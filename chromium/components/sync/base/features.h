@@ -41,6 +41,9 @@ inline constexpr base::FeatureParam<int> kMinGuResponsesToIgnoreKey{
 // by legacy clients not supporting password notes.
 // This feature is added here instead of the password manager codebase to avoid
 // cycle dependencies.
+// This feature is used in Credential Provider Extension on iOS. Keep the
+// default value in sync with the default value in
+// ios/chrome/credential_provider_extension/ui/feature_flags.mm.
 BASE_DECLARE_FEATURE(kPasswordNotesWithBackup);
 // Decides how long the user does not require reuathentication after
 // successfully authenticated.
@@ -64,6 +67,7 @@ BASE_DECLARE_FEATURE(kSyncAutofillWalletUsageData);
 // likely to get combined into one commit message.
 BASE_DECLARE_FEATURE(kSyncExtensionTypesThrottling);
 
+// TODO(crbug.com/1425065): Remove this.
 BASE_DECLARE_FEATURE(kSyncResetPollIntervalOnStart);
 
 // If enabled, Segmentation data type will be synced.
@@ -138,18 +142,14 @@ BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataType);
 BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataTypeEarlyReturnNoDatabase);
 BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataTypeInTransportMode);
 BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataTypeForCustomPassphraseUsers);
+BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataTypeForDasherUsers);
+inline constexpr base::FeatureParam<bool>
+    kSyncEnableContactInfoDataTypeForDasherGoogleUsers{
+        &kSyncEnableContactInfoDataTypeForDasherUsers,
+        "enable_for_google_accounts", false};
 
 // If enabled, issues error and disables bookmarks sync when limit is crossed.
 BASE_DECLARE_FEATURE(kSyncEnforceBookmarksCountLimit);
-
-// If enabled, Sync will not use a primary account that doesn't have a refresh
-// token. (This state should only ever occur temporarily during signout.)
-BASE_DECLARE_FEATURE(kSyncIgnoreAccountWithoutRefreshToken);
-
-// Enabled by default, it acts as a kill switch for a newly-introduced logic,
-// which implies that DataTypeManager (and hence individual datatypes) won't be
-// notified about browser shutdown.
-BASE_DECLARE_FEATURE(kSyncDoNotPropagateBrowserShutdownToDataTypes);
 
 // Enables codepath to allow clearing metadata when the data type is stopped.
 BASE_DECLARE_FEATURE(kSyncAllowClearingMetadataWhenDataTypeIsStopped);
@@ -171,6 +171,30 @@ inline constexpr base::FeatureParam<base::TimeDelta>
 // Enable check to ensure only preferences in the allowlist are registered as
 // syncable.
 BASE_DECLARE_FEATURE(kSyncEnforcePreferencesAllowlist);
+
+// Enables a separate account-scoped storage for preferences, for syncing users.
+// (Note that opposed to other "account storage" features, this one does not
+// have any effect for signed-in non-syncing users!)
+BASE_DECLARE_FEATURE(kEnablePreferencesAccountStorage);
+
+// If enabled, Sync will send a poll GetUpdates request on every browser
+// startup. This is a temporary hack; see crbug.com/1425026.
+// TODO(crbug.com/1425071): Remove this.
+BASE_DECLARE_FEATURE(kSyncPollImmediatelyOnEveryStartup);
+
+#if BUILDFLAG(IS_IOS)
+// Feature flag to enable indicating the Account Storage error in the Account
+// Cell when Sync is turned OFF (iOS only).
+BASE_DECLARE_FEATURE(kIndicateAccountStorageErrorInAccountCell);
+#endif  // BUILDFLAG(IS_IOS)
+
+#if !BUILDFLAG(IS_ANDROID) || !BUILDFLAG(IS_IOS)
+// Enables syncing the WEBAUTHN_CREDENTIAL data type.
+BASE_DECLARE_FEATURE(kSyncWebauthnCredentials);
+#endif  // !BUILDFLAG(IS_ANDROID) || !BUILDFLAG(IS_IOS)
+
+// If enabled, ignore GetUpdates retry delay command from the server.
+BASE_DECLARE_FEATURE(kSyncIgnoreGetUpdatesRetryDelay);
 
 }  // namespace syncer
 

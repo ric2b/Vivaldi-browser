@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Отворени раздели</translation>
 <translation id="1829244130665387512">Намиране в страницата</translation>
 <translation id="1910514478706885609">Отвори в нов куп</translation>
+<translation id="1925021887439448749">Въведете собствен адрес</translation>
 <translation id="2038563949887743358">Включване на настолната версия</translation>
 <translation id="2139186145475833000">Добави към началния екран</translation>
+<translation id="2149973817440762519">Редактирай отметката</translation>
 <translation id="2306442503286132111">Записана отметка в папка <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Облик</translation>
-<translation id="2501278716633472235">Развий</translation>
+<translation id="2501278716633472235">Върни назад</translation>
 <translation id="2633278372998075009">Частни раздели</translation>
+<translation id="2951071800649516099">Добави страници към списъка за четене по-късно</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> отметка}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> отметки}}</translation>
@@ -23,19 +26,22 @@
 <translation id="3504699618187058974">Скупчи разделите</translation>
 <translation id="3518985090088779359">Приемам — напред</translation>
 <translation id="3571177741182643350">Нечетени статии за автономен прочит:</translation>
-<translation id="3700829948786686853">Добре дошли във Vivaldi</translation>
+<translation id="3700829948786686853">Добре дошли във Vivaldi!</translation>
 <translation id="3719826155360621982">Начална страница</translation>
 <translation id="385051799172605136">Назад</translation>
 <translation id="399014816462153200">Прочетени статии:</translation>
 <translation id="4121750346708795461">С ползване на приложението, приемате <ph name="BEGIN_LINK1" />Лицензионно споразумение с крайния потребител<ph name="END_LINK1" /> и <ph name="BEGIN_LINK2" />Политика на поверителност<ph name="END_LINK2" /> на Vivaldi.</translation>
 <translation id="4137746084635924146">Текущ език на устройство</translation>
 <translation id="4167670741834902166">Нов частен раздел</translation>
+<translation id="4195643157523330669">Отвори в нов раздел</translation>
 <translation id="4243710787042215766">Отвори в частен раздел</translation>
+<translation id="451872707440238414">Търси в отметките</translation>
 <translation id="4526803704855831732">Частни раздели</translation>
 <translation id="4719086422742491124">Узнавате темите на сайта, без да напускате страницата. Изберете една или повече думи в страницата, за да ги потърсите.
 
 Търсене с докосване е възможност, налична само когато Google е зададена като основна търсачка във Vivaldi.</translation>
 <translation id="4759238208242260848">Изтегляния</translation>
+<translation id="4850886885716139402">Покажи</translation>
 <translation id="4883379392681899581">Излизане от частен режим</translation>
 <translation id="4943872375798546930">Няма резултати</translation>
 <translation id="49576331685473090">Блокер на съдържание</translation>
@@ -48,7 +54,9 @@
 За да коригирате търсеното понятие, натиснете продължително, за да го изберете. За да поправите търсенето, плъзнете панела изцяло нагоре и докоснете полето за търсене.</translation>
 <translation id="572328651809341494">Последни раздели</translation>
 <translation id="6150320133806434356">Записана отметка</translation>
+<translation id="6301525844455696527">Наваксайте със списъка за четене</translation>
 <translation id="6336451774241870485">Създаване на частен раздел</translation>
+<translation id="6404511346730675251">Редактирай отметката</translation>
 <translation id="6585139692466700358">Предлагане на превод на страници на други езици чрез услуга на Vivaldi</translation>
 <translation id="6593061639179217415">Настолна версия</translation>
 <translation id="6610147964972079463">Затвори частните раздели</translation>
@@ -57,9 +65,15 @@
 <translation id="732145680195464316">Записана отметка в <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">За Vivaldi</translation>
 <translation id="7465104139234185284">Затваряне на всички частни раздели</translation>
-<translation id="804786196054284061">Лицензионно споразумение с краен потребител</translation>
+<translation id="7481312909269577407">Напред</translation>
+<translation id="7583262514280211622">Тук ще се показва списъкът за четене</translation>
+<translation id="7968014550143838305">Добавено към списъка за четене</translation>
+<translation id="804786196054284061">Лицензионно споразумение с краен потребител</translation>
+<translation id="8127542551745560481">Редактирай началната страница</translation>
+<translation id="8560602726703398413">Списъкът за четене е в Отметки</translation>
 <translation id="85991616550051997">Преход към началната страница</translation>
 <translation id="8820817407110198400">Отметки</translation>
 <translation id="9063523880881406963">Изключване на настолната версия</translation>
 <translation id="9080642952018487277">Влизане в частен режим</translation>
+<translation id="96681097142096641">Показване на опростена страница?</translation>
 </translationbundle>

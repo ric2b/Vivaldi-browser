@@ -350,8 +350,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     #   expect in following loads.
     # cache_pages: List of URLs that should be both re-navigated and/or
     #   reloaded in a restarted browser to expect some cache condition.
-    webgpu_cache_test_browser_args = [
-        cba.ENABLE_UNSAFE_WEBGPU,
+    webgpu_cache_test_browser_args = cba.ENABLE_WEBGPU_FOR_TESTING + [
         cba.ENABLE_EXPERIMENTAL_WEB_PLATFORM_FEATURES,
     ]
     # For the tests to run properly on Linux, we need additional args.
@@ -885,7 +884,7 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       if event.name != _PRESENT_TO_SWAP_CHAIN_EVENT_NAME:
         continue
       image_type = event.args.get('image_type', None)
-      if image_type == 'swap chain':
+      if image_type == 'DCompVisualContent':
         found_overlay = True
         break
     if expect_overlay and not found_overlay:

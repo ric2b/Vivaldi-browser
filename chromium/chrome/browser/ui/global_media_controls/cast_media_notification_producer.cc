@@ -34,8 +34,13 @@ bool ShouldHideNotification(const raw_ptr<Profile> profile,
   std::unique_ptr<media_router::CastMediaSource> source =
       media_router::CastMediaSource::FromMediaSource(route.media_source());
   if (media_router::GlobalMediaControlsCastStartStopEnabled(profile)) {
-    // Hide a route if it contains a Streaming App, i.e. Tab/Desktop Mirroring,
-    // Site-initiated Mirroring and Remote Playback routes.
+    // Show local site-initiated Mirroring routes.
+    if (source && route.is_local() &&
+        media_router::IsSiteInitiatedMirroringSource(source->source_id())) {
+      return false;
+    }
+    // Hide a route if it contains a Streaming App, i.e. Tab/Desktop Mirroring
+    // and Remote Playback routes.
     if (source && source->ContainsStreamingApp()) {
       return true;
     }

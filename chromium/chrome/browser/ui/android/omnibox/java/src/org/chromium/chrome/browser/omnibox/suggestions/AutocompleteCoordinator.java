@@ -19,11 +19,10 @@ import androidx.core.view.ViewCompat;
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.StrictModeContext;
-import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
-import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.UrlBar.UrlTextChangeListener;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
@@ -33,6 +32,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.SuggestionListViewBinder.
 import org.chromium.chrome.browser.omnibox.suggestions.answer.AnswerSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewBinder;
+import org.chromium.chrome.browser.omnibox.suggestions.base.HistoryClustersProcessor.OpenHistoryClustersDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.BasicSuggestionProcessor.BookmarkState;
 import org.chromium.chrome.browser.omnibox.suggestions.basic.SuggestionViewViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.carousel.BaseCarouselSuggestionItemViewBuilder;
@@ -44,8 +44,6 @@ import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestion
 import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderView;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderViewBinder;
-import org.chromium.chrome.browser.omnibox.suggestions.pedal.PedalSuggestionView;
-import org.chromium.chrome.browser.omnibox.suggestions.pedal.PedalSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionViewBinder;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
@@ -85,6 +83,12 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
     private @Nullable OmniboxSuggestionsDropdown mDropdown;
     private @NonNull ObserverList<OmniboxSuggestionsDropdownScrollListener> mScrollListenerList =
             new ObserverList<>();
+    private OmniboxSuggestionsDropdownAdapter mAdapter;
+    private Context mContext;
+    private boolean mUrlHasFocus;
+    private OneshotSupplierImpl<OmniboxSuggestionsDropdownAdapter> mAdapterSupplier =
+            new OneshotSupplierImpl<>();
+    private PreWarmingRecycledViewPool mRecycledViewPool;
 
     // Vivaldi
     private SearchEngineSuggestionView mSearchEngineSuggestionView;
@@ -102,12 +106,13 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
             @NonNull ObservableSupplier<Profile> profileObservableSupplier,
             @NonNull Callback<Tab> bringToForegroundCallback,
             @NonNull Supplier<TabWindowManager> tabWindowManagerSupplier,
-            @NonNull BookmarkState bookmarkState, @NonNull JankTracker jankTracker,
-            @NonNull OmniboxPedalDelegate omniboxPedalDelegate,
-            @NonNull OmniboxSuggestionsDropdownScrollListener scrollListener) {
+            @NonNull BookmarkState bookmarkState, @NonNull ActionChipsDelegate actionChipsDelegate,
+            @NonNull OmniboxSuggestionsDropdownScrollListener scrollListener,
+            @NonNull OpenHistoryClustersDelegate openHistoryClustersDelegate) {
         mParent = parent;
         mModalDialogManagerSupplier = modalDialogManagerSupplier;
         Context context = parent.getContext();
+        mContext = context;
 
         PropertyModel listModel = new PropertyModel(SuggestionListProperties.ALL_KEYS);
         ModelList listItems = new ModelList();
@@ -119,8 +124,8 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
         mMediator = new AutocompleteMediator(context, controllerProvider, delegate,
                 urlBarEditingTextProvider, listModel, new Handler(), modalDialogManagerSupplier,
                 activityTabSupplier, shareDelegateSupplier, locationBarDataProvider,
-                bringToForegroundCallback, tabWindowManagerSupplier, bookmarkState, jankTracker,
-                omniboxPedalDelegate);
+                bringToForegroundCallback, tabWindowManagerSupplier, bookmarkState,
+                actionChipsDelegate, openHistoryClustersDelegate);
         mMediator.initDefaultProcessors();
 
         mScrollListenerList.addObserver(scrollListener);
@@ -142,6 +147,9 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
         mProfileChangeCallback = this::setAutocompleteProfile;
         mProfileSupplier.addObserver(mProfileChangeCallback);
 
+        mAdapter = createAdapter(listItems);
+        mRecycledViewPool = new PreWarmingRecycledViewPool(mAdapter, context, new Handler());
+
         // https://crbug.com/966227 Set initial layout direction ahead of inflating the suggestions.
         updateSuggestionListLayoutDirection();
         // Vivaldi
@@ -152,6 +160,7 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
      * Clean up resources used by this class.
      */
     public void destroy() {
+        mRecycledViewPool.destroy();
         mProfileSupplier.removeObserver(mProfileChangeCallback);
         mMediator.destroy();
         if (mDropdown != null) {
@@ -170,80 +179,11 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
             public void inflate() {
                 OmniboxSuggestionsDropdown dropdown;
                 try (StrictModeContext ignored = StrictModeContext.allowDiskReads()) {
-                    dropdown = new OmniboxSuggestionsDropdown(context);
+                    dropdown = new OmniboxSuggestionsDropdown(context, mRecycledViewPool);
                 }
 
-                // Start with visibility GONE to ensure that show() is called.
-                // http://crbug.com/517438
-                if (!OmniboxFeatures.shouldRemoveExcessiveRecycledViewClearCalls()) {
-                    dropdown.getViewGroup().setVisibility(View.GONE);
-                }
                 dropdown.getViewGroup().setClipToPadding(false);
-
-                OmniboxSuggestionsDropdownAdapter adapter =
-                        new OmniboxSuggestionsDropdownAdapter(modelList);
-                dropdown.setAdapter(adapter);
-
-                // Note: clang-format does a bad job formatting lambdas so we turn it off here.
-                // clang-format off
-                // Register a view type for a default omnibox suggestion.
-                adapter.registerType(
-                        OmniboxSuggestionUiType.DEFAULT,
-                        parent -> new BaseSuggestionView<View>(
-                                parent.getContext(), R.layout.omnibox_basic_suggestion),
-                        new BaseSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
-
-                adapter.registerType(
-                        OmniboxSuggestionUiType.EDIT_URL_SUGGESTION,
-                        parent -> new EditUrlSuggestionView(parent.getContext()),
-                        new EditUrlSuggestionViewBinder());
-
-                adapter.registerType(
-                        OmniboxSuggestionUiType.ANSWER_SUGGESTION,
-                        parent -> new BaseSuggestionView<View>(
-                                parent.getContext(), R.layout.omnibox_answer_suggestion),
-                        new BaseSuggestionViewBinder<View>(AnswerSuggestionViewBinder::bind));
-
-                adapter.registerType(
-                        OmniboxSuggestionUiType.ENTITY_SUGGESTION,
-                        parent -> new BaseSuggestionView<View>(
-                                parent.getContext(), R.layout.omnibox_entity_suggestion),
-                        new BaseSuggestionViewBinder<View>(EntitySuggestionViewBinder::bind));
-
-                adapter.registerType(
-                        OmniboxSuggestionUiType.TAIL_SUGGESTION,
-                        parent -> new BaseSuggestionView<TailSuggestionView>(
-                                new TailSuggestionView(parent.getContext())),
-                        new BaseSuggestionViewBinder<TailSuggestionView>(
-                                TailSuggestionViewBinder::bind));
-
-                adapter.registerType(
-                        OmniboxSuggestionUiType.CLIPBOARD_SUGGESTION,
-                        parent -> new BaseSuggestionView<View>(
-                                parent.getContext(), R.layout.omnibox_basic_suggestion),
-                        new BaseSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
-
-                adapter.registerType(
-                        OmniboxSuggestionUiType.TILE_NAVSUGGEST,
-                        BaseCarouselSuggestionItemViewBuilder::createView,
-                        BaseCarouselSuggestionViewBinder::bind);
-
-                adapter.registerType(
-                        OmniboxSuggestionUiType.HEADER,
-                        parent -> new HeaderView(parent.getContext()),
-                        HeaderViewBinder::bind);
-
-                adapter.registerType(
-                    OmniboxSuggestionUiType.PEDAL_SUGGESTION,
-                    parent -> new PedalSuggestionView<View>(
-                            parent.getContext(), R.layout.omnibox_basic_suggestion),
-                    new PedalSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
-
-                adapter.registerType(
-                    OmniboxSuggestionUiType.DIVIDER_LINE,
-                    parent -> new DividerLineView(parent.getContext()),
-                    DividerLineViewBinder::bind);
-                // clang-format on
+                dropdown.setAdapter(mAdapter);
 
                 ViewGroup container = (ViewGroup) ((ViewStub) mParent.getRootView().findViewById(
                                                            R.id.omnibox_results_container_stub))
@@ -289,8 +229,76 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
         };
     }
 
+    private OmniboxSuggestionsDropdownAdapter createAdapter(ModelList listItems) {
+        OmniboxSuggestionsDropdownAdapter adapter =
+                new OmniboxSuggestionsDropdownAdapter(listItems);
+
+        // Note: clang-format does a bad job formatting lambdas so we turn it off here.
+        // clang-format off
+        // Register a view type for a default omnibox suggestion.
+        adapter.registerType(
+            OmniboxSuggestionUiType.DEFAULT,
+            parent -> new BaseSuggestionView<View>(
+                parent.getContext(), R.layout.omnibox_basic_suggestion),
+            new BaseSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.EDIT_URL_SUGGESTION,
+            parent -> new EditUrlSuggestionView(parent.getContext()),
+            new EditUrlSuggestionViewBinder());
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.ANSWER_SUGGESTION,
+            parent -> new BaseSuggestionView<View>(
+                parent.getContext(), R.layout.omnibox_answer_suggestion),
+            new BaseSuggestionViewBinder<View>(AnswerSuggestionViewBinder::bind));
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.ENTITY_SUGGESTION,
+            parent -> new BaseSuggestionView<View>(
+                parent.getContext(), R.layout.omnibox_entity_suggestion),
+            new BaseSuggestionViewBinder<View>(EntitySuggestionViewBinder::bind));
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.TAIL_SUGGESTION,
+            parent -> new BaseSuggestionView<TailSuggestionView>(
+                new TailSuggestionView(parent.getContext())),
+            new BaseSuggestionViewBinder<TailSuggestionView>(
+                TailSuggestionViewBinder::bind));
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.CLIPBOARD_SUGGESTION,
+            parent -> new BaseSuggestionView<View>(
+                parent.getContext(), R.layout.omnibox_basic_suggestion),
+            new BaseSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.TILE_NAVSUGGEST,
+            BaseCarouselSuggestionItemViewBuilder::createView,
+            BaseCarouselSuggestionViewBinder::bind);
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.HEADER,
+            parent -> new HeaderView(parent.getContext()),
+            HeaderViewBinder::bind);
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.PEDAL_SUGGESTION,
+            parent -> new BaseSuggestionView<View>(
+                parent.getContext(), R.layout.omnibox_basic_suggestion),
+            new BaseSuggestionViewBinder<View>(SuggestionViewViewBinder::bind));
+
+        adapter.registerType(
+            OmniboxSuggestionUiType.DIVIDER_LINE,
+            parent -> new DividerLineView(parent.getContext()),
+            DividerLineViewBinder::bind);
+        // clang-format on
+        return adapter;
+    }
+
     @Override
     public void onUrlFocusChange(boolean hasFocus) {
+        mUrlHasFocus = hasFocus;
         mMediator.onUrlFocusChange(hasFocus);
 
         // Vivaldi - Handle the visibility of search engine suggestion layout as per url focus
@@ -344,6 +352,7 @@ public class AutocompleteCoordinator implements UrlFocusChangeListener, UrlTextC
      */
     public void onNativeInitialized() {
         mMediator.onNativeInitialized();
+        mRecycledViewPool.onNativeInitialized();
     }
 
     /**

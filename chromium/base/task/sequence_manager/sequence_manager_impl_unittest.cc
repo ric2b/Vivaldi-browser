@@ -37,7 +37,6 @@
 #include "base/task/sequence_manager/test/mock_time_domain.h"
 #include "base/task/sequence_manager/test/mock_time_message_pump.h"
 #include "base/task/sequence_manager/test/sequence_manager_for_test.h"
-#include "base/task/sequence_manager/test/test_task_queue.h"
 #include "base/task/sequence_manager/test/test_task_time_observer.h"
 #include "base/task/sequence_manager/thread_controller_with_message_pump_impl.h"
 #include "base/task/sequence_manager/work_queue.h"
@@ -81,6 +80,22 @@ using testing::UnorderedElementsAre;
 namespace base {
 namespace sequence_manager {
 namespace internal {
+
+class TestTaskQueue : public TaskQueue {
+ public:
+  TestTaskQueue(SequenceManager& sequence_manager, const TaskQueue::Spec& spec)
+      : TaskQueue(sequence_manager.CreateTaskQueueImpl(spec), spec) {}
+
+  using TaskQueue::GetTaskQueueImpl;
+
+  WeakPtr<TestTaskQueue> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
+
+ private:
+  ~TestTaskQueue() override = default;  // Ref-counted.
+
+  // Used to ensure that task queue is deleted in tests.
+  WeakPtrFactory<TestTaskQueue> weak_factory_{this};
+};
 
 namespace {
 
@@ -398,7 +413,7 @@ class SequenceManagerTest
 
   scoped_refptr<TestTaskQueue> CreateTaskQueue(
       TaskQueue::Spec spec = TaskQueue::Spec(QueueName::TEST_TQ)) {
-    return sequence_manager()->CreateTaskQueueWithType<TestTaskQueue>(spec);
+    return MakeRefCounted<TestTaskQueue>(*sequence_manager(), spec);
   }
 
   std::vector<scoped_refptr<TestTaskQueue>> CreateTaskQueues(
@@ -1951,6 +1966,45 @@ TEST_P(SequenceManagerTest, QueueTaskObserverRemovingInsideTask) {
               WillProcessTask(_, /*was_blocked_or_low_priority=*/false))
       .Times(1);
   EXPECT_CALL(observer, DidProcessTask(_)).Times(0);
+  RunLoop().RunUntilIdle();
+}
+
+TEST_P(SequenceManagerTest, CancelHandleInsideTaskObserver) {
+  class CancelingTaskObserver : public TaskObserver {
+   public:
+    DelayedTaskHandle handle;
+    bool will_run_task_called = false;
+    bool did_process_task_called = false;
+    explicit CancelingTaskObserver(DelayedTaskHandle handle_in)
+        : handle(std::move(handle_in)) {
+      EXPECT_TRUE(handle.IsValid());
+    }
+
+    ~CancelingTaskObserver() override {
+      EXPECT_FALSE(handle.IsValid());
+      EXPECT_TRUE(will_run_task_called);
+      EXPECT_TRUE(did_process_task_called);
+    }
+
+    void DidProcessTask(const PendingTask& task) override {
+      did_process_task_called = true;
+    }
+    void WillProcessTask(const PendingTask& task,
+                         bool was_blocked_or_low_priority) override {
+      handle.CancelTask();
+      will_run_task_called = true;
+    }
+  };
+
+  auto queue = CreateTaskQueue();
+
+  auto handle = queue->task_runner()->PostCancelableDelayedTask(
+      subtle::PostDelayedTaskPassKeyForTesting(), FROM_HERE,
+      BindLambdaForTesting([]() { FAIL(); }), base::TimeDelta());
+
+  CancelingTaskObserver observer(std::move(handle));
+  queue->AddTaskObserver(&observer);
+
   RunLoop().RunUntilIdle();
 }
 

@@ -33,6 +33,11 @@ if (is_win) {
     ]
     data_deps += [ "//vivaldi/tools/vivaldi_proxy" ]
   }
+  update_target("//chrome/notification_helper:notification_helper") {
+    deps += [
+      "//chrome/installer/util:with_no_strings",
+    ]
+  }
 }
 
 update_target("//chrome:dependencies") {

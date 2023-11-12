@@ -105,8 +105,9 @@ Value RunGetTargetOutputs(Scope* scope,
   }
 
   if (!target) {
+    bool with_toolchain = !scope->settings()->is_default();
     *err = Err(function, "Target not found in this context.",
-               label.GetUserVisibleName(false) +
+               label.GetUserVisibleName(with_toolchain) +
                    "\nwas not found. get_target_outputs() can only be used for "
                    "targets\n"
                    "previously defined in the current file.");

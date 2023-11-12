@@ -24,6 +24,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/clamped_math.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -240,11 +241,9 @@ std::vector<apps::UrlHandlerInfo> CreateRandomUrlHandlers(uint32_t suffix) {
   return url_handlers;
 }
 
-std::vector<ScopeExtensionInfo> CreateRandomScopeExtensions(
-    uint32_t suffix,
-    RandomHelper& random) {
-  std::vector<ScopeExtensionInfo> scope_extensions;
-
+ScopeExtensions CreateRandomScopeExtensions(uint32_t suffix,
+                                            RandomHelper& random) {
+  ScopeExtensions scope_extensions;
   for (unsigned int i = 0; i < 3; ++i) {
     std::string suffix_str =
         base::NumberToString(suffix) + base::NumberToString(i);
@@ -253,7 +252,7 @@ std::vector<ScopeExtensionInfo> CreateRandomScopeExtensions(
     scope_extension.origin =
         url::Origin::Create(GURL("https://app-" + suffix_str + ".com/"));
     scope_extension.has_origin_wildcard = random.next_bool();
-    scope_extensions.push_back(std::move(scope_extension));
+    scope_extensions.insert(std::move(scope_extension));
   }
 
   return scope_extensions;
@@ -261,10 +260,11 @@ std::vector<ScopeExtensionInfo> CreateRandomScopeExtensions(
 
 std::vector<WebAppShortcutsMenuItemInfo> CreateRandomShortcutsMenuItemInfos(
     const GURL& scope,
+    int num,
     RandomHelper& random) {
   const uint32_t suffix = random.next_uint();
   std::vector<WebAppShortcutsMenuItemInfo> shortcuts_menu_item_infos;
-  for (int i = random.next_uint(4) + 1; i >= 0; --i) {
+  for (int i = num - 1; i >= 0; --i) {
     std::string suffix_str =
         base::NumberToString(suffix) + base::NumberToString(i);
     WebAppShortcutsMenuItemInfo shortcut_info;
@@ -308,14 +308,15 @@ std::vector<WebAppShortcutsMenuItemInfo> CreateRandomShortcutsMenuItemInfos(
 }
 
 std::vector<IconSizes> CreateRandomDownloadedShortcutsMenuIconsSizes(
+    int num,
     RandomHelper& random) {
   std::vector<IconSizes> results;
-  for (unsigned int i = 0; i < 3; ++i) {
+  for (int i = 0; i < num; ++i) {
     IconSizes result;
     std::vector<SquareSizePx> shortcuts_menu_icon_sizes_any;
     std::vector<SquareSizePx> shortcuts_menu_icon_sizes_maskable;
     std::vector<SquareSizePx> shortcuts_menu_icon_sizes_monochrome;
-    for (unsigned int j = 0; j < i; ++j) {
+    for (int j = 0; j < i; ++j) {
       shortcuts_menu_icon_sizes_any.push_back(random.next_uint(256) + 1);
       shortcuts_menu_icon_sizes_maskable.push_back(random.next_uint(256) + 1);
       shortcuts_menu_icon_sizes_monochrome.push_back(random.next_uint(256) + 1);
@@ -416,6 +417,8 @@ proto::WebAppOsIntegrationState GenerateRandomWebAppOsIntegrationState(
   // Randomly fill uninstallation registration logic.
   state.mutable_uninstall_registration()->set_registered_with_os(
       random.next_bool());
+  state.mutable_uninstall_registration()->set_display_name(
+      app.untranslated_name());
 
   // Randomly fill shortcuts menu information.
   auto* shortcut_menus = state.mutable_shortcut_menus();
@@ -675,6 +678,16 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   app->SetUrlHandlers(CreateRandomUrlHandlers(random.next_uint()));
   app->SetScopeExtensions(
       CreateRandomScopeExtensions(random.next_uint(), random));
+
+  ScopeExtensions validated_scope_extensions;
+  base::ranges::copy_if(app->scope_extensions(),
+                        std::inserter(validated_scope_extensions,
+                                      validated_scope_extensions.begin()),
+                        [&random](const ScopeExtensionInfo& extension) {
+                          return random.next_bool();
+                        });
+  app->SetValidatedScopeExtensions(validated_scope_extensions);
+
   if (random.next_bool()) {
     app->SetLockScreenStartUrl(scope.Resolve(
         "lock_screen_start_url" + base::NumberToString(random.next_uint())));
@@ -693,10 +706,14 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
   }
   app->SetAdditionalSearchTerms(std::move(additional_search_terms));
 
+  int num_shortcut_menus = static_cast<int>(random.next_uint(4)) + 1;
   app->SetShortcutsMenuItemInfos(
-      CreateRandomShortcutsMenuItemInfos(scope, random));
+      CreateRandomShortcutsMenuItemInfos(scope, num_shortcut_menus, random));
   app->SetDownloadedShortcutsMenuIconsSizes(
-      CreateRandomDownloadedShortcutsMenuIconsSizes(random));
+      CreateRandomDownloadedShortcutsMenuIconsSizes(num_shortcut_menus,
+                                                    random));
+  CHECK_EQ(app->shortcuts_menu_item_infos().size(),
+           app->downloaded_shortcuts_menu_icons_sizes().size());
   app->SetManifestUrl(base_url.Resolve("/manifest" + seed_str + ".json"));
 
   const int num_allowed_launch_protocols = random.next_uint(8);
@@ -743,7 +760,7 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
 
   uint32_t install_source =
       random.next_uint(static_cast<int>(webapps::WebappInstallSource::COUNT));
-  app->SetInstallSourceForMetrics(
+  app->SetLatestInstallSource(
       static_cast<webapps::WebappInstallSource>(install_source));
 
   if (IsChromeOsDataMandatory()) {
@@ -767,13 +784,23 @@ std::unique_ptr<WebApp> CreateRandomWebApp(const GURL& base_url,
     if (type == WebAppManagement::kSync)
       continue;
     base::flat_set<GURL> install_urls;
+    base::flat_set<std::string> additional_policy_ids;
     WebApp::ExternalManagementConfig config;
-    if (random.next_bool())
+    if (random.next_bool()) {
       install_urls.emplace(base_url.Resolve("installer1_" + seed_str + "/"));
-    if (random.next_bool())
+    }
+    if (random.next_bool()) {
       install_urls.emplace(base_url.Resolve("installer2_" + seed_str + "/"));
+    }
+    if (random.next_bool()) {
+      additional_policy_ids.emplace("policy_id_1_" + seed_str);
+    }
+    if (random.next_bool()) {
+      additional_policy_ids.emplace("policy_id_2_" + seed_str);
+    }
     config.is_placeholder = random.next_bool();
-    config.install_urls = install_urls;
+    config.install_urls = std::move(install_urls);
+    config.additional_policy_ids = std::move(additional_policy_ids);
     management_to_external_config.insert_or_assign(type, std::move(config));
   }
 

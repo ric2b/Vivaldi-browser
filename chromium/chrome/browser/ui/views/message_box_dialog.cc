@@ -52,8 +52,7 @@ UINT GetMessageBoxFlagsFromType(chrome::MessageBoxType type) {
     case chrome::MESSAGE_BOX_TYPE_QUESTION:
       return flags | MB_YESNO | MB_ICONQUESTION;
   }
-  NOTREACHED();
-  return flags | MB_OK | MB_ICONWARNING;
+  NOTREACHED_NORETURN();
 }
 #endif
 
@@ -151,12 +150,15 @@ chrome::MessageBoxResult MessageBoxDialog::Show(
   }
 #endif
 
-  bool is_system_modal = !parent;
-
-#if BUILDFLAG(IS_MAC)
-  // Mac does not support system modals, so never ask MessageBoxDialog to
-  // be system modal.
-  is_system_modal = false;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // System modals are only supported on IS_CHROMEOS_ASH.
+  const bool is_system_modal = !parent;
+#else
+  // TODO(pbos): Consider whether we should disallow parentless MessageBoxes
+  // here. This currently fails from ShowProfileErrorDialog() which calls
+  // chrome::ShowWarningMessageBox*() without a parent. See
+  // https://crbug.com/1431697 which discovered this through a DCHECK failure.
+  const bool is_system_modal = false;
 #endif
 
   MessageBoxDialog* dialog = new MessageBoxDialog(

@@ -119,11 +119,76 @@ public abstract class BrowserServicesIntentDataProvider {
             ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DIVIDER})
     @Retention(RetentionPolicy.SOURCE)
     public @interface SideSheetDecorationType {}
+    /**
+     * Side sheet's default decoration type. Same as
+     * {@link ACTIVITY_SIDE_SHEET_DECORATION_TYPE_SHADOW}.
+     */
     public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DEFAULT = 0;
+    /**
+     * Side sheet with no decorations - the activity is not bordered by any shadow or divider line.
+     */
     public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_NONE = 1;
+    /**
+     * Side sheet with shadow decoration - the activity is bordered by a shadow effect.
+     */
     public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_SHADOW = 2;
+    /**
+     * Side sheet with a divider line - the activity is bordered by a thin opaque line.
+     */
     public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DIVIDER = 3;
     public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_MAX = 3;
+
+    @IntDef({ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_DEFAULT, ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_NONE,
+            ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_TOP})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SideSheetRoundedCornersPosition {}
+
+    /**
+     * Side sheet's default rounded corner configuration. Same as
+     * {@link ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_NONE}
+     */
+    public static final int ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_DEFAULT = 0;
+    /**
+     * Side sheet with no rounded corners.
+     */
+    public static final int ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_NONE = 1;
+    /**
+     * Side sheet with the inner top corner rounded (if positioned on the right of the screen, this
+     * will be the top left corner)
+     */
+    public static final int ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_TOP = 2;
+    public static final int ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_MAX = 2;
+
+    @IntDef({ACTIVITY_LAYOUT_STATE_NONE, ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET,
+            ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET_MAXIMIZED, ACTIVITY_LAYOUT_STATE_SIDE_SHEET,
+            ACTIVITY_LAYOUT_STATE_SIDE_SHEET_MAXIMIZED, ACTIVITY_LAYOUT_STATE_FULL_SCREEN})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ActivityLayoutState {}
+    /**
+     * The activity's layout state is unknown.
+     */
+    public static final int ACTIVITY_LAYOUT_STATE_NONE = 0;
+    /**
+     * The activity is being displayed as a bottom-sheet at its initial height.
+     */
+    public static final int ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET = 1;
+    /**
+     * The activity is being displayed as a bottom-sheet at its maximized height.
+     */
+    public static final int ACTIVITY_LAYOUT_STATE_BOTTOM_SHEET_MAXIMIZED = 2;
+    /**
+     * The activity is being displayed as a side-sheet at its initial width.
+     */
+    public static final int ACTIVITY_LAYOUT_STATE_SIDE_SHEET = 3;
+    /**
+     * The activity is being displayed as a side-sheet at its maximized width.
+     */
+    public static final int ACTIVITY_LAYOUT_STATE_SIDE_SHEET_MAXIMIZED = 4;
+    /**
+     * The activity is being displayed over the whole window.
+     */
+    public static final int ACTIVITY_LAYOUT_STATE_FULL_SCREEN = 5;
+    public static final int ACTIVITY_LAYOUT_STATE_MAX = 5;
 
     /**
      * @return The type of the Activity;
@@ -575,7 +640,14 @@ public abstract class BrowserServicesIntentDataProvider {
      * @return An int representing the side sheet decoration type for the Activity.
      */
     public int getActivitySideSheetDecorationType() {
-        return ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DEFAULT;
+        return ACTIVITY_SIDE_SHEET_DECORATION_TYPE_SHADOW;
+    }
+
+    /**
+     * @return An int representing the side sheet rounded corner position for the Activity
+     */
+    public int getActivitySideSheetRoundedCornersPosition() {
+        return ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_NONE;
     }
 
     /**
@@ -622,11 +694,11 @@ public abstract class BrowserServicesIntentDataProvider {
 
     /** Return the default behavior. */
     public int getSideSheetSlideInBehavior() {
-        return ACTIVITY_SIDE_SHEET_SLIDE_IN_DEFAULT;
+        return ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE;
     }
 
     /** Return the default position. */
     public int getSideSheetPosition() {
-        return ACTIVITY_SIDE_SHEET_POSITION_DEFAULT;
+        return ACTIVITY_SIDE_SHEET_POSITION_END;
     }
 }

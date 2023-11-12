@@ -35,17 +35,20 @@
 #include "components/autofill/ios/form_util/form_activity_params.h"
 #include "components/autofill/ios/form_util/unique_id_data_tab_helper.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
+#import "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_generation_frame_helper.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/ios/account_select_fill_data.h"
 #import "components/password_manager/ios/ios_password_manager_driver_factory.h"
 #include "components/password_manager/ios/password_manager_ios_util.h"
+#import "components/password_manager/ios/password_manager_java_script_feature.h"
 #import "components/password_manager/ios/shared_password_controller+private.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/web/common/url_scheme_util.h"
 #include "ios/web/public/js_messaging/web_frame.h"
-#include "ios/web/public/js_messaging/web_frame_util.h"
+#import "ios/web/public/js_messaging/web_frames_manager.h"
+#import "ios/web/public/js_messaging/web_frames_manager_observer_bridge.h"
 #include "ios/web/public/navigation/navigation_context.h"
 #import "ios/web/public/web_state.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -91,11 +94,6 @@ constexpr int kMinimumLengthForEditedPassword = 4;
 // The string ' •••' appended to the username in the suggestion.
 NSString* const kSuggestionSuffix = @" ••••••••";
 
-BOOL canProcessCrossOriginIframes() {
-  return base::FeatureList::IsEnabled(
-      password_manager::features::kIOSPasswordManagerCrossOriginIframeSupport);
-}
-
 }  // namespace
 
 @interface SharedPasswordController ()
@@ -124,6 +122,10 @@ BOOL canProcessCrossOriginIframes() {
 
   // Bridge to observe WebState from Objective-C.
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserverBridge;
+
+  // Bridge to observe the web frames manager from Objective-C.
+  std::unique_ptr<web::WebFramesManagerObserverBridge>
+      _webFramesManagerObserverBridge;
 
   // Bridge to observe form activity in |_webState|.
   std::unique_ptr<FormActivityObserverBridge> _formActivityObserverBridge;
@@ -167,6 +169,12 @@ BOOL canProcessCrossOriginIframes() {
     _webStateObserverBridge =
         std::make_unique<web::WebStateObserverBridge>(self);
     _webState->AddObserver(_webStateObserverBridge.get());
+    _webFramesManagerObserverBridge =
+        std::make_unique<web::WebFramesManagerObserverBridge>(self);
+    web::WebFramesManager* framesManager =
+        password_manager::PasswordManagerJavaScriptFeature::GetInstance()
+            ->GetWebFramesManager(_webState);
+    framesManager->AddObserver(_webFramesManagerObserverBridge.get());
     _formActivityObserverBridge =
         std::make_unique<FormActivityObserverBridge>(_webState, self);
     _formHelper = formHelper;
@@ -257,66 +265,54 @@ BOOL canProcessCrossOriginIframes() {
     UniqueIDDataTabHelper* uniqueIDDataTabHelper =
         UniqueIDDataTabHelper::FromWebState(_webState);
     uint32_t maxUniqueID = uniqueIDDataTabHelper->GetNextAvailableRendererID();
+    password_manager::PasswordManagerJavaScriptFeature* feature =
+        password_manager::PasswordManagerJavaScriptFeature::GetInstance();
+    web::WebFrame* mainFrame =
+        feature->GetWebFramesManager(_webState)->GetMainWebFrame();
     [self didFinishPasswordFormExtraction:std::vector<FormData>()
                           withMaxUniqueID:maxUniqueID
                     triggeredByFormChange:false
-                                  inFrame:web::GetMainFrame(_webState)];
+                                  inFrame:mainFrame];
   }
 }
 
-- (void)webState:(web::WebState*)webState
-    frameDidBecomeAvailable:(web::WebFrame*)web_frame {
-  DCHECK_EQ(_webState, webState);
-  DCHECK(web_frame);
-  if (!web_frame->CanCallJavaScriptFunction()) {
-    return;
-  }
+- (void)webFramesManager:(web::WebFramesManager*)webFramesManager
+    frameBecameAvailable:(web::WebFrame*)webFrame {
+  DCHECK(webFrame);
   UniqueIDDataTabHelper* uniqueIDDataTabHelper =
       UniqueIDDataTabHelper::FromWebState(_webState);
   uint32_t nextAvailableRendererID =
       uniqueIDDataTabHelper->GetNextAvailableRendererID();
   [self.formHelper setUpForUniqueIDsWithInitialState:nextAvailableRendererID
-                                             inFrame:web_frame];
+                                             inFrame:webFrame];
 
-  if (IsCrossOriginIframe(_webState, web_frame->IsMainFrame(),
-                          web_frame->GetSecurityOrigin()) &&
-      !canProcessCrossOriginIframes()) {
-    return;
-  }
-
-  if (webState->ContentIsHTML()) {
+  if (_webState->ContentIsHTML()) {
     [self findPasswordFormsAndSendToPasswordStoreForFormChange:false
-                                                       inFrame:web_frame];
+                                                       inFrame:webFrame];
   }
 }
 
 // Track detaching iframes.
-- (void)webState:(web::WebState*)webState
-    frameWillBecomeUnavailable:(web::WebFrame*)web_frame {
-  DCHECK_EQ(_webState, webState);
+- (void)webFramesManager:(web::WebFramesManager*)webFramesManager
+    frameBecameUnavailable:(const std::string&)frameId {
   // No need to try to detect submissions when the webState is being destroyed.
-  if (webState->IsBeingDestroyed()) {
+  if (_webState->IsBeingDestroyed()) {
     return;
   }
-  if (web_frame->IsMainFrame() || !web_frame->CanCallJavaScriptFunction()) {
-    return;
-  }
-
-  if (IsCrossOriginIframe(_webState, web_frame->IsMainFrame(),
-                          web_frame->GetSecurityOrigin()) &&
-      !canProcessCrossOriginIframes()) {
+  web::WebFrame* webFrame = webFramesManager->GetFrameWithId(frameId);
+  if (!webFrame || webFrame->IsMainFrame()) {
     return;
   }
 
   // Casting is safe, as this code is run on iOS Chrome & WebView only.
   auto* driver = static_cast<IOSPasswordManagerDriver*>(
-      [_driverHelper PasswordManagerDriver:web_frame]);
+      [_driverHelper PasswordManagerDriver:webFrame]);
   if (driver)
     driver->ProcessFrameDeletion();
 
   auto fieldDataManager =
       UniqueIDDataTabHelper::FromWebState(_webState)->GetFieldDataManager();
-  _passwordManager->OnIframeDetach(web_frame->GetFrameId(), driver,
+  _passwordManager->OnIframeDetach(webFrame->GetFrameId(), driver,
                                    *fieldDataManager);
 }
 
@@ -325,6 +321,11 @@ BOOL canProcessCrossOriginIframes() {
   if (_webState) {
     _webState->RemoveObserver(_webStateObserverBridge.get());
     _webStateObserverBridge.reset();
+    web::WebFramesManager* framesManager =
+        password_manager::PasswordManagerJavaScriptFeature::GetInstance()
+            ->GetWebFramesManager(_webState);
+    framesManager->RemoveObserver(_webFramesManagerObserverBridge.get());
+    _webFramesManagerObserverBridge.reset();
     _formActivityObserverBridge.reset();
     _webState = nullptr;
   }
@@ -349,10 +350,14 @@ BOOL canProcessCrossOriginIframes() {
                              (SuggestionsAvailableCompletion)completion {
   DCHECK_EQ(_webState, webState);
   if (!GetPageURLAndCheckTrustLevel(webState, nullptr)) {
+    completion(NO);
     return;
   }
-  web::WebFrame* frame =
-      web::GetWebFrameWithId(webState, SysNSStringToUTF8(formQuery.frameID));
+
+  password_manager::PasswordManagerJavaScriptFeature* feature =
+      password_manager::PasswordManagerJavaScriptFeature::GetInstance();
+  web::WebFrame* frame = feature->GetWebFramesManager(webState)->GetFrameWithId(
+      SysNSStringToUTF8(formQuery.frameID));
 
   // Clicking on a password form field from a different form on the same page
   // triggers displaying the on-screen keyboard. When the keyboard is
@@ -360,9 +365,7 @@ BOOL canProcessCrossOriginIframes() {
   // previous clicked field in the previous password form. Getting the frame
   // from this previous frame id will result in a null frame pointer, hence
   // the check below.
-  if (!frame || (IsCrossOriginIframe(_webState, frame->IsMainFrame(),
-                                     frame->GetSecurityOrigin()) &&
-                 !canProcessCrossOriginIframes())) {
+  if (!frame) {
     completion(NO);
     return;
   }
@@ -422,14 +425,17 @@ BOOL canProcessCrossOriginIframes() {
                  completionHandler:(SuggestionsReadyCompletion)completion {
   DCHECK_EQ(_webState, webState);
   if (!GetPageURLAndCheckTrustLevel(webState, nullptr)) {
+    completion({}, self);
     return;
   }
-  web::WebFrame* frame =
-      web::GetWebFrameWithId(_webState, SysNSStringToUTF8(formQuery.frameID));
 
-  if (frame == nullptr || (IsCrossOriginIframe(_webState, frame->IsMainFrame(),
-                                               frame->GetSecurityOrigin()) &&
-                           !canProcessCrossOriginIframes())) {
+  password_manager::PasswordManagerJavaScriptFeature* feature =
+      password_manager::PasswordManagerJavaScriptFeature::GetInstance();
+  web::WebFrame* frame =
+      feature->GetWebFramesManager(_webState)->GetFrameWithId(
+          SysNSStringToUTF8(formQuery.frameID));
+
+  if (frame == nullptr) {
     completion({}, self);
     return;
   }
@@ -490,7 +496,27 @@ BOOL canProcessCrossOriginIframes() {
     LogPasswordDropdownShown(*suggestionState, [self isIncognito]);
   }
 
-  completion([suggestions copy], self);
+  if (suggestions.count == 0 || ![_delegate shouldShowAccountStorageNotice]) {
+    completion(suggestions, self);
+    return;
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  [_delegate showAccountStorageNotice:^{
+    if (!weakSelf) {
+      return;
+    }
+    if (weakSelf.delegate && !weakSelf.delegate.passwordManagerClient
+             ->GetPasswordFeatureManager()
+             ->IsOptedInForAccountStorage()) {
+      // Re-fetch, account suggestions are no longer valid.
+      [weakSelf retrieveSuggestionsForForm:formQuery
+                                  webState:webState
+                         completionHandler:completion];
+    } else {
+      completion(suggestions, weakSelf);
+    }
+  }];
 }
 
 - (void)didSelectSuggestion:(FormSuggestion*)suggestion
@@ -500,8 +526,11 @@ BOOL canProcessCrossOriginIframes() {
               uniqueFieldID:(FieldRendererId)uniqueFieldID
                     frameID:(NSString*)frameID
           completionHandler:(SuggestionHandledCompletion)completion {
+  password_manager::PasswordManagerJavaScriptFeature* feature =
+      password_manager::PasswordManagerJavaScriptFeature::GetInstance();
   web::WebFrame* frame =
-      web::GetWebFrameWithId(_webState, SysNSStringToUTF8(frameID));
+      feature->GetWebFramesManager(_webState)->GetFrameWithId(
+          SysNSStringToUTF8(frameID));
 
   switch (suggestion.identifier) {
     case autofill::POPUP_ITEM_ID_ALL_SAVED_PASSWORDS_ENTRY: {
@@ -603,11 +632,6 @@ BOOL canProcessCrossOriginIframes() {
   if (frame->IsMainFrame()) {
     _passwordManager->OnPasswordFormSubmitted(driver, form);
   } else {
-    if (IsCrossOriginIframe(_webState, frame->IsMainFrame(),
-                            frame->GetSecurityOrigin()) &&
-        !canProcessCrossOriginIframes()) {
-      return;
-    }
     // Show a save prompt immediately because for iframes it is very hard to
     // figure out correctness of password forms submission.
     _passwordManager->OnSubframeFormSubmission(driver, form);
@@ -621,6 +645,12 @@ BOOL canProcessCrossOriginIframes() {
                                             inFrame:(web::WebFrame*)frame {
   [self findPasswordFormsAndSendToPasswordStoreForFormChange:false
                                                      inFrame:frame];
+}
+
+- (void)attachListenersForBottomSheet:
+            (const std::vector<autofill::FieldRendererId>&)rendererIds
+                              inFrame:(web::WebFrame*)frame {
+  [self.delegate attachListenersForBottomSheet:rendererIds inFrame:frame];
 }
 
 #pragma mark - Private methods
@@ -891,10 +921,7 @@ BOOL canProcessCrossOriginIframes() {
 
   GURL pageURL;
   if (!GetPageURLAndCheckTrustLevel(webState, &pageURL) || !frame ||
-      !frame->CanCallJavaScriptFunction() || params.input_missing ||
-      (IsCrossOriginIframe(_webState, frame->IsMainFrame(),
-                           frame->GetSecurityOrigin()) &&
-       !canProcessCrossOriginIframes())) {
+      params.input_missing) {
     _lastFocusedFormIdentifier = FormRendererId();
     _lastFocusedFieldIdentifier = FieldRendererId();
     _lastFocusedFrame = nullptr;
@@ -926,11 +953,6 @@ BOOL canProcessCrossOriginIframes() {
     didRegisterFormRemoval:(const autofill::FormRemovalParams&)params
                    inFrame:(web::WebFrame*)frame {
   DCHECK_EQ(_webState, webState);
-  if (IsCrossOriginIframe(_webState, frame->IsMainFrame(),
-                          frame->GetSecurityOrigin()) &&
-      !canProcessCrossOriginIframes()) {
-    return;
-  }
   if (!params.unique_form_id) {
     // If formless password fields were removed, check that all of them had
     // user input.

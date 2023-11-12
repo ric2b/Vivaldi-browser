@@ -34,7 +34,7 @@ class DeviceMenuController {
   bool HandleCommand(int command_id, int event_flags);
 
  private:
-  VivaldiRenderViewContextMenu* rv_context_menu_;
+  const raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;
   Mode mode_;
 };
 

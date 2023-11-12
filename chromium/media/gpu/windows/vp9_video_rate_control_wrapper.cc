@@ -42,6 +42,14 @@ int VP9RateControl::GetLoopfilterLevel() const {
 }
 
 template <>
+void VP9RateControl::PostEncodeUpdate(uint64_t encoded_frame_size,
+                                      const FrameParams& frame_params) {
+  DCHECK(impl_);
+  return impl_->PostEncodeUpdate(encoded_frame_size,
+                                 ConvertFrameParams(frame_params));
+}
+
+template <>
 libvpx::VP9RateControlRtcConfig VP9RateControl::ConvertControlConfig(
     const RateControlConfig& config) {
   libvpx::VP9RateControlRtcConfig rc_config;
@@ -65,11 +73,13 @@ libvpx::VP9RateControlRtcConfig VP9RateControl::ConvertControlConfig(
   rc_config.max_inter_bitrate_pct = 0;
   rc_config.ss_number_layers = config.ss_number_layers;
   rc_config.ts_number_layers = config.ts_number_layers;
+  for (int tid = 0; tid < config.ts_number_layers; ++tid) {
+    rc_config.ts_rate_decimator[tid] = config.ts_rate_decimator[tid];
+  }
   for (int sid = 0; sid < config.ss_number_layers; ++sid) {
     rc_config.scaling_factor_num[sid] = config.scaling_factor_num[sid];
     rc_config.scaling_factor_den[sid] = config.scaling_factor_den[sid];
     for (int tid = 0; tid < config.ts_number_layers; ++tid) {
-      rc_config.ts_rate_decimator[tid] = config.ts_rate_decimator[tid];
       const int i = sid * config.ts_number_layers + tid;
       rc_config.max_quantizers[i] = config.max_quantizers[i];
       rc_config.min_quantizers[i] = config.min_quantizers[i];
@@ -87,8 +97,8 @@ libvpx::VP9FrameParamsQpRTC VP9RateControl::ConvertFrameParams(
   rc_params.temporal_layer_id = frame_params.temporal_layer_id;
   rc_params.frame_type =
       frame_params.frame_type == FrameParams::FrameType::kKeyFrame
-          ? FRAME_TYPE::KEY_FRAME
-          : FRAME_TYPE::INTER_FRAME;
+          ? libvpx::RcFrameType::kKeyFrame
+          : libvpx::RcFrameType::kInterFrame;
   return rc_params;
 }
 

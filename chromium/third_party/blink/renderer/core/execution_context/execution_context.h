@@ -139,6 +139,9 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
                                      public UseCounter,
                                      public FeatureContext {
  public:
+  ExecutionContext(const ExecutionContext&) = delete;
+  ExecutionContext& operator=(const ExecutionContext&) = delete;
+
   void Trace(Visitor*) const override;
 
   static ExecutionContext* From(const ScriptState*);
@@ -174,6 +177,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual bool IsPaintWorkletGlobalScope() const { return false; }
   virtual bool IsThreadedWorkletGlobalScope() const { return false; }
   virtual bool IsShadowRealmGlobalScope() const { return false; }
+  virtual bool IsSharedStorageWorkletGlobalScope() const { return false; }
   virtual bool IsJSExecutionForbidden() const { return false; }
 
   // TODO(crbug.com/1335924) Change this method to be pure-virtual and each
@@ -268,7 +272,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   bool is_in_back_forward_cache() const { return is_in_back_forward_cache_; }
 
   void SetLifecycleState(mojom::FrameLifecycleState);
-  void NotifyContextDestroyed();
+  virtual void NotifyContextDestroyed();
 
   using ConsoleLogger::AddConsoleMessage;
 
@@ -304,7 +308,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   SecureContextMode GetSecureContextMode() const {
     return security_context_.GetSecureContextMode();
   }
-  bool IsSecureContext() const {
+  virtual bool IsSecureContext() const {
     return GetSecureContextMode() == SecureContextMode::kSecureContext;
   }
   bool IsSecureContext(String& error_message) const;
@@ -490,9 +494,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual bool HasStorageAccess() const { return false; }
 
  protected:
-  explicit ExecutionContext(v8::Isolate* isolate, Agent*);
-  ExecutionContext(const ExecutionContext&) = delete;
-  ExecutionContext& operator=(const ExecutionContext&) = delete;
+  ExecutionContext(v8::Isolate* isolate, Agent* agent, bool is_window = false);
   ~ExecutionContext() override;
 
   // Resetting the Agent is only necessary for a special case related to the

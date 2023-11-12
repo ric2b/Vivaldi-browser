@@ -63,6 +63,14 @@ BASE_FEATURE(kEnableFeedSyntheticCapabilities,
              "EnableFeedSyntheticCapabilities",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kWebFeedFeedbackReroute,
+             "WebFeedFeedbackReroute",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableFollowManagementInstantReload,
+             "EnableFollowManagementInstantReload",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 #pragma mark - Feature parameters
 
 const char kDiscoverFeedSRSReconstructedTemplatesEnabled[] =
@@ -75,6 +83,8 @@ const char kDiscoverFeedSRSPreloadTemplatesEnabled[] =
 const char kDiscoverFeedTopSyncPromoStyle[] = "DiscoverFeedTopSyncPromoStyle";
 const char kDiscoverFeedTopSyncPromoAutodismissImpressions[] =
     "autodismissImpressions";
+const char kDiscoverFeedTopSyncPromoIgnoreEngagementCondition[] =
+    "IgnoreFeedEngagementConditionForTopSyncPromo";
 
 // EnableFollowingFeedDefaultSortType parameters.
 const char kFollowingFeedDefaultSortTypeSortByLatest[] = "SortByLatest";
@@ -119,6 +129,13 @@ SigninPromoViewStyle GetTopOfFeedPromoStyle() {
   // Defaults to Compact Titled (Unpersonalized).
   return (SigninPromoViewStyle)base::GetFieldTrialParamByFeatureAsInt(
       kEnableDiscoverFeedTopSyncPromo, kDiscoverFeedTopSyncPromoStyle, 1);
+}
+
+bool ShouldIgnoreFeedEngagementConditionForTopSyncPromo() {
+  CHECK(IsDiscoverFeedTopSyncPromoEnabled());
+  return base::GetFieldTrialParamByFeatureAsBool(
+      kEnableDiscoverFeedTopSyncPromo,
+      kDiscoverFeedTopSyncPromoIgnoreEngagementCondition, false);
 }
 
 int FeedSyncPromoAutodismissCount() {
@@ -174,4 +191,12 @@ int FollowingFeedHeaderHeight() {
   return base::GetFieldTrialParamByFeatureAsInt(kFeedHeaderSettings,
                                                 kOverrideFeedHeaderHeight,
                                                 defaultWebChannelsHeaderHeight);
+}
+
+bool IsWebFeedFeedbackRerouteEnabled() {
+  return base::FeatureList::IsEnabled(kWebFeedFeedbackReroute);
+}
+
+bool IsFollowManagementInstantReloadEnabled() {
+  return base::FeatureList::IsEnabled(kEnableFollowManagementInstantReload);
 }

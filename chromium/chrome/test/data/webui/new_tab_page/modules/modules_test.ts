@@ -10,6 +10,7 @@ import {PageCallbackRouter, PageHandlerRemote, PageRemote} from 'chrome://new-ta
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {fakeMetricsPrivate, MetricsTracker} from 'chrome://webui-test/metrics_test_support.js';
+import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {TestMock} from 'chrome://webui-test/test_mock.js';
 
 import {assertNotStyle, assertStyle, capture, createElement, initNullModule, installMock, render} from '../test_support.js';
@@ -35,7 +36,7 @@ suite('NewTabPageModulesModulesTest', () => {
   async function createModulesElement(modules: Module[]):
       Promise<ModulesElement> {
     const modulesPromise = Promise.resolve(modules);
-    moduleRegistry.setResultFor('initializeModules', modulesPromise);
+    moduleRegistry.setResultFor('initializeModulesHavingIds', modulesPromise);
     const modulesElement = new ModulesElement();
     document.body.appendChild(modulesElement);
     await modulesPromise;
@@ -48,8 +49,14 @@ suite('NewTabPageModulesModulesTest', () => {
       const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
       const barDescriptor = new ModuleDescriptor('bar', initNullModule);
       const bazDescriptor = new ModuleDescriptor('baz', initNullModule);
-      moduleRegistry.setResultFor(
-          'getDescriptors', [fooDescriptor, barDescriptor, bazDescriptor]);
+      handler.setResultFor('getModulesIdNames', {
+        data: [
+          {id: fooDescriptor.id, name: fooDescriptor.id},
+          {id: barDescriptor.id, name: barDescriptor.id},
+          {id: bazDescriptor.id, name: bazDescriptor.id},
+        ],
+      });
+
       // Act.
       const modulesElement = await createModulesElement([
         {
@@ -106,8 +113,14 @@ suite('NewTabPageModulesModulesTest', () => {
         const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
         const barDescriptor = new ModuleDescriptor('bar', initNullModule);
         const bazDescriptor = new ModuleDescriptor('baz', initNullModule);
-        moduleRegistry.setResultFor(
-            'getDescriptors', [fooDescriptor, barDescriptor, bazDescriptor]);
+        handler.setResultFor('getModulesIdNames', {
+          data: [
+            {id: fooDescriptor.id, name: fooDescriptor.id},
+            {id: barDescriptor.id, name: barDescriptor.id},
+            {id: bazDescriptor.id, name: bazDescriptor.id},
+          ],
+        });
+
         // Act.
         const modulesElement = await createModulesElement([
           {
@@ -156,7 +169,9 @@ suite('NewTabPageModulesModulesTest', () => {
     test(`clicking customize chrome link sends event`, async () => {
       // Arrange.
       const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
-      moduleRegistry.setResultFor('getDescriptors', [fooDescriptor]);
+      handler.setResultFor(
+          'getModulesIdNames',
+          {data: [{id: fooDescriptor.id, name: fooDescriptor.id}]});
       const modulesElement = await createModulesElement([
         {
           descriptor: fooDescriptor,
@@ -180,9 +195,12 @@ suite('NewTabPageModulesModulesTest', () => {
       // Arrange.
       const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
       const barDescriptor = new ModuleDescriptor('bar', initNullModule);
-
-      moduleRegistry.setResultFor(
-          'getDescriptors', [fooDescriptor, barDescriptor]);
+      handler.setResultFor('getModulesIdNames', {
+        data: [
+          {id: fooDescriptor.id, name: fooDescriptor.id},
+          {id: barDescriptor.id, name: barDescriptor.id},
+        ],
+      });
       const modulesElement = await createModulesElement([
         {
           descriptor: fooDescriptor,
@@ -253,9 +271,14 @@ suite('NewTabPageModulesModulesTest', () => {
           'baz', ModuleHeight.SHORT, async () => createElement());
       const quzDescriptor = new ModuleDescriptorV2(
           'quz', ModuleHeight.TALL, async () => createElement());
-      moduleRegistry.setResultFor(
-          'getDescriptors',
-          [fooDescriptor, barDescriptor, bazDescriptor, quzDescriptor]);
+      handler.setResultFor('getModulesIdNames', {
+        data: [
+          {id: fooDescriptor.id, name: fooDescriptor.id},
+          {id: barDescriptor.id, name: barDescriptor.id},
+          {id: bazDescriptor.id, name: bazDescriptor.id},
+          {id: quzDescriptor.id, name: quzDescriptor.id},
+        ],
+      });
 
       // Act.
       const modulesElement = await createModulesElement([
@@ -320,8 +343,13 @@ suite('NewTabPageModulesModulesTest', () => {
           'bar', ModuleHeight.SHORT, async () => createElement());
       const bazDescriptor = new ModuleDescriptorV2(
           'baz', ModuleHeight.SHORT, async () => createElement());
-      moduleRegistry.setResultFor(
-          'getDescriptors', [fooDescriptor, barDescriptor, bazDescriptor]);
+      handler.setResultFor('getModulesIdNames', {
+        data: [
+          {id: fooDescriptor.id, name: fooDescriptor.id},
+          {id: barDescriptor.id, name: barDescriptor.id},
+          {id: bazDescriptor.id, name: bazDescriptor.id},
+        ],
+      });
 
       // Act.
       const modulesElement = await createModulesElement([
@@ -416,7 +444,11 @@ suite('NewTabPageModulesModulesTest', () => {
       assertFalse(restoreCalled);
 
       // Act.
-      modulesElement.$.undoRemoveModuleButton.click();
+      await waitAfterNextRender(modulesElement);
+      const undoRemoveModuleButton =
+          modulesElement.shadowRoot!.querySelector('#undoRemoveModuleButton') as
+          HTMLElement;
+      undoRemoveModuleButton.click();
 
       // Assert.
       assertDeepEquals(['foo', false], handler.getArgs('setModuleDisabled')[1]);
@@ -458,11 +490,66 @@ suite('NewTabPageModulesModulesTest', () => {
     });
   });
 
+  test('modules can be dismissed with no restore action', async () => {
+    const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
+    handler.setResultFor('getModulesIdNames', {
+      data: [
+        {id: fooDescriptor.id, name: fooDescriptor.id},
+      ],
+    });
+
+    // Act.
+    const modulesElement = await createModulesElement([
+      {
+        descriptor: fooDescriptor,
+        element: createElement(),
+      },
+    ]);
+    callbackRouterRemote.setDisabledModules(false, []);
+    await callbackRouterRemote.$.flushForTesting();
+
+    const moduleWrappers =
+        modulesElement.shadowRoot!.querySelectorAll('ntp-module-wrapper');
+    const moduleWrapperContainers =
+        modulesElement.shadowRoot!.querySelectorAll('.module-container');
+    assertEquals(1, moduleWrappers.length);
+    assertEquals(1, moduleWrapperContainers.length);
+    assertNotStyle(moduleWrappers[0]!, 'display', 'none');
+    assertNotStyle(moduleWrapperContainers[0]!, 'display', 'none');
+    assertFalse(modulesElement.$.removeModuleToast.open);
+
+    // Act.
+    moduleWrappers[0]!.dispatchEvent(new CustomEvent('dismiss-module', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        message: 'Foo',
+      },
+    }));
+    await waitAfterNextRender(modulesElement);
+
+    // Assert.
+    assertNotStyle(moduleWrappers[0]!, 'display', 'none');
+    assertStyle(moduleWrapperContainers[0]!, 'display', 'none');
+    assertTrue(modulesElement.$.removeModuleToast.open);
+    assertEquals(
+        'Foo', modulesElement.$.removeModuleToastMessage.textContent!.trim());
+    assertEquals(1, handler.getCallCount('onDismissModule'));
+    assertEquals('foo', handler.getArgs('onDismissModule')[0]);
+    assertEquals(
+        null,
+        modulesElement.shadowRoot!.querySelector('#undoRemoveModuleButton'));
+  });
+
   test('modules can be dismissed and restored', async () => {
     // Arrange.
     let restoreCalled = false;
     const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
-    moduleRegistry.setResultFor('getDescriptors', [fooDescriptor]);
+    handler.setResultFor('getModulesIdNames', {
+      data: [
+        {id: fooDescriptor.id, name: fooDescriptor.id},
+      ],
+    });
 
     // Act.
     const modulesElement = await createModulesElement([
@@ -508,7 +595,11 @@ suite('NewTabPageModulesModulesTest', () => {
     assertFalse(restoreCalled);
 
     // Act.
-    modulesElement.$.undoRemoveModuleButton.click();
+    await waitAfterNextRender(modulesElement);
+    const undoRemoveModuleButton =
+        modulesElement.shadowRoot!.querySelector('#undoRemoveModuleButton') as
+        HTMLElement;
+    undoRemoveModuleButton.click();
 
     // Assert.
     assertNotStyle(moduleWrappers[0]!, 'display', 'none');
@@ -522,7 +613,11 @@ suite('NewTabPageModulesModulesTest', () => {
     // Arrange.
     let restoreCalled = false;
     const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
-    moduleRegistry.setResultFor('getDescriptors', [fooDescriptor]);
+    handler.setResultFor('getModulesIdNames', {
+      data: [
+        {id: fooDescriptor.id, name: fooDescriptor.id},
+      ],
+    });
 
     // Act.
     const modulesElement = await createModulesElement([{
@@ -574,7 +669,11 @@ suite('NewTabPageModulesModulesTest', () => {
     assertFalse(restoreCalled);
 
     // Act.
-    modulesElement.$.undoRemoveModuleButton.click();
+    await waitAfterNextRender(modulesElement);
+    const undoRemoveModuleButton =
+        modulesElement.shadowRoot!.querySelector('#undoRemoveModuleButton') as
+        HTMLElement;
+    undoRemoveModuleButton.click();
 
     // Assert.
     assertDeepEquals(['foo', false], handler.getArgs('setModuleDisabled')[1]);
@@ -604,8 +703,12 @@ suite('NewTabPageModulesModulesTest', () => {
     // Arrange.
     const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
     const barDescriptor = new ModuleDescriptor('bar', initNullModule);
-    moduleRegistry.setResultFor(
-        'getDescriptors', [fooDescriptor, barDescriptor]);
+    handler.setResultFor('getModulesIdNames', {
+      data: [
+        {id: fooDescriptor.id, name: fooDescriptor.id},
+        {id: barDescriptor.id, name: barDescriptor.id},
+      ],
+    });
     await createModulesElement([
       {
         descriptor: fooDescriptor,
@@ -627,8 +730,12 @@ suite('NewTabPageModulesModulesTest', () => {
     // Arrange.
     const fooDescriptor = new ModuleDescriptor('foo', initNullModule);
     const barDescriptor = new ModuleDescriptor('bar', initNullModule);
-    moduleRegistry.setResultFor(
-        'getDescriptors', [fooDescriptor, barDescriptor]);
+    handler.setResultFor('getModulesIdNames', {
+      data: [
+        {id: fooDescriptor.id, name: fooDescriptor.id},
+        {id: barDescriptor.id, name: barDescriptor.id},
+      ],
+    });
     await createModulesElement([
       {
         descriptor: fooDescriptor,
@@ -669,8 +776,13 @@ suite('NewTabPageModulesModulesTest', () => {
       const fooBarDescriptor = new ModuleDescriptorV2(
           'foo bar', ModuleHeight.TALL, async () => createElement());
 
-      moduleRegistry.setResultFor(
-          'getDescriptors', [fooDescriptor, barDescriptor, fooBarDescriptor]);
+      handler.setResultFor('getModulesIdNames', {
+        data: [
+          {id: fooDescriptor.id, name: fooDescriptor.id},
+          {id: barDescriptor.id, name: barDescriptor.id},
+          {id: fooBarDescriptor.id, name: fooBarDescriptor.id},
+        ],
+      });
       const modulesElement = await createModulesElement([
         {
           descriptor: fooDescriptor,
@@ -837,8 +949,13 @@ suite('NewTabPageModulesModulesTest', () => {
       const fooBarDescriptor = new ModuleDescriptorV2(
           'foo bar', ModuleHeight.SHORT, async () => createElement());
 
-      moduleRegistry.setResultFor(
-          'getDescriptors', [fooDescriptor, barDescriptor, fooBarDescriptor]);
+      handler.setResultFor('getModulesIdNames', {
+        data: [
+          {id: fooDescriptor.id, name: fooDescriptor.id},
+          {id: barDescriptor.id, name: barDescriptor.id},
+          {id: fooBarDescriptor.id, name: fooBarDescriptor.id},
+        ],
+      });
       const modulesElement = await createModulesElement([
         {
           descriptor: fooDescriptor,
@@ -922,8 +1039,13 @@ suite('NewTabPageModulesModulesTest', () => {
       const fooBarDescriptor = new ModuleDescriptorV2(
           'foo bar', ModuleHeight.SHORT, async () => createElement());
 
-      moduleRegistry.setResultFor(
-          'getDescriptors', [fooDescriptor, barDescriptor, fooBarDescriptor]);
+      handler.setResultFor('getModulesIdNames', {
+        data: [
+          {id: fooDescriptor.id, name: fooDescriptor.id},
+          {id: barDescriptor.id, name: barDescriptor.id},
+          {id: fooBarDescriptor.id, name: fooBarDescriptor.id},
+        ],
+      });
       const modulesElement = await createModulesElement([
         {
           descriptor: fooDescriptor,
@@ -994,8 +1116,12 @@ suite('NewTabPageModulesModulesTest', () => {
       assertEquals(1, moduleWrappers.indexOf(tallModule));
       assertEquals(2, moduleWrappers.indexOf(shortModule1));
 
-      // Act.
-      modulesElement.$.undoRemoveModuleButton.click();
+      // // Act.
+      await waitAfterNextRender(modulesElement);
+      const undoRemoveModuleButton =
+          modulesElement.shadowRoot!.querySelector('#undoRemoveModuleButton') as
+          HTMLElement;
+      undoRemoveModuleButton.click();
 
       // Assert.
       assertDeepEquals(['bar', false], handler.getArgs('setModuleDisabled')[1]);

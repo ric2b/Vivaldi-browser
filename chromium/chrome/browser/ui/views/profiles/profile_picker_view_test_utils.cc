@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/views/profiles/profile_picker_view_test_utils.h"
 #include "chrome/browser/ui/webui/signin/enterprise_profile_welcome_handler.h"
 #include "chrome/browser/ui/webui/signin/enterprise_profile_welcome_ui.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
@@ -93,7 +94,7 @@ class TestProfileManagementFlowController
     std::move(initial_step_load_finished_closure_).Run();
   }
 
-  void CancelPostSignInFlow() override { NOTREACHED(); }
+  void CancelPostSignInFlow() override { NOTREACHED_NORETURN(); }
 
   Step step_;
   ProfileManagementStepTestView::StepControllerFactory step_controller_factory_;
@@ -252,21 +253,18 @@ void ExpectPickerWelcomeScreenTypeAndProceed(
 void CompleteLacrosFirstRun(
     LoginUIService::SyncConfirmationUIClosedResult result) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
-  Profile* profile = profiles::testing::CreateProfileSync(
+  Profile& profile = profiles::testing::CreateProfileSync(
       profile_manager, profile_manager->GetPrimaryUserProfilePath());
 
   WaitForPickerWidgetCreated();
-  WaitForPickerLoadStop(GURL("chrome://enterprise-profile-welcome/"));
+  WaitForPickerLoadStop(GURL(chrome::kChromeUIIntroURL));
 
   ASSERT_TRUE(ProfilePicker::IsFirstRunOpen());
   EXPECT_EQ(0u, BrowserList::GetInstance()->size());
 
-  ExpectPickerWelcomeScreenType(
-      EnterpriseProfileWelcomeUI::ScreenType::kLacrosConsumerWelcome);
   base::Value::List args;
-  args.Append(false);
   GetPickerWebContents()->GetWebUI()->ProcessWebUIMessage(
-      GetPickerWebContents()->GetURL(), "proceed", std::move(args));
+      GetPickerWebContents()->GetURL(), "continueWithAccount", std::move(args));
 
   WaitForPickerLoadStop(AppendSyncConfirmationQueryParams(
       GURL("chrome://sync-confirmation/"), SyncConfirmationStyle::kWindow));
@@ -278,7 +276,7 @@ void CompleteLacrosFirstRun(
     // open.
     ProfilePicker::Hide();
   } else {
-    LoginUIServiceFactory::GetForProfile(profile)->SyncConfirmationUIClosed(
+    LoginUIServiceFactory::GetForProfile(&profile)->SyncConfirmationUIClosed(
         result);
   }
 }

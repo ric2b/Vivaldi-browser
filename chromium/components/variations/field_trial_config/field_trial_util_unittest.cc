@@ -77,6 +77,8 @@ class TestVariationsServiceClient : public VariationsServiceClient {
     return false;
   }
   bool IsEnterprise() override { return false; }
+  void RemoveGoogleGroupsFromPrefsForDeletedProfiles(
+      PrefService* local_state) override {}
 
  private:
   // VariationsServiceClient:
@@ -113,12 +115,12 @@ TEST_F(FieldTrialUtilTest, AssociateParamsFromString) {
   ASSERT_TRUE(AssociateParamsFromString(kVariationsString));
 
   base::FieldTrialList::CreateFieldTrial(kTrialName, "B");
-  EXPECT_EQ("/", GetVariationParamValue(kTrialName, "a"));
-  EXPECT_EQ(std::string(), GetVariationParamValue(kTrialName, "b"));
-  EXPECT_EQ(std::string(), GetVariationParamValue(kTrialName, "x"));
+  EXPECT_EQ("/", base::GetFieldTrialParamValue(kTrialName, "a"));
+  EXPECT_EQ(std::string(), base::GetFieldTrialParamValue(kTrialName, "b"));
+  EXPECT_EQ(std::string(), base::GetFieldTrialParamValue(kTrialName, "x"));
 
   std::map<std::string, std::string> params;
-  EXPECT_TRUE(GetVariationParams(kTrialName, &params));
+  EXPECT_TRUE(base::GetFieldTrialParams(kTrialName, &params));
   EXPECT_EQ(1U, params.size());
   EXPECT_EQ("/", params["a"]);
 }
@@ -201,11 +203,11 @@ TEST_F(FieldTrialUtilTest, AssociateParamsFromFieldTrialConfig) {
       kConfig, override_callback_.callback(), platform,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("1", GetVariationParamValue("TestTrial1", "x"));
-  EXPECT_EQ("2", GetVariationParamValue("TestTrial1", "y"));
+  EXPECT_EQ("1", base::GetFieldTrialParamValue("TestTrial1", "x"));
+  EXPECT_EQ("2", base::GetFieldTrialParamValue("TestTrial1", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_TRUE(GetVariationParams("TestTrial1", &params));
+  EXPECT_TRUE(base::GetFieldTrialParams("TestTrial1", &params));
   EXPECT_EQ(2U, params.size());
   EXPECT_EQ("1", params["x"]);
   EXPECT_EQ("2", params["y"]);
@@ -405,11 +407,11 @@ TEST_F(FieldTrialUtilTest,
         kConfig, override_callback_.callback(), platform,
         variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-    EXPECT_EQ("1", GetVariationParamValue("TestTrial", "x"));
-    EXPECT_EQ("2", GetVariationParamValue("TestTrial", "y"));
+    EXPECT_EQ("1", base::GetFieldTrialParamValue("TestTrial", "x"));
+    EXPECT_EQ("2", base::GetFieldTrialParamValue("TestTrial", "y"));
 
     std::map<std::string, std::string> params;
-    EXPECT_TRUE(GetVariationParams("TestTrial", &params));
+    EXPECT_TRUE(base::GetFieldTrialParams("TestTrial", &params));
     EXPECT_EQ(2U, params.size());
     EXPECT_EQ("1", params["x"]);
     EXPECT_EQ("2", params["y"]);
@@ -452,11 +454,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), Study::PLATFORM_ANDROID_WEBVIEW,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_FALSE(GetVariationParams("TestTrial", &params));
+  EXPECT_FALSE(base::GetFieldTrialParams("TestTrial", &params));
 
   EXPECT_EQ("", base::FieldTrialList::FindFullName("TestTrial"));
 }
@@ -496,11 +498,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), Study::PLATFORM_ANDROID_WEBVIEW,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("1", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("2", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("1", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("2", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_TRUE(GetVariationParams("TestTrial", &params));
+  EXPECT_TRUE(base::GetFieldTrialParams("TestTrial", &params));
   EXPECT_EQ(2U, params.size());
   EXPECT_EQ("1", params["x"]);
   EXPECT_EQ("2", params["y"]);
@@ -535,11 +537,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), platform,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("1", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("2", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("1", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("2", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_TRUE(GetVariationParams("TestTrial", &params));
+  EXPECT_TRUE(base::GetFieldTrialParams("TestTrial", &params));
   EXPECT_EQ(2U, params.size());
   EXPECT_EQ("1", params["x"]);
   EXPECT_EQ("2", params["y"]);
@@ -572,11 +574,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), platform,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("1", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("2", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("1", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("2", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_TRUE(GetVariationParams("TestTrial", &params));
+  EXPECT_TRUE(base::GetFieldTrialParams("TestTrial", &params));
   EXPECT_EQ(2U, params.size());
   EXPECT_EQ("1", params["x"]);
   EXPECT_EQ("2", params["y"]);
@@ -616,11 +618,11 @@ TEST_F(FieldTrialUtilTest,
         kConfig, override_callback_.callback(), Study::PLATFORM_ANDROID_WEBVIEW,
         variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-    EXPECT_EQ("", GetVariationParamValue("TestTrial", "x"));
-    EXPECT_EQ("", GetVariationParamValue("TestTrial", "y"));
+    EXPECT_EQ("", base::GetFieldTrialParamValue("TestTrial", "x"));
+    EXPECT_EQ("", base::GetFieldTrialParamValue("TestTrial", "y"));
 
     std::map<std::string, std::string> params;
-    EXPECT_FALSE(GetVariationParams("TestTrial", &params));
+    EXPECT_FALSE(base::GetFieldTrialParams("TestTrial", &params));
 
     EXPECT_EQ("", base::FieldTrialList::FindFullName("TestTrial"));
   }
@@ -868,11 +870,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), platform,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("1", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("2", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("1", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("2", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_TRUE(GetVariationParams("TestTrial", &params));
+  EXPECT_TRUE(base::GetFieldTrialParams("TestTrial", &params));
   EXPECT_EQ(2U, params.size());
   EXPECT_EQ("1", params["x"]);
   EXPECT_EQ("2", params["y"]);
@@ -918,11 +920,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), platform,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("1", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("2", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("1", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("2", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_TRUE(GetVariationParams("TestTrial", &params));
+  EXPECT_TRUE(base::GetFieldTrialParams("TestTrial", &params));
   EXPECT_EQ(2U, params.size());
   EXPECT_EQ("1", params["x"]);
   EXPECT_EQ("2", params["y"]);
@@ -961,11 +963,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), platform,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_FALSE(GetVariationParams("TestTrial", &params));
+  EXPECT_FALSE(base::GetFieldTrialParams("TestTrial", &params));
 
   EXPECT_EQ("", base::FieldTrialList::FindFullName("TestTrial"));
 }
@@ -1003,11 +1005,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), platform,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("1", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("2", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("1", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("2", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_TRUE(GetVariationParams("TestTrial", &params));
+  EXPECT_TRUE(base::GetFieldTrialParams("TestTrial", &params));
   EXPECT_EQ(2U, params.size());
   EXPECT_EQ("1", params["x"]);
   EXPECT_EQ("2", params["y"]);
@@ -1050,11 +1052,11 @@ TEST_F(FieldTrialUtilTest,
       kConfig, override_callback_.callback(), platform,
       variation_service_client_.GetCurrentFormFactor(), &feature_list);
 
-  EXPECT_EQ("", GetVariationParamValue("TestTrial", "x"));
-  EXPECT_EQ("", GetVariationParamValue("TestTrial", "y"));
+  EXPECT_EQ("", base::GetFieldTrialParamValue("TestTrial", "x"));
+  EXPECT_EQ("", base::GetFieldTrialParamValue("TestTrial", "y"));
 
   std::map<std::string, std::string> params;
-  EXPECT_FALSE(GetVariationParams("TestTrial", &params));
+  EXPECT_FALSE(base::GetFieldTrialParams("TestTrial", &params));
 
   EXPECT_EQ("", base::FieldTrialList::FindFullName("TestTrial"));
 }

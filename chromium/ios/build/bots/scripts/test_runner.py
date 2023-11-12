@@ -588,11 +588,26 @@ class TestRunner(object):
       # figure out a way to identify test repo info depending on the test suite.
       parser.ParseAndPopulateTestResultLocations(DEFAULT_TEST_REPO,
                                                  self.output_disabled_tests)
+    elif isinstance(self, DeviceTestRunner):
+      # Pull the file from device first before parsing.
+      if (parser.compiled_tests_file_path != None):
+        LOGGER.info('Pulling test location file from iOS device Documents...')
+        file_name = os.path.split(parser.compiled_tests_file_path)[1]
+        pull_cmd = [
+            'idevicefs', '--udid', self.udid, 'pull',
+            '@%s/Documents/%s' % (self.cfbundleid, file_name), self.out_dir
+        ]
+        print_process_output(self.start_proc(pull_cmd))
+        host_tests_file_path = os.path.join(self.out_dir, file_name)
+        parser.ParseAndPopulateTestResultLocations(DEFAULT_TEST_REPO,
+                                                   self.output_disabled_tests,
+                                                   host_tests_file_path)
+      else:
+        LOGGER.warning('No compiled test files found in documents dir...')
+
     else:
-      # TODO(crbug.com/1091345): Pull the file from device first before parsing.
-      LOGGER.warning(
-          'Cannot populate test locations because it is not yet supported' +
-          'on device tests yet...')
+      LOGGER.warning('Test location reporting is not yet supported on %s',
+                     type(self))
 
     return parser.GetResultCollection()
 
@@ -608,7 +623,8 @@ class TestRunner(object):
     cmd = self.get_launch_command(test_app, out_dir, destination, self.shards)
     try:
       result = self._run(cmd=cmd, shards=self.shards or 1)
-      if result.crashed and not result.crashed_tests():
+      if (result.crashed and not result.spawning_test_launcher and
+          not result.crashed_tests()):
         # If the app crashed but not during any particular test case, assume
         # it crashed on startup. Try one more time.
         self.shutdown_and_restart()
@@ -620,13 +636,15 @@ class TestRunner(object):
 
       result.report_to_result_sink()
 
-      if result.crashed and not result.crashed_tests():
+      if (result.crashed and not result.spawning_test_launcher and
+          not result.crashed_tests()):
         raise AppLaunchError
 
       overall_result.add_result_collection(result)
 
       try:
-        while result.crashed and result.crashed_tests():
+        while (result.crashed and not result.spawning_test_launcher and
+               result.crashed_tests()):
           # If the app crashes during a specific test case, then resume at the
           # next test case. This is achieved by filtering out every test case
           # which has already run.
@@ -656,7 +674,8 @@ class TestRunner(object):
       # Retry failed test cases.
       test_app.excluded_tests = []
       never_expected_tests = overall_result.never_expected_tests()
-      if self.retries and never_expected_tests:
+      if (self.retries and not result.spawning_test_launcher and
+          never_expected_tests):
         LOGGER.warning('%s tests failed and will be retried.\n',
                        len(never_expected_tests))
         for i in range(self.retries):

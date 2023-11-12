@@ -12,15 +12,11 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
-#include "base/functional/callback_forward.h"
 #include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
 #include "base/logging.h"  // For CHECK macros.
-#include "base/memory/ref_counted.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
@@ -32,7 +28,6 @@
 #include "chrome/test/chromedriver/chrome/bidi_tracker.h"
 #include "chrome/test/chromedriver/chrome/browser_info.h"
 #include "chrome/test/chromedriver/chrome/chrome.h"
-#include "chrome/test/chromedriver/chrome/chrome_android_impl.h"
 #include "chrome/test/chromedriver/chrome/chrome_desktop_impl.h"
 #include "chrome/test/chromedriver/chrome/chrome_impl.h"
 #include "chrome/test/chromedriver/chrome/device_manager.h"
@@ -110,7 +105,7 @@ InitSessionParams::InitSessionParams(
 
 InitSessionParams::InitSessionParams(const InitSessionParams& other) = default;
 
-InitSessionParams::~InitSessionParams() {}
+InitSessionParams::~InitSessionParams() = default;
 
 // Look for W3C mode setting in InitSession command parameters.
 bool GetW3CSetting(const base::Value::Dict& params) {
@@ -485,8 +480,8 @@ Status ConfigureHeadlessSession(Session* session,
     download_directory = capabilities.prefs->FindStringByDottedPath(
         "download.default_directory");
     if (!download_directory) {
-      download_directory = capabilities.prefs->FindStringByDottedPath(
-          "download.default_directory");
+      download_directory =
+          capabilities.prefs->FindString("download.default_directory");
     }
   }
   session->headless_download_directory = std::make_unique<std::string>(
@@ -818,12 +813,8 @@ Status ExecuteGetWindowHandles(Session* session,
     return status;
 
   if (session->webSocketUrl) {
-    std::string mapper_view_id;
-    // TODO(chromedriver:4181): How do we know for sure that the first page is
-    // the mapper?
-    status = session->chrome->GetWebViewIdForFirstTab(&mapper_view_id,
-                                                      session->w3c_compliant);
-    auto it = base::ranges::find(web_view_ids, mapper_view_id);
+    auto it =
+        base::ranges::find(web_view_ids, session->bidi_mapper_web_view_id);
     if (it != web_view_ids.end()) {
       web_view_ids.erase(it);
     }
@@ -1066,15 +1057,14 @@ Status ExecuteGetLocation(Session* session,
     return Status(kUnknownError,
                   "Location must be set before it can be retrieved");
   }
-  base::Value location(base::Value::Type::DICT);
-  location.SetDoubleKey("latitude", session->overridden_geoposition->latitude);
-  location.SetDoubleKey("longitude",
-                        session->overridden_geoposition->longitude);
-  location.SetDoubleKey("accuracy", session->overridden_geoposition->accuracy);
+  base::Value::Dict location;
+  location.Set("latitude", session->overridden_geoposition->latitude);
+  location.Set("longitude", session->overridden_geoposition->longitude);
+  location.Set("accuracy", session->overridden_geoposition->accuracy);
   // Set a dummy altitude to make WebDriver clients happy.
   // https://code.google.com/p/chromedriver/issues/detail?id=281
-  location.SetDoubleKey("altitude", 0);
-  *value = base::Value::ToUniquePtrValue(location.Clone());
+  location.Set("altitude", 0);
+  *value = base::Value::ToUniquePtrValue(base::Value(std::move(location)));
   return Status(kOk);
 }
 
@@ -1102,18 +1092,15 @@ Status ExecuteGetNetworkConditions(Session* session,
     return Status(kUnknownError,
                   "network conditions must be set before it can be retrieved");
   }
-  base::Value conditions(base::Value::Type::DICT);
-  conditions.SetBoolKey("offline",
-                        session->overridden_network_conditions->offline);
-  conditions.SetIntKey("latency",
-                       session->overridden_network_conditions->latency);
-  conditions.SetIntKey(
-      "download_throughput",
-      session->overridden_network_conditions->download_throughput);
-  conditions.SetIntKey(
-      "upload_throughput",
-      session->overridden_network_conditions->upload_throughput);
-  *value = base::Value::ToUniquePtrValue(conditions.Clone());
+  base::Value::Dict conditions =
+      base::Value::Dict()
+          .Set("offline", session->overridden_network_conditions->offline)
+          .Set("latency", session->overridden_network_conditions->latency)
+          .Set("download_throughput",
+               session->overridden_network_conditions->download_throughput)
+          .Set("upload_throughput",
+               session->overridden_network_conditions->upload_throughput);
+  *value = base::Value::ToUniquePtrValue(base::Value(std::move(conditions)));
   return Status(kOk);
 }
 
@@ -1198,10 +1185,9 @@ Status ExecuteGetWindowPosition(Session* session,
   if (status.IsError())
     return status;
 
-  base::Value position(base::Value::Type::DICT);
-  position.SetIntKey("x", window_rect.x);
-  position.SetIntKey("y", window_rect.y);
-  *value = base::Value::ToUniquePtrValue(position.Clone());
+  base::Value::Dict position =
+      base::Value::Dict().Set("x", window_rect.x).Set("y", window_rect.y);
+  *value = base::Value::ToUniquePtrValue(base::Value(std::move(position)));
   return Status(kOk);
 }
 
@@ -1230,10 +1216,10 @@ Status ExecuteGetWindowSize(Session* session,
   if (status.IsError())
     return status;
 
-  base::Value size(base::Value::Type::DICT);
-  size.SetIntKey("width", window_rect.width);
-  size.SetIntKey("height", window_rect.height);
-  *value = base::Value::ToUniquePtrValue(size.Clone());
+  base::Value::Dict size = base::Value::Dict()
+                               .Set("width", window_rect.width)
+                               .Set("height", window_rect.height);
+  *value = base::Value::ToUniquePtrValue(base::Value(std::move(size)));
   return Status(kOk);
 }
 

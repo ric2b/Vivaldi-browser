@@ -35,6 +35,7 @@
 #include "extensions/buildflags/buildflags.h"
 #include "media/base/media_switches.h"
 #include "ui/lazy_load_service_factory.h"
+#include "ui/window_registry_service_factory.h"
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_runtime_feature.h"
@@ -148,8 +149,9 @@ void VivaldiBrowserMainExtraParts::
   extensions::TranslateHistoryAPI::GetFactoryInstance();
 
   extensions::VivaldiRootDocumentHandlerFactory::GetInstance();
+  vivaldi::WindowRegistryServiceFactory::GetInstance();
 
-#endif
+#endif // ENABLE_EXTENSIONS
   VivaldiAdverseAdFilterListFactory::GetFactoryInstance();
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -164,6 +166,8 @@ void VivaldiBrowserMainExtraParts::PreProfileInit() {
 
   vivaldi::ClientHintsBrandRegisterProfilePrefs(
       g_browser_process->local_state());
+
+  vivaldi::ConfigureClientHintsOverrides();
 }
 
 void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,

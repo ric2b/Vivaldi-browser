@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "extensions/browser/extension_function.h"
+#include "extensions/common/features/feature.h"
 #include "extensions/common/mojom/frame.mojom.h"
 #include "ipc/ipc_sender.h"
 
@@ -26,7 +27,6 @@ namespace extensions {
 
 class Extension;
 class ExtensionAPI;
-class ProcessMap;
 class WindowController;
 
 // ExtensionFunctionDispatcher receives requests to execute functions from
@@ -81,7 +81,7 @@ class ExtensionFunctionDispatcher {
   // Message handlers.
   // Dispatches a request for service woker and the response is sent to the
   // corresponding render process in an ExtensionMsg_ResponseWorker message.
-  void DispatchForServiceWorker(const mojom::RequestParams& params,
+  void DispatchForServiceWorker(mojom::RequestParamsPtr params,
                                 int render_process_id);
 
   // Called when an ExtensionFunction is done executing, after it has sent
@@ -139,9 +139,10 @@ class ExtensionFunctionDispatcher {
       int requesting_process_id,
       bool is_worker_request,
       const GURL* rfh_url,
-      const ProcessMap& process_map,
+      Feature::Context context_type,
       ExtensionAPI* api,
-      ExtensionFunction::ResponseCallback callback);
+      ExtensionFunction::ResponseCallback callback,
+      content::RenderFrameHost* render_frame_host);
 
   void DispatchWithCallbackInternal(
       const mojom::RequestParams& params,

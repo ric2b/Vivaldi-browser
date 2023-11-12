@@ -49,7 +49,14 @@ class MetricReportingManagerLacrosFactory : public ProfileKeyedServiceFactory {
 };
 
 MetricReportingManagerLacrosFactory::MetricReportingManagerLacrosFactory()
-    : ProfileKeyedServiceFactory("MetricReportingManagerLacros") {}
+    : ProfileKeyedServiceFactory(
+          "MetricReportingManagerLacros",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOriginalOnly)
+              .Build()) {}
 
 MetricReportingManagerLacrosFactory::~MetricReportingManagerLacrosFactory() =
     default;
@@ -208,7 +215,7 @@ void MetricReportingManagerLacros::DelayedInit() {
 void MetricReportingManagerLacros::InitNetworkCollectors() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto network_bandwidth_sampler = std::make_unique<NetworkBandwidthSampler>(
-      g_browser_process->network_quality_tracker(), profile_);
+      g_browser_process->network_quality_tracker(), profile_->GetWeakPtr());
 
   // Network bandwidth telemetry.
   InitPeriodicCollector(

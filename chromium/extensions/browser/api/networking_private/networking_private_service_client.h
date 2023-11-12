@@ -15,7 +15,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/values.h"
-#include "components/keyed_service/core/keyed_service.h"
 #include "components/wifi/wifi_service.h"
 #include "extensions/browser/api/networking_private/networking_private_delegate.h"
 #include "services/network/public/cpp/network_connection_tracker.h"
@@ -61,7 +60,7 @@ class NetworkingPrivateServiceClient
                      VoidCallback success_callback,
                      FailureCallback failure_callback) override;
   void CreateNetwork(bool shared,
-                     base::Value properties_dict,
+                     base::Value::Dict properties_dict,
                      StringCallback success_callback,
                      FailureCallback failure_callback) override;
   void ForgetNetwork(const std::string& guid,

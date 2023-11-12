@@ -10,11 +10,13 @@
 
 #include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_validator.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_config.h"
 #include "chrome/browser/policy/device_account_initializer.h"
+#include "chromeos/ash/components/attestation/attestation_flow.h"
 #include "chromeos/ash/components/dbus/authpolicy/authpolicy_client.h"
 #include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
@@ -29,7 +31,7 @@
 
 namespace ash {
 namespace attestation {
-class AttestationFlow;
+class AttestationFeatures;
 }  // namespace attestation
 }  // namespace ash
 
@@ -151,17 +153,16 @@ class EnrollmentHandler : public CloudPolicyClient::Observer,
   // Handles the response to a request for server-backed state keys.
   void HandleStateKeysResult(const std::vector<std::string>& state_keys);
 
-  // Starts attestation based enrollment flow. If |is_initial_attempt| is true,
-  // uses existing certificate if any. Otherwise, uses a new certificate.
-  void StartAttestationBasedEnrollmentFlow(bool is_initial_attempt);
+  // Starts attestation based enrollment flow.
+  void StartAttestationBasedEnrollmentFlow();
+
+  // Checks the Attestation Features and gets a fresh certificate.
+  void OnGetFeaturesReady(
+      ash::attestation::AttestationFlow::CertificateCallback callback,
+      const ash::attestation::AttestationFeatures* features);
 
   // Handles the response to a request for a registration certificate.
-  // |is_initial_attempt| indicates whether it is the first attempt to obtain
-  // valid enrollment certificate. If |is_initial_attempt| is true, then
-  // |StartAttestationBasedEnrollmentFlow| attempted to fetch existing
-  // certificate if any. Otherwise, it attempted to fetch a fresh certificate.
   void HandleRegistrationCertificateResult(
-      bool is_initial_attempt,
       ash::attestation::AttestationStatus status,
       const std::string& pem_certificate_chain);
 
@@ -222,15 +223,16 @@ class EnrollmentHandler : public CloudPolicyClient::Observer,
   // Set |enrollment_step_| to |step|.
   void SetStep(EnrollmentStep step);
 
-  DeviceCloudPolicyStoreAsh* store_;
-  ash::InstallAttributes* install_attributes_;
-  ServerBackedStateKeysBroker* state_keys_broker_;
-  ash::attestation::AttestationFlow* attestation_flow_;
+  raw_ptr<DeviceCloudPolicyStoreAsh, ExperimentalAsh> store_;
+  raw_ptr<ash::InstallAttributes, ExperimentalAsh> install_attributes_;
+  raw_ptr<ServerBackedStateKeysBroker, ExperimentalAsh> state_keys_broker_;
+  raw_ptr<ash::attestation::AttestationFlow, ExperimentalAsh> attestation_flow_;
   // Factory for SigningService to be used by |client_| to register with.
   std::unique_ptr<SigningServiceProvider> signing_service_provider_;
   std::unique_ptr<CloudPolicyClient> client_;
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
-  ActiveDirectoryJoinDelegate* ad_join_delegate_ = nullptr;
+  raw_ptr<ActiveDirectoryJoinDelegate, ExperimentalAsh> ad_join_delegate_ =
+      nullptr;
   std::unique_ptr<DeviceAccountInitializer> device_account_initializer_;
   std::unique_ptr<DMTokenStorage> dm_token_storage_;
 

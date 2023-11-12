@@ -96,9 +96,9 @@ class RTCRtpSenderImplTest : public ::testing::Test {
         main_thread_, dependency_factory_->GetWebRtcSignalingTaskRunner(),
         mock_webrtc_sender_, std::move(track_ref), std::vector<std::string>());
     sender_state.Initialize();
-    return std::make_unique<RTCRtpSenderImpl>(
-        peer_connection_.get(), track_map_, std::move(sender_state),
-        encoded_insertable_streams);
+    return std::make_unique<RTCRtpSenderImpl>(peer_connection_, track_map_,
+                                              std::move(sender_state),
+                                              encoded_insertable_streams);
   }
 
   // Calls replaceTrack(), which is asynchronous, returning a callback that when
@@ -226,7 +226,7 @@ TEST_F(RTCRtpSenderImplTest, GetStats) {
   // not perform any stats filtering, we just set it to a dummy value.
   rtc::scoped_refptr<webrtc::RTCStatsReport> webrtc_report =
       webrtc::RTCStatsReport::Create(webrtc::Timestamp::Micros(0));
-  webrtc_report->AddStats(std::make_unique<webrtc::RTCOutboundRTPStreamStats>(
+  webrtc_report->AddStats(std::make_unique<webrtc::RTCOutboundRtpStreamStats>(
       "stats-id", webrtc::Timestamp::Micros(1234)));
   peer_connection_->SetGetStatsReport(webrtc_report.get());
 

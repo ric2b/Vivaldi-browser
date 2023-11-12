@@ -41,6 +41,7 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
       bool avoid_closing_connections,
       const absl::optional<net::CookiePartitionKey>& cookie_partition_key,
       const absl::optional<blink::StorageKey>& storage_key,
+      bool partitioned_state_allowed_only,
       base::OnceClosure callback)
       : origin_(origin),
         clear_cookies_(clear_cookies),
@@ -50,6 +51,7 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
         avoid_closing_connections_(avoid_closing_connections),
         cookie_partition_key_(cookie_partition_key),
         storage_key_(storage_key),
+        partitioned_state_allowed_only_(partitioned_state_allowed_only),
         callback_(std::move(callback)),
         pending_task_count_(0),
         remover_(nullptr) {
@@ -91,8 +93,10 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
       cookie_filter_builder->SetCookiePartitionKeyCollection(
           net::CookiePartitionKeyCollection::FromOptional(
               cookie_partition_key_));
+      cookie_filter_builder->SetPartitionedStateAllowedOnly(
+          partitioned_state_allowed_only_);
 
-      ++pending_task_count_;
+      pending_task_count_++;
       uint64_t remove_mask = BrowsingDataRemover::DATA_TYPE_COOKIES;
       if (avoid_closing_connections_) {
         remove_mask |= BrowsingDataRemover::DATA_TYPE_AVOID_CLOSING_CONNECTIONS;
@@ -106,7 +110,7 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
 
     // Storage buckets
     if (!storage_buckets_to_remove_.empty()) {
-      ++pending_task_count_;
+      pending_task_count_++;
 
       // For storage buckets, no mask is being passed per se. Therefore, when
       // the storage buckets are successfully removed, the `failed_data_types`
@@ -115,35 +119,16 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
           storage_key_.value_or(blink::StorageKey::CreateFirstParty(origin_)),
           storage_buckets_to_remove_,
           base::BindOnce(&SiteDataClearer::OnBrowsingDataRemoverDone,
-                         weak_factory_.GetWeakPtr(), /*failed_data_types=*/0));
+                         weak_factory_.GetWeakPtr(), 0));
     }
 
     // Delete origin-scoped data.
     uint64_t remove_mask = 0;
     if (clear_storage_) {
-      ++pending_task_count_;
-
       remove_mask |= BrowsingDataRemover::DATA_TYPE_DOM_STORAGE;
       remove_mask |= BrowsingDataRemover::DATA_TYPE_PRIVACY_SANDBOX;
       // Internal data should not be removed by site-initiated deletions.
       remove_mask &= ~BrowsingDataRemover::DATA_TYPE_PRIVACY_SANDBOX_INTERNAL;
-
-      // Remove all the buckets
-      remover_->RemoveAllStorageBucketsAndReply(
-          storage_key_.value_or(blink::StorageKey::CreateFirstParty(origin_)),
-          base::BindOnce(&SiteDataClearer::OnBrowsingDataRemoverDone,
-                         weak_factory_.GetWeakPtr(), /*failed_data_types=*/0));
-    } else if (!storage_buckets_to_remove_.empty()) {
-      ++pending_task_count_;
-
-      // For storage buckets, no mask is being passed per se. Therefore, when
-      // the storage buckets are successfully removed, the `failed_data_types`
-      // arg should be set to 0 to align with existing behaviour in this class.
-      remover_->RemoveStorageBucketsAndReply(
-          storage_key_.value_or(blink::StorageKey::CreateFirstParty(origin_)),
-          storage_buckets_to_remove_,
-          base::BindOnce(&SiteDataClearer::OnBrowsingDataRemoverDone,
-                         weak_factory_.GetWeakPtr(), /*failed_data_types=*/0));
     }
 
     if (clear_cache_) {
@@ -157,7 +142,7 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
       origin_filter_builder->AddOrigin(origin_);
       origin_filter_builder->SetStorageKey(storage_key_);
 
-      ++pending_task_count_;
+      pending_task_count_++;
       remover_->RemoveWithFilterAndReply(
           base::Time(), base::Time::Max(), remove_mask,
           BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
@@ -180,14 +165,15 @@ class SiteDataClearer : public BrowsingDataRemover::Observer {
     delete this;
   }
 
-  url::Origin origin_;
-  bool clear_cookies_;
-  bool clear_storage_;
-  bool clear_cache_;
-  std::set<std::string> storage_buckets_to_remove_;
-  bool avoid_closing_connections_;
-  absl::optional<net::CookiePartitionKey> cookie_partition_key_;
-  absl::optional<blink::StorageKey> storage_key_;
+  const url::Origin origin_;
+  const bool clear_cookies_;
+  const bool clear_storage_;
+  const bool clear_cache_;
+  const std::set<std::string> storage_buckets_to_remove_;
+  const bool avoid_closing_connections_;
+  const absl::optional<net::CookiePartitionKey> cookie_partition_key_;
+  const absl::optional<blink::StorageKey> storage_key_;
+  const bool partitioned_state_allowed_only_;
   base::OnceClosure callback_;
   int pending_task_count_ = 0;
   raw_ptr<BrowsingDataRemoverImpl> remover_ = nullptr;
@@ -208,6 +194,7 @@ void ClearSiteData(
     bool avoid_closing_connections,
     const absl::optional<net::CookiePartitionKey>& cookie_partition_key,
     const absl::optional<blink::StorageKey>& storage_key,
+    bool partitioned_state_allowed_only,
     base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -222,7 +209,8 @@ void ClearSiteData(
   (new SiteDataClearer(browser_context, origin, clear_cookies, clear_storage,
                        clear_cache, storage_buckets_to_remove,
                        avoid_closing_connections, cookie_partition_key,
-                       storage_key, std::move(callback)))
+                       storage_key, partitioned_state_allowed_only,
+                       std::move(callback)))
       ->RunAndDestroySelfWhenDone();
 }
 

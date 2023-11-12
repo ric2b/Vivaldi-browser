@@ -46,11 +46,11 @@ class NotesStorage : public base::ImportantFileWriter::DataSerializer {
   void NotesModelDeleted();
 
   // ImportantFileWriter::DataSerializer implementation.
-  bool SerializeData(std::string* output) override;
+  absl::optional<std::string> SerializeData() override;
 
  private:
   // The model. The model is NULL once NotesModelDeleted has been invoked.
-  NotesModel* model_;
+  raw_ptr<NotesModel> model_;
 
   // Sequenced task runner where disk writes will be performed at.
   scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;

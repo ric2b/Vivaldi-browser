@@ -975,6 +975,10 @@ bool DesktopNativeWidgetAura::IsActive() const {
          wm::IsActiveWindow(content_window_);
 }
 
+void DesktopNativeWidgetAura::PaintAsActiveChanged() {
+  desktop_window_tree_host_->PaintAsActiveChanged();
+}
+
 void DesktopNativeWidgetAura::SetZOrderLevel(ui::ZOrderLevel order) {
   if (content_window_)
     desktop_window_tree_host_->SetZOrderLevel(order);
@@ -1040,9 +1044,10 @@ void DesktopNativeWidgetAura::SetOpacity(float opacity) {
     desktop_window_tree_host_->SetOpacity(opacity);
 }
 
-void DesktopNativeWidgetAura::SetAspectRatio(const gfx::SizeF& aspect_ratio) {
+void DesktopNativeWidgetAura::SetAspectRatio(const gfx::SizeF& aspect_ratio,
+                                             const gfx::Size& excluded_margin) {
   if (desktop_window_tree_host_)
-    desktop_window_tree_host_->SetAspectRatio(aspect_ratio);
+    desktop_window_tree_host_->SetAspectRatio(aspect_ratio, excluded_margin);
 }
 
 void DesktopNativeWidgetAura::FlashFrame(bool flash_frame) {
@@ -1495,12 +1500,14 @@ void DesktopNativeWidgetAura::RootWindowDestroyed() {
 void DesktopNativeWidgetAura::PerformDrop(
     views::DropHelper::DropCallback drop_cb,
     std::unique_ptr<ui::OSExchangeData> data,
-    ui::mojom::DragOperation& output_drag_op) {
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   if (ShouldActivate())
     Activate();
 
   if (drop_cb)
-    std::move(drop_cb).Run(std::move(data), output_drag_op);
+    std::move(drop_cb).Run(std::move(data), output_drag_op,
+                           std::move(drag_image_layer_owner));
 }
 
 }  // namespace views

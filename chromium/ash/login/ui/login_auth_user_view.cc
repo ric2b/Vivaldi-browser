@@ -26,7 +26,6 @@
 #include "ash/login/ui/pin_keyboard_animation.h"
 #include "ash/login/ui/pin_request_view.h"
 #include "ash/login/ui/smart_lock_auth_factor_model.h"
-#include "ash/login/ui/system_label_button.h"
 #include "ash/login/ui/views_utils.h"
 #include "ash/public/cpp/smartlock_state.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -36,6 +35,7 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/color_util.h"
+#include "ash/style/pill_button.h"
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/time/time_of_day.h"
@@ -43,16 +43,19 @@
 #include "base/functional/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/callback_layer_animation_observer.h"
 #include "ui/compositor/layer.h"
@@ -275,7 +278,7 @@ class FingerprintLabel : public views::Label {
 struct LockScreenMessage {
   std::u16string title;
   std::u16string content;
-  const gfx::VectorIcon* icon;
+  raw_ptr<const gfx::VectorIcon, ExperimentalAsh> icon;
 };
 
 // Returns the message used when the device was locked due to a time window
@@ -391,10 +394,10 @@ class LoginAuthUserView::FingerprintView : public views::View {
         gfx::Size(kFingerprintIconSizeDp, kFingerprintIconSizeDp),
         0 /*corner_radius*/);
 
-    AddChildView(icon_);
+    AddChildView(icon_.get());
 
     label_ = new FingerprintLabel();
-    AddChildView(label_);
+    AddChildView(label_.get());
 
     DisplayCurrentState();
   }
@@ -526,8 +529,8 @@ class LoginAuthUserView::FingerprintView : public views::View {
            state == FingerprintState::DISABLED_FROM_TIMEOUT;
   }
 
-  FingerprintLabel* label_ = nullptr;
-  AnimatedRoundedImageView* icon_ = nullptr;
+  raw_ptr<FingerprintLabel, ExperimentalAsh> label_ = nullptr;
+  raw_ptr<AnimatedRoundedImageView, ExperimentalAsh> icon_ = nullptr;
   base::OneShotTimer reset_state_;
   FingerprintState state_ = FingerprintState::AVAILABLE_DEFAULT;
 
@@ -575,8 +578,7 @@ class LoginAuthUserView::ChallengeResponseView : public views::View {
         GetTextForLabel(), views::style::CONTEXT_LABEL,
         views::style::STYLE_PRIMARY));
     label_->SetAutoColorReadabilityEnabled(false);
-    label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorSecondary));
+    label_->SetEnabledColorId(kColorAshTextColorSecondary);
     label_->SetSubpixelRenderingEnabled(false);
     label_->SetFontList(views::Label::GetDefaultFontList().Derive(
         /*size_delta=*/1, gfx::Font::FontStyle::ITALIC,
@@ -617,31 +619,21 @@ class LoginAuthUserView::ChallengeResponseView : public views::View {
   // views::View:
   void RequestFocus() override { arrow_button_->RequestFocus(); }
 
-  // views::View:
-  void OnThemeChanged() override {
-    views::View::OnThemeChanged();
-    icon_->SetImage(GetImageForIcon());
-    label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorSecondary));
-  }
-
   views::Button* GetButtonForTesting() { return arrow_button_; }
   views::Label* GetLabelForTesting() { return label_; }
 
  private:
-  gfx::ImageSkia GetImageForIcon() const {
+  ui::ImageModel GetImageForIcon() const {
     switch (state_) {
       case State::kInitial:
       case State::kAuthenticating:
-        return gfx::CreateVectorIcon(
-            kLockScreenSmartCardIcon, kChallengeResponseIconSizeDp,
-            AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kIconColorPrimary));
+        return ui::ImageModel::FromVectorIcon(kLockScreenSmartCardIcon,
+                                              kColorAshIconColorPrimary,
+                                              kChallengeResponseIconSizeDp);
       case State::kFailure:
-        return gfx::CreateVectorIcon(
-            kLockScreenSmartCardFailureIcon, kChallengeResponseIconSizeDp,
-            AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kIconColorAlert));
+        return ui::ImageModel::FromVectorIcon(kLockScreenSmartCardFailureIcon,
+                                              kColorAshIconColorAlert,
+                                              kChallengeResponseIconSizeDp);
     }
   }
 
@@ -666,10 +658,10 @@ class LoginAuthUserView::ChallengeResponseView : public views::View {
 
   base::RepeatingClosure on_start_tap_;
   State state_ = State::kInitial;
-  ArrowButtonView* arrow_button_ = nullptr;
-  NonAccessibleView* arrow_to_icon_spacer_ = nullptr;
-  views::ImageView* icon_ = nullptr;
-  views::Label* label_ = nullptr;
+  raw_ptr<ArrowButtonView, ExperimentalAsh> arrow_button_ = nullptr;
+  raw_ptr<NonAccessibleView, ExperimentalAsh> arrow_to_icon_spacer_ = nullptr;
+  raw_ptr<views::ImageView, ExperimentalAsh> icon_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> label_ = nullptr;
   base::OneShotTimer reset_state_timer_;
 };
 
@@ -691,7 +683,7 @@ class LoginAuthUserView::DisabledAuthMessageView : public views::View {
     }
 
    private:
-    DisabledAuthMessageView* const view_;
+    const raw_ptr<DisabledAuthMessageView, ExperimentalAsh> view_;
   };
 
   DisabledAuthMessageView() {
@@ -796,32 +788,22 @@ class LoginAuthUserView::DisabledAuthMessageView : public views::View {
     }
   }
 
-  // views::View:
-  void OnThemeChanged() override {
-    views::View::OnThemeChanged();
-    UpdateColors();
-  }
-
  private:
   void UpdateColors() {
-    message_title_->SetEnabledColor(
-        AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kTextColorPrimary));
-    message_contents_->SetEnabledColor(
-        AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kTextColorPrimary));
+    message_title_->SetEnabledColorId(kColorAshTextColorPrimary);
+    message_contents_->SetEnabledColorId(kColorAshTextColorPrimary);
     if (message_vector_icon_) {
-      message_icon_->SetImage(gfx::CreateVectorIcon(
-          *message_vector_icon_, kDisabledAuthMessageIconSizeDp,
-          AshColorProvider::Get()->GetContentLayerColor(
-              AshColorProvider::ContentLayerType::kIconColorPrimary)));
+      message_icon_->SetImage(ui::ImageModel::FromVectorIcon(
+          *message_vector_icon_, kColorAshIconColorPrimary,
+          kDisabledAuthMessageIconSizeDp));
     }
   }
 
-  views::Label* message_title_;
-  views::Label* message_contents_;
-  views::ImageView* message_icon_;
-  const gfx::VectorIcon* message_vector_icon_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> message_title_;
+  raw_ptr<views::Label, ExperimentalAsh> message_contents_;
+  raw_ptr<views::ImageView, ExperimentalAsh> message_icon_;
+  raw_ptr<const gfx::VectorIcon, ExperimentalAsh> message_vector_icon_ =
+      nullptr;
 };
 
 // The message shown to user when TPM is locked.
@@ -840,16 +822,20 @@ class LoginAuthUserView::LockedTpmMessageView : public views::View {
     SetFocusBehavior(FocusBehavior::ALWAYS);
 
     message_icon_ = AddChildView(std::make_unique<views::ImageView>());
-    message_icon_->SetPreferredSize(
-        gfx::Size(kLockedTpmMessageIconSizeDp, kLockedTpmMessageIconSizeDp));
+    message_icon_->SetImage(ui::ImageModel::FromVectorIcon(
+        kLockScreenAlertIcon, kColorAshIconColorPrimary,
+        kLockedTpmMessageIconSizeDp));
 
     message_warning_ = CreateLabel();
+    message_warning_->SetEnabledColorId(kColorAshTextColorPrimary);
+
     message_description_ = CreateLabel();
 
     // Set content.
     std::u16string message_description = l10n_util::GetStringUTF16(
         IDS_ASH_LOGIN_POD_TPM_LOCKED_ISSUE_DESCRIPTION);
     message_description_->SetText(message_description);
+    message_description_->SetEnabledColorId(kColorAshTextColorPrimary);
   }
 
   LockedTpmMessageView(const LockedTpmMessageView&) = delete;
@@ -888,21 +874,6 @@ class LoginAuthUserView::LockedTpmMessageView : public views::View {
   // views::View:
   void RequestFocus() override { message_warning_->RequestFocus(); }
 
-  // views::View:
-  void OnThemeChanged() override {
-    views::View::OnThemeChanged();
-    message_icon_->SetImage(gfx::CreateVectorIcon(
-        kLockScreenAlertIcon,
-        AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kIconColorPrimary)));
-    message_warning_->SetEnabledColor(
-        AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kTextColorPrimary));
-    message_description_->SetEnabledColor(
-        AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kTextColorPrimary));
-  }
-
  private:
   views::Label* CreateLabel() {
     auto label = std::make_unique<views::Label>(std::u16string(),
@@ -919,9 +890,9 @@ class LoginAuthUserView::LockedTpmMessageView : public views::View {
   }
 
   base::TimeDelta prev_time_left_;
-  views::Label* message_warning_;
-  views::Label* message_description_;
-  views::ImageView* message_icon_;
+  raw_ptr<views::Label, ExperimentalAsh> message_warning_;
+  raw_ptr<views::Label, ExperimentalAsh> message_description_;
+  raw_ptr<views::ImageView, ExperimentalAsh> message_icon_;
 };
 
 LoginAuthUserView::AuthMethodsMetadata::AuthMethodsMetadata() = default;
@@ -1078,8 +1049,7 @@ LoginAuthUserView::LoginAuthUserView(const LoginUserInfo& user,
                           base::Unretained(this)),
       base::BindRepeating(&LoginAuthUserView::OnPasswordTextChanged,
                           base::Unretained(this)),
-      callbacks.on_easy_unlock_icon_hovered,
-      callbacks.on_easy_unlock_icon_tapped);
+      callbacks.on_easy_unlock_icon_hovered);
 
   auto pin_input_view = std::make_unique<LoginPinInputView>();
   pin_input_view_ = pin_input_view.get();
@@ -1094,7 +1064,7 @@ LoginAuthUserView::LoginAuthUserView(const LoginUserInfo& user,
       gfx::Insets::TLBR(kPinPasswordToggleButtonPaddingTop, 0,
                         kPinPasswordToggleButtonPaddingBottom, 0)));
   pin_password_toggle_ =
-      toggle_container->AddChildView(std::make_unique<SystemLabelButton>(
+      toggle_container->AddChildView(std::make_unique<PillButton>(
           base::BindRepeating(&LoginAuthUserView::OnSwitchButtonClicked,
                               base::Unretained(this)),
           GetPinPasswordToggleText()));
@@ -1127,7 +1097,7 @@ LoginAuthUserView::LoginAuthUserView(const LoginUserInfo& user,
         l10n_util::GetStringUTF16(IDS_ASH_LOCK_SCREEN_VERIFY_ACCOUNT_MESSAGE);
   }
 
-  auto online_sign_in_button = std::make_unique<SystemLabelButton>(
+  auto online_sign_in_button = std::make_unique<PillButton>(
       base::BindRepeating(&LoginAuthUserView::OnOnlineSignInMessageTap,
                           base::Unretained(this)),
       button_message);
@@ -1814,6 +1784,14 @@ void LoginAuthUserView::OnOnlineSignInMessageTap() {
       session_manager::SessionState::LOGIN_SECONDARY) {
     return;
   }
+
+  user_manager::KnownUser known_user(Shell::Get()->local_state());
+  int reauth_reason =
+      known_user.FindReauthReason(current_user().basic_user_info.account_id)
+          .value_or(-1);
+  LOG(WARNING) << "Showing online GAIA signin, the reauth reason was: "
+               << reauth_reason;
+
   Shell::Get()->login_screen_controller()->ShowGaiaSignin(
       current_user().basic_user_info.account_id);
 }

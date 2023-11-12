@@ -20,23 +20,27 @@ class Tracker;
 namespace web {
 class WebState;
 }
+namespace syncer {
+class SyncService;
+}
 
 @protocol ActivityServiceCommands;
 @protocol ApplicationCommands;
 @protocol BookmarksCommands;
-@protocol BrowserCommands;
 @protocol BrowserCoordinatorCommands;
 class BrowserPolicyConnectorIOS;
+@protocol FindInPageCommands;
+class FollowBrowserAgent;
 class OverlayPresenter;
 @protocol PageInfoCommands;
 @protocol PopupMenuCommands;
-@protocol PriceNotificationsCommands;
 class PrefService;
-@protocol FindInPageCommands;
+@protocol PriceNotificationsCommands;
+class PromosManager;
+class ReadingListBrowserAgent;
 @protocol TextZoomCommands;
 class WebNavigationBrowserAgent;
 class WebStateList;
-class FollowBrowserAgent;
 
 // Mediator for the overflow menu. This object is in charge of creating and
 // updating the items of the overflow menu.
@@ -52,7 +56,6 @@ class FollowBrowserAgent;
 // Dispatcher.
 @property(nonatomic, weak) id<ActivityServiceCommands,
                               ApplicationCommands,
-                              BrowserCommands,
                               BrowserCoordinatorCommands,
                               FindInPageCommands,
                               PriceNotificationsCommands,
@@ -100,6 +103,15 @@ class FollowBrowserAgent;
 // The number of destinations immediately visible to the user when opening the
 // new overflow menu (i.e. the number of "above-the-fold" destinations).
 @property(nonatomic, assign) int visibleDestinationsCount;
+
+// The Sync Service that provides the status of Sync.
+@property(nonatomic, assign) syncer::SyncService* syncService;
+
+// The Promos Manager to alert if the user uses What's New.
+@property(nonatomic, assign) PromosManager* promosManager;
+
+// The ReadingListBrowserAgent used to add urls to reading list.
+@property(nonatomic, assign) ReadingListBrowserAgent* readingListBrowserAgent;
 
 // Updates the pin state of the tab corresponding to the given `webState` in
 // `webStateList`.

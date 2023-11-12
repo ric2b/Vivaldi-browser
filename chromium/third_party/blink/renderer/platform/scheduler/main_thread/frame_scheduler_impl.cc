@@ -29,10 +29,12 @@
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/find_in_page_budget_pool_controller.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_task_queue.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_web_scheduling_task_queue_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_visibility_state.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/task_type_names.h"
+#include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_queue_type.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/worker_scheduler_proxy.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
@@ -674,6 +676,15 @@ void FrameSchedulerImpl::OnRemovedAggressiveThrottlingOptOut() {
     parent_page_scheduler_->OnThrottlingStatusUpdated();
 }
 
+void FrameSchedulerImpl::OnTaskCompleted(
+    TaskQueue::TaskTiming* timing,
+    base::TimeTicks desired_execution_time) {
+  if (delegate_) {
+    delegate_->OnTaskCompleted(timing->start_time(), timing->end_time(),
+                               desired_execution_time);
+  }
+}
+
 void FrameSchedulerImpl::WriteIntoTrace(perfetto::TracedValue context) const {
   auto dict = std::move(context).WriteDictionary();
   dict.Add("frame_visible", frame_visible_);
@@ -820,6 +831,12 @@ void FrameSchedulerImpl::OnFirstContentfulPaintInMainFrame() {
   main_thread_scheduler_->OnMainFramePaint();
 }
 
+void FrameSchedulerImpl::OnMainFrameInteractive() {
+  if (delegate_) {
+    return delegate_->MainFrameInteractive();
+  }
+}
+
 void FrameSchedulerImpl::OnFirstMeaningfulPaint() {
   waiting_for_meaningful_paint_ = false;
 
@@ -899,14 +916,20 @@ TaskPriority FrameSchedulerImpl::ComputePriority(
   // TODO(shaseley): This should use lower priorities if the frame is
   // deprioritized. Change this once we refactor and add frame policy/priorities
   // and add a range of new priorities less than low.
-  if (task_queue->web_scheduling_priority()) {
-    switch (task_queue->web_scheduling_priority().value()) {
+  if (absl::optional<WebSchedulingQueueType> queue_type =
+          task_queue->GetWebSchedulingQueueType()) {
+    bool is_continuation =
+        *queue_type == WebSchedulingQueueType::kContinuationQueue;
+    switch (*task_queue->GetWebSchedulingPriority()) {
       case WebSchedulingPriority::kUserBlockingPriority:
-        return TaskPriority::kHighPriority;
+        return is_continuation ? TaskPriority::kHighPriorityContinuation
+                               : TaskPriority::kHighPriority;
       case WebSchedulingPriority::kUserVisiblePriority:
-        return TaskPriority::kNormalPriority;
+        return is_continuation ? TaskPriority::kNormalPriorityContinuation
+                               : TaskPriority::kNormalPriority;
       case WebSchedulingPriority::kBackgroundPriority:
-        return TaskPriority::kLowPriority;
+        return is_continuation ? TaskPriority::kLowPriorityContinuation
+                               : TaskPriority::kLowPriority;
     }
   }
 
@@ -916,77 +939,9 @@ TaskPriority FrameSchedulerImpl::ComputePriority(
     return TaskPriority::kNormalPriority;
   }
 
-  // A hidden page with no audio.
-  if (parent_page_scheduler_->IsBackgrounded()) {
-    if (main_thread_scheduler_->scheduling_settings()
-            .low_priority_background_page) {
-      return TaskPriority::kLowPriority;
-    }
-
-    if (main_thread_scheduler_->scheduling_settings()
-            .best_effort_background_page) {
-      return TaskPriority::kBestEffortPriority;
-    }
-  }
-
-  // Low priority feature enabled for hidden frame.
-  if (main_thread_scheduler_->scheduling_settings().low_priority_hidden_frame &&
-      !IsFrameVisible()) {
-    return TaskPriority::kLowPriority;
-  }
-
-  bool is_subframe = GetFrameType() == FrameScheduler::FrameType::kSubframe;
-  bool is_throttleable_task_queue =
-      task_queue->queue_type() ==
-      MainThreadTaskQueue::QueueType::kFrameThrottleable;
-
-  // Low priority feature enabled for sub-frame.
-  if (main_thread_scheduler_->scheduling_settings().low_priority_subframe &&
-      is_subframe) {
-    return TaskPriority::kLowPriority;
-  }
-
-  // Low priority feature enabled for sub-frame throttleable task queues.
-  if (main_thread_scheduler_->scheduling_settings()
-          .low_priority_subframe_throttleable &&
-      is_subframe && is_throttleable_task_queue) {
-    return TaskPriority::kLowPriority;
-  }
-
-  // Low priority feature enabled for throttleable task queues.
-  if (main_thread_scheduler_->scheduling_settings().low_priority_throttleable &&
-      is_throttleable_task_queue) {
-    return TaskPriority::kLowPriority;
-  }
-
-  // Ad frame experiment.
-  if (IsAdFrame()) {
-    if (main_thread_scheduler_->scheduling_settings().low_priority_ad_frame) {
-      return TaskPriority::kLowPriority;
-    }
-
-    if (main_thread_scheduler_->scheduling_settings().best_effort_ad_frame) {
-      return TaskPriority::kBestEffortPriority;
-    }
-  }
-
-  // Frame origin type experiment.
-  if (IsCrossOriginToNearestMainFrame() &&
-      main_thread_scheduler_->scheduling_settings().low_priority_cross_origin) {
-    return TaskPriority::kLowPriority;
-  }
-
   if (task_queue->GetPrioritisationType() ==
       MainThreadTaskQueue::QueueTraits::PrioritisationType::kLoadingControl) {
-    return main_thread_scheduler_->should_prioritize_loading_with_compositing()
-               ? TaskPriority::kVeryHighPriority
-               : TaskPriority::kHighPriority;
-  }
-
-  if (task_queue->GetPrioritisationType() ==
-          MainThreadTaskQueue::QueueTraits::PrioritisationType::kLoading &&
-      main_thread_scheduler_->should_prioritize_loading_with_compositing()) {
-    return main_thread_scheduler_->compositor_priority();
+    return TaskPriority::kHighPriority;
   }
 
   if (task_queue->GetPrioritisationType() ==
@@ -1175,6 +1130,7 @@ FrameSchedulerImpl::GetFrameOrWorkerSchedulerWeakPtr() {
 
 std::unique_ptr<WebSchedulingTaskQueue>
 FrameSchedulerImpl::CreateWebSchedulingTaskQueue(
+    WebSchedulingQueueType queue_type,
     WebSchedulingPriority priority) {
   // The QueueTraits for scheduler.postTask() are similar to those of
   // setTimeout() (deferrable queue traits + throttling for delayed tasks), with
@@ -1185,13 +1141,19 @@ FrameSchedulerImpl::CreateWebSchedulingTaskQueue(
   //     WebSchedulingPriority, which is only set for these task queues)
   scoped_refptr<MainThreadTaskQueue> immediate_task_queue =
       frame_task_queue_controller_->NewWebSchedulingTaskQueue(
-          DeferrableTaskQueueTraits(), priority);
+          DeferrableTaskQueueTraits(), queue_type, priority);
+  // Continuation task queues can only be used for immediate tasks since there
+  // the yield API doesn't support delayed continuations.
+  if (queue_type == WebSchedulingQueueType::kContinuationQueue) {
+    return std::make_unique<MainThreadWebSchedulingTaskQueueImpl>(
+        immediate_task_queue->AsWeakPtr(), nullptr);
+  }
   scoped_refptr<MainThreadTaskQueue> delayed_task_queue =
       frame_task_queue_controller_->NewWebSchedulingTaskQueue(
           DeferrableTaskQueueTraits()
               .SetCanBeThrottled(true)
               .SetCanBeIntensivelyThrottled(true),
-          priority);
+          queue_type, priority);
   return std::make_unique<MainThreadWebSchedulingTaskQueueImpl>(
       immediate_task_queue->AsWeakPtr(), delayed_task_queue->AsWeakPtr());
 }

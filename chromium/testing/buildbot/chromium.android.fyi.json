@@ -154,7 +154,6 @@
           "--avd-config=../../tools/android/avd/proto/generic_android28.textpb",
           "--use-upstream-wpt"
         ],
-        "experiment_percentage": 100,
         "isolate_name": "chrome_public_wpt",
         "merge": {
           "args": [
@@ -809,7 +808,7 @@
             {
               "cipd_package": "chromium/android_webview/tools/cts_archive",
               "location": "android_webview/tools/cts_archive",
-              "revision": "APYMYksv9eNAkU6osFvNXN38pMO1Q1kScjeecePr7NgC"
+              "revision": "D9ziv4Z61qHwterMTFEoPeCZzFNyUfMnWAlYuxEKlM8C"
             }
           ],
           "dimension_sets": [
@@ -878,7 +877,7 @@
             {
               "cipd_package": "chromium/android_webview/tools/cts_archive",
               "location": "android_webview/tools/cts_archive",
-              "revision": "APYMYksv9eNAkU6osFvNXN38pMO1Q1kScjeecePr7NgC"
+              "revision": "D9ziv4Z61qHwterMTFEoPeCZzFNyUfMnWAlYuxEKlM8C"
             }
           ],
           "dimension_sets": [
@@ -1191,7 +1190,7 @@
             {
               "cipd_package": "chromium/android_webview/tools/cts_archive",
               "location": "android_webview/tools/cts_archive",
-              "revision": "APYMYksv9eNAkU6osFvNXN38pMO1Q1kScjeecePr7NgC"
+              "revision": "D9ziv4Z61qHwterMTFEoPeCZzFNyUfMnWAlYuxEKlM8C"
             }
           ],
           "dimension_sets": [
@@ -1260,7 +1259,7 @@
             {
               "cipd_package": "chromium/android_webview/tools/cts_archive",
               "location": "android_webview/tools/cts_archive",
-              "revision": "APYMYksv9eNAkU6osFvNXN38pMO1Q1kScjeecePr7NgC"
+              "revision": "D9ziv4Z61qHwterMTFEoPeCZzFNyUfMnWAlYuxEKlM8C"
             }
           ],
           "dimension_sets": [
@@ -1313,7 +1312,6 @@
           "--log-wptreport",
           "--use-upstream-wpt"
         ],
-        "experiment_percentage": 100,
         "isolate_name": "system_webview_wpt",
         "merge": {
           "args": [

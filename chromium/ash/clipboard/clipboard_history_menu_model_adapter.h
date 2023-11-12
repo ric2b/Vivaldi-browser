@@ -8,6 +8,8 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/clipboard_history_controller.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -40,6 +42,8 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
  public:
   static std::unique_ptr<ClipboardHistoryMenuModelAdapter> Create(
       ui::SimpleMenuModel::Delegate* delegate,
+      ClipboardHistoryController::OnMenuClosingCallback
+          on_menu_closing_callback,
       base::RepeatingClosure menu_closed_callback,
       const ClipboardHistory* clipboard_history,
       const ClipboardHistoryResourceManager* resource_manager);
@@ -58,8 +62,9 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
   // Returns if the menu is currently running.
   bool IsRunning() const;
 
-  // Hides and cancels the menu.
-  void Cancel();
+  // Hides and cancels the menu. `will_paste_item` indicates whether a clipboard
+  // history item will be pasted after the menu is closed.
+  void Cancel(bool will_paste_item);
 
   // Returns the command of the currently selected menu item. If no menu item is
   // currently selected, returns |absl::nullopt|.
@@ -93,12 +98,13 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
   views::MenuItemView* GetMenuItemViewAtForTest(size_t index);
 
  private:
+  class MenuModelWithWillCloseCallback;
   class ScopedA11yIgnore;
 
   using ItemViewsByCommandId = std::map<int, ClipboardHistoryItemView*>;
 
   ClipboardHistoryMenuModelAdapter(
-      std::unique_ptr<ui::SimpleMenuModel> model,
+      std::unique_ptr<MenuModelWithWillCloseCallback> model,
       base::RepeatingClosure menu_closed_callback,
       const ClipboardHistory* clipboard_history,
       const ClipboardHistoryResourceManager* resource_manager);
@@ -121,10 +127,11 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
   void OnMenuClosed(views::MenuItemView* menu) override;
 
   // The model which holds the contents of the menu.
-  std::unique_ptr<ui::SimpleMenuModel> const model_;
+  std::unique_ptr<MenuModelWithWillCloseCallback> const model_;
   // The root MenuItemView which contains all child MenuItemViews. Owned by
   // |menu_runner_|.
-  views::MenuItemView* root_view_ = nullptr;
+  raw_ptr<views::MenuItemView, DanglingUntriaged | ExperimentalAsh> root_view_ =
+      nullptr;
   // Responsible for showing |root_view_|.
   std::unique_ptr<views::MenuRunner> menu_runner_;
 
@@ -143,11 +150,12 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter
   // It updates synchronously when a item is removed.
   ItemViewsByCommandId item_views_by_command_id_;
 
-  const ClipboardHistory* const clipboard_history_;
+  const raw_ptr<const ClipboardHistory, ExperimentalAsh> clipboard_history_;
 
   // Resource manager used to fetch image models. Owned by
   // ClipboardHistoryController.
-  const ClipboardHistoryResourceManager* const resource_manager_;
+  const raw_ptr<const ClipboardHistoryResourceManager, ExperimentalAsh>
+      resource_manager_;
 
   // Indicates the number of item deletion operations in progress. Note that
   // a `ClipboardHistoryItemView` instance is deleted asynchronously.

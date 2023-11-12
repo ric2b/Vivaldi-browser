@@ -68,7 +68,7 @@ class PasswordProtectionService;
 }
 
 namespace device_reauth {
-class BiometricAuthenticator;
+class DeviceAuthenticator;
 }
 
 namespace version_info {
@@ -96,7 +96,9 @@ enum class SyncState {
   kSyncingWithCustomPassphrase,
   // Sync is disabled but the user is signed in and opted in to passwords
   // account storage.
-  kAccountPasswordsActiveNormalEncryption
+  kAccountPasswordsActiveNormalEncryption,
+  // Same as above but the account has a custom passphrase set.
+  kAccountPasswordsActiveWithCustomPassphrase,
 };
 
 enum class ErrorMessageFlowType { kSaveFlow, kFillFlow };
@@ -131,10 +133,6 @@ class PasswordManagerClient {
   // TODO(crbug.com/1071842): This method's name is misleading as it also
   // determines whether saving prompts should be shown.
   virtual bool IsFillingEnabled(const GURL& url) const;
-
-  // Checks if manual filling fallback is enabled for the page that has |url|
-  // address.
-  virtual bool IsFillingFallbackEnabled(const GURL& url) const;
 
   // Checks if the auto sign-in functionality is enabled.
   virtual bool IsAutoSignInEnabled() const;
@@ -203,16 +201,12 @@ class PasswordManagerClient {
   virtual void ShowTouchToFill(
       PasswordManagerDriver* driver,
       autofill::mojom::SubmissionReadinessState submission_readiness);
-
-  // Informs `PasswordReuseDetectionManager` about reused passwords selected
-  // from the AllPasswordsBottomSheet.
-  virtual void OnPasswordSelected(const std::u16string& text);
 #endif
 
-  // Returns a pointer to a BiometricAuthenticator. Might be null if
+  // Returns a pointer to a DeviceAuthenticator. Might be null if
   // BiometricAuthentication is not available for a given platform.
-  virtual scoped_refptr<device_reauth::BiometricAuthenticator>
-  GetBiometricAuthenticator();
+  virtual scoped_refptr<device_reauth::DeviceAuthenticator>
+  GetDeviceAuthenticator();
 
   // Informs the embedder that the user has requested to generate a
   // password in the focused password field.
@@ -402,26 +396,6 @@ class PasswordManagerClient {
                                            const GURL& frame_url) = 0;
 #endif
 
-  // Checks the safe browsing reputation of the webpage where password reuse
-  // happens. This is called by the PasswordReuseDetectionManager when a
-  // protected password is typed on the wrong domain. This may trigger a
-  // warning dialog if it looks like the page is phishy.
-  // The |username| is the user name of the reused password. The user name
-  // can be an email or a username for a non-GAIA or saved-password reuse. No
-  // validation has been done on it. The |domain| is the origin of the webpage
-  // where password reuse happens. The |reused_password_hash| is the hash of the
-  // reused password.
-  virtual void CheckProtectedPasswordEntry(
-      metrics_util::PasswordType reused_password_type,
-      const std::string& username,
-      const std::vector<MatchingReusedCredential>& matching_reused_credentials,
-      bool password_field_exists,
-      uint64_t reused_password_hash,
-      const std::string& domain) = 0;
-
-  // Records a Chrome Sync event that GAIA password reuse was detected.
-  virtual void LogPasswordReuseDetectedEvent() = 0;
-
   // If the feature is enabled send an event to the enterprise reporting
   // connector server indicating that the user signed in to a website.
   virtual void MaybeReportEnterpriseLoginEvent(
@@ -475,6 +449,10 @@ class PasswordManagerClient {
   // Causes a navigation to the manage passwords page.
   virtual void NavigateToManagePasswordsPage(ManagePasswordsReferrer referrer) {
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  virtual void NavigateToManagePasskeysPage(ManagePasswordsReferrer referrer) {}
+#endif
 
   virtual bool IsIsolationForPasswordSitesEnabled() const = 0;
 

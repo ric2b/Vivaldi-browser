@@ -4,10 +4,12 @@
 
 #include <bitset>
 #include <map>
+#include <type_traits>
 
 #include "base/containers/adapters.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/files/file_util.h"
+#include "base/ios/ios_util.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -22,6 +24,22 @@
 namespace adblock_filter {
 
 namespace {
+
+constexpr auto kOldResourceTypeMap =
+    base::MakeFixedFlatMap<RequestFilterRule::ResourceType, base::StringPiece>({
+        {RequestFilterRule::kStylesheet, "style-sheet"},
+        {RequestFilterRule::kImage, "image"},
+        {RequestFilterRule::kObject, "media"},
+        {RequestFilterRule::kScript, "script"},
+        {RequestFilterRule::kXmlHttpRequest, "raw"},
+        {RequestFilterRule::kSubDocument, "document"},
+        {RequestFilterRule::kFont, "font"},
+        {RequestFilterRule::kMedia, "media"},
+        {RequestFilterRule::kWebSocket, "raw"},
+        {RequestFilterRule::kPing, "ping"},
+        {RequestFilterRule::kOther, "raw"},
+    });
+
 constexpr auto kResourceTypeMap =
     base::MakeFixedFlatMap<RequestFilterRule::ResourceType, base::StringPiece>({
         {RequestFilterRule::kStylesheet, "style-sheet"},
@@ -36,47 +54,6 @@ constexpr auto kResourceTypeMap =
         {RequestFilterRule::kPing, "ping"},
         {RequestFilterRule::kOther, "other"},
     });
-constexpr char kVersion[] = "version";
-constexpr char kNetworkRules[] = "network";
-constexpr char kCosmeticRules[] = "cosmetic";
-constexpr char kBlockRules[] = "block";
-constexpr char kAllowRules[] = "allow";
-constexpr char kGeneric[] = "generic";
-constexpr char kSpecific[] = "specific";
-constexpr char kGenericAllowRules[] = "generic-allow";
-constexpr char kBlockAllowPairs[] = "block-allow-pairs";
-
-constexpr char kTrigger[] = "trigger";
-constexpr char kUrlFilter[] = "url-filter";
-constexpr char kUrlFilterIsCaseSensitive[] = "url-filter-is-case-sensitive";
-constexpr char kResourceType[] = "resource-type";
-constexpr char kLoadType[] = "load-type";
-constexpr char kFirstParty[] = "first-party";
-constexpr char kThirdParty[] = "third-party";
-constexpr char kLoadContext[] = "load-context";
-constexpr char kTopFrame[] = "top-frame";
-constexpr char kChildFrame[] = "child-frame";
-constexpr char kIfTopUrl[] = "if-top-url";
-constexpr char kUnlessTopUrl[] = "unless-top-url";
-constexpr char kTopUrlFilterIsCaseSensitive[] =
-    "top-url-filter-is-case-sensitive";
-
-constexpr char kAction[] = "action";
-constexpr char kType[] = "type";
-constexpr char kBlock[] = "block";
-constexpr char kIgnorePrevious[] = "ignore-previous-rules";
-constexpr char kCssHide[] = "css-display-none";
-constexpr char kRedirect[] = "redirect";
-constexpr char kModifyHeaders[] = "modify-headers";
-constexpr char kSelector[] = "selector";
-constexpr char kUrl[] = "url";
-constexpr char kPriority[] = "priority";
-constexpr char kResponseHeaders[] = "response-headers";
-constexpr char kOperation[] = "operation";
-constexpr char kAppend[] = "append";
-constexpr char kHeader[] = "header";
-constexpr char kCsp[] = "Content-Security-Policy";
-constexpr char kValue[] = "value";
 
 constexpr char kDelim = '^';
 constexpr char kWildcard = '*';
@@ -106,38 +83,41 @@ class Trigger {
 
   base::Value::Dict ToDict() const {
     base::Value::Dict result;
-    result.Set(kUrlFilter, url_filter_);
-    result.Set(kUrlFilterIsCaseSensitive, case_sensitive_);
+    result.Set(rules_json::kUrlFilter, url_filter_);
+    result.Set(rules_json::kUrlFilterIsCaseSensitive, case_sensitive_);
     if (!resource_type_.all() && !resource_type_.none()) {
       base::Value::List resource_type;
       for (size_t i = 0; i < resource_type_.size(); i++) {
         if (resource_type_.test(i)) {
-          resource_type.Append(base::Value(kResourceTypeMap.at(i)));
+          if (base::ios::IsRunningOnIOS15OrLater())
+            resource_type.Append(base::Value(kResourceTypeMap.at(i)));
+          else
+            resource_type.Append(base::Value(kOldResourceTypeMap.at(i)));
         }
       }
-      result.Set(kResourceType, std::move(resource_type));
+      result.Set(rules_json::kResourceType, std::move(resource_type));
     }
     if (!load_type_.all() && !load_type_.none()) {
       base::Value::List load_type;
       if (load_type_.test(RequestFilterRule::kFirstParty))
-        load_type.Append(base::Value(kFirstParty));
+        load_type.Append(base::Value(rules_json::kFirstParty));
       if (load_type_.test(RequestFilterRule::kThirdParty))
-        load_type.Append(base::Value(kThirdParty));
-      result.Set(kLoadType, std::move(load_type));
+        load_type.Append(base::Value(rules_json::kThirdParty));
+      result.Set(rules_json::kLoadType, std::move(load_type));
     }
     base::Value::List load_context;
     switch (load_context_) {
       case LoadContext::kChildFrame:
-        load_context.Append(kChildFrame);
+        load_context.Append(rules_json::kChildFrame);
         break;
       case LoadContext::kTopFrame:
-        load_context.Append(kTopFrame);
+        load_context.Append(rules_json::kTopFrame);
         break;
       case LoadContext::kAny:
         break;
     }
-    if (!load_context.empty()) {
-      result.Set(kLoadContext, std::move(load_context));
+    if (!load_context.empty() && base::ios::IsRunningOnIOS15OrLater()) {
+      result.Set(rules_json::kLoadContext, std::move(load_context));
     }
 
     if (!top_url_filter_.empty()) {
@@ -145,9 +125,10 @@ class Trigger {
       for (const auto& url : top_url_filter_) {
         top_url_filter.Append(url);
       }
-      result.Set(top_url_filter_is_excluding_ ? kUnlessTopUrl : kIfTopUrl,
+      result.Set(top_url_filter_is_excluding_ ? rules_json::kUnlessTopUrl
+                                              : rules_json::kIfTopUrl,
                  std::move(top_url_filter));
-      result.Set(kTopUrlFilterIsCaseSensitive,
+      result.Set(rules_json::kTopUrlFilterIsCaseSensitive,
                  top_url_filter_is_case_sensitive_);
     }
 
@@ -155,12 +136,6 @@ class Trigger {
   }
 
   void set_resource_type(std::bitset<RequestFilterRule::kTypeCount> type) {
-    if (type.test(RequestFilterRule::kWebTransport) ||
-        type.test(RequestFilterRule::kWebRTC)) {
-      type.set(RequestFilterRule::kOther);
-      type.reset(RequestFilterRule::kWebTransport);
-      type.reset(RequestFilterRule::kWebRTC);
-    }
     resource_type_ = type;
   }
 
@@ -207,33 +182,35 @@ class Action {
 
   Action Clone() const { return Action(*this); }
 
-  static Action BlockAction() { return Action(kBlock); }
+  static Action BlockAction() { return Action(rules_json::kBlock); }
 
-  static Action IgnorePreviousAction() { return Action(kIgnorePrevious); }
+  static Action IgnorePreviousAction() {
+    return Action(rules_json::kIgnorePrevious);
+  }
 
   static Action CssHideAction(std::string selector) {
-    Action action(kCssHide);
+    Action action(rules_json::kCssHide);
     action.selector_ = selector;
     return action;
   }
 
   virtual base::Value::Dict ToDict() const {
     base::Value::Dict result;
-    result.Set(kType, type_);
-    if (type_ == kCssHide) {
-      result.Set(kSelector, selector_);
-    } else if (type_ == kRedirect) {
-      result.Set(kUrl, redirect_url_);
-    } else if (type_ == kCsp) {
-      result.Set(kPriority, 0);
+    result.Set(rules_json::kType, type_);
+    if (type_ == rules_json::kCssHide) {
+      result.Set(rules_json::kSelector, selector_);
+    } else if (type_ == rules_json::kRedirect) {
+      result.Set(rules_json::kUrl, redirect_url_);
+    } else if (type_ == rules_json::kCsp) {
+      result.Set(rules_json::kPriority, 0);
       base::Value::Dict modify_header_info;
-      modify_header_info.Set(kOperation, kAppend);
-      modify_header_info.Set(kHeader, kCsp);
-      modify_header_info.Set(kValue, csp_);
+      modify_header_info.Set(rules_json::kOperation, rules_json::kAppend);
+      modify_header_info.Set(rules_json::kHeader, rules_json::kCsp);
+      modify_header_info.Set(rules_json::kValue, csp_);
       base::Value::Dict modify_header_actions;
-      modify_header_actions.Set(kResponseHeaders,
+      modify_header_actions.Set(rules_json::kResponseHeaders,
                                 std::move(modify_header_info));
-      result.Set(kModifyHeaders, std::move(modify_header_actions));
+      result.Set(rules_json::kModifyHeaders, std::move(modify_header_actions));
     }
     return result;
   }
@@ -251,8 +228,8 @@ class Action {
 
 base::Value::Dict MakeRule(const Trigger& trigger, const Action& action) {
   base::Value::Dict result;
-  result.Set(kTrigger, trigger.ToDict());
-  result.Set(kAction, action.ToDict());
+  result.Set(rules_json::kTrigger, trigger.ToDict());
+  result.Set(rules_json::kAction, action.ToDict());
 
   return result;
 }
@@ -330,22 +307,57 @@ absl::optional<std::string> GetRegexFromRule(const RequestFilterRule& rule) {
   bool start_anchored = rule.anchor_type.test(RequestFilterRule::kAnchorStart);
   bool host_anchored = rule.anchor_type.test(RequestFilterRule::kAnchorHost);
   if (!host.empty() && !start_anchored && !host_anchored) {
-    if (pattern.substr(0, host.size()) == host) {
-      host_anchored = true;
-    } else {
+    bool pattern_matches_host = false;
+    size_t first_slash = pattern.find_first_of("/^");
+    size_t pattern_host_size = first_slash;
+    bool has_first_slash = true;
+    if (first_slash == base::StringPiece::npos) {
+      pattern_host_size = pattern.size();
+      has_first_slash = false;
+    }
+    if (host.size() < pattern_host_size &&
+        pattern.substr(pattern_host_size - host.size(), host.size()) == host &&
+        pattern[pattern_host_size - host.size() - 1] == '.') {
+      GURL validation_url(std::string("https://") +
+                          std::string(pattern.substr(0, pattern_host_size)));
+      if (validation_url.is_valid() && validation_url.has_host() &&
+          !validation_url.has_query() && !validation_url.has_ref() &&
+          !validation_url.has_username() && !validation_url.has_password()) {
+        host_anchored = true;
+        pattern_matches_host = true;
+      }
+    }
+    if (host.size() >= pattern_host_size) {
+      if (has_first_slash &&
+          host.substr(host.size() - pattern_host_size, pattern_host_size) ==
+              pattern.substr(0, pattern_host_size)) {
+        pattern.remove_prefix(pattern_host_size);
+        pattern_matches_host = true;
+      } else if (!has_first_slash &&
+                 host.find(pattern) != base::StringPiece::npos) {
+        pattern_matches_host = true;
+      }
+    }
+
+    if (!host_anchored) {
       result.append(kSchemeRegex);
       result.append(kUserInfoAndSubdomainRegex);
       AppendfromPattern(rule.host, result);
-      size_t first_slash = pattern.find_first_of("/^");
-      if (first_slash != base::StringPiece::npos &&
-          host.size() >= first_slash &&
-          host.substr(host.size() - first_slash, first_slash) ==
-              pattern.substr(0, first_slash)) {
-        pattern.remove_prefix(first_slash);
-      } else {
-        result.append(kDelimRegex);
-        result.append(kWildcardRegex);
+    }
+
+    if (!has_first_slash && pattern_matches_host) {
+      if (host_anchored) {
+        result.append(kSchemeRegex);
+        result.append(kUserInfoAndSubdomainRegex);
+        AppendfromPattern(pattern, result);
       }
+      result.append(kDelimRegex);
+      return result;
+    }
+
+    if (!pattern_matches_host) {
+      result.append(kDelimRegex);
+      result.append(kWildcardRegex);
     }
   }
 
@@ -388,7 +400,8 @@ std::string DomainToIfURL(std::string domain, bool subdomains) {
   return result;
 }
 
-std::vector<std::string> DomainsToIfURL(std::vector<std::string> domains) {
+template <typename T>
+std::vector<std::string> DomainsToIfURL(T domains) {
   std::vector<std::string> results;
   std::transform(
       domains.cbegin(), domains.cend(), std::back_inserter(results),
@@ -444,19 +457,19 @@ std::vector<std::string> DomainsForRuleToIfUrls(
 
   return results;
 }
-// Compute which blocks/allows are actually meaningful. Each entry in the map is
-// a further level of allowing/blocking in the domain tree. Once this is done,
-// the domains listed for each depth are subdomains exempted from the rule set
-// at the depth one lower. For instance, if we have a blocking rule with
-// domains=example.com,~bad.example.com,good.x.bad.example.com, we'll end up
-// with example.com at level 0, bad.example.com at level one and
+// Compute which blocks/allows are actually meaningful. Each entry in the map
+// is a further level of allowing/blocking in the domain tree. Once this is
+// done, the domains listed for each depth are subdomains exempted from the
+// rule set at the depth one lower. For instance, if we have a blocking rule
+// with domains=example.com,~bad.example.com,good.x.bad.example.com, we'll end
+// up with example.com at level 0, bad.example.com at level one and
 // good.x.example.com at level2. The even layers list domains included by the
 // rule and odd layers list domains which are excluded. As such, if we are
 // trying to populate an even depth and encounter an exclusion domain, it is
 // already superceded by an excludion at the preceding level and we can ignore
 // it. Same goes for inclusions and odd levels. Note that excluded domains are
-// ignored at level 0 because the presence of inclusions implies that everything
-// else is included and those inclusions are therefore redundant.
+// ignored at level 0 because the presence of inclusions implies that
+// everything else is included and those inclusions are therefore redundant.
 void TraverseDomainTree(
     const DomainTreeNode& node,
     std::string domain,
@@ -496,9 +509,10 @@ void CompileRuleWithDomains(bool is_allow_rule,
     }
 
     base::Value::List* target =
-        is_allow_rule ? compiled_rules.EnsureList(kAllowRules)
-                      : compiled_rules.EnsureDict(kBlockRules)
-                            ->EnsureList(is_generic ? kGeneric : kSpecific);
+        is_allow_rule ? compiled_rules.EnsureList(rules_json::kAllowRules)
+                      : compiled_rules.EnsureDict(rules_json::kBlockRules)
+                            ->EnsureList(is_generic ? rules_json::kGeneric
+                                                    : rules_json::kSpecific);
     DCHECK(target);
 
     Action action = is_allow_rule ? Action::IgnorePreviousAction()
@@ -525,9 +539,9 @@ void CompileRuleWithDomains(bool is_allow_rule,
     trigger.set_top_url_filter(DomainsForRuleToIfUrls(domains_for_rule.at(0)),
                                false, true);
     base::Value::List* target =
-        is_allow_rule
-            ? compiled_rules.EnsureList(kAllowRules)
-            : compiled_rules.EnsureDict(kBlockRules)->EnsureList(kSpecific);
+        is_allow_rule ? compiled_rules.EnsureList(rules_json::kAllowRules)
+                      : compiled_rules.EnsureDict(rules_json::kBlockRules)
+                            ->EnsureList(rules_json::kSpecific);
     DCHECK(target);
     Action action = is_allow_rule ? Action::IgnorePreviousAction()
                                   : std::move(block_action);
@@ -546,12 +560,13 @@ void CompileRuleWithDomains(bool is_allow_rule,
       }
     }
     trigger.set_top_url_filter(std::move(if_urls), false, true);
-    compiled_rules.EnsureList(kAllowRules)
+    compiled_rules.EnsureList(rules_json::kAllowRules)
         ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     return;
   }
 
-  base::Value::List target;
+  base::Value::List* target =
+      compiled_rules.EnsureList(rules_json::kBlockAllowPairs);
   base::Value::List current_pair;
   int i;
   for (i = 0; domains_for_rule.count(i) != 0; i++) {
@@ -563,13 +578,12 @@ void CompileRuleWithDomains(bool is_allow_rule,
       current_pair.Append(MakeRule(trigger2, block_action.Clone()));
     } else {
       current_pair.Append(MakeRule(trigger2, Action::IgnorePreviousAction()));
-      target.Append(std::move(current_pair));
+      target->Append(std::move(current_pair));
     }
   }
   if (i % 2 != 0) {
-    target.Append(std::move(current_pair));
+    target->Append(std::move(current_pair));
   }
-  compiled_rules.EnsureList(kBlockAllowPairs)->Append(std::move(target));
 }
 
 void CompilePlainRequestFilter(const RequestFilterRule& rule,
@@ -612,52 +626,53 @@ void CompileRequestFilterRule(
                                 std::move(subdocument_trigger));
     }
 
-    trigger.set_resource_type(resource_types);
-    CompilePlainRequestFilter(rule, compiled_request_filter_rules,
-                              std::move(trigger));
+    // Unsupported on iOS.
+    resource_types.reset(RequestFilterRule::kWebTransport);
+    resource_types.reset(RequestFilterRule::kWebRTC);
+
+    // Remaining types after handling subdocument
+    if (!resource_types.none()) {
+      trigger.set_resource_type(resource_types);
+      CompilePlainRequestFilter(rule, compiled_request_filter_rules,
+                                std::move(trigger));
+    }
   }
 
   if (rule.is_allow_rule && !activations.none()) {
     Trigger trigger(kWildcardRegex, false);
+    trigger.set_load_type(rule.party);
     trigger.set_top_url_filter(*url_filter, false, rule.is_case_sensitive);
     if (activations.test(RequestFilterRule::kDocument)) {
-      compiled_request_filter_rules.EnsureList(kAllowRules)
+      compiled_request_filter_rules.EnsureList(rules_json::kAllowRules)
+          ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
+      compiled_cosmetic_filter_rules.EnsureList(rules_json::kAllowRules)
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     }
 
     if (activations.test(RequestFilterRule::kGenericBlock)) {
-      compiled_request_filter_rules.EnsureList(kGenericAllowRules)
+      compiled_request_filter_rules.EnsureList(rules_json::kGenericAllowRules)
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     }
 
     if (activations.test(RequestFilterRule::kElementHide)) {
-      compiled_cosmetic_filter_rules.EnsureList(kAllowRules)
+      compiled_cosmetic_filter_rules.EnsureList(rules_json::kAllowRules)
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     }
 
     if (activations.test(RequestFilterRule::kGenericHide)) {
-      compiled_cosmetic_filter_rules.EnsureList(kGenericAllowRules)
+      compiled_cosmetic_filter_rules.EnsureList(rules_json::kGenericAllowRules)
           ->Append(MakeRule(trigger, Action::IgnorePreviousAction()));
     }
   }
 }
 
-void CompileRequestFilterRule(
-    const CosmeticRule& rule,
-    base::Value::Dict& compiled_cosmetic_filter_rules) {
-  if (rule.core.included_domains.empty() && rule.core.is_allow_rule) {
-    return;
-  }
-  if (rule.core.included_domains.empty() &&
-      rule.core.excluded_domains.empty()) {
-    compiled_cosmetic_filter_rules.EnsureDict(kBlock)
-        ->EnsureList(kSelector)
-        ->Append(rule.selector);
-    return;
-  }
+void CompileCosmeticRule(const CosmeticRule& rule,
+                         base::Value::Dict& compiled_cosmetic_filter_rules) {
   CompileRuleWithDomains(
       rule.core.is_allow_rule, rule.core.included_domains,
-      rule.core.excluded_domains, compiled_cosmetic_filter_rules,
+      rule.core.excluded_domains,
+      *(compiled_cosmetic_filter_rules.EnsureDict(rules_json::kSelector)
+            ->EnsureDict(rule.selector)),
       Trigger(kWildcardRegex, false), Action::CssHideAction(rule.selector));
 }
 }  // namespace
@@ -671,12 +686,15 @@ std::string CompileIosRulesToString(const ParseResult& parse_result,
                              compiled_cosmetic_filter_rules);
   }
   for (const auto& cosmetic_rule : parse_result.cosmetic_rules) {
-    CompileRequestFilterRule(cosmetic_rule, compiled_cosmetic_filter_rules);
+    CompileCosmeticRule(cosmetic_rule, compiled_cosmetic_filter_rules);
   }
   base::Value::Dict result;
-  result.Set(kVersion, GetIntermediateRepresentationVersionNumber());
-  result.Set(kNetworkRules, std::move(compiled_request_filter_rules));
-  result.Set(kCosmeticRules, std::move(compiled_cosmetic_filter_rules));
+  result.Set(rules_json::kVersion,
+             GetIntermediateRepresentationVersionNumber());
+  result.Set(rules_json::kNetworkRules,
+             std::move(compiled_request_filter_rules));
+  result.Set(rules_json::kCosmeticRules,
+             std::move(compiled_cosmetic_filter_rules));
   std::string output;
   JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(pretty_print);
@@ -692,5 +710,13 @@ bool CompileIosRules(const ParseResult& parse_result,
   std::string ios_rules = CompileIosRulesToString(parse_result, false);
   checksum = CalculateBufferChecksum(ios_rules);
   return base::WriteFile(output_path, ios_rules);
+}
+
+base::Value CompileExceptionsRule(const std::set<std::string>& exceptions,
+                                  bool process_list) {
+  Trigger trigger(kWildcardRegex, false);
+  trigger.set_top_url_filter(DomainsToIfURL(exceptions), process_list, true);
+
+  return base::Value(MakeRule(trigger, Action::IgnorePreviousAction()));
 }
 }  // namespace adblock_filter

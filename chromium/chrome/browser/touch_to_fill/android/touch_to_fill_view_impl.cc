@@ -5,8 +5,10 @@
 #include "chrome/browser/touch_to_fill/android/touch_to_fill_view_impl.h"
 
 #include <memory>
+#include <vector>
 
 #include "base/android/jni_android.h"
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
@@ -17,6 +19,8 @@
 #include "chrome/browser/ui/passwords/ui_utils.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
 #include "components/password_manager/core/browser/passkey_credential.h"
+#include "components/password_manager/core/browser/password_ui_utils.h"
+#include "components/strings/grit/components_strings.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 #include "url/android/gurl_android.h"
@@ -54,11 +58,21 @@ UiCredential ConvertJavaCredential(JNIEnv* env,
 PasskeyCredential ConvertJavaWebAuthnCredential(
     JNIEnv* env,
     const JavaParamRef<jobject>& credential) {
+  std::vector<uint8_t> credential_id;
+  base::android::JavaByteArrayToByteVector(
+      env, Java_WebAuthnCredential_getCredentialId(env, credential),
+      &credential_id);
+
+  std::vector<uint8_t> user_id;
+  base::android::JavaByteArrayToByteVector(
+      env, Java_WebAuthnCredential_getUserId(env, credential), &user_id);
+
   return PasskeyCredential(
-      PasskeyCredential::Username(ConvertJavaStringToUTF16(
-          env, Java_WebAuthnCredential_getUsername(env, credential))),
-      PasskeyCredential::BackendId(ConvertJavaStringToUTF8(
-          env, Java_WebAuthnCredential_getId(env, credential))));
+      PasskeyCredential::Source::kAndroidPhone,
+      ConvertJavaStringToUTF8(Java_WebAuthnCredential_getRpId(env, credential)),
+      std::move(credential_id), std::move(user_id),
+      ConvertJavaStringToUTF8(
+          Java_WebAuthnCredential_getUsername(env, credential)));
 }
 
 }  // namespace
@@ -79,7 +93,8 @@ void TouchToFillViewImpl::Show(
     IsOriginSecure is_origin_secure,
     base::span<const password_manager::UiCredential> credentials,
     base::span<const PasskeyCredential> passkey_credentials,
-    bool trigger_submission) {
+    bool trigger_submission,
+    bool can_manage_passwords_when_passkeys_present) {
   if (!RecreateJavaObject()) {
     // It's possible that the constructor cannot access the bottom sheet clank
     // component. That case may be temporary but we can't let users in a waiting
@@ -112,15 +127,17 @@ void TouchToFillViewImpl::Show(
   for (size_t i = 0; i < passkey_credentials.size(); ++i) {
     const PasskeyCredential& credential = passkey_credentials[i];
     Java_TouchToFillBridge_insertWebAuthnCredential(
-        env, passkey_array, i,
-        ConvertUTF16ToJavaString(env, credential.username().value()),
-        ConvertUTF8ToJavaString(env, credential.id().value()));
+        env, passkey_array, i, ConvertUTF8ToJavaString(env, credential.rp_id()),
+        base::android::ToJavaByteArray(env, credential.credential_id()),
+        base::android::ToJavaByteArray(env, credential.user_id()),
+        ConvertUTF16ToJavaString(
+            env, password_manager::ToUsernameString(credential.username())));
   }
 
   Java_TouchToFillBridge_showCredentials(
       env, java_object_internal_, url::GURLAndroid::FromNativeGURL(env, url),
       is_origin_secure.value(), passkey_array, credential_array,
-      trigger_submission);
+      trigger_submission, !can_manage_passwords_when_passkeys_present);
 }
 
 void TouchToFillViewImpl::OnCredentialSelected(const UiCredential& credential) {
@@ -144,8 +161,9 @@ void TouchToFillViewImpl::OnWebAuthnCredentialSelected(
       ConvertJavaWebAuthnCredential(env, credential));
 }
 
-void TouchToFillViewImpl::OnManagePasswordsSelected(JNIEnv* env) {
-  controller_->OnManagePasswordsSelected();
+void TouchToFillViewImpl::OnManagePasswordsSelected(JNIEnv* env,
+                                                    jboolean passkeys_shown) {
+  controller_->OnManagePasswordsSelected(passkeys_shown);
 }
 
 void TouchToFillViewImpl::OnDismiss(JNIEnv* env) {

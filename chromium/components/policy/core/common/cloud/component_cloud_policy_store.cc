@@ -436,8 +436,7 @@ bool ComponentCloudPolicyStore::ParsePolicy(const std::string& data,
   auto value_with_error = base::JSONReader::ReadAndReturnValueWithError(
       data, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
   if (!value_with_error.has_value()) {
-    *error =
-        base::StrCat({"Invalid JSON blob: ", value_with_error.error().message});
+    *error = "Invalid JSON blob: " + value_with_error.error().message;
     return false;
   }
   base::Value json = std::move(*value_with_error);
@@ -446,8 +445,9 @@ bool ComponentCloudPolicyStore::ParsePolicy(const std::string& data,
     return false;
   }
 
-  return ParseComponentPolicy(std::move(json), domain_constants_->scope,
-                              POLICY_SOURCE_CLOUD, policy, error);
+  return ParseComponentPolicy(std::move(json).TakeDict(),
+                              domain_constants_->scope, POLICY_SOURCE_CLOUD,
+                              policy, error);
 }
 
 ComponentPolicyMap ComponentCloudPolicyStore::GetJsonPolicyMap() {

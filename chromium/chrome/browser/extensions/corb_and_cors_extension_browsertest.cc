@@ -9,6 +9,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
@@ -23,11 +24,9 @@
 #include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_management_test_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -55,7 +54,9 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/url_loader_interceptor.h"
+#include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/browsertest_util.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/url_loader_factory_manager.h"
 #include "extensions/common/extension_features.h"
@@ -91,19 +92,16 @@ constexpr char kOriginTrialPublicKeyForTesting[] =
 
 std::string CreateFetchScript(
     const GURL& resource,
-    absl::optional<base::Value> request_init = absl::nullopt) {
-  CHECK(request_init == absl::nullopt || request_init->is_dict());
-
+    absl::optional<base::Value::Dict> request_init = absl::nullopt) {
   const char kFetchScriptTemplate[] = R"(
     fetch($1, $2)
       .then(response => response.text())
       .then(text => domAutomationController.send(text))
       .catch(err => domAutomationController.send('error: ' + err));
   )";
-  return content::JsReplace(kFetchScriptTemplate, resource,
-                            request_init
-                                ? std::move(*request_init)
-                                : base::Value(base::Value::Type::DICT));
+  return content::JsReplace(
+      kFetchScriptTemplate, resource,
+      request_init ? std::move(*request_init) : base::Value::Dict());
 }
 
 std::string PopString(content::DOMMessageQueue* message_queue) {
@@ -259,11 +257,10 @@ class CorbAndCorsExtensionBrowserTest : public CorbAndCorsExtensionTestBase {
         console_observer.messages();
 
     std::vector<std::string> messages;
-    std::transform(console_messages.begin(), console_messages.end(),
-                   std::back_inserter(messages),
-                   [](const ConsoleMessage& console_message) {
-                     return base::UTF16ToUTF8(console_message.message);
-                   });
+    base::ranges::transform(console_messages, std::back_inserter(messages),
+                            [](const auto& console_message) {
+                              return base::UTF16ToUTF8(console_message.message);
+                            });
 
     // We allow more than 1 console message, because the test might flakily see
     // extra console messages - see https://crbug.com/1085629.
@@ -380,27 +377,26 @@ class CorbAndCorsExtensionBrowserTest : public CorbAndCorsExtensionTestBase {
 
   bool RegisterServiceWorkerForExtension(
       const std::string& service_worker_script) {
-    const char kServiceWorkerPath[] = "service_worker.js";
+    static constexpr char kServiceWorkerPath[] = "service_worker.js";
     dir_.WriteFile(base::FilePath::FromASCII(kServiceWorkerPath).value(),
                    service_worker_script);
 
-    const char kRegistrationScript[] = R"(
+    static constexpr char kRegistrationScript[] = R"(
         navigator.serviceWorker.register($1).then(function() {
           // Wait until the service worker is active.
           return navigator.serviceWorker.ready;
         }).then(function(r) {
-          window.domAutomationController.send('SUCCESS');
+          chrome.test.sendScriptResult('SUCCESS');
         }).catch(function(err) {
-          window.domAutomationController.send('ERROR: ' + err.message);
+          chrome.test.sendScriptResult('ERROR: ' + err.message);
         }); )";
     std::string registration_script =
         content::JsReplace(kRegistrationScript, kServiceWorkerPath);
 
-    std::string result = browsertest_util::ExecuteScriptInBackgroundPage(
-        browser()->profile(), extension_->id(), registration_script);
+    base::Value result =
+        ExecuteScriptInBackgroundPage(extension_->id(), registration_script);
     if (result != "SUCCESS") {
       ADD_FAILURE() << "Failed to register the service worker: " << result;
-      return false;
     }
     return !::testing::Test::HasFailure();
   }
@@ -483,8 +479,8 @@ class CorbAndCorsExtensionBrowserTest : public CorbAndCorsExtensionTestBase {
     int tab_id = ExtensionTabUtil::GetTabId(web_contents);
     std::string background_script = content::JsReplace(
         "chrome.tabs.executeScript($1, { code: $2 });", tab_id, content_script);
-    return browsertest_util::ExecuteScriptInBackgroundPageNoWait(
-        browser()->profile(), extension_->id(), background_script);
+    return ExecuteScriptInBackgroundPageNoWait(extension_->id(),
+                                               background_script);
   }
 
  protected:
@@ -540,15 +536,14 @@ class CorbAndCorsExtensionBrowserTest : public CorbAndCorsExtensionTestBase {
   // |fetch_script| will include calls to |domAutomationController.send| and
   // therefore instances of FetchCallback should not inject their own calls to
   // |domAutomationController.send| (e.g. this constraint rules out
-  // browsertest_util::ExecuteScriptInBackgroundPage and/or
-  // content::ExecuteScript).
+  // ExecuteScriptInBackgroundPage and/or content::ExecuteScript).
   //
   // The function should return true if script execution started successfully.
   //
   // Currently used "implementations":
   // - CorbAndCorsExtensionBrowserTest::ExecuteContentScript(web_contents)
   // - CorbAndCorsExtensionBrowserTest::ExecuteRegularScript(web_contents)
-  // - browsertest_util::ExecuteScriptInBackgroundPageNoWait(profile, ext_id)
+  // - ExecuteScriptInBackgroundPageNoWait(profile, ext_id)
   using FetchCallback =
       base::OnceCallback<bool(const std::string& fetch_script)>;
 
@@ -1320,8 +1315,8 @@ IN_PROC_BROWSER_TEST_F(
   {
     content::DOMMessageQueue message_queue(active_web_contents());
 
-    base::Value request_init(base::Value::Type::DICT);
-    request_init.SetStringPath("trustToken.type", "token-redemption");
+    base::Value::Dict request_init;
+    request_init.SetByDottedPath("trustToken.type", "token-redemption");
 
     EXPECT_TRUE(ExecuteContentScript(
         active_web_contents(),
@@ -1334,8 +1329,9 @@ IN_PROC_BROWSER_TEST_F(
 
   // Make sure the permission propagates correctly after a network service
   // crash.
-  if (!content::IsOutOfProcessNetworkService())
+  if (!content::IsOutOfProcessNetworkService()) {
     return;
+  }
   SimulateNetworkServiceCrash();
   active_web_contents()
       ->GetPrimaryMainFrame()
@@ -1343,8 +1339,8 @@ IN_PROC_BROWSER_TEST_F(
   {
     content::DOMMessageQueue message_queue(active_web_contents());
 
-    base::Value request_init(base::Value::Type::DICT);
-    request_init.SetStringPath("trustToken.type", "token-redemption");
+    base::Value::Dict request_init;
+    request_init.SetByDottedPath("trustToken.type", "token-redemption");
 
     EXPECT_TRUE(ExecuteContentScript(
         active_web_contents(),
@@ -1529,8 +1525,8 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsExtensionBrowserTest,
   // Performs a cross-origin fetch from the background page in "no-cors" mode.
   GURL cross_site_resource(
       embedded_test_server()->GetURL("cross-site.com", "/nosniff.xml"));
-  base::Value request_init(base::Value::Type::DICT);
-  request_init.SetStringPath("mode", "no-cors");
+  base::Value::Dict request_init;
+  request_init.Set("mode", "no-cors");
   std::string script =
       CreateFetchScript(cross_site_resource, std::move(request_init));
   content::WebContents* background_web_contents =
@@ -1658,9 +1654,9 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsExtensionBrowserTest,
     GURL cross_site_resource2(
         embedded_test_server()->GetURL("cross-site.com", "/nosniff.xml"));
 
-    base::Value request_init(base::Value::Type::DICT);
-    request_init.SetStringPath("method", "GET");
-    request_init.SetStringPath("mode", "no-cors");
+    base::Value::Dict request_init;
+    request_init.Set("method", "GET");
+    request_init.Set("mode", "no-cors");
 
     content::WebContents* background_web_contents =
         ProcessManager::Get(browser()->profile())
@@ -1731,16 +1727,15 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsExtensionBrowserTest,
   {
     PermissionsRequestFunction::SetAutoConfirmForTests(true);
     const char kPermissionGrantingScriptTemplate[] = R"(
-        chrome.permissions.request(
+        new Promise(resolve => {
+          chrome.permissions.request(
             { origins: [$1] },
-            granted => { domAutomationController.send(granted); });
+            granted => { resolve(granted); });
+        });
     )";
-    bool has_permission_been_granted = false;
     std::string script = content::JsReplace(kPermissionGrantingScriptTemplate,
                                             cross_site_origin.GetURL());
-    ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-        test_frame, script, &has_permission_been_granted));
-    ASSERT_TRUE(has_permission_been_granted);
+    ASSERT_EQ(true, content::EvalJs(test_frame, script));
     PermissionsRequestFunction::SetAutoConfirmForTests(false);
   }
 
@@ -1961,12 +1956,8 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsExtensionBrowserTest,
       active_web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin());
 
   // Verify that the service worker controls the fetches.
-  bool is_controlled_by_service_worker = false;
-  ASSERT_TRUE(ExecuteScriptAndExtractBool(
-      active_web_contents(),
-      "domAutomationController.send(!!navigator.serviceWorker.controller)",
-      &is_controlled_by_service_worker));
-  ASSERT_TRUE(is_controlled_by_service_worker);
+  ASSERT_EQ(true, EvalJs(active_web_contents(),
+                         "!!navigator.serviceWorker.controller"));
 
   // Test case #1: Network fetch initiated by the service worker.
   //
@@ -2184,9 +2175,8 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsExtensionBrowserTest,
     std::string args = base::StringPrintf(kArgsTemplate, tab_id);
     auto function = base::MakeRefCounted<TabsExecuteScriptFunction>();
     function->set_extension(extension());
-    std::string actual_error =
-        extension_function_test_utils::RunFunctionAndReturnError(
-            function.get(), args, browser());
+    std::string actual_error = api_test_utils::RunFunctionAndReturnError(
+        function.get(), args, browser()->profile());
     std::string expected_error =
         "Cannot access contents of url \"chrome://settings/\". "
         "Extension manifest must request permission to access this host.";
@@ -2201,27 +2191,22 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsExtensionBrowserTest,
 
   // Check if the injection above succeeded (it shouldn't have, because of
   // renderer-side checks).
-  const char kInjectionVerificationScript[] = R"(
-      domAutomationController.send(
-          !!document.getElementById('content-script-injection-result')); )";
-  bool has_content_script_run = false;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(active_web_contents(),
-                                                   kInjectionVerificationScript,
-                                                   &has_content_script_run));
-  EXPECT_FALSE(has_content_script_run);
+  const char kInjectionVerificationScript[] =
+      "!!document.getElementById('content-script-injection-result');";
+  EXPECT_EQ(false, content::EvalJs(active_web_contents(),
+                                   kInjectionVerificationScript));
 
   // Try to fetch a WebUI resource (i.e. verify that the unsucessful content
   // script injection above didn't clobber the WebUI-specific URLLoaderFactory).
   const char kScript[] = R"(
       var img = document.createElement('img');
       img.src = 'chrome://resources/images/arrow_down.svg';
-      img.onload = () => domAutomationController.send('LOADED');
-      img.onerror = e => domAutomationController.send('ERROR: ' + e);
+      new Promise(resolve => {
+        img.onload = () => resolve('LOADED');
+        img.onerror = e => resolve('ERROR: ' + e);
+      });
   )";
-  std::string result;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(active_web_contents(),
-                                                     kScript, &result));
-  EXPECT_EQ("LOADED", result);
+  EXPECT_EQ("LOADED", content::EvalJs(active_web_contents(), kScript));
 }
 
 class CorbAndCorsAppBrowserTest : public PlatformAppBrowserTest {
@@ -2360,8 +2345,9 @@ IN_PROC_BROWSER_TEST_F(OriginHeaderExtensionBrowserTest,
   std::string actual_origin_header = "<none>";
   const auto& headers_map = http_request.http_request()->headers;
   auto it = headers_map.find("Origin");
-  if (it != headers_map.end())
+  if (it != headers_map.end()) {
     actual_origin_header = it->second;
+  }
 
   // Verify the Origin header uses the page's origin (not the extension
   // origin).
@@ -2409,8 +2395,9 @@ IN_PROC_BROWSER_TEST_F(OriginHeaderExtensionBrowserTest,
   std::string actual_origin_header = "<none>";
   const auto& headers_map = http_request.http_request()->headers;
   auto it = headers_map.find("Origin");
-  if (it != headers_map.end())
+  if (it != headers_map.end()) {
     actual_origin_header = it->second;
+  }
 
   // Verify the Origin header uses the page's origin (not the extension
   // origin).

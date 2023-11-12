@@ -18,6 +18,12 @@ namespace {
 using testing::ElementsAre;
 using testing::UnorderedElementsAre;
 
+constexpr char kTestCom[] = "https://test.com";
+constexpr char kTestComChangePassword[] =
+    "https://test.com/.well-known/change-password";
+constexpr char kAndroidSignonRealm[] =
+    "android://certificate_hash@com.test.client/";
+
 // Creates matcher for a given domain info
 auto ExpectDomain(const std::string& name, const GURL& url) {
   return AllOf(testing::Field(&CredentialUIEntry::DomainInfo::name, name),
@@ -118,9 +124,9 @@ TEST(CredentialUIEntryTest, TestGetAffiliatedDomains) {
   std::vector<PasswordForm> forms;
 
   PasswordForm android_form;
-  android_form.signon_realm = "android://certificate_hash@com.test.client/";
+  android_form.signon_realm = kAndroidSignonRealm;
   android_form.app_display_name = "g3.com";
-  android_form.affiliated_web_realm = "https://test.com";
+  android_form.affiliated_web_realm = kTestCom;
 
   PasswordForm web_form;
   web_form.signon_realm = "https://g.com/";
@@ -146,7 +152,7 @@ TEST(CredentialUIEntryTest, TestGetAffiliatedDomainsHttpForm) {
 
 TEST(CredentialUIEntryTest, TestGetAffiliatedDomainsEmptyAndroidForm) {
   PasswordForm android_form;
-  android_form.signon_realm = "android://certificate_hash@com.test.client/";
+  android_form.signon_realm = kAndroidSignonRealm;
 
   CredentialUIEntry entry = CredentialUIEntry({android_form});
   EXPECT_THAT(entry.GetAffiliatedDomains(),
@@ -186,15 +192,68 @@ TEST(CredentialUIEntryTest, CredentialUIEntryInsecureHelpers) {
 
   auto leaked_entry = CreateInsecureCredential(InsecureType::kLeaked);
   EXPECT_TRUE(leaked_entry.IsLeaked());
+  EXPECT_TRUE(IsCompromised(leaked_entry));
 
   auto phished_entry = CreateInsecureCredential(InsecureType::kPhished);
   EXPECT_TRUE(phished_entry.IsPhished());
+  EXPECT_TRUE(IsCompromised(phished_entry));
 
   auto weak_entry = CreateInsecureCredential(InsecureType::kWeak);
   EXPECT_TRUE(weak_entry.IsWeak());
 
   auto reused_entry = CreateInsecureCredential(InsecureType::kReused);
   EXPECT_TRUE(reused_entry.IsReused());
+}
+
+TEST(CredentialUIEntryTest, TestGetAffiliatedDomainsWithDuplicates) {
+  PasswordForm form1;
+  form1.signon_realm = "https://g.com/";
+  form1.url = GURL("https://g.com/");
+
+  PasswordForm form2;
+  form2.signon_realm = "https://g.com/";
+  form2.url = GURL("https://g.com/");
+
+  CredentialUIEntry entry = CredentialUIEntry({form1, form2});
+  EXPECT_THAT(entry.GetAffiliatedDomains(),
+              ElementsAre(ExpectDomain("g.com", form1.url)));
+}
+
+TEST(CredentialUIEntryTest, TestGetAffiliatedDuplicatesWithDifferentUrls) {
+  PasswordForm form1;
+  form1.signon_realm = "https://g.com/";
+  form1.url = GURL("https://g.com/login/");
+
+  PasswordForm form2;
+  form2.signon_realm = "https://g.com/";
+  form2.url = GURL("https://g.com/sign%20in/");
+
+  CredentialUIEntry entry = CredentialUIEntry({form1, form2});
+  EXPECT_THAT(entry.GetAffiliatedDomains(),
+              UnorderedElementsAre(ExpectDomain("g.com", form1.url),
+                                   ExpectDomain("g.com", form2.url)));
+}
+
+TEST(CredentialUIEntryTest, TestGetChangeURLAndroid) {
+  PasswordForm android_form;
+  android_form.signon_realm = kAndroidSignonRealm;
+  android_form.affiliated_web_realm = kTestCom;
+  CredentialUIEntry entry = CredentialUIEntry(android_form);
+  EXPECT_EQ(entry.GetChangePasswordURL(), GURL(kTestComChangePassword));
+}
+
+TEST(CredentialUIEntryTest, TestGetChangeURLAndroidNoAffiliatedWebRealm) {
+  PasswordForm android_form;
+  android_form.signon_realm = kAndroidSignonRealm;
+  CredentialUIEntry entry = CredentialUIEntry(android_form);
+  EXPECT_FALSE(entry.GetChangePasswordURL());
+}
+
+TEST(CredentialUIEntryTest, TestGetChangeURLWebForm) {
+  PasswordForm web_form;
+  web_form.url = GURL(kTestCom);
+  CredentialUIEntry entry = CredentialUIEntry(web_form);
+  EXPECT_EQ(entry.GetChangePasswordURL(), GURL(kTestComChangePassword));
 }
 
 }  // namespace password_manager

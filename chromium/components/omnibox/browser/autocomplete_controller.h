@@ -10,12 +10,15 @@
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "build/build_config.h"
@@ -34,14 +37,16 @@
 
 class ClipboardProvider;
 class DocumentProvider;
-class HistoryURLProvider;
+class HistoryFuzzyProvider;
 class HistoryQuickProvider;
+class HistoryURLProvider;
 class KeywordProvider;
+class OmniboxTriggeredFeatureService;
+class OnDeviceHeadProvider;
 class SearchProvider;
 class TemplateURLService;
 class VoiceSuggestProvider;
 class ZeroSuggestProvider;
-class OnDeviceHeadProvider;
 
 // The AutocompleteController is the center of the autocomplete system.  A
 // class creates an instance of the controller, which in turn creates a set of
@@ -204,7 +209,7 @@ class AutocompleteController : public AutocompleteProviderListener,
   // See also AutocompleteResult::GroupSuggestionsBySearchVsURL()
   void GroupSuggestionsBySearchVsURL(size_t begin, size_t end);
   bool done() const { return done_; }
-  bool in_start() const { return in_start_; }
+  bool sync_pass_done() const { return sync_pass_done_; }
   // TODO(manukh): Once we have a smarter `expire_timer_` that early runs when
   //  the controller is done, `expire_timer_done()` will be unnecessary. Until
   //  then, neither, either, or both `done()` and `expire_timer_done()` can be
@@ -223,6 +228,10 @@ class AutocompleteController : public AutocompleteProviderListener,
   AutocompleteProviderClient* autocomplete_provider_client() const {
     return provider_client_.get();
   }
+
+  // This is a deprecated method of injecting an externally sourced
+  // match into the result set, currently still needed only by iOS.
+  size_t InjectAdHocMatch(AutocompleteMatch match);
 
  private:
   friend class FakeAutocompleteController;
@@ -290,8 +299,14 @@ class AutocompleteController : public AutocompleteProviderListener,
   void UpdateResult(bool regenerate_result,
                     bool force_notify_default_match_changed);
 
-  // Updates ML scoring signals of suggestions in the autocomplete result.
-  void UpdateScoringSignals();
+  // Calls `SortAndCull()`, then annotates the final set of suggestions (with
+  // open tab match, pedals, keyword info, etc.). Upon completion, notifies the
+  // listeners that the result and potentially the default match has changed.
+  void SortCullAndAnnotateResult(
+      const absl::optional<AutocompleteMatch>& last_default_match,
+      const std::u16string& last_default_associated_keyword,
+      bool force_notify_default_match_changed,
+      absl::optional<AutocompleteMatch> default_match_to_preserve);
 
   // Updates `result` to populate each match's `associated_keyword` if that
   // match can show a keyword hint. `result` should be sorted by relevance
@@ -317,6 +332,10 @@ class AutocompleteController : public AutocompleteProviderListener,
   // Invokes `NotifyChanged()` through `notify_changed_debouncer_`.
   void DelayedNotifyChanged(bool notify_default_match);
 
+  // Cancels any pending `NotifyChanged()` invocation through
+  // `notify_changed_debouncer_`.
+  void CancelDelayedNotifyChanged();
+
   // Updates |done_| to be accurate with respect to current providers' statuses.
   void CheckIfDone();
 
@@ -340,16 +359,39 @@ class AutocompleteController : public AutocompleteProviderListener,
       const base::trace_event::MemoryDumpArgs& args,
       base::trace_event::ProcessMemoryDump* process_memory_dump) override;
 
-  base::ObserverList<Observer> observers_;
-
-  // The client passed to the providers.
-  std::unique_ptr<AutocompleteProviderClient> provider_client_;
-
   // Returns whether the given provider should be ran based on whether we're in
   // keyword mode and which keyword we're searching. Currently runs all enabled
   // providers unless in a Starter Pack scope, except for OpenTabProvider which
   // only runs on Lacros and the @tabs scope.
   bool ShouldRunProvider(AutocompleteProvider* provider) const;
+
+  // Runs the async scoring model for all the eligible matches in
+  // `results_.matches_` and bypasses the ineligible matches. Passes
+  // `completion_callback` to `OnUrlScoringModelDone()` callback which is called
+  // once the model is done for all the eligible matches, whether successfully
+  // or not, and all the ineligible matches are bypassed.
+  void RunUrlScoringModel(base::OnceClosure completion_callback);
+
+  // Tries to cancel any pending requests to the scoring model and prevents
+  // `OnUrlScoringModelDone()` and its completion callback from being called.
+  void CancelUrlScoringModel();
+
+  // Called when the async scoring model is done running for all the eligible
+  // matches in `results_.matches_` and all the ineligible matches are bypassed.
+  // Redistributes the existing relevance scores to the matches based on the
+  // model output (i.e. highest relevance now belongs to the match with the
+  // highest output value, and vice versa), re-sorts and trims the matches, and
+  // calls `completion_callback`.
+  void OnUrlScoringModelDone(
+      const base::ElapsedTimer elapsed_timer,
+      base::OnceClosure completion_callback,
+      std::vector<std::tuple<absl::optional<float>, size_t, GURL>>
+          outputs_and_match_info);
+
+  base::ObserverList<Observer> observers_;
+
+  // The client passed to the providers.
+  std::unique_ptr<AutocompleteProviderClient> provider_client_;
 
   // A list of all providers.
   Providers providers_;
@@ -373,6 +415,8 @@ class AutocompleteController : public AutocompleteProviderListener,
   raw_ptr<ClipboardProvider> clipboard_provider_;
 
   raw_ptr<VoiceSuggestProvider> voice_suggest_provider_;
+
+  raw_ptr<HistoryFuzzyProvider> history_fuzzy_provider_;
 
   raw_ptr<OpenTabProvider> open_tab_provider_;
 
@@ -441,13 +485,14 @@ class AutocompleteController : public AutocompleteProviderListener,
   // `NotifyChanged()` couldn't know of the former.
   bool notify_changed_default_match_ = false;
 
-  // True if a query is not currently running.
-  bool done_;
+  // True if a query is not currently running - i.e., the synchronous pass is
+  // done and all providers have provided their async updates.
+  bool done_ = true;
 
-  // Are we in Start()? This is used to avoid updating |result_| and sending
-  // notifications until Start() has been invoked on all providers. When this
-  // boolean is true, we are definitely within the synchronous pass.
-  bool in_start_;
+  // True, if the synchronous pass is done. Used to avoid updating `result_` and
+  // sending notifications until the the synchronous pass is done on all
+  // providers.
+  bool sync_pass_done_ = true;
 
   // True if this instance of AutocompleteController is owned by the CrOS
   // launcher. This is currently used to determine whether to enable the Open
@@ -463,6 +508,15 @@ class AutocompleteController : public AutocompleteProviderListener,
   bool search_service_worker_signal_sent_;
 
   raw_ptr<TemplateURLService> template_url_service_;
+
+  raw_ptr<OmniboxTriggeredFeatureService> triggered_feature_service_;
+
+  // Combined, used to cancel model execution requests sent to
+  // `AutocompleteScoringModelService` and to prevent its callbacks from being
+  // called `base::CancelableTaskTracker` alone is insufficient because it
+  // cannot cancel tasks that have already started to run.
+  base::CancelableTaskTracker scoring_model_task_tracker_;
+  base::WeakPtrFactory<AutocompleteController> weak_ptr_factory_{this};
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_AUTOCOMPLETE_CONTROLLER_H_

@@ -11,10 +11,6 @@
 
 #include "base/memory/scoped_refptr.h"
 
-namespace breadcrumbs {
-class BreadcrumbPersistentStorageManager;
-}
-
 namespace component_updater {
 class ComponentUpdateService;
 }
@@ -70,7 +66,6 @@ class VariationsService;
 
 class ApplicationContext;
 class BrowserPolicyConnectorIOS;
-class PromosManager;
 class IOSChromeIOThread;
 class PrefService;
 class PushNotificationService;
@@ -167,15 +162,6 @@ class ApplicationContext {
   // Returns the BrowserPolicyConnectorIOS that starts and manages the policy
   // system. May be null if policy is not enabled.
   virtual BrowserPolicyConnectorIOS* GetBrowserPolicyConnector() = 0;
-
-  // Gets the Promos Manager. For v1, this will be a Fullscreen Promos Manager.
-  // May be null if feature kFullscreenPromosManager is not enabled.
-  virtual PromosManager* GetPromosManager() = 0;
-
-  // Returns the BreadcrumbPersistentStorageManager writing breadcrumbs to disk.
-  // Will be null if breadcrumb collection is not enabled.
-  virtual breadcrumbs::BreadcrumbPersistentStorageManager*
-  GetBreadcrumbPersistentStorageManager() = 0;
 
   // Returns the SingleSignOnService instance used by this application.
   virtual id<SingleSignOnService> GetSSOService() = 0;

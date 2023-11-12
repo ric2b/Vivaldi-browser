@@ -60,21 +60,13 @@ class MockEventConverterEvdevImpl : public EventConverterEvdevImpl {
 // Test fixture.
 class EventConverterEvdevImplTest : public testing::Test {
  public:
-  EventConverterEvdevImplTest() {}
+  EventConverterEvdevImplTest() = default;
 
   EventConverterEvdevImplTest(const EventConverterEvdevImplTest&) = delete;
   EventConverterEvdevImplTest& operator=(const EventConverterEvdevImplTest&) =
       delete;
 
-  // Overridden from testing::Test:
   void SetUp() override { SetUpDevice(ui::EventDeviceInfo()); }
-
-  void TearDown() override {
-    device_.reset();
-    cursor_.reset();
-    events_out_.reset();
-    test_clock_.reset();
-  }
 
   void SetUpDevice(const ui::EventDeviceInfo& info) {
     // Set up pipe to satisfy message pump (unused).
@@ -708,7 +700,7 @@ TEST_F(EventConverterEvdevImplTest, ShouldSwapMouseButtonsFromUserPreference) {
 
   SetTestNowSeconds(1510019415);
   ClearDispatchedEvents();
-  GetInputController()->SetPrimaryButtonRight(false);
+  GetInputController()->SetPrimaryButtonRight(absl::nullopt, false);
   dev->ProcessEvents(mock_kernel_queue, std::size(mock_kernel_queue));
   EXPECT_EQ(4u, size());
 
@@ -748,7 +740,7 @@ TEST_F(EventConverterEvdevImplTest, ShouldSwapMouseButtonsFromUserPreference) {
   SetTestNowSeconds(1510019417);
 
   ClearDispatchedEvents();
-  GetInputController()->SetPrimaryButtonRight(true);
+  GetInputController()->SetPrimaryButtonRight(absl::nullopt, true);
   dev->ProcessEvents(mock_kernel_queue2, std::size(mock_kernel_queue2));
   EXPECT_EQ(4u, size());
 

@@ -164,12 +164,13 @@ ScoredHistoryMatch::ScoredHistoryMatch(
 
   if (OmniboxFieldTrial::IsLogUrlScoringSignalsEnabled()) {
     // Populate the scoring signals available in the URL Row.
-    scoring_signals.set_typed_count(row.typed_count());
-    scoring_signals.set_visit_count(row.visit_count());
+    scoring_signals = absl::make_optional<ScoringSignals>();
+    scoring_signals->set_typed_count(row.typed_count());
+    scoring_signals->set_visit_count(row.visit_count());
     base::TimeDelta elapsed_time = now - row.last_visit();
-    scoring_signals.set_elapsed_time_last_visit_secs(elapsed_time.InSeconds());
-    scoring_signals.set_is_host_only(IsHostOnly());
-    scoring_signals.set_length_of_url(row.url().spec().length());
+    scoring_signals->set_elapsed_time_last_visit_secs(elapsed_time.InSeconds());
+    scoring_signals->set_is_host_only(IsHostOnly());
+    scoring_signals->set_length_of_url(row.url().spec().length());
   }
 
   // Figure out where each search term appears in the URL and/or page title
@@ -284,9 +285,13 @@ ScoredHistoryMatch::ScoredHistoryMatch(
   const float topicality_score =
       GetTopicalityScore(terms_vector.size(), gurl, adjustments,
                          terms_to_word_starts_offsets, word_starts);
-  const float frequency_score = GetFrequency(now, is_url_bookmarked, visits);
-  const float specificity_score =
-      GetDocumentSpecificityScore(num_matching_pages);
+  float frequency_score = 0, specificity_score = 0;
+  if (topicality_score > 0) {
+    // No need to calculate these intermediates; when `topicality_score` is 0,
+    // they'll be unused.
+    frequency_score = GetFrequency(now, is_url_bookmarked, visits);
+    specificity_score = GetDocumentSpecificityScore(num_matching_pages);
+  }
   raw_score_before_domain_boosting =
       base::saturated_cast<int>(GetFinalRelevancyScore(
           topicality_score, frequency_score, specificity_score, 1));
@@ -717,33 +722,33 @@ float ScoredHistoryMatch::GetTopicalityScore(
         adjustments, url_matches);
     if (url_matching_signals.first_url_match_position.has_value()) {
       // Not set if there is no URL match.
-      scoring_signals.set_first_url_match_position(
+      scoring_signals->set_first_url_match_position(
           *(url_matching_signals.first_url_match_position));
     }
     if (url_matching_signals.host_match_at_word_boundary.has_value()) {
       // Not set if there is no match in the host.
-      scoring_signals.set_host_match_at_word_boundary(
+      scoring_signals->set_host_match_at_word_boundary(
           *(url_matching_signals.host_match_at_word_boundary));
-      scoring_signals.set_has_non_scheme_www_match(
+      scoring_signals->set_has_non_scheme_www_match(
           *(url_matching_signals.has_non_scheme_www_match));
     }
-    scoring_signals.set_total_url_match_length(
+    scoring_signals->set_total_url_match_length(
         url_matching_signals.total_url_match_length);
-    scoring_signals.set_total_host_match_length(
+    scoring_signals->set_total_host_match_length(
         url_matching_signals.total_host_match_length);
-    scoring_signals.set_total_path_match_length(
+    scoring_signals->set_total_path_match_length(
         url_matching_signals.total_path_match_length);
-    scoring_signals.set_total_query_or_ref_match_length(
+    scoring_signals->set_total_query_or_ref_match_length(
         url_matching_signals.total_query_or_ref_match_length);
-    scoring_signals.set_num_input_terms_matched_by_url(
+    scoring_signals->set_num_input_terms_matched_by_url(
         url_matching_signals.num_input_terms_matched_by_url);
 
     // Title matching signals.
     size_t total_title_match_length = ComputeTotalMatchLength(
         terms_to_word_starts_offsets, title_matches,
         word_starts.title_word_starts_, num_title_words_to_allow_);
-    scoring_signals.set_total_title_match_length(total_title_match_length);
-    scoring_signals.set_num_input_terms_matched_by_title(
+    scoring_signals->set_total_title_match_length(total_title_match_length);
+    scoring_signals->set_num_input_terms_matched_by_title(
         CountUniqueMatchTerms(title_matches));
   }
 
@@ -978,8 +983,11 @@ float ScoredHistoryMatch::GetFinalRelevancyScore(float topicality_score,
   DCHECK(!relevance_buckets->empty());
   DCHECK_EQ(0.0, (*relevance_buckets)[0].first);
 
-  if (topicality_score == 0)
+  if (topicality_score == 0) {
+    DCHECK_EQ(frequency_score, 0);
+    DCHECK_EQ(specificity_score, 0);
     return 0;
+  }
 
   // Compute an intermediate score by multiplying the topicality, specificity,
   // and frequency scores, then map it to the range [0, 1399].  For typical

@@ -57,8 +57,7 @@ constexpr char kResponseTransportHistogram[] =
 
 using TestGetAssertionRequestCallback = test::StatusAndValuesCallbackReceiver<
     GetAssertionStatus,
-    absl::optional<std::vector<AuthenticatorGetAssertionResponse>>,
-    const FidoAuthenticator*>;
+    absl::optional<std::vector<AuthenticatorGetAssertionResponse>>>;
 
 }  // namespace
 
@@ -230,6 +229,8 @@ TEST_F(FidoGetAssertionHandlerTest, TransportAvailabilityInfo) {
         request_handler->transport_availability_info().has_empty_allow_list);
     EXPECT_FALSE(request_handler->transport_availability_info()
                      .is_only_hybrid_or_internal);
+    EXPECT_FALSE(request_handler->transport_availability_info()
+                     .request_is_internal_only);
   }
   {
     // Internal and a phone.
@@ -244,6 +245,8 @@ TEST_F(FidoGetAssertionHandlerTest, TransportAvailabilityInfo) {
         request_handler->transport_availability_info().has_empty_allow_list);
     EXPECT_TRUE(request_handler->transport_availability_info()
                     .is_only_hybrid_or_internal);
+    EXPECT_FALSE(request_handler->transport_availability_info()
+                     .request_is_internal_only);
   }
   {
     // Internal, a phone, and USB.
@@ -259,6 +262,8 @@ TEST_F(FidoGetAssertionHandlerTest, TransportAvailabilityInfo) {
         request_handler->transport_availability_info().has_empty_allow_list);
     EXPECT_FALSE(request_handler->transport_availability_info()
                      .is_only_hybrid_or_internal);
+    EXPECT_FALSE(request_handler->transport_availability_info()
+                     .request_is_internal_only);
   }
   {
     // Only USB.
@@ -272,6 +277,8 @@ TEST_F(FidoGetAssertionHandlerTest, TransportAvailabilityInfo) {
         request_handler->transport_availability_info().has_empty_allow_list);
     EXPECT_FALSE(request_handler->transport_availability_info()
                      .is_only_hybrid_or_internal);
+    EXPECT_FALSE(request_handler->transport_availability_info()
+                     .request_is_internal_only);
   }
   {
     // A phone and an unknown (empty) transport credential.
@@ -285,6 +292,24 @@ TEST_F(FidoGetAssertionHandlerTest, TransportAvailabilityInfo) {
         request_handler->transport_availability_info().has_empty_allow_list);
     EXPECT_FALSE(request_handler->transport_availability_info()
                      .is_only_hybrid_or_internal);
+    EXPECT_FALSE(request_handler->transport_availability_info()
+                     .request_is_internal_only);
+  }
+  {
+    // Internal only.
+    auto request_handler = CreateGetAssertionHandlerWithRequestedTransports(
+        {{FidoTransportProtocol::kInternal},
+         {FidoTransportProtocol::kInternal}});
+    EXPECT_EQ(FidoRequestType::kGetAssertion,
+              request_handler->transport_availability_info().request_type);
+    EXPECT_TRUE(request_handler->transport_availability_info()
+                    .transport_list_did_include_internal);
+    EXPECT_FALSE(
+        request_handler->transport_availability_info().has_empty_allow_list);
+    EXPECT_TRUE(request_handler->transport_availability_info()
+                    .is_only_hybrid_or_internal);
+    EXPECT_TRUE(request_handler->transport_availability_info()
+                    .request_is_internal_only);
   }
 }
 
@@ -929,7 +954,7 @@ TEST(GetAssertionRequestHandlerWinTest, TestWinUsbDiscovery) {
 
     EXPECT_EQ(handler->AuthenticatorsForTesting().size(), 1u);
     EXPECT_EQ(handler->AuthenticatorsForTesting().begin()->second->GetType() ==
-                  FidoAuthenticator::Type::kWinNative,
+                  AuthenticatorType::kWinNative,
               enable_api);
   }
 }

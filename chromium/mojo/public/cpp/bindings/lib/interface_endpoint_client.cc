@@ -11,6 +11,7 @@
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/debug/alias.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -458,6 +459,7 @@ InterfaceEndpointClient::InterfaceEndpointClient(
       interface_name_(interface_name),
       method_info_callback_(method_info_callback),
       method_name_callback_(method_name_callback) {
+  DCHECK(interface_name_);
   DCHECK(handle_.is_valid());
   sequence_checker_.DetachFromSequence();
 
@@ -713,6 +715,8 @@ void InterfaceEndpointClient::NotifyError(
   if (encountered_error_)
     return;
   encountered_error_ = true;
+
+  DEBUG_ALIAS_FOR_CSTR(interface_name, interface_name_, 256);
 
   // Response callbacks may hold on to resource, and there's no need to keep
   // them alive any longer. Note that it's allowed that a pending response

@@ -85,6 +85,7 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::UserAgentBrandVersionType,
 IPC_STRUCT_TRAITS_BEGIN(blink::UserAgentOverride)
   IPC_STRUCT_TRAITS_MEMBER(ua_string_override)
   IPC_STRUCT_TRAITS_MEMBER(ua_metadata_override)
+  IPC_STRUCT_TRAITS_MEMBER(domain_ua_metadata_override)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::RendererPreferences)

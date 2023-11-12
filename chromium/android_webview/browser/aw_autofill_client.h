@@ -11,8 +11,10 @@
 
 #include "base/android/jni_weak_ref.h"
 #include "base/compiler_specific.h"
+#include "base/dcheck_is_on.h"
 #include "base/memory/raw_ptr.h"
-#include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
+#include "components/autofill/core/browser/autofill_trigger_source.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/android/view_android.h"
@@ -45,16 +47,31 @@ class PrefService;
 
 namespace android_webview {
 
-// Manager delegate for the autofill functionality. Android webview
-// supports enabling autocomplete feature for each webview instance
-// (different than the browser which supports enabling/disabling for
-// a profile). Since there is only one pref service for a given browser
-// context, we cannot enable this feature via UserPrefs. Rather, we always
-// keep the feature enabled at the pref service, and control it via
-// the delegates.
-class AwAutofillClient : public autofill::AutofillClient,
-                         public content::WebContentsUserData<AwAutofillClient> {
+// Manager delegate for the autofill functionality.
+//
+// Android O and beyond shall use `AndroidAutofillManager` (and
+// `AutofillProvider`), whereas earlier versions use a `BrowserAutofillManager`.
+// This is determined by the `use_android_autofill_manager` parameters below.
+//
+// Android webview supports enabling autocomplete feature for each webview
+// instance (different than the browser which supports enabling/disabling for a
+// profile). Since there is only one pref service for a given browser context,
+// we cannot enable this feature via UserPrefs. Rather, we always keep the
+// feature enabled at the pref service, and control it via the delegates.
+class AwAutofillClient : public autofill::ContentAutofillClient {
  public:
+  static AwAutofillClient* FromWebContents(content::WebContents* web_contents) {
+    return static_cast<AwAutofillClient*>(
+        ContentAutofillClient::FromWebContents(web_contents));
+  }
+
+  // The `use_android_autofill_manager` parameter determines which
+  // DriverInitCallback to use:
+  // - autofill::BrowserDriverInitHook() (to be used before Android O) or
+  // - android_webview::AndroidDriverInitHook() (to be used as of Android O).
+  static void CreateForWebContents(content::WebContents* contents,
+                                   bool use_android_autofill_manager);
+
   AwAutofillClient(const AwAutofillClient&) = delete;
   AwAutofillClient& operator=(const AwAutofillClient&) = delete;
 
@@ -116,13 +133,6 @@ class AwAutofillClient : public autofill::AutofillClient,
       AddressProfileSavePromptCallback callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(CreditCardScanCallback callback) override;
-  bool TryToShowFastCheckout(
-      const autofill::FormData& form,
-      const autofill::FormFieldData& field,
-      base::WeakPtr<autofill::AutofillManager> autofill_manager) override;
-  void HideFastCheckout(bool allow_further_runs) override;
-  bool IsFastCheckoutSupported() override;
-  bool IsShowingFastCheckoutUI() override;
   bool IsTouchToFillCreditCardSupported() override;
   bool ShowTouchToFillCreditCard(
       base::WeakPtr<autofill::TouchToFillDelegate> delegate,
@@ -145,6 +155,9 @@ class AwAutofillClient : public autofill::AutofillClient,
   void PropagateAutofillPredictions(
       autofill::AutofillDriver* driver,
       const std::vector<autofill::FormStructure*>& forms) override;
+  void DidFillOrPreviewForm(autofill::mojom::RendererFormDataAction action,
+                            autofill::AutofillTriggerSource trigger_source,
+                            bool is_refill) override;
   void DidFillOrPreviewField(const std::u16string& autofilled_value,
                              const std::u16string& profile_full_name) override;
   bool IsContextSecure() const override;
@@ -162,7 +175,11 @@ class AwAutofillClient : public autofill::AutofillClient,
                           jint position);
 
  private:
-  explicit AwAutofillClient(content::WebContents* web_contents);
+  // `use_android_autofill_manager` determines which DriverInitCallback to use
+  // for the ContentAutofillDriverFactory: autofill::BrowserDriverInitHook() or
+  // android_webview::AndroidDriverInitHook().
+  AwAutofillClient(content::WebContents* web_contents,
+                   bool use_android_autofill_manager);
   friend class content::WebContentsUserData<AwAutofillClient>;
 
   void ShowAutofillPopupImpl(
@@ -182,7 +199,9 @@ class AwAutofillClient : public autofill::AutofillClient,
   base::WeakPtr<autofill::AutofillPopupDelegate> delegate_;
   std::unique_ptr<autofill::AutofillDownloadManager> download_manager_;
 
-  WEB_CONTENTS_USER_DATA_KEY_DECL();
+#if DCHECK_IS_ON()
+  bool use_android_autofill_manager_;
+#endif
 };
 
 }  // namespace android_webview

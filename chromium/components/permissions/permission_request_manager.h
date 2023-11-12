@@ -20,6 +20,7 @@
 #include "components/permissions/permission_uma_util.h"
 #include "components/permissions/request_type.h"
 #include "content/public/browser/global_routing_id.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -72,7 +73,7 @@ class PermissionRequestManager
       public content::WebContentsUserData<PermissionRequestManager>,
       public PermissionPrompt::Delegate {
  public:
-  class Observer {
+  class Observer : public base::CheckedObserver {
    public:
     virtual void OnPromptAdded() {}
     virtual void OnPromptRemoved() {}
@@ -95,9 +96,6 @@ class PermissionRequestManager
     virtual void OnNavigation(content::NavigationHandle* navigation_handle) {}
 
     virtual void OnRequestDecided(permissions::PermissionAction action) {}
-
-   protected:
-    virtual ~Observer() = default;
   };
 
   enum AutoResponseType { NONE, ACCEPT_ONCE, ACCEPT_ALL, DENY_ALL, DISMISS };
@@ -173,6 +171,7 @@ class PermissionRequestManager
   void SetManageClicked() override;
   void SetLearnMoreClicked() override;
   base::WeakPtr<PermissionPrompt::Delegate> GetWeakPtr() override;
+  content::WebContents* GetAssociatedWebContents() override;
   bool RecreateView() override;
 
   void set_manage_clicked() { did_click_manage_ = true; }
@@ -238,7 +237,7 @@ class PermissionRequestManager
     enabled_app_level_notification_permission_for_testing_ = enabled;
   }
 
-  base::ObserverList<Observer>::Unchecked* get_observer_list_for_testing() {
+  base::ObserverList<Observer>* get_observer_list_for_testing() {
     CHECK_IS_TEST();
     return &observer_list_;
   }
@@ -252,6 +251,9 @@ class PermissionRequestManager
  private:
   friend class test::PermissionRequestManagerTestApi;
   friend class content::WebContentsUserData<PermissionRequestManager>;
+  FRIEND_TEST_ALL_PREFIXES(PermissionRequestManagerTest, WeakDuplicateRequests);
+  FRIEND_TEST_ALL_PREFIXES(PermissionRequestManagerTest,
+                           WeakDuplicateRequestsAccept);
 
   explicit PermissionRequestManager(content::WebContents* web_contents);
 
@@ -326,6 +328,25 @@ class PermissionRequestManager
   // may or may not be the same object as |request|.
   PermissionRequest* GetExistingRequest(PermissionRequest* request) const;
 
+  // Returns an iterator into |duplicate_requests_|, points the matching list,
+  // or duplicate_requests_.end() if no match. The matching list contains all
+  // the weak requests which are duplicate of the given |request| (see
+  // |IsDuplicateOf|)
+  using WeakPermissionRequestList =
+      std::list<std::list<base::WeakPtr<PermissionRequest>>>;
+  WeakPermissionRequestList::iterator FindDuplicateRequestList(
+      PermissionRequest* request);
+
+  // Trigger |visitor| for each live weak request which matches the given
+  // request (see |IsDuplicateOf|) in the |duplicate_requests_|. Returns an
+  // iterator into |duplicate_requests_|, points the matching list, or
+  // duplicate_requests_.end() if no match.
+  using DuplicateRequestVisitor =
+      base::RepeatingCallback<void(const base::WeakPtr<PermissionRequest>&)>;
+  WeakPermissionRequestList::iterator VisitDuplicateRequests(
+      DuplicateRequestVisitor visitor,
+      PermissionRequest* request);
+
   // Calls PermissionGranted on a request and all its duplicates.
   void PermissionGrantedIncludingDuplicates(PermissionRequest* request,
                                             bool is_one_time);
@@ -391,10 +412,8 @@ class PermissionRequestManager
 
   PermissionRequestQueue pending_permission_requests_;
 
-  // Maps from the first request of a kind to subsequent requests that were
-  // duped against it.
-  std::unordered_multimap<PermissionRequest*, PermissionRequest*>
-      duplicate_requests_;
+  // Stores the weak pointers of duplicated requests in a 2D list.
+  WeakPermissionRequestList duplicate_requests_;
 
   // Maps each PermissionRequest currently in |requests_| or
   // |pending_permission_requests_| to which RenderFrameHost it originated from.
@@ -407,8 +426,8 @@ class PermissionRequestManager
   // not prempt a request if the incoming request is already validated.
   std::set<PermissionRequest*> validated_requests_set_;
 
-  base::ObserverList<Observer>::Unchecked observer_list_;
-  AutoResponseType auto_response_for_test_;
+  base::ObserverList<Observer> observer_list_;
+  AutoResponseType auto_response_for_test_ = NONE;
 
   // Suppress notification permission prompts in this tab, regardless of the
   // origin requesting the permission.

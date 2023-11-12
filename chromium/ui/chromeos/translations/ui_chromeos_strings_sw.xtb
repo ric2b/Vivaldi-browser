@@ -84,6 +84,7 @@
 <translation id="1722487484194605434">Inabana vipengee <ph name="NUMBER_OF_ITEMS" /> ...</translation>
 <translation id="1722687688096767818">Inaweka Maelezo ya eSIM...</translation>
 <translation id="1726100011689679555">Seva za majina</translation>
+<translation id="1727562178154619254">Iko tayari kusawazisha</translation>
 <translation id="1729953886957086472">Kijerumani (Ujerumani)</translation>
 <translation id="1730235522912993863">Cangjie ya Kichina</translation>
 <translation id="1731889557567069540">Vipengee <ph name="NUMBER_OF_ITEMS" /> vimenakiliwa.</translation>
@@ -106,7 +107,6 @@
 <translation id="1834290891154666894">Jina mbadala la kichwa linalolingana si sahihi</translation>
 <translation id="1838709767668011582">Tovuti ya Google</translation>
 <translation id="1853795129690976061">Umeshiriki folda hii na Linux</translation>
-<translation id="1859422890169495746">Chromebook hii</translation>
 <translation id="1864756863218646478">Faili haikupatikana.</translation>
 <translation id="1884013283844450420">Mtandao wa <ph name="NETWORK_INDEX" /> kati ya <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Unganisha</translation>
 <translation id="1920670151694390848">Unukuzi wa mfumo wa kuandika Kimalayalamu</translation>
@@ -118,7 +118,6 @@
 <translation id="1942765061641586207">Ubora wa picha</translation>
 <translation id="1972984168337863910">Panua vidirisha vya maoni ya faili</translation>
 <translation id="1995337122023280937">Nenda mahali faili ilipo</translation>
-<translation id="1999709132469742660">URL zote zinaweza kufikia faili</translation>
 <translation id="2001796770603320721">Dhibiti katika Hifadhi ya Google</translation>
 <translation id="2009067268969781306">Hatua ya kubadilisha muundo wa hifadhi itafuta data yote iliyomo. Kitendo hiki hakiwezi kutenduliwa.</translation>
 <translation id="2025955442973426285">Kitigrinya</translation>
@@ -130,6 +129,7 @@
 <translation id="2084108471225856927">Mipangilio ya kifaa</translation>
 <translation id="2084809735218147718">Mtu anayesema asante kwa lugha ya ishara</translation>
 <translation id="2088690981887365033">Mtandao wa VPN</translation>
+<translation id="2111134541987263231">Washa <ph name="BEGIN_BOLD" />Ruhusu katika Hali fiche<ph name="END_BOLD" /></translation>
 <translation id="2114191879048183086">Vipengee <ph name="NUMBER_OF_ITEMS" /> vitafutwa na hutaweza kuvirejesha.</translation>
 <translation id="2122305276694332719">Hatua ya kuunganisha kiotomatiki kwenye mtandao uliofichwa huruhusu watu wengine kuona kifaa chako na baadhi ya mipangilio ya mtandao, na hali hii haipendekezwi.</translation>
 <translation id="2125607626296734455">Kikhema</translation>
@@ -150,6 +150,7 @@
 <translation id="2236732657580416950">Your Google Drive cache was cleared.</translation>
 <translation id="2239068707900391003">Mtu aliye na kahawa</translation>
 <translation id="2251368349685848079">Rejesha kutoka kwenye tupio</translation>
+<translation id="2278133026967558505">URL na tovuti zote zinaweza kufikia faili</translation>
 <translation id="2282155092769082568">URL ya kuweka mipangilio kiotomatiki:</translation>
 <translation id="2284767815536050991">nafasi ya hifadhi inayoweza kuondolewa</translation>
 <translation id="2288278176040912387">Kicheza rekodi</translation>
@@ -158,6 +159,7 @@
 <translation id="2304820083631266885">Sayari</translation>
 <translation id="2305020378527873881"><ph name="VOLUME_NAME" /> imeondolewa.</translation>
 <translation id="2307462900900812319">Sanidi mtandao</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{Huwezi kutambua mahali kilipo kiendelezi chenye kitambulisho <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Wasiliana na msimamizi wako.}other{Huwezi kufahamu vilipo viendelezi vyenye vitambulisho vya <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Wasiliana na msimamizi wako.}}</translation>
 <translation id="2325650632570794183">Aina hii ya faili haihimiliwi. Tafadhali tembelea Duka la Wavuti la Chrome ili kupata programu ambayo inaweza kufungua aina hii ya faili.</translation>
 <translation id="2326539130272988168">Kibulgaria</translation>
 <translation id="2337715497728194187">Shiriki na Bruschetta</translation>
@@ -227,6 +229,7 @@
 <translation id="290843123675549676">Kimarathi</translation>
 <translation id="2923240520113693977">Kiestonia</translation>
 <translation id="2938685643439809023">Kimongolia</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{Imeshindwa kupata kiendelezi}other{Imeshindwa kupata viendelezi}}</translation>
 <translation id="2943503720238418293">Tumia jina fupi</translation>
 <translation id="2949781154072577687">Inabadilisha muundo <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">Kiwavi wa baharini</translation>
@@ -272,6 +275,7 @@
 <translation id="3290356915286466215">Haulindwi</translation>
 <translation id="3291218047831493686">Unganisha kwenye mtandao huu ili ubadilishe mipangilio ya kufunga SIM</translation>
 <translation id="3293023191599135697">Mitandao ya WEP haitumiki</translation>
+<translation id="3295006446256079333">Kiwango hiki</translation>
 <translation id="3295357220137379386">Kifaa kinatumika</translation>
 <translation id="3296763833017966289">Kijiojia</translation>
 <translation id="3307875152560779385">Kiukrania</translation>
@@ -281,6 +285,7 @@
 <translation id="3356580349448036450">Imekamilika</translation>
 <translation id="3358452157379365236">Gitaa</translation>
 <translation id="3368922792935385530">Umeunganishwa</translation>
+<translation id="3372635229069101468">Bofya <ph name="BEGIN_BOLD" />Maelezo<ph name="END_BOLD" /></translation>
 <translation id="3382143449143186018">Kinepali kwenye kibodi ya Hati za Kihindi</translation>
 <translation id="338691029516748599">Mtandao wa <ph name="NETWORK_INDEX" /> kati ya <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, Uthabiti wa Mtandao <ph name="SIGNAL_STRENGTH" />%, Unadhibitiwa na Msimamizi wako, Unganisha</translation>
 <translation id="3408072735282270043">Washa, <ph name="NETWORK_NAME" /></translation>
@@ -365,6 +370,7 @@
 <translation id="4124935795427217608">Farasi mwenye pembe</translation>
 <translation id="4131235941541910880">Hamishia kwenye tupio vipengee ambavyo huvihitaji</translation>
 <translation id="4134804435730168042">Mtandao wa <ph name="NETWORK_INDEX" /> kati ya <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Washa baada ya kuweka mipangilio ya kifaa</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{Washa kiendelezi kifuatacho katika Hali fiche:}other{Washa viendelezi vifuatavyo katika Hali fiche:}}</translation>
 <translation id="4153015322587141338">Bofya kulia kwenye faili na uchague "<ph name="PIN_COMMAND" />" ili ufikie kwa haraka faili zako zilizo kwenye rafu.</translation>
 <translation id="4157569377477607576">Sera ya msimamizi haipendekezi:</translation>
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> imehamishwa.</translation>
@@ -461,12 +467,15 @@
 <translation id="4801956050125744859">Hifadhi yote mawili</translation>
 <translation id="4804827417948292437">Parachichi</translation>
 <translation id="4805966553127040832">Inarejesha vipengee <ph name="COUNT" /></translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{Ili utumie Hali fiche, shirika lako linahitaji kiendelezi}other{Ili utumie Hali fiche, shirika lako linahitaji baadhi ya viendelezi}}</translation>
 <translation id="4823651846660089135">Kifaa ni cha kusoma tu</translation>
 <translation id="4826849268470072925">ITRANS ya Kitamili</translation>
+<translation id="482932175346970750">Andika <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" /> kwenye kivinjari chako</translation>
 <translation id="4839847978919684242">Vifaa <ph name="SELCTED_FILES_COUNT" /> vilivyochaguliwa</translation>
 <translation id="4843566743023903107">Chromebase</translation>
 <translation id="4850886885716139402">Mwonekano</translation>
 <translation id="485316830061041779">Kijerumani</translation>
+<translation id="4862885579661885411">Mipangilio ya faili</translation>
 <translation id="4867079195717347957">Bofya ili upange safu wima katika mpangilio wa kushuka.</translation>
 <translation id="4867297348137739678">Wiki iliyopita</translation>
 <translation id="4873265419374180291">Baiti <ph name="NUMBER_OF_BYTES" /></translation>
@@ -532,6 +541,7 @@
         kwenye faili na wengine, vyote mahali pamoja.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">Faili zilizorejeshwa kutoka Hifadhi ya Google</translation>
 <translation id="5278111733643988471">Ili urejeshe kipengee hiki, buruta ukipeleke kwenye folda iliyo nje ya tupio. Folda ya awali "<ph name="PARENT_FOLDER_NAME" />" ya kipengee hiki imefutwa.</translation>
+<translation id="5283101102242354279">Washa kiendelezi katika Hali fiche:</translation>
 <translation id="5286194356314741248">Inachanganua</translation>
 <translation id="5288441970121584418">Baga</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -542,7 +552,6 @@
 <translation id="5323213332664049067">Amerika ya Kusini</translation>
 <translation id="5330145655348521461">Faili hizi zilifunguka kwenye eneo-kazi tofauti. Sogea kwenye <ph name="USER_NAME" /> ( <ph name="MAIL_ADDRESS" /> ) ili uzione.</translation>
 <translation id="5330512191124428349">Pata maelezo</translation>
-<translation id="5337538975554986899">URL zote zinaweza kufikia faili isipokuwa <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="5344246330454251646">Dhibiti hali ya kushiriki na Bruschetta</translation>
 <translation id="535792325654997756">Mtu aliye na paka</translation>
 <translation id="5358764674931277">Kasi ya picha</translation>
@@ -615,6 +624,7 @@
 <translation id="5911887972742538906">Hitilafu imetokea wakati wa kusakinisha programu yako ya Linux.</translation>
 <translation id="5912396950572065471">Muundo</translation>
 <translation id="5913638992615760742">Uendeshaji wa kunakili umeshindikana, hitilafu isiyotarajiwa: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">Vipengele vipya vya utafutaji vinapatikana</translation>
 <translation id="5926082595146149752">Kiholanzi (Uholanzi) kwenye kibodi ya Kimataifa ya Marekani (PC)</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063">Mtandao wa <ph name="NETWORK_INDEX" /> kati ya <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Washa baada ya kuweka mipangilio ya kifaa</translation>
@@ -627,6 +637,7 @@
 <translation id="603895874132768835">Hutaweza kutumia mtandao huu hadi utakapoweka PIN mpya</translation>
 <translation id="6040143037577758943">Funga</translation>
 <translation id="6055907707645252013">Mtandao wa <ph name="NETWORK_TYPE" /> - haujaunganishwa</translation>
+<translation id="6073060579181816027">Maeneo mengi ya faili</translation>
 <translation id="6074825444536523002">Fomu ya Google</translation>
 <translation id="6079871810119356840">Kihungari kwenye kibodi ya Qwerty</translation>
 <translation id="6096979789310008754">Imefuta hoja ya utafutaji, inaonyesha faili na folda zote.</translation>
@@ -704,6 +715,7 @@
 <translation id="6732801395666424405">Vyeti havijapakiwa</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6740270213273127264">Shiriki folda na Bruschetta</translation>
+<translation id="6750737795876287924">Saraka iliyochaguliwa sasa</translation>
 <translation id="6751256176799620176">Folda 1 imechaguliwa</translation>
 <translation id="6755827872271341378">Kifaa cha ChromeOS Flex</translation>
 <translation id="6790428901817661496">Cheza</translation>
@@ -741,7 +753,6 @@
 <translation id="6973630695168034713">Folda</translation>
 <translation id="6976795442547527108">Simba</translation>
 <translation id="6979158407327259162">Hifadhi ya Google</translation>
-<translation id="6979737339423435258">Wakati wote</translation>
 <translation id="6989942356279143254">Kiswidi</translation>
 <translation id="6990081529015358884">Nafasi yako imeisha</translation>
 <translation id="6993826899923627728">Vipengee hivi vipo kwenye tupio lako</translation>
@@ -767,6 +778,7 @@
 <translation id="7162080671816799010">Hujaweka 'Jina mbadala la mada linalolingana' au 'Kiambishi cha kikoa kinacholingana' ili uthibitishe utambulisho wa seva ya uthibitishaji</translation>
 <translation id="7165320105431587207">Ilishindwa kusanidi mtandao</translation>
 <translation id="7170041865419449892">Nje ya eneo</translation>
+<translation id="7179579940054351344">URL na tovuti zote zinaweza kufikia faili isipokuwa <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="7180611975245234373">Onyesha upya</translation>
 <translation id="7189874332498648577">GB <ph name="NUMBER_OF_GB" /></translation>
 <translation id="7191454237977785534">Hifadhi faili kama</translation>
@@ -776,6 +788,7 @@
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />, Maelezo</translation>
 <translation id="7246947237293279874">Seva Mbadala ya FTP</translation>
 <translation id="7248671827512403053">Programu</translation>
+<translation id="7252604552361840748">Tafuta kiendelezi hapo juu</translation>
 <translation id="7256405249507348194">Hitilafu isiyotambulika: <ph name="DESC" /></translation>
 <translation id="7268659760406822741">Huduma zinazopatikana</translation>
 <translation id="7292816689782057017">Sera ya msimamizi inazuia kuhifadhi faili kwenye baadhi ya folda.</translation>
@@ -797,7 +810,6 @@
 <translation id="7458955835361612701">Hakuna picha za hivi karibuni</translation>
 <translation id="7460898608667578234">Kiukrania</translation>
 <translation id="7469894403370665791">Unganisha otomatiki kwenye mtandao huu</translation>
-<translation id="7481358317100446445">Iko tayari</translation>
 <translation id="7486315294984620427">Ili uweze kudondosha faili katika Parallels Desktop, ni lazima faili hiyo iwe imenakiliwa kwenye folda ya faili za Windows.</translation>
 <translation id="749452993132003881">Kihiragana</translation>
 <translation id="7495372004724182530">Fonetiki ya Kimalayalamu</translation>
@@ -941,6 +953,7 @@
 <translation id="8492972329130824181">Mtandao wa nyumbani haupatikani. Ni lazima uwashe kipengele cha matumizi ya data kwenye mitandao ya simu ya ng'ambo ili uweze kuunganisha.</translation>
 <translation id="8499098729323186194">Inatoa vipengee <ph name="NUMBER_OF_ITEMS" /> ...</translation>
 <translation id="8502913769543567768">Mtandao wa <ph name="NETWORK_INDEX" /> kati ya <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Washa baada ya kuweka mipangilio ya kifaa, Unadhibitiwa na Msimamizi wako</translation>
+<translation id="8512483403832814140">Wakati wowote</translation>
 <translation id="8521441079177373948">Kiingereza cha Uingereza</translation>
 <translation id="853494022971700746">Kifaransa (Ufaransa)</translation>
 <translation id="8540608333167683902">Mtandao wa <ph name="NETWORK_INDEX" /> kati ya <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, Uthabiti wa Mtandao <ph name="SIGNAL_STRENGTH" />%, Maelezo</translation>

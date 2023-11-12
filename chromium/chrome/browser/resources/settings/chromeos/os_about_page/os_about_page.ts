@@ -8,6 +8,7 @@
  */
 
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
+import 'chrome://resources/cr_components/settings_prefs/prefs.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
@@ -15,7 +16,6 @@ import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import '../../icons.html.js';
-import '../../prefs/prefs.js';
 import '../os_settings_page/os_settings_animated_pages.js';
 import '../os_settings_page/os_settings_section.js';
 import '../os_settings_page/os_settings_subpage.js';
@@ -23,9 +23,10 @@ import '../os_settings_page_styles.css.js';
 import '../../settings_shared.css.js';
 import '../os_settings_icons.html.js';
 import '../os_reset_page/os_powerwash_dialog.js';
-import './detailed_build_info.js';
+import './eol_offer_section.js';
 import './update_warning_dialog.js';
 
+import {LifetimeBrowserProxyImpl} from '/shared/settings/lifetime_browser_proxy.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
@@ -33,11 +34,10 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {LifetimeBrowserProxyImpl} from '../../lifetime_browser_proxy.js';
-import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {MainPageMixin} from '../main_page_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {routes} from '../os_settings_routes.js';
 import {Route, Router} from '../router.js';
 
@@ -128,6 +128,16 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
       regulatoryInfo_: Object,
 
       hasEndOfLife_: {
+        type: Boolean,
+        value: false,
+      },
+
+      showEolIncentive_: {
+        type: Boolean,
+        value: false,
+      },
+
+      shouldShowOfferText_: {
         type: Boolean,
         value: false,
       },
@@ -251,6 +261,8 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
   private isLts_: boolean;
   private regulatoryInfo_: RegulatoryInfo|null;
   private hasEndOfLife_: boolean;
+  private showEolIncentive_: boolean;
+  private shouldShowOfferText_: boolean;
   private hasDeferredUpdate_: boolean;
   private eolMessageWithMonthAndYear_: string;
   private hasInternetConnection_: boolean;
@@ -300,6 +312,8 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
     this.aboutBrowserProxy_.getEndOfLifeInfo().then(result => {
       this.hasEndOfLife_ = !!result.hasEndOfLife;
       this.eolMessageWithMonthAndYear_ = result.aboutPageEndOfLifeMessage || '';
+      this.showEolIncentive_ = !!result.shouldShowEndOfLifeIncentive;
+      this.shouldShowOfferText_ = !!result.shouldShowOfferText;
     });
 
     this.aboutBrowserProxy_.checkInternetConnection().then(result => {
@@ -367,7 +381,15 @@ class OsSettingsAboutPageElement extends OsSettingsAboutPageBaseElement {
     event.stopPropagation();
   }
 
-  private onReleaseNotesTap_() {
+  private onProductLicenseOtherClicked_(event: CustomEvent<{event: Event}>) {
+    // Prevent the default link click behavior
+    event.detail.event.preventDefault();
+
+    // Programmatically open license.
+    this.aboutBrowserProxy_.openProductLicenseOther();
+  }
+
+  private onReleaseNotesClick_() {
     this.aboutBrowserProxy_.launchReleaseNotes();
   }
 

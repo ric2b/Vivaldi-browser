@@ -17,16 +17,29 @@ import '../../controls/settings_radio_group.js';
 import '../../controls/settings_slider.js';
 import '../../controls/settings_toggle_button.js';
 import '../../settings_shared.css.js';
+import './input_device_settings_shared.css.js';
 import 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
 
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Touchpad} from './input_device_settings_types.js';
+import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
+import {routes} from '../os_settings_routes.js';
+import {RouteObserverMixin} from '../route_observer_mixin.js';
+import {Route} from '../router.js';
+
+import {getInputDeviceSettingsProvider} from './input_device_mojo_interface_provider.js';
+import {InputDeviceSettingsProviderInterface, Touchpad, TouchpadSettings} from './input_device_settings_types.js';
+import {settingsAreEqual} from './input_device_settings_utils.js';
 import {getTemplate} from './per_device_touchpad_subsection.html.js';
 
-export class SettingsPerDeviceTouchpadSubsectionElement extends PolymerElement {
+const SettingsPerDeviceTouchpadSubsectionElementBase =
+    DeepLinkingMixin(RouteObserverMixin(I18nMixin(PolymerElement)));
+export class SettingsPerDeviceTouchpadSubsectionElement extends
+    SettingsPerDeviceTouchpadSubsectionElementBase {
   static get is(): string {
     return 'settings-per-device-touchpad-subsection';
   }
@@ -163,6 +176,27 @@ export class SettingsPerDeviceTouchpadSubsectionElement extends PolymerElement {
       },
 
       touchpad: {type: Object},
+
+      /**
+       * Used by DeepLinkingMixin to focus this page's deep links.
+       */
+      supportedSettingIds: {
+        type: Object,
+        value: () => new Set<Setting>([
+          Setting.kTouchpadTapToClick,
+          Setting.kTouchpadTapDragging,
+          Setting.kTouchpadReverseScrolling,
+          Setting.kTouchpadAcceleration,
+          Setting.kTouchpadScrollAcceleration,
+          Setting.kTouchpadSpeed,
+          Setting.kTouchpadHapticFeedback,
+          Setting.kTouchpadHapticClickSensitivity,
+        ]),
+      },
+
+      touchpadIndex: {
+        type: Number,
+      },
     };
   }
 
@@ -175,9 +209,22 @@ export class SettingsPerDeviceTouchpadSubsectionElement extends PolymerElement {
           'scrollAccelerationPref.value,' +
           'scrollSensitivityPref.value,' +
           'hapticClickSensitivityPref.value,' +
-          'reverseScrollValue)',
+          'reverseScrollValue,' +
+          'hapticFeedbackValue)',
       'updateSettingsToCurrentPrefs(touchpad)',
     ];
+  }
+
+  override currentRouteChanged(route: Route): void {
+    // Does not apply to this page.
+    if (route !== routes.PER_DEVICE_TOUCHPAD) {
+      return;
+    }
+
+    // If multiple touchpads are available, focus on the first one.
+    if (this.touchpadIndex === 0) {
+      this.attemptDeepLink();
+    }
   }
 
   private touchpad: Touchpad;
@@ -191,8 +238,15 @@ export class SettingsPerDeviceTouchpadSubsectionElement extends PolymerElement {
   private reverseScrollValue: boolean;
   private hapticFeedbackValue: boolean;
   private isInitialized: boolean = false;
+  private inputDeviceSettingsProvider: InputDeviceSettingsProviderInterface =
+      getInputDeviceSettingsProvider();
+  private touchpadIndex: number;
 
   private updateSettingsToCurrentPrefs(): void {
+    // `updateSettingsToCurrentPrefs` gets called when the `keyboard` object
+    // gets updated. This subsection element can be reused multiple times so we
+    // need to reset `isInitialized` so we do not make unneeded API calls.
+    this.isInitialized = false;
     this.set(
         'enableTapToClickPref.value', this.touchpad.settings.tapToClickEnabled);
     this.set(
@@ -236,10 +290,35 @@ export class SettingsPerDeviceTouchpadSubsectionElement extends PolymerElement {
   }
 
   private onSettingsChanged(): void {
-    // TODO(wangdanny): Implement onSettingsChanged.
     if (!this.isInitialized) {
       return;
     }
+
+    const newSettings: TouchpadSettings = {
+      ...this.touchpad.settings,
+      tapToClickEnabled: this.enableTapToClickPref.value,
+      tapDraggingEnabled: this.enableTapDraggingPref.value,
+      accelerationEnabled: this.accelerationPref.value,
+      sensitivity: this.sensitivityPref.value,
+      scrollAcceleration: this.scrollAccelerationPref.value,
+      scrollSensitivity: this.scrollSensitivityPref.value,
+      hapticSensitivity: this.hapticClickSensitivityPref.value,
+      reverseScrolling: this.reverseScrollValue,
+      hapticEnabled: this.hapticFeedbackValue,
+    };
+
+    if (settingsAreEqual(newSettings, this.touchpad.settings)) {
+      return;
+    }
+
+    this.touchpad.settings = newSettings;
+    this.inputDeviceSettingsProvider.setTouchpadSettings(
+        this.touchpad.id, this.touchpad.settings);
+  }
+
+  private getTouchpadName(): string {
+    return this.touchpad.isExternal ? this.touchpad.name :
+                                      this.i18n('builtInTouchpadName');
   }
 }
 

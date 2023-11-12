@@ -12,8 +12,10 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/pixel/ash_pixel_differ.h"
 #include "ash/test/pixel/ash_pixel_test_init_params.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "google_apis/calendar/calendar_api_response_types.h"
 
 namespace ash {
@@ -24,12 +26,12 @@ std::unique_ptr<google_apis::calendar::CalendarEvent> CreateEvent(
     const base::Time end_time,
     const char* summary = "Event with long name that should ellipsis",
     bool all_day_event = false,
-    const std::string hangout_link = "") {
+    const GURL video_conference_url = GURL()) {
   return calendar_test_utils::CreateEvent(
       "id_0", summary, start_time, end_time,
       google_apis::calendar::CalendarEvent::EventStatus::kConfirmed,
       google_apis::calendar::CalendarEvent::ResponseStatus::kAccepted,
-      all_day_event, hangout_link);
+      all_day_event, video_conference_url);
 }
 
 }  // namespace
@@ -42,7 +44,7 @@ class CalendarUpNextViewPixelTest : public AshTestBase {
   void SetUp() override {
     scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
     scoped_feature_list_->InitWithFeatures(
-        {features::kJelly, features::kCalendarJelly}, {});
+        {chromeos::features::kJelly, features::kCalendarJelly}, {});
     AshTestBase::SetUp();
 
     controller_ = std::make_unique<CalendarViewController>();
@@ -107,7 +109,7 @@ class CalendarUpNextViewPixelTest : public AshTestBase {
   }
 
   std::unique_ptr<views::Widget> widget_;
-  CalendarUpNextView* up_next_view_ = nullptr;
+  raw_ptr<CalendarUpNextView, ExperimentalAsh> up_next_view_ = nullptr;
   std::unique_ptr<CalendarViewController> controller_;
   std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
 };
@@ -192,14 +194,14 @@ TEST_F(CalendarUpNextViewPixelTest, ShouldShowJoinMeetingButton) {
       []() { return base::subtle::TimeNowIgnoringOverride().LocalMidnight(); },
       nullptr, nullptr);
 
-  // Add an upcoming event with a hangout_link.
+  // Add an upcoming event with a video_conference_url.
   std::list<std::unique_ptr<google_apis::calendar::CalendarEvent>> events;
   auto start_time = base::subtle::TimeNowIgnoringOverride().LocalMidnight() +
                     base::Minutes(10);
   auto end_time =
       base::subtle::TimeNowIgnoringOverride().LocalMidnight() + base::Hours(1);
   events.push_back(CreateEvent(start_time, end_time, "First event", false,
-                               "https://meet.google.com/abc-123"));
+                               GURL("https://meet.google.com/abc-123")));
 
   CreateCalendarUpNextView(std::move(events));
 

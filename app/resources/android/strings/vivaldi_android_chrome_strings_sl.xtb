@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Odprti zavihki</translation>
 <translation id="1829244130665387512">Poiščite na strani</translation>
 <translation id="1910514478706885609">Odpri v novem nizu zavihkov</translation>
+<translation id="1925021887439448749">Vnesite spletni naslov po meri</translation>
 <translation id="2038563949887743358">Vklop možnosti Zahteva za namizno spletno mesto</translation>
 <translation id="2139186145475833000">Dodaj na začetni zaslon</translation>
+<translation id="2149973817440762519">Uredi zaznamek</translation>
 <translation id="2306442503286132111">Zaznamek je shranjen v mapi <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Videz</translation>
 <translation id="2501278716633472235">Pojdi nazaj</translation>
 <translation id="2633278372998075009">Zasebni zavihki</translation>
+<translation id="2951071800649516099">Dodajte strani na bralni seznam za pozneje</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> zaznamek}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> zaznamki}}</translation>
@@ -30,12 +33,15 @@
 <translation id="4121750346708795461">Z uporabo te aplikacije se strinjate z Vivaldijevo <ph name="BEGIN_LINK1" />Licenčno pogodba za končnega uporabnika<ph name="END_LINK1" /> in <ph name="BEGIN_LINK2" />Pravilnikom o zasebnosti<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Trenutni jezik naprave</translation>
 <translation id="4167670741834902166">Nov zasebni zavihek</translation>
+<translation id="4195643157523330669">Odpri v novem zavihku</translation>
 <translation id="4243710787042215766">Odpri na zasebnem zavihku</translation>
+<translation id="451872707440238414">Iščite med zaznamki</translation>
 <translation id="4526803704855831732">Zasebni zavihki</translation>
 <translation id="4719086422742491124">Spoznajte teme na spletnih mestih, ne da bi zapustili stran. Izberite eno ali več besed na strani, da jih poiščete.
 
 Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot privzeti iskalnik v Vivaldiju.</translation>
 <translation id="4759238208242260848">Prenosi</translation>
+<translation id="4850886885716139402">Pogled</translation>
 <translation id="4883379392681899581">Zapusti zasebni način</translation>
 <translation id="4943872375798546930">Ni rezultatov</translation>
 <translation id="49576331685473090">Blokator vsebine</translation>
@@ -48,7 +54,9 @@ Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot p
 Če želite prilagoditi iskalni izraz, dolgo pritisnite, da izberete. Če želite izboljšati iskanje, povlecite panel do konca navzgor in tapnite iskalno polje.</translation>
 <translation id="572328651809341494">Nedavni zavihki</translation>
 <translation id="6150320133806434356">Zaznamek je shranjen</translation>
+<translation id="6301525844455696527">Oglejte si svoj bralni seznam</translation>
 <translation id="6336451774241870485">Nov zasebni zavihek</translation>
+<translation id="6404511346730675251">Uredi zaznamek</translation>
 <translation id="6585139692466700358">Ponudite prevod strani v druge jezike z uporabo storitve prevajanja Vivaldi</translation>
 <translation id="6593061639179217415">Namizno spletno mesto</translation>
 <translation id="6610147964972079463">Zapri zasebne zavihke</translation>
@@ -57,9 +65,15 @@ Iskanje z dotikom je funkcija, ki je na voljo le, če je Google nastavljen kot p
 <translation id="732145680195464316">Zaznamek je shranjen v <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">O brskalniku Vivaldi</translation>
 <translation id="7465104139234185284">Zapri vse zasebne zavihke</translation>
+<translation id="7481312909269577407">Naprej</translation>
+<translation id="7583262514280211622">Tukaj boste našli svoj bralni seznam</translation>
+<translation id="7968014550143838305">Dodano na bralni seznam</translation>
 <translation id="804786196054284061">Licenčna pogodba za končnega uporabnika</translation>
+<translation id="8127542551745560481">Uredi domačo stran</translation>
+<translation id="8560602726703398413">Poiščite svoj bralni seznam v zaznamkih</translation>
 <translation id="85991616550051997">Pojdi na domačo stran</translation>
 <translation id="8820817407110198400">Zaznamki</translation>
 <translation id="9063523880881406963">Izklop možnosti Zahteva za namizno spletno mesto</translation>
 <translation id="9080642952018487277">Vstopi v zasebni način</translation>
+<translation id="96681097142096641">Si želite ogledati poenostavljeno stran?</translation>
 </translationbundle>

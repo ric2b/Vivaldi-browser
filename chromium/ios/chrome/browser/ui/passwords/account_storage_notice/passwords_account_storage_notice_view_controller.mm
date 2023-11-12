@@ -19,9 +19,6 @@
 @interface PasswordsAccountStorageNoticeViewController () <
     UIAdaptivePresentationControllerDelegate,
     UITextViewDelegate>
-
-@property(nonatomic, strong, readonly) NSString* accountStoringPasswords;
-
 @end
 
 @implementation PasswordsAccountStorageNoticeViewController
@@ -29,29 +26,35 @@
 @dynamic actionHandler;
 
 - (instancetype)initWithActionHandler:
-                    (id<PasswordsAccountStorageNoticeActionHandler>)
-                        actionHandler
-              accountStoringPasswords:(NSString*)accountStoringPasswords {
-  self = [super initWithNibName:nil bundle:nil];
+    (id<PasswordsAccountStorageNoticeActionHandler>)actionHandler {
+  self = [super init];
   if (!self) {
     return nil;
   }
 
-  _accountStoringPasswords = accountStoringPasswords;
   self.actionHandler = actionHandler;
   self.presentationController.delegate = self;
-  if (@available(iOS 15, *)) {
-    self.modalPresentationStyle = UIModalPresentationPageSheet;
-    self.sheetPresentationController.preferredCornerRadius = 20;
-    // Both prefersEdgeAttachedInCompactHeight and mediumDetent serve to keep
-    // the sheet at half-height.
-    self.sheetPresentationController.prefersEdgeAttachedInCompactHeight = YES;
+
+  self.modalPresentationStyle = UIModalPresentationPageSheet;
+  self.sheetPresentationController.preferredCornerRadius = 20;
+
+  if (@available(iOS 16, *)) {
     self.sheetPresentationController.detents = @[
-      UISheetPresentationControllerDetent.mediumDetent,
+      // Add custom detent to fit content vertically.
+      self.preferredHeightDetent,
+      UISheetPresentationControllerDetent.largeDetent
     ];
   } else {
-    self.modalPresentationStyle = UIModalPresentationFormSheet;
+    self.sheetPresentationController.detents = @[
+      UISheetPresentationControllerDetent.mediumDetent,
+      UISheetPresentationControllerDetent.largeDetent
+    ];
   }
+
+  // prefersEdgeAttachedInCompactHeight just controls attaching to the bottom,
+  // not the sheet height.
+  self.sheetPresentationController.prefersEdgeAttachedInCompactHeight = YES;
+
   return self;
 }
 
@@ -61,7 +64,7 @@
   self.imageHasFixedSize = YES;
   self.showDismissBarButton = NO;
   self.customSpacingAfterImage = 32;
-  self.customSpacingBeforeImageIfNoNavigationBar = 16;
+  self.customSpacingBeforeImageIfNoNavigationBar = 24;
   self.titleTextStyle = UIFontTextStyleTitle2;
   self.topAlignedLayout = YES;
   self.titleString =
@@ -112,9 +115,8 @@
 #pragma mark - Private
 
 - (StringWithTag)subtitleStringWithTag {
-  StringWithTags stringWithTags = ParseStringWithLinks(l10n_util::GetNSStringF(
-      IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_SUBTITLE,
-      base::SysNSStringToUTF16(self.accountStoringPasswords)));
+  StringWithTags stringWithTags = ParseStringWithLinks(l10n_util::GetNSString(
+      IDS_IOS_PASSWORDS_ACCOUNT_STORAGE_NOTICE_SUBTITLE));
   DCHECK_EQ(stringWithTags.ranges.size(), 1u);
   return {stringWithTags.string, stringWithTags.ranges[0]};
 }

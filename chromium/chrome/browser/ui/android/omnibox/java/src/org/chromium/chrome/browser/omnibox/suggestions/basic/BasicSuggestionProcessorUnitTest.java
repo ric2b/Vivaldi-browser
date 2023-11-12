@@ -29,8 +29,6 @@ import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
-import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.ShadowUrlBarData;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.FaviconFetcher;
@@ -39,9 +37,11 @@ import org.chromium.chrome.browser.omnibox.suggestions.FaviconFetcher.FaviconTyp
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProperties;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableState;
+import org.chromium.chrome.browser.omnibox.test.R;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteMatchBuilder;
+import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
@@ -132,7 +132,7 @@ public class BasicSuggestionProcessorUnitTest {
     public void setUp() {
         doReturn("").when(mUrlBarText).getTextWithoutAutocomplete();
         mProcessor = new BasicSuggestionProcessor(ContextUtils.getApplicationContext(),
-                mSuggestionHost, mUrlBarText, mIconFetcher, mIsBookmarked);
+                mSuggestionHost, null, mUrlBarText, mIconFetcher, mIsBookmarked);
     }
 
     /**
@@ -305,11 +305,11 @@ public class BasicSuggestionProcessorUnitTest {
         createSearchSuggestion(OmniboxSuggestionType.URL_WHAT_YOU_TYPED, typed);
         PropertyModel model = mProcessor.createModel();
         mProcessor.populateModel(mSuggestion, model, 0);
-        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
+        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS));
 
         createUrlSuggestion(OmniboxSuggestionType.URL_WHAT_YOU_TYPED, typed);
         mProcessor.populateModel(mSuggestion, model, 0);
-        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
+        Assert.assertNull(mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS));
     }
 
     @Test
@@ -321,14 +321,14 @@ public class BasicSuggestionProcessorUnitTest {
         createSearchSuggestion(OmniboxSuggestionType.URL_WHAT_YOU_TYPED, refined);
         PropertyModel model = mProcessor.createModel();
         mProcessor.populateModel(mSuggestion, model, 0);
-        Assert.assertNotNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
+        Assert.assertNotNull(mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS));
 
         createUrlSuggestion(OmniboxSuggestionType.URL_WHAT_YOU_TYPED, refined);
         mProcessor.populateModel(mSuggestion, model, 0);
-        Assert.assertNotNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
+        Assert.assertNotNull(mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS));
 
         final List<BaseSuggestionViewProperties.Action> actions =
-                mModel.get(BaseSuggestionViewProperties.ACTIONS);
+                mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS);
         Assert.assertEquals(actions.size(), 1);
         final SuggestionDrawableState iconState = actions.get(0).icon;
         Assert.assertEquals(iconState.resourceId, R.drawable.btn_suggestion_refine);
@@ -341,10 +341,10 @@ public class BasicSuggestionProcessorUnitTest {
         createSwitchToTabSuggestion(OmniboxSuggestionType.URL_WHAT_YOU_TYPED, tabMatch);
         PropertyModel model = mProcessor.createModel();
         mProcessor.populateModel(mSuggestion, model, 0);
-        Assert.assertNotNull(mModel.get(BaseSuggestionViewProperties.ACTIONS));
+        Assert.assertNotNull(mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS));
 
         final List<BaseSuggestionViewProperties.Action> actions =
-                mModel.get(BaseSuggestionViewProperties.ACTIONS);
+                mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS);
         Assert.assertEquals(actions.size(), 1);
         final SuggestionDrawableState iconState = actions.get(0).icon;
         Assert.assertEquals(iconState.resourceId, R.drawable.switch_to_tab);

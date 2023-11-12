@@ -42,7 +42,6 @@
 
 namespace blink {
 using protocol::Maybe;
-using protocol::Response;
 
 namespace {
 
@@ -79,7 +78,7 @@ struct LegacyDOMSnapshotAgent::VectorStringHashTraits
   }
 
   static void ConstructDeletedValue(Vector<String>& vec) {
-    new (NotNullTag::kNotNull, &vec)
+    new (WTF::NotNullTag::kNotNull, &vec)
         Vector<String>(WTF::kHashTableDeletedValue);
   }
 
@@ -101,7 +100,7 @@ LegacyDOMSnapshotAgent::LegacyDOMSnapshotAgent(
 
 LegacyDOMSnapshotAgent::~LegacyDOMSnapshotAgent() = default;
 
-Response LegacyDOMSnapshotAgent::GetSnapshot(
+protocol::Response LegacyDOMSnapshotAgent::GetSnapshot(
     Document* document,
     std::unique_ptr<protocol::Array<String>> style_filter,
     protocol::Maybe<bool> include_event_listeners,
@@ -147,7 +146,7 @@ Response LegacyDOMSnapshotAgent::GetSnapshot(
   computed_styles_map_.reset();
   css_property_filter_.reset();
   paint_order_map_ = nullptr;
-  return Response::Success();
+  return protocol::Response::Success();
 }
 
 int LegacyDOMSnapshotAgent::VisitNode(Node* node,

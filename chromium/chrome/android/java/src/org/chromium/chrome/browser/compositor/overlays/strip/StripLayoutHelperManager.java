@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.compositor.overlays.strip;
 
-import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -18,6 +17,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
 import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
@@ -27,7 +27,6 @@ import org.chromium.chrome.browser.compositor.layouts.components.TintedComposito
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.AreaGestureEventFilter;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.GestureHandler;
 import org.chromium.chrome.browser.compositor.scene_layer.TabStripSceneLayer;
-import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.EventFilter;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
@@ -53,7 +52,6 @@ import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementFieldTrial;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
-import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.base.PageTransition;
@@ -83,7 +81,6 @@ import android.widget.FrameLayout;
  * all input and model events to the proper destination.
  */
 public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNativeObserver {
-    private static final long FADE_SCRIM_DURATION_MS = 200;
     // Caching Variables
     private final RectF mStripFilterArea = new RectF();
 
@@ -98,7 +95,6 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP_DETACHED = 38.f;
     private static final float MODEL_SELECTOR_BUTTON_BACKGROUND_HEIGHT_DP_DETACHED = 38.f;
     private static final float MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP = 12.f;
-    private static final float NEW_TAB_BUTTON_WITH_MODEL_SELECTOR_BUTTON_PADDING = 8.f;
     private static final float BUTTON_DESIRED_TOUCH_TARGET_SIZE = 48.f;
 
     // External influences
@@ -120,9 +116,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     private CompositorButton mModelSelectorButton;
 
     private Context mContext;
-    private final StripScrim mStripScrim;
     private boolean mBrowserScrimShowing;
-    private ValueAnimator mScrimFadeAnimation;
     private int mTabStripFadeShort;
     private int mTabStripFadeLong;
 
@@ -132,6 +126,8 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     private TabSwitcherLayoutObserver mTabSwitcherLayoutObserver;
 
     private float mModelSelectorWidth;
+    // 3-dots menu button with tab strip end padding
+    private float mMenuButtonPadding;
     private TabModelSelectorTabModelObserver mTabModelSelectorTabModelObserver;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
     private final TabModelSelectorObserver mTabModelSelectorObserver =
@@ -162,7 +158,6 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             // toolbar is at the bottom in order to handle the input events.
             if (ChromeApplicationImpl.isVivaldi()) y = getValueOfY(y);
             if (mModelSelectorButton.onDown(x, y)) return;
-            if (mStripScrim.isVisible()) return;
             getActiveStripLayoutHelper().onDown(time(), x, y, fromMouse, buttons);
         }
 
@@ -177,14 +172,12 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 mTabModelSelector.selectModel(!mTabModelSelector.isIncognitoSelected());
                 return;
             }
-            if (mStripScrim.isVisible()) return;
             getActiveStripLayoutHelper().onUpOrCancel(time());
         }
 
         @Override
         public void drag(float x, float y, float dx, float dy, float tx, float ty) {
             mModelSelectorButton.drag(x, y);
-            if (mStripScrim.isVisible()) return;
             getActiveStripLayoutHelper().drag(time(), x, y, dx, dy, tx, ty);
         }
 
@@ -197,20 +190,16 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 mModelSelectorButton.handleClick(time);
                 return;
             }
-            if (mStripScrim.isVisible()) return;
             getActiveStripLayoutHelper().click(time(), x, y, fromMouse, buttons);
         }
 
         @Override
         public void fling(float x, float y, float velocityX, float velocityY) {
-            if (mStripScrim.isVisible()) return;
             getActiveStripLayoutHelper().fling(time(), x, y, velocityX, velocityY);
         }
 
         @Override
         public void onLongPress(float x, float y) {
-            if (mStripScrim.isVisible()) return;
-
             /** Vivaldi - Handling long click event on + button in tab strip **/
             if (ChromeApplicationImpl.isVivaldi()) {
                 if (isNewTabButtonClicked(x, y)) {
@@ -219,7 +208,8 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 }
             }
             /** Vivaldi - Consider the offset in case of bottom address bar **/
-            getActiveStripLayoutHelper().onLongPress(time(), x, getValueOfY(y));
+
+            getActiveStripLayoutHelper().onLongPress(time(), x, y);
         }
 
         @Override
@@ -239,48 +229,19 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
         @Override
         public void onStartedShowing(@LayoutType int layoutType, boolean showToolbar) {
             if (layoutType != LayoutType.TAB_SWITCHER) return;
-            updateScrimVisibility(true);
+            mBrowserScrimShowing = true;
         }
 
         @Override
         public void onStartedHiding(
                 @LayoutType int layoutType, boolean showToolbar, boolean delayAnimation) {
             if (layoutType != LayoutType.TAB_SWITCHER) return;
-            updateScrimVisibility(false);
+            mBrowserScrimShowing = false;
         }
 
         @Override
         public void onTabSelectionHinted(int tabId) {
             LayoutStateObserver.super.onTabSelectionHinted(tabId);
-        }
-
-        private void updateScrimVisibility(boolean visibility) {
-            // Handled by separate scrim over entire browser in the polished version.
-            if (isGridTabSwitcherPolishEnabled()) {
-                // Scrim doesn't actually show if the a11y list switcher is showing.
-                mBrowserScrimShowing =
-                        visibility && !DeviceClassManager.enableAccessibilityLayout(mContext);
-                return;
-            }
-
-            if (!isGridTabSwitcherNonPolishEnabled()) return;
-
-            if (mScrimFadeAnimation != null && mScrimFadeAnimation.isRunning()) {
-                mScrimFadeAnimation.cancel();
-            }
-
-            float startAlpha = visibility ? 0.f : 1.f;
-            float endAlpha = visibility ? 1.f : 0.f;
-            mScrimFadeAnimation = ValueAnimator.ofFloat(startAlpha, endAlpha);
-            mScrimFadeAnimation.setInterpolator(Interpolators.LINEAR_INTERPOLATOR);
-            mScrimFadeAnimation.setDuration(FADE_SCRIM_DURATION_MS);
-            mScrimFadeAnimation.addUpdateListener((anim -> {
-                final float currentAlpha = (float) anim.getAnimatedValue();
-                mStripScrim.setAlpha(currentAlpha);
-                mTabStripTreeProvider.updateStripScrim(mStripScrim);
-            }));
-            mScrimFadeAnimation.start();
-            mStripScrim.setVisible(visibility);
         }
     }
 
@@ -294,14 +255,16 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     /**
      * Creates an instance of the {@link StripLayoutHelperManager}.
      * @param context The current Android {@link Context}.
+     * @param managerHost The parent {@link LayoutManagerHost}.
      * @param updateHost The parent {@link LayoutUpdateHost}.
      * @param renderHost The {@link LayoutRenderHost}.
      * @param layerTitleCacheSupplier A supplier of the cache that holds the title textures.
      * @param lifecycleDispatcher The {@link ActivityLifecycleDispatcher} for registering this class
      *         to lifecycle events.
      */
-    public StripLayoutHelperManager(Context context, LayoutUpdateHost updateHost,
-            LayoutRenderHost renderHost, Supplier<LayerTitleCache> layerTitleCacheSupplier,
+    public StripLayoutHelperManager(Context context, LayoutManagerHost managerHost,
+            LayoutUpdateHost updateHost, LayoutRenderHost renderHost,
+            Supplier<LayerTitleCache> layerTitleCacheSupplier,
             ActivityLifecycleDispatcher lifecycleDispatcher) {
         mUpdateHost = updateHost;
         mLayerTitleCacheSupplier = layerTitleCacheSupplier;
@@ -324,9 +287,9 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
         };
         if (ChromeFeatureList.sTabStripRedesign.isEnabled()) {
             if (TabManagementFieldTrial.isTabStripFolioEnabled()) {
-                createFolioModelSelectorButtion(context, selectorClickHandler);
+                createFolioModelSelectorButton(context, selectorClickHandler);
             } else {
-                createDetachedModelSelectorButtion(context, selectorClickHandler);
+                createDetachedModelSelectorButton(context, selectorClickHandler);
             }
 
             // Model selector button icon color
@@ -360,6 +323,11 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             mModelSelectorButton.setY(MODEL_SELECTOR_BUTTON_BACKGROUND_Y_OFFSET_DP);
             mTabStripFadeShort = R.drawable.tab_strip_fade_short_tsr;
             mTabStripFadeLong = R.drawable.tab_strip_fade_long_tsr;
+
+            // Use toolbar menu button padding to align MSB with menu button.
+            mMenuButtonPadding = context.getResources().getDimension(R.dimen.button_end_padding)
+                    / context.getResources().getDisplayMetrics().density;
+
         } else {
             mModelSelectorButton = new CompositorButton(context, MODEL_SELECTOR_BUTTON_WIDTH_DP,
                     MODEL_SELECTOR_BUTTON_HEIGHT_DP, selectorClickHandler);
@@ -393,14 +361,12 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_standard),
                 res.getString(R.string.accessibility_tabstrip_btn_incognito_toggle_incognito));
 
-        mStripScrim = new StripScrim(context, mWidth, mHeight);
-        mStripScrim.setVisible(false);
         mBrowserScrimShowing = false;
 
-        mNormalHelper =
-                new StripLayoutHelper(context, updateHost, renderHost, false, mModelSelectorButton);
-        mIncognitoHelper =
-                new StripLayoutHelper(context, updateHost, renderHost, true, mModelSelectorButton);
+        mNormalHelper = new StripLayoutHelper(
+                context, managerHost, updateHost, renderHost, false, mModelSelectorButton);
+        mIncognitoHelper = new StripLayoutHelper(
+                context, managerHost, updateHost, renderHost, true, mModelSelectorButton);
 
         onContextChanged(context);
 
@@ -410,7 +376,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
         mContext = context;
     }
 
-    private void createFolioModelSelectorButtion(
+    private void createFolioModelSelectorButton(
             Context context, CompositorOnClickHandler selectorClickHandler) {
         mModelSelectorButton =
                 new TintedCompositorButton(context, MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP_FOLIO,
@@ -423,7 +389,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
         mModelSelectorWidth = MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP_FOLIO;
     }
 
-    private void createDetachedModelSelectorButtion(
+    private void createDetachedModelSelectorButton(
             Context context, CompositorOnClickHandler selectorClickHandler) {
         mModelSelectorButton = new TintedCompositorButton(context,
                 MODEL_SELECTOR_BUTTON_BACKGROUND_WIDTH_DP_DETACHED,
@@ -437,19 +403,9 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     }
 
     /**
-     * @return Return scrim to be applied on tab strip.
-     */
-    public StripScrim getStripScrim() {
-        return mStripScrim;
-    }
-
-    /**
      * Cleans up internal state.
      */
     public void destroy() {
-        if (mScrimFadeAnimation != null) {
-            mScrimFadeAnimation.cancel();
-        }
         mTabStripTreeProvider.destroy();
         mTabStripTreeProvider = null;
         mIncognitoHelper.destroy();
@@ -567,12 +523,15 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             orientationChanged = true;
         }
         if (!LocalizationUtils.isLayoutRtl()) {
-            mModelSelectorButton.setX(
-                    mWidth - mModelSelectorWidth - getModelSelectorButtonWithTabStripEndPadding());
+            if (ChromeApplicationImpl.isVivaldi())
+                mModelSelectorButton.setX(
+                        mWidth - mModelSelectorWidth - MODEL_SELECTOR_BUTTON_PADDING_DP);
+            else
+            mModelSelectorButton.setX(mWidth - getModelSelectorButtonWidthWithPadding());
         } else {
-            mModelSelectorButton.setX(getModelSelectorButtonWithTabStripEndPadding());
+            mModelSelectorButton.setX(MODEL_SELECTOR_BUTTON_PADDING_DP); /* Vivaldi
+                getModelSelectorButtonWidthWithPadding() - mModelSelectorWidth); */
         }
-        updateStripScrim();
 
         // Note(david@vivaldi.com): We need to take the orientation into account.
         if (ChromeApplicationImpl.isVivaldi()) {
@@ -601,33 +560,13 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
         mEventFilter.setEventArea(mStripFilterArea);
     }
 
-    private void updateStripScrim() {
-        if (!isGridTabSwitcherNonPolishEnabled()) return;
-        // Update width
-        float scrimWidth = mModelSelectorButton.isVisible()
-                ? mWidth - getModelSelectorButtonWidthWithPadding()
-                : mWidth;
-        mStripScrim.setWidth(scrimWidth);
-
-        // Update drawX
-        float drawX = 0;
-        if (LocalizationUtils.isLayoutRtl() && mModelSelectorButton.isVisible()) {
-            drawX = getModelSelectorButtonWidthWithPadding();
-        }
-        mStripScrim.setX(drawX);
-    }
-
-    private float getModelSelectorButtonWithTabStripEndPadding() {
-        if (ChromeFeatureList.sTabStripRedesign.isEnabled()) {
-            return (BUTTON_DESIRED_TOUCH_TARGET_SIZE - mModelSelectorWidth) / 2;
-        } else {
-            return MODEL_SELECTOR_BUTTON_PADDING_DP;
-        }
-    }
-
     private float getModelSelectorButtonWidthWithPadding() {
         if (ChromeFeatureList.sTabStripRedesign.isEnabled()) {
-            return mModelSelectorWidth + NEW_TAB_BUTTON_WITH_MODEL_SELECTOR_BUTTON_PADDING;
+            float modelSelectorWithStripEndPadding =
+                    (BUTTON_DESIRED_TOUCH_TARGET_SIZE - mModelSelectorWidth - mMenuButtonPadding)
+                            / 2
+                    + mMenuButtonPadding;
+            return mModelSelectorWidth + modelSelectorWithStripEndPadding;
         } else {
             return mModelSelectorWidth + (MODEL_SELECTOR_BUTTON_PADDING_DP * 2);
         }
@@ -652,7 +591,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     public void getVirtualViews(List<VirtualView> views) {
         if (mBrowserScrimShowing) return;
 
-        if (!mStripScrim.isVisible()) getActiveStripLayoutHelper().getVirtualViews(views);
+        getActiveStripLayoutHelper().getVirtualViews(views);
         if (mModelSelectorButton.isVisible()) views.add(mModelSelectorButton);
     }
 
@@ -1045,20 +984,9 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
 
             float endMargin = isVisible ? getModelSelectorButtonWidthWithPadding() : 0.0f;
 
-            mNormalHelper.setEndMargin(endMargin);
-            mIncognitoHelper.setEndMargin(endMargin);
-            updateStripScrim();
+            mNormalHelper.setEndMargin(endMargin, false);
+            mIncognitoHelper.setEndMargin(endMargin, true);
         }
-    }
-
-    private boolean isGridTabSwitcherPolishEnabled() {
-        return ChromeFeatureList.sGridTabSwitcherForTablets.isEnabled()
-                && TabUiFeatureUtilities.GRID_TAB_SWITCHER_FOR_TABLETS_POLISH.getValue();
-    }
-
-    private boolean isGridTabSwitcherNonPolishEnabled() {
-        return ChromeFeatureList.sGridTabSwitcherForTablets.isEnabled()
-                && !TabUiFeatureUtilities.GRID_TAB_SWITCHER_FOR_TABLETS_POLISH.getValue();
     }
 
     /**

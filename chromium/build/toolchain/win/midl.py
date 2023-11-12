@@ -446,7 +446,6 @@ def main(arch, gendir, outdir, dynamic_guids, tlb, h, dlldata, iid, proxy,
 
   # Now compare the output in midl_output_dir to the copied-over outputs.
   # Vivaldi: paths in comments are different, causing failures
-  # diff = filecmp.dircmp(midl_output_dir, outdir, ignore=dircmp_ignore)
   _, mismatch, errors = 0, None, 0 #filecmp.cmpfiles(midl_output_dir, outdir, common_files)
   assert not errors
 

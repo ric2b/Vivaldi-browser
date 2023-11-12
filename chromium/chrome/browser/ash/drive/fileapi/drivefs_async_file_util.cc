@@ -10,6 +10,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
@@ -129,7 +130,7 @@ class CopyOperation : public base::RefCountedThreadSafe<CopyOperation> {
         std::move(progress_callback_), std::move(callback_));
   }
 
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
   std::unique_ptr<storage::FileSystemOperationContext> context_;
   const storage::FileSystemURL src_url_;
   const storage::FileSystemURL dest_url_;
@@ -173,16 +174,15 @@ class DeleteOperation : public base::RefCountedThreadSafe<DeleteOperation> {
       return;
     }
 
-    if (ash::features::IsDriveFsBulkPinningEnabled()) {
-      if (drive_->GetRelativeDrivePath(path_, &drive_path_)) {
-        // TODO(b/266168982): In the case this is a folder, only the folder will
-        // get unpinned leaving all the children pinned. When the new method is
-        // exposed (or parameter on the existing method) update the
-        // implementation here.
-        drive_->GetDriveFsInterface()->GetMetadata(
-            drive_path_, base::BindOnce(&DeleteOperation::OnGotMetadata, this));
-        return;
-      }
+    if (drive_->GetPinManager() &&
+        drive_->GetRelativeDrivePath(path_, &drive_path_)) {
+      // TODO(b/266168982): In the case this is a folder, only the folder will
+      // get unpinned leaving all the children pinned. When the new method is
+      // exposed (or parameter on the existing method) update the
+      // implementation here.
+      drive_->GetDriveFsInterface()->GetMetadata(
+          drive_path_, base::BindOnce(&DeleteOperation::OnGotMetadata, this));
+      return;
     }
 
     blocking_task_runner_->PostTask(
@@ -195,29 +195,15 @@ class DeleteOperation : public base::RefCountedThreadSafe<DeleteOperation> {
 
   void OnGotMetadata(const drive::FileError error,
                      const drivefs::mojom::FileMetadataPtr metadata) {
-    if (error == drive::FILE_ERROR_OK) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    if (error != drive::FILE_ERROR_OK) {
+      LOG(ERROR) << "Cannot get metadata of '" << drive_path_ << "': " << error;
+    } else {
       DCHECK(metadata);
       id_ = Id(metadata->stable_id);
-      VLOG(1) << "Got metadata of " << id_ << " '" << drive_path_ << "'";
-      if (metadata->pinned) {
-        DCHECK(drive_);
-        drive_->GetDriveFsInterface()->SetPinnedByStableId(
-            metadata->stable_id, /*pinned=*/false,
-            base::BindOnce(&DeleteOperation::OnUnpinFile, this));
-        return;
-      }
-    } else {
-      LOG(ERROR) << "Cannot get metadata of '" << drive_path_ << "': " << error;
     }
 
-    blocking_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&DeleteOperation::Delete, this));
-  }
-
-  void OnUnpinFile(const drive::FileError error) {
-    LOG_IF(ERROR, error != drive::FILE_ERROR_OK)
-        << "Cannot unpin " << id_ << " '" << drive_path_
-        << "' before deleting it: " << error;
     blocking_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&DeleteOperation::Delete, this));
   }
@@ -243,13 +229,13 @@ class DeleteOperation : public base::RefCountedThreadSafe<DeleteOperation> {
   void OnDeleted() {
     DCHECK(drive_);
     if (PinManager* const pin_manager = drive_->GetPinManager()) {
-      // Local delete events are currently not sent via DriveFS, so for now
-      // we notify the `PinManager` for local deletes.
+      // TODO(b/267225898) Local delete events are currently not sent via
+      // DriveFS, so for now we notify the `PinManager` for local deletes.
       pin_manager->NotifyDelete(id_, drive_path_);
     }
   }
 
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
   const base::FilePath path_;
   base::FilePath drive_path_;
   Id id_ = Id::kNone;

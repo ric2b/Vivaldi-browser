@@ -44,6 +44,7 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/work_area_insets.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -86,21 +87,11 @@ class HotseatWidgetTest
         navigation_buttons_shown_in_tablet_mode_(std::get<2>(GetParam())) {
     if (is_assistant_enabled_)
       assistant_test_api_ = AssistantTestApi::Create();
-
-    std::vector<base::test::FeatureRef> enabled_features;
-    std::vector<base::test::FeatureRef> disabled_features;
-
-    if (navigation_buttons_shown_in_tablet_mode_) {
-      disabled_features.push_back(features::kHideShelfControlsInTabletMode);
-    } else {
-      enabled_features.push_back(features::kHideShelfControlsInTabletMode);
-    }
-    enabled_features.push_back(features::kShelfPalmRejectionSwipeOffset);
-    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   // testing::Test:
   void SetUp() override {
+    SetupFeatureLists();
     ShelfLayoutManagerTestBase::SetUp();
 
     if (is_assistant_enabled_) {
@@ -112,6 +103,19 @@ class HotseatWidgetTest
 
       assistant_test_api_->WaitUntilIdle();
     }
+  }
+
+  virtual void SetupFeatureLists() {
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    if (navigation_buttons_shown_in_tablet_mode()) {
+      disabled_features.push_back(features::kHideShelfControlsInTabletMode);
+    } else {
+      enabled_features.push_back(features::kHideShelfControlsInTabletMode);
+    }
+    enabled_features.push_back(features::kShelfPalmRejectionSwipeOffset);
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   void TearDown() override {
@@ -218,11 +222,29 @@ class HotseatWidgetTest
   }
 
  private:
+  friend class StackedHotseatWidgetTest;
   const ShelfAutoHideBehavior shelf_auto_hide_behavior_;
   const bool is_assistant_enabled_;
   const bool navigation_buttons_shown_in_tablet_mode_;
   std::unique_ptr<AssistantTestApi> assistant_test_api_;
   base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+class StackedHotseatWidgetTest : public HotseatWidgetTest {
+ public:
+  void SetupFeatureLists() override {
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    if (navigation_buttons_shown_in_tablet_mode()) {
+      disabled_features.push_back(features::kHideShelfControlsInTabletMode);
+    } else {
+      enabled_features.push_back(features::kHideShelfControlsInTabletMode);
+    }
+    enabled_features.push_back(features::kShelfPalmRejectionSwipeOffset);
+    enabled_features.push_back(features::kShelfStackedHotseat);
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+  }
 };
 
 // Counts the number of times the work area changes.
@@ -259,7 +281,7 @@ class ShelfStateWatcher : public ShelfObserver {
   ~ShelfStateWatcher() override {
     AshTestBase::GetPrimaryShelf()->RemoveObserver(this);
   }
-  void WillChangeVisibilityState(ShelfVisibilityState new_state) override {
+  void OnShelfVisibilityStateChanged(ShelfVisibilityState new_state) override {
     state_change_count_++;
   }
   int state_change_count() const { return state_change_count_; }
@@ -325,7 +347,8 @@ class HotseatTransitionAnimationObserver
     int aborted;
   } observer_counts_ = {0};
   std::unique_ptr<base::RunLoop> run_loop_;
-  HotseatTransitionAnimator* hotseat_transition_animator_;
+  raw_ptr<HotseatTransitionAnimator, ExperimentalAsh>
+      hotseat_transition_animator_;
 };
 
 // Used to test the Hotseat, ScrollableShelf, and DenseShelf features.
@@ -337,6 +360,42 @@ INSTANTIATE_TEST_SUITE_P(
                         ShelfAutoHideBehavior::kAlways),
         /*is_assistant_enabled*/ testing::Bool(),
         /*navigation_buttons_shown_in_tablet_mode*/ testing::Bool()));
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    StackedHotseatWidgetTest,
+    testing::Combine(
+        testing::Values(ShelfAutoHideBehavior::kNever,
+                        ShelfAutoHideBehavior::kAlways),
+        /*is_assistant_enabled*/ testing::Bool(),
+        /*navigation_buttons_shown_in_tablet_mode*/ testing::Bool()));
+
+// TODO(b:270757104) Set status are widget sizes.
+TEST_P(StackedHotseatWidgetTest, StackedHotseatShownOnSmallScreens) {
+  UpdateDisplay("475x350");
+  TabletModeControllerTestApi().EnterTabletMode();
+  GetAppListTestHelper()->CheckVisibility(true);
+  const gfx::Rect hotseat_bounds = GetPrimaryShelf()
+                                       ->shelf_widget()
+                                       ->hotseat_widget()
+                                       ->GetWindowBoundsInScreen();
+  ASSERT_EQ(hotseat_bounds.bottom(),
+            350 - ShelfConfig::Get()->hotseat_bottom_padding() * 2 -
+                ShelfConfig::Get()->shelf_size());
+}
+
+// TODO(b:270757104) Set status are widget sizes.
+TEST_P(StackedHotseatWidgetTest, StackedHotseatNotShownOnLargeScreens) {
+  UpdateDisplay("800x600");
+  TabletModeControllerTestApi().EnterTabletMode();
+  GetAppListTestHelper()->CheckVisibility(true);
+  const gfx::Rect hotseat_bounds = GetPrimaryShelf()
+                                       ->shelf_widget()
+                                       ->hotseat_widget()
+                                       ->GetWindowBoundsInScreen();
+  ASSERT_EQ(hotseat_bounds.bottom(),
+            600 - ShelfConfig::Get()->hotseat_bottom_padding());
+}
 
 TEST_P(HotseatWidgetTest, LongPressHomeWithoutAppWindow) {
   GetPrimaryShelf()->SetAutoHideBehavior(shelf_auto_hide_behavior());
@@ -1650,7 +1709,8 @@ TEST_P(HotseatWidgetTest, DismissHotseatWhenStatusAreaTrayShows) {
 
 // Tests that the work area updates once each when going to/from tablet mode
 // with no windows open.
-TEST_P(HotseatWidgetTest, WorkAreaUpdatesClamshellToFromHomeLauncherNoWindows) {
+TEST_P(HotseatWidgetTest,
+       DISABLED_WorkAreaUpdatesClamshellToFromHomeLauncherNoWindows) {
   DisplayWorkAreaChangeCounter counter;
   TabletModeControllerTestApi().EnterTabletMode();
 

@@ -111,6 +111,8 @@ class MockMediaRouter : public MediaRouterBase {
                    const MediaRoute::Id& route_id));
 
 #if !BUILDFLAG(IS_ANDROID)
+  MOCK_METHOD1(GetMirroringMediaControllerHost,
+               MirroringMediaControllerHost*(const MediaRoute::Id& route_id));
   IssueManager* GetIssueManager() override { return &issue_manager_; }
   MOCK_METHOD3(GetMediaController,
                void(const MediaRoute::Id& route_id,
@@ -123,7 +125,7 @@ class MockMediaRouter : public MediaRouterBase {
   MOCK_CONST_METHOD0(GetLogs, base::Value());
   MOCK_CONST_METHOD0(GetState, base::Value::Dict());
   MOCK_METHOD0(GetLogger, LoggerImpl*());
-  MOCK_METHOD0(GetDebugger, MediaRouterDebugger&());
+  MOCK_METHOD(MediaRouterDebugger&, GetDebugger, (), (override));
 #endif  // !BUILDFLAG(IS_ANDROID)
   MOCK_METHOD1(OnAddPresentationConnectionStateChangedCallbackInvoked,
                void(const content::PresentationConnectionStateChangedCallback&

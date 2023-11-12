@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
@@ -58,6 +59,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotCapabilitiesProvider
     kNotAllowed = 1,
     kUpstreamNetworkNotAvailable = 2,
     kShillOperationFailed = 3,
+    kUnknownResult = 4,
   };
 
   HotspotCapabilitiesProvider();
@@ -70,11 +72,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotCapabilitiesProvider
 
   // Return the latest hotspot capabilities
   const HotspotCapabilities& GetHotspotCapabilities() const;
-
-  // Update the hotspot allow status with the given |new_allow_status|
-  // and then notify observers if it changes.
-  void SetHotspotAllowStatus(
-      hotspot_config::mojom::HotspotAllowStatus new_allow_status);
 
   // Return callback for the CheckTetheringReadiness method.
   using CheckTetheringReadinessCallback =
@@ -91,6 +88,9 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotCapabilitiesProvider
   bool HasObserver(Observer* observer) const;
 
  private:
+  friend class HotspotMetricsHelperTest;
+  friend class HotspotFeatureUsageMetricsTest;
+
   // ShillPropertyChangedObserver overrides
   void OnPropertyChanged(const std::string& key,
                          const base::Value& value) override;
@@ -101,6 +101,11 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotCapabilitiesProvider
 
   // Callback to handle the manager properties with hotspot related properties.
   void OnManagerProperties(absl::optional<base::Value::Dict> properties);
+
+  // Update the hotspot allow status with the given |new_allow_status|
+  // and then notify observers if it changes.
+  void SetHotspotAllowStatus(
+      hotspot_config::mojom::HotspotAllowStatus new_allow_status);
 
   // Notify observer that hotspot capabilities was changed.
   void NotifyHotspotCapabilitiesChanged();
@@ -125,7 +130,8 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotCapabilitiesProvider
       hotspot_config::mojom::HotspotAllowStatus::kDisallowedNoCellularUpstream};
 
   bool policy_allow_hotspot_ = true;
-  NetworkStateHandler* network_state_handler_ = nullptr;
+  raw_ptr<NetworkStateHandler, ExperimentalAsh> network_state_handler_ =
+      nullptr;
   base::ScopedObservation<NetworkStateHandler, NetworkStateHandlerObserver>
       network_state_handler_observer_{this};
   base::ObserverList<Observer> observer_list_;

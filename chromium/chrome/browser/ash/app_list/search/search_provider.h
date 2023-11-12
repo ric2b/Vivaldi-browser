@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ash/public/cpp/app_list/app_list_types.h"
+#include "base/memory/raw_ptr.h"
 
 class ChromeSearchResult;
 
@@ -61,8 +62,6 @@ class SearchProvider {
     search_controller_ = controller;
   }
 
-  const Results& results() const { return results_; }
-
  protected:
   // Swaps the internal results with |new_results|.
   // This is useful when multiple results will be added, and the notification is
@@ -70,8 +69,7 @@ class SearchProvider {
   void SwapResults(Results* new_results);
 
  private:
-  SearchController* search_controller_ = nullptr;
-  Results results_;
+  raw_ptr<SearchController, ExperimentalAsh> search_controller_ = nullptr;
 };
 
 }  // namespace app_list

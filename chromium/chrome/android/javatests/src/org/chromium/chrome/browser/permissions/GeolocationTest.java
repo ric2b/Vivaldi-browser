@@ -12,6 +12,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.permissions.PermissionTestRule.PermissionUpdateWaiter;
@@ -36,8 +37,6 @@ public class GeolocationTest {
     public PermissionTestRule mPermissionRule = new PermissionTestRule();
 
     private static final String TEST_FILE = "/content/test/data/android/geolocation.html";
-    private static final String PERSIST_ACCEPT_HISTOGRAM =
-            "Permissions.Prompt.Accepted.Persisted.Geolocation";
 
     public GeolocationTest() {}
 
@@ -77,6 +76,7 @@ public class GeolocationTest {
      */
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1441822")
     @Feature({"Location", "Main"})
     public void testGeolocationPlumbingAllowedDialogNoGesture() throws Exception {
         runTest("initiate_getCurrentPosition()", 1, false, true);

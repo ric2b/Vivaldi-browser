@@ -117,6 +117,22 @@ bool ProductsRemoved(cart_db::ChromeCartContentProto existing_proto,
   }
   return false;
 }
+
+// Check if products in existing_proto are the same as the new_proto.
+bool HaveSameProducts(cart_db::ChromeCartContentProto existing_proto,
+                      cart_db::ChromeCartContentProto new_proto) {
+  if (existing_proto.product_image_urls_size() !=
+      new_proto.product_image_urls_size()) {
+    return false;
+  }
+  for (int i = 0; i < existing_proto.product_image_urls_size(); i++) {
+    if (existing_proto.product_image_urls()[i] !=
+        new_proto.product_image_urls()[i]) {
+      return false;
+    }
+  }
+  return true;
+}
 }  // namespace
 
 CartService::CartService(Profile* profile)
@@ -126,8 +142,6 @@ CartService::CartService(Profile* profile)
       domain_cart_url_mapping_(
           JSONToDictionary(IDR_CART_DOMAIN_CART_URL_MAPPING_JSON)),
       discount_link_fetcher_(std::make_unique<CartDiscountLinkFetcher>()),
-      metrics_tracker_(std::make_unique<CartMetricsTracker>(
-          chrome::FindTabbedBrowser(profile, false))),
       coupon_service_(CouponServiceFactory::GetForProfile(profile)),
       shopping_service_(
           commerce::ShoppingServiceFactory::GetForBrowserContext(profile)) {
@@ -213,8 +227,8 @@ void CartService::AddCart(const GURL& navigation_url,
 }
 
 void CartService::DeleteCart(const GURL& url, bool ignore_remove_status) {
-  coupon_service_->DeleteFreeListingCouponsForUrl(url);
   if (ignore_remove_status) {
+    coupon_service_->DeleteFreeListingCouponsForUrl(url);
     cart_db_->DeleteCart(eTLDPlusOne(url),
                          base::BindOnce(&CartService::OnOperationFinished,
                                         weak_ptr_factory_.GetWeakPtr()));
@@ -336,6 +350,12 @@ void CartService::HasActiveCartForURL(const GURL& url,
                           weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
+bool CartService::IsCartEnabled() {
+  const base::Value::List& list =
+      profile_->GetPrefs()->GetList(prefs::kNtpDisabledModules);
+  return !base::Contains(list, base::Value(kCartPrefsKey));
+}
+
 void CartService::ShouldShowDiscountConsent(
     base::OnceCallback<void(bool)> callback) {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
@@ -448,6 +468,14 @@ void CartService::HasActiveCartForURLCallback(
   std::move(callback).Run(!IsCartExpired(proto_pairs[0].second));
 }
 
+void CartService::MaybeCommitDeletion(GURL url) {
+  std::string domain = eTLDPlusOne(url);
+  if (pending_deletion_map_.contains(domain)) {
+    coupon_service_->DeleteFreeListingCouponsForUrl(url);
+    pending_deletion_map_.erase(domain);
+  }
+}
+
 void CartService::ShouldShowDiscountConsentCallback(
     base::OnceCallback<void(bool)> callback,
     bool success,
@@ -481,7 +509,7 @@ void CartService::ShouldShowDiscountConsentCallback(
       should_show &=
           (last_dismissed_time == base::Time() ||
            reshow_time_delta.is_negative()) &&
-          last_dismissed_count <
+          last_dismissed_count <=
               commerce::kNtpChromeCartModuleDiscountConsentMaxDismissalCount
                   .Get();
     }
@@ -583,6 +611,10 @@ void CartService::OnDiscountURLFetched(
 
 void CartService::PrepareForNavigation(const GURL& cart_url,
                                        bool is_navigating) {
+  if (!metrics_tracker_) {
+    metrics_tracker_ = std::make_unique<CartMetricsTracker>(
+        chrome::FindTabbedBrowser(profile_, false));
+  }
   metrics_tracker_->PrepareToRecordUKM(cart_url);
   if (is_navigating || !commerce::IsRuleDiscountPartnerMerchant(cart_url) ||
       !IsCartDiscountEnabled()) {
@@ -621,7 +653,9 @@ void CartService::Shutdown() {
   // Delete content of all carts that are removed.
   cart_db_->LoadAllCarts(base::BindOnce(&CartService::DeleteRemovedCartsContent,
                                         weak_ptr_factory_.GetWeakPtr()));
-  metrics_tracker_->ShutDown();
+  if (metrics_tracker_) {
+    metrics_tracker_->ShutDown();
+  }
   if (discount_url_loader_) {
     discount_url_loader_->ShutDown();
   }
@@ -937,9 +971,24 @@ void CartService::OnAddCart(const GURL& navigation_url,
   if (!success) {
     return;
   }
+  std::string domain = eTLDPlusOne(navigation_url);
+
   // Restore module visibility anytime a cart-related action happens.
   RestoreHidden();
-  std::string domain = eTLDPlusOne(navigation_url);
+
+  // Cancel pending closure if the cart being closed has the same content as the
+  // cart being added.
+  if (pending_deletion_map_.contains(domain) &&
+      pending_deletion_map_[domain].merchant_cart_url() ==
+          proto.merchant_cart_url() &&
+      HaveSameProducts(pending_deletion_map_[domain], proto)) {
+    cart_db_->AddCart(domain, pending_deletion_map_[domain],
+                      base::BindOnce(&CartService::OnOperationFinished,
+                                     weak_ptr_factory_.GetWeakPtr()));
+    pending_deletion_map_.erase(domain);
+    return;
+  }
+
   absl::optional<std::string> merchant_name_from_component =
       commerce_heuristics::CommerceHeuristicsData::GetInstance()
           .GetMerchantName(domain);
@@ -1132,7 +1181,7 @@ void CartService::StartGettingDiscount() {
       profile_->GetDefaultStoragePartition()
           ->GetURLLoaderFactoryForBrowserProcess(),
       std::make_unique<CartDiscountFetcherFactory>(),
-      std::make_unique<CartServiceDelegate>(this),
+      std::make_unique<CartDiscountServiceDelegate>(this),
       IdentityManagerFactory::GetForProfile(profile_),
       profile_->GetVariationsClient());
 
@@ -1193,6 +1242,15 @@ void CartService::OnDeleteCart(bool success,
                                std::vector<CartDB::KeyAndValue> proto_pairs) {
   if (proto_pairs.size() != 1 || proto_pairs[0].second.is_removed())
     return;
+  // Postpone cart deletion commit to avoid ephemeral cart deletions.
+  content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
+      ->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(&CartService::MaybeCommitDeletion,
+                         weak_ptr_factory_.GetWeakPtr(),
+                         GURL(proto_pairs[0].second.merchant_cart_url())),
+          commerce::kCodeBasedRuleDiscountCouponDeletionTime.Get());
+  pending_deletion_map_[proto_pairs[0].first] = proto_pairs[0].second;
   cart_db_->DeleteCart(proto_pairs[0].first,
                        base::BindOnce(&CartService::OnOperationFinished,
                                       weak_ptr_factory_.GetWeakPtr()));

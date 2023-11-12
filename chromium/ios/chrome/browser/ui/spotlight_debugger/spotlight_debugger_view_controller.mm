@@ -8,11 +8,13 @@
 #import "base/notreached.h"
 #import "base/time/time.h"
 #import "ios/chrome/app/spotlight/bookmarks_spotlight_manager.h"
+#import "ios/chrome/app/spotlight/reading_list_spotlight_manager.h"
+#import "ios/chrome/app/spotlight/spotlight_interface.h"
 #import "ios/chrome/app/spotlight/spotlight_logger.h"
 #import "ios/chrome/app/spotlight/spotlight_util.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/elements/highlight_button.h"
 #import "ios/chrome/common/ui/util/button_util.h"
@@ -38,12 +40,15 @@ typedef NS_ENUM(NSUInteger, StatusSectionRows) {
 typedef NS_ENUM(NSUInteger, DebugCommandsRows) {
   ClearAllRow = 0,
   ReindexBookmarks,
+  ReindexReadingList,
   DebugCommandsRowsCount,
 };
 
 @interface SpotlightDebuggerViewController ()
 
 @property(nonatomic, strong) UIActivityIndicatorView* spinner;
+
+@property(nonatomic, readonly) SpotlightInterface* spotlightInterface;
 
 @end
 
@@ -55,6 +60,7 @@ typedef NS_ENUM(NSUInteger, DebugCommandsRows) {
     _spinner = [[UIActivityIndicatorView alloc]
         initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     _spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    _spotlightInterface = [SpotlightInterface defaultInterface];
   }
   return self;
 }
@@ -142,6 +148,12 @@ typedef NS_ENUM(NSUInteger, DebugCommandsRows) {
                                                      kSymbolAccessoryPointSize);
           break;
         }
+        case ReindexReadingList: {
+          content.text = @"Clear and Reindex reading list";
+          content.image = DefaultSymbolWithPointSize(@"bin.xmark",
+                                                     kSymbolAccessoryPointSize);
+          break;
+        }
         default:
           NOTREACHED();
           break;
@@ -182,6 +194,9 @@ typedef NS_ENUM(NSUInteger, DebugCommandsRows) {
         case ReindexBookmarks:
           [self clearAndReindexBookmarks];
           break;
+        case ReindexReadingList:
+          [self clearAndReindexReadingList];
+          break;
         default:
           NOTREACHED();
           break;
@@ -199,7 +214,8 @@ typedef NS_ENUM(NSUInteger, DebugCommandsRows) {
 
 - (void)clearAllSpotlightEntries {
   [self showSpinner];
-  spotlight::ClearSpotlightIndexWithCompletion(^(NSError* error) {
+  [self.spotlightInterface deleteAllSearchableItemsWithCompletionHandler:^(
+                               NSError* error) {
     dispatch_async(dispatch_get_main_queue(), ^{
       UIAlertController* controller = [UIAlertController
           alertControllerWithTitle:@"Clear Entries"
@@ -215,7 +231,7 @@ typedef NS_ENUM(NSUInteger, DebugCommandsRows) {
       [self removeSpinner];
       [self.tableView reloadData];
     });
-  });
+  }];
 }
 
 - (void)clearAndReindexBookmarks {
@@ -232,6 +248,36 @@ typedef NS_ENUM(NSUInteger, DebugCommandsRows) {
                   [NSString stringWithFormat:
                                 @"Clearing and Reindexing complete in %lld ms",
                                 duration.InMilliseconds()]
+                               message:error ? error.localizedDescription
+                                             : @"Success"
+                        preferredStyle:UIAlertControllerStyleAlert];
+          [controller
+              addAction:[UIAlertAction actionWithTitle:@"OK"
+                                                 style:UIAlertActionStyleDefault
+                                               handler:nil]];
+          [self presentViewController:controller animated:YES completion:nil];
+
+          [self removeSpinner];
+          [self.tableView reloadData];
+        });
+      }];
+}
+
+- (void)clearAndReindexReadingList {
+  base::Time startTime = base::Time::Now();
+  [self showSpinner];
+
+  [self.readingListSpotlightManager
+      clearAndReindexReadingListWithCompletionBlock:^(NSError* error) {
+        base::Time endTime = base::Time::Now();
+        base::TimeDelta duration = endTime - startTime;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+          UIAlertController* controller = [UIAlertController
+              alertControllerWithTitle:
+                  [NSString stringWithFormat:@"Clearing and Reindexing reading "
+                                             @"list complete in %lld ms",
+                                             duration.InMilliseconds()]
                                message:error ? error.localizedDescription
                                              : @"Success"
                         preferredStyle:UIAlertControllerStyleAlert];

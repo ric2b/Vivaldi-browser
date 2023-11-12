@@ -54,12 +54,10 @@ class AppListItemViewPixelTest
     if (use_folder_icon_refresh()) {
       scoped_feature_list_.InitAndEnableFeature(
           features::kAppCollectionFolderRefresh);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kAppCollectionFolderRefresh);
     }
-
-    app_list_test_model_ = std::make_unique<test::AppListTestModel>();
-    search_model_ = std::make_unique<SearchModel>();
-    Shell::Get()->app_list_controller()->SetActiveModel(
-        /*profile_id=*/1, app_list_test_model_.get(), search_model_.get());
   }
 
   // Creates multiple folders that contain from 1 app to `max_items` apps
@@ -68,10 +66,11 @@ class AppListItemViewPixelTest
     AppListFolderItem* folder_item;
     for (int i = 1; i <= max_items; ++i) {
       if (i == 1) {
-        folder_item = app_list_test_model_->CreateSingleItemFolder("folder_id",
-                                                                   "item_id");
+        folder_item = GetAppListTestHelper()->model()->CreateSingleItemFolder(
+            "folder_id", "item_id");
       } else {
-        folder_item = app_list_test_model_->CreateAndPopulateFolderWithApps(i);
+        folder_item =
+            GetAppListTestHelper()->model()->CreateAndPopulateFolderWithApps(i);
       }
       // Update the notification state of the first app in the folder to
       // simulate that there exists an app with notifications in the folder.
@@ -81,7 +80,8 @@ class AppListItemViewPixelTest
   }
 
   void CreateAppListItem(const std::string& name) {
-    AppListItem* item = app_list_test_model_->CreateAndAddItem(name + "_id");
+    AppListItem* item =
+        GetAppListTestHelper()->model()->CreateAndAddItem(name + "_id");
     item->SetName(name);
     item->SetIsNewInstall(is_new_install());
     item->UpdateNotificationBadge(has_notification());
@@ -125,10 +125,6 @@ class AppListItemViewPixelTest
   bool is_new_install() const { return std::get<4>(GetParam()); }
   bool has_notification() const { return std::get<5>(GetParam()); }
 
- protected:
-  std::unique_ptr<test::AppListTestModel> app_list_test_model_;
-  std::unique_ptr<SearchModel> search_model_;
-
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
@@ -166,14 +162,28 @@ TEST_P(AppListItemViewPixelTest, AppListFolderItemsLayoutInIcon) {
     return;
   }
 
-  // Set the maximum number of the items in a folder that we want to test to 4.
-  const int max_items_in_folder = 4;
+  // Reset any configs set by previous tests so that
+  // ItemIconInFolderIconMargin() in app_list_config.cc is correctly
+  // initialized. Can be removed if folder icon refresh is set as default.
+  AppListConfigProvider::Get().ResetForTesting();
+
+  // To test the item counter on folder icons, set the maximum number of the
+  // items in a folder to 5. For legacy folder icons, set the max items to 4 to
+  // reduce the revisions.
+  const int max_items_in_folder = use_folder_icon_refresh() ? 5 : 4;
   CreateFoldersContainingDifferentNumOfItems(max_items_in_folder);
   ShowAppList();
 
-  EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      GenerateScreenshotName(), /*revision_number=*/0, GetItemViewAt(0),
-      GetItemViewAt(1), GetItemViewAt(2), GetItemViewAt(3)));
+  if (use_folder_icon_refresh()) {
+    EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
+        GenerateScreenshotName(), /*revision_number=*/1, GetItemViewAt(0),
+        GetItemViewAt(1), GetItemViewAt(2), GetItemViewAt(3),
+        GetItemViewAt(4)));
+  } else {
+    EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
+        GenerateScreenshotName(), /*revision_number=*/0, GetItemViewAt(0),
+        GetItemViewAt(1), GetItemViewAt(2), GetItemViewAt(3)));
+  }
 }
 
 // Verifies the folder icon is extended when an app is dragged upon it.
@@ -184,8 +194,15 @@ TEST_P(AppListItemViewPixelTest, AppListFolderIconExtendedState) {
     return;
   }
 
-  // Set the maximum number of the items in a folder that we want to test to 4.
-  const int max_items_in_folder = 4;
+  // Reset any configs set by previous tests so that
+  // ItemIconInFolderIconMargin() in app_list_config.cc is correctly
+  // initialized. Can be removed if folder icon refresh is set as default.
+  AppListConfigProvider::Get().ResetForTesting();
+
+  // To test the item counter on folder icons, set the maximum number of the
+  // items in a folder to 5. For legacy folder icons, set the max items to 4 to
+  // reduce the revisions.
+  const int max_items_in_folder = use_folder_icon_refresh() ? 5 : 4;
   CreateFoldersContainingDifferentNumOfItems(max_items_in_folder);
   CreateAppListItem("App");
   ShowAppList();
@@ -202,9 +219,16 @@ TEST_P(AppListItemViewPixelTest, AppListFolderIconExtendedState) {
     GetItemViewAt(i)->OnDraggedViewEnter();
   }
 
-  EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      GenerateScreenshotName(), /*revision_number=*/0, GetItemViewAt(0),
-      GetItemViewAt(1), GetItemViewAt(2), GetItemViewAt(3)));
+  if (use_folder_icon_refresh()) {
+    EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
+        GenerateScreenshotName(), /*revision_number=*/1, GetItemViewAt(0),
+        GetItemViewAt(1), GetItemViewAt(2), GetItemViewAt(3),
+        GetItemViewAt(4)));
+  } else {
+    EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
+        GenerateScreenshotName(), /*revision_number=*/0, GetItemViewAt(0),
+        GetItemViewAt(1), GetItemViewAt(2), GetItemViewAt(3)));
+  }
 
   // Reset the states.
   for (int i = 0; i < max_items_in_folder; ++i) {
@@ -222,6 +246,11 @@ TEST_P(AppListItemViewPixelTest, DraggedAppListFolderIcon) {
   if (is_new_install() || has_notification()) {
     return;
   }
+
+  // Reset any configs set by previous tests so that
+  // ItemIconInFolderIconMargin() in app_list_config.cc is correctly
+  // initialized. Can be removed if folder icon refresh is set as default.
+  AppListConfigProvider::Get().ResetForTesting();
 
   // Set the maximum number of the items in a folder that we want to test to 4.
   const int max_items_in_folder = 4;
@@ -259,10 +288,12 @@ TEST_P(AppListItemViewPixelTest, DraggedAppListFolderIcon) {
       event_generator->MoveMouseTo(grid_center);
     }
 
+    const int revision_number = use_folder_icon_refresh() ? 3 : 2;
+
     std::string filename = base::NumberToString(i + 1) + "_items_folder";
     EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
         base::JoinString({GenerateScreenshotName(), filename}, "."),
-        /*revision_number=*/1,
+        revision_number,
         apps_grid_view->app_drag_icon_proxy_for_test()->GetWidgetForTesting()));
 
     // Release the drag.

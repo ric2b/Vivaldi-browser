@@ -8,10 +8,11 @@ import android.app.Notification;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Looper;
-import android.support.test.InstrumentationRegistry;
 import android.util.Pair;
 import android.view.View;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matchers;
@@ -178,7 +179,8 @@ public class DownloadTest implements CustomMainActivityStart {
     public void setUp() {
         deleteTestFiles();
         Looper.prepare();
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         DownloadNotificationService.setInstanceForTests(new MockNotificationService());
     }
 

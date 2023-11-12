@@ -603,10 +603,9 @@ void ArcMetricsService::ReportDnsQueryResult(mojom::ArcDnsQuery query,
   base::UmaHistogramBoolean(metric_name, success);
 }
 
-void ArcMetricsService::ReportImageCopyPasteCompatAction(
+void ArcMetricsService::ReportImageCopyPasteCompatActionDeprecated(
     mojom::ArcImageCopyPasteCompatAction action_type) {
-  base::UmaHistogramEnumeration("Arc.ImageCopyPasteCompatOperationType",
-                                action_type);
+  // Intentionally no-op. This metric was deprecated.
 }
 
 void ArcMetricsService::NotifyLowMemoryKill() {
@@ -712,6 +711,13 @@ void ArcMetricsService::ReportLowLatencyStylusLibApiUsage(
     mojom::LowLatencyStylusLibApiId api_id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   UMA_HISTOGRAM_ENUMERATION("Arc.LowLatencyStylusLibraryApisCounter", api_id);
+}
+
+void ArcMetricsService::ReportVpnServiceBuilderCompatApiUsage(
+    mojom::VpnServiceBuilderCompatApiId api_id) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  base::UmaHistogramEnumeration("Arc.VpnServiceBuilderCompatApisCounter",
+                                api_id);
 }
 
 void ArcMetricsService::ReportLowLatencyStylusLibPredictionTarget(

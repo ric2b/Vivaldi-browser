@@ -77,11 +77,10 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView& root_frame_view) {
   }
 #endif
 
-  bool was_opacity_updated = root_frame_view.UpdateAllPendingOpacityUpdates();
-  bool was_transform_updated = root_frame_view.UpdateAllPendingTransforms();
-
-  if (was_opacity_updated || was_transform_updated)
+  bool updates_executed = root_frame_view.ExecuteAllPendingUpdates();
+  if (updates_executed) {
     needs_invalidate_chrome_client_ = true;
+  }
 
   // If the page has anything changed, we need to inform the chrome client
   // so that the client will initiate repaint of the contents if needed (e.g.
@@ -187,17 +186,11 @@ bool HasBlockingEventHandlerHelper(const LayoutObject& object,
       return true;
   }
 
-  auto* node = object.GetNode();
-  auto* layout_block_flow = DynamicTo<LayoutBlockFlow>(object);
-  if (!node && layout_block_flow &&
-      layout_block_flow->IsAnonymousBlockContinuation()) {
-    // An anonymous continuation does not have handlers so we need to check the
-    // DOM ancestor for handlers using |NodeForHitTest|.
-    node = object.NodeForHitTest();
+  if (auto* node = object.GetNode()) {
+    return HasBlockingEventHandlerHelper(*object.GetFrame(), *node, event_type);
   }
-  if (!node)
-    return false;
-  return HasBlockingEventHandlerHelper(*object.GetFrame(), *node, event_type);
+
+  return false;
 }
 
 bool HasBlockingTouchEventHandler(const LayoutObject& object) {
@@ -369,16 +362,6 @@ FragmentData* PrePaintTreeWalk::GetOrCreateFragmentData(
   bool needs_paint_properties = fragment_data->PaintProperties();
 
   wtf_size_t fragment_id = pre_paint_info.fragmentainer_idx;
-  // TODO(mstensho): For now we need to treat unfragmented as ID 0. It doesn't
-  // really matter for LayoutNG, but legacy
-  // PaintPropertyTreeBuilder::ContextForFragment() may take a walk up the tree
-  // and end up querying this (LayoutNG) object, and
-  // FragmentData::LogicalTopInFlowThread() will DCHECK that the value is 0
-  // unless it has been explicitly set by legacy code (which won't happen, since
-  // it's an NG object).
-  if (fragment_id == WTF::kNotFound)
-    fragment_id = 0;
-
   if (pre_paint_info.is_first_for_node) {
     if (allow_update) {
       if (fragment_data->FragmentID() < fragment_id) {
@@ -476,7 +459,11 @@ void PrePaintTreeWalk::UpdateContextForOOFContainer(
   // fragment of an OOF fragment is always simply the parent.
   if (!context.current_container.IsInFragmentationContext() ||
       (fragment && fragment->IsMonolithic())) {
-    context.current_container.fragment = fragment;
+    // Anonymous blocks are not allowed to be containing blocks, so we should
+    // skip over any such elements.
+    if (!fragment || !fragment->IsAnonymousBlock()) {
+      context.current_container.fragment = fragment;
+    }
   }
 
   if (!object.CanContainAbsolutePositionObjects())
@@ -999,9 +986,7 @@ void PrePaintTreeWalk::WalkChildren(
           // monolithic content. We may re-enter
           // LayoutNGBoxFragment-accompanied traversal if we get to a
           // descendant that supports that.
-          DCHECK(
-              !box->FlowThreadContainingBlock() ||
-              (box->GetNGPaginationBreakability() == LayoutBox::kForbidBreaks));
+          DCHECK(!box->FlowThreadContainingBlock() || box->IsMonolithic());
 
           traversable_fragment = nullptr;
         }

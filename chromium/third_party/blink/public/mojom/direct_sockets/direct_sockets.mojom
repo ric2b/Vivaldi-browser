@@ -12,27 +12,10 @@ import "services/network/public/mojom/host_resolver.mojom";
 import "services/network/public/mojom/ip_endpoint.mojom";
 import "services/network/public/mojom/mutable_network_traffic_annotation_tag.mojom";
 import "services/network/public/mojom/network_param.mojom";
+import "services/network/public/mojom/optional_bool.mojom";
 import "services/network/public/mojom/restricted_udp_socket.mojom";
 import "services/network/public/mojom/tcp_socket.mojom";
 import "services/network/public/mojom/udp_socket.mojom";
-
-// This enum is used to track how often each permission check cause
-// Permission Denied failures. Used for histograms, don't renumber.
-enum DirectSocketFailureType {
-  kPermissionsPolicy = 0,
-  kTransientActivation = 1,
-  kUserDialog = 2,
-  kResolvingToNonPublic = 3,
-  kRateLimiting = 4,
-  kCORS = 5,
-  kEnterprisePolicy = 6
-};
-
-enum DirectSocketProtocolType {
-  kTcp = 0,
-  kUdp = 1,
-  kUdpServer = 2,
-};
 
 struct DirectTCPSocketOptions {
   network.mojom.HostPortPair remote_addr;
@@ -49,11 +32,8 @@ struct DirectTCPSocketOptions {
       network.mojom.DnsQueryType.UNSPECIFIED;
 };
 
-struct DirectUDPSocketOptions {
-  // Note that one and only one of |remote_addr| and |local_addr| should be
-  // populated.
-  network.mojom.HostPortPair? remote_addr;
-  network.mojom.IPEndPoint? local_addr;
+struct DirectConnectedUDPSocketOptions {
+  network.mojom.HostPortPair remote_addr;
 
   int32 send_buffer_size = 0;
   int32 receive_buffer_size = 0;
@@ -62,12 +42,31 @@ struct DirectUDPSocketOptions {
       network.mojom.DnsQueryType.UNSPECIFIED;
 };
 
+struct DirectBoundUDPSocketOptions {
+  network.mojom.IPEndPoint local_addr;
+
+  int32 send_buffer_size = 0;
+  int32 receive_buffer_size = 0;
+
+  // Sets IPV6_V6ONLY on the socket to enable/disable dual stack mode.
+  // |true| restricts incoming connections to IPv6 only; |false| allows both
+  // IPv4/IPv6 connections. Leaving this value unset results in platform default
+  // being applied (|true| on Windows, |false| on Posix).
+  network.mojom.OptionalBool ipv6_only;
+};
+
 struct DirectTCPServerSocketOptions {
   network.mojom.IPEndPoint local_addr;
 
   // |backlog| defines the size of the OS accept queue. |backlog| = 0 represents
   // an optional value that will be substituted by a reasonable default.
   uint32 backlog = 0;
+
+  // Sets IPV6_V6ONLY on the socket to enable/disable dual stack mode.
+  // |true| restricts incoming connections to IPv6 only; |false| allows both
+  // IPv4/IPv6 connections. Leaving this value unset results in platform default
+  // being applied (|true| on Windows, |false| on Posix).
+  network.mojom.OptionalBool ipv6_only;
 };
 
 // This wraps network.mojom.NetworkContext and handles extra work such as
@@ -91,30 +90,35 @@ interface DirectSocketsService {
           handle<data_pipe_consumer>? receive_stream,
           handle<data_pipe_producer>? send_stream);
 
-  // Creates a Restricted UDP socket depending on the provided params.
-  //   * if |options->local_addr| is specified, creates a bound socket.
-  //       Setting the port to 0 lets the OS pick an available port.
-  //       Note that |options->remote_addr| should be set to null.
-  //   * if |options->remote_addr| is specified, creates a connected socket.
-  //       Note that |options->local_addr| should be set to null.
-  //
+  // Creates a Connected Restricted UDP socket.
   // Caller can supply a |listener| to listen for incoming datagrams.
   //
-  // On success, |result| is net::OK.
-  //   * In bound mode, |local_addr| is set to the real local address used.
-  //       |peer_addr| is null.
-  //   * In connected mode, |local_addr| is set to the real local address used.
-  //       |peer_addr| is the resolved address the socket is connected to.
+  // On success |result| is net::OK. |local_addr| is the real local address
+  // used, |peer_addr| is the resolved address the socket is connected to.
   //
-  // On failure, |result| is a negative network error code.
+  // On failure |result| is a negative network error code.
   // |local_addr| and |peer_addr| are null.
-  OpenUDPSocket(
-      DirectUDPSocketOptions options,
+  OpenConnectedUDPSocket(
+      DirectConnectedUDPSocketOptions options,
       pending_receiver<network.mojom.RestrictedUDPSocket> receiver,
       pending_remote<network.mojom.UDPSocketListener>? listener)
       => (int32 result,
           network.mojom.IPEndPoint? local_addr,
           network.mojom.IPEndPoint? peer_addr);
+
+  // Creates a Bound Restricted UDP socket.
+  // Caller can supply a |listener| to listen for incoming datagrams.
+  //
+  // On success |result| is net::OK. |local_addr| is the real local address
+  // used.
+  //
+  // On failure |result| is a negative network error code, |local_addr| is null.
+  OpenBoundUDPSocket(
+      DirectBoundUDPSocketOptions options,
+      pending_receiver<network.mojom.RestrictedUDPSocket> receiver,
+      pending_remote<network.mojom.UDPSocketListener>? listener)
+      => (int32 result,
+          network.mojom.IPEndPoint? local_addr);
 
   // Creates a listening (server) TCP socket configured with |options|.
   //

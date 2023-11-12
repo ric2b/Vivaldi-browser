@@ -120,6 +120,11 @@
 #include "services/network/public/mojom/ct_log_info.mojom.h"
 #endif
 
+#if BUILDFLAG(IS_IOS)
+#include "components/permissions/bluetooth_delegate_impl.h"
+#include "content/shell/browser/bluetooth/shell_bluetooth_delegate_impl_client.h"
+#endif
+
 namespace content {
 
 namespace {
@@ -194,6 +199,9 @@ class ShellVariationsServiceClient
     return false;
   }
   bool IsEnterprise() override { return false; }
+  // Profiles aren't supported, so nothing to do here.
+  void RemoveGoogleGroupsFromPrefsForDeletedProfiles(
+      PrefService* local_state) override {}
 };
 
 // Returns the full user agent string for the content shell.
@@ -678,6 +686,16 @@ ShellContentBrowserClient::GetNetworkContextsParentDirectory() {
   return {browser_context()->GetPath()};
 }
 
+#if BUILDFLAG(IS_IOS)
+BluetoothDelegate* ShellContentBrowserClient::GetBluetoothDelegate() {
+  if (!bluetooth_delegate_) {
+    bluetooth_delegate_ = std::make_unique<permissions::BluetoothDelegateImpl>(
+        std::make_unique<ShellBluetoothDelegateImplClient>());
+  }
+  return bluetooth_delegate_.get();
+}
+#endif
+
 void ShellContentBrowserClient::BindBrowserControlInterface(
     mojo::ScopedMessagePipeHandle pipe) {
   if (!pipe.is_valid())
@@ -828,6 +846,7 @@ ShellContentBrowserClient::GetPermissionsPolicyForIsolatedWebApp(
       blink::mojom::PermissionsPolicyFeature::kDirectSockets,
       {blink::OriginWithPossibleWildcards(app_origin,
                                           /*has_subdomain_wildcard=*/false)},
+      /*self_if_matches=*/absl::nullopt,
       /*matches_all_origins=*/false, /*matches_opaque_src=*/false);
   return {{decl}};
 }

@@ -4,6 +4,7 @@
 
 #include "ash/wm/desks/desks_controller.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -53,19 +54,21 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/unique_ptr_adapters.h"
-#include "base/cxx17_backports.h"
 #include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/i18n/number_formatting.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/uuid.h"
 #include "chromeos/ui/wm/features.h"
 #include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/full_restore_utils.h"
@@ -296,6 +299,7 @@ class DesksController::RemovedDeskData {
                                  .enabled()),
         source_(source),
         desk_close_type_(type) {
+    full_restore::SaveRemovingDeskGuid(desk_->uuid());
     desk_->set_is_desk_being_removed(true);
   }
 
@@ -310,6 +314,7 @@ class DesksController::RemovedDeskData {
       toast_manager->Cancel(toast_id_);
       DesksController::Get()->FinalizeDeskRemoval(this);
     }
+    full_restore::ResetRemovingDeskGuid();
   }
 
   const std::string& toast_id() const { return toast_id_; }
@@ -395,7 +400,7 @@ class DesksController::DeskTraversalsMetricsHelper {
 
   // Pointer to the DesksController that owns this. Guaranteed to be not
   // nullptr for the lifetime of |this|.
-  DesksController* const controller_;
+  const raw_ptr<DesksController, ExperimentalAsh> controller_;
 
   base::OneShotTimer timer_;
 
@@ -547,7 +552,7 @@ Desk* DesksController::GetPreviousDesk(bool use_target_active_desk) const {
   return desks_[previous_index].get();
 }
 
-Desk* DesksController::GetDeskByUuid(const base::GUID& desk_uuid) const {
+Desk* DesksController::GetDeskByUuid(const base::Uuid& desk_uuid) const {
   auto it = base::ranges::find(desks_, desk_uuid, &Desk::uuid);
   return it != desks_.end() ? it->get() : nullptr;
 }
@@ -610,6 +615,10 @@ void DesksController::NewDesk(DesksCreationRemovalSource source) {
     UMA_HISTOGRAM_ENUMERATION(kNewDeskHistogramName, source);
     ReportDesksCountHistogram();
   }
+}
+
+bool DesksController::HasDesk(const Desk* desk) const {
+  return base::Contains(desks_, desk, &std::unique_ptr<Desk>::get);
 }
 
 void DesksController::RemoveDesk(const Desk* desk,
@@ -1000,7 +1009,7 @@ void DesksController::RestoreNameOfDeskAtIndex(std::u16string name,
   desks_[index]->SetName(std::move(name), /*set_by_user=*/true);
 }
 
-void DesksController::RestoreGuidOfDeskAtIndex(base::GUID guid, size_t index) {
+void DesksController::RestoreGuidOfDeskAtIndex(base::Uuid guid, size_t index) {
   DCHECK(guid.is_valid());
   DCHECK_LT(index, desks_.size());
   desks_[index]->SetGuid(std::move(guid));
@@ -1533,8 +1542,8 @@ void DesksController::OnActiveUserSessionChanged(const AccountId& account_id) {
   int new_user_active_desk_index =
       /* This is a default initialized index to 0 if the id doesn't exist. */
       user_to_active_desk_index_[current_account_id_];
-  new_user_active_desk_index = base::clamp(new_user_active_desk_index, 0,
-                                           static_cast<int>(desks_.size()) - 1);
+  new_user_active_desk_index = std::clamp(new_user_active_desk_index, 0,
+                                          static_cast<int>(desks_.size()) - 1);
 
   ActivateDesk(desks_[new_user_active_desk_index].get(),
                DesksSwitchSource::kUserSwitch);
@@ -1573,10 +1582,6 @@ void DesksController::OnAnimationFinished(DeskAnimationBase* animation) {
   DCHECK_EQ(animation_.get(), animation);
   metrics_helper_->OnAnimationFinished(animation->visible_desk_changes());
   animation_.reset();
-}
-
-bool DesksController::HasDesk(const Desk* desk) const {
-  return base::Contains(desks_, desk, &std::unique_ptr<Desk>::get);
 }
 
 bool DesksController::HasDeskWithName(const std::u16string& desk_name) const {
@@ -1696,6 +1701,10 @@ void DesksController::RemoveDeskInternal(const Desk* desk,
   }
 
   // Keep the removed desk's data alive until at least the end of this function.
+  // `MaybeCommitPendingDeskRemoval` at this point should have cleared
+  // `temporary_removed_desk_`. Otherwise, we may be resetting the wrong
+  // removing desk GUID in restore data.
+  CHECK(!temporary_removed_desk_);
   auto temporary_removed_desk = std::make_unique<RemovedDeskData>(
       std::move(*iter), removed_desk_index, source, close_type);
   auto* temporary_removed_desk_ptr = temporary_removed_desk.get();
@@ -2055,7 +2064,7 @@ void DesksController::CleanUpClosedAppWindowsTask(
   }
 
   // We post a delayed task to check that all of the windows in
-  // `widgetless_windows` eventually end up closing.
+  // `widgetless_windows eventually end up closing.
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ReportNumberOfZombieWindows,
@@ -2118,7 +2127,22 @@ void DesksController::RestackVisibleOnAllDesksWindowsOnActiveDesk() {
     auto* desk_container =
         visible_on_all_desks_window->GetRootWindow()->GetChildById(
             active_desk_->container_id());
-    DCHECK_EQ(desk_container, visible_on_all_desks_window->parent());
+    if (desk_container != visible_on_all_desks_window->parent()) {
+      // TODO(b/252556509): Clean this up when the root cause has been resolved.
+      // This can sometimes happen and we're still trying to nail down the root
+      // cause. Rather than proceeding to stack the window (which will crash),
+      // we'll log some info and skip the window.
+      SCOPED_CRASH_KEY_NUMBER("Restack", "adw_type",
+                              visible_on_all_desks_window->GetType());
+      SCOPED_CRASH_KEY_NUMBER(
+          "Restack", "adw_app_type",
+          visible_on_all_desks_window->GetProperty(aura::client::kAppType));
+      SCOPED_CRASH_KEY_STRING32(
+          "Restack", "adw_app_id",
+          full_restore::GetAppId(visible_on_all_desks_window));
+      base::debug::DumpWithoutCrashing();
+      continue;
+    }
 
     // Search through the MRU list for the next element that shares the same
     // parent. This will be used to stack |visible_on_all_desks_window| in

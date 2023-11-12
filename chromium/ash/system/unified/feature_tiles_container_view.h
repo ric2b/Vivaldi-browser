@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/pagination/pagination_model_observer.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
@@ -74,23 +75,30 @@ class ASH_EXPORT FeatureTilesContainerView : public views::View,
   int page_count() { return pages_.size(); }
 
  private:
-  class PageContainer;
-  class RowContainer;
-
   friend class FeatureTilesContainerViewTest;
   friend class QuickSettingsViewTest;
 
+  class RowContainer;
+  class PageContainer;
+
   // Calculates the number of rows based on the available `height`.
   int CalculateRowsFromHeight(int height);
+
+  // Calculates and sets the position of the container pages that are animating
+  // through a scroll, drag gesture or by clicking on a pagination dot.
+  // This function is called multiple times per page transition.
+  // After animation ends, `SelectedPageChanged` will be called to update bounds
+  // of all pages, including those that were not part of the transition.
+  void UpdateAnimatingPagesBounds(int old_selected, int new_selected);
 
   // Updates page splits for feature tiles.
   void UpdateTotalPages();
 
   // Owned by `UnifiedSystemTrayBubble`.
-  UnifiedSystemTrayController* const controller_;
+  const raw_ptr<UnifiedSystemTrayController, ExperimentalAsh> controller_;
 
   // Owned by `UnifiedSystemTrayModel`.
-  PaginationModel* const pagination_model_;
+  const raw_ptr<PaginationModel, ExperimentalAsh> pagination_model_;
 
   // List of pages that contain `RowContainer` elements.
   // Owned by views hierarchy.

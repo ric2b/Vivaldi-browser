@@ -179,7 +179,12 @@ enum class NotificationCatalogName {
   kDictationOnlySodaDownloaded = 164,
   kIPHGoogleOneOffer = 165,
   kLockScreen = 166,
-  kMaxValue = kLockScreen
+  kWebAppSettings = 167,
+  kEOLIncentive = 168,
+  kHotspot = 169,
+  kGeolocationSwitch = 170,
+  kMultiCaptureOnLogin = 171,
+  kMaxValue = kMultiCaptureOnLogin
 };
 
 // A living catalog that registers system nudges.
@@ -198,7 +203,8 @@ enum class NudgeCatalogName {
   kPhoneHub = 6,
   kClipboardHistoryZeroState = 7,
   kClipboardHistoryOnboarding = 8,
-  kMaxValue = kClipboardHistoryOnboarding,
+  kDisableDiacritics = 9,
+  kMaxValue = kDisableDiacritics,
 };
 
 // A living catalog that registers toasts.
@@ -249,7 +255,8 @@ enum class ToastCatalogName {
   kCopyToClipboardAction = 40,
   kVideoConferenceTraySpeakOnMuteDetected = 41,
   kCopyGifToClipboardAction = 42,
-  kMaxValue = kCopyGifToClipboardAction,
+  kVideoConferenceTrayUseWhileDisabled = 43,
+  kMaxValue = kVideoConferenceTrayUseWhileDisabled,
 };
 
 }  // namespace ash

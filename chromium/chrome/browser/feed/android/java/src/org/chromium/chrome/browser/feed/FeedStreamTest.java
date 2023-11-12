@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.feed;
 
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
 
 import static org.hamcrest.CoreMatchers.not;
@@ -12,7 +13,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -68,18 +68,16 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.xsurface.FeedActionsHandler;
-import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.OpenMode;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.OpenUrlOptions;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler.WebFeedFollowUpdate;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
+import org.chromium.chrome.browser.xsurface.feed.FeedActionsHandler;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.feed.proto.FeedUiProto;
-import org.chromium.components.feed.proto.wire.ReliabilityLoggingEnums.DiscoverLaunchResult;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.JUnitTestGURLs;
@@ -102,13 +100,13 @@ public class FeedStreamTest {
     private static final String TEST_DATA = "test";
     private static final String TEST_URL = JUnitTestGURLs.EXAMPLE_URL;
     private static final String HEADER_PREFIX = "header";
-    private static final String TAG = "FeedStreamTest";
+    private static final OpenUrlOptions DEFAULT_OPEN_URL_OPTIONS = new OpenUrlOptions() {};
 
     private Activity mActivity;
     private RecyclerView mRecyclerView;
     private FakeLinearLayoutManager mLayoutManager;
     private FeedStream mFeedStream;
-    private NtpListContentManager mContentManager;
+    private FeedListContentManager mContentManager;
 
     @Mock
     private FeedStream.Natives mFeedStreamJniMock;
@@ -143,7 +141,7 @@ public class FeedStreamTest {
     @Mock
     private RecyclerView.Adapter mAdapter;
     @Mock
-    private FeedLaunchReliabilityLogger mLaunchReliabilityLogger;
+    private FeedReliabilityLogger mReliabilityLogger;
     @Mock
     private FeedActionDelegate mActionDelegate;
     @Mock
@@ -172,6 +170,7 @@ public class FeedStreamTest {
     private void setFeatureOverrides(boolean feedLoadingPlaceholderOn) {
         Map<String, Boolean> overrides = new ArrayMap<>();
         overrides.put(ChromeFeatureList.FEED_LOADING_PLACEHOLDER, feedLoadingPlaceholderOn);
+        overrides.put(ChromeFeatureList.FEED_USER_INTERACTION_RELIABILITY_REPORT, true);
         FeatureList.setTestFeatures(overrides);
     }
 
@@ -200,7 +199,7 @@ public class FeedStreamTest {
         mFeedStream.mMakeGURL = url -> JUnitTestGURLs.getGURL(url);
         mRecyclerView = new RecyclerView(mActivity);
         mRecyclerView.setAdapter(mAdapter);
-        mContentManager = new NtpListContentManager();
+        mContentManager = new FeedListContentManager();
         mLayoutManager = new FakeLinearLayoutManager(mActivity);
         mRecyclerView.setLayoutManager(mLayoutManager);
         when(mRenderer.getListLayoutHelper()).thenReturn(mLayoutManager);
@@ -299,7 +298,7 @@ public class FeedStreamTest {
 
         // Bind again with correct headercount.
         mFeedStream.bind(mRecyclerView, mContentManager, null, mSurfaceScope, mRenderer,
-                mLaunchReliabilityLogger, 2);
+                mReliabilityLogger, 2);
 
         // Add different feed content.
         update = FeedUiProto.StreamUpdate.newBuilder()
@@ -322,7 +321,7 @@ public class FeedStreamTest {
         verify(mFeedStreamJniMock).surfaceOpened(anyLong(), any(FeedStream.class));
         // Set handlers in contentmanager.
         assertEquals(2, mContentManager.getContextValues(0).size());
-        verify(mLaunchReliabilityLogger, times(1)).logFeedReloading(anyLong());
+        verify(mReliabilityLogger).onBindStream(anyInt(), anyInt());
     }
 
     @Test
@@ -332,6 +331,7 @@ public class FeedStreamTest {
         verify(mFeedStreamJniMock).surfaceClosed(anyLong(), any(FeedStream.class));
         // Unset handlers in contentmanager.
         assertEquals(0, mContentManager.getContextValues(0).size());
+        verify(mReliabilityLogger).onUnbindStream();
     }
 
     @Test
@@ -468,25 +468,12 @@ public class FeedStreamTest {
 
     @Test
     @SmallTest
-    public void testNavigateTab() {
-        bindToView();
-        FeedStream.FeedSurfaceActionsHandler handler =
-                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
-                        SurfaceActionsHandler.KEY);
-        handler.navigateTab(TEST_URL, null);
-        verify(mActionDelegate)
-                .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.CURRENT_TAB),
-                        any(), eq(false), any(), any());
-    }
-
-    @Test
-    @SmallTest
     public void testOpenUrlSameTab() {
         bindToView();
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.openUrl(OpenMode.SAME_TAB, TEST_URL, new OpenUrlOptions() {});
+        handler.openUrl(OpenMode.SAME_TAB, TEST_URL, DEFAULT_OPEN_URL_OPTIONS);
         verify(mActionDelegate)
                 .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.CURRENT_TAB),
                         any(), eq(false), any(), any());
@@ -549,71 +536,48 @@ public class FeedStreamTest {
     @Test
     @SmallTest
     public void testLogLaunchFinishedOnOpenSuggestionUrl() {
-        when(mLaunchReliabilityLogger.isLaunchInProgress()).thenReturn(true);
         bindToView();
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.openUrl(OpenMode.SAME_TAB, TEST_URL, new OpenUrlOptions() {});
-        verify(mLaunchReliabilityLogger)
-                .logLaunchFinished(anyLong(), eq(DiscoverLaunchResult.CARD_TAPPED.getNumber()));
+        handler.openUrl(OpenMode.SAME_TAB, TEST_URL, DEFAULT_OPEN_URL_OPTIONS);
+        verify(mReliabilityLogger).onOpenCard();
     }
 
     @Test
     @SmallTest
     public void testLogLaunchFinishedOnOpenSuggestionUrlNewTab() {
-        when(mLaunchReliabilityLogger.isLaunchInProgress()).thenReturn(true);
         bindToView();
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, new OpenUrlOptions() {});
+        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, DEFAULT_OPEN_URL_OPTIONS);
 
-        // Don't log "launch finished" if the card was opened in a new tab in the background.
-        verify(mLaunchReliabilityLogger, never())
-                .logLaunchFinished(anyLong(), eq(DiscoverLaunchResult.CARD_TAPPED.getNumber()));
+        // Don't report card opened if the card was opened in a new tab in the background.
+        verify(mReliabilityLogger, never()).onOpenCard();
     }
 
     @Test
     @SmallTest
     public void testLogLaunchFinishedOnOpenUrlNewTab() {
-        when(mLaunchReliabilityLogger.isLaunchInProgress()).thenReturn(true);
         bindToView();
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, new OpenUrlOptions() {});
-        // Don't log "launch finished" if the card was opened in a new tab in the background.
-        verify(mLaunchReliabilityLogger, never())
-                .logLaunchFinished(anyLong(), eq(DiscoverLaunchResult.CARD_TAPPED.getNumber()));
+        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, DEFAULT_OPEN_URL_OPTIONS);
+        // Don't report card opened if the card was opened in a new tab in the background.
+        verify(mReliabilityLogger, never()).onOpenCard();
     }
 
     @Test
     @SmallTest
     public void testLogLaunchFinishedOnOpenSuggestionUrlIncognito() {
-        when(mLaunchReliabilityLogger.isLaunchInProgress()).thenReturn(true);
         bindToView();
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.navigateIncognitoTab(TEST_URL);
-        verify(mLaunchReliabilityLogger)
-                .logLaunchFinished(anyLong(), eq(DiscoverLaunchResult.CARD_TAPPED.getNumber()));
-    }
-
-    @Test
-    @SmallTest
-    public void testNavigateNewTab() {
-        bindToView();
-        FeedStream.FeedSurfaceActionsHandler handler =
-                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
-                        SurfaceActionsHandler.KEY);
-
-        handler.navigateNewTab(TEST_URL, null);
-        verify(mActionDelegate)
-                .openSuggestionUrl(
-                        eq(org.chromium.ui.mojom.WindowOpenDisposition.NEW_BACKGROUND_TAB), any(),
-                        eq(false), any(), any());
+        handler.openUrl(OpenMode.INCOGNITO_TAB, TEST_URL, DEFAULT_OPEN_URL_OPTIONS);
+        verify(mReliabilityLogger).onOpenCard();
     }
 
     @Test
@@ -624,26 +588,11 @@ public class FeedStreamTest {
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
 
-        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, new OpenUrlOptions() {});
+        handler.openUrl(OpenMode.NEW_TAB, TEST_URL, DEFAULT_OPEN_URL_OPTIONS);
         verify(mActionDelegate)
                 .openSuggestionUrl(
                         eq(org.chromium.ui.mojom.WindowOpenDisposition.NEW_BACKGROUND_TAB), any(),
                         eq(false), any(), any());
-    }
-
-    @Test
-    @SmallTest
-    public void testNavigateNewTabInGroup() {
-        bindToView();
-        FeedStream.FeedSurfaceActionsHandler handler =
-                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
-                        SurfaceActionsHandler.KEY);
-
-        handler.navigateNewTabInGroup(TEST_URL, null);
-        verify(mActionDelegate)
-                .openSuggestionUrl(
-                        eq(org.chromium.ui.mojom.WindowOpenDisposition.NEW_BACKGROUND_TAB), any(),
-                        eq(true), any(), any());
     }
 
     @Test
@@ -654,24 +603,11 @@ public class FeedStreamTest {
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
 
-        handler.openUrl(OpenMode.NEW_TAB_IN_GROUP, TEST_URL, new OpenUrlOptions() {});
+        handler.openUrl(OpenMode.NEW_TAB_IN_GROUP, TEST_URL, DEFAULT_OPEN_URL_OPTIONS);
         verify(mActionDelegate)
                 .openSuggestionUrl(
                         eq(org.chromium.ui.mojom.WindowOpenDisposition.NEW_BACKGROUND_TAB), any(),
                         eq(true), any(), any());
-    }
-
-    @Test
-    @SmallTest
-    public void testNavigateIncognitoTab() {
-        bindToView();
-        FeedStream.FeedSurfaceActionsHandler handler =
-                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
-                        SurfaceActionsHandler.KEY);
-        handler.navigateIncognitoTab(TEST_URL);
-        verify(mActionDelegate)
-                .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.OFF_THE_RECORD),
-                        any(), eq(false), any(), any());
     }
 
     @Test
@@ -681,7 +617,7 @@ public class FeedStreamTest {
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.openUrl(OpenMode.INCOGNITO_TAB, TEST_URL, new OpenUrlOptions() {});
+        handler.openUrl(OpenMode.INCOGNITO_TAB, TEST_URL, DEFAULT_OPEN_URL_OPTIONS);
         verify(mActionDelegate)
                 .openSuggestionUrl(eq(org.chromium.ui.mojom.WindowOpenDisposition.OFF_THE_RECORD),
                         any(), eq(false), any(), any());
@@ -921,28 +857,21 @@ public class FeedStreamTest {
     @SmallTest
     public void testAddToReadingList() {
         bindToView();
+        String title = "title";
         FeedStream.FeedSurfaceActionsHandler handler =
                 (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
                         SurfaceActionsHandler.KEY);
-        handler.addToReadingList("title", TEST_URL);
+        handler.openUrl(OpenMode.READ_LATER, TEST_URL, new OpenUrlOptions() {
+            @Override
+            public String getTitle() {
+                return title;
+            }
+        });
 
         verify(mFeedStreamJniMock)
                 .reportOtherUserAction(anyLong(), any(FeedStream.class),
                         eq(FeedUserActionType.TAPPED_ADD_TO_READING_LIST));
-        verify(mActionDelegate).addToReadingList(eq("title"), eq(TEST_URL));
-    }
-
-    @Test
-    @SmallTest
-    public void testNavigateCrow() {
-        bindToView();
-
-        FeedStream.FeedSurfaceActionsHandler handler =
-                (FeedStream.FeedSurfaceActionsHandler) mContentManager.getContextValues(0).get(
-                        SurfaceActionsHandler.KEY);
-        handler.navigateCrow(TEST_URL);
-
-        verify(mActionDelegate).openCrow(TEST_URL);
+        verify(mActionDelegate).addToReadingList(eq(title), eq(TEST_URL));
     }
 
     @Test
@@ -1088,11 +1017,11 @@ public class FeedStreamTest {
         mFeedStream.onStreamUpdated(update.toByteArray());
         assertEquals(2, mContentManager.getItemCount());
         assertEquals("a", mContentManager.getContent(1).getKey());
-        NtpListContentManager.FeedContent content = mContentManager.getContent(1);
+        FeedListContentManager.FeedContent content = mContentManager.getContent(1);
         assertThat(mContentManager.getContent(1),
-                instanceOf(NtpListContentManager.NativeViewContent.class));
-        NtpListContentManager.NativeViewContent nativeViewContent =
-                (NtpListContentManager.NativeViewContent) mContentManager.getContent(1);
+                instanceOf(FeedListContentManager.NativeViewContent.class));
+        FeedListContentManager.NativeViewContent nativeViewContent =
+                (FeedListContentManager.NativeViewContent) mContentManager.getContent(1);
 
         FrameLayout layout = new FrameLayout(mActivity);
 
@@ -1113,11 +1042,11 @@ public class FeedStreamTest {
         mFeedStream.onStreamUpdated(update.toByteArray());
         assertEquals(2, mContentManager.getItemCount());
         assertEquals("a", mContentManager.getContent(1).getKey());
-        NtpListContentManager.FeedContent content = mContentManager.getContent(1);
+        FeedListContentManager.FeedContent content = mContentManager.getContent(1);
         assertThat(mContentManager.getContent(1),
-                instanceOf(NtpListContentManager.NativeViewContent.class));
-        NtpListContentManager.NativeViewContent nativeViewContent =
-                (NtpListContentManager.NativeViewContent) mContentManager.getContent(1);
+                instanceOf(FeedListContentManager.NativeViewContent.class));
+        FeedListContentManager.NativeViewContent nativeViewContent =
+                (FeedListContentManager.NativeViewContent) mContentManager.getContent(1);
 
         FrameLayout layout = new FrameLayout(mActivity);
 
@@ -1278,9 +1207,9 @@ public class FeedStreamTest {
     }
 
     private void createHeaderContent(int number) {
-        List<NtpListContentManager.FeedContent> contentList = new ArrayList<>();
+        List<FeedListContentManager.FeedContent> contentList = new ArrayList<>();
         for (int i = 0; i < number; i++) {
-            contentList.add(new NtpListContentManager.NativeViewContent(
+            contentList.add(new FeedListContentManager.NativeViewContent(
                     0, HEADER_PREFIX + i, new AppCompatTextView(mActivity)));
         }
         mContentManager.addContents(0, contentList);
@@ -1288,7 +1217,7 @@ public class FeedStreamTest {
 
     void bindToView() {
         mFeedStream.bind(mRecyclerView, mContentManager, null, mSurfaceScope, mRenderer,
-                mLaunchReliabilityLogger, mContentManager.getItemCount());
+                mReliabilityLogger, mContentManager.getItemCount());
     }
 
     class StubSnackbarController implements FeedActionsHandler.SnackbarController {

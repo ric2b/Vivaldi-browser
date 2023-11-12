@@ -208,6 +208,8 @@ ImageResource* ImageResource::Fetch(FetchParameters& params,
   auto* resource = To<ImageResource>(
       fetcher->RequestResource(params, ImageResourceFactory(), nullptr));
 
+  resource->GetContent()->SetDiscoveryTime(params.DiscoveryTime());
+
   // If the fetch originated from user agent CSS we should mark it as a user
   // agent resource.
   if (is_user_agent_resource) {

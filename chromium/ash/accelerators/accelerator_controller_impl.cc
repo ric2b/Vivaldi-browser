@@ -33,16 +33,18 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/containers/contains.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/system/sys_info.h"
+#include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "ui/aura/env.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/chromeos/events/keyboard_layout_util.h"
 #include "ui/display/manager/managed_display_info.h"
+#include "ui/events/ash/keyboard_layout_util.h"
 
 namespace ash {
 namespace {
@@ -331,7 +333,12 @@ AcceleratorControllerImpl::AcceleratorControllerImpl(
     AshAcceleratorConfiguration* config)
     : accelerator_manager_(std::make_unique<ui::AcceleratorManager>()),
       accelerator_history_(std::make_unique<AcceleratorHistoryImpl>()),
-      accelerator_configuration_(config) {
+      accelerator_configuration_(config),
+      output_volume_metric_delay_timer_(
+          FROM_HERE,
+          CrasAudioHandler::kMetricsDelayTimerInterval,
+          /*receiver=*/this,
+          &AcceleratorControllerImpl::RecordVolumeSource) {
   if (::features::IsImprovedKeyboardShortcutsEnabled()) {
     // Observe input method changes to determine when to use positional
     // shortcuts. Calling AddObserver will cause InputMethodChanged to be
@@ -429,7 +436,7 @@ bool AcceleratorControllerImpl::OnMenuAccelerator(
   accelerator_history_->StoreCurrentAccelerator(accelerator);
 
   // Menu shouldn't be closed for an invalid accelerator.
-  AcceleratorAction* action_ptr =
+  const AcceleratorAction* action_ptr =
       accelerator_configuration_->FindAcceleratorAction(accelerator);
   return action_ptr && !base::Contains(actions_keeping_menu_open_, *action_ptr);
 }
@@ -446,7 +453,7 @@ AcceleratorHistoryImpl* AcceleratorControllerImpl::GetAcceleratorHistory() {
 bool AcceleratorControllerImpl::DoesAcceleratorMatchAction(
     const ui::Accelerator& accelerator,
     AcceleratorAction action) {
-  AcceleratorAction* action_ptr =
+  const AcceleratorAction* action_ptr =
       accelerator_configuration_->FindAcceleratorAction(accelerator);
   return action_ptr && *action_ptr == action;
 }
@@ -471,20 +478,22 @@ bool AcceleratorControllerImpl::IsReserved(
 
 bool AcceleratorControllerImpl::AcceleratorPressed(
     const ui::Accelerator& accelerator) {
-  AcceleratorAction action =
-      accelerator_configuration_->GetAcceleratorAction(accelerator);
-  if (!CanPerformAction(action, accelerator))
+  const AcceleratorAction* action =
+      accelerator_configuration_->FindAcceleratorAction(accelerator);
+
+  if (!action || !CanPerformAction(*action, accelerator)) {
     return false;
+  }
 
   // Handling the deprecated accelerators (if any) only if action can be
   // performed.
-  if (MaybeDeprecatedAcceleratorPressed(action, accelerator) ==
+  if (MaybeDeprecatedAcceleratorPressed(*action, accelerator) ==
       AcceleratorProcessingStatus::STOP) {
     return false;
   }
 
-  PerformAction(action, accelerator);
-  return ShouldActionConsumeKeyEvent(action);
+  PerformAction(*action, accelerator);
+  return ShouldActionConsumeKeyEvent(*action);
 }
 
 bool AcceleratorControllerImpl::CanHandleAccelerators() const {
@@ -610,7 +619,6 @@ bool AcceleratorControllerImpl::CanPerformAction(
     case DESKS_ACTIVATE_7:
     case DESKS_TOGGLE_ASSIGN_TO_ALL_DESKS:
       return true;
-    case DEBUG_DUMP_CALENDAR_MODEL:
     case DEBUG_KEYBOARD_BACKLIGHT_TOGGLE:
     case DEBUG_MICROPHONE_MUTE_TOGGLE:
     case DEBUG_PRINT_LAYER_HIERARCHY:
@@ -680,7 +688,7 @@ bool AcceleratorControllerImpl::CanPerformAction(
           accelerator, previous_accelerator,
           accelerator_history_->currently_pressed_keys());
     case TOGGLE_CALENDAR:
-      return accelerators::CanToggleCalendar();
+      return true;
     case TOGGLE_CAPS_LOCK:
       return CanHandleToggleCapsLock(
           accelerator, previous_accelerator,
@@ -879,7 +887,6 @@ void AcceleratorControllerImpl::PerformAction(
     case DESKS_TOGGLE_ASSIGN_TO_ALL_DESKS:
       accelerators::ToggleAssignToAllDesk();
       break;
-    case DEBUG_DUMP_CALENDAR_MODEL:
     case DEBUG_KEYBOARD_BACKLIGHT_TOGGLE:
     case DEBUG_MICROPHONE_MUTE_TOGGLE:
     case DEBUG_PRINT_LAYER_HIERARCHY:
@@ -1302,6 +1309,7 @@ void AcceleratorControllerImpl::PerformAction(
       break;
     case VOLUME_DOWN:
       base::RecordAction(UserMetricsAction("Accel_VolumeDown_F9"));
+      output_volume_metric_delay_timer_.Reset();
       accelerators::VolumeDown();
       break;
     case VOLUME_MUTE:
@@ -1311,6 +1319,7 @@ void AcceleratorControllerImpl::PerformAction(
       break;
     case VOLUME_UP:
       base::RecordAction(UserMetricsAction("Accel_VolumeUp_F10"));
+      output_volume_metric_delay_timer_.Reset();
       accelerators::VolumeUp();
       break;
     case WINDOW_CYCLE_SNAP_LEFT:
@@ -1442,6 +1451,10 @@ void AcceleratorControllerImpl::SetPreventProcessingAccelerators(
 
 bool AcceleratorControllerImpl::ShouldPreventProcessingAccelerators() const {
   return prevent_processing_accelerators_;
+}
+
+void AcceleratorControllerImpl::RecordVolumeSource() {
+  accelerators::RecordVolumeSource();
 }
 
 }  // namespace ash

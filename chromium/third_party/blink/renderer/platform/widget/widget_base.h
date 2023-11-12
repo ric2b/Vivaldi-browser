@@ -22,6 +22,7 @@
 #include "third_party/blink/public/mojom/widget/record_content_to_visible_time_request.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
+#include "third_party/blink/renderer/platform/graphics/lcd_text_preference.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -158,7 +159,6 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
       bool defer_status,
       cc::PaintHoldingReason reason,
       absl::optional<cc::PaintHoldingCommitTrigger> trigger) override;
-  void OnPauseRenderingChanged(bool) override;
   void OnCommitRequested() override;
   void DidBeginMainFrame() override;
   void RequestNewLayerTreeFrameSink(
@@ -271,7 +271,7 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   void set_handling_select_range(bool value) { handling_select_range_ = value; }
   bool handling_select_range() const { return handling_select_range_; }
 
-  bool ComputePreferCompositingToLCDText();
+  LCDTextPreference ComputeLCDTextPreference() const;
 
   const viz::LocalSurfaceId& local_surface_id_from_parent() {
     return local_surface_id_from_parent_;
@@ -377,6 +377,11 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   }
 
   bool is_embedded() const { return is_embedded_; }
+
+  // Returns the maximum bounds for buffers allocated for rasterization and
+  // compositing.
+  // Returns null if the compositing stack has not been initialized yet.
+  absl::optional<int> GetMaxRenderBufferBounds() const;
 
  private:
   bool CanComposeInline();
@@ -551,6 +556,11 @@ class PLATFORM_EXPORT WidgetBase : public mojom::blink::Widget,
   // The task runner on the main thread used for compositor tasks.
   scoped_refptr<base::SingleThreadTaskRunner>
       main_thread_compositor_task_runner_;
+
+  // The maximum bounds for buffers allocated for rasterization and compositing.
+  // Set when the compositor is initialized.
+  absl::optional<int> max_render_buffer_bounds_gpu_;
+  absl::optional<int> max_render_buffer_bounds_sw_;
 
   base::WeakPtrFactory<WidgetBase> weak_ptr_factory_{this};
 };

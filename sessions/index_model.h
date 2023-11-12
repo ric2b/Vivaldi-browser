@@ -57,6 +57,8 @@ class Index_Model : public KeyedService {
   Index_Node* items_node() { return items_node_; }
   // Returns the fixed node that holds the timed session backup.
   Index_Node* backup_node() { return backup_node_; }
+  // Returns the fixed node that holds saved persistent tabs.
+  Index_Node* persistent_node() { return persistent_node_; }
 
   content::BrowserContext* browser_context() { return context_; }
 
@@ -65,13 +67,15 @@ class Index_Model : public KeyedService {
   bool loaded_ = false;
   bool loading_failed_ = false;
   base::ObserverList<IndexModelObserver> observers_;
-  content::BrowserContext* context_;
+  const raw_ptr<content::BrowserContext> context_;
   std::unique_ptr<IndexStorage> store_;
   Index_Node root_;
   // Managed by the root node. Provides easy access.
-  Index_Node* items_node_ = nullptr;
+  raw_ptr<Index_Node> items_node_ = nullptr;
   // Managed by the root node. Provides easy access.
-  Index_Node* backup_node_ = nullptr;
+  raw_ptr<Index_Node> backup_node_ = nullptr;
+  // Managed by the root node. Provides easy access.
+  raw_ptr<Index_Node> persistent_node_ = nullptr;
 };
 
 }  // namespace sessions

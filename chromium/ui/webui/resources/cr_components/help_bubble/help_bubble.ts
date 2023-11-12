@@ -31,6 +31,11 @@ const ACTION_BUTTON_ID_PREFIX = 'action-button-';
 export const HELP_BUBBLE_DISMISSED_EVENT = 'help-bubble-dismissed';
 export const HELP_BUBBLE_TIMED_OUT_EVENT = 'help-bubble-timed-out';
 
+export const HELP_BUBBLE_SCROLL_ANCHOR_OPTIONS: ScrollIntoViewOptions = {
+  behavior: 'smooth',
+  block: 'center',
+};
+
 export type HelpBubbleDismissedEvent = CustomEvent<{
   nativeId: any,
   fromActionButton: boolean,
@@ -41,9 +46,7 @@ export type HelpBubbleTimedOutEvent = CustomEvent<{
   nativeId: any,
 }>;
 
-type ResizeListener = (this: Window, ev: UIEvent) => any;
-
-export function debounceEnd(fn: Function, time: number = 50) {
+export function debounceEnd(fn: Function, time: number = 50): () => void {
   let timerId: number|undefined;
   return () => {
     clearTimeout(timerId);
@@ -101,11 +104,9 @@ export class HelpBubbleElement extends PolymerElement {
   progress: Progress|null = null;
   bodyIconName: string|null;
   bodyIconAltText: string;
-  forceCloseButton: boolean;
   timeoutMs: number|null = null;
   timeoutTimerId: number|null = null;
-  debouncedUpdate: ResizeListener|EventListenerOrEventListenerObject|null =
-      null;
+  debouncedUpdate: (() => void)|null = null;
   padding: InsetsF = new InsetsF();
   fixed: boolean = false;
 
@@ -119,6 +120,13 @@ export class HelpBubbleElement extends PolymerElement {
    * The elements are placeholders only.
    */
   private progressData_: void[] = [];
+
+  /**
+   * Watches the offsetParent for resize events, allowing the bubble to be
+   * repositioned in response. Useful for when the content around a help bubble
+   * target can be filtered/expanded/repositioned.
+   */
+  private resizeObserver_: ResizeObserver|null = null;
 
   /**
    * Shows the bubble.
@@ -154,9 +162,8 @@ export class HelpBubbleElement extends PolymerElement {
     }, 50);
 
     this.$.buttonlist.addEventListener(
-        'rendered-item-count-changed',
-        this.debouncedUpdate as EventListenerOrEventListenerObject);
-    window.addEventListener('resize', this.debouncedUpdate as ResizeListener);
+        'rendered-item-count-changed', this.debouncedUpdate);
+    window.addEventListener('resize', this.debouncedUpdate);
 
     if (this.timeoutMs !== null) {
       const timedOutCallback = () => {
@@ -167,6 +174,14 @@ export class HelpBubbleElement extends PolymerElement {
         }));
       };
       this.timeoutTimerId = setTimeout(timedOutCallback, this.timeoutMs);
+    }
+
+    if (this.offsetParent && !this.fixed) {
+      this.resizeObserver_ = new ResizeObserver(() => {
+        this.updatePosition_();
+        this.anchorElement_?.scrollIntoView(HELP_BUBBLE_SCROLL_ANCHOR_OPTIONS);
+      });
+      this.resizeObserver_.observe(this.offsetParent);
     }
   }
 
@@ -179,6 +194,10 @@ export class HelpBubbleElement extends PolymerElement {
    * bubble will go away on hide.
    */
   hide() {
+    if (this.resizeObserver_) {
+      this.resizeObserver_.disconnect();
+      this.resizeObserver_ = null;
+    }
     this.style.display = 'none';
     this.setAttribute('aria-hidden', 'true');
     this.anchorElement_ = null;
@@ -187,11 +206,9 @@ export class HelpBubbleElement extends PolymerElement {
       this.timeoutTimerId = null;
     }
     if (this.debouncedUpdate) {
-      window.removeEventListener(
-          'resize', this.debouncedUpdate as ResizeListener);
+      window.removeEventListener('resize', this.debouncedUpdate);
       this.$.buttonlist.removeEventListener(
-          'rendered-item-count-changed',
-          this.debouncedUpdate as EventListenerOrEventListenerObject);
+          'rendered-item-count-changed', this.debouncedUpdate);
       this.debouncedUpdate = null;
     }
   }
@@ -213,6 +230,18 @@ export class HelpBubbleElement extends PolymerElement {
   }
 
   /**
+   * Focuses a button in the bubble.
+   */
+  override focus() {
+    this.$.buttonlist.render();
+    const button: HTMLElement =
+        this.$.buttons.querySelector('cr-button.default-button') ||
+        this.$.buttons.querySelector('cr-button') || this.$.close;
+    assert(button);
+    button.focus();
+  }
+
+  /**
    * Returns whether the default button is leading (true on Windows) vs trailing
    * (all other platforms).
    */
@@ -228,6 +257,25 @@ export class HelpBubbleElement extends PolymerElement {
         fromActionButton: false,
       },
     }));
+  }
+
+  /**
+   * Handles ESC keypress (dismiss bubble) and prevents it from propagating up
+   * to parent elements.
+   */
+  private onKeyDown_(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      this.dismiss_();
+    }
+  }
+
+  /**
+   * Prevent event propagation. Attach to any event that should not bubble up
+   * out of the help bubble.
+   */
+  private blockPropagation_(e: Event) {
+    e.stopPropagation();
   }
 
   private getProgressClass_(index: number): string {
@@ -248,11 +296,6 @@ export class HelpBubbleElement extends PolymerElement {
   private shouldShowBodyInMain_(progress: Progress|null, titleText: string):
       boolean {
     return !!progress || !!titleText;
-  }
-
-  private shouldShowCloseButton_(
-      buttons: HelpBubbleButtonParams[], forceCloseButton: boolean): boolean {
-    return buttons.length === 0 || forceCloseButton;
   }
 
   private shouldShowBodyIcon_(bodyIconName: string): boolean {

@@ -14,10 +14,13 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
+#include "base/process/launch.h"
+#include "base/process/process.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -26,6 +29,7 @@
 #include "base/system/sys_info.h"
 #include "base/test/bind.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/platform_thread.h"
 #include "base/win/atl.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
@@ -57,29 +61,6 @@ CSecurityDesc GetEveryoneDaclSecurityDescriptor(ACCESS_MASK accessmask) {
   sd.SetDacl(dacl);
   sd.MakeAbsolute();
   return sd;
-}
-
-[[nodiscard]] bool CreateService(const std::wstring& service_name,
-                                 const std::wstring& display_name,
-                                 const std::wstring& command_line) {
-  SC_HANDLE scm = ::OpenSCManager(
-      nullptr, nullptr, SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE);
-  if (!scm) {
-    return false;
-  }
-
-  SC_HANDLE service = ::CreateService(
-      scm, service_name.c_str(), display_name.c_str(),
-      DELETE | SERVICE_QUERY_CONFIG | SERVICE_CHANGE_CONFIG,
-      SERVICE_WIN32_OWN_PROCESS, SERVICE_DEMAND_START, SERVICE_ERROR_NORMAL,
-      command_line.c_str(), nullptr, nullptr, nullptr, nullptr, nullptr);
-  if (!service && ::GetLastError() != ERROR_SERVICE_EXISTS) {
-    return false;
-  }
-
-  ::CloseServiceHandle(service);
-  ::CloseServiceHandle(scm);
-  return true;
 }
 
 }  // namespace
@@ -352,12 +333,6 @@ TEST(WinUtil, CreateSecureTempDir) {
   absl::optional<base::ScopedTempDir> temp_dir = CreateSecureTempDir();
   EXPECT_TRUE(temp_dir);
   EXPECT_TRUE(temp_dir->IsValid());
-
-  base::FilePath program_files_dir;
-  EXPECT_TRUE(
-      base::PathService::Get(base::DIR_PROGRAM_FILES, &program_files_dir));
-  EXPECT_EQ(program_files_dir.IsParent(temp_dir->GetPath()),
-            !!::IsUserAnAdmin());
 }
 
 TEST(WinUtil, SignalShutdownEvent) {
@@ -375,10 +350,44 @@ TEST(WinUtil, SignalShutdownEvent) {
       << "Unexpected shutdown event signaled";
 }
 
-TEST(WinUtil, StopGoogleUpdateProcesses) {
-  // TODO(crbug.com/1290496) perhaps some comprehensive tests for
-  // `StopGoogleUpdateProcesses`?
-  EXPECT_TRUE(StopGoogleUpdateProcesses(GetTestScope()));
+TEST(WinUtil, StopProcessesUnderPath) {
+  base::FilePath exe_dir;
+  ASSERT_TRUE(base::PathService::Get(base::DIR_EXE, &exe_dir));
+  exe_dir = exe_dir.AppendASCII(test::GetTestName());
+
+  base::CommandLine command_line =
+      GetTestProcessCommandLine(GetTestScope(), test::GetTestName());
+  command_line.AppendSwitchASCII(
+      updater::kTestSleepSecondsSwitch,
+      base::NumberToString(TestTimeouts::action_timeout().InSeconds() / 4));
+
+  std::vector<base::Process> processes;
+  for (const base::FilePath& dir :
+       {exe_dir, exe_dir.Append(L"1"), exe_dir.Append(L"2")}) {
+    ASSERT_TRUE(base::CreateDirectory(dir));
+
+    for (const std::wstring exe_name : {L"random1.exe", L"random2.exe"}) {
+      const base::FilePath exe(dir.Append(exe_name));
+      ASSERT_TRUE(base::CopyFile(command_line.GetProgram(), exe));
+
+      base::Process process = base::LaunchProcess(
+          base::StrCat(
+              {base::CommandLine::QuoteForCommandLineToArgvW(exe.value()), L" ",
+               command_line.GetArgumentsString()}),
+          {});
+      ASSERT_TRUE(process.IsValid());
+      processes.push_back(std::move(process));
+    }
+  }
+
+  StopProcessesUnderPath(exe_dir, TestTimeouts::action_timeout());
+  base::PlatformThread::Sleep(TestTimeouts::tiny_timeout());
+
+  for (const base::Process& process : processes) {
+    EXPECT_FALSE(process.IsRunning()) << process.Pid();
+  }
+
+  EXPECT_TRUE(base::DeletePathRecursively(exe_dir));
 }
 
 TEST(WinUtil, IsGuid) {
@@ -407,7 +416,7 @@ TEST(WinUtil, IsGuid) {
 
 TEST(WinUtil, ForEachRegistryRunValueWithPrefix) {
   constexpr int kRunEntries = 6;
-  constexpr wchar_t kRunEntryPrefix[] = L"win_util_unittest";
+  const std::wstring kRunEntryPrefix(base::ASCIIToWide(test::GetTestName()));
 
   base::win::RegKey key;
   ASSERT_EQ(key.Open(HKEY_CURRENT_USER, REGSTR_PATH_RUN, KEY_READ | KEY_WRITE),
@@ -434,7 +443,7 @@ TEST(WinUtil, ForEachRegistryRunValueWithPrefix) {
 
 TEST(WinUtil, DeleteRegValue) {
   constexpr int kRegValues = 6;
-  constexpr wchar_t kRegValuePrefix[] = L"win_util_unittest";
+  const std::wstring kRegValuePrefix(base::ASCIIToWide(test::GetTestName()));
 
   base::win::RegKey key;
   ASSERT_EQ(key.Open(HKEY_CURRENT_USER, REGSTR_PATH_RUN, KEY_READ | KEY_WRITE),
@@ -459,7 +468,7 @@ TEST(WinUtil, ForEachServiceWithPrefix) {
   }
 
   constexpr int kNumServices = 6;
-  constexpr wchar_t kServiceNamePrefix[] = L"win_util_unittest";
+  const std::wstring kServiceNamePrefix(base::ASCIIToWide(test::GetTestName()));
 
   for (int count = 0; count < kNumServices; ++count) {
     std::wstring service_name(kServiceNamePrefix);
@@ -486,7 +495,7 @@ TEST(WinUtil, DeleteService) {
   }
 
   constexpr int kNumServices = 6;
-  constexpr wchar_t kServiceNamePrefix[] = L"win_util_unittest";
+  const std::wstring kServiceNamePrefix(base::ASCIIToWide(test::GetTestName()));
 
   for (int count = 0; count < kNumServices; ++count) {
     std::wstring service_name(kServiceNamePrefix);
@@ -495,6 +504,14 @@ TEST(WinUtil, DeleteService) {
         CreateService(service_name, service_name, L"C:\\temp\\temp.exe"));
     EXPECT_TRUE(DeleteService(service_name));
   }
+}
+
+TEST(WinUtil, LogClsidEntries) {
+  CLSID clsid = {};
+  EXPECT_HRESULT_SUCCEEDED(
+      ::CLSIDFromProgID(L"InternetExplorer.Application", &clsid));
+
+  LogClsidEntries(clsid);
 }
 
 }  // namespace updater

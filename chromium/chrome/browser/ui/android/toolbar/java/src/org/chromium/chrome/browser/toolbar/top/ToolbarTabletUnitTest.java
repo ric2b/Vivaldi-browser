@@ -17,7 +17,6 @@ import android.view.View;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -31,16 +30,16 @@ import org.robolectric.Shadows;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadows.ShadowToast;
 
-import org.chromium.base.FeatureList;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinatorTablet;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
+import org.chromium.chrome.browser.omnibox.OmniboxFeatures;
 import org.chromium.chrome.browser.omnibox.status.StatusCoordinator;
 import org.chromium.chrome.browser.toolbar.HomeButton;
+import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarAllowCaptureReason;
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarBlockCaptureReason;
@@ -87,9 +86,9 @@ public final class ToolbarTabletUnitTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         mActivity = Robolectric.buildActivity(Activity.class).setup().get();
-        mActivity.setTheme(org.chromium.chrome.tab_ui.R.style.Theme_BrowserUI_DayNight);
+        mActivity.setTheme(R.style.Theme_BrowserUI_DayNight);
         mToolbarTablet = (ToolbarTablet) mActivity.getLayoutInflater().inflate(
-                org.chromium.chrome.R.layout.toolbar_tablet, null);
+                R.layout.toolbar_tablet, null);
         when(mLocationBar.getTabletCoordinator()).thenReturn(mLocationBarTablet);
         mToolbarTablet.setLocationBarCoordinator(mLocationBar);
         LocationBarLayout locationBarLayout = mToolbarTablet.findViewById(R.id.location_bar);
@@ -102,11 +101,6 @@ public final class ToolbarTabletUnitTest {
         mForwardButton = mToolbarTablet.findViewById(R.id.forward_button);
         mReloadingButton = mToolbarTablet.findViewById(R.id.refresh_button);
         mJniMocker.mock(ToastManagerJni.TEST_HOOKS, mToastManagerJni);
-    }
-
-    @After
-    public void tearDown() {
-        disableGridTabSwitcher();
     }
 
     @Test
@@ -125,7 +119,7 @@ public final class ToolbarTabletUnitTest {
 
     @Test
     @EnableFeatures(ChromeFeatureList.TAB_STRIP_REDESIGN)
-    public void testButtonPositionForTSR() {
+    public void testButtonPosition_TSR() {
         mToolbarTablet.onFinishInflate();
         assertEquals("Back button position is not as expected for Tab Strip Redesign", mBackButton,
                 mToolbarTabletLayout.getChildAt(0));
@@ -135,6 +129,29 @@ public final class ToolbarTabletUnitTest {
                 mReloadingButton, mToolbarTabletLayout.getChildAt(2));
         assertEquals("Home button position is not as expected for Tab Strip Redesign", mHomeButton,
                 mToolbarTabletLayout.getChildAt(3));
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.TAB_STRIP_REDESIGN)
+    public void testButtonPosition_TSR_DisableToolbarReordering() {
+        OmniboxFeatures.TAB_STRIP_REDESIGN_DISABLE_TOOLBAR_REORDERING.setForTesting(true);
+
+        // Resetup for feature param to enable before Native.
+        setUp();
+        mToolbarTablet.onFinishInflate();
+
+        assertEquals("Home button position is not as expected for TSR disable Toolbar reordering",
+                mHomeButton, mToolbarTabletLayout.getChildAt(0));
+        assertEquals("Back button position is not as expected for TSR disable Toolbar reordering",
+                mBackButton, mToolbarTabletLayout.getChildAt(1));
+        assertEquals(
+                "Forward button position is not as expected for TSR disable Toolbar reordering",
+                mForwardButton, mToolbarTabletLayout.getChildAt(2));
+        assertEquals(
+                "Reloading button position is not as expected for TSR disable Toolbar reordering",
+                mReloadingButton, mToolbarTabletLayout.getChildAt(3));
+
+        OmniboxFeatures.TAB_STRIP_REDESIGN_DISABLE_TOOLBAR_REORDERING.setForTesting(false);
     }
 
     @Test
@@ -201,10 +218,8 @@ public final class ToolbarTabletUnitTest {
         }
     }
 
-    @EnableFeatures(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS)
     @Test
-    public void testSetTabSwitcherPolishModeOff_toolbarStillVisible() {
-        enableGridTabSwitcher(true);
+    public void testSetTabSwitcherModeOff_toolbarStillVisible() {
         assertEquals("Initial Toolbar visibility is not as expected", View.VISIBLE,
                 mToolbarTablet.getVisibility());
         // Call
@@ -214,10 +229,8 @@ public final class ToolbarTabletUnitTest {
         verify(mLocationBar).setUrlBarFocusable(true);
     }
 
-    @EnableFeatures(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS)
     @Test
-    public void testSetTabSwitcherPolishModeOn_toolbarStillVisible() {
-        enableGridTabSwitcher(true);
+    public void testSetTabSwitcherModeOn_toolbarStillVisible() {
         assertEquals("Initial Toolbar visibility is not as expected", View.VISIBLE,
                 mToolbarTablet.getVisibility());
         // Call
@@ -349,19 +362,5 @@ public final class ToolbarTabletUnitTest {
         assertTrue("Toast is not as expected",
                 ShadowToast.showedCustomToast(
                         mActivity.getResources().getString(stringId), R.id.toast_text));
-    }
-
-    private void enableGridTabSwitcher(boolean enablePolish) {
-        FeatureList.TestValues testValues = new FeatureList.TestValues();
-        testValues.addFeatureFlagOverride(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS, true);
-        testValues.addFieldTrialParamOverride(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS,
-                "enable_launch_polish", String.valueOf(enablePolish));
-        FeatureList.setTestValues(testValues);
-    }
-
-    private void disableGridTabSwitcher() {
-        FeatureList.TestValues testValues = new FeatureList.TestValues();
-        testValues.addFeatureFlagOverride(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS, false);
-        FeatureList.setTestValues(testValues);
     }
 }

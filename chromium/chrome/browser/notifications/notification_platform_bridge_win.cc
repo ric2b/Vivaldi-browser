@@ -4,11 +4,14 @@
 
 #include "chrome/browser/notifications/notification_platform_bridge_win.h"
 
-#include <memory>
-#include <utility>
-
 #include <objbase.h>
 #include <wrl/event.h>
+
+#include <map>
+#include <memory>
+#include <set>
+#include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -168,8 +171,7 @@ class NotificationPlatformBridgeWinImpl
  public:
   explicit NotificationPlatformBridgeWinImpl(
       scoped_refptr<base::SequencedTaskRunner> notification_task_runner)
-      : com_functions_initialized_(base::win::ResolveCoreWinRTDelayload()),
-        notification_task_runner_(std::move(notification_task_runner)),
+      : notification_task_runner_(std::move(notification_task_runner)),
         image_retainer_(std::make_unique<NotificationImageRetainer>()) {
     // Delete any remaining temp files in the image folder from the previous
     // sessions.
@@ -705,8 +707,7 @@ class NotificationPlatformBridgeWinImpl
         InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled();
 
     int status = static_cast<int>(SetReadyCallbackStatus::kSuccess);
-    bool enabled = com_functions_initialized_ && activator_registered &&
-                   shortcut_installed;
+    bool enabled = activator_registered && shortcut_installed;
 
     if (!enabled) {
       if (!shortcut_installed) {
@@ -717,8 +718,6 @@ class NotificationPlatformBridgeWinImpl
         status |= static_cast<int>(
             SetReadyCallbackStatus::kComServerMisconfiguration);
       }
-      if (!com_functions_initialized_)
-        status |= static_cast<int>(SetReadyCallbackStatus::kComNotInitialized);
     }
 
     LogSetReadyCallbackStatus(static_cast<SetReadyCallbackStatus>(status));
@@ -882,9 +881,6 @@ class NotificationPlatformBridgeWinImpl
   std::map<NotificationPlatformBridgeWin::NotificationKeyType,
            NotificationLaunchId>
       displayed_notifications_;
-
-  // Whether the required functions from combase.dll have been loaded.
-  const bool com_functions_initialized_;
 
   // The task runner running notification related tasks.
   scoped_refptr<base::SequencedTaskRunner> notification_task_runner_;

@@ -51,7 +51,7 @@ class SortComparator {
   }
 
  private:
-  icu::Collator* collator_;
+  const raw_ptr<icu::Collator> collator_;
 };
 
 const NoteNode* GetNodeByID(const NoteNode* node, int64_t id) {

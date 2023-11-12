@@ -6,7 +6,9 @@
 #define ASH_STYLE_PILL_BUTTON_H_
 
 #include "ash/ash_export.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/color/color_id.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/metadata/view_factory.h"
 
@@ -20,6 +22,7 @@ class ASH_EXPORT PillButton : public views::LabelButton {
   METADATA_HEADER(PillButton);
 
   static constexpr int kPillButtonHorizontalSpacing = 16;
+  static constexpr int kPaddingReductionForIcon = 4;
 
   // The PillButton style is defined with 4 features:
   // 1. Color variant defines which background, text, and icon color scheme to
@@ -157,18 +160,13 @@ class ASH_EXPORT PillButton : public views::LabelButton {
     kAccentFloatingWithoutIcon = kAccent | kFloating,
   };
 
-  // Keeps the button in light mode if `use_light_colors` is true.
-  // InstallRoundRectHighlightPathGenerator for the button only if
-  // `rounded_highlight_path` is true. This is special handlings for buttons
-  // inside the old notifications UI, might can be removed once
-  // `kNotificationsRefresh` is fully launched.
-  explicit PillButton(PressedCallback callback = PressedCallback(),
-                      const std::u16string& text = std::u16string(),
-                      Type type = Type::kDefaultWithoutIcon,
-                      const gfx::VectorIcon* icon = nullptr,
-                      int horizontal_spacing = kPillButtonHorizontalSpacing,
-                      bool use_light_colors = false,
-                      bool rounded_highlight_path = true);
+  explicit PillButton(
+      PressedCallback callback = PressedCallback(),
+      const std::u16string& text = std::u16string(),
+      Type type = Type::kDefaultWithoutIcon,
+      const gfx::VectorIcon* icon = nullptr,
+      int horizontal_spacing = kPillButtonHorizontalSpacing,
+      int padding_reduction_for_icon = kPaddingReductionForIcon);
   PillButton(const PillButton&) = delete;
   PillButton& operator=(const PillButton&) = delete;
   ~PillButton() override;
@@ -185,8 +183,11 @@ class ASH_EXPORT PillButton : public views::LabelButton {
   // this only when the button wants to have different colors from the default
   // ones.
   void SetBackgroundColor(const SkColor background_color);
+  void SetBackgroundColorId(ui::ColorId background_color_id);
   void SetButtonTextColor(const SkColor text_color);
+  void SetButtonTextColorId(ui::ColorId text_color_id);
   void SetIconColor(const SkColor icon_color);
+  void SetIconColorId(ui::ColorId icon_color_id);
   void SetPillButtonType(Type type);
 
   // Sets the button's label to use the default label font, which is smaller
@@ -206,24 +207,22 @@ class ASH_EXPORT PillButton : public views::LabelButton {
   int GetHorizontalSpacingWithIcon() const;
 
   Type type_;
-  const gfx::VectorIcon* const icon_;
-
-  // True if the button wants to use light colors when the D/L mode feature is
-  // not enabled. Note, can be removed when D/L mode feature is fully launched.
-  bool use_light_colors_;
+  const raw_ptr<const gfx::VectorIcon, ExperimentalAsh> icon_;
 
   // Horizontal spacing of this button. `kPillButtonHorizontalSpacing` will be
   // set as the default value.
   int horizontal_spacing_;
 
-  // The flag that indicates if highlight path is used for focus ring.
-  const bool rounded_highlight_path_;
+  // The padding reduced by icon.
+  int padding_reduction_for_icon_;
 
-  // Customized value for the button's background color, text's color and icon's
-  // color.
+  // Custom colors and color IDs.
   absl::optional<SkColor> background_color_;
+  absl::optional<ui::ColorId> background_color_id_;
   absl::optional<SkColor> text_color_;
+  absl::optional<ui::ColorId> text_color_id_;
   absl::optional<SkColor> icon_color_;
+  absl::optional<ui::ColorId> icon_color_id_;
 
   // Called to update background color when the button is enabled/disabled.
   base::CallbackListSubscription enabled_changed_subscription_;
@@ -231,8 +230,11 @@ class ASH_EXPORT PillButton : public views::LabelButton {
 
 BEGIN_VIEW_BUILDER(ASH_EXPORT, PillButton, views::LabelButton)
 VIEW_BUILDER_PROPERTY(const SkColor, BackgroundColor)
-VIEW_BUILDER_PROPERTY(const SkColor, TextColor)
+VIEW_BUILDER_PROPERTY(ui::ColorId, BackgroundColorId)
+VIEW_BUILDER_PROPERTY(const SkColor, ButtonTextColor)
+VIEW_BUILDER_PROPERTY(ui::ColorId, ButtonTextColorId)
 VIEW_BUILDER_PROPERTY(const SkColor, IconColor)
+VIEW_BUILDER_PROPERTY(ui::ColorId, IconColorId)
 VIEW_BUILDER_PROPERTY(PillButton::Type, PillButtonType)
 END_VIEW_BUILDER
 

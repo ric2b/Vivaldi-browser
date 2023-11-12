@@ -35,7 +35,6 @@ using ContentLayerType = AshColorProvider::ContentLayerType;
 namespace {
 
 constexpr auto kQsSliderRowPadding = gfx::Insets::TLBR(0, 12, 4, 16);
-constexpr int kQsSliderViewSpacing = 8;
 constexpr auto kQsSliderIconInsets = gfx::Insets::VH(0, 10);
 constexpr auto kQsSliderBorder = gfx::Insets::TLBR(0, 4, 0, 16);
 
@@ -67,7 +66,10 @@ UnifiedSliderView::UnifiedSliderView(views::Button::PressedCallback callback,
                                      const gfx::VectorIcon& icon,
                                      int accessible_name_id,
                                      bool read_only,
-                                     QuickSettingsSlider::Style slider_style) {
+                                     QuickSettingsSlider::Style slider_style)
+    : icon_(&icon),
+      accessible_name_id_(accessible_name_id),
+      callback_(callback) {
   if (!features::IsQsRevampEnabled()) {
     button_ = AddChildView(std::make_unique<IconButton>(
         std::move(callback), IconButton::Type::kMedium, &icon,
@@ -136,8 +138,9 @@ UnifiedSliderView::UnifiedSliderView(views::Button::PressedCallback callback,
 
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, kQsSliderRowPadding,
-      kQsSliderViewSpacing));
-  layout->SetFlexForView(AddChildView(std::move(container)), /*flex=*/1);
+      kSliderChildrenViewSpacing));
+  container_ = AddChildView(std::move(container));
+  layout->SetFlexForView(container_, /*flex=*/1);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
 
@@ -153,17 +156,27 @@ void UnifiedSliderView::SetSliderValue(float value, bool by_user) {
   // It should allow the case GetWidget() returning null, so that initial
   // position can be properly set by controllers before the view is attached to
   // a widget.
-  if (GetWidget() && GetWidget()->IsClosed())
+  if (GetWidget() && GetWidget()->IsClosed()) {
     return;
+  }
 
   slider_->SetValue(value);
-  if (by_user)
+  if (by_user) {
     slider_->SetEnableAccessibilityEvents(true);
+  }
 }
 
 UnifiedSliderView::~UnifiedSliderView() = default;
 
 void UnifiedSliderView::CreateToastLabel() {
+  if (features::IsQsRevampEnabled()) {
+    button_ = AddChildView(std::make_unique<IconButton>(
+        std::move(callback_), IconButton::Type::kMedium, icon_,
+        accessible_name_id_,
+        /*is_togglable=*/true,
+        /*has_border=*/true));
+    container_->SetVisible(false);
+  }
   toast_label_ = AddChildView(std::make_unique<views::Label>());
   TrayPopupUtils::SetLabelFontList(toast_label_,
                                    TrayPopupUtils::FontStyle::kPodMenuHeader);

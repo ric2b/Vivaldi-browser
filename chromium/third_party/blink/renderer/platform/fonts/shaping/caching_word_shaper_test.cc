@@ -25,7 +25,6 @@ class CachingWordShaperTest : public FontTestBase {
 
     font = Font(font_description);
     ASSERT_TRUE(font.CanShapeWordByWord());
-    fallback_fonts = nullptr;
     cache = std::make_unique<ShapeCache>();
   }
 
@@ -33,7 +32,6 @@ class CachingWordShaperTest : public FontTestBase {
   FontDescription font_description;
   Font font;
   std::unique_ptr<ShapeCache> cache;
-  HashSet<const SimpleFontData*>* fallback_fonts;
   unsigned start_index = 0;
   unsigned num_glyphs = 0;
   hb_script_t script = HB_SCRIPT_INVALID;
@@ -346,38 +344,18 @@ TEST_F(CachingWordShaperTest, SegmentHangulToneMark) {
   ASSERT_FALSE(iterator.Next(&word_result));
 }
 
-TEST_F(CachingWordShaperTest, TextOrientationFallbackShouldNotInFallbackList) {
-  const UChar kStr[] = {
-      'A',  // code point for verticalRightOrientationFontData()
-      // Ideally we'd like to test uprightOrientationFontData() too
-      // using code point such as U+3042, but it'd fallback to system
-      // fonts as the glyph is missing.
-      0x0};
-  TextRun text_run(kStr, 1);
-
-  font_description.SetOrientation(FontOrientation::kVerticalMixed);
-  Font vertical_mixed_font = Font(font_description);
-  ASSERT_TRUE(vertical_mixed_font.CanShapeWordByWord());
-
-  CachingWordShaper shaper(vertical_mixed_font);
-  gfx::RectF glyph_bounds;
-  HashSet<const SimpleFontData*> fallback_fonts;
-  ASSERT_GT(shaper.Width(text_run, &fallback_fonts, &glyph_bounds), 0);
-  EXPECT_EQ(0u, fallback_fonts.size());
-}
-
 TEST_F(CachingWordShaperTest, GlyphBoundsWithSpaces) {
   CachingWordShaper shaper(font);
 
   TextRun periods(reinterpret_cast<const LChar*>(".........."), 10);
   gfx::RectF periods_glyph_bounds;
-  float periods_width = shaper.Width(periods, nullptr, &periods_glyph_bounds);
+  float periods_width = shaper.Width(periods, &periods_glyph_bounds);
 
   TextRun periods_and_spaces(
       reinterpret_cast<const LChar*>(". . . . . . . . . ."), 19);
   gfx::RectF periods_and_spaces_glyph_bounds;
-  float periods_and_spaces_width = shaper.Width(
-      periods_and_spaces, nullptr, &periods_and_spaces_glyph_bounds);
+  float periods_and_spaces_width =
+      shaper.Width(periods_and_spaces, &periods_and_spaces_glyph_bounds);
 
   // The total width of periods and spaces should be longer than the width of
   // periods alone.

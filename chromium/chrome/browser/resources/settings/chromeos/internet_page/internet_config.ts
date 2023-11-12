@@ -21,9 +21,8 @@ import {htmlEscape} from 'chrome://resources/js/util_ts.js';
 import {NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {SettingChangeValue} from '../../mojom-webui/search/user_action_recorder.mojom-webui.js';
-import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {recordSettingChange} from '../metrics_recorder.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 
 import {getTemplate} from './internet_config.html.js';
 
@@ -146,35 +145,33 @@ export class InternetConfigElement extends InternetConfigElementBase {
     return this.i18n('networkErrorUnknown');
   }
 
-  private onCancelTap_(): void {
+  private onCancelClick_(): void {
     this.close();
   }
 
   /**
-   * Note that onSaveTap_ will only be called if the user explicitly clicks
+   * Note that onSaveClick_ will only be called if the user explicitly clicks
    * on the 'Save' button.
    */
-  private onSaveTap_(): void {
+  private onSaveClick_(): void {
     this.$.networkConfig.save();
   }
 
   /**
-   * Note that onConnectTap_ will only be called if the user explicitly clicks
+   * Note that onConnectClick_ will only be called if the user explicitly clicks
    * on the 'Connect' button.
    */
-  private onConnectTap_(): void {
+  private onConnectClick_(): void {
     this.$.networkConfig.connect();
   }
 
   /**
    * A connect or save may be initiated within the NetworkConfigElement instead
-   * of onConnectTap_() or onSaveTap_() (e.g on an enter event).
+   * of onConnectClick_() or onSaveClick_() (e.g on an enter event).
    */
   private onPropertiesSet_(): void {
     if (this.type === OncMojo.getNetworkTypeString(NetworkType.kWiFi)) {
-      recordSettingChange(
-          Setting.kWifiAddNetwork,
-          {stringValue: this.guid} as SettingChangeValue);
+      recordSettingChange(Setting.kWifiAddNetwork, {stringValue: this.guid});
     } else {
       recordSettingChange();
     }

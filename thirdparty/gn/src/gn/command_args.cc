@@ -212,7 +212,7 @@ int ListArgs(const std::string& build_dir) {
   Args::ValueWithOverrideMap args =
       setup->build_settings().build_args().GetAllArguments();
   std::string list_value =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(kSwitchList);
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueString(kSwitchList);
   if (!list_value.empty()) {
     // List just the one specified as the parameter to --list.
     auto found = args.find(list_value);

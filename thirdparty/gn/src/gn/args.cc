@@ -280,23 +280,31 @@ Args::ValueWithOverrideMap Args::GetAllArguments() const {
 
   std::lock_guard<std::mutex> lock(lock_);
 
-  // Sort the keys from declared_arguments_per_toolchain_ so
-  // the return value will be deterministic.
-  std::vector<const Settings*> keys;
-  keys.reserve(declared_arguments_per_toolchain_.size());
+  // Sort the toolchains from declared_arguments_per_toolchain_ so
+  // the return value will be deterministic. Always prioritize
+  // the default toolchain.
+  std::vector<const Settings*> toolchains;
+  toolchains.reserve(declared_arguments_per_toolchain_.size());
   for (const auto& map_pair : declared_arguments_per_toolchain_) {
-    keys.push_back(map_pair.first);
+    toolchains.push_back(map_pair.first);
   }
-  std::sort(keys.begin(), keys.end(),
+  std::sort(toolchains.begin(), toolchains.end(),
             [](const Settings* a, const Settings* b) -> bool {
+              // NOTE: There can be multiple default toolchains in the map!
+              // which happens when declare_args() blocks are found in args.gn
+              // or some of its imports. This uses a Settings instance with
+              // an empty label, where `is_default()` returns true.
+              if (a->is_default() != b->is_default())
+                return a->is_default();
               return a->toolchain_label() < b->toolchain_label();
             });
 
   // Default values.
-  for (const auto& key : keys) {
-    const auto& value = declared_arguments_per_toolchain_[key];
-    for (const auto& arg : value)
+  for (const auto& toolchain : toolchains) {
+    const auto& value_map = declared_arguments_per_toolchain_[toolchain];
+    for (const auto& arg : value_map) {
       result.insert(std::make_pair(arg.first, ValueWithOverride(arg.second)));
+    }
   }
 
   // Merge in overrides.

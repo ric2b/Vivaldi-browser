@@ -4,12 +4,12 @@
 
 package org.chromium.components.browser_ui.util;
 
+import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewTreeObserver;
 
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.lang.ref.WeakReference;
 
@@ -61,7 +61,7 @@ public class FirstDrawDetector {
                 onFirstDraw();
                 // The draw listener can't be removed from within the callback, so remove it
                 // asynchronously.
-                PostTask.postTask(UiThreadTaskTraits.BEST_EFFORT, () -> {
+                PostTask.postTask(TaskTraits.UI_BEST_EFFORT, () -> {
                     if (mView.get() == null) return;
                     mView.get().getViewTreeObserver().removeOnDrawListener(this);
                 });
@@ -84,7 +84,8 @@ public class FirstDrawDetector {
                         // The pre-draw listener will run both when the screen is on or off, but the
                         // view might not have been drawn yet at this point. Trigger the first paint
                         // at the next frame.
-                        PostTask.postTask(TaskTraits.CHOREOGRAPHER_FRAME, () -> { onFirstDraw(); });
+                        Choreographer.getInstance().postFrameCallback(
+                                (long frameTimeNanos) -> { onFirstDraw(); });
                         if (mView.get() != null) {
                             mView.get().getViewTreeObserver().removeOnPreDrawListener(this);
                         }

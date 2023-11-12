@@ -10,6 +10,7 @@
 #include "base/barrier_closure.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -28,9 +29,7 @@
 #include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
-#include "chrome/browser/ash/guest_os/public/guest_os_wayland_server.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/ash/policy/handlers/powerwash_requirements_checker.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/component_updater/fake_cros_component_manager.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
@@ -48,13 +47,12 @@
 #include "chromeos/ash/components/dbus/cicerone/cicerone_service.pb.h"
 #include "chromeos/ash/components/dbus/cicerone/fake_cicerone_client.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
-#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/ash/components/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/ash/components/dbus/dlcservice/dlcservice_client.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
-#include "chromeos/ash/components/dbus/userdataauth/fake_cryptohome_misc_client.h"
+#include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "chromeos/ash/components/disks/mock_disk_mount_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
@@ -222,13 +220,6 @@ class CrostiniManagerTest : public testing::Test {
     g_browser_process->platform_part()
         ->InitializeSchedulerConfigurationManager();
 
-    guest_os::GuestOsService::GetForProfile(profile())
-        ->WaylandServer()
-        ->OverrideServerForTesting(vm_tools::launch::TERMINA, nullptr, {});
-
-    ash::CryptohomeMiscClient::InitializeFake();
-    ash::FakeCryptohomeMiscClient::Get()->set_requires_powerwash(false);
-    policy::PowerwashRequirementsChecker::InitializeSynchronouslyForTesting();
     TestingBrowserProcess::GetGlobal()->SetSystemNotificationHelper(
         std::make_unique<SystemNotificationHelper>());
 
@@ -241,7 +232,6 @@ class CrostiniManagerTest : public testing::Test {
   }
 
   void TearDown() override {
-    ash::CryptohomeMiscClient::Shutdown();
     g_browser_process->platform_part()->ShutdownSchedulerConfigurationManager();
     scoped_user_manager_.reset();
     crostini_manager_->Shutdown();
@@ -263,14 +253,15 @@ class CrostiniManagerTest : public testing::Test {
         user_manager::UserManager::Get());
   }
 
-  ash::FakeCiceroneClient* fake_cicerone_client_;
-  ash::FakeConciergeClient* fake_concierge_client_;
-  ash::FakeAnomalyDetectorClient* fake_anomaly_detector_client_;
+  raw_ptr<ash::FakeCiceroneClient, ExperimentalAsh> fake_cicerone_client_;
+  raw_ptr<ash::FakeConciergeClient, ExperimentalAsh> fake_concierge_client_;
+  raw_ptr<ash::FakeAnomalyDetectorClient, ExperimentalAsh>
+      fake_anomaly_detector_client_;
 
   std::unique_ptr<base::RunLoop>
       run_loop_;  // run_loop_ must be created on the UI thread.
   std::unique_ptr<TestingProfile> profile_;
-  CrostiniManager* crostini_manager_;
+  raw_ptr<CrostiniManager, ExperimentalAsh> crostini_manager_;
   const guest_os::GuestId container_id_ =
       guest_os::GuestId(kCrostiniDefaultVmType, kVmName, kContainerName);
   device::FakeUsbDeviceManager fake_usb_manager_;
@@ -325,7 +316,7 @@ TEST_F(CrostiniManagerTest, StartTerminaVmNameError) {
   TestFuture<bool> success_future;
 
   const base::FilePath& disk_path = base::FilePath("unused");
-  crostini_manager()->StartTerminaVm("", disk_path, {}, 0,
+  crostini_manager()->StartTerminaVm("", disk_path, 0,
                                      success_future.GetCallback());
 
   EXPECT_FALSE(success_future.Get());
@@ -338,7 +329,7 @@ TEST_F(CrostiniManagerTest, StartTerminaVmAnomalyDetectorNotConnectedError) {
 
   fake_anomaly_detector_client_->set_guest_file_corruption_signal_connected(
       false);
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
+  crostini_manager()->StartTerminaVm(kVmName, disk_path, 0,
                                      success_future.GetCallback());
 
   EXPECT_FALSE(success_future.Get());
@@ -349,83 +340,11 @@ TEST_F(CrostiniManagerTest, StartTerminaVmDiskPathError) {
   TestFuture<bool> success_future;
   const base::FilePath& disk_path = base::FilePath();
 
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
+  crostini_manager()->StartTerminaVm(kVmName, disk_path, 0,
                                      success_future.GetCallback());
 
   EXPECT_FALSE(success_future.Get());
   EXPECT_EQ(fake_concierge_client_->start_vm_call_count(), 0);
-}
-
-TEST_F(CrostiniManagerTest, StartTerminaVmPowerwashRequestError) {
-  const base::FilePath& disk_path = base::FilePath("unused");
-
-  // Login unaffiliated user.
-  const AccountId account_id(AccountId::FromUserEmailGaiaId(
-      profile()->GetProfileUserName(), "0987654321"));
-  fake_user_manager()->AddUserWithAffiliation(account_id, false);
-  fake_user_manager()->LoginUser(account_id);
-
-  // Set DeviceRebootOnUserSignout to always.
-  ash::ScopedCrosSettingsTestHelper settings_helper{
-      /* create_settings_service=*/false};
-  settings_helper.ReplaceDeviceSettingsProviderWithStub();
-  settings_helper.SetInteger(
-      ash::kDeviceRebootOnUserSignout,
-      enterprise_management::DeviceRebootOnUserSignoutProto::ALWAYS);
-
-  // Set cryptohome requiring powerwash.
-  ash::FakeCryptohomeMiscClient::Get()->set_requires_powerwash(true);
-  policy::PowerwashRequirementsChecker::InitializeSynchronouslyForTesting();
-
-  NotificationDisplayServiceTester notification_service(profile());
-  TestFuture<bool> success_future;
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
-                                     success_future.GetCallback());
-
-  EXPECT_FALSE(success_future.Get());
-  EXPECT_EQ(fake_concierge_client_->start_vm_call_count(), 0);
-
-  auto notification = notification_service.GetNotification(
-      "crostini_powerwash_request_instead_of_run");
-  EXPECT_NE(absl::nullopt, notification);
-}
-
-TEST_F(CrostiniManagerTest,
-       StartTerminaVmPowerwashRequestErrorDueToCryptohomeError) {
-  const base::FilePath& disk_path = base::FilePath("unused");
-
-  // Login unaffiliated user.
-  const AccountId account_id(AccountId::FromUserEmailGaiaId(
-      profile()->GetProfileUserName(), "0987654321"));
-  fake_user_manager()->AddUserWithAffiliation(account_id, false);
-  fake_user_manager()->LoginUser(account_id);
-
-  // Set DeviceRebootOnUserSignout to always.
-  ash::ScopedCrosSettingsTestHelper settings_helper{
-      /* create_settings_service=*/false};
-  settings_helper.ReplaceDeviceSettingsProviderWithStub();
-  settings_helper.SetInteger(
-      ash::kDeviceRebootOnUserSignout,
-      enterprise_management::DeviceRebootOnUserSignoutProto::ALWAYS);
-
-  // Reset cryptohome state to undefined and make cryptohome unavailable.
-  policy::PowerwashRequirementsChecker::ResetForTesting();
-  ash::FakeCryptohomeMiscClient::Get()->SetServiceIsAvailable(false);
-  policy::PowerwashRequirementsChecker::Initialize();
-  ash::FakeCryptohomeMiscClient::Get()->ReportServiceIsNotAvailable();
-
-  NotificationDisplayServiceTester notification_service(profile());
-
-  TestFuture<bool> success_future;
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
-                                     success_future.GetCallback());
-
-  EXPECT_FALSE(success_future.Get());
-  EXPECT_EQ(fake_concierge_client_->start_vm_call_count(), 0);
-
-  auto notification = notification_service.GetNotification(
-      "crostini_powerwash_request_cryptohome_error");
-  EXPECT_NE(absl::nullopt, notification);
 }
 
 TEST_F(CrostiniManagerTest, StartTerminaVmMountError) {
@@ -439,7 +358,7 @@ TEST_F(CrostiniManagerTest, StartTerminaVmMountError) {
 
   EnsureTerminaInstalled();
   TestFuture<bool> success_future;
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
+  crostini_manager()->StartTerminaVm(kVmName, disk_path, 0,
                                      success_future.GetCallback());
 
   EXPECT_FALSE(success_future.Get());
@@ -460,7 +379,7 @@ TEST_F(CrostiniManagerTest, StartTerminaVmMountErrorThenSuccess) {
 
   EnsureTerminaInstalled();
   TestFuture<bool> result_future;
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
+  crostini_manager()->StartTerminaVm(kVmName, disk_path, 0,
                                      result_future.GetCallback());
 
   EXPECT_TRUE(result_future.Get());
@@ -475,7 +394,7 @@ TEST_F(CrostiniManagerTest, StartTerminaVmSuccess) {
 
   EnsureTerminaInstalled();
   TestFuture<bool> result_future;
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
+  crostini_manager()->StartTerminaVm(kVmName, disk_path, 0,
                                      result_future.GetCallback());
 
   EXPECT_TRUE(result_future.Get());
@@ -496,8 +415,8 @@ TEST_F(CrostiniManagerTest, StartTerminaVmLowDiskNotification) {
 
   EnsureTerminaInstalled();
   TestFuture<bool> result_future;
-  crostini_manager()->StartTerminaVm(DefaultContainerId().vm_name, disk_path,
-                                     {}, 0, result_future.GetCallback());
+  crostini_manager()->StartTerminaVm(DefaultContainerId().vm_name, disk_path, 0,
+                                     result_future.GetCallback());
 
   EXPECT_TRUE(result_future.Get());
   EXPECT_GE(fake_concierge_client_->start_vm_call_count(), 1);
@@ -519,8 +438,8 @@ TEST_F(CrostiniManagerTest,
 
   EnsureTerminaInstalled();
   TestFuture<bool> result_future;
-  crostini_manager()->StartTerminaVm(DefaultContainerId().vm_name, disk_path,
-                                     {}, 0, result_future.GetCallback());
+  crostini_manager()->StartTerminaVm(DefaultContainerId().vm_name, disk_path, 0,
+                                     result_future.GetCallback());
 
   EXPECT_TRUE(result_future.Get());
   EXPECT_GE(fake_concierge_client_->start_vm_call_count(), 1);
@@ -535,7 +454,7 @@ TEST_F(CrostiniManagerTest, OnStartTremplinRecordsRunningVm) {
   // Start the Vm.
   EnsureTerminaInstalled();
   TestFuture<bool> result_future;
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
+  crostini_manager()->StartTerminaVm(kVmName, disk_path, 0,
                                      result_future.GetCallback());
 
   // Check that the Vm start is not recorded until tremplin starts.
@@ -556,7 +475,7 @@ TEST_F(CrostiniManagerTest, OnStartTremplinHappensEarlier) {
   // Start the Vm.
   EnsureTerminaInstalled();
   TestFuture<bool> result_future;
-  crostini_manager()->StartTerminaVm(kVmName, disk_path, {}, 0,
+  crostini_manager()->StartTerminaVm(kVmName, disk_path, 0,
                                      result_future.GetCallback());
 
   // Check that the Vm start is not recorded until tremplin starts.
@@ -890,7 +809,8 @@ class CrostiniManagerRestartTest : public CrostiniManagerTest,
   const CrostiniManager::RestartId uninitialized_id_ =
       CrostiniManager::kUninitializedRestartId;
 
-  ash::disks::MockDiskMountManager* disk_mount_manager_mock_;
+  raw_ptr<ash::disks::MockDiskMountManager, ExperimentalAsh>
+      disk_mount_manager_mock_;
   base::HistogramTester histogram_tester_{};
 
   base::RepeatingCallback<void(mojom::InstallerState)> on_stage_started_ =
@@ -2384,7 +2304,8 @@ class CrostiniManagerAnsibleInfraTest : public CrostiniManagerRestartTest {
   }
 
   std::unique_ptr<AnsibleManagementTestHelper> ansible_management_test_helper_;
-  MockAnsibleManagementService* mock_ansible_management_service_;
+  raw_ptr<MockAnsibleManagementService, ExperimentalAsh>
+      mock_ansible_management_service_;
 };
 
 TEST_F(CrostiniManagerAnsibleInfraTest, StartContainerFailure) {

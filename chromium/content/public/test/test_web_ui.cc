@@ -48,6 +48,10 @@ WebUIController* TestWebUI::GetController() {
   return controller_.get();
 }
 
+RenderFrameHost* TestWebUI::GetRenderFrameHost() {
+  return nullptr;
+}
+
 void TestWebUI::SetController(std::unique_ptr<WebUIController> controller) {
   controller_ = std::move(controller);
 }
@@ -90,6 +94,19 @@ void TestWebUI::RegisterMessageCallback(base::StringPiece message,
                                         MessageCallback callback) {
   message_callbacks_[static_cast<std::string>(message)].push_back(
       std::move(callback));
+}
+
+void TestWebUI::ProcessWebUIMessage(const GURL& source_url,
+                                    const std::string& message,
+                                    base::Value::List args) {
+  auto callback_entry = message_callbacks_.find(message);
+  if (callback_entry == message_callbacks_.end()) {
+    return;
+  }
+
+  for (auto& callback : callback_entry->second) {
+    callback.Run(args);
+  }
 }
 
 bool TestWebUI::CanCallJavascript() {

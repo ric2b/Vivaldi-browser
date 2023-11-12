@@ -21,8 +21,10 @@
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
+#include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tray_utils.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "components/media_message_center/notification_theme.h"
@@ -111,11 +113,19 @@ class GlobalMediaControlsTitleView : public views::View {
     title_label_ = AddChildView(std::make_unique<views::Label>());
     title_label_->SetText(
         l10n_util::GetStringUTF16(IDS_ASH_GLOBAL_MEDIA_CONTROLS_TITLE));
-    title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-
     title_label_->SetAutoColorReadabilityEnabled(false);
-    title_label_->SetFontList(views::Label::GetDefaultFontList().Derive(
-        kTitleFontSizeIncrease, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
+
+    if (base::FeatureList::IsEnabled(
+            media::kGlobalMediaControlsCrOSUpdatedUI)) {
+      title_label_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
+      TrayPopupUtils::SetLabelFontList(title_label_,
+                                       TrayPopupUtils::FontStyle::kTitle);
+    } else {
+      title_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+      title_label_->SetFontList(views::Label::GetDefaultFontList().Derive(
+          kTitleFontSizeIncrease, gfx::Font::NORMAL,
+          gfx::Font::Weight::MEDIUM));
+    }
 
     // Media tray should always be pinned to shelf when we are opening the
     // dialog.
@@ -127,14 +137,17 @@ class GlobalMediaControlsTitleView : public views::View {
 
   void OnThemeChanged() override {
     views::View::OnThemeChanged();
-    SetBorder(views::CreatePaddedBorder(
-        views::CreateSolidSidedBorder(
-            gfx::Insets::TLBR(0, 0, kMenuSeparatorWidth, 0),
-            AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kSeparatorColor)),
-        gfx::Insets::TLBR(kMenuSeparatorVerticalPadding, 0,
-                          kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
-                          0)));
+    if (!base::FeatureList::IsEnabled(
+            media::kGlobalMediaControlsCrOSUpdatedUI)) {
+      SetBorder(views::CreatePaddedBorder(
+          views::CreateSolidSidedBorder(
+              gfx::Insets::TLBR(0, 0, kMenuSeparatorWidth, 0),
+              AshColorProvider::Get()->GetContentLayerColor(
+                  AshColorProvider::ContentLayerType::kSeparatorColor)),
+          gfx::Insets::TLBR(kMenuSeparatorVerticalPadding, 0,
+                            kMenuSeparatorVerticalPadding - kMenuSeparatorWidth,
+                            0)));
+    }
     title_label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
         AshColorProvider::ContentLayerType::kTextColorPrimary));
   }
@@ -142,8 +155,8 @@ class GlobalMediaControlsTitleView : public views::View {
   views::Button* pin_button() { return pin_button_; }
 
  private:
-  views::ImageButton* pin_button_ = nullptr;
-  views::Label* title_label_ = nullptr;
+  raw_ptr<views::ImageButton, ExperimentalAsh> pin_button_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> title_label_ = nullptr;
 };
 
 }  // namespace
@@ -269,42 +282,7 @@ TrayBubbleView* MediaTray::GetBubbleView() {
 }
 
 void MediaTray::ShowBubble() {
-  DCHECK(MediaNotificationProvider::Get());
-  SetNotificationColorTheme();
-
-  TrayBubbleView::InitParams init_params;
-  init_params.delegate = GetWeakPtr();
-  init_params.parent_window = GetBubbleWindowContainer();
-  init_params.anchor_view = nullptr;
-  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
-  init_params.anchor_rect = GetAnchorBoundsInScreen();
-  init_params.insets = GetTrayBubbleInsets();
-  init_params.shelf_alignment = shelf()->alignment();
-  init_params.preferred_width = kTrayMenuWidth;
-  init_params.close_on_deactivate = true;
-  init_params.translucent = true;
-  init_params.corner_radius = kTrayItemCornerRadius;
-  init_params.reroute_event_handler = true;
-
-  auto bubble_view = std::make_unique<TrayBubbleView>(init_params);
-
-  auto* title_view = bubble_view->AddChildView(
-      std::make_unique<GlobalMediaControlsTitleView>());
-  title_view->SetPaintToLayer();
-  title_view->layer()->SetFillsBoundsOpaquely(false);
-  pin_button_ = title_view->pin_button();
-
-  content_view_ = bubble_view->AddChildView(
-      MediaNotificationProvider::Get()->GetMediaNotificationListView(
-          kMenuSeparatorWidth, /*should_clip_height=*/true));
-
-  bubble_ = std::make_unique<TrayBubbleWrapper>(this);
-  bubble_->ShowBubble(std::move(bubble_view));
-  SetIsActive(true);
-
-  base::UmaHistogramBoolean("Media.CrosGlobalMediaControls.RepeatUsageOnShelf",
-                            bubble_has_shown_);
-  bubble_has_shown_ = true;
+  ShowBubbleWithItem("");
 }
 
 void MediaTray::CloseBubble() {
@@ -363,6 +341,35 @@ void MediaTray::UpdateDisplayState() {
   SetVisiblePreferred(should_show);
 }
 
+void MediaTray::ShowBubbleWithItem(const std::string& item_id) {
+  DCHECK(MediaNotificationProvider::Get());
+  SetNotificationColorTheme();
+
+  std::unique_ptr<TrayBubbleView> bubble_view = CreateTrayBubbleView();
+
+  auto* title_view = bubble_view->AddChildView(
+      std::make_unique<GlobalMediaControlsTitleView>());
+  title_view->SetPaintToLayer();
+  title_view->layer()->SetFillsBoundsOpaquely(false);
+  pin_button_ = title_view->pin_button();
+
+  content_view_ = bubble_view->AddChildView(
+      MediaNotificationProvider::Get()->GetMediaNotificationListView(
+          kMenuSeparatorWidth, /*should_clip_height=*/true, item_id));
+  if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsCrOSUpdatedUI)) {
+    content_view_->SetBorder(views::CreateEmptyBorder(
+        gfx::Insets::TLBR(0, 0, kMediaNotificationListViewBottomPadding, 0)));
+  }
+
+  bubble_ = std::make_unique<TrayBubbleWrapper>(this);
+  bubble_->ShowBubble(std::move(bubble_view));
+  SetIsActive(true);
+
+  base::UmaHistogramBoolean("Media.CrosGlobalMediaControls.RepeatUsageOnShelf",
+                            bubble_has_shown_);
+  bubble_has_shown_ = true;
+}
+
 std::u16string MediaTray::GetAccessibleNameForBubble() {
   return l10n_util::GetStringUTF16(IDS_ASH_GLOBAL_MEDIA_CONTROLS_TITLE);
 }
@@ -382,6 +389,8 @@ void MediaTray::SetNotificationColorTheme() {
       AshColorProvider::ContentLayerType::kIconColorSecondary);
   theme.separator_color = AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kSeparatorColor);
+  theme.background_color = AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorInactive);
   MediaNotificationProvider::Get()->SetColorTheme(theme);
 }
 
@@ -429,6 +438,24 @@ void MediaTray::AnchorUpdated() {
 
   bubble_->GetBubbleView()->SetAnchorRect(
       shelf()->GetStatusAreaWidget()->GetMediaTrayAnchorRect());
+}
+
+std::unique_ptr<TrayBubbleView> MediaTray::CreateTrayBubbleView() {
+  TrayBubbleView::InitParams init_params;
+  init_params.delegate = GetWeakPtr();
+  init_params.parent_window = GetBubbleWindowContainer();
+  init_params.anchor_view = nullptr;
+  init_params.anchor_mode = TrayBubbleView::AnchorMode::kRect;
+  init_params.anchor_rect = GetAnchorBoundsInScreen();
+  init_params.insets = GetTrayBubbleInsets();
+  init_params.shelf_alignment = shelf()->alignment();
+  init_params.preferred_width = kTrayMenuWidth;
+  init_params.close_on_deactivate = true;
+  init_params.translucent = true;
+  init_params.corner_radius = kTrayItemCornerRadius;
+  init_params.reroute_event_handler = true;
+
+  return std::make_unique<TrayBubbleView>(init_params);
 }
 
 }  // namespace ash

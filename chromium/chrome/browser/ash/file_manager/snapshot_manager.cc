@@ -33,8 +33,9 @@ int64_t ComputeSpaceNeedToBeFreedAfterGetMetadataAsync(
     const base::FilePath& path,
     int64_t snapshot_size) {
   int64_t free_size = base::SysInfo::AmountOfFreeDiskSpace(path);
-  if (free_size < 0)
+  if (free_size < 0) {
     return -1;
+  }
 
   // We need to keep cryptohome::kMinFreeSpaceInBytes free space even after
   // |snapshot_size| is occupied.
@@ -202,30 +203,8 @@ void SnapshotManager::CreateManagedSnapshot(
     std::move(callback).Run(base::FilePath());
     return;
   }
-
   storage::FileSystemURL filesystem_url =
       context->CrackURLInFirstPartyContext(url);
-
-  ComputeSpaceNeedToBeFreed(
-      profile_, context, filesystem_url,
-      base::BindOnce(&SnapshotManager::CreateManagedSnapshotAfterSpaceComputed,
-                     weak_ptr_factory_.GetWeakPtr(), filesystem_url,
-                     std::move(callback)));
-}
-
-void SnapshotManager::CreateManagedSnapshot(
-    const storage::FileSystemURL& filesystem_url,
-    LocalPathCallback callback) {
-  scoped_refptr<storage::FileSystemContext> context(
-      util::GetFileManagerFileSystemContext(profile_));
-  DCHECK(context.get());
-
-  storage::ExternalFileSystemBackend* const backend =
-      context->external_backend();
-  if (!backend || !backend->CanHandleType(filesystem_url.type())) {
-    std::move(callback).Run(base::FilePath());
-    return;
-  }
 
   ComputeSpaceNeedToBeFreed(
       profile_, context, filesystem_url,

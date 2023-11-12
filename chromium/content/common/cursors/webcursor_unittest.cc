@@ -59,14 +59,15 @@ TEST(WebCursorTest, WebCursorCursorConstructorCustom) {
   webcursor.GetNativeCursor();
   EXPECT_TRUE(webcursor.has_custom_cursor_for_test());
 
-#if BUILDFLAG(IS_OZONE)
   // Test if the rotating custom cursor works correctly.
   display::Display display;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   display.set_panel_rotation(display::Display::ROTATE_90);
-#endif
   webcursor.SetDisplayInfo(display);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   EXPECT_FALSE(webcursor.has_custom_cursor_for_test());
+#else
+  EXPECT_TRUE(webcursor.has_custom_cursor_for_test());
+#endif
   native_cursor = webcursor.GetNativeCursor();
   EXPECT_TRUE(webcursor.has_custom_cursor_for_test());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -78,7 +79,6 @@ TEST(WebCursorTest, WebCursorCursorConstructorCustom) {
   // For non-CrOS platforms, the cursor mustn't be rotated as logical and
   // physical location is the same.
   EXPECT_EQ(gfx::Point(5, 10), native_cursor.custom_hotspot());
-#endif
 #endif
 #endif
 }
@@ -110,18 +110,6 @@ TEST(WebCursorTest, SetCursor) {
   cursor = ui::Cursor::NewCustom(kBitmap, kHotspot, 0.001f);
   EXPECT_FALSE(webcursor.SetCursor(cursor));
 
-  // SetCursor should return false when the scale factor is too large.
-  cursor = ui::Cursor::NewCustom(kBitmap, kHotspot, 1000.0f);
-  EXPECT_FALSE(webcursor.SetCursor(cursor));
-
-  // SetCursor should return false when the unscaled bitmap width is too large.
-  cursor = ui::Cursor::NewCustom(CreateTestBitmap(1025, 5), kHotspot, 10.0f);
-  EXPECT_FALSE(webcursor.SetCursor(cursor));
-
-  // SetCursor should return false when the unscaled bitmap height is too large.
-  cursor = ui::Cursor::NewCustom(CreateTestBitmap(5, 1025), kHotspot, 10.0f);
-  EXPECT_FALSE(webcursor.SetCursor(cursor));
-
   // SetCursor should return false when the 1x scaled image width is too large.
   cursor = ui::Cursor::NewCustom(CreateTestBitmap(151, 3), kHotspot, 1.0f);
   EXPECT_FALSE(webcursor.SetCursor(cursor));
@@ -151,8 +139,8 @@ TEST(WebCursorTest, CursorScaleFactor) {
   display.set_device_scale_factor(kDeviceScale);
   webcursor.SetDisplayInfo(display);
 
-#if BUILDFLAG(IS_OZONE)
-  // In Ozone, the size of the cursor is capped at 64px unless the hardware
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // In Ash, the size of the cursor is capped at 64px unless the hardware
   // advertises support for bigger cursors.
   const gfx::Size kDefaultMaxSize = gfx::Size(64, 64);
   EXPECT_EQ(gfx::SkISizeToSize(

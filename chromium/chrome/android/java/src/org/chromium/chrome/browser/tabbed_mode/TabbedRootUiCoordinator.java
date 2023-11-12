@@ -15,7 +15,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.CommandLine;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneShotCallback;
@@ -78,14 +77,11 @@ import org.chromium.chrome.browser.offlinepages.indicator.OfflineIndicatorInProd
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxDialogController;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.read_later.ReadLaterIPHController;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
-import org.chromium.chrome.browser.share.crow.CrowButtonDelegateImpl;
-import org.chromium.chrome.browser.share.crow.CrowIphController;
 import org.chromium.chrome.browser.share.link_to_text.LinkToTextIPHController;
 import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
@@ -105,12 +101,10 @@ import org.chromium.chrome.browser.toolbar.ToolbarIntentMetadata;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuBlocker;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
-import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.default_browser_promo.DefaultBrowserPromoUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.signin.FullScreenSyncPromoUtil;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController.StatusBarColorProvider;
-import org.chromium.chrome.browser.ui.tablet.emptybackground.EmptyBackgroundViewWrapper;
 import org.chromium.chrome.browser.webapps.AddToHomescreenIPHController;
 import org.chromium.chrome.browser.webapps.AddToHomescreenMostVisitedTileClickObserver;
 import org.chromium.chrome.features.start_surface.StartSurface;
@@ -146,7 +140,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
     private static boolean sDisableStatusIndicatorAnimations;
     private final RootUiTabObserver mRootUiTabObserver;
     private TabbedSystemUiCoordinator mSystemUiCoordinator;
-    private @Nullable EmptyBackgroundViewWrapper mEmptyBackgroundViewWrapper;
 
     private StatusIndicatorCoordinator mStatusIndicatorCoordinator;
     private StatusIndicatorCoordinator.StatusIndicatorObserver mStatusIndicatorObserver;
@@ -159,7 +152,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
     private @Nullable ToolbarButtonInProductHelpController mToolbarButtonInProductHelpController;
     private AddToHomescreenIPHController mAddToHomescreenIPHController;
     private LinkToTextIPHController mLinkToTextIPHController;
-    private CrowIphController mCrowIphController;
     private AddToHomescreenMostVisitedTileClickObserver mAddToHomescreenMostVisitedTileObserver;
     private AppBannerInProductHelpController mAppBannerInProductHelpController;
     private PwaBottomSheetController mPwaBottomSheetController;
@@ -237,7 +229,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
      * @param startSurfaceParentTabSupplier Supplies the parent tab for the StartSurface.
      * @param browserControlsManager Manages the browser controls.
      * @param windowAndroid The current {@link WindowAndroid}.
-     * @param jankTracker Tracks the jank in the app.
      * @param activityLifecycleDispatcher Allows observation of the activity lifecycle.
      * @param layoutManagerSupplier Supplies the {@link LayoutManager}.
      * @param menuOrKeyboardActionController Controls the menu or keyboard action controller.
@@ -281,7 +272,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             @NonNull OneshotSupplier<LayoutStateProvider> layoutStateProviderOneshotSupplier,
             @NonNull Supplier<Tab> startSurfaceParentTabSupplier,
             @NonNull BrowserControlsManager browserControlsManager,
-            @NonNull ActivityWindowAndroid windowAndroid, @NonNull JankTracker jankTracker,
+            @NonNull ActivityWindowAndroid windowAndroid,
             @NonNull ActivityLifecycleDispatcher activityLifecycleDispatcher,
             @NonNull ObservableSupplier<LayoutManagerImpl> layoutManagerSupplier,
             @NonNull MenuOrKeyboardActionController menuOrKeyboardActionController,
@@ -311,7 +302,7 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                 contextualSearchManagerSupplier, tabModelSelectorSupplier, startSurfaceSupplier,
                 tabSwitcherSupplier, intentMetadataOneshotSupplier,
                 layoutStateProviderOneshotSupplier, startSurfaceParentTabSupplier,
-                browserControlsManager, windowAndroid, jankTracker, activityLifecycleDispatcher,
+                browserControlsManager, windowAndroid, activityLifecycleDispatcher,
                 layoutManagerSupplier, menuOrKeyboardActionController, activityThemeColorSupplier,
                 modalDialogManagerSupplier, appMenuBlocker, supportsAppMenuSupplier,
                 supportsFindInPage, tabCreatorManagerSupplier, fullscreenManager,
@@ -342,7 +333,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
         FeatureNotificationUtils.unregisterIPHCallback(FeatureType.DEFAULT_BROWSER);
 
         if (mSystemUiCoordinator != null) mSystemUiCoordinator.destroy();
-        if (mEmptyBackgroundViewWrapper != null) mEmptyBackgroundViewWrapper.destroy();
 
         if (mOfflineIndicatorController != null) {
             mOfflineIndicatorController.destroy();
@@ -375,10 +365,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
 
         if (mAppBannerInProductHelpController != null) {
             AppBannerInProductHelpControllerFactory.detach(mAppBannerInProductHelpController);
-        }
-
-        if (mCrowIphController != null) {
-            mCrowIphController.destroy();
         }
 
         if (mPwaBottomSheetController != null) {
@@ -518,17 +504,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
             }
         };
         mRootUiTabObserver.swapToTab(mActivityTabProvider.get());
-
-        // TODO(twellington): Supply TabModelSelector as well and move initialization earlier.
-        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)) {
-            AppMenuHandler appMenuHandler =
-                    mAppMenuCoordinator == null ? null : mAppMenuCoordinator.getAppMenuHandler();
-            mEmptyBackgroundViewWrapper =
-                    new EmptyBackgroundViewWrapper(mTabModelSelectorSupplier.get(),
-                            mTabCreatorManagerSupplier.get().getTabCreator(false), mActivity,
-                            appMenuHandler, mSnackbarManagerSupplier.get(), mLayoutManagerSupplier);
-            mEmptyBackgroundViewWrapper.initialize();
-        }
 
         if (!ChromeApplicationImpl.isVivaldi())
         if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(mActivity)
@@ -783,9 +758,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
                         () -> mToolbarManager.getMenuButtonView(), R.id.add_to_homescreen_id);
         AppBannerInProductHelpControllerFactory.attach(
                 mWindowAndroid, mAppBannerInProductHelpController);
-        mCrowIphController = new CrowIphController(mActivity,
-                mAppMenuCoordinator.getAppMenuHandler(), new CrowButtonDelegateImpl(),
-                mActivityTabProvider, mToolbarManager.getMenuButtonView());
 
         if (!ChromeApplicationImpl.isVivaldi())
         if (!didTriggerPromo
@@ -845,10 +817,6 @@ public class TabbedRootUiCoordinator extends RootUiCoordinator {
     }
 
     private void initCommerceSubscriptionsService() {
-        if (!PriceTrackingFeatures.getPriceTrackingNotificationsEnabled()) {
-            return;
-        }
-
         CommerceSubscriptionsServiceFactory factory = new CommerceSubscriptionsServiceFactory();
         mCommerceSubscriptionsService = factory.getForLastUsedProfile();
         mCommerceSubscriptionsService.initDeferredStartupForActivity(

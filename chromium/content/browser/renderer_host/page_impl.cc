@@ -30,9 +30,12 @@ PageImpl::PageImpl(RenderFrameHostImpl& rfh, PageDelegate& delegate)
       delegate_(delegate),
       text_autosizer_page_info_({0, 0, 1.f}) {
   if (base::FeatureList::IsEnabled(
-          blink::features::kSharedStorageReportEventLimit)) {
-    select_url_report_event_budget_ = static_cast<double>(
-        blink::features::kSharedStorageReportEventBitBudgetPerPageLoad.Get());
+          blink::features::kSharedStorageSelectURLLimit)) {
+    select_url_overall_budget_ = static_cast<double>(
+        blink::features::kSharedStorageSelectURLBitBudgetPerPageLoad.Get());
+    select_url_max_bits_per_origin_ = static_cast<double>(
+        blink::features::kSharedStorageSelectURLBitBudgetPerOriginPerPageLoad
+            .Get());
   }
 }
 
@@ -102,9 +105,10 @@ void PageImpl::OnThemeColorChanged(const absl::optional<SkColor>& theme_color) {
   delegate_->OnThemeColorChanged(*this);
 }
 
-void PageImpl::DidChangeBackgroundColor(SkColor background_color,
+void PageImpl::DidChangeBackgroundColor(SkColor4f background_color,
                                         bool color_adjust) {
-  main_document_background_color_ = background_color;
+  // TODO(aaronhk): This should remain an SkColor4f
+  main_document_background_color_ = background_color.toSkColor();
   delegate_->OnBackgroundColorChanged(*this);
   // NOTE(andre@vivaldi.com) : In Vivaldi we do not have a RenderWidgetHostView
   // created here. See VB-77203.
@@ -117,7 +121,7 @@ void PageImpl::DidChangeBackgroundColor(SkColor background_color,
     // process navigations we would paint the default background (typically
     // white) while the rendering is blocked.
     main_document_->GetRenderWidgetHost()->GetView()->SetContentBackgroundColor(
-        background_color);
+        background_color.toSkColor());
   }
 }
 
@@ -164,7 +168,7 @@ void PageImpl::OnTextAutosizerPageInfoChanged(
       ->render_manager()
       ->ExecuteRemoteFramesBroadcastMethod(
           std::move(remote_frames_broadcast_callback),
-          main_document_->GetSiteInstance());
+          main_document_->GetSiteInstance()->group());
 }
 
 void PageImpl::SetActivationStartTime(base::TimeTicks activation_start) {
@@ -173,7 +177,8 @@ void PageImpl::SetActivationStartTime(base::TimeTicks activation_start) {
 }
 
 void PageImpl::ActivateForPrerendering(
-    StoredPage::RenderViewHostImplSafeRefSet& render_view_hosts) {
+    StoredPage::RenderViewHostImplSafeRefSet& render_view_hosts,
+    absl::optional<blink::ViewTransitionState> view_transition_state) {
   base::OnceClosure did_activate_render_views =
       base::BindOnce(&PageImpl::DidActivateAllRenderViewsForPrerendering,
                      weak_factory_.GetWeakPtr());
@@ -181,7 +186,8 @@ void PageImpl::ActivateForPrerendering(
   base::RepeatingClosure barrier = base::BarrierClosure(
       render_view_hosts.size(), std::move(did_activate_render_views));
   for (const auto& rvh : render_view_hosts) {
-    base::TimeTicks navigation_start_to_send;
+    auto params = blink::mojom::PrerenderPageActivationParams::New();
+
     // Only send navigation_start to the RenderViewHost for the main frame to
     // avoid sending the info cross-origin. Only this RenderViewHost needs the
     // info, as we expect the other RenderViewHosts are made for cross-origin
@@ -190,16 +196,16 @@ void PageImpl::ActivateForPrerendering(
     // not yet committed. These RenderViews still need to know about activation
     // so their documents are created in the non-prerendered state once their
     // navigation is committed.
-    if (main_document_->GetRenderViewHost() == &*rvh)
-      navigation_start_to_send = *activation_start_time_for_prerendering_;
+    if (main_document_->GetRenderViewHost() == &*rvh) {
+      params->activation_start = *activation_start_time_for_prerendering_;
+      params->view_transition_state = std::move(view_transition_state);
+    }
 
-    auto params = blink::mojom::PrerenderPageActivationParams::New();
     params->was_user_activated =
         main_document_->frame_tree_node()
                 ->has_received_user_gesture_before_nav()
             ? blink::mojom::WasActivatedOption::kYes
             : blink::mojom::WasActivatedOption::kNo;
-    params->activation_start = navigation_start_to_send;
     rvh->ActivatePrerenderedPage(std::move(params), barrier);
   }
 
@@ -315,63 +321,40 @@ base::flat_map<std::string, std::string> PageImpl::GetKeyboardLayoutMap() {
   return GetMainDocument().GetRenderWidgetHost()->GetKeyboardLayoutMap();
 }
 
-bool PageImpl::IsSelectURLAllowed(const url::Origin& origin) {
-  if (!base::FeatureList::IsEnabled(
-          blink::features::kSharedStorageSelectURLLimit)) {
+bool PageImpl::CheckAndMaybeDebitSelectURLBudgets(const url::Origin& origin,
+                                                  double bits_to_charge) {
+  if (!select_url_overall_budget_) {
+    // The limits are not enabled.
     return true;
   }
 
-  int& count = select_url_count_[origin];
-  if (count >=
-      blink::features::
-          kSharedStorageMaxAllowedSelectURLCallsPerOriginPerPageLoad.Get()) {
+  // Return false if there is insufficient overall budget.
+  if (bits_to_charge > select_url_overall_budget_.value()) {
     return false;
   }
 
-  ++count;
-  return true;
-}
+  DCHECK(select_url_max_bits_per_origin_);
 
-bool PageImpl::CheckAndMaybeDebitReportEventForSelectURLBudget(
-    RenderFrameHost& rfh) {
-  if (!select_url_report_event_budget_.has_value()) {
-    // `blink::features::kSharedStorageReportEventLimit` is disabled.
-    return true;
-  }
-
-  std::vector<const SharedStorageBudgetMetadata*> metadata_vector =
-      static_cast<RenderFrameHostImpl&>(rfh)
-          .frame_tree_node()
-          ->FindSharedStorageBudgetMetadata();
-
-  // Get the total charge.
-  double total_to_charge = 0;
-  for (const auto* metadata : metadata_vector) {
-    if (metadata->report_event_called) {
-      // The bits have already been charged for this URN.
-      continue;
-    }
-
-    total_to_charge += metadata->budget_to_charge;
-  }
-
-  if (total_to_charge > select_url_report_event_budget_.value()) {
-    // There is insufficient budget remaining.
+  // Return false if the max bits per origin is set to a value smaller than the
+  // current bits to charge.
+  if (bits_to_charge > select_url_max_bits_per_origin_.value()) {
     return false;
   }
 
-  // Set flag(s) that `reportEvent()` has now been called.
-  for (const auto* metadata : metadata_vector) {
-    if (metadata->report_event_called) {
-      // The bits have already been charged for this URN.
-      continue;
-    }
-
-    metadata->report_event_called = true;
+  // Charge the per-origin budget or return false if there is not enough.
+  auto it = select_url_per_origin_budget_.find(origin);
+  if (it == select_url_per_origin_budget_.end()) {
+    select_url_per_origin_budget_[origin] =
+        select_url_max_bits_per_origin_.value() - bits_to_charge;
+  } else if (bits_to_charge > it->second) {
+    // There is insufficient per-origin budget remaining.
+    return false;
+  } else {
+    it->second -= bits_to_charge;
   }
 
-  // There is sufficient budget, so charge the total now.
-  select_url_report_event_budget_.value() -= total_to_charge;
+  // Charge the overall budget.
+  select_url_overall_budget_.value() -= bits_to_charge;
   return true;
 }
 

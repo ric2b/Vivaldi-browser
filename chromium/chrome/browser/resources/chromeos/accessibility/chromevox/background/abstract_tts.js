@@ -9,8 +9,9 @@
 
 import {Msgs} from '../common/msgs.js';
 import {SettingsManager} from '../common/settings_manager.js';
-import {TtsInterface} from '../common/tts_interface.js';
 import * as ttsTypes from '../common/tts_types.js';
+
+import {TtsInterface} from './tts_interface.js';
 
 /**
  * @typedef {{
@@ -133,12 +134,17 @@ export class AbstractTts {
 
   /** @override */
   increaseOrDecreaseProperty(propertyName, increase) {
-    const min = this.propertyMin[propertyName];
-    const max = this.propertyMax[propertyName];
     const step = this.propertyStep[propertyName];
     let current = this.ttsProperties[propertyName];
     current = increase ? current + step : current - step;
-    this.ttsProperties[propertyName] = Math.max(Math.min(current, max), min);
+    this.setProperty(propertyName, current);
+  }
+
+  /** @override */
+  setProperty(propertyName, value) {
+    const min = this.propertyMin[propertyName];
+    const max = this.propertyMax[propertyName];
+    this.ttsProperties[propertyName] = Math.max(Math.min(value, max), min);
   }
 
   /**

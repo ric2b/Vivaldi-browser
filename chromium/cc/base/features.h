@@ -34,6 +34,13 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kRemoveMobileViewportDoubleTap);
 // https://docs.google.com/document/d/1smLAXs-DSLLmkEt4FIPP7PVglJXOcwRc7A5G0SEwxaY/edit
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kScrollUnification);
 
+// Sets raster tree priority to NEW_CONTENT_TAKES_PRIORITY when performing a
+// unified scroll with main-thread repaint reasons.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMainRepaintScrollPrefersNewContent);
+
+// Flush pending GPU raster work before running the LTHI::DrawLayers stage.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kFlushGpuAtDraw);
+
 // When enabled, wheel scrolls trigger smoothness mode. When disabled,
 // smoothness mode is limited to non-animated (precision) scrolls, such as
 // touch scrolling.
@@ -73,12 +80,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSlidingWindowForDroppedFrameCounter);
 // Introduced to fix https://crbug.com/1116624
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kNormalPriorityImageDecoding);
 
-// When enabled commits are aborted if scroll and viewport state from CC could
-// not be synchronized at the beginning of the frame because main frames were
-// being deferred.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(
-    kSkipCommitsIfNotSynchronizingCompositorState);
-
 // Use DMSAA instead of MSAA for rastering tiles.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUseDMSAAForTiles);
 
@@ -104,6 +105,10 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimResourcesFlushInBackground);
 // Try to play a longer list of ops before giving up in solid color analysis for
 // tiles.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMoreAggressiveSolidColorDetection);
+
+// Allow CC FrameRateEstimater to reduce the frame rate to half of the default
+// if the condition meets the requirement.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReducedFrameRateEstimation);
 
 }  // namespace features
 

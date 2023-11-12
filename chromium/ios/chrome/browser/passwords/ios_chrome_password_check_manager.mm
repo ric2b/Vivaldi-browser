@@ -72,12 +72,6 @@ PasswordCheckState ConvertBulkCheckState(State state) {
   NOTREACHED();
   return PasswordCheckState::kIdle;
 }
-
-// Returns true if the Password Checkup feature flag is enabled.
-bool IsPasswordCheckupEnabled() {
-  return base::FeatureList::IsEnabled(
-      password_manager::features::kIOSPasswordCheckup);
-}
 }  // namespace
 
 IOSChromePasswordCheckManager::IOSChromePasswordCheckManager(
@@ -122,7 +116,7 @@ void IOSChromePasswordCheckManager::StartPasswordCheck() {
     bulk_leak_check_service_adapter_.StartBulkLeakCheck(kPasswordCheckDataKey,
                                                         &data);
 
-    if (IsPasswordCheckupEnabled()) {
+    if (password_manager::features::IsPasswordCheckupEnabled()) {
       insecure_credentials_manager_.StartWeakCheck(base::BindOnce(
           &IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished,
           weak_ptr_factory_.GetWeakPtr()));
@@ -153,12 +147,23 @@ PasswordCheckState IOSChromePasswordCheckManager::GetPasswordCheckState()
       bulk_leak_check_service_adapter_.GetBulkLeakCheckState());
 }
 
-base::Time IOSChromePasswordCheckManager::GetLastPasswordCheckTime() const {
+absl::optional<base::Time>
+IOSChromePasswordCheckManager::GetLastPasswordCheckTime() const {
+  if (!browser_state_->GetPrefs()->HasPrefPath(
+          password_manager::prefs::kLastTimePasswordCheckCompleted)) {
+    return last_completed_weak_or_reuse_check_;
+  }
+
   base::Time last_password_check =
       base::Time::FromDoubleT(browser_state_->GetPrefs()->GetDouble(
           password_manager::prefs::kLastTimePasswordCheckCompleted));
 
-  return std::max(last_password_check, last_completed_weak_or_reuse_check_);
+  if (!last_completed_weak_or_reuse_check_.has_value()) {
+    return last_password_check;
+  }
+
+  return std::max(last_password_check,
+                  last_completed_weak_or_reuse_check_.value());
 }
 
 std::vector<CredentialUIEntry>
@@ -227,4 +232,14 @@ void IOSChromePasswordCheckManager::NotifyPasswordCheckStatusChanged() {
   for (auto& observer : observers_) {
     observer.PasswordCheckStatusChanged(GetPasswordCheckState());
   }
+}
+
+void IOSChromePasswordCheckManager::MuteCredential(
+    const CredentialUIEntry& credential) {
+  insecure_credentials_manager_.MuteCredential(credential);
+}
+
+void IOSChromePasswordCheckManager::UnmuteCredential(
+    const CredentialUIEntry& credential) {
+  insecure_credentials_manager_.UnmuteCredential(credential);
 }

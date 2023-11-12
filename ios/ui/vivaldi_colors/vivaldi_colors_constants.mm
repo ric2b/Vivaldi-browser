@@ -22,3 +22,4 @@ NSString* const vSystemGray04 = @"viv_system_gray_04";
 NSString* const vSystemGray05 = @"viv_system_gray_05";
 NSString* const vSystemGray06 = @"viv_system_gray_06";
 NSString* const vSystemGray07 = @"viv_system_gray_07";
+NSString* const vTopToolbarTintColor = @"viv_top_toolbar_tint_color";

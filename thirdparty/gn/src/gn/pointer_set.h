@@ -6,6 +6,8 @@
 #define SRC_GN_POINTER_SET_H_
 
 #include <functional>
+#include <vector>
+
 #include "gn/hash_table_base.h"
 
 // PointerSet<T> is a fast implemention of a set of non-owning and non-null
@@ -185,6 +187,16 @@ class PointerSet : public HashTableBase<PointerSetNode> {
         return false;
 
     return true;
+  }
+
+  // Convert this to a vector, more convenient and slightly faster than using
+  // std::vector<T*>(set.begin(), set.end()).
+  std::vector<T*> ToVector() const {
+    std::vector<T*> result(this->size());
+    auto it_result = result.begin();
+    for (auto it = this->begin(); it.valid(); ++it)
+      *it_result++ = *it;
+    return result;
   }
 
  private:

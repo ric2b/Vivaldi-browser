@@ -514,6 +514,13 @@ const char kDefined_Help[] =
   named scope foo. It will throw an error if foo is not defined or is not a
   scope.
 
+  You can also check a named scope using a subscript string expression:
+    defined(foo[bar + "_name"])
+  Which will return true or false depending on whether the subscript
+  expression expands to the name of a member of the scope foo. It will
+  throw an error if foo is not defined or is not a scope, or if the
+  expression does not expand to a string, or if it is an empty string.
+
 Example
 
   template("mytemplate") {
@@ -551,27 +558,40 @@ Value RunDefined(Scope* scope,
 
   const AccessorNode* accessor = args_vector[0]->AsAccessor();
   if (accessor) {
-    // Passed an accessor "defined(foo.bar)".
-    if (accessor->member()) {
-      // The base of the accessor must be a scope if it's defined.
-      const Value* base = scope->GetValue(accessor->base().value());
-      if (!base) {
-        *err = Err(accessor, "Undefined identifier");
-        return Value();
-      }
-      if (!base->VerifyTypeIs(Value::SCOPE, err))
-        return Value();
+    // The base of the accessor must be a scope if it's defined.
+    const Value* base = scope->GetValue(accessor->base().value());
+    if (!base) {
+      *err = Err(accessor, "Undefined identifier");
+      return Value();
+    }
+    if (!base->VerifyTypeIs(Value::SCOPE, err))
+      return Value();
 
+    std::string scope_member;
+
+    if (accessor->member()) {
+      // Passed an accessor "defined(foo.bar)".
+      scope_member = accessor->member()->value().value();
+    } else if (accessor->subscript()) {
+      // Passed an accessor "defined(foo["bar"])".
+      Value subscript_value = accessor->subscript()->Execute(scope, err);
+      if (err->has_error())
+        return Value();
+      if (!subscript_value.VerifyTypeIs(Value::STRING, err))
+        return Value();
+      scope_member = subscript_value.string_value();
+    }
+    if (!scope_member.empty()) {
       // Check the member inside the scope to see if its defined.
-      if (base->scope_value()->GetValue(accessor->member()->value().value()))
-        return Value(function, true);
-      return Value(function, false);
+      bool result = base->scope_value()->GetValue(scope_member) != nullptr;
+      return Value(function, result);
     }
   }
 
   // Argument is invalid.
   *err = Err(function, "Bad thing passed to defined().",
-             "It should be of the form defined(foo) or defined(foo.bar).");
+             "It should be of the form defined(foo), defined(foo.bar) or "
+             "defined(foo[<string-expression>]).");
   return Value();
 }
 
@@ -955,6 +975,68 @@ Value RunPrint(Scope* scope,
     output.append(args[i].ToString(false));
   }
   output.push_back('\n');
+
+  const BuildSettings::PrintCallback& cb =
+      scope->settings()->build_settings()->print_callback();
+  if (cb) {
+    cb(output);
+  } else {
+    printf("%s", output.c_str());
+    fflush(stdout);
+  }
+
+  return Value();
+}
+
+// print_stack_trace -----------------------------------------------------------
+
+const char kPrintStackTrace[] = "print_stack_trace";
+const char kPrintStackTrace_HelpShort[] =
+    "print_stack_trace: Prints a stack trace.";
+const char kPrintStackTrace_Help[] =
+    R"(print_stack_trace: Prints a stack trace.
+
+  Prints the current file location, and all template invocations that led up to
+  this location, to the console.
+
+Examples
+
+  template("foo"){
+    print_stack_trace()
+  }
+  template("bar"){
+    foo(target_name + ".foo") {
+      baz = invoker.baz
+    }
+  }
+  bar("lala") {
+    baz = 42
+  }
+
+  will print out the following:
+
+  print_stack_trace() initiated at  //build.gn:2
+    bar("lala")  //BUILD.gn:9
+    foo("lala.foo")  //BUILD.gn:5
+    print_stack_trace()  //BUILD.gn:2
+
+)";
+
+Value RunPrintStackTrace(Scope* scope,
+                         const FunctionCallNode* function,
+                         const std::vector<Value>& args,
+                         Err* err) {
+  std::string location_str = function->GetRange().begin().Describe(false);
+  std::string toolchain =
+      scope->settings()->toolchain_label().GetUserVisibleName(false);
+  std::string output =
+      "print_stack_trace() initiated at:  " + location_str + "  using: " + toolchain;
+  output.push_back('\n');
+
+  for (const auto& entry : scope->GetTemplateInvocationEntries()) {
+    output.append("  " + entry.Describe() + "\n");
+  }
+  output.append("  print_stack_trace()  " + location_str + "\n");
 
   const BuildSettings::PrintCallback& cb =
       scope->settings()->build_settings()->print_callback();
@@ -1579,6 +1661,7 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(NotNeeded, false)
     INSERT_FUNCTION(Pool, false)
     INSERT_FUNCTION(Print, false)
+    INSERT_FUNCTION(PrintStackTrace, false)
     INSERT_FUNCTION(ProcessFileTemplate, false)
     INSERT_FUNCTION(ReadFile, false)
     INSERT_FUNCTION(RebasePath, false)

@@ -5,6 +5,7 @@
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/ui/browser_container/edit_menu_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers_app_interface.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 
@@ -167,6 +168,10 @@ id<GREYMatcher> OmniboxText(const std::string& text) {
 id<GREYMatcher> OmniboxContainingText(const std::string& text) {
   return [ChromeMatchersAppInterface
       omniboxContainingText:base::SysUTF8ToNSString(text)];
+}
+
+id<GREYMatcher> OmniboxAutocompleteLabel() {
+  return [ChromeMatchersAppInterface omniboxAutocompleteLabel];
 }
 
 id<GREYMatcher> LocationViewContainingText(const std::string& text) {
@@ -360,8 +365,8 @@ id<GREYMatcher> SettingsPrivacySafeBrowsingTableView() {
   return [ChromeMatchersAppInterface settingsPrivacySafeBrowsingTableView];
 }
 
-id<GREYMatcher> SettingsPriceNotificationsTableView() {
-  return [ChromeMatchersAppInterface settingsPriceNotificationsTableView];
+id<GREYMatcher> SettingsNotificationsTableView() {
+  return [ChromeMatchersAppInterface settingsNotificationsTableView];
 }
 
 id<GREYMatcher> SettingsTrackingPriceTableView() {
@@ -397,8 +402,8 @@ id<GREYMatcher> SettingsMenuPrivacyButton() {
   return [ChromeMatchersAppInterface settingsMenuPrivacyButton];
 }
 
-id<GREYMatcher> SettingsMenuPriceNotificationsButton() {
-  return [ChromeMatchersAppInterface settingsMenuPriceNotificationsButton];
+id<GREYMatcher> SettingsMenuNotificationsButton() {
+  return [ChromeMatchersAppInterface settingsMenuNotificationsButton];
 }
 
 id<GREYMatcher> SettingsMenuPasswordsButton() {
@@ -486,19 +491,27 @@ id<GREYMatcher> OpenNewWindowMenuButton() {
 }
 
 id<GREYMatcher> SystemSelectionCallout() {
-  return [ChromeMatchersAppInterface systemSelectionCallout];
+  return [EditMenuAppInterface editMenuButtonMatcher];
 }
 
 id<GREYMatcher> SystemSelectionCalloutLinkToTextButton() {
-  return [ChromeMatchersAppInterface systemSelectionCalloutLinkToTextButton];
+  return [EditMenuAppInterface editMenuLinkToTextButtonMatcher];
 }
 
 id<GREYMatcher> SystemSelectionCalloutCopyButton() {
-  return [ChromeMatchersAppInterface systemSelectionCalloutCopyButton];
+  return [EditMenuAppInterface editMenuCopyButtonMatcher];
+}
+
+id<GREYMatcher> SystemSelectionCalloutCutButton() {
+  return [EditMenuAppInterface editMenuCutButtonMatcher];
+}
+
+id<GREYMatcher> SystemSelectionCalloutPasteButton() {
+  return [EditMenuAppInterface editMenuPasteButtonMatcher];
 }
 
 id<GREYMatcher> SystemSelectionCalloutOverflowButton() {
-  return [ChromeMatchersAppInterface systemSelectionCalloutOverflowButton];
+  return [EditMenuAppInterface editMenuNextButtonMatcher];
 }
 
 id<GREYMatcher> CopyActivityButton() {
@@ -698,6 +711,10 @@ id<GREYMatcher> PasswordsDestinationButton() {
   return [ChromeMatchersAppInterface passwordsDestinationButton];
 }
 
+id<GREYMatcher> PriceNotificationsDestinationButton() {
+  return [ChromeMatchersAppInterface priceNotificationsDestinationButton];
+}
+
 id<GREYMatcher> DownloadsDestinationButton() {
   return [ChromeMatchersAppInterface downloadsDestinationButton];
 }
@@ -712,6 +729,10 @@ id<GREYMatcher> SiteInfoDestinationButton() {
 
 id<GREYMatcher> SettingsDestinationButton() {
   return [ChromeMatchersAppInterface settingsDestinationButton];
+}
+
+id<GREYMatcher> WhatsNewDestinationButton() {
+  return [ChromeMatchersAppInterface whatsNewDestinationButton];
 }
 
 #pragma mark - Overflow Menu Actions
@@ -778,6 +799,10 @@ id<GREYMatcher> ManualFallbackPasswordSearchBarMatcher() {
 
 id<GREYMatcher> ManualFallbackManagePasswordsMatcher() {
   return [ChromeMatchersAppInterface manualFallbackManagePasswordsMatcher];
+}
+
+id<GREYMatcher> ManualFallbackManageSettingsMatcher() {
+  return [ChromeMatchersAppInterface manualFallbackManageSettingsMatcher];
 }
 
 id<GREYMatcher> ManualFallbackOtherPasswordsMatcher() {

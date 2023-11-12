@@ -26,9 +26,9 @@
 #include "components/sync/engine/commit_queue.h"
 #include "components/sync/engine/data_type_activation_response.h"
 #include "components/sync/engine/model_type_processor_proxy.h"
-#include "components/sync/engine/model_type_worker.h"
 #include "components/sync/model/data_type_activation_request.h"
 #include "components/sync/model/type_entities_count.h"
+#include "components/sync/protocol/model_type_state_helper.h"
 #include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "notes/note_node.h"
@@ -47,22 +47,7 @@ namespace sync_notes {
 
 namespace {
 
-#if BUILDFLAG(IS_IOS) or BUILDFLAG(IS_ANDROID)
-// Set a lower limit for mobile platforms.
-// 1. Keeps the notes code similar to the bookmarks code.
-// 2. Prevents creation of an overly huge sync metadata file to be stored on
-// the disk.
-// 3. Reduced memory consumption and processing, noticeable especially during
-// an initial merge.
-// 4. A lower limit for mobile platforms reflects the lower
-// capacity/processing power of mobile devices.
-//
-// Since the note model thread is the UI thread, a smoother user
-// experience outweighs the resulting downsides.
-constexpr size_t kDefaultMaxNotesTillSyncEnabled = 20000;
-#else
 constexpr size_t kDefaultMaxNotesTillSyncEnabled = 100000;
-#endif
 
 class ScopedRemoteUpdateNotes {
  public:
@@ -202,7 +187,7 @@ void NoteModelTypeProcessor::OnUpdateReceived(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!model_type_state.cache_guid().empty());
   DCHECK_EQ(model_type_state.cache_guid(), cache_guid_);
-  DCHECK(model_type_state.initial_sync_done());
+  DCHECK(syncer::IsInitialSyncDone(model_type_state.initial_sync_state()));
   DCHECK(start_callback_.is_null());
   // Processor should never connect if
   // |last_initial_merge_remote_updates_exceeded_limit_| is set.
@@ -315,6 +300,9 @@ void NoteModelTypeProcessor::ModelReadyToSync(
 
   sync_pb::NotesModelMetadata model_metadata;
   model_metadata.ParseFromString(metadata_str);
+
+  syncer::MigrateLegacyInitialSyncDone(
+      *model_metadata.mutable_model_type_state(), syncer::NOTES);
 
   if (pending_clear_metadata_) {
     pending_clear_metadata_ = false;

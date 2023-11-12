@@ -11,34 +11,34 @@
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
-#import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/ui/elements/home_waiting_view.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_illustrated_empty_view.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller_constants.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
-#import "ios/chrome/browser/ui/elements/home_waiting_view.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
-#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
 #import "ios/chrome/browser/ui/sharing/sharing_params.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#import "ios/chrome/browser/ui/table_view/table_view_illustrated_empty_view.h"
-#import "ios/chrome/browser/ui/table_view/table_view_model.h"
-#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -50,11 +50,10 @@
 #import "ios/notes/cells/note_folder_item.h"
 #import "ios/notes/cells/note_home_node_item.h"
 #import "ios/notes/cells/note_table_cell_title_edit_delegate.h"
-#import "ios/notes/cells/note_text_field_item.h"
 #import "ios/notes/cells/table_view_note_cell.h"
 #import "ios/notes/note_add_edit_view_controller.h"
 #import "ios/notes/note_empty_background.h"
-#import "ios/notes/note_folder_view_controller.h"
+#import "ios/notes/note_folder_chooser_view_controller.h"
 #import "ios/notes/note_home_consumer.h"
 #import "ios/notes/note_home_mediator.h"
 #import "ios/notes/note_home_shared_state.h"
@@ -116,7 +115,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
 }  // namespace
 
-@interface NoteHomeViewController () <NoteFolderViewControllerDelegate,
+@interface NoteHomeViewController () <NoteFolderChooserViewControllerDelegate,
                                           NoteHomeConsumer,
                                           NoteHomeSharedStateObserver,
                                           NoteInteractionControllerDelegate,
@@ -153,7 +152,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // The view controller used to pick a folder in which to move the selected
 // notes.
-@property(nonatomic, strong) NoteFolderViewController* folderSelector;
+@property(nonatomic, strong) NoteFolderChooserViewController* folderSelector;
 
 // The current state of the context bar UI.
 @property(nonatomic, assign) NotesContextBarState contextBarState;
@@ -539,7 +538,7 @@ const int kRowsHiddenByNavigationBar = 3;
   const NoteNode* editedNode = *(nodes.begin());
   const NoteNode* selectedFolder = editedNode->parent();
   self.folderSelector =
-      [[NoteFolderViewController alloc] initWithNotesModel:self.notes
+      [[NoteFolderChooserViewController alloc] initWithNotesModel:self.notes
                                                  allowsNewFolders:YES
                                                       editedNodes:nodes
                                                      allowsCancel:YES
@@ -557,7 +556,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
   const NoteNode* trashFolder = self.notes->trash_node();
   [self.snackbarCommandsHandler
-      showSnackbarMessage:note_utils_ios::MoveNotesWithUndoToast(
+      showSnackbarMessage:note_utils_ios::MoveNotesWithToast(
                               nodes, self.notes, trashFolder,
                               self.browserState)];
   [self setTableViewEditing:NO];
@@ -567,7 +566,7 @@ const int kRowsHiddenByNavigationBar = 3;
 - (void)deleteNodes:(const std::set<const NoteNode*>&)nodes {
   DCHECK_GE(nodes.size(), 1u);
   [self.snackbarCommandsHandler
-      showSnackbarMessage:note_utils_ios::DeleteNotesWithUndoToast(
+      showSnackbarMessage:note_utils_ios::DeleteNotesWithToast(
                               nodes, self.notes, self.browserState)];
   [self setTableViewEditing:NO];
 }
@@ -762,7 +761,7 @@ const int kRowsHiddenByNavigationBar = 3;
             toPosition:(int)position {
   [self.snackbarCommandsHandler
       showSnackbarMessage:
-          note_utils_ios::UpdateNotePositionWithUndoToast(
+          note_utils_ios::UpdateNotePositionWithToast(
               node, _rootNode, position, self.notes, self.browserState)];
 }
 
@@ -790,15 +789,15 @@ const int kRowsHiddenByNavigationBar = 3;
   [self refreshContents];
 }
 
-#pragma mark - NoteFolderViewControllerDelegate
+#pragma mark - NoteFolderChooserViewControllerDelegate
 
-- (void)folderPicker:(NoteFolderViewController*)folderPicker
+- (void)folderPicker:(NoteFolderChooserViewController*)folderPicker
     didFinishWithFolder:(const NoteNode*)folder {
   DCHECK(folder);
   DCHECK_GE(folderPicker.editedNodes.size(), 1u);
 
   [self.snackbarCommandsHandler
-      showSnackbarMessage:note_utils_ios::MoveNotesWithUndoToast(
+      showSnackbarMessage:note_utils_ios::MoveNotesWithToast(
                               folderPicker.editedNodes, self.notes, folder,
                               self.browserState)];
 
@@ -808,14 +807,14 @@ const int kRowsHiddenByNavigationBar = 3;
   self.folderSelector = nil;
 }
 
-- (void)folderPickerDidCancel:(NoteFolderViewController*)folderPicker {
+- (void)folderPickerDidCancel:(NoteFolderChooserViewController*)folderPicker {
   [self setTableViewEditing:NO];
   [self.navigationController dismissViewControllerAnimated:YES completion:NULL];
   self.folderSelector.delegate = nil;
   self.folderSelector = nil;
 }
 
-- (void)folderPickerDidDismiss:(NoteFolderViewController*)folderPicker {
+- (void)folderPickerDidDismiss:(NoteFolderChooserViewController*)folderPicker {
   self.folderSelector.delegate = nil;
   self.folderSelector = nil;
 }
@@ -956,22 +955,6 @@ const int kRowsHiddenByNavigationBar = 3;
   }
 }
 
-- (void)addNewNoteItem : (id) sender {
-  // Ignore the button tap if any of our controller is presenting.
-  if ([self isAnyControllerPresenting]) {
-    return;
-  }
-  // Toggle edit mode.
-  if (self.sharedState.currentlyInEditMode == YES) {
-    [self setTableViewEditing:!self.sharedState.currentlyInEditMode];
-    self.navigationItem.rightBarButtonItem.enabled = YES;
-  } else {
-    const std::set<const vivaldi::NoteNode*> nodes =
-      self.sharedState.editNodes;
-    [self addNewNote];
-    [self hideEmptyBackground];
- }
-}
 
 // Back button callback for the new ui.
 - (void)back {
@@ -1015,79 +998,19 @@ const int kRowsHiddenByNavigationBar = 3;
   if (!self.sharedState.tableViewDisplayedRootNode) {
     return;
   }
-  self.sharedState.addingNewFolder = YES;
-
-  std::u16string folderTitle =
-      l10n_util::GetStringUTF16(IDS_VIVALDI_NOTE_NEW_GROUP_DEFAULT_NAME);
-  self.sharedState.editingFolderNode =
-      self.sharedState.notesModel->AddFolder(
-          self.sharedState.tableViewDisplayedRootNode,
-          self.sharedState.tableViewDisplayedRootNode->children().size(),
-          folderTitle);
-
-  NoteHomeNodeItem* nodeItem = [[NoteHomeNodeItem alloc]
-      initWithType:NoteHomeItemTypeNote
-      noteNode:self.sharedState.editingFolderNode];
-  [self.sharedState.tableViewModel
-                      addItem:nodeItem
-      toSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
-
-  // Insert the new folder cell at the end of the table.
-  NSIndexPath* newRowIndexPath =
-      [self.sharedState.tableViewModel indexPathForItem:nodeItem];
-  NSMutableArray* newRowIndexPaths =
-      [[NSMutableArray alloc] initWithObjects:newRowIndexPath, nil];
-  [self.sharedState.tableView beginUpdates];
-  [self.sharedState.tableView
-      insertRowsAtIndexPaths:newRowIndexPaths
-            withRowAnimation:UITableViewRowAnimationNone];
-  [self.sharedState.tableView endUpdates];
-  // Scroll to the end of the table
-  [self.sharedState.tableView
-      scrollToRowAtIndexPath:newRowIndexPath
-            atScrollPosition:UITableViewScrollPositionBottom
-                    animated:YES];
+    if (!self.noteInteractionController) {
+      self.noteInteractionController =
+          [[NoteInteractionController alloc] initWithBrowser:self.browser
+                                                parentController:self];
+      self.noteInteractionController.delegate = self;
+    }
+    [self.noteInteractionController presentNoteFolderEditor:nil
+      parent:self.sharedState.tableViewDisplayedRootNode
+        isEditing:NO];
 }
 
 - (void)handleAddBarButtonTap {
     [self addNote];
-}
-
-- (void)addNewNote {
-  [self.sharedState.editingNoteCell stopEdit];
-  if (!self.sharedState.tableViewDisplayedRootNode) {
-    return;
-  }
-  self.sharedState.addingNewNote = YES;
-  std::u16string folderTitle =
-      l10n_util::GetStringUTF16(IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_NOTE);
-  self.sharedState.editingNoteNode =
-      self.sharedState.notesModel->AddNote(
-          self.sharedState.tableViewDisplayedRootNode,
-          self.sharedState.tableViewDisplayedRootNode->children().size(),
-          folderTitle, GURL(), folderTitle);
-  NoteHomeNodeItem* nodeItem = [[NoteHomeNodeItem alloc]
-      initWithType:NoteHomeItemTypeNote
-      noteNode:self.sharedState.editingNoteNode];
-  [self.sharedState.tableViewModel
-                      addItem:nodeItem
-      toSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
-
-  // Insert the new cell at the end of the table.
-  NSIndexPath* newRowIndexPath =
-      [self.sharedState.tableViewModel indexPathForItem:nodeItem];
-  NSMutableArray* newRowIndexPaths =
-      [[NSMutableArray alloc] initWithObjects:newRowIndexPath, nil];
-  [self.sharedState.tableView beginUpdates];
-  [self.sharedState.tableView
-      insertRowsAtIndexPaths:newRowIndexPaths
-            withRowAnimation:UITableViewRowAnimationNone];
-  [self.sharedState.tableView endUpdates];
-  // Scroll to the end of the table
-  [self.sharedState.tableView
-      scrollToRowAtIndexPath:newRowIndexPath
-            atScrollPosition:UITableViewScrollPositionBottom
-                    animated:YES];
 }
 
 - (NoteHomeViewController*)createControllerWithRootFolder:
@@ -2248,7 +2171,7 @@ const int kRowsHiddenByNavigationBar = 3;
       atIndexPath:(NSIndexPath*)indexPath {
   NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
   [self.snackbarCommandsHandler showSnackbarMessage:
-                    note_utils_ios::CreateNoteAtPositionWithUndoToast(
+                    note_utils_ios::CreateNoteAtPositionWithToast(
                         base::SysUTF8ToNSString(URL.spec()), URL, _rootNode,
                         index, self.notes, self.browserState)];
 }

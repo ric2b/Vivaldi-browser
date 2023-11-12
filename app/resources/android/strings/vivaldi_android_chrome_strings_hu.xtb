@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Megnyitott lapok</translation>
 <translation id="1829244130665387512">Keresés az oldalon</translation>
 <translation id="1910514478706885609">Megnyitás új lapcsoportban</translation>
+<translation id="1925021887439448749">Írd be az egyéni internetcímet</translation>
 <translation id="2038563949887743358">Bekapcsolja az Asztali webhely kérése funkciót</translation>
 <translation id="2139186145475833000">Hozzáadás a kezdőképernyőhöz</translation>
+<translation id="2149973817440762519">Könyvjelző szerkesztése</translation>
 <translation id="2306442503286132111">Könyvjelző mentve ( <ph name="FOLDER_NAME" /> mappa)</translation>
 <translation id="2433507940547922241">Megjelenés</translation>
 <translation id="2501278716633472235">Visszalépés</translation>
 <translation id="2633278372998075009">Privát lapok</translation>
+<translation id="2951071800649516099">Oldalak felvétele az olvasólistára, későbbi elolvasáshoz</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> könyvjelző}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> könyvjelző}}</translation>
@@ -36,6 +39,7 @@
 
 Az "Érintéses keresés" csak akkor érhető el, ha a Vivaldi alapértelmezett keresőmotorja a Google.</translation>
 <translation id="4759238208242260848">Letöltések</translation>
+<translation id="4850886885716139402">Nézet</translation>
 <translation id="4883379392681899581">Privát mód elhagyása</translation>
 <translation id="4943872375798546930">Nincs találat</translation>
 <translation id="49576331685473090">Tartalom blokkolása</translation>
@@ -48,7 +52,9 @@ Az "Érintéses keresés" csak akkor érhető el, ha a Vivaldi alapértelmezett 
 A keresési kifejezés módosításához tarts hosszan nyomva. A keresés finomításához teljesen húzd fel a panelt, és koppintson a keresőmezőre.</translation>
 <translation id="572328651809341494">Nemrég megnyitott lapok</translation>
 <translation id="6150320133806434356">Könyvjelző mentve</translation>
+<translation id="6301525844455696527">Ne feledkezz meg az olvasási listádról</translation>
 <translation id="6336451774241870485">Új privát lap</translation>
+<translation id="6404511346730675251">Könyvjelző szerkesztése</translation>
 <translation id="6585139692466700358">Oldalak fordítása más nyelvekre a Vivaldi fordítás szolgáltatása segítségével</translation>
 <translation id="6593061639179217415">Asztali webhely</translation>
 <translation id="6610147964972079463">Privát lapok bezárása</translation>
@@ -57,9 +63,15 @@ A keresési kifejezés módosításához tarts hosszan nyomva. A keresés finom�
 <translation id="732145680195464316">Könyvjelző mentve (<ph name="PRODUCT_NAME" />)</translation>
 <translation id="7427132068601343474">A Vivaldi névjegye</translation>
 <translation id="7465104139234185284">Minden privát lap bezárása</translation>
+<translation id="7481312909269577407">Előre</translation>
+<translation id="7583262514280211622">Itt találod majd az Olvasási listádat</translation>
+<translation id="7968014550143838305">Hozzáadva az Olvasási listához</translation>
 <translation id="804786196054284061">Általános Szerződési Feltételek</translation>
+<translation id="8127542551745560481">Kezdőlap szerkesztése</translation>
+<translation id="8560602726703398413">Olvasási lista keresése a Könyvjelzőkben</translation>
 <translation id="85991616550051997">Kezdőlapra ugrás</translation>
 <translation id="8820817407110198400">Könyvjelzők</translation>
 <translation id="9063523880881406963">Kikapcsolja az Asztali webhely kérése funkciót</translation>
 <translation id="9080642952018487277">Privát módba váltás</translation>
+<translation id="96681097142096641">Egyszerűsített oldalt megtekintése?</translation>
 </translationbundle>

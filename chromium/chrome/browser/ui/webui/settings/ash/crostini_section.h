@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_CROSTINI_SECTION_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_CROSTINI_SECTION_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/ui/webui/settings/ash/os_settings_section.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -28,6 +29,10 @@ class CrostiniSection : public OsSettingsSection {
   ~CrostiniSection() override;
 
  private:
+  friend class CrostiniSectionTest;
+
+  static bool ShouldShowBruschetta(Profile* profile);
+
   // OsSettingsSection:
   void AddLoadTimeData(content::WebUIDataSource* html_source) override;
   void AddHandlers(content::WebUI* web_ui) override;
@@ -46,9 +51,9 @@ class CrostiniSection : public OsSettingsSection {
 
   void UpdateSearchTags();
 
-  PrefService* pref_service_;
+  raw_ptr<PrefService, ExperimentalAsh> pref_service_;
   PrefChangeRegistrar pref_change_registrar_;
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
 };
 
 }  // namespace ash::settings

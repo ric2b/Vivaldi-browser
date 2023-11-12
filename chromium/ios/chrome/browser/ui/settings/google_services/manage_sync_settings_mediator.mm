@@ -16,10 +16,17 @@
 #import "components/sync/base/pref_names.h"
 #import "components/sync/driver/sync_service.h"
 #import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_image_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_info_button_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/sync_setup_service.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_command_handler.h"
 #import "ios/chrome/browser/ui/settings/google_services/manage_sync_settings_constants.h"
@@ -27,13 +34,6 @@
 #import "ios/chrome/browser/ui/settings/google_services/sync_error_settings_command_handler.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_image_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_info_button_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
@@ -79,8 +79,21 @@ UIImageConfiguration* AccessoryConfiguration() {
 
 // Enterprise icon.
 NSString* const kGoogleServicesEnterpriseImage = @"google_services_enterprise";
-// Sync error icon.
-NSString* const kGoogleServicesSyncErrorImage = @"google_services_sync_error";
+
+// Returns true if the initial sync setup is currently ongoing. Sync initial
+// setup is considered to finished iff:
+//   1. User is signed in with sync enabled and the sync setup was completed.
+//   OR
+//   2. User is not signed in or has disabled sync.
+// Otherwise we consider that the initial setup is still pending.
+// Note that if the user visits the Advanced Settings during the opt-in flow,
+// the Sync consent is not granted yet. In this case, IsSyncRequested() is
+// set to true, indicating that the sync was requested but the initial setup
+// has not been finished yet.
+bool IsInitialSyncSetupOngoing(SyncSetupService* sync_setup_service) {
+  return sync_setup_service->IsSyncRequested() &&
+         !sync_setup_service->IsFirstSetupComplete();
+}
 
 }  // namespace
 
@@ -293,6 +306,8 @@ NSString* const kGoogleServicesSyncErrorImage = @"google_services_sync_error";
   // EncryptionItemType.
   self.encryptionItem =
       [[TableViewImageItem alloc] initWithType:EncryptionItemType];
+  self.encryptionItem.accessibilityIdentifier =
+      kEncryptionAccessibilityIdentifier;
   self.encryptionItem.title = GetNSString(IDS_IOS_MANAGE_SYNC_ENCRYPTION);
   // The detail text (if any) is an error message, so color it in red.
   self.encryptionItem.detailTextColor = [UIColor colorNamed:kRedColor];
@@ -765,15 +780,10 @@ NSString* const kGoogleServicesSyncErrorImage = @"google_services_sync_error";
       syncErrorItem.text = GetNSString(IDS_SYNC_NEEDS_VERIFICATION_TITLE);
       break;
   }
-  if (UseSymbols()) {
-    syncErrorItem.iconImage = DefaultSettingsRootSymbol(kSyncErrorSymbol);
-    syncErrorItem.iconBackgroundColor = [UIColor colorNamed:kRed500Color];
-    syncErrorItem.iconTintColor = UIColor.whiteColor;
-    syncErrorItem.iconCornerRadius = kColorfulBackgroundSymbolCornerRadius;
-  } else {
-    syncErrorItem.iconImage =
-        [UIImage imageNamed:kGoogleServicesSyncErrorImage];
-  }
+  syncErrorItem.iconImage = DefaultSettingsRootSymbol(kSyncErrorSymbol);
+  syncErrorItem.iconBackgroundColor = [UIColor colorNamed:kRed500Color];
+  syncErrorItem.iconTintColor = UIColor.whiteColor;
+  syncErrorItem.iconCornerRadius = kColorfulBackgroundSymbolCornerRadius;
   return syncErrorItem;
 }
 
@@ -788,7 +798,7 @@ NSString* const kGoogleServicesSyncErrorImage = @"google_services_sync_error";
 // Updates the sync errors section. If `notifyConsumer` is YES, the consumer is
 // notified about model changes.
 - (void)updateSyncErrorsSection:(BOOL)notifyConsumer {
-  if (self.syncSetupService->IsInitialSetupOngoing()) {
+  if (IsInitialSyncSetupOngoing(self.syncSetupService)) {
     return;
   }
 

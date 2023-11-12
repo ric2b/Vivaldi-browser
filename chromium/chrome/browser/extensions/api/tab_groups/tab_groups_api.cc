@@ -68,8 +68,8 @@ bool IndexSupportsGroupMove(TabStripModel* tab_strip,
 }  // namespace
 
 ExtensionFunction::ResponseAction TabGroupsGetFunction::Run() {
-  std::unique_ptr<api::tab_groups::Get::Params> params(
-      api::tab_groups::Get::Params::Create(args()));
+  absl::optional<api::tab_groups::Get::Params> params =
+      api::tab_groups::Get::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   int group_id = params->group_id;
 
@@ -89,8 +89,8 @@ ExtensionFunction::ResponseAction TabGroupsGetFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction TabGroupsQueryFunction::Run() {
-  std::unique_ptr<api::tab_groups::Query::Params> params(
-      api::tab_groups::Query::Params::Create(args()));
+  absl::optional<api::tab_groups::Query::Params> params =
+      api::tab_groups::Query::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   base::Value::List result_list;
@@ -124,11 +124,9 @@ ExtensionFunction::ResponseAction TabGroupsQueryFunction::Run() {
     }
 
     TabStripModel* tab_strip = browser->tab_strip_model();
-    if (!tab_strip)
-      return RespondNow(Error(tabs_constants::kTabStripNotEditableQueryError));
-    if (!tab_strip->SupportsTabGroups())
-      return RespondNow(
-          Error(tabs_constants::kTabStripDoesNotSupportTabGroupsError));
+    if (!tab_strip->SupportsTabGroups()) {
+      continue;
+    }
 
     for (const tab_groups::TabGroupId& id :
          tab_strip->group_model()->ListTabGroups()) {
@@ -161,8 +159,8 @@ ExtensionFunction::ResponseAction TabGroupsQueryFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction TabGroupsUpdateFunction::Run() {
-  std::unique_ptr<api::tab_groups::Update::Params> params(
-      api::tab_groups::Update::Params::Create(args()));
+  absl::optional<api::tab_groups::Update::Params> params =
+      api::tab_groups::Update::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int group_id = params->group_id;
@@ -211,8 +209,8 @@ ExtensionFunction::ResponseAction TabGroupsUpdateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction TabGroupsMoveFunction::Run() {
-  std::unique_ptr<api::tab_groups::Move::Params> params(
-      api::tab_groups::Move::Params::Create(args()));
+  absl::optional<api::tab_groups::Move::Params> params =
+      api::tab_groups::Move::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int group_id = params->group_id;

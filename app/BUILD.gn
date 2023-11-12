@@ -38,6 +38,7 @@ group("resources") {
 if (generate_untranslated) {
   # Also extracting Android and ios strings
   extract_deps = []
+  target_num = 0
   foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST + ANDROID_VIVALDI_RESOURCE_LIST + IOS_VIVALDI_RESOURCE_LIST) {
     _target = _target_config[0]
     _vivaldi_source = _target_config[1]
@@ -55,7 +56,8 @@ if (generate_untranslated) {
         vivaldi_translation_dir = _flags.translation_dir_setting
       }
 
-      name = "Extract_strings_merge_"+ get_label_info(_target, "name")
+      target_num = target_num + 1
+      name = "Extract_strings_merge_"+ get_label_info(_target, "name") + "_$target_num"
       extract_deps += [":$name"]
       vivaldi_extract_untranslated(name) {
         forward_variables_from(_flags, ["no_override_locales"])

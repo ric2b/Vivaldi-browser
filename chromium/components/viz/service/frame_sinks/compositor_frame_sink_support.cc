@@ -315,7 +315,7 @@ void CompositorFrameSinkSupport::OnSurfaceDestroyed(Surface* surface) {
   if (surface->surface_id() == last_created_surface_id_)
     last_created_surface_id_ = SurfaceId();
 
-  if (!features::IsOnBeginFrameAcksEnabled() || !client_ ||
+  if (!ShouldMergeBeginFrameWithAcks() || !client_ ||
       surface_returned_resources_.empty()) {
     return;
   }
@@ -356,16 +356,16 @@ void CompositorFrameSinkSupport::ReturnResources(
 
   // When features::OnBeginFrameAcks is disabled we attempt to return resources
   // in DidReceiveCompositorFrameAck. However if there is no
-  // `ack_pending_count_` then we don't expect that signal soon. In which case
-  // we return the resources to the `client_` now.
+  // `ack_pending_from_surface_count_` then we don't expect that signal soon. In
+  // which case we return the resources to the `client_` now.
   //
   // When features::OnBeginFrameAcks is enabled we attempt to return resources
   // during the next OnBeginFrame. However if we currently do not
   // `needs_begin_frame_` or if we have been disconnected from a
   // `begin_frame_source_` then we don't expect that signal soon. In which case
   // we return the resources to the `client_` now.
-  if (!ack_pending_count_ && client_ &&
-      (!features::IsOnBeginFrameAcksEnabled() ||
+  if (!ack_pending_from_surface_count_ && client_ &&
+      (!ShouldMergeBeginFrameWithAcks() ||
        (!needs_begin_frame_ || !begin_frame_source_))) {
     client_->ReclaimResources(std::move(resources));
     return;
@@ -443,6 +443,10 @@ void CompositorFrameSinkSupport::SetWantsAnimateOnlyBeginFrames() {
   wants_animate_only_begin_frames_ = true;
 }
 
+void CompositorFrameSinkSupport::SetWantsBeginFrameAcks() {
+  wants_begin_frame_acks_ = true;
+}
+
 bool CompositorFrameSinkSupport::WantsAnimateOnlyBeginFrames() const {
   return wants_animate_only_begin_frames_;
 }
@@ -459,6 +463,11 @@ void CompositorFrameSinkSupport::InitializeCompositorFrameSinkType(
     frame_sink_manager_->frame_counter()->SetFrameSinkType(frame_sink_id_,
                                                            frame_sink_type_);
   }
+}
+
+void CompositorFrameSinkSupport::BindLayerContext(
+    mojom::PendingLayerContext& context) {
+  layer_context_impl_ = std::make_unique<LayerContextImpl>(context);
 }
 
 void CompositorFrameSinkSupport::SetThreadIds(
@@ -553,7 +562,7 @@ SubmitResult CompositorFrameSinkSupport::MaybeSubmitCompositorFrame(
   CHECK(callback_received_receive_ack_);
 
   begin_frame_tracker_.ReceivedAck(frame.metadata.begin_frame_ack);
-  ++ack_pending_count_;
+  ++ack_pending_from_surface_count_;
 
   if (frame.metadata.begin_frame_ack.frame_id.source_id ==
       BeginFrameArgs::kManualSourceId) {
@@ -731,11 +740,11 @@ void CompositorFrameSinkSupport::HandleCallback() {
 }
 
 void CompositorFrameSinkSupport::DidReceiveCompositorFrameAck() {
-  DCHECK_GT(ack_pending_count_, 0);
+  DCHECK_GT(ack_pending_from_surface_count_, 0);
   bool was_pending_manual_begin_frame_source_ =
       pending_manual_begin_frame_source_;
-  ack_pending_count_--;
-  if (!ack_pending_count_) {
+  ack_pending_from_surface_count_--;
+  if (!ack_pending_from_surface_count_) {
     pending_manual_begin_frame_source_ = false;
   }
   if (!client_)
@@ -749,8 +758,20 @@ void CompositorFrameSinkSupport::DidReceiveCompositorFrameAck() {
     return;
   }
 
-  if (features::IsOnBeginFrameAcksEnabled() &&
-      !was_pending_manual_begin_frame_source_) {
+  // When we want to merge OnBeginFrame signals with Acks, we want to enqueue
+  // the Ack here, and exit. An exception to this are when the frame was
+  // submitted with a manual BeginFrameSource, as that is driven by the client,
+  // and not by our `begin_frame_source_`.
+  //
+  // The other exception is when we have just sent an OnBeginFrame, however
+  // there was an Ack pending at that time. This typically occurs when a client
+  // submits a frame right before the next VSync. In this case we do want to
+  // send a separate Ack, so they can unthrottle and begin frame production.
+  if (ShouldMergeBeginFrameWithAcks() &&
+      !was_pending_manual_begin_frame_source_ &&
+      (!base::FeatureList::IsEnabled(features::kOnBeginFrameAllowLateAcks) ||
+       !ack_pending_during_on_begin_frame_)) {
+    ack_queued_for_client_count_++;
     return;
   }
 
@@ -880,10 +901,15 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
     frames_throttled_since_last_ = 0;
 
     last_frame_time_ = adjusted_args.frame_time;
-    if (features::IsOnBeginFrameAcksEnabled()) {
+    if (ShouldMergeBeginFrameWithAcks()) {
+      bool frame_ack = ack_queued_for_client_count_ > 0;
+      ack_pending_during_on_begin_frame_ =
+          !frame_ack && ack_pending_from_surface_count_;
       client_->OnBeginFrame(adjusted_args, std::move(frame_timing_details_),
-                            !ack_pending_count_,
-                            std::move(surface_returned_resources_));
+                            frame_ack, std::move(surface_returned_resources_));
+      if (frame_ack) {
+        ack_queued_for_client_count_--;
+      }
       surface_returned_resources_.clear();
     } else {
       client_->OnBeginFrame(adjusted_args, std::move(frame_timing_details_),
@@ -918,7 +944,7 @@ void CompositorFrameSinkSupport::UpdateNeedsBeginFramesInternal() {
       (client_needs_begin_frame_ || !frame_timing_details_.empty() ||
        !pending_surfaces_.empty() ||
        (compositor_frame_callback_ && !callback_received_begin_frame_) ||
-       (features::IsOnBeginFrameAcksEnabled() &&
+       (ShouldMergeBeginFrameWithAcks() &&
         !surface_returned_resources_.empty()));
 
   if (bundle_id_.has_value()) {
@@ -1205,6 +1231,10 @@ void CompositorFrameSinkSupport::CheckPendingSurfaces() {
   }
 }
 
+bool CompositorFrameSinkSupport::ShouldMergeBeginFrameWithAcks() const {
+  return features::IsOnBeginFrameAcksEnabled() && wants_begin_frame_acks_;
+}
+
 bool CompositorFrameSinkSupport::ShouldThrottleBeginFrameAsRequested(
     base::TimeTicks frame_time) {
   // It is not good enough to only check whether
@@ -1276,6 +1306,20 @@ void CompositorFrameSinkSupport::ProcessCompositorFrameTransitionDirective(
       break;
     case CompositorFrameTransitionDirective::Type::kRelease:
       surface_animation_manager_.reset();
+
+      // This `surface_animation_manager_` could correspond to an in-flight
+      // save, reset the tracking here.
+      in_flight_save_sequence_id_ = 0;
+
+      // If we had a `navigation_id`, also make sure to clean up the
+      // `frame_sink_manager_` in case the animation was never started (which
+      // would be the case if the destination renderer didn't opt-in to the
+      // animation behavior). Note that this operation is harmless if there
+      // is no surface animation manager to clear.
+      if (directive.navigation_id()) {
+        frame_sink_manager_->ClearSurfaceAnimationManager(
+            directive.navigation_id());
+      }
       break;
   }
 }

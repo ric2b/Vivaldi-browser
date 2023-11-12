@@ -1,0 +1,38 @@
+import("//chrome/version.gni")
+
+
+
+action("edge_version") {
+
+  edge_version_file = "edge_versions.json"
+  edge_version_header = "$target_gen_dir/base/edge_version.h"
+  edge_version_header_template = "//vivaldi/base/edge_version.h.in"
+
+  edge_version_json = read_file(edge_version_file, "json")
+
+  if (defined(edge_version_json["v" + chrome_version_major])) {
+    edge_version = edge_version_json["v" + chrome_version_major]
+    edge_version = "EDGE_VERSION='\"$edge_version\"'"
+  } else {
+    not_needed(["edge_version_json"])
+    edge_version = "EDGE_VERSION='CHROME_PRODUCT_VERSION'"
+  }
+
+  inputs = [
+    edge_version_file,
+    edge_version_header_template,
+  ]
+
+  outputs = [edge_version_header]
+
+  script = "//build/util/version.py"
+
+  args = [
+    "-e", edge_version,
+    "-i",
+    rebase_path(edge_version_header_template, root_build_dir),
+    "-o",
+    rebase_path(edge_version_header, root_build_dir),
+  ]
+
+}

@@ -9,6 +9,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
+#include "third_party/blink/renderer/core/layout/geometry/scroll_offset_range.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_static_position.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/inline_containing_block_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_absolute_utils.h"
@@ -86,7 +87,7 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
     void PropagateSpaceShortage(LayoutUnit space_shortage);
 
     // The list of columns to balance.
-    NGContainerFragmentBuilder::ChildrenVector columns;
+    NGFragmentBuilder::ChildrenVector columns;
     // The list of OOF fragmentainer descendants of |columns|.
     HeapVector<NGLogicalOOFNodeForFragmentation>
         out_of_flow_fragmentainer_descendants;
@@ -240,6 +241,11 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
     // This should only be used when laying out a fragmentainer descendant.
     LogicalOffset original_offset;
 
+    // These two fields are set only if this |OffsetInfo| is calculated from a
+    // @try rule of a @position-fallback rule.
+    absl::optional<wtf_size_t> fallback_index;
+    Vector<PhysicalScrollRange> non_overflowing_ranges;
+
     void Trace(Visitor* visitor) const;
   };
 
@@ -263,9 +269,6 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       NGBlockNode container);
 
  private:
-  bool SweepLegacyCandidates(
-      const HeapHashSet<Member<const LayoutObject>>& placed_objects);
-
   const ContainingBlockInfo GetContainingBlockInfo(
       const NGLogicalOutOfFlowPositionedNode&);
 
@@ -297,8 +300,7 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
 
   void LayoutCandidates(
       HeapVector<NGLogicalOutOfFlowPositionedNode>* candidates,
-      const LayoutBox* only_layout,
-      HeapHashSet<Member<const LayoutObject>>* placed_objects);
+      const LayoutBox* only_layout);
 
   void HandleMulticolsWithPendingOOFs(NGBoxFragmentBuilder* container_builder);
   void LayoutOOFsInMulticol(
@@ -339,7 +341,8 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
       const NGLogicalAnchorQueryMap* anchor_queries,
       const LayoutObject* implicit_anchor,
       bool try_fit_available_space,
-      bool is_first_run);
+      bool is_first_run,
+      PhysicalScrollRange* out_scroll_range);
 
   const NGLayoutResult* Layout(
       const NodeToLayout& oof_node_to_layout,
@@ -407,8 +410,8 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
   NGLogicalStaticPosition ToStaticPositionForLegacy(
       NGLogicalStaticPosition position) const;
 
-  const NGContainerFragmentBuilder::ChildrenVector&
-  FragmentationContextChildren() const {
+  const NGFragmentBuilder::ChildrenVector& FragmentationContextChildren()
+      const {
     DCHECK(container_builder_->IsBlockFragmentationContextRoot());
     return column_balancing_info_ ? column_balancing_info_->columns
                                   : container_builder_->Children();
@@ -448,16 +451,6 @@ class CORE_EXPORT NGOutOfFlowLayoutPart {
   bool has_block_fragmentation_ = false;
   // A fixedpos containing block was found in an outer fragmentation context.
   bool outer_context_has_fixedpos_container_ = false;
-
-  // Set to true if there's a legacy flexbox inside a (non-containing) legacy
-  // object (so that it's found in LayoutBlock::PositionedObjects()). E.g.:
-  //
-  // <div style="position:relative;">
-  //   <div id="legacy" style="columns:2;">
-  //     <div style="display:flex; position:absolute;">
-  bool has_legacy_flex_box_ = false;
-
-  bool performing_extra_legacy_check_ = false;
 };
 
 }  // namespace blink

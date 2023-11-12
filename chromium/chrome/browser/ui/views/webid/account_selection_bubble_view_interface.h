@@ -32,14 +32,21 @@ class AccountSelectionBubbleViewInterface {
   // Updates to show single account plus a confirm dialog. Used when showing the
   // account confirmation dialog after the user picks one of multiple accounts.
   virtual void ShowSingleAccountConfirmDialog(
-      const std::u16string& rp_for_display,
+      const std::u16string& top_frame_for_display,
+      const absl::optional<std::u16string>& iframe_for_display,
       const content::IdentityRequestAccount& account,
       const IdentityProviderDisplayData& idp_data,
       bool show_back_button) = 0;
 
   // Updates the FedCM bubble to show the "failure" sheet.
-  virtual void ShowFailureDialog(const std::u16string& rp_for_display,
-                                 const std::u16string& idp_for_display) = 0;
+  virtual void ShowFailureDialog(
+      const std::u16string& top_frame_for_display,
+      const absl::optional<std::u16string>& iframe_for_display,
+      const std::u16string& idp_for_display,
+      const content::IdentityProviderMetadata& idp_metadata) = 0;
+
+  virtual std::string GetDialogTitle() const = 0;
+  virtual absl::optional<std::string> GetDialogSubtitle() const = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_WEBID_ACCOUNT_SELECTION_BUBBLE_VIEW_INTERFACE_H_

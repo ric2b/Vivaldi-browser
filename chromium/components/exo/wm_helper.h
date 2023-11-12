@@ -189,7 +189,6 @@ class WMHelper : public chromeos::PowerManagerClient::Observer,
                                  display::ManagedDisplayMode* mode) const;
   aura::Window* GetActiveWindow() const;
   aura::Window* GetFocusedWindow() const;
-  aura::Window* GetRootWindowForNewWindows() const;
   aura::client::CursorClient* GetCursorClient();
   aura::client::DragDropClient* GetDragDropClient();
   void AddPreTargetHandler(ui::EventHandler* handler);
@@ -236,7 +235,8 @@ class WMHelper : public chromeos::PowerManagerClient::Observer,
   void PerformDrop(
       std::vector<WMHelper::DragDropObserver::DropCallback> drop_callbacks,
       std::unique_ptr<ui::OSExchangeData> data,
-      ui::mojom::DragOperation& output_drag_op);
+      ui::mojom::DragOperation& output_drag_op,
+      std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
 
   base::ObserverList<ExoWindowObserver> exo_window_observers_;
 

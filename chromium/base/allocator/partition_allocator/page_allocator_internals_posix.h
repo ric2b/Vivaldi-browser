@@ -35,7 +35,7 @@
 #include <Security/Security.h>
 #include <mach/mach.h>
 #endif
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
 #include <sys/prctl.h>
 #endif
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -62,7 +62,8 @@ namespace partition_alloc::internal {
 
 namespace {
 
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
+#if defined(PR_SET_VMA) && defined(PR_SET_VMA_ANON_NAME)
 const char* PageTagToName(PageTag tag) {
   // Important: All the names should be string literals. As per prctl.h in
   // //third_party/android_ndk the kernel keeps a pointer to the name instead
@@ -84,6 +85,7 @@ const char* PageTagToName(PageTag tag) {
       return "";
   }
 }
+#endif
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_MAC)
@@ -130,8 +132,9 @@ bool UseMapJit() {
   base::ScopedCFTypeRef<CFTypeRef> jit_entitlement(
       SecTaskCopyValueForEntitlement(
           task.get(), CFSTR("com.apple.security.cs.allow-jit"), nullptr));
-  if (!jit_entitlement)
+  if (!jit_entitlement) {
     return false;
+  }
 
   return base::mac::CFCast<CFBooleanRef>(jit_entitlement.get()) ==
          kCFBooleanTrue;
@@ -194,14 +197,16 @@ uintptr_t SystemAllocPagesInternal(uintptr_t hint,
     ret = nullptr;
   }
 
-#if BUILDFLAG(IS_ANDROID)
-  // On Android, anonymous mappings can have a name attached to them. This is
-  // useful for debugging, and double-checking memory attribution.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
+#if defined(PR_SET_VMA) && defined(PR_SET_VMA_ANON_NAME)
+  // On Android and Linux, anonymous mappings can have a name attached to them.
+  // This is useful for debugging, and double-checking memory attribution.
   if (ret) {
     // No error checking on purpose, testing only.
     prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, ret, length,
           PageTagToName(page_tag));
   }
+#endif
 #endif
 
   return reinterpret_cast<uintptr_t>(ret);
@@ -248,8 +253,9 @@ void SetSystemPagesAccessInternal(
   //
   // In this case, we are almost certainly bumping into the sandbox limit, mark
   // the crash as OOM. See SandboxLinux::LimitAddressSpace() for details.
-  if (ret == -1 && errno == ENOMEM && (access_flags & PROT_WRITE))
+  if (ret == -1 && errno == ENOMEM && (access_flags & PROT_WRITE)) {
     OOM_CRASH(length);
+  }
 
   PA_PCHECK(0 == ret);
 }
@@ -365,8 +371,9 @@ bool TryRecommitSystemPagesInternal(
   if (accessibility_disposition ==
       PageAccessibilityDisposition::kRequireUpdate) {
     bool ok = TrySetSystemPagesAccess(address, length, accessibility);
-    if (!ok)
+    if (!ok) {
       return false;
+    }
   }
 
 #if BUILDFLAG(IS_APPLE)

@@ -9,8 +9,7 @@
 #include "chromeos/ash/components/phonehub/notification.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace ash {
-namespace phonehub {
+namespace ash::phonehub {
 
 namespace {
 
@@ -97,6 +96,18 @@ class AppStreamLauncherDataModelTest : public testing::Test {
     return app_stream_launcher_data_launcher_->GetAppsListSortedByName();
   }
 
+  void SetLauncherSize(int height, int width) {
+    app_stream_launcher_data_launcher_->SetLauncherSize(height, width);
+  }
+
+  int GetLauncherHeight() {
+    return app_stream_launcher_data_launcher_->launcher_height();
+  }
+
+  int GetLauncherWidth() {
+    return app_stream_launcher_data_launcher_->launcher_width();
+  }
+
  private:
   std::unique_ptr<AppStreamLauncherDataModel>
       app_stream_launcher_data_launcher_;
@@ -116,12 +127,16 @@ TEST_F(AppStreamLauncherDataModelTest, ResetState) {
 
 TEST_F(AppStreamLauncherDataModelTest, SetAppsList) {
   std::vector<Notification::AppMetadata> apps_list;
-  apps_list.emplace_back(Notification::AppMetadata(
-      u"GPay", "com.fakeapp1", gfx::Image(), absl::nullopt, true, 1,
-      proto::AppStreamabilityStatus::STREAMABLE));
-  apps_list.emplace_back(Notification::AppMetadata(
-      u"Gboard", "com.fakeapp2", gfx::Image(), absl::nullopt, true, 1,
-      proto::AppStreamabilityStatus::STREAMABLE));
+  apps_list.emplace_back(u"GPay", "com.fakeapp1", /*color_icon=*/gfx::Image(),
+                         /*monochrome_icon_mask=*/absl::nullopt,
+                         /*icon_color=*/absl::nullopt,
+                         /*icon_is_monochrome=*/true, /*user_id=*/1,
+                         proto::AppStreamabilityStatus::STREAMABLE);
+  apps_list.emplace_back(u"Gboard", "com.fakeapp2", /*color_icon=*/gfx::Image(),
+                         /*monochrome_icon_mask=*/absl::nullopt,
+                         /*icon_color=*/absl::nullopt,
+                         /*icon_is_monochrome=*/true, /*user_id=*/1,
+                         proto::AppStreamabilityStatus::STREAMABLE);
   SetAppList(apps_list);
   EXPECT_TRUE(IsObserverAppListChanged());
   EXPECT_EQ(GetAppsList()->size(), 2u);
@@ -134,18 +149,26 @@ TEST_F(AppStreamLauncherDataModelTest, SetAppsList) {
 
 TEST_F(AppStreamLauncherDataModelTest, AddAppToList) {
   std::vector<Notification::AppMetadata> apps_list;
-  apps_list.emplace_back(Notification::AppMetadata(
-      u"GPay", "com.fakeapp1", gfx::Image(), absl::nullopt, true, 1,
-      proto::AppStreamabilityStatus::STREAMABLE));
-  apps_list.emplace_back(Notification::AppMetadata(
-      u"Gboard", "com.fakeapp2", gfx::Image(), absl::nullopt, true, 1,
-      proto::AppStreamabilityStatus::STREAMABLE));
+  apps_list.emplace_back(u"GPay", "com.fakeapp1", /*color_icon=*/gfx::Image(),
+                         /*monochrome_icon_mask=*/absl::nullopt,
+                         /*icon_color=*/absl::nullopt,
+                         /*icon_is_monochrome=*/true, /*user_id=*/1,
+                         proto::AppStreamabilityStatus::STREAMABLE);
+  apps_list.emplace_back(u"Gboard", "com.fakeapp2", /*color_icon=*/gfx::Image(),
+                         /*monochrome_icon_mask=*/absl::nullopt,
+                         /*icon_color=*/absl::nullopt,
+                         /*icon_is_monochrome=*/true, /*user_id=*/1,
+                         proto::AppStreamabilityStatus::STREAMABLE);
   SetAppList(apps_list);
   AddAppToList(Notification::AppMetadata(
-      u"added_app", "com.fakeapp3", gfx::Image(), absl::nullopt, true, 1,
+      u"added_app", "com.fakeapp3", /*color_icon=*/gfx::Image(),
+      /*monochrome_icon_mask=*/absl::nullopt, /*icon_color=*/absl::nullopt,
+      /*icon_is_monochrome=*/true, /*user_id=*/1,
       proto::AppStreamabilityStatus::STREAMABLE));
   AddAppToList(Notification::AppMetadata(
-      u"a_added_app", "com.fakeapp3", gfx::Image(), absl::nullopt, true, 1,
+      u"a_added_app", "com.fakeapp3", /*color_icon=*/gfx::Image(),
+      /*monochrome_icon_mask=*/absl::nullopt, /*icon_color=*/absl::nullopt,
+      /*icon_is_monochrome=*/true, /*user_id=*/1,
       proto::AppStreamabilityStatus::STREAMABLE));
   EXPECT_TRUE(IsObserverAppListChanged());
   EXPECT_EQ(GetAppsList()->size(), 4u);
@@ -162,12 +185,16 @@ TEST_F(AppStreamLauncherDataModelTest, AddAppToList) {
 
 TEST_F(AppStreamLauncherDataModelTest, RemoveAppFromList) {
   std::vector<Notification::AppMetadata> apps_list;
-  apps_list.emplace_back(Notification::AppMetadata(
-      u"GPay", "com.fakeapp1", gfx::Image(), absl::nullopt, true, 1,
-      proto::AppStreamabilityStatus::STREAMABLE));
-  apps_list.emplace_back(Notification::AppMetadata(
-      u"Gboard", "com.fakeapp2", gfx::Image(), absl::nullopt, true, 1,
-      proto::AppStreamabilityStatus::STREAMABLE));
+  apps_list.emplace_back(u"GPay", "com.fakeapp1", /*color_icon=*/gfx::Image(),
+                         /*monochrome_icon_mask=*/absl::nullopt,
+                         /*icon_color=*/absl::nullopt,
+                         /*icon_is_monochrome=*/true, /*user_id=*/1,
+                         proto::AppStreamabilityStatus::STREAMABLE);
+  apps_list.emplace_back(u"Gboard", "com.fakeapp2", /*color_icon=*/gfx::Image(),
+                         /*monochrome_icon_mask=*/absl::nullopt,
+                         /*icon_color=*/absl::nullopt,
+                         /*icon_is_monochrome=*/true, /*user_id=*/1,
+                         proto::AppStreamabilityStatus::STREAMABLE);
   SetAppList(apps_list);
   auto app_to_remove = proto::App();
   app_to_remove.set_package_name("com.fakeapp1");
@@ -179,5 +206,11 @@ TEST_F(AppStreamLauncherDataModelTest, RemoveAppFromList) {
   EXPECT_EQ(GetAppsListSortedByName()->size(), 1u);
   EXPECT_EQ(GetAppsListSortedByName()->at(0).visible_app_name, u"Gboard");
 }
-}  // namespace phonehub
-}  // namespace ash
+
+TEST_F(AppStreamLauncherDataModelTest, SetLauncherSize) {
+  SetLauncherSize(/*height=*/400, /*width=*/300);
+  EXPECT_EQ(GetLauncherHeight(), 400);
+  EXPECT_EQ(GetLauncherWidth(), 300);
+}
+
+}  // namespace ash::phonehub

@@ -9,15 +9,6 @@ import("//device/vr/buildflags/buildflags.gni")
 import("//tools/grit/grit_rule.gni")
 import("//weblayer/variables.gni")
 
-_bundle_utils_output =
-    "$target_gen_dir/org/chromium/weblayer_private/WebLayerBundleUtils.java"
-
-jinja_template("weblayer_bundle_utils") {
-  input = "WebLayerBundleUtils.java.jinja2"
-  output = _bundle_utils_output
-  variables = "weblayer_in_split=$weblayer_in_split"
-}
-
 android_resources("weblayer_resources") {
   sources = [
     "res/drawable/weblayer_tab_indicator.xml",
@@ -92,7 +83,6 @@ android_library("base_module_java") {
   sources = [
     "org/chromium/weblayer_private/ApplicationInfoHelper.java",
     "org/chromium/weblayer_private/ChildProcessServiceImpl.java",
-    "org/chromium/weblayer_private/WebViewCompatibilityHelperImpl.java",
   ]
   deps = [
     ":base_module_interfaces_java",
@@ -172,7 +162,6 @@ android_library("java") {
     "org/chromium/weblayer_private/WebLayerOriginVerifier.java",
     "org/chromium/weblayer_private/WebLayerTabModalPresenter.java",
     "org/chromium/weblayer_private/WebLayerVerificationResultStore.java",
-    "org/chromium/weblayer_private/WebMessageReplyProxyImpl.java",
     "org/chromium/weblayer_private/WebShareServiceFactory.java",
     "org/chromium/weblayer_private/WebappsHelper.java",
     "org/chromium/weblayer_private/bluetooth/WebLayerBluetoothChooserAndroidDelegate.java",
@@ -190,7 +179,6 @@ android_library("java") {
     "org/chromium/weblayer_private/resources/ResourceMapper.java",
     "org/chromium/weblayer_private/settings/WebLayerAccessibilitySettingsDelegate.java",
     "org/chromium/weblayer_private/settings/WebLayerSiteSettingsDelegate.java",
-    _bundle_utils_output,
   ]
   resources_package = "org.chromium.weblayer_private"
 
@@ -199,7 +187,6 @@ android_library("java") {
     ":base_module_java",
     ":gms_bridge_java",
     ":interfaces_java",
-    ":weblayer_bundle_utils",
     ":weblayer_resources",
     "//base:base_java",
     "//base:jni_java",
@@ -231,11 +218,11 @@ android_library("java") {
     "//components/browser_ui/widget/android:java",
     "//components/component_updater/android:embedded_component_loader_java",
     "//components/content_capture/android:java",
+    "//components/content_relationship_verification/android:java",
     "//components/content_settings/android:content_settings_enums_java",
     "//components/content_settings/android:java",
     "//components/crash/android:handler_java",
     "//components/crash/android:java",
-    "//components/digital_asset_links/android:java",
     "//components/download/internal/background_service:internal_java",
     "//components/download/internal/common:internal_java",
     "//components/download/network:network_java",
@@ -316,10 +303,7 @@ android_library("java") {
       "org/chromium/weblayer_private/ArCompositorDelegateProviderImpl.java",
       "org/chromium/weblayer_private/ArCoreVersionUtils.java",
     ]
-    deps += [
-      "//components/webxr/android:ar_java",
-      "//components/webxr/android:ar_java_interfaces",
-    ]
+    deps += [ "//components/webxr/android:xr_java" ]
   }
 
   srcjar_deps = [
@@ -367,7 +351,7 @@ android_library("test_java") {
     "//base:jni_java",
     "//build/android:build_java",
     "//components/android_autofill/browser:java",
-    "//components/android_autofill/browser/test_support:component_autofill_provider_java_test_support",
+    "//components/android_autofill/browser/test_support:java",
     "//components/browser_ui/accessibility/android:java",
     "//components/content_capture/android:java",
     "//components/infobars/android:java",
@@ -424,9 +408,9 @@ robolectric_binary("weblayer_junit_tests") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
-    "//components/digital_asset_links:java",
-    "//components/digital_asset_links/android:java",
-    "//components/digital_asset_links/android:junit_test_support",
+    "//components/content_relationship_verification:java",
+    "//components/content_relationship_verification/android:java",
+    "//components/content_relationship_verification/android:junit_test_support",
     "//components/embedder_support/android:util_java",
     "//components/payments/content/android:java",
     "//components/payments/content/android:junit_test_support",
@@ -444,21 +428,6 @@ robolectric_binary("weblayer_junit_tests") {
     "//third_party/mockito:mockito_java",
     "//ui/android:ui_no_recycler_view_java",
   ]
-}
-
-if (current_toolchain == default_toolchain) {
-  generate_jni_registration("weblayer_jni_registration") {
-    targets = [ ":java" ]
-    manual_jni_registration = true
-    namespace = "weblayer"
-  }
-
-  generate_jni_registration("test_weblayer_jni_registration") {
-    testonly = true
-    targets = [ ":test_java" ]
-    manual_jni_registration = true
-    namespace = "weblayer_test"
-  }
 }
 
 generate_jni("test_jni") {
@@ -501,8 +470,6 @@ generate_jni("jni") {
     "org/chromium/weblayer_private/WebLayerExceptionFilter.java",
     "org/chromium/weblayer_private/WebLayerFactoryImpl.java",
     "org/chromium/weblayer_private/WebLayerImpl.java",
-    "org/chromium/weblayer_private/WebMessageReplyProxyImpl.java",
-    "org/chromium/weblayer_private/WebViewCompatibilityHelperImpl.java",
     "org/chromium/weblayer_private/WebappsHelper.java",
     "org/chromium/weblayer_private/bluetooth/WebLayerBluetoothChooserAndroidDelegate.java",
     "org/chromium/weblayer_private/bluetooth/WebLayerBluetoothScanningPromptAndroidDelegate.java",
@@ -609,7 +576,6 @@ android_aidl("aidl") {
     "org/chromium/weblayer_private/interfaces/IBooleanCallback.aidl",
     "org/chromium/weblayer_private/interfaces/IBrowser.aidl",
     "org/chromium/weblayer_private/interfaces/IBrowserClient.aidl",
-    "org/chromium/weblayer_private/interfaces/IBrowserFragment.aidl",
     "org/chromium/weblayer_private/interfaces/IClientDownload.aidl",
     "org/chromium/weblayer_private/interfaces/IClientNavigation.aidl",
     "org/chromium/weblayer_private/interfaces/IClientPage.aidl",
@@ -639,6 +605,7 @@ android_aidl("aidl") {
     "org/chromium/weblayer_private/interfaces/IProfile.aidl",
     "org/chromium/weblayer_private/interfaces/IProfileClient.aidl",
     "org/chromium/weblayer_private/interfaces/IRemoteFragment.aidl",
+    "org/chromium/weblayer_private/interfaces/IRemoteFragmentClient.aidl",
     "org/chromium/weblayer_private/interfaces/IStringCallback.aidl",
     "org/chromium/weblayer_private/interfaces/ITab.aidl",
     "org/chromium/weblayer_private/interfaces/ITabClient.aidl",
@@ -646,8 +613,6 @@ android_aidl("aidl") {
     "org/chromium/weblayer_private/interfaces/IWebLayer.aidl",
     "org/chromium/weblayer_private/interfaces/IWebLayerClient.aidl",
     "org/chromium/weblayer_private/interfaces/IWebLayerFactory.aidl",
-    "org/chromium/weblayer_private/interfaces/IWebMessageCallbackClient.aidl",
-    "org/chromium/weblayer_private/interfaces/IWebMessageReplyProxy.aidl",
   ]
 }
 

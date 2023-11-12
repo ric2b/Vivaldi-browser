@@ -11,7 +11,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/note_interaction_controller.h"
 #import "ios/notes/notes_factory.h"
@@ -53,7 +53,8 @@ NoteInteractionController* _noteInteractionController;
         ^(const base::Value* value) {
             vivaldi::NotesModel* notesModel =
                 vivaldi::NotesModelFactory::GetForBrowserState(
-                                            [self getBrowserState]);
+                      self.browserState
+                );
             if (notesModel) {
                 const vivaldi::NoteNode* defaultNoteFolder =
                     notesModel->main_node();

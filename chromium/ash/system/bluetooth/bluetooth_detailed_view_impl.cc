@@ -13,6 +13,7 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/rounded_container.h"
+#include "ash/style/typography.h"
 #include "ash/system/bluetooth/bluetooth_device_list_item_view.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/detailed_view_delegate.h"
@@ -54,7 +55,6 @@ BluetoothDetailedViewImpl::BluetoothDetailedViewImpl(
     : BluetoothDetailedView(delegate),
       TrayDetailedView(detailed_view_delegate) {
   CreateTitleRow(IDS_ASH_STATUS_TRAY_BLUETOOTH);
-  CreateTitleSettingsButton();
   CreateScrollableList();
   CreateTopContainer();
   CreateMainContainer();
@@ -96,8 +96,9 @@ void BluetoothDetailedViewImpl::UpdateBluetoothEnabledState(bool enabled) {
       IDS_ASH_STATUS_TRAY_BLUETOOTH_TOGGLE_TOOLTIP, toggle_tooltip));
 
   // Ensure the toggle button is in sync with the current Bluetooth state.
-  if (toggle_button_->GetIsOn() != enabled)
+  if (toggle_button_->GetIsOn() != enabled) {
     toggle_button_->SetIsOn(enabled);
+  }
 
   InvalidateLayout();
 }
@@ -113,7 +114,7 @@ views::View* BluetoothDetailedViewImpl::AddDeviceListSubHeader(
   auto header = std::make_unique<views::BoxLayoutView>();
   header->SetInsideBorderInsets(kSubHeaderInsets);
   std::unique_ptr<views::Label> label = bubble_utils::CreateLabel(
-      bubble_utils::TypographyStyle::kBody2, l10n_util::GetStringUTF16(text_id),
+      TypographyToken::kCrosBody2, l10n_util::GetStringUTF16(text_id),
       cros_tokens::kColorSecondary);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label->SetSubpixelRenderingEnabled(false);
@@ -151,7 +152,7 @@ void BluetoothDetailedViewImpl::HandleViewClicked(views::View* view) {
       static_cast<BluetoothDeviceListItemView*>(view)->device_properties());
 }
 
-void BluetoothDetailedViewImpl::CreateTitleSettingsButton() {
+void BluetoothDetailedViewImpl::CreateExtraTitleRowButtons() {
   DCHECK(!settings_button_);
 
   tri_view()->SetContainerVisible(TriView::Container::END, /*visible=*/true);
@@ -183,11 +184,9 @@ void BluetoothDetailedViewImpl::CreateTopContainer() {
   toggle_row_->AddViewAndLabel(std::move(icon), u"");
   toggle_row_->text_label()->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
 
-  auto toggle = std::make_unique<TrayToggleButton>(
-      base::BindRepeating(&BluetoothDetailedViewImpl::OnToggleClicked,
-                          weak_factory_.GetWeakPtr()),
-      IDS_ASH_STATUS_TRAY_BLUETOOTH,
-      /*use_empty_border=*/true);
+  auto toggle = std::make_unique<Switch>(base::BindRepeating(
+      &BluetoothDetailedViewImpl::OnToggleClicked, weak_factory_.GetWeakPtr()));
+  SetAccessibleName(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_BLUETOOTH));
   toggle_button_ = toggle.get();
   toggle_row_->AddRightView(toggle.release());
 

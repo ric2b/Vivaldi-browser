@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.browser.customtabs.CustomTabsSessionToken;
 
+import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.ActivityLayoutState;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.findinpage.FindToolbarObserver;
@@ -28,12 +29,20 @@ public class CustomTabHeightStrategy implements FindToolbarObserver {
         void onResized(int height, int width);
     }
 
+    /** A callback to be called once the Custom Tab's layout has changed. */
+    interface OnActivityLayoutCallback {
+        /** The Custom Tab's layout has changed. */
+        void onActivityLayout(
+                int left, int top, int right, int bottom, @ActivityLayoutState int state);
+    }
+
     public static CustomTabHeightStrategy createStrategy(Activity activity, @Px int initialHeight,
             @Px int initialWidth, int breakPointDp, boolean isPartialCustomTabFixedHeight,
             CustomTabsConnection connection, @Nullable CustomTabsSessionToken session,
             ActivityLifecycleDispatcher lifecycleDispatcher, FullscreenManager fullscreenManager,
             boolean isTablet, boolean interactWithBackground, boolean showMaximizeButton,
-            int decorationType, int sideSheetPosition, int sideSheetAnimation) {
+            int decorationType, int sideSheetPosition, int sideSheetAnimation,
+            int roundedCornersPosition) {
         if (initialHeight <= 0
                 && (!ChromeFeatureList.sCctResizableSideSheet.isEnabled() || initialWidth <= 0)) {
             return new CustomTabHeightStrategy();
@@ -44,13 +53,20 @@ public class CustomTabHeightStrategy implements FindToolbarObserver {
                     breakPointDp, isPartialCustomTabFixedHeight,
                     (height, width)
                             -> connection.onResized(session, height, width),
+                    (left, top, right, bottom, state)
+                            -> connection.onActivityLayout(
+                                    session, left, top, right, bottom, state),
                     lifecycleDispatcher, fullscreenManager, isTablet, interactWithBackground,
-                    showMaximizeButton, decorationType, sideSheetPosition, sideSheetAnimation);
+                    showMaximizeButton, decorationType, sideSheetPosition, sideSheetAnimation,
+                    roundedCornersPosition);
         } else {
             return new PartialCustomTabBottomSheetStrategy(activity, initialHeight,
                     isPartialCustomTabFixedHeight,
                     (height, width)
                             -> connection.onResized(session, height, width),
+                    (left, top, right, bottom, state)
+                            -> connection.onActivityLayout(
+                                    session, left, top, right, bottom, state),
                     lifecycleDispatcher, fullscreenManager, isTablet, interactWithBackground, false,
                     new PartialCustomTabHandleStrategyFactory());
         }
@@ -81,8 +97,9 @@ public class CustomTabHeightStrategy implements FindToolbarObserver {
 
     /**
      * @see {@link BaseCustomTabRootUiCoordinator#handleCloseAnimation()}
+     * @return {@code true} if the animation will be performed.
      */
-    public void handleCloseAnimation(Runnable finishRunnable) {
+    public boolean handleCloseAnimation(Runnable finishRunnable) {
         throw new IllegalStateException(
                 "Custom close animation should be performed only on partial CCT.");
     }

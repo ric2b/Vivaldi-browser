@@ -6,6 +6,10 @@
 #import "base/check.h"
 #import "ios/chrome/common/ios_app_bundle_id_prefix_buildflags.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -13,6 +17,11 @@
 @implementation AppGroupHelper
 
 + (NSString*)applicationGroup {
+
+#if defined(VIVALDI_BUILD)
+  return [NSString stringWithFormat:@"group.%s.browser",
+                                  BUILDFLAG(IOS_APP_BUNDLE_ID_PREFIX), nil];
+#else
   NSBundle* bundle = [NSBundle mainBundle];
   NSString* group = [bundle objectForInfoDictionaryKey:@"KSApplicationGroup"];
   if (![group length]) {
@@ -20,6 +29,8 @@
                                       BUILDFLAG(IOS_APP_BUNDLE_ID_PREFIX), nil];
   }
   return group;
+#endif // End Vivaldi
+
 }
 
 + (NSUserDefaults*)groupUserDefaults {

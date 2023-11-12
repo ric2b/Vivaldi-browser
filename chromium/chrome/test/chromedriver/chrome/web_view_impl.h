@@ -11,10 +11,10 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/values.h"
+#include "chrome/test/chromedriver/chrome/mobile_device.h"
 #include "chrome/test/chromedriver/chrome/web_view.h"
 
 struct BrowserInfo;
-struct DeviceMetrics;
 class DevToolsClient;
 class DownloadDirectoryOverrideManager;
 class FrameTracker;
@@ -41,7 +41,7 @@ class WebViewImpl : public WebView {
               const WebViewImpl* parent,
               const BrowserInfo* browser_info,
               std::unique_ptr<DevToolsClient> client,
-              const DeviceMetrics* device_metrics,
+              absl::optional<MobileDevice> mobile_device,
               std::string page_load_strategy);
   ~WebViewImpl() override;
   WebViewImpl* CreateChild(const std::string& session_id,
@@ -72,11 +72,6 @@ class WebViewImpl : public WebView {
                                  const base::Value::Dict& params,
                                  std::unique_ptr<base::Value>* value) override;
   Status TraverseHistory(int delta, const Timeout* timeout) override;
-  Status EvaluateScriptWithTimeout(const std::string& frame,
-                                   const std::string& expression,
-                                   const base::TimeDelta& timeout,
-                                   const bool await_promise,
-                                   std::unique_ptr<base::Value>* result);
   Status EvaluateScript(const std::string& frame,
                         const std::string& expression,
                         const bool await_promise,
@@ -184,6 +179,15 @@ class WebViewImpl : public WebView {
   bool IsDetached() const;
 
  private:
+  WebViewImpl* GetTargetForFrame(const std::string& frame);
+  Status GetLoaderId(const std::string& frame_id,
+                     std::string* loader_id,
+                     Timeout* timeout);
+  Status CallFunctionWithTimeoutInternal(std::string frame,
+                                         std::string function,
+                                         base::Value::List args,
+                                         const base::TimeDelta& timeout,
+                                         std::unique_ptr<base::Value>* result);
   Status CallAsyncFunctionInternal(const std::string& frame,
                                    const std::string& function,
                                    const base::Value::List& args,
@@ -193,6 +197,27 @@ class WebViewImpl : public WebView {
   Status IsNotPendingNavigation(const std::string& frame_id,
                                 const Timeout* timeout,
                                 bool* is_not_pending);
+  Status ResolveElementReferences(base::Value* arg,
+                                  base::Value::List* nodes,
+                                  const std::string& context_id,
+                                  const std::string& object_group_name,
+                                  const std::string& expected_loader_id,
+                                  bool w3c_compliant);
+  Status ResolveElementReferences(base::Value::Dict* arg_dict,
+                                  base::Value::List* nodes,
+                                  const std::string& context_id,
+                                  const std::string& object_group_name,
+                                  const std::string& expected_loader_id,
+                                  bool w3c_compliant);
+  Status ResolveElementReferences(base::Value::List* arg_list,
+                                  base::Value::List* nodes,
+                                  const std::string& context_id,
+                                  const std::string& object_group_name,
+                                  const std::string& expected_loader_id,
+                                  bool w3c_compliant);
+  Status CreateElementReferences(base::Value* res,
+                                 const base::Value::List& nodes,
+                                 const std::string& loader_id);
 
   Status InitProfileInternal();
   Status StopProfileInternal();
@@ -245,25 +270,12 @@ class WebViewImplHolder {
 };
 
 namespace internal {
-
-enum EvaluateScriptReturnType {
-  ReturnByValue,
-  ReturnByObject
-};
 Status EvaluateScript(DevToolsClient* client,
                       const std::string& context_id,
                       const std::string& expression,
-                      EvaluateScriptReturnType return_type,
                       const base::TimeDelta& timeout,
                       const bool await_promise,
                       base::Value::Dict& result);
-Status EvaluateScriptAndGetObject(DevToolsClient* client,
-                                  const std::string& context_id,
-                                  const std::string& expression,
-                                  const base::TimeDelta& timeout,
-                                  const bool await_promise,
-                                  bool* got_object,
-                                  std::string* object_id);
 Status EvaluateScriptAndGetValue(DevToolsClient* client,
                                  const std::string& context_id,
                                  const std::string& expression,
@@ -272,20 +284,6 @@ Status EvaluateScriptAndGetValue(DevToolsClient* client,
                                  std::unique_ptr<base::Value>* result);
 Status ParseCallFunctionResult(const base::Value& temp_result,
                                std::unique_ptr<base::Value>* result);
-Status GetBackendNodeIdFromFunction(DevToolsClient* client,
-                                    const std::string& context_id,
-                                    const std::string& function,
-                                    const base::Value::List& args,
-                                    bool* found_node,
-                                    int* backend_node_id,
-                                    bool w3c_compliant);
-Status GetFrameIdFromFunction(DevToolsClient* client,
-                              const std::string& context_id,
-                              const std::string& function,
-                              const base::Value::List& args,
-                              bool* found_node,
-                              std::string* frame_id,
-                              bool w3c_compliant);
 }  // namespace internal
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CHROME_WEB_VIEW_IMPL_H_

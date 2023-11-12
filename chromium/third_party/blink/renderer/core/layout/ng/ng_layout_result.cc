@@ -58,7 +58,7 @@ NGLayoutResult::NGLayoutResult(NGBoxFragmentBuilderPassKey passkey,
                                const NGPhysicalFragment* physical_fragment,
                                NGBoxFragmentBuilder* builder)
     : NGLayoutResult(std::move(physical_fragment),
-                     static_cast<NGContainerFragmentBuilder*>(builder)) {
+                     static_cast<NGFragmentBuilder*>(builder)) {
   bitfields_.is_initial_block_size_indefinite =
       builder->is_initial_block_size_indefinite_;
   intrinsic_block_size_ = builder->intrinsic_block_size_;
@@ -105,14 +105,6 @@ NGLayoutResult::NGLayoutResult(NGBoxFragmentBuilderPassKey passkey,
         builder->initial_break_before_.value_or(EBreakBetween::kAuto));
     bitfields_.final_break_after =
         static_cast<unsigned>(builder->previous_break_after_);
-
-    if ((builder->start_page_name_ != g_null_atom &&
-         builder->start_page_name_) ||
-        builder->previous_page_name_) {
-      RareData* rare_data = EnsureRareData();
-      rare_data->start_page_name = builder->start_page_name_;
-      rare_data->end_page_name = builder->previous_page_name_;
-    }
   }
 
   if (builder->table_column_count_) {
@@ -137,7 +129,7 @@ NGLayoutResult::NGLayoutResult(NGLineBoxFragmentBuilderPassKey passkey,
                                const NGPhysicalFragment* physical_fragment,
                                NGLineBoxFragmentBuilder* builder)
     : NGLayoutResult(std::move(physical_fragment),
-                     static_cast<NGContainerFragmentBuilder*>(builder)) {
+                     static_cast<NGFragmentBuilder*>(builder)) {
   DCHECK_EQ(builder->bfc_block_offset_.has_value(),
             builder->line_box_bfc_block_offset_.has_value());
   if (builder->bfc_block_offset_ != builder->line_box_bfc_block_offset_) {
@@ -154,9 +146,9 @@ NGLayoutResult::NGLayoutResult(NGLineBoxFragmentBuilderPassKey passkey,
   }
 }
 
-NGLayoutResult::NGLayoutResult(NGContainerFragmentBuilderPassKey key,
+NGLayoutResult::NGLayoutResult(NGFragmentBuilderPassKey key,
                                EStatus status,
-                               NGContainerFragmentBuilder* builder)
+                               NGFragmentBuilder* builder)
     : NGLayoutResult(/* physical_fragment */ nullptr, builder) {
   bitfields_.status = status;
   DCHECK_NE(status, kSuccess)
@@ -221,7 +213,7 @@ NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
 }
 
 NGLayoutResult::NGLayoutResult(const NGPhysicalFragment* physical_fragment,
-                               NGContainerFragmentBuilder* builder)
+                               NGFragmentBuilder* builder)
     : space_(builder->space_),
       physical_fragment_(std::move(physical_fragment)),
       bitfields_(builder->is_self_collapsing_,
@@ -307,6 +299,7 @@ NGExclusionSpace NGLayoutResult::MergeExclusionSpaces(
 
 NGLayoutResult::RareData* NGLayoutResult::EnsureRareData() {
   if (!HasRareData()) {
+    DCHECK(!bitfields_.has_oof_positioned_offset);
     absl::optional<LayoutUnit> bfc_block_offset;
     if (!bitfields_.is_bfc_block_offset_nullopt)
       bfc_block_offset = bfc_offset_.block_offset;
@@ -338,9 +331,6 @@ void NGLayoutResult::CheckSameForSimplifiedLayout(
   DCHECK(EndMarginStrut() == other.EndMarginStrut());
   DCHECK(MinimalSpaceShortage() == other.MinimalSpaceShortage());
   DCHECK_EQ(TableColumnCount(), other.TableColumnCount());
-
-  DCHECK_EQ(StartPageName(), other.StartPageName());
-  DCHECK_EQ(EndPageName(), other.EndPageName());
 
   DCHECK_EQ(bitfields_.has_forced_break, other.bitfields_.has_forced_break);
   DCHECK_EQ(bitfields_.is_self_collapsing, other.bitfields_.is_self_collapsing);

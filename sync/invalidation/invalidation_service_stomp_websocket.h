@@ -83,7 +83,7 @@ class InvalidationServiceStompWebsocket
   bool HandleFrame();
 
   GURL url_;
-  Client* client_;
+  const raw_ptr<Client> client_;
 
   mojo::Receiver<network::mojom::WebSocketHandshakeClient> handshake_receiver_{
       this};

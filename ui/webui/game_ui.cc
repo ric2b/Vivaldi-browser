@@ -15,9 +15,10 @@ namespace vivaldi {
 // generated from generate_asset_definitions.py
 #include "vivaldi_game_resources.inc"
 
-content::WebUIDataSource* CreateGameUIDataSource() {
+content::WebUIDataSource* CreateGameUIDataSource(content::WebUI* web_ui) {
   content::WebUIDataSource* html_source =
-      content::WebUIDataSource::Create(vivaldi::kVivaldiGameHost);
+    content::WebUIDataSource::CreateAndAdd(Profile::FromWebUI(web_ui),
+                                           vivaldi::kVivaldiGameHost);
 
   html_source->SetDefaultResource(IDR_VIVALDI_GAME_INDEX);
 
@@ -37,9 +38,7 @@ content::WebUIDataSource* CreateGameUIDataSource() {
 }
 
 GameUI::GameUI(content::WebUI* web_ui) : content::WebUIController(web_ui) {
-  Profile* profile = Profile::FromWebUI(web_ui);
-
-  content::WebUIDataSource::Add(profile, CreateGameUIDataSource());
+  CreateGameUIDataSource(web_ui);
 }
 GameUI::~GameUI() {}
 

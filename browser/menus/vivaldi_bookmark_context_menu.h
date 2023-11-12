@@ -69,13 +69,13 @@ views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
                                  unsigned int* menu_index,
                                  int id,
                                  const std::u16string& label,
-                                 const gfx::ImageSkia& icon,
+                                 const ui::ImageModel& icon,
                                  views::MenuItemView::Type type);
 
 unsigned int GetStartIndexForBookmarks(views::MenuItemView* menu, int64_t id);
 bool IsVivaldiMenuItem(int id);
 const gfx::Image GetBookmarkDefaultIcon();
-const gfx::ImageSkia* GetBookmarkletIcon(views::MenuItemView* menu,
+const gfx::Image GetBookmarkletIcon(views::MenuItemView* menu,
                                          views::Widget* widget);
 ui::ImageModel GetBookmarkFolderIcon(views::MenuItemView* menu,
                                      views::Widget* widget);

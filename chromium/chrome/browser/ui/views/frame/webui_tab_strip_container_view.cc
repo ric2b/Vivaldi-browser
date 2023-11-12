@@ -4,12 +4,12 @@
 
 #include "chrome/browser/ui/views/frame/webui_tab_strip_container_view.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
 #include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/i18n/message_formatter.h"
 #include "base/i18n/number_formatting.h"
@@ -278,14 +278,14 @@ class WebUITabStripContainerView::AutoCloser : public ui::EventHandler,
 
   void OnViewIsDeleting(views::View* observed_view) override {
     view_observations_.RemoveObservation(observed_view);
-    if (observed_view == content_area_)
+    if (observed_view == content_area_) {
       content_area_ = nullptr;
-    else if (observed_view == omnibox_)
+    } else if (observed_view == omnibox_) {
       omnibox_ = nullptr;
-    else if (observed_view == top_container_)
+    } else {
+      CHECK_EQ(observed_view, top_container_);
       top_container_ = nullptr;
-    else
-      NOTREACHED();
+    }
   }
 
   void OnViewAddedToWidget(views::View* observed_view) override {
@@ -618,7 +618,7 @@ void WebUITabStripContainerView::UpdateHeightForDragToOpen(float height_delta) {
   }
 
   current_drag_height_ =
-      base::clamp(*current_drag_height_ + height_delta, 0.0f,
+      std::clamp(*current_drag_height_ + height_delta, 0.0f,
                   static_cast<float>(GetPreferredSize().height()));
   PreferredSizeChanged();
 }

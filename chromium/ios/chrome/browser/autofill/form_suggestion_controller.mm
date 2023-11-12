@@ -14,9 +14,11 @@
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "components/autofill/ios/browser/form_suggestion_provider.h"
 #import "components/autofill/ios/form_util/form_activity_params.h"
+#import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/autofill/form_input_navigator.h"
 #import "ios/chrome/browser/autofill/form_input_suggestions_provider.h"
-#import "ios/chrome/browser/passwords/password_generation_utils.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/web/common/url_scheme_util.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
@@ -28,6 +30,9 @@
 
 using autofill::FieldRendererId;
 using autofill::FormRendererId;
+// Block types for `RunSearchPipeline`.
+using PipelineBlock = void (^)(void (^completion)(BOOL));
+using PipelineCompletionBlock = void (^)(NSUInteger index);
 
 namespace {
 
@@ -68,6 +73,27 @@ AutofillSuggestionState::AutofillSuggestionState(
       unique_field_id(unique_field_id),
       frame_identifier(frame_identifier),
       typed_value(typed_value) {}
+
+// Executes each PipelineBlock in `blocks` in order until one invokes its
+// completion with YES, in which case `on_complete` will be invoked with the
+// `index` of the succeeding block, or until they all invoke their completions
+// with NO, in which case `on_complete` will be invoked with NSNotFound.
+void RunSearchPipeline(NSArray<PipelineBlock>* blocks,
+                       PipelineCompletionBlock on_complete,
+                       NSUInteger from_index = 0) {
+  if (from_index == [blocks count]) {
+    on_complete(NSNotFound);
+    return;
+  }
+  PipelineBlock block = blocks[from_index];
+  block(^(BOOL success) {
+    if (success) {
+      on_complete(from_index);
+    } else {
+      RunSearchPipeline(blocks, on_complete, from_index + 1);
+    }
+  });
+}
 
 }  // namespace
 
@@ -190,7 +216,7 @@ AutofillSuggestionState::AutofillSuggestionState(
   // and NO otherwise.
   NSMutableArray* findProviderBlocks = [[NSMutableArray alloc] init];
   for (NSUInteger i = 0; i < [_suggestionProviders count]; i++) {
-    passwords::PipelineBlock block = ^(void (^completion)(BOOL success)) {
+    PipelineBlock block = ^(void (^completion)(BOOL success)) {
       // Access all the providers through `self` to guarantee that both
       // `self` and all the providers exist when the block is executed.
       // `_suggestionProviders` is immutable, so the subscripting is
@@ -215,7 +241,7 @@ AutofillSuggestionState::AutofillSuggestionState(
       };
 
   // Once a provider is found, use it to retrieve suggestions.
-  passwords::PipelineCompletionBlock completion = ^(NSUInteger providerIndex) {
+  PipelineCompletionBlock completion = ^(NSUInteger providerIndex) {
     // Ignore outdated results.
     if (weakSelf.requestIdentifier != requestIdentifier) {
       return;
@@ -237,7 +263,7 @@ AutofillSuggestionState::AutofillSuggestionState(
   // Run all the blocks in `findProviderBlocks` until one invokes its
   // completion with YES. The first one to do so will be passed to
   // `completion`.
-  passwords::RunSearchPipeline(findProviderBlocks, completion);
+  RunSearchPipeline(findProviderBlocks, completion);
 }
 
 - (void)onNoSuggestionsAvailable {
@@ -294,6 +320,10 @@ AutofillSuggestionState::AutofillSuggestionState(
 }
 
 - (void)didSelectSuggestion:(FormSuggestion*)suggestion {
+  // If a suggestion was selected, reset the password bottom sheet dismiss count
+  // to 0.
+  [self resetPasswordBottomSheetDismissCount];
+
   if (!_suggestionState)
     return;
 
@@ -340,6 +370,20 @@ AutofillSuggestionState::AutofillSuggestionState(
 - (autofill::PopupType)suggestionType {
   return _provider ? _provider.suggestionType
                    : autofill::PopupType::kUnspecified;
+}
+
+#pragma mark - Private
+
+// Resets the password bottom sheet dismiss count to 0.
+- (void)resetPasswordBottomSheetDismissCount {
+  ChromeBrowserState* browserState =
+      _webState
+          ? ChromeBrowserState::FromBrowserState(_webState->GetBrowserState())
+          : nullptr;
+  if (browserState) {
+    browserState->GetPrefs()->SetInteger(
+        prefs::kIosPasswordBottomSheetDismissCount, 0);
+  }
 }
 
 @end

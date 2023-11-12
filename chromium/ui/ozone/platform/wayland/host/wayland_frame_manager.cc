@@ -11,7 +11,9 @@
 #include "base/containers/adapters.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/time/time.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/rrect_f.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/overlay_priority_hint.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_backing.h"
@@ -30,6 +32,11 @@ namespace {
 
 constexpr uint32_t kMaxNumberOfFrames = 20u;
 constexpr uint32_t kMaxFramesInFlight = 3u;
+
+constexpr base::TimeDelta kPresentationFlushTimerDuration =
+    base::Milliseconds(160);
+constexpr base::TimeDelta kPresentationFlushTimerStopThreshold =
+    kPresentationFlushTimerDuration / 10;
 
 constexpr char kBoundsRectNanOrInf[] =
     "Overlay bounds_rect is invalid (NaN or infinity).";
@@ -102,7 +109,7 @@ WaylandFrameManager::WaylandFrameManager(WaylandWindow* window,
 }
 
 WaylandFrameManager::~WaylandFrameManager() {
-  ClearStates(true /* closing */);
+  ClearStates();
 }
 
 void WaylandFrameManager::RecordFrame(std::unique_ptr<WaylandFrame> frame) {
@@ -342,13 +349,15 @@ void WaylandFrameManager::ApplySurfaceConfigure(
   surface->set_viewport_destination(config.bounds_rect.size());
   surface->set_opacity(config.opacity);
   surface->set_blending(config.enable_blend);
-  surface->set_rounded_clip_bounds(config.rounded_clip_bounds);
+  surface->set_rounded_clip_bounds(
+      config.rounded_clip_bounds.value_or(gfx::RRectF()));
   surface->set_overlay_priority(config.priority_hint);
   surface->set_background_color(config.background_color);
   surface->set_contains_video(
       config.priority_hint == gfx::OverlayPriorityHint::kHardwareProtection ||
       config.priority_hint == gfx::OverlayPriorityHint::kVideo);
-  surface->set_color_space(config.color_space);
+  surface->set_color_space(
+      config.color_space.value_or(gfx::ColorSpace::CreateSRGB()));
   if (set_opaque_region) {
     std::vector<gfx::Rect> region_px = {
         gfx::Rect(gfx::ToRoundedSize(config.bounds_rect.size()))};
@@ -628,6 +637,13 @@ void WaylandFrameManager::MaybeProcessSubmittedFrames() {
   if (submitted_frames_.empty())
     return;
 
+  // Determine the range of frames in `submitted_frames_` that we want to send
+  // OnSubmission. The range is specified by
+  //   [`on_submission_begin`, `on_submission_begin` + `on_submission_count`).
+  base::circular_deque<std::unique_ptr<WaylandFrame>>::iterator
+      on_submission_begin;
+  int32_t on_submission_count = 0;
+
   // We force an OnSubmission call for the very first buffer submitted,
   // otherwise buffers are not acked in a quiescent state. We keep track of
   // whether it has already been acked. A buffer may have already been acked
@@ -635,8 +651,9 @@ void WaylandFrameManager::MaybeProcessSubmittedFrames() {
   // explicitly released. In that case, don't send an OnSubmission.
   if (submitted_frames_.size() == 1u &&
       !submitted_frames_.front()->submission_acked) {
-    ProcessOldSubmittedFrame(submitted_frames_.front().get(),
-                             gfx::GpuFenceHandle());
+    ProcessOldSubmittedFrame(submitted_frames_.front().get());
+    on_submission_begin = submitted_frames_.begin();
+    on_submission_count = 1;
   }
 
   // Buffers may be released out of order, but we need to provide the
@@ -655,43 +672,52 @@ void WaylandFrameManager::MaybeProcessSubmittedFrames() {
     if ((*(iter + 1))->submission_acked)
       continue;
 
-    // Call OnSubmission() for this for |iter + 1| since |iter| is fully
+    // Prepare to call OnSubmission() for |iter + 1| since |iter| is fully
     // released.
-    gfx::GpuFenceHandle release_fence_handle;
-    if ((*iter)->merged_release_fence_fd.is_valid())
-      release_fence_handle.owned_fd =
-          std::move((*iter)->merged_release_fence_fd);
-    ProcessOldSubmittedFrame((iter + 1)->get(),
-                             std::move(release_fence_handle));
+    // We had to wait for this release because SwapCompletionCallback
+    // indicates to the client that the buffers in previous frame is available
+    // for reuse.
+    ProcessOldSubmittedFrame((iter + 1)->get());
+    if (on_submission_count == 0) {
+      on_submission_begin = iter + 1;
+    }
+    on_submission_count++;
   }
 
-  // Process for presentation feedbacks. OnPresentation() must be called after
-  // OnSubmission() for a frame.
-  for (auto& frame : submitted_frames_) {
-    if (!frame->submission_acked || !frame->feedback.has_value())
-      break;
-    if (frame->presentation_acked)
-      continue;
-    frame->presentation_acked = true;
-    connection_->buffer_manager_host()->OnPresentation(
-        window_->GetWidget(), frame->frame_id, frame->feedback.value());
+  if (on_submission_count > 0) {
+    std::vector<wl::WaylandPresentationInfo> presentation_infos =
+        GetReadyPresentations();
+
+    for (int32_t i = 0; i < on_submission_count; ++i) {
+      auto iter = on_submission_begin + i;
+
+      gfx::GpuFenceHandle release_fence_handle;
+      if (iter != submitted_frames_.begin()) {
+        auto prev_iter = iter - 1;
+        if ((*prev_iter)->merged_release_fence_fd.is_valid()) {
+          release_fence_handle.owned_fd =
+              std::move((*prev_iter)->merged_release_fence_fd);
+        }
+      }
+
+      // The presentation info entries are sent with the last OnSubmission()
+      // call.
+      connection_->buffer_manager_host()->OnSubmission(
+          window_->GetWidget(), (*iter)->frame_id, gfx::SwapResult::SWAP_ACK,
+          std::move(release_fence_handle),
+          (i != on_submission_count - 1)
+              ? std::vector<wl::WaylandPresentationInfo>()
+              : presentation_infos);
+    }
   }
 
-  // Clear frames that are fully released and has already called
-  // OnPresentation().
-  while (submitted_frames_.size() > 1 &&
-         submitted_frames_.front()->submitted_buffers.empty() &&
-         submitted_frames_.front()->presentation_acked) {
-    DCHECK(submitted_frames_.front()->submission_acked);
-    submitted_frames_.pop_front();
-  }
-
+  ClearProcessedSubmittedFrames();
   DCHECK_LE(submitted_frames_.size(), kMaxNumberOfFrames);
+
+  UpdatePresentationFlushTimer();
 }
 
-void WaylandFrameManager::ProcessOldSubmittedFrame(
-    WaylandFrame* frame,
-    gfx::GpuFenceHandle release_fence_handle) {
+void WaylandFrameManager::ProcessOldSubmittedFrame(WaylandFrame* frame) {
   DCHECK(!submitted_frames_.empty());
   DCHECK(!frame->submission_acked);
   DCHECK(!frame->presentation_acked);
@@ -705,13 +731,6 @@ void WaylandFrameManager::ProcessOldSubmittedFrame(
     freeze_timeout_timer_.Stop();
   }
 
-  // We can now complete the latest submission. We had to wait for this
-  // release because SwapCompletionCallback indicates to the client that the
-  // buffers in previous frame is available for reuse.
-  connection_->buffer_manager_host()->OnSubmission(
-      window_->GetWidget(), frame->frame_id, gfx::SwapResult::SWAP_ACK,
-      std::move(release_fence_handle));
-
   // If presentation feedback is not supported, use a fake feedback. This
   // literally means there are no presentation feedback callbacks created.
   if (!connection_->presentation()) {
@@ -719,6 +738,45 @@ void WaylandFrameManager::ProcessOldSubmittedFrame(
     frame->feedback = frame->feedback.value_or(
         gfx::PresentationFeedback(base::TimeTicks::Now(), base::TimeDelta(),
                                   GetPresentationKindFlags(0)));
+  }
+}
+
+std::vector<wl::WaylandPresentationInfo>
+WaylandFrameManager::GetReadyPresentations() {
+  std::vector<wl::WaylandPresentationInfo> results;
+  for (auto& frame : submitted_frames_) {
+    if (!frame->submission_acked || !frame->feedback.has_value()) {
+      break;
+    }
+    if (frame->presentation_acked) {
+      continue;
+    }
+    frame->presentation_acked = true;
+    results.emplace_back(frame->frame_id, frame->feedback.value());
+  }
+
+  return results;
+}
+
+bool WaylandFrameManager::HaveReadyPresentations() const {
+  for (auto& frame : submitted_frames_) {
+    if (!frame->submission_acked || !frame->feedback.has_value()) {
+      break;
+    }
+    if (frame->presentation_acked) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+void WaylandFrameManager::ClearProcessedSubmittedFrames() {
+  while (submitted_frames_.size() > 1 &&
+         submitted_frames_.front()->submitted_buffers.empty() &&
+         submitted_frames_.front()->presentation_acked) {
+    DCHECK(submitted_frames_.front()->submission_acked);
+    submitted_frames_.pop_front();
   }
 }
 
@@ -758,38 +816,81 @@ void WaylandFrameManager::Hide() {
   MaybeProcessSubmittedFrames();
 }
 
-void WaylandFrameManager::ClearStates(bool closing) {
+void WaylandFrameManager::ClearStates() {
   // Clear the previous fatal error message as it might have been set during
   // a playback.
   fatal_error_message_.clear();
 
   for (auto& frame : submitted_frames_) {
-    frame->wl_frame_callback.reset();
     for (auto& submitted : frame->submitted_buffers)
       submitted.second->OnExplicitRelease(submitted.first);
-    frame->submission_acked = true;
-    frame->submitted_buffers.clear();
-    if (!frame->feedback.has_value())
-      frame->feedback = gfx::PresentationFeedback::Failure();
   }
+  submitted_frames_.clear();
 
   for (auto& frame : pending_frames_) {
     DCHECK(frame)
         << "Can't perform OnChannelDestroyed() during a frame playback.";
-    frame->feedback = gfx::PresentationFeedback::Failure();
-    submitted_frames_.push_back(std::move(frame));
   }
   pending_frames_.clear();
 
-  if (closing)
+  presentation_flush_timer_.Stop();
+}
+
+// static
+base::TimeDelta
+WaylandFrameManager::GetPresentationFlushTimerDurationForTesting() {
+  return kPresentationFlushTimerDuration;
+}
+
+void WaylandFrameManager::UpdatePresentationFlushTimer() {
+  if (HaveReadyPresentations()) {
+    if (!presentation_flush_timer_.IsRunning()) {
+      presentation_flush_timer_.Start(
+          FROM_HERE, kPresentationFlushTimerDuration, this,
+          &WaylandFrameManager::OnPresentationFlushTimerFired);
+    }
+
     return;
+  }
 
-  MaybeProcessSubmittedFrames();
+  if (presentation_flush_timer_.IsRunning()) {
+    // There is no queued presentation. Decide whether to stop the presentation
+    // flush timer.
+    //
+    // If we unconditionally stop the timer here, it is logically correct, but
+    // often results in frequent timer starts and stops. Imagine we have
+    // interleaved submissions and presentations:
+    //   submission_1 - presentation_1 - submission_2 - presetnation_2 - ...
+    // Then we will always start timer when we get presentation_i, and stop
+    // timer when we get submission_(i+1), at which point we send an
+    // OnSubmission IPC carrying both submission_(i+1) and presentation_i.
+    //
+    // In order to reduce timer starts/stops, here we choose not to stop the
+    // timer, except for one case: when it gets close enough to the target time
+    // of the timer. The reason is that if we don't stop the timer in this case,
+    // it is likely to fire before the next submission, resulting in either
+    //   (1) a no-op (if no presentation arrives before timer firing); or
+    //   (2) an extra OnPresentation IPC (if a presentation arrives before timer
+    //   firing), which could have been piggybacked by the next submission. This
+    //   is an expensive case that we want to avoid.
+    const base::TimeDelta remaining_delay =
+        presentation_flush_timer_.desired_run_time() - base::TimeTicks::Now();
+    if (remaining_delay <= kPresentationFlushTimerStopThreshold) {
+      presentation_flush_timer_.Stop();
+    }
+  }
+}
 
-  DCHECK(submitted_frames_.empty() ||
-         (submitted_frames_.size() == 1 &&
-          submitted_frames_.back()->submission_acked &&
-          submitted_frames_.back()->presentation_acked));
+void WaylandFrameManager::OnPresentationFlushTimerFired() {
+  std::vector<wl::WaylandPresentationInfo> presentation_infos =
+      GetReadyPresentations();
+  if (presentation_infos.empty()) {
+    return;
+  }
+  connection_->buffer_manager_host()->OnPresentation(window_->GetWidget(),
+                                                     presentation_infos);
+
+  ClearProcessedSubmittedFrames();
 }
 
 }  // namespace ui

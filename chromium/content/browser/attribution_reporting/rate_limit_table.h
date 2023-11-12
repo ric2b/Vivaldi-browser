@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/containers/flat_set.h"
-#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
@@ -75,7 +74,8 @@ class CONTENT_EXPORT RateLimitTable {
   // Returns false on failure.
   [[nodiscard]] bool AddRateLimitForAttribution(
       sql::Database* db,
-      const AttributionInfo& attribution_info);
+      const AttributionInfo& attribution_info,
+      const StoredSource&);
 
   [[nodiscard]] RateLimitResult SourceAllowedForReportingOriginLimit(
       sql::Database* db,
@@ -87,11 +87,13 @@ class CONTENT_EXPORT RateLimitTable {
 
   [[nodiscard]] RateLimitResult AttributionAllowedForReportingOriginLimit(
       sql::Database* db,
-      const AttributionInfo& attribution_info);
+      const AttributionInfo& attribution_info,
+      const StoredSource&);
 
   [[nodiscard]] RateLimitResult AttributionAllowedForAttributionLimit(
       sql::Database* db,
-      const AttributionInfo& attribution_info);
+      const AttributionInfo& attribution_info,
+      const StoredSource&);
 
   // These should be 1:1 with |AttributionStorageSql|'s |ClearData| functions.
   // Returns false on failure.

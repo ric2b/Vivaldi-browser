@@ -16,7 +16,6 @@ namespace blink {
 
 class LayoutBox;
 class NGBlockBreakToken;
-class NGBoxFragmentBuilder;
 class NGColumnSpannerPath;
 class NGConstraintSpace;
 class NGEarlyBreak;
@@ -134,17 +133,13 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
   NGBlockNode GetRenderedLegend() const;
   NGBlockNode GetFieldsetContent() const;
 
-  bool IsNGTableCell() const {
-    return box_->IsTableCell() && !box_->IsTableCellLegacy();
-  }
+  bool IsNGTableCell() const { return box_->IsTableCell(); }
 
   bool IsContainingBlockNGGrid() const {
     return box_->ContainingBlock()->IsLayoutNGGrid();
   }
-  bool IsFrameSet() const { return box_->IsLayoutNGFrameSet(); }
-  bool IsParentNGFrameSet() const {
-    return box_->Parent()->IsLayoutNGFrameSet();
-  }
+  bool IsFrameSet() const { return box_->IsFrameSet(); }
+  bool IsParentNGFrameSet() const { return box_->Parent()->IsFrameSet(); }
   bool IsParentNGGrid() const { return box_->Parent()->IsLayoutNGGrid(); }
 
   // Return true if this block node establishes an inline formatting context.
@@ -157,7 +152,7 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
   bool IsInlineLevel() const;
   bool IsAtomicInlineLevel() const;
   bool HasAspectRatio() const;
-  bool IsInTopLayer() const;
+  bool IsInTopOrViewTransitionLayer() const;
 
   // Returns the aspect ratio of a replaced element.
   LogicalSize GetAspectRatio() const;
@@ -236,6 +231,10 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
     return box_->ShouldApplyLayoutContainment();
   }
 
+  bool ShouldApplyPaintContainment() const {
+    return box_->ShouldApplyPaintContainment();
+  }
+
   bool HasLineIfEmpty() const {
     if (const auto* block = DynamicTo<LayoutBlock>(box_.Get()))
       return block->HasLineIfEmpty();
@@ -263,10 +262,6 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
  private:
   void PrepareForLayout() const;
 
-  // Runs layout on the underlying LayoutObject and creates a fragment for the
-  // resulting geometry.
-  const NGLayoutResult* RunLegacyLayout(const NGConstraintSpace&) const;
-
   const NGLayoutResult* RunSimplifiedLayout(const NGLayoutAlgorithmParams&,
                                             const NGLayoutResult&) const;
 
@@ -275,7 +270,8 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
   void FinishLayout(LayoutBlockFlow*,
                     const NGConstraintSpace&,
                     const NGBlockBreakToken*,
-                    const NGLayoutResult*) const;
+                    const NGLayoutResult*,
+                    LayoutSize old_box_size) const;
 
   // Update the layout results vector in LayoutBox with the new result.
   void StoreResultInLayoutBox(const NGLayoutResult*,
@@ -300,11 +296,6 @@ class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
       const NGConstraintSpace&,
       const NGPhysicalBoxFragment&,
       const NGBlockBreakToken* previous_container_break_token) const;
-
-  void CopyBaselinesFromLegacyLayout(const NGConstraintSpace&,
-                                     NGBoxFragmentBuilder*) const;
-  LayoutUnit AtomicInlineBaselineFromLegacyLayout(
-      const NGConstraintSpace&) const;
 
   void UpdateMarginPaddingInfoIfNeeded(const NGConstraintSpace&) const;
 

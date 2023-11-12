@@ -4,6 +4,7 @@
 #ifndef CHROME_BROWSER_ASH_INPUT_METHOD_NATIVE_INPUT_METHOD_ENGINE_OBSERVER_H_
 #define CHROME_BROWSER_ASH_INPUT_METHOD_NATIVE_INPUT_METHOD_ENGINE_OBSERVER_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/input_method/assistive_suggester.h"
@@ -156,8 +157,7 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
 
   void OnJapaneseSettingsReceived(ime::mojom::JapaneseConfigPtr config);
   void OnJapaneseDecoderConnected(bool bound);
-  void ConnectToImeService(ime::mojom::ConnectionTarget connection_target,
-                           const std::string& engine_id);
+  void ConnectToImeService(const std::string& engine_id);
 
   void HandleOnFocusAsyncForNativeMojoEngine(
       const std::string& engine_id,
@@ -168,9 +168,11 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
   bool IsInputMethodBound();
   bool IsInputMethodConnected();
   bool IsTextClientActive();
-  void ActivateTextClient(int context_id, bool on_focus_success);
+  void OnFocusAck(int context_id,
+                  bool on_focus_success,
+                  ime::mojom::InputMethodMetadataPtr metadata);
 
-  PrefService* prefs_ = nullptr;
+  raw_ptr<PrefService, ExperimentalAsh> prefs_ = nullptr;
 
   std::unique_ptr<InputMethodEngineObserver> ime_base_observer_;
   mojo::Remote<ime::mojom::InputEngineManager> remote_manager_;

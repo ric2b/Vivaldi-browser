@@ -6,10 +6,12 @@
 
 #import "base/feature_list.h"
 #import "base/mac/foundation_util.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/link_to_text/link_to_text_delegate.h"
 #import "ios/chrome/browser/ui/partial_translate/partial_translate_delegate.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/search_with/search_with_delegate.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
@@ -31,20 +33,23 @@
 }
 
 - (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder {
-  [self addLinkToText:builder];
-  [self addPartialTranslate:builder];
-}
-
-- (void)addLinkToText:(id<UIMenuBuilder>)builder {
   if (!base::FeatureList::IsEnabled(kIOSCustomBrowserEditMenu)) {
     return;
   }
+  [self addLinkToText:builder];
+  [self addPartialTranslate:builder];
+  [self.searchWithDelegate buildMenuWithBuilder:builder];
+}
+
+- (void)addLinkToText:(id<UIMenuBuilder>)builder {
   NSString* title = l10n_util::GetNSString(IDS_IOS_SHARE_LINK_TO_TEXT);
   NSString* linkToTextId = @"chromecommand.linktotext";
-  UICommand* menuCommand = [UICommand commandWithTitle:title
-                                                 image:nil
-                                                action:@selector(linkToText:)
-                                          propertyList:linkToTextId];
+  UICommand* menuCommand = [UICommand
+      commandWithTitle:title
+                 image:DefaultSymbolWithPointSize(kHighlighterSymbol,
+                                                  kSymbolActionPointSize)
+                action:@selector(linkToText:)
+          propertyList:linkToTextId];
 
   UIMenu* linkToTextMenu = [UIMenu menuWithTitle:title
                                            image:nil
@@ -63,7 +68,8 @@
   NSString* partialTranslateId = @"chromecommand.partialTranslate";
   UICommand* partialTranslateCommand =
       [UICommand commandWithTitle:title
-                            image:nil
+                            image:CustomSymbolWithPointSize(
+                                      kTranslateSymbol, kSymbolActionPointSize)
                            action:@selector(chromePartialTranslate:)
                      propertyList:partialTranslateId];
 
@@ -174,7 +180,7 @@
   if (_firstResponder) {
     return _firstResponder;
   }
-  _firstResponder = GetFirstResponder();
+  _firstResponder = GetFirstResponderSubview(self.rootView);
   __weak BrowserEditMenuHandler* weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
     weakSelf.firstResponder = nil;

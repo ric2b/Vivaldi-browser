@@ -6,7 +6,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
@@ -15,6 +14,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/scoped_feature_list.h"
@@ -26,6 +26,7 @@
 #include "components/password_manager/core/browser/credential_manager_utils.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check_factory.h"
+#include "components/password_manager/core/browser/leak_detection/leak_detection_request_utils.h"
 #include "components/password_manager/core/browser/leak_detection/mock_leak_detection_check_factory.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
@@ -59,7 +60,11 @@ const char kTestAndroidRealm2[] = "android://hash@com.example.two.android/";
 
 class MockLeakDetectionCheck : public LeakDetectionCheck {
  public:
-  MOCK_METHOD3(Start, void(const GURL&, std::u16string, std::u16string));
+  MOCK_METHOD(
+      void,
+      Start,
+      (LeakDetectionInitiator, const GURL&, std::u16string, std::u16string),
+      (override));
 };
 
 class MockPasswordManagerClient : public StubPasswordManagerClient {
@@ -158,9 +163,8 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
         FROM_HERE, base::BindOnce(std::move(callback),
                                   base::Owned(new PasswordForm(*form))));
     std::vector<PasswordForm*> raw_forms(local_forms.size());
-    std::transform(
-        local_forms.begin(), local_forms.end(), raw_forms.begin(),
-        [](const std::unique_ptr<PasswordForm>& form) { return form.get(); });
+    base::ranges::transform(local_forms, raw_forms.begin(),
+                            &std::unique_ptr<PasswordForm>::get);
     PromptUserToChooseCredentialsPtr(raw_forms, origin, base::DoNothing());
     return true;
   }
@@ -1782,7 +1786,8 @@ TEST_P(CredentialManagerImplTest, StorePasswordCredentialStartsLeakDetection) {
 
   auto check_instance = std::make_unique<MockLeakDetectionCheck>();
   EXPECT_CALL(*check_instance,
-              Start(form_.url, form_.username_value, form_.password_value));
+              Start(LeakDetectionInitiator::kSignInCheck, form_.url,
+                    form_.username_value, form_.password_value));
   EXPECT_CALL(*weak_factory, TryCreateLeakCheck)
       .WillOnce(testing::Return(testing::ByMove(std::move(check_instance))));
   CallStore(PasswordFormToCredentialInfo(form_), base::DoNothing());

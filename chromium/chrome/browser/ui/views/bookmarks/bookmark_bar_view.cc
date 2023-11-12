@@ -20,6 +20,7 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
@@ -27,14 +28,18 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/favicon/favicon_utils.h"
+#include "chrome/browser/preloading/chrome_preloading.h"
+#include "chrome/browser/preloading/prerender/prerender_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/themes/theme_properties.h"
@@ -43,6 +48,7 @@
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils_desktop.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -59,6 +65,8 @@
 #include "chrome/browser/ui/views/event_utils.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_background.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_util.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_switches.h"
@@ -81,6 +89,7 @@
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -131,6 +140,7 @@
 #include "ui/views/controls/separator.h"
 #include "ui/views/drag_utils.h"
 #include "ui/views/metrics.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/view_constants.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/tooltip_manager.h"
@@ -157,6 +167,13 @@ gfx::ImageSkia* GetImageSkiaNamed(int id) {
   return ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(id);
 }
 
+const std::u16string& GetFolderButtonAccessibleName(
+    const std::u16string& folder_title) {
+  static const std::u16string& fallback_name =
+      l10n_util::GetStringUTF16(IDS_UNNAMED_BOOKMARK_FOLDER);
+  return folder_title.empty() ? fallback_name : folder_title;
+}
+
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 enum class PreloadBookmarkMetricsEvent {
@@ -165,6 +182,27 @@ enum class PreloadBookmarkMetricsEvent {
   kMouseClick = 2,
   kMaxValue = kMouseClick,
 };
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PrerenderPredictionResult {
+  kPrerenderedAndNavigated = 0,        // True Positive
+  kPrerenderedButNotNavigated = 1,     // False Positive
+  kNotPrerenderedButNavigated = 2,     // False Negative
+  kNotPrerenderedAndNotNavigated = 3,  // True Negative
+  kMaxValue = kNotPrerenderedAndNotNavigated,
+};
+
+// These are used as control the behavior of kBookmarkTriggerForPrerender2.
+const base::FeatureParam<int> kPrerenderStartDelayOnMouseHoverByMiliSeconds{
+    &features::kBookmarkTriggerForPrerender2,
+    "prerender_start_delay_on_mouse_hover_ms", 300};
+const base::FeatureParam<bool> kPrerenderBookmarkBarOnMousePressedTrigger{
+    &features::kBookmarkTriggerForPrerender2,
+    "prerender_bookmarkbar_on_mouse_pressed_trigger", true};
+const base::FeatureParam<bool> kPrerenderBookmarkBarOnMouseHoverTrigger{
+    &features::kBookmarkTriggerForPrerender2,
+    "prerender_bookmarkbar_on_mouse_hover_trigger", true};
 
 // BookmarkButtonBase -----------------------------------------------
 
@@ -182,6 +220,7 @@ class BookmarkButtonBase : public views::LabelButton {
     views::InstallPillHighlightPathGenerator(this);
 
     SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+    views::FocusRing::Get(this)->SetOutsetFocusRingDisabled(true);
     SetHideInkDropWhenShowingContextMenu(false);
 
     show_animation_ = std::make_unique<gfx::SlideAnimation>(this);
@@ -213,8 +252,6 @@ class BookmarkButtonBase : public views::LabelButton {
   }
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
-    if (GetAccessibleName().empty())
-      node_data->SetNameExplicitlyEmpty();
     views::LabelButton::GetAccessibleNodeData(node_data);
     node_data->AddStringAttribute(
         ax::mojom::StringAttribute::kRoleDescription,
@@ -237,34 +274,57 @@ class BookmarkButton : public BookmarkButtonBase {
   METADATA_HEADER(BookmarkButton);
   BookmarkButton(PressedCallback callback,
                  const GURL& url,
-                 const std::u16string& title)
-      : BookmarkButtonBase(std::move(callback), title), url_(url) {
-    const auto mouseover_and_mousedown_recorder_callback =
-        [](views::Button* button) {
-          switch (button->GetState()) {
-            case views::Button::ButtonState::STATE_PRESSED:
-              base::UmaHistogramEnumeration(
-                  "Prerender.Experimental.BookmarkUrlButtonEvent",
-                  PreloadBookmarkMetricsEvent::kMouseDown);
-              break;
-            case views::Button::ButtonState::STATE_HOVERED:
-              base::UmaHistogramEnumeration(
-                  "Prerender.Experimental.BookmarkUrlButtonEvent",
-                  PreloadBookmarkMetricsEvent::kMouseOver);
-              break;
-            case views::Button::ButtonState::STATE_DISABLED:
-            case views::Button::ButtonState::STATE_NORMAL:
-            case views::Button::ButtonState::STATE_COUNT:
-              break;
-          }
-        };
-
-    state_change_subscription_ =
-        this->AddStateChangedCallback(base::BindRepeating(
-            mouseover_and_mousedown_recorder_callback, base::Unretained(this)));
-  }
+                 const std::u16string& title,
+                 const raw_ptr<Browser> browser)
+      : BookmarkButtonBase(base::BindRepeating(&BookmarkButton::OnButtonPressed,
+                                               base::Unretained(this)),
+                           title),
+        callback_(std::move(callback)),
+        url_(url),
+        browser_(browser) {}
   BookmarkButton(const BookmarkButton&) = delete;
   BookmarkButton& operator=(const BookmarkButton&) = delete;
+
+  void OnButtonPressed(const ui::Event& event) {
+    MayRecordHoverDuration(/*taken=*/true);
+    callback_.Run(event);
+  }
+
+  void MayRecordHoverDuration(bool taken) {
+    // Record once. `moouse_entered_time_` should not be set if
+    // `OnButtonPressed` is called for keyboard events. We are not interested
+    // in such cases.
+    if (hover_duration_recorded_ || !mouse_entered_time_.has_value()) {
+      return;
+    }
+    hover_duration_recorded_ = true;
+    base::TimeDelta duration = base::TimeTicks::Now() - *mouse_entered_time_;
+    base::UmaHistogramTimes(
+        taken ? "Prerender.Experimental.BookmarkBar.HoverDuration.Taken"
+              : "Prerender.Experimental.BookmarkBar.HoverDuration.NotTaken",
+        duration);
+    CHECK(mouse_move_time_.has_value());
+    base::TimeDelta duration_from_last_move =
+        base::TimeTicks::Now() - *mouse_move_time_;
+    base::UmaHistogramTimes(taken ? "Prerender.Experimental.BookmarkBar."
+                                    "HoverDuration.FromLastMouseMove.Taken"
+                                  : "Prerender.Experimental.BookmarkBar."
+                                    "HoverDuration.FromLastMouseMove.NotTaken",
+                            duration_from_last_move);
+
+    // Check `prerender_handle_` to know if we triggered prerendering for this
+    // bookmark button. The handle could be invalidated if the primary page
+    // navigates but we still need to count such a case as prerendered.
+    bool prerendered = prerender_handle_ || prerender_handle_.WasInvalidated();
+    base::UmaHistogramEnumeration(
+        "Prerender.Experimental.BookmarkBar.PredictionResult",
+        prerendered
+            ? (taken ? PrerenderPredictionResult::kPrerenderedAndNavigated
+                     : PrerenderPredictionResult::kPrerenderedButNotNavigated)
+            : (taken ? PrerenderPredictionResult::kNotPrerenderedButNavigated
+                     : PrerenderPredictionResult::
+                           kNotPrerenderedAndNotNavigated));
+  }
 
   // views::View:
   std::u16string GetTooltipText(const gfx::Point& p) const override {
@@ -283,18 +343,133 @@ class BookmarkButton : public BookmarkButtonBase {
     return tooltip_text_;
   }
 
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    BookmarkButtonBase::GetAccessibleNodeData(node_data);
+    const std::u16string name = GetAccessibleName();
+    node_data->SetNameChecked(
+        name.empty()
+            ? l10n_util::GetStringFUTF16(
+                  IDS_UNNAMED_BOOKMARK_BUTTON_ACCESSIBLE_NAME,
+                  url_formatter::FormatUrl(
+                      url_.get(), url_formatter::kFormatUrlOmitDefaults,
+                      base::UnescapeRule::NORMAL, nullptr, nullptr, nullptr))
+            : name);
+  }
+
   void SetText(const std::u16string& text) override {
     BookmarkButtonBase::SetText(text);
     tooltip_text_.clear();
   }
 
+  void OnMouseEntered(const ui::MouseEvent& event) override {
+    // Reset source information for taking metrics for following mouse events.
+    mouse_entered_time_ = base::TimeTicks::Now();
+    mouse_move_time_ = *mouse_entered_time_;
+    hover_duration_recorded_ = false;
+    mouse_has_been_pressed_ = false;
+
+    base::UmaHistogramEnumeration(
+        "Prerender.Experimental.BookmarkUrlButtonEvent",
+        PreloadBookmarkMetricsEvent::kMouseOver);
+    BookmarkButtonBase::OnMouseEntered(event);
+
+    if (base::FeatureList::IsEnabled(features::kBookmarkTriggerForPrerender2) &&
+        kPrerenderBookmarkBarOnMouseHoverTrigger.Get() &&
+        url_->SchemeIs("https")) {
+      preloading_timer_.Start(
+          FROM_HERE,
+          base::Milliseconds(
+              kPrerenderStartDelayOnMouseHoverByMiliSeconds.Get()),
+          base::BindRepeating(
+              &BookmarkButton::StartPrerendering, base::Unretained(this),
+              chrome_preloading_predictor::kMouseHoverOnBookmarkBar, *url_));
+    }
+  }
+
+  void OnMouseExited(const ui::MouseEvent& event) override {
+    MayRecordHoverDuration(/*taken=*/false);
+    BookmarkButtonBase::OnMouseExited(event);
+    if (base::FeatureList::IsEnabled(features::kBookmarkTriggerForPrerender2)) {
+      preloading_timer_.Stop();
+      if (prerender_web_contents_) {
+        auto* prerender_manager =
+            PrerenderManager::FromWebContents(&(*prerender_web_contents_));
+        prerender_manager->StopPrerenderBookmark(prerender_handle_);
+        prerender_handle_ = nullptr;
+        prerender_web_contents_ = nullptr;
+      }
+    }
+  }
+
+  bool OnMousePressed(const ui::MouseEvent& event) override {
+    bool result = BookmarkButtonBase::OnMousePressed(event);
+    if (GetState() == ButtonState::STATE_PRESSED) {
+      base::UmaHistogramEnumeration("Prerender.Experimental.BookmarkMetrics",
+                                    PreloadBookmarkMetricsEvent::kMouseDown);
+    }
+    // Record duration if the event happens before PressedCallback invocation.
+    if (!mouse_has_been_pressed_) {
+      mouse_has_been_pressed_ = true;
+      auto now = base::TimeTicks::Now();
+      // It seems `mouse_entered_time_` could be empty, maybe OnMouseEntered()
+      // can be dropped sometime.
+      base::TimeDelta duration = now - mouse_entered_time_.value_or(now);
+      base::UmaHistogramTimes(
+          "Prerender.Experimental.BookmarkBar.EnterToPressDuration", duration);
+      if (event.IsOnlyLeftMouseButton()) {
+        base::UmaHistogramTimes(
+            "Prerender.Experimental.BookmarkBar.EnterToPressDuration."
+            "LeftButton",
+            duration);
+      }
+    }
+    if (event.IsOnlyLeftMouseButton() &&
+        base::FeatureList::IsEnabled(features::kBookmarkTriggerForPrerender2) &&
+        kPrerenderBookmarkBarOnMousePressedTrigger.Get()) {
+      StartPrerendering(chrome_preloading_predictor::kPointerDownOnBookmarkBar,
+                        *url_);
+    }
+    return result;
+  }
+
+  void OnMouseMoved(const ui::MouseEvent& event) override {
+    mouse_move_time_ = base::TimeTicks::Now();
+    return BookmarkButtonBase::OnMouseMoved(event);
+  }
+
  private:
+  void StartPrerendering(content::PreloadingPredictor predictor, GURL url) {
+    // TODO(https://crbug.com/1422819): Prerender only for https scheme, and add
+    // an enum metric to report the protocol scheme.
+    CHECK(
+        base::FeatureList::IsEnabled(features::kBookmarkTriggerForPrerender2));
+    if (!prerender_handle_) {
+      prerender_web_contents_ =
+          browser_->tab_strip_model()->GetActiveWebContents()->GetWeakPtr();
+      PrerenderManager::CreateForWebContents(&(*prerender_web_contents_));
+      auto* prerender_manager =
+          PrerenderManager::FromWebContents(&(*prerender_web_contents_));
+      prerender_handle_ =
+          prerender_manager->StartPrerenderBookmark(url, predictor);
+    }
+  }
+
   // A cached value of maximum width for tooltip to skip generating
   // new tooltip text.
   mutable int max_tooltip_width_ = 0;
   mutable std::u16string tooltip_text_;
+  PressedCallback callback_;
   const raw_ref<const GURL> url_;
-  base::CallbackListSubscription state_change_subscription_;
+  const raw_ptr<Browser> browser_;
+  base::WeakPtr<content::PrerenderHandle> prerender_handle_;
+  base::RetainingOneShotTimer preloading_timer_;
+  base::WeakPtr<content::WebContents> prerender_web_contents_;
+
+  // Information for metrics.
+  absl::optional<base::TimeTicks> mouse_entered_time_;
+  absl::optional<base::TimeTicks> mouse_move_time_;
+  bool hover_duration_recorded_ = false;
+  bool mouse_has_been_pressed_ = false;
 };
 
 BEGIN_METADATA(BookmarkButton, BookmarkButtonBase)
@@ -476,6 +651,7 @@ BookmarkBarView::BookmarkBarView(Browser* browser, BrowserView* browser_view)
       browser_(browser),
       browser_view_(browser_view) {
   SetID(VIEW_ID_BOOKMARK_BAR);
+  SetProperty(views::kElementIdentifierKey, kBookmarkBarElementId);
 
   // TODO(lgrey): This layer was introduced to support clipping the bookmark
   // bar to bounds to prevent it from drawing over the toolbar while animating.
@@ -885,7 +1061,7 @@ void BookmarkBarView::Layout() {
     x += bookmarks_separator_pref.width();
   }
 
-  // The "Other Bookmarks" button.
+  // The "All/Other Bookmarks" button.
   if (other_bookmarks_button_->GetVisible()) {
     other_bookmarks_button_->SetBounds(x, y, other_bookmarks_pref.width(),
                                        button_height);
@@ -1129,12 +1305,16 @@ void BookmarkBarView::BookmarkModelLoaded(BookmarkModel* model,
   // once, or we didn't properly clear things. Either of which shouldn't happen.
   // The actual bookmark buttons are added from Layout().
   DCHECK(bookmark_buttons_.empty());
-  DCHECK(model->other_node());
-  other_bookmarks_button_->SetAccessibleName(model->other_node()->GetTitle());
-  other_bookmarks_button_->SetText(model->other_node()->GetTitle());
+  const std::u16string other_bookmarks_button_text =
+      base::FeatureList::IsEnabled(features::kPowerBookmarksSidePanel)
+          ? l10n_util::GetStringUTF16(IDS_BOOKMARKS_ALL_BOOKMARKS)
+          : model->other_node()->GetTitle();
+  other_bookmarks_button_->SetAccessibleName(other_bookmarks_button_text);
+  other_bookmarks_button_->SetText(other_bookmarks_button_text);
+  const auto managed_title = managed_->managed_node()->GetTitle();
   managed_bookmarks_button_->SetAccessibleName(
-      managed_->managed_node()->GetTitle());
-  managed_bookmarks_button_->SetText(managed_->managed_node()->GetTitle());
+      GetFolderButtonAccessibleName(managed_title));
+  managed_bookmarks_button_->SetText(managed_title);
   UpdateAppearanceForTheme();
   UpdateOtherAndManagedButtonsVisibility();
   other_bookmarks_button_->SetEnabled(true);
@@ -1143,12 +1323,7 @@ void BookmarkBarView::BookmarkModelLoaded(BookmarkModel* model,
 }
 
 void BookmarkBarView::BookmarkModelBeingDeleted(BookmarkModel* model) {
-  NOTREACHED();
-  // Do minimal cleanup, presumably we'll be deleted shortly.
-  bookmark_model_->RemoveObserver(this);
-  bookmark_model_ = nullptr;
-
-  drop_weak_ptr_factory_.InvalidateWeakPtrs();
+  NOTREACHED_NORETURN();
 }
 
 void BookmarkBarView::BookmarkNodeMoved(BookmarkModel* model,
@@ -1267,7 +1442,7 @@ void BookmarkBarView::WriteDragDataForView(View* sender,
   if (node->is_url()) {
     const gfx::Image& image = bookmark_model_->GetFavicon(node);
     icon = image.IsEmpty()
-               ? ui::ImageModel::FromImage(favicon::GetDefaultFavicon())
+               ? favicon::GetDefaultFaviconModel(kColorBookmarkBarBackground)
                : ui::ImageModel::FromImage(image);
   } else {
     icon = chrome::GetBookmarkFolderIcon(
@@ -1475,14 +1650,34 @@ size_t BookmarkBarView::GetFirstHiddenNodeIndex() const {
 }
 
 std::unique_ptr<MenuButton> BookmarkBarView::CreateOtherBookmarksButton() {
-  // Title is set in Loaded.
-  auto button = std::make_unique<BookmarkFolderButton>(base::BindRepeating(
-      [](BookmarkBarView* bar, const ui::Event& event) {
-        bar->OnMenuButtonPressed(bar->bookmark_model_->other_node(), event);
-      },
-      base::Unretained(this)));
+  std::unique_ptr<MenuButton> button;
+  if (base::FeatureList::IsEnabled(features::kPowerBookmarksSidePanel)) {
+    // Title is set in Loaded.
+    button = std::make_unique<BookmarkFolderButton>(base::BindRepeating(
+        [](BookmarkBarView* bar, const ui::Event& event) {
+          SidePanelCoordinator* side_panel_coordinator =
+              bar->browser_view_->side_panel_coordinator();
+          if (side_panel_coordinator->GetCurrentEntryId() ==
+              SidePanelEntry::Id::kBookmarks) {
+            side_panel_coordinator->Close();
+          } else {
+            side_panel_coordinator->Show(
+                SidePanelEntry::Id::kBookmarks,
+                SidePanelUtil::SidePanelOpenTrigger::kBookmarkBar);
+          }
+        },
+        base::Unretained(this)));
+  } else {
+    // Title is set in Loaded.
+    button = std::make_unique<BookmarkFolderButton>(base::BindRepeating(
+        [](BookmarkBarView* bar, const ui::Event& event) {
+          bar->OnMenuButtonPressed(bar->bookmark_model_->other_node(), event);
+        },
+        base::Unretained(this)));
+
+    button->set_context_menu_controller(this);
+  }
   button->SetID(VIEW_ID_OTHER_BOOKMARKS);
-  button->set_context_menu_controller(this);
   return button;
 }
 
@@ -1528,13 +1723,12 @@ std::unique_ptr<MenuButton> BookmarkBarView::CreateOverflowButton() {
 
 std::unique_ptr<views::View> BookmarkBarView::CreateBookmarkButton(
     const BookmarkNode* node) {
-  size_t index = node->parent()->GetIndexOf(node).value();
   std::unique_ptr<views::LabelButton> button;
   if (node->is_url()) {
     button = std::make_unique<BookmarkButton>(
         base::BindRepeating(&BookmarkBarView::OnButtonPressed,
                             base::Unretained(this), node),
-        node->url(), node->GetTitle());
+        node->url(), node->GetTitle(), browser());
     button->GetViewAccessibility().OverrideDescription(url_formatter::FormatUrl(
         node->url(), url_formatter::kFormatUrlOmitDefaults,
         base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
@@ -1545,6 +1739,7 @@ std::unique_ptr<views::View> BookmarkBarView::CreateBookmarkButton(
         node->GetTitle());
   }
   ConfigureButton(node, button.get());
+  size_t index = node->parent()->GetIndexOf(node).value();
   bookmark_buttons_.insert(bookmark_buttons_.cbegin() + index, button.get());
   return button;
 }
@@ -1590,8 +1785,11 @@ void BookmarkBarView::ConfigureButton(const BookmarkNode* node,
     // Themify chrome:// favicons and the default one. This is similar to
     // code in the tabstrip.
     bool themify_icon = node->url().SchemeIs(content::kChromeUIScheme);
-    gfx::ImageSkia favicon = bookmark_model_->GetFavicon(node).AsImageSkia();
-    if (favicon.isNull()) {
+
+    // TODO(crbug.com/1099602): BookmarkModel::GetFavicon should be updated to
+    // support ImageModel.
+    auto favicon = ui::ImageModel::FromImage(bookmark_model_->GetFavicon(node));
+    if (favicon.IsEmpty()) {
       if (ui::TouchUiController::Get()->touch_ui() && cp) {
         // This favicon currently does not match the default favicon icon used
         // elsewhere in the codebase.
@@ -1602,9 +1800,10 @@ void BookmarkBarView::ConfigureButton(const BookmarkNode* node,
         // the alpha channel matters.
         const gfx::ImageSkia mask =
             gfx::CreateVectorIcon(kDefaultTouchFaviconMaskIcon, SK_ColorWHITE);
-        favicon = gfx::ImageSkiaOperations::CreateMaskedImage(icon, mask);
+        favicon = ui::ImageModel::FromImageSkia(
+            gfx::ImageSkiaOperations::CreateMaskedImage(icon, mask));
       } else {
-        favicon = favicon::GetDefaultFavicon().AsImageSkia();
+        favicon = favicon::GetDefaultFaviconModel(kColorBookmarkBarBackground);
       }
       themify_icon = true;
     }
@@ -1612,13 +1811,13 @@ void BookmarkBarView::ConfigureButton(const BookmarkNode* node,
     if (themify_icon && cp) {
       SkColor favicon_color = cp->GetColor(kColorBookmarkFavicon);
       if (favicon_color != SK_ColorTRANSPARENT) {
-        favicon =
-            gfx::ImageSkiaOperations::CreateColorMask(favicon, favicon_color);
+        favicon = ui::ImageModel::FromImageSkia(
+            gfx::ImageSkiaOperations::CreateColorMask(favicon.Rasterize(cp),
+                                                      favicon_color));
       }
     }
 
-    button->SetImageModel(views::Button::STATE_NORMAL,
-                          ui::ImageModel::FromImageSkia(favicon));
+    button->SetImageModel(views::Button::STATE_NORMAL, std::move(favicon));
   }
 
   button->SetMaxSize(gfx::Size(bookmark_button_util::kMaxButtonWidth, 0));
@@ -1668,9 +1867,12 @@ void BookmarkBarView::BookmarkNodeChangedImpl(BookmarkModel* model,
                                               const BookmarkNode* node) {
   if (node == managed_->managed_node()) {
     // The managed node may have its title updated.
+    // If the folder is unnamed, set the name to a default string for unnamed
+    // folders; otherwise set the name to the user-supplied folder name.
+    const auto managed_title = managed_->managed_node()->GetTitle();
     managed_bookmarks_button_->SetAccessibleName(
-        managed_->managed_node()->GetTitle());
-    managed_bookmarks_button_->SetText(managed_->managed_node()->GetTitle());
+        GetFolderButtonAccessibleName(managed_title));
+    managed_bookmarks_button_->SetText(managed_title);
     return;
   }
 
@@ -1883,11 +2085,12 @@ void BookmarkBarView::UpdateAppearanceForTheme() {
 
   const SkColor color = color_provider->GetColor(kColorBookmarkBarForeground);
   other_bookmarks_button_->SetEnabledTextColors(color);
-  managed_bookmarks_button_->SetEnabledTextColors(color);
   other_bookmarks_button_->SetImageModel(
       views::Button::STATE_NORMAL,
       chrome::GetBookmarkFolderIcon(chrome::BookmarkFolderIconType::kNormal,
                                     kColorBookmarkFolderIcon));
+
+  managed_bookmarks_button_->SetEnabledTextColors(color);
   managed_bookmarks_button_->SetImageModel(
       views::Button::STATE_NORMAL,
       chrome::GetBookmarkFolderIcon(chrome::BookmarkFolderIconType::kManaged,
@@ -1909,12 +2112,21 @@ void BookmarkBarView::UpdateAppearanceForTheme() {
 }
 
 bool BookmarkBarView::UpdateOtherAndManagedButtonsVisibility() {
-  bool has_other_children = !bookmark_model_->other_node()->children().empty();
-  bool update_other =
-      has_other_children != other_bookmarks_button_->GetVisible();
-  if (update_other) {
-    other_bookmarks_button_->SetVisible(has_other_children);
-    UpdateBookmarksSeparatorVisibility();
+  bool update_other;
+  if (base::FeatureList::IsEnabled(features::kPowerBookmarksSidePanel)) {
+    update_other = !other_bookmarks_button_->GetVisible();
+    if (update_other) {
+      other_bookmarks_button_->SetVisible(true);
+      UpdateBookmarksSeparatorVisibility();
+    }
+  } else {
+    bool has_other_children =
+        !bookmark_model_->other_node()->children().empty();
+    update_other = has_other_children != other_bookmarks_button_->GetVisible();
+    if (update_other) {
+      other_bookmarks_button_->SetVisible(has_other_children);
+      UpdateBookmarksSeparatorVisibility();
+    }
   }
 
   bool show_managed = !managed_->managed_node()->children().empty() &&
@@ -1960,7 +2172,7 @@ void BookmarkBarView::InsertBookmarkButtonAtIndex(
 // All of the secondary buttons are always in the view hierarchy, even if
 // they're not visible. The order should be: [Apps shortcut] [Managed bookmark
 // button] [saved tab group bar] [..bookmark buttons..] [Overflow chevron]
-// [Other bookmarks]
+// [All/Other bookmarks]
 #if DCHECK_IS_ON()
   auto i = children().cbegin();
   DCHECK_EQ(*i++, apps_page_shortcut_);
@@ -2014,12 +2226,14 @@ const BookmarkNode* BookmarkBarView::GetParentNodeAndIndexForDrop(
   return parent_node;
 }
 
-void BookmarkBarView::PerformDrop(const bookmarks::BookmarkNodeData data,
-                                  const BookmarkNode* parent_node,
-                                  const size_t index,
-                                  const bool copy,
-                                  const ui::DropTargetEvent& event,
-                                  ui::mojom::DragOperation& output_drag_op) {
+void BookmarkBarView::PerformDrop(
+    const bookmarks::BookmarkNodeData data,
+    const BookmarkNode* parent_node,
+    const size_t index,
+    const bool copy,
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   DCHECK(data.is_valid());
   DCHECK(parent_node);
   DCHECK_NE(index, static_cast<size_t>(-1));

@@ -20,6 +20,7 @@ import android.widget.LinearLayout;
 
 import androidx.test.filters.SmallTest;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -35,8 +36,10 @@ import org.robolectric.shadows.ShadowDrawable;
 
 import org.chromium.base.task.TaskTraits;
 import org.chromium.base.task.test.ShadowPostTask;
+import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.suggestions.ImageFetcher;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
@@ -48,7 +51,6 @@ import org.chromium.components.favicon.IconType;
 import org.chromium.components.favicon.LargeIconBridge.LargeIconCallback;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
@@ -57,7 +59,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** A simple test for {@link TileRenderer} using real {@link android.view.View} objects. */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE, shadows = {ShadowPostTask.class})
 @EnableFeatures({ChromeFeatureList.HISTORY_ORGANIC_REPEATABLE_QUERIES})
 public class TileRendererTest {
@@ -69,7 +71,7 @@ public class TileRendererTest {
         private final List<Runnable> mRunnables = new ArrayList<>();
 
         @Override
-        public void postDelayedTask(TaskTraits traits, Runnable task, long delay) {
+        public void postDelayedTask(@TaskTraits int traits, Runnable task, long delay) {
             mRunnables.add(task);
         }
 
@@ -103,6 +105,9 @@ public class TileRendererTest {
     private TemplateUrlService mMockTemplateUrlService;
 
     @Mock
+    private Profile mProfile;
+
+    @Mock
     private RoundedIconGenerator mIconGenerator;
 
     @Mock
@@ -128,6 +133,7 @@ public class TileRendererTest {
         mPostTaskRunner = new ShadowPostTaskImpl();
         ShadowPostTask.setTestImpl(mPostTaskRunner);
 
+        Profile.setLastUsedProfileForTesting(mProfile);
         TemplateUrlServiceFactory.setInstanceForTesting(mMockTemplateUrlService);
 
         mSharedParent = new LinearLayout(mActivity);
@@ -142,6 +148,12 @@ public class TileRendererTest {
                 .when(mTileSetupDelegate)
                 .createInteractionDelegate(any());
         doReturn(mBitmap).when(mIconGenerator).generateIconForUrl(any(GURL.class));
+    }
+
+    @After
+    public void tearDown() {
+        Profile.setLastUsedProfileForTesting(null);
+        TemplateUrlServiceFactory.setInstanceForTesting(null);
     }
 
     private SuggestionsTileView buildTileView(@TileStyle int style, int titleLines) {

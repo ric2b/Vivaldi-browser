@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_TYPES_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_FORM_TYPES_H_
 
+#include "autofill_field.h"
 #include "components/autofill/core/browser/field_types.h"
 
 namespace autofill {

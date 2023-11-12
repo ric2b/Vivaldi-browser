@@ -22,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/service/gr_cache_controller.h"
@@ -56,6 +57,7 @@ class GLShareGroup;
 
 namespace gpu {
 
+class BuiltInShaderCacheWriter;
 class SharedImageManager;
 struct GpuPreferences;
 class GpuChannel;
@@ -182,6 +184,10 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager
 #endif
 
   void OnApplicationBackgrounded();
+  void OnApplicationForegounded();
+  bool application_backgrounded() const { return application_backgrounded_; }
+  // Make sure that delayed cleanup is happening now. Expensive.
+  void PerformImmediateCleanup();
 
   MailboxManager* mailbox_manager() const { return mailbox_manager_.get(); }
 
@@ -333,6 +339,10 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager
 
   scoped_refptr<gl::GLShareGroup> share_group_;
 
+#if BUILDFLAG(IS_MAC)
+  std::unique_ptr<BuiltInShaderCacheWriter> shader_cache_writer_;
+#endif
+
   std::unique_ptr<MailboxManager> mailbox_manager_;
   std::unique_ptr<gles2::Outputter> outputter_;
   raw_ptr<Scheduler> scheduler_;
@@ -386,12 +396,12 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager
   // features::Vulkan is used.
   raw_ptr<viz::VulkanContextProvider> vulkan_context_provider_ = nullptr;
 
-  // If features::Metal, |metal_context_provider_| will be set from
-  // viz::GpuServiceImpl. The raster decoders will use it for rasterization.
+  // If features::SkiaGraphite, |metal_context_provider_| will be set from
+  // viz::GpuServiceImpl. The raster decoders may use it for rasterization.
   raw_ptr<viz::MetalContextProvider> metal_context_provider_ = nullptr;
 
-  // With features::SkiaDawn, |dawn_context_provider_| will be set from
-  // viz::GpuServiceImpl. The raster decoders will use it for rasterization.
+  // With features::SkiaGraphite, |dawn_context_provider_| will be set from
+  // viz::GpuServiceImpl. The raster decoders may use it for rasterization.
   raw_ptr<viz::DawnContextProvider> dawn_context_provider_ = nullptr;
 
   GpuPeakMemoryMonitor peak_memory_monitor_;
@@ -404,6 +414,8 @@ class GPU_IPC_SERVICE_EXPORT GpuChannelManager
 
   // Count of context lost.
   int context_lost_count_ = 0;
+
+  bool application_backgrounded_ = false;
 
   THREAD_CHECKER(thread_checker_);
 

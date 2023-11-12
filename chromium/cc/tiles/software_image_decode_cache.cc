@@ -39,7 +39,7 @@ namespace {
 // if more items are locked. That is, locked items ignore this limit.
 // Depending on the memory state of the system, we limit the amount of items
 // differently.
-const size_t kNormalMaxItemsInCacheForSoftware = 200;
+const size_t kNormalMaxItemsInCacheForSoftware = 1000;
 
 class AutoRemoveKeyFromTaskMap {
  public:
@@ -320,6 +320,8 @@ void SoftwareImageDecodeCache::UnrefImage(const CacheKey& key) {
       RemoveBudgetForImage(key, entry);
     if (entry->is_locked)
       entry->Unlock();
+
+    ReduceCacheUsageUntilWithinLimit(max_items_in_cache_);
   }
 }
 
@@ -724,6 +726,9 @@ SoftwareImageDecodeCache::CacheEntry* SoftwareImageDecodeCache::AddCacheEntry(
 size_t SoftwareImageDecodeCache::GetNumCacheEntriesForTesting() {
   base::AutoLock lock(lock_);
   return decoded_images_.size();
+}
+size_t SoftwareImageDecodeCache::GetMaxNumCacheEntriesForTesting() {
+  return kNormalMaxItemsInCacheForSoftware;
 }
 
 SkColorType SoftwareImageDecodeCache::GetColorTypeForPaintImage(

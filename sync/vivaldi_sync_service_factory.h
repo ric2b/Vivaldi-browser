@@ -3,7 +3,7 @@
 #ifndef SYNC_VIVALDI_SYNC_SERVICE_FACTORY_H_
 #define SYNC_VIVALDI_SYNC_SERVICE_FACTORY_H_
 
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 
@@ -27,7 +27,7 @@ class VivaldiSyncServiceFactory : public SyncServiceFactory {
   static VivaldiSyncServiceFactory* GetInstance();
 
  private:
-  friend struct base::DefaultSingletonTraits<VivaldiSyncServiceFactory>;
+  friend base::NoDestructor<VivaldiSyncServiceFactory>;
 
   VivaldiSyncServiceFactory();
   ~VivaldiSyncServiceFactory() override;

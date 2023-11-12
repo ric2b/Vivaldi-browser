@@ -12,6 +12,7 @@
 #include "base/containers/flat_set.h"
 #include "components/password_manager/core/browser/import/csv_password.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace password_manager {
 
@@ -68,6 +69,9 @@ struct CredentialUIEntry {
 
     // The URL that will be linked to when an entry is clicked.
     GURL url;
+
+    // signon_realm of a corresponding PasswordForm.
+    std::string signon_realm;
   };
 
   struct Less {
@@ -146,6 +150,10 @@ struct CredentialUIEntry {
   // entry.
   GURL GetURL() const;
 
+  // Returns the URL which allows to change the password of compromised
+  // credentials. Can be null for Android credentials.
+  absl::optional<GURL> GetChangePasswordURL() const;
+
   // Returns a vector of pairs, where the first element is formatted string
   // representing website or an Android application and a second parameter is a
   // link which should be opened when item is clicked. Can be used by the UI to
@@ -156,6 +164,9 @@ struct CredentialUIEntry {
 bool operator==(const CredentialUIEntry& lhs, const CredentialUIEntry& rhs);
 bool operator!=(const CredentialUIEntry& lhs, const CredentialUIEntry& rhs);
 bool operator<(const CredentialUIEntry& lhs, const CredentialUIEntry& rhs);
+
+// Returns true when the credential is either leaked or phished.
+bool IsCompromised(const CredentialUIEntry& credential);
 
 }  // namespace password_manager
 

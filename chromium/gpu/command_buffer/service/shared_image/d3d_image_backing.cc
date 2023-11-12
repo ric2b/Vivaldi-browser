@@ -10,7 +10,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
-#include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/dxgi_shared_handle_manager.h"
@@ -18,12 +17,21 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/shared_image/skia_gl_image_representation.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
+#include "ui/gl/egl_util.h"
 #include "ui/gl/gl_bindings.h"
+#include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/scoped_restore_texture.h"
 
 #if BUILDFLAG(USE_DAWN) && BUILDFLAG(DAWN_ENABLE_BACKEND_OPENGLES)
 #include "gpu/command_buffer/service/shared_image/dawn_egl_image_representation.h"
 #endif
+
+#ifndef EGL_ANGLE_image_d3d11_texture
+#define EGL_D3D11_TEXTURE_ANGLE 0x3484
+#define EGL_TEXTURE_INTERNAL_FORMAT_ANGLE 0x345D
+#define EGL_D3D11_TEXTURE_PLANE_ANGLE 0x3492
+#define EGL_D3D11_TEXTURE_ARRAY_SLICE_ANGLE 0x3493
+#endif /* EGL_ANGLE_image_d3d11_texture */
 
 namespace gpu {
 
@@ -59,29 +67,31 @@ size_t NumPlanes(DXGI_FORMAT dxgi_format) {
 
 viz::SharedImageFormat PlaneFormat(DXGI_FORMAT dxgi_format, size_t plane) {
   DCHECK_LT(plane, NumPlanes(dxgi_format));
-  viz::ResourceFormat format;
+  viz::SharedImageFormat format;
   switch (dxgi_format) {
     case DXGI_FORMAT_NV12:
       // Y plane is accessed as R8 and UV plane is accessed as RG88 in D3D.
-      format = plane == 0 ? viz::RED_8 : viz::RG_88;
+      format = plane == 0 ? viz::SinglePlaneFormat::kR_8
+                          : viz::SinglePlaneFormat::kRG_88;
       break;
     case DXGI_FORMAT_P010:
-      format = plane == 0 ? viz::R16_EXT : viz::RG16_EXT;
+      format = plane == 0 ? viz::SinglePlaneFormat::kR_16
+                          : viz::SinglePlaneFormat::kRG_1616;
       break;
     case DXGI_FORMAT_B8G8R8A8_UNORM:
-      format = viz::BGRA_8888;
+      format = viz::SinglePlaneFormat::kBGRA_8888;
       break;
     case DXGI_FORMAT_R10G10B10A2_UNORM:
-      format = viz::RGBA_1010102;
+      format = viz::SinglePlaneFormat::kRGBA_1010102;
       break;
     case DXGI_FORMAT_R16G16B16A16_FLOAT:
-      format = viz::RGBA_F16;
+      format = viz::SinglePlaneFormat::kRGBA_F16;
       break;
     default:
       NOTREACHED();
-      format = viz::BGRA_8888;
+      format = viz::SinglePlaneFormat::kBGRA_8888;
   }
-  return viz::SharedImageFormat::SinglePlane(format);
+  return format;
 }
 
 WGPUTextureFormat DXGIToWGPUFormat(DXGI_FORMAT dxgi_format) {
@@ -137,10 +147,40 @@ void CopyPlane(const uint8_t* source_memory,
                     row_bytes, size.height());
 }
 
+bool BindEGLImageToTexture(GLenum texture_target, void* egl_image) {
+  if (!egl_image) {
+    LOG(ERROR) << "EGL image is null";
+    return false;
+  }
+  glEGLImageTargetTexture2DOES(texture_target, egl_image);
+  if (eglGetError() != static_cast<EGLint>(EGL_SUCCESS)) {
+    LOG(ERROR) << "Failed to bind EGL image to the texture"
+               << ui::GetLastEGLErrorString();
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
+D3DImageBacking::GLTextureHolder::GLTextureHolder(
+    base::PassKey<D3DImageBacking>,
+    scoped_refptr<gles2::TexturePassthrough> texture_passthrough,
+    gl::ScopedEGLImage egl_image)
+    : texture_passthrough_(std::move(texture_passthrough)),
+      egl_image_(std::move(egl_image)) {}
+
+void D3DImageBacking::GLTextureHolder::MarkContextLost() {
+  if (texture_passthrough_) {
+    texture_passthrough_->MarkContextLost();
+  }
+}
+
+D3DImageBacking::GLTextureHolder::~GLTextureHolder() = default;
+
 // static
-scoped_refptr<gles2::TexturePassthrough> D3DImageBacking::CreateGLTexture(
+scoped_refptr<D3DImageBacking::GLTextureHolder>
+D3DImageBacking::CreateGLTexture(
     viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
@@ -178,29 +218,40 @@ scoped_refptr<gles2::TexturePassthrough> D3DImageBacking::CreateGLTexture(
     gl_format_desc = ToGLFormatDesc(format, /*plane_index=*/0,
                                     /*use_angle_rgbx_format=*/false);
   }
-  auto image = base::MakeRefCounted<gl::GLImageD3D>(
-      size, gl_format_desc.image_internal_format, d3d11_texture, array_slice,
-      plane_index, swap_chain);
-  if (!image->Initialize()) {
-    LOG(ERROR) << "GLImageD3D::Initialize failed";
+
+  const EGLint egl_attrib_list[] = {
+      EGL_TEXTURE_INTERNAL_FORMAT_ANGLE,
+      static_cast<EGLint>(gl_format_desc.image_internal_format),
+      EGL_D3D11_TEXTURE_ARRAY_SLICE_ANGLE,
+      static_cast<EGLint>(array_slice),
+      EGL_D3D11_TEXTURE_PLANE_ANGLE,
+      static_cast<EGLint>(plane_index),
+      EGL_NONE};
+
+  auto egl_image = gl::MakeScopedEGLImage(
+      EGL_NO_CONTEXT, EGL_D3D11_TEXTURE_ANGLE,
+      static_cast<EGLClientBuffer>(d3d11_texture.Get()), egl_attrib_list);
+
+  if (!egl_image.get()) {
+    LOG(ERROR) << "Failed to create an EGL image";
     api->glDeleteTexturesFn(1, &service_id);
     return nullptr;
   }
-  if (!image->BindTexImage(texture_target)) {
-    LOG(ERROR) << "GLImageD3D::BindTexImage failed";
-    api->glDeleteTexturesFn(1, &service_id);
+
+  if (!BindEGLImageToTexture(texture_target, egl_image.get())) {
     return nullptr;
   }
 
   auto texture = base::MakeRefCounted<gles2::TexturePassthrough>(
       service_id, texture_target);
-  texture->SetLevelImage(texture_target, 0, image.get());
   GLint texture_memory_size = 0;
   api->glGetTexParameterivFn(texture_target, GL_MEMORY_SIZE_ANGLE,
                              &texture_memory_size);
   texture->SetEstimatedSize(texture_memory_size);
 
-  return texture;
+  return base::MakeRefCounted<GLTextureHolder>(base::PassKey<D3DImageBacking>(),
+                                               std::move(texture),
+                                               std::move(egl_image));
 }
 
 #if BUILDFLAG(USE_DAWN)
@@ -226,16 +277,16 @@ std::unique_ptr<D3DImageBacking> D3DImageBacking::CreateFromSwapChainBuffer(
     Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain,
     bool is_back_buffer) {
   DCHECK(format.is_single_plane());
-  auto gl_texture =
+  auto gl_texture_holder =
       CreateGLTexture(format, size, color_space, d3d11_texture, GL_TEXTURE_2D,
                       /*array_slice=*/0u, /*plane_index=*/0u, swap_chain);
-  if (!gl_texture) {
-    LOG(ERROR) << "Failed to create GL texture";
+  if (!gl_texture_holder) {
+    LOG(ERROR) << "Failed to create GL texture.";
     return nullptr;
   }
   return base::WrapUnique(new D3DImageBacking(
       mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      std::move(d3d11_texture), {gl_texture},
+      std::move(d3d11_texture), {std::move(gl_texture_holder)},
       /*dxgi_shared_handle_state=*/nullptr, GL_TEXTURE_2D, /*array_slice=*/0u,
       /*plane_index=*/0u, std::move(swap_chain), is_back_buffer));
 }
@@ -259,7 +310,7 @@ std::unique_ptr<D3DImageBacking> D3DImageBacking::Create(
   // composition where fences are used instead.
   DCHECK(!has_webgpu_usage || dxgi_shared_handle_state);
 
-  std::vector<scoped_refptr<gles2::TexturePassthrough>> gl_textures;
+  std::vector<scoped_refptr<GLTextureHolder>> gl_texture_holders;
   // Do not cache a GL texture in the backing if it could be owned by WebGPU
   // since there's no GL context to MakeCurrent in the destructor.
   if (!has_webgpu_usage) {
@@ -271,19 +322,19 @@ std::unique_ptr<D3DImageBacking> D3DImageBacking::Create(
       unsigned plane_id = format.is_single_plane() ? plane_index : plane;
       // Creating the GL texture doesn't require exclusive access to the
       // underlying D3D11 texture.
-      scoped_refptr<gles2::TexturePassthrough> gl_texture =
+      scoped_refptr<GLTextureHolder> gl_texture_holder =
           CreateGLTexture(format, plane_size, color_space, d3d11_texture,
                           texture_target, array_slice, plane_id);
-      if (!gl_texture) {
-        LOG(ERROR) << "Failed to create GL texture";
+      if (!gl_texture_holder) {
+        LOG(ERROR) << "Failed to create GL texture.";
         return nullptr;
       }
-      gl_textures.push_back(std::move(gl_texture));
+      gl_texture_holders.push_back(std::move(gl_texture_holder));
     }
   }
   auto backing = base::WrapUnique(new D3DImageBacking(
       mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      std::move(d3d11_texture), std::move(gl_textures),
+      std::move(d3d11_texture), std::move(gl_texture_holders),
       std::move(dxgi_shared_handle_state), texture_target, array_slice,
       plane_index));
   return backing;
@@ -291,7 +342,7 @@ std::unique_ptr<D3DImageBacking> D3DImageBacking::Create(
 
 std::unique_ptr<D3DImageBacking> D3DImageBacking::CreateFromGLTexture(
     const Mailbox& mailbox,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -300,10 +351,15 @@ std::unique_ptr<D3DImageBacking> D3DImageBacking::CreateFromGLTexture(
     Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
     scoped_refptr<gles2::TexturePassthrough> gl_texture,
     size_t array_slice) {
+  DCHECK(gl_texture);
+  GLenum texture_target = gl_texture->target();
+  auto gl_texture_holder = base::MakeRefCounted<GLTextureHolder>(
+      base::PassKey<D3DImageBacking>(), std::move(gl_texture),
+      gl::ScopedEGLImage());
   return base::WrapUnique(new D3DImageBacking(
-      mailbox, viz::SharedImageFormat::SinglePlane(format), size, color_space,
-      surface_origin, alpha_type, usage, std::move(d3d11_texture), {gl_texture},
-      /*dxgi_shared_handle_state=*/nullptr, gl_texture->target(), array_slice));
+      mailbox, format, size, color_space, surface_origin, alpha_type, usage,
+      std::move(d3d11_texture), {std::move(gl_texture_holder)},
+      /*dxgi_shared_handle_state=*/nullptr, texture_target, array_slice));
 }
 
 // static
@@ -339,29 +395,30 @@ D3DImageBacking::CreateFromVideoTexture(
     // value from default-construction.
     constexpr gfx::ColorSpace kInvalidColorSpace;
 
-    // TODO(sunnyps): Switch to GL_TEXTURE_2D since it's now supported by ANGLE.
+    // TODO(crbug.com/1430349): Switch to GL_TEXTURE_2D since it's now supported
+    // by ANGLE.
     constexpr GLenum kTextureTarget = GL_TEXTURE_EXTERNAL_OES;
 
     // Do not cache a GL texture in the backing if it could be owned by WebGPU
     // since there's no GL context to MakeCurrent in the destructor.
-    std::vector<scoped_refptr<gles2::TexturePassthrough>> gl_textures;
+    std::vector<scoped_refptr<GLTextureHolder>> gl_texture_holders;
     if (!has_webgpu_usage) {
       // Creating the GL texture doesn't require exclusive access to the
       // underlying D3D11 texture.
-      auto texture = CreateGLTexture(plane_format, plane_size,
-                                     kInvalidColorSpace, d3d11_texture,
-                                     kTextureTarget, array_slice, plane_index);
-      if (!texture) {
-        LOG(ERROR) << "Failed to create GL texture";
+      auto texture_holder = CreateGLTexture(
+          plane_format, plane_size, kInvalidColorSpace, d3d11_texture,
+          kTextureTarget, array_slice, plane_index);
+      if (!texture_holder) {
+        LOG(ERROR) << "Failed to create GL texture.";
         return {};
       }
-      gl_textures.push_back(std::move(texture));
+      gl_texture_holders.push_back(std::move(texture_holder));
     }
 
     shared_images[plane_index] = base::WrapUnique(new D3DImageBacking(
         mailbox, plane_format, plane_size, kInvalidColorSpace,
         kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, d3d11_texture,
-        std::move(gl_textures), dxgi_shared_handle_state, kTextureTarget,
+        std::move(gl_texture_holders), dxgi_shared_handle_state, kTextureTarget,
         array_slice, plane_index));
     if (!shared_images[plane_index])
       return {};
@@ -380,7 +437,7 @@ D3DImageBacking::D3DImageBacking(
     SkAlphaType alpha_type,
     uint32_t usage,
     Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
-    std::vector<scoped_refptr<gles2::TexturePassthrough>> gl_textures,
+    std::vector<scoped_refptr<GLTextureHolder>> gl_texture_holders,
     scoped_refptr<DXGISharedHandleState> dxgi_shared_handle_state,
     GLenum texture_target,
     size_t array_slice,
@@ -395,9 +452,9 @@ D3DImageBacking::D3DImageBacking(
                                       alpha_type,
                                       usage,
                                       format.EstimatedSizeInBytes(size),
-                                      false /* is_thread_safe */),
+                                      /*is_thread_safe=*/false),
       d3d11_texture_(std::move(d3d11_texture)),
-      gl_textures_(std::move(gl_textures)),
+      gl_texture_holders_(std::move(gl_texture_holders)),
       dxgi_shared_handle_state_(std::move(dxgi_shared_handle_state)),
       texture_target_(texture_target),
       array_slice_(array_slice),
@@ -405,18 +462,18 @@ D3DImageBacking::D3DImageBacking(
       swap_chain_(std::move(swap_chain)),
       is_back_buffer_(is_back_buffer) {
   const bool has_webgpu_usage = !!(usage & SHARED_IMAGE_USAGE_WEBGPU);
-  DCHECK(has_webgpu_usage || !gl_textures_.empty());
+  DCHECK(has_webgpu_usage || !gl_texture_holders_.empty());
   if (d3d11_texture_)
     d3d11_texture_->GetDevice(&d3d11_device_);
 }
 
 D3DImageBacking::~D3DImageBacking() {
   if (!have_context()) {
-    for (auto& texture : gl_textures_) {
-      texture->MarkContextLost();
+    for (auto& texture_holder : gl_texture_holders_) {
+      texture_holder->MarkContextLost();
     }
   }
-  gl_textures_.clear();
+  gl_texture_holders_.clear();
   dxgi_shared_handle_state_.reset();
   swap_chain_.Reset();
   d3d11_texture_.Reset();
@@ -618,6 +675,7 @@ bool D3DImageBacking::ReadbackToMemory(const std::vector<SkPixmap>& pixmaps) {
 }
 
 WGPUTextureUsageFlags D3DImageBacking::GetAllowedDawnUsages(
+    WGPUDevice device,
     const WGPUTextureFormat wgpu_format) const {
   // TODO(crbug.com/2709243): Figure out other SI flags, if any.
   DCHECK(usage() & gpu::SHARED_IMAGE_USAGE_WEBGPU);
@@ -625,13 +683,34 @@ WGPUTextureUsageFlags D3DImageBacking::GetAllowedDawnUsages(
       WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst |
       WGPUTextureUsage_TextureBinding | WGPUTextureUsage_RenderAttachment;
   switch (wgpu_format) {
-    case WGPUTextureFormat_BGRA8Unorm:
     case WGPUTextureFormat_R8Unorm:
     case WGPUTextureFormat_RG8Unorm:
       return kBasicUsage;
+    case WGPUTextureFormat_BGRA8Unorm: {
+      if (usage() & gpu::SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE) {
+        if (dawn::native::GetProcs().deviceHasFeature(
+                device, WGPUFeatureName_BGRA8UnormStorage)) {
+          return kBasicUsage | WGPUTextureUsage_StorageBinding;
+        } else {
+          // We cannot use BGRA8Unorm textures as storage textures when
+          // the feature BGRA8UnormStorage is not enabled.
+          LOG(ERROR) << "StorageBinding is not supported for "
+                     << WGPUTextureFormat_BGRA8Unorm << " when the feature "
+                     << WGPUFeatureName_BGRA8UnormStorage << " is not enabled";
+          return WGPUTextureUsage_None;
+        }
+      } else {
+        return kBasicUsage;
+      }
+    }
     case WGPUTextureFormat_RGBA8Unorm:
-    case WGPUTextureFormat_RGBA16Float:
-      return kBasicUsage | WGPUTextureUsage_StorageBinding;
+    case WGPUTextureFormat_RGBA16Float: {
+      if (usage() & gpu::SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE) {
+        return kBasicUsage | WGPUTextureUsage_StorageBinding;
+      } else {
+        return kBasicUsage;
+      }
+    }
     case WGPUTextureFormat_R8BG8Biplanar420Unorm:
       return WGPUTextureUsage_TextureBinding;
     default:
@@ -650,14 +729,17 @@ std::unique_ptr<DawnImageRepresentation> D3DImageBacking::ProduceDawn(
   if (backend_type == WGPUBackendType_OpenGLES) {
     std::unique_ptr<GLTextureImageRepresentationBase> gl_representation =
         ProduceGLTexturePassthrough(manager, tracker);
-    gpu::TextureBase* texture = gl_representation->GetTextureBase();
-    const auto* image = gl::GLImage::ToGLImageD3D(
-        static_cast<gles2::TexturePassthrough*>(texture)->GetLevelImage(
-            texture->target(), 0u));
-    DCHECK(image);
+    auto* d3d_representation =
+        static_cast<GLTexturePassthroughD3DImageRepresentation*>(
+            gl_representation.get());
+    void* egl_image = d3d_representation->GetEGLImage();
+    if (!egl_image) {
+      LOG(ERROR) << "EGL image is null.";
+      return nullptr;
+    }
     return std::make_unique<DawnEGLImageRepresentation>(
-        std::move(gl_representation), image->GetEGLImage(), manager, this,
-        tracker, device);
+        std::move(gl_representation), egl_image, manager, this, tracker,
+        device);
   }
 #endif
   D3D11_TEXTURE2D_DESC desc;
@@ -668,7 +750,8 @@ std::unique_ptr<DawnImageRepresentation> D3DImageBacking::ProduceDawn(
     return nullptr;
   }
 
-  WGPUTextureUsageFlags allowed_usage = GetAllowedDawnUsages(wgpu_format);
+  WGPUTextureUsageFlags allowed_usage =
+      GetAllowedDawnUsages(device, wgpu_format);
   if (allowed_usage == WGPUTextureUsage_None) {
     LOG(ERROR) << "Allowed WGPUTextureUsage is unknown for WGPUTextureFormat: "
                << wgpu_format;
@@ -956,11 +1039,10 @@ void D3DImageBacking::EndAccessCommon(
   }
 }
 
-gl::GLImage* D3DImageBacking::GetGLImage() const {
+void* D3DImageBacking::GetEGLImage() const {
   DCHECK(format().is_single_plane());
-  return !gl_textures_.empty()
-             ? gl_textures_[0]->GetLevelImage(gl_textures_[0]->target(), 0u)
-             : nullptr;
+  return !gl_texture_holders_.empty() ? gl_texture_holders_[0]->egl_image()
+                                      : nullptr;
 }
 
 bool D3DImageBacking::PresentSwapChain() {
@@ -976,7 +1058,7 @@ bool D3DImageBacking::PresentSwapChain() {
 
   UINT flags = DXGI_PRESENT_ALLOW_TEARING;
 
-  HRESULT hr = swap_chain_->Present1(0 /* interval */, flags, &params);
+  HRESULT hr = swap_chain_->Present1(/*interval=*/0, flags, &params);
   if (FAILED(hr)) {
     LOG(ERROR) << "Present1 failed with error " << std::hex << hr;
     return false;
@@ -986,17 +1068,21 @@ bool D3DImageBacking::PresentSwapChain() {
   gl::ScopedRestoreTexture scoped_restore(api, GL_TEXTURE_2D);
 
   DCHECK(format().is_single_plane());
-  DCHECK_EQ(gl_textures_[0]->target(), static_cast<unsigned>(GL_TEXTURE_2D));
-  api->glBindTextureFn(GL_TEXTURE_2D, gl_textures_[0]->service_id());
-  DCHECK(GetGLImage());
-  if (auto* gl_image_d3d = gl::GLImage::ToGLImageD3D(GetGLImage())) {
-    if (!gl_image_d3d->BindTexImage(GL_TEXTURE_2D)) {
-      LOG(ERROR) << "GLImageD3D::BindTexImage failed";
-      return false;
-    }
+  DCHECK_EQ(gl_texture_holders_[0]->texture_passthrough()->target(),
+            static_cast<unsigned>(GL_TEXTURE_2D));
+  api->glBindTextureFn(
+      GL_TEXTURE_2D,
+      gl_texture_holders_[0]->texture_passthrough()->service_id());
+
+  // we're rebinding to ensure that underlying D3D11 resource views are
+  // recreated in ANGLE.
+  void* egl_image = GetEGLImage();
+  if (!BindEGLImageToTexture(GL_TEXTURE_2D, egl_image)) {
+    return false;
   }
 
   TRACE_EVENT0("gpu", "D3DImageBacking::PresentSwapChain::Flush");
+
   // Flush device context through ANGLE otherwise present could be deferred.
   api->glFlushFn();
   return true;
@@ -1007,8 +1093,8 @@ D3DImageBacking::ProduceGLTexturePassthrough(SharedImageManager* manager,
                                              MemoryTypeTracker* tracker) {
   TRACE_EVENT0("gpu", "D3DImageBacking::ProduceGLTexturePassthrough");
   // Lazily create a GL texture if it wasn't provided on initialization.
-  auto gl_textures = gl_textures_;
-  if (gl_textures.empty()) {
+  auto gl_texture_holders = gl_texture_holders_;
+  if (gl_texture_holders.empty()) {
     for (int plane = 0; plane < format().NumberOfPlanes(); plane++) {
       gfx::Size plane_size = format().GetPlaneSize(plane, size());
       // For legacy multiplanar formats, format() is plane format (eg. RED, RG)
@@ -1017,21 +1103,22 @@ D3DImageBacking::ProduceGLTexturePassthrough(SharedImageManager* manager,
       unsigned plane_id = format().is_single_plane() ? plane_index_ : plane;
       // Creating the GL texture doesn't require exclusive access to the
       // underlying D3D11 texture.
-      scoped_refptr<gles2::TexturePassthrough> gl_texture =
+      scoped_refptr<GLTextureHolder> gl_texture_holder =
           CreateGLTexture(format(), plane_size, color_space(), d3d11_texture_,
                           texture_target_, array_slice_, plane_id, swap_chain_);
-      if (!gl_texture) {
-        LOG(ERROR) << "Failed to create GL texture";
+      if (!gl_texture_holder) {
+        LOG(ERROR) << "Failed to create GL texture.";
         return nullptr;
       }
-      gl_textures.push_back(std::move(gl_texture));
+      gl_texture_holders.push_back(std::move(gl_texture_holder));
     }
   }
   return std::make_unique<GLTexturePassthroughD3DImageRepresentation>(
-      manager, this, tracker, std::move(gl_textures));
+      manager, this, tracker, std::move(gl_texture_holders));
 }
 
-std::unique_ptr<SkiaImageRepresentation> D3DImageBacking::ProduceSkia(
+std::unique_ptr<SkiaGaneshImageRepresentation>
+D3DImageBacking::ProduceSkiaGanesh(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {

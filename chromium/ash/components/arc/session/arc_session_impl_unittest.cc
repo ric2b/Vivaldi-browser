@@ -22,6 +22,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
@@ -245,8 +246,9 @@ class TestArcSessionObserver : public ArcSession::Observer {
   }
 
  private:
-  ArcSession* const arc_session_;            // Not owned.
-  base::RunLoop* const run_loop_ = nullptr;  // Not owned.
+  const raw_ptr<ArcSession, ExperimentalAsh> arc_session_;  // Not owned.
+  const raw_ptr<base::RunLoop, ExperimentalAsh> run_loop_ =
+      nullptr;  // Not owned.
   absl::optional<OnSessionStoppedArgs> on_session_stopped_args_;
 };
 
@@ -933,17 +935,6 @@ TEST_F(ArcSessionImplTest, HostUreadaheadGenerationSet) {
 
 // Test that validates TTS caching is enabled by default.
 TEST_F(ArcSessionImplTest, TTSCachingByDefault) {
-  auto arc_session = CreateArcSession();
-  arc_session->StartMiniInstance();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(
-      GetClient(arc_session.get())->last_start_params().enable_tts_caching);
-}
-
-// Test that validates TTS caching is enabled.
-TEST_F(ArcSessionImplTest, TTSCachingEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(arc::kEnableTTSCacheSetup, true);
   auto arc_session = CreateArcSession();
   arc_session->StartMiniInstance();
   base::RunLoop().RunUntilIdle();

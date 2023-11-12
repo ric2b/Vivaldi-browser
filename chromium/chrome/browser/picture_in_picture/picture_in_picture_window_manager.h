@@ -88,7 +88,11 @@ class PictureInPictureWindowManager {
       const display::Display& display);
 
   // Used for Document picture-in-picture windows only.
-  static gfx::Size GetMinimumWindowSize();
+  // Note that this is meant to represent the inner window bounds. When the pip
+  // window is drawn, outer bounds may be greater than kMinWindowSize to
+  // accommodate window decorations and ensure the inner bound minimum size
+  // respects kMinWindowSize.
+  static gfx::Size GetMinimumInnerWindowSize();
 
   // Used for Document picture-in-picture windows only.
   static gfx::Size GetMaximumWindowSize(const display::Display& display);
@@ -124,8 +128,8 @@ class PictureInPictureWindowManager {
   std::unique_ptr<DocumentWebContentsObserver> document_web_contents_observer_;
 #endif  //! BUILDFLAG(IS_ANDROID)
 
-  raw_ptr<content::PictureInPictureWindowController> pip_window_controller_ =
-      nullptr;
+  raw_ptr<content::PictureInPictureWindowController, DanglingUntriaged>
+      pip_window_controller_ = nullptr;
 };
 
 #endif  // CHROME_BROWSER_PICTURE_IN_PICTURE_PICTURE_IN_PICTURE_WINDOW_MANAGER_H_

@@ -15,9 +15,17 @@
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_implementation.h"
+#include "third_party/skia/include/core/SkAlphaType.h"
+#include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkColorType.h"
+#include "third_party/skia/include/core/SkImage.h"
+#include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkSamplingOptions.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/GrTypes.h"
+#include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
 #include "third_party/skia/include/gpu/vk/GrVkBackendContext.h"
 #include "third_party/skia/include/gpu/vk/GrVkExtensions.h"
 #include "third_party/skia/include/private/chromium/GrVkSecondaryCBDrawContext.h"
@@ -314,7 +322,7 @@ void VulkanGLInterop::DrawVk(sk_sp<GrVkSecondaryCBDrawContext> draw_context,
   // Create an SkImage from AHB.
   GrBackendTexture backend_texture(params.width, params.height,
                                    pending_draw->image_info);
-  pending_draw->ahb_skimage = SkImage::MakeFromTexture(
+  pending_draw->ahb_skimage = SkImages::BorrowTextureFrom(
       vulkan_context_provider_->GetGrContext(), backend_texture,
       kBottomLeft_GrSurfaceOrigin, kRGBA_8888_SkColorType, kPremul_SkAlphaType,
       color_space);
@@ -344,9 +352,13 @@ void VulkanGLInterop::PostDrawVk() {
 
   // Get the final state of the SkImage so that we can pass this back to Skia
   // during re-use.
-  GrBackendTexture backend_texture =
-      pending_draw->ahb_skimage->getBackendTexture(
-          true /* flushPendingGrContextIO */);
+  GrBackendTexture backend_texture;
+  if (!SkImages::GetBackendTextureFromImage(
+          pending_draw->ahb_skimage, &backend_texture,
+          true /* flushPendingGrContextIO */)) {
+    LOG(ERROR) << "Could not get Vk backend texture.";
+    return;
+  }
   GrVkImageInfo image_info;
   if (!backend_texture.getVkImageInfo(&image_info)) {
     LOG(ERROR) << "Could not get Vk image info.";

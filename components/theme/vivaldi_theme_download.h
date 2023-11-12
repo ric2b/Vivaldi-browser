@@ -66,7 +66,7 @@ class VivaldiThemeDownloadHelper {
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
   ThemeDownloadCallback callback_;
   base::WeakPtr<Profile> profile_;
-  Delegate* delegate_ = nullptr;
+  raw_ptr<Delegate> delegate_ = nullptr;
   // Temporary downloaded file to delete after import
   base::FilePath temporary_file_;
 

@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 624 tests; 342 PASS, 282 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 662 tests; 347 PASS, 315 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS Loading data…
 PASS Parsing: <http://example	.
 org> against <http://example.org/foo/bar>
@@ -281,6 +281,7 @@ PASS Parsing: <http://foo:💩@example.com/bar> against <http://other.com/>
 PASS Parsing: <#> against <test:test>
 FAIL Parsing: <#x> against <data:,> assert_equals: href expected "data:,#x" but got "test:test#x"
 PASS Parsing: <#x> against <about:blank>
+PASS Parsing: <#x:y> against <about:blank>
 PASS Parsing: <#> against <test:test?test>
 PASS Parsing: <https://@test@test@example:800/> against <http://doesnotmatter/>
 PASS Parsing: <https://@@@example> against <http://doesnotmatter/>
@@ -589,6 +590,7 @@ FAIL Parsing: <abc:rootless> against <abc://host/path> assert_equals: href expec
 FAIL Parsing: <abc:rootless> against <abc:/path> assert_equals: href expected "abc:rootless" but got "abc:/rootless"
 PASS Parsing: <abc:rootless> against <abc:path>
 FAIL Parsing: <abc:/rooted> against <abc://host/path> assert_equals: href expected "abc:/rooted" but got "abc://host/rooted"
+FAIL Parsing: <?> against <about:blank> assert_equals: failure should set href to input expected "?" but got ""
 FAIL Parsing: <http://1.2.3.4.5> against <http://other.com/> assert_equals: failure should set href to input expected "http://1.2.3.4.5" but got "http://1.2.3.4.5/"
 FAIL Parsing: <http://1.2.3.4.5.> against <http://other.com/> assert_equals: failure should set href to input expected "http://1.2.3.4.5." but got "http://1.2.3.4.5./"
 PASS Parsing: <http://0..0x300/> against <about:blank>
@@ -635,5 +637,41 @@ FAIL Parsing: <non-special:￿y> against <about:blank> assert_equals: href expec
 FAIL Parsing: <non-special:x/￿y> against <about:blank> assert_equals: href expected "non-special:x/%EF%BF%BFy" but got "non-special:x/%EF%BF%BDy"
 FAIL Parsing: <non-special:x/?￿y> against <about:blank> assert_equals: href expected "non-special:x/?%EF%BF%BFy" but got "non-special:x/?%EF%BF%BDy"
 FAIL Parsing: <non-special:x/?#￿y> against <about:blank> assert_equals: href expected "non-special:x/?#%EF%BF%BFy" but got "non-special:x/?#%EF%BF%BDy"
+PASS Parsing: <> against <about:blank>
+PASS Parsing: <https://example.com/"quoted"> against <about:blank>
+PASS Parsing: <https://a%C2%ADb/> against <about:blank>
+FAIL Parsing: <https://­/> against <about:blank> assert_equals: failure should set href to input expected "https://­/" but got "https://%C2%AD/"
+PASS Parsing: <https://%C2%AD/> against <about:blank>
+FAIL Parsing: <https://xn--/> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <data://example.com:8080/pathname?search#hash> against <about:blank> assert_equals: host expected "example.com:8080" but got ""
+FAIL Parsing: <data:///test> against <about:blank> assert_equals: pathname expected "/test" but got "///test"
+FAIL Parsing: <data://test/a/../b> against <about:blank> assert_equals: href expected "data://test/b" but got "data://test/a/../b"
+FAIL Parsing: <data://:443> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <data://test:test> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <data://[:1]> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <intent://example.com:8080/pathname?search#hash> against <about:blank> assert_equals: host expected "example.com:8080" but got ""
+FAIL Parsing: <intent:///test> against <about:blank> assert_equals: pathname expected "/test" but got "///test"
+FAIL Parsing: <intent://test/a/../b> against <about:blank> assert_equals: href expected "intent://test/b" but got "intent://test/a/../b"
+FAIL Parsing: <intent://:443> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <intent://test:test> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <intent://[:1]> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <urn://example.com:8080/pathname?search#hash> against <about:blank> assert_equals: host expected "example.com:8080" but got ""
+FAIL Parsing: <urn:///test> against <about:blank> assert_equals: pathname expected "/test" but got "///test"
+FAIL Parsing: <urn://test/a/../b> against <about:blank> assert_equals: href expected "urn://test/b" but got "urn://test/a/../b"
+FAIL Parsing: <urn://:443> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <urn://test:test> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <urn://[:1]> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <turn://example.com:8080/pathname?search#hash> against <about:blank> assert_equals: host expected "example.com:8080" but got ""
+FAIL Parsing: <turn:///test> against <about:blank> assert_equals: pathname expected "/test" but got "///test"
+FAIL Parsing: <turn://test/a/../b> against <about:blank> assert_equals: href expected "turn://test/b" but got "turn://test/a/../b"
+FAIL Parsing: <turn://:443> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <turn://test:test> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <turn://[:1]> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <stun://example.com:8080/pathname?search#hash> against <about:blank> assert_equals: host expected "example.com:8080" but got ""
+FAIL Parsing: <stun:///test> against <about:blank> assert_equals: pathname expected "/test" but got "///test"
+FAIL Parsing: <stun://test/a/../b> against <about:blank> assert_equals: href expected "stun://test/b" but got "stun://test/a/../b"
+FAIL Parsing: <stun://:443> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <stun://test:test> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
+FAIL Parsing: <stun://[:1]> against <about:blank> assert_unreached: Expected URL to fail parsing Reached unreachable code
 Harness: the test ran to completion.
 

@@ -1,4 +1,343 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="el">
+<translation id="1016495303386450659">Η σημείωση ενημερώθηκε</translation>
+<translation id="1066692930984703744">Ενεργοποιήστε τον αποκλεισμό παρακολούθησης και διαφημίσεων για ταχύτερη και ασφαλέστερη περιήγηση</translation>
+<translation id="1116694919640316211">Σχετικά</translation>
+<translation id="1123707809902612118">Αποκλεισμός Ιχνηλατών και Διαφημίσεων</translation>
+<translation id="1151972924205500581">Απαιτείται κωδικός πρόσβασης</translation>
+<translation id="1166425484559430538">Τα δεδομένα συγχρονισμού σας είναι κρυπτογραφημένα. Δώστε τον κωδικό πρόσβασης κρυπτογράφησης για την αποκρυπτογράφηση των δεδομένων.</translation>
+<translation id="1181037720776840403">Αφαίρεση</translation>
+<translation id="1182668946911971500">Γραμμή Σημειώσεων</translation>
+<translation id="1198271701881992799">Ας ξεκινήσουμε</translation>
+<translation id="1201402288615127009">Επόμενο</translation>
+<translation id="1208495925646914304">Τίτλος</translation>
+<translation id="1254117744268754948">Επιλογή Φακέλου</translation>
+<translation id="1265555169187992603">Επιλέξτε ένα όνομα χρήστη μόνο μεταξύ 3 και 30 γραμμάτων (a-z ή A-Z) και ψηφίων (0-9).</translation>
+<translation id="1267954839079880017">Ιταλικά (<ph name="ORIGIN" />)</translation>
+<translation id="1272729688996227528">Ο συγχρονισμός είναι ενεργός</translation>
+<translation id="1275213816424141989">Ίσως Αργότερα</translation>
+<translation id="1315107593850379616">Email ανάκτησης</translation>
+<translation id="1325473901257014816">Με το Vivaldi, κρατήστε όλες τις καρτέλες σας σε ένα πρόγραμμα περιήγησης και συγχρονίστε τις σε όλες τις συσκευές.</translation>
+<translation id="132683371494960526">Πατήστε δύο φορές για αλλαγή του γονικού φακέλου.</translation>
+<translation id="1379470994139227452">Ορίστε τον Vivaldi ως προεπιλογή</translation>
+<translation id="1381484244248892686">Μπορείτε να χρησιμοποιήσετε αποθηκευμένους κωδικούς πρόσβασης σε οποιαδήποτε συσκευή. Αποθηκεύονται στον Διαχειριστή Κωδικών Πρόσβασης του Vivaldi για <ph name="EMAIL" /></translation>
+<translation id="1383876407941801731">Αναζήτηση</translation>
+<translation id="1430638949087011281">Χωρίς Αποκλεισμό</translation>
+<translation id="1446108955355168157">Για να κρυπτογραφήσετε και να προστατέψετε τα δεδομένα συγχρονισμού σας (κωδικούς πρόσβασης, σελιδοδείκτες, σημειώσεις και άλλα), δημιουργήστε έναν κωδικό πρόσβασης κρυπτογράφησης. Αυτός ο κωδικός πρόσβασης δεν θα σταλεί σε εμάς ποτέ.</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> σημειώσεις</translation>
+<translation id="1521731267649138856">η διεύθυνση email ανάκτησής σας.</translation>
+<translation id="1573784689611551537">Διαχείριση Πηγών Αποκλεισμού Διαφημίσεων</translation>
+<translation id="1577761519530347814">Συγχρονισμός αποθηκευμένων κωδικών πρόσβασης ιστότοπων</translation>
+<translation id="1644574205037202324">Ιστορικό</translation>
+<translation id="1659112017960130179">Κορεάτικα (<ph name="ORIGIN" />)</translation>
+<translation id="1689333818294560261">Ψευδώνυμο</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Όροι χρήσης ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Πολιτική Απορρήτου ➔<ph name="END_LINK2" /></translation>
+<translation id="1721552494230946796">Νέος Φάκελος Ταχείας Κλήσης</translation>
+<translation id="173924678149983125">Εισαγάγετε τη διεύθυνση URL για εισαγωγή κανόνων αποκλεισμού</translation>
+<translation id="1751280147639351837">Αποκλεισμός Διαφημίσεων και Παρακολούθησης</translation>
+<translation id="1752547299766512813">Αποθήκευση Κωδικών Πρόσβασης</translation>
+<translation id="1754797958074421486">Όροι Χρήσης</translation>
+<translation id="1771413903824396513">Κατά Ψευδώνυμο</translation>
+<translation id="1804522390855853698">Κινέζικα (<ph name="ORIGIN" />)</translation>
+<translation id="1809939268435598390">Διαγραφή Φακέλου</translation>
+<translation id="1813686536470127172">Άλλος φάκελος</translation>
+<translation id="1828800626900562968">Πατήστε το εικονίδιο συν παρακάτω για να δημιουργήσετε μια νέα καρτέλα.</translation>
+<translation id="1861262398884155592">Αυτός ο φάκελος είναι κενός</translation>
+<translation id="1887193815546011584">Νέα Ταχεία Κλήση</translation>
+<translation id="1929299157575856072">ΠΡΟΕΠΙΛΕΓΜΕΝΟ ΕΠΙΠΕΔΟ ΑΠΟΚΛΕΙΣΜΟΥ</translation>
+<translation id="1979539205367899613">Πατήστε το εικονίδιο "συν" παρακάτω για να δημιουργήσετε μια νέα ιδιωτική καρτέλα.</translation>
+<translation id="2030706494969937066">Αποτυχία ανάκτησης των διαπιστευτηρίων σας. Παρακαλώ συνδεθείτε ξανά.</translation>
+<translation id="2034405583989639424">Επεξεργασία Ταχείας Κλήσης</translation>
+<translation id="2048247880942380698">Αραβικά (<ph name="ORIGIN" />)</translation>
+<translation id="2079545284768500474">Αναίρεση</translation>
+<translation id="2117093051794889870">Κατά Περιεχόμενο</translation>
+<translation id="2129408066358825297">Ηλικία</translation>
+<translation id="2148384276939959392">Συγχρονισμός Επιλεγμένων</translation>
+<translation id="2195713384412091023">Αυτό θα καταργήσει όλα τα δεδομένα συγχρονισμού που είναι αποθηκευμένα στον διακομιστή μας, θα επαναφέρει τον κωδικό πρόσβασης κρυπτογράφησης και θα σας αποσυνδέσει.</translation>
+<translation id="2243210264130642074">Η σημείωση αποθηκεύτηκε</translation>
+<translation id="2272338747456392228">Ο λογαριασμός έχει κλειδωθεί</translation>
+<translation id="2273327106802955778">Περισσότερα μενού</translation>
+<translation id="2324160330092901720">Ένας κωδικός επαλήθευσης έχει σταλεί στη διεύθυνση <ph name="EMAIL_ID" /></translation>
+<translation id="2359808026110333948">Συνέχεια</translation>
+<translation id="2386793615875593361">1 επιλεγμένο</translation>
+<translation id="2388224692799337242">Μόλις ξεκινήσετε την περιήγηση, το ιστορικό σας θα εμφανιστεί εδώ</translation>
+<translation id="2391028308389203648">Τουρκικά (<ph name="ORIGIN" />)</translation>
+<translation id="2392369802118427583">Ενεργοποίηση</translation>
+<translation id="2434910957904013691">Συγχρονισμός Όλων</translation>
+<translation id="2536780277491102902">ΕΞΑΙΡΕΣΕΙΣ</translation>
+<translation id="2558801801411970131">Αποκλεισμός Ιχνηλατών</translation>
+<translation id="2577446409661931381">Νέα Σημείωση</translation>
+<translation id="2619628557366098325">Πορτογαλικά (<ph name="ORIGIN" />)</translation>
+<translation id="2677862276555105603">Διαφήμιση
+αποκλείστηκε</translation>
+<translation id="2678542925523700624">Εσθονικά (<ph name="ORIGIN" />)</translation>
+<translation id="2709516037105925701">Αυτόματη συμπλήρωση</translation>
+<translation id="271033894570825754">Νέο</translation>
+<translation id="2745324713975967671">Κωδικός πρόσβασης κρυπτογράφησης</translation>
+<translation id="2765217105034171413">Μικρό</translation>
+<translation id="2825232297853754349">Πρέπει να συμφωνήσετε με τους Όρους και τις Προϋποθέσεις.</translation>
+<translation id="2842985007712546952">Γονικός φάκελος</translation>
+<translation id="2843343418360315034">Ουγγρικά (<ph name="ORIGIN" />)</translation>
+<translation id="2850144663494818309">Εκκίνηση συγχρονισμού...</translation>
+<translation id="2874121295511641364">Συγχρονισμός πληκτρολογημένων διευθύνσεων URL και ανοιχτών καρτελών</translation>
+<translation id="2898963176829412617">Νέος Φάκελος…</translation>
+<translation id="2961573414320947355">Θέλετε να ανοίξετε όλους τους συνδέσμους στο Vivaldi; Βεβαιωθείτε ότι μας έχετε ορίσει ως προεπιλογή.</translation>
+<translation id="3006429105107822794">Δεν θα χρειαστεί να θυμάστε αυτόν τον κωδικό πρόσβασης. Θα αποθηκευτεί στον Διαχειριστή Kωδικών Πρόσβασης του Vivaldi.</translation>
+<translation id="3018244467214569202">Ελληνικά (<ph name="ORIGIN" />)</translation>
+<translation id="3039671569659952257">Διαγραφή φακέλου</translation>
+<translation id="3073196329485613487">Συνδεθείτε στο λογαριασμό σας</translation>
+<translation id="307859903981308731">Συνεχίζοντας, συμφωνείτε με του Vivaldi</translation>
+<translation id="3086746722712840547">σημείωση</translation>
+<translation id="3091563570137981919">Αποκλεισμός Ιχνηλατών και Διαφημίσεων</translation>
+<translation id="313566647356924831">Διαχείριση Ρυθμίσεων Αποκλεισμού</translation>
+<translation id="3177673846235066154">Ο διακομιστής απέρριψε τα διαπιστευτήριά σας.</translation>
+<translation id="3229182533910980085">Προσθέστε τον πρώτο σας σελιδοδείκτη πατώντας το εικονίδιο συν παρακάτω</translation>
+<translation id="3236835587712044564">Ευχαριστημένος με τον Vivaldi; Ορίστε το ως προεπιλογή σας.</translation>
+<translation id="3270894089048358271">Ορίστε τον Vivaldi ως προεπιλογή σας</translation>
+<translation id="3270930591809084274">Συγχρονισμένες Καρτέλες</translation>
+<translation id="3335772982573114336">Νέα σημείωση</translation>
+<translation id="33451081266695216">Η σύνδεση διακόπηκε από τον διακομιστή.</translation>
+<translation id="3346386541263128307">Οι διευθύνσεις email πρέπει να ταιριάζουν.</translation>
+<translation id="3365991203476235715">Αγγλικά (<ph name="ORIGIN" />)</translation>
+<translation id="3368960138304620657">Λιθουανικά (<ph name="ORIGIN" />)</translation>
+<translation id="3377025655491224618">Ιδιωτική Καρτέλα</translation>
+<translation id="3435896845095436175">Ενεργοποίηση</translation>
+<translation id="3438160227308459316">Ρουμανικά (<ph name="ORIGIN" />)</translation>
+<translation id="3451162533623145500">Δημιουργία Λογαριασμού</translation>
+<translation id="3509379002674019679">Δημιουργήστε, αποθηκεύστε και διαχειριστείτε τους κωδικούς πρόσβασής σας, ώστε να μπορείτε να συνδέεστε εύκολα σε ιστότοπους και εφαρμογές.</translation>
+<translation id="3513566764071045027">Αποσύνδεση</translation>
+<translation id="3527085408025491307">Φάκελος</translation>
+<translation id="3530991200302302959">Βουλγαρικά (<ph name="ORIGIN" />)</translation>
+<translation id="3601414719864711130">Κατά Ημερομηνία</translation>
+<translation id="3607176258839749451">Η εγγραφή απέτυχε λόγω σφάλματος. Παρακαλώ προσπαθήστε ξανά αργότερα.</translation>
+<translation id="3646647753063635401">Συγχρονίστε όλα τα δεδομένα και ενεργοποιήστε αυτόματα το συγχρονισμό νέων τύπων δεδομένων</translation>
+<translation id="3682791711395736890">Προβολή του ιστότοπου σε έκδοση για υπολογιστές</translation>
+<translation id="3692650606013198282">Άνοιγμα σε Ιδιωτικό</translation>
+<translation id="3699026013955941879">Ο κωδικός έχει λήξει. Παρακαλώ ζητήστε νέο κωδικό ενεργοποίησης.</translation>
+<translation id="3700829948786686853">Καλώς ήρθατε στο Vivaldi</translation>
+<translation id="3766350025418769949">Μπορείτε να χρησιμοποιήσετε τους κωδικούς πρόσβασης που έχετε αποθηκεύσει στον Διαχειριστή Κωδικών Πρόσβασης του Vivaldi σε άλλες εφαρμογές του iPad σας.</translation>
+<translation id="3858860766373142691">Όνομα</translation>
+<translation id="3866249974567520381">Περιγραφή</translation>
+<translation id="3872195896030547485">Παρακαλώ εισάγετε μια έγκυρη διεύθυνση ηλεκτρονικού ταχυδρομείου.</translation>
+<translation id="3894427358181296146">Προσθήκη φακέλου</translation>
+<translation id="3897092660631435901">Μενού</translation>
+<translation id="3953599441418463312">Ιαπωνικά (<ph name="ORIGIN" />)</translation>
+<translation id="395506590020066151">Ιχνηλάτης αποκλείστηκε</translation>
+<translation id="3997823869212225788">Εισαγάγετε τον 6ψήφιο κωδικό</translation>
+<translation id="4002066346123236978">Τίτλος</translation>
+<translation id="4032606071208172574">(Προεπιλογή)</translation>
+<translation id="4048057312173843244">Εδώ θα εμφανιστούν οι συγχρονισμένες καρτέλες από άλλες συσκευές. Συνδεθείτε στον Συγχρονισμό για να χρησιμοποιήσετε αυτήν την υπηρεσία.</translation>
+<translation id="4073968054795398875">Ο διακομιστής συγχρονισμού αντιμετωπίζει προβλήματα. Επανάληψη προετοιμασίας συγχρονισμού σύντομα...</translation>
+<translation id="4096707694175478403">Πίνακας</translation>
+<translation id="414098425907666915">Ιδιωτική Αναζήτηση</translation>
+<translation id="4141861385728508836">Σκανδιναβικά (<ph name="ORIGIN" />)</translation>
+<translation id="4145489350420416595">Απροσδόκητο σφάλμα.</translation>
+<translation id="4152011295694446843">Θα βρείτε τους σελιδοδείκτες σας εδώ</translation>
+<translation id="4152623049003960417">Λεπτομέρειες Ιχνηλάτη</translation>
+<translation id="4176463684765177261">Απενεργοποιήθηκε</translation>
+<translation id="4209092469652827314">Μεγάλα</translation>
+<translation id="4219175188138757774">Τσεχικά και Σλοβακικά (<ph name="ORIGIN" />)</translation>
+<translation id="4276839458685471670">Κατά Δημιουργία</translation>
+<translation id="4277085371281330061">Ιχνηλάτες
+αποκλείστηκαν</translation>
+<translation id="4299298331965375737">Να γίνει ο Vivaldi το προεπιλεγμένο πρόγραμμα περιήγησής σας;</translation>
+<translation id="4304224509867189079">Σύνδεση</translation>
+<translation id="432696242656678770">Ρωσικά (<ph name="ORIGIN" />)</translation>
+<translation id="4350751486125178847">Ισπανικά (<ph name="ORIGIN" />)</translation>
+<translation id="4376661454588260127">Βιετναμέζικα (<ph name="ORIGIN" />)</translation>
+<translation id="4394049700291259645">Απενεργοποίηση</translation>
+<translation id="4413780690230851155">Διαγραφή Ιστορικού Περιήγησης</translation>
+<translation id="4452878871193896747">Ινδονησιακά (<ph name="ORIGIN" />)</translation>
+<translation id="4493850495402472953">και</translation>
+<translation id="4497115807425788318">Τοποθεσία</translation>
+<translation id="4507213865286211606">Προεπισκόπηση Μεγέθους</translation>
+<translation id="4515084385531683114">Οι κωδικοί πρόσβασης αποθηκεύονται στον Διαχειριστή Κωδικών Πρόσβασης σε αυτήν τη συσκευή.</translation>
+<translation id="4525945044609022380">Αυτό το email είναι ήδη συνδεδεμένο με άλλον λογαριασμό.</translation>
+<translation id="4526803704855831732">Ιδιωτικές Καρτέλες</translation>
+<translation id="4563480492836333884">Το email δεν έγινε αποδεκτό. Παρακαλώ χρησιμοποιήστε διαφορετικό τομέα.</translation>
+<translation id="457386861538956877">Περισσότερα...</translation>
+<translation id="460370326897402035">Ο κωδικός πρόσβασης δεν είναι έγκυρος.</translation>
+<translation id="4619615317237390068">Καρτέλες από άλλες συσκευές</translation>
+<translation id="4640946580087069269">Αντιγραφή σε σημείωση</translation>
+<translation id="4654578955713250802">Αποκλεισμός Διαφημίσεων και Παρακολούθησης</translation>
+<translation id="4655510151391078468">Αυτός ο κωδικός δεν ταιριάζει με αυτόν που σας στείλαμε.
+         Σας απομένουν <ph name="ATTEMPTS" /> προσπάθειες.</translation>
+<translation id="466494460776294423">Απαιτείται κωδικός επαλήθευσης</translation>
+<translation id="4727698999970341158">Ισλανδικά (<ph name="ORIGIN" />)</translation>
+<translation id="473775607612524610">Ενημέρωση</translation>
+<translation id="4739712911308055817">Δεν έγινε ανάκτηση</translation>
+<translation id="4780953868408193639">Ιχνηλάτης
+αποκλείστηκε</translation>
+<translation id="4807415245238822255">Οι κωδικοί πρόσβασης πρέπει να ταιριάζουν.</translation>
+<translation id="4833044618885331665">Πρέπει να αναβαθμίσετε το Vivaldi για να χρησιμοποιήσετε τον συγχρονισμό.</translation>
+<translation id="4852383705713307704">Διαφήμιση αποκλείστηκε</translation>
+<translation id="4871370605780490696">Προσθήκη σελιδοδείκτη</translation>
+<translation id="4903325570808402486">Συγχρονισμός ρυθμίσεων Vivaldi (δεν μπορούν ακόμη να συγχρονιστούν όλες οι ρυθμίσεις)</translation>
+<translation id="4929196061847506605">Ισχυρό. Προσωπικό. Ιδιωτικό.</translation>
+<translation id="4936710149174207991">Μη Συγχρονισμένο</translation>
+<translation id="4943266325467647391">Το ενσωματωμένο πρόγραμμα αποκλεισμού ιχνηλατών και διαφημίσεων του Vivaldi σας προστατεύει από κακόβουλο λογισμικό και διαφημίσεις.</translation>
+<translation id="495421405224926623">Έχω διαβάσει και συμφωνώ με τους Όρους Χρήσης και την Πολιτική Απορρήτου</translation>
+<translation id="497942794017668482">Αποκλεισμός Ιχνηλατών και Διαφημίσεων</translation>
+<translation id="5037761343305489956">Αντιγράφτηκε σε σημείωση</translation>
+<translation id="504986598654589766">Η περιήγηση σε μια ιδιωτική καρτέλα σημαίνει ότι οι αναζητήσεις, οι σελίδες που επισκέπτονται, τα cookies και τα προσωρινά αρχεία δεν θα αποθηκευτούν από τον Vivaldi. Δεν κρυπτογραφεί ή τροποποιεί τη σύνδεσή σας με άλλο τρόπο.</translation>
+<translation id="5116316489033177455">Συγχρονισμός σελιδοδεικτών και Ταχείας Κλήσης</translation>
+<translation id="5122095890854520072">Λετονικά (<ph name="ORIGIN" />)</translation>
+<translation id="5153806174841856652">Η Σύνδεση Απέτυχε</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Επανάληψη αποστολής κωδικού<ph name="END_LINK" /></translation>
+<translation id="5238642303473095117">Διαγραφή Δεδομένων</translation>
+<translation id="5245732982828228444">Θα βρείτε τις σημειώσεις σας εδώ</translation>
+<translation id="5249199221558969362">Παρακαλώ εισαγάγετε έναν ρεαλιστικό αριθμό διάρκειας ζωής.</translation>
+<translation id="5290452628447338707">Δεν υπάρχουν σημειώσεις</translation>
+<translation id="5317780077021120954">Αποθήκευση</translation>
+<translation id="5349678548463426691">Κατά Περιγραφή</translation>
+<translation id="5350737901534958404">Να επιτρέπονται διαφημίσεις από τους συνεργάτες μας (υποστηρίξτε το Vivaldi)</translation>
+<translation id="5351912500249789547">Το Vivaldi.net απέρριψε τα διαπιστευτήριά σας: Κωδικός λάθους <ph name="ERROR_CODE" /></translation>
+<translation id="5378841821586202982">Φάκελος απορριμμάτων</translation>
+<translation id="5398772614898833570">Διαφημίσεις αποκλείστηκαν</translation>
+<translation id="5421638721143596928">Αποτυχία αποκρυπτογράφησης των διαπιστευτηρίων σας. Παρακαλώ συνδεθείτε ξανά.</translation>
+<translation id="5422086212043657100">Χρήση ως Φάκελος Ταχείας Κλήσης</translation>
+<translation id="5439835075346716808">Η εγγραφή έχει αποκλειστεί προσωρινά από αυτήν την IP. Παρακαλώ προσπαθήστε ξανά αργότερα.</translation>
+<translation id="5486261815000869482">Επιβεβαίωση κωδικού</translation>
+<translation id="5494016731375030300">Καρτέλες που Έκλεισαν Πρόσφατα</translation>
+<translation id="5569279496588266002">Διάταξη Αρχικής Σελίδας</translation>
+<translation id="5639137028584114536">Ο οργανισμός σας απαιτεί από εσάς να κάνετε ιδιωτική περιήγηση. Οι καρτέλες δεν αποθηκεύονται στην Ιδιωτική λειτουργία.
+         <ph name="BEGIN_LINK" />Μάθετε περισσότερα<ph name="END_LINK" /></translation>
+<translation id="5684277895745049190">Λίστα</translation>
+<translation id="574392208103952083">Μεσαίο</translation>
+<translation id="5787420647064736989">Όνομα συσκευής</translation>
+<translation id="5822336771053074270">Προσθήκη σημείωσης</translation>
+<translation id="5823830882692559950">Το Vivaldi.net απέρριψε τα διαπιστευτήριά σας: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5857090052475505287">Νέος Φάκελος</translation>
+<translation id="5859825823508296659">Επεξεργασία Τομέα</translation>
+<translation id="5867841422488265304">Αναζητήστε ή πληκτρ. μια διεύθ. ιστού</translation>
+<translation id="5871497086027727873">1 σημείωση μετακινήθηκε</translation>
+<translation id="5898502570200301364">Μπορείτε να χρησιμοποιήσετε τους κωδικούς πρόσβασης που έχετε αποθηκεύσει στον Διαχειριστή Κωδικών Πρόσβασης του Vivaldi σε άλλες εφαρμογές του iPhone σας.</translation>
+<translation id="5900160494089383343">Αυτό το όνομα χρήστη δεν είναι διαθέσιμο.</translation>
+<translation id="6005497458542935062">Μετακίνηση εκτός φακέλου</translation>
+<translation id="6042308850641462728">Περισσότερα</translation>
+<translation id="6077943432358741146">Ταχεία Κλήση</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> σημειώσεις μετακινήθηκαν</translation>
+<translation id="6147094071357011481">Οι καρτέλες που έκλεισαν πρόσφατα δεν είναι διαθέσιμες</translation>
+<translation id="6193995664633100765">Ινδικά (<ph name="ORIGIN" />)</translation>
+<translation id="6365929278691047681">Γερμανικά (<ph name="ORIGIN" />)</translation>
+<translation id="6404511346730675251">Επεξεργασία σελιδοδείκτη</translation>
+<translation id="6406506848690869874">Συγχρονισμός</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> επιλέχθηκαν</translation>
+<translation id="6468130661190228905">Λυπούμαστε, φαίνεται ότι πρέπει να περιμένετε λίγο πριν εγγραφείτε στην κοινότητά μας. Απαιτούμε τα μέλη μας να είναι τουλάχιστον 16 ετών για να εγγραφούν.</translation>
+<translation id="6517411226162529295">Εφεδρικό κλειδί κρυπτογράφησης</translation>
+<translation id="6527303717912515753">Κοινοποίηση</translation>
+<translation id="6535988230515403205">Πολωνικά (<ph name="ORIGIN" />)</translation>
+<translation id="659351303388691480">Εκκαθάριση Δεδομένων Περιήγησης ...</translation>
+<translation id="6614744450826097546">Λεπτομέρειες διαφήμισης</translation>
+<translation id="6627583120233659107">Επεξεργασία φακέλου</translation>
+<translation id="6631760746795162665">Κολομβίας (<ph name="ORIGIN" />)</translation>
+<translation id="6639866709520319699">Οι ιχνηλάτες και οι διαφημίσεις είναι αποκλεισμένες. Ορισμένοι ιστότοποι ενδέχεται να μην λειτουργούν σωστά.</translation>
+<translation id="6642196070615520677">Διαγραφή Δεδομένων Απομακρυσμένου Συγχρονισμού</translation>
+<translation id="6645228090427373820">Οι ιχνηλάτες είναι αποκλεισμένοι, αλλά όχι οι διαφημίσεις. Ορισμένοι ιστότοποι ενδέχεται να μην λειτουργούν σωστά.</translation>
+<translation id="6656103420185847513">Επεξεργασία φακέλου</translation>
+<translation id="6657585470893396449">Κωδικός πρόσβασης</translation>
+<translation id="6690955457036363013">Διαχειριστείτε το επίπεδο αποκλεισμού ανά ιστότοπο</translation>
+<translation id="6703516503311038964">Θέλω να λαμβάνω το ενημερωτικό δελτίο του Vivaldi</translation>
+<translation id="6757792528048321576">Αποκλεισμός Διαφημίσεων και Παρακολούθησης</translation>
+<translation id="6798469570047202628">Εισαγάγατε λάθος κωδικό πρόσβασης</translation>
+<translation id="681368974849482173">Το στοιχείο δημιουργήθηκε</translation>
+<translation id="6830986331692390764">Εκκαθάριση Δεδομένων Συγχρονισμού. Παρακαλώ περιμένετε.</translation>
+<translation id="6875510405870945573">Επιλέξτε το επίπεδο αποκλεισμού που προτιμάτε.</translation>
+<translation id="6885837502028760851">Εμφάνιση μόνο φακέλων Ταχείας Κλήσης</translation>
+<translation id="6887143077297974801">Ο συγχρονισμός απέτυχε να ξεκινήσει.</translation>
+<translation id="6937750621455385628">Πρέπει να χρησιμοποιήσετε έναν λογαριασμό Vivaldi για να συνδεθείτε.</translation>
+<translation id="6945221475159498467">Επιλογή</translation>
+<translation id="6946395294519639514">Με τους Πίνακες μπορείτε να διατηρήσετε εύκολα προσβάσιμα τα χρήσιμα εργαλεία στην πλευρική μπάρα του προγράμματος περιήγησης.</translation>
+<translation id="6967884871145366229">Διαχείριση Ρυθμίσεων Απορρήτου</translation>
+<translation id="6973630695168034713">Φάκελοι</translation>
+<translation id="7029809446516969842">Κωδικοί πρόσβασης</translation>
+<translation id="7041964446309059643">Χειροκίνητα</translation>
+<translation id="7194677467200983873">Τελευταίος συγχρονισμός:</translation>
+<translation id="7196846668589096106">Καρτέλες επιτραπέζιου υπολογιστή</translation>
+<translation id="7210372243397300116">Αναζήτηση Φακέλου</translation>
+<translation id="7215420652436283416">Κατά Διεύθυνση</translation>
+<translation id="7229439505896086266">Δημιουργία σημείωσης</translation>
+<translation id="7299721129597238157">Διαγραφή σελιδοδείκτη</translation>
+<translation id="7311118006561484338">Κατά Τίτλο</translation>
+<translation id="7325310788570036874">Συνεχίστε να περιηγείστε στον διαδίκτυο πιο έξυπνα, πιο ομαλά και πιο γρήγορα με το Vivaldi.</translation>
+<translation id="734110743815267231">Εβραϊκά (<ph name="ORIGIN" />)</translation>
+<translation id="7362952245780030555">Επιλέξτε ανάμεσα σε πλήρεις καρτέλες επιτραπέζιου υπολογιστή ή την απλοποιημένη εναλλαγή καρτελών.</translation>
+<translation id="7379938540614588640">Ολλανδικά (<ph name="ORIGIN" />)</translation>
+<translation id="7388525939184421699">Προσθήκη Νέας Πηγής</translation>
+<translation id="7400418766976504921">URL</translation>
+<translation id="7454640759045234067">Ιχνηλάτες αποκλείστηκαν</translation>
+<translation id="7461899062138731833">ΠΗΓΕΣ</translation>
+<translation id="750493650310597496">0 επιλεγμένα</translation>
+<translation id="7525067979554623046">Δημιουργία</translation>
+<translation id="7541020606126512786">Σύνοψη προγράμματος αποκλεισμού Διαφημίσεων και Παρακολούθησης</translation>
+<translation id="7573518470897278603">Προβολή του ιστότοπου σε έκδοση για κινητά</translation>
+<translation id="7574321014880720413">Προσθήκη Νέου Τομέα</translation>
+<translation id="7587132259180664054">Το email στάλθηκε με επιτυχία</translation>
+<translation id="7602336701644200880">Η αποστολή email απέτυχε. Παρακαλώ προσπαθήστε ξανά.</translation>
+<translation id="7606108789437688910">Άνοιγμα των Διευθύνσεων της Σημείωσης σε Κατάσταση Ανώνυμης Περιήγησης</translation>
+<translation id="7622661618259256505">Επιλέξτε έναν κωδικό πρόσβασης τουλάχιστον 12 χαρακτήρων.</translation>
+<translation id="7658239707568436148">Άκυρο</translation>
+<translation id="767363698559661695">Ορίστε το στυλ της Καρτέλας σας</translation>
+<translation id="7702907602086592255">Τομέας</translation>
+<translation id="7730831244010940855">Αλλαγή προεπιλογής σε Vivaldi στο iPad;</translation>
+<translation id="7732622593814325274">Διαχείριση Πηγών Αποκλεισμού Ιχνηλατών</translation>
+<translation id="7765158879357617694">Μετακίνηση</translation>
+<translation id="7801204999757211519">Έχετε ήδη λογαριασμό; <ph name="BEGIN_LINK" />Σύνδεση ➔<ph name="END_LINK" /></translation>
+<translation id="7914995060146784406">Επεξεργασία Σημείωσης</translation>
+<translation id="7925340978147141704">Προβολή Κωδικού Πρόσβασης</translation>
+<translation id="8008214489230610096">Επιβεβαίωση email ανάκτησης</translation>
+<translation id="804786196054284061">Άδεια Χρήσης</translation>
+<translation id="8053851743673939284">Γαλλικά (<ph name="ORIGIN" />)</translation>
+<translation id="8066170816074394954">Σφάλμα Διακομιστή.</translation>
+<translation id="8076492880354921740">Καρτέλες</translation>
+<translation id="8112996065264879835">Αυτός ο κωδικός δεν ταιριάζει με αυτόν που σας στείλαμε.
+         Έχετε φτάσει το μέγιστο όριο λανθασμένων προσπαθειών. Ζητήστε νέο κωδικό χρησιμοποιώντας την επιλογή Επαναποστολή παρακάτω.</translation>
+<translation id="8147118677117542370">Παρακαλώ δώστε την ηλικία σας.</translation>
+<translation id="8165573437634525334">Τα δεδομένα προστατεύονται με κωδικό κρυπτογράφησης</translation>
+<translation id="8182979418912184986">Νέα ιδιωτική Καρτέλα</translation>
+<translation id="8257908958623224237">Διένεξη με δεδομένα άλλης συσκευής-πελάτη.</translation>
+<translation id="8261506727792406068">Διαγραφή</translation>
+<translation id="8273666073173891138">Η σημείωση αποθηκεύτηκε στο <ph name="FOLDER_TITLE" /></translation>
+<translation id="8275038454117074363">Εισαγωγή</translation>
+<translation id="8329813750766387010">Ενημερώθηκε: <ph name="DATE" /></translation>
+<translation id="8347535536909603600">Κατάργηση προειδοποιήσεων cookie (<ph name="TYPE" />)</translation>
+<translation id="8366175803122817174">Άνοιγμα Όλων των Διευθύνσεων των Σημειώσεων</translation>
+<translation id="8384409685584033392">Πληροφορίες Σελίδας</translation>
+<translation id="8414685983518053656">Σημειώσεις</translation>
+<translation id="8423076545503792640">Το αίτημα απέτυχε λόγω σφάλματος. Παρακαλώ προσπαθήστε ξανά αργότερα.</translation>
+<translation id="8428213095426709021">Ρυθμίσεις</translation>
+<translation id="8458397775385147834">1 σημείωση διαγράφηκε</translation>
+<translation id="8500459200727969761">Επαναφορά Ενσωματωμένων Λιστών</translation>
+<translation id="8503813439785031346">Όνομα χρήστη</translation>
+<translation id="8515808232153642813">Αποκρυπτογράφηση</translation>
+<translation id="8517852590337319813">Ενεργοποιήστε τον λογαριασμό σας</translation>
+<translation id="8546963963006468833">Με το Vivaldi, μπορείτε να ανοίγετε απρόσκοπτα συνδέσμους, να κάνετε αναζήτηση από widget και να συμπληρώνετε αυτόματα κωδικούς πρόσβασης σε άλλες εφαρμογές.</translation>
+<translation id="8562452229998620586">Οι αποθηκευμένοι κωδικοί πρόσβασης θα εμφανιστούν εδώ.</translation>
+<translation id="8605953154325672921">Απαιτείται όνομα χρήστη</translation>
+<translation id="8675578805254882416">Προσκόμιση</translation>
+<translation id="8677007239430848917">Προσθέστε την πρώτη σας σημείωση πατώντας το εικονίδιο συν παρακάτω</translation>
+<translation id="8684294196284714094">Είστε έτοιμοι να ορίσετε το Vivaldi ως το προεπιλεγμένο πρόγραμμα περιήγησής σας;</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> σημειώσεις διαγράφηκαν</translation>
+<translation id="8804164990146287819">Πολιτική Απορρήτου</translation>
+<translation id="8819841443522803117">Ήρθε η ώρα να αλλάξετε το προεπιλεγμένο πρόγραμμα περιήγησής σας; Επιλέξτε Vivaldi.</translation>
+<translation id="8820817407110198400">Σελιδοδείκτες</translation>
+<translation id="8855707633300847215">Προβολή της Γραμμής Καρτελών</translation>
+<translation id="8892354889971902600">Οι καρτέλες που κλείσατε πρόσφατα θα εμφανιστούν εδώ.</translation>
+<translation id="89390081013973080">Όλα έτοιμα! Ώρα να αποφασίσετε ποια δεδομένα θα συγχρονίσετε μεταξύ των συσκευών.</translation>
+<translation id="8965371804397726192">Έναρξη Συγχρονισμού Όλων των Δεδομένων</translation>
+<translation id="9028089729841356743">Σφάλμα δικτύου.</translation>
+<translation id="9043882097999887291">Διαφημίσεις
+αποκλείστηκαν</translation>
+<translation id="9065203028668620118">Επεξεργασία</translation>
+<translation id="9078193189520575214">Εφαρμογή αλλαγών...</translation>
+<translation id="9079251484401922158">Φινλανδικά (<ph name="ORIGIN" />)</translation>
+<translation id="9083392325882095631">1 σημείωση</translation>
+<translation id="9091665118798175641">Συγχρονισμός πληροφοριών φόρμας αυτόματης συμπλήρωσης</translation>
+<translation id="9097127519290088802">Απαιτείται κωδικός κρυπτογράφησης</translation>
+<translation id="9212737146310746733">Φαρσί (<ph name="ORIGIN" />)</translation>
+<translation id="9218693288527810093">Αποκλεισμός Ιχνηλατών</translation>
+<translation id="937440209447114831">Δεν αποκλείουμε διαφημίσεις ή προγράμματα παρακολούθησης.</translation>
+<translation id="984650419570014454">Ο κωδικός ενεργοποίησης πρέπει να είναι 6ψήφιος.</translation>
+<translation id="992440609313570947">Νέος στον Vivaldi; <ph name="BEGIN_LINK" />Δημιουργήστε έναν λογαριασμό ➔<ph name="END_LINK" /></translation>
 </translationbundle>

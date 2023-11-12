@@ -310,7 +310,7 @@ void RootView::DeviceScaleFactorChanged(float old_device_scale_factor,
 
 // Accessibility ---------------------------------------------------------------
 
-raw_ptr<AnnounceTextView> RootView::GetOrCreateAnnounceView() {
+AnnounceTextView* RootView::GetOrCreateAnnounceView() {
   if (!announce_view_) {
     announce_view_ = AddChildView(std::make_unique<AnnounceTextView>());
     announce_view_->SetProperty(kViewIgnoredByLayoutKey, true);
@@ -396,10 +396,7 @@ void RootView::OnEventProcessingStarted(ui::Event* event) {
   gesture_handler_set_before_processing_ = !!gesture_handler_;
 }
 
-void RootView::OnEventProcessingFinished(
-    ui::Event* event,
-    ui::EventTarget* target,
-    const ui::EventDispatchDetails& details) {
+void RootView::OnEventProcessingFinished(ui::Event* event) {
   VLOG(5) << "RootView::OnEventProcessingFinished(" << event->ToString() << ")";
   // If |event| was not handled and |gesture_handler_| was not set by the
   // dispatch of a previous gesture event, then no default gesture handler
@@ -697,6 +694,7 @@ bool RootView::OnMouseWheel(const ui::MouseWheelEvent& event) {
 }
 
 void RootView::MaybeNotifyGestureHandlerBeforeReplacement() {
+#if defined(USE_AURA)
   ui::GestureRecognizer* gesture_recognizer =
       (gesture_handler_ && widget_ ? widget_->GetGestureRecognizer() : nullptr);
   if (!gesture_recognizer)
@@ -707,6 +705,7 @@ void RootView::MaybeNotifyGestureHandlerBeforeReplacement() {
     return;
 
   gesture_recognizer->SendSynthesizedEndEvents(gesture_consumer);
+#endif
 }
 
 void RootView::SetMouseAndGestureHandler(View* new_handler) {
@@ -727,12 +726,25 @@ void RootView::SetMouseHandler(View* new_mouse_handler) {
 }
 
 void RootView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  View::GetAccessibleNodeData(node_data);
+
   DCHECK(GetWidget());
   auto* widget_delegate = GetWidget()->widget_delegate();
-  if (!widget_delegate)
+  if (!widget_delegate) {
     return;
-  node_data->role = widget_delegate->GetAccessibleWindowRole();
-  node_data->SetName(widget_delegate->GetAccessibleWindowTitle());
+  }
+
+  if (node_data->role == ax::mojom::Role::kUnknown) {
+    node_data->role = widget_delegate->GetAccessibleWindowRole();
+  }
+
+  if (node_data->GetStringAttribute(ax::mojom::StringAttribute::kName)
+          .empty() &&
+      static_cast<ax::mojom::NameFrom>(
+          node_data->GetIntAttribute(ax::mojom::IntAttribute::kNameFrom)) !=
+          ax::mojom::NameFrom::kAttributeExplicitlyEmpty) {
+    node_data->SetName(widget_delegate->GetAccessibleWindowTitle());
+  }
 }
 
 void RootView::UpdateParentLayer() {

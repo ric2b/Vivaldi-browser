@@ -54,6 +54,18 @@ interface FS {
 }
 
 /**
+ * Handle ExitStatus from emscripten_force_exit when stop recording.
+ * TODO(b/199980849): Find build options or function to handle FFMpeg to not
+ * throw ExitStatus on normal stopping.
+ */
+function exitNormally(err: unknown) {
+  if (err instanceof Object && 'name' in err && 'status' in err) {
+    return err.name === 'ExitStatus' && err.status === 0;
+  }
+  return false;
+}
+
+/**
  * An emulated input device backed by Int8Array.
  */
 class InputDevice {
@@ -112,7 +124,13 @@ class InputDevice {
    */
   endPush(): void {
     this.ended = true;
-    this.consumeReadableCallback();
+    try {
+      this.consumeReadableCallback();
+    } catch (e) {
+      if (!exitNormally(e)) {
+        throw e;
+      }
+    }
   }
 
   /**
@@ -156,10 +174,10 @@ class InputDevice {
   getFileOps(): FileOps {
     return {
       open: () => {
-        // Do nothing.
+          // Do nothing.
       },
       close: () => {
-        // Do nothing.
+          // Do nothing.
       },
       read: (...args) => this.read(...args),
       write: () => assertNotReached('write should not be called on stdin'),
@@ -257,7 +275,7 @@ class OutputDevice {
   getFileOps(): FileOps {
     return {
       open: () => {
-        // Do nothing.
+          // Do nothing.
       },
       close: () => this.close(),
       read: () => assertNotReached('read should not be called on output'),
@@ -265,13 +283,6 @@ class OutputDevice {
       llseek: (...args) => this.llseek(...args),
     };
   }
-}
-
-declare global {
-  // TypeScript only exports values declared with "var" in global scope, and
-  // not "let" or "const".
-  // eslint-disable-next-line no-var
-  var waitReadable: ((callback: ReadableCallback) => void)|undefined;
 }
 
 /**
@@ -299,8 +310,8 @@ class FFMpegVideoProcessor {
     // clang-format off
     const args = [
       // Make the procssing pipeline start earlier by shorten the initial
-      // analyze durtaion from the default 5s to 1s. This reduce the
-      // stop-capture lantency significantly for short videos.
+      // analyze duration from the default 5s to 1s. This reduce the
+      // stop-capture latency significantly for short videos.
       '-analyzeduration', '1M',
       // input from stdin
       ...processorArgs.decoderArgs, '-i', 'pipe:0',
@@ -348,6 +359,9 @@ class FFMpegVideoProcessor {
         assert(stdout.fd === 1);
         assert(stderr.fd === 2);
       },
+      waitReadable: (callback: ReadableCallback) => {
+        this.inputDevice.setReadableCallback(callback);
+      },
     };
 
     function initFFmpeg() {
@@ -361,11 +375,6 @@ class FFMpegVideoProcessor {
       });
     }
     this.jobQueue.push(initFFmpeg);
-
-    // This is a function to be called by ffmpeg before running read() in C.
-    globalThis.waitReadable = (callback: ReadableCallback) => {
-      this.inputDevice.setReadableCallback(callback);
-    };
   }
 
   /**

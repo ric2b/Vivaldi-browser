@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/containers/queue.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
@@ -122,7 +123,7 @@ class CallbacksHelper {
   // indicates that 1) the image has been sent to be shown after being scheduled
   // 2) the image is displayed. This sort of mimics a buffer queue, but in a
   // simpler way.
-  void FinishSwapBuffersAsync(
+  void FinishPresent(
       uint32_t local_swap_id,
       std::vector<scoped_refptr<OverlayImageHolder>> overlay_images,
       gfx::SwapCompletionResult result) {
@@ -206,7 +207,8 @@ class WaylandSurfaceFactoryTest : public WaylandTest {
         std::move(manager_ptr), kSupportedFormatsWithModifiers,
         /*supports_dma_buf=*/false,
         /*supports_viewporter=*/true,
-        /*supports_acquire_fence=*/false, kAugmentedSurfaceNotSupportedVersion);
+        /*supports_acquire_fence=*/false,
+        /*supports_overlays=*/true, kAugmentedSurfaceNotSupportedVersion);
 
     // Wait until initialization and mojo calls go through.
     base::RunLoop().RunUntilIdle();
@@ -230,10 +232,10 @@ class WaylandSurfaceFactoryTest : public WaylandTest {
     return canvas;
   }
 
-  void ScheduleOverlayPlane(gl::GLSurface* gl_surface,
+  void ScheduleOverlayPlane(gl::Presenter* presenter,
                             gl::OverlayImage image,
                             int z_order) {
-    gl_surface->ScheduleOverlayPlane(
+    presenter->ScheduleOverlayPlane(
         image, nullptr,
         gfx::OverlayPlaneData(
             z_order, gfx::OverlayTransform::OVERLAY_TRANSFORM_NONE,
@@ -260,11 +262,11 @@ TEST_P(WaylandSurfaceFactoryTest,
 
   auto* gl_ozone = surface_factory_->GetGLOzone(
       gl::GLImplementationParts(gl::kGLImplementationEGLGLES2));
-  auto gl_surface = gl_ozone->CreateSurfacelessViewGLSurface(
+  auto presenter = gl_ozone->CreateSurfacelessViewGLSurface(
       gl::GetDefaultDisplay(), widget_);
-  EXPECT_TRUE(gl_surface);
-  gl_surface->SetRelyOnImplicitSync();
-  static_cast<ui::GbmSurfacelessWayland*>(gl_surface.get())
+  EXPECT_TRUE(presenter);
+  presenter->SetRelyOnImplicitSync();
+  static_cast<ui::GbmSurfacelessWayland*>(presenter.get())
       ->SetNoGLFlushForTests();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -296,7 +298,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[0]->SetBusy(true);
 
     // Prepare background.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[0]->GetNativePixmap(),
                          /*z_order=*/INT32_MIN);
 
@@ -307,7 +309,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[1]->SetBusy(true);
 
     // Prepare overlay plane.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[1]->GetNativePixmap(),
                          /*z_order=*/1);
 
@@ -316,8 +318,8 @@ TEST_P(WaylandSurfaceFactoryTest,
     overlay_images.push_back(fake_overlay_image[1]);
 
     // And submit each image. They will be executed in FIFO manner.
-    gl_surface->SwapBuffersAsync(
-        base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
+    presenter->Present(
+        base::BindOnce(&CallbacksHelper::FinishPresent,
                        base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
@@ -399,7 +401,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[2]->SetBusy(true);
 
     // Prepare overlay plane.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[2]->GetNativePixmap(),
                          /*z_order=*/1);
 
@@ -407,8 +409,8 @@ TEST_P(WaylandSurfaceFactoryTest,
     overlay_images.push_back(fake_overlay_image[2]);
 
     // And submit each image. They will be executed in FIFO manner.
-    gl_surface->SwapBuffersAsync(
-        base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
+    presenter->Present(
+        base::BindOnce(&CallbacksHelper::FinishPresent,
                        base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
@@ -494,7 +496,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[3]->SetBusy(true);
 
     // Prepare primary plane.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[3]->GetNativePixmap(),
                          /*z_order=*/0);
 
@@ -502,8 +504,8 @@ TEST_P(WaylandSurfaceFactoryTest,
     overlay_images.push_back(fake_overlay_image[3]);
 
     // And submit each image. They will be executed in FIFO manner.
-    gl_surface->SwapBuffersAsync(
-        base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
+    presenter->Present(
+        base::BindOnce(&CallbacksHelper::FinishPresent,
                        base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
@@ -614,11 +616,11 @@ TEST_P(WaylandSurfaceFactoryTest,
 
   auto* gl_ozone = surface_factory_->GetGLOzone(
       gl::GLImplementationParts(gl::kGLImplementationEGLGLES2));
-  auto gl_surface = gl_ozone->CreateSurfacelessViewGLSurface(
+  auto presenter = gl_ozone->CreateSurfacelessViewGLSurface(
       gl::GetDefaultDisplay(), widget_);
-  EXPECT_TRUE(gl_surface);
-  gl_surface->SetRelyOnImplicitSync();
-  static_cast<ui::GbmSurfacelessWayland*>(gl_surface.get())
+  EXPECT_TRUE(presenter);
+  presenter->SetRelyOnImplicitSync();
+  static_cast<ui::GbmSurfacelessWayland*>(presenter.get())
       ->SetNoGLFlushForTests();
 
   // Create buffers and FakeGlImageNativePixmap.
@@ -650,7 +652,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[0]->SetBusy(true);
 
     // Prepare background.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[0]->GetNativePixmap(),
                          /*z_order=*/INT32_MIN);
 
@@ -661,7 +663,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[1]->SetBusy(true);
 
     // Prepare primary plane.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[1]->GetNativePixmap(),
                          /*z_order=*/0);
 
@@ -672,7 +674,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[2]->SetBusy(true);
 
     // Prepare underlay plane.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[2]->GetNativePixmap(),
                          /*z_order=*/-1);
 
@@ -682,8 +684,8 @@ TEST_P(WaylandSurfaceFactoryTest,
     overlay_images.push_back(fake_overlay_image[2]);
 
     // And submit each image. They will be executed in FIFO manner.
-    gl_surface->SwapBuffersAsync(
-        base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
+    presenter->Present(
+        base::BindOnce(&CallbacksHelper::FinishPresent,
                        base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
@@ -770,7 +772,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[3]->SetBusy(true);
 
     // Prepare primary plane.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[3]->GetNativePixmap(),
                          /*z_order=*/0);
 
@@ -781,7 +783,7 @@ TEST_P(WaylandSurfaceFactoryTest,
     fake_overlay_image[4]->SetBusy(true);
 
     // Prepare overlay plane.
-    ScheduleOverlayPlane(gl_surface.get(),
+    ScheduleOverlayPlane(presenter.get(),
                          fake_overlay_image[4]->GetNativePixmap(),
                          /*z_order=*/1);
 
@@ -790,8 +792,8 @@ TEST_P(WaylandSurfaceFactoryTest,
     overlay_images.push_back(fake_overlay_image[4]);
 
     // And submit each image. They will be executed in FIFO manner.
-    gl_surface->SwapBuffersAsync(
-        base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
+    presenter->Present(
+        base::BindOnce(&CallbacksHelper::FinishPresent,
                        base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
@@ -1282,33 +1284,33 @@ TEST_P(WaylandSurfaceFactoryTest, CreateSurfaceCheckGbm) {
   auto* gl_ozone = surface_factory_->GetGLOzone(
       gl::GLImplementationParts(gl::kGLImplementationEGLGLES2));
   EXPECT_TRUE(gl_ozone);
-  auto gl_surface = gl_ozone->CreateSurfacelessViewGLSurface(
+  auto presenter = gl_ozone->CreateSurfacelessViewGLSurface(
       gl::GetDefaultDisplay(), widget_);
-  EXPECT_FALSE(gl_surface);
+  EXPECT_FALSE(presenter);
 
   // Now, set gbm.
   buffer_manager_gpu_->gbm_device_ = std::make_unique<MockGbmDevice>();
 
   // It's still impossible to create the device if supports_dmabuf is false.
   EXPECT_FALSE(buffer_manager_gpu_->GetGbmDevice());
-  gl_surface = gl_ozone->CreateSurfacelessViewGLSurface(gl::GetDefaultDisplay(),
-                                                        widget_);
-  EXPECT_FALSE(gl_surface);
+  presenter = gl_ozone->CreateSurfacelessViewGLSurface(gl::GetDefaultDisplay(),
+                                                       widget_);
+  EXPECT_FALSE(presenter);
 
   // Now set supports_dmabuf.
   buffer_manager_gpu_->supports_dmabuf_ = true;
   EXPECT_TRUE(buffer_manager_gpu_->GetGbmDevice());
-  gl_surface = gl_ozone->CreateSurfacelessViewGLSurface(gl::GetDefaultDisplay(),
-                                                        widget_);
-  EXPECT_TRUE(gl_surface);
+  presenter = gl_ozone->CreateSurfacelessViewGLSurface(gl::GetDefaultDisplay(),
+                                                       widget_);
+  EXPECT_TRUE(presenter);
 
   // Reset gbm now. WaylandConnectionProxy can reset it when zwp is not
   // available. And factory must behave the same way as previously.
   buffer_manager_gpu_->gbm_device_ = nullptr;
   EXPECT_FALSE(buffer_manager_gpu_->GetGbmDevice());
-  gl_surface = gl_ozone->CreateSurfacelessViewGLSurface(gl::GetDefaultDisplay(),
-                                                        widget_);
-  EXPECT_FALSE(gl_surface);
+  presenter = gl_ozone->CreateSurfacelessViewGLSurface(gl::GetDefaultDisplay(),
+                                                       widget_);
+  EXPECT_FALSE(presenter);
 }
 
 class WaylandSurfaceFactoryCompositorV3 : public WaylandSurfaceFactoryTest {};
@@ -1323,11 +1325,11 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
   auto* gl_ozone = surface_factory_->GetGLOzone(
       gl::GLImplementationParts(gl::kGLImplementationEGLGLES2));
   ASSERT_TRUE(gl_ozone);
-  auto gl_surface = gl_ozone->CreateSurfacelessViewGLSurface(
+  auto presenter = gl_ozone->CreateSurfacelessViewGLSurface(
       gl::GetDefaultDisplay(), widget_);
-  ASSERT_TRUE(gl_surface);
-  gl_surface->SetRelyOnImplicitSync();
-  static_cast<ui::GbmSurfacelessWayland*>(gl_surface.get())
+  ASSERT_TRUE(presenter);
+  presenter->SetRelyOnImplicitSync();
+  static_cast<ui::GbmSurfacelessWayland*>(presenter.get())
       ->SetNoGLFlushForTests();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -1373,7 +1375,7 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
     fake_overlay_image[0]->SetBusy(true);
 
     // Prepare background.
-    gl_surface->ScheduleOverlayPlane(
+    presenter->ScheduleOverlayPlane(
         fake_overlay_image[0]->GetNativePixmap(), nullptr,
         gfx::OverlayPlaneData(
             INT32_MIN, gfx::OverlayTransform::OVERLAY_TRANSFORM_ROTATE_270,
@@ -1385,8 +1387,8 @@ TEST_P(WaylandSurfaceFactoryCompositorV3, SurfaceDamageTest) {
     overlay_images.push_back(fake_overlay_image[0]);
 
     // And submit each image. They will be executed in FIFO manner.
-    gl_surface->SwapBuffersAsync(
-        base::BindOnce(&CallbacksHelper::FinishSwapBuffersAsync,
+    presenter->Present(
+        base::BindOnce(&CallbacksHelper::FinishPresent,
                        base::Unretained(&cbs_helper), swap_id, overlay_images),
         base::BindOnce(&CallbacksHelper::BufferPresented,
                        base::Unretained(&cbs_helper), swap_id),
@@ -1453,6 +1455,7 @@ INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
 INSTANTIATE_TEST_SUITE_P(
     CompositorVersionV3Test,
     WaylandSurfaceFactoryCompositorV3,
-    Values(wl::ServerConfig{.compositor_version = wl::CompositorVersion::kV3}));
+    Values(wl::ServerConfig{
+        .compositor_version = wl::TestCompositor::Version::kV3}));
 
 }  // namespace ui

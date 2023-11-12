@@ -1,0 +1,57 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/swift_source_set.gni")
+
+source_set("vivaldi_onboarding") {
+  sources = []
+
+  deps = [
+    "resources",
+    ":vivaldi_onboarding_swift",
+    "//base",
+    "//ui/base",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+swift_source_set("vivaldi_onboarding_swift") {
+  bridge_header = "vivaldi_onboarding_swift_bridge.h"
+  sources = [
+    "vivaldi_onboarding_view_provider.swift",
+    "vivaldi_onboarding_view.swift",
+    "vivaldi_onboarding_start_view.swift",
+    "vivaldi_onboarding_default_browser_view.swift",
+    "vivaldi_onboarding_features_view.swift",
+    "vivaldi_onboarding_adblocker_option_view.swift",
+    "vivaldi_onboarding_tab_style_view.swift",
+    "vivaldi_onboarding_data_model.swift",
+    "vivaldi_onboarding_actions_bridge.swift",
+    "vivaldi_onboarding_constants.swift",
+    "vivaldi_onboarding_background_view.swift",
+    "vivaldi_onboarding_shadow_modifier.swift",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base",
+    "//url",
+    "//ios/chrome/app/strings",
+    "//vivaldi/ios/ui/helpers:helpers",
+    "//vivaldi/ios/ui/ad_tracker_blocker:vivaldi_ad_tracker_blocker",
+    "//vivaldi/ios/ui/settings/sync:vivaldi_sync_settings",
+    "//vivaldi/ios/ui/settings/tabs:vivaldi_tab_settings",
+    "//vivaldi/ios/ui/common:vivaldi_common",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+    "SwiftUI.framework",
+  ]
+}

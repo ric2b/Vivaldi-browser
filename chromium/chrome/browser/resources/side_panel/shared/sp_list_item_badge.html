@@ -14,11 +14,13 @@
   :host-context([chrome-refresh-2023]):host {
     align-items: center;
     background: var(--color-side-panel-badge-background);
+    box-sizing: border-box;
     color: var(--color-side-panel-badge-foreground);
     font-size: 11px;
     gap: 0;
     height: 20px;
-    line-height: 20px;
+    /* Normal line-height results in more vertically centered text in Roboto. */
+    line-height: normal;
     padding: 4px 8px 4px 6px;
   }
 

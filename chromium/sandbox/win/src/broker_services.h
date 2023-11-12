@@ -45,6 +45,8 @@ class BrokerServicesBase final : public BrokerServices,
 
   // BrokerServices interface.
   ResultCode Init() override;
+  ResultCode InitForTesting(
+      std::unique_ptr<BrokerServicesTargetTracker> target_tracker) override;
   ResultCode CreateAlternateDesktop(Desktop desktop) override;
   void DestroyDesktops() override;
   std::unique_ptr<TargetPolicy> CreatePolicy() override;
@@ -55,7 +57,6 @@ class BrokerServicesBase final : public BrokerServices,
                          std::unique_ptr<TargetPolicy> policy,
                          DWORD* last_error,
                          PROCESS_INFORMATION* target) override;
-  ResultCode WaitForAllTargets() override;
   ResultCode GetPolicyDiagnostics(
       std::unique_ptr<PolicyDiagnosticsReceiver> receiver) override;
   void SetStartingMitigations(MitigationFlags starting_mitigations) override;
@@ -66,6 +67,9 @@ class BrokerServicesBase final : public BrokerServices,
   static void FreezeTargetConfigForTesting(TargetConfig* config);
 
  private:
+  // Implements Init and InitForTesting.
+  ResultCode Init(std::unique_ptr<BrokerServicesTargetTracker> target_tracker);
+
   // Ensures the desktop integrity suits any process we are launching.
   ResultCode UpdateDesktopIntegrity(Desktop desktop, IntegrityLevel integrity);
 
@@ -73,16 +77,12 @@ class BrokerServicesBase final : public BrokerServices,
   // the worker thread.
   base::win::ScopedHandle job_port_;
 
-  // Handle to a manual-reset event that is signaled when the total target
-  // process count reaches zero.
-  base::win::ScopedHandle no_targets_;
-
   // Handle to the worker thread that reacts to job notifications.
   base::win::ScopedHandle job_thread_;
 
   // Provides a pool of threads that are used to wait on the IPC calls.
   // Owned by TargetEventsThread which is alive until our destructor.
-  raw_ptr<ThreadPool> thread_pool_ = nullptr;
+  raw_ptr<ThreadPool, DanglingUntriaged> thread_pool_ = nullptr;
 
   // Handles for the alternate winstation (desktop==kAlternateWinstation).
   std::unique_ptr<AlternateDesktop> alt_winstation_;

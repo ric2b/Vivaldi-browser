@@ -129,6 +129,7 @@
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/finder/text_finder.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
 #include "third_party/blink/renderer/core/editing/selection_template.h"
@@ -163,6 +164,7 @@
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/inspector/dev_tools_emulator.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
+#include "third_party/blink/renderer/core/layout/layout_text.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
@@ -229,6 +231,7 @@ using blink::url_test_helpers::ToKURL;
 using testing::_;
 using testing::ElementsAre;
 using testing::Mock;
+using testing::Return;
 
 namespace blink {
 
@@ -300,12 +303,6 @@ void ExecuteScriptInMainWorld(
                             user_gesture);
 }
 
-const char* ViewBackgroundLayerName() {
-  return RuntimeEnabledFeatures::LayoutNGPrintingEnabled()
-             ? "Scrolling background of LayoutNGView #document"
-             : "Scrolling background of LayoutView #document";
-}
-
 }  // namespace
 
 const int kTouchPointPadding = 32;
@@ -335,7 +332,7 @@ class WebFrameTest : public testing::Test {
     // throttled.
     if (kLaunchingProcessIsBackgrounded) {
       blink::scheduler::WebThreadScheduler::MainThreadScheduler()
-          ->SetRendererBackgrounded(false);
+          .SetRendererBackgrounded(false);
     }
   }
 
@@ -391,15 +388,9 @@ class WebFrameTest : public testing::Test {
         WebString::FromUTF8(file_name), WebString::FromUTF8(mime_type));
   }
 
-  static void ConfigureCompositingWebView(WebSettings* settings) {
-    settings->SetPreferCompositingToLCDTextEnabled(true);
-  }
-
   static void ConfigureAndroid(WebSettings* settings) {
-    settings->SetViewportMetaEnabled(true);
-    settings->SetViewportEnabled(true);
-    settings->SetMainFrameResizesAreOrientationChanges(true);
-    settings->SetShrinksViewportContentToFit(true);
+    frame_test_helpers::WebViewHelper::UpdateAndroidCompositingSettings(
+        settings);
     settings->SetViewportStyle(mojom::blink::ViewportStyle::kMobile);
   }
 
@@ -1119,6 +1110,25 @@ TEST_F(WebFrameTest, CapabilityDelegationMessageEventTest) {
     ScriptExecutionCallbackHelper callback_helper;
     ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
                              post_message_w_fullscreen_request,
+                             callback_helper.Callback(),
+                             blink::mojom::PromiseResultOption::kAwait,
+                             blink::mojom::UserActivationOption::kActivate);
+    RunPendingTasks();
+    EXPECT_TRUE(callback_helper.DidComplete());
+    EXPECT_TRUE(message_event_listener->DelegateCapability());
+  }
+
+  {
+    String post_message_w_display_capture_request(
+        "window.frames[0].postMessage("
+        "'1', {targetOrigin: '/', delegate: 'display-capture'});");
+
+    // The delegation info is passed through a postMessage that is sent with
+    // both user activation and the delegation option for another known
+    // capability.
+    ScriptExecutionCallbackHelper callback_helper;
+    ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                             post_message_w_display_capture_request,
                              callback_helper.Callback(),
                              blink::mojom::PromiseResultOption::kAwait,
                              blink::mojom::UserActivationOption::kActivate);
@@ -3137,11 +3147,11 @@ TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOne) {
                   .height(),
               1.0f);
 
-    EXPECT_NEAR(0.25f, web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
-    auto* frame =
-        To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
-    DCHECK(frame);
-    EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
+  EXPECT_NEAR(0.25f, web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
+  auto* frame =
+      To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
+  DCHECK(frame);
+  EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
 }
 
 TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOneWithDeviceWidth) {
@@ -3184,12 +3194,12 @@ TEST_F(WebFrameTest, NoWideViewportAndScaleLessThanOneWithDeviceWidth) {
                   .height(),
               4.0f);
 
-    EXPECT_NEAR(kPageZoom, web_view_helper.GetWebView()->PageScaleFactor(),
-                0.01f);
-    auto* frame =
-        To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
-    DCHECK(frame);
-    EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
+  EXPECT_NEAR(kPageZoom, web_view_helper.GetWebView()->PageScaleFactor(),
+              0.01f);
+  auto* frame =
+      To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
+  DCHECK(frame);
+  EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
 }
 
 TEST_F(WebFrameTest, NoWideViewportAndNoViewportWithInitialPageScaleOverride) {
@@ -3301,11 +3311,11 @@ TEST_F(WebFrameTest,
                   .height(),
               1.0f);
 
-    EXPECT_NEAR(2.0f, web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
-    auto* frame =
-        To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
-    DCHECK(frame);
-    EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
+  EXPECT_NEAR(2.0f, web_view_helper.GetWebView()->PageScaleFactor(), 0.01f);
+  auto* frame =
+      To<LocalFrame>(web_view_helper.GetWebView()->GetPage()->MainFrame());
+  DCHECK(frame);
+  EXPECT_EQ(device_scale_factor, frame->DevicePixelRatio());
 }
 
 TEST_F(WebFrameTest, NoUserScalableQuirkIgnoresViewportScaleForWideViewport) {
@@ -3555,7 +3565,11 @@ TEST_F(WebFrameTest, updateOverlayScrollbarLayers)
   int view_height = 500;
 
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &ConfigureCompositingWebView);
+  web_view_helper.Initialize();
+  web_view_helper.GetWebView()
+      ->GetPage()
+      ->GetSettings()
+      .SetPreferCompositingToLCDTextForTesting(true);
 
   web_view_helper.Resize(gfx::Size(view_width, view_height));
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
@@ -6295,8 +6309,8 @@ TEST_F(WebFrameTest, SmartClipData) {
       "font-family: myahem; font-size: 8px; font-style: normal; "
       "font-variant-ligatures: normal; font-variant-caps: normal; font-weight: "
       "400; letter-spacing: normal; orphans: 2; text-align: start; "
-      "text-indent: 0px; text-transform: none; white-space: normal; widows: 2; "
-      "word-spacing: 0px; -webkit-text-stroke-width: 0px; "
+      "text-indent: 0px; text-transform: none; widows: 2; "
+      "word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; "
       "text-decoration-thickness: initial; text-decoration-style: initial; "
       "text-decoration-color: initial;\">Air conditioner</div><div id=\"div5\" "
       "style=\"padding: 10px; margin: 10px; border: 2px solid skyblue; float: "
@@ -6304,8 +6318,9 @@ TEST_F(WebFrameTest, SmartClipData) {
       "myahem; font-size: 8px; font-style: normal; font-variant-ligatures: "
       "normal; font-variant-caps: normal; font-weight: 400; letter-spacing: "
       "normal; orphans: 2; text-align: start; text-indent: 0px; "
-      "text-transform: none; white-space: normal; widows: 2; word-spacing: "
-      "0px; -webkit-text-stroke-width: 0px; text-decoration-thickness: "
+      "text-transform: none; widows: 2; word-spacing: 0px; "
+      "-webkit-text-stroke-width: 0px; white-space: normal; "
+      "text-decoration-thickness: "
       "initial; text-decoration-style: initial; text-decoration-color: "
       "initial;\">Price 10,000,000won</div>";
   String clip_text;
@@ -6321,8 +6336,8 @@ TEST_F(WebFrameTest, SmartClipData) {
   gfx::Rect crop_rect(300, 125, 152, 50);
   frame->GetFrame()->ExtractSmartClipDataInternal(crop_rect, clip_text,
                                                   clip_html, clip_rect);
-  EXPECT_EQ(kExpectedClipText, clip_text);
-  EXPECT_EQ(kExpectedClipHtml, clip_html);
+  EXPECT_EQ(String(kExpectedClipText), clip_text);
+  EXPECT_EQ(String(kExpectedClipHtml), clip_html);
 }
 
 TEST_F(WebFrameTest, SmartClipDataWithPinchZoom) {
@@ -6333,8 +6348,8 @@ TEST_F(WebFrameTest, SmartClipDataWithPinchZoom) {
       "font-family: myahem; font-size: 8px; font-style: normal; "
       "font-variant-ligatures: normal; font-variant-caps: normal; font-weight: "
       "400; letter-spacing: normal; orphans: 2; text-align: start; "
-      "text-indent: 0px; text-transform: none; white-space: normal; widows: 2; "
-      "word-spacing: 0px; -webkit-text-stroke-width: 0px; "
+      "text-indent: 0px; text-transform: none; widows: 2; "
+      "word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; "
       "text-decoration-thickness: initial; text-decoration-style: initial; "
       "text-decoration-color: initial;\">Air conditioner</div><div id=\"div5\" "
       "style=\"padding: 10px; margin: 10px; border: 2px solid skyblue; float: "
@@ -6342,8 +6357,9 @@ TEST_F(WebFrameTest, SmartClipDataWithPinchZoom) {
       "myahem; font-size: 8px; font-style: normal; font-variant-ligatures: "
       "normal; font-variant-caps: normal; font-weight: 400; letter-spacing: "
       "normal; orphans: 2; text-align: start; text-indent: 0px; "
-      "text-transform: none; white-space: normal; widows: 2; word-spacing: "
-      "0px; -webkit-text-stroke-width: 0px; text-decoration-thickness: "
+      "text-transform: none; widows: 2; word-spacing: 0px; "
+      "-webkit-text-stroke-width: 0px; white-space: normal; "
+      "text-decoration-thickness: "
       "initial; text-decoration-style: initial; text-decoration-color: "
       "initial;\">Price 10,000,000won</div>";
   String clip_text;
@@ -6361,8 +6377,8 @@ TEST_F(WebFrameTest, SmartClipDataWithPinchZoom) {
   gfx::Rect crop_rect(200, 38, 228, 75);
   frame->GetFrame()->ExtractSmartClipDataInternal(crop_rect, clip_text,
                                                   clip_html, clip_rect);
-  EXPECT_EQ(kExpectedClipText, clip_text);
-  EXPECT_EQ(kExpectedClipHtml, clip_html);
+  EXPECT_EQ(String(kExpectedClipText), clip_text);
+  EXPECT_EQ(String(kExpectedClipHtml), clip_html);
 }
 
 TEST_F(WebFrameTest, SmartClipReturnsEmptyStringsWhenUserSelectIsNone) {
@@ -6775,7 +6791,8 @@ class CompositedSelectionBoundsTest
   static int LayerIdFromNode(const cc::Layer* root_layer, blink::Node* node) {
     Vector<const cc::Layer*> layers;
     if (node->IsDocumentNode()) {
-      layers = CcLayersByName(root_layer, ViewBackgroundLayerName());
+      layers = CcLayersByName(root_layer,
+                              "Scrolling background of LayoutNGView #document");
     } else {
       DCHECK(node->IsElementNode());
       layers = CcLayersByDOMElementId(root_layer,
@@ -7633,7 +7650,8 @@ class TestNewWindowWebFrameClient
       const SessionStorageNamespaceId&,
       bool& consumed_user_gesture,
       const absl::optional<Impression>&,
-      const absl::optional<WebPictureInPictureWindowOptions>&) override {
+      const absl::optional<WebPictureInPictureWindowOptions>&,
+      const WebURL&) override {
     EXPECT_TRUE(false);
     return nullptr;
   }
@@ -8150,7 +8168,11 @@ TEST_F(WebFrameTest, FirstNonBlankSubframeNavigation) {
 TEST_F(WebFrameTest, overflowHiddenRewrite) {
   RegisterMockedHttpURLLoad("non-scrollable.html");
   frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.Initialize(nullptr, nullptr, &ConfigureCompositingWebView);
+  web_view_helper.Initialize();
+  web_view_helper.GetWebView()
+      ->GetPage()
+      ->GetSettings()
+      .SetPreferCompositingToLCDTextForTesting(true);
 
   web_view_helper.Resize(gfx::Size(100, 100));
   frame_test_helpers::LoadFrame(web_view_helper.GetWebView()->MainFrameImpl(),
@@ -8845,7 +8867,9 @@ TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
   EXPECT_TRUE(document->IsXrOverlay());
 
   const cc::Layer* root_layer = layer_tree_host->root_layer();
-  EXPECT_EQ(1u, CcLayersByName(root_layer, ViewBackgroundLayerName()).size());
+  EXPECT_EQ(1u, CcLayersByName(root_layer,
+                               "Scrolling background of LayoutNGView #document")
+                    .size());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "other").size());
   // The overlay is not composited when it's not in full screen.
   EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "overlay").size());
@@ -8857,7 +8881,9 @@ TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
   EXPECT_TRUE(!layer_tree_host->background_color().isOpaque());
 
   root_layer = layer_tree_host->root_layer();
-  EXPECT_EQ(0u, CcLayersByName(root_layer, ViewBackgroundLayerName()).size());
+  EXPECT_EQ(0u, CcLayersByName(root_layer,
+                               "Scrolling background of LayoutNGView #document")
+                    .size());
   EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "other").size());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "overlay").size());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "inner").size());
@@ -8869,7 +8895,9 @@ TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
   document->SetIsXrOverlay(false, overlay);
 
   root_layer = layer_tree_host->root_layer();
-  EXPECT_EQ(1u, CcLayersByName(root_layer, ViewBackgroundLayerName()).size());
+  EXPECT_EQ(1u, CcLayersByName(root_layer,
+                               "Scrolling background of LayoutNGView #document")
+                    .size());
   EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "other").size());
   // The overlay is not composited when it's not in full screen.
   EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "overlay").size());
@@ -8900,44 +8928,6 @@ TEST_F(WebFrameTest, FullscreenFrameSet) {
   auto* fullscreen_layout_object = To<LayoutBox>(frameset->GetLayoutObject());
   ASSERT_TRUE(fullscreen_layout_object);
   EXPECT_EQ(fullscreen_layout_object->Parent(), document->GetLayoutView());
-}
-
-TEST_F(WebFrameTest, LayoutBlockPercentHeightDescendants) {
-  RegisterMockedHttpURLLoad("percent-height-descendants.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
-  web_view_helper.InitializeAndLoad(base_url_ +
-                                    "percent-height-descendants.html");
-
-  WebViewImpl* web_view = web_view_helper.GetWebView();
-  web_view_helper.Resize(gfx::Size(800, 800));
-  UpdateAllLifecyclePhases(web_view);
-
-  Document* document = web_view->MainFrameImpl()->GetFrame()->GetDocument();
-  LayoutBlock* container =
-      To<LayoutBlock>(document->getElementById("container")->GetLayoutObject());
-  auto* percent_height_in_anonymous =
-      To<LayoutBox>(document->getElementById("percent-height-in-anonymous")
-                        ->GetLayoutObject());
-  auto* percent_height_direct_child =
-      To<LayoutBox>(document->getElementById("percent-height-direct-child")
-                        ->GetLayoutObject());
-
-  EXPECT_TRUE(
-      container->HasPercentHeightDescendant(percent_height_in_anonymous));
-  EXPECT_TRUE(
-      container->HasPercentHeightDescendant(percent_height_direct_child));
-
-  ASSERT_TRUE(container->PercentHeightDescendants());
-  ASSERT_TRUE(container->HasPercentHeightDescendants());
-  EXPECT_EQ(2U, container->PercentHeightDescendants()->size());
-  EXPECT_TRUE(container->PercentHeightDescendants()->Contains(
-      percent_height_in_anonymous));
-  EXPECT_TRUE(container->PercentHeightDescendants()->Contains(
-      percent_height_direct_child));
-
-  LayoutBlock* anonymous_block = percent_height_in_anonymous->ContainingBlock();
-  EXPECT_TRUE(anonymous_block->IsAnonymous());
-  EXPECT_FALSE(anonymous_block->HasPercentHeightDescendants());
 }
 
 TEST_F(WebFrameTest, HasVisibleContentOnVisibleFrames) {
@@ -11307,6 +11297,63 @@ TEST_F(WebFrameTest, CopyTextInImageDocument) {
   // Clear clipboard data
   system_clipboard->WritePlainText("");
   system_clipboard->CommitWrite();
+}
+
+class SelectionMockWebFrameClient
+    : public frame_test_helpers::TestWebFrameClient {
+ public:
+  MOCK_METHOD(void, DidChangeSelection, (bool, blink::SyncCondition));
+};
+
+TEST_F(WebFrameTest, ImeSelectionCommitDoesNotChangeClipboard) {
+  using blink::ImeTextSpan;
+  using ui::mojom::ImeTextSpanThickness;
+  using ui::mojom::ImeTextSpanUnderlineStyle;
+
+  RegisterMockedHttpURLLoad("foo.html");
+  SelectionMockWebFrameClient web_frame_client;
+
+  frame_test_helpers::WebViewHelper web_view_helper;
+  WebLocalFrameImpl* web_frame =
+      web_view_helper
+          .InitializeAndLoad(base_url_ + "foo.html", &web_frame_client)
+          ->MainFrameImpl();
+  WebViewImpl* web_view = web_view_helper.GetWebView();
+  WebFrameWidget* widget = web_view->MainFrameImpl()->FrameWidgetImpl();
+  EXPECT_CALL(web_frame_client, DidChangeSelection(true, _))
+      .WillRepeatedly(Return());  // Happens due to edit change.
+  EXPECT_CALL(web_frame_client, DidChangeSelection(false, _))
+      .WillRepeatedly(testing::Invoke(
+          [widget] { EXPECT_FALSE(widget->HandlingInputEvent()); }));
+
+  Document* document = web_frame->GetFrame()->GetDocument();
+
+  document->write("<div id='sample' contenteditable>hello world</div>");
+  document->getElementById("sample")->Focus();
+
+  Vector<ImeTextSpan> ime_text_spans;
+  ime_text_spans.push_back(ImeTextSpan(
+      ImeTextSpan::Type::kComposition, 0, 5, Color(255, 0, 0),
+      ImeTextSpanThickness::kThin, ImeTextSpanUnderlineStyle::kSolid,
+      Color::kTransparent, Color::kTransparent));
+  InputMethodController& controller =
+      web_frame->GetFrame()->GetInputMethodController();
+  controller.SetCompositionFromExistingText(ime_text_spans, 0, 5);
+
+  // Even though the commit came as part of a user interaction,
+  // the internal selection to replace the composition (done as
+  // part of the commit) should _not_ be marked as such, or it would
+  // change the X11 clipboard (crbug.com/1213325).
+  // The actual test for this is in the EXPECT_CALL above.
+  //
+  // Since the selection-to-clipboard logic isn't hooked up in
+  // TestWebFrameClient, we cannot check that the actual clipboard
+  // values don't change, but must be slightly more indirect
+  // in our testing, and thus, we check for HandlingInputEvent()
+  // instead (which, in the actual code, suppresses the clipboard logic).
+  widget->SetHandlingInputEvent(true);
+  controller.CommitText(String("replaced"), ime_text_spans, 0);
+  widget->SetHandlingInputEvent(false);
 }
 
 class TestRemoteFrameHostForVisibility : public FakeRemoteFrameHost {
@@ -14046,6 +14093,7 @@ class TestFocusedElementChangedLocalFrameHost : public FakeLocalFrameHost {
 
   // FakeLocalFrameHost:
   void FocusedElementChanged(bool is_editable_element,
+                             bool is_richly_editable_element,
                              const gfx::Rect& bounds_in_frame_widget,
                              blink::mojom::FocusType focus_type) override {
     did_notify_ = true;

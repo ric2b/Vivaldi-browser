@@ -10,8 +10,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
-import org.chromium.chrome.browser.feed.NtpListContentManager.FeedContent;
-import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
+import org.chromium.chrome.browser.feed.FeedListContentManager.FeedContent;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
 
@@ -110,17 +109,17 @@ public interface Stream {
      * When bound, the feed actively updates views and content. Assumes that whatever
      * views currently shown by manager are headers.
      *  @param view The {@link RecyclerView} to which the feed is bound.
-     * @param manager The {@link NtpListContentManager} to which we should make updates to.
+     * @param manager The {@link FeedListContentManager} to which we should make updates to.
      * @param savedInstanceState A previously saved instance state to restore to after loading
      *         content.
      * @param surfaceScope The {@link SurfaceScope} that is hosting the renderer.
      * @param renderer The {@link HybridListRenderer} that is rendering the feed.
-     * @param launchReliabilityLogger Logger for timestamps and status codes related to launching
+     * @param reliabilityLogger Logger for feed reliability.
      * @param headerCount The number of headers in the RecyclerView that the feed shouldn't touch.
      */
-    void bind(RecyclerView view, NtpListContentManager manager, FeedScrollState savedInstanceState,
+    void bind(RecyclerView view, FeedListContentManager manager, FeedScrollState savedInstanceState,
             SurfaceScope surfaceScope, HybridListRenderer renderer,
-            FeedLaunchReliabilityLogger launchReliabilityLogger, int headerCount);
+            @Nullable FeedReliabilityLogger reliabilityLogger, int headerCount);
 
     /**
      * Unbinds the feed. Stops this feed from updating the RecyclerView.

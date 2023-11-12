@@ -55,8 +55,8 @@ class VideoPipControllerDelegate
 
  private:
   // ownership tied to the VideoOverlayWindowViews class
-  vivaldi::VideoProgress* progress_view_ = nullptr;
-  vivaldi::MuteButton* mute_button_ = nullptr;
+  const raw_ptr<vivaldi::VideoProgress> progress_view_ = nullptr;
+  const raw_ptr<vivaldi::MuteButton> mute_button_ = nullptr;
 };
 
 void VideoOverlayWindowViews::HandleVivaldiMuteButton() {

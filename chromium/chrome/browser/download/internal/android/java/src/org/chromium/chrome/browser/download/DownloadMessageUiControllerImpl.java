@@ -63,8 +63,7 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
     // error when applied to a text view. https://crbug.com/1250423
     private static final int MAX_DESCRIPTION_LENGTH = 200;
 
-    // Values for the histogram Android.Download.InfoBar.Shown. Keep this in sync with the
-    // DownloadInfoBar.ShownState enum in enums.xml.
+    // Keep this in sync with the DownloadInfoBar.ShownState enum in enums.xml.
     @IntDef({UmaInfobarShown.ANY_STATE, UmaInfobarShown.ACCELERATED, UmaInfobarShown.DOWNLOADING,
             UmaInfobarShown.COMPLETE, UmaInfobarShown.FAILED, UmaInfobarShown.PENDING,
             UmaInfobarShown.MULTIPLE_DOWNLOADING, UmaInfobarShown.MULTIPLE_COMPLETE,
@@ -665,12 +664,10 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
             info.iconType = IconType.VECTOR_DRAWABLE;
         } else if (resultState == ResultState.FAILED) {
             stringRes = R.plurals.download_message_multiple_download_failed;
-            info.icon = org.chromium.components.browser_ui.widget.R.drawable
-                                .ic_error_outline_googblue_24dp;
+            info.icon = R.drawable.ic_error_outline_googblue_24dp;
         } else if (resultState == ResultState.PENDING) {
             stringRes = R.plurals.download_message_multiple_download_pending;
-            info.icon = org.chromium.components.browser_ui.widget.R.drawable
-                                .ic_error_outline_googblue_24dp;
+            info.icon = R.drawable.ic_error_outline_googblue_24dp;
         } else {
             assert false : "Unexpected resultState " + resultState + " and uiState " + uiState;
         }
@@ -839,7 +836,6 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
 
         if (updateOnly) return;
         getMessageDispatcher().enqueueWindowScopedMessage(mPropertyModel, /*highPriority=*/false);
-        recordMessageCreated();
     }
 
     @VisibleForTesting
@@ -1019,12 +1015,7 @@ public class DownloadMessageUiControllerImpl implements DownloadMessageUiControl
         }
     }
 
-    private static void recordMessageCreated() {
-        RecordUserAction.record("Android.Download.InfoBar.Shown");
-    }
-
     private void recordCloseButtonClicked() {
-        RecordUserAction.record("Android.Download.InfoBar.CloseButtonClicked");
         RecordHistogram.recordEnumeratedHistogram(
                 "Download.Progress.InfoBar.CloseButtonClicked", mState, UiState.NUM_ENTRIES);
     }

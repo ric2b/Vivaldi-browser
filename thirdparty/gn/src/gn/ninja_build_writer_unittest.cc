@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <fstream>
 #include <sstream>
 
 #include "base/command_line.h"
@@ -53,7 +54,7 @@ TEST_F(NinjaBuildWriterTest, GetSelfInvocationCommandLine) {
   // (from //out/Debug to //).
   setup.build_settings()->SetRootPath(root_realpath);
   cmd_out = GetSelfInvocationCommandLine(setup.build_settings());
-  EXPECT_EQ("../..", cmd_out.GetSwitchValueASCII(switches::kRoot));
+  EXPECT_EQ("../..", cmd_out.GetSwitchValueString(switches::kRoot));
   EXPECT_FALSE(cmd_out.HasSwitch(switches::kDotfile));
 
   // If --root is . and --dotfile is foo/.gn, then --dotfile also needs
@@ -61,9 +62,9 @@ TEST_F(NinjaBuildWriterTest, GetSelfInvocationCommandLine) {
   setup.build_settings()->SetRootPath(root_realpath);
   setup.build_settings()->set_dotfile_name(gn_realpath);
   cmd_out = GetSelfInvocationCommandLine(setup.build_settings());
-  EXPECT_EQ("../..", cmd_out.GetSwitchValueASCII(switches::kRoot));
+  EXPECT_EQ("../..", cmd_out.GetSwitchValueString(switches::kRoot));
   EXPECT_EQ("../../testdot.gn",
-            cmd_out.GetSwitchValueASCII(switches::kDotfile));
+            cmd_out.GetSwitchValueString(switches::kDotfile));
 }
 
 TEST_F(NinjaBuildWriterTest, TwoTargets) {
@@ -113,7 +114,7 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
   target_baz.action_values().outputs() = SubstitutionList::MakeForTest(
       "//out/Debug/out5.out", "//out/Debug/out6.out");
   target_baz.SetToolchain(&other_toolchain);
-  target_baz.action_values().set_pool(
+  target_baz.set_pool(
       LabelPtrPair<Pool>(&another_regular_pool));
   ASSERT_TRUE(target_baz.OnResolved(&err));
 
@@ -143,10 +144,13 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
   ASSERT_TRUE(writer.Run(&err));
 
   const char expected_rule_gn[] = "rule gn\n";
-  const char expected_build_ninja[] =
-      "build build.ninja: gn\n"
+  const char expected_build_ninja_stamp[] =
+      "build build.ninja.stamp: gn\n"
       "  generator = 1\n"
       "  depfile = build.ninja.d\n";
+  const char expected_build_ninja[] =
+      "build build.ninja: phony build.ninja.stamp\n"
+      "  generator = 1\n";
   const char expected_other_pool[] =
       "pool other_toolchain_another_depth_pool\n"
       "  depth = 7\n"
@@ -172,6 +176,7 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
       << "Expected to find: " << expected << "\n"      \
       << "Within: " << out_str
   EXPECT_SNIPPET(expected_rule_gn);
+  EXPECT_SNIPPET(expected_build_ninja_stamp);
   EXPECT_SNIPPET(expected_build_ninja);
   EXPECT_SNIPPET(expected_other_pool);
   EXPECT_SNIPPET(expected_toolchain);
@@ -182,6 +187,88 @@ TEST_F(NinjaBuildWriterTest, TwoTargets) {
 
   // A pool definition for ninja's built-in console pool must not be written.
   EXPECT_EQ(std::string::npos, out_str.find("pool console"));
+}
+
+TEST_F(NinjaBuildWriterTest, ExtractRegenerationCommands) {
+  TestWithScope setup;
+  Err err;
+
+  Target target_foo(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target_foo.set_output_type(Target::ACTION);
+  target_foo.action_values().set_script(SourceFile("//foo/script.py"));
+  target_foo.action_values().outputs() = SubstitutionList::MakeForTest(
+      "//out/Debug/out1.out", "//out/Debug/out2.out");
+  target_foo.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target_foo.OnResolved(&err));
+
+  // The console pool must be in the default toolchain.
+  Pool console_pool(setup.settings(), Label(SourceDir("//"), "console",
+                                            setup.toolchain()->label().dir(),
+                                            setup.toolchain()->label().name()));
+  console_pool.set_depth(1);
+
+  std::unordered_map<const Settings*, const Toolchain*> used_toolchains;
+  used_toolchains[setup.settings()] = setup.toolchain();
+
+  std::vector<const Target*> targets = {&target_foo};
+
+  std::stringstream ninja_out;
+  std::ostringstream depfile_out;
+
+  NinjaBuildWriter writer(setup.build_settings(), used_toolchains, targets,
+                          setup.toolchain(), targets, ninja_out, depfile_out);
+  ASSERT_TRUE(writer.Run(&err));
+
+  const char expected_rule_gn[] = "rule gn\n";
+  const char expected_build_ninja_stamp[] = "build build.ninja.stamp: gn\n";
+  const char expected_build_ninja[] =
+      "build build.ninja: phony build.ninja.stamp\n";
+  const char expected_target[] = "build bar:";
+  const char expected_root_target[] = "build all: phony $\n";
+  const char expected_default[] = "default all\n";
+  std::string ninja_out_str = ninja_out.str();
+#define EXPECT_SNIPPET(str, expected)              \
+  EXPECT_NE(std::string::npos, str.find(expected)) \
+      << "Expected to find: " << expected << "\n"  \
+      << "Within: " << str
+#define EXPECT_NO_SNIPPET(str, unexpected)           \
+  EXPECT_EQ(std::string::npos, str.find(unexpected)) \
+      << "Found unexpected: " << unexpected << "\n"  \
+      << "Within: " << str
+  EXPECT_SNIPPET(ninja_out_str, expected_rule_gn);
+  EXPECT_SNIPPET(ninja_out_str, expected_build_ninja_stamp);
+  EXPECT_SNIPPET(ninja_out_str, expected_build_ninja);
+  EXPECT_SNIPPET(ninja_out_str, expected_target);
+  EXPECT_SNIPPET(ninja_out_str, expected_root_target);
+  EXPECT_SNIPPET(ninja_out_str, expected_default);
+
+  std::string commands =
+      NinjaBuildWriter::ExtractRegenerationCommands(ninja_out);
+  EXPECT_SNIPPET(commands, expected_rule_gn);
+  EXPECT_SNIPPET(commands, expected_build_ninja_stamp);
+  EXPECT_SNIPPET(commands, expected_build_ninja);
+  EXPECT_NO_SNIPPET(commands, expected_target);
+  EXPECT_NO_SNIPPET(commands, expected_root_target);
+  EXPECT_NO_SNIPPET(commands, expected_default);
+
+#undef EXPECT_SNIPPET
+#undef EXPECT_NO_SNIPPET
+}
+
+TEST_F(NinjaBuildWriterTest, ExtractRegenerationCommands_DefaultStream) {
+  std::ifstream ninja_in;
+  EXPECT_EQ(NinjaBuildWriter::ExtractRegenerationCommands(ninja_in), "");
+}
+
+TEST_F(NinjaBuildWriterTest, ExtractRegenerationCommands_StreamError) {
+  std::ifstream ninja_in("/does/not/exist");
+  EXPECT_EQ(NinjaBuildWriter::ExtractRegenerationCommands(ninja_in), "");
+}
+
+TEST_F(NinjaBuildWriterTest, ExtractRegenerationCommands_IncompleteNinja) {
+  std::stringstream ninja_in;
+  ninja_in << "foo\nbar\nbaz\nbif\n";
+  EXPECT_EQ(NinjaBuildWriter::ExtractRegenerationCommands(ninja_in), "");
 }
 
 TEST_F(NinjaBuildWriterTest, SpaceInDepfile) {
@@ -208,7 +295,7 @@ TEST_F(NinjaBuildWriterTest, SpaceInDepfile) {
   ASSERT_TRUE(writer.Run(&err));
 
   EXPECT_EQ(depfile_out.str(),
-            "build.ninja: ../../path\\ with\\ space/BUILD.gn");
+            "build.ninja.stamp: ../../path\\ with\\ space/BUILD.gn");
 }
 
 TEST_F(NinjaBuildWriterTest, DuplicateOutputs) {

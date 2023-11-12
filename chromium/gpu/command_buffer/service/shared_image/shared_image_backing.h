@@ -51,6 +51,7 @@ class SharedImageManager;
 class SharedImageRepresentation;
 class GLTextureImageRepresentation;
 class GLTexturePassthroughImageRepresentation;
+class SkiaGaneshImageRepresentation;
 class SkiaImageRepresentation;
 class DawnImageRepresentation;
 class LegacyOverlayImageRepresentation;
@@ -124,8 +125,9 @@ class GPU_GLES2_EXPORT SharedImageBacking {
 
   void OnContextLost();
 
-  // Creates SkImageInfo matching backing size, format, alpha and color space.
-  SkImageInfo AsSkImageInfo() const;
+  // Creates SkImageInfo matching backing size, format, alpha and color space
+  // for the specified `plane_index`.
+  SkImageInfo AsSkImageInfo(int plane_index = 0) const;
 
   // Disables reference counting for backing. No references should be added,
   // either before or after this is called.
@@ -194,6 +196,13 @@ class GPU_GLES2_EXPORT SharedImageBacking {
 
   virtual void MarkForDestruction() {}
 
+  // Called when secondary reference is added to the SharedImage. Used by
+  // CompoundImageBacking to make sure it can create necessary backings after
+  // original ref (and potentially SharedImageFactory) is gone.
+  // TODO(vasilyt): We need a better way to make it work for
+  // multithreading/multigpu support
+  virtual void OnAddSecondaryReference() {}
+
   // Produces a MemoryAllocatorDump with `dump_name` and creates a shared
   // ownership edge to `client_guid`. Subclasses can extend this function to
   // add additional ownership edges linked to `client_guid` but they must call
@@ -230,17 +239,19 @@ class GPU_GLES2_EXPORT SharedImageBacking {
   friend class SharedImageManager;
   friend class CompoundImageBacking;
 
-  // Memory dump importance values for shared ownership edges.
-  static constexpr int kNonOwningEdgeImportance = 0;
-  static constexpr int kOwningEdgeImportance = 2;
-
   virtual std::unique_ptr<GLTextureImageRepresentation> ProduceGLTexture(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker);
   virtual std::unique_ptr<GLTexturePassthroughImageRepresentation>
   ProduceGLTexturePassthrough(SharedImageManager* manager,
                               MemoryTypeTracker* tracker);
-  virtual std::unique_ptr<SkiaImageRepresentation> ProduceSkia(
+  std::unique_ptr<SkiaImageRepresentation> ProduceSkia(
+      SharedImageManager* manager,
+      MemoryTypeTracker* tracker,
+      scoped_refptr<SharedContextState> context_state);
+  // Returns a SkiaGaneshImageRepresentation created using the Skia Ganesh
+  // backend.
+  virtual std::unique_ptr<SkiaGaneshImageRepresentation> ProduceSkiaGanesh(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state);

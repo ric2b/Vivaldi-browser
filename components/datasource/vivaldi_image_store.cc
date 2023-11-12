@@ -31,7 +31,6 @@
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
-#include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
 #include "ui/base/models/tree_node_iterator.h"
@@ -263,8 +262,6 @@ std::string HashDataToFileName(const uint8_t* data, size_t size) {
 VivaldiImageStore::VivaldiImageStore(Profile* profile)
     : profile_(profile),
       user_data_dir_(profile->GetPath()),
-      ui_thread_runner_(content::GetUIThreadTaskRunner(
-          {base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       sequence_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::TaskPriority::USER_VISIBLE, base::MayBlock()})) {}
 
@@ -277,7 +274,7 @@ void VivaldiImageStore::Start() {
 
   // Inline ScheduleRemovalOfUnusedUrlData here as it uses FromBrowserContext()
   // but that can not be used when the factory initializes the instance.
-  ui_thread_runner_->PostDelayedTask(
+  content::GetUIThreadTaskRunner()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&VivaldiImageStore::FindUsedUrlsOnUIThread, this),
       kDataUrlGCStartupDelay);
@@ -427,7 +424,7 @@ void VivaldiImageStore::ScheduleRemovalOfUnusedUrlData(
     return;
   }
 
-  api->ui_thread_runner_->PostDelayedTask(
+  content::GetUIThreadTaskRunner()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&VivaldiImageStore::FindUsedUrlsOnUIThread, api), when);
 }
@@ -464,7 +461,7 @@ void VivaldiImageStore::FindUsedUrlsOnUIThreadWithLoadedBookmaks(
         used_ids[url_kind].push_back(std::move(id));
       } else {
         bookmark_thumbnail_ids_to_migrate.push_back(
-            std::pair(node->guid(), std::move(id)));
+            std::pair(node->uuid(), std::move(id)));
       }
     }
   }
@@ -563,7 +560,7 @@ void VivaldiImageStore::MigrateCustomBookmarkThumbnailsOnFileThread(
     if (!content)
       continue;
 
-    ui_thread_runner_->PostTask(
+    content::GetUIThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&VivaldiImageStore::
                            FinishCustomBookmarkThumbnailMigrationOnUIThread,
@@ -576,7 +573,7 @@ void VivaldiImageStore::FinishCustomBookmarkThumbnailMigrationOnUIThread(
     std::vector<uint8_t> content) {
   auto* bookmarks_model = GetBookmarkModel();
   const bookmarks::BookmarkNode* bookmark =
-      bookmarks::GetBookmarkNodeByGUID(bookmarks_model, bookmark_guid);
+      bookmarks::GetBookmarkNodeByUuid(bookmarks_model, bookmark_guid);
 
   if (!bookmark)
     return;
@@ -662,7 +659,7 @@ void VivaldiImageStore::UpdateMappingOnFileThread(ImagePlace place,
   bool inserted =
       path_id_map_.emplace(std::move(path_id), std::move(file_path)).second;
 
-  ui_thread_runner_->PostTask(
+  content::GetUIThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&VivaldiImageStore::FinishStoreImageOnUIThread,
                                 this, std::move(callback), std::move(place),
                                 std::move(data_url)));

@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ash/file_system_provider/operations/remove_watcher.h"
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -74,8 +73,8 @@ TEST_F(FileSystemProviderOperationsRemoveWatcherTest, Execute) {
   ASSERT_TRUE(options_as_value->is_dict());
 
   RemoveWatcherRequestedOptions options;
-  ASSERT_TRUE(
-      RemoveWatcherRequestedOptions::Populate(*options_as_value, &options));
+  ASSERT_TRUE(RemoveWatcherRequestedOptions::Populate(
+      options_as_value->GetDict(), options));
   EXPECT_EQ(kFileSystemId, options.file_system_id);
   EXPECT_EQ(kRequestId, options.request_id);
   EXPECT_EQ(kEntryPath, options.entry_path);
@@ -105,8 +104,7 @@ TEST_F(FileSystemProviderOperationsRemoveWatcherTest, OnSuccess) {
 
   EXPECT_TRUE(remove_watcher.Execute(kRequestId));
 
-  remove_watcher.OnSuccess(kRequestId, std::make_unique<RequestValue>(),
-                           false /* has_more */);
+  remove_watcher.OnSuccess(kRequestId, RequestValue(), false /* has_more */);
   ASSERT_EQ(1u, callback_log.size());
   EXPECT_EQ(base::File::FILE_OK, callback_log[0]);
 }
@@ -122,7 +120,7 @@ TEST_F(FileSystemProviderOperationsRemoveWatcherTest, OnError) {
 
   EXPECT_TRUE(remove_watcher.Execute(kRequestId));
 
-  remove_watcher.OnError(kRequestId, std::make_unique<RequestValue>(),
+  remove_watcher.OnError(kRequestId, RequestValue(),
                          base::File::FILE_ERROR_TOO_MANY_OPENED);
   ASSERT_EQ(1u, callback_log.size());
   EXPECT_EQ(base::File::FILE_ERROR_TOO_MANY_OPENED, callback_log[0]);

@@ -29,7 +29,6 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/range/range.h"
 
-class GURL;
 class OmniboxEditModelDelegate;
 class OmniboxViewMacTest;
 class OmniboxEditModel;
@@ -64,24 +63,6 @@ class OmniboxView {
   // Called when any relevant state changes other than changing tabs.
   virtual void Update() = 0;
 
-  // Asks the browser to load the specified match, using the supplied
-  // disposition. |alternate_nav_url|, if non-empty, contains the
-  // alternate navigation URL for for this match. See comments on
-  // AutocompleteResult::GetAlternateNavURL().
-  //
-  // |pasted_text| should only be set if this call is due to a
-  // Paste-And-Go/Search action.
-  //
-  // |selected_line| is passed to SendOpenNotification(); see comments there.
-  //
-  // This may close the popup.
-  virtual void OpenMatch(const AutocompleteMatch& match,
-                         WindowOpenDisposition disposition,
-                         const GURL& alternate_nav_url,
-                         const std::u16string& pasted_text,
-                         size_t selected_line,
-                         base::TimeTicks match_selection_timestamp);
-
   // Returns the current text of the edit control, which could be the
   // "temporary" text set by the popup, the "permanent" text set by the
   // browser, or just whatever the user has currently typed.
@@ -98,12 +79,16 @@ class OmniboxView {
   // the secure page lock). `color_vectors` is used for vector icons e.g. the
   // history clock or bookmark star. `color_bright_vectors` is used for special
   // vector icons e.g. the history cluster squiggle. Favicons aren't
-  // custom-colored.
+  // custom-colored. `dark_mode` returns the dark_mode version of an icon. This
+  // should usually be handled by `color_current_page_icon` but in cases where
+  // the icon has hardcoded colors this can be used to return a different icon.
+  // E.g., the SuperGIcon will return different icons in dark and light modes.
   ui::ImageModel GetIcon(int dip_size,
                          SkColor color_current_page_icon,
                          SkColor color_vectors,
                          SkColor color_bright_vectors,
-                         IconFetchedCallback on_icon_fetched) const;
+                         IconFetchedCallback on_icon_fetched,
+                         bool dark_mode) const;
 
   // The user text is the text the user has manually keyed in.  When present,
   // this is shown in preference to the permanent text; hitting escape will

@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {(1 används)} other {(# används)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrollerar adressen till mellanservern (proxyn)<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bitar)</translation>
-<translation id="5287240709317226393">Visa kakor</translation>
 <translation id="5355557959165512791">Det går inte att besöka <ph name="SITE" /> just nu eftersom dess certifikat har återkallats. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
 <translation id="5386426401304769735">Certifikatkedjan för den här webbplatsen innehåller ett certifikat som signerades med SHA-1.</translation>
 <translation id="5452270690849572955">Sidan på <ph name="HOST_NAME" /> kan inte hittas</translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Lösenord</translation>
 <translation id="6711464428925977395">Något är fel med proxyservern eller så är adressen felaktig.</translation>
 <translation id="6757797048963528358">Enheten gick ner i vänteläge.</translation>
+<translation id="6890956352250146925">Alternativ för cookies och webbplatsdata</translation>
 <translation id="6897140037006041989">Användaragent</translation>
 <translation id="7053983685419859001">Blockera</translation>
 <translation id="7079718277001814089">Webbplatsen innehåller skadlig programvara</translation>

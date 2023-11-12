@@ -4,7 +4,8 @@
 
 #include "chrome/browser/dips/dips_utils.h"
 
-#include "base/cxx17_backports.h"
+#include <algorithm>
+
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile_selections.h"
@@ -77,6 +78,10 @@ base::StringPiece CookieAccessTypeToString(CookieAccessType type) {
     case CookieAccessType::kReadWrite:
       return "ReadWrite";
   }
+}
+
+std::ostream& operator<<(std::ostream& os, CookieAccessType access_type) {
+  return os << CookieAccessTypeToString(access_type);
 }
 
 // DIPSCookieMode:
@@ -157,7 +162,7 @@ std::ostream& operator<<(std::ostream& os, DIPSRedirectType type) {
 }
 
 int64_t BucketizeBounceDelay(base::TimeDelta delta) {
-  return base::clamp(delta.InSeconds(), INT64_C(0), INT64_C(10));
+  return std::clamp(delta.InSeconds(), INT64_C(0), INT64_C(10));
 }
 
 std::string GetSiteForDIPS(const GURL& url) {

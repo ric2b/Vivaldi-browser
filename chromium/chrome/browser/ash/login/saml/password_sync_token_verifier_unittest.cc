@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ash/login/saml/password_sync_token_verifier.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/default_clock.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/browser/ash/login/users/mock_user_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -54,9 +54,9 @@ class PasswordSyncTokenVerifierTest : public testing::Test {
       base::test::TaskEnvironment::MainThreadType::UI,
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   TestingProfileManager profile_manager_{TestingBrowserProcess::GetGlobal()};
-  TestingProfile* primary_profile_ = nullptr;
+  raw_ptr<TestingProfile, ExperimentalAsh> primary_profile_ = nullptr;
 
-  FakeChromeUserManager* user_manager_ = nullptr;
+  raw_ptr<FakeChromeUserManager, ExperimentalAsh> user_manager_ = nullptr;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
   std::unique_ptr<PasswordSyncTokenVerifier> verifier_;
   std::unique_ptr<user_manager::KnownUser> known_user_;

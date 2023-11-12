@@ -19,6 +19,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/template_expressions.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/base/window_open_disposition_utils.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -37,11 +38,22 @@ namespace {
 // Generous cap to guard against out-of-memory issues.
 constexpr float kMaxScaleFactor = 1000.0f;
 
+std::string GetFontFamilyMd() {
+#if !BUILDFLAG(IS_LINUX)
+  if (base::FeatureList::IsEnabled(features::kWebUiSystemFont)) {
+    return GetFontFamily();
+  }
+#endif
+
+  return "Roboto, " + GetFontFamily();
+}
+
 std::string GetWebUiCssTextDefaults(const std::string& css_template) {
   ui::TemplateReplacements placeholders;
-  placeholders["textDirection"] = GetTextDirection();
-  placeholders["fontFamily"] = GetFontFamily();
-  placeholders["fontSize"] = GetFontSize();
+  placeholders["textdirection"] = GetTextDirection();
+  placeholders["fontfamily"] = GetFontFamily();
+  placeholders["fontfamilyMd"] = GetFontFamilyMd();
+  placeholders["fontsize"] = GetFontSize();
   return ui::ReplaceTemplateExpressions(css_template, placeholders);
 }
 
@@ -174,6 +186,7 @@ void ParsePathAndImageSpec(const GURL& url,
 void SetLoadTimeDataDefaults(const std::string& app_locale,
                              base::Value::Dict* localized_strings) {
   localized_strings->Set("fontfamily", GetFontFamily());
+  localized_strings->Set("fontfamilyMd", GetFontFamilyMd());
   localized_strings->Set("fontsize", GetFontSize());
   localized_strings->Set("language", l10n_util::GetLanguage(app_locale));
   localized_strings->Set("textdirection", GetTextDirection());
@@ -182,6 +195,7 @@ void SetLoadTimeDataDefaults(const std::string& app_locale,
 void SetLoadTimeDataDefaults(const std::string& app_locale,
                              ui::TemplateReplacements* replacements) {
   (*replacements)["fontfamily"] = GetFontFamily();
+  (*replacements)["fontfamilyMd"] = GetFontFamilyMd();
   (*replacements)["fontsize"] = GetFontSize();
   (*replacements)["language"] = l10n_util::GetLanguage(app_locale);
   (*replacements)["textdirection"] = GetTextDirection();
@@ -192,13 +206,6 @@ std::string GetWebUiCssTextDefaults() {
       ui::ResourceBundle::GetSharedInstance();
   return GetWebUiCssTextDefaults(
       resource_bundle.LoadDataResourceString(IDR_WEBUI_CSS_TEXT_DEFAULTS_CSS));
-}
-
-std::string GetWebUiCssTextDefaultsMd() {
-  const ui::ResourceBundle& resource_bundle =
-      ui::ResourceBundle::GetSharedInstance();
-  return GetWebUiCssTextDefaults(resource_bundle.LoadDataResourceString(
-      IDR_WEBUI_CSS_TEXT_DEFAULTS_MD_CSS));
 }
 
 void AppendWebUiCssTextDefaults(std::string* html) {

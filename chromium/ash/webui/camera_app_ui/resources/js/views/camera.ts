@@ -8,7 +8,6 @@ import {
   assertInstanceof,
   assertNotReached,
 } from '../assert.js';
-import * as customToast from '../custom_effect.js';
 import {
   CameraConfig,
   CameraManager,
@@ -19,6 +18,7 @@ import {
   setAvc1Parameters,
   VideoResult,
 } from '../device/index.js';
+import {TimeLapseResult} from '../device/mode/video';
 import * as dom from '../dom.js';
 import * as error from '../error.js';
 import * as expert from '../expert.js';
@@ -30,6 +30,7 @@ import {ResultSaver} from '../models/result_saver.js';
 import {VideoSaver} from '../models/video_saver.js';
 import {ChromeHelper} from '../mojo/chrome_helper.js';
 import {DeviceOperator} from '../mojo/device_operator.js';
+import {ToteMetricFormat} from '../mojo/type.js';
 import * as nav from '../nav.js';
 import {PerfLogger} from '../perf.js';
 import * as sound from '../sound.js';
@@ -74,9 +75,6 @@ import {WarningType} from './warning.js';
  */
 export class Camera extends View implements CameraViewUI {
   private readonly documentReview: DocumentReview;
-
-  private readonly docModeDialogView =
-      new Dialog(ViewName.DOCUMENT_MODE_DIALOG);
 
   private currentLowStorageType: LowStorageDialogType|null = null;
 
@@ -140,7 +138,6 @@ export class Camera extends View implements CameraViewUI {
       new PTZPanel(),
       this.review,
       this.documentReview,
-      this.docModeDialogView,
       this.lowStorageDialogView,
       new View(ViewName.FLASH),
     ];
@@ -292,9 +289,9 @@ export class Camera extends View implements CameraViewUI {
           const mode = util.assertEnumVariant(Mode, el.dataset['mode']);
           this.updateModeUI(mode);
           this.updateShutterLabel(mode);
-          state.set(state.State.MODE_SWITCHING, true);
+          state.set(PerfEvent.MODE_SWITCHING, true);
           const isSuccess = await this.cameraManager.switchMode(mode);
-          state.set(state.State.MODE_SWITCHING, false, {hasError: !isSuccess});
+          state.set(PerfEvent.MODE_SWITCHING, false, {hasError: !isSuccess});
         }
       });
     }
@@ -415,11 +412,6 @@ export class Camera extends View implements CameraViewUI {
       return;
     }
 
-    if (customToast.isShowing()) {
-      customToast.focus();
-      return;
-    }
-
     this.focusShutterButton();
   }
 
@@ -532,7 +524,8 @@ export class Camera extends View implements CameraViewUI {
     });
     try {
       const name = (new Filenamer(timestamp)).newImageName();
-      await this.resultSaver.savePhoto(blob, name, metadata);
+      await this.resultSaver.savePhoto(
+          blob, ToteMetricFormat.PHOTO, name, metadata);
     } catch (e) {
       toast.show(I18nString.ERROR_MSG_SAVE_FILE_FAILED);
       throw e;
@@ -581,7 +574,8 @@ export class Camera extends View implements CameraViewUI {
 
       try {
         const name = (new Filenamer(timestamp)).newImageName();
-        await this.resultSaver.savePhoto(blob, name, metadata);
+        await this.resultSaver.savePhoto(
+            blob, ToteMetricFormat.PHOTO, name, metadata);
       } catch (e) {
         toast.show(I18nString.ERROR_MSG_SAVE_FILE_FAILED);
         throw e;
@@ -623,7 +617,8 @@ export class Camera extends View implements CameraViewUI {
       const filenamer = new Filenamer(timestamp);
       const name = filenamer.newBurstName(false);
       try {
-        await this.resultSaver.savePhoto(blob, name, metadata);
+        await this.resultSaver.savePhoto(
+            blob, ToteMetricFormat.PHOTO, name, metadata);
       } catch (e) {
         toast.show(I18nString.ERROR_MSG_SAVE_FILE_FAILED);
         throw e;
@@ -634,7 +629,8 @@ export class Camera extends View implements CameraViewUI {
         const {blob: portraitBlob, metadata: portraitMetadata} =
             await pendingPortrait;
         const name = filenamer.newBurstName(true);
-        await this.resultSaver.savePhoto(portraitBlob, name, portraitMetadata);
+        await this.resultSaver.savePhoto(
+            portraitBlob, ToteMetricFormat.PHOTO, name, portraitMetadata);
       } catch (e) {
         toast.show(I18nString.ERROR_MSG_TAKE_PORTRAIT_BOKEH_PHOTO_FAILED);
         // PortraitModeProcessError might be thrown when no face is detected
@@ -845,6 +841,41 @@ export class Camera extends View implements CameraViewUI {
     ChromeHelper.getInstance().maybeTriggerSurvey();
   }
 
+  async onTimeLapseCaptureDone(
+      {autoStopped, duration, everPaused, resolution, speed, timeLapseSaver}:
+          TimeLapseResult): Promise<void> {
+    if (autoStopped) {
+      this.showLowStorageDialog(LowStorageDialogType.AUTO_STOP);
+    }
+    nav.open(ViewName.FLASH);
+    state.set(PerfEvent.TIME_LAPSE_CAPTURE_POST_PROCESSING, true);
+    try {
+      metrics.sendCaptureEvent({
+        recordType: metrics.RecordType.TIME_LAPSE,
+        facing: this.getFacing(),
+        duration,
+        everPaused,
+        resolution,
+        shutterType: this.shutterType,
+        resolutionLevel: this.cameraManager.getVideoResolutionLevel(resolution),
+        aspectRatioSet: this.cameraManager.getAspectRatioSet(resolution),
+        timeLapseSpeed: speed,
+      });
+      await this.resultSaver.finishSaveVideo(timeLapseSaver);
+      state.set(
+          PerfEvent.TIME_LAPSE_CAPTURE_POST_PROCESSING, false,
+          {resolution, facing: this.getFacing()});
+    } catch (e) {
+      state.set(
+          PerfEvent.TIME_LAPSE_CAPTURE_POST_PROCESSING, false,
+          {hasError: true});
+      throw e;
+    } finally {
+      nav.close(ViewName.FLASH);
+    }
+    ChromeHelper.getInstance().maybeTriggerSurvey();
+  }
+
   override layout(): void {
     this.layoutHandler.update();
   }
@@ -855,24 +886,30 @@ export class Camera extends View implements CameraViewUI {
           this.cameraManager.getPreviewResolution().toString());
       return true;
     }
-    if ((key === 'AudioVolumeUp' || key === 'AudioVolumeDown') &&
-        state.get(state.State.TABLET) && state.get(state.State.STREAMING)) {
-      if (state.get(state.State.TAKING)) {
-        this.endTake();
-      } else {
-        this.beginTake(metrics.ShutterType.VOLUME_KEY);
+
+    if (state.get(state.State.STREAMING) &&
+        !state.get(state.State.ENABLE_SCAN_BARCODE)) {
+      if ((key === 'AudioVolumeUp' || key === 'AudioVolumeDown') &&
+          state.get(state.State.TABLET)) {
+        if (state.get(state.State.TAKING)) {
+          this.endTake();
+        } else {
+          this.beginTake(metrics.ShutterType.VOLUME_KEY);
+        }
+        return true;
       }
-      return true;
-    }
-    if (key === ' ') {
-      this.focusShutterButton();
-      if (state.get(state.State.TAKING)) {
-        this.endTake();
-      } else {
-        this.beginTake(metrics.ShutterType.KEYBOARD);
+
+      if (key === ' ') {
+        this.focusShutterButton();
+        if (state.get(state.State.TAKING)) {
+          this.endTake();
+        } else {
+          this.beginTake(metrics.ShutterType.KEYBOARD);
+        }
+        return true;
       }
-      return true;
     }
+
     return false;
   }
 

@@ -197,6 +197,10 @@ HeapVector<Member<PointerEvent>> PointerEventFactory::CreateEventSequence(
 
       last_global_position = event.PositionInScreen();
 
+      if (pointer_event_init->hasDeviceId()) {
+        new_event_init->setDeviceId(pointer_event_init->deviceId());
+      }
+
       PointerEvent* pointer_event =
           PointerEvent::Create(type, new_event_init, event.TimeStamp());
       // Set the trusted flag for these events at the creation time as oppose to
@@ -352,6 +356,9 @@ PointerEvent* PointerEventFactory::Create(
 
   SetLastPosition(pointer_event_init->pointerId(),
                   web_pointer_event.PositionInScreen(), event_type);
+
+  pointer_event_init->setDeviceId(GetBlinkDeviceId(web_pointer_event));
+
   return PointerEvent::Create(type, pointer_event_init,
                               web_pointer_event.TimeStamp());
 }
@@ -388,7 +395,8 @@ gfx::PointF PointerEventFactory::GetLastPointerPosition(
 
 PointerEvent* PointerEventFactory::CreatePointerCancelEvent(
     const int pointer_id,
-    base::TimeTicks platfrom_time_stamp) {
+    base::TimeTicks platfrom_time_stamp,
+    const int32_t device_id) {
   DCHECK(pointer_id_mapping_.Contains(pointer_id));
   pointer_id_mapping_.Set(
       pointer_id,
@@ -403,6 +411,8 @@ PointerEvent* PointerEventFactory::CreatePointerCancelEvent(
   pointer_event_init->setIsPrimary(IsPrimary(pointer_id));
 
   SetEventSpecificFields(pointer_event_init, event_type_names::kPointercancel);
+
+  pointer_event_init->setDeviceId(device_id);
 
   return PointerEvent::Create(event_type_names::kPointercancel,
                               pointer_event_init, platfrom_time_stamp);
@@ -432,6 +442,7 @@ PointerEvent* PointerEventFactory::CreatePointerEventFrom(
       pointer_event->tangentialPressure());
   pointer_event_init->setTwist(pointer_event->twist());
   pointer_event_init->setView(pointer_event->view());
+  pointer_event_init->setDeviceId(pointer_event->deviceId());
 
   SetEventSpecificFields(pointer_event_init, type);
 
@@ -504,6 +515,8 @@ void PointerEventFactory::Clear() {
   pointer_id_mapping_.clear();
   pointer_id_last_position_mapping_.clear();
 
+  device_id_browser_to_blink_mapping_.clear();
+
   // Always add mouse pointer in initialization and never remove it.
   // No need to add it to |pointer_incoming_id_mapping_| as it is not going to
   // be used with the existing APIs
@@ -514,6 +527,7 @@ void PointerEventFactory::Clear() {
                     false, true));
 
   current_id_ = PointerEventFactory::kMouseId + 1;
+  current_device_id_ = PointerEventFactory::kMouseId + 1;
 }
 
 PointerId PointerEventFactory::AddIdAndActiveButtons(
@@ -632,6 +646,25 @@ PointerId PointerEventFactory::GetPointerEventId(
   if (pointer_incoming_id_mapping_.Contains(id))
     return pointer_incoming_id_mapping_.at(id);
   return kInvalidId;
+}
+
+int32_t PointerEventFactory::GetBlinkDeviceId(
+    const WebPointerEvent& web_pointer_event) {
+  if (web_pointer_event.pointer_type ==
+      WebPointerProperties::PointerType::kMouse) {
+    return PointerEventFactory::kMouseId;
+  }
+
+  const int32_t incoming_id = web_pointer_event.device_id;
+  if (incoming_id == -1) {
+    return -1;
+  }
+
+  auto result = device_id_browser_to_blink_mapping_.insert(incoming_id, -1);
+  if (result.is_new_entry) {
+    result.stored_value->value = current_device_id_++;
+  }
+  return result.stored_value->value;
 }
 
 }  // namespace blink

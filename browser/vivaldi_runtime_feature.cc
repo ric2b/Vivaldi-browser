@@ -52,12 +52,12 @@ Profile* ProfileFromBrowserContext(content::BrowserContext* browser_context) {
 absl::optional<FeatureMap> ParseFeatures(base::Value json) {
   if (!json.is_dict())
     return absl::nullopt;
-  base::Value* flags_dict = json.FindKey("flags");
+  base::Value* flags_dict = json.GetDict().Find("flags");
   if (!flags_dict || !flags_dict->is_dict())
     return absl::nullopt;
 
   std::vector<std::pair<std::string, Feature>> features;
-  for (auto feature_iter : flags_dict->DictItems()) {
+  for (auto feature_iter : flags_dict->GetDict()) {
     const std::string& feature_name = feature_iter.first;
     base::Value& dict = feature_iter.second;
     if (!dict.is_dict()) {

@@ -186,17 +186,18 @@ void ThreadControllerImpl::DoWork(WorkType work_type) {
     // tracing. OnApplicationTaskSelected() assumes this ordering as well.
     DCHECK_GT(run_level_tracker_.num_run_levels(), 0U);
     run_level_tracker_.OnWorkStarted(lazy_now_select_task);
+    int run_depth = static_cast<int>(run_level_tracker_.num_run_levels());
 
     absl::optional<SequencedTaskSource::SelectedTask> selected_task =
         sequence_->SelectNextTask(lazy_now_select_task);
     LazyNow lazy_now_task_selected(time_source_);
     run_level_tracker_.OnApplicationTaskSelected(
-        (selected_task && selected_task->task->delayed_run_time.is_null())
-            ? selected_task->task->queue_time
+        (selected_task && selected_task->task.delayed_run_time.is_null())
+            ? selected_task->task.queue_time
             : TimeTicks(),
         lazy_now_task_selected);
     if (!selected_task) {
-      run_level_tracker_.OnWorkEnded(lazy_now_task_selected);
+      run_level_tracker_.OnWorkEnded(lazy_now_task_selected, run_depth);
       break;
     }
 
@@ -210,11 +211,11 @@ void ThreadControllerImpl::DoWork(WorkType work_type) {
       // logging so lambda captures are safe as lambda is executed inline.
       SequencedTaskSource* source = sequence_;
       task_annotator_.RunTask(
-          "ThreadControllerImpl::RunTask", *selected_task->task,
+          "ThreadControllerImpl::RunTask", selected_task->task,
           [&selected_task, &source](perfetto::EventContext& ctx) {
             if (selected_task->task_execution_trace_logger)
               selected_task->task_execution_trace_logger.Run(
-                  ctx, *selected_task->task);
+                  ctx, selected_task->task);
             source->MaybeEmitTaskDetails(ctx, *selected_task);
           });
       if (!weak_ptr)
@@ -224,7 +225,7 @@ void ThreadControllerImpl::DoWork(WorkType work_type) {
       // after it.
       LazyNow lazy_now_after_run_task(time_source_);
       sequence_->DidRunTask(lazy_now_after_run_task);
-      run_level_tracker_.OnWorkEnded(lazy_now_after_run_task);
+      run_level_tracker_.OnWorkEnded(lazy_now_after_run_task, run_depth);
 
       // If DidRunTask() read the clock (lazy_now_after_run_task.has_value()),
       // store it in `recent_time` so it can be reused by SelectNextTask() at
@@ -375,11 +376,6 @@ void ThreadControllerImpl::DetachFromMessagePump() {
 #endif  // BUILDFLAG(IS_IOS)
 
 void ThreadControllerImpl::PrioritizeYieldingToNative(base::TimeTicks) {
-  NOTREACHED();
-}
-
-void ThreadControllerImpl::EnablePeriodicYieldingToNative(
-    base::TimeDelta delta) {
   NOTREACHED();
 }
 

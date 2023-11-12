@@ -200,15 +200,15 @@ CompositorGpuThread::GetSharedContextState() {
   // Initialize GL.
   if (!shared_context_state->InitializeGL(gpu_preferences,
                                           std::move(gles2_feature_info))) {
-    LOG(ERROR) << "Failed to initialize GL for SharedContextState";
+    LOG(ERROR) << "Failed to initialize GL for DrDC SharedContextState";
     return nullptr;
   }
 
-  // Initialize GrContext.
-  if (!shared_context_state->InitializeGrContext(
+  // Initialize Skia.
+  if (!shared_context_state->InitializeSkia(
           gpu_preferences, workarounds, gpu_channel_manager_->gr_shader_cache(),
           /*activity_flags=*/nullptr, /*progress_reporter=*/nullptr)) {
-    LOG(ERROR) << "Failed to Initialize GrContext for SharedContextState";
+    LOG(ERROR) << "Failed to Initialize Skia for DrDC SharedContextState";
   }
   shared_context_state_ = std::move(shared_context_state);
   return shared_context_state_;
@@ -221,9 +221,9 @@ bool CompositorGpuThread::Initialize() {
   StartWithOptions(std::move(thread_options));
 
   // Wait until thread is started and Init() is executed in order to return
-  // updated |init_succeded_|.
+  // updated |init_succeeded_|.
   WaitUntilThreadStarted();
-  return init_succeded_;
+  return init_succeeded_;
 }
 
 void CompositorGpuThread::HandleMemoryPressure(
@@ -239,12 +239,10 @@ void CompositorGpuThread::HandleMemoryPressure(
 
 void CompositorGpuThread::Init() {
   const auto& gpu_preferences = gpu_channel_manager_->gpu_preferences();
-  if (enable_watchdog_) {
+  if (enable_watchdog_ && gpu_channel_manager_->watchdog()) {
     watchdog_thread_ = gpu::GpuWatchdogThread::Create(
-        gpu_preferences.watchdog_starts_backgrounded, "GpuWatchdog_Compositor");
-
-    if (!watchdog_thread_)
-      return;
+        gpu_preferences.watchdog_starts_backgrounded,
+        gpu_channel_manager_->watchdog(), "GpuWatchdog_Compositor");
     watchdog_thread_->OnInitComplete();
   }
 
@@ -254,7 +252,7 @@ void CompositorGpuThread::Init() {
   memory_pressure_listener_ = std::make_unique<base::MemoryPressureListener>(
       FROM_HERE, base::BindRepeating(&CompositorGpuThread::HandleMemoryPressure,
                                      base::Unretained(this))),
-  init_succeded_ = true;
+  init_succeeded_ = true;
 }
 
 void CompositorGpuThread::CleanUp() {

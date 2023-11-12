@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/barrier_callback.h"
+#include "base/check_is_test.h"
 #include "base/containers/cxx20_erase_set.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -16,8 +17,8 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
+#include "chrome/browser/apps/almanac_api_client/device_info_manager.h"
 #include "chrome/browser/apps/app_preload_service/app_preload_service_factory.h"
-#include "chrome/browser/apps/app_preload_service/device_info_manager.h"
 #include "chrome/browser/apps/app_preload_service/preload_app_definition.h"
 #include "chrome/browser/apps/app_preload_service/web_app_preload_installer.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -51,6 +52,10 @@ static constexpr char kFirstLoginFlowHistogramSuccessName[] =
 static constexpr char kFirstLoginFlowHistogramFailureName[] =
     "AppPreloadService.FirstLoginFlowTime.Failure";
 
+bool AreTestAppsEnabled() {
+  return base::FeatureList::IsEnabled(apps::kAppPreloadServiceEnableTestApps);
+}
+
 }  // namespace
 
 namespace apps {
@@ -62,6 +67,10 @@ static constexpr char kApsStateManager[] =
 
 BASE_FEATURE(kAppPreloadServiceForceRun,
              "AppPreloadServiceForceRun",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAppPreloadServiceEnableTestApps,
+             "AppPreloadServiceEnableTestApps",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 AppPreloadService::AppPreloadService(Profile* profile)
@@ -118,8 +127,18 @@ void AppPreloadService::StartFirstLoginFlow() {
 void AppPreloadService::StartAppInstallationForFirstLogin(
     base::TimeTicks start_time,
     DeviceInfo device_info) {
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
+      profile_->GetURLLoaderFactory();
+  if (!url_loader_factory.get()) {
+    // `url_loader_factory` should only be null if we are in a non-preload
+    // related test. Tests that use profile builder to create their profile
+    // won't have `url_loader_factory` set up by default, so we bypass preloads
+    // code being called for those tests.
+    CHECK_IS_TEST();
+    return;
+  }
   server_connector_->GetAppsForFirstLogin(
-      device_info, profile_->GetURLLoaderFactory(),
+      device_info, url_loader_factory,
       base::BindOnce(&AppPreloadService::OnGetAppsForFirstLoginCompleted,
                      weak_ptr_factory_.GetWeakPtr(), start_time));
 }
@@ -178,8 +197,11 @@ bool AppPreloadService::ShouldInstallApp(const PreloadAppDefinition& app) {
     return false;
   }
 
-  // We currently only install apps which were requested by the device OEM.
-  if (!app.IsOemApp()) {
+  // We currently only install apps which were requested by the device OEM. If
+  // the testing feature is enabled, also install test apps.
+  bool install_reason_allowed =
+      app.IsOemApp() || (app.IsTestApp() && AreTestAppsEnabled());
+  if (!install_reason_allowed) {
     return false;
   }
 

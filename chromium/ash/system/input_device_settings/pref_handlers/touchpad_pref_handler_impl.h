@@ -9,6 +9,7 @@
 #include "ash/system/input_device_settings/pref_handlers/touchpad_pref_handler.h"
 #include "base/values.h"
 
+class AccountId;
 class PrefService;
 
 namespace ash {
@@ -23,16 +24,22 @@ class ASH_EXPORT TouchpadPrefHandlerImpl : public TouchpadPrefHandler {
   // TouchpadPrefHandler:
   void InitializeTouchpadSettings(PrefService* pref_service,
                                   mojom::Touchpad* touchpad) override;
+
+  void InitializeLoginScreenTouchpadSettings(
+      PrefService* local_state,
+      const AccountId& account_id,
+      mojom::Touchpad* touchpad) override;
+
   void UpdateTouchpadSettings(PrefService* pref_service,
                               const mojom::Touchpad& touchpad) override;
 
- private:
-  mojom::TouchpadSettingsPtr GetNewTouchpadSettings(
-      const mojom::Touchpad& touchpad);
-  mojom::TouchpadSettingsPtr RetreiveTouchpadSettings(
-      PrefService* prefs,
-      const mojom::Touchpad& touchpad,
-      const base::Value::Dict& settings_dict);
+  void UpdateLoginScreenTouchpadSettings(
+      PrefService* local_state,
+      const AccountId& account_id,
+      const mojom::Touchpad& touchpad) override;
+
+  void InitializeWithDefaultTouchpadSettings(
+      mojom::Touchpad* touchpad) override;
 };
 
 }  // namespace ash

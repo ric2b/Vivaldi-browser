@@ -65,12 +65,12 @@ class UkmRecorderFactoryImpl : public cc::UkmRecorderFactory {
 
   // This method gets called on the compositor thread.
   std::unique_ptr<ukm::UkmRecorder> CreateRecorder() override {
-    mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder;
+    mojo::Remote<ukm::mojom::UkmRecorderFactory> factory;
 
     // Calling these methods on the compositor thread are thread safe.
     Platform::Current()->GetBrowserInterfaceBroker()->GetInterface(
-        recorder.InitWithNewPipeAndPassReceiver());
-    return std::make_unique<ukm::MojoUkmRecorder>(std::move(recorder));
+        factory.BindNewPipeAndPassReceiver());
+    return ukm::MojoUkmRecorder::Create(*factory);
   }
 };
 
@@ -197,12 +197,6 @@ void LayerTreeView::OnDeferMainFrameUpdatesChanged(bool status) {
   if (!delegate_)
     return;
   delegate_->OnDeferMainFrameUpdatesChanged(status);
-}
-
-void LayerTreeView::OnPauseRenderingChanged(bool paused) {
-  if (!delegate_)
-    return;
-  delegate_->OnPauseRenderingChanged(paused);
 }
 
 void LayerTreeView::OnCommitRequested() {

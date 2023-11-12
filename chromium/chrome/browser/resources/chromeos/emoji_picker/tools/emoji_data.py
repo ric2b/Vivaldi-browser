@@ -4,8 +4,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-from __future__ import print_function
-
 import os
 import sys
 import argparse
@@ -16,11 +14,9 @@ _SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))
 _CHROME_SOURCE = os.path.realpath(
     os.path.join(_SCRIPT_DIR, *[os.path.pardir] * 6))
 
-sys.path.append(os.path.join(_CHROME_SOURCE, 'build/android/gyp'))
+sys.path.append(os.path.join(_CHROME_SOURCE, 'build'))
 
-from util import build_utils
-
-_chr = unichr if sys.version_info.major == 2 else chr
+import action_helpers
 
 
 def parse_emoji_annotations(keyword_file):
@@ -48,14 +44,14 @@ def parse_emoji_metadata(metadata_file):
         return json.load(file)
 
 
-def transform_emoji_data(metadata, names, keywords, firstOnly):
-    def transform(codepoints, emoticons = None, shortcodes = None):
+def transform_emoji_data(metadata, names, keywords, first_only):
+    def transform(codepoints, is_variant, emoticons = None, shortcodes = None):
         if emoticons is None:
           emoticons = []
         if shortcodes is None:
           shortcodes = []
         # transform array of codepoint values into unicode string.
-        string = u''.join(_chr(x) for x in codepoints)
+        string = u''.join(chr(x) for x in codepoints)
 
         # keyword data has U+FE0F emoji presentation characters removed.
         if string not in names:
@@ -68,27 +64,36 @@ def transform_emoji_data(metadata, names, keywords, firstOnly):
           name = ''
           keyword_list = emoticons
 
-        return {'string': string, 'name': name, 'keywords': keyword_list}
-    if firstOnly:
-      metadata_out = [metadata[0]]
+        if is_variant:
+          return {'string': string, 'name': name}
+        else:
+          return {'string': string, 'name': name, 'keywords': keyword_list}
+    if first_only:
+      metadata = [metadata[0]]
     else:
-      metadata_out = metadata[1:]
-    for group in metadata_out:
-        for emoji in group['emoji']:
-            emoji['base'] = transform(emoji['base'],
-                                      emoji['emoticons'],
-                                      emoji.get('shortcodes',[]))
-            del emoji['emoticons']
-            if emoji.get('shortcodes'):
-              del emoji['shortcodes']
-            if emoji['alternates']:
-              emoji['alternates'] = [
-                  transform(e,) for e in emoji['alternates']
-              ]
-            else:
-              del emoji['alternates']
+      metadata = metadata[1:]
 
-    return metadata_out
+    # Create a new object for output since they keep adding extra properties to
+    # the JSON (rather than just editing the input object).
+    out = []
+    for group in metadata:
+        newGroup = []
+        for emoji in group['emoji']:
+            newobj = {
+                'base': transform(
+                    emoji['base'],
+                    False,
+                    emoji['emoticons'],
+                    emoji.get('shortcodes', []),
+                ),
+            }
+            if emoji['alternates']:
+              newobj['alternates'] = [
+                  transform(e, True) for e in emoji['alternates']
+              ]
+            newGroup.append(newobj)
+        out.append({'emoji': newGroup})
+    return out
 
 def main(args):
     parser = argparse.ArgumentParser()
@@ -127,7 +132,7 @@ def main(args):
     metadata = transform_emoji_data(metadata, names, keywords, first_group)
 
     # write output file atomically in utf-8 format.
-    with build_utils.AtomicOutput(output_file) as tmp_file:
+    with action_helpers.atomic_output(output_file) as tmp_file:
         tmp_file.write(
             json.dumps(metadata, separators=(',', ':'),
                        ensure_ascii=False).encode('utf-8'))

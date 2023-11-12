@@ -28,6 +28,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/inline_login_resources.h"
 #include "chrome/grit/inline_login_resources_map.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_switches.h"
@@ -253,10 +254,15 @@ void CreateAndAddWebUIDataSource(Profile* profile) {
           : profile->GetPrefs()->GetBoolean(
                 ash::prefs::kShouldSkipInlineLoginWelcomePage));
   if (ash::AccountAppsAvailability::IsArcAccountRestrictionsEnabled()) {
-    int message_id =
-        profiles::IsGuestModeEnabled()
-            ? IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2_WITH_GUEST_MODE
-            : IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2;
+    int message_id = IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2_WITHOUT_GUEST;
+    // Offer browser guest mode or device guest mode, if available.
+    if (profiles::IsGuestModeEnabled()) {
+      message_id = IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2_WITH_GUEST_MODE;
+    } else if (user_manager::UserManager::Get()->IsGuestSessionAllowed()) {
+      message_id =
+          IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2_WITH_DEVICE_GUEST_MODE;
+    }
+
     source->AddString(
         "accountManagerDialogWelcomeBody",
         l10n_util::GetStringFUTF16(
@@ -287,7 +293,7 @@ void CreateAndAddWebUIDataSource(Profile* profile) {
   } else {
     bool is_incognito_enabled =
         (IncognitoModePrefs::GetAvailability(profile->GetPrefs()) !=
-         IncognitoModePrefs::Availability::kDisabled);
+         policy::IncognitoModeAvailability::kDisabled);
     int message_id =
         is_incognito_enabled
             ? IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY

@@ -14,17 +14,18 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/version_info/version_info.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
+#import "ios/chrome/browser/shared/ui/util/terms_util.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/settings/cells/version_item.h"
 #import "ios/chrome/browser/ui/settings/settings_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/utils/settings_utils.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/terms_util.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -37,6 +38,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "app/vivaldi_version_info.h"
+#import "components/version_info/version_info_values.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -185,7 +187,8 @@ const CGFloat kDefaultHeight = 70;
 #pragma mark - VersionFooterDelegate
 
 - (void)didTapVersionFooter:(VersionFooter*)footer {
-  [[UIPasteboard generalPasteboard] setString:[self versionOnlyString]];
+  StoreTextInPasteboard([self versionOnlyString]);
+
   TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
   NSString* messageText = l10n_util::GetNSString(IDS_IOS_VERSION_COPIED);
   MDCSnackbarMessage* message =
@@ -201,7 +204,11 @@ const CGFloat kDefaultHeight = 70;
 }
 
 - (std::string)versionString {
+#if defined(VIVALDI_BUILD)
+  std::string versionString = vivaldi::GetVivaldiVersionString();
+#else
   std::string versionString = version_info::GetVersionNumber();
+#endif // VIVALDI_BUILD
   std::string versionStringModifier = GetChannelString();
   if (!versionStringModifier.empty()) {
     versionString = versionString + " " + versionStringModifier;

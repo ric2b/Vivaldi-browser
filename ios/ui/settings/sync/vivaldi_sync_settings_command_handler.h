@@ -9,7 +9,8 @@
 
 - (void)showActivateAccountView;
 - (void)showSyncCreateAccountUserView;
-- (void)showSyncEncryptionPasswordView:(BOOL)creatingPasscode;
+- (void)showSyncCreateEncryptionPasswordView;
+- (void)showSyncEncryptionPasswordView;
 - (void)showSyncSettingsView;
 - (void)showSyncLoginView;
 - (void)loginFailed:(NSString*)errorMessage;

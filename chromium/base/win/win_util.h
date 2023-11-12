@@ -83,9 +83,8 @@ BASE_EXPORT bool SetClsidForPropertyStore(IPropertyStore* property_store,
                                           const PROPERTYKEY& property_key,
                                           const CLSID& property_clsid_value);
 
-// Sets the application id in given IPropertyStore. The function is intended
-// for tagging application/chromium shortcut, browser window and jump list for
-// Win7.
+// Sets the application id in given IPropertyStore. The function is used to tag
+// application/Chrome shortcuts, and set app details for Chrome windows.
 BASE_EXPORT bool SetAppIdForPropertyStore(IPropertyStore* property_store,
                                           const wchar_t* app_id);
 
@@ -201,7 +200,7 @@ BASE_EXPORT void DisableFlicks(HWND hwnd);
 BASE_EXPORT void EnableHighDPISupport();
 
 // Returns a string representation of |rguid|.
-BASE_EXPORT std::wstring WStringFromGUID(REFGUID rguid);
+BASE_EXPORT std::wstring WStringFromGUID(const ::GUID& rguid);
 
 // Attempts to pin user32.dll to ensure it remains loaded. If it isn't loaded
 // yet, the module will first be loaded and then the pin will be attempted. If

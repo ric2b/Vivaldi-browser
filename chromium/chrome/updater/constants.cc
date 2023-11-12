@@ -9,9 +9,11 @@
 
 namespace updater {
 
+const char kInstallerVersion[] = "installer_version";
+
 // App ids.
-const char kUpdaterAppId[] = "{44fc7fe2-65ce-487c-93f4-edee46eeaaab}";
-const char kQualificationAppId[] = "{6f0f9a34-a0ab-4a75-a0eb-6eab78d0dc4b}";
+const char kUpdaterAppId[] = UPDATER_APPID;
+const char kQualificationAppId[] = QUALIFICATION_APPID;
 
 const char kNullVersion[] = "0.0.0.0";
 
@@ -92,6 +94,8 @@ const char kUninstallScript[] = "uninstall.cmd";
 
 // Developer override key names.
 const char kDevOverrideKeyUrl[] = "url";
+const char kDevOverrideKeyCrashUploadUrl[] = "crash_upload_url";
+const char kDevOverrideKeyDeviceManagementUrl[] = "device_management_url";
 const char kDevOverrideKeyUseCUP[] = "use_cup";
 const char kDevOverrideKeyInitialDelay[] = "initial_delay";
 const char kDevOverrideKeyServerKeepAliveSeconds[] = "server_keep_alive";
@@ -116,6 +120,8 @@ const char kSourceDMPolicyManager[] = "DeviceManagement";
 const char kSourceManagedPreferencePolicyManager[] = "ManagedPreference";
 const char kSourceDefaultValuesPolicyManager[] = "default";
 const char kSourceDictValuesPolicyManager[] = "DictValuePolicy";
+
+const char kSetupMutex[] = SETUP_MUTEX;
 
 #if BUILDFLAG(IS_MAC)
 // The user defaults suite name.

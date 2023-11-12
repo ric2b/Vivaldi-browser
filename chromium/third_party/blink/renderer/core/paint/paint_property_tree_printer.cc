@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/paint_property_tree_printer.h"
 
+#include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
@@ -12,6 +13,7 @@
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 
 #include <iomanip>
@@ -112,13 +114,13 @@ class PropertyTreePrinterTraits<ClipPaintPropertyNodeOrAlias> {
   static void AddObjectPaintProperties(
       const ObjectPaintProperties& properties,
       PropertyTreePrinter<ClipPaintPropertyNodeOrAlias>& printer) {
-    printer.AddNode(properties.FragmentClip());
     printer.AddNode(properties.ClipPathClip());
     printer.AddNode(properties.MaskClip());
     printer.AddNode(properties.CssClip());
     printer.AddNode(properties.CssClipFixedPosition());
     printer.AddNode(properties.PixelMovingFilterClipExpander());
     printer.AddNode(properties.OverflowControlsClip());
+    printer.AddNode(properties.BackgroundClip());
     printer.AddNode(properties.InnerBorderRadiusClip());
     printer.AddNode(properties.OverflowClip());
     printer.AddNode(properties.ClipIsolationNode());
@@ -145,6 +147,7 @@ class PropertyTreePrinterTraits<EffectPaintPropertyNodeOrAlias> {
     printer.AddNode(properties.Filter());
     printer.AddNode(properties.VerticalScrollbarEffect());
     printer.AddNode(properties.HorizontalScrollbarEffect());
+    printer.AddNode(properties.ScrollCornerEffect());
     printer.AddNode(properties.Mask());
     printer.AddNode(properties.ClipPathMask());
     printer.AddNode(properties.EffectIsolationNode());
@@ -242,7 +245,6 @@ void UpdateDebugNames(const LayoutObject& object,
   SetDebugName(properties.TransformIsolationNode(), "TransformIsolationNode",
                object);
 
-  SetDebugName(properties.FragmentClip(), "FragmentClip", object);
   SetDebugName(properties.ClipPathClip(), "ClipPathClip", object);
   SetDebugName(properties.MaskClip(), "MaskClip", object);
   SetDebugName(properties.CssClip(), "CssClip", object);
@@ -252,6 +254,7 @@ void UpdateDebugNames(const LayoutObject& object,
                "PixelMovingFilterClip", object);
   SetDebugName(properties.OverflowControlsClip(), "OverflowControlsClip",
                object);
+  SetDebugName(properties.BackgroundClip(), "BackgroundClip", object);
   SetDebugName(properties.InnerBorderRadiusClip(), "InnerBorderRadiusClip",
                object);
   SetDebugName(properties.OverflowClip(), "OverflowClip", object);
@@ -263,6 +266,7 @@ void UpdateDebugNames(const LayoutObject& object,
                object);
   SetDebugName(properties.HorizontalScrollbarEffect(),
                "HorizontalScrollbarEffect", object);
+  SetDebugName(properties.ScrollCornerEffect(), "ScrollCornerEffect", object);
   SetDebugName(properties.Mask(), "Mask", object);
   SetDebugName(properties.ClipPathMask(), "ClipPathMask", object);
   SetDebugName(properties.EffectIsolationNode(), "EffectIsolationNode", object);

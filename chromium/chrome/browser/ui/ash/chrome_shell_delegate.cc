@@ -10,6 +10,7 @@
 #include "ash/constants/app_types.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/game_dashboard/game_dashboard_delegate.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/system_sounds_delegate.h"
@@ -38,11 +39,13 @@
 #include "chrome/browser/ui/ash/capture_mode/chrome_capture_mode_delegate.h"
 #include "chrome/browser/ui/ash/chrome_accessibility_delegate.h"
 #include "chrome/browser/ui/ash/desks/chrome_saved_desk_delegate.h"
+#include "chrome/browser/ui/ash/game_dashboard/chrome_game_dashboard_delegate.h"
 #include "chrome/browser/ui/ash/glanceables/chrome_glanceables_delegate.h"
 #include "chrome/browser/ui/ash/global_media_controls/media_notification_provider_impl.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/ash/system_sounds_delegate_impl.h"
+#include "chrome/browser/ui/ash/user_education/chrome_user_education_delegate.h"
 #include "chrome/browser/ui/ash/window_pin_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -107,8 +110,6 @@ content::WebContents* GetActiveWebContentsForNativeBrowserWindow(
 chrome::FeedbackSource ToChromeFeedbackSource(
     ash::ShellDelegate::FeedbackSource source) {
   switch (source) {
-    case ash::ShellDelegate::FeedbackSource::kBentoBar:
-      return chrome::FeedbackSource::kFeedbackSourceBentoBar;
     case ash::ShellDelegate::FeedbackSource::kWindowLayoutMenu:
       return chrome::FeedbackSource::kFeedbackSourceWindowLayoutMenu;
   }
@@ -129,6 +130,11 @@ bool ChromeShellDelegate::CanShowWindowForUser(
 std::unique_ptr<ash::CaptureModeDelegate>
 ChromeShellDelegate::CreateCaptureModeDelegate() const {
   return std::make_unique<ChromeCaptureModeDelegate>();
+}
+
+std::unique_ptr<ash::GameDashboardDelegate>
+ChromeShellDelegate::CreateGameDashboardDelegate() const {
+  return std::make_unique<ChromeGameDashboardDelegate>();
 }
 
 std::unique_ptr<ash::GlanceablesDelegate>
@@ -167,6 +173,11 @@ ChromeShellDelegate::CreateSavedDeskDelegate() const {
 std::unique_ptr<ash::SystemSoundsDelegate>
 ChromeShellDelegate::CreateSystemSoundsDelegate() const {
   return std::make_unique<SystemSoundsDelegateImpl>();
+}
+
+std::unique_ptr<ash::UserEducationDelegate>
+ChromeShellDelegate::CreateUserEducationDelegate() const {
+  return std::make_unique<ChromeUserEducationDelegate>();
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>

@@ -31,9 +31,10 @@
 #endif
 
 using chrome_test_util::SetUpAndReturnMockReauthenticationModule;
-using chrome_test_util::SetUpAndReturnMockReauthenticationModuleForExport;
 using chrome_test_util::
     SetUpAndReturnMockReauthenticationModuleForExportFromSettings;
+using chrome_test_util::
+    SetUpAndReturnMockReauthenticationModuleForPasswordManager;
 using password_manager::PasswordForm;
 
 namespace {
@@ -164,9 +165,9 @@ static std::unique_ptr<ScopedPasswordSettingsReauthModuleOverride>
   _mockReauthenticationModule = SetUpAndReturnMockReauthenticationModule(true);
 }
 
-+ (void)setUpMockReauthenticationModuleForExport {
++ (void)setUpMockReauthenticationModuleForPasswordManager {
   _mockReauthenticationModule =
-      SetUpAndReturnMockReauthenticationModuleForExport();
+      SetUpAndReturnMockReauthenticationModuleForPasswordManager();
 }
 
 + (void)mockReauthenticationModuleExpectedResult:
@@ -231,15 +232,57 @@ static std::unique_ptr<ScopedPasswordSettingsReauthModuleOverride>
   return SaveToPasswordStore(example);
 }
 
-+ (BOOL)saveInsecurePassword:(NSString*)password
-                    userName:(NSString*)userName
-                      origin:(NSString*)origin {
++ (BOOL)saveCompromisedPassword:(NSString*)password
+                       userName:(NSString*)userName
+                         origin:(NSString*)origin {
   PasswordForm example;
   example.username_value = base::SysNSStringToUTF16(userName);
   example.password_value = base::SysNSStringToUTF16(password);
   example.url = GURL(base::SysNSStringToUTF16(origin));
   example.signon_realm = example.url.spec();
   example.password_issues.insert({password_manager::InsecureType::kLeaked,
+                                  password_manager::InsecurityMetadata()});
+  return SaveToPasswordStore(example);
+}
+
++ (BOOL)saveMutedCompromisedPassword:(NSString*)password
+                            userName:(NSString*)userName
+                              origin:(NSString*)origin {
+  PasswordForm example;
+  example.username_value = base::SysNSStringToUTF16(userName);
+  example.password_value = base::SysNSStringToUTF16(password);
+  example.url = GURL(base::SysNSStringToUTF16(origin));
+  example.signon_realm = example.url.spec();
+  example.password_issues.insert(
+      {password_manager::InsecureType::kLeaked,
+       password_manager::InsecurityMetadata(
+           base::Time::Now(), password_manager::IsMuted(true),
+           password_manager::TriggerBackendNotification(false))});
+  return SaveToPasswordStore(example);
+}
+
++ (BOOL)saveReusedPassword:(NSString*)password
+                  userName:(NSString*)userName
+                    origin:(NSString*)origin {
+  PasswordForm example;
+  example.username_value = base::SysNSStringToUTF16(userName);
+  example.password_value = base::SysNSStringToUTF16(password);
+  example.url = GURL(base::SysNSStringToUTF16(origin));
+  example.signon_realm = example.url.spec();
+  example.password_issues.insert({password_manager::InsecureType::kReused,
+                                  password_manager::InsecurityMetadata()});
+  return SaveToPasswordStore(example);
+}
+
++ (BOOL)saveWeakPassword:(NSString*)password
+                userName:(NSString*)userName
+                  origin:(NSString*)origin {
+  PasswordForm example;
+  example.username_value = base::SysNSStringToUTF16(userName);
+  example.password_value = base::SysNSStringToUTF16(password);
+  example.url = GURL(base::SysNSStringToUTF16(origin));
+  example.signon_realm = example.url.spec();
+  example.password_issues.insert({password_manager::InsecureType::kWeak,
                                   password_manager::InsecurityMetadata()});
   return SaveToPasswordStore(example);
 }

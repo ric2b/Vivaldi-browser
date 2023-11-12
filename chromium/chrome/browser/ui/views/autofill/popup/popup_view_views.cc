@@ -30,6 +30,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
@@ -43,9 +44,11 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -74,13 +77,6 @@ constexpr int kAutofillPopupMaxWidth = kAutofillPopupWidthMultiple * 38;
 int GetContentsVerticalPadding() {
   return ChromeLayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_CONTENT_LIST_VERTICAL_SINGLE);
-}
-
-int GetContentsHorizontalPadding() {
-  return base::FeatureList::IsEnabled(
-             features::kAutofillShowAutocompleteDeleteButton)
-             ? GetContentsVerticalPadding()
-             : 0;
 }
 
 // Returns true if the item at `line_number` is a footer item.
@@ -178,7 +174,6 @@ void PopupViewViews::SetSelectedCell(absl::optional<CellIndex> cell_index) {
   } else {
     row_with_selected_cell_ = absl::nullopt;
   }
-  NotifyAccessibilityEvent(ax::mojom::Event::kSelectedChildrenChanged, true);
 }
 
 bool PopupViewViews::HandleKeyPressEvent(
@@ -288,11 +283,12 @@ bool PopupViewViews::AcceptSelectedCell(bool tab_key_pressed) {
     }
   }
 
-  // TODO(crbug.com/1411172): Use different actions depending on which cell is
-  // selected.
-  // No show threshold is used for key pressed - they can be accepted
-  // immediately after the popup is shown.
-  controller_->AcceptSuggestion(index->first, base::TimeDelta());
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillPopupUseThresholdForKeyboardAndMobileAccept)) {
+    controller_->AcceptSuggestion(index->first);
+  } else {
+    controller_->AcceptSuggestionWithoutThreshold(index->first);
+  }
   return true;
 }
 
@@ -300,8 +296,25 @@ bool PopupViewViews::RemoveSelectedCell() {
   absl::optional<CellIndex> index = GetSelectedCell();
 
   // Only content cells can be removed.
-  return index && index->second == PopupRowView::CellType::kContent &&
-         controller_ && controller_->RemoveSuggestion(index->first);
+  if (!index || index->second != PopupRowView::CellType::kContent ||
+      !controller_) {
+    return false;
+  }
+
+  bool was_autocomplete =
+      controller_->GetSuggestionAt(index->first).frontend_id ==
+      POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY;
+  if (!controller_->RemoveSuggestion(index->first)) {
+    return false;
+  }
+
+  if (was_autocomplete) {
+    AutofillMetrics::OnAutocompleteSuggestionDeleted(
+        AutofillMetrics::AutocompleteSingleEntryRemovalMethod::
+            kKeyboardShiftDeletePressed);
+  }
+
+  return true;
 }
 
 void PopupViewViews::OnSuggestionsChanged() {
@@ -337,22 +350,15 @@ void PopupViewViews::OnWidgetVisibilityChanged(views::Widget* widget,
     return;
   }
 
-  for (int row = 0; row < controller_->GetLineCount(); ++row) {
-    // Show the in-product-help promo anchored to this bubble.
-    // The in-product-help promo is a bubble anchored to this row item to show
-    // educational messages. The promo bubble should only be shown once in one
-    // session and has a limit for how many times it can be shown at most in a
-    // period of time.
-    if (controller_->GetSuggestionAt(row).feature_for_iph ==
-        "IPH_AutofillVirtualCardSuggestion") {
-      GetPopupRowViewAt(row).SetProperty(
-          views::kElementIdentifierKey,
-          kAutofillCreditCardSuggestionEntryElementId);
-
-      browser->window()->MaybeShowFeaturePromo(
-          feature_engagement::kIPHAutofillVirtualCardSuggestionFeature);
-    }
-  }
+  // Show the in-product-help promo anchored to this bubble.
+  // The in-product-help promo is a bubble anchored to this row item to show
+  // educational messages. The promo bubble should only be shown once in one
+  // session and has a limit for how many times it can be shown at most in a
+  // period of time.
+  browser->window()->MaybeShowFeaturePromo(
+      feature_engagement::kIPHAutofillVirtualCardSuggestionFeature);
+  browser->window()->MaybeShowFeaturePromo(
+      feature_engagement::kIPHAutofillExternalAccountProfileSuggestionFeature);
 }
 
 bool PopupViewViews::HasPopupRowViewAt(size_t index) const {
@@ -374,15 +380,13 @@ void PopupViewViews::CreateChildViews() {
       views::CreateThemedSolidBackground(ui::kColorDropdownBackground));
 
   // `content_view` wraps the full content of the popup and provides vertical
-  // padding. This is similar to `padding_wrapper` used in the scroll area, but
-  // it allows to add a padding below the footer.
-  raw_ptr<views::BoxLayoutView> content_view = AddChildView(
-      views::Builder<views::BoxLayoutView>()
-          .SetOrientation(views::BoxLayout::Orientation::kVertical)
-          .SetInsideBorderInsets(gfx::Insets::VH(
-              GetContentsVerticalPadding(), GetContentsHorizontalPadding()))
-          .SetMainAxisAlignment(views::BoxLayout::MainAxisAlignment::kStart)
-          .Build());
+  // padding.
+  raw_ptr<views::BoxLayoutView> content_view =
+      AddChildView(views::Builder<views::BoxLayoutView>()
+                       .SetOrientation(views::BoxLayout::Orientation::kVertical)
+                       .SetInsideBorderInsets(
+                           gfx::Insets::VH(GetContentsVerticalPadding(), 0))
+                       .Build());
 
   rows_.reserve(kSuggestions.size());
   size_t current_line_number = 0u;
@@ -392,7 +396,6 @@ void PopupViewViews::CreateChildViews() {
     std::unique_ptr<views::BoxLayoutView> body_container =
         views::Builder<views::BoxLayoutView>()
             .SetOrientation(views::BoxLayout::Orientation::kVertical)
-            .SetMainAxisAlignment(views::BoxLayout::MainAxisAlignment::kStart)
             .Build();
 
     for (; current_line_number < kSuggestions.size() &&
@@ -413,11 +416,31 @@ void PopupViewViews::CreateChildViews() {
                   kSuggestions[current_line_number])));
           break;
 
-        // The default section contains most all selectable rows and includes
+        // The default section contains all selectable rows and includes
         // autocomplete, address, credit cards and passwords.
         default:
-          rows_.push_back(body_container->AddChildView(
-              PopupRowView::Create(*this, current_line_number)));
+          PopupRowView* row_view = body_container->AddChildView(
+              PopupRowView::Create(*this, current_line_number));
+          rows_.push_back(row_view);
+
+          const std::string& feature_for_iph =
+              kSuggestions[current_line_number].feature_for_iph;
+
+          // Set appropriate element ids for IPH targets, it is important to
+          // set them earlier to make sure the elements are discoverable later
+          // during popup's visibility change and the promo bubble showing.
+          if (feature_for_iph ==
+              feature_engagement::kIPHAutofillVirtualCardSuggestionFeature
+                  .name) {
+            row_view->SetProperty(views::kElementIdentifierKey,
+                                  kAutofillCreditCardSuggestionEntryElementId);
+          }
+          if (feature_for_iph ==
+              feature_engagement::
+                  kIPHAutofillExternalAccountProfileSuggestionFeature.name) {
+            row_view->SetProperty(views::kElementIdentifierKey,
+                                  kAutofillSuggestionElementId);
+          }
       }
     }
 
@@ -444,9 +467,8 @@ void PopupViewViews::CreateChildViews() {
   std::unique_ptr<views::BoxLayoutView> footer_container =
       views::Builder<views::BoxLayoutView>()
           .SetOrientation(views::BoxLayout::Orientation::kVertical)
-          .SetMainAxisAlignment(views::BoxLayout::MainAxisAlignment::kStart)
-          .SetBackground(views::CreateThemedSolidBackground(
-              ui::kColorBubbleFooterBackground))
+          .SetBackground(
+              views::CreateThemedSolidBackground(ui::kColorDropdownBackground))
           .Build();
 
   for (; current_line_number < kSuggestions.size(); ++current_line_number) {
@@ -578,8 +600,27 @@ bool PopupViewViews::DoUpdateBoundsAndRedrawPopup() {
   GetWidget()->SetBounds(popup_bounds);
   UpdateClipPath();
 
+  // If `kUiCompositorScrollWithLayers` is enabled, then a ScrollView performs
+  // scrolling by using layers. These layers are not affected by the clip path
+  // of the widget. If the corner radius of the popup is larger than the
+  // vertical padding that separates the widget's top border and the
+  // ScrollView, this will cause pixel artifacts.
+  // To avoid these, set a corner radius for the ScrollView's ViewPort if layer
+  // scrolling is enabled.
+  const int kPaddingCornerDelta =
+      GetCornerRadius() - GetContentsVerticalPadding();
+  if (kPaddingCornerDelta > 0 && scroll_view_ &&
+      base::FeatureList::IsEnabled(::features::kUiCompositorScrollWithLayers)) {
+    scroll_view_->SetViewportRoundedCornerRadius(
+        gfx::RoundedCornersF(kPaddingCornerDelta));
+  }
+
   SchedulePaint();
   return true;
+}
+
+base::WeakPtr<AutofillPopupView> PopupViewViews::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 BEGIN_METADATA(PopupViewViews, PopupBaseView)
@@ -587,7 +628,7 @@ ADD_PROPERTY_METADATA(absl::optional<PopupViewViews::CellIndex>, SelectedCell)
 END_METADATA
 
 // static
-AutofillPopupView* AutofillPopupView::Create(
+base::WeakPtr<AutofillPopupView> AutofillPopupView::Create(
     base::WeakPtr<AutofillPopupController> controller) {
 #if BUILDFLAG(IS_MAC)
   // It's possible for the container_view to not be in a window. In that case,
@@ -610,7 +651,7 @@ AutofillPopupView* AutofillPopupView::Create(
   }
 #endif
 
-  return new PopupViewViews(controller, observing_widget);
+  return (new PopupViewViews(controller, observing_widget))->GetWeakPtr();
 }
 
 }  // namespace autofill

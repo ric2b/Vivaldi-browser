@@ -12,7 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
-#include "components/digital_asset_links/response_header_verifier.h"
+#include "components/content_relationship_verification/response_header_verifier.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -89,15 +89,32 @@ class NavigationControllerImpl::NavigationThrottleImpl
   ~NavigationThrottleImpl() override = default;
 
   void ScheduleCancel() { should_cancel_ = true; }
+  void ScheduleBlock() { should_block_ = true; }
 
   // content::NavigationThrottle:
   ThrottleCheckResult WillStartRequest() override {
-    return should_cancel_ ? CANCEL : PROCEED;
+    if (should_cancel_) {
+      return CANCEL;
+    }
+
+    if (should_block_) {
+      return BLOCK_REQUEST;
+    }
+
+    return PROCEED;
   }
 
   ThrottleCheckResult WillRedirectRequest() override {
     controller_->WillRedirectRequest(this, navigation_handle());
-    return should_cancel_ ? CANCEL : PROCEED;
+    if (should_cancel_) {
+      return CANCEL;
+    }
+
+    if (should_block_) {
+      return BLOCK_REQUEST;
+    }
+
+    return PROCEED;
   }
 
   const char* GetNameForLogging() override {
@@ -107,6 +124,7 @@ class NavigationControllerImpl::NavigationThrottleImpl
  private:
   raw_ptr<NavigationControllerImpl> controller_;
   bool should_cancel_ = false;
+  bool should_block_ = false;
 };
 
 NavigationControllerImpl::NavigationControllerImpl(TabImpl* tab)
@@ -125,6 +143,9 @@ NavigationControllerImpl::CreateNavigationThrottle(
   auto* navigation = navigation_map_[handle].get();
   if (navigation->should_stop_when_throttle_created())
     throttle->ScheduleCancel();
+  if (navigation->should_block_when_throttle_created()) {
+    throttle->ScheduleBlock();
+  }
   return throttle;
 }
 
@@ -462,6 +483,22 @@ void NavigationControllerImpl::DidStartNavigation(
 
   if (java_controller_) {
     JNIEnv* env = AttachCurrentThread();
+
+    if (navigation->GetURL().SchemeIsHTTPOrHTTPS()) {
+      TRACE_EVENT0("weblayer", "Java_NavigationControllerImpl_isUrlAllowed");
+
+      ScopedJavaLocalRef<jstring> jstring_url =
+          base::android::ConvertUTF8ToJavaString(env,
+                                                 navigation->GetURL().spec());
+
+      jboolean is_allowed = Java_NavigationControllerImpl_isUrlAllowed(
+          env, java_controller_, jstring_url);
+
+      if (!is_allowed) {
+        navigation->set_should_block_when_throttle_created();
+      }
+    }
+
     {
       TRACE_EVENT0("weblayer",
                    "Java_NavigationControllerImpl_createNavigation");
@@ -562,11 +599,22 @@ void NavigationControllerImpl::DidFinishNavigation(
       navigation_handle->GetNetErrorCode() == net::OK &&
       !navigation_handle->IsErrorPage()) {
     if (!navigation_handle->IsSameDocument()) {
-      navigation->set_consenting_content(
-          digital_asset_links::ResponseHeaderVerifier::Verify(
-              tab_->browser()->GetPackageName(),
-              navigation->GetNormalizedHeader(
-                  digital_asset_links::kEmbedderAncestorHeader)));
+      content_relationship_verification::ResponseHeaderVerificationResult
+          header_verification_result =
+              content_relationship_verification::ResponseHeaderVerifier::Verify(
+                  tab_->browser()->GetPackageName(),
+                  navigation->GetNormalizedHeader(
+                      content_relationship_verification::
+                          kEmbedderAncestorHeader));
+
+      bool allowed_or_missing_consent =
+          header_verification_result ==
+              content_relationship_verification::
+                  ResponseHeaderVerificationResult::kAllow ||
+          header_verification_result ==
+              content_relationship_verification::
+                  ResponseHeaderVerificationResult::kMissing;
+      navigation->set_consenting_content(allowed_or_missing_consent);
     }
 #if BUILDFLAG(IS_ANDROID)
     if (java_controller_) {

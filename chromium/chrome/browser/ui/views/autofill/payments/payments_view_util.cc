@@ -37,6 +37,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/typography.h"
+#include "ui/views/widget/widget.h"
 
 namespace autofill {
 
@@ -86,11 +87,6 @@ class IconView : public views::ImageView {
             icon, kIconHeight, GetColorProvider()->GetColor(ui::kColorIcon));
         break;
       }
-      case TitleWithIconAndSeparatorView::Icon::PRODUCT_LOGO:
-        image =
-            gfx::CreateVectorIcon(vector_icons::kProductIcon, kIconHeight,
-                                  GetColorProvider()->GetColor(ui::kColorIcon));
-        break;
     }
     SetImage(image);
   }

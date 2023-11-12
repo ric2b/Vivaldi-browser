@@ -10,6 +10,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -49,32 +50,15 @@ void BrowserDriverInitHook(AutofillClient* client,
     driver->GetAutofillAgent()->EnableHeavyFormDataScraping();
 }
 
-const char ContentAutofillDriverFactory::
-    kContentAutofillDriverFactoryWebContentsUserDataKey[] =
-        "web_contents_autofill_driver_factory";
-
-// static
-void ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
-    content::WebContents* contents,
-    AutofillClient* client,
-    DriverInitCallback driver_init_hook) {
-
-// Vivaldi
-#if !BUILDFLAG(IS_ANDROID)
-  if (FromWebContents(contents))
-    return;
-#endif
-
-  contents->SetUserData(kContentAutofillDriverFactoryWebContentsUserDataKey,
-                        base::WrapUnique(new ContentAutofillDriverFactory(
-                            contents, client, std::move(driver_init_hook))));
-}
-
 // static
 ContentAutofillDriverFactory* ContentAutofillDriverFactory::FromWebContents(
     content::WebContents* contents) {
-  return static_cast<ContentAutofillDriverFactory*>(contents->GetUserData(
-      kContentAutofillDriverFactoryWebContentsUserDataKey));
+  ContentAutofillClient* client =
+      ContentAutofillClient::FromWebContents(contents);
+  if (!client) {
+    return nullptr;
+  }
+  return client->GetAutofillDriverFactory();
 }
 
 // static
@@ -106,7 +90,11 @@ ContentAutofillDriverFactory::ContentAutofillDriverFactory(
       client_(client),
       driver_init_hook_(std::move(driver_init_hook)) {}
 
-ContentAutofillDriverFactory::~ContentAutofillDriverFactory() = default;
+ContentAutofillDriverFactory::~ContentAutofillDriverFactory() {
+  for (Observer& observer : observers_) {
+    observer.OnContentAutofillDriverFactoryDestroyed(*this);
+  }
+}
 
 std::unique_ptr<ContentAutofillDriver>
 ContentAutofillDriverFactory::CreateDriver(content::RenderFrameHost* rfh) {
@@ -145,6 +133,9 @@ ContentAutofillDriver* ContentAutofillDriverFactory::DriverForFrame(
     // 5. `render_frame_host->~RenderFrameHostImpl()` finishes.
     if (render_frame_host->IsRenderFrameLive()) {
       driver = CreateDriver(render_frame_host);
+      for (Observer& observer : observers_) {
+        observer.OnContentAutofillDriverCreated(*this, *driver);
+      }
       DCHECK_EQ(driver_map_.find(render_frame_host)->second.get(),
                 driver.get());
     } else {
@@ -185,6 +176,9 @@ void ContentAutofillDriverFactory::RenderFrameDeleted(
     driver->renderer_events().HidePopup();
   }
 
+  for (Observer& observer : observers_) {
+    observer.OnContentAutofillDriverWillBeDeleted(*this, *driver);
+  }
   driver_map_.erase(it);
 }
 
@@ -209,19 +203,46 @@ void ContentAutofillDriverFactory::DidStartNavigation(
 
 void ContentAutofillDriverFactory::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (navigation_handle->HasCommitted() &&
-      (navigation_handle->IsInMainFrame() ||
-       navigation_handle->HasSubframeNavigationEntryCommitted())) {
-    if (auto* driver =
-            DriverForFrame(navigation_handle->GetRenderFrameHost())) {
-      if (!navigation_handle->IsInPrerenderedMainFrame()) {
-        client_->HideAutofillPopup(PopupHidingReason::kNavigation);
-        if (client_->IsTouchToFillCreditCardSupported())
-          client_->HideTouchToFillCreditCard();
-      }
-      driver->DidNavigateFrame(navigation_handle);
+  if (!navigation_handle->HasCommitted()) {
+    return;
+  }
+  // TODO(crbug.com/1064709): Should we really return early?
+  if (!navigation_handle->IsInMainFrame() &&
+      !navigation_handle->HasSubframeNavigationEntryCommitted()) {
+    return;
+  }
+
+  auto* driver = DriverForFrame(navigation_handle->GetRenderFrameHost());
+  if (!driver) {
+    return;
+  }
+  if (!navigation_handle->IsInPrerenderedMainFrame()) {
+    client_->HideAutofillPopup(PopupHidingReason::kNavigation);
+    if (client_->IsTouchToFillCreditCardSupported()) {
+      client_->HideTouchToFillCreditCard();
     }
   }
+
+  if (navigation_handle->IsSameDocument()) {
+    return;
+  }
+
+  // If the navigation happened in the main frame and the BrowserAutofillManager
+  // exists (not in Android Webview), and the AutofillOfferManager exists (not
+  // in Incognito windows), notifies the navigation event.
+  if (navigation_handle->IsInPrimaryMainFrame() &&
+      client()->GetAutofillOfferManager()) {
+    client()->GetAutofillOfferManager()->OnDidNavigateFrame(client());
+  }
+
+  // When IsServedFromBackForwardCache or IsPrerendererdPageActivation, the form
+  // data is not parsed again. So, we should keep and use the autofill manager's
+  // FormStructures from BFCache or prerendering page for form submit.
+  if (navigation_handle->IsServedFromBackForwardCache() ||
+      navigation_handle->IsPrerenderedPageActivation()) {
+    return;
+  }
+  driver->Reset();
 }
 
 void ContentAutofillDriverFactory::OnVisibilityChanged(

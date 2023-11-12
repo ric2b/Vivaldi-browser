@@ -66,9 +66,9 @@ class VivaldiBookmarksAPI : public bookmarks::BookmarkModelObserver,
 
   friend class BrowserContextKeyedAPIFactory<VivaldiBookmarksAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
-  bookmarks::BookmarkModel* bookmark_model_;
+  const raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiBookmarksAPI"; }
@@ -134,6 +134,67 @@ class BookmarksPrivateIsCustomThumbnailFunction : public BookmarksFunction {
 
  protected:
   ~BookmarksPrivateIsCustomThumbnailFunction() override = default;
+
+ private:
+  // BookmarksFunction:
+  ResponseValue RunOnReady() override;
+};
+
+class BookmarksPrivateIOFunction : public BookmarksFunction,
+                                         public ui::SelectFileDialog::Listener {
+ public:
+  BookmarksPrivateIOFunction();
+
+  void FileSelected(const base::FilePath& path,
+                    int index,
+                    void* params) override = 0;
+
+  // ui::SelectFileDialog::Listener:
+  void MultiFilesSelected(const std::vector<base::FilePath>& files,
+                          void* params) override;
+  void FileSelectionCanceled(void* params) override;
+
+  void ShowSelectFileDialog(
+      ui::SelectFileDialog::Type type,
+      const base::FilePath& default_path);
+
+ protected:
+  ~BookmarksPrivateIOFunction() override;
+
+  scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
+};
+
+class BookmarksPrivateImportFunction
+    : public BookmarksPrivateIOFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.import",
+                             BOOKMARKSPRIVATE_IMPORT)
+
+  // BookmarkManagerIOFunction:
+  void FileSelected(const base::FilePath& path,
+                    int index,
+                    void* params) override;
+
+ protected:
+  ~BookmarksPrivateImportFunction() override = default;
+
+ private:
+  // BookmarksFunction:
+  ResponseValue RunOnReady() override;
+};
+
+class BookmarksPrivateExportFunction
+    : public BookmarksPrivateIOFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("bookmarksPrivate.export",
+                             BOOKMARKSPRIVATE_EXPORT)
+
+  // BookmarkManagerIOFunction:
+  void FileSelected(const base::FilePath& path,
+                    int index,
+                    void* params) override;
+ protected:
+  ~BookmarksPrivateExportFunction() override = default;
 
  private:
   // BookmarksFunction:

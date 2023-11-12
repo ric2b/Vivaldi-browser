@@ -15,10 +15,10 @@
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_name_view.h"
 #include "ash/wm/desks/desk_preview_view.h"
-#include "ash/wm/desks/desks_bar_view.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/desks/expanded_desks_bar_button.h"
+#include "ash/wm/desks/legacy_desk_bar_view.h"
 #include "ash/wm/desks/templates/saved_desk_grid_view.h"
 #include "ash/wm/desks/templates/saved_desk_item_view.h"
 #include "ash/wm/desks/templates/saved_desk_library_view.h"
@@ -274,24 +274,6 @@ void OverviewHighlightController::ResetHighlightedView() {
   deleted_index_.reset();
   highlighted_view_->SetHighlightVisibility(false);
   highlighted_view_ = nullptr;
-}
-
-void OverviewHighlightController::HideTabDragHighlight() {
-  if (tab_dragged_view_)
-    tab_dragged_view_->SetHighlightVisibility(false);
-  tab_dragged_view_ = nullptr;
-}
-
-void OverviewHighlightController::ShowTabDragHighlight(
-    OverviewHighlightableView* view) {
-  if (tab_dragged_view_)
-    tab_dragged_view_->SetHighlightVisibility(false);
-  tab_dragged_view_ = view;
-  tab_dragged_view_->SetHighlightVisibility(true);
-}
-
-bool OverviewHighlightController::IsTabDragHighlightVisible() const {
-  return !!tab_dragged_view_;
 }
 
 std::vector<OverviewHighlightableView*>

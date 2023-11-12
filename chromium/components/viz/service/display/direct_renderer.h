@@ -13,6 +13,7 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/viz/common/quads/aggregated_render_pass.h"
@@ -128,7 +129,9 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     raw_ptr<const AggregatedRenderPassList> render_passes_in_draw_order =
         nullptr;
     raw_ptr<const AggregatedRenderPass> root_render_pass = nullptr;
-    const AggregatedRenderPass* current_render_pass = nullptr;
+    // This field is not a raw_ptr<> because of a reference to raw_ptr in
+    // not-rewritten platform specific code and #addr-of.
+    RAW_PTR_EXCLUSION const AggregatedRenderPass* current_render_pass = nullptr;
 
     gfx::Rect root_damage_rect;
     std::vector<gfx::Rect> root_content_bounds;
@@ -199,17 +202,16 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   friend class DelegatedInkPointPixelTestHelper;
   friend class DelegatedInkDisplayTest;
 
-  enum SurfaceInitializationMode {
-    SURFACE_INITIALIZATION_MODE_PRESERVE,
-    SURFACE_INITIALIZATION_MODE_SCISSORED_CLEAR,
-    SURFACE_INITIALIZATION_MODE_FULL_SURFACE_CLEAR,
-  };
-
   struct RenderPassRequirements {
     gfx::Size size;
     bool generate_mipmap = false;
-    ResourceFormat format;
+    SharedImageFormat format;
     gfx::ColorSpace color_space;
+    // Render pass wants scanout
+    bool is_scanout = false;
+    // Render pass wants to synchronize updates with other overlays, on Windows
+    // this means a DComp surface.
+    bool scanout_dcomp_surface = false;
   };
 
   static gfx::RectF QuadVertexRect();
@@ -234,9 +236,11 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   void SetScissorTestRectInDrawSpace(const gfx::Rect& draw_space_rect);
 
   gfx::Size CalculateTextureSizeForRenderPass(
-      const AggregatedRenderPass* render_pass);
+      const AggregatedRenderPass* render_pass) const;
   gfx::Size CalculateSizeForOutputSurface(
       const gfx::Size& device_viewport_size);
+  RenderPassRequirements CalculateRenderPassRequirements(
+      const AggregatedRenderPass* render_pass) const;
 
   void FlushPolygons(
       base::circular_deque<std::unique_ptr<DrawPolygon>>* poly_list,
@@ -280,14 +284,16 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   virtual void BindFramebufferToTexture(
       const AggregatedRenderPassId render_pass_id) = 0;
   virtual void SetScissorTestRect(const gfx::Rect& scissor_rect) = 0;
-  virtual void PrepareSurfaceForPass(
-      SurfaceInitializationMode initialization_mode,
-      const gfx::Rect& render_pass_scissor) = 0;
+  // |render_pass_update_rect| is in render pass backing buffer space.
+  virtual void BeginDrawingRenderPass(
+      bool needs_clear,
+      const gfx::Rect& render_pass_update_rect) = 0;
   // |clip_region| is a (possibly null) pointer to a quad in the same
   // space as the quad. When non-null only the area of the quad that overlaps
   // with clip_region will be drawn.
   virtual void DoDrawQuad(const DrawQuad* quad,
                           const gfx::QuadF* clip_region) = 0;
+  virtual void FinishDrawingRenderPass() {}
   virtual void BeginDrawingFrame() = 0;
   virtual void FinishDrawingFrame() = 0;
   // If a pass contains a single tile draw quad and can be drawn without
@@ -295,9 +301,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // return that quad, otherwise return null.
   virtual const DrawQuad* CanPassBeDrawnDirectly(
       const AggregatedRenderPass* pass);
-  virtual void FinishDrawingQuadList() {}
   virtual bool FlippedFramebuffer() const = 0;
-  virtual void EnsureScissorTestEnabled() = 0;
   virtual void EnsureScissorTestDisabled() = 0;
   virtual void DidChangeVisibility() = 0;
   virtual void CopyDrawnRenderPass(
@@ -320,7 +324,8 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   gfx::ColorSpace CurrentRenderPassColorSpace() const;
   gfx::ColorSpace RenderPassColorSpace(
       const AggregatedRenderPass* render_pass) const;
-  ResourceFormat GetColorSpaceResourceFormat(gfx::ColorSpace color_space) const;
+  SharedImageFormat GetColorSpaceSharedImageFormat(
+      gfx::ColorSpace color_space) const;
   // Return the SkColorSpace for rendering to the current render pass. Unlike
   // CurrentRenderPassColorSpace, this color space has the value of
   // CurrentFrameSDRWhiteLevel incorporated into it.
@@ -343,9 +348,6 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // damaged, skip the rendering.
   const bool allow_undamaged_nonroot_render_pass_to_skip_;
 
-  // Whether it's valid to SwapBuffers with an empty rect. Trivially true when
-  // using partial swap.
-  bool allow_empty_swap_ = false;
   // Whether partial swap can be used.
   bool use_partial_swap_ = false;
 

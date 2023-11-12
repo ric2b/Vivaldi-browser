@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/platform/disk_data_allocator.h"
 #include "third_party/blink/renderer/platform/instrumentation/memory_pressure_listener.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
+#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
@@ -85,7 +86,7 @@ const base::TimeDelta ParkableStringManager::kFirstParkingDelay;
 // static
 ParkableStringManagerDumpProvider*
 ParkableStringManagerDumpProvider::Instance() {
-  static ParkableStringManagerDumpProvider instance;
+  DEFINE_STATIC_LOCAL(ParkableStringManagerDumpProvider, instance, ());
   return &instance;
 }
 
@@ -412,8 +413,9 @@ void ParkableStringManager::ScheduleAgingTaskIfNeeded() {
     return;
 
   base::TimeDelta delay = base::Seconds(kAgingIntervalInSeconds);
-  if (base::FeatureList::IsEnabled(features::kDelayFirstParkingOfStrings) &&
-      !first_string_aging_was_delayed_) {
+  // Delay the first aging tick, since this renderer may be short-lived, we do
+  // not want to waste CPU time compressing memory that is going away soon.
+  if (!first_string_aging_was_delayed_) {
     delay = kFirstParkingDelay;
     first_string_aging_was_delayed_ = true;
   }

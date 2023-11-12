@@ -4,12 +4,13 @@
 
 #include "components/zucchini/equivalence_map.h"
 
-#include <algorithm>
+#include <tuple>
 #include <utility>
 
 #include "base/containers/cxx20_erase.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/ranges/algorithm.h"
 #include "components/zucchini/encoded_view.h"
 #include "components/zucchini/patch_reader.h"
 #include "components/zucchini/suffix_array.h"
@@ -247,9 +248,8 @@ OffsetMapper::OffsetMapper(const EquivalenceMap& equivalence_map,
       old_image_size_(old_image_size),
       new_image_size_(new_image_size) {
   DCHECK_GT(new_image_size_, 0U);
-  std::transform(equivalence_map.begin(), equivalence_map.end(),
-                 equivalences_.begin(),
-                 [](const EquivalenceCandidate& c) { return c.eq; });
+  base::ranges::transform(equivalence_map, equivalences_.begin(),
+                          &EquivalenceCandidate::eq);
   PruneEquivalencesAndSortBySource(&equivalences_);
 }
 
@@ -313,17 +313,26 @@ void OffsetMapper::PruneEquivalencesAndSortBySource(
     std::deque<Equivalence>* equivalences) {
   std::sort(equivalences->begin(), equivalences->end(),
             [](const Equivalence& a, const Equivalence& b) {
-              return a.src_offset < b.src_offset;
+              // Sort by ascending |src_offset| (required by loop below),
+              // then by descending |length| (optimization to reduce churn),
+              // then by ascending |dst_offset| (for total ordering).
+              return std::tuple(a.src_offset, -a.length, a.dst_offset) <
+                     std::tuple(b.src_offset, -b.length, b.dst_offset);
             });
 
   for (auto current = equivalences->begin(); current != equivalences->end();
        ++current) {
+    if (current->length == 0) {
+      continue;
+    }
+    offset_t current_src_end = current->src_end();
+
     // A "reaper" is an equivalence after |current| that overlaps with it, but
     // is longer, and so truncates |current|.  For example:
     //  ******  <=  |current|
-    //    **
     //    ****
-    //      ****
+    //    **
+    //     ****
     //      **********  <= |next| as reaper.
     // If a reaper is found (as |next|), every equivalence strictly between
     // |current| and |next| would be truncated to 0 and discarded. Handling this
@@ -334,12 +343,13 @@ void OffsetMapper::PruneEquivalencesAndSortBySource(
     auto next = current + 1;
     for (; next != equivalences->end(); ++next) {
       DCHECK_GE(next->src_offset, current->src_offset);
-      if (next->src_offset >= current->src_end())
+      if (next->src_offset >= current_src_end) {
         break;  // No more overlap.
+      }
 
       if (current->length < next->length) {
         // |next| is better: So it is a reaper that shrinks |current|.
-        offset_t delta = current->src_end() - next->src_offset;
+        offset_t delta = current_src_end - next->src_offset;
         current->length -= delta;
         next_is_reaper = true;
         break;
@@ -353,13 +363,20 @@ void OffsetMapper::PruneEquivalencesAndSortBySource(
       current = next - 1;
     } else {
       // Shrink all equivalences that overlap with |current|. These are all
-      // worse than |current| since no reaper is found.
+      // worse (same length or shorter), since no reaper is found.
       for (auto reduced = current + 1; reduced != next; ++reduced) {
-        offset_t delta = current->src_end() - reduced->src_offset;
-        reduced->length -= std::min(reduced->length, delta);
-        reduced->src_offset += delta;
-        reduced->dst_offset += delta;
-        DCHECK_EQ(reduced->src_offset, current->src_end());
+        offset_t delta = current_src_end - reduced->src_offset;
+        offset_t capped_delta = std::min(reduced->length, delta);
+        // Use |capped_delta| so length is >= 0 always.
+        reduced->length -= capped_delta;
+        // Truncate while preserving sort order re. |src_offset|. This is same
+        // as |reduced->src_offset += delta|.
+        reduced->src_offset = current_src_end;
+        // If the range becomes empty, |+= delta| may cause new |dst_offset| to
+        // overflow (although the value won't get used). To prevent this (for
+        // robustness), use |+= capped_delta|, which is identical to |+= delta|
+        // if the range remains non-empty.
+        reduced->dst_offset += capped_delta;
       }
     }
   }
@@ -479,6 +496,7 @@ void EquivalenceMap::CreateCandidates(
 void EquivalenceMap::SortByDestination() {
   std::sort(candidates_.begin(), candidates_.end(),
             [](const EquivalenceCandidate& a, const EquivalenceCandidate& b) {
+              // Values should be distinct; no tiebreaker is needed.
               return a.eq.dst_offset < b.eq.dst_offset;
             });
 }

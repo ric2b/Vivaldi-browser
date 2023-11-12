@@ -131,6 +131,10 @@ void TabLifecycleUnitExternal::SetIsDiscarded() {}
 
 namespace vivaldi {
 
+SessionOptions::SessionOptions() {}
+
+SessionOptions::~SessionOptions() {}
+
 VivaldiSessionService::~VivaldiSessionService() {}
 
 VivaldiSessionService::VivaldiSessionService()
@@ -138,7 +142,6 @@ VivaldiSessionService::VivaldiSessionService()
       buffer_(kFileReadBufferSize, 0),
       buffer_position_(0),
       available_count_(0),
-      browser_(nullptr),
       profile_(nullptr) {}
 
 VivaldiSessionService::VivaldiSessionService(Profile* profile)
@@ -146,7 +149,6 @@ VivaldiSessionService::VivaldiSessionService(Profile* profile)
       buffer_(kFileReadBufferSize, 0),
       buffer_position_(0),
       available_count_(0),
-      browser_(nullptr),
       profile_(profile) {}
 
 // Based on SessionBackend::OpenAndWriteHeader()
@@ -335,6 +337,84 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
       session_tab_helper->session_id(), session_storage_namespace->id()));
 }
 
+
+int VivaldiSessionService::SetCommands(
+  std::vector<std::unique_ptr<sessions::SessionWindow>>& windows,
+  std::vector<std::unique_ptr<sessions::SessionTab>>& tabs)
+{
+  for (auto& window : windows) {
+    for (auto& tab : tabs) {
+      if (tab->window_id == window->window_id) {
+        SetCommandsForWindow(*window.get(), tabs);
+        break;
+      }
+    }
+  }
+  return pending_commands_.size();
+}
+
+void VivaldiSessionService::SetCommandsForWindow(
+    const sessions::SessionWindow& window,
+    std::vector<std::unique_ptr<sessions::SessionTab>>& tabs) {
+  SessionID window_id = window.window_id;
+
+  ScheduleCommand(sessions::CreateSetWindowBoundsCommand(
+      window_id, window.bounds, window.show_state));
+  ScheduleCommand(sessions::CreateSetWindowTypeCommand(
+      window_id, window.type));
+  if (!window.app_name.empty()) {
+    ScheduleCommand(sessions::CreateSetWindowAppNameCommand(
+        window_id, window.app_name));
+  }
+  if (!window.viv_ext_data.empty()) {
+    ScheduleCommand(sessions::CreateSetWindowVivExtDataCommand(
+        window_id, window.viv_ext_data));
+  }
+  for (auto& tab : tabs) {
+    if (tab->window_id == window_id) {
+      SetCommandsForTab(*tab);
+    }
+  }
+  ScheduleCommand(sessions::CreateSetSelectedTabInWindowCommand(
+      window_id, window.selected_tab_index));
+}
+
+void VivaldiSessionService::SetCommandsForTab(const sessions::SessionTab& tab) {
+  SessionID window_id = tab.window_id;
+  SessionID tab_id = tab.tab_id;
+
+  ScheduleCommand(sessions::CreateSetTabWindowCommand(window_id, tab_id));
+  if (tab.pinned) {
+    ScheduleCommand(sessions::CreatePinnedStateCommand(tab_id, true));
+  }
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  if (!tab.extension_app_id.empty()) {
+    ScheduleCommand(sessions::CreateSetTabExtensionAppIDCommand(
+        tab_id, tab.extension_app_id));
+  }
+#endif
+  if (!tab.viv_ext_data.empty()) {
+    ScheduleCommand(sessions::CreateSetVivExtDataCommand(
+        tab_id, tab.viv_ext_data));
+  }
+  if (!tab.user_agent_override.ua_string_override.empty()) {
+    ScheduleCommand(sessions::CreateSetTabUserAgentOverrideCommand(
+        tab_id, tab.user_agent_override));
+  }
+  for (auto& navigation : tab.navigations) {
+    ScheduleCommand(CreateUpdateTabNavigationCommand(tab_id, navigation));
+  }
+
+  ScheduleCommand(sessions::CreateSetSelectedNavigationIndexCommand(
+      tab_id, tab.current_navigation_index));
+  if (tab.tab_visual_index != -1) {
+    ScheduleCommand(sessions::CreateSetTabIndexInWindowCommand(
+        tab_id, tab.tab_visual_index));
+  }
+  ScheduleCommand(sessions::CreateSessionStorageAssociatedCommand(
+      tab_id, tab.session_storage_persistent_id));
+}
+
 // Based on SessionService::BuildCommandsForBrowser
 void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
                                                     std::vector<int>& ids) {
@@ -466,6 +546,9 @@ void VivaldiSessionService::RestoreTabsToBrowser(
     std::vector<SessionRestoreDelegate::RestoredTab>* created_contents) {
   DCHECK(!window.tabs.empty());
   if (initial_tab_count == 0) {
+    // We prefer to select the one that is selected in the session, but fall
+    // back to the first if none are.
+    int actual_selected_tab_index = 0;
     for (int i = 0; i < static_cast<int>(window.tabs.size()); ++i) {
       const sessions::SessionTab& tab = *(window.tabs[i]);
 
@@ -489,13 +572,18 @@ void VivaldiSessionService::RestoreTabsToBrowser(
       if (!is_selected_tab)
         continue;
 
-      ShowBrowser(browser,
-                  browser->tab_strip_model()->GetIndexOfWebContents(contents));
+      actual_selected_tab_index =
+        browser->tab_strip_model()->GetIndexOfWebContents(contents);
+
+    }
+    if (browser->tab_strip_model()->count() > 0) {
+      ShowBrowser(browser, actual_selected_tab_index);
     }
   } else {
     // If the browser already has tabs, we want to restore the new ones after
     // the existing ones.
     int tab_index_offset = initial_tab_count;
+    int num_restored = 0;
     for (int i = 0; i < static_cast<int>(window.tabs.size()); ++i) {
       const sessions::SessionTab& tab = *(window.tabs[i]);
       // Always schedule loads as we will not be calling ShowBrowser().
@@ -507,7 +595,12 @@ void VivaldiSessionService::RestoreTabsToBrowser(
         SessionRestoreDelegate::RestoredTab restored_tab(
             contents, false, tab.extension_app_id.empty(), tab.pinned, group);
         created_contents->push_back(restored_tab);
+        num_restored ++;
       }
+    }
+    // Activate the first of the restored tabs.
+    if (num_restored > 0) {
+      browser->tab_strip_model()->ActivateTabAt(tab_index_offset);
     }
   }
 }
@@ -522,12 +615,18 @@ content::WebContents* VivaldiSessionService::RestoreTab(
     const int tab_index,
     Browser* browser,
     bool is_selected_tab) {
-  if (sessions::IsQuarantined(tab.viv_ext_data)) {
+  if (sessions::IsTabQuarantined(&tab)) {
     return nullptr;
   }
 
   if (!opts_.withWorkspace_ &&
       extensions::IsTabInAWorkspace(tab.viv_ext_data)) {
+    return nullptr;
+  }
+
+  const std::vector<int>& ids = opts_.tabs_to_include_;
+  if (ids.size() > 0 &&
+      std::find(ids.begin(), ids.end(), tab.tab_id.id()) == ids.end()) {
     return nullptr;
   }
 
@@ -683,13 +782,20 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
 bool VivaldiSessionService::HasTabs(const sessions::SessionWindow& window) {
   for (int i = 0; i < static_cast<int>(window.tabs.size()); ++i) {
     const sessions::SessionTab& tab = *(window.tabs[i]);
-    if (sessions::IsQuarantined(tab.viv_ext_data)) {
+    if (sessions::IsTabQuarantined(&tab)) {
       continue;
     }
     if (!opts_.withWorkspace_ &&
       extensions::IsTabInAWorkspace(tab.viv_ext_data)) {
       continue;
     }
+
+    const std::vector<int>& ids = opts_.tabs_to_include_;
+    if (ids.size() > 0 &&
+      std::find(ids.begin(), ids.end(), tab.tab_id.id()) == ids.end()) {
+      continue;
+    }
+
     if (tab.navigations.empty()) {
       continue;
     }

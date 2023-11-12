@@ -31,6 +31,7 @@ source_set("chromeos") {
     "//base",
     "//build/config/linux/libdrm",
     "//media",
+    "//media/gpu:buffer_validation",
     "//media/gpu:buildflags",
     "//media/gpu:command_buffer_helper",
     "//media/gpu:common",
@@ -86,8 +87,6 @@ source_set("common") {
     "vda_video_frame_pool.cc",
     "vda_video_frame_pool.h",
     "video_decoder_pipeline.h",
-    "video_frame_converter.cc",
-    "video_frame_converter.h",
   ]
 
   # TODO(crbug.com/1012587): Merge :fourcc to :common.
@@ -162,6 +161,7 @@ source_set("video_frame_mapper") {
     "//media/gpu:command_buffer_helper",
     "//media/gpu:common",
     "//media/gpu:video_frame_mapper_common",
+    "//third_party/libyuv",
   ]
 }
 

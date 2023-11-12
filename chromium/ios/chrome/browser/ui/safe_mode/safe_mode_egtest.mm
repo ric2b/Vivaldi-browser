@@ -5,8 +5,8 @@
 #import "base/feature_list.h"
 #import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/safe_mode/safe_mode_app_interface.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -159,10 +159,9 @@ void AssertTryAgainButtonOnPage() {
       disabled:{}
       relaunchPolicy:ForceRelaunchByCleanShutdown];
   [SafeModeAppInterface setFailedStartupAttemptCount:2];
-  [[AppLaunchManager sharedManager]
-      ensureAppLaunchedWithFeaturesEnabled:{kRemoveCrashInfobar}
-                                  disabled:{}
-                            relaunchPolicy:ForceRelaunchByKilling];
+  [[AppLaunchManager sharedManager] ensureAppLaunchedWithFeaturesEnabled:{}
+      disabled:{}
+      relaunchPolicy:ForceRelaunchByKilling];
   [ChromeEarlGrey waitForMainTabCount:3];
   [ChromeEarlGrey waitForIncognitoTabCount:1];
   [[EarlGrey

@@ -676,6 +676,17 @@ const char* ProtoEnumToString(
   return "";
 }
 
+const char* ProtoEnumToString(sync_pb::WebApkIconInfo::Purpose purpose) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WebApkIconInfo, Purpose, UNSPECIFIED, MONOCHROME);
+  switch (purpose) {
+    ENUM_CASE(sync_pb::WebApkIconInfo, UNSPECIFIED);
+    ENUM_CASE(sync_pb::WebApkIconInfo, ANY);
+    ENUM_CASE(sync_pb::WebApkIconInfo, MASKABLE);
+    ENUM_CASE(sync_pb::WebApkIconInfo, MONOCHROME);
+  }
+  NOTREACHED_NORETURN();
+}
+
 const char* ProtoEnumToString(sync_pb::WebAppIconInfo::Purpose purpose) {
   ASSERT_ENUM_BOUNDS(sync_pb::WebAppIconInfo, Purpose, UNSPECIFIED, MONOCHROME);
   switch (purpose) {
@@ -887,6 +898,19 @@ const char* ProtoEnumToString(
     ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, PURPLE);
     ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, CYAN);
     ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, ORANGE);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(sync_pb::ModelTypeState::InitialSyncState state) {
+  ASSERT_ENUM_BOUNDS(sync_pb::ModelTypeState, InitialSyncState,
+                     INITIAL_SYNC_STATE_UNSPECIFIED, INITIAL_SYNC_UNNECESSARY);
+  switch (state) {
+    ENUM_CASE(sync_pb::ModelTypeState, INITIAL_SYNC_STATE_UNSPECIFIED);
+    ENUM_CASE(sync_pb::ModelTypeState, INITIAL_SYNC_PARTIALLY_DONE);
+    ENUM_CASE(sync_pb::ModelTypeState, INITIAL_SYNC_DONE);
+    ENUM_CASE(sync_pb::ModelTypeState, INITIAL_SYNC_UNNECESSARY);
   }
   NOTREACHED();
   return "";

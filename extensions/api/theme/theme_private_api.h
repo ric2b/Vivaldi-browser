@@ -40,7 +40,7 @@ class ThemePrivateAPI : public BrowserContextKeyedAPI {
  private:
   void OnPrefsChanged(const std::string& path);
 
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
   PrefChangeRegistrar prefs_registrar_;
 };
 

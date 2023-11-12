@@ -22,6 +22,7 @@
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
+#include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 
 namespace cc {
 class Layer;
@@ -182,9 +183,6 @@ class CORE_EXPORT RemoteFrame final : public Frame,
       const base::UnguessableToken& embedding_token) override;
   void SetPageFocus(bool is_focused) override;
   void RenderFallbackContent() override;
-  void RenderFallbackContentWithResourceTiming(
-      mojom::blink::ResourceTimingInfoPtr timing,
-      const String& server_timing_values) final;
   void ScrollRectToVisible(
       const gfx::RectF& rect_to_scroll,
       mojom::blink::ScrollIntoViewParamsPtr params) override;
@@ -221,6 +219,8 @@ class CORE_EXPORT RemoteFrame final : public Frame,
       const base::UnguessableToken& devtools_frame_token,
       mojom::blink::RemoteFrameInterfacesFromBrowserPtr remote_frame_interfaces)
       override;
+  void CreateRemoteChildren(
+      Vector<mojom::blink::CreateRemoteChildParamsPtr> params) override;
 
   // Called only when this frame has a local frame owner.
   gfx::Size GetOutermostMainFrameSize() const override;
@@ -301,9 +301,12 @@ class CORE_EXPORT RemoteFrame final : public Frame,
   // Whether the frame is considered to be an ad frame by Ad Tagging.
   bool is_ad_frame_;
 
+  GC_PLUGIN_IGNORE("https://crbug.com/1381979")
   mojo::AssociatedRemote<mojom::blink::RemoteFrameHost>
       remote_frame_host_remote_;
+  GC_PLUGIN_IGNORE("https://crbug.com/1381979")
   mojo::AssociatedReceiver<mojom::blink::RemoteFrame> receiver_{this};
+  GC_PLUGIN_IGNORE("https://crbug.com/1381979")
   mojo::AssociatedReceiver<mojom::blink::RemoteMainFrame> main_frame_receiver_{
       this};
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;

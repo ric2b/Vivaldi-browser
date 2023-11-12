@@ -11,20 +11,22 @@
 
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/memory_usage_estimator.h"
+#include "base/uuid.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/features.h"
@@ -32,7 +34,6 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_invalidation_adapter.h"
 #include "components/sync/base/time.h"
-#include "components/sync/base/unique_position.h"
 #include "components/sync/engine/bookmark_update_preprocessing.h"
 #include "components/sync/engine/cancelation_signal.h"
 #include "components/sync/engine/commit_contribution.h"
@@ -41,6 +42,7 @@
 #include "components/sync/engine/model_type_processor.h"
 #include "components/sync/protocol/data_type_progress_marker.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
+#include "components/sync/protocol/model_type_state_helper.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 #include "components/sync/protocol/sync_entity.pb.h"
 
@@ -111,6 +113,24 @@ void AdaptClientTagForFullUpdateData(ModelType model_type,
                                    data->specifics.autofill_offer()));
   } else {
     NOTREACHED();
+  }
+}
+
+void AdaptWebAuthnClientTagHash(syncer::EntityData* data) {
+  // Google Play Services may create entities where the client_tag_hash doesn't
+  // conform to the form expected by Chromium. These values are the hex-encoded,
+  // 16-byte random `sync_id` value, and will therefore always be 32 bytes long.
+  // Valid ClientTagHash values are Base64(SHA1(protobuf_prefix + client_tag))
+  // and therefore always 28 bytes.
+  const std::string& client_tag_hash = data->client_tag_hash.value();
+  if (client_tag_hash.size() == 32 &&
+      // base::HexEncode() returns upper case, `client_tag_hash` is lower case.
+      base::ToUpperASCII(client_tag_hash) ==
+          base::HexEncode(base::as_bytes(base::make_span(
+              data->specifics.webauthn_credential().sync_id())))) {
+    data->client_tag_hash = ClientTagHash::FromUnhashed(
+        ModelType::WEBAUTHN_CREDENTIAL,
+        data->specifics.webauthn_credential().sync_id());
   }
 }
 
@@ -328,19 +348,20 @@ void ModelTypeWorker::ConnectSync(
   model_type_processor_->ConnectSync(
       std::make_unique<CommitQueueProxy>(weak_ptr_factory_.GetWeakPtr()));
 
-  if (!model_type_state_.initial_sync_done()) {
+  if (!IsInitialSyncDone(model_type_state_.initial_sync_state())) {
     nudge_handler_->NudgeForInitialDownload(type_);
   }
 
   // |model_type_state_| might have an outdated encryption key name, e.g.
   // because |cryptographer_| was updated before this worker was constructed.
   // OnCryptographerChange() might never be called, so update the key manually
-  // here and push it to the processor. Only push if initial sync is done,
-  // otherwise this violates some of the processor assumptions; if initial sync
-  // isn't done, the now-updated key will be pushed on the first ApplyUpdates()
-  // call anyway.
+  // here and push it to the processor. SendPendingUpdatesToProcessorIfReady()
+  // takes care to only send updated if initial sync is (at least partially)
+  // done, otherwise this violates some of the processor assumptions; if initial
+  // sync isn't done, the now-updated key will be pushed on the first
+  // ApplyUpdates() call anyway.
   bool had_outdated_key_name = UpdateTypeEncryptionKeyName();
-  if (had_outdated_key_name && model_type_state_.initial_sync_done()) {
+  if (had_outdated_key_name) {
     SendPendingUpdatesToProcessorIfReady();
   }
 }
@@ -389,7 +410,7 @@ void ModelTypeWorker::UpdatePassphraseType(PassphraseType type) {
 
 bool ModelTypeWorker::IsInitialSyncEnded() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return model_type_state_.initial_sync_done();
+  return IsInitialSyncDone(model_type_state_.initial_sync_state());
 }
 
 const sync_pb::DataTypeProgressMarker& ModelTypeWorker::GetDownloadProgress()
@@ -410,7 +431,8 @@ void ModelTypeWorker::ProcessGetUpdatesResponse(
     StatusController* status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  const bool is_initial_sync = !model_type_state_.initial_sync_done();
+  const bool is_initial_sync =
+      !IsInitialSyncDone(model_type_state_.initial_sync_state());
 
   // TODO(rlarocque): Handle data type context conflicts.
   *model_type_state_.mutable_type_context() = mutated_context;
@@ -505,7 +527,7 @@ void ModelTypeWorker::ProcessGetUpdatesResponse(
   // remote data first. Instead, apply updates as they come in. This saves the
   // need to accumulate all data in memory.
   if (ApplyUpdatesImmediatelyTypes().Has(type_)) {
-    ApplyUpdates(status);
+    ApplyUpdates(status, /*cycle_done=*/false);
   }
 }
 
@@ -556,7 +578,7 @@ ModelTypeWorker::DecryptionStatus ModelTypeWorker::PopulateUpdateResponseData(
   // Prepare the message for the model thread.
   data.id = update_entity.id_string();
   data.client_tag_hash =
-      ClientTagHash::FromHashed(update_entity.client_defined_unique_tag());
+      ClientTagHash::FromHashed(update_entity.client_tag_hash());
   data.creation_time = ProtoTimeToTime(update_entity.ctime());
   data.modification_time = ProtoTimeToTime(update_entity.mtime());
   data.name = update_entity.name();
@@ -589,18 +611,31 @@ ModelTypeWorker::DecryptionStatus ModelTypeWorker::PopulateUpdateResponseData(
   } else if (model_type == AUTOFILL_WALLET_DATA ||
              model_type == AUTOFILL_WALLET_OFFER) {
     AdaptClientTagForFullUpdateData(model_type, &data);
+  } else if (model_type == WEBAUTHN_CREDENTIAL) {
+    AdaptWebAuthnClientTagHash(&data);
   }
 
   response_data->entity = std::move(data);
   return SUCCESS;
 }
 
-void ModelTypeWorker::ApplyUpdates(StatusController* status) {
+void ModelTypeWorker::ApplyUpdates(StatusController* status, bool cycle_done) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // Indicate to the processor that the initial download is done. The initial
-  // sync technically isn't done yet but by the time this value is persisted to
-  // disk on the model thread it will be.
-  model_type_state_.set_initial_sync_done(true);
+  // Indicate the new initial-sync state to the processor: If the current sync
+  // cycle was completed, the initial sync must be done. Otherwise, it's started
+  // now. The latter can only happen for ApplyUpdatesImmediatelyTypes(), since
+  // other types wait for the cycle to complete before applying any updates.
+  // Note that the initial sync technically isn't started/done yet but by the
+  // time this value is persisted to disk on the model thread it will be.
+  model_type_state_.set_initial_sync_done_deprecated(true);
+  if (cycle_done) {
+    model_type_state_.set_initial_sync_state(
+        sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
+  } else {
+    DCHECK(ApplyUpdatesImmediatelyTypes().Has(type_));
+    model_type_state_.set_initial_sync_state(
+        sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_PARTIALLY_DONE);
+  }
 
   if (!entries_pending_decryption_.empty() &&
       (!encryption_enabled_ || cryptographer_->CanEncrypt())) {
@@ -613,25 +648,32 @@ void ModelTypeWorker::ApplyUpdates(StatusController* status) {
     }
   }
 
-  // Processed pending invalidations are deleted, and unprocessed invalidations
-  // will be used in next sync cycle.
-  auto it = pending_invalidations_.begin();
-  while (it != pending_invalidations_.end()) {
-    if (it->is_processed) {
-      LogPendingInvalidationStatus(PendingInvalidationStatus::kAcknowledged);
-      it->pending_invalidation->Acknowledge();
-      it = pending_invalidations_.erase(it);
-    } else {
-      ++it;
+  // At the end of a sync cycle, clean up any invalidations that were used.
+  // (If the cycle is still ongoing, i.e. there are more updates to download,
+  // the invalidations must be kept and sent again in the next request, since
+  // they may still be relevant.)
+  if (cycle_done) {
+    // Processed pending invalidations are deleted, and unprocessed
+    // invalidations will be used again in the next sync cycle.
+    auto it = pending_invalidations_.begin();
+    while (it != pending_invalidations_.end()) {
+      if (it->is_processed) {
+        LogPendingInvalidationStatus(PendingInvalidationStatus::kAcknowledged);
+        it->pending_invalidation->Acknowledge();
+        it = pending_invalidations_.erase(it);
+      } else {
+        ++it;
+      }
     }
-  }
-  if (base::FeatureList::IsEnabled(kSyncPersistInvalidations)) {
-    UpdateModelTypeStateInvalidations();
-  }
+    if (base::FeatureList::IsEnabled(kSyncPersistInvalidations)) {
+      UpdateModelTypeStateInvalidations();
+    }
 
-  has_dropped_invalidation_ = false;
+    has_dropped_invalidation_ = false;
 
-  nudge_handler_->SetHasPendingInvalidations(type_, HasPendingInvalidations());
+    nudge_handler_->SetHasPendingInvalidations(type_,
+                                               HasPendingInvalidations());
+  }
 
   if (HasNonDeletionUpdates()) {
     status->add_updated_type(type_);
@@ -644,7 +686,8 @@ void ModelTypeWorker::ApplyUpdates(StatusController* status) {
 void ModelTypeWorker::SendPendingUpdatesToProcessorIfReady() {
   DCHECK(model_type_processor_);
 
-  if (!model_type_state_.initial_sync_done()) {
+  if (!IsInitialSyncAtLeastPartiallyDone(
+          model_type_state_.initial_sync_state())) {
     return;
   }
 
@@ -697,7 +740,8 @@ void ModelTypeWorker::NudgeIfReadyToCommit() {
 std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
     size_t max_entries) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(model_type_state_.initial_sync_done());
+  DCHECK(IsInitialSyncAtLeastPartiallyDone(
+      model_type_state_.initial_sync_state()));
   DCHECK(model_type_processor_);
 
   // Early return if type is not ready to commit (initial sync isn't done or
@@ -791,14 +835,12 @@ size_t ModelTypeWorker::EstimateMemoryUsage() const {
   return memory_usage;
 }
 
-bool ModelTypeWorker::IsTypeInitialized() const {
-  return model_type_state_.initial_sync_done();
-}
-
 bool ModelTypeWorker::CanCommitItems() const {
   // We can only commit if we've received the initial update response and aren't
   // blocked by missing encryption keys.
-  return IsTypeInitialized() && !BlockForEncryption();
+  return IsInitialSyncAtLeastPartiallyDone(
+             model_type_state_.initial_sync_state()) &&
+         !BlockForEncryption();
 }
 
 bool ModelTypeWorker::BlockForEncryption() const {
@@ -958,7 +1000,9 @@ void ModelTypeWorker::DeduplicatePendingUpdatesBasedOnOriginatorClientItemId() {
     // without deduplication, which is the case for all datatypes except
     // bookmarks, as well as bookmarks created before 2015, when the item ID was
     // not globally unique across clients.
-    if (!base::IsValidGUID(candidate.entity.originator_client_item_id)) {
+    if (!base::Uuid::ParseCaseInsensitive(
+             candidate.entity.originator_client_item_id)
+             .is_valid()) {
       pending_updates_.push_back(std::move(candidate));
       continue;
     }

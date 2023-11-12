@@ -50,36 +50,32 @@ SkiaOutputDeviceOffscreen::~SkiaOutputDeviceOffscreen() {
   DiscardBackbuffer();
 }
 
-bool SkiaOutputDeviceOffscreen::Reshape(
-    const SkSurfaceCharacterization& characterization,
-    const gfx::ColorSpace& color_space,
-    float device_scale_factor,
-    gfx::OverlayTransform transform) {
+bool SkiaOutputDeviceOffscreen::Reshape(const SkImageInfo& image_info,
+                                        const gfx::ColorSpace& color_space,
+                                        int sample_count,
+                                        float device_scale_factor,
+                                        gfx::OverlayTransform transform) {
   DCHECK_EQ(transform, gfx::OVERLAY_TRANSFORM_NONE);
 
   DiscardBackbuffer();
-  size_ = gfx::SkISizeToSize(characterization.dimensions());
-  sk_color_type_ = characterization.colorType();
-  sk_color_space_ = characterization.refColorSpace();
-  sample_count_ = characterization.sampleCount();
+  size_ = gfx::SkISizeToSize(image_info.dimensions());
+  sk_color_type_ = image_info.colorType();
+  sk_color_space_ = image_info.refColorSpace();
+  sample_count_ = sample_count;
   EnsureBackbuffer();
   return true;
 }
 
-void SkiaOutputDeviceOffscreen::SwapBuffers(BufferPresentedCallback feedback,
-                                            OutputSurfaceFrame frame) {
+void SkiaOutputDeviceOffscreen::Present(
+    const absl::optional<gfx::Rect>& update_rect,
+    BufferPresentedCallback feedback,
+    OutputSurfaceFrame frame) {
   // Reshape should have been called first.
   DCHECK(backend_texture_.isValid());
 
   StartSwapBuffers(std::move(feedback));
   FinishSwapBuffers(gfx::SwapCompletionResult(gfx::SwapResult::SWAP_ACK),
                     gfx::Size(size_.width(), size_.height()), std::move(frame));
-}
-
-void SkiaOutputDeviceOffscreen::PostSubBuffer(const gfx::Rect& rect,
-                                              BufferPresentedCallback feedback,
-                                              OutputSurfaceFrame frame) {
-  return SwapBuffers(std::move(feedback), std::move(frame));
 }
 
 void SkiaOutputDeviceOffscreen::EnsureBackbuffer() {

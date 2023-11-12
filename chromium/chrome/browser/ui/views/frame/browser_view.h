@@ -25,7 +25,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
-#include "chrome/browser/ui/performance_controls/high_efficiency_iph_controller.h"
+#include "chrome/browser/ui/performance_controls/high_efficiency_opt_in_iph_controller.h"
 #include "chrome/browser/ui/tabs/tab_renderer_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
@@ -165,11 +165,6 @@ class BrowserView : public BrowserWindow,
 
   void SetDownloadShelfForTest(DownloadShelf* download_shelf);
 
-  // This suppresses the slide behaviors of top-controls and so the top controls
-  // will stay showing under any situation. This is only for testing behaviors
-  // of top controls which should be visible always.
-  void DisableTopControlsSlideForTesting();
-
   // Initializes (or re-initializes) the status bubble.  We try to only create
   // the bubble once and re-use it for the life of the browser, but certain
   // events (such as changing enabling/disabling Aero on Win) can force a need
@@ -189,8 +184,7 @@ class BrowserView : public BrowserWindow,
 
   // Returns the preferred size of the Web App Frame Toolbar. Used for example
   // to determine the height of the title bar.
-  // Returns an empty size if this browser is not for a web app, or if
-  // features::kWebAppFrameToolbarInBrowserView is disabled.
+  // Returns an empty size if this browser is not for a web app.
   gfx::Size GetWebAppFrameToolbarPreferredSize() const;
 
   // Container for the tabstrip, toolbar, etc.
@@ -199,21 +193,26 @@ class BrowserView : public BrowserWindow,
 #if BUILDFLAG(IS_MAC)
   views::Widget* overlay_widget() { return overlay_widget_.get(); }
   views::Widget* tab_overlay_widget() { return tab_overlay_widget_.get(); }
+  views::View* tab_overlay_view() { return tab_overlay_view_.get(); }
 
   // Returns if this browser view will use immersive fullscreen mode, based
   // on the state of the two relevant base::Features, as well as the type of
   // browser this is a view for.
   bool UsesImmersiveFullscreenMode() const;
+
+  // Returns if this browser view will use immersive fullscreen tabbed mode.
+  // In tabbed mode the tab strip is contained within the window's titlebar. In
+  // non-tabbed mode the tab strip is positioned below the titlebar.
+  // The return value is determined based on the state of
+  // `features::kImmersiveFullscreen` and `features::kImmersiveFullscreenTabs`
+  // as well as the type of browser.
+  bool UsesImmersiveFullscreenTabbedMode() const;
 #endif
 
   // Container for the web contents.
   views::View* contents_container() { return contents_container_; }
 
   SidePanel* unified_side_panel() { return unified_side_panel_; }
-
-  SidePanel* side_search_side_panel_for_testing() {
-    return side_search_side_panel_;
-  }
 
   SidePanelCoordinator* side_panel_coordinator() {
     return side_panel_coordinator_.get();
@@ -420,8 +419,6 @@ class BrowserView : public BrowserWindow,
     return window_management_permission_granted_;
   }
 
-  void set_isolated_web_app_true_for_testing() { is_isolated_web_app_ = true; }
-
   // Update the side panel's horizontal alignment when
   // prefs::kSidePanelHorizontalAlignment is changed from the appearance
   // settings page.
@@ -523,6 +520,9 @@ class BrowserView : public BrowserWindow,
   bool IsToolbarShowing() const override;
   bool IsLocationBarVisible() const override;
   bool IsBorderlessModeEnabled() const override;
+  void ShowSidePanel(
+      absl::optional<SidePanelEntryId> entry_id,
+      absl::optional<SidePanelOpenTrigger> open_trigger) override;
 
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
@@ -773,10 +773,6 @@ class BrowserView : public BrowserWindow,
     return accessibility_focus_highlight_.get();
   }
 
-  // Closes an opened right aligned side panel, returns true if there is an open
-  // side panel being closed.
-  bool CloseOpenRightAlignedSidePanel(bool exclude_side_search = false);
-
   bool should_show_window_controls_overlay_toggle() const {
     return should_show_window_controls_overlay_toggle_;
   }
@@ -796,8 +792,6 @@ class BrowserView : public BrowserWindow,
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, BrowserView);
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, AccessibleWindowTitle);
   class AccessibilityModeObserver;
-  class SidePanelButtonHighlighter;
-  class SidePanelVisibilityController;
 
   // If the browser is in immersive full screen mode, it will reveal the
   // tabstrip for a short duration. This is useful for shortcuts that perform
@@ -958,9 +952,6 @@ class BrowserView : public BrowserWindow,
   void SetWindowManagementPermissionSubscriptionForBorderlessMode(
       content::WebContents* web_contents);
 
-  // Updates whether the web app is an isolated web app.
-  void UpdateIsIsolatedWebApp();
-
   WebAppFrameToolbarView* web_app_frame_toolbar();
   const WebAppFrameToolbarView* web_app_frame_toolbar() const;
 
@@ -1046,13 +1037,21 @@ class BrowserView : public BrowserWindow,
   // Used when calling CreateMacOverlayView(). This widget owns `overlay_view_`.
   // Its content NSView will be reparented to a NSToolbarFullScreenWindow
   // during fullscreen.
-  raw_ptr<views::Widget, DanglingUntriaged> overlay_widget_;
+  raw_ptr<views::Widget, DanglingUntriaged> overlay_widget_ = nullptr;
 
   // Also used when calling CreateMacOverlayView(). This widget will host the
   // tabstrip contents. Its content NSView will be reparented to a separate
   // section of the NSToolbarFullScreenWindow allowing for the tabs to live in
   // the Titlebar.
-  raw_ptr<views::Widget, DanglingUntriaged> tab_overlay_widget_;
+  raw_ptr<views::Widget, DanglingUntriaged> tab_overlay_widget_ = nullptr;
+
+  // The hosting view of TabStripRegionView during immersive fullscreen.
+  raw_ptr<views::View, DanglingUntriaged> tab_overlay_view_ = nullptr;
+
+  // Targeter for the tab_overlay_view_. Ensures tab_overlay_view_ does not
+  // handle events, while allowing for child views to handle events.
+  std::unique_ptr<views::ViewTargeterDelegate> tab_overlay_view_targeter_;
+
 #endif
 
   // The Bookmark Bar View for this window. Lazily created. May be null for
@@ -1093,26 +1092,10 @@ class BrowserView : public BrowserWindow,
       nullptr;
 
   // The side search side panel.
-  raw_ptr<SidePanel, DanglingUntriaged> side_search_side_panel_ = nullptr;
   raw_ptr<views::View, DanglingUntriaged> left_aligned_side_panel_separator_ =
       nullptr;
 
   std::unique_ptr<SidePanelCoordinator> side_panel_coordinator_;
-
-  // TODO(pbos): Move this functionality into SidePanel when multiple "panels"
-  // are managed within the same object.
-  // Observer object managing the button highlight of the side-panel button
-  // inside ToolbarView. Must outlive the button whose highlight it's managing
-  // as well as the side panels it's observing.
-  std::unique_ptr<SidePanelButtonHighlighter> side_panel_button_highlighter_;
-
-  // TODO(tluk): Move this functionality into SidePanelCoordinator when the side
-  // panel v2 project rolls out.
-  // This controller manages the visibility of the read later, side search and
-  // lens side panels. It ensures only one panel is visible at a given time and
-  // the contextual panel interacts as expected with the global panels.
-  std::unique_ptr<SidePanelVisibilityController>
-      side_panel_visibility_controller_;
 
   // Provides access to the toolbar buttons this browser view uses. Buttons may
   // appear in a hosted app frame or in a tabbed UI toolbar.
@@ -1221,7 +1204,8 @@ class BrowserView : public BrowserWindow,
 
   OnLinkOpeningFromGestureCallbackList link_opened_from_gesture_callbacks_;
 
-  std::unique_ptr<HighEfficiencyIPHController> high_efficiency_iph_controller_;
+  std::unique_ptr<HighEfficiencyOptInIPHController>
+      high_efficiency_opt_in_iph_controller_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // |loading_animation_tracker_| is used to measure animation smoothness for
@@ -1233,7 +1217,6 @@ class BrowserView : public BrowserWindow,
   bool should_show_window_controls_overlay_toggle_ = false;
   bool borderless_mode_enabled_ = false;
   bool window_management_permission_granted_ = false;
-  bool is_isolated_web_app_ = false;
   absl::optional<content::PermissionController::SubscriptionId>
       window_management_subscription_id_;
 

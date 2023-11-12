@@ -17,6 +17,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
+#include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -49,6 +50,8 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/profiles/badged_profile_photo.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -156,15 +159,21 @@ void ProfileMenuView::BuildMenu() {
   Profile* profile = browser()->profile();
   if (profile->IsGuestSession()) {
     BuildGuestIdentity();
-  } else if (!profile->IsOffTheRecord()) {
-    BuildIdentity();
-    BuildSyncInfo();
-    BuildAutofillButtons();
   } else {
-    NOTREACHED();
+    CHECK(!profile->IsOffTheRecord());
+    BuildIdentity();
+
+    // Users should not be able to open chrome settings from WebApps.
+    if (!web_app::AppBrowserController::IsWebApp(browser())) {
+      BuildSyncInfo();
+      BuildAutofillButtons();
+    }
   }
 
-  BuildFeatureButtons();
+  // Users should not be able to use features from WebApps.
+  if (!web_app::AppBrowserController::IsWebApp(browser())) {
+    BuildFeatureButtons();
+  }
 
 //  ChromeOS doesn't support multi-profile.
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -172,9 +181,18 @@ void ProfileMenuView::BuildMenu() {
     SetProfileManagementHeading(
         l10n_util::GetStringUTF16(IDS_PROFILES_LIST_PROFILES_TITLE));
     BuildAvailableProfiles();
-    BuildProfileManagementFeatureButtons();
+
+    // Users should not be able to manage profiles from WebApps.
+    if (!web_app::AppBrowserController::IsWebApp(browser())) {
+      BuildProfileManagementFeatureButtons();
+    }
   }
 #endif
+
+  if (web_app::AppBrowserController::IsWebApp(browser())) {
+    browser()->window()->NotifyFeatureEngagementEvent(
+        "web_app_profile_menu_shown");
+  }
 }
 
 gfx::ImageSkia ProfileMenuView::GetSyncIcon() const {
@@ -392,8 +410,34 @@ void ProfileMenuView::OnOtherProfileSelected(
   RecordClick(ActionableItem::kOtherProfileButton);
   if (!perform_menu_actions())
     return;
-  GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
-  profiles::SwitchToProfile(profile_path, /*always_create=*/false);
+
+  if (!web_app::AppBrowserController::IsWebApp(browser())) {
+    GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
+    profiles::SwitchToProfile(profile_path, /*always_create=*/false);
+  } else {
+#if !BUILDFLAG(IS_CHROMEOS)
+    // Open the same web app for another profile.
+    // So far the only allowlisted case is PasswordManager WebApp.
+    const web_app::AppId& app_id = browser()->app_controller()->app_id();
+    CHECK_EQ(app_id, web_app::kPasswordManagerAppId);
+
+    app_profile_switcher_.emplace(
+        app_id, *browser()->profile(),
+        base::BindOnce(
+            [](views::Widget* widget) {
+              widget->CloseWithReason(
+                  views::Widget::ClosedReason::kUnspecified);
+            },
+            // It's safe to use base::Unretained, because the profile
+            // switcher is onwned by ProfileMenuView and is destroyed
+            // before the widget is destroyed.
+            base::Unretained(GetWidget())));
+    app_profile_switcher_->SwitchToProfile(profile_path);
+#else
+    // WebApps are can only be installed for the main profile on ChromeOS.
+    NOTREACHED();
+#endif
+  }
 }
 
 void ProfileMenuView::OnAddNewProfileButtonClicked() {
@@ -450,11 +494,14 @@ void ProfileMenuView::BuildIdentity() {
 // Profile names are not supported on ChromeOS.
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   profile_name = profile_attributes->GetLocalProfileName();
-  edit_button_params = EditButtonParams(
-      &vector_icons::kEditIcon,
-      l10n_util::GetStringUTF16(IDS_PROFILES_CUSTOMIZE_PROFILE_BUTTON_TOOLTIP),
-      base::BindRepeating(&ProfileMenuView::OnEditProfileButtonClicked,
-                          base::Unretained(this)));
+  if (!web_app::AppBrowserController::IsWebApp(browser())) {
+    edit_button_params = EditButtonParams(
+        &vector_icons::kEditIcon,
+        l10n_util::GetStringUTF16(
+            IDS_PROFILES_CUSTOMIZE_PROFILE_BUTTON_TOOLTIP),
+        base::BindRepeating(&ProfileMenuView::OnEditProfileButtonClicked,
+                            base::Unretained(this)));
+  }
 #endif
 
   SkColor background_color =
@@ -575,7 +622,7 @@ void ProfileMenuView::BuildSyncInfo() {
   } else {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     // There is always an account on ChromeOS.
-    NOTREACHED();
+    NOTREACHED_NORETURN();
 #else
     BuildSyncInfoWithCallToAction(
         l10n_util::GetStringUTF16(IDS_PROFILES_DICE_SYNC_PROMO),
@@ -691,7 +738,8 @@ void ProfileMenuView::BuildAvailableProfiles() {
                         profile_entries.size() > 1);
 
   if (!browser()->profile()->IsGuestSession() &&
-      profiles::IsGuestModeEnabled()) {
+      profiles::IsGuestModeEnabled() &&
+      !web_app::AppBrowserController::IsWebApp(browser())) {
     AddAvailableProfile(
         profiles::GetGuestAvatar(),
         l10n_util::GetStringUTF16(IDS_GUEST_PROFILE_NAME),

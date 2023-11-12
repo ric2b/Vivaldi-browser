@@ -5,12 +5,17 @@
 #ifndef IOS_CHROME_BROWSER_UI_CREDENTIAL_PROVIDER_PROMO_CREDENTIAL_PROVIDER_PROMO_COORDINATOR_H_
 #define IOS_CHROME_BROWSER_UI_CREDENTIAL_PROVIDER_PROMO_CREDENTIAL_PROVIDER_PROMO_COORDINATOR_H_
 
-#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
-#import "ios/chrome/browser/ui/commands/credential_provider_promo_commands.h"
+#import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
+
+@protocol PromosManagerUIHandler;
 
 @interface CredentialProviderPromoCoordinator
     : ChromeCoordinator <CredentialProviderPromoCommands>
+
+// The promos manager ui handler to alert about UI changes.
+@property(nonatomic, weak) id<PromosManagerUIHandler> promosUIHandler;
 
 @end
 

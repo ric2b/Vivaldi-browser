@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import {assert, assertInstanceof, assertNotReached} from '../assert.js';
-import {IndicatorType, showIndicator} from '../custom_effect.js';
 import * as dom from '../dom.js';
 import {Point} from '../geometry.js';
 import {I18nString} from '../i18n_string.js';
@@ -16,17 +15,13 @@ import {
 } from '../metrics.js';
 import {Filenamer} from '../models/file_namer.js';
 import {getI18nMessage} from '../models/load_time_data.js';
-import {
-  getBool as getLocalStorage,
-  set as setLocalStorage,
-} from '../models/local_storage.js';
 import {ResultSaver} from '../models/result_saver.js';
 import {ChromeHelper} from '../mojo/chrome_helper.js';
+import {ToteMetricFormat} from '../mojo/type.js';
 import * as nav from '../nav.js';
 import {speakMessage} from '../spoken_msg.js';
 import {show as showToast} from '../toast.js';
 import {
-  LocalStorageKey,
   MimeType,
   Rotation,
   ViewName,
@@ -59,6 +54,10 @@ export enum Mode {
   PREVIEW,
 }
 
+// The class to set on page element when the page is selected.
+const ACTIVE_PAGE_CLASS = 'active';
+const DELETE_PAGE_BUTTON_SELECTOR = '.delete';
+
 /**
  * View controller for reviewing document scanning.
  */
@@ -89,17 +88,6 @@ export class DocumentReview extends View {
    */
   private mode = Mode.PREVIEW;
 
-  private readonly classes = {
-    active: 'active',
-    delete: 'delete',
-    page: 'page',
-    pages: 'document-pages',
-    preview: 'document-preview',
-    thumbnail: 'thumbnail',
-  } as const;
-
-  private readonly pageTemplateSelector = '#document-review-page';
-
   private readonly modes: {
     [Mode.FIX]: DocumentFixMode,
     [Mode.PREVIEW]: DocumentPreviewMode,
@@ -118,25 +106,20 @@ export class DocumentReview extends View {
   private pendingUpdatePayload: [number, PageInternal]|null = null;
 
   /**
-   * The function to hide the multi-page available indicator at leave. Should be
-   * set once the indicator shows.
-   */
-  private hideMultiPageAvailableIndicator: (() => void)|null = null;
-
-  /**
    * Count the fix times of each session (reset when page count is zero) for
    * sending events.
    */
   private fixCount = 0;
 
   constructor(protected readonly resultSaver: ResultSaver) {
-    super(
-        ViewName.DOCUMENT_REVIEW,
-        {dismissByEsc: true, defaultFocusSelector: 'primary'});
+    super(ViewName.DOCUMENT_REVIEW, {
+      dismissByEsc: true,
+      defaultFocusSelector: '.show .primary',
+    });
     this.pagesElement =
-        dom.getFrom(this.root, `.${this.classes.pages}`, HTMLDivElement);
+        dom.getFrom(this.root, '.document-pages', HTMLDivElement);
     this.previewElement =
-        dom.getFrom(this.root, `.${this.classes.preview}`, HTMLDivElement);
+        dom.getFrom(this.root, '.document-preview', HTMLDivElement);
     this.pagesElement.addEventListener('keydown', (e) => {
       const key = getKeyboardShortcut(e);
       if (key === ' ') {
@@ -146,14 +129,14 @@ export class DocumentReview extends View {
     });
     this.pagesElement.addEventListener('click', async (e: MouseEvent) => {
       const target = assertInstanceof(e.target, HTMLElement);
-      const pageElement = target.closest(`.${this.classes.page}`);
+      const pageElement = target.closest('.page');
       if (pageElement === null) {
         return;
       }
       const index = Array.from(this.pagesElement.children).indexOf(pageElement);
       await this.waitForUpdatingPage();
       const clickOnDeleteButton =
-          target.closest(`.${this.classes.delete}`) !== null;
+          target.closest(DELETE_PAGE_BUTTON_SELECTOR) !== null;
       if (clickOnDeleteButton) {
         await this.onDeletePage(index);
         return;
@@ -258,7 +241,7 @@ export class DocumentReview extends View {
   }
 
   private async addPageView(blob: Blob): Promise<void> {
-    const fragment = instantiateTemplate(this.pageTemplateSelector);
+    const fragment = instantiateTemplate('#document-review-page');
     await this.updatePageView(fragment, blob);
     this.pagesElement.appendChild(fragment);
   }
@@ -271,10 +254,12 @@ export class DocumentReview extends View {
     const blobs = this.pages.map((page) => page.croppedBlob);
     const name = (new Filenamer()).newDocumentName(mimeType);
     if (mimeType === MimeType.JPEG) {
-      await this.resultSaver.savePhoto(blobs[0], name, null);
+      await this.resultSaver.savePhoto(
+          blobs[0], ToteMetricFormat.SCAN_JPG, name, null);
     } else {
       const pdfBlob = await ChromeHelper.getInstance().convertToPdf(blobs);
-      await this.resultSaver.savePhoto(pdfBlob, name, null);
+      await this.resultSaver.savePhoto(
+          pdfBlob, ToteMetricFormat.SCAN_PDF, name, null);
     }
   }
 
@@ -323,9 +308,7 @@ export class DocumentReview extends View {
       this.modes[mode].show();
       this.mode = mode;
     }
-    if (this.mode === Mode.PREVIEW) {
-      this.showMultiPageAvailableIndicatorAtFirstTime();
-    }
+    this.modes[this.mode].focusDefaultElement();
   }
 
   /**
@@ -448,13 +431,13 @@ export class DocumentReview extends View {
   private selectPageView(index: number): void {
     for (let i = 0; i < this.pagesElement.children.length; i++) {
       const pageElement = this.pagesElement.children[i];
-      pageElement.classList.remove(this.classes.active);
+      pageElement.classList.remove(ACTIVE_PAGE_CLASS);
       pageElement.setAttribute('aria-selected', 'false');
       pageElement.setAttribute('tabindex', '-1');
     }
     const activePageElement =
         assertInstanceof(this.pagesElement.children[index], HTMLElement);
-    activePageElement.classList.add(this.classes.active);
+    activePageElement.classList.add(ACTIVE_PAGE_CLASS);
     activePageElement.setAttribute('aria-selected', 'true');
     activePageElement.setAttribute('tabindex', '0');
     activePageElement.focus();
@@ -485,28 +468,10 @@ export class DocumentReview extends View {
   }
 
   private getPageImageElement(node: ParentNode) {
-    return dom.getFrom(node, `.${this.classes.thumbnail}`, HTMLImageElement);
-  }
-
-  private showMultiPageAvailableIndicatorAtFirstTime() {
-    if (getLocalStorage(LocalStorageKey.DOC_MODE_MULTI_PAGE_TOAST_SHOWN)) {
-      return;
-    }
-    setLocalStorage(LocalStorageKey.DOC_MODE_MULTI_PAGE_TOAST_SHOWN, true);
-    const addPageButton = dom.getFrom(
-        this.root, 'button[i18n-aria=add_new_page_button]', HTMLButtonElement);
-    const {hide} = showIndicator(
-        addPageButton, IndicatorType.DOC_MODE_MULTI_PAGE_AVAILABLE);
-    addPageButton.addEventListener('click', hide, {once: true});
-    this.hideMultiPageAvailableIndicator = () => {
-      hide();
-      addPageButton.removeEventListener('click', hide);
-    };
+    return dom.getFrom(node, '.thumbnail', HTMLImageElement);
   }
 
   protected override leaving(): boolean {
-    this.hideMultiPageAvailableIndicator?.();
-    this.hideMultiPageAvailableIndicator = null;
     this.waitForUpdatingPage();
     if (this.pages.length === 0) {
       this.fixCount = 0;
@@ -570,7 +535,7 @@ export class DocumentReview extends View {
   private updateDeleteButtonLabels() {
     for (let i = 0; i < this.pagesElement.children.length; i++) {
       const deleteButton = dom.getFrom(
-          this.pagesElement.children[i], `.${this.classes.delete}`,
+          this.pagesElement.children[i], DELETE_PAGE_BUTTON_SELECTOR,
           HTMLElement);
       deleteButton.setAttribute(
           'aria-label', getI18nMessage(I18nString.DELETE_PAGE_BUTTON, i + 1));

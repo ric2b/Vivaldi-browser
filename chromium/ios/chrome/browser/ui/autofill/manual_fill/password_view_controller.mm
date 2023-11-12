@@ -13,17 +13,17 @@
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_item+Controller.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_link_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_favicon_data_source.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_action_cell.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_cell_utils.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_cell.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_text_cell.h"
-#import "ios/chrome/browser/ui/list_model/list_item+Controller.h"
 #import "ios/chrome/browser/ui/settings/password/branded_navigation_item_title_view.h"
 #import "ios/chrome/browser/ui/settings/password/create_password_manager_title_view.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_link_item.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#import "ios/chrome/browser/ui/table_view/table_view_favicon_data_source.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
@@ -31,6 +31,11 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -198,14 +203,15 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
   NSString* itemIdentifier = passwordItem.uniqueIdentifier;
   CrURL* crurl = [[CrURL alloc] initWithGURL:passwordItem.faviconURL];
   [self.imageDataSource
-      faviconForURL:crurl
-         completion:^(FaviconAttributes* attributes) {
-           // Only set favicon if the cell hasn't been reused.
-           if ([passwordCell.uniqueIdentifier isEqualToString:itemIdentifier]) {
-             DCHECK(attributes);
-             [passwordCell configureWithFaviconAttributes:attributes];
-           }
-         }];
+      faviconForPageURL:crurl
+             completion:^(FaviconAttributes* attributes) {
+               // Only set favicon if the cell hasn't been reused.
+               if ([passwordCell.uniqueIdentifier
+                       isEqualToString:itemIdentifier]) {
+                 DCHECK(attributes);
+                 [passwordCell configureWithFaviconAttributes:attributes];
+               }
+             }];
 }
 
 - (void)handleDoneButton {
@@ -225,6 +231,12 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
   TableViewTextLinkItem* headerItem =
       [[TableViewTextLinkItem alloc] initWithType:ManualFallbackItemTypeHeader];
 
+  if (vivaldi::IsVivaldiRunning()) {
+    NSString* titleString =
+        l10n_util::GetNSString(
+           IDS_VIVALDI_SAVE_PASSWORDS_MANAGE_ACCOUNT_HEADER);
+    headerItem.text = titleString;
+  } else {
   StringWithTags headerStringWithTags = ParseStringWithLinks(
       l10n_util::GetNSString(IDS_IOS_SAVE_PASSWORDS_MANAGE_ACCOUNT_HEADER));
 
@@ -235,6 +247,7 @@ NSString* const kPasswordTableViewAccessibilityIdentifier =
   DCHECK_EQ(1U, headerStringWithTags.ranges.size());
   headerItem.linkRanges =
       @[ [NSValue valueWithRange:headerStringWithTags.ranges[0]] ];
+  } // End Vivaldi
 
   [self presentHeaderItem:headerItem];
 }

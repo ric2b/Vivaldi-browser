@@ -23,22 +23,28 @@ BASE_DECLARE_FEATURE(kIPHDummyFeature);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
+BASE_DECLARE_FEATURE(kIPHAutofillFeedbackNewBadgeFeature);
 BASE_DECLARE_FEATURE(kIPHBatterySaverModeFeature);
 BASE_DECLARE_FEATURE(kIPHDesktopSharedHighlightingFeature);
 BASE_DECLARE_FEATURE(kIPHDesktopTabGroupsNewGroupFeature);
+BASE_DECLARE_FEATURE(kIPHDesktopCustomizeChromeFeature);
+BASE_DECLARE_FEATURE(kIPHDownloadToolbarButtonFeature);
 BASE_DECLARE_FEATURE(kIPHExtensionsMenuFeature);
 BASE_DECLARE_FEATURE(kIPHFocusHelpBubbleScreenReaderPromoFeature);
 BASE_DECLARE_FEATURE(kIPHGMCCastStartStopFeature);
-BASE_DECLARE_FEATURE(kIPHHighEfficiencyInfoModeFeature);
 BASE_DECLARE_FEATURE(kIPHHighEfficiencyModeFeature);
 BASE_DECLARE_FEATURE(kIPHLiveCaptionFeature);
 BASE_DECLARE_FEATURE(kIPHTabAudioMutingFeature);
 BASE_DECLARE_FEATURE(kIPHPasswordsAccountStorageFeature);
+BASE_DECLARE_FEATURE(kIPHPasswordsManagementBubbleAfterSaveFeature);
+BASE_DECLARE_FEATURE(kIPHPasswordsManagementBubbleDuringSigninFeature);
+BASE_DECLARE_FEATURE(kIPHPasswordsWebAppProfileSwitchFeature);
 BASE_DECLARE_FEATURE(kIPHPerformanceNewBadgeFeature);
+BASE_DECLARE_FEATURE(kIPHPowerBookmarksSidePanelFeature);
+BASE_DECLARE_FEATURE(kIPHPriceTrackingChipFeature);
 BASE_DECLARE_FEATURE(kIPHPriceTrackingPageActionIconLabelFeature);
 BASE_DECLARE_FEATURE(kIPHReadingListDiscoveryFeature);
 BASE_DECLARE_FEATURE(kIPHReadingListEntryPointFeature);
-BASE_DECLARE_FEATURE(kIPHIntentChipFeature);
 BASE_DECLARE_FEATURE(kIPHReadingListInSidePanelFeature);
 BASE_DECLARE_FEATURE(kIPHReopenTabFeature);
 BASE_DECLARE_FEATURE(kIPHSideSearchAutoTriggeringFeature);
@@ -51,6 +57,7 @@ BASE_DECLARE_FEATURE(kIPHDesktopPwaInstallFeature);
 BASE_DECLARE_FEATURE(kIPHProfileSwitchFeature);
 BASE_DECLARE_FEATURE(kIPHWebUiHelpBubbleTestFeature);
 BASE_DECLARE_FEATURE(kIPHPriceTrackingInSidePanelFeature);
+BASE_DECLARE_FEATURE(kIPHBackNavigationMenuFeature);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 
@@ -62,13 +69,16 @@ BASE_DECLARE_FEATURE(kIPHAdaptiveButtonInTopToolbarCustomizationNewTabFeature);
 BASE_DECLARE_FEATURE(kIPHAdaptiveButtonInTopToolbarCustomizationShareFeature);
 BASE_DECLARE_FEATURE(
     kIPHAdaptiveButtonInTopToolbarCustomizationVoiceSearchFeature);
+BASE_DECLARE_FEATURE(
+    kIPHAdaptiveButtonInTopToolbarCustomizationTranslateFeature);
+BASE_DECLARE_FEATURE(
+    kIPHAdaptiveButtonInTopToolbarCustomizationAddToBookmarksFeature);
 BASE_DECLARE_FEATURE(kIPHAddToHomescreenMessageFeature);
 BASE_DECLARE_FEATURE(kIPHAutoDarkOptOutFeature);
 BASE_DECLARE_FEATURE(kIPHAutoDarkUserEducationMessageFeature);
 BASE_DECLARE_FEATURE(kIPHAutoDarkUserEducationMessageOptInFeature);
 BASE_DECLARE_FEATURE(kIPHContextualPageActionsQuietVariantFeature);
 BASE_DECLARE_FEATURE(kIPHContextualPageActionsActionChipFeature);
-BASE_DECLARE_FEATURE(kIPHCrowFeature);
 BASE_DECLARE_FEATURE(kIPHDataSaverDetailFeature);
 BASE_DECLARE_FEATURE(kIPHDataSaverMilestonePromoFeature);
 BASE_DECLARE_FEATURE(kIPHDataSaverPreviewFeature);
@@ -177,11 +187,17 @@ BASE_DECLARE_FEATURE(kIPHPriceNotificationsWhileBrowsingFeature);
 BASE_DECLARE_FEATURE(kIPHiOSDefaultBrowserBadgeEligibilityFeature);
 BASE_DECLARE_FEATURE(kIPHiOSDefaultBrowserOverflowMenuBadgeFeature);
 BASE_DECLARE_FEATURE(kIPHiOSDefaultBrowserSettingsBadgeFeature);
-BASE_DECLARE_FEATURE(kIPHiOSAppStorePromoFeature);
+BASE_DECLARE_FEATURE(kIPHiOSPromoAppStoreFeature);
+BASE_DECLARE_FEATURE(kIPHTabPinnedFeature);
+BASE_DECLARE_FEATURE(kIPHiOSPromoWhatsNewFeature);
+BASE_DECLARE_FEATURE(kIPHiOSPromoPostRestoreFeature);
+BASE_DECLARE_FEATURE(kIPHiOSPromoCredentialProviderExtensionFeature);
+BASE_DECLARE_FEATURE(kIPHiOSPromoDefaultBrowserFeature);
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+BASE_DECLARE_FEATURE(kIPHAutofillExternalAccountProfileSuggestionFeature);
 BASE_DECLARE_FEATURE(kIPHAutofillVirtualCardSuggestionFeature);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) ||
@@ -189,6 +205,7 @@ BASE_DECLARE_FEATURE(kIPHAutofillVirtualCardSuggestionFeature);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 BASE_DECLARE_FEATURE(kIPHGoogleOneOfferNotificationFeature);
+BASE_DECLARE_FEATURE(kIPHLauncherSearchHelpUiFeature);
 #endif
 
 }  // namespace feature_engagement

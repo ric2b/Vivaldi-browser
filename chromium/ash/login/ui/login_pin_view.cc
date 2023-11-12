@@ -15,16 +15,17 @@
 #include "ash/style/color_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -243,8 +244,8 @@ class LoginPinView::DigitPinButton : public BasePinButton {
   ~DigitPinButton() override = default;
 
  private:
-  views::Label* label_ = nullptr;
-  views::Label* sub_label_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> label_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> sub_label_ = nullptr;
 };
 
 // A PIN button that displays backspace icon.
@@ -285,11 +286,6 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
           views::InkDropState::DEACTIVATED, nullptr);
       CancelRepeat();
     }
-    UpdateImage();
-  }
-
-  void OnThemeChanged() override {
-    BasePinButton::OnThemeChanged();
     UpdateImage();
   }
 
@@ -386,7 +382,7 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
   std::unique_ptr<base::RepeatingTimer> repeat_timer_ =
       std::make_unique<base::RepeatingTimer>();
 
-  views::ImageView* image_ = nullptr;
+  raw_ptr<views::ImageView, ExperimentalAsh> image_ = nullptr;
   base::CallbackListSubscription enabled_changed_subscription_ =
       AddEnabledChangedCallback(base::BindRepeating(
           &LoginPinView::BackspacePinButton::OnEnabledChanged,
@@ -417,7 +413,7 @@ class LoginPinView::SubmitPinButton : public BasePinButton {
         ui::ImageModel::FromVectorIcon(kLockScreenArrowIcon, color_id));
   }
 
-  views::ImageView* image_ = nullptr;
+  raw_ptr<views::ImageView, ExperimentalAsh> image_ = nullptr;
   base::CallbackListSubscription enabled_changed_subscription_ =
       AddEnabledChangedCallback(
           base::BindRepeating(&LoginPinView::SubmitPinButton::UpdateImage,

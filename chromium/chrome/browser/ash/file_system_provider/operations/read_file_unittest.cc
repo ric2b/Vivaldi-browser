@@ -121,7 +121,8 @@ TEST_F(FileSystemProviderOperationsReadFileTest, Execute) {
   ASSERT_TRUE(options_as_value->is_dict());
 
   ReadFileRequestedOptions options;
-  ASSERT_TRUE(ReadFileRequestedOptions::Populate(*options_as_value, &options));
+  ASSERT_TRUE(
+      ReadFileRequestedOptions::Populate(options_as_value->GetDict(), options));
   EXPECT_EQ(kFileSystemId, options.file_system_id);
   EXPECT_EQ(kRequestId, options.request_id);
   EXPECT_EQ(kFileHandle, options.open_request_id);
@@ -166,11 +167,10 @@ TEST_F(FileSystemProviderOperationsReadFileTest, OnSuccess) {
   list.Append(has_more);
   list.Append(execution_time);
 
-  std::unique_ptr<Params> params(Params::Create(std::move(list)));
-  ASSERT_TRUE(params.get());
-  std::unique_ptr<RequestValue> request_value(
-      RequestValue::CreateForReadFileSuccess(std::move(params)));
-  ASSERT_TRUE(request_value.get());
+  absl::optional<Params> params = Params::Create(std::move(list));
+  ASSERT_TRUE(params.has_value());
+  RequestValue request_value =
+      RequestValue::CreateForReadFileSuccess(std::move(*params));
 
   read_file.OnSuccess(kRequestId, std::move(request_value), has_more);
 
@@ -193,7 +193,7 @@ TEST_F(FileSystemProviderOperationsReadFileTest, OnError) {
 
   EXPECT_TRUE(read_file.Execute(kRequestId));
 
-  read_file.OnError(kRequestId, std::make_unique<RequestValue>(),
+  read_file.OnError(kRequestId, RequestValue(),
                     base::File::FILE_ERROR_TOO_MANY_OPENED);
 
   ASSERT_EQ(1u, callback_logger.events().size());

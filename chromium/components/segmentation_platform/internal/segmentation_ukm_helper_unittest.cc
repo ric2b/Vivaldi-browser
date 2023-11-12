@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "base/bit_cast.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
@@ -48,6 +49,7 @@ void CompareEncodeDecodeDifference(float tensor) {
 absl::optional<proto::PredictionResult> GetPredictionResult() {
   proto::PredictionResult result;
   result.add_result(0.5);
+  result.add_result(0.4);
   return result;
 }
 
@@ -98,6 +100,14 @@ class SegmentationUkmHelperTest : public testing::Test {
     EXPECT_EQ(0u, test_recorder_.GetEntriesByName(entry_name).size());
   }
 
+  void SetSamplingRate(int sampling_rate) {
+    feature_list_.InitAndEnableFeatureWithParameters(
+        features::kSegmentationPlatformModelExecutionSampling,
+        {{kModelExecutionSamplingRateKey,
+          base::NumberToString(sampling_rate)}});
+    InitializeUkmHelper();
+  }
+
  protected:
   base::test::TaskEnvironment task_environment_;
   ukm::TestAutoSetUkmRecorder test_recorder_;
@@ -106,10 +116,12 @@ class SegmentationUkmHelperTest : public testing::Test {
 
 // Tests that basic execution results recording works properly.
 TEST_F(SegmentationUkmHelperTest, TestExecutionResultReporting) {
+  SetSamplingRate(1);
   // Allow results for OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB to be recorded.
   ModelProvider::Request input_tensors = {0.1, 0.7, 0.8, 0.5};
   SegmentationUkmHelper::GetInstance()->RecordModelExecutionResult(
-      proto::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, 101, input_tensors, 0.6);
+      proto::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, 101, input_tensors,
+      {0.6, 0.3});
   ExpectUkmMetrics(Segmentation_ModelExecution::kEntryName,
                    {Segmentation_ModelExecution::kOptimizationTargetName,
                     Segmentation_ModelExecution::kModelVersionName,
@@ -117,7 +129,8 @@ TEST_F(SegmentationUkmHelperTest, TestExecutionResultReporting) {
                     Segmentation_ModelExecution::kInput1Name,
                     Segmentation_ModelExecution::kInput2Name,
                     Segmentation_ModelExecution::kInput3Name,
-                    Segmentation_ModelExecution::kPredictionResultName},
+                    Segmentation_ModelExecution::kPredictionResult1Name,
+                    Segmentation_ModelExecution::kPredictionResult2Name},
                    {
                        proto::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB,
                        101,
@@ -126,7 +139,20 @@ TEST_F(SegmentationUkmHelperTest, TestExecutionResultReporting) {
                        SegmentationUkmHelper::FloatToInt64(0.8),
                        SegmentationUkmHelper::FloatToInt64(0.5),
                        SegmentationUkmHelper::FloatToInt64(0.6),
+                       SegmentationUkmHelper::FloatToInt64(0.3),
                    });
+}
+
+// Tests that execution results recording are disabled if sampling rate is 0.
+TEST_F(SegmentationUkmHelperTest,
+       TestExecutionResultReportingwithZeroSampling) {
+  SetSamplingRate(0);
+  // Allow results for OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB to be recorded.
+  ModelProvider::Request input_tensors = {0.1, 0.7, 0.8, 0.5};
+  EXPECT_EQ(SegmentationUkmHelper::GetInstance()->RecordModelExecutionResult(
+                proto::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, 101,
+                input_tensors, {0.6, 0.3}),
+            ukm::NoURLSourceId());
 }
 
 // Tests that the training data collection recording works properly.
@@ -147,7 +173,8 @@ TEST_F(SegmentationUkmHelperTest, TestTrainingDataCollectionReporting) {
                     Segmentation_ModelExecution::kInput0Name,
                     Segmentation_ModelExecution::kActualResult3Name,
                     Segmentation_ModelExecution::kActualResult4Name,
-                    Segmentation_ModelExecution::kPredictionResultName,
+                    Segmentation_ModelExecution::kPredictionResult1Name,
+                    Segmentation_ModelExecution::kPredictionResult2Name,
                     Segmentation_ModelExecution::kSelectionResultName,
                     Segmentation_ModelExecution::kOutputDelaySecName},
                    {
@@ -157,6 +184,7 @@ TEST_F(SegmentationUkmHelperTest, TestTrainingDataCollectionReporting) {
                        SegmentationUkmHelper::FloatToInt64(1.0),
                        SegmentationUkmHelper::FloatToInt64(0.0),
                        SegmentationUkmHelper::FloatToInt64(0.5),
+                       SegmentationUkmHelper::FloatToInt64(0.4),
                        proto::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB,
                        10,
                    });
@@ -217,6 +245,7 @@ TEST_F(SegmentationUkmHelperTest, FloatEncodeDeocode) {
 
 // Tests that there are too many input tensors to record.
 TEST_F(SegmentationUkmHelperTest, TooManyInputTensors) {
+  SetSamplingRate(1);
   base::HistogramTester tester;
   std::string histogram_name(
       "SegmentationPlatform.StructuredMetrics.TooManyTensors.Count");
@@ -224,7 +253,7 @@ TEST_F(SegmentationUkmHelperTest, TooManyInputTensors) {
   ukm::SourceId source_id =
       SegmentationUkmHelper::GetInstance()->RecordModelExecutionResult(
           proto::OPTIMIZATION_TARGET_SEGMENTATION_NEW_TAB, 101, input_tensors,
-          0.6);
+          {0.6});
   ASSERT_EQ(source_id, ukm::kInvalidSourceId);
   tester.ExpectTotalCount(histogram_name, 1);
   ASSERT_EQ(tester.GetTotalSum(histogram_name), 100);

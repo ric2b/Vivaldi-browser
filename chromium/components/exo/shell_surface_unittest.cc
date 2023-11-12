@@ -107,6 +107,7 @@ struct ConfigureData {
   chromeos::WindowStateType state_type = chromeos::WindowStateType::kDefault;
   bool is_resizing = false;
   bool is_active = false;
+  float raster_scale = 1.0f;
 };
 
 uint32_t Configure(ConfigureData* config_data,
@@ -120,6 +121,7 @@ uint32_t Configure(ConfigureData* config_data,
   config_data->state_type = state_type;
   config_data->is_resizing = resizing;
   config_data->is_active = activated;
+  config_data->raster_scale = raster_scale;
   return 0;
 }
 
@@ -955,36 +957,6 @@ TEST_F(ShellSurfaceTest, SurfaceDestroyedCallback) {
   EXPECT_TRUE(shell_surface.get());
   surface.reset();
   EXPECT_FALSE(shell_surface.get());
-}
-
-void DestroyedCallbackCounter(int* count) {
-  *count += 1;
-}
-
-TEST_F(ShellSurfaceTest, ForceClose) {
-  gfx::Size buffer_size(64, 64);
-  std::unique_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
-  std::unique_ptr<Surface> surface(new Surface);
-  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
-  surface->Attach(buffer.get());
-  surface->Commit();
-  ASSERT_TRUE(shell_surface->GetWidget());
-
-  int surface_destroyed_ctr = 0;
-  shell_surface->set_surface_destroyed_callback(base::BindOnce(
-      &DestroyedCallbackCounter, base::Unretained(&surface_destroyed_ctr)));
-
-  // Since we did not set the close callback, closing this widget will have no
-  // effect.
-  shell_surface->GetWidget()->Close();
-  EXPECT_TRUE(shell_surface->GetWidget());
-  EXPECT_EQ(surface_destroyed_ctr, 0);
-
-  // CloseNow() will always destroy the widget.
-  shell_surface->GetWidget()->CloseNow();
-  EXPECT_FALSE(shell_surface->GetWidget());
-  EXPECT_EQ(surface_destroyed_ctr, 1);
 }
 
 TEST_F(ShellSurfaceTest, ConfigureCallback) {
@@ -3085,6 +3057,45 @@ TEST_F(ShellSurfaceTest, SetImmersiveModeTriggersConfigure) {
   shell_surface->SetUseImmersiveForFullscreen(true);
 
   EXPECT_EQ(times_configured, 1);
+}
+
+TEST_F(ShellSurfaceTest,
+       SetRasterScaleWindowPropertyConfiguresRasterScaleAndWaitsForAck) {
+  ConfigureData config_data;
+  constexpr gfx::Size buffer_size(256, 256);
+
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder(buffer_size).BuildShellSurface();
+
+  shell_surface->set_configure_callback(
+      base::BindRepeating(&Configure, base::Unretained(&config_data)));
+
+  auto* window = shell_surface->GetWidget()->GetNativeWindow();
+  window->SetProperty(aura::client::kRasterScale, 0.1f);
+  shell_surface->AcknowledgeConfigure(0);
+  EXPECT_EQ(0.1f, config_data.raster_scale);
+
+  window->SetProperty(aura::client::kRasterScale, 1.0f);
+  shell_surface->AcknowledgeConfigure(0);
+  EXPECT_EQ(1.0f, config_data.raster_scale);
+}
+
+TEST_F(ShellSurfaceTest, MoveParentWithoutWidget) {
+  UpdateDisplay("800x600, 800x600");
+  constexpr gfx::Size kSize{256, 256};
+  std::unique_ptr<ShellSurface> parent_surface =
+      test::ShellSurfaceBuilder(kSize).BuildShellSurface();
+
+  std::unique_ptr<ShellSurface> child_surface =
+      test::ShellSurfaceBuilder(kSize).SetNoCommit().BuildShellSurface();
+  child_surface->SetParent(parent_surface.get());
+  auto* parent_widget = parent_surface->GetWidget();
+  auto* root_before = parent_widget->GetNativeWindow()->GetRootWindow();
+  parent_widget->SetBounds({{1000, 0}, kSize});
+  // Crash (crbug.com/1395433) happens when a transient parent moved
+  // to another root window before widget is created. Make sure that
+  // happened.
+  EXPECT_NE(root_before, parent_widget->GetNativeWindow()->GetRootWindow());
 }
 
 }  // namespace exo

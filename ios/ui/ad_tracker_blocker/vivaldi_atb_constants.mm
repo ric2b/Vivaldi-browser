@@ -6,6 +6,10 @@
 #error "This file requires ARC support."
 #endif
 
+#pragma mark - NOTIFICATION
+NSString* vATBHostKey = @"vivaldi_atb_host_key";
+NSString* vATBSiteSettingsDidChange = @"vATBSiteSettingsDidChange";
+
 #pragma mark - SIZE AND PADDINGS
 // Corner radius for tracker blocker count background
 const CGFloat vBlockedCountBgCornerRadius = 6.f;

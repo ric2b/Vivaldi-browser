@@ -8,7 +8,6 @@
 #include "android_webview/browser/aw_print_manager.h"
 #include "android_webview/browser/renderer_host/aw_render_view_host_ext.h"
 #include "android_webview/browser/safe_browsing/aw_url_checker_delegate_impl.h"
-#include "android_webview/common/aw_features.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/cdm/browser/media_drm_storage_impl.h"
 #include "components/content_capture/browser/onscreen_content_provider.h"
@@ -16,6 +15,7 @@
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/mojo_safe_browsing_impl.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "content/public/browser/browser_associated_interface.h"
@@ -87,11 +87,17 @@ void MaybeCreateSafeBrowsing(
   if (!render_process_host)
     return;
 
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&safe_browsing::MojoSafeBrowsingImpl::MaybeCreate, rph_id,
-                     std::move(resource_context),
-                     std::move(get_checker_delegate), std::move(receiver)));
+  if (base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)) {
+    safe_browsing::MojoSafeBrowsingImpl::MaybeCreate(
+        rph_id, std::move(resource_context), std::move(get_checker_delegate),
+        std::move(receiver));
+  } else {
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&safe_browsing::MojoSafeBrowsingImpl::MaybeCreate,
+                       rph_id, std::move(resource_context),
+                       std::move(get_checker_delegate), std::move(receiver)));
+  }
 }
 
 void BindNetworkHintsHandler(
@@ -203,11 +209,8 @@ void AwContentBrowserClient::ExposeInterfacesToRenderer(
 void AwContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     content::RenderFrameHost* render_frame_host,
     mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
-  if (base::FeatureList::IsEnabled(
-          features::kWebViewEnableDnsPrefetchAndPreconnect)) {
-    map->Add<network_hints::mojom::NetworkHintsHandler>(
-        base::BindRepeating(&BindNetworkHintsHandler));
-  }
+  map->Add<network_hints::mojom::NetworkHintsHandler>(
+      base::BindRepeating(&BindNetworkHintsHandler));
 }
 
 }  // namespace android_webview

@@ -98,7 +98,7 @@
 #include "services/device/public/mojom/sensor_provider.mojom.h"
 #include "services/device/public/mojom/vibration_manager.mojom.h"
 #include "services/metrics/public/mojom/ukm_interface.mojom.h"
-#include "services/metrics/ukm_recorder_interface.h"
+#include "services/metrics/ukm_recorder_factory_impl.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/mojom/p2p.mojom.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom.h"
@@ -190,10 +190,6 @@
 #include "third_party/blink/public/mojom/serial/serial.mojom.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
-#include "third_party/blink/public/mojom/smart_card/smart_card.mojom.h"
-#endif
-
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
 #include "media/mojo/mojom/remoting.mojom-forward.h"
 #endif
@@ -212,11 +208,16 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "content/browser/lock_screen/lock_screen_service_impl.h"
 #include "third_party/blink/public/mojom/lock_screen/lock_screen.mojom.h"
+#include "third_party/blink/public/mojom/smart_card/smart_card.mojom.h"
 #endif
 
 #if BUILDFLAG(IS_FUCHSIA)
 #include "content/browser/renderer_host/media/fuchsia_media_cdm_provider_impl.h"
 #include "media/mojo/mojom/fuchsia_media.mojom.h"
+#endif
+
+#if !BUILDFLAG(IS_CHROMEOS)
+#include "services/webnn/public/mojom/webnn_service.mojom.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -269,6 +270,26 @@ void BindTextDetection(
   GetShapeDetectionService()->BindTextDetection(std::move(receiver));
 }
 
+#if !BUILDFLAG(IS_CHROMEOS)
+webnn::mojom::WebNNService* GetWebNNService() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  static base::NoDestructor<mojo::Remote<webnn::mojom::WebNNService>> remote;
+  if (!*remote) {
+    auto* gpu = GpuProcessHost::Get();
+    if (gpu) {
+      gpu->RunService(remote->BindNewPipeAndPassReceiver());
+    }
+  }
+
+  return remote->get();
+}
+
+void BindWebNNContextProvider(
+    mojo::PendingReceiver<webnn::mojom::WebNNContextProvider> receiver) {
+  GetWebNNService()->BindWebNNContextProvider(std::move(receiver));
+}
+#endif
+
 #if BUILDFLAG(IS_MAC)
 void BindTextInputHost(
     mojo::PendingReceiver<blink::mojom::TextInputHost> receiver) {
@@ -278,10 +299,10 @@ void BindTextInputHost(
 }
 #endif
 
-void BindUkmRecorderInterface(
-    mojo::PendingReceiver<ukm::mojom::UkmRecorderInterface> receiver) {
-  metrics::UkmRecorderInterface::Create(ukm::UkmRecorder::Get(),
-                                        std::move(receiver));
+void BindUkmRecorderFactory(
+    mojo::PendingReceiver<ukm::mojom::UkmRecorderFactory> receiver) {
+  metrics::UkmRecorderFactoryImpl::Create(ukm::UkmRecorder::Get(),
+                                          std::move(receiver));
 }
 
 void BindColorChooserFactoryForFrame(
@@ -413,6 +434,22 @@ BindWorkerReceiver(
           (process_host->*method)(std::move(receiver));
       },
       base::Unretained(host), method);
+}
+
+template <typename WorkerHost>
+base::RepeatingCallback<
+    void(const url::Origin&,
+         mojo::PendingReceiver<device::mojom::PressureManager>)>
+BindPressureManagerWorkerForOrigin(WorkerHost* host) {
+  return base::BindRepeating(
+      [](WorkerHost* host, const url::Origin& origin,
+         mojo::PendingReceiver<device::mojom::PressureManager> receiver) {
+        if (!network::IsOriginPotentiallyTrustworthy(origin)) {
+          return;
+        }
+        GetDeviceService().BindPressureManager(std::move(receiver));
+      },
+      base::Unretained(host));
 }
 
 template <typename WorkerHost, typename Interface>
@@ -869,6 +906,14 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
         base::BindRepeating(&CreateMLService));
   }
 
+#if !BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(
+          blink::features::kEnableMachineLearningNeuralNetworkService)) {
+    map->Add<webnn::mojom::WebNNContextProvider>(
+        base::BindRepeating(&BindWebNNContextProvider));
+  }
+#endif
+
   if (base::FeatureList::IsEnabled(blink::features::kPendingBeaconAPI)) {
     map->Add<blink::mojom::PendingBeaconHost>(base::BindRepeating(
         &RenderFrameHostImpl::GetPendingBeaconHost, base::Unretained(host)));
@@ -1033,7 +1078,7 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
       &RenderFrameHostImpl::BindSerialService, base::Unretained(host)));
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_CHROMEOS)
   map->Add<blink::mojom::SmartCardService>(base::BindRepeating(
       &RenderFrameHostImpl::GetSmartCardService, base::Unretained(host)));
 #endif
@@ -1203,8 +1248,8 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
       base::BindRepeating(&BindFaceDetectionProvider));
   map->Add<shape_detection::mojom::TextDetection>(
       base::BindRepeating(&BindTextDetection));
-  map->Add<ukm::mojom::UkmRecorderInterface>(
-      base::BindRepeating(&BindUkmRecorderInterface));
+  map->Add<ukm::mojom::UkmRecorderFactory>(
+      base::BindRepeating(&BindUkmRecorderFactory));
 
   // worker host binders
   // base::Unretained(host) is safe because the map is owned by
@@ -1291,6 +1336,13 @@ void PopulateBinderMapWithContext(
       &RenderProcessHostImpl::CreatePaymentManagerForOrigin, host));
   map->Add<blink::mojom::PermissionService>(BindWorkerReceiverForOrigin(
       &RenderProcessHostImpl::CreatePermissionService, host));
+
+  // BindPressureManagerWorkerForOrigin() does not use RenderProcessHost,
+  // but also needs an origin for its checks.
+  if (base::FeatureList::IsEnabled(blink::features::kComputePressure)) {
+    map->Add<device::mojom::PressureManager>(
+        BindPressureManagerWorkerForOrigin(host));
+  }
 }
 
 void PopulateBinderMap(DedicatedWorkerHost* host, mojo::BinderMap* map) {
@@ -1320,8 +1372,8 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
       base::BindRepeating(&BindFaceDetectionProvider));
   map->Add<shape_detection::mojom::TextDetection>(
       base::BindRepeating(&BindTextDetection));
-  map->Add<ukm::mojom::UkmRecorderInterface>(
-      base::BindRepeating(&BindUkmRecorderInterface));
+  map->Add<ukm::mojom::UkmRecorderFactory>(
+      base::BindRepeating(&BindUkmRecorderFactory));
 
   // worker host binders
   // base::Unretained(host) is safe because the map is owned by
@@ -1384,6 +1436,13 @@ void PopulateBinderMapWithContext(
       &RenderProcessHostImpl::CreatePaymentManagerForOrigin, host));
   map->Add<blink::mojom::PermissionService>(BindWorkerReceiverForOrigin(
       &RenderProcessHostImpl::CreatePermissionService, host));
+
+  // BindPressureManagerWorkerForOrigin() does not use RenderProcessHost,
+  // but also needs an origin for its checks.
+  if (base::FeatureList::IsEnabled(blink::features::kComputePressure)) {
+    map->Add<device::mojom::PressureManager>(
+        BindPressureManagerWorkerForOrigin(host));
+  }
 }
 
 void PopulateBinderMap(SharedWorkerHost* host, mojo::BinderMap* map) {
@@ -1419,8 +1478,8 @@ void PopulateServiceWorkerBinders(ServiceWorkerHost* host,
       base::BindRepeating(&BindFaceDetectionProvider));
   map->Add<shape_detection::mojom::TextDetection>(
       base::BindRepeating(&BindTextDetection));
-  map->Add<ukm::mojom::UkmRecorderInterface>(
-      base::BindRepeating(&BindUkmRecorderInterface));
+  map->Add<ukm::mojom::UkmRecorderFactory>(
+      base::BindRepeating(&BindUkmRecorderFactory));
 
   // worker host binders
   map->Add<blink::mojom::WebTransportConnector>(base::BindRepeating(

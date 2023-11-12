@@ -3,7 +3,7 @@
 #import "ios/notes/note_home_shared_state.h"
 
 #import "base/check.h"
-#import "ios/chrome/browser/ui/table_view/table_view_model.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 #import "ios/notes/cells/note_table_cell_title_editing.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)

@@ -86,6 +86,11 @@ class Settings {
     greedy_target_generation_ = gtg;
   }
 
+  // Returns true if any Label in the list provided is not in the default
+  // toolchain, and therefore any error message that involves this list of
+  // Labels should print the toolchain for each Label.
+  bool ShouldShowToolchain(std::initializer_list<const Label*> labels) const;
+
  private:
   const BuildSettings* build_settings_;
 

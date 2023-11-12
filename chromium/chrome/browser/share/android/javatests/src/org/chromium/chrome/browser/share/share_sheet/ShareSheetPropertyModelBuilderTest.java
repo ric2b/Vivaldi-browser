@@ -13,6 +13,8 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.ContextWrapper;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
@@ -30,14 +32,17 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.PackageManagerWrapper;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ChromeShareExtras;
 import org.chromium.chrome.browser.share.ChromeShareExtras.DetailedContentType;
+import org.chromium.chrome.browser.share.ShareContentTypeHelper;
+import org.chromium.chrome.browser.share.ShareContentTypeHelper.ContentType;
 import org.chromium.chrome.browser.share.link_to_text.LinkToTextCoordinator.LinkGeneration;
-import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder.ContentType;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.share.ShareParams;
@@ -74,29 +79,43 @@ public final class ShareSheetPropertyModelBuilderTest {
     @Mock
     private ResolveInfo mImageResolveInfo2;
 
-    private static final String sTextModelLabel1 = "textModelLabel1";
-    private static final String sTextModelLabel2 = "textModelLabel2";
-    private static final String sImageModelLabel1 = "imageModelLabel1";
-    private static final String sImageModelLabel2 = "imageModelLabel2";
+    private static final String TEXT_MODEL_LABEL_1 = "textModelLabel1";
+    private static final String TEXT_MODEL_LABEL_2 = "textModelLabel2";
+    private static final String IMAGE_MODEL_LABEL_1 = "imageModelLabel1";
+    private static final String IMAGE_MODEL_LABEL_2 = "imageModelLabel2";
 
     private static final String IMAGE_TYPE = "image/jpeg";
     private static final String URL = "http://www.google.com/";
 
     private Activity mActivity;
+    private TestContext mTestContext;
     private ShareSheetPropertyModelBuilder mPropertyModelBuilder;
+
+    class TestContext extends ContextWrapper {
+        public TestContext(Context base) {
+            super(base);
+        }
+
+        @Override
+        public PackageManager getPackageManager() {
+            return new PackageManagerWrapper(mPackageManager);
+        }
+    }
 
     @Before
     public void setUp() throws PackageManager.NameNotFoundException {
         MockitoAnnotations.initMocks(this);
+        mTestContext = new TestContext(ContextUtils.getApplicationContext());
+        ContextUtils.initApplicationContextForTests(mTestContext);
         NativeLibraryTestUtils.loadNativeLibraryNoBrowserProcess();
         mActivityTestRule.launchActivity(null);
         mActivity = mActivityTestRule.getActivity();
         mPropertyModelBuilder = new ShareSheetPropertyModelBuilder(null, mPackageManager, mProfile);
 
-        setUpResolveInfo(mTextResolveInfo1, "textPackage1", sTextModelLabel1);
-        setUpResolveInfo(mTextResolveInfo2, "textPackage2", sTextModelLabel2);
-        setUpResolveInfo(mImageResolveInfo1, "imagePackage1", sImageModelLabel1);
-        setUpResolveInfo(mImageResolveInfo2, "imagePackage1", sImageModelLabel2);
+        setUpResolveInfo(mTextResolveInfo1, "textPackage1", TEXT_MODEL_LABEL_1);
+        setUpResolveInfo(mTextResolveInfo2, "textPackage2", TEXT_MODEL_LABEL_2);
+        setUpResolveInfo(mImageResolveInfo1, "imagePackage1", IMAGE_MODEL_LABEL_1);
+        setUpResolveInfo(mImageResolveInfo2, "imagePackage1", IMAGE_MODEL_LABEL_2);
         mImageResolveInfo2.activityInfo.name = "com.google.android.gm.ComposeActivityGmailExternal";
 
         doReturn(ImmutableList.of(mTextResolveInfo1, mTextResolveInfo2))
@@ -119,11 +138,11 @@ public final class ShareSheetPropertyModelBuilderTest {
 
         assertEquals("Should contain LINK_PAGE_NOT_VISIBLE.",
                 ImmutableSet.of(ContentType.LINK_PAGE_NOT_VISIBLE),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
         shareExtras = new ChromeShareExtras.Builder().setIsUrlOfVisiblePage(true).build();
         assertEquals("Should contain LINK_PAGE_VISIBLE.",
                 ImmutableSet.of(ContentType.LINK_PAGE_VISIBLE),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -133,10 +152,10 @@ public final class ShareSheetPropertyModelBuilderTest {
         ChromeShareExtras shareExtras = new ChromeShareExtras.Builder().build();
 
         assertEquals("Should not contain LINK_PAGE_NOT_VISIBLE", ImmutableSet.of(),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
         shareExtras = new ChromeShareExtras.Builder().setIsUrlOfVisiblePage(true).build();
         assertEquals("Should not contain LINK_PAGE_VISIBLE.", ImmutableSet.of(),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -146,7 +165,7 @@ public final class ShareSheetPropertyModelBuilderTest {
         ChromeShareExtras shareExtras = new ChromeShareExtras.Builder().build();
 
         assertEquals("Should contain TEXT.", ImmutableSet.of(ContentType.TEXT),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -156,7 +175,7 @@ public final class ShareSheetPropertyModelBuilderTest {
         ChromeShareExtras shareExtras = new ChromeShareExtras.Builder().build();
 
         assertEquals("Should not contain TEXT.", ImmutableSet.of(),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -170,20 +189,20 @@ public final class ShareSheetPropertyModelBuilderTest {
 
         assertEquals("Should contain HIGHLIGHTED_TEXT.",
                 ImmutableSet.of(ContentType.HIGHLIGHTED_TEXT),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
     @MediumTest
     public void getContentTypes_hasImageContentType() {
         ShareParams shareParams = new ShareParams.Builder(null, "", "")
-                                          .setFileUris(new ArrayList<>(ImmutableSet.of(Uri.EMPTY)))
+                                          .setSingleImageUri(Uri.EMPTY)
                                           .setFileContentType(IMAGE_TYPE)
                                           .build();
         ChromeShareExtras shareExtras = new ChromeShareExtras.Builder().build();
 
         assertEquals("Should contain IMAGE.", ImmutableSet.of(ContentType.IMAGE),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -194,7 +213,7 @@ public final class ShareSheetPropertyModelBuilderTest {
         ChromeShareExtras shareExtras = new ChromeShareExtras.Builder().build();
 
         assertEquals("Should not contain IMAGE.", ImmutableSet.of(),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -209,7 +228,7 @@ public final class ShareSheetPropertyModelBuilderTest {
 
         assertEquals("Should contain OTHER_FILE_TYPE.",
                 ImmutableSet.of(ContentType.OTHER_FILE_TYPE),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -224,7 +243,7 @@ public final class ShareSheetPropertyModelBuilderTest {
 
         assertEquals("Should contain IMAGE_AND_LINK and LINK_PAGE_NOT_VISIBLE.",
                 ImmutableSet.of(ContentType.IMAGE_AND_LINK, ContentType.LINK_PAGE_NOT_VISIBLE),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -239,7 +258,7 @@ public final class ShareSheetPropertyModelBuilderTest {
                 new ChromeShareExtras.Builder().setSkipPageSharingActions(true).build();
 
         assertEquals("Should contain IMAGE_AND_LINK.", ImmutableSet.of(ContentType.IMAGE_AND_LINK),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -250,7 +269,7 @@ public final class ShareSheetPropertyModelBuilderTest {
         ChromeShareExtras shareExtras = new ChromeShareExtras.Builder().build();
 
         assertEquals("Should not contain OTHER_FILE_TYPE.", ImmutableSet.of(),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -267,7 +286,7 @@ public final class ShareSheetPropertyModelBuilderTest {
         assertEquals("Should contain correct content types.",
                 ImmutableSet.of(ContentType.LINK_PAGE_NOT_VISIBLE, ContentType.OTHER_FILE_TYPE,
                         ContentType.TEXT, ContentType.LINK_AND_TEXT),
-                ShareSheetPropertyModelBuilder.getContentTypes(shareParams, shareExtras));
+                ShareContentTypeHelper.getContentTypes(shareParams, shareExtras));
     }
 
     @Test
@@ -282,7 +301,7 @@ public final class ShareSheetPropertyModelBuilderTest {
 
         assertEquals("Incorrect number of property models.", 2, propertyModels.size());
         assertModelsAreInTheRightOrder(
-                propertyModels, ImmutableList.of(sTextModelLabel1, sTextModelLabel2));
+                propertyModels, ImmutableList.of(TEXT_MODEL_LABEL_1, TEXT_MODEL_LABEL_2));
     }
 
     @Test
@@ -298,7 +317,7 @@ public final class ShareSheetPropertyModelBuilderTest {
 
         assertEquals("Incorrect number of property models.", 2, propertyModels.size());
         assertModelsAreInTheRightOrder(
-                propertyModels, ImmutableList.of(sImageModelLabel2, sImageModelLabel1));
+                propertyModels, ImmutableList.of(IMAGE_MODEL_LABEL_2, IMAGE_MODEL_LABEL_1));
     }
 
     @Test
@@ -315,8 +334,8 @@ public final class ShareSheetPropertyModelBuilderTest {
 
         assertEquals("Incorrect number of property models.", 4, propertyModels.size());
         assertModelsAreInTheRightOrder(propertyModels,
-                ImmutableList.of(
-                        sImageModelLabel2, sTextModelLabel1, sTextModelLabel2, sImageModelLabel1));
+                ImmutableList.of(IMAGE_MODEL_LABEL_2, TEXT_MODEL_LABEL_1, TEXT_MODEL_LABEL_2,
+                        IMAGE_MODEL_LABEL_1));
     }
 
     private void setUpResolveInfo(ResolveInfo resolveInfo, String packageName, String label)

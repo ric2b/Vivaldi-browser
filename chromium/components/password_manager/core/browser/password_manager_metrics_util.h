@@ -630,6 +630,40 @@ enum class PasswordsImportDesktopInteractions {
   kMaxValue = kCanceledBeforeFileSelect,
 };
 
+// Represents different user interactions related to managing credentials from
+// the password management bubble opened from the key icon in omnibox.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. Always keep this enum in sync with the
+// corresponding PasswordManagementBubbleInteractions in enums.xml.
+enum class PasswordManagementBubbleInteractions {
+  kManagePasswordsButtonClicked = 0,
+  kGooglePasswordManagerLinkClicked = 1,
+  kCredentialRowWithoutNoteClicked = 2,
+  kUsernameCopyButtonClicked = 3,
+  kPasswordCopyButtonClicked = 4,
+  kPasswordShowButtonClicked = 5,
+  kUsernameEditButtonClicked = 6,
+  kUsernameAdded = 7,
+  kNoteEditButtonClicked = 8,
+  kNoteAdded = 9,
+  kNoteEdited = 10,
+  kNoteDeleted = 11,
+  kCredentialRowWithNoteClicked = 12,
+  kMaxValue = kCredentialRowWithNoteClicked,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PasswordManagerShortcutMetric {
+  // User clicked "Add shortcut" from the UI.
+  kAddShortcutClicked = 0,
+  // Shortcut was successfully installed .
+  kShortcutInstalled = 1,
+  // User switched profile in the standalone password manager app.
+  kProfileSwitched = 2,
+  kMaxValue = kProfileSwitched,
+};
+
 std::string GetPasswordAccountStorageUsageLevelHistogramSuffix(
     PasswordAccountStorageUsageLevel usage_level);
 
@@ -800,6 +834,10 @@ void LogGaiaPasswordHashChange(GaiaPasswordHashChange event,
 void LogIsSyncPasswordHashSaved(IsSyncPasswordHashSaved state,
                                 bool is_under_advanced_protection);
 
+// Log whether the saved password is protected by Phishguard. To preserve
+// privacy of individual data points, we will log with 10% noise.
+void LogIsPasswordProtected(bool is_password_protected);
+
 // Log the number of Gaia password hashes saved. Currently only called on
 // profile start up.
 void LogProtectedPasswordHashCounts(size_t gaia_hash_count,
@@ -810,6 +848,15 @@ void LogProtectedPasswordHashCounts(size_t gaia_hash_count,
 void LogUserInteractionsWhenAddingCredentialFromSettings(
     AddCredentialFromSettingsUserInteractions
         add_credential_from_settings_user_interaction);
+
+// Log the user interaction with the note field in password add / edit dialogs.
+void LogPasswordNoteActionInSettings(PasswordNoteAction action);
+
+// Log the user interaction events with a revamped password management bubble
+// opened from the key icon in omnibox.
+void LogUserInteractionsInPasswordManagementBubble(
+    PasswordManagementBubbleInteractions
+        password_management_bubble_interaction);
 
 // Wraps |callback| into another callback that measures the elapsed time between
 // construction and actual execution of the callback. Records the result to

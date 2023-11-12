@@ -9,7 +9,6 @@
 
 #include "base/time/time.h"
 #include "content/common/content_export.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
 
@@ -50,12 +49,12 @@ struct CONTENT_EXPORT AttributionConfig {
     uint64_t event_source_trigger_data_cardinality = 2;
 
     // Controls randomized response rates for the API: when a source is
-    // registered, these rates are used to determine whether any subsequent
-    // attributions for the source are handled truthfully, or whether the source
-    // is immediately attributed with zero or more fake reports and real
-    // attributions are dropped. Must be in the range [0, 1].
-    double navigation_source_randomized_response_rate = .0024;
-    double event_source_randomized_response_rate = .0000025;
+    // registered, this parameter is used to determine the probability that any
+    // subsequent attributions for the source are handled truthfully, or whether
+    // the source is immediately attributed with zero or more fake reports and
+    // real attributions are dropped. Must be non-negative and non-NaN, but may
+    // be infinite.
+    double randomized_response_epsilon = 14;
 
     // Controls how many reports can be in the storage per attribution
     // destination.
@@ -64,6 +63,18 @@ struct CONTENT_EXPORT AttributionConfig {
     // Controls how many times a single source can create an event-level report.
     int max_attributions_per_navigation_source = 3;
     int max_attributions_per_event_source = 1;
+
+    // Default constants for report window deadlines.
+    static constexpr base::TimeDelta kDefaultFirstReportWindowDeadline =
+        base::Days(2);
+    static constexpr base::TimeDelta kDefaultSecondReportWindowDeadline =
+        base::Days(7);
+
+    // Controls the report window deadlines for scheduling report times.
+    base::TimeDelta first_report_window_deadline =
+        kDefaultFirstReportWindowDeadline;
+    base::TimeDelta second_report_window_deadline =
+        kDefaultSecondReportWindowDeadline;
 
     // When adding new members, the corresponding `Validate()` definition and
     // `operator==()` definition in `attribution_interop_parser_unittest.cc`
@@ -85,9 +96,14 @@ struct CONTENT_EXPORT AttributionConfig {
     // should also be updated.
     int64_t aggregatable_budget_per_source = 65536;
 
+    // Default constants for the report delivery time to be used when declaring
+    // field trial params.
+    static constexpr base::TimeDelta kDefaultMinDelay = base::Minutes(10);
+    static constexpr base::TimeDelta kDefaultDelaySpan = base::Minutes(50);
+
     // Controls the report delivery time.
-    base::TimeDelta min_delay = base::Minutes(10);
-    base::TimeDelta delay_span = base::Minutes(50);
+    base::TimeDelta min_delay = kDefaultMinDelay;
+    base::TimeDelta delay_span = kDefaultDelaySpan;
 
     // When adding new members, the corresponding `Validate()` definition and
     // `operator==()` definition in `attribution_interop_parser_unittest.cc`
@@ -99,9 +115,6 @@ struct CONTENT_EXPORT AttributionConfig {
 
   // Controls how many sources can be in the storage per source origin.
   int max_sources_per_origin = 1024;
-
-  // Controls the valid range of source event id. No limit if `absl::nullopt`.
-  absl::optional<uint64_t> source_event_id_cardinality = absl::nullopt;
 
   // Controls the maximum number of distinct attribution destinations that can
   // be in storage at any time for sources with the same <source site, reporting

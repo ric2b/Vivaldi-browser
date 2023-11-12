@@ -6,8 +6,8 @@
 
 #include <unordered_map>
 
-#include "base/guid.h"
 #include "base/strings/string_util.h"
+#include "base/uuid.h"
 #include "chrome/test/chromedriver/chrome/browser_info.h"
 #include "chrome/test/chromedriver/chrome/devtools_client.h"
 #include "chrome/test/chromedriver/chrome/javascript_dialog_manager.h"
@@ -57,7 +57,9 @@ bool IsNetworkError(const std::string& error_text) {
 class ObjectGroup {
  public:
   explicit ObjectGroup(DevToolsClient* client)
-      : client_(client), object_group_name_(base::GenerateGUID()) {}
+      : client_(client),
+        object_group_name_(base::Uuid::GenerateRandomV4().AsLowercaseString()) {
+  }
 
   ~ObjectGroup() {
     base::Value::Dict params;
@@ -282,12 +284,13 @@ Status NavigationTracker::OnEvent(DevToolsClient* client,
     frame_to_state_map_[*frame_id] = kUnknown;
   } else if (method == "Page.frameDetached") {
     const std::string* frame_id = params.FindString("frameId");
-    if (!frame_id)
+    if (!frame_id) {
       return Status(kUnknownError, "missing or invalid 'frameId'");
-
-    frame_to_state_map_.erase(*frame_id);
-    if (*frame_id == current_frame_id_)
+    }
+    if (*frame_id == current_frame_id_) {
       SetCurrentFrameInvalid();
+    }
+    frame_to_state_map_.erase(*frame_id);
   } else if (method == "Page.frameStartedLoading") {
     // If frame that started loading is the current frame
     // set loading_state_ to loading. If it is another subframe
@@ -436,6 +439,6 @@ void NavigationTracker::InitCurrentFrame(LoadingState state) {
 }
 
 void NavigationTracker::ClearFrameStates() {
-  frame_to_state_map_.clear();
   SetCurrentFrameInvalid();
+  frame_to_state_map_.clear();
 }

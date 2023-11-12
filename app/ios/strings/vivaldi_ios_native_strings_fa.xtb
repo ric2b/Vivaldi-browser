@@ -1,4 +1,343 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fa">
+<translation id="1016495303386450659">یادداشت به‌روزرسانی شد</translation>
+<translation id="1066692930984703744">برای وب‌گردی سریع‌تر و ایمن‌تر، مسدودسازی تبلیغات و ردیاب‌ها را فعال کنید</translation>
+<translation id="1116694919640316211">درباره</translation>
+<translation id="1123707809902612118">مسدودسازی ردیاب‌ها و تبلیغات</translation>
+<translation id="1151972924205500581">رمز عبور مورد نیاز است</translation>
+<translation id="1166425484559430538">داده‌های همگام‌سازی شما رمزگذاری شده است. برای رمزگشایی داده‌ها، رمزعبور مربوط به رمزگذاری خود را وارد کنید.</translation>
+<translation id="1181037720776840403">حذف</translation>
+<translation id="1182668946911971500">نوار یادداشت‌ها</translation>
+<translation id="1198271701881992799">بیایید شروع کنیم</translation>
+<translation id="1201402288615127009">بعدی</translation>
+<translation id="1208495925646914304">عنوان</translation>
+<translation id="1254117744268754948">انتخاب پوشه</translation>
+<translation id="1265555169187992603">لطفاً یک نام کاربری بین۳ تا ۳۰ کاراکتر و متشکل از حروف (a-z یا A-Z) یا اعداد (0-9) انتخاب کنید.</translation>
+<translation id="1267954839079880017">ایتالیایی (<ph name="ORIGIN" />)</translation>
+<translation id="1272729688996227528">همگام‌سازی فعال است</translation>
+<translation id="1275213816424141989">شاید بعداً</translation>
+<translation id="1315107593850379616">ایمیل بازیابی</translation>
+<translation id="1325473901257014816">با ویوالدی، همه‌ی زبانه‌ها را در یک مرورگر نگه داشته و بین همه‌ی دستگاه‌های خود همگام‌سازی کنید.</translation>
+<translation id="132683371494960526">برای تغییر پوشه‌ی اصلی، دوبار ضربه بزنید.</translation>
+<translation id="1379470994139227452">تنظیم ویوالدی به عنوان مرورگر پیش‌فرض</translation>
+<translation id="1381484244248892686">از رمزهای عبور ذخیره شده می‌توانید در همه‌ی دستگاه‌های خود استفاده کنید. این رمزها در قسمت مدیریت رمز عبور ویوالدی برای <ph name="EMAIL" /> ذخیره می‌شوند</translation>
+<translation id="1383876407941801731">جستجو</translation>
+<translation id="1430638949087011281">فاقد مسدودسازی</translation>
+<translation id="1446108955355168157">برای رمزگذاری و محافظت از داده‌های همگام‌سازی شده‌ی خود (رمزهای عبور، نشانک‌ها، یادداشت‌ها و موارد دیگر)، لطفاً یک رمزعبور رمزگذاری ایجاد کنید. این رمز هرگز برای ما ارسال نمی‌شود.</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> مورد</translation>
+<translation id="1521731267649138856">آدرس ایمیل بازیابی شما.</translation>
+<translation id="1573784689611551537">مدیریت منابع مسدودسازی تبلیغات</translation>
+<translation id="1577761519530347814">همگام‌سازی رمزعبورهای ذخیره شده‌ی وب‌سایت‌ها</translation>
+<translation id="1644574205037202324">تاریخچه</translation>
+<translation id="1659112017960130179">کره‌ای (<ph name="ORIGIN" />)</translation>
+<translation id="1689333818294560261">نام مستعار</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />➔ شرایط استفاده<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />➔ سیاست حفظ حریم خصوصی<ph name="END_LINK2" /></translation>
+<translation id="1721552494230946796">پوشه‌ی دسترسی سریع جدید</translation>
+<translation id="173924678149983125">برای وارد کردن قوانین مسدودسازی، نشانی اینترنتی را وارد کنید</translation>
+<translation id="1751280147639351837">مسدودساز ردیاب و تبلیغات</translation>
+<translation id="1752547299766512813">ذخیره‌سازی رمزهای عبور</translation>
+<translation id="1754797958074421486">شرایط استفاده</translation>
+<translation id="1771413903824396513">بر اساس نام مستعار</translation>
+<translation id="1804522390855853698">چینی (<ph name="ORIGIN" />)</translation>
+<translation id="1809939268435598390">حذف پوشه</translation>
+<translation id="1813686536470127172">سایر پوشه‌ها</translation>
+<translation id="1828800626900562968">برای ایجاد یک زبانه‌ی جدید، روی آیکون مثبت در پایین بزنید.</translation>
+<translation id="1861262398884155592">این پوشه خالی است</translation>
+<translation id="1887193815546011584">دسترسی‌ سریع جدید</translation>
+<translation id="1929299157575856072">سطح پیش‌فرض مسدودسازی</translation>
+<translation id="1979539205367899613">برای ایجاد یک زبانه‌ی خصوصی جدید، روی آیکون مثبت در پایین بزنید.</translation>
+<translation id="2030706494969937066">بازیابی اعتبارنامه شما ناموفق بود. لطفا دوباره وارد شوید.</translation>
+<translation id="2034405583989639424">ویرایش بخش دسترسی سریع</translation>
+<translation id="2048247880942380698">عربی (<ph name="ORIGIN" />)</translation>
+<translation id="2079545284768500474">بازگردانی تغییرات</translation>
+<translation id="2117093051794889870">بر اساس محتوا</translation>
+<translation id="2129408066358825297">سن</translation>
+<translation id="2148384276939959392">همگام‌سازی موارد انتخاب شده</translation>
+<translation id="2195713384412091023">با این کار تمامی اطلاعات همگام‌سازی شده بر روی سرورهای ما حذف خواهد شد، رمزعبوری که برای رمزگذاری تعیین نموده‌اید، بازنشانی شده، و شما نیز از حساب کاربری خارج خواهید شد.</translation>
+<translation id="2243210264130642074">یادداشت ذخیره شد</translation>
+<translation id="2272338747456392228">حساب کاربری مسدود شده است</translation>
+<translation id="2273327106802955778">گزینه‌های بیشتر</translation>
+<translation id="2324160330092901720">کد فعال‌سازی به این آدرس ارسال شد: <ph name="EMAIL_ID" /></translation>
+<translation id="2359808026110333948">ادامه</translation>
+<translation id="2386793615875593361">۱ مورد انتخاب شد</translation>
+<translation id="2388224692799337242">با شروع وب‌گردی، تاریخچه‌ی آن در این‌جا نمایش داده می‌شود</translation>
+<translation id="2391028308389203648">ترکی (<ph name="ORIGIN" />)</translation>
+<translation id="2392369802118427583">فعال‌سازی</translation>
+<translation id="2434910957904013691">همگام‌سازی همه‌ی موارد</translation>
+<translation id="2536780277491102902">استثنائات</translation>
+<translation id="2558801801411970131">مسدودسازی ردیاب‌ها</translation>
+<translation id="2577446409661931381">یادداشت جدید</translation>
+<translation id="2619628557366098325">پرتغالی (<ph name="ORIGIN" />)</translation>
+<translation id="2677862276555105603">تبلیغ
+مسدود شد</translation>
+<translation id="2678542925523700624">استونیایی (<ph name="ORIGIN" />)</translation>
+<translation id="2709516037105925701">تکمیل خودکار</translation>
+<translation id="271033894570825754">جدید</translation>
+<translation id="2745324713975967671">رمزعبور رمزگذاری</translation>
+<translation id="2765217105034171413">کوچک</translation>
+<translation id="2825232297853754349">باید شرایط و مقررات استفاده را بپذیرید.</translation>
+<translation id="2842985007712546952">پوشه اصلی</translation>
+<translation id="2843343418360315034">مجارستانی (<ph name="ORIGIN" />)</translation>
+<translation id="2850144663494818309">آغاز همگام‌سازی...</translation>
+<translation id="2874121295511641364">همگام‌سازی آدرس‌های تایپ شده و زبانه‌های باز</translation>
+<translation id="2898963176829412617">پوشه‌ی جدید…</translation>
+<translation id="2961573414320947355">آیا می‌خواهید همه‌ی لینک‌ها در ویوالدی باز شود؟ حتما ما را به‌عنوان مرورگر پیش‌فرض خود تنظیم کنید.</translation>
+<translation id="3006429105107822794">لازم نیست این رمز عبور را به خاطر بسپارید. این رمز در قسمت مدیریت رمز عبور ویوالدی ذخیره خواهد شد.</translation>
+<translation id="3018244467214569202">یونانی (<ph name="ORIGIN" />)</translation>
+<translation id="3039671569659952257">حذف پوشه</translation>
+<translation id="3073196329485613487">به حساب کاربری خود وارد شوید</translation>
+<translation id="307859903981308731">چنانچه ادامه دهید، با ویوالدی موافقت می‌کنید</translation>
+<translation id="3086746722712840547">یادداشت</translation>
+<translation id="3091563570137981919">مسدودسازی ردیاب و تبلیغات</translation>
+<translation id="313566647356924831">مدیریت تنظیمات مسدودساز</translation>
+<translation id="3177673846235066154">سرور اعتبارنامه‌‌های شما را نپذیرفت.</translation>
+<translation id="3229182533910980085">برای افزودن اولین نشانک خود، آیکون مثبت زیر را فشار دهید</translation>
+<translation id="3236835587712044564">از ویوالدی راضی هستید؟ آن را به‌عنوان مرورگر پیش‌فرض تنظیم کنید.</translation>
+<translation id="3270894089048358271">تنظیم ویوالدی به عنوان مرورگر پیش‌فرض شما</translation>
+<translation id="3270930591809084274">زبانه‌های همگام‌سازی شده</translation>
+<translation id="3335772982573114336">یادداشت جدید</translation>
+<translation id="33451081266695216">اتصال توسط سرور قطع شد.</translation>
+<translation id="3346386541263128307">آدرس‌های ایمیل باید باهم مطابقت داشته باشند.</translation>
+<translation id="3365991203476235715">انگلیسی (<ph name="ORIGIN" />)</translation>
+<translation id="3368960138304620657">لیتوانیایی (<ph name="ORIGIN" />)</translation>
+<translation id="3377025655491224618">زبانه‌ی خصوصی</translation>
+<translation id="3435896845095436175">فعال</translation>
+<translation id="3438160227308459316">رومانیایی (<ph name="ORIGIN" />)</translation>
+<translation id="3451162533623145500">ایجاد حساب کاربری</translation>
+<translation id="3509379002674019679">برای ورود سریع به وب‌سایت‌ها و برنامه‌ها می‌توانید رمزهای عبور خود را ایجاد، ذخیره و مدیریت کنید.</translation>
+<translation id="3513566764071045027">خروج</translation>
+<translation id="3527085408025491307">پوشه</translation>
+<translation id="3530991200302302959">بلغاری (<ph name="ORIGIN" />)</translation>
+<translation id="3601414719864711130">بر اساس تاریخ</translation>
+<translation id="3607176258839749451">ثبت‌نام به دلیل بروز خطا انجام نشد. لطفاً بعداً دوباره امتحان کنید.</translation>
+<translation id="3646647753063635401">همه‌ی اطلاعات همگام‌سازی شده، و عملیات همگام‌سازی برای هر نوع داده‌ی جدید نیز به‌طور خودکار انجام شود</translation>
+<translation id="3682791711395736890">مشاهده‌ی نسخه‌ی دسکتاپ سایت</translation>
+<translation id="3692650606013198282">گشودن در زبانه‌ی خصوصی</translation>
+<translation id="3699026013955941879">کد منقضی شده است. لطفاً کد فعال‌سازی جدید درخواست دهید.</translation>
+<translation id="3700829948786686853">به ویوالدی خوش آمدید</translation>
+<translation id="3766350025418769949">از گذرواژه‌هایی که در قسمت مدیریت رمز عبور ویوالدی ذخیره کرده‌اید، می‌توانید در سایر برنامه‌های آی‌پد خود استفاده کنید.</translation>
+<translation id="3858860766373142691">نام</translation>
+<translation id="3866249974567520381">توضیحات</translation>
+<translation id="3872195896030547485">لطفاً یک آدرس ایمیل معتبر وارد کنید.</translation>
+<translation id="3894427358181296146">افزودن پوشه</translation>
+<translation id="3897092660631435901">منو</translation>
+<translation id="3953599441418463312">ژاپنی (<ph name="ORIGIN" />)</translation>
+<translation id="395506590020066151">ردیاب مسدود شد</translation>
+<translation id="3997823869212225788">کد ۶ رقمی را وارد کنید</translation>
+<translation id="4002066346123236978">عنوان</translation>
+<translation id="4032606071208172574">(پیش‌فرض)</translation>
+<translation id="4048057312173843244">زبانه‌های همگام‌سازی شده از سایر دستگاه‌ها در این‌جا نشان داده می‌شوند. برای استفاده از این سرویس، به بخش همگام‌سازی وارد شوید.</translation>
+<translation id="4073968054795398875">بروز خطا بر روی سرور همگام‌سازی. عملیات همگام‌سازی دوباره آغاز خواهد شد...</translation>
+<translation id="4096707694175478403">پنل</translation>
+<translation id="414098425907666915">جستجوی خصوصی</translation>
+<translation id="4141861385728508836">نوردیک (<ph name="ORIGIN" />)</translation>
+<translation id="4145489350420416595">خطای پیش‌بینی نشده.</translation>
+<translation id="4152011295694446843">نشانک‌های خود را در این‌جا خواهید یافت</translation>
+<translation id="4152623049003960417">جزئیات ردیاب</translation>
+<translation id="4176463684765177261">غیرفعال</translation>
+<translation id="4209092469652827314">بزرگ</translation>
+<translation id="4219175188138757774">چک و اسلواکی (<ph name="ORIGIN" />)</translation>
+<translation id="4276839458685471670">بر اساس تاریخ ایجاد</translation>
+<translation id="4277085371281330061">ردیاب‌ها
+مسدود شد</translation>
+<translation id="4299298331965375737">ویوالدی را به‌عنوان مرورگر پیش‌فرض خود تنظیم می‌کنید؟</translation>
+<translation id="4304224509867189079">ورود</translation>
+<translation id="432696242656678770">روسی (<ph name="ORIGIN" />)</translation>
+<translation id="4350751486125178847">اسپانیایی (<ph name="ORIGIN" />)</translation>
+<translation id="4376661454588260127">ویتنامی (<ph name="ORIGIN" />)</translation>
+<translation id="4394049700291259645">غیرفعال‌سازی</translation>
+<translation id="4413780690230851155">حذف تاریخچه‌ی مرورگر اینترنتی</translation>
+<translation id="4452878871193896747">اندونزیایی (<ph name="ORIGIN" />)</translation>
+<translation id="4493850495402472953">و</translation>
+<translation id="4497115807425788318">موقعیت</translation>
+<translation id="4507213865286211606">پیش‌نمایش اندازه</translation>
+<translation id="4515084385531683114">رمزهای عبور در قسمت مدیریت رمز عبور این دستگاه ذخیره می‌شوند.</translation>
+<translation id="4525945044609022380">ایمیل وارد شده به حساب کاربری دیگری تعلق دارد.</translation>
+<translation id="4526803704855831732">زبانه‌های خصوصی</translation>
+<translation id="4563480492836333884">ایمیل وارد شده قابل قبول نیست. لطفاً از دامنه‌ی دیگری استفاده کنید.</translation>
+<translation id="457386861538956877">بیشتر...</translation>
+<translation id="460370326897402035">رمزعبور معتبر نیست.</translation>
+<translation id="4619615317237390068">زبانه‌های سایر دستگاه‌ها</translation>
+<translation id="4640946580087069269">کپی در یادداشت</translation>
+<translation id="4654578955713250802">مسدودسازی تبلیغات و ردیاب‌ها</translation>
+<translation id="4655510151391078468">کد وارد شده با کد ارسالی برای شما مطابقت ندارد.
+        می‌توانید <ph name="ATTEMPTS" /> بار دیگر امتحان کنید.</translation>
+<translation id="466494460776294423">می‌بایست کد تأیید را وارد کنید</translation>
+<translation id="4727698999970341158">ایسلندی (<ph name="ORIGIN" />)</translation>
+<translation id="473775607612524610">به‌روزرسانی</translation>
+<translation id="4739712911308055817">دریافت نشده</translation>
+<translation id="4780953868408193639">ردیاب
+مسدود شد</translation>
+<translation id="4807415245238822255">رمزهای عبور باید باهم مطابقت داشته باشند.</translation>
+<translation id="4833044618885331665">برای استفاده از ابزار همگام‌سازی باید ویوالدی را به‌روزرسانی نمایید.</translation>
+<translation id="4852383705713307704">تبلیغ مسدود شد</translation>
+<translation id="4871370605780490696">افزودن نشانک</translation>
+<translation id="4903325570808402486">همگام‌سازی تنظیمات ویوالدی (هنوز همه‌ی تنظیمات قابل همگام‌سازی نیستند)</translation>
+<translation id="4929196061847506605">قدرتمند. شخصی. خصوصی.</translation>
+<translation id="4936710149174207991">همگام‌سازی نشده</translation>
+<translation id="4943266325467647391">مسدودساز داخلی ردیاب‌ها و تبلیغات ویوالدی، از شما در برابر بدافزارها و تبلیغات محافظت می‌کند.</translation>
+<translation id="495421405224926623">من شرایط استفاده و سیاست حفظ حریم خصوصی را خوانده‌ام و با آن موافقم</translation>
+<translation id="497942794017668482">مسدودسازی ردیاب‌ها و تبلیغات</translation>
+<translation id="5037761343305489956">داخل یادداشت‌ها کپی شد</translation>
+<translation id="504986598654589766">وب‌گردی در یک زبانه‌ی خصوصی به این معنی است که جستجوها، سایت‌های بازدید شده، کوکی‌ها و فایل‌های موقت توسط ویوالدی ذخیره نخواهد شد. البته انتخاب این حالت، باعث رمزگذاری یا تغییر دیگری اتصال شما نخواهد شد.</translation>
+<translation id="5116316489033177455">همگام‌سازی نشانک‌ها و دسترسی‌های سریع</translation>
+<translation id="5122095890854520072">لتونیایی (<ph name="ORIGIN" />)</translation>
+<translation id="5153806174841856652">ورود ناموفق بود</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />ارسال مجدد کد<ph name="END_LINK" /></translation>
+<translation id="5238642303473095117">حذف داده‌ها</translation>
+<translation id="5245732982828228444">یادداشت‌های خود را در این‌جا خواهید یافت</translation>
+<translation id="5249199221558969362">لطفاً سن واقعی خود را وارد نمایید.</translation>
+<translation id="5290452628447338707">یادداشتی وجود ندارد</translation>
+<translation id="5317780077021120954">ذخیره</translation>
+<translation id="5349678548463426691">بر اساس توضیحات</translation>
+<translation id="5350737901534958404">اجازه‌ی تبلیغات از شرکای ما (پشتیبانی از ویوالدی)</translation>
+<translation id="5351912500249789547">Vivaldi.net اعتبار شما را رد کرد: کد خطا <ph name="ERROR_CODE" /></translation>
+<translation id="5378841821586202982">پوشه‌ی سطل زباله</translation>
+<translation id="5398772614898833570">تبلیغات مسدود شد</translation>
+<translation id="5421638721143596928">رمزگشایی اعتبارنامه‌ی شما ناموفق بود. لطفاً دوباره وارد شوید.</translation>
+<translation id="5422086212043657100">استفاده به‌عنوان پوشه‌ی دسترسی سریع</translation>
+<translation id="5439835075346716808">ثبت‌نام از طریق این IP به‌طور موقت مسدود شده است. لطفاً بعداً دوباره امتحان کنید.</translation>
+<translation id="5486261815000869482">تأیید رمزعبور</translation>
+<translation id="5494016731375030300">زبانه‌های بسته شده‌ی اخیر</translation>
+<translation id="5569279496588266002">چیدمان صفحه‌ی شروع</translation>
+<translation id="5639137028584114536">چنان‌چه در سازمان خود مجبورید به‌صورت خصوصی وب‌گردی کنید؛ بد نیست بدانید زبانه‌ها درحالت خصوصی ذخیره نخواهند شد.
+        <ph name="BEGIN_LINK" />بیشتر بدانید<ph name="END_LINK" /></translation>
+<translation id="5684277895745049190">فهرست</translation>
+<translation id="574392208103952083">متوسط</translation>
+<translation id="5787420647064736989">نام دستگاه</translation>
+<translation id="5822336771053074270">افزودن یادداشت</translation>
+<translation id="5823830882692559950">Vivaldi.net اعتبار شما را رد کرد: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5857090052475505287">پوشه‌ی جدید</translation>
+<translation id="5859825823508296659">ویرایش دامنه</translation>
+<translation id="5867841422488265304">نشانی وب را جستجو ویا تایپ کنید</translation>
+<translation id="5871497086027727873">۱ مورد منتقل شد</translation>
+<translation id="5898502570200301364">از گذرواژه‌هایی که در قسمت مدیریت رمز عبور ویوالدی ذخیره کرده‌اید، می‌توانید در سایر برنامه‌های آیفون خود استفاده کنید.</translation>
+<translation id="5900160494089383343">این نام کاربری موجود نیست.</translation>
+<translation id="6005497458542935062">انتقال به خارج از پوشه</translation>
+<translation id="6042308850641462728">بیشتر</translation>
+<translation id="6077943432358741146">دسترسی‌ سریع</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> مورد منتقل شد</translation>
+<translation id="6147094071357011481">آخرین زبانه‌های بسته شده در دسترس نیستند</translation>
+<translation id="6193995664633100765">هندی (<ph name="ORIGIN" />)</translation>
+<translation id="6365929278691047681">آلمانی (<ph name="ORIGIN" />)</translation>
+<translation id="6404511346730675251">ویرایش نشانک</translation>
+<translation id="6406506848690869874">همگام‌سازی</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> یادداشت انتخاب شد</translation>
+<translation id="6468130661190228905">متأسفیم، به‌نظر می‌رسد قبل از پیوستن به انجمن ما باید کمی صبر کنید. زیرا اعضای ما باید حداقل ۱۶ سال سن داشته باشند.</translation>
+<translation id="6517411226162529295">کلید رمزگذاری پشتیبان</translation>
+<translation id="6527303717912515753">اشتراک‌گذاری</translation>
+<translation id="6535988230515403205">لهستانی (<ph name="ORIGIN" />)</translation>
+<translation id="659351303388691480">پاک‌سازی داده‌های وب‌گردی...</translation>
+<translation id="6614744450826097546">جزئیات تبلیغ</translation>
+<translation id="6627583120233659107">ویرایش پوشه</translation>
+<translation id="6631760746795162665">کلمبیایی (<ph name="ORIGIN" />)</translation>
+<translation id="6639866709520319699">ردیاب‌ها و تبلیغات مسدود شده‌اند. برخی سایت‌ها ممکن است به درستی کار نکنند.</translation>
+<translation id="6642196070615520677">حذف داده‌های همگام‌سازی شده‌ی راه دور</translation>
+<translation id="6645228090427373820">ردیاب‌ها مسدود شده‌اند اما تبلیغات خیر. برخی از سایت‌ها ممکن است به درستی کار نکنند.</translation>
+<translation id="6656103420185847513">ویرایش پوشه</translation>
+<translation id="6657585470893396449">رمز عبور</translation>
+<translation id="6690955457036363013">‏مدیریت سطح مسدودسازی در هر سایت</translation>
+<translation id="6703516503311038964">مایلم خبرنامه‌ی ویوالدی را دریافت کنم</translation>
+<translation id="6757792528048321576">مسدودساز تبلیغات و ردیاب‌ها</translation>
+<translation id="6798469570047202628">رمز عبور اشتباه است</translation>
+<translation id="681368974849482173">یادداشت ایجاد شد</translation>
+<translation id="6830986331692390764">پاکسازی اطلاعات همگام‌سازی. لطفاً صبر کنید.</translation>
+<translation id="6875510405870945573">سطح مسدودسازی مورد نظر خود را انتخاب کنید.</translation>
+<translation id="6885837502028760851">فقط پوشه‌های دسترسی سریع نشان داده شود</translation>
+<translation id="6887143077297974801">همگام‌سازی آغاز نشد.</translation>
+<translation id="6937750621455385628">برای ورود باید از حساب ویوالدی استفاده کنید.</translation>
+<translation id="6945221475159498467">انتخاب</translation>
+<translation id="6946395294519639514">با پنل‌ها می‌توانید ابزارهای مفید خود را در نوار کناری مرورگر، در دسترس داشته باشید.</translation>
+<translation id="6967884871145366229">مدیریت تنظیمات حریم خصوصی</translation>
+<translation id="6973630695168034713">پوشه‌ها</translation>
+<translation id="7029809446516969842">رمزهای عبور</translation>
+<translation id="7041964446309059643">به صورت دستی</translation>
+<translation id="7194677467200983873">آخرین همگام‌سازی:</translation>
+<translation id="7196846668589096106">زبانه‌های دسکتاپ</translation>
+<translation id="7210372243397300116">جستجوی پوشه</translation>
+<translation id="7215420652436283416">بر اساس آدرس</translation>
+<translation id="7229439505896086266">ایجاد یادداشت</translation>
+<translation id="7299721129597238157">حذف نشانک</translation>
+<translation id="7311118006561484338">بر اساس عنوان</translation>
+<translation id="7325310788570036874">با ویوالدی هوشمندانه‌تر، کارآمدتر و سریع‌تر به وب‌گردی بپردازید.</translation>
+<translation id="734110743815267231">عبری (<ph name="ORIGIN" />)</translation>
+<translation id="7362952245780030555">بین نمای زبانه‌ی معمولی یا ساده شده، یکی را انتخاب کنید.</translation>
+<translation id="7379938540614588640">هلندی (<ph name="ORIGIN" />)</translation>
+<translation id="7388525939184421699">افزودن منبع جدید</translation>
+<translation id="7400418766976504921">نشانی اینترنتی</translation>
+<translation id="7454640759045234067">ردیاب‌ها مسدود شد</translation>
+<translation id="7461899062138731833">منابع</translation>
+<translation id="750493650310597496">یادداشتی انتخاب نشده است</translation>
+<translation id="7525067979554623046">ایجاد</translation>
+<translation id="7541020606126512786">خلاصه‌ی فعالیت مسدودساز ردیاب و تبلیغات</translation>
+<translation id="7573518470897278603">مشاهده‌ی نسخه‌ی موبایل سایت</translation>
+<translation id="7574321014880720413">افزودن دامنه‌ی جدید</translation>
+<translation id="7587132259180664054">ایمیل با موفقیت ارسال شد</translation>
+<translation id="7602336701644200880">ارسال ایمیل ناموفق بود. لطفاً دوباره تلاش کنید.</translation>
+<translation id="7606108789437688910">گشودن آدرس یادداشت‌ها درحالت ناشناس</translation>
+<translation id="7622661618259256505">لطفا یک رمزعبور با حداقل ۱۲ کاراکتر انتخاب کنید.</translation>
+<translation id="7658239707568436148">لغو</translation>
+<translation id="767363698559661695">سبک نمایش زبانه‌ها را انتخاب کنید</translation>
+<translation id="7702907602086592255">دامنه</translation>
+<translation id="7730831244010940855">ویوالدی را به‌عنوان مرورگر پیش‌فرض در iPad انتخاب می‌کنید؟</translation>
+<translation id="7732622593814325274">مدیریت منابع مسدودسازی ردیاب‌ها</translation>
+<translation id="7765158879357617694">انتقال</translation>
+<translation id="7801204999757211519">از قبل حساب کاربری دارید؟ <ph name="BEGIN_LINK" />➔ ورود<ph name="END_LINK" /></translation>
+<translation id="7914995060146784406">ویرایش یادداشت</translation>
+<translation id="7925340978147141704">نمایش رمز عبور</translation>
+<translation id="8008214489230610096">تأیید ایمیل بازیابی</translation>
+<translation id="804786196054284061">توافق‌نامه‌ی مجوز کاربر نهایی</translation>
+<translation id="8053851743673939284">فرانسوی (<ph name="ORIGIN" />)</translation>
+<translation id="8066170816074394954">خطای سرور.</translation>
+<translation id="8076492880354921740">زبانه‌ها</translation>
+<translation id="8112996065264879835">این کد با کد ارسال شده برای شما مطابقت ندارد.
+        شما به حداکثر حد مجاز تلاش اشتباه رسیده‌اید. لطفاً با استفاده از گزینه ارسال مجدد در زیر، یک کد جدید درخواست کنید.</translation>
+<translation id="8147118677117542370">لطفاً سن خود را وارد نمایید.</translation>
+<translation id="8165573437634525334">داده‌ها توسط رمز عبور رمزنگاری محافظت می‌شوند</translation>
+<translation id="8182979418912184986">زبانه‌ی خصوصی جدید</translation>
+<translation id="8257908958623224237">بروز تداخل با سایر اطلاعات کاربر.</translation>
+<translation id="8261506727792406068">حذف</translation>
+<translation id="8273666073173891138">یادداشت داخل <ph name="FOLDER_TITLE" /> ذخیره شد</translation>
+<translation id="8275038454117074363">وارد کردن</translation>
+<translation id="8329813750766387010">به‌روز شده: <ph name="DATE" /></translation>
+<translation id="8347535536909603600">حذف هشدارهای کوکی (<ph name="TYPE" />)</translation>
+<translation id="8366175803122817174">گشودن آدرس همه‌ی یادداشت‌ها</translation>
+<translation id="8384409685584033392">اطلاعات صفحه</translation>
+<translation id="8414685983518053656">یادداشت‌ها</translation>
+<translation id="8423076545503792640">درخواست به‌دلیل بروز خطا انجام نشد. لطفاً بعداً دوباره امتحان کنید.</translation>
+<translation id="8428213095426709021">تنظیمات</translation>
+<translation id="8458397775385147834">۱ مورد حذف شد</translation>
+<translation id="8500459200727969761">بازیابی فهرست‌های داخلی</translation>
+<translation id="8503813439785031346">نام کاربری</translation>
+<translation id="8515808232153642813">رمزگشایی</translation>
+<translation id="8517852590337319813">حساب خود را فعال کنید</translation>
+<translation id="8546963963006468833">با ویوالدی، می‌توانید به راحتی لینک‌ها را باز کنید، از طریق ویجت‌ها جستجو کنید و رمزهای عبور را به‌طور خودکار در برنامه‌های دیگر تکمیل کنید.</translation>
+<translation id="8562452229998620586">رمزهای عبور ذخیره شده در این‌جا نمایش داده می‌شوند.</translation>
+<translation id="8605953154325672921">می‌بایست نام کاربری را وارد کنید</translation>
+<translation id="8675578805254882416">درحال دریافت اطلاعات</translation>
+<translation id="8677007239430848917">برای افزودن اولین یادداشت خود، آیکون مثبت زیر را فشار دهید</translation>
+<translation id="8684294196284714094">برای تنظیم ویوالدی به‌عنوان مرورگر پیش‌فرض خود آماده‌اید؟</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> مورد حذف شد</translation>
+<translation id="8804164990146287819">سیاست حفظ حریم خصوصی</translation>
+<translation id="8819841443522803117">زمان آن است که مرورگر پیش‌فرض خود را تغییر دهید؟ ویوالدی را انتخاب کنید.</translation>
+<translation id="8820817407110198400">نشانک‌ها</translation>
+<translation id="8855707633300847215">نمایش نوار زبانه‌</translation>
+<translation id="8892354889971902600">زبانه‌هایی که به تازگی بسته‌اید، در این‌جا نشان داده می‌شوند.</translation>
+<translation id="89390081013973080">همه چیز آماده است! وقت آن است که تصمیم بگیرید چه اطلاعاتی را بین دستگاه‌ها همگام‌سازی کنید.</translation>
+<translation id="8965371804397726192">آغاز همگام‌سازی همه‌ی داده‌ها</translation>
+<translation id="9028089729841356743">خطای شبکه.</translation>
+<translation id="9043882097999887291">تبلیغات
+مسدود شد</translation>
+<translation id="9065203028668620118">ویرایش</translation>
+<translation id="9078193189520575214">اعمال تغییرات...</translation>
+<translation id="9079251484401922158">فنلاندی (<ph name="ORIGIN" />)</translation>
+<translation id="9083392325882095631">۱ مورد</translation>
+<translation id="9091665118798175641">همگام‌سازی اطلاعات تکمیل خودکار فرم</translation>
+<translation id="9097127519290088802">رمز عبور رمزگذاری مورد نیاز است</translation>
+<translation id="9212737146310746733">فارسی (<ph name="ORIGIN" />)</translation>
+<translation id="9218693288527810093">مسدودسازی ردیاب‌ها</translation>
+<translation id="937440209447114831">ما هیچ تبلیغ یا ردیابی را مسدود نمی‌کنیم.</translation>
+<translation id="984650419570014454">کد فعال‌سازی باید ۶ رقم باشد.</translation>
+<translation id="992440609313570947">کاربر جدید ویوالدی هستید؟ <ph name="BEGIN_LINK" />➔ یک حساب کاربری ایجاد کنید<ph name="END_LINK" /></translation>
 </translationbundle>

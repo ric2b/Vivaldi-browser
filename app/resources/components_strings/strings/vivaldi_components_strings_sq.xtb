@@ -61,11 +61,11 @@
 <translation id="3234666976984236645">Gjithmonë diktoj materialet e rëndësishme te ky uebsajti</translation>
 <translation id="3308738399950580893">reklamat</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> është e paarritshme për momentin.</translation>
-<translation id="3427092606871434483">Autorizoj (standarde)</translation>
+<translation id="3427092606871434483">Lejoj (standarde)</translation>
 <translation id="3447661539832366887">Zotëruesi i këtij aparati e ka çaktivizuar lojën me dinozaur.</translation>
 <translation id="3447884698081792621">Tregoj certifikatën (është lëshuar nga <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Fsheh detajet e avancuara</translation>
-<translation id="3484560055331845446">Mund të humbitni aksesin te kontoja në Google. Chrome rekomandon ta ndryshoni që tani fjalëkalimin. Do ju kërkohet identifikimi.</translation>
+<translation id="3484560055331845446">Mund të humbitni aksesin te kontoja në Google. Ju rekomandojmë ta ndryshoni që tani fjalëkalimin. Do ju kërkohet identifikimi.</translation>
 <translation id="3566021033012934673">Linja nuk është private</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Fsheh detajet</translation>
@@ -75,12 +75,12 @@
 <translation id="3681007416295224113">Informacion për certifikatën</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Të kontrolloni konfigurimin e proxy-t, të sistemit mbrojtës të rrjetit dhe të DNS-së<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Nëse përdorni server proxy...</translation>
-<translation id="3894751534882749287">Gjithsesi, për ta parë faqen, ndryshoni nivelin e mbrojtjes nga gjurmimi nëpërmjet dritares automatike për gjurmuesit ose klikoni butonin Autorizoj</translation>
+<translation id="3894751534882749287">Gjithsesi, për të parë faqen ndryshoni nivelin e mbrojtjes nga gjurmimi nëpërmjet dritares automatike për gjurmuesit ose klikoni butonin Lejoj</translation>
 <translation id="3950820424414687140">Identifikohem</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> është bllokuar</translation>
 <translation id="3987940399970879459">Më pak se 1 MB</translation>
 <translation id="4075732493274867456">Klienti dhe serveri përdorin një variant jo të zakonshëm të protokollit apo të metodave të shifrimit SSL.</translation>
-<translation id="4116663294526079822">Gjithmonë autorizoj te ky uebsajti</translation>
+<translation id="4116663294526079822">Gjithmonë lejoj te ky uebsajti</translation>
 <translation id="4130226655945681476">Të kontrolloni kabllot e rrjetit kompjuterik, modemin dhe ruterin</translation>
 <translation id="4151403195736952345">Përdor standardin e përgjithshëm (Diktoj)</translation>
 <translation id="4165986682804962316">Parametrat e uebsajtit</translation>
@@ -88,7 +88,7 @@
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Provoni të diagnostikoni rrjetin kompjuterik<ph name="END_LINK" />.</translation>
 <translation id="4235360514405112390">E vlefshme</translation>
 <translation id="4250431568374086873">Linja me uebsajtin është pjesërisht e sigurt</translation>
-<translation id="4265872034478892965">Autorizohet nga administratori</translation>
+<translation id="4265872034478892965">Lejohet nga administratori</translation>
 <translation id="4305666528087210886">Nuk hapet skedari</translation>
 <translation id="4312866146174492540">Bllokoj (standarde)</translation>
 <translation id="4356973930735388585">Piratët e internetit mund të tentojnë të instalojnë programe të rrezikshme nga uebsajti në kompjuter, të cilat vjedhin ose fshijnë informacionet (për shembull: fotot, fjalëkalimet, mesazhet dhe kartat e kreditit).</translation>
@@ -105,14 +105,13 @@
 <translation id="4744603770635761495">Skedari i ekzekutueshëm</translation>
 <translation id="4750917950439032686">Uebsajti i mbron informacionet tuaja private (për shembull, fjalëkalimet ose numrat e kartës së kreditit).</translation>
 <translation id="4764776831041365478">Faqja <ph name="URL" /> është përkohësisht e padisponueshme ose është zhvendosur përfundimisht në një adresë të re interneti.</translation>
-<translation id="483241715238664915">Aktivizoni vërejtjet</translation>
+<translation id="483241715238664915">Aktivizoj vërejtjet</translation>
 <translation id="4943872375798546930">Nuk rezulton</translation>
 <translation id="5023310440958281426">Kontrolloni rregullat e administratorit</translation>
-<translation id="5039804452771397117">Autorizoj</translation>
+<translation id="5039804452771397117">Lejoj</translation>
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 në përdorim)} other {(# në përdorim)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Të kontrolloni adresën proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5287240709317226393">Tregoj cookies</translation>
 <translation id="5355557959165512791">Uebsajti <ph name="SITE" /> nuk mund të vizitohet për momentin, sepse përdor certifikatë të revokuar. Gabimet dhe sulmet në rrjetin kompjuterik zakonisht janë të përkohshme, ndaj faqja mund të hapet më vonë.</translation>
 <translation id="5386426401304769735">Lista e certifikatave të uebsajtit është firmosur me standardin SHA-1.</translation>
 <translation id="5452270690849572955">Nuk gjendet faqja <ph name="HOST_NAME" /></translation>
@@ -154,13 +153,14 @@
 <translation id="6657585470893396449">Fjalëkalimi</translation>
 <translation id="6711464428925977395">Ka problem me serverin proxy ose adresa është e pasaktë.</translation>
 <translation id="6757797048963528358">Aparati hyri në gjendje mosgatishmërie.</translation>
+<translation id="6890956352250146925">Opsionet për cookies dhe të dhënat e uebsajteve</translation>
 <translation id="6897140037006041989">Agjenti ndërmjetësues</translation>
 <translation id="7053983685419859001">Bllokoj</translation>
 <translation id="7079718277001814089">Uebsajti përmban programe komprometuese</translation>
 <translation id="7096937462164235847">Identiteti i uebsajtit është i paverifikuar.</translation>
-<translation id="7108819624672055576">Autorizohet nga një shtesë</translation>
+<translation id="7108819624672055576">Lejohet nga një shtesë</translation>
 <translation id="7111012039238467737">(E vlefshme)</translation>
-<translation id="7113310725918019676">Autorizoj <ph name="BLOCKED_TYPE" /> nga <ph name="DOMAIN" /></translation>
+<translation id="7113310725918019676">Lejoj <ph name="BLOCKED_TYPE" /> nga <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nuk i respekton standardet e sigurisë.</translation>
 <translation id="7219179957768738017">Linja përdor <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Shfaq njoftimet</translation>
@@ -191,7 +191,7 @@
 <translation id="8119307142152921512">gjurmuesit dhe reklamat</translation>
 <translation id="8149426793427495338">Kompjuteri hyri në gjendje mosgatishmërie.</translation>
 <translation id="8150722005171944719">Është i palexueshëm skedari në <ph name="URL" />. Mund të jetë fshirë, zhvendosur ose aksesi po pengohet nga autorizimet e skedarit.</translation>
-<translation id="8184538546369750125">Përdor standardin e përgjithshëm (Autorizoj)</translation>
+<translation id="8184538546369750125">Përdor standardin e përgjithshëm (Lejoj)</translation>
 <translation id="8211406090763984747">Linja është e sigurt</translation>
 <translation id="8225771182978767009">Uebsajti është bllokuar nga personi që konfiguroi kompjuterin.</translation>
 <translation id="8241707690549784388">Faqja që kërkoni përdor informacionet tuaja të vjetra. Nëse ktheheni pas do ju duhet të përsëritni çdo veprim të mëparshëm. Doni të vijoni?</translation>

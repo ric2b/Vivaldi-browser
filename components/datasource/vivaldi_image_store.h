@@ -259,12 +259,9 @@ class VivaldiImageStore : public base::RefCountedThreadSafe<VivaldiImageStore> {
   bookmarks::BookmarkModel* GetBookmarkModel();
 
   // This must be accessed only on UI thread. It is reset to null on shutdown.
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
 
   const base::FilePath user_data_dir_;
-
-  // Runner for UI thread that skips tasks on shutdown.
-  const scoped_refptr<base::SingleThreadTaskRunner> ui_thread_runner_;
 
   // Runner to ensure that tasks to manipulate the data mapping runs in sequence
   // with the proper order.

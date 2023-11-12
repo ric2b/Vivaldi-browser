@@ -13,7 +13,7 @@
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/url_formatter/url_fixer.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_bridge_observer.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
@@ -24,6 +24,7 @@ using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 using vivaldi_bookmark_kit::GetSpeeddial;
 using vivaldi_bookmark_kit::SetNodeSpeeddial;
+using vivaldi_bookmark_kit::IsSeparator;
 using bookmarks::ManagedBookmarkService;
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -191,7 +192,7 @@ using bookmarks::ManagedBookmarkService;
     const BookmarkNode* node = stk.top();
     stk.pop();
 
-    if (GetSpeeddial(node)) {
+    if (GetSpeeddial(node) && !IsSeparator(node)) {
       speedDials.push_back(node);
       VivaldiSpeedDialItem* item =
           [[VivaldiSpeedDialItem alloc] initWithBookmark:node];
@@ -255,6 +256,8 @@ using bookmarks::ManagedBookmarkService;
       if (node->children().size() > 0)
         for (const auto& child : node->children()) {
           const BookmarkNode* childNode = child.get();
+          if (IsSeparator(childNode))
+            continue;
           [items addObject:[[VivaldiSpeedDialItem alloc]
                               initWithBookmark:childNode]];
         }
@@ -324,30 +327,34 @@ using bookmarks::ManagedBookmarkService;
 
 #pragma mark - BOOKMARK MODEL OBSERVER
 
-- (void)bookmarkModelLoaded {
+- (void)bookmarkModelLoaded:(bookmarks::BookmarkModel*)model {
   // No-op when loaded.
 }
 
-- (void)bookmarkNodeChanged:(const BookmarkNode*)node {
+- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+        didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   [self refreshContents];
 }
 
-- (void)bookmarkNodeChildrenChanged:(const BookmarkNode*)bookmarkNode {
+- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+    didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   [self refreshContents];
 }
 
-- (void)bookmarkNode:(const BookmarkNode*)bookmarkNode
-     movedFromParent:(const BookmarkNode*)oldParent
-            toParent:(const BookmarkNode*)newParent {
+- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+          didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
+           fromParent:(const bookmarks::BookmarkNode*)oldParent
+             toParent:(const bookmarks::BookmarkNode*)newParent {
   [self refreshContents];
 }
 
-- (void)bookmarkNodeDeleted:(const BookmarkNode*)node
-                 fromFolder:(const BookmarkNode*)folder {
+- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+        didDeleteNode:(const bookmarks::BookmarkNode*)node
+           fromFolder:(const bookmarks::BookmarkNode*)folder {
   [self refreshContents];
 }
 
-- (void)bookmarkModelRemovedAllNodes {
+- (void)bookmarkModelRemovedAllNodes:(bookmarks::BookmarkModel*)model {
   // No-op.
 }
 

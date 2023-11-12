@@ -70,6 +70,15 @@ bool IsAccessibilityTreeForViewsEnabled() {
       ::features::kEnableAccessibilityTreeForViews);
 }
 
+BASE_FEATURE(kEnableAccessibilityRestrictiveIA2AXModes,
+             "AccessibilityRestrictiveIA2AXModes",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool IsAccessibilityRestrictiveIA2AXModesEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kEnableAccessibilityRestrictiveIA2AXModes);
+}
+
 BASE_FEATURE(kAccessibilityFocusHighlight,
              "AccessibilityFocusHighlight",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -93,6 +102,15 @@ BASE_FEATURE(kTextBasedAudioDescription,
 bool IsTextBasedAudioDescriptionEnabled() {
   return base::FeatureList::IsEnabled(::features::kTextBasedAudioDescription);
 }
+
+bool IsUnserializeOptimizationsEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityUnserializeOptimizations);
+}
+
+BASE_FEATURE(kAccessibilityUnserializeOptimizations,
+             "AccessibilityUnserializeOptimizations",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_WIN)
 BASE_FEATURE(kIChromeAccessible,
@@ -121,24 +139,6 @@ bool IsDictationOfflineAvailable() {
       ash::features::kOnDeviceSpeechRecognition);
 }
 
-BASE_FEATURE(kExperimentalAccessibilityDictationWithPumpkin,
-             "ExperimentalAccessibilityDictationWithPumpkin",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsExperimentalAccessibilityDictationWithPumpkinEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kExperimentalAccessibilityDictationWithPumpkin);
-}
-
-BASE_FEATURE(kExperimentalAccessibilityDictationMoreCommands,
-             "ExperimentalAccessibilityDictationMoreCommands",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsExperimentalAccessibilityDictationMoreCommandsEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kExperimentalAccessibilityDictationMoreCommands);
-}
-
 BASE_FEATURE(kExperimentalAccessibilityDictationContextChecking,
              "ExperimentalAccessibilityDictationContextChecking",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -155,15 +155,6 @@ BASE_FEATURE(kExperimentalAccessibilityGoogleTtsLanguagePacks,
 bool IsExperimentalAccessibilityGoogleTtsLanguagePacksEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kExperimentalAccessibilityGoogleTtsLanguagePacks);
-}
-
-BASE_FEATURE(kExperimentalAccessibilitySelectToSpeakVoiceSwitching,
-             "ExperimentalAccessibilitySelectToSpeakVoiceSwitching",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsExperimentalAccessibilitySelectToSpeakVoiceSwitchingEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kExperimentalAccessibilitySelectToSpeakVoiceSwitching);
 }
 
 BASE_FEATURE(kExperimentalAccessibilityColorEnhancementSettings,
@@ -202,15 +193,6 @@ bool IsAccessibilitySelectToSpeakPrefsMigrationEnabled() {
       ::features::kAccessibilitySelectToSpeakPrefsMigration);
 }
 
-BASE_FEATURE(kAccessibilitySelectToSpeakContextMenuOption,
-             "AccessibilitySelectToSpeakContextMenuOption",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsAccessibilitySelectToSpeakContextMenuOptionEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kAccessibilitySelectToSpeakContextMenuOption);
-}
-
 BASE_FEATURE(kAccessibilitySelectToSpeakHoverTextImprovements,
              "AccessibilitySelectToSpeakHoverTextImprovements",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -222,11 +204,20 @@ bool IsAccessibilitySelectToSpeakHoverTextImprovementsEnabled() {
 
 BASE_FEATURE(kAccessibilityAcceleratorNotificationsTimeout,
              "AccessibilityAcceleratorNotificationsTimeout",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsAccessibilityAcceleratorNotificationsTimeoutEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kAccessibilityAcceleratorNotificationsTimeout);
+}
+
+BASE_FEATURE(kAccessibilityDeprecateChromeVoxTabs,
+             "AccessibilityDeprecateChromeVoxTabs",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool IsAccessibilityDeprecateChromeVoxTabsEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityDeprecateChromeVoxTabs);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -265,30 +256,12 @@ bool IsAblateSendPendingAccessibilityEventsEnabled() {
 }
 
 #if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kComputeAXMode,
-             "ComputeAXMode",
+BASE_FEATURE(kAccessibilityAXModes,
+             "AccessibilityAXModes",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-bool IsComputeAXModeEnabled() {
-  return base::FeatureList::IsEnabled(::features::kComputeAXMode);
-}
-
-BASE_FEATURE(kAccessibilityFormControlsMode,
-             "AccessibilityFormControlsAXMode",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-bool IsAccessibilityFormControlsAXModeEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kAccessibilityFormControlsMode);
-}
-
-BASE_FEATURE(kOptimizeAccessibilityUiThreadWork,
-             "OptimizeAccessibilityUiThreadWork",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsOptimizeAccessibilityUiThreadWorkEnabled() {
-  return base::FeatureList::IsEnabled(
-      ::features::kOptimizeAccessibilityUiThreadWork);
+bool IsAccessibilityAXModesEnabled() {
+  return base::FeatureList::IsEnabled(::features::kAccessibilityAXModes);
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 

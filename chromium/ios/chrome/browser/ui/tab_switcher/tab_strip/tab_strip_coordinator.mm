@@ -51,7 +51,6 @@
       [[TabStripMediator alloc] initWithConsumer:self.tabStripViewController];
   self.mediator.webStateList = self.browser->GetWebStateList();
 
-  self.tabStripViewController.faviconDataSource = self.mediator;
   self.tabStripViewController.delegate = self.mediator;
 }
 
@@ -65,10 +64,6 @@
 
 - (UIViewController*)viewController {
   return self.tabStripViewController;
-}
-
-- (void)setLongPressDelegate:(id<PopupMenuLongPressDelegate>)longPressDelegate {
-  _longPressDelegate = longPressDelegate;
 }
 
 - (UIView<TabStripContaining>*)view {

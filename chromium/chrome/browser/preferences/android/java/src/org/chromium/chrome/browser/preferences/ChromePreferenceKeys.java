@@ -87,13 +87,6 @@ public final class ChromePreferenceKeys {
 
     public static final String APP_LOCALE = "locale";
 
-    /** Counter for taps outside of assistant voice consent screen. */
-    public static final String ASSISTANT_VOICE_CONSENT_OUTSIDE_TAPS =
-            "Chrome.AssistantVoiceConsentTapsCounter.ConsentTapsCount";
-
-    /** Assistant voice search keys. */
-    public static final String ASSISTANT_VOICE_SEARCH_ENABLED = "Chrome.Assistant.Enabled";
-
     /** Autofill assistant keys. */
     /** Whether Autofill Assistant is enabled */
     public static final String AUTOFILL_ASSISTANT_ENABLED = "autofill_assistant_switch";
@@ -113,6 +106,7 @@ public final class ChromePreferenceKeys {
     public static final String BOOKMARKS_LAST_USED_URL = "enhanced_bookmark_last_used_url";
     public static final String BOOKMARKS_LAST_USED_PARENT =
             "enhanced_bookmark_last_used_parent_folder";
+    public static final String BOOKMARK_VISUALS_PREF = "Chrome.Bookmarks.BookmarkRowDisplay";
 
     /**
      * Whether Chrome is set as the default browser.
@@ -286,12 +280,10 @@ public final class ChromePreferenceKeys {
             "Chrome.NTPExploreOfflineCard.HasExploreOfflineContent";
 
     /**
-     * Indicates whether First run field trial was enabled during FRE. This experiment is configured
-     * by client side code in {@link
+     * Indicates which variation of the First run field trial was enabled during FRE. This
+     * experiment is configured by client side code in {@link
      * org.chromium.chrome.browser.signin.services.FREMobileIdentityConsistencyFieldTrial}.
      */
-    public static final String FIRST_RUN_FIELD_TRIAL_GROUP = "Chrome.FirstRun.FieldTrialEnabled";
-
     public static final String FIRST_RUN_VARIATIONS_FIELD_TRIAL_GROUP =
             "Chrome.FirstRun.VariationFieldTrialGroup";
 
@@ -604,6 +596,9 @@ public final class ChromePreferenceKeys {
     public static final KeyPrefix OPTIMIZATION_GUIDE_PUSH_NOTIFICATION_CACHE =
             new KeyPrefix("Chrome.OptimizationGuide.PushNotificationCache.*");
 
+    /** The accounts Password Protection should protect. */
+    public static final String PASSWORD_PROTECTION_ACCOUNTS = "Chrome.PasswordProtection.Accounts";
+
     /** The shared preference for the 'save card to device' checkbox status. */
     public static final String PAYMENTS_CHECK_SAVE_CARD_TO_DEVICE = "check_save_card_to_device";
 
@@ -743,16 +738,6 @@ public final class ChromePreferenceKeys {
     /**
      * Keys used to store user actions for behavioral targeting of showing Start surface on startup.
      */
-    public static final String START_SHOW_ON_STARTUP = "Chrome.StartSurface.ShownOnStartup";
-    public static final String START_NEXT_SHOW_ON_STARTUP_DECISION_MS =
-            "Chrome.StartSurface.ShownOnStartupDecisionMs";
-    public static final String TAP_MV_TILES_COUNT = "Chrome.StartSurface.TapMVTilesCount";
-    public static final String TAP_FEED_CARDS_COUNT = "Chrome.StartSurface.TapFeedCardsCount";
-    public static final String OPEN_NEW_TAB_PAGE_COUNT = "Chrome.StartSurface.OpenNewTabPageCount";
-    public static final String OPEN_HISTORY_COUNT = "Chrome.StartSurface.OpenHistoryCount";
-    public static final String OPEN_RECENT_TABS_COUNT = "Chrome.StartSurface.OpenRecentTabCount";
-    public static final String SHOW_START_SEGMENTATION_RESULT =
-            "Chrome.StartSurface.ShowSegmentationResult";
     public static final String START_RETURN_TIME_SEGMENTATION_RESULT_MS =
             "Chrome.StartSurface.StartReturnTimeSegmentationResultMs";
 
@@ -1005,14 +990,13 @@ public final class ChromePreferenceKeys {
         return Arrays.asList(
                 ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,
                 ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS,
-                ASSISTANT_VOICE_CONSENT_OUTSIDE_TAPS,
-                ASSISTANT_VOICE_SEARCH_ENABLED,
                 AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER,
                 AUTOFILL_ASSISTANT_PROACTIVE_HELP_ENABLED,
                 APP_LAUNCH_LAST_KNOWN_ACTIVE_TAB_STATE,
                 APP_LAUNCH_SEARCH_ENGINE_HAD_LOGO,
                 APPLICATION_OVERRIDE_LANGUAGE,
                 BLUETOOTH_NOTIFICATION_IDS,
+                BOOKMARK_VISUALS_PREF,
                 CHROME_SURVEY_DOWNLOAD_ATTEMPTS.pattern(),
                 CHROME_SURVEY_PROMPT_DISPLAYED_TIMESTAMP.pattern(),
                 CLIPBOARD_SHARED_URI,
@@ -1045,7 +1029,6 @@ public final class ChromePreferenceKeys {
                 DOWNLOAD_INTERSTITIAL_DOWNLOAD_PENDING_REMOVAL,
                 EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS,
                 FEED_ARTICLES_LIST_VISIBLE,
-                FIRST_RUN_FIELD_TRIAL_GROUP,
                 FIRST_RUN_VARIATIONS_FIELD_TRIAL_GROUP,
                 FIRST_RUN_SKIPPED_BY_POLICY,
                 FLAGS_CACHED.pattern(),
@@ -1096,10 +1079,8 @@ public final class ChromePreferenceKeys {
                 OFFLINE_MEASUREMENTS_SYSTEM_STATE_LIST,
                 OFFLINE_MEASUREMENTS_USER_AGENT_STRING,
                 OMNIBOX_CACHED_ZERO_SUGGEST_GROUPS_INFO,
-                OPEN_HISTORY_COUNT,
-                OPEN_NEW_TAB_PAGE_COUNT,
-                OPEN_RECENT_TABS_COUNT,
                 OPTIMIZATION_GUIDE_PUSH_NOTIFICATION_CACHE.pattern(),
+                PASSWORD_PROTECTION_ACCOUNTS,
                 PERSISTENT_OFFLINE_CONTENT_AVAILABILITY_STATUS,
                 PRICE_TRACKING_ANNOTATIONS_ENABLED_METRICS_TIMESTAMP,
                 PRICE_TRACKING_CHROME_MANAGED_NOTIFICATIONS_TIMESTAMPS,
@@ -1125,18 +1106,13 @@ public final class ChromePreferenceKeys {
                 SETTINGS_SAFETY_CHECK_LAST_RUN_TIMESTAMP,
                 SETTINGS_SAFETY_CHECK_RUN_COUNTER,
                 SHARING_LAST_SHARED_COMPONENT_NAME,
-                SHOW_START_SEGMENTATION_RESULT,
                 START_RETURN_TIME_SEGMENTATION_RESULT_MS,
                 SYNC_PROMO_SHOW_COUNT.pattern(),
                 SIGNIN_PROMO_NTP_FIRST_SHOWN_TIME,
                 SIGNIN_PROMO_NTP_LAST_SHOWN_TIME,
                 SYNC_PROMO_TOTAL_SHOW_COUNT,
-                START_NEXT_SHOW_ON_STARTUP_DECISION_MS,
                 SEARCH_RESUMPTION_MODULE_COLLAPSE_ON_NTP,
-                START_SHOW_ON_STARTUP,
                 TABBED_ACTIVITY_LAST_VISIBLE_TIME_MS,
-                TAP_FEED_CARDS_COUNT,
-                TAP_MV_TILES_COUNT,
                 TWA_DISCLOSURE_SEEN_PACKAGES,
                 USB_NOTIFICATION_IDS,
                 USER_ENABLED_DESKTOP_SITE_GLOBAL_SETTING_PREFERENCE_KEY,

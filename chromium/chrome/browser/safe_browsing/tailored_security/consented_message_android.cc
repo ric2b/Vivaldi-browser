@@ -5,12 +5,16 @@
 #include "chrome/browser/safe_browsing/tailored_security/consented_message_android.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/safe_browsing/android/safe_browsing_settings_launcher_android.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/messages/android/message_dispatcher_bridge.h"
 #include "components/safe_browsing/core/browser/tailored_security_service/tailored_security_outcome.h"
+#include "components/safe_browsing/core/browser/tailored_security_service/tailored_security_service_util.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -18,11 +22,14 @@
 namespace safe_browsing {
 
 namespace {
+
 void LogOutcome(TailoredSecurityOutcome outcome, bool enable) {
   std::string histogram =
       enable ? "SafeBrowsing.TailoredSecurityConsentedEnabledMessageOutcome"
              : "SafeBrowsing.TailoredSecurityConsentedDisabledMessageOutcome";
   base::UmaHistogramEnumeration(histogram, outcome);
+  base::RecordAction(
+      base::UserMetricsAction(GetUserActionString(outcome, enable)));
 }
 
 }  // namespace
@@ -49,15 +56,27 @@ TailoredSecurityConsentedModalAndroid::TailoredSecurityConsentedModalAndroid(
   if (is_enable_message_) {
     title = l10n_util::GetStringUTF16(
         IDS_TAILORED_SECURITY_CONSENTED_ENABLE_MESSAGE_TITLE);
-    description = l10n_util::GetStringUTF16(
-        IDS_TAILORED_SECURITY_CONSENTED_ENABLE_MESSAGE_DESCRIPTION);
+    if (base::FeatureList::IsEnabled(
+            safe_browsing::kTailoredSecurityUpdatedMessages)) {
+      description = l10n_util::GetStringUTF16(
+          IDS_TAILORED_SECURITY_CONSENTED_ENABLE_MESSAGE_DESCRIPTION_UPDATED);
+    } else {
+      description = l10n_util::GetStringUTF16(
+          IDS_TAILORED_SECURITY_CONSENTED_ENABLE_MESSAGE_DESCRIPTION);
+    }
     icon_resource_id =
         ResourceMapper::MapToJavaDrawableId(IDR_ANDROID_MESSAGE_SAFETY_CHECK);
   } else {
     title = l10n_util::GetStringUTF16(
         IDS_TAILORED_SECURITY_CONSENTED_DISABLE_MESSAGE_TITLE);
-    description = l10n_util::GetStringUTF16(
-        IDS_TAILORED_SECURITY_CONSENTED_DISABLE_MESSAGE_DESCRIPTION);
+    if (base::FeatureList::IsEnabled(
+            safe_browsing::kTailoredSecurityUpdatedMessages)) {
+      description = l10n_util::GetStringUTF16(
+          IDS_TAILORED_SECURITY_CONSENTED_DISABLE_MESSAGE_DESCRIPTION_UPDATED);
+    } else {
+      description = l10n_util::GetStringUTF16(
+          IDS_TAILORED_SECURITY_CONSENTED_DISABLE_MESSAGE_DESCRIPTION);
+    }
     icon_resource_id =
         ResourceMapper::MapToJavaDrawableId(IDR_ANDROID_MESSAGE_SHIELD);
     message_->DisableIconTint();

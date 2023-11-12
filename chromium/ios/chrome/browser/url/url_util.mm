@@ -36,15 +36,24 @@ bool UrlHasChromeScheme(NSURL* url) {
   return net::UrlSchemeIs(url, base::SysUTF8ToNSString(kChromeUIScheme));
 }
 
-bool IsURLNtp(const GURL& url) {
-  return UrlHasChromeScheme(url) && url.host() == kChromeUINewTabHost;
+bool IsUrlNtp(const GURL& url) {
+  // Check for "chrome://newtab".
+  if (url.SchemeIs(kChromeUIScheme)) {
+    return url.host_piece() == kChromeUINewTabHost;
+  }
+  // Check for "about://newtab/". Since "about:" scheme is not standardised,
+  // check the full path.
+  if (url.SchemeIs(url::kAboutScheme)) {
+    return url == kChromeUIAboutNewTabURL;
+  }
+  return false;
 }
 
 bool IsHandledProtocol(const std::string& scheme) {
   DCHECK_EQ(scheme, base::ToLowerASCII(scheme));
   return (scheme == url::kHttpScheme || scheme == url::kHttpsScheme ||
           scheme == url::kAboutScheme || scheme == url::kDataScheme ||
-          scheme == kChromeUIScheme);
+          scheme == kChromeUIScheme || SchemeIsAppStoreScheme(scheme));
 }
 
 bool ShouldLoadUrlInDesktopMode(const GURL& url,
@@ -102,6 +111,28 @@ bool ShouldLoadUrlInDesktopMode(const GURL& url,
 
 - (void)setCallbackSchemeForTesting:(NSString*)scheme {
   _callbackScheme = [scheme copy];
+}
+
+NSSet<NSString*>* GetItmsSchemes() {
+  static NSSet<NSString*>* schemes;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    schemes = [NSSet<NSString*>
+        setWithObjects:@"itms", @"itmss", @"itms-apps", @"itms-appss",
+                       // There's no evidence that itms-bookss is actually
+                       // supported, but over-inclusion costs less than
+                       // under-inclusion.
+                       @"itms-books", @"itms-bookss", nil];
+  });
+  return schemes;
+}
+
+bool UrlHasAppStoreScheme(const GURL& url) {
+  return SchemeIsAppStoreScheme(url.scheme());
+}
+
+bool SchemeIsAppStoreScheme(const std::string& scheme) {
+  return [GetItmsSchemes() containsObject:base::SysUTF8ToNSString(scheme)];
 }
 
 @end

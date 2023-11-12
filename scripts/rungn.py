@@ -18,14 +18,14 @@ use_gn_ide_all = os.access(os.path.join(sourcedir, ".enable_gn_all_ide"), os.F_O
 use_gn_unique_name = os.access(os.path.join(sourcedir, ".enable_gn_unique_name"), os.F_OK)
 use_gn_goma = os.access(os.path.join(sourcedir, ".enable_gn_goma"), os.F_OK)
 
-# Check python version on Windows
-if is_windows:
-  try:
-    import check_win_python
-    check_win_python.CheckPythonInstall()
-  except:
-    pass
-elif is_linux:
+# Check python version
+try:
+  if is_windows:
+    import check_python
+    check_python.CheckPythonInstall()
+except:
+  pass
+if is_linux:
   # Add path for downloaded clang
   os.environ["PATH"] = os.pathsep.join([
       os.path.join(sourcedir, "chromium", "third_party", "llvm-build",
@@ -194,6 +194,9 @@ if args.refresh or args.bootstrap or not os.access(gn_path, os.F_OK):
 
 gn_defines = os.environ.get("GN_DEFINES", "")
 if gn_defines:
+  if not int(os.environ.get("CHROME_HEADLESS", 0)):
+    print("Using the GN_DEFINES environment variable is deprecated.\n"
+          "Use the files args.gn, args.Release.gn, and/or args.Debug.gn in the source root dir instead.")
   gn_defines = " "+gn_defines
 
 # Remove Google API client ID/secret apparently not needed
@@ -294,9 +297,6 @@ if args.refresh or not args.args:
   if not is_builder and not args.official:
     for project in ["Debug"] + args.extra_debug:
       profiles.append(("out/"+project, ['--args='+ include_arg(project) +'is_debug=true'+platform_target+' ' + gn_defines]))
-  if is_windows and is_builder:
-    profiles.append(("out/Release_x64",
-                    ['--args='+ include_arg("Release_x64") +'is_debug=false target_cpu="x64"'+gn_defines]))
 
   if args.ide_all or use_gn_ide_all:
     ide_profile_name += "_all"

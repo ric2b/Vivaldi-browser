@@ -9,9 +9,12 @@
 #include "base/scoped_observation.h"
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
 #include "chrome/browser/extensions/extension_view_host.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/extensions/extension_view_views.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_view_state_observer.h"
+#include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_icon_image.h"
 
 class Browser;
@@ -32,13 +35,18 @@ class Extension;
 // ExtensionSidePanelCoordinator handles the creation and registration of
 // SidePanelEntries for the associated extension and creates the view to be
 // shown if this extension's SidePanelEntry is active.
+// TODO(crbug.com/1434219): Separate into different classes for global vs
+// contextual extension side panels given the difference in behavior betweeen
+// these two panel types.
 class ExtensionSidePanelCoordinator : public ExtensionViewViews::Observer,
-                                      public IconImage::Observer,
-                                      public SidePanelService::Observer {
+                                      public SidePanelService::Observer,
+                                      public TabStripModelObserver {
  public:
-  explicit ExtensionSidePanelCoordinator(Browser* browser,
+  explicit ExtensionSidePanelCoordinator(Profile* profile,
+                                         Browser* browser,
+                                         content::WebContents* web_contents,
                                          const Extension* extension,
-                                         SidePanelRegistry* global_registry);
+                                         SidePanelRegistry* registry);
   ExtensionSidePanelCoordinator(const ExtensionSidePanelCoordinator&) = delete;
   ExtensionSidePanelCoordinator& operator=(
       const ExtensionSidePanelCoordinator&) = delete;
@@ -47,18 +55,23 @@ class ExtensionSidePanelCoordinator : public ExtensionViewViews::Observer,
   // Returns the WebContents managed by `host_`.
   content::WebContents* GetHostWebContentsForTesting() const;
 
-  // Calls LoadExtensionIcon() again. Since LoadExtensionIcon() is called right
-  // when this class is created, it's difficult for tests to catch the
-  // OnExtensionIconImageChanged event. This method allows tests to initiate
-  // and wait for that event.
-  void LoadExtensionIconForTesting();
-
  private:
   SidePanelEntry::Key GetEntryKey() const;
 
+  SidePanelEntry* GetEntry() const;
+
+  bool IsGlobalCoordinator() const;
+
+  // Returns if this extension's side panel is explicitly disabled for the given
+  // `tab_id`.
+  bool IsDisabledForTab(int tab_id) const;
+
+  // Deregisters this extension's SidePanelEntry from `registry_`.
+  void DeregisterEntry();
+
   // Deregisters this extension's SidePanelEntry from the global
-  // SidePanelCoordinator.
-  void DeregisterGlobalEntry();
+  // SidePanelRegistry and caches the entry's view into `global_entry_view_`.
+  void DeregisterGlobalEntryAndCacheView();
 
   // SidePanelService::Observer:
   void OnPanelOptionsChanged(
@@ -69,8 +82,11 @@ class ExtensionSidePanelCoordinator : public ExtensionViewViews::Observer,
   // ExtensionViewViews::Observer
   void OnViewDestroying() override;
 
-  // IconImage::Observer
-  void OnExtensionIconImageChanged(IconImage* image) override;
+  // TabStripModelObserver:
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
 
   // Creates and registers the SidePanelEntry for this extension, and observes
   // the entry. This is called if the extension has a default side panel path
@@ -82,6 +98,11 @@ class ExtensionSidePanelCoordinator : public ExtensionViewViews::Observer,
   // view for the entry has not been cached.
   std::unique_ptr<views::View> CreateView();
 
+  // Called when window.close() is called from the extension's side panel page.
+  // This closes the side panel if the extension's panel is showing. Otherwise
+  // it clears the extension entry's cached view.
+  void HandleCloseExtensionSidePanel(ExtensionHost* host);
+
   // Loads the `side_panel_url_` into the WebContents of the view for the
   // extension's SidePanelEntry. To avoid unnecessary updates, this is only
   // called when this extension's SidePanelEntry is currently active.
@@ -90,9 +111,27 @@ class ExtensionSidePanelCoordinator : public ExtensionViewViews::Observer,
   // Loads the extension's icon for its SidePanelEntry.
   void LoadExtensionIcon();
 
+  // The profile associated with either `browser_` or `web_contents_`.
+  raw_ptr<Profile> profile_;
+
+  // The browser that owns `registry_` and the ExtensionSidePanelManager that
+  // owns this class. A reference for this is kept so the side panel can be
+  // closed when window.close() is called from the extension's side panel page.
+  // Only one of `browser_` or `web_contents_` should be defined.
   raw_ptr<Browser> browser_;
+
+  // The WebContents that owns `registry_` and the ExtensionSidePanelManager
+  // that owns this class. Refer to the comment for `browser_` on why this
+  // reference needs to be kept.
+  raw_ptr<content::WebContents> web_contents_;
+
+  // The extension that registered the side panel content that's managed by this
+  // class.
   raw_ptr<const Extension> extension_;
-  raw_ptr<SidePanelRegistry> global_registry_;
+
+  // The SidePanelRegistry that lives in the same user data that an instance of
+  // this class lives in. Owns all extension entries managed by `coordinators_`.
+  raw_ptr<SidePanelRegistry> registry_;
 
   // The current URL set for the extension's global side panel. This is set in
   // the constructor or during OnPanelOptionsChanged.
@@ -106,6 +145,10 @@ class ExtensionSidePanelCoordinator : public ExtensionViewViews::Observer,
 
   // The extension's own icon for its side panel entry.
   std::unique_ptr<IconImage> extension_icon_;
+
+  // Cached view for global entry if it was disabled for a specific tab and may
+  // be shown again on a different tab where it's enabled.
+  std::unique_ptr<views::View> global_entry_view_;
 
   base::ScopedObservation<ExtensionViewViews, ExtensionViewViews::Observer>
       scoped_view_observation_{this};

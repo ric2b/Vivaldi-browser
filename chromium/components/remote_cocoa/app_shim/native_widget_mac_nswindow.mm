@@ -166,11 +166,14 @@ void OrderChildWindow(NSWindow* child_window,
   BOOL _isEnforcingNeverMadeVisible;
   BOOL _preventKeyWindow;
   BOOL _isTooltip;
+  BOOL _isHeadless;
 }
 @synthesize bridgedNativeWidgetId = _bridgedNativeWidgetId;
 @synthesize bridge = _bridge;
 @synthesize isTooltip = _isTooltip;
+@synthesize isHeadless = _isHeadless;
 @synthesize childWindowAddedHandler = _childWindowAddedHandler;
+@synthesize childWindowRemovedHandler = _childWindowRemovedHandler;
 
 - (instancetype)initWithContentRect:(NSRect)contentRect
                           styleMask:(NSUInteger)windowStyle
@@ -210,6 +213,7 @@ void OrderChildWindow(NSWindow* child_window,
   _willUpdateRestorableState = YES;
   [NSObject cancelPreviousPerformRequestsWithTarget:self];
   [_childWindowAddedHandler dealloc];
+  [_childWindowRemovedHandler dealloc];
   [super dealloc];
 }
 
@@ -221,6 +225,13 @@ void OrderChildWindow(NSWindow* child_window,
   childWin.level = level;
   if (self.childWindowAddedHandler) {
     self.childWindowAddedHandler(childWin);
+  }
+}
+
+- (void)removeChildWindow:(NSWindow*)childWin {
+  [super removeChildWindow:childWin];
+  if (self.childWindowRemovedHandler) {
+    self.childWindowRemovedHandler(childWin);
   }
 }
 
@@ -296,6 +307,15 @@ void OrderChildWindow(NSWindow* child_window,
                 [notificationCenter removeObserver:observer];
               }];
   [self orderWindow:NSWindowAbove relativeTo:0];
+}
+
+- (NSRect)constrainFrameRect:(NSRect)frameRect toScreen:(NSScreen*)screen {
+  // Headless windows should not be constrained within the physical screen.
+  if (_isHeadless) {
+    return frameRect;
+  }
+
+  return [super constrainFrameRect:frameRect toScreen:screen];
 }
 
 // Private methods.

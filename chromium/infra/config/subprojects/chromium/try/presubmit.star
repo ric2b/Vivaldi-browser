@@ -18,8 +18,6 @@ try_.defaults.set(
     execution_timeout = 15 * time.minute,
     main_list_view = "try",
 
-    # TODO(crbug.com/1362440): remove this.
-    omit_python2 = False,
     # Default priority for buildbucket is 30, see
     # https://chromium.googlesource.com/infra/infra/+/bb68e62b4380ede486f65cd32d9ff3f1bbe288e4/appengine/cr-buildbucket/creation.py#42
     # This will improve our turnaround time for landing infra/config changes
@@ -44,7 +42,8 @@ def presubmit_builder(*, name, tryjob, **kwargs):
     """
     if tryjob:
         tryjob_args = {a: getattr(tryjob, a) for a in dir(tryjob)}
-        tryjob_args["disable_reuse"] = True
+        if tryjob_args.get("disable_reuse") == None:
+            tryjob_args["disable_reuse"] = True
         tryjob_args["add_default_filters"] = False
         tryjob = try_.job(**tryjob_args)
     return try_.builder(name = name, tryjob = tryjob, **kwargs)
@@ -138,6 +137,24 @@ presubmit_builder(
         "repo_name": "chromium",
     },
     tryjob = try_.job(),
+)
+
+presubmit_builder(
+    name = "win-presubmit",
+    executable = "recipe:presubmit",
+    builderless = True,
+    os = os.WINDOWS_DEFAULT,
+    execution_timeout = 40 * time.minute,
+    properties = {
+        "$depot_tools/presubmit": {
+            "runhooks": True,
+            "timeout_s": 480,
+        },
+        "repo_name": "chromium",
+    },
+    tryjob = try_.job(
+        disable_reuse = False,
+    ),
 )
 
 presubmit_builder(

@@ -85,22 +85,21 @@ base::Value::Dict GetBackgroundInfoWithColor(
   return new_background_info;
 }
 
-base::Value NtpCustomBackgroundDefaults() {
-  base::Value defaults(base::Value::Type::DICT);
-  defaults.SetKey(kNtpCustomBackgroundURL,
-                  base::Value(base::Value::Type::STRING));
-  defaults.SetKey(kNtpCustomBackgroundAttributionLine1,
-                  base::Value(base::Value::Type::STRING));
-  defaults.SetKey(kNtpCustomBackgroundAttributionLine2,
-                  base::Value(base::Value::Type::STRING));
-  defaults.SetKey(kNtpCustomBackgroundAttributionActionURL,
-                  base::Value(base::Value::Type::STRING));
-  defaults.SetKey(kNtpCustomBackgroundCollectionId,
-                  base::Value(base::Value::Type::STRING));
-  defaults.SetKey(kNtpCustomBackgroundResumeToken,
-                  base::Value(base::Value::Type::STRING));
-  defaults.SetKey(kNtpCustomBackgroundRefreshTimestamp,
-                  base::Value(base::Value::Type::INTEGER));
+base::Value::Dict NtpCustomBackgroundDefaults() {
+  base::Value::Dict defaults;
+  defaults.Set(kNtpCustomBackgroundURL, base::Value(base::Value::Type::STRING));
+  defaults.Set(kNtpCustomBackgroundAttributionLine1,
+               base::Value(base::Value::Type::STRING));
+  defaults.Set(kNtpCustomBackgroundAttributionLine2,
+               base::Value(base::Value::Type::STRING));
+  defaults.Set(kNtpCustomBackgroundAttributionActionURL,
+               base::Value(base::Value::Type::STRING));
+  defaults.Set(kNtpCustomBackgroundCollectionId,
+               base::Value(base::Value::Type::STRING));
+  defaults.Set(kNtpCustomBackgroundResumeToken,
+               base::Value(base::Value::Type::STRING));
+  defaults.Set(kNtpCustomBackgroundRefreshTimestamp,
+               base::Value(base::Value::Type::INTEGER));
   return defaults;
 }
 
@@ -384,6 +383,11 @@ void NtpCustomBackgroundService::SelectLocalBackgroundImage(
 
 void NtpCustomBackgroundService::RefreshBackgroundIfNeeded() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // Do not refresh background & color if extension theme is in use.
+  if (theme_service_->UsingExtensionTheme()) {
+    return;
+  }
+
   const base::Value::Dict& background_info =
       profile_->GetPrefs()->GetDict(prefs::kNtpCustomBackgroundDict);
   int64_t refresh_timestamp = 0;

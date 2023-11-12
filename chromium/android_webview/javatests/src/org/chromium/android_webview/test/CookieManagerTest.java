@@ -8,10 +8,10 @@ import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 
-import android.support.test.InstrumentationRegistry;
 import android.util.Pair;
 
 import androidx.annotation.IntDef;
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
@@ -254,6 +254,31 @@ public class CookieManagerTest {
             waitForCookie(url);
             assertHasCookies(url);
             validateCookies(url, "httponly", "strictsamesite", "laxsamesite");
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"AndroidWebView"})
+    public void testEmbedderCanSeePartitionedCookies() throws Throwable {
+        TestWebServer webServer = TestWebServer.start();
+        try {
+            // Set a partitioned cookie and an unpartitioned cookie to ensure that they are all
+            // visible to CookieManager in the app.
+            String cookies[] = {"partitioned_cookie=foo; SameSite=None; Secure; Partitioned",
+                    "unpartitioned_cookie=bar; SameSite=None; Secure"};
+            List<Pair<String, String>> responseHeaders = new ArrayList<Pair<String, String>>();
+            for (String cookie : cookies) {
+                responseHeaders.add(Pair.create("Set-Cookie", cookie));
+            }
+            String url = webServer.setResponse("/", "test", responseHeaders);
+            mActivityTestRule.loadUrlSync(
+                    mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
+            waitForCookie(url);
+            assertHasCookies(url);
+            validateCookies(url, "partitioned_cookie", "unpartitioned_cookie");
         } finally {
             webServer.shutdown();
         }

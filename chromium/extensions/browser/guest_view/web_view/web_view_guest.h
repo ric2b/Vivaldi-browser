@@ -78,8 +78,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   // Request navigating the guest to the provided |src| URL.
   void NavigateGuest(const std::string& src, bool force_navigation,
       ui::PageTransition transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-      content::Referrer* referrer = nullptr,
-      content::OpenURLParams* params = nullptr);
+      absl::optional<content::OpenURLParams> params = absl::nullopt);
 
   // Shows the context menu for the guest.
   void ShowContextMenu(int request_id);
@@ -303,7 +302,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
       const content::Referrer& referrer,
       ui::PageTransition transition_type,
       bool force_navigation,
-      const content::OpenURLParams* params = nullptr);
+      absl::optional<content::OpenURLParams> params = absl::nullopt);
 
   void RequestNewWindowPermission(WindowOpenDisposition disposition,
                                   const gfx::Rect& initial_bounds,
@@ -374,10 +373,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
     bool did_start_navigating_away_from_initial_url = false;
 
     // Vivaldi
-    content::Referrer* referrer = nullptr;
-
-    // Vivaldi
-    content::OpenURLParams* params = nullptr;
+    absl::optional<content::OpenURLParams> params;
 
     NewWindowInfo(const GURL& url, const std::string& name);
     NewWindowInfo(const NewWindowInfo&);

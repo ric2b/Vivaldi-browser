@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <functional>
 #include <memory>
 #include <set>
@@ -34,6 +33,7 @@
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search_engines/template_url_starter_pack_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 
 using base::ASCIIToUTF16;
@@ -211,8 +211,8 @@ void HistoryQuickProviderTest::SetUp() {
       std::make_unique<TemplateURLService>(nullptr, 0));
 
   client_->set_in_memory_url_index(std::make_unique<InMemoryURLIndex>(
-      client_->GetBookmarkModel(), client_->GetHistoryService(), nullptr,
-      history_dir_.GetPath(), SchemeSet()));
+      client_->GetLocalOrSyncableBookmarkModel(), client_->GetHistoryService(),
+      nullptr, history_dir_.GetPath(), SchemeSet()));
   client_->GetInMemoryURLIndex()->Init();
 
   // Block until History has processed InMemoryURLIndex initialization.
@@ -494,18 +494,16 @@ TEST_F(HistoryQuickProviderTest,
                     false, u"https://suffix.com/prefixsuffix1",
                     std::u16string());
   std::vector<int> unbroken_scores(3);
-  std::transform(ac_matches().begin(), ac_matches().end(),
-                 unbroken_scores.begin(),
-                 [](const auto& match) { return match.relevance; });
+  base::ranges::transform(ac_matches(), unbroken_scores.begin(),
+                          &AutocompleteMatch::relevance);
 
   // Get scores for 'prefix suffix'
   RunTestWithCursor(u"prefix suffix", std::string::npos, false, expected_urls,
                     false, u"https://suffix.com/prefixsuffix1",
                     std::u16string());
   std::vector<int> broken_scores(3);
-  std::transform(ac_matches().begin(), ac_matches().end(),
-                 broken_scores.begin(),
-                 [](const auto& match) { return match.relevance; });
+  base::ranges::transform(ac_matches(), broken_scores.begin(),
+                          &AutocompleteMatch::relevance);
   // Ensure the latter scores are higher than the former.
   for (size_t i = 0; i < 3; ++i)
     EXPECT_GT(broken_scores[i], unbroken_scores[i]);
@@ -1070,12 +1068,11 @@ TEST_F(HQPDomainSuggestionsTest, DomainSuggestions) {
         [](const auto& match) { return match.description; });
     EXPECT_THAT(match_titles, testing::ElementsAreArray(expected_matches));
 
-    EXPECT_EQ(
-        client()
-            .GetOmniboxTriggeredFeatureService()
-            ->GetFeatureTriggeredInSession(
-                OmniboxTriggeredFeatureService::Feature::kDomainSuggestions),
-        expected_triggered);
+    EXPECT_EQ(client()
+                  .GetOmniboxTriggeredFeatureService()
+                  ->GetFeatureTriggeredInSession(
+                      metrics::OmniboxEventProto_Feature_DOMAIN_SUGGESTIONS),
+              expected_triggered);
   };
 
   // When matching a popular domain, its top 3 suggestions should be suggested

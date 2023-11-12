@@ -7,6 +7,8 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 
+WebAppTest::WebAppTest() = default;
+
 void WebAppTest::SetUp() {
   ASSERT_TRUE(testing_profile_manager_.SetUp());
   profile_ = testing_profile_manager_.CreateTestingProfile(

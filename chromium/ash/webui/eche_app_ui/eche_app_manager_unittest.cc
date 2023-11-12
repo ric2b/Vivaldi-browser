@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "ash/webui/eche_app_ui/eche_connection_status_handler.h"
 #include "ash/webui/eche_app_ui/eche_stream_orientation_observer.h"
 #include "ash/webui/eche_app_ui/eche_stream_status_change_handler.h"
 #include "ash/webui/eche_app_ui/launch_app_helper.h"
@@ -30,16 +31,18 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/image/image.h"
 
-namespace ash {
-namespace eche_app {
+namespace ash::eche_app {
 
 namespace {
-void LaunchEcheAppFunction(const absl::optional<int64_t>& notification_id,
-                           const std::string& package_name,
-                           const std::u16string& visible_name,
-                           const absl::optional<int64_t>& user_id,
-                           const gfx::Image& icon,
-                           const std::u16string& phone_name) {}
+
+void LaunchEcheAppFunction(
+    const absl::optional<int64_t>& notification_id,
+    const std::string& package_name,
+    const std::u16string& visible_name,
+    const absl::optional<int64_t>& user_id,
+    const gfx::Image& icon,
+    const std::u16string& phone_name,
+    AppsLaunchInfoProvider* apps_launcher_info_provider) {}
 
 void LaunchNotificationFunction(
     const absl::optional<std::u16string>& title,
@@ -64,6 +67,7 @@ class FakePresenceMonitorClient : public secure_channel::PresenceMonitorClient {
       const multidevice::RemoteDeviceRef& local_device_ref) override {}
   void StopMonitoring() override {}
 };
+
 }  // namespace
 
 const char kFakeDeviceName[] = "Someone's Chromebook";
@@ -152,6 +156,11 @@ class EcheAppManagerTest : public testing::Test {
     return stream_orientation_observer_remote_;
   }
 
+  mojo::Remote<mojom::ConnectionStatusObserver>&
+  connection_status_observer_remote() {
+    return connection_status_observer_remote_;
+  }
+
   void Bind() {
     manager_->BindSignalingMessageExchangerInterface(
         signaling_message_exchanger_remote_.BindNewPipeAndPassReceiver());
@@ -165,6 +174,8 @@ class EcheAppManagerTest : public testing::Test {
         display_stream_handler_remote_.BindNewPipeAndPassReceiver());
     manager_->BindStreamOrientationObserverInterface(
         stream_orientation_observer_remote_.BindNewPipeAndPassReceiver());
+    manager_->BindConnectionStatusObserverInterface(
+        connection_status_observer_remote_.BindNewPipeAndPassReceiver());
   }
 
  private:
@@ -188,6 +199,8 @@ class EcheAppManagerTest : public testing::Test {
   mojo::Remote<mojom::DisplayStreamHandler> display_stream_handler_remote_;
   mojo::Remote<mojom::StreamOrientationObserver>
       stream_orientation_observer_remote_;
+  mojo::Remote<mojom::ConnectionStatusObserver>
+      connection_status_observer_remote_;
 };
 
 TEST_F(EcheAppManagerTest, BindCheck) {
@@ -197,6 +210,7 @@ TEST_F(EcheAppManagerTest, BindCheck) {
   EXPECT_FALSE(notification_generator_remote());
   EXPECT_FALSE(display_stream_handler_remote());
   EXPECT_FALSE(stream_orientation_observer_remote());
+  EXPECT_FALSE(connection_status_observer_remote());
 
   Bind();
 
@@ -206,7 +220,7 @@ TEST_F(EcheAppManagerTest, BindCheck) {
   EXPECT_TRUE(notification_generator_remote());
   EXPECT_TRUE(display_stream_handler_remote());
   EXPECT_TRUE(stream_orientation_observer_remote());
+  EXPECT_TRUE(connection_status_observer_remote());
 }
 
-}  // namespace eche_app
-}  // namespace ash
+}  // namespace ash::eche_app

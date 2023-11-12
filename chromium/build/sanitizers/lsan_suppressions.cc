@@ -30,7 +30,7 @@ char kLSanDefaultSuppressions[] =
     // suppression works. http://crbug.com/605286
     "leak:__strdup\n"
 
-    // Leaks in Nvidia's GL and Vulkan drivers.
+    // Leaks in GL and Vulkan drivers and system libraries on Linux NVIDIA
     "leak:libGL.so\n"
     "leak:libGLX_nvidia.so\n"
     "leak:libnvidia-cbl.so\n"
@@ -39,6 +39,7 @@ char kLSanDefaultSuppressions[] =
     "leak:libnvidia-rtcore.so\n"
     "leak:nvidia0\n"
     "leak:nvidiactl\n"
+    "leak:libdbus-1.so\n"
 
     // XRandR has several one time leaks.
     "leak:libxrandr\n"
@@ -68,9 +69,6 @@ char kLSanDefaultSuppressions[] =
     // Suppressing the leak is acceptable in some cases when reverting is
     // impossible, i.e. when enabling leak detection for the first time for a
     // test target with pre-existing leaks.
-
-    // https://crbug.com/755670
-    "leak:third_party/yasm/\n"
 
     // v8 leaks caused by weak ref not call
     "leak:blink::DOMWrapperWorld::Create\n"

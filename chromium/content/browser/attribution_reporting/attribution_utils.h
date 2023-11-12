@@ -7,34 +7,42 @@
 
 #include <string>
 
-#include "components/attribution_reporting/source_type.mojom-forward.h"
+#include "base/containers/span.h"
 #include "content/common/content_export.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class Time;
+class TimeDelta;
 class ValueView;
 }  // namespace base
 
 namespace content {
 
-class CommonSourceInfo;
+// Calculates the impression expiry deadline used for report time scheduling.
+CONTENT_EXPORT base::TimeDelta ExpiryDeadline(
+    base::Time source_time,
+    base::Time event_report_window_time);
+
+// Calculates the report time between a source and its deadline.
+base::Time ReportTimeFromDeadline(base::Time source_time,
+                                  base::TimeDelta deadline);
 
 // Calculates the report time for a conversion associated with a given
 // source.
-base::Time ComputeReportTime(const CommonSourceInfo& source,
-                             base::Time trigger_time);
-
-// Returns the number of report windows for the given source type.
-int NumReportWindows(attribution_reporting::mojom::SourceType);
-
-// Calculates the report time for a given source and window index.
-base::Time ReportTimeAtWindow(const CommonSourceInfo& source, int window_index);
+base::Time ComputeReportTime(base::Time source_time,
+                             base::Time trigger_time,
+                             base::span<const base::TimeDelta> deadlines);
 
 // Calculates the last trigger time that could have produced `report_time`.
 CONTENT_EXPORT base::Time LastTriggerTimeForReportTime(base::Time report_time);
 
 CONTENT_EXPORT std::string SerializeAttributionJson(base::ValueView body,
                                                     bool pretty_print = false);
+
+CONTENT_EXPORT base::Time ComputeReportWindowTime(
+    absl::optional<base::Time> report_window_time,
+    base::Time expiry_time);
 
 }  // namespace content
 

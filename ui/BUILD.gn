@@ -53,6 +53,10 @@ static_library("ui") {
       "vivaldi_document_loader.h",
       "vivaldi_rootdocument_handler.cc",
       "vivaldi_rootdocument_handler.h",
+      "window_registry_service_factory.cc",
+      "window_registry_service_factory.h",
+      "window_registry_service.cc",
+      "window_registry_service.h",
     ]
     deps += [
       "//chrome/browser/extensions:extensions",

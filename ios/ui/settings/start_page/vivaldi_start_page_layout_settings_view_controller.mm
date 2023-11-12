@@ -7,10 +7,10 @@
 
 #import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
@@ -29,11 +29,11 @@ using l10n_util::GetNSString;
 namespace {
 
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
-  SectionIdentifierSettings
+  SectionIdentifierSettings = kSectionIdentifierEnumZero
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
-  ItemTypeLayoutLarge,
+  ItemTypeLayoutLarge = kItemTypeEnumZero,
   ItemTypeLayoutMedium,
   ItemTypeLayoutSmall,
   ItemTypeLayoutList,

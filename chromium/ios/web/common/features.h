@@ -61,10 +61,6 @@ BASE_DECLARE_FEATURE(kEnableFullscreenAPI);
 // should be used instead of directly checking this feature.
 BASE_DECLARE_FEATURE(kUseLoadSimulatedRequestForOfflinePage);
 
-// Feature flag that enables getting more of the surrounding text when the user
-// long presses at a certain location.
-BASE_DECLARE_FEATURE(kLongPressSurroundingText);
-
 // Feature flag to enable Emails detection.
 BASE_DECLARE_FEATURE(kEnableEmails);
 
@@ -82,6 +78,16 @@ BASE_DECLARE_FEATURE(kScrollViewProxyScrollEnabledWorkaround);
 // Feature flag to prevent navigation without user interaction.
 BASE_DECLARE_FEATURE(kPreventNavigationWithoutUserInteraction);
 
+// Feature flag to enable Web Inspector support.
+BASE_DECLARE_FEATURE(kEnableWebInspector);
+
+// Feature used by finch config to enable smooth scrolling when the default
+// viewport adjustment experiment is selected via command line switches.
+BASE_DECLARE_FEATURE(kSmoothScrollingDefault);
+
+// Feature flag to enable the session serialization optimizations.
+BASE_DECLARE_FEATURE(kEnableSessionSerializationOptimizations);
+
 // When true, user control for camera and/or microphone access should be
 // enabled.
 bool IsMediaPermissionsControlEnabled();
@@ -92,6 +98,9 @@ bool IsLoadSimulatedRequestAPIEnabled();
 
 // When true, the fullscreen API should be used to enable fullscreen mode.
 bool IsFullscreenAPIEnabled();
+
+// When true, session serialization optimizations should be enabled.
+bool UseSessionSerializationOptimizations();
 
 }  // namespace features
 }  // namespace web

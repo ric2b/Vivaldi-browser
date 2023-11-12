@@ -24,5 +24,7 @@ extern CGFloat const vTabViewBackgroundCornerRadius;
 // Padding for the vivaldi tab view background.
 // In order - (Top, Left, Bottom, Right)
 extern UIEdgeInsets const vTabViewBackgroundPadding;
+// Padding for the desktop tabs new tab button.
+extern UIEdgeInsets const vNewTabButtonPadding;
 
 #endif  // VIVALDI_BROWSER_UI_TAB_STRIP_CONSTANTS_H_

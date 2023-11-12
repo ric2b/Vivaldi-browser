@@ -32,6 +32,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/media/media_resource_provider.h"
 #include "chrome/common/net/net_resource_provider.h"
+#include "chrome/common/renderer_configuration.mojom.h"
 #include "chrome/common/url_constants.h"
 #include "components/visitedlink/renderer/visitedlink_reader.h"
 #include "content/public/child/child_thread.h"
@@ -46,8 +47,6 @@
 #include "net/base/net_module.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/platform/web_request_peer.h"
-#include "third_party/blink/public/platform/web_resource_request_sender_delegate.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -55,12 +54,8 @@
 #include "third_party/blink/public/web/web_security_policy.h"
 #include "third_party/blink/public/web/web_view.h"
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "extensions/renderer/localization_peer.h"
-#endif
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/renderer/chromeos_merge_session_loader_throttle.h"
+#include "chrome/renderer/ash_merge_session_loader_throttle.h"
 #endif
 
 using blink::WebCache;
@@ -68,31 +63,6 @@ using blink::WebSecurityPolicy;
 using content::RenderThread;
 
 namespace {
-
-class RendererResourceDelegate
-    : public blink::WebResourceRequestSenderDelegate {
- public:
-  RendererResourceDelegate() = default;
-
-  RendererResourceDelegate(const RendererResourceDelegate&) = delete;
-  RendererResourceDelegate& operator=(const RendererResourceDelegate&) = delete;
-
-  void OnRequestComplete() override {}
-  scoped_refptr<blink::WebRequestPeer> OnReceivedResponse(
-      scoped_refptr<blink::WebRequestPeer> current_peer,
-      const blink::WebString& mime_type,
-      const blink::WebURL& url) override {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-    return ExtensionLocalizationPeer::CreateExtensionLocalizationPeer(
-        std::move(current_peer), RenderThread::Get(), mime_type.Utf8(), url);
-#else
-    return current_peer;
-#endif
-  }
-
- private:
-  base::WeakPtrFactory<RendererResourceDelegate> weak_factory_{this};
-};
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 scoped_refptr<base::SequencedTaskRunner> GetCallbackGroupTaskRunner() {
@@ -145,7 +115,7 @@ void ChromeRenderThreadObserver::ChromeOSListener::MergeSessionComplete() {
 
 ChromeRenderThreadObserver::ChromeOSListener::ChromeOSListener()
     : session_merged_callbacks_(base::MakeRefCounted<DelayedCallbackGroup>(
-          MergeSessionLoaderThrottle::GetMergeSessionTimeout(),
+          AshMergeSessionLoaderThrottle::GetMergeSessionTimeout(),
           GetCallbackGroupTaskRunner())),
       merge_session_running_(true) {}
 
@@ -158,19 +128,8 @@ void ChromeRenderThreadObserver::ChromeOSListener::BindOnIOThread(
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-chrome::mojom::DynamicParams* GetDynamicConfigParams() {
-  static base::NoDestructor<chrome::mojom::DynamicParams> dynamic_params;
-  return dynamic_params.get();
-}
-
 ChromeRenderThreadObserver::ChromeRenderThreadObserver()
-    : resource_request_sender_delegate_(
-          std::make_unique<RendererResourceDelegate>()),
-      visited_link_reader_(new visitedlink::VisitedLinkReader) {
-  RenderThread* thread = RenderThread::Get();
-  thread->SetResourceRequestSenderDelegate(
-      resource_request_sender_delegate_.get());
-
+    : visited_link_reader_(new visitedlink::VisitedLinkReader) {
   // Configure modules that need access to resources.
   net::NetModule::SetResourceProvider(ChromeNetResourceProvider);
   media::SetLocalizedStringProvider(ChromeMediaLocalizedStringProvider);
@@ -178,10 +137,15 @@ ChromeRenderThreadObserver::ChromeRenderThreadObserver()
 
 ChromeRenderThreadObserver::~ChromeRenderThreadObserver() {}
 
-// static
-const chrome::mojom::DynamicParams&
-ChromeRenderThreadObserver::GetDynamicParams() {
-  return *GetDynamicConfigParams();
+chrome::mojom::DynamicParamsPtr ChromeRenderThreadObserver::GetDynamicParams()
+    const {
+  {
+    base::AutoLock lock(dynamic_params_lock_);
+    if (dynamic_params_) {
+      return dynamic_params_.Clone();
+    }
+  }
+  return chrome::mojom::DynamicParams::New();
 }
 
 void ChromeRenderThreadObserver::RegisterMojoInterfaces(
@@ -203,7 +167,9 @@ void ChromeRenderThreadObserver::SetInitialConfiguration(
     mojo::PendingReceiver<chrome::mojom::ChromeOSListener>
         chromeos_listener_receiver,
     mojo::PendingRemote<content_settings::mojom::ContentSettingsManager>
-        content_settings_manager) {
+        content_settings_manager,
+    mojo::PendingRemote<chrome::mojom::BoundSessionRequestThrottledListener>
+        bound_session_request_throttled_listener) {
   if (content_settings_manager)
     content_settings_manager_.Bind(std::move(content_settings_manager));
   is_incognito_process_ = is_incognito_process;
@@ -217,7 +183,8 @@ void ChromeRenderThreadObserver::SetInitialConfiguration(
 
 void ChromeRenderThreadObserver::SetConfiguration(
     chrome::mojom::DynamicParamsPtr params) {
-  *GetDynamicConfigParams() = std::move(*params);
+  base::AutoLock lock(dynamic_params_lock_);
+  dynamic_params_ = std::move(params);
 }
 
 void ChromeRenderThreadObserver::OnRendererConfigurationAssociatedRequest(

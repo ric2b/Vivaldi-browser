@@ -35,7 +35,6 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
                                    public NavigationControllerDelegate {
  public:
   FencedFrame(base::SafeRef<RenderFrameHostImpl> owner_render_frame_host,
-              blink::mojom::FencedFrameMode mode,
               bool was_discarded);
   ~FencedFrame() override;
 
@@ -56,12 +55,14 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
 
   // blink::mojom::FencedFrameOwnerHost implementation.
   void Navigate(const GURL& url,
-                base::TimeTicks navigation_start_time) override;
+                base::TimeTicks navigation_start_time,
+                const absl::optional<std::u16string>&
+                    embedder_shared_storage_context) override;
   void DidChangeFramePolicy(const blink::FramePolicy& frame_policy) override;
 
   // FrameTree::Delegate.
-  void DidStartLoading(FrameTreeNode* frame_tree_node,
-                       bool should_show_loading_ui) override {}
+  void LoadingStateChanged(LoadingState new_state) override {}
+  void DidStartLoading(FrameTreeNode* frame_tree_node) override {}
   void DidStopLoading() override {}
   bool IsHidden() override;
   int GetOuterDelegateFrameTreeNodeId() override;
@@ -75,8 +76,6 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
   const base::UnguessableToken& GetDevToolsFrameToken() const;
 
   RenderFrameHostImpl* GetInnerRoot() { return frame_tree_->GetMainFrame(); }
-
-  blink::mojom::FencedFrameMode mode() const { return mode_; }
 
  private:
   // NavigationControllerDelegate
@@ -115,13 +114,6 @@ class CONTENT_EXPORT FencedFrame : public blink::mojom::FencedFrameOwnerHost,
 
   // The FrameTree that we create to host the "inner" fenced frame contents.
   std::unique_ptr<FrameTree> frame_tree_;
-
-  // The `mode` attribute set on the fenced frame. The mode will stay the same
-  // across navigations to avoid privacy leak. Since each mode might have
-  // different access constraints, privacy leak might occur if the mode is
-  // mutable as a fenced frame can pass the information it learned in one mode
-  // to the other mode if mode was changed across navigations.
-  const blink::mojom::FencedFrameMode mode_;
 
   // Receives messages from the frame owner element in Blink.
   mojo::AssociatedReceiver<blink::mojom::FencedFrameOwnerHost> receiver_{this};

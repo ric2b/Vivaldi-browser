@@ -8,9 +8,6 @@
 <translation id="1175958423215084756">Phát hiện thấy đường liên kết. <ph name="HOSTNAME" /></translation>
 <translation id="1197694886744716213">Đã xoá trang <ph name="PAGE_NUMBER" /></translation>
 <translation id="1258009455399840361">Xoay 90 độ theo chiều kim đồng hồ</translation>
-<translation id="1300209025925956156">Quét tài liệu của bạn</translation>
-<translation id="1309250603447638106">Đang tải bản cập nhật xuống để sử dụng tính năng quét tài liệu</translation>
-<translation id="137991641490787891"><ph name="ASPECT_RATIO_WIDTH" />. Hãy nhấn tổ hợp phím Tìm kiếm + Mũi tên trái để truy cập.</translation>
 <translation id="1417314334557041815">Chỉnh sửa trang <ph name="INDEX" /></translation>
 <translation id="1467231725790366244">Đã rút <ph name="CAMERA" /> khỏi thiết bị.</translation>
 <translation id="1473110567575736769">Đồng hồ hẹn giờ 3 giây</translation>
@@ -24,14 +21,12 @@
 <translation id="1664224225747386870">Chưa ghi dữ liệu nào</translation>
 <translation id="1838104802459806957">Xoay lên</translation>
 <translation id="1843105061469674856">Quét trang bổ sung</translation>
-<translation id="1851169887664797861">Hiện đã có thêm các tùy chọn điều khiển máy ảnh</translation>
 <translation id="1851616744363735765">ĐÃ TẠM DỪNG</translation>
 <translation id="1899697626337024495">Độ phân giải của ảnh</translation>
 <translation id="1925845977604399247">Truy cập Thư viện</translation>
 <translation id="199526504800285197">Quá trình quay video đã dừng</translation>
 <translation id="1995951722691075581">Quá trình quay video đã dừng vì thiết bị sắp hết dung lượng lưu trữ. Để quay thêm video, bạn cần giải phóng dung lượng trên thiết bị.</translation>
 <translation id="2036868001356139588">Thời lượng bộ hẹn giờ</translation>
-<translation id="2050339315714019657">Khổ dọc</translation>
 <translation id="2064538373111010176"><ph name="CAMERA" /> đang hoạt động</translation>
 <translation id="2134029355740465625">Cài đặt video</translation>
 <translation id="2144806332417375165">Thông số video tùy chỉnh</translation>
@@ -49,7 +44,6 @@
 <translation id="2761536921376153655">Loại quét</translation>
 <translation id="28682968802727151">Xem trước gương</translation>
 <translation id="2879583609344924966">Đã cắm <ph name="CAMERA" /> vào thiết bị.</translation>
-<translation id="2904654629665923749">Có tính năng quét tài liệu</translation>
 <translation id="3067436040345934772">Xoay phải</translation>
 <translation id="3081586908890909590">Chuyển sang quay video</translation>
 <translation id="313467653172006084">30 khung hình/giây</translation>
@@ -74,7 +68,6 @@
 <translation id="4269820728363426813">Sao chép địa chỉ liên kết</translation>
 <translation id="4281620174117014503">Độ phân giải trung bình</translation>
 <translation id="428234092390943511">Hình thu nhỏ của trang</translation>
-<translation id="4340659173795395806">Hiện bạn có thể tạo tệp PDF có nhiều trang</translation>
 <translation id="4383571725254449280">In nhật ký hiệu suất</translation>
 <translation id="4445542136948522167">Dừng chụp ảnh</translation>
 <translation id="4570032796877367747">Máy ảnh mặt trước</translation>
@@ -87,6 +80,7 @@
 <translation id="4864143361253542638">Danh sách trang đã quét</translation>
 <translation id="4890010094662541459">3 x 3</translation>
 <translation id="491895758387112773">Quay video phát trực tuyến đa luồng</translation>
+<translation id="495170559598752135">Tác vụ</translation>
 <translation id="4984613436295737187">Quad HD (1440p)</translation>
 <translation id="5034763830503483128">Tỷ lệ khung hình ảnh</translation>
 <translation id="5057360777601936059">Máy ảnh của bạn hiện chưa sẵn sàng.
@@ -97,7 +91,6 @@
 <translation id="5317780077021120954">Lưu</translation>
 <translation id="5320594929574852403">Đang di chuyển theo hướng sang trái</translation>
 <translation id="5374917190292010970">4K (2160p)</translation>
-<translation id="5444515100983837161">Đặt tất cả cạnh của tài liệu vào trong khung. Tính năng quét hoạt động hiệu quả nhất khi màu của tài liệu và nền khác nhau.</translation>
 <translation id="5662366948659129155">Đang quét trang <ph name="COUNT" /></translation>
 <translation id="5671277269877808209">Vuông</translation>
 <translation id="5746169159649715125">Lưu dưới dạng PDF</translation>
@@ -127,6 +120,7 @@ Nếu ý kiến phản hồi của bạn là về chất lượng ảnh hoặc v
 <translation id="6888362557094394345">Đang di chuyển theo hướng xuống dưới</translation>
 <translation id="695140971690006676">Đặt lại tất cả</translation>
 <translation id="6965382102122355670">OK</translation>
+<translation id="6965830616442491568">Chân dung</translation>
 <translation id="698156982839284926">3 giây</translation>
 <translation id="7134221860976209830">Đồng hồ hẹn giờ 10 giây</translation>
 <translation id="7191890674911603392">Loại bản ghi</translation>
@@ -142,6 +136,7 @@ Nếu ý kiến phản hồi của bạn là về chất lượng ảnh hoặc v
 <translation id="7658239707568436148">Hủy</translation>
 <translation id="7670511624014457267">60 khung hình/giây</translation>
 <translation id="7671804233658741790">Góc dưới cùng bên phải của tài liệu</translation>
+<translation id="7684446460490665873">Quay video ở chế độ tua nhanh thời gian</translation>
 <translation id="7692090236657809299">Bật chế độ quét xoay tròn</translation>
 <translation id="7726641833034062494">Quay video thông thường</translation>
 <translation id="7748344063862150053">Góc trên cùng bên phải của tài liệu</translation>
@@ -157,7 +152,6 @@ Nếu ý kiến phản hồi của bạn là về chất lượng ảnh hoặc v
 <translation id="8428213095426709021">Cài đặt</translation>
 <translation id="8629662593426079630">360p</translation>
 <translation id="8711011893539266636">Bật/tắt micrô. Chế độ tắt tiếng đang bật</translation>
-<translation id="8712637175834984815">Tôi hiểu</translation>
 <translation id="8730621377337864115">Xong</translation>
 <translation id="8732462232047530626">Xem trước siêu dữ liệu</translation>
 <translation id="8815966864175525708">Chuyển sang chụp ảnh chân dung</translation>
@@ -168,6 +162,7 @@ Nếu ý kiến phản hồi của bạn là về chất lượng ảnh hoặc v
 <translation id="9045010116236796332">Đặt tất cả cạnh của tài liệu vào trong khung</translation>
 <translation id="9045155556724273246">10 giây</translation>
 <translation id="906331135292332864">Đang xử lý hình ảnh...</translation>
+<translation id="9161584225258678723">Tua nhanh thời gian</translation>
 <translation id="922762992951083513">Bật gương</translation>
 <translation id="945522503751344254">Gửi phản hồi</translation>
 </translationbundle>

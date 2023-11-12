@@ -36,9 +36,6 @@ import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.base.LocalizationUtils;
-import org.chromium.ui.resources.AndroidResourceType;
-import org.chromium.ui.resources.LayoutResource;
-import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.util.ColorUtils;
 
 import java.util.List;
@@ -47,6 +44,9 @@ import java.util.List;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.ui.resources.AndroidResourceType;
+import org.chromium.ui.resources.LayoutResource;
+import org.chromium.ui.resources.ResourceManager;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
@@ -189,7 +189,6 @@ public class StripLayoutTab implements VirtualView {
     // Close button padding value comes from the built-in padding in the source png.
     private static final int CLOSE_BUTTON_PADDING_DP = 7;
     private static final int CLOSE_BUTTON_WIDTH_DP = 24;
-    private static final int CLOSE_BUTTON_WIDTH_SCROLLING_STRIP_DP = 48;
 
     // Tab strip content y offset
     private static final float FOLIO_CONTENT_OFFSET_Y = 8.f;
@@ -739,7 +738,7 @@ public class StripLayoutTab implements VirtualView {
      * @param animate Whether or not to animate the close button showing/hiding.
      */
     public void setCanShowCloseButton(boolean show, boolean animate) {
-        mCanShowCloseButton = show;
+        mCanShowCloseButton = true; // Vivaldi: There is always room for the close button.
         checkCloseButtonVisibility(animate);
     }
 
@@ -933,9 +932,7 @@ public class StripLayoutTab implements VirtualView {
     }
 
     private RectF getCloseRect() {
-        boolean tabStripImprovementsEnabled = ChromeFeatureList.sTabStripImprovements.isEnabled();
-        int closeButtonWidth = tabStripImprovementsEnabled ? CLOSE_BUTTON_WIDTH_SCROLLING_STRIP_DP
-                                                           : CLOSE_BUTTON_WIDTH_DP;
+        int closeButtonWidth = CLOSE_BUTTON_WIDTH_DP;
         // Vivaldi: Bounds offset for shifted close button.
         final int vivaldiOffset = 5;
         if (!LocalizationUtils.isLayoutRtl()) {
@@ -956,7 +953,7 @@ public class StripLayoutTab implements VirtualView {
         mClosePlacement.bottom = getHeight();
 
         float xOffset = 0;
-        if (!tabStripImprovementsEnabled) {
+        if (ChromeApplicationImpl.isVivaldi()) {
             ResourceManager manager = mRenderHost.getResourceManager();
             if (manager != null) {
                 LayoutResource resource =
@@ -969,7 +966,7 @@ public class StripLayoutTab implements VirtualView {
             }
         }
 
-        mClosePlacement.offset(getDrawX() + xOffset, getDrawY());
+        mClosePlacement.offset(getDrawX() + xOffset, getDrawY()); // Vivaldi
         return mClosePlacement;
     }
 

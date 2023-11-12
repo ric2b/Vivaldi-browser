@@ -255,8 +255,8 @@ void WebViewGuest::CursorHider::Hide() {
   cursor_client_->HideCursor();
 }
 
-WebViewGuest::CursorHider::CursorHider(aura::Window* window) {
-  cursor_client_ = aura::client::GetCursorClient(window);
+WebViewGuest::CursorHider::CursorHider(aura::Window* window)
+    : cursor_client_(aura::client::GetCursorClient(window)) {
   hide_timer_.Start(FROM_HERE, base::Milliseconds(TIME_BEFORE_HIDING_MS), this,
                     &CursorHider::Hide);
 }
@@ -788,7 +788,8 @@ void WebViewGuest::VivaldiCreateWebContents(
   if (!base::IsStringUTF8(storage_partition_id)) {
     bad_message::ReceivedBadMessage(owner_render_process_host,
                                     bad_message::WVG_PARTITION_ID_NOT_UTF8);
-    std::move(webcontentents_created_callback).Run(std::move(owned_this), nullptr);
+    std::move(webcontentents_created_callback)
+        .Run(std::move(owned_this), nullptr);
     return;
   }
   std::string partition_domain = GetOwnerSiteURL().host();
@@ -863,7 +864,6 @@ void WebViewGuest::VivaldiCreateWebContents(
     if (extensions::ExtensionTabUtil::GetTabById(
             *tab_id, profile, include_incognito, &browser, nullptr,
             &tabstrip_contents, &tab_index)) {
-
       new_contents.reset(
           tabstrip_contents);  // Tabstrip must not lose ownership. Will
                                // override and release in
@@ -871,7 +871,7 @@ void WebViewGuest::VivaldiCreateWebContents(
 
       // Make sure we clean up WebViewguests with the same webcontents.
       extensions::WebViewGuest* web_view_guest =
-        extensions::WebViewGuest::FromWebContents(tabstrip_contents);
+          extensions::WebViewGuest::FromWebContents(tabstrip_contents);
       if (web_view_guest) {
         zoom::ZoomController::FromWebContents(tabstrip_contents)
             ->RemoveObserver(web_view_guest);
@@ -907,20 +907,28 @@ void WebViewGuest::VivaldiCreateWebContents(
       if (inspected_contents) {
         // NOTE(david@vivaldi.com): This returns always the |main_web_contents_|
         // which is required when the dev tools window is undocked.
-        content::WebContents* devtools_contents =
-            DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
-                inspected_contents);
+
+        content::WebContents* devtools_contents = nullptr;
+
         // NOTE(david@vivaldi.com): Each docking state has it's own dedicated
         // webview now (VB-42802). We need to make sure that we attach this
         // guest view either to the already existing |toolbox_web_contents_|
         // which is required for undocked dev tools or to the
         // |main_web_contents_| when docked. Each guest view will be reattached
         // after docking state was changed.
+        // VB-94370 introduced replacement of the docked/undocked webviews.
         if (auto* paramstr = create_params.FindString("name")) {
-          if (!paramstr->find("vivaldi-devtools")) {
-            DevToolsContentsResizingStrategy strategy;
-            devtools_contents = DevToolsWindow::GetInTabWebContents(
-                inspected_contents, &strategy);
+          if (*paramstr == "vivaldi-devtools-undocked") {
+            // Make sure we always use the toolbox_contents_ from
+            // DevtoolsWindow.
+            devtools_contents = devtools_contents =
+                DevToolsWindow::GetInTabWebContents(inspected_contents,
+                                                    nullptr);
+          } else if (*paramstr == "vivaldi-devtools-main") {
+            // Make sure we always use the main_contents_ from DevtoolsWindow.
+            devtools_contents =
+                DevToolsWindow::GetDevtoolsWebContentsForInspectedWebContents(
+                    inspected_contents);
           }
         }
         DCHECK(devtools_contents);
@@ -941,6 +949,7 @@ void WebViewGuest::VivaldiCreateWebContents(
         DevToolsWindow* devWindow =
             DevToolsWindow::GetInstanceForInspectedWebContents(
                 inspected_contents);
+        DCHECK(devWindow);
         devWindow->set_guest_delegate(this);
         connector_item_ = api->GetOrCreateDevtoolsConnectorItem(*tab_id);
         DCHECK(connector_item_);
@@ -950,7 +959,7 @@ void WebViewGuest::VivaldiCreateWebContents(
 
         // Make sure we clean up WebViewguests with the same webcontents.
         extensions::WebViewGuest* web_view_guest =
-          extensions::WebViewGuest::FromWebContents(devtools_contents);
+            extensions::WebViewGuest::FromWebContents(devtools_contents);
         if (web_view_guest) {
           zoom::ZoomController::FromWebContents(devtools_contents)
               ->RemoveObserver(web_view_guest);
@@ -1007,7 +1016,8 @@ void WebViewGuest::VivaldiCreateWebContents(
           extension_host_ = std::make_unique<::vivaldi::VivaldiExtensionHost>(
               context, popup_url, mojom::ViewType::kExtensionPopup,
               new_contents.get());
-          task_manager::WebContentsTags::CreateForTabContents(new_contents.get());
+          task_manager::WebContentsTags::CreateForTabContents(
+              new_contents.get());
         }
       } else if (*view_name == "vivaldi_embedded_view") {
         // Create WebContents where we can open
@@ -1072,50 +1082,50 @@ void WebViewGuest::VivaldiCreateWebContents(
 
 blink::mojom::DisplayMode WebViewGuest::GetDisplayMode(
     const content::WebContents* source) {
+  if (!owner_web_contents() || !owner_web_contents()->GetDelegate()) {
+    return blink::mojom::DisplayMode::kBrowser;
+  }
   return owner_web_contents()->GetDelegate()->GetDisplayMode(source);
 }
 
 void WebViewGuest::MaybeAddToOpenersTabStrip(
     const base::Value::Dict& create_params) {
-
   absl::optional<int> opener_process_id =
       create_params.FindInt("opener_process_id");
   absl::optional<int> opener_frame_id =
       create_params.FindInt("opener_render_frame_id");
-  absl::optional<int> disposition =
-      create_params.FindInt("disposition");
+  absl::optional<int> disposition = create_params.FindInt("disposition");
 
   WindowOpenDisposition window_open_disposition =
       (disposition ? static_cast<WindowOpenDisposition>(*disposition)
                    : WindowOpenDisposition::NEW_FOREGROUND_TAB);
+
+  if (window_open_disposition == WindowOpenDisposition::NEW_POPUP) {
+    return;
+  }
 
   if ((opener_process_id &&
        *opener_process_id != content::ChildProcessHost::kInvalidUniqueID) &&
       (opener_frame_id && *opener_frame_id != MSG_ROUTING_NONE)) {
     content::WebContents* opener_web_contents =
         content::WebContents::FromRenderFrameHost(
-            content::RenderFrameHost::FromID(
-                *opener_process_id,
-                *opener_frame_id));
+            content::RenderFrameHost::FromID(*opener_process_id,
+                                             *opener_frame_id));
 
     auto* opener_guest = WebViewGuest::FromWebContents(opener_web_contents);
-
-    WebViewGuest* opener = GetOpener();
-
-    CHECK_NE(opener, opener_guest);
 
     SetOpener(opener_guest);
   }
   WebViewGuest* opener = GetOpener();
-  if (opener && (window_open_disposition != WindowOpenDisposition::NEW_POPUP)) {
-
+  if (opener) {
     Browser* browser =
         chrome::FindBrowserWithWebContents(opener->web_contents());
-    if (browser) {
+    if (browser && !browser->is_type_popup()) {
       opener->AddGuestToTabStripModel(
           this, browser->session_id().id(),
           /*bool activePage =*/
-          (window_open_disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB),
+          (window_open_disposition !=
+           WindowOpenDisposition::NEW_BACKGROUND_TAB),
           /*bool inherit_opener =*/true);
     }
   }
@@ -1136,7 +1146,7 @@ void WebViewGuest::ActivateContents(content::WebContents* web_contents) {
   // Fallback: will focus the embedder if attached, as in
   // GuestViewBase::ActivateContents
   embedder_web_contents()->GetDelegate()->ActivateContents(
-    embedder_web_contents());
+      embedder_web_contents());
 }
 
 }  // namespace extensions

@@ -450,9 +450,8 @@ void SafeBrowsingUrlCheckerImpl::ProcessUrls() {
       continue;
     }
 
-    // TODO(yzshen): Consider moving CanCheckRequestDestination() to the
-    // renderer side. That would save some IPCs. It requires a method on the
-    // SafeBrowsing mojo interface to query all supported request destinations.
+    // TODO(crbug.com/1420085): Remove this check when
+    // kSafeBrowsingSkipImageCssFont is launched.
     if (!database_manager_->CanCheckRequestDestination(request_destination_)) {
       UMA_HISTOGRAM_ENUMERATION("SB2.RequestDestination.Skipped",
                                 request_destination_);
@@ -548,7 +547,7 @@ SafeBrowsingUrlCheckerImpl::KickOffLookupMechanism(
           database_manager_, can_check_db_,
           can_check_high_confidence_allowlist_,
           url_lookup_service_metric_suffix_, last_committed_url_,
-          ui_task_runner_, url_lookup_service_on_ui_, webui_delegate_,
+          url_lookup_service_on_ui_, webui_delegate_,
           hash_realtime_service_on_ui_);
     } else {
       lookup_mechanism = std::make_unique<UrlRealTimeMechanism>(

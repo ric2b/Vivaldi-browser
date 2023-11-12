@@ -40,6 +40,8 @@ using adblock_filter::KnownRuleSource;
 #pragma mark:- AdBlocker Backend Model Observer methods
 @optional
 - (void)ruleServiceStateDidLoad;
+@optional
+- (void)rulesListDidApply:(RuleGroup)group;
 
 @optional
 - (void)ruleSourceDidUpdate:(uint32_t)key

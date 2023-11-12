@@ -11,23 +11,20 @@
 #include <vector>
 
 #include "base/strings/string_piece.h"
+#include "base/values.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/omnibox/browser/suggestion_group_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/metrics_proto/chrome_searchbox_stats.pb.h"
+#include "third_party/omnibox_proto/chrome_searchbox_stats.pb.h"
 #include "third_party/omnibox_proto/entity_info.pb.h"
 #include "third_party/omnibox_proto/types.pb.h"
 #include "url/gurl.h"
 
 class AutocompleteInput;
 class AutocompleteSchemeClassifier;
-
-namespace base {
-class Value;
-}
 
 namespace network {
 class SimpleURLLoader;
@@ -273,7 +270,7 @@ class SearchSuggestionParser {
 
   typedef std::vector<SuggestResult> SuggestResults;
   typedef std::vector<NavigationResult> NavigationResults;
-  typedef std::vector<metrics::ChromeSearchboxStats::ExperimentStatsV2>
+  typedef std::vector<omnibox::metrics::ChromeSearchboxStats::ExperimentStatsV2>
       ExperimentStatsV2s;
 
   // A simple structure bundling most of the information (including
@@ -343,7 +340,7 @@ class SearchSuggestionParser {
   // Parses JSON response received from the provider, stripping XSSI
   // protection if needed. Returns the parsed data if successful, NULL
   // otherwise.
-  static std::unique_ptr<base::Value> DeserializeJsonData(
+  static absl::optional<base::Value::List> DeserializeJsonData(
       base::StringPiece json_data);
 
   // Parses results from the suggest server and updates the appropriate suggest
@@ -351,7 +348,7 @@ class SearchSuggestionParser {
   // whether the response was received from the keyword provider.
   // Returns whether the appropriate result list members were updated.
   static bool ParseSuggestResults(
-      const base::Value& root_val,
+      const base::Value::List& root_list,
       const AutocompleteInput& input,
       const AutocompleteSchemeClassifier& scheme_classifier,
       int default_result_relevance,

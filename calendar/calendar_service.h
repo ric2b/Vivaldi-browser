@@ -31,8 +31,6 @@
 #include "calendar/calendar_database_params.h"
 #include "calendar/calendar_model_observer.h"
 
-class Profile;
-
 namespace base {
 class SequencedTaskRunner;
 }  // namespace base
@@ -61,83 +59,43 @@ class CalendarService : public KeyedService {
   // specified priority. The task will have ownership taken.
   void ScheduleTask(base::OnceClosure task);
 
-  // Provides the result of a query. See QueryResults in calendar_types.h.
-  // The common use will be to use QueryResults.Swap to suck the contents of
-  // the results out of the passed in parameter and take ownership of them.
-  typedef base::OnceCallback<void(std::shared_ptr<EventQueryResults>)>
-      QueryCalendarCallback;
-
-  typedef base::OnceCallback<void(std::shared_ptr<CalendarQueryResults>)>
-      GetALLQueryCalendarCallback;
+  typedef base::OnceCallback<void(CalendarRows)> GetALLQueryCalendarCallback;
 
   // Provides the result of a event create. See EventResultCB in
   // event_type.h.
-  typedef base::OnceCallback<void(std::shared_ptr<EventResultCB>)>
-      EventResultCallback;
+  typedef base::OnceCallback<void(EventResultCB)> EventResultCallback;
 
   // Provides the results of multiple event create. See CreateEventsResult in
   // event_type.h.
-  typedef base::OnceCallback<void(std::shared_ptr<CreateEventsResult>)>
-      CreateEventsCallback;
-
-  // Provides the result of a delete calendar event. See DeleteEventResult in
-  // event_type.h.
-  typedef base::OnceCallback<void(std::shared_ptr<DeleteEventResult>)>
-      DeleteEventCallback;
+  typedef base::OnceCallback<void(CreateEventsResult)> CreateEventsCallback;
 
   // Provides the result of a create calendar. See CreateCalendarResult in
   // calendar_type.h.
-  typedef base::OnceCallback<void(std::shared_ptr<CreateCalendarResult>)>
-      CreateCalendarCallback;
+  typedef base::OnceCallback<void(CreateCalendarResult)> CreateCalendarCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<UpdateCalendarResult>)>
-      UpdateCalendarCallback;
+  typedef base::OnceCallback<void(EventTypeRows)> GetALLEventTypesCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<DeleteCalendarResult>)>
-      DeleteCalendarCallback;
+  typedef base::OnceCallback<void(bool)> DeleteEventTypeCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<EventTypeRows>)>
-      GetALLEventTypesCallback;
-
-  typedef base::OnceCallback<void(std::shared_ptr<CreateEventTypeResult>)>
-      CreateEventTypeCallback;
-
-  typedef base::OnceCallback<void(std::shared_ptr<UpdateEventTypeResult>)>
-      UpdateEventTypeCallback;
-
-  typedef base::OnceCallback<void(std::shared_ptr<DeleteEventTypeResult>)>
-      DeleteEventTypeCallback;
-
-  typedef base::OnceCallback<void(std::shared_ptr<GetAllNotificationResult>)>
+  typedef base::OnceCallback<void(GetAllNotificationResult)>
       GetAllNotificationsCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<NotificationResult>)>
-      NotificationCallback;
+  typedef base::OnceCallback<void(NotificationResult)> NotificationCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<DeleteNotificationResult>)>
-      DeleteNotificationCallback;
+  typedef base::OnceCallback<void(InviteResult)> InviteCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<InviteResult>)>
-      InviteCallback;
+  typedef base::OnceCallback<void(CreateAccountResult)> CreateAccountCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<DeleteInviteResult>)>
-      DeleteInviteCallback;
+  typedef base::OnceCallback<void(DeleteAccountResult)> DeleteAccountCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<CreateAccountResult>)>
-      CreateAccountCallback;
+  typedef base::OnceCallback<void(UpdateAccountResult)> UpdateAccountCallback;
 
-  typedef base::OnceCallback<void(std::shared_ptr<DeleteAccountResult>)>
-      DeleteAccountCallback;
-
-  typedef base::OnceCallback<void(std::shared_ptr<UpdateAccountResult>)>
-      UpdateAccountCallback;
-
-  typedef base::OnceCallback<void(std::shared_ptr<AccountRows>)>
-      GetALLAccounsCallback;
+  typedef base::OnceCallback<void(AccountRows)> GetALLAccounsCallback;
 
   base::CancelableTaskTracker::TaskId GetAllEvents(
-      QueryCalendarCallback callback,
+      base::OnceCallback<void(EventRows)>,
       base::CancelableTaskTracker* tracker);
+
   // Returns true if this calendar service is currently in a mode where
   // extensive changes might happen, such as for import and sync. This is
   // helpful for observers that are created after the service has started, and
@@ -162,7 +120,7 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId DeleteCalendarEvent(
       EventID event_id,
-      DeleteEventCallback callback,
+      base::OnceCallback<void(bool)> callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteEventRecurrenceException(
@@ -188,12 +146,12 @@ class CalendarService : public KeyedService {
   base::CancelableTaskTracker::TaskId UpdateCalendar(
       CalendarID calendar_id,
       Calendar calendar,
-      UpdateCalendarCallback callback,
+      base::OnceCallback<void(bool)> callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteCalendar(
       CalendarID event_id,
-      DeleteCalendarCallback callback,
+      base::OnceCallback<void(bool)>,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllEventTypes(
@@ -202,13 +160,13 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId CreateEventType(
       EventTypeRow ev,
-      CreateEventTypeCallback callback,
+      base::OnceCallback<void(bool)> callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateEventType(
       EventTypeID event_type_id,
       EventType ev,
-      UpdateEventTypeCallback callback,
+      base::OnceCallback<void(bool)> callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId DeleteEventType(
@@ -238,7 +196,7 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId DeleteNotification(
       NotificationID notification_id,
-      DeleteNotificationCallback callback,
+      base::OnceCallback<void(bool)> callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId CreateInvite(
@@ -248,7 +206,7 @@ class CalendarService : public KeyedService {
 
   base::CancelableTaskTracker::TaskId DeleteInvite(
       InviteID invite_id,
-      DeleteInviteCallback callback,
+      base::OnceCallback<void(bool)> callback,
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId UpdateInvite(
@@ -276,7 +234,7 @@ class CalendarService : public KeyedService {
       base::CancelableTaskTracker* tracker);
 
   base::CancelableTaskTracker::TaskId GetAllEventTemplates(
-      QueryCalendarCallback callback,
+      base::OnceCallback<void(std::vector<calendar::EventRow>)> callback,
       base::CancelableTaskTracker* tracker);
 
  private:
@@ -302,8 +260,6 @@ class CalendarService : public KeyedService {
   void OnCalendarModified();
 
   void Cleanup();
-
-  Profile* profile_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

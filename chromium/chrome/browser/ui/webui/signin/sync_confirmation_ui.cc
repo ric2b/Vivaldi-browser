@@ -45,6 +45,7 @@
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/webui/resource_path.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/color_utils.h"
@@ -137,6 +138,8 @@ SyncConfirmationUI::SyncConfirmationUI(content::WebUI* web_ui)
       {"icons.html.js", IDR_SIGNIN_ICONS_HTML_JS},
       {"signin_shared.css.js", IDR_SIGNIN_SIGNIN_SHARED_CSS_JS},
       {"signin_vars.css.js", IDR_SIGNIN_SIGNIN_VARS_CSS_JS},
+      {"tangible_sync_style_shared.css.js",
+       IDR_SIGNIN_TANGIBLE_SYNC_STYLE_SHARED_CSS_JS},
       {"sync_confirmation_browser_proxy.js",
        IDR_SIGNIN_SYNC_CONFIRMATION_SYNC_CONFIRMATION_BROWSER_PROXY_JS},
       {"sync_confirmation.js",
@@ -148,6 +151,7 @@ SyncConfirmationUI::SyncConfirmationUI(content::WebUI* web_ui)
 
   AddStringResource(source, "syncLoadingConfirmationTitle",
                     IDS_SYNC_LOADING_CONFIRMATION_TITLE);
+  webui::SetupChromeRefresh2023(source);
 
   if (is_sync_allowed) {
     InitializeForSyncConfirmation(source, GetSyncConfirmationStyle(url));
@@ -267,10 +271,9 @@ void SyncConfirmationUI::InitializeForSyncConfirmation(
     illustration_dark_path =
         "images/tangible_sync_dialog_illustration_dark.svg";
 
-    illustration_id =
-        IDR_SIGNIN_SYNC_CONFIRMATION_IMAGES_TANGIBLE_SYNC_DIALOG_ILLUSTRATION_SVG;
+    illustration_id = IDR_SIGNIN_IMAGES_SHARED_DIALOG_ILLUSTRATION_SVG;
     illustration_dark_id =
-        IDR_SIGNIN_SYNC_CONFIRMATION_IMAGES_TANGIBLE_SYNC_DIALOG_ILLUSTRATION_DARK_SVG;
+        IDR_SIGNIN_IMAGES_SHARED_DIALOG_ILLUSTRATION_DARK_SVG;
 
     source->AddResourcePath("images/tangible_sync_window_left_illustration.svg",
                             IDR_SIGNIN_IMAGES_SHARED_LEFT_BANNER_SVG);

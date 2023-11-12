@@ -8,10 +8,12 @@
 #include "base/functional/bind.h"
 #include "base/path_service.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/prefetch/prefetch_prefs.h"
 #include "chrome/browser/preloading/prerender/prerender_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "components/prefs/pref_service.h"
@@ -36,12 +38,9 @@ namespace {
 
 namespace {
 
-// This is equal to content::PrerenderFinalStatus::kActivated.
-// TODO(crbug.com/1274021): Replace this with the FinalStatus enum value
-// once it is exposed.
+// Following definitions are equal to content::PrerenderFinalStatus.
 constexpr int kFinalStatusActivated = 0;
-constexpr int kFinalStatusCrossSiteNavigation = 45;
-constexpr int kFinalStatusSameSiteCrossOriginNavigation = 47;
+constexpr int kFinalStatusCrossSiteNavigationInMainFrameNavigation = 64;
 
 }  // namespace
 
@@ -267,9 +266,11 @@ IN_PROC_BROWSER_TEST_F(PrerenderHoldbackBrowserTest,
   ASSERT_EQ(prefetch::IsSomePreloadingEnabled(*prefs),
             content::PreloadingEligibility::kPreloadingDisabled);
 
-  // Emulating Devtools attached to make PreloadingHoldback overridden.
-  ASSERT_NE(content::DevToolsAgentHost::GetOrCreateFor(GetActiveWebContents()),
-            nullptr);
+  // Emulating Devtools attached to make PreloadingHoldback overridden. Retain
+  // the returned host until the test finishes to avoid DevTools termination.
+  scoped_refptr<content::DevToolsAgentHost> dev_tools_agent_host =
+      content::DevToolsAgentHost::GetOrCreateFor(GetActiveWebContents());
+  ASSERT_TRUE(dev_tools_agent_host);
 
   // Start a prerender.
   GURL prerender_url = embedded_test_server()->GetURL("/simple.html");
@@ -313,12 +314,13 @@ IN_PROC_BROWSER_TEST_F(PrerenderHoldbackBrowserTest,
 }
 
 // TODO(crbug.com/1239281): Merge PrerenderMainFrameNavigationBrowserTest into
-// PrerenderBrowserTest once the feature is enabled by default.
+// PrerenderBrowserTest.
 class PrerenderMainFrameNavigationBrowserTest : public PrerenderBrowserTest {
  public:
   PrerenderMainFrameNavigationBrowserTest() {
-    feature_list_.InitAndEnableFeature(
-        blink::features::kPrerender2MainFrameNavigation);
+    // TODO(crbug.com/1394910): Use HTTPS URLs in tests to avoid having to
+    // disable this feature.
+    feature_list_.InitAndDisableFeature(features::kHttpsUpgrades);
   }
 
  private:
@@ -374,12 +376,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderMainFrameNavigationBrowserTest,
       kFinalStatusActivated, 1);
 }
 
-// TODO(crbug.com/1239281): Support the same-site cross-origin navigation.
 // Tests that the same-site cross-origin main frame navigation in an embedder
-// triggered prerendering page cancels the prerendering.
-IN_PROC_BROWSER_TEST_F(
-    PrerenderMainFrameNavigationBrowserTest,
-    SameSiteCrossOriginMainFrameNavigationCancelsEmbedderTriggeredPrerendering) {
+// triggered prerendering page succeeds.
+IN_PROC_BROWSER_TEST_F(PrerenderMainFrameNavigationBrowserTest,
+                       SameSiteCrossOriginMainFrameNavigation) {
   base::HistogramTester histogram_tester;
 
   // Navigate to an initial page.
@@ -387,8 +387,8 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(content::NavigateToURL(GetActiveWebContents(), url));
 
   GURL prerender_url = embedded_test_server()->GetURL("a.test", "/title1.html");
-  GURL navigation_url =
-      embedded_test_server()->GetURL("b.a.test", "/title2.html");
+  GURL navigation_url = embedded_test_server()->GetURL(
+      "b.a.test", "/prerender_with_opt_in_header.html");
 
   // Start an embedder triggered prerendering.
   std::unique_ptr<content::PrerenderHandle> prerender_handle =
@@ -409,14 +409,24 @@ IN_PROC_BROWSER_TEST_F(
       *GetActiveWebContents(), host_id);
 
   // Start a same-site cross-origin main frame navigation in the prerender frame
-  // tree. It will cancel the initiator's prerendering.
+  // tree. It will not cancel the initiator's prerendering.
   prerender_helper().NavigatePrerenderedPage(host_id, navigation_url);
 
-  prerender_observer.WaitForDestroyed();
+  // Activate.
+  content::TestActivationManager activation_manager(GetActiveWebContents(),
+                                                    prerender_url);
+  // Simulate a browser-initiated navigation.
+  GetActiveWebContents()->OpenURL(content::OpenURLParams(
+      prerender_url, content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                ui::PAGE_TRANSITION_FROM_ADDRESS_BAR),
+      /*is_renderer_initiated=*/false));
+  activation_manager.WaitForNavigationFinished();
+  EXPECT_TRUE(activation_manager.was_activated());
 
   histogram_tester.ExpectUniqueSample(
       "Prerender.Experimental.PrerenderHostFinalStatus.Embedder_DirectURLInput",
-      kFinalStatusSameSiteCrossOriginNavigation, 1);
+      kFinalStatusActivated, 1);
 }
 
 // Tests that the cross-site main frame navigation in an embedder triggered
@@ -431,8 +441,8 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_TRUE(content::NavigateToURL(GetActiveWebContents(), url));
 
   GURL prerender_url = embedded_test_server()->GetURL("a.test", "/title1.html");
-  GURL navigation_url =
-      embedded_test_server()->GetURL("b.test", "/title2.html");
+  GURL navigation_url = embedded_test_server()->GetURL(
+      "b.test", "/prerender_with_opt_in_header.html");
 
   // Start an embedder triggered prerendering.
   std::unique_ptr<content::PrerenderHandle> prerender_handle =
@@ -460,7 +470,7 @@ IN_PROC_BROWSER_TEST_F(
 
   histogram_tester.ExpectUniqueSample(
       "Prerender.Experimental.PrerenderHostFinalStatus.Embedder_DirectURLInput",
-      kFinalStatusCrossSiteNavigation, 1);
+      kFinalStatusCrossSiteNavigationInMainFrameNavigation, 1);
 }
 
 }  // namespace

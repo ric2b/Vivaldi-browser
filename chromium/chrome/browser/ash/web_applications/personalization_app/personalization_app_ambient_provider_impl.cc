@@ -10,7 +10,9 @@
 
 #include "ash/ambient/ambient_controller.h"
 #include "ash/constants/ambient_theme.h"
+#include "ash/constants/ambient_video.h"
 #include "ash/constants/ash_features.h"
+#include "ash/controls/contextual_tooltip.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/public/cpp/ambient/ambient_metrics.h"
@@ -30,6 +32,7 @@
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/ash/web_applications/personalization_app/ambient_video_albums.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_manager.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_manager_factory.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_metrics.h"
@@ -46,9 +49,13 @@ namespace ash::personalization_app {
 
 namespace {
 
-// Width and height of the preview image for personal album.
+// Width and height of the preview images without Jelly.
 constexpr int kBannerWidthPx = 160;
 constexpr int kBannerHeightPx = 160;
+// When Jelly is enabled, the max possible preview image container is 460x290.
+// Double the fetched image W/H to stay sharp when scaled down.
+constexpr int kJellyBannerWidthPx = 920;
+constexpr int kJellyBannerHeightPx = 580;
 
 constexpr int kMaxRetries = 3;
 
@@ -76,9 +83,9 @@ PersonalizationAppAmbientProviderImpl::PersonalizationAppAmbientProviderImpl(
           &PersonalizationAppAmbientProviderImpl::OnAmbientModeEnabledChanged,
           base::Unretained(this)));
   pref_change_registrar_.Add(
-      ash::ambient::prefs::kAmbientTheme,
+      ash::ambient::prefs::kAmbientUiSettings,
       base::BindRepeating(
-          &PersonalizationAppAmbientProviderImpl::OnAnimationThemeChanged,
+          &PersonalizationAppAmbientProviderImpl::OnAmbientUiSettingsChanged,
           base::Unretained(this)));
   ambient_ui_model_observer_.Observe(
       Shell::Get()->ambient_controller()->ambient_ui_model());
@@ -124,8 +131,13 @@ void PersonalizationAppAmbientProviderImpl::SetAmbientObserver(
   // Call it once to get the current ambient mode enabled status.
   OnAmbientModeEnabledChanged();
 
-  // Call it once to get the current animation theme.
-  OnAnimationThemeChanged();
+  // Call it once to get the current ambient ui settings.
+  OnAmbientUiSettingsChanged();
+
+  // Call it once to get the current ambient duration settings.
+  if (ash::features::IsScreenSaverDurationEnabled()) {
+    OnScreenSaverDurationChanged();
+  }
 
   ResetLocalSettings();
 }
@@ -138,16 +150,54 @@ void PersonalizationAppAmbientProviderImpl::SetAmbientModeEnabled(
 }
 
 void PersonalizationAppAmbientProviderImpl::SetAnimationTheme(
-    ash::AmbientTheme animation_theme) {
+    ash::AmbientTheme to_theme) {
   PrefService* pref_service = profile_->GetPrefs();
   DCHECK(pref_service);
-  LogAmbientModeTheme(animation_theme);
-  pref_service->SetInteger(ash::ambient::prefs::kAmbientTheme,
-                           static_cast<int>(animation_theme));
+  LogAmbientModeTheme(to_theme);
+  AmbientUiSettings orig_settings = GetCurrentUiSettings();
+  AmbientTheme from_theme = orig_settings.theme();
+  if (from_theme == to_theme) {
+    return;
+  }
+
+  // Attempt to retrieve the previously selected video. If not, fallback to the
+  // default video. Only applicable when target theme is `AmbientTheme::kVideo`.
+  AmbientUiSettings(to_theme,
+                    orig_settings.video().value_or(kDefaultAmbientVideo))
+      .WriteToPrefService(*pref_service);
+
+  // `kVideo` theme is special and automatically means a switch to the `kVideo`
+  // topic source. None of the other topic sources are possible with this theme.
+  //
+  // If `settings_` is null, the next call to `FetchSettingsAndAlbums()` will
+  // broadcast the `OnTopicSourceChanged()` call that's being done here.
+  if (settings_ && (to_theme == AmbientTheme::kVideo ||
+                    from_theme == AmbientTheme::kVideo)) {
+    OnTopicSourceChanged();
+  }
 }
 
 void PersonalizationAppAmbientProviderImpl::SetTopicSource(
     ash::AmbientModeTopicSource topic_source) {
+  AmbientTheme current_theme = GetCurrentUiSettings().theme();
+  // The presence of the `kVideo` theme in pref automatically means the `kVideo`
+  // topic source is active. `settings_` should be kept as the server's view of
+  // the user's ambient settings, and `SetAnimationTheme(kVideo)` already
+  // broadcasts an `OnTopicSourceChanged()`, so there's no work to do here.
+  if (current_theme == AmbientTheme::kVideo) {
+    if (topic_source != AmbientModeTopicSource::kVideo) {
+      LOG(ERROR) << "Cannot set topic source to "
+                 << static_cast<int>(topic_source) << " for video theme";
+    }
+    return;
+  }
+
+  if (topic_source == AmbientModeTopicSource::kVideo) {
+    LOG(ERROR) << "Video topic source does not apply to theme "
+               << ToString(current_theme);
+    return;
+  }
+
   // If this is an Art gallery album page, will select art gallery topic source.
   if (topic_source == ash::AmbientModeTopicSource::kArtGallery) {
     MaybeUpdateTopicSource(topic_source);
@@ -163,6 +213,12 @@ void PersonalizationAppAmbientProviderImpl::SetTopicSource(
 
   // 2. Select Google Photos topic source if at least one album is selected.
   MaybeUpdateTopicSource(ash::AmbientModeTopicSource::kGooglePhotos);
+}
+
+void PersonalizationAppAmbientProviderImpl::SetScreenSaverDuration(
+    int minutes) {
+  Shell::Get()->ambient_controller()->SetScreenSaverDuration(minutes);
+  OnScreenSaverDurationChanged();
 }
 
 void PersonalizationAppAmbientProviderImpl::SetTemperatureUnit(
@@ -220,10 +276,31 @@ void PersonalizationAppAmbientProviderImpl::SetAlbumSelected(
       art_setting->enabled = selected;
       break;
     }
+    case AmbientModeTopicSource::kVideo:
+      if (!selected) {
+        DVLOG(4) << "Exactly one video must be selected at all times. Setting "
+                    "the desired video to selected==true automatically "
+                    "unselects all other videos.";
+        return;
+      }
+      absl::optional<AmbientVideo> video = FindAmbientVideoByAlbumId(id);
+      if (!video) {
+        ambient_receiver_.ReportBadMessage("Invalid album id.");
+        return;
+      }
+      // Even if the current `AmbientTheme` is not `kVideo`, pref storage can
+      // still be updated with the requested video, and it will be applied
+      // if/when the user selects the video theme later.
+      PrefService* pref_service = profile_->GetPrefs();
+      DCHECK(pref_service);
+      AmbientUiSettings(GetCurrentUiSettings().theme(), *video)
+          .WriteToPrefService(*pref_service);
+      break;
   }
 
   UpdateSettings();
   OnTopicSourceChanged();
+  OnAlbumsChanged();
 }
 
 void PersonalizationAppAmbientProviderImpl::SetPageViewed() {
@@ -262,11 +339,25 @@ void PersonalizationAppAmbientProviderImpl::OnAmbientModeEnabledChanged() {
   }
 }
 
-void PersonalizationAppAmbientProviderImpl::OnAnimationThemeChanged() {
+void PersonalizationAppAmbientProviderImpl::OnAmbientUiSettingsChanged() {
   if (!ambient_observer_remote_.is_bound())
     return;
 
-  ambient_observer_remote_->OnAnimationThemeChanged(GetCurrentAnimationTheme());
+  ambient_observer_remote_->OnAnimationThemeChanged(
+      GetCurrentUiSettings().theme());
+}
+
+void PersonalizationAppAmbientProviderImpl::OnScreenSaverDurationChanged() {
+  absl::optional<int> duration_pref_value =
+      Shell::Get()->ambient_controller()->GetScreenSaverDuration();
+
+  if (!ambient_observer_remote_.is_bound() ||
+      !duration_pref_value.has_value() || duration_pref_value.value() < 0) {
+    return;
+  }
+
+  ambient_observer_remote_->OnScreenSaverDurationChanged(
+      duration_pref_value.value());
 }
 
 void PersonalizationAppAmbientProviderImpl::OnTemperatureUnitChanged() {
@@ -281,15 +372,22 @@ void PersonalizationAppAmbientProviderImpl::OnTopicSourceChanged() {
   if (!ambient_observer_remote_.is_bound())
     return;
 
-  // First, empty the WebUI store so it doesn't show the previously selected
-  // albums' previews. If |settings_->topic_source| is Google photos, refetch
-  // the previews because the selected albums may have changed. Otherwise, we
-  // fallback to the preview urls that comes with the albums.
-  OnGooglePhotosAlbumsPreviewsFetched(std::vector<GURL>());
-  if (settings_->topic_source == ash::AmbientModeTopicSource::kGooglePhotos)
-    FetchGooglePhotosAlbumsPreviews(settings_->selected_album_ids);
+  // Empty the WebUI store so it doesn't show the previously selected albums'
+  // previews.
+  OnPreviewsFetched(std::vector<GURL>());
+  if (features::IsPersonalizationJellyEnabled() ||
+      GetCurrentTopicSource() == AmbientModeTopicSource::kGooglePhotos ||
+      GetCurrentTopicSource() == AmbientModeTopicSource::kVideo) {
+    if (is_updating_backend_) {
+      // Once settings updated, fetch preview images.
+      needs_update_previews_ = true;
+    } else {
+      // Fetch preview images if settings have been updated.
+      FetchPreviewImages();
+    }
+  }
 
-  ambient_observer_remote_->OnTopicSourceChanged(settings_->topic_source);
+  ambient_observer_remote_->OnTopicSourceChanged(GetCurrentTopicSource());
 }
 
 void PersonalizationAppAmbientProviderImpl::OnAlbumsChanged() {
@@ -329,6 +427,12 @@ void PersonalizationAppAmbientProviderImpl::OnAlbumsChanged() {
     albums.emplace_back(std::move(album));
   }
 
+  // Video:
+  AppendAmbientVideoAlbums(
+      /*currently_selected_video*/ GetCurrentUiSettings().video().value_or(
+          kDefaultAmbientVideo),
+      albums);
+
   ambient_observer_remote_->OnAlbumsChanged(std::move(albums));
 }
 
@@ -343,18 +447,19 @@ bool PersonalizationAppAmbientProviderImpl::IsAmbientModeEnabled() {
   return pref_service->GetBoolean(ash::ambient::prefs::kAmbientModeEnabled);
 }
 
-ash::AmbientTheme
-PersonalizationAppAmbientProviderImpl::GetCurrentAnimationTheme() {
+AmbientUiSettings PersonalizationAppAmbientProviderImpl::GetCurrentUiSettings()
+    const {
   PrefService* pref_service = profile_->GetPrefs();
   DCHECK(pref_service);
-  return static_cast<ash::AmbientTheme>(
-      pref_service->GetInteger(ash::ambient::prefs::kAmbientTheme));
+  return AmbientUiSettings::ReadFromPrefService(*pref_service);
 }
 
 void PersonalizationAppAmbientProviderImpl::UpdateSettings() {
   DCHECK(IsAmbientModeEnabled())
       << "Ambient mode must be enabled to update settings";
   DCHECK(settings_);
+  DCHECK_NE(settings_->topic_source, AmbientModeTopicSource::kVideo)
+      << "Ambient backend is not aware of the video topic source";
 
   // Prevent fetch settings callback changing `settings_` and `personal_albums_`
   // while updating.
@@ -385,6 +490,9 @@ void PersonalizationAppAmbientProviderImpl::OnUpdateSettings(bool success) {
   if (success) {
     update_settings_retry_backoff_.Reset();
     cached_settings_ = settings_sent_for_update_;
+    if (needs_update_previews_) {
+      FetchPreviewImages();
+    }
   } else {
     update_settings_retry_backoff_.InformOfRequest(/*succeeded=*/false);
   }
@@ -506,6 +614,9 @@ void PersonalizationAppAmbientProviderImpl::SyncSettingsAndAlbums() {
 
 void PersonalizationAppAmbientProviderImpl::MaybeUpdateTopicSource(
     ash::AmbientModeTopicSource topic_source) {
+  DCHECK_NE(settings_->topic_source, AmbientModeTopicSource::kVideo)
+      << "Video topic source should automatically get set via the video "
+         "AmbientTheme. Should not be reflected in the server.";
   // If the setting is the same, no need to update.
   if (settings_->topic_source != topic_source) {
     settings_->topic_source = topic_source;
@@ -518,26 +629,36 @@ void PersonalizationAppAmbientProviderImpl::MaybeUpdateTopicSource(
   OnTopicSourceChanged();
 }
 
-void PersonalizationAppAmbientProviderImpl::FetchGooglePhotosAlbumsPreviews(
-    const std::vector<std::string>& album_ids) {
-  const int num_previews = features::IsPersonalizationJellyEnabled() ? 3 : 4;
-  const int preview_width =
-      features::IsPersonalizationJellyEnabled() ? 360 : kBannerWidthPx;
-  const int preview_height =
-      features::IsPersonalizationJellyEnabled() ? 130 : kBannerHeightPx;
-  DCHECK(!album_ids.empty());
-  google_photos_albums_previews_weak_factory_.InvalidateWeakPtrs();
-  ash::AmbientBackendController::Get()->GetGooglePhotosAlbumsPreview(
-      album_ids, preview_width, preview_height, num_previews,
-      base::BindOnce(&PersonalizationAppAmbientProviderImpl::
-                         OnGooglePhotosAlbumsPreviewsFetched,
-                     google_photos_albums_previews_weak_factory_.GetWeakPtr()));
+void PersonalizationAppAmbientProviderImpl::FetchPreviewImages() {
+  needs_update_previews_ = false;
+  previews_weak_factory_.InvalidateWeakPtrs();
+  if (GetCurrentUiSettings().theme() == AmbientTheme::kVideo) {
+    absl::optional<AmbientVideo> video = GetCurrentUiSettings().video();
+    DCHECK(video.has_value());
+    auto url_arr =
+        AmbientBackendController::Get()->GetTimeOfDayVideoPreviewImageUrls(
+            video.value());
+    std::vector<GURL> previews;
+    base::ranges::transform(url_arr, std::back_inserter(previews),
+                            [](const char* url) { return GURL(url); });
+    OnPreviewsFetched(std::move(previews));
+    return;
+  }
+
+  const gfx::Size image_size =
+      features::IsPersonalizationJellyEnabled()
+          ? gfx::Size(kJellyBannerWidthPx, kJellyBannerHeightPx)
+          : gfx::Size(kBannerWidthPx, kBannerHeightPx);
+  ash::AmbientBackendController::Get()->FetchPreviewImages(
+      image_size,
+      base::BindOnce(&PersonalizationAppAmbientProviderImpl::OnPreviewsFetched,
+                     previews_weak_factory_.GetWeakPtr()));
 }
 
-void PersonalizationAppAmbientProviderImpl::OnGooglePhotosAlbumsPreviewsFetched(
+void PersonalizationAppAmbientProviderImpl::OnPreviewsFetched(
     const std::vector<GURL>& preview_urls) {
   DVLOG(4) << __func__ << " preview_urls_size=" << preview_urls.size();
-  ambient_observer_remote_->OnGooglePhotosAlbumsPreviewsFetched(preview_urls);
+  ambient_observer_remote_->OnPreviewsFetched(preview_urls);
 }
 
 ash::PersonalAlbum*
@@ -566,7 +687,7 @@ ash::ArtSetting* PersonalizationAppAmbientProviderImpl::FindArtAlbumById(
 void PersonalizationAppAmbientProviderImpl::ResetLocalSettings() {
   write_weak_factory_.InvalidateWeakPtrs();
   read_weak_factory_.InvalidateWeakPtrs();
-  google_photos_albums_previews_weak_factory_.InvalidateWeakPtrs();
+  previews_weak_factory_.InvalidateWeakPtrs();
 
   settings_.reset();
   cached_settings_.reset();
@@ -580,10 +701,36 @@ void PersonalizationAppAmbientProviderImpl::StartScreenSaverPreview() {
   Shell::Get()->ambient_controller()->StartScreenSaverPreview();
 }
 
+void PersonalizationAppAmbientProviderImpl::ShouldShowTimeOfDayBanner(
+    ShouldShowTimeOfDayBannerCallback callback) {
+  std::move(callback).Run(
+      features::IsTimeOfDayScreenSaverEnabled() &&
+      contextual_tooltip::ShouldShowNudge(
+          profile_->GetPrefs(),
+          contextual_tooltip::TooltipType::kTimeOfDayFeatureBanner,
+          /*recheck_delay=*/nullptr));
+}
+
+void PersonalizationAppAmbientProviderImpl::HandleTimeOfDayBannerDismissed() {
+  contextual_tooltip::HandleGesturePerformed(
+      profile_->GetPrefs(),
+      contextual_tooltip::TooltipType::kTimeOfDayFeatureBanner);
+}
+
 void PersonalizationAppAmbientProviderImpl::OnAmbientUiVisibilityChanged(
     ash::AmbientUiVisibility visibility) {
   if (ambient_observer_remote_.is_bound()) {
     ambient_observer_remote_->OnAmbientUiVisibilityChanged(visibility);
+  }
+}
+
+AmbientModeTopicSource
+PersonalizationAppAmbientProviderImpl::GetCurrentTopicSource() const {
+  if (GetCurrentUiSettings().theme() == AmbientTheme::kVideo) {
+    return AmbientModeTopicSource::kVideo;
+  } else {
+    DCHECK(settings_);
+    return settings_->topic_source;
   }
 }
 

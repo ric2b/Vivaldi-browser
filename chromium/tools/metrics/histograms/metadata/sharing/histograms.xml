@@ -106,7 +106,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.ClickToCallSelectedDeviceIndex" units="index"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
 <!-- Name completed by histogram_suffixes name="SharingClickToCallUi" -->
 
   <owner>mvanouwerkerk@chromium.org</owner>
@@ -118,7 +118,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.DefaultSharesheetAndroid.Opened" enum="ShareOrigin"
-    expires_after="2023-07-26">
+    expires_after="2023-09-24">
   <owner>sophey@chromium.org</owner>
   <owner>src/chrome/browser/share/OWNERS</owner>
   <summary>
@@ -147,38 +147,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Sharing.LongScreenshots.BitmapGenerationStatus"
-    enum="SharingLongScreenshotsEvent" expires_after="M110">
-  <owner>skare@chromium.org</owner>
-  <owner>src/chrome/browser/share/OWNERS</owner>
-  <summary>
-    Counts of Bitmap Generator statuses when capturing long screenshots.
-    Recorded when a new bitmap is requested from the paint_preview engine, for
-    example when scrolling down the page for the first time.
-  </summary>
-</histogram>
-
-<histogram name="Sharing.LongScreenshots.BitmapSelectedHeight" units="pixels"
-    expires_after="M110">
-  <owner>skare@chromium.org</owner>
-  <owner>src/chrome/browser/share/OWNERS</owner>
-  <summary>
-    Height of the long screenshot output from the region-selection dialog.
-    Recorded on region selection dialog confirmation.
-  </summary>
-</histogram>
-
-<histogram name="Sharing.LongScreenshots.Event"
-    enum="SharingLongScreenshotsEvent" expires_after="M110">
-  <owner>skare@chromium.org</owner>
-  <owner>src/chrome/browser/share/OWNERS</owner>
-  <summary>
-    Counts of events in the long screenshot capture process. Events are recorded
-    for events such as opening/confirming the dialog, or on corner cases such as
-    memory pressure while the dialog is open.
-  </summary>
-</histogram>
-
 <histogram name="Sharing.MessageAckTime" units="ms" expires_after="2022-06-26">
 <!-- Name completed by histogram_suffixes name="SharingChannelType",
      name="SharingDevicePlatform" and name="SharingMessage" -->
@@ -204,13 +172,24 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.MessageReceivedType" enum="SharingMessageType"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>mvanouwerkerk@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
     The type of SharingMessage (aka the PayloadCase). This is logged when a
     message is received through FCM by the handler in the Sharing service. All
     platforms.
+  </summary>
+</histogram>
+
+<histogram name="Sharing.PreparePreviewFaviconDuration" units="ms"
+    expires_after="2023-07-21">
+  <owner>wenyufu@chromium.org</owner>
+  <owner>src/chrome/browser/share/OWNERS</owner>
+  <summary>
+    The time to download the favicon as the image preview for sharing an link
+    using Android share sheet. Recorded when sharing a link with Android share
+    sheet only.
   </summary>
 </histogram>
 
@@ -321,7 +300,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.Screenshot.Action" enum="SharingScreenshotAction"
-    expires_after="2023-06-25">
+    expires_after="2023-09-03">
   <owner>jeffreycohen@chromium.org</owner>
   <owner>src/chrome/browser/share/OWNERS</owner>
   <summary>
@@ -349,7 +328,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Sharing.ScrollCapture.BitmapGeneratorStatus"
     enum="SharingScrollCaptureBitmapGenerationStatus"
-    expires_after="2023-07-16">
+    expires_after="2023-10-01">
   <owner>ckitagawa@chromium.org</owner>
   <owner>src/components/paint_preview/OWNERS</owner>
   <summary>
@@ -361,7 +340,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.ScrollCapture.SuccessfulCaptureDuration" units="ms"
-    expires_after="2023-07-16">
+    expires_after="2023-10-01">
   <owner>ckitagawa@chromium.org</owner>
   <owner>src/components/paint_preview/OWNERS</owner>
   <summary>
@@ -385,7 +364,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SendMessageResult" enum="SharingSendMessageResult"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
 <!-- Name completed by histogram_suffixes SharingChannelType,
     SharingDevicePlatform, SharingMessage, and SharingPulseInterval. -->
 
@@ -399,7 +378,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SendTabToSelf.NotificationStatus"
-    enum="SendTabToSelfNotificationStatus" expires_after="2023-07-02">
+    enum="SendTabToSelfNotificationStatus" expires_after="2023-09-03">
   <owner>ellyjones@chromium.org</owner>
   <owner>src/chrome/browser/share/OWNERS</owner>
   <summary>
@@ -481,7 +460,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SharingHubAndroid.Opened" enum="ShareOrigin"
-    expires_after="2023-07-02">
+    expires_after="2023-09-03">
   <owner>sophey@chromium.org</owner>
   <owner>src/chrome/browser/share/OWNERS</owner>
   <summary>
@@ -503,6 +482,10 @@ chromium-metrics-reviews@google.com.
 <histogram
     name="Sharing.SharingHubAndroid.TimeToSaveScreenshotImageBeforeShare"
     units="ms" expires_after="M110">
+  <obsolete>
+    No longer gathered for several milestones as of M111. Not sure precisely
+    when gathering of this metric stopped.
+  </obsolete>
   <owner>skare@chromium.org</owner>
   <owner>src/chrome/browser/share/OWNERS</owner>
   <summary>
@@ -556,7 +539,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SharingHubDesktop.CrOSSharesheetResult"
-    enum="SharingHubSharesheetResult" expires_after="2023-07-02">
+    enum="SharingHubSharesheetResult" expires_after="2023-09-03">
   <owner>kristipark@chromium.org</owner>
   <owner>src/chrome/browser/share/OWNERS</owner>
   <summary>
@@ -598,7 +581,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SharingHubDesktop.TimeToShow" units="ms"
-    expires_after="2023-07-26">
+    expires_after="2023-09-24">
   <owner>ellyjones@chromium.org</owner>
   <owner>src/chrome/browser/share/OWNERS</owner>
   <summary>
@@ -609,7 +592,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SmsFetcherAvailableDeviceCount" units="devices"
-    expires_after="2023-07-02">
+    expires_after="2023-11-01">
   <owner>yigu@chromium.org</owner>
   <owner>src/content/browser/sms/OWNERS</owner>
   <summary>
@@ -620,7 +603,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SmsFetcherClientNameIsEmpty" enum="BooleanEmpty"
-    expires_after="2023-04-30">
+    expires_after="2023-11-01">
   <owner>yigu@chromium.org</owner>
   <owner>src/content/browser/sms/OWNERS</owner>
   <summary>
@@ -631,7 +614,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SmsFetcherScreenOnAndUnlocked" enum="Boolean"
-    expires_after="2023-06-11">
+    expires_after="2023-11-01">
   <owner>yigu@chromium.org</owner>
   <owner>src/content/browser/sms/OWNERS</owner>
   <summary>
@@ -642,7 +625,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sharing.SmsFetcherTapWithChromeDestroyed" enum="Boolean"
-    expires_after="2023-05-07">
+    expires_after="2023-11-01">
   <owner>yigu@chromium.org</owner>
   <owner>src/content/browser/sms/OWNERS</owner>
   <summary>
@@ -661,6 +644,20 @@ chromium-metrics-reviews@google.com.
     Number of ice servers fetched by network traversal API call. Logged after
     receiving response of API call.
   </summary>
+</histogram>
+
+<histogram name="Sharing.{ShareSurface}.ShareContentType"
+    enum="SharingContentTypeAndroid" expires_after="2023-10-13">
+  <owner>wenyufu@chromium.org</owner>
+  <owner>src/chrome/browser/share/OWNERS</owner>
+  <summary>
+    The content type being shared when using a share sheet. Recorded when share
+    is sent to share sheet for {ShareSurface}. Android only.
+  </summary>
+  <token key="ShareSurface">
+    <variant name="DefaultSharesheetAndroid" summary="System share sheet"/>
+    <variant name="SharingHubAndroid" summary="Chrome's sharing hub"/>
+  </token>
 </histogram>
 
 </histograms>

@@ -69,7 +69,7 @@
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
 #include "chrome/browser/ui/layout_constants.h"
-#include "chrome/browser/ui/performance_controls/high_efficiency_iph_controller.h"
+#include "chrome/browser/ui/performance_controls/high_efficiency_opt_in_iph_controller.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/sad_tab_helper.h"
@@ -142,6 +142,7 @@
 #include "chrome/browser/ui/views/side_panel/side_panel.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_toolbar_container.h"
 #include "chrome/browser/ui/views/status_bubble_views.h"
 #include "chrome/browser/ui/views/sync/one_click_signin_dialog_view.h"
 #include "chrome/browser/ui/views/tab_contents/chrome_web_contents_view_focus_helper.h"
@@ -205,7 +206,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/command.h"
@@ -274,6 +274,7 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
+#include "chrome/browser/themes/theme_service_factory.h"
 #include "components/remote_cocoa/app_shim/application_bridge.h"
 #include "components/remote_cocoa/browser/application_host.h"
 #endif
@@ -526,6 +527,40 @@ class OverlayWidget : public ThemeCopyingWidget {
     return parent()->GetAccelerator(cmd_id, accelerator);
   }
 };
+
+// TabContainerOverlayView is a view that hosts the TabStripRegionView during
+// immersive fullscreen. The TopContainerView usually draws the background for
+// the tab strip. Since the tab strip has been reparented we need to handle
+// drawing the background here.
+class TabContainerOverlayView : public views::View {
+ public:
+  METADATA_HEADER(TabContainerOverlayView);
+  explicit TabContainerOverlayView(base::WeakPtr<BrowserView> browser_view)
+      : browser_view_(std::move(browser_view)) {}
+  ~TabContainerOverlayView() override = default;
+
+  // views::View override
+  void OnPaintBackground(gfx::Canvas* canvas) override {
+    SkColor frame_color = browser_view_->frame()->GetFrameView()->GetFrameColor(
+        BrowserFrameActiveState::kUseCurrent);
+    canvas->DrawColor(frame_color);
+
+    auto* theme_service =
+        ThemeServiceFactory::GetForProfile(browser_view_->browser()->profile());
+    if (!theme_service->UsingSystemTheme()) {
+      auto* non_client_frame_view = browser_view_->frame()->GetFrameView();
+      non_client_frame_view->PaintThemedFrame(canvas);
+    }
+  }
+
+ private:
+  // The BrowserView this overlay is created for. WeakPtr is used since
+  // this view is held in a different hierarchy.
+  base::WeakPtr<BrowserView> browser_view_;
+};
+
+BEGIN_METADATA(TabContainerOverlayView, views::View)
+END_METADATA
 #endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace
@@ -579,11 +614,18 @@ class BrowserViewLayoutDelegateImpl : public BrowserViewLayoutDelegate {
 
   int GetTopInsetInBrowserView() const override {
     // BrowserView should fill the full window when window controls overlay
-    // is enabled.
+    // is enabled or when immersive fullscreen with tabs is enabled.
     if (browser_view_->IsWindowControlsOverlayEnabled() ||
         browser_view_->IsBorderlessModeEnabled()) {
       return 0;
     }
+#if BUILDFLAG(IS_MAC)
+    if (browser_view_->UsesImmersiveFullscreenTabbedMode() &&
+        browser_view_->immersive_mode_controller()->IsEnabled()) {
+      return 0;
+    }
+#endif
+
     return browser_view_->frame()->GetTopInset() - browser_view_->y();
   }
 
@@ -679,6 +721,18 @@ class BrowserViewLayoutDelegateImpl : public BrowserViewLayoutDelegate {
             : browser_view_->GetMirroredRect(available_titlebar_area));
   }
 
+  bool ShouldLayoutTabStrip() const override {
+#if BUILDFLAG(IS_MAC)
+    // The tab strip is hosted in a separate widget in immersive fullscreen on
+    // macOS.
+    if (browser_view_->UsesImmersiveFullscreenTabbedMode() &&
+        browser_view_->immersive_mode_controller()->IsEnabled()) {
+      return false;
+    }
+#endif
+    return true;
+  }
+
  private:
   raw_ptr<BrowserView> browser_view_;
 };
@@ -716,151 +770,6 @@ class BrowserView::AccessibilityModeObserver : public ui::AXModeObserver {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// BrowserView::SidePanelButtonHighlighter:
-//
-// Coordinating class that manages the button highlight.
-// TODO(pbos): This is only here because there's no coordinating SidePanel entry
-// but instead multiple SidePanels, and views::Button doesn't track multiple
-// "reasons" for being highlighted (i.e. the interface is SetHighlighted(true)
-// rather than adding/removing reasons for highlighting). Remove this once
-// SidePanel is a single entry.
-class BrowserView::SidePanelButtonHighlighter : public views::ViewObserver {
- public:
-  SidePanelButtonHighlighter(views::Button* button,
-                             std::vector<views::View*> side_panels)
-      : button_(button), side_panels_(std::move(side_panels)) {
-    DCHECK(button_);
-    DCHECK(!side_panels_.empty());
-    for (views::View* view : side_panels_)
-      view->AddObserver(this);
-    UpdateHighlight();
-  }
-
-  ~SidePanelButtonHighlighter() override {
-    for (views::View* view : side_panels_)
-      view->RemoveObserver(this);
-  }
-
-  // views::ViewObserver:
-  void OnViewVisibilityChanged(views::View* observed_view,
-                               View* starting_from) override {
-    UpdateHighlight();
-  }
-
- private:
-  void UpdateHighlight() {
-    bool any_panel_visible = false;
-    for (views::View* view : side_panels_) {
-      if (view->GetVisible()) {
-        any_panel_visible = true;
-        break;
-      }
-    }
-    button_->SetHighlighted(any_panel_visible);
-    button_->SetTooltipText(l10n_util::GetStringUTF16(
-        any_panel_visible ? IDS_TOOLTIP_SIDE_PANEL_HIDE
-                          : IDS_TOOLTIP_SIDE_PANEL_SHOW));
-  }
-
-  const raw_ptr<views::Button> button_;
-  const std::vector<views::View*> side_panels_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-// BrowserView::SidePanelVisibilityController:
-//
-// Coordinating class that manages side panel visibility such that there is a
-// single RHS side panel open at a given time. It enforces the following policy:
-//   - Only one RHS panel is visible at a time.
-//   - When the contextual panel is shown, the state of the global panels is
-//     captured and global panels are hidden.
-//   - When the contextual panel is hidden, the state of the global panels is
-//     restored.
-//
-// TODO(tluk): This is intended to manage the visibility of the read later
-// (global), google lens (global) and side search (contextual) panels for the
-// interim period before side panel v2 rolls out.
-class BrowserView::SidePanelVisibilityController : public views::ViewObserver {
- public:
-  // Structures that hold the global panel views and their captured visibility
-  // state.
-  struct PanelStateEntry {
-    const raw_ptr<views::View> panel_view;
-    absl::optional<bool> captured_visibility_state;
-  };
-  using Panels = std::vector<PanelStateEntry>;
-
-  SidePanelVisibilityController(views::View* side_search_panel,
-                                views::View* rhs_panel)
-      : side_search_panel_(side_search_panel) {
-    if (rhs_panel)
-      global_panels_.push_back({rhs_panel, absl::nullopt});
-  }
-  ~SidePanelVisibilityController() override = default;
-
-  // views::ViewObserver:
-  void OnViewVisibilityChanged(views::View* observed_view,
-                               View* starting_from) override {
-    DCHECK_EQ(side_search_panel_, observed_view);
-    if (side_search_panel_->GetVisible()) {
-      CaptureGlobalPanelVisibilityStateAndHide();
-    } else {
-      RestoreGlobalPanelVisibilityState();
-    }
-  }
-
-  // Called when the contextual panel is shown. Captures the current visibility
-  // state of the global panel before hiding the panel. The captured state of
-  // the global panels remains valid while the contextual panel is open.
-  void CaptureGlobalPanelVisibilityStateAndHide() {
-    for (PanelStateEntry& entry : global_panels_) {
-      auto panel_view = entry.panel_view;
-      entry.captured_visibility_state = panel_view->GetVisible();
-      panel_view->SetVisible(false);
-    }
-  }
-
-  // Called when the contextual panel is hidden. Restores the visibility state
-  // of the global panels.
-  void RestoreGlobalPanelVisibilityState() {
-    for (PanelStateEntry& entry : global_panels_) {
-      if (entry.captured_visibility_state.has_value()) {
-        entry.panel_view->SetVisible(entry.captured_visibility_state.value());
-
-        // After restoring global panel state reset the stored visibility bits.
-        // These will not remain valid while the contextual panel is closed.
-        entry.captured_visibility_state.reset();
-      }
-    }
-  }
-
-  // Returns true if one of its managed panels is currently visible in the
-  // browser window.
-  bool IsManagedSidePanelVisible() const {
-    if (side_search_panel_ && side_search_panel_->GetVisible())
-      return true;
-    return base::ranges::any_of(global_panels_,
-                                [](const PanelStateEntry& entry) {
-                                  return entry.panel_view->GetVisible();
-                                });
-  }
-
- private:
-  // We observe the side search panel when improved clobbering is enabled to
-  // implement the correct view visibility transitions.
-  const raw_ptr<views::View> side_search_panel_;
-
-  // The set of global panels that this maintains visibility for.
-  Panels global_panels_;
-
-  // Keep track of the side search panel's visibility so that we can hide /
-  // restore global panels as the side search panel is shown / hidden
-  // respectively.
-  base::ScopedObservation<views::View, views::ViewObserver>
-      side_search_panel_observation_{this};
-};
-
-///////////////////////////////////////////////////////////////////////////////
 // BrowserView, public:
 
 BrowserView::BrowserView(std::unique_ptr<Browser> browser)
@@ -873,8 +782,7 @@ BrowserView::BrowserView(std::unique_ptr<Browser> browser)
 
   // In forced app mode, all size controls are always disabled. Otherwise, use
   // `create_params` to enable/disable specific size controls.
-  // Allow devtools window to be movable and resizable.
-  if (chrome::IsRunningInForcedAppMode() && !browser_->is_type_devtools()) {
+  if (chrome::IsRunningInForcedAppMode()) {
     SetHasWindowSizeControls(false);
   } else if (GetIsPictureInPictureType()) {
     // Picture in picture windows must always have a title, can never minimize,
@@ -935,8 +843,7 @@ BrowserView::BrowserView(std::unique_ptr<Browser> browser)
   tabstrip_controller_ptr->InitFromModel(tabstrip_);
   top_container_ = AddChildView(std::make_unique<TopContainerView>(this));
 
-  if (GetIsWebAppType() && base::FeatureList::IsEnabled(
-                               features::kWebAppFrameToolbarInBrowserView)) {
+  if (GetIsWebAppType()) {
     web_app_frame_toolbar_ = top_container_->AddChildView(
         std::make_unique<WebAppFrameToolbarView>(this));
     if (ShouldShowWindowTitle()) {
@@ -1019,12 +926,8 @@ BrowserView::BrowserView(std::unique_ptr<Browser> browser)
 #endif
 
   // High Efficiency mode is default off but is available to turn on
-  if (!performance_manager::features::kHighEfficiencyModeDefaultState.Get() &&
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable)) {
-    high_efficiency_iph_controller_ =
-        std::make_unique<HighEfficiencyIPHController>(browser_.get());
-  }
+  high_efficiency_opt_in_iph_controller_ =
+      std::make_unique<HighEfficiencyOptInIPHController>(browser_.get());
 }
 
 BrowserView::~BrowserView() {
@@ -1058,12 +961,6 @@ BrowserView::~BrowserView() {
   // TabStrip first so that it can cleanly remove the listener.
   if (tabstrip_)
     tabstrip_->parent()->RemoveChildViewT(tabstrip_.get());
-
-  // This highlighter and visibility controller refer to side-panel objects
-  // (children of this) and to children inside ToolbarView and of this, remove
-  // this observer before those children are removed.
-  side_panel_button_highlighter_.reset();
-  side_panel_visibility_controller_.reset();
 
   // Child views maintain PrefMember attributes that point to
   // OffTheRecordProfile's PrefService which gets deleted by ~Browser.
@@ -1125,10 +1022,6 @@ void BrowserView::SetDisableRevealerDelayForTesting(bool disable) {
   g_disable_revealer_delay_for_testing = disable;
 }
 
-void BrowserView::DisableTopControlsSlideForTesting() {
-  top_controls_slide_controller_.reset();
-}
-
 void BrowserView::InitStatusBubble() {
   status_bubble_ = std::make_unique<StatusBubbleViews>(contents_web_view_);
   contents_web_view_->SetStatusBubble(status_bubble_.get());
@@ -1170,6 +1063,13 @@ bool BrowserView::UsesImmersiveFullscreenMode() const {
   return base::FeatureList::IsEnabled(features::kImmersiveFullscreen) &&
          (!GetIsWebAppType() ||
           base::FeatureList::IsEnabled(features::kImmersiveFullscreenPWAs));
+}
+
+bool BrowserView::UsesImmersiveFullscreenTabbedMode() const {
+  return (GetSupportsTabStrip() &&
+          base::FeatureList::IsEnabled(features::kImmersiveFullscreen) &&
+          base::FeatureList::IsEnabled(features::kImmersiveFullscreenTabs)) &&
+         !GetIsWebAppType();
 }
 #endif
 
@@ -1697,7 +1597,6 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
   // one subscriber per web contents.
   if (AppUsesBorderlessMode() && !old_contents) {
     SetWindowManagementPermissionSubscriptionForBorderlessMode(new_contents);
-    UpdateIsIsolatedWebApp();
   }
 }
 
@@ -1822,14 +1721,6 @@ void BrowserView::EnterFullscreen(const GURL& url,
     // Nothing to do.
     return;
   }
-
-  if (unified_side_panel_ && unified_side_panel_->GetVisible() &&
-      GetExclusiveAccessManager()
-          ->fullscreen_controller()
-          ->IsWindowFullscreenForTabOrPending()) {
-    toolbar_button_provider_->GetSidePanelButton()->HideSidePanel();
-  }
-
   ProcessFullscreen(true, url, bubble_type, display_id);
 }
 
@@ -1863,13 +1754,27 @@ void BrowserView::UpdateExclusiveAccessExitBubbleContent(
       (!notify_download && bubble_type == EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE) ||
       (ShouldUseImmersiveFullscreenForUrl(url) &&
        !profiles::IsPublicSession())) {
-    // |exclusive_access_bubble_.reset()| will trigger callback for current
-    // bubble with |ExclusiveAccessBubbleHideReason::kInterrupted| if available.
-    exclusive_access_bubble_.reset();
     if (bubble_first_hide_callback) {
       std::move(bubble_first_hide_callback)
           .Run(ExclusiveAccessBubbleHideReason::kNotShown);
     }
+
+    // If we intend to close the bubble but it has already been deleted no
+    // action is needed.
+    if (!exclusive_access_bubble_) {
+      return;
+    }
+
+    // `HideImmediately()` will trigger a callback for the current bubble with
+    // `ExclusiveAccessBubbleHideReason::kInterrupted` if available.
+    exclusive_access_bubble_->HideImmediately();
+
+    // Perform the destroy async. State updates in the exclusive access bubble
+    // view may call back into this method. This otherwise results in premature
+    // deletion of the bubble view and UAFs. See crbug.com/1426521.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&BrowserView::DestroyAnyExclusiveAccessBubble,
+                                  GetAsWeakPtr()));
     return;
   }
 
@@ -2237,7 +2142,6 @@ void BrowserView::UpdateBorderlessModeEnabled() {
     // null. These get overridden when the app is launched and its web contents
     // are ready.
     window_management_permission_granted_ = borderless_mode_enabled;
-    is_isolated_web_app_ = borderless_mode_enabled;
   }
 
   if (borderless_mode_enabled == borderless_mode_enabled_)
@@ -2286,11 +2190,6 @@ void BrowserView::SetWindowManagementPermissionSubscriptionForBorderlessMode(
                               base::Unretained(this)));
 }
 
-void BrowserView::UpdateIsIsolatedWebApp() {
-  is_isolated_web_app_ = browser()->app_controller() &&
-                         browser()->app_controller()->IsIsolatedWebApp();
-}
-
 void BrowserView::ToggleWindowControlsOverlayEnabled(base::OnceClosure done) {
   browser()->app_controller()->ToggleWindowControlsOverlayEnabled(
       base::BindOnce(&BrowserView::UpdateWindowControlsOverlayEnabled,
@@ -2299,8 +2198,13 @@ void BrowserView::ToggleWindowControlsOverlayEnabled(base::OnceClosure done) {
 }
 
 bool BrowserView::IsBorderlessModeEnabled() const {
-  return borderless_mode_enabled_ && window_management_permission_granted_ &&
-         is_isolated_web_app_;
+  return borderless_mode_enabled_ && window_management_permission_granted_;
+}
+
+void BrowserView::ShowSidePanel(
+    absl::optional<SidePanelEntry::Id> entry_id,
+    absl::optional<SidePanelUtil::SidePanelOpenTrigger> open_trigger) {
+  side_panel_coordinator_->Show(entry_id, open_trigger);
 }
 
 bool BrowserView::AppUsesBorderlessMode() const {
@@ -2819,7 +2723,16 @@ void BrowserView::ConfirmBrowserCloseWithPendingDownloads(
 
 void BrowserView::UserChangedTheme(BrowserThemeChangeType theme_change_type) {
   frame()->UserChangedTheme(theme_change_type);
+  // Because the theme change may cause the browser frame to be regenerated,
+  // which can mess with tutorials (which expect their bubble anchors to remain
+  // visible), this event is sent after the theme change. It can be used to
+  // advance a tutorial that expects a theme change.
+  if (theme_change_type == BrowserThemeChangeType::kBrowserTheme) {
+    views::ElementTrackerViews::GetInstance()->NotifyCustomEvent(
+        kBrowserThemeChangedEventId, this);
+  }
 }
+
 void BrowserView::ShowAppMenu() {
   if (!toolbar_button_provider_->GetAppMenuButton())
     return;
@@ -2924,13 +2837,13 @@ bool BrowserView::HandleKeyboardEvent(const NativeWebKeyboardEvent& event) {
 namespace {
 remote_cocoa::mojom::CutCopyPasteCommand CommandFromBrowserCommand(
     int command_id) {
-  if (command_id == IDC_CUT)
+  if (command_id == IDC_CUT) {
     return remote_cocoa::mojom::CutCopyPasteCommand::kCut;
-  else if (command_id == IDC_COPY)
+  }
+  if (command_id == IDC_COPY) {
     return remote_cocoa::mojom::CutCopyPasteCommand::kCopy;
-  else if (command_id == IDC_PASTE)
-    return remote_cocoa::mojom::CutCopyPasteCommand::kPaste;
-  NOTREACHED();
+  }
+  CHECK_EQ(command_id, IDC_PASTE);
   return remote_cocoa::mojom::CutCopyPasteCommand::kPaste;
 }
 }  // namespace
@@ -3270,8 +3183,7 @@ std::u16string BrowserView::GetAccessibleTabLabel(bool include_app_name,
       return l10n_util::GetStringFUTF16(IDS_TAB_AX_LABEL_VR_PRESENTING, title);
   }
 
-  NOTREACHED();
-  return std::u16string();
+  NOTREACHED_NORETURN();
 }
 
 std::vector<views::NativeViewHost*>
@@ -3512,11 +3424,11 @@ views::View* BrowserView::CreateOverlayView() {
 views::View* BrowserView::CreateMacOverlayView() {
   DCHECK(UsesImmersiveFullscreenMode());
 
-  auto create_overlay_widget = [this]() -> views::Widget* {
+  auto create_overlay_widget = [this](views::Widget* parent) -> views::Widget* {
     views::Widget::InitParams params;
     params.type = views::Widget::InitParams::TYPE_POPUP;
     params.child = true;
-    params.parent = GetWidget()->GetNativeView();
+    params.parent = parent->GetNativeView();
     OverlayWidget* overlay_widget = new OverlayWidget(GetWidget());
     overlay_widget->Init(std::move(params));
     overlay_widget->SetNativeWindowProperty(kBrowserViewKey, this);
@@ -3534,7 +3446,7 @@ views::View* BrowserView::CreateMacOverlayView() {
   };
 
   // Create the toolbar overlay widget.
-  overlay_widget_ = create_overlay_widget();
+  overlay_widget_ = create_overlay_widget(GetWidget());
 
   // Create a new TopContainerOverlayView. The tab strip, omnibox, bookmarks
   // etc. will be contained within this view. Right clicking on the blank space
@@ -3551,12 +3463,20 @@ views::View* BrowserView::CreateMacOverlayView() {
   overlay_view_ = overlay_view.get();
   overlay_widget_->GetRootView()->AddChildView(std::move(overlay_view));
 
-  if (base::FeatureList::IsEnabled(features::kImmersiveFullscreenTabs)) {
-    // Create the tab overlay widget.
-    tab_overlay_widget_ = create_overlay_widget();
-
-    // TODO(https://crbug.com/1414521): Figure out how to handle multiple view
-    // targeters.
+  if (UsesImmersiveFullscreenTabbedMode()) {
+    // Create the tab overlay widget as a child of overlay_widget_.
+    tab_overlay_widget_ = create_overlay_widget(overlay_widget_);
+    std::unique_ptr<TabContainerOverlayView> tab_overlay_view =
+        std::make_unique<TabContainerOverlayView>(
+            weak_ptr_factory_.GetWeakPtr());
+    tab_overlay_view->set_context_menu_controller(frame());
+    tab_overlay_view_targeter_ =
+        std::make_unique<OverlayViewTargeterDelegate>();
+    tab_overlay_view->SetEventTargeter(std::make_unique<views::ViewTargeter>(
+        tab_overlay_view_targeter_.get()));
+    tab_overlay_view_ = tab_overlay_view.get();
+    tab_overlay_widget_->GetRootView()->AddChildView(
+        std::move(tab_overlay_view));
   }
 
   return overlay_view_;
@@ -3685,18 +3605,6 @@ void BrowserView::CloseTabSearchBubble() {
     tab_search_host->CloseTabSearchBubble();
 }
 
-bool BrowserView::CloseOpenRightAlignedSidePanel(bool exclude_side_search) {
-  // Check if any side panels are open before closing side panels.
-  if (!side_panel_visibility_controller_ ||
-      !side_panel_visibility_controller_->IsManagedSidePanelVisible()) {
-    return false;
-  }
-
-  toolbar()->side_panel_button()->HideSidePanel();
-
-  return true;
-}
-
 void BrowserView::RevealTabStripIfNeeded() {
   if (!immersive_mode_controller_->IsEnabled())
     return;
@@ -3744,8 +3652,6 @@ void BrowserView::GetAccessiblePanes(std::vector<views::View*>* panes) {
     panes->push_back(download_shelf_->GetView());
   if (unified_side_panel_)
     panes->push_back(unified_side_panel_);
-  if (side_search_side_panel_)
-    panes->push_back(side_search_side_panel_);
   // TODO(crbug.com/1055150): Implement for mac.
   panes->push_back(contents_web_view_);
   if (devtools_web_view_->GetVisible())
@@ -3919,25 +3825,16 @@ void BrowserView::AddedToWidget() {
 
   toolbar_->Init();
 
-  // TODO(pbos): Manage this either inside SidePanel or the corresponding button
-  // when SidePanel is singular, at least per button/side.
   // TODO(pbos): Investigate whether the side panels should be creatable when
   // the ToolbarView does not create a button for them. This specifically seems
   // to hit web apps. See https://crbug.com/1267781.
-  if (toolbar_->side_panel_button() && unified_side_panel_) {
-    std::vector<View*> panels;
-    if (unified_side_panel_)
-      panels.push_back(unified_side_panel_);
-    if (side_search_side_panel_) {
-      panels.push_back(side_search_side_panel_);
+  if (toolbar_->GetSidePanelButton() && unified_side_panel_) {
+    if (toolbar()->side_panel_container()) {
+      toolbar()->side_panel_container()->ObserveSidePanelView(
+          unified_side_panel_);
+    } else {
+      unified_side_panel_->AddObserver(side_panel_coordinator_.get());
     }
-    side_panel_button_highlighter_ =
-        std::make_unique<SidePanelButtonHighlighter>(
-            toolbar_->side_panel_button(), panels);
-
-    side_panel_visibility_controller_ =
-        std::make_unique<SidePanelVisibilityController>(side_search_side_panel_,
-                                                        unified_side_panel_);
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -3966,10 +3863,9 @@ void BrowserView::AddedToWidget() {
       std::make_unique<BrowserViewLayoutDelegateImpl>(this), this,
       top_container_, web_app_frame_toolbar_, web_app_window_title_,
       tab_strip_region_view_, tabstrip_, toolbar_, infobar_container_,
-      contents_container_, side_search_side_panel_,
-      left_aligned_side_panel_separator_, unified_side_panel_,
-      right_aligned_side_panel_separator_, immersive_mode_controller_.get(),
-      contents_separator_));
+      contents_container_, left_aligned_side_panel_separator_,
+      unified_side_panel_, right_aligned_side_panel_separator_,
+      immersive_mode_controller_.get(), contents_separator_));
 
   EnsureFocusOrder();
 
@@ -4635,6 +4531,14 @@ bool BrowserView::MaybeShowFeaturePromo(
         body_text_replacements,
     user_education::FeaturePromoController::BubbleCloseCallback
         close_callback) {
+  // Trying to show a promo before the browser is initialized can result in a
+  // failure to retrieve accelerators, which can cause issues for screen reader
+  // users.
+  if (!initialized_) {
+    LOG(ERROR) << "Attempting to show IPH " << iph_feature.name
+               << " before browser initialization; IPH will not be shown.";
+    return false;
+  }
   return feature_promo_controller_ &&
          feature_promo_controller_->MaybeShowPromo(
              iph_feature, body_text_replacements, std::move(close_callback));
@@ -4855,25 +4759,11 @@ void BrowserView::OnInstallableWebAppStatusUpdated() {
 }
 
 WebAppFrameToolbarView* BrowserView::web_app_frame_toolbar() {
-  if (web_app_frame_toolbar_) {
-    return web_app_frame_toolbar_;
-  }
-  if (frame_ && frame_->GetFrameView()) {
-    return frame_->GetFrameView()->web_app_frame_toolbar(
-        base::PassKey<BrowserView>());
-  }
-  return nullptr;
+  return web_app_frame_toolbar_;
 }
 
 const WebAppFrameToolbarView* BrowserView::web_app_frame_toolbar() const {
-  if (web_app_frame_toolbar_) {
-    return web_app_frame_toolbar_;
-  }
-  if (frame_ && frame_->GetFrameView()) {
-    return frame_->GetFrameView()->web_app_frame_toolbar(
-        base::PassKey<BrowserView>());
-  }
-  return nullptr;
+  return web_app_frame_toolbar_;
 }
 
 void BrowserView::PaintAsActiveChanged() {

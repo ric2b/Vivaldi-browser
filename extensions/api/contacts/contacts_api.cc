@@ -347,10 +347,10 @@ Profile* ContactAsyncFunction::GetProfile() const {
 }
 
 ExtensionFunction::ResponseAction ContactsUpdateFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::Update::Params> params(
+  absl::optional<vivaldi::contacts::Update::Params> params(
       vivaldi::contacts::Update::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
   contact::ContactID contact_id;
   if (!GetIdAsInt64(params->id, &contact_id)) {
     return RespondNow(Error("Error. Invalid contact id"));
@@ -419,10 +419,10 @@ void ContactsUpdateFunction::UpdateContactComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsDeleteFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::Delete::Params> params(
+  absl::optional<vivaldi::contacts::Delete::Params> params(
       vivaldi::contacts::Delete::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
   contact::ContactID contact_id;
   if (!GetIdAsInt64(params->id, &contact_id)) {
     return RespondNow(Error("Error. Invalid contact id"));
@@ -449,9 +449,9 @@ void ContactsDeleteFunction::DeleteContactComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsCreateFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::Create::Params> params(
+  absl::optional<vivaldi::contacts::Create::Params> params(
       vivaldi::contacts::Create::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   contact::ContactRow createContact = GetContactRow(params->contact);
 
@@ -476,9 +476,9 @@ void ContactsCreateFunction::CreateComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsCreateManyFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::CreateMany::Params> params(
+  absl::optional<vivaldi::contacts::CreateMany::Params> params(
       vivaldi::contacts::CreateMany::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::vector<vivaldi::contacts::CreateUpdateDetails>& contacts =
       params->contact_list;
@@ -513,9 +513,9 @@ void ContactsCreateManyFunction::CreateManyComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsAddPropertyItemFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::AddPropertyItem::Params> params(
+  absl::optional<vivaldi::contacts::AddPropertyItem::Params> params(
       vivaldi::contacts::AddPropertyItem::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   contact::AddPropertyObject add_property;
   contact::ContactID contact_id;
@@ -554,9 +554,9 @@ void ContactsAddPropertyItemFunction::AddPropertyComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsUpdatePropertyItemFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::UpdatePropertyItem::Params> params(
+  absl::optional<vivaldi::contacts::UpdatePropertyItem::Params> params(
       vivaldi::contacts::UpdatePropertyItem::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   contact::UpdatePropertyObject update_property;
   contact::ContactID contact_id;
@@ -606,9 +606,9 @@ void ContactsUpdatePropertyItemFunction::UpdatePropertyComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsRemovePropertyItemFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::RemovePropertyItem::Params> params(
+  absl::optional<vivaldi::contacts::RemovePropertyItem::Params> params(
       vivaldi::contacts::RemovePropertyItem::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   contact::RemovePropertyObject remove_property;
 
@@ -654,9 +654,9 @@ void ContactsRemovePropertyItemFunction::RemovePropertyComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::AddEmailAddress::Params> params(
+  absl::optional<vivaldi::contacts::AddEmailAddress::Params> params(
       vivaldi::contacts::AddEmailAddress::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   contact::EmailAddressRow add_email;
   contact::ContactID contact_id;
@@ -712,9 +712,9 @@ void ContactsAddEmailAddressFunction::AddEmailAddressComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsRemoveEmailAddressFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::RemoveEmailAddress::Params> params(
+  absl::optional<vivaldi::contacts::RemoveEmailAddress::Params> params(
       vivaldi::contacts::RemoveEmailAddress::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   contact::ContactID contact_id;
   contact::EmailAddressID email_address_id;
@@ -751,9 +751,9 @@ void ContactsRemoveEmailAddressFunction::RemoveEmailAddressComplete(
 }
 
 ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::UpdateEmailAddress::Params> params(
+  absl::optional<vivaldi::contacts::UpdateEmailAddress::Params> params(
       vivaldi::contacts::UpdateEmailAddress::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   contact::EmailAddressRow updated_email;
   contact::ContactID contact_id;
@@ -821,10 +821,10 @@ void ContactsUpdateEmailAddressFunction::UpdateEmailAddressComplete(
 
 ExtensionFunction::ResponseAction
 ContactsReadThunderbirdContactsFunction::Run() {
-  std::unique_ptr<vivaldi::contacts::ReadThunderbirdContacts::Params> params(
+  absl::optional<vivaldi::contacts::ReadThunderbirdContacts::Params> params(
       vivaldi::contacts::ReadThunderbirdContacts::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
   std::string path = params->path;
   contact::ContactRows contacts;
   ContactsAPI::GetFactoryInstance()

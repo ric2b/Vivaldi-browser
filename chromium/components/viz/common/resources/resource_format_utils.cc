@@ -44,6 +44,7 @@ SkColorType ResourceFormatToClosestSkColorType(bool gpu_compositing,
     case LUMINANCE_8:
       return kGray_8_SkColorType;
     case RGBX_8888:
+    case BGRX_8888:
     case ETC1:
       return kRGB_888x_SkColorType;
     case P010:
@@ -52,9 +53,11 @@ SkColorType ResourceFormatToClosestSkColorType(bool gpu_compositing,
 #endif
       return kRGBA_1010102_SkColorType;
     case RGBA_1010102:
-      return kRGBA_1010102_SkColorType;
+    // This intentionally returns kRGBA_1010102_SkColorType for BGRA_1010102
+    // even though kBGRA_1010102_SkColorType exists. It should only be used on
+    // macOS (outside of tests).
     case BGRA_1010102:
-      return kBGRA_1010102_SkColorType;
+      return kRGBA_1010102_SkColorType;
 
     // YUV images are sampled as RGB.
     case YVU_420:
@@ -79,8 +82,6 @@ SkColorType ResourceFormatToClosestSkColorType(bool gpu_compositing,
       return kN32_SkColorType;
     case RG_88:
       return kR8G8_unorm_SkColorType;
-    case BGRX_8888:
-      return kRGB_888x_SkColorType;
     case RGBA_F16:
       return kRGBA_F16_SkColorType;
   }
@@ -292,9 +293,9 @@ bool HasEquivalentBufferFormat(SharedImageFormat format) {
     return HasEquivalentBufferFormat(format.resource_format());
   }
 
-  return format == MultiPlaneFormat::kYVU_420 ||
-         format == MultiPlaneFormat::kYUV_420_BIPLANAR ||
-         format == MultiPlaneFormat::kYUVA_420_TRIPLANAR ||
+  return format == MultiPlaneFormat::kYV12 ||
+         format == MultiPlaneFormat::kNV12 ||
+         format == MultiPlaneFormat::kNV12A ||
          format == MultiPlaneFormat::kP010;
 }
 
@@ -685,6 +686,13 @@ SkColorType ToClosestSkColorType(bool gpu_compositing,
                                  : kR16G16_float_SkColorType;
     }
   }
+}
+
+SkColorType ToClosestSkColorType(bool gpu_compositing,
+                                 SharedImageFormat format) {
+  CHECK(format.is_single_plane());
+  return ResourceFormatToClosestSkColorType(gpu_compositing,
+                                            format.resource_format());
 }
 
 }  // namespace viz

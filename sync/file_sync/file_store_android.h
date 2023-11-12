@@ -22,7 +22,7 @@ class SyncedFileStoreAndroid {
                const base::android::JavaParamRef<jobject> callback);
 
  private:
-  file_sync::SyncedFileStore* file_store_;
+  raw_ptr<file_sync::SyncedFileStore> file_store_;
   JavaObjectWeakGlobalRef weak_java_ref_;
 };
 

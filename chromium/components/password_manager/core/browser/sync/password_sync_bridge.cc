@@ -33,6 +33,7 @@
 #include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/model/sync_metadata_store_change_list.h"
+#include "components/sync/protocol/model_type_state_helper.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -294,7 +295,8 @@ PasswordSyncBridge::PasswordSyncBridge(
       batch = std::make_unique<syncer::MetadataBatch>();
       sync_metadata_read_error = SyncMetadataReadError::
           kNewlySupportedFieldDetectedInUnsupportedFieldsCache;
-    } else if (batch->GetModelTypeState().initial_sync_done() &&
+    } else if (syncer::IsInitialSyncDone(
+                   batch->GetModelTypeState().initial_sync_state()) &&
                !batch->GetModelTypeState()
                     .notes_enabled_before_initial_sync_for_passwords() &&
                base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
@@ -307,7 +309,8 @@ PasswordSyncBridge::PasswordSyncBridge(
       batch = std::make_unique<syncer::MetadataBatch>();
       sync_metadata_read_error = SyncMetadataReadError::
           kPasswordsRequireRedownloadForPotentialNotesOnTheServer;
-    } else if (batch->GetModelTypeState().initial_sync_done() &&
+    } else if (syncer::IsInitialSyncDone(
+                   batch->GetModelTypeState().initial_sync_state()) &&
                batch->GetModelTypeState()
                    .notes_enabled_before_initial_sync_for_passwords() &&
                !base::FeatureList::IsEnabled(
@@ -344,8 +347,8 @@ void PasswordSyncBridge::ActOnPasswordStoreChanges(
     return;  // Sync processor not yet ready, don't sync.
   }
 
-  // ActOnPasswordStoreChanges() can be called from ApplySyncChanges(). Do
-  // nothing in this case.
+  // ActOnPasswordStoreChanges() can be called from
+  // ApplyIncrementalSyncChanges(). Do nothing in this case.
   if (is_processing_remote_sync_changes_) {
     return;
   }
@@ -390,7 +393,7 @@ PasswordSyncBridge::CreateMetadataChangeList() {
   return std::make_unique<syncer::InMemoryMetadataChangeList>();
 }
 
-absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
+absl::optional<syncer::ModelError> PasswordSyncBridge::MergeFullSyncData(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_data) {
   // This method merges the local and remote passwords based on their client
@@ -655,13 +658,18 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
     metrics_util::
         LogDownloadedBlocklistedEntriesCountFromAccountStoreAfterUnlock(
             entity_data.size() - password_count);
+  } else {
+    base::UmaHistogramCustomCounts(
+        "PasswordManager.ProfileStore.TotalAccountsBeforeInitialSync",
+        key_to_local_specifics_map.size(), 0, 1000, 100);
   }
 
   sync_enabled_or_disabled_cb_.Run();
   return absl::nullopt;
 }
 
-absl::optional<syncer::ModelError> PasswordSyncBridge::ApplySyncChanges(
+absl::optional<syncer::ModelError>
+PasswordSyncBridge::ApplyIncrementalSyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_changes) {
   base::AutoReset<bool> processing_changes(&is_processing_remote_sync_changes_,
@@ -897,11 +905,8 @@ bool PasswordSyncBridge::SupportsGetStorageKey() const {
   return false;
 }
 
-void PasswordSyncBridge::ApplyStopSyncChanges(
+void PasswordSyncBridge::ApplyDisableSyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> delete_metadata_change_list) {
-  if (!delete_metadata_change_list) {
-    return;
-  }
   if (!password_store_sync_->IsAccountStore()) {
     password_store_sync_->GetMetadataStore()->DeleteAllSyncMetadata();
     sync_enabled_or_disabled_cb_.Run();

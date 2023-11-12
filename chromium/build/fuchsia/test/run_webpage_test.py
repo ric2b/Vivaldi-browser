@@ -9,7 +9,7 @@ import time
 
 from typing import List, Optional
 
-from common import run_continuous_ffx_command
+from common import catch_sigterm, run_continuous_ffx_command
 from test_runner import TestRunner
 
 
@@ -33,6 +33,7 @@ class WebpageTestRunner(TestRunner):
         super().__init__(out_dir, test_args, packages, target_id)
 
     def run_test(self):
+        catch_sigterm()
         browser_cmd = [
             'test',
             'run',
@@ -41,10 +42,8 @@ class WebpageTestRunner(TestRunner):
             f'fuchsia-pkg://fuchsia.com/{self._packages[0]}#meta/'
             f'{self._packages[0]}.cm'
         ]
-        browser_cmd.extend([
-            '--', '--web-engine-package-name=web_engine_with_webui',
-            '--use-web-instance', '--enable-web-instance-tmp', '--with-webui'
-        ])
+        browser_cmd.extend(
+            ['--', '--web-engine-package-name=web_engine_with_webui'])
         if self._test_args:
             browser_cmd.extend(self._test_args)
         logging.info('Starting %s', self._packages[0])

@@ -83,9 +83,9 @@ void NinjaActionTargetWriter::Run() {
 
     WriteNinjaVariablesForAction();
 
-    if (target_->action_values().pool().ptr) {
+    if (target_->pool().ptr) {
       out_ << "  pool = ";
-      out_ << target_->action_values().pool().ptr->GetNinjaName(
+      out_ << target_->pool().ptr->GetNinjaName(
           settings_->default_toolchain_label());
       out_ << std::endl;
     }
@@ -141,13 +141,16 @@ std::string NinjaActionTargetWriter::WriteRuleDefinition() {
     out_ << std::endl;
   }
 
+  // The command line requires shell escaping to properly handle filenames
+  // with spaces.
+  PathOutput command_output(path_output_.current_dir(),
+                            settings_->build_settings()->root_path_utf8(),
+                            ESCAPE_NINJA_COMMAND);
+
   out_ << "  command = ";
-  PathOutput output(path_output_.current_dir(),
-                    settings_->build_settings()->root_path_utf8(),
-                    ESCAPE_NINJA_COMMAND);
-  output.WriteFile(out_, settings_->build_settings()->python_path());
+  command_output.WriteFile(out_, settings_->build_settings()->python_path());
   out_ << " ";
-  path_output_.WriteFile(out_, target_->action_values().script());
+  command_output.WriteFile(out_, target_->action_values().script());
   for (const auto& arg : args.list()) {
     out_ << " ";
     SubstitutionWriter::WriteWithNinjaVariables(arg, args_escape_options, out_);
@@ -216,9 +219,9 @@ void NinjaActionTargetWriter::WriteSourceRules(
     if (target_->action_values().has_depfile()) {
       WriteDepfile(sources[i]);
     }
-    if (target_->action_values().pool().ptr) {
+    if (target_->pool().ptr) {
       out_ << "  pool = ";
-      out_ << target_->action_values().pool().ptr->GetNinjaName(
+      out_ << target_->pool().ptr->GetNinjaName(
           settings_->default_toolchain_label());
       out_ << std::endl;
     }

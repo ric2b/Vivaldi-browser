@@ -14,6 +14,7 @@ import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Process;
 import android.os.SystemClock;
 import android.view.Display;
 import android.view.Menu;
@@ -24,6 +25,7 @@ import androidx.annotation.CallSuper;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.IntentUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
@@ -31,6 +33,7 @@ import org.chromium.base.compat.ApiHelperForR;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LoaderErrors;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeBaseAppCompatActivity;
 import org.chromium.chrome.browser.IntentHandler;
@@ -64,6 +67,7 @@ public abstract class AsyncInitializationActivity
     @VisibleForTesting
     public static final String FIRST_DRAW_COMPLETED_TIME_MS_UMA = "FirstDrawCompletedTime";
     private static final String TAG = "AsyncInitActivity";
+    static Boolean sOverrideNativeLibraryCannotBeLoadedForTesting;
     protected final Handler mHandler;
 
     private final NativeInitializationController mNativeInitializationController =
@@ -355,6 +359,14 @@ public abstract class AsyncInitializationActivity
             return false;
         }
 
+        if (nativeLibraryCannotBeLoaded()) {
+            // For intents into Chrome, ensure that the right library can be loaded.
+            Intent newIntent = new Intent(this, LaunchFailedActivity.class);
+            IntentUtils.safeStartActivity(this, newIntent);
+            abortLaunch(LaunchIntentDispatcher.Action.FINISH_ACTIVITY);
+            return false;
+        }
+
         if (requiresFirstRunToBeCompleted(intent)
                 && FirstRunFlowSequencer.launch(this, intent, false /* requiresBroadcast */,
                         shouldPreferLightweightFre(intent))) {
@@ -373,8 +385,17 @@ public abstract class AsyncInitializationActivity
         mIntentRequestTracker.restoreInstanceState(getSavedInstanceState());
 
         mStartupDelayed = shouldDelayBrowserStartup();
+
         ChromeBrowserInitializer.getInstance().handlePreNativeStartupAndLoadLibraries(this);
         return true;
+    }
+
+    private static boolean nativeLibraryCannotBeLoaded() {
+        if (sOverrideNativeLibraryCannotBeLoadedForTesting != null) {
+            return sOverrideNativeLibraryCannotBeLoadedForTesting;
+        }
+
+        return Process.is64Bit() && !ChromeBrowserInitializer.canBeLoadedIn64Bit();
     }
 
     /**
@@ -851,13 +872,16 @@ public abstract class AsyncInitializationActivity
 
     @Override
     public boolean moveTaskToBack(boolean nonRoot) {
-        // On Android L moving the task to the background flakily stops the
-        // Activity from being finished, breaking tests. Trying to bring the
-        // task back to the foreground after also happens to be flaky, so just
-        // allow tests to prevent actually moving to the background.
+        // On Android (at least until N) moving the task to the background flakily stops the
+        // Activity from being finished, breaking tests. Trying to bring the task back to the
+        // foreground after also happens to be flaky, so just allow tests to prevent actually moving
+        // to the background.
         if (sInterceptMoveTaskToBackForTesting) {
             sBackInterceptedForTesting = true;
             return false;
+        } else if (BuildConfig.IS_FOR_TEST) {
+            assert false : "moveTaskToBack must be intercepted or it will create flaky tests. "
+                           + "See #interceptMoveTaskToBackForTesting";
         }
         return super.moveTaskToBack(nonRoot);
     }

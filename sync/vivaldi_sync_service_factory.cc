@@ -7,49 +7,81 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/memory/ptr_util.h"
+#include "base/no_destructor.h"
 #include "build/build_config.h"
-#include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/consent_auditor/consent_auditor_factory.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
-#include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
+#include "chrome/browser/password_manager/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/power_bookmarks/power_bookmark_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/signin/chrome_device_id_helper.h"
-#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/security_events/security_event_recorder_factory.h"
+#include "chrome/browser/sharing/sharing_message_bridge_factory.h"
+#include "chrome/browser/signin/about_signin_internals_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/sync/sync_service_factory.h"
-#include "chrome/browser/ui/global_error/global_error_service_factory.h"
+#include "chrome/browser/spellchecker/spellcheck_factory.h"
+#include "chrome/browser/sync/bookmark_sync_service_factory.h"
+#include "chrome/browser/sync/chrome_sync_client.h"
+#include "chrome/browser/sync/device_info_sync_service_factory.h"
+#include "chrome/browser/sync/model_type_store_service_factory.h"
+#include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
+#include "chrome/browser/sync/session_sync_service_factory.h"
+#include "chrome/browser/sync/sync_invalidations_service_factory.h"
+#include "chrome/browser/sync/user_event_service_factory.h"
+#include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/undo/bookmark_undo_service_factory.h"
+#include "chrome/browser/web_applications/web_app_provider_factory.h"
+#include "chrome/browser/web_data_service_factory.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/channel_info.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/invalidation/impl/profile_invalidation_provider.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/prefs/pref_service.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "components/sync/base/command_line_switches.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/buildflags/buildflags.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "sync/note_sync_service_factory.h"
 #include "sync/vivaldi_sync_client.h"
 #include "sync/vivaldi_sync_service_impl.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/browser/api/storage/storage_frontend.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_WIN)
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/webauthn/passkey_model_factory.h"
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 namespace vivaldi {
 
 // static
 VivaldiSyncServiceFactory* VivaldiSyncServiceFactory::GetInstance() {
-  return base::Singleton<VivaldiSyncServiceFactory>::get();
+  static base::NoDestructor<VivaldiSyncServiceFactory> instance;
+  return instance.get();
 }
 
 // static
@@ -77,18 +109,46 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() : SyncServiceFactory() {
   // The VivaldiSyncService depends on various SyncableServices being around
   // when it is shut down.  Specify those dependencies here to build the proper
   // destruction order.
-  DependsOn(autofill::PersonalDataManagerFactory::GetInstance());
   DependsOn(BookmarkModelFactory::GetInstance());
-#if !BUILDFLAG(IS_ANDROID)
-  DependsOn(GlobalErrorServiceFactory::GetInstance());
-#endif
+  DependsOn(BookmarkSyncServiceFactory::GetInstance());
+  DependsOn(BookmarkUndoServiceFactory::GetInstance());
+  DependsOn(browser_sync::UserEventServiceFactory::GetInstance());
+  DependsOn(ConsentAuditorFactory::GetInstance());
+  DependsOn(DeviceInfoSyncServiceFactory::GetInstance());
+  DependsOn(FaviconServiceFactory::GetInstance());
   DependsOn(HistoryServiceFactory::GetInstance());
+  DependsOn(IdentityManagerFactory::GetInstance());
+  DependsOn(ModelTypeStoreServiceFactory::GetInstance());
+#if !BUILDFLAG(IS_ANDROID)
+  DependsOn(PasskeyModelFactory::GetInstance());
+#endif  // !BUILDFLAG(IS_ANDROID)
   DependsOn(PasswordStoreFactory::GetInstance());
+  DependsOn(PowerBookmarkServiceFactory::GetInstance());
+  DependsOn(SecurityEventRecorderFactory::GetInstance());
+  DependsOn(SendTabToSelfSyncServiceFactory::GetInstance());
+  DependsOn(SharingMessageBridgeFactory::GetInstance());
+  DependsOn(SpellcheckServiceFactory::GetInstance());
+  DependsOn(SyncInvalidationsServiceFactory::GetInstance());
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  DependsOn(SupervisedUserSettingsServiceFactory::GetInstance());
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  DependsOn(SessionSyncServiceFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
 #if !BUILDFLAG(IS_ANDROID)
+  DependsOn(ThemeServiceFactory::GetInstance());
+#endif  // !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
+  DependsOn(SavedTabGroupServiceFactory::GetInstance());
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_WIN)
+  DependsOn(WebDataServiceFactory::GetInstance());
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   DependsOn(
       extensions::ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
-#endif
+  DependsOn(extensions::StorageFrontend::GetFactoryInstance());
+  DependsOn(web_app::WebAppProviderFactory::GetInstance());
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   DependsOn(NoteSyncServiceFactory::GetInstance());
   DependsOn(VivaldiAccountManagerFactory::GetInstance());
 }
@@ -97,9 +157,13 @@ VivaldiSyncServiceFactory::~VivaldiSyncServiceFactory() {}
 
 KeyedService* VivaldiSyncServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
+  syncer::SyncServiceImpl::InitParams init_params;
+
   Profile* profile = Profile::FromBrowserContext(context);
 
-  syncer::SyncServiceImpl::InitParams init_params;
+  DCHECK(!profile->IsOffTheRecord());
+
+  init_params.is_regular_profile_for_uma = profile->IsRegularProfile();
   init_params.sync_client = std::make_unique<VivaldiSyncClient>(profile);
   init_params.url_loader_factory = profile->GetDefaultStoragePartition()
                                        ->GetURLLoaderFactoryForBrowserProcess();
@@ -107,26 +171,64 @@ KeyedService* VivaldiSyncServiceFactory::BuildServiceInstanceFor(
       content::GetNetworkConnectionTracker();
   init_params.channel = chrome::GetChannel();
   init_params.debug_identifier = profile->GetDebugName();
-  init_params.identity_manager = IdentityManagerFactory::GetForProfile(profile);
-  init_params.start_behavior = syncer::SyncServiceImpl::MANUAL_START;
+
+  bool local_sync_backend_enabled = false;
+// Only check the local sync backend pref on the supported platforms of
+// Windows, Mac and Linux.
+// TODO(crbug.com/1052397): Reassess whether the following block needs to be
+// included in lacros-chrome once build flag switch of lacros-chrome is
+// complete.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
+    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+  syncer::SyncPrefs prefs(profile->GetPrefs());
+  local_sync_backend_enabled = prefs.IsLocalSyncEnabled();
+  if (local_sync_backend_enabled) {
+    base::FilePath local_sync_backend_folder =
+        init_params.sync_client->GetLocalSyncBackendFolder();
+
+    // If the user has not specified a folder and we can't get the default
+    // roaming profile location the sync service will not be created.
+    if (local_sync_backend_folder.empty()) {
+      return nullptr;
+    }
+
+    init_params.start_behavior = syncer::SyncServiceImpl::AUTO_START;
+  }
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS_LACROS))
+
+  if (!local_sync_backend_enabled) {
+    init_params.identity_manager =
+        IdentityManagerFactory::GetForProfile(profile);
+
+    // TODO(tim): Currently, AUTO/MANUAL settings refer to the *first* time sync
+    // is set up and *not* a browser restart for a manual-start platform (where
+    // sync has already been set up, and should be able to start without user
+    // intervention). We can get rid of the browser_default eventually, but
+    // need to take care that SyncServiceImpl doesn't get tripped up between
+    // those two cases. Bug 88109.
+    init_params.start_behavior = syncer::SyncServiceImpl::MANUAL_START;
+  }
 
   PrefService* local_state = g_browser_process->local_state();
   if (local_state)
     init_params.sync_server_url =
         GURL(local_state->GetString(vivaldiprefs::kVivaldiSyncServerUrl));
 
-  auto vpss = std::make_unique<VivaldiSyncServiceImpl>(
+  auto sync_service = std::make_unique<VivaldiSyncServiceImpl>(
       std::move(init_params), profile->GetPrefs(),
       VivaldiAccountManagerFactory::GetForProfile(profile));
 
-  vpss->Initialize();
+  sync_service->Initialize();
 
-  // Hook PSS into PersonalDataManager (a circular dependency).
-  autofill::PersonalDataManager* pdm =
-      autofill::PersonalDataManagerFactory::GetForProfile(profile);
-  pdm->OnSyncServiceInitialized(vpss.get());
+  auto password_store = PasswordStoreFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+  // PasswordStoreInterface may be null in tests.
+  if (password_store) {
+    password_store->OnSyncServiceInitialized(sync_service.get());
+  }
 
-  return vpss.release();
+  return sync_service.release();
 }
 
 }  // namespace vivaldi

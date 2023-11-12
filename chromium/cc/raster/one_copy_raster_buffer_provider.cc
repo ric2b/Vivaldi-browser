@@ -24,7 +24,6 @@
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/resources/platform_color.h"
-#include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/GLES2/gl2extchromium.h"
@@ -96,7 +95,7 @@ OneCopyRasterBufferProvider::RasterBufferImpl::RasterBufferImpl(
     : client_(client),
       backing_(backing),
       resource_size_(in_use_resource.size()),
-      resource_format_(in_use_resource.format()),
+      format_(in_use_resource.format()),
       color_space_(in_use_resource.color_space()),
       previous_content_id_(previous_content_id),
       before_raster_sync_token_(backing->returned_sync_token),
@@ -132,8 +131,8 @@ void OneCopyRasterBufferProvider::RasterBufferImpl::Playback(
   after_raster_sync_token_ = client_->PlaybackAndCopyOnWorkerThread(
       &mailbox_, mailbox_texture_target_, mailbox_texture_is_overlay_candidate_,
       before_raster_sync_token_, raster_source, raster_full_rect,
-      raster_dirty_rect, transform, resource_size_, resource_format_,
-      color_space_, playback_settings, previous_content_id_, new_content_id);
+      raster_dirty_rect, transform, resource_size_, format_, color_space_,
+      playback_settings, previous_content_id_, new_content_id);
 }
 
 bool OneCopyRasterBufferProvider::RasterBufferImpl::
@@ -155,7 +154,7 @@ OneCopyRasterBufferProvider::OneCopyRasterBufferProvider(
     bool use_partial_raster,
     bool use_gpu_memory_buffer_resources,
     int max_staging_buffer_usage_in_bytes,
-    viz::ResourceFormat tile_format)
+    viz::SharedImageFormat tile_format)
     : compositor_context_provider_(compositor_context_provider),
       worker_context_provider_(worker_context_provider),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
@@ -174,7 +173,7 @@ OneCopyRasterBufferProvider::OneCopyRasterBufferProvider(
                     max_staging_buffer_usage_in_bytes) {
   DCHECK(compositor_context_provider);
   DCHECK(worker_context_provider);
-  DCHECK(!IsResourceFormatCompressed(tile_format));
+  DCHECK(!tile_format.IsCompressed());
 }
 
 OneCopyRasterBufferProvider::~OneCopyRasterBufferProvider() {}
@@ -212,7 +211,7 @@ void OneCopyRasterBufferProvider::Flush() {
   compositor_context_provider_->ContextSupport()->FlushPendingWork();
 }
 
-viz::ResourceFormat OneCopyRasterBufferProvider::GetResourceFormat() const {
+viz::SharedImageFormat OneCopyRasterBufferProvider::GetFormat() const {
   return tile_format_;
 }
 
@@ -287,24 +286,24 @@ gpu::SyncToken OneCopyRasterBufferProvider::PlaybackAndCopyOnWorkerThread(
     const gfx::Rect& raster_dirty_rect,
     const gfx::AxisTransform2d& transform,
     const gfx::Size& resource_size,
-    viz::ResourceFormat resource_format,
+    viz::SharedImageFormat format,
     const gfx::ColorSpace& color_space,
     const RasterSource::PlaybackSettings& playback_settings,
     uint64_t previous_content_id,
     uint64_t new_content_id) {
   std::unique_ptr<StagingBuffer> staging_buffer =
-      staging_pool_.AcquireStagingBuffer(resource_size, resource_format,
+      staging_pool_.AcquireStagingBuffer(resource_size, format,
                                          previous_content_id);
   DCHECK(staging_buffer->size.width() >= raster_full_rect.width() &&
          staging_buffer->size.height() >= raster_full_rect.height());
 
   PlaybackToStagingBuffer(staging_buffer.get(), raster_source, raster_full_rect,
-                          raster_dirty_rect, transform, resource_format,
-                          color_space, playback_settings, previous_content_id,
+                          raster_dirty_rect, transform, format, color_space,
+                          playback_settings, previous_content_id,
                           new_content_id);
 
   gpu::SyncToken sync_token_after_upload = CopyOnWorkerThread(
-      staging_buffer.get(), raster_source, raster_full_rect, resource_format,
+      staging_buffer.get(), raster_source, raster_full_rect, format,
       resource_size, mailbox, mailbox_texture_target,
       mailbox_texture_is_overlay_candidate, sync_token, color_space);
   staging_pool_.ReleaseStagingBuffer(std::move(staging_buffer));
@@ -317,7 +316,7 @@ void OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
     const gfx::Rect& raster_full_rect,
     const gfx::Rect& raster_dirty_rect,
     const gfx::AxisTransform2d& transform,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::ColorSpace& dst_color_space,
     const RasterSource::PlaybackSettings& playback_settings,
     uint64_t previous_content_id,
@@ -326,7 +325,7 @@ void OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
   if (!staging_buffer->gpu_memory_buffer) {
     staging_buffer->gpu_memory_buffer =
         gpu_memory_buffer_manager_->CreateGpuMemoryBuffer(
-            staging_buffer->size, BufferFormat(format),
+            staging_buffer->size, BufferFormat(format.resource_format()),
             gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle,
             shutdown_event_);
   }
@@ -376,7 +375,7 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
     StagingBuffer* staging_buffer,
     const RasterSource* raster_source,
     const gfx::Rect& rect_to_copy,
-    viz::ResourceFormat resource_format,
+    viz::SharedImageFormat format,
     const gfx::Size& resource_size,
     gpu::Mailbox* mailbox,
     GLenum mailbox_texture_target,
@@ -406,8 +405,8 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
     if (mailbox_texture_is_overlay_candidate)
       usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
     *mailbox = sii->CreateSharedImage(
-        viz::SharedImageFormat::SinglePlane(resource_format), resource_size,
-        color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
+        format, resource_size, color_space, kTopLeft_GrSurfaceOrigin,
+        kPremul_SkAlphaType, usage, "OneCopyRasterTile",
         gpu::kNullSurfaceHandle);
     // Clear the resource if we're not going to initialize it fully from the
     // copy due to non-exact resource reuse.  See https://crbug.com/1313091
@@ -419,7 +418,8 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
     const uint32_t usage = gpu::SHARED_IMAGE_USAGE_CPU_WRITE;
     staging_buffer->mailbox = sii->CreateSharedImage(
         staging_buffer->gpu_memory_buffer.get(), gpu_memory_buffer_manager_,
-        color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage);
+        color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
+        "OneCopyRasterStaging");
   } else {
     sii->UpdateSharedImage(staging_buffer->sync_token, staging_buffer->mailbox);
   }
@@ -466,7 +466,7 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
   // Clear to ensure the resource is fully initialized and BeginAccess succeeds.
   if (needs_clear) {
     int clear_bytes_per_row = viz::ResourceSizes::UncheckedWidthInBytes<int>(
-        resource_size.width(), resource_format);
+        resource_size.width(), format.resource_format());
     SkImageInfo dst_info = SkImageInfo::MakeN32Premul(resource_size.width(),
                                                       resource_size.height());
     SkBitmap bitmap;
@@ -474,13 +474,14 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
       // SkBitmap.cpp doesn't yet have an interface for SkColor4fs
       // https://bugs.chromium.org/p/skia/issues/detail?id=13329
       bitmap.eraseColor(raster_source->background_color().toSkColor());
-      ri->WritePixels(*mailbox, 0, 0, mailbox_texture_target,
-                      clear_bytes_per_row, dst_info, bitmap.getPixels());
+      ri->WritePixels(*mailbox, /*dst_x_offset=*/0, /*dst_y_offset=*/0,
+                      /*dst_plane_index=*/0, mailbox_texture_target,
+                      bitmap.pixmap());
     }
   }
 
   int bytes_per_row = viz::ResourceSizes::UncheckedWidthInBytes<int>(
-      rect_to_copy.width(), staging_buffer->format);
+      rect_to_copy.width(), staging_buffer->format.resource_format());
   int chunk_size_in_rows =
       std::max(1, max_bytes_per_copy_operation_ / bytes_per_row);
   // Align chunk size to 4. Required to support compressed texture formats.

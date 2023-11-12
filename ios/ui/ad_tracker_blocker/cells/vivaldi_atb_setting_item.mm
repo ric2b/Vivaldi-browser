@@ -163,12 +163,10 @@ const UIEdgeInsets imageViewPadding = UIEdgeInsetsMake(12.f, 0.f, 0.f, 0.f);
 
   // Show selection check
   if (item.type == userPreferred) {
-    self.accessoryType = UITableViewCellAccessoryCheckmark;
     _imageView.image =
         [_imageView.image
           imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
   } else {
-    self.accessoryType = UITableViewCellAccessoryNone;
     _imageView.image =
         [_imageView.image
           imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];

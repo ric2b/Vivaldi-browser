@@ -335,6 +335,11 @@ struct CookieDeletionFilter {
   // is equivalent to setting the field to
   // CookiePartitionKeyCollection::ContainsAll.
   CookiePartitionKeyCollection? cookie_partition_key_collection;
+
+  // If true, it indicates that third-party cookie blocking would apply to the
+  // context triggering the deletion. In these cases, we should only delete
+  // partitioned cookies.
+  bool partitioned_state_only;
 };
 
 interface CookieChangeListener {
@@ -475,8 +480,9 @@ interface CookieManager {
   SetStorageAccessGrantSettings(
       array<content_settings.mojom.ContentSettingPatternSource> settings) => ();
 
-  // Sets content settings for which top-level storage access grants exist. Will
+  // Sets content settings for both flavors of storage access grants. Will
   // ack the caller with a callback when settings have been updated.
-  SetTopLevelStorageAccessSettings(
-      array<content_settings.mojom.ContentSettingPatternSource> settings) => ();
+  SetAllStorageAccessSettings(
+      array<content_settings.mojom.ContentSettingPatternSource> standard_settings,
+      array<content_settings.mojom.ContentSettingPatternSource> top_level_settings) => ();
 };

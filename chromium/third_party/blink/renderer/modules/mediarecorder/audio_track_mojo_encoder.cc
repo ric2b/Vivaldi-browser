@@ -9,10 +9,10 @@
 
 #include "base/containers/queue.h"
 #include "base/logging.h"
+#include "base/task/bind_post_task.h"
 #include "base/time/time.h"
 #include "media/base/audio_encoder.h"
 #include "media/base/audio_parameters.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/encoder_status.h"
 #include "media/mojo/clients/mojo_audio_encoder.h"
 #include "media/mojo/mojom/audio_encoder.mojom-blink.h"
@@ -33,10 +33,12 @@ void LogError(const std::string& message, media::EncoderStatus error) {
 namespace blink {
 
 AudioTrackMojoEncoder::AudioTrackMojoEncoder(
+    scoped_refptr<base::SequencedTaskRunner> encoder_task_runner,
     AudioTrackRecorder::CodecId codec,
     OnEncodedAudioCB on_encoded_audio_cb,
     uint32_t bits_per_second)
     : AudioTrackEncoder(std::move(on_encoded_audio_cb)),
+      encoder_task_runner_(std::move(encoder_task_runner)),
       bits_per_second_(bits_per_second),
       current_status_(
           media::EncoderStatus::Codes::kEncoderInitializeNeverCompleted) {
@@ -90,10 +92,14 @@ void AudioTrackMojoEncoder::OnSetFormat(
   if (bits_per_second_ > 0)
     options.bitrate = bits_per_second_;
 
-  auto output_cb = media::BindToCurrentLoop(WTF::BindRepeating(
-      &AudioTrackMojoEncoder::OnEncodeOutput, weak_factory_.GetWeakPtr()));
-  auto done_cb = media::BindToCurrentLoop(WTF::BindOnce(
-      &AudioTrackMojoEncoder::OnInitializeDone, weak_factory_.GetWeakPtr()));
+  auto output_cb = base::BindPostTask(
+      encoder_task_runner_,
+      WTF::BindRepeating(&AudioTrackMojoEncoder::OnEncodeOutput,
+                         weak_factory_.GetWeakPtr()));
+  auto done_cb =
+      base::BindPostTask(encoder_task_runner_,
+                         WTF::BindOnce(&AudioTrackMojoEncoder::OnInitializeDone,
+                                       weak_factory_.GetWeakPtr()));
   mojo_encoder_->Initialize(options, std::move(output_cb), std::move(done_cb));
 }
 
@@ -118,8 +124,9 @@ void AudioTrackMojoEncoder::EncodeAudio(
     return;
   }
 
-  auto done_cb = media::BindToCurrentLoop(WTF::BindOnce(
-      &AudioTrackMojoEncoder::OnEncodeDone, weak_factory_.GetWeakPtr()));
+  auto done_cb = base::BindPostTask(
+      encoder_task_runner_, WTF::BindOnce(&AudioTrackMojoEncoder::OnEncodeDone,
+                                          weak_factory_.GetWeakPtr()));
   mojo_encoder_->Encode(std::move(input_bus), capture_time, std::move(done_cb));
 }
 

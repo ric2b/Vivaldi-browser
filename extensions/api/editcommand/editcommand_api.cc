@@ -16,8 +16,8 @@ namespace extensions {
 ExtensionFunction::ResponseAction EditcommandExecuteFunction::Run() {
   using vivaldi::editcommand::Execute::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
       VivaldiBrowserWindow::FromId(params->window_id);

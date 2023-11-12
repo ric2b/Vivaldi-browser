@@ -19,12 +19,12 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.support.test.InstrumentationRegistry;
 import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
@@ -219,6 +219,24 @@ public class AwContentsTest {
         boolean newBlockNetworkLoads = !awSettings.getBlockNetworkLoads();
         awSettings.setBlockNetworkLoads(newBlockNetworkLoads);
         Assert.assertEquals(newBlockNetworkLoads, awSettings.getBlockNetworkLoads());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testGoBackGoForwardWithoutSessionHistory() throws Throwable {
+        mActivityTestRule.startBrowserProcess();
+        mActivityTestRule.runOnUiThread(() -> {
+            AwContents awContents =
+                    mActivityTestRule.createAwTestContainerView(mContentsClient).getAwContents();
+
+            Assert.assertFalse(awContents.canGoBack());
+            Assert.assertFalse(awContents.canGoForward());
+            // If no back/forward entries exist, then calling these should do nothing and not crash
+            // or fail asserts.
+            awContents.goBack();
+            awContents.goForward();
+        });
     }
 
     @Test
@@ -998,6 +1016,7 @@ public class AwContentsTest {
                 "Pixel",
                 "Pixel 2",
                 "Pixel 3",
+                "Pixel 4a",
         };
         if (!Arrays.asList(supportedModels).contains(Build.MODEL)) {
             Log.w(TAG, "Skipping vulkan test on unknown device: " + Build.MODEL);
@@ -1199,7 +1218,7 @@ public class AwContentsTest {
         }
     }
 
-    // This test verifies that Private Network Access' secure context
+    // This test verifies that Local Network Access' secure context
     // restriction (feature flag BlockInsecurePrivateNetworkRequests) does not
     // apply to Webview: insecure private network requests are allowed.
     //
@@ -1208,7 +1227,7 @@ public class AwContentsTest {
     @Feature({"AndroidWebView"})
     @CommandLineFlags.Add(ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1")
     @SmallTest
-    public void testInsecurePrivateNetworkAccess() throws Throwable {
+    public void testInsecureLocalNetworkAccess() throws Throwable {
         mActivityTestRule.startBrowserProcess();
         final AwTestContainerView testContainer =
                 mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);

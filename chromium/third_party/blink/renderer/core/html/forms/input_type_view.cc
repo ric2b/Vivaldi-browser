@@ -93,9 +93,9 @@ HTMLFormElement* InputTypeView::FormForSubmission() const {
   return GetElement().Form();
 }
 
-LayoutObject* InputTypeView::CreateLayoutObject(const ComputedStyle& style,
-                                                LegacyLayout legacy) const {
-  return LayoutObject::CreateObject(&GetElement(), style, legacy);
+LayoutObject* InputTypeView::CreateLayoutObject(
+    const ComputedStyle& style) const {
+  return LayoutObject::CreateObject(&GetElement(), style);
 }
 
 ControlPart InputTypeView::AutoAppearance() const {
@@ -130,7 +130,21 @@ bool InputTypeView::NeedsShadowSubtree() const {
   return true;
 }
 
+TextControlInnerEditorElement* InputTypeView::EnsureInnerEditorElement() {
+  CreateShadowSubtreeIfNeeded();
+  return GetElement().InnerEditorElement();
+}
+
 void InputTypeView::CreateShadowSubtree() {}
+
+void InputTypeView::CreateShadowSubtreeIfNeeded() {
+  if (has_created_shadow_subtree_ || !NeedsShadowSubtree()) {
+    return;
+  }
+  GetElement().EnsureUserAgentShadowRoot();
+  has_created_shadow_subtree_ = true;
+  CreateShadowSubtree();
+}
 
 void InputTypeView::DestroyShadowSubtree() {
   if (ShadowRoot* root = GetElement().UserAgentShadowRoot())

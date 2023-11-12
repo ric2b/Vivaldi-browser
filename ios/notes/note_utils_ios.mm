@@ -16,9 +16,7 @@
 #import "components/query_parser/query_parser.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/flags/system_flags.h"
-#import "ios/chrome/browser/ui/bookmarks/undo_manager_wrapper.h"
-#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "notes/note_node.h"
@@ -82,7 +80,6 @@ const NoteNode* FindFolderById(vivaldi::NotesModel* model,
 
 NSString* TitleForNoteNode(const NoteNode* node) {
   NSString* title;
-
   if (node->is_main()) {
     title = l10n_util::GetNSString(IDS_VIVALDI_NOTE_NEW_NOTES_BAR_TITLE);
   } else if (node->is_other()) {
@@ -143,28 +140,14 @@ void DeleteNotes(const std::set<const NoteNode*>& notes,
 // Creates a toast which will undo the changes made to the note model if
 // the user presses the undo button, and the UndoManagerWrapper allows the undo
 // to go through.
-MDCSnackbarMessage* CreateUndoToastWithWrapper(UndoManagerWrapper* wrapper,
-                                               NSString* text) {
-  // Create the block that will be executed if the user taps the undo button.
-  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
-  action.handler = ^{
-      if (![wrapper hasUndoManagerChanged]) {
-        [wrapper undo];
-      }
-  };
-
-  action.title = l10n_util::GetNSString(IDS_VIVALDI_NOTE_NEW_UNDO_BUTTON_TITLE);
-  action.accessibilityIdentifier = @"Undo";
-  action.accessibilityLabel =
-      l10n_util::GetNSString(IDS_VIVALDI_NOTE_NEW_UNDO_BUTTON_TITLE);
+MDCSnackbarMessage* CreateToastWithWrapper(NSString* text) {
   TriggerHapticFeedbackForNotification(UINotificationFeedbackTypeSuccess);
   MDCSnackbarMessage* message = [MDCSnackbarMessage messageWithText:text];
-  message.action = action;
   message.category = kNotesSnackbarCategory;
   return message;
 }
 
-MDCSnackbarMessage* CreateOrUpdateNoteWithUndoToast(
+MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
     const NoteNode* node,
     NSString* title,
     const GURL& url,
@@ -178,13 +161,6 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithUndoToast(
       node->parent() == folder) {
     return nil;
   }
-  // Secondly, create an Undo group for all undoable actions.
-  UndoManagerWrapper* wrapper =
-      [[UndoManagerWrapper alloc] initWithBrowserState:browser_state];
-
-  // Create or update the note.
-  [wrapper startGroupingActions];
-
   // Save the note information.
   if (!node) {  // Create a new note.
     node = note_model->AddNote(folder, folder->children().size(),
@@ -202,16 +178,13 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithUndoToast(
     DCHECK(node->parent() == folder);
   }
 
-  [wrapper stopGroupingActions];
-  [wrapper resetUndoManagerChanged];
-
   NSString* text =
       l10n_util::GetNSString((node) ? IDS_VIVALDI_NOTE_NEW_NOTE_UPDATED
                                     : IDS_VIVALDI_NOTE_NEW_NOTE_CREATED);
-  return CreateUndoToastWithWrapper(wrapper, text);
+  return CreateToastWithWrapper(text);
 }
 
-MDCSnackbarMessage* CreateNoteAtPositionWithUndoToast(
+MDCSnackbarMessage* CreateNoteAtPositionWithToast(
     NSString* title,
     const GURL& url,
     const vivaldi::NoteNode* folder,
@@ -220,23 +193,16 @@ MDCSnackbarMessage* CreateNoteAtPositionWithUndoToast(
     ChromeBrowserState* browser_state) {
   std::u16string titleString = base::SysNSStringToUTF16(title);
 
-  UndoManagerWrapper* wrapper =
-      [[UndoManagerWrapper alloc] initWithBrowserState:browser_state];
-  [wrapper startGroupingActions];
-
   const vivaldi::NoteNode* node = note_model->AddNote(
       folder, folder->children().size(), titleString, url, titleString);
   note_model->Move(node, folder, position);
 
-  [wrapper stopGroupingActions];
-  [wrapper resetUndoManagerChanged];
-
   NSString* text =
       l10n_util::GetNSString(IDS_VIVALDI_NOTE_NEW_NOTE_CREATED);
-  return CreateUndoToastWithWrapper(wrapper, text);
+  return CreateToastWithWrapper(text);
 }
 
-MDCSnackbarMessage* UpdateNotePositionWithUndoToast(
+MDCSnackbarMessage* UpdateNotePositionWithToast(
     const vivaldi::NoteNode* node,
     const vivaldi::NoteNode* folder,
     size_t position,
@@ -255,21 +221,10 @@ MDCSnackbarMessage* UpdateNotePositionWithUndoToast(
   if (node->parent() == folder && old_index == position) {
     return nil;
   }
-
-  // Secondly, create an Undo group for all undoable actions.
-  UndoManagerWrapper* wrapper =
-      [[UndoManagerWrapper alloc] initWithBrowserState:browser_state];
-
-  // Update the note.
-  [wrapper startGroupingActions];
   note_model->Move(node, folder, position);
-
-  [wrapper stopGroupingActions];
-  [wrapper resetUndoManagerChanged];
-
   NSString* text =
       l10n_util::GetNSString(IDS_VIVALDI_NOTE_NEW_NOTE_UPDATED);
-  return CreateUndoToastWithWrapper(wrapper, text);
+  return CreateToastWithWrapper(text);
 }
 
 void DeleteNotes(const std::set<const NoteNode*>& notes,
@@ -278,21 +233,15 @@ void DeleteNotes(const std::set<const NoteNode*>& notes,
   DeleteNotes(notes, model, model->root_node());
 }
 
-MDCSnackbarMessage* DeleteNotesWithUndoToast(
+MDCSnackbarMessage* DeleteNotesWithToast(
     const std::set<const NoteNode*>& nodes,
     vivaldi::NotesModel* model,
     ChromeBrowserState* browser_state) {
   size_t nodeCount = nodes.size();
   DCHECK_GT(nodeCount, 0u);
 
-  UndoManagerWrapper* wrapper =
-      [[UndoManagerWrapper alloc] initWithBrowserState:browser_state];
-
   // Delete the selected notes.
-  [wrapper startGroupingActions];
   note_utils_ios::DeleteNotes(nodes, model);
-  [wrapper stopGroupingActions];
-  [wrapper resetUndoManagerChanged];
 
   NSString* text = nil;
 
@@ -305,7 +254,7 @@ MDCSnackbarMessage* DeleteNotesWithUndoToast(
                                 base::SysNSStringToUTF16(countString));
   }
 
-  return CreateUndoToastWithWrapper(wrapper, text);
+  return CreateToastWithWrapper(text);
 }
 
 bool MoveNotes(const std::set<const NoteNode*>& notes,
@@ -330,22 +279,16 @@ bool MoveNotes(const std::set<const NoteNode*>& notes,
   return didPerformMove;
 }
 
-MDCSnackbarMessage* MoveNotesWithUndoToast(
+MDCSnackbarMessage* MoveNotesWithToast(
     const std::set<const NoteNode*>& nodes,
     vivaldi::NotesModel* model,
     const NoteNode* folder,
     ChromeBrowserState* browser_state) {
   size_t nodeCount = nodes.size();
   DCHECK_GT(nodeCount, 0u);
-  UndoManagerWrapper* wrapper =
-      [[UndoManagerWrapper alloc] initWithBrowserState:browser_state];
 
   // Move the selected notes.
-  [wrapper startGroupingActions];
   bool didPerformMove = note_utils_ios::MoveNotes(nodes, model, folder);
-  [wrapper stopGroupingActions];
-  [wrapper resetUndoManagerChanged];
-
   if (!didPerformMove)
     return nil;  // Don't return a snackbar when no real move as happened.
 
@@ -357,7 +300,7 @@ MDCSnackbarMessage* MoveNotesWithUndoToast(
     text = l10n_util::GetNSStringF(IDS_VIVALDI_NOTE_NEW_MULTIPLE_NOTE_MOVE,
                                    base::SysNSStringToUTF16(countString));
   }
-  return CreateUndoToastWithWrapper(wrapper, text);
+  return CreateToastWithWrapper(text);
 }
 
 const NoteNode* defaultMoveFolder(
@@ -486,8 +429,6 @@ bool FolderHasAncestorInNoteNodes(const NoteNode* folder,
 bool IsObstructed(const NoteNode* node, const NodeSet& obstructions) {
   if (!node->is_folder())
     return true;
-//  if (!node->IsVisible())
-//    return true;
   if (FolderHasAncestorInNoteNodes(node, obstructions))
     return true;
   return false;

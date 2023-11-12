@@ -34,6 +34,7 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/interaction/element_tracker_views.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -67,11 +68,13 @@ absl::optional<ViewID> GetViewID(
     case ImageType::NUM_IMAGE_TYPES:
       break;
   }
-  NOTREACHED();
-  return absl::nullopt;
+  NOTREACHED_NORETURN();
 }
 
 }  // namespace
+
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ContentSettingImageView,
+                                      kMediaActivityIndicatorElementId);
 
 ContentSettingImageView::ContentSettingImageView(
     std::unique_ptr<ContentSettingImageModel> image_model,
@@ -90,6 +93,30 @@ ContentSettingImageView::ContentSettingImageView(
       GetViewID(content_setting_image_model_->image_type());
   if (view_id)
     SetID(*view_id);
+
+  // Because this view is focusable, it should always have an accessible name,
+  // even if an announcement is not to be made.
+  // TODO(crbug.com/1411342): `IconLabelBubbleView::GetAccessibleNodeData`
+  // would set the name to explicitly empty when the name was missing.
+  // That function no longer exists. As a result we need to handle that here.
+  // There appear to be cases in which `Update` is never called and we lack
+  // an announcement string ID during construction. As a result, this view
+  // will lack an accessible name and the paint checks will fail. Shouldn't
+  // this view always have an accessible name? If not, should it be pruned
+  // from the accessibility tree when it lacks one?
+  const std::u16string& accessible_name =
+      content_setting_image_model_->AccessibilityAnnouncementStringId()
+          ? l10n_util::GetStringUTF16(content_setting_image_model_
+                                          ->AccessibilityAnnouncementStringId())
+          : std::u16string();
+  const std::u16string& accessible_description =
+      l10n_util::GetStringUTF16(IDS_A11Y_OMNIBOX_CHIP_HINT);
+
+  SetAccessibilityProperties(
+      /*role*/ absl::nullopt, accessible_name, accessible_description,
+      /*role_description*/ absl::nullopt,
+      accessible_name.empty() ? ax::mojom::NameFrom::kAttributeExplicitlyEmpty
+                              : ax::mojom::NameFrom::kAttribute);
 }
 
 ContentSettingImageView::~ContentSettingImageView() = default;
@@ -105,24 +132,24 @@ void ContentSettingImageView::Update() {
 
   if (!content_setting_image_model_->is_visible()) {
     SetVisible(false);
+    GetViewAccessibility().OverrideIsIgnored(true);
     critical_promo_bubble_.reset();
     return;
   }
   DCHECK(web_contents);
   UpdateImage();
   SetVisible(true);
+  GetViewAccessibility().OverrideIsIgnored(false);
 
   if (content_setting_image_model_->ShouldNotifyAccessibility(web_contents)) {
     auto name = l10n_util::GetStringUTF16(
         content_setting_image_model_->AccessibilityAnnouncementStringId());
-    auto desc = l10n_util::GetStringUTF16(IDS_A11Y_OMNIBOX_CHIP_HINT);
-    GetViewAccessibility().OverrideName(name);
-    GetViewAccessibility().OverrideDescription(desc);
+    SetAccessibleName(name);
 #if BUILDFLAG(IS_MAC)
     NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
 #else
     GetViewAccessibility().AnnounceText(l10n_util::GetStringFUTF16(
-        IDS_CONCAT_TWO_STRINGS_WITH_COMMA, name, desc));
+        IDS_CONCAT_TWO_STRINGS_WITH_COMMA, name, GetAccessibleDescription()));
 #endif
     NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
     content_setting_image_model_->AccessibilityWasNotified(web_contents);
@@ -161,6 +188,11 @@ void ContentSettingImageView::Update() {
   }
 
   content_setting_image_model_->SetAnimationHasRun(web_contents);
+
+  if (content_setting_image_model_->image_type() ==
+      ContentSettingImageModel::ImageType::MEDIASTREAM) {
+    SetProperty(views::kElementIdentifierKey, kMediaActivityIndicatorElementId);
+  }
 }
 
 void ContentSettingImageView::SetIconColor(absl::optional<SkColor> color) {

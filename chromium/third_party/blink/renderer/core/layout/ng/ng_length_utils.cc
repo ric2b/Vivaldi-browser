@@ -9,7 +9,6 @@
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
-#include "third_party/blink/renderer/core/layout/layout_table_cell.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_box_strut.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
@@ -315,8 +314,8 @@ MinMaxSizesResult ComputeMinAndMaxContentContributionInternal(
   MinMaxSizesResult result;
 
   const Length& inline_size = parent_writing_mode == WritingMode::kHorizontalTb
-                                  ? style.Width()
-                                  : style.Height();
+                                  ? style.UsedWidth()
+                                  : style.UsedHeight();
   if (inline_size.IsAuto() || inline_size.IsPercentOrCalc() ||
       inline_size.IsFillAvailable() || inline_size.IsFitContent()) {
     result = min_max_sizes_func(MinMaxSizesType::kContent);
@@ -343,8 +342,8 @@ MinMaxSizesResult ComputeMinAndMaxContentContributionInternal(
   }
 
   const Length& max_length = parent_writing_mode == WritingMode::kHorizontalTb
-                                 ? style.MaxWidth()
-                                 : style.MaxHeight();
+                                 ? style.UsedMaxWidth()
+                                 : style.UsedMaxHeight();
   LayoutUnit max;
   if (IsParallelWritingMode(parent_writing_mode, child_writing_mode)) {
     max = ResolveMaxInlineLength(space, style, border_padding,
@@ -355,8 +354,8 @@ MinMaxSizesResult ComputeMinAndMaxContentContributionInternal(
   result.sizes.Constrain(max);
 
   const Length& min_length = parent_writing_mode == WritingMode::kHorizontalTb
-                                 ? style.MinWidth()
-                                 : style.MinHeight();
+                                 ? style.UsedMinWidth()
+                                 : style.UsedMinHeight();
   LayoutUnit min;
   if (IsParallelWritingMode(parent_writing_mode, child_writing_mode)) {
     min = ResolveMinInlineLength(space, style, border_padding,
@@ -690,8 +689,10 @@ LayoutUnit ComputeBlockSizeForFragmentInternal(
   MinMaxSizes min_max = ComputeMinMaxBlockSizes(space, style, border_padding,
                                                 override_available_size);
 
-  if (space.MinBlockSizeShouldEncompassIntrinsicSize())
-    min_max.Encompass(intrinsic_size);
+  if (space.MinBlockSizeShouldEncompassIntrinsicSize()) {
+    // Encompass intrinsic block-size, but not beyond computed max-block-size.
+    min_max.Encompass(std::min(intrinsic_size, min_max.max_size));
+  }
 
   // Scrollable percentage-sized children of table cells (sometimes) are sized
   // to their min-size.
@@ -1186,15 +1187,22 @@ LogicalSize ComputeReplacedSize(
                                                  override_available_size, mode,
                                                  anchor_evaluator);
 
-  if (node.Style().LogicalWidth().IsPercentOrCalc())
-    size.inline_size *= svg_root->LogicalSizeScaleFactorForPercentageLengths();
+  if (node.Style().LogicalWidth().IsPercentOrCalc()) {
+    double factor = svg_root->LogicalSizeScaleFactorForPercentageLengths();
+    if (factor != 1.0) {
+      size.inline_size *= factor;
+    }
+  }
 
   const Length& logical_height = node.Style().LogicalHeight();
   if (svg_root->IsDocumentElement() && logical_height.IsPercentOrCalc()) {
     LayoutUnit height = ValueForLength(
         logical_height,
         node.GetDocument().GetLayoutView()->ViewLogicalHeightForPercentages());
-    height *= svg_root->LogicalSizeScaleFactorForPercentageLengths();
+    double factor = svg_root->LogicalSizeScaleFactorForPercentageLengths();
+    if (factor != 1.0) {
+      height *= factor;
+    }
     size.block_size = height;
   }
   return size;
@@ -1516,20 +1524,6 @@ NGFragmentGeometry CalculateInitialFragmentGeometry(
   NGBoxStrut scrollbar = ComputeScrollbars(constraint_space, node);
   NGBoxStrut border_padding = border + padding;
   NGBoxStrut border_scrollbar_padding = border_padding + scrollbar;
-
-  // If we have a percentage size, we need to set the
-  // HasPercentHeightDescendants flag correctly so that flexbox knows it may
-  // need to redo layout and can also do some performance optimizations.
-  if (style.LogicalHeight().IsPercentOrCalc() ||
-      style.LogicalMinHeight().IsPercentOrCalc() ||
-      style.LogicalMaxHeight().IsPercentOrCalc() ||
-      style.LogicalTop().IsPercentOrCalc() ||
-      style.LogicalBottom().IsPercentOrCalc() ||
-      (node.IsFlexItem() && style.FlexBasis().IsPercentOrCalc())) {
-    // This call has the side-effect of setting HasPercentHeightDescendants
-    // correctly.
-    node.GetLayoutBox()->ComputePercentageLogicalHeight(Length::Percent(0));
-  }
 
   if (node.IsReplaced()) {
     const LogicalSize border_box_size =

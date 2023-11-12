@@ -27,10 +27,6 @@ class UkmRecorder;
 
 namespace screen_ai {
 
-using AnnotationCallback = base::OnceCallback<void(const ui::AXTreeID&)>;
-using ContentExtractionCallback =
-    base::OnceCallback<void(const std::vector<int32_t>&)>;
-
 // Uses a local machine intelligence library to augment the accessibility
 // tree. Functionalities include extracting layout and running OCR on passed
 // snapshots and extracting the main content of a page.
@@ -46,7 +42,11 @@ class ScreenAIService : public mojom::ScreenAIService,
   ScreenAIService& operator=(const ScreenAIService&) = delete;
   ~ScreenAIService() override;
 
+  // Calls `success_callback` function and tells it if `library` has value.
+  // If `library` has value, sets the library and starts task runner, otherwise
+  // kills the current process.
   void SetLibraryAndStartTaskRunner(
+      LoadAndInitializeLibraryCallback success_callback,
       std::unique_ptr<ScreenAILibraryWrapper> library);
 
   static void RecordMetrics(ukm::SourceId ukm_source_id,
@@ -60,22 +60,24 @@ class ScreenAIService : public mojom::ScreenAIService,
   // mojom::ScreenAIAnnotator:
   void ExtractSemanticLayout(const SkBitmap& image,
                              const ui::AXTreeID& parent_tree_id,
-                             AnnotationCallback callback) override;
+                             ExtractSemanticLayoutCallback callback) override;
 
   // mojom::ScreenAIAnnotator:
-  void PerformOcr(const SkBitmap& image,
-                  const ui::AXTreeID& parent_tree_id,
-                  AnnotationCallback callback) override;
+  void PerformOcrAndReturnAXTreeUpdate(
+      const SkBitmap& image,
+      PerformOcrAndReturnAXTreeUpdateCallback callback) override;
 
   // mojom::Screen2xMainContentExtractor:
   void ExtractMainContent(const ui::AXTreeUpdate& snapshot,
                           ukm::SourceId ukm_source_id,
-                          ContentExtractionCallback callback) override;
+                          ExtractMainContentCallback callback) override;
 
   // mojom::ScreenAIService:
-  void LoadAndInitializeLibrary(base::File model_config,
-                                base::File model_tflite,
-                                const base::FilePath& library_path) override;
+  void LoadAndInitializeLibrary(
+      base::File model_config,
+      base::File model_tflite,
+      const base::FilePath& library_path,
+      LoadAndInitializeLibraryCallback callback) override;
 
   // mojom::ScreenAIService:
   void BindAnnotator(
@@ -90,16 +92,8 @@ class ScreenAIService : public mojom::ScreenAIService,
       mojo::PendingReceiver<mojom::Screen2xMainContentExtractor>
           main_content_extractor) override;
 
-  // Common section of PerformOcr and ExtractSemanticLayout functions.
-  void PerformVisualAnnotation(const SkBitmap& image,
-                               const ui::AXTreeID& parent_tree_id,
-                               AnnotationCallback callback,
-                               bool run_ocr,
-                               bool run_layout_extraction);
-
   // Wrapper functions for task scheduler.
   void VisualAnnotationInternal(const SkBitmap& image,
-                                const ui::AXTreeID& parent_tree_id,
                                 bool run_ocr,
                                 bool run_layout_extraction,
                                 ui::AXTreeUpdate* annotation);

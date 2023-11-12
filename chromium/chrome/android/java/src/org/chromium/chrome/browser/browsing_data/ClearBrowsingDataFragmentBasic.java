@@ -90,8 +90,8 @@ public class ClearBrowsingDataFragmentBasic extends ClearBrowsingDataFragment {
                     .launchUrl(UrlConstants.MY_ACTIVITY_URL_IN_CBD, TabLaunchType.FROM_CHROME_UI);
         });
 
-        IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
-                Profile.getLastUsedRegularProfile());
+        IdentityManager identityManager =
+                IdentityServicesProvider.get().getIdentityManager(getProfile());
         if (identityManager.hasPrimaryAccount(ConsentLevel.SIGNIN)) {
             // Update the Clear Browsing History text based on the sign-in/sync state and whether
             // the link to MyActivity is displayed inline or at the bottom of the page.
@@ -108,14 +108,15 @@ public class ClearBrowsingDataFragmentBasic extends ClearBrowsingDataFragment {
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         super.onCreatePreferences(savedInstanceState, rootKey);
-        IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
-                Profile.getLastUsedRegularProfile());
+        Profile profile = getProfile();
+        IdentityManager identityManager =
+                IdentityServicesProvider.get().getIdentityManager(profile);
         ClickableSpansTextMessagePreference googleDataTextPref =
                 (ClickableSpansTextMessagePreference) findPreference(
                         ClearBrowsingDataFragment.PREF_GOOGLE_DATA_TEXT);
         Preference nonGoogleSearchHistoryTextPref =
                 findPreference(ClearBrowsingDataFragment.PREF_SEARCH_HISTORY_NON_GOOGLE_TEXT);
-        TemplateUrlService templateUrlService = TemplateUrlServiceFactory.get();
+        TemplateUrlService templateUrlService = TemplateUrlServiceFactory.getForProfile(profile);
         TemplateUrl defaultSearchEngine = templateUrlService.getDefaultSearchEngineTemplateUrl();
         boolean isDefaultSearchEngineGoogle = templateUrlService.isDefaultSearchEngineGoogle();
 

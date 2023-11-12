@@ -71,6 +71,7 @@
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/supervised_user/core/common/buildflags.h"
+#include "components/supervised_user/core/common/pref_names.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/uninstall_result_code.h"
 #include "content/public/browser/browser_message_filter.h"
@@ -127,7 +128,8 @@
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "chrome/browser/supervised_user/supervised_user_url_filter.h"
+#include "components/supervised_user/core/browser/supervised_user_url_filter.h"
+#include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
 #endif
 
@@ -253,7 +255,7 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     return menu;
   }
 
-  // Does not work on ChromeOS.
+  // Does not work on ChromeOS Ash where there's only one profile.
   Profile* CreateSecondaryProfile(int profile_num) {
     base::ScopedAllowBlockingForTesting allow_blocking;
     ProfileManager* profile_manager = g_browser_process->profile_manager();
@@ -314,13 +316,16 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     auto callback =
         [](std::vector<uint8_t>* response_image_data,
            gfx::Size* response_original_size,
+           gfx::Size* response_downscaled_size,
            std::string* response_file_extension,
            std::vector<lens::mojom::LatencyLogPtr>* response_log_data,
            base::OnceClosure quit, const std::vector<uint8_t>& image_data,
-           const gfx::Size& original_size, const std::string& file_extension,
+           const gfx::Size& original_size, const gfx::Size& downscaled_size,
+           const std::string& file_extension,
            std::vector<lens::mojom::LatencyLogPtr> log_data) {
           *response_image_data = image_data;
           *response_original_size = original_size;
+          *response_downscaled_size = downscaled_size;
           *response_file_extension = file_extension;
           *response_log_data = std::move(log_data);
           std::move(quit).Run();
@@ -329,17 +334,20 @@ class ContextMenuBrowserTest : public InProcessBrowserTest {
     base::RunLoop run_loop;
     std::vector<uint8_t> response_image_data;
     gfx::Size response_original_size;
+    gfx::Size response_downscaled_size;
     std::string response_file_extension;
     std::vector<lens::mojom::LatencyLogPtr> response_log_data;
     chrome_render_frame->RequestImageForContextNode(
         0, request_size, request_image_format, chrome::mojom::kDefaultQuality,
         base::BindOnce(callback, &response_image_data, &response_original_size,
-                       &response_file_extension, &response_log_data,
-                       run_loop.QuitClosure()));
+                       &response_downscaled_size, &response_file_extension,
+                       &response_log_data, run_loop.QuitClosure()));
     run_loop.Run();
 
     ASSERT_EQ(expected_original_size.width(), response_original_size.width());
     ASSERT_EQ(expected_original_size.height(), response_original_size.height());
+    ASSERT_EQ(expected_size.width(), response_downscaled_size.width());
+    ASSERT_EQ(expected_size.height(), response_downscaled_size.height());
     ASSERT_EQ(expected_extension, response_file_extension);
 
     SkBitmap decoded_bitmap;
@@ -553,8 +561,21 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
 }
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
-                       SaveLinkAsEntryIsDisabledForUrlsNotAccessibleForChild) {
+class ContextMenuWithoutFilteringForSupervisedUsersBrowserTest
+    : public ContextMenuBrowserTest {
+ public:
+  ContextMenuWithoutFilteringForSupervisedUsersBrowserTest() {
+    scoped_feature_list_.InitAndDisableFeature(
+        supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    ContextMenuWithoutFilteringForSupervisedUsersBrowserTest,
+    SaveLinkAsEntryIsDisabledForUrlsNotAccessibleForChildWithoutFiltering) {
   // Set up child user profile.
   Profile* profile = browser()->profile();
   browser()->profile()->GetPrefs()->SetString(
@@ -563,7 +584,48 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   // Block access to http://www.google.com/ in the URL filter.
   SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForProfile(profile);
-  SupervisedUserURLFilter* url_filter = supervised_user_service->GetURLFilter();
+  supervised_user::SupervisedUserURLFilter* url_filter =
+      supervised_user_service->GetURLFilter();
+  std::map<std::string, bool> hosts;
+  hosts["www.google.com"] = false;
+  url_filter->SetManualHosts(std::move(hosts));
+
+  base::RunLoop().RunUntilIdle();
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNone(GURL("http://www.google.com/"),
+                                     GURL("http://www.google.com/"));
+
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SAVELINKAS));
+
+  // The entry is only disabled for platforms on which URL filtering is enabled.
+  if (supervised_user_service->IsURLFilteringEnabled()) {
+    EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
+  } else {
+    EXPECT_TRUE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
+  }
+}
+
+class ContextMenuWithFilteringForSupervisedUsersBrowserTest
+    : public ContextMenuBrowserTest {
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS};
+};
+
+IN_PROC_BROWSER_TEST_F(
+    ContextMenuWithFilteringForSupervisedUsersBrowserTest,
+    SaveLinkAsEntryIsDisabledForUrlsNotAccessibleForChildWithFiltering) {
+  // Set up child user profile.
+  Profile* profile = browser()->profile();
+  browser()->profile()->GetPrefs()->SetString(
+      prefs::kSupervisedUserId, supervised_user::kChildAccountSUID);
+
+  // Block access to http://www.google.com/ in the URL filter.
+  SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForProfile(profile);
+  supervised_user::SupervisedUserURLFilter* url_filter =
+      supervised_user_service->GetURLFilter();
   std::map<std::string, bool> hosts;
   hosts["www.google.com"] = false;
   url_filter->SetManualHosts(std::move(hosts));
@@ -577,8 +639,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_SAVELINKAS));
   EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_SAVELINKAS));
 }
-
-#endif
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
@@ -1145,19 +1206,12 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenInNewTabReferrer) {
   // Verify that it's the correct tab.
   ASSERT_EQ(echoheader, tab->GetLastCommittedURL());
   // Verify that the text on the page matches |kCorrectReferrer|.
-  std::string actual_referrer;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      tab,
-      "window.domAutomationController.send(window.document.body.textContent);",
-      &actual_referrer));
-  ASSERT_EQ(kCorrectReferrer, actual_referrer);
+  ASSERT_EQ(kCorrectReferrer,
+            content::EvalJs(tab, "window.document.body.textContent;"));
 
   // Verify that the referrer on the page matches |kCorrectReferrer|.
-  std::string page_referrer;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      tab, "window.domAutomationController.send(window.document.referrer);",
-      &page_referrer));
-  ASSERT_EQ(kCorrectReferrer, page_referrer);
+  ASSERT_EQ(kCorrectReferrer,
+            content::EvalJs(tab, "window.document.referrer;"));
 }
 
 // Verify that "Open Link in Incognito Window " doesn't send referrer URL.
@@ -1173,8 +1227,6 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenIncognitoNoneReferrer) {
 
   // Set up referrer URL with fragment.
   const GURL kReferrerWithFragment("http://foo.com/test#fragment");
-  const std::string kNoneReferrer("None");
-  const std::string kEmptyReferrer("");
 
   // Set up menu with link URL.
   content::ContextMenuParams context_menu_params;
@@ -1195,20 +1247,11 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenIncognitoNoneReferrer) {
 
   // Verify that it's the correct tab.
   ASSERT_EQ(echoheader, tab->GetLastCommittedURL());
-  // Verify that the text on the page matches |kNoneReferrer|.
-  std::string actual_referrer;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      tab,
-      "window.domAutomationController.send(window.document.body.textContent);",
-      &actual_referrer));
-  ASSERT_EQ(kNoneReferrer, actual_referrer);
+  // Verify that the text on the page is "None".
+  ASSERT_EQ("None", content::EvalJs(tab, "window.document.body.textContent;"));
 
-  // Verify that the referrer on the page matches |kEmptyReferrer|.
-  std::string page_referrer;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      tab, "window.domAutomationController.send(window.document.referrer);",
-      &page_referrer));
-  ASSERT_EQ(kEmptyReferrer, page_referrer);
+  // Verify that the referrer on the page is "".
+  ASSERT_EQ("", content::EvalJs(tab, "window.document.referrer;"));
 }
 
 // Check filename on clicking "Save Link As" via a "real" context menu.
@@ -1412,22 +1455,16 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   ContextMenuWaiter menu_observer;
   content::WebContents* tab =
       browser()->tab_strip_model()->GetActiveWebContents();
-  int x;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(
-      tab,
-      "var bounds = document.getElementById('anchor1')"
-      ".getBoundingClientRect();"
-      "domAutomationController.send("
-      "    Math.floor(bounds.left + bounds.width / 2));",
-      &x));
-  int y;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(
-      tab,
-      "var bounds = document.getElementById('anchor1')"
-      ".getBoundingClientRect();"
-      "domAutomationController.send("
-      "    Math.floor(bounds.top + bounds.height / 2));",
-      &y));
+  int x = content::EvalJs(tab,
+                          "var bounds = document.getElementById('anchor1')"
+                          ".getBoundingClientRect();"
+                          "Math.floor(bounds.left + bounds.width / 2);")
+              .ExtractInt();
+  int y = content::EvalJs(tab,
+                          "var bounds = document.getElementById('anchor1')"
+                          ".getBoundingClientRect();"
+                          "Math.floor(bounds.top + bounds.height / 2);")
+              .ExtractInt();
 
   // Focus in the middle of an anchor element.
   content::SimulateMouseClickAt(tab, /*modifiers=*/0,
@@ -1571,13 +1608,7 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest,
   }
 }
 
-// Test is flaky on Win and Mac dbg: crbug.com/1121731
-#if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_MAC) && !defined(NDEBUG))
-#define MAYBE_OpenLinkInProfile DISABLED_OpenLinkInProfile
-#else
-#define MAYBE_OpenLinkInProfile OpenLinkInProfile
-#endif
-IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_OpenLinkInProfile) {
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenLinkInProfile) {
   signin_util::ScopedForceSigninSetterForTesting force_signin_setter(true);
   // Create |num_profiles| extra profiles for testing.
   const int num_profiles = 8;
@@ -1615,9 +1646,15 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, MAYBE_OpenLinkInProfile) {
                                   profiles_signin_required.end(), i)) {
       entry->LockForceSigninProfile(true);
     } else {
+      // In order for the profile to be counted as active, it needs to have a
+      // created browser window. The profile isn't marked active until the
+      // browser is actually open, which we need.
+      ui_test_utils::BrowserChangeObserver observer(
+          nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
       profiles::FindOrCreateNewWindowForProfile(
           profile, chrome::startup::IsProcessStartup::kNo,
           chrome::startup::IsFirstRun::kNo, false);
+      observer.Wait();
       profiles_in_menu.push_back(profile);
     }
   }
@@ -1710,21 +1747,10 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenProfileNoneReferrer) {
   ASSERT_EQ(echoheader, tab->GetLastCommittedURL());
 
   // Verify that the header text echoed on the page doesn't reveal `kReferrer`.
-  const std::string kNoneReferrer("None");
-  std::string actual_referrer;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      tab,
-      "window.domAutomationController.send(window.document.body.textContent);",
-      &actual_referrer));
-  ASSERT_EQ(kNoneReferrer, actual_referrer);
+  ASSERT_EQ("None", content::EvalJs(tab, "window.document.body.textContent;"));
 
   // Verify that the javascript referrer is empty.
-  std::string page_referrer;
-  const std::string kEmptyReferrer("");
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      tab, "window.domAutomationController.send(window.document.referrer);",
-      &page_referrer));
-  ASSERT_EQ(kEmptyReferrer, page_referrer);
+  ASSERT_EQ("", content::EvalJs(tab, "window.document.referrer;"));
 }
 
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -2115,8 +2141,16 @@ class SearchByRegionWithUnifiedSidePanelBrowserTest
   }
 };
 
+// https://crbug.com/1444953
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_ValidLensRegionSearchWithUnifiedSidePanel \
+  DISABLED_ValidLensRegionSearchWithUnifiedSidePanel
+#else
+#define MAYBE_ValidLensRegionSearchWithUnifiedSidePanel \
+  ValidLensRegionSearchWithUnifiedSidePanel
+#endif
 IN_PROC_BROWSER_TEST_F(SearchByRegionWithUnifiedSidePanelBrowserTest,
-                       ValidLensRegionSearchWithUnifiedSidePanel) {
+                       MAYBE_ValidLensRegionSearchWithUnifiedSidePanel) {
   SetupUnifiedSidePanel();
   // We need a base::RunLoop to ensure that our test does not finish until the
   // side panel has opened and we have verified the URL.
@@ -2160,8 +2194,17 @@ IN_PROC_BROWSER_TEST_F(SearchByRegionWithUnifiedSidePanelBrowserTest,
                                    ".*ep=crs&re=df&s=4&st=\\d+&lm=.+"));
 }
 
-IN_PROC_BROWSER_TEST_F(SearchByRegionWithUnifiedSidePanelBrowserTest,
-                       ValidFullscreenLensRegionSearchWithUnifiedSidePanel) {
+// https://crbug.com/1444953
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_ValidFullscreenLensRegionSearchWithUnifiedSidePanel \
+  DISABLED_ValidFullscreenLensRegionSearchWithUnifiedSidePanel
+#else
+#define MAYBE_ValidFullscreenLensRegionSearchWithUnifiedSidePanel \
+  ValidFullscreenLensRegionSearchWithUnifiedSidePanel
+#endif
+IN_PROC_BROWSER_TEST_F(
+    SearchByRegionWithUnifiedSidePanelBrowserTest,
+    MAYBE_ValidFullscreenLensRegionSearchWithUnifiedSidePanel) {
   SetupUnifiedSidePanel();
   // We need a base::RunLoop to ensure that our test does not finish until the
   // side panel has opened and we have verified the URL.
@@ -2740,6 +2783,37 @@ IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, OpenReadingMode) {
                                                   params);
   menu3->Init();
   ASSERT_TRUE(menu3->IsItemPresent(IDC_CONTENT_CONTEXT_OPEN_IN_READING_MODE));
+}
+
+// Ensure that the context menu can tolerate changes to session history that
+// happen between menu initialization and command execution.
+IN_PROC_BROWSER_TEST_F(ContextMenuBrowserTest, BackAfterBackEntryRemoved) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  content::NavigationController& controller = web_contents->GetController();
+
+  GURL url(embedded_test_server()->GetURL("/title1.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  // At the time the context menu is created, it is possible to navigate back,
+  // so the back menu item is enabled. While the context menu is open, we
+  // navigate back to the first entry. This will make it so that there is no
+  // back entry to navigate to when clicking the back menu item.
+  base::OnceClosure nav_to_first_entry = base::BindLambdaForTesting([&]() {
+    content::TestNavigationObserver back_nav_observer(web_contents);
+    EXPECT_TRUE(controller.CanGoBack());
+    controller.GoBack();
+    back_nav_observer.Wait();
+    EXPECT_FALSE(controller.CanGoBack());
+  });
+
+  ContextMenuWaiter menu_observer(IDC_BACK, std::move(nav_to_first_entry));
+  content::SimulateMouseClickAt(web_contents, 0,
+                                blink::WebMouseEvent::Button::kRight,
+                                gfx::Point(15, 15));
+  menu_observer.WaitForMenuOpenAndClose();
 }
 
 }  // namespace

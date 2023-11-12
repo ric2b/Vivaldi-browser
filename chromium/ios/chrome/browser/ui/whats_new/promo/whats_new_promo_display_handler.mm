@@ -6,6 +6,7 @@
 
 #import "base/check.h"
 #import "base/metrics/user_metrics.h"
+#import "components/feature_engagement/public/feature_constants.h"
 #import "ios/chrome/browser/promos_manager/constants.h"
 #import "ios/chrome/browser/promos_manager/promo_config.h"
 #import "ios/chrome/browser/ui/whats_new/whats_new_util.h"
@@ -14,9 +15,19 @@
 #error "This file requires ARC support."
 #endif
 
-@implementation WhatsNewPromoDisplayHandler
+@implementation WhatsNewPromoDisplayHandler {
+  // Promos Manager to alert if the user uses What's New.
+  PromosManager* _promosManager;
+}
 
 #pragma mark - StandardPromoDisplayHandler
+
+- (instancetype)initWithPromosManager:(PromosManager*)promosManager {
+  if (self = [super init]) {
+    _promosManager = promosManager;
+  }
+  return self;
+}
 
 - (void)handleDisplay {
   // Don't show the promo if What's New has been previously open.
@@ -25,14 +36,15 @@
   }
 
   DCHECK(self.handler);
-  SetWhatsNewUsed();
+  SetWhatsNewUsed(_promosManager);
   [self.handler showWhatsNewPromo];
 }
 
 #pragma mark - PromoProtocol
 
 - (PromoConfig)config {
-  return PromoConfig(promos_manager::Promo::WhatsNew);
+  return PromoConfig(promos_manager::Promo::WhatsNew,
+                     &feature_engagement::kIPHiOSPromoWhatsNewFeature);
 }
 
 - (void)promoWasDisplayed {

@@ -5,10 +5,12 @@
 #include "chromeos/ash/components/audio/cros_audio_config_impl.h"
 
 #include "ash/constants/ash_features.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "chromeos/ash/components/audio/audio_devices_pref_handler.h"
 #include "chromeos/ash/components/audio/audio_devices_pref_handler_stub.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
@@ -41,11 +43,25 @@ constexpr uint64_t kInternalMicFrontId = 10040;
 constexpr uint64_t kInternalMicRearId = 10050;
 constexpr uint64_t kInternalMicId = 10060;
 
+constexpr base::TimeDelta kMetricsDelayTimerInterval = base::Seconds(2);
+
 // Histogram names.
 constexpr char kOutputMuteChangeHistogramName[] =
-    "ChromeOS.Settings.Device.Audio.OutputMuteStateChange";
+    "ChromeOS.CrosAudioConfig.OutputMuteStateChange";
 constexpr char kInputMuteChangeHistogramName[] =
-    "ChromeOS.Settings.Device.Audio.InputMuteStateChange";
+    "ChromeOS.CrosAudioConfig.InputMuteStateChange";
+constexpr char kNoiseCancellationEnabledHistogramName[] =
+    "ChromeOS.CrosAudioConfig.NoiseCancellationEnabled";
+constexpr char kOutputVolumeChangeHistogramName[] =
+    "ChromeOS.CrosAudioConfig.OutputVolumeSetTo";
+constexpr char kInputGainChangeHistogramName[] =
+    "ChromeOS.CrosAudioConfig.InputGainSetTo";
+constexpr char kAudioDeviceChangeHistogramName[] =
+    "ChromeOS.CrosAudioConfig.DeviceChange";
+constexpr char kOutputDeviceTypeHistogramName[] =
+    "ChromeOS.CrosAudioConfig.OutputDeviceTypeChangedTo";
+constexpr char kInputDeviceTypeHistogramName[] =
+    "ChromeOS.CrosAudioConfig.InputDeviceTypeChangedTo";
 
 struct AudioNodeInfo {
   bool is_input;
@@ -122,7 +138,8 @@ class FakeAudioSystemPropertiesObserver
 
 class CrosAudioConfigImplTest : public testing::Test {
  public:
-  CrosAudioConfigImplTest() = default;
+  CrosAudioConfigImplTest()
+      : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
   ~CrosAudioConfigImplTest() override = default;
 
   void SetUp() override {
@@ -292,9 +309,13 @@ class CrosAudioConfigImplTest : public testing::Test {
   }
 
   void SetNoiseCancellationState(bool noise_cancellation_on) {
-    cras_audio_handler_->SetNoiseCancellationState(noise_cancellation_on);
+    cras_audio_handler_->SetNoiseCancellationState(
+        noise_cancellation_on,
+        CrasAudioHandler::AudioSettingsChangeSource::kOsSettings);
     base::RunLoop().RunUntilIdle();
   }
+
+  base::test::TaskEnvironment* task_environment() { return &task_environment_; }
 
   base::HistogramTester histogram_tester_;
 
@@ -324,11 +345,12 @@ class CrosAudioConfigImplTest : public testing::Test {
   base::test::TaskEnvironment task_environment_;
   base::test::ScopedFeatureList scoped_feature_list_;
 
-  CrasAudioHandler* cras_audio_handler_ = nullptr;  // Not owned.
+  raw_ptr<CrasAudioHandler, ExperimentalAsh> cras_audio_handler_ =
+      nullptr;  // Not owned.
   std::unique_ptr<CrosAudioConfigImpl> cros_audio_config_;
   mojo::Remote<mojom::CrosAudioConfig> remote_;
   scoped_refptr<AudioDevicesPrefHandlerStub> audio_pref_handler_;
-  FakeCrasAudioClient* fake_cras_audio_client_;
+  raw_ptr<FakeCrasAudioClient, ExperimentalAsh> fake_cras_audio_client_;
 };
 
 TEST_F(CrosAudioConfigImplTest, HandleExternalInputGainUpdate) {
@@ -535,8 +557,14 @@ TEST_F(CrosAudioConfigImplTest, SetNoiseCancellationState) {
   // Simulate trying to set noise cancellation.
   SimulateSetNoiseCancellationEnabled(/*enabled=*/true);
 
-  // Since noise cancellation is not supported, noting is set.
+  // Since noise cancellation is not supported, nothing is set.
   ASSERT_FALSE(GetNoiseCancellationState());
+  bool expect_noise_cancellation_enabled = true;
+  histogram_tester_.ExpectBucketCount(kNoiseCancellationEnabledHistogramName,
+                                      expect_noise_cancellation_enabled, 0);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kNoiseCancellationEnabledSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 0);
 
   // Turn on noise cancellation support.
   SetNoiseCancellationSupported(/*supported=*/true);
@@ -544,6 +572,11 @@ TEST_F(CrosAudioConfigImplTest, SetNoiseCancellationState) {
 
   // Now turning on noise cancellation should work.
   SimulateSetNoiseCancellationEnabled(/*enabled=*/true);
+  histogram_tester_.ExpectBucketCount(kNoiseCancellationEnabledHistogramName,
+                                      expect_noise_cancellation_enabled, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kNoiseCancellationEnabledSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 1);
 
   // Add input audio nodes.
   SetAudioNodes({kInternalMic, kUsbMic});
@@ -566,6 +599,12 @@ TEST_F(CrosAudioConfigImplTest, SetNoiseCancellationState) {
 
   ASSERT_TRUE(GetNoiseCancellationState());
   ASSERT_TRUE(GetNoiseCancellationStatePref());
+  expect_noise_cancellation_enabled = false;
+  histogram_tester_.ExpectBucketCount(kNoiseCancellationEnabledHistogramName,
+                                      expect_noise_cancellation_enabled, 0);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kNoiseCancellationEnabledSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 1);
 
   // Turn noise cancellation off with active input device that supports noise
   // cancellation.
@@ -576,6 +615,11 @@ TEST_F(CrosAudioConfigImplTest, SetNoiseCancellationState) {
   ASSERT_FALSE(GetNoiseCancellationStatePref());
   ASSERT_EQ(mojom::AudioEffectState::kNotEnabled,
             fake_observer->GetInputAudioDevice(1)->noise_cancellation_state);
+  histogram_tester_.ExpectBucketCount(kNoiseCancellationEnabledHistogramName,
+                                      expect_noise_cancellation_enabled, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kNoiseCancellationEnabledSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 2);
 }
 
 TEST_F(CrosAudioConfigImplTest, GetOutputAudioDevices) {
@@ -754,6 +798,12 @@ TEST_F(CrosAudioConfigImplTest, SetActiveOutputDevice) {
   ASSERT_TRUE(fake_observer->last_audio_system_properties_.value()
                   ->output_devices[1]
                   ->is_active);
+  histogram_tester_.ExpectBucketCount(kAudioDeviceChangeHistogramName,
+                                      AudioDeviceChange::kOutputDevice, 1);
+  histogram_tester_.ExpectBucketCount(kAudioDeviceChangeHistogramName,
+                                      AudioDeviceChange::kInputDevice, 0);
+  histogram_tester_.ExpectBucketCount(kOutputDeviceTypeHistogramName,
+                                      AudioDeviceType::kHdmi, 1);
 }
 
 TEST_F(CrosAudioConfigImplTest, SetActiveInputDevice) {
@@ -778,6 +828,12 @@ TEST_F(CrosAudioConfigImplTest, SetActiveInputDevice) {
   ASSERT_TRUE(fake_observer->last_audio_system_properties_.value()
                   ->input_devices[1]
                   ->is_active);
+  histogram_tester_.ExpectBucketCount(kAudioDeviceChangeHistogramName,
+                                      AudioDeviceChange::kOutputDevice, 0);
+  histogram_tester_.ExpectBucketCount(kAudioDeviceChangeHistogramName,
+                                      AudioDeviceChange::kInputDevice, 1);
+  histogram_tester_.ExpectBucketCount(kInputDeviceTypeHistogramName,
+                                      AudioDeviceType::kUsb, 1);
 }
 
 TEST_F(CrosAudioConfigImplTest, HandleInputMuteState) {
@@ -843,6 +899,9 @@ TEST_F(CrosAudioConfigImplTest, SetOutputMuted) {
                                       AudioMuteButtonAction::kMuted, 1);
   histogram_tester_.ExpectBucketCount(kOutputMuteChangeHistogramName,
                                       AudioMuteButtonAction::kUnmuted, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kOutputVolumeMuteSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 2);
 }
 
 TEST_F(CrosAudioConfigImplTest, SetInputMuted) {
@@ -869,6 +928,9 @@ TEST_F(CrosAudioConfigImplTest, SetInputMuted) {
                                       AudioMuteButtonAction::kMuted, 1);
   histogram_tester_.ExpectBucketCount(kInputMuteChangeHistogramName,
                                       AudioMuteButtonAction::kUnmuted, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kInputGainMuteSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 2);
 
   // Simulate turning physical switch on.
   SetInputMuteState(mojom::MuteState::kMutedExternally, /*switch_on=*/true);
@@ -891,6 +953,9 @@ TEST_F(CrosAudioConfigImplTest, SetInputMuted) {
                                       AudioMuteButtonAction::kMuted, 1);
   histogram_tester_.ExpectBucketCount(kInputMuteChangeHistogramName,
                                       AudioMuteButtonAction::kUnmuted, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kInputGainMuteSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 2);
 }
 
 // Verify merging front and rear mic into a single device returns expected
@@ -909,8 +974,7 @@ TEST_F(CrosAudioConfigImplTest, StubInternalMicHandlesDualMicUpdates) {
       fake_observer->last_audio_system_properties_.value()
           ->input_devices[1]
           .Clone();
-  const std::string expected_display_name = "Internal Mic";
-  EXPECT_EQ(expected_display_name, internal_mic->display_name);
+  EXPECT_EQ(mojom::AudioDeviceType::kInternalMic, internal_mic->device_type);
   EXPECT_FALSE(internal_mic->is_active);
 
   SimulateSetActiveDevice(kInternalMicFrontId);
@@ -921,7 +985,7 @@ TEST_F(CrosAudioConfigImplTest, StubInternalMicHandlesDualMicUpdates) {
   internal_mic = fake_observer->last_audio_system_properties_.value()
                      ->input_devices[1]
                      .Clone();
-  EXPECT_EQ(expected_display_name, internal_mic->display_name);
+  EXPECT_EQ(mojom::AudioDeviceType::kInternalMic, internal_mic->device_type);
   EXPECT_TRUE(internal_mic->is_active);
 
   // Verify rear device ID will also set internal mic to active.
@@ -934,7 +998,7 @@ TEST_F(CrosAudioConfigImplTest, StubInternalMicHandlesDualMicUpdates) {
   internal_mic = fake_observer->last_audio_system_properties_.value()
                      ->input_devices[1]
                      .Clone();
-  EXPECT_EQ(expected_display_name, internal_mic->display_name);
+  EXPECT_EQ(mojom::AudioDeviceType::kInternalMic, internal_mic->device_type);
   EXPECT_TRUE(internal_mic->is_active);
 }
 
@@ -1007,6 +1071,74 @@ TEST_F(CrosAudioConfigImplTest,
   SetNoiseCancellationState(/*noise_cancellation_on=*/false);
 
   EXPECT_EQ(expected_call_count, fake_observer->num_properties_updated_calls_);
+}
+
+TEST_F(CrosAudioConfigImplTest, SetOutputVolumeHistogram) {
+  // Bind mojo remote.
+  Observe();
+
+  // Move the output volume up slider 3 times. Move the slider at half of the
+  // delay interval time so each change shouldn't be recorded.
+  SetOutputVolumePercent(/*volume_percent=*/10);
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval / 2);
+  SetOutputVolumePercent(/*volume_percent=*/20);
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval / 2);
+  SetOutputVolumePercent(/*volume_percent=*/30);
+
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval);
+  histogram_tester_.ExpectBucketCount(kOutputVolumeChangeHistogramName, 10, 0);
+  histogram_tester_.ExpectBucketCount(kOutputVolumeChangeHistogramName, 20, 0);
+  histogram_tester_.ExpectBucketCount(kOutputVolumeChangeHistogramName, 30, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kOutputVolumeChangedSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 1);
+
+  // Move the output volume up slider 2 times. Move the slider at half of the
+  // delay interval time so each change shouldn't be recorded.
+  SetOutputVolumePercent(/*volume_percent=*/50);
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval / 2);
+  SetOutputVolumePercent(/*volume_percent=*/100);
+
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval);
+  histogram_tester_.ExpectBucketCount(kOutputVolumeChangeHistogramName, 50, 0);
+  histogram_tester_.ExpectBucketCount(kOutputVolumeChangeHistogramName, 100, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kOutputVolumeChangedSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 2);
+}
+
+TEST_F(CrosAudioConfigImplTest, SetInputGainHistogram) {
+  // Bind mojo remote.
+  Observe();
+
+  // Move the input gain up slider 3 times. Move the slider at half of the
+  // delay interval time so each change shouldn't be recorded.
+  SetInputGainPercentFromFrontEnd(/*gain_percent=*/10);
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval / 2);
+  SetInputGainPercentFromFrontEnd(/*gain_percent=*/20);
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval / 2);
+  SetInputGainPercentFromFrontEnd(/*gain_percent=*/30);
+
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval);
+  histogram_tester_.ExpectBucketCount(kInputGainChangeHistogramName, 10, 0);
+  histogram_tester_.ExpectBucketCount(kInputGainChangeHistogramName, 20, 0);
+  histogram_tester_.ExpectBucketCount(kInputGainChangeHistogramName, 30, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kInputGainChangedSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 1);
+
+  // Move the input gain up slider 2 times. Move the slider at half of the
+  // delay interval time so each change shouldn't be recorded.
+  SetInputGainPercentFromFrontEnd(/*gain_percent=*/50);
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval / 2);
+  SetInputGainPercentFromFrontEnd(/*gain_percent=*/100);
+
+  task_environment()->FastForwardBy(kMetricsDelayTimerInterval);
+  histogram_tester_.ExpectBucketCount(kInputGainChangeHistogramName, 50, 0);
+  histogram_tester_.ExpectBucketCount(kInputGainChangeHistogramName, 100, 1);
+  histogram_tester_.ExpectBucketCount(
+      CrasAudioHandler::kInputGainChangedSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kOsSettings, 2);
 }
 
 }  // namespace ash::audio_config

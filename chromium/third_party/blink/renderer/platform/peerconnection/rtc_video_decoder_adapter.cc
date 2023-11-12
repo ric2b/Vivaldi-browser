@@ -18,13 +18,13 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/trace_event/base_tracing.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/media_util.h"
@@ -171,18 +171,7 @@ absl::optional<RTCVideoDecoderFallbackReason> NeedSoftwareFallback(
   // layers. See https://crbug.com/webrtc/9304.
   const bool is_spatial_layer_buffer = buffer.side_data_size() > 0;
   if (codec == media::VideoCodec::kVP9 && is_spatial_layer_buffer &&
-      !RTCVideoDecoderAdapter::Vp9HwSupportForSpatialLayers()) {
-    // D3D11 supports decoding the VP9 kSVC stream, but DXVA not. Currently just
-    // a reasonably temporary measure. Once the DXVA supports decoding VP9 kSVC
-    // stream, the boolean |need_fallback_to_software| should be removed, and if
-    // the OS is windows but not win7, we will return true in
-    // 'Vp9HwSupportForSpatialLayers' instead of false.
-#if BUILDFLAG(IS_WIN)
-    if (decoder_type == media::VideoDecoderType::kD3D11 &&
-        base::FeatureList::IsEnabled(media::kD3D11Vp9kSVCHWDecoding)) {
-      return absl::nullopt;
-    }
-#endif
+      !RTCVideoDecoderAdapter::Vp9HwSupportForSpatialLayers(decoder_type)) {
     return RTCVideoDecoderFallbackReason::kSpatialLayers;
   }
 
@@ -584,6 +573,7 @@ std::unique_ptr<RTCVideoDecoderAdapter> RTCVideoDecoderAdapter::Create(
       media::kNoTransformation, kDefaultSize, gfx::Rect(kDefaultSize),
       kDefaultSize, media::EmptyExtraData(),
       media::EncryptionScheme::kUnencrypted);
+  config.set_is_rtc(true);
 
   std::unique_ptr<RTCVideoDecoderAdapter> rtc_video_decoder_adapter;
   if (gpu_factories->IsDecoderConfigSupported(config) !=
@@ -615,8 +605,8 @@ RTCVideoDecoderAdapter::RTCVideoDecoderAdapter(
 
   weak_this_ = weak_this_factory_.GetWeakPtr();
 
-  auto change_status_callback =
-      CrossThreadBindRepeating(media::BindToCurrentLoop(base::BindRepeating(
+  auto change_status_callback = CrossThreadBindRepeating(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &RTCVideoDecoderAdapter::ChangeStatus, weak_this_)));
   impl_ = std::make_unique<Impl>(gpu_factories,
                                  std::move(change_status_callback), weak_impl_);
@@ -919,7 +909,15 @@ void RTCVideoDecoderAdapter::DecrementCurrentDecoderCountForTesting() {
   Impl::g_num_decoders_--;
 }
 
-bool RTCVideoDecoderAdapter::Vp9HwSupportForSpatialLayers() {
+bool RTCVideoDecoderAdapter::Vp9HwSupportForSpatialLayers(
+    const media::VideoDecoderType decoder_type) {
+#if BUILDFLAG(IS_WIN)
+  // D3D11 supports decoding the VP9 kSVC stream, but DXVA not.
+  if (decoder_type == media::VideoDecoderType::kD3D11 &&
+      base::FeatureList::IsEnabled(media::kD3D11Vp9kSVCHWDecoding)) {
+    return true;
+  }
+#endif
   return base::FeatureList::IsEnabled(media::kVp9kSVCHWDecoding);
 }
 

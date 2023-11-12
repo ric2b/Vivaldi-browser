@@ -18,6 +18,8 @@
 #include "ash/public/cpp/system_tray_observer.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/session/test_session_controller_client.h"
+#include "ash/shelf/drag_handle.h"
+#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/system/accessibility/dictation_button_tray.h"
 #include "ash/system/accessibility/select_to_speak/select_to_speak_tray.h"
@@ -37,8 +39,10 @@
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_ash_web_view_factory.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/ash/components/network/cellular_metrics_logger.h"
 #include "chromeos/ash/components/network/network_handler.h"
@@ -480,13 +484,13 @@ class StatusAreaWidgetCollapseStateTest : public AshTestBase {
     return status_area_->collapse_state();
   }
 
-  StatusAreaWidget* status_area_;
-  StatusAreaOverflowButtonTray* overflow_button_;
-  TrayBackgroundView* virtual_keyboard_;
-  TrayBackgroundView* ime_menu_;
-  TrayBackgroundView* palette_;
-  TrayBackgroundView* dictation_button_;
-  TrayBackgroundView* select_to_speak_;
+  raw_ptr<StatusAreaWidget, ExperimentalAsh> status_area_;
+  raw_ptr<StatusAreaOverflowButtonTray, ExperimentalAsh> overflow_button_;
+  raw_ptr<TrayBackgroundView, ExperimentalAsh> virtual_keyboard_;
+  raw_ptr<TrayBackgroundView, ExperimentalAsh> ime_menu_;
+  raw_ptr<TrayBackgroundView, ExperimentalAsh> palette_;
+  raw_ptr<TrayBackgroundView, ExperimentalAsh> dictation_button_;
+  raw_ptr<TrayBackgroundView, ExperimentalAsh> select_to_speak_;
 };
 
 TEST_F(StatusAreaWidgetCollapseStateTest, TrayVisibility) {
@@ -639,6 +643,65 @@ TEST_F(StatusAreaWidgetCollapseStateTest, AllTraysFitInCollapsedState) {
   EXPECT_FALSE(overflow_button_->GetVisible());
 }
 
+TEST_F(StatusAreaWidgetCollapseStateTest,
+       HideDragHandleOnOverlapInExpandedState) {
+  std::unique_ptr<aura::Window> test_window =
+      CreateTestWindow(gfx::Rect(0, 0, 400, 400));
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+  status_area_->UpdateCollapseState();
+
+  // By default, status area is collapsed.
+  EXPECT_EQ(StatusAreaWidget::CollapseState::COLLAPSED, collapse_state());
+  ShelfWidget* const shelf_widget =
+      AshTestBase::GetPrimaryShelf()->shelf_widget();
+  DragHandle* const drag_handle = shelf_widget->GetDragHandle();
+  ASSERT_TRUE(drag_handle);
+  EXPECT_TRUE(drag_handle->GetVisible());
+
+  // Expand the status area.
+  GetEventGenerator()->GestureTapAt(
+      overflow_button_->GetBoundsInScreen().CenterPoint());
+  EXPECT_EQ(StatusAreaWidget::CollapseState::EXPANDED, collapse_state());
+
+  // Verify that the drag handle was hidden.
+  EXPECT_FALSE(drag_handle->GetVisible());
+}
+
+TEST_F(StatusAreaWidgetCollapseStateTest,
+       HideDragHandleWithNudgeOnOverlapInExpandedState) {
+  std::unique_ptr<aura::Window> test_window =
+      CreateTestWindow(gfx::Rect(0, 0, 400, 400));
+  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
+  status_area_->UpdateCollapseState();
+
+  // By default, status area is collapsed.
+  EXPECT_EQ(StatusAreaWidget::CollapseState::COLLAPSED, collapse_state());
+
+  ShelfWidget* const shelf_widget =
+      AshTestBase::GetPrimaryShelf()->shelf_widget();
+
+  DragHandle* const drag_handle = shelf_widget->GetDragHandle();
+  ASSERT_TRUE(drag_handle);
+  EXPECT_TRUE(drag_handle->GetVisible());
+
+  // Tap on the drag handle to show drag handle nudge.
+  GetEventGenerator()->GestureTapAt(
+      drag_handle->GetBoundsInScreen().CenterPoint());
+  ASSERT_TRUE(drag_handle->drag_handle_nudge());
+  base::WeakPtr<views::Widget> drag_handle_widget =
+      drag_handle->drag_handle_nudge()->GetWidget()->GetWeakPtr();
+
+  // Expand the status area.
+  GetEventGenerator()->GestureTapAt(
+      overflow_button_->GetBoundsInScreen().CenterPoint());
+  EXPECT_EQ(StatusAreaWidget::CollapseState::EXPANDED, collapse_state());
+
+  // Verify that the drag handle, and drag handle nudge were hidden.
+  EXPECT_FALSE(drag_handle->GetVisible());
+  EXPECT_FALSE(drag_handle->drag_handle_nudge());
+  EXPECT_TRUE(!drag_handle_widget || drag_handle_widget->IsClosed());
+}
+
 class StatusAreaWidgetQSRevampTest : public AshTestBase {
  protected:
   void SetUp() override {
@@ -705,9 +768,11 @@ TEST_F(StatusAreaWidgetEcheTest, EcheTrayShowHide) {
   bitmap.allocN32Pixels(30, 30);
   gfx::ImageSkia image_skia = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
   image_skia.MakeThreadSafe();
-  status_area->eche_tray()->LoadBubble(GURL("http://google.com"),
-                                       gfx::Image(image_skia), u"app 1",
-                                       u"your phone");
+  status_area->eche_tray()->LoadBubble(
+      GURL("http://google.com"), gfx::Image(image_skia), u"app 1",
+      u"your phone",
+      eche_app::mojom::ConnectionStatus::kConnectionStatusDisconnected,
+      eche_app::mojom::AppStreamLaunchEntryPoint::APPS_LIST);
   status_area->eche_tray()->ShowBubble();
 
   // Auto-hidden shelf would be forced to be visible.

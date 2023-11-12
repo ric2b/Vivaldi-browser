@@ -143,6 +143,8 @@ class CalendarRow {
   base::Time lastmodified_;
 };
 
+typedef std::vector<CalendarRow> CalendarRows;
+
 class CalendarResult : public CalendarRow {
  public:
   CalendarResult();
@@ -179,76 +181,14 @@ struct Calendar {
   int updateFields;
 };
 
-class CalendarQueryResults {
- public:
-  typedef std::vector<CalendarResult> CalendarResultVector;
-
-  CalendarQueryResults();
-  ~CalendarQueryResults();
-  CalendarQueryResults(const CalendarQueryResults&) = delete;
-  CalendarQueryResults& operator=(const CalendarQueryResults&) = delete;
-
-  size_t size() const { return results_.size(); }
-  bool empty() const { return results_.empty(); }
-
-  CalendarResult& back() { return results_.back(); }
-  const CalendarResult& back() const { return results_.back(); }
-
-  CalendarResult& operator[](size_t i) { return results_[i]; }
-  const CalendarResult& operator[](size_t i) const { return results_[i]; }
-
-  CalendarResultVector::const_iterator begin() const {
-    return results_.begin();
-  }
-  CalendarResultVector::const_iterator end() const { return results_.end(); }
-  CalendarResultVector::const_reverse_iterator rbegin() const {
-    return results_.rbegin();
-  }
-  CalendarResultVector::const_reverse_iterator rend() const {
-    return results_.rend();
-  }
-
-  // Swaps the current result with another. This allows ownership to be
-  // efficiently transferred without copying.
-  void Swap(CalendarQueryResults* other);
-
-  // Adds the given result to the map, using swap() on the members to avoid
-  // copying (there are a lot of strings and vectors). This means the parameter
-  // object will be cleared after this call.
-  void AppendCalendarBySwapping(CalendarResult* result);
-
- private:
-  // The ordered list of results. The pointers inside this are owned by this
-  // CalendarQueryResults object.
-  std::vector<CalendarResult> results_;
-};
-
 class CreateCalendarResult {
  public:
   CreateCalendarResult();
-  CreateCalendarResult(const CreateCalendarResult&) = delete;
-  CreateCalendarResult& operator=(const CreateCalendarResult&) = delete;
+  CreateCalendarResult(const CreateCalendarResult& calendar) = default;
+  CreateCalendarResult& operator=(CreateCalendarResult& calendar) = default;
 
   bool success;
   CalendarRow createdRow;
-};
-
-class UpdateCalendarResult {
- public:
-  UpdateCalendarResult();
-  UpdateCalendarResult(const UpdateCalendarResult&) = delete;
-  UpdateCalendarResult& operator=(const UpdateCalendarResult&) = delete;
-
-  bool success;
-};
-
-class DeleteCalendarResult {
- public:
-  DeleteCalendarResult();
-  DeleteCalendarResult(const DeleteCalendarResult&) = delete;
-  DeleteCalendarResult& operator=(const DeleteCalendarResult&) = delete;
-
-  bool success;
 };
 
 }  // namespace calendar

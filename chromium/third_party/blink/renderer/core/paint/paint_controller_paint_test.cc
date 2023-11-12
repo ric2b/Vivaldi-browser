@@ -7,7 +7,6 @@
 #include "third_party/blink/renderer/core/editing/frame_caret.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/layout/layout_text.h"
-#include "third_party/blink/renderer/core/layout/line/inline_text_box.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
@@ -31,14 +30,11 @@ TEST_P(PaintControllerPaintTest, InlineRelayout) {
   auto& div_block =
       *To<LayoutBlock>(GetDocument().body()->firstChild()->GetLayoutObject());
   auto& text = *To<LayoutText>(div_block.FirstChild());
-  const DisplayItemClient* first_text_box = text.FirstTextBox();
-  wtf_size_t first_text_box_fragment_id = 0;
-  if (text.IsInLayoutNGInlineFormattingContext()) {
-    NGInlineCursor cursor;
-    cursor.MoveTo(text);
-    first_text_box = cursor.Current().GetDisplayItemClient();
-    first_text_box_fragment_id = cursor.Current().FragmentId();
-  }
+  NGInlineCursor cursor;
+  cursor.MoveTo(text);
+  const DisplayItemClient* first_text_box =
+      cursor.Current().GetDisplayItemClient();
+  wtf_size_t first_text_box_fragment_id = cursor.Current().FragmentId();
 
   EXPECT_THAT(ContentDisplayItems(),
               ElementsAre(VIEW_SCROLLING_BACKGROUND_DISPLAY_ITEM,
@@ -48,20 +44,14 @@ TEST_P(PaintControllerPaintTest, InlineRelayout) {
   div.setAttribute(html_names::kStyleAttr, "width: 10px; height: 200px");
   UpdateAllLifecyclePhasesForTest();
 
-  auto& new_text = *To<LayoutText>(div_block.FirstChild());
-  const DisplayItemClient* new_first_text_box = text.FirstTextBox();
-  const DisplayItemClient* second_text_box = nullptr;
-  wtf_size_t second_text_box_fragment_id = 0;
-  if (!text.IsInLayoutNGInlineFormattingContext()) {
-    second_text_box = new_text.FirstTextBox()->NextForSameLayoutObject();
-  } else {
-    NGInlineCursor cursor;
-    cursor.MoveTo(text);
-    new_first_text_box = cursor.Current().GetDisplayItemClient();
-    cursor.MoveToNextForSameLayoutObject();
-    second_text_box = cursor.Current().GetDisplayItemClient();
-    second_text_box_fragment_id = cursor.Current().FragmentId();
-  }
+  cursor = NGInlineCursor();
+  cursor.MoveTo(text);
+  const DisplayItemClient* new_first_text_box =
+      cursor.Current().GetDisplayItemClient();
+  cursor.MoveToNextForSameLayoutObject();
+  const DisplayItemClient* second_text_box =
+      cursor.Current().GetDisplayItemClient();
+  wtf_size_t second_text_box_fragment_id = cursor.Current().FragmentId();
 
   EXPECT_THAT(ContentDisplayItems(),
               ElementsAre(VIEW_SCROLLING_BACKGROUND_DISPLAY_ITEM,
@@ -560,6 +550,50 @@ TEST_P(PaintControllerPaintTest,
               PaintChunk::Id(pos_z_child.Layer()->Id(),
                              DisplayItem::kLayerChunk),
               pos_z_child.FirstFragment().LocalBorderBoxProperties())));
+}
+
+TEST_P(PaintControllerPaintTest, PaintChunkIsSolidColor) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      .target {
+        width: 50px;
+        height: 50px;
+        background-color: blue;
+        position: relative;
+      }
+    </style>
+    <div id="target1" class="target"></div>
+    <div id="target2" class="target">TEXT</div>
+    <div id="target3" class="target"
+         style="background-image: linear-gradient(red, blue)"></div>
+    <div id="target4" class="target" style="background-color: transparent">
+      <div style="width: 200px; height: 40px; background: blue"></div>
+    </div>
+    <div id="target5" class="target" style="background-color: transparent">
+      <div style="width: 200px; height: 60px; background: blue"></div>
+    </div>
+  )HTML");
+
+  auto chunks = ContentPaintChunks();
+  ASSERT_EQ(6u, chunks.size());
+  // View background.
+  EXPECT_TRUE(chunks[0].background_color.is_solid_color);
+  EXPECT_EQ(SkColors::kWhite, chunks[0].background_color.color);
+  // target1.
+  EXPECT_TRUE(chunks[1].background_color.is_solid_color);
+  EXPECT_EQ(SkColors::kBlue, chunks[1].background_color.color);
+  // target2.
+  EXPECT_FALSE(chunks[2].background_color.is_solid_color);
+  EXPECT_EQ(SkColors::kBlue, chunks[2].background_color.color);
+  // target3.
+  EXPECT_FALSE(chunks[3].background_color.is_solid_color);
+  EXPECT_EQ(SkColors::kBlue, chunks[3].background_color.color);
+  // target4.
+  EXPECT_FALSE(chunks[4].background_color.is_solid_color);
+  EXPECT_EQ(SkColors::kBlue, chunks[4].background_color.color);
+  // target5.
+  EXPECT_TRUE(chunks[5].background_color.is_solid_color);
+  EXPECT_EQ(SkColors::kBlue, chunks[5].background_color.color);
 }
 
 }  // namespace blink

@@ -58,8 +58,6 @@ class ContentPasswordManagerDriver
 
   // PasswordManagerDriver implementation.
   int GetId() const override;
-  void PasswordFieldHasNoAssociatedUsername(
-      autofill::FieldRendererId password_element_renderer_id) override;
   void SetPasswordFillData(
       const autofill::PasswordFormFillData& form_data) override;
   void InformNoSavedCredentials(
@@ -93,6 +91,7 @@ class ContentPasswordManagerDriver
   bool IsInPrimaryMainFrame() const override;
   bool CanShowAutofillUi() const override;
   ::ui::AXTreeID GetAxTreeId() const override;
+  int GetFrameId() const override;
   const GURL& GetLastCommittedURL() const override;
   void AnnotateFieldsWithParsingResult(
       const autofill::ParsingResult& parsing_result) override;
@@ -138,9 +137,11 @@ class ContentPasswordManagerDriver
   void PasswordFormCleared(const autofill::FormData& form_data) override;
   void RecordSavePasswordProgress(const std::string& log) override;
   void UserModifiedPasswordField() override;
-  void UserModifiedNonPasswordField(autofill::FieldRendererId renderer_id,
-                                    const std::u16string& field_name,
-                                    const std::u16string& value) override;
+  void UserModifiedNonPasswordField(
+      autofill::FieldRendererId renderer_id,
+      const std::u16string& field_name,
+      const std::u16string& value,
+      bool autocomplete_attribute_has_username) override;
   void ShowPasswordSuggestions(base::i18n::TextDirection text_direction,
                                const std::u16string& typed_username,
                                int options,

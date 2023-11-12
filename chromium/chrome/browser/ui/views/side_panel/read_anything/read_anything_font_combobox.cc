@@ -31,8 +31,13 @@ class ReadAnythingFontCombobox::MenuModel : public ComboboxMenuModel {
   // The Read Anything font combobox will use a different FontList for each
   // item in the menu. This will give a preview of the font to the user.
   const gfx::FontList* GetLabelFontListAt(size_t index) const override {
-    return new gfx::FontList(static_cast<ReadAnythingFontModel*>(GetModel())
-                                 ->GetLabelFontListAt(index));
+    std::vector<std::string> font_list = GetModel()->GetLabelFontNameAt(index);
+    if (!font_list.empty()) {
+      return new gfx::FontList(font_list, gfx::Font::FontStyle::NORMAL,
+                               kMenuLabelFontSizePx, gfx::Font::Weight::NORMAL);
+    }
+
+    return ComboboxMenuModel::GetLabelFontListAt(index);
   }
 };
 
@@ -51,6 +56,7 @@ ReadAnythingFontCombobox::ReadAnythingFontCombobox(
 
   SetBorderColorId(ui::kColorSidePanelComboboxBorder);
   SetMenuModel(std::move(new_model));
+  SetFocusBehavior(FocusBehavior::ALWAYS);
 }
 
 void ReadAnythingFontCombobox::GetAccessibleNodeData(
@@ -61,12 +67,22 @@ void ReadAnythingFontCombobox::GetAccessibleNodeData(
 }
 
 void ReadAnythingFontCombobox::FontNameChangedCallback() {
+  UpdateFont();
   if (delegate_)
     delegate_->OnFontChoiceChanged(GetSelectedIndex().value());
 }
 
 gfx::Size ReadAnythingFontCombobox::GetMinimumSize() const {
   return gfx::Size(kMinimumComboboxWidth, CalculatePreferredSize().height());
+}
+
+void ReadAnythingFontCombobox::SetDropdownColorIds(ui::ColorId background_color,
+                                                   ui::ColorId foreground_color,
+                                                   ui::ColorId selected_color) {
+  delegate_->GetFontComboboxModel()->SetForegroundColorId(foreground_color);
+  delegate_->GetFontComboboxModel()->SetBackgroundColorId(background_color);
+  delegate_->GetFontComboboxModel()->SetSelectedBackgroundColorId(
+      selected_color);
 }
 
 BEGIN_METADATA(ReadAnythingFontCombobox, views::Combobox)

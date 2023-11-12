@@ -31,27 +31,20 @@ class ASH_PUBLIC_EXPORT FakeAmbientBackendControllerImpl
       bool show_pair_personal_portraits,
       const gfx::Size& screen_size,
       OnScreenUpdateInfoFetchedCallback callback) override;
-  void GetSettings(GetSettingsCallback callback) override;
+  void FetchPreviewImages(const gfx::Size& preview_size,
+                          OnPreviewImagesFetchedCallback callback) override;
   void UpdateSettings(const AmbientSettings& settings,
                       UpdateSettingsCallback callback) override;
-  void FetchPersonalAlbums(int banner_width,
-                           int banner_height,
-                           int num_albums,
-                           const std::string& resume_token,
-                           OnPersonalAlbumsFetchedCallback callback) override;
   void FetchSettingsAndAlbums(
       int banner_width,
       int banner_height,
       int num_albums,
       OnSettingsAndAlbumsFetchedCallback callback) override;
   void FetchWeather(FetchWeatherCallback callback) override;
-  void GetGooglePhotosAlbumsPreview(
-      const std::vector<std::string>& album_ids,
-      int preview_width,
-      int preview_height,
-      int num_previews,
-      GetGooglePhotosAlbumsPreviewCallback callback) override;
   const std::array<const char*, 2>& GetBackupPhotoUrls() const override;
+  std::array<const char*, 2> GetTimeOfDayVideoPreviewImageUrls(
+      AmbientVideo video) const override;
+  const char* GetPromoBannerUrl() const override;
 
   // Simulate to reply the request of FetchSettingsAndAlbums().
   // If |success| is true, will return fake data.
@@ -77,6 +70,10 @@ class ASH_PUBLIC_EXPORT FakeAmbientBackendControllerImpl
   // Whether there is a pending UpdateSettings() request.
   bool IsUpdateSettingsPending() const;
 
+  // Will automatically reply to all future UpdateSettings() calls with
+  // |success|.
+  void EnableUpdateSettingsAutoReply(bool success);
+
   // Sets the weather info that will be returned in subsequent calls to
   // `FetchWeather`.
   void SetWeatherInfo(absl::optional<WeatherInfo> info);
@@ -95,10 +92,18 @@ class ASH_PUBLIC_EXPORT FakeAmbientBackendControllerImpl
     custom_topic_generator_ = std::move(custom_topic_generator);
   }
 
+  // The latest temperature unit received via |UpdateSettings()|. Defaults to
+  // |kCelsius| if |UpdateSettings()| has not been called.
+  AmbientModeTemperatureUnit current_temperature_unit() const {
+    return current_temperature_unit_;
+  }
+
  private:
   OnSettingsAndAlbumsFetchedCallback pending_fetch_settings_albums_callback_;
 
   UpdateSettingsCallback pending_update_callback_;
+
+  absl::optional<bool> update_auto_reply_;
 
   absl::optional<WeatherInfo> weather_info_;
 
@@ -111,6 +116,9 @@ class ASH_PUBLIC_EXPORT FakeAmbientBackendControllerImpl
   absl::optional<int> custom_num_topics_to_return_;
 
   TopicGeneratorCallback custom_topic_generator_;
+
+  AmbientModeTemperatureUnit current_temperature_unit_ =
+      AmbientModeTemperatureUnit::kCelsius;
 };
 
 }  // namespace ash

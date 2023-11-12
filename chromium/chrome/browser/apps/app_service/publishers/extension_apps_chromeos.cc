@@ -158,6 +158,9 @@ ash::ShelfLaunchSource ConvertLaunchSource(apps::LaunchSource launch_source) {
     case apps::LaunchSource::kFromUrlHandler:
     case apps::LaunchSource::kFromLockScreen:
     case apps::LaunchSource::kFromAppHomePage:
+    case apps::LaunchSource::kFromReparenting:
+    case apps::LaunchSource::kFromProfileMenu:
+    case apps::LaunchSource::kFromSysTrayCalendar:
       return ash::LAUNCH_FROM_UNKNOWN;
   }
 }
@@ -219,7 +222,7 @@ void ExtensionAppsChromeOs::Initialize() {
 
   profile_pref_change_registrar_.Init(profile()->GetPrefs());
   profile_pref_change_registrar_.Add(
-      prefs::kHideWebStoreIcon,
+      policy::policy_prefs::kHideWebStoreIcon,
       base::BindRepeating(&ExtensionAppsBase::OnHideWebStoreIconPrefChanged,
                           GetWeakPtr()));
 

@@ -36,6 +36,10 @@ bool PermissionRequest::IsDuplicateOf(PermissionRequest* other_request) const {
          requesting_origin() == other_request->requesting_origin();
 }
 
+base::WeakPtr<PermissionRequest> PermissionRequest::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
+}
+
 #if BUILDFLAG(IS_ANDROID)
 std::u16string PermissionRequest::GetDialogMessageText() const {
   int message_id = 0;
@@ -230,6 +234,10 @@ std::u16string PermissionRequest::GetMessageTextFragment() const {
   return l10n_util::GetStringUTF16(message_id);
 }
 #endif
+
+bool PermissionRequest::ShouldUseTwoOriginPrompt() const {
+  return request_type_ == RequestType::kStorageAccess;
+}
 
 void PermissionRequest::PermissionGranted(bool is_one_time) {
   std::move(permission_decided_callback_)

@@ -43,6 +43,7 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -57,7 +58,6 @@
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/api/runtime.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/value_builder.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "extensions/test/result_catcher.h"
 #include "extensions/test/test_extension_dir.h"
@@ -80,12 +80,8 @@ class MessageSender : public ExtensionHostRegistry::Observer {
  private:
   static base::Value::List BuildEventArguments(const bool last_message,
                                                const std::string& data) {
-    base::Value::Dict event;
-    event.Set("lastMessage", last_message);
-    event.Set("data", data);
-    base::Value::List arguments;
-    arguments.Append(std::move(event));
-    return arguments;
+    return base::Value::List().Append(
+        base::Value::Dict().Set("lastMessage", last_message).Set("data", data));
   }
 
   static std::unique_ptr<Event> BuildEvent(
@@ -132,10 +128,8 @@ class MessagingApiTest : public ExtensionApiTest {
   explicit MessagingApiTest(bool enable_back_forward_cache) {
     if (enable_back_forward_cache) {
       feature_list_.InitWithFeaturesAndParameters(
-          {{features::kBackForwardCache, {}},
-           // Allow BackForwardCache for all devices regardless of their memory.
-           {features::kBackForwardCacheMemoryControls, {}}},
-          {});
+          content::GetBasicBackForwardCacheFeatureForTesting(),
+          content::GetDefaultDisabledBackForwardCacheFeaturesForTesting());
     } else {
       feature_list_.InitWithFeaturesAndParameters(
           {}, {features::kBackForwardCache});
@@ -334,13 +328,12 @@ class ExternallyConnectableMessagingTest : public MessagingApiTest {
   Result CanConnectAndSendMessagesToFrame(content::RenderFrameHost* frame,
                                           const Extension* extension,
                                           const char* message) {
-    int result;
     std::string command = base::StringPrintf(
         "assertions.canConnectAndSendMessages('%s', %s, %s)",
         extension->id().c_str(),
         extension->is_platform_app() ? "true" : "false",
         message ? base::StringPrintf("'%s'", message).c_str() : "undefined");
-    CHECK(content::ExecuteScriptAndExtractInt(frame, command, &result));
+    int result = content::EvalJs(frame, command).ExtractInt();
     return static_cast<Result>(result);
   }
 
@@ -588,16 +581,14 @@ class ExternallyConnectableMessagingTest : public MessagingApiTest {
                                            const Extension* extension,
                                            bool include_tls_channel_id,
                                            const char* message) {
-    std::string result;
     std::string args = "'" + extension->id() + "', ";
     args += include_tls_channel_id ? "true" : "false";
     if (message)
       args += std::string(", '") + message + "'";
-    CHECK(content::ExecuteScriptAndExtractString(
-        browser()->tab_strip_model()->GetActiveWebContents(),
-        base::StringPrintf("assertions.%s(%s)", method, args.c_str()),
-        &result));
-    return result;
+    return content::EvalJs(
+               browser()->tab_strip_model()->GetActiveWebContents(),
+               base::StringPrintf("assertions.%s(%s)", method, args.c_str()))
+        .ExtractString();
   }
 
   TestExtensionDir web_connectable_dir_extension_;
@@ -611,11 +602,10 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest, NotInstalled) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
           .SetID("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-          .SetManifest(DictionaryBuilder()
+          .SetManifest(base::Value::Dict()
                            .Set("name", "Fake extension")
                            .Set("version", "1")
-                           .Set("manifest_version", 2)
-                           .Build())
+                           .Set("manifest_version", 2))
           .Build();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), chromium_org_url()));
@@ -1261,24 +1251,27 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingUserGesture) {
           sender->id(),
           base::StringPrintf(
               "if (chrome.test.isProcessingUserGesture()) {\n"
-              "  domAutomationController.send("
+              "  chrome.test.sendScriptResult("
               "      'Error: unexpected user gesture');\n"
               "} else {\n"
               "  chrome.runtime.sendMessage('%s', {}, function(response) {\n"
-              "    domAutomationController.send('' + response.result);\n"
+              "    chrome.test.sendScriptResult('' + response.result);\n"
               "  });\n"
               "}",
               receiver->id().c_str()),
           extensions::browsertest_util::ScriptUserActivation::kDontActivate));
 
-  EXPECT_EQ("true",
-      ExecuteScriptInBackgroundPage(sender->id(),
-                                    base::StringPrintf(
-          "chrome.test.runWithUserGesture(function() {\n"
-          "  chrome.runtime.sendMessage('%s', {}, function(response)  {\n"
-          "    window.domAutomationController.send('' + response.result);\n"
-          "  });\n"
-          "});", receiver->id().c_str())));
+  EXPECT_EQ(
+      "true",
+      ExecuteScriptInBackgroundPage(
+          sender->id(),
+          base::StringPrintf(
+              "chrome.test.runWithUserGesture(function() {\n"
+              "  chrome.runtime.sendMessage('%s', {}, function(response)  {\n"
+              "    chrome.test.sendScriptResult('' + response.result);\n"
+              "  });\n"
+              "});",
+              receiver->id().c_str())));
 }
 
 IN_PROC_BROWSER_TEST_F(MessagingApiTest, UserGestureFromContentScript) {
@@ -1366,7 +1359,7 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest,
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       embedder_support::kDisablePopupBlocking);
 
-  const char kManifest[] = R"({
+  static constexpr char kManifest[] = R"({
     "name": "activation_state_thru_send_reply",
     "version": "1.0",
     "background": {
@@ -1396,13 +1389,13 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest,
   const Extension* sender = LoadExtension(sender_dir.UnpackedPath());
   ASSERT_TRUE(sender);
 
-  const char send_script_template[] = R"(
+  static constexpr char send_script_template[] = R"(
     log = [];
     log.push('sender-initial:' + navigator.userActivation.isActive);
     chrome.runtime.sendMessage('%s', {}, response => {
       log.push('receiver:' + response.active);
       log.push('sender-received:' + navigator.userActivation.isActive);
-      window.domAutomationController.send(log.toString());
+      chrome.test.sendScriptResult(log.toString());
     });
     log.push('sender-sent:' + navigator.userActivation.isActive);
   )";
@@ -1479,11 +1472,10 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest,
   scoped_refptr<const Extension> invalid =
       ExtensionBuilder()
           .SetID(crx_file::id_util::GenerateId("invalid"))
-          .SetManifest(DictionaryBuilder()
+          .SetManifest(base::Value::Dict()
                            .Set("name", "Fake extension")
                            .Set("version", "1")
-                           .Set("manifest_version", 2)
-                           .Build())
+                           .Set("manifest_version", 2))
           .Build();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), chromium_org_url()));
@@ -1513,13 +1505,8 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingOnUnload) {
   ASSERT_TRUE(background_host);
   content::WebContents* background_contents = background_host->host_contents();
   ASSERT_TRUE(background_contents);
-  int message_count = -1;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(
-      background_contents,
-      "window.domAutomationController.send(window.messageCount);",
-      &message_count));
   // There shouldn't be any messages yet.
-  EXPECT_EQ(0, message_count);
+  EXPECT_EQ(0, content::EvalJs(background_contents, "window.messageCount;"));
 
   content::WebContentsDestroyedWatcher destroyed_watcher(
       browser()->tab_strip_model()->GetActiveWebContents());
@@ -1527,17 +1514,76 @@ IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessagingOnUnload) {
   destroyed_watcher.Wait();
   base::RunLoop().RunUntilIdle();
   // The extension should have sent a message from its unload handler.
-  ASSERT_TRUE(content::ExecuteScriptAndExtractInt(
-      background_contents,
-      "window.domAutomationController.send(window.messageCount);",
-      &message_count));
-  EXPECT_EQ(1, message_count);
+  EXPECT_EQ(1, content::EvalJs(background_contents, "window.messageCount;"));
 }
 
 // Tests that messages over a certain size are not sent.
 // https://crbug.com/766713.
 IN_PROC_BROWSER_TEST_F(MessagingApiTest, LargeMessages) {
   ASSERT_TRUE(RunExtensionTest("messaging/large_messages"));
+}
+
+// Tests that the channel name used in runtime.connect() cannot redirect the
+// message to another event (like onMessage).
+// See https://crbug.com/1430999.
+IN_PROC_BROWSER_TEST_F(MessagingApiTest, MessageChannelName) {
+  static constexpr char kManifest[] =
+      R"({
+           "name": "Ext",
+           "manifest_version": 3,
+           "version": "0.1"
+         })";
+  static constexpr char kConnectorJs[] =
+      R"(chrome.test.runTests([
+           async function portWithSendMessageName() {
+             let port = chrome.runtime.connect(
+                 {name: 'chrome.runtime.sendMessage'});
+             chrome.test.assertEq('chrome.runtime.sendMessage', port.name);
+             port.onMessage.addListener((msg) => {
+               chrome.test.assertEq('pong', msg);
+               chrome.test.succeed();
+             });
+             port.postMessage('ping');
+           }
+         ]);)";
+  static constexpr char kConnecteeJs[] =
+      R"(chrome.runtime.onConnect.addListener((port) => {
+           self.port = port;
+           port.onMessage.addListener((msg) => {
+             chrome.test.assertEq(port.name, 'chrome.runtime.sendMessage');
+             chrome.test.assertEq(msg, 'ping');
+             port.postMessage('pong');
+           });
+         });
+         chrome.runtime.onMessage.addListener((msg) => {
+           // We don't expect anything to hit the `onMessage` listener.
+           // See https://crbug.com/1430999.
+           chrome.test.fail(`Unexpected onMessage received: ${msg}`);
+         });)";
+  TestExtensionDir test_dir;
+  test_dir.WriteManifest(kManifest);
+  test_dir.WriteFile(FILE_PATH_LITERAL("connector.html"),
+                     R"(<html><script src="connector.js"></script></html>)");
+  test_dir.WriteFile(FILE_PATH_LITERAL("connector.js"), kConnectorJs);
+  test_dir.WriteFile(FILE_PATH_LITERAL("connectee.html"),
+                     R"(<html><script src="connectee.js"></script></html>)");
+  test_dir.WriteFile(FILE_PATH_LITERAL("connectee.js"), kConnecteeJs);
+
+  const Extension* extension = LoadExtension(test_dir.UnpackedPath());
+  ASSERT_TRUE(extension);
+
+  ResultCatcher result_catcher;
+
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), extension->GetResourceURL("connectee.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), extension->GetResourceURL("connector.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  ASSERT_TRUE(result_catcher.GetNextResult()) << result_catcher.message();
 }
 
 class ServiceWorkerMessagingApiTest : public MessagingApiTest {
@@ -1638,7 +1684,8 @@ class MessagingApiFencedFrameTest : public MessagingApiTest {
  protected:
   MessagingApiFencedFrameTest() {
     feature_list_.InitWithFeaturesAndParameters(
-        {{blink::features::kFencedFrames, {{}}},
+        {{blink::features::kFencedFrames, {}},
+         {blink::features::kFencedFramesAPIChanges, {}},
          {features::kPrivacySandboxAdsAPIsOverride, {}}},
         {/* disabled_features */});
   }

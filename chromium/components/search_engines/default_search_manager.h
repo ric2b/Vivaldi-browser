@@ -75,6 +75,7 @@ class DefaultSearchManager {
   static const char kPrefetchLikelyNavigations[];
   static const char kIsActive[];
   static const char kStarterPackId[];
+  static const char kEnforcedByPolicy[];
 
   static const char kPosition[];
 

@@ -11,6 +11,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
@@ -440,7 +441,7 @@ class NetworkConfigurationUpdaterAshTest : public testing::Test {
   // NetworkConfigurationUpdater. When that happens, |certificate_importer_|
   // continues to point to that instance but
   // |client_certificate_importer_owned_| is released.
-  FakeCertificateImporter* certificate_importer_;
+  raw_ptr<FakeCertificateImporter, ExperimentalAsh> certificate_importer_;
   std::unique_ptr<ash::onc::CertificateImporter>
       client_certificate_importer_owned_;
 
@@ -509,9 +510,8 @@ TEST_F(NetworkConfigurationUpdaterAshTest,
 
 TEST_F(NetworkConfigurationUpdaterAshTest, PolicyIsValidatedAndRepaired) {
   base::Value::Dict onc_repaired =
-      chromeos::onc::test_utils::ReadTestDictionaryValue(
-          "repaired_toplevel_partially_invalid.onc")
-          .TakeDict();
+      chromeos::onc::test_utils::ReadTestDictionary(
+          "repaired_toplevel_partially_invalid.onc");
 
   base::Value::List* network_configs_repaired =
       onc_repaired.FindList(onc::toplevel_config::kNetworkConfigurations);

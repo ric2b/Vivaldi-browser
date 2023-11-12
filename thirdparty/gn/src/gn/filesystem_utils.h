@@ -22,8 +22,6 @@ inline std::string FilePathToUTF8(const base::FilePath& path) {
 }
 base::FilePath UTF8ToFilePath(std::string_view sp);
 
-std::string MaybeQuotePath(const std::string_view path);
-
 // Extensions -----------------------------------------------------------------
 
 // Returns the index of the extension (character after the last dot not after a

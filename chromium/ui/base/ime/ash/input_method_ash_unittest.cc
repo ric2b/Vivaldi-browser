@@ -14,6 +14,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/char_iterator.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
@@ -29,10 +30,12 @@
 #include "ui/base/ime/fake_text_input_client.h"
 #include "ui/base/ime/ime_key_event_dispatcher.h"
 #include "ui/base/ime/text_input_client.h"
+#include "ui/base/ime/text_input_flags.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/events/ozone/events_ozone.h"
 #include "ui/events/test/keyboard_layout.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -387,7 +390,7 @@ class InputMethodAshTest : public ui::ImeKeyEventDispatcher,
 
   bool stop_propagation_post_ime_;
 
-  TestInputMethodManager* input_method_manager_;
+  raw_ptr<TestInputMethodManager, ExperimentalAsh> input_method_manager_;
 
   base::test::TaskEnvironment task_environment_;
 };
@@ -413,6 +416,19 @@ TEST_F(InputMethodAshTest, OnTextInputTypeChangedChangesInputType) {
   ime.OnTextInputTypeChanged(&fake_text_input_client);
 
   EXPECT_EQ(ime.GetTextInputType(), ui::TEXT_INPUT_TYPE_PASSWORD);
+
+  ime.SetFocusedTextInputClient(nullptr);
+}
+
+TEST_F(InputMethodAshTest, HasBeenPasswordShouldTriggerPassowrd) {
+  InputMethodAsh ime(this);
+  FakeTextInputClient fake_text_input_client(ui::TEXT_INPUT_TYPE_TEXT);
+  fake_text_input_client.SetFlags(ui::TEXT_INPUT_FLAG_HAS_BEEN_PASSWORD);
+
+  ime.SetFocusedTextInputClient(&fake_text_input_client);
+
+  EXPECT_EQ(mock_ime_engine_handler_->last_text_input_context().type,
+            ui::TEXT_INPUT_TYPE_PASSWORD);
 
   ime.SetFocusedTextInputClient(nullptr);
 }
@@ -1213,6 +1229,34 @@ TEST_F(InputMethodAshKeyEventTest, DeadKeyPressTest) {
   EXPECT_EQ(eventA.time_stamp(), key_event.time_stamp());
 }
 
+TEST_F(InputMethodAshKeyEventTest, KeyboardImeFlags) {
+  // Preparation.
+  input_type_ = ui::TEXT_INPUT_TYPE_TEXT;
+  input_method_ash_->OnTextInputTypeChanged(this);
+
+  {
+    ui::KeyEvent eventA(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A, 0,
+                        ui::DomKey::FromCharacter('a'), ui::EventTimeForNow());
+    input_method_ash_->ProcessKeyEventPostIME(
+        &eventA, ui::ime::KeyEventHandledState::kHandledByIME, true);
+
+    const ui::KeyEvent& key_event = dispatched_key_event_;
+    EXPECT_EQ(ui::kPropertyKeyboardImeHandledFlag,
+              ui::GetKeyboardImeFlags(key_event));
+  }
+
+  {
+    ui::KeyEvent eventA(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A, 0,
+                        ui::DomKey::FromCharacter('a'), ui::EventTimeForNow());
+    input_method_ash_->ProcessKeyEventPostIME(
+        &eventA, ui::ime::KeyEventHandledState::kNotHandled, true);
+
+    const ui::KeyEvent& key_event = dispatched_key_event_;
+    EXPECT_EQ(ui::kPropertyKeyboardImeIgnoredFlag,
+              ui::GetKeyboardImeFlags(key_event));
+  }
+}
+
 TEST_F(InputMethodAshKeyEventTest,
        SingleCharAssistiveSuggesterKeyEventDispatchesProcessKey) {
   ui::KeyEvent event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::EF_NONE);
@@ -1234,6 +1278,8 @@ TEST_F(InputMethodAshKeyEventTest,
   EXPECT_EQ(event.flags(), key_event.flags());
   EXPECT_EQ(ui::DomKey::PROCESS, key_event.GetDomKey());
   EXPECT_EQ(event.time_stamp(), key_event.time_stamp());
+  EXPECT_EQ(ui::kPropertyKeyboardImeHandledFlag,
+            ui::GetKeyboardImeFlags(key_event));
 }
 
 TEST_F(InputMethodAshKeyEventTest, JP106KeyTest) {

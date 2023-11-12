@@ -11,6 +11,9 @@
 
 namespace updater {
 
+// Key for storing the installer version in the install settings dictionary.
+extern const char kInstallerVersion[];
+
 // The updater specific app ID.
 extern const char kUpdaterAppId[];
 
@@ -214,6 +217,8 @@ extern const char kUninstallScript[];
 
 // Developer override keys.
 extern const char kDevOverrideKeyUrl[];
+extern const char kDevOverrideKeyCrashUploadUrl[];
+extern const char kDevOverrideKeyDeviceManagementUrl[];
 extern const char kDevOverrideKeyUseCUP[];
 extern const char kDevOverrideKeyInitialDelay[];
 extern const char kDevOverrideKeyServerKeepAliveSeconds[];
@@ -225,6 +230,10 @@ extern const char kDevOverrideKeyOverinstallTimeout[];
 // How long to wait for an application installer (such as chrome_installer.exe)
 // to complete.
 inline constexpr base::TimeDelta kWaitForAppInstaller = base::Minutes(15);
+
+// How long to wait for the common setup lock for
+// AppInstall/AppUninstall/AppUpdate.
+inline constexpr base::TimeDelta kWaitForSetupLock = base::Seconds(5);
 
 // The default last check period is 4.5 hours.
 inline constexpr base::TimeDelta kDefaultLastCheckPeriod =
@@ -303,8 +312,8 @@ inline constexpr int kErrorFailedToDeleteDataFolder = 17;
 // Failed to get versioned updater folder path.
 inline constexpr int kErrorFailedToGetVersionedInstallDirectory = 18;
 
-// Failed to get the installed app bundle path.
-inline constexpr int kErrorFailedToGetAppBundlePath = 19;
+// Failed to get the install directory.
+inline constexpr int kErrorFailedToGetInstallDir = 19;
 
 // Failed to remove the active(unversioned) update service job from Launchd.
 inline constexpr int kErrorFailedToRemoveActiveUpdateServiceJobFromLaunchd = 20;
@@ -376,17 +385,30 @@ inline constexpr int kErrorFailedToInstallSystemdUnit = 40;
 // Failed to remove one or more Systemd units during uninstallation.
 inline constexpr int kErrorFailedToRemoveSystemdUnit = 41;
 
+// Running as the wrong user for the provided UpdaterScope.
+inline constexpr int kErrorWrongUser = 42;
+
+// Failed to get the setup files.
+inline constexpr int kErrorFailedToGetSetupFiles = 43;
+
+// Failed to run install list.
+inline constexpr int kErrorFailedToRunInstallList = 44;
+
 inline constexpr int kErrorTagParsing = 50;
 
 // Metainstaller errors.
 inline constexpr int kErrorCreatingTempDir = 60;
 inline constexpr int kErrorUnpackingResource = 61;
+inline constexpr int kErrorInitializingBackupDir = 62;
 
 // Launcher errors.
 constexpr int kErrorGettingUpdaterPath = 71;
 constexpr int kErrorStattingPath = 72;
 constexpr int kErrorLaunchingProcess = 73;
 constexpr int kErrorPathOwnershipMismatch = 74;
+
+// A setup process could not acquire the lock needed to run.
+inline constexpr int kErrorFailedToLockSetupMutex = 75;
 
 // Policy Management constants.
 // The maximum value allowed for policy AutoUpdateCheckPeriodMinutes.
@@ -426,8 +448,13 @@ extern const char kSourceManagedPreferencePolicyManager[];
 extern const char kSourceDefaultValuesPolicyManager[];
 extern const char kSourceDictValuesPolicyManager[];
 
+// Serializes updater installs.
+extern const char kSetupMutex[];
+
 inline constexpr int kUninstallPingReasonUninstalled = 0;
 inline constexpr int kUninstallPingReasonUserNotAnOwner = 1;
+inline constexpr int kUninstallPingReasonNoAppsRemain = 2;
+inline constexpr int kUninstallPingReasonNeverHadApps = 3;
 
 // The file downloaded to a temporary location could not be moved.
 inline constexpr int kErrorFailedToMoveDownloadedFile = 5;

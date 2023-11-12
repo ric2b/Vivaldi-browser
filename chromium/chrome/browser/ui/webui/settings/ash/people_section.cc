@@ -24,7 +24,6 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/ash/sync/os_sync_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/account_manager_ui_handler.h"
@@ -42,6 +41,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/account_manager/account_manager_factory.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "components/account_manager_core/account_manager_facade.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/account_manager_core/pref_names.h"
@@ -285,6 +285,8 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
        IDS_SETTINGS_PEOPLE_RECOVERY_DISABLE_DIALOG_TITLE},
       {"recoveryDisableDialogMessage",
        IDS_SETTINGS_PEOPLE_RECOVERY_DISABLE_DIALOG_MESSAGE},
+      {"recoveryNotSupportedMessage",
+       IDS_SETTINGS_PEOPLE_RECOVERY_NOT_SUPPORTED_MESSAGE},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -306,6 +308,9 @@ void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
                              ui::GetChromeOSDeviceName()));
   html_source->AddString("fingerprintLearnMoreLink",
                          chrome::kFingerprintLearnMoreURL);
+  html_source->AddBoolean("cryptohomeRecoveryEnabled",
+                          features::IsCryptohomeRecoveryEnabled());
+  html_source->AddString("recoveryLearnMoreUrl", chrome::kRecoveryLearnMoreURL);
 }
 
 void AddFingerprintListStrings(content::WebUIDataSource* html_source) {
@@ -400,6 +405,13 @@ void AddSyncControlsStrings(content::WebUIDataSource* html_source) {
       {"osSyncAppsCheckboxLabel", IDS_OS_SETTINGS_SYNC_APPS_CHECKBOX_LABEL},
       {"osSyncAppsCheckboxSublabel",
        IDS_OS_SETTINGS_SYNC_APPS_CHECKBOX_SUBLABEL},
+      {"osSyncSettingsCheckboxSublabel",
+       IDS_OS_SETTINGS_SYNC_SETTINGS_CHECKBOX_SUBLABEL},
+      {"osSyncWifiCheckboxSublabel",
+       IDS_OS_SETTINGS_SYNC_WIFI_CHECKBOX_SUBLABEL},
+      {"osSyncWallpaperCheckboxSublabel",
+       IDS_OS_SETTINGS_SYNC_WALLPAPER_CHECKBOX_SUBLABEL},
+      {"osSyncAppsTooltipText", IDS_OS_SETTINGS_SYNC_APPS_TOOLTIP},
       {"osSyncTurnOn", IDS_OS_SETTINGS_SYNC_TURN_ON},
       {"osSyncFeatureLabel", IDS_OS_SETTINGS_SYNC_FEATURE_LABEL},
       {"spellingPref", IDS_SETTINGS_SPELLING_PREF},
@@ -414,9 +426,6 @@ void AddSyncControlsStrings(content::WebUIDataSource* html_source) {
       "appsToggleSharingEnabled",
       base::FeatureList::IsEnabled(syncer::kSyncChromeOSAppsToggleSharing) &&
           crosapi::browser_util::IsLacrosEnabled());
-  html_source->AddString(
-      "browserSettingsSyncSetupUrl",
-      base::StrCat({chrome::kChromeUISettingsURL, chrome::kSyncSetupSubPage}));
 
   // This handler is for chrome://os-settings.
   html_source->AddBoolean("isOSSettings", true);
@@ -441,8 +450,7 @@ void AddUsersStrings(content::WebUIDataSource* html_source) {
 }
 
 void AddParentalControlStrings(content::WebUIDataSource* html_source,
-                               bool are_parental_control_settings_allowed,
-                               SupervisedUserService* supervised_user_service) {
+                               bool are_parental_control_settings_allowed) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"parentalControlsPageTitle", IDS_SETTINGS_PARENTAL_CONTROLS_PAGE_TITLE},
       {"parentalControlsPageSetUpLabel",
@@ -483,13 +491,13 @@ bool IsSameAccount(const ::account_manager::AccountKey& account_key,
 PeopleSection::PeopleSection(Profile* profile,
                              SearchTagRegistry* search_tag_registry,
                              syncer::SyncService* sync_service,
-                             SupervisedUserService* supervised_user_service,
                              signin::IdentityManager* identity_manager,
                              PrefService* pref_service)
     : OsSettingsSection(profile, search_tag_registry),
-      supervised_user_service_(supervised_user_service),
       identity_manager_(identity_manager),
-      pref_service_(pref_service) {
+      pref_service_(pref_service),
+      auth_performer_(UserDataAuthClient::Get()),
+      fp_engine_(&auth_performer_) {
   // No search tags are registered if in guest mode.
   if (IsGuestModeActive())
     return;
@@ -508,7 +516,7 @@ PeopleSection::PeopleSection(Profile* profile,
     account_manager_facade_ =
         ::GetAccountManagerFacade(profile->GetPath().value());
     DCHECK(account_manager_facade_);
-    account_manager_facade_observation_.Observe(account_manager_facade_);
+    account_manager_facade_observation_.Observe(account_manager_facade_.get());
     account_apps_availability_ =
         AccountAppsAvailabilityFactory::GetForProfile(profile);
     FetchAccounts();
@@ -597,8 +605,7 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   AddSyncControlsStrings(html_source);
   AddUsersStrings(html_source);
   AddParentalControlStrings(html_source,
-                            ShouldShowParentalControlSettings(profile()),
-                            supervised_user_service_);
+                            ShouldShowParentalControlSettings(profile()));
 
   ::settings::AddPasswordPromptDialogStrings(html_source);
   ::settings::AddSharedSyncPageStrings(html_source);
@@ -752,8 +759,8 @@ void PeopleSection::UpdateAccountManagerSearchTags(
 }
 
 bool PeopleSection::AreFingerprintSettingsAllowed() {
-  return quick_unlock::IsFingerprintEnabled(profile(),
-                                            quick_unlock::Purpose::kAny);
+  return fp_engine_.IsFingerprintEnabled(
+      *profile()->GetPrefs(), LegacyFingerprintEngine::Purpose::kAny);
 }
 
 }  // namespace ash::settings

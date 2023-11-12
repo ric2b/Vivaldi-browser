@@ -10,6 +10,7 @@
 #include "base/path_service.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/prefetch/prefetch_prefs.h"
@@ -18,7 +19,6 @@
 #include "chrome/browser/preloading/prerender/prerender_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_test_utils.h"
@@ -60,10 +60,7 @@ class OmniboxPrerenderBrowserTest : public PlatformBrowserTest {
   OmniboxPrerenderBrowserTest()
       : prerender_helper_(base::BindRepeating(
             &OmniboxPrerenderBrowserTest::GetActiveWebContents,
-            base::Unretained(this))) {
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kOmniboxTriggerForPrerender2);
-  }
+            base::Unretained(this))) {}
 
   void SetUp() override {
     prerender_helper_.SetUp(embedded_test_server());
@@ -121,7 +118,6 @@ class OmniboxPrerenderBrowserTest : public PlatformBrowserTest {
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_ukm_recorder_;
   std::unique_ptr<content::test::PreloadingAttemptUkmEntryBuilder>
       ukm_entry_builder_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<base::ScopedMockElapsedTimersForTest> test_timer_;
 };
 

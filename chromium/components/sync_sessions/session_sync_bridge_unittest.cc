@@ -28,6 +28,7 @@
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/protocol/session_specifics.pb.h"
 #include "components/sync/protocol/sync_enums.pb.h"
+#include "components/sync/test/mock_commit_queue.h"
 #include "components/sync/test/mock_model_type_change_processor.h"
 #include "components/sync/test/model_type_store_test_util.h"
 #include "components/sync/test/test_matchers.h"
@@ -199,7 +200,8 @@ class SessionSyncBridgeTest : public ::testing::Test {
     syncer::DataTypeActivationRequest request;
     request.error_handler = base::DoNothing();
     request.cache_guid = kLocalCacheGuid;
-    request.authenticated_account_id = CoreAccountId("SomeAccountId");
+    request.authenticated_account_id =
+        CoreAccountId::FromGaiaId("SomeAccountId");
 
     base::RunLoop loop;
     real_processor_->OnSyncStarting(
@@ -210,8 +212,14 @@ class SessionSyncBridgeTest : public ::testing::Test {
             }));
     loop.Run();
 
+    // ClientTagBasedModelTypeProcessor requires connecting before other
+    // interactions with the worker happen.
+    real_processor_->ConnectSync(
+        std::make_unique<testing::NiceMock<syncer::MockCommitQueue>>());
+
     sync_pb::ModelTypeState state;
-    state.set_initial_sync_done(true);
+    state.set_initial_sync_state(
+        sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
     state.set_cache_guid(request.cache_guid);
     state.mutable_progress_marker()->set_data_type_id(
         GetSpecificsFieldNumberFromModelType(syncer::SESSIONS));
@@ -902,7 +910,8 @@ TEST_F(SessionSyncBridgeTest, ShouldRecycleTabNodeAfterCommitCompleted) {
   // Mimic a commit completing for the initial sync.
   ASSERT_TRUE(real_processor()->HasLocalChangesForTest());
   sync_pb::ModelTypeState state;
-  state.set_initial_sync_done(true);
+  state.set_initial_sync_state(
+      sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
   real_processor()->OnCommitCompleted(
       state,
       {CreateSuccessResponse(kLocalCacheGuid),
@@ -1091,7 +1100,7 @@ TEST_F(SessionSyncBridgeTest, ShouldMergeForeignSession) {
   EXPECT_CALL(
       mock_processor(),
       Put(_, EntityDataHasSpecifics(MatchesHeader(kLocalCacheGuid, _, _)), _));
-  EXPECT_CALL(mock_foreign_session_updated_cb(), Run());
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run()).Times(AtLeast(1));
   StartSyncing({foreign_header, foreign_tab});
 
   std::vector<const SyncedSession*> foreign_sessions;
@@ -1101,6 +1110,20 @@ TEST_F(SessionSyncBridgeTest, ShouldMergeForeignSession) {
               ElementsAre(MatchesSyncedSession(
                   kForeignSessionTag,
                   {{kForeignWindowId, std::vector<int>{kForeignTabId}}})));
+}
+
+// Starting sync even without remote data should trigger a notification for
+// updated foreign session.
+TEST_F(SessionSyncBridgeTest, ShouldTriggerNotificationWithoutRemoteData) {
+  InitializeBridge();
+  ASSERT_THAT(bridge()->GetOpenTabsUIDelegate(), IsNull());
+  // Starting sync, even without remote data, should trigger a notification that
+  // foreign sessions got updated, because `GetOpenTabsUIDelegate()`'s behavior
+  // changed and it no longer returns null.
+  EXPECT_CALL(mock_foreign_session_updated_cb(), Run());
+  StartSyncing();
+
+  EXPECT_THAT(bridge()->GetOpenTabsUIDelegate(), NotNull());
 }
 
 TEST_F(SessionSyncBridgeTest, ShouldNotExposeForeignHeaderWithoutTabs) {
@@ -1221,7 +1244,8 @@ TEST_F(SessionSyncBridgeTest, ShouldHandleRemoteDeletion) {
   StartSyncing({foreign_header, foreign_tab});
 
   sync_pb::ModelTypeState state;
-  state.set_initial_sync_done(true);
+  state.set_initial_sync_state(
+      sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
 
   // Mimic receiving a commit ack for the local header entity, to later be able
   // to verify HasLocalChangesForTest() without interferences from the local
@@ -1345,7 +1369,8 @@ TEST_F(SessionSyncBridgeTest, ShouldIgnoreRemoteDeletionOfLocalTab) {
   // Mimic receiving a commit ack for both the tab and the header entity,
   // because otherwise it will be treated as conflict, and then local wins.
   sync_pb::ModelTypeState state;
-  state.set_initial_sync_done(true);
+  state.set_initial_sync_state(
+      sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
   real_processor()->OnCommitCompleted(
       state,
       {CreateSuccessResponse(tab_client_tag1),
@@ -1518,7 +1543,8 @@ TEST_F(SessionSyncBridgeTest, ShouldNotBroadcastUpdatesIfEmpty) {
 
   // Mimic receiving an empty list of remote updates.
   sync_pb::ModelTypeState state;
-  state.set_initial_sync_done(true);
+  state.set_initial_sync_state(
+      sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
   real_processor()->OnUpdateReceived(state, {}, /*gc_directive=*/absl::nullopt);
 }
 
@@ -1538,7 +1564,8 @@ TEST_F(SessionSyncBridgeTest, ShouldDoGarbageCollection) {
 
   // Construct a remote update.
   sync_pb::ModelTypeState state;
-  state.set_initial_sync_done(true);
+  state.set_initial_sync_state(
+      sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
   syncer::UpdateResponseDataList updates;
   // Two entities belong to a recent session.
   updates.push_back(SpecificsToUpdateResponse(

@@ -124,6 +124,8 @@ class PerfPlatform(object):
 
   @property
   def builder_url(self):
+    if self.pinpoint_only:
+      return None
     return ('https://ci.chromium.org/p/chrome/builders/ci/%s' %
             six.moves.urllib.parse.quote(self._name))
 
@@ -349,7 +351,7 @@ _PB_IMAGE_PATHS = {
 }
 
 _FUCHSIA_IMAGE_DIR = '../../third_party/fuchsia-sdk/images-internal/%s/%s'
-_COMMON_FUCHSIA_ARGS = ['-d', '--os-check=update']
+_COMMON_FUCHSIA_ARGS = ['-d', '--os-check=check']
 for board, path_parts in _IMAGE_PATHS.items():
   image_dir = _FUCHSIA_IMAGE_DIR % path_parts
   FUCHSIA_EXEC_ARGS[board] = _COMMON_FUCHSIA_ARGS + [
@@ -417,8 +419,13 @@ _MAC_M1_MINI_2020_BENCHMARK_CONFIGS = PerfSuite(
     OFFICIAL_BENCHMARK_CONFIGS).Remove([
         'blink_perf.display_locking',
         'v8.runtime_stats.top_25',
-    ])
+    ]).Add(['speedometer2-minormc'])
 _MAC_M1_MINI_2020_PGO_BENCHMARK_CONFIGS = PerfSuite([
+    _GetBenchmarkConfig('jetstream2'),
+    _GetBenchmarkConfig('speedometer2'),
+    _GetBenchmarkConfig('rendering.desktop'),
+])
+_MAC_M1_PRO_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('jetstream2'),
     _GetBenchmarkConfig('speedometer2'),
     _GetBenchmarkConfig('rendering.desktop'),
@@ -449,9 +456,7 @@ _WIN_10_LOW_END_HP_CANDIDATE_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('rendering.desktop', abridged=True),
 ])
 _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS = PerfSuite([
-    _GetBenchmarkConfig('jetstream'),
     _GetBenchmarkConfig('jetstream2'),
-    _GetBenchmarkConfig('kraken'),
     _GetBenchmarkConfig('octane'),
     _GetBenchmarkConfig('speedometer2'),
 ])
@@ -519,7 +524,6 @@ _ANDROID_PIXEL2_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('speedometer2'),
     _GetBenchmarkConfig('rendering.mobile'),
     _GetBenchmarkConfig('octane'),
-    _GetBenchmarkConfig('jetstream'),
     _GetBenchmarkConfig('system_health.scroll_jank_mobile')
 ])
 _CHROMEOS_KEVIN_FYI_BENCHMARK_CONFIGS = PerfSuite([
@@ -556,14 +560,12 @@ _FUCHSIA_ATLAS_PERF_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('system_health.common_desktop'),
     _GetBenchmarkConfig('speedometer'),
     _GetBenchmarkConfig('speedometer2'),
-    _GetBenchmarkConfig('jetstream'),
     _GetBenchmarkConfig('jetstream2'),
 ])
 _FUCHSIA_NUC_PERF_FYI_BENCHMARK_CONFIGS = PerfSuite([
     _GetBenchmarkConfig('system_health.common_desktop'),
     _GetBenchmarkConfig('speedometer'),
     _GetBenchmarkConfig('speedometer2'),
-    _GetBenchmarkConfig('jetstream'),
     _GetBenchmarkConfig('jetstream2'),
 ])
 _LINUX_PERF_CALIBRATION_BENCHMARK_CONFIGS = PerfSuite([
@@ -589,7 +591,8 @@ LINUX_PGO = PerfPlatform('linux-perf-pgo',
                          _LINUX_BENCHMARK_CONFIGS,
                          26,
                          'linux',
-                         executables=_LINUX_EXECUTABLE_CONFIGS)
+                         executables=_LINUX_EXECUTABLE_CONFIGS,
+                         pinpoint_only=True)
 LINUX_REL = PerfPlatform(
     'linux-perf-rel',
     'Ubuntu-18.04, 8 core, NVIDIA Quadro P400',
@@ -612,7 +615,8 @@ MAC_HIGH_END_LAPTOP_PGO = PerfPlatform(
     _MAC_HIGH_END_BENCHMARK_CONFIGS,
     26,
     'mac',
-    executables=_MAC_HIGH_END_EXECUTABLE_CONFIGS)
+    executables=_MAC_HIGH_END_EXECUTABLE_CONFIGS,
+    pinpoint_only=True)
 MAC_LOW_END_LAPTOP = PerfPlatform(
     'mac-laptop_low_end-perf',
     'MacBook Air, Core i5 1.8 GHz, 8GB RAM, 128GB SSD, HD Graphics',
@@ -626,7 +630,8 @@ MAC_LOW_END_LAPTOP_PGO = PerfPlatform(
     _MAC_LOW_END_BENCHMARK_CONFIGS,
     26,
     'mac',
-    executables=_MAC_LOW_END_EXECUTABLE_CONFIGS)
+    executables=_MAC_LOW_END_EXECUTABLE_CONFIGS,
+    pinpoint_only=True)
 MAC_M1_MINI_2020 = PerfPlatform(
     'mac-m1_mini_2020-perf',
     'Mac M1 Mini 2020',
@@ -640,6 +645,12 @@ MAC_M1_MINI_2020_PGO = PerfPlatform(
     _MAC_M1_MINI_2020_PGO_BENCHMARK_CONFIGS,
     4,
     'mac')
+MAC_M1_PRO = PerfPlatform(
+    'mac-m1-pro-perf',
+    'Mac M1 PRO 2020',
+    _MAC_M1_PRO_BENCHMARK_CONFIGS,
+    5,
+    'mac')
 
 # Win
 WIN_10_LOW_END = PerfPlatform(
@@ -647,8 +658,8 @@ WIN_10_LOW_END = PerfPlatform(
     'Low end windows 10 HP laptops. HD Graphics 5500, x86-64-i3-5005U, '
     'SSD, 4GB RAM.',
     _WIN_10_LOW_END_BENCHMARK_CONFIGS,
-    # TODO(crbug.com/1305291): Increase the count back to 46 when issue fixed.
-    40,
+    # TODO(b/278947510): Increase the count when m.2 disks stop failing.
+    20,
     'win')
 WIN_10_LOW_END_PGO = PerfPlatform(
     'win-10_laptop_low_end-perf-pgo',
@@ -657,7 +668,8 @@ WIN_10_LOW_END_PGO = PerfPlatform(
     _WIN_10_LOW_END_BENCHMARK_CONFIGS,
     # TODO(crbug.com/1305291): Increase the count back to 46 when issue fixed.
     40,
-    'win')
+    'win',
+    pinpoint_only=True)
 WIN_10 = PerfPlatform(
     'win-10-perf',
     'Windows Intel HD 630 towers, Core i7-7700 3.6 GHz, 16GB RAM,'
@@ -673,20 +685,27 @@ WIN_10_PGO = PerfPlatform(
     _WIN_10_BENCHMARK_CONFIGS,
     26,
     'win',
-    executables=_WIN_10_EXECUTABLE_CONFIGS)
+    executables=_WIN_10_EXECUTABLE_CONFIGS,
+    pinpoint_only=True)
 WIN_10_AMD_LAPTOP = PerfPlatform('win-10_amd_laptop-perf',
                                  'Windows 10 Laptop with AMD chipset.',
                                  _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS, 5, 'win')
 WIN_10_AMD_LAPTOP_PGO = PerfPlatform('win-10_amd_laptop-perf-pgo',
                                      'Windows 10 Laptop with AMD chipset.',
-                                     _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS, 5,
-                                     'win')
+                                     _WIN_10_AMD_LAPTOP_BENCHMARK_CONFIGS,
+                                     5,
+                                     'win',
+                                     pinpoint_only=True)
 
 # Android
 ANDROID_GO = PerfPlatform('android-go-perf', 'Android O (gobo)',
                           _ANDROID_GO_BENCHMARK_CONFIGS, 13, 'android')
-ANDROID_GO_PGO = PerfPlatform('android-go-perf-pgo', 'Android O (gobo)',
-                              _ANDROID_GO_BENCHMARK_CONFIGS, 13, 'android')
+ANDROID_GO_PGO = PerfPlatform('android-go-perf-pgo',
+                              'Android O (gobo)',
+                              _ANDROID_GO_BENCHMARK_CONFIGS,
+                              13,
+                              'android',
+                              pinpoint_only=True)
 ANDROID_GO_WEBVIEW = PerfPlatform('android-go_webview-perf',
                                   'Android OPM1.171019.021 (gobo)',
                                   _ANDROID_GO_WEBVIEW_BENCHMARK_CONFIGS, 10,
@@ -703,13 +722,18 @@ ANDROID_PIXEL2_PGO = PerfPlatform(
     _ANDROID_PIXEL2_BENCHMARK_CONFIGS,
     28,
     'android',
-    executables=_ANDROID_PIXEL2_EXECUTABLE_CONFIGS)
+    executables=_ANDROID_PIXEL2_EXECUTABLE_CONFIGS,
+    pinpoint_only=True)
 ANDROID_PIXEL2_WEBVIEW = PerfPlatform(
     'android-pixel2_webview-perf', 'Android OPM1.171019.021',
     _ANDROID_PIXEL2_WEBVIEW_BENCHMARK_CONFIGS, 21, 'android')
 ANDROID_PIXEL2_WEBVIEW_PGO = PerfPlatform(
-    'android-pixel2_webview-perf-pgo', 'Android OPM1.171019.021',
-    _ANDROID_PIXEL2_WEBVIEW_BENCHMARK_CONFIGS, 21, 'android')
+    'android-pixel2_webview-perf-pgo',
+    'Android OPM1.171019.021',
+    _ANDROID_PIXEL2_WEBVIEW_BENCHMARK_CONFIGS,
+    21,
+    'android',
+    pinpoint_only=True)
 ANDROID_PIXEL4 = PerfPlatform('android-pixel4-perf',
                               'Android R',
                               _ANDROID_PIXEL4_BENCHMARK_CONFIGS,
@@ -722,7 +746,8 @@ ANDROID_PIXEL4_PGO = PerfPlatform(
     _ANDROID_PIXEL4_BENCHMARK_CONFIGS,
     28,
     'android',
-    executables=_ANDROID_PIXEL4_EXECUTABLE_CONFIGS)
+    executables=_ANDROID_PIXEL4_EXECUTABLE_CONFIGS,
+    pinpoint_only=True)
 ANDROID_PIXEL4_WEBVIEW = PerfPlatform(
     'android-pixel4_webview-perf', 'Android R',
     _ANDROID_PIXEL4_WEBVIEW_BENCHMARK_CONFIGS, 21, 'android')
@@ -745,7 +770,8 @@ ANDROID_PIXEL6_PGO = PerfPlatform(
     _ANDROID_PIXEL6_BENCHMARK_CONFIGS,
     28,
     'android',
-    executables=_ANDROID_PIXEL6_EXECUTABLE_CONFIGS)
+    executables=_ANDROID_PIXEL6_EXECUTABLE_CONFIGS,
+    pinpoint_only=True)
 ANDROID_PIXEL6_PRO = PerfPlatform(
     'android-pixel6-pro-perf',
     'Android T',
@@ -759,7 +785,8 @@ ANDROID_PIXEL6_PRO_PGO = PerfPlatform(
     _ANDROID_PIXEL6_PRO_BENCHMARK_CONFIGS,
     16,
     'android',
-    executables=_ANDROID_PIXEL6_PRO_EXECUTABLE_CONFIGS)
+    executables=_ANDROID_PIXEL6_PRO_EXECUTABLE_CONFIGS,
+    pinpoint_only=True)
 ANDROID_GO_WEMBLEY = PerfPlatform('android-go-wembley-perf',
                                   'Android U',
                                   _ANDROID_GO_WEMBLEY_BENCHMARK_CONFIGS, 2,
@@ -794,7 +821,7 @@ LACROS_EVE_PERF = PerfPlatform('lacros-eve-perf', '',
                                _LACROS_EVE_PERF_BENCHMARK_CONFIGS, 4,
                                'chromeos')
 LACROS_X86_PERF = PerfPlatform('lacros-x86-perf', '', _LACROS_BENCHMARK_CONFIGS,
-                               10, 'chromeos')
+                               20, 'chromeos')
 # Fuchsia
 FUCHSIA_PERF_ASTRO = PerfPlatform('fuchsia-perf-ast',
                                   '',

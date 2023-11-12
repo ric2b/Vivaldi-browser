@@ -20,14 +20,14 @@ _BAD_FILES = [
 ]
 
 
-def is_bad_gn_file(filepath: str, root: str) -> bool:
+def is_bad_gn_file(filepath: str, root: pathlib.Path) -> bool:
     relpath = os.path.relpath(filepath, root)
     for bad_filepath in _BAD_FILES:
         if relpath == bad_filepath:
-            logging.warning(f'Skipping {relpath}: found in _BAD_FILES list.')
+            logging.info(f'Skipping {relpath}: found in _BAD_FILES list.')
             return True
     if not os.access(filepath, os.R_OK | os.W_OK):
-        logging.warning(f'Skipping {relpath}: Cannot read and write to it.')
+        logging.info(f'Skipping {relpath}: Cannot read and write to it.')
         return True
     return False
 

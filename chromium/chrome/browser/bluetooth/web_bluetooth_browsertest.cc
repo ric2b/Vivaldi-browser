@@ -9,6 +9,7 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -561,13 +562,12 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, WebBluetoothAfterCrash) {
   // Make sure we can use Web Bluetooth after the tab crashes.
   // Set up adapter with one device.
   adapter_->SetIsPresent(false);
-  std::string result;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents_.get(),
-      "navigator.bluetooth.requestDevice({filters: [{services: [0x180d]}]})"
-      "  .catch(e => domAutomationController.send(e.toString()));",
-      &result));
-  EXPECT_EQ("NotFoundError: Bluetooth adapter not available.", result);
+  EXPECT_EQ(
+      "NotFoundError: Bluetooth adapter not available.",
+      content::EvalJs(
+          web_contents_.get(),
+          "navigator.bluetooth.requestDevice({filters: [{services: [0x180d]}]})"
+          "  .catch(e => e.toString());"));
 
   // Crash the renderer process.
   content::RenderProcessHost* process =
@@ -583,14 +583,12 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, WebBluetoothAfterCrash) {
       browser()->tab_strip_model()->GetActiveWebContents()));
 
   // Use Web Bluetooth again.
-  std::string result_after_crash;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents_.get(),
-      "navigator.bluetooth.requestDevice({filters: [{services: [0x180d]}]})"
-      "  .catch(e => domAutomationController.send(e.toString()));",
-      &result_after_crash));
-  EXPECT_EQ("NotFoundError: Bluetooth adapter not available.",
-            result_after_crash);
+  EXPECT_EQ(
+      "NotFoundError: Bluetooth adapter not available.",
+      content::EvalJs(
+          web_contents_.get(),
+          "navigator.bluetooth.requestDevice({filters: [{services: [0x180d]}]})"
+          "  .catch(e => e.toString());"));
 }
 
 IN_PROC_BROWSER_TEST_F(WebBluetoothTest, KillSwitchShouldBlock) {
@@ -602,22 +600,21 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, KillSwitchShouldBlock) {
   std::map<std::string, std::string> params;
   params["Bluetooth"] =
       permissions::PermissionContextBase::kPermissionsKillSwitchBlockedValue;
-  variations::AssociateVariationParams(
+  base::AssociateFieldTrialParams(
       permissions::PermissionContextBase::kPermissionsKillSwitchFieldStudy,
       "TestGroup", params);
   base::FieldTrialList::CreateFieldTrial(
       permissions::PermissionContextBase::kPermissionsKillSwitchFieldStudy,
       "TestGroup");
 
-  std::string rejection;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents_.get(),
-      "navigator.bluetooth.requestDevice({filters: [{name: 'Hello'}]})"
-      "  .then(() => { domAutomationController.send('Success'); },"
-      "        reason => {"
-      "      domAutomationController.send(reason.name + ': ' + reason.message);"
-      "  });",
-      &rejection));
+  std::string rejection =
+      content::EvalJs(
+          web_contents_.get(),
+          "navigator.bluetooth.requestDevice({filters: [{name: 'Hello'}]})"
+          "  .then(() => 'Success',"
+          "        reason => reason.name + ': ' + reason.message"
+          "  );")
+          .ExtractString();
   EXPECT_THAT(rejection,
               testing::MatchesRegex("NotFoundError: .*globally disabled.*"));
 }
@@ -631,8 +628,8 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, BlocklistShouldBlock) {
 
   if (base::FieldTrialList::TrialExists("WebBluetoothBlocklist")) {
     LOG(INFO) << "WebBluetoothBlocklist field trial already configured.";
-    ASSERT_NE(variations::GetVariationParamValue("WebBluetoothBlocklist",
-                                                 "blocklist_additions")
+    ASSERT_NE(base::GetFieldTrialParamValue("WebBluetoothBlocklist",
+                                            "blocklist_additions")
                   .find("ed5f25a4"),
               std::string::npos)
         << "ERROR: WebBluetoothBlocklist field trial being tested in\n"
@@ -644,21 +641,20 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothTest, BlocklistShouldBlock) {
     // Create a field trial with test parameter.
     std::map<std::string, std::string> params;
     params["blocklist_additions"] = "ed5f25a4:e";
-    variations::AssociateVariationParams("WebBluetoothBlocklist", "TestGroup",
-                                         params);
+    base::AssociateFieldTrialParams("WebBluetoothBlocklist", "TestGroup",
+                                    params);
     base::FieldTrialList::CreateFieldTrial("WebBluetoothBlocklist",
                                            "TestGroup");
   }
 
-  std::string rejection;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents_.get(),
-      "navigator.bluetooth.requestDevice({filters: [{services: [0xed5f25a4]}]})"
-      "  .then(() => { domAutomationController.send('Success'); },"
-      "        reason => {"
-      "      domAutomationController.send(reason.name + ': ' + reason.message);"
-      "  });",
-      &rejection));
+  std::string rejection =
+      content::EvalJs(web_contents_.get(),
+                      "navigator.bluetooth.requestDevice({filters: [{services: "
+                      "[0xed5f25a4]}]})"
+                      "  .then(() => 'Success',"
+                      "        reason => reason.name + ': ' + reason.message"
+                      "  );")
+          .ExtractString();
   EXPECT_THAT(rejection,
               testing::MatchesRegex("SecurityError: .*blocklisted UUID.*"));
 }

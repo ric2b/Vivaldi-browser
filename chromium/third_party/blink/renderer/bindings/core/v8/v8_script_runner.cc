@@ -70,11 +70,6 @@ namespace {
 // This limit was arrived at arbitrarily. crbug.com/449744
 const int kMaxRecursionDepth = 44;
 
-bool InDiscardExperiment() {
-  return base::FeatureList::IsEnabled(
-      blink::features::kDiscardCodeCacheAfterFirstUse);
-}
-
 // In order to make sure all pending messages to be processed in
 // v8::Function::Call, we don't call throwStackOverflowException
 // directly. Instead, we create a v8::Function of
@@ -194,13 +189,6 @@ v8::MaybeLocal<v8::Script> CompileScriptInternal(
             ExecutionContext::GetCodeCacheHostFromContext(
                 ExecutionContext::From(script_state)),
             CachedMetadataHandler::kClearPersistentStorage);
-      } else if (InDiscardExperiment()) {
-        // Experimentally free code cache from memory after first use. See
-        // http://crbug.com/1045052.
-        cache_handler->ClearCachedMetadata(
-            ExecutionContext::GetCodeCacheHostFromContext(
-                ExecutionContext::From(script_state)),
-            CachedMetadataHandler::kDiscardLocally);
       }
       if (cache_result) {
         *cache_result = absl::make_optional(
@@ -345,12 +333,6 @@ v8::MaybeLocal<v8::Module> V8ScriptRunner::CompileModule(
           cache_handler->ClearCachedMetadata(
               ExecutionContext::GetCodeCacheHostFromContext(execution_context),
               CachedMetadataHandler::kClearPersistentStorage);
-        } else if (InDiscardExperiment()) {
-          // Experimentally free code cache from memory after first use. See
-          // http://crbug.com/1045052.
-          cache_handler->ClearCachedMetadata(
-              ExecutionContext::GetCodeCacheHostFromContext(execution_context),
-              CachedMetadataHandler::kDiscardLocally);
         }
         cache_result = absl::make_optional(
             inspector_compile_script_event::V8ConsumeCacheResult(
@@ -400,7 +382,11 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::RunCompiledScript(
       ThrowScriptForbiddenException(isolate);
       return v8::MaybeLocal<v8::Value>();
     }
-    DCHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+    if (RuntimeEnabledFeatures::BlinkLifecycleScriptForbiddenEnabled()) {
+      CHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+    } else {
+      DCHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+    }
 
     v8::Isolate::SafeForTerminationScope safe_for_termination(isolate);
     v8::MicrotasksScope microtasks_scope(isolate, microtask_queue,
@@ -573,17 +559,16 @@ ScriptEvaluationResult V8ScriptRunner::CompileAndRunScript(
       }
 
 #if BUILDFLAG(ENABLE_V8_COMPILE_HINTS)
-      if (compile_options == v8::ScriptCompiler::kProduceCompileHints &&
-          frame != nullptr) {
-        // TODO(chromium:1406506): Add a compile hints solution for workers.
-        // TODO(chromium:1406506): Add a compile hints solution for fenced
-        // frames.
-        // TODO(chromium:1406506): Add a compile hints solution for
-        // out-of-process iframes.
-        Page* page = frame->GetPage();
-        if (page != nullptr) {
-          page->GetV8CompileHints().RecordScript(frame, execution_context,
-                                                 script, script_state);
+      Page* page;
+      if (frame != nullptr && (page = frame->GetPage()) != nullptr) {
+        if (compile_options == v8::ScriptCompiler::kProduceCompileHints) {
+          // TODO(chromium:1406506): Add a compile hints solution for workers.
+          // TODO(chromium:1406506): Add a compile hints solution for fenced
+          // frames.
+          // TODO(chromium:1406506): Add a compile hints solution for
+          // out-of-process iframes.
+          page->GetV8CrowdsourcedCompileHintsProducer().RecordScript(
+              frame, execution_context, script, script_state);
         }
       }
 #endif  // BUILDFLAG(ENABLE_V8_COMPILE_HINTS)
@@ -672,7 +657,11 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallAsConstructor(
     ThrowScriptForbiddenException(isolate);
     return v8::MaybeLocal<v8::Value>();
   }
-  DCHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+  if (RuntimeEnabledFeatures::BlinkLifecycleScriptForbiddenEnabled()) {
+    CHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+  } else {
+    DCHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+  }
 
   // TODO(dominicc): When inspector supports tracing object
   // invocation, change this to use v8::Object instead of
@@ -729,7 +718,11 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallFunction(
     ThrowScriptForbiddenException(isolate);
     return v8::MaybeLocal<v8::Value>();
   }
-  DCHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+  if (RuntimeEnabledFeatures::BlinkLifecycleScriptForbiddenEnabled()) {
+    CHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+  } else {
+    DCHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
+  }
 
   DCHECK(!frame ||
          BindingSecurity::ShouldAllowAccessToFrame(

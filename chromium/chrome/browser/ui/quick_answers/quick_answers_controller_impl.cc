@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/quick_answers/quick_answers_ui_controller.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_state.h"
+#include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -94,8 +95,9 @@ void QuickAnswersControllerImpl::MaybeShowQuickAnswers(
   if (!ShouldShowQuickAnswers())
     return;
 
-  if (visibility_ == QuickAnswersVisibility::kClosed)
+  if (visibility_ != QuickAnswersVisibility::kPending) {
     return;
+  }
 
   // Cache anchor-bounds and query.
   anchor_bounds_ = anchor_bounds;
@@ -104,7 +106,7 @@ void QuickAnswersControllerImpl::MaybeShowQuickAnswers(
   title_ = title;
   query_ = title;
   context_ = context;
-  quick_answer_.reset();
+  quick_answers_session_.reset();
 
   QuickAnswersRequest request = BuildRequest();
   if (QuickAnswersState::Get()->ShouldUseQuickAnswersTextAnnotator()) {
@@ -124,7 +126,7 @@ void QuickAnswersControllerImpl::HandleQuickAnswerRequest(
         IntentTypeToString(request.preprocessed_output.intent_info.intent_type),
         base::UTF8ToUTF16(request.preprocessed_output.intent_info.intent_text));
   } else {
-    visibility_ = QuickAnswersVisibility::kVisible;
+    visibility_ = QuickAnswersVisibility::kQuickAnswersVisible;
     quick_answers_ui_controller_->CreateQuickAnswersView(
         anchor_bounds_, title_, query_,
         request.context.device_properties.is_internal);
@@ -138,25 +140,53 @@ void QuickAnswersControllerImpl::HandleQuickAnswerRequest(
 
 void QuickAnswersControllerImpl::DismissQuickAnswers(
     QuickAnswersExitPoint exit_point) {
-  visibility_ = QuickAnswersVisibility::kClosed;
-  MaybeDismissQuickAnswersConsent();
-  bool closed = quick_answers_ui_controller_->CloseQuickAnswersView();
-  // |quick_answer_| could be null before we receive the result from the server.
-  // Do not send the signal since the quick answer is dismissed before ready.
-  if (quick_answer_) {
-    // For quick-answer rendered along with browser context menu, if user didn't
-    // click on other context menu items, it is considered as active impression.
-    bool is_active = exit_point != QuickAnswersExitPoint::kContextMenuClick;
-    quick_answers_client_->OnQuickAnswersDismissed(quick_answer_->result_type,
-                                                   is_active && closed);
+  switch (visibility_) {
+    case QuickAnswersVisibility::kRichAnswersVisible: {
+      // For the rich-answers view, ignore dismissal by context-menu related
+      // actions as they should only affect the companion quick-answers views.
+      if (exit_point == QuickAnswersExitPoint::kContextMenuDismiss ||
+          exit_point == QuickAnswersExitPoint::kContextMenuClick) {
+        return;
+      }
+      quick_answers_ui_controller_->CloseRichAnswersView();
+      visibility_ = QuickAnswersVisibility::kClosed;
+      return;
+    }
+    case QuickAnswersVisibility::kUserConsentVisible: {
+      if (quick_answers_ui_controller_->IsShowingUserConsentView()) {
+        QuickAnswersState::Get()->OnConsentResult(ConsentResultType::kDismiss);
+      }
+      quick_answers_ui_controller_->CloseUserConsentView();
+      visibility_ = QuickAnswersVisibility::kClosed;
+      return;
+    }
+    case QuickAnswersVisibility::kQuickAnswersVisible:
+    case QuickAnswersVisibility::kPending:
+    case QuickAnswersVisibility::kClosed: {
+      bool closed = quick_answers_ui_controller_->CloseQuickAnswersView();
+      visibility_ = QuickAnswersVisibility::kClosed;
+      // |quick_answers_session_| could be null before we receive the result
+      // from the server. Do not send the signal since the quick answer is
+      // dismissed before ready.
+      if (quick_answers_session_ && quick_answer()) {
+        // For quick-answer rendered along with browser context menu, if user
+        // didn't click on other context menu items, it is considered as active
+        // impression.
+        bool is_active = exit_point != QuickAnswersExitPoint::kContextMenuClick;
+        quick_answers_client_->OnQuickAnswersDismissed(
+            quick_answer()->result_type, is_active && closed);
 
-    // Record Quick Answers exit point.
-    // Make sure |closed| is true so that only the direct exit point is recorded
-    // when multiple dissmiss requests are received (For example, dissmiss
-    // request from context menu will also fire when the settings button is
-    // pressed).
-    if (closed)
-      base::UmaHistogramEnumeration(kQuickAnswersExitPoint, exit_point);
+        // Record Quick Answers exit point.
+        // Make sure |closed| is true so that only the direct exit point is
+        // recorded when multiple dismiss requests are received (For example,
+        // dismiss request from context menu will also fire when the settings
+        // button is pressed).
+        if (closed) {
+          base::UmaHistogramEnumeration(kQuickAnswersExitPoint, exit_point);
+        }
+      }
+      return;
+    }
   }
 }
 
@@ -170,18 +200,26 @@ QuickAnswersVisibility QuickAnswersControllerImpl::GetVisibilityForTesting()
   return visibility_;
 }
 
-void QuickAnswersControllerImpl::OnQuickAnswerReceived(
-    std::unique_ptr<QuickAnswer> quick_answer) {
-  if (visibility_ != QuickAnswersVisibility::kVisible)
-    return;
+void QuickAnswersControllerImpl::SetVisibility(
+    QuickAnswersVisibility visibility) {
+  visibility_ = visibility;
+}
 
-  if (quick_answer) {
-    if (quick_answer->title.empty()) {
-      quick_answer->title.push_back(
+void QuickAnswersControllerImpl::OnQuickAnswerReceived(
+    std::unique_ptr<quick_answers::QuickAnswersSession> quick_answers_session) {
+  if (visibility_ != QuickAnswersVisibility::kQuickAnswersVisible) {
+    return;
+  }
+
+  quick_answers_session_ = std::move(quick_answers_session);
+
+  if (quick_answer()) {
+    if (quick_answer()->title.empty()) {
+      quick_answer()->title.push_back(
           std::make_unique<quick_answers::QuickAnswerText>(title_));
     }
     quick_answers_ui_controller_->RenderQuickAnswersViewWithResult(
-        anchor_bounds_, *quick_answer);
+        anchor_bounds_, *quick_answer());
   } else {
     quick_answers::QuickAnswer quick_answer_with_no_result;
     quick_answer_with_no_result.title.push_back(
@@ -195,13 +233,12 @@ void QuickAnswersControllerImpl::OnQuickAnswerReceived(
     query_ = title_;
     quick_answers_ui_controller_->SetActiveQuery(query_);
   }
-
-  quick_answer_ = std::move(quick_answer);
 }
 
 void QuickAnswersControllerImpl::OnNetworkError() {
-  if (visibility_ != QuickAnswersVisibility::kVisible)
+  if (visibility_ != QuickAnswersVisibility::kQuickAnswersVisible) {
     return;
+  }
 
   // Notify quick_answers_ui_controller_ to show retry UI.
   quick_answers_ui_controller_->ShowRetry();
@@ -244,7 +281,7 @@ void QuickAnswersControllerImpl::OnRetryQuickAnswersRequest() {
 
 void QuickAnswersControllerImpl::OnQuickAnswerClick() {
   quick_answers_client_->OnQuickAnswerClick(
-      quick_answer_ ? quick_answer_->result_type : ResultType::kNoResult);
+      quick_answer() ? quick_answer()->result_type : ResultType::kNoResult);
 }
 
 void QuickAnswersControllerImpl::UpdateQuickAnswersAnchorBounds(
@@ -264,16 +301,11 @@ void QuickAnswersControllerImpl::OnUserConsentResult(bool consented) {
       consented ? ConsentResultType::kAllow : ConsentResultType::kNoThanks);
 
   if (consented) {
+    visibility_ = QuickAnswersVisibility::kPending;
     // Display Quick-Answer for the cached query when user consent has
     // been granted.
     MaybeShowQuickAnswers(anchor_bounds_, title_, context_);
   }
-}
-
-void QuickAnswersControllerImpl::MaybeDismissQuickAnswersConsent() {
-  if (quick_answers_ui_controller_->IsShowingUserConsentView())
-    QuickAnswersState::Get()->OnConsentResult(ConsentResultType::kDismiss);
-  quick_answers_ui_controller_->CloseUserConsentView();
 }
 
 void QuickAnswersControllerImpl::ShowUserConsent(
@@ -284,6 +316,7 @@ void QuickAnswersControllerImpl::ShowUserConsent(
     quick_answers_ui_controller_->CreateUserConsentView(
         anchor_bounds_, intent_type, intent_text);
     QuickAnswersState::Get()->StartConsent();
+    visibility_ = QuickAnswersVisibility::kUserConsentVisible;
   }
 }
 

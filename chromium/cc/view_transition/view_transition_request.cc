@@ -60,10 +60,11 @@ ViewTransitionRequest::CreateAnimateRenderer(uint32_t document_tag,
 
 // static
 std::unique_ptr<ViewTransitionRequest> ViewTransitionRequest::CreateRelease(
-    uint32_t document_tag) {
-  return base::WrapUnique(new ViewTransitionRequest(
-      Type::kRelease, document_tag, 0u, viz::NavigationID::Null(), {},
-      base::OnceClosure()));
+    uint32_t document_tag,
+    viz::NavigationID navigation_id) {
+  return base::WrapUnique(
+      new ViewTransitionRequest(Type::kRelease, document_tag, 0u, navigation_id,
+                                {}, base::OnceClosure()));
 }
 
 ViewTransitionRequest::ViewTransitionRequest(
@@ -88,6 +89,21 @@ ViewTransitionRequest::~ViewTransitionRequest() = default;
 viz::CompositorFrameTransitionDirective
 ViewTransitionRequest::ConstructDirective(
     const SharedElementMap& shared_element_render_pass_id_map) const {
+  switch (type_) {
+    case Type::kRelease:
+      DCHECK_EQ(shared_element_count_, 0u);
+      DCHECK(capture_resource_ids_.empty());
+      return viz::CompositorFrameTransitionDirective::CreateRelease(
+          navigation_id_, sequence_id_);
+    case Type::kAnimateRenderer:
+      DCHECK_EQ(shared_element_count_, 0u);
+      DCHECK(capture_resource_ids_.empty());
+      return viz::CompositorFrameTransitionDirective::CreateAnimate(
+          navigation_id_, sequence_id_);
+    case Type::kSave:
+      break;
+  }
+
   std::vector<viz::CompositorFrameTransitionDirective::SharedElement>
       shared_elements(shared_element_count_);
   auto capture_resource_ids = capture_resource_ids_;
@@ -119,8 +135,8 @@ ViewTransitionRequest::ConstructDirective(
         empty_resource_id;
   }
 
-  return viz::CompositorFrameTransitionDirective(
-      navigation_id_, sequence_id_, type_, std::move(shared_elements));
+  return viz::CompositorFrameTransitionDirective::CreateSave(
+      navigation_id_, sequence_id_, std::move(shared_elements));
 }
 
 std::string ViewTransitionRequest::ToString() const {

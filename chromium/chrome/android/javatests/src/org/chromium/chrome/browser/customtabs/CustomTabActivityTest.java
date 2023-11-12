@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
+
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
@@ -40,8 +42,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.provider.Browser;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.runner.lifecycle.Stage;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -58,9 +58,12 @@ import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsService;
 import androidx.browser.customtabs.CustomTabsSession;
 import androidx.browser.customtabs.CustomTabsSessionToken;
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
+import androidx.test.runner.lifecycle.Stage;
 
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -82,6 +85,7 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -92,7 +96,6 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.AppHooksImpl;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
@@ -134,6 +137,7 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.contextmenu.ContextMenuUtils;
@@ -143,7 +147,6 @@ import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.ClickUtils;
 import org.chromium.content_public.browser.test.util.DOMUtils;
@@ -492,13 +495,14 @@ public class CustomTabActivityTest {
         TestThreadUtils.runOnUiThreadBlocking((Runnable) actionButton::performClick);
 
         onFinished.waitForCallback("Pending Intent was not sent.");
-        Assert.assertThat(onFinished.getCallbackIntent().getDataString(), equalTo(mTestPage));
+        assertThat(onFinished.getCallbackIntent().getDataString(), equalTo(mTestPage));
     }
 
     /**
      * Test if an action button is shown with correct image and size, and clicking it sends the
      * correct {@link PendingIntent}.
      */
+    // TODO(crbug.com/1420991): Re-enable this test after fixing/diagnosing flakiness.
     @Test
     @SmallTest
     @Feature({"UiCatalogue"})
@@ -523,7 +527,7 @@ public class CustomTabActivityTest {
         final PendingIntent pi2 =
                 PendingIntent.getBroadcast(InstrumentationRegistry.getTargetContext(), 1,
                         new Intent(), IntentUtils.getPendingIntentMutabilityFlag(true));
-        Assert.assertThat(pi2, not(equalTo(pi1)));
+        assertThat(pi2, not(equalTo(pi1)));
         final OnFinishedForTest onFinished2 = new OnFinishedForTest(pi2);
         toolbarItems.add(CustomTabsIntentTestUtils.makeToolbarItemBundle(
                 expectedIcon2, "Even gooder test", pi2, sIdToIncrement++));
@@ -561,7 +565,7 @@ public class CustomTabActivityTest {
         TestThreadUtils.runOnUiThreadBlocking((Runnable) actionButton::performClick);
 
         onFinished1.waitForCallback("Pending Intent was not sent.");
-        Assert.assertThat(onFinished1.getCallbackIntent().getDataString(), equalTo(mTestPage));
+        assertThat(onFinished1.getCallbackIntent().getDataString(), equalTo(mTestPage));
         assertNull(onFinished2.getCallbackIntent());
 
         CustomTabsConnection connection = CustomTabsConnection.getInstance();
@@ -600,7 +604,7 @@ public class CustomTabActivityTest {
         assertNull("Action button should not be shown", actionButton);
 
         BrowserServicesIntentDataProvider dataProvider = getActivity().getIntentDataProvider();
-        Assert.assertThat(dataProvider.getCustomButtonsOnToolbar(), is(empty()));
+        assertThat(dataProvider.getCustomButtonsOnToolbar(), is(empty()));
     }
 
     @Test
@@ -692,7 +696,7 @@ public class CustomTabActivityTest {
         pref.writeBoolean(ChromePreferenceKeys.CUSTOM_TABS_LAST_CLOSE_TAB_INTERACTION, true);
 
         Intent intent = CustomTabsIntentTestUtils.createCustomTabIntent(
-                InstrumentationRegistry.getContext(), mTestPage, false, builder -> {});
+                ApplicationProvider.getApplicationContext(), mTestPage, false, builder -> {});
         CustomTabsConnection connection = CustomTabsTestUtils.warmUpAndWait();
         CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
         connection.newSession(token);
@@ -710,7 +714,7 @@ public class CustomTabActivityTest {
     @Test
     @SmallTest
     public void testRecordRetainableSession_WithoutWarmupAndSession() {
-        Context context = InstrumentationRegistry.getContext();
+        Context context = ApplicationProvider.getApplicationContext();
         Activity emptyActivity = startBlankUiTestActivity();
 
         Intent intent =
@@ -1551,7 +1555,7 @@ public class CustomTabActivityTest {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> ApplicationStatus.registerStateListenerForAllActivities(listener));
 
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> {
             TabTestUtils.openNewTab(cctActivity.getActivityTab(), new GURL("about:blank"), null,
                     null, WindowOpenDisposition.OFF_THE_RECORD, false);
         });
@@ -2088,7 +2092,7 @@ public class CustomTabActivityTest {
     }
 
     private Activity startBlankUiTestActivity() {
-        Context context = InstrumentationRegistry.getContext();
+        Context context = ApplicationProvider.getApplicationContext();
         Intent emptyIntent = new Intent(context, BlankUiTestActivity.class);
         emptyIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return InstrumentationRegistry.getInstrumentation().startActivitySync(emptyIntent);

@@ -23,7 +23,7 @@ class NotesModelLoadedObserver : public NotesModelObserver {
   void NotesModelLoaded(NotesModel* model, bool ids_reassigned) override;
   void NotesModelBeingDeleted(NotesModel* model) override;
 
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 };
 
 }  // namespace vivaldi

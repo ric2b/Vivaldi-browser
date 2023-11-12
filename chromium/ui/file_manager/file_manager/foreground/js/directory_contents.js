@@ -10,15 +10,18 @@ import {mountGuest} from '../../common/js/api.js';
 import {AsyncQueue, ConcurrentQueue} from '../../common/js/async_util.js';
 import {createDOMError} from '../../common/js/dom_utils.js';
 import {FileType} from '../../common/js/file_type.js';
+import {EntryList} from '../../common/js/files_app_entry_types.js';
 import {metrics} from '../../common/js/metrics.js';
+import {getEarliestTimestamp} from '../../common/js/recent_date_bucket.js';
 import {createTrashReaders} from '../../common/js/trash.js';
 import {util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
 import {EntryLocation} from '../../externs/entry_location.js';
-import {FakeEntry, FilesAppDirEntry} from '../../externs/files_app_entry_interfaces.js';
-import {SearchFileType, SearchLocation, SearchOptions, SearchRecency} from '../../externs/ts/state.js';
+import {FakeEntry, FilesAppDirEntry, FilesAppEntry} from '../../externs/files_app_entry_interfaces.js';
+import {SearchLocation, SearchOptions, SearchRecency} from '../../externs/ts/state.js';
+import {VolumeInfo} from '../../externs/volume_info.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
-import {getDefaultSearchOptions} from '../../state/store.js';
+import {getDefaultSearchOptions, getStore} from '../../state/store.js';
 
 import {constants} from './constants.js';
 import {FileListModel} from './file_list_model.js';
@@ -240,103 +243,259 @@ export class LocalSearchContentScanner extends ContentScanner {
  */
 export class SearchV2ContentScanner extends ContentScanner {
   /**
-   * @param {!VolumeManagerCommon.RootType|null} rootType The root type of the
-   *    location in the directory tree, if known.
-   * @param {!DirectoryEntry} entry The current directory.
+   * @param {!VolumeManager} volumeManager Manager of volumes available to the
+   *     files app.
+   * @param {!DirectoryEntry|!FilesAppEntry} entry The entry representing the
+   *     selected location in the directory tree.
    * @param {!string} query The query of the search.
    * @param {SearchOptions=} options The options for the search.
    */
-  constructor(rootType, entry, query, options = undefined) {
+  constructor(volumeManager, entry, query, options = undefined) {
     super();
-    this.rootType_ = rootType;
+    this.volumeManager_ = volumeManager;
     this.entry_ = entry;
+    const locationInfo = this.volumeManager_.getLocationInfo(this.entry_);
+    this.rootType_ = locationInfo ? locationInfo.rootType : null;
     this.query_ = query.toLowerCase();
     this.options_ = options || getDefaultSearchOptions();
   }
 
   /**
-   * For the given options returns the category of files to which the search
-   * should be limited (e.g., images, videos, etc.).
+   * For the given `dirEntry` it returns a list of searchable roots. This
+   * method exists as we have special volumes that aggregate other volumes.
+   * Examples include Crostini, Playfiles, aggregated in My files or
+   * USB partitions aggregated by USB root. For those cases we return multiple
+   * search roots. For plain directories we just return the directory itself.
+   * @param {!FilesAppEntry|!DirectoryEntry} dirEntry
+   * @return {!Array<!DirectoryEntry>}
    */
-  getDesiredCategory_() {
-    switch (this.options_.type) {
-      case SearchFileType.AUDIO:
-        return chrome.fileManagerPrivate.FileCategory.AUDIO;
-      case SearchFileType.DOCUMENTS:
-        return chrome.fileManagerPrivate.FileCategory.DOCUMENT;
-      case SearchFileType.IMAGES:
-        return chrome.fileManagerPrivate.FileCategory.IMAGE;
-      case SearchFileType.VIDEOS:
-        return chrome.fileManagerPrivate.FileCategory.VIDEO;
-      default:
-        return chrome.fileManagerPrivate.FileCategory.ALL;
+  getSearchRoots_(dirEntry) {
+    const typeName = dirEntry.type_name;
+    if (typeName !== 'EntryList' && typeName !== 'VolumeEntry') {
+      return [dirEntry];
     }
-  }
-
-  isSearchingRoot_() {
-    if (this.options_.location === SearchLocation.EVERYWHERE ||
-        this.options_.location === SearchLocation.THIS_CHROMEBOOK) {
-      return true;
-    }
+    const allRoots = [dirEntry].concat(
+        /** @type {EntryList} */ (dirEntry).getUIChildren());
+    return allRoots.filter(entry => !util.isFakeEntry(entry))
+        .map(entry => entry.filesystem.root);
   }
 
   /**
-   * @returns Whether or not the local (MY_FILES) search should be performed.
+   * For the given entry attempts to return the top most volume that contains
+   * this entry. The reason for this method is that for some entries, getting
+   * the root volume is not sufficient. For example, for a Linux folder the root
+   * volume would be the Linux volume. However, in the UI Linux is nested inside
+   * My files, so we need to get My files as the top-most volume of a Linux
+   * directory.
+   * @return {!DirectoryEntry|!FilesAppEntry}
    * @private
    */
-  isSearchingLocal_() {
-    if (this.isSearchingRoot_()) {
-      return true;
+  getTopMostVolume_() {
+    const volumeInfo = this.volumeManager_.getVolumeInfo(this.entry_);
+    if (!volumeInfo) {
+      // It's a placeholder or a fake entry.
+      return this.entry_;
     }
-    if (this.options_.location === SearchLocation.THIS_FOLDER) {
-      return (this.rootType_ !== VolumeManagerCommon.RootType.DRIVE);
-    }
-    return false;
+    const entry = volumeInfo.prefixEntry ? volumeInfo.prefixEntry :
+                                           volumeInfo.displayRoot;
+    // Here entry should never be null, but due to Closure annotations, Closure
+    // thinks it may be (both prefixEntry and displayRoot above are not
+    // guaranteed to be non-null).
+    return entry ? this.getWrappedVolumeEntry_(entry) : this.entry_;
   }
 
   /**
-   * Computes the timestamp based on options. If the options ask for today's
-   * results, it uses the time in ms from midnight. For yesterday, it goes back
-   * by one day from midnight. For week, it goes back by 6 days from midnight.
-   * For a month, it goes back by 30 days since midnight, regardless of how
-   * many days are in the current month. For a year, it goes back by 365 days
-   * since midnight, regardless if the current year is a leap year or not.
+   * @param {!FilesAppEntry|!DirectoryEntry} entry
+   * @return {!DirectoryEntry|!FilesAppEntry}
    * @private
    */
-  getEarliestTimestamp_() {
-    const now = new Date();
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const midnightMs = midnight.getTime();
-    const dayMs = 24 * 60 * 60 * 1000;
-
-    switch (this.options_.recency) {
-      case SearchRecency.TODAY:
-        return midnightMs;
-      case SearchRecency.YESTERDAY:
-        return midnightMs - 1 * dayMs;
-      case SearchRecency.LAST_WEEK:
-        return midnightMs - 6 * dayMs;
-      case SearchRecency.LAST_MONTH:
-        return midnightMs - 30 * dayMs;
-      case SearchRecency.LAST_YEAR:
-        return midnightMs - 365 * dayMs;
-      default:
-        return 0;
+  getWrappedVolumeEntry_(entry) {
+    const state = getStore().getState();
+    // Fetch the wrapped VolumeEntry from the store.
+    const fileData = state.allEntries[entry.toURL()];
+    if (!fileData || !fileData.entry) {
+      console.warn(`Missing FileData for ${entry.toURL()}`);
+      return entry;
     }
+    return fileData.entry;
   }
 
   /**
-   * @returns Whether or not the Google Drive search should be performed.
+   * Creates a single promise that, when fulfilled, returns a non-null array of
+   * file entries. The array may be empty.
+   * @param {!chrome.fileManagerPrivate.SearchMetadataParams} params
+   * @return {!Promise<!Array<!Entry>>}
    * @private
    */
-  isSearchingDrive_() {
-    if (this.options_.location === SearchLocation.EVERYWHERE) {
-      return true;
+  makeFileSearchPromise_(params) {
+    return new Promise((resolve, reject) => {
+      metrics.startInterval('Search.Local.Latency');
+      chrome.fileManagerPrivate.searchFiles(
+          params,
+          /**
+           * @param {!Array<!Entry>} entries
+           */
+          (entries) => {
+            if (this.cancelled_) {
+              reject(createDOMError(util.FileError.ABORT_ERR));
+            } else if (chrome.runtime.lastError) {
+              reject(createDOMError(
+                  util.FileError.NOT_READABLE_ERR,
+                  chrome.runtime.lastError.message));
+            } else {
+              metrics.recordInterval('Search.Local.Latency');
+              resolve(entries);
+            }
+          });
+    });
+  }
+
+  /**
+   * For the given set of `folders` holding directory entries, creates an array
+   * of promises that, when fulfilled, return an array of entries in those
+   * directories.
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
+   * @param {!Array<!DirectoryEntry>} folders
+   * @return {!Array<!Promise<!Array<!Entry>>>}
+   * @private
+   */
+  makeFileSearchPromiseList_(modifiedTimestamp, category, maxResults, folders) {
+    /** @type {!chrome.fileManagerPrivate.SearchMetadataParams} */
+    const baseParams = {
+      query: this.query_,
+      types: chrome.fileManagerPrivate.SearchType.ALL,
+      maxResults: maxResults,
+      timestamp: modifiedTimestamp,
+      category: category,
+    };
+    return folders.map(
+        searchDir => this.makeFileSearchPromise_(
+            /** @type {!chrome.fileManagerPrivate.SearchMetadataParams} */ ({
+              ...baseParams,
+              rootDir: searchDir,
+            })));
+  }
+
+  /**
+   * Returns an array of promises that, when fulfilled, return an array of
+   * entries matching the current query, modified timestamp, and category for
+   * folders located under My files.
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
+   * @return {!Array<Promise<!Array<Entry>>>}
+   * @private
+   */
+  createMyFilesSearch_(modifiedTimestamp, category, maxResults) {
+    const myFilesVolume = this.volumeManager_.getCurrentProfileVolumeInfo(
+        VolumeManagerCommon.VolumeType.DOWNLOADS);
+    if (!myFilesVolume || !myFilesVolume.displayRoot) {
+      return [];
     }
-    if (this.options_.location === SearchLocation.THIS_FOLDER) {
-      return (this.rootType_ === VolumeManagerCommon.RootType.DRIVE);
+    const myFilesEntry = this.getWrappedVolumeEntry_(myFilesVolume.displayRoot);
+    return this.makeFileSearchPromiseList_(
+        modifiedTimestamp, category, maxResults,
+        this.getSearchRoots_(myFilesEntry));
+  }
+
+  /**
+   * Returns an array of promises that, when fulfilled, return an array of
+   * entries matching the current query, modified timestamp, and category for
+   * all known removable drives.
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
+   * @return {!Array<!Promise<!Array<Entry>>>}
+   * @private
+   */
+  createRemovablesSearch_(modifiedTimestamp, category, maxResults) {
+    const removableRootDirs = [];
+    const volumeInfoList = this.volumeManager_.volumeInfoList;
+    for (let index = 0; index < volumeInfoList.length; ++index) {
+      const volumeInfo = volumeInfoList.item(index);
+      if (volumeInfo.volumeType === VolumeManagerCommon.VolumeType.REMOVABLE) {
+        const displayRoot = volumeInfo.displayRoot;
+        if (displayRoot) {
+          removableRootDirs.push(...this.getSearchRoots_(displayRoot));
+        }
+      }
     }
-    return false;
+    return this.makeFileSearchPromiseList_(
+        modifiedTimestamp, category, maxResults, removableRootDirs);
+  }
+
+  /**
+   * Returns a promise that, when fulfilled, returns an array of file entries
+   * matching the current query, modified timestamp and category for files
+   * located on Drive.
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @return {Promise<!Array<Entry>>}
+   * @private
+   */
+  createDriveSearch_(modifiedTimestamp, category) {
+    return new Promise((resolve, reject) => {
+      metrics.startInterval('Search.Drive.Latency');
+      chrome.fileManagerPrivate.searchDrive(
+          {
+            query: this.query_,
+            category: category,
+            modifiedTimestamp: modifiedTimestamp,
+            nextFeed: '',
+          },
+          (entries, nextFeed) => {
+            if (chrome.runtime.lastError) {
+              reject(createDOMError(
+                  util.FileError.NOT_READABLE_ERR,
+                  chrome.runtime.lastError.message));
+            } else if (this.cancelled_) {
+              reject(createDOMError(util.FileError.ABORT_ERR));
+            } else if (!entries) {
+              reject(createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
+            } else {
+              metrics.recordInterval('Search.Drive.Latency');
+              resolve(entries);
+            }
+          });
+    });
+  }
+
+  /**
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
+   * @return {!Array<Promise<!Array<Entry>>>}
+   * @private
+   */
+  createDirectorySearch_(modifiedTimestamp, category, maxResults) {
+    if (this.rootType_ === VolumeManagerCommon.RootType.DRIVE) {
+      return [this.createDriveSearch_(modifiedTimestamp, category)];
+    }
+    if (this.options_.location == SearchLocation.THIS_FOLDER) {
+      return this.makeFileSearchPromiseList_(
+          modifiedTimestamp, category, maxResults,
+          this.getSearchRoots_(this.entry_));
+    }
+    return this.makeFileSearchPromiseList_(
+        modifiedTimestamp, category, maxResults,
+        this.getSearchRoots_(this.getTopMostVolume_()));
+  }
+
+  /**
+   * @param {number} modifiedTimestamp
+   * @param {chrome.fileManagerPrivate.FileCategory} category
+   * @param {number} maxResults
+   * @return {!Array<Promise<!Array<Entry>>>}
+   * @private
+   */
+  createEverywhereSearch_(modifiedTimestamp, category, maxResults) {
+    return [
+      ...this.createMyFilesSearch_(modifiedTimestamp, category, maxResults),
+      ...this.createRemovablesSearch_(modifiedTimestamp, category, maxResults),
+      this.createDriveSearch_(modifiedTimestamp, category),
+    ];
   }
 
   /**
@@ -346,75 +505,34 @@ export class SearchV2ContentScanner extends ContentScanner {
   async scan(
       entriesCallback, successCallback, errorCallback,
       invalidateCache = false) {
-    const searchPromises = [];
-    const category = this.getDesiredCategory_();
-    if (this.isSearchingLocal_()) {
-      searchPromises.push(new Promise((resolve, reject) => {
-        const rootDir =
-            this.isSearchingRoot_() ? this.entry_.filesystem.root : this.entry_;
-        const timestamp = this.getEarliestTimestamp_();
-        chrome.fileManagerPrivate.searchFiles(
-            {
-              rootDir: rootDir,
-              query: this.query_,
-              types: chrome.fileManagerPrivate.SearchType.ALL,
-              maxResults: 100,
-              timestamp: timestamp,
-              category: category,
-            },
-            /**
-             * @param {!Array<!Entry>} entries
-             */
-            (entries) => {
-              if (this.cancelled_) {
-                reject(createDOMError(util.FileError.ABORT_ERR));
-              } else if (chrome.runtime.lastError) {
-                reject(createDOMError(
-                    util.FileError.NOT_READABLE_ERR,
-                    chrome.runtime.lastError.message));
-              } else {
-                resolve(entries);
-              }
-            });
-      }));
-    }
-    if (this.isSearchingDrive_()) {
-      searchPromises.push(new Promise((resolve, reject) => {
-        chrome.fileManagerPrivate.searchDrive(
-            {
-              query: this.query_,
-              category: category,
-              nextFeed: '',
-            },
-            (entries, nextFeed) => {
-              if (chrome.runtime.lastError) {
-                reject(createDOMError(
-                    util.FileError.NOT_READABLE_ERR,
-                    chrome.runtime.lastError.message));
-              } else if (this.cancelled_) {
-                reject(createDOMError(util.FileError.ABORT_ERR));
-              } else if (!entries) {
-                reject(createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
-              } else {
-                resolve(entries);
-              }
-            });
-      }));
-    }
+    const category = this.options_.fileCategory;
+    const timestamp = getEarliestTimestamp(this.options_.recency, new Date());
+    const maxResults = 100;
+
+    const searchPromises =
+        this.options_.location === SearchLocation.EVERYWHERE ?
+        this.createEverywhereSearch_(timestamp, category, maxResults) :
+        this.createDirectorySearch_(timestamp, category, maxResults);
+
     if (!searchPromises) {
       console.warn(
           `No search promises for options ${JSON.stringify(this.options_)}`);
       successCallback();
     }
     Promise.allSettled(searchPromises).then((results) => {
+      let resultCount = 0;
       for (const result of results) {
         if (result.status === 'rejected') {
           errorCallback(/** @type {DOMError} */ (result.reason));
         } else if (result.status === 'fulfilled') {
-          entriesCallback(result.value);
+          if (result.value) {
+            entriesCallback(result.value);
+            resultCount += result.value.length;
+          }
         }
       }
       successCallback();
+      metrics.recordMediumCount('Search.ResultCount', resultCount);
     });
   }
 }
@@ -507,7 +625,7 @@ export class RecentContentScanner extends ContentScanner {
   async scan(
       entriesCallback, successCallback, errorCallback,
       invalidateCache = false) {
-    /** @type {function(!FileEntry): boolean} */
+    /** @type {function(!Entry): boolean} */
     const isMatchQuery = (entry) =>
         entry.name.toLowerCase().indexOf(this.query_) >= 0;
     /**
@@ -515,7 +633,7 @@ export class RecentContentScanner extends ContentScanner {
      * some volumes. Before returning the recent entries, we need to check if
      * the entry's volume location is valid or not (crbug.com/1333385/#c17).
      */
-    /** @type {function(!FileEntry): boolean} */
+    /** @type {function(!Entry): boolean} */
     const isAllowedVolume = (entry) =>
         this.volumeManager_.getVolumeInfo(entry) !== null;
     chrome.fileManagerPrivate.getRecentFiles(
@@ -529,7 +647,8 @@ export class RecentContentScanner extends ContentScanner {
           }
           if (entries.length > 0) {
             entriesCallback(entries.filter(
-                entry => isMatchQuery(entry) && isAllowedVolume(entry)));
+                entry =>
+                    isMatchQuery(assert(entry)) && isAllowedVolume(entry)));
           }
           successCallback();
         });
@@ -725,8 +844,8 @@ export class FileFilter extends EventTarget {
 
   /**
    * @param {string} name Filter identifier.
-   * @param {function(Entry)} callback A filter - a function receiving an Entry,
-   *     and returning bool.
+   * @param {function((Entry|FilesAppEntry))} callback A filter - a function
+   *     receiving an Entry, and returning bool.
    */
   addFilter(name, callback) {
     this.filters_[name] = callback;
@@ -827,7 +946,7 @@ export class FileFilter extends EventTarget {
   }
 
   /**
-   * @param {Entry} entry File entry.
+   * @param {Entry|FilesAppEntry} entry File entry.
    * @return {boolean} True if the file should be shown, false otherwise.
    */
   filter(entry) {

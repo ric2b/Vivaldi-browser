@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "ash/components/arc/test/arc_util_test_support.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
@@ -125,9 +124,6 @@ const char kManagedUser[] = "user@example.com";
 const char kManagedGaiaID[] = "33333";
 const char kManager[] = "admin@example.com";
 const char kManagedDomain[] = "example.com";
-const char kUserAllowlist[] = "*@ad-domain.com";
-const char kUserNotMatchingAllowlist[] = "user@another_mail.com";
-const char kPassword[] = "test_password";
 
 const char kPublicSessionUserEmail[] = "public_session_user@localhost";
 const char kPublicSessionSecondUserEmail[] =
@@ -155,33 +151,6 @@ void WaitForPermanentlyUntrustedStatusAndRun(base::OnceClosure callback) {
         break;
     }
   }
-}
-
-base::FilePath GetKerberosConfigPath() {
-  base::FilePath path;
-  EXPECT_TRUE(base::PathService::Get(base::DIR_HOME, &path));
-  return path.Append("kerberos").Append("krb5.conf");
-}
-
-base::FilePath GetKerberosCredentialsCachePath() {
-  base::FilePath path;
-  EXPECT_TRUE(base::PathService::Get(base::DIR_HOME, &path));
-  return path.Append("kerberos").Append("krb5cc");
-}
-
-void EnableArcForProfile(Profile* profile) {
-  arc::SetArcAvailableCommandLineForTesting(
-      base::CommandLine::ForCurrentProcess());
-  arc::ResetArcAllowedCheckForTesting(profile);
-  arc::SetArcPlayStoreEnabledForProfile(profile, true);
-
-  ArcAppListPrefsFactory::GetInstance()->RecreateServiceInstanceForTesting(
-      profile);
-  arc::ArcSessionManager::Get()->SetProfile(profile);
-}
-
-arc::data_snapshotd::ArcDataSnapshotdManager* arc_data_snapshotd_manager() {
-  return arc::data_snapshotd::ArcDataSnapshotdManager::Get();
 }
 
 class UserProfileLoadedObserver
@@ -246,7 +215,7 @@ class ExistingUserControllerTest : public policy::DevicePolicyCrosBrowserTest {
     EXPECT_CALL(*mock_login_display_host_, GetSigninUI())
         .Times(AnyNumber())
         .WillRepeatedly(Return(mock_signin_ui_.get()));
-    EXPECT_CALL(*mock_login_display_, Init(_, true)).Times(1);
+    EXPECT_CALL(*mock_login_display_, Init(_)).Times(1);
   }
 
   void SetUpOnMainThread() override {
@@ -412,12 +381,6 @@ class ExistingUserControllerPublicSessionTest
   void SetUpOnMainThread() override {
     ExistingUserControllerTest::SetUpOnMainThread();
 
-    // By default ArcDataSnapshotdManager does not influence an auto login
-    // flow.
-    EXPECT_TRUE(arc_data_snapshotd_manager());
-    EXPECT_TRUE(arc_data_snapshotd_manager()->IsAutoLoginAllowed());
-    EXPECT_FALSE(arc_data_snapshotd_manager()->IsAutoLoginConfigured());
-
     // Wait for the public session user to be created.
     if (!user_manager::UserManager::Get()->IsKnownUser(
             public_session_account_id_)) {
@@ -482,7 +445,7 @@ class ExistingUserControllerPublicSessionTest
     EXPECT_CALL(*mock_login_display_host_, GetSigninUI())
         .Times(AnyNumber())
         .WillRepeatedly(Return(mock_signin_ui_.get()));
-    EXPECT_CALL(*mock_login_display_, Init(_, _)).Times(AnyNumber());
+    EXPECT_CALL(*mock_login_display_, Init(_)).Times(AnyNumber());
   }
 
   void TearDownOnMainThread() override {
@@ -778,54 +741,6 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerPublicSessionTest,
   FireAutoLogin();
 }
 
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerPublicSessionTest,
-                       ArcDataSnapshotdAutoLogin) {
-  arc_data_snapshotd_manager()->set_state_for_testing(
-      arc::data_snapshotd::ArcDataSnapshotdManager::State::kBlockedUi);
-  EXPECT_FALSE(arc_data_snapshotd_manager()->IsAutoLoginAllowed());
-  EXPECT_TRUE(arc_data_snapshotd_manager()->IsAutoLoginConfigured());
-
-  ConfigureAutoLogin();
-
-  // Do not start an auto-login public account session when in blocked UI mode.
-  EXPECT_TRUE(auto_login_account_id().is_valid());
-  EXPECT_EQ(public_session_account_id_, auto_login_account_id());
-  EXPECT_EQ(0, auto_login_delay());
-  EXPECT_FALSE(auto_login_timer());
-  auto& reset_autologin_callback =
-      arc_data_snapshotd_manager()->get_reset_autologin_callback_for_testing();
-  EXPECT_FALSE(reset_autologin_callback.is_null());
-
-  // Allow to launch public account session (MGS).
-  arc_data_snapshotd_manager()->set_state_for_testing(
-      arc::data_snapshotd::ArcDataSnapshotdManager::State::kMgsToLaunch);
-  EXPECT_TRUE(arc_data_snapshotd_manager()->IsAutoLoginAllowed());
-  EXPECT_TRUE(arc_data_snapshotd_manager()->IsAutoLoginConfigured());
-
-  // Set up mocks to check login success.
-  UserContext user_context(user_manager::USER_TYPE_PUBLIC_ACCOUNT,
-                           public_session_account_id_);
-  user_context.SetUserIDHash(user_context.GetAccountId().GetUserEmail());
-  ExpectSuccessfulLogin(user_context);
-
-  std::move(reset_autologin_callback).Run();
-
-  // Start auto-login and wait for login tasks to complete.
-  content::RunAllPendingInMessageLoop();
-
-  // Setup profile before changing the state.
-  EXPECT_TRUE(user_manager::UserManager::Get()->IsLoggedInAsPublicAccount());
-  EnableArcForProfile(ProfileManager::GetActiveUserProfile());
-
-  arc_data_snapshotd_manager()->OnSnapshotSessionStarted();
-
-  EXPECT_TRUE(auto_login_account_id().is_valid());
-  EXPECT_EQ(0, auto_login_delay());
-  EXPECT_TRUE(auto_login_timer());
-  EXPECT_EQ(arc::data_snapshotd::ArcDataSnapshotdManager::State::kMgsLaunched,
-            arc_data_snapshotd_manager()->state());
-}
-
 class ExistingUserControllerSecondPublicSessionTest
     : public ExistingUserControllerPublicSessionTest {
  public:
@@ -858,308 +773,6 @@ class ExistingUserControllerSecondPublicSessionTest
         kPublicSessionSecondUserEmail, device_local_account_policy.GetBlob());
   }
 };
-// Test that if two public session accounts are configured for the device, auto
-// login is not happening.
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerSecondPublicSessionTest,
-                       ArcDataSnapshotdTwoAccounts) {
-  // Allow to launch public account session (MGS).
-  arc_data_snapshotd_manager()->set_state_for_testing(
-      arc::data_snapshotd::ArcDataSnapshotdManager::State::kMgsToLaunch);
-  EXPECT_TRUE(arc_data_snapshotd_manager()->IsAutoLoginAllowed());
-  EXPECT_TRUE(arc_data_snapshotd_manager()->IsAutoLoginConfigured());
-
-  ConfigureAutoLogin();
-
-  // Do not configure auto login if more than one public session is configured.
-  EXPECT_FALSE(auto_login_account_id().is_valid());
-  EXPECT_EQ(0, auto_login_delay());
-  EXPECT_FALSE(auto_login_timer());
-}
-
-class ExistingUserControllerActiveDirectoryTest
-    : public ExistingUserControllerTest {
- public:
-  ExistingUserControllerActiveDirectoryTest() {
-    // All tests related to Active Directory login don't make sense when the
-    // kChromadAvailable feature is disabled. We also don't need to verify that
-    // the device is disabled in that case, because the Chromad disabling
-    // feature is already tested in `device_disabling_manager_unittest.cc`.
-    scoped_feature_list_.InitAndEnableFeature(features::kChromadAvailable);
-  }
-
-  // Overriden from ExistingUserControllerTest:
-  void SetUp() override {
-    device_state_.SetState(
-        DeviceStateMixin::State::OOBE_COMPLETED_ACTIVE_DIRECTORY_ENROLLED);
-    ExistingUserControllerTest::SetUp();
-  }
-
-  void SetUpInProcessBrowserTestFixture() override {
-    ExistingUserControllerTest::SetUpInProcessBrowserTestFixture();
-
-    // This is called before ChromeBrowserMain initializes the fake dbus
-    // clients, and DisableOperationDelayForTesting() needs to be called before
-    // other ChromeBrowserMain initialization occurs.
-    AuthPolicyClient::InitializeFake();
-    FakeAuthPolicyClient::Get()->DisableOperationDelayForTesting();
-    // Required for tpm_util. Will be destroyed in browser shutdown.
-    UserDataAuthClient::InitializeFake();
-
-    RefreshDevicePolicy();
-    policy_provider_.SetDefaultReturns(
-        /*is_initialization_complete_return=*/true,
-        /*is_first_policy_load_complete_return=*/true);
-    policy::BrowserPolicyConnector::SetPolicyProviderForTesting(
-        &policy_provider_);
-  }
-
-  void TearDownOnMainThread() override {
-    base::RunLoop().RunUntilIdle();
-    ExistingUserControllerTest::TearDownOnMainThread();
-  }
-
- protected:
-  // Needs to be a member because this class is a friend of
-  // AuthPolicyCredentialsManagerFactory to access GetServiceForBrowserContext.
-  KerberosFilesHandler* GetKerberosFilesHandler() {
-    auto* authpolicy_credentials_manager =
-        static_cast<AuthPolicyCredentialsManager*>(
-            AuthPolicyCredentialsManagerFactory::GetInstance()
-                ->GetServiceForBrowserContext(
-                    ProfileManager::GetLastUsedProfile(), false /* create */));
-    EXPECT_TRUE(authpolicy_credentials_manager);
-    return authpolicy_credentials_manager->GetKerberosFilesHandlerForTesting();
-  }
-
-  void LoginAdOnline() {
-    ExpectLoginSuccess();
-    UserContext user_context(user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-                             ad_account_id_);
-    user_context.SetKey(Key(kPassword));
-    user_context.SetUserIDHash(ad_account_id_.GetUserEmail());
-    user_context.SetAuthFlow(UserContext::AUTH_FLOW_ACTIVE_DIRECTORY);
-    ASSERT_EQ(user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-              user_context.GetUserType());
-    UserProfileLoadedObserver profile_loaded_observer;
-    existing_user_controller()->CompleteLogin(user_context);
-
-    profile_loaded_observer.Wait();
-
-    // This only works if no RunLoop::Run() call is made after the Kerberos file
-    // writer task has been posted. Ideally, SetFilesChangedForTesting() should
-    // be called before the task is posted, but we don't have a profile yet at
-    // that point, so we can't get the files handler.
-    base::RunLoop run_loop;
-    GetKerberosFilesHandler()->SetFilesChangedForTesting(
-        run_loop.QuitClosure());
-    run_loop.Run();
-    CheckKerberosFiles(true /* enable_dns_cname_lookup */);
-  }
-
-  void UpdateProviderPolicy(const policy::PolicyMap& policy) {
-    policy_provider_.UpdateChromePolicy(policy);
-  }
-
-  void ExpectLoginFailure() {
-    EXPECT_CALL(*mock_login_display_, SetUIEnabled(false)).Times(2);
-    EXPECT_CALL(
-        *mock_signin_ui_,
-        ShowSigninError(SigninError::kGoogleAccountNotAllowed,
-                        "Google accounts are not allowed on this device"))
-        .Times(1);
-    EXPECT_CALL(*mock_login_display_, SetUIEnabled(true)).Times(1);
-  }
-
-  void ExpectLoginAllowlistFailure() {
-    EXPECT_CALL(*mock_login_display_, SetUIEnabled(false)).Times(2);
-    EXPECT_CALL(*mock_login_display_host_, ShowAllowlistCheckFailedError())
-        .Times(1);
-    EXPECT_CALL(*mock_login_display_, SetUIEnabled(true)).Times(1);
-  }
-
-  void ExpectLoginSuccess() {
-    EXPECT_CALL(*mock_login_display_, SetUIEnabled(false)).Times(2);
-    EXPECT_CALL(*mock_login_display_, SetUIEnabled(true)).Times(1);
-  }
-
-  std::string GetExpectedKerberosConfig(bool enable_dns_cname_lookup) {
-    std::string config(base::StringPrintf(
-        kKrb5CnameSettings, enable_dns_cname_lookup ? "true" : "false"));
-    config += FakeAuthPolicyClient::Get()->user_kerberos_conf();
-    return config;
-  }
-
-  void CheckKerberosFiles(bool enable_dns_cname_lookup) {
-    base::ScopedAllowBlockingForTesting allow_io;
-    std::string file_contents;
-    EXPECT_TRUE(
-        base::ReadFileToString(GetKerberosConfigPath(), &file_contents));
-    EXPECT_EQ(GetExpectedKerberosConfig(enable_dns_cname_lookup),
-              file_contents);
-
-    EXPECT_TRUE(base::ReadFileToString(GetKerberosCredentialsCachePath(),
-                                       &file_contents));
-    EXPECT_EQ(file_contents,
-              FakeAuthPolicyClient::Get()->user_kerberos_creds());
-  }
-
-  // Applies policy and waits until both config and credentials files changed.
-  void ApplyPolicyAndWaitFilesChanged(bool enable_dns_cname_lookup) {
-    policy::PolicyMap policies;
-    policies.Set(policy::key::kDisableAuthNegotiateCnameLookup,
-                 policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                 policy::POLICY_SOURCE_CLOUD,
-                 base::Value(!enable_dns_cname_lookup), nullptr);
-    base::RunLoop run_loop;
-    GetKerberosFilesHandler()->SetFilesChangedForTesting(
-        run_loop.QuitClosure());
-    UpdateProviderPolicy(policies);
-    run_loop.Run();
-  }
-
- private:
-  testing::NiceMock<policy::MockConfigurationPolicyProvider> policy_provider_;
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-class ExistingUserControllerActiveDirectoryTestCreateProfileDir
-    : public ExistingUserControllerActiveDirectoryTest {
- public:
-  ExistingUserControllerActiveDirectoryTestCreateProfileDir() {
-    cryptohome_mixin_.MarkUserAsExisting(ad_account_id_);
-  }
-
- private:
-  CryptohomeMixin cryptohome_mixin_{&mixin_host_};
-};
-
-class ExistingUserControllerActiveDirectoryUserAllowlistTest
-    : public ExistingUserControllerActiveDirectoryTest {
- public:
-  ExistingUserControllerActiveDirectoryUserAllowlistTest() = default;
-
-  void SetUpInProcessBrowserTestFixture() override {
-    ExistingUserControllerActiveDirectoryTest::
-        SetUpInProcessBrowserTestFixture();
-    em::ChromeDeviceSettingsProto device_policy;
-    device_policy.mutable_user_allowlist()->add_user_allowlist()->assign(
-        kUserAllowlist);
-    device_policy.mutable_allow_new_users()->set_allow_new_users(false);
-    FakeAuthPolicyClient::Get()->set_device_policy(device_policy);
-  }
-
-  void SetUpLoginDisplay() override {
-    EXPECT_CALL(*mock_login_display_host_, GetLoginDisplay())
-        .Times(AnyNumber())
-        .WillRepeatedly(Return(mock_login_display_.get()));
-    EXPECT_CALL(*mock_login_display_host_, GetSigninUI())
-        .Times(AnyNumber())
-        .WillRepeatedly(Return(mock_signin_ui_.get()));
-    EXPECT_CALL(*mock_login_display_, Init(_, true)).Times(1);
-  }
-};
-
-// Tests that Active Directory online login succeeds on the Active Directory
-// managed device.
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerActiveDirectoryTest,
-                       ActiveDirectoryOnlineLogin_Success) {
-  LoginAdOnline();
-}
-
-// Tests if DisabledAuthNegotiateCnameLookup changes trigger updating user
-// Kerberos files.
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerActiveDirectoryTest,
-                       PolicyChangeTriggersFileUpdate) {
-  LoginAdOnline();
-
-  ApplyPolicyAndWaitFilesChanged(false /* enable_dns_cname_lookup */);
-  CheckKerberosFiles(false /* enable_dns_cname_lookup */);
-
-  ApplyPolicyAndWaitFilesChanged(true /* enable_dns_cname_lookup */);
-  CheckKerberosFiles(true /* enable_dns_cname_lookup */);
-}
-
-// Tests if user Kerberos files changed D-Bus signal triggers updating user
-// Kerberos files.
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerActiveDirectoryTest,
-                       UserKerberosFilesChangedSignalTriggersFileUpdate) {
-  LoginAdOnline();
-
-  // Set authpolicyd's copy of the Kerberos files and wait until Chrome's copy
-  // has updated.
-  base::RunLoop run_loop;
-  GetKerberosFilesHandler()->SetFilesChangedForTesting(run_loop.QuitClosure());
-  FakeAuthPolicyClient::Get()->SetUserKerberosFiles("new_kerberos_creds",
-                                                    "new_kerberos_config");
-  run_loop.Run();
-  CheckKerberosFiles(true /* enable_dns_cname_lookup */);
-}
-
-// Tests that Active Directory offline login succeeds on the Active Directory
-// managed device.
-IN_PROC_BROWSER_TEST_F(
-    ExistingUserControllerActiveDirectoryTestCreateProfileDir,
-    ActiveDirectoryOfflineLogin_Success) {
-  ExpectLoginSuccess();
-  UserContext user_context(user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-                           ad_account_id_);
-  user_context.SetKey(Key(kPassword));
-  user_context.SetUserIDHash(ad_account_id_.GetUserEmail());
-  ASSERT_EQ(user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-            user_context.GetUserType());
-
-  UserProfileLoadedObserver profile_loaded_observer;
-  existing_user_controller()->Login(user_context, SigninSpecifics());
-  profile_loaded_observer.Wait();
-
-  // Note: Can't call SetFilesChangedForTesting() earlier, see LoginAdOnline().
-  base::RunLoop run_loop;
-  GetKerberosFilesHandler()->SetFilesChangedForTesting(run_loop.QuitClosure());
-  run_loop.Run();
-  CheckKerberosFiles(true /* enable_dns_cname_lookup */);
-}
-
-// Tests that Gaia login fails on the Active Directory managed device.
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerActiveDirectoryTest,
-                       GAIAAccountLogin_Failure) {
-  ExpectLoginFailure();
-  UserContext user_context(
-      LoginManagerMixin::CreateDefaultUserContext(new_user_));
-  existing_user_controller()->CompleteLogin(user_context);
-}
-
-// Tests that authentication succeeds if user email matches allowlist.
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerActiveDirectoryUserAllowlistTest,
-                       Success) {
-  ExpectLoginSuccess();
-  UserContext user_context(user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-                           ad_account_id_);
-  user_context.SetKey(Key(kPassword));
-  user_context.SetUserIDHash(ad_account_id_.GetUserEmail());
-  user_context.SetAuthFlow(UserContext::AUTH_FLOW_ACTIVE_DIRECTORY);
-  ASSERT_EQ(user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-            user_context.GetUserType());
-  UserProfileLoadedObserver profile_loaded_observer;
-  existing_user_controller()->CompleteLogin(user_context);
-
-  profile_loaded_observer.Wait();
-}
-
-// Tests that authentication fails if user email does not match allowlist.
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerActiveDirectoryUserAllowlistTest,
-                       Fail) {
-  ExpectLoginAllowlistFailure();
-  AccountId account_id =
-      AccountId::AdFromUserEmailObjGuid(kUserNotMatchingAllowlist, kObjectGuid);
-  UserContext user_context(user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-                           account_id);
-  user_context.SetKey(Key(kPassword));
-  user_context.SetUserIDHash(account_id.GetUserEmail());
-  user_context.SetAuthFlow(UserContext::AUTH_FLOW_ACTIVE_DIRECTORY);
-  ASSERT_EQ(user_manager::UserType::USER_TYPE_ACTIVE_DIRECTORY,
-            user_context.GetUserType());
-  existing_user_controller()->CompleteLogin(user_context);
-}
 
 class ExistingUserControllerSavePasswordHashTest
     : public ExistingUserControllerTest {
@@ -1449,12 +1062,6 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerProfileTest, NotManagedUserLogin) {
   // Verify that no managed warning is shown for an unmanaged user.
   EXPECT_FALSE(LoginScreenTestApi::IsManagedMessageInDialogShown(
       not_managed_user_.account_id));
-
-  // Verify that the owner user gets saved into local state.
-  absl::optional<std::string> owner =
-      user_manager::UserManager::Get()->GetOwnerEmail();
-  ASSERT_TRUE(owner.has_value());
-  EXPECT_EQ(owner.value(), not_managed_user_.account_id.GetUserEmail());
 }
 
 }  // namespace ash

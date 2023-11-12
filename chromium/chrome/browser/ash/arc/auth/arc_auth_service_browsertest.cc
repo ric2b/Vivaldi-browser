@@ -23,10 +23,10 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
-#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_command_line.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability_factory.h"
 #include "chrome/browser/ash/app_list/arc/arc_data_removal_dialog.h"
@@ -69,7 +69,7 @@
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/test/browser_test.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -257,8 +257,10 @@ class AccountAppsAvailabilitySetter {
     return false;
   }
 
-  ash::AccountAppsAvailability* const account_apps_availability_;
-  account_manager::AccountManagerFacade* const account_manager_facade_;
+  const raw_ptr<ash::AccountAppsAvailability, ExperimentalAsh>
+      account_apps_availability_;
+  const raw_ptr<account_manager::AccountManagerFacade, ExperimentalAsh>
+      account_manager_facade_;
 };
 
 class ArcAuthServiceTest : public InProcessBrowserTest,
@@ -376,7 +378,6 @@ class ArcAuthServiceTest : public InProcessBrowserTest,
     }
 
     GetFakeUserManager()->LoginUser(account_id);
-    GetFakeUserManager()->CreateLocalState();
 
     // Create test profile.
     TestingProfile::Builder profile_builder;
@@ -577,8 +578,8 @@ class ArcAuthServiceTest : public InProcessBrowserTest,
   base::test::ScopedFeatureList feature_list_;
 
   // Not owned.
-  ArcAuthService* auth_service_ = nullptr;
-  ArcBridgeService* arc_bridge_service_ = nullptr;
+  raw_ptr<ArcAuthService, ExperimentalAsh> auth_service_ = nullptr;
+  raw_ptr<ArcBridgeService, ExperimentalAsh> arc_bridge_service_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForGaiaAccounts) {
@@ -618,7 +619,6 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForPublicAccounts) {
 // Tests that when ARC requests account info for a non-managed account,
 // Chrome supplies the info configured in SetAccountAndProfile() method.
 IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundFetch) {
-  base::HistogramTester histogram_tester;
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
                                          GetFakeAuthTokenResponse());
@@ -627,9 +627,6 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundFetch) {
   auth_instance().RequestPrimaryAccountInfo(run_loop.QuitClosure());
   run_loop.Run();
 
-  histogram_tester.ExpectUniqueSample(
-      "Arc.Auth.CodeFetcher.ProxyBypass.Unmanaged", /*proxy_bypass=*/false,
-      /*count=*/1);
   ASSERT_TRUE(auth_instance().account_info());
   EXPECT_EQ(kFakeUserName,
             auth_instance().account_info()->account_name.value());
@@ -644,7 +641,6 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundFetch) {
 // which fetches the auth code to be used for Google Play Store sign-in if the
 // request has failed because of a unreachable mandatory PAC script.
 IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundProxyBypass) {
-  base::HistogramTester histogram_tester;
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   int requests_count = 0;
   test_url_loader_factory()->SetInterceptor(base::BindLambdaForTesting(
@@ -676,9 +672,6 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundProxyBypass) {
   // because the mandatory PAC script is unreachable and the second request
   // which bypassed the proxy and succeeded.
   EXPECT_EQ(2, requests_count);
-  histogram_tester.ExpectUniqueSample(
-      "Arc.Auth.CodeFetcher.ProxyBypass.Unmanaged", /*proxy_bypass*/ true,
-      /*count*/ 1);
 
   ASSERT_TRUE(auth_instance().account_info());
   EXPECT_EQ(kFakeUserName,

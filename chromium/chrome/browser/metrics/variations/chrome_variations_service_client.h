@@ -32,10 +32,11 @@ class ChromeVariationsServiceClient
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   network_time::NetworkTimeTracker* GetNetworkTimeTracker() override;
   bool OverridesRestrictParameter(std::string* parameter) override;
-  variations::Study::FormFactor GetCurrentFormFactor() override;
   bool IsEnterprise() override;
   std::unique_ptr<variations::SeedResponse>
   TakeSeedFromNativeVariationsSeedStore() override;
+  void RemoveGoogleGroupsFromPrefsForDeletedProfiles(
+      PrefService* local_state) override;
 
  private:
   // variations::VariationsServiceClient:

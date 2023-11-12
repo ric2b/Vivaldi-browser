@@ -19,12 +19,11 @@ BOOL IsPasswordCreationUserEnabled() {
       boolValue];
 }
 
-BOOL IsPasswordManagerBrandingUpdateEnable() {
+BOOL IsPasswordNotesWithBackupEnabled() {
   NSDictionary* allFeatures = [app_group::GetGroupUserDefaults()
       objectForKey:app_group::kChromeExtensionFieldTrialPreference];
-  NSDictionary* featureData =
-      allFeatures[@"IOSEnablePasswordManagerBrandingUpdate"];
-  if (!featureData || kPasswordManagerBrandingUpdateFeatureVersion !=
+  NSDictionary* featureData = allFeatures[@"PasswordNotesWithBackup"];
+  if (!featureData || kCredentialProviderExtensionPasswordNotesVersion !=
                           [featureData[kFieldTrialVersionKey] intValue]) {
     return NO;
   }

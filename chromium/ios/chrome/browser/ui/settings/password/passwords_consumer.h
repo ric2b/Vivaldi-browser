@@ -35,6 +35,8 @@ typedef NS_ENUM(NSInteger, PasswordCheckUIState) {
   PasswordCheckStateDisabled,
   // When password check failed due to network issues, quota limit or others.
   PasswordCheckStateError,
+  // When password check failed due to user being signed out.
+  PasswordCheckStateSignedOut,
 };
 
 // Consumer for the Passwords Screen.
@@ -50,6 +52,9 @@ typedef NS_ENUM(NSInteger, PasswordCheckUIState) {
         blockedSites:
             (std::vector<password_manager::CredentialUIEntry>)blockedSites;
 
+// Updates whether passwords are being saved to an account or only locally.
+- (void)setSavingPasswordsToAccount:(BOOL)savingPasswordsToAccount;
+
 // Displays affiliated groups for the Password Manager.
 // This method relates to the -setPasswords method above. This will eventually
 // replace it when the feature is done.
@@ -59,12 +64,6 @@ typedef NS_ENUM(NSInteger, PasswordCheckUIState) {
                blockedSites:
                    (const std::vector<password_manager::CredentialUIEntry>&)
                        blockedSites;
-
-// Updates "On/Off" state for Passwords In Other Apps item.
-- (void)updatePasswordsInOtherAppsDetailedText;
-
-// Updates "on-device encryption" related UI.
-- (void)updateOnDeviceEncryptionSessionAndUpdateTableView;
 
 @end
 

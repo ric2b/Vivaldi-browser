@@ -75,7 +75,7 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
         gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
         shutdown_event_(shutdown_event),
         resource_size_(in_use_resource.size()),
-        resource_format_(in_use_resource.format()),
+        format_(in_use_resource.format()),
         resource_color_space_(in_use_resource.color_space()),
         gpu_memory_buffer_(std::move(backing_->gpu_memory_buffer)) {}
   ZeroCopyRasterBufferImpl(const ZeroCopyRasterBufferImpl&) = delete;
@@ -103,7 +103,7 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
       backing_->mailbox = sii->CreateSharedImage(
           gpu_memory_buffer_.get(), gpu_memory_buffer_manager_,
           resource_color_space_, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-          usage);
+          usage, "ZeroCopyRasterTile");
     } else {
       sii->UpdateSharedImage(backing_->returned_sync_token, backing_->mailbox);
     }
@@ -126,8 +126,8 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
 
     if (!gpu_memory_buffer_) {
       gpu_memory_buffer_ = gpu_memory_buffer_manager_->CreateGpuMemoryBuffer(
-          resource_size_, viz::BufferFormat(resource_format_), kBufferUsage,
-          gpu::kNullSurfaceHandle, shutdown_event_);
+          resource_size_, viz::BufferFormat(format_.resource_format()),
+          kBufferUsage, gpu::kNullSurfaceHandle, shutdown_event_);
       // Note that GpuMemoryBuffer allocation can fail.
       // https://crbug.com/554541
       if (!gpu_memory_buffer_)
@@ -144,7 +144,7 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
 
     // TODO(danakj): Implement partial raster with raster_dirty_rect.
     RasterBufferProvider::PlaybackToMemory(
-        gpu_memory_buffer_->memory(0), resource_format_, resource_size_,
+        gpu_memory_buffer_->memory(0), format_, resource_size_,
         gpu_memory_buffer_->stride(0), raster_source, raster_full_rect,
         raster_full_rect, transform, resource_color_space_,
         /*gpu_compositing=*/true, playback_settings);
@@ -161,7 +161,7 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
   raw_ptr<gpu::GpuMemoryBufferManager> gpu_memory_buffer_manager_;
   raw_ptr<base::WaitableEvent> shutdown_event_;
   gfx::Size resource_size_;
-  viz::ResourceFormat resource_format_;
+  viz::SharedImageFormat format_;
   gfx::ColorSpace resource_color_space_;
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
 };
@@ -171,7 +171,7 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
 ZeroCopyRasterBufferProvider::ZeroCopyRasterBufferProvider(
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     viz::ContextProvider* compositor_context_provider,
-    viz::ResourceFormat tile_format)
+    viz::SharedImageFormat tile_format)
     : gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       compositor_context_provider_(compositor_context_provider),
       tile_format_(tile_format) {}
@@ -191,7 +191,7 @@ ZeroCopyRasterBufferProvider::AcquireBufferForRaster(
     const gpu::Capabilities& caps =
         compositor_context_provider_->ContextCapabilities();
     backing->texture_target = gpu::GetBufferTextureTarget(
-        kBufferUsage, BufferFormat(resource.format()), caps);
+        kBufferUsage, BufferFormat(resource.format().resource_format()), caps);
     backing->overlay_candidate = true;
     // This RasterBufferProvider will modify the resource outside of the
     // GL command stream. So resources should not become available for reuse
@@ -211,7 +211,7 @@ ZeroCopyRasterBufferProvider::AcquireBufferForRaster(
 
 void ZeroCopyRasterBufferProvider::Flush() {}
 
-viz::ResourceFormat ZeroCopyRasterBufferProvider::GetResourceFormat() const {
+viz::SharedImageFormat ZeroCopyRasterBufferProvider::GetFormat() const {
   return tile_format_;
 }
 

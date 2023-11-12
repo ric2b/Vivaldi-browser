@@ -7,11 +7,14 @@ package org.chromium.chrome.browser.ui.favicon;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.Bitmap.Config;
+import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.graphics.drawable.RoundedBitmapDrawable;
 
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
@@ -65,6 +68,26 @@ public class FaviconUtils {
             Resources resources, Bitmap icon) {
         return ViewUtils.createRoundedBitmapDrawable(resources, icon,
                 resources.getDimensionPixelSize(R.dimen.default_favicon_corner_radius));
+    }
+
+    /**
+     * Create a bitmap with corresponding size of a generic favicon.
+     * @param context {@link Context} to read the generic favicon.
+     * @param size Desired size of the bitmap.
+     * @param backgroundColor Optional background color for the favicon.
+     * @return A generic globe favicon.
+     */
+    public static Bitmap createGenericFaviconBitmap(
+            Context context, int size, @Nullable @ColorInt Integer backgroundColor) {
+        Bitmap bitmap = Bitmap.createBitmap(size, size, Config.ARGB_8888);
+        Drawable drawable = AppCompatResources.getDrawable(context, R.drawable.ic_globe_48dp);
+        drawable.setBounds(0, 0, size, size);
+        Canvas canvas = new Canvas(bitmap);
+        if (backgroundColor != null) {
+            canvas.drawColor(backgroundColor);
+        }
+        drawable.draw(canvas);
+        return bitmap;
     }
 
     /**

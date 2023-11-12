@@ -13,7 +13,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelFilterFactory;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate;
-import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider;
+import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegateProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 
 import javax.inject.Inject;
@@ -50,10 +50,9 @@ public class ChromeTabModelFilterFactory implements TabModelFilterFactory {
         // runtime we always need to instantiate a |TabGroupModelFilter| and an
         // |EmptyTabModelFilter| for the appropriate provider.
         if (sInitTabGroupModelFilter) {
-            TabManagementDelegate tabManagementDelegate = TabManagementModuleProvider.getDelegate();
-            if (tabManagementDelegate != null) {
-                return tabManagementDelegate.createTabGroupModelFilter(model);
-            }
+            TabManagementDelegate tabManagementDelegate =
+                    TabManagementDelegateProvider.getDelegate();
+            return tabManagementDelegate.createTabGroupModelFilter(model);
         }
         return new EmptyTabModelFilter(model);
     }

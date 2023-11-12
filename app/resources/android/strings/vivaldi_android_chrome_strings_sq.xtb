@@ -8,17 +8,20 @@
 <translation id="17513872634828108">Skedat e hapura</translation>
 <translation id="1829244130665387512">Gjej te faqja</translation>
 <translation id="1910514478706885609">Hap në grupin e ri të skedave</translation>
+<translation id="1925021887439448749">Shkruani adresën e personalizuar të internetit</translation>
 <translation id="2038563949887743358">Aktivizoj opsionin për uebsajtet për kompjuter</translation>
 <translation id="2139186145475833000">Shtoj te faqja bazë e sistemit</translation>
+<translation id="2149973817440762519">Përpunoj faqen interesante</translation>
 <translation id="2306442503286132111">Regjistroi faqen interesante në dosjen <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Paraqitja</translation>
 <translation id="2501278716633472235">Kthehem</translation>
 <translation id="2633278372998075009">Skedat private</translation>
+<translation id="2951071800649516099">Shtoni faqe në listën e leximeve për më vonë</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> faqe interesante}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> faqe interesante}}</translation>
 <translation id="3076631378407175873">Kopirajti <ph name="YEAR" /> Vivaldi Technologies AS. Gjithë të drejtat janë rezervuar.</translation>
-<translation id="3234355010754616171">Skedë të re private</translation>
+<translation id="3234355010754616171">Skedë private të re</translation>
 <translation id="3377025655491224618">Skedë private</translation>
 <translation id="3504699618187058974">Grupoj skedat</translation>
 <translation id="3518985090088779359">Pranoj dhe vazhdoj</translation>
@@ -30,12 +33,15 @@
 <translation id="4121750346708795461">Duke përdorur aplikacionin po miratoni edhe <ph name="BEGIN_LINK1" />Marrëveshjen e licensimit për klientët<ph name="END_LINK1" /> dhe <ph name="BEGIN_LINK2" />Politikën e privatësisë<ph name="END_LINK2" /> të Vivaldit.</translation>
 <translation id="4137746084635924146">Gjuha e aparatit aktual</translation>
 <translation id="4167670741834902166">Skedë private të re</translation>
+<translation id="4195643157523330669">Hap në skedë të re</translation>
 <translation id="4243710787042215766">Hap në skedën private</translation>
+<translation id="451872707440238414">Kërkoni te faqet interesante</translation>
 <translation id="4526803704855831732">Skedat private</translation>
 <translation id="4719086422742491124">Zbuloni temat që trajtojnë uebsajtet pa e mbyllur faqen. Kërkoni një a më shumë fjalë në to duke i zgjedhur.
 
 Kërkimi me Prekje funksionon vetëm po të caktoni Google si motorin standard të kërkimit brenda Vivaldit.</translation>
 <translation id="4759238208242260848">Shkarkimet</translation>
+<translation id="4850886885716139402">Shoh</translation>
 <translation id="4883379392681899581">Dal nga këndi privat</translation>
 <translation id="4943872375798546930">Pa rezultat</translation>
 <translation id="49576331685473090">Bllokuesi i materialeve</translation>
@@ -48,7 +54,9 @@ Kërkimi me Prekje funksionon vetëm po të caktoni Google si motorin standard t
 Termi i kërkuar mund të ndryshohet duke u mbajtur shtypur. Për ta përpunuar kërkimin, rrëshqiteni panelin lart dhe shtypni kutinë e kërkimit.</translation>
 <translation id="572328651809341494">Skedat e fundit</translation>
 <translation id="6150320133806434356">Regjistroi faqen interesante</translation>
-<translation id="6336451774241870485">Skedë të re private</translation>
+<translation id="6301525844455696527">Konsultoni listën e leximeve</translation>
+<translation id="6336451774241870485">Skedë private të re</translation>
+<translation id="6404511346730675251">Përpunoni faqen interesante</translation>
 <translation id="6585139692466700358">Propozoj përkthimin e faqeve në gjuhë të tjera nëpërmjet shërbimit të Vivaldit</translation>
 <translation id="6593061639179217415">Varianti për kompjuter</translation>
 <translation id="6610147964972079463">Mbyll skedat private</translation>
@@ -57,9 +65,15 @@ Termi i kërkuar mund të ndryshohet duke u mbajtur shtypur. Për ta përpunuar 
 <translation id="732145680195464316">Regjistroi faqen interesante në <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Për Vivaldin</translation>
 <translation id="7465104139234185284">Mbyll të gjitha skedat private</translation>
+<translation id="7481312909269577407">Përpara</translation>
+<translation id="7583262514280211622">Lista e leximeve ndodhet këtu</translation>
+<translation id="7968014550143838305">Shtoi në listën e leximeve</translation>
 <translation id="804786196054284061">Marrëveshja e licensimit për klientët</translation>
+<translation id="8127542551745560481">Përpunoni faqen kryesore</translation>
+<translation id="8560602726703398413">Lista e leximeve ndodhet te faqet interesante</translation>
 <translation id="85991616550051997">Shkoj te faqja kryesore</translation>
 <translation id="8820817407110198400">Faqet interesante</translation>
 <translation id="9063523880881406963">Çaktivizoj opsionin për uebsajtet për kompjuter</translation>
 <translation id="9080642952018487277">Hyni në këndin privat</translation>
+<translation id="96681097142096641">Do shihni faqen e thjeshtë?</translation>
 </translationbundle>

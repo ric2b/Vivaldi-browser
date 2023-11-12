@@ -30,8 +30,9 @@ const char kPrefLaunchType[] = "launchType";
 
 LaunchType GetLaunchType(const ExtensionPrefs* prefs,
                          const Extension* extension) {
-  if (!extension)
+  if (!extension) {
     return LAUNCH_TYPE_INVALID;
+  }
   LaunchType result = LAUNCH_TYPE_DEFAULT;
 
   int value = GetLaunchTypePrefValue(prefs, extension->id());
@@ -64,7 +65,7 @@ void SetLaunchType(content::BrowserContext* context,
 
   ExtensionPrefs::Get(context)->UpdateExtensionPref(
       extension_id, kPrefLaunchType,
-      std::make_unique<base::Value>(static_cast<int>(launch_type)));
+      base::Value(static_cast<int>(launch_type)));
 
   // Sync the launch type.
   const Extension* extension =

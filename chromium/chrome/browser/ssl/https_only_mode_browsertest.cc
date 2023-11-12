@@ -56,7 +56,8 @@ class HttpsOnlyModeBrowserTest : public InProcessBrowserTest {
   void SetUp() override {
     feature_list_.InitWithFeatures(
         /*enabled_features=*/{features::kHttpsOnlyMode},
-        /*disabled_features=*/{features::kHttpsFirstModeV2});
+        /*disabled_features=*/{features::kHttpsFirstModeV2,
+                               features::kHttpsUpgrades});
     InProcessBrowserTest::SetUp();
   }
 
@@ -732,16 +733,17 @@ IN_PROC_BROWSER_TEST_F(HttpsOnlyModeBrowserTest, BadHttpsFollowedByGoodHttps) {
 
   // Load "logo.gif" as an image on the page.
   GURL image = https_server()->GetURL("foo.test", "/ssl/google_files/logo.gif");
-  bool result = false;
-  EXPECT_TRUE(ExecuteScriptAndExtractBool(
-      tab,
-      std::string("var img = document.createElement('img');img.src ='") +
-          image.spec() +
-          "';img.onload=function() { "
-          "window.domAutomationController.send(true); };"
-          "document.body.appendChild(img);",
-      &result));
-  EXPECT_TRUE(result);
+  EXPECT_EQ(
+      true,
+      EvalJs(tab,
+             std::string("var img = document.createElement('img');img.src ='") +
+                 image.spec() +
+                 "';"
+                 "new Promise(resolve => {"
+                 "  img.onload=function() { "
+                 "    resolve(true); };"
+                 "  document.body.appendChild(img);"
+                 "});"));
 
   EXPECT_FALSE(state->HasAllowException(
       http_url.host(), tab->GetPrimaryMainFrame()->GetStoragePartition()));
@@ -1128,8 +1130,19 @@ class HttpsOnlyModeForAdvancedProtectionBrowserTest
     InProcessBrowserTest::SetUp();
   }
 
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    http_server_.AddDefaultHandlers(GetChromeTestDataDir());
+    ASSERT_TRUE(http_server_.Start());
+  }
+
  protected:
   bool is_enabled_for_advanced_protection() const { return GetParam(); }
+
+  net::EmbeddedTestServer* http_server() { return &http_server_; }
+
+ private:
+  net::EmbeddedTestServer http_server_{net::EmbeddedTestServer::TYPE_HTTP};
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1147,12 +1160,23 @@ IN_PROC_BROWSER_TEST_P(HttpsOnlyModeForAdvancedProtectionBrowserTest,
   EXPECT_FALSE(ap_manager->IsUnderAdvancedProtection());
   EXPECT_FALSE(GetPref());
 
+  GURL http_url = http_server()->GetURL("foo.test", "/simple.html");
+  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
+
   ap_manager->SetAdvancedProtectionStatusForTesting(true);
   if (is_enabled_for_advanced_protection()) {
     EXPECT_TRUE(GetPref());
+
+    EXPECT_FALSE(content::NavigateToURL(contents, http_url));
+    EXPECT_TRUE(chrome_browser_interstitials::IsShowingInterstitial(contents));
+    EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
+        contents->GetPrimaryMainFrame(), "Advanced Protection"));
   } else {
     EXPECT_FALSE(GetPref());
-  }
 
-  // TODO(crbug.com/1414633): Check that the HFM UI setting is locked.
+    EXPECT_TRUE(content::NavigateToURL(contents, http_url));
+    EXPECT_FALSE(
+        chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+            contents));
+  }
 }

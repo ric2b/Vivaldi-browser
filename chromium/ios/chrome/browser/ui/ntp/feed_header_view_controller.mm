@@ -5,16 +5,17 @@
 #import "ios/chrome/browser/ui/ntp/feed_header_view_controller.h"
 
 #import "ios/chrome/browser/ntp/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_constants.h"
 #import "ios/chrome/browser/ui/ntp/feed_control_delegate.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_constants.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -48,9 +49,6 @@ const CGFloat kHeaderMenuButtonInsetSides = 2;
 const CGFloat kDiscoverFeedHeaderHeight = 40;
 const CGFloat kCustomSearchEngineLabelHeight = 18;
 // * Values below are exclusive to Web Channels.
-// The width of the segmented control to toggle between feeds.
-// TODO(crbug.com/1277974): See how segments react to longer words.
-const CGFloat kHeaderSegmentWidth = 300;
 // The height and width of the header menu button. Based on the default
 // UISegmentedControl height.
 const CGFloat kButtonSize = 28;
@@ -61,9 +59,6 @@ const CGFloat kFollowingSegmentDotRadius = 3;
 const CGFloat kFollowingSegmentDotMargin = 8;
 // Duration of the fade animation for elements that toggle when switching feeds.
 const CGFloat kSegmentAnimationDuration = 0.3;
-
-// TODO(crbug.com/1277974): Remove this when Web Channels is launched.
-NSString* kDiscoverMenuIcon = @"infobar_settings_icon";
 
 // The size of feed symbol images.
 NSInteger kFeedSymbolPointSize = 17;
@@ -133,12 +128,8 @@ NSInteger kFeedSymbolPointSize = 17;
 
   // Applies an opacity to the background. If ReduceTransparency is enabled,
   // then this replaces the blur effect.
-  // With ContentSuggestionsUIModuleRefresh enabled, the background color will
-  // be clear for continuity with the overall NTP gradient view.
-  self.view.backgroundColor = IsContentSuggestionsUIModuleRefreshEnabled()
-                                  ? [UIColor clearColor]
-                                  : [[UIColor colorNamed:kBackgroundColor]
-                                        colorWithAlphaComponent:0.95];
+  self.view.backgroundColor =
+      [[UIColor colorNamed:kBackgroundColor] colorWithAlphaComponent:0.95];
 
   self.container = [[UIView alloc] init];
 
@@ -159,15 +150,6 @@ NSInteger kFeedSymbolPointSize = 17;
   if (UIAccessibilityIsReduceTransparencyEnabled() ||
       ![self.feedControlDelegate isFollowingFeedAvailable] ||
       !self.blurBackgroundView) {
-    if (IsContentSuggestionsUIModuleRefreshEnabled() &&
-        UIAccessibilityIsReduceTransparencyEnabled()) {
-      // Give background a solid color since it is clear when not pinned to the
-      // top of the NTP.
-      self.view.backgroundColor = blurred
-                                      ? [[UIColor colorNamed:kBackgroundColor]
-                                            colorWithAlphaComponent:0.95]
-                                      : [UIColor clearColor];
-    }
     return;
   }
 
@@ -178,15 +160,8 @@ NSInteger kFeedSymbolPointSize = 17;
   // blurred.
   if (!animated) {
     self.blurBackgroundView.hidden = !blurred;
-    if (IsContentSuggestionsUIModuleRefreshEnabled()) {
-      self.view.backgroundColor = blurred
-                                      ? [[UIColor colorNamed:kBackgroundColor]
-                                            colorWithAlphaComponent:0.1]
-                                      : [UIColor clearColor];
-    } else {
-      self.view.backgroundColor = [[UIColor colorNamed:kBackgroundColor]
-          colorWithAlphaComponent:(blurred ? 0.1 : 0.95)];
-    }
+    self.view.backgroundColor = [[UIColor colorNamed:kBackgroundColor]
+        colorWithAlphaComponent:(blurred ? 0.1 : 0.95)];
     return;
   }
   [UIView transitionWithView:self.blurBackgroundView
@@ -198,15 +173,8 @@ NSInteger kFeedSymbolPointSize = 17;
       completion:^(BOOL finished) {
         // Only reduce opacity after the animation is complete to avoid showing
         // content suggestions tiles momentarily.
-        if (IsContentSuggestionsUIModuleRefreshEnabled()) {
-          self.view.backgroundColor =
-              blurred ? [[UIColor colorNamed:kBackgroundColor]
-                            colorWithAlphaComponent:0.1]
-                      : [UIColor clearColor];
-        } else {
-          self.view.backgroundColor = [[UIColor colorNamed:kBackgroundColor]
-              colorWithAlphaComponent:(blurred ? 0.1 : 0.95)];
-        }
+        self.view.backgroundColor = [[UIColor colorNamed:kBackgroundColor]
+            colorWithAlphaComponent:(blurred ? 0.1 : 0.95)];
       }];
 }
 
@@ -370,17 +338,14 @@ NSInteger kFeedSymbolPointSize = 17;
     menuButton.layer.cornerRadius = kButtonSize / 2;
     menuButton.clipsToBounds = YES;
   } else {
-    UIImage* menuIcon =
-        UseSymbols()
-            ? DefaultSymbolTemplateWithPointSize(kSettingsFilledSymbol,
-                                                 kFeedSymbolPointSize)
-            : [[UIImage imageNamed:kDiscoverMenuIcon]
-                  imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    UIImage* menuIcon = DefaultSymbolTemplateWithPointSize(
+        kSettingsFilledSymbol, kFeedSymbolPointSize);
     [menuButton setImage:menuIcon forState:UIControlStateNormal];
     menuButton.tintColor = [UIColor colorNamed:kGrey600Color];
-    menuButton.imageEdgeInsets = UIEdgeInsetsMake(
+    UIEdgeInsets imageInsets = UIEdgeInsetsMake(
         kHeaderMenuButtonInsetTopAndBottom, kHeaderMenuButtonInsetSides,
         kHeaderMenuButtonInsetTopAndBottom, kHeaderMenuButtonInsetSides);
+    SetImageEdgeInsets(menuButton, imageInsets);
   }
 }
 
@@ -631,8 +596,6 @@ NSInteger kFeedSymbolPointSize = 17;
     [self.segmentedControl.leadingAnchor
         constraintEqualToAnchor:self.sortButton.trailingAnchor
                        constant:kButtonHorizontalMargin],
-    [self.segmentedControl.widthAnchor
-        constraintLessThanOrEqualToConstant:kHeaderSegmentWidth],
   ]];
 
   // Set Following segment dot size.

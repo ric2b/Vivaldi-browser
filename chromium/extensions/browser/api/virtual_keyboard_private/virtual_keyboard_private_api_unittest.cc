@@ -43,7 +43,7 @@ class MockVirtualKeyboardDelegate : public VirtualKeyboardDelegate {
   bool ShowLanguageSettings() override { return false; }
   bool ShowSuggestionSettings() override { return false; }
   bool IsSettingsEnabled() override { return false; }
-  bool SetVirtualKeyboardMode(int mode_enum,
+  bool SetVirtualKeyboardMode(api::virtual_keyboard_private::KeyboardMode mode,
                               gfx::Rect target_bounds,
                               OnSetModeCallback on_set_mode_callback) override {
     return false;
@@ -52,7 +52,10 @@ class MockVirtualKeyboardDelegate : public VirtualKeyboardDelegate {
       const api::virtual_keyboard_private::Bounds& rect) override {
     return false;
   }
-  bool SetRequestedKeyboardState(int state_enum) override { return false; }
+  bool SetRequestedKeyboardState(
+      api::virtual_keyboard_private::KeyboardState state) override {
+    return false;
+  }
 
   bool SetOccludedBounds(const std::vector<gfx::Rect>& bounds) override {
     occluded_bounds_ = bounds;
@@ -81,7 +84,6 @@ class MockVirtualKeyboardDelegate : public VirtualKeyboardDelegate {
   const gfx::Rect& GetWindowBounds() { return window_bounds_; }
 
   void GetClipboardHistory(
-      const std::set<std::string>& item_ids_filter,
       OnGetClipboardHistoryCallback get_history_callback) override {}
   bool PasteClipboardItem(const std::string& clipboard_item_id) override {
     return false;

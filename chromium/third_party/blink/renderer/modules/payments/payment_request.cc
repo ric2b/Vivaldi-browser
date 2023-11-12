@@ -90,6 +90,8 @@ using ::payments::mojom::blink::PaymentValidationErrorsPtr;
 
 const char kHasEnrolledInstrumentDebugName[] = "hasEnrolledInstrument";
 const char kGooglePayMethod[] = "https://google.com/pay";
+const char kGooglePayAuthenticationMethod[] =
+    "https://pay.google.com/authentication";
 const char kAndroidPayMethod[] = "https://android.com/pay";
 const char kGooglePlayBillingMethod[] = "https://play.google.com/billing";
 const char kUnknownCurrency[] = "ZZZ";
@@ -269,18 +271,15 @@ void ValidateShippingOptionOrPaymentItem(const T* item,
   }
 }
 
-const WTF::HashSet<String> GetAppStoreBillingMethods() {
-  static const WTF::HashSet<String> app_store_billing_methods = {
-      kGooglePlayBillingMethod};
-  return app_store_billing_methods;
+bool IsAppStoreBillingMethod(const StringView& billing_method) {
+  return billing_method == kGooglePlayBillingMethod;
 }
 
 bool RequestingOnlyAppStoreBillingMethods(
     const Vector<payments::mojom::blink::PaymentMethodDataPtr>& method_data) {
   DCHECK(!method_data.empty());
-  const WTF::HashSet<String> billing_methods = GetAppStoreBillingMethods();
   for (const auto& method : method_data) {
-    if (!billing_methods.Contains(method->supported_method)) {
+    if (!IsAppStoreBillingMethod(method->supported_method)) {
       return false;
     }
   }
@@ -434,7 +433,8 @@ void StringifyAndParseMethodSpecificData(ExecutionContext& execution_context,
   // payment apps are responsible for validating and processing their method
   // data asynchronously. Do not throw exceptions here.
   if (supported_method == kGooglePayMethod ||
-      supported_method == kAndroidPayMethod) {
+      supported_method == kAndroidPayMethod ||
+      supported_method == kGooglePayAuthenticationMethod) {
     SetAndroidPayMethodData(execution_context.GetIsolate(), input, output,
                             exception_state);
     if (exception_state.HadException()) {
@@ -806,6 +806,32 @@ void WarnIgnoringQueryQuotaForCanMakePayment(
       mojom::ConsoleMessageLevel::kWarning, error));
 }
 
+// Returns whether a Show() call may be allowed without a user activation,
+// based on the request method and feature state.
+bool ActivationlessShowEnabled(ExecutionContext* execution_context,
+                               const HashSet<String>& method_names) {
+  if (method_names.size() == 1 &&
+      method_names.Contains(kSecurePaymentConfirmationMethod)) {
+    return RuntimeEnabledFeatures::
+        SecurePaymentConfirmationAllowOneActivationlessShowEnabled(
+            execution_context);
+  }
+
+  // Activationless show is currently only possible for the Secure Payment
+  // Confirmation method.
+  return false;
+}
+
+// Records metrics for an activationless Show() call based on the request
+// method.
+void RecordActivationlessShow(ExecutionContext* execution_context,
+                              const HashSet<String>& method_names) {
+  DCHECK((method_names.size() == 1 &&
+          method_names.Contains(kSecurePaymentConfirmationMethod)));
+  UseCounter::Count(execution_context,
+                    WebFeature::kSecurePaymentConfirmationActivationlessShow);
+}
+
 }  // namespace
 
 PaymentRequest* PaymentRequest::Create(
@@ -863,21 +889,31 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
 
   bool has_transient_user_activation =
       LocalFrame::HasTransientUserActivation(local_frame);
-  bool payment_request_token_active =
-      DomWindow()->IsPaymentRequestTokenActive();
+  bool has_delegated_activation = DomWindow()->IsPaymentRequestTokenActive();
 
   if (!has_transient_user_activation) {
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kPaymentRequestShowWithoutGesture);
 
-    if (!payment_request_token_active) {
+    if (!has_delegated_activation) {
       UseCounter::Count(GetExecutionContext(),
                         WebFeature::kPaymentRequestShowWithoutGestureOrToken);
     }
   }
 
-  bool payment_request_allowed =
-      has_transient_user_activation || payment_request_token_active;
+  bool activationless_payment_request =
+      ActivationlessShowEnabled(GetExecutionContext(), method_names_) &&
+      !has_transient_user_activation && !has_delegated_activation &&
+      !DomWindow()->HadActivationlessPaymentRequest();
+
+  if (activationless_payment_request) {
+    DomWindow()->SetHadActivationlessPaymentRequest();
+    RecordActivationlessShow(GetExecutionContext(), method_names_);
+  }
+
+  bool payment_request_allowed = has_transient_user_activation ||
+                                 has_delegated_activation ||
+                                 activationless_payment_request;
   DomWindow()->ConsumePaymentRequestToken();
 
   if (payment_request_allowed) {
@@ -915,7 +951,8 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
                 this, UpdatePaymentDetailsFunction::ResolveType::kReject)));
   }
 
-  accept_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  accept_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   return accept_resolver_->Promise();
 }
 
@@ -943,7 +980,8 @@ ScriptPromise PaymentRequest::abort(ScriptState* script_state,
 
   VLOG(2) << "Renderer: PaymentRequest (" << id_.Utf8() << "): abort()";
 
-  abort_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  abort_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   payment_provider_->Abort();
   return abort_resolver_->Promise();
 }
@@ -967,8 +1005,8 @@ ScriptPromise PaymentRequest::canMakePayment(ScriptState* script_state,
 
   payment_provider_->CanMakePayment();
 
-  can_make_payment_resolver_ =
-      MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  can_make_payment_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   return can_make_payment_resolver_->Promise();
 }
 
@@ -993,7 +1031,8 @@ ScriptPromise PaymentRequest::hasEnrolledInstrument(
   payment_provider_->HasEnrolledInstrument();
 
   has_enrolled_instrument_resolver_ =
-      MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+      MakeGarbageCollected<ScriptPromiseResolver>(script_state,
+                                                  exception_state.GetContext());
   return has_enrolled_instrument_resolver_->Promise();
 }
 
@@ -1093,7 +1132,8 @@ ScriptPromise PaymentRequest::Retry(ScriptState* script_state,
   payment_provider_->Retry(
       payments::mojom::blink::PaymentValidationErrors::From(*errors));
 
-  retry_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  retry_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
 
   return retry_resolver_->Promise();
 }
@@ -1141,8 +1181,8 @@ ScriptPromise PaymentRequest::Complete(ScriptState* script_state,
   // The payment provider should respond in PaymentRequest::OnComplete().
   payment_provider_->Complete(payments::mojom::blink::PaymentComplete(result));
 
-  complete_resolver_ =
-      MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  complete_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   return complete_resolver_->Promise();
 }
 
@@ -1266,6 +1306,7 @@ PaymentRequest::PaymentRequest(
         mock_payment_provider,
     ExceptionState& exception_state)
     : ExecutionContextLifecycleObserver(execution_context),
+      ActiveScriptWrappable<PaymentRequest>({}),
       options_(options),
       payment_provider_(execution_context),
       client_receiver_(this, execution_context),
@@ -1322,9 +1363,8 @@ PaymentRequest::PaymentRequest(
     return;
   }
 
-  const WTF::HashSet<String> billing_methods = GetAppStoreBillingMethods();
   for (const PaymentMethodDataPtr& data : validated_method_data) {
-    if (billing_methods.Contains(data->supported_method) &&
+    if (IsAppStoreBillingMethod(data->supported_method) &&
         (options_->requestShipping() || options_->requestPayerName() ||
          options_->requestPayerEmail() || options_->requestPayerPhone())) {
       execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(

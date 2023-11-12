@@ -70,32 +70,27 @@ SkiaOutputDeviceX11::~SkiaOutputDeviceX11() {
   connection_->FreeGC({gc_});
 }
 
-bool SkiaOutputDeviceX11::Reshape(
-    const SkSurfaceCharacterization& characterization,
-    const gfx::ColorSpace& color_space,
-    float device_scale_factor,
-    gfx::OverlayTransform transform) {
-  if (!SkiaOutputDeviceOffscreen::Reshape(characterization, color_space,
+bool SkiaOutputDeviceX11::Reshape(const SkImageInfo& image_info,
+                                  const gfx::ColorSpace& color_space,
+                                  int sample_count,
+                                  float device_scale_factor,
+                                  gfx::OverlayTransform transform) {
+  if (!SkiaOutputDeviceOffscreen::Reshape(image_info, color_space, sample_count,
                                           device_scale_factor, transform)) {
     return false;
   }
-  auto ii = SkImageInfo::MakeN32(
-      characterization.width(), characterization.height(), kOpaque_SkAlphaType);
+  auto ii = SkImageInfo::MakeN32(image_info.width(), image_info.height(),
+                                 kOpaque_SkAlphaType);
   std::vector<uint8_t> mem(ii.computeMinByteSize());
   pixels_ = base::RefCountedBytes::TakeVector(&mem);
   return true;
 }
 
-void SkiaOutputDeviceX11::SwapBuffers(BufferPresentedCallback feedback,
-                                      OutputSurfaceFrame frame) {
-  return PostSubBuffer(
-      gfx::Rect(0, 0, sk_surface_->width(), sk_surface_->height()),
-      std::move(feedback), std::move(frame));
-}
-
-void SkiaOutputDeviceX11::PostSubBuffer(const gfx::Rect& rect,
-                                        BufferPresentedCallback feedback,
-                                        OutputSurfaceFrame frame) {
+void SkiaOutputDeviceX11::Present(const absl::optional<gfx::Rect>& update_rect,
+                                  BufferPresentedCallback feedback,
+                                  OutputSurfaceFrame frame) {
+  gfx::Rect rect = update_rect.value_or(
+      gfx::Rect(0, 0, sk_surface_->width(), sk_surface_->height()));
   StartSwapBuffers(std::move(feedback));
   if (!rect.IsEmpty()) {
     auto ii =

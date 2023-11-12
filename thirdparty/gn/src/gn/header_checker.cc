@@ -214,6 +214,16 @@ void HeaderChecker::AddTargetToFileMap(const Target* target, FileMap* dest) {
     files_to_public[source].is_public = default_public;
   }
 
+  // If the target includes some .swift files, it may also use a header file
+  // to provide bridging Objective-C code. This header needs to be considered
+  // as a source file with the default visibility.
+  if (target->has_swift_values()) {
+    const SourceFile& bridge_header = target->swift_values().bridge_header();
+    if (!bridge_header.is_null()) {
+      files_to_public[bridge_header].is_public = default_public;
+    }
+  }
+
   // Add in the public files, forcing them to public. This may overwrite some
   // entries, and it may add new ones.
   if (default_public)  // List only used when default is not public.

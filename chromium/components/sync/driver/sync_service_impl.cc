@@ -159,7 +159,6 @@ SyncServiceImpl::SyncServiceImpl(InitParams init_params)
           base::BindRepeating(&CreateHttpBridgeFactory)),
       start_behavior_(init_params.start_behavior),
       is_regular_profile_for_uma_(init_params.is_regular_profile_for_uma),
-      is_setting_sync_requested_(false),
       should_record_trusted_vault_error_shown_on_startup_(true),
 #if BUILDFLAG(IS_ANDROID)
       sessions_invalidations_enabled_(false) {
@@ -255,8 +254,9 @@ void SyncServiceImpl::Initialize() {
   // Local Sync bypasses the IsSyncRequested() check, so no need to set it in
   // that case.
   // TODO(crbug.com/920158): Get rid of AUTO_START and remove this workaround.
-  if (start_behavior_ == AUTO_START && !IsLocalSyncEnabled()) {
-    user_settings_->SetSyncRequestedIfNotSetExplicitly();
+  if (start_behavior_ == AUTO_START && !IsLocalSyncEnabled() &&
+      !sync_prefs_.IsSyncRequestedSetExplicitly()) {
+    SetSyncFeatureRequested();
   }
   bool force_immediate = (start_behavior_ == AUTO_START &&
                           !HasDisableReason(DISABLE_REASON_USER_CHOICE) &&
@@ -500,10 +500,13 @@ void SyncServiceImpl::ResetEngine(ShutdownReason shutdown_reason,
     }
     // If enabled, call controller's Stop() to inform them to clear the
     // metadata.
-    if (base::FeatureList::IsEnabled(
+    if (shutdown_reason != ShutdownReason::BROWSER_SHUTDOWN_AND_KEEP_DATA &&
+        base::FeatureList::IsEnabled(
             kSyncAllowClearingMetadataWhenDataTypeIsStopped)) {
+      SyncStopMetadataFate fate =
+          ShutdownReasonToSyncStopMetadataFate(shutdown_reason);
       for (auto& [type, controller] : data_type_controllers_) {
-        controller->Stop(shutdown_reason, base::DoNothing());
+        controller->Stop(fate, base::DoNothing());
       }
     }
     return;
@@ -540,10 +543,9 @@ void SyncServiceImpl::ResetEngine(ShutdownReason shutdown_reason,
       // When aborting as part of shutdown, we should expect an aborted sync
       // configure result, else we'll dcheck when we try to read the sync error.
       expect_sync_configuration_aborted_ = true;
-      if (shutdown_reason != ShutdownReason::BROWSER_SHUTDOWN_AND_KEEP_DATA ||
-          !base::FeatureList::IsEnabled(
-              kSyncDoNotPropagateBrowserShutdownToDataTypes)) {
-        data_type_manager_->Stop(shutdown_reason);
+      if (shutdown_reason != ShutdownReason::BROWSER_SHUTDOWN_AND_KEEP_DATA) {
+        data_type_manager_->Stop(
+            ShutdownReasonToSyncStopMetadataFate(shutdown_reason));
       }
     }
     data_type_manager_.reset();
@@ -596,6 +598,23 @@ void SyncServiceImpl::ResetEngine(ShutdownReason shutdown_reason,
   }
 }
 
+void SyncServiceImpl::SetSyncFeatureRequested() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  sync_prefs_.SetSyncRequested(true);
+
+  // If the Sync engine was already initialized (probably running in transport
+  // mode), just reconfigure.
+  if (engine_ && engine_->IsInitialized()) {
+    ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
+  } else {
+    // Otherwise try to start up. Note that there might still be other disable
+    // reasons remaining, in which case this will effectively do nothing.
+    startup_controller_->TryStart(/*force_immediate=*/true);
+  }
+
+  NotifyObservers();
+}
+
 SyncUserSettings* SyncServiceImpl::GetUserSettings() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return user_settings_.get();
@@ -622,7 +641,7 @@ SyncService::DisableReasonSet SyncServiceImpl::GetDisableReasons() const {
     if (!IsSignedIn()) {
       result.Put(DISABLE_REASON_NOT_SIGNED_IN);
     }
-    if (!user_settings_->IsSyncRequested()) {
+    if (!sync_prefs_.IsSyncRequested()) {
       result.Put(DISABLE_REASON_USER_CHOICE);
     }
   }
@@ -904,7 +923,7 @@ void SyncServiceImpl::OnActionableProtocolError(
       }
 
       // Security domain state might be reset, reset local state as well.
-      sync_client_->GetTrustedVaultClient()->ClearDataForAccount(
+      sync_client_->GetTrustedVaultClient()->ClearLocalDataForAccount(
           GetAccountInfo());
 
       // Note: StopAndClear sets IsSyncRequested to false, which ensures that
@@ -1033,7 +1052,10 @@ void SyncServiceImpl::CryptoStateChanged() {
 
 void SyncServiceImpl::CryptoRequiredUserActionChanged() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  MaybeRecordTrustedVaultHistograms();
+}
 
+void SyncServiceImpl::MaybeRecordTrustedVaultHistograms() {
   if (should_record_trusted_vault_error_shown_on_startup_ &&
       crypto_.IsTrustedVaultKeyRequiredStateKnown() && IsSyncFeatureEnabled()) {
     DCHECK(engine_);
@@ -1045,6 +1067,14 @@ void SyncServiceImpl::CryptoRequiredUserActionChanged() {
           "Sync.TrustedVaultErrorShownOnStartup",
           user_settings_->IsTrustedVaultKeyRequiredForPreferredDataTypes(),
           engine_->GetDetailedStatus());
+
+      if (is_first_time_sync_configure_) {
+        // A 'first time sync configure' is an indication that the account was
+        // added to the browser recently (sign in).
+        base::UmaHistogramBoolean(
+            "Sync.TrustedVaultErrorShownOnFirstTimeSync2",
+            user_settings_->IsTrustedVaultKeyRequiredForPreferredDataTypes());
+      }
     }
   }
 }
@@ -1203,21 +1233,24 @@ ModelTypeSet SyncServiceImpl::GetActiveDataTypes() const {
 
   // Persistent auth errors lead to PAUSED, which implies
   // data_type_manager_==null above.
-  DCHECK(!GetAuthError().IsPersistentError());
+  CHECK(!GetAuthError().IsPersistentError());
 
   return data_type_manager_->GetActiveDataTypes();
 }
 
-void SyncServiceImpl::SetSyncRequestedAndIgnoreNotification(bool is_requested) {
-  // For a no-op, OnSyncRequestedPrefChange() wouldn't be called and
-  // |is_setting_sync_requested_| wouldn't get reset, so check.
-  if (is_requested != user_settings_->IsSyncRequested()) {
-    DCHECK(!is_setting_sync_requested_);
-    is_setting_sync_requested_ = true;
-    user_settings_->SetSyncRequested(is_requested);
-    // OnSyncRequestedPrefChange() should have cleared the flag.
-    DCHECK(!is_setting_sync_requested_);
+ModelTypeSet SyncServiceImpl::GetTypesWithPendingDownloadForInitialSync()
+    const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (!data_type_manager_) {
+    return ModelTypeSet();
   }
+
+  // Persistent auth errors lead to PAUSED, which implies
+  // data_type_manager_==null above.
+  CHECK(!GetAuthError().IsPersistentError());
+
+  return data_type_manager_->GetTypesWithPendingDownloadForInitialSync();
 }
 
 void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
@@ -1530,34 +1563,9 @@ void SyncServiceImpl::OnFirstSetupCompletePrefChange(
     bool is_first_setup_complete) {
   if (engine_ && engine_->IsInitialized()) {
     ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
-  }
-}
-
-void SyncServiceImpl::OnSyncRequestedPrefChange(bool is_sync_requested) {
-  // Ignore the notification if the service itself set the pref.
-  if (is_setting_sync_requested_) {
-    is_setting_sync_requested_ = false;
-    return;
-  }
-
-  if (is_sync_requested) {
-    // If the Sync engine was already initialized (probably running in transport
-    // mode), just reconfigure.
-    if (engine_ && engine_->IsInitialized()) {
-      ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
-    } else {
-      // Otherwise try to start up. Note that there might still be other disable
-      // reasons remaining, in which case this will effectively do nothing.
-      startup_controller_->TryStart(/*force_immediate=*/true);
-    }
-
-    NotifyObservers();
-  } else {
-    // This will notify the observers.
-    // TODO(crbug.com/856179): Evaluate whether we can get away without a
-    // full restart in this case (i.e. just reconfigure).
-    ResetEngine(ShutdownReason::STOP_SYNC_AND_KEEP_DATA,
-                ResetEngineReason::kRequestedPrefChange);
+    // IsSyncFeatureEnabled() likely changed, it might be time to record
+    // histograms.
+    MaybeRecordTrustedVaultHistograms();
   }
 }
 
@@ -1566,25 +1574,6 @@ void SyncServiceImpl::OnAccountsInCookieUpdated(
     const GoogleServiceAuthError& error) {
   OnAccountsInCookieUpdatedWithCallback(
       accounts_in_cookie_jar_info.signed_in_accounts, base::NullCallback());
-}
-
-void SyncServiceImpl::OnErrorStateOfRefreshTokenUpdatedForAccount(
-    const CoreAccountInfo& account_info,
-    const GoogleServiceAuthError& error) {
-  if (error.state() == GoogleServiceAuthError::NONE &&
-      last_error_state_of_refresh_token_.IsPersistentError()) {
-    // Resolving a persistent error may or may not necessarily imply changes in
-    // the recoverability state. However, over-triggering
-    // OnTrustedVaultRecoverabilityChanged() is totally fine and should lead to
-    // no user-facing changes, either because it's a strict no-op, e.g. if the
-    // passphrase type != kTrustedVaultPassphrase, or because the recoverability
-    // hasn't changed.
-    // TODO(crbug.com/1156584): This is only needed because currently not all
-    // persistent errors stop the sync engine.
-    crypto_.OnTrustedVaultRecoverabilityChanged();
-  }
-
-  last_error_state_of_refresh_token_ = error;
 }
 
 void SyncServiceImpl::OnAccountsInCookieUpdatedWithCallback(
@@ -1797,7 +1786,9 @@ void SyncServiceImpl::StopAndClear() {
   // For explicit passphrase users, clear the encryption key, such that they
   // will need to reenter it if sync gets re-enabled.
   sync_prefs_.ClearEncryptionBootstrapToken();
-  SetSyncRequestedAndIgnoreNotification(false);
+
+  sync_prefs_.SetSyncRequested(false);
+
   // Also let observers know that Sync-the-feature is now fully disabled
   // (before it possibly starts up again in transport-only mode).
   NotifyObservers();
@@ -1867,11 +1858,8 @@ void SyncServiceImpl::OverrideNetworkForTest(
                 ResetEngineReason::kShutdown);
     // The startup logic and DCHECKs require that datatypes start stopped.
     // Since ResetEngine() doesn't do this, it is necessary to stop them here.
-    // STOP_SYNC_AND_KEEP_DATA is used instead of BROWSER_SHUTDOWN_AND_KEEP_DATA
-    // because crbug.com/1400437 is removing shutdown logic from controllers.
     for (const auto& [type, controller] : data_type_controllers_) {
-      controller->Stop(ShutdownReason::STOP_SYNC_AND_KEEP_DATA,
-                       base::DoNothing());
+      controller->Stop(SyncStopMetadataFate::KEEP_METADATA, base::DoNothing());
     }
     restart = true;
   }

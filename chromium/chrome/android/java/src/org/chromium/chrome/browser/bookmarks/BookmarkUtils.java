@@ -141,12 +141,12 @@ public class BookmarkUtils {
             return;
         }
 
-        ShoppingService shoppingService =
-                ShoppingServiceFactory.getForProfile(Profile.getLastUsedRegularProfile());
+        Profile profile = Profile.getLastUsedRegularProfile();
+        ShoppingService shoppingService = ShoppingServiceFactory.getForProfile(profile);
 
         BookmarkSaveFlowCoordinator bookmarkSaveFlowCoordinator =
                 new BookmarkSaveFlowCoordinator(activity, bottomSheetController, shoppingService,
-                        new UserEducationHelper(activity, new Handler()));
+                        new UserEducationHelper(activity, new Handler()), profile);
         bookmarkSaveFlowCoordinator.show(
                 bookmarkId, fromExplicitTrackUi, wasBookmarkMoved, isNewBookmark);
     }
@@ -486,7 +486,7 @@ public class BookmarkUtils {
             url = getLastUsedUrl(context);
         } else {
             // Load a specific folder.
-            url = BookmarkUIState.createFolderUrl(folderId).toString();
+            url = BookmarkUiState.createFolderUrl(folderId).toString();
         }
 
         return TextUtils.isEmpty(url) ? UrlConstants.BOOKMARKS_URL : url;
@@ -623,7 +623,7 @@ public class BookmarkUtils {
         BookmarkId othersNodeId = bookmarkModel.getOtherFolderId();
 
         List<BookmarkId> specialFoldersIds =
-                bookmarkModel.getTopLevelFolderIDs(/*getSpecial=*/true, /*getNormal=*/false);
+                bookmarkModel.getTopLevelFolderIds(/*getSpecial=*/true, /*getNormal=*/false);
         BookmarkId rootFolder = bookmarkModel.getRootFolderId();
 
         // managed and partner bookmark folders will be put to the bottom.

@@ -236,7 +236,6 @@ TEST_F(FontUpdateInvalidationTest, LayoutInvalidationOnModalDialog) {
   main_resource.Finish();
 }
 
-// https://crbug.com/1101483
 TEST_F(FontUpdateInvalidationTest, FallbackBetweenPendingAndLoadedCustomFonts) {
   SimRequest main_resource("https://example.com", "text/html");
   SimSubresourceRequest slow_font_resource("https://example.com/nonexist.woff2",

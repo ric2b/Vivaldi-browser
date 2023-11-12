@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
@@ -25,7 +26,6 @@
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/logging/user_signin_logger.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/user_signin_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/user_signin_coordinator.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -158,9 +158,11 @@ using signin_metrics::PromoAction;
   ChromeBrowserState* browserState = browser->GetBrowserState();
   ChromeAccountManagerService* accountManagerService =
       ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
-  if (!accountManagerService->HasIdentities()) {
+  if (!IsConsistencyNewAccountInterfaceEnabled() &&
+      !accountManagerService->HasIdentities()) {
     RecordConsistencyPromoUserAction(
-        signin_metrics::AccountConsistencyPromoAction::SUPPRESSED_NO_ACCOUNTS);
+        signin_metrics::AccountConsistencyPromoAction::SUPPRESSED_NO_ACCOUNTS,
+        accessPoint);
     return nil;
   }
   AuthenticationService* authenticationService =
@@ -175,7 +177,8 @@ using signin_metrics::PromoAction;
     // Related to crbug.com/1308448.
     RecordConsistencyPromoUserAction(
         signin_metrics::AccountConsistencyPromoAction::
-            SUPPRESSED_ALREADY_SIGNED_IN);
+            SUPPRESSED_ALREADY_SIGNED_IN,
+        accessPoint);
     return nil;
   }
   switch (authenticationService->GetServiceStatus()) {
@@ -185,7 +188,8 @@ using signin_metrics::PromoAction;
     case AuthenticationService::ServiceStatus::SigninDisabledByInternal:
       RecordConsistencyPromoUserAction(
           signin_metrics::AccountConsistencyPromoAction::
-              SUPPRESSED_SIGNIN_NOT_ALLOWED);
+              SUPPRESSED_SIGNIN_NOT_ALLOWED,
+          accessPoint);
       return nil;
     case AuthenticationService::ServiceStatus::SigninAllowed:
       break;
@@ -197,7 +201,8 @@ using signin_metrics::PromoAction;
       currentDismissalCount >= kDefaultWebSignInDismissalCount) {
     RecordConsistencyPromoUserAction(
         signin_metrics::AccountConsistencyPromoAction::
-            SUPPRESSED_CONSECUTIVE_DISMISSALS);
+            SUPPRESSED_CONSECUTIVE_DISMISSALS,
+        accessPoint);
     return nil;
   }
   return [[ConsistencyPromoSigninCoordinator alloc]
@@ -248,7 +253,9 @@ using signin_metrics::PromoAction;
   DCHECK(((signinResult == SigninCoordinatorResultSuccess) &&
           completionInfo.identity) ||
          ((signinResult != SigninCoordinatorResultSuccess) &&
-          !completionInfo.identity));
+          !completionInfo.identity))
+      << "signinResult: " << signinResult
+      << ", identity: " << (completionInfo.identity ? "YES" : "NO");
   // If `self.signinCompletion` is nil, this method has been probably called
   // twice.
   DCHECK(self.signinCompletion);

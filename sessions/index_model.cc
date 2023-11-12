@@ -40,7 +40,10 @@ std::unique_ptr<IndexLoadDetails> Index_Model::CreateLoadDetails() {
   Index_Node* backup = new Index_Node(Index_Node::backup_node_guid(),
                                       Index_Node::backup_node_id(),
                                       Index_Node::kNode);
-  return base::WrapUnique(new IndexLoadDetails(items, backup));
+  Index_Node* persistent = new Index_Node(Index_Node::persistent_node_guid(),
+                                      Index_Node::persistent_node_id(),
+                                      Index_Node::kNode);
+  return base::WrapUnique(new IndexLoadDetails(items, backup, persistent));
 }
 
 void Index_Model::Load() {
@@ -62,6 +65,13 @@ void Index_Model::LoadFinished(std::unique_ptr<IndexLoadDetails> details) {
   std::unique_ptr<Index_Node> items_node(details->release_items_node());
   items_node_ = items_node.get();
   root_.Add(std::move(items_node));
+
+  if (!details->persistent_node()->filename().empty()) {
+    std::unique_ptr<Index_Node> persistent_node(
+        details->release_persistent_node());
+    persistent_node_ = persistent_node.get();
+    root_.Add(std::move(persistent_node));
+  }
 
   if (!details->backup_node()->filename().empty()) {
     // We have timed backup information in the model. This is a sign the prev
@@ -160,6 +170,8 @@ Index_Node* Index_Model::Add(std::unique_ptr<Index_Node> node,
   // Save quick access to backup. This node is only removed on exit once set.
   if (node_ptr->id() == Index_Node::backup_node_id()) {
     backup_node_ = node_ptr;
+  } else if (node_ptr->id() == Index_Node::persistent_node_id()) {
+    persistent_node_ = node_ptr;
   }
 
   Save();
@@ -230,6 +242,8 @@ bool Index_Model::Remove(Index_Node* node) {
 
   if (id == Index_Node::kBackupNodeId) {
     backup_node_ = nullptr;
+  } else if (id == Index_Node::kPersistentNodeId) {
+    persistent_node_ = nullptr;
   }
 
   Save();

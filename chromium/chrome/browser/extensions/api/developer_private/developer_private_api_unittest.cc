@@ -18,9 +18,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/gtest_util.h"
 #include "base/test/values_test_util.h"
+#include "base/values.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/error_console/error_console.h"
-#include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_management_test_util.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -46,6 +46,7 @@
 #include "extensions/browser/event_router_factory.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_error_test_util.h"
+#include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -63,10 +64,15 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
-#include "extensions/common/value_builder.h"
 #include "extensions/test/test_extension_dir.h"
 #include "services/data_decoder/data_decoder_service.h"
 #include "services/service_manager/public/cpp/test/test_connector_factory.h"
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "components/supervised_user/core/common/features.h"
+#endif
 
 namespace extensions {
 
@@ -106,7 +112,8 @@ bool WasItemChangedEventDispatched(
   const Event& event = *iter->second;
   CHECK_GE(1u, event.event_args.size());
   std::unique_ptr<api::developer_private::EventData> event_data =
-      api::developer_private::EventData::FromValue(event.event_args[0]);
+      api::developer_private::EventData::FromValueDeprecated(
+          event.event_args[0]);
   if (!event_data)
     return false;
 
@@ -131,7 +138,8 @@ bool WasUserSiteSettingsChangedEventDispatched(
   const Event& event = *iter->second;
   CHECK_GE(1u, event.event_args.size());
   auto site_settings =
-      api::developer_private::UserSiteSettings::FromValue(event.event_args[0]);
+      api::developer_private::UserSiteSettings::FromValueDeprecated(
+          event.event_args[0]);
   if (!site_settings)
     return false;
 
@@ -208,7 +216,8 @@ void GetMatchingExtensionsForSite(
   infos->clear();
   for (const auto& value : (*results)[0].GetList()) {
     infos->push_back(std::move(
-        *api::developer_private::MatchingExtensionInfo::FromValue(value)));
+        *api::developer_private::MatchingExtensionInfo::FromValueDeprecated(
+            value)));
   }
 }
 
@@ -271,7 +280,7 @@ class DeveloperPrivateApiUnitTest : public ExtensionServiceTestWithInstall {
     service()->AddProviderForTesting(std::move(provider));
   }
 
-  // A wrapper around extension_function_test_utils::RunFunction that runs with
+  // A wrapper around api_test_utils::RunFunction that runs with
   // the associated browser, no flags, and can take stack-allocated arguments.
   bool RunFunction(const scoped_refptr<ExtensionFunction>& function,
                    const base::Value::List& args);
@@ -330,14 +339,16 @@ class DeveloperPrivateApiUnitTest : public ExtensionServiceTestWithInstall {
   std::unique_ptr<Browser> browser_;
   std::unique_ptr<content::RenderProcessHost> render_process_host_;
 
-  std::vector<std::unique_ptr<TestExtensionDir>> test_extension_dirs_;
+  std::vector<TestExtensionDir> test_extension_dirs_;
 };
 
 bool DeveloperPrivateApiUnitTest::RunFunction(
     const scoped_refptr<ExtensionFunction>& function,
     const base::Value::List& args) {
-  return extension_function_test_utils::RunFunction(
-      function.get(), args.Clone(), browser(), api_test_utils::NONE);
+  return api_test_utils::RunFunction(
+      function.get(), args.Clone(),
+      std::make_unique<ExtensionFunctionDispatcher>(profile()),
+      api_test_utils::FunctionMode::kNone);
 }
 
 const Extension* DeveloperPrivateApiUnitTest::LoadUnpackedExtension() {
@@ -349,30 +360,30 @@ const Extension* DeveloperPrivateApiUnitTest::LoadUnpackedExtension() {
            "permissions": ["*://*/*"]
          })";
 
-  test_extension_dirs_.push_back(std::make_unique<TestExtensionDir>());
-  TestExtensionDir* dir = test_extension_dirs_.back().get();
-  dir->WriteManifest(kManifest);
+  test_extension_dirs_.emplace_back();
+  TestExtensionDir& dir = test_extension_dirs_.back();
+  dir.WriteManifest(kManifest);
 
   ChromeTestExtensionLoader loader(profile());
   // The fact that unpacked extensions get file access by default is an
   // irrelevant detail to these tests. Disable it.
   loader.set_allow_file_access(false);
 
-  return loader.LoadExtension(dir->UnpackedPath()).get();
+  return loader.LoadExtension(dir.UnpackedPath()).get();
 }
 
 const Extension* DeveloperPrivateApiUnitTest::LoadSimpleExtension() {
   const char kName[] = "extension name";
   const char kVersion[] = "1.0.0.1";
   std::string id = crx_file::id_util::GenerateId(kName);
-  DictionaryBuilder manifest;
-  manifest.Set("name", kName)
-          .Set("version", kVersion)
-          .Set("manifest_version", 2)
-          .Set("description", "an extension");
+  auto manifest = base::Value::Dict()
+                      .Set("name", kName)
+                      .Set("version", kVersion)
+                      .Set("manifest_version", 2)
+                      .Set("description", "an extension");
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
-          .SetManifest(manifest.Build())
+          .SetManifest(std::move(manifest))
           .SetLocation(mojom::ManifestLocation::kInternal)
           .SetID(id)
           .Build();
@@ -441,7 +452,8 @@ testing::AssertionResult DeveloperPrivateApiUnitTest::TestPackExtensionFunction(
   // part of the general extension api system.
   const base::Value& response_value = (*function->GetResultListForTest())[0];
   std::unique_ptr<api::developer_private::PackDirectoryResponse> response =
-      api::developer_private::PackDirectoryResponse::FromValue(response_value);
+      api::developer_private::PackDirectoryResponse::FromValueDeprecated(
+          response_value);
   CHECK(response);
 
   if (response->status != expected_status) {
@@ -462,10 +474,8 @@ void DeveloperPrivateApiUnitTest::UpdateProfileConfigurationDevMode(
     bool dev_mode) {
   auto function = base::MakeRefCounted<
       api::DeveloperPrivateUpdateProfileConfigurationFunction>();
-  base::Value::List args =
-      ListBuilder()
-          .Append(DictionaryBuilder().Set("inDeveloperMode", dev_mode).Build())
-          .Build();
+  base::Value::List args = base::Value::List().Append(
+      base::Value::Dict().Set("inDeveloperMode", dev_mode));
   EXPECT_TRUE(RunFunction(function, args)) << function->GetError();
 }
 
@@ -480,7 +490,7 @@ void DeveloperPrivateApiUnitTest::GetProfileConfiguration(
   ASSERT_EQ(1u, function->GetResultListForTest()->size());
   const base::Value& response_value = (*function->GetResultListForTest())[0];
   *profile_info =
-      api::developer_private::ProfileInfo::FromValue(response_value);
+      api::developer_private::ProfileInfo::FromValueDeprecated(response_value);
 }
 
 void DeveloperPrivateApiUnitTest::RunUpdateHostAccess(
@@ -500,11 +510,7 @@ void DeveloperPrivateApiUnitTest::RunUpdateHostAccess(
 void DeveloperPrivateApiUnitTest::SetUp() {
   ExtensionServiceTestBase::SetUp();
 
-  // By not specifying a pref_file filepath, we get a
-  // sync_preferences::TestingPrefServiceSyncable
-  // - see BuildTestingProfile in extension_service_test_base.cc.
-  ExtensionServiceInitParams init_params = CreateDefaultInitParams();
-  init_params.pref_file.clear();
+  ExtensionServiceInitParams init_params;
   init_params.profile_is_supervised = ProfileIsSupervised();
   InitializeExtensionService(init_params);
 
@@ -755,7 +761,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateLoadUnpackedLoadError) {
     // The loadError result should be populated.
     ASSERT_TRUE(result);
     std::unique_ptr<api::developer_private::LoadError> error =
-        api::developer_private::LoadError::FromValue(*result);
+        api::developer_private::LoadError::FromValueDeprecated(*result);
     ASSERT_TRUE(error);
     ASSERT_TRUE(error->source);
     // The source should have *something* (rely on file highlighter tests for
@@ -782,7 +788,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateLoadUnpackedLoadError) {
     // The load error should be populated.
     ASSERT_TRUE(result);
     std::unique_ptr<api::developer_private::LoadError> error =
-        api::developer_private::LoadError::FromValue(*result);
+        api::developer_private::LoadError::FromValueDeprecated(*result);
     ASSERT_TRUE(error);
     // The file source should be empty.
     ASSERT_TRUE(error->source);
@@ -846,7 +852,7 @@ TEST_F(DeveloperPrivateApiUnitTest, LoadUnpackedRetryId) {
             "[{\"failQuietly\": true, \"populateError\": true}]", profile());
     ASSERT_TRUE(result);
     std::unique_ptr<api::developer_private::LoadError> error =
-        api::developer_private::LoadError::FromValue(*result);
+        api::developer_private::LoadError::FromValueDeprecated(*result);
     ASSERT_TRUE(error);
     EXPECT_FALSE(error->retry_guid.empty());
     retry_guid = error->retry_guid;
@@ -866,7 +872,7 @@ TEST_F(DeveloperPrivateApiUnitTest, LoadUnpackedRetryId) {
             "[{\"failQuietly\": true, \"populateError\": true}]", profile());
     ASSERT_TRUE(result);
     std::unique_ptr<api::developer_private::LoadError> error =
-        api::developer_private::LoadError::FromValue(*result);
+        api::developer_private::LoadError::FromValueDeprecated(*result);
     ASSERT_TRUE(error);
     EXPECT_EQ(retry_guid, error->retry_guid);
   }
@@ -896,7 +902,7 @@ TEST_F(DeveloperPrivateApiUnitTest, LoadUnpackedRetryId) {
     // The loadError result should be populated.
     ASSERT_TRUE(result);
     std::unique_ptr<api::developer_private::LoadError> error =
-        api::developer_private::LoadError::FromValue(*result);
+        api::developer_private::LoadError::FromValueDeprecated(*result);
     ASSERT_TRUE(error);
     EXPECT_NE(retry_guid, error->retry_guid);
   }
@@ -1046,7 +1052,7 @@ TEST_F(DeveloperPrivateApiUnitTest, ReloadBadExtensionToLoadUnpackedRetry) {
             function.get(), reload_args, profile());
     ASSERT_TRUE(result);
     std::unique_ptr<api::developer_private::LoadError> error =
-        api::developer_private::LoadError::FromValue(*result);
+        api::developer_private::LoadError::FromValueDeprecated(*result);
     ASSERT_TRUE(error);
     EXPECT_FALSE(error->retry_guid.empty());
     retry_guid = error->retry_guid;
@@ -1147,7 +1153,8 @@ TEST_F(DeveloperPrivateApiUnitTest,
         api_test_utils::RunFunctionAndReturnSingleResult(
             function.get(), kLoadUnpackedArgs, profile());
     ASSERT_TRUE(result);
-    EXPECT_TRUE(api::developer_private::LoadError::FromValue(*result));
+    EXPECT_TRUE(
+        api::developer_private::LoadError::FromValueDeprecated(*result));
   }
 
   // Cleanup.
@@ -1177,7 +1184,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateRequestFileSource) {
 
   const base::Value& response_value = (*function->GetResultListForTest())[0];
   std::unique_ptr<api::developer_private::RequestFileSourceResponse> response =
-      api::developer_private::RequestFileSourceResponse::FromValue(
+      api::developer_private::RequestFileSourceResponse::FromValueDeprecated(
           response_value);
   EXPECT_FALSE(response->before_highlight.empty());
   EXPECT_EQ("\"name\": \"foo\"", response->highlight);
@@ -1205,7 +1212,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateGetExtensionsInfo) {
     const base::Value::List& list = (*results)[0].GetList();
     ASSERT_EQ(1u, list.size());
     std::unique_ptr<api::developer_private::ExtensionInfo> info =
-        api::developer_private::ExtensionInfo::FromValue(list[0]);
+        api::developer_private::ExtensionInfo::FromValueDeprecated(list[0]);
     ASSERT_TRUE(info);
   }
 
@@ -1224,7 +1231,7 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateGetExtensionsInfo) {
     const base::Value::List& list = (*results)[0].GetList();
     ASSERT_EQ(1u, list.size());
     std::unique_ptr<api::developer_private::ItemInfo> item_info =
-        api::developer_private::ItemInfo::FromValue(list[0]);
+        api::developer_private::ItemInfo::FromValueDeprecated(list[0]);
     ASSERT_TRUE(item_info);
   }
 }
@@ -1248,12 +1255,10 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
   // Start by removing all errors for the extension of a given type (manifest).
   std::string type_string = api::developer_private::ToString(
       api::developer_private::ERROR_TYPE_MANIFEST);
-  base::Value::List args = ListBuilder()
-                               .Append(DictionaryBuilder()
-                                           .Set("extensionId", extension->id())
-                                           .Set("type", type_string)
-                                           .Build())
-                               .Build();
+  base::Value::List args =
+      base::Value::List().Append(base::Value::Dict()
+                                     .Set("extensionId", extension->id())
+                                     .Set("type", type_string));
   auto function = base::MakeRefCounted<
       api::DeveloperPrivateDeleteExtensionErrorsFunction>();
   EXPECT_TRUE(RunFunction(function, args)) << function->GetError();
@@ -1264,13 +1269,10 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
 
   // Next remove errors by id.
   int error_id = error_list[0]->id();
-  args =
-      ListBuilder()
-          .Append(DictionaryBuilder()
-                      .Set("extensionId", extension->id())
-                      .Set("errorIds", ListBuilder().Append(error_id).Build())
-                      .Build())
-          .Build();
+  args = base::Value::List().Append(
+      base::Value::Dict()
+          .Set("extensionId", extension->id())
+          .Set("errorIds", base::Value::List().Append(error_id)));
   function = base::MakeRefCounted<
       api::DeveloperPrivateDeleteExtensionErrorsFunction>();
   EXPECT_TRUE(RunFunction(function, args)) << function->GetError();
@@ -1278,11 +1280,8 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateDeleteExtensionErrors) {
   EXPECT_EQ(1u, error_console->GetErrorsForExtension(extension->id()).size());
 
   // Finally remove all errors for the extension.
-  args =
-      ListBuilder()
-          .Append(
-              DictionaryBuilder().Set("extensionId", extension->id()).Build())
-          .Build();
+  args = base::Value::List().Append(
+      base::Value::Dict().Set("extensionId", extension->id()));
   function = base::MakeRefCounted<
       api::DeveloperPrivateDeleteExtensionErrorsFunction>();
   EXPECT_TRUE(RunFunction(function, args)) << function->GetError();
@@ -1297,7 +1296,7 @@ TEST_F(DeveloperPrivateApiUnitTest, RepairNotBrokenExtension) {
   const Extension* extension = InstallCRX(extension_path, INSTALL_NEW);
 
   // Attempt to repair the good extension, expect failure.
-  base::Value::List args = ListBuilder().Append(extension->id()).Build();
+  base::Value::List args = base::Value::List().Append(extension->id());
   auto function =
       base::MakeRefCounted<api::DeveloperPrivateRepairExtensionFunction>();
   EXPECT_FALSE(RunFunction(function, args));
@@ -1327,7 +1326,7 @@ TEST_F(DeveloperPrivateApiUnitTest, RepairPolicyExtension) {
   }
 
   // Attempt to repair the good extension, expect failure.
-  base::Value::List args = ListBuilder().Append(extension_id).Build();
+  base::Value::List args = base::Value::List().Append(extension_id);
   auto function =
       base::MakeRefCounted<api::DeveloperPrivateRepairExtensionFunction>();
   EXPECT_FALSE(RunFunction(function, args));
@@ -1336,7 +1335,7 @@ TEST_F(DeveloperPrivateApiUnitTest, RepairPolicyExtension) {
   // Corrupt the extension , still expect repair failure because this is a
   // policy extension.
   service()->DisableExtension(extension_id, disable_reason::DISABLE_CORRUPTED);
-  args = ListBuilder().Append(extension_id).Build();
+  args = base::Value::List().Append(extension_id);
   function =
       base::MakeRefCounted<api::DeveloperPrivateRepairExtensionFunction>();
   EXPECT_FALSE(RunFunction(function, args));
@@ -1397,8 +1396,8 @@ TEST_F(DeveloperPrivateApiUnitTest, LoadUnpackedFailsWithoutDevMode) {
   auto function =
       base::MakeRefCounted<api::DeveloperPrivateLoadUnpackedFunction>();
   function->SetRenderFrameHost(web_contents->GetPrimaryMainFrame());
-  std::string error = extension_function_test_utils::RunFunctionAndReturnError(
-      function.get(), "[]", browser());
+  std::string error = api_test_utils::RunFunctionAndReturnError(
+      function.get(), "[]", profile());
   EXPECT_THAT(error, testing::HasSubstr("developer mode"));
   prefs->SetBoolean(prefs::kExtensionsUIDeveloperMode, true);
 }
@@ -1430,8 +1429,8 @@ TEST_F(DeveloperPrivateApiUnitTest, LoadUnpackedFailsWithBlocklistingPolicy) {
   auto function =
       base::MakeRefCounted<api::DeveloperPrivateLoadUnpackedFunction>();
   function->SetRenderFrameHost(web_contents->GetPrimaryMainFrame());
-  std::string error = extension_function_test_utils::RunFunctionAndReturnError(
-      function.get(), "[]", browser());
+  std::string error = api_test_utils::RunFunctionAndReturnError(
+      function.get(), "[]", profile());
   EXPECT_THAT(error, testing::HasSubstr("policy"));
 }
 
@@ -1928,7 +1927,7 @@ TEST_F(DeveloperPrivateApiUnitTest, ExtensionUpdatedEventOnPermissionsChange) {
   scoped_refptr<const Extension> dummy_extension =
       ExtensionBuilder("dummy")
           .SetManifestKey("optional_permissions",
-                          ListBuilder().Append("tabs").Build())
+                          base::Value::List().Append("tabs"))
           .Build();
 
   TestEventRouterObserver test_observer(event_router);
@@ -2000,7 +1999,8 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateGetUserSiteSettings) {
           function.get(), /*args=*/"[]", profile());
   ASSERT_TRUE(result.has_value());
   std::unique_ptr<api::developer_private::UserSiteSettings> settings =
-      api::developer_private::UserSiteSettings::FromValue(result.value());
+      api::developer_private::UserSiteSettings::FromValueDeprecated(
+          result.value());
 
   ASSERT_TRUE(settings);
   EXPECT_THAT(settings->permitted_sites, testing::IsEmpty());
@@ -2123,7 +2123,8 @@ TEST_F(DeveloperPrivateApiWithPermittedSitesUnitTest,
   ASSERT_EQ(1u, function->GetResultListForTest()->size());
   const base::Value& response_value = (*function->GetResultListForTest())[0];
   std::unique_ptr<api::developer_private::UserSiteSettings> settings =
-      api::developer_private::UserSiteSettings::FromValue(response_value);
+      api::developer_private::UserSiteSettings::FromValueDeprecated(
+          response_value);
 
   ASSERT_TRUE(settings);
   EXPECT_THAT(settings->permitted_sites,
@@ -2766,10 +2767,23 @@ TEST_F(DeveloperPrivateApiAllowlistUnitTest,
       api::developer_private::EVENT_TYPE_PREFS_CHANGED));
 }
 
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 class DeveloperPrivateApiSupervisedUserUnitTest
-    : public DeveloperPrivateApiUnitTest {
+    : public DeveloperPrivateApiUnitTest,
+      public testing::WithParamInterface<bool> {
  public:
-  DeveloperPrivateApiSupervisedUserUnitTest() = default;
+  DeveloperPrivateApiSupervisedUserUnitTest() {
+    if (extensions_permissions_for_supervised_users_on_desktop()) {
+      feature_list_.InitAndEnableFeature(
+          supervised_user::
+              kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
+
+    } else {
+      feature_list_.InitAndDisableFeature(
+          supervised_user::
+              kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
+    }
+  }
 
   DeveloperPrivateApiSupervisedUserUnitTest(
       const DeveloperPrivateApiSupervisedUserUnitTest&) = delete;
@@ -2779,27 +2793,53 @@ class DeveloperPrivateApiSupervisedUserUnitTest
   ~DeveloperPrivateApiSupervisedUserUnitTest() override = default;
 
   bool ProfileIsSupervised() const override { return true; }
+
+  bool extensions_permissions_for_supervised_users_on_desktop() const {
+    return GetParam();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // Tests trying to call loadUnpacked when the profile shouldn't be allowed to.
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-TEST_F(DeveloperPrivateApiSupervisedUserUnitTest,
+TEST_P(DeveloperPrivateApiSupervisedUserUnitTest,
        LoadUnpackedFailsForSupervisedUsers) {
   std::unique_ptr<content::WebContents> web_contents(
       content::WebContentsTester::CreateTestWebContents(profile(), nullptr));
-
   base::FilePath path = data_dir().AppendASCII("simple_with_popup");
   api::EntryPicker::SkipPickerAndAlwaysSelectPathForTest(&path);
 
-  ASSERT_TRUE(profile()->IsChild());
-
-  auto function =
-      base::MakeRefCounted<api::DeveloperPrivateLoadUnpackedFunction>();
-  function->SetRenderFrameHost(web_contents->GetPrimaryMainFrame());
-  std::string error = extension_function_test_utils::RunFunctionAndReturnError(
-      function.get(), "[]", browser());
-  EXPECT_THAT(error, testing::HasSubstr("Child account"));
+  SupervisedUserService* service =
+      SupervisedUserServiceFactory::GetForProfile(profile());
+  EXPECT_NE(service, nullptr);
+  if (extensions_permissions_for_supervised_users_on_desktop()) {
+    EXPECT_TRUE(service->AreExtensionsPermissionsEnabled());
+    auto function =
+        base::MakeRefCounted<api::DeveloperPrivateLoadUnpackedFunction>();
+    function->SetRenderFrameHost(web_contents->GetPrimaryMainFrame());
+    std::string error = api_test_utils::RunFunctionAndReturnError(
+        function.get(), "[]", profile());
+    EXPECT_THAT(error, testing::HasSubstr("Child account"));
+  } else {
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+    EXPECT_TRUE(service->AreExtensionsPermissionsEnabled());
+    auto function =
+        base::MakeRefCounted<api::DeveloperPrivateLoadUnpackedFunction>();
+    function->SetRenderFrameHost(web_contents->GetPrimaryMainFrame());
+    std::string error = api_test_utils::RunFunctionAndReturnError(
+        function.get(), "[]", profile());
+    EXPECT_THAT(error, testing::HasSubstr("Child account"));
+#else
+    EXPECT_FALSE(service->AreExtensionsPermissionsEnabled());
+#endif
+  }
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    ExtensionsPermissionsForSupervisedUsersOnDesktopFeature,
+    DeveloperPrivateApiSupervisedUserUnitTest,
+    testing::Bool());
 #endif
 
 }  // namespace extensions

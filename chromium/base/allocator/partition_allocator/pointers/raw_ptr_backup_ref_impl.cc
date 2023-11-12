@@ -64,6 +64,29 @@ void RawPtrBackupRefImpl<AllowDangling>::ReportIfDanglingInternal(
   }
 }
 
+// static
+template <bool AllowDangling>
+bool RawPtrBackupRefImpl<AllowDangling>::CheckPointerWithinSameAlloc(
+    uintptr_t before_addr,
+    uintptr_t after_addr,
+    size_t type_size) {
+  partition_alloc::internal::PtrPosWithinAlloc ptr_pos_within_alloc =
+      partition_alloc::internal::IsPtrWithinSameAlloc(before_addr, after_addr,
+                                                      type_size);
+  // No need to check that |new_ptr| is in the same pool, as
+  // IsPtrWithinSameAlloc() checks that it's within the same allocation, so
+  // must be the same pool.
+  PA_BASE_CHECK(ptr_pos_within_alloc !=
+                partition_alloc::internal::PtrPosWithinAlloc::kFarOOB);
+
+#if BUILDFLAG(BACKUP_REF_PTR_POISON_OOB_PTR)
+  return ptr_pos_within_alloc ==
+         partition_alloc::internal::PtrPosWithinAlloc::kAllocEnd;
+#else
+  return false;
+#endif
+}
+
 template <bool AllowDangling>
 bool RawPtrBackupRefImpl<AllowDangling>::IsPointeeAlive(uintptr_t address) {
 #if BUILDFLAG(PA_DCHECK_IS_ON) || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
@@ -75,37 +98,10 @@ bool RawPtrBackupRefImpl<AllowDangling>::IsPointeeAlive(uintptr_t address) {
       ->IsAlive();
 }
 
-template <bool AllowDangling>
-template <typename Z>
-partition_alloc::PtrPosWithinAlloc
-RawPtrBackupRefImpl<AllowDangling>::IsValidDelta(
-    uintptr_t address,
-    partition_alloc::internal::PtrDelta<Z> delta) {
-  return partition_alloc::internal::PartitionAllocIsValidPtrDelta(address,
-                                                                  delta);
-}
-
 // Explicitly instantiates the two BackupRefPtr variants in the .cc. This
 // ensures the definitions not visible from the .h are available in the binary.
 template struct RawPtrBackupRefImpl</*AllowDangling=*/false>;
 template struct RawPtrBackupRefImpl</*AllowDangling=*/true>;
-
-template PA_COMPONENT_EXPORT(RAW_PTR)
-    partition_alloc::PtrPosWithinAlloc RawPtrBackupRefImpl<false>::IsValidDelta(
-        uintptr_t,
-        partition_alloc::internal::PtrDelta<size_t>);
-template PA_COMPONENT_EXPORT(RAW_PTR)
-    partition_alloc::PtrPosWithinAlloc RawPtrBackupRefImpl<false>::IsValidDelta(
-        uintptr_t,
-        partition_alloc::internal::PtrDelta<ptrdiff_t>);
-template PA_COMPONENT_EXPORT(RAW_PTR)
-    partition_alloc::PtrPosWithinAlloc RawPtrBackupRefImpl<true>::IsValidDelta(
-        uintptr_t,
-        partition_alloc::internal::PtrDelta<size_t>);
-template PA_COMPONENT_EXPORT(RAW_PTR)
-    partition_alloc::PtrPosWithinAlloc RawPtrBackupRefImpl<true>::IsValidDelta(
-        uintptr_t,
-        partition_alloc::internal::PtrDelta<ptrdiff_t>);
 
 #if BUILDFLAG(PA_DCHECK_IS_ON) || BUILDFLAG(ENABLE_BACKUP_REF_PTR_SLOW_CHECKS)
 void CheckThatAddressIsntWithinFirstPartitionPage(uintptr_t address) {

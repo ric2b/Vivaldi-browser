@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ASH_ECHE_APP_ECHE_APP_MANAGER_FACTORY_H_
 
 #include "ash/webui/eche_app_ui/launch_app_helper.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/profiles/profile_keyed_service_factory.h"
@@ -20,6 +21,7 @@ namespace eche_app {
 class EcheAppManager;
 class EcheAppNotificationController;
 class SystemInfo;
+class AppsLaunchInfoProvider;
 
 class LaunchedAppInfo {
  public:
@@ -29,8 +31,9 @@ class LaunchedAppInfo {
     ~Builder();
 
     std::unique_ptr<LaunchedAppInfo> Build() {
-      return base::WrapUnique(new LaunchedAppInfo(
-          package_name_, visible_name_, user_id_, icon_, phone_name_));
+      return base::WrapUnique(new LaunchedAppInfo(package_name_, visible_name_,
+                                                  user_id_, icon_, phone_name_,
+                                                  apps_launch_info_provider_));
     }
     Builder& SetPackageName(const std::string& package_name) {
       package_name_ = package_name;
@@ -57,12 +60,19 @@ class LaunchedAppInfo {
       return *this;
     }
 
+    Builder& SetAppsLaunchInfoProvider(
+        AppsLaunchInfoProvider* apps_launch_info_provider) {
+      apps_launch_info_provider_ = apps_launch_info_provider;
+      return *this;
+    }
+
    private:
     std::string package_name_;
     std::u16string visible_name_;
     absl::optional<int64_t> user_id_;
     gfx::Image icon_;
     std::u16string phone_name_;
+    raw_ptr<AppsLaunchInfoProvider, ExperimentalAsh> apps_launch_info_provider_;
   };
 
   LaunchedAppInfo() = delete;
@@ -75,13 +85,17 @@ class LaunchedAppInfo {
   absl::optional<int64_t> user_id() const { return user_id_; }
   gfx::Image icon() const { return icon_; }
   std::u16string phone_name() const { return phone_name_; }
+  AppsLaunchInfoProvider* apps_launch_info_provider() {
+    return apps_launch_info_provider_;
+  }
 
  protected:
   LaunchedAppInfo(const std::string& package_name,
                   const std::u16string& visible_name,
                   const absl::optional<int64_t>& user_id,
                   const gfx::Image& icon,
-                  const std::u16string& phone_name);
+                  const std::u16string& phone_name,
+                  AppsLaunchInfoProvider* apps_launch_info_provider);
 
  private:
   std::string package_name_;
@@ -89,6 +103,7 @@ class LaunchedAppInfo {
   absl::optional<int64_t> user_id_;
   gfx::Image icon_;
   std::u16string phone_name_;
+  raw_ptr<AppsLaunchInfoProvider, ExperimentalAsh> apps_launch_info_provider_;
 };
 
 // Factory to create a single EcheAppManager.
@@ -111,7 +126,8 @@ class EcheAppManagerFactory : public ProfileKeyedServiceFactory {
                             const std::u16string& visible_name,
                             const absl::optional<int64_t>& user_id,
                             const gfx::Image& icon,
-                            const std::u16string& phone_name);
+                            const std::u16string& phone_name,
+                            AppsLaunchInfoProvider* apps_launch_info_provider);
 
   void SetLastLaunchedAppInfo(
       std::unique_ptr<LaunchedAppInfo> last_launched_app_info);

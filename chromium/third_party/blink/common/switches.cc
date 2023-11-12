@@ -118,9 +118,6 @@ const char kMinHeightForGpuRasterTile[] = "min-height-for-gpu-raster-tile";
 // signal to dismiss a splash screen.
 const char kNetworkQuietTimeout[] = "network-quiet-timeout";
 
-// Number of worker threads used to rasterize content.
-const char kNumRasterThreads[] = "num-raster-threads";
-
 // Visibly render a border around layout shift rects in the web page to help
 // debug and study layout shifts.
 const char kShowLayoutShiftRegions[] = "show-layout-shift-regions";
@@ -140,16 +137,6 @@ const char kDisableThrottleNonVisibleCrossOriginIframes[] =
 const char kTouchTextSelectionStrategy[] = "touch-selection-strategy";
 const char kTouchTextSelectionStrategy_Character[] = "character";
 const char kTouchTextSelectionStrategy_Direction[] = "direction";
-
-// Used to communicate managed policy for the MaxUnthrottledTimeoutNestingLevel
-// feature. This feature is typically controlled by base::Feature (see
-// blink/common/features.*) but requires an enterprise policy override. This is
-// implicitly a tri-state, and can be either unset, or set to "1" for force
-// enable, or "0" for force disable.
-extern const char kUnthrottledNestedTimeoutPolicy[] =
-    "unthrottled-nested-timeout-level-policy";
-extern const char kUnthrottledNestedTimeoutPolicy_ForceDisable[] = "0";
-extern const char kUnthrottledNestedTimeoutPolicy_ForceEnable[] = "1";
 
 // Comma-separated list of origins that can use SharedArrayBuffer without
 // enabling cross-origin isolation.

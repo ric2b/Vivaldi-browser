@@ -829,9 +829,10 @@ export class FileTable extends Table {
     label.appendChild(
         filelist.renderFileNameLabel(this.ownerDocument, entry, locationInfo));
     if (locationInfo && locationInfo.isDriveBased) {
+      label.appendChild(filelist.renderEncryptionStatus(this.ownerDocument));
       label.appendChild(filelist.renderInlineStatus(this.ownerDocument));
     }
-    if (!util.isJellyEnabled()) {
+    if (!util.isJellyEnabled() && !util.isInlineSyncStatusEnabled()) {
       const isDlpRestricted = !!metadata.isDlpRestricted;
       if (isDlpRestricted) {
         label.appendChild(this.renderDlpManagedIcon_());
@@ -928,7 +929,7 @@ export class FileTable extends Table {
     const div = /** @type {!HTMLDivElement} */
         (this.ownerDocument.createElement('div'));
 
-    if (util.isJellyEnabled()) {
+    if (util.isJellyEnabled() || util.isInlineSyncStatusEnabled()) {
       div.className = 'dateholder';
       const label = /** @type {!HTMLDivElement} */
           (this.ownerDocument.createElement('div'));
@@ -1006,7 +1007,7 @@ export class FileTable extends Table {
       }
     };
     if (type === 'filesystem') {
-      forEachCell('.table-row-cell > .date', function(item, entry, unused) {
+      forEachCell('.table-row-cell .date', function(item, entry, unused) {
         this.updateDate_(item, entry);
       });
       forEachCell('.table-row-cell > .size', function(item, entry, unused) {
@@ -1015,9 +1016,9 @@ export class FileTable extends Table {
       this.updateGroupHeading_();
     } else if (type === 'external') {
       // The cell name does not matter as the entire list item is needed.
-      forEachCell('.table-row-cell > .date', function(item, entry, listItem) {
+      forEachCell('.table-row-cell .date', function(item, entry, listItem) {
         filelist.updateListItemExternalProps(
-            listItem,
+            listItem, entry,
             this.metadataModel_.getCache(
                 [entry],
                 [

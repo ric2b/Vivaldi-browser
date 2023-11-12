@@ -13,7 +13,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect.h"
@@ -21,7 +20,6 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/rrect_f.h"
-#include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/linux/drm_util_linux.h"
 #include "ui/gfx/overlay_priority_hint.h"
@@ -32,9 +30,9 @@
 #include "ui/ozone/platform/wayland/host/wayland_buffer_factory.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
+#include "ui/ozone/platform/wayland/host/wayland_frame_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_subsurface.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_linux_dmabuf.h"
-#include "ui/ozone/platform/wayland/mojom/wayland_overlay_config.mojom.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
 #include "ui/ozone/platform/wayland/test/mock_zwp_linux_dmabuf.h"
 #include "ui/ozone/platform/wayland/test/test_overlay_prioritized_surface.h"
@@ -114,6 +112,8 @@ class WaylandBufferManagerTest : public WaylandTest {
     // before we create the surface.
     connection_->set_surface_submission_in_pixel_coordinates(
         GetParam().surface_submission_in_pixel_coordinates);
+    connection_->set_supports_viewporter_surface_scaling(
+        GetParam().supports_viewporter_surface_scaling);
 
     // Set this bug fix so that WaylandFrameManager does not use a freeze
     // counter. Otherwise, we won't be able to have a reliable test order of
@@ -130,8 +130,11 @@ class WaylandBufferManagerTest : public WaylandTest {
     // callback and bind the interface again if the manager failed.
     manager_host_->SetTerminateGpuCallback(callback_.Get());
     auto interface_ptr = manager_host_->BindInterface();
-    buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false, true,
-                                    false,
+    buffer_manager_gpu_->Initialize(std::move(interface_ptr), {},
+                                    /*supports_dma_buf=*/false,
+                                    /*supports_viewporter=*/true,
+                                    /*supports_acquire_fence=*/false,
+                                    /*supports_overlays=*/true,
                                     kAugmentedSurfaceNotSupportedVersion);
     surface_id_ = window_->root_surface()->get_surface_id();
   }
@@ -205,7 +208,11 @@ class WaylandBufferManagerTest : public WaylandTest {
                 buffer_manager_gpu_ =
                     std::make_unique<WaylandBufferManagerGpu>();
                 buffer_manager_gpu_->Initialize(
-                    std::move(interface_ptr), {}, false, true, false,
+                    std::move(interface_ptr), {},
+                    /*supports_dma_buf=*/false,
+                    /*supports_viewporter=*/true,
+                    /*supports_acquire_fence=*/false,
+                    /*supports_overlays=*/true,
                     kAugmentedSurfaceNotSupportedVersion);
               }));
     }
@@ -942,7 +949,6 @@ TEST_P(WaylandBufferManagerTest,
     // Deliberately drop the presentation feedback for the first buffer,
     // since we will destroy it.
     auto* mock_wp_presentation = server->EnsureAndGetWpPresentation();
-    ;
     EXPECT_EQ(1u, mock_wp_presentation->num_of_presentation_callbacks());
     mock_wp_presentation->DropPresentationCallback();
   });
@@ -974,7 +980,6 @@ TEST_P(WaylandBufferManagerTest,
     // Deliberately drop the presentation feedback for the second buffer,
     // since we will destroy it.
     auto* mock_wp_presentation = server->EnsureAndGetWpPresentation();
-    ;
     EXPECT_EQ(1u, mock_wp_presentation->num_of_presentation_callbacks());
     mock_wp_presentation->DropPresentationCallback();
   });
@@ -1010,8 +1015,9 @@ TEST_P(WaylandBufferManagerTest,
     server->EnsureAndGetWpPresentation()->SendPresentationCallback();
   });
 
-  // Let the mojo messages to be processed.
-  base::RunLoop().RunUntilIdle();
+  // Ensure that presentation feedback is flushed.
+  task_environment_.FastForwardBy(
+      WaylandFrameManager::GetPresentationFlushTimerDurationForTesting());
 
   // Verify our expecations.
   testing::Mock::VerifyAndClearExpectations(&mock_surface_gpu);
@@ -1031,6 +1037,8 @@ TEST_P(WaylandBufferManagerTest,
   });
 
   // Let the mojo messages to be processed.
+  // No need to fast forward to ensure the presentation flush timer is fired,
+  // because in this case the OnSubmission should piggyback the feedback.
   base::RunLoop().RunUntilIdle();
 
   testing::Mock::VerifyAndClearExpectations(&mock_surface_gpu);
@@ -1184,8 +1192,9 @@ TEST_P(WaylandBufferManagerTest,
     mock_wp_presentation->SendPresentationCallback();
   });
 
-  // Let the mojo messages to be processed.
-  base::RunLoop().RunUntilIdle();
+  // Ensure that presentation feedback is flushed.
+  task_environment_.FastForwardBy(
+      WaylandFrameManager::GetPresentationFlushTimerDurationForTesting());
 
   testing::Mock::VerifyAndClearExpectations(&mock_surface_gpu);
 
@@ -1213,8 +1222,9 @@ TEST_P(WaylandBufferManagerTest,
     mock_wp_presentation->SendPresentationCallback();
   });
 
-  // Let the mojo messages to be processed.
-  base::RunLoop().RunUntilIdle();
+  // Ensure that presentation feedback is flushed.
+  task_environment_.FastForwardBy(
+      WaylandFrameManager::GetPresentationFlushTimerDurationForTesting());
 
   testing::Mock::VerifyAndClearExpectations(&mock_surface_gpu);
 
@@ -1378,8 +1388,7 @@ TEST_P(WaylandBufferManagerTest, TestCommitBufferConditionsAckConfigured) {
           auto* xdg_surface = mock_surface->xdg_surface();
           testing::Mock::VerifyAndClearExpectations(mock_surface);
 
-          EXPECT_CALL(*xdg_surface, SetWindowGeometry(gfx::Rect(800, 600)))
-              .Times(1);
+          EXPECT_CALL(*xdg_surface, SetWindowGeometry(_)).Times(0);
           EXPECT_CALL(*xdg_surface, AckConfigure(_)).Times(1);
           EXPECT_CALL(*mock_surface, Attach(_, _, _)).Times(1);
           EXPECT_CALL(*mock_surface, Frame(_)).Times(1);
@@ -2497,8 +2506,12 @@ TEST_P(WaylandBufferManagerTest,
   });
 
   auto interface_ptr = manager_host_->BindInterface();
-  buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false, true,
-                                  false, kAugmentedSurfaceNotSupportedVersion);
+  buffer_manager_gpu_->Initialize(std::move(interface_ptr), {},
+                                  /*supports_dma_buf=*/false,
+                                  /*supports_viewporter=*/true,
+                                  /*supports_acquire_fence=*/false,
+                                  /*supports_overlays=*/true,
+                                  kAugmentedSurfaceNotSupportedVersion);
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
     EXPECT_CALL(*server->zwp_linux_dmabuf_v1(), CreateParams(_, _, _)).Times(1);
@@ -2612,8 +2625,12 @@ TEST_P(WaylandBufferManagerTest, HidesSubsurfacesOnChannelDestroyed) {
   });
 
   auto interface_ptr = manager_host_->BindInterface();
-  buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false, true,
-                                  false, kAugmentedSurfaceNotSupportedVersion);
+  buffer_manager_gpu_->Initialize(std::move(interface_ptr), {},
+                                  /*supports_dma_buf=*/false,
+                                  /*supports_viewporter=*/true,
+                                  /*supports_acquire_fence=*/false,
+                                  /*supports_overlays=*/true,
+                                  kAugmentedSurfaceNotSupportedVersion);
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
     // Now, create only one buffer and attach that to the root surface. The
@@ -2778,6 +2795,12 @@ TEST_P(WaylandBufferManagerTest, CanSetRoundedCorners) {
 
   uint32_t frame_id = 0u;
   for (auto scale_factor : scale_factors) {
+    if (scale_factor != std::ceil(scale_factor) &&
+        !GetParam().surface_submission_in_pixel_coordinates) {
+      // Fractional scales not supported when surface submission in pixel
+      // coordinates is disabled.
+      continue;
+    }
     for (const auto& rounded_corners : rounded_corners_vec) {
       std::vector<wl::WaylandOverlayConfig> overlay_configs;
       for (auto id : kBufferIds) {
@@ -2941,8 +2964,12 @@ TEST_P(WaylandBufferManagerTest, ExecutesTasksAfterInitialization) {
   EXPECT_EQ(3u, buffer_manager_gpu_->pending_tasks_.size());
 
   auto interface_ptr = manager_host_->BindInterface();
-  buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false, true,
-                                  false, kAugmentedSurfaceNotSupportedVersion);
+  buffer_manager_gpu_->Initialize(std::move(interface_ptr), {},
+                                  /*supports_dma_buf=*/false,
+                                  /*supports_viewporter=*/true,
+                                  /*supports_acquire_fence=*/false,
+                                  /*supports_overlays=*/true,
+                                  kAugmentedSurfaceNotSupportedVersion);
 
   base::RunLoop().RunUntilIdle();
 
@@ -3100,7 +3127,7 @@ TEST_P(WaylandBufferManagerViewportTest, ViewportDestinationNonInteger) {
 // available (the destination is set with floating point precision).
 TEST_P(WaylandBufferManagerViewportTest, ViewportDestinationInteger) {
   constexpr gfx::RectF test_data[2][2] = {
-      {gfx::RectF({21, 18}, {7.423, 11.854}), gfx::RectF({21, 18}, {8, 12})},
+      {gfx::RectF({21, 18}, {7.423, 11.854}), gfx::RectF({21, 18}, {7, 12})},
       {gfx::RectF({7, 8}, {43.562, 63.76}),
        gfx::RectF({7, 8}, {43.562, 63.76})}};
 
@@ -3139,5 +3166,10 @@ INSTANTIATE_TEST_SUITE_P(
     XdgVersionStableTestWithSurfaceSubmissionInPixelCoordinatesDisabled,
     WaylandBufferManagerTest,
     Values(wl::ServerConfig{.surface_submission_in_pixel_coordinates = false}));
+INSTANTIATE_TEST_SUITE_P(
+    XdgVersionStableTestWithViewporterSurfaceScalingEnabled,
+    WaylandBufferManagerTest,
+    Values(wl::ServerConfig{.surface_submission_in_pixel_coordinates = false,
+                            .supports_viewporter_surface_scaling = true}));
 
 }  // namespace ui

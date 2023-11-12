@@ -104,6 +104,13 @@ FeaturePromoSpecification FeaturePromoSpecification::CreateForToastPromo(
     AcceleratorInfo accessible_accelerator) {
   FeaturePromoSpecification spec(&feature, PromoType::kToast, anchor_element_id,
                                  body_text_string_id);
+  CHECK_NE(body_text_string_id, accessible_text_string_id)
+      << "Because toasts are hard to notice and time out quickly, screen "
+         "reader text associated with toasts should differ from the bubble "
+         "text and either provide the accelerator to access the highlighted "
+         "entry point for your feature, or at the very least provide a "
+         "separate description of the screen element appropriate for keyboard "
+         "and low-vision users.";
   spec.screen_reader_string_id_ = accessible_text_string_id;
   spec.screen_reader_accelerator_ = std::move(accessible_accelerator);
   return spec;
@@ -116,6 +123,22 @@ FeaturePromoSpecification FeaturePromoSpecification::CreateForSnoozePromo(
     int body_text_string_id) {
   return FeaturePromoSpecification(&feature, PromoType::kSnooze,
                                    anchor_element_id, body_text_string_id);
+}
+
+// static
+FeaturePromoSpecification FeaturePromoSpecification::CreateForSnoozePromo(
+    const base::Feature& feature,
+    ui::ElementIdentifier anchor_element_id,
+    int body_text_string_id,
+    int accessible_text_string_id,
+    AcceleratorInfo accessible_accelerator) {
+  // See `FeaturePromoSpecification::CreateForToastPromo()`.
+  CHECK_NE(body_text_string_id, accessible_text_string_id);
+  FeaturePromoSpecification spec(&feature, PromoType::kSnooze,
+                                 anchor_element_id, body_text_string_id);
+  spec.screen_reader_string_id_ = accessible_text_string_id;
+  spec.screen_reader_accelerator_ = std::move(accessible_accelerator);
+  return spec;
 }
 
 // static

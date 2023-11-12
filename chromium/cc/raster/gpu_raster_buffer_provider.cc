@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/bits.h"
-#include "base/cxx17_backports.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -88,8 +87,7 @@ GpuRasterBufferProvider::RasterBufferImpl::RasterBufferImpl(
     : client_(client),
       backing_(backing),
       resource_size_(in_use_resource.size()),
-      shared_image_format_(
-          viz::SharedImageFormat::SinglePlane(in_use_resource.format())),
+      shared_image_format_(in_use_resource.format()),
       color_space_(in_use_resource.color_space()),
       resource_has_previous_content_(resource_has_previous_content),
       depends_on_at_raster_decodes_(depends_on_at_raster_decodes),
@@ -141,7 +139,7 @@ GpuRasterBufferProvider::GpuRasterBufferProvider(
     viz::ContextProvider* compositor_context_provider,
     viz::RasterContextProvider* worker_context_provider,
     bool use_gpu_memory_buffer_resources,
-    viz::ResourceFormat tile_format,
+    viz::SharedImageFormat tile_format,
     const gfx::Size& max_tile_size,
     bool unpremultiply_and_dither_low_bit_depth_tiles,
     RasterQueryQueue* const pending_raster_queries,
@@ -195,12 +193,12 @@ void GpuRasterBufferProvider::Flush() {
   compositor_context_provider_->ContextSupport()->FlushPendingWork();
 }
 
-viz::ResourceFormat GpuRasterBufferProvider::GetResourceFormat() const {
+viz::SharedImageFormat GpuRasterBufferProvider::GetFormat() const {
   return tile_format_;
 }
 
 bool GpuRasterBufferProvider::IsResourcePremultiplied() const {
-  return !ShouldUnpremultiplyAndDitherResource(GetResourceFormat());
+  return !ShouldUnpremultiplyAndDitherResource(GetFormat());
 }
 
 bool GpuRasterBufferProvider::IsResourceReadyToDraw(
@@ -366,7 +364,7 @@ void GpuRasterBufferProvider::RasterBufferImpl::RasterizeSource(
     }
     backing_->mailbox = sii->CreateSharedImage(
         shared_image_format_, resource_size_, color_space_,
-        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, flags,
+        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, flags, "GpuRasterTile",
         gpu::kNullSurfaceHandle);
     mailbox_needs_clear = true;
     ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
@@ -385,7 +383,7 @@ void GpuRasterBufferProvider::RasterBufferImpl::RasterizeSource(
   // If playback_settings.msaa_sample_count <= 0, the MSAA is not used. It is
   // equivalent to MSAA sample count 1.
   uint32_t sample_count =
-      base::clamp(playback_settings.msaa_sample_count, 1, 64);
+      std::clamp(playback_settings.msaa_sample_count, 1, 64);
   UMA_HISTOGRAM_CUSTOM_COUNTS("Gpu.Rasterization.Raster.MSAASampleCountLog2",
                               base::bits::Log2Floor(sample_count), 0, 7, 7);
   // With Raw Draw, the framebuffer will be the rasterization target. It cannot
@@ -420,7 +418,7 @@ void GpuRasterBufferProvider::RasterBufferImpl::RasterizeSource(
 }
 
 bool GpuRasterBufferProvider::ShouldUnpremultiplyAndDitherResource(
-    viz::ResourceFormat format) const {
+    viz::SharedImageFormat format) const {
   // TODO(crbug.com/1151490): Re-enable for OOPR.
   return false;
 }

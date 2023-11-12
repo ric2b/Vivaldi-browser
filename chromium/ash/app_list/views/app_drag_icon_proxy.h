@@ -24,6 +24,7 @@ class Rect;
 
 namespace ui {
 class Layer;
+class LayerOwner;
 }  // namespace ui
 
 namespace ash {
@@ -32,7 +33,7 @@ namespace ash {
 // shelf. It creates a DragImageView widget in a window container used for
 // drag images, so the app icon can escape the views container that owns the
 // dragged app view. The widget is destroyed when this goes out of scope.
-class AppDragIconProxy : public ui::ImplicitAnimationObserver {
+class AppDragIconProxy {
  public:
   // `root_window` - The root window to which the proxy should be added.
   // `icon` - The icon to be used for the app icon.
@@ -43,18 +44,18 @@ class AppDragIconProxy : public ui::ImplicitAnimationObserver {
   // `scale_factor` - The scale factor by which the `icon` should be scaled when
   //     shown as a drag image.
   // `is_folder_icon` - whether the icon dragged is a folder.
+  // `shadow_size` - specify the size of the shadow, which will be drawn at the
+  // center of the icon proxy.
   AppDragIconProxy(aura::Window* root_window,
                    const gfx::ImageSkia& icon,
                    const gfx::Point& pointer_location_in_screen,
                    const gfx::Vector2d& pointer_offset_from_center,
                    float scale_factor,
-                   bool is_folder_icon);
+                   bool is_folder_icon,
+                   const gfx::Size& shadow_size);
   AppDragIconProxy(const AppDragIconProxy&) = delete;
   AppDragIconProxy& operator=(const AppDragIconProxy&) = delete;
-  ~AppDragIconProxy() override;
-
-  // ui::ImplicitAnimationObserver:
-  void OnImplicitAnimationsCompleted() override;
+  ~AppDragIconProxy();
 
   // Updates drag icon position to match the new pointer location.
   void UpdatePosition(const gfx::Point& pointer_location_in_screen);
@@ -83,12 +84,21 @@ class AppDragIconProxy : public ui::ImplicitAnimationObserver {
     return shadow_->GetContentBounds();
   }
 
+  // Returns the layer that is used to blur the background.
+  ui::Layer* GetBlurredLayerForTesting();
+
  private:
+  void OnProxyAnimationCompleted();
+
   // Whether close animation (see `AnimateToBoundsAndCloseWidget()`) is in
   // progress.
   bool closing_widget_ = false;
 
   std::unique_ptr<SystemShadow> shadow_;
+
+  // A layer that is used to blur the background of the dragged icon. Only used
+  // for refreshed folder icons.
+  std::unique_ptr<ui::LayerOwner> blurred_background_layer_;
 
   // The widget used to display the drag image.
   views::UniqueWidgetPtr drag_image_widget_;
@@ -97,6 +107,8 @@ class AppDragIconProxy : public ui::ImplicitAnimationObserver {
   gfx::Vector2d drag_image_offset_;
 
   base::OnceClosure animation_completion_callback_;
+
+  base::WeakPtrFactory<AppDragIconProxy> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

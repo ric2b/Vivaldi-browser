@@ -22,6 +22,7 @@
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
 #if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/performance_manager/policies/heuristic_memory_saver_policy.h"
 #include "chrome/browser/performance_manager/policies/high_efficiency_mode_policy.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -113,6 +114,7 @@ void PageTimelineMonitor::CollectSlice() {
     bool has_notification_permission = false;
     bool is_capturing_media = false;
     bool is_connected_to_device = false;
+    bool updated_title_or_favicon_in_background = false;
 
     const auto* page_live_state_data =
         PageLiveStateDecorator::Data::FromPageNode(page_node);
@@ -129,18 +131,13 @@ void PageTimelineMonitor::CollectSlice() {
       is_connected_to_device =
           page_live_state_data->IsConnectedToUSBDevice() ||
           page_live_state_data->IsConnectedToBluetoothDevice();
+      updated_title_or_favicon_in_background =
+          page_live_state_data->UpdatedTitleOrFaviconInBackground();
     }
 
-    ukm::builders::PerformanceManager_PageTimelineState(source_id)
-        .SetSliceId(slice_id)
-#if !BUILDFLAG(IS_ANDROID)
-        .SetHighEfficiencyMode(performance_manager::policies::
-                                   HighEfficiencyModePolicy::GetInstance() &&
-                               performance_manager::policies::
-                                   HighEfficiencyModePolicy::GetInstance()
-                                       ->IsHighEfficiencyDiscardingEnabled())
-        .SetBatterySaverMode(battery_saver_enabled_)
-#endif  // !BUILDFLAG(IS_ANDROID)
+    ukm::builders::PerformanceManager_PageTimelineState builder(source_id);
+
+    builder.SetSliceId(slice_id)
         .SetIsActiveTab(is_active_tab)
         .SetTimeSinceLastSlice(ukm::GetSemanticBucketMinForDurationTiming(
             time_since_last_slice.InMilliseconds()))
@@ -153,14 +150,28 @@ void PageTimelineMonitor::CollectSlice() {
         .SetTotalForegroundTime(ukm::GetSemanticBucketMinForDurationTiming(
             curr_info->total_foreground_milliseconds))
         .SetChangedFaviconOrTitleInBackground(
-            curr_info->updated_title_or_favicon_in_background)
+            updated_title_or_favicon_in_background)
         .SetHasNotificationPermission(has_notification_permission)
         .SetIsCapturingMedia(is_capturing_media)
         .SetIsConnectedToDevice(is_connected_to_device)
         .SetIsPlayingAudio(page_node->IsAudible())
+        .SetPrivateFootprint(page_node->EstimatePrivateFootprintSize())
         .SetResidentSetSize(page_node->EstimateResidentSetSize())
-        .SetTabId(curr_info->tab_id)
-        .Record(ukm::UkmRecorder::Get());
+        .SetTabId(curr_info->tab_id);
+
+#if !BUILDFLAG(IS_ANDROID)
+    bool high_efficiency_mode_active =
+        (policies::HighEfficiencyModePolicy::GetInstance() &&
+         policies::HighEfficiencyModePolicy::GetInstance()
+             ->IsHighEfficiencyDiscardingEnabled()) ||
+        (policies::HeuristicMemorySaverPolicy::GetInstance() &&
+         policies::HeuristicMemorySaverPolicy::GetInstance()->IsActive());
+
+    builder.SetHighEfficiencyMode(high_efficiency_mode_active)
+        .SetBatterySaverMode(battery_saver_enabled_);
+#endif  // !BUILDFLAG(IS_ANDROID)
+
+    builder.Record(ukm::UkmRecorder::Get());
   }
 }
 
@@ -200,8 +211,9 @@ void PageTimelineMonitor::OnBeforePageNodeRemoved(const PageNode* page_node) {
 }
 
 void PageTimelineMonitor::OnIsVisibleChanged(const PageNode* page_node) {
-  if (page_node->GetType() != performance_manager::PageType::kTab)
+  if (page_node->GetType() != performance_manager::PageType::kTab) {
     return;
+  }
 
   // It's possible for this to happen when a tab is discarded. The sequence of
   // events is:
@@ -237,8 +249,9 @@ void PageTimelineMonitor::OnIsVisibleChanged(const PageNode* page_node) {
 
 void PageTimelineMonitor::OnPageLifecycleStateChanged(
     const PageNode* page_node) {
-  if (page_node->GetType() != performance_manager::PageType::kTab)
+  if (page_node->GetType() != performance_manager::PageType::kTab) {
     return;
+  }
 
   auto it = page_node_info_map_.find(page_node);
   if (it == page_node_info_map_.end()) {
@@ -277,29 +290,6 @@ void PageTimelineMonitor::OnTypeChanged(const PageNode* page_node,
     case performance_manager::PageType::kUnknown:
       NOTREACHED();
       break;
-  }
-}
-
-void PageTimelineMonitor::OnTitleUpdated(const PageNode* page_node) {
-  if (page_node->GetType() != performance_manager::PageType::kTab)
-    return;
-
-  DCHECK(base::Contains(page_node_info_map_, page_node));
-  if (page_node_info_map_[page_node]->GetPageState() ==
-      PageState::kBackground) {
-    page_node_info_map_[page_node]->updated_title_or_favicon_in_background =
-        true;
-  }
-}
-void PageTimelineMonitor::OnFaviconUpdated(const PageNode* page_node) {
-  if (page_node->GetType() != performance_manager::PageType::kTab)
-    return;
-
-  DCHECK(base::Contains(page_node_info_map_, page_node));
-  if (page_node_info_map_[page_node]->GetPageState() ==
-      PageState::kBackground) {
-    page_node_info_map_[page_node]->updated_title_or_favicon_in_background =
-        true;
   }
 }
 

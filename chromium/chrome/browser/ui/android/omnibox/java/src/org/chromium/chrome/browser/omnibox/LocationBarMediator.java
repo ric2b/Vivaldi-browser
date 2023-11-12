@@ -34,9 +34,9 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.lens.LensController;
@@ -75,7 +75,6 @@ import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
@@ -157,6 +156,9 @@ class LocationBarMediator
                 @Override
                 public void setValue(LocationBarMediator object, float value) {
                     ((LocationBarTablet) mLocationBarLayout).setWidthChangeAnimationFraction(value);
+                    if (mUrlHasFocus) {
+                        mEmbedderImpl.recalculateOmniboxAlignment();
+                    }
                 }
             };
 
@@ -188,6 +190,7 @@ class LocationBarMediator
     private final SearchEngineLogoUtils mSearchEngineLogoUtils;
     private final SaveOfflineButtonState mSaveOfflineButtonState;
     private final OmniboxUma mOmniboxUma;
+    private final OmniboxSuggestionsDropdownEmbedderImpl mEmbedderImpl;
 
     private boolean mNativeInitialized;
     private boolean mUrlFocusedFromFakebox;
@@ -208,6 +211,7 @@ class LocationBarMediator
     private @BrandedColorScheme int mBrandedColorScheme = BrandedColorScheme.APP_DEFAULT;
     private ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
             new ObservableSupplierImpl<>();
+    private boolean mShouldClearOmniboxOnFocus = true;
 
     // Vivaldi
     private boolean mIsStatusBarModified;
@@ -223,18 +227,17 @@ class LocationBarMediator
             @NonNull BackKeyBehaviorDelegate backKeyBehavior, @NonNull WindowAndroid windowAndroid,
             boolean isTablet, @NonNull SearchEngineLogoUtils searchEngineLogoUtils,
             @NonNull LensController lensController,
-            @NonNull Runnable launchAssistanceSettingsAction,
             @NonNull SaveOfflineButtonState saveOfflineButtonState, @NonNull OmniboxUma omniboxUma,
-            @NonNull BooleanSupplier isToolbarMicEnabledSupplier) {
+            @NonNull BooleanSupplier isToolbarMicEnabledSupplier,
+            @NonNull OmniboxSuggestionsDropdownEmbedderImpl dropdownEmbedder) {
         mContext = context;
         mLocationBarLayout = locationBarLayout;
         mLocationBarDataProvider = locationBarDataProvider;
         mLocationBarDataProvider.addObserver(this);
         mOverrideUrlLoadingDelegate = overrideUrlLoadingDelegate;
         mLocaleManager = localeManager;
-        mVoiceRecognitionHandler =
-                new VoiceRecognitionHandler(this, mAssistantVoiceSearchServiceSupplier,
-                        launchAssistanceSettingsAction, profileSupplier);
+        mVoiceRecognitionHandler = new VoiceRecognitionHandler(
+                this, mAssistantVoiceSearchServiceSupplier, profileSupplier);
         mVoiceRecognitionHandler.addObserver(this);
         mProfileSupplier = profileSupplier;
         mProfileSupplier.addObserver(mCallbackController.makeCancelable(this::setProfile));
@@ -249,6 +252,7 @@ class LocationBarMediator
         mSaveOfflineButtonState = saveOfflineButtonState;
         mOmniboxUma = omniboxUma;
         mIsToolbarMicEnabledSupplier = isToolbarMicEnabledSupplier;
+        mEmbedderImpl = dropdownEmbedder;
     }
 
     /**
@@ -572,12 +576,7 @@ class LocationBarMediator
         }
         mLocaleManager.recordLocaleBasedSearchMetrics(false, url, transition);
 
-        // TODO(crbug.com/1316461): enable by default and remove this feature.
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.POST_TASK_FOCUS_TAB)) {
-            PostTask.postTask(UiThreadTaskTraits.USER_VISIBLE, () -> focusCurrentTab());
-        } else {
-            focusCurrentTab();
-        }
+        PostTask.postTask(TaskTraits.UI_USER_VISIBLE, () -> focusCurrentTab());
     }
 
     /* package */ boolean didFocusUrlFromFakebox() {
@@ -693,6 +692,8 @@ class LocationBarMediator
         if (!mIsTablet && !showExpandedState) {
             mLocationBarLayout.setUrlActionContainerVisibility(View.GONE);
         }
+        // Reset to the default value.
+        mShouldClearOmniboxOnFocus = true;
     }
 
     /**
@@ -965,6 +966,10 @@ class LocationBarMediator
         String textWithoutAutocomplete = mUrlCoordinator.getTextWithoutAutocomplete();
         String textWithAutocomplete = mUrlCoordinator.getTextWithAutocomplete();
         mAutocompleteCoordinator.onTextChanged(textWithoutAutocomplete, textWithAutocomplete);
+    }
+
+    /* package */ boolean shouldClearOmniboxOnFocus() {
+        return mShouldClearOmniboxOnFocus;
     }
 
     // Private methods
@@ -1343,6 +1348,8 @@ class LocationBarMediator
                 mUrlFocusedFromFakebox = true;
             }
 
+            mShouldClearOmniboxOnFocus = pastedText == null;
+
             if (urlHasFocus && mUrlFocusedWithoutAnimations) {
                 handleUrlFocusAnimation(true);
             } else {
@@ -1357,7 +1364,19 @@ class LocationBarMediator
             // This must be happen after requestUrlFocus(), which changes the selection.
             mUrlCoordinator.setUrlBarData(UrlBarData.forNonUrlText(pastedText),
                     UrlBar.ScrollType.NO_SCROLL, UrlBarCoordinator.SelectionState.SELECT_END);
-            forceOnTextChanged();
+            /*
+              When the URL bar text is programmatically set on omnibox state restoration during a
+              device fold transition, {@code AutocompleteEditText#getTextWithoutAutocomplete()}
+              invoked by {@code #forceOnTextChanged()} returns an empty string because {@code
+              AutocompleteEditText#mModel} is not initialized. To trigger the autocomplete system in
+              this case, {@code AutocompleteCoordinator#onTextChanged()} will be directly called on
+              the restored omnibox text input.
+             */
+            if (reason == OmniboxFocusReason.FOLD_TRANSITION_RESTORATION) {
+                mAutocompleteCoordinator.onTextChanged(pastedText, pastedText);
+            } else {
+                forceOnTextChanged();
+            }
         }
     }
 

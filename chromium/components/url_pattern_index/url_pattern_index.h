@@ -14,6 +14,7 @@
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/strings/string_piece_forward.h"
 #include "components/url_pattern_index/closed_hash_map.h"
 #include "components/url_pattern_index/flat/url_pattern_index_generated.h"
@@ -87,7 +88,7 @@ int CompareDomains(base::StringPiece lhs_domain, base::StringPiece rhs_domain);
 // Increase this value when introducing an incompatible change to the
 // UrlPatternIndex schema (flat/url_pattern_index.fbs). url_pattern_index
 // clients can use this as a signal to rebuild rulesets.
-constexpr int kUrlPatternIndexFormatVersion = 14;
+constexpr int kUrlPatternIndexFormatVersion = 15;
 
 // The class used to construct an index over the URL patterns of a set of URL
 // rules. The rules themselves need to be converted to FlatBuffers format by the
@@ -248,7 +249,9 @@ class UrlPatternIndexMatcher {
 
  private:
   // Must outlive this instance.
-  const flat::UrlPatternIndex* flat_index_;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #union
+  RAW_PTR_EXCLUSION const flat::UrlPatternIndex* flat_index_;
 
   // The number of rules in this index. Mutable since this is lazily computed.
   mutable absl::optional<size_t> rules_count_;

@@ -125,6 +125,7 @@ constexpr auto kUnifiedSliderBubblePadding = gfx::Insets::TLBR(12, 0, 4, 0);
 constexpr auto kUnifiedSliderPadding = gfx::Insets::VH(0, 16);
 constexpr auto kMicGainSliderViewPadding = gfx::Insets::TLBR(0, 52, 8, 0);
 constexpr auto kMicGainSliderPadding = gfx::Insets::TLBR(0, 8, 0, 48);
+constexpr int kSliderChildrenViewSpacing = 8;
 
 // Constants used in the QuickSettingsSlider of the `QuickSettingsView`.
 constexpr int kQsSliderIconSize = 20;
@@ -132,11 +133,9 @@ constexpr auto kRadioSliderIconPadding = gfx::Insets::VH(0, 2);
 constexpr auto kRadioSliderPadding = gfx::Insets::TLBR(0, 4, 0, 24);
 constexpr auto kRadioSliderPreferredSize = gfx::Size(0, 44);
 constexpr auto kRadioSliderViewPadding = gfx::Insets::TLBR(0, 20, 0, 0);
-constexpr int kRadioSliderViewSpacing = 8;
 
 constexpr int kMessageCenterCollapseThreshold = 175;
 constexpr int kStackedNotificationBarHeight = 32;
-constexpr int kStackedNotificationBarCollapsedHeight = 40;
 constexpr int kNotificationIconStackThreshold = 28;
 constexpr int kUnifiedSliderViewSpacing = 12;
 constexpr int kUnifiedMessageCenterBubbleSpacing = 8;
@@ -241,8 +240,6 @@ constexpr int kUnifiedTopShortcutButtonDefaultSpacing = 16;
 constexpr int kUnifiedTopShortcutButtonMinSpacing = 4;
 
 // Constants used in the detailed view in UnifiedSystemTray.
-constexpr auto kUnifiedDetailedViewTitlePadding =
-    gfx::Insets::TLBR(0, 0, 0, 16);
 constexpr int kUnifiedDetailedViewTitleRowHeight = 64;
 
 // Constants used for the status area overflow button and state.
@@ -266,6 +263,7 @@ constexpr int kPrivacyScreenToastSpacing = 16;
 
 // Constants used for media tray.
 constexpr int kMediaTrayPadding = 8;
+constexpr int kMediaNotificationListViewBottomPadding = 8;
 
 // There is no active user session during oobe, which means it doesn't support
 // dark mode. Sets the icon color to be constant.

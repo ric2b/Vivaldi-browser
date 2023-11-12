@@ -120,8 +120,7 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
   void GetDefaultPrintSettings(
       GetDefaultPrintSettingsCallback callback) override;
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  void UpdatePrintSettings(int32_t cookie,
-                           base::Value::Dict job_settings,
+  void UpdatePrintSettings(base::Value::Dict job_settings,
                            UpdatePrintSettingsCallback callback) override;
 #endif
   void IsPrintingEnabled(IsPrintingEnabledCallback callback) override;
@@ -248,6 +247,19 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
                           bool succeeded);
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
+  // Helpers for UpdatePrintSettings().
+#if BUILDFLAG(IS_WIN)
+  void OnDidUpdatePrintableArea(std::unique_ptr<PrinterQuery> printer_query,
+                                base::Value::Dict job_settings,
+                                std::unique_ptr<PrintSettings> print_settings,
+                                UpdatePrintSettingsCallback callback,
+                                bool success);
+#endif
+  void CompleteUpdatePrintSettings(
+      base::Value::Dict job_settings,
+      std::unique_ptr<PrintSettings> print_settings,
+      UpdatePrintSettingsCallback callback);
+
   // Helpers for PrintForPrintPreview();
   void OnPrintSettingsDone(scoped_refptr<base::RefCountedMemory> print_data,
                            uint32_t page_count,
@@ -360,14 +372,7 @@ class PrintViewManagerBase : public PrintManager, public PrintJob::Observer {
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
   // Client ID with the print backend service manager for system print dialog.
   absl::optional<PrintBackendServiceManager::ClientId> query_with_ui_client_id_;
-
-#if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
-  // Client ID with the print backend service manager to reuse for printing, to
-  // get the same device context as was used with the system print dialog.
-  absl::optional<PrintBackendServiceManager::ClientId>
-      print_document_client_id_;
 #endif
-#endif  // BUILDFLAG(ENABLE_OOP_PRINTING)
 
 #if BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
   // Indicates that a snapshot of the page/document is currently being made.

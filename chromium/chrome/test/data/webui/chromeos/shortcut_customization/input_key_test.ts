@@ -8,7 +8,8 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {IronIconElement} from '//resources/polymer/v3_0/iron-icon/iron-icon.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {InputKeyElement, keyToIconNameMap} from 'chrome://shortcut-customization/js/input_key.js';
+import {AcceleratorLookupManager} from 'chrome://shortcut-customization/js/accelerator_lookup_manager.js';
+import {InputKeyElement, KeyInputState, keyToIconNameMap} from 'chrome://shortcut-customization/js/input_key.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
 
@@ -21,10 +22,18 @@ function initInputKeyElement(): InputKeyElement {
 
 suite('inputKeyTest', function() {
   let inputKeyElement: InputKeyElement|null = null;
+  let manager: AcceleratorLookupManager|null = null;
+
+  setup(() => {
+    manager = AcceleratorLookupManager.getInstance();
+  });
 
   teardown(() => {
     if (inputKeyElement) {
       inputKeyElement.remove();
+    }
+    if (manager) {
+      manager.reset();
     }
     inputKeyElement = null;
   });
@@ -60,7 +69,8 @@ suite('inputKeyTest', function() {
   test('AllIconsHaveValidAriaLabelStringIds', async () => {
     inputKeyElement = initInputKeyElement();
     for (const keyCode of Object.keys(keyToIconNameMap)) {
-      const ariaLabelStringId = InputKeyElement.getAriaLabelStringId(keyCode);
+      const ariaLabelStringId =
+          InputKeyElement.getAriaLabelStringId(keyCode, true);
       assertTrue(
           inputKeyElement.i18nExists(ariaLabelStringId),
           `String ID ${ariaLabelStringId} should exist, but it doesn't.`);
@@ -75,7 +85,71 @@ suite('inputKeyTest', function() {
     const iconWrapperElement = inputKeyElement.shadowRoot!.querySelector(
                                    '#key > div') as HTMLDivElement;
     assertTrue(isVisible(iconWrapperElement));
-    assertEquals('screenshot', iconWrapperElement.ariaLabel);
+    assertEquals('take screenshot', iconWrapperElement.ariaLabel);
     assertEquals('img', iconWrapperElement.getAttribute('role'));
+  });
+
+  test('MetaKeyShowLauncherIcon', async () => {
+    inputKeyElement = initInputKeyElement();
+    inputKeyElement.key = 'meta';
+
+    manager!.setHasLauncherButton(true);
+    await flush();
+
+    // Should show launcher icon when hasLauncherButton is true.
+    const iconElement = inputKeyElement.shadowRoot!.querySelector(
+                            '#key-icon') as IronIconElement;
+    const iconWrapperElement = inputKeyElement.shadowRoot!.querySelector(
+                                   '#key > div') as HTMLDivElement;
+    assertTrue(isVisible(iconElement));
+    assertTrue(isVisible(iconWrapperElement));
+    assertEquals('shortcut-customization-keys:launcher', iconElement.icon);
+    assertEquals('launcher', iconWrapperElement.ariaLabel);
+  });
+
+  test('MetaKeyShowSearchIcon', async () => {
+    inputKeyElement = initInputKeyElement();
+    inputKeyElement.key = 'meta';
+
+    manager!.setHasLauncherButton(false);
+    await flush();
+
+    // Should show search icon when hasLauncherButton is false.
+    const iconElement2 = inputKeyElement.shadowRoot!.querySelector(
+                             '#key-icon') as IronIconElement;
+    const iconWrapperElement2 = inputKeyElement.shadowRoot!.querySelector(
+                                    '#key > div') as HTMLDivElement;
+    assertTrue(isVisible(iconElement2));
+    assertTrue(isVisible(iconWrapperElement2));
+    assertEquals('shortcut-customization-keys:search', iconElement2.icon);
+    assertEquals('search', iconWrapperElement2.ariaLabel);
+  });
+
+  test('MetaKeyIsAlwaysModifier', async () => {
+    inputKeyElement = initInputKeyElement();
+    inputKeyElement.key = 'meta';
+    inputKeyElement.keyState = KeyInputState.ALPHANUMERIC_SELECTED;
+
+    manager!.setHasLauncherButton(true);
+    await flush();
+
+    // Should show launcher icon when hasLauncherButton is true.
+    const iconElement = inputKeyElement.shadowRoot!.querySelector(
+                            '#key-icon') as IronIconElement;
+    assertEquals('shortcut-customization-keys:launcher', iconElement.icon);
+    // 'meta' key should always be a modifier.
+    assertEquals(KeyInputState.MODIFIER_SELECTED, inputKeyElement.keyState);
+  });
+
+  test('OtherKeyStateUnchanged', async () => {
+    inputKeyElement = initInputKeyElement();
+    inputKeyElement.key = 'a';
+    inputKeyElement.keyState = KeyInputState.ALPHANUMERIC_SELECTED;
+
+    manager!.setHasLauncherButton(true);
+    await flush();
+
+    // other keys should keep their original state.
+    assertEquals(KeyInputState.ALPHANUMERIC_SELECTED, inputKeyElement.keyState);
   });
 });

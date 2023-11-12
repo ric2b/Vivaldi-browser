@@ -346,19 +346,10 @@ gfx::Vector2dF TransformTree::StickyPositionOffset(TransformNode* node) {
   const ScrollNode* scroll_node =
       property_trees()->scroll_tree().Node(sticky_data->scroll_ancestor);
   const TransformNode* transform_node = Node(scroll_node->transform_id);
-  const auto& scroll_offset = transform_node->scroll_offset;
-  // TODO(crbug.com/1206694): Understand why these values are not exactly equal
-  // and which one we should be using here.
-#if DCHECK_IS_ON()
-  {
-    const auto& scroll_offset_delta =
-        property_trees()->scroll_tree().current_scroll_offset(
-            scroll_node->element_id) -
-        scroll_offset;
-    DCHECK_LE(std::abs(scroll_offset_delta.x()), 0.5);
-    DCHECK_LE(std::abs(scroll_offset_delta.y()), 0.5);
-  }
-#endif
+  DCHECK(transform_node);
+  gfx::PointF scroll_offset =
+      property_trees()->scroll_tree().current_scroll_offset(
+          scroll_node->element_id);
   gfx::PointF scroll_position(scroll_offset.x(), scroll_offset.y());
   if (transform_node->scrolls) {
     // The scroll position does not include snapping which shifts the scroll
@@ -514,6 +505,9 @@ gfx::Vector2dF TransformTree::AnchorScrollOffset(TransformNode* node) {
       continue;
     }
     const TransformNode* transform_node = Node(scroll_node->transform_id);
+    // We don't ever expect that an anchor node or any of its scrolling
+    // containers should have an invalid transform_id.
+    DCHECK(scroll_node->transform_id != kInvalidPropertyNodeId);
     accumulated_scroll_offset +=
         transform_node->scroll_offset.OffsetFromOrigin();
   }
@@ -579,7 +573,11 @@ void TransformTree::UpdateLocalTransform(
   transform.Translate(position_adjustment -
                       node->scroll_offset.OffsetFromOrigin());
   transform.Translate(StickyPositionOffset(node));
-  transform.Translate(AnchorScrollOffset(node));
+  if (node->anchor_scroll_containers_data_id >= 0) {
+    transform.Translate(AnchorScrollOffset(node));
+    // Make sure the damage rect is tracked.
+    node->transform_changed = true;
+  }
   transform.PreConcat(node->local);
   transform.Translate3d(gfx::Point3F() - node->origin);
 
@@ -1244,13 +1242,12 @@ bool EffectTree::CreateOrReuseRenderSurfaces(
     LayerTreeImpl* layer_tree_impl) {
   // Make a list of {stable id, node id} pairs for nodes that are supposed to
   // have surfaces.
-  std::vector<std::pair<uint64_t, int>> stable_id_node_id_list;
+  std::vector<std::pair<ElementId, int>> stable_id_node_id_list;
   for (int id = kContentsRootPropertyNodeId; id < static_cast<int>(size());
        ++id) {
     EffectNode* node = Node(id);
     if (node->HasRenderSurface()) {
-      stable_id_node_id_list.push_back(
-          std::make_pair(node->stable_id, node->id));
+      stable_id_node_id_list.emplace_back(node->element_id, node->id);
     }
   }
 
@@ -1278,7 +1275,7 @@ bool EffectTree::CreateOrReuseRenderSurfaces(
 
     render_surfaces_changed = true;
 
-    if ((*surfaces_list_it)->id() > id_list_it->first) {
+    if (id_list_it->first < (*surfaces_list_it)->id()) {
       int new_node_id = id_list_it->second;
       render_surfaces_[new_node_id] = std::make_unique<RenderSurfaceImpl>(
           layer_tree_impl, id_list_it->first);
@@ -1609,11 +1606,13 @@ const gfx::PointF ScrollTree::GetPixelSnappedScrollOffset(
 
   const TransformNode* transform_node =
       property_trees()->transform_tree().Node(scroll_node->transform_id);
-  DCHECK(offset == transform_node->scroll_offset)
-      << "Transform node scroll offset does not match the actual offset, this "
-         "means the snapped_amount calculation will be incorrect";
 
-  if (transform_node->scrolls) {
+  // TODO(crbug.com/1418689): current_scroll_offset can disagree with
+  // transform_node->scroll_offset if the delta on a main frame update is
+  // simply rounding of the scroll position and not using fractional scroll
+  // deltas (see needs_scroll_update in PushScrollUpdatesFromMainThread).
+
+  if (transform_node && transform_node->scrolls) {
     // If necessary perform a update for this node to ensure snap amount is
     // accurate. This method is used by scroll timeline, so it is possible for
     // it to get called before transform tree has gone through a full update

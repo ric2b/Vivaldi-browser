@@ -40,6 +40,9 @@ struct VIEWS_EXPORT MenuConfig {
   bool ShouldShowAcceleratorText(const MenuItemView* item_view,
                                  std::u16string* text) const;
 
+  // Initialize menu config for CR2023
+  void InitCR2023();
+
   // Font list used by menus.
   gfx::FontList font_list;
 
@@ -116,6 +119,10 @@ struct VIEWS_EXPORT MenuConfig {
   // Thickness of the drawn separator line in pixels for double separator.
   int double_separator_thickness = 2;
 
+  // Left & right separator padding
+  int separator_left_margin = 0;
+  int separator_right_margin = 0;
+
   // Are mnemonics shown?
   bool show_mnemonics = false;
 
@@ -166,17 +173,17 @@ struct VIEWS_EXPORT MenuConfig {
   int show_delay = 400;
 
   // Radius of the rounded corners of the menu border. Must be >= 0.
-  int corner_radius =
-      LayoutProvider::Get()->GetCornerRadiusMetric(Emphasis::kNone);
+  int corner_radius = LayoutProvider::Get()->GetCornerRadiusMetric(
+      ShapeContextTokens::kMenuRadius);
 
   // Radius of "auxiliary" rounded corners - comboboxes and context menus.
   // Must be >= 0.
-  int auxiliary_corner_radius =
-      LayoutProvider::Get()->GetCornerRadiusMetric(Emphasis::kNone);
+  int auxiliary_corner_radius = LayoutProvider::Get()->GetCornerRadiusMetric(
+      ShapeContextTokens::kMenuAuxRadius);
 
   // Radius of the rounded corners of the touchable menu border
-  int touchable_corner_radius =
-      LayoutProvider::Get()->GetCornerRadiusMetric(Emphasis::kHigh);
+  int touchable_corner_radius = LayoutProvider::Get()->GetCornerRadiusMetric(
+      ShapeContextTokens::kMenuTouchRadius);
 
   // Anchor offset for touchable menus created by a touch event.
   int touchable_anchor_offset = 8;
@@ -199,8 +206,9 @@ struct VIEWS_EXPORT MenuConfig {
   // Vertical padding for touchable menus.
   int vertical_touchable_menu_item_padding = 8;
 
-  // Left margin of padded separator (ui::PADDED_SEPARATOR).
+  // Left & right margin of padded separator (ui::PADDED_SEPARATOR).
   int padded_separator_left_margin = 64;
+  int padded_separator_right_margin = 0;
 
   // Whether arrow keys should wrap around the end of the menu when selecting.
   bool arrow_key_selection_wraps = true;
@@ -214,10 +222,8 @@ struct VIEWS_EXPORT MenuConfig {
   // Margins for footnotes (HIGHLIGHTED item at the end of a menu).
   int footnote_vertical_margin = 11;
 
-  // Should use Win11 style menus.
-  // TODO(kylixrd): This should not exist. Menus should be fully configurable
-  // without needing any platform specific metrics.
-  bool win11_style_menus = false;
+  // Should use a bubble border for menus.
+  bool use_bubble_border = false;
 
  private:
   // Configures a MenuConfig as appropriate for the current platform.

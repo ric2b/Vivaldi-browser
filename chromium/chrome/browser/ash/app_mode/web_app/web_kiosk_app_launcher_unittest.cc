@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/auto_reset.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -25,6 +26,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/network/network_handler_test_helper.h"
+#include "chromeos/ash/components/standalone_browser/browser_support.h"
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/wm_helper.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -33,7 +35,10 @@
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
+
+using ash::standalone_browser::BrowserSupport;
 
 namespace ash {
 
@@ -76,7 +81,7 @@ class MockAppLauncherObserver : public KioskAppLauncher::Observer {
   MOCK_METHOD0(OnAppInstalling, void());
   MOCK_METHOD0(OnAppPrepared, void());
   MOCK_METHOD0(OnAppLaunched, void());
-  MOCK_METHOD0(OnAppWindowCreated, void());
+  MOCK_METHOD(void, OnAppWindowCreated, (const absl::optional<std::string>&));
   MOCK_METHOD1(OnLaunchFailed, void(KioskAppLaunchError::Error));
 };
 
@@ -120,7 +125,7 @@ class AppWindowCloser : public BrowserListObserver {
   }
 
  private:
-  Browser* app_browser_ = nullptr;
+  raw_ptr<Browser, ExperimentalAsh> app_browser_ = nullptr;
   // TODO(crbug/1379290): Use `TestFuture<void>` in all these tests
   TestFuture<bool> closed_waiter_;
 };
@@ -207,7 +212,8 @@ class WebKioskAppLauncherTest : public BrowserWithTestWindowTest {
 
  protected:
   AccountId account_id_;
-  web_app::TestWebAppUrlLoader* url_loader_;  // Owned by |launcher_|.
+  raw_ptr<web_app::TestWebAppUrlLoader, ExperimentalAsh>
+      url_loader_;  // Owned by |launcher_|.
 
  private:
   std::unique_ptr<WebKioskAppManager> app_manager_;
@@ -266,45 +272,6 @@ TEST_F(WebKioskAppLauncherTest, NormalFlowBadLaunchUrl) {
   EXPECT_NE(app_data()->status(), WebKioskAppData::Status::kInstalled);
 }
 
-TEST_F(WebKioskAppLauncherTest, InstallationRestarted) {
-  SetupAppData(/*installed*/ false);
-  // Freezes url requests until they are manually processed.
-  url_loader_->SaveLoadUrlRequests();
-
-  EXEC_AND_WAIT_FOR_CALL(launcher()->Initialize(), delegate(),
-                         InitializeNetwork());
-
-  SetupInstallData();
-
-  EXPECT_CALL(observer(), OnAppInstalling());
-  launcher()->ContinueWithNetworkReady();
-
-  EXPECT_CALL(delegate(), InitializeNetwork()).Times(1);
-  launcher()->RestartLauncher();
-
-  // App should not be installed yet.
-  EXPECT_NE(app_data()->status(), WebKioskAppData::Status::kInstalled);
-
-  // We should not receive any status updates now.
-  url_loader_->ProcessLoadUrlRequests();
-
-  SetupInstallData();
-
-  EXPECT_CALL(observer(), OnAppInstalling()).Times(1);
-  EXEC_AND_WAIT_FOR_CALL(
-      {
-        launcher()->ContinueWithNetworkReady();
-        url_loader_->ProcessLoadUrlRequests();
-      },
-      observer(), OnAppPrepared());
-
-  EXPECT_EQ(app_data()->status(), WebKioskAppData::Status::kInstalled);
-
-  EXEC_AND_WAIT_FOR_CALL(launcher()->LaunchApp(), observer(), OnAppLaunched());
-
-  CloseAppWindow();
-}
-
 TEST_F(WebKioskAppLauncherTest, UrlNotLoaded) {
   base::HistogramTester histogram;
 
@@ -348,9 +315,10 @@ class WebKioskAppLauncherUsingLacrosTest : public WebKioskAppLauncherTest {
   WebKioskAppLauncherUsingLacrosTest()
       : browser_manager_(std::make_unique<crosapi::FakeBrowserManager>()),
         fake_user_manager_(new FakeChromeUserManager()),
-        scoped_user_manager_(base::WrapUnique(fake_user_manager_)),
+        scoped_user_manager_(base::WrapUnique(fake_user_manager_.get())),
         wm_helper_(std::make_unique<exo::WMHelper>()) {
-    scoped_feature_list_.InitAndEnableFeature(features::kWebKioskEnableLacros);
+    scoped_feature_list_.InitAndEnableFeature(
+        ::features::kWebKioskEnableLacros);
   }
 
   void LoginWebKioskUser() {
@@ -378,12 +346,12 @@ class WebKioskAppLauncherUsingLacrosTest : public WebKioskAppLauncherTest {
 
  private:
   base::AutoReset<bool> set_lacros_enabled_ =
-      crosapi::browser_util::SetLacrosEnabledForTest(true);
+      BrowserSupport::SetLacrosEnabledForTest(true);
   base::AutoReset<absl::optional<bool>> set_lacros_primary_ =
       crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<crosapi::FakeBrowserManager> browser_manager_;
-  FakeChromeUserManager* fake_user_manager_;
+  raw_ptr<FakeChromeUserManager, ExperimentalAsh> fake_user_manager_;
   user_manager::ScopedUserManager scoped_user_manager_;
   std::unique_ptr<exo::WMHelper> wm_helper_;
 };
@@ -400,11 +368,11 @@ TEST_F(WebKioskAppLauncherUsingLacrosTest, NormalFlow) {
   // `OnAppWindowCreated` method will be called after the lacros-chrome window
   // is created successfully.
   EXPECT_CALL(observer(), OnAppLaunched()).Times(1);
-  browser_manager()->set_is_running(true);
+  browser_manager()->StartRunning();
   launcher()->LaunchApp();
 
   EXEC_AND_WAIT_FOR_CALL(CreateLacrosWindowAndNotify(), observer(),
-                         OnAppWindowCreated());
+                         OnAppWindowCreated);
   EXPECT_CALL(observer(), OnLaunchFailed(_)).Times(0);
 }
 
@@ -413,6 +381,7 @@ TEST_F(WebKioskAppLauncherUsingLacrosTest, WaitBrowserManagerToRun) {
   SetupAppData(/*installed*/ true);
   browser_manager()->set_new_fullscreen_window_creation_result(
       crosapi::mojom::CreationResult::kSuccess);
+  browser_manager()->StopRunning();
 
   EXEC_AND_WAIT_FOR_CALL(launcher()->Initialize(), observer(), OnAppPrepared());
 
@@ -420,13 +389,11 @@ TEST_F(WebKioskAppLauncherUsingLacrosTest, WaitBrowserManagerToRun) {
   // will pend until it is ready. The `OnAppWindowCreated` method will be called
   // after the lacros-chrome window is created successfully.
   EXPECT_CALL(observer(), OnAppLaunched()).Times(1);
-  browser_manager()->set_is_running(false);
   launcher()->LaunchApp();
-  browser_manager()->set_is_running(true);
   browser_manager()->StartRunning();
 
   EXEC_AND_WAIT_FOR_CALL(CreateLacrosWindowAndNotify(), observer(),
-                         OnAppWindowCreated());
+                         OnAppWindowCreated);
   EXPECT_CALL(observer(), OnLaunchFailed(_)).Times(0);
 }
 
@@ -442,8 +409,8 @@ TEST_F(WebKioskAppLauncherUsingLacrosTest, FailToLaunchApp) {
   // method will be called instead.
 
   EXPECT_CALL(observer(), OnAppLaunched()).Times(1);
-  EXPECT_CALL(observer(), OnAppWindowCreated()).Times(0);
-  browser_manager()->set_is_running(true);
+  EXPECT_CALL(observer(), OnAppWindowCreated).Times(0);
+  browser_manager()->StartRunning();
 
   EXEC_AND_WAIT_FOR_CALL(launcher()->LaunchApp(), observer(),
                          OnLaunchFailed(_));

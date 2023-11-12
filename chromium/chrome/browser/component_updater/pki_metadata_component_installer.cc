@@ -21,6 +21,7 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
+#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -42,9 +43,7 @@
 #endif
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-#include "chrome/browser/net/cert_verifier_configuration.h"
 #include "mojo/public/cpp/base/big_buffer.h"
-#include "net/base/features.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #endif
 
@@ -137,8 +136,10 @@ void PKIMetadataComponentInstallerService::UpdateChromeRootStoreOnUI(
       cert_verifier::mojom::ChromeRootStore::New(
           base::as_bytes(base::make_span(chrome_root_store_bytes)));
   content::GetCertVerifierServiceFactory()->UpdateChromeRootStore(
-      std::move(root_store_ptr));
-  NotifyChromeRootStoreConfigured();
+      std::move(root_store_ptr),
+      base::BindOnce(&PKIMetadataComponentInstallerService::
+                         NotifyChromeRootStoreConfigured,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void PKIMetadataComponentInstallerService::NotifyChromeRootStoreConfigured() {
@@ -398,13 +399,12 @@ PKIMetadataComponentInstallerPolicy::BytesArrayFromProtoBytes(
     google::protobuf::RepeatedPtrField<std::string> proto_bytes) {
   std::vector<std::vector<uint8_t>> bytes;
   bytes.reserve(proto_bytes.size());
-  std::transform(proto_bytes.begin(), proto_bytes.end(),
-                 std::back_inserter(bytes), [](std::string element) {
-                   const uint8_t* raw_data =
-                       reinterpret_cast<const uint8_t*>(element.data());
-                   return std::vector<uint8_t>(raw_data,
-                                               raw_data + element.length());
-                 });
+  base::ranges::transform(
+      proto_bytes, std::back_inserter(bytes), [](std::string element) {
+        const auto bytes =
+            base::as_bytes(base::make_span(element.data(), element.length()));
+        return std::vector<uint8_t>(bytes.begin(), bytes.end());
+      });
   return bytes;
 }
 
@@ -476,15 +476,19 @@ void MaybeRegisterPKIMetadataComponent(ComponentUpdateService* cus) {
 #endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-  should_install |= GetChromeCertVerifierServiceParams(/*local_state=*/nullptr)
-                        ->use_chrome_root_store;
-
-// Even if we aren't using Chrome Root Store for cert verification, we may be
-// trialing it. Check if the trial is enabled.
-#if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
-  should_install |= base::FeatureList::IsEnabled(
-      net::features::kCertDualVerificationTrialFeature);
-#endif
+  // If Chrome Root Store is supported, always install the component.
+  // Note that if CRS is supported but optional, the CRS setting can change
+  // during runtime based on the enterprise policy, so we still have to install
+  // the component now so that CRS updates will be processed in case we need
+  // them later. (Might be possible to refactor to only install component later
+  // when it's needed and if it's not already installed? Probably not worth the
+  // trouble though since CRS being optional is only a temporary state.)
+  // Note: On Android CRS will continue to be optional in code since chrome
+  // browser and webview use the same binary, but eventually it will just be
+  // unconditionally enabled in chrome and disabled in webview. This component
+  // is not registered in webview so setting it to always install here isn't a
+  // problem.
+  should_install = true;
 #endif
 
   if (!should_install)

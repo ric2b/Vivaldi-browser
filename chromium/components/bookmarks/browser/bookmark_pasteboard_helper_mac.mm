@@ -11,9 +11,9 @@
 #include <memory>
 
 #include "base/files/file_path.h"
-#include "base/guid.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/uuid.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -96,7 +96,7 @@ void ConvertNSArrayToElements(
     }
 
     auto new_node = std::make_unique<BookmarkNode>(
-        /*id=*/0, base::GUID::GenerateRandomV4(), url);
+        /*id=*/0, base::Uuid::GenerateRandomV4(), url);
 
     NSNumber* node_id =
         base::mac::ObjCCast<NSNumber>(bookmark_dict[kChromiumBookmarkIdKey]);
@@ -145,7 +145,7 @@ bool ReadStandardBookmarks(NSPasteboard* pb,
                            std::vector<BookmarkNodeData::Element>* elements) {
   NSArray* urls = nil;
   NSArray* titles = nil;
-  if (!ui::ClipboardUtil::URLsAndTitlesFromPasteboard(
+  if (!ui::clipboard_util::URLsAndTitlesFromPasteboard(
           pb, /*include_files=*/false, &urls, &titles)) {
     return false;
   }
@@ -240,7 +240,7 @@ NSArray<NSPasteboardItem*>* PasteboardItemsFromBookmarks(
   CollectUrlsAndTitlesOfBookmarks(elements, url_titles, urls);
 
   NSArray<NSPasteboardItem*>* items =
-      ui::ClipboardUtil::PasteboardItemsFromUrls(urls, url_titles);
+      ui::clipboard_util::PasteboardItemsFromUrls(urls, url_titles);
 
   // 2. The plist and path for Chromium use.
 

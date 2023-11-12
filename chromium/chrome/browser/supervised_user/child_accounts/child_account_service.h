@@ -15,15 +15,20 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/supervised_user/child_accounts/family_info_fetcher.h"
-#include "chrome/browser/supervised_user/kids_chrome_management/kids_external_fetcher.h"
 #include "chrome/browser/supervised_user/kids_chrome_management/kids_profile_manager.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/common/pref_names.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/supervised_user/core/browser/kids_external_fetcher.h"
 #include "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
 #include "net/base/backoff_entry.h"
+
+#if !(BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS))
+#include "base/feature_list.h"
+#include "components/supervised_user/core/common/features.h"
+#endif
 
 class Profile;
 
@@ -37,13 +42,14 @@ class ChildAccountService : public KeyedService,
  public:
   enum class AuthState { AUTHENTICATED, NOT_AUTHENTICATED, PENDING };
 
-  static constexpr bool IsChildAccountDetectionEnabled() {
+  static bool IsChildAccountDetectionEnabled() {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-    // Child account detection is always enabled on Android and ChromeOS, and
-    // disabled in other platforms.
+    // Supervision features are fully supported on Android and ChromeOS.
     return true;
 #else
-    return false;
+    // Supervision features are under development on other platforms.
+    return base::FeatureList::IsEnabled(
+        supervised_user::kEnableSupervisionOnDesktopAndIOS);
 #endif
   }
 

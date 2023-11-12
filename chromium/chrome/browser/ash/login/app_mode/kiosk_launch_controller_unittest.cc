@@ -8,6 +8,7 @@
 
 #include "ash/constants/ash_switches.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -18,8 +19,9 @@
 #include "chrome/browser/ash/app_mode/kiosk_app_launcher.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
-#include "chrome/browser/ash/login/test/kiosk_test_helpers.h"
+#include "chrome/browser/ash/login/app_mode/test/kiosk_test_helpers.h"
 #include "chrome/browser/ash/policy/core/device_local_account.h"
+#include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -29,6 +31,7 @@
 #include "chrome/browser/ui/webui/ash/login/app_launch_splash_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/fake_app_launch_splash_screen_handler.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "components/account_id/account_id.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/policy/core/browser/browser_policy_connector_base.h"
@@ -53,6 +56,8 @@ const char kInstallUrl[] = "https://install.url";
 const char kExtensionId[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const char kInvalidExtensionId[] = "invalid-extension-id";
 const char kExtensionName[] = "extension_name";
+const char kTestDomain[] = "test.com";
+const char kDeviceId[] = "123";
 
 // URL of Chrome Web Store.
 const char kWebStoreExtensionUpdateUrl[] =
@@ -87,7 +92,7 @@ class MockKioskProfileLoadFailedObserver
 class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
  public:
   using AppState = KioskLaunchController::AppState;
-  using NetworkUIState = KioskLaunchController::NetworkUIState;
+  using NetworkUIState = NetworkUiController::NetworkUIState;
 
   KioskLaunchControllerTest()
       : extensions::ExtensionServiceTestBase(
@@ -99,6 +104,7 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
       delete;
 
   void SetUp() override {
+    SetDeviceEnterpriseManaged();
     InitializeEmptyExtensionService();
     policy::BrowserPolicyConnectorBase::SetPolicyServiceForTesting(
         policy_service());
@@ -136,11 +142,11 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
 
   KioskLaunchController& controller() { return *controller_; }
 
-  KioskAppLauncher::NetworkDelegate& network_delegate() { return *controller_; }
+  KioskAppLauncher::NetworkDelegate& network_delegate() {
+    return *controller_->GetNetworkUiControllerForTesting();
+  }
 
   KioskProfileLoader::Delegate& profile_controls() { return *controller_; }
-
-  AppLaunchSplashScreenView::Delegate& view_controls() { return *controller_; }
 
   FakeKioskAppLauncher& launcher() { return *app_launcher_; }
 
@@ -150,9 +156,9 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
     return testing::AllOf(
         testing::Field("app_state", &KioskLaunchController::app_state_,
                        Eq(app_state)),
-        testing::Field("network_ui_state",
-                       &KioskLaunchController::network_ui_state_,
-                       Eq(network_state)));
+        testing::Property("network_ui_state",
+                          &KioskLaunchController::GetNetworkUiStateForTesting,
+                          Eq(network_state)));
   }
 
   auto HasViewState(AppLaunchSplashScreenView::AppLaunchState launch_state) {
@@ -171,12 +177,7 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
     task_environment()->FastForwardBy(kDefaultKioskSplashScreenMinTime);
   }
 
-  void DeleteSplashScreen() { controller_->OnDeletingSplashScreenView(); }
-
-  void SetOnline(bool online) {
-    view_->SetNetworkReady(online);
-    view_controls().OnNetworkStateChanged(online);
-  }
+  void SetOnline(bool online) { view_->SetNetworkReady(online); }
 
   void OnNetworkConfigRequested() { controller().OnNetworkConfigRequested(); }
 
@@ -197,6 +198,11 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
   }
 
  private:
+  void SetDeviceEnterpriseManaged() {
+    cros_settings_test_helper().InstallAttributes()->SetCloudManaged(
+        kTestDomain, kDeviceId);
+  }
+
   void SetUpKioskAppInAppManager() {
     std::string email = policy::GenerateDeviceLocalAccountUserId(
         kInstallUrl, policy::DeviceLocalAccount::Type::TYPE_WEB_KIOSK_APP);
@@ -224,11 +230,12 @@ class KioskLaunchControllerTest : public extensions::ExtensionServiceTestBase {
       keyboard_controller_client_;
   std::unique_ptr<WebKioskAppManager> kiosk_app_manager_;
 
-  ScopedCanConfigureNetwork can_configure_network_for_testing_{true, false};
+  ScopedCanConfigureNetwork can_configure_network_for_testing_{true};
   std::unique_ptr<base::AutoReset<bool>>
       disable_wait_timer_and_login_operations_for_testing_;
   std::unique_ptr<FakeAppLaunchSplashScreenHandler> view_;
-  FakeKioskAppLauncher* app_launcher_ = nullptr;  // owned by `controller_`.
+  raw_ptr<FakeKioskAppLauncher, ExperimentalAsh> app_launcher_ =
+      nullptr;  // owned by `controller_`.
   int app_launchers_created_ = 0;
   std::unique_ptr<KioskLaunchController> controller_;
   KioskAppId kiosk_app_id_;
@@ -343,8 +350,8 @@ TEST_F(KioskLaunchControllerTest,
   profile_controls().OnProfileLoaded(profile());
 
   network_delegate().InitializeNetwork();
-  EXPECT_THAT(controller(),
-              HasState(AppState::kInitNetwork, NetworkUIState::kNotShowing));
+  EXPECT_THAT(controller(), HasState(AppState::kInitLauncher,
+                                     NetworkUIState::kWaitingForNetwork));
   EXPECT_THAT(
       view(),
       HasViewState(
@@ -361,8 +368,8 @@ TEST_F(KioskLaunchControllerTest,
   profile_controls().OnProfileLoaded(profile());
 
   network_delegate().InitializeNetwork();
-  EXPECT_THAT(controller(),
-              HasState(AppState::kInitNetwork, NetworkUIState::kNotShowing));
+  EXPECT_THAT(controller(), HasState(AppState::kInitLauncher,
+                                     NetworkUIState::kWaitingForNetwork));
   EXPECT_THAT(
       view(),
       HasViewState(
@@ -390,7 +397,7 @@ TEST_F(KioskLaunchControllerTest,
   profile_controls().OnProfileLoaded(profile());
 
   EXPECT_THAT(controller(),
-              HasState(AppState::kCreatingProfile, NetworkUIState::kShowing));
+              HasState(AppState::kInitNetwork, NetworkUIState::kShowing));
   EXPECT_THAT(view(), HasViewState(AppLaunchSplashScreenView::AppLaunchState::
                                        kShowingNetworkConfigureUI));
 }
@@ -415,12 +422,13 @@ TEST_F(KioskLaunchControllerTest, ConfigureNetworkDuringInstallation) {
       HasViewState(
           AppLaunchSplashScreenView::AppLaunchState::kInstallingApplication));
 
-  view_controls().OnNetworkConfigFinished();
+  view().FinishNetworkConfig();
   EXPECT_THAT(
       view(),
       HasViewState(
           AppLaunchSplashScreenView::AppLaunchState::kPreparingProfile));
   EXPECT_TRUE(launcher().IsInitialized());
+  EXPECT_EQ(num_launchers_created(), 2);
 }
 
 TEST_F(KioskLaunchControllerTest, KioskProfileLoadFailedObserverShouldBeFired) {
@@ -436,6 +444,7 @@ TEST_F(KioskLaunchControllerTest, KioskProfileLoadFailedObserverShouldBeFired) {
   profile_controls().OnProfileLoadFailed(
       KioskAppLaunchError::Error::kUnableToMount);
   VerifyLaunchStateCrashKey(KioskLaunchState::kLaunchFailed);
+  EXPECT_EQ(num_launchers_created(), 0);
 
   controller().RemoveKioskProfileLoadFailedObserver(
       &profile_load_failed_observer);
@@ -464,8 +473,8 @@ TEST_F(KioskLaunchControllerTest,
 
   // Network required during app launch
   network_delegate().InitializeNetwork();
-  EXPECT_THAT(controller(),
-              HasState(AppState::kInitNetwork, NetworkUIState::kNotShowing));
+  EXPECT_THAT(controller(), HasState(AppState::kInstalled,
+                                     NetworkUIState::kWaitingForNetwork));
   EXPECT_FALSE(launcher().HasContinueWithNetworkReadyBeenCalled());
 
   SetOnline(true);

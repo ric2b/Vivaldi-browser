@@ -31,8 +31,6 @@
 #include "contact/contact_database_params.h"
 #include "contact/contact_model_observer.h"
 
-class Profile;
-
 namespace base {
 class SequencedTaskRunner;
 }  // namespace base
@@ -162,8 +160,6 @@ class ContactService : public KeyedService {
   void OnContactChanged(const ContactRow& row);
 
   void Cleanup();
-
-  Profile* profile_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

@@ -16,6 +16,7 @@
 namespace user_education {
 
 DECLARE_CUSTOM_ELEMENT_EVENT_TYPE(kHelpBubbleAnchorBoundsChangedEvent);
+DECLARE_CUSTOM_ELEMENT_EVENT_TYPE(kHelpBubbleNextButtonClickedEvent);
 
 // HelpBubble is an interface for the lifecycle of an IPH or tutorial bubble.
 // it is implemented by a framework's bubble. It is returned as the result of
@@ -53,16 +54,11 @@ class HelpBubble : public ui::FrameworkSpecificImplementation {
   [[nodiscard]] base::CallbackListSubscription AddOnCloseCallback(
       ClosedCallback callback);
 
-  bool is_open() const { return !is_closed() && !closing_; }
+  bool is_open() const { return !is_closed(); }
 
  protected:
   // Actually close the bubble.
   virtual void CloseBubbleImpl() = 0;
-
-  // Updates internal state to indicate that the bubble has been closed.
-  // Called by Close(), but can also be called if the bubble is closed by user
-  // action, etc.
-  void NotifyBubbleClosed();
 
  private:
   // Closed callbacks are cleared out on close, so this keeps us from having to
@@ -71,7 +67,6 @@ class HelpBubble : public ui::FrameworkSpecificImplementation {
 
   using CallbackList = base::OnceCallbackList<ClosedCallback::RunType>;
   std::unique_ptr<CallbackList> on_close_callbacks_;
-  bool closing_ = false;
 };
 
 }  // namespace user_education

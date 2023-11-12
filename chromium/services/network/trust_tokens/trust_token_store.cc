@@ -255,8 +255,11 @@ void TrustTokenStore::SetRedemptionRecord(
     const SuitableTrustTokenOrigin& top_level,
     const TrustTokenRedemptionRecord& record) {
   auto config = persister_->GetIssuerToplevelPairConfig(issuer, top_level);
-  if (!config)
+  if (!config) {
     config = std::make_unique<TrustTokenIssuerToplevelPairConfig>();
+    *config->mutable_last_redemption() =
+        internal::TimeToTimestamp(base::Time::UnixEpoch());
+  }
   *config->mutable_redemption_record() = record;
   *config->mutable_penultimate_redemption() = config->last_redemption();
   *config->mutable_last_redemption() =
@@ -347,6 +350,33 @@ bool TrustTokenStore::ClearDataForFilter(mojom::ClearDataFilterPtr filter) {
         return true;
       },
       beginning_of_time, end_of_time);
+  return persister_->DeleteForOrigins(std::move(key_matcher),
+                                      std::move(time_matcher));
+}
+
+// Assumes predicate is created from
+// CookieSettings::CreateDeleteCookieOnExitPredicate and matches PST
+// storage key hosts.
+//
+// Some inputs and the resulting data clearing decisions.
+//
+// Serialized storage key    | Clear on exit list includes | will get cleared
+// https://a.com:1443        | a.com                       | yes
+// https://a.com:1443        | https://a.com               | yes
+// https://a.b.com:1443      | a.b.com                     | yes
+// https://a.b.com:1443      | b.com                       | no
+// https://b.com:1443        | a.b.com                     | no
+//
+bool TrustTokenStore::ClearDataForPredicate(
+    base::RepeatingCallback<bool(const std::string&)> predicate) {
+  auto time_matcher = base::BindRepeating(
+      [](const base::Time& creation_time) -> bool { return true; });
+  auto key_matcher = base::BindRepeating(
+      [](base::RepeatingCallback<bool(const std::string&)> pred,
+         const SuitableTrustTokenOrigin& storage_key) -> bool {
+        return pred.Run(storage_key.origin().host());
+      },
+      predicate);
   return persister_->DeleteForOrigins(std::move(key_matcher),
                                       std::move(time_matcher));
 }

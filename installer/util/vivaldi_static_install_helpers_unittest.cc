@@ -21,7 +21,7 @@ TEST(VivaldiStaticInstallHelpers, IsSystemInstallExecutable) {
       L"vivaldi_proxy.exe",
       L"update_notifier.exe",
       L"1.1.1.1\\" + kNotificationHelper,
-      L"" VIVALDI_VERSION "\\" + kNotificationHelper,
+      L"" VIVALDI_VERSION_STRING "\\" + kNotificationHelper,
   };
   base::FilePath dir = base::CreateUniqueTempDirectoryScopedToTest();
   for (const std::wstring& path : kTestExePaths) {
@@ -46,7 +46,7 @@ TEST(VivaldiStaticInstallHelpers, IsSystemInstallExecutable) {
   // for the marker.
 
   EXPECT_FALSE(IsSystemInstallExecutable(
-      dir.Append(L"" VIVALDI_VERSION "\\" + kVivaldi).value()));
+      dir.Append(L"" VIVALDI_VERSION_STRING "\\" + kVivaldi).value()));
   EXPECT_FALSE(
       IsSystemInstallExecutable(dir.Append(kNotificationHelper).value()));
 
@@ -59,9 +59,9 @@ TEST(VivaldiStaticInstallHelpers, IsSystemInstallExecutable) {
 
   EXPECT_FALSE(IsSystemInstallExecutable(kNotificationHelper));
   EXPECT_FALSE(IsSystemInstallExecutable(kVivaldi));
-  EXPECT_FALSE(IsSystemInstallExecutable(L"" VIVALDI_VERSION "\\" +
+  EXPECT_FALSE(IsSystemInstallExecutable(L"" VIVALDI_VERSION_STRING "\\" +
                                          kNotificationHelper));
-  EXPECT_FALSE(IsSystemInstallExecutable(L"" VIVALDI_VERSION "\\" + kVivaldi));
+  EXPECT_FALSE(IsSystemInstallExecutable(L"" VIVALDI_VERSION_STRING "\\" + kVivaldi));
 }
 
 }  // namespace vivaldi

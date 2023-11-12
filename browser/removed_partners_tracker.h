@@ -74,8 +74,8 @@ class RemovedPartnersTracker : public bookmarks::BookmarkModelObserver {
   void TrackRemovals(const bookmarks::BookmarkNode* node, bool recursive);
   void DoTrackRemovals(const bookmarks::BookmarkNode* node, bool recursive);
 
-  bookmarks::BookmarkModel* model_;
-  PrefService* prefs_;
+  const raw_ptr<bookmarks::BookmarkModel> model_;
+  const raw_ptr<PrefService> prefs_;
   std::set<base::GUID> removed_partners_;
 
   std::unique_ptr<MetaInfoChangeFilter> change_filter_;

@@ -12,24 +12,22 @@ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
-import './peripheral_data_access_protection_dialog.js';
 import '../../controls/settings_toggle_button.js';
 import '../../settings_shared.css.js';
 import '../os_settings_page/os_settings_subpage.js';
 import '../os_settings_page/os_settings_animated_pages.js';
-import '../os_people_page/lock_screen.js';
-import '../os_people_page/lock_screen_password_prompt_dialog.js';
-import './manage_users_page.js';
 import './metrics_consent_toggle_button.js';
+import './peripheral_data_access_protection_dialog.js';
 
+import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsToggleButtonElement} from '../../controls/settings_toggle_button.js';
-import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
-import {PrefsMixin} from '../../prefs/prefs_mixin.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {LockStateMixin} from '../lock_state_mixin.js';
+import {recordSettingChange} from '../metrics_recorder.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, Router} from '../router.js';
@@ -37,7 +35,13 @@ import {Route, Router} from '../router.js';
 import {getTemplate} from './os_privacy_page.html.js';
 import {PeripheralDataAccessBrowserProxy, PeripheralDataAccessBrowserProxyImpl} from './peripheral_data_access_browser_proxy.js';
 import {PrivacyHubBrowserProxy, PrivacyHubBrowserProxyImpl} from './privacy_hub_browser_proxy.js';
-import {PrivacyHubNavigationOrigin} from './privacy_hub_page.js';
+import {PrivacyHubNavigationOrigin} from './privacy_hub_subpage.js';
+
+interface OsSettingsPrivacyPageElement {
+  $: {
+    verifiedAccessToggle: SettingsToggleButtonElement,
+  };
+}
 
 const OsSettingsPrivacyPageElementBase = PrefsMixin(
     LockStateMixin(RouteObserverMixin(DeepLinkingMixin(PolymerElement))));
@@ -319,7 +323,7 @@ class OsSettingsPrivacyPageElement extends OsSettingsPrivacyPageElementBase {
     this.setModes_ = undefined;
   }
 
-  private onConfigureLockTap_(e: Event): void {
+  private onConfigureLockClick_(e: Event): void {
     // Navigating to the lock screen will always open the password prompt
     // dialog, so prevent the end of the tap event to focus what is underneath
     // it, which takes focus from the dialog.
@@ -413,9 +417,7 @@ class OsSettingsPrivacyPageElement extends OsSettingsPrivacyPageElementBase {
     // previous element.
     if (this.dataAccessShiftTabPressed_) {
       this.dataAccessShiftTabPressed_ = false;
-      this.shadowRoot!
-          .querySelector<SettingsToggleButtonElement>(
-              '#enableVerifiedAccess')!.focus();
+      this.$.verifiedAccessToggle.focus();
       return;
     }
 
@@ -473,6 +475,11 @@ class OsSettingsPrivacyPageElement extends OsSettingsPrivacyPageElementBase {
             });
           });
     }
+  }
+
+  private onVerifiedAccessChange_(): void {
+    const enabled = this.$.verifiedAccessToggle.checked;
+    recordSettingChange(Setting.kVerifiedAccess, {boolValue: enabled});
   }
 
   /**

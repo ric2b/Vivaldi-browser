@@ -47,12 +47,15 @@ class SessionsPrivateAPI : public BrowserContextKeyedAPI,
   static void SendDeleted(
     content::BrowserContext* browser_context, int id);
   static void SendContentChanged(
-    content::BrowserContext* browser_context, int id);
+    content::BrowserContext* browser_context, int id,
+    vivaldi::sessions_private::ContentModel& content_model);
+  static void SendOnPersistentLoad(
+    content::BrowserContext* browser_context, bool state);
 
  private:
   friend class BrowserContextKeyedAPIFactory<SessionsPrivateAPI>;
-  content::BrowserContext* browser_context_;
-  sessions::Index_Model* model_ = nullptr;
+  const raw_ptr<content::BrowserContext> browser_context_;
+  raw_ptr<sessions::Index_Model> model_ = nullptr;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "SessionsPrivateAPI"; }
@@ -84,6 +87,7 @@ class SessionsPrivateGetAllFunction : public ExtensionFunction,
  private:
   ~SessionsPrivateGetAllFunction() override = default;
   void SendResponse(sessions::Index_Model* model);
+  void Piggyback();
 
   // ExtensionFunction:
   ResponseAction Run() override;

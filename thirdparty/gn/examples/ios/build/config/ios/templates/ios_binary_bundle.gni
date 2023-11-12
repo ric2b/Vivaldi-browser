@@ -117,5 +117,11 @@ template("ios_binary_bundle") {
     bundle_contents_dir = bundle_root_dir
     bundle_executable_dir = bundle_contents_dir
     bundle_resources_dir = bundle_contents_dir
+
+    xcode_extra_attributes = {
+      CODE_SIGN_IDENTITY = ""
+      CODE_SIGNING_REQUIRED = "NO"
+      CODE_SIGNING_ALLOWED = "NO"
+    }
   }
 }

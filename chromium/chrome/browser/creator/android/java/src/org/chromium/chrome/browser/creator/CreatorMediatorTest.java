@@ -29,6 +29,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.UnownedUserDataSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.JniMocker;
+import org.chromium.chrome.browser.creator.test.R;
 import org.chromium.chrome.browser.feed.FeedReliabilityLoggingBridge;
 import org.chromium.chrome.browser.feed.FeedServiceBridge;
 import org.chromium.chrome.browser.feed.FeedServiceBridgeJni;
@@ -60,8 +61,6 @@ public class CreatorMediatorTest {
     @Mock
     private WebFeedBridge.Natives mWebFeedBridgeJniMock;
     @Mock
-    private CreatorApiBridge.Natives mCreatorBridgeJniMock;
-    @Mock
     private FeedStream.Natives mFeedStreamJniMock;
     @Mock
     private FeedServiceBridge.Natives mFeedServiceBridgeJniMock;
@@ -83,6 +82,8 @@ public class CreatorMediatorTest {
     private UnownedUserDataSupplier<ShareDelegate> mShareDelegateSupplier;
     @Mock
     private UrlFormatter.Natives mUrlFormatterJniMock;
+    @Mock
+    private SignInInterstitialInitiator mSignInInterstitialInitiator;
 
     @Captor
     private ArgumentCaptor<Callback<FollowResults>> mFollowResultsCallbackCaptor;
@@ -105,7 +106,6 @@ public class CreatorMediatorTest {
     @Before
     public void setUpTest() {
         MockitoAnnotations.initMocks(this);
-        mJniMocker.mock(CreatorApiBridgeJni.TEST_HOOKS, mCreatorBridgeJniMock);
         mJniMocker.mock(FeedStreamJni.TEST_HOOKS, mFeedStreamJniMock);
         mJniMocker.mock(FeedServiceBridgeJni.TEST_HOOKS, mFeedServiceBridgeJniMock);
         mJniMocker.mock(WebFeedBridge.getTestHooksForTesting(), mWebFeedBridgeJniMock);
@@ -116,14 +116,17 @@ public class CreatorMediatorTest {
         when(mUrlFormatterJniMock.formatUrlForDisplayOmitSchemePathAndTrivialSubdomains(any()))
                 .thenReturn(JUnitTestGURLs.URL_1);
 
+        when(mFeedServiceBridgeJniMock.isSignedIn()).thenReturn(true);
+
         mActivityScenarioRule.getScenario().onActivity(activity -> mActivity = activity);
         mCreatorCoordinator = new CreatorCoordinator(mActivity, mWebFeedId, mSnackbarManager,
                 mWindowAndroid, mProfile, mUrl, mCreatorWebContents, mCreatorOpenTab,
-                mShareDelegateSupplier, SingleWebFeedEntryPoint.OTHER, /* isFollowing= */ false);
+                mShareDelegateSupplier, SingleWebFeedEntryPoint.OTHER, /* isFollowing= */ false,
+                mSignInInterstitialInitiator);
         mCreatorModel = mCreatorCoordinator.getCreatorModel();
 
-        mCreatorMediator =
-                new CreatorMediator(mActivity, mCreatorModel, mCreatorSnackbarController);
+        mCreatorMediator = new CreatorMediator(
+                mActivity, mCreatorModel, mCreatorSnackbarController, mSignInInterstitialInitiator);
     }
 
     @Test

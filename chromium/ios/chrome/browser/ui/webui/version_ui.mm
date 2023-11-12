@@ -16,8 +16,11 @@
 #import "components/strings/grit/components_chromium_strings.h"
 #import "components/strings/grit/components_google_chrome_strings.h"
 #import "components/strings/grit/components_strings.h"
+#import "components/variations/service/variations_service.h"
 #import "components/version_info/version_info.h"
+#import "components/version_ui/version_handler_helper.h"
 #import "components/version_ui/version_ui_constants.h"
+#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/ui/webui/version_handler.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
@@ -28,6 +31,11 @@
 #import "ios/web/public/webui/web_ui_ios_data_source.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/about/vivaldi_ios_about_version.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -99,6 +107,13 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
                                   IDS_VERSION_UI_VARIATIONS);
   html_source->AddLocalizedString(version_ui::kVariationsCmdName,
                                   IDS_VERSION_UI_VARIATIONS_CMD);
+  html_source->AddLocalizedString(version_ui::kVariationsSeedName,
+                                  IDS_VERSION_UI_VARIATIONS_SEED_NAME);
+
+  html_source->AddString(
+      version_ui::kVariationsSeed,
+      version_ui::SeedTypeToUiString(
+          GetApplicationContext()->GetVariationsService()->GetSeedType()));
 
   html_source->AddString(version_ui::kSanitizer, version_info::GetSanitizerList());
 
@@ -112,6 +127,11 @@ web::WebUIIOSDataSource* CreateVersionUIDataSource() {
   html_source->AddResourcePath("images/product_logo_white.png",
                                IDR_PRODUCT_LOGO_WHITE);
   html_source->SetDefaultResource(IDR_VERSION_UI_HTML);
+
+  if (vivaldi::IsVivaldiRunning()) {
+    vivaldi::UpdateVersionUIIOSDataSource(html_source);
+  } // End Vivaldi
+
   return html_source;
 }
 

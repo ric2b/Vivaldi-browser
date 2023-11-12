@@ -12,7 +12,6 @@ import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
@@ -26,7 +25,6 @@ import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthController;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
-import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -37,7 +35,6 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
-import org.chromium.components.module_installer.builder.ModuleInterface;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
@@ -46,10 +43,7 @@ import java.lang.annotation.RetentionPolicy;
 
 /**
  * Interface to get access to components concerning tab management.
- * TODO(crbug.com/982018): Move DFM configurations to 'chrome/android/modules/start_surface/'
  */
-@ModuleInterface(module = "tab_management",
-        impl = "org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegateImpl")
 public interface TabManagementDelegate {
     @IntDef({TabSwitcherType.GRID, TabSwitcherType.CAROUSEL, TabSwitcherType.SINGLE,
             TabSwitcherType.NONE})
@@ -73,8 +67,8 @@ public interface TabManagementDelegate {
      * @return The {@link TabSwitcherLayout}.
      */
     Layout createTabSwitcherLayout(Context context, LayoutUpdateHost updateHost,
-            LayoutRenderHost renderHost, TabSwitcher tabSwitcher, JankTracker jankTracker,
-            ViewGroup tabSwitcherScrimAnchor, ScrimCoordinator scrimCoordinator);
+            LayoutRenderHost renderHost, TabSwitcher tabSwitcher, ViewGroup tabSwitcherScrimAnchor,
+            ScrimCoordinator scrimCoordinator);
 
     /**
      * Create the {@link TabSwitcher} to display Tabs in grid.
@@ -86,7 +80,6 @@ public interface TabManagementDelegate {
      * @param tabCreatorManager Manages creation of tabs.
      * @param menuOrKeyboardActionController allows access to menu or keyboard actions.
      * @param containerView The {@link ViewGroup} to add the switcher to.
-     * @param shareDelegateSupplier Supplies the current {@link ShareDelegate}.
      * @param multiWindowModeStateDispatcher Gives access to the multi window mode state.
      * @param scrimCoordinator The {@link ScrimCoordinator} to control the scrim view.
      * @param rootView The root view of the app.
@@ -106,7 +99,6 @@ public interface TabManagementDelegate {
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull MenuOrKeyboardActionController menuOrKeyboardActionController,
             @NonNull ViewGroup containerView,
-            @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
             @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
             @NonNull ScrimCoordinator scrimCoordinator, @NonNull ViewGroup rootView,
             @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
@@ -125,7 +117,6 @@ public interface TabManagementDelegate {
      * @param tabCreatorManager Manages creation of tabs.
      * @param menuOrKeyboardActionController allows access to menu or keyboard actions.
      * @param containerView The {@link ViewGroup} to add the switcher to.
-     * @param shareDelegateSupplier Supplies the current {@link ShareDelegate}.
      * @param multiWindowModeStateDispatcher Gives access to the multi window mode state.
      * @param scrimCoordinator The {@link ScrimCoordinator} to control the scrim view.
      * @param rootView The root view of the app.
@@ -142,7 +133,6 @@ public interface TabManagementDelegate {
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull MenuOrKeyboardActionController menuOrKeyboardActionController,
             @NonNull ViewGroup containerView,
-            @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
             @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
             @NonNull ScrimCoordinator scrimCoordinator, @NonNull ViewGroup rootView,
             @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
@@ -164,7 +154,6 @@ public interface TabManagementDelegate {
      * @param rootView The root view of the app.
      * @param dynamicResourceLoaderSupplier Supplies the current {@link DynamicResourceLoader}.
      * @param tabCreatorManager Manages creation of tabs.
-     * @param shareDelegateSupplier Supplies the current {@link ShareDelegate}.
      * @param layoutStateProviderSupplier Supplies the {@link LayoutStateProvider}.
      * @param snackbarManager Manages the display of snackbars.
      * @return The {@link TabGroupUi}.
@@ -180,7 +169,6 @@ public interface TabManagementDelegate {
             @NonNull TabContentManager tabContentManager, @NonNull ViewGroup rootView,
             @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
             @NonNull TabCreatorManager tabCreatorManager,
-            @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
             @NonNull OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
             @NonNull SnackbarManager snackbarManager);
 

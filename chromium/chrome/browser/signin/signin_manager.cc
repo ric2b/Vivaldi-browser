@@ -126,7 +126,7 @@ void SigninManager::UpdateUnconsentedPrimaryAccount() {
 #else
     DCHECK(!identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync));
     signin_metrics::ProfileSignout source =
-        signin_metrics::ProfileSignout::kUserDeletedAccountCookies;
+        signin_metrics::ProfileSignout::kSigninManagerUpdateUPA;
 #endif
     identity_manager_->GetPrimaryAccountMutator()->ClearPrimaryAccount(
         source, signin_metrics::SignoutDelete::kIgnoreMetric);
@@ -157,7 +157,9 @@ CoreAccountInfo SigninManager::ComputeUnconsentedPrimaryAccountInfo() const {
   // `signin_client_->IsClearPrimaryAccountAllowed()` is expected to always
   // return `false` for the main profile and this function to early return the
   // current primary account.
-  DCHECK(!signin_client_->GetInitialPrimaryAccount().has_value());
+  DCHECK(signin_client_
+             ->is_clear_primary_account_allowed_for_testing() ||  // IN-TEST
+         !signin_client_->GetInitialPrimaryAccount().has_value());
 
   // Secondary profile.
   // Unless the user signs out, removes the account, the UPA will stay the same.
@@ -281,10 +283,6 @@ void SigninManager::OnRefreshTokensLoaded() {
 void SigninManager::OnAccountsInCookieUpdated(
     const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
     const GoogleServiceAuthError& error) {
-  UpdateUnconsentedPrimaryAccount();
-}
-
-void SigninManager::OnAccountsCookieDeletedByUserAction() {
   UpdateUnconsentedPrimaryAccount();
 }
 

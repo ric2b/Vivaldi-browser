@@ -10,6 +10,8 @@
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
+#include "base/ranges/algorithm.h"
 #include "base/test/task_environment.h"
 #include "chromeos/ash/services/secure_channel/ble_initiator_connection_attempt.h"
 #include "chromeos/ash/services/secure_channel/ble_listener_connection_attempt.h"
@@ -101,7 +103,8 @@ class FakeBleInitiatorConnectionAttemptFactory
     ++num_instances_deleted_;
   }
 
-  FakeBleConnectionManager* expected_ble_connection_manager_;
+  raw_ptr<FakeBleConnectionManager, ExperimentalAsh>
+      expected_ble_connection_manager_;
   absl::optional<ConnectionAttemptDetails> expected_connection_attempt_details_;
 
   base::flat_map<ConnectionAttemptDetails,
@@ -110,8 +113,8 @@ class FakeBleInitiatorConnectionAttemptFactory
 
   size_t num_instances_created_ = 0u;
   size_t num_instances_deleted_ = 0u;
-  FakeConnectionAttempt<BleInitiatorFailureType>* last_created_instance_ =
-      nullptr;
+  raw_ptr<FakeConnectionAttempt<BleInitiatorFailureType>, ExperimentalAsh>
+      last_created_instance_ = nullptr;
 };
 
 class FakeBleListenerConnectionAttemptFactory
@@ -181,7 +184,8 @@ class FakeBleListenerConnectionAttemptFactory
     ++num_instances_deleted_;
   }
 
-  FakeBleConnectionManager* expected_ble_connection_manager_;
+  raw_ptr<FakeBleConnectionManager, ExperimentalAsh>
+      expected_ble_connection_manager_;
   absl::optional<ConnectionAttemptDetails> expected_connection_attempt_details_;
 
   base::flat_map<ConnectionAttemptDetails,
@@ -190,8 +194,8 @@ class FakeBleListenerConnectionAttemptFactory
 
   size_t num_instances_created_ = 0u;
   size_t num_instances_deleted_ = 0u;
-  FakeConnectionAttempt<BleListenerFailureType>* last_created_instance_ =
-      nullptr;
+  raw_ptr<FakeConnectionAttempt<BleListenerFailureType>, ExperimentalAsh>
+      last_created_instance_ = nullptr;
 };
 
 class FakeNearbyInitiatorConnectionAttemptFactory
@@ -262,7 +266,8 @@ class FakeNearbyInitiatorConnectionAttemptFactory
     ++num_instances_deleted_;
   }
 
-  FakeNearbyConnectionManager* expected_nearby_connection_manager_;
+  raw_ptr<FakeNearbyConnectionManager, ExperimentalAsh>
+      expected_nearby_connection_manager_;
   absl::optional<ConnectionAttemptDetails> expected_connection_attempt_details_;
 
   base::flat_map<ConnectionAttemptDetails,
@@ -271,8 +276,8 @@ class FakeNearbyInitiatorConnectionAttemptFactory
 
   size_t num_instances_created_ = 0u;
   size_t num_instances_deleted_ = 0u;
-  FakeConnectionAttempt<NearbyInitiatorFailureType>* last_created_instance_ =
-      nullptr;
+  raw_ptr<FakeConnectionAttempt<NearbyInitiatorFailureType>, ExperimentalAsh>
+      last_created_instance_ = nullptr;
 };
 
 class FakePendingBleInitiatorConnectionRequestFactory
@@ -447,9 +452,8 @@ std::vector<ClientConnectionParameters*> ClientParamsListToRawPtrs(
     const std::vector<std::unique_ptr<ClientConnectionParameters>>&
         unique_ptr_list) {
   std::vector<ClientConnectionParameters*> raw_ptr_list;
-  std::transform(unique_ptr_list.begin(), unique_ptr_list.end(),
-                 std::back_inserter(raw_ptr_list),
-                 [](const auto& unique_ptr) { return unique_ptr.get(); });
+  base::ranges::transform(unique_ptr_list, std::back_inserter(raw_ptr_list),
+                          &std::unique_ptr<ClientConnectionParameters>::get);
   return raw_ptr_list;
 }
 

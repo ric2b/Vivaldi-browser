@@ -45,6 +45,13 @@ Scope::ProgrammaticProvider::~ProgrammaticProvider() {
   scope_->RemoveProvider(this);
 }
 
+std::string Scope::TemplateInvocationEntry::Describe() const {
+  std::string ret = template_name;
+  ret += "(\"" + target_name + "\")  ";
+  ret += location.Describe(false);
+  return ret;
+}
+
 Scope::Scope(const Settings* settings)
     : const_containing_(nullptr),
       mutable_containing_(nullptr),
@@ -257,6 +264,17 @@ bool Scope::CheckForUnusedVars(Err* err) const {
       std::string help =
           "You set the variable \"" + std::string(pair.first) +
           "\" here and it was unused before it went\nout of scope.";
+
+
+      // Gather the template invocations that led up to this scope.
+      auto entries = GetTemplateInvocationEntries();
+      if (entries.size() != 0) {
+
+        help.append("\n\nVia these template invocations:\n");
+        for (const auto& entry : entries) {
+          help.append("  " + entry.Describe() + "\n");
+        }
+      }
 
       const BinaryOpNode* binary = pair.second.value.origin()->AsBinaryOp();
       if (binary && binary->op().type() == Token::EQUAL) {
@@ -566,6 +584,41 @@ void Scope::AddProvider(ProgrammaticProvider* p) {
 void Scope::RemoveProvider(ProgrammaticProvider* p) {
   DCHECK(programmatic_providers_.find(p) != programmatic_providers_.end());
   programmatic_providers_.erase(p);
+}
+
+void Scope::SetTemplateInvocationEntry(std::string template_name,
+                                       std::string target_name,
+                                       Location location) {
+  template_invocation_entry_ = std::make_unique<TemplateInvocationEntry>(
+      TemplateInvocationEntry{std::move(template_name), std::move(target_name),
+                              std::move(location)});
+}
+
+const Scope::TemplateInvocationEntry* Scope::FindTemplateInvocationEntry() const {
+  if (template_invocation_entry_)
+    return template_invocation_entry_.get();
+  if (const Scope* scope = containing())
+    return scope->FindTemplateInvocationEntry();
+  return nullptr;
+}
+
+void Scope::AppendTemplateInvocationEntries(
+    std::vector<TemplateInvocationEntry>* out) const {
+
+  const Value* invoker = GetValue("invoker");
+  if (invoker && invoker->type() == Value::SCOPE)
+    invoker->scope_value()->AppendTemplateInvocationEntries(out);
+
+  const TemplateInvocationEntry* entry = FindTemplateInvocationEntry();
+  if (entry)
+    out->push_back(*entry);
+}
+
+std::vector<Scope::TemplateInvocationEntry>
+Scope::GetTemplateInvocationEntries() const {
+  std::vector<Scope::TemplateInvocationEntry> result;
+  AppendTemplateInvocationEntries(&result);
+  return result;
 }
 
 // static

@@ -36,7 +36,6 @@ missing,chrome/android/java/src/org/chromium/chrome/browser/offlinepages/measure
 missing,chrome/browser/android/compositor/scene_layer/contextual_search_scene_layer.cc
 missing,chrome/browser/android/feedback/connectivity_checker.cc
 missing,chrome/browser/commerce/subscriptions/android/java/src/org/chromium/chrome/browser/subscriptions/CommerceSubscriptionsServiceProxy.java
-missing,chrome/browser/page_annotations/android/java/src/org/chromium/chrome/browser/page_annotations/PageAnnotationsServiceProxy.java
 missing,chrome/browser/tab/java/src/org/chromium/chrome/browser/tab/state/StorePersistedTabData.java
 missing,net/proxy_resolution/proxy_config_service_android.cc
 
@@ -68,7 +67,6 @@ missing_new_fields,ash/ambient/ambient_weather_controller.cc
 missing_new_fields,ash/assistant/assistant_controller_impl.cc
 missing_new_fields,ash/quick_pair/repository/fast_pair/device_metadata_fetcher.cc
 missing_new_fields,ash/quick_pair/repository/fast_pair/fast_pair_image_decoder_impl.cc
-missing_new_fields,ash/wallpaper/wallpaper_controller_impl.cc
 missing_new_fields,ash/webui/os_feedback_ui/backend/help_content_provider.cc
 missing_new_fields,ash/webui/projector_app/projector_xhr_sender.cc
 missing_new_fields,chrome/browser/apps/app_preload_service/app_preload_server_connector.cc
@@ -77,7 +75,6 @@ missing_new_fields,chrome/browser/ash/app_mode/web_app/web_kiosk_app_data.cc
 missing_new_fields,chrome/browser/ash/bruschetta/bruschetta_installer.cc
 missing_new_fields,chrome/browser/ash/customization/customization_document.cc
 missing_new_fields,chrome/browser/ash/customization/customization_wallpaper_downloader.cc
-missing_new_fields,chrome/browser/ash/enhanced_network_tts/enhanced_network_tts_impl.cc
 missing_new_fields,chrome/browser/ash/input_method/ime_service_connector.cc
 missing_new_fields,chrome/browser/ash/login/gaia_reauth_token_fetcher.cc
 missing_new_fields,chrome/browser/ash/login/marketing_backend_connector.cc
@@ -91,7 +88,6 @@ missing_new_fields,chrome/browser/ash/printing/server_printers_fetcher.cc
 missing_new_fields,chrome/browser/ash/remote_apps/remote_apps_manager.cc
 missing_new_fields,chrome/browser/ash/smb_client/discovery/netbios_client.cc
 missing_new_fields,chrome/browser/ash/wallpaper_handlers/wallpaper_handlers.cc
-missing_new_fields,chrome/browser/ash/wilco_dtc_supportd/wilco_dtc_supportd_web_request_service.cc
 missing_new_fields,chrome/browser/autofill/autofill_gstatic_reader.cc
 missing_new_fields,chrome/browser/autofill/autofill_image_fetcher_impl.cc
 missing_new_fields,chrome/browser/bitmap_fetcher/bitmap_fetcher_service.cc
@@ -104,7 +100,7 @@ missing_new_fields,chrome/browser/devtools/device/android_device_manager.cc
 missing_new_fields,chrome/browser/devtools/device/android_web_socket.cc
 missing_new_fields,chrome/browser/devtools/device/port_forwarding_controller.cc
 missing_new_fields,chrome/browser/devtools/devtools_ui_bindings.cc
-missing_new_fields,chrome/browser/download/bubble/download_bubble_controller.cc
+missing_new_fields,chrome/browser/download/bubble/download_bubble_ui_controller.cc
 missing_new_fields,chrome/browser/extensions/api/downloads/downloads_api.cc
 missing_new_fields,chrome/browser/extensions/api/image_writer_private/write_from_url_operation.cc
 missing_new_fields,chrome/browser/extensions/blocklist_state_fetcher.cc
@@ -153,7 +149,6 @@ missing_new_fields,chrome/browser/ssl/sct_reporting_service.cc
 missing_new_fields,chrome/browser/supervised_user/child_accounts/family_info_fetcher.cc
 missing_new_fields,chrome/browser/supervised_user/child_accounts/permission_request_creator_apiary.cc
 missing_new_fields,chrome/browser/supervised_user/chromeos/supervised_user_favicon_request_handler.cc
-missing_new_fields,chrome/browser/supervised_user/kids_chrome_management/kids_external_fetcher.cc
 missing_new_fields,chrome/browser/supervised_user/supervised_user_service.cc
 missing_new_fields,chrome/browser/sync_file_system/drive_backend/sync_engine.cc
 missing_new_fields,chrome/browser/ui/ash/ambient/ambient_client_impl.cc
@@ -185,15 +180,14 @@ missing_new_fields,chromeos/ash/components/fwupd/firmware_update_manager.cc
 missing_new_fields,chromeos/ash/components/login/auth/recovery/cryptohome_recovery_service_client.cc
 missing_new_fields,chromeos/ash/components/timezone/timezone_request.cc
 missing_new_fields,chromeos/components/quick_answers/result_loader.cc
-missing_new_fields,chromeos/components/quick_answers/utils/spell_check_language.cc
 missing_new_fields,components/assist_ranker/ranker_url_fetcher.cc
 missing_new_fields,components/autofill/core/browser/autofill_download_manager.cc
 missing_new_fields,components/autofill/core/browser/payments/payments_client.cc
 missing_new_fields,components/captive_portal/content/captive_portal_service.cc
 missing_new_fields,components/commerce/core/account_checker.cc
 missing_new_fields,components/commerce/core/subscriptions/subscriptions_server_proxy.cc
+missing_new_fields,components/content_relationship_verification/digital_asset_links_handler.cc
 missing_new_fields,components/contextual_search/core/browser/contextual_search_delegate_impl.cc
-missing_new_fields,components/digital_asset_links/digital_asset_links_handler.cc
 missing_new_fields,components/dom_distiller/core/distiller_url_fetcher.cc
 missing_new_fields,components/domain_reliability/uploader.cc
 missing_new_fields,components/download/internal/common/download_item_impl.cc
@@ -207,9 +201,6 @@ missing_new_fields,components/media_router/common/providers/cast/channel/cast_so
 missing_new_fields,components/metrics/net/net_metrics_log_uploader.cc
 missing_new_fields,components/mirroring/service/udp_socket_client.cc
 missing_new_fields,components/network_time/network_time_tracker.cc
-missing_new_fields,components/ntp_snippets/content_suggestions_service.cc
-missing_new_fields,components/ntp_snippets/remote/cached_image_fetcher.cc
-missing_new_fields,components/ntp_snippets/remote/json_request.cc
 missing_new_fields,components/ntp_tiles/icon_cacher_impl.cc
 missing_new_fields,components/ntp_tiles/popular_sites_impl.cc
 missing_new_fields,components/offline_pages/core/prefetch/prefetch_downloader_impl.cc
@@ -256,8 +247,8 @@ missing_new_fields,components/signin/internal/identity_manager/gaia_cookie_manag
 missing_new_fields,components/spellcheck/browser/spelling_service_client.cc
 missing_new_fields,components/sync/driver/sync_stopped_reporter.cc
 missing_new_fields,components/sync/engine/net/http_bridge.cc
-missing_new_fields,components/sync/trusted_vault/trusted_vault_request.cc
 missing_new_fields,components/translate/core/browser/translate_url_fetcher.cc
+missing_new_fields,components/trusted_vault/trusted_vault_request.cc
 missing_new_fields,components/ui_devtools/devtools_server.cc
 missing_new_fields,components/update_client/net/network_impl.cc
 missing_new_fields,components/variations/service/variations_service.cc

@@ -6,6 +6,7 @@
 
 #include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/run_loop.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -97,6 +98,44 @@ TEST_F(DIPSServiceTest, DeleteDbFilesIfPersistenceDisabled) {
   EXPECT_FALSE(base::PathExists(GetDIPSFilePath(profile.get())));
 }
 
+// Verifies that when an OTR profile is opened, the DIPS database file for
+// the underlying regular profile is NOT deleted.
+TEST_F(DIPSServiceTest, PreserveRegularProfileDbFiles) {
+  base::FilePath data_path = base::CreateUniqueTempDirectoryScopedToTest();
+
+  // Ensure the DIPS feature is enabled and the database is set to be persisted.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      dips::kFeature, {{"persist_database", "true"}});
+
+  // Build a regular profile.
+  std::unique_ptr<TestingProfile> profile =
+      TestingProfile::Builder().SetPath(data_path).Build();
+  DIPSService* service = DIPSService::Get(profile.get());
+  ASSERT_NE(service, nullptr);
+
+  // Ensure the regular profile's database files have been created since the
+  // DIPS feature and persistence are enabled.
+  WaitOnStorage(service);
+  service->WaitForFileDeletionCompleteForTesting();
+  ASSERT_TRUE(base::PathExists(GetDIPSFilePath(profile.get())));
+
+  // Build an off-the-record profile based on `profile`.
+  TestingProfile* otr_profile =
+      TestingProfile::Builder().SetPath(data_path).BuildIncognito(
+          profile.get());
+  DIPSService* otr_service = DIPSService::Get(otr_profile);
+  ASSERT_NE(otr_service, nullptr);
+
+  // Ensure the OTR profile's database has been initialized and any file
+  // deletion tasks have finished (although there shouldn't be any).
+  WaitOnStorage(otr_service);
+  otr_service->WaitForFileDeletionCompleteForTesting();
+
+  // Ensure the regular profile's database files were NOT deleted.
+  EXPECT_TRUE(base::PathExists(GetDIPSFilePath(profile.get())));
+}
+
 class DIPSServiceStateRemovalTest : public testing::Test {
  public:
   DIPSServiceStateRemovalTest()
@@ -153,6 +192,9 @@ class DIPSServiceStateRemovalTest : public testing::Test {
     ASSERT_GE(now, clock_.Now());
     clock_.SetNow(now);
   }
+
+  base::Time Now() { return clock_.Now(); }
+  void SetNow(base::Time now) { clock_.SetNow(now); }
 
   void AdvanceTimeBy(base::TimeDelta delta) { clock_.Advance(delta); }
 
@@ -380,6 +422,61 @@ TEST_F(DIPSServiceStateRemovalTest,
               EntryUrlsAre("DIPS.Deletion", {"http://excepted-as-3p.com/",
                                              "http://excepted-as-1p.com/",
                                              "http://not-excepted.com/"}));
+}
+
+TEST_F(DIPSServiceStateRemovalTest, ImmediateEnforcement) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      dips::kFeature, {{"delete", "true"}, {"triggering_action", "bounce"}});
+  SetNow(base::Time::FromDoubleT(2));
+
+  // Record a bounce.
+  GURL url("https://example.com");
+  base::Time bounce = Now();
+  GetService()
+      ->storage()
+      ->AsyncCall(&DIPSStorage::RecordBounce)
+      .WithArgs(url, bounce, false);
+  WaitOnStorage();
+  EXPECT_TRUE(GetDIPSState(url).has_value());
+
+  // Set the current time to just after the bounce happened and simulate firing
+  // the DIPS timer.
+  AdvanceTimeTo(bounce + tiny_delta);
+  FireDIPSTimer();
+  task_environment_.RunUntilIdle();
+
+  // Verify a removal task was not posted to the BrowsingDataRemover(Delegate).
+  delegate_.VerifyAndClearExpectations();
+
+  auto filter_builder = content::BrowsingDataFilterBuilder::Create(
+      content::BrowsingDataFilterBuilder::Mode::kDelete);
+  filter_builder->AddRegisterableDomain(GetSiteForDIPS(url));
+  delegate_.ExpectCall(
+      base::Time::Min(), base::Time::Max(),
+      chrome_browsing_data_remover::FILTERABLE_DATA_TYPES |
+          content::BrowsingDataRemover::DATA_TYPE_AVOID_CLOSING_CONNECTIONS,
+      content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
+          content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
+      filter_builder.get());
+
+  // Perform immediate enforcement of deletion, without regard for grace period
+  // and verify `url` is returned the `DeletedSitesCallback`.
+  base::RunLoop run_loop;
+  base::OnceCallback<void(const std::vector<std::string>& sites)> callback =
+      base::BindLambdaForTesting(
+          [&](const std::vector<std::string>& deleted_sites) {
+            EXPECT_THAT(deleted_sites,
+                        testing::UnorderedElementsAre(GetSiteForDIPS(url)));
+            run_loop.Quit();
+          });
+  GetService()->DeleteEligibleSitesImmediately(std::move(callback));
+  task_environment_.RunUntilIdle();
+  run_loop.Run();
+
+  // Verify that a removal task was posted to the BrowsingDataRemover(Delegate)
+  // for 'url'.
+  delegate_.VerifyAndClearExpectations();
 }
 
 // A test class that verifies DIPSService state deletion metrics collection

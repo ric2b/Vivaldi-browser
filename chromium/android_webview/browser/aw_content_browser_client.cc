@@ -18,11 +18,11 @@
 #include "android_webview/browser/aw_devtools_manager_delegate.h"
 #include "android_webview/browser/aw_feature_list_creator.h"
 #include "android_webview/browser/aw_http_auth_handler.h"
-#include "android_webview/browser/aw_origin_verification_scheduler_bridge.h"
 #include "android_webview/browser/aw_resource_context.h"
 #include "android_webview/browser/aw_settings.h"
 #include "android_webview/browser/aw_speech_recognition_manager_delegate.h"
 #include "android_webview/browser/aw_web_contents_view_delegate.h"
+#include "android_webview/browser/content_relationship_verification/aw_origin_verification_scheduler_bridge.h"
 #include "android_webview/browser/cookie_manager.h"
 #include "android_webview/browser/network_service/aw_proxy_config_monitor.h"
 #include "android_webview/browser/network_service/aw_proxying_restricted_cookie_manager.h"
@@ -602,8 +602,8 @@ AwContentBrowserClient::CreateURLLoaderThrottles(
            features::kWebViewRestrictSensitiveContent))) {
     auto* origin_verification_bridge =
         AwOriginVerificationSchedulerBridge::GetInstance();
-    result.push_back(digital_asset_links::BrowserURLLoaderThrottle::Create(
-        origin_verification_bridge));
+    result.push_back(
+        BrowserURLLoaderThrottle::Create(origin_verification_bridge));
   }
 
   result.push_back(safe_browsing::BrowserURLLoaderThrottle::Create(
@@ -617,7 +617,8 @@ AwContentBrowserClient::CreateURLLoaderThrottles(
       // used to perform real time URL check, which is gated by UKM opted-in.
       // Since AW currently doesn't support UKM, this feature is not enabled.
       /* rt_lookup_service */ nullptr,
-      /* hash_realtime_service */ nullptr));
+      /* hash_realtime_service */ nullptr,
+      /* ping_manager */ nullptr));
 
   if (request.destination == network::mojom::RequestDestination::kDocument) {
     const bool is_load_url =
@@ -629,8 +630,8 @@ AwContentBrowserClient::CreateURLLoaderThrottles(
         ui::PAGE_TRANSITION_RELOAD);
     if (is_load_url || is_go_back_forward || is_reload) {
       result.push_back(
-          std::make_unique<AwURLLoaderThrottle>(static_cast<AwResourceContext*>(
-              browser_context->GetResourceContext())));
+          std::make_unique<AwURLLoaderThrottle>(static_cast<AwBrowserContext*>(
+              browser_context)));
     }
   }
 
@@ -639,7 +640,10 @@ AwContentBrowserClient::CreateURLLoaderThrottles(
 
 scoped_refptr<safe_browsing::UrlCheckerDelegate>
 AwContentBrowserClient::GetSafeBrowsingUrlCheckerDelegate() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(
+      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
+          ? content::BrowserThread::UI
+          : content::BrowserThread::IO);
 
   if (!safe_browsing_url_checker_delegate_) {
     safe_browsing_url_checker_delegate_ = new AwUrlCheckerDelegateImpl(
@@ -1044,11 +1048,11 @@ void AwContentBrowserClient::LogWebFeatureForCurrentPage(
       render_frame_host, feature);
 }
 
-bool AwContentBrowserClient::ShouldAllowInsecurePrivateNetworkRequests(
+bool AwContentBrowserClient::ShouldAllowInsecureLocalNetworkRequests(
     content::BrowserContext* browser_context,
     const url::Origin& origin) {
   // Webview does not implement support for deprecation trials, so webview apps
-  // broken by Private Network Access restrictions cannot help themselves by
+  // broken by Local Network Access restrictions cannot help themselves by
   // registering for the trial.
   // See crbug.com/1255675.
   return true;
@@ -1071,7 +1075,8 @@ bool AwContentBrowserClient::SuppressDifferentOriginSubframeJSDialogs(
 
 bool AwContentBrowserClient::ShouldPreconnectNavigation(
     content::BrowserContext* browser_context) {
-  return true;
+  // This didn't make a performance improvement in WebView.
+  return false;
 }
 
 void AwContentBrowserClient::OnDisplayInsecureContent(
@@ -1097,7 +1102,14 @@ bool AwContentBrowserClient::IsAttributionReportingOperationAllowed(
     const url::Origin* source_origin,
     const url::Origin* destination_origin,
     const url::Origin* reporting_origin) {
-  return false;
+  // WebView only supports OS-level attribution and not web-attribution.
+  return operation == AttributionReportingOperation::kAny ||
+         operation == AttributionReportingOperation::kOsSource ||
+         operation == AttributionReportingOperation::kOsTrigger;
+}
+
+bool AwContentBrowserClient::IsWebAttributionReportingAllowed() {
+  return false;  // WebView does not support web-only attribution.
 }
 
 }  // namespace android_webview

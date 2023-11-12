@@ -468,13 +468,11 @@ TEST(FencedFrameConfigMojomTraitsTest, ConfigMojomTraitsTest) {
   // Test `shared_storage_budget_metadata`.
   {
     SharedStorageBudgetMetadata test_shared_storage_budget_metadata = {
-        url::Origin::Create(test_url), 0.5, /*top_navigated=*/true,
-        /*report_event_called=*/false};
+        url::Origin::Create(test_url), 0.5, /*top_navigated=*/true};
     auto eq_fn = [](const SharedStorageBudgetMetadata& a,
                     const SharedStorageBudgetMetadata& b) {
       return a.origin == b.origin && a.budget_to_charge == b.budget_to_charge &&
-             a.top_navigated == b.top_navigated &&
-             a.report_event_called == b.report_event_called;
+             a.top_navigated == b.top_navigated;
     };
     TestProperty(&FencedFrameConfig::shared_storage_budget_metadata_,
                  &RedactedFencedFrameConfig::shared_storage_budget_metadata_,
@@ -485,8 +483,7 @@ TEST(FencedFrameConfigMojomTraitsTest, ConfigMojomTraitsTest) {
            const SharedStorageBudgetMetadata& b) {
           return a->origin == b.origin &&
                  a->budget_to_charge == b.budget_to_charge &&
-                 a->top_navigated == b.top_navigated &&
-                 a->report_event_called == b.report_event_called;
+                 a->top_navigated == b.top_navigated;
         };
     TestProperty(
         &FencedFrameProperties::shared_storage_budget_metadata_,
@@ -513,7 +510,7 @@ TEST(FencedFrameConfigMojomTraitsTest, PropertiesHasFencedFrameReportingTest) {
   // Create a reporting service with a dummy SharedURLLoaderFactory.
   properties.fenced_frame_reporter_ = FencedFrameReporter::CreateForFledge(
       base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(nullptr),
-      /*attribution_data_host_manager=*/nullptr,
+      /*attribution_manager=*/nullptr,
       /*direct_seller_is_seller=*/false,
       /*private_aggregation_manager=*/nullptr,
       /*main_frame_origin=*/url::Origin(),

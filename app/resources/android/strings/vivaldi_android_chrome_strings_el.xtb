@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Ανοικτές καρτέλες</translation>
 <translation id="1829244130665387512">Εύρεση στη σελίδα</translation>
 <translation id="1910514478706885609">Άνοιγμα σε νέα στοίβα καρτελών</translation>
+<translation id="1925021887439448749">Εισαγάγετε προσαρμοσμένη διεύθυνση ιστού</translation>
 <translation id="2038563949887743358">Ενεργοποίηση αιτήματος ιστότοπου για υπολογιστές</translation>
 <translation id="2139186145475833000">Προσθήκη στην Αρχική οθόνη</translation>
+<translation id="2149973817440762519">Επεξεργασία Σελιδοδείκτη</translation>
 <translation id="2306442503286132111">Ο σελιδοδείκτης αποθηκεύτηκε στον φάκελο <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Εμφάνιση</translation>
 <translation id="2501278716633472235">Πάει πίσω</translation>
 <translation id="2633278372998075009">Ιδιωτικές καρτέλες</translation>
+<translation id="2951071800649516099">Προσθέστε σελίδες στη λίστα ανάγνωσης για αργότερα</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> σελιδοδείκτης}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> σελιδοδείκτες}}</translation>
@@ -36,6 +39,7 @@
 
 Το Αγγίξτε για Αναζήτηση είναι μια λειτουργία που είναι διαθέσιμη μόνο όταν το Google έχει οριστεί ως η προεπιλεγμένη μηχανή αναζήτησης στο Vivaldi.</translation>
 <translation id="4759238208242260848">Λήψεις</translation>
+<translation id="4850886885716139402">Προβολή</translation>
 <translation id="4883379392681899581">Έξοδος από την ιδιωτική λειτουργία</translation>
 <translation id="4943872375798546930">Δεν υπάρχουν αποτελέσματα</translation>
 <translation id="49576331685473090">Αποκλεισμός περιεχομένου</translation>
@@ -48,7 +52,9 @@
 Για να προσαρμόσετε τον όρο αναζήτησής σας, πατήστε παρατεταμένα για επιλογή. Για να κάνετε πιο συγκεκριμένη την αναζήτησή σας, σύρετε το πλαίσιο μέχρι τέρμα προς τα πάνω και πατήστε το πλαίσιο αναζήτησης.</translation>
 <translation id="572328651809341494">Πρόσφατες καρτέλες</translation>
 <translation id="6150320133806434356">Ο σελιδοδείκτης αποθηκεύτηκε</translation>
+<translation id="6301525844455696527">Προλάβετε τη λίστα ανάγνωσης</translation>
 <translation id="6336451774241870485">Νέα ιδιωτική καρτέλα</translation>
+<translation id="6404511346730675251">Επεξεργασία σελιδοδείκτη</translation>
 <translation id="6585139692466700358">Δυνατότητα μετάφρασης σελίδων σε άλλες γλώσσες χρησιμοποιώντας την υπηρεσία μετάφρασης του Vivaldi</translation>
 <translation id="6593061639179217415">Για υπολογιστή</translation>
 <translation id="6610147964972079463">Κλείσιμο ιδιωτικών καρτελών</translation>
@@ -57,9 +63,15 @@
 <translation id="732145680195464316">Ο σελιδοδείκτης αποθηκεύτηκε στο <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Σχετικά με το Vivaldi</translation>
 <translation id="7465104139234185284">Κλείσιμο όλων των ιδιωτικών καρτελών</translation>
+<translation id="7481312909269577407">Προώθηση</translation>
+<translation id="7583262514280211622">Εδώ θα βρείτε τη λίστα ανάγνωσής σας</translation>
+<translation id="7968014550143838305">Προστέθηκε στη λίστα ανάγνωσης</translation>
 <translation id="804786196054284061">Άδεια Χρήσης</translation>
+<translation id="8127542551745560481">Επεξεργασία αρχικής σελίδας</translation>
+<translation id="8560602726703398413">Βρείτε τη λίστα ανάγνωσης στους Σελιδοδείκτες</translation>
 <translation id="85991616550051997">Μετάβαση στην αρχική σελίδα</translation>
 <translation id="8820817407110198400">Σελιδοδείκτες</translation>
 <translation id="9063523880881406963">Απενεργοποίηση αιτήματος ιστότοπου για υπολογιστές</translation>
 <translation id="9080642952018487277">Είσοδος σε ιδιωτική λειτουργία</translation>
+<translation id="96681097142096641">Προβολή απλοποιημένης σελίδας;</translation>
 </translationbundle>

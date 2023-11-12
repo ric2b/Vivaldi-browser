@@ -51,14 +51,14 @@ with `AutofillAgent` extracting a form from the DOM.
 ┌─┴──────────────────┐     │          ┌─┴───────────────────┐ │   │owns N         queries│
 │ChromeAutofillClient◄─────┼──────────┤AutofillManager      ├─┼───┴──────────────────────┘
 │1 per WebContents   │     │  weak ref│1 per RenderFrameHost│ │
-└────────────────────┘     │          └─▲─────────────────┬─┘ │
-                           │            │           events│   │
-                           └────────────┼────────────────►│◄──┘
-                                        │                 │
-                           ┌────────────┼─────────────────┼────────────┐
-                           │owns 1      │events           │            │
-                           │            │owns 1           │            │
-┌──────────────────────────┴─┐        ┌─┴─────────────────▼─┐        ┌─▼───────────────────┐
+└─┬──────────────────┘     │          └─▲─────────────────┬─┘ │
+  │owns 1                  │            │           events│   │
+  │                        └────────────┼────────────────►│◄──┘
+  │                                     │                 │
+  │                        ┌────────────┼─────────────────┼────────────┐
+  │                        │owns 1      │events           │            │
+  │                        │            │owns 1           │            │
+┌─▼────────────────────────┴─┐        ┌─┴─────────────────▼─┐        ┌─▼───────────────────┐
 │ContentAutofillDriverFactory├────────►ContentAutofillDriver◄────────►ContentAutofillRouter│
 │1 per WebContents           │owns N  │1 per RenderFrameHost│ events │1 per WebContents    │
 └────────────────────────────┘        └─▲─────────┬─────────┘        └─────────────────────┘
@@ -238,10 +238,9 @@ may sacrifice a little bit of correctness in favor of simplicity.
   * `FormField::ParseFormFields` is the global entry point for parsing fields
     with heuristics.
   * Local heuristics are only applied if a form has at least 3 fields and at
-    least 3 fields are classified (after launching
-    AutofillMin3FieldTypesForLocalHeuristics, we require 3 different field
-    types). There are exceptions for a few field types (email addresses,
-    promo codes, IBANs, CVV fields).
+    least 3 fields are classified with distinct field types. There are
+    exceptions for a few field types (email addresses, promo codes, IBANs, CVV
+    fields).
   * We perform local heuristics even for smaller forms but only for promo codes
     and IBANs (see `ParseSingleFieldForms`).
   * Regular expressions for parsing are provided via

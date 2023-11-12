@@ -36,8 +36,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/re2/src/re2/re2.h"
 
-using std::string;
-
 namespace update_client {
 
 class PingManagerTest : public testing::Test,
@@ -136,7 +134,8 @@ scoped_refptr<UpdateContext> PingManagerTest::MakeMockUpdateContext() const {
       false, false, std::vector<std::string>(),
       UpdateClient::CrxStateChangeCallback(),
       UpdateEngine::NotifyObserversCallback(), UpdateEngine::Callback(),
-      nullptr);
+      nullptr,
+      /*is_update_check_only=*/false);
 }
 
 // This test is parameterized for using JSON or XML serialization. |true| means
@@ -179,7 +178,11 @@ TEST_P(PingManagerTest, SendPing) {
 
     EXPECT_TRUE(request.contains("@os"));
     EXPECT_EQ("fake_prodid", CHECK_DEREF(request.FindString("@updater")));
+#if BUILDFLAG(ENABLE_PUFFIN_PATCHES)
+    EXPECT_EQ("crx3,puff", CHECK_DEREF(request.FindString("acceptformat")));
+#else
     EXPECT_EQ("crx3", CHECK_DEREF(request.FindString("acceptformat")));
+#endif
     EXPECT_TRUE(request.contains("arch"));
     EXPECT_EQ("cr", CHECK_DEREF(request.FindString("dedup")));
     EXPECT_LT(0, request.FindByDottedPath("hw.physmemory")->GetInt());

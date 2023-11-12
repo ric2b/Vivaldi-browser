@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_components/settings_prefs/prefs.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
+import 'chrome://resources/cr_elements/icons.html.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
-import './storage_external.js';
-import '../../prefs/prefs.js';
 import '../../settings_shared.css.js';
+import './storage_external.js';
 
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
@@ -68,18 +68,18 @@ class SettingsStorageElement extends SettingsStorageElementBase {
 
       showCrostini: Boolean,
 
-      isGuest_: {
+      isEphemeralUser_: {
         type: Boolean,
         value() {
-          return loadTimeData.getBoolean('isGuest');
+          return loadTimeData.getBoolean('isCryptohomeDataEphemeral');
         },
       },
 
       showOtherUsers_: {
         type: Boolean,
-        // Initialize showOtherUsers_ to false if the user is in guest mode.
+        // Initialize showOtherUsers_ to false if the user is ephemeral.
         value() {
-          return !loadTimeData.getBoolean('isGuest');
+          return !loadTimeData.getBoolean('isCryptohomeDataEphemeral');
         },
       },
 
@@ -93,7 +93,7 @@ class SettingsStorageElement extends SettingsStorageElementBase {
 
   showCrostini: boolean;
   private browserProxy_: DevicePageBrowserProxy;
-  private isGuest_: boolean;
+  private isEphemeralUser_: boolean;
   private route_: Route;
   private showCrostiniStorage_: boolean;
   private showDriveOfflineStorage_: boolean;
@@ -178,21 +178,21 @@ class SettingsStorageElement extends SettingsStorageElementBase {
   /**
    * Handler for tapping the "My files" item.
    */
-  private onMyFilesTap_(): void {
+  private onMyFilesClick_(): void {
     this.browserProxy_.openMyFiles();
   }
 
   /**
    * Handler for tapping the "Browsing data" item.
    */
-  private onBrowsingDataTap_(): void {
+  private onBrowsingDataClick_(): void {
     this.browserProxy_.openBrowsingDataSettings();
   }
 
   /**
    * Handler for tapping the "Apps and Extensions" item.
    */
-  private onAppsTap_(): void {
+  private onAppsClick_(): void {
     Router.getInstance().navigateTo(
         routes.APP_MANAGEMENT,
         /* dynamicParams= */ undefined, /* removeSearch= */ true);
@@ -201,15 +201,16 @@ class SettingsStorageElement extends SettingsStorageElementBase {
   /**
    * Handler for tapping the "Offline files" item.
    */
-  private onDriveOfflineTap_(): void {
-    // TODO(b/266631636): Offline files row should redirect users to Files
-    // settings > Drive settings.
+  private onDriveOfflineClick_(): void {
+    Router.getInstance().navigateTo(
+        routes.GOOGLE_DRIVE,
+        /* dynamicParams= */ undefined, /* removeSearch= */ true);
   }
 
   /**
    * Handler for tapping the "Linux storage" item.
    */
-  private onCrostiniTap_(): void {
+  private onCrostiniClick_(): void {
     Router.getInstance().navigateTo(
         routes.CROSTINI_DETAILS, /* dynamicParams= */ undefined,
         /* removeSearch= */ true);
@@ -218,7 +219,7 @@ class SettingsStorageElement extends SettingsStorageElementBase {
   /**
    * Handler for tapping the "Other users" item.
    */
-  private onOtherUsersTap_(): void {
+  private onOtherUsersClick_(): void {
     Router.getInstance().navigateTo(
         routes.ACCOUNTS,
         /* dynamicParams= */ undefined, /* removeSearch= */ true);
@@ -227,7 +228,7 @@ class SettingsStorageElement extends SettingsStorageElementBase {
   /**
    * Handler for tapping the "External storage preferences" item.
    */
-  private onExternalStoragePreferencesTap_(): void {
+  private onExternalStoragePreferencesClick_(): void {
     Router.getInstance().navigateTo(routes.EXTERNAL_STORAGE_PREFERENCES);
   }
 
@@ -266,8 +267,10 @@ class SettingsStorageElement extends SettingsStorageElementBase {
    *     Google Drive.
    */
   private handleDriveOfflineSizeChanged_(size: string): void {
-    this.shadowRoot!.querySelector<CrLinkRowElement>(
-                        '#driveOfflineSize')!.subLabel = size;
+    if (this.showDriveOfflineStorage_) {
+      this.shadowRoot!.querySelector<CrLinkRowElement>(
+                          '#driveOfflineSize')!.subLabel = size;
+    }
   }
 
   /**
@@ -287,7 +290,7 @@ class SettingsStorageElement extends SettingsStorageElementBase {
    */
   private handleOtherUsersSizeChanged_(size: string, noOtherUsers: boolean):
       void {
-    if (this.isGuest_ || noOtherUsers) {
+    if (this.isEphemeralUser_ || noOtherUsers) {
       this.showOtherUsers_ = false;
       return;
     }

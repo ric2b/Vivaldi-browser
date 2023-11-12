@@ -10,6 +10,7 @@
 
 #import "base/functional/callback.h"
 #import "base/mac/foundation_util.h"
+#import "base/notreached.h"
 #import "base/ranges/algorithm.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
@@ -157,16 +158,18 @@ using UserDecision =
           fieldIdentifier:(NSString*)fieldIdentifier
                   frameID:(NSString*)frameID
         completionHandler:(nullable void (^)(void))completionHandler {
+  autofill::AutofillJavaScriptFeature* feature =
+      autofill::AutofillJavaScriptFeature::GetInstance();
   web::WebFrame* frame =
-      web::GetWebFrameWithId(_webState, base::SysNSStringToUTF8(frameID));
-  autofill::AutofillJavaScriptFeature::GetInstance()
-      ->ClearAutofilledFieldsForForm(frame, _lastFormActivityUniqueFormID,
-                                     _lastFormActivityUniqueFieldID,
-                                     base::BindOnce(^(NSString*) {
-                                       if (completionHandler) {
-                                         completionHandler();
-                                       }
-                                     }));
+      feature->GetWebFramesManager(_webState)->GetFrameWithId(
+          base::SysNSStringToUTF8(frameID));
+  feature->ClearAutofilledFieldsForForm(frame, _lastFormActivityUniqueFormID,
+                                        _lastFormActivityUniqueFieldID,
+                                        base::BindOnce(^(NSString*) {
+                                          if (completionHandler) {
+                                            completionHandler();
+                                          }
+                                        }));
 }
 
 - (void)fetchSuggestionsForFormWithName:(NSString*)formName
@@ -273,9 +276,11 @@ using UserDecision =
 }
 
 - (void)focusPreviousField {
+  web::WebFramesManager* framesManager =
+      autofill::AutofillJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          _webState);
   web::WebFrame* frame =
-      _webState->GetPageWorldWebFramesManager()->GetFrameWithId(
-          _lastFormActivityWebFrameID);
+      framesManager->GetFrameWithId(_lastFormActivityWebFrameID);
 
   if (!frame)
     return;
@@ -285,9 +290,11 @@ using UserDecision =
 }
 
 - (void)focusNextField {
+  web::WebFramesManager* framesManager =
+      autofill::AutofillJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          _webState);
   web::WebFrame* frame =
-      _webState->GetPageWorldWebFramesManager()->GetFrameWithId(
-          _lastFormActivityWebFrameID);
+      framesManager->GetFrameWithId(_lastFormActivityWebFrameID);
 
   if (!frame)
     return;
@@ -298,9 +305,11 @@ using UserDecision =
 
 - (void)checkIfPreviousAndNextFieldsAreAvailableForFocusWithCompletionHandler:
     (void (^)(BOOL previous, BOOL next))completionHandler {
+  web::WebFramesManager* framesManager =
+      autofill::AutofillJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          _webState);
   web::WebFrame* frame =
-      _webState->GetPageWorldWebFramesManager()->GetFrameWithId(
-          _lastFormActivityWebFrameID);
+      framesManager->GetFrameWithId(_lastFormActivityWebFrameID);
 
   autofill::SuggestionControllerJavaScriptFeature::GetInstance()
       ->FetchPreviousAndNextElementsPresenceInFrame(
@@ -716,9 +725,23 @@ using UserDecision =
   }
 }
 
+- (void)attachListenersForBottomSheet:
+            (const std::vector<autofill::FieldRendererId>&)rendererIds
+                              inFrame:(web::WebFrame*)frame {
+  // No op.
+}
+
 - (void)sharedPasswordController:(SharedPasswordController*)controller
              didAcceptSuggestion:(FormSuggestion*)suggestion {
   // No op.
+}
+
+- (BOOL)shouldShowAccountStorageNotice {
+  return false;
+}
+
+- (void)showAccountStorageNotice:(void (^)())completion {
+  NOTREACHED_NORETURN();
 }
 
 @end

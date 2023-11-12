@@ -272,6 +272,9 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
       mojo::PendingRemote<chromeos::sensors::mojom::SensorHalClient> client,
       const base::UnguessableToken& auth_token,
       RegisterSensorClientWithTokenCallback callback) final;
+  void BindServiceToMojoServiceManager(
+      const std::string& service_name,
+      mojo::ScopedMessagePipeHandle receiver) final;
 
   // CameraHalServerCallbacks implementations.
   void CameraDeviceActivityChange(int32_t camera_id,
@@ -299,10 +302,6 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   // `CameraEffectsController`. Clients should always use
   // `CameraEffectsController` instead.
   void SetCameraEffects(cros::mojom::EffectsConfigPtr config);
-
-  // Sets what should be the initial camera effects state when the camera
-  // server is registered.
-  void SetInitialCameraEffects(cros::mojom::EffectsConfigPtr config);
 
  private:
   friend struct base::DefaultSingletonTraits<CameraHalDispatcherImpl>;
@@ -387,6 +386,10 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   base::flat_set<std::string> GetDeviceIdsFromCameraIds(
       base::flat_set<int32_t> camera_ids);
 
+  void BindToMojoServiceManagerOnUIThread(
+      const std::string service_name,
+      mojo::ScopedMessagePipeHandle receiver);
+
   void StopOnProxyThread();
 
   TokenManager* GetTokenManagerForTesting();
@@ -442,9 +445,6 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   // The initial state the camera effects should be set to
   // when the camera server is registered.
   cros::mojom::EffectsConfigPtr initial_effects_;
-
-  // Called when `SetCameraEffects` succeeds or fails.
-  CameraEffectsControllerCallback camera_effects_controller_callback_;
 
   scoped_refptr<base::ObserverListThreadSafe<CameraPrivacySwitchObserver>>
       privacy_switch_observers_;

@@ -49,11 +49,12 @@ class TestRenderFrameHostCreationObserver : public WebContentsObserver {
 
   // WebContentsObserver implementation.
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
+  void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
 
   RenderFrameHost* last_created_frame() const { return last_created_frame_; }
 
  private:
-  raw_ptr<RenderFrameHost> last_created_frame_;
+  raw_ptr<RenderFrameHost> last_created_frame_ = nullptr;
 };
 
 class TestRenderFrameHost : public RenderFrameHostImpl,
@@ -114,9 +115,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   const std::vector<std::string>& GetConsoleMessages() override;
   int GetHeavyAdIssueCount(HeavyAdIssueType type) override;
   void SimulateManifestURLUpdate(const GURL& manifest_url) override;
-  TestRenderFrameHost* AppendFencedFrame(
-      blink::mojom::FencedFrameMode mode =
-          blink::mojom::FencedFrameMode::kDefault) override;
+  TestRenderFrameHost* AppendFencedFrame() override;
   void CreateWebUsbServiceForTesting(
       mojo::PendingReceiver<blink::mojom::WebUsbService> receiver) override;
 
@@ -138,6 +137,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       mojom::DidCommitProvisionalLoadParamsPtr params,
       blink::mojom::SameDocumentNavigationType same_document_navigation_type,
       bool should_replace_current_entry);
+  void SendStartLoadingForAsyncNavigationApiCommit();
 
   // With the current navigation logic this method is a no-op.
   // Simulates a renderer-initiated navigation to |url| starting in the
@@ -204,7 +204,8 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       bool same_document);
 
   // Creates a WebBluetooth Service with a dummy InterfaceRequest.
-  WebBluetoothServiceImpl* CreateWebBluetoothServiceForTesting();
+  WebBluetoothServiceImpl* CreateWebBluetoothServiceForTesting(
+      mojo::PendingReceiver<blink::mojom::WebBluetoothService> receiver);
 
   // Returns a pending Frame remote that represents a connection to a non-
   // existent renderer, where all messages will go into the void.
@@ -275,6 +276,9 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
           prefetch_loader_factory,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           topics_loader_factory,
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>
+          keep_alive_loader_factory,
+      mojo::PendingRemote<blink::mojom::ResourceCache> resource_cache_remote,
       const absl::optional<blink::ParsedPermissionsPolicy>& permissions_policy,
       blink::mojom::PolicyContainerPtr policy_container,
       const blink::DocumentToken& document_token,
@@ -350,9 +354,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   std::map<NavigationRequest*,
            mojom::NavigationClient::CommitFailedNavigationCallback>
       commit_failed_callback_;
-
-  mojo::PendingRemote<blink::mojom::WebBluetoothService>
-      dummy_web_bluetooth_service_remote_;
 };
 
 }  // namespace content

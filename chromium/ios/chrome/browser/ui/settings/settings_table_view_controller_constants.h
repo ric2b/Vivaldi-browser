@@ -7,7 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/ui/list_model/list_model.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 
 // Sections used in Settings page.
 typedef NS_ENUM(NSInteger, SettingsSectionIdentifier) {
@@ -38,7 +38,8 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypeAutofillCreditCard,
   SettingsItemTypeAutofillProfile,
   SettingsItemTypeVoiceSearch,
-  SettingsItemTypePriceNotifications,
+  SettingsItemTypeBottomOmnibox,
+  SettingsItemTypeNotifications,
   SettingsItemTypePrivacy,
   SettingsItemTypeLanguageSettings,
   SettingsItemTypeContentSettings,
@@ -52,6 +53,7 @@ typedef NS_ENUM(NSInteger, SettingsItemType) {
   SettingsItemTypeSafetyCheck,
   SettingsItemTypeDefaultBrowser,
   SettingsItemTypeSigninDisabled,
+  SettingsItemTypeTabs,
 
   // Vivaldi
   SettingsItemTypeVivaldiSyncSettings,
@@ -84,6 +86,9 @@ extern NSString* const kSettingsManagedSearchEngineCellId;
 
 // The accessibility identifier of the Voice Search cell.
 extern NSString* const kSettingsVoiceSearchCellId;
+
+// The accessibility identifier of the Bottom Omnibox cell.
+extern NSString* const kSettingsBottomOmniboxCellId;
 
 // The accessibility identifier of the Sync and Google services cell.
 extern NSString* const kSettingsGoogleSyncAndServicesCellId;
@@ -166,7 +171,13 @@ extern NSString* const kSettingsIncognitoInterstitialId;
 // when the setting is disabled because of Enterprise policy.
 extern NSString* const kSettingsIncognitoInterstitialDisabledId;
 
-// The accessibility identifier of the Price Notifications setting.
-extern NSString* const kSettingsPriceNotificationsId;
+// The accessibility identifier of the Notifications setting.
+extern NSString* const kSettingsNotificationsId;
+
+// The accessibility identifier of the tabs cell.
+extern NSString* const kSettingsTabsCellId;
+
+// The accessibility identifier of the move inactive tabs settings cell.
+extern NSString* const kSettingsMoveInactiveTabsCellId;
 
 #endif  // IOS_CHROME_BROWSER_UI_SETTINGS_SETTINGS_TABLE_VIEW_CONTROLLER_CONSTANTS_H_

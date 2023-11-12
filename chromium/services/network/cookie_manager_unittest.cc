@@ -2812,6 +2812,7 @@ TEST_F(FlushableCookieManagerTest, DeletionFilterToInfo) {
       net::CookiePartitionKeyCollection(
           net::CookiePartitionKey::FromURLForTesting(
               GURL("https://www.foo.com")));
+  filter_ptr->partitioned_state_only = true;
 
   delete_info = DeletionFilterToInfo(std::move(filter_ptr));
   EXPECT_EQ(base::Time::FromDoubleT(kTestStartEpoch),
@@ -2842,6 +2843,7 @@ TEST_F(FlushableCookieManagerTest, DeletionFilterToInfo) {
       delete_info.cookie_partition_key_collection.PartitionKeys(),
       testing::UnorderedElementsAre(net::CookiePartitionKey::FromURLForTesting(
           GURL("https://www.foo.com"))));
+  EXPECT_TRUE(delete_info.partitioned_state_only);
 }
 
 // A test class having cookie store with a persistent backing store. The cookie
@@ -2862,7 +2864,8 @@ class SessionCleanupCookieManagerTest : public CookieManagerTest {
     auto sqlite_store = base::MakeRefCounted<net::SQLitePersistentCookieStore>(
         temp_dir_.GetPath().Append(kTestCookiesFilename),
         task_environment_.GetMainThreadTaskRunner(), background_task_runner_,
-        true, nullptr);
+        /*restore_old_session_cookies=*/true, /*crypto_delegate=*/nullptr,
+        /*enable_exclusive_access=*/false);
     return base::MakeRefCounted<SessionCleanupCookieStore>(sqlite_store.get());
   }
 

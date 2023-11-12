@@ -65,6 +65,7 @@
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
@@ -197,7 +198,8 @@ class DragAndDropSimulator {
     // (DragDropDelegate) doesn't return NullCallback.
     DCHECK(drop_cb);
     ui::mojom::DragOperation output_drag_op = ui::mojom::DragOperation::kNone;
-    std::move(drop_cb).Run(std::move(os_exchange_data_), output_drag_op);
+    std::move(drop_cb).Run(std::move(os_exchange_data_), output_drag_op,
+                           /*drag_image_layer_owner=*/nullptr);
     return true;
   }
 
@@ -221,7 +223,8 @@ class DragAndDropSimulator {
     delegate->OnDragUpdated(*active_drag_event_);
     auto drop_cb = delegate->GetDropCallback(*active_drag_event_);
     ui::mojom::DragOperation output_drag_op = ui::mojom::DragOperation::kNone;
-    std::move(drop_cb).Run(std::move(os_exchange_data_), output_drag_op);
+    std::move(drop_cb).Run(std::move(os_exchange_data_), output_drag_op,
+                           /*drag_image_layer_owner=*/nullptr);
     return true;
   }
 
@@ -796,19 +799,17 @@ class DragAndDropBrowserTest : public InProcessBrowserTest,
     if (!frame)
       return false;
 
-    std::string script;
-    int response = 0;
-
     // Navigate the frame and wait for the load event.
-    script = base::StringPrintf(
+    std::string script = base::StringPrintf(
         "location.href = '/cross-site/%s/drag_and_drop/%s';\n"
-        "setTimeout(function() { domAutomationController.send(42); }, 0);",
+        "new Promise(resolve => {"
+        "  setTimeout(function() { resolve(42); }, 0);"
+        "});",
         origin.c_str(), filename.c_str());
     content::TestFrameNavigationObserver observer(frame);
-    if (!content::ExecuteScriptAndExtractInt(frame, script, &response))
+    if (content::EvalJs(frame, script).ExtractInt() != 42) {
       return false;
-    if (response != 42)
-      return false;
+    }
     observer.Wait();
 
     // |frame| might have been swapped-out during a cross-site navigation,

@@ -18,9 +18,11 @@
 #include "third_party/blink/renderer/platform/graphics/compositing/pending_layer.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.h"
 #include "third_party/blink/renderer/platform/graphics/compositing_reasons.h"
+#include "third_party/blink/renderer/platform/graphics/lcd_text_preference.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_chunk_subset.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
+#include "third_party/blink/renderer/platform/graphics/paint/transform_paint_property_node.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 
@@ -160,10 +162,17 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // noncomposited nodes, and is used for Scroll Unification to generate scroll
   // nodes for noncomposited scrollers to complete the compositor's scroll
   // property tree.
+  //
+  // |anchor_scroll_container_nodes| is the set of scroll nodes whose scroll
+  // offset contributes to any anchor-scroll translation (namely, whose id is
+  // snapshotted in an AnchorScrollData). This is needed only when
+  // ScrollUnification is disabled.
   void Update(
       scoped_refptr<const PaintArtifact> artifact,
       const ViewportProperties& viewport_properties,
       const Vector<const TransformPaintPropertyNode*>& scroll_translation_nodes,
+      const Vector<const TransformPaintPropertyNode*>&
+          anchor_scroll_container_nodes,
       Vector<std::unique_ptr<cc::ViewTransitionRequest>> requests);
 
   // Fast-path update where the painting of existing composited layers changed,
@@ -196,6 +205,10 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   bool DirectlySetScrollOffset(CompositorElementId,
                                const gfx::PointF& scroll_offset);
 
+  uint32_t GetMainThreadScrollingReasons(const ScrollPaintPropertyNode&) const;
+  // Returns true if the scroll node is currently composited in cc.
+  bool UsesCompositedScrolling(const ScrollPaintPropertyNode&) const;
+
   // The root layer of the tree managed by this object.
   cc::Layer* RootLayer() const { return root_layer_.get(); }
 
@@ -224,7 +237,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   bool NeedsUpdate() const { return needs_update_; }
   void ClearNeedsUpdateForTesting() { needs_update_ = false; }
 
-  void SetPrefersLCDText(bool);
+  void SetLCDTextPreference(LCDTextPreference);
 
   // There is no mechanism for doing a paint lifecycle phase without running
   // PaintArtifactCompositor::Update so this is exposed so tests can check the
@@ -252,9 +265,15 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
 
   size_t ApproximateUnsharedMemoryUsage() const;
 
-  void SetScrollbarNeedsDisplay(CompositorElementId element_id);
+  // Invalidates the scrollbar layer. Returns true if the scrollbar layer is
+  // found by `element_id`.
+  bool SetScrollbarNeedsDisplay(CompositorElementId element_id);
 
  private:
+  void UpdateCompositorViewportProperties(const ViewportProperties&,
+                                          PropertyTreeManager&,
+                                          cc::LayerTreeHost*);
+
   // Collects the PaintChunks into groups which will end up in the same
   // cc layer. This is the entry point of the layerization algorithm.
   void CollectPendingLayers(scoped_refptr<const PaintArtifact>);
@@ -305,6 +324,14 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
       CompositorElementId& mask_isolation_id,
       CompositorElementId& mask_effect_id) final;
 
+  bool NeedsCompositedScrolling(
+      const TransformPaintPropertyNode& scroll_translation) const final;
+  bool ComputeNeedsCompositedScrolling(
+      const PaintArtifact&,
+      Vector<PaintChunk>::const_iterator chunk_cursor) const;
+  PendingLayer::CompositingType ChunkCompositingType(const PaintArtifact&,
+                                                     const PaintChunk&) const;
+
   static void UpdateRenderSurfaceForEffects(
       cc::EffectTree&,
       const cc::LayerList&,
@@ -314,7 +341,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
 
   CompositingReasons GetCompositingReasons(
       const PendingLayer& layer,
-      const PendingLayer* previous_layer) const;
+      const PropertyTreeState& previous_layer_state) const;
 
   void UpdateDebugInfo() const;
 
@@ -325,7 +352,7 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   bool needs_update_ = true;
   PreviousUpdateType previous_update_for_testing_ = PreviousUpdateType::kNone;
   bool layer_debug_info_enabled_ = false;
-  bool prefers_lcd_text_ = false;
+  LCDTextPreference lcd_text_preference_ = LCDTextPreference::kIgnored;
 
   scoped_refptr<cc::Layer> root_layer_;
   struct SynthesizedClipEntry {
@@ -338,6 +365,11 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   using PendingLayers = Vector<PendingLayer, 0>;
   class OldPendingLayerMatcher;
   PendingLayers pending_layers_;
+
+  // ScrollTranslationNodes of the PaintArtifact that are painted.
+  // This member variable is only used in PaintArtifactCompositor::Update.
+  // The value indicates if the scroll should be composited.
+  HashMap<const TransformPaintPropertyNode*, bool> scroll_translation_nodes_;
 
   friend class StubChromeClientForCAP;
   friend class PaintArtifactCompositorTest;

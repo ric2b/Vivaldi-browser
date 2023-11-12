@@ -72,7 +72,8 @@ class OmniboxPedalClearBrowsingData : public OmniboxPedal {
   // This method override enables this Pedal to spoof its ID for metrics
   // reporting, making it possible to distinguish incognito usage.
   OmniboxPedalId GetMetricsId() const override {
-    return incognito_ ? OmniboxPedalId::INCOGNITO_CLEAR_BROWSING_DATA : id();
+    return incognito_ ? OmniboxPedalId::INCOGNITO_CLEAR_BROWSING_DATA
+                      : PedalId();
   }
 
  protected:
@@ -149,7 +150,7 @@ class OmniboxPedalSetChromeAsDefaultBrowser : public OmniboxPedal {
           {
               true,
               true,
-              IDS_IOS_OMNIBOX_PEDAL_SYNONYMS_SET_CHROME_AS_DEFAULT_BROWSER_ONE_REQUIRED_HOW_TO_MAKE_CHROME_MY_DEFAULT_BROWSER,
+              IDS_OMNIBOX_PEDAL_SYNONYMS_SET_CHROME_AS_DEFAULT_BROWSER_ONE_REQUIRED_HOW_TO_MAKE_CHROME_MY_DEFAULT_BROWSER,
           },
           {
               false,
@@ -465,11 +466,13 @@ std::unordered_map<OmniboxPedalId, scoped_refptr<OmniboxPedal>>
 GetPedalImplementations(bool incognito, bool testing) {
   std::unordered_map<OmniboxPedalId, scoped_refptr<OmniboxPedal>> pedals;
   __unused const auto add = [&](OmniboxPedal* pedal) {
-    pedals.insert(std::make_pair(pedal->id(), base::WrapRefCounted(pedal)));
+    pedals.insert(
+        std::make_pair(pedal->PedalId(), base::WrapRefCounted(pedal)));
   };
 
   if (!incognito) {
     add(new OmniboxPedalClearBrowsingData(incognito));
+    add(new OmniboxPedalViewChromeHistory());
   }
 
   add(new OmniboxPedalManagePasswords());
@@ -478,7 +481,6 @@ GetPedalImplementations(bool incognito, bool testing) {
   add(new OmniboxPedalLaunchIncognito());
   add(new OmniboxPedalRunChromeSafetyCheck());
   add(new OmniboxPedalManageChromeSettings());
-  add(new OmniboxPedalViewChromeHistory());
   add(new OmniboxPedalPlayChromeDinoGame());
 
   return pedals;

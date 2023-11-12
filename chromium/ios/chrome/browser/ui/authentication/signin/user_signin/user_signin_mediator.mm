@@ -111,7 +111,7 @@
     // We need to set Sync requested in order to display the preferences
     // correctly and differentiate the special state where the user is
     // signed in, but the sync feature can't start yet.
-    self.syncService->GetUserSettings()->SetSyncRequested(true);
+    self.syncService->SetSyncFeatureRequested();
   } else {
     [self.delegate userSigninMediatorSigninFailed];
   }
@@ -138,7 +138,6 @@
                                         completion:(ProceduralBlock)completion {
   [self.authenticationFlow cancelAndDismissAnimated:animated];
 
-  self.syncService->GetUserSettings()->SetSyncRequested(false);
   DCHECK(self.delegate);
   switch (self.delegate.signinStateOnStart) {
     case IdentitySigninStateSignedOut: {
@@ -172,6 +171,8 @@
     }
     case IdentitySigninStateSignedInWithSyncEnabled: {
       // Switching accounts is not possible without sign-out.
+      // TODO(crbug.com/1410747): DCHECK failures are reported for this
+      // codepath that requires more investigation.
       NOTREACHED();
       break;
     }

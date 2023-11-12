@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <set>
+#include <string>
 #include <utility>
 
 #include "build/build_config.h"
@@ -141,11 +142,12 @@ const gfx::Rect overlapping_damage = gfx::Rect(gfx::Size(5, 20));
 class MockedSkiaOutputSurface : public FakeSkiaOutputSurface {
  public:
   MockedSkiaOutputSurface() : FakeSkiaOutputSurface(nullptr) {}
-  MOCK_METHOD5(CreateSharedImage,
-               gpu::Mailbox(ResourceFormat format,
+  MOCK_METHOD6(CreateSharedImage,
+               gpu::Mailbox(SharedImageFormat format,
                             const gfx::Size& size,
                             const gfx::ColorSpace& color_space,
                             uint32_t usage,
+                            base::StringPiece debug_label,
                             gpu::SurfaceHandle surface_handle));
   MOCK_METHOD1(DestroySharedImage, void(const gpu::Mailbox& mailbox));
 };
@@ -163,7 +165,7 @@ TEST(BufferQueueStandaloneTest, BufferCreationAndDestruction) {
                                   gpu::SHARED_IMAGE_USAGE_SCANOUT |
                                       gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
                                       gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE,
-                                  _))
+                                  _, _))
         .WillOnce(Return(expected_mailbox));
     EXPECT_CALL(*mock_skia_output_surface,
                 DestroySharedImage(expected_mailbox));
@@ -589,6 +591,38 @@ TEST_F(BufferQueueTest, RecreateBuffers) {
 
   // New queue of buffers loops.
   EXPECT_EQ(buffer_queue_->GetCurrentBuffer(), mb4);
+}
+
+TEST_F(BufferQueueTest, DestroyBuffers) {
+  EXPECT_TRUE(buffer_queue_->Reshape(screen_size, kBufferQueueColorSpace,
+                                     kBufferQueueFormat));
+  auto mb1 = SendDamagedFrame(small_damage);
+  auto mb2 = SendDamagedFrame(small_damage);
+  auto mb3 = SendDamagedFrame(small_damage);
+  std::vector<gpu::Mailbox> original_buffers = {mb1, mb2, mb3};
+
+  EXPECT_EQ(buffer_queue_->GetCurrentBuffer(), mb1);
+  buffer_queue_->SwapBuffers(small_damage);
+  EXPECT_EQ(buffer_queue_->GetCurrentBuffer(), mb2);
+  buffer_queue_->SwapBuffers(small_damage);
+
+  buffer_queue_->DestroyBuffers();
+
+  // All buffers are destroyed, and GetLastSwappedBuffer should not recreate
+  // them.
+  EXPECT_TRUE(buffer_queue_->GetLastSwappedBuffer().IsZero());
+  buffer_queue_->SwapBuffersComplete();  // mb1
+  EXPECT_TRUE(buffer_queue_->GetLastSwappedBuffer().IsZero());
+  // Reshape should not reallocate buffers.
+  EXPECT_TRUE(buffer_queue_->Reshape(gfx::Size(20, 20), kBufferQueueColorSpace,
+                                     kBufferQueueFormat));
+  EXPECT_TRUE(buffer_queue_->GetLastSwappedBuffer().IsZero());
+
+  // GetCurrentBuffer should create the new buffers.
+  auto mb4 = buffer_queue_->GetCurrentBuffer();
+  EXPECT_FALSE(mb4.IsZero());
+  EXPECT_THAT(original_buffers, Not(Contains(mb4)));
+  EXPECT_FALSE(buffer_queue_->GetLastSwappedBuffer().IsZero());
 }
 
 }  // namespace viz

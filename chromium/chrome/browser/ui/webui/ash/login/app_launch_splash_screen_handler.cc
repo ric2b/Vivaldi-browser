@@ -76,9 +76,6 @@ AppLaunchSplashScreenHandler::AppLaunchSplashScreenHandler(
 
 AppLaunchSplashScreenHandler::~AppLaunchSplashScreenHandler() {
   network_state_informer_->RemoveObserver(this);
-  if (delegate_) {
-    delegate_->OnDeletingSplashScreenView();
-  }
 }
 
 void AppLaunchSplashScreenHandler::DeclareLocalizedValues(
@@ -117,7 +114,7 @@ void AppLaunchSplashScreenHandler::SetNetworkRequired() {
   is_network_required_ = true;
 }
 
-void AppLaunchSplashScreenHandler::RegisterMessages() {
+void AppLaunchSplashScreenHandler::DeclareJSCallbacks() {
   AddCallback("configureNetwork",
               &AppLaunchSplashScreenHandler::HandleConfigureNetwork);
 }

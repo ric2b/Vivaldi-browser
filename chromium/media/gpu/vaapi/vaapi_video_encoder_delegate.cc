@@ -89,11 +89,11 @@ VaapiVideoEncoderDelegate::EncodeResult::metadata() const {
 VaapiVideoEncoderDelegate::VaapiVideoEncoderDelegate(
     scoped_refptr<VaapiWrapper> vaapi_wrapper,
     base::RepeatingClosure error_cb)
-    : vaapi_wrapper_(vaapi_wrapper), error_cb_(error_cb) {
-  DETACH_FROM_SEQUENCE(sequence_checker_);
-}
+    : vaapi_wrapper_(vaapi_wrapper), error_cb_(error_cb) {}
 
-VaapiVideoEncoderDelegate::~VaapiVideoEncoderDelegate() = default;
+VaapiVideoEncoderDelegate::~VaapiVideoEncoderDelegate() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+}
 
 size_t VaapiVideoEncoderDelegate::GetBitstreamBufferSize() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -102,7 +102,7 @@ size_t VaapiVideoEncoderDelegate::GetBitstreamBufferSize() const {
 }
 
 void VaapiVideoEncoderDelegate::BitrateControlUpdate(
-    uint64_t encoded_chunk_size_bytes) {
+    const BitstreamBufferMetadata& metadata) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
@@ -141,9 +141,8 @@ VaapiVideoEncoderDelegate::GetEncodeResult(
     return absl::nullopt;
   }
 
-  BitrateControlUpdate(encoded_chunk_size);
-
   auto metadata = GetMetadata(*encode_job, encoded_chunk_size);
+  BitrateControlUpdate(metadata);
   return absl::make_optional<EncodeResult>(
       std::move(*encode_job).CreateEncodeResult(metadata));
 }

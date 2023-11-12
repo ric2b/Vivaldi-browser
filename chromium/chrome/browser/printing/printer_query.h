@@ -11,9 +11,15 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "content/public/browser/global_routing_id.h"
+#include "printing/buildflags/buildflags.h"
 #include "printing/mojom/print.mojom.h"
 #include "printing/print_settings.h"
 #include "printing/printing_context.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
+#include "chrome/browser/printing/print_backend_service_manager.h"
+#endif
 
 namespace content {
 class WebContents;
@@ -37,6 +43,11 @@ class PrinterQuery {
   using SettingsCallback =
       base::OnceCallback<void(std::unique_ptr<PrintSettings>,
                               mojom::ResultCode)>;
+
+#if BUILDFLAG(IS_WIN)
+  using OnDidUpdatePrintableAreaCallback =
+      base::OnceCallback<void(bool success)>;
+#endif
 
   static std::unique_ptr<PrinterQuery> Create(
       content::GlobalRenderFrameHostId rfh_id);
@@ -82,14 +93,35 @@ class PrinterQuery {
                           base::OnceClosure callback);
 #endif
 
+#if BUILDFLAG(IS_WIN)
+  // Updates the printable area of the provided `PrintSettings` object.
+  // Caller has to ensure that `this` and `print_settings` are alive until
+  // `callback` runs.
+  // TODO(crbug.com/1424368):  Remove this if the printable areas can be made
+  // fully available from `PrintBackend::GetPrinterSemanticCapsAndDefaults()`.
+  virtual void UpdatePrintableArea(PrintSettings* print_settings,
+                                   OnDidUpdatePrintableAreaCallback callback);
+#endif
+
+  // Sets the printable area in `print_settings` to be the default printable
+  // area. Intended to be used only for virtual printers. Does not communicate
+  // with printer drivers, so it does not require special OOPPD handling.
+  static void ApplyDefaultPrintableAreaToVirtualPrinterPrintSettings(
+      PrintSettings& print_settings);
+
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
+  // Provide the client ID when the caller has registered with the
+  // `PrintBackendServiceManager` for getting settings for system print.
+  // Only intended to be used when out-of-process printing is in use, will
+  // DCHECK if used for in-browser printing.
+  virtual void SetClientId(PrintBackendServiceManager::ClientId client_id);
+#endif
+
   int cookie() const;
   mojom::ResultCode last_status() const { return last_status_; }
 
   // Returns true if a PrintingContext is still associated to this instance.
   bool is_valid() const;
-
-  // Posts the given task to be run.
-  bool PostTask(const base::Location& from_here, base::OnceClosure task);
 
   // Provide an override for generating worker threads in tests.
   static void SetCreatePrinterQueryCallbackForTest(

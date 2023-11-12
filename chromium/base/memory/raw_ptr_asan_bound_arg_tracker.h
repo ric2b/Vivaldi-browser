@@ -16,7 +16,6 @@
 #include "base/base_export.h"
 #include "base/containers/stack_container.h"
 #include "base/memory/raw_ptr.h"
-#include "base/threading/thread_local.h"
 
 namespace base {
 namespace internal {
@@ -47,6 +46,9 @@ class UnretainedRefWrapper;
 // the Bind implementation. This should not be used directly.
 class BASE_EXPORT RawPtrAsanBoundArgTracker {
  public:
+  static constexpr size_t kInlineArgsCount = 3;
+  using ProtectedArgsVector = base::StackVector<uintptr_t, kInlineArgsCount>;
+
   // Check whether ptr is an address inside an allocation pointed to by one of
   // the currently protected callback arguments. If it is, then this function
   // returns the base address of that allocation, otherwise it returns 0.
@@ -103,10 +105,6 @@ class BASE_EXPORT RawPtrAsanBoundArgTracker {
     }
   }
 
-  static constexpr size_t kInlineArgsCount = 3;
-  using ProtectedArgsVector = base::StackVector<uintptr_t, kInlineArgsCount>;
-  static ThreadLocalPointer<ProtectedArgsVector>& CurrentProtectedArgs();
-
   // Cache whether or not BRP-ASan is running when we enter the argument
   // tracking scope so that we ensure that our actions on leaving the scope are
   // consistent even if the runtime flags are changed.
@@ -115,7 +113,7 @@ class BASE_EXPORT RawPtrAsanBoundArgTracker {
   // We save the previously bound arguments, so that we can restore them when
   // this callback returns. This helps with coverage while avoiding false
   // positives due to nested run loops/callback re-entrancy.
-  ProtectedArgsVector* prev_protected_args_;
+  raw_ptr<ProtectedArgsVector> prev_protected_args_;
   ProtectedArgsVector protected_args_;
 };
 

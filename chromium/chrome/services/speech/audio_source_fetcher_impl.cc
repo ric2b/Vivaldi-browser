@@ -8,7 +8,9 @@
 
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/services/speech/speech_recognition_recognizer_impl.h"
@@ -35,6 +37,11 @@ constexpr int kServerBasedRecognitionAudioSampleRate = 16000;
 constexpr base::TimeDelta kServerBasedRecognitionAudioBufferSize =
     base::Milliseconds(100);
 
+constexpr char kServerBasedRecognitionSessionLength[] =
+    "Ash.SpeechRecognitionSessionLength.ServerBased";
+constexpr char kOnDeviceRecognitionSessionLength[] =
+    "Ash.SpeechRecognitionSessionLength.OnDevice";
+
 }  // namespace
 
 AudioSourceFetcherImpl::AudioSourceFetcherImpl(
@@ -51,6 +58,10 @@ AudioSourceFetcherImpl::AudioSourceFetcherImpl(
 AudioSourceFetcherImpl::~AudioSourceFetcherImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   Stop();
+  const auto* session_length_metric_name =
+      is_server_based_ ? kServerBasedRecognitionSessionLength
+                       : kOnDeviceRecognitionSessionLength;
+  base::UmaHistogramLongTimes100(session_length_metric_name, audio_length_);
 }
 
 void AudioSourceFetcherImpl::Create(
@@ -147,13 +158,23 @@ void AudioSourceFetcherImpl::Stop() {
     converter_.reset();
   }
   send_audio_callback_.Reset();
-  audio_consumer_->OnAudioCaptureEnd();
+
+  // Ensure `SendAudioEndToSpeechRecognitionService` is executed after
+  // `SendAudioToSpeechRecognitionService`.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &AudioSourceFetcherImpl::SendAudioEndToSpeechRecognitionService,
+          weak_factory_.GetWeakPtr()));
 }
 
 void AudioSourceFetcherImpl::Capture(const media::AudioBus* audio_source,
                                      base::TimeTicks audio_capture_time,
                                      double volume,
                                      bool key_pressed) {
+  audio_length_ += media::AudioTimestampHelper::FramesToTime(
+      audio_source->frames(), audio_parameters_.sample_rate());
+
   if (converter_) {
     // Send the audio callback to the main thread to resample.
     std::unique_ptr<media::AudioBus> input =
@@ -229,6 +250,10 @@ void AudioSourceFetcherImpl::OnAudioFinishedConvert(
       *output_bus, server_based_recognition_params_->sample_rate(),
       server_based_recognition_params_->channel_layout(),
       is_multi_channel_supported_));
+}
+
+void AudioSourceFetcherImpl::SendAudioEndToSpeechRecognitionService() {
+  audio_consumer_->OnAudioCaptureEnd();
 }
 
 }  // namespace speech

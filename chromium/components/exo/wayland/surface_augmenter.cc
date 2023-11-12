@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "components/exo/buffer.h"
 #include "components/exo/sub_surface.h"
 #include "components/exo/sub_surface_observer.h"
@@ -78,7 +79,7 @@ class AugmentedSurface : public SurfaceObserver {
   }
 
  private:
-  Surface* surface_;
+  raw_ptr<Surface, ExperimentalAsh> surface_;
 };
 
 void augmented_surface_destroy(wl_client* client, wl_resource* resource) {
@@ -167,6 +168,8 @@ class AugmentedSubSurface : public SubSurfaceObserver {
       : sub_surface_(sub_surface) {
     sub_surface_->AddSubSurfaceObserver(this);
     sub_surface_->SetProperty(kSubSurfaceHasAugmentedSubSurfaceKey, true);
+    sub_surface_->surface()->set_leave_enter_callback(
+        Surface::LeaveEnterCallback());
   }
   AugmentedSubSurface(const AugmentedSubSurface&) = delete;
   AugmentedSubSurface& operator=(const AugmentedSubSurface&) = delete;
@@ -201,7 +204,7 @@ class AugmentedSubSurface : public SubSurfaceObserver {
   }
 
  private:
-  SubSurface* sub_surface_;
+  raw_ptr<SubSurface, ExperimentalAsh> sub_surface_;
 };
 
 void augmented_sub_surface_destroy(wl_client* client, wl_resource* resource) {

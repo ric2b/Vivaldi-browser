@@ -25,26 +25,6 @@ import {loadTimeData} from './i18n_setup.js';
  */
 export class Oobe extends DisplayManager {
   /**
-   * OOBE initialization coordination. Used by tests to wait for OOBE
-   * to fully load when using the HTLImports polyfill.
-   * TODO(crbug.com/1111387) - Remove once migrated to JS modules.
-   * Remove spammy logging when closer to M89 branch point.
-   */
-  static waitForOobeToLoad() {
-    return new Promise((resolve, reject) => {
-      if (this.initializationComplete) {
-        // TODO(crbug.com/1111387) - Remove excessive logging.
-        console.warn('OOBE is already initialized. Continuing...');
-        resolve();
-      } else {
-        // TODO(crbug.com/1111387) - Remove excessive logging.
-        console.warn('OOBE not loaded yet. Waiting...');
-        this.initCallbacks.push(resolve);
-      }
-    });
-  }
-
-  /**
    * Handle the cancel accelerator.
    */
   static handleCancel() {
@@ -258,14 +238,7 @@ export class Oobe extends DisplayManager {
       document.documentElement.setAttribute(attribute, localizedString);
     }
 
-    const missingApiId = 'missingAPIKeysNotice';
-    if (!loadTimeData.valueExists(missingApiId)) {
-      return;
-    }
-    // Update this standalone div in the main document.
-    const apiKeysNoticeDiv = $('api-keys-notice');
-    apiKeysNoticeDiv.textContent = loadTimeData.getValue(missingApiId);
-    $('api-keys-notice-container').hidden = false;
+    $('api-keys-notice').updateLocaleAndMaybeShowNotice();
   }
 
   /**
@@ -286,17 +259,14 @@ export class Oobe extends DisplayManager {
 
 }  // class Oobe
 
-  Oobe.initializationComplete = false;
-  Oobe.initCallbacks = [];
-  /**
-   * Some ForTesting APIs directly access to DOM. Because this script is loaded
-   * in header, DOM tree may not be available at beginning.
-   * In DOMContentLoaded, after Oobe.initialize() is done, this is marked to
-   * true, indicating ForTesting methods can be called.
-   * External script using ForTesting APIs should wait for this condition.
-   * @type {boolean}
-   */
-  Oobe.readyForTesting = false;
+/**
+ * Some ForTesting APIs directly access to DOM. Because this script is loaded
+ * in header, DOM tree may not be available at beginning.
+ * In DOMContentLoaded, after Oobe.initialize() is done, this is marked to
+ * true, indicating ForTesting methods can be called.
+ * External script using ForTesting APIs should wait for this condition.
+ * @type {boolean}
+ */
+Oobe.readyForTesting = false;
 
-  addSingletonGetter(Oobe);
-
+addSingletonGetter(Oobe);

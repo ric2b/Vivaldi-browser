@@ -22,7 +22,7 @@ class RulesetFileParser {
  private:
   void ParseLine(base::StringPiece line);
 
-  ParseResult* parse_result_;
+  const raw_ptr<ParseResult> parse_result_;
   RuleParser parser_;
 };
 }  // namespace adblock_filter

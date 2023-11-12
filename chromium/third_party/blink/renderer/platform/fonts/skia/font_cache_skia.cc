@@ -54,6 +54,10 @@
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 
+#if BUILDFLAG(IS_MAC)
+#error This file should not be used by MacOS.
+#endif
+
 namespace blink {
 
 AtomicString ToAtomicString(const SkString& str) {
@@ -226,31 +230,11 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
   }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_WIN)
-  // TODO(vmpstr): Deal with paint typeface here.
-  if (sideloaded_fonts_) {
-    auto sideloaded_font = sideloaded_fonts_->find(name.c_str());
-    if (sideloaded_font != sideloaded_fonts_->end())
-      return sideloaded_font->value;
-  }
-#endif
-
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
-  // On linux if the fontManager has been overridden then we should be calling
-  // the embedder provided font Manager rather than calling
-  // SkTypeface::CreateFromName which may redirect the call to the default font
-  // Manager.  On Windows the font manager is always present.
-  if (font_manager_) {
-    auto tf = sk_sp<SkTypeface>(font_manager_->matchFamilyStyle(
-        name.c_str(), font_description.SkiaFontStyle()));
-    return tf;
-  }
-#endif
-
-  // FIXME: Use m_fontManager, matchFamilyStyle instead of
-  // legacyCreateTypeface on all platforms.
-  return SkTypeface_Factory::FromFamilyNameAndFontStyle(
-      name.c_str(), font_description.SkiaFontStyle());
+  // TODO(https://crbug.com/1425390: Assign FontCache::font_manager_ in the
+  // ctor.
+  auto font_manager = font_manager_ ? font_manager_ : SkFontMgr::RefDefault();
+  return sk_sp<SkTypeface>(font_manager->matchFamilyStyle(
+      name.empty() ? nullptr : name.c_str(), font_description.SkiaFontStyle()));
 }
 
 #if !BUILDFLAG(IS_WIN)
@@ -289,25 +273,30 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
   if (!typeface)
     return nullptr;
 
+  bool synthetic_bold =
+      (font_description.Weight() >
+           FontSelectionValue(200) +
+               FontSelectionValue(typeface->fontStyle().weight()) ||
+       font_description.IsSyntheticBold()) &&
+      font_description.GetFontSynthesisWeight() ==
+          FontDescription::kAutoFontSynthesisWeight;
+
+  bool synthetic_italic = (((font_description.Style() == ItalicSlopeValue()) &&
+                            !typeface->isItalic()) ||
+                           font_description.IsSyntheticItalic()) &&
+                          font_description.GetFontSynthesisStyle() ==
+                              FontDescription::kAutoFontSynthesisStyle;
+
+  ResolvedFontFeatures resolved_font_features =
+      font_description.GetFontVariantAlternates()
+          ? font_description.GetFontVariantAlternates()
+                ->GetResolvedFontFeatures()
+          : ResolvedFontFeatures();
+
   std::unique_ptr<FontPlatformData> font_platform_data =
       std::make_unique<FontPlatformData>(
-          typeface, name, font_size,
-          ((font_description.Weight() >
-                FontSelectionValue(200) +
-                    FontSelectionValue(typeface->fontStyle().weight()) ||
-            font_description.IsSyntheticBold()) &&
-           font_description.GetFontSynthesisWeight() ==
-               FontDescription::kAutoFontSynthesisWeight),
-          (((font_description.Style() == ItalicSlopeValue()) &&
-            !typeface->isItalic()) ||
-           font_description.IsSyntheticItalic()) &&
-              font_description.GetFontSynthesisStyle() ==
-                  FontDescription::kAutoFontSynthesisStyle,
-          font_description.TextRendering(),
-          font_description.GetFontVariantAlternates()
-              ? font_description.GetFontVariantAlternates()
-                    ->GetResolvedFontFeatures()
-              : ResolvedFontFeatures(),
+          typeface, name, font_size, synthetic_bold, synthetic_italic,
+          font_description.TextRendering(), resolved_font_features,
           font_description.Orientation());
 
   font_platform_data->SetAvoidEmbeddedBitmaps(

@@ -132,6 +132,7 @@ def get_chromium_variables():
     global_vars.setdefault('skia_git', BASE_URL +'/skia')
     global_vars.setdefault('swiftshader_git', BASE_URL +'/swiftshader')
     global_vars.setdefault('webrtc_git', BASE_URL +'/webrtc')
+    global_vars.setdefault('betocore_git', BASE_URL +'/betocore')
 
   global_vars["checkout_src_internal"]=False
   global_vars["checkout_nacl"]=False

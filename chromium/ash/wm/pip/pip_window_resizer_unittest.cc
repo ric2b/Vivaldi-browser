@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/wm/pip/pip_window_resizer.h"
+#include "base/memory/raw_ptr.h"
 
 #include <memory>
 #include <string>
@@ -72,7 +73,7 @@ class FakeWindowState : public WindowState::State {
  private:
   WindowStateType state_type_;
   gfx::Rect last_bounds_;
-  WindowState* last_window_state_ = nullptr;
+  raw_ptr<WindowState, ExperimentalAsh> last_window_state_ = nullptr;
 };
 
 }  // namespace
@@ -184,8 +185,8 @@ class PipWindowResizerTest : public AshTestBase,
 
  private:
   std::unique_ptr<views::Widget> widget_;
-  aura::Window* window_;
-  FakeWindowState* test_state_;
+  raw_ptr<aura::Window, ExperimentalAsh> window_;
+  raw_ptr<FakeWindowState, ExperimentalAsh> test_state_;
   base::HistogramTester histograms_;
   std::unique_ptr<display::ScopedDisplayForNewWindows> scoped_display_;
 
@@ -609,23 +610,6 @@ TEST_P(PipWindowResizerTest, PipStartAndFinishFreeResizeUmaMetrics) {
   histograms().ExpectTotalCount(kAshPipEventsHistogramName, 1);
 }
 
-TEST_P(PipWindowResizerTest, PipFreeResizeAreaUmaMetrics) {
-  PreparePipWindow(gfx::Rect(200, 200, 100, 100));
-  std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTBOTTOM));
-  ASSERT_TRUE(resizer.get());
-
-  EXPECT_EQ(1, histograms().GetBucketCount(
-                   kAshPipFreeResizeInitialAreaHistogramName, Sample(5)));
-  histograms().ExpectTotalCount(kAshPipFreeResizeInitialAreaHistogramName, 1);
-
-  window()->layer()->SetBounds(gfx::Rect(200, 200, 100, 190));
-  resizer->CompleteDrag();
-
-  EXPECT_EQ(1, histograms().GetBucketCount(
-                   kAshPipFreeResizeFinishAreaHistogramName, Sample(10)));
-  histograms().ExpectTotalCount(kAshPipFreeResizeFinishAreaHistogramName, 1);
-}
-
 TEST_P(PipWindowResizerTest, DragDetailsAreDestroyed) {
   PreparePipWindow(gfx::Rect(200, 200, 100, 100));
   WindowState* window_state = WindowState::Get(window());
@@ -655,265 +639,5 @@ INSTANTIATE_TEST_SUITE_P(All,
                                          std::make_tuple("500x400,500x400", 0u),
                                          std::make_tuple("500x400,500x400",
                                                          1u)));
-
-using PipWindowResizerNonSquareAspectRatioTest = PipWindowResizerTest;
-
-TEST_P(PipWindowResizerNonSquareAspectRatioTest, PipPositionUmaMetrics) {
-  histograms().ExpectTotalCount(kAshPipPositionHistogramName, 0);
-
-  {
-    // Check TOP_LEFT.
-    PreparePipWindow(gfx::Rect(0, 0, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                             Sample(AshPipPosition::TOP_LEFT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 1);
-  }
-
-  {
-    // Check TOP_MIDDLE.
-    PreparePipWindow(gfx::Rect(100, 0, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1,
-              histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                          Sample(AshPipPosition::TOP_MIDDLE)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 2);
-  }
-
-  {
-    // Check TOP_RIGHT.
-    PreparePipWindow(gfx::Rect(250, 0, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1,
-              histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                          Sample(AshPipPosition::TOP_RIGHT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 3);
-  }
-
-  {
-    // Check MIDDLE_LEFT.
-    PreparePipWindow(gfx::Rect(0, 100, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1,
-              histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                          Sample(AshPipPosition::MIDDLE_LEFT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 4);
-  }
-
-  {
-    // Check MIDDLE.
-    PreparePipWindow(gfx::Rect(100, 100, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                             Sample(AshPipPosition::MIDDLE)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 5);
-  }
-
-  {
-    // Check MIDDLE_RIGHT.
-    PreparePipWindow(gfx::Rect(250, 100, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(
-        1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                       Sample(AshPipPosition::MIDDLE_RIGHT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 6);
-  }
-
-  {
-    // Check BOTTOM_LEFT.
-    PreparePipWindow(gfx::Rect(0, 250, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1,
-              histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                          Sample(AshPipPosition::BOTTOM_LEFT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 7);
-  }
-
-  {
-    // Check BOTTOM_MIDDLE.
-    PreparePipWindow(gfx::Rect(100, 250, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(
-        1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                       Sample(AshPipPosition::BOTTOM_MIDDLE)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 8);
-  }
-
-  {
-    // Check BOTTOM_RIGHT.
-    PreparePipWindow(gfx::Rect(250, 250, 100, 100));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(
-        1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                       Sample(AshPipPosition::BOTTOM_RIGHT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 9);
-  }
-}
-
-TEST_P(PipWindowResizerNonSquareAspectRatioTest,
-       PipPositionUmaMetricsCornerPriority) {
-  histograms().ExpectTotalCount(kAshPipPositionHistogramName, 0);
-
-  // Check corners are priotised over edges and middle.
-  {
-    // Check TOP_LEFT.
-    PreparePipWindow(gfx::Rect(0, 0, 300, 210));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                             Sample(AshPipPosition::TOP_LEFT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 1);
-  }
-
-  {
-    // Check TOP_RIGHT.
-    PreparePipWindow(gfx::Rect(100, 0, 300, 210));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1,
-              histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                          Sample(AshPipPosition::TOP_RIGHT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 2);
-  }
-
-  {
-    // Check BOTTOM_LEFT.
-    PreparePipWindow(gfx::Rect(0, 190, 300, 210));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1,
-              histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                          Sample(AshPipPosition::BOTTOM_LEFT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 3);
-  }
-
-  {
-    // Check BOTTOM_RIGHT.
-    PreparePipWindow(gfx::Rect(100, 190, 300, 210));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(
-        1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                       Sample(AshPipPosition::BOTTOM_RIGHT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 4);
-  }
-}
-
-TEST_P(PipWindowResizerNonSquareAspectRatioTest,
-       PipPositionUmaMetricsEdgePriority) {
-  histograms().ExpectTotalCount(kAshPipPositionHistogramName, 0);
-
-  // Test that edges are prioritised over middle.
-  {
-    // Check TOP_MIDDLE.
-    PreparePipWindow(gfx::Rect(100, 0, 200, 220));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1,
-              histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                          Sample(AshPipPosition::TOP_MIDDLE)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 1);
-  }
-
-  {
-    // Check BOTTOM_MIDDLE.
-    PreparePipWindow(gfx::Rect(100, 80, 200, 220));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(
-        1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                       Sample(AshPipPosition::BOTTOM_MIDDLE)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 2);
-  }
-
-  {
-    // Check MIDDLE_LEFT.
-    PreparePipWindow(gfx::Rect(0, 90, 300, 120));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(1,
-              histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                          Sample(AshPipPosition::MIDDLE_LEFT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 3);
-  }
-
-  {
-    // Check MIDDLE_RIGHT.
-    PreparePipWindow(gfx::Rect(100, 90, 300, 120));
-    std::unique_ptr<PipWindowResizer> resizer(CreateResizerForTest(HTCAPTION));
-    ASSERT_TRUE(resizer.get());
-    resizer->Drag(CalculateDragPoint(*resizer, 0, 0), 0);
-    resizer->CompleteDrag();
-
-    EXPECT_EQ(
-        1, histograms().GetBucketCount(kAshPipPositionHistogramName,
-                                       Sample(AshPipPosition::MIDDLE_RIGHT)));
-    histograms().ExpectTotalCount(kAshPipPositionHistogramName, 4);
-  }
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    PipWindowResizerNonSquareAspectRatioTest,
-    testing::Values(std::make_tuple("400x300", 0u),
-                    std::make_tuple("400x300,4000x3000", 0u),
-                    std::make_tuple("4000x3000,400x300", 1u)));
 
 }  // namespace ash

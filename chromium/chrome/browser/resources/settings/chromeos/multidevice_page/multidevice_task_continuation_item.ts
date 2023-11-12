@@ -22,16 +22,15 @@ import './multidevice_task_continuation_disabled_link.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import '../../settings_shared.css.js';
 
+import {SyncBrowserProxy, SyncBrowserProxyImpl, SyncPrefs} from '/shared/settings/people_page/sync_browser_proxy.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-
-import {SyncBrowserProxy, SyncBrowserProxyImpl, SyncPrefs} from '../../people_page/sync_browser_proxy.js';
 
 import {SettingsMultideviceFeatureItemElement} from './multidevice_feature_item.js';
 import {MultiDeviceFeatureMixin} from './multidevice_feature_mixin.js';
 import {getTemplate} from './multidevice_task_continuation_item.html.js';
 
-interface SettingsMultideviceTaskContinuationItemElement {
+export interface SettingsMultideviceTaskContinuationItemElement {
   $: {
     phoneHubTaskContinuationItem: SettingsMultideviceFeatureItemElement,
   };
@@ -40,7 +39,7 @@ interface SettingsMultideviceTaskContinuationItemElement {
 const SettingsMultideviceTaskContinuationItemElementBase =
     MultiDeviceFeatureMixin(WebUiListenerMixin(PolymerElement));
 
-class SettingsMultideviceTaskContinuationItemElement extends
+export class SettingsMultideviceTaskContinuationItemElement extends
     SettingsMultideviceTaskContinuationItemElementBase {
   static get is() {
     return 'settings-multidevice-task-continuation-item' as const;

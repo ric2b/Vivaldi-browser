@@ -37,6 +37,7 @@
 #include "cc/animation/animation_timeline.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_range_offset.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_cssnumericvalue_double.h"
 #include "third_party/blink/renderer/core/animation/animation_timeline.h"
 #include "third_party/blink/renderer/core/animation/animation_utils.h"
@@ -268,7 +269,8 @@ Animation* Animation::Create(ExecutionContext* execution_context,
 Animation::Animation(ExecutionContext* execution_context,
                      AnimationTimeline* timeline,
                      AnimationEffect* content)
-    : ExecutionContextLifecycleObserver(nullptr),
+    : ActiveScriptWrappable<Animation>({}),
+      ExecutionContextLifecycleObserver(nullptr),
       reported_play_state_(kIdle),
       playback_rate_(1),
       start_time_(),
@@ -786,6 +788,8 @@ void Animation::NotifyReady(AnimationTimeDelta ready_time) {
 // Refer to Step 8.3 'pending play task' in the following spec:
 // https://www.w3.org/TR/web-animations-1/#playing-an-animation-section
 void Animation::CommitPendingPlay(AnimationTimeDelta ready_time) {
+  UpdateStartTimeForViewTimeline();
+
   DCHECK(start_time_ || hold_time_);
   DCHECK(pending_play_);
   pending_play_ = false;
@@ -937,44 +941,49 @@ void Animation::setTimeline(AnimationTimeline* timeline) {
 
   // Update content timing to be based on new timeline type. This ensures that
   // EffectEnd() is returning a value appropriate to the new timeline.
-  if (content_ && timeline_)
+  if (content_) {
     content_->InvalidateNormalizedTiming();
+  }
 
   reset_current_time_on_resume_ = false;
 
-  if (timeline) {
-    if (!timeline->IsMonotonicallyIncreasing()) {
-      ApplyPendingPlaybackRate();
-      AnimationTimeDelta boundary_time =
-          (playback_rate_ > 0) ? AnimationTimeDelta() : EffectEnd();
-      switch (old_play_state) {
-        case kIdle:
-          break;
+  // Set the timeline if needed for resolving timeline offsets in kefyrames.
+  if (auto* keyframe_effect = DynamicTo<KeyframeEffect>(effect())) {
+    ViewTimeline* view_timeline = DynamicTo<ViewTimeline>(timeline);
+    keyframe_effect->Model()->SetViewTimelineIfRequired(view_timeline);
+  }
 
-        case kRunning:
-        case kFinished:
-          // A non-monotonic timeline has a fixed start time at the beginning or
-          // end of the timeline.
+  if (timeline && !timeline->IsMonotonicallyIncreasing()) {
+    ApplyPendingPlaybackRate();
+    AnimationTimeDelta boundary_time =
+        (playback_rate_ > 0) ? AnimationTimeDelta() : EffectEnd();
+    switch (old_play_state) {
+      case kIdle:
+        break;
+
+      case kRunning:
+      case kFinished:
+        // A non-monotonic timeline has a fixed start time at the beginning or
+        // end of the timeline.
+        start_time_ = boundary_time;
+        break;
+
+      case kPaused:
+        if (old_current_time) {
+          reset_current_time_on_resume_ = true;
+          start_time_ = absl::nullopt;
+          hold_time_ = progress * EffectEnd();
+        } else if (PendingInternal()) {
           start_time_ = boundary_time;
-          break;
+        }
+        break;
 
-        case kPaused:
-          if (old_current_time) {
-            reset_current_time_on_resume_ = true;
-            start_time_ = absl::nullopt;
-            hold_time_ = progress * EffectEnd();
-          } else if (PendingInternal()) {
-            start_time_ = boundary_time;
-          }
-          break;
-
-        default:
-          NOTREACHED();
-      }
-    } else if (old_current_time && old_timeline &&
-               !old_timeline->IsMonotonicallyIncreasing()) {
-      SetCurrentTimeInternal(progress * EffectEnd());
+      default:
+        NOTREACHED();
     }
+  } else if (old_current_time && old_timeline &&
+             !old_timeline->IsMonotonicallyIncreasing()) {
+    SetCurrentTimeInternal(progress * EffectEnd());
   }
 
   // 4. If the start time of animation is resolved, make the animation’s hold
@@ -1163,8 +1172,13 @@ void Animation::setEffect(AnimationEffect* new_effect) {
   // The effect is no longer associated with CSS properties.
   if (new_effect) {
     new_effect->SetIgnoreCssTimingProperties();
-    if (KeyframeEffect* keyframe_effect = DynamicTo<KeyframeEffect>(new_effect))
+    if (KeyframeEffect* keyframe_effect =
+            DynamicTo<KeyframeEffect>(new_effect)) {
       keyframe_effect->SetIgnoreCSSKeyframes();
+      // Set the timeline if needed for resolving timeline offsets in kefyrames.
+      ViewTimeline* view_timeline = DynamicTo<ViewTimeline>(timeline());
+      keyframe_effect->Model()->SetViewTimelineIfRequired(view_timeline);
+    }
   }
 
   // The remaining steps are for handling CSS animation and transition events.
@@ -2025,8 +2039,9 @@ Animation::CheckCanStartAnimationOnCompositorInternal() const {
 
   // An Animation with zero playback rate will produce no visual output, so
   // there is no reason to composite it.
-  if (EffectivePlaybackRate() == 0)
+  if (IsWithinAnimationTimeEpsilon(0, EffectivePlaybackRate())) {
     reasons |= CompositorAnimations::kInvalidAnimationOrEffect;
+  }
 
   // Animation times with large magnitudes cannot be accurately reflected by
   // TimeTicks. These animations will stall, be finished next frame, or
@@ -2061,8 +2076,9 @@ Animation::CheckCanStartAnimationOnCompositorInternal() const {
   // are in the compositor, the animation should be composited.
   if (timeline_ && timeline_->IsScrollTimeline() &&
       !CompositorAnimations::CheckUsesCompositedScrolling(
-          To<ScrollTimeline>(*timeline_).ResolvedSource()))
+          To<ScrollTimeline>(*timeline_).ResolvedSource())) {
     reasons |= CompositorAnimations::kTimelineSourceHasInvalidCompositingState;
+  }
 
   // An Animation without an effect cannot produce a visual, so there is no
   // reason to composite it.
@@ -2202,6 +2218,109 @@ void Animation::SetCompositorPending(bool effect_changed) {
     // painted via a paint worklet.
     UpdateCompositedPaintStatus();
   }
+}
+
+const Animation::RangeBoundary* Animation::rangeStart() {
+  return ToRangeBoundary(range_start_);
+}
+
+const Animation::RangeBoundary* Animation::rangeEnd() {
+  return ToRangeBoundary(range_end_);
+}
+
+void Animation::setRangeStart(const Animation::RangeBoundary* range_start,
+                              ExceptionState& exception_state) {
+  SetRangeStartInternal(
+      GetEffectiveTimelineOffset(range_start, 0, exception_state));
+}
+
+void Animation::setRangeEnd(const Animation::RangeBoundary* range_end,
+                            ExceptionState& exception_state) {
+  SetRangeEndInternal(
+      GetEffectiveTimelineOffset(range_end, 1, exception_state));
+}
+
+absl::optional<TimelineOffset> Animation::GetEffectiveTimelineOffset(
+    const Animation::RangeBoundary* boundary,
+    double default_percent,
+    ExceptionState& exception_state) {
+  KeyframeEffect* keyframe_effect = DynamicTo<KeyframeEffect>(effect());
+  Element* element = keyframe_effect ? keyframe_effect->target() : nullptr;
+
+  return TimelineOffset::Create(element, boundary, default_percent,
+                                exception_state);
+}
+
+/* static */
+Animation::RangeBoundary* Animation::ToRangeBoundary(
+    absl::optional<TimelineOffset> timeline_offset) {
+  if (!timeline_offset) {
+    return MakeGarbageCollected<RangeBoundary>("normal");
+  }
+
+  TimelineRangeOffset* timeline_range_offset =
+      MakeGarbageCollected<TimelineRangeOffset>();
+  timeline_range_offset->setRangeName(timeline_offset->name);
+  CSSPrimitiveValue* value =
+      CSSPrimitiveValue::CreateFromLength(timeline_offset->offset, 1);
+  CSSNumericValue* offset = CSSNumericValue::FromCSSValue(*value);
+  timeline_range_offset->setOffset(offset);
+  return MakeGarbageCollected<RangeBoundary>(timeline_range_offset);
+}
+
+void Animation::UpdateStartTimeForViewTimeline() {
+  auto* view_timeline = DynamicTo<ViewTimeline>(timeline_.Get());
+  if (!view_timeline || !effect()) {
+    return;
+  }
+
+  absl::optional<TimelineOffset> boundary;
+  double default_offset;
+  if (EffectivePlaybackRate() >= 0) {
+    boundary = GetRangeStartInternal();
+    default_offset = 0;
+  } else {
+    boundary = GetRangeEndInternal();
+    default_offset = 1;
+  }
+
+  double relative_offset =
+      boundary ? view_timeline->ToFractionalOffset(boundary.value())
+               : default_offset;
+  AnimationTimeDelta duration = timeline_->GetDuration().value();
+  start_time_ = duration * relative_offset;
+}
+
+void Animation::OnRangeUpdate() {
+  // Change in animation range has no effect unless using a scroll-timeline.
+  ScrollTimeline* scroll_timeline = DynamicTo<ScrollTimeline>(timeline_.Get());
+  if (!scroll_timeline) {
+    return;
+  }
+
+  SetOutdated();
+  if (content_) {
+    // Animation range affects intrinsic iteration duration, which in turn
+    // affects iteration duration in normalized timing.
+    content_->InvalidateNormalizedTiming();
+    content_->Invalidate();
+  }
+  if (start_time_) {
+    UpdateStartTimeForViewTimeline();
+  }
+
+  Update(kTimingUpdateOnDemand);
+
+  // Clamp current time to end time if finished. The |previous_current_time_|
+  // flag prevents current time from jumping when updating the finished state
+  // on an animation and not performing an explicit seek operation.
+  previous_current_time_ = absl::nullopt;
+  UpdateFinishedState(UpdateType::kContinuous, NotificationType::kAsync);
+
+  SetCompositorPending(/*effect_changed=*/true);
+
+  // Inform devtools of a potential change to the play state.
+  NotifyProbe();
 }
 
 void Animation::CancelAnimationOnCompositor() {

@@ -78,7 +78,7 @@ class AdverseAdFilterListService : public KeyedService,
   void ComputeSHA256Sum(const void* data, size_t length);
 
   std::set<std::string> adverse_ad_sites_;
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
   bool blocklist_file_exists_ = false;
   bool is_enabled_and_been_loaded_ = false;
 

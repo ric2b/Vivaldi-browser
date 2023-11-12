@@ -183,7 +183,7 @@ bool ActionTargetGenerator::FillPool() {
   LabelPtrPair<Pool> pair(label);
   pair.origin = target_->defined_from();
 
-  target_->action_values().set_pool(std::move(pair));
+  target_->set_pool(std::move(pair));
   return true;
 }
 

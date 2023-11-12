@@ -59,8 +59,9 @@ void FakeLocalFrameHost::VisibilityChanged(
 void FakeLocalFrameHost::DidChangeThemeColor(
     absl::optional<::SkColor> theme_color) {}
 
-void FakeLocalFrameHost::DidChangeBackgroundColor(SkColor background_color,
-                                                  bool color_adjust) {}
+void FakeLocalFrameHost::DidChangeBackgroundColor(
+    const SkColor4f& background_color,
+    bool color_adjust) {}
 
 void FakeLocalFrameHost::DidFailLoadWithError(const ::blink::KURL& url,
                                               int32_t error_code) {}
@@ -162,6 +163,7 @@ void FakeLocalFrameHost::DownloadURL(
 
 void FakeLocalFrameHost::FocusedElementChanged(
     bool is_editable_element,
+    bool is_richly_editable_element,
     const gfx::Rect& bounds_in_frame_widget,
     blink::mojom::FocusType focus_type) {}
 
@@ -251,11 +253,13 @@ void FakeLocalFrameHost::ReceivedDelegatedCapability(
 void FakeLocalFrameHost::SendFencedFrameReportingBeacon(
     const WTF::String& event_data,
     const WTF::String& event_type,
-    blink::FencedFrame::ReportingDestination destination) {}
+    const WTF::Vector<blink::FencedFrame::ReportingDestination>& destinations) {
+}
 
 void FakeLocalFrameHost::SetFencedFrameAutomaticBeaconReportEventData(
     const WTF::String& event_data,
-    const WTF::Vector<blink::FencedFrame::ReportingDestination>& destination) {}
+    const WTF::Vector<blink::FencedFrame::ReportingDestination>& destinations) {
+}
 
 void FakeLocalFrameHost::SendPrivateAggregationRequestsForFencedFrameEvent(
     const WTF::String& event_type) {}
@@ -280,7 +284,6 @@ void FakeLocalFrameHost::AdoptPortal(
 
 void FakeLocalFrameHost::CreateFencedFrame(
     mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>,
-    mojom::blink::FencedFrameMode,
     mojom::blink::RemoteFrameInterfacesFromRendererPtr remote_frame_interfaces,
     const RemoteFrameToken& frame_token,
     const base::UnguessableToken& devtools_frame_token) {

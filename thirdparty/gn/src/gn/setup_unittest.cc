@@ -31,7 +31,7 @@ TEST_F(SetupTest, DotGNFileIsGenDep) {
   base::FilePath dot_gn_name = in_path.Append(FILE_PATH_LITERAL(".gn"));
   WriteFile(dot_gn_name, "buildconfig = \"//BUILDCONFIG.gn\"\n");
   WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
-  cmdline.AppendSwitchASCII(switches::kRoot, FilePathToUTF8(in_path));
+  cmdline.AppendSwitchPath(switches::kRoot, in_path);
 
   // Create another temp dir for writing the generated files to.
   base::ScopedTempDir build_temp_dir;
@@ -49,18 +49,21 @@ TEST_F(SetupTest, DotGNFileIsGenDep) {
 TEST_F(SetupTest, EmptyScriptExecutableDoesNotGenerateError) {
   base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
 
+  const char kDotfileContents[] = R"(
+buildconfig = "//BUILDCONFIG.gn"
+script_executable = ""
+)";
+
   // Create a temp directory containing a .gn file and a BUILDCONFIG.gn file,
   // pass it as --root.
   base::ScopedTempDir in_temp_dir;
   ASSERT_TRUE(in_temp_dir.CreateUniqueTempDir());
   base::FilePath in_path = in_temp_dir.GetPath();
   base::FilePath dot_gn_name = in_path.Append(FILE_PATH_LITERAL(".gn"));
-  WriteFile(dot_gn_name,
-            "buildconfig = \"//BUILDCONFIG.gn\"\n"
-            "script_executable = \"\"\n");
+  WriteFile(dot_gn_name, kDotfileContents);
 
   WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
-  cmdline.AppendSwitchASCII(switches::kRoot, FilePathToUTF8(in_path));
+  cmdline.AppendSwitchPath(switches::kRoot, in_path);
 
   // Create another temp dir for writing the generated files to.
   base::ScopedTempDir build_temp_dir;
@@ -77,18 +80,21 @@ TEST_F(SetupTest, EmptyScriptExecutableDoesNotGenerateError) {
 TEST_F(SetupTest, MissingScriptExeGeneratesSetupErrorOnWindows) {
   base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
 
+  const char kDotfileContents[] = R"(
+buildconfig = "//BUILDCONFIG.gn"
+script_executable = "this_does_not_exist"
+)";
+
   // Create a temp directory containing a .gn file and a BUILDCONFIG.gn file,
   // pass it as --root.
   base::ScopedTempDir in_temp_dir;
   ASSERT_TRUE(in_temp_dir.CreateUniqueTempDir());
   base::FilePath in_path = in_temp_dir.GetPath();
   base::FilePath dot_gn_name = in_path.Append(FILE_PATH_LITERAL(".gn"));
-  WriteFile(dot_gn_name,
-            "buildconfig = \"//BUILDCONFIG.gn\"\n"
-            "script_executable = \"this_does_not_exist\"\n");
+  WriteFile(dot_gn_name, kDotfileContents);
 
   WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
-  cmdline.AppendSwitchASCII(switches::kRoot, FilePathToUTF8(in_path));
+  cmdline.AppendSwitchPath(switches::kRoot, in_path);
 
   // Create another temp dir for writing the generated files to.
   base::ScopedTempDir build_temp_dir;
@@ -119,7 +125,7 @@ static void RunExtensionCheckTest(std::string extension,
       build_file_extension = \"" +
                 extension + "\"");
   WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
-  cmdline.AppendSwitchASCII(switches::kRoot, FilePathToUTF8(in_path));
+  cmdline.AppendSwitchPath(switches::kRoot, in_path);
 
   // Create another temp dir for writing the generated files to.
   base::ScopedTempDir build_temp_dir;
@@ -142,9 +148,51 @@ TEST_F(SetupTest, NoSeparatorInExtension) {
 #else
       "Build file extension 'hello/world' cannot contain a path separator"
 #endif
-        );
+  );
 }
 
 TEST_F(SetupTest, Extension) {
   RunExtensionCheckTest("yay", true, "");
+}
+
+TEST_F(SetupTest, AddExportCompileCommands) {
+  base::CommandLine cmdline(base::CommandLine::NO_PROGRAM);
+
+  // Provide a project default export compile command list.
+  const char kDotfileContents[] = R"(
+buildconfig = "//BUILDCONFIG.gn"
+export_compile_commands = [ "//base/*" ]
+)";
+
+  // Create a temp directory containing the build.
+  base::ScopedTempDir in_temp_dir;
+  ASSERT_TRUE(in_temp_dir.CreateUniqueTempDir());
+  base::FilePath in_path = in_temp_dir.GetPath();
+  base::FilePath dot_gn_name = in_path.Append(FILE_PATH_LITERAL(".gn"));
+  WriteFile(dot_gn_name, kDotfileContents);
+
+  WriteFile(in_path.Append(FILE_PATH_LITERAL("BUILDCONFIG.gn")), "");
+  cmdline.AppendSwitch(switches::kRoot, FilePathToUTF8(in_path));
+
+  // Two additions to the compile commands list.
+  cmdline.AppendSwitch(switches::kAddExportCompileCommands,
+                       "//tools:doom_melon");
+  cmdline.AppendSwitch(switches::kAddExportCompileCommands, "//src/gn:*");
+
+  // Create another temp dir for writing the generated files to.
+  base::ScopedTempDir build_temp_dir;
+  ASSERT_TRUE(build_temp_dir.CreateUniqueTempDir());
+
+  // Run setup and check that the .gn file is in the scheduler's gen deps.
+  Setup setup;
+  Err err;
+  EXPECT_TRUE(setup.DoSetupWithErr(FilePathToUTF8(build_temp_dir.GetPath()),
+                                   true, cmdline, &err));
+
+  // The export compile commands should have three items.
+  const std::vector<LabelPattern>& export_cc = setup.export_compile_commands();
+  ASSERT_EQ(3u, export_cc.size());
+  EXPECT_EQ("//base/*", export_cc[0].Describe());
+  EXPECT_EQ("//tools:doom_melon", export_cc[1].Describe());
+  EXPECT_EQ("//src/gn:*", export_cc[2].Describe());
 }

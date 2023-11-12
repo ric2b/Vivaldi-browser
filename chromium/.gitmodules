@@ -106,6 +106,9 @@
 [submodule "third_party/gemmlowp/src"]
 	path = third_party/gemmlowp/src
 	url = ../../external/github.com/google/gemmlowp.git
+[submodule "third_party/google_benchmark/src"]
+	path = third_party/google_benchmark/src
+	url = ../../external/github.com/google/benchmark.git
 [submodule "third_party/google_toolbox_for_mac/src"]
 	path = third_party/google_toolbox_for_mac/src
 	url = ../../external/github.com/google/google-toolbox-for-mac.git

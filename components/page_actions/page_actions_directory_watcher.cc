@@ -54,7 +54,7 @@ void GetApkAssets(base::FilePath& apk_assets,
 
   base::FilePath apk_dir = apk_assets.DirName();
 
-  for (auto content : asset_contents->DictItems()) {
+  for (auto content : asset_contents->GetDict()) {
     if (!content.second.is_string())
       continue;
     update_contents[apk_dir].emplace(std::make_pair(

@@ -10,6 +10,7 @@
 
 #include "gn/config.h"
 #include "gn/ninja_target_command_util.h"
+#include "gn/pool.h"
 #include "gn/scheduler.h"
 #include "gn/target.h"
 #include "gn/test_with_scheduler.h"
@@ -2717,6 +2718,51 @@ build ./main: link obj/launchpad/main.main.o | ./Space$ Cadet.so.TOC
   "  solibs = ./Space\\$ Cadet.so\n";
 #endif
 
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+TEST_F(NinjaCBinaryTargetWriterTest, Pool) {
+  Err err;
+  TestWithScope setup;
+
+  Pool pool(setup.settings(),
+            Label(SourceDir("//foo/"), "pool", setup.toolchain()->label().dir(),
+                  setup.toolchain()->label().name()));
+  pool.set_depth(42);
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.sources().push_back(SourceFile("//foo/source.cc"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.set_pool(LabelPtrPair<Pool>(&pool));
+  target.visibility().SetPublic();
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = bar\n"
+      "\n"
+      "build obj/foo/bar.source.o: cxx ../../foo/source.cc\n"
+      "  source_file_part = source.cc\n"
+      "  source_name_part = source\n"
+      "  pool = foo_pool\n"
+      "\n"
+      "build ./bar: link obj/foo/bar.source.o\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension = \n"
+      "  output_dir = \n"
+      "  pool = foo_pool\n";
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }

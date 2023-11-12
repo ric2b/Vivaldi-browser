@@ -35,13 +35,17 @@ std::set<HoldingSpaceSectionId> GetHoldingSpaceSectionIds() {
 
 void ExpectSection(const HoldingSpaceSection* section,
                    HoldingSpaceSectionId expected_id) {
-  ASSERT_TRUE(section);
   switch (expected_id) {
     case HoldingSpaceSectionId::kDownloads:
       EXPECT_EQ(section->id, HoldingSpaceSectionId::kDownloads);
       EXPECT_THAT(section->supported_types,
                   testing::UnorderedElementsAre(
                       HoldingSpaceItem::Type::kArcDownload,
+                      HoldingSpaceItem::Type::kCameraAppPhoto,
+                      HoldingSpaceItem::Type::kCameraAppScanJpg,
+                      HoldingSpaceItem::Type::kCameraAppScanPdf,
+                      HoldingSpaceItem::Type::kCameraAppVideoGif,
+                      HoldingSpaceItem::Type::kCameraAppVideoMp4,
                       HoldingSpaceItem::Type::kDiagnosticsLog,
                       HoldingSpaceItem::Type::kDownload,
                       HoldingSpaceItem::Type::kLacrosDownload,
@@ -103,6 +107,11 @@ TEST_F(HoldingSpaceSectionTest, GetHoldingSpaceSectionByType) {
     absl::optional<HoldingSpaceSectionId> id;
     switch (type) {
       case HoldingSpaceItem::Type::kArcDownload:
+      case HoldingSpaceItem::Type::kCameraAppPhoto:
+      case HoldingSpaceItem::Type::kCameraAppScanJpg:
+      case HoldingSpaceItem::Type::kCameraAppScanPdf:
+      case HoldingSpaceItem::Type::kCameraAppVideoGif:
+      case HoldingSpaceItem::Type::kCameraAppVideoMp4:
       case HoldingSpaceItem::Type::kDiagnosticsLog:
       case HoldingSpaceItem::Type::kDownload:
       case HoldingSpaceItem::Type::kLacrosDownload:

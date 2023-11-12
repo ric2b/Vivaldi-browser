@@ -61,6 +61,8 @@ const SyncConfirmationTestParam kWindowTestParams[] = {
                           .use_small_window = true}},
     {.pixel_test_param = {.test_suffix = "LegacySyncManagedAccount"},
      .account_management_status = AccountManagementStatus::kManaged},
+    {.pixel_test_param = {.test_suffix = "LegacySyncCR2023",
+                          .use_chrome_refresh_2023_style = true}},
     {.pixel_test_param = {.test_suffix = "TangibleSync"},
      .use_tangible_sync = true},
     {.pixel_test_param = {.test_suffix = "TangibleSyncDarkTheme",
@@ -75,6 +77,8 @@ const SyncConfirmationTestParam kWindowTestParams[] = {
     {.pixel_test_param = {.test_suffix = "TangibleSyncManagedAccount"},
      .use_tangible_sync = true,
      .account_management_status = AccountManagementStatus::kManaged},
+    {.pixel_test_param = {.test_suffix = "TangibleSyncCR2023",
+                          .use_chrome_refresh_2023_style = true}},
 };
 
 const SyncConfirmationTestParam kDialogTestParams[] = {
@@ -91,6 +95,9 @@ const SyncConfirmationTestParam kDialogTestParams[] = {
     {.pixel_test_param = {.test_suffix = "LegacySyncManagedAccount"},
      .account_management_status = AccountManagementStatus::kManaged,
      .sync_style = SyncConfirmationStyle::kSigninInterceptModal},
+    {.pixel_test_param = {.test_suffix = "LegacySyncCR2023",
+                          .use_chrome_refresh_2023_style = true},
+     .sync_style = SyncConfirmationStyle::kDefaultModal},
     {.pixel_test_param = {.test_suffix = "TangibleSync"},
      .use_tangible_sync = true,
      .sync_style = SyncConfirmationStyle::kDefaultModal},
@@ -108,6 +115,9 @@ const SyncConfirmationTestParam kDialogTestParams[] = {
     {.pixel_test_param = {.test_suffix = "TangibleSyncManagedAccount"},
      .use_tangible_sync = true,
      .account_management_status = AccountManagementStatus::kManaged,
+     .sync_style = SyncConfirmationStyle::kDefaultModal},
+    {.pixel_test_param = {.test_suffix = "TangibleSyncCR2023",
+                          .use_chrome_refresh_2023_style = true},
      .sync_style = SyncConfirmationStyle::kDefaultModal},
 };
 
@@ -138,7 +148,7 @@ class SyncConfirmationStepControllerForTest
             weak_ptr_factory_.GetWeakPtr(), std::move(step_shown_callback)));
   }
 
-  void OnNavigateBackRequested() override { NOTREACHED(); }
+  void OnNavigateBackRequested() override { NOTREACHED_NORETURN(); }
 
   void OnSyncConfirmationLoaded(
       StepSwitchFinishedCallback step_shown_callback) {
@@ -294,9 +304,7 @@ class SyncConfirmationUIDialogPixelTest
   std::unique_ptr<base::ScopedEnvironmentVariableOverride> scoped_env_override_;
 };
 
-// TODO(crbug.com/1417934): Re-enable this test
-IN_PROC_BROWSER_TEST_P(SyncConfirmationUIDialogPixelTest,
-                       DISABLED_InvokeUi_default) {
+IN_PROC_BROWSER_TEST_P(SyncConfirmationUIDialogPixelTest, InvokeUi_default) {
   ShowAndVerifyUi();
 }
 

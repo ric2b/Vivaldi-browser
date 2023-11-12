@@ -133,6 +133,16 @@ void CallStackProfileBuilder::ApplyMetadataRetrospectively(
                           call_stack_profile->mutable_metadata_name_hash());
 }
 
+void CallStackProfileBuilder::AddProfileMetadata(
+    const base::MetadataRecorder::Item& item) {
+  CallStackProfile* call_stack_profile =
+      sampled_profile_.mutable_call_stack_profile();
+
+  metadata_.SetMetadata(item,
+                        call_stack_profile->mutable_profile_metadata()->Add(),
+                        call_stack_profile->mutable_metadata_name_hash());
+}
+
 void CallStackProfileBuilder::OnSampleCompleted(
     std::vector<base::Frame> frames,
     base::TimeTicks sample_timestamp) {
@@ -181,10 +191,7 @@ void CallStackProfileBuilder::OnSampleCompleted(
     ptrdiff_t module_offset =
         reinterpret_cast<const char*>(instruction_pointer) -
         reinterpret_cast<const char*>(frame.module->GetBaseAddress());
-    // Temporarily disable this DCHECK as there's likely bug in ModuleCache
-    // that causes this to fail. This results in bad telemetry data but no
-    // functional effect. https://crbug.com/1240645.
-    // DCHECK_GE(module_offset, 0);
+    DCHECK_GE(module_offset, 0);
     location->set_address(static_cast<uint64_t>(module_offset));
     location->set_module_id_index(module_loc->second);
   }

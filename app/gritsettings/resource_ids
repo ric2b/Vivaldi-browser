@@ -103,5 +103,29 @@
   },
   "app/resources/android-browser-ui/vivaldi_browser_ui_string.grd": {
     "messages": [92200],
+  },
+  "app/resources/ios_share_extension_strings/vivaldi_ios_share_extension_strings.grd": {
+    "messages": [92300],
+  },
+  "app/resources/ios_search_extension_strings/vivaldi_ios_search_widget_extension_strings.grd": {
+    "messages": [92400],
+  },
+  "app/resources/ios_search_extension_google_chrome_strings/vivaldi_ios_search_widget_extension_google_chrome_strings.grd": {
+    "messages": [92500],
+  },
+  "app/resources/ios_content_extension_strings/vivaldi_ios_content_widget_extension_strings.grd": {
+    "messages": [92600],
+  },
+  "app/resources/ios_credential_extension_strings/vivaldi_ios_credential_provider_extension_strings.grd": {
+    "messages": [92700],
+  },
+  "app/resources/ios_widget_kit_extension_strings/vivaldi_ios_widget_kit_extension_strings.grd": {
+    "messages": [92800],
+  },
+  "app/resources/webui_resources/vivaldi_webui_resources.grd": {
+    "includes": [92900],
+  },
+  "app/resources/profile_picker/vivaldi_profile_picker.grd": {
+    "includes": [93000],
   }
 }

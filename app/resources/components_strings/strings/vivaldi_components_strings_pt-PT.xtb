@@ -65,7 +65,7 @@
 <translation id="3447661539832366887">O proprietário deste equipamento desativou o jogo do dinossauro.</translation>
 <translation id="3447884698081792621">Mostrar certificado (emitido por <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Ocultar avançadas</translation>
-<translation id="3484560055331845446">Pode perder o acesso à sua Conta Google. O Chrome recomenda que altere a palavra-passe agora. Ser-lhe-á pedido para iniciar sessão.</translation>
+<translation id="3484560055331845446">Pode perder o acesso à sua Conta Google. O Vivaldi recomenda que altere a palavra-passe agora. Ser-lhe-á pedido para iniciar sessão.</translation>
 <translation id="3566021033012934673">A sua ligação não é privada</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ocultar detalhes</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 em utilização)} other {(# em utilização)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />A verificar o endereço proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bits)</translation>
-<translation id="5287240709317226393">Mostrar cookies</translation>
 <translation id="5355557959165512791">Não pode visitar <ph name="SITE" /> neste momento, porque o certificado foi revogado. Os erros de rede e os ataques são geralmente temporários, pelo que esta página deverá funcionar mais tarde.</translation>
 <translation id="5386426401304769735">A cadeia de certificados inclui um certificado assinado através de SHA-1.</translation>
 <translation id="5452270690849572955">Não é possível encontrar esta página de <ph name="HOST_NAME" /></translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Palavra-passe</translation>
 <translation id="6711464428925977395">Existe um problema com o servidor proxy ou o endereço está incorreto.</translation>
 <translation id="6757797048963528358">O seu equipamento entrou em suspensão.</translation>
+<translation id="6890956352250146925">Opções para cookies e dados de websites</translation>
 <translation id="6897140037006041989">Agente do utilizador</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este website contém um software malicioso</translation>
@@ -175,7 +175,7 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> não consegue processar este pedido de momento.</translation>
 <translation id="7662298039739062396">Definição controlada por uma extensão</translation>
 <translation id="7663736086183791259">Certificado <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Os utilizadores mal intencionados neste website podem tentar enganá-lo/a para instalar programas que são prejudiciais para a sua experiência de navegação (por exemplo, ao alterar a sua página inicial ou ao mostrar anúncios adicionais em websites que visita).</translation>
+<translation id="7669271284792375604">Os utilizadores mal intencionados neste website podem tentar enganá-lo/a para instalar programas que são prejudiciais para a sua experiência de navegação (por exemplo, ao alterar a sua página principal ou ao mostrar anúncios adicionais em websites que visita).</translation>
 <translation id="7714464543167945231">Certificado</translation>
 <translation id="7716147886133743102">Bloqueada pelo administrador</translation>
 <translation id="7716424297397655342">Não é possível carregar este website a partir da cache</translation>

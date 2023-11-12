@@ -20,16 +20,17 @@
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "gpu/ipc/service/image_transport_surface_delegate.h"
 #include "ui/accelerated_widget_mac/ca_layer_tree_coordinator.h"
+#include "ui/base/cocoa/remote_layer_api.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/gpu_fence.h"
+#include "ui/gfx/overlay_plane_data.h"
 #include "ui/gfx/video_types.h"
 #include "ui/gl/ca_renderer_layer_params.h"
 #include "ui/gl/gl_features.h"
-#include "ui/gl/gpu_switching_manager.h"
 
 #if BUILDFLAG(IS_MAC)
 #include "ui/accelerated_widget_mac/io_surface_context.h"
-#include "ui/base/cocoa/remote_layer_api.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_cgl.h"
 #endif
@@ -52,19 +53,12 @@ BASE_FEATURE(kAVFoundationOverlays,
 }  // namespace
 
 ImageTransportSurfaceOverlayMacEGL::ImageTransportSurfaceOverlayMacEGL(
-    gl::GLDisplayEGL* display,
     base::WeakPtr<ImageTransportSurfaceDelegate> delegate)
-    : gl::Presenter(display, gfx::Size()),
-      delegate_(delegate),
-#if BUILDFLAG(IS_MAC)
+    : delegate_(delegate),
       use_remote_layer_api_(ui::RemoteLayerAPISupported()),
-#endif
       scale_factor_(1),
       vsync_callback_(delegate->GetGpuVSyncCallback()),
-      gl_renderer_id_(0),
       weak_ptr_factory_(this) {
-  ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
-
   static bool av_disabled_at_command_line =
       !base::FeatureList::IsEnabled(kAVFoundationOverlays);
 
@@ -74,37 +68,29 @@ ImageTransportSurfaceOverlayMacEGL::ImageTransportSurfaceOverlayMacEGL(
            ->workarounds()
            .disable_av_sample_buffer_display_layer;
 
-#if BUILDFLAG(IS_MAC)
   ca_layer_tree_coordinator_ = std::make_unique<ui::CALayerTreeCoordinator>(
       use_remote_layer_api_, allow_av_sample_buffer_display_layer);
 
   // Create the CAContext to send this to the GPU process, and the layer for
   // the context.
   if (use_remote_layer_api_) {
+#if BUILDFLAG(IS_MAC)
     CGSConnectionID connection_id = CGSMainConnectionID();
     ca_context_.reset([[CAContext contextWithCGSConnection:connection_id
                                                    options:@{}] retain]);
+#else
+    // Use a very large display ID to ensure that the context is never put
+    // on-screen without being explicitly parented.
+    ca_context_.reset([[CAContext remoteContextWithOptions:@{
+      kCAContextIgnoresHitTest : @YES,
+      kCAContextDisplayId : @10000
+    }] retain]);
+#endif
     [ca_context_ setLayer:ca_layer_tree_coordinator_->GetCALayerForDisplay()];
   }
-#else
-  ca_layer_tree_coordinator_ = std::make_unique<ui::CALayerTreeCoordinator>(
-      /*allow_remote_layers=*/false, allow_av_sample_buffer_display_layer);
-#endif
 }
 
 ImageTransportSurfaceOverlayMacEGL::~ImageTransportSurfaceOverlayMacEGL() {
-  ui::GpuSwitchingManager::GetInstance()->RemoveObserver(this);
-  Destroy();
-}
-
-bool ImageTransportSurfaceOverlayMacEGL::Initialize(
-    gl::GLSurfaceFormat format) {
-  return true;
-}
-
-void ImageTransportSurfaceOverlayMacEGL::PrepareToDestroy(bool have_context) {}
-
-void ImageTransportSurfaceOverlayMacEGL::Destroy() {
   ca_layer_tree_coordinator_.reset();
 }
 
@@ -119,15 +105,15 @@ void ImageTransportSurfaceOverlayMacEGL::ApplyBackpressure() {
 }
 
 void ImageTransportSurfaceOverlayMacEGL::BufferPresented(
-    gl::GLSurface::PresentationCallback callback,
+    PresentationCallback callback,
     const gfx::PresentationFeedback& feedback) {
   DCHECK(!callback.is_null());
   std::move(callback).Run(feedback);
 }
 
 void ImageTransportSurfaceOverlayMacEGL::Present(
-    gl::GLSurface::SwapCompletionCallback completion_callback,
-    gl::GLSurface::PresentationCallback presentation_callback,
+    SwapCompletionCallback completion_callback,
+    PresentationCallback presentation_callback,
     gfx::FrameData data) {
   TRACE_EVENT0("gpu", "ImageTransportSurfaceOverlayMac::Present");
 
@@ -149,7 +135,7 @@ void ImageTransportSurfaceOverlayMacEGL::Present(
       if (eglQueryDeviceAttribEXT(angle_device, EGL_METAL_DEVICE_ANGLE,
                                   &metal_device)) {
         ca_layer_tree_coordinator_->GetPendingCARendererLayerTree()
-            ->SetMetalDevice(metal_device);
+            ->SetMetalDevice((id<MTLDevice>)metal_device);
       }
     }
   }
@@ -183,13 +169,9 @@ void ImageTransportSurfaceOverlayMacEGL::Present(
     TRACE_EVENT_INSTANT2("test_gpu", "SwapBuffers", TRACE_EVENT_SCOPE_THREAD,
                          "GLImpl", static_cast<int>(gl::GetGLImplementation()),
                          "width", pixel_size_.width());
-#if BUILDFLAG(IS_MAC)
     if (use_remote_layer_api_) {
       params.ca_context_id = [ca_context_ contextId];
     } else {
-#else
-    if (true) {
-#endif
       IOSurfaceRef io_surface =
           ca_layer_tree_coordinator_->GetIOSurfaceForDisplay();
       if (io_surface) {
@@ -219,30 +201,6 @@ void ImageTransportSurfaceOverlayMacEGL::Present(
       base::BindOnce(&ImageTransportSurfaceOverlayMacEGL::BufferPresented,
                      weak_ptr_factory_.GetWeakPtr(),
                      std::move(presentation_callback), feedback));
-}
-
-bool ImageTransportSurfaceOverlayMacEGL::SupportsCommitOverlayPlanes() {
-  return true;
-}
-
-gfx::Size ImageTransportSurfaceOverlayMacEGL::GetSize() {
-  return gfx::Size();
-}
-
-void* ImageTransportSurfaceOverlayMacEGL::GetHandle() {
-  return nullptr;
-}
-
-gl::GLSurfaceFormat ImageTransportSurfaceOverlayMacEGL::GetFormat() {
-  return gl::GLSurfaceFormat();
-}
-
-bool ImageTransportSurfaceOverlayMacEGL::OnMakeCurrent(gl::GLContext* context) {
-  // Ensure that the context is on the appropriate GL renderer. The GL renderer
-  // will generally only change when the GPU changes.
-  if (gl_renderer_id_ && context)
-    context->share_group()->SetRendererID(gl_renderer_id_);
-  return true;
 }
 
 bool ImageTransportSurfaceOverlayMacEGL::ScheduleOverlayPlane(
@@ -294,31 +252,6 @@ bool ImageTransportSurfaceOverlayMacEGL::Resize(
   scale_factor_ = scale_factor;
   ca_layer_tree_coordinator_->Resize(pixel_size, scale_factor);
   return true;
-}
-
-void ImageTransportSurfaceOverlayMacEGL::OnGpuSwitched(
-    gl::GpuPreference active_gpu_heuristic) {
-#if BUILDFLAG(IS_MAC)
-  // Create a new context, and use the GL renderer ID that the new context gets.
-  scoped_refptr<ui::IOSurfaceContext> context_on_new_gpu =
-      ui::IOSurfaceContext::Get(ui::IOSurfaceContext::kCALayerContext);
-  if (!context_on_new_gpu)
-    return;
-  GLint context_renderer_id = -1;
-  if (CGLGetParameter(context_on_new_gpu->cgl_context(),
-                      kCGLCPCurrentRendererID,
-                      &context_renderer_id) != kCGLNoError) {
-    LOG(ERROR) << "Failed to create test context after GPU switch";
-    return;
-  }
-  gl_renderer_id_ = context_renderer_id & kCGLRendererIDMatchingMask;
-
-  // Delay releasing the reference to the new GL context. The reason for this
-  // is to avoid creating-then-destroying the context for every image transport
-  // surface that is observing the GPU switch.
-  base::SingleThreadTaskRunner::GetCurrentDefault()->ReleaseSoon(
-      FROM_HERE, std::move(context_on_new_gpu));
-#endif
 }
 
 void ImageTransportSurfaceOverlayMacEGL::SetCALayerErrorCode(

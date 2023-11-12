@@ -11,11 +11,11 @@
 namespace vivaldi {
 
 std::string GetVivaldiVersionString() {
-  return VIVALDI_VERSION;
+  return VIVALDI_VERSION_STRING;
 }
 
 const base::Version& GetVivaldiVersion() {
-  static const base::NoDestructor<base::Version> version(VIVALDI_VERSION);
+  static const base::NoDestructor<base::Version> version(VIVALDI_VERSION_STRING);
   DCHECK(version->IsValid());
   return *version;
 }

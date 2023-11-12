@@ -20,6 +20,7 @@
 #include "ash/public/cpp/ambient/proto/photo_cache_entry.pb.h"
 #include "ash/public/cpp/test/test_image_downloader.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/test_ash_web_view_factory.h"
 #include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/login/auth/auth_metrics_recorder.h"
@@ -35,7 +36,9 @@ namespace ash {
 
 class AmbientAccessTokenController;
 class AmbientContainerView;
+class AmbientManagedPhotoController;
 class AmbientPhotoController;
+class AmbientUiSettings;
 class FakeAmbientBackendControllerImpl;
 class MediaStringView;
 
@@ -52,11 +55,19 @@ class AmbientAshTestBase : public AshTestBase {
   // Enables/disables ambient mode for the currently active user session.
   void SetAmbientModeEnabled(bool enabled);
 
-  // Sets the AmbientTheme to use when ShowAmbientScreen() is called.
-  // To reflect real world usage, the incoming |theme| does not take effect
+  // Enables/disables the managed ambient mode pref in the currently active pref
+  // service.
+  void SetAmbientModeManagedScreensaverEnabled(bool enabled);
+
+  // Sets the |AmbientUiSettings| to use when ShowAmbientScreen() is called.
+  // To reflect real world usage, the incoming settings do not take effect
   // immediately if the test is currently displaying the ambient screen. In that
-  // case, the ambient screen must be closed, and the new |theme| will take
+  // case, the ambient screen must be closed, and the new settings will take
   // effect with the next call to ShowAmbientScreen().
+  void SetAmbientUiSettings(const AmbientUiSettings& settings);
+
+  // Convenient form of the above that only sets |AmbientUiSettings::theme| and
+  // leaves the rest of the settings unset.
   void SetAmbientTheme(AmbientTheme theme);
 
   // Sets jitters configs to zero for pixel testing.
@@ -171,6 +182,7 @@ class AmbientAshTestBase : public AshTestBase {
   PhotoView* GetPhotoView();
   AmbientAnimationView* GetAmbientAnimationView();
   AmbientInfoView* GetAmbientInfoView();
+  AmbientSlideshowPeripheralUi* GetAmbientSlideshowPeripheralUi();
 
   const std::map<int, ::ambient::PhotoCacheEntry>& GetCachedFiles();
   const std::map<int, ::ambient::PhotoCacheEntry>& GetBackupCachedFiles();
@@ -178,6 +190,8 @@ class AmbientAshTestBase : public AshTestBase {
   AmbientController* ambient_controller();
 
   AmbientPhotoController* photo_controller();
+
+  AmbientManagedPhotoController* managed_photo_controller();
 
   AmbientPhotoCache* photo_cache();
 
@@ -210,10 +224,21 @@ class AmbientAshTestBase : public AshTestBase {
 
   void SetPhotoDownloadDelay(base::TimeDelta delay);
 
+  void CreateTestImageJpegFile(base::FilePath path,
+                               size_t width,
+                               size_t height,
+                               SkColor color);
+  void DisableBackupCacheDownloads();
+
+  void SetScreenSaverDuration(int minutes);
+
+  absl::optional<int> GetScreenSaverDuration();
+
  private:
   void SpinWaitForAmbientViewAvailable(
       const base::RepeatingClosure& quit_closure);
 
+  TestAshWebViewFactory web_view_factory_;
   std::unique_ptr<views::Widget> widget_;
   power_manager::PowerSupplyProperties proto_;
   TestImageDownloader image_downloader_;

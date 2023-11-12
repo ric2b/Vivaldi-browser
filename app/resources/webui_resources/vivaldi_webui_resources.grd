@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grit latest_public_release="0" current_release="1">
+  <release seq="1" allow_pseudo="false">
+    <includes>
+      <include name="IDR_WEBUI_IMAGES_CHROME_LOGO_DARK_SVG" file="images/vivaldi_logo_dark.svg" resource_path="images/chrome_logo_dark.svg" type="BINDATA" />
+    </includes>
+  </release>
+</grit>

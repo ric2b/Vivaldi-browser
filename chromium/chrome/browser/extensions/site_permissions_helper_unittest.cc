@@ -36,7 +36,7 @@ base::Value::List ToValueList(const std::vector<std::string>& permissions) {
 
 }  // namespace
 
-using SiteAccess = SitePermissionsHelper::SiteAccess;
+using UserSiteAccess = PermissionsManager::UserSiteAccess;
 using SiteInteraction = SitePermissionsHelper::SiteInteraction;
 
 class SitePermissionsHelperUnitTest : public ExtensionServiceTestWithInstall {
@@ -58,6 +58,7 @@ class SitePermissionsHelperUnitTest : public ExtensionServiceTestWithInstall {
   SitePermissionsHelper* permissions_helper() {
     return permissions_helper_.get();
   }
+  PermissionsManager* permissions_manager() { return permissions_manager_; }
 
   // ExtensionServiceTestBase:
   void SetUp() override;
@@ -70,6 +71,8 @@ class SitePermissionsHelperUnitTest : public ExtensionServiceTestWithInstall {
 
   // Site permissions helper being tested.
   std::unique_ptr<SitePermissionsHelper> permissions_helper_;
+
+  raw_ptr<PermissionsManager> permissions_manager_;
 };
 
 scoped_refptr<const extensions::Extension>
@@ -124,6 +127,7 @@ void SitePermissionsHelperUnitTest::SetUp() {
   InitializeEmptyExtensionService();
 
   permissions_helper_ = std::make_unique<SitePermissionsHelper>(profile());
+  permissions_manager_ = PermissionsManager::Get(profile());
 }
 
 void SitePermissionsHelperUnitTest::TearDown() {
@@ -136,6 +140,8 @@ void SitePermissionsHelperUnitTest::TearDown() {
   ExtensionServiceTestBase::TearDown();
 }
 
+// TODO(crbug.com/1289441): Move test that verify SiteAccess and SiteInteraction
+// behavior after moving both enums to PermissionsManager.
 TEST_F(SitePermissionsHelperUnitTest, SiteAccessAndInteraction_AllUrls) {
   auto extension =
       InstallExtensionWithPermissions("AllUrls Extension", {"<all_urls>"});
@@ -145,9 +151,9 @@ TEST_F(SitePermissionsHelperUnitTest, SiteAccessAndInteraction_AllUrls) {
     // site interaction when the extension has all urls permission.
     const GURL non_restricted_url("http://www.non-restricted-url.com");
     auto* web_contents = AddTab(non_restricted_url);
-    EXPECT_EQ(
-        permissions_helper()->GetSiteAccess(*extension, non_restricted_url),
-        SiteAccess::kOnAllSites);
+    EXPECT_EQ(permissions_manager()->GetUserSiteAccess(*extension,
+                                                       non_restricted_url),
+              UserSiteAccess::kOnAllSites);
     EXPECT_EQ(
         permissions_helper()->GetSiteInteraction(*extension, web_contents),
         SiteInteraction::kGranted);
@@ -173,8 +179,9 @@ TEST_F(SitePermissionsHelperUnitTest, SiteAccessAndInteraction_RequestedUrl) {
     // Verify a non-restricted url has "on site" site access and "granted" site
     // interaction by default when the extension requests it.
     auto* web_contents = AddTab(requested_url);
-    EXPECT_EQ(permissions_helper()->GetSiteAccess(*extension, requested_url),
-              SiteAccess::kOnSite);
+    EXPECT_EQ(
+        permissions_manager()->GetUserSiteAccess(*extension, requested_url),
+        UserSiteAccess::kOnSite);
     EXPECT_EQ(
         permissions_helper()->GetSiteInteraction(*extension, web_contents),
         SiteInteraction::kGranted);
@@ -201,9 +208,9 @@ TEST_F(SitePermissionsHelperUnitTest, SiteAccessAndInteraction_ActiveTab) {
     // site interaction when the extension only has active tab permission.
     const GURL non_restricted_url("http://www.non-restricted.com");
     auto* web_contents = AddTab(non_restricted_url);
-    EXPECT_EQ(
-        permissions_helper()->GetSiteAccess(*extension, non_restricted_url),
-        SiteAccess::kOnClick);
+    EXPECT_EQ(permissions_manager()->GetUserSiteAccess(*extension,
+                                                       non_restricted_url),
+              UserSiteAccess::kOnClick);
     EXPECT_EQ(
         permissions_helper()->GetSiteInteraction(*extension, web_contents),
         SiteInteraction::kActiveTab);
@@ -235,8 +242,8 @@ TEST_F(SitePermissionsHelperUnitTest,
     const GURL non_requested_url("http://www.non-requested.com");
     auto* web_contents = AddTab(non_requested_url);
     EXPECT_EQ(
-        permissions_helper()->GetSiteAccess(*extension, non_requested_url),
-        SiteAccess::kOnClick);
+        permissions_manager()->GetUserSiteAccess(*extension, non_requested_url),
+        UserSiteAccess::kOnClick);
     EXPECT_EQ(
         permissions_helper()->GetSiteInteraction(*extension, web_contents),
         SiteInteraction::kActiveTab);
@@ -248,8 +255,9 @@ TEST_F(SitePermissionsHelperUnitTest,
     // behavior). "granted" takes priority over "activeTab" since the extension
     // has access to the site.
     auto* web_contents = AddTab(requested_url);
-    EXPECT_EQ(permissions_helper()->GetSiteAccess(*extension, requested_url),
-              SiteAccess::kOnSite);
+    EXPECT_EQ(
+        permissions_manager()->GetUserSiteAccess(*extension, requested_url),
+        UserSiteAccess::kOnSite);
     EXPECT_EQ(
         permissions_helper()->GetSiteInteraction(*extension, web_contents),
         SiteInteraction::kGranted);
@@ -264,8 +272,9 @@ TEST_F(SitePermissionsHelperUnitTest,
     // "withheld" takes priority over "activeTab" since the extension is
     // explicitly requesting access to the site.
     auto* web_contents = AddTab(requested_url);
-    EXPECT_EQ(permissions_helper()->GetSiteAccess(*extension, requested_url),
-              SiteAccess::kOnClick);
+    EXPECT_EQ(
+        permissions_manager()->GetUserSiteAccess(*extension, requested_url),
+        UserSiteAccess::kOnClick);
     EXPECT_EQ(
         permissions_helper()->GetSiteInteraction(*extension, web_contents),
         SiteInteraction::kWithheld);
@@ -284,84 +293,38 @@ TEST_F(SitePermissionsHelperUnitTest,
             SiteInteraction::kNone);
 }
 
-TEST_F(SitePermissionsHelperUnitTest, CanSelectSiteAccess_AllUrls) {
-  auto extension =
-      InstallExtensionWithPermissions("AllUrls Extension", {"<all_urls>"});
-
-  // Verify "on click", "on site" and "on all sites" site access can be selected
-  // for a non-restricted url.
-  const GURL url("http://www.example.com");
-  EXPECT_TRUE(permissions_helper()->CanSelectSiteAccess(*extension, url,
-                                                        SiteAccess::kOnClick));
-  EXPECT_TRUE(permissions_helper()->CanSelectSiteAccess(*extension, url,
-                                                        SiteAccess::kOnSite));
-  EXPECT_TRUE(permissions_helper()->CanSelectSiteAccess(
-      *extension, url, SiteAccess::kOnAllSites));
-
-  // Verify "on click", "on site" and "on all sites" cannot be selected for a
-  // restricted url.
-  const GURL chrome_url("chrome://settings");
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(*extension, chrome_url,
-                                                         SiteAccess::kOnClick));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(*extension, chrome_url,
-                                                         SiteAccess::kOnSite));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(
-      *extension, chrome_url, SiteAccess::kOnAllSites));
-}
-
-TEST_F(SitePermissionsHelperUnitTest, CanSelectSiteAccess_SpecificUrl) {
-  const GURL url_a("http://www.a.com");
-  auto extension =
-      InstallExtensionWithPermissions("A Extension", {url_a.spec()});
-
-  // Verify "on click" and "on site" can be selected for the specific url, but
-  // "on all sites" cannot be selected.
-  EXPECT_TRUE(permissions_helper()->CanSelectSiteAccess(*extension, url_a,
-                                                        SiteAccess::kOnClick));
-  EXPECT_TRUE(permissions_helper()->CanSelectSiteAccess(*extension, url_a,
-                                                        SiteAccess::kOnSite));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(
-      *extension, url_a, SiteAccess::kOnAllSites));
-
-  // Verify "on click", "on site" and "on all sites" cannot be selected for any
-  // other url.
-  const GURL url_b("http://www.b.com");
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(*extension, url_b,
-                                                         SiteAccess::kOnClick));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(*extension, url_b,
-                                                         SiteAccess::kOnSite));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(
-      *extension, url_b, SiteAccess::kOnAllSites));
-}
-
-TEST_F(SitePermissionsHelperUnitTest, CanSelectSiteAccess_NoHostPermissions) {
-  auto extension = InstallExtension("Extension");
-
-  // Verify "on click", "on site" and "on all sites" cannot be selected for any
-  // url.
-  const GURL url("http://www.example.com");
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(*extension, url,
-                                                         SiteAccess::kOnClick));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(*extension, url,
-                                                         SiteAccess::kOnSite));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(
-      *extension, url, SiteAccess::kOnAllSites));
-}
-
-TEST_F(SitePermissionsHelperUnitTest, CanSelectSiteAccess_ActiveTab) {
+// Tests that updating permission only applies the permission to the upgraded
+// site and not others.
+TEST_F(SitePermissionsHelperUnitTest, UpdateSiteAccess_OnlySiteSelected) {
+  const GURL site("https://allowed.example");
   auto extension = InstallExtensionWithPermissions(
-      "ActiveTab Extension",
-      /*host_permissions=*/{}, /*permissions=*/{"activeTab"});
+      "extension", /*host_permissions=*/{site.spec()});
+  const GURL site_without_permission("https://disallowed.com");
+  auto* site_contents = AddTab(site);
 
-  // Verify "on click" can be selected for the specific url, but "on site" and
-  // "on all sites" cannot be selected.
-  const GURL url("http://www.example.com");
-  EXPECT_TRUE(permissions_helper()->CanSelectSiteAccess(*extension, url,
-                                                        SiteAccess::kOnClick));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(*extension, url,
-                                                         SiteAccess::kOnSite));
-  EXPECT_FALSE(permissions_helper()->CanSelectSiteAccess(
-      *extension, url, SiteAccess::kOnAllSites));
+  // Extension should only have on-click access to both sites.
+  ASSERT_EQ(PermissionsManager::UserSiteAccess::kOnSite,
+            permissions_manager()->GetUserSiteAccess(*extension, site));
+  EXPECT_EQ(PermissionsManager::UserSiteAccess::kOnClick,
+            permissions_manager()->GetUserSiteAccess(*extension,
+                                                     site_without_permission));
+
+  // Switch the extension from on-click to always on site.
+  ExtensionActionRunner* action_runner =
+      ExtensionActionRunner::GetForWebContents(site_contents);
+  ASSERT_TRUE(action_runner);
+  action_runner->accept_bubble_for_testing(false);
+  permissions_helper()->UpdateSiteAccess(
+      *extension, site_contents, PermissionsManager::UserSiteAccess::kOnClick);
+
+  // Confirm always on site permission applied.
+  EXPECT_EQ(PermissionsManager::UserSiteAccess::kOnClick,
+            permissions_manager()->GetUserSiteAccess(*extension, site));
+
+  // Site without permission should remain without access.
+  EXPECT_EQ(PermissionsManager::UserSiteAccess::kOnClick,
+            permissions_manager()->GetUserSiteAccess(*extension,
+                                                     site_without_permission));
 }
 
 class SitePermissionsHelperWithUserHostControlsUnitTest
@@ -390,11 +353,10 @@ TEST_F(SitePermissionsHelperWithUserHostControlsUnitTest,
   const GURL user_permitted_site("https://allowed.example");
   const GURL non_user_permitted_site("https://not-allowed.example");
 
-  PermissionsManager* permissions_manager = PermissionsManager::Get(profile());
   {
     // Add a user-permitted site.
-    PermissionsManagerWaiter waiter(permissions_manager);
-    permissions_manager->AddUserPermittedSite(
+    PermissionsManagerWaiter waiter(permissions_manager());
+    permissions_manager()->AddUserPermittedSite(
         url::Origin::Create(user_permitted_site));
     waiter.WaitForUserPermissionsSettingsChange();
   }
@@ -404,18 +366,18 @@ TEST_F(SitePermissionsHelperWithUserHostControlsUnitTest,
 
   // Right now, the extension should be allowed to run everywhere (on both
   // `user_permitted_site` and `non_user_permitted_site`).
-  EXPECT_EQ(
-      SitePermissionsHelper::SiteAccess::kOnAllSites,
-      permissions_helper()->GetSiteAccess(*extension, user_permitted_site));
+  EXPECT_EQ(UserSiteAccess::kOnAllSites,
+            permissions_manager()->GetUserSiteAccess(*extension,
+                                                     user_permitted_site));
   EXPECT_EQ(SitePermissionsHelper::SiteInteraction::kGranted,
             permissions_helper()->GetSiteInteraction(*extension,
                                                      user_permitted_contents));
   EXPECT_EQ(PermissionsData::PageAccess::kAllowed,
             extension->permissions_data()->GetPageAccess(
                 user_permitted_site, extension_misc::kUnknownTabId, nullptr));
-  EXPECT_EQ(
-      SitePermissionsHelper::SiteAccess::kOnAllSites,
-      permissions_helper()->GetSiteAccess(*extension, non_user_permitted_site));
+  EXPECT_EQ(UserSiteAccess::kOnAllSites,
+            permissions_manager()->GetUserSiteAccess(*extension,
+                                                     non_user_permitted_site));
   EXPECT_EQ(SitePermissionsHelper::SiteInteraction::kGranted,
             permissions_helper()->GetSiteInteraction(
                 *extension, non_user_permitted_contents));
@@ -429,11 +391,12 @@ TEST_F(SitePermissionsHelperWithUserHostControlsUnitTest,
     ExtensionActionRunner* action_runner =
         ExtensionActionRunner::GetForWebContents(non_user_permitted_contents);
     ASSERT_TRUE(action_runner);
-    action_runner->accept_bubble_for_testing(true);
-    PermissionsManagerWaiter waiter(permissions_manager);
+    // Permissions for the site are still updated even if the tab is not
+    // reloaded.
+    action_runner->accept_bubble_for_testing(false);
+    PermissionsManagerWaiter waiter(permissions_manager());
     permissions_helper()->UpdateSiteAccess(
-        *extension, non_user_permitted_contents,
-        SitePermissionsHelper::SiteAccess::kOnClick);
+        *extension, non_user_permitted_contents, UserSiteAccess::kOnClick);
     waiter.WaitForExtensionPermissionsUpdate();
   }
 
@@ -441,15 +404,14 @@ TEST_F(SitePermissionsHelperWithUserHostControlsUnitTest,
   // automatically, since it's a user-permitted site.
 
   // TODO(https://crbug.com/1268198): The following check should be in place:
-  // EXPECT_EQ(SitePermissionsHelper::SiteAccess::kOnSite,
-  //           permissions_helper()->GetSiteAccess(
+  // EXPECT_EQ(UserSiteAccess::kOnSite,
+  //           permissions_manager->GetUserSiteAccess(
   //               *extension, user_permitted_site));
   // However, currently PermissionsManager::GetSiteAccess() (which is used by
   // SitePermissionsHelper::GetSiteAccess()) doesn't take user-permitted sites
   // into account.
-  EXPECT_EQ(
-      SitePermissionsHelper::SiteAccess::kOnClick,
-      permissions_helper()->GetSiteAccess(*extension, user_permitted_site));
+  EXPECT_EQ(UserSiteAccess::kOnClick, permissions_manager()->GetUserSiteAccess(
+                                          *extension, user_permitted_site));
   EXPECT_EQ(SitePermissionsHelper::SiteInteraction::kGranted,
             permissions_helper()->GetSiteInteraction(*extension,
                                                      user_permitted_contents));
@@ -458,9 +420,8 @@ TEST_F(SitePermissionsHelperWithUserHostControlsUnitTest,
                 user_permitted_site, extension_misc::kUnknownTabId, nullptr));
 
   // Non-user-permitted sites should remain withheld.
-  EXPECT_EQ(
-      SitePermissionsHelper::SiteAccess::kOnClick,
-      permissions_helper()->GetSiteAccess(*extension, non_user_permitted_site));
+  EXPECT_EQ(UserSiteAccess::kOnClick, permissions_manager()->GetUserSiteAccess(
+                                          *extension, non_user_permitted_site));
   EXPECT_EQ(SitePermissionsHelper::SiteInteraction::kWithheld,
             permissions_helper()->GetSiteInteraction(
                 *extension, non_user_permitted_contents));

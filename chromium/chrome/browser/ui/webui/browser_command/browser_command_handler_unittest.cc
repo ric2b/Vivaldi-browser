@@ -51,6 +51,7 @@ std::vector<Command> supported_commands = {
     Command::kOpenPasswordManager,
     Command::kNoOpCommand,
     Command::kOpenPerformanceSettings,
+    Command::kOpenNTPAndStartCustomizeChromeTutorial,
 };
 
 const ui::ElementContext kTestContext1(1);
@@ -103,6 +104,14 @@ class TestCommandHandler : public BrowserCommandHandler {
     has_tab_groups_ = has_tab_groups;
   }
 
+  void SetBrowserSupportsCustomizeChromeSidePanel(bool is_supported) {
+    customize_chrome_side_panel_feature_supported_ = is_supported;
+  }
+
+  void SetDefaultSearchProviderToGoogle(bool is_google) {
+    default_search_provider_is_google_ = is_google;
+  }
+
  protected:
   bool BrowserSupportsTabGroups() override {
     return tab_groups_feature_supported_;
@@ -110,12 +119,22 @@ class TestCommandHandler : public BrowserCommandHandler {
 
   bool BrowserHasTabGroups() override { return has_tab_groups_; }
 
+  bool BrowserSupportsCustomizeChromeSidePanel() override {
+    return customize_chrome_side_panel_feature_supported_;
+  }
+
+  bool DefaultSearchProviderIsGoogle() override {
+    return default_search_provider_is_google_;
+  }
+
  private:
   raw_ptr<user_education::TutorialService> tutorial_service_;
   std::unique_ptr<CommandUpdater> command_updater_;
 
   bool tab_groups_feature_supported_ = true;
   bool has_tab_groups_ = false;
+  bool customize_chrome_side_panel_feature_supported_ = true;
+  bool default_search_provider_is_google_ = true;
 };
 
 class TestTutorialService : public user_education::TutorialService {
@@ -130,13 +149,18 @@ class TestTutorialService : public user_education::TutorialService {
     return std::u16string();
   }
 
-  bool StartTutorial(
+  void StartTutorial(
       user_education::TutorialIdentifier id,
       ui::ElementContext context,
       base::OnceClosure completed_callback = base::DoNothing(),
       base::OnceClosure aborted_callback = base::DoNothing()) override {
-    return true;
+    running_ = true;
   }
+
+  bool IsRunningTutorial() const override { return running_; }
+
+ private:
+  bool running_ = false;
 };
 
 class MockTutorialService : public TestTutorialService {
@@ -148,12 +172,13 @@ class MockTutorialService : public TestTutorialService {
   ~MockTutorialService() override = default;
 
   MOCK_METHOD4(StartTutorial,
-               bool(user_education::TutorialIdentifier,
+               void(user_education::TutorialIdentifier,
                     ui::ElementContext,
                     base::OnceClosure,
                     base::OnceClosure));
   MOCK_METHOD2(LogStartedFromWhatsNewPage,
                void(user_education::TutorialIdentifier, bool));
+  MOCK_CONST_METHOD0(IsRunningTutorial, bool());
 };
 
 class MockCommandHandler : public TestCommandHandler {
@@ -465,7 +490,8 @@ TEST_F(BrowserCommandHandlerTest, StartTabGroupTutorialCommand) {
     ClickInfoPtr info = ClickInfo::New();
     EXPECT_CALL(service, StartTutorial(kTabGroupTutorialId, kTestContext1,
                                        testing::_, testing::_))
-        .WillOnce(testing::Return(true));
+        .Times(1);
+    EXPECT_CALL(service, IsRunningTutorial).WillOnce(testing::Return(true));
     EXPECT_CALL(service, LogStartedFromWhatsNewPage(kTabGroupTutorialId, true));
     EXPECT_TRUE(
         ExecuteCommand(Command::kStartTabGroupTutorial, std::move(info)));
@@ -478,7 +504,8 @@ TEST_F(BrowserCommandHandlerTest, StartTabGroupTutorialCommand) {
     ClickInfoPtr info = ClickInfo::New();
     EXPECT_CALL(service, StartTutorial(kTabGroupWithExistingGroupTutorialId,
                                        kTestContext1, testing::_, testing::_))
-        .WillOnce(testing::Return(true));
+        .Times(1);
+    EXPECT_CALL(service, IsRunningTutorial).WillOnce(testing::Return(true));
     EXPECT_CALL(service, LogStartedFromWhatsNewPage(
                              kTabGroupWithExistingGroupTutorialId, true));
     EXPECT_TRUE(
@@ -502,60 +529,67 @@ TEST_F(BrowserCommandHandlerTest, OpenPasswordManagerCommand) {
 }
 
 TEST_F(BrowserCommandHandlerTest, OpenPerformanceSettings) {
-  {
-    // Cannot open performance settings if the features enabling the page are
-    // not enabled.
-    base::test::ScopedFeatureList disabled;
-    disabled.InitWithFeaturesAndParameters(
-        /*enabled_features=*/{},
-        /*disabled_features=*/{
-            {performance_manager::features::kBatterySaverModeAvailable},
-            {performance_manager::features::kHighEfficiencyModeAvailable}});
-    EXPECT_FALSE(CanExecuteCommand(Command::kOpenPerformanceSettings));
-  }
-  {
-    // Can open the performance settings if at least one feature is enabled.
-    base::test::ScopedFeatureList battery_saver;
-    battery_saver.InitWithFeaturesAndParameters(
-        /*enabled_features=*/{{performance_manager::features::
-                                   kBatterySaverModeAvailable,
-                               {}}},
-        /*disabled_features=*/{
-            {performance_manager::features::kHighEfficiencyModeAvailable}});
-    EXPECT_TRUE(CanExecuteCommand(Command::kOpenPerformanceSettings));
-  }
-  {
-    // Can open the performance settings if at least one feature is enabled.
-    base::test::ScopedFeatureList high_efficiency;
-    high_efficiency.InitWithFeaturesAndParameters(
-        /*enabled_features=*/{{performance_manager::features::
-                                   kHighEfficiencyModeAvailable,
-                               {}}},
-        /*disabled_features=*/{
-            {performance_manager::features::kBatterySaverModeAvailable}});
-    EXPECT_TRUE(CanExecuteCommand(Command::kOpenPerformanceSettings));
-  }
-  {
-    // Can open with both features enabled.
-    base::test::ScopedFeatureList enabled;
-    enabled.InitWithFeaturesAndParameters(
-        /*enabled_features=*/
-        {{performance_manager::features::kBatterySaverModeAvailable, {}},
-         {performance_manager::features::kHighEfficiencyModeAvailable, {}}},
-        /*disabled_features=*/{});
-    EXPECT_TRUE(CanExecuteCommand(Command::kOpenPerformanceSettings));
+  EXPECT_TRUE(CanExecuteCommand(Command::kOpenPerformanceSettings));
 
-    // Confirm executing the command works.
+  // Confirm executing the command works.
+  ClickInfoPtr info = ClickInfo::New();
+  info->middle_button = true;
+  info->meta_key = true;
+  // The OpenPerformanceSettings command opens a new settings window with the
+  // performance page open.
+  EXPECT_CALL(
+      *command_handler_,
+      NavigateToURL(GURL(chrome::GetSettingsUrl(chrome::kPerformanceSubPage)),
+                    DispositionFromClick(*info)));
+  EXPECT_TRUE(
+      ExecuteCommand(Command::kOpenPerformanceSettings, std::move(info)));
+}
+
+TEST_F(BrowserCommandHandlerTest,
+       OpenNTPAndStartCustomizeChromeTutorialCommand) {
+  // Command cannot be executed if the tutorial service doesn't exist.
+  command_handler_->SetTutorialService(nullptr);
+  EXPECT_FALSE(
+      CanExecuteCommand(Command::kOpenNTPAndStartCustomizeChromeTutorial));
+
+  // Create mock service so the command can be executed.
+  auto bubble_factory_registry =
+      std::make_unique<user_education::HelpBubbleFactoryRegistry>();
+  user_education::TutorialRegistry registry;
+  MockTutorialService service(&registry, bubble_factory_registry.get());
+  command_handler_->SetTutorialService(&service);
+
+  // If the customize chrome side panel is not enabled, dont run the command.
+  command_handler_->SetBrowserSupportsCustomizeChromeSidePanel(false);
+  EXPECT_FALSE(
+      CanExecuteCommand(Command::kOpenNTPAndStartCustomizeChromeTutorial));
+  command_handler_->SetBrowserSupportsCustomizeChromeSidePanel(true);
+
+  // If the search provider is not set to Google, dont run the command
+  command_handler_->SetDefaultSearchProviderToGoogle(false);
+  EXPECT_FALSE(
+      CanExecuteCommand(Command::kOpenNTPAndStartCustomizeChromeTutorial));
+  command_handler_->SetDefaultSearchProviderToGoogle(true);
+
+  // If the browser has feature enabled and google is default search
+  // provider, allow running command
+  EXPECT_TRUE(
+      CanExecuteCommand(Command::kOpenNTPAndStartCustomizeChromeTutorial));
+
+  // The OpenNTPAndStartCustomizeChromeTutorialCommand command should
+  // start the customize chrome tutorial.
+  {
     ClickInfoPtr info = ClickInfo::New();
-    info->middle_button = true;
-    info->meta_key = true;
-    // The OpenPassswordManager command opens a new settings window with the
-    // password manager and the correct disposition.
-    EXPECT_CALL(
-        *command_handler_,
-        NavigateToURL(GURL(chrome::GetSettingsUrl(chrome::kPerformanceSubPage)),
-                      DispositionFromClick(*info)));
-    EXPECT_TRUE(
-        ExecuteCommand(Command::kOpenPerformanceSettings, std::move(info)));
+    EXPECT_CALL(service, StartTutorial(kSidePanelCustomizeChromeTutorialId,
+                                       kTestContext1, testing::_, testing::_))
+        .Times(1);
+    EXPECT_CALL(service, IsRunningTutorial).WillOnce(testing::Return(true));
+    EXPECT_CALL(service, LogStartedFromWhatsNewPage(
+                             kSidePanelCustomizeChromeTutorialId, true));
+    EXPECT_CALL(*command_handler_,
+                NavigateToURL(GURL(chrome::kChromeUINewTabPageURL),
+                              DispositionFromClick(*info)));
+    EXPECT_TRUE(ExecuteCommand(Command::kOpenNTPAndStartCustomizeChromeTutorial,
+                               std::move(info)));
   }
 }

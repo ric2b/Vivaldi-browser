@@ -15,17 +15,17 @@
 #import "components/send_tab_to_self/send_tab_to_self_model.h"
 #import "components/send_tab_to_self/target_device_info.h"
 #import "components/sync_device_info/device_info.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_image_detail_text_item.h"
 #import "ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_manage_devices_item.h"
 #import "ios/chrome/browser/ui/send_tab_to_self/send_tab_to_self_modal_delegate.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -256,40 +256,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
         [self sendTabToSelfdaysSinceLastUpdate:daysSinceLastUpdate];
     switch (iter->form_factor) {
       case syncer::DeviceInfo::FormFactor::kTablet:
-        if (UseSymbols()) {
-          deviceItem.iconImage = MakeSymbolMonochrome(
-              DefaultSymbolWithPointSize(kIPadSymbol, kSymbolSize));
-        } else {
-          deviceItem.iconImage =
-              [UIImage imageNamed:@"send_tab_to_self_tablet"];
-        }
+        deviceItem.iconImage = MakeSymbolMonochrome(
+            DefaultSymbolWithPointSize(kIPadSymbol, kSymbolSize));
         break;
       case syncer::DeviceInfo::FormFactor::kPhone:
-        if (UseSymbols()) {
-          deviceItem.iconImage = MakeSymbolMonochrome(
-              DefaultSymbolWithPointSize(kIPhoneSymbol, kSymbolSize));
-        } else {
-          deviceItem.iconImage =
-              [UIImage imageNamed:@"send_tab_to_self_smartphone"];
-        }
+        deviceItem.iconImage = MakeSymbolMonochrome(
+            DefaultSymbolWithPointSize(kIPhoneSymbol, kSymbolSize));
         break;
       case syncer::DeviceInfo::FormFactor::kDesktop:
-        if (UseSymbols()) {
-          deviceItem.iconImage = MakeSymbolMonochrome(
-              DefaultSymbolWithPointSize(kLaptopSymbol, kSymbolSize));
-        } else {
-          deviceItem.iconImage =
-              [UIImage imageNamed:@"send_tab_to_self_laptop"];
-        }
+        deviceItem.iconImage = MakeSymbolMonochrome(
+            DefaultSymbolWithPointSize(kLaptopSymbol, kSymbolSize));
         break;
       default:
-        if (UseSymbols()) {
-          deviceItem.iconImage = MakeSymbolMonochrome(
-              DefaultSymbolWithPointSize(kLaptopSymbol, kSymbolSize));
-        } else {
-          deviceItem.iconImage =
-              [UIImage imageNamed:@"send_tab_to_self_devices"];
-        }
+        deviceItem.iconImage = MakeSymbolMonochrome(
+            DefaultSymbolWithPointSize(kLaptopSymbol, kSymbolSize));
+        break;
     }
 
     if (iter == _targetDeviceList.begin()) {

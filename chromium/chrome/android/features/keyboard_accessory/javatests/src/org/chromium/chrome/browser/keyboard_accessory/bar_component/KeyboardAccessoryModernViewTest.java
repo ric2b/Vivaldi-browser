@@ -21,16 +21,15 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import static org.chromium.chrome.browser.keyboard_accessory.AccessoryAction.AUTOFILL_SUGGESTION;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.BAR_ITEMS;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.DISABLE_ANIMATIONS_FOR_TESTING;
-import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.KEYBOARD_TOGGLE_VISIBLE;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.OBFUSCATED_CHILD_AT_CALLBACK;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.SHEET_OPENER_ITEM;
-import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.SHEET_TITLE;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.SHOW_SWIPING_IPH;
 import static org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryProperties.VISIBLE;
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
@@ -62,6 +61,7 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.CriteriaNotSatisfiedException;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -295,19 +295,14 @@ public class KeyboardAccessoryModernViewTest {
     public void testUpdatesKeyPaddingAfterRotation() throws InterruptedException {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mModel.set(VISIBLE, true);
-            mModel.set(KEYBOARD_TOGGLE_VISIBLE, false);
-            mModel.set(SHEET_TITLE, "Sheet title");
             mModel.get(BAR_ITEMS).set(createAutofillChipAndTab("John", null));
         });
         KeyboardAccessoryModernView view = mKeyboardAccessoryView.take();
-        CriteriaHelper.pollUiThread(view.mBarItemsView::isShown);
+        CriteriaHelper.pollUiThread(
+                () -> view.mBarItemsView.isShown() && view.mBarItemsView.getChildAt(1) != null);
         CriteriaHelper.pollUiThread(viewsAreRightAligned(view, view.mBarItemsView.getChildAt(1)));
 
-        TestThreadUtils.runOnUiThreadBlocking(() -> mModel.set(KEYBOARD_TOGGLE_VISIBLE, true));
-        CriteriaHelper.pollUiThread(() -> !view.mBarItemsView.isShown());
-
         rotateActivityToLandscape();
-        TestThreadUtils.runOnUiThreadBlocking(() -> mModel.set(KEYBOARD_TOGGLE_VISIBLE, false));
 
         CriteriaHelper.pollUiThread(view.mBarItemsView::isShown);
         CriteriaHelper.pollUiThread(viewsAreRightAligned(view, view.mBarItemsView.getChildAt(1)));
@@ -399,6 +394,7 @@ public class KeyboardAccessoryModernViewTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1432551")
     public void testDismissesSwipingEducationBubbleOnTap() {
         TestTracker tracker = new TestTracker() {
             @Override
@@ -484,6 +480,7 @@ public class KeyboardAccessoryModernViewTest {
 
     @Test
     @MediumTest
+    @EnableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES})
     public void testCustomIconUrlSet_imageReturnedByPersonalDataManager_customIconSetOnChipView()
             throws InterruptedException {
         GURL customIconUrl = mock(GURL.class);
@@ -492,7 +489,8 @@ public class KeyboardAccessoryModernViewTest {
         // Return the cached image when
         // PersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable is called for the
         // above url.
-        when(mMockPersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable(any()))
+        when(mMockPersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable(
+                     any(), any(), anyInt(), anyInt(), anyInt()))
                 .thenReturn(TEST_CARD_ART_IMAGE);
         // Create an autofill suggestion and set the `customIconUrl`.
         AutofillBarItem customIconItem = new AutofillBarItem(
@@ -524,7 +522,8 @@ public class KeyboardAccessoryModernViewTest {
         when(customIconUrl.getSpec()).thenReturn(CUSTOM_ICON_URL);
         // Return the response of PersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable
         // to null to indicate that the image is not present in the cache.
-        when(mMockPersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable(any()))
+        when(mMockPersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable(
+                     any(), any(), anyInt(), anyInt(), anyInt()))
                 .thenReturn(null);
         AutofillBarItem customIconItem = new AutofillBarItem(
                 getDefaultAutofillSuggestionBuilder().setCustomIconUrl(customIconUrl).build(),

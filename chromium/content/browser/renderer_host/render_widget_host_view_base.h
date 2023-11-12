@@ -564,6 +564,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView {
   virtual void UnlockOrientation() {}
   virtual void SetHasPersistentVideo(bool has_persistent_video) {}
 
+  bool HasFallbackSurfaceForTesting() const { return HasFallbackSurface(); }
+
   // Vivaldi addition:
   bool IsRenderWidgetHostViewMac() { return is_render_widget_host_view_mac_; }
 

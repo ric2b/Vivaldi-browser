@@ -52,6 +52,16 @@ class AshStructuredMetricsRecorderTest : public MixinBasedInProcessBrowserTest {
         ->EnableRecording();
   }
 
+  void TearDownOnMainThread() override {
+    MixinBasedInProcessBrowserTest::TearDownOnMainThread();
+
+    // A null callback is needed for when the logout event occurs. If not set,
+    // then the test would fail.
+    EventDelegate delegate;
+    structured_metrics_mixin_.GetTestStructuredMetricsProvider()
+        ->SetOnEventsRecordClosure(delegate);
+  }
+
  protected:
   StructuredMetricsMixin structured_metrics_mixin_{&mixin_host_};
 

@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 en uso)} other {(# en uso)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Comprobar o enderezo do proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5287240709317226393">Amosar cookies</translation>
 <translation id="5355557959165512791">Non podes visitar <ph name="SITE" /> neste momento porque o seu certificado foi revogado. Os erros e ataques de rede adoitan ser temporais, polo que é probable que esta páxina funcione máis tarde.</translation>
 <translation id="5386426401304769735">A cadea de certificados deste sitio contén un certificado asinado con SHA-1.</translation>
 <translation id="5452270690849572955">Esta<ph name="HOST_NAME" /> páxina non se pode atopar</translation>

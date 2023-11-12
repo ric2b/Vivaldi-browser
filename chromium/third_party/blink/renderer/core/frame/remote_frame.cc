@@ -255,7 +255,11 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
   auto params = mojom::blink::OpenURLParams::New();
   params->url = url;
   params->initiator_origin = request.RequestorOrigin();
-  params->initiator_base_url = frame_request.GetRequestorBaseURL();
+  if (features::IsNewBaseUrlInheritanceBehaviorEnabled() &&
+      (url.IsAboutBlankURL() || url.IsAboutSrcdocURL()) &&
+      !frame_request.GetRequestorBaseURL().IsEmpty()) {
+    params->initiator_base_url = frame_request.GetRequestorBaseURL();
+  }
   params->post_body =
       blink::GetRequestBodyForWebURLRequest(WrappedResourceRequest(request));
   DCHECK_EQ(!!params->post_body, request.HttpMethod().Utf8() == "POST");
@@ -304,6 +308,7 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
       GetNavigationInitiatorActivationAndAdStatus(request.HasUserGesture(),
                                                   is_ad_script_in_stack);
 
+  params->is_container_initiated = frame_request.IsContainerInitiated();
   GetRemoteFrameHostRemote().OpenURL(std::move(params));
 }
 
@@ -409,25 +414,11 @@ void RemoteFrame::RenderFallbackContent() {
   Frame::RenderFallbackContent();
 }
 
-void RemoteFrame::RenderFallbackContentWithResourceTiming(
-    mojom::blink::ResourceTimingInfoPtr timing,
-    const String& server_timing_value) {
-  Frame::RenderFallbackContentWithResourceTiming(std::move(timing),
-                                                 server_timing_value);
-}
-
 void RemoteFrame::AddResourceTimingFromChild(
     mojom::blink::ResourceTimingInfoPtr timing) {
   HTMLFrameOwnerElement* owner_element = To<HTMLFrameOwnerElement>(Owner());
   DCHECK(owner_element);
-
-  if (!owner_element->HasPendingFallbackTimingInfo()) {
-    return;
-  }
-
-  DOMWindowPerformance::performance(*owner_element->GetDocument().domWindow())
-      ->AddResourceTiming(std::move(timing), owner_element->localName());
-  owner_element->DidReportResourceTiming();
+  owner_element->AddResourceTiming(std::move(timing));
 }
 
 void RemoteFrame::DidStartLoading() {
@@ -1106,6 +1097,11 @@ void RemoteFrame::CreateRemoteChild(
       token, opener_frame_token, tree_scope_type, std::move(replication_state),
       std::move(owner_properties), is_loading, devtools_frame_token,
       std::move(remote_frame_interfaces));
+}
+
+void RemoteFrame::CreateRemoteChildren(
+    Vector<mojom::blink::CreateRemoteChildParamsPtr> params) {
+  Client()->CreateRemoteChildren(params);
 }
 
 }  // namespace blink

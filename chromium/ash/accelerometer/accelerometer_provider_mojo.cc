@@ -79,7 +79,7 @@ void AccelerometerProviderMojo::OnNewDeviceAdded(
         continue;
       }
 
-      if (accelerometers_.find(iio_device_id) != accelerometers_.end())
+      if (base::Contains(accelerometers_, iio_device_id))
         continue;
 
       RegisterAccelerometerWithId(iio_device_id);
@@ -201,11 +201,6 @@ void AccelerometerProviderMojo::SetECLidAngleDriverSupported() {
     // status and revert some changes.
     LOG(WARNING) << "Overwriting ECLidAngleDriverStatus from NOT_SUPPORTED "
                     "to SUPPORTED";
-
-    // Restarts to listen to TabletPhysicalStateChanged from
-    // TabletModeController. Allows the enabled samples when setting
-    // ECLidAngleDriverStatus to SUPPORTED.
-    StartListenToTabletModeController();
   }
 
   SetECLidAngleDriverStatus(ECLidAngleDriverStatus::SUPPORTED);
@@ -515,8 +510,7 @@ void AccelerometerProviderMojo::GetAttributesCallback(
         std::distance(std::begin(kLocationStrings), it));
     accelerometer.location = source;
 
-    if (location_to_accelerometer_id_.find(source) !=
-        location_to_accelerometer_id_.end()) {
+    if (base::Contains(location_to_accelerometer_id_, source)) {
       LOG(WARNING) << "Duplicated location source " << source
                    << " of accel id: " << id << ", and accel id: "
                    << location_to_accelerometer_id_[source];

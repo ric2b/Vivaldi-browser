@@ -31,7 +31,8 @@ class Index_Node;
 
 class IndexLoadDetails {
  public:
-  explicit IndexLoadDetails(Index_Node* items_node, Index_Node* backup_node);
+  explicit IndexLoadDetails(Index_Node* items_node, Index_Node* backup_node,
+                            Index_Node* persistent_node);
   ~IndexLoadDetails();
   IndexLoadDetails(const IndexLoadDetails&) = delete;
   IndexLoadDetails& operator=(const IndexLoadDetails&) = delete;
@@ -51,12 +52,18 @@ class IndexLoadDetails {
     return std::move(backup_node_);
   }
 
+  std::unique_ptr<Index_Node> release_persistent_node() {
+    return std::move(persistent_node_);
+  }
+
   Index_Node* items_node() const { return items_node_.get(); }
   Index_Node* backup_node() const { return backup_node_.get(); }
+  Index_Node* persistent_node() const { return persistent_node_.get(); }
 
  private:
   std::unique_ptr<Index_Node> items_node_;
   std::unique_ptr<Index_Node> backup_node_;
+  std::unique_ptr<Index_Node> persistent_node_;
   bool loaded_from_filescan_ = false;
   bool loading_failed_ = false;
 };
@@ -86,7 +93,7 @@ class IndexStorage : public base::ImportantFileWriter::DataSerializer {
   void OnLoadFinished(std::unique_ptr<IndexLoadDetails> details);
 
   // ImportantFileWriter::DataSerializer implementation.
-  bool SerializeData(std::string* output) override;
+  absl::optional<std::string> SerializeData() override;
 
   bool SaveValue(const std::unique_ptr<base::Value>& value);
 
@@ -106,7 +113,7 @@ class IndexStorage : public base::ImportantFileWriter::DataSerializer {
   // Returns true on successful serialization.
   bool SaveNow();
 
-  Index_Model* model_;
+  raw_ptr<Index_Model> model_;
 
   base::FilePath directory_;
 

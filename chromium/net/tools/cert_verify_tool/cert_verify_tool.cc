@@ -143,9 +143,9 @@ class CertVerifyImplUsingProc : public CertVerifyImpl {
                       .InsertBeforeExtensionASCII("." + GetName());
     }
 
-    return VerifyUsingCertVerifyProc(
-        proc_.get(), target_der_cert, hostname, intermediate_der_certs,
-        der_certs_with_trust_settings, crl_set, dump_path);
+    return VerifyUsingCertVerifyProc(proc_.get(), target_der_cert, hostname,
+                                     intermediate_der_certs,
+                                     der_certs_with_trust_settings, dump_path);
   }
 
  private:
@@ -221,8 +221,10 @@ std::unique_ptr<net::SystemTrustStore> CreateSystemTrustStore(
 std::unique_ptr<CertVerifyImpl> CreateCertVerifyImplFromName(
     base::StringPiece impl_name,
     scoped_refptr<net::CertNetFetcher> cert_net_fetcher,
+    scoped_refptr<net::CRLSet> crl_set,
     RootStoreType root_store_type) {
-#if !(BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
+#if !(BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || \
+      BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(CHROME_ROOT_STORE_ONLY))
   if (impl_name == "platform") {
     if (root_store_type != RootStoreType::kSystem) {
       std::cerr << "WARNING: platform verifier not supported with "
@@ -231,8 +233,9 @@ std::unique_ptr<CertVerifyImpl> CreateCertVerifyImplFromName(
     }
 
     return std::make_unique<CertVerifyImplUsingProc>(
-        "CertVerifyProc (system)", net::CertVerifyProc::CreateSystemVerifyProc(
-                                       std::move(cert_net_fetcher)));
+        "CertVerifyProc (system)",
+        net::CertVerifyProc::CreateSystemVerifyProc(std::move(cert_net_fetcher),
+                                                    std::move(crl_set)));
   }
 #endif
 
@@ -240,7 +243,7 @@ std::unique_ptr<CertVerifyImpl> CreateCertVerifyImplFromName(
     return std::make_unique<CertVerifyImplUsingProc>(
         "CertVerifyProcBuiltin",
         net::CreateCertVerifyProcBuiltin(
-            std::move(cert_net_fetcher),
+            std::move(cert_net_fetcher), std::move(crl_set),
             CreateSystemTrustStore(impl_name, root_store_type)));
   }
 
@@ -534,7 +537,8 @@ int main(int argc, char** argv) {
   std::string impls_str = command_line.GetSwitchValueASCII("impls");
   if (impls_str.empty()) {
     // Default value.
-#if !(BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
+#if !(BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || \
+      BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(CHROME_ROOT_STORE_ONLY))
     impls_str = "platform,";
 #endif
     impls_str += "builtin,pathbuilder";
@@ -545,7 +549,7 @@ int main(int argc, char** argv) {
 
   for (const std::string& impl_name : impl_names) {
     auto verify_impl = CreateCertVerifyImplFromName(impl_name, cert_net_fetcher,
-                                                    root_store_type);
+                                                    crl_set, root_store_type);
     if (verify_impl)
       impls.push_back(std::move(verify_impl));
   }

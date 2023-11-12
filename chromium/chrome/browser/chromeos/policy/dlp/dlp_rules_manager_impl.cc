@@ -108,6 +108,20 @@ DlpRulesManager::Component GetComponentMapping(const std::string& component) {
              : it->second;
 }
 
+::dlp::DlpComponent GetComponentProtoMapping(const std::string& component) {
+  static constexpr auto kComponentsMap =
+      base::MakeFixedFlatMap<base::StringPiece, ::dlp::DlpComponent>(
+          {{dlp::kArc, ::dlp::DlpComponent::ARC},
+           {dlp::kCrostini, ::dlp::DlpComponent::CROSTINI},
+           {dlp::kPluginVm, ::dlp::DlpComponent::PLUGIN_VM},
+           {dlp::kDrive, ::dlp::DlpComponent::GOOGLE_DRIVE},
+           {dlp::kUsb, ::dlp::DlpComponent::USB}});
+
+  auto* it = kComponentsMap.find(component);
+  return (it == kComponentsMap.end()) ? ::dlp::DlpComponent::UNKNOWN_COMPONENT
+                                      : it->second;
+}
+
 // Creates `urls` conditions, saves patterns strings mapping in
 // `patterns_mapping`, and saves conditions ids to rules ids mapping in `map`.
 void AddUrlConditions(url_matcher::URLMatcher* matcher,
@@ -690,7 +704,13 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
           }
         }
 
-        // TODO(crbug.com/1321088): Add components to SetDlpFilesPolicyRequest.
+        if (rule_has_components) {
+          for (const auto& component : *destinations_components) {
+            DCHECK(component.is_string());
+            files_rule.add_destination_components(
+                GetComponentProtoMapping(component.GetString()));
+          }
+        }
 
         files_rule.set_level(GetLevelProtoEnum(rule_level));
         request_to_daemon.mutable_rules()->Add(std::move(files_rule));
@@ -704,8 +724,15 @@ void DlpRulesManagerImpl::OnPolicyUpdate() {
 
   src_url_matcher_->AddConditionSets(src_conditions_);
   dst_url_matcher_->AddConditionSets(dst_conditions_);
-
-  if (base::Contains(restrictions_map_, Restriction::kClipboard)) {
+  if (base::Contains(restrictions_map_, Restriction::kClipboard)
+  // TODO(b/269610458): It should be instantiated for files in
+  // Lacros as well.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      || (base::FeatureList::IsEnabled(
+              features::kDataLeakPreventionFilesRestriction) &&
+          request_to_daemon.rules_size() > 0)
+#endif
+  ) {
     DataTransferDlpController::Init(*this);
   } else {
     DataTransferDlpController::DeleteInstance();

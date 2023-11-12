@@ -37,7 +37,7 @@
 // As an example, consider
 //
 //    fetch("https://chromium.org", {
-//        trustToken: {
+//        privateToken: {
 //            version: 1,
 //            operation: 'token-request'}})
 //
@@ -138,7 +138,7 @@ class TrustTokenOriginTrialBrowsertest
     auto& field_trial_param =
         network::features::kTrustTokenOperationsRequiringOriginTrial;
     features_.InitAndEnableFeatureWithParameters(
-        network::features::kPrivateStateTokens,
+        network::features::kFledgePst,
         {{field_trial_param.name,
           field_trial_param.GetName(std::get<1>(GetParam()).trial_type)}});
   }
@@ -241,10 +241,6 @@ const TestDescription kTestDescriptions[] = {
     {network::mojom::TrustTokenMajorVersion::kPrivateStateTokenV1,
      Op::kIssuance, Outcome::kSuccess,
      TrialType::kOnlyIssuanceRequiresOriginTrial, TrialEnabled::kEnabled},
-
-    {network::mojom::TrustTokenMajorVersion::kPrivateStateTokenV1,
-     Op::kIssuance, Outcome::kFailure,
-     TrialType::kOnlyIssuanceRequiresOriginTrial, TrialEnabled::kDisabled},
 
     {network::mojom::TrustTokenMajorVersion::kPrivateStateTokenV1,
      Op::kRedemption, Outcome::kSuccess,
@@ -362,7 +358,7 @@ IN_PROC_BROWSER_TEST_P(TrustTokenOriginTrialBrowsertest,
   std::string command;
   switch (interface) {
     case Interface::kFetch:
-      command = JsReplace("fetch($1, {trustToken: ", kTrustTokenUrl) +
+      command = JsReplace("fetch($1, {privateToken: ", kTrustTokenUrl) +
                 expected_params_and_serialization.serialized_params + "});";
       break;
     case Interface::kIframe:

@@ -4,6 +4,7 @@
 
 #include "ash/system/time/calendar_view.h"
 #include <climits>
+#include <memory>
 
 #include "ash/calendar/calendar_client.h"
 #include "ash/calendar/calendar_controller.h"
@@ -27,6 +28,9 @@
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "ash/test/ash_test_base.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -58,6 +62,26 @@ constexpr char kTestUser[] = "user@test";
 constexpr int kLoadingBarIndex = 2;
 
 }  // namespace
+
+class CalendarViewControllerTestObserver
+    : public CalendarViewController::Observer {
+ public:
+  explicit CalendarViewControllerTestObserver(
+      base::OnceCallback<void(void)> callback)
+      : callback_(std::move(callback)) {}
+
+  CalendarViewControllerTestObserver(
+      const CalendarViewControllerTestObserver&) = delete;
+  CalendarViewControllerTestObserver& operator=(
+      const CalendarViewControllerTestObserver&) = delete;
+
+  ~CalendarViewControllerTestObserver() override = default;
+
+  void OnCalendarLoaded() override { std::move(callback_).Run(); }
+
+ private:
+  base::OnceCallback<void(void)> callback_;
+};
 
 class CalendarViewTest : public AshTestBase {
  public:
@@ -95,8 +119,9 @@ class CalendarViewTest : public AshTestBase {
     for (const auto* child_view : month->children()) {
       auto* current_date_cell =
           static_cast<const views::LabelButton*>(child_view);
-      if (day != current_date_cell->GetText())
+      if (day != current_date_cell->GetText()) {
         continue;
+      }
 
       date_cell = current_date_cell;
       break;
@@ -128,6 +153,24 @@ class CalendarViewTest : public AshTestBase {
   void CloseEventList() { calendar_view_->CloseEventList(); }
 
   void DestroyCalendarViewWidget() { widget_.reset(); }
+
+  // Calendar has some arbitrary delays to allow itself to load, otherwise the
+  // test assertions run too early and fail. We hook into the `OnCalendarLoaded`
+  // callback here to pause the test until the Calendar has finished loading.
+  void WaitForCalendarToCompleteLoading() {
+    base::RunLoop run_loop;
+    auto callback = [](base::RunLoop* run_loop) {
+      run_loop->QuitClosure().Run();
+    };
+
+    auto observer = std::make_unique<CalendarViewControllerTestObserver>(
+        base::BindOnce(callback, &run_loop));
+    AddCalendarViewControllerObserver(observer.get());
+
+    run_loop.Run();
+
+    RemoveCalendarViewControllerObserver(observer.get());
+  }
 
   CalendarView* calendar_view() { return calendar_view_; }
   views::ScrollView* scroll_view() { return calendar_view_->scroll_view_; }
@@ -196,9 +239,18 @@ class CalendarViewTest : public AshTestBase {
         ->selected_date_;
   }
 
-  views::View* up_next_view() { return calendar_view_->up_next_view_; }
+  CalendarUpNextView* up_next_view() { return calendar_view_->up_next_view_; }
 
-  views::View* calendar_sliding_surface_view() {
+  views::View* up_next_scroll_contents() {
+    return calendar_view_->up_next_view_->content_view_;
+  }
+
+  // Executes the given task immediately rather than waiting for the timer.
+  void run_upcoming_events_timer_task() {
+    calendar_view_->check_upcoming_events_timer_.user_task().Run();
+  }
+
+  CalendarSlidingSurface* calendar_sliding_surface_view() {
     return calendar_view_->calendar_sliding_surface_;
   }
 
@@ -254,13 +306,23 @@ class CalendarViewTest : public AshTestBase {
     generator.PressKey(ui::KeyboardCode::VKEY_RIGHT, ui::EF_NONE);
   }
 
+  void AddCalendarViewControllerObserver(
+      CalendarViewController::Observer* observer) {
+    calendar_view_->calendar_view_controller_->AddObserver(observer);
+  }
+
+  void RemoveCalendarViewControllerObserver(
+      CalendarViewController::Observer* observer) {
+    calendar_view_->calendar_view_controller_->RemoveObserver(observer);
+  }
+
   static base::Time FakeTimeNow() { return fake_time_; }
   static void SetFakeNow(base::Time fake_now) { fake_time_ = fake_now; }
 
  private:
   std::unique_ptr<views::Widget> widget_;
   // Owned by `widget_`.
-  CalendarView* calendar_view_ = nullptr;
+  raw_ptr<CalendarView, ExperimentalAsh> calendar_view_ = nullptr;
   std::unique_ptr<DetailedViewDelegate> delegate_;
   scoped_refptr<UnifiedSystemTrayModel> tray_model_;
   std::unique_ptr<UnifiedSystemTrayController> tray_controller_;
@@ -658,14 +720,17 @@ TEST_F(CalendarViewTest,
   const int scroll_up_count = 10;
   const int scroll_down_count = scroll_up_count - 1;
   // Scroll up.
-  for (int i = 0; i < scroll_up_count; ++i)
+  for (int i = 0; i < scroll_up_count; ++i) {
     ScrollUpOneMonth();
+  }
   // Return to today.
-  for (int i = 0; i < scroll_up_count; ++i)
+  for (int i = 0; i < scroll_up_count; ++i) {
     ScrollDownOneMonth();
+  }
   // Scroll down from today.
-  for (int i = 0; i < scroll_down_count; ++i)
+  for (int i = 0; i < scroll_down_count; ++i) {
     ScrollDownOneMonth();
+  }
 
   DestroyCalendarViewWidget();
 
@@ -702,8 +767,9 @@ class DateCellFocusChangeListener : public views::FocusChangeListener {
                          views::View* focused_now) override {}
   void OnDidChangeFocus(views::View* focused_before,
                         views::View* focused_now) override {
-    if (found_)
+    if (found_) {
       return;
+    }
 
     steps_taken_++;
     found_ = static_cast<const views::LabelButton*>(focused_now)->GetText() ==
@@ -718,7 +784,7 @@ class DateCellFocusChangeListener : public views::FocusChangeListener {
   int steps_taken_ = 0;
 
   // Unowned.
-  views::FocusManager* const focus_manager_;
+  const raw_ptr<views::FocusManager, ExperimentalAsh> focus_manager_;
   // The string being looked for.
   const std::u16string looking_for_;
   // The number of steps it is acceptable to have made before finding the
@@ -1380,8 +1446,9 @@ class CalendarViewAnimationTest : public AshTestBase {
     for (const auto* child_view : month->children()) {
       auto* current_date_cell =
           static_cast<const views::LabelButton*>(child_view);
-      if (day != current_date_cell->GetText())
+      if (day != current_date_cell->GetText()) {
         continue;
+      }
 
       date_cell = current_date_cell;
       break;
@@ -1487,12 +1554,12 @@ class CalendarViewAnimationTest : public AshTestBase {
  private:
   std::unique_ptr<views::Widget> widget_;
   // Owned by `widget_`.
-  CalendarView* calendar_view_ = nullptr;
+  raw_ptr<CalendarView, ExperimentalAsh> calendar_view_ = nullptr;
   std::unique_ptr<DetailedViewDelegate> delegate_;
   scoped_refptr<UnifiedSystemTrayModel> tray_model_;
   std::unique_ptr<UnifiedSystemTrayController> tray_controller_;
   std::unique_ptr<base::subtle::ScopedTimeClockOverrides> time_overrides_;
-  CalendarModel* calendar_model_;
+  raw_ptr<CalendarModel, ExperimentalAsh> calendar_model_;
   std::unique_ptr<calendar_test_utils::CalendarClientTestImpl> calendar_client_;
 };
 
@@ -2063,13 +2130,6 @@ class CalendarViewWithMessageCenterTest : public AshTestBase {
       const CalendarViewWithMessageCenterTest&) = delete;
   ~CalendarViewWithMessageCenterTest() override = default;
 
-  void SetUp() override {
-    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitWithFeatures(
-        {features::kCalendarView, features::kNotificationsRefresh}, {});
-    AshTestBase::SetUp();
-  }
-
   views::FocusManager* message_center_focus_manager() {
     return GetPrimaryUnifiedSystemTray()
         ->message_center_bubble()
@@ -2114,8 +2174,9 @@ class CalendarViewWithMessageCenterTest : public AshTestBase {
     while ((current_focusable_view =
                 message_center_focus_manager()->GetNextFocusableView(
                     current_focusable_view, widget, /*reverse=*/false,
-                    /*dont_loop=*/true)))
+                    /*dont_loop=*/true))) {
       count++;
+    }
     return count;
   }
 
@@ -2128,9 +2189,6 @@ class CalendarViewWithMessageCenterTest : public AshTestBase {
     ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
     generator.PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_SHIFT_DOWN);
   }
-
- private:
-  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
 };
 
 // Tests `Tab` / `Shift+Tab` navigation within two bubbles.
@@ -2157,8 +2215,9 @@ TEST_F(CalendarViewWithMessageCenterTest,
   PressTab();
 
   // Keep tabbing until exiting the message center.
-  for (int i = 0; i < number_of_focusable_views_in_message_center; i++)
+  for (int i = 0; i < number_of_focusable_views_in_message_center; i++) {
     PressTab();
+  }
 
   // The "back to today" `PillButton` is the first focused view.
   EXPECT_STREQ(calendar_focus_manager()->GetFocusedView()->GetClassName(),
@@ -2168,8 +2227,9 @@ TEST_F(CalendarViewWithMessageCenterTest,
   PressShiftTab();
 
   // Keep tabbing backwards until exiting the message center.
-  for (int i = 0; i < number_of_focusable_views_in_message_center; i++)
+  for (int i = 0; i < number_of_focusable_views_in_message_center; i++) {
     PressShiftTab();
+  }
 
   // Today's date cell should be focused now.
   EXPECT_EQ(current_date_cell_view, calendar_focus_manager()->GetFocusedView());
@@ -2186,8 +2246,7 @@ class CalendarViewWithJellyEnabledTest : public CalendarViewTest {
 
   void SetUp() override {
     scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitWithFeatures(
-        {features::kCalendarView, features::kCalendarJelly}, {});
+    scoped_feature_list_->InitWithFeatures({features::kCalendarJelly}, {});
     CalendarViewTest::SetUp();
   }
 
@@ -2209,6 +2268,19 @@ class CalendarViewWithJellyEnabledTest : public CalendarViewTest {
     event_list->set_time_zone("Greenwich Mean Time");
     event_list->InjectItemForTesting(calendar_test_utils::CreateEvent(
         "id_0", "summary_0", "18 Nov 2021 10:10 GMT", "18 Nov 2021 13:30 GMT"));
+
+    return event_list;
+  }
+
+  // Assumes current time is "18 Nov 2021 10:00 GMT".
+  std::unique_ptr<google_apis::calendar::EventList>
+  CreateMockEventListWithTwoEventsOneEndingInOneMin() {
+    auto event_list = std::make_unique<google_apis::calendar::EventList>();
+    event_list->set_time_zone("Greenwich Mean Time");
+    event_list->InjectItemForTesting(calendar_test_utils::CreateEvent(
+        "id_0", "summary_0", "18 Nov 2021 10:00 GMT", "18 Nov 2021 13:30 GMT"));
+    event_list->InjectItemForTesting(calendar_test_utils::CreateEvent(
+        "id_1", "summary_1", "18 Nov 2021 09:00 GMT", "18 Nov 2021 10:01 GMT"));
 
     return event_list;
   }
@@ -2277,9 +2349,7 @@ TEST_F(
   EXPECT_FALSE(is_showing_up_next_view);
 }
 
-TEST_F(
-    CalendarViewWithJellyEnabledTest,
-    GivenEventsStartingTenMinsAway_WhenCalendarViewOpens_ThenUpNextViewShouldBeShown) {
+TEST_F(CalendarViewWithJellyEnabledTest, ShouldShowUpNextView) {
   base::Time date;
   ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
   // Set time override.
@@ -2294,8 +2364,7 @@ TEST_F(
 
   // When fetched events are in the next 10 mins, then up next should have been
   // created.
-  bool is_showing_up_next_view = up_next_view();
-  EXPECT_TRUE(is_showing_up_next_view);
+  EXPECT_TRUE(up_next_view());
 }
 
 TEST_F(CalendarViewWithJellyEnabledTest,
@@ -2317,11 +2386,8 @@ TEST_F(CalendarViewWithJellyEnabledTest,
   MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
                     CreateMockEventListWithEventStartTimeTenMinsAway());
 
-  // When the event list view is open, then the up next view should have
-  // been created but the changes to scroll view height, animations etc
-  // shouldn't occur.
   bool is_showing_up_next_view = up_next_view();
-  EXPECT_TRUE(is_showing_up_next_view);
+  EXPECT_FALSE(is_showing_up_next_view);
   const int bottom_of_scroll_view_visible_area =
       scroll_view()->bounds().y() + scroll_view()->GetMaxHeight();
   const int top_of_event_list_view = calendar_sliding_surface_view()->y();
@@ -2409,6 +2475,42 @@ TEST_F(
   // When fetched events are now more than two hours away, then up next
   // should have been destroyed.
   EXPECT_FALSE(up_next_view());
+}
+
+// Tests the following:
+// - 2 upcoming events are displayed in the up next view
+// - Time passes so that one event has ended
+// - Up next refreshes to show the 1 upcoming event (as the other has now ended)
+TEST_F(CalendarViewWithJellyEnabledTest,
+       ShouldHideCompletedEventsInTheUpNextView) {
+  base::Time date;
+  ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
+  // Set time override.
+  SetFakeNow(date);
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  CreateCalendarView();
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateMockEventListWithTwoEventsOneEndingInOneMin());
+
+  // Up next should be shown with the 2 events.
+  EXPECT_TRUE(up_next_view());
+  EXPECT_EQ(size_t(2), up_next_scroll_contents()->children().size());
+
+  // Move base::Time::Now to 1 minute past the event end time and force the
+  // upcoming events timer to fire.
+  base::Time time_one_min_past_event_end;
+  ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:02 GMT",
+                                     &time_one_min_past_event_end));
+  SetFakeNow(time_one_min_past_event_end);
+  run_upcoming_events_timer_task();
+
+  // Up next should still be showing but with a single event as the other has
+  // ended.
+  EXPECT_TRUE(up_next_view());
+  EXPECT_EQ(size_t(1), up_next_scroll_contents()->children().size());
 }
 
 TEST_F(CalendarViewWithJellyEnabledTest,
@@ -2509,12 +2611,12 @@ TEST_F(CalendarViewWithJellyEnabledTest,
   MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
                     CreateMockEventListWithEventStartTimeTenMinsAway());
 
-  // Up next view should have been created.
-  EXPECT_TRUE(up_next_view());
-
   // Close the event list view.
   GestureTapOn(close_button());
   ASSERT_FALSE(event_list_view());
+
+  // Up next should be showing.
+  EXPECT_TRUE(up_next_view());
 
   // When the event list view closes, the scrollview max height should have been
   // clipped back to the right height for the up next view.
@@ -2603,6 +2705,105 @@ TEST_F(
   EXPECT_EQ(u"January", GetNextNextLabelText());
   EXPECT_EQ(u"November", month_header()->GetText());
   EXPECT_EQ(u"2021", header_year()->GetText());
+}
+
+TEST_F(
+    CalendarViewWithJellyEnabledTest,
+    ShouldFocusEventListCloseButton_WhenEventListViewLaunchedFromUpNextView) {
+  base::Time date;
+  ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
+  // Set time override.
+  SetFakeNow(date);
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  CreateCalendarView();
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateMockEventListWithEventStartTimeTenMinsAway());
+
+  // When fetched events are in the next 10 mins, then up next should have been
+  // created.
+  ASSERT_TRUE(up_next_view());
+
+  auto* focus_manager = calendar_view()->GetFocusManager();
+  up_next_todays_events_button()->RequestFocus();
+  ASSERT_EQ(up_next_todays_events_button(), focus_manager->GetFocusedView());
+
+  PressEnter();
+  ASSERT_TRUE(event_list_view());
+
+  EXPECT_EQ(focus_manager->GetFocusedView(), close_button());
+}
+
+TEST_F(CalendarViewWithJellyEnabledTest, RecordEventsDisplayedToUserOnce) {
+  base::HistogramTester histogram_tester;
+  base::Time now;
+  ASSERT_TRUE(base::Time::FromString("1 Oct 2021 10:00 GMT", &now));
+  base::Time next_month;
+  ASSERT_TRUE(base::Time::FromString("1 Nov 2021 10:00 GMT", &next_month));
+  // Set time override.
+  SetFakeNow(now);
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  CreateCalendarView();
+  // Mock events will be in the `next_month` so when the calendar opens we don't
+  // record the metric.
+  MockEventsFetched(
+      calendar_utils::GetStartOfMonthUTC(next_month),
+      CreateMockEventListWithEventStartTimeMoreThanTwoHoursAway());
+
+  // Make sure we're on the current month and no events have been displayed to
+  // the user.
+  EXPECT_EQ(u"October", GetCurrentLabelText());
+  EXPECT_EQ(u"October", month_header()->GetText());
+  EXPECT_EQ(u"2021", header_year()->GetText());
+  histogram_tester.ExpectTotalCount("Ash.Calendar.EventsDisplayedToUser", 0);
+
+  // Scroll down a month, this month should contain events.
+  ScrollDownOneMonth();
+
+  EXPECT_EQ(u"November", GetCurrentLabelText());
+  EXPECT_EQ(u"November", month_header()->GetText());
+  EXPECT_EQ(u"2021", header_year()->GetText());
+  histogram_tester.ExpectTotalCount("Ash.Calendar.EventsDisplayedToUser", 1);
+
+  // Scroll back and forward to land on the month containing events again.
+  ScrollDownOneMonth();
+  ScrollUpOneMonth();
+
+  // We should still have only logged the metric once.
+  histogram_tester.ExpectTotalCount("Ash.Calendar.EventsDisplayedToUser", 1);
+}
+
+TEST_F(CalendarViewWithJellyEnabledTest, ShouldShowUpNextWithCachedData) {
+  base::Time date;
+  ASSERT_TRUE(base::Time::FromString("18 Nov 2021 10:00 GMT", &date));
+  // Set time override.
+  SetFakeNow(date);
+  base::subtle::ScopedTimeClockOverrides time_override(
+      &CalendarViewTest::FakeTimeNow, /*time_ticks_override=*/nullptr,
+      /*thread_ticks_override=*/nullptr);
+
+  // First populate model with events.
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateMockEventListWithEventStartTimeTenMinsAway());
+  // Then build the Calendar view.
+  CreateCalendarView();
+
+  WaitForCalendarToCompleteLoading();
+
+  // Up next should be displayed (with cached events).
+  EXPECT_TRUE(up_next_view());
+  EXPECT_EQ(size_t(1), up_next_scroll_contents()->children().size());
+
+  // Replace the cached data with new data.
+  MockEventsFetched(calendar_utils::GetStartOfMonthUTC(date),
+                    CreateMockEventListWithTwoEventsOneEndingInOneMin());
+  EXPECT_TRUE(up_next_view());
+  EXPECT_EQ(size_t(2), up_next_scroll_contents()->children().size());
 }
 
 }  // namespace ash

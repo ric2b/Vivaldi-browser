@@ -6,6 +6,10 @@
 
 #include "ash/constants/quick_settings_catalogs.h"
 #include "ash/system/audio/unified_volume_view.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "chromeos/ash/components/audio/cras_audio_handler.h"
 
 namespace ash {
 
@@ -20,12 +24,22 @@ UnifiedVolumeSliderController::Delegate::~Delegate() = default;
 
 UnifiedVolumeSliderController::UnifiedVolumeSliderController(
     UnifiedVolumeSliderController::Delegate* delegate)
-    : delegate_(delegate) {
+    : delegate_(delegate),
+      output_volume_metric_delay_timer_(
+          FROM_HERE,
+          CrasAudioHandler::kMetricsDelayTimerInterval,
+          /*receiver=*/this,
+          &UnifiedVolumeSliderController::RecordVolumeSourceMetric) {
   DCHECK(delegate);
 }
 
 UnifiedVolumeSliderController::UnifiedVolumeSliderController()
-    : delegate_(nullptr) {}
+    : delegate_(nullptr),
+      output_volume_metric_delay_timer_(
+          FROM_HERE,
+          CrasAudioHandler::kMetricsDelayTimerInterval,
+          /*receiver=*/this,
+          &UnifiedVolumeSliderController::RecordVolumeSourceMetric) {}
 
 UnifiedVolumeSliderController::~UnifiedVolumeSliderController() = default;
 
@@ -47,8 +61,9 @@ void UnifiedVolumeSliderController::SetMapDeviceSliderCallbackForTest(
   g_map_slider_device_callback = map_slider_device_callback;
 }
 
-views::View* UnifiedVolumeSliderController::CreateView() {
-  return new UnifiedVolumeView(this, delegate_, /*is_active_output_node=*/true);
+std::unique_ptr<UnifiedSliderView> UnifiedVolumeSliderController::CreateView() {
+  return std::make_unique<UnifiedVolumeView>(this, delegate_,
+                                             /*is_active_output_node=*/true);
 }
 
 QsSliderCatalogName UnifiedVolumeSliderController::GetCatalogName() {
@@ -60,8 +75,9 @@ void UnifiedVolumeSliderController::SliderValueChanged(
     float value,
     float old_value,
     views::SliderChangeReason reason) {
-  if (reason != views::SliderChangeReason::kByUser)
+  if (reason != views::SliderChangeReason::kByUser) {
     return;
+  }
 
   const int level = value * 100;
 
@@ -77,6 +93,8 @@ void UnifiedVolumeSliderController::SliderValueChanged(
       level > CrasAudioHandler::Get()->GetOutputDefaultVolumeMuteThreshold()) {
     CrasAudioHandler::Get()->SetOutputMute(false);
   }
+
+  output_volume_metric_delay_timer_.Reset();
 }
 
 void UnifiedVolumeSliderController::SliderButtonPressed() {
@@ -85,7 +103,14 @@ void UnifiedVolumeSliderController::SliderButtonPressed() {
 
   TrackToggleUMA(/*target_toggle_state=*/mute);
 
-  audio_handler->SetOutputMute(mute);
+  audio_handler->SetOutputMute(
+      mute, CrasAudioHandler::AudioSettingsChangeSource::kSystemTray);
+}
+
+void UnifiedVolumeSliderController::RecordVolumeSourceMetric() {
+  base::UmaHistogramEnumeration(
+      CrasAudioHandler::kOutputVolumeChangedSourceHistogramName,
+      CrasAudioHandler::AudioSettingsChangeSource::kSystemTray);
 }
 
 }  // namespace ash

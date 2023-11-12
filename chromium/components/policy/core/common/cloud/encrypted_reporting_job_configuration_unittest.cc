@@ -5,6 +5,7 @@
 #include "components/policy/core/common/cloud/encrypted_reporting_job_configuration.h"
 
 #include "base/base64.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/scoped_refptr.h"
@@ -114,27 +115,8 @@ class RequestPayloadBuilder {
 
 class ResponseValueBuilder {
  public:
-  static absl::optional<base::Value> CreateUploadFailure(
-      const ::reporting::SequenceInformation& sequence_information) {
-    if (!sequence_information.has_sequencing_id() ||
-        !sequence_information.has_generation_id() ||
-        !sequence_information.has_priority()) {
-      return absl::nullopt;
-    }
-
-    base::Value upload_failure{base::Value::Type::DICT};
-    upload_failure.SetKey(kFailedUploadedRecord,
-                          BuildSequenceInformationValue(sequence_information));
-
-    // Set to internal error (error::INTERNAL == 13).
-    upload_failure.SetIntKey(GetFailureStatusCodePath(), 13);
-    upload_failure.SetStringKey(GetFailureStatusMessagePath(),
-                                "FailingForTests");
-    return upload_failure;
-  }
-
   static base::Value::Dict CreateResponse(
-      const base::Value& sequence_information,
+      const base::Value::Dict& sequence_information,
       absl::optional<base::Value> upload_failure) {
     base::Value::Dict response;
 
@@ -173,18 +155,6 @@ class ResponseValueBuilder {
   }
 
  private:
-  static base::Value BuildSequenceInformationValue(
-      const ::reporting::SequenceInformation& sequence_information) {
-    base::Value sequence_information_value{base::Value::Type::DICT};
-    sequence_information_value.SetIntKey(kSequencingIdKey,
-                                         sequence_information.sequencing_id());
-    sequence_information_value.SetIntKey(kGenerationIdKey,
-                                         sequence_information.generation_id());
-    sequence_information_value.SetIntKey(kPriorityKey,
-                                         sequence_information.priority());
-    return sequence_information_value;
-  }
-
   static std::string GetPath(base::StringPiece base, base::StringPiece leaf) {
     return base::JoinString({base, leaf}, ".");
   }
@@ -243,7 +213,8 @@ class EncryptedReportingJobConfigurationTest : public testing::Test {
   TestUpload CreateTestUpload(const base::Value& record_value) {
     TestUpload test_upload;
     test_upload.response = ResponseValueBuilder::CreateResponse(
-        *record_value.FindDictKey(kSequenceInformationKey), absl::nullopt);
+        *record_value.GetDict().FindDict(kSequenceInformationKey),
+        absl::nullopt);
     test_upload.completion_cb = std::make_unique<StrictMock<MockCompleteCb>>();
     test_upload.configuration =
         std::make_unique<EncryptedReportingJobConfiguration>(
@@ -257,27 +228,26 @@ class EncryptedReportingJobConfigurationTest : public testing::Test {
 
   base::Value GenerateSingleRecord(base::StringPiece encrypted_wrapped_record,
                                    ::reporting::Priority priority = kPriority) {
-    base::Value record_dictionary{base::Value::Type::DICT};
+    base::Value::Dict record_dictionary;
     std::string base64_encode;
     base::Base64Encode(encrypted_wrapped_record, &base64_encode);
-    record_dictionary.SetStringKey(kEncryptedWrappedRecordKey, base64_encode);
+    record_dictionary.Set(kEncryptedWrappedRecordKey, base64_encode);
 
-    base::Value* const sequencing_dictionary = record_dictionary.SetKey(
-        kSequenceInformationKey, base::Value{base::Value::Type::DICT});
-    sequencing_dictionary->SetStringKey(
-        kSequencingIdKey, base::NumberToString(GetNextSequenceId()));
-    sequencing_dictionary->SetStringKey(kGenerationIdKey,
-                                        base::NumberToString(kGenerationId));
-    sequencing_dictionary->SetIntKey(kPriorityKey, priority);
+    base::Value::Dict* const sequencing_dictionary =
+        record_dictionary.EnsureDict(kSequenceInformationKey);
+    sequencing_dictionary->Set(kSequencingIdKey,
+                               base::NumberToString(GetNextSequenceId()));
+    sequencing_dictionary->Set(kGenerationIdKey,
+                               base::NumberToString(kGenerationId));
+    sequencing_dictionary->Set(kPriorityKey, priority);
 
-    base::Value* const encryption_info_dictionary = record_dictionary.SetKey(
-        kEncryptionInfoKey, base::Value{base::Value::Type::DICT});
-    encryption_info_dictionary->SetStringKey(kEncryptionKey,
-                                             kEncryptionKeyValue);
-    encryption_info_dictionary->SetStringKey(
-        kPublicKeyIdKey, base::NumberToString(kPublicKeyIdValue));
+    base::Value::Dict* const encryption_info_dictionary =
+        record_dictionary.EnsureDict(kEncryptionInfoKey);
+    encryption_info_dictionary->Set(kEncryptionKey, kEncryptionKeyValue);
+    encryption_info_dictionary->Set(kPublicKeyIdKey,
+                                    base::NumberToString(kPublicKeyIdValue));
 
-    return record_dictionary;
+    return base::Value(std::move(record_dictionary));
   }
 
   static base::Value::Dict GenerateContext(base::StringPiece key,
@@ -288,9 +258,9 @@ class EncryptedReportingJobConfigurationTest : public testing::Test {
   }
 
   void GetRecordList(EncryptedReportingJobConfiguration* configuration,
-                     base::Value** record_list) {
+                     base::Value::List** record_list) {
     base::Value* const payload = GetPayload(configuration);
-    *record_list = payload->FindListKey(kEncryptedRecordListKey);
+    *record_list = payload->GetDict().FindList(kEncryptedRecordListKey);
     ASSERT_TRUE(*record_list);
   }
 
@@ -347,29 +317,30 @@ TEST_F(EncryptedReportingJobConfigurationTest, ValidatePayload) {
       RequestPayloadBuilder().Build(), kDmToken, kClientId,
       base::BindOnce(&MockCompleteCb::Call, base::Unretained(&completion_cb)));
   auto* payload = GetPayload(&configuration);
+  const base::Value::Dict& payload_dict = payload->GetDict();
   EXPECT_FALSE(GetDeviceName().empty());
-  EXPECT_EQ(
-      *payload->FindStringPath(ReportingJobConfigurationBase::
-                                   DeviceDictionaryBuilder::GetNamePath()),
-      GetDeviceName());
-  EXPECT_EQ(
-      *payload->FindStringPath(ReportingJobConfigurationBase::
-                                   DeviceDictionaryBuilder::GetClientIdPath()),
-      kClientId);
-  EXPECT_EQ(*payload->FindStringPath(
+  EXPECT_EQ(*payload_dict.FindStringByDottedPath(
+                ReportingJobConfigurationBase::DeviceDictionaryBuilder::
+                    GetNamePath()),
+            GetDeviceName());
+  EXPECT_EQ(*payload_dict.FindStringByDottedPath(
+                ReportingJobConfigurationBase::DeviceDictionaryBuilder::
+                    GetClientIdPath()),
+            kClientId);
+  EXPECT_EQ(*payload_dict.FindStringByDottedPath(
                 ReportingJobConfigurationBase::DeviceDictionaryBuilder::
                     GetOSPlatformPath()),
             GetOSPlatform());
-  EXPECT_EQ(
-      *payload->FindStringPath(ReportingJobConfigurationBase::
-                                   DeviceDictionaryBuilder::GetOSVersionPath()),
-      GetOSVersion());
+  EXPECT_EQ(*payload_dict.FindStringByDottedPath(
+                ReportingJobConfigurationBase::DeviceDictionaryBuilder::
+                    GetOSVersionPath()),
+            GetOSVersion());
 
-  EXPECT_EQ(*payload->FindStringPath(
+  EXPECT_EQ(*payload_dict.FindStringByDottedPath(
                 ReportingJobConfigurationBase::BrowserDictionaryBuilder::
                     GetMachineUserPath()),
             GetOSUsername());
-  EXPECT_EQ(*payload->FindStringPath(
+  EXPECT_EQ(*payload_dict.FindStringByDottedPath(
                 ReportingJobConfigurationBase::BrowserDictionaryBuilder::
                     GetChromeVersionPath()),
             version_info::GetVersionNumber());
@@ -389,13 +360,13 @@ TEST_F(EncryptedReportingJobConfigurationTest, CorrectlyAddEncryptedRecord) {
       kClientId,
       base::BindOnce(&MockCompleteCb::Call, base::Unretained(&completion_cb)));
 
-  base::Value* record_list = nullptr;
+  base::Value::List* record_list = nullptr;
   GetRecordList(&configuration, &record_list);
-  EXPECT_EQ(record_list->GetList().size(), 1u);
-  EXPECT_EQ(record_list->GetList()[0], record_value);
+  EXPECT_EQ(record_list->size(), 1u);
+  EXPECT_EQ((*record_list)[0], record_value);
 
   std::string* encrypted_wrapped_record =
-      record_list->GetList()[0].FindStringKey(kEncryptedWrappedRecordKey);
+      (*record_list)[0].GetDict().FindString(kEncryptedWrappedRecordKey);
   ASSERT_THAT(encrypted_wrapped_record, NotNull());
 
   std::string decoded_record;
@@ -421,14 +392,14 @@ TEST_F(EncryptedReportingJobConfigurationTest, CorrectlyAddsMultipleRecords) {
       builder.Build(), kDmToken, kClientId,
       base::BindOnce(&MockCompleteCb::Call, base::Unretained(&completion_cb)));
 
-  base::Value* record_list = nullptr;
+  base::Value::List* record_list = nullptr;
   GetRecordList(&configuration, &record_list);
 
-  EXPECT_EQ(record_list->GetList().size(), records.size());
+  EXPECT_EQ(record_list->size(), records.size());
 
   size_t counter = 0;
   for (const auto& record : records) {
-    EXPECT_EQ(record_list->GetList()[counter++], record);
+    EXPECT_EQ((*record_list)[counter++], record);
   }
 
   EXPECT_FALSE(GetAttachEncryptionSettings(&configuration));
@@ -446,10 +417,10 @@ TEST_F(EncryptedReportingJobConfigurationTest,
       builder.Build(), kDmToken, kClientId,
       base::BindOnce(&MockCompleteCb::Call, base::Unretained(&completion_cb)));
 
-  base::Value* record_list = nullptr;
+  base::Value::List* record_list = nullptr;
   GetRecordList(&configuration, &record_list);
 
-  EXPECT_TRUE(record_list->GetList().empty());
+  EXPECT_TRUE(record_list->empty());
 
   EXPECT_TRUE(GetAttachEncryptionSettings(&configuration));
 }
@@ -472,14 +443,14 @@ TEST_F(EncryptedReportingJobConfigurationTest,
       builder.Build(), kDmToken, kClientId,
       base::BindOnce(&MockCompleteCb::Call, base::Unretained(&completion_cb)));
 
-  base::Value* record_list = nullptr;
+  base::Value::List* record_list = nullptr;
   GetRecordList(&configuration, &record_list);
 
-  EXPECT_EQ(record_list->GetList().size(), records.size());
+  EXPECT_EQ(record_list->size(), records.size());
 
   size_t counter = 0;
   for (const auto& record : records) {
-    EXPECT_EQ(record_list->GetList()[counter++], record);
+    EXPECT_EQ((*record_list)[counter++], record);
   }
 
   EXPECT_TRUE(GetAttachEncryptionSettings(&configuration));
@@ -501,7 +472,9 @@ TEST_F(EncryptedReportingJobConfigurationTest, CorrectlyAddsAndUpdatesContext) {
 
   // Ensure the payload includes the path and value.
   base::Value* payload = GetPayload(&configuration);
-  std::string* good_result = payload->FindStringPath(kTestKey);
+  const base::Value::Dict& payload_dict = payload->GetDict();
+  const std::string* good_result =
+      payload_dict.FindStringByDottedPath(kTestKey);
   ASSERT_THAT(good_result, NotNull());
   EXPECT_THAT(*good_result, StrEq(kTestValue));
 
@@ -512,11 +485,12 @@ TEST_F(EncryptedReportingJobConfigurationTest, CorrectlyAddsAndUpdatesContext) {
 
   // Ensure that the path is removed from the payload.
   payload = GetPayload(&configuration);
-  const std::string* bad_result = payload->FindStringPath(kBadTestKey);
+  const std::string* bad_result =
+      payload_dict.FindStringByDottedPath(kBadTestKey);
   EXPECT_THAT(bad_result, IsNull());
 
   // Ensure that adding a bad path hasn't destroyed the good path.
-  good_result = payload->FindStringPath(kTestKey);
+  good_result = payload_dict.FindStringByDottedPath(kTestKey);
   EXPECT_THAT(good_result, NotNull());
   EXPECT_EQ(*good_result, kTestValue);
 
@@ -525,7 +499,7 @@ TEST_F(EncryptedReportingJobConfigurationTest, CorrectlyAddsAndUpdatesContext) {
   context = GenerateContext(kTestKey, kUpdatedTestValue);
   configuration.UpdateContext(std::move(context));
   payload = GetPayload(&configuration);
-  good_result = payload->FindStringPath(kTestKey);
+  good_result = payload_dict.FindStringByDottedPath(kTestKey);
   ASSERT_THAT(good_result, NotNull());
   EXPECT_EQ(*good_result, kUpdatedTestValue);
 }
@@ -716,5 +690,13 @@ TEST_F(EncryptedReportingJobConfigurationTest, FailedUploadsSequenceThrottled) {
         DeviceManagementService::kInvalidAuthCookieOrDMToken,
         ResponseValueBuilder::CreateResponseString(upload.response));
   }
+}
+
+TEST_F(EncryptedReportingJobConfigurationTest, UmaName) {
+  EncryptedReportingJobConfiguration configuration(
+      shared_url_loader_factory_, DMAuth::FromDMToken(kDmToken), kServerUrl,
+      RequestPayloadBuilder().Build(), kDmToken, kClientId, base::DoNothing());
+
+  EXPECT_EQ(configuration.GetUmaName(), "Browser.ERP.UploadEncryptedReport");
 }
 }  // namespace policy

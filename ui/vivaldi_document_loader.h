@@ -37,7 +37,7 @@ class VivaldiDocumentLoader : protected content::WebContentsDelegate,
       content::NavigationHandle* navigation_handle) override;
 
   std::unique_ptr<content::WebContents> vivaldi_web_contents_;
-  const extensions::Extension* vivaldi_extension_;
+  const raw_ptr<const extensions::Extension> vivaldi_extension_;
 
   // Timers.
   base::TimeTicks start_time_;

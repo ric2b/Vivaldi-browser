@@ -313,6 +313,11 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.primary_pointer_type;
   }
 
+  static blink::mojom::OutputDeviceUpdateAbilityType
+  output_device_update_ability_type(const blink::web_pref::WebPreferences& r) {
+    return r.output_device_update_ability_type;
+  }
+
   static uint32_t available_hover_types(
       const blink::web_pref::WebPreferences& r) {
     return r.available_hover_types;
@@ -683,6 +688,16 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
   static blink::mojom::AutoplayPolicy autoplay_policy(
       const blink::web_pref::WebPreferences& r) {
     return r.autoplay_policy;
+  }
+
+  static bool require_transient_activation_for_get_display_media(
+      const blink::web_pref::WebPreferences& r) {
+    return r.require_transient_activation_for_get_display_media;
+  }
+
+  static bool require_transient_activation_for_show_file_or_directory_picker(
+      const blink::web_pref::WebPreferences& r) {
+    return r.require_transient_activation_for_show_file_or_directory_picker;
   }
 
   static blink::mojom::PreferredColorScheme preferred_color_scheme(

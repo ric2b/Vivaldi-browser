@@ -55,9 +55,9 @@ class VIEWS_EXPORT VideoProgress : public views::View {
 
   void HandleSeeking(const gfx::Point& location);
 
-  views::ProgressBar* progress_bar_;
-  views::Label* progress_time_;
-  views::Label* duration_;
+  raw_ptr<views::ProgressBar> progress_bar_;
+  raw_ptr<views::Label> progress_time_;
+  raw_ptr<views::Label> duration_;
   base::TimeDelta duration_delta_;
   // Do we allow clicking to seek. Might be false for indetermined duration
   // videos such as streams.

@@ -18,10 +18,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/chromium_strings.h"
-#include "components/crash/core/app/breakpad_linux.h"
-#include "components/crash/core/app/crashpad.h"
-#include "components/metrics/metrics_service.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "device/bluetooth/dbus/bluez_dbus_thread_manager.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -43,8 +40,8 @@
 #include "base/linux_util.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
-#include "components/os_crypt/key_storage_config_linux.h"
-#include "components/os_crypt/os_crypt.h"
+#include "components/os_crypt/sync/key_storage_config_linux.h"
+#include "components/os_crypt/sync/os_crypt.h"
 #include "content/public/browser/browser_thread.h"
 #endif
 

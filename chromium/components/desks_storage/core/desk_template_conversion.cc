@@ -5,7 +5,6 @@
 #include "components/desks_storage/core/desk_template_conversion.h"
 
 #include "base/containers/fixed_flat_set.h"
-#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/values_util.h"
 #include "base/notreached.h"
@@ -13,6 +12,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "components/app_constants/constants.h"
 #include "components/app_restore/app_launch_info.h"
@@ -171,50 +171,37 @@ constexpr auto kValidTabGroupColors = base::MakeFixedFlatSet<base::StringPiece>(
 constexpr int kVersionNum = 1;
 
 // Conversion to desk methods.
-bool GetString(const base::Value* dict, const char* key, std::string* out) {
-  const base::Value* value =
-      dict->FindKeyOfType(key, base::Value::Type::STRING);
+bool GetString(const base::Value::Dict& dict,
+               const char* key,
+               std::string* out) {
+  const std::string* value = dict.FindString(key);
   if (!value)
     return false;
 
-  *out = value->GetString();
+  *out = *value;
   return true;
 }
 
-bool GetString(const base::Value& dict, const char* key, std::string* out) {
-  return GetString(&dict, key, out);
-}
-
-bool GetInt(const base::Value* dict, const char* key, int* out) {
-  const base::Value* value =
-      dict->FindKeyOfType(key, base::Value::Type::INTEGER);
+bool GetInt(const base::Value::Dict& dict, const char* key, int* out) {
+  absl::optional<int> value = dict.FindInt(key);
   if (!value)
     return false;
 
-  *out = value->GetInt();
+  *out = *value;
   return true;
 }
 
-bool GetInt(const base::Value& dict, const char* key, int* out) {
-  return GetInt(&dict, key, out);
-}
-
-bool GetBool(const base::Value* dict, const char* key, bool* out) {
-  const base::Value* value =
-      dict->FindKeyOfType(key, base::Value::Type::BOOLEAN);
+bool GetBool(const base::Value::Dict& dict, const char* key, bool* out) {
+  absl::optional<bool> value = dict.FindBool(key);
   if (!value)
     return false;
 
-  *out = value->GetBool();
+  *out = *value;
   return true;
-}
-
-bool GetBool(const base::Value& dict, const char* key, bool* out) {
-  return GetBool(&dict, key, out);
 }
 
 // Get App ID from App proto.
-std::string GetJsonAppId(const base::Value& app) {
+std::string GetJsonAppId(const base::Value::Dict& app) {
   std::string app_type;
   if (!GetString(app, kAppType, &app_type))
     return std::string();  // App Type must be specified.
@@ -247,20 +234,21 @@ std::string GetJsonAppId(const base::Value& app) {
   return std::string();
 }
 
-// Convert a TabGroupInfo object to a base::Value dictionary.
-base::Value ConvertTabGroupInfoToValue(
+// Convert a TabGroupInfo object to a base::Value::Dict.
+base::Value::Dict ConvertTabGroupInfoToDict(
     const tab_groups::TabGroupInfo& group_info) {
-  base::Value tab_group_dict(base::Value::Type::DICT);
+  base::Value::Dict tab_group_dict;
 
-  tab_group_dict.SetIntKey(kTabRangeFirstIndex, group_info.tab_range.start());
-  tab_group_dict.SetIntKey(kTabRangeLastIndex, group_info.tab_range.end());
-  tab_group_dict.SetStringKey(
-      kTabGroupTitleKey, base::UTF16ToUTF8(group_info.visual_data.title()));
-  tab_group_dict.SetStringKey(
-      kTabGroupColorKey,
-      tab_groups::TabGroupColorToString(group_info.visual_data.color()));
-  tab_group_dict.SetBoolKey(kTabGroupIsCollapsed,
-                            group_info.visual_data.is_collapsed());
+  tab_group_dict.Set(kTabRangeFirstIndex,
+                     static_cast<int>(group_info.tab_range.start()));
+  tab_group_dict.Set(kTabRangeLastIndex,
+                     static_cast<int>(group_info.tab_range.end()));
+  tab_group_dict.Set(kTabGroupTitleKey,
+                     base::UTF16ToUTF8(group_info.visual_data.title()));
+  tab_group_dict.Set(kTabGroupColorKey, tab_groups::TabGroupColorToString(
+                                            group_info.visual_data.color()));
+  tab_group_dict.Set(kTabGroupIsCollapsed,
+                     group_info.visual_data.is_collapsed());
 
   return tab_group_dict;
 }
@@ -301,8 +289,8 @@ GroupColor ConvertGroupColorStringToGroupColor(const std::string& group_color) {
 // Constructs a GroupVisualData from value `group_visual_data` IFF all fields
 // are present and valid in the value parameter.  Returns true on success, false
 // on failure.
-bool MakeTabGroupVisualDataFromValue(
-    const base::Value& tab_group,
+bool MakeTabGroupVisualDataFromDict(
+    const base::Value::Dict& tab_group,
     tab_groups::TabGroupVisualData* out_visual_data) {
   std::string tab_group_title;
   std::string group_color_string;
@@ -323,8 +311,8 @@ bool MakeTabGroupVisualDataFromValue(
 // Constructs a gfx::Range from value `group_range` IFF all fields are
 // present and valid in the value parameter.  Returns true on success, false on
 // failure.
-bool MakeTabGroupRangeFromValue(const base::Value& tab_group,
-                                gfx::Range* out_range) {
+bool MakeTabGroupRangeFromDict(const base::Value::Dict& tab_group,
+                               gfx::Range* out_range) {
   int32_t range_start;
   int32_t range_end;
   if (GetInt(tab_group, kTabRangeFirstIndex, &range_start) &&
@@ -339,13 +327,13 @@ bool MakeTabGroupRangeFromValue(const base::Value& tab_group,
 // Constructs a TabGroupInfo from `tab_group` IFF all fields are present
 // and valid in the value parameter. Returns true on success, false on failure.
 absl::optional<tab_groups::TabGroupInfo> MakeTabGroupInfoFromDict(
-    const base::Value& tab_group) {
+    const base::Value::Dict& tab_group) {
   absl::optional<tab_groups::TabGroupInfo> tab_group_info = absl::nullopt;
 
   tab_groups::TabGroupVisualData visual_data;
   gfx::Range range;
-  if (MakeTabGroupRangeFromValue(tab_group, &range) &&
-      MakeTabGroupVisualDataFromValue(tab_group, &visual_data)) {
+  if (MakeTabGroupRangeFromDict(tab_group, &range) &&
+      MakeTabGroupVisualDataFromDict(tab_group, &visual_data)) {
     tab_group_info.emplace(range, visual_data);
   }
 
@@ -418,7 +406,7 @@ int32_t StringToWindowOpenDisposition(const std::string& disposition) {
 
 // Convert App JSON to `app_restore::AppLaunchInfo`.
 std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
-    const base::Value& app) {
+    const base::Value::Dict& app) {
   int32_t window_id;
   if (!GetInt(app, kWindowId, &window_id))
     return nullptr;
@@ -479,27 +467,24 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
       app_launch_info->first_non_pinned_tab_index = first_non_pinned_tab_index;
 
     // Fill in the URL list
-    app_launch_info->urls.emplace();
-    const base::Value* tabs = app.FindKeyOfType(kTabs, base::Value::Type::LIST);
+    const base::Value::List* tabs = app.FindList(kTabs);
     if (tabs) {
-      for (auto& tab : tabs->GetList()) {
+      for (auto& tab : *tabs) {
         std::string url;
-        if (GetString(tab, kTabUrl, &url)) {
-          app_launch_info->urls.value().emplace_back(url);
+        if (GetString(tab.GetDict(), kTabUrl, &url)) {
+          app_launch_info->urls.emplace_back(url);
         }
       }
     }
 
     // Fill the tab groups
-    app_launch_info->tab_group_infos.emplace();
-    const base::Value* tab_groups =
-        app.FindKeyOfType(kTabGroups, base::Value::Type::LIST);
+    const base::Value::List* tab_groups = app.FindList(kTabGroups);
     if (tab_groups) {
-      for (auto& tab : tab_groups->GetList()) {
+      for (auto& tab : *tab_groups) {
         absl::optional<tab_groups::TabGroupInfo> tab_group =
-            MakeTabGroupInfoFromDict(tab);
+            MakeTabGroupInfoFromDict(tab.GetDict());
         if (tab_group.has_value()) {
-          app_launch_info->tab_group_infos->push_back(
+          app_launch_info->tab_group_infos.push_back(
               std::move(tab_group.value()));
         }
       }
@@ -561,38 +546,40 @@ chromeos::WindowStateType ToChromeOsWindowState(
 }
 
 void FillArcExtraWindowInfoFromJson(
-    const base::Value& app,
+    const base::Value::Dict& app,
     app_restore::WindowInfo::ArcExtraInfo* out_window_info) {
-  const base::Value* bounds_in_root = app.FindDictKey(kBoundsInRoot);
+  const base::Value::Dict* bounds_in_root = app.FindDict(kBoundsInRoot);
   int top;
   int left;
   int bounds_width;
   int bounds_height;
-  if (bounds_in_root && GetInt(bounds_in_root, kWindowBoundTop, &top) &&
-      GetInt(bounds_in_root, kWindowBoundLeft, &left) &&
-      GetInt(bounds_in_root, kWindowBoundWidth, &bounds_width) &&
-      GetInt(bounds_in_root, kWindowBoundHeight, &bounds_height))
+  if (bounds_in_root && GetInt(*bounds_in_root, kWindowBoundTop, &top) &&
+      GetInt(*bounds_in_root, kWindowBoundLeft, &left) &&
+      GetInt(*bounds_in_root, kWindowBoundWidth, &bounds_width) &&
+      GetInt(*bounds_in_root, kWindowBoundHeight, &bounds_height)) {
     out_window_info->bounds_in_root.emplace(left, top, bounds_width,
                                             bounds_height);
+  }
 
-  const base::Value* maximum_size = app.FindDictKey(kMaximumSize);
+  const base::Value::Dict* maximum_size = app.FindDict(kMaximumSize);
   int max_width;
   int max_height;
-  if (maximum_size && GetInt(maximum_size, kSizeWidth, &max_width) &&
-      GetInt(maximum_size, kSizeHeight, &max_height))
+  if (maximum_size && GetInt(*maximum_size, kSizeWidth, &max_width) &&
+      GetInt(*maximum_size, kSizeHeight, &max_height)) {
     out_window_info->maximum_size.emplace(max_width, max_height);
+  }
 
-  const base::Value* minimum_size = app.FindDictKey(kMinimumSize);
+  const base::Value::Dict* minimum_size = app.FindDict(kMinimumSize);
   int min_width;
   int min_height;
-  if (minimum_size && GetInt(minimum_size, kSizeWidth, &min_width) &&
-      GetInt(minimum_size, kSizeHeight, &min_height)) {
+  if (minimum_size && GetInt(*minimum_size, kSizeWidth, &min_width) &&
+      GetInt(*minimum_size, kSizeHeight, &min_height)) {
     out_window_info->minimum_size.emplace(min_width, min_height);
   }
 }
 
 // Fill `out_window_info` with information from JSON `app`.
-void FillWindowInfoFromJson(const base::Value& app,
+void FillWindowInfoFromJson(const base::Value::Dict& app,
                             app_restore::WindowInfo* out_window_info) {
   std::string window_state;
   chromeos::WindowStateType cros_window_state =
@@ -609,15 +596,15 @@ void FillWindowInfoFromJson(const base::Value& app,
                                    &out_window_info->arc_extra_info.emplace());
   }
 
-  const base::Value* window_bound = app.FindDictKey(kWindowBound);
+  const base::Value::Dict* window_bound = app.FindDict(kWindowBound);
   int top;
   int left;
   int width;
   int height;
-  if (window_bound && GetInt(window_bound, kWindowBoundTop, &top) &&
-      GetInt(window_bound, kWindowBoundLeft, &left) &&
-      GetInt(window_bound, kWindowBoundWidth, &width) &&
-      GetInt(window_bound, kWindowBoundHeight, &height)) {
+  if (window_bound && GetInt(*window_bound, kWindowBoundTop, &top) &&
+      GetInt(*window_bound, kWindowBoundLeft, &left) &&
+      GetInt(*window_bound, kWindowBoundWidth, &width) &&
+      GetInt(*window_bound, kWindowBoundHeight, &height)) {
     out_window_info->current_bounds.emplace(left, top, width, height);
   }
 
@@ -651,27 +638,29 @@ void FillWindowInfoFromJson(const base::Value& app,
 
 // Convert a desk template to `app_restore::RestoreData`.
 std::unique_ptr<app_restore::RestoreData> ConvertJsonToRestoreData(
-    const base::Value* desk) {
+    const base::Value::Dict* desk) {
   std::unique_ptr<app_restore::RestoreData> restore_data =
       std::make_unique<app_restore::RestoreData>();
 
-  const base::Value* apps = desk->FindListKey(kApps);
+  const base::Value::List* apps = desk->FindList(kApps);
   if (apps) {
-    for (const auto& app : apps->GetList()) {
+    for (const auto& app : *apps) {
+      const base::Value::Dict& app_dict = app.GetDict();
       std::unique_ptr<app_restore::AppLaunchInfo> app_launch_info =
-          ConvertJsonToAppLaunchInfo(app);
+          ConvertJsonToAppLaunchInfo(app_dict);
       if (!app_launch_info)
         continue;  // Skip unsupported app.
 
       int window_id;
-      if (!GetInt(app, kWindowId, &window_id))
+      if (!GetInt(app_dict, kWindowId, &window_id)) {
         return nullptr;
+      }
 
       const std::string app_id = app_launch_info->app_id;
       restore_data->AddAppLaunchInfo(std::move(app_launch_info));
 
       app_restore::WindowInfo app_window_info;
-      FillWindowInfoFromJson(app, &app_window_info);
+      FillWindowInfoFromJson(app_dict, &app_window_info);
 
       restore_data->ModifyWindowInfo(app_id, window_id, app_window_info);
     }
@@ -682,22 +671,22 @@ std::unique_ptr<app_restore::RestoreData> ConvertJsonToRestoreData(
 
 // Conversion to value methods.
 
-base::Value ConvertWindowBoundToValue(const gfx::Rect& rect) {
-  base::Value rectangle_value(base::Value::Type::DICT);
+base::Value::Dict ConvertWindowBoundToValue(const gfx::Rect& rect) {
+  base::Value::Dict rectangle_value;
 
-  rectangle_value.SetKey(kWindowBoundTop, base::Value(rect.y()));
-  rectangle_value.SetKey(kWindowBoundLeft, base::Value(rect.x()));
-  rectangle_value.SetKey(kWindowBoundHeight, base::Value(rect.height()));
-  rectangle_value.SetKey(kWindowBoundWidth, base::Value(rect.width()));
+  rectangle_value.Set(kWindowBoundTop, base::Value(rect.y()));
+  rectangle_value.Set(kWindowBoundLeft, base::Value(rect.x()));
+  rectangle_value.Set(kWindowBoundHeight, base::Value(rect.height()));
+  rectangle_value.Set(kWindowBoundWidth, base::Value(rect.width()));
 
   return rectangle_value;
 }
 
-base::Value ConvertSizeToValue(const gfx::Size& size) {
-  base::Value size_value(base::Value::Type::DICT);
+base::Value::Dict ConvertSizeToValue(const gfx::Size& size) {
+  base::Value::Dict size_value;
 
-  size_value.SetKey(kSizeWidth, base::Value(size.width()));
-  size_value.SetKey(kSizeHeight, base::Value(size.height()));
+  size_value.Set(kSizeWidth, base::Value(size.width()));
+  size_value.Set(kSizeHeight, base::Value(size.height()));
 
   return size_value;
 }
@@ -898,14 +887,15 @@ base::Value ConvertWindowToDeskApp(const std::string& app_id,
 
   app_data.Set(kAppType, app_type);
 
-  if (app->urls.has_value())
-    app_data.Set(kTabs, ConvertURLsToBrowserAppTabValues(app->urls.value()));
+  if (!app->urls.empty()) {
+    app_data.Set(kTabs, ConvertURLsToBrowserAppTabValues(app->urls));
+  }
 
-  if (app->tab_group_infos.has_value()) {
+  if (!app->tab_group_infos.empty()) {
     base::Value::List tab_groups_value;
 
-    for (const auto& tab_group : app->tab_group_infos.value()) {
-      tab_groups_value.Append(ConvertTabGroupInfoToValue(tab_group));
+    for (const auto& tab_group : app->tab_group_infos) {
+      tab_groups_value.Append(ConvertTabGroupInfoToDict(tab_group));
     }
 
     app_data.Set(kTabGroups, std::move(tab_groups_value));
@@ -1245,14 +1235,11 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertToAppLaunchInfo(
             app.app().browser_app_window().active_tab_index();
       }
 
-      app_launch_info->urls.emplace();
-      FillUrlList(app.app().browser_app_window(),
-                  &app_launch_info->urls.value());
+      FillUrlList(app.app().browser_app_window(), &app_launch_info->urls);
 
       if (app.app().browser_app_window().tab_groups_size() > 0) {
-        app_launch_info->tab_group_infos.emplace();
         FillTabGroupInfosFromProto(app.app().browser_app_window(),
-                                   &app_launch_info->tab_group_infos.value());
+                                   &app_launch_info->tab_group_infos);
       }
 
       if (app.app().browser_app_window().has_show_as_app()) {
@@ -1478,8 +1465,9 @@ void FillBrowserAppTabs(const std::vector<GURL>& gurls,
 // `app_restore_data`.
 void FillBrowserAppWindow(const app_restore::AppRestoreData* app_restore_data,
                           BrowserAppWindow* out_browser_app_window) {
-  if (app_restore_data->urls.has_value())
-    FillBrowserAppTabs(app_restore_data->urls.value(), out_browser_app_window);
+  if (!app_restore_data->urls.empty()) {
+    FillBrowserAppTabs(app_restore_data->urls, out_browser_app_window);
+  }
 
   if (app_restore_data->active_tab_index.has_value()) {
     out_browser_app_window->set_active_tab_index(
@@ -1491,8 +1479,8 @@ void FillBrowserAppWindow(const app_restore::AppRestoreData* app_restore_data,
         app_restore_data->app_type_browser.value());
   }
 
-  if (app_restore_data->tab_group_infos.has_value()) {
-    FillBrowserAppTabGroupInfos(app_restore_data->tab_group_infos.value(),
+  if (!app_restore_data->tab_group_infos.empty()) {
+    FillBrowserAppTabGroupInfos(app_restore_data->tab_group_infos,
                                 out_browser_app_window);
   }
 
@@ -1941,6 +1929,8 @@ std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromSource(
   if (!policy_json.is_dict())
     return nullptr;
 
+  const base::Value::Dict& policy_json_dict = policy_json.GetDict();
+
   int version;
   std::string uuid_str;
   std::string name;
@@ -1948,25 +1938,26 @@ std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromSource(
   std::string updated_time_usec_str;
   int64_t created_time_usec;
   int64_t updated_time_usec;
-  const base::Value* desk = policy_json.FindDictKey(kDesk);
-  if (!desk || !GetInt(policy_json, kVersion, &version) ||
-      !GetString(policy_json, kUuid, &uuid_str) ||
-      !GetString(policy_json, kName, &name) ||
-      !GetString(policy_json, kCreatedTime, &created_time_usec_str) ||
+  const base::Value::Dict* desk = policy_json_dict.FindDict(kDesk);
+  if (!desk || !GetInt(policy_json_dict, kVersion, &version) ||
+      !GetString(policy_json_dict, kUuid, &uuid_str) ||
+      !GetString(policy_json_dict, kName, &name) ||
+      !GetString(policy_json_dict, kCreatedTime, &created_time_usec_str) ||
       !base::StringToInt64(created_time_usec_str, &created_time_usec) ||
-      !GetString(policy_json, kUpdatedTime, &updated_time_usec_str) ||
+      !GetString(policy_json_dict, kUpdatedTime, &updated_time_usec_str) ||
       !base::StringToInt64(updated_time_usec_str, &updated_time_usec) ||
       name.empty() || created_time_usec_str.empty() ||
-      updated_time_usec_str.empty())
+      updated_time_usec_str.empty()) {
     return nullptr;
+  }
 
-  base::GUID uuid = base::GUID::ParseCaseInsensitive(uuid_str);
+  base::Uuid uuid = base::Uuid::ParseCaseInsensitive(uuid_str);
   if (!uuid.is_valid())
     return nullptr;
 
   // Set default value for the desk type to template.
   std::string desk_type_string;
-  if (!GetString(policy_json, kDeskType, &desk_type_string)) {
+  if (!GetString(policy_json_dict, kDeskType, &desk_type_string)) {
     desk_type_string = kDeskTypeTemplate;
   } else if (!IsValidDeskTemplateType(desk_type_string)) {
     return nullptr;
@@ -1988,24 +1979,23 @@ std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromSource(
 
 base::Value SerializeDeskTemplateAsPolicy(const ash::DeskTemplate* desk,
                                           apps::AppRegistryCache* app_cache) {
-  base::Value desk_dict(base::Value::Type::DICT);
-  desk_dict.SetKey(kVersion, base::Value(kVersionNum));
-  desk_dict.SetKey(kUuid, base::Value(desk->uuid().AsLowercaseString()));
-  desk_dict.SetKey(kName, base::Value(desk->template_name()));
-  desk_dict.SetKey(kCreatedTime, base::TimeToValue(desk->created_time()));
-  desk_dict.SetKey(kUpdatedTime, base::TimeToValue(desk->GetLastUpdatedTime()));
-  desk_dict.SetKey(kDeskType,
-                   base::Value(SerializeDeskTypeAsString(desk->type())));
+  base::Value::Dict desk_dict;
+  desk_dict.Set(kVersion, kVersionNum);
+  desk_dict.Set(kUuid, desk->uuid().AsLowercaseString());
+  desk_dict.Set(kName, desk->template_name());
+  desk_dict.Set(kCreatedTime, base::TimeToValue(desk->created_time()));
+  desk_dict.Set(kUpdatedTime, base::TimeToValue(desk->GetLastUpdatedTime()));
+  desk_dict.Set(kDeskType, SerializeDeskTypeAsString(desk->type()));
 
-  desk_dict.SetKey(
+  desk_dict.Set(
       kDesk, ConvertRestoreDataToValue(desk->desk_restore_data(), app_cache));
 
-  return desk_dict;
+  return base::Value(std::move(desk_dict));
 }
 
 std::unique_ptr<DeskTemplate> FromSyncProto(
     const sync_pb::WorkspaceDeskSpecifics& pb_entry) {
-  base::GUID uuid = base::GUID::ParseCaseInsensitive(pb_entry.uuid());
+  base::Uuid uuid = base::Uuid::ParseCaseInsensitive(pb_entry.uuid());
   if (!uuid.is_valid())
     return nullptr;
 

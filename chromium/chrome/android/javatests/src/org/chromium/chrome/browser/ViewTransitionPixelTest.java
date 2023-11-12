@@ -7,9 +7,9 @@ package org.chromium.chrome.browser;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.support.test.InstrumentationRegistry;
 import android.text.TextUtils;
 
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matchers;
@@ -79,7 +79,8 @@ public class ViewTransitionPixelTest {
 
     @Before
     public void setUp() {
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
     }
 
     @After
@@ -166,8 +167,6 @@ public class ViewTransitionPixelTest {
 
         double keyboardHeight = getKeyboardHeightDp();
 
-        // Use less than or equal since the keyboard may actually include accessories like the
-        // Autofill bar.
         if (mVirtualKeyboardMode == VirtualKeyboardMode.RESIZES_VISUAL) {
             assertWaitForVisualViewportHeight(mInitialVVHeight - keyboardHeight);
         } else if (mVirtualKeyboardMode == VirtualKeyboardMode.RESIZES_CONTENT) {
@@ -204,7 +203,7 @@ public class ViewTransitionPixelTest {
     }
 
     private Bitmap takeScreenshot() throws Throwable {
-        Context context = InstrumentationRegistry.getContext();
+        Context context = ApplicationProvider.getApplicationContext();
 
         final CallbackHelper ch = new CallbackHelper();
         final AtomicReference<String> screenshotOutputPath = new AtomicReference<>();

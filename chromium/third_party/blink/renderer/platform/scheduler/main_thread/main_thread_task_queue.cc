@@ -112,17 +112,18 @@ bool MainThreadTaskQueue::IsPerFrameTaskQueue(
 }
 
 MainThreadTaskQueue::MainThreadTaskQueue(
-    std::unique_ptr<base::sequence_manager::internal::TaskQueueImpl> impl,
+    base::sequence_manager::SequenceManager& sequence_manager,
     const TaskQueue::Spec& spec,
     const QueueCreationParams& params,
     MainThreadSchedulerImpl* main_thread_scheduler)
-    : queue_type_(params.queue_type),
+    : task_queue_(sequence_manager.CreateTaskQueue(spec)),
+      queue_type_(params.queue_type),
       queue_traits_(params.queue_traits),
+      web_scheduling_queue_type_(params.web_scheduling_queue_type),
       web_scheduling_priority_(params.web_scheduling_priority),
       main_thread_scheduler_(main_thread_scheduler),
       agent_group_scheduler_(params.agent_group_scheduler),
       frame_scheduler_(params.frame_scheduler) {
-  task_queue_ = base::MakeRefCounted<TaskQueue>(std::move(impl), spec);
   task_runner_with_default_task_type_ =
       base::FeatureList::IsEnabled(
           features::kUseBlinkSchedulerTaskRunnerWithCustomDeleter)
@@ -131,12 +132,15 @@ MainThreadTaskQueue::MainThreadTaskQueue(
   // Throttling needs |should_notify_observers| to get task timing.
   DCHECK(!params.queue_traits.can_be_throttled || spec.should_notify_observers)
       << "Throttled queue is not supported with |!should_notify_observers|";
+  DCHECK_EQ(web_scheduling_priority_.has_value(),
+            web_scheduling_queue_type_.has_value());
+  DCHECK_EQ(web_scheduling_priority_.has_value(),
+            queue_type_ == QueueType::kWebScheduling);
   if (task_queue_->HasImpl() && spec.should_notify_observers) {
     if (params.queue_traits.can_be_throttled) {
       throttler_.emplace(task_queue_.get(),
                          main_thread_scheduler_->GetTickClock());
     }
-    // TaskQueueImpl may be null for tests.
     // TODO(scheduler-dev): Consider mapping directly to
     // MainThreadSchedulerImpl::OnTaskStarted/Completed. At the moment this
     // is not possible due to task queue being created inside
@@ -278,11 +282,6 @@ void MainThreadTaskQueue::SetWebSchedulingPriority(
 
 void MainThreadTaskQueue::OnWebSchedulingTaskQueueDestroyed() {
   frame_scheduler_->OnWebSchedulingTaskQueueDestroyed(this);
-}
-
-absl::optional<WebSchedulingPriority>
-MainThreadTaskQueue::web_scheduling_priority() const {
-  return web_scheduling_priority_;
 }
 
 bool MainThreadTaskQueue::IsThrottled() const {

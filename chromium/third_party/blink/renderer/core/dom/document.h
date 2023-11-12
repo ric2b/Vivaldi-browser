@@ -548,7 +548,6 @@ class CORE_EXPORT Document : public ContainerNode,
   HTMLCollection* WindowNamedItems(const AtomicString& name);
   DocumentNameCollection* DocumentNamedItems(const AtomicString& name);
   HTMLCollection* DocumentAllNamedItems(const AtomicString& name);
-  HTMLCollection* PopoverInvokers();
 
   // The unassociated listed elements are listed elements that are not
   // associated to a <form> element.
@@ -757,7 +756,10 @@ class CORE_EXPORT Document : public ContainerNode,
   // AXContexts are deleted, the AXObjectCache will be removed.
   AXObjectCache* ExistingAXObjectCache() const;
   Document& AXObjectCacheOwner() const;
-  void ClearAXObjectCache();
+  // If there is an accessibility tree, recompute it and re-serialize it all.
+  // This method is useful when something that potentially affects most of the
+  // page occurs, such as an inertness change or a fullscreen toggle.
+  void RefreshAccessibilityTree() const;
 
   // to get visually ordered hebrew and arabic pages right
   bool VisuallyOrdered() const { return visually_ordered_; }
@@ -1197,11 +1199,8 @@ class CORE_EXPORT Document : public ContainerNode,
   // may otherwise be blocked.
   ScriptPromise hasStorageAccess(ScriptState* script_state);
   ScriptPromise requestStorageAccess(ScriptState* script_state);
-  ScriptPromise requestStorageAccessForOrigin(ScriptState* script_state,
-                                              const AtomicString& site);
-  // Returns whether the window has obtained storage access. Must be called on
-  // active documents.
-  bool HasStorageAccess() const;
+  ScriptPromise requestStorageAccessFor(ScriptState* script_state,
+                                        const AtomicString& site);
 
   // Fragment directive API, currently used to feature detect text-fragments.
   // https://wicg.github.io/scroll-to-text-fragment/#feature-detectability
@@ -1214,7 +1213,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // service is unavailable).
   ScriptPromise hasPrivateToken(ScriptState* script_state,
                                 const String& issuer,
-                                const String& type,
                                 ExceptionState&);
 
   // Sends a query via Mojo to ask whether the user has a redemption record.
@@ -1224,7 +1222,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // is unavailable).
   ScriptPromise hasRedemptionRecord(ScriptState* script_state,
                                     const String& issuer,
-                                    const String& type,
                                     ExceptionState&);
 
   void ariaNotify(const String announcement, const AriaNotificationOptions*);
@@ -1485,8 +1482,6 @@ class CORE_EXPORT Document : public ContainerNode,
 
   int RequestAnimationFrame(FrameCallback*);
   void CancelAnimationFrame(int id);
-  void ServiceScriptedAnimations(base::TimeTicks monotonic_animation_start_time,
-                                 bool can_throttle = false);
 
   int RequestIdleCallback(IdleTask*, const IdleRequestOptions*);
   void CancelIdleCallback(int id);
@@ -1547,12 +1542,14 @@ class CORE_EXPORT Document : public ContainerNode,
 
   HTMLDialogElement* ActiveModalDialog() const;
 
+  HTMLElement* PopoverHintShowing() const { return popover_hint_showing_; }
+  void SetPopoverHintShowing(HTMLElement* element);
   HeapVector<Member<HTMLElement>>& PopoverStack() { return popover_stack_; }
   const HeapVector<Member<HTMLElement>>& PopoverStack() const {
     return popover_stack_;
   }
   bool PopoverAutoShowing() const { return !popover_stack_.empty(); }
-  HTMLElement* TopmostPopover() const;
+  HTMLElement* TopmostPopoverOrHint() const;
   HeapHashSet<Member<HTMLElement>>& PopoversWaitingToHide() {
     return popovers_waiting_to_hide_;
   }
@@ -1579,9 +1576,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Document& EnsureTemplateDocument();
   Document* TemplateDocumentHost() { return template_document_host_; }
 
-  // TODO(thestig): Rename these and related functions, since we can call them
-  // for controls outside of forms as well.
-  void DidAssociateFormControl(Element*);
+  void DidAddOrRemoveFormRelatedElement(Element*);
 
   void AddConsoleMessage(ConsoleMessage* message,
                          bool discard_duplicates = false) const;
@@ -2003,6 +1998,7 @@ class CORE_EXPORT Document : public ContainerNode,
   void RemoveAXContext(AXContext*);
   // Called when the AXMode of an existing AXContext changes.
   void AXContextModeChanged();
+  void ClearAXObjectCache();
 
   bool IsDocumentFragment() const =
       delete;  // This will catch anyone doing an unnecessary check.
@@ -2092,7 +2088,7 @@ class CORE_EXPORT Document : public ContainerNode,
   }
   void AddMutationEventListenerTypeIfEnabled(ListenerType);
 
-  void DidAssociateFormControlsTimerFired(TimerBase*);
+  void DidAddOrRemoveFormRelatedElementsTimerFired(TimerBase*);
 
   void ClearFocusedElementTimerFired(TimerBase*);
 
@@ -2149,15 +2145,37 @@ class CORE_EXPORT Document : public ContainerNode,
       bool has_user_gesture,
       mojom::blink::PermissionStatus previous_status);
 
+  // Similar to `OnGotExistingStorageAccessPermissionState`, but for the
+  // top-level variant. Allows bypassing user activation checks in the event
+  // that the permission is already granted.
+  void OnGotExistingTopLevelStorageAccessPermissionState(
+      ScriptPromiseResolver* resolver,
+      bool has_user_gesture,
+      mojom::blink::PermissionDescriptorPtr descriptor,
+      mojom::blink::PermissionStatus previous_status);
+
   // Wraps `ProcessStorageAccessPermissionState` to handle the requested
   // permission status.
   void OnRequestedStorageAccessPermissionState(
       ScriptPromiseResolver* resolver,
       mojom::blink::PermissionStatus status);
 
+  // Similar to `OnRequestedStorageAccessPermissionState`, but for the top-level
+  // variant. Used to react to the result of a permission request.
+  void OnRequestedTopLevelStorageAccessPermissionState(
+      ScriptPromiseResolver* resolver,
+      mojom::blink::PermissionStatus status);
+
   // Resolves the promise if the `status` can approve; rejects the promise
   // otherwise, and consumes user activation.
   void ProcessStorageAccessPermissionState(
+      ScriptPromiseResolver* resolver,
+      bool use_existing_status,
+      mojom::blink::PermissionStatus status);
+
+  // Similar to `ProcessStorageAccessPermissionState`, but for the top-level
+  // variant. Notably, does not modify the per-frame storage access bit.
+  void ProcessTopLevelStorageAccessPermissionState(
       ScriptPromiseResolver* resolver,
       bool use_existing_status,
       mojom::blink::PermissionStatus status);
@@ -2223,12 +2241,12 @@ class CORE_EXPORT Document : public ContainerNode,
   KURL base_url_override_;  // An alternative base URL that takes precedence
                             // over base_url_ (but not base_element_url_).
 
-  // Used in FallbackBaseURL() to provide the base URL for srcdoc documents,
-  // which is the initiator's base URL at the time the navigation was initiated.
-  // Separate from the base_url_* fields because the fallback base URL should
-  // not take precedence over things like <base>.
-  // Note: this currently is only used when IsolateSandboxedIframes is enabled.
-  KURL fallback_base_url_for_srcdoc_;
+  // Used in FallbackBaseURL() to provide the base URL for  about:srcdoc  and
+  // about:blank documents, which is the initiator's base URL at the time the
+  // navigation was initiated. Separate from the base_url_* fields because the
+  // fallback base URL should not take precedence over things like <base>. Note:
+  // this currently is only used when NewBaseUrlInheritanceBehavior is enabled.
+  KURL fallback_base_url_;
 
   KURL base_element_url_;   // The URL set by the <base> element.
   KURL cookie_url_;         // The URL to use for cookie access.
@@ -2421,12 +2439,14 @@ class CORE_EXPORT Document : public ContainerNode,
   // stack and is thus the one that will be visually on top.
   HeapVector<Member<Element>> top_layer_elements_;
 
-  // top_layer_elements_ to be removed when top-layer computes to none.
+  // top_layer_elements_ to be removed when overlay computes to none.
   HeapHashSet<Member<Element>> top_layer_elements_pending_removal_;
 
   // The stack of currently-displayed `popover=auto` elements. Elements in the
   // stack go from earliest (bottom-most) to latest (top-most).
   HeapVector<Member<HTMLElement>> popover_stack_;
+  // The `popover=hint` that is currently showing, if any.
+  Member<HTMLElement> popover_hint_showing_;
   // The popover (if any) that received the most recent pointerdown event.
   Member<const HTMLElement> popover_pointerdown_target_;
   // A set of popovers for which hidePopover() has been called, but animations
@@ -2481,7 +2501,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<Document> template_document_;
   Member<Document> template_document_host_;
 
-  HeapTaskRunnerTimer<Document> did_associate_form_controls_timer_;
+  HeapTaskRunnerTimer<Document> did_add_or_remove_form_related_elements_timer_;
 
   HeapHashSet<Member<SVGUseElement>> use_elements_needing_update_;
 

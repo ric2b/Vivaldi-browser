@@ -12,7 +12,7 @@
 #import "ios/chrome/browser/credential_provider_promo/features.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/promos_manager/mock_promos_manager.h"
-#import "ios/chrome/browser/ui/commands/credential_provider_promo_commands.h"
+#import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
 #import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_constants.h"
 #import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_consumer.h"
 #import "ios/chrome/grit/ios_google_chrome_strings.h"
@@ -184,6 +184,16 @@ TEST_F(CredentialProviderPromoMediatorTest,
   EXPECT_TRUE([mediator_ canShowCredentialProviderPromoWithTrigger:
                              CredentialProviderPromoTrigger::PasswordCopied
                                                          promoSeen:NO]);
+}
+
+// Tests that the promo will always be displayed when the trigger is SetUpList.
+TEST_F(CredentialProviderPromoMediatorTest,
+       CredentialProviderPromoSetUpListTrigger) {
+  local_state_.Get()->SetBoolean(prefs::kIosCredentialProviderPromoStopPromo,
+                                 true);
+  EXPECT_TRUE([mediator_ canShowCredentialProviderPromoWithTrigger:
+                             CredentialProviderPromoTrigger::SetUpList
+                                                         promoSeen:YES]);
 }
 
 // Tests that the consumer content is correctly set when the promo:

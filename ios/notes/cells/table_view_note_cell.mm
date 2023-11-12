@@ -4,7 +4,7 @@
 
 #import "base/i18n/rtl.h"
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/cells/note_table_cell_title_edit_delegate.h"
 #import "ios/notes/note_ui_constants.h"

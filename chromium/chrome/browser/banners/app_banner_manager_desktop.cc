@@ -47,8 +47,6 @@ const char kPlatformChromeWebStore[] = "chrome_web_store";
 const char kPlatformPlay[] = "play";
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-bool gDisableTriggeringForTesting = false;
-
 }  // namespace
 
 namespace webapps {
@@ -72,10 +70,6 @@ void AppBannerManagerDesktop::CreateForWebContents(
   web_contents->SetUserData(
       UserDataKey(),
       base::WrapUnique(new AppBannerManagerDesktop(web_contents)));
-}
-
-void AppBannerManagerDesktop::DisableTriggeringForTesting() {
-  gDisableTriggeringForTesting = true;
 }
 
 TestAppBannerManagerDesktop*
@@ -191,26 +185,6 @@ void AppBannerManagerDesktop::ShowBannerUi(WebappInstallSource install_source) {
   CreateWebApp(install_source);
 }
 
-void AppBannerManagerDesktop::DidFinishLoad(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url) {
-  if (gDisableTriggeringForTesting)
-    return;
-
-  AppBannerManager::DidFinishLoad(render_frame_host, validated_url);
-}
-
-void AppBannerManagerDesktop::OnEngagementEvent(
-    content::WebContents* web_contents,
-    const GURL& url,
-    double score,
-    site_engagement::EngagementType type) {
-  if (gDisableTriggeringForTesting)
-    return;
-
-  AppBannerManager::OnEngagementEvent(web_contents, url, score, type);
-}
-
 void AppBannerManagerDesktop::OnWebAppInstalled(
     const web_app::AppId& installed_app_id) {
   absl::optional<web_app::AppId> app_id =
@@ -232,7 +206,8 @@ void AppBannerManagerDesktop::OnWebAppWillBeUninstalled(
 }
 
 void AppBannerManagerDesktop::OnWebAppUninstalled(
-    const web_app::AppId& app_id) {
+    const web_app::AppId& app_id,
+    webapps::WebappUninstallSource uninstall_source) {
   if (uninstalling_app_id_ == app_id)
     RecheckInstallabilityForLoadedPage(validated_url(), true);
 }
@@ -245,7 +220,6 @@ void AppBannerManagerDesktop::CreateWebApp(WebappInstallSource install_source) {
   content::WebContents* contents = web_contents();
   DCHECK(contents);
 
-  // TODO(loyso): Take appropriate action if WebApps disabled for profile.
   web_app::CreateWebAppFromManifest(
       contents, /*bypass_service_worker_check=*/false, install_source,
       base::BindOnce(&AppBannerManagerDesktop::DidFinishCreatingWebApp,

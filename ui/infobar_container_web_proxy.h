@@ -33,7 +33,7 @@ class ConfirmInfoBarWebProxy : public InfoBarView {
   void PlatformSpecificShow(bool animate) override;
 
  private:
-  Profile* profile_ = nullptr;
+  raw_ptr<Profile> profile_ = nullptr;
   int tab_id_ = 0;
 };
 

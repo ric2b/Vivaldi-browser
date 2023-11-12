@@ -7,11 +7,11 @@
 #include <string>
 #include <vector>
 
-#include "base/guid.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/saved_tab_groups/saved_tab_group_tab.h"
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 #include "components/tab_groups/tab_group_color.h"
@@ -24,12 +24,12 @@ SavedTabGroup::SavedTabGroup(
     const std::u16string& title,
     const tab_groups::TabGroupColorId& color,
     const std::vector<SavedTabGroupTab>& urls,
-    absl::optional<base::GUID> saved_guid,
+    absl::optional<base::Uuid> saved_guid,
     absl::optional<int> position,
     absl::optional<tab_groups::TabGroupId> local_group_id,
     absl::optional<base::Time> creation_time_windows_epoch_micros,
     absl::optional<base::Time> update_time_windows_epoch_micros)
-    : saved_guid_(saved_guid.value_or(base::GUID::GenerateRandomV4())),
+    : saved_guid_(saved_guid.value_or(base::Uuid::GenerateRandomV4())),
       local_group_id_(local_group_id),
       title_(title),
       color_(color),
@@ -44,22 +44,39 @@ SavedTabGroup::SavedTabGroup(const SavedTabGroup& other) = default;
 
 SavedTabGroup::~SavedTabGroup() = default;
 
-SavedTabGroupTab* SavedTabGroup::GetTab(const base::GUID& saved_tab_guid) {
+const SavedTabGroupTab* SavedTabGroup::GetTab(
+    const base::Uuid& saved_tab_guid) const {
   absl::optional<int> index = GetIndexOfTab(saved_tab_guid);
   if (!index.has_value())
     return nullptr;
   return &saved_tabs()[index.value()];
 }
 
-SavedTabGroupTab* SavedTabGroup::GetTab(const base::Token& local_tab_id) {
+const SavedTabGroupTab* SavedTabGroup::GetTab(
+    const base::Token& local_tab_id) const {
   absl::optional<int> index = GetIndexOfTab(local_tab_id);
   if (!index.has_value())
     return nullptr;
-
   return &saved_tabs()[index.value()];
 }
 
-bool SavedTabGroup::ContainsTab(const base::GUID& saved_tab_guid) const {
+SavedTabGroupTab* SavedTabGroup::GetTab(const base::Uuid& saved_tab_guid) {
+  absl::optional<int> index = GetIndexOfTab(saved_tab_guid);
+  if (!index.has_value()) {
+    return nullptr;
+  }
+  return &saved_tabs()[index.value()];
+}
+
+SavedTabGroupTab* SavedTabGroup::GetTab(const base::Token& local_tab_id) {
+  absl::optional<int> index = GetIndexOfTab(local_tab_id);
+  if (!index.has_value()) {
+    return nullptr;
+  }
+  return &saved_tabs()[index.value()];
+}
+
+bool SavedTabGroup::ContainsTab(const base::Uuid& saved_tab_guid) const {
   absl::optional<int> index = GetIndexOfTab(saved_tab_guid);
   return index.has_value();
 }
@@ -70,7 +87,7 @@ bool SavedTabGroup::ContainsTab(const base::Token& local_tab_id) const {
 }
 
 absl::optional<int> SavedTabGroup::GetIndexOfTab(
-    const base::GUID& saved_tab_guid) const {
+    const base::Uuid& saved_tab_guid) const {
   auto it = base::ranges::find_if(
       saved_tabs(), [saved_tab_guid](const SavedTabGroupTab& tab) {
         return tab.saved_tab_guid() == saved_tab_guid;
@@ -140,7 +157,7 @@ SavedTabGroup& SavedTabGroup::AddTab(SavedTabGroupTab tab,
   return *this;
 }
 
-SavedTabGroup& SavedTabGroup::RemoveTab(const base::GUID& saved_tab_guid,
+SavedTabGroup& SavedTabGroup::RemoveTab(const base::Uuid& saved_tab_guid,
                                         bool update_tab_positions) {
   absl::optional<size_t> index = GetIndexOfTab(saved_tab_guid);
   CHECK(index.has_value());
@@ -167,13 +184,12 @@ SavedTabGroup& SavedTabGroup::UpdateTab(SavedTabGroupTab tab) {
   return *this;
 }
 
-SavedTabGroup& SavedTabGroup::ReplaceTabAt(const base::GUID& tab_id,
+SavedTabGroup& SavedTabGroup::ReplaceTabAt(const base::Uuid& tab_id,
                                            SavedTabGroupTab tab) {
   absl::optional<size_t> index = GetIndexOfTab(tab_id);
   CHECK(index.has_value());
   CHECK_GE(index.value(), 0u);
   CHECK_LT(index.value(), saved_tabs_.size());
-  CHECK(!ContainsTab(tab.saved_tab_guid()));
   saved_tabs_.erase(saved_tabs_.begin() + index.value());
   saved_tabs_.insert(saved_tabs_.begin() + index.value(), std::move(tab));
   UpdateTabPositionsImpl();
@@ -181,7 +197,7 @@ SavedTabGroup& SavedTabGroup::ReplaceTabAt(const base::GUID& tab_id,
   return *this;
 }
 
-SavedTabGroup& SavedTabGroup::MoveTab(const base::GUID& saved_tab_guid,
+SavedTabGroup& SavedTabGroup::MoveTab(const base::Uuid& saved_tab_guid,
                                       size_t new_index) {
   absl::optional<size_t> curr_index = GetIndexOfTab(saved_tab_guid);
   CHECK(curr_index.has_value());
@@ -248,7 +264,7 @@ void SavedTabGroup::InsertTabImpl(const SavedTabGroupTab& tab) {
 }
 
 bool SavedTabGroup::ShouldMergeGroup(
-    const sync_pb::SavedTabGroupSpecifics& sync_specific) {
+    const sync_pb::SavedTabGroupSpecifics& sync_specific) const {
   bool sync_update_is_latest =
       sync_specific.update_time_windows_epoch_micros() >=
       update_time_windows_epoch_micros()
@@ -279,7 +295,7 @@ SavedTabGroup SavedTabGroup::FromSpecifics(
   const std::u16string& title = base::UTF8ToUTF16(specific.group().title());
   int position = specific.group().position();
 
-  base::GUID guid = base::GUID::ParseLowercase(specific.guid());
+  base::Uuid guid = base::Uuid::ParseLowercase(specific.guid());
   base::Time creation_time = base::Time::FromDeltaSinceWindowsEpoch(
       base::Microseconds(specific.creation_time_windows_epoch_micros()));
   base::Time update_time = base::Time::FromDeltaSinceWindowsEpoch(

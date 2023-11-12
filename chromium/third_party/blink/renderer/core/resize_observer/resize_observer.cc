@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_resize_observer_options.h"
+#include "third_party/blink/renderer/core/core_probes_inl.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -35,7 +36,8 @@ ResizeObserver* ResizeObserver::Create(LocalDOMWindow* window,
 
 ResizeObserver::ResizeObserver(V8ResizeObserverCallback* callback,
                                LocalDOMWindow* window)
-    : ExecutionContextClient(window),
+    : ActiveScriptWrappable<ResizeObserver>({}),
+      ExecutionContextClient(window),
       callback_(callback),
       skipped_observations_(false) {
   DCHECK(callback_);
@@ -46,7 +48,8 @@ ResizeObserver::ResizeObserver(V8ResizeObserverCallback* callback,
 }
 
 ResizeObserver::ResizeObserver(Delegate* delegate, LocalDOMWindow* window)
-    : ExecutionContextClient(window),
+    : ActiveScriptWrappable<ResizeObserver>({}),
+      ExecutionContextClient(window),
       delegate_(delegate),
       skipped_observations_(false) {
   DCHECK(delegate_);
@@ -185,8 +188,9 @@ void ResizeObserver::DeliverObservations() {
   }
 
   DCHECK(callback_ || delegate_);
-  if (callback_)
+  if (callback_) {
     callback_->InvokeAndReportException(this, entries, this);
+  }
   if (delegate_)
     delegate_->OnResize(entries);
   ClearObservations();

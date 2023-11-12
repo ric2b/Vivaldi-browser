@@ -47,9 +47,9 @@
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
 #include <stdio.h>
-#endif
+#endif  // DCHECK_IS_ON()
 
 namespace blink {
 
@@ -62,6 +62,8 @@ unsigned MaximumSpecificity(const CSSSelectorList* list) {
   return list->MaximumSpecificity();
 }
 
+}  // namespace
+
 unsigned MaximumSpecificity(const CSSSelector* first_selector) {
   unsigned specificity = 0;
   for (const CSSSelector* s = first_selector; s;
@@ -70,8 +72,6 @@ unsigned MaximumSpecificity(const CSSSelector* first_selector) {
   }
   return specificity;
 }
-
-}  // namespace
 
 struct SameSizeAsCSSSelector {
   unsigned bitfields;
@@ -110,7 +110,7 @@ unsigned CSSSelector::Specificity() const {
   unsigned temp = 0;
 
   for (const CSSSelector* selector = this; selector;
-       selector = selector->TagHistory()) {
+       selector = selector->NextSimpleSelector()) {
     temp = total + selector->SpecificityForOneSelector();
     // Clamp each component to its max in the case of overflow.
     if ((temp & kIdMask) < (total & kIdMask)) {
@@ -214,7 +214,7 @@ unsigned CSSSelector::SpecificityForPage() const {
   unsigned s = 0;
 
   for (const CSSSelector* component = this; component;
-       component = component->TagHistory()) {
+       component = component->NextSimpleSelector()) {
     switch (component->match_) {
       case kTag:
         s += TagQName().LocalName() == UniversalSelectorAtom() ? 0 : 4;
@@ -330,7 +330,6 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoInRange:
     case kPseudoIncrement:
     case kPseudoIndeterminate:
-    case kPseudoInitial:
     case kPseudoInvalid:
     case kPseudoIs:
     case kPseudoIsHtml:
@@ -354,7 +353,6 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoOptional:
     case kPseudoOutOfRange:
     case kPseudoParent:
-    case kPseudoParentUnparsed:
     case kPseudoPart:
     case kPseudoPastCue:
     case kPseudoPaused:
@@ -362,6 +360,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoPlaceholder:
     case kPseudoPlaceholderShown:
     case kPseudoPlaying:
+    case kPseudoPopoverOpen:
     case kPseudoReadOnly:
     case kPseudoReadWrite:
     case kPseudoRelativeAnchor:
@@ -378,7 +377,9 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoState:
     case kPseudoTarget:
     case kPseudoToggle:
+    case kPseudoTrue:
     case kPseudoUnknown:
+    case kPseudoUnparsed:
     case kPseudoValid:
     case kPseudoVertical:
     case kPseudoVideoPersistent:
@@ -395,6 +396,15 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
 
   NOTREACHED();
   return kPseudoIdNone;
+}
+
+void CSSSelector::Reparent(StyleRule* old_parent, StyleRule* new_parent) {
+  if (GetPseudoType() == CSSSelector::kPseudoParent) {
+    DCHECK_EQ(old_parent, ParentRule());
+    data_.parent_rule_ = new_parent;
+  } else if (has_rare_data_ && data_.rare_data_->selector_list_) {
+    data_.rare_data_->selector_list_->Reparent(old_parent, new_parent);
+  }
 }
 
 // Could be made smaller and faster by replacing pointer with an
@@ -476,7 +486,6 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"in-range", CSSSelector::kPseudoInRange},
     {"increment", CSSSelector::kPseudoIncrement},
     {"indeterminate", CSSSelector::kPseudoIndeterminate},
-    {"initial", CSSSelector::kPseudoInitial},
     {"invalid", CSSSelector::kPseudoInvalid},
     {"last-child", CSSSelector::kPseudoLastChild},
     {"last-of-type", CSSSelector::kPseudoLastOfType},
@@ -496,6 +505,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"placeholder", CSSSelector::kPseudoPlaceholder},
     {"placeholder-shown", CSSSelector::kPseudoPlaceholderShown},
     {"playing", CSSSelector::kPseudoPlaying},
+    {"popover-open", CSSSelector::kPseudoPopoverOpen},
     {"read-only", CSSSelector::kPseudoReadOnly},
     {"read-write", CSSSelector::kPseudoReadWrite},
     {"required", CSSSelector::kPseudoRequired},
@@ -606,10 +616,10 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
   bool popover_attribute_enabled =
       !document || RuntimeEnabledFeatures::HTMLPopoverAttributeEnabled(
                        document->GetExecutionContext());
-  if (match->type == CSSSelector::kPseudoOpen && !popover_attribute_enabled) {
-    return CSSSelector::kPseudoUnknown;
-  }
-  if (match->type == CSSSelector::kPseudoClosed && !popover_attribute_enabled) {
+  if (!popover_attribute_enabled &&
+      (match->type == CSSSelector::kPseudoOpen ||
+       match->type == CSSSelector::kPseudoClosed ||
+       match->type == CSSSelector::kPseudoPopoverOpen)) {
     return CSSSelector::kPseudoUnknown;
   }
 
@@ -635,15 +645,10 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
     return CSSSelector::kPseudoUnknown;
   }
 
-  if (match->type == CSSSelector::kPseudoInitial &&
-      !RuntimeEnabledFeatures::CSSInitialPseudoEnabled()) {
-    return CSSSelector::kPseudoUnknown;
-  }
-
   return static_cast<CSSSelector::PseudoType>(match->type);
 }
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
 void CSSSelector::Show(int indent) const {
   printf("%*sSelectorText(): %s\n", indent, "", SelectorText().Ascii().c_str());
   printf("%*smatch_: %d\n", indent, "", match_);
@@ -662,9 +667,9 @@ void CSSSelector::Show(int indent) const {
   }
   printf("%*sArgument(): %s\n", indent, "", Argument().Ascii().c_str());
   printf("%*sSpecificity(): %u\n", indent, "", Specificity());
-  if (TagHistory()) {
+  if (NextSimpleSelector()) {
     printf("\n%*s--> (Relation() == %d)\n", indent, "", Relation());
-    TagHistory()->Show(indent + 2);
+    NextSimpleSelector()->Show(indent + 2);
   } else {
     printf("\n%*s--> (Relation() == %d)\n", indent, "", Relation());
   }
@@ -676,7 +681,7 @@ void CSSSelector::Show() const {
   Show(2);
   printf("******* end *******\n");
 }
-#endif
+#endif  // DCHECK_IS_ON()
 
 void CSSSelector::UpdatePseudoPage(const AtomicString& value,
                                    const Document* document) {
@@ -800,7 +805,6 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoInRange:
     case kPseudoIncrement:
     case kPseudoIndeterminate:
-    case kPseudoInitial:
     case kPseudoInvalid:
     case kPseudoIs:
     case kPseudoLang:
@@ -820,12 +824,12 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoOptional:
     case kPseudoOutOfRange:
     case kPseudoParent:
-    case kPseudoParentUnparsed:
     case kPseudoPastCue:
     case kPseudoPaused:
     case kPseudoPictureInPicture:
     case kPseudoPlaceholderShown:
     case kPseudoPlaying:
+    case kPseudoPopoverOpen:
     case kPseudoReadOnly:
     case kPseudoReadWrite:
     case kPseudoRelativeAnchor:
@@ -838,7 +842,9 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoState:
     case kPseudoTarget:
     case kPseudoToggle:
+    case kPseudoTrue:
     case kPseudoUnknown:
+    case kPseudoUnparsed:
     case kPseudoValid:
     case kPseudoVertical:
     case kPseudoVisited:
@@ -859,10 +865,33 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
   }
 }
 
-void CSSSelector::SetUnparsedPlaceholder(const AtomicString& value) {
+void CSSSelector::SetUnparsedPlaceholder(CSSNestingType unparsed_nesting_type,
+                                         const AtomicString& value) {
   DCHECK(match_ == kPseudoClass);
-  SetPseudoType(kPseudoParentUnparsed);
+  SetPseudoType(kPseudoUnparsed);
+  CreateRareData();
   SetValue(value);
+  data_.rare_data_->bits_.unparsed_nesting_type_ = unparsed_nesting_type;
+}
+
+CSSNestingType CSSSelector::GetNestingType() const {
+  switch (GetPseudoType()) {
+    case CSSSelector::kPseudoParent:
+      return CSSNestingType::kNesting;
+    case CSSSelector::kPseudoUnparsed:
+      return data_.rare_data_->bits_.unparsed_nesting_type_;
+    case CSSSelector::kPseudoScope:
+      // TODO(crbug.com/1280240): Handle unparsed :scope.
+      return CSSNestingType::kScope;
+    default:
+      return CSSNestingType::kNone;
+  }
+}
+
+void CSSSelector::SetTrue() {
+  SetMatch(kPseudoClass);
+  SetPseudoType(kPseudoTrue);
+  is_implicitly_added_ = true;
 }
 
 static void SerializeIdentifierOrAny(const AtomicString& identifier,
@@ -907,10 +936,11 @@ bool CSSSelector::SerializeSimpleSelector(StringBuilder& builder) const {
     builder.Append('.');
     SerializeIdentifier(SerializingValue(), builder);
   } else if (match_ == kPseudoClass || match_ == kPagePseudoClass) {
-    if (GetPseudoType() == kPseudoParentUnparsed) {
+    if (GetPseudoType() == kPseudoUnparsed) {
       builder.Append(Value());
     } else if (GetPseudoType() != kPseudoState &&
-               GetPseudoType() != kPseudoParent) {
+               GetPseudoType() != kPseudoParent &&
+               GetPseudoType() != kPseudoTrue) {
       builder.Append(':');
       builder.Append(SerializingValue());
     }
@@ -1082,11 +1112,12 @@ const CSSSelector* CSSSelector::SerializeCompound(
   }
 
   for (const CSSSelector* simple_selector = this; simple_selector;
-       simple_selector = simple_selector->TagHistory()) {
+       simple_selector = simple_selector->NextSimpleSelector()) {
     if (!simple_selector->SerializeSimpleSelector(builder)) {
       return nullptr;
     }
-    if (simple_selector->Relation() != kSubSelector) {
+    if (simple_selector->Relation() != kSubSelector &&
+        simple_selector->Relation() != kScopeActivation) {
       return simple_selector;
     }
   }
@@ -1096,20 +1127,32 @@ const CSSSelector* CSSSelector::SerializeCompound(
 String CSSSelector::SelectorText() const {
   String result;
   for (const CSSSelector* compound = this; compound;
-       compound = compound->TagHistory()) {
+       compound = compound->NextSimpleSelector()) {
     StringBuilder builder;
     compound = compound->SerializeCompound(builder);
     if (!compound) {
       return builder.ReleaseString() + result;
     }
 
-    // If we are combining with an implicit &, it is as if we used
-    // a relative combinator.
     RelationType relation = compound->Relation();
     DCHECK_NE(relation, kSubSelector);
-    if (compound->TagHistory()->Match() == kPseudoClass &&
-        compound->TagHistory()->GetPseudoType() == kPseudoParent &&
-        compound->TagHistory()->is_implicitly_added_) {
+    DCHECK_NE(relation, kScopeActivation);
+
+    const CSSSelector* next_compound = compound->NextSimpleSelector();
+    DCHECK(next_compound);
+
+    // Skip leading :true. This internal pseudo-class is not supposed to
+    // affect serialization.
+    if (next_compound->GetPseudoType() == kPseudoTrue) {
+      next_compound = next_compound->NextSimpleSelector();
+    }
+
+    // If we are combining with an implicit & or :scope, it is as if we
+    // used a relative combinator.
+    if (!next_compound || (next_compound->Match() == kPseudoClass &&
+                           (next_compound->GetPseudoType() == kPseudoParent ||
+                            next_compound->GetPseudoType() == kPseudoScope) &&
+                           next_compound->is_implicitly_added_)) {
       relation = ConvertRelationToRelative(relation);
     }
 
@@ -1127,6 +1170,7 @@ String CSSSelector::SelectorText() const {
         result = " ~ " + builder.ReleaseString() + result;
         break;
       case kSubSelector:
+      case kScopeActivation:
         NOTREACHED();
         break;
       case kShadowPart:
@@ -1236,7 +1280,6 @@ static bool ValidateSubSelector(const CSSSelector* selector) {
     case CSSSelector::kPseudoFirstChild:
     case CSSSelector::kPseudoLastChild:
     case CSSSelector::kPseudoFirstOfType:
-    case CSSSelector::kPseudoInitial:
     case CSSSelector::kPseudoLastOfType:
     case CSSSelector::kPseudoOnlyOfType:
     case CSSSelector::kPseudoHost:
@@ -1269,7 +1312,7 @@ bool CSSSelector::IsCompound() const {
   }
 
   const CSSSelector* prev_sub_selector = this;
-  const CSSSelector* sub_selector = TagHistory();
+  const CSSSelector* sub_selector = NextSimpleSelector();
 
   while (sub_selector) {
     if (prev_sub_selector->Relation() != kSubSelector) {
@@ -1280,7 +1323,7 @@ bool CSSSelector::IsCompound() const {
     }
 
     prev_sub_selector = sub_selector;
-    sub_selector = sub_selector->TagHistory();
+    sub_selector = sub_selector->NextSimpleSelector();
   }
 
   return true;
@@ -1288,7 +1331,7 @@ bool CSSSelector::IsCompound() const {
 
 bool CSSSelector::HasLinkOrVisited() const {
   for (const CSSSelector* current = this; current;
-       current = current->TagHistory()) {
+       current = current->NextSimpleSelector()) {
     CSSSelector::PseudoType pseudo = current->GetPseudoType();
     if (pseudo == CSSSelector::kPseudoLink ||
         pseudo == CSSSelector::kPseudoVisited) {
@@ -1320,7 +1363,7 @@ bool CSSSelector::MatchNth(unsigned count) const {
 
 bool CSSSelector::MatchesPseudoElement() const {
   for (const CSSSelector* current = this; current;
-       current = current->TagHistory()) {
+       current = current->NextSimpleSelector()) {
     if (current->Match() == kPseudoElement) {
       return true;
     }
@@ -1364,17 +1407,17 @@ bool CSSSelector::IsAllowedAfterPart() const {
 }
 
 template <typename Functor>
-static bool ForAnyInTagHistory(const Functor& functor,
-                               const CSSSelector& selector) {
+static bool ForAnyInComplexSelector(const Functor& functor,
+                                    const CSSSelector& selector) {
   for (const CSSSelector* current = &selector; current;
-       current = current->TagHistory()) {
+       current = current->NextSimpleSelector()) {
     if (functor(*current)) {
       return true;
     }
     if (const CSSSelectorList* selector_list = current->SelectorList()) {
       for (const CSSSelector* sub_selector = selector_list->First();
            sub_selector; sub_selector = CSSSelectorList::Next(*sub_selector)) {
-        if (ForAnyInTagHistory(functor, *sub_selector)) {
+        if (ForAnyInComplexSelector(functor, *sub_selector)) {
           return true;
         }
       }
@@ -1385,7 +1428,7 @@ static bool ForAnyInTagHistory(const Functor& functor,
 }
 
 bool CSSSelector::FollowsPart() const {
-  const CSSSelector* previous = TagHistory();
+  const CSSSelector* previous = NextSimpleSelector();
   if (!previous) {
     return false;
   }
@@ -1393,7 +1436,7 @@ bool CSSSelector::FollowsPart() const {
 }
 
 bool CSSSelector::FollowsSlotted() const {
-  const CSSSelector* previous = TagHistory();
+  const CSSSelector* previous = NextSimpleSelector();
   if (!previous) {
     return false;
   }

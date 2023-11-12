@@ -10,6 +10,7 @@
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/new_tab_page/promos/promo_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -25,6 +26,7 @@
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/safe_browsing_policy_handler.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/search/ntp_features.h"
 #include "components/user_education/common/tutorial_identifier.h"
 #include "components/user_education/common/tutorial_service.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -98,11 +100,12 @@ void BrowserCommandHandler::CanExecuteCommand(
       can_execute = true;
       break;
     case Command::kOpenPerformanceSettings:
-      can_execute =
-          base::FeatureList::IsEnabled(
-              performance_manager::features::kBatterySaverModeAvailable) ||
-          base::FeatureList::IsEnabled(
-              performance_manager::features::kHighEfficiencyModeAvailable);
+      can_execute = true;
+      break;
+    case Command::kOpenNTPAndStartCustomizeChromeTutorial:
+      can_execute = !!GetTutorialService() &&
+                    BrowserSupportsCustomizeChromeSidePanel() &&
+                    DefaultSearchProviderIsGoogle();
       break;
   }
   std::move(callback).Run(can_execute);
@@ -172,6 +175,9 @@ void BrowserCommandHandler::ExecuteCommandWithDisposition(
       NavigateToURL(GURL(chrome::GetSettingsUrl(chrome::kPerformanceSubPage)),
                     disposition);
       break;
+    case Command::kOpenNTPAndStartCustomizeChromeTutorial:
+      OpenNTPAndStartCustomizeChromeTutorial(disposition);
+      break;
     default:
       NOTREACHED() << "Unspecified behavior for command " << id;
       break;
@@ -219,8 +225,50 @@ void BrowserCommandHandler::StartTabGroupTutorial() {
       BrowserHasTabGroups() ? kTabGroupWithExistingGroupTutorialId
                             : kTabGroupTutorialId;
 
-  bool started_tutorial = tutorial_service->StartTutorial(tutorial_id, context);
-  tutorial_service->LogStartedFromWhatsNewPage(tutorial_id, started_tutorial);
+  tutorial_service->StartTutorial(tutorial_id, context);
+  tutorial_service->LogStartedFromWhatsNewPage(
+      tutorial_id, tutorial_service->IsRunningTutorial());
+}
+
+bool BrowserCommandHandler::BrowserSupportsCustomizeChromeSidePanel() {
+  return base::FeatureList::IsEnabled(ntp_features::kCustomizeChromeSidePanel);
+}
+
+bool BrowserCommandHandler::DefaultSearchProviderIsGoogle() {
+  return search::DefaultSearchProviderIsGoogle(profile_);
+}
+
+void BrowserCommandHandler::OpenNTPAndStartCustomizeChromeTutorial(
+    WindowOpenDisposition disposition) {
+  user_education::TutorialService* tutorial_service = GetTutorialService();
+
+  // Should never happen since we return false in CanExecuteCommand(), but
+  // avoid a browser crash anyway.
+  if (!tutorial_service) {
+    return;
+  }
+
+  const ui::ElementContext context = GetUiElementContext();
+  if (!context) {
+    return;
+  }
+
+  if (!BrowserSupportsCustomizeChromeSidePanel()) {
+    return;
+  }
+
+  if (!DefaultSearchProviderIsGoogle()) {
+    return;
+  }
+
+  user_education::TutorialIdentifier tutorial_id =
+      kSidePanelCustomizeChromeTutorialId;
+
+  tutorial_service->StartTutorial(tutorial_id, context);
+  tutorial_service->LogStartedFromWhatsNewPage(
+      tutorial_id, tutorial_service->IsRunningTutorial());
+
+  NavigateToURL(GURL(chrome::kChromeUINewTabPageURL), disposition);
 }
 
 void BrowserCommandHandler::OpenFeedbackForm() {

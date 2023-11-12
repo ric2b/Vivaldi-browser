@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fil">
+<translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Lahat ng karapatan ay nakalaan.</translation>
+<translation id="6524604576097824284">Kapag naka on, ang Vivaldi ay nagpapalaya ng memorya mula sa mga hindi aktibong tab. Ito ay nagbibigay sa mga aktibong tab at iba pang mga app ng higit pang mga mapagkukunan ng computer at pinapanatili ang Vivaldi mabilis. Ang iyong mga hindi aktibong tab ay awtomatikong nagiging aktibo muli kapag bumalik ka sa kanila. <ph name="BEGIN_LINK" />Matuto nang higit pa<ph name="END_LINK" /></translation>
+<translation id="7642161109152167169">Kapag naka-on, ang Vivaldi ay nag-e-save ng battery power sa pamamagitan ng paglimit sa background activity at visual effects, tulad ng smooth scrolling at mga frame rate ng video. <ph name="BEGIN_LINK" />Matutunan nang higit pa<ph name="END_LINK" /></translation>
+<translation id="8031581238030785388">Vivaldi Apps</translation>
 </translationbundle>

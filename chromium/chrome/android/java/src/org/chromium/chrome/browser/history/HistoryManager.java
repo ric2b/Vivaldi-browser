@@ -338,7 +338,6 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
             });
         } // End Vivaldi
 
-
         mShouldShowPrivacyDisclaimerSupplier.set(shouldShowInfoHeader);
         mShouldShowClearBrowsingDataSupplier.set(mContentManager.getShouldShowClearData());
 
@@ -944,5 +943,9 @@ public class HistoryManager implements OnMenuItemClickListener, SelectionObserve
     }
     public HistoryAdapter getAdapter() {
         return mContentManager.getAdapter();
+    }
+    public void refresh() {
+        if (mContentManager != null)
+            mContentManager.startLoadingItems();
     }
 }

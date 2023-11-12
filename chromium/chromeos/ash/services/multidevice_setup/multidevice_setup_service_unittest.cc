@@ -6,6 +6,7 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/task_environment.h"
 #include "chromeos/ash/components/multidevice/remote_device_test_util.h"
@@ -94,18 +95,23 @@ class FakeMultiDeviceSetupFactory : public MultiDeviceSetupImpl::Factory {
     return instance;
   }
 
-  sync_preferences::TestingPrefServiceSyncable* expected_testing_pref_service_;
-  device_sync::FakeDeviceSyncClient* expected_device_sync_client_;
-  FakeAuthTokenValidator* expected_auth_token_validator_;
-  OobeCompletionTracker* expected_oobe_completion_tracker_;
-  FakeAndroidSmsAppHelperDelegate* expected_android_sms_app_helper_delegate_;
-  FakeAndroidSmsPairingStateTracker*
+  raw_ptr<sync_preferences::TestingPrefServiceSyncable, ExperimentalAsh>
+      expected_testing_pref_service_;
+  raw_ptr<device_sync::FakeDeviceSyncClient, ExperimentalAsh>
+      expected_device_sync_client_;
+  raw_ptr<FakeAuthTokenValidator, ExperimentalAsh>
+      expected_auth_token_validator_;
+  raw_ptr<OobeCompletionTracker, ExperimentalAsh>
+      expected_oobe_completion_tracker_;
+  raw_ptr<FakeAndroidSmsAppHelperDelegate, ExperimentalAsh>
+      expected_android_sms_app_helper_delegate_;
+  raw_ptr<FakeAndroidSmsPairingStateTracker, ExperimentalAsh>
       expected_android_sms_pairing_state_tracker_;
-  const device_sync::FakeGcmDeviceInfoProvider*
+  raw_ptr<const device_sync::FakeGcmDeviceInfoProvider, ExperimentalAsh>
       expected_gcm_device_info_provider_;
   bool expected_is_secondary_user_;
 
-  FakeMultiDeviceSetup* instance_ = nullptr;
+  raw_ptr<FakeMultiDeviceSetup, ExperimentalAsh> instance_ = nullptr;
 };
 
 }  // namespace
@@ -287,6 +293,14 @@ TEST_F(MultiDeviceSetupServiceTest, CallFunctionsBeforeInitialization) {
   multidevice_setup_remote()->RetrySetHostNow(base::DoNothing());
   multidevice_setup_remote().FlushForTesting();
 
+  // SetQuickStartPhoneInstanceId().
+  multidevice_setup_remote()->SetQuickStartPhoneInstanceID("");
+  multidevice_setup_remote().FlushForTesting();
+
+  // GetQuickStartPhoneInstanceId();
+  multidevice_setup_remote()->GetQuickStartPhoneInstanceID(base::DoNothing());
+  multidevice_setup_remote().FlushForTesting();
+
   // None of these requests should have been processed yet, since initialization
   // was not complete.
   EXPECT_FALSE(fake_multidevice_setup());
@@ -301,6 +315,10 @@ TEST_F(MultiDeviceSetupServiceTest, CallFunctionsBeforeInitialization) {
   EXPECT_EQ(1u, fake_multidevice_setup()->set_feature_enabled_args().size());
   EXPECT_EQ(1u, fake_multidevice_setup()->get_feature_states_args().size());
   EXPECT_EQ(1u, fake_multidevice_setup()->retry_set_host_now_args().size());
+  EXPECT_EQ(1u,
+            fake_multidevice_setup()->set_qs_phone_instance_id_args().size());
+  EXPECT_EQ(1u,
+            fake_multidevice_setup()->get_qs_phone_instance_id_args().size());
 }
 
 TEST_F(MultiDeviceSetupServiceTest, SetThenRemoveBeforeInitialization) {
@@ -455,6 +473,18 @@ TEST_F(MultiDeviceSetupServiceTest, FinishInitializationFirst) {
                                                         base::DoNothing());
   privileged_host_device_setter_remote().FlushForTesting();
   EXPECT_EQ(1u, fake_multidevice_setup()->set_host_without_auth_args().size());
+
+  // SetQuickStartPhoneInstanceID().
+  multidevice_setup_remote()->SetQuickStartPhoneInstanceID("");
+  multidevice_setup_remote().FlushForTesting();
+  EXPECT_EQ(1u,
+            fake_multidevice_setup()->set_qs_phone_instance_id_args().size());
+
+  // GetQuickStartPhoneInstanceID().
+  multidevice_setup_remote()->GetQuickStartPhoneInstanceID(base::DoNothing());
+  multidevice_setup_remote().FlushForTesting();
+  EXPECT_EQ(1u,
+            fake_multidevice_setup()->get_qs_phone_instance_id_args().size());
 }
 
 }  // namespace multidevice_setup

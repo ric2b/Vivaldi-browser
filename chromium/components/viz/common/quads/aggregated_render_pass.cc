@@ -200,14 +200,23 @@ std::unique_ptr<AggregatedRenderPass> AggregatedRenderPass::DeepCopy() const {
     }
     DCHECK(quad->shared_quad_state == *sqs_iter);
 
-    if (quad->material == DrawQuad::Material::kAggregatedRenderPass) {
-      const auto* pass_quad = AggregatedRenderPassDrawQuad::MaterialCast(quad);
+    if (const auto* pass_quad =
+            quad->DynamicCast<AggregatedRenderPassDrawQuad>()) {
       copy_pass->CopyFromAndAppendRenderPassDrawQuad(pass_quad);
     } else {
       copy_pass->CopyFromAndAppendDrawQuad(quad);
     }
   }
   return copy_pass;
+}
+
+bool AggregatedRenderPass::ShouldDrawWithBlending() const {
+  for (auto* quad : quad_list) {
+    if (quad->ShouldDrawWithBlending()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void AggregatedRenderPass::AsValueInto(

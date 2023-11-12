@@ -70,6 +70,7 @@ source_set("frame") {
 
   deps = [
     "//base",
+    "//chromeos/constants/",
     "//chromeos/strings:strings_grit",
     "//chromeos/ui/base",
     "//chromeos/ui/vector_icons",
@@ -85,6 +86,13 @@ source_set("frame") {
     "//ui/views/window/vector_icons",
     "//ui/wm/public",
   ]
+
+  if (is_chromeos_ash) {
+    deps += [
+      "//ash/constants",
+      "//components/user_manager",
+    ]
+  }
 }
 
 source_set("test_support") {

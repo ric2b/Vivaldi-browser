@@ -391,12 +391,12 @@ GetDisplayInfosAndInvalidCrtcs(const DrmWrapper& drm) {
 
   std::vector<ScopedDrmConnectorPtr> connectors;
   std::vector<drmModeConnector*> available_connectors;
-  for (int i = 0; i < resources->count_connectors; ++i) {
+  const size_t count_connectors = resources->count_connectors;
+  for (size_t i = 0; i < count_connectors; ++i) {
     if (i >= kMaxDrmConnectors) {
       LOG(WARNING) << "Reached the current limit of " << kMaxDrmConnectors
                    << " connectors per DRM. Ignoring the remaining "
-                   << resources->count_connectors - kMaxDrmConnectors
-                   << " connectors.";
+                   << count_connectors - kMaxDrmConnectors << " connectors.";
       break;
     }
 
@@ -539,9 +539,7 @@ display::DisplaySnapshot::DisplayModeList ExtractDisplayModes(
 std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
     const DrmWrapper& drm,
     HardwareDisplayControllerInfo* info,
-    uint8_t device_index,
-    const gfx::Point& origin,
-    const display::DrmFormatsAndModifiers& drm_formats_and_modifiers) {
+    uint8_t device_index) {
   const uint8_t display_index =
       display::ConnectorIndex8(device_index, info->index());
   const uint16_t connector_index =
@@ -578,7 +576,7 @@ std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
   std::string display_name;
   // Make sure the ID contains non index part.
   int64_t port_display_id = display_index | 0x100;
-  int64_t edid_display_id = display::kInvalidDisplayId;
+  int64_t edid_display_id = port_display_id;
   int64_t product_code = display::DisplaySnapshot::kInvalidProductCode;
   int32_t year_of_manufacture = display::kInvalidYearOfManufacture;
   bool has_overscan = false;
@@ -587,7 +585,7 @@ std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
   absl::optional<gfx::HDRStaticMetadata> hdr_static_metadata{};
   // Active pixels size from the first detailed timing descriptor in the EDID.
   gfx::Size active_pixel_size;
-  absl::optional<gfx::Range> vertical_display_range_limits;
+  absl::optional<uint16_t> vsync_rate_min;
 
   ScopedDrmPropertyBlobPtr edid_blob(
       GetDrmPropertyBlob(drm, info->connector(), "EDID"));
@@ -615,10 +613,7 @@ std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
     base::UmaHistogramCounts100("DrmUtil.CreateDisplaySnapshot.BitsPerChannel",
                                 bits_per_channel);
     hdr_static_metadata = edid_parser.hdr_static_metadata();
-    vertical_display_range_limits =
-        variable_refresh_rate_state == display::kVrrNotCapable
-            ? absl::nullopt
-            : edid_parser.vertical_display_range_limits();
+    vsync_rate_min = edid_parser.vsync_rate_min();
   } else {
     VLOG(1) << "Failed to get EDID blob for connector "
             << info->connector()->connector_id;
@@ -629,16 +624,19 @@ std::unique_ptr<display::DisplaySnapshot> CreateDisplaySnapshot(
   display::DisplaySnapshot::DisplayModeList modes =
       ExtractDisplayModes(info, active_pixel_size, &current_mode, &native_mode);
 
+  const display::DrmFormatsAndModifiers drm_formats_and_modifiers =
+      drm.GetFormatsAndModifiersForCrtc(info->crtc()->crtc_id);
+
   return std::make_unique<display::DisplaySnapshot>(
       port_display_id, port_display_id, edid_display_id, connector_index,
-      origin, physical_size, type, base_connector_id, path_topology,
+      gfx::Point(), physical_size, type, base_connector_id, path_topology,
       is_aspect_preserving_scaling, has_overscan, privacy_screen_state,
       has_content_protection_key, has_color_correction_matrix,
       color_correction_in_linear_space, display_color_space, bits_per_channel,
       hdr_static_metadata, display_name, drm.device_path(), std::move(modes),
       panel_orientation, edid, current_mode, native_mode, product_code,
       year_of_manufacture, maximum_cursor_size, variable_refresh_rate_state,
-      vertical_display_range_limits, drm_formats_and_modifiers);
+      vsync_rate_min, drm_formats_and_modifiers);
 }
 
 int GetFourCCFormatForOpaqueFramebuffer(gfx::BufferFormat format) {

@@ -131,6 +131,9 @@ base::Value ToValue(const blink::InterestGroup::Ad& ad) {
   base::Value value(base::Value::Type::DICT);
   base::Value::Dict& dict = value.GetDict();
   dict.Set("url", ad.render_url.spec());
+  if (ad.size_group) {
+    dict.Set("size_group", ad.size_group.value());
+  }
   if (ad.metadata)
     dict.Set("metadata", ad.metadata.value());
   return value;
@@ -141,6 +144,10 @@ blink::InterestGroup::Ad FromInterestGroupAdValue(
   const std::string* maybe_url = dict.FindString("url");
   if (maybe_url)
     result.render_url = GURL(*maybe_url);
+  const std::string* maybe_size_group = dict.FindString("size_group");
+  if (maybe_size_group) {
+    result.size_group = *maybe_size_group;
+  }
   const std::string* maybe_metadata = dict.FindString("metadata");
   if (maybe_metadata)
     result.metadata = *maybe_metadata;
@@ -200,8 +207,8 @@ DeserializeInterestGroupAdVector(const std::string& serialized_ads) {
 }
 
 std::string Serialize(
-    const absl::optional<
-        base::flat_map<std::string, blink::InterestGroup::Size>>& ad_sizes) {
+    const absl::optional<base::flat_map<std::string, blink::AdSize>>&
+        ad_sizes) {
   if (!ad_sizes) {
     return std::string();
   }
@@ -219,13 +226,13 @@ std::string Serialize(
   }
   return Serialize(base::Value(std::move(dict)));
 }
-absl::optional<base::flat_map<std::string, blink::InterestGroup::Size>>
+absl::optional<base::flat_map<std::string, blink::AdSize>>
 DeserializeStringSizeMap(const std::string& serialized_sizes) {
   std::unique_ptr<base::Value> dict = DeserializeValue(serialized_sizes);
   if (!dict || !dict->is_dict()) {
     return absl::nullopt;
   }
-  std::vector<std::pair<std::string, blink::InterestGroup::Size>> result;
+  std::vector<std::pair<std::string, blink::AdSize>> result;
   for (std::pair<const std::string&, base::Value&> entry : dict->GetDict()) {
     std::unique_ptr<base::Value> ads_size =
         DeserializeValue(entry.second.GetString());
@@ -234,18 +241,17 @@ DeserializeStringSizeMap(const std::string& serialized_sizes) {
     const base::Value* width_val = size_dict->Find("width");
     const base::Value* width_units_val = size_dict->Find("width_units");
     const base::Value* height_val = size_dict->Find("height");
-    const base::Value* height_units_val = size_dict->Find("width_units");
+    const base::Value* height_units_val = size_dict->Find("height_units");
     if (!width_val || !width_units_val || !height_val || !height_units_val) {
       return absl::nullopt;
     }
     result.emplace_back(entry.first,
-                        blink::InterestGroup::Size(
-                            width_val->GetDouble(),
-                            static_cast<blink::InterestGroup::Size::LengthUnit>(
-                                width_units_val->GetInt()),
-                            height_val->GetDouble(),
-                            static_cast<blink::InterestGroup::Size::LengthUnit>(
-                                height_units_val->GetInt())));
+                        blink::AdSize(width_val->GetDouble(),
+                                      static_cast<blink::AdSize::LengthUnit>(
+                                          width_units_val->GetInt()),
+                                      height_val->GetDouble(),
+                                      static_cast<blink::AdSize::LengthUnit>(
+                                          height_units_val->GetInt())));
   }
   return result;
 }
@@ -435,6 +441,9 @@ bool CreateInterestGroupIndices(sql::Database& db) {
 // Initializes the tables, returning true on success.
 // The tables cannot exist when calling this function.
 bool CreateV13Schema(sql::Database& db) {
+  // IMPORTANT: If you add or remove fields, you need to update
+  // `ClearExcessiveStorage()` to consider the size of added/removed fields for
+  // storage usage calculations.
   DCHECK(!db.DoesTableExist("interest_groups"));
   static const char kInterestGroupTableSql[] =
       // clang-format off
@@ -1153,7 +1162,7 @@ bool DoLoadInterestGroup(sql::Database& db,
       static_cast<blink::InterestGroup::ExecutionMode>(load.ColumnInt(10));
   group.bidding_url = DeserializeURL(load.ColumnString(11));
   group.bidding_wasm_helper_url = DeserializeURL(load.ColumnString(12));
-  group.daily_update_url = DeserializeURL(load.ColumnString(13));
+  group.update_url = DeserializeURL(load.ColumnString(13));
   group.trusted_bidding_signals_url = DeserializeURL(load.ColumnString(14));
   group.trusted_bidding_signals_keys =
       DeserializeStringVector(load.ColumnString(15));
@@ -1293,7 +1302,7 @@ bool DoJoinInterestGroup(sql::Database& db,
   join_group.BindString(14, Serialize(joining_url));
   join_group.BindString(15, Serialize(data.bidding_url));
   join_group.BindString(16, Serialize(data.bidding_wasm_helper_url));
-  join_group.BindString(17, Serialize(data.daily_update_url));
+  join_group.BindString(17, Serialize(data.update_url));
   join_group.BindString(18, Serialize(data.trusted_bidding_signals_url));
   join_group.BindString(19, Serialize(data.trusted_bidding_signals_keys));
   if (data.user_bidding_signals) {
@@ -1359,7 +1368,7 @@ bool DoStoreInterestGroupUpdate(sql::Database& db,
   store_group.BindInt(8, static_cast<int>(group.execution_mode));
   store_group.BindString(9, Serialize(group.bidding_url));
   store_group.BindString(10, Serialize(group.bidding_wasm_helper_url));
-  store_group.BindString(11, Serialize(group.daily_update_url));
+  store_group.BindString(11, Serialize(group.update_url));
   store_group.BindString(12, Serialize(group.trusted_bidding_signals_url));
   store_group.BindString(13, Serialize(group.trusted_bidding_signals_keys));
   store_group.BindString(14, Serialize(group.ads));
@@ -2276,6 +2285,85 @@ bool ClearExpiredInterestGroups(sql::Database& db,
   return transaction.Commit();
 }
 
+// Removes interest groups so that per-owner limit is respected. Note that we're
+// intentionally not trying to keep this in sync with
+// `blink::InterestGroup::EstimateSize()`. There's not a compelling reason to
+// keep those exactly aligned and keeping them in sync would require a
+// significant amount of extra work.
+bool ClearExcessiveStorage(sql::Database& db, size_t max_owner_storage_size) {
+  sql::Transaction transaction(&db);
+  if (!transaction.Begin()) {
+    return false;
+  }
+
+  // We go through groups for each owner, starting with the ones that expire
+  // later, accumulating the stored size. If the accumulated size is too much,
+  // we start marking groups for deletion. This means that the interest groups
+  // expiring soonest will be deleted if we need to free up space.
+  // clang-format off
+  sql::Statement excessive_storage_groups(db.GetCachedStatement(
+      SQL_FROM_HERE,
+        "SELECT owner, name, "
+          "(LENGTH(interest_groups.owner)+"
+              "LENGTH(interest_groups.joining_origin)+"
+              "LENGTH(interest_groups.name)+"
+              "LENGTH(interest_groups.priority_vector)+"
+              "LENGTH(interest_groups.priority_signals_overrides)+"
+              "LENGTH(interest_groups.seller_capabilities)+"
+              "LENGTH(interest_groups.joining_url)+"
+              "LENGTH(interest_groups.bidding_url)+"
+              "LENGTH(interest_groups.bidding_wasm_helper_url)+"
+              "LENGTH(interest_groups.update_url)+"
+              "LENGTH(interest_groups.trusted_bidding_signals_url)+"
+              "LENGTH(interest_groups.trusted_bidding_signals_keys)+"
+              "LENGTH(interest_groups.user_bidding_signals)+"
+              "LENGTH(interest_groups.ads)+"
+              "LENGTH(interest_groups.ad_components)+"
+              "LENGTH(interest_groups.ad_sizes)+"
+              "LENGTH(interest_groups.size_groups)+"
+              "36) "  // other fields are fixed at 36 bytes
+            "AS cum_size "
+        "FROM interest_groups "
+        "ORDER BY owner, expiration DESC"
+      ));
+  // clang-format on
+  if (!excessive_storage_groups.is_valid()) {
+    return false;
+  }
+
+  excessive_storage_groups.Reset(true);
+  std::vector<blink::InterestGroupKey> groups_to_remove;
+  absl::optional<url::Origin> previous;
+  size_t cum_size;
+  while (excessive_storage_groups.Step()) {
+    url::Origin group_owner =
+        DeserializeOrigin(excessive_storage_groups.ColumnString(0));
+    std::string group_name = excessive_storage_groups.ColumnString(1);
+    size_t group_size = excessive_storage_groups.ColumnInt64(2);
+
+    if (!previous || *previous != group_owner) {
+      previous = group_owner;
+      cum_size = group_size;
+      continue;
+    }
+    cum_size += group_size;
+    if (cum_size > max_owner_storage_size) {
+      groups_to_remove.emplace_back(std::move(group_owner),
+                                    std::move(group_name));
+    }
+  }
+  if (!excessive_storage_groups.Succeeded()) {
+    DLOG(ERROR) << "ClearExcessiveStorage could not get expired groups.";
+    // Keep going so we can clear any groups that we did get.
+  }
+  for (const auto& interest_group : groups_to_remove) {
+    if (!DoRemoveInterestGroup(db, interest_group)) {
+      return false;
+    }
+  }
+  return transaction.Commit();
+}
+
 bool ClearExpiredKAnon(sql::Database& db, base::Time cutoff) {
   sql::Statement expired_kanon(
       db.GetCachedStatement(SQL_FROM_HERE,
@@ -2294,29 +2382,41 @@ bool ClearExpiredKAnon(sql::Database& db, base::Time cutoff) {
 bool DoPerformDatabaseMaintenance(sql::Database& db,
                                   base::Time now,
                                   size_t max_owners,
+                                  size_t max_owner_storage_size,
                                   size_t max_owner_interest_groups) {
   SCOPED_UMA_HISTOGRAM_TIMER_MICROS("Storage.InterestGroup.DBMaintenanceTime");
   sql::Transaction transaction(&db);
-  if (!transaction.Begin())
+  if (!transaction.Begin()) {
     return false;
-  if (!ClearExcessInterestGroups(db, max_owners, max_owner_interest_groups))
+  }
+  if (!ClearExcessInterestGroups(db, max_owners, max_owner_interest_groups)) {
     return false;
-  if (!ClearExpiredInterestGroups(db, now))
+  }
+  if (!ClearExpiredInterestGroups(db, now)) {
     return false;
-  if (!DeleteOldJoins(db, now - InterestGroupStorage::kHistoryLength))
+  }
+  if (!ClearExcessiveStorage(db, max_owner_storage_size)) {
     return false;
-  if (!DeleteOldBids(db, now - InterestGroupStorage::kHistoryLength))
+  }
+  if (!DeleteOldJoins(db, now - InterestGroupStorage::kHistoryLength)) {
     return false;
-  if (!DeleteOldWins(db, now - InterestGroupStorage::kHistoryLength))
+  }
+  if (!DeleteOldBids(db, now - InterestGroupStorage::kHistoryLength)) {
     return false;
-  if (!ClearExpiredKAnon(db, now - InterestGroupStorage::kHistoryLength))
+  }
+  if (!DeleteOldWins(db, now - InterestGroupStorage::kHistoryLength)) {
     return false;
+  }
+  if (!ClearExpiredKAnon(db, now - InterestGroupStorage::kHistoryLength)) {
+    return false;
+  }
   return transaction.Commit();
 }
 
 base::FilePath DBPath(const base::FilePath& base) {
-  if (base.empty())
+  if (base.empty()) {
     return base;
+  }
   return base.Append(kDatabasePath);
 }
 
@@ -2333,6 +2433,8 @@ InterestGroupStorage::InterestGroupStorage(const base::FilePath& path)
       max_owners_(blink::features::kInterestGroupStorageMaxOwners.Get()),
       max_owner_interest_groups_(
           blink::features::kInterestGroupStorageMaxGroupsPerOwner.Get()),
+      max_owner_storage_size_(
+          blink::features::kInterestGroupStorageMaxStoragePerOwner.Get()),
       max_ops_before_maintenance_(
           blink::features::kInterestGroupStorageMaxOpsBeforeMaintenance.Get()),
       db_(std::make_unique<sql::Database>(sql::DatabaseOptions{})),
@@ -2383,7 +2485,7 @@ bool InterestGroupStorage::InitializeDB() {
   } else {
     const base::FilePath dir = path_to_database_.DirName();
 
-    if (!base::DirectoryExists(dir) && !base::CreateDirectory(dir)) {
+    if (!base::CreateDirectory(dir)) {
       DLOG(ERROR) << "Failed to create directory for interest group database";
       return false;
     }
@@ -2729,7 +2831,7 @@ void InterestGroupStorage::DeleteAllInterestGroupData() {
   if (!EnsureDBInitialized())
     return;
 
-  db_->RazeAndClose();
+  db_->RazeAndPoison();
   db_.reset();
 }
 
@@ -2784,6 +2886,7 @@ void InterestGroupStorage::PerformDBMaintenance() {
   if (EnsureDBInitialized()) {
     DoPerformDatabaseMaintenance(
         *db_, last_maintenance_time_, /*max_owners=*/max_owners_,
+        /*max_owner_storage_size=*/max_owner_storage_size_,
         /*max_owner_interest_groups=*/max_owner_interest_groups_);
   }
 }
@@ -2824,10 +2927,10 @@ void InterestGroupStorage::DatabaseErrorCallback(int extended_error,
 
   if (sql::IsErrorCatastrophic(extended_error)) {
     // Normally this will poison the database, causing any subsequent operations
-    // to silently fail without any side effects. However, if RazeAndClose() is
+    // to silently fail without any side effects. However, if RazeAndPoison() is
     // called from the error callback in response to an error raised from within
     // sql::Database::Open, opening the now-razed database will be retried.
-    db_->RazeAndClose();
+    db_->RazeAndPoison();
     return;
   }
 

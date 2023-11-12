@@ -11,6 +11,7 @@
 
 #include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -52,6 +53,7 @@
 #include "ui/gfx/vector_icon_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/editable_combobox/editable_combobox.h"
@@ -152,34 +154,34 @@ void BuildCredentialRows(views::View* parent_view,
 
 // Create a vector which contains only the values in |items| and no elements.
 std::vector<std::u16string> ToValues(
-    const password_manager::ValueElementVector& items) {
+    const password_manager::AlternativeElementVector& items) {
   std::vector<std::u16string> passwords;
   passwords.reserve(items.size());
-  for (auto& pair : items)
-    passwords.push_back(pair.first);
+  for (const auto& item : items)
+    passwords.push_back(item.value);
   return passwords;
 }
 
-// Creates an EditableCombobox from |PasswordForm.all_possible_usernames| or
+// Creates an EditableCombobox from |PasswordForm.all_alternative_usernames| or
 // even just |PasswordForm.username_value|.
 std::unique_ptr<views::EditableCombobox> CreateUsernameEditableCombobox(
     const password_manager::PasswordForm& form) {
   std::vector<std::u16string> usernames = {form.username_value};
-  for (const password_manager::ValueElementPair& other_possible_username_pair :
-       form.all_possible_usernames) {
-    if (other_possible_username_pair.first != form.username_value)
-      usernames.push_back(other_possible_username_pair.first);
+  for (const password_manager::AlternativeElement& other_possible_username :
+       form.all_alternative_usernames) {
+    if (other_possible_username.value != form.username_value)
+      usernames.push_back(other_possible_username.value);
   }
   base::EraseIf(usernames, [](const std::u16string& username) {
     return username.empty();
   });
-  bool display_arrow = !usernames.empty();
+  const bool kDisplayArrow = usernames.size() > 1;
   auto combobox = std::make_unique<views::EditableCombobox>(
       std::make_unique<ui::SimpleComboboxModel>(
           std::vector<ui::SimpleComboboxModel::Item>(usernames.begin(),
                                                      usernames.end())),
       /*filter_on_edit=*/false, /*show_on_empty=*/true,
-      views::style::CONTEXT_BUTTON, views::style::STYLE_PRIMARY, display_arrow);
+      views::style::CONTEXT_BUTTON, views::style::STYLE_PRIMARY, kDisplayArrow);
   combobox->SetText(form.username_value);
   combobox->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_USERNAME_LABEL));
@@ -189,33 +191,30 @@ std::unique_ptr<views::EditableCombobox> CreateUsernameEditableCombobox(
 }
 
 // Creates an EditablePasswordCombobox from
-// `PasswordForm.all_possible_passwords` or even just
+// `PasswordForm.all_alternative_passwords` or even just
 // `PasswordForm.password_value`.
 std::unique_ptr<views::EditablePasswordCombobox> CreateEditablePasswordCombobox(
     const password_manager::PasswordForm& form,
-    bool are_passwords_revealed,
-    views::EditablePasswordCombobox::IsPasswordRevealPermittedCheck
-        reveal_permitted_check) {
+    views::Button::PressedCallback reveal_password_callback) {
   DCHECK(!form.IsFederatedCredential());
   std::vector<std::u16string> passwords =
-      form.all_possible_passwords.empty()
+      form.all_alternative_passwords.empty()
           ? std::vector<std::u16string>(/*n=*/1, form.password_value)
-          : ToValues(form.all_possible_passwords);
+          : ToValues(form.all_alternative_passwords);
   base::EraseIf(passwords, [](const std::u16string& password) {
     return password.empty();
   });
-  bool display_arrow = !passwords.empty();
+  const bool kDisplayArrow = passwords.size() > 1;
   auto combobox = std::make_unique<views::EditablePasswordCombobox>(
       std::make_unique<ui::SimpleComboboxModel>(
           std::vector<ui::SimpleComboboxModel::Item>(passwords.begin(),
                                                      passwords.end())),
-      views::style::CONTEXT_BUTTON, STYLE_PRIMARY_MONOSPACED, display_arrow);
+      views::style::CONTEXT_BUTTON, STYLE_PRIMARY_MONOSPACED, kDisplayArrow,
+      std::move(reveal_password_callback));
   combobox->SetText(form.password_value);
   combobox->SetPasswordIconTooltips(
       l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_SHOW_PASSWORD),
       l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_HIDE_PASSWORD));
-  combobox->SetIsPasswordRevealPermittedCheck(std::move(reveal_permitted_check));
-  combobox->RevealPasswords(are_passwords_revealed);
   combobox->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_PASSWORD_LABEL));
   return combobox;
@@ -339,9 +338,8 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
     std::unique_ptr<views::EditablePasswordCombobox> password_dropdown =
         CreateEditablePasswordCombobox(
             password_form,
-            controller_.are_passwords_revealed_when_bubble_is_opened(),
-            base::BindRepeating(&SaveUpdateBubbleController::RevealPasswords,
-                                base::Unretained(&controller_)));
+            base::BindRepeating(&PasswordSaveUpdateView::TogglePasswordRevealed,
+                                base::Unretained(this)));
     // Set up layout:
     SetLayoutManager(std::make_unique<AutoResizingLayout>());
     views::View* root_view = AddChildView(std::make_unique<views::View>());
@@ -698,4 +696,35 @@ void PasswordSaveUpdateView::UpdateFootnote() {
   // The footnote size could have changed since it depends on whether it
   // affects the account store, and hence resize.
   SizeToContents();
+}
+
+void PasswordSaveUpdateView::TogglePasswordRevealed() {
+  if (password_dropdown_->ArePasswordsRevealed()) {
+    password_dropdown_->RevealPasswords(false);
+    return;
+  }
+  // User authentication might be required, query the controller to determine
+  // whether the user is allowed to unmask the password.
+
+  // Prevent the bubble from closing for the duration of the lifetime of the
+  // `pin`. This is to keep it open while the user authentication is in action.
+  std::unique_ptr<CloseOnDeactivatePin> pin = PreventCloseOnDeactivate();
+
+  controller_.ShouldRevealPasswords(base::BindOnce(
+      [](PasswordSaveUpdateView* view,
+         std::unique_ptr<CloseOnDeactivatePin> pin, bool reveal) {
+        view->password_dropdown_->RevealPasswords(reveal);
+        // This is necessary on Windows since the bubble isn't activated again
+        // after the conlusion of the auth flow.
+        view->GetWidget()->Activate();
+        // Delay the destruction of `pin` for 1 sec to make sure the bubble
+        // remains open till the OS closes the authentication dialog and
+        // reactivates the bubble.
+        base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+            FROM_HERE,
+            base::BindOnce([](std::unique_ptr<CloseOnDeactivatePin> pin) {},
+                           std::move(pin)),
+            base::Seconds(1));
+      },
+      base::Unretained(this), std::move(pin)));
 }

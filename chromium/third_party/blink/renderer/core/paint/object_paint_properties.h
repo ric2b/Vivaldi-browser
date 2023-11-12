@@ -203,9 +203,10 @@ class CORE_EXPORT ObjectPaintProperties {
   // |     will have SkBlendMode::kDstIn and shall paint last, i.e. after
   // |     clipped contents. If there is no Mask node, then this node is a
   // |     direct child of the Effect node.
-  // +-[ VerticalScrollbarEffect / HorizontalScrollbarEffect ]
+  // +-[ VerticalScrollbarEffect / HorizontalScrollbarEffect / ScrollCorner ]
   //       Overlay Scrollbars on Aura and Android need effect node for fade
-  //       animation.
+  //       animation. Also used in ViewTransitions to separate out scrollbars
+  //       from the root snapshot.
   //
   // ... +-[ EffectIsolationNode ]
   //       This serves as a parent to subtree effects on an element with paint
@@ -214,21 +215,24 @@ class CORE_EXPORT ObjectPaintProperties {
  public:
   bool HasEffectNode() const {
     return effect_ || filter_ || vertical_scrollbar_effect_ ||
-           horizontal_scrollbar_effect_ || mask_ || clip_path_mask_ ||
-           effect_isolation_node_;
+           horizontal_scrollbar_effect_ || scroll_corner_effect_ || mask_ ||
+           clip_path_mask_ || effect_isolation_node_;
   }
   ADD_EFFECT(Effect, effect_);
   ADD_EFFECT(Filter, filter_);
   ADD_EFFECT(VerticalScrollbarEffect, vertical_scrollbar_effect_);
   ADD_EFFECT(HorizontalScrollbarEffect, horizontal_scrollbar_effect_);
+  ADD_EFFECT(ScrollCornerEffect, scroll_corner_effect_);
   ADD_EFFECT(Mask, mask_);
   ADD_EFFECT(ClipPathMask, clip_path_mask_);
   ADD_ALIAS_NODE(Effect, EffectIsolationNode, effect_isolation_node_);
 
   // The hierarchy of the clip subtree created by a LayoutObject is as follows:
-  // [ FragmentClip ]
-  // |    Clips to a fragment's bounds.
-  // |    This is only present for content under a fragmentation container.
+  // [ ViewTransitionClip ]
+  // |   Clip created only when there is an active ViewTransition. This is used
+  // |   to clip the element's painting to a subset close to the viewport.
+  // |   See https://drafts.csswg.org/css-view-transitions-1/
+  // |       #compute-the-interest-rectangle-algorithm for details.
   // +-[ ClipPathClip ]
   //   |  Clip created by path-based CSS clip-path. Only exists if the
   //  /   clip-path is "simple" that can be applied geometrically. This and
@@ -249,6 +253,9 @@ class CORE_EXPORT ObjectPaintProperties {
   //     +-[ OverflowControlsClip ]
   //     |   Clip created by overflow clip to clip overflow controls
   //     |   (scrollbars, resizer, scroll corner) that would overflow the box.
+  //     +-[ BackgroundClip ]
+  //     |   Clip created for CompositeBackgroundAttachmentFixed background
+  //     |   according to CSS background-clip.
   //     +-[ PixelMovingFilterClipExpander ]
   //       | Clip created by pixel-moving filter. Instead of intersecting with
   //       | the current clip, this clip expands the current clip to include all
@@ -269,18 +276,17 @@ class CORE_EXPORT ObjectPaintProperties {
   //       paint element.
  public:
   bool HasClipNode() const {
-    return fragment_clip_ || pixel_moving_filter_clip_expaner_ ||
-           clip_path_clip_ || mask_clip_ || css_clip_ ||
-           overflow_controls_clip_ || inner_border_radius_clip_ ||
+    return pixel_moving_filter_clip_expaner_ || clip_path_clip_ || mask_clip_ ||
+           css_clip_ || overflow_controls_clip_ || inner_border_radius_clip_ ||
            overflow_clip_ || clip_isolation_node_;
   }
-  ADD_CLIP(FragmentClip, fragment_clip_);
   ADD_CLIP(PixelMovingFilterClipExpander, pixel_moving_filter_clip_expaner_);
   ADD_CLIP(ClipPathClip, clip_path_clip_);
   ADD_CLIP(MaskClip, mask_clip_);
   ADD_CLIP(CssClip, css_clip_);
   ADD_CLIP(CssClipFixedPosition, css_clip_fixed_position_);
   ADD_CLIP(OverflowControlsClip, overflow_controls_clip_);
+  ADD_CLIP(BackgroundClip, background_clip_);
   ADD_CLIP(InnerBorderRadiusClip, inner_border_radius_clip_);
   ADD_CLIP(OverflowClip, overflow_clip_);
   ADD_ALIAS_NODE(Clip, ClipIsolationNode, clip_isolation_node_);

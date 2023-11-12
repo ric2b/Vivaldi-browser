@@ -30,7 +30,7 @@ namespace web {
 // Minimal implementation of WebState, to be used in tests.
 class FakeWebState : public WebState {
  public:
-  explicit FakeWebState(NSString* stable_identifier = nil);
+  FakeWebState();
   ~FakeWebState() override;
 
   // WebState implementation.
@@ -61,8 +61,8 @@ class FakeWebState : public WebState {
   void Stop() override {}
   const NavigationManager* GetNavigationManager() const override;
   NavigationManager* GetNavigationManager() override;
-  const WebFramesManager* GetPageWorldWebFramesManager() const override;
   WebFramesManager* GetPageWorldWebFramesManager() override;
+  WebFramesManager* GetWebFramesManager(ContentWorld world) override;
   const SessionCertificatePolicyCache* GetSessionCertificatePolicyCache()
       const override;
   SessionCertificatePolicyCache* GetSessionCertificatePolicyCache() override;
@@ -70,6 +70,7 @@ class FakeWebState : public WebState {
   void LoadData(NSData* data, NSString* mime_type, const GURL& url) override;
   void ExecuteUserJavaScript(NSString* javaScript) override;
   NSString* GetStableIdentifier() const override;
+  SessionID GetUniqueIdentifier() const override;
   const std::string& GetContentsMimeType() const override;
   bool ContentIsHTML() const override;
   const std::u16string& GetTitle() const override;
@@ -140,6 +141,9 @@ class FakeWebState : public WebState {
       std::unique_ptr<NavigationManager> navigation_manager);
   void SetWebFramesManager(
       std::unique_ptr<WebFramesManager> web_frames_manager);
+  void SetWebFramesManager(
+      ContentWorld content_world,
+      std::unique_ptr<WebFramesManager> web_frames_manager);
   void SetView(UIView* view);
   void SetIsCrashed(bool value);
   void SetIsEvicted(bool value);
@@ -180,6 +184,7 @@ class FakeWebState : public WebState {
  private:
   BrowserState* browser_state_ = nullptr;
   NSString* stable_identifier_ = nil;
+  const SessionID unique_identifier_;
   bool web_usage_enabled_ = true;
   bool is_realized_ = true;
   bool is_loading_ = false;
@@ -200,7 +205,8 @@ class FakeWebState : public WebState {
   bool content_is_html_ = true;
   std::string mime_type_;
   std::unique_ptr<NavigationManager> navigation_manager_;
-  std::unique_ptr<WebFramesManager> web_frames_manager_;
+  std::map<ContentWorld, std::unique_ptr<WebFramesManager>>
+      web_frames_managers_;
   UIView* view_ = nil;
   CRWWebViewProxyType web_view_proxy_;
   NSData* last_loaded_data_ = nil;

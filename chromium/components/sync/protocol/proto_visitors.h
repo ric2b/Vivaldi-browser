@@ -53,6 +53,7 @@
 #include "components/sync/protocol/unique_position.pb.h"
 #include "components/sync/protocol/user_consent_specifics.pb.h"
 #include "components/sync/protocol/user_event_specifics.pb.h"
+#include "components/sync/protocol/web_apk_specifics.pb.h"
 #include "components/sync/protocol/web_app_specifics.pb.h"
 #include "components/sync/protocol/webauthn_credential_specifics.pb.h"
 #include "components/sync/protocol/workspace_desk_specifics.pb.h"
@@ -97,6 +98,10 @@
 // Repeated fields are always present, so there are no 'has_<field>' methods.
 // This macro unconditionally calls visitor.Visit().
 #define VISIT_REP(field) visitor.Visit(proto, #field, proto.field());
+
+// Repeated fields are always present, so there are no 'has_<field>' methods.
+// This macro unconditionally calls visitor.VisitBytes().
+#define VISIT_REP_BYTES(field) visitor.VisitBytes(proto, #field, proto.field());
 
 // Values that are secrets do not have their contents reported in debugging
 // output, only their lengths, but are still counted for things like memory
@@ -549,7 +554,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntityMetadata& proto) {
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
-  static_assert(45 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(46 + 1 /* notes */ == GetNumModelTypes(),
                 "When adding a new protocol type, you will likely need to add "
                 "it here as well.");
   VISIT(encrypted);
@@ -594,6 +599,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(user_event);
   VISIT(wallet_metadata);
   VISIT(web_app);
+  VISIT(webauthn_credential);
   VISIT(wifi_configuration);
   VISIT(workspace_desk);
   VISIT(webauthn_credential);
@@ -687,7 +693,8 @@ VISIT_PROTO_FIELDS(const sync_pb::ModelTypeState& proto) {
   VISIT(progress_marker);
   VISIT(type_context);
   VISIT(encryption_key_name);
-  VISIT(initial_sync_done);
+  VISIT(initial_sync_done_deprecated);
+  VISIT_ENUM(initial_sync_state);
   VISIT(cache_guid);
   VISIT(authenticated_account_id);
   VISIT_REP(invalidations);
@@ -778,11 +785,12 @@ VISIT_PROTO_FIELDS(const sync_pb::WebauthnCredentialSpecifics& proto) {
   VISIT_BYTES(credential_id);
   VISIT(rp_id);
   VISIT_BYTES(user_id);
-  VISIT_REP(newly_shadowed_credential_ids);
+  VISIT_REP_BYTES(newly_shadowed_credential_ids);
   VISIT(creation_time);
   VISIT(user_name);
   VISIT(user_display_name);
   VISIT(third_party_payments_support);
+  VISIT(last_used_time_windows_epoch_micros);
   VISIT_SECRET(private_key);
   VISIT_SECRET(encrypted);
 }
@@ -872,17 +880,17 @@ VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData& proto) {
   VISIT(notes);
 }
 
-VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData_PasswordIssues& proto) {
+VISIT_PROTO_FIELDS(const sync_pb::PasswordIssues& proto) {
   VISIT(leaked_password_issue);
   VISIT(reused_password_issue);
   VISIT(weak_password_issue);
   VISIT(phished_password_issue);
 }
 
-VISIT_PROTO_FIELDS(
-    const sync_pb::PasswordSpecificsData_PasswordIssues_PasswordIssue& proto) {
+VISIT_PROTO_FIELDS(const sync_pb::PasswordIssues_PasswordIssue& proto) {
   VISIT(date_first_detection_windows_epoch_micros);
   VISIT(is_muted);
+  VISIT(trigger_notification_from_backend_on_detection);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData_Notes& proto) {
@@ -900,6 +908,7 @@ VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsMetadata& proto) {
   VISIT(url);
   VISIT(blacklisted);
   VISIT(date_last_used_windows_epoch_micros);
+  VISIT(password_issues);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PowerBookmarkSpecifics& proto) {
@@ -1144,7 +1153,7 @@ VISIT_PROTO_FIELDS(const sync_pb::SyncEntity& proto) {
   VISIT(originator_client_item_id);
   VISIT(specifics);
   VISIT(folder);
-  VISIT(client_defined_unique_tag);
+  VISIT(client_tag_hash);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SyncInvalidationsPayload& proto) {
@@ -1416,6 +1425,21 @@ VISIT_PROTO_FIELDS(const sync_pb::WalletCreditCardCloudTokenData& proto) {
   VISIT(exp_year);
   VISIT(art_fife_url);
   VISIT(instrument_token);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::WebApkIconInfo& proto) {
+  VISIT(size_in_px);
+  VISIT(url);
+  VISIT_ENUM(purpose);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::WebApkSpecifics& proto) {
+  VISIT(manifest_id);
+  VISIT(start_url);
+  VISIT(name);
+  VISIT(theme_color);
+  VISIT(scope);
+  VISIT_REP(icon_infos);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WebAppIconInfo& proto) {

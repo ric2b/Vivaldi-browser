@@ -6,8 +6,8 @@
 
 #import "base/notreached.h"
 #import "base/strings/utf_string_conversions.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/grit/ios_theme_resources.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -84,14 +84,8 @@ UIImage* GetOmniboxSuggestionIconForAutocompleteMatchType(
 
 // Returns the asset with "always template" rendering mode.
 UIImage* GetLocationBarSecurityIcon(LocationBarSecurityIconType iconType) {
-  if (UseSymbols()) {
-    return DefaultSymbolTemplateWithPointSize(
-        GetLocationBarSecuritySymbolName(iconType),
-        kSymbolLocationBarPointSize);
-  }
-  NSString* imageName = GetLocationBarSecurityIconTypeAssetName(iconType);
-  return [[UIImage imageNamed:imageName]
-      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  return DefaultSymbolTemplateWithPointSize(
+      GetLocationBarSecuritySymbolName(iconType), kSymbolLocationBarPointSize);
 }
 
 // Converts the `security_level` to an appropriate security icon type.

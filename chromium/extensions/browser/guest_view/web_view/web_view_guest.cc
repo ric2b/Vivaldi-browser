@@ -105,9 +105,9 @@
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "ui/content/vivaldi_tab_check.h"
 #include "ui/devtools/devtools_connector.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
-
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -472,6 +472,12 @@ void WebViewGuest::MaybeRecreateGuestContents(
     return;
   }
 
+  // NOTE(andre@vivaldi.com) : If the contents are owned by someone else we
+  // cannot recreate it. This came in cr114 and flagged in VB-96819.
+  if (VivaldiTabCheck::IsOwnedByTabStripOrDevTools(web_contents())) {
+    return;
+  }
+
   DCHECK(GetCreateParams().has_value());
   auto& [create_params, web_contents_create_params] = *GetCreateParams();
   DCHECK_EQ(web_contents_create_params.guest_delegate, this);
@@ -505,7 +511,7 @@ void WebViewGuest::MaybeRecreateGuestContents(
   recreate_initial_nav_ = base::BindOnce(
       &WebViewGuest::LoadURLWithParams, weak_ptr_factory_.GetWeakPtr(),
       new_web_contents_create_params.initial_popup_url, content::Referrer(),
-      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, /*force_navigation=*/true, /*params=*/ nullptr);
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, /*force_navigation=*/true, /*params=*/ absl::nullopt);
 }
 
 void WebViewGuest::ClearCodeCache(base::Time remove_since,
@@ -781,11 +787,9 @@ void WebViewGuest::NewGuestWebViewCallback(
   pending_new_windows_.insert(
       std::make_pair(raw_new_guest, NewWindowInfo(params.url, std::string())));
 
-  // NOTE(espen@vivaldi.com): We must send along the referrer as well.
-  pending_new_windows_.at(new_guest.get()).referrer =
-      new content::Referrer(params.referrer.url, params.referrer.policy);
-  pending_new_windows_.at(new_guest.get()).params =
-      new content::OpenURLParams(params);
+  // NOTE(espen@vivaldi.com): We must send along the params (including referrer)
+  // as well.
+  pending_new_windows_.at(new_guest.get()).params = params;
 
   // NOTE(andre@vivaldi.com): If we open a new window from an incognito window,
   // this new window should be the same type.
@@ -1075,13 +1079,10 @@ void WebViewGuest::UserAgentOverrideSet(
 void WebViewGuest::FrameNameChanged(RenderFrameHost* render_frame_host,
                                     const std::string& name) {
   // WebViewGuest does not support back/forward cache or prerendering so
-  // |render_frame_host| should be either active or pending deletion. Note that
-  // the pending deletion state becomes possible with site isolation for
-  // <webview> (crbug.com/1267977).
+  // |render_frame_host| should be either active or pending deletion.
   DCHECK(render_frame_host->IsActive() ||
-         (content::SiteIsolationPolicy::IsSiteIsolationForGuestsEnabled() &&
-          render_frame_host->IsInLifecycleState(
-              RenderFrameHost::LifecycleState::kPendingDeletion)));
+         render_frame_host->IsInLifecycleState(
+             RenderFrameHost::LifecycleState::kPendingDeletion));
   if (render_frame_host->GetParentOrOuterDocument())
     return;
 
@@ -1261,8 +1262,7 @@ content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(
 void WebViewGuest::NavigateGuest(const std::string& src,
                                  bool force_navigation,
                                  ui::PageTransition transition_type,
-                                 content::Referrer* referrer,
-                                 content::OpenURLParams* params) {
+                                 absl::optional<content::OpenURLParams> params) {
   if (src.empty())
     return;
 
@@ -1287,12 +1287,12 @@ void WebViewGuest::NavigateGuest(const std::string& src,
     SignalWhenReady(
         base::BindOnce(&WebViewGuest::LoadURLWithParams,
                    weak_ptr_factory_.GetWeakPtr(), url,
-                   referrer ? *referrer : content::Referrer(),
-                   transition_type, force_navigation, params));
+                   params ? params->referrer : content::Referrer(),
+                   transition_type, force_navigation, std::move(params)));
     return;
   }
-  LoadURLWithParams(url, referrer ? *referrer : content::Referrer(),
-                    transition_type, force_navigation, params);
+  LoadURLWithParams(url, params ? params->referrer : content::Referrer(),
+                    transition_type, force_navigation, std::move(params));
 }
 
 bool WebViewGuest::HandleKeyboardShortcuts(
@@ -1399,7 +1399,6 @@ void WebViewGuest::ApplyAttributes(const base::Value::Dict& params) {
            !web_contents()->HasOpener())) {
         NavigateGuest(new_window_info.url.spec(), false /* force_navigation */,
                       ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-                      new_window_info.referrer,
                       new_window_info.params);
       }
 
@@ -1761,7 +1760,7 @@ void WebViewGuest::LoadURLWithParams(const GURL& url,
                                      const content::Referrer& referrer,
                                      ui::PageTransition transition_type,
                                      bool force_navigation,
-                                     const content::OpenURLParams* params) {
+                                     absl::optional<content::OpenURLParams> params) {
   if (!url.is_valid()) {
     LoadAbort(true /* is_top_level */, url, net::ERR_INVALID_URL);
     NavigateGuest(url::kAboutBlankURL, false /* force_navigation */);

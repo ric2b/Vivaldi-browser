@@ -305,7 +305,7 @@
   },
   {
     "cmd": [
-      "python",
+      "python3",
       "-u",
       "[START_DIR]/gn/build/gen.py",
       "-d"
@@ -462,7 +462,7 @@
   },
   {
     "cmd": [
-      "python",
+      "python3",
       "-u",
       "[START_DIR]/gn/build/gen.py",
       "--use-lto",
@@ -668,7 +668,7 @@
   },
   {
     "cmd": [
-      "python",
+      "python3",
       "-u",
       "[START_DIR]/gn/build/gen.py",
       "--use-lto",

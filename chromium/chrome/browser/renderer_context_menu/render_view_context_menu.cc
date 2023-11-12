@@ -72,11 +72,11 @@
 #include "chrome/browser/sharing/click_to_call/click_to_call_metrics.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_utils.h"
 #include "chrome/browser/sharing/features.h"
+#include "chrome/browser/sharing_hub/sharing_hub_features.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 #include "chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
-#include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -89,6 +89,8 @@
 #include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble.h"
+#include "chrome/browser/ui/side_panel/companion/companion_tab_helper.h"
+#include "chrome/browser/ui/side_panel/companion/companion_utils.h"
 #include "chrome/browser/ui/side_search/side_search_utils.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -113,6 +115,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/custom_handlers/protocol_handler.h"
@@ -132,6 +135,7 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/policy/content/policy_blocklist_service.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/search_engines_pref_names.h"
@@ -247,7 +251,7 @@
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
-#include "chrome/browser/supervised_user/supervised_user_url_filter.h"
+#include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #endif
 
 #if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
@@ -638,8 +642,13 @@ void AddAvatarToLastMenuItem(const gfx::Image& icon,
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
-void OnProfileCreated(const GURL& link_url, Profile* profile) {
-  Browser* browser = chrome::FindLastActiveWithProfile(profile);
+void OnBrowserCreated(const GURL& link_url, Browser* browser) {
+  if (!browser) {
+    // TODO(crbug.com/1374315): Make sure we do something or log an error if
+    // opening a browser window was not possible.
+    return;
+  }
+
   NavigateParams nav_params(
       browser, link_url,
       /* |ui::PAGE_TRANSITION_TYPED| is used rather than
@@ -749,6 +758,8 @@ RenderViewContextMenu::RenderViewContextMenu(
                        this,
                        &menu_model_,
                        base::BindRepeating(MenuItemMatchesParams, params_)),
+      current_url_(render_frame_host.GetLastCommittedURL()),
+      main_frame_url_(render_frame_host.GetMainFrame()->GetLastCommittedURL()),
       profile_link_submenu_model_(this),
       multiple_profiles_open_(false),
       protocol_handler_submenu_model_(this),
@@ -761,7 +772,8 @@ RenderViewContextMenu::RenderViewContextMenu(
               GetProfile()->GetOriginalProfile()),
           this,
           &menu_model_,
-          GetBrowser()) {
+          GetBrowser(),
+          std::make_unique<ScopedNewBadgeTracker>(GetProfile())) {
   if (!g_custom_id_ranges_initialized) {
     g_custom_id_ranges_initialized = true;
     SetContentCustomCommandIdRange(IDC_CONTENT_CONTEXT_CUSTOM_FIRST,
@@ -971,6 +983,7 @@ void RenderViewContextMenu::WriteURLToClipboard(const GURL& url) {
   ui::ScopedClipboardWriter scw(
       ui::ClipboardBuffer::kCopyPaste,
       CreateDataEndpoint(/*notify_if_restricted=*/true));
+  scw.SetDataSourceURL(main_frame_url_, current_url_);
   scw.WriteText(FormatURLForClipboard(url));
 }
 
@@ -1056,7 +1069,8 @@ void RenderViewContextMenu::InitMenu() {
     AppendLinkToTextItems();
   }
 
-  if (user_notes::IsUserNotesEnabled()) {
+  if (user_notes::IsUserNotesEnabled() && GetBrowser() &&
+      GetBrowser()->is_type_normal()) {
     AppendUserNotesItems();
   }
 
@@ -1108,11 +1122,13 @@ void RenderViewContextMenu::InitMenu() {
     }
   }
 
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   if (accessibility_state_utils::IsScreenReaderEnabled() &&
       features::IsPdfOcrEnabled() && IsFrameInPdfViewer(GetRenderFrameHost())) {
     AppendPdfOcrItems();
     VLOG(2) << "Appended PDF OCR Items";
   }
+#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
   if (content_type_->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_MEDIA_PLUGIN)) {
@@ -1707,7 +1723,11 @@ void RenderViewContextMenu::AppendOpenInWebAppLinkItems() {
   const Browser* browser = GetBrowser();
   if (browser && browser->app_name() ==
                      web_app::GenerateApplicationNameFromAppId(*link_app_id)) {
-    open_in_app_string_id = IDS_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP_SAMEAPP;
+    if (provider->registrar_unsafe().IsTabbedWindowModeEnabled(*link_app_id)) {
+      open_in_app_string_id = IDS_CONTENT_CONTEXT_OPENLINKWEBAPP_NEWTAB;
+    } else {
+      open_in_app_string_id = IDS_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP_SAMEAPP;
+    }
   } else {
     open_in_app_string_id = IDS_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP;
   }
@@ -1774,7 +1794,8 @@ void RenderViewContextMenu::AppendSearchWebForImageItems() {
 
   menu_model_.AddItem(GetSearchForImageIdc(), menu_string);
 
-  if (base::FeatureList::IsEnabled(lens::features::kEnableImageTranslate) &&
+  if (base::FeatureList::IsEnabled(lens::features::kLensStandalone) &&
+      base::FeatureList::IsEnabled(lens::features::kEnableImageTranslate) &&
       provider && !provider->image_translate_url().empty() &&
       provider->image_translate_url_ref().IsValid(
           service->search_terms_data())) {
@@ -1981,6 +2002,7 @@ void RenderViewContextMenu::AppendReadAnythingItem() {
   menu_model_.SetIsNewFeatureAt(menu_model_.GetItemCount() - 1, true);
 }
 
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 void RenderViewContextMenu::AppendPdfOcrItems() {
   menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
   if (!pdf_ocr_submenu_model_observer_) {
@@ -1990,6 +2012,7 @@ void RenderViewContextMenu::AppendPdfOcrItems() {
   observers_.AddObserver(pdf_ocr_submenu_model_observer_.get());
   pdf_ocr_submenu_model_observer_->InitMenu(params_);
 }
+#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
 void RenderViewContextMenu::AppendRotationItems() {
   if (params_.media_flags & ContextMenuData::kMediaCanRotate) {
@@ -2829,12 +2852,15 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       ExecRotateCCW();
       break;
 
+    // When the context menu was initialized, we checked whether there were
+    // back/forward entries. Session history may have changed while the context
+    // menu was open. So we need to check `CanGoBack`/`CanGoForward` again.
     case IDC_BACK:
-      embedder_web_contents_->GetController().GoBack();
+      chrome::GoBack(embedder_web_contents_);
       break;
 
     case IDC_FORWARD:
-      embedder_web_contents_->GetController().GoForward();
+      chrome::GoForward(embedder_web_contents_);
       break;
 
     case IDC_SAVE_PAGE:
@@ -2955,7 +2981,16 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     case IDC_CONTENT_CONTEXT_SEARCHWEBFOR: {
       RecordAmbientSearchQuery(
           lens::AmbientSearchEntryPoint::CONTEXT_MENU_SEARCH_WEB_FOR);
+      if (companion::IsSearchWebInCompanionSidePanelSupported(
+              chrome::FindBrowserWithWebContents(embedder_web_contents_))) {
+        ExecSearchWebInCompanionSidePanel(selection_navigation_url_);
+        break;
+      }
+      // Searching in this side panel is dependent on the companion feature
+      // being disabled.
       if (side_search::IsSearchWebInSidePanelSupported(
+              chrome::FindBrowserWithWebContents(embedder_web_contents_)) &&
+          !companion::IsSearchInCompanionSidePanelSupported(
               chrome::FindBrowserWithWebContents(embedder_web_contents_))) {
         ExecSearchWebInSidePanel(selection_navigation_url_);
         break;
@@ -2997,7 +3032,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
     case IDC_CONTENT_CONTEXT_GENERATEPASSWORD:
       password_manager_util::UserTriggeredManualGenerationFromContextMenu(
           ChromePasswordManagerClient::FromWebContents(source_web_contents_),
-          autofill::ChromeAutofillClient::FromWebContents(
+          autofill::ContentAutofillClient::FromWebContents(
               source_web_contents_));
       break;
 
@@ -3108,6 +3143,7 @@ void RenderViewContextMenu::AddAccessibilityLabelsServiceItem(bool is_checked) {
 }
 
 void RenderViewContextMenu::AddPdfOcrMenuItem(bool is_always_active) {
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   if (is_always_active) {
     // Only a checked item needs to be added to the context menu when the user
     // selects "Always" or toggles on PDF OCR to make it always active.
@@ -3130,6 +3166,7 @@ void RenderViewContextMenu::AddPdfOcrMenuItem(bool is_always_active) {
         l10n_util::GetStringUTF16(IDS_CONTENT_CONTEXT_PDF_OCR_MENU_OPTION),
         pdf_ocr_submenu_model_.get());
   }
+#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 }
 
 // static
@@ -3264,14 +3301,16 @@ bool RenderViewContextMenu::IsSaveLinkAsEnabled() const {
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   Profile* const profile = Profile::FromBrowserContext(browser_context_);
-  if (profile->IsChild()) {
-    SupervisedUserService* supervised_user_service =
-        SupervisedUserServiceFactory::GetForProfile(profile);
-    SupervisedUserURLFilter* url_filter =
+  SupervisedUserService* supervised_user_service =
+      SupervisedUserServiceFactory::GetForProfile(profile);
+  if (supervised_user_service &&
+      supervised_user_service->IsURLFilteringEnabled()) {
+    supervised_user::SupervisedUserURLFilter* url_filter =
         supervised_user_service->GetURLFilter();
     if (url_filter->GetFilteringBehaviorForURL(params_.link_url) !=
-        SupervisedUserURLFilter::FilteringBehavior::ALLOW)
+        supervised_user::SupervisedUserURLFilter::FilteringBehavior::ALLOW) {
       return false;
+    }
   }
 #endif
 
@@ -3373,8 +3412,15 @@ bool RenderViewContextMenu::IsPrintPreviewEnabled() const {
 }
 
 bool RenderViewContextMenu::IsQRCodeGeneratorEnabled() const {
-  if (!GetBrowser())
+  if (!GetBrowser() || !GetProfile()) {
     return false;
+  }
+
+  if (sharing_hub::SharingIsDisabledByPolicy(GetProfile())) {
+    // If the sharing hub is disabled, clicking the QR code item (which tries to
+    // show the sharing hub) won't work.
+    return false;
+  }
 
   if (params_.media_type == ContextMenuDataMediaType::kImage) {
     return qrcode_generator::QRCodeGeneratorBubbleController::
@@ -3534,9 +3580,9 @@ bool RenderViewContextMenu::IsOpenLinkOTREnabled() const {
   if (!IsURLAllowedInIncognito(params_.link_url, browser_context_))
     return false;
 
-  IncognitoModePrefs::Availability incognito_avail =
+  policy::IncognitoModeAvailability incognito_avail =
       IncognitoModePrefs::GetAvailability(GetPrefs(browser_context_));
-  return incognito_avail != IncognitoModePrefs::Availability::kDisabled;
+  return incognito_avail != policy::IncognitoModeAvailability::kDisabled;
 }
 
 void RenderViewContextMenu::ExecOpenWebApp() {
@@ -3585,7 +3631,7 @@ void RenderViewContextMenu::ExecOpenLinkInProfile(int profile_index) {
   base::FilePath profile_path = profile_link_paths_[profile_index];
   profiles::SwitchToProfile(
       profile_path, false,
-      base::BindRepeating(OnProfileCreated, params_.link_url));
+      base::BindRepeating(OnBrowserCreated, params_.link_url));
 }
 
 void RenderViewContextMenu::ExecInspectElement() {
@@ -3694,6 +3740,7 @@ void RenderViewContextMenu::ExecCopyLinkText() {
   ui::ScopedClipboardWriter scw(
       ui::ClipboardBuffer::kCopyPaste,
       CreateDataEndpoint(/*notify_if_restricted=*/true));
+  scw.SetDataSourceURL(main_frame_url_, current_url_);
   scw.WriteText(params_.link_text);
 }
 
@@ -3747,16 +3794,24 @@ void RenderViewContextMenu::ExecRegionSearch(
   // PDF reader.
   WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
-
-  if (!lens_region_search_controller_) {
-    lens_region_search_controller_ =
-        std::make_unique<lens::LensRegionSearchController>(browser);
-  }
   // If Lens fullscreen search is enabled, we want to send every region search
   // as a fullscreen capture.
   bool use_fullscreen_capture =
       GetMenuSourceType(event_flags) == ui::MENU_SOURCE_KEYBOARD ||
       lens::features::IsLensFullscreenSearchEnabled();
+
+  auto* companion_helper =
+      companion::CompanionTabHelper::FromWebContents(embedder_web_contents_);
+  if (companion_helper &&
+      companion::IsSearchImageInCompanionSidePanelSupported(browser)) {
+    companion_helper->StartRegionSearch(web_contents, use_fullscreen_capture);
+    return;
+  }
+
+  if (!lens_region_search_controller_) {
+    lens_region_search_controller_ =
+        std::make_unique<lens::LensRegionSearchController>(browser);
+  }
   lens_region_search_controller_->Start(web_contents, use_fullscreen_capture,
                                         is_google_default_search_provider);
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -3774,6 +3829,15 @@ void RenderViewContextMenu::ExecSearchWebForImage(bool is_image_translate) {
       lens::AmbientSearchEntryPoint::CONTEXT_MENU_SEARCH_IMAGE_WITH_WEB);
   core_tab_helper->SearchByImage(render_frame_host, params().src_url,
                                  is_image_translate);
+}
+
+void RenderViewContextMenu::ExecSearchWebInCompanionSidePanel(const GURL& url) {
+  auto* companion_helper =
+      companion::CompanionTabHelper::FromWebContents(embedder_web_contents_);
+  if (!companion_helper) {
+    return;
+  }
+  companion_helper->ShowCompanionSidePanelForSearchURL(url);
 }
 
 void RenderViewContextMenu::ExecSearchWebInSidePanel(const GURL& url) {

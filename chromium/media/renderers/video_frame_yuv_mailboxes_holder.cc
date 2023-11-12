@@ -19,6 +19,7 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkYUVAPixmaps.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 
 namespace media {
@@ -42,11 +43,10 @@ viz::SharedImageFormat PlaneSharedImageFormat(int num_channels,
   return viz::SinglePlaneFormat::kRGBA_8888;
 }
 
-GLenum PlaneGLFormat(int num_channels,
-                     bool for_surface,
-                     const gpu::Capabilities& capabilities) {
+GLenum PlaneGLFormat(int num_channels, const gpu::Capabilities& capabilities) {
   return viz::TextureStorageFormat(
-      PlaneSharedImageFormat(num_channels, for_surface).resource_format(),
+      PlaneSharedImageFormat(num_channels, capabilities.texture_rg)
+          .resource_format(),
       capabilities.angle_rgbx_internal_format);
 }
 
@@ -139,7 +139,8 @@ void VideoFrameYUVMailboxesHolder::VideoFrameToMailboxes(
           PlaneSharedImageFormat(num_channels, caps.texture_rg);
       holders_[plane].mailbox = sii->CreateSharedImage(
           format, tex_size, video_frame->ColorSpace(), kTopLeft_GrSurfaceOrigin,
-          kPremul_SkAlphaType, mailbox_usage, gpu::kNullSurfaceHandle);
+          kPremul_SkAlphaType, mailbox_usage, "VideoFrameYUV",
+          gpu::kNullSurfaceHandle);
       holders_[plane].texture_target = GL_TEXTURE_2D;
     }
 
@@ -162,8 +163,10 @@ void VideoFrameYUVMailboxesHolder::VideoFrameToMailboxes(
         SkYUVAPixmaps::DataType::kUnorm8, num_channels);
     SkImageInfo info = SkImageInfo::Make(plane_sizes_[plane], color_type,
                                          kUnknown_SkAlphaType);
-    ri->WritePixels(holders_[plane].mailbox, 0, 0, GL_TEXTURE_2D,
-                    video_frame->stride(plane), info, video_frame->data(plane));
+    ri->WritePixels(
+        holders_[plane].mailbox, /*dst_x_offset=*/0,
+        /*dst_y_offset=*/0, /*dst_plane_index=*/0, GL_TEXTURE_2D,
+        SkPixmap(info, video_frame->data(plane), video_frame->stride(plane)));
     mailboxes[plane] = holders_[plane].mailbox;
   }
 }
@@ -200,8 +203,8 @@ sk_sp<SkImage> VideoFrameYUVMailboxesHolder::VideoFrameToSkImage(
           : video_frame->ColorSpace().GetAsFullRangeRGB().ToSkColorSpace();
 
   DCHECK(yuva_backend_textures.isValid());
-  auto result = SkImage::MakeFromYUVATextures(gr_context, yuva_backend_textures,
-                                              rgb_color_space);
+  auto result = SkImages::TextureFromYUVATextures(
+      gr_context, yuva_backend_textures, rgb_color_space);
   DCHECK(result);
   return result;
 }
@@ -272,8 +275,8 @@ void VideoFrameYUVMailboxesHolder::ImportTextures(bool for_surface) {
 
     int num_channels = yuva_info_.numChannelsInPlane(plane);
     textures_[plane].texture.fTarget = holders_[plane].texture_target;
-    textures_[plane].texture.fFormat = PlaneGLFormat(
-        num_channels, for_surface, provider_->ContextCapabilities());
+    textures_[plane].texture.fFormat =
+        PlaneGLFormat(num_channels, provider_->ContextCapabilities());
   }
 
   imported_textures_ = true;

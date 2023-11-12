@@ -29,6 +29,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -121,8 +122,9 @@ class FakeMetricBluetoothAdapter
  public:
   device::BluetoothDevice* GetDevice(const std::string& address) override {
     for (const auto& it : mock_devices_) {
-      if (it->GetAddress() == address)
+      if (it->GetAddress() == address) {
         return it.get();
+      }
     }
 
     return nullptr;
@@ -372,7 +374,7 @@ class QuickPairMetricsLoggerTest : public NoSessionAshTestBase {
         fake_retroactive_pairing_detector_->NotifyRetroactivePairFound(
             retroactive_device_);
         mock_ui_broker_->NotifyAssociateAccountAction(
-            retroactive_device_, AssociateAccountAction::kAssoicateAccount);
+            retroactive_device_, AssociateAccountAction::kAssociateAccount);
         mock_pairer_broker_->NotifyPairingStart(retroactive_device_);
         mock_pairer_broker_->NotifyHandshakeComplete(retroactive_device_);
         mock_pairer_broker_->NotifyAccountKeyWrite(retroactive_device_,
@@ -448,7 +450,7 @@ class QuickPairMetricsLoggerTest : public NoSessionAshTestBase {
 
   void SimulateAssociateAccountUiSavePressed() {
     mock_ui_broker_->NotifyAssociateAccountAction(
-        retroactive_device_, AssociateAccountAction::kAssoicateAccount);
+        retroactive_device_, AssociateAccountAction::kAssociateAccount);
   }
 
   void SimulateAssociateAccountUiLearnMorePressed() {
@@ -522,12 +524,13 @@ class QuickPairMetricsLoggerTest : public NoSessionAshTestBase {
 
   std::unique_ptr<MockQuickPairBrowserDelegate> browser_delegate_;
   TestingPrefServiceSimple pref_service_;
-  TestingPrefServiceSimple* user_prefs_;
+  raw_ptr<TestingPrefServiceSimple, ExperimentalAsh> user_prefs_;
 
-  MockScannerBroker* mock_scanner_broker_ = nullptr;
-  MockPairerBroker* mock_pairer_broker_ = nullptr;
-  MockUIBroker* mock_ui_broker_ = nullptr;
-  FakeRetroactivePairingDetector* fake_retroactive_pairing_detector_ = nullptr;
+  raw_ptr<MockScannerBroker, ExperimentalAsh> mock_scanner_broker_ = nullptr;
+  raw_ptr<MockPairerBroker, ExperimentalAsh> mock_pairer_broker_ = nullptr;
+  raw_ptr<MockUIBroker, ExperimentalAsh> mock_ui_broker_ = nullptr;
+  raw_ptr<FakeRetroactivePairingDetector, ExperimentalAsh>
+      fake_retroactive_pairing_detector_ = nullptr;
 
   std::unique_ptr<FakeFastPairRepository> fake_fast_pair_repository_;
   std::unique_ptr<ScannerBroker> scanner_broker_;

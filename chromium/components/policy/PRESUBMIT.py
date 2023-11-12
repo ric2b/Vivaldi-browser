@@ -24,9 +24,9 @@ import pyyaml
 _CACHED_FILES = {}
 _CACHED_POLICY_CHANGE_LIST = []
 
-_TEST_CASES_DEPOT_PATH = os.path.join(
-      'chrome', 'test', 'data', 'policy', 'policy_test_cases.json')
 _COMPONENTS_POLICY_PATH = os.path.join('components', 'policy')
+_TEST_CASES_DEPOT_PATH = os.path.join(
+    _COMPONENTS_POLICY_PATH, 'test' , 'data', 'policy_test_cases.json')
 _PRESUBMIT_PATH = os.path.join(_COMPONENTS_POLICY_PATH, 'PRESUBMIT.py')
 _TOOLS_PATH = os.path.join(_COMPONENTS_POLICY_PATH, 'tools')
 _SYNTAX_CHECK_SCRIPT_PATH = os.path.join(_TOOLS_PATH,
@@ -145,7 +145,7 @@ def _GetUnchangedPolicyList(input_api):
   return results
 
 def _GetPolicyChangeList(input_api):
-  '''Returns a list of policies modified inthe changelist with their old schema
+  '''Returns a list of policies modified in the changelist with their old schema
      next to their new schemas.
      Args:
        input_api
@@ -157,6 +157,7 @@ def _GetPolicyChangeList(input_api):
   if _CACHED_POLICY_CHANGE_LIST:
     return _CACHED_POLICY_CHANGE_LIST
 
+  policy_changes_map = {}
   root = input_api.change.RepositoryRoot()
   policies_dir = input_api.os_path.join(root,
                                         _POLICIES_DEFINITIONS_PATH)
@@ -177,22 +178,41 @@ def _GetPolicyChangeList(input_api):
     old_policy = None
     new_policy = None
     if affected_file.Action() == 'M':
-        old_policy = pyyaml.safe_load('\n'.join(affected_file.OldContents()))
-        old_policy['name'] = policy_name
-        old_policy['id'] = policy_name_to_id[policy_name]
+      old_policy = pyyaml.safe_load('\n'.join(affected_file.OldContents()))
+      old_policy['name'] = policy_name
+      old_policy['id'] = policy_name_to_id[policy_name]
 
     if affected_file.Action() == 'D':
-        old_policy = pyyaml.safe_load('\n'.join(affected_file.OldContents()))
-        old_policy['name'] = policy_name
+      old_policy = pyyaml.safe_load('\n'.join(affected_file.OldContents()))
+      old_policy['name'] = policy_name
 
     if affected_file.Action() != 'D':
       new_policy = pyyaml.safe_load('\n'.join(affected_file.NewContents()))
       new_policy['name'] = policy_name
       new_policy['id'] = policy_name_to_id[policy_name]
-    _CACHED_POLICY_CHANGE_LIST.append({
+
+    # If a policy has been moved, it will appear as deleted then added.
+    # Here we reconcile such policies so that a moved policy does not appear as
+    # deleted. This also allows to verify the new policy schema against the one
+    # from the previous location.
+    if policy_name in policy_changes_map:
+      # We previously found the policy at the new location, update old_policy
+      # with the value from the old location.
+      if policy_changes_map[policy_name]['old_policy'] == None:
+        policy_changes_map[policy_name]['old_policy'] = old_policy
+      # We previously found the policy at the old location, update new_policy
+      # with the value from the new location.
+      if policy_changes_map[policy_name]['new_policy'] == None:
+        policy_changes_map[policy_name]['new_policy'] = new_policy
+    else:
+      policy_changes_map[policy_name] = {
       'policy': policy_name,
       'old_policy': old_policy,
-      'new_policy': new_policy})
+      'new_policy': new_policy}
+
+  for policy_change in policy_changes_map.values():
+    _CACHED_POLICY_CHANGE_LIST.append(policy_change)
+
   return _CACHED_POLICY_CHANGE_LIST
 
 
@@ -207,7 +227,7 @@ def CheckPolicyTestCases(input_api, output_api):
       [_TEST_CASES_DEPOT_PATH, _POLICIES_YAML_PATH, _PRESUBMIT_PATH]):
     return results
 
-  # Read list of policies in chrome/test/data/policy/policy_test_cases.json.
+  # Read list of policies in components/policy/test/data/policy_test_cases.json.
   root = input_api.change.RepositoryRoot()
   with open(os.path.join(root, _TEST_CASES_DEPOT_PATH), encoding='utf-8') as f:
     test_names = input_api.json.load(f).keys()
@@ -221,12 +241,16 @@ def CheckPolicyTestCases(input_api, output_api):
   # Finally check if any policies are missing.
   missing = policy_names - tested_policies
   extra = tested_policies - policy_names
-  error_missing = ("Policy '%s' was added to policy_templates.json but not "
-                   "to src/chrome/test/data/policy/policy_test_cases.json. "
-                   "Please update both files.")
+  error_missing = ("Policy '%s' was added to "
+                   "//components/policy/resources/templates/policy_definitions/"
+                   " but not to "
+                   "//components/policy/test/data/policy_test_cases.json. "
+                   "Please update both places.")
   error_extra = ("Policy '%s' is tested by "
-                 "src/chrome/test/data/policy/policy_test_cases.json but is not"
-                 " defined in policy_templates.json. Please update both files.")
+                 "//components/policy/test/policy_test_cases.json but is not"
+                 " defined in "
+                 "//components/policy/resources/templates/policy_definitions/."
+                 " Please update both places.")
   results = []
   for policy in missing:
     results.append(output_api.PresubmitError(error_missing % policy))
@@ -611,7 +635,7 @@ def CheckPoliciesYamlOrdering(input_api, output_api):
     return results
 
   root = input_api.change.RepositoryRoot()
-  with open(os.path.join(root, _POLICIES_YAML_PATH), 'r') as f:
+  with open(os.path.join(root, _POLICIES_YAML_PATH), 'r', encoding='utf-8') as f:
     policies_yaml_lines = f.readlines()
 
   previous_id = 0

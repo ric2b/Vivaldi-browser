@@ -7,7 +7,9 @@
 #include <memory>
 
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
@@ -260,9 +262,8 @@ class SecureChannelBluetoothLowEnergyCharacteristicFinderTest
 
   std::vector<BluetoothRemoteGattService*> GetRawServiceList() {
     std::vector<BluetoothRemoteGattService*> service_list_raw;
-    std::transform(services_.begin(), services_.end(),
-                   std::back_inserter(service_list_raw),
-                   [](auto& service) { return service.get(); });
+    base::ranges::transform(services_, std::back_inserter(service_list_raw),
+                            &std::unique_ptr<BluetoothRemoteGattService>::get);
     return service_list_raw;
   }
 
@@ -279,7 +280,8 @@ class SecureChannelBluetoothLowEnergyCharacteristicFinderTest
   std::vector<std::unique_ptr<BluetoothRemoteGattService>> services_;
   std::vector<std::unique_ptr<MockBluetoothGattCharacteristic>>
       all_mock_characteristics_;
-  FakeBackgroundEidGenerator* fake_background_eid_generator_;
+  raw_ptr<FakeBackgroundEidGenerator, ExperimentalAsh>
+      fake_background_eid_generator_;
   RemoteAttribute remote_service_;
   RemoteAttribute to_peripheral_char_;
   RemoteAttribute from_peripheral_char_;

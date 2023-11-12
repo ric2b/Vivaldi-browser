@@ -57,6 +57,9 @@ class UpdateNotificationRow {
  public:
   UpdateNotificationRow() = default;
   ~UpdateNotificationRow() = default;
+  UpdateNotificationRow(const UpdateNotificationRow& notification) = default;
+  UpdateNotificationRow& operator=(UpdateNotificationRow& notification) =
+      default;
 
   NotificationRow notification_row;
   int updateFields = 0;
@@ -68,8 +71,8 @@ typedef std::vector<NotificationToCreate> NotificationsToCreate;
 class NotificationResult {
  public:
   NotificationResult() = default;
-  NotificationResult(const NotificationResult&) = delete;
-  NotificationResult& operator=(const NotificationResult&) = delete;
+  NotificationResult(const NotificationResult&) = default;
+  NotificationResult& operator=(const NotificationResult&) = default;
 
   bool success;
   std::string message;
@@ -80,8 +83,7 @@ class GetAllNotificationResult {
  public:
   GetAllNotificationResult();
   ~GetAllNotificationResult();
-  GetAllNotificationResult(const GetAllNotificationResult&) = delete;
-  GetAllNotificationResult& operator=(const GetAllNotificationResult&) = delete;
+  GetAllNotificationResult(const GetAllNotificationResult&);
 
   bool success;
   std::string message;

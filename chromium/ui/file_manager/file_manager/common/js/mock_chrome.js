@@ -9,11 +9,23 @@
 export function installMockChrome(mockChrome) {
   /** @suppress {const|checkTypes} */
   window.chrome = window.chrome || {};
+  const metricsPrivate = mockChrome['metricsPrivate'] || getMetricsApiMock();
+  mockChrome['metricsPrivate'] = metricsPrivate;
+
   const chrome = window.chrome;
   for (const [key, value] of Object.entries(mockChrome)) {
     const target = chrome[key] || {};
+    chrome[key] = target;
     Object.assign(target, value);
   }
+}
+
+export function getMetricsApiMock() {
+  return {
+    recordSmallCount() {},
+    recordPercentage() {},
+    recordValue() {},
+  };
 }
 
 /**
@@ -216,7 +228,7 @@ export class MockChromeFileManagerPrivateDirectoryChanged {
 
   /**
    * Returns the stubbed out drive quota metadata for a directory change.
-   * @param {!Entry} entry
+   * @param {Entry} entry
    * @param {!function((!chrome.fileManagerPrivate.DriveQuotaMetadata|undefined))}
    *     callback
    * @private

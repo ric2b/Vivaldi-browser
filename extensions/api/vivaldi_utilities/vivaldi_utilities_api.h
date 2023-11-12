@@ -160,7 +160,7 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
 
   void TimeoutCall();
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "UtilitiesAPI"; }

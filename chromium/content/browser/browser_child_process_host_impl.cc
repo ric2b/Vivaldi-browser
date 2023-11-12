@@ -51,8 +51,11 @@
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 #include "content/browser/child_process_task_port_provider_mac.h"
+#endif
+
+#if BUILDFLAG(IS_MAC)
 #include "content/browser/sandbox_support_mac_impl.h"
 #include "content/common/sandbox_support_mac.mojom.h"
 #endif
@@ -141,7 +144,7 @@ BrowserChildProcessHost* BrowserChildProcessHost::FromID(int child_process_id) {
   return nullptr;
 }
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 base::PortProvider* BrowserChildProcessHost::GetPortProvider() {
   return ChildProcessTaskPortProvider::GetInstance();
 }
@@ -360,11 +363,13 @@ void BrowserChildProcessHostImpl::LaunchWithoutExtraCommandLineSwitches(
     OnProcessConnected();
 }
 
-void BrowserChildProcessHostImpl::HistogramBadMessageTerminated(
-    ProcessType process_type) {
-  UMA_HISTOGRAM_ENUMERATION("ChildProcess.BadMessgeTerminated", process_type,
-                            PROCESS_TYPE_MAX);
+#if !BUILDFLAG(IS_ANDROID)
+void BrowserChildProcessHostImpl::SetProcessBackgrounded(bool is_background) {
+  DCHECK(child_process_);
+  DCHECK(!child_process_->IsStarting());
+  child_process_->SetProcessBackgrounded(is_background);
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID)
 void BrowserChildProcessHostImpl::EnableWarmUpConnection() {
@@ -537,16 +542,6 @@ void BrowserChildProcessHostImpl::OnChildDisconnected() {
       }
     }
 #endif  // BUILDFLAG(IS_ANDROID)
-    UMA_HISTOGRAM_ENUMERATION("ChildProcess.Disconnected2",
-                              static_cast<ProcessType>(data_.process_type),
-                              PROCESS_TYPE_MAX);
-#if BUILDFLAG(IS_CHROMEOS)
-    if (info.status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM) {
-      UMA_HISTOGRAM_ENUMERATION("ChildProcess.Killed2.OOM",
-                                static_cast<ProcessType>(data_.process_type),
-                                PROCESS_TYPE_MAX);
-    }
-#endif
   }
   delete delegate_;  // Will delete us
 }
@@ -771,8 +766,6 @@ void BrowserChildProcessHostImpl::TerminateProcessForBadMessage(
     const std::string& error) {
   if (!process)
     return;
-  HistogramBadMessageTerminated(
-      static_cast<ProcessType>(process->data_.process_type));
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableKillAfterBadIPC)) {
     return;

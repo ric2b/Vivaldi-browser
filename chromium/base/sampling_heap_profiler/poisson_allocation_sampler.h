@@ -8,6 +8,7 @@
 #include <atomic>
 #include <vector>
 
+#include "base/allocator/buildflags.h"
 #include "base/allocator/dispatcher/reentry_guard.h"
 #include "base/allocator/dispatcher/subsystem.h"
 #include "base/base_export.h"
@@ -103,18 +104,21 @@ class BASE_EXPORT PoissonAllocationSampler {
   // Returns the current mean sampling interval, in bytes.
   size_t SamplingInterval() const;
 
+#if !BUILDFLAG(USE_ALLOCATION_EVENT_DISPATCHER)
   ALWAYS_INLINE static void RecordAlloc(
       void* address,
       size_t,
       base::allocator::dispatcher::AllocationSubsystem,
       const char* context);
   ALWAYS_INLINE static void RecordFree(void* address);
+#endif
 
-  void OnAllocation(void* address,
-                    size_t,
-                    base::allocator::dispatcher::AllocationSubsystem,
-                    const char* context);
-  void OnFree(void* address);
+  ALWAYS_INLINE void OnAllocation(
+      void* address,
+      size_t,
+      base::allocator::dispatcher::AllocationSubsystem,
+      const char* context);
+  ALWAYS_INLINE void OnFree(void* address);
 
   static PoissonAllocationSampler* Get();
 
@@ -211,7 +215,9 @@ class BASE_EXPORT PoissonAllocationSampler {
   // RemoveSamplesObserver().
   std::vector<SamplesObserver*> observers_ GUARDED_BY(mutex_);
 
+#if !BUILDFLAG(USE_ALLOCATION_EVENT_DISPATCHER)
   static PoissonAllocationSampler* instance_;
+#endif
 
   // Fast, thread-safe access to the current profiling state.
   static std::atomic<ProfilingStateFlagMask> profiling_state_;
@@ -224,6 +230,7 @@ class BASE_EXPORT PoissonAllocationSampler {
   FRIEND_TEST_ALL_PREFIXES(SamplingHeapProfilerTest, HookedAllocatorMuted);
 };
 
+#if !BUILDFLAG(USE_ALLOCATION_EVENT_DISPATCHER)
 // static
 ALWAYS_INLINE void PoissonAllocationSampler::RecordAlloc(
     void* address,
@@ -237,8 +244,9 @@ ALWAYS_INLINE void PoissonAllocationSampler::RecordAlloc(
 ALWAYS_INLINE void PoissonAllocationSampler::RecordFree(void* address) {
   instance_->OnFree(address);
 }
+#endif
 
-inline void PoissonAllocationSampler::OnAllocation(
+ALWAYS_INLINE void PoissonAllocationSampler::OnAllocation(
     void* address,
     size_t size,
     base::allocator::dispatcher::AllocationSubsystem type,
@@ -274,7 +282,7 @@ inline void PoissonAllocationSampler::OnAllocation(
   DoRecordAllocation(state, address, size, type, context);
 }
 
-inline void PoissonAllocationSampler::OnFree(void* address) {
+ALWAYS_INLINE void PoissonAllocationSampler::OnFree(void* address) {
   // The allocation hooks may be installed before the sampler is started. Check
   // if its ever been started first to avoid extra work on the fast path,
   // because it's the most common case. Note that DoRecordFree still needs to be

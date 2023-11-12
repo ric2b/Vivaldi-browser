@@ -83,21 +83,6 @@ namespace synchronization_internal {
 
 class FutexImpl {
  public:
-  // Atomically check that `*v == val`, and if it is, then sleep until the
-  // timeout `t` has been reached, or until woken by `Wake()`.
-  static int WaitUntil(std::atomic<int32_t>* v, int32_t val,
-                       KernelTimeout t) {
-    if (!t.has_timeout()) {
-      return Wait(v, val);
-    } else if (t.is_absolute_timeout()) {
-      auto abs_timespec = t.MakeAbsTimespec();
-      return WaitAbsoluteTimeout(v, val, &abs_timespec);
-    } else {
-      auto rel_timespec = t.MakeRelativeTimespec();
-      return WaitRelativeTimeout(v, val, &rel_timespec);
-    }
-  }
-
   // Atomically check that `*v == val`, and if it is, then sleep until the until
   // woken by `Wake()`.
   static int Wait(std::atomic<int32_t>* v, int32_t val) {

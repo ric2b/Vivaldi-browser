@@ -59,7 +59,7 @@ NSDate* createdAtForNoteNode(const vivaldi::NoteNode* node);
 // successful or there's nothing to undo.
 // TODO(crbug.com/1099901): Refactor to include position and replace two
 // functions below.
-MDCSnackbarMessage* CreateOrUpdateNoteWithUndoToast(
+MDCSnackbarMessage* CreateOrUpdateNoteWithToast(
     const vivaldi::NoteNode* node,
     NSString* title,
     const GURL& url,
@@ -70,7 +70,7 @@ MDCSnackbarMessage* CreateOrUpdateNoteWithUndoToast(
 // Creates a new note with |title|, |url|, at |position| under parent
 // |folder|. Returns a snackbar with an undo action. Returns nil if operation
 // failed or there's nothing to undo.
-MDCSnackbarMessage* CreateNoteAtPositionWithUndoToast(
+MDCSnackbarMessage* CreateNoteAtPositionWithToast(
     NSString* title,
     const GURL& url,
     const vivaldi::NoteNode* folder,
@@ -80,7 +80,7 @@ MDCSnackbarMessage* CreateNoteAtPositionWithUndoToast(
 
 // Updates a note node position, and returns a snackbar with an undo action.
 // Returns nil if the operation wasn't successful or there's nothing to undo.
-MDCSnackbarMessage* UpdateNotePositionWithUndoToast(
+MDCSnackbarMessage* UpdateNotePositionWithToast(
     const vivaldi::NoteNode* node,
     const vivaldi::NoteNode* folder,
     size_t position,
@@ -90,7 +90,7 @@ MDCSnackbarMessage* UpdateNotePositionWithUndoToast(
 // Deletes all notes in |model| that are in |notes|, and returns a
 // snackbar with an undo action. Returns nil if the operation wasn't successful
 // or there's nothing to undo.
-MDCSnackbarMessage* DeleteNotesWithUndoToast(
+MDCSnackbarMessage* DeleteNotesWithToast(
     const std::set<const vivaldi::NoteNode*>& notes,
     vivaldi::NotesModel* model,
     ChromeBrowserState* browser_state);
@@ -102,7 +102,7 @@ void DeleteNotes(const std::set<const vivaldi::NoteNode*>& notes,
 // Move all |notes| to the given |folder|, and returns a snackbar with an
 // undo action. Returns nil if the operation wasn't successful or there's
 // nothing to undo.
-MDCSnackbarMessage* MoveNotesWithUndoToast(
+MDCSnackbarMessage* MoveNotesWithToast(
     const std::set<const vivaldi::NoteNode*>& notes,
     vivaldi::NotesModel* model,
     const vivaldi::NoteNode* folder,

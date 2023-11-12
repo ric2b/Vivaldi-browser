@@ -202,6 +202,7 @@ class LocationBarView : public LocationBar,
 
   // IconLabelBubbleView::Delegate:
   SkColor GetIconLabelBubbleSurroundingForegroundColor() const override;
+  SkAlpha GetIconLabelBubbleSeparatorAlpha() const override;
   SkColor GetIconLabelBubbleBackgroundColor() const override;
 
   // ContentSettingImageView::Delegate:
@@ -320,8 +321,6 @@ class LocationBarView : public LocationBar,
   WindowOpenDisposition GetWindowOpenDisposition() const override;
   ui::PageTransition GetPageTransition() const override;
   base::TimeTicks GetMatchSelectionTimestamp() const override;
-  void AcceptInput() override;
-  void AcceptInput(base::TimeTicks match_selection_timestamp) override;
   void FocusSearch() override;
   void UpdateContentSettingsIcons() override;
   void SaveStateToContents(content::WebContents* contents) override;
@@ -441,9 +440,8 @@ class LocationBarView : public LocationBar,
 
   // The following views are used to provide hints and remind the user as to
   // what is going in the edit. They are all added a children of the
-  // LocationBarView. At most one is visible at a time. Preference is
-  // given to the keyword_view_, then hint_view_.
-  // These autocollapse when the edit needs the room.
+  // LocationBarView. At most one is visible at a time. These autocollapse when
+  // the edit needs the room.
 
   // Shown if the user has selected a keyword.
   raw_ptr<SelectedKeywordView> selected_keyword_view_ = nullptr;

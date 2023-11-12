@@ -63,7 +63,7 @@ export class HelpBubbleMixinTestElement extends HelpBubbleMixinTestElementBase {
         <li id='list-item'>List item 1</li>
         <li>List item 2</li>
       </ul>
-      <span>Span text</span>
+      <span style='display: block;'>Span text</span>
       <container-element id='container-element'></container-element>
     </div>`;
   }
@@ -97,7 +97,7 @@ export class HelpBubbleMixinTestContainerElement extends PolymerElement {
   static get template() {
     return html`
     <div>
-      <div class='child-element'></div>
+      <div class='child-element'>ABCDE</div>
     </div>`;
   }
 }
@@ -267,7 +267,6 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
     bodyIconName: 'lightbulb_outline',
     bodyIconAltText: BODY_ICON_ALT_TEXT,
     buttons: [],
-    forceCloseButton: false,
   };
 
   test('help bubble mixin shows bubble when called directly', () => {
@@ -454,7 +453,6 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
           position: HelpBubbleArrowPosition.BOTTOM_CENTER,
           bodyText: 'This is a help bubble.',
           buttons: [],
-          forceCloseButton: false,
         };
 
         testProxy.getCallbackRouterRemote().showHelpBubble(params);
@@ -626,7 +624,6 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
     bodyText: 'This is another help bubble.',
     titleText: 'This is a title',
     buttons: [],
-    forceCloseButton: false,
   };
 
   test('help bubble mixin shows multiple bubbles', async () => {
@@ -668,7 +665,6 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
     bodyText: 'This is another help bubble.',
     progress: {current: 1, total: 3},
     buttons: [],
-    forceCloseButton: false,
   };
 
   test(
@@ -740,7 +736,6 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
         isDefault: true,
       },
     ],
-    forceCloseButton: false,
   };
 
   test('help bubble mixin sends action button clicked event', async () => {
@@ -770,7 +765,6 @@ suite('CrComponentsHelpBubbleMixinTest', () => {
     bodyText: 'This is another help bubble.',
     titleText: 'This is a title',
     buttons: [],
-    forceCloseButton: false,
   };
 
   // It is hard to guarantee the correct timing on various test systems,

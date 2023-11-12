@@ -16,6 +16,7 @@
 #include "ash/public/cpp/holding_space/holding_space_section.h"
 #include "ash/public/cpp/holding_space/holding_space_util.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/test/scoped_feature_list.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -123,7 +124,7 @@ class ScopedModelObservation : public HoldingSpaceModelObserver {
   // The last `HoldingSpaceItem` for which `OnHoldingSpaceItemUpdated()` was
   // called. May be `nullptr` prior to an update event or following a call to
   // `TakeLastUpdatedItem()`.
-  const HoldingSpaceItem* last_updated_item_ = nullptr;
+  raw_ptr<const HoldingSpaceItem, ExperimentalAsh> last_updated_item_ = nullptr;
 
   // The last updated fields for which `OnHoldingSpaceItemUpdated()` was called.
   // May be zero prior to an update event or following a call to
@@ -572,8 +573,8 @@ TEST_P(HoldingSpaceModelTest, EnforcesMaxItemCountsPerSection) {
   EXPECT_EQ(model().items().size(), 0u);
 
   // Cache the section to which the parameterized type belongs.
-  const HoldingSpaceSection* section =
-      GetHoldingSpaceSection(GetHoldingSpaceItemType());
+  const HoldingSpaceItem::Type type = GetHoldingSpaceItemType();
+  const HoldingSpaceSection* section = GetHoldingSpaceSection(type);
   ASSERT_TRUE(section);
 
   // Add the maximum count of items allowed for the section or some high number

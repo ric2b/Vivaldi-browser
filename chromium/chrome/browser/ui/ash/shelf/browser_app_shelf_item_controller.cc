@@ -14,11 +14,13 @@
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/ash/shelf/shelf_context_menu.h"
+#include "chrome/grit/theme_resources.h"
 #include "chromeos/ui/wm/desks/desks_helper.h"
 #include "components/app_constants/constants.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "extensions/common/constants.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/views/widget/native_widget_aura.h"
 
 namespace {
@@ -53,10 +55,10 @@ BrowserAppShelfItemController::BrowserAppShelfItemController(
       profile_(profile),
       registry_(*apps::AppServiceProxyFactory::GetForProfile(profile_)
                      ->BrowserAppInstanceRegistry()) {
-  registry_observation_.Observe(&registry_);
+  registry_observation_.Observe(&*registry_);
   // Registers all running instances that started before this shelf item was
   // created, for example if a running app is later pinned to the shelf.
-  registry_.NotifyExistingInstances(this);
+  registry_->NotifyExistingInstances(this);
   LoadIcon(extension_misc::EXTENSION_ICON_BITTY,
            base::BindOnce(&BrowserAppShelfItemController::OnLoadBittyIcon,
                           weak_ptr_factory_.GetWeakPtr()));
@@ -72,7 +74,7 @@ void BrowserAppShelfItemController::ItemSelected(
     const ItemFilterPredicate& filter_predicate) {
   auto instances = GetMatchingInstances(filter_predicate);
   if (instances.size() == 0 ||
-      ShouldLaunchNewLacrosWindow(app_id(), instances, registry_)) {
+      ShouldLaunchNewLacrosWindow(app_id(), instances, *registry_)) {
     // No instances or if this is a lacros window and there isn't already one on
     // the current workspace, launch.
     std::move(callback).Run(ash::SHELF_ACTION_NEW_WINDOW_CREATED, {});
@@ -84,11 +86,11 @@ void BrowserAppShelfItemController::ItemSelected(
     const bool can_minimize = source != ash::LAUNCH_FROM_APP_LIST &&
                               source != ash::LAUNCH_FROM_APP_LIST_SEARCH;
     ash::ShelfAction action;
-    if (registry_.IsInstanceActive(id) && can_minimize) {
-      registry_.MinimizeInstance(id);
+    if (registry_->IsInstanceActive(id) && can_minimize) {
+      registry_->MinimizeInstance(id);
       action = ash::SHELF_ACTION_WINDOW_MINIMIZED;
     } else {
-      registry_.ActivateInstance(id);
+      registry_->ActivateInstance(id);
       action = ash::SHELF_ACTION_WINDOW_ACTIVATED;
     }
     std::move(callback).Run(action, {});
@@ -111,12 +113,17 @@ BrowserAppShelfItemController::GetAppMenuItems(
     base::UnguessableToken id = pair.second;
     if (shelf_id().app_id == app_constants::kLacrosAppId) {
       const apps::BrowserWindowInstance* instance =
-          registry_.GetBrowserWindowInstanceById(id);
+          registry_->GetBrowserWindowInstanceById(id);
       DCHECK(instance);
-      items.push_back({command_id, instance->window->GetTitle(), bitty_icon_});
+      const gfx::Image& icon =
+          ui::ResourceBundle::GetSharedInstance().GetImageNamed(
+              instance->is_incognito ? IDR_ASH_SHELF_LIST_INCOGNITO_BROWSER
+                                     : IDR_ASH_SHELF_LIST_BROWSER);
+      items.push_back(
+          {command_id, instance->window->GetTitle(), icon.AsImageSkia()});
     } else {
       const apps::BrowserAppInstance* instance =
-          registry_.GetAppInstanceById(id);
+          registry_->GetAppInstanceById(id);
       DCHECK(instance);
       items.push_back(
           {command_id, base::UTF8ToUTF16(instance->title), bitty_icon_});
@@ -141,7 +148,7 @@ void BrowserAppShelfItemController::ExecuteCommand(bool from_context_menu,
   // Item selected from menu.
   auto it = command_to_instance_map_.find(command_id);
   if (it != command_to_instance_map_.end()) {
-    registry_.ActivateInstance(it->second);
+    registry_->ActivateInstance(it->second);
   }
 }
 
@@ -216,12 +223,12 @@ BrowserAppShelfItemController::GetMatchingInstances(
     aura::Window* window = nullptr;
     if (shelf_id().app_id == app_constants::kLacrosAppId) {
       const apps::BrowserWindowInstance* instance =
-          registry_.GetBrowserWindowInstanceById(id);
+          registry_->GetBrowserWindowInstanceById(id);
       DCHECK(instance);
       window = instance->window;
     } else {
       const apps::BrowserAppInstance* instance =
-          registry_.GetAppInstanceById(id);
+          registry_->GetAppInstanceById(id);
       DCHECK(instance);
       window = instance->window;
     }
@@ -262,12 +269,12 @@ void BrowserAppShelfItemController::OnLoadMediumIcon(
     // have already been created.
     std::string app_id = shelf_id().app_id;
     if (app_id == app_constants::kLacrosAppId) {
-      for (auto* instance : registry_.GetLacrosBrowserWindowInstances()) {
+      for (auto* instance : registry_->GetLacrosBrowserWindowInstances()) {
         views::NativeWidgetAura::AssignIconToAuraWindow(
             instance->window, bitty_icon_, medium_icon_);
       }
     } else {
-      for (auto* instance : registry_.SelectAppInstances(
+      for (auto* instance : registry_->SelectAppInstances(
                [&app_id](const apps::BrowserAppInstance& instance) {
                  return instance.type ==
                             apps::BrowserAppInstance::Type::kAppWindow &&

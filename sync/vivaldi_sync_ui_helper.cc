@@ -5,7 +5,7 @@
 #include <tuple>
 
 #include "base/base64.h"
-#include "components/os_crypt/os_crypt.h"
+#include "components/os_crypt/sync/os_crypt.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/syncer_error.h"
 #include "sync/vivaldi_sync_service_impl.h"
@@ -117,7 +117,8 @@ vivaldi::EngineData VivaldiSyncUIHelper::GetEngineData() {
 
   if (sync_service_->is_clearing_sync_data()) {
     engine_data.engine_state = EngineState::CLEARING_DATA;
-  } else if (!sync_service_->GetUserSettings()->IsSyncRequested() ||
+  } else if (sync_service_->GetDisableReasons().Has(
+        syncer::SyncService::DISABLE_REASON_USER_CHOICE) ||
              sync_service_->GetTransportState() ==
                  syncer::SyncService::TransportState::START_DEFERRED) {
     engine_data.engine_state = EngineState::STOPPED;

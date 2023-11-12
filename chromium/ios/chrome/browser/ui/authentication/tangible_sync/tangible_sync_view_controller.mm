@@ -4,12 +4,15 @@
 
 #import "ios/chrome/browser/ui/authentication/tangible_sync/tangible_sync_view_controller.h"
 
+#import "base/feature_list.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/notreached.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/signin/public/base/signin_metrics.h"
+#import "ios/chrome/browser/shared/ui/elements/instruction_view.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
-#import "ios/chrome/browser/ui/elements/instruction_view.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "net/base/mac/url_conversions.h"
@@ -44,7 +47,7 @@ UIView* IconViewWithImage(NSString* image_name, BOOL custom_symbol) {
   UIImageView* icon_view = [[UIImageView alloc] initWithImage:icon_image];
   icon_view.translatesAutoresizingMaskIntoConstraints = NO;
   UIView* full_view = [[UIView alloc] init];
-  full_view.backgroundColor = UIColor.whiteColor;
+  full_view.backgroundColor = [UIColor colorNamed:kSolidWhiteColor];
   full_view.layer.cornerRadius = kIconSquareCornerRadius;
   full_view.layer.masksToBounds = YES;
   [full_view addSubview:icon_view];
@@ -106,29 +109,20 @@ UIView* IconViewWithImage(NSString* image_name, BOOL custom_symbol) {
     l10n_util::GetNSString(IDS_IOS_TANGIBLE_SYNC_DATA_TYPE_AUTOFILL),
     l10n_util::GetNSString(IDS_IOS_TANGIBLE_SYNC_DATA_TYPE_HISTORY),
   ];
-  InstructionView* instructionView = nil;
-  if (UseSymbols()) {
-    NSArray<UIView*>* imageViews = @[
-      IconViewWithImage(kBookmarksSymbol, /*custom_symbol=*/NO),
-      IconViewWithImage(kPasswordSymbol, /*custom_symbol=*/YES),
-      IconViewWithImage(kRecentTabsSymbol, /*custom_symbol=*/YES),
-    ];
-    instructionView =
-        [[InstructionView alloc] initWithList:dataTypeNames
-                                        style:InstructionViewStyleDefault
-                                    iconViews:imageViews];
-  } else {
-    NSArray<UIImage*>* dataTypeIcons = @[
-      [UIImage imageNamed:@"tangible_sync_bookmarks"],
-      [UIImage imageNamed:@"tangible_sync_autofill"],
-      [UIImage imageNamed:@"tangible_sync_history"],
-    ];
-    instructionView =
-        [[InstructionView alloc] initWithList:dataTypeNames
-                                        style:InstructionViewStyleDefault
-                                        icons:dataTypeIcons];
-  }
-  DCHECK(instructionView);
+  UIView* autofillIconView =
+      base::FeatureList::IsEnabled(
+          password_manager::features::kEnablePasswordsAccountStorage)
+          ? IconViewWithImage(kDocPlaintext, /*custom_symbol=*/NO)
+          : IconViewWithImage(kPasswordSymbol, /*custom_symbol=*/YES);
+  NSArray<UIView*>* imageViews = @[
+    IconViewWithImage(kBookmarksSymbol, /*custom_symbol=*/NO),
+    autofillIconView,
+    IconViewWithImage(kRecentTabsSymbol, /*custom_symbol=*/YES),
+  ];
+  InstructionView* instructionView =
+      [[InstructionView alloc] initWithList:dataTypeNames
+                                      style:InstructionViewStyleDefault
+                                  iconViews:imageViews];
   instructionView.tapListener = self;
   instructionView.translatesAutoresizingMaskIntoConstraints = NO;
   [self.specificContentView addSubview:instructionView];

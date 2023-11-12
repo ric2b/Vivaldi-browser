@@ -14,8 +14,8 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/ui/ash/cryptohome_pin_engine.h"
-#include "chrome/browser/ui/ash/legacy_fingerprint_engine.h"
+#include "chrome/browser/ui/ash/auth/cryptohome_pin_engine.h"
+#include "chrome/browser/ui/ash/auth/legacy_fingerprint_engine.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/login/auth/auth_performer.h"
 #include "chromeos/ash/components/login/auth/auth_status_consumer.h"
@@ -140,10 +140,6 @@ class InSessionAuthDialogClient
                         absl::optional<ash::AuthenticationError> error);
 
   void OnPasswordAuthSuccess(const ash::UserContext& user_context);
-
-  void OnFingerprintAuthDone(
-      base::OnceCallback<void(bool, ash::FingerprintState)> callback,
-      user_data_auth::CryptohomeErrorCode error);
 
   // Passed as a callback to `CryptohomePinEngine::InPinAuthAvailable`
   // Takes back ownership of the `user_context` that was borrowed by

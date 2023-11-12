@@ -33,7 +33,8 @@ from pylib.base import base_test_result  # pylint: disable=import-error
 from pylib.results import json_results  # pylint: disable=import-error
 
 sys.path.insert(0, os.path.join(CHROMIUM_SRC_PATH, 'build', 'util'))
-from lib.results import result_sink  # pylint: disable=import-error
+# TODO(crbug.com/1421441): Re-enable the 'no-name-in-module' check.
+from lib.results import result_sink  # pylint: disable=import-error,no-name-in-module
 
 assert not six.PY2, 'Py2 not supported for this file.'
 
@@ -572,7 +573,7 @@ class GTestTest(RemoteTest):
     if self._trace_dir:
       device_test_script_contents.extend([
           'rm -rf %s' % device_trace_dir,
-          'su chronos -c -- "mkdir -p %s"' % device_trace_dir,
+          'sudo -E -u chronos -- /bin/bash -c "mkdir -p %s"' % device_trace_dir,
       ])
       test_invocation += ' --trace-dir=%s' % device_trace_dir
 
@@ -586,7 +587,8 @@ class GTestTest(RemoteTest):
       # The UI service on the device owns the chronos user session, so shutting
       # it down as chronos kills the entire execution of the test. So we'll have
       # to run as root up until the test invocation.
-      test_invocation = 'su chronos -c -- "%s"' % test_invocation
+      test_invocation = (
+          'sudo -E -u chronos -- /bin/bash -c "%s"' % test_invocation)
       # And we'll need to chown everything since cros_run_test's "--as-chronos"
       # option normally does that for us.
       device_test_script_contents.append('chown -R chronos: ../..')
@@ -941,6 +943,13 @@ def main():
 
   add_common_args(gtest_parser, tast_test_parser, host_cmd_parser)
   args, unknown_args = parser.parse_known_args()
+  # Re-add N-1 -v/--verbose flags to the args we'll pass to whatever we are
+  # running. The assumption is that only one verbosity incrase would be meant
+  # for this script since it's a boolean value instead of increasing verbosity
+  # with more instances.
+  verbose_flags = [a for a in sys.argv if a in ('-v', '--verbose')]
+  if verbose_flags:
+    unknown_args += verbose_flags[1:]
 
   logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARN)
 

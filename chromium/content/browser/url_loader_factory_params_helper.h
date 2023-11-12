@@ -54,7 +54,10 @@ class URLLoaderFactoryParamsHelper {
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter,
       RenderProcessHost* process,
-      network::mojom::TrustTokenRedemptionPolicy trust_token_redemption_policy,
+      network::mojom::TrustTokenOperationPolicyVerdict
+          trust_token_issuance_policy,
+      network::mojom::TrustTokenOperationPolicyVerdict
+          trust_token_redemption_policy,
       net::CookieSettingOverrides cookie_setting_overrides,
       base::StringPiece debug_tag);
 
@@ -69,7 +72,10 @@ class URLLoaderFactoryParamsHelper {
       const url::Origin& main_world_origin,
       const net::IsolationInfo& isolation_info,
       network::mojom::ClientSecurityStatePtr client_security_state,
-      network::mojom::TrustTokenRedemptionPolicy trust_token_redemption_policy,
+      network::mojom::TrustTokenOperationPolicyVerdict
+          trust_token_issuance_policy,
+      network::mojom::TrustTokenOperationPolicyVerdict
+          trust_token_redemption_policy,
       net::CookieSettingOverrides cookie_setting_overrides);
 
   static network::mojom::URLLoaderFactoryParamsPtr CreateForPrefetch(
@@ -100,8 +106,9 @@ class URLLoaderFactoryParamsHelper {
       const url::Origin& tentative_origin,
       NavigationRequest& navigation_request,
       const network::mojom::EarlyHints& early_hints,
-      mojo::PendingRemote<network::mojom::CookieAccessObserver>
-          cookie_observer);
+      mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer,
+      mojo::PendingRemote<network::mojom::TrustTokenAccessObserver>
+          trust_token_observer);
 
  private:
   // Only static methods.

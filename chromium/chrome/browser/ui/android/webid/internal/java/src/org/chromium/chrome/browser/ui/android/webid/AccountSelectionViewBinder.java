@@ -294,14 +294,31 @@ class AccountSelectionViewBinder {
      * @param key The key of the property to be bound.
      */
     static void bindHeaderView(PropertyModel model, View view, PropertyKey key) {
-        if (key == HeaderProperties.RP_FOR_DISPLAY || key == HeaderProperties.IDP_FOR_DISPLAY
-                || key == HeaderProperties.TYPE) {
+        if (key == HeaderProperties.TOP_FRAME_FOR_DISPLAY
+                || key == HeaderProperties.IFRAME_FOR_DISPLAY
+                || key == HeaderProperties.IDP_FOR_DISPLAY || key == HeaderProperties.TYPE
+                || key == HeaderProperties.RP_CONTEXT) {
             Resources resources = view.getResources();
             TextView headerTitleText = view.findViewById(R.id.header_title);
+            TextView headerSubtitleText = view.findViewById(R.id.header_subtitle);
             HeaderProperties.HeaderType headerType = model.get(HeaderProperties.TYPE);
-            String title = computeHeaderTitle(resources, headerType,
-                    model.get(HeaderProperties.RP_FOR_DISPLAY),
-                    model.get(HeaderProperties.IDP_FOR_DISPLAY));
+
+            String rpUrlForDisplayInTitle;
+            String subtitle = computeHeaderSubtitle(resources, headerType,
+                    model.get(HeaderProperties.TOP_FRAME_FOR_DISPLAY),
+                    model.get(HeaderProperties.IFRAME_FOR_DISPLAY));
+            if (!subtitle.isEmpty()) {
+                headerTitleText.setPadding(/*left=*/0, /*top=*/12, /*right=*/0, /*bottom=*/0);
+                headerSubtitleText.setText(subtitle);
+                rpUrlForDisplayInTitle = model.get(HeaderProperties.IFRAME_FOR_DISPLAY);
+            } else {
+                headerSubtitleText.setVisibility(View.GONE);
+                rpUrlForDisplayInTitle = model.get(HeaderProperties.TOP_FRAME_FOR_DISPLAY);
+            }
+
+            String title = computeHeaderTitle(resources, headerType, rpUrlForDisplayInTitle,
+                    model.get(HeaderProperties.IDP_FOR_DISPLAY),
+                    model.get(HeaderProperties.RP_CONTEXT));
             headerTitleText.setText(title);
 
             // Make instructions for closing the bottom sheet part of the header's content
@@ -364,8 +381,8 @@ class AccountSelectionViewBinder {
         return R.string.verify_sheet_title_auto_reauthn;
     }
 
-    private static String computeHeaderTitle(
-            Resources resources, HeaderProperties.HeaderType type, String rpUrl, String idpUrl) {
+    private static String computeHeaderTitle(Resources resources, HeaderProperties.HeaderType type,
+            String rpUrl, String idpUrl, String rpContext) {
         if (type == HeaderProperties.HeaderType.VERIFY) {
             return resources.getString(getVerifyHeaderStringId());
         }
@@ -373,8 +390,32 @@ class AccountSelectionViewBinder {
             return resources.getString(getVerifyHeaderAutoReauthnStringId());
         }
         @StringRes
-        int titleStringId = R.string.account_selection_sheet_title_explicit;
+        int titleStringId;
+        switch (rpContext) {
+            case "signup":
+                titleStringId = R.string.account_selection_sheet_title_explicit_signup;
+                break;
+            case "use":
+                titleStringId = R.string.account_selection_sheet_title_explicit_use;
+                break;
+            case "continue":
+                titleStringId = R.string.account_selection_sheet_title_explicit_continue;
+                break;
+            default:
+                titleStringId = R.string.account_selection_sheet_title_explicit_signin;
+        }
         return String.format(resources.getString(titleStringId), rpUrl, idpUrl);
+    }
+
+    private static String computeHeaderSubtitle(Resources resources,
+            HeaderProperties.HeaderType type, String topFrameUrl, String iframeUrl) {
+        if (type == HeaderProperties.HeaderType.VERIFY
+                || type == HeaderProperties.HeaderType.VERIFY_AUTO_REAUTHN || iframeUrl.isEmpty()) {
+            return "";
+        }
+        @StringRes
+        int subtitleStringId = R.string.account_selection_sheet_subtitle_explicit;
+        return String.format(resources.getString(subtitleStringId), topFrameUrl);
     }
 
     private AccountSelectionViewBinder() {}

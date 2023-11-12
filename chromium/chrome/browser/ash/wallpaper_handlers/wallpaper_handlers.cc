@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_handlers.h"
 
 #include <map>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -25,10 +26,12 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_handlers_metric_utils.h"
+#include "chrome/browser/ash/wallpaper_handlers/wallpaper_prefs.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
@@ -39,6 +42,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/url_util.h"
 #include "net/http/http_status_code.h"
+#include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -71,6 +75,9 @@ constexpr char kFilteringLabel[] = "chromebook";
 
 // The label used to return exclusive content for Google branded chromebooks.
 constexpr char kGoogleDeviceFilteringLabel[] = "google_branded_chromebook";
+
+// The label used to return exclusive Time of Day wallpapers.
+constexpr char kTimeOfDayFilteringLabel[] = "chromebook_time_of_day";
 
 // The URL to download an album's photos from a user's Google Photos library.
 constexpr char kGooglePhotosAlbumUrl[] =
@@ -356,6 +363,9 @@ void BackdropCollectionInfoFetcher::Start(OnCollectionsInfoFetched callback) {
   if (ash::IsGoogleBrandedDevice()) {
     request.add_filtering_label(kGoogleDeviceFilteringLabel);
   }
+  if (ash::features::IsTimeOfDayWallpaperEnabled()) {
+    request.add_filtering_label(kTimeOfDayFilteringLabel);
+  }
   std::string serialized_proto;
   request.SerializeToString(&serialized_proto);
 
@@ -428,6 +438,9 @@ void BackdropImageInfoFetcher::Start(OnImagesInfoFetched callback) {
   request.add_filtering_label(kFilteringLabel);
   if (ash::IsGoogleBrandedDevice()) {
     request.add_filtering_label(kGoogleDeviceFilteringLabel);
+  }
+  if (ash::features::IsTimeOfDayWallpaperEnabled()) {
+    request.add_filtering_label(kTimeOfDayFilteringLabel);
   }
   std::string serialized_proto;
   request.SerializeToString(&serialized_proto);
@@ -503,6 +516,9 @@ void BackdropSurpriseMeImageFetcher::Start(OnSurpriseMeImageFetched callback) {
   if (ash::IsGoogleBrandedDevice()) {
     request.add_filtering_label(kGoogleDeviceFilteringLabel);
   }
+  if (ash::features::IsTimeOfDayWallpaperEnabled()) {
+    request.add_filtering_label(kTimeOfDayFilteringLabel);
+  }
   if (!resume_token_.empty()) {
     request.set_resume_token(resume_token_);
   }
@@ -572,7 +588,7 @@ GooglePhotosFetcher<T>::GooglePhotosFetcher(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(profile_);
   DCHECK(identity_manager_);
-  identity_manager_observation_.Observe(identity_manager_);
+  identity_manager_observation_.Observe(identity_manager_.get());
 }
 
 template <typename T>
@@ -721,6 +737,13 @@ void GooglePhotosFetcher<T>::OnResponseReady(
   pending_client_callbacks_.erase(service_url);
 }
 
+template <typename T>
+bool GooglePhotosFetcher<T>::IsGooglePhotosIntegrationPolicyEnabled() const {
+  PrefService* pref_service = profile_->GetPrefs();
+  return pref_service->GetBoolean(
+      prefs::kWallpaperGooglePhotosIntegrationEnabled);
+}
+
 GooglePhotosAlbumsFetcher::GooglePhotosAlbumsFetcher(Profile* profile)
     : GooglePhotosFetcher(profile, kGooglePhotosAlbumsTrafficAnnotation) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -820,6 +843,15 @@ GooglePhotosSharedAlbumsFetcher::~GooglePhotosSharedAlbumsFetcher() {
 void GooglePhotosSharedAlbumsFetcher::AddRequestAndStartIfNecessary(
     const absl::optional<std::string>& resume_token,
     base::OnceCallback<void(GooglePhotosAlbumsCbkArgs)> callback) {
+  if (!IsGooglePhotosIntegrationPolicyEnabled()) {
+    DVLOG(1) << __FUNCTION__
+             << ": Skipping due to disabled policy: "
+                "WallpaperGooglePhotosIntegrationEnabled.";
+    std::move(callback).Run(ash::personalization_app::mojom::
+                                FetchGooglePhotosAlbumsResponse::New());
+    return;
+  }
+
   GURL service_url = GURL(kGooglePhotosSharedAlbumsUrl);
   if (resume_token.has_value()) {
     service_url = net::AppendQueryParameter(service_url, "resume_token",
@@ -895,6 +927,14 @@ GooglePhotosEnabledFetcher::~GooglePhotosEnabledFetcher() = default;
 
 void GooglePhotosEnabledFetcher::AddRequestAndStartIfNecessary(
     base::OnceCallback<void(GooglePhotosEnablementState)> callback) {
+  if (!IsGooglePhotosIntegrationPolicyEnabled()) {
+    DVLOG(1) << __FUNCTION__
+             << ": Skipping due to disabled policy: "
+                "WallpaperGooglePhotosIntegrationEnabled.";
+    std::move(callback).Run(GooglePhotosEnablementState::kDisabled);
+    return;
+  }
+
   GooglePhotosFetcher::AddRequestAndStartIfNecessary(
       GURL(kGooglePhotosEnabledUrl), std::move(callback));
 }
@@ -942,6 +982,18 @@ void GooglePhotosPhotosFetcher::AddRequestAndStartIfNecessary(
     const absl::optional<std::string>& resume_token,
     bool shuffle,
     base::OnceCallback<void(GooglePhotosPhotosCbkArgs)> callback) {
+  if (!IsGooglePhotosIntegrationPolicyEnabled()) {
+    DVLOG(1) << __FUNCTION__
+             << ": Skipping due to disabled policy: "
+                "WallpaperGooglePhotosIntegrationEnabled.";
+    auto parsed_response =
+        ash::personalization_app::mojom::FetchGooglePhotosPhotosResponse::New();
+    parsed_response->photos =
+        std::vector<ash::personalization_app::mojom::GooglePhotosPhotoPtr>();
+    std::move(callback).Run(mojo::Clone(parsed_response));
+    return;
+  }
+
   GURL service_url;
   if (item_id.has_value()) {
     DCHECK(!album_id.has_value() && !resume_token.has_value() && !shuffle);

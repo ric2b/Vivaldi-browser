@@ -12,6 +12,7 @@
 #include "base/check.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/values.h"
 #include "chromeos/ash/components/network/policy_util.h"
@@ -196,11 +197,11 @@ class MergeListOfDictionaries {
 class MergeSettingsAndPolicies : public MergeListOfDictionaries {
  public:
   struct ValueParams {
-    const base::Value* user_policy;
-    const base::Value* device_policy;
-    const base::Value* user_setting;
-    const base::Value* shared_setting;
-    const base::Value* active_setting;
+    raw_ptr<const base::Value, ExperimentalAsh> user_policy;
+    raw_ptr<const base::Value, ExperimentalAsh> device_policy;
+    raw_ptr<const base::Value, ExperimentalAsh> user_setting;
+    raw_ptr<const base::Value, ExperimentalAsh> shared_setting;
+    raw_ptr<const base::Value, ExperimentalAsh> active_setting;
     bool user_editable;
     bool device_editable;
   };
@@ -537,7 +538,7 @@ class MergeToAugmented : public MergeToEffective {
   }
 
  private:
-  const chromeos::onc::OncValueSignature* signature_;
+  raw_ptr<const chromeos::onc::OncValueSignature, ExperimentalAsh> signature_;
 };
 
 }  // namespace
@@ -545,34 +546,23 @@ class MergeToAugmented : public MergeToEffective {
 base::Value::Dict MergeSettingsAndPoliciesToEffective(
     const base::Value::Dict* user_policy,
     const base::Value::Dict* device_policy,
-    const base::Value* user_settings,
-    const base::Value* shared_settings) {
-  const base::Value::Dict* user_settings_dict =
-      user_settings ? &user_settings->GetDict() : nullptr;
-  const base::Value::Dict* shared_settings_dict =
-      shared_settings ? &shared_settings->GetDict() : nullptr;
-
+    const base::Value::Dict* user_settings,
+    const base::Value::Dict* shared_settings) {
   MergeToEffective merger;
-  return merger.MergeDictionaries(user_policy, device_policy,
-                                  user_settings_dict, shared_settings_dict,
-                                  nullptr);
+  return merger.MergeDictionaries(user_policy, device_policy, user_settings,
+                                  shared_settings, nullptr);
 }
 
 base::Value::Dict MergeSettingsAndPoliciesToAugmented(
     const chromeos::onc::OncValueSignature& signature,
     const base::Value::Dict* user_policy,
     const base::Value::Dict* device_policy,
-    const base::Value* user_settings,
-    const base::Value* shared_settings,
+    const base::Value::Dict* user_settings,
+    const base::Value::Dict* shared_settings,
     const base::Value::Dict* active_settings) {
-  const base::Value::Dict* user_settings_dict =
-      user_settings ? &user_settings->GetDict() : nullptr;
-  const base::Value::Dict* shared_settings_dict =
-      shared_settings ? &shared_settings->GetDict() : nullptr;
-
   MergeToAugmented merger;
   return merger.MergeDictionaries(signature, user_policy, device_policy,
-                                  user_settings_dict, shared_settings_dict,
+                                  user_settings, shared_settings,
                                   active_settings);
 }
 

@@ -64,7 +64,9 @@ class ACCELERATED_WIDGET_MAC_EXPORT CARendererLayerTree {
   bool ScheduleCALayer(const CARendererLayerParams& params);
 
   // Set the MTLDevice to use for any CAMetalLayers.
-  void SetMetalDevice(intptr_t metal_device) { metal_device_ = metal_device; }
+  void SetMetalDevice(id<MTLDevice> metal_device) {
+    metal_device_ = metal_device;
+  }
 
   // Create a CALayer tree for the scheduled layers, and set |superlayer| to
   // have only this tree as its sublayers. If |old_tree| is non-null, then try
@@ -95,7 +97,6 @@ class ACCELERATED_WIDGET_MAC_EXPORT CARendererLayerTree {
 
   void MatchLayersToOldTreeDefault(CARendererLayerTree* old_tree);
   void MatchLayersToOldTree(CARendererLayerTree* old_tree);
-  void VerifyCommittedCALayers();
 
   class RootLayer {
    public:
@@ -229,7 +230,7 @@ class ACCELERATED_WIDGET_MAC_EXPORT CARendererLayerTree {
                  const gfx::ColorSpace& color_space,
                  unsigned edge_aa_mask,
                  float opacity,
-                 unsigned filter,
+                 bool nearest_neighbor_filter,
                  gfx::HDRMode hdr_mode,
                  absl::optional<gfx::HDRMetadata> hdr_metadata,
                  gfx::ProtectedVideoType protected_video_type);
@@ -308,7 +309,7 @@ class ACCELERATED_WIDGET_MAC_EXPORT CARendererLayerTree {
   bool has_committed_ = false;
   const bool allow_av_sample_buffer_display_layer_ = true;
   const bool allow_solid_color_layers_ = true;
-  intptr_t metal_device_ = 0;
+  id<MTLDevice> metal_device_ = nil;
 
   // Used for uma.
   int changed_io_surfaces_during_commit_ = 0;

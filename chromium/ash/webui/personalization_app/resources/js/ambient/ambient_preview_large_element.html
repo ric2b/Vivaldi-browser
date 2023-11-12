@@ -1,17 +1,16 @@
 <style include="common cros-button-style">
   #container {
-    border: 1px solid var(--cros-separator-color);
     border-radius: 16px;
     display: grid;
     grid-template-areas:
-      '. slot           slot    slot    .'
-      '. image          image   image   .'
-      '. .              .       .       .'
-      '. message        message message .'
-      '. mainpage-desc  .       collage .'
-      '. .              .       .       .';
+      '. slot           slot    slot      .'
+      '. image          image   image     .'
+      '. .              .       .         .'
+      '. message        message message   .'
+      '. mainpage-desc  .       thumbnail .'
+      '. .              .       .         .';
     grid-template-columns: 20px auto 192px auto 20px;
-    grid-template-rows: auto auto 20px 192px auto 20px;
+    grid-template-rows: auto auto 20px 192px 1fr 20px;
     height: 100%;
   }
 
@@ -20,21 +19,22 @@
       '. slot          .'
       '. image         .'
       '. .             .'
-      '. collage       .'
+      '. thumbnail     .'
       '. mainpage-desc .'
       '. .             .';
     grid-template-columns: 20px minmax(0,1fr) 20px;
-    grid-template-rows: auto auto 20px 130px auto 18px;
+    grid-template-rows: auto auto 20px 130px 1fr 18px;
   }
 
   #container.jelly-disabled {
+    border: 1px solid var(--cros-separator-color);
     grid-template-areas:
-      '. slot           slot    slot    .'
-      '. image          image   image   .'
-      '. .              .       .       .'
-      '. message        message message .'
-      '. mainpage-desc  .       collage .'
-      '. .              .       .       .';
+      '. slot           slot    slot      .'
+      '. image          image   image     .'
+      '. .              .       .         .'
+      '. message        message message   .'
+      '. mainpage-desc  .       thumbnail .'
+      '. .              .       .         .';
     grid-template-columns: 20px minmax(0, 1fr) 16px 106px 20px;
     grid-template-rows: auto minmax(158px, 220px) 20px 106px auto 24px;
   }
@@ -59,7 +59,7 @@
   }
 
   #ambientSubpageLink {
-    --cr-icon-button-size: 48px;
+    --cr-icon-button-size: 44px;
     /* Make the arrow align with the thumbnail image */
     margin-inline-end: -18px;
   }
@@ -67,7 +67,7 @@
   #ambientLabel>h2 {
     color: var(--cros-text-color-primary);
     font: var(--personalization-app-label-font);
-    margin: 14px 0;
+    margin: 12px 0;
   }
 
   #ambientLabel.enterprise {
@@ -126,7 +126,7 @@
 
   :host-context(body.jelly-enabled) #imageContainer,
   :host-context(body.jelly-enabled) #imagePlaceholder {
-    aspect-ratio: 460/274;
+    aspect-ratio: 340/220;
     max-width: 460px;
     min-width: 278px;
   }
@@ -172,7 +172,7 @@
   #albumTitle {
     color: var(--cros-text-color-primary);
     font: var(--cros-display-7-font);
-    margin-top: 16px;
+    margin-top: 10px;
   }
 
   #albumTitle.jelly-disabled {
@@ -194,7 +194,7 @@
     border-radius: 12px;
     display: grid;
     gap: 2px;
-    grid-area: collage;
+    grid-area: thumbnail;
     overflow: hidden;
   }
 
@@ -247,12 +247,18 @@
   #thumbnailContainer,
   #thumbnailPlaceholder {
     display: grid;
-    grid-area: collage;
+    grid-area: thumbnail;
     justify-self: center;
     max-width: 360px;
     min-width: 252px;
     overflow: hidden;
     width: 100%;
+  }
+
+  :host-context(body.jelly-enabled) #thumbnailContainer,
+  :host-context(body.jelly-enabled) #thumbnailPlaceholder {
+    max-width: 460px;
+    min-width: 278px;
   }
 
   .thumbnail-item {
@@ -263,8 +269,13 @@
 
   .thumbnail-item img {
     height: 100%;
-    object-fit: fill;
+    object-fit: cover;
     width: 100%;
+  }
+
+  #thumbnailContainer.thumbnail-0 {
+    background-color: var(--personalization-app-grid-item-background-color);
+    border-radius: 12px;
   }
 
   #thumbnailContainer.thumbnail-1 .thumbnail-item {
@@ -296,7 +307,6 @@
   #thumbnailContainer.thumbnail-3 .thumbnail-item:last-of-type img,
   #thumbnailContainer.thumbnail-3 .thumbnail-item:nth-last-of-type(2) img {
     border-radius: 16px;
-    object-fit: none;
   }
 
 </style>
@@ -336,7 +346,7 @@
         <span class="text" id="turnOnDescription">
           $i18n{ambientModeMainPageEnterpriseUserMessage}
         </span>
-        <cr-button class="primary">
+        <cr-button class="primary action-button">
           <!-- TODO(b/258838122): on-click behavior -->
           <div>$i18n{ambientModeLearnMoreLabel}</div>
         </cr-button>
@@ -378,7 +388,7 @@
               $i18n{ambientModeMainPageZeroStateMessageV2}
             </span>
             <cr-button aria-describedby="turnOnDescription"
-                class="primary"
+                class="primary action-button"
                 on-click="onClickAmbientModeButton_">
               <span>$i18n{ambientModeTurnOnLabel}</span>
             </cr-button>
@@ -398,11 +408,11 @@
                   on-keypress="onClickPreviewImage_">
             </div>
             <div aria-hidden="true"
-                class$="[[getThumbnailContainerClass_(collageImages_)]]"
+                class$="[[getThumbnailContainerClass_(thumbnailImages_)]]"
                 id="thumbnailContainer"
-                on-click="onClickPhotoCollage_"
-                on-keypress="onClickPhotoCollage_">
-              <template is="dom-repeat" items="[[collageImages_]]">
+                on-click="onClickThumbnails_"
+                on-keypress="onClickThumbnails_">
+              <template is="dom-repeat" items="[[thumbnailImages_]]">
                 <div class="thumbnail-item">
                   <img auto-src="[[item.url]]"
                       is-google-photos
@@ -462,7 +472,7 @@
             $i18n{ambientModeMainPageZeroStateMessage}
           </span>
           <cr-button aria-describedby="turnOnDescription"
-              class="primary"
+              class="primary action-button"
               on-click="onClickAmbientModeButton_">
             <span>$i18n{ambientModeTurnOnLabel}</span>
           </cr-button>

@@ -102,13 +102,6 @@ RenderFrameHostImpl* RenderFrameHostDelegate::GetFocusedFrame() {
   return nullptr;
 }
 
-std::unique_ptr<WebUIImpl>
-RenderFrameHostDelegate::CreateWebUIForRenderFrameHost(
-    RenderFrameHostImpl* frame_host,
-    const GURL& url) {
-  return nullptr;
-}
-
 FrameTree* RenderFrameHostDelegate::CreateNewWindow(
     RenderFrameHostImpl* opener,
     const mojom::CreateNewWindowParams& params,
@@ -150,9 +143,9 @@ RenderFrameHostDelegate::GetRecordAggregateWatchTimeCallback(
 void RenderFrameHostDelegate::IsClipboardPasteContentAllowed(
     const GURL& url,
     const ui::ClipboardFormatType& data_type,
-    const std::string& data,
+    ClipboardPasteData clipboard_paste_data,
     IsClipboardPasteContentAllowedCallback callback) {
-  std::move(callback).Run(data);
+  std::move(callback).Run(std::move(clipboard_paste_data));
 }
 
 bool RenderFrameHostDelegate::HasSeenRecentScreenOrientationChange() {

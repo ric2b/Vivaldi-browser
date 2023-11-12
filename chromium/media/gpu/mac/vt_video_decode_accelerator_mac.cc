@@ -10,13 +10,13 @@
 #include <OpenGL/gl.h>
 #include <stddef.h>
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 
 #include "base/atomic_sequence_num.h"
 #include "base/containers/contains.h"
 #include "base/containers/span.h"
-#include "base/cxx17_backports.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
@@ -40,7 +40,6 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/version.h"
 #include "components/crash/core/common/crash_key.h"
-#include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -50,13 +49,13 @@
 #include "media/base/mac/color_space_util_mac.h"
 #include "media/base/media_switches.h"
 #include "media/filters/vp9_parser.h"
+#include "media/gpu/mac/gl_image_io_surface.h"
 #include "media/gpu/mac/vp9_super_frame_bitstream_filter.h"
 #include "media/gpu/mac/vt_config_util.h"
 #include "media/video/h264_level_limits.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gl_context.h"
-#include "ui/gl/gl_image_io_surface.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/scoped_binders.h"
 
@@ -69,6 +68,11 @@
 namespace media {
 
 namespace {
+
+// Controls whether InitializeVideoToolboxInternal() does preload or not.
+BASE_FEATURE(kSkipVideoToolboxPreload,
+             "SkipVideoToolboxPreload",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Parameter sets vector contain all PPSs/SPSs(/VPSs)
 using ParameterSets = std::vector<base::span<const uint8_t>>;
@@ -351,6 +355,15 @@ bool CreateVideoToolboxSession(
 // session fails, hardware decoding will be disabled (Initialize() will always
 // return false).
 bool InitializeVideoToolboxInternal() {
+  if (base::FeatureList::IsEnabled(kSkipVideoToolboxPreload)) {
+    // When skipping preload we still need to register vp9, otherwise it won't
+    // work at all.
+    if (__builtin_available(macOS 11.0, *)) {
+      VTRegisterSupplementalVideoDecoderIfAvailable(kCMVideoCodecType_VP9);
+    }
+    return true;
+  }
+
   VTDecompressionOutputCallbackRecord callback = {0};
   base::ScopedCFTypeRef<VTDecompressionSessionRef> session;
   gfx::Size configured_size;
@@ -491,7 +504,7 @@ int32_t ComputeH264ReorderWindow(const H264SPS* sps) {
   int max_dpb_frames =
       max_dpb_mbs / ((sps->pic_width_in_mbs_minus1 + 1) *
                      (sps->pic_height_in_map_units_minus1 + 1));
-  max_dpb_frames = base::clamp(max_dpb_frames, 0, 16);
+  max_dpb_frames = std::clamp(max_dpb_frames, 0, 16);
 
   // See AVC spec section E.2.1 definition of |max_num_reorder_frames|.
   if (sps->vui_parameters_present_flag && sps->bitstream_restriction_flag) {
@@ -524,6 +537,24 @@ void OutputThunk(void* decompression_output_refcon,
   VTVideoDecodeAccelerator* vda =
       reinterpret_cast<VTVideoDecodeAccelerator*>(decompression_output_refcon);
   vda->Output(source_frame_refcon, status, image_buffer);
+}
+
+gfx::BufferFormat ToBufferFormat(viz::SharedImageFormat format) {
+  DCHECK(format.is_multi_plane());
+  if (format == viz::MultiPlaneFormat::kYV12) {
+    return gfx::BufferFormat::YVU_420;
+  }
+  if (format == viz::MultiPlaneFormat::kNV12) {
+    return gfx::BufferFormat::YUV_420_BIPLANAR;
+  }
+  if (format == viz::MultiPlaneFormat::kNV12A) {
+    return gfx::BufferFormat::YUVA_420_TRIPLANAR;
+  }
+  if (format == viz::MultiPlaneFormat::kP010) {
+    return gfx::BufferFormat::P010;
+  }
+  NOTREACHED();
+  return gfx::BufferFormat::RGBA_8888;
 }
 
 }  // namespace
@@ -2178,15 +2209,15 @@ bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
     picture_size_ = frame.image_size;
 
     if (has_alpha_) {
-      buffer_format_ = gfx::BufferFormat::YUVA_420_TRIPLANAR;
+      si_format_ = viz::MultiPlaneFormat::kNV12A;
       picture_format_ = PIXEL_FORMAT_NV12A;
     } else if (config_.profile == VP9PROFILE_PROFILE2 ||
                config_.profile == HEVCPROFILE_MAIN10 ||
                config_.profile == HEVCPROFILE_REXT) {
-      buffer_format_ = gfx::BufferFormat::P010;
+      si_format_ = viz::MultiPlaneFormat::kP010;
       picture_format_ = PIXEL_FORMAT_P016LE;
     } else {
-      buffer_format_ = gfx::BufferFormat::YUV_420_BIPLANAR;
+      si_format_ = viz::MultiPlaneFormat::kNV12;
       picture_format_ = PIXEL_FORMAT_NV12;
     }
 
@@ -2217,20 +2248,24 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
 
   const gfx::ColorSpace color_space = GetImageBufferColorSpace(frame.image);
   std::vector<gfx::BufferPlane> planes;
-  switch (picture_format_) {
-    case PIXEL_FORMAT_NV12:
-    case PIXEL_FORMAT_P016LE:
-      planes.push_back(gfx::BufferPlane::Y);
-      planes.push_back(gfx::BufferPlane::UV);
-      break;
-    case PIXEL_FORMAT_NV12A:
-      planes.push_back(gfx::BufferPlane::Y);
-      planes.push_back(gfx::BufferPlane::UV);
-      planes.push_back(gfx::BufferPlane::A);
-      break;
-    default:
-      NOTREACHED();
-      break;
+  if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
+    planes.push_back(gfx::BufferPlane::DEFAULT);
+  } else {
+    switch (picture_format_) {
+      case PIXEL_FORMAT_NV12:
+      case PIXEL_FORMAT_P016LE:
+        planes.push_back(gfx::BufferPlane::Y);
+        planes.push_back(gfx::BufferPlane::UV);
+        break;
+      case PIXEL_FORMAT_NV12A:
+        planes.push_back(gfx::BufferPlane::Y);
+        planes.push_back(gfx::BufferPlane::UV);
+        planes.push_back(gfx::BufferPlane::A);
+        break;
+      default:
+        NOTREACHED();
+        break;
+    }
   }
   for (size_t plane = 0; plane < planes.size(); ++plane) {
     if (picture_info->uses_shared_images) {
@@ -2259,10 +2294,19 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
                               base::scoped_policy::RETAIN);
 
       gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
-      bool success = shared_image_stub->CreateSharedImage(
-          mailbox, std::move(handle), buffer_format_, planes[plane], frame_size,
-          color_space, kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType,
-          shared_image_usage);
+      bool success;
+      constexpr char kDebugLabel[] = "VTVideoDecodeAccelerator";
+      if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
+        success = shared_image_stub->CreateSharedImage(
+            mailbox, std::move(handle), si_format_, frame_size, color_space,
+            kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType, shared_image_usage,
+            kDebugLabel);
+      } else {
+        success = shared_image_stub->CreateSharedImage(
+            mailbox, std::move(handle), ToBufferFormat(si_format_),
+            planes[plane], frame_size, color_space, kTopLeft_GrSurfaceOrigin,
+            kOpaque_SkAlphaType, shared_image_usage, kDebugLabel);
+      }
       if (!success) {
         DLOG(ERROR) << "Failed to create shared image";
         NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
@@ -2292,14 +2336,14 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
           CVPixelBufferGetWidthOfPlane(frame.image.get(), plane),
           CVPixelBufferGetHeightOfPlane(frame.image.get(), plane));
       gfx::BufferFormat plane_buffer_format =
-          gpu::GetPlaneBufferFormat(planes[plane], buffer_format_);
+          gpu::GetPlaneBufferFormat(planes[plane], ToBufferFormat(si_format_));
 
-      scoped_refptr<gl::GLImageIOSurface> gl_image(
-          gl::GLImageIOSurface::Create(plane_size));
+      scoped_refptr<GLImageIOSurface> gl_image(
+          GLImageIOSurface::Create(plane_size));
       if (!gl_image->InitializeWithCVPixelBuffer(
               frame.image.get(), plane,
               gfx::GenericSharedMemoryId(g_cv_pixel_buffer_ids.GetNext()),
-              plane_buffer_format, color_space)) {
+              plane_buffer_format)) {
         NOTIFY_STATUS("Failed to initialize GLImageIOSurface", PLATFORM_FAILURE,
                       SFT_PLATFORM_ERROR);
       }
@@ -2333,7 +2377,12 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
   picture.set_read_lock_fences_enabled(true);
   if (frame.hdr_metadata)
     picture.set_hdr_metadata(frame.hdr_metadata);
+  if (IsMultiPlaneFormatForHardwareVideoEnabled()) {
+    picture.set_shared_image_format_type(
+        SharedImageFormatType::kSharedImageFormat);
+  }
   if (picture_info->uses_shared_images) {
+    // For multiplanar shared images, planes.size() is 1.
     for (size_t plane = 0; plane < planes.size(); ++plane) {
       picture.set_scoped_shared_image(picture_info->scoped_shared_images[plane],
                                       plane);

@@ -8,9 +8,12 @@
 #include <string>
 
 #include "ash/constants/ash_pref_names.h"
+#include "ash/style/dark_light_mode_controller_impl.h"
+#include "ash/system/session/guest_session_confirmation_dialog.h"
 #include "base/base64.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability_factory.h"
@@ -18,6 +21,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -201,10 +205,10 @@ class EduCoexistenceChildSigninHelper : public SigninHelper {
 
  private:
   // Unowned pointer to pref service.
-  PrefService* const pref_service_;
+  const raw_ptr<PrefService, ExperimentalAsh> pref_service_;
 
   // Unowned pointer to the WebUI through which the account was added.
-  const content::WebUI* const web_ui_;
+  const raw_ptr<const content::WebUI, ExperimentalAsh> web_ui_;
 
   // Added account email.
   const std::string account_email_;
@@ -265,7 +269,7 @@ void InlineLoginHandlerImpl::SetExtraInitParams(base::Value::Dict& params) {
   const GaiaUrls* const gaia_urls = GaiaUrls::GetInstance();
   params.Set("clientId", gaia_urls->oauth2_chrome_client_id());
 
-  const GURL& url = gaia_urls->embedded_setup_chromeos_url(2U);
+  const GURL& url = gaia_urls->embedded_setup_chromeos_url();
   params.Set("gaiaPath", url.path().substr(1));
 
   absl::optional<std::string> version = chromeos::version_loader::GetVersion(
@@ -276,6 +280,8 @@ void InlineLoginHandlerImpl::SetExtraInitParams(base::Value::Dict& params) {
                                             params.FindString("email")));
   params.Set("dontResizeNonEmbeddedPages", true);
   params.Set("enableGaiaActionButtons", true);
+  params.Set("forceDarkMode",
+             DarkLightModeControllerImpl::Get()->IsDarkModeEnabled());
 
   // For in-session login flows, request Gaia to ignore third party SAML IdP SSO
   // redirection policies (and redirect to SAML IdPs by default), otherwise some
@@ -473,7 +479,13 @@ void InlineLoginHandlerImpl::HandleSkipWelcomePage(
 
 void InlineLoginHandlerImpl::OpenGuestWindowAndCloseDialog(
     const base::Value::List& args) {
-  crosapi::BrowserManager::Get()->NewGuestWindow();
+  // Open the browser guest mode if available, else the device guest mode.
+  if (profiles::IsGuestModeEnabled()) {
+    crosapi::BrowserManager::Get()->NewGuestWindow();
+  } else {
+    GuestSessionConfirmationDialog::Show();
+  }
+
   close_dialog_closure_.Run();
 }
 

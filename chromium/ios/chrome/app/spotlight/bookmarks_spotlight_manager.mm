@@ -15,7 +15,8 @@
 #import "base/version.h"
 #import "components/bookmarks/browser/base_bookmark_model_observer.h"
 #import "components/bookmarks/browser/bookmark_model.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/app/spotlight/spotlight_interface.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -154,15 +155,18 @@ class SpotlightBookmarkModelBridge : public bookmarks::BookmarkModelObserver {
   return [[BookmarksSpotlightManager alloc]
       initWithLargeIconService:IOSChromeLargeIconServiceFactory::
                                    GetForBrowserState(browserState)
-                 bookmarkModel:ios::BookmarkModelFactory::GetForBrowserState(
-                                   browserState)];
+                 bookmarkModel:ios::LocalOrSyncableBookmarkModelFactory::
+                                   GetForBrowserState(browserState)
+            spotlightInterface:[SpotlightInterface defaultInterface]];
 }
 
 - (instancetype)
-initWithLargeIconService:(favicon::LargeIconService*)largeIconService
-           bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel {
+    initWithLargeIconService:(favicon::LargeIconService*)largeIconService
+               bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
+          spotlightInterface:(SpotlightInterface*)spotlightInterface {
   self = [super initWithLargeIconService:largeIconService
-                                  domain:spotlight::DOMAIN_BOOKMARKS];
+                                  domain:spotlight::DOMAIN_BOOKMARKS
+                      spotlightInterface:spotlightInterface];
   if (self) {
     _bookmarkModelBridge.reset(new SpotlightBookmarkModelBridge(self));
     _bookmarkModel = bookmarkModel;
@@ -214,11 +218,13 @@ initWithLargeIconService:(favicon::LargeIconService*)largeIconService
   NSString* title = base::SysUTF16ToNSString(node->GetTitle());
   NSString* spotlightID = [self spotlightIDForURL:URL title:title];
   __weak BookmarksSpotlightManager* weakSelf = self;
-  spotlight::DeleteItemsWithIdentifiers(@[ spotlightID ], ^(NSError*) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [weakSelf onCompletedDeleteItemsWithURL:URL];
-    });
-  });
+  [self.spotlightInterface
+      deleteSearchableItemsWithIdentifiers:@[ spotlightID ]
+                         completionHandler:^(NSError*) {
+                           dispatch_async(dispatch_get_main_queue(), ^{
+                             [weakSelf onCompletedDeleteItemsWithURL:URL];
+                           });
+                         }];
 }
 
 // Completion helper for URL node deletion.
@@ -326,12 +332,10 @@ initWithLargeIconService:(favicon::LargeIconService*)largeIconService
       }
       return;
     }
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [weakSelf completedClearAllSpotlightItems];
-      if (completionHandler) {
-        completionHandler(nil);
-      }
-    });
+    [weakSelf completedClearAllSpotlightItems];
+    if (completionHandler) {
+      completionHandler(nil);
+    }
   }];
 }
 

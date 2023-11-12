@@ -11,15 +11,15 @@
 
 #include "ash/ambient/ambient_constants.h"
 #include "ash/ambient/ambient_controller.h"
-#include "ash/ambient/ambient_weather_controller.h"
+#include "ash/ambient/ambient_photo_cache.h"
 #include "ash/ambient/model/ambient_animation_photo_config.h"
 #include "ash/ambient/model/ambient_backend_model.h"
 #include "ash/ambient/model/ambient_backend_model_observer.h"
 #include "ash/ambient/model/ambient_photo_config.h"
-#include "ash/ambient/model/ambient_weather_model.h"
 #include "ash/ambient/test/ambient_ash_test_base.h"
 #include "ash/ambient/test/ambient_test_util.h"
 #include "ash/ambient/test/ambient_topic_queue_test_delegate.h"
+#include "ash/ambient/test/mock_ambient_backend_model_observer.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/fake_ambient_backend_controller_impl.h"
 #include "ash/public/cpp/ambient/proto/photo_cache_entry.pb.h"
@@ -57,15 +57,6 @@ using ::testing::Pointwise;
 using ::testing::SizeIs;
 
 namespace {
-class MockAmbientBackendModelObserver : public AmbientBackendModelObserver {
- public:
-  MockAmbientBackendModelObserver() = default;
-  ~MockAmbientBackendModelObserver() override = default;
-
-  // AmbientBackendModelObserver:
-  MOCK_METHOD(void, OnImageAdded, (), (override));
-  MOCK_METHOD(void, OnImagesReady, (), (override));
-};
 
 bool AreBackedBySameImage(const PhotoWithDetails& topic_l,
                           const PhotoWithDetails& topic_r) {
@@ -670,7 +661,7 @@ TEST_F(AmbientPhotoControllerTest, UsesBackupCacheAfterPrimaryCacheCleared) {
   // photos from the last "screen update". ClearCache() should only clear the
   // primary cache, leaving photos in the backup cache to use.
   ASSERT_FALSE(GetBackupCachedFiles().empty());
-  photo_controller()->ClearCache();
+  ambient_controller()->ambient_photo_cache()->Clear();
   // Simulate an IMAX failure to leave the photo controller no choice but to
   // resort to the backup cache.
   backend_controller()->SetFetchScreenUpdateInfoResponseSize(0);
@@ -711,36 +702,6 @@ TEST_F(AmbientPhotoControllerTest, ShouldNotLoadDuplicateImages) {
   EXPECT_TRUE(photo_controller()->ambient_backend_model()->IsHashDuplicate(
       base::SHA1HashString("image data 2")));
   EXPECT_TRUE(photo_controller()->ambient_backend_model()->ImagesReady());
-}
-
-TEST_F(AmbientPhotoControllerTest, ShouldStartToRefreshWeather) {
-  auto* model = weather_controller()->weather_model();
-  EXPECT_FALSE(model->show_celsius());
-  EXPECT_TRUE(model->weather_condition_icon().isNull());
-
-  WeatherInfo info;
-  info.show_celsius = true;
-  info.condition_icon_url = "https://fake-icon-url";
-  info.temp_f = 70.0f;
-  backend_controller()->SetWeatherInfo(info);
-
-  // Start to refresh weather as screen update starts.
-  photo_controller()->StartScreenUpdate(
-      std::make_unique<AmbientTopicQueueTestDelegate>());
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_TRUE(model->show_celsius());
-  EXPECT_FALSE(model->weather_condition_icon().isNull());
-  EXPECT_GT(info.temp_f, 0);
-
-  // Refresh weather again after time passes.
-  info.show_celsius = false;
-  info.temp_f = -70.0f;
-  backend_controller()->SetWeatherInfo(info);
-
-  FastForwardToRefreshWeather();
-  EXPECT_FALSE(model->show_celsius());
-  EXPECT_LT(info.temp_f, 0);
 }
 
 TEST_F(AmbientPhotoControllerTest, IsScreenUpdateActive) {

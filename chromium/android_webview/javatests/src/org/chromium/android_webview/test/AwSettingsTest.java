@@ -11,11 +11,11 @@ import android.graphics.Point;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.SystemClock;
-import android.support.test.InstrumentationRegistry;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
@@ -3391,10 +3391,10 @@ public class AwSettingsTest {
         mOverridenFactory = null;
     }
 
-    private static class EmptyDocumentPeristenceTestDependencyFactory
+    private static class EmptyDocumentPersistenceTestDependencyFactory
             extends TestDependencyFactory {
         private boolean mAllow;
-        public EmptyDocumentPeristenceTestDependencyFactory(boolean allow) {
+        public EmptyDocumentPersistenceTestDependencyFactory(boolean allow) {
             mAllow = allow;
         }
 
@@ -3407,7 +3407,7 @@ public class AwSettingsTest {
     }
 
     private void doAllowEmptyDocumentPersistenceTest(boolean allow) throws Throwable {
-        mOverridenFactory = new EmptyDocumentPeristenceTestDependencyFactory(allow);
+        mOverridenFactory = new EmptyDocumentPersistenceTestDependencyFactory(allow);
 
         final TestAwContentsClient client = new TestAwContentsClient();
         final AwTestContainerView mContainerView =

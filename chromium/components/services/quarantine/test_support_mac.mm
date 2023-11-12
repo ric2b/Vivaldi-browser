@@ -9,12 +9,17 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/mac/scoped_nsobject.h"
+#include "base/mac/bridging.h"
+#include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "components/services/quarantine/common.h"
 #include "components/services/quarantine/common_mac.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace quarantine {
 
@@ -34,16 +39,15 @@ bool IsFileQuarantined(const base::FilePath& file,
     return false;
   }
 
-  base::scoped_nsobject<NSMutableDictionary> properties;
-  bool success = GetQuarantineProperties(file, &properties);
-
-  if (!success || !properties) {
+  NSDictionary* properties = GetQuarantineProperties(file);
+  if (!properties) {
     return false;
   }
 
   // The agent bundle id must always be set.
   NSString* bundle_id =
-      [properties valueForKey:(NSString*)kLSQuarantineAgentBundleIdentifierKey];
+      [properties valueForKey:base::mac::CFToNSPtrCast(
+                                  kLSQuarantineAgentBundleIdentifierKey)];
   if (!bundle_id.length) {
     return false;
   }
@@ -51,8 +55,9 @@ bool IsFileQuarantined(const base::FilePath& file,
   // The source and referrer URLs are optional.
   GURL expected_source_url =
       SanitizeUrlForQuarantine(expected_source_url_unsafe);
-  NSString* source_url =
-      [[properties valueForKey:(NSString*)kLSQuarantineDataURLKey] description];
+  NSString* source_url = [[properties
+      valueForKey:base::mac::CFToNSPtrCast(kLSQuarantineDataURLKey)]
+      description];
   if (expected_source_url.is_valid() && source_url.length) {
     if (![source_url isEqualToString:base::SysUTF8ToNSString(
                                          expected_source_url.spec())]) {
@@ -63,7 +68,8 @@ bool IsFileQuarantined(const base::FilePath& file,
   GURL expected_referrer_url =
       SanitizeUrlForQuarantine(expected_referrer_url_unsafe);
   NSString* referrer_url = [[properties
-      valueForKey:(NSString*)kLSQuarantineOriginURLKey] description];
+      valueForKey:base::mac::CFToNSPtrCast(kLSQuarantineOriginURLKey)]
+      description];
   if (expected_referrer_url.is_valid() && referrer_url.length) {
     if (![referrer_url isEqualToString:base::SysUTF8ToNSString(
                                            expected_referrer_url.spec())]) {

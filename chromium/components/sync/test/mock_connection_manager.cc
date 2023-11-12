@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "base/containers/contains.h"
-#include "base/guid.h"
 #include "base/location.h"
 #include "base/strings/stringprintf.h"
+#include "base/uuid.h"
 #include "components/sync/engine/syncer_proto_util.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 #include "components/sync/protocol/client_commands.pb.h"
@@ -278,7 +278,7 @@ sync_pb::SyncEntity* MockConnectionManager::AddUpdatePref(
   sync_pb::SyncEntity* ent =
       AddUpdateMeta(id, parent_id, " ", version, sync_ts);
 
-  ent->set_client_defined_unique_tag(client_tag);
+  ent->set_client_tag_hash(client_tag);
 
   sync_pb::EntitySpecifics specifics;
   AddDefaultFieldValue(PREFERENCES, &specifics);
@@ -428,7 +428,7 @@ void MockConnectionManager::SetLastUpdateServerTag(const string& tag) {
 }
 
 void MockConnectionManager::SetLastUpdateClientTag(const string& tag) {
-  GetMutableLastUpdate()->set_client_defined_unique_tag(tag);
+  GetMutableLastUpdate()->set_client_tag_hash(tag);
 }
 
 void MockConnectionManager::SetNewTimestamp(int ts) {
@@ -563,7 +563,7 @@ bool MockConnectionManager::ProcessCommit(
       // For commit-only types, fake having received a random ID, simply to
       // reuse the validation logic later below.
       if (CommitOnlyTypes().Has(model_type)) {
-        id_string = base::GenerateGUID();
+        id_string = base::Uuid::GenerateRandomV4().AsLowercaseString();
       } else {
         ADD_FAILURE() << " for specifics type "
                       << ModelTypeToDebugString(model_type);

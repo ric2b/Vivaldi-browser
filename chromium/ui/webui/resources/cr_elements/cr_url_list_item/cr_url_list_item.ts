@@ -5,6 +5,7 @@
 import '../cr_hidden_style.css.js';
 import '../cr_icons.css.js';
 import '../cr_shared_vars.css.js';
+import '//resources/cr_elements/cr_auto_img/cr_auto_img.js';
 
 import {assert} from '//resources/js/assert_ts.js';
 import {FocusOutlineManager} from '//resources/js/focus_outline_manager.js';
@@ -21,6 +22,13 @@ export enum CrUrlListItemSize {
   LARGE = 'large',
 }
 
+export interface CrUrlListItemElement {
+  $: {
+    badges: HTMLSlotElement,
+    description: HTMLSlotElement,
+  };
+}
+
 const CrUrlListItemElementBase = MouseHoverableMixin(PolymerElement);
 
 export class CrUrlListItemElement extends CrUrlListItemElementBase {
@@ -34,25 +42,73 @@ export class CrUrlListItemElement extends CrUrlListItemElementBase {
 
   static get properties() {
     return {
-      alwaysShowSuffixIcons: {
-        reflectToAttribute: true,
-        type: Boolean,
-      },
+      buttonAriaLabel: String,
+      buttonAriaDescription: String,
       count: Number,
+      description: String,
+      url: String,
+
+      title: {
+        reflectToAttribute: true,
+        type: String,
+      },
+
+      hasBadges_: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
+
+      hasDescriptions_: {
+        type: Boolean,
+        computed: 'computeHasDescriptions_(hasBadges_, description)',
+        reflectToAttribute: true,
+      },
+
+      isFolder_: {
+        computed: 'computeIsFolder_(count)',
+        type: Boolean,
+        value: false,
+        reflectToAttribute: true,
+      },
+
       size: {
         observer: 'onSizeChanged_',
         reflectToAttribute: true,
         type: String,
         value: CrUrlListItemSize.MEDIUM,
       },
-      url: String,
+
+      imageUrls: {
+        observer: 'resetFirstImageLoaded_',
+        type: Array,
+        value: () => [],
+      },
+
+      firstImageLoaded_: {
+        type: Boolean,
+        value: false,
+      },
+
+      forceHover: {
+        reflectToAttribute: true,
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
+  buttonAriaLabel?: string;
+  buttonAriaDescription?: string;
   count?: number;
-  iconsAlwaysVisible: boolean;
+  description?: string;
+  private hasBadges_: boolean;
+  private hasDescription_: boolean;
+  private isFolder_: boolean;
   size: CrUrlListItemSize;
   url?: string;
+  imageUrls: string[];
+  private firstImageLoaded_: boolean;
+  forceHover: boolean;
 
   override ready() {
     super.ready();
@@ -60,6 +116,44 @@ export class CrUrlListItemElement extends CrUrlListItemElementBase {
     this.addEventListener('pointerdown', () => this.setActiveState_(true));
     this.addEventListener('pointerup', () => this.setActiveState_(false));
     this.addEventListener('pointerleave', () => this.setActiveState_(false));
+  }
+
+  override connectedCallback() {
+    super.connectedCallback();
+    this.resetFirstImageLoaded_();
+  }
+
+  private resetFirstImageLoaded_() {
+    this.firstImageLoaded_ = false;
+    const image = this.shadowRoot!.querySelector('img');
+    if (!image) {
+      return;
+    }
+
+    if (image.complete) {
+      this.firstImageLoaded_ = true;
+      return;
+    }
+
+    image.addEventListener('load', () => {
+      this.firstImageLoaded_ = true;
+    }, {once: true});
+  }
+
+  private computeHasDescriptions_(): boolean {
+    return !!this.description || this.hasBadges_;
+  }
+
+  private computeIsFolder_(): boolean {
+    return this.count !== undefined;
+  }
+
+  private getButtonAriaDescription_(): string|undefined {
+    return this.buttonAriaDescription || this.description;
+  }
+
+  private getButtonAriaLabel_(): string {
+    return this.buttonAriaLabel || this.title;
   }
 
   private getDisplayedCount_() {
@@ -75,6 +169,15 @@ export class CrUrlListItemElement extends CrUrlListItemElementBase {
     return getFaviconForPageURL(this.url || '', false);
   }
 
+  private shouldShowImageUrl_(_url: string, index: number) {
+    return index <= 1;
+  }
+
+  private onBadgesSlotChange_() {
+    this.hasBadges_ =
+        this.$.badges.assignedElements({flatten: true}).length > 0;
+  }
+
   private onSizeChanged_() {
     assert(Object.values(CrUrlListItemSize).includes(this.size));
   }
@@ -84,7 +187,29 @@ export class CrUrlListItemElement extends CrUrlListItemElementBase {
   }
 
   private shouldShowFavicon_(): boolean {
-    return this.url !== undefined;
+    return this.url !== undefined &&
+        (this.size === CrUrlListItemSize.COMPACT ||
+         this.imageUrls.length === 0);
+  }
+
+  private shouldShowUrlImage_(): boolean {
+    return this.url !== undefined &&
+        !(this.size === CrUrlListItemSize.COMPACT ||
+          this.imageUrls.length === 0) &&
+        this.firstImageLoaded_;
+  }
+
+  private shouldShowFolderImages_(): boolean {
+    return this.size !== CrUrlListItemSize.COMPACT;
+  }
+
+  private shouldShowFolderIcon_(): boolean {
+    return this.size === CrUrlListItemSize.COMPACT ||
+        this.imageUrls.length === 0;
+  }
+
+  private shouldShowFolderCount_(): boolean {
+    return this.url === undefined;
   }
 }
 

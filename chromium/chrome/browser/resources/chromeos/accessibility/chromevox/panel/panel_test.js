@@ -10,14 +10,23 @@ GEN_INCLUDE(['panel_test_base.js']);
  */
 ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
   /** @override */
+  testGenCppIncludes() {
+    super.testGenCppIncludes();
+    GEN(`#include "ui/accessibility/accessibility_features.h"`);
+  }
+
+  /** @override */
+  get featureList() {
+    return {enabled: ['features::kAccessibilityDeprecateChromeVoxTabs']};
+  }
+
+  /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();
 
     // Alphabetical based on file path.
     await importModule(
         'ChromeVoxRange', '/chromevox/background/chromevox_range.js');
-    await importModule(
-        'ChromeVoxState', '/chromevox/background/chromevox_state.js');
     await importModule(
         'CommandHandlerInterface',
         '/chromevox/background/command_handler_interface.js');
@@ -76,7 +85,7 @@ ChromeVoxPanelTest = class extends ChromeVoxPanelTestBase {
       const evt = {};
       evt.target = {};
       evt.target.value = query;
-      this.getPanel().instance.onSearchBarQuery_(evt);
+      this.getPanel().instance.menuManager_.onSearchBarQuery(evt);
     }.bind(this);
   }
 
@@ -221,7 +230,7 @@ AX_TEST_F('ChromeVoxPanelTest', 'DISABLED_Gestures', async function() {
   const desktop = root.parent.root;
   const panelNode = desktop.find(
       {role: 'rootWebArea', attributes: {name: 'ChromeVox Panel'}});
-  ChromeVoxState.instance.setCurrentRange(CursorRange.fromNode(panelNode));
+  ChromeVoxRange.set(CursorRange.fromNode(panelNode));
 
   doGestureAsync(Gesture.SWIPE_RIGHT1);
   await this.waitForMenu('panel_menu_jump');
@@ -290,8 +299,6 @@ AX_TEST_F(
       this.assertActiveMenuItem(
           'panel_menu_speech', 'Announce Current Battery Status',
           'Search+O, then B');
-      // Skip the tabs menu.
-      this.fireMockEvent('ArrowRight')();
       this.fireMockEvent('ArrowRight')();
       this.assertActiveMenuItem(
           'panel_menu_chromevox', 'Open keyboard shortcuts menu', 'Ctrl+Alt+/');

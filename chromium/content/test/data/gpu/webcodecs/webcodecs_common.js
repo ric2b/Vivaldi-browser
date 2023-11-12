@@ -37,6 +37,12 @@ class TestHarness {
       this.reportFailure("Assertion failed: " + msg);
   }
 
+  assert_eq(val1, val2, msg) {
+    if (val1 != val2) {
+      this.reportFailure(`Assertion failed: ${msg}. ${val1} != ${val2}.`);
+    }
+  }
+
   summary() {
     return this.message + "\n\n" + this.logs.join("\n");
   }
@@ -149,7 +155,7 @@ function validateBlackDots(frame, count) {
   const width = frame.displayWidth;
   const height = frame.displayHeight;
   let cnv = new OffscreenCanvas(width, height);
-  var ctx = cnv.getContext('2d');
+  var ctx = cnv.getContext('2d', { willReadFrequently : true });
   ctx.drawImage(frame, 0, 0);
   const dot_size = 10;
   const step = dot_size * 3;
@@ -438,4 +444,20 @@ async function createFrameSource(type, width, height) {
       return new ArrayBufferSource(width, height);
     }
   }
+}
+
+function addManualTestButton(configs) {
+  document.addEventListener('DOMContentLoaded', _ => {
+    configs.forEach(config => {
+      const btn = document.createElement('button');
+      const label = document.createTextNode(
+          'Run test with config: ' + JSON.stringify(config));
+      btn.onclick = function() {
+        main(config);
+      };
+      btn.appendChild(label);
+      btn.style.margin = '5px';
+      document.body.appendChild(btn);
+    });
+  }, true);
 }

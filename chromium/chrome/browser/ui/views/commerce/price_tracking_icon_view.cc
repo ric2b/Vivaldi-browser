@@ -34,9 +34,29 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/view_class_properties.h"
+
+namespace {
+
+void AddIfNotBookmarkedToTheDefaultFolder(bookmarks::BookmarkModel* model,
+                                          content::WebContents* web_contents) {
+  GURL url;
+  std::u16string title;
+
+  if (chrome::GetURLAndTitleToBookmark(web_contents, &url, &title)) {
+    if (bookmarks::IsBookmarkedByUser(model, url)) {
+      return;
+    }
+
+    const bookmarks::BookmarkNode* other_node = model->other_node();
+    model->AddNewURL(other_node, other_node->children().size(), title, url);
+  }
+}
+
+}  // namespace
 
 PriceTrackingIconView::PriceTrackingIconView(
     IconLabelBubbleView::Delegate* parent_delegate,
@@ -53,17 +73,15 @@ PriceTrackingIconView::PriceTrackingIconView(
       icon_(&omnibox::kPriceTrackingDisabledIcon) {
   SetUpForInOutAnimation();
   SetProperty(views::kElementIdentifierKey, kPriceTrackingChipElementId);
+  SetAccessibilityProperties(
+      /*role*/ absl::nullopt,
+      l10n_util::GetStringUTF16(IDS_OMNIBOX_TRACK_PRICE));
 }
 
 PriceTrackingIconView::~PriceTrackingIconView() = default;
 
 views::BubbleDialogDelegate* PriceTrackingIconView::GetBubble() const {
   return bubble_coordinator_.GetBubble();
-}
-
-std::u16string PriceTrackingIconView::GetTextForTooltipAndAccessibleName()
-    const {
-  return tooltip_text_and_accessibleName_;
 }
 
 void PriceTrackingIconView::OnExecuting(
@@ -160,7 +178,23 @@ void PriceTrackingIconView::AnimationProgressed(
         FROM_HERE, kLabelPersistDuration,
         base::BindOnce(&PriceTrackingIconView::UnpauseAnimation,
                        base::Unretained(this)));
+    if (static_cast<commerce::PriceTrackingChipExperimentVariation>(
+            commerce::kCommercePriceTrackingChipExperimentVariation.Get()) ==
+            commerce::PriceTrackingChipExperimentVariation::kWithChipIPH &&
+        MaybeShowIPH()) {
+      AnimateOutTimer().Stop();
+    }
   }
+}
+
+bool PriceTrackingIconView::MaybeShowIPH() {
+  if (!browser_->window() || !ShouldShowFirstUseExperienceBubble()) {
+    return false;
+  }
+  return browser_->window()->MaybeShowFeaturePromo(
+      feature_engagement::kIPHPriceTrackingChipFeature, {},
+      base::BindOnce(&PriceTrackingIconView::UnpauseAnimation,
+                     base::Unretained(this)));
 }
 
 void PriceTrackingIconView::ForceVisibleForTesting(bool is_tracking_price) {
@@ -195,11 +229,7 @@ void PriceTrackingIconView::EnablePriceTracking(bool enable) {
   bool is_new_bookmark = existing_node == nullptr;
 
   if (enable) {
-    GURL url;
-    std::u16string title;
-    if (chrome::GetURLAndTitleToBookmark(GetWebContents(), &url, &title)) {
-      bookmarks::AddIfNotBookmarked(model, url, title);
-    }
+    AddIfNotBookmarkedToTheDefaultFolder(model, GetWebContents());
     base::RecordAction(
         base::UserMetricsAction("Commerce.PriceTracking.OmniboxChip.Tracked"));
     commerce::MaybeEnableEmailNotifications(profile_->GetPrefs());
@@ -221,32 +251,14 @@ void PriceTrackingIconView::EnablePriceTracking(bool enable) {
     }
   }
 
-  const bookmarks::BookmarkNode* node =
-      existing_node ? existing_node
-                    : model->GetMostRecentlyAddedUserNodeForURL(
-                          GetWebContents()->GetLastCommittedURL());
+  auto* tab_helper =
+      commerce::ShoppingListUiTabHelper::FromWebContents(GetWebContents());
+  CHECK(tab_helper);
 
-  commerce::ShoppingService* service =
-      commerce::ShoppingServiceFactory::GetForBrowserContext(profile_);
-  base::OnceCallback<void(bool)> callback =
+  tab_helper->SetPriceTrackingState(
+      enable, is_new_bookmark,
       base::BindOnce(&PriceTrackingIconView::OnPriceTrackingServerStateUpdated,
-                     weak_ptr_factory_.GetWeakPtr());
-
-  if (node) {
-    commerce::SetPriceTrackingStateForBookmark(
-        commerce::ShoppingServiceFactory::GetForBrowserContext(profile_), model,
-        node, enable, std::move(callback), enable && is_new_bookmark);
-  } else {
-    DCHECK(!enable);
-    absl::optional<commerce::ProductInfo> info =
-        service->GetAvailableProductInfoForUrl(
-            GetWebContents()->GetLastCommittedURL());
-    if (info.has_value()) {
-      commerce::SetPriceTrackingStateForClusterId(
-          commerce::ShoppingServiceFactory::GetForBrowserContext(profile_),
-          model, info->product_cluster_id, enable, std::move(callback));
-    }
-  }
+                     weak_ptr_factory_.GetWeakPtr()));
 
   SetVisualState(enable);
 }
@@ -256,8 +268,8 @@ void PriceTrackingIconView::SetVisualState(bool enable) {
                  : &omnibox::kPriceTrackingDisabledIcon;
   // TODO(meiliang@): Confirm with UXW on the tooltip string. If this expected,
   // we can return label()->GetText() instead.
-  tooltip_text_and_accessibleName_ = l10n_util::GetStringUTF16(
-      enable ? IDS_OMNIBOX_TRACKING_PRICE : IDS_OMNIBOX_TRACK_PRICE);
+  SetAccessibleName(l10n_util::GetStringUTF16(
+      enable ? IDS_OMNIBOX_TRACKING_PRICE : IDS_OMNIBOX_TRACK_PRICE));
 
   SetLabel(l10n_util::GetStringUTF16(enable ? IDS_OMNIBOX_TRACKING_PRICE
                                             : IDS_OMNIBOX_TRACK_PRICE));
@@ -318,3 +330,6 @@ base::OneShotTimer& PriceTrackingIconView::AnimateOutTimer() {
   return animate_out_timer_for_testing_ ? *animate_out_timer_for_testing_
                                         : animate_out_timer_;
 }
+
+BEGIN_METADATA(PriceTrackingIconView, PageActionIconView)
+END_METADATA

@@ -4,27 +4,35 @@
 
 package org.chromium.chrome.browser.share;
 
-import android.content.ClipData;
+import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
-import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
+import android.graphics.drawable.Icon;
+import android.os.Parcelable;
 import android.text.TextUtils;
 import android.util.Pair;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.annotation.VisibleForTesting;
+import androidx.core.os.BuildCompat;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
+import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -33,12 +41,29 @@ import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.browser_ui.share.ShareParams.TargetChosenCallback;
 import org.chromium.ui.base.WindowAndroid;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A helper class that provides additional Chrome-specific share functionality.
  */
 public class ShareHelper extends org.chromium.components.browser_ui.share.ShareHelper {
+    private static final String TAG = "AndroidShare";
+    // TODO(https://crbug.com/1420388): Remove when Android OS provides this string.
+    private static final String INTENT_EXTRA_CHOOSER_CUSTOM_ACTIONS =
+            "android.intent.extra.CHOOSER_CUSTOM_ACTIONS";
+    private static final String INTENT_EXTRA_CHOOSER_MODIFY_SHARE_ACTION =
+            "android.intent.extra.CHOOSER_MODIFY_SHARE_ACTION";
+    // The max number of custom actions supported for custom actions.
+    private static final int MAX_CUSTOM_ACTION_SUPPORTED = 5;
+    private static final int CUSTOM_ACTION_REQUEST_CODE_BASE = 112;
+    @VisibleForTesting
+    static final String EXTRA_SHARE_CUSTOM_ACTION = "EXTRA_SHARE_CUSTOM_ACTION";
+
     private ShareHelper() {}
 
     /**
@@ -50,10 +75,29 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
     // TODO(crbug/1022172): Should be package-protected once modularization is complete.
     public static void shareWithSystemShareSheetUi(
             ShareParams params, @Nullable Profile profile, boolean saveLastUsed) {
+        shareWithSystemShareSheetUi(params, profile, saveLastUsed, null);
+    }
+
+    /**
+     * Shares the params using the system share sheet with custom actinos.
+     * @param params The share parameters.
+     * @param profile The profile last shared component will be saved to, if |saveLastUsed| is set.
+     * @param saveLastUsed True if the chosen share component should be saved for future reuse.
+     * @param customActionProvider List of custom actions for Android share sheet.
+     */
+    @OptIn(markerClass = BuildCompat.PrereleaseSdkCheck.class)
+    public static void shareWithSystemShareSheetUi(ShareParams params, @Nullable Profile profile,
+            boolean saveLastUsed, @Nullable ChromeCustomShareAction.Provider customActionProvider) {
+        assert (customActionProvider == null || ChooserActionHelper.isSupported())
+            : "Custom action is not supported.";
+
+        recordShareSource(ShareSourceAndroid.ANDROID_SHARE_SHEET);
         if (saveLastUsed) {
             params.setCallback(new SaveComponentCallback(profile, params.getCallback()));
         }
-        ShareHelper.shareWithSystemShareSheetUi(params);
+        Intent intent = getShareIntent(params);
+
+        sendChooserIntent(params.getWindow(), intent, params.getCallback(), customActionProvider);
     }
 
     /**
@@ -76,56 +120,32 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
             intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
         }
         intent.setComponent(component);
-        fireIntent(params.getWindow(), intent, null);
-    }
-
-    /**
-     * Share an image URI with an activity identified by the provided Component Name.
-     * @param window The current window.
-     * @param name The component name of the activity to share the image with.
-     * @param imageUri The uri generated from the content provider of the image to share with the
-     *         external activity.
-     * @param contentUrl The web url shared along with the image as a text if set.
-     */
-    public static void shareImage(final WindowAndroid window, final Profile profile,
-            final ComponentName name, Uri imageUri, @Nullable String contentUrl) {
-        Intent shareIntent = getShareImageIntent(imageUri, contentUrl);
-        if (name == null) {
-            sendChooserIntent(window, shareIntent, new SaveComponentCallback(profile, null));
-        } else {
-            shareIntent.setComponent(name);
-            fireIntent(window, shareIntent, null);
+        try {
+            fireIntent(params.getWindow(), intent, null);
+        } catch (ActivityNotFoundException exception) {
+            // In rare cases when the component set for the send intent is not found, swallow the
+            // errors.
+            Log.e(TAG, exception.getMessage());
+            ChromePureJavaExceptionReporter.reportJavaException(exception);
         }
     }
 
     /**
      * Convenience method to create an Intent to retrieve all the apps that support sharing text.
      */
-    public static Intent getShareTextAppCompatibilityIntent() {
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-        intent.putExtra(Intent.EXTRA_SUBJECT, "");
-        intent.putExtra(Intent.EXTRA_TEXT, "");
-        intent.setType("text/plain");
-        return intent;
-    }
-
-    /**
-     * Convenience method to create an Intent to retrieve all the apps that support sharing image.
-     */
-    public static Intent getShareImageAppCompatibilityIntent() {
-        return getShareImageIntent(null, null);
+    public static List<ResolveInfo> getCompatibleAppsForSharingText() {
+        return PackageManagerUtils.queryIntentActivities(getShareTextAppCompatibilityIntent(),
+                PackageManager.MATCH_DEFAULT_ONLY | PackageManager.GET_RESOLVED_FILTER);
     }
 
     /**
      * Convenience method to create an Intent to retrieve all the apps that support sharing {@code
      * fileContentType}.
      */
-    public static Intent getShareFileAppCompatibilityIntent(String fileContentType) {
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-        intent.setType(fileContentType);
-        return intent;
+    public static List<ResolveInfo> getCompatibleAppsForSharingFiles(String fileContentType) {
+        return PackageManagerUtils.queryIntentActivities(
+                getShareFileAppCompatibilityIntent(fileContentType),
+                PackageManager.MATCH_DEFAULT_ONLY | PackageManager.GET_RESOLVED_FILTER);
     }
 
     /**
@@ -143,11 +163,27 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
     }
 
     /**
+     * Convenience method to retrieve the most recent app that support sharing text.
+     */
+    public static Pair<Drawable, CharSequence> getShareableIconAndNameForText() {
+        return getShareableIconAndName(getShareTextAppCompatibilityIntent());
+    }
+
+    /**
+     * Convenience method to retrieve the most recent app that support sharing {@code
+     * fileContentType}.
+     */
+    public static Pair<Drawable, CharSequence> getShareableIconAndNameForFileContentType(
+            String fileContentType) {
+        return getShareableIconAndName(getShareFileAppCompatibilityIntent(fileContentType));
+    }
+
+    /**
      * Get the icon and name of the most recently shared app by certain app.
      * @param shareIntent Intent used to get list of apps support sharing.
      * @return The Image and the String of the recently shared Icon.
      */
-    public static Pair<Drawable, CharSequence> getShareableIconAndName(Intent shareIntent) {
+    private static Pair<Drawable, CharSequence> getShareableIconAndName(Intent shareIntent) {
         Drawable directShareIcon = null;
         CharSequence directShareTitle = null;
 
@@ -214,6 +250,114 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
         }
     }
 
+    private static void sendChooserIntent(WindowAndroid window, Intent sharingIntent,
+            @Nullable TargetChosenCallback callback,
+            ChromeCustomShareAction.Provider customActions) {
+        new CustomActionChosenReceiver(callback, customActions)
+                .sendChooserIntent(window, sharingIntent);
+    }
+
+    private static Intent getShareTextAppCompatibilityIntent() {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+        intent.putExtra(Intent.EXTRA_SUBJECT, "");
+        intent.putExtra(Intent.EXTRA_TEXT, "");
+        intent.setType("text/plain");
+        return intent;
+    }
+
+    /**
+     * Convenience method to create an Intent to retrieve all the apps that support sharing {@code
+     * fileContentType}.
+     */
+    private static Intent getShareFileAppCompatibilityIntent(String fileContentType) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+        intent.setType(fileContentType);
+        return intent;
+    }
+
+    /**
+     * Helper class for injecting extras into the sharing intents.
+     */
+    private static class CustomActionChosenReceiver extends TargetChosenReceiver {
+        private final ChromeCustomShareAction.Provider mCustomActionProvider;
+        private final Map<String, Runnable> mActionsMap = new HashMap<>();
+
+        protected CustomActionChosenReceiver(@Nullable TargetChosenCallback callback,
+                @Nullable ChromeCustomShareAction.Provider customActionProvider) {
+            super(callback);
+            mCustomActionProvider = customActionProvider;
+        }
+
+        // Override so this file can have access to call this protected method.
+        @Override
+        protected void sendChooserIntent(WindowAndroid windowAndroid, Intent sharingIntent) {
+            super.sendChooserIntent(windowAndroid, sharingIntent);
+        }
+
+        @Override
+        protected Intent getChooserIntent(WindowAndroid window, Intent sharingIntent) {
+            Intent chooserIntent = super.getChooserIntent(window, sharingIntent);
+            if (mCustomActionProvider == null) return chooserIntent;
+
+            List<ChromeCustomShareAction> chromeCustomShareActions =
+                    mCustomActionProvider.getCustomActions();
+            assert chromeCustomShareActions.size() <= MAX_CUSTOM_ACTION_SUPPORTED
+                : "Max number of actions supported:"
+                  + MAX_CUSTOM_ACTION_SUPPORTED;
+
+            List<Parcelable> chooserActions = new ArrayList<>();
+            Activity activity = window.getActivity().get();
+
+            // Use different request code to avoid pending intent don't collision.
+            int requestCode = activity.getTaskId() * MAX_CUSTOM_ACTION_SUPPORTED
+                    + CUSTOM_ACTION_REQUEST_CODE_BASE;
+            for (var action : chromeCustomShareActions) {
+                Parcelable chooserAction = createChooserAction(action, activity, requestCode++);
+                chooserActions.add(chooserAction);
+            }
+
+            Parcelable[] customActions = chooserActions.toArray(new Parcelable[0]);
+            chooserIntent.putExtra(INTENT_EXTRA_CHOOSER_CUSTOM_ACTIONS, customActions);
+
+            if (mCustomActionProvider.getModifyShareAction() != null) {
+                var modifiedShareAction = createChooserAction(
+                        mCustomActionProvider.getModifyShareAction(), activity, requestCode);
+                chooserIntent.putExtra(
+                        INTENT_EXTRA_CHOOSER_MODIFY_SHARE_ACTION, modifiedShareAction);
+            }
+
+            return chooserIntent;
+        }
+
+        @Override
+        protected void onReceiveInternal(Context context, Intent intent) {
+            String action = IntentUtils.safeGetStringExtra(intent, EXTRA_SHARE_CUSTOM_ACTION);
+            if (!TextUtils.isEmpty(action)) {
+                assert mActionsMap.get(action) != null : "Action <" + action + "> does not exists.";
+                mActionsMap.get(action).run();
+            }
+        }
+
+        private Parcelable createChooserAction(
+                ChromeCustomShareAction action, Activity activity, int requestCode) {
+            Intent sendBackIntent = createSendBackIntentWithFilteredAction();
+            sendBackIntent.putExtra(EXTRA_SHARE_CUSTOM_ACTION, action.key);
+            // Make custom action immutable, since it doesn't need change any chooser component.
+            PendingIntent pendingIntent =
+                    PendingIntent.getBroadcast(activity, requestCode++, sendBackIntent,
+                            PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_ONE_SHOT
+                                    | PendingIntent.FLAG_IMMUTABLE);
+
+            Parcelable chooserAction =
+                    ChooserActionHelper.newChooserAction(action.icon, action.label, pendingIntent);
+            mActionsMap.put(action.key, action.runnable);
+
+            return chooserAction;
+        }
+    }
+
     /**
      * A {@link TargetChosenCallback} that wraps another callback, forwarding calls to it, and
      * saving the chosen component.
@@ -230,7 +374,9 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
 
         @Override
         public void onTargetChosen(ComponentName chosenComponent) {
-            setLastShareComponentName(mProfile, chosenComponent);
+            if (chosenComponent != null) {
+                setLastShareComponentName(mProfile, chosenComponent);
+            }
             if (mOriginalCallback != null) mOriginalCallback.onTargetChosen(chosenComponent);
         }
 
@@ -240,24 +386,41 @@ public class ShareHelper extends org.chromium.components.browser_ui.share.ShareH
         }
     }
 
-    private static Intent getShareImageIntent(@Nullable Uri imageUri, @Nullable String contentUrl) {
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-        intent.setType("image/jpeg");
-        if (imageUri == null) {
-            return intent;
+    /**
+     * Helper class used to build Android custom action.
+     */
+    // TODO(https://crbug.com/1420388): Replace calls with Android OS chooser actions.
+    @VisibleForTesting
+    public static class ChooserActionHelper {
+        /**
+         * Try to query if the builder class exists.
+         */
+        @SuppressWarnings("PrivateApi")
+        static boolean isSupported() {
+            try {
+                Class.forName("android.service.chooser.ChooserAction$Builder");
+                return true;
+            } catch (ClassNotFoundException e) {
+                return false;
+            }
         }
 
-        intent.putExtra(Intent.EXTRA_STREAM, imageUri);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-        // Add text, title and clip data preview for the image being shared.
-        ContentResolver resolver = ContextUtils.getApplicationContext().getContentResolver();
-        intent.setType(resolver.getType(imageUri));
-        intent.setClipData(ClipData.newUri(resolver, null, imageUri));
-        if (!TextUtils.isEmpty(contentUrl)) {
-            intent.putExtra(Intent.EXTRA_TEXT, contentUrl);
+        @SuppressWarnings("PrivateApi")
+        static Parcelable newChooserAction(Icon icon, String name, PendingIntent action) {
+            Parcelable parcelable = null;
+            try {
+                Class<?> chooserActionBuilderClass =
+                        Class.forName("android.service.chooser.ChooserAction$Builder");
+                Constructor<?> ctor = chooserActionBuilderClass.getConstructor(
+                        Icon.class, CharSequence.class, PendingIntent.class);
+                Object builder = ctor.newInstance(icon, name, action);
+                parcelable =
+                        (Parcelable) chooserActionBuilderClass.getMethod("build").invoke(builder);
+            } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException
+                    | InvocationTargetException | InstantiationException e) {
+                Log.w(TAG, "Building ChooserAction failed.", e);
+            }
+            return parcelable;
         }
-        return intent;
     }
 }

@@ -17,6 +17,7 @@
 #include "ash/public/cpp/update_types.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/user_metrics.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/crosapi/browser_manager.h"
+#include "chrome/browser/ash/eol_incentive_util.h"
 #include "chrome/browser/ash/login/help_app_launcher.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_cloud_policy_manager_ash.h"
@@ -61,6 +63,7 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state.h"
@@ -85,7 +88,7 @@ SystemTrayClientImpl* g_system_tray_client_instance = nullptr;
 
 // The prefix a calendar event URL *must* have in order to be launched by the
 // calendar web app.
-const char* kOfficialCalendarUrlPrefix =
+constexpr char kOfficialCalendarUrlPrefix[] =
     "https://calendar.google.com/calendar/";
 
 void ShowSettingsSubPageForActiveUser(const std::string& sub_page) {
@@ -227,8 +230,8 @@ class SystemTrayClientImpl::EnterpriseAccountObserver
   ~EnterpriseAccountObserver() override = default;
 
  private:
-  SystemTrayClientImpl* const owner_;
-  Profile* profile_ = nullptr;
+  const raw_ptr<SystemTrayClientImpl, ExperimentalAsh> owner_;
+  raw_ptr<Profile, ExperimentalAsh> profile_ = nullptr;
 
   base::ScopedObservation<user_manager::UserManager,
                           user_manager::UserManager::UserSessionStateObserver>
@@ -363,6 +366,11 @@ void SystemTrayClientImpl::SetLocaleList(
   system_tray_->SetLocaleList(std::move(locale_list), current_locale_iso_code);
 }
 
+void SystemTrayClientImpl::SetShowEolNotice(bool show,
+                                            bool eol_passed_recently) {
+  eol_incentive_recently_passed_ = eol_passed_recently;
+  system_tray_->SetShowEolNotice(show);
+}
 ////////////////////////////////////////////////////////////////////////////////
 // ash::SystemTrayClient:
 
@@ -751,24 +759,13 @@ void SystemTrayClientImpl::ShowCalendarEvent(
 
 // TODO(b/269075177): Reuse existing Google Meet PWA instead of opening a new
 // one for each call to `LaunchAppWithUrl`.
-void SystemTrayClientImpl::ShowGoogleMeet(const std::string& hangout_link) {
-  const auto final_url = GURL(hangout_link);
-
-  if (!IsAppInstalled(web_app::kGoogleMeetAppId)) {
-    OpenInBrowser(final_url);
-    return;
+void SystemTrayClientImpl::ShowVideoConference(
+    const GURL& video_conference_url) {
+  if (auto* profile = ProfileManager::GetActiveUserProfile()) {
+    apps::MaybeLaunchPreferredAppForUrl(
+        profile, video_conference_url,
+        apps::LaunchSource::kFromSysTrayCalendar);
   }
-
-  apps::AppServiceProxyAsh* proxy = GetActiveUserAppServiceProxyAsh();
-  if (!proxy) {
-    LOG(ERROR) << __FUNCTION__
-               << " failed to get active user AppServiceProxyAsh";
-    OpenInBrowser(final_url);
-    return;
-  }
-
-  proxy->LaunchAppWithUrl(web_app::kGoogleMeetAppId, ui::EF_NONE, final_url,
-                          apps::LaunchSource::kFromShelf);
 }
 
 void SystemTrayClientImpl::ShowChannelInfoAdditionalDetails() {
@@ -788,6 +785,36 @@ void SystemTrayClientImpl::ShowAudioSettings() {
   base::RecordAction(base::UserMetricsAction("ShowAudioSettingsPage"));
   ShowSettingsSubPageForActiveUser(
       chromeos::settings::mojom::kAudioSubpagePath);
+}
+
+void SystemTrayClientImpl::ShowEolInfoPage() {
+  const bool use_offer_url = ash::features::kEolIncentiveParam.Get() !=
+                                 ash::features::EolIncentiveParam::kNoOffer &&
+                             eol_incentive_recently_passed_;
+
+  if (eol_incentive_recently_passed_) {
+    ash::eol_incentive_util::RecordButtonClicked(
+        use_offer_url ? ash::eol_incentive_util::EolIncentiveButtonType::
+                            kQuickSettings_Offer_RecentlyPassed
+                      : ash::eol_incentive_util::EolIncentiveButtonType::
+                            kQuickSettings_NoOffer_RecentlyPassed);
+  } else {
+    DCHECK(!use_offer_url);
+    ash::eol_incentive_util::RecordButtonClicked(
+        ash::eol_incentive_util::EolIncentiveButtonType::
+            kQuickSettings_NoOffer_Passed);
+  }
+
+  ash::NewWindowDelegate::GetPrimary()->OpenUrl(
+      GURL(use_offer_url ? chrome::kEolIncentiveNotificationOfferURL
+                         : chrome::kEolIncentiveNotificationNoOfferURL),
+      ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
+      ash::NewWindowDelegate::Disposition::kNewForegroundTab);
+}
+
+void SystemTrayClientImpl::RecordEolNoticeShown() {
+  ash::eol_incentive_util::RecordShowSourceHistogram(
+      ash::eol_incentive_util::EolIncentiveShowSource::kQuickSettings);
 }
 
 bool SystemTrayClientImpl::IsUserFeedbackEnabled() {

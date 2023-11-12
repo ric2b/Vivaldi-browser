@@ -2,9 +2,6 @@
 
 const ExecutionArray = ['sync', 'async'];
 
-// https://webmachinelearning.github.io/webnn/#enumdef-mldevicetype
-const DeviceTypeArray = ['cpu', 'gpu'];
-
 // https://webmachinelearning.github.io/webnn/#enumdef-mloperandtype
 const TypedArrayDict = {
   float32: Float32Array,
@@ -268,13 +265,19 @@ const PrecisionMetrics = {
   sin: {ATOL: {float32: 1/1024, float16: 1/512}},
   tan: {ATOL: {float32: 1/1024, float16: 1/512}},
   // End Element-wise unary operations
+  elu: {ULP: {float32: 18, float16: 18}},
   gemm: {ULP: {float32: getGemmPrecisionTolerance, float16: getGemmPrecisionTolerance}},
+  hardSigmoid: {ULP: {float32: 2, float16: 2}},
+  hardSwish: {ULP: {float32: 4, float16: 4}},
   leakyRelu: {ULP: {float32: 1, float16: 1}},
+  linear: {ULP: {float32: 2, float16: 2}},
   matmul: {ULP: {float32: getMatmulPrecisionTolerance, float16: getMatmulPrecisionTolerance}},
+  pad: {ULP: {float32: 0, float16: 0}},
   // Begin Pooling operations
   averagePool2d: {ULP: {float32: getAveragePool2dPrecisionTolerance, float16: getAveragePool2dPrecisionTolerance}},
   maxPool2d: {ULP: {float32: 0, float16: 0}},
   // End Pooling operations
+  prelu: {ULP: {float32: 1, float16: 1}},
   // Begin Reduction operations
   reduceMax: {ULP: {float32: 0, float16: 0}},
   reduceMean: {ULP: {float32: getReductionPrecisionTolerance, float16: getReductionPrecisionTolerance}},
@@ -287,6 +290,7 @@ const PrecisionMetrics = {
   sigmoid: {ULP: {float32: 32+2, float16: 3}}, // float32 (leaving a few ULP for roundoff)
   slice: {ULP: {float32: 0, float16: 0}},
   softmax: {ULP: {float32: getSoftmaxPrecisionTolerance, float16: getSoftmaxPrecisionTolerance}},
+  softsign: {ULP: {float32: 3, float16: 3}},
   split: {ULP: {float32: 0, float16: 0}},
   squeeze: {ULP: {float32: 0, float16: 0}},
   tanh: {ATOL: {float32: 1/1024, float16: 1/512}},
@@ -353,12 +357,17 @@ const assert_array_approx_equals_ulp = (actual, expected, nulp, dataType, descri
               `assert_array_approx_equals_ulp: ${description} lengths differ, expected ${expected.length} but got ${actual.length}`);
   let actualBitwise, expectedBitwise, distance;
   for (let i = 0; i < actual.length; i++) {
-    actualBitwise = getBitwise(actual[i], dataType);
-    expectedBitwise = getBitwise(expected[i], dataType);
-    distance = actualBitwise - expectedBitwise;
-    distance = distance >= 0 ? distance : -distance;
-    assert_true(distance <= nulp,
-                `assert_array_approx_equals_ulp: ${description} actual ${actual[i]} should be close enough to expected ${expected[i]} by the acceptable ${nulp} ULP distance, but they have ${distance} ULP distance`);
+    if (actual[i] === expected[i]) {
+      continue;
+    } else {
+      // measure the ULP distance
+      actualBitwise = getBitwise(actual[i], dataType);
+      expectedBitwise = getBitwise(expected[i], dataType);
+      distance = actualBitwise - expectedBitwise;
+      distance = distance >= 0 ? distance : -distance;
+      assert_true(distance <= nulp,
+                  `assert_array_approx_equals_ulp: ${description} actual ${actual[i]} should be close enough to expected ${expected[i]} by the acceptable ${nulp} ULP distance, but they have ${distance} ULP distance`);
+    }
   }
 };
 
@@ -598,33 +607,29 @@ const testWebNNOperation = (operationName, buildFunc) => {
       // test sync
       operationNameArray.forEach((subOperationName) => {
         const tests = loadTests(subOperationName);
-        DeviceTypeArray.forEach(deviceType => {
-          setup(() => {
-            context = navigator.ml.createContextSync({deviceType});
-            builder = new MLGraphBuilder(context);
-          });
-          for (const subTest of tests) {
-            test(() => {
-              runSync(subOperationName, context, builder, subTest, buildFunc);
-            }, `${subTest.name} / ${deviceType} / ${executionType}`);
-          }
+        setup(() => {
+          context = navigator.ml.createContextSync();
+          builder = new MLGraphBuilder(context);
         });
+        for (const subTest of tests) {
+          test(() => {
+            runSync(subOperationName, context, builder, subTest, buildFunc);
+          }, `${subTest.name} / ${executionType}`);
+        }
       });
     } else {
       // test async
       operationNameArray.forEach((subOperationName) => {
         const tests = loadTests(subOperationName);
-        DeviceTypeArray.forEach(deviceType => {
-          promise_setup(async () => {
-            context = await navigator.ml.createContext({deviceType});
-            builder = new MLGraphBuilder(context);
-          });
-          for (const subTest of tests) {
-            promise_test(async () => {
-              await run(subOperationName, context, builder, subTest, buildFunc);
-            }, `${subTest.name} / ${deviceType} / ${executionType}`);
-          }
+        promise_setup(async () => {
+          context = await navigator.ml.createContext();
+          builder = new MLGraphBuilder(context);
         });
+        for (const subTest of tests) {
+          promise_test(async () => {
+            await run(subOperationName, context, builder, subTest, buildFunc);
+          }, `${subTest.name} / ${executionType}`);
+        }
       });
     }
   });

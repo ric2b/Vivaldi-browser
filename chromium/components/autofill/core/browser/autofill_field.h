@@ -30,6 +30,17 @@ typedef std::map<ServerFieldType, std::vector<AutofillDataModel::ValidityState>>
 typedef std::map<ServerFieldType, AutofillDataModel::ValidityState>
     ServerFieldTypeValidityStateMap;
 
+enum class FormControlType {
+  kEmpty = 0,
+  kOther = 1,
+  kText = 2,
+  kTextarea = 3,
+  kCheckbox = 4,
+  kRadio = 5,
+  kSelectOne = 6,
+  kMaxValue = kSelectOne,
+};
+
 class AutofillField : public FormFieldData {
  public:
   using FieldLogEventType = absl::variant<absl::monostate,
@@ -145,6 +156,37 @@ class AutofillField : public FormFieldData {
   // Returns true if the value of this field is empty.
   bool IsEmpty() const;
 
+  // The rank of a field is N iff this field is preceded by N other fields
+  // in the frame-transcending form.
+  size_t rank() const { return rank_; }
+  void set_rank(size_t rank) { rank_ = rank; }
+
+  // The rank in the signature group of a field is N in a form iff this field is
+  // preceded by N other fields whose signature is identical to this field's
+  // signature in the frame-transcending form.
+  size_t rank_in_signature_group() const { return rank_in_signature_group_; }
+  void set_rank_in_signature_group(size_t rank_in_signature_group) {
+    rank_in_signature_group_ = rank_in_signature_group;
+  }
+
+  // The rank of a field is N iff this field is preceded by N other fields
+  // in the form in the host frame.
+  size_t rank_in_host_form() const { return rank_in_host_form_; }
+  void set_rank_in_host_form(size_t rank_in_host_form) {
+    rank_in_host_form_ = rank_in_host_form;
+  }
+
+  // The rank in the signature group of a field is N in a form iff this field is
+  // preceded by N other fields whose signature is identical to this field's
+  // signature in the form in the host frame.
+  size_t rank_in_host_form_signature_group() const {
+    return rank_in_host_form_signature_group_;
+  }
+  void set_rank_in_host_form_signature_group(
+      size_t rank_in_host_form_signature_group) {
+    rank_in_host_form_signature_group_ = rank_in_host_form_signature_group;
+  }
+
   // The unique signature of this field, composed of the field name and the html
   // input type in a 32-bit hash.
   FieldSignature GetFieldSignature() const;
@@ -155,6 +197,9 @@ class AutofillField : public FormFieldData {
   // Returns true if the field type has been determined (without the text in the
   // field).
   bool IsFieldFillable() const;
+
+  // Returns true if the field's type is a credit card expiration type.
+  bool HasExpirationDateType() const;
 
   // Address Autofill gets disabled by an unrecognized autocomplete attribute.
   // If `kAutofillFillAndImportFromMoreFields` is enabled, this changes and the
@@ -269,6 +314,8 @@ class AutofillField : public FormFieldData {
     return autofill_source_profile_guid_;
   }
 
+  enum FormControlType FormControlType() const;
+
  private:
   explicit AutofillField(FieldSignature field_signature);
 
@@ -276,6 +323,11 @@ class AutofillField : public FormFieldData {
   bool IsCreditCardPrediction() const;
 
   absl::optional<FieldSignature> field_signature_;
+
+  size_t rank_ = 0;
+  size_t rank_in_signature_group_ = 0;
+  size_t rank_in_host_form_ = 0;
+  size_t rank_in_host_form_signature_group_ = 0;
 
   // The possible types of the field, as determined by the Autofill server.
   std::vector<

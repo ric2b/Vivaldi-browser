@@ -315,6 +315,13 @@ void RealtimeAudioDestinationHandler::CreatePlatformDestination() {
         Context()->GetDeferredTaskHandler().RenderQuantumFrames());
   }
 
+  // if `sample_rate_` is nullopt, it is supposed to use the default device
+  // sample rate. Update the internal sample rate for subsequent device change
+  // request. See https://crbug.com/1424839.
+  if (!sample_rate_.has_value()) {
+    sample_rate_ = platform_destination_->SampleRate();
+  }
+
   // TODO(crbug.com/991981): Can't query `GetCallbackBufferSize()` here because
   // creating the destination is not a synchronous process. When anything
   // touches the destination information between this call and
@@ -328,9 +335,9 @@ void RealtimeAudioDestinationHandler::StartPlatformDestination() {
                "RealtimeAudioDestinationHandler::StartPlatformDestination",
                "sink information (when starting a new destination)",
                audio_utilities::GetSinkInfoForTracing(
-                  sink_descriptor_, latency_hint_,
+                  sink_descriptor_, latency_hint_, MaxChannelCount(),
                   sample_rate_.has_value() ? sample_rate_.value() : -1,
-                  MaxChannelCount(), GetCallbackBufferSize()));
+                  GetCallbackBufferSize()));
   DCHECK(IsMainThread());
 
   if (platform_destination_->IsPlaying()) {
@@ -384,9 +391,9 @@ void RealtimeAudioDestinationHandler::SetSinkDescriptor(
   TRACE_EVENT1("webaudio", "RealtimeAudioDestinationHandler::SetSinkDescriptor",
                "sink information (when descriptor change requested)",
                audio_utilities::GetSinkInfoForTracing(
-                  sink_descriptor, latency_hint_,
+                  sink_descriptor, latency_hint_, MaxChannelCount(),
                   sample_rate_.has_value() ? sample_rate_.value() : -1,
-                  MaxChannelCount(), GetCallbackBufferSize()));
+                  GetCallbackBufferSize()));
   DCHECK(IsMainThread());
 
   // Create a pending AudioDestination to replace the current one.

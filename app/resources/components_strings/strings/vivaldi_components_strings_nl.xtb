@@ -62,7 +62,7 @@
 <translation id="3447661539832366887">De eigenaar van dit apparaat heeft de dinosaurusgame uitgeschakeld.</translation>
 <translation id="3447884698081792621">Certificaat weergeven (uitgegeven door <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Gedetailleerde informatie verbergen</translation>
-<translation id="3484560055331845446">Je kunt de toegang tot je Google-account kwijtraken. Chrome raadt je aan je wachtwoord nu te wijzigen. Je wordt gevraagd in te loggen op je account.</translation>
+<translation id="3484560055331845446">Je kunt de toegang tot je Google-account kwijtraken. Vivaldi raadt je aan je wachtwoord nu te wijzigen. Je wordt gevraagd in te loggen op je account.</translation>
 <translation id="3566021033012934673">Je verbinding is niet privé</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details verbergen</translation>
@@ -108,7 +108,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 in gebruik)}other{(# in gebruik)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Controleer het proxyadres<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bits)</translation>
-<translation id="5287240709317226393">Cookies weergeven</translation>
 <translation id="5355557959165512791">Je kunt <ph name="SITE" /> momenteel niet bezoeken, omdat het bijbehorende certificaat is ingetrokken. Netwerkfouten en aanvallen zijn doorgaans tijdelijk, dus deze pagina werkt later waarschijnlijk correct.</translation>
 <translation id="5386426401304769735">De certificaatketen voor deze website bevat een certificaat dat is ondertekend met SHA-1.</translation>
 <translation id="5452270690849572955">Deze pagina op <ph name="HOST_NAME" /> kan niet worden gevonden</translation>
@@ -149,6 +148,7 @@
 <translation id="6657585470893396449">Wachtwoord</translation>
 <translation id="6711464428925977395">Er is iets mis met de proxyserver of het adres is onjuist.</translation>
 <translation id="6757797048963528358">Je apparaat is in de slaapstand gegaan.</translation>
+<translation id="6890956352250146925">Opties voor cookies en sitegegevens</translation>
 <translation id="6897140037006041989">Gebruikersagent</translation>
 <translation id="7053983685419859001">Blokkeren</translation>
 <translation id="7079718277001814089">Deze website bevat malware</translation>

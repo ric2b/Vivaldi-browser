@@ -28,6 +28,7 @@ _BUILD_ANDROID_GYP = os.path.join(_CHROMIUM_SRC, 'build', 'android', 'gyp')
 sys.path.insert(1, _BUILD_ANDROID_GYP)
 
 from util import build_utils
+import action_helpers  # build_utils adds //build to sys.path.
 
 # Match single line comments, multiline comments, character literals, and
 # double-quoted strings.
@@ -260,6 +261,13 @@ def _GetJNIFirstParam(native, for_declaration):
   if for_declaration:
     c_type = WrapCTypeForDeclaration(c_type)
   return [c_type + ' jcaller']
+
+
+def GetFullyQualifiedClassWithPackagePrefix(fully_qualified_class,
+                                            package_prefix):
+  if package_prefix:
+    return '%s/%s' % (package_prefix.replace(".", "/"), fully_qualified_class)
+  return fully_qualified_class
 
 
 def _GetParamsInDeclaration(native):
@@ -883,12 +891,13 @@ class ProxyHelpers(object):
     return name_prefix + ('N' if short_name else 'GEN_JNI')
 
   @staticmethod
-  def GetPackage(short_name):
-    return 'J' if short_name else 'org/chromium/base/natives'
+  def GetPackage(short_name, package_prefix=None):
+    package = 'J' if short_name else 'org/chromium/base/natives'
+    return GetFullyQualifiedClassWithPackagePrefix(package, package_prefix)
 
   @staticmethod
-  def GetQualifiedClass(short_name, name_prefix=None):
-    return '%s/%s' % (ProxyHelpers.GetPackage(short_name),
+  def GetQualifiedClass(short_name, name_prefix=None, package_prefix=None):
+    return '%s/%s' % (ProxyHelpers.GetPackage(short_name, package_prefix),
                       ProxyHelpers.GetClass(short_name, name_prefix))
 
   @staticmethod
@@ -984,6 +993,9 @@ class JNIFromJavaSource(object):
   """Uses the given java source file to generate the JNI header file."""
 
   def __init__(self, contents, fully_qualified_class, options):
+    if options.package_prefix:
+      fully_qualified_class = GetFullyQualifiedClassWithPackagePrefix(
+          fully_qualified_class, options.package_prefix)
     contents = RemoveComments(contents)
     self.jni_params = JniParams(fully_qualified_class)
     self.jni_params.ExtractImportsAndInnerClasses(contents)
@@ -1023,12 +1035,14 @@ class HeaderFileGeneratorHelper(object):
                module_name,
                fully_qualified_class,
                use_proxy_hash,
+               package_prefix,
                split_name=None,
                enable_jni_multiplexing=False):
     self.class_name = class_name
     self.module_name = module_name
     self.fully_qualified_class = fully_qualified_class
     self.use_proxy_hash = use_proxy_hash
+    self.package_prefix = package_prefix
     self.split_name = split_name
     self.enable_jni_multiplexing = enable_jni_multiplexing
 
@@ -1049,7 +1063,7 @@ class HeaderFileGeneratorHelper(object):
       return 'Java_%s_%s' % (EscapeClassName(
           ProxyHelpers.GetQualifiedClass(
               self.use_proxy_hash or self.enable_jni_multiplexing,
-              self.module_name)), method_name)
+              self.module_name, self.package_prefix)), method_name)
 
     template = Template('Java_${JAVA_NAME}_native${NAME}')
 
@@ -1066,7 +1080,7 @@ class HeaderFileGeneratorHelper(object):
       if isinstance(entry, NativeMethod) and entry.is_proxy:
         short_name = self.use_proxy_hash or self.enable_jni_multiplexing
         ret[ProxyHelpers.GetClass(short_name, self.module_name)] \
-          = ProxyHelpers.GetQualifiedClass(short_name, self.module_name)
+          = ProxyHelpers.GetQualifiedClass(short_name, self.module_name, self.package_prefix)
         continue
       ret[self.class_name] = self.fully_qualified_class
 
@@ -1100,8 +1114,8 @@ const char kClassPath_${JAVA_CLASS}[] = \
       # Since all proxy methods use the same class, defining this in every
       # header file would result in duplicated extern initializations.
       if full_clazz != ProxyHelpers.GetQualifiedClass(
-          self.use_proxy_hash or self.enable_jni_multiplexing,
-          self.module_name):
+          self.use_proxy_hash or self.enable_jni_multiplexing, self.module_name,
+          self.package_prefix):
         ret += [template.substitute(values)]
 
     class_getter = """\
@@ -1133,8 +1147,8 @@ JNI_REGISTRATION_EXPORT std::atomic<jclass> g_${JAVA_CLASS}_clazz(nullptr);
       # Since all proxy methods use the same class, defining this in every
       # header file would result in duplicated extern initializations.
       if full_clazz != ProxyHelpers.GetQualifiedClass(
-          self.use_proxy_hash or self.enable_jni_multiplexing,
-          self.module_name):
+          self.use_proxy_hash or self.enable_jni_multiplexing, self.module_name,
+          self.package_prefix):
         ret += [template.substitute(values)]
 
     return ''.join(ret)
@@ -1159,6 +1173,7 @@ class InlHeaderFileGenerator(object):
         module_name,
         fully_qualified_class,
         self.options.use_proxy_hash,
+        self.options.package_prefix,
         split_name=self.options.split_name,
         enable_jni_multiplexing=self.options.enable_jni_multiplexing)
 
@@ -1334,7 +1349,6 @@ $METHOD_STUBS
         'POST_CALL': post_call,
         'STUB_NAME': self.helper.GetStubName(native),
         'PROFILING_ENTERED_NATIVE': profiling_entered_native,
-        'TRACE_EVENT': '',
     }
 
     namespace_qual = self.namespace + '::' if self.namespace else ''
@@ -1347,15 +1361,11 @@ $METHOD_STUBS
           'PARAM0_NAME': native.params[0].name,
           'P0_TYPE': native.p0_type,
       })
-      if self.options.enable_tracing:
-        values['TRACE_EVENT'] = self.GetTraceEventForNameTemplate(
-            namespace_qual + '${P0_TYPE}::${NAME}', values)
       template = Template("""\
 JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(
     JNIEnv* env,
     ${PARAMS_IN_STUB}) {
 ${PROFILING_ENTERED_NATIVE}\
-${TRACE_EVENT}\
   ${P0_TYPE}* native = reinterpret_cast<${P0_TYPE}*>(${PARAM0_NAME});
   CHECK_NATIVE_PTR(env, jcaller, native, "${NAME}"${OPTIONAL_ERROR_RETURN});
   return native->${NAME}(${PARAMS_IN_CALL})${POST_CALL};
@@ -1364,9 +1374,6 @@ ${TRACE_EVENT}\
     else:
       if values['PARAMS']:
         values['PARAMS'] = ', ' + values['PARAMS']
-      if self.options.enable_tracing:
-        values['TRACE_EVENT'] = self.GetTraceEventForNameTemplate(
-            namespace_qual + '${IMPL_METHOD_NAME}', values)
       template = Template("""\
 static ${RETURN_DECLARATION} ${IMPL_METHOD_NAME}(JNIEnv* env${PARAMS});
 
@@ -1374,7 +1381,6 @@ JNI_GENERATOR_EXPORT ${RETURN} ${STUB_NAME}(
     JNIEnv* env,
     ${PARAMS_IN_STUB}) {
 ${PROFILING_ENTERED_NATIVE}\
-${TRACE_EVENT}\
   return ${IMPL_METHOD_NAME}(${PARAMS_IN_CALL})${POST_CALL};
 }
 """)
@@ -1502,7 +1508,6 @@ ${FUNCTION_HEADER}
           ${JNI_SIGNATURE},
           &g_${JAVA_CLASS}_${METHOD_ID_VAR_NAME});
 
-${TRACE_EVENT}\
 ${PROFILING_LEAVING_NATIVE}\
   ${RETURN_DECLARATION}
      ${PRE_CALL}env->${ENV_CALL}(${FIRST_PARAM_IN_CALL},
@@ -1517,11 +1522,6 @@ ${PROFILING_LEAVING_NATIVE}\
           function_header_with_unused_template.substitute(values))
     else:
       values['FUNCTION_HEADER'] = function_header_template.substitute(values)
-    if self.options.enable_tracing:
-      values['TRACE_EVENT'] = self.GetTraceEventForNameTemplate(
-          '${JAVA_NAME_FULL}', values)
-    else:
-      values['TRACE_EVENT'] = ''
     return RemoveIndentedEmptyLines(template.substitute(values))
 
   def GetTraceEventForNameTemplate(self, name_template, values):
@@ -1548,6 +1548,10 @@ def WrapOutput(output):
 def GenerateJNIHeader(input_file, output_file, options):
   try:
     if os.path.splitext(input_file)[1] == '.class':
+      # The current package-prefix implementation does not support adding
+      # prefix to java compiled classes. The current support is only for
+      # java source files.
+      assert not options.package_prefix
       jni_from_javap = JNIFromJavaP.CreateFromClass(input_file, options)
       content = jni_from_javap.GetContent()
     else:
@@ -1558,7 +1562,7 @@ def GenerateJNIHeader(input_file, output_file, options):
     print(e)
     sys.exit(1)
   if output_file:
-    with build_utils.AtomicOutput(output_file, mode='w') as f:
+    with action_helpers.atomic_output(output_file, mode='w') as f:
       f.write(content)
   else:
     print(content)
@@ -1653,10 +1657,6 @@ See SampleForTests.java for more details.
       action='store_true',
       help='Add additional profiling instrumentation.')
   parser.add_argument(
-      '--enable_tracing',
-      action='store_true',
-      help='Add TRACE_EVENTs to generated functions.')
-  parser.add_argument(
       '--always_mangle', action='store_true', help='Mangle all function names')
   parser.add_argument('--unchecked_exceptions',
                       action='store_true',
@@ -1675,6 +1675,11 @@ See SampleForTests.java for more details.
   parser.add_argument(
       '--split_name',
       help='Split name that the Java classes should be loaded from.')
+  parser.add_argument(
+      '--package_prefix',
+      help=
+      'Adds a prefix to the classes fully qualified-name. Effectively changing a class name from'
+      'foo.bar -> prefix.foo.bar')
   # TODO(agrieve): --stamp used only to make incremental builds work.
   #     Remove --stamp at some point after 2022.
   parser.add_argument('--stamp',

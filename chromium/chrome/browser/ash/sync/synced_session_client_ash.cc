@@ -9,7 +9,8 @@
 #include "chromeos/crosapi/mojom/synced_session_client.mojom.h"
 #include "components/sync_sessions/synced_session.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 
 namespace ash {
 
@@ -49,9 +50,14 @@ ForeignSyncedSessionTabAsh::~ForeignSyncedSessionTabAsh() = default;
 SyncedSessionClientAsh::SyncedSessionClientAsh() = default;
 SyncedSessionClientAsh::~SyncedSessionClientAsh() = default;
 
-void SyncedSessionClientAsh::BindReceiver(
-    mojo::PendingReceiver<crosapi::mojom::SyncedSessionClient> receiver) {
-  receivers_.Add(this, std::move(receiver));
+mojo::PendingRemote<crosapi::mojom::SyncedSessionClient>
+SyncedSessionClientAsh::CreateRemote() {
+  mojo::PendingReceiver<crosapi::mojom::SyncedSessionClient> pending_receiver;
+  mojo::PendingRemote<crosapi::mojom::SyncedSessionClient> pending_remote =
+      pending_receiver.InitWithNewPipeAndPassRemote();
+  receivers_.Add(this, std::move(pending_receiver));
+  return {pending_remote.PassPipe(),
+          crosapi::mojom::SyncedSessionClient::Version_};
 }
 
 void SyncedSessionClientAsh::OnForeignSyncedPhoneSessionsUpdated(
@@ -88,6 +94,27 @@ void SyncedSessionClientAsh::OnSessionSyncEnabledChanged(bool enabled) {
   for (auto& observer : observers_) {
     observer.OnSessionSyncEnabledChanged(is_session_sync_enabled_);
   }
+}
+
+void SyncedSessionClientAsh::SetFaviconDelegate(
+    mojo::PendingRemote<crosapi::mojom::SyncedSessionClientFaviconDelegate>
+        delegate) {
+  if (favicon_delegate_.is_bound()) {
+    favicon_delegate_.reset();
+  }
+
+  favicon_delegate_.Bind(std::move(delegate));
+}
+
+void SyncedSessionClientAsh::GetFaviconImageForPageURL(
+    const GURL& url,
+    base::OnceCallback<void(const gfx::ImageSkia&)> callback) {
+  if (!favicon_delegate_.is_bound()) {
+    std::move(callback).Run(gfx::ImageSkia());
+    return;
+  }
+
+  favicon_delegate_->GetFaviconImageForPageURL(url, std::move(callback));
 }
 
 void SyncedSessionClientAsh::AddObserver(Observer* observer) {

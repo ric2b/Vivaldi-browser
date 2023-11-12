@@ -31,6 +31,9 @@ constexpr char kZhuyinEngineId[] = "zh-hant-t-i0-und";
 
 constexpr char kJapaneseEngineId[] = "nacl_mozc_jp";
 
+constexpr char kVietnameseVniEngineId[] = "vkd_vi_vni";
+constexpr char kVietnameseTelexEngineId[] = "vkd_vi_telex";
+
 // This should be kept in sync with the values on the settings page's
 // InputMethodOptions. This should match
 // https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/resources/settings/chromeos/os_languages_page/input_method_util.js;l=71-88;drc=6c88edbfe6096489ccac66b3ef5c84d479892181.
@@ -745,6 +748,27 @@ TEST(CreateSettingsFromPrefsTest, CreateZhuyinSettingsDefault) {
   EXPECT_EQ(zhuyin_settings.page_size, 10u);
 }
 
+TEST(CreateSettingsFromPrefsTest, CreateVietnameseVniSettings) {
+  base::Value::Dict dict;
+  TestingPrefServiceSimple prefs;
+  RegisterTestingPrefs(prefs, dict);
+
+  const auto settings = CreateSettingsFromPrefs(prefs, kVietnameseVniEngineId);
+
+  ASSERT_TRUE(settings->is_vietnamese_vni_settings());
+}
+
+TEST(CreateSettingsFromPrefsTest, CreateVietnameseTelexSettings) {
+  base::Value::Dict dict;
+  TestingPrefServiceSimple prefs;
+  RegisterTestingPrefs(prefs, dict);
+
+  const auto settings =
+      CreateSettingsFromPrefs(prefs, kVietnameseTelexEngineId);
+
+  ASSERT_TRUE(settings->is_vietnamese_telex_settings());
+}
+
 TEST(CreateSettingsFromPrefsTest, CreateZhuyinSettings) {
   base::Value::Dict dict;
   dict.SetByDottedPath(base::StrCat({kZhuyinEngineId, ".zhuyinKeyboardLayout"}),
@@ -763,6 +787,24 @@ TEST(CreateSettingsFromPrefsTest, CreateZhuyinSettings) {
   EXPECT_EQ(zhuyin_settings.selection_keys,
             mojom::ZhuyinSelectionKeys::kAsdfghjkl);
   EXPECT_EQ(zhuyin_settings.page_size, 8u);
+}
+
+TEST(CreateSettingsFromPrefsTest, AutocorrectIsSupportedForLatin) {
+  ASSERT_TRUE(IsAutocorrectSupported("xkb:ca:multix:fra"));
+  ASSERT_TRUE(IsAutocorrectSupported("xkb:de::ger"));
+  ASSERT_TRUE(IsAutocorrectSupported("xkb:us::eng"));
+  ASSERT_TRUE(IsAutocorrectSupported("xkb:us:intl_pc:por"));
+  ASSERT_TRUE(IsAutocorrectSupported("xkb:us:workman-intl:eng"));
+}
+
+TEST(CreateSettingsFromPrefsTest, AutocorrectIsNotSupportedForNonLatin) {
+  ASSERT_FALSE(IsAutocorrectSupported("ko-t-i0-und"));
+  ASSERT_FALSE(IsAutocorrectSupported("nacl_mozc_us"));
+  ASSERT_FALSE(IsAutocorrectSupported("xkb:am:phonetic:arm"));
+  ASSERT_FALSE(IsAutocorrectSupported("xkb:in::eng"));
+  ASSERT_FALSE(IsAutocorrectSupported("zh-hant-t-i0-pinyin"));
+  ASSERT_FALSE(IsAutocorrectSupported("zh-hant-t-i0-und"));
+  ASSERT_FALSE(IsAutocorrectSupported("zh-t-i0-pinyin"));
 }
 
 }  // namespace

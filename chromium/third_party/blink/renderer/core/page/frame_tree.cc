@@ -42,6 +42,29 @@ namespace {
 
 const unsigned kInvalidChildCount = ~0U;
 
+void LogDanglingMarkupHistogram(Document* document, const AtomicString& name) {
+  document->CountUse(WebFeature::kDanglingMarkupInTarget);
+  if (!name.EndsWith('>')) {
+    document->CountUse(WebFeature::kDanglingMarkupInTargetNotEndsWithGT);
+    if (!name.EndsWith('\n')) {
+      document->CountUse(
+          WebFeature::kDanglingMarkupInTargetNotEndsWithNewLineOrGT);
+    }
+  }
+}
+
+bool ContainsNewLineAndLessThan(const AtomicString& name) {
+  return name.Contains('\n') && name.Contains('<');
+}
+
+bool IsRequestFromHtml(FrameLoadRequest& request) {
+  return request.ClientRedirectReason() ==
+             ClientNavigationReason::kFormSubmissionGet ||
+         request.ClientRedirectReason() ==
+             ClientNavigationReason::kFormSubmissionPost ||
+         request.ClientRedirectReason() == ClientNavigationReason::kAnchorClick;
+}
+
 }  // namespace
 
 FrameTree::FrameTree(Frame* this_frame)
@@ -210,6 +233,12 @@ FrameTree::FindResult FrameTree::FindOrCreateFrameForNavigation(
   if (request.GetNavigationPolicy() != kNavigationPolicyCurrentTab)
     return FindResult(current_frame, false);
 
+  // Log use counters if the name contains both '\n' and '<'.
+  if (ContainsNewLineAndLessThan(name) && IsRequestFromHtml(request) &&
+      current_frame->GetDocument()) {
+    LogDanglingMarkupHistogram(current_frame->GetDocument(), name);
+  }
+
   const KURL& url = request.GetResourceRequest().Url();
   Frame* frame = FindFrameForNavigationInternal(name, url, &request);
   bool new_window = false;
@@ -259,8 +288,8 @@ Frame* FrameTree::FindFrameForNavigationInternal(
     // that this is an _unfencedTop navigation, and return the current frame
     // so that the renderer-side checks will succeed.
     // TODO(crbug.com/1315802): Refactor MPArch _unfencedTop handling.
-    if (this_frame_.Get()->GetFencedFrameMode() ==
-            mojom::blink::FencedFrameMode::kOpaqueAds &&
+    if (this_frame_.Get()->GetDeprecatedFencedFrameMode() ==
+            blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds &&
         request != nullptr) {
       request->SetIsUnfencedTopNavigation(true);
       return this_frame_;

@@ -48,6 +48,7 @@
 #include "third_party/blink/public/web/web_form_element.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_local_frame_client.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -349,6 +350,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
 
     // TODO(crbug/862989): Remove workaround preventing non-test classes to bind
     // fake_driver_ or fake_pw_client_.
+    password_autofill_agent_->SetAutofillAgent(autofill_agent_);
     password_autofill_agent_->GetPasswordManagerDriver();
     password_generation_->RequestPasswordManagerClientForTesting();
     base::RunLoop().RunUntilIdle();  // Executes binding the interfaces.
@@ -377,16 +379,16 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     password3_ = kCarolPassword16;
     alternate_username3_ = kCarolAlternateUsername16;
 
-    fill_data_.preferred_login.username = username1_;
-    fill_data_.preferred_login.password = password1_;
+    fill_data_.preferred_login.username_value = username1_;
+    fill_data_.preferred_login.password_value = password1_;
 
     PasswordAndMetadata password2;
-    password2.password = password2_;
-    password2.username = username2_;
+    password2.password_value = password2_;
+    password2.username_value = username2_;
     fill_data_.additional_logins.push_back(std::move(password2));
     PasswordAndMetadata password3;
-    password3.password = password3_;
-    password3.username = username3_;
+    password3.password_value = password3_;
+    password3.username_value = username3_;
     fill_data_.additional_logins.push_back(std::move(password3));
 
     // We need to set the origin so it matches the frame URL, otherwise we won't
@@ -430,6 +432,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     std::string script =
         "document.getElementById('" + element_id + "').focus()";
     ExecuteJavaScriptForTests(script.c_str());
+    GetMainFrame()->Client()->FocusedElementChanged(GetElementByID(element_id));
     GetMainFrame()->AutofillClient()->DidCompleteFocusChangeInFrame();
   }
 
@@ -492,13 +495,16 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     UpdateRendererIDsInFillData();
   }
 
-  WebInputElement GetInputElementByID(const std::string& id) {
+  WebElement GetElementByID(const std::string& id) {
     WebDocument document = GetMainFrame()->GetDocument();
     WebElement element =
         document.GetElementById(WebString::FromUTF8(id.c_str()));
     EXPECT_FALSE(element.IsNull());
+    return element;
+  }
 
-    WebInputElement input_element = element.To<WebInputElement>();
+  WebInputElement GetInputElementByID(const std::string& id) {
+    WebInputElement input_element = GetElementByID(id).To<WebInputElement>();
     EXPECT_FALSE(input_element.IsNull());
     return input_element;
   }
@@ -1830,6 +1836,7 @@ TEST_F(PasswordAutofillAgentTest, TouchToFillClosed) {
   auto previous_state = password_element_.GetAutofillState();
   // Touch to fill will be shown multiple times until TouchToFillClosed()
   // gets called.
+  FocusElement(kPasswordName);
   EXPECT_TRUE(
       password_autofill_agent_->TryToShowTouchToFill(password_element_));
   EXPECT_TRUE(password_autofill_agent_->ShouldSuppressKeyboard());
@@ -2690,7 +2697,7 @@ TEST_F(PasswordAutofillAgentTest, ShowPopupOnEmptyPasswordField) {
   LoadHTML(kVisibleFormWithNoUsernameHTML);
   UpdateUrlForHTML(kVisibleFormWithNoUsernameHTML);
   UpdateOnlyPasswordElement();
-  fill_data_.preferred_login.username.clear();
+  fill_data_.preferred_login.username_value.clear();
   fill_data_.additional_logins.clear();
 
   SimulateClosingTouchToFillIfAndroid(kPasswordName);
@@ -2717,7 +2724,7 @@ TEST_F(PasswordAutofillAgentTest, ShowPopupOnAutofilledPasswordField) {
   LoadHTML(kVisibleFormWithNoUsernameHTML);
   UpdateUrlForHTML(kVisibleFormWithNoUsernameHTML);
   UpdateOnlyPasswordElement();
-  fill_data_.preferred_login.username.clear();
+  fill_data_.preferred_login.username_value.clear();
   fill_data_.additional_logins.clear();
 
   SimulateClosingTouchToFillIfAndroid(kPasswordName);
@@ -2744,7 +2751,7 @@ TEST_F(PasswordAutofillAgentTest, NotShowPopupPasswordField) {
   LoadHTML(kVisibleFormWithNoUsernameHTML);
   UpdateUrlForHTML(kVisibleFormWithNoUsernameHTML);
   UpdateOnlyPasswordElement();
-  fill_data_.preferred_login.username.clear();
+  fill_data_.preferred_login.username_value.clear();
   fill_data_.additional_logins.clear();
 
   password_element_.SetValue("");
@@ -2907,7 +2914,7 @@ TEST_F(PasswordAutofillAgentTest, PasswordGenerationSupersedesAutofill) {
   // the password manager didn't detect a username field so it will try to
   // show UI when the password field is focused.
   fill_data_.wait_for_username = true;
-  fill_data_.preferred_login.username.clear();
+  fill_data_.preferred_login.username_value.clear();
   fill_data_.username_element_renderer_id = FieldRendererId();
   UpdateUrlForHTML(kSignupFormHTML);
   SimulateOnFillPasswordForm(fill_data_);
@@ -2997,7 +3004,7 @@ TEST_F(PasswordAutofillAgentTest,
 // Tests that only the password field is autocompleted when the browser sends
 // back data with only one credentials and empty username.
 TEST_F(PasswordAutofillAgentTest, NotAutofillNoUsername) {
-  fill_data_.preferred_login.username.clear();
+  fill_data_.preferred_login.username_value.clear();
   fill_data_.username_element_renderer_id = autofill::FieldRendererId();
   fill_data_.additional_logins.clear();
   SimulateOnFillPasswordForm(fill_data_);
@@ -3009,7 +3016,7 @@ TEST_F(PasswordAutofillAgentTest, NotAutofillNoUsername) {
 // the empty username.
 TEST_F(PasswordAutofillAgentTest,
        AutofillNoUsernameWhenOtherCredentialsStored) {
-  fill_data_.preferred_login.username.clear();
+  fill_data_.preferred_login.username_value.clear();
   ASSERT_FALSE(fill_data_.additional_logins.empty());
   SimulateOnFillPasswordForm(fill_data_);
 
@@ -3478,7 +3485,7 @@ TEST_F(PasswordAutofillAgentTest, RememberChosenUsernamePassword) {
 // fields.
 TEST_F(PasswordAutofillAgentTest, ShowSuggestionForNonUsernameFieldForms) {
   LoadHTML(kTwoNoUsernameFormsHTML);
-  fill_data_.preferred_login.username.clear();
+  fill_data_.preferred_login.username_value.clear();
   UpdateUrlForHTML(kTwoNoUsernameFormsHTML);
   SimulateOnFillPasswordForm(fill_data_);
 
@@ -3867,7 +3874,7 @@ TEST_F(PasswordAutofillAgentTest,
   CheckTextFieldsSuggestedState(kAliceUsername, true, kAlicePassword, true);
 
   // Change fill data
-  fill_data_.preferred_login.password = u"a-changed-password";
+  fill_data_.preferred_login.password_value = u"a-changed-password";
   // Supply changed fill data
   password_autofill_agent_->SetPasswordFillData(fill_data_);
   CheckTextFieldsSuggestedState(kAliceUsername, true, "a-changed-password",
@@ -3883,7 +3890,7 @@ TEST_F(PasswordAutofillAgentTest, SuggestLatestCredentials) {
   base::RunLoop().RunUntilIdle();
 
   // Change fill data
-  fill_data_.preferred_login.username = u"a-changed-username";
+  fill_data_.preferred_login.username_value = u"a-changed-username";
 
   password_autofill_agent_->SetPasswordFillData(fill_data_);
   SimulateElementClick(kPasswordName);
@@ -3909,10 +3916,10 @@ TEST_F(PasswordAutofillAgentTest, PSLMatchedPasswordIsNotAutofill) {
 
   // Add PSL matched credentials with username equal to prefilled one.
   PasswordAndMetadata psl_credentials;
-  psl_credentials.password = u"pslpassword";
+  psl_credentials.password_value = u"pslpassword";
   // Non-empty realm means PSL matched credentials.
   psl_credentials.realm = "example.com";
-  psl_credentials.username = u"prefilledusername";
+  psl_credentials.username_value = u"prefilledusername";
   fill_data_.additional_logins.push_back(std::move(psl_credentials));
 
   // Simulate the browser sending back the login info, it triggers the
@@ -3943,7 +3950,7 @@ TEST_F(PasswordAutofillAgentTest, FillOnLoadNoForm) {
 TEST_F(PasswordAutofillAgentTest, FillOnLoadNoUsername) {
   LoadHTML(kTwoNoUsernameFormsHTML);
   username_element_.Reset();
-  fill_data_.preferred_login.username.clear();
+  fill_data_.preferred_login.username_value.clear();
   password_element_ = GetInputElementByID("password2");
   UpdateRendererIDsInFillData();
   SimulateOnFillPasswordForm(fill_data_);
@@ -3994,7 +4001,7 @@ TEST_F(PasswordAutofillAgentTest, AutofillsAfterUserGesture) {
   password_autofill_agent_->ReadyToCommitNavigation(nullptr);
 
   fill_data_.username_may_use_prefilled_placeholder = true;
-  fill_data_.preferred_login.password = kBobPassword16;
+  fill_data_.preferred_login.password_value = kBobPassword16;
 
   SimulateOnFillPasswordForm(fill_data_);
   CheckTextFieldsStateForElements(
@@ -4043,7 +4050,7 @@ TEST_F(PasswordAutofillAgentTest, DoNotRestoreWhenFormStructureWasChanged) {
 // after user gesture.
 TEST_F(PasswordAutofillAgentTest, FillOnLoadSingleUsername) {
   // Simulate filling single username by clearing password fill data.
-  fill_data_.preferred_login.password.clear();
+  fill_data_.preferred_login.password_value.clear();
   fill_data_.password_element_renderer_id = autofill::FieldRendererId();
 
   SimulateOnFillPasswordForm(fill_data_);
@@ -4062,7 +4069,7 @@ TEST_F(PasswordAutofillAgentTest, FillOnLoadSingleUsername) {
 
 // Tests that |PreviewSuggestion| properly previews the single username.
 TEST_F(PasswordAutofillAgentTest, SingleUsernamePreviewSuggestion) {
-  fill_data_.preferred_login.password.clear();
+  fill_data_.preferred_login.password_value.clear();
   fill_data_.password_element_renderer_id = autofill::FieldRendererId();
   // Simulate the browser sending the login info, but set |wait_for_username| to
   // prevent the form from being immediately filled.
@@ -4085,7 +4092,7 @@ TEST_F(PasswordAutofillAgentTest, SingleUsernamePreviewSuggestion) {
 
 // Tests that |FillSuggestion| properly fills the single username.
 TEST_F(PasswordAutofillAgentTest, SingleUsernameFillSuggestion) {
-  fill_data_.preferred_login.password.clear();
+  fill_data_.preferred_login.password_value.clear();
   fill_data_.password_element_renderer_id = autofill::FieldRendererId();
   // Simulate the browser sending the login info, but set |wait_for_username|
   // to prevent the form from being immediately filled.
@@ -4113,7 +4120,7 @@ TEST_F(PasswordAutofillAgentTest, SingleUsernameFillSuggestion) {
 
 // Tests that |ClearPreview| properly clears previewed single username.
 TEST_F(PasswordAutofillAgentTest, SingleUsernameClearPreview) {
-  fill_data_.preferred_login.password.clear();
+  fill_data_.preferred_login.password_value.clear();
   fill_data_.password_element_renderer_id = autofill::FieldRendererId();
   ResetFieldState(&username_element_, "ali", WebAutofillState::kPreviewed);
   username_element_.SetSelectionRange(3, 3);
@@ -4145,8 +4152,9 @@ TEST_F(PasswordAutofillAgentTest, NoUsernameCredential) {
 
   // Add a credential with an empty username.
   PasswordAndMetadata empty_username_credential;
-  empty_username_credential.password = kPasswordForEmptyUsernameCredential16;
-  empty_username_credential.username = u"";
+  empty_username_credential.password_value =
+      kPasswordForEmptyUsernameCredential16;
+  empty_username_credential.username_value = u"";
   fill_data_.additional_logins.push_back(std::move(empty_username_credential));
 
   SimulateOnFillPasswordForm(fill_data_);

@@ -12,8 +12,8 @@ namespace extensions {
 ExtensionFunction::ResponseAction AutoUpdateCheckForUpdatesFunction::Run() {
   using vivaldi::auto_update::CheckForUpdates::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   AppController* controller =
     base::mac::ObjCCastStrict<AppController>([NSApp delegate]);
@@ -67,8 +67,8 @@ AutoUpdateSetAutoInstallUpdatesFunction::Run() {
   using vivaldi::auto_update::SetAutoInstallUpdates::Params;
   using ::vivaldi::kSparkleAutoInstallSettingName;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
   NSString* key =
       [NSString stringWithUTF8String:kSparkleAutoInstallSettingName];
   [[NSUserDefaults standardUserDefaults] setBool:params->autoinstall

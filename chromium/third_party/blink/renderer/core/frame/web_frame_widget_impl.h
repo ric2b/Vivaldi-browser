@@ -57,6 +57,7 @@
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/exported/web_page_popup_impl.h"
+#include "third_party/blink/renderer/core/frame/animation_frame_timing_monitor.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/page/event_with_hit_test_results.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
@@ -107,6 +108,7 @@ class CORE_EXPORT WebFrameWidgetImpl
       public viz::mojom::blink::InputTargetClient,
       public mojom::blink::FrameWidgetInputHandler,
       public FrameWidget,
+      public AnimationFrameTimingMonitor::Client,
       public WidgetEventHandler {
  public:
   struct PromiseCallbacks {
@@ -279,7 +281,7 @@ class CORE_EXPORT WebFrameWidgetImpl
                   int relative_cursor_pos) override;
   void FinishComposingText(bool keep_selection) override;
   bool IsProvisional() override;
-  uint64_t GetScrollableContainerIdAt(const gfx::PointF& point) override;
+  cc::ElementId GetScrollableContainerIdAt(const gfx::PointF& point) override;
   bool ShouldHandleImeEvents() override;
   void SetEditCommandsForNextKeyEvent(
       Vector<mojom::blink::EditCommandPtr> edit_commands) override;
@@ -317,8 +319,20 @@ class CORE_EXPORT WebFrameWidgetImpl
       bool may_throttle_if_undrawn_frames) override;
   int GetVirtualKeyboardResizeHeight() const override;
 
+  void OnTaskCompletedForFrame(base::TimeTicks start_time,
+                               base::TimeTicks end_time,
+                               base::TimeTicks desired_execution_time,
+                               LocalFrame*) override;
   void SetVirtualKeyboardResizeHeightForTesting(int);
   bool GetMayThrottleIfUndrawnFramesForTesting();
+
+  // AnimationFrameTimingMonitor::Client overrides
+  void ReportLongAnimationFrameTiming(AnimationFrameTimingInfo* info) override;
+  bool ShouldReportLongAnimationFrameTiming() const override;
+  bool RequestedMainFramePending() override;
+  ukm::UkmRecorder* MainFrameUkmRecorder() override;
+  ukm::SourceId MainFrameUkmSourceId() override;
+  bool IsMainFrameFullyLoaded() const override;
 
   // WebFrameWidget overrides.
   void InitializeNonCompositing(WebNonCompositedWidgetClient* client) override;
@@ -502,6 +516,12 @@ class CORE_EXPORT WebFrameWidgetImpl
   // Pause all rendering (main and compositor thread) in the compositor.
   [[nodiscard]] std::unique_ptr<cc::ScopedPauseRendering> PauseRendering();
 
+  // Returns the maximum bounds for buffers allocated for rasterization and
+  // compositing. This is is max texture size for GPU compositing and a browser
+  // chosen limit in software mode.
+  // Returns null if the compositing stack has not been initialized yet.
+  absl::optional<int> GetMaxRenderBufferBounds() const;
+
   // Prevents any updates to the input for the layer tree, and the layer tree
   // itself, and the layer tree from becoming visible.
   std::unique_ptr<cc::ScopedDeferMainFrameUpdate> DeferMainFrameUpdate();
@@ -660,6 +680,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   // WebFrameWidget overrides.
   cc::LayerTreeHost* LayerTreeHost() override;
 
+  // Determines whether the drag source is currently dragging.
   bool doing_drag_and_drop_ = false;
 
  private:
@@ -792,6 +813,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   void Cut() override;
   void Copy() override;
   void CopyToFindPboard() override;
+  void CenterSelection() override;
   void Paste() override;
   void PasteAndMatchStyle() override;
   void Delete() override;
@@ -837,7 +859,8 @@ class CORE_EXPORT WebFrameWidgetImpl
 
   void SendOverscrollEventFromImplSide(const gfx::Vector2dF& overscroll_delta,
                                        cc::ElementId scroll_latched_element_id);
-  void SendScrollEndEventFromImplSide(cc::ElementId scroll_latched_element_id);
+  void SendScrollEndEventFromImplSide(bool affects_outer_viewport,
+                                      cc::ElementId scroll_latched_element_id);
 
   void RecordManipulationTypeCounts(cc::ManipulationInfo info);
 
@@ -845,11 +868,10 @@ class CORE_EXPORT WebFrameWidgetImpl
   // Consolidate some common code between starting a drag over a target and
   // updating a drag over a target. If we're starting a drag, |isEntering|
   // should be true.
-  ui::mojom::blink::DragOperation DragTargetDragEnterOrOver(
-      const gfx::PointF& point_in_viewport,
-      const gfx::PointF& screen_point,
-      DragAction,
-      uint32_t key_modifiers);
+  void DragTargetDragEnterOrOver(const gfx::PointF& point_in_viewport,
+                                 const gfx::PointF& screen_point,
+                                 DragAction,
+                                 uint32_t key_modifiers);
 
   // Helper function to call VisualViewport::viewportToRootFrame().
   gfx::PointF ViewportToRootFrame(const gfx::PointF& point_in_viewport) const;
@@ -1026,6 +1048,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   // Used to override values given from the browser such as ScreenInfo,
   // WidgetScreenRect, WindowScreenRect, and the widget's size.
   Member<ScreenMetricsEmulator> device_emulator_;
+
+  Member<AnimationFrameTimingMonitor> animation_frame_timing_monitor_;
 
   // keyPress events to be suppressed if the associated keyDown event was
   // handled.

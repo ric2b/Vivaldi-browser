@@ -8,8 +8,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/guid.h"
 #include "base/run_loop.h"
+#include "base/uuid.h"
 #include "content/browser/fenced_frame/fenced_frame.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/navigation_request.h"
@@ -53,7 +53,7 @@ namespace content {
 
 TestRenderFrameHostCreationObserver::TestRenderFrameHostCreationObserver(
     WebContents* web_contents)
-    : WebContentsObserver(web_contents), last_created_frame_(nullptr) {}
+    : WebContentsObserver(web_contents) {}
 
 TestRenderFrameHostCreationObserver::~TestRenderFrameHostCreationObserver() =
     default;
@@ -61,6 +61,13 @@ TestRenderFrameHostCreationObserver::~TestRenderFrameHostCreationObserver() =
 void TestRenderFrameHostCreationObserver::RenderFrameCreated(
     RenderFrameHost* render_frame_host) {
   last_created_frame_ = render_frame_host;
+}
+
+void TestRenderFrameHostCreationObserver::RenderFrameDeleted(
+    RenderFrameHost* render_frame_host) {
+  if (last_created_frame_ == render_frame_host) {
+    last_created_frame_ = nullptr;
+  }
 }
 
 TestRenderFrameHost::TestRenderFrameHost(
@@ -181,7 +188,8 @@ TestRenderFrameHost* TestRenderFrameHost::AppendChild(
 TestRenderFrameHost* TestRenderFrameHost::AppendChildWithPolicy(
     const std::string& frame_name,
     const blink::ParsedPermissionsPolicy& allow) {
-  std::string frame_unique_name = base::GenerateGUID();
+  std::string frame_unique_name =
+      base::Uuid::GenerateRandomV4().AsLowercaseString();
   OnCreateChildFrame(
       GetProcess()->GetNextRoutingID(), CreateStubFrameRemote(),
       CreateStubBrowserInterfaceBrokerReceiver(),
@@ -296,10 +304,9 @@ void TestRenderFrameHost::SimulateManifestURLUpdate(const GURL& manifest_url) {
   GetPage().UpdateManifestUrl(manifest_url);
 }
 
-TestRenderFrameHost* TestRenderFrameHost::AppendFencedFrame(
-    blink::mojom::FencedFrameMode mode) {
+TestRenderFrameHost* TestRenderFrameHost::AppendFencedFrame() {
   fenced_frames_.push_back(std::make_unique<FencedFrame>(
-      weak_ptr_factory_.GetSafeRef(), mode, /* was_discarded= */ false));
+      weak_ptr_factory_.GetSafeRef(), /* was_discarded= */ false));
   FencedFrame* fenced_frame = fenced_frames_.back().get();
   // Create stub RemoteFrameInterfaces.
   auto remote_frame_interfaces =
@@ -394,6 +401,10 @@ void TestRenderFrameHost::SendDidCommitSameDocumentNavigation(
                                   std::move(same_doc_params));
 }
 
+void TestRenderFrameHost::SendStartLoadingForAsyncNavigationApiCommit() {
+  StartLoadingForAsyncNavigationApiCommit();
+}
+
 void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
     const GURL& url,
     bool has_user_gesture) {
@@ -419,7 +430,9 @@ void TestRenderFrameHost::SendRendererInitiatedNavigationRequest(
           base::TimeTicks() /* renderer_before_unload_end */,
           absl::nullopt /* web_bundle_token */,
           blink::mojom::NavigationInitiatorActivationAndAdStatus::
-              kDidNotStartWithTransientActivation);
+              kDidNotStartWithTransientActivation,
+          false /* is_container_initiated */,
+          false /* is_fullscreen_requested */, false /* has_storage_access */);
   auto common_params = blink::CreateCommonNavigationParams();
   common_params->url = url;
   common_params->initiator_origin = GetLastCommittedOrigin();
@@ -576,9 +589,9 @@ void TestRenderFrameHost::SimulateCommitProcessed(
 }
 
 WebBluetoothServiceImpl*
-TestRenderFrameHost::CreateWebBluetoothServiceForTesting() {
-  RenderFrameHostImpl::CreateWebBluetoothService(
-      dummy_web_bluetooth_service_remote_.InitWithNewPipeAndPassReceiver());
+TestRenderFrameHost::CreateWebBluetoothServiceForTesting(
+    mojo::PendingReceiver<blink::mojom::WebBluetoothService> receiver) {
+  RenderFrameHostImpl::CreateWebBluetoothService(std::move(receiver));
   return RenderFrameHostImpl::GetWebBluetoothServiceForTesting();
 }
 
@@ -611,6 +624,9 @@ void TestRenderFrameHost::SendCommitNavigation(
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         prefetch_loader_factory,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> topics_loader_factory,
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>
+        keep_alive_loader_factory,
+    mojo::PendingRemote<blink::mojom::ResourceCache> resource_cache_remote,
     const absl::optional<blink::ParsedPermissionsPolicy>& permissions_policy,
     blink::mojom::PolicyContainerPtr policy_container,
     const blink::DocumentToken& document_token,
@@ -679,8 +695,8 @@ TestRenderFrameHost::BuildDidCommitParams(bool did_create_new_entry,
   }
 
   // In most cases, the origin will match the URL's origin.  Tests that need to
-  // check corner cases (like about:blank) should specify the origin param
-  // manually.
+  // check corner cases (like about:blank) should specify the origin and
+  // initiator_base_url params manually.
   url::Origin origin = url::Origin::Create(url);
   params->origin = origin;
 

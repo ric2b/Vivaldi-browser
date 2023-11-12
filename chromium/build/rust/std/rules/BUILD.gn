@@ -26,6 +26,7 @@ cargo_crate("addr2line") {
     ":gimli",
     ":rustc_std_workspace_alloc",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     alloc = ":rustc_std_workspace_alloc__rlib"
@@ -37,6 +38,9 @@ cargo_crate("addr2line") {
     "core",
     "rustc-dep-of-std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("adler") {
   crate_type = "rlib"
@@ -59,6 +63,7 @@ cargo_crate("adler") {
   deps = [
     ":compiler_builtins",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     core = ":rustc_std_workspace_core__rlib"
@@ -68,6 +73,9 @@ cargo_crate("adler") {
     "core",
     "rustc-dep-of-std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("alloc") {
   crate_type = "rlib"
@@ -88,25 +96,11 @@ cargo_crate("alloc") {
   deps = [
     ":compiler_builtins",
     ":core",
+    "//build/rust/std:std_build_deps",
   ]
-}
-cargo_crate("cc") {
-  crate_type = "rlib"
-  crate_root = "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/cc-1.0.78/src/lib.rs"
-  no_std = true
-
-  # Unit tests skipped. Generate with --with-tests to include them.
-  build_native_rust_unit_tests = false
-  sources = [ "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/cc-1.0.78/src/lib.rs" ]
-  edition = "2018"
-  cargo_pkg_version = "1.0.78"
-  cargo_pkg_authors = "Alex Crichton <alex@alexcrichton.com>"
-  cargo_pkg_name = "cc"
-  cargo_pkg_description = "A build-time dependency for Cargo build scripts to assist in invoking the nativeC compiler to compile native C code into a static archive to be linked into Rustcode."
-  library_configs -= [ "//build/config/compiler:chromium_code" ]
-  library_configs += [ "//build/config/compiler:no_chromium_code" ]
-  executable_configs -= [ "//build/config/compiler:chromium_code" ]
-  executable_configs += [ "//build/config/compiler:no_chromium_code" ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("cfg_if") {
   crate_type = "rlib"
@@ -120,7 +114,7 @@ cargo_crate("cfg_if") {
   cargo_pkg_version = "1.0.0"
   cargo_pkg_authors = "Alex Crichton <alex@alexcrichton.com>"
   cargo_pkg_name = "cfg-if"
-  cargo_pkg_description = "A macro to ergonomically define an item depending on a large number of #[cfg]parameters. Structured like an if-else chain, the first matching branch is theitem that gets emitted."
+  cargo_pkg_description = "A macro to ergonomically define an item depending on a large number of #[cfg] parameters. Structured like an if-else chain, the first matching branch is the item that gets emitted."
   library_configs -= [ "//build/config/compiler:chromium_code" ]
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
@@ -128,6 +122,7 @@ cargo_crate("cfg_if") {
   deps = [
     ":compiler_builtins",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     core = ":rustc_std_workspace_core__rlib"
@@ -137,25 +132,31 @@ cargo_crate("cfg_if") {
     "core",
     "rustc-dep-of-std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("compiler_builtins") {
   crate_type = "rlib"
-  crate_root = "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/compiler_builtins-0.1.85/src/lib.rs"
+  crate_root = "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/compiler_builtins-0.1.89/src/lib.rs"
   no_std = true
 
   # Unit tests skipped. Generate with --with-tests to include them.
   build_native_rust_unit_tests = false
-  sources = [ "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/compiler_builtins-0.1.85/src/lib.rs" ]
+  sources = [ "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/compiler_builtins-0.1.89/src/lib.rs" ]
   edition = "2015"
-  cargo_pkg_version = "0.1.85"
+  cargo_pkg_version = "0.1.89"
   cargo_pkg_authors = "Jorge Aparicio <japaricious@gmail.com>"
   cargo_pkg_name = "compiler_builtins"
-  cargo_pkg_description = "Compiler intrinsics used by the Rust compiler. Also available for other targetsif necessary!"
+  cargo_pkg_description = "Compiler intrinsics used by the Rust compiler. Also available for other targets if necessary!"
   library_configs -= [ "//build/config/compiler:chromium_code" ]
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
   executable_configs += [ "//build/config/compiler:no_chromium_code" ]
-  deps = [ ":rustc_std_workspace_core" ]
+  deps = [
+    ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
+  ]
   aliased_deps = {
     core = ":rustc_std_workspace_core__rlib"
   }
@@ -164,6 +165,9 @@ cargo_crate("compiler_builtins") {
     "core",
     "rustc-dep-of-std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("core") {
   crate_type = "rlib"
@@ -183,6 +187,10 @@ cargo_crate("core") {
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
   executable_configs += [ "//build/config/compiler:no_chromium_code" ]
+  deps = [ "//build/rust/std:std_build_deps" ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("getopts") {
   crate_type = "rlib"
@@ -205,6 +213,7 @@ cargo_crate("getopts") {
     ":rustc_std_workspace_core",
     ":rustc_std_workspace_std",
     ":unicode_width",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     core = ":rustc_std_workspace_core__rlib"
@@ -215,6 +224,9 @@ cargo_crate("getopts") {
     "rustc-dep-of-std",
     "std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("gimli") {
   crate_type = "rlib"
@@ -237,6 +249,7 @@ cargo_crate("gimli") {
     ":compiler_builtins",
     ":rustc_std_workspace_alloc",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     alloc = ":rustc_std_workspace_alloc__rlib"
@@ -250,6 +263,9 @@ cargo_crate("gimli") {
     "read-core",
     "rustc-dep-of-std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("hashbrown") {
   crate_type = "rlib"
@@ -272,6 +288,7 @@ cargo_crate("hashbrown") {
     ":compiler_builtins",
     ":rustc_std_workspace_alloc",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     alloc = ":rustc_std_workspace_alloc__rlib"
@@ -285,17 +302,20 @@ cargo_crate("hashbrown") {
     "rustc-dep-of-std",
     "rustc-internal-api",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("libc") {
   crate_type = "rlib"
-  crate_root = "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/libc-0.2.139/src/lib.rs"
+  crate_root = "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/libc-0.2.140/src/lib.rs"
   no_std = true
 
   # Unit tests skipped. Generate with --with-tests to include them.
   build_native_rust_unit_tests = false
-  sources = [ "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/libc-0.2.139/src/lib.rs" ]
+  sources = [ "//build/rust/std/fake_root/../../../../third_party/rust-toolchain/lib/rustlib/src/rust/vendor/libc-0.2.140/src/lib.rs" ]
   edition = "2015"
-  cargo_pkg_version = "0.2.139"
+  cargo_pkg_version = "0.2.140"
   cargo_pkg_authors = "The Rust Project Developers"
   cargo_pkg_name = "libc"
   cargo_pkg_description = "Raw FFI bindings to platform libraries like libc."
@@ -303,17 +323,33 @@ cargo_crate("libc") {
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
   executable_configs += [ "//build/config/compiler:no_chromium_code" ]
-  deps = [ ":rustc_std_workspace_core" ]
+  deps = [
+    ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
+  ]
   features = [
     "align",
     "rustc-dep-of-std",
     "rustc-std-workspace-core",
   ]
   rustflags = [
-    "--cfg=libc_align",
     "--cfg=libc_priv_mod_use",
+    "--cfg=libc_union",
+    "--cfg=libc_const_size_of",
+    "--cfg=libc_align",
+    "--cfg=libc_int128",
     "--cfg=libc_core_cvoid",
+    "--cfg=libc_packedN",
+    "--cfg=libc_cfg_target_vendor",
+    "--cfg=libc_non_exhaustive",
+    "--cfg=libc_long_array",
+    "--cfg=libc_ptr_addr_of",
+    "--cfg=libc_underscore_const_names",
+    "--cfg=libc_const_extern_fn",
+    "-Zforce-unstable-if-unmarked",
   ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("memchr") {
   crate_type = "rlib"
@@ -335,6 +371,7 @@ cargo_crate("memchr") {
   deps = [
     ":compiler_builtins",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     core = ":rustc_std_workspace_core__rlib"
@@ -344,6 +381,9 @@ cargo_crate("memchr") {
     "core",
     "rustc-dep-of-std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("miniz_oxide") {
   crate_type = "rlib"
@@ -367,6 +407,7 @@ cargo_crate("miniz_oxide") {
     ":compiler_builtins",
     ":rustc_std_workspace_alloc",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     alloc = ":rustc_std_workspace_alloc__rlib"
@@ -378,6 +419,9 @@ cargo_crate("miniz_oxide") {
     "core",
     "rustc-dep-of-std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("object") {
   crate_type = "rlib"
@@ -401,6 +445,7 @@ cargo_crate("object") {
     ":memchr",
     ":rustc_std_workspace_alloc",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     alloc = ":rustc_std_workspace_alloc__rlib"
@@ -419,6 +464,9 @@ cargo_crate("object") {
     "rustc-dep-of-std",
     "unaligned",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("panic_abort") {
   crate_type = "rlib"
@@ -442,7 +490,11 @@ cargo_crate("panic_abort") {
     ":compiler_builtins",
     ":core",
     ":libc",
+    "//build/rust/std:std_build_deps",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("panic_unwind") {
   crate_type = "rlib"
@@ -467,7 +519,11 @@ cargo_crate("panic_unwind") {
     ":core",
     ":libc",
     ":unwind",
+    "//build/rust/std:std_build_deps",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("proc_macro") {
   crate_type = "rlib"
@@ -487,7 +543,11 @@ cargo_crate("proc_macro") {
   deps = [
     ":core",
     ":std",
+    "//build/rust/std:std_build_deps",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("profiler_builtins") {
   crate_type = "rlib"
@@ -507,8 +567,11 @@ cargo_crate("profiler_builtins") {
   deps = [
     ":compiler_builtins",
     ":core",
+    "//build/rust/std:std_build_deps",
   ]
-  build_deps = [ ":cc" ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("rustc_demangle") {
   crate_type = "rlib"
@@ -530,6 +593,7 @@ cargo_crate("rustc_demangle") {
   deps = [
     ":compiler_builtins",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     core = ":rustc_std_workspace_core__rlib"
@@ -539,6 +603,9 @@ cargo_crate("rustc_demangle") {
     "core",
     "rustc-dep-of-std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("rustc_std_workspace_alloc") {
   crate_type = "rlib"
@@ -556,7 +623,13 @@ cargo_crate("rustc_std_workspace_alloc") {
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
   executable_configs += [ "//build/config/compiler:no_chromium_code" ]
-  deps = [ ":alloc" ]
+  deps = [
+    ":alloc",
+    "//build/rust/std:std_build_deps",
+  ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("rustc_std_workspace_core") {
   crate_type = "rlib"
@@ -574,7 +647,13 @@ cargo_crate("rustc_std_workspace_core") {
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
   executable_configs += [ "//build/config/compiler:no_chromium_code" ]
-  deps = [ ":core" ]
+  deps = [
+    ":core",
+    "//build/rust/std:std_build_deps",
+  ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("rustc_std_workspace_std") {
   crate_type = "rlib"
@@ -592,7 +671,13 @@ cargo_crate("rustc_std_workspace_std") {
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
   executable_configs += [ "//build/config/compiler:no_chromium_code" ]
-  deps = [ ":std" ]
+  deps = [
+    ":std",
+    "//build/rust/std:std_build_deps",
+  ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("std") {
   crate_type = "rlib"
@@ -629,6 +714,7 @@ cargo_crate("std") {
     ":rustc_demangle",
     ":std_detect",
     ":unwind",
+    "//build/rust/std:std_build_deps",
   ]
   features = [
     "addr2line",
@@ -642,8 +728,13 @@ cargo_crate("std") {
     "std_detect_dlsym_getauxval",
     "std_detect_file_io",
   ]
-  rustflags = [ "--cfg=backtrace_in_libstd" ]
   rustenv = [ "STD_ENV_ARCH=$rust_target_arch" ]
+  rustflags = [
+    "--cfg=backtrace_in_libstd",
+    "-Zforce-unstable-if-unmarked",
+  ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("std_detect") {
   crate_type = "rlib"
@@ -669,6 +760,7 @@ cargo_crate("std_detect") {
     ":libc",
     ":rustc_std_workspace_alloc",
     ":rustc_std_workspace_core",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     alloc = ":rustc_std_workspace_alloc__rlib"
@@ -683,6 +775,9 @@ cargo_crate("std_detect") {
     "std_detect_dlsym_getauxval",
     "std_detect_file_io",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("test") {
   crate_type = "rlib"
@@ -702,17 +797,17 @@ cargo_crate("test") {
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
   executable_configs += [ "//build/config/compiler:no_chromium_code" ]
   deps = [
-    ":cfg_if",
     ":core",
     ":getopts",
-    ":libc",
     ":panic_abort",
     ":panic_unwind",
-    ":proc_macro",
     ":std",
+    "//build/rust/std:std_build_deps",
   ]
-
   rustenv = [ "CFG_DISABLE_UNSTABLE_FEATURES=0" ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("unicode_width") {
   crate_type = "rlib"
@@ -727,7 +822,7 @@ cargo_crate("unicode_width") {
   cargo_pkg_authors =
       "kwantam <kwantam@gmail.com>, Manish Goregaokar <manishsmail@gmail.com>"
   cargo_pkg_name = "unicode-width"
-  cargo_pkg_description = "Determine displayed width of `char` and `str` typesaccording to Unicode Standard Annex #11 rules."
+  cargo_pkg_description = "Determine displayed width of `char` and `str` types according to Unicode Standard Annex #11 rules."
   library_configs -= [ "//build/config/compiler:chromium_code" ]
   library_configs += [ "//build/config/compiler:no_chromium_code" ]
   executable_configs -= [ "//build/config/compiler:chromium_code" ]
@@ -736,6 +831,7 @@ cargo_crate("unicode_width") {
     ":compiler_builtins",
     ":rustc_std_workspace_core",
     ":rustc_std_workspace_std",
+    "//build/rust/std:std_build_deps",
   ]
   aliased_deps = {
     core = ":rustc_std_workspace_core__rlib"
@@ -747,6 +843,9 @@ cargo_crate("unicode_width") {
     "rustc-dep-of-std",
     "std",
   ]
+  rustflags = [ "-Zforce-unstable-if-unmarked" ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }
 cargo_crate("unwind") {
   crate_type = "rlib"
@@ -768,6 +867,12 @@ cargo_crate("unwind") {
     ":compiler_builtins",
     ":core",
     ":libc",
+    "//build/rust/std:std_build_deps",
   ]
-  build_deps = [ ":cc" ]
+  rustflags = [
+    "-Zlink-directives=false",
+    "-Zforce-unstable-if-unmarked",
+  ]
+  output_dir =
+      "$root_out_dir/local_rustc_sysroot/lib/rustlib/$rust_abi_target/lib/"
 }

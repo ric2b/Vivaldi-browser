@@ -19,13 +19,16 @@
 #import "components/commerce/core/test_utils.h"
 #import "components/optimization_guide/proto/push_notification.pb.h"
 #import "components/session_proto_db/session_proto_db.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/commerce/session_proto_db_factory.h"
 #import "ios/chrome/browser/commerce/shopping_service_factory.h"
 #import "ios/chrome/browser/main/browser_list.h"
 #import "ios/chrome/browser/main/browser_list_factory.h"
 #import "ios/chrome/browser/main/test_browser.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/coordinator/scene/test/fake_scene_state.h"
 #import "ios/chrome/browser/url_loading/fake_url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
 #import "ios/web/public/test/web_task_environment.h"
@@ -123,7 +126,6 @@ const bookmarks::BookmarkNode* PrepareSubscription(
   absl::optional<commerce::ProductInfo> optional_product_info;
   optional_product_info.emplace(product_info);
   shopping_service->SetResponseForGetProductInfoForUrl(optional_product_info);
-  EXPECT_TRUE(commerce::IsBookmarkPriceTracked(bookmark_model, product));
   return product;
 }
 
@@ -137,8 +139,9 @@ class CommercePushNotificationClientTest : public PlatformTest {
   void SetUp() override {
     PlatformTest::SetUp();
     TestChromeBrowserState::Builder builder;
-    builder.AddTestingFactory(ios::BookmarkModelFactory::GetInstance(),
-                              ios::BookmarkModelFactory::GetDefaultFactory());
+    builder.AddTestingFactory(
+        ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
+        ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
     builder.AddTestingFactory(
         commerce::ShoppingServiceFactory::GetInstance(),
         base::BindRepeating(
@@ -156,17 +159,36 @@ class CommercePushNotificationClientTest : public PlatformTest {
     browser_list_ =
         BrowserListFactory::GetForBrowserState(chrome_browser_state_.get());
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get());
+    background_browser_ =
+        std::make_unique<TestBrowser>(chrome_browser_state_.get());
     browser_list_->AddBrowser(browser_.get());
     UrlLoadingNotifierBrowserAgent::CreateForBrowser(browser_.get());
     FakeUrlLoadingBrowserAgent::InjectForBrowser(browser_.get());
     commerce_push_notification_client_.SetLastUsedChromeBrowserStateForTesting(
         chrome_browser_state_.get());
-    bookmark_model_ = ios::BookmarkModelFactory::GetForBrowserState(
-        chrome_browser_state_.get());
+    bookmark_model_ =
+        ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
+            chrome_browser_state_.get());
     bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
     shopping_service_ = static_cast<commerce::MockShoppingService*>(
         commerce::ShoppingServiceFactory::GetForBrowserState(
             chrome_browser_state_.get()));
+    app_state_ = [[AppState alloc] initWithBrowserLauncher:nil
+                                        startupInformation:nil
+                                       applicationDelegate:nil];
+    scene_state_foreground_ =
+        [[FakeSceneState alloc] initWithAppState:app_state_
+                                    browserState:chrome_browser_state_.get()];
+    scene_state_foreground_.activationLevel =
+        SceneActivationLevelForegroundActive;
+    SceneStateBrowserAgent::CreateForBrowser(browser_.get(),
+                                             scene_state_foreground_);
+    scene_state_background_ =
+        [[FakeSceneState alloc] initWithAppState:app_state_
+                                    browserState:chrome_browser_state_.get()];
+    scene_state_background_.activationLevel = SceneActivationLevelBackground;
+    SceneStateBrowserAgent::CreateForBrowser(background_browser_.get(),
+                                             scene_state_background_);
   }
 
   CommercePushNotificationClient* GetCommercePushNotificationClient() {
@@ -174,6 +196,8 @@ class CommercePushNotificationClientTest : public PlatformTest {
   }
 
   Browser* GetBrowser() { return browser_.get(); }
+
+  Browser* GetBackgroundBrowser() { return background_browser_.get(); }
 
   void HandleNotificationInteraction(
       NSString* action_identifier,
@@ -183,14 +207,28 @@ class CommercePushNotificationClientTest : public PlatformTest {
         action_identifier, user_info, on_complete_for_testing);
   }
 
+  std::vector<const std::string>& GetUrlsDelayedForLoading() {
+    return commerce_push_notification_client_.urls_delayed_for_loading_;
+  }
+
+  void OnBrowserReady() { commerce_push_notification_client_.OnBrowserReady(); }
+
+  Browser* GetCommercePushClientActiveBrowser() {
+    return commerce_push_notification_client_.GetActiveBrowser();
+  }
+
  protected:
   web::WebTaskEnvironment task_environment_;
   CommercePushNotificationClient commerce_push_notification_client_;
   std::unique_ptr<Browser> browser_;
+  std::unique_ptr<Browser> background_browser_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   BrowserList* browser_list_;
   bookmarks::BookmarkModel* bookmark_model_;
   commerce::MockShoppingService* shopping_service_;
+  FakeSceneState* scene_state_foreground_;
+  FakeSceneState* scene_state_background_;
+  AppState* app_state_;
 };
 
 TEST_F(CommercePushNotificationClientTest, TestNotificationInteraction) {
@@ -223,11 +261,13 @@ TEST_F(CommercePushNotificationClientTest, TestActionableNotifications) {
 }
 
 TEST_F(CommercePushNotificationClientTest, TestUntrackPrice) {
-  const bookmarks::BookmarkNode* product =
-      PrepareSubscription(shopping_service_, bookmark_model_, true);
+  PrepareSubscription(shopping_service_, bookmark_model_, true);
   NSDictionary* user_info = SerializeOptGuideCommercePayload();
   base::RunLoop run_loop;
   base::HistogramTester histogram_tester;
+
+  EXPECT_CALL(*shopping_service_, Unsubscribe(testing::_, testing::_)).Times(1);
+
   // Simulate user clicking 'visit site'.
   HandleNotificationInteraction(kUntrackPriceActionId, user_info, &run_loop);
   run_loop.Run();
@@ -235,7 +275,6 @@ TEST_F(CommercePushNotificationClientTest, TestUntrackPrice) {
                                      /*sample=*/true, /*expected_count=*/1);
   histogram_tester.ExpectBucketCount(kUntrackSuccessHistogramName,
                                      /*sample=*/true, /*expected_count=*/1);
-  EXPECT_FALSE(commerce::IsBookmarkPriceTracked(bookmark_model_, product));
 }
 
 TEST_F(CommercePushNotificationClientTest, TestNoBookmarkFound) {
@@ -244,6 +283,9 @@ TEST_F(CommercePushNotificationClientTest, TestNoBookmarkFound) {
   NSDictionary* user_info = SerializeOptGuideCommercePayload();
   base::RunLoop run_loop;
   base::HistogramTester histogram_tester;
+
+  EXPECT_CALL(*shopping_service_, Unsubscribe(testing::_, testing::_)).Times(0);
+
   // Simulate user clicking 'visit site'.
   HandleNotificationInteraction(kUntrackPriceActionId, user_info, &run_loop);
   run_loop.Run();
@@ -254,11 +296,13 @@ TEST_F(CommercePushNotificationClientTest, TestNoBookmarkFound) {
 }
 
 TEST_F(CommercePushNotificationClientTest, TestUntrackPriceFailed) {
-  const bookmarks::BookmarkNode* product =
-      PrepareSubscription(shopping_service_, bookmark_model_, false);
+  PrepareSubscription(shopping_service_, bookmark_model_, false);
   NSDictionary* user_info = SerializeOptGuideCommercePayload();
   base::RunLoop run_loop;
   base::HistogramTester histogram_tester;
+
+  EXPECT_CALL(*shopping_service_, Unsubscribe(testing::_, testing::_)).Times(1);
+
   // Simulate user clicking 'visit site'.
   HandleNotificationInteraction(kUntrackPriceActionId, user_info, &run_loop);
   run_loop.Run();
@@ -266,5 +310,49 @@ TEST_F(CommercePushNotificationClientTest, TestUntrackPriceFailed) {
                                      /*sample=*/false, /*expected_count=*/1);
   histogram_tester.ExpectBucketCount(kBookmarkFoundHistogramName,
                                      /*sample=*/true, /*expected_count=*/1);
-  EXPECT_TRUE(commerce::IsBookmarkPriceTracked(bookmark_model_, product));
+}
+
+TEST_F(CommercePushNotificationClientTest, TestBrowserInitialization) {
+  browser_list_->RemoveBrowser(GetBrowser());
+  NSDictionary* user_info = SerializeOptGuideCommercePayload();
+
+  // Simulate user clicking 'visit site'.
+  HandleNotificationInteraction(kVisitSiteActionId, user_info);
+  EXPECT_EQ(1u, GetUrlsDelayedForLoading().size());
+  CommercePushNotificationClient* commerce_push_notification_client =
+      GetCommercePushNotificationClient();
+  browser_list_->AddBrowser(GetBrowser());
+  commerce_push_notification_client->OnBrowserReady();
+  EXPECT_EQ(0u, GetUrlsDelayedForLoading().size());
+
+  // Check PriceDropNotification Destination URL loaded.
+  FakeUrlLoadingBrowserAgent* url_loader =
+      FakeUrlLoadingBrowserAgent::FromUrlLoadingBrowserAgent(
+          UrlLoadingBrowserAgent::FromBrowser(GetBrowser()));
+  EXPECT_EQ(kHintKey, url_loader->last_params.web_params.url);
+}
+
+TEST_F(CommercePushNotificationClientTest,
+       TestBackgroundBrowserNotUsedWhenForegroundAvailable) {
+  browser_list_->AddBrowser(GetBackgroundBrowser());
+  Browser* browser = GetCommercePushClientActiveBrowser();
+  // When active foregrounded and active backgrounded browser is availalbe,
+  // should choose foregrounded browser.
+  EXPECT_EQ(SceneActivationLevelForegroundActive,
+            SceneStateBrowserAgent::FromBrowser(browser)
+                ->GetSceneState()
+                .activationLevel);
+}
+
+TEST_F(CommercePushNotificationClientTest, TestBackgroundFallback) {
+  // Remove foregrounded browser
+  browser_list_->RemoveBrowser(GetBrowser());
+  // Add backgrounded browser
+  browser_list_->AddBrowser(GetBackgroundBrowser());
+  Browser* browser = GetCommercePushClientActiveBrowser();
+  // Only option is backgronuded browser
+  EXPECT_EQ(SceneActivationLevelBackground,
+            SceneStateBrowserAgent::FromBrowser(browser)
+                ->GetSceneState()
+                .activationLevel);
 }

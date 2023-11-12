@@ -24,6 +24,7 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabTabObserver;
@@ -38,11 +39,9 @@ import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
 import org.chromium.chrome.browser.tab.TabBrowserControlsOffsetHelper;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
-import org.chromium.chrome.browser.tabmodel.TabSwitchMetrics;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.util.TokenHolder;
 
@@ -327,7 +326,7 @@ public class BrowserControlsManager implements ActivityStateListener, BrowserCon
     @Override
     public void onActivityStateChange(Activity activity, int newState) {
         if (newState == ActivityState.STARTED) {
-            PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT,
+            PostTask.postDelayedTask(TaskTraits.UI_DEFAULT,
                     mBrowserVisibilityDelegate::showControlsTransient,
                     ACTIVITY_RETURN_SHOW_REQUEST_DELAY_MS);
         } else if (newState == ActivityState.DESTROYED) {
@@ -670,7 +669,6 @@ public class BrowserControlsManager implements ActivityStateListener, BrowserCon
             updateBrowserControlsOffsets(false, topControlsOffsetY, bottomControlsOffsetY,
                     contentOffsetY, topControlsMinHeightOffsetY, bottomControlsMinHeightOffsetY);
         }
-        TabSwitchMetrics.setActualTabSwitchLatencyMetricRequired();
     }
 
     @Override
@@ -807,8 +805,9 @@ public class BrowserControlsManager implements ActivityStateListener, BrowserCon
         mControlsAnimator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
-                updateBrowserControlsOffsets(false, 0, 0, getTopControlsHeight(),
-                        getTopControlsMinHeight(), getBottomControlsMinHeight());
+                updateBrowserControlsOffsets(false, getTopControlsMinHeight() /*Vivaldi*/, 0,
+                        getTopControlsHeight(), getTopControlsMinHeight(),
+                        getBottomControlsMinHeight());
                 mControlsAnimator = null;
             }
         });

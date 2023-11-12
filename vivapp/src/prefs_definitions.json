@@ -116,7 +116,7 @@
           "COMMAND_TAB_STACK_TILE_GRID": {"shortcuts": ["ctrl+f7"]},
           "COMMAND_TAB_STACK_TILE_HORIZONTAL": {"shortcuts": ["ctrl+f8"]},
           "COMMAND_TAB_STACK_TILE_VERTICAL": {"shortcuts": ["ctrl+f9"]},
-          "COMMAND_TAB_STACK_UNTILE": {"shortcuts": ["ctrl+f6"]},
+          "COMMAND_DISBAND_TILE_GROUP": {"shortcuts": ["ctrl+f6"]},
           "COMMAND_TAB_SWITCH_BACK_ORDER": {"shortcuts": ["ctrl+pageup", "1", "numpad1"]},
           "COMMAND_TAB_SWITCH_FORWARD_ORDER": {"shortcuts": ["ctrl+pagedown", "2", "numpad2"]},
           "COMMAND_TAB_SWITCH_BACK_HISTORY": {"shortcuts": ["3", "numpad3"]},
@@ -140,16 +140,16 @@
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["f4"]},
           "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]},
-          "COMMAND_WORKSPACE_SWITCH_0": {"shortcuts": ["ctrl+shift+0", "ctrl+shift+numpad0"]},
-          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1", "ctrl+shift+numpad1"]},
-          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2", "ctrl+shift+numpad2"]},
-          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3", "ctrl+shift+numpad3"]},
-          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["ctrl+shift+4", "ctrl+shift+numpad4"]},
-          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["ctrl+shift+5", "ctrl+shift+numpad5"]},
-          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6", "ctrl+shift+numpad6"]},
-          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7", "ctrl+shift+numpad7"]},
-          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8", "ctrl+shift+numpad8"]},
-          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9", "ctrl+shift+numpad9"]},
+          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1"]},
+          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2"]},
+          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3"]},
+          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["ctrl+shift+4"]},
+          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["ctrl+shift+5"]},
+          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6"]},
+          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7"]},
+          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8"]},
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9"]},
+          "COMMAND_WORKSPACE_SWITCH_10": {"shortcuts": []},
           "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
         }
       ],
@@ -266,7 +266,7 @@
           "COMMAND_TAB_STACK_TILE_GRID": {"shortcuts": ["ctrl+f7"]},
           "COMMAND_TAB_STACK_TILE_HORIZONTAL": {"shortcuts": ["ctrl+f8"]},
           "COMMAND_TAB_STACK_TILE_VERTICAL": {"shortcuts": ["ctrl+f9"]},
-          "COMMAND_TAB_STACK_UNTILE": {"shortcuts": ["ctrl+f6"]},
+          "COMMAND_DISBAND_TILE_GROUP": {"shortcuts": ["ctrl+f6"]},
           "COMMAND_TAB_SWITCH_BACK_ORDER": {"shortcuts": ["ctrl+pageup", "1", "numpad1"]},
           "COMMAND_TAB_SWITCH_FORWARD_ORDER": {"shortcuts": ["ctrl+pagedown", "2", "numpad2"]},
           "COMMAND_TAB_SWITCH_BACK_HISTORY": {"shortcuts": ["3", "numpad3"]},
@@ -290,16 +290,16 @@
           "COMMAND_TOGGLE_MENU_POSITION": {"shortcuts": ["ctrl+m"]},
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["f4"]},
           "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["ctrl+shift+alt+i"]},
-          "COMMAND_WORKSPACE_SWITCH_0": {"shortcuts": ["ctrl+shift+0", "ctrl+shift+numpad0"]},
-          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1", "ctrl+shift+numpad1"]},
-          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2", "ctrl+shift+numpad2"]},
-          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3", "ctrl+shift+numpad3"]},
-          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["ctrl+shift+4", "ctrl+shift+numpad4"]},
-          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["ctrl+shift+5", "ctrl+shift+numpad5"]},
-          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6", "ctrl+shift+numpad6"]},
-          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7", "ctrl+shift+numpad7"]},
-          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8", "ctrl+shift+numpad8"]},
-          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9", "ctrl+shift+numpad9"]},
+          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1"]},
+          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2"]},
+          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3"]},
+          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["ctrl+shift+4"]},
+          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["ctrl+shift+5"]},
+          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6"]},
+          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7"]},
+          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8"]},
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9"]},
+          "COMMAND_WORKSPACE_SWITCH_10": {"shortcuts": []},
           "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
         }
       ],
@@ -415,7 +415,7 @@
           "COMMAND_TAB_STACK_TILE_GRID": {"shortcuts": ["meta+f7"]},
           "COMMAND_TAB_STACK_TILE_HORIZONTAL": {"shortcuts": ["meta+f8"]},
           "COMMAND_TAB_STACK_TILE_VERTICAL": {"shortcuts": ["meta+f9"]},
-          "COMMAND_TAB_STACK_UNTILE": {"shortcuts": ["meta+f6"]},
+          "COMMAND_DISBAND_TILE_GROUP": {"shortcuts": ["meta+f6"]},
           "COMMAND_TAB_SWITCH_BACK_ORDER": {"shortcuts": ["shift+meta+[", "1"]},
           "COMMAND_TAB_SWITCH_FORWARD_ORDER": {"shortcuts": ["shift+meta+]", "2"]},
           "COMMAND_TAB_SWITCH_BACK_HISTORY": {"shortcuts": ["3", "numpad3"]},
@@ -440,16 +440,16 @@
           "COMMAND_TOGGLE_PANEL": {"shortcuts": ["alt+meta+p", "f4"]},
           "COMMAND_TOGGLE_IMAGES": {"shortcuts": ["shift+meta+i"]},
           "COMMAND_WINDOW_MINIMIZE": {"shortcuts": ["meta+m"]},
-          "COMMAND_WORKSPACE_SWITCH_0": {"shortcuts": ["shift+meta+0"]},
-          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["shift+meta+1"]},
-          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["shift+meta+2"]},
-          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["shift+meta+3"]},
-          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["shift+meta+4"]},
-          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["shift+meta+5"]},
-          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["shift+meta+6"]},
-          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["shift+meta+7"]},
-          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["shift+meta+8"]},
-          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["shift+meta+9"]},
+          "COMMAND_WORKSPACE_SWITCH_1": {"shortcuts": ["ctrl+shift+1"]},
+          "COMMAND_WORKSPACE_SWITCH_2": {"shortcuts": ["ctrl+shift+2"]},
+          "COMMAND_WORKSPACE_SWITCH_3": {"shortcuts": ["ctrl+shift+3"]},
+          "COMMAND_WORKSPACE_SWITCH_4": {"shortcuts": ["ctrl+shift+4"]},
+          "COMMAND_WORKSPACE_SWITCH_5": {"shortcuts": ["ctrl+shift+5"]},
+          "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6"]},
+          "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7"]},
+          "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8"]},
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9"]},
+          "COMMAND_WORKSPACE_SWITCH_10": {"shortcuts": []},
           "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
         }
       ]
@@ -484,6 +484,11 @@
           "syncable": true
         },
         "autocomplete_on_title": {
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        },
+        "autocomplete_on_domain_first": {
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -1156,7 +1161,7 @@
         "syncable": true
       },
       "send_invite_email_action": {
-        "description": "Sending of invite emails to attendees, 'ask' shows a dialog for user",
+        "description": "[DEPRECATED 2023/04] VB-95463, Sending of invite emails to attendees, 'ask' shows a dialog for user",
         "type": "enum",
         "enum_values": {
           "ask": 0,
@@ -1253,7 +1258,7 @@
         }
       },
       "refresh_tokens": {
-        "description": "Store encrypted oauth refresh-token per account using OAuth authentication for reconnecting on restart",
+        "description": "DEPRECATED 2023/02. See oAuth refresh_token",
         "type": "dictionary",
         "default": {},
         "syncable": false
@@ -1753,7 +1758,7 @@
         "syncable": true
       },
       "refresh_tokens": {
-        "description": "Store encrypted oauth refresh-token per account using OAuth authentication for reconnecting on restart",
+        "description": "DEPRECATED 2023/02. See oAuth refresh_token",
         "type": "dictionary",
         "default": {},
         "syncable": false
@@ -3029,6 +3034,7 @@
         "description": "Re-open vivaldi in full-screen if it was closed in full-screen. Unofficial setting, not exposed in the UI for now.",
         "type": "boolean",
         "default": false,
+        "default_mac": true,
         "syncable": true
       },
       "show_ffmpeg_information": {
@@ -4013,6 +4019,7 @@
       "status": {
         "type": "list",
         "default": [
+          "BreakMode",
           "SyncStatus",
           "MailStatus",
           "CalendarStatus",
@@ -4022,7 +4029,8 @@
           "ImagesToggle",
           "TilingToggle",
           "PageActions",
-          "Zoom"
+          "Zoom",
+          "Clock"
         ],
         "syncable": false
       },
@@ -4484,7 +4492,32 @@
         }
       }
     },
-
+    "geolocation": {
+      "use_override": {
+        "description": "Enable settings override for location.",
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
+      "latitude ": {
+        "description": "latitude, defaults to Berlin",
+        "type": "double",
+        "syncable": false,
+        "default": 52.520007
+      },
+      "longitude ": {
+        "description": "longitude, defaults to Berlin",
+        "type": "double",
+        "syncable": false,
+        "default": 13.404954
+      },
+      "accuracy": {
+        "description": "accuracy",
+        "type": "double",
+        "syncable": false,
+        "default": 0.0
+      }
+    },
     "system": {
       "accent_color": {
         "description": "The app accent color, RRGGBB hex values. Maps to --colorHighlightBg.",
@@ -4561,6 +4594,14 @@
           "default": null,
           "syncable": false
         }
+      }
+    },
+    "oauth": {
+      "refresh_tokens": {
+        "description": "Store encrypted oauth refresh-tokens per account using OAuth authentication for reconnecting on restart",
+        "type": "dictionary",
+        "default": {},
+        "syncable": false
       }
     }
   },

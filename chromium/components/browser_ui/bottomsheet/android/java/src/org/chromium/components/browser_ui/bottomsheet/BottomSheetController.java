@@ -163,4 +163,9 @@ public interface BottomSheetController {
      *         sheet is open or holds sheet content.
      */
     BackPressHandler getBottomSheetBackPressHandler();
+
+    /** Vivaldi
+     * Set to make sheet swipe only using toolbar
+     */
+    void swipeWithToolbar();
 }

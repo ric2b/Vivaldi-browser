@@ -4,7 +4,9 @@
 
 #include "third_party/blink/renderer/modules/xr/xr_cube_map.h"
 
-#include "base/cxx17_backports.h"
+#include <algorithm>
+#include <cstring>
+
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_texture.h"
@@ -19,14 +21,15 @@ bool IsPowerOfTwo(uint32_t value) {
 // This is an inversion of FloatToHalfFloat in ui/gfx/half_float.cc
 float HalfFloatToFloat(const uint16_t input) {
   uint32_t tmp = (input & 0x7fff) << 13 | (input & 0x8000) << 16;
-  float tmp2 = *reinterpret_cast<float*>(&tmp);
+  float tmp2;
+  std::memcpy(&tmp2, &tmp, 4);
   return tmp2 / 1.9259299444e-34f;
 }
 
 // Linear to sRGB converstion as given in
 // https://www.khronos.org/registry/OpenGL/extensions/ARB/ARB_framebuffer_sRGB.txt
 uint8_t LinearToSrgb(float cl) {
-  float cs = base::clamp(
+  float cs = std::clamp(
       cl < 0.0031308f ? 12.92f * cl : 1.055f * std::pow(cl, 0.41666f) - 0.055f,
       0.0f, 1.0f);
   return static_cast<uint8_t>(255.0f * cs + 0.5f);

@@ -54,6 +54,10 @@ const char kEnableDawnBackendValidation[] = "enable-dawn-backend-validation";
 // The adapter to use for WebGPU content.
 GPU_EXPORT extern const char kUseWebGPUAdapter[] = "use-webgpu-adapter";
 
+// The adapter selecting strategy related to GPUPowerPreference.
+GPU_EXPORT extern const char kUseWebGPUPowerPreference[] =
+    "use-webgpu-power-preference";
+
 // Set the Dawn features(toggles) enabled on the creation of Dawn devices.
 const char kEnableDawnFeatures[] = "enable-dawn-features";
 
@@ -125,5 +129,11 @@ const char kGpuWatchdogTimeoutSeconds[] = "gpu-watchdog-timeout-seconds";
 // multi-GPU pathways on devices with only one valid GPU.
 const char kForceSeparateEGLDisplayForWebGLTesting[] =
     "force-separate-egl-display-for-webgl-testing";
+
+// Specify which backend to use for Skia Graphite - "dawn" (default) or "metal"
+// (only allowed on non-official developer builds).
+const char kSkiaGraphiteBackend[] = "skia-graphite-backend";
+const char kSkiaGraphiteBackendDawn[] = "dawn";
+const char kSkiaGraphiteBackendMetal[] = "metal";
 
 }  // namespace switches

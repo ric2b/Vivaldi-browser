@@ -4,6 +4,7 @@
 
 #include "content/browser/attribution_reporting/attribution_interop_parser.h"
 
+#include <cmath>
 #include <ostream>
 #include <string>
 #include <tuple>
@@ -16,6 +17,7 @@
 #include "base/time/time_override.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/attribution_reporting/source_registration.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
@@ -68,11 +70,12 @@ bool operator==(AttributionConfig::EventLevelLimit a,
   const auto tie = [](AttributionConfig::EventLevelLimit config) {
     return std::make_tuple(config.navigation_source_trigger_data_cardinality,
                            config.event_source_trigger_data_cardinality,
-                           config.navigation_source_randomized_response_rate,
-                           config.event_source_randomized_response_rate,
+                           config.randomized_response_epsilon,
                            config.max_reports_per_destination,
                            config.max_attributions_per_navigation_source,
-                           config.max_attributions_per_event_source);
+                           config.max_attributions_per_event_source,
+                           config.first_report_window_deadline,
+                           config.second_report_window_deadline);
   };
   return tie(a) == tie(b);
 }
@@ -89,9 +92,8 @@ bool operator==(AttributionConfig::AggregateLimit a,
 
 bool operator==(AttributionConfig a, AttributionConfig b) {
   const auto tie = [](AttributionConfig config) {
-    return std::make_tuple(
-        config.max_sources_per_origin, config.source_event_id_cardinality,
-        config.rate_limit, config.event_level_limit, config.aggregate_limit);
+    return std::make_tuple(config.max_sources_per_origin, config.rate_limit,
+                           config.event_level_limit, config.aggregate_limit);
   };
   return tie(a) == tie(b);
 }
@@ -180,7 +182,7 @@ TEST(AttributionInteropParserTest, ValidSourceParses) {
             *SuitableOrigin::Deserialize("https://a.r.test"));
   EXPECT_EQ(source1->common_info().source_origin(),
             *SuitableOrigin::Deserialize("https://a.s.test"));
-  EXPECT_THAT(source1->common_info().destination_sites().destinations(),
+  EXPECT_THAT(source1->registration().destination_set.destinations(),
               ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
   EXPECT_FALSE(source1->is_within_fenced_frame());
   EXPECT_TRUE(result->front().debug_permission);
@@ -193,7 +195,7 @@ TEST(AttributionInteropParserTest, ValidSourceParses) {
             *SuitableOrigin::Deserialize("https://b.r.test"));
   EXPECT_EQ(source2->common_info().source_origin(),
             *SuitableOrigin::Deserialize("https://b.s.test"));
-  EXPECT_THAT(source2->common_info().destination_sites().destinations(),
+  EXPECT_THAT(source2->registration().destination_set.destinations(),
               ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
   EXPECT_FALSE(source2->is_within_fenced_frame());
   EXPECT_FALSE(result->back().debug_permission);
@@ -590,10 +592,6 @@ TEST(AttributionInteropParserTest, ValidConfig) {
        false,
        AttributionConfig{.max_destinations_per_source_site_reporting_origin =
                              100}},
-      {R"json({"source_event_id_cardinality":"0"})json", false,
-       AttributionConfig{.source_event_id_cardinality = absl::nullopt}},
-      {R"json({"source_event_id_cardinality":"10"})json", false,
-       AttributionConfig{.source_event_id_cardinality = 10}},
       {R"json({"rate_limit_time_window":"30"})json", false,
        AttributionConfig{.rate_limit = {.time_window = base::Days(30)}}},
       {R"json({"rate_limit_max_source_registration_reporting_origins":"10"})json",
@@ -613,14 +611,10 @@ TEST(AttributionInteropParserTest, ValidConfig) {
       {R"json({"event_source_trigger_data_cardinality":"10"})json", false,
        AttributionConfig{
            .event_level_limit = {.event_source_trigger_data_cardinality = 10}}},
-      {R"json({"navigation_source_randomized_response_rate":0.2})json", false,
-       AttributionConfig{
-           .event_level_limit = {.navigation_source_randomized_response_rate =
-                                     0.2}}},
-      {R"json({"event_source_randomized_response_rate":0.2})json", false,
-       AttributionConfig{
-           .event_level_limit = {.event_source_randomized_response_rate =
-                                     0.2}}},
+      {R"json({"randomized_response_epsilon":"inf"})json", false,
+       AttributionConfig{.event_level_limit =
+                             {.randomized_response_epsilon =
+                                  std ::numeric_limits<double>::infinity()}}},
       {R"json({"max_event_level_reports_per_destination":"10"})json", false,
        AttributionConfig{
            .event_level_limit = {.max_reports_per_destination = 10}}},
@@ -644,15 +638,13 @@ TEST(AttributionInteropParserTest, ValidConfig) {
       {R"json({
         "max_sources_per_origin":"10",
         "max_destinations_per_source_site_reporting_origin":"10",
-        "source_event_id_cardinality":"100",
         "rate_limit_time_window":"10",
         "rate_limit_max_source_registration_reporting_origins":"20",
         "rate_limit_max_attribution_reporting_origins":"15",
         "rate_limit_max_attributions":"10",
         "navigation_source_trigger_data_cardinality":"100",
         "event_source_trigger_data_cardinality":"10",
-        "navigation_source_randomized_response_rate":0.2,
-        "event_source_randomized_response_rate":0.1,
+        "randomized_response_epsilon":"0.2",
         "max_event_level_reports_per_destination":"10",
         "max_attributions_per_navigation_source":"5",
         "max_attributions_per_event_source":"1",
@@ -664,7 +656,6 @@ TEST(AttributionInteropParserTest, ValidConfig) {
        true,
        AttributionConfig{
            .max_sources_per_origin = 10,
-           .source_event_id_cardinality = 100,
            .max_destinations_per_source_site_reporting_origin = 10,
            .rate_limit = {.time_window = base::Days(10),
                           .max_source_registration_reporting_origins = 20,
@@ -673,9 +664,7 @@ TEST(AttributionInteropParserTest, ValidConfig) {
            .event_level_limit = {.navigation_source_trigger_data_cardinality =
                                      100,
                                  .event_source_trigger_data_cardinality = 10,
-                                 .navigation_source_randomized_response_rate =
-                                     0.2,
-                                 .event_source_randomized_response_rate = 0.1,
+                                 .randomized_response_epsilon = 0.2,
                                  .max_reports_per_destination = 10,
                                  .max_attributions_per_navigation_source = 5,
                                  .max_attributions_per_event_source = 1},
@@ -752,7 +741,6 @@ TEST(AttributionInteropParserTest, InvalidConfigPositiveIntegers) {
 
 TEST(AttributionInteropParserTest, InvalidConfigNonNegativeIntegers) {
   const char* const kFields[] = {
-      "source_event_id_cardinality",
       "aggregatable_report_min_delay",
       "aggregatable_report_delay_span",
   };
@@ -789,43 +777,24 @@ TEST(AttributionInteropParserTest, InvalidConfigNonNegativeIntegers) {
   }
 }
 
-TEST(AttributionInteropParserTest, InvalidConfigRandomizedResponseRates) {
-  const char* const kFields[] = {
-      "navigation_source_randomized_response_rate",
-      "event_source_randomized_response_rate",
-  };
-
+TEST(AttributionInteropParserTest, InvalidConfigRandomizedResponseEpsilon) {
   {
     auto result = ParseAttributionConfig(base::Value::Dict());
     ASSERT_FALSE(result.has_value());
-
-    for (const char* field : kFields) {
-      EXPECT_THAT(
-          result.error(),
-          HasSubstr(base::StrCat(
-              {"[\"", field,
-               "\"]: must be a double between 0 and 1 formatted as string"})))
-          << field;
-    }
+    EXPECT_THAT(
+        result.error(),
+        HasSubstr("[\"randomized_response_epsilon\"]: must be \"inf\" or a "
+                  "non-negative double formated as a base-10 string"));
   }
-
   {
     AttributionConfig config;
     base::Value::Dict dict;
-    for (const char* field : kFields) {
-      dict.Set(field, "1.5");
-    }
-
+    dict.Set("randomized_response_epsilon", "-1.5");
     std::string error = MergeAttributionConfig(dict, config);
-
-    for (const char* field : kFields) {
-      EXPECT_THAT(
-          error,
-          HasSubstr(base::StrCat(
-              {"[\"", field,
-               "\"]: must be a double between 0 and 1 formatted as string"})))
-          << field;
-    }
+    EXPECT_THAT(
+        error,
+        HasSubstr("[\"randomized_response_epsilon\"]: must be \"inf\" or a "
+                  "non-negative double formated as a base-10 string"));
   }
 }
 

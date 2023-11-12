@@ -540,6 +540,13 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
   }
   *status = CookieInclusionStatus();
 
+  // Check the URL; it may be nonsense since some platform APIs may permit
+  // it to be specified directly.
+  if (!url.is_valid()) {
+    status->AddExclusionReason(CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
+    return nullptr;
+  }
+
   ParsedCookie parsed_cookie(cookie_line, status);
 
   // We record this metric before checking validity because the presence of an
@@ -661,6 +668,13 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
   }
 
   RecordCookieSameSiteAttributeValueHistogram(samesite_string);
+
+  // These metrics capture whether or not a cookie has a Non-ASCII character in
+  // it.
+  UMA_HISTOGRAM_BOOLEAN("Cookie.HasNonASCII.Name",
+                        !base::IsStringASCII(cc->Name()));
+  UMA_HISTOGRAM_BOOLEAN("Cookie.HasNonASCII.Value",
+                        !base::IsStringASCII(cc->Value()));
 
   // Check for "__" prefixed names, excluding the cookie prefixes.
   bool name_prefixed_with_underscores =
@@ -944,37 +958,7 @@ bool CanonicalCookie::IsEquivalentForSecureCookieMatching(
 }
 
 bool CanonicalCookie::IsOnPath(const std::string& url_path) const {
-  // A zero length would be unsafe for our trailing '/' checks, and
-  // would also make no sense for our prefix match.  The code that
-  // creates a CanonicalCookie should make sure the path is never zero length,
-  // but we double check anyway.
-  if (path_.empty())
-    return false;
-
-  // The Mozilla code broke this into three cases, based on if the cookie path
-  // was longer, the same length, or shorter than the length of the url path.
-  // I think the approach below is simpler.
-
-  // Make sure the cookie path is a prefix of the url path.  If the url path is
-  // shorter than the cookie path, then the cookie path can't be a prefix.
-  if (!base::StartsWith(url_path, path_, base::CompareCase::SENSITIVE))
-    return false;
-
-  // |url_path| is >= |path_|, and |path_| is a prefix of |url_path|.  If they
-  // are the are the same length then they are identical, otherwise need an
-  // additional check:
-
-  // In order to avoid in correctly matching a cookie path of /blah
-  // with a request path of '/blahblah/', we need to make sure that either
-  // the cookie path ends in a trailing '/', or that we prefix up to a '/'
-  // in the url path.  Since we know that the url path length is greater
-  // than the cookie path length, it's safe to index one byte past.
-  if (path_.length() != url_path.length() && path_.back() != '/' &&
-      url_path[path_.length()] != '/') {
-    return false;
-  }
-
-  return true;
+  return cookie_util::IsOnPath(path_, url_path);
 }
 
 bool CanonicalCookie::IsDomainMatch(const std::string& host) const {
@@ -1710,7 +1694,8 @@ bool CanonicalCookie::IsCookiePartitionedValid(const GURL& url,
     return true;
   if (partition_has_nonce)
     return true;
-  bool result = url.SchemeIsCryptographic() && secure;
+  CookieAccessScheme scheme = cookie_util::ProvisionalAccessScheme(url);
+  bool result = (scheme != CookieAccessScheme::kNonCryptographic) && secure;
   DLOG_IF(WARNING, !result)
       << "CanonicalCookie has invalid Partitioned attribute";
   return result;

@@ -172,7 +172,8 @@ bool IsPreviewsEnabled() {
 // being initialized, what makes an `item` previewable is having been created by
 // a user action.
 bool IsPreviewable(const std::unique_ptr<HoldingSpaceItem>& item) {
-  return item->IsInitialized() && !HoldingSpaceItem::IsSuggestion(item->type());
+  return item->IsInitialized() &&
+         !HoldingSpaceItem::IsSuggestionType(item->type());
 }
 
 // Creates the default tray icon.
@@ -189,6 +190,7 @@ std::unique_ptr<views::ImageView> CreateDefaultTrayIcon() {
   return icon;
 }
 
+// TODO(http://b/276741422): Add pixel test for drop target state.
 // Creates the icon to be parented by the drop target overlay to indicate that
 // the parent view is a drop target and is capable of handling the current drag
 // payload.
@@ -200,7 +202,7 @@ std::unique_ptr<views::ImageView> CreateDropTargetIcon() {
       gfx::Size(kHoldingSpaceIconSize, kHoldingSpaceIconSize));
   icon->SetPaintToLayer();
   icon->layer()->SetFillsBoundsOpaquely(false);
-  icon->SetImage(gfx::CreateVectorIcon(
+  icon->SetImage(ui::ImageModel::FromVectorIcon(
       views::kUnpinIcon, kColorAshIconColorPrimary, kHoldingSpaceIconSize));
   return icon;
 }
@@ -441,7 +443,8 @@ views::View::DropCallback HoldingSpaceTray::GetDropCallback(
 void HoldingSpaceTray::PerformDrop(
     std::vector<base::FilePath> unpinned_file_paths,
     const ui::DropTargetEvent& event,
-    ui::mojom::DragOperation& output_drag_op) {
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   DCHECK(!unpinned_file_paths.empty());
 
   holding_space_metrics::RecordPodAction(
@@ -504,9 +507,18 @@ void HoldingSpaceTray::OnThemeChanged() {
 void HoldingSpaceTray::UpdateVisibility() {
   // The holding space tray should not be visible if the `model` is not attached
   // or if the user session is blocked.
-  HoldingSpaceModel* const model = HoldingSpaceController::Get()->model();
+  HoldingSpaceController* const controller = HoldingSpaceController::Get();
+  HoldingSpaceModel* const model = controller->model();
   if (!model || Shell::Get()->session_controller()->IsUserSessionBlocked()) {
     SetVisiblePreferred(false);
+    return;
+  }
+
+  // Always show the holding space tray if there are clients forcing it to show
+  // in shelf. Note that this is intentionally respected only while the holding
+  // space model is attached and the user session is unblocked.
+  if (controller->force_show_in_shelf()) {
+    SetVisiblePreferred(true);
     return;
   }
 
@@ -595,6 +607,16 @@ void HoldingSpaceTray::OnHoldingSpaceModelAttached(HoldingSpaceModel* model) {
 
 void HoldingSpaceTray::OnHoldingSpaceModelDetached(HoldingSpaceModel* model) {
   model_observer_.Reset();
+  UpdateVisibility();
+  UpdatePreviewsState();
+}
+
+void HoldingSpaceTray::OnHoldingSpaceForceShowInShelfChanged() {
+  // Animations are distracting when forcibly toggling holding space visibility
+  // in the shelf. Disable them temporarily. Note that animations will be
+  // re-enabled when items are added/removed from the holding space model.
+  SetShouldAnimate(false);
+
   UpdateVisibility();
   UpdatePreviewsState();
 }

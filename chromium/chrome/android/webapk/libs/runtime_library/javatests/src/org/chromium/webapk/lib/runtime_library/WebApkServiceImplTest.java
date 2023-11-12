@@ -11,8 +11,9 @@ import android.content.ServiceConnection;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.os.IBinder;
-import android.support.test.InstrumentationRegistry;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
@@ -66,7 +67,7 @@ public class WebApkServiceImplTest {
 
     @Before
     public void setUp() {
-        mContext = InstrumentationRegistry.getContext();
+        mContext = ApplicationProvider.getApplicationContext();
         mTargetContext = InstrumentationRegistry.getTargetContext();
         mTargetUid = getUid(mTargetContext);
     }

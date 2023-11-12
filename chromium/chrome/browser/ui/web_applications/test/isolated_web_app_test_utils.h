@@ -10,6 +10,7 @@
 
 #include "base/files/file_path.h"
 #include "base/strings/string_piece.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/web_package/test_support/signed_web_bundles/web_bundle_signer.h"
@@ -18,6 +19,7 @@
 
 class Browser;
 class GURL;
+class Profile;
 
 namespace content {
 class RenderFrameHost;
@@ -65,8 +67,6 @@ class IsolatedWebAppBrowserTestHarness : public WebAppControllerBrowserTest {
  protected:
   std::unique_ptr<net::EmbeddedTestServer> CreateAndStartServer(
       const base::FilePath::StringPieceType& chrome_test_data_relative_root);
-  AppId InstallIsolatedWebApp(const std::string& host);
-  AppId InstallIsolatedWebApp(const GURL& app_url);
   IsolatedWebAppUrlInfo InstallDevModeProxyIsolatedWebApp(
       const url::Origin& origin);
   content::RenderFrameHost* OpenApp(const AppId& app_id);
@@ -76,11 +76,25 @@ class IsolatedWebAppBrowserTestHarness : public WebAppControllerBrowserTest {
       WindowOpenDisposition disposition = WindowOpenDisposition::CURRENT_TAB);
 
   Browser* GetBrowserFromFrame(content::RenderFrameHost* frame);
-  void CreateIframe(content::RenderFrameHost* parent_frame,
-                    const std::string& iframe_id,
-                    const GURL& url,
-                    const std::string& permissions_policy);
+
+ private:
+  base::test::ScopedFeatureList iwa_scoped_feature_list_;
 };
+
+std::unique_ptr<net::EmbeddedTestServer> CreateAndStartDevServer(
+    const base::FilePath::StringPieceType& chrome_test_data_relative_root);
+
+IsolatedWebAppUrlInfo InstallDevModeProxyIsolatedWebApp(
+    Profile* profile,
+    const url::Origin& proxy_origin);
+
+content::RenderFrameHost* OpenIsolatedWebApp(Profile* profile,
+                                             const AppId& app_id);
+
+void CreateIframe(content::RenderFrameHost* parent_frame,
+                  const std::string& iframe_id,
+                  const GURL& url,
+                  const std::string& permissions_policy);
 
 struct TestSignedWebBundle {
   TestSignedWebBundle(std::vector<uint8_t> data,
@@ -115,6 +129,12 @@ class TestSignedWebBundleBuilder {
 };
 
 TestSignedWebBundle BuildDefaultTestSignedWebBundle();
+
+// Adds an Isolated Web App to the WebAppRegistrar. The IWA will have an empty
+// filepath for |IsolatedWebAppLocation|.
+AppId AddDummyIsolatedAppToRegistry(Profile* profile,
+                                    const GURL& start_url,
+                                    const std::string& name);
 }  // namespace web_app
 
 #endif  // CHROME_BROWSER_UI_WEB_APPLICATIONS_TEST_ISOLATED_WEB_APP_TEST_UTILS_H_

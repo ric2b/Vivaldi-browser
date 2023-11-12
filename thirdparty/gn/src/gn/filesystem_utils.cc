@@ -229,14 +229,6 @@ base::FilePath UTF8ToFilePath(std::string_view sp) {
 #endif
 }
 
-std::string MaybeQuotePath(const std::string_view path_in) {
-  std::string path(path_in);
-  if (path[0] != '\"' && path.find_first_of(' ') != std::string_view::npos) {
-    return "\"" + path + "\"";
-  }
-  return path;
-}
-
 size_t FindExtensionOffset(const std::string& path) {
   for (int i = static_cast<int>(path.size()); i >= 0; i--) {
     if (IsSlash(path[i]))
@@ -1083,8 +1075,8 @@ OutputFile GetSubBuildDirAsOutputFile(const BuildDirContext& context,
       // or `toolchain2/obj/BUILD_DIR/toolchain1/gen` which look surprising,
       // but guarantee unicity.
       result.value().append("BUILD_DIR/");
-      result.value().append(&source_dir_path[build_dir.size()],
-                            source_dir_path.size() - build_dir.size());
+      result.value().append(source_dir_path.substr(build_dir.size()));
+
     } else {
       // The source dir is source-absolute, so we trim off the two leading
       // slashes to append to the toolchain object directory.

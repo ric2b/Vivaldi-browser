@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_CONTENT_SUGGESTIONS_COORDINATOR_H_
 #define IOS_CHROME_BROWSER_UI_CONTENT_SUGGESTIONS_CONTENT_SUGGESTIONS_COORDINATOR_H_
 
-#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
 namespace web {
 class WebState;
@@ -16,6 +16,7 @@ class WebState;
 @protocol FeedDelegate;
 @protocol NewTabPageControllerDelegate;
 @protocol NewTabPageDelegate;
+@protocol NewTabPageMetricsDelegate;
 @protocol ThumbStripSupporting;
 @class ViewRevealingVerticalPanHandler;
 
@@ -45,15 +46,21 @@ class WebState;
     thumbStripSupporting;
 
 // Delegate for NTP related actions.
-@property(nonatomic, weak) id<NewTabPageDelegate> ntpDelegate;
+@property(nonatomic, weak) id<NewTabPageDelegate> NTPDelegate;
 
 // Delegate used to communicate to communicate events to the feed.
 @property(nonatomic, weak) id<FeedDelegate> feedDelegate;
 
+// Delegate for reporting content suggestions actions to the NTP metrics
+// recorder.
+@property(nonatomic, weak) id<NewTabPageMetricsDelegate> NTPMetricsDelegate;
+
 // Reloads the suggestions.
 - (void)reload;
 
-// Configure Content Suggestions if showing the Start Surface.
+// Configure Content Suggestions if showing the Start Surface. NOTE: this should
+// only be called once for every Start configuration. Calling it multiple times
+// in sequence can lead to unpredictable outcomes.
 - (void)configureStartSurfaceIfNeeded;
 
 @end

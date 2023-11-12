@@ -14,7 +14,7 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSession;
+import org.chromium.chrome.browser.recent_tabs.ForeignSessionHelper.ForeignSession;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
 
 /**
@@ -111,9 +111,9 @@ public class RecentTabsGroupView extends RelativeLayout {
     }
 
     private void setGroupViewHeight(boolean isTimeLabelVisible) {
-        mRow.getLayoutParams().height = getResources().getDimensionPixelOffset(isTimeLabelVisible
+        mRow.setMinimumHeight(getResources().getDimensionPixelOffset(isTimeLabelVisible
                         ? R.dimen.recent_tabs_foreign_session_group_item_height
-                        : R.dimen.recent_tabs_default_group_item_height);
+                        : R.dimen.recent_tabs_default_group_item_height));
     }
 
     private CharSequence getTimeString(ForeignSession session) {

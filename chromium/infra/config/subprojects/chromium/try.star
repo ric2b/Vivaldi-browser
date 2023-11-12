@@ -41,19 +41,56 @@ luci.bucket(
                 "findit-for-me@appspot.gserviceaccount.com",
                 "tricium-prod@appspot.gserviceaccount.com",
             ],
-            projects = [
-                "angle",
-                "dawn",
-                "skia",
-                "swiftshader",
-                "v8",
-            ] if settings.is_main else None,
+            projects = [p for p in [
+                branches.value(branch_selector = branches.selector.MAIN, value = "angle"),
+                branches.value(branch_selector = branches.selector.DESKTOP_BRANCHES, value = "dawn"),
+                branches.value(branch_selector = branches.selector.MAIN, value = "skia"),
+                branches.value(branch_selector = branches.selector.MAIN, value = "swiftshader"),
+                branches.value(branch_selector = branches.selector.MAIN, value = "v8"),
+            ] if p != None],
         ),
         acl.entry(
             roles = acl.BUILDBUCKET_OWNER,
             groups = "service-account-chromium-tryserver",
         ),
     ],
+)
+
+# Shadow bucket of `try`, for led builds.
+luci.bucket(
+    name = "try.shadow",
+    shadows = "try",
+    constraints = luci.bucket_constraints(
+        pools = ["luci.chromium.try", "luci.chromium.try.orchestrator"],
+        service_accounts = [
+            "chromium-cipd-try-builder@chops-service-accounts.iam.gserviceaccount.com",
+            "chromium-orchestrator@chops-service-accounts.iam.gserviceaccount.com",
+            "chromium-try-builder@chops-service-accounts.iam.gserviceaccount.com",
+            "chromium-try-gpu-builder@chops-service-accounts.iam.gserviceaccount.com",
+        ],
+    ),
+    bindings = [
+        luci.binding(
+            roles = "role/buildbucket.creator",
+            groups = [
+                "mdb/chrome-troopers",
+                "chromium-led-users",
+            ],
+            users = [
+                "chromium-orchestrator@chops-service-accounts.iam.gserviceaccount.com",
+                "infra-try-recipes-tester@chops-service-accounts.iam.gserviceaccount.com",
+            ],
+        ),
+        # Allow try builders to create invocations in their own builds.
+        luci.binding(
+            roles = "role/resultdb.invocationCreator",
+            groups = [
+                "project-chromium-try-task-accounts",
+                "project-chromium-tryjob-access",
+            ],
+        ),
+    ],
+    dynamic = True,
 )
 
 luci.cq_group(
@@ -132,9 +169,9 @@ exec("./try/tryserver.chromium.chromiumos.star")
 exec("./try/tryserver.chromium.cft.star")
 exec("./try/tryserver.chromium.dawn.star")
 exec("./try/tryserver.chromium.fuchsia.star")
+exec("./try/tryserver.chromium.infra.star")
 exec("./try/tryserver.chromium.linux.star")
 exec("./try/tryserver.chromium.mac.star")
-exec("./try/tryserver.chromium.packager.star")
 exec("./try/tryserver.chromium.rust.star")
 exec("./try/tryserver.chromium.tricium.star")
 exec("./try/tryserver.chromium.updater.star")

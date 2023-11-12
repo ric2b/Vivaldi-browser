@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
@@ -158,13 +159,18 @@ class MESSAGE_CENTER_PUBLIC_EXPORT RichNotificationData {
   // and only pass globally defined constants.
   // TODO(tetsui): Remove the pointer, after fixing VectorIconSource not to
   // retain VectorIcon reference.  https://crbug.com/760866
-  const gfx::VectorIcon* vector_small_image = &gfx::kNoneIcon;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #union
+  RAW_PTR_EXCLUSION const gfx::VectorIcon* vector_small_image = &gfx::kNoneIcon;
 
   // Vector image to display on the parent notification of this notification,
   // illustrating the source of the group notification that this notification
   // belongs to. Optional. Note that all notification belongs to the same group
   // should have the same `parent_vector_small_image`.
-  const gfx::VectorIcon* parent_vector_small_image = &gfx::kNoneIcon;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #union
+  RAW_PTR_EXCLUSION const gfx::VectorIcon* parent_vector_small_image =
+      &gfx::kNoneIcon;
 
   // Items to display on the notification. Only applicable for notifications
   // that have type NOTIFICATION_TYPE_MULTIPLE.
@@ -406,6 +412,12 @@ class MESSAGE_CENTER_PUBLIC_EXPORT Notification {
 
   const gfx::Image& image() const { return optional_fields_.image; }
   void set_image(const gfx::Image& image) { optional_fields_.image = image; }
+
+#if BUILDFLAG(IS_CHROMEOS)
+  void set_image_path(const base::FilePath& image_path) {
+    optional_fields_.image_path = image_path;
+  }
+#endif
 
   const gfx::Image& small_image() const { return optional_fields_.small_image; }
   void set_small_image(const gfx::Image& image) {

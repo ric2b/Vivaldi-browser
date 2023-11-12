@@ -13,6 +13,10 @@ namespace calendar {
 AccountRow::AccountRow()
     : account_type(ACCOUNT_TYPE_LOCAL), interval(0), updateFields(0) {}
 
+/* CreateAccountResult::CreateAccountResult(
+    const CreateAccountResult& account) =
+    default;*/
+
 AccountRow::AccountRow(const AccountRow& account)
     : id(account.id),
       name(account.name),

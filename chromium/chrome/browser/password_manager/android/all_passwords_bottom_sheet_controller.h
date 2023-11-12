@@ -11,7 +11,7 @@
 #include "base/types/pass_key.h"
 #include "base/types/strong_alias.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom-forward.h"
-#include "components/device_reauth/biometric_authenticator.h"
+#include "components/device_reauth/device_authenticator.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
@@ -20,6 +20,10 @@ namespace password_manager {
 class PasswordManagerClient;
 class PasswordManagerDriver;
 }  // namespace password_manager
+
+namespace safe_browsing {
+class PasswordReuseDetectionManagerClient;
+}
 
 namespace content {
 class WebContents;
@@ -41,7 +45,9 @@ class AllPasswordsBottomSheetController
       password_manager::PasswordStoreInterface* store,
       base::OnceCallback<void()> dismissal_callback,
       autofill::mojom::FocusedFieldType focused_field_type,
-      password_manager::PasswordManagerClient* client);
+      password_manager::PasswordManagerClient* client,
+      safe_browsing::PasswordReuseDetectionManagerClient*
+          password_reuse_detection_manager_client);
 
   AllPasswordsBottomSheetController(
       content::WebContents* web_contents,
@@ -104,15 +110,20 @@ class AllPasswordsBottomSheetController
   base::WeakPtr<password_manager::PasswordManagerDriver> driver_;
 
   // Authenticator used to trigger a biometric re-auth before password filling.
-  scoped_refptr<device_reauth::BiometricAuthenticator> authenticator_;
+  scoped_refptr<device_reauth::DeviceAuthenticator> authenticator_;
 
   // The type of field on which the user is focused, e.g. PASSWORD.
   autofill::mojom::FocusedFieldType focused_field_type_;
 
   // The PasswordManagerClient associated with the current |web_contents_|.
-  // Used to tell `PasswordReuseDetectionManager` that a password has been
-  // reused.
+  // Used to get a pointer to a BiometricAuthenticator.
   raw_ptr<password_manager::PasswordManagerClient> client_ = nullptr;
+
+  // The passwordReuseDetectionManagerClient associated with the current
+  // |web_contents_|. Used to tell `PasswordReuseDetectionManager` that a
+  // password has been reused.
+  raw_ptr<safe_browsing::PasswordReuseDetectionManagerClient>
+      password_reuse_detection_manager_client_ = nullptr;
 
   base::WeakPtrFactory<AllPasswordsBottomSheetController> weak_ptr_factory_{
       this};

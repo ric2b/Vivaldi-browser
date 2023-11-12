@@ -27,9 +27,39 @@ chromium-metrics-reviews@google.com.
   <variant name="TLS" summary="TLS canary check"/>
 </variants>
 
+<variants name="SpeculationEagerness">
+  <variant name="Conservative" summary="Conservative"/>
+  <variant name="Eager" summary="Eager"/>
+  <variant name="Moderate" summary="Moderate"/>
+</variants>
+
+<histogram
+    name="PrefetchProxy.AfterClick.BlockUntilHeadDuration.{WasServed}.{SpeculationEagerness}"
+    units="ms" expires_after="2023-09-10">
+  <owner>curranmax@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <owner>spelchat@chromium.org</owner>
+  <summary>
+    If a prefetch request has started but the head of the prefetch response has
+    not been received yet when a navigation to a URL that matches the prefetch,
+    then the prefetch service will block until the head of the prefetch response
+    is received and then decide to serve or not serve the prefetch.
+
+    This histogram records the amount of time that the prefetch service blocked
+    until the head of the prefetch response was received. This histogram is only
+    recorded for prefetches that are {WasServed} and with an Eagerness of
+    {SpeculationEagerness}.
+  </summary>
+  <token key="WasServed">
+    <variant name="NotServed" summary="not served"/>
+    <variant name="Served" summary="served"/>
+  </token>
+  <token key="SpeculationEagerness" variants="SpeculationEagerness"/>
+</histogram>
+
 <histogram
     name="PrefetchProxy.AfterClick.Mainframe.CookieCopyStartToInterceptorCheck"
-    units="ms" expires_after="2023-04-25">
+    units="ms" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -46,7 +76,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.AfterClick.Mainframe.CookieCopyTime" units="ms"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -63,7 +93,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.AfterClick.Mainframe.CookieReadTime" units="ms"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -82,7 +112,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.AfterClick.Mainframe.CookieWaitTime" units="ms"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -100,7 +130,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.AfterClick.Mainframe.CookieWriteTime" units="ms"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -117,9 +147,52 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="PrefetchProxy.AfterClick.RedirectChainSize" units="count"
+    expires_after="2023-09-10">
+  <owner>curranmax@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <owner>spelchat@chromium.org</owner>
+  <summary>
+    The redirect chain size of a served prefetch. This histogram is recorded
+    only for prefetches that are served for a navigation.
+  </summary>
+</histogram>
+
+<histogram
+    name="PrefetchProxy.AfterClick.WasBlockedUntilHeadWhenServing.{SpeculationEagerness}"
+    enum="Boolean" expires_after="2023-09-10">
+  <owner>curranmax@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <owner>spelchat@chromium.org</owner>
+  <summary>
+    If a prefetch request has started but the head of the prefetch response has
+    not been received yet when a navigation to a URL that matches the prefetch,
+    then the prefetch service will block until the head of the prefetch response
+    is received and then decide to serve or not serve the prefetch.
+
+    This histogram records whether or not prefetch service will block or not for
+    a prefetch. This histogram is only for prefetches with an Eagerness of
+    {SpeculationEagerness}.
+  </summary>
+  <token key="SpeculationEagerness" variants="SpeculationEagerness"/>
+</histogram>
+
+<histogram name="PrefetchProxy.AfterClick.WasFullRedirectChainServed"
+    enum="Boolean" expires_after="2023-09-10">
+  <owner>curranmax@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <owner>spelchat@chromium.org</owner>
+  <summary>
+    Whether the full redirect chain of a prefetch is served (true), or just part
+    of the redirect was served (false). This histogram is only recorded when: 1)
+    the prefetch had at least one redirect (i.e. the redirect chain is at least
+    2), and 2) at least part of prefetch redirect chain is served.
+  </summary>
+</histogram>
+
 <histogram
     name="PrefetchProxy.CanaryChecker.CacheEntryAge.{PrefetchProxyCanaryCheckerClient}"
-    units="hours" expires_after="2023-04-25">
+    units="hours" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>chrome-brapp-loading@chromium.org</owner>
   <summary>
@@ -131,7 +204,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.CanaryChecker.CacheLookupResult.{PrefetchProxyCanaryCheckerClient}"
-    enum="CanaryCheckLookupResult" expires_after="2023-04-25">
+    enum="CanaryCheckLookupResult" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>chrome-brapp-loading@google.com</owner>
   <summary>
@@ -146,7 +219,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.CanaryChecker.FinalState.{PrefetchProxyCanaryCheckerClient}"
-    enum="BooleanSuccess" expires_after="2023-04-25">
+    enum="BooleanSuccess" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>chrome-brapp-loading@chromium.org</owner>
   <summary>
@@ -160,7 +233,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.CanaryChecker.GenerateCacheKey.{PrefetchProxyCanaryCheckerClient}"
-    units="ms" expires_after="2023-04-25">
+    units="ms" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>chrome-brapp-loading@chromium.org</owner>
   <summary>
@@ -174,7 +247,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.CanaryChecker.NetError.{PrefetchProxyCanaryCheckerClient}"
-    enum="NetErrorCodes" expires_after="2023-04-25">
+    enum="NetErrorCodes" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>chrome-brapp-loading@chromium.org</owner>
   <summary>
@@ -188,7 +261,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.CanaryChecker.NumAttemptsBeforeSuccess.{PrefetchProxyCanaryCheckerClient}"
-    units="count" expires_after="2023-04-25">
+    units="count" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>chrome-brapp-loading@chromium.org</owner>
   <summary>
@@ -205,7 +278,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.CanaryChecker.TimeUntilFailure.{PrefetchProxyCanaryCheckerClient}"
-    units="ms" expires_after="2023-04-25">
+    units="ms" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>chrome-brapp-loading@chromium.org</owner>
   <summary>
@@ -218,7 +291,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.CanaryChecker.TimeUntilSuccess.{PrefetchProxyCanaryCheckerClient}"
-    units="ms" expires_after="2023-04-25">
+    units="ms" expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>chrome-brapp-loading@chromium.org</owner>
   <summary>
@@ -230,7 +303,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.ExistingPrefetchWithMatchingURL"
-    units="Boolean" expires_after="2023-06-25">
+    units="Boolean" expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -242,7 +315,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.Mainframe.BodyLength" units="bytes"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -254,7 +327,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.Mainframe.ConnectTime" units="ms"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -266,7 +339,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.Mainframe.CookiesToCopy" units="count"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -277,7 +350,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.Mainframe.NetError"
-    enum="NetErrorCodes" expires_after="2023-06-25">
+    enum="NetErrorCodes" expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -289,7 +362,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.Mainframe.RespCode"
-    enum="HttpResponseCode" expires_after="2023-06-25">
+    enum="HttpResponseCode" expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -301,7 +374,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.Mainframe.RetryAfter" units="ms"
-    expires_after="2023-04-25">
+    expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -324,7 +397,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.Mainframe.TotalTime" units="ms"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -337,7 +410,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.Prefetch.NumExistingEligiblePrefetchWithMatchingURL"
-    units="count" expires_after="2023-07-23">
+    units="count" expires_after="2023-09-24">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -350,7 +423,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Prefetch.NumExistingPrefetchWithMatchingURL"
-    units="count" expires_after="2023-06-25">
+    units="count" expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -363,7 +436,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.Prefetch.NumExistingPrefetchWithMatchingURLAndReferrer"
-    units="count" expires_after="2023-07-23">
+    units="count" expires_after="2023-09-24">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -377,7 +450,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.Prefetch.NumExistingPrefetchWithMatchingURLAndRenderFrameHost"
-    units="count" expires_after="2023-07-23">
+    units="count" expires_after="2023-09-24">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -394,7 +467,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="PrefetchProxy.Prefetch.NumExistingServablePrefetchWithMatchingURL"
-    units="count" expires_after="2023-07-23">
+    units="count" expires_after="2023-09-24">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -406,8 +479,19 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="PrefetchProxy.Prefetch.RedirectChainSize" units="count"
+    expires_after="2023-09-10">
+  <owner>curranmax@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <owner>spelchat@chromium.org</owner>
+  <summary>
+    The redirect chain size of a prefetch. This histogram is recorded once for
+    each prefetch.
+  </summary>
+</histogram>
+
 <histogram name="PrefetchProxy.Prefetch.StreamingURLLoaderFinalStatus"
-    units="PrefetchStreamingURLLoaderStatus" expires_after="2023-07-23">
+    enum="PrefetchStreamingURLLoaderStatus" expires_after="2023-09-24">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -423,7 +507,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Proxy.Fallback.NetError" enum="NetErrorCodes"
-    expires_after="2023-04-25">
+    expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -434,7 +518,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="PrefetchProxy.Proxy.RespCode" enum="HttpResponseCode"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>
@@ -445,8 +529,32 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="PrefetchProxy.Redirect.NetworkContextStateTransition"
+    enum="PrefetchRedirectNetworkContextTransition" expires_after="2023-09-10">
+  <owner>curranmax@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <owner>spelchat@chromium.org</owner>
+  <summary>
+    The network context transition required to handle a redirect while
+    prefetching. Prefetches require an isolated network context if user data
+    cannot be included in the prefetch. Otherwise the prefetch is made in the
+    default network context. This histogram is recorded for every redirect.
+  </summary>
+</histogram>
+
+<histogram name="PrefetchProxy.Redirect.Result" enum="PrefetchRedirectResult"
+    expires_after="2023-09-10">
+  <owner>curranmax@chromium.org</owner>
+  <owner>ryansturm@chromium.org</owner>
+  <owner>spelchat@chromium.org</owner>
+  <summary>
+    The result of receiving a redirect while prefetching. This histogram is
+    recorded for every redirect.
+  </summary>
+</histogram>
+
 <histogram name="PrefetchProxy.SpareRenderer.CountStartedOnSRP" units="count"
-    expires_after="2023-04-25">
+    expires_after="2024-04-25">
   <owner>curranmax@chromium.org</owner>
   <owner>ryansturm@chromium.org</owner>
   <owner>spelchat@chromium.org</owner>

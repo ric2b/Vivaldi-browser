@@ -46,7 +46,6 @@
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/input/keyboard_event_manager.h"
 #include "third_party/blink/renderer/core/input_type_names.h"
-#include "third_party/blink/renderer/core/layout/layout_text_control_single_line.h"
 
 namespace blink {
 
@@ -152,7 +151,7 @@ bool PasswordInputType::ShouldDrawCapsLockIndicator() const {
 }
 
 void PasswordInputType::UpdatePasswordRevealButton() {
-  Element* button = GetElement().UserAgentShadowRoot()->getElementById(
+  Element* button = GetElement().EnsureShadowSubtree()->getElementById(
       shadow_element_names::kIdPasswordRevealButton);
 
   // Update the glyph.

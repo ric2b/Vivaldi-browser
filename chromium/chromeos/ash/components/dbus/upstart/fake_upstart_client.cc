@@ -72,9 +72,6 @@ void FakeUpstartClient::RestartAuthPolicyService() {
   FakeAuthPolicyClient::Get()->SetStarted(true);
 }
 
-void FakeUpstartClient::StartLacrosChrome(
-    const std::vector<std::string>& upstart_env) {}
-
 void FakeUpstartClient::StartMediaAnalytics(
     const std::vector<std::string>& /* upstart_env */,
     chromeos::VoidDBusMethodCallback callback) {
@@ -114,19 +111,6 @@ void FakeUpstartClient::StartWilcoDtcService(
 }
 
 void FakeUpstartClient::StopWilcoDtcService(
-    chromeos::VoidDBusMethodCallback callback) {
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), true));
-}
-
-void FakeUpstartClient::StartArcDataSnapshotd(
-    const std::vector<std::string>& upstart_env,
-    chromeos::VoidDBusMethodCallback callback) {
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), true));
-}
-
-void FakeUpstartClient::StopArcDataSnapshotd(
     chromeos::VoidDBusMethodCallback callback) {
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(callback), true));

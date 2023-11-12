@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/webui/ash/cloud_upload/drive_upload_handler.h"
 
-#include "ash/constants/ash_features.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/test/scoped_feature_list.h"
@@ -20,6 +19,7 @@
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "content/public/test/browser_test.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "storage/browser/file_system/external_mount_points.h"
@@ -52,7 +52,8 @@ class DriveUploadHandlerTest
       public file_manager::io_task::IOTaskController::Observer {
  public:
   DriveUploadHandlerTest() {
-    feature_list_.InitAndEnableFeature(features::kUploadOfficeToCloud);
+    feature_list_.InitAndEnableFeature(
+        chromeos::features::kUploadOfficeToCloud);
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
     drive_mount_point_ = temp_dir_.GetPath().Append("drivefs");
     drive_root_dir_ = drive_mount_point_.AppendASCII("root");
@@ -168,8 +169,7 @@ class DriveUploadHandlerTest
         drive::DriveIntegrationServiceFactory::FindForProfile(profile());
     base::FilePath observed_relative_drive_path;
     drive_integration_service->GetRelativeDrivePath(
-        drive_root_dir_.AppendASCII(kDestinationFolder)
-            .AppendASCII(test_file_name_),
+        drive_root_dir_.AppendASCII(test_file_name_),
         &observed_relative_drive_path);
     return observed_relative_drive_path;
   }

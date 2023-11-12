@@ -16,8 +16,8 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.R;
+import org.chromium.chrome.browser.omnibox.suggestions.ActionChipsDelegate;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionViewProcessor;
@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.omnibox.suggestions.base.SuggestionDrawableSt
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.image_fetcher.ImageFetcher;
 import org.chromium.components.omnibox.AutocompleteMatch;
+import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 
@@ -53,8 +54,8 @@ public class EntitySuggestionProcessor extends BaseSuggestionViewProcessor {
      * @param suggestionHost A handle to the object using the suggestions.
      */
     public EntitySuggestionProcessor(Context context, SuggestionHost suggestionHost,
-            Supplier<ImageFetcher> imageFetcherSupplier) {
-        super(context, suggestionHost, null);
+            ActionChipsDelegate actionChipsDelegate, Supplier<ImageFetcher> imageFetcherSupplier) {
+        super(context, suggestionHost, actionChipsDelegate, null);
         mSuggestionHost = suggestionHost;
         mPendingImageRequests = new HashMap<>();
         mImageFetcherSupplier = imageFetcherSupplier;

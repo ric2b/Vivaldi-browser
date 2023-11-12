@@ -40,7 +40,6 @@ class AndroidAutofillManager : public AutofillManager {
   }
 
   base::WeakPtr<AutofillManager> GetWeakPtr() override;
-  AutofillOfferManager* GetOfferManager() override;
   CreditCardAccessManager* GetCreditCardAccessManager() override;
 
   bool ShouldClearPreviewedForm() override;
@@ -48,10 +47,12 @@ class AndroidAutofillManager : public AutofillManager {
   void FillCreditCardFormImpl(const FormData& form,
                               const FormFieldData& field,
                               const CreditCard& credit_card,
-                              const std::u16string& cvc) override;
+                              const std::u16string& cvc,
+                              AutofillTriggerSource trigger_source) override;
   void FillProfileFormImpl(const FormData& form,
                            const FormFieldData& field,
-                           const autofill::AutofillProfile& profile) override;
+                           const autofill::AutofillProfile& profile,
+                           AutofillTriggerSource trigger_source) override;
 
   void OnFocusNoLongerOnFormImpl(bool had_interacted_form) override;
 
@@ -123,7 +124,7 @@ class AndroidAutofillManager : public AutofillManager {
       const FormFieldData& field,
       const std::u16string& old_value) override {}
 
-  bool ShouldParseForms(const std::vector<FormData>& forms) override;
+  bool ShouldParseForms() override;
 
   void OnBeforeProcessParsedForms() override {}
 
@@ -170,6 +171,7 @@ class AndroidAutofillManager : public AutofillManager {
   raw_ptr<AutofillProvider> autofill_provider_for_testing_ = nullptr;
   std::unique_ptr<FormEventLoggerWeblayerAndroid> address_logger_;
   std::unique_ptr<FormEventLoggerWeblayerAndroid> payments_logger_;
+  std::unique_ptr<FormEventLoggerWeblayerAndroid> password_logger_;
 
   base::WeakPtrFactory<AndroidAutofillManager> weak_ptr_factory_{this};
 };

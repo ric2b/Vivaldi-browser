@@ -11,15 +11,12 @@
 
 #include "base/containers/flat_map.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/component_updater/cros_component_manager.h"
 #include "components/component_updater/component_installer.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/update_client/update_client.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-namespace base {
-class TimeTicks;
-}
 
 namespace component_updater {
 
@@ -88,7 +85,8 @@ class CrOSComponentInstallerPolicy : public ComponentInstallerPolicy {
   std::string GetName() const override;
 
  protected:
-  CrOSComponentInstaller* const cros_component_installer_;
+  const raw_ptr<CrOSComponentInstaller, DanglingUntriaged | ExperimentalAsh>
+      cros_component_installer_;
 
  private:
   const std::string name_;
@@ -259,7 +257,6 @@ class CrOSComponentInstaller : public CrOSComponentManager {
   // Calls load_callback and pass in the parameter |result| (component mount
   // point).
   void FinishLoad(LoadCallback load_callback,
-                  const base::TimeTicks start_time,
                   const std::string& name,
                   absl::optional<base::FilePath> result);
 
@@ -281,7 +278,7 @@ class CrOSComponentInstaller : public CrOSComponentManager {
   base::flat_map<std::string, base::FilePath> compatible_components_;
 
   // A weak pointer to a Delegate for emitting D-Bus signal.
-  Delegate* delegate_ = nullptr;
+  raw_ptr<Delegate, ExperimentalAsh> delegate_ = nullptr;
 
   // Table storing metadata (installs, usage, etc.).
   std::unique_ptr<MetadataTable> metadata_table_;
@@ -290,7 +287,7 @@ class CrOSComponentInstaller : public CrOSComponentManager {
   // results.
   std::map<std::string, LoadInfo> load_cache_;
 
-  ComponentUpdateService* const component_updater_;
+  const raw_ptr<ComponentUpdateService, ExperimentalAsh> component_updater_;
 };
 
 }  // namespace component_updater

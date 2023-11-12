@@ -22,14 +22,17 @@ const char kAllowInsecureLocalhost[] = "allow-insecure-localhost";
 const char kAllowLoopbackInPeerConnection[] =
     "allow-loopback-in-peer-connection";
 
-// Uses the android SkFontManager on linux. The specified directory should
-// include the configuration xml file with the name "fonts.xml".
-// This is used in blimp to emulate android fonts on linux.
-const char kAndroidFontsPath[]          = "android-fonts-path";
-
 // Causes the Attribution Report API to run without delays or noise.
 const char kAttributionReportingDebugMode[] =
     "attribution-reporting-debug-mode";
+
+// Bypasses the dialog prompting the user for permission to capture
+// cameras and microphones. Useful in automatic tests of video-conferencing
+// Web applications.
+// This is nearly identical to kUseFakeUIForMediaStream, with the exception
+// being that this flag does NOT affect screen-capture.
+const char kAutoAcceptCameraAndMicrophoneCapture[] =
+    "auto-accept-camera-and-microphone-capture";
 
 // Causes the browser process to crash on startup.
 const char kBrowserCrashTest[]              = "crash-test";
@@ -292,10 +295,6 @@ const char kDisable2dCanvasClipAntialiasing[] = "disable-2d-canvas-clip-aa";
 // Has no effect unless GPU rasterization is enabled.
 const char kDisableYUVImageDecoding[] = "disable-yuv-image-decoding";
 
-// Enables the Accept-CH cache for client hints to be durable past browser
-// restarts.
-const char kDurableClientHintsCache[] = "durable-client-hints-cache";
-
 // Enables LCD text.
 const char kEnableLCDText[]                 = "enable-lcd-text";
 
@@ -480,7 +479,17 @@ const char kForcePresentationReceiverForTesting[] =
 // Force renderer accessibility to be on instead of enabling it on demand when
 // a screen reader is detected. The disable-renderer-accessibility switch
 // overrides this if present.
+// This switch has an optional parameter that forces an AXMode bundle. The three
+// available bundle settings are: 'basic', 'form-controls', and 'complete'. If
+// the bundle argument is invalid, then the forced AXMode will default to
+// 'complete'. If the bundle argument is missing, then the initial AXMode will
+// default to complete but allow changes to the AXMode during execution.
 const char kForceRendererAccessibility[]    = "force-renderer-accessibility";
+
+// Force Skia's CPU backend to use analytic anti-aliasing for all content
+// (rather than a mix of analytic and supersampling). Test migration tool for
+// https://crbug.com/1421297
+const char kForceSkiaAnalyticAntialiasing[] = "force-skia-analytic-aa";
 
 // Extra command line options for launching the GPU process (normally used
 // for debugging). Use like renderer-cmd-prefix.
@@ -982,9 +991,17 @@ const char kRemoteDebuggingSocketName[]     = "remote-debugging-socket-name";
 // Java debugger is attached.
 const char kRendererWaitForJavaDebugger[] = "renderer-wait-for-java-debugger";
 
+// Provides user-level memory pressure signal parameters for renderer processes.
+// The parameters are a pair of base::TimeDelta(). The first one is
+// inert interval and the second one is minimum interval.
+// If any valid parameters are specified, the renderer processes know that
+// the browser process enabled user-level memory pressure signal feature.
+const char kUserLevelMemoryPressureSignalParams[] =
+    "user-level-memory-pressure-signal-params";
+
 // Disables debug crash dumps for OOPR.
 const char kDisableOoprDebugCrashDump[] = "disable-oopr-debug-crash-dump";
-#endif
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // Enable the aggressive flushing of DOM Storage to minimize data loss.
 const char kEnableAggressiveDOMStorageFlushing[] =
@@ -1000,6 +1017,10 @@ const char kEnableAutomation[] = "enable-automation";
 // Linux speech service. Because it's buggy, the user must explicitly
 // enable it so that visiting a random webpage can't cause instability.
 const char kEnableSpeechDispatcher[] = "enable-speech-dispatcher";
+
+// For lacros, we do not use environment variable to pass values. Instead we
+// use a command line flag to pass the path to the device.
+const char kLLVMProfileFile[] = "llvm-profile-file";
 #endif
 
 #if BUILDFLAG(IS_WIN)

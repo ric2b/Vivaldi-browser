@@ -11,10 +11,31 @@
 
 namespace features {
 
+// When enabled we will tell WebRTC that we want to use the 0Hz mode of the
+// DirectX and GDI based DesktopCapturers in combination with sharing the screen
+// or a separate window. In this mode, only frames with new content will be sent
+// to the client leading to to 0fps for a static source. A special flag called
+// kWebRtcAllowWgcZeroHz is used to specify the support when using the WGC
+// capture API.
+// This flag has no effect if kWebRtcAllowWgcDesktopCapturer is enabled. Use
+// kWebRtcAllowWgcZeroHz for WGC.
+BASE_FEATURE(kWebRtcAllowDxgiGdiZeroHz,
+             "AllowDxgiGdiZeroHz",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // When enabled we will tell WebRTC that we want to use the
 // Windows.Graphics.Capture API based DesktopCapturer, if it is available.
 BASE_FEATURE(kWebRtcAllowWgcDesktopCapturer,
              "AllowWgcDesktopCapturer",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled we will tell WebRTC that we want to use the 0Hz mode of the
+// Windows.Graphics.Capture API based DesktopCapturer, if the WGC capturer is
+// available and enabled. In this mode, only frames with new content will be
+// sent to the client leading to to 0fps for a static source.
+// This flag has no effect if AllowWgcDesktopCapturer is disabled.
+BASE_FEATURE(kWebRtcAllowWgcZeroHz,
+             "AllowWgcZeroHz",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // TODO(crbug.com/1375239): Inactivate the flag gradually before deleting it.

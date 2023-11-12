@@ -3,6 +3,7 @@
 #include "extensions/api/devtools/devtools_private_api.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -25,8 +26,8 @@ DevtoolsPrivateGetDockingStateSizesFunction::Run() {
   using vivaldi::devtools_private::GetDockingStateSizes::Params;
   namespace Results = vivaldi::devtools_private::GetDockingStateSizes::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   int tab_id = params->tab_id;
 
@@ -61,8 +62,8 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
   using vivaldi::devtools_private::CloseDevtools::Params;
   namespace Results = vivaldi::devtools_private::CloseDevtools::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   int tab_id = params->tab_id;
   bool success = false;
@@ -109,8 +110,8 @@ ExtensionFunction::ResponseAction DevtoolsPrivateCloseDevtoolsFunction::Run() {
 ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
   using vivaldi::devtools_private::ToggleDevtools::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   PanelType panelType = params->panel_type;
   int windowId = params->window_id;
@@ -134,7 +135,7 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
     // Trying to inspect the Vivaldi app using shortcuts or the menu. We fake a
     // inspect element to get into the code path that leads to a
     // separate window.
-    if (::vivaldi::IsVivaldiApp(host)) {
+    if (::vivaldi::IsVivaldiApp(host) || VIVALDI_WEBUI_URL_HOST == host) {
       DevToolsWindow::InspectElement(
           static_cast<VivaldiBrowserWindow*>(browser->window())
               ->web_contents()

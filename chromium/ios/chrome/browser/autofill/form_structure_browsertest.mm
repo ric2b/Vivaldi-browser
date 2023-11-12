@@ -45,6 +45,7 @@
 #import "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frames_manager.h"
+#import "ios/web/public/test/js_test_util.h"
 #import "ios/web/public/test/scoped_testing_web_client.h"
 #import "ios/web/public/test/task_observer_util.h"
 #import "ios/web/public/test/web_state_test_util.h"
@@ -215,15 +216,16 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        // TODO(crbug.com/1311937): Remove once launched.
        features::kAutofillEnableSupportForPhoneNumberTrunkTypes,
        features::kAutofillInferCountryCallingCode,
-       // TODO(crbug.com/1352826): Remove once launched.
-       features::kAutofillMin3FieldTypesForLocalHeuristics,
        // TODO(crbug.com/1355264): Remove once launched.
        features::kAutofillLabelAffixRemoval},
       // Disabled
-      // TODO(crbug.com/1311937): Remove once launched.
-      // This feature is part of the AutofillRefinedPhoneNumberTypes rollout. As
-      // it is not supported on iOS yet, it is disabled.
-      {features::kAutofillConsiderPhoneNumberSeparatorsValidLabels});
+      {// TODO(crbug.com/1311937): Remove once launched.
+       // This feature is part of the AutofillRefinedPhoneNumberTypes rollout.
+       // As it is not supported on iOS yet, it is disabled.
+       features::kAutofillConsiderPhoneNumberSeparatorsValidLabels,
+       // TODO(crbug.com/1317961): Remove once launched. This feature is
+       // disabled since it is not supported on iOS.
+       features::kAutofillAlwaysParsePlaceholders});
 }
 
 void FormStructureBrowserTest::SetUp() {
@@ -275,9 +277,14 @@ bool FormStructureBrowserTest::LoadHtmlWithoutSubresourcesAndInitRendererIds(
     return false;
   }
 
+  autofill::FormUtilJavaScriptFeature* feature =
+      autofill::FormUtilJavaScriptFeature::GetInstance();
+
   __block web::WebFrame* main_frame = nullptr;
   success = WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
-    main_frame = web_state()->GetPageWorldWebFramesManager()->GetMainWebFrame();
+    web::WebFramesManager* frames_manager =
+        feature->GetWebFramesManager(web_state());
+    main_frame = frames_manager->GetMainWebFrame();
     return main_frame != nullptr;
   });
   if (!success) {
@@ -286,14 +293,13 @@ bool FormStructureBrowserTest::LoadHtmlWithoutSubresourcesAndInitRendererIds(
   DCHECK(main_frame);
 
   uint32_t next_available_id = 1;
-  autofill::FormUtilJavaScriptFeature::GetInstance()
-      ->SetUpForUniqueIDsWithInitialState(main_frame, next_available_id);
+  feature->SetUpForUniqueIDsWithInitialState(main_frame, next_available_id);
 
   // Wait for `SetUpForUniqueIDsWithInitialState` to complete.
   return WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
-    return [web::test::ExecuteJavaScript(@"document[__gCrWeb.fill.ID_SYMBOL]",
-                                         web_state()) intValue] ==
-           static_cast<int>(next_available_id);
+    return [web::test::ExecuteJavaScriptForFeature(
+               web_state(), @"document[__gCrWeb.fill.ID_SYMBOL]", feature)
+               intValue] == static_cast<int>(next_available_id);
   });
 }
 

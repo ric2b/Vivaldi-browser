@@ -9,9 +9,11 @@
 #include "base/feature_list.h"
 #include "components/page_load_metrics/browser/observers/back_forward_cache_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/core/uma_page_load_metrics_observer.h"
+#include "components/page_load_metrics/browser/observers/cross_origin_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/early_hints_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/fenced_frames_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/prerender_page_load_metrics_observer.h"
+#include "components/page_load_metrics/browser/observers/privacy_sandbox_ads_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/same_origin_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/shared_storage_page_load_metrics_observer.h"
 #include "components/page_load_metrics/browser/observers/use_counter_page_load_metrics_observer.h"
@@ -38,10 +40,14 @@ void PageLoadMetricsEmbedderBase::RegisterObservers(PageLoadTracker* tracker) {
         std::make_unique<FencedFramesPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<PrerenderPageLoadMetricsObserver>());
     tracker->AddObserver(std::make_unique<SameOriginPageLoadMetricsObserver>());
+    tracker->AddObserver(
+        std::make_unique<CrossOriginPageLoadMetricsObserver>());
     if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI)) {
       tracker->AddObserver(
           std::make_unique<SharedStoragePageLoadMetricsObserver>());
     }
+    tracker->AddObserver(
+        std::make_unique<PrivacySandboxAdsPageLoadMetricsObserver>());
   }
   // Allow the embedder to register any embedder-specific observers
   RegisterEmbedderObservers(tracker);

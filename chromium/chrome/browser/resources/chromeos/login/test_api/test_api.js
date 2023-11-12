@@ -525,6 +525,21 @@ class EnrollmentSignInStep extends PolymerElementApi {
   }
 }
 
+class EnrollmentAttributeStep extends PolymerElementApi {
+  constructor(parent) {
+    super(parent, '#step-attribute-prompt');
+    this.skipButton = new PolymerElementApi(parent, '#attributesSkip');
+  }
+
+  isReadyForTesting() {
+    return this.isVisible() && this.skipButton.isVisible();
+  }
+
+  clickSkip() {
+    return this.skipButton.click();
+  }
+}
+
 class EnrollmentSuccessStep extends PolymerElementApi {
   constructor(parent) {
     super(parent, '#step-success');
@@ -589,6 +604,7 @@ class EnterpriseEnrollmentScreenTester extends ScreenElementApi {
   constructor() {
     super('enterprise-enrollment');
     this.signInStep = new EnrollmentSignInStep(this);
+    this.attributeStep = new EnrollmentAttributeStep(this);
     this.successStep = new EnrollmentSuccessStep(this);
     this.errorStep = new EnrollmentErrorStep(this);
     this.enrollmentInProgressDlg = new PolymerElementApi(this, '#step-working');
@@ -646,6 +662,8 @@ class ErrorScreenTester extends ScreenElementApi {
   constructor() {
     super('error-message');
     this.offlineLink = new PolymerElementApi(this, '#error-offline-login-link');
+    this.errorTitle = new PolymerElementApi(this, '#error-title');
+    this.errorSubtitle = new PolymerElementApi(this, '#error-subtitle');
   }
 
   /**
@@ -653,7 +671,42 @@ class ErrorScreenTester extends ScreenElementApi {
    * @return {boolean}
    */
   isReadyForTesting() {
-    return this.isVisible() && this.offlineLink.isVisible();
+    return this.isVisible();
+  }
+
+  /**
+   *
+   * Returns if offline link is visible.
+   * @return {boolean}
+   */
+  isOfflineLinkVisible() {
+    return this.offlineLink.isVisible();
+  }
+
+  /**
+   * Returns error screen message title.
+   * @return {string}
+   */
+  getErrorTitle() {
+    // If screen is not visible always return empty title.
+    if (!this.isVisible()) {
+      return '';
+    }
+
+    return this.errorTitle.element().innerText.trim();
+  }
+
+  /**
+   * Returns error screen subtitle. Includes all visible error messages.
+   * @return {string}
+   */
+  getErrorReasons() {
+    // If screen is not visible always return empty reasons.
+    if (!this.isVisible()) {
+      return '';
+    }
+
+    return this.errorSubtitle.element().innerText.trim();
   }
 
   /**
@@ -671,19 +724,6 @@ class DemoPreferencesScreenTester extends ScreenElementApi {
 
   getDemoPreferencesNextButtonName() {
     return loadTimeData.getString('demoPreferencesNextButtonLabel');
-  }
-}
-
-class ArcTosScreenTester extends ScreenElementApi {
-  constructor() {
-    super('arc-tos');
-  }
-
-  // Note that the Accept Button text key is different depending on whether
-  // the device in Demo Mode setup. Key for non-demo setup is
-  // "arcTermsOfServiceAcceptButton"
-  getArcTosDemoModeAcceptButtonName() {
-    return loadTimeData.getString('arcTermsOfServiceAcceptAndContinueButton');
   }
 }
 
@@ -850,6 +890,13 @@ class ConsolidatedConsentScreenTester extends ScreenElementApi {
   getPrivacyPolicyLinkName() {
     return this.privacyPolicyLink.element().text.trim();
   }
+
+  /**
+   * Click `accept` button to go to the next screen.
+   */
+  clickAcceptButton() {
+    this.nextButton.element().click();
+  }
 }
 
 class SmartPrivacyProtectionScreenTester extends ScreenElementApi {
@@ -901,7 +948,6 @@ export class OobeApiProvider {
       ErrorScreen: new ErrorScreenTester(),
       OfflineLoginScreen: new OfflineLoginScreenTester(),
       DemoPreferencesScreen: new DemoPreferencesScreenTester(),
-      ArcTosScreen: new ArcTosScreenTester(),
       ThemeSelectionScreen: new ThemeSelectionScreenTester(),
       GestureNavigation: new GestureNavigationScreenTester(),
       ConsolidatedConsentScreen: new ConsolidatedConsentScreenTester(),
@@ -931,10 +977,6 @@ export class OobeApiProvider {
 
     this.showGaiaDialog = function() {
       chrome.send('OobeTestApi.showGaiaDialog');
-    };
-
-    this.isGaiaDialogVisible = function() {
-      chrome.send('OobeTestApi.isGaiaDialogVisible');
     };
 
     this.getBrowseAsGuestButtonName = function() {

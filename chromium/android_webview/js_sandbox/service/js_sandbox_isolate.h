@@ -13,10 +13,12 @@
 #include "base/compiler_specific.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "v8/include/v8-array-buffer.h"
+#include "v8/include/v8-inspector.h"
 #include "v8/include/v8-promise.h"
 
 namespace base {
@@ -43,13 +45,21 @@ class JsSandboxIsolateCallback;
 
 class JsSandboxIsolate {
  public:
-  explicit JsSandboxIsolate(size_t max_heap_size_bytes = 0);
+  explicit JsSandboxIsolate(
+      const base::android::JavaParamRef<jobject>& j_isolate_,
+      size_t max_heap_size_bytes);
   ~JsSandboxIsolate();
 
   jboolean EvaluateJavascript(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jcode,
+      const base::android::JavaParamRef<jobject>& j_callback);
+  jboolean EvaluateJavascriptWithFd(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const jint fd,
+      const jint length,
       const base::android::JavaParamRef<jobject>& j_callback);
   void DestroyNative(JNIEnv* env,
                      const base::android::JavaParamRef<jobject>& obj);
@@ -58,10 +68,18 @@ class JsSandboxIsolate {
                             const base::android::JavaParamRef<jstring>& jname,
                             const jint fd,
                             const jint length);
+  // May enable or disable inspection, as needed.
+  void SetConsoleEnabled(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& obj,
+                         jboolean enable);
 
  private:
+  class InspectorClient;
+
   void DeleteSelf();
   void InitializeIsolateOnThread();
+  // Will enabled or disable inspection depending on whether any dynamic
+  // features require it (for example, console logging).
   void EvaluateJavascriptOnThread(
       const std::string code,
       scoped_refptr<JsSandboxIsolateCallback> callback);
@@ -115,6 +133,13 @@ class JsSandboxIsolate {
   [[noreturn]] void MemoryLimitExceeded();
   [[noreturn]] void FreezeThread();
 
+  void EnableOrDisableInspectorAsNeeded();
+  void SetConsoleEnabledOnControlThread(bool enable);
+  void SetConsoleEnabledOnIsolateThread(bool enable);
+
+  // Java-side JsSandboxIsolate object corresponding to this isolate.
+  const base::android::ScopedJavaGlobalRef<jobject> j_isolate_;
+
   // V8 heap size limit. Must be non-negative.
   //
   // 0 indicates no explicit limit (but use the default V8 limits).
@@ -137,6 +162,12 @@ class JsSandboxIsolate {
   // Should be used from isolate_task_runner_.
   std::unique_ptr<gin::IsolateHolder> isolate_holder_;
   // Should be used from isolate_task_runner_.
+  //
+  // This isolate scope is entered during initialization from inside the
+  // isolate_task_runner_ thread and exited only at isolate teardown. It is thus
+  // used implicitly by all tasks run on the isolate thread.
+  std::unique_ptr<v8::Isolate::Scope> isolate_scope_;
+  // Should be used from isolate_task_runner_.
   std::unique_ptr<gin::ContextHolder> context_holder_;
 
   base::Lock named_fd_lock_;
@@ -150,7 +181,18 @@ class JsSandboxIsolate {
   // of an evaluation is a JS promise which is pending resolution/rejection.
   //
   // This pointer must only be accessed from the isolate thread.
-  JsSandboxIsolateCallback* current_callback_;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #addr-of
+  RAW_PTR_EXCLUSION JsSandboxIsolateCallback* current_callback_;
+
+  bool console_enabled_;
+
+  // Inspector objects should be destructed before anything they're inspecting,
+  // so they are later in the field list.
+  std::unique_ptr<v8_inspector::V8InspectorClient> inspector_client_;
+  std::unique_ptr<v8_inspector::V8Inspector> inspector_;
+  std::unique_ptr<v8_inspector::V8Inspector::Channel> inspector_channel_;
+  std::unique_ptr<v8_inspector::V8InspectorSession> inspector_session_;
 };
 }  // namespace android_webview
 

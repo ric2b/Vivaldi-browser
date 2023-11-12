@@ -653,7 +653,7 @@ int RunDesc(const std::vector<std::string>& args) {
   if (args.size() == 3)
     what_to_print = args[2];
 
-  bool json = cmdline->GetSwitchValueASCII("format") == "json";
+  bool json = cmdline->GetSwitchValueString("format") == "json";
 
   if (target_matches.empty() && config_matches.empty()) {
     OutputString(

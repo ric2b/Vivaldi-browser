@@ -90,12 +90,9 @@ class CodeSignConfig(object):
         """
         raise ConfigError('is_chrome_branded')
 
-    @staticmethod
-    def enable_updater():
+    @property
+    def enable_updater(self):
         """Returns True if the build should use updater-related resources.
-
-        This is a @staticmethod and not a @property so that it can be tested
-        during the process of creating a CodeSignConfig object.
         """
         raise ConfigError('enable_updater')
 
@@ -146,6 +143,15 @@ class CodeSignConfig(object):
         enum.
         """
         return self._notarization_tool or NotarizationTool.ALTOOL
+
+    @property
+    def notarization_tool_path(self):
+        """Returns the path to the notarization tool binary, or None if this
+        Config does not override the default. The default is to invoke the tool
+        via xcrun(1). If a Config does override this value, it must be
+        appropriate for the active Config.notarization_tool.
+        """
+        return None
 
     @property
     def app_product(self):

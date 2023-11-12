@@ -37,7 +37,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/core/layout/layout_object_factory.h"
+#include "third_party/blink/renderer/core/layout/ng/layout_ng_button.h"
 
 namespace blink {
 
@@ -65,7 +65,7 @@ BaseButtonInputType::SupportsPopoverTriggering() const {
 }
 
 void BaseButtonInputType::ValueAttributeChanged() {
-  To<Text>(GetElement().UserAgentShadowRoot()->firstChild())
+  To<Text>(GetElement().EnsureShadowSubtree()->firstChild())
       ->setData(GetElement().ValueOrDefaultLabel());
 }
 
@@ -80,9 +80,8 @@ ControlPart BaseButtonInputType::AutoAppearance() const {
 }
 
 LayoutObject* BaseButtonInputType::CreateLayoutObject(
-    const ComputedStyle& style,
-    LegacyLayout legacy) const {
-  return LayoutObjectFactory::CreateButton(GetElement(), style, legacy);
+    const ComputedStyle&) const {
+  return MakeGarbageCollected<LayoutNGButton>(&GetElement());
 }
 
 InputType::ValueMode BaseButtonInputType::GetValueMode() const {

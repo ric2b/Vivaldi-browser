@@ -10,7 +10,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
-#include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/net/profile_network_context_service.h"
 #include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -32,6 +31,7 @@
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
+#include "extensions/browser/api_test_utils.h"
 #include "net/cert/x509_certificate.h"
 #include "net/cert/x509_util.h"
 #include "net/ssl/client_cert_identity_test_util.h"
@@ -245,14 +245,15 @@ IN_PROC_BROWSER_TEST_P(
     Test) {
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_TRUE(info.browser_affiliation_ids.empty());
   EXPECT_TRUE(info.profile_affiliation_ids.empty());
@@ -284,19 +285,10 @@ class EnterpriseReportingPrivateGetContextInfoChromeOSFirewallTest
 
   bool BuiltInDnsClientPlatformDefault() {
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID) || \
-    BUILDFLAG(IS_WIN)
+    BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
     return true;
 #else
     return false;
-#endif
-  }
-
-  void ExpectDefaultChromeCleanupEnabled(
-      const enterprise_reporting_private::ContextInfo& info) {
-#if BUILDFLAG(IS_WIN)
-    EXPECT_TRUE(*info.chrome_cleanup_enabled);
-#else
-    EXPECT_FALSE(info.chrome_cleanup_enabled.has_value());
 #endif
   }
 
@@ -315,14 +307,15 @@ IN_PROC_BROWSER_TEST_P(
     Test) {
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_TRUE(info.browser_affiliation_ids.empty());
   EXPECT_TRUE(info.profile_affiliation_ids.empty());
@@ -341,7 +334,6 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(
       enterprise_reporting_private::PASSWORD_PROTECTION_TRIGGER_POLICY_UNSET,
       info.password_protection_warning_trigger);
-  ExpectDefaultChromeCleanupEnabled(info);
   EXPECT_FALSE(info.chrome_remote_desktop_app_blocked);
   ExpectDefaultThirdPartyBlockingEnabled(info);
   EXPECT_EQ(dev_mode_enabled() ? api::enterprise_reporting_private::
@@ -367,15 +359,15 @@ IN_PROC_BROWSER_TEST_P(EnterpriseReportingPrivateGetContextInfoBrowserTest,
                        MAYBE_AffiliationIDs) {
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
-  ASSERT_TRUE(context_info_value.get());
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   if (profile_managed()) {
     EXPECT_EQ(2u, info.profile_affiliation_ids.size());
@@ -407,11 +399,6 @@ IN_PROC_BROWSER_TEST_P(EnterpriseReportingPrivateGetContextInfoBrowserTest,
   EXPECT_EQ(
       enterprise_reporting_private::PASSWORD_PROTECTION_TRIGGER_POLICY_UNSET,
       info.password_protection_warning_trigger);
-#if BUILDFLAG(IS_WIN)
-  EXPECT_TRUE(*info.chrome_cleanup_enabled);
-#else
-  EXPECT_FALSE(info.chrome_cleanup_enabled.has_value());
-#endif
   EXPECT_FALSE(info.chrome_remote_desktop_app_blocked);
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   EXPECT_TRUE(*info.third_party_blocking_enabled);
@@ -429,15 +416,15 @@ IN_PROC_BROWSER_TEST_F(EnterpriseReportingPrivateGetContextInfoBaseBrowserTest,
 
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
-  ASSERT_TRUE(context_info_value.get());
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_EQ(0UL, info.on_file_downloaded_providers.size());
   EXPECT_EQ(0UL, info.on_bulk_data_entry_providers.size());
@@ -456,15 +443,15 @@ IN_PROC_BROWSER_TEST_F(EnterpriseReportingPrivateGetContextInfoBaseBrowserTest,
 
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
-  ASSERT_TRUE(context_info_value.get());
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_EQ(0UL, info.on_file_attached_providers.size());
   EXPECT_EQ(0UL, info.on_bulk_data_entry_providers.size());
@@ -483,15 +470,15 @@ IN_PROC_BROWSER_TEST_F(EnterpriseReportingPrivateGetContextInfoBaseBrowserTest,
 
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
-  ASSERT_TRUE(context_info_value.get());
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_EQ(0UL, info.on_file_downloaded_providers.size());
   EXPECT_EQ(0UL, info.on_file_attached_providers.size());
@@ -510,15 +497,15 @@ IN_PROC_BROWSER_TEST_F(EnterpriseReportingPrivateGetContextInfoBaseBrowserTest,
 
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
-  ASSERT_TRUE(context_info_value.get());
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_EQ(0UL, info.on_file_downloaded_providers.size());
   EXPECT_EQ(0UL, info.on_file_attached_providers.size());
@@ -546,15 +533,15 @@ IN_PROC_BROWSER_TEST_F(EnterpriseReportingPrivateGetContextInfoBaseBrowserTest,
 
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
-  ASSERT_TRUE(context_info_value.get());
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_EQ(1UL, info.on_bulk_data_entry_providers.size());
   EXPECT_EQ("google", info.on_bulk_data_entry_providers[0]);
@@ -575,15 +562,15 @@ IN_PROC_BROWSER_TEST_F(EnterpriseReportingPrivateGetContextInfoBaseBrowserTest,
 
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
-  ASSERT_TRUE(context_info_value.get());
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_EQ(0UL, info.on_security_event_providers.size());
 }
@@ -596,15 +583,15 @@ IN_PROC_BROWSER_TEST_F(EnterpriseReportingPrivateGetContextInfoBaseBrowserTest,
 
   auto function =
       base::MakeRefCounted<EnterpriseReportingPrivateGetContextInfoFunction>();
-  auto context_info_value = std::unique_ptr<base::Value>(
-      extension_function_test_utils::RunFunctionAndReturnSingleResult(
-          function.get(),
-          /*args*/ "[]", browser()));
-  ASSERT_TRUE(context_info_value.get());
+  auto context_info_value = api_test_utils::RunFunctionAndReturnSingleResult(
+      function.get(),
+      /*args*/ "[]", browser()->profile());
+  ASSERT_TRUE(context_info_value);
+  ASSERT_TRUE(context_info_value->is_dict());
 
   enterprise_reporting_private::ContextInfo info;
   ASSERT_TRUE(enterprise_reporting_private::ContextInfo::Populate(
-      *context_info_value, &info));
+      context_info_value->GetDict(), info));
 
   EXPECT_EQ(1UL, info.on_security_event_providers.size());
   // SetOnSecurityEventReporting sets the provider name to google
@@ -646,15 +633,14 @@ class EnterpriseReportingPrivateGetCertificateTest : public policy::PolicyTest {
     params += kRequestingUrl;
     params += "\"]";
 
-    std::unique_ptr<base::Value> certificate_value =
-        std::unique_ptr<base::Value>(
-            extension_function_test_utils::RunFunctionAndReturnSingleResult(
-                function.get(), params, browser()));
-    EXPECT_TRUE(certificate_value.get());
+    auto certificate_value = api_test_utils::RunFunctionAndReturnSingleResult(
+        function.get(), params, browser()->profile());
+    EXPECT_TRUE(certificate_value);
+    EXPECT_TRUE(certificate_value->is_dict());
 
     enterprise_reporting_private::Certificate cert;
     EXPECT_TRUE(enterprise_reporting_private::Certificate::Populate(
-        *certificate_value, &cert));
+        certificate_value->GetDict(), cert));
 
     return cert;
   }

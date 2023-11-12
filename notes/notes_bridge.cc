@@ -6,11 +6,10 @@
 #include "notes_bridge.h"
 
 #include <android/log.h>
-#include <memory>
-#include <queue>
 #include <stddef.h>
 #include <stdint.h>
-
+#include <memory>
+#include <queue>
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -68,8 +67,8 @@ class NoteTitleComparer {
   }
 
  private:
-  NotesBridge* notes_bridge_;  // weak
-  const icu::Collator* collator_;
+  const raw_ptr<NotesBridge> notes_bridge_;  // weak
+  const raw_ptr<const icu::Collator> collator_;
 };
 
 std::unique_ptr<icu::Collator> GetICUCollator() {
@@ -86,10 +85,10 @@ std::unique_ptr<icu::Collator> GetICUCollator() {
 NotesBridge::NotesBridge(JNIEnv* env,
                          const JavaRef<jobject>& obj,
                          const JavaRef<jobject>& j_profile)
-    : weak_java_ref_(env, obj), notes_model_(nullptr) {
+    : profile_(ProfileAndroid::FromProfileAndroid(j_profile)),
+      notes_model_(NotesModelFactory::GetForBrowserContext(profile_)),
+      weak_java_ref_(env, obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  profile_ = ProfileAndroid::FromProfileAndroid(j_profile);
-  notes_model_ = NotesModelFactory::GetForBrowserContext(profile_);
 
   // Registers the notifications we are interested.
   notes_model_->AddObserver(this);

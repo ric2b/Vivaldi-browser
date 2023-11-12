@@ -8,17 +8,13 @@
 #include <set>
 #include <utility>
 
+#include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
-#include "base/path_service.h"
-#include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
@@ -27,42 +23,27 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_key.h"
-#include "chrome/browser/supervised_user/kids_chrome_management/kids_chrome_management_client_factory.h"
-#include "chrome/browser/supervised_user/supervised_user_service_observer.h"
-#include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
-#include "chrome/browser/sync/sync_service_factory.h"
-#include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/supervised_user/core/browser/kids_chrome_management_client.h"
+#include "components/supervised_user/core/browser/supervised_user_service_observer.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
+#include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "extensions/buildflags/buildflags.h"
-#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/themes/theme_service.h"
-#include "chrome/browser/themes/theme_service_factory.h"
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/login/users/chrome_user_manager.h"
-#include "chrome/browser/ash/login/users/supervised_user_manager.h"
-#include "chromeos/ash/components/settings/cros_settings_names.h"
-#include "components/user_manager/user_manager.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -84,12 +65,6 @@ using extensions::ExtensionSystem;
 
 namespace {
 
-// The URL from which to download a host denylist if no local one exists yet.
-const char kDenylistURL[] =
-    "https://www.gstatic.com/chrome/supervised_user/denylist-20141001-1k.bin";
-
-const char kDenylistSourceHistogramName[] = "FamilyUser.DenylistSource";
-
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // These extensions are allowed for supervised users for internal development
 // purposes.
@@ -99,17 +74,11 @@ constexpr char const* kAllowlistExtensionIds[] = {
 
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-base::FilePath GetDenylistPath() {
-  base::FilePath denylist_dir;
-  base::PathService::Get(chrome::DIR_USER_DATA, &denylist_dir);
-  return denylist_dir.AppendASCII(supervised_user::kDenylistFilename);
-}
-
-bool AreWebFilterPrefsDefault(PrefService* pref_service) {
+bool AreWebFilterPrefsDefault(const PrefService& pref_service) {
   return pref_service
-             ->FindPreference(prefs::kDefaultSupervisedUserFilteringBehavior)
+             .FindPreference(prefs::kDefaultSupervisedUserFilteringBehavior)
              ->IsDefaultValue() ||
-         pref_service->FindPreference(prefs::kSupervisedUserSafeSites)
+         pref_service.FindPreference(prefs::kSupervisedUserSafeSites)
              ->IsDefaultValue();
 }
 
@@ -132,36 +101,27 @@ void SupervisedUserService::RegisterProfilePrefs(
 #endif
   registry->RegisterDictionaryPref(prefs::kSupervisedUserManualHosts);
   registry->RegisterDictionaryPref(prefs::kSupervisedUserManualURLs);
-  registry->RegisterIntegerPref(prefs::kDefaultSupervisedUserFilteringBehavior,
-                                SupervisedUserURLFilter::ALLOW);
+  registry->RegisterIntegerPref(
+      prefs::kDefaultSupervisedUserFilteringBehavior,
+      supervised_user::SupervisedUserURLFilter::ALLOW);
   registry->RegisterBooleanPref(prefs::kSupervisedUserSafeSites, true);
   for (const char* pref : supervised_user::kCustodianInfoPrefs) {
     registry->RegisterStringPref(pref, std::string());
   }
 }
 
-// static
-const char* SupervisedUserService::GetDenylistSourceHistogramForTesting() {
-  return kDenylistSourceHistogramName;
-}
-
-// static
-base::FilePath SupervisedUserService::GetDenylistPathForTesting() {
-  return GetDenylistPath();
-}
-
 void SupervisedUserService::Init() {
   DCHECK(!did_init_);
   did_init_ = true;
-  DCHECK(GetSettingsService()->IsReady());
+  DCHECK(settings_service_->IsReady());
 
-  pref_change_registrar_.Init(profile_->GetPrefs());
+  pref_change_registrar_.Init(&user_prefs_.get());
   pref_change_registrar_.Add(
       prefs::kSupervisedUserId,
       base::BindRepeating(&SupervisedUserService::OnSupervisedUserIdChanged,
                           base::Unretained(this)));
 
-  SetActive(IsChild());
+  SetActive(IsSubjectToParentalControls());
 }
 
 void SupervisedUserService::SetDelegate(Delegate* delegate) {
@@ -176,7 +136,8 @@ void SupervisedUserService::SetDelegate(Delegate* delegate) {
   delegate_ = delegate;
 }
 
-SupervisedUserURLFilter* SupervisedUserService::GetURLFilter() {
+supervised_user::SupervisedUserURLFilter*
+SupervisedUserService::GetURLFilter() {
   return &url_filter_;
 }
 
@@ -189,33 +150,32 @@ std::string SupervisedUserService::GetExtensionRequestId(
 }
 
 std::string SupervisedUserService::GetCustodianEmailAddress() const {
-  return profile_->GetPrefs()->GetString(prefs::kSupervisedUserCustodianEmail);
+  return user_prefs_->GetString(prefs::kSupervisedUserCustodianEmail);
 }
 
 std::string SupervisedUserService::GetCustodianObfuscatedGaiaId() const {
-  return profile_->GetPrefs()->GetString(
+  return user_prefs_->GetString(
       prefs::kSupervisedUserCustodianObfuscatedGaiaId);
 }
 
 std::string SupervisedUserService::GetCustodianName() const {
   std::string name =
-      profile_->GetPrefs()->GetString(prefs::kSupervisedUserCustodianName);
+      user_prefs_->GetString(prefs::kSupervisedUserCustodianName);
   return name.empty() ? GetCustodianEmailAddress() : name;
 }
 
 std::string SupervisedUserService::GetSecondCustodianEmailAddress() const {
-  return profile_->GetPrefs()->GetString(
-      prefs::kSupervisedUserSecondCustodianEmail);
+  return user_prefs_->GetString(prefs::kSupervisedUserSecondCustodianEmail);
 }
 
 std::string SupervisedUserService::GetSecondCustodianObfuscatedGaiaId() const {
-  return profile_->GetPrefs()->GetString(
+  return user_prefs_->GetString(
       prefs::kSupervisedUserSecondCustodianObfuscatedGaiaId);
 }
 
 std::string SupervisedUserService::GetSecondCustodianName() const {
-  std::string name = profile_->GetPrefs()->GetString(
-      prefs::kSupervisedUserSecondCustodianName);
+  std::string name =
+      user_prefs_->GetString(prefs::kSupervisedUserSecondCustodianName);
   return name.empty() ? GetSecondCustodianEmailAddress() : name;
 }
 
@@ -224,25 +184,29 @@ std::u16string SupervisedUserService::GetExtensionsLockedMessage() const {
                                     base::UTF8ToUTF16(GetCustodianName()));
 }
 
-// static
-std::string SupervisedUserService::GetEduCoexistenceLoginUrl() {
-  return chrome::kChromeUIEDUCoexistenceLoginURLV2;
-}
-
-bool SupervisedUserService::IsChild() const {
-  return profile_->IsChild();
-}
-
 bool SupervisedUserService::IsURLFilteringEnabled() const {
+// TODO(b/271413641): Use capabilities to verify if filtering is enabled on iOS.
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-  return profile_->IsChild();
+  return IsSubjectToParentalControls();
 #else
-  AccountInfo account_info = identity_manager_->FindExtendedAccountInfo(
-      identity_manager_->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin));
-  return account_info.capabilities.is_subject_to_parental_controls() ==
-             signin::Tribool::kTrue &&
+  return IsSubjectToParentalControls() &&
          base::FeatureList::IsEnabled(
-             supervised_user::kFilterWebsitesForSupervisedUsersOnThirdParty);
+             supervised_user::kFilterWebsitesForSupervisedUsersOnDesktopAndIOS);
+#endif
+}
+
+bool SupervisedUserService::AreExtensionsPermissionsEnabled() const {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
+  return IsSubjectToParentalControls();
+#else
+  return IsSubjectToParentalControls() &&
+         base::FeatureList::IsEnabled(
+             supervised_user::
+                 kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
+#endif
+#else
+  return false;
 #endif
 }
 
@@ -264,16 +228,22 @@ void SupervisedUserService::RemoveObserver(
 SupervisedUserService::SupervisedUserService(
     Profile* profile,
     signin::IdentityManager* identity_manager,
-    ValidateURLSupportCallback check_webstore_url_callback)
-    : profile_(profile),
+    KidsChromeManagementClient* kids_chrome_management_client,
+    PrefService& user_prefs,
+    supervised_user::SupervisedUserSettingsService& settings_service,
+    syncer::SyncService& sync_service,
+    ValidateURLSupportCallback check_webstore_url_callback,
+    std::unique_ptr<supervised_user::SupervisedUserURLFilter::Delegate>
+        url_filter_delegate)
+    : user_prefs_(user_prefs),
+      settings_service_(settings_service),
+      sync_service_(sync_service),
+      profile_(profile),
       identity_manager_(identity_manager),
-      active_(false),
+      kids_chrome_management_client_(kids_chrome_management_client),
       delegate_(nullptr),
-      is_profile_active_(false),
-      did_init_(false),
-      did_shutdown_(false),
-      url_filter_(std::move(check_webstore_url_callback)),
-      denylist_state_(DenylistLoadState::NOT_LOADED) {
+      url_filter_(std::move(check_webstore_url_callback),
+                  std::move(url_filter_delegate)) {
   url_filter_.AddObserver(this);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   registry_observation_.Observe(extensions::ExtensionRegistry::Get(profile));
@@ -306,33 +276,13 @@ void SupervisedUserService::RemoveExtensionApproval(
   }
 }
 
-void SupervisedUserService::UpdateApprovedExtensionForTesting(
-    const std::string& extension_id,
-    ApprovedExtensionChange type) {
-  base::Version dummy_version("0");
-  UpdateApprovedExtension(extension_id, dummy_version.GetString(), type);
-}
-
 bool SupervisedUserService::
     GetSupervisedUserExtensionsMayRequestPermissionsPref() const {
-  DCHECK(IsChild())
+  DCHECK(IsSubjectToParentalControls())
       << "Calling GetSupervisedUserExtensionsMayRequestPermissionsPref() only "
          "makes sense for supervised users";
-  return profile_->GetPrefs()->GetBoolean(
+  return user_prefs_->GetBoolean(
       prefs::kSupervisedUserExtensionsMayRequestPermissions);
-}
-
-void SupervisedUserService::
-    SetSupervisedUserExtensionsMayRequestPermissionsPrefForTesting(
-        bool enabled) {
-  // TODO(crbug/1024646): kSupervisedUserExtensionsMayRequestPermissions is
-  // currently set indirectly by setting geolocation requests. Update Kids
-  // Management server to set a new bit for extension permissions and update
-  // this setter function.
-  GetSettingsService()->SetLocalSetting(supervised_user::kGeolocationDisabled,
-                                        base::Value(!enabled));
-  profile_->GetPrefs()->SetBoolean(
-      prefs::kSupervisedUserExtensionsMayRequestPermissions, enabled);
 }
 
 bool SupervisedUserService::CanInstallExtensions() const {
@@ -359,8 +309,9 @@ void SupervisedUserService::RecordExtensionEnablementUmaMetrics(
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 void SupervisedUserService::ReportNonDefaultWebFilterValue() const {
-  if (AreWebFilterPrefsDefault(profile_->GetPrefs()))
+  if (AreWebFilterPrefsDefault(*user_prefs_)) {
     return;
+  }
 
   url_filter_.ReportManagedSiteListMetrics();
   url_filter_.ReportWebFilterTypeMetrics();
@@ -374,27 +325,17 @@ void SupervisedUserService::SetActive(bool active) {
   if (delegate_)
     delegate_->SetActive(active_);
 
-    // Now activate/deactivate anything not handled by the delegate yet.
-#if !BUILDFLAG(IS_ANDROID)
-  // Re-set the default theme to turn the SU theme on/off.
-  ThemeService* theme_service = ThemeServiceFactory::GetForProfile(profile_);
-  if (theme_service->UsingDefaultTheme() || theme_service->UsingSystemTheme())
-    theme_service->UseDefaultTheme();
-#endif
+  settings_service_->SetActive(active_);
 
   // Trigger a sync reconfig to enable/disable the right SU data types.
   // The logic to do this lives in the SupervisedUserSyncModelTypeController.
   // TODO(crbug.com/946473): Get rid of this hack and instead call
   // DataTypePreconditionChanged from the controller.
-  syncer::SyncService* sync_service =
-      SyncServiceFactory::GetForProfile(profile_);
-  if (sync_service->GetUserSettings()->IsFirstSetupComplete()) {
+  if (sync_service_->GetUserSettings()->IsFirstSetupComplete()) {
     // Trigger a reconfig by grabbing a SyncSetupInProgressHandle and
     // immediately releasing it again (via the temporary unique_ptr going away).
-    sync_service->GetSetupInProgressHandle();
+    sync_service_->GetSetupInProgressHandle();
   }
-
-  GetSettingsService()->SetActive(active_);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   SetExtensionsActive();
@@ -445,19 +386,15 @@ void SupervisedUserService::SetActive(bool active) {
     RefreshApprovedExtensionsFromPrefs();
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-#if !BUILDFLAG(IS_ANDROID)
-    // TODO(bauerb): Get rid of the platform-specific #ifdef here.
-    // http://crbug.com/313377
-    BrowserList::AddObserver(this);
-#endif
   } else {
-    web_approvals_manager_.ClearRemoteApprovalRequestsCreators();
+    remote_web_approvals_manager_.ClearApprovalRequestsCreators();
 
     pref_change_registrar_.Remove(
         prefs::kDefaultSupervisedUserFilteringBehavior);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     pref_change_registrar_.Remove(prefs::kSupervisedUserApprovedExtensions);
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+    pref_change_registrar_.Remove(prefs::kSupervisedUserSafeSites);
     pref_change_registrar_.Remove(prefs::kSupervisedUserManualHosts);
     pref_change_registrar_.Remove(prefs::kSupervisedUserManualURLs);
     for (const char* pref : supervised_user::kCustodianInfoPrefs) {
@@ -467,13 +404,12 @@ void SupervisedUserService::SetActive(bool active) {
     url_filter_.Clear();
     for (SupervisedUserServiceObserver& observer : observer_list_)
       observer.OnURLFilterChanged();
-
-#if !BUILDFLAG(IS_ANDROID)
-    // TODO(bauerb): Get rid of the platform-specific #ifdef here.
-    // http://crbug.com/313377
-    BrowserList::RemoveObserver(this);
-#endif
   }
+}
+
+bool SupervisedUserService::IsSubjectToParentalControls() const {
+  return user_prefs_->GetString(prefs::kSupervisedUserId) ==
+         supervised_user::kChildAccountSUID;
 }
 
 void SupervisedUserService::OnCustodianInfoChanged() {
@@ -481,36 +417,24 @@ void SupervisedUserService::OnCustodianInfoChanged() {
     observer.OnCustodianInfoChanged();
 }
 
-supervised_user::SupervisedUserSettingsService*
-SupervisedUserService::GetSettingsService() {
-  return SupervisedUserSettingsServiceFactory::GetForKey(
-      profile_->GetProfileKey());
-}
-
-PrefService* SupervisedUserService::GetPrefService() {
-  PrefService* pref_service = profile_->GetPrefs();
-  DCHECK(pref_service) << "PrefService not found";
-  return pref_service;
-}
-
 void SupervisedUserService::OnSupervisedUserIdChanged() {
-  SetActive(IsChild());
+  SetActive(IsSubjectToParentalControls());
 }
 
 void SupervisedUserService::OnDefaultFilteringBehaviorChanged() {
-  int behavior_value = profile_->GetPrefs()->GetInteger(
-      prefs::kDefaultSupervisedUserFilteringBehavior);
-  SupervisedUserURLFilter::FilteringBehavior behavior =
-      SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
+  int behavior_value =
+      user_prefs_->GetInteger(prefs::kDefaultSupervisedUserFilteringBehavior);
+  supervised_user::SupervisedUserURLFilter::FilteringBehavior behavior =
+      supervised_user::SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
   url_filter_.SetDefaultFilteringBehavior(behavior);
   UpdateAsyncUrlChecker();
 
   for (SupervisedUserServiceObserver& observer : observer_list_)
     observer.OnURLFilterChanged();
 
-  SupervisedUserURLFilter::WebFilterType filter_type =
+  supervised_user::SupervisedUserURLFilter::WebFilterType filter_type =
       url_filter_.GetWebFilterType();
-  if (!AreWebFilterPrefsDefault(profile_->GetPrefs()) &&
+  if (!AreWebFilterPrefsDefault(*user_prefs_) &&
       current_web_filter_type_ != filter_type) {
     url_filter_.ReportWebFilterTypeMetrics();
     current_web_filter_type_ = filter_type;
@@ -518,29 +442,16 @@ void SupervisedUserService::OnDefaultFilteringBehaviorChanged() {
 }
 
 bool SupervisedUserService::IsSafeSitesEnabled() const {
-  return profile_->IsChild() &&
-         profile_->GetPrefs()->GetBoolean(prefs::kSupervisedUserSafeSites);
+  return IsSubjectToParentalControls() &&
+         user_prefs_->GetBoolean(prefs::kSupervisedUserSafeSites);
 }
 
 void SupervisedUserService::OnSafeSitesSettingChanged() {
-  bool use_denylist = IsSafeSitesEnabled();
-  if (use_denylist != url_filter_.HasDenylist()) {
-    if (use_denylist && denylist_state_ == DenylistLoadState::NOT_LOADED) {
-      LoadDenylist(GetDenylistPath(), GURL(kDenylistURL));
-    } else if (!use_denylist || denylist_state_ == DenylistLoadState::LOADED) {
-      // Either the denylist was turned off, or it was turned on but has
-      // already been loaded previously. Just update the setting.
-      UpdateDenylist();
-    }
-    // Else: The denylist was enabled, but the load is already in progress.
-    // Do nothing - we'll check the setting again when the load finishes.
-  }
-
   UpdateAsyncUrlChecker();
 
-  SupervisedUserURLFilter::WebFilterType filter_type =
+  supervised_user::SupervisedUserURLFilter::WebFilterType filter_type =
       url_filter_.GetWebFilterType();
-  if (!AreWebFilterPrefsDefault(profile_->GetPrefs()) &&
+  if (!AreWebFilterPrefsDefault(*user_prefs_) &&
       current_web_filter_type_ != filter_type) {
     url_filter_.ReportWebFilterTypeMetrics();
     current_web_filter_type_ = filter_type;
@@ -548,128 +459,28 @@ void SupervisedUserService::OnSafeSitesSettingChanged() {
 }
 
 void SupervisedUserService::UpdateAsyncUrlChecker() {
-  int behavior_value = profile_->GetPrefs()->GetInteger(
-      prefs::kDefaultSupervisedUserFilteringBehavior);
-  SupervisedUserURLFilter::FilteringBehavior behavior =
-      SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
+  int behavior_value =
+      user_prefs_->GetInteger(prefs::kDefaultSupervisedUserFilteringBehavior);
+  supervised_user::SupervisedUserURLFilter::FilteringBehavior behavior =
+      supervised_user::SupervisedUserURLFilter::BehaviorFromInt(behavior_value);
 
   bool use_online_check =
       IsSafeSitesEnabled() ||
-      behavior == SupervisedUserURLFilter::FilteringBehavior::BLOCK;
+      behavior ==
+          supervised_user::SupervisedUserURLFilter::FilteringBehavior::BLOCK;
 
   if (use_online_check != url_filter_.HasAsyncURLChecker()) {
     if (use_online_check) {
-      url_filter_.InitAsyncURLChecker(
-          KidsChromeManagementClientFactory::GetInstance()
-              ->GetForBrowserContext(profile_));
+      url_filter_.InitAsyncURLChecker(kids_chrome_management_client_);
     } else {
       url_filter_.ClearAsyncURLChecker();
     }
   }
 }
 
-void SupervisedUserService::LoadDenylist(const base::FilePath& path,
-                                         const GURL& url) {
-  DCHECK(denylist_state_ == DenylistLoadState::NOT_LOADED);
-  denylist_state_ = DenylistLoadState::LOAD_STARTED;
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
-       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&base::PathExists, path),
-      base::BindOnce(&SupervisedUserService::OnDenylistFileChecked,
-                     weak_ptr_factory_.GetWeakPtr(), path, url));
-}
-
-void SupervisedUserService::OnDenylistFileChecked(const base::FilePath& path,
-                                                  const GURL& url,
-                                                  bool file_exists) {
-  DCHECK(denylist_state_ == DenylistLoadState::LOAD_STARTED);
-  if (file_exists) {
-    LoadDenylistFromFile(path);
-    base::UmaHistogramEnumeration(kDenylistSourceHistogramName,
-                                  DenylistSource::kDenylist);
-    return;
-  }
-
-  DCHECK(!denylist_downloader_);
-
-  // Create traffic annotation tag.
-  net::NetworkTrafficAnnotationTag traffic_annotation =
-      net::DefineNetworkTrafficAnnotation("supervised_users_denylist", R"(
-        semantics {
-          sender: "Supervised Users"
-          description:
-            "Downloads a static denylist consisting of hostname hashes of "
-            "common inappropriate websites. This is only enabled for child "
-            "accounts and only if the corresponding setting is enabled by the "
-            "parent."
-          trigger:
-            "The file is downloaded on demand if the child account profile is "
-            "created and the setting is enabled."
-          data:
-            "No additional data is sent to the server beyond the request "
-            "itself."
-          destination: GOOGLE_OWNED_SERVICE
-        }
-        policy {
-          cookies_allowed: NO
-          setting:
-            "The feature can be remotely enabled or disabled by the parent. In "
-            "addition, if sign-in is restricted to accounts from a managed "
-            "domain, those accounts are not going to be child accounts."
-          chrome_policy {
-            RestrictSigninToPattern {
-              policy_options {mode: MANDATORY}
-              RestrictSigninToPattern: "*@manageddomain.com"
-            }
-          }
-        })");
-
-  auto factory = profile_->GetDefaultStoragePartition()
-                     ->GetURLLoaderFactoryForBrowserProcess();
-  denylist_downloader_ = std::make_unique<FileDownloader>(
-      url, path, false, std::move(factory),
-      base::BindOnce(&SupervisedUserService::OnDenylistDownloadDone,
-                     base::Unretained(this), path),
-      traffic_annotation);
-}
-
-void SupervisedUserService::LoadDenylistFromFile(const base::FilePath& path) {
-  DCHECK(denylist_state_ == DenylistLoadState::LOAD_STARTED);
-  denylist_.ReadFromFile(
-      path, base::BindRepeating(&SupervisedUserService::OnDenylistLoaded,
-                                base::Unretained(this)));
-}
-
-void SupervisedUserService::OnDenylistDownloadDone(
-    const base::FilePath& path,
-    FileDownloader::Result result) {
-  DCHECK(denylist_state_ == DenylistLoadState::LOAD_STARTED);
-  if (FileDownloader::IsSuccess(result)) {
-    LoadDenylistFromFile(path);
-    base::UmaHistogramEnumeration(kDenylistSourceHistogramName,
-                                  DenylistSource::kDenylist);
-  }
-  LOG(WARNING) << "Denylist download failed";
-  denylist_downloader_.reset();
-}
-
-void SupervisedUserService::OnDenylistLoaded() {
-  DCHECK(denylist_state_ == DenylistLoadState::LOAD_STARTED);
-  denylist_state_ = DenylistLoadState::LOADED;
-  UpdateDenylist();
-}
-
-void SupervisedUserService::UpdateDenylist() {
-  url_filter_.SetDenylist(IsSafeSitesEnabled() ? &denylist_ : nullptr);
-  for (SupervisedUserServiceObserver& observer : observer_list_)
-    observer.OnURLFilterChanged();
-}
-
 void SupervisedUserService::UpdateManualHosts() {
   const base::Value::Dict& dict =
-      profile_->GetPrefs()->GetDict(prefs::kSupervisedUserManualHosts);
+      user_prefs_->GetDict(prefs::kSupervisedUserManualHosts);
   std::map<std::string, bool> host_map;
   for (auto it : dict) {
     DCHECK(it.second.is_bool());
@@ -680,13 +491,14 @@ void SupervisedUserService::UpdateManualHosts() {
   for (SupervisedUserServiceObserver& observer : observer_list_)
     observer.OnURLFilterChanged();
 
-  if (!AreWebFilterPrefsDefault(profile_->GetPrefs()))
+  if (!AreWebFilterPrefsDefault(*user_prefs_)) {
     url_filter_.ReportManagedSiteListMetrics();
+  }
 }
 
 void SupervisedUserService::UpdateManualURLs() {
   const base::Value::Dict& dict =
-      profile_->GetPrefs()->GetDict(prefs::kSupervisedUserManualURLs);
+      user_prefs_->GetDict(prefs::kSupervisedUserManualURLs);
   std::map<GURL, bool> url_map;
   for (auto it : dict) {
     DCHECK(it.second.is_bool());
@@ -697,8 +509,9 @@ void SupervisedUserService::UpdateManualURLs() {
   for (SupervisedUserServiceObserver& observer : observer_list_)
     observer.OnURLFilterChanged();
 
-  if (!AreWebFilterPrefsDefault(profile_->GetPrefs()))
+  if (!AreWebFilterPrefsDefault(*user_prefs_)) {
     url_filter_.ReportManagedSiteListMetrics();
+  }
 }
 
 void SupervisedUserService::Shutdown() {
@@ -706,7 +519,7 @@ void SupervisedUserService::Shutdown() {
     return;
   DCHECK(!did_shutdown_);
   did_shutdown_ = true;
-  if (IsChild()) {
+  if (IsSubjectToParentalControls()) {
     base::RecordAction(UserMetricsAction("ManagedUsers_QuitBrowser"));
   }
   SetActive(false);
@@ -784,7 +597,7 @@ std::string SupervisedUserService::GetDebugPolicyProviderName() const {
 
 bool SupervisedUserService::UserMayLoad(const Extension* extension,
                                         std::u16string* error) const {
-  DCHECK(IsChild());
+  DCHECK(IsSubjectToParentalControls());
   ExtensionState result = GetExtensionState(*extension);
   bool may_load = result != ExtensionState::BLOCKED;
   if (!may_load && error)
@@ -796,7 +609,7 @@ bool SupervisedUserService::MustRemainDisabled(
     const Extension* extension,
     extensions::disable_reason::DisableReason* reason,
     std::u16string* error) const {
-  DCHECK(IsChild());
+  DCHECK(IsSubjectToParentalControls());
   ExtensionState state = GetExtensionState(*extension);
   // Only extensions that require approval should be disabled.
   // Blocked extensions should be not loaded at all, and are taken care of
@@ -840,7 +653,7 @@ void SupervisedUserService::ChangeExtensionStateIfNecessary(
   // shouldn't be needed.
   if (!active_)
     return;
-  DCHECK(IsChild());
+  DCHECK(IsSubjectToParentalControls());
   ExtensionRegistry* registry = ExtensionRegistry::Get(profile_);
   const Extension* extension = registry->GetInstalledExtension(extension_id);
   // If the extension is not installed (yet), do nothing.
@@ -884,8 +697,7 @@ void SupervisedUserService::UpdateApprovedExtension(
     const std::string& extension_id,
     const std::string& version,
     ApprovedExtensionChange type) {
-  PrefService* pref_service = GetPrefService();
-  ScopedDictPrefUpdate update(pref_service,
+  ScopedDictPrefUpdate update(&user_prefs_.get(),
                               prefs::kSupervisedUserApprovedExtensions);
   base::Value::Dict& approved_extensions = update.Get();
   bool success = false;
@@ -922,7 +734,7 @@ void SupervisedUserService::RefreshApprovedExtensionsFromPrefs() {
   // for backwards compatibility. Remove the version information once sufficient
   // users have migrated away from M83.
   const base::Value::Dict& dict =
-      profile_->GetPrefs()->GetDict(prefs::kSupervisedUserApprovedExtensions);
+      user_prefs_->GetDict(prefs::kSupervisedUserApprovedExtensions);
   for (auto it : dict) {
     approved_extensions_set_.insert(it.first);
     extensions_to_be_checked.insert(it.first);
@@ -950,22 +762,6 @@ void SupervisedUserService::SetExtensionsActive() {
   }
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-
-bool SupervisedUserService::IsCustomPassphraseAllowed() const {
-  return !active_;
-}
-
-#if !BUILDFLAG(IS_ANDROID)
-void SupervisedUserService::OnBrowserSetLastActive(Browser* browser) {
-  bool profile_became_active = profile_->IsSameOrParent(browser->profile());
-  if (!is_profile_active_ && profile_became_active)
-    base::RecordAction(UserMetricsAction("ManagedUsers_OpenProfile"));
-  else if (is_profile_active_ && !profile_became_active)
-    base::RecordAction(UserMetricsAction("ManagedUsers_SwitchProfile"));
-
-  is_profile_active_ = profile_became_active;
-}
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 void SupervisedUserService::OnSiteListUpdated() {
   for (SupervisedUserServiceObserver& observer : observer_list_)

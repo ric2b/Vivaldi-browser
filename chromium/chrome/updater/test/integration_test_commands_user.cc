@@ -30,6 +30,10 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
  public:
   IntegrationTestCommandsUser() = default;
 
+  void ExpectNoCrashes() const override {
+    updater::test::ExpectNoCrashes(updater_scope_);
+  }
+
   void PrintLog() const override { updater::test::PrintLog(updater_scope_); }
 
   void CopyLog() const override {
@@ -47,6 +51,10 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
 
   void Install() const override { updater::test::Install(updater_scope_); }
 
+  void InstallUpdaterAndApp(const std::string& app_id) const override {
+    updater::test::InstallUpdaterAndApp(updater_scope_, app_id);
+  }
+
   void ExpectInstalled() const override {
     updater::test::ExpectInstalled(updater_scope_);
   }
@@ -57,8 +65,11 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
     updater::test::ExpectCandidateUninstalled(updater_scope_);
   }
 
-  void EnterTestMode(const GURL& url) const override {
-    updater::test::EnterTestMode(url);
+  void EnterTestMode(const GURL& update_url,
+                     const GURL& crash_upload_url,
+                     const GURL& device_management_url) const override {
+    updater::test::EnterTestMode(update_url, crash_upload_url,
+                                 device_management_url);
   }
 
   void ExitTestMode() const override {
@@ -73,35 +84,41 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
     updater::test::SetGroupPolicies(values);
   }
 
+  void ExpectUninstallPing(ScopedServer* test_server) const override {
+    updater::test::ExpectUninstallPing(updater_scope_, test_server);
+  }
+
   void ExpectUpdateCheckSequence(
       ScopedServer* test_server,
       const std::string& app_id,
-      const std::string& install_data_index,
+      UpdateService::Priority priority,
       const base::Version& from_version,
       const base::Version& to_version) const override {
     updater::test::ExpectUpdateCheckSequence(updater_scope_, test_server,
-                                             app_id, install_data_index,
-                                             from_version, to_version);
+                                             app_id, priority, from_version,
+                                             to_version);
   }
 
   void ExpectUpdateSequence(ScopedServer* test_server,
                             const std::string& app_id,
                             const std::string& install_data_index,
+                            UpdateService::Priority priority,
                             const base::Version& from_version,
                             const base::Version& to_version) const override {
     updater::test::ExpectUpdateSequence(updater_scope_, test_server, app_id,
-                                        install_data_index, from_version,
-                                        to_version);
+                                        install_data_index, priority,
+                                        from_version, to_version);
   }
 
   void ExpectInstallSequence(ScopedServer* test_server,
                              const std::string& app_id,
                              const std::string& install_data_index,
+                             UpdateService::Priority priority,
                              const base::Version& from_version,
                              const base::Version& to_version) const override {
     updater::test::ExpectInstallSequence(updater_scope_, test_server, app_id,
-                                         install_data_index, from_version,
-                                         to_version);
+                                         install_data_index, priority,
+                                         from_version, to_version);
   }
 
   void ExpectVersionActive(const std::string& version) const override {
@@ -172,15 +189,21 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
     updater::test::RunWakeAll(updater_scope_);
   }
 
+  void RunCrashMe() const override {
+    updater::test::RunCrashMe(updater_scope_);
+  }
+
   void RunWakeActive(int exit_code) const override {
     updater::test::RunWakeActive(updater_scope_, exit_code);
   }
 
+  void CheckForUpdate(const std::string& app_id) const override {
+    updater::test::CheckForUpdate(updater_scope_, app_id);
+  }
+
   void Update(const std::string& app_id,
-              const std::string& install_data_index,
-              bool do_update_check_only) const override {
-    updater::test::Update(updater_scope_, app_id, install_data_index,
-                          do_update_check_only);
+              const std::string& install_data_index) const override {
+    updater::test::Update(updater_scope_, app_id, install_data_index);
   }
 
   void UpdateAll() const override { updater::test::UpdateAll(updater_scope_); }
@@ -206,11 +229,14 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
     updater::test::ExpectMarshalInterfaceSucceeds(updater_scope_);
   }
 
-  void ExpectLegacyUpdate3WebSucceeds(const std::string& app_id,
-                                      int expected_final_state,
-                                      int expected_error_code) const override {
+  void ExpectLegacyUpdate3WebSucceeds(
+      const std::string& app_id,
+      AppBundleWebCreateMode app_bundle_web_create_mode,
+      int expected_final_state,
+      int expected_error_code) const override {
     updater::test::ExpectLegacyUpdate3WebSucceeds(
-        updater_scope_, app_id, expected_final_state, expected_error_code);
+        updater_scope_, app_id, app_bundle_web_create_mode,
+        expected_final_state, expected_error_code);
   }
 
   void ExpectLegacyProcessLauncherSucceeds() const override {
@@ -267,12 +293,18 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
             UpdateService::PolicySameVersionUpdate::kAllowed);
   }
 
-  void SetupFakeLegacyUpdaterData() const override {
-    updater::test::SetupFakeLegacyUpdaterData(updater_scope_);
+  void SetupFakeLegacyUpdater() const override {
+    updater::test::SetupFakeLegacyUpdater(updater_scope_);
   }
 
-  void ExpectLegacyUpdaterDataMigrated() const override {
-    updater::test::ExpectLegacyUpdaterDataMigrated(updater_scope_);
+#if BUILDFLAG(IS_WIN)
+  void RunFakeLegacyUpdater() const override {
+    updater::test::RunFakeLegacyUpdater(updater_scope_);
+  }
+#endif  // BUILDFLAG(IS_WIN)
+
+  void ExpectLegacyUpdaterMigrated() const override {
+    updater::test::ExpectLegacyUpdaterMigrated(updater_scope_);
   }
 
   void RunRecoveryComponent(const std::string& app_id,

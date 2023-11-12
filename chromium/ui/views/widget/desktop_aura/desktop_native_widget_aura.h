@@ -169,6 +169,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;
+  void PaintAsActiveChanged() override;
   void SetZOrderLevel(ui::ZOrderLevel order) override;
   ui::ZOrderLevel GetZOrderLevel() const override;
   void SetVisibleOnAllWorkspaces(bool always_visible) override;
@@ -183,7 +184,9 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void SetCanAppearInExistingFullscreenSpaces(
       bool can_appear_in_existing_fullscreen_spaces) override;
   void SetOpacity(float opacity) override;
-  void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
+  // See NativeWidgetPrivate::SetAspectRatio for more information.
+  void SetAspectRatio(const gfx::SizeF& aspect_ratio,
+                      const gfx::Size& excluded_margin) override;
   void FlashFrame(bool flash_frame) override;
   void RunShellDrag(View* view,
                     std::unique_ptr<ui::OSExchangeData> data,
@@ -280,10 +283,12 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
 
   void PerformDrop(views::DropHelper::DropCallback drop_cb,
                    std::unique_ptr<ui::OSExchangeData> data,
-                   ui::mojom::DragOperation& output_drag_op);
+                   ui::mojom::DragOperation& output_drag_op,
+                   std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
 
   std::unique_ptr<aura::WindowTreeHost> host_;
-  raw_ptr<DesktopWindowTreeHost> desktop_window_tree_host_;
+  // DanglingUntriaged because it is assigned a DanglingUntriaged pointer.
+  raw_ptr<DesktopWindowTreeHost, DanglingUntriaged> desktop_window_tree_host_;
 
   // See class documentation for Widget in widget.h for a note about ownership.
   Widget::InitParams::Ownership ownership_ =

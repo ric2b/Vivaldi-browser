@@ -177,9 +177,14 @@ TEST_P(CSSAnimationsTest, IncompatibleRetargetedTransition) {
                   GetSaturateFilterAmount(element));
 
   // Now we start a contrast filter. Since it will try to combine with
-  // the in progress saturate filter, and be incompatible, there should
-  // be no transition and it should immediately apply on the next frame.
+  // the in progress saturate filter, and be incompatible, there will be a
+  // discrete transition and it will apply halfway through the transition.
   element->setAttribute(html_names::kClassAttr, "contrast");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FLOAT_EQ(1.0 * (1 - 0.003) + 0.2 * 0.003,
+                  GetSaturateFilterAmount(element));
+
+  AdvanceClockSeconds(0.5);
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(0.2, GetContrastFilterAmount(element));
 }
@@ -1026,6 +1031,48 @@ TEST_P(CSSAnimationsCompositorSyncTest, SetCurrentTime) {
   EXPECT_EQ(post_update_compositor_group, animation->CompositorGroup());
   VerifyCompositorIterationTime(950);
   VerifyCompositorOpacity(0.05);
+}
+
+TEST_P(CSSAnimationsTest, LingeringTimelineAttachments) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      .defer {
+        scroll-timeline: t1 defer;
+      }
+      #scroller {
+        overflow: auto;
+        width: 100px;
+        height: 100px;
+      }
+      #scroller > div {
+        width: 50px;
+        height: 200px;
+      }
+      .ancestor-timeline {
+        scroll-timeline: t1 ancestor;
+      }
+    </style>
+    <div class=defer>
+      <div id=scroller class=ancestor-timeline>
+        <div></div>
+      </div>
+    </div>
+  )HTML");
+
+  Element* scroller = GetDocument().getElementById("scroller");
+  ASSERT_TRUE(scroller);
+
+  ElementAnimations* element_animations = scroller->GetElementAnimations();
+  ASSERT_TRUE(element_animations);
+
+  const CSSAnimations& css_animations = element_animations->CssAnimations();
+  EXPECT_TRUE(css_animations.HasTimelines());
+
+  scroller->classList().Remove("ancestor-timeline");
+  UpdateAllLifecyclePhasesForTest();
+
+  // No timeline data should linger on #scroller's CSSAnimations.
+  EXPECT_FALSE(css_animations.HasTimelines());
 }
 
 }  // namespace blink

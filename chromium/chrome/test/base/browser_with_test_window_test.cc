@@ -64,10 +64,15 @@ void BrowserWithTestWindowTest::SetUp() {
 
   base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kNoFirstRun);
 
+  profile_manager_ = std::make_unique<TestingProfileManager>(
+      TestingBrowserProcess::GetGlobal());
+  ASSERT_TRUE(profile_manager_->SetUp());
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!user_manager::UserManager::IsInitialized()) {
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
-        std::make_unique<user_manager::FakeUserManager>());
+        std::make_unique<user_manager::FakeUserManager>(
+            g_browser_process->local_state()));
   }
   ash_test_helper_.SetUp();
 #endif
@@ -88,9 +93,8 @@ void BrowserWithTestWindowTest::SetUp() {
   SetConstrainedWindowViewsClient(CreateChromeConstrainedWindowViewsClient());
 #endif
 
-  profile_manager_ = std::make_unique<TestingProfileManager>(
-      TestingBrowserProcess::GetGlobal());
-  ASSERT_TRUE(profile_manager_->SetUp());
+  user_performance_tuning_manager_environment_.SetUp(
+      profile_manager_->local_state()->Get());
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   crosapi::IdleServiceAsh::DisableForTesting();
@@ -133,6 +137,8 @@ void BrowserWithTestWindowTest::TearDown() {
   manager_.reset();
   kiosk_app_manager_.reset();
 #endif
+
+  user_performance_tuning_manager_environment_.TearDown();
 
   // Calling DeleteAllTestingProfiles() first can cause issues in some tests, if
   // they're still holding a ScopedProfileKeepAlive.

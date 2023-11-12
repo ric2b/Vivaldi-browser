@@ -13,6 +13,7 @@
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/model/app_list_test_model.h"
 #include "ash/app_list/model/search/test_search_result.h"
+#include "ash/app_list/quick_app_access_model.h"
 #include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/app_list/views/app_list_bubble_search_page.h"
 #include "ash/app_list/views/app_list_bubble_view.h"
@@ -38,6 +39,8 @@
 #include "ash/app_list/views/search_result_page_anchored_dialog.h"
 #include "ash/app_list/views/search_result_page_view.h"
 #include "ash/assistant/ui/assistant_ui_constants.h"
+#include "ash/display/display_configuration_controller.h"
+#include "ash/display/display_configuration_controller_test_api.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/keyboard/ui/test/keyboard_test_util.h"
@@ -49,6 +52,7 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/root_window_controller.h"
+#include "ash/rotator/screen_rotation_animator.h"
 #include "ash/shelf/home_button.h"
 #include "ash/shelf/scrollable_shelf_view.h"
 #include "ash/shelf/shelf.h"
@@ -71,6 +75,7 @@
 #include "ash/wm/workspace_controller_test_api.h"
 #include "base/command_line.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/aura_constants.h"
@@ -103,10 +108,6 @@ namespace ash {
 namespace {
 
 constexpr int kBestMatchContainerIndex = 1;
-
-AppListModel* GetAppListModel() {
-  return AppListModelProvider::Get()->model();
-}
 
 SearchModel* GetSearchModel() {
   return AppListModelProvider::Get()->search_model();
@@ -242,6 +243,10 @@ class AppListPresenterTest : public AshTestBase,
   // Whether to run the test with fullscreen or not.
   bool TestFullscreenParam() const { return GetParam(); }
 
+  test::AppListTestModel* GetAppListModel() {
+    return GetAppListTestHelper()->model();
+  }
+
   SearchBoxView* GetSearchBoxView() {
     return GetSearchBoxViewFromHelper(GetAppListTestHelper());
   }
@@ -288,9 +293,9 @@ class AppListPresenterTest : public AshTestBase,
   }
 
   void LongPressAt(const gfx::Point& point) {
-    ui::TouchEvent long_press(ui::ET_GESTURE_LONG_PRESS, point,
-                              base::TimeTicks::Now(),
-                              ui::PointerDetails(ui::EventPointerType::kTouch));
+    ui::GestureEvent long_press(
+        point.x(), point.y(), 0, base::TimeTicks::Now(),
+        ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
     GetEventGenerator()->Dispatch(&long_press);
   }
 };
@@ -314,11 +319,6 @@ class AppListBubbleAndTabletTestBase : public AshTestBase {
   // testing::Test:
   void SetUp() override {
     AshTestBase::SetUp();
-
-    app_list_test_model_ = std::make_unique<test::AppListTestModel>();
-    search_model_ = std::make_unique<SearchModel>();
-    Shell::Get()->app_list_controller()->SetActiveModel(
-        /*profile_id=*/1, app_list_test_model_.get(), search_model_.get());
 
     // Make the display big enough to hold the app list.
     UpdateDisplay("1024x768");
@@ -368,6 +368,10 @@ class AppListBubbleAndTabletTestBase : public AshTestBase {
 
   // Bubble launcher is visible in clamshell mode.
   bool should_show_bubble_launcher() { return !tablet_mode_param(); }
+
+  test::AppListTestModel* GetAppListModel() {
+    return GetAppListTestHelper()->model();
+  }
 
   SearchBoxView* GetSearchBoxView() {
     return should_show_bubble_launcher()
@@ -467,13 +471,13 @@ class AppListBubbleAndTabletTestBase : public AshTestBase {
       items_to_delete.push_back(item->GetChildItemAt(i)->id());
     }
     for (auto& item_to_delete : items_to_delete)
-      app_list_test_model_->DeleteItem(item_to_delete);
+      GetAppListModel()->DeleteItem(item_to_delete);
   }
 
   void LongPressAt(const gfx::Point& point) {
-    ui::TouchEvent long_press(ui::ET_GESTURE_LONG_PRESS, point,
-                              base::TimeTicks::Now(),
-                              ui::PointerDetails(ui::EventPointerType::kTouch));
+    ui::GestureEvent long_press(
+        point.x(), point.y(), 0, base::TimeTicks::Now(),
+        ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
     GetEventGenerator()->Dispatch(&long_press);
   }
 
@@ -521,9 +525,7 @@ class AppListBubbleAndTabletTestBase : public AshTestBase {
   const bool tablet_mode_;
 
   std::unique_ptr<test::AppsGridViewTestApi> grid_test_api_;
-  std::unique_ptr<test::AppListTestModel> app_list_test_model_;
-  std::unique_ptr<SearchModel> search_model_;
-  AppsGridView* apps_grid_view_ = nullptr;
+  raw_ptr<AppsGridView, ExperimentalAsh> apps_grid_view_ = nullptr;
 };
 
 // Parameterized by tablet/clamshell mode.
@@ -566,10 +568,6 @@ class PopulatedAppListTest : public AshTestBase {
     // Make the display big enough to hold the app list.
     UpdateDisplay("1024x768");
 
-    app_list_test_model_ = std::make_unique<test::AppListTestModel>();
-    search_model_ = std::make_unique<SearchModel>();
-    Shell::Get()->app_list_controller()->SetActiveModel(
-        /*profile_id=*/1, app_list_test_model_.get(), search_model_.get());
     // Fullscreen launcher is used only in tablet mode, so enable tablet mode.
     EnableTabletMode(true);
   }
@@ -596,18 +594,18 @@ class PopulatedAppListTest : public AshTestBase {
   }
 
   void PopulateApps(int n) {
-    app_list_test_model_->PopulateApps(n);
+    GetAppListModel()->PopulateApps(n);
     app_list_view_->GetWidget()->LayoutRootViewIfNecessary();
   }
 
   AppListFolderItem* CreateAndPopulateFolderWithApps(int n) {
-    auto* folder = app_list_test_model_->CreateAndPopulateFolderWithApps(n);
+    auto* folder = GetAppListModel()->CreateAndPopulateFolderWithApps(n);
     app_list_view_->GetWidget()->LayoutRootViewIfNecessary();
     return folder;
   }
 
-  gfx::Rect GetItemRectOnCurrentPageAt(int row, int col) const {
-    DCHECK_GT(app_list_test_model_->top_level_item_list()->item_count(), 0u);
+  gfx::Rect GetItemRectOnCurrentPageAt(int row, int col) {
+    DCHECK_GT(GetAppListModel()->top_level_item_list()->item_count(), 0u);
     return apps_grid_test_api_->GetItemTileRectOnCurrentPageAt(row, col);
   }
 
@@ -633,6 +631,10 @@ class PopulatedAppListTest : public AshTestBase {
         folder_name);
   }
 
+  test::AppListTestModel* GetAppListModel() {
+    return GetAppListTestHelper()->model();
+  }
+
   const std::string GetFolderName() {
     return base::UTF16ToUTF8(
         folder_view()->folder_header_view()->GetFolderNameForTest());
@@ -642,11 +644,11 @@ class PopulatedAppListTest : public AshTestBase {
     folder_view()->folder_header_view()->ItemNameChanged();
   }
 
-  std::unique_ptr<test::AppListTestModel> app_list_test_model_;
-  std::unique_ptr<SearchModel> search_model_;
   std::unique_ptr<test::AppsGridViewTestApi> apps_grid_test_api_;
-  AppListView* app_list_view_ = nullptr;         // Owned by native widget.
-  PagedAppsGridView* apps_grid_view_ = nullptr;  // Owned by |app_list_view_|.
+  raw_ptr<AppListView, ExperimentalAsh> app_list_view_ =
+      nullptr;  // Owned by native widget.
+  raw_ptr<PagedAppsGridView, ExperimentalAsh> apps_grid_view_ =
+      nullptr;  // Owned by |app_list_view_|.
 };
 
 // Subclass of PopulatedAppListTest which enables the virtual keyboard.
@@ -667,7 +669,7 @@ TEST_P(AppListBubbleAndTabletTest, SortingClosesOpenFolderView) {
   ui::ScopedAnimationDurationScaleMode scope_duration(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
-  app_list_test_model_->CreateAndPopulateFolderWithApps(4);
+  GetAppListModel()->CreateAndPopulateFolderWithApps(4);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -687,11 +689,12 @@ TEST_P(AppListBubbleAndTabletTest, SortingClosesOpenFolderView) {
 // folder was shown).
 TEST_P(AppListBubbleAndTabletTest,
        FolderItemViewNotAnimatingAfterClosingFolder) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -757,11 +760,12 @@ TEST_P(AppListBubbleAndTabletTest,
 // view position in the root apps grid).
 TEST_P(AppListBubbleAndTabletTest,
        FolderViewRemainsInPlaceWhenAddingItemToModel) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -785,12 +789,14 @@ TEST_P(AppListBubbleAndTabletTest,
 
   // Add a new item.
   test::AppListTestModel::AppListTestItem* new_item =
-      app_list_test_model_->CreateItem("new_test_item");
-  new_item->SetPosition(app_list_test_model_->top_level_item_list()
+      model->CreateItem("new_test_item");
+  new_item->SetPosition(GetAppListTestHelper()
+                            ->model()
+                            ->top_level_item_list()
                             ->item_at(0)
                             ->position()
                             .CreateBefore());
-  app_list_test_model_->AddItem(new_item);
+  model->AddItem(new_item);
   apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
   grid_test_api_->WaitForItemMoveAnimationDone();
 
@@ -871,11 +877,12 @@ TEST_P(AppListBubbleAndTabletTest,
 // folder item view changes in the model (as long as the folder is open).
 TEST_P(AppListBubbleAndTabletTest,
        FolderViewRemainsInPlaceWhenItemMovedToEndInModel) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -902,13 +909,14 @@ TEST_P(AppListBubbleAndTabletTest,
       apps_grid_view_->GetItemViewAt(5)->GetBoundsInScreen();
 
   // Move the folder item to the last position in the model.
-  app_list_test_model_->RequestPositionUpdate(
-      folder_id,
-      app_list_test_model_->top_level_item_list()
-          ->item_at(5)
-          ->position()
-          .CreateAfter(),
-      RequestPositionUpdateReason::kMoveItem);
+  model->RequestPositionUpdate(folder_id,
+                               GetAppListTestHelper()
+                                   ->model()
+                                   ->top_level_item_list()
+                                   ->item_at(5)
+                                   ->position()
+                                   .CreateAfter(),
+                               RequestPositionUpdateReason::kMoveItem);
 
   // Verify that the folder view location did not actually change.
   EXPECT_EQ(folder_bounds, folder_view->GetBoundsInScreen());
@@ -990,11 +998,12 @@ TEST_P(AppListBubbleAndTabletTest,
 // folder item view changes in the model (as long as the folder is open).
 TEST_P(AppListBubbleAndTabletTest,
        FolderViewRemainsInPlaceWhenItemMovedToStartInModel) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -1021,13 +1030,14 @@ TEST_P(AppListBubbleAndTabletTest,
       apps_grid_view_->GetItemViewAt(0)->GetBoundsInScreen();
 
   // Move the folder item to the last position in the model.
-  app_list_test_model_->RequestPositionUpdate(
-      folder_id,
-      app_list_test_model_->top_level_item_list()
-          ->item_at(0)
-          ->position()
-          .CreateBefore(),
-      RequestPositionUpdateReason::kMoveItem);
+  model->RequestPositionUpdate(folder_id,
+                               GetAppListTestHelper()
+                                   ->model()
+                                   ->top_level_item_list()
+                                   ->item_at(0)
+                                   ->position()
+                                   .CreateBefore(),
+                               RequestPositionUpdateReason::kMoveItem);
 
   // Verify that the folder view location did not actually change.
   EXPECT_EQ(folder_bounds, folder_view->GetBoundsInScreen());
@@ -1109,11 +1119,12 @@ TEST_P(AppListBubbleAndTabletTest,
 // well.
 TEST_P(AppListBubbleAndTabletTest,
        ReorderedFolderItemDeletionDuringFolderClose) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -1138,13 +1149,14 @@ TEST_P(AppListBubbleAndTabletTest,
       apps_grid_view_->GetItemViewAt(3)->GetBoundsInScreen();
 
   // Move the folder item to the first position in the model.
-  app_list_test_model_->RequestPositionUpdate(
-      folder_id,
-      app_list_test_model_->top_level_item_list()
-          ->item_at(0)
-          ->position()
-          .CreateBefore(),
-      RequestPositionUpdateReason::kMoveItem);
+  model->RequestPositionUpdate(folder_id,
+                               GetAppListTestHelper()
+                                   ->model()
+                                   ->top_level_item_list()
+                                   ->item_at(0)
+                                   ->position()
+                                   .CreateBefore(),
+                               RequestPositionUpdateReason::kMoveItem);
 
   // Verify that the folder view location did not actually change.
   EXPECT_EQ(folder_bounds, folder_view->GetBoundsInScreen());
@@ -1193,11 +1205,12 @@ TEST_P(AppListBubbleAndTabletTest,
 // bounds are still animating to final positions) gets handled well.
 TEST_P(AppListBubbleAndTabletTest,
        ReorderedFolderItemDeletionDuringFolderItemFadeOut) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -1222,13 +1235,14 @@ TEST_P(AppListBubbleAndTabletTest,
       apps_grid_view_->GetItemViewAt(3)->GetBoundsInScreen();
 
   // Move the folder item to the last position in the model.
-  app_list_test_model_->RequestPositionUpdate(
-      folder_id,
-      app_list_test_model_->top_level_item_list()
-          ->item_at(0)
-          ->position()
-          .CreateBefore(),
-      RequestPositionUpdateReason::kMoveItem);
+  model->RequestPositionUpdate(folder_id,
+                               GetAppListTestHelper()
+                                   ->model()
+                                   ->top_level_item_list()
+                                   ->item_at(0)
+                                   ->position()
+                                   .CreateBefore(),
+                               RequestPositionUpdateReason::kMoveItem);
 
   // Verify that the folder view location did not actually change.
   EXPECT_EQ(folder_bounds, folder_view->GetBoundsInScreen());
@@ -1291,11 +1305,12 @@ TEST_P(AppListBubbleAndTabletTest,
 // bounds are still animating to final positions) gets handled well.
 TEST_P(AppListBubbleAndTabletTest,
        ReorderedFolderItemDeletionAfterFolderItemFadeOut) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -1320,13 +1335,14 @@ TEST_P(AppListBubbleAndTabletTest,
       apps_grid_view_->GetItemViewAt(3)->GetBoundsInScreen();
 
   // Move the folder item to the last position in the model.
-  app_list_test_model_->RequestPositionUpdate(
-      folder_id,
-      app_list_test_model_->top_level_item_list()
-          ->item_at(0)
-          ->position()
-          .CreateBefore(),
-      RequestPositionUpdateReason::kMoveItem);
+  model->RequestPositionUpdate(folder_id,
+                               GetAppListTestHelper()
+                                   ->model()
+                                   ->top_level_item_list()
+                                   ->item_at(0)
+                                   ->position()
+                                   .CreateBefore(),
+                               RequestPositionUpdateReason::kMoveItem);
 
   // Verify that the folder view location did not actually change.
   EXPECT_EQ(folder_bounds, folder_view->GetBoundsInScreen());
@@ -1387,11 +1403,12 @@ TEST_P(AppListBubbleAndTabletTest,
 // Tests that folder item deletion while the folder is shown gets handled well.
 TEST_P(AppListBubbleAndTabletTest,
        ReorderedFolderItemDeletionWhileFolderShown) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -1416,13 +1433,14 @@ TEST_P(AppListBubbleAndTabletTest,
       apps_grid_view_->GetItemViewAt(3)->GetBoundsInScreen();
 
   // Move the folder item to the last position in the model.
-  app_list_test_model_->RequestPositionUpdate(
-      folder_id,
-      app_list_test_model_->top_level_item_list()
-          ->item_at(0)
-          ->position()
-          .CreateBefore(),
-      RequestPositionUpdateReason::kMoveItem);
+  model->RequestPositionUpdate(folder_id,
+                               GetAppListTestHelper()
+                                   ->model()
+                                   ->top_level_item_list()
+                                   ->item_at(0)
+                                   ->position()
+                                   .CreateBefore(),
+                               RequestPositionUpdateReason::kMoveItem);
 
   // Verify that the folder view location did not actually change.
   EXPECT_EQ(folder_bounds, folder_view->GetBoundsInScreen());
@@ -1459,11 +1477,12 @@ TEST_P(AppListBubbleAndTabletTest,
 // Tests that folder item deletion while the folder view is still animating into
 // shown state gets handled well.
 TEST_P(AppListBubbleAndTabletTest, ReorderedFolderItemDeletionDuringShow) {
-  app_list_test_model_->PopulateApps(2);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
   AppListFolderItem* const folder_item =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
+      model->CreateAndPopulateFolderWithApps(3);
   const std::string folder_id = folder_item->id();
-  app_list_test_model_->PopulateApps(3);
+  model->PopulateApps(3);
 
   // Setup tablet/clamshell mode and show launcher.
   EnableTabletMode(tablet_mode_param());
@@ -2093,6 +2112,55 @@ TEST_P(AppListBubbleAndTabletTest,
   widget_close_waiter.Wait();
 }
 
+// Verifies that rotation the screen when launcher is shown does not crash.
+TEST_P(AppListBubbleAndTabletTest, RotationAnimationSmoke) {
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(15);
+  model->CreateAndPopulateFolderWithApps(3);
+  model->PopulateApps(15);
+
+  EnableTabletMode(tablet_mode_param());
+  EnsureLauncherShown();
+
+  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  ScreenRotationAnimator* animator =
+      DisplayConfigurationControllerTestApi(
+          Shell::Get()->display_configuration_controller())
+          .GetScreenRotationAnimatorForDisplay(display.id());
+  animator->Rotate(display::Display::ROTATE_90,
+                   display::Display::RotationSource::USER,
+                   DisplayConfigurationController::ANIMATION_SYNC);
+}
+
+TEST_P(AppListBubbleAndTabletTest, RotationAnimationInSearchSmoke) {
+  EnableTabletMode(tablet_mode_param());
+  EnsureLauncherShown();
+
+  // Show search page.
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->PressKey(ui::VKEY_A, 0);
+  EXPECT_TRUE(AppListSearchResultPageVisible());
+
+  // Add suggestion results - the result that will be tested is in
+  // the second place.
+  GetSearchModel()->results()->Add(
+      CreateOmniboxSuggestionResult("Another suggestion"));
+  const std::string kTestResultId = "Test suggestion";
+  GetSearchModel()->results()->Add(
+      CreateOmniboxSuggestionResult(kTestResultId));
+  // The result list is updated asynchronously.
+  base::RunLoop().RunUntilIdle();
+
+  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+  ScreenRotationAnimator* animator =
+      DisplayConfigurationControllerTestApi(
+          Shell::Get()->display_configuration_controller())
+          .GetScreenRotationAnimatorForDisplay(display.id());
+  animator->Rotate(display::Display::ROTATE_90,
+                   display::Display::RotationSource::USER,
+                   DisplayConfigurationController::ANIMATION_SYNC);
+}
+
 // Tests that mouse app list item drag is cancelled when mouse capture is lost
 // (e.g. on screen rotation).
 TEST_F(PopulatedAppListTest, CancelItemDragOnMouseCaptureLoss) {
@@ -2141,7 +2209,7 @@ TEST_F(PopulatedAppListTest, CancelItemDragOnDragItemDeletion) {
   EXPECT_TRUE(apps_grid_view_->IsDragging());
 
   // Delete the dragged item.
-  app_list_test_model_->DeleteItem(dragged_view->item()->id());
+  GetAppListModel()->DeleteItem(dragged_view->item()->id());
   EXPECT_FALSE(apps_grid_view_->IsDragging());
 
   // Verify that mouse drag has been canceled.
@@ -2184,7 +2252,7 @@ TEST_F(PopulatedAppListTest, CancelFolderItemDragOnDragItemDeletion) {
   EXPECT_TRUE(folder_view()->items_grid_view()->IsDragging());
 
   // Delete the dragged item.
-  app_list_test_model_->DeleteItem(dragged_view->item()->id());
+  GetAppListModel()->DeleteItem(dragged_view->item()->id());
 
   // Verify that drag has been canceled.
   EXPECT_FALSE(apps_grid_view_->IsDragging());
@@ -2244,7 +2312,7 @@ TEST_F(PopulatedAppListTest, CancelFolderItemReparentDragOnDragItemDeletion) {
   EXPECT_TRUE(folder_view()->items_grid_view()->IsDragging());
 
   // Delete the dragged item.
-  app_list_test_model_->DeleteItem(dragged_view->item()->id());
+  GetAppListModel()->DeleteItem(dragged_view->item()->id());
 
   // Verify that drag has been canceled.
   EXPECT_FALSE(apps_grid_view_->IsDragging());
@@ -2304,8 +2372,8 @@ TEST_F(PopulatedAppListTest,
 
   // Leave the dragged item as it's folder only child, and then delete it, which
   // should also delete the folder.
-  app_list_test_model_->DeleteItem("Item 3");
-  app_list_test_model_->DeleteItem(dragged_view->item()->id());
+  GetAppListModel()->DeleteItem("Item 3");
+  GetAppListModel()->DeleteItem(dragged_view->item()->id());
 
   // Verify that drag has been canceled.
   EXPECT_FALSE(apps_grid_view_->IsDragging());
@@ -2573,10 +2641,10 @@ TEST_F(PopulatedAppListTest, ScreenRotationDuringAppsGridItemReparentDrag) {
 TEST_P(AppListBubbleAndTabletTest, AppsGridItemReparentToFolderDrag) {
   UpdateDisplay("1200x600");
 
-  app_list_test_model_->PopulateApps(2);
-  AppListFolderItem* folder =
-      app_list_test_model_->CreateAndPopulateFolderWithApps(3);
-  app_list_test_model_->PopulateApps(10);
+  test::AppListTestModel* model = GetAppListModel();
+  model->PopulateApps(2);
+  AppListFolderItem* folder = model->CreateAndPopulateFolderWithApps(3);
+  model->PopulateApps(10);
   EnableTabletMode(tablet_mode_param());
   EnsureLauncherShown();
   apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
@@ -2688,12 +2756,12 @@ TEST_F(PopulatedAppListTest, RemoveFolderItemAfterFolderCreation) {
   apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
 
   // Remove an item from the folder, and leave it as a single item folder.
-  app_list_test_model_->DeleteItem(merged_item->id());
+  GetAppListModel()->DeleteItem(merged_item->id());
   EXPECT_TRUE(AppListIsInFolderView());
   apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
 
   // Remove the original drag view item.
-  app_list_test_model_->DeleteItem(dragged_item->id());
+  GetAppListModel()->DeleteItem(dragged_item->id());
   apps_grid_test_api_->WaitForItemMoveAnimationDone();
 
   EXPECT_FALSE(AppListIsInFolderView());
@@ -2760,10 +2828,10 @@ TEST_F(PopulatedAppListTest, ReparentLastFolderItemAfterFolderCreation) {
   apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
 
   // Remove the original drag view item.
-  app_list_test_model_->DeleteItem(dragged_item->id());
+  GetAppListModel()->DeleteItem(dragged_item->id());
   // Reparent the remaining folder item to the root apps grid (as it's done by
   // Chrome when cleaning up single-item folders).
-  app_list_test_model_->MoveItemToRootAt(merged_item, folder_item->position());
+  GetAppListModel()->MoveItemToRootAt(merged_item, folder_item->position());
   apps_grid_test_api_->WaitForItemMoveAnimationDone();
 
   EXPECT_FALSE(AppListIsInFolderView());
@@ -3062,8 +3130,11 @@ TEST_P(AppListPresenterTest, SearchBoxDeactivatedOnModelChange) {
   // deactivated.
   auto model_override = std::make_unique<test::AppListTestModel>();
   auto search_model_override = std::make_unique<SearchModel>();
+  auto quick_app_access_model_override =
+      std::make_unique<QuickAppAccessModel>();
   Shell::Get()->app_list_controller()->SetActiveModel(
-      /*profile_id=*/1, model_override.get(), search_model_override.get());
+      /*profile_id=*/1, model_override.get(), search_model_override.get(),
+      quick_app_access_model_override.get());
 
   EXPECT_FALSE(search_box_view->is_search_box_active());
 
@@ -3109,7 +3180,7 @@ TEST_F(AppListPresenterTest, SearchClearedOnModelChange) {
 
   SearchResultContainerView* item_list_container =
       GetDefaultSearchResultListView();
-  ASSERT_EQ(1, item_list_container->num_results());
+  ASSERT_EQ(1u, item_list_container->num_results());
   EXPECT_EQ("test_list",
             item_list_container->GetResultViewAt(0)->result()->id());
 
@@ -3117,8 +3188,11 @@ TEST_F(AppListPresenterTest, SearchClearedOnModelChange) {
   // cleared.
   auto model_override = std::make_unique<test::AppListTestModel>();
   auto search_model_override = std::make_unique<SearchModel>();
+  auto quick_app_access_model_override =
+      std::make_unique<QuickAppAccessModel>();
   Shell::Get()->app_list_controller()->SetActiveModel(
-      /*profile_id=*/1, model_override.get(), search_model_override.get());
+      /*profile_id=*/1, model_override.get(), search_model_override.get(),
+      quick_app_access_model_override.get());
 
   EXPECT_FALSE(search_box_view->is_search_box_active());
   GetAppListTestHelper()->CheckState(AppListViewState::kFullscreenAllApps);
@@ -3143,7 +3217,7 @@ TEST_F(AppListPresenterTest, SearchClearedOnModelChange) {
   GetAppListTestHelper()->CheckState(AppListViewState::kFullscreenSearch);
 
   item_list_container = GetDefaultSearchResultListView();
-  ASSERT_EQ(1, item_list_container->num_results());
+  ASSERT_EQ(1u, item_list_container->num_results());
   EXPECT_EQ("test_list_override",
             item_list_container->GetResultViewAt(0)->result()->id());
 
@@ -3225,9 +3299,9 @@ TEST_F(AppListTabletTest,
 TEST_P(AppListPresenterTest, ShouldNotCrashOnItemClickAfterMonitorDisconnect) {
   // Set up two displays.
   UpdateDisplay("1024x768,1200x900");
-  AppListModel* model = GetAppListModel();
-  AppListItem* item0 = model->AddItem(std::make_unique<AppListItem>("item 0"));
-  AppListItem* item1 = model->AddItem(std::make_unique<AppListItem>("item 1"));
+  test::AppListTestModel* model = GetAppListModel();
+  AppListItem* item0 = model->AddItem(new AppListItem("item 0"));
+  AppListItem* item1 = model->AddItem(new AppListItem("item 1"));
 
   // Give each item a name so that the accessibility paint checks pass.
   // (Focusable items should have accessible names.)
@@ -3393,10 +3467,12 @@ TEST_F(PopulatedAppListTest, TouchSelectionMenu) {
 
   AppListFolderItem* folder_item = CreateAndPopulateFolderWithApps(4);
   EXPECT_TRUE(folder_item->is_folder());
-  EXPECT_EQ(1u, app_list_test_model_->top_level_item_list()->item_count());
-  EXPECT_EQ(
-      AppListFolderItem::kItemType,
-      app_list_test_model_->top_level_item_list()->item_at(0)->GetItemType());
+  EXPECT_EQ(1u, GetAppListModel()->top_level_item_list()->item_count());
+  EXPECT_EQ(AppListFolderItem::kItemType, GetAppListTestHelper()
+                                              ->model()
+                                              ->top_level_item_list()
+                                              ->item_at(0)
+                                              ->GetItemType());
 
   // Open the folder.
   ASSERT_FALSE(AppListIsInFolderView());

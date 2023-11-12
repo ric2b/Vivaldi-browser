@@ -32,7 +32,7 @@ void ActivateWindow(gfx::NativeWindow window) {
 }
 
 bool IsVisible(gfx::NativeView view) {
-  return view->IsVisible();
+  return view ? view->IsVisible() : false;
 }
 
 }  // namespace platform_util

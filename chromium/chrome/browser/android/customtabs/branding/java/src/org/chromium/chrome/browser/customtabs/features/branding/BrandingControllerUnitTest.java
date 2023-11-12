@@ -41,7 +41,6 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.base.task.test.ShadowPostTask;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.R;
 
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -74,7 +73,7 @@ public class BrandingControllerUnitTest {
             final Handler mHandler = new Handler(Looper.getMainLooper());
 
             @Override
-            public void postDelayedTask(TaskTraits taskTraits, Runnable task, long delay) {
+            public void postDelayedTask(@TaskTraits int taskTraits, Runnable task, long delay) {
                 mHandler.postDelayed(task, delay);
             }
         };

@@ -193,7 +193,7 @@ public class SnackbarView {
     void overrideParent(ViewGroup overridingParent) {
         mRootContentView.removeOnLayoutChangeListener(mLayoutListener);
         mParent = overridingParent == null ? mOriginalParent : overridingParent;
-        if (isShowing()) {
+        if (mContainerView.getParent() != null) {
             ((ViewGroup) mContainerView.getParent()).removeView(mContainerView);
         }
         addToParent();

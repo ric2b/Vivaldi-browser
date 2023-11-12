@@ -27,7 +27,7 @@ class VivaldiMenubarMenuViews : public VivaldiMenubarMenu {
   void Show() override;
 
  private:
-  content::WebContents* web_contents_;
+  const raw_ptr<content::WebContents> web_contents_;
   std::unique_ptr<Menubar> menubar_;
 };
 

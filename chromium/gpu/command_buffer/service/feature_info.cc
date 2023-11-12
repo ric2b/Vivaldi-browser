@@ -198,7 +198,7 @@ FeatureInfo::FeatureInfo(
   feature_flags_.chromium_image_ycbcr_420v = base::Contains(
       gpu_feature_info.supported_buffer_formats_for_allocation_and_texturing,
       gfx::BufferFormat::YUV_420_BIPLANAR);
-#elif BUILDFLAG(IS_MAC)
+#elif BUILDFLAG(IS_APPLE)
   feature_flags_.chromium_image_ycbcr_420v = true;
 #endif
 
@@ -793,8 +793,7 @@ void FeatureInfo::InitializeFeatures() {
   }
 
   if (gl_version_info_->is_es3 ||
-      gfx::HasExtension(extensions, "GL_OES_element_index_uint") ||
-      gl::HasDesktopGLFeatures()) {
+      gfx::HasExtension(extensions, "GL_OES_element_index_uint")) {
     AddExtensionString("GL_OES_element_index_uint");
     validators_.index_type.AddValue(GL_UNSIGNED_INT);
   }
@@ -1009,7 +1008,12 @@ void FeatureInfo::InitializeFeatures() {
   // For ES, there is no extension that exposes BGRA renderbuffers, however
   // Angle does support these.
   bool enable_render_buffer_bgra =
+#if BUILDFLAG(IS_IOS)
+      // BGRA is not supported on iOS with ANGLE + GL.
+      gl_version_info_->is_angle_metal || !gl_version_info_->is_es;
+#else
       gl_version_info_->is_angle || !gl_version_info_->is_es;
+#endif  // BUILDFLAG(IS_IOS)
 
   if (enable_render_buffer_bgra) {
     feature_flags_.ext_render_buffer_format_bgra8888 = true;
@@ -1050,8 +1054,7 @@ void FeatureInfo::InitializeFeatures() {
     AddExtensionString("GL_EXT_disjoint_timer_query");
   }
 
-  if (gfx::HasExtension(extensions, "GL_OES_rgb8_rgba8") ||
-      gl::HasDesktopGLFeatures()) {
+  if (gfx::HasExtension(extensions, "GL_OES_rgb8_rgba8")) {
     AddExtensionString("GL_OES_rgb8_rgba8");
     validators_.render_buffer_format.AddValue(GL_RGB8_OES);
     validators_.render_buffer_format.AddValue(GL_RGBA8_OES);
@@ -1114,15 +1117,14 @@ void FeatureInfo::InitializeFeatures() {
   }
 
   if (gfx::HasExtension(extensions, "GL_OES_depth24") ||
-      gl::HasDesktopGLFeatures() || gl_version_info_->is_es3) {
+      gl_version_info_->is_es3) {
     AddExtensionString("GL_OES_depth24");
     feature_flags_.oes_depth24 = true;
     validators_.render_buffer_format.AddValue(GL_DEPTH_COMPONENT24);
   }
 
   if (gl_version_info_->is_es3 ||
-      gfx::HasExtension(extensions, "GL_OES_standard_derivatives") ||
-      gl::HasDesktopGLFeatures()) {
+      gfx::HasExtension(extensions, "GL_OES_standard_derivatives")) {
     AddExtensionString("GL_OES_standard_derivatives");
     feature_flags_.oes_standard_derivatives = true;
     validators_.hint_target.AddValue(GL_FRAGMENT_SHADER_DERIVATIVE_HINT_OES);
@@ -1246,9 +1248,9 @@ void FeatureInfo::InitializeFeatures() {
         gfx::BufferFormat::YUV_420_BIPLANAR);
   }
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   // Mac can create GLImages out of AR30 IOSurfaces only after 10.13 which is
-  // required for Chromium.
+  // required for Chromium. iOS based devices seem to handle well also.
   feature_flags_.chromium_image_ar30 = true;
 #elif !BUILDFLAG(IS_WIN)
   // TODO(mcasas): connect in Windows, https://crbug.com/803451
@@ -1382,8 +1384,7 @@ void FeatureInfo::InitializeFeatures() {
   }
 
   if (gl_version_info_->is_es3 ||
-      gfx::HasExtension(extensions, "GL_EXT_blend_minmax") ||
-      gl::HasDesktopGLFeatures()) {
+      gfx::HasExtension(extensions, "GL_EXT_blend_minmax")) {
     AddExtensionString("GL_EXT_blend_minmax");
     validators_.equation.AddValue(GL_MIN_EXT);
     validators_.equation.AddValue(GL_MAX_EXT);
@@ -1392,14 +1393,12 @@ void FeatureInfo::InitializeFeatures() {
   }
 
   // TODO(dshwang): GLES3 supports gl_FragDepth, not gl_FragDepthEXT.
-  if (gfx::HasExtension(extensions, "GL_EXT_frag_depth") ||
-      gl::HasDesktopGLFeatures()) {
+  if (gfx::HasExtension(extensions, "GL_EXT_frag_depth")) {
     AddExtensionString("GL_EXT_frag_depth");
     feature_flags_.ext_frag_depth = true;
   }
 
-  if (gfx::HasExtension(extensions, "GL_EXT_shader_texture_lod") ||
-      gl::HasDesktopGLFeatures()) {
+  if (gfx::HasExtension(extensions, "GL_EXT_shader_texture_lod")) {
     AddExtensionString("GL_EXT_shader_texture_lod");
     feature_flags_.ext_shader_texture_lod = true;
   }
@@ -1724,6 +1723,16 @@ void FeatureInfo::InitializeFeatures() {
                         "GL_AMD_framebuffer_multisample_advanced")) {
     feature_flags_.amd_framebuffer_multisample_advanced = true;
     AddExtensionString("GL_AMD_framebuffer_multisample_advanced");
+  }
+
+  if (gfx::HasExtension(extensions, "GL_ANGLE_shader_pixel_local_storage")) {
+    feature_flags_.angle_shader_pixel_local_storage = true;
+    AddExtensionString("GL_ANGLE_shader_pixel_local_storage");
+  }
+
+  if (gfx::HasExtension(extensions,
+                        "GL_ANGLE_shader_pixel_local_storage_coherent")) {
+    AddExtensionString("GL_ANGLE_shader_pixel_local_storage_coherent");
   }
 
   if (gfx::HasExtension(extensions, "GL_ANGLE_rgbx_internal_format")) {

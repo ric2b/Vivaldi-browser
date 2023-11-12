@@ -154,6 +154,9 @@ class ProfileManager : public Profile::Delegate {
                          bool incognito,
                          ProfileLoadedCallback callback);
 
+  // Whether a new profile can be created at |path|.
+  bool CanCreateProfileAtPath(const base::FilePath& path) const;
+
   // Creates or loads the profile located at |profile_path|.
   // Should be called on the UI thread.
   // Params:
@@ -244,6 +247,13 @@ class ProfileManager : public Profile::Delegate {
   // system.
   base::FilePath GenerateNextProfileDirectoryPath();
 
+  // Get the path of the next profile directory without incrementing the
+  // internal count.
+  // This function should only be used for path checking before
+  // 'GenerateNextProfileDirectoryPath' as this will return the path generated
+  // the next time `GenerateNextProfileDirectoryPath` is called.
+  base::FilePath GetNextExpectedProfileDirectoryPath();
+
   // Returns a ProfileAttributesStorage object which can be used to get
   // information about profiles without having to load them from disk.
   ProfileAttributesStorage& GetProfileAttributesStorage();
@@ -262,9 +272,6 @@ class ProfileManager : public Profile::Delegate {
   // conditions.
   absl::optional<base::FilePath> FindLastActiveProfile(
       base::RepeatingCallback<bool(ProfileAttributesEntry*)> predicate);
-
-  // Deletes Guest profile's browsing data.
-  static void CleanUpGuestProfile();
 
   DeleteProfileHelper& GetDeleteProfileHelper();
 #endif
@@ -474,9 +481,6 @@ class ProfileManager : public Profile::Delegate {
   // also return a profile that is not fully initialized yet, so this method
   // should be used carefully.
   Profile* GetProfileByPathInternal(const base::FilePath& path) const;
-
-  // Whether a new profile can be created at |path|.
-  bool CanCreateProfileAtPath(const base::FilePath& path) const;
 
   // Adds |profile| to the profile attributes storage if it hasn't been added
   // yet.

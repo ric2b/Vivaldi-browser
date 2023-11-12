@@ -12,6 +12,7 @@
 #include "base/files/file.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
@@ -74,10 +75,11 @@ class FakeEventRouter : public extensions::EventRouter {
     ASSERT_TRUE(file_system_);
     const base::Value* dict = &event->event_args[0];
     ASSERT_TRUE(dict->is_dict());
-    const std::string* file_system_id = dict->FindStringKey("fileSystemId");
+    const std::string* file_system_id =
+        dict->GetDict().FindString("fileSystemId");
     EXPECT_NE(file_system_id, nullptr);
     EXPECT_EQ(kFileSystemId, *file_system_id);
-    absl::optional<int> id = dict->FindIntKey("requestId");
+    absl::optional<int> id = dict->GetDict().FindInt("requestId");
     EXPECT_TRUE(id);
     int request_id = *id;
     EXPECT_TRUE(event->event_name == extensions::api::file_system_provider::
@@ -97,22 +99,23 @@ class FakeEventRouter : public extensions::EventRouter {
 
       using extensions::api::file_system_provider_internal::
           OperationRequestedSuccess::Params;
-      std::unique_ptr<Params> params(Params::Create(list));
-      ASSERT_TRUE(params.get());
+      absl::optional<Params> params(Params::Create(list));
+      ASSERT_TRUE(params.has_value());
       file_system_->GetRequestManager()->FulfillRequest(
           request_id,
-          RequestValue::CreateForOperationSuccess(std::move(params)),
+          RequestValue::CreateForOperationSuccess(std::move(*params)),
           false /* has_more */);
     } else {
       file_system_->GetRequestManager()->RejectRequest(
-          request_id, std::make_unique<RequestValue>(), reply_result_);
+          request_id, RequestValue(), reply_result_);
     }
   }
 
   void set_reply_result(base::File::Error result) { reply_result_ = result; }
 
  private:
-  ProvidedFileSystemInterface* const file_system_;  // Not owned.
+  const raw_ptr<ProvidedFileSystemInterface, ExperimentalAsh>
+      file_system_;  // Not owned.
   base::File::Error reply_result_;
 };
 

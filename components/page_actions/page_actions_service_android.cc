@@ -21,9 +21,9 @@ static jlong JNI_PageActionsService_Init(
 
 PageActionsServiceAndroid::PageActionsServiceAndroid(JNIEnv* env, jobject obj)
     : weak_java_ref_(env, obj) {
-  profile_ = ProfileManager::GetActiveUserProfile();
-  DCHECK(profile_);
-  service_ = page_actions::ServiceFactory::GetForBrowserContext(profile_);
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  DCHECK(profile);
+  service_ = page_actions::ServiceFactory::GetForBrowserContext(profile);
   service_->AddObserver(this);
 }
 

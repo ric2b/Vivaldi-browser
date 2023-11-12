@@ -14,6 +14,8 @@ import multiprocessing
 import os
 import re
 import shutil
+import signal
+import subprocess
 import sys
 import warnings
 from typing import List, Optional, Tuple
@@ -22,13 +24,16 @@ from blinkpy.common import exit_codes
 from blinkpy.common import path_finder
 from blinkpy.common.host import Host
 from blinkpy.common.path_finder import PathFinder
+from blinkpy.w3c.wpt_results_processor import WPTResultsProcessor
 from blinkpy.web_tests.port.android import (
     ANDROID_WEBVIEW,
     CHROME_ANDROID,
 )
+from blinkpy.web_tests.port.base import ARTIFACTS_SUB_DIR, Port
 
 path_finder.add_testing_dir_to_sys_path()
 path_finder.add_build_android_to_sys_path()
+path_finder.add_build_ios_to_sys_path()
 path_finder.bootstrap_wpt_imports()
 
 import mozlog
@@ -53,23 +58,60 @@ try:
 except ImportError:
     _ANDROID_ENABLED = False
 
-
-def _make_log_enabled_grouping_formatter():
-    # Make a grouping log formatter that shows regular log messages:
-    #   WARNING Unsupported test type wdspec for product content_shell
-    #
-    # Activating logs dynamically with:
-    #   StructuredLogger.send_message('show_logs', 'on')
-    # appears buggy. This factory exists as a workaround.
-    grouping_formatter = mozlog.formatters.GroupingFormatter()
-    grouping_formatter.message_handler.handle_message('show_logs', 'on')
-    return grouping_formatter
+try:
+    import xcode_util as xcode
+    _IOS_ENABLED = True
+except ImportError:
+    _IOS_ENABLED = False
 
 
-mozlog.commandline.log_formatters['grouped'] = (
-    _make_log_enabled_grouping_formatter,
-    mozlog.commandline.log_formatters['grouped'][1],
-)
+class GroupingFormatter(mozlog.formatters.GroupingFormatter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Enable informative log messages, which look like:
+        #   WARNING Unsupported test type wdspec for product content_shell
+        #
+        # Activating logs dynamically with:
+        #   StructuredLogger.send_message('show_logs', 'on')
+        # appears buggy. This default exists as a workaround.
+        self.show_logs = True
+
+    def suite_start(self, data) -> str:
+        self.completed_tests = 0
+        self.running_tests.clear()
+        self.test_output.clear()
+        self.subtest_failures.clear()
+        self.tests_with_failing_subtests.clear()
+        for status in self.expected:
+            self.expected[status] = 0
+        for tests in self.unexpected_tests.values():
+            tests.clear()
+        return super().suite_start(data)
+
+    def suite_end(self, data) -> str:
+        # Do not show test failures again in noninteractive mode. THey are
+        # already shown during the run.
+        self.test_failure_text = ''
+        return super().suite_end(data)
+
+
+class MachFormatter(mozlog.formatters.MachFormatter):
+    def __init__(self, *args, reset_before_suite: bool = True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.reset_before_suite = reset_before_suite
+
+    def suite_start(self, data) -> str:
+        output = super().suite_start(data)
+        if self.reset_before_suite:
+            for counts in self.summary.current['counts'].values():
+                counts['count'] = 0
+                counts['expected'].clear()
+                counts['unexpected'].clear()
+                counts['known_intermittent'].clear()
+            self.summary.current['unexpected_logs'].clear()
+            self.summary.current['intermittent_logs'].clear()
+            self.summary.current['harness_errors'].clear()
+        return output
 
 
 class StructuredLogAdapter(logging.Handler):
@@ -221,6 +263,10 @@ class WPTAdapter:
             self.add_android_arguments(parser)
         else:
             warnings.warn('Android tools not found')
+        if _IOS_ENABLED:
+            self.add_ios_arguments(parser)
+        else:
+            warnings.warn('iOS tools not found')
         # Nightly installation is not supported, so just add defaults.
         parser.set_defaults(
             prompt=False,
@@ -266,7 +312,8 @@ class WPTAdapter:
         output_dir = self.path_from_output_dir(options.target)
         if not self.fs.isdir(output_dir):
             raise ValueError("'--target' must be a directory under //out")
-        if options.log_chromium == '':
+        self.port.set_option_default('target', options.target)
+        if options.log_chromium == '' or options.show_results:
             options.log_chromium = self.fs.join(output_dir, 'results.json')
         if options.log_wptreport == '':
             if self._shard_index is None:
@@ -281,7 +328,6 @@ class WPTAdapter:
             if filename:
                 filename = self.fs.abspath(filename)
                 setattr(options, dest, [mozlog.commandline.log_file(filename)])
-
         options.log = wptlogging.setup(dict(vars(options)),
                                        {'grouped': sys.stdout})
         logging.root.handlers.clear()
@@ -320,21 +366,50 @@ class WPTAdapter:
             options.config = self.path_finder.path_from_web_tests(
                 'wptrunner.blink.ini')
         if options.flag_specific:
+            # Enable adding smoke tests later.
+            self.port.set_option_default('flag_specific',
+                                         options.flag_specific)
             configs = self.port.flag_specific_configs()
-            args, smoke_file_name = configs[options.flag_specific]
+            args, _ = configs[options.flag_specific]
             logger.info('Running with flag-specific arguments: "%s"',
                         ' '.join(args))
             options.binary_args.extend(args)
-            if smoke_file_name and not _has_explicit_tests(options):
-                options.include_file = self.path_finder.path_from_web_tests(
-                    smoke_file_name)
+
+        if self.port.default_smoke_test_only():
+            smoke_file_short_path = self.fs.relpath(
+                self.port.path_to_smoke_tests_file(),
+                self.port.web_tests_dir())
+            if not _has_explicit_tests(options):
+                self._load_smoke_tests(options)
                 logger.info(
                     'Tests not explicitly specified; '
-                    'running tests from web_tests/%s', smoke_file_name)
-            elif smoke_file_name:
+                    'running tests from %s', smoke_file_short_path)
+            else:
                 logger.warning(
                     'Tests explicitly specified; '
-                    'not running tests from web_tests/%s', smoke_file_name)
+                    'not running tests from %s', smoke_file_short_path)
+
+    def _load_smoke_tests(self, options: argparse.Namespace):
+        """Read the smoke tests file and append its tests to the test list.
+
+        This method handles smoke test files inherited from `run_web_tests.py`
+        differently from the native `wpt run --include-file` parameter.
+        Specifically, tests are assumed to be relative to `web_tests/`, so a
+        line without a recognized `external/wpt/` or `wpt_internal/` prefix is
+        assumed to be a legacy layout test that is excluded.
+        """
+        smoke_file_path = self.port.path_to_smoke_tests_file()
+        options.include = options.include or []
+        with self.fs.open_text_file_for_reading(smoke_file_path) as smoke_file:
+            for line in smoke_file:
+                test, _, _ = line.partition('#')
+                test = test.strip()
+                for wpt_dir, url_prefix in Port.WPT_DIRS.items():
+                    if not wpt_dir.endswith('/'):
+                        wpt_dir += '/'
+                    if test.startswith(wpt_dir):
+                        options.include.append(
+                            test.replace(wpt_dir, url_prefix, 1))
 
     def _check_and_update_upstream_options(self, options: argparse.Namespace):
         if options.use_upstream_wpt:
@@ -354,6 +429,7 @@ class WPTAdapter:
             # '--run-by-dir=0' so that tests can be more evenly distributed
             # among workers.
             options.fail_on_unexpected_pass = False
+            options.restart_on_unexpected = False
             options.restart_on_new_group = False
             options.run_by_dir = 0
 
@@ -408,8 +484,8 @@ class WPTAdapter:
             stack.callback(self.port.clean_up_test_run)
             self.fs.chdir(self.path_finder.web_tests_dir())
             run = _load_entry_point(tools_root)
+            stack.enter_context(self.process_and_upload_results(options))
             exit_code = run(**vars(options))
-            self.process_and_upload_results(options)
             return exit_code
 
     def _make_product(self, options: argparse.Namespace) -> 'Product':
@@ -449,49 +525,32 @@ class WPTAdapter:
         with self.fs.open_text_file_for_writing(run_info_path) as file_handle:
             json.dump(run_info, file_handle)
 
+    @contextlib.contextmanager
     def process_and_upload_results(
             self,
             options,
-            layout_test_results_subdir: str = 'layout-test-results',
+            layout_test_results_subdir: str = ARTIFACTS_SUB_DIR,
     ):
-        if not options.log_chromium:
-            return
-        json_results_filename = options.log_chromium[0].name
-        artifacts_dir = os.path.join(os.path.dirname(json_results_filename),
-                                     layout_test_results_subdir)
-        command = [
-            self.port.python3_command(),
-            os.path.join(path_finder.get_blink_tools_dir(),
-                         'wpt_process_results.py'),
-            '--target',
-            options.target,
-            '--web-tests-dir',
-            self.path_finder.web_tests_dir(),
-            '--artifacts-dir',
-            artifacts_dir,
-            '--wpt-results',
-            json_results_filename,
-        ]
-        if options.verbose:
-            command.append('--verbose')
+        if options.log_chromium:
+            artifacts_dir = self.fs.join(
+                self.fs.dirname(options.log_chromium[0].name),
+                layout_test_results_subdir)
+        else:
+            artifacts_dir = self.path_from_output_dir(
+                options.target, layout_test_results_subdir)
+        processor = WPTResultsProcessor(self.host.filesystem,
+                                        self.port,
+                                        artifacts_dir=artifacts_dir)
+        with processor.stream_results() as events:
+            options.log.add_handler(events.put)
+            yield
         if options.log_wptreport:
-            command.extend(['--wpt-report', options.log_wptreport[0].name])
-        exit_code = common.run_command(command)
-        if (exit_code != exit_codes.INTERRUPTED_EXIT_STATUS
-                and options.show_results
-                and self.has_regressions(artifacts_dir)):
-            self.show_results_in_browser(artifacts_dir)
-
-    def show_results_in_browser(self, artifacts_dir: str):
-        results_file = self.fs.join(artifacts_dir, 'results.html')
-        self.port.show_results_html_file(results_file)
-
-    def has_regressions(self, artifacts_dir: str):
-        full_results_file = self.fs.join(artifacts_dir, 'full_results.json')
-        with self.fs.open_text_file_for_reading(
-                full_results_file) as full_results:
-            results = json.load(full_results)
-        return results["num_regressions"] > 0
+            processor.process_wpt_report(options.log_wptreport[0].name)
+        if options.log_chromium:
+            processor.process_results_json(options.log_chromium[0].name)
+        if options.show_results and processor.has_regressions:
+            self.port.show_results_html_file(
+                self.fs.join(artifacts_dir, 'results.html'))
 
     def add_configuration_arguments(self, parser: argparse.ArgumentParser):
         group = parser.add_argument_group('Configuration')
@@ -660,6 +719,15 @@ class WPTAdapter:
                            action='count',
                            default=0,
                            help='Increase verbosity')
+        # Install customized versions of `mozlog` formatters.
+        for name, formatter in [
+            ('grouped', GroupingFormatter),
+            ('mach', MachFormatter),
+        ]:
+            mozlog.commandline.log_formatters[name] = (
+                formatter,
+                mozlog.commandline.log_formatters[name][1],
+            )
         return group
 
     def add_android_arguments(self, parser):
@@ -691,6 +759,16 @@ class WPTAdapter:
             help='Install WebView from release channel. (WebView only.)')
         return group
 
+    def add_ios_arguments(self, parser):
+        group = parser.add_argument_group(
+            'iOS specific arguments', 'Options for configuring iOS tooling.')
+        group.add_argument(
+            '--xcode-build-version',
+            help='Xcode build version to install. Use chrome_ios'
+            ' product to enable this',
+            metavar='build_id')
+        return group
+
 
 class IsolatedScriptTestFilterAction(argparse.Action):
     def __init__(self, finder, *args, **kwargs):
@@ -708,6 +786,15 @@ class IsolatedScriptTestFilterAction(argparse.Action):
                 include.extend(extra_include)
                 exclude.extend(extra_exclude)
         namespace.include, namespace.exclude = include, exclude
+        # The `chromium_tests` recipe passes `--isolated-script-test-filter` to
+        # retry failed tests without the patch. Because the patch may have added
+        # the failed tests (common for imported tests),
+        #  1. `run_wpt_tests.py --isolated-script-test-filter` must tolerate
+        #     test IDs that don't exist.
+        #  2. When all tests retried don't exist without the patch, wptrunner
+        #     must run zero tests and exit successfully instead of interpreting
+        #     the lack of explicit tests as running all tests.
+        namespace.default_exclude = True
 
     def _resolve_tests(self, test_filter: str) -> Tuple[List[str], List[str]]:
         """Resolve an isolated script-style filter string into lists of tests.
@@ -753,7 +840,7 @@ def _load_entry_point(tools_root: str):
     if tools_root not in sys.path:
         sys.path.insert(0, tools_root)
     # Remove current cached modules to force a reload.
-    module_pattern = re.compile(r'\bwpt(runner|serve)?\b')
+    module_pattern = re.compile(r'^(tools|wpt(runner|serve)?)\b')
     for name in list(sys.modules):
         if module_pattern.search(name):
             del sys.modules[name]
@@ -898,6 +985,43 @@ class ChromeiOS(Product):
                 '../../../ios/chrome/test/wpt/tools/'
                 'run_cwt_chromedriver_wrapper.py'))
 
+    @contextlib.contextmanager
+    def test_env(self):
+        with super().test_env():
+            self.update_options()
+            # Set up xcode log output dir.
+            output_dir = self._host.filesystem.join(
+                self._host.filesystem.dirname(
+                    self._options.log_chromium[0].name), "xcode-output")
+            self._options.webdriver_args.extend([
+                '--out-dir=' + output_dir,
+            ])
+
+            # Install xcode.
+            if self._options.xcode_build_version:
+                try:
+                    runtime_cache_folder = xcode.construct_runtime_cache_folder(
+                        '../../Runtime-ios-', '16.0')
+                    os.makedirs(runtime_cache_folder, exist_ok=True)
+                    xcode.install('../../mac_toolchain',
+                                  self._options.xcode_build_version,
+                                  '../../Xcode.app',
+                                  runtime_cache_folder=runtime_cache_folder,
+                                  ios_version='16.0')
+                    xcode.select('../../Xcode.app')
+                except subprocess.CalledProcessError as e:
+                    logger.error(
+                        'Xcode build version %s failed to install: %s ',
+                        self._options.xcode_build_version, e)
+                else:
+                    logger.info(
+                        'Xcode build version %s successfully installed.',
+                        self._options.xcode_build_version)
+            else:
+                logger.warning('Skip the Xcode installation, no '
+                               '--xcode-build-version')
+            yield
+
 
 @contextlib.contextmanager
 def _install_apk(device, path):
@@ -927,6 +1051,7 @@ class ChromeAndroidBase(Product):
                                 'if using only emulators.')
 
             self.provision_devices(devices)
+            self.update_options()
             yield
 
     def update_options(self):
@@ -1144,6 +1269,16 @@ def _parse_environ_int(name: str) -> Optional[int]:
     return None
 
 
+def handle_interrupt_signals():
+    def termination_handler(_signum, _unused_frame):
+        raise KeyboardInterrupt()
+
+    if sys.platform == "win32":
+        signal.signal(signal.SIGBREAK, termination_handler)
+    else:
+        signal.signal(signal.SIGTERM, termination_handler)
+
+
 def main() -> int:
     # Force log output in utf-8 instead of a locale-dependent encoding. On
     # Windows, this can be cp1252. See: crbug.com/1371195.
@@ -1152,11 +1287,17 @@ def main() -> int:
         sys.stderr.reconfigure(encoding='utf-8')
     # Also apply utf-8 mode to python subprocesses.
     os.environ['PYTHONUTF8'] = '1'
+    # Convert SIGTERM to be handled as KeyboardInterrupt to handle early termination
+    # Same handle is declared later on in wptrunner
+    # See: https://github.com/web-platform-tests/wpt/blob/25cd6eb086db5977ac51f7dee7faafe6772dc9d7/tools/wptrunner/wptrunner/wptrunner.py
+    # This early declaration allow graceful exit when Chromium swarming kill process before wpt starts
+    handle_interrupt_signals()
     try:
         adapter = WPTAdapter()
         options = adapter.parse_arguments()
         return adapter.run_tests(options)
     except KeyboardInterrupt:
+        logger.critical("Harness exited after signal interrupt")
         return exit_codes.INTERRUPTED_EXIT_STATUS
 
 

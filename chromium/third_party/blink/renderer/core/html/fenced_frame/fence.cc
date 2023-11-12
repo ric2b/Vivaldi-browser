@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/html/fenced_frame/fence.h"
 
+#include "base/feature_list.h"
+#include "base/ranges/algorithm.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
@@ -76,7 +78,8 @@ void Fence::reportEvent(ScriptState* script_state,
         "fully active");
     return;
   }
-  if (event->eventData().length() > blink::kFencedFrameMaxBeaconLength) {
+  if (event->hasEventData() &&
+      event->eventData().length() > blink::kFencedFrameMaxBeaconLength) {
     exception_state.ThrowSecurityError(
         "The data provided to reportEvent() exceeds the maximum length, which "
         "is 64KB.");
@@ -86,18 +89,24 @@ void Fence::reportEvent(ScriptState* script_state,
   LocalFrame* frame = DomWindow()->GetFrame();
   DCHECK(frame->GetDocument());
   bool has_fenced_frame_reporting =
-      frame->GetDocument()->Loader()->HasFencedFrameReporting();
+      frame->GetDocument()->Loader()->FencedFrameProperties().has_value() &&
+      frame->GetDocument()
+          ->Loader()
+          ->FencedFrameProperties()
+          ->has_fenced_frame_reporting();
   if (!has_fenced_frame_reporting) {
     AddConsoleMessage("This frame did not register reporting metadata.");
     return;
   }
 
-  for (const V8FenceReportingDestination& web_destination :
-       event->destination()) {
-    frame->GetLocalFrameHostRemote().SendFencedFrameReportingBeacon(
-        event->eventData(), event->eventType(),
-        ToPublicDestination(web_destination));
-  }
+  WTF::Vector<blink::FencedFrame::ReportingDestination> destinations;
+  destinations.reserve(event->destination().size());
+  base::ranges::transform(event->destination(),
+                          std::back_inserter(destinations),
+                          ToPublicDestination);
+
+  frame->GetLocalFrameHostRemote().SendFencedFrameReportingBeacon(
+      event->getEventDataOr(String{""}), event->eventType(), destinations);
 }
 
 void Fence::setReportEventDataForAutomaticBeacons(
@@ -115,7 +124,8 @@ void Fence::setReportEventDataForAutomaticBeacons(
                       " is not a valid automatic beacon event type.");
     return;
   }
-  if (event->eventData().length() > blink::kFencedFrameMaxBeaconLength) {
+  if (event->hasEventData() &&
+      event->eventData().length() > blink::kFencedFrameMaxBeaconLength) {
     exception_state.ThrowSecurityError(
         "The data provided to setReportEventDataForAutomaticBeacons() exceeds "
         "the maximum length, which is 64KB.");
@@ -124,18 +134,24 @@ void Fence::setReportEventDataForAutomaticBeacons(
   LocalFrame* frame = DomWindow()->GetFrame();
   DCHECK(frame->GetDocument());
   bool has_fenced_frame_reporting =
-      frame->GetDocument()->Loader()->HasFencedFrameReporting();
+      frame->GetDocument()->Loader()->FencedFrameProperties().has_value() &&
+      frame->GetDocument()
+          ->Loader()
+          ->FencedFrameProperties()
+          ->has_fenced_frame_reporting();
   if (!has_fenced_frame_reporting) {
     AddConsoleMessage("This frame did not register reporting metadata.");
     return;
   }
-  WTF::Vector<blink::FencedFrame::ReportingDestination> destination_vector;
-  for (const V8FenceReportingDestination& web_destination :
-       event->destination()) {
-    destination_vector.push_back(ToPublicDestination(web_destination));
-  }
+
+  WTF::Vector<blink::FencedFrame::ReportingDestination> destinations;
+  destinations.reserve(event->destination().size());
+  base::ranges::transform(event->destination(),
+                          std::back_inserter(destinations),
+                          ToPublicDestination);
+
   frame->GetLocalFrameHostRemote().SetFencedFrameAutomaticBeaconReportEventData(
-      event->eventData(), destination_vector);
+      event->getEventDataOr(String{""}), destinations);
 }
 
 HeapVector<Member<FencedFrameConfig>> Fence::getNestedConfigs(
@@ -163,8 +179,12 @@ HeapVector<Member<FencedFrameConfig>> Fence::getNestedConfigs(
 void Fence::reportPrivateAggregationEvent(ScriptState* script_state,
                                           const String& event,
                                           ExceptionState& exception_state) {
-  if (!RuntimeEnabledFeatures::PrivateAggregationApiFledgeExtensionsEnabled(
-          ExecutionContext::From(script_state))) {
+  if (!base::FeatureList::IsEnabled(blink::features::kPrivateAggregationApi) ||
+      !blink::features::kPrivateAggregationApiEnabledInFledge.Get() ||
+      (!blink::features::kPrivateAggregationApiFledgeExtensionsEnabled.Get() &&
+       !base::FeatureList::IsEnabled(
+           blink::features::
+               kPrivateAggregationApiFledgeExtensionsLocalTestingOverride))) {
     exception_state.ThrowSecurityError(
         "FLEDGE extensions must be enabled to use reportEvent() for private "
         "aggregation events.");
@@ -186,7 +206,11 @@ void Fence::reportPrivateAggregationEvent(ScriptState* script_state,
   DCHECK(frame->GetDocument());
 
   bool has_fenced_frame_reporting =
-      frame->GetDocument()->Loader()->HasFencedFrameReporting();
+      frame->GetDocument()->Loader()->FencedFrameProperties().has_value() &&
+      frame->GetDocument()
+          ->Loader()
+          ->FencedFrameProperties()
+          ->has_fenced_frame_reporting();
   if (!has_fenced_frame_reporting) {
     AddConsoleMessage("This frame did not register reporting metadata.");
     return;

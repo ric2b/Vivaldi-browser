@@ -13,8 +13,10 @@
 #include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
@@ -44,7 +46,7 @@ class DrmPropertyBlobMetadata {
   uint32_t id() const { return id_; }
 
  private:
-  DrmWrapper* drm_;  // Not owned;
+  raw_ptr<DrmWrapper, ExperimentalAsh> drm_;  // Not owned;
   uint32_t id_;
 };
 
@@ -267,6 +269,14 @@ class DrmWrapper {
 
   virtual absl::optional<std::string> GetDriverName() const;
 
+  // TODO(gildekel): remove once DrmWrapper and DrmDevice are completely
+  // decoupled.
+  // Returns a list of supported drm formats and modifiers for |crtc_id|. Note:
+  // implementation in wrapper is a stub. Full implementation is in
+  // DrmDevice::GetFormatsAndModifiersForCrtc().
+  virtual display::DrmFormatsAndModifiers GetFormatsAndModifiersForCrtc(
+      uint32_t crtc_id) const;
+
   // Extracts the FD from the given |drm|. The |drm| object will be invalidated.
   static base::ScopedFD ToScopedFD(std::unique_ptr<DrmWrapper> drm);
 
@@ -276,8 +286,8 @@ class DrmWrapper {
 
  protected:
   // TODO(gildekel): move CommitProperties() and PageFlip() to the public API
-  // once DrmWrapper DrmDevice are completely decoupled. Consider changing the
-  // signature to `void* user_data` instead of |page_flip_id|, which is too
+  // once DrmWrapper and DrmDevice are completely decoupled. Consider changing
+  // the signature to `void* user_data` instead of |page_flip_id|, which is too
   // specific.
   bool CommitProperties(drmModeAtomicReq* properties,
                         uint32_t flags,

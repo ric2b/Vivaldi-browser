@@ -7,6 +7,7 @@
 #include "base/containers/contains.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
 #include "chromeos/ash/components/network/hotspot_util.h"
+#include "chromeos/ash/components/network/metrics/hotspot_metrics_helper.h"
 #include "chromeos/ash/components/network/network_event_log.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
@@ -33,23 +34,15 @@ HotspotStateHandler::~HotspotStateHandler() {
   if (ShillManagerClient::Get()) {
     ShillManagerClient::Get()->RemovePropertyChangedObserver(this);
   }
-  if (LoginState::IsInitialized()) {
-    LoginState::Get()->RemoveObserver(this);
-  }
 }
 
 void HotspotStateHandler::Init() {
-  if (LoginState::IsInitialized()) {
-    LoginState::Get()->AddObserver(this);
-  }
   // Add as an observer here so that new hotspot state updated after this call
   // are recognized.
   ShillManagerClient::Get()->AddPropertyChangedObserver(this);
   ShillManagerClient::Get()->GetProperties(
       base::BindOnce(&HotspotStateHandler::OnManagerProperties,
                      weak_ptr_factory_.GetWeakPtr()));
-  if (LoginState::IsInitialized())
-    LoggedInStateChanged();
 }
 
 void HotspotStateHandler::AddObserver(Observer* observer) {
@@ -69,115 +62,19 @@ HotspotStateHandler::GetHotspotState() const {
   return hotspot_state_;
 }
 
+const absl::optional<hotspot_config::mojom::DisableReason>
+HotspotStateHandler::GetDisableReason() const {
+  return disable_reason_;
+}
+
 size_t HotspotStateHandler::GetHotspotActiveClientCount() const {
   return active_client_count_;
-}
-
-hotspot_config::mojom::HotspotConfigPtr HotspotStateHandler::GetHotspotConfig()
-    const {
-  if (!hotspot_config_)
-    return nullptr;
-
-  return ShillTetheringConfigToMojomConfig(*hotspot_config_);
-}
-
-void HotspotStateHandler::SetHotspotConfig(
-    hotspot_config::mojom::HotspotConfigPtr mojom_config,
-    SetHotspotConfigCallback callback) {
-  using SetHotspotConfigResult = hotspot_config::mojom::SetHotspotConfigResult;
-
-  if (!LoginState::Get()->IsUserLoggedIn()) {
-    NET_LOG(ERROR) << "Could not set hotspot config without login first.";
-    std::move(callback).Run(SetHotspotConfigResult::kFailedNotLogin);
-    return;
-  }
-
-  if (!mojom_config) {
-    NET_LOG(ERROR) << "Invalid hotspot configurations.";
-    std::move(callback).Run(
-        SetHotspotConfigResult::kFailedInvalidConfiguration);
-    return;
-  }
-
-  base::Value shill_tethering_config =
-      MojomConfigToShillConfig(std::move(mojom_config));
-  auto callback_split = base::SplitOnceCallback(std::move(callback));
-  ShillManagerClient::Get()->SetProperty(
-      shill::kTetheringConfigProperty, std::move(shill_tethering_config),
-      base::BindOnce(&HotspotStateHandler::OnSetHotspotConfigSuccess,
-                     weak_ptr_factory_.GetWeakPtr(),
-                     std::move(callback_split.first)),
-      base::BindOnce(&HotspotStateHandler::OnSetHotspotConfigFailure,
-                     weak_ptr_factory_.GetWeakPtr(),
-                     std::move(callback_split.second)));
-}
-
-void HotspotStateHandler::OnSetHotspotConfigSuccess(
-    SetHotspotConfigCallback callback) {
-  ShillManagerClient::Get()->GetProperties(
-      base::BindOnce(&HotspotStateHandler::UpdateHotspotConfigAndRunCallback,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-}
-
-void HotspotStateHandler::OnSetHotspotConfigFailure(
-    SetHotspotConfigCallback callback,
-    const std::string& error_name,
-    const std::string& error_message) {
-  NET_LOG(ERROR) << "Error setting hotspot config, error name:" << error_name
-                 << ", message" << error_message;
-  std::move(callback).Run(hotspot_config::mojom::SetHotspotConfigResult::
-                              kFailedInvalidConfiguration);
-}
-
-void HotspotStateHandler::LoggedInStateChanged() {
-  if (!LoginState::Get()->IsUserLoggedIn()) {
-    if (hotspot_config_) {
-      hotspot_config_ = absl::nullopt;
-      NotifyHotspotStatusChanged();
-    }
-    return;
-  }
-  ShillManagerClient::Get()->GetProperties(
-      base::BindOnce(&HotspotStateHandler::UpdateHotspotConfigAndRunCallback,
-                     weak_ptr_factory_.GetWeakPtr(), base::DoNothing()));
-}
-
-void HotspotStateHandler::UpdateHotspotConfigAndRunCallback(
-    SetHotspotConfigCallback callback,
-    absl::optional<base::Value::Dict> properties) {
-  if (!properties) {
-    NET_LOG(ERROR) << "Error getting Shill manager properties.";
-    std::move(callback).Run(
-        hotspot_config::mojom::SetHotspotConfigResult::kSuccess);
-    return;
-  }
-  const base::Value::Dict* shill_tethering_config =
-      properties->FindDict(shill::kTetheringConfigProperty);
-  if (!shill_tethering_config) {
-    NET_LOG(ERROR) << "Error getting " << shill::kTetheringConfigProperty
-                   << " in Shill manager properties";
-    std::move(callback).Run(
-        hotspot_config::mojom::SetHotspotConfigResult::kSuccess);
-    return;
-  }
-
-  hotspot_config_ = shill_tethering_config->Clone();
-  std::move(callback).Run(
-      hotspot_config::mojom::SetHotspotConfigResult::kSuccess);
-  NotifyHotspotStatusChanged();
 }
 
 void HotspotStateHandler::OnPropertyChanged(const std::string& key,
                                             const base::Value& value) {
   if (key == shill::kTetheringStatusProperty) {
     UpdateHotspotStatus(value.GetDict());
-  } else if (key == shill::kProfilesProperty) {
-    // Shill initializes the tethering config with random value and signals
-    // "Profiles" property changes when the tethering config is fully loaded
-    // from persistent storage.
-    ShillManagerClient::Get()->GetProperties(
-        base::BindOnce(&HotspotStateHandler::UpdateHotspotConfigAndRunCallback,
-                       weak_ptr_factory_.GetWeakPtr(), base::DoNothing()));
   }
 }
 
@@ -212,6 +109,7 @@ void HotspotStateHandler::UpdateHotspotStatus(const base::Value::Dict& status) {
       ShillTetheringStateToMojomState(*state);
   if (mojom_state != hotspot_state_) {
     hotspot_state_ = mojom_state;
+    UpdateDisableReason(status);
     NotifyHotspotStatusChanged();
   }
 
@@ -225,6 +123,24 @@ void HotspotStateHandler::UpdateHotspotStatus(const base::Value::Dict& status) {
 
   active_client_count_ = active_client_count;
   NotifyHotspotStatusChanged();
+}
+
+void HotspotStateHandler::UpdateDisableReason(const base::Value::Dict& status) {
+  const std::string* idle_reason =
+      status.FindString(shill::kTetheringStatusIdleReasonProperty);
+  if (!idle_reason) {
+    disable_reason_ = absl::nullopt;
+    NET_LOG(EVENT) << "HotspotStateHandler: No string value for: "
+                   << shill::kTetheringStatusIdleReasonProperty << " in "
+                   << shill::kTetheringStatusProperty;
+    return;
+  }
+
+  if (*idle_reason != shill::kTetheringIdleReasonInitialState) {
+    hotspot_config::mojom::DisableReason disable_reason =
+        ShillTetheringIdleReasonToMojomState(*idle_reason);
+    disable_reason_ = disable_reason;
+  }
 }
 
 void HotspotStateHandler::NotifyHotspotStatusChanged() {

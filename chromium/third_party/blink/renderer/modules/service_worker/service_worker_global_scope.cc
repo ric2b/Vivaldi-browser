@@ -139,6 +139,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/loader/fetch/unique_identifier.h"
 #include "third_party/blink/renderer/platform/network/content_security_policy_response_headers.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
@@ -692,11 +693,10 @@ bool ServiceWorkerGlobalScope::AddEventListenerInternal(
     // Count the update of fetch handlers after the initial evaluation.
     if (event_type == event_type_names::kFetch) {
       UseCounter::Count(
-          this,
-          WebFeature::kServiceWorkerFetchHandlerUpdateAfterInitialization);
+          this, WebFeature::kServiceWorkerFetchHandlerAddedAfterInitialization);
     }
-    UseCounter::Count(this,
-                      WebFeature::kServiceWorkerAddHandlerAfterInitialization);
+    UseCounter::Count(
+        this, WebFeature::kServiceWorkerEventHandlerAddedAfterInitialization);
   }
   return WorkerGlobalScope::AddEventListenerInternal(event_type, listener,
                                                      options);
@@ -1576,6 +1576,20 @@ void ServiceWorkerGlobalScope::DispatchFetchEventForSubresource(
               GetThread()->GetTaskRunner(TaskType::kNetworking));
   fetch_response_callbacks_.Set(event_id, WrapDisallowNew(std::move(remote)));
 
+  if (params->did_start_race_network_request) {
+    UseCounter::Count(
+        this,
+        // If the runtime flag is enabled, that means the feature is enabled via
+        // OriginTrial. We count the feature usage separatefy from the a/b
+        // experiment to monitor the actual usage respectively.
+        RuntimeEnabledFeatures::ServiceWorkerRaceNetworkRequestEnabled(
+            ExecutionContext::From(ScriptController()->GetScriptState()))
+            ? WebFeature::
+                  kServiceWorkerBypassFetchHandlerForAllWithRaceNetworkRequestByOriginTrial
+            : WebFeature::
+                  kServiceWorkerBypassFetchHandlerForAllWithRaceNetworkRequest);
+  }
+
   if (RequestedTermination()) {
     event_queue_->EnqueuePending(
         event_id,
@@ -1620,7 +1634,8 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
     mojom::blink::FetchHandlerExistence fetch_hander_existence,
     mojo::PendingReceiver<mojom::blink::ReportingObserver>
         reporting_observer_receiver,
-    mojom::blink::AncestorFrameType ancestor_frame_type) {
+    mojom::blink::AncestorFrameType ancestor_frame_type,
+    const blink::BlinkStorageKey& storage_key) {
   DCHECK(IsContextThread());
   DCHECK(!global_scope_initialized_);
 
@@ -1656,6 +1671,8 @@ void ServiceWorkerGlobalScope::InitializeGlobalScope(
   global_scope_initialized_ = true;
   if (!pause_evaluation_)
     ReadyToRunWorkerScript();
+
+  storage_key_ = storage_key;
 }
 
 void ServiceWorkerGlobalScope::PauseEvaluation() {
@@ -2627,15 +2644,18 @@ ServiceWorkerGlobalScope::FetchHandlerType() {
   if (!elv) {
     return mojom::blink::ServiceWorkerFetchHandlerType::kNoHandler;
   }
-  v8::Isolate* isolate = GetIsolate();
-  v8::HandleScope handle_scope(isolate);
+
+  ScriptState* script_state = ScriptController()->GetScriptState();
+  // Do not remove this, |scope| is needed by `GetListenerObject`.
+  ScriptState::Scope scope(script_state);
+
   // TODO(crbug.com/1349613): revisit the way to implement this.
   // The following code returns kEmptyFetchHandler if all handlers are nop.
   for (RegisteredEventListener& e : *elv) {
-    EventTarget* et = EventTarget::Create(ScriptController()->GetScriptState());
+    EventTarget* et = EventTarget::Create(script_state);
     v8::Local<v8::Value> v =
-        To<JSBasedEventListener>(e.Callback())->GetEffectiveFunction(*et);
-    if (!v->IsFunction() ||
+        To<JSBasedEventListener>(e.Callback())->GetListenerObject(*et);
+    if (v.IsEmpty() || !v->IsFunction() ||
         !v.As<v8::Function>()->Experimental_IsNopFunction()) {
       return mojom::blink::ServiceWorkerFetchHandlerType::kNotSkippable;
     }
@@ -2660,7 +2680,8 @@ bool ServiceWorkerGlobalScope::SetAttributeEventListener(
           WebFeature::kServiceWorkerFetchHandlerModifiedAfterInitialization);
     }
     UseCounter::Count(
-        this, WebFeature::kServiceWorkerSetAttributeHandlerAfterInitialization);
+        this,
+        WebFeature::kServiceWorkerEventHandlerModifiedAfterInitialization);
   }
   return WorkerGlobalScope::SetAttributeEventListener(event_type, listener);
 }

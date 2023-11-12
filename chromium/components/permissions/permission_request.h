@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -83,6 +84,9 @@ class PermissionRequest {
   virtual std::u16string GetDialogMessageText() const;
 #endif
 
+  // Returns a weak pointer to this instance.
+  base::WeakPtr<PermissionRequest> GetWeakPtr();
+
 #if !BUILDFLAG(IS_ANDROID)
   // Returns whether displaying a confirmation chip for the request is
   // supported.
@@ -104,6 +108,10 @@ class PermissionRequest {
   // "[domain] wants to:".
   virtual std::u16string GetMessageTextFragment() const;
 #endif
+
+  // Returns true if the request has two origins and should use the two origin
+  // prompt. Returns false otherwise.
+  bool ShouldUseTwoOriginPrompt() const;
 
   // Called when the user has granted the requested permission.
   // If |is_one_time| is true the permission will last until all tabs of
@@ -163,6 +171,8 @@ class PermissionRequest {
   // Called when the request is no longer in use so it can be deleted by the
   // caller.
   base::OnceClosure delete_callback_;
+
+  base::WeakPtrFactory<PermissionRequest> weak_factory_{this};
 };
 
 }  // namespace permissions

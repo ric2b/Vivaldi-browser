@@ -281,9 +281,8 @@ base::FilePath GetLastChooseEntryDirectory(const ExtensionPrefs* prefs,
 void SetLastChooseEntryDirectory(ExtensionPrefs* prefs,
                                  const std::string& extension_id,
                                  const base::FilePath& path) {
-  prefs->UpdateExtensionPref(
-      extension_id, kLastChooseEntryDirectory,
-      base::Value::ToUniquePtrValue(::base::FilePathToValue(path)));
+  prefs->UpdateExtensionPref(extension_id, kLastChooseEntryDirectory,
+                             ::base::FilePathToValue(path));
 }
 
 }  // namespace file_system_api
@@ -307,7 +306,7 @@ ExtensionFunction::ResponseAction FileSystemGetDisplayPathFunction::Run() {
   }
 
   file_path = path_util::PrettifyPath(file_path);
-  return RespondNow(OneArgument(base::Value(file_path.AsUTF8Unsafe())));
+  return RespondNow(WithArguments(file_path.AsUTF8Unsafe()));
 }
 
 FileSystemEntryFunction::FileSystemEntryFunction() = default;
@@ -341,7 +340,7 @@ void FileSystemEntryFunction::RegisterFileSystemsAndSendResponse(
   base::Value::Dict result = CreateResult();
   for (const auto& path : paths)
     AddEntryToResult(path, std::string(), result);
-  Respond(OneArgument(base::Value(std::move(result))));
+  Respond(WithArguments(std::move(result)));
 }
 
 base::Value::Dict FileSystemEntryFunction::CreateResult() {
@@ -446,7 +445,7 @@ ExtensionFunction::ResponseAction FileSystemIsWritableEntryFunction::Run() {
   bool is_writable =
       policy->CanReadWriteFileSystem(source_process_id(), filesystem_id);
 
-  return RespondNow(OneArgument(base::Value(is_writable)));
+  return RespondNow(WithArguments(is_writable));
 }
 
 void FileSystemChooseEntryFunction::ShowPicker(
@@ -778,9 +777,9 @@ void FileSystemChooseEntryFunction::MaybeUseManagedSavePath(
 FileSystemChooseEntryFunction::~FileSystemChooseEntryFunction() = default;
 
 ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
-  std::unique_ptr<ChooseEntry::Params> params(
-      ChooseEntry::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<ChooseEntry::Params> params =
+      ChooseEntry::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   base::FilePath suggested_name;
   ui::SelectFileDialog::FileTypeInfo file_type_info;
@@ -793,11 +792,11 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
     if (multiple_)
       picker_type = ui::SelectFileDialog::SELECT_OPEN_MULTI_FILE;
 
-    if (options.type == file_system::CHOOSE_ENTRY_TYPE_OPENWRITABLEFILE &&
+    if (options.type == file_system::ChooseEntryType::kOpenWritableFile &&
         !app_file_handler_util::HasFileSystemWritePermission(
             extension_.get())) {
       return RespondNow(Error(kRequiresFileSystemWriteError));
-    } else if (options.type == file_system::CHOOSE_ENTRY_TYPE_SAVEFILE) {
+    } else if (options.type == file_system::ChooseEntryType::kSaveFile) {
       if (!app_file_handler_util::HasFileSystemWritePermission(
               extension_.get())) {
         return RespondNow(Error(kRequiresFileSystemWriteError));
@@ -806,7 +805,7 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
         return RespondNow(Error(kMultipleUnsupportedError));
       }
       picker_type = ui::SelectFileDialog::SELECT_SAVEAS_FILE;
-    } else if (options.type == file_system::CHOOSE_ENTRY_TYPE_OPENDIRECTORY) {
+    } else if (options.type == file_system::ChooseEntryType::kOpenDirectory) {
       is_directory_ = true;
       if (!extension_->permissions_data()->HasAPIPermission(
               mojom::APIPermissionID::kFileSystemDirectory)) {
@@ -1002,8 +1001,8 @@ ExtensionFunction::ResponseAction FileSystemIsRestorableFunction::Run() {
       delegate->GetSavedFilesService(browser_context());
   DCHECK(saved_files_service);
 
-  return RespondNow(OneArgument(base::Value(
-      saved_files_service->IsRegistered(extension_->id(), entry_id))));
+  return RespondNow(WithArguments(
+      saved_files_service->IsRegistered(extension_->id(), entry_id)));
 }
 
 FileSystemRestoreEntryFunction::~FileSystemRestoreEntryFunction() = default;
@@ -1036,7 +1035,7 @@ ExtensionFunction::ResponseAction FileSystemRestoreEntryFunction::Run() {
     is_directory_ = file->is_directory;
     base::Value::Dict result = CreateResult();
     AddEntryToResult(file->path, file->id, result);
-    return RespondNow(OneArgument(base::Value(std::move(result))));
+    return RespondNow(WithArguments(std::move(result)));
   }
   return RespondNow(NoArguments());
 }
@@ -1052,7 +1051,7 @@ FileSystemRequestFileSystemFunction::~FileSystemRequestFileSystemFunction() =
 
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   using file_system::RequestFileSystem::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   consent_provider_ =
@@ -1083,7 +1082,7 @@ void FileSystemRequestFileSystemFunction::OnGotFileSystem(
   base::Value::Dict dict;
   dict.Set("file_system_id", id);
   dict.Set("file_system_path", path);
-  Respond(OneArgument(base::Value(std::move(dict))));
+  Respond(WithArguments(std::move(dict)));
 }
 
 void FileSystemRequestFileSystemFunction::OnError(const std::string& error) {
@@ -1133,7 +1132,7 @@ FileSystemRequestFileSystemFunction::~FileSystemRequestFileSystemFunction() =
 
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   using file_system::RequestFileSystem::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   NOTIMPLEMENTED();

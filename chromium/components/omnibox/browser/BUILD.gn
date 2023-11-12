@@ -33,12 +33,13 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "answer_sunrise.icon",
     "answer_translation.icon",
     "answer_when_is.icon",
-    "blank.icon",
     "bookmark.icon",
     "calculator.icon",
     "chevron.icon",
     "clear.icon",
     "clock.icon",
+    "cookie_chrome_refresh.icon",
+    "cookie_crossed_chrome_refresh.icon",
     "dino.icon",
     "drive_docs.icon",
     "drive_folder.icon",
@@ -51,7 +52,9 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "drive_video.icon",
     "extension_app.icon",
     "find_in_page.icon",
+    "find_in_page_chrome_refresh.icon",
     "http.icon",
+    "http_chrome_refresh.icon",
     "https_valid_in_chip.icon",
     "incognito.icon",
     "install_desktop.icon",
@@ -63,20 +66,35 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "price_tracking_disabled.icon",
     "price_tracking_enabled_filled.icon",
     "product.icon",
+    "product_chrome_refresh.icon",
+    "secure_page_info_chrome_refresh.icon",
     "share.icon",
+    "share_chrome_refresh.icon",
     "star.icon",
     "star_active.icon",
+    "star_active_chrome_refresh.icon",
+    "star_chrome_refresh.icon",
     "switch.icon",
     "tab.icon",
     "trending_up.icon",
   ]
 
   if (is_mac) {
-    sources += [ "share_mac.icon" ]
+    sources += [
+      "share_mac.icon",
+      "share_mac_chrome_refresh.icon",
+    ]
   }
 
   if (is_win) {
-    sources += [ "share_win.icon" ]
+    sources += [
+      "share_win.icon",
+      "share_win_chrome_refresh.icon",
+    ]
+  }
+
+  if (is_linux) {
+    sources += [ "share_linux_chrome_refresh.icon" ]
   }
 }
 
@@ -213,6 +231,8 @@ static_library("browser") {
     "on_device_tail_tokenizer.h",
     "open_tab_provider.cc",
     "open_tab_provider.h",
+    "page_classification_functions.cc",
+    "page_classification_functions.h",
     "query_tile_provider.cc",
     "query_tile_provider.h",
     "remote_suggestions_service.cc",
@@ -375,6 +395,8 @@ static_library("browser") {
 
   if (is_android) {
     sources += [
+      "actions/omnibox_action_in_suggest.cc",
+      "actions/omnibox_action_in_suggest.h",
       "actions/omnibox_pedal_jni_wrapper.cc",
       "actions/omnibox_pedal_jni_wrapper.h",
       "autocomplete_match_android.cc",
@@ -466,7 +488,11 @@ if (is_android) {
       "android/java/res/drawable-xxxhdpi/omnibox_https_valid_arrow.png",
       "android/java/res/drawable-xxxhdpi/omnibox_info.png",
       "android/java/res/drawable-xxxhdpi/omnibox_not_secure_warning.png",
+      "android/java/res/drawable/action_call.xml",
+      "android/java/res/drawable/action_directions.xml",
+      "android/java/res/drawable/action_web.xml",
       "android/java/res/values/colors.xml",
+      "android/java/res/values/drawables.xml",
     ]
     deps = [
       "//components/browser_ui/strings/android:browser_ui_strings_grd",
@@ -484,6 +510,8 @@ if (is_android) {
       "android/java/src/org/chromium/components/omnibox/SecurityStatusIcon.java",
       "android/java/src/org/chromium/components/omnibox/SuggestionAnswer.java",
       "android/java/src/org/chromium/components/omnibox/action/HistoryClustersAction.java",
+      "android/java/src/org/chromium/components/omnibox/action/OmniboxAction.java",
+      "android/java/src/org/chromium/components/omnibox/action/OmniboxActionInSuggest.java",
       "android/java/src/org/chromium/components/omnibox/action/OmniboxPedal.java",
     ]
 
@@ -492,6 +520,7 @@ if (is_android) {
       ":java_resources",
       "//base:jni_java",
       "//build/android:build_java",
+      "//components/browser_ui/styles/android:java_resources",
       "//components/browser_ui/widget/android:java",
       "//components/embedder_support/android:util_java",
       "//components/query_tiles:query_tile_java",
@@ -512,20 +541,28 @@ if (is_android) {
   }
 
   robolectric_library("junit") {
-    sources = [ "android/java/src/org/chromium/components/omnibox/AutocompleteResultUnitTest.java" ]
+    resources_package = "org.chromium.components.omnibox"
+    sources = [
+      "android/java/src/org/chromium/components/omnibox/AutocompleteResultUnitTest.java",
+      "android/java/src/org/chromium/components/omnibox/action/HistoryClustersActionUnitTest.java",
+      "android/java/src/org/chromium/components/omnibox/action/OmniboxActionInSuggestUnitTest.java",
+      "android/java/src/org/chromium/components/omnibox/action/OmniboxPedalUnitTest.java",
+    ]
     deps = [
       ":browser_java",
+      ":java_resources",
       ":junit_test_support",
       "//base:base_java_test_support",
       "//base:base_junit_test_support",
+      "//components/browser_ui/styles/android:java_resources",
       "//third_party/android_deps:protobuf_lite_runtime_java",
-      "//third_party/androidx:androidx_test_runner_java",
       "//third_party/junit:junit",
       "//url:gurl_junit_shadows",
     ]
   }
 
   android_library("junit_test_support") {
+    resources_package = "org.chromium.components.omnibox"
     testonly = true
     sources = [
       "//components/omnibox/browser/android/java/src/org/chromium/components/omnibox/AutocompleteMatchBuilder.java",
@@ -544,6 +581,7 @@ if (is_android) {
   java_cpp_enum("browser_java_enums_srcjar") {
     sources = [
       "actions/omnibox_action_concepts.h",
+      "actions/omnibox_action_in_suggest.cc",
       "actions/omnibox_pedal_concepts.h",
       "autocomplete_match.h",
       "autocomplete_match_type.h",
@@ -560,6 +598,7 @@ if (is_android) {
       "android/java/src/org/chromium/components/omnibox/OmniboxUrlEmphasizer.java",
       "android/java/src/org/chromium/components/omnibox/SuggestionAnswer.java",
       "android/java/src/org/chromium/components/omnibox/action/HistoryClustersAction.java",
+      "android/java/src/org/chromium/components/omnibox/action/OmniboxActionInSuggest.java",
       "android/java/src/org/chromium/components/omnibox/action/OmniboxPedal.java",
     ]
   }
@@ -715,6 +754,7 @@ source_set("unit_tests") {
   if (build_with_tflite_lib) {
     sources += [
       "autocomplete_scoring_model_executor_unittest.cc",
+      "autocomplete_scoring_model_handler_unittest.cc",
       "on_device_tail_model_executor_unittest.cc",
     ]
   }
@@ -725,6 +765,7 @@ source_set("unit_tests") {
     ":unit_tests_bundle_data",
     "//base",
     "//base/test:test_support",
+    "//build:blink_buildflags",
     "//components/bookmarks/browser",
     "//components/bookmarks/test",
     "//components/dom_distiller/core:core",
@@ -733,6 +774,8 @@ source_set("unit_tests") {
     "//components/ntp_tiles:ntp_tiles",
     "//components/omnibox/common",
     "//components/open_from_clipboard:test_support",
+    "//components/optimization_guide/core:test_support",
+    "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/prefs:test_support",
     "//components/search",
     "//components/search_engines",

@@ -18,6 +18,7 @@
 #include "media/base/media_util.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
+#include "media/filters/dav1d_video_decoder.h"
 #include "media/filters/ffmpeg_video_decoder.h"
 #include "media/filters/vpx_video_decoder.h"
 #include "media/gpu/macros.h"
@@ -35,6 +36,13 @@ std::unique_ptr<VideoDecoder> CreateDecoder(
     VideoCodec codec,
     std::unique_ptr<MediaLog>* media_log) {
   std::unique_ptr<VideoDecoder> decoder;
+
+  if (codec == VideoCodec::kAV1) {
+#if BUILDFLAG(ENABLE_DAV1D_DECODER)
+    *media_log = std::make_unique<NullMediaLog>();
+    decoder = std::make_unique<Dav1dVideoDecoder>(media_log->get());
+#endif
+  }
 
   if (codec == VideoCodec::kVP8 || codec == VideoCodec::kVP9) {
 #if BUILDFLAG(ENABLE_LIBVPX)
@@ -284,16 +292,6 @@ void BitstreamValidator::DecodeDone(int64_t timestamp, DecoderStatus status) {
     validator_cv_.Signal();
     return;
   }
-
-  // This validator and |decoder_| don't use bitstream any more. Release here,
-  // so that a caller can use the bitstream buffer and proceed.
-  auto it = decoding_buffers_.Peek(timestamp);
-  if (it == decoding_buffers_.end()) {
-    // This occurs when VerifyfOutputFrame() is called before DecodeDone() and
-    // the entry has been deleted.
-    return;
-  }
-  it->second.second.reset();
 }
 
 void BitstreamValidator::OutputFrameProcessed() {

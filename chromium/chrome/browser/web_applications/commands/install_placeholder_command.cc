@@ -7,17 +7,18 @@
 #include <memory>
 #include <utility>
 
+#include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/install_bounce_metric.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
-#include "chrome/browser/web_applications/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_uninstall_and_replace_job.h"
+#include "chrome/browser/web_applications/web_contents/web_app_data_retriever.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "content/public/browser/web_contents.h"
 
@@ -37,7 +38,8 @@ InstallPlaceholderCommand::InstallPlaceholderCommand(
     std::unique_ptr<WebAppDataRetriever> data_retriever)
     : WebAppCommandTemplate<AppLock>("InstallPlaceholderCommand"),
       profile_(profile),
-      app_id_(GenerateAppId(/*manifest_id=*/"", install_options.install_url)),
+      app_id_(GenerateAppId(/*manifest_id=*/absl::nullopt,
+                            install_options.install_url)),
       lock_description_(std::make_unique<AppLockDescription>(app_id_)),
       install_options_(install_options),
       callback_(std::move(callback)),
@@ -78,7 +80,7 @@ void InstallPlaceholderCommand::Abort(webapps::InstallResultCode code) {
   if (!callback_) {
     return;
   }
-  debug_value_.Set("result_code", base::StreamableToString(code));
+  debug_value_.Set("result_code", base::ToString(code));
   webapps::InstallableMetrics::TrackInstallResult(false);
   SignalCompletionAndSelfDestruct(
       CommandResult::kFailure,
@@ -173,7 +175,7 @@ void InstallPlaceholderCommand::OnInstallFinalized(
     const AppId& app_id,
     webapps::InstallResultCode code,
     OsHooksErrors os_hooks_errors) {
-  debug_value_.Set("result_code", base::StreamableToString(code));
+  debug_value_.Set("result_code", base::ToString(code));
 
   if (!web_contents_ || web_contents_->IsBeingDestroyed()) {
     Abort(webapps::InstallResultCode::kWebContentsDestroyed);
@@ -189,8 +191,8 @@ void InstallPlaceholderCommand::OnInstallFinalized(
       Profile::FromBrowserContext(web_contents_->GetBrowserContext())
           ->GetPrefs(),
       app_id,
-      (ConvertExternalInstallSourceToInstallSource(
-          install_options_.install_source)));
+      ConvertExternalInstallSourceToInstallSource(
+          install_options_.install_source));
 
   RecordAppBanner(web_contents_.get(), install_options_.install_url);
 

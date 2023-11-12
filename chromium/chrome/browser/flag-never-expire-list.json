@@ -34,6 +34,7 @@
   "disable-webrtc-hw-encoding",
   "disallow-doc-written-script-loads",
   "enable-autofill-credit-card-upload",
+  "enable-benchmarking",
   "enable-command-line-on-non-rooted-devices",
   "enable-data-reduction-proxy-server-experiment",
   "enable-debug-for-store-billing",
@@ -56,6 +57,7 @@
   "enable-quic",
   "enable-reader-mode-in-cct",
   "enable-resource-loading-hints",
+  "enable-rfc-8925",
   "enable-show-autofill-signatures",
   "enable-site-per-process",
   "enable-touchscreen-calibration",
@@ -96,7 +98,6 @@
   "minutes-delay-to-restore-gaia-cookies-if-deleted",
   "omaha-min-sdk-version-android",
   "overlay-strategies",
-  "password-import",
   "prefer-dcheck",
   "printing-ppd-channel",
   "reader-mode-heuristics",
@@ -132,5 +133,6 @@
   "wait-threshold-seconds-for-capabilities-api",
   "wallet-service-use-sandbox",
   "web-authentication-permit-enterprise-attestation",
-  "webxr-runtime"
+  "webxr-runtime",
+  "webxr-shared-buffers"
 ]

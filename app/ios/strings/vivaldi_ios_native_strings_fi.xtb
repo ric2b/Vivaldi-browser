@@ -1,4 +1,343 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
+<translation id="1016495303386450659">Kohdetta muokattiin</translation>
+<translation id="1066692930984703744">Ota seuranta- ja mainosesto käyttöön nopeampaa ja turvallisempaa selausta varten</translation>
+<translation id="1116694919640316211">Tietoja</translation>
+<translation id="1123707809902612118">Estä seurannat ja mainokset</translation>
+<translation id="1151972924205500581">Salasana vaaditaan</translation>
+<translation id="1166425484559430538">Synkronointitiedot on salattu. Pura tietojen salaus syöttämällä salaussalasanasi.</translation>
+<translation id="1181037720776840403">Poista</translation>
+<translation id="1182668946911971500">Muistiinpanopalkki</translation>
+<translation id="1198271701881992799">Aloitetaan</translation>
+<translation id="1201402288615127009">Seuraava</translation>
+<translation id="1208495925646914304">Otsikko</translation>
+<translation id="1254117744268754948">Valitse kansio</translation>
+<translation id="1265555169187992603">Valitse käyttäjätunnus, joka sisältää 3-30 merkkiä (kirjaimet a–z, A–Z ja numerot 0–9).</translation>
+<translation id="1267954839079880017">Italia (<ph name="ORIGIN" />)</translation>
+<translation id="1272729688996227528">Synkronointi on käytössä</translation>
+<translation id="1275213816424141989">Ehkä myöhemmin</translation>
+<translation id="1315107593850379616">Palautussähköpostiosoite</translation>
+<translation id="1325473901257014816">Vivaldilla pidät kaikki välilehdet samassa selaimessa ja synkronoit ne kaikille laitteille.</translation>
+<translation id="132683371494960526">Vaihda yläkansiota tuplanapautuksella.</translation>
+<translation id="1379470994139227452">Aseta Vivaldi oletusselaimeksi</translation>
+<translation id="1381484244248892686">Tallennetut salasanat ovat käytettävissä kaikilla laitteillasi. Ne säilytetään Vivaldin Salasanahallinnassa tunnuksella <ph name="EMAIL" /></translation>
+<translation id="1383876407941801731">Hae</translation>
+<translation id="1430638949087011281">Ei estoa</translation>
+<translation id="1446108955355168157">Salaa ja suojaa synkronointitiedot (mm. salasanat, kirjanmerkit ja muistiinpanot) luomalla salaussalasana. Sitä ei koskaan lähetetä meille.</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> kohdetta</translation>
+<translation id="1521731267649138856">palautussähköpostiosoitteesi.</translation>
+<translation id="1573784689611551537">Hallitse mainoseston lähteitä</translation>
+<translation id="1577761519530347814">Synkronoi tallennetut verkkosivustojen kirjautumistiedot</translation>
+<translation id="1644574205037202324">Historia</translation>
+<translation id="1659112017960130179">Korea (<ph name="ORIGIN" />)</translation>
+<translation id="1689333818294560261">Lempinimi</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Käyttöehdot ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Tietosuojakäytäntö ➔<ph name="END_LINK2" /></translation>
+<translation id="1721552494230946796">Uusi pikavalintakansio</translation>
+<translation id="173924678149983125">Syöt URL-osoite estosääntöjen tuontiin</translation>
+<translation id="1751280147639351837">Mainos- ja seurantaesto</translation>
+<translation id="1752547299766512813">Tallenna salasanat</translation>
+<translation id="1754797958074421486">Käyttöehdot</translation>
+<translation id="1771413903824396513">Lempinimellä</translation>
+<translation id="1804522390855853698">Kiina (<ph name="ORIGIN" />)</translation>
+<translation id="1809939268435598390">Poista kansio</translation>
+<translation id="1813686536470127172">Muu kansio</translation>
+<translation id="1828800626900562968">Luo uusi välilehti napauttamalla alla olevaa Plus-painiketta.</translation>
+<translation id="1861262398884155592">Kansio on tyhjä</translation>
+<translation id="1887193815546011584">Uusi pikavalinta</translation>
+<translation id="1929299157575856072">OLETUSARVOINEN ESTOTASO</translation>
+<translation id="1979539205367899613">Luo uusi yksityisvälilehti napauttamalla alla olevaa Plus-painiketta.</translation>
+<translation id="2030706494969937066">Tietojesi nouto epäonnistui. Kirjaudu uudelleen.</translation>
+<translation id="2034405583989639424">Muokkaa pikavalintoja</translation>
+<translation id="2048247880942380698">Arabia (<ph name="ORIGIN" />)</translation>
+<translation id="2079545284768500474">Kumoa</translation>
+<translation id="2117093051794889870">Sisällöllä</translation>
+<translation id="2129408066358825297">Ikä</translation>
+<translation id="2148384276939959392">Synkronoi valitut</translation>
+<translation id="2195713384412091023">Tämä poistaa kaikki synkronointitiedot palvelimeltamme, tyhjentää salaussalasanasi ja kirjaa sinut ulos.</translation>
+<translation id="2243210264130642074">Muistiinpano tallennettiin</translation>
+<translation id="2272338747456392228">Tili on lukittu</translation>
+<translation id="2273327106802955778">Lisää-valikko</translation>
+<translation id="2324160330092901720">Vaihvistuskoodi lähetettiin osoitteeseen <ph name="EMAIL_ID" /></translation>
+<translation id="2359808026110333948">Jatka</translation>
+<translation id="2386793615875593361">1 valittu</translation>
+<translation id="2388224692799337242">Aloitettuasi selauksen, näet historiasi tässä</translation>
+<translation id="2391028308389203648">Turkki (<ph name="ORIGIN" />)</translation>
+<translation id="2392369802118427583">Aktivoi</translation>
+<translation id="2434910957904013691">Synkronoi kaikki</translation>
+<translation id="2536780277491102902">POIKKEUKSET</translation>
+<translation id="2558801801411970131">Estetään seurannat</translation>
+<translation id="2577446409661931381">Uusi muistiinpano</translation>
+<translation id="2619628557366098325">Portugali (<ph name="ORIGIN" />)</translation>
+<translation id="2677862276555105603">Mainos
+estetty</translation>
+<translation id="2678542925523700624">Viro (<ph name="ORIGIN" />)</translation>
+<translation id="2709516037105925701">Automaattinen täyttö</translation>
+<translation id="271033894570825754">Uusi</translation>
+<translation id="2745324713975967671">Salaussalasana</translation>
+<translation id="2765217105034171413">Pieni</translation>
+<translation id="2825232297853754349">Säännöt ja käyttöehdot on hyväksyttävä.</translation>
+<translation id="2842985007712546952">Yläkansio</translation>
+<translation id="2843343418360315034">Unkari (<ph name="ORIGIN" />)</translation>
+<translation id="2850144663494818309">Synkronointia valmistellaan…</translation>
+<translation id="2874121295511641364">Synkronoi syötetyt URL-osoitteet ja avoimet välilehdet</translation>
+<translation id="2898963176829412617">Uusi kansio…</translation>
+<translation id="2961573414320947355">Haluatko kaikkien linkkien avautuvan Vivaldissa? Muista määrittää se oletukseksi.</translation>
+<translation id="3006429105107822794">Sinun ei tarvitse muistaa tätä salasanaa. Se tallentuu Vivaldin Salasanahallintaan.</translation>
+<translation id="3018244467214569202">Kreikka (<ph name="ORIGIN" />)</translation>
+<translation id="3039671569659952257">Poista kansio</translation>
+<translation id="3073196329485613487">Kirjaudu tilillesi</translation>
+<translation id="307859903981308731">Jatkamalla hyväksyt Vivaldin</translation>
+<translation id="3086746722712840547">muistiinpano</translation>
+<translation id="3091563570137981919">Seuranta ja mainossuojaus</translation>
+<translation id="313566647356924831">Hallitse eston asetuksia</translation>
+<translation id="3177673846235066154">Palvelin hylkäsi käyttäjätietosi.</translation>
+<translation id="3229182533910980085">Lisää ensimmäinen kirjanmerkkisi napauttamalla alla olevaa Plus-kuvaketta</translation>
+<translation id="3236835587712044564">Oletko tyytyväinen Vivaldiin? Määritä se oletukseksi.</translation>
+<translation id="3270894089048358271">Aseta Vivaldi oletusselaimeksi</translation>
+<translation id="3270930591809084274">Synkronoidut välilehdet</translation>
+<translation id="3335772982573114336">Uusi muistiinpano</translation>
+<translation id="33451081266695216">Palvelin rajoittaa yYteyttä.</translation>
+<translation id="3346386541263128307">Sähköpostiosoitteiden on täsmättävä.</translation>
+<translation id="3365991203476235715">Englanti (<ph name="ORIGIN" />)</translation>
+<translation id="3368960138304620657">Liettua (<ph name="ORIGIN" />)</translation>
+<translation id="3377025655491224618">Yksityisvälilehti</translation>
+<translation id="3435896845095436175">Ota käyttöön</translation>
+<translation id="3438160227308459316">Romania (<ph name="ORIGIN" />)</translation>
+<translation id="3451162533623145500">Luo tili</translation>
+<translation id="3509379002674019679">Luo, tallenna ja hallitse salasanojasi, jotta sivustoille ja sovelluksiin on helppo kirjautua.</translation>
+<translation id="3513566764071045027">Kirjaudu ulos</translation>
+<translation id="3527085408025491307">Kansio</translation>
+<translation id="3530991200302302959">Bulgaria (<ph name="ORIGIN" />)</translation>
+<translation id="3601414719864711130">Päiväyksellä</translation>
+<translation id="3607176258839749451">Rekisteröityminen epäonnistui virheen vuoksi. Yritä myöhemmin uudelleen.</translation>
+<translation id="3646647753063635401">Kaikki tiedot synkronoidaan ja uudet tietotyypit sisällytetään synkronointiin automaattisesti.</translation>
+<translation id="3682791711395736890">Näytä sivuston työpöytäversio</translation>
+<translation id="3692650606013198282">Avaa yksityisesti</translation>
+<translation id="3699026013955941879">Koodi on erääntynyt. Pyydä uusi aktivointikoodi.</translation>
+<translation id="3700829948786686853">Tervetuloa Vivaldiin</translation>
+<translation id="3766350025418769949">Voit käyttää Vivaldin Salasanahallintaan tallennettujan käyttäjätietoja myös muissa iPadisi sovelluksissa.</translation>
+<translation id="3858860766373142691">Nimi</translation>
+<translation id="3866249974567520381">Kuvaus</translation>
+<translation id="3872195896030547485">Syötä toimiva sähköpostiosoite.</translation>
+<translation id="3894427358181296146">Lisää kansio</translation>
+<translation id="3897092660631435901">Valikko</translation>
+<translation id="3953599441418463312">Japani (<ph name="ORIGIN" />)</translation>
+<translation id="395506590020066151">Seuranta estetty</translation>
+<translation id="3997823869212225788">Syötä 6-numeroinen koodi</translation>
+<translation id="4002066346123236978">Nimi</translation>
+<translation id="4032606071208172574">(oletus)</translation>
+<translation id="4048057312173843244">Muilta laitteilta synkronoidut välilehdet näytetään tässä. Kirjaudu synkronointiin käyttääksesi palvelua.</translation>
+<translation id="4073968054795398875">Synkronointipalvelimella on ongelmia. Synkronointia yritetään pian uudelleen...</translation>
+<translation id="4096707694175478403">Paneeli</translation>
+<translation id="414098425907666915">Yksityinen haku</translation>
+<translation id="4141861385728508836">Pohjoismaat (<ph name="ORIGIN" />)</translation>
+<translation id="4145489350420416595">Odottamaton virhe.</translation>
+<translation id="4152011295694446843">Löydät kirjanmerkkisi täältä</translation>
+<translation id="4152623049003960417">Seurannan tiedot</translation>
+<translation id="4176463684765177261">Poistettu käytöstä</translation>
+<translation id="4209092469652827314">Suuri</translation>
+<translation id="4219175188138757774">Tšekki ja Slovakki (<ph name="ORIGIN" />)</translation>
+<translation id="4276839458685471670">Tekijällä</translation>
+<translation id="4277085371281330061">Seurantaa
+estetty</translation>
+<translation id="4299298331965375737">Määritetäänkö Vivaldi oletusselaimeksi?</translation>
+<translation id="4304224509867189079">Kirjaudu sisään</translation>
+<translation id="432696242656678770">Venäjä (<ph name="ORIGIN" />)</translation>
+<translation id="4350751486125178847">Espanja (<ph name="ORIGIN" />)</translation>
+<translation id="4376661454588260127">Vietnam (<ph name="ORIGIN" />)</translation>
+<translation id="4394049700291259645">Poista käytöstä</translation>
+<translation id="4413780690230851155">Poista selaushistoria</translation>
+<translation id="4452878871193896747">Indonesia (<ph name="ORIGIN" />)</translation>
+<translation id="4493850495402472953">ja</translation>
+<translation id="4497115807425788318">Sijainti</translation>
+<translation id="4507213865286211606">Koon esikatselu</translation>
+<translation id="4515084385531683114">Salasanat tallennetaan Salasanahallintaan tässä laitteessa.</translation>
+<translation id="4525945044609022380">Tämä sähköpostiosoite on jo liitetty toiseen tiliin.</translation>
+<translation id="4526803704855831732">Yksityisvälilehdet</translation>
+<translation id="4563480492836333884">Sähköpostiosoite ei kelpaa. Käytä eri verkkotunnusta.</translation>
+<translation id="457386861538956877">Lisää...</translation>
+<translation id="460370326897402035">Salasana ei kelpaa.</translation>
+<translation id="4619615317237390068">Välilehdet muilta laitteilta</translation>
+<translation id="4640946580087069269">Kopioi muistiinpanoon</translation>
+<translation id="4654578955713250802">Estä mainokset ja seurannat</translation>
+<translation id="4655510151391078468">Koodi ei vastaa sinulle lähetettyä koodia.
+        Jäljellä on <ph name="ATTEMPTS" /> yritystä.</translation>
+<translation id="466494460776294423">Vahvistuskoodi vaaditaan</translation>
+<translation id="4727698999970341158">Islanti (<ph name="ORIGIN" />)</translation>
+<translation id="473775607612524610">Päivitä</translation>
+<translation id="4739712911308055817">Ei noudettu</translation>
+<translation id="4780953868408193639">Seuranta
+estetty</translation>
+<translation id="4807415245238822255">Salasanojen on täsmättävä.</translation>
+<translation id="4833044618885331665">Vivaldi on päivitettävä synkronoinnin käyttämiseksi.</translation>
+<translation id="4852383705713307704">Mainosesto</translation>
+<translation id="4871370605780490696">Lisää kirjanmerkki</translation>
+<translation id="4903325570808402486">Synkronoi asetukset (kaikkien synkronointia ei toistaiseksi tueta)</translation>
+<translation id="4929196061847506605">Tehokas. Henkilökohtainen. Yksityinen.</translation>
+<translation id="4936710149174207991">Ei synkronoitu</translation>
+<translation id="4943266325467647391">Vivaldin sisäänrakennettu seuranta- ja mainosesto suojaa sinua haittaohjelmilta ja mainoksilta.</translation>
+<translation id="495421405224926623">Olen lukenut ja hyväksyn käyttöehdot ja tietosuojakäytännön</translation>
+<translation id="497942794017668482">Estetään seurannat ja mainokset</translation>
+<translation id="5037761343305489956">Kopioitiin muistiinpanoon</translation>
+<translation id="504986598654589766">Yksityisvälilehdessä selattaessa Vivaldi ei säilytä hakuja, avattuja sivustoja eikä väliaikaistiedostoja. Se ei kuitenkaan salaa tai muuta yhteyttä muulla tavoin.</translation>
+<translation id="5116316489033177455">Synkronoi kirjanmerkit ja pikavalinnat</translation>
+<translation id="5122095890854520072">Latvia (<ph name="ORIGIN" />)</translation>
+<translation id="5153806174841856652">Kirjautuminen epäonnistui</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Lähetä koodi uudelleen<ph name="END_LINK" /></translation>
+<translation id="5238642303473095117">Poista tiedot</translation>
+<translation id="5245732982828228444">Löydät muistiinpanosi täältä</translation>
+<translation id="5249199221558969362">Valitse eliniäksi realistinen luku.</translation>
+<translation id="5290452628447338707">Ei muistiinpanoja</translation>
+<translation id="5317780077021120954">Tallenna</translation>
+<translation id="5349678548463426691">Kuvauksella</translation>
+<translation id="5350737901534958404">Salli kumppaneidemme mainokset (tue Vivaldia)</translation>
+<translation id="5351912500249789547">Vivaldi.net hylkäsi todennustietosi: virhekoodi <ph name="ERROR_CODE" /></translation>
+<translation id="5378841821586202982">Roskakori-kansio</translation>
+<translation id="5398772614898833570">Mainosta estetty</translation>
+<translation id="5421638721143596928">Tietojesi salauksen purku epäonnistui. Kirjaudu uudelleen.</translation>
+<translation id="5422086212043657100">Käytä pikavalintakansiona</translation>
+<translation id="5439835075346716808">Rekisteröityminen on tilapäisesti estetty tästä IP-osoitteesta. Yritä myöhemmin uudelleen.</translation>
+<translation id="5486261815000869482">Vahvista salasana</translation>
+<translation id="5494016731375030300">Hiljattain suljetut välilehdet</translation>
+<translation id="5569279496588266002">Aloitussivun asettelu</translation>
+<translation id="5639137028584114536">Organisaatiosi edellyttää yksityistä selaustilaa. Välilehtiä ei tallenneta yksityistilassa.
+        <ph name="BEGIN_LINK" />Lue lisää<ph name="END_LINK" /></translation>
+<translation id="5684277895745049190">Lista</translation>
+<translation id="574392208103952083">Keskikokoinen</translation>
+<translation id="5787420647064736989">Laitteen nimi</translation>
+<translation id="5822336771053074270">Lisää muistiinpano</translation>
+<translation id="5823830882692559950">Vivaldi.net hylkäsi todennustietosi: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5857090052475505287">Uusi kansio</translation>
+<translation id="5859825823508296659">Muokkaa verkkotunnusta</translation>
+<translation id="5867841422488265304">Kirjoita hakulauseke tai URL-osoite</translation>
+<translation id="5871497086027727873">1 kohde siirrettiin</translation>
+<translation id="5898502570200301364">Voit käyttää Vivaldin Salasanahallintaan tallennettujan käyttäjätietoja myös muissa iPhonesi sovelluksissa.</translation>
+<translation id="5900160494089383343">Käyttäjätunnus ei ole käytettävissä.</translation>
+<translation id="6005497458542935062">Siirrä pois kansiosta</translation>
+<translation id="6042308850641462728">Lisää</translation>
+<translation id="6077943432358741146">Pikavalinnat</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> kohdetta siirrettiin</translation>
+<translation id="6147094071357011481">Hiljattain suljetut välilehdet eivät ole käytettävissä</translation>
+<translation id="6193995664633100765">Intia (<ph name="ORIGIN" />)</translation>
+<translation id="6365929278691047681">Saksa (<ph name="ORIGIN" />)</translation>
+<translation id="6404511346730675251">Muokkaa kirjanmerkkiä</translation>
+<translation id="6406506848690869874">Synkronointi</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> valittu</translation>
+<translation id="6468130661190228905">Valitettavasti sinun on odotettava tovi ennen yhteisöömme liittymistä. Edellytämme jäseniltämme vähintään 16 vuoden ikää.</translation>
+<translation id="6517411226162529295">Salauksen vara-avain</translation>
+<translation id="6527303717912515753">Jaa</translation>
+<translation id="6535988230515403205">Puola (<ph name="ORIGIN" />)</translation>
+<translation id="659351303388691480">Tyhjennä selaustiedot...</translation>
+<translation id="6614744450826097546">Mainoksen tiedot</translation>
+<translation id="6627583120233659107">Muokkaa kansiota</translation>
+<translation id="6631760746795162665">Kolumbia (<ph name="ORIGIN" />)</translation>
+<translation id="6639866709520319699">Seurannat ja mainokset estetään. Jotkin sivustot eivät ehkä toimi oikein.</translation>
+<translation id="6642196070615520677">Poista synkronoinnin etätiedot</translation>
+<translation id="6645228090427373820">Seurannat estetään, mainoksia ei. Jotkin sivustot eivät ehkä toimi oikein.</translation>
+<translation id="6656103420185847513">Muokkaa kansiota</translation>
+<translation id="6657585470893396449">Salasana</translation>
+<translation id="6690955457036363013">Hallitse eston tasoa sivustokohtaisesti</translation>
+<translation id="6703516503311038964">Haluan saada Vivaldin uutiskirjeen</translation>
+<translation id="6757792528048321576">Mainos- ja seurantaesto</translation>
+<translation id="6798469570047202628">Syötetty salasana ei kelpaa</translation>
+<translation id="681368974849482173">Kohde luotiin</translation>
+<translation id="6830986331692390764">Synkronointitietoja tyhjennetään. Odota.</translation>
+<translation id="6875510405870945573">Valitse haluamasi estotaso.</translation>
+<translation id="6885837502028760851">Näytä vain pikavalintakansiot</translation>
+<translation id="6887143077297974801">Synkronoinnin aloitus epäonnistui.</translation>
+<translation id="6937750621455385628">Kirjautumiseen vaaditaan Vivaldi-tili.</translation>
+<translation id="6945221475159498467">Valitse</translation>
+<translation id="6946395294519639514">Paneeleilla pidät suosikkityökalusi helposti tavoitettavissa selaimen sivupalkissa.</translation>
+<translation id="6967884871145366229">Hallitse tietosuoja-asetuksia</translation>
+<translation id="6973630695168034713">Kansiot</translation>
+<translation id="7029809446516969842">Salasanat</translation>
+<translation id="7041964446309059643">Manuaalinen</translation>
+<translation id="7194677467200983873">Edellinen synkronointi:</translation>
+<translation id="7196846668589096106">Työpöytävälilehdet</translation>
+<translation id="7210372243397300116">Hae kansiota</translation>
+<translation id="7215420652436283416">Osoitteella</translation>
+<translation id="7229439505896086266">Luo muistiinpano</translation>
+<translation id="7299721129597238157">Poista kirjanmerkki</translation>
+<translation id="7311118006561484338">Otsikolla</translation>
+<translation id="7325310788570036874">Jatka verkon selausta fiksummin, sulavammin ja nopeammin Vivaldilla.</translation>
+<translation id="734110743815267231">Heprea (<ph name="ORIGIN" />)</translation>
+<translation id="7362952245780030555">Valitse täysikokoiset työpöytävälilehdet tai yksinkertaistettu välilehtivaihtaja.</translation>
+<translation id="7379938540614588640">Hollanti (<ph name="ORIGIN" />)</translation>
+<translation id="7388525939184421699">Lisää uusi lähde</translation>
+<translation id="7400418766976504921">URL</translation>
+<translation id="7454640759045234067">Seurantaa estetty</translation>
+<translation id="7461899062138731833">LÄHTEET</translation>
+<translation id="750493650310597496">0 valittua</translation>
+<translation id="7525067979554623046">Luo</translation>
+<translation id="7541020606126512786">Mainos- ja seurantaeston yhteenveto</translation>
+<translation id="7573518470897278603">Näytä sivuston mobiiliversio</translation>
+<translation id="7574321014880720413">Lisää uusi verkkotunnus</translation>
+<translation id="7587132259180664054">Sähköpostin lähetys onnistui</translation>
+<translation id="7602336701644200880">Sähköpostin lähetys epäonnistui. Yritä uudelleen.</translation>
+<translation id="7606108789437688910">Avaa muistiinpanojen osoitteet yksityisesti</translation>
+<translation id="7622661618259256505">Valitse vähintään 12 merkkiä sisältävä salasana.</translation>
+<translation id="7658239707568436148">Peruuta</translation>
+<translation id="767363698559661695">Määritä välilehtien tyyli</translation>
+<translation id="7702907602086592255">Verkkotunnus</translation>
+<translation id="7730831244010940855">Vaihdetaanko oletukseksi Vivaldin iPad-sovellus?</translation>
+<translation id="7732622593814325274">Hallitse seurantaeston lähteitä</translation>
+<translation id="7765158879357617694">Siirrä</translation>
+<translation id="7801204999757211519">Onko sivulla jo tili? <ph name="BEGIN_LINK" />Kirjaudu sisään ➔<ph name="END_LINK" /></translation>
+<translation id="7914995060146784406">Muokkaa muistiinpanoa</translation>
+<translation id="7925340978147141704">Näytä salasana</translation>
+<translation id="8008214489230610096">Vahvista palautussähköpostiosoite</translation>
+<translation id="804786196054284061">Loppukäyttäjän lisenssisopimus</translation>
+<translation id="8053851743673939284">Ranska (<ph name="ORIGIN" />)</translation>
+<translation id="8066170816074394954">Palvelinvirhe.</translation>
+<translation id="8076492880354921740">Välilehdet</translation>
+<translation id="8112996065264879835">Koodi ei vastaa sinulle lähetettyä koodia.
+        Olet syöttänyt koodin väärin liian monta kertaa. Pyydä uusi koodi alla olevalla uudelleenlähetysvalinnalla.</translation>
+<translation id="8147118677117542370">Ilmoita ikäsi.</translation>
+<translation id="8165573437634525334">Tiedot on suojattu salaussalasanalla</translation>
+<translation id="8182979418912184986">Uusi yksityisvälilehti</translation>
+<translation id="8257908958623224237">Ristiriita toisen päätteen tietojen kanssa.</translation>
+<translation id="8261506727792406068">Poista</translation>
+<translation id="8273666073173891138">Muistiinpano tallennettiin kansioon <ph name="FOLDER_TITLE" /></translation>
+<translation id="8275038454117074363">Tuo</translation>
+<translation id="8329813750766387010">Päivitetty: <ph name="DATE" /></translation>
+<translation id="8347535536909603600">Poista evästeilmoitukset (<ph name="TYPE" />)</translation>
+<translation id="8366175803122817174">Avaa kaikki muistiinpanojen osoitteet</translation>
+<translation id="8384409685584033392">Sivun tiedot</translation>
+<translation id="8414685983518053656">Muistiinpanot</translation>
+<translation id="8423076545503792640">Pyyntö epäonnistui virheen vuoksi. Yritä myöhemmin uudelleen.</translation>
+<translation id="8428213095426709021">Asetukset</translation>
+<translation id="8458397775385147834">1 kohde poistettiin</translation>
+<translation id="8500459200727969761">Palauta sisäänrakennetut listat</translation>
+<translation id="8503813439785031346">Käyttäjätunnus</translation>
+<translation id="8515808232153642813">Pura salaus</translation>
+<translation id="8517852590337319813">Aktivoi tilisi</translation>
+<translation id="8546963963006468833">Vivaldilla avaat linkit saumattomasti, etsit widgeteistä ja täytät kirjautumistietosi muihin sovelluksiin.</translation>
+<translation id="8562452229998620586">Tallennetut salasanat näytetään tässä.</translation>
+<translation id="8605953154325672921">Käyttäjätunnus vaaditaan</translation>
+<translation id="8675578805254882416">Noudetaan</translation>
+<translation id="8677007239430848917">Lisää ensimmäinen muistiinpanosi napauttamalla alla olevaa Plus-kuvaketta</translation>
+<translation id="8684294196284714094">Oletko valmis määrittämään Vivaldin oletusselaimeksi?</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> kohdetta poistettiin</translation>
+<translation id="8804164990146287819">Tietosuojakäytäntö</translation>
+<translation id="8819841443522803117">Olisiko aika vaihtaa oletusselaintasi? Valitse Vivaldi.</translation>
+<translation id="8820817407110198400">Kirjamerkit</translation>
+<translation id="8855707633300847215">Näytä välilehtipalkki</translation>
+<translation id="8892354889971902600">Viimeksi suljetut välilehdet näytetään tässä.</translation>
+<translation id="89390081013973080">Kaikki valmista! AIka valita laitteiden välillä synkronoitavat tiedot.</translation>
+<translation id="8965371804397726192">Aloita kaikkien tietojen synkronointi</translation>
+<translation id="9028089729841356743">Verkkovirhe.</translation>
+<translation id="9043882097999887291">Mainosta
+etetty</translation>
+<translation id="9065203028668620118">Muokkaa</translation>
+<translation id="9078193189520575214">Otetaan muutoksia käyttöön...</translation>
+<translation id="9079251484401922158">Suomi (<ph name="ORIGIN" />)</translation>
+<translation id="9083392325882095631">1 kohde</translation>
+<translation id="9091665118798175641">Synkronoi lomakkeiden automaattitäytön tiedot</translation>
+<translation id="9097127519290088802">Salaussalasana vaaditaan</translation>
+<translation id="9212737146310746733">Persia (<ph name="ORIGIN" />)</translation>
+<translation id="9218693288527810093">Estä seurannat</translation>
+<translation id="937440209447114831">Mitään mainoksia tai seurantoja ei estetä.</translation>
+<translation id="984650419570014454">Aktivointikoodin on oltava 6-numeroa.</translation>
+<translation id="992440609313570947">Oletko uusi Vivaldin käyttäjä? <ph name="BEGIN_LINK" />Luo tili ➔<ph name="END_LINK" /></translation>
 </translationbundle>

@@ -16,7 +16,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/observer_list.h"
-#include "base/strings/string_util.h"
+#include "base/strings/to_string.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -38,9 +38,11 @@
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/common/content_features.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/manifest/manifest_util.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
+#include "chromeos/constants/chromeos_features.h"
 #endif
 
 namespace web_app {
@@ -90,8 +92,8 @@ bool WebAppRegistrar::IsPlaceholderApp(
         .IsPlaceholderApp(app_id);
   }
 
-  DCHECK(source_type == WebAppManagement::kPolicy ||
-         source_type == WebAppManagement::kKiosk);
+  CHECK(source_type == WebAppManagement::kPolicy ||
+        source_type == WebAppManagement::kKiosk);
   const WebApp* web_app = GetAppById(app_id);
   if (!web_app)
     return false;
@@ -106,6 +108,9 @@ bool WebAppRegistrar::IsPlaceholderApp(
   return it->second.is_placeholder;
 }
 
+// TODO(crbug.com/1434692): Revert changes back to old code
+// once the system starts enforcing a single install URL per
+// app_id.
 absl::optional<AppId> WebAppRegistrar::LookupPlaceholderAppId(
     const GURL& install_url,
     const WebAppManagement::Type source_type) const {
@@ -115,11 +120,22 @@ absl::optional<AppId> WebAppRegistrar::LookupPlaceholderAppId(
         .LookupPlaceholderAppId(install_url);
   }
 
-  DCHECK(source_type == WebAppManagement::kPolicy ||
-         source_type == WebAppManagement::kKiosk);
-  absl::optional<AppId> app_id = LookUpAppIdByInstallUrl(install_url);
-  if (app_id.has_value() && IsPlaceholderApp(app_id.value(), source_type))
-    return app_id;
+  CHECK(source_type == WebAppManagement::kPolicy ||
+        source_type == WebAppManagement::kKiosk);
+  for (const WebApp& web_app : GetApps()) {
+    const WebApp::ExternalConfigMap& config_map =
+        web_app.management_to_external_config_map();
+    auto it = config_map.find(source_type);
+
+    if (it == config_map.end()) {
+      continue;
+    }
+
+    if (base::Contains(it->second.install_urls, install_url) &&
+        it->second.is_placeholder) {
+      return web_app.app_id();
+    }
+  }
   return absl::nullopt;
 }
 
@@ -327,8 +343,7 @@ size_t WebAppRegistrar::GetUrlInAppScopeScore(const std::string& url_spec,
           : 0;
 
 #if BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(
-          features::kMicrosoftOfficeWebAppExperiment)) {
+  if (chromeos::features::IsUploadOfficeToCloudEnabled()) {
     score = std::max(score, ChromeOsWebAppExperiments::GetExtendedScopeScore(
                                 app_id, url_spec));
   }
@@ -953,6 +968,16 @@ absl::optional<mojom::UserDisplayMode> WebAppRegistrar::GetAppUserDisplayMode(
     return absl::nullopt;
   }
 
+#if BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(
+          features::kPreinstalledWebAppWindowExperiment)) {
+    auto it = user_display_mode_overrides_for_experiment_.find(app_id);
+    if (it != user_display_mode_overrides_for_experiment_.end()) {
+      return it->second;
+    }
+  }
+#endif
+
   return web_app->user_display_mode();
 }
 
@@ -968,6 +993,13 @@ apps::UrlHandlers WebAppRegistrar::GetAppUrlHandlers(
   auto* web_app = GetAppById(app_id);
   return web_app ? web_app->url_handlers()
                  : std::vector<apps::UrlHandlerInfo>();
+}
+
+base::flat_set<ScopeExtensionInfo> WebAppRegistrar::GetValidatedScopeExtensions(
+    const AppId& app_id) const {
+  auto* web_app = GetAppById(app_id);
+  return web_app ? web_app->validated_scope_extensions()
+                 : base::flat_set<ScopeExtensionInfo>();
 }
 
 GURL WebAppRegistrar::GetAppManifestUrl(const AppId& app_id) const {
@@ -991,15 +1023,15 @@ base::Time WebAppRegistrar::GetAppInstallTime(const AppId& app_id) const {
 }
 
 absl::optional<webapps::WebappInstallSource>
-WebAppRegistrar::GetAppInstallSourceForMetrics(const AppId& app_id) const {
+WebAppRegistrar::GetLatestAppInstallSource(const AppId& app_id) const {
   const WebApp* web_app = GetAppById(app_id);
   if (!web_app)
     return absl::nullopt;
 
   absl::optional<webapps::WebappInstallSource> value =
-      web_app->install_source_for_metrics();
+      web_app->latest_install_source();
 
-  // If the migration code hasn't run yet, `WebApp::install_source_for_metrics_`
+  // If the migration code hasn't run yet, `WebApp::latest_install_source_`
   // may not be populated. After migration code is removed, this branch can be
   // deleted.
   if (!value) {
@@ -1168,6 +1200,73 @@ WebAppRegistrar::AppSet WebAppRegistrar::GetApps() const {
                !web_app.is_uninstalling();
       },
       /*empty=*/registry_profile_being_deleted_);
+}
+
+#if BUILDFLAG(IS_CHROMEOS)
+void WebAppRegistrar::SetUserDisplayModeOverridesForExperiment(
+    base::flat_map<AppId, mojom::UserDisplayMode> overrides) {
+  DCHECK(base::FeatureList::IsEnabled(
+      features::kPreinstalledWebAppWindowExperiment));
+  user_display_mode_overrides_for_experiment_ = std::move(overrides);
+}
+#endif
+
+base::Value WebAppRegistrar::AsDebugValue() const {
+  base::Value::Dict root;
+
+  std::vector<const web_app::WebApp*> web_apps;
+  for (const web_app::WebApp& web_app : GetAppsIncludingStubs()) {
+    web_apps.push_back(&web_app);
+  }
+  base::ranges::sort(web_apps, {}, &web_app::WebApp::untranslated_name);
+
+  // Prefix with a ! so this appears at the top when serialized.
+  base::Value::Dict& index = *root.EnsureDict("!Index");
+  for (const web_app::WebApp* web_app : web_apps) {
+    const std::string& key = web_app->untranslated_name();
+    base::Value* existing_entry = index.Find(key);
+    if (!existing_entry) {
+      index.Set(key, web_app->app_id());
+      continue;
+    }
+    // If any web apps share identical names then collect a list of app IDs.
+    const std::string* existing_id = existing_entry->GetIfString();
+    if (existing_id) {
+      base::Value::List id_list;
+      id_list.Append(*existing_id);
+      index.Set(key, std::move(id_list));
+    }
+    index.FindList(key)->Append(web_app->app_id());
+  }
+
+  base::Value::List& web_app_details = *root.EnsureList("Details");
+  for (const web_app::WebApp* web_app : web_apps) {
+    auto app_id = web_app->app_id();
+
+    base::Value app_debug_value = web_app->AsDebugValue();
+    auto& app_debug_dict = app_debug_value.GetDict();
+
+    base::Value::Dict& effective_fields =
+        *app_debug_dict.EnsureDict("registrar_evaluated_fields");
+    effective_fields.Set(
+        "display_mode",
+        blink::DisplayModeToString(GetAppEffectiveDisplayMode(app_id)));
+    effective_fields.Set("launch_url", base::ToString(GetAppLaunchUrl(app_id)));
+    effective_fields.Set("scope", base::ToString(GetAppScope(app_id)));
+
+    base::Value::Dict& run_on_os_login_fields =
+        *effective_fields.EnsureDict("run_on_os_login_mode");
+    web_app::ValueWithPolicy<web_app::RunOnOsLoginMode> run_on_os_login_mode =
+        GetAppRunOnOsLoginMode(app_id);
+    run_on_os_login_fields.Set(
+        "value", RunOnOsLoginModeToString(run_on_os_login_mode.value));
+    run_on_os_login_fields.Set("user_controllable",
+                               run_on_os_login_mode.user_controllable);
+
+    web_app_details.Append(std::move(app_debug_value));
+  }
+
+  return base::Value(std::move(root));
 }
 
 void WebAppRegistrar::SetRegistry(Registry&& registry) {

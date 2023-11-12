@@ -17,6 +17,7 @@
 #include "content/public/browser/render_frame_host_receiver_set.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/conversions/attribution_data_host.mojom-forward.h"
 #include "third_party/blink/public/mojom/conversions/conversions.mojom.h"
@@ -28,6 +29,7 @@ class SuitableOrigin;
 namespace content {
 
 struct AttributionInputEvent;
+class RenderFrameHost;
 class RenderFrameHostImpl;
 class WebContents;
 
@@ -41,7 +43,7 @@ class AttributionInputEventTrackerAndroid;
 class CONTENT_EXPORT AttributionHost
     : public WebContentsObserver,
       public WebContentsUserData<AttributionHost>,
-      public blink::mojom::ConversionHost {
+      public blink::mojom::AttributionHost {
  public:
   explicit AttributionHost(WebContents* web_contents);
   AttributionHost(const AttributionHost&) = delete;
@@ -51,7 +53,7 @@ class CONTENT_EXPORT AttributionHost
   ~AttributionHost() override;
 
   static void BindReceiver(
-      mojo::PendingAssociatedReceiver<blink::mojom::ConversionHost> receiver,
+      mojo::PendingAssociatedReceiver<blink::mojom::AttributionHost> receiver,
       RenderFrameHost* rfh);
 
 #if BUILDFLAG(IS_ANDROID)
@@ -66,15 +68,20 @@ class CONTENT_EXPORT AttributionHost
   // navigation beacon.
   // This function should only be invoked if Attribution Reporting API is
   // enabled on the page.
+  // `navigation_id` will be set if this beacon is being sent as the result of a
+  // top navigation initiated by a fenced frame. This is used to track
+  // attributions that occur on a navigated page after the current page has been
+  // unloaded. Otherwise `absl::nullopt`.
   void NotifyFencedFrameReportingBeaconStarted(
       BeaconId beacon_id,
+      absl::optional<int64_t> navigation_id,
       RenderFrameHostImpl* initiator_frame_host);
 
  private:
   friend class AttributionHostTestPeer;
   friend class WebContentsUserData<AttributionHost>;
 
-  // blink::mojom::ConversionHost:
+  // blink::mojom::AttributionHost:
   void RegisterDataHost(
       mojo::PendingReceiver<blink::mojom::AttributionDataHost>,
       attribution_reporting::mojom::RegistrationType) override;
@@ -87,16 +94,15 @@ class CONTENT_EXPORT AttributionHost
   void DidRedirectNavigation(NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
 
+  void NotifyNavigationRegistrationData(NavigationHandle* navigation_handle,
+                                        bool is_final_response);
+
   // Returns the top frame origin corresponding to the current target frame.
   // Returns `absl::nullopt` and reports a bad message if the top frame origin
   // is not potentially trustworthy or the current target frame is not a secure
   // context.
   absl::optional<attribution_reporting::SuitableOrigin>
   TopFrameOriginForSecureContext();
-
-  // Notifies the `AttributionDataHostManager` that a navigation with an
-  // associated `AttributionDataHost` failed, if necessary.
-  void MaybeNotifyFailedSourceNavigation(NavigationHandle* navigation_handle);
 
   AttributionInputEvent GetMostRecentNavigationInputEvent() const;
 
@@ -116,7 +122,7 @@ class CONTENT_EXPORT AttributionHost
   using NavigationInfoMap = base::flat_map<int64_t, NavigationInfo>;
   NavigationInfoMap navigation_info_map_;
 
-  RenderFrameHostReceiverSet<blink::mojom::ConversionHost> receivers_;
+  RenderFrameHostReceiverSet<blink::mojom::AttributionHost> receivers_;
 
 #if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<AttributionInputEventTrackerAndroid>

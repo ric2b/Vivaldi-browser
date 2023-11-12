@@ -183,6 +183,7 @@ source_set("ui_lib_shared_headers") {
     "src/UILib/GREYScreenshotter.h",
     "src/UILib/Provider/GREYUIWindowProvider.h",
     "src/UILib/Visibility/GREYVisibilityChecker.h",
+    "src/UILib/Visibility/GREYVisibilityCheckerCacheEntry.h",
   ]
 }
 
@@ -218,7 +219,6 @@ source_set("ui_lib") {
     "src/UILib/Visibility/GREYQuickVisibilityChecker.m",
     "src/UILib/Visibility/GREYThoroughVisibilityChecker.h",
     "src/UILib/Visibility/GREYThoroughVisibilityChecker.m",
-    "src/UILib/Visibility/GREYVisibilityChecker+Private.h",
     "src/UILib/Visibility/GREYVisibilityChecker.h",
     "src/UILib/Visibility/GREYVisibilityChecker.m",
     "src/UILib/Visibility/GREYVisibilityCheckerCacheEntry.h",
@@ -493,10 +493,10 @@ source_set("test_lib") {
     "src/TestLib/DistantObject/GREYTestApplicationDistantObject+GREYLogger.h",
     "src/TestLib/DistantObject/GREYTestApplicationDistantObject+GREYLogger.m",
     "src/TestLib/DistantObject/GREYTestApplicationDistantObject.m",
-    "src/TestLib/EarlGreyImpl/EarlGrey.h",
-    "src/TestLib/EarlGreyImpl/EarlGrey.m",
     "src/TestLib/EarlGreyImpl/EarlGreyImpl+XCUIApplication.h",
     "src/TestLib/EarlGreyImpl/EarlGreyImpl+XCUIApplication.m",
+    "src/TestLib/EarlGreyImpl/EarlGreyImpl.h",
+    "src/TestLib/EarlGreyImpl/EarlGreyImpl.m",
     "src/TestLib/EarlGreyImpl/GREYElementInteractionErrorHandler.h",
     "src/TestLib/EarlGreyImpl/GREYElementInteractionErrorHandler.m",
     "src/TestLib/EarlGreyImpl/GREYElementInteractionProxy.h",

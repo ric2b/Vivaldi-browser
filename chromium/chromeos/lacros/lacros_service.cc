@@ -66,6 +66,7 @@
 #include "chromeos/crosapi/mojom/login.mojom.h"
 #include "chromeos/crosapi/mojom/login_screen_storage.mojom.h"
 #include "chromeos/crosapi/mojom/login_state.mojom.h"
+#include "chromeos/crosapi/mojom/media_ui.mojom.h"
 #include "chromeos/crosapi/mojom/message_center.mojom.h"
 #include "chromeos/crosapi/mojom/metrics.mojom.h"
 #include "chromeos/crosapi/mojom/metrics_reporting.mojom.h"
@@ -85,9 +86,11 @@
 #include "chromeos/crosapi/mojom/screen_manager.mojom.h"
 #include "chromeos/crosapi/mojom/select_file.mojom.h"
 #include "chromeos/crosapi/mojom/sharesheet.mojom.h"
+#include "chromeos/crosapi/mojom/smart_reader.mojom.h"
 #include "chromeos/crosapi/mojom/speech_recognition.mojom.h"
 #include "chromeos/crosapi/mojom/sync.mojom.h"
 #include "chromeos/crosapi/mojom/task_manager.mojom.h"
+#include "chromeos/crosapi/mojom/telemetry_event_service.mojom.h"
 #include "chromeos/crosapi/mojom/test_controller.mojom.h"
 #include "chromeos/crosapi/mojom/timezone.mojom.h"
 #include "chromeos/crosapi/mojom/tts.mojom.h"
@@ -108,6 +111,7 @@
 #include "components/crash/core/common/crash_key.h"
 #include "media/mojo/mojom/stable/stable_video_decoder.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/invitation.h"
 #include "services/device/public/mojom/hid.mojom.h"
@@ -341,10 +345,6 @@ LacrosService::LacrosService()
       &crosapi::mojom::Crosapi::BindFieldTrialService,
       Crosapi::MethodMinVersions::kBindFieldTrialServiceMinVersion>();
   ConstructRemote<
-      crosapi::mojom::FirewallHoleService,
-      &crosapi::mojom::Crosapi::BindFirewallHoleService,
-      Crosapi::MethodMinVersions::kBindFirewallHoleServiceMinVersion>();
-  ConstructRemote<
       crosapi::mojom::ForceInstalledTracker,
       &crosapi::mojom::Crosapi::BindForceInstalledTracker,
       Crosapi::MethodMinVersions::kBindForceInstalledTrackerMinVersion>();
@@ -404,6 +404,9 @@ LacrosService::LacrosService()
       chromeos::machine_learning::mojom::MachineLearningService,
       &crosapi::mojom::Crosapi::BindMachineLearningService,
       Crosapi::MethodMinVersions::kBindMachineLearningServiceMinVersion>();
+  ConstructRemote<crosapi::mojom::MediaUI,
+                  &crosapi::mojom::Crosapi::BindMediaUI,
+                  Crosapi::MethodMinVersions::kBindMediaUIMinVersion>();
   ConstructRemote<crosapi::mojom::MessageCenter,
                   &crosapi::mojom::Crosapi::BindMessageCenter,
                   Crosapi::MethodMinVersions::kBindMessageCenterMinVersion>();
@@ -484,6 +487,10 @@ LacrosService::LacrosService()
   ConstructRemote<crosapi::mojom::TaskManager,
                   &crosapi::mojom::Crosapi::BindTaskManager,
                   Crosapi::MethodMinVersions::kBindTaskManagerMinVersion>();
+  ConstructRemote<
+      crosapi::mojom::TelemetryEventService,
+      &Crosapi::BindTelemetryEventService,
+      Crosapi::MethodMinVersions::kBindTelemetryEventServiceMinVersion>();
   ConstructRemote<
       crosapi::mojom::TelemetryProbeService,
       &crosapi::mojom::Crosapi::BindTelemetryProbeService,
@@ -627,6 +634,13 @@ bool LacrosService::IsMultiCaptureServiceAvailable() const {
   return version &&
          version.value() >=
              Crosapi::MethodMinVersions::kBindMultiCaptureServiceMinVersion;
+}
+
+bool LacrosService::IsSmartReaderClientAvailable() const {
+  absl::optional<uint32_t> version = CrosapiVersion();
+  return version &&
+         version.value() >=
+             Crosapi::MethodMinVersions::kBindSmartReaderClientMinVersion;
 }
 
 bool LacrosService::IsSensorHalClientAvailable() const {

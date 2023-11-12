@@ -98,6 +98,12 @@ export interface MultiStoreExceptionEntryParams {
   deviceId?: number;
 }
 
+export const STUB_USER_ACCOUNT_INFO: chrome.autofillPrivate.AccountInfo = {
+  email: 'stub-user@example.com',
+  isSyncEnabledForAutofillProfiles: false,
+  isEligibleForAddressAccountStorage: false,
+};
+
 /**
  * Creates a new fake address entry for testing.
  */
@@ -448,6 +454,7 @@ export class TestAutofillManager extends TestBrowserProxy implements
       accountInfo: {
         email: 'stub-user@example.com',
         isSyncEnabledForAutofillProfiles: true,
+        isEligibleForAddressAccountStorage: false,
       },
     };
 
@@ -506,6 +513,7 @@ export class PaymentsManagerExpectations {
   addedVirtualCards: number = 0;
   requestedIbans: number = 0;
   removedIbans: number = 0;
+  isValidIban: number = 0;
 }
 
 /**
@@ -535,6 +543,7 @@ export class TestPaymentsManager extends TestBrowserProxy implements
       'removeCreditCard',
       'removeIban',
       'addVirtualCard',
+      'isValidIban',
     ]);
 
     // Set these to have non-empty data.
@@ -600,6 +609,11 @@ export class TestPaymentsManager extends TestBrowserProxy implements
   getIbanList() {
     this.methodCalled('getIbanList');
     return Promise.resolve(this.data.ibans);
+  }
+
+  isValidIban(_ibanValue: string) {
+    this.methodCalled('isValidIban');
+    return Promise.resolve(true);
   }
 
 

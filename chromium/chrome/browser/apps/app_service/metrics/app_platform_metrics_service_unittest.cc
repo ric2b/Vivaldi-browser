@@ -38,6 +38,7 @@
 #include "chrome/browser/metrics/structured/event_logging_features.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/test/base/test_browser_window_aura.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
@@ -136,6 +137,22 @@ class MockAppPlatformMetricsObserver : public AppPlatformMetrics::Observer {
   MOCK_METHOD(void, OnAppPlatformMetricsDestroyed, (), (override));
 };
 
+// Mock observer implementation for the `AppPlatformMetricsService` component.
+class MockObserver : public AppPlatformMetricsService::Observer {
+ public:
+  MockObserver() = default;
+  MockObserver(const MockObserver&) = delete;
+  MockObserver& operator=(const MockObserver&) = delete;
+  ~MockObserver() override = default;
+
+  MOCK_METHOD(void,
+              OnAppPlatformMetricsInit,
+              (AppPlatformMetrics * app_platform_metrics),
+              (override));
+
+  MOCK_METHOD(void, OnAppPlatformMetricsServiceWillBeDestroyed, (), (override));
+};
+
 class FakePublisher : public AppPublisher {
  public:
   FakePublisher(AppServiceProxy* proxy, AppType app_type)
@@ -211,6 +228,11 @@ class AppPlatformMetricsServiceTest
     }
 
     InstallApps();
+    // The WebAppProvider system must be started after the apps are added, as
+    // the tests explicitly check that the apps start in the 'initializing'
+    // state (where they have not yet been registered with the WebAppProvider
+    // system).
+    web_app::test::AwaitStartWebAppProviderAndSubsystems(profile());
   }
 
   void TearDown() override {
@@ -1263,19 +1285,23 @@ TEST_P(AppPlatformMetricsServiceTest, UsageTimeUkm) {
   sync_service()->SetDisableReasons(
       syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
 
+  // Fast forward by 2 hours and verify no usage data is reported to UKM.
   task_environment_.FastForwardBy(base::Hours(2));
-
   VerifyNoAppUsageTimeUkm();
 
   // Set sync is allowed by setting an empty disable reason set.
   sync_service()->SetDisableReasons(syncer::SyncService::DisableReasonSet());
 
-  task_environment_.FastForwardBy(base::Hours(1));
+  static constexpr base::TimeDelta kAppUsageDuration = base::Hours(1);
+  task_environment_.FastForwardBy(kAppUsageDuration);
   ModifyInstance(app_constants::kChromeAppId,
                  browser->window()->GetNativeWindow(), kInactiveInstanceState);
 
-  task_environment_.FastForwardBy(base::Hours(1));
-  VerifyAppUsageTimeUkm(app_constants::kChromeAppId, /*duration=*/10800000,
+  // Fast forward by 2 hours and verify usage data reported to UKM only includes
+  // usage data since sync was last enabled.
+  task_environment_.FastForwardBy(base::Hours(2));
+  VerifyAppUsageTimeUkm(app_constants::kChromeAppId,
+                        (int)kAppUsageDuration.InMilliseconds(),
                         AppTypeName::kChromeBrowser);
 }
 
@@ -2112,6 +2138,29 @@ TEST_P(AppPlatformMetricsServiceTest,
 }
 
 TEST_P(AppPlatformMetricsServiceTest,
+       ShouldClearUsageInfoFromPrefStoreWhenSyncDisabled) {
+  // Save usage entry with no usage data to the pref store.
+  {
+    const base::UnguessableToken& kInstanceId =
+        base::UnguessableToken::Create();
+    ScopedDictPrefUpdate usage_dict(GetPrefService(), kAppUsageTime);
+    AppPlatformMetrics::UsageTime usage_time;
+    usage_time.app_id = "TestApp";
+    usage_dict->SetByDottedPath(kInstanceId.ToString(),
+                                usage_time.ConvertToDict());
+  }
+
+  // Disable sync state.
+  sync_service()->SetDisableReasons(
+      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+
+  // Fast forward by two hours and verify usage info is cleared from the pref
+  // store.
+  task_environment_.FastForwardBy(base::Hours(2));
+  ASSERT_TRUE(GetPrefService()->GetDict(kAppUsageTime).empty());
+}
+
+TEST_P(AppPlatformMetricsServiceTest,
        ShouldNotClearUsageInfoFromPrefStoreIfReportingUsageSet) {
   // Create a new window for the app.
   auto window = std::make_unique<aura::Window>(nullptr);
@@ -2168,6 +2217,30 @@ TEST_P(AppPlatformMetricsServiceTest,
       base::ValueToTimeDelta(usage_dict_pref.FindDict(kInstanceId.ToString())
                                  ->Find(kReportingUsageTimeDurationKey)),
       Eq(kAppRunningDuration));
+}
+
+TEST_P(AppPlatformMetricsServiceTest, ShouldNotPersistUsageDataIfSyncDisabled) {
+  // Disable sync state.
+  sync_service()->SetDisableReasons(
+      syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY);
+
+  // Create a new window for the app.
+  auto window = std::make_unique<aura::Window>(nullptr);
+  window->Init(ui::LAYER_NOT_DRAWN);
+
+  // Set the window active state and simulate app usage.
+  static constexpr char kAppId[] = "a";
+  const base::UnguessableToken& kInstanceId = base::UnguessableToken::Create();
+  ModifyInstance(kInstanceId, kAppId, window.get(),
+                 ::apps::InstanceState::kActive);
+  static constexpr base::TimeDelta kAppRunningDuration = base::Minutes(5);
+  task_environment_.FastForwardBy(kAppRunningDuration);
+
+  // Close app window to stop tracking further usage and verify usage info is
+  // not persisted in the pref store.
+  ModifyInstance(kInstanceId, kAppId, window.get(),
+                 ::apps::InstanceState::kDestroyed);
+  ASSERT_TRUE(GetPrefService()->GetDict(kAppUsageTime).empty());
 }
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -3022,7 +3095,14 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   ModifyInstance(app_id, window.get(), apps::InstanceState::kStarted);
   launch_event_run_loop.Run();
 
-  // Validate active event is recorded.
+  // Mark app as kRunning otherwise active event will not trigger since the app
+  // isn't considered to be running yet.
+  ModifyInstance(
+      app_id, window.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kStarted |
+                                       apps::InstanceState::kRunning));
+
+  // Validate launch -> active event is recorded.
   base::RunLoop active_event_run_loop;
   auto active_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
@@ -3032,10 +3112,13 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       active_record_callback);
 
-  ModifyInstance(app_id, window.get(), apps::InstanceState::kActive);
+  ModifyInstance(
+      app_id, window.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kActive |
+                                       apps::InstanceState::kRunning));
   active_event_run_loop.Run();
 
-  // Validate inactive event is recorded.
+  // Validate active -> inactive event is recorded.
   base::RunLoop hidden_event_run_loop;
   auto hidden_record_callback = base::BindLambdaForTesting(
       [&, this](const metrics::structured::Event& event) {
@@ -3045,8 +3128,27 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   test_structured_metrics_provider()->SetOnEventsRecordClosure(
       hidden_record_callback);
 
-  ModifyInstance(app_id, window.get(), apps::InstanceState::kHidden);
+  ModifyInstance(
+      app_id, window.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kHidden |
+                                       apps::InstanceState::kRunning));
   hidden_event_run_loop.Run();
+
+  // Validate inactive -> active is recorded.
+  base::RunLoop active_event_run_loop2;
+  auto active_record_callback2 = base::BindLambdaForTesting(
+      [&, this](const metrics::structured::Event& event) {
+        ValidateAppStateEvent(event, app_id, AppStateChange::kActive);
+        active_event_run_loop2.Quit();
+      });
+  test_structured_metrics_provider()->SetOnEventsRecordClosure(
+      active_record_callback2);
+
+  ModifyInstance(
+      app_id, window.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kActive |
+                                       apps::InstanceState::kRunning));
+  active_event_run_loop2.Run();
 
   // Validate closed event is recorded.
   base::RunLoop closed_event_run_loop;
@@ -3062,11 +3164,221 @@ TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecorded) {
   closed_event_run_loop.Run();
 }
 
-// TODO(b/269683180): Add more complex tests such as opening multiple instances
-// of an app for better coverage.
+TEST_P(AppDiscoveryMetricsTest, AppActivityMetricsRecordedForTwoInstances) {
+  base::test::ScopedRunLoopTimeout default_timeout(FROM_HERE, base::Seconds(3));
+
+  auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
+  apps::AppRegistryCache& cache = proxy->AppRegistryCache();
+  proxy->SetAppPlatformMetricsServiceForTesting(GetAppPlatformMetricsService());
+  const std::string app_id = "a";
+
+  // Install an ARC app to test.
+  AddApp(cache, app_id, AppType::kArc, "com.google.A", Readiness::kReady,
+         InstallReason::kUser, InstallSource::kPlayStore,
+         true /* should_notify_initialized */);
+
+  // Simulate registering publishers for the launch interface to record metrics.
+  proxy->RegisterPublishersForTesting();
+  FakePublisher fake_arc_apps(proxy, AppType::kArc);
+
+  // Create a window to simulate launching the app.
+  auto window1 = std::make_unique<aura::Window>(nullptr);
+  auto window2 = std::make_unique<aura::Window>(nullptr);
+  window1->Init(ui::LAYER_NOT_DRAWN);
+  window2->Init(ui::LAYER_NOT_DRAWN);
+
+  // Validate event recorded after event is recorded.
+  base::RunLoop launch_event_run_loop;
+  auto launch_record_callback = base::BindLambdaForTesting(
+      [&, this](const metrics::structured::Event& event) {
+        ValidateAppLaunchEvent(event, app_id, AppType::kArc,
+                               LaunchSource::kFromChromeInternal);
+        launch_event_run_loop.Quit();
+      });
+  test_structured_metrics_provider()->SetOnEventsRecordClosure(
+      launch_record_callback);
+
+  EXPECT_CALL(fake_arc_apps,
+              Launch(app_id, ui::EF_NONE, LaunchSource::kFromChromeInternal, _))
+      .Times(1);
+  proxy->Launch(app_id, ui::EF_NONE, LaunchSource::kFromChromeInternal,
+                nullptr);
+  ModifyInstance(app_id, window1.get(), apps::InstanceState::kStarted);
+  ModifyInstance(app_id, window2.get(), apps::InstanceState::kStarted);
+  launch_event_run_loop.Run();
+
+  // Mark app as kRunning otherwise active event will not trigger since the app
+  // isn't considered to be running yet.
+  ModifyInstance(
+      app_id, window1.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kStarted |
+                                       apps::InstanceState::kRunning));
+  ModifyInstance(
+      app_id, window2.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kStarted |
+                                       apps::InstanceState::kRunning));
+
+  // Validate launch -> active event is recorded.
+  base::RunLoop active_event_run_loop;
+  auto active_record_callback = base::BindLambdaForTesting(
+      [&, this](const metrics::structured::Event& event) {
+        ValidateAppStateEvent(event, app_id, AppStateChange::kActive);
+        active_event_run_loop.Quit();
+      });
+  test_structured_metrics_provider()->SetOnEventsRecordClosure(
+      active_record_callback);
+
+  ModifyInstance(
+      app_id, window1.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kActive |
+                                       apps::InstanceState::kRunning));
+  active_event_run_loop.Run();
+
+  // Active event should not be recorded when 2nd instance becomes active.
+  auto active_record_callback2 =
+      base::BindLambdaForTesting([](const metrics::structured::Event& event) {
+        ADD_FAILURE() << "Should not be called!";
+      });
+  test_structured_metrics_provider()->SetOnEventsRecordClosure(
+      active_record_callback2);
+  ModifyInstance(
+      app_id, window2.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kActive |
+                                       apps::InstanceState::kRunning));
+
+  // Inactive event is not recorded if one instance becomes inactive but other
+  // instance is active.
+  auto hidden_record_callback =
+      base::BindLambdaForTesting([](const metrics::structured::Event& event) {
+        ADD_FAILURE() << "Should not be called!";
+      });
+  test_structured_metrics_provider()->SetOnEventsRecordClosure(
+      hidden_record_callback);
+
+  ModifyInstance(
+      app_id, window1.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kHidden |
+                                       apps::InstanceState::kRunning));
+
+  // Validate inactive event recorded if both instances are inactive.
+  base::RunLoop inactive_event_run_loop;
+  auto inactive_record_callback = base::BindLambdaForTesting(
+      [&, this](const metrics::structured::Event& event) {
+        ValidateAppStateEvent(event, app_id, AppStateChange::kInactive);
+        inactive_event_run_loop.Quit();
+      });
+  test_structured_metrics_provider()->SetOnEventsRecordClosure(
+      inactive_record_callback);
+
+  ModifyInstance(
+      app_id, window2.get(),
+      static_cast<apps::InstanceState>(apps::InstanceState::kVisible |
+                                       apps::InstanceState::kRunning));
+  inactive_event_run_loop.Run();
+
+  // Validate closed event is not recorded when one instance is closed.
+  auto closed_record_callback =
+      base::BindLambdaForTesting([](const metrics::structured::Event& event) {
+        ADD_FAILURE() << "Should not be called!";
+      });
+  test_structured_metrics_provider()->SetOnEventsRecordClosure(
+      closed_record_callback);
+  ModifyInstance(app_id, window1.get(), apps::InstanceState::kDestroyed);
+
+  // Validate closed event is recorded when both instances are closed.
+  base::RunLoop closed_event_run_loop;
+  auto closed_record_callback2 = base::BindLambdaForTesting(
+      [&, this](const metrics::structured::Event& event) {
+        ValidateAppStateEvent(event, app_id, AppStateChange::kClosed);
+        closed_event_run_loop.Quit();
+      });
+  test_structured_metrics_provider()->SetOnEventsRecordClosure(
+      closed_record_callback2);
+
+  ModifyInstance(app_id, window2.get(), apps::InstanceState::kDestroyed);
+  closed_event_run_loop.Run();
+}
 
 INSTANTIATE_TEST_SUITE_P(All,
                          AppDiscoveryMetricsTest,
                          testing::Bool() /* IsLacrosPrimary */);
+
+class AppPlatformMetricsServiceObserverTest
+    : public AppPlatformMetricsServiceTestBase,
+      public ::testing::WithParamInterface<bool> {
+ protected:
+  void SetUp() override {
+    if (IsLacrosPrimary()) {
+      feature_list_.InitWithFeatures(
+          /*enabled_features=*/{ash::features::kLacrosSupport,
+                                ash::features::kLacrosPrimary},
+          {});
+    } else {
+      feature_list_.InitWithFeatures(
+          {},
+          /*disabled_features=*/{ash::features::kLacrosSupport,
+                                 ash::features::kLacrosPrimary});
+    }
+
+    // Set up test user.
+    AddRegularUser("test@test.com");
+  }
+
+  bool IsLacrosPrimary() const { return GetParam(); }
+
+  MockObserver* observer() { return &observer_; }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+
+  // Mock observer for the `AppPlatformMetricsService` component. Needs to
+  // outlive the lifetime of the component for testing purposes.
+  MockObserver observer_;
+};
+
+TEST_P(AppPlatformMetricsServiceObserverTest,
+       NotifyObserversOnAppPlatformMetricsInit) {
+  MockObserver* const observer_ptr = observer();
+  AppPlatformMetricsService app_platform_metrics_service(profile());
+  app_platform_metrics_service.AddObserver(observer_ptr);
+  EXPECT_CALL(*observer_ptr, OnAppPlatformMetricsInit(_))
+      .WillOnce([&](AppPlatformMetrics* app_platform_metrics) {
+        EXPECT_THAT(app_platform_metrics,
+                    Eq(app_platform_metrics_service.AppPlatformMetrics()));
+      });
+  app_platform_metrics_service.Start(
+      AppServiceProxyFactory::GetForProfile(profile())->AppRegistryCache(),
+      AppServiceProxyFactory::GetForProfile(profile())->InstanceRegistry());
+}
+
+TEST_P(AppPlatformMetricsServiceObserverTest,
+       ShouldNotNotifyObserversOnAppPlatformMetricsInitIfUnregistered) {
+  MockObserver* const observer_ptr = observer();
+  AppPlatformMetricsService app_platform_metrics_service(profile());
+
+  // Unregister registered observer before init and verify observer is not
+  // notified.
+  app_platform_metrics_service.AddObserver(observer_ptr);
+  app_platform_metrics_service.RemoveObserver(observer_ptr);
+  EXPECT_CALL(*observer_ptr, OnAppPlatformMetricsInit(_)).Times(0);
+  app_platform_metrics_service.Start(
+      AppServiceProxyFactory::GetForProfile(profile())->AppRegistryCache(),
+      AppServiceProxyFactory::GetForProfile(profile())->InstanceRegistry());
+}
+
+TEST_P(AppPlatformMetricsServiceObserverTest,
+       ShouldNotifyObserverOnDestruction) {
+  MockObserver* const observer_ptr = observer();
+  auto app_platform_metrics_service =
+      std::make_unique<AppPlatformMetricsService>(profile());
+  app_platform_metrics_service->AddObserver(observer_ptr);
+  EXPECT_CALL(*observer_ptr, OnAppPlatformMetricsServiceWillBeDestroyed)
+      .Times(1);
+  app_platform_metrics_service.reset();
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         AppPlatformMetricsServiceObserverTest,
+                         ::testing::Bool() /* IsLacrosPrimary */);
 
 }  // namespace apps

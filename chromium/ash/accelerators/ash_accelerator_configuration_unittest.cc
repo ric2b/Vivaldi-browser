@@ -11,6 +11,7 @@
 #include "ash/public/cpp/accelerator_configuration.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/accelerators_util.h"
+#include "ash/public/mojom/accelerator_configuration.mojom.h"
 #include "base/containers/contains.h"
 #include "base/ranges/algorithm.h"
 #include "base/test/scoped_feature_list.h"
@@ -24,6 +25,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
+
+using ::ash::mojom::AcceleratorConfigResult;
 
 class UpdatedAcceleratorsObserver
     : public ash::AshAcceleratorConfiguration::Observer {
@@ -160,7 +163,7 @@ TEST_F(AshAcceleratorConfigurationTest, DeprecatedAccelerators) {
   // overall accelerators list too.
   ExpectAllAcceleratorsEqual(expected_test_data, accelerators);
 
-  // Verify that the fetch deprecated accelerators are correct.
+  // Verify that the fetched deprecated accelerators are correct.
   std::vector<ui::Accelerator> deprecated_accelerators;
   for (const auto& accel : accelerators) {
     if (config_->IsDeprecated(accel)) {
@@ -184,6 +187,86 @@ TEST_F(AshAcceleratorConfigurationTest, DeprecatedAccelerators) {
   const ui::Accelerator active_accelerator(ui::VKEY_ESCAPE,
                                            ui::EF_COMMAND_DOWN);
   EXPECT_FALSE(config_->IsDeprecated(active_accelerator));
+}
+
+TEST_F(AshAcceleratorConfigurationTest,
+       RemoveAndRestoreDeprecatedAccelerators) {
+  // Test deprecated accelerators, in this case `SHOW_TASK_MANAGER` has two
+  // associated accelerators: (deprecated) ESCAPE + SHIFT and
+  // (active) ESCAPE + COMMAND.
+  const AcceleratorData initial_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN,
+       SHOW_TASK_MANAGER},
+  };
+
+  const AcceleratorData expected_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN,
+       SHOW_TASK_MANAGER},
+      {/*trigger_on_press=*/true, ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN,
+       SHOW_TASK_MANAGER},
+  };
+
+  const DeprecatedAcceleratorData deprecated_data[] = {
+      {SHOW_TASK_MANAGER, /*uma_histogram_name=*/"deprecated.showTaskManager",
+       /*notification_message_id=*/1, /*old_shortcut_id=*/1,
+       /*new_shortcut_id=*/2, /*deprecated_enabled=*/true},
+  };
+
+  const AcceleratorData test_deprecated_accelerators[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN,
+       SHOW_TASK_MANAGER},
+  };
+
+  config_->Initialize(initial_test_data);
+  config_->InitializeDeprecatedAccelerators(deprecated_data,
+                                            test_deprecated_accelerators);
+
+  const ui::Accelerator deprecated_accelerator(ui::VKEY_ESCAPE,
+                                               ui::EF_SHIFT_DOWN);
+
+  // Remove the deprecated accelerator ESCAPE + SHIFT.
+  const AcceleratorData updated_expected_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN,
+       SHOW_TASK_MANAGER},
+  };
+  AcceleratorConfigResult result =
+      config_->RemoveAccelerator(SHOW_TASK_MANAGER, deprecated_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+  // Verify that the accelerator is no longer deprecated.
+  EXPECT_FALSE(config_->IsDeprecated(deprecated_accelerator));
+  EXPECT_FALSE(config_->GetDeprecatedAcceleratorData(SHOW_TASK_MANAGER));
+  ExpectAllAcceleratorsEqual(updated_expected_test_data,
+                             config_->GetAllAccelerators());
+
+  // Attempt to restore SHOW_TASK_MANAGER, expect deprecated accelerator to NOT
+  // be re-added.
+  result = config_->RestoreDefault(SHOW_TASK_MANAGER);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+  EXPECT_FALSE(config_->IsDeprecated(deprecated_accelerator));
+  EXPECT_FALSE(config_->GetDeprecatedAcceleratorData(SHOW_TASK_MANAGER));
+  ExpectAllAcceleratorsEqual(updated_expected_test_data,
+                             config_->GetAllAccelerators());
+
+  // Now restore all accelerators, this time deprecated accelerators should be
+  // restored.
+  result = config_->RestoreAllDefaults();
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+  EXPECT_TRUE(config_->IsDeprecated(deprecated_accelerator));
+  EXPECT_EQ(deprecated_data,
+            config_->GetDeprecatedAcceleratorData(SHOW_TASK_MANAGER));
+  ExpectAllAcceleratorsEqual(expected_test_data, config_->GetAllAccelerators());
 }
 
 TEST_F(AshAcceleratorConfigurationTest, IsDefaultAccelerator) {
@@ -491,4 +574,618 @@ TEST_F(AshAcceleratorConfigurationTest, RemoveDefaultAccelerator) {
   ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
   EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
 }
+
+TEST_F(AshAcceleratorConfigurationTest, RemoveAndRestoreDefault) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Remove `SWITCH_TO_LAST_USE_IME`.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+  AcceleratorConfigResult result = config_->RemoveAccelerator(
+      SWITCH_TO_LAST_USED_IME,
+      ui::Accelerator(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN));
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // removing an accelerator.
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+
+  // Restore all defaults.
+  result = config_->RestoreAllDefaults();
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Expect accelerators to revert back to the default state and observer
+  // is called.
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(3, observer_.num_times_accelerator_updated_called());
+}
+
+TEST_F(AshAcceleratorConfigurationTest, RestoreAllConsecutively) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Restore all defaults, even though no change was made.
+  AcceleratorConfigResult reset_result = config_->RestoreAllDefaults();
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, reset_result);
+
+  // Nothing should have changed, but the observer is called.
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+
+  // Restore all defaults again, even though no change was made.
+  reset_result = config_->RestoreAllDefaults();
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, reset_result);
+
+  // Nothing should have changed, but the observer is called.
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(3, observer_.num_times_accelerator_updated_called());
+}
+
+TEST_F(AshAcceleratorConfigurationTest, RemoveAndRestoreOneAction) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Remove `SWITCH_TO_LAST_USE_IME`.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+  AcceleratorConfigResult result = config_->RemoveAccelerator(
+      SWITCH_TO_LAST_USED_IME,
+      ui::Accelerator(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN));
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // removing an accelerator.
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+
+  // Reset the `SWITCH_TO_LAST_USED_IME` action..
+  result = config_->RestoreDefault(SWITCH_TO_LAST_USED_IME);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Expect accelerators to revert back to the default state and observer
+  // is called.
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(3, observer_.num_times_accelerator_updated_called());
+
+  // Reset one more time, no changes should be made.
+  result = config_->RestoreDefault(SWITCH_TO_LAST_USED_IME);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // No changes to be made, but observer should be called.
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(4, observer_.num_times_accelerator_updated_called());
+}
+
+TEST_F(AshAcceleratorConfigurationTest, RestoreInvalidAction) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // `BRIGHTNESS_DOWN` is not a valid accelerator, so this should return an
+  // error.
+  const AcceleratorConfigResult result =
+      config_->RestoreDefault(BRIGHTNESS_DOWN);
+  EXPECT_EQ(AcceleratorConfigResult::kNotFound, result);
+
+  // Expect nothing to change.
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+}
+
+// Add accelerator with no conflict.
+TEST_F(AshAcceleratorConfigurationTest, AddAccelerator) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Add CTRL + SPACE to SWITCH_TO_LAST_USED_IME.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  const ui::Accelerator new_accelerator(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN);
+  AcceleratorConfigResult result =
+      config_->AddUserAccelerator(SWITCH_TO_LAST_USED_IME, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // adding an accelerator.
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  const AcceleratorAction* found_action =
+      config_->FindAcceleratorAction(new_accelerator);
+  EXPECT_TRUE(found_action);
+  EXPECT_EQ(SWITCH_TO_LAST_USED_IME, *found_action);
+}
+
+// Add accelerator that conflict with default accelerator.
+TEST_F(AshAcceleratorConfigurationTest, AddAcceleratorDefaultConflict) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Add ALT + SHIFT + TAB to SWITCH_TO_LAST_USED_IME, which conflicts with
+  // CYCLE_BACKWARD_MRU.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+  };
+
+  const ui::Accelerator new_accelerator(ui::VKEY_TAB,
+                                        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
+  AcceleratorConfigResult result =
+      config_->AddUserAccelerator(SWITCH_TO_LAST_USED_IME, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // removing an accelerator.
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  const AcceleratorAction* found_action =
+      config_->FindAcceleratorAction(new_accelerator);
+  EXPECT_TRUE(found_action);
+  EXPECT_EQ(SWITCH_TO_LAST_USED_IME, *found_action);
+
+  // Confirm that conflicting accelerator was removed.
+  const std::vector<ui::Accelerator>& backward_mru_accelerators =
+      config_->GetAcceleratorsForAction(CYCLE_BACKWARD_MRU);
+  EXPECT_TRUE(backward_mru_accelerators.empty());
+}
+
+// Add accelerator that conflicts with a deprecated accelerator.
+TEST_F(AshAcceleratorConfigurationTest, AddAcceleratorDeprecatedConflict) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  const DeprecatedAcceleratorData deprecated_data[] = {
+      {SHOW_TASK_MANAGER, /*uma_histogram_name=*/"deprecated.showTaskManager",
+       /*notification_message_id=*/1, /*old_shortcut_id=*/1,
+       /*new_shortcut_id=*/2, /*deprecated_enabled=*/true},
+  };
+
+  const AcceleratorData test_deprecated_accelerators[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN,
+       SHOW_TASK_MANAGER},
+  };
+
+  const AcceleratorData initial_expected_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN,
+       SHOW_TASK_MANAGER},
+  };
+
+  config_->Initialize(test_data);
+  config_->InitializeDeprecatedAccelerators(deprecated_data,
+                                            test_deprecated_accelerators);
+
+  ExpectAllAcceleratorsEqual(initial_expected_data,
+                             config_->GetAllAccelerators());
+  // Initializing deprecated accelerators will also trigger the observer.
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+
+  const ui::Accelerator deprecated_accelerator(ui::VKEY_ESCAPE,
+                                               ui::EF_SHIFT_DOWN);
+  EXPECT_TRUE(config_->IsDeprecated(deprecated_accelerator));
+
+  // Add SHIFT + ESCAPE to SWITCH_TO_LAST_USED_IME, which conflicts with
+  // a deprecated accelerator.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  AcceleratorConfigResult result = config_->AddUserAccelerator(
+      SWITCH_TO_LAST_USED_IME, deprecated_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // removing an accelerator.
+  EXPECT_EQ(3, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  const AcceleratorAction* found_action =
+      config_->FindAcceleratorAction(deprecated_accelerator);
+  EXPECT_TRUE(found_action);
+  EXPECT_EQ(SWITCH_TO_LAST_USED_IME, *found_action);
+
+  // Confirm that the deprecated accelerator was removed.
+  EXPECT_FALSE(config_->IsDeprecated(deprecated_accelerator));
+}
+
+// Add and then remove an accelerator.
+TEST_F(AshAcceleratorConfigurationTest, AddRemoveAccelerator) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Add CTRL + SPACE to SWITCH_TO_LAST_USED_IME.
+  const AcceleratorData added_updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  const ui::Accelerator new_accelerator(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN);
+  AcceleratorConfigResult result =
+      config_->AddUserAccelerator(SWITCH_TO_LAST_USED_IME, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // adding an accelerator.
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(added_updated_test_data,
+                             config_->GetAllAccelerators());
+  const AcceleratorAction* found_action =
+      config_->FindAcceleratorAction(new_accelerator);
+  EXPECT_TRUE(found_action);
+  EXPECT_EQ(SWITCH_TO_LAST_USED_IME, *found_action);
+
+  // Remove CTRL + SPACE from SWITCH_TO_LAST_USED_IME.
+  const AcceleratorData removed_updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  // Remove the accelerator now.
+  result = config_->RemoveAccelerator(SWITCH_TO_LAST_USED_IME, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+  EXPECT_EQ(3, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(removed_updated_test_data,
+                             config_->GetAllAccelerators());
+  EXPECT_FALSE(config_->FindAcceleratorAction(new_accelerator));
+}
+
+// Add accelerator and restore its default.
+TEST_F(AshAcceleratorConfigurationTest, AddRestoreAccelerator) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Add CTRL + SPACE to SWITCH_TO_LAST_USED_IME.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  const ui::Accelerator new_accelerator(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN);
+  AcceleratorConfigResult result =
+      config_->AddUserAccelerator(SWITCH_TO_LAST_USED_IME, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // adding an accelerator.
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  const AcceleratorAction* found_action =
+      config_->FindAcceleratorAction(new_accelerator);
+  EXPECT_TRUE(found_action);
+  EXPECT_EQ(SWITCH_TO_LAST_USED_IME, *found_action);
+
+  // Restore default, expect to be back to default state.
+  result = config_->RestoreDefault(SWITCH_TO_LAST_USED_IME);
+  EXPECT_EQ(3, observer_.num_times_accelerator_updated_called());
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+  EXPECT_FALSE(config_->FindAcceleratorAction(new_accelerator));
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+}
+
+// Add an accelerator, then add the same accelerator to another action.
+TEST_F(AshAcceleratorConfigurationTest, ReAddAcceleratorToAnotherAction) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Add CTRL + SPACE to SWITCH_TO_LAST_USED_IME.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+  };
+
+  const ui::Accelerator new_accelerator(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN);
+  AcceleratorConfigResult result =
+      config_->AddUserAccelerator(SWITCH_TO_LAST_USED_IME, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // adding an accelerator.
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  const AcceleratorAction* found_action =
+      config_->FindAcceleratorAction(new_accelerator);
+  EXPECT_TRUE(found_action);
+  EXPECT_EQ(SWITCH_TO_LAST_USED_IME, *found_action);
+
+  // Add CTRL + SPACE to CYCLE_BACKWARD_MRU.
+  const AcceleratorData reupdated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB, ui::EF_ALT_DOWN,
+       CYCLE_FORWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_TAB,
+       ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE, ui::EF_CONTROL_DOWN,
+       CYCLE_BACKWARD_MRU},
+  };
+  result = config_->AddUserAccelerator(CYCLE_BACKWARD_MRU, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+  ExpectAllAcceleratorsEqual(reupdated_test_data,
+                             config_->GetAllAccelerators());
+  const AcceleratorAction* found_action2 =
+      config_->FindAcceleratorAction(new_accelerator);
+  EXPECT_TRUE(found_action2);
+  EXPECT_EQ(CYCLE_BACKWARD_MRU, *found_action2);
+}
+
+TEST_F(AshAcceleratorConfigurationTest, ReplaceAccelerator) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Replace  CTRL + ALT + SPACE -> CTRL + VKEY_M.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_M, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+  };
+
+  const ui::Accelerator old_accelerator(ui::VKEY_SPACE,
+                                        ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN);
+  const ui::Accelerator new_accelerator(ui::VKEY_M, ui::EF_CONTROL_DOWN);
+  AcceleratorConfigResult result = config_->ReplaceAccelerator(
+      SWITCH_TO_LAST_USED_IME, old_accelerator, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // adding an accelerator.
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  const AcceleratorAction* found_action =
+      config_->FindAcceleratorAction(new_accelerator);
+  EXPECT_TRUE(found_action);
+  EXPECT_EQ(SWITCH_TO_LAST_USED_IME, *found_action);
+}
+
+TEST_F(AshAcceleratorConfigurationTest, ReplaceNonExistentAccelerator) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  const ui::Accelerator old_accelerator(ui::VKEY_J, ui::EF_CONTROL_DOWN);
+  const ui::Accelerator new_accelerator(ui::VKEY_C, ui::EF_COMMAND_DOWN);
+
+  AcceleratorConfigResult result = config_->ReplaceAccelerator(
+      SWITCH_TO_LAST_USED_IME, old_accelerator, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kNotFound, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // adding an accelerator.
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+}
+
+TEST_F(AshAcceleratorConfigurationTest, ReplaceThenRestoreAccelerator) {
+  EXPECT_EQ(0, observer_.num_times_accelerator_updated_called());
+  const AcceleratorData test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_SPACE,
+       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, SWITCH_TO_LAST_USED_IME},
+  };
+
+  config_->Initialize(test_data);
+
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+  EXPECT_EQ(1, observer_.num_times_accelerator_updated_called());
+
+  // Replace  CTRL + ALT + SPACE -> CTRL + VKEY_M.
+  const AcceleratorData updated_test_data[] = {
+      {/*trigger_on_press=*/true, ui::VKEY_M, ui::EF_CONTROL_DOWN,
+       SWITCH_TO_LAST_USED_IME},
+  };
+
+  const ui::Accelerator old_accelerator(ui::VKEY_SPACE,
+                                        ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN);
+  const ui::Accelerator new_accelerator(ui::VKEY_M, ui::EF_CONTROL_DOWN);
+  AcceleratorConfigResult result = config_->ReplaceAccelerator(
+      SWITCH_TO_LAST_USED_IME, old_accelerator, new_accelerator);
+  EXPECT_EQ(AcceleratorConfigResult::kSuccess, result);
+
+  // Compare expected accelerators and that the observer was fired after
+  // adding an accelerator.
+  EXPECT_EQ(2, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(updated_test_data, config_->GetAllAccelerators());
+  const AcceleratorAction* found_action =
+      config_->FindAcceleratorAction(new_accelerator);
+  EXPECT_TRUE(found_action);
+  EXPECT_EQ(SWITCH_TO_LAST_USED_IME, *found_action);
+
+  // Restore defaults, expect everything to be back to default state.
+  config_->RestoreAllDefaults();
+  EXPECT_EQ(3, observer_.num_times_accelerator_updated_called());
+  ExpectAllAcceleratorsEqual(test_data, config_->GetAllAccelerators());
+}
+
 }  // namespace ash

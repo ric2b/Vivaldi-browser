@@ -9,6 +9,9 @@ import static org.chromium.components.content_settings.PrefNames.COOKIE_CONTROLS
 import android.os.Build;
 import android.os.Bundle;
 import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.SuperscriptSpan;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -19,7 +22,9 @@ import androidx.preference.PreferenceFragmentCompat;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
+import org.chromium.chrome.browser.enterprise.util.ManagedBrowserUtils;
+import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthSettingSwitchPreference;
 import org.chromium.chrome.browser.preferences.Pref;
@@ -34,6 +39,7 @@ import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.metrics.SettingsAccessPoint;
 import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
+import org.chromium.chrome.browser.settings.ProfileDependentSetting;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.settings.GoogleServicesSettings;
@@ -44,8 +50,8 @@ import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.ContentSettingsResources;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
-import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
@@ -59,8 +65,9 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 /**
  * Fragment to keep track of the all the privacy related preferences.
  */
-public class PrivacySettings
-        extends PreferenceFragmentCompat implements Preference.OnPreferenceChangeListener {
+public class PrivacySettings extends PreferenceFragmentCompat
+        implements Preference.OnPreferenceChangeListener, FragmentHelpAndFeedbackLauncher,
+                   ProfileDependentSetting {
     private static final String PREF_CAN_MAKE_PAYMENT = "can_make_payment";
     private static final String PREF_PRELOAD_PAGES = "preload_pages";
     private static final String PREF_HTTPS_FIRST_MODE = "https_first_mode";
@@ -82,6 +89,8 @@ public class PrivacySettings
     private static final String PREF_PHONE_AS_A_SECURITY_KEY = "phone_as_a_security_key";
 
     private IncognitoLockSettings mIncognitoLockSettings;
+    private HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
+    private Profile mProfile;
 
     /**
      * Vivaldi
@@ -107,8 +116,10 @@ public class PrivacySettings
 
         if (!ChromeApplicationImpl.isVivaldi()) {
         Preference sandboxPreference = findPreference(PREF_PRIVACY_SANDBOX);
-        if (PrivacySandboxBridge.isPrivacySandboxRestricted()) {
-            // Hide the Privacy Sandbox if it is restricted.
+        if (PrivacySandboxBridge.isPrivacySandboxRestricted()
+                && !PrivacySandboxBridge.isRestrictedNoticeEnabled()) {
+            // Hide the Privacy Sandbox if it is restricted and ad-measurement is not
+            // available to restricted users.
             getPreferenceScreen().removePreference(sandboxPreference);
         } else {
             // Overwrite the click listener to pass a correct referrer to the fragment.
@@ -127,9 +138,11 @@ public class PrivacySettings
             RecordHistogram.recordEnumeratedHistogram("Settings.PrivacyGuide.EntryExit",
                     PrivacyGuideInteractions.SETTINGS_LINK_ROW_ENTRY,
                     PrivacyGuideInteractions.MAX_VALUE);
+            UserPrefs.get(mProfile).setBoolean(Pref.PRIVACY_GUIDE_VIEWED, true);
             return false;
         });
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_GUIDE)) {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_GUIDE) || mProfile.isChild()
+                || ManagedBrowserUtils.isBrowserManaged(mProfile)) {
             getPreferenceScreen().removePreference(privacyGuidePreference);
         }
 
@@ -163,20 +176,19 @@ public class PrivacySettings
             public boolean isPreferenceControlledByPolicy(Preference preference) {
                 String key = preference.getKey();
                 assert PREF_HTTPS_FIRST_MODE.equals(key) : "Unexpected preference key: " + key;
-                return UserPrefs.get(Profile.getLastUsedRegularProfile())
-                        .isManagedPreference(Pref.HTTPS_ONLY_MODE_ENABLED);
+                return UserPrefs.get(mProfile).isManagedPreference(Pref.HTTPS_ONLY_MODE_ENABLED);
             }
 
             @Override
-            public boolean isPreferenceClickDisabledByPolicy(Preference preference) {
+            public boolean isPreferenceClickDisabled(Preference preference) {
                 // Advanced Protection automatically enables HTTPS-Only Mode so
                 // lock the setting.
                 return isPreferenceControlledByPolicy(preference)
                         || SafeBrowsingBridge.isUnderAdvancedProtection();
             }
         });
-        httpsFirstModePref.setChecked(UserPrefs.get(Profile.getLastUsedRegularProfile())
-                                              .getBoolean(Pref.HTTPS_ONLY_MODE_ENABLED));
+        httpsFirstModePref.setChecked(
+                UserPrefs.get(mProfile).getBoolean(Pref.HTTPS_ONLY_MODE_ENABLED));
         if (SafeBrowsingBridge.isUnderAdvancedProtection()) {
             httpsFirstModePref.setSummary(getContext().getResources().getString(
                     R.string.settings_https_first_mode_with_advanced_protection_summary));
@@ -257,11 +269,9 @@ public class PrivacySettings
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         String key = preference.getKey();
         if (PREF_CAN_MAKE_PAYMENT.equals(key)) {
-            UserPrefs.get(Profile.getLastUsedRegularProfile())
-                    .setBoolean(Pref.CAN_MAKE_PAYMENT_ENABLED, (boolean) newValue);
+            UserPrefs.get(mProfile).setBoolean(Pref.CAN_MAKE_PAYMENT_ENABLED, (boolean) newValue);
         } else if (PREF_HTTPS_FIRST_MODE.equals(key)) {
-            UserPrefs.get(Profile.getLastUsedRegularProfile())
-                    .setBoolean(Pref.HTTPS_ONLY_MODE_ENABLED, (boolean) newValue);
+            UserPrefs.get(mProfile).setBoolean(Pref.HTTPS_ONLY_MODE_ENABLED, (boolean) newValue);
         }
         // Vivaldi
         else if (PREF_WEBRTC_BROADCAST_IP.equals(key)) {
@@ -284,17 +294,16 @@ public class PrivacySettings
      * Updates the preferences.
      */
     public void updatePreferences() {
-        PrefService prefService = UserPrefs.get(Profile.getLastUsedRegularProfile());
-
         ChromeSwitchPreference canMakePaymentPref =
                 (ChromeSwitchPreference) findPreference(PREF_CAN_MAKE_PAYMENT);
         if (canMakePaymentPref != null) {
-            canMakePaymentPref.setChecked(prefService.getBoolean(Pref.CAN_MAKE_PAYMENT_ENABLED));
+            canMakePaymentPref.setChecked(
+                    UserPrefs.get(mProfile).getBoolean(Pref.CAN_MAKE_PAYMENT_ENABLED));
         }
 
         Preference doNotTrackPref = findPreference(PREF_DO_NOT_TRACK);
         if (doNotTrackPref != null) {
-            doNotTrackPref.setSummary(prefService.getBoolean(Pref.ENABLE_DO_NOT_TRACK)
+            doNotTrackPref.setSummary(UserPrefs.get(mProfile).getBoolean(Pref.ENABLE_DO_NOT_TRACK)
                             ? R.string.text_on
                             : R.string.text_off);
         }
@@ -319,7 +328,7 @@ public class PrivacySettings
         Preference usageStatsPref = findPreference(PREF_USAGE_STATS);
         if (usageStatsPref != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                    && prefService.getBoolean(Pref.USAGE_STATS_ENABLED)) {
+                    && UserPrefs.get(mProfile).getBoolean(Pref.USAGE_STATS_ENABLED)) {
                 usageStatsPref.setOnPreferenceClickListener(preference -> {
                     UsageStatsConsentDialog
                             .create(getActivity(), true,
@@ -350,7 +359,7 @@ public class PrivacySettings
         Preference thirdPartyCookies = findPreference(PREF_THIRD_PARTY_COOKIES);
         if (thirdPartyCookies != null) {
             thirdPartyCookies.setSummary(ContentSettingsResources.getThirdPartyCookieListSummary(
-                    prefService.getInteger(COOKIE_CONTROLS_MODE)));
+                    UserPrefs.get(mProfile).getInteger(COOKIE_CONTROLS_MODE)));
         }
 
         // Vivaldi
@@ -367,6 +376,35 @@ public class PrivacySettings
                     VivaldiPreferences.getSharedPreferencesManager().readBoolean(
                             VivaldiPreferences.CLEAR_SESSION_BROWSING_DATA, false) ?
                             R.string.text_on : R.string.text_off);
+
+        updatePrivacyGuidePreferenceTitle();
+    }
+
+    // TODO(crbug.com/1431101): This will be removed when the Privacy Guide is rolled out and no
+    //  longer a new feature.
+    private void updatePrivacyGuidePreferenceTitle() {
+        Preference privacyGuide = findPreference(PREF_PRIVACY_GUIDE);
+        if (privacyGuide == null) {
+            return;
+        }
+
+        final CharSequence privacyGuidePrefTitle;
+        if (!UserPrefs.get(mProfile).getBoolean(Pref.PRIVACY_GUIDE_VIEWED)) {
+            privacyGuidePrefTitle = SpanApplier.applySpans(
+                    getString(R.string.privacy_guide_pref_title),
+                    new SpanApplier.SpanInfo("<new>", "</new>", new SuperscriptSpan(),
+                            new RelativeSizeSpan(0.75f),
+                            new ForegroundColorSpan(
+                                    SemanticColorUtils.getDefaultTextColorAccent1(getContext()))));
+        } else {
+            privacyGuidePrefTitle =
+                    (CharSequence) (SpanApplier
+                                            .removeSpanText(
+                                                    getString(R.string.privacy_guide_pref_title),
+                                                    new SpanApplier.SpanInfo("<new>", "</new>"))
+                                            .trim());
+        }
+        privacyGuide.setTitle(privacyGuidePrefTitle);
     }
 
     @Override
@@ -381,11 +419,20 @@ public class PrivacySettings
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.menu_id_targeted_help) {
-            HelpAndFeedbackLauncherImpl.getInstance().show(getActivity(),
-                    getString(R.string.help_context_privacy), Profile.getLastUsedRegularProfile(),
-                    null);
+            mHelpAndFeedbackLauncher.show(
+                    getActivity(), getString(R.string.help_context_privacy), null);
             return true;
         }
         return false;
+    }
+
+    @Override
+    public void setHelpAndFeedbackLauncher(HelpAndFeedbackLauncher helpAndFeedbackLauncher) {
+        mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
+    }
+
+    @Override
+    public void setProfile(Profile profile) {
+        mProfile = profile;
     }
 }

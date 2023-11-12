@@ -10,6 +10,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_move_support.h"
 #include "base/test/test_simple_task_runner.h"
@@ -57,8 +58,9 @@ class MockDeviceStatusCollector : public DeviceStatusCollector {
   std::unique_ptr<DeviceLocalAccount> GetAutoLaunchedKioskSessionInfo()
       override {
     return std::make_unique<DeviceLocalAccount>(
-        DeviceLocalAccount::TYPE_KIOSK_APP, "account_id", "app_id",
-        "update_url");
+        DeviceLocalAccount::TYPE_KIOSK_APP,
+        policy::DeviceLocalAccount::EphemeralMode::kUnset, "account_id",
+        "app_id", "update_url");
   }
 };
 
@@ -112,7 +114,7 @@ class StatusUploaderTest : public testing::Test {
     // Running the status collected callback should trigger
     // CloudPolicyClient::UploadDeviceStatus.
     CloudPolicyClient::ResultCallback callback;
-    EXPECT_CALL(client_, UploadDeviceStatus_).WillOnce(MoveArg<3>(&callback));
+    EXPECT_CALL(client_, UploadDeviceStatus).WillOnce(MoveArg<3>(&callback));
 
     // Send some "valid" (read: non-nullptr) device/session data to the
     // callback in order to simulate valid status data.
@@ -163,7 +165,7 @@ class StatusUploaderTest : public testing::Test {
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   ash::ScopedTestingCrosSettings scoped_testing_cros_settings_;
   std::unique_ptr<MockDeviceStatusCollector> collector_;
-  MockDeviceStatusCollector* collector_ptr_;
+  raw_ptr<MockDeviceStatusCollector, ExperimentalAsh> collector_ptr_;
   ui::UserActivityDetector detector_;
   MockCloudPolicyClient client_;
   TestingPrefServiceSimple prefs_;
@@ -260,7 +262,7 @@ TEST_F(StatusUploaderTest, ResetTimerAfterUnregisteredClient) {
   // Running the status collected callback should trigger
   // CloudPolicyClient::UploadDeviceStatus.
   CloudPolicyClient::ResultCallback callback;
-  EXPECT_CALL(client_, UploadDeviceStatus_).WillOnce(MoveArg<3>(&callback));
+  EXPECT_CALL(client_, UploadDeviceStatus).WillOnce(MoveArg<3>(&callback));
 
   // Send some "valid" (read: non-nullptr) device/session data to the
   // callback in order to simulate valid status data.

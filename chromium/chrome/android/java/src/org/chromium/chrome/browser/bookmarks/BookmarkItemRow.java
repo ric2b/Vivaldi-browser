@@ -10,6 +10,7 @@ import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
@@ -23,53 +24,61 @@ import android.graphics.PorterDuff;
 
 import androidx.core.widget.ImageViewCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.bookmarks.BookmarkType;
 
 /**
  * A row view that shows bookmark info in the bookmarks UI.
  */
+// TODO (crbug.com/1424431): Make this class more extensible.
 public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
     private GURL mUrl;
     private RoundedIconGenerator mIconGenerator;
-    private final int mMinIconSize;
-    private final int mDisplayedIconSize;
+    private int mMinIconSize;
+    private int mDisplayedIconSize;
     private boolean mFaviconCancelled;
 
     /**
-     * Constructor for inflating from XML.
+     * Factory constructor for building the view programmatically.
+     * @param context The calling context, usually the parent view.
+     * @param isVisualRefreshEnabled Whether to show the visual or compact bookmark row.
      */
+    public static BookmarkItemRow buildView(Context context, boolean isVisualRefreshEnabled) {
+        BookmarkItemRow row = new BookmarkItemRow(context, null);
+        BookmarkRow.buildView(row, context, isVisualRefreshEnabled);
+
+        return row;
+    }
+
+    /** Constructor for inflating from XML. */
     public BookmarkItemRow(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mMinIconSize = isVisualRefreshEnabled()
-                ? getResources().getDimensionPixelSize(R.dimen.bookmark_refresh_min_start_icon_size)
-                : getResources().getDimensionPixelSize(R.dimen.default_favicon_min_size);
 
-        mDisplayedIconSize = isVisualRefreshEnabled()
-                ? getResources().getDimensionPixelSize(
-                        R.dimen.bookmark_refresh_preferred_start_icon_size)
-                : getResources().getDimensionPixelSize(R.dimen.default_favicon_size);
-        if (isVisualRefreshEnabled()) {
-            mIconGenerator = new RoundedIconGenerator(mDisplayedIconSize, mDisplayedIconSize,
-                    mDisplayedIconSize / 2,
-                    getContext().getColor(R.color.default_favicon_background_color),
-                    getResources().getDimensionPixelSize(
-                            R.dimen.bookmark_refresh_circular_monogram_text_size));
-        } else {
-            mIconGenerator = FaviconUtils.createCircularIconGenerator(context);
-        }
+        boolean isVisualRefreshEnabled = BookmarkFeatures.isLegacyBookmarksVisualRefreshEnabled();
+
+        mMinIconSize = getResources().getDimensionPixelSize(R.dimen.default_favicon_min_size);
+        mDisplayedIconSize = getResources().getDimensionPixelSize(isVisualRefreshEnabled
+                        ? R.dimen.bookmark_refresh_preferred_start_icon_size
+                        : R.dimen.default_favicon_size);
+
+        mIconGenerator = isVisualRefreshEnabled
+                ? new RoundedIconGenerator(mDisplayedIconSize, mDisplayedIconSize,
+                        mDisplayedIconSize / 2,
+                        getContext().getColor(R.color.default_favicon_background_color),
+                        getResources().getDimensionPixelSize(
+                                R.dimen.bookmark_refresh_circular_monogram_text_size))
+                : FaviconUtils.createCircularIconGenerator(getContext());
     }
 
     // BookmarkRow implementation.
 
     @Override
     public void onClick() {
-        switch (mDelegate.getCurrentState()) {
-            case BookmarkUIState.STATE_FOLDER:
-            case BookmarkUIState.STATE_SEARCHING:
+        switch (mDelegate.getCurrentUiMode()) {
+            case BookmarkUiMode.FOLDER:
+            case BookmarkUiMode.SEARCHING:
                 break;
-            case BookmarkUIState.STATE_LOADING:
+            case BookmarkUiMode.LOADING:
                 assert false :
                         "The main content shouldn't be inflated if it's still loading";
                 break;
@@ -119,7 +128,7 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
 
         Drawable iconDrawable = FaviconUtils.getIconDrawableWithoutFilter(
                 icon, mUrl, fallbackColor, mIconGenerator, getResources(), mDisplayedIconSize);
-        setStartIconDrawable(iconDrawable);
+        setIconDrawable(iconDrawable);
     }
 
     protected boolean getFaviconCancelledForTesting() {
@@ -138,7 +147,8 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
         Drawable iconDrawable = FaviconUtils.getIconDrawableWithoutFilter(
                 icon, mUrl.getSpec(), fallbackColor, mIconGenerator, getResources(),
                 vivaldiIconSize);
-        setStartIconDrawable(iconDrawable);
+        setIconDrawable(iconDrawable);
+        mStartIconView.setImageDrawable(iconDrawable);
         if (mStartIconView != null) setReadingListIconTint();
     }
 
@@ -149,15 +159,15 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
         if (this.getItem().getType() == BookmarkType.READING_LIST && bookmarkItem.isRead()) {
             mStartIconView.setColorFilter(getContext().getColor(
                     R.color.default_text_color_disabled_light), PorterDuff.Mode.MULTIPLY);
-            if (mMoreIcon != null)
-                mMoreIcon.setColorFilter(getContext().getColor(
+            if (mMoreButton != null)
+                mMoreButton.setColorFilter(getContext().getColor(
                         R.color.default_text_color_disabled_light), PorterDuff.Mode.MULTIPLY);
         } else {
             mStartIconView.setColorFilter(null);
-            ImageViewCompat.setImageTintList(mStartIconView, getDefaultStartIconTint());
-            if (mMoreIcon != null) {
-                mMoreIcon.setColorFilter(null);
-                ImageViewCompat.setImageTintList(mMoreIcon, getDefaultStartIconTint());
+            ImageViewCompat.setImageTintList(mStartIconView, getDefaultIconTint());
+            if (mMoreButton != null) {
+                mMoreButton.setColorFilter(null);
+                ImageViewCompat.setImageTintList(mMoreButton, getDefaultIconTint());
             }
         }
     }

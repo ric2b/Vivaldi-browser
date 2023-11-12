@@ -112,7 +112,6 @@
 #include "components/web_cache/renderer/web_cache_impl.h"
 #include "components/webapps/renderer/web_page_metadata_agent.h"
 #include "content/public/common/content_constants.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/page_visibility_state.h"
 #include "content/public/common/url_constants.h"
@@ -194,9 +193,11 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/common/controlled_frame.h"
 #include "chrome/common/initialize_extensions_client.h"
 #include "chrome/renderer/extensions/chrome_extensions_renderer_client.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/context_data.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_handlers/csp_info.h"
 #include "extensions/common/manifest_handlers/web_accessible_resources_info.h"
@@ -373,7 +374,8 @@ ChromeContentRendererClient::ChromeContentRendererClient()
 #endif
       ) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  EnsureExtensionsClientInitialized();
+  EnsureExtensionsClientInitialized(
+      controlled_frame::CreateAvailabilityCheckMap());
   extensions::ExtensionsRendererClient::Set(
       ChromeExtensionsRendererClient::GetInstance());
 #endif
@@ -1645,17 +1647,6 @@ void ChromeContentRendererClient::
 
   if (base::FeatureList::IsEnabled(subresource_filter::kAdTagging))
     blink::WebRuntimeFeatures::EnableAdTagging(true);
-
-  // Prerender2 should be enabled for supporting the basic infrastructure on the
-  // browser side.
-  // One of the features of kOmniboxTriggerForPrerender2 and
-  // kSupportSearchSuggestionForPrerender2 should be enabled before telling the
-  // blink side that chrome is enrolling the experinment.
-  if (base::FeatureList::IsEnabled(features::kOmniboxTriggerForPrerender2) ||
-      base::FeatureList::IsEnabled(
-          features::kSupportSearchSuggestionForPrerender2)) {
-    blink::WebRuntimeFeatures::EnablePrerender2RelatedFeatures(true);
-  }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // WebHID and WebUSB on service workers is only available in extensions.

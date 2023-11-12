@@ -251,7 +251,8 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
   if (sync_service->is_clearing_sync_data()) {
     engine_data.engine_state =
         vivaldi::sync::EngineState::ENGINE_STATE_CLEARING_DATA;
-  } else if (!sync_service->GetUserSettings()->IsSyncRequested() ||
+  } else if (sync_service->GetDisableReasons().Has(
+        syncer::SyncService::DISABLE_REASON_USER_CHOICE) ||
              sync_service->GetTransportState() ==
                  syncer::SyncService::TransportState::START_DEFERRED) {
     engine_data.engine_state = vivaldi::sync::EngineState::ENGINE_STATE_STOPPED;
@@ -409,7 +410,7 @@ ExtensionFunction::ResponseAction SyncStartFunction::Run() {
   if (!sync_service)
     return RespondNow(NoArguments());
 
-  sync_service->GetUserSettings()->SetSyncRequested(true);
+  sync_service->SetSyncFeatureRequested();
 
   return RespondNow(NoArguments());
 }
@@ -426,10 +427,10 @@ ExtensionFunction::ResponseAction SyncStopFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
-  std::unique_ptr<vivaldi::sync::SetEncryptionPassword::Params> params(
+  absl::optional<vivaldi::sync::SetEncryptionPassword::Params> params(
       vivaldi::sync::SetEncryptionPassword::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiSyncServiceImpl* sync_service =
       VivaldiSyncServiceFactory::GetForProfileVivaldi(
@@ -448,10 +449,10 @@ ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SyncBackupEncryptionTokenFunction::Run() {
-  std::unique_ptr<vivaldi::sync::BackupEncryptionToken::Params> params(
+  absl::optional<vivaldi::sync::BackupEncryptionToken::Params> params(
       vivaldi::sync::BackupEncryptionToken::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiSyncServiceImpl* sync_service =
       VivaldiSyncServiceFactory::GetForProfileVivaldi(
@@ -488,10 +489,10 @@ void SyncBackupEncryptionTokenFunction::OnBackupDone(bool result) {
 }
 
 ExtensionFunction::ResponseAction SyncRestoreEncryptionTokenFunction::Run() {
-  std::unique_ptr<vivaldi::sync::RestoreEncryptionToken::Params> params(
+  absl::optional<vivaldi::sync::RestoreEncryptionToken::Params> params(
       vivaldi::sync::RestoreEncryptionToken::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   SyncService* sync_service = VivaldiSyncServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
@@ -557,10 +558,10 @@ void SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName(
 }
 
 ExtensionFunction::ResponseAction SyncSetTypesFunction::Run() {
-  std::unique_ptr<vivaldi::sync::SetTypes::Params> params(
+  absl::optional<vivaldi::sync::SetTypes::Params> params(
       vivaldi::sync::SetTypes::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   SyncService* sync_service = VivaldiSyncServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));

@@ -375,9 +375,9 @@ ExtensionFunction::ResponseValue
 ContentBlockingSetRuleGroupEnabledFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::SetRuleGroupEnabled::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   rules_service->SetRuleGroupEnabled(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -391,7 +391,7 @@ ContentBlockingIsRuleGroupEnabledFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::IsRuleGroupEnabled::Params;
   namespace Results = vivaldi::content_blocking::IsRuleGroupEnabled::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   return ArgumentList(Results::Create(rules_service->IsRuleGroupEnabled(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value())));
@@ -402,7 +402,7 @@ ContentBlockingAddKnownSourceFromURLFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::AddKnownSourceFromURL::Params;
   namespace Results = vivaldi::content_blocking::AddKnownSourceFromURL::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   auto source_id = rules_service->GetKnownSourcesHandler()->AddSourceFromUrl(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -420,7 +420,7 @@ ContentBlockingAddKnownSourceFromFileFunction::RunWithService(
   using vivaldi::content_blocking::AddKnownSourceFromFile::Params;
   namespace Results =
       vivaldi::content_blocking::AddKnownSourceFromFile::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   auto source_id = rules_service->GetKnownSourcesHandler()->AddSourceFromFile(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -436,7 +436,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingEnableSourceFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::EnableSource::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   if (!rules_service->GetKnownSourcesHandler()->EnableSource(
           FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -450,7 +450,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingDisableSourceFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::DisableSource::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   rules_service->GetKnownSourcesHandler()->DisableSource(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -463,7 +463,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingFetchSourceNowFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::FetchSourceNow::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   if (!rules_service->GetRuleManager()->FetchRuleSourceNow(
           FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -477,7 +477,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingDeleteKnownSourceFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::DeleteKnownSource::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   rules_service->GetKnownSourcesHandler()->RemoveSource(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -490,7 +490,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingResetPresetSourcesFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::ResetPresetSources::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   rules_service->GetKnownSourcesHandler()->ResetPresetSources(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value());
@@ -503,7 +503,7 @@ ContentBlockingGetRuleSourceFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::GetRuleSource::Params;
   namespace Results = vivaldi::content_blocking::GetRuleSource::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   adblock_filter::RuleGroup group =
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value();
@@ -529,7 +529,7 @@ ContentBlockingGetRuleSourcesFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::GetRuleSources::Params;
   namespace Results = vivaldi::content_blocking::GetRuleSources::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   adblock_filter::RuleGroup group =
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value();
@@ -554,7 +554,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingSetActiveExceptionsListFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::SetActiveExceptionsList::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   rules_service->GetRuleManager()->SetActiveExceptionList(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -569,7 +569,7 @@ ContentBlockingGetActiveExceptionsListFunction::RunWithService(
   using vivaldi::content_blocking::GetActiveExceptionsList::Params;
   namespace Results =
       vivaldi::content_blocking::GetActiveExceptionsList::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   return ArgumentList(Results::Create(ToVivaldiContentBlockingExceptionList(
       rules_service->GetRuleManager()->GetActiveExceptionList(
@@ -580,7 +580,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingAddExceptionForDomainFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::AddExceptionForDomain::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   rules_service->GetRuleManager()->AddExceptionForDomain(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -594,7 +594,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingRemoveExceptionForDomainFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::RemoveExceptionForDomain::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   rules_service->GetRuleManager()->RemoveExceptionForDomain(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -608,7 +608,7 @@ ExtensionFunction::ResponseValue
 ContentBlockingRemoveAllExceptionsFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::RemoveAllExceptions::Params;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   rules_service->GetRuleManager()->RemoveAllExceptions(
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value(),
@@ -622,7 +622,7 @@ ContentBlockingGetExceptionsFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::GetExceptions::Params;
   namespace Results = vivaldi::content_blocking::GetExceptions::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   return ArgumentList(Results::Create(
       CopySetToVector(rules_service->GetRuleManager()->GetExceptions(
@@ -662,7 +662,7 @@ ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::GetBlockedUrlsInfo::Params;
   namespace Results = vivaldi::content_blocking::GetBlockedUrlsInfo::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   adblock_filter::RuleGroup group =
       FromVivaldiContentBlockingRuleGroup(params->rule_group).value();
@@ -777,7 +777,7 @@ ContentBlockingIsExemptOfFilteringFunction::RunWithService(
     adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::IsExemptOfFiltering::Params;
   namespace Results = vivaldi::content_blocking::IsExemptOfFiltering::Results;
-  std::unique_ptr<Params> params(Params::Create(args()));
+  absl::optional<Params> params(Params::Create(args()));
 
   return ArgumentList(
       Results::Create(rules_service->GetRuleManager()->IsExemptOfFiltering(

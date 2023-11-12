@@ -28,24 +28,13 @@ void RecordClusterFilterReasonHistogram(
 // Returns whether `filter_params` is a filter that would actually filter
 // clusters out.
 bool IsFunctionalFilter(QueryClustersFilterParams filter_params) {
-  return filter_params.min_visits_with_images > 0 ||
-         !filter_params.categories.empty() ||
+  return filter_params.min_visits > 0 ||
+         filter_params.min_visits_with_images > 0 ||
+         !filter_params.categories_allowlist.empty() ||
+         !filter_params.categories_blocklist.empty() ||
          filter_params.is_search_initiated ||
          filter_params.has_related_searches ||
          filter_params.is_shown_on_prominent_ui_surfaces;
-}
-
-// Returns whether `visit` could possibly be classified as one of the categories
-// in `categories`.
-bool IsVisitInCategories(const history::ClusterVisit& visit,
-                         const base::flat_set<std::string>& categories) {
-  for (const auto& visit_category :
-       visit.annotated_visit.content_annotations.model_annotations.categories) {
-    if (categories.contains(visit_category.id)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 }  // namespace
@@ -84,21 +73,34 @@ void FilterClusterProcessor::ProcessClusters(
 }
 
 bool FilterClusterProcessor::DoesClusterMatchFilter(
-    const history::Cluster& cluster) const {
+    history::Cluster& cluster) const {
   int num_visits_with_images = 0;
   size_t num_visits_in_allowed_categories = 0;
+  bool has_visits_in_blocked_categories = false;
   bool is_search_initiated = false;
   bool has_related_searches = false;
   size_t num_interesting_visits = 0;
+  int num_visits = 0;
   bool is_content_visible = true;
 
   for (const auto& visit : cluster.visits) {
-    if (visit.annotated_visit.content_annotations.has_url_keyed_image) {
+    if (!IsShownVisitCandidate(visit)) {
+      continue;
+    }
+
+    num_visits++;
+
+    if (visit.annotated_visit.content_annotations.has_url_keyed_image &&
+        visit.annotated_visit.visit_row.is_known_to_sync) {
       num_visits_with_images++;
     }
-    if (!filter_params_->categories.empty() &&
-        IsVisitInCategories(visit, filter_params_->categories)) {
+    if (!filter_params_->categories_allowlist.empty() &&
+        IsVisitInCategories(visit, filter_params_->categories_allowlist)) {
       num_visits_in_allowed_categories++;
+    }
+    if (!filter_params_->categories_blocklist.empty() &&
+        IsVisitInCategories(visit, filter_params_->categories_blocklist)) {
+      has_visits_in_blocked_categories = true;
     }
     if (!is_search_initiated &&
         !visit.annotated_visit.content_annotations.search_terms.empty()) {
@@ -122,16 +124,27 @@ bool FilterClusterProcessor::DoesClusterMatchFilter(
   }
 
   bool matches_filter = true;
+  if (num_visits < filter_params_->min_visits) {
+    RecordClusterFilterReasonHistogram(clustering_request_source_,
+                                       ClusterFilterReason::kNotEnoughVisits);
+    matches_filter = false;
+  }
   if (num_visits_with_images < filter_params_->min_visits_with_images) {
     RecordClusterFilterReasonHistogram(clustering_request_source_,
                                        ClusterFilterReason::kNotEnoughImages);
     matches_filter = false;
   }
-  if (!filter_params_->categories.empty() &&
+  if (!filter_params_->categories_allowlist.empty() &&
       num_visits_in_allowed_categories <
           GetConfig().number_interesting_visits_filter_threshold) {
     RecordClusterFilterReasonHistogram(clustering_request_source_,
                                        ClusterFilterReason::kNoCategoryMatch);
+    matches_filter = false;
+  }
+  if (!filter_params_->categories_blocklist.empty() &&
+      has_visits_in_blocked_categories) {
+    RecordClusterFilterReasonHistogram(
+        clustering_request_source_, ClusterFilterReason::kHasBlockedCategory);
     matches_filter = false;
   }
   if (filter_params_->is_search_initiated && !is_search_initiated) {
@@ -145,6 +158,8 @@ bool FilterClusterProcessor::DoesClusterMatchFilter(
     matches_filter = false;
   }
   if (filter_params_->is_shown_on_prominent_ui_surfaces) {
+    cluster.should_show_on_prominent_ui_surfaces = true;
+
     if (engagement_score_provider_is_valid_ &&
         num_interesting_visits <
             GetConfig().number_interesting_visits_filter_threshold) {
@@ -153,7 +168,7 @@ bool FilterClusterProcessor::DoesClusterMatchFilter(
           ClusterFilterReason::kNotEnoughInterestingVisits);
       matches_filter = false;
     }
-    if (cluster.visits.size() <= 1) {
+    if (num_visits <= 1) {
       RecordClusterFilterReasonHistogram(clustering_request_source_,
                                          ClusterFilterReason::kSingleVisit);
       matches_filter = false;
@@ -163,6 +178,8 @@ bool FilterClusterProcessor::DoesClusterMatchFilter(
           clustering_request_source_, ClusterFilterReason::kNotContentVisible);
       matches_filter = false;
     }
+
+    cluster.should_show_on_prominent_ui_surfaces = matches_filter;
   }
 
   if (matches_filter) {

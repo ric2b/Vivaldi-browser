@@ -502,8 +502,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     def individual_device_set_up(device, host_device_tuples):
       def install_apk(dev):
         # Install test APK.
-        with self._ArchiveLogcat(dev, 'install_apk'):
-          self._delegate.Install(dev)
+        self._delegate.Install(dev)
 
       def push_test_data(dev):
         if self._test_instance.use_existing_test_data:
@@ -529,6 +528,10 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
         tool = self.GetTool(dev)
         tool.CopyFiles(dev)
         tool.SetupEnvironment()
+
+        if self._env.disable_test_server:
+          logging.warning('Not starting test server. Some tests may fail.')
+          return
 
         try:
           # See https://crbug.com/1030827.

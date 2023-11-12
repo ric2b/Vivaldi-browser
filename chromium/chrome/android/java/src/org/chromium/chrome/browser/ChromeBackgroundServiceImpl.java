@@ -13,12 +13,10 @@ import com.google.android.gms.gcm.TaskParams;
 
 import org.chromium.base.Log;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.background_sync.BackgroundSyncBackgroundTaskScheduler;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.init.MinimalBrowserStartupUtils;
-import org.chromium.chrome.browser.offlinepages.BackgroundScheduler;
-import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 /**
  * {@link ChromeBackgroundService} is scheduled through the {@link GcmNetworkManager} when the
@@ -33,19 +31,12 @@ public class ChromeBackgroundServiceImpl extends ChromeBackgroundService.Impl {
     public int onRunTask(final TaskParams params) {
         final String taskTag = params.getTag();
         final Context context = getService();
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> {
             switch (taskTag) {
                 case BackgroundSyncBackgroundTaskScheduler.TASK_TAG:
                     // Background Sync tasks are now scheduled using BackgroundTaskScheduler.
                     // This should be rare, and we simply reschedule using BackgroundTaskScheduler.
                     rescheduleOneShotBackgroundSyncTasks();
-                    break;
-
-                case OfflinePageUtils.TASK_TAG:
-                    // Offline pages are migrating to BackgroundTaskScheduler, therefore getting
-                    // a task through ChromeBackgroundService should cause a rescheduling using
-                    // the new component.
-                    rescheduleOfflinePages();
                     break;
 
                 // This is only for tests.
@@ -75,11 +66,6 @@ public class ChromeBackgroundServiceImpl extends ChromeBackgroundService.Impl {
     @VisibleForTesting
     protected void rescheduleBackgroundSyncTasksOnUpgrade() {
         rescheduleOneShotBackgroundSyncTasks();
-    }
-
-    /** Reschedules offline pages (using appropriate version of Background Task Scheduler). */
-    private void rescheduleOfflinePages() {
-        BackgroundScheduler.getInstance().reschedule();
     }
 
     private void rescheduleOneShotBackgroundSyncTasks() {

@@ -36,6 +36,10 @@ CloudUploadUI::CloudUploadUI(content::WebUI* web_ui)
       source, base::make_span(kCloudUploadResources, kCloudUploadResourcesSize),
       IDR_CLOUD_UPLOAD_MAIN_HTML);
   source->DisableTrustedTypesCSP();
+  // Required for lottie animations.
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::WorkerSrc,
+      "worker-src blob: chrome://resources 'self';");
 }
 
 CloudUploadUI::~CloudUploadUI() = default;
@@ -70,9 +74,6 @@ void CloudUploadUI::RespondWithUserActionAndCloseDialog(
   switch (action) {
     case mojom::UserAction::kCancel:
       args.Append(kUserActionCancel);
-      break;
-    case mojom::UserAction::kSetUpGoogleDrive:
-      args.Append(kUserActionSetUpGoogleDrive);
       break;
     case mojom::UserAction::kSetUpOneDrive:
       args.Append(kUserActionSetUpOneDrive);

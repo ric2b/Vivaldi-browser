@@ -6,9 +6,9 @@ package org.chromium.chrome.browser;
 
 import static org.chromium.ui.test.util.ViewUtils.createMotionEvent;
 
-import android.support.test.InstrumentationRegistry;
 import android.view.View;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -18,6 +18,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
@@ -25,17 +26,16 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.layouts.LayoutTestUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.ViewEventSink;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
@@ -133,7 +133,7 @@ public class ContentViewFocusTest {
         addFocusChangedListener(view);
         final SwipeHandler swipeHandler =
                 mActivityTestRule.getActivity().getLayoutManager().getToolbarSwipeHandler();
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> {
             swipeHandler.onSwipeStarted(ScrollDirection.RIGHT, createMotionEvent(0, 0));
             swipeHandler.onSwipeUpdated(
                     createMotionEvent(100 * mDpToPx, 0), 100 * mDpToPx, 0, 100 * mDpToPx, 0);
@@ -149,7 +149,7 @@ public class ContentViewFocusTest {
         Assert.assertFalse("Content view didn't lose focus", blockForFocusChanged());
 
         // End the drag
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, swipeHandler::onSwipeFinished);
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, swipeHandler::onSwipeFinished);
 
         CriteriaHelper.pollUiThread(() -> {
             LayoutManagerImpl driver = mActivityTestRule.getActivity().getLayoutManager();
@@ -230,11 +230,11 @@ public class ContentViewFocusTest {
         onTitleUpdatedHelper.waitForCallback(callCount);
         Assert.assertEquals("initial", mTitle);
         callCount = onTitleUpdatedHelper.getCallCount();
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> eventSink.onPauseForTesting());
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> eventSink.onPauseForTesting());
         onTitleUpdatedHelper.waitForCallback(callCount);
         Assert.assertEquals("blurred", mTitle);
         callCount = onTitleUpdatedHelper.getCallCount();
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> eventSink.onResumeForTesting());
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> eventSink.onResumeForTesting());
         onTitleUpdatedHelper.waitForCallback(callCount);
         Assert.assertEquals("focused", mTitle);
         TestThreadUtils.runOnUiThreadBlocking(

@@ -19,12 +19,14 @@
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_type.mojom.h"
+#include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom.h"
 
 namespace content {
 
@@ -33,8 +35,6 @@ namespace {
 using ::attribution_reporting::FilterPair;
 using ::attribution_reporting::mojom::SourceType;
 using ::testing::ElementsAre;
-
-using AttributionFilters = ::attribution_reporting::Filters;
 
 }  // namespace
 
@@ -51,29 +51,30 @@ TEST(AggregatableAttributionUtilsTest, CreateAggregatableHistogram) {
           *attribution_reporting::AggregatableTriggerData::Create(
               absl::MakeUint128(/*high=*/0, /*low=*/1024),
               /*source_keys=*/{"key1", "key3"},
-              FilterPair{.positive = *AttributionFilters::Create(
-                             {{"filter", {"value"}}})}),
+              FilterPair(
+                  /*positive=*/{{{"filter", {"value"}}}},
+                  /*negative=*/{})),
 
           // The second trigger data applies to "key2", "key4" is ignored.
           *attribution_reporting::AggregatableTriggerData::Create(
               absl::MakeUint128(/*high=*/0, /*low=*/2688),
               /*source_keys=*/{"key2", "key4"},
-              FilterPair{.positive =
-                             *AttributionFilters::Create({{"a", {"b", "c"}}})}),
+              FilterPair(/*positive=*/{{{"a", {"b", "c"}}}},
+                         /*negative=*/{})),
 
           // The third trigger will be ignored due to mismatched filters.
           *attribution_reporting::AggregatableTriggerData::Create(
               absl::MakeUint128(/*high=*/0, /*low=*/4096),
               /*source_keys=*/{"key1", "key2"},
-              FilterPair{.positive =
-                             *AttributionFilters::Create({{"filter", {}}})}),
+              FilterPair(/*positive=*/{{{"filter", {}}}},
+                         /*negative=*/{})),
 
           // The fourth trigger will be ignored due to matched not_filters.
           *attribution_reporting::AggregatableTriggerData::Create(
               absl::MakeUint128(/*high=*/0, /*low=*/4096),
               /*source_keys=*/{"key1", "key2"},
-              FilterPair{.negative = *AttributionFilters::Create(
-                             {{"filter", {"value"}}})})};
+              FilterPair(/*positive=*/{},
+                         /*negative=*/{{{"filter", {"value"}}}}))};
 
   absl::optional<attribution_reporting::FilterData> source_filter_data =
       attribution_reporting::FilterData::Create({{"filter", {"value"}}});
@@ -83,11 +84,9 @@ TEST(AggregatableAttributionUtilsTest, CreateAggregatableHistogram) {
       {{"key1", 32768}, {"key2", 1664}});
 
   std::vector<AggregatableHistogramContribution> contributions =
-      CreateAggregatableHistogram(
-          *source_filter_data, SourceType::kEvent, *source,
-          *attribution_reporting::AggregatableTriggerDataList::Create(
-              std::move(aggregatable_trigger_data)),
-          aggregatable_values);
+      CreateAggregatableHistogram(*source_filter_data, SourceType::kEvent,
+                                  *source, std::move(aggregatable_trigger_data),
+                                  aggregatable_values);
 
   // "key3" is not present as no value is found.
   EXPECT_THAT(
@@ -146,9 +145,8 @@ TEST(AggregatableAttributionUtilsTest, RoundsSourceRegistrationTime) {
   for (const auto& test_case : kTestCases) {
     base::Time source_time = base::Time::FromJavaTime(test_case.source_time);
     AttributionReport report =
-        ReportBuilder(
-            AttributionInfoBuilder(SourceBuilder(source_time).BuildStored())
-                .Build())
+        ReportBuilder(AttributionInfoBuilder().Build(),
+                      SourceBuilder(source_time).BuildStored())
             .SetAggregatableHistogramContributions(
                 {AggregatableHistogramContribution(/*key=*/1, /*value=*/2)})
             .BuildAggregatableAttribution();
@@ -170,8 +168,8 @@ TEST(AggregatableAttributionUtilsTest, AggregationCoordinatorSet) {
   for (auto aggregation_coordinator :
        {::aggregation_service::mojom::AggregationCoordinator::kAwsCloud}) {
     AttributionReport report =
-        ReportBuilder(
-            AttributionInfoBuilder(SourceBuilder().BuildStored()).Build())
+        ReportBuilder(AttributionInfoBuilder().Build(),
+                      SourceBuilder().BuildStored())
             .SetAggregatableHistogramContributions(
                 {AggregatableHistogramContribution(/*key=*/1, /*value=*/2)})
             .SetAggregationCoordinator(aggregation_coordinator)
@@ -184,6 +182,26 @@ TEST(AggregatableAttributionUtilsTest, AggregationCoordinatorSet) {
               aggregation_coordinator)
         << aggregation_coordinator;
   }
+}
+
+TEST(AggregatableAttributionUtilsTest, AggregatableReportRequestForNullReport) {
+  absl::optional<AggregatableReportRequest> request =
+      CreateAggregatableReportRequest(
+          ReportBuilder(AttributionInfoBuilder().Build(),
+                        SourceBuilder(base::Time::FromJavaTime(1234567890123))
+                            .BuildStored())
+              .BuildNullAggregatable());
+  ASSERT_TRUE(request.has_value());
+  EXPECT_THAT(request->payload_contents().contributions,
+              ElementsAre(blink::mojom::AggregatableReportHistogramContribution(
+                  /*bucket=*/0, /*value=*/0)));
+  EXPECT_EQ(request->payload_contents().aggregation_coordinator,
+            ::aggregation_service::mojom::AggregationCoordinator::kAwsCloud);
+  const std::string* source_registration_time =
+      request->shared_info().additional_fields.FindString(
+          "source_registration_time");
+  ASSERT_TRUE(source_registration_time);
+  EXPECT_EQ(*source_registration_time, "1234483200");
 }
 
 }  // namespace content

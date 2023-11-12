@@ -21,6 +21,7 @@
 #include "gn/general_tool.h"
 #include "gn/ninja_target_command_util.h"
 #include "gn/ninja_utils.h"
+#include "gn/pool.h"
 #include "gn/scheduler.h"
 #include "gn/settings.h"
 #include "gn/string_utils.h"
@@ -484,6 +485,7 @@ void NinjaCBinaryTargetWriter::WriteSources(
 
       WriteCompilerBuildLine({source}, deps, order_only_deps, tool_name,
                              tool_outputs);
+      WritePool(out_);
     }
 
     // It's theoretically possible for a compiler to produce more than one
@@ -734,6 +736,7 @@ void NinjaCBinaryTargetWriter::WriteLinkerStuff(
   WriteOutputSubstitutions();
   WriteLibsList("solibs", solibs);
   WriteLibsList("rlibs", transitive_rustlibs);
+  WritePool(out_);
 }
 
 void NinjaCBinaryTargetWriter::WriteOutputSubstitutions() {

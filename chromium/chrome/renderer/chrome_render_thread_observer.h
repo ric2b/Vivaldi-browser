@@ -7,6 +7,8 @@
 
 #include <memory>
 
+#include "base/synchronization/lock.h"
+#include "base/thread_annotations.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/common/renderer_configuration.mojom.h"
 #include "components/content_settings/common/content_settings_manager.mojom.h"
@@ -20,10 +22,6 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/renderer/chromeos_delayed_callback_group.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-namespace blink {
-class WebResourceRequestSenderDelegate;
-}  // namespace blink
 
 namespace visitedlink {
 class VisitedLinkReader;
@@ -87,9 +85,9 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
 
   static bool is_incognito_process() { return is_incognito_process_; }
 
-  // Return the dynamic parameters - those that may change while the
+  // Return a copy of the dynamic parameters - those that may change while the
   // render process is running.
-  static const chrome::mojom::DynamicParams& GetDynamicParams();
+  chrome::mojom::DynamicParamsPtr GetDynamicParams() const;
 
   visitedlink::VisitedLinkReader* visited_link_reader() {
     return visited_link_reader_.get();
@@ -120,15 +118,15 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
       mojo::PendingReceiver<chrome::mojom::ChromeOSListener>
           chromeos_listener_receiver,
       mojo::PendingRemote<content_settings::mojom::ContentSettingsManager>
-          content_settings_manager) override;
+          content_settings_manager,
+      mojo::PendingRemote<chrome::mojom::BoundSessionRequestThrottledListener>
+          bound_session_request_throttled_listener) override;
   void SetConfiguration(chrome::mojom::DynamicParamsPtr params) override;
   void OnRendererConfigurationAssociatedRequest(
       mojo::PendingAssociatedReceiver<chrome::mojom::RendererConfiguration>
           receiver);
 
   static bool is_incognito_process_;
-  std::unique_ptr<blink::WebResourceRequestSenderDelegate>
-      resource_request_sender_delegate_;
   mojo::Remote<content_settings::mojom::ContentSettingsManager>
       content_settings_manager_;
 
@@ -136,6 +134,10 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
 
   mojo::AssociatedReceiverSet<chrome::mojom::RendererConfiguration>
       renderer_configuration_receivers_;
+
+  chrome::mojom::DynamicParamsPtr dynamic_params_
+      GUARDED_BY(dynamic_params_lock_);
+  mutable base::Lock dynamic_params_lock_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Only set if the Chrome OS merge session was running when the renderer

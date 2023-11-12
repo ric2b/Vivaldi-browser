@@ -13,9 +13,7 @@
 #include "base/test/gmock_callback_support.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
-#include "content/browser/file_system_access/fake_file_system_access_permission_context.h"
 #include "content/browser/file_system_access/file_system_access_manager_impl.h"
-#include "content/browser/file_system_access/file_system_chooser_test_helpers.h"
 #include "content/browser/file_system_access/fixed_file_system_access_permission_grant.h"
 #include "content/browser/file_system_access/mock_file_system_access_permission_context.h"
 #include "content/browser/file_system_access/mock_file_system_access_permission_grant.h"
@@ -30,6 +28,8 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/fake_file_system_access_permission_context.h"
+#include "content/public/test/file_system_chooser_test_helpers.h"
 #include "content/shell/browser/shell.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "storage/browser/file_system/external_mount_points.h"
@@ -1426,7 +1426,9 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, StartIn_FileHandle) {
                    "  self.selected_entry = e;"
                    "  return e.name; })()"));
   EXPECT_EQ(ui::SelectFileDialog::SELECT_OPEN_FILE, dialog_params.type);
-  EXPECT_EQ(test_file_dir, dialog_params.default_path);
+  // Windows file system is case-insensitive.
+  EXPECT_TRUE(base::FilePath::CompareEqualIgnoreCase(
+      test_file_dir.value(), dialog_params.default_path.value()));
 }
 
 IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, StartIn_DirectoryHandle) {

@@ -10,6 +10,11 @@
 namespace media {
 namespace v4l2_test {
 
+constexpr uint32_t kNumberOfBuffersInOutputQueue = 1;
+static_assert(kNumberOfBuffersInOutputQueue == 1,
+              "Too many buffers in OUTPUT queue. It is currently designed to "
+              "support only 1 request at a time.");
+
 // For stateless API, fourcc |VP9F| is needed instead of |VP90| for VP9 codec.
 // Fourcc |AV1F| is needed instead of |AV10| for AV1 codec.
 // https://www.kernel.org/doc/html/latest/userspace-api/media/v4l/pixfmt-compressed.html
@@ -28,8 +33,7 @@ class VideoDecoder {
   };
 
   VideoDecoder(std::unique_ptr<V4L2IoctlShim> v4l2_ioctl,
-               std::unique_ptr<V4L2Queue> OUTPUT_queue,
-               std::unique_ptr<V4L2Queue> CAPTURE_queue);
+               gfx::Size display_resolution);
 
   virtual ~VideoDecoder();
 
@@ -38,48 +42,39 @@ class VideoDecoder {
 
   // Initializes setup needed for decoding.
   // https://www.kernel.org/doc/html/v5.10/userspace-api/media/v4l/dev-stateless-decoder.html#initialization
-  void Initialize();
+  void CreateOUTPUTQueue(uint32_t compressed_fourcc);
+  void CreateCAPTUREQueue(uint32_t num_buffers);
 
-  virtual Result DecodeNextFrame(std::vector<char>& y_plane,
-                                 std::vector<char>& u_plane,
-                                 std::vector<char>& v_plane,
+  virtual Result DecodeNextFrame(std::vector<uint8_t>& y_plane,
+                                 std::vector<uint8_t>& u_plane,
+                                 std::vector<uint8_t>& v_plane,
                                  gfx::Size& size,
                                  const int frame_number) = 0;
 
   // Handles dynamic resolution change with new resolution parsed from frame
   // header.
-  VideoDecoder::Result HandleDynamicResolutionChange(
-      const gfx::Size& new_resolution);
+  void HandleDynamicResolutionChange(const gfx::Size& new_resolution);
 
   // Returns whether the last decoded frame was visible.
   bool LastDecodedFrameVisible() const { return last_decoded_frame_visible_; }
 
-  // Returns whether there is a dynamic resolution change.
-  bool IsResolutionChanged() const { return is_resolution_changed_; }
-
   // Converts raw YUV of decoded frame data to PNG.
-  static std::vector<unsigned char> ConvertYUVToPNG(char* y_plane,
-                                                    char* u_plane,
-                                                    char* v_plane,
-                                                    const gfx::Size& size);
+  static std::vector<uint8_t> ConvertYUVToPNG(uint8_t* y_plane,
+                                              uint8_t* u_plane,
+                                              uint8_t* v_plane,
+                                              const gfx::Size& size);
 
  protected:
-  // Helper method for converting NV12 frames to I420.
-  static void ConvertNV12ToYUV(std::vector<char>& dest_y,
-                               std::vector<char>& dest_u,
-                               std::vector<char>& dest_v,
-                               const gfx::Size& dest_size,
-                               const char* src,
-                               const gfx::Size& src_size);
+  void NegotiateCAPTUREFormat();
 
-  // Helper method for converting MM21 frames to I420.
-  static void ConvertMM21ToYUV(std::vector<char>& dest_y,
-                               std::vector<char>& dest_u,
-                               std::vector<char>& dest_v,
-                               const gfx::Size& dest_size,
-                               char* src_y,
-                               char* src_uv,
-                               const gfx::Size& src_size);
+  // Helper method for converting frames to YUV.
+  static void ConvertToYUV(std::vector<uint8_t>& dest_y,
+                           std::vector<uint8_t>& dest_u,
+                           std::vector<uint8_t>& dest_v,
+                           const gfx::Size& dest_size,
+                           const MmappedBuffer::MmappedPlanes& planes,
+                           const gfx::Size& src_size,
+                           uint32_t fourcc);
 
   // Wrapper for V4L2 ioctl requests.
   const std::unique_ptr<V4L2IoctlShim> v4l2_ioctl_;
@@ -93,11 +88,11 @@ class VideoDecoder {
   // Whether the last decoded frame was visible.
   bool last_decoded_frame_visible_ = false;
 
-  // Whether there is a dynamic support change.
-  bool is_resolution_changed_ = false;
+  // resolution from the bitstream header
+  gfx::Size display_resolution_;
 
-  // Number of buffers in CAPTURE queue varied by different codecs.
-  uint32_t number_of_buffers_in_capture_queue_;
+  // Whether V4L2_CTRL_WHICH_CUR_VAL is implemented correctly
+  bool cur_val_is_supported_ = true;
 };
 
 }  // namespace v4l2_test

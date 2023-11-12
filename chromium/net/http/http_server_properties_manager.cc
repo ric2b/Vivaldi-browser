@@ -230,9 +230,8 @@ void HttpServerPropertiesManager::ReadPrefs(
   const base::Value::Dict& http_server_properties_dict =
       pref_delegate_->GetServerProperties();
 
-  net_log_.AddEvent(NetLogEventType::HTTP_SERVER_PROPERTIES_UPDATE_CACHE, [&] {
-    return base::Value(http_server_properties_dict.Clone());
-  });
+  net_log_.AddEvent(NetLogEventType::HTTP_SERVER_PROPERTIES_UPDATE_CACHE,
+                    [&] { return http_server_properties_dict.Clone(); });
   absl::optional<int> maybe_version_number =
       http_server_properties_dict.FindInt(kVersionKey);
   if (!maybe_version_number.has_value() ||
@@ -270,8 +269,8 @@ void HttpServerPropertiesManager::ReadPrefs(
       std::make_unique<HttpServerProperties::QuicServerInfoMap>(
           max_server_configs_stored_in_properties_);
 
-  bool use_network_anonymization_key = base::FeatureList::IsEnabled(
-      features::kPartitionHttpServerPropertiesByNetworkIsolationKey);
+  bool use_network_anonymization_key =
+      NetworkAnonymizationKey::IsPartitioningEnabled();
 
   // Iterate `servers_list` (least-recently-used item is in the front) so that
   // entries are inserted into `server_info_map` from oldest to newest.
@@ -765,9 +764,8 @@ void HttpServerPropertiesManager::WriteToPrefs(
       broken_alternative_service_list, kMaxBrokenAlternativeServicesToPersist,
       recently_broken_alternative_services, http_server_properties_dict);
 
-  net_log_.AddEvent(NetLogEventType::HTTP_SERVER_PROPERTIES_UPDATE_PREFS, [&] {
-    return base::Value(std::move(http_server_properties_dict));
-  });
+  net_log_.AddEvent(NetLogEventType::HTTP_SERVER_PROPERTIES_UPDATE_PREFS,
+                    [&] { return std::move(http_server_properties_dict); });
 
   pref_delegate_->SetServerProperties(std::move(http_server_properties_dict),
                                       std::move(callback));

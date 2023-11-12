@@ -4,12 +4,12 @@
 
 import 'chrome://password-manager/password_manager.js';
 
-import {Page, PasswordDetailsCardElement, PasswordDetailsSectionElement, PasswordManagerImpl, Router} from 'chrome://password-manager/password_manager.js';
+import {Page, PasswordDetailsCardElement, PasswordDetailsSectionElement, PasswordManagerImpl, PasswordViewPageInteractions, Router} from 'chrome://password-manager/password_manager.js';
 import {assertArrayEquals, assertDeepEquals, assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
-import {createCredentialGroup, createPasswordEntry} from './test_util.js';
+import {createAffiliatedDomain, createCredentialGroup, createPasswordEntry} from './test_util.js';
 
 suite('PasswordDetailsSectionTest', function() {
   let passwordManager: TestPasswordManagerProxy;
@@ -59,6 +59,9 @@ suite('PasswordDetailsSectionTest', function() {
         document.createElement('password-details-section');
     document.body.appendChild(section);
     await passwordManager.whenCalled('getCredentialGroups');
+    assertEquals(
+        PasswordViewPageInteractions.CREDENTIAL_REQUESTED_BY_URL,
+        await passwordManager.whenCalled('recordPasswordViewInteraction'));
     assertArrayEquals(
         [0, 1], await passwordManager.whenCalled('requestCredentialsDetails'));
     await flushTasks();
@@ -298,5 +301,71 @@ suite('PasswordDetailsSectionTest', function() {
     assertEquals(
         1,
         section.shadowRoot!.querySelectorAll('password-details-card').length);
+  });
+
+  test('Page closes when auth times out', async function() {
+    const group = createCredentialGroup({
+      name: 'test.com',
+      credentials: [
+        createPasswordEntry({id: 0, username: 'test1'}),
+      ],
+    });
+    passwordManager.data.groups = [group];
+    Router.getInstance().navigateTo(Page.PASSWORD_DETAILS, group);
+
+    const section = document.createElement('password-details-section');
+    document.body.appendChild(section);
+    await flushTasks();
+
+    // Assert that details section subscribed as a listener.
+    assertTrue(!!passwordManager.listeners.passwordManagerAuthTimeoutListener);
+
+    passwordManager.listeners.passwordManagerAuthTimeoutListener();
+    assertEquals(
+        PasswordViewPageInteractions.TIMED_OUT_IN_VIEW_PAGE,
+        await passwordManager.whenCalled('recordPasswordViewInteraction'));
+    await flushTasks();
+
+    // Assert that now Passwords page is shown.
+    assertEquals(Page.PASSWORDS, Router.getInstance().currentRoute.page);
+  });
+
+  test('Navigating by domain name', async function() {
+    // Simulate direct navigation.
+    Router.getInstance().navigateTo(Page.PASSWORD_DETAILS, 'www.test.com');
+    passwordManager.data.groups = [
+      createCredentialGroup({
+        name: 'test.com',
+        credentials: [
+          createPasswordEntry({id: 0}),
+          createPasswordEntry({id: 1}),
+        ],
+      }),
+    ];
+    passwordManager.data.groups[0]!.entries[0]!.affiliatedDomains =
+        [createAffiliatedDomain('www.test.com')];
+    passwordManager.data.groups[0]!.entries[1]!.affiliatedDomains =
+        [createAffiliatedDomain('test app')];
+
+    // Simulate successful reauth.
+    passwordManager.setRequestCredentialsDetailsResponse(
+        passwordManager.data.groups[0]!.entries.slice());
+
+    const section: PasswordDetailsSectionElement =
+        document.createElement('password-details-section');
+    document.body.appendChild(section);
+    await passwordManager.whenCalled('getCredentialGroups');
+    assertArrayEquals(
+        [0, 1], await passwordManager.whenCalled('requestCredentialsDetails'));
+    await flushTasks();
+
+    assertEquals(Page.PASSWORD_DETAILS, Router.getInstance().currentRoute.page);
+    const title = section.$.title;
+    assertEquals('test.com', title.textContent!.trim());
+
+    const entries =
+        section.shadowRoot!.querySelectorAll<PasswordDetailsCardElement>(
+            'password-details-card');
+    assertEquals(2, entries.length);
   });
 });

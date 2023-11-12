@@ -8,7 +8,7 @@
 #import "components/keyed_service/core/service_access_type.h"
 #import "ios/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/notes/notes_factory.h"
@@ -49,7 +49,8 @@ UpdaterClientImpl::UpdaterClientImpl(ChromeBrowserState* browser_state)
 UpdaterClientImpl::~UpdaterClientImpl() = default;
 
 bookmarks::BookmarkModel* UpdaterClientImpl::GetBookmarkModel() {
-  return ios::BookmarkModelFactory::GetForBrowserState(browser_state_);
+  return ios::LocalOrSyncableBookmarkModelFactory::
+              GetForBrowserState(browser_state_);
 }
 
 PrefService* UpdaterClientImpl::GetPrefService() {
@@ -73,7 +74,8 @@ FaviconServiceGetter UpdaterClientImpl::GetFaviconServiceGetter() {
 namespace vivaldi {
 void PostBrowserStateInit(ChromeBrowserState* browser_state) {
   vivaldi_partners::RemovedPartnersTracker::Create(
-      browser_state->GetPrefs(), ios::BookmarkModelFactory::GetForBrowserState(browser_state));
+      browser_state->GetPrefs(), ios::LocalOrSyncableBookmarkModelFactory::
+                                      GetForBrowserState(browser_state));
 
   vivaldi_default_bookmarks::UpdatePartners(
       vivaldi_default_bookmarks::UpdaterClientImpl::Create(browser_state));

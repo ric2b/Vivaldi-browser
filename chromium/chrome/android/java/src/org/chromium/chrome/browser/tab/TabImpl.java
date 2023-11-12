@@ -18,6 +18,7 @@ import android.view.accessibility.AccessibilityEvent;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
@@ -39,6 +40,7 @@ import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.content.ContentUtils;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.native_page.NativePageAssassin;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
@@ -86,7 +88,7 @@ import org.vivaldi.browser.embedder.ContentViewWithAutofill;
  * Implementation of the interface {@link Tab}. Contains and manages a {@link ContentView}.
  * This class is not intended to be extended.
  */
-public class TabImpl implements Tab, TabObscuringHandler.Observer {
+public class TabImpl implements Tab {
     private static final long INVALID_TIMESTAMP = -1;
 
     /** Used for logging. */
@@ -218,6 +220,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     private final TabThemeColorHelper mThemeColorHelper;
     private int mThemeColor;
     private boolean mUsedCriticalPersistedTabData;
+    private boolean mIsWebContentObscured;
 
     //** Vivaldi */
     AutofillProvider mAutofillProvider;
@@ -490,6 +493,28 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         return mInteractableState;
     }
 
+    /**
+     * The parent tab for the current tab is set and the DelegateFactory is updated if it is not set
+     * already. This happens only if the tab has been detached and the parent has not been set yet,
+     * for example, for the spare tab before loading url.
+     * @param parent The tab that caused this tab to be opened.
+     */
+    @Override
+    public void reparentTab(Tab parent) {
+        // When parent is null, no action is taken since it is the same as the default setting (no
+        // parent).
+        if (parent != null) {
+            CriticalPersistedTabData.from(this).setParentId(parent.getId());
+
+            // Update the DelegateFactory if it is not already set, since it is associated with the
+            // parent tab.
+            if (mDelegateFactory == null) {
+                mDelegateFactory = ((TabImpl) parent).getDelegateFactory();
+                setDelegateFactory(mDelegateFactory);
+            }
+        }
+    }
+
     @Override
     public int loadUrl(LoadUrlParams params) {
         try {
@@ -579,7 +604,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             if (webContents == null) {
                 Profile profile =
                         IncognitoUtils.getProfileFromWindowAndroid(mWindowAndroid, isIncognito());
-                webContents = WebContentsFactory.createWebContents(profile, isHidden());
+                webContents = WebContentsFactory.createWebContents(profile, isHidden(), false);
             }
             initWebContents(webContents);
             loadUrl(mPendingLoadParams);
@@ -707,9 +732,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             // TabSwitcherAndStartSurfaceLayout.startHidingImpl which lasts around 300ms.
             // TabSwitcherAndStartSurfaceLayout.doneHiding runs after the animation, actually
             // triggering this tab change.
-            //
-            // Due to this TabSwitchMetrics.startTabSwitchLatencyTiming is not using an accurate
-            // start time and needs updating.
             //
             // We should also consider merging the TabImpl and WebContents onShow into a single Jni
             // call.
@@ -852,16 +874,13 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         return mIsTabSaveEnabledSupplier;
     }
 
-    // TabObscuringHandler.Observer
-
-    @Override
-    public void updateObscured(boolean obscureTabContent, boolean obscureToolbar) {
+    protected void updateWebContentObscured(boolean obscureWebContent) {
         // Update whether or not the current native tab and/or web contents are
         // currently visible (from an accessibility perspective), or whether
         // they're obscured by another view.
         View view = getView();
         if (view != null) {
-            int importantForAccessibility = obscureTabContent
+            int importantForAccessibility = obscureWebContent
                     ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                     : View.IMPORTANT_FOR_ACCESSIBILITY_YES;
             if (view.getImportantForAccessibility() != importantForAccessibility) {
@@ -872,8 +891,9 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
         WebContentsAccessibility wcax = getWebContentsAccessibility(getWebContents());
         if (wcax != null) {
-            boolean isWebContentObscured = obscureTabContent || isShowingCustomView();
-            wcax.setObscuredByAnotherView(isWebContentObscured);
+            if (mIsWebContentObscured == obscureWebContent) return;
+            wcax.setObscuredByAnotherView(obscureWebContent);
+            mIsWebContentObscured = obscureWebContent;
         }
     }
 
@@ -882,21 +902,31 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
      * a new {@link WebContents} will be created for this {@link Tab}.
      * @param parent The tab that caused this tab to be opened.
      * @param creationState State in which the tab is created.
-     * @param loadUrlParams Parameters used for a lazily loaded Tab.
+     * @param loadUrlParams Parameters used for a lazily loaded Tab or null if we initialize a tab
+     *         without an URL.
      * @param webContents A {@link WebContents} object or {@code null} if one should be created.
      * @param delegateFactory The {@link TabDelegateFactory} to be used for delegate creation.
      * @param initiallyHidden Only used if {@code webContents} is {@code null}.  Determines
      *        whether or not the newly created {@link WebContents} will be hidden or not.
      * @param tabState State containing information about this Tab, if it was persisted.
+     * @param initializeRenderer Determines whether or not we initialize renderer with {@link
+     *         WebContents} creation. The CREATE_NEW_TAB_INITIALIZE_RENDERER feature also controls
+     *         this parameter, which initializes the renderer when it is enabled.
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public void initialize(Tab parent, @Nullable @TabCreationState Integer creationState,
-            LoadUrlParams loadUrlParams, WebContents webContents,
+            @Nullable LoadUrlParams loadUrlParams, WebContents webContents,
             @Nullable TabDelegateFactory delegateFactory, boolean initiallyHidden,
-            TabState tabState) {
+            TabState tabState, boolean initializeRenderer) {
         try {
             TraceEvent.begin("Tab.initialize");
-
+            // If the feature is enabled, the renderer will always be initialized during the
+            // WebContents creation. It is an experimental performance optimization to speed
+            // up navigation.
+            initializeRenderer = ChromeFeatureList.isEnabled(
+                                         ChromeFeatureList.CREATE_NEW_TAB_INITIALIZE_RENDERER)
+                    ? true
+                    : initializeRenderer;
             if (parent != null) {
                 CriticalPersistedTabData.from(this).setParentId(parent.getId());
                 mSourceTabId = parent.isIncognito() == mIncognito ? parent.getId() : INVALID_TAB_ID;
@@ -941,7 +971,8 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 if (webContents == null) {
                     Profile profile = IncognitoUtils.getProfileFromWindowAndroid(
                             mWindowAndroid, isIncognito());
-                    webContents = WebContentsFactory.createWebContents(profile, initiallyHidden);
+                    webContents = WebContentsFactory.createWebContents(
+                            profile, initiallyHidden, initializeRenderer);
                 }
             }
 
@@ -1279,7 +1310,14 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         mIsLoading = false;
 
         RewindableIterator<TabObserver> observers = getTabObservers();
-        while (observers.hasNext()) observers.next().onCrash(this);
+        // When the renderer crashes for a hidden spare tab, we can skip notifying the observers to
+        // crash the underlying tab. This is because it is safe to keep the spare tab around without
+        // a renderer process, and since the tab is hidden, we don't need to show a sad tab. When
+        // the spare tab is used for navigation it will create a new renderer process.
+        // TODO(crbug.com/1447250): Make this logic more robust for all hidden tab cases.
+        if (!WarmupManager.getInstance().isSpareTab(this)) {
+            while (observers.hasNext()) observers.next().onCrash(this);
+        }
         mIsBeingRestored = false;
     }
 
@@ -1587,7 +1625,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 // an error page instead of a blank page in that case (and the last loaded URL).
                 Profile profile =
                         IncognitoUtils.getProfileFromWindowAndroid(mWindowAndroid, isIncognito());
-                webContents = WebContentsFactory.createWebContents(profile, isHidden());
+                webContents = WebContentsFactory.createWebContents(profile, isHidden(), false);
                 for (TabObserver observer : mObservers) observer.onRestoreFailed(this);
                 restored = false;
             }
@@ -1718,8 +1756,14 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             return userAgentOverrideOption;
         }
 
+        CommandLine commandLine = CommandLine.getInstance();
+        // For --request-desktop-sites, always override the user agent.
+        boolean alwaysRequestDesktopSite =
+                commandLine.hasSwitch(ChromeSwitches.REQUEST_DESKTOP_SITES);
+
         boolean shouldRequestDesktopSite =
-                TabUtils.readRequestDesktopSiteContentSettings(profile, url);
+                TabUtils.readRequestDesktopSiteContentSettings(profile, url)
+                || alwaysRequestDesktopSite;
         if (!shouldRequestDesktopSite
                 && ContentFeatureList.isEnabled(
                         ContentFeatureList.REQUEST_DESKTOP_SITE_ADDITIONS)) {

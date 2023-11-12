@@ -13,6 +13,7 @@
 #endif  // BUILDFLAG(IS_WIN)
 
 #include "base/base_paths.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -55,8 +56,8 @@ constexpr int64_t kLogRotateAtSize = 1024 * 1024 * 5;  // 5 MiB.
 
 const char kHexString[] = "0123456789ABCDEF";
 inline char IntToHex(int i) {
-  DCHECK_GE(i, 0) << i << " not a hex value";
-  DCHECK_LE(i, 15) << i << " not a hex value";
+  CHECK_GE(i, 0) << i << " not a hex value";
+  CHECK_LE(i, 15) << i << " not a hex value";
   return kHexString[i];
 }
 
@@ -135,18 +136,18 @@ absl::optional<base::FilePath> GetUpdaterExecutablePath(UpdaterScope scope) {
   return path->Append(GetExecutableRelativePath());
 }
 
+absl::optional<base::FilePath> GetCrashDatabasePath(UpdaterScope scope) {
+  const absl::optional<base::FilePath> path(
+      GetVersionedInstallDirectory(scope));
+  return path ? absl::optional<base::FilePath>(path->AppendASCII("Crashpad"))
+              : absl::nullopt;
+}
+
 absl::optional<base::FilePath> EnsureCrashDatabasePath(UpdaterScope scope) {
-  const absl::optional<base::FilePath> path =
-      GetVersionedInstallDirectory(scope);
-  if (!path) {
-    return absl::nullopt;
-  }
-  base::FilePath database_path = path->AppendASCII("Crashpad");
-  if (!base::CreateDirectory(database_path)) {
-    LOG(ERROR) << "Failed to create path to Crashpad database.";
-    return absl::nullopt;
-  }
-  return database_path;
+  const absl::optional<base::FilePath> database_path(
+      GetCrashDatabasePath(scope));
+  return database_path && base::CreateDirectory(*database_path) ? database_path
+                                                                : absl::nullopt;
 }
 
 TagParsingResult::TagParsingResult() = default;
@@ -325,24 +326,25 @@ bool PathOwnedByUser(const base::FilePath& path) {
 
   base::stat_wrapper_t stat_info = {};
   if (base::File::Lstat(path.value().c_str(), &stat_info) != 0) {
-    DPLOG(ERROR) << "Failed to get information on path " << path.value();
+    VPLOG(1) << "Failed to get information on path " << path.value();
     return false;
   }
 
   if (S_ISLNK(stat_info.st_mode)) {
-    DLOG(ERROR) << "Path " << path.value() << " is a symbolic link.";
+    VLOG(1) << "Path " << path.value() << " is a symbolic link.";
     return false;
   }
 
   if (stat_info.st_uid != user_uid) {
-    DLOG(ERROR) << "Path " << path.value() << " is owned by the wrong user.";
+    VLOG(1) << "Path " << path.value() << " is owned by the wrong user. (Was "
+            << stat_info.st_uid << ", expected " << user_uid << ".)";
     return false;
   }
 
   return true;
 }
 
-#endif  // BUILDFLAG(IS_LINUX)
+#endif  // BUILDFLAG(IS_POSIX)
 
 #if BUILDFLAG(IS_WIN)
 

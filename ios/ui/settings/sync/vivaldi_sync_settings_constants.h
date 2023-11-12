@@ -16,19 +16,15 @@ extern const int kSyncStatusYellowColor;
 extern const int kSyncStatusYellowBackgroundColor;
 
 extern const CGFloat kFooterSectionHeight;
+extern const CGFloat kPasswordSectionFooterHeight;
+extern const CGFloat kHeaderSectionHeight;
+extern const CGFloat kLogoutSectionHeaderHeight;
+extern const CGFloat kDecryptSectionHeaderHeight;
+extern const CGFloat kSaveSectionHeaderHeight;
 
 extern NSString* const kShowPasswordIcon;
 extern NSString* const kHidePasswordIcon;
 extern NSString* const kVivaldiIcon;
-
-// Vivaldi URLs
-extern NSString* const vVivaldiBrowserPrivacyUrl;
-extern NSString* const vVivaldiCommunityPrivacyUrl;
-extern NSString* const vVivaldiSyncActivateAccountUrl;
-extern NSString* const vVivaldiSyncRegistrationUrl;
-extern NSString* const vVivaldiSyncReSendActivationCodeUrl;
-extern NSString* const vVivaldiSyncValidateFieldUrl;
-extern NSString* const vVivaldiTermsOfServiceUrl;
 
 // Vivaldi.net account creation validation
 extern const int vUserMinimumValidAge;

@@ -63,8 +63,7 @@ TEST_P(WaylandZcrColorManagerTest, CreateColorManagementOutput) {
   // Set default values for the output.
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
     wl::TestOutput* output = server->output();
-    output->SetRect({800, 600});
-    output->SetScale(1);
+    output->SetPhysicalAndLogicalBounds({800, 600});
     output->Flush();
   });
 
@@ -120,7 +119,7 @@ TEST_P(WaylandZcrColorManagerTest, CreateColorManagementSurface) {
   EXPECT_TRUE(connection_->buffer_manager_host());
   auto interface_ptr = connection_->buffer_manager_host()->BindInterface();
   buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false, true,
-                                  false, 0);
+                                  false, true, 0);
 
   // Setup wl_buffers.
   constexpr uint32_t buffer_id = 1;
@@ -162,7 +161,7 @@ TEST_P(WaylandZcrColorManagerTest, DoNotSetInvaliColorSpace) {
   EXPECT_TRUE(connection_->buffer_manager_host());
   auto interface_ptr = connection_->buffer_manager_host()->BindInterface();
   buffer_manager_gpu_->Initialize(std::move(interface_ptr), {}, false, true,
-                                  false, 0);
+                                  false, true, 0);
 
   // Setup wl_buffers.
   constexpr uint32_t buffer_id = 1;

@@ -97,12 +97,6 @@ CSSAtRuleID CssAtRuleID(StringView name) {
   if (EqualIgnoringASCIICase(name, "counter-style")) {
     return CSSAtRuleID::kCSSAtRuleCounterStyle;
   }
-  if (EqualIgnoringASCIICase(name, "scroll-timeline")) {
-    if (RuntimeEnabledFeatures::CSSScrollTimelineEnabled()) {
-      return CSSAtRuleID::kCSSAtRuleScrollTimeline;
-    }
-    return CSSAtRuleID::kCSSAtRuleInvalid;
-  }
   if (EqualIgnoringASCIICase(name, "scope")) {
     if (RuntimeEnabledFeatures::CSSScopeEnabled()) {
       return CSSAtRuleID::kCSSAtRuleScope;
@@ -115,6 +109,12 @@ CSSAtRuleID CssAtRuleID(StringView name) {
   if (EqualIgnoringASCIICase(name, "try")) {
     if (RuntimeEnabledFeatures::CSSAnchorPositioningEnabled()) {
       return CSSAtRuleID::kCSSAtRuleTry;
+    }
+    return CSSAtRuleID::kCSSAtRuleInvalid;
+  }
+  if (EqualIgnoringASCIICase(name, "initial")) {
+    if (RuntimeEnabledFeatures::CSSInitialPseudoEnabled()) {
+      return CSSAtRuleID::kCSSAtRuleInitial;
     }
     return CSSAtRuleID::kCSSAtRuleInvalid;
   }
@@ -142,6 +142,8 @@ absl::optional<WebFeature> AtRuleFeature(CSSAtRuleID rule_id) {
       return WebFeature::kCSSAtRuleFontFeatureValues;
     case CSSAtRuleID::kCSSAtRuleImport:
       return WebFeature::kCSSAtRuleImport;
+    case CSSAtRuleID::kCSSAtRuleInitial:
+      return WebFeature::kCSSAtRuleInitial;
     case CSSAtRuleID::kCSSAtRuleKeyframes:
       return WebFeature::kCSSAtRuleKeyframes;
     case CSSAtRuleID::kCSSAtRuleLayer:
@@ -168,8 +170,6 @@ absl::optional<WebFeature> AtRuleFeature(CSSAtRuleID rule_id) {
       return WebFeature::kCSSAtRuleStylistic;
     case CSSAtRuleID::kCSSAtRuleSwash:
       return WebFeature::kCSSAtRuleSwash;
-    case CSSAtRuleID::kCSSAtRuleScrollTimeline:
-      return WebFeature::kCSSAtRuleScrollTimeline;
     case CSSAtRuleID::kCSSAtRuleSupports:
       return WebFeature::kCSSAtRuleSupports;
     case CSSAtRuleID::kCSSAtRulePositionFallback:

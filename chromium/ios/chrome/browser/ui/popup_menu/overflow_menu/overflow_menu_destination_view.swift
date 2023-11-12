@@ -100,15 +100,10 @@ struct OverflowMenuDestinationButton: ButtonStyle {
       spacing = 0
       interiorPadding = Dimensions.horizontalLayoutIconPadding
     }
-    let image: Image
-    if !destination.symbolName.isEmpty {
-      image =
-        (destination.systemSymbol
-        ? Image(systemName: destination.symbolName) : Image(destination.symbolName)).renderingMode(
-          .template)
-    } else {
-      image = destination.image
-    }
+    let image =
+      (destination.systemSymbol
+      ? Image(systemName: destination.symbolName) : Image(destination.symbolName)).renderingMode(
+        .template)
     return iconBuilder(
       configuration: configuration, spacing: spacing, interiorPadding: interiorPadding, image: image
     )
@@ -122,6 +117,14 @@ struct OverflowMenuDestinationButton: ButtonStyle {
     return -Dimensions.iconWidth + (Dimensions.newLabelBadgeWidth - 10)
   }
 
+  var circleBadge: some View {
+    return Circle()
+      .frame(width: Dimensions.badgeWidth, height: Dimensions.badgeWidth)
+      .offset(
+        x: Dimensions.iconWidth - (Dimensions.badgeWidth / 2),
+        y: -Dimensions.iconWidth + (Dimensions.badgeWidth / 2))
+  }
+
   /// Build the image to be displayed, based on the configuration of the item.
   /// TODO(crbug.com/1315544): Remove this once only the symbols are present.
   @ViewBuilder
@@ -131,22 +134,19 @@ struct OverflowMenuDestinationButton: ButtonStyle {
     let configuredImage =
       image
       .overlay {
-        if destination.badge == .blueDot {
-          Circle()
-            .foregroundColor(.blue600)
-            .frame(width: Dimensions.badgeWidth, height: Dimensions.badgeWidth)
-            .offset(
-              x: Dimensions.iconWidth - (Dimensions.badgeWidth / 2),
-              y: -Dimensions.iconWidth + (Dimensions.badgeWidth / 2))
-        } else if destination.badge == .newLabel {
+        if destination.badge == .error {
+          circleBadge.foregroundColor(.red500)
+        } else if destination.badge == .promo {
+          circleBadge.foregroundColor(.blue600)
+        } else if destination.badge == .new {
           Image(systemName: "seal.fill")
             .resizable()
             .foregroundColor(.blue600)
             .frame(width: Dimensions.newLabelBadgeWidth, height: Dimensions.newLabelBadgeWidth)
             .offset(x: newBadgeOffsetX, y: newBadgeOffsetY)
             .overlay {
-              if let newLabelString = L10NUtils.stringWithFixup(
-                forMessageId: IDS_IOS_NEW_LABEL_FEATURE_BADGE)
+              if let newLabelString = L10nUtils.stringWithFixup(
+                messageId: IDS_IOS_NEW_LABEL_FEATURE_BADGE)
               {
                 Text(newLabelString)
                   .font(.system(size: 10, weight: .bold, design: .rounded))
@@ -166,13 +166,9 @@ struct OverflowMenuDestinationButton: ButtonStyle {
       // recognize.
       .accessibilityHidden(true)
 
-    if !destination.symbolName.isEmpty {
-      configuredImage
-        .foregroundColor(.blue600).imageScale(.medium).font(
-          Font.system(size: Dimensions.iconSymbolSize, weight: .medium))
-    } else {
-      configuredImage
-    }
+    configuredImage
+      .foregroundColor(.blue600).imageScale(.medium).font(
+        Font.system(size: Dimensions.iconSymbolSize, weight: .medium))
   }
 
   /// Text view for the destination.
@@ -224,12 +220,16 @@ struct OverflowMenuDestinationView: View {
 
   enum AccessibilityIdentifier {
     /// The addition to the `accessibilityIdentfier` for this element if it
-    /// has a badge.
-    static let badgeAddition = "badge"
+    /// has an error badge.
+    static let errorBadge = "errorBadge"
+
+    /// The addition to the `accessibilityIdentfier` for this element if it
+    /// has a promo badge.
+    static let promoBadge = "promoBadge"
 
     /// The addition to the `accessibilityIdentfier` for this element if it
     /// has a "New" badge.
-    static let newBadgeAddition = "newBadge"
+    static let newBadge = "newBadge"
   }
 
   /// The destination for this view.
@@ -259,18 +259,22 @@ struct OverflowMenuDestinationView: View {
   var accessibilityLabel: String {
     return [
       destination.name,
-      destination.badge == .blueDot
-        ? L10NUtils.stringWithFixup(forMessageId: IDS_IOS_NEW_ITEM_ACCESSIBILITY_HINT) : nil,
-      destination.badge == .newLabel
-        ? L10NUtils.stringWithFixup(forMessageId: IDS_IOS_TOOLS_MENU_CELL_NEW_FEATURE_BADGE) : nil,
+      destination.badge == .error
+        ? L10nUtils.stringWithFixup(
+          messageId: IDS_IOS_ITEM_ACCOUNT_ERROR_BADGE_ACCESSIBILITY_HINT) : nil,
+      destination.badge == .promo
+        ? L10nUtils.stringWithFixup(messageId: IDS_IOS_NEW_ITEM_ACCESSIBILITY_HINT) : nil,
+      destination.badge == .new
+        ? L10nUtils.stringWithFixup(messageId: IDS_IOS_TOOLS_MENU_CELL_NEW_FEATURE_BADGE) : nil,
     ].compactMap { $0 }.joined(separator: ", ")
   }
 
   var accessibilityIdentifier: String {
     return [
       destination.accessibilityIdentifier,
-      destination.badge == .blueDot ? AccessibilityIdentifier.badgeAddition : nil,
-      destination.badge == .newLabel ? AccessibilityIdentifier.newBadgeAddition : nil,
+      destination.badge == .error ? AccessibilityIdentifier.errorBadge : nil,
+      destination.badge == .promo ? AccessibilityIdentifier.promoBadge : nil,
+      destination.badge == .new ? AccessibilityIdentifier.newBadge : nil,
     ].compactMap { $0 }.joined(separator: "-")
   }
 

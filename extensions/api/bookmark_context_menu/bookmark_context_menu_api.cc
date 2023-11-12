@@ -63,7 +63,7 @@ ExtensionFunction::ResponseAction BookmarkContextMenuShowFunction::Run() {
   namespace Results = vivaldi::bookmark_context_menu::Show::Results;
 
   params_ = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params_.get());
+  EXTENSION_FUNCTION_VALIDATE(params_);
 
   VivaldiBrowserWindow* window =
       VivaldiBrowserWindow::FromId(params_->properties.window_id);

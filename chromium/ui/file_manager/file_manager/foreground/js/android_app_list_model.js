@@ -4,6 +4,9 @@
 
 import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/event_target.js';
 
+import {addAndroidApps} from '../../state/actions/android_apps.js';
+import {getStore} from '../../state/store.js';
+
 /**
  * Model for managing a list of Android apps.
  */
@@ -33,6 +36,7 @@ export class AndroidAppListModel extends EventTarget {
 
     chrome.fileManagerPrivate.getAndroidPickerApps(extensions, apps => {
       this.apps_ = apps;
+      getStore().dispatch(addAndroidApps({apps}));
       this.dispatchEvent(new Event('permuted'));
     });
   }

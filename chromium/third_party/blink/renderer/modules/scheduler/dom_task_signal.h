@@ -24,14 +24,9 @@ class MODULES_EXPORT DOMTaskSignal final : public AbortSignal {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  // These values are persisted to logs. Entries should not be renumbered and
-  // numeric values should never be reused.
-  enum class PriorityChangeStatus {
-    kNoPriorityChange = 0,
-    kPriorityHasChanged = 1,
-
-    kMaxValue = kPriorityHasChanged
-  };
+  static DOMTaskSignal* CreateFixedPriorityTaskSignal(
+      ScriptState*,
+      const AtomicString& priority);
 
   // Constructor for non-composite signals.
   DOMTaskSignal(ExecutionContext*, const AtomicString& priority, SignalType);
@@ -40,7 +35,7 @@ class MODULES_EXPORT DOMTaskSignal final : public AbortSignal {
   DOMTaskSignal(ScriptState*,
                 const AtomicString& priority,
                 DOMTaskSignal* source_task_signal,
-                HeapVector<Member<AbortSignal>> source_abort_signals);
+                HeapVector<Member<AbortSignal>>& source_abort_signals);
   ~DOMTaskSignal() override;
 
   // task_signal.idl
@@ -59,10 +54,6 @@ class MODULES_EXPORT DOMTaskSignal final : public AbortSignal {
   void Trace(Visitor*) const override;
   bool HasPendingActivity() const override;
 
-  PriorityChangeStatus GetPriorityChangeStatus() const {
-    return priority_change_status_;
-  }
-
   bool HasFixedPriority() const;
 
  private:
@@ -73,13 +64,8 @@ class MODULES_EXPORT DOMTaskSignal final : public AbortSignal {
   void OnSignalSettled(AbortSignalCompositionType) override;
 
   AtomicString priority_;
-
-  PriorityChangeStatus priority_change_status_ =
-      PriorityChangeStatus::kNoPriorityChange;
-
   HeapLinkedHashSet<WeakMember<AlgorithmHandle>> priority_change_algorithms_;
   Member<AbortSignalCompositionManager> priority_composition_manager_;
-
   bool is_priority_changing_ = false;
 };
 

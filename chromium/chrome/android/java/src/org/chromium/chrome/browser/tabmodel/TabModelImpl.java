@@ -36,6 +36,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+// Vivaldi
+import androidx.appcompat.app.AppCompatActivity;
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.rating.RateVivaldiUtils;
+
 /**
  * This is the implementation of the synchronous {@link TabModel} for the
  * {@link ChromeTabbedActivity}.
@@ -277,6 +282,14 @@ public class TabModelImpl extends TabModelJniBridge {
             if (selectTab) setIndex(newIndex, TabSelectionType.FROM_NEW, false);
         } finally {
             TraceEvent.end("TabModelImpl.addTab");
+
+            // Vivaldi - Launch rate vivaldi prompt if needed
+            boolean openedTabFromInsideApp = type == TabLaunchType.FROM_CHROME_UI;
+            if (openedTabFromInsideApp && !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+                if (tab.getContext() instanceof ChromeTabbedActivity) {
+                    RateVivaldiUtils.maybeShowPrompt((AppCompatActivity) tab.getContext());
+                }
+            }
         }
     }
 

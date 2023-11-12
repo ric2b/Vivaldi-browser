@@ -56,7 +56,7 @@ class TH_Model : public KeyedService {
   std::unique_ptr<TH_LoadDetails> CreateLoadDetails();
 
   std::unique_ptr<NodeList> list_;
-  content::BrowserContext* context_;
+  const raw_ptr<content::BrowserContext> context_;
   std::unique_ptr<TH_Storage> store_;
   base::ObserverList<TH_ModelObserver> observers_;
   bool loaded_ = false;

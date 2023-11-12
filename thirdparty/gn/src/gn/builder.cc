@@ -75,8 +75,9 @@ void Builder::ItemDefined(std::unique_ptr<Item> item) {
 
   // Check that it's not been already defined.
   if (record->item()) {
+    bool with_toolchain = item->settings()->ShouldShowToolchain({&item->label()});
     err = Err(item->defined_from(), "Duplicate definition.",
-              "The item\n  " + item->label().GetUserVisibleName(false) +
+              "The item\n  " + item->label().GetUserVisibleName(with_toolchain) +
                   "\nwas already defined.");
     err.AppendSubErr(
         Err(record->item()->defined_from(), "Previous definition:"));
@@ -232,7 +233,7 @@ bool Builder::CheckForBadItems(Err* err) const {
           "possibly due to an\ninternal error:";
       for (auto* bad_record : bad_records) {
         depstring +=
-            "\n\"" + bad_record->label().GetUserVisibleName(false) + "\"";
+            "\n\"" + bad_record->label().GetUserVisibleName(true) + "\"";
       }
       *err = Err(Location(), "", depstring);
     } else {
@@ -254,7 +255,7 @@ bool Builder::TargetDefined(BuilderRecord* record, Err* err) {
       !AddDeps(record, target->all_dependent_configs(), err) ||
       !AddDeps(record, target->public_configs(), err) ||
       !AddGenDeps(record, target->gen_deps(), err) ||
-      !AddActionValuesDep(record, target->action_values(), err) ||
+      !AddPoolDep(record, target, err) ||
       !AddToolchainDep(record, target, err))
     return false;
 
@@ -335,7 +336,7 @@ BuilderRecord* Builder::GetOrCreateRecordOfType(const Label& label,
   // Check types, if the record was not just created.
   if (!pair.first && record->type() != type) {
     std::string msg =
-        "The type of " + label.GetUserVisibleName(false) + "\nhere is a " +
+        "The type of " + label.GetUserVisibleName(true) + "\nhere is a " +
         BuilderRecord::GetNameForType(type) + " but was previously seen as a " +
         BuilderRecord::GetNameForType(record->type()) +
         ".\n\n"
@@ -359,7 +360,7 @@ BuilderRecord* Builder::GetResolvedRecordOfType(const Label& label,
   BuilderRecord* record = GetRecord(label);
   if (!record) {
     *err = Err(origin, "Item not found",
-               "\"" + label.GetUserVisibleName(false) +
+               "\"" + label.GetUserVisibleName(true) +
                    "\" doesn't\n"
                    "refer to an existent thing.");
     return nullptr;
@@ -369,7 +370,7 @@ BuilderRecord* Builder::GetResolvedRecordOfType(const Label& label,
   if (!item) {
     *err = Err(
         origin, "Item not resolved.",
-        "\"" + label.GetUserVisibleName(false) + "\" hasn't been resolved.\n");
+        "\"" + label.GetUserVisibleName(true) + "\" hasn't been resolved.\n");
     return nullptr;
   }
 
@@ -377,7 +378,7 @@ BuilderRecord* Builder::GetResolvedRecordOfType(const Label& label,
     *err =
         Err(origin,
             std::string("This is not a ") + BuilderRecord::GetNameForType(type),
-            "\"" + label.GetUserVisibleName(false) + "\" refers to a " +
+            "\"" + label.GetUserVisibleName(true) + "\" refers to a " +
                 item->GetItemTypeName() + " instead of a " +
                 BuilderRecord::GetNameForType(type) + ".");
     return nullptr;
@@ -437,14 +438,14 @@ bool Builder::AddGenDeps(BuilderRecord* record,
   return true;
 }
 
-bool Builder::AddActionValuesDep(BuilderRecord* record,
-                                 const ActionValues& action_values,
-                                 Err* err) {
-  if (action_values.pool().label.is_null())
+bool Builder::AddPoolDep(BuilderRecord* record,
+                         const Target* target,
+                         Err* err) {
+  if (target->pool().label.is_null())
     return true;
 
   BuilderRecord* pool_record = GetOrCreateRecordOfType(
-      action_values.pool().label, action_values.pool().origin,
+      target->pool().label, target->pool().origin,
       BuilderRecord::ITEM_POOL, err);
   if (!pool_record)
     return false;
@@ -505,7 +506,7 @@ bool Builder::ResolveItem(BuilderRecord* record, Err* err) {
         !ResolveConfigs(&target->configs(), err) ||
         !ResolveConfigs(&target->all_dependent_configs(), err) ||
         !ResolveConfigs(&target->public_configs(), err) ||
-        !ResolveActionValues(&target->action_values(), err) ||
+        !ResolvePool(target, err) ||
         !ResolveToolchain(target, err))
       return false;
   } else if (record->type() == BuilderRecord::ITEM_CONFIG) {
@@ -584,16 +585,16 @@ bool Builder::ResolveToolchain(Target* target, Err* err) {
   return true;
 }
 
-bool Builder::ResolveActionValues(ActionValues* action_values, Err* err) {
-  if (action_values->pool().label.is_null())
+bool Builder::ResolvePool(Target* target, Err* err) {
+  if (target->pool().label.is_null())
     return true;
 
   BuilderRecord* record = GetResolvedRecordOfType(
-      action_values->pool().label, action_values->pool().origin,
+      target->pool().label, target->pool().origin,
       BuilderRecord::ITEM_POOL, err);
   if (!record)
     return false;
-  action_values->set_pool(LabelPtrPair<Pool>(record->item()->AsPool()));
+  target->set_pool(LabelPtrPair<Pool>(record->item()->AsPool()));
 
   return true;
 }

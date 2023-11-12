@@ -72,7 +72,7 @@ class VivaldiSubresourceFilterTest : public AdverseAdFilterTestHarness {
 
  private:
   std::unique_ptr<VivaldiContentBrowserClient> browser_content_client_;
-  AdverseAdFilterListService* adblock_;
+  raw_ptr<AdverseAdFilterListService> adblock_ = nullptr;
   // local_state_ should be destructed after TestingProfile.
   TestingPrefServiceSimple local_state_;
 };

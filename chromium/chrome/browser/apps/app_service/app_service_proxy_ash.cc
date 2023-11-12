@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -18,7 +19,9 @@
 #include "chrome/browser/apps/app_service/metrics/app_platform_metrics.h"
 #include "chrome/browser/apps/app_service/metrics/app_platform_metrics_service.h"
 #include "chrome/browser/apps/app_service/metrics/app_service_metrics.h"
-#include "chrome/browser/apps/app_service/promise_apps/promise_apps.h"
+#include "chrome/browser/apps/app_service/promise_apps/promise_app.h"
+#include "chrome/browser/apps/app_service/promise_apps/promise_app_registry_cache.h"
+#include "chrome/browser/apps/app_service/promise_apps/promise_app_service.h"
 #include "chrome/browser/apps/app_service/publishers/app_publisher.h"
 #include "chrome/browser/apps/app_service/uninstall_dialog.h"
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
@@ -148,10 +151,13 @@ void AppServiceProxyAsh::Initialize() {
   }
   if (!profile_->AsTestingProfile()) {
     app_platform_metrics_service_ =
-        std::make_unique<AppPlatformMetricsService>(profile_);
+        std::make_unique<apps::AppPlatformMetricsService>(profile_);
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&AppServiceProxyAsh::InitAppPlatformMetrics,
                                   weak_ptr_factory_.GetWeakPtr()));
+  }
+  if (ash::features::ArePromiseIconsEnabled()) {
+    promise_app_service_ = std::make_unique<apps::PromiseAppService>(profile_);
   }
 }
 
@@ -163,6 +169,12 @@ apps::AppPlatformMetrics* AppServiceProxyAsh::AppPlatformMetrics() {
   return app_platform_metrics_service_
              ? app_platform_metrics_service_->AppPlatformMetrics()
              : nullptr;
+}
+
+apps::AppPlatformMetricsService*
+AppServiceProxyAsh::AppPlatformMetricsService() {
+  return app_platform_metrics_service_ ? app_platform_metrics_service_.get()
+                                       : nullptr;
 }
 
 apps::BrowserAppInstanceTracker*
@@ -221,6 +233,15 @@ void AppServiceProxyAsh::OnApps(std::vector<AppPtr> deltas,
           profile_->GetPath(), app_ids,
           base::BindOnce(&AppServiceProxyAsh::PostIconFoldersDeletion,
                          weak_ptr_factory_.GetWeakPtr(), app_ids));
+    }
+  }
+
+  // Close uninstall dialogs for any uninstalled apps.
+  for (const AppPtr& delta : deltas) {
+    if (delta->readiness != Readiness::kUnknown &&
+        !apps_util::IsInstalled(delta->readiness) &&
+        base::Contains(uninstall_dialogs_, delta->app_id)) {
+      uninstall_dialogs_[delta->app_id]->CloseDialog();
     }
   }
 
@@ -372,11 +393,19 @@ void AppServiceProxyAsh::ReadIconsForTesting(AppType app_type,
   ReadIcons(app_type, app_id, size_in_dip, icon_key.Clone(), icon_type,
             std::move(callback));
 }
-apps::PromiseAppRegistryCache& AppServiceProxyAsh::PromiseAppRegistryCache() {
-  return promise_app_registry_cache_;
+
+apps::PromiseAppRegistryCache* AppServiceProxyAsh::PromiseAppRegistryCache() {
+  if (!promise_app_service_) {
+    return nullptr;
+  }
+  return promise_app_service_->PromiseAppRegistryCache();
 }
-void AppServiceProxyAsh::AddPromiseApp(PromiseAppPtr app) {
-  promise_app_registry_cache_.AddPromiseApp(std::move(app));
+
+void AppServiceProxyAsh::OnPromiseApp(PromiseAppPtr delta) {
+  if (!PromiseAppRegistryCache()) {
+    return;
+  }
+  PromiseAppRegistryCache()->OnPromiseApp(std::move(delta));
 }
 
 void AppServiceProxyAsh::Shutdown() {
@@ -435,8 +464,6 @@ void AppServiceProxyAsh::OnUninstallDialogClosed(
     bool report_abuse,
     UninstallDialog* uninstall_dialog) {
   if (uninstall) {
-    app_registry_cache_.ForOneApp(app_id, RecordAppBounce);
-
     auto* publisher = GetPublisher(app_type);
     DCHECK(publisher);
     publisher->Uninstall(app_id, uninstall_source, clear_site_data,

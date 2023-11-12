@@ -145,6 +145,9 @@ class TestBrowserWindow : public BrowserWindow {
   bool IsLocationBarVisible() const override;
   bool IsToolbarShowing() const override;
   bool IsBorderlessModeEnabled() const override;
+  void ShowSidePanel(
+      absl::optional<SidePanelEntryId> entry_id,
+      absl::optional<SidePanelOpenTrigger> open_trigger) override {}
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
   void ShowUpdateChromeDialog() override {}
@@ -289,8 +292,6 @@ class TestBrowserWindow : public BrowserWindow {
     WindowOpenDisposition GetWindowOpenDisposition() const override;
     ui::PageTransition GetPageTransition() const override;
     base::TimeTicks GetMatchSelectionTimestamp() const override;
-    void AcceptInput() override {}
-    void AcceptInput(base::TimeTicks match_selection_timestamp) override {}
     void FocusLocation(bool select_all) override {}
     void FocusSearch() override {}
     void UpdateContentSettingsIcons() override {}

@@ -153,7 +153,6 @@ const char kGoogleSheetsDemoAppId[] = "nifkmgcdokhkjghdlgflonppnefddien";
 const char kGoogleSheetsPwaAppId[] = "hcgjdbbnhkmopplfiibmdgghhdhbiidh";
 const char kGoogleSlidesDemoAppId[] = "hdmobeajeoanbanmdlabnbnlopepchip";
 const char kGoogleKeepAppId[] = "hmjkmjkepdijhoojdojkdfohbdgmmhki";
-const char kOfficePwaAppId[] = "ocdlmjhbenodhlknglojajgokahchlkk";
 const char kYoutubeAppId[] = "blpcfgokakmgnkcojhhkbfbldkacnbeo";
 const char kYoutubePwaAppId[] = "agimnkijcaahngcdmfeangaknmldooml";
 const char kSpotifyAppId[] = "pjibgclleladliembfgfagdaldikeohf";
@@ -206,6 +205,7 @@ bool IsDemoModeChromeApp(base::StringPiece extension_id) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kSigninProfileTestExtensionId[] = "mecfefiddjlmabpeilblgegnbioikfmp";
 const char kGuestModeTestExtensionId[] = "behllobkkfkfnphdnhnkndlbkcpglgmj";
+const char kChromeOSXKB[] = "jkghodnilhceideoidjikpgommlajknk";
 
 bool IsSystemUIApp(base::StringPiece extension_id) {
   static const char* const kApps[] = {

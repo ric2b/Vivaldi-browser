@@ -16,9 +16,13 @@
 #include "third_party/blink/renderer/platform/scheduler/common/task_priority.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/task_queue_throttler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_priority.h"
+#include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_queue_type.h"
 
-namespace blink {
-namespace scheduler {
+namespace base::sequence_manager {
+class SequenceManager;
+}  // namespace base::sequence_manager
+
+namespace blink::scheduler {
 
 using TaskQueue = base::sequence_manager::TaskQueue;
 
@@ -27,12 +31,36 @@ class NonMainThreadSchedulerBase;
 class PLATFORM_EXPORT NonMainThreadTaskQueue
     : public base::RefCountedThreadSafe<NonMainThreadTaskQueue> {
  public:
-  // TODO(kraynov): Consider options to remove TaskQueueImpl reference here.
+  struct QueueCreationParams {
+    QueueCreationParams() = default;
+
+    QueueCreationParams SetCanBeThrottled(bool value) {
+      can_be_throttled = value;
+      return *this;
+    }
+
+    QueueCreationParams SetWebSchedulingQueueType(
+        absl::optional<WebSchedulingQueueType> type) {
+      web_scheduling_queue_type = type;
+      return *this;
+    }
+
+    QueueCreationParams SetWebSchedulingPriority(
+        absl::optional<WebSchedulingPriority> priority) {
+      web_scheduling_priority = priority;
+      return *this;
+    }
+
+    bool can_be_throttled = false;
+    absl::optional<WebSchedulingQueueType> web_scheduling_queue_type;
+    absl::optional<WebSchedulingPriority> web_scheduling_priority;
+  };
+
   NonMainThreadTaskQueue(
-      std::unique_ptr<base::sequence_manager::internal::TaskQueueImpl> impl,
+      base::sequence_manager::SequenceManager& sequence_manager,
       const TaskQueue::Spec& spec,
       NonMainThreadSchedulerBase* non_main_thread_scheduler,
-      bool can_be_throttled,
+      QueueCreationParams params,
       scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner);
   ~NonMainThreadTaskQueue();
 
@@ -107,6 +135,10 @@ class PLATFORM_EXPORT NonMainThreadTaskQueue
   // Not owned.
   NonMainThreadSchedulerBase* non_main_thread_scheduler_;
 
+  // Set if this is queue is used for the web-exposed scheduling API. Used to
+  // differentiate initial tasks from continuations for prioritization.
+  const absl::optional<WebSchedulingQueueType> web_scheduling_queue_type_;
+
   // |web_scheduling_priority_| is the priority of the task queue within the web
   // scheduling API. This priority is used to determine the task queue priority.
   absl::optional<WebSchedulingPriority> web_scheduling_priority_;
@@ -116,7 +148,6 @@ class PLATFORM_EXPORT NonMainThreadTaskQueue
       task_runner_with_default_task_type_;
 };
 
-}  // namespace scheduler
-}  // namespace blink
+}  // namespace blink::scheduler
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_SCHEDULER_WORKER_NON_MAIN_THREAD_TASK_QUEUE_H_

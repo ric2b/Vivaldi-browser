@@ -7,73 +7,112 @@ import {Keyboard, MetaKey, ModifierKey, Mouse, PointingStick, Touchpad} from './
 export const fakeKeyboards: Keyboard[] = [
   {
     id: 0,
+    deviceKey: 'test:key',
     name: 'ERGO K860',
     isExternal: true,
-    metaKey: MetaKey.COMMAND,
+    metaKey: MetaKey.kCommand,
     modifierKeys: [
-      ModifierKey.ALT,
-      ModifierKey.BACKSPACE,
-      ModifierKey.CAPS_LOCK,
-      ModifierKey.CONTROL,
-      ModifierKey.ESC,
-      ModifierKey.META,
+      ModifierKey.kAlt,
+      ModifierKey.kBackspace,
+      ModifierKey.kCapsLock,
+      ModifierKey.kControl,
+      ModifierKey.kEscape,
+      ModifierKey.kMeta,
     ],
     settings: {
-      modifierRemappings: new Map<ModifierKey, ModifierKey>([
-        [ModifierKey.CONTROL, ModifierKey.CAPS_LOCK],
-        [ModifierKey.CAPS_LOCK, ModifierKey.ASSISTANT],
-      ]),
-      topRowAreFKeys: false,
-      suppressMetaFKeyRewrites: false,
-      autoRepeatEnabled: false,
-      autoRepeatDelay: 2000,
-      autoRepeatInterval: 2000,
+      modifierRemappings: {
+        [ModifierKey.kControl]: ModifierKey.kCapsLock,
+        [ModifierKey.kCapsLock]: ModifierKey.kAssistant,
+      },
+      topRowAreFkeys: false,
+      suppressMetaFkeyRewrites: false,
     },
   },
   {
     id: 1,
+    deviceKey: 'test:key',
     name: 'AT Translated Set 2 ',
     isExternal: false,
-    metaKey: MetaKey.SEARCH,
+    metaKey: MetaKey.kSearch,
     modifierKeys: [
-      ModifierKey.ALT,
-      ModifierKey.ASSISTANT,
-      ModifierKey.BACKSPACE,
-      ModifierKey.CONTROL,
-      ModifierKey.ESC,
-      ModifierKey.META,
+      ModifierKey.kAlt,
+      ModifierKey.kAssistant,
+      ModifierKey.kBackspace,
+      ModifierKey.kControl,
+      ModifierKey.kEscape,
+      ModifierKey.kMeta,
     ],
     settings: {
-      modifierRemappings: new Map<ModifierKey, ModifierKey>(),
-      topRowAreFKeys: true,
-      suppressMetaFKeyRewrites: true,
-      autoRepeatEnabled: true,
-      autoRepeatDelay: 150,
-      autoRepeatInterval: 20,
+      modifierRemappings: {},
+      topRowAreFkeys: true,
+      suppressMetaFkeyRewrites: true,
     },
   },
   {
     id: 8,
+    deviceKey: 'test:key',
     name: 'Logitech G713 Aurora',
     isExternal: true,
-    metaKey: MetaKey.LAUNCHER,
+    metaKey: MetaKey.kLauncher,
     modifierKeys: [
-      ModifierKey.ALT,
-      ModifierKey.BACKSPACE,
-      ModifierKey.CAPS_LOCK,
-      ModifierKey.CONTROL,
-      ModifierKey.ESC,
-      ModifierKey.META,
+      ModifierKey.kAlt,
+      ModifierKey.kAssistant,
+      ModifierKey.kBackspace,
+      ModifierKey.kCapsLock,
+      ModifierKey.kControl,
+      ModifierKey.kEscape,
+      ModifierKey.kMeta,
     ],
     settings: {
-      modifierRemappings: new Map<ModifierKey, ModifierKey>([
-        [ModifierKey.ALT, ModifierKey.ASSISTANT],
-      ]),
-      topRowAreFKeys: true,
-      suppressMetaFKeyRewrites: false,
-      autoRepeatEnabled: true,
-      autoRepeatDelay: 500,
-      autoRepeatInterval: 100,
+      modifierRemappings: {[ModifierKey.kAlt]: ModifierKey.kAssistant},
+      topRowAreFkeys: true,
+      suppressMetaFkeyRewrites: false,
+    },
+  },
+];
+
+export const fakeKeyboards2: Keyboard[] = [
+  {
+    id: 9,
+    deviceKey: 'test:key',
+    name: 'Fake ERGO K860',
+    isExternal: true,
+    metaKey: MetaKey.kCommand,
+    modifierKeys: [
+      ModifierKey.kAlt,
+      ModifierKey.kBackspace,
+      ModifierKey.kCapsLock,
+      ModifierKey.kControl,
+      ModifierKey.kEscape,
+      ModifierKey.kMeta,
+    ],
+    settings: {
+      modifierRemappings: {
+        [ModifierKey.kControl]: ModifierKey.kCapsLock,
+        [ModifierKey.kCapsLock]: ModifierKey.kAssistant,
+      },
+      topRowAreFkeys: false,
+      suppressMetaFkeyRewrites: false,
+    },
+  },
+  {
+    id: 10,
+    deviceKey: 'test:key',
+    name: 'Fake AT Translated Set 2 ',
+    isExternal: false,
+    metaKey: MetaKey.kSearch,
+    modifierKeys: [
+      ModifierKey.kAlt,
+      ModifierKey.kAssistant,
+      ModifierKey.kBackspace,
+      ModifierKey.kControl,
+      ModifierKey.kEscape,
+      ModifierKey.kMeta,
+    ],
+    settings: {
+      modifierRemappings: {},
+      topRowAreFkeys: true,
+      suppressMetaFkeyRewrites: true,
     },
   },
 ];
@@ -81,6 +120,7 @@ export const fakeKeyboards: Keyboard[] = [
 export const fakeTouchpads: Touchpad[] = [
   {
     id: 2,
+    deviceKey: 'test:key',
     name: 'Default Touchpad',
     isExternal: false,
     isHaptic: true,
@@ -99,6 +139,7 @@ export const fakeTouchpads: Touchpad[] = [
   },
   {
     id: 3,
+    deviceKey: 'test:key',
     name: 'Logitech T650',
     isExternal: true,
     isHaptic: false,
@@ -117,9 +158,32 @@ export const fakeTouchpads: Touchpad[] = [
   },
 ];
 
+export const fakeTouchpads2: Touchpad[] = [
+  {
+    id: 11,
+    deviceKey: 'test:key',
+    name: 'Fake Default Touchpad',
+    isExternal: false,
+    isHaptic: true,
+    settings: {
+      sensitivity: 1,
+      reverseScrolling: false,
+      accelerationEnabled: false,
+      tapToClickEnabled: false,
+      threeFingerClickEnabled: false,
+      tapDraggingEnabled: false,
+      scrollSensitivity: 1,
+      scrollAcceleration: false,
+      hapticSensitivity: 1,
+      hapticEnabled: false,
+    },
+  },
+];
+
 export const fakeMice: Mouse[] = [
   {
     id: 4,
+    deviceKey: 'test:key',
     name: 'Razer Basilisk V3',
     isExternal: true,
     settings: {
@@ -133,6 +197,7 @@ export const fakeMice: Mouse[] = [
   },
   {
     id: 5,
+    deviceKey: 'test:key',
     name: 'MX Anywhere 2S',
     isExternal: false,
     settings: {
@@ -146,9 +211,27 @@ export const fakeMice: Mouse[] = [
   },
 ];
 
+export const fakeMice2: Mouse[] = [
+  {
+    id: 13,
+    deviceKey: 'test:key',
+    name: 'Fake Razer Basilisk V3',
+    isExternal: true,
+    settings: {
+      swapRight: true,
+      sensitivity: 5,
+      reverseScrolling: true,
+      accelerationEnabled: true,
+      scrollSensitivity: 5,
+      scrollAcceleration: true,
+    },
+  },
+];
+
 export const fakePointingSticks: PointingStick[] = [
   {
     id: 6,
+    deviceKey: 'test:key',
     name: 'Default Pointing Stick',
     isExternal: false,
     settings: {
@@ -159,7 +242,22 @@ export const fakePointingSticks: PointingStick[] = [
   },
   {
     id: 7,
+    deviceKey: 'test:key',
     name: 'Lexmark-Unicomp FSR',
+    isExternal: true,
+    settings: {
+      swapRight: true,
+      sensitivity: 5,
+      accelerationEnabled: true,
+    },
+  },
+];
+
+export const fakePointingSticks2: PointingStick[] = [
+  {
+    id: 12,
+    deviceKey: 'test:key',
+    name: 'Fake Lexmark-Unicomp FSR',
     isExternal: true,
     settings: {
       swapRight: true,

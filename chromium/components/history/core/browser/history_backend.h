@@ -357,7 +357,12 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // metrics measuring domain visit counts spanning the following date ranges
   // (all dates are inclusive):
   // {{10/30, 10/3~10/30}, {10/29, 10/2~10/29}, {10/28, 10/1~10/28}}
-  DomainDiversityResults GetDomainDiversity(
+  //
+  // The return value is a pair of results, where the first member counts only
+  // local visits, and the second counts both local and foreign (synced) visits.
+  // TODO(crbug.com/1422210): Once the "V2" domain diversity metrics are
+  // deprecated, return only a single result, the "local" one.
+  std::pair<DomainDiversityResults, DomainDiversityResults> GetDomainDiversity(
       base::Time report_time,
       int number_of_days_to_report,
       DomainMetricBitmaskType metric_type_bitmask);
@@ -519,7 +524,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   void ReplaceClusters(const std::vector<int64_t>& ids_to_delete,
                        const std::vector<Cluster>& clusters_to_add);
 
-  int64_t ReserveNextClusterId();
+  int64_t ReserveNextClusterIdWithVisit(const ClusterVisit& cluster_visit);
 
   void AddVisitsToCluster(int64_t cluster_id,
                           const std::vector<ClusterVisit>& visits);
@@ -576,6 +581,17 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   void RemoveObserver(HistoryBackendObserver* observer) override;
 
   // Generic operations --------------------------------------------------------
+
+  // Sets the device information for all syncing devices.
+  void SetSyncDeviceInfo(SyncDeviceInfoMap sync_device_info);
+
+  // Sets the local device Originator Cache GUID.
+  void SetLocalDeviceOriginatorCacheGuid(
+      std::string local_device_originator_cache_guid);
+
+  // Notifies the history backend that it should consider adding foreign
+  // visits to local segments data.
+  void SetCanAddForeignVisitsToSegments(bool add_foreign_visits);
 
   void ProcessDBTask(
       std::unique_ptr<HistoryDBTask> task,
@@ -771,6 +787,8 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   static int GetForeignVisitsToDeletePerBatchForTest();
 
+  sql::Database& GetDBForTesting();
+
   // Vivaldi
   // Computes the |num_hosts| most-visited hostnames per day. For all history
   // available. Returns an empty list if db_ is not initialized.
@@ -825,6 +843,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
       VisitSource visit_source,
       bool should_increment_typed_count,
       VisitID opener_visit,
+      bool consider_for_ntp_most_visited,
       absl::optional<std::u16string> title = absl::nullopt,
       absl::optional<base::TimeDelta> visit_duration = absl::nullopt,
       absl::optional<std::string> originator_cache_guid = absl::nullopt,
@@ -905,13 +924,27 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // id and returns it. If there is none found, returns 0.
   SegmentID GetLastSegmentID(VisitID from_visit);
 
-  // Update the segment information. This is called internally when a page is
-  // added. Return the segment id of the segment that has been updated.
-  SegmentID UpdateSegments(const GURL& url,
-                           VisitID from_visit,
-                           VisitID visit_id,
-                           ui::PageTransition transition_type,
-                           const base::Time ts);
+  // Assign segment information for a new visit. This is called internally when
+  // a page is added. Return the segment id of the segment that has been
+  // assigned to `visit_id`.
+  SegmentID AssignSegmentForNewVisit(const GURL& url,
+                                     VisitID from_visit,
+                                     VisitID visit_id,
+                                     ui::PageTransition transition_type,
+                                     const base::Time ts);
+
+  // Calculates the segment ID given a URL, visit ID, and page transition
+  // type(s). If necessary, this method will create a new segment and return its
+  // ID. Returns 0 if no segment ID can be calculated, or a new segment cannot
+  // be created.
+  SegmentID CalculateSegmentID(const GURL& url,
+                               VisitID from_visit,
+                               ui::PageTransition transition_type);
+
+  // Detects if `visit_row`'s segment has changed. If so, updates
+  // `visit_row`'s `segment_id`, and ensures segment visits are not double
+  // counted across the existing and new segments.
+  void UpdateSegmentForExistingForeignVisit(VisitRow& visit_row);
 
   // Favicons ------------------------------------------------------------------
 
@@ -1069,6 +1102,19 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // HistoryBackend::Init() is called. Defined after `observers_` because
   // it unregisters itself as observer during destruction.
   std::unique_ptr<HistorySyncBridge> history_sync_bridge_;
+
+  // Contains device information for all syncing devices.
+  SyncDeviceInfoMap sync_device_info_;
+
+  // Contains the local device Originator Cache GUID, a unique, sync-specific
+  // identifier for the local device.
+  std::string local_device_originator_cache_guid_;
+
+  // Whether segments data should include foreign history; Note that setting
+  // this to true doesn't guarantee segments data is synced, as feature
+  // `kSyncSegmentsData` may be enabled or disabled, or
+  // `kMaxNumNewTabPageDisplays` is reached.
+  bool can_add_foreign_visits_to_segments_ = false;
 };
 
 }  // namespace history

@@ -350,6 +350,12 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kJavaScriptRegExpUnicodeSets,
                          "--harmony-regexp-unicode-sets",
                          "--no-harmony-regexp-unicode-sets");
+  SetV8FlagsIfOverridden(features::kJavaScriptJsonParseWithSource,
+                         "--harmony-json-parse-with-source",
+                         "--no-harmony-json-parse-with-source");
+  SetV8FlagsIfOverridden(features::kJavaScriptArrayBufferTransfer,
+                         "--harmony-rab-gsab-transfer",
+                         "--no-harmony-rab-gsab-transfer");
 
   if (IsolateHolder::kStrictMode == mode) {
     SetV8Flags("--use_strict");
@@ -359,11 +365,17 @@ void SetFlags(IsolateHolder::ScriptMode mode,
                          "--use-libm-trig-functions",
                          "--no-use-libm-trig-functions");
 
+  SetV8FlagsIfOverridden(features::kJavaScriptCompileHintsMagic,
+                         "--compile-hints-magic", "--no-compile-hints-magic");
+
   // WebAssembly features.
 
   SetV8FlagsIfOverridden(features::kWebAssemblyTailCall,
                          "--experimental-wasm-return-call",
                          "--no-experimental-wasm-return-call");
+  SetV8FlagsIfOverridden(features::kWebAssemblyInlining,
+                         "--experimental-wasm-inlining",
+                         "--no-experimental-wasm-inlining");
 
   if (js_command_line_flags.empty())
     return;

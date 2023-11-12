@@ -133,7 +133,7 @@
 
   // NOTE(david@vivaldi.com): |connector_item_| is a proxy delegate which is
   // required by Vivaldi. connector_item_ is owned by the DevtoolsConnectorAPI.
-  extensions::DevtoolsConnectorItem* connector_item_ = nullptr;
+  raw_ptr<extensions::DevtoolsConnectorItem> connector_item_ = nullptr;
 
 #if defined(USE_AURA)
 
@@ -158,7 +158,7 @@
     void Stop() { hide_timer_.Stop(); }
 
    private:
-    aura::client::CursorClient* cursor_client_;
+    const raw_ptr<aura::client::CursorClient> cursor_client_;
 
     // A timer to delay hiding the mouse.
     base::RepeatingTimer hide_timer_;

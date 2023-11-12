@@ -4,7 +4,6 @@
 
 #include "content/public/common/content_switch_dependent_feature_overrides.h"
 
-#include "content/common/private_aggregation_features.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "net/base/features.h"
@@ -135,11 +134,6 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
     {::switches::kHeadless, std::cref(blink::features::kPaintHolding),
      base::FeatureList::OVERRIDE_DISABLE_FEATURE},
 
-    // Override for --durable-client-hints-cache.
-    {switches::kDurableClientHintsCache,
-     std::cref(blink::features::kDurableClientHintsCache),
-     base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-
     // Override for --reduce-user-agent-minor-version.
     {switches::kReduceUserAgentMinorVersion,
      std::cref(blink::features::kReduceUserAgentMinorVersion),
@@ -178,12 +172,23 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
      std::cref(blink::features::kConversionMeasurement),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
     {switches::kEnablePrivacySandboxAdsApis,
+     std::cref(network::features::kAttributionReportingCrossAppWeb),
+     base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+    {switches::kEnablePrivacySandboxAdsApis,
      std::cref(blink::features::kFencedFrames),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
     {switches::kEnablePrivacySandboxAdsApis,
      std::cref(blink::features::kSharedStorageAPI),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
-    {switches::kEnablePrivacySandboxAdsApis, std::cref(kPrivateAggregationApi),
+    {switches::kEnablePrivacySandboxAdsApis,
+     std::cref(blink::features::kPrivateAggregationApi),
+     base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+    {switches::kEnablePrivacySandboxAdsApis,
+     std::cref(blink::features::
+                   kPrivateAggregationApiFledgeExtensionsLocalTestingOverride),
+     base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+    {switches::kEnablePrivacySandboxAdsApis,
+     std::cref(features::kAttributionFencedFrameReportingBeacon),
      base::FeatureList::OVERRIDE_ENABLE_FEATURE},
   };
 

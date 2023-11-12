@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/web_applications/web_app_browser_controller.h"
 
+#include "base/check_is_test.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
@@ -30,11 +31,13 @@
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_id.h"
+#include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -49,6 +52,7 @@
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
 #include "chrome/common/chrome_features.h"
+#include "chromeos/constants/chromeos_features.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -56,6 +60,7 @@
 #include "chrome/browser/ash/apps/apk_web_app_service.h"
 #include "chrome/browser/ash/system_web_apps/color_helpers.h"
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
+#include "chromeos/constants/chromeos_features.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -185,7 +190,8 @@ void WebAppBrowserController::ToggleWindowControlsOverlayEnabled(
 }
 
 bool WebAppBrowserController::AppUsesBorderlessMode() const {
-  return effective_display_mode_ == DisplayMode::kBorderless;
+  return IsIsolatedWebApp() &&
+         effective_display_mode_ == DisplayMode::kBorderless;
 }
 
 bool WebAppBrowserController::AppUsesTabbed() const {
@@ -196,7 +202,11 @@ bool WebAppBrowserController::AppUsesTabbed() const {
 }
 
 bool WebAppBrowserController::IsIsolatedWebApp() const {
-  return registrar().IsIsolated(app_id());
+  return is_isolated_web_app_for_testing_ || registrar().IsIsolated(app_id());
+}
+
+void WebAppBrowserController::SetIsolatedWebAppTrueForTesting() {
+  is_isolated_web_app_for_testing_ = true;
 }
 
 gfx::Rect WebAppBrowserController::GetDefaultBounds() const {
@@ -215,6 +225,14 @@ bool WebAppBrowserController::HasReloadButton() const {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return true;
 }
+
+#if !BUILDFLAG(IS_CHROMEOS)
+bool WebAppBrowserController::HasProfileMenuButton() const {
+  return (app_id() == web_app::kPasswordManagerAppId) &&
+         base::FeatureList::IsEnabled(
+             password_manager::features::kPasswordManagerRedesign);
+}
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const ash::SystemWebAppDelegate* WebAppBrowserController::system_app() const {
@@ -267,14 +285,15 @@ void WebAppBrowserController::CheckDigitalAssetLinkRelationshipForAndroidApp(
 }
 
 void WebAppBrowserController::OnRelationshipCheckComplete(
-    digital_asset_links::RelationshipCheckResult result) {
+    content_relationship_verification::RelationshipCheckResult result) {
   bool should_show_cct = false;
   switch (result) {
-    case digital_asset_links::RelationshipCheckResult::kSuccess:
+    case content_relationship_verification::RelationshipCheckResult::kSuccess:
       should_show_cct = false;
       break;
-    case digital_asset_links::RelationshipCheckResult::kFailure:
-    case digital_asset_links::RelationshipCheckResult::kNoConnection:
+    case content_relationship_verification::RelationshipCheckResult::kFailure:
+    case content_relationship_verification::RelationshipCheckResult::
+        kNoConnection:
       should_show_cct = true;
       break;
   }
@@ -297,7 +316,8 @@ void WebAppBrowserController::OnGetAssociatedAndroidPackage(
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 void WebAppBrowserController::OnWebAppUninstalled(
-    const AppId& uninstalled_app_id) {
+    const AppId& uninstalled_app_id,
+    webapps::WebappUninstallSource uninstall_source) {
   if (uninstalled_app_id == app_id())
     chrome::CloseWindow(browser());
 }
@@ -400,8 +420,7 @@ absl::optional<SkColor> WebAppBrowserController::GetThemeColor() const {
     return web_theme_color;
 
 #if BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(
-          features::kMicrosoftOfficeWebAppExperiment)) {
+  if (chromeos::features::IsUploadOfficeToCloudEnabled()) {
     if (absl::optional<SkColor> fallback_page_theme_color =
             ChromeOsWebAppExperiments::GetFallbackPageThemeColor(
                 app_id(),
@@ -415,7 +434,7 @@ absl::optional<SkColor> WebAppBrowserController::GetThemeColor() const {
   // System Apps with dynamic color ignore manifest and pull theme color from
   // the OS.
   if (system_app() && system_app()->UseSystemThemeColor() &&
-      ash::features::IsJellyEnabled()) {
+      chromeos::features::IsJellyEnabled()) {
     return ash::GetSystemThemeColor();
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -443,7 +462,7 @@ absl::optional<SkColor> WebAppBrowserController::GetBackgroundColor() const {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (system_app()) {
-    if (ash::features::IsJellyEnabled()) {
+    if (chromeos::features::IsJellyEnabled()) {
       // System Apps with dynamic color ignore the manifest and pull background
       // color from the OS in situations where a background color can not be
       // extracted from the web contents.
@@ -469,6 +488,42 @@ GURL WebAppBrowserController::GetAppNewTabUrl() const {
   return registrar().GetAppNewTabUrl(app_id());
 }
 
+bool WebAppBrowserController::IsUrlInHomeTabScope(const GURL& url) const {
+  if (!registrar().IsTabbedWindowModeEnabled(app_id())) {
+    return false;
+  }
+
+  if (!IsUrlInAppScope(url)) {
+    return false;
+  }
+
+  absl::optional<GURL> pinned_home_url =
+      registrar().GetAppPinnedHomeTabUrl(app_id());
+  if (!pinned_home_url) {
+    return false;
+  }
+
+  // We ignore query params and hash ref when deciding what should be
+  // opened as the home tab.
+  GURL::Replacements replacements;
+  replacements.ClearQuery();
+  replacements.ClearRef();
+  if (url.ReplaceComponents(replacements) ==
+      pinned_home_url.value().ReplaceComponents(replacements)) {
+    return true;
+  }
+
+  if (!home_tab_scope_.has_value()) {
+    home_tab_scope_ = GetTabbedHomeTabScope();
+  }
+
+  if (home_tab_scope_.has_value()) {
+    std::vector<int> vec;
+    return home_tab_scope_.value().Match(url.path(), &vec);
+  }
+  return false;
+}
+
 bool WebAppBrowserController::IsUrlInAppScope(const GURL& url) const {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (system_app() && system_app()->IsUrlInSystemAppScope(url))
@@ -476,8 +531,7 @@ bool WebAppBrowserController::IsUrlInAppScope(const GURL& url) const {
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(
-          features::kMicrosoftOfficeWebAppExperiment)) {
+  if (chromeos::features::IsUploadOfficeToCloudEnabled()) {
     size_t extended_scope_score =
         ChromeOsWebAppExperiments::GetExtendedScopeScore(app_id(), url.spec());
     if (extended_scope_score > 0)
@@ -589,8 +643,7 @@ void WebAppBrowserController::OnTabInserted(content::WebContents* contents) {
   // considered "appy".
   WebAppTabHelper::FromWebContents(contents)->set_acting_as_app(true);
 
-  if (AppUsesTabbed() && IsPinnedHomeTabUrl(registrar(), app_id(),
-                                            contents->GetLastCommittedURL())) {
+  if (AppUsesTabbed() && IsUrlInHomeTabScope(contents->GetLastCommittedURL())) {
     WebAppTabHelper::FromWebContents(contents)->set_is_pinned_home_tab(true);
   }
 }
@@ -670,9 +723,9 @@ void WebAppBrowserController::OnReadIcon(IconPurpose purpose, SkBitmap bitmap) {
 void WebAppBrowserController::PerformDigitalAssetLinkVerification(
     Browser* browser) {
 #if BUILDFLAG(IS_CHROMEOS)
-  asset_link_handler_ =
-      std::make_unique<digital_asset_links::DigitalAssetLinksHandler>(
-          browser->profile()->GetURLLoaderFactory());
+  asset_link_handler_ = std::make_unique<
+      content_relationship_verification::DigitalAssetLinksHandler>(
+      browser->profile()->GetURLLoaderFactory());
   is_verified_ = absl::nullopt;
 #endif
 
@@ -720,6 +773,35 @@ WebAppBrowserController::GetResolvedManifestBackgroundColor() const {
       return dark_mode_color;
   }
   return registrar().GetAppBackgroundColor(app_id());
+}
+
+absl::optional<RE2::Set> WebAppBrowserController::GetTabbedHomeTabScope()
+    const {
+  const WebApp* web_app = registrar().GetAppById(app_id());
+  if (!web_app) {
+    return absl::nullopt;
+  }
+  TabStrip tab_strip = web_app->tab_strip().value();
+  if (const auto* params =
+          absl::get_if<blink::Manifest::HomeTabParams>(&tab_strip.home_tab)) {
+    std::vector<blink::UrlPattern> scope_patterns = params->scope_patterns;
+
+    RE2::Set scope_set = RE2::Set(RE2::Options(), RE2::Anchor::UNANCHORED);
+    for (auto& scope : scope_patterns) {
+      liburlpattern::Options options = {.delimiter_list = "/",
+                                        .prefix_list = "/",
+                                        .sensitive = true,
+                                        .strict = false};
+      liburlpattern::Pattern pattern(scope.pathname, options, "[^/]+?");
+      std::string error;
+      scope_set.Add(pattern.GenerateRegexString(), &error);
+    }
+
+    if (scope_set.Compile()) {
+      return scope_set;
+    }
+  }
+  return absl::nullopt;
 }
 
 }  // namespace web_app

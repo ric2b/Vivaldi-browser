@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/statistics_recorder.h"
@@ -16,7 +17,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/ash/input_method/input_method_configuration.h"
-#include "chrome/browser/ash/input_method/mock_input_method_manager_impl.h"
 #include "chrome/browser/ash/input_method/stub_input_method_engine_observer.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client_test_helper.h"
 #include "content/public/test/browser_task_environment.h"
@@ -25,6 +25,7 @@
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/ash/mock_component_extension_ime_manager_delegate.h"
 #include "ui/base/ime/ash/mock_ime_input_context_handler.h"
+#include "ui/base/ime/ash/mock_input_method_manager_impl.h"
 #include "ui/base/ime/ash/text_input_method.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/events/base_event_utils.h"
@@ -168,7 +169,7 @@ class InputMethodEngineTest : public testing::Test {
 
   std::unique_ptr<InputMethodEngine> engine_;
 
-  TestObserver* observer_;
+  raw_ptr<TestObserver, ExperimentalAsh> observer_;
   std::vector<std::string> languages_;
   std::vector<std::string> layouts_;
   GURL options_page_;

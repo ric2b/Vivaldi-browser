@@ -25,6 +25,8 @@
 #include "content/public/common/network_service_util.h"
 #include "content/public/test/browser_test.h"
 #include "net/cert/ev_root_ca_metadata.h"
+#include "net/dns/mock_host_resolver.h"
+#include "net/net_buildflags.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/test_data_directory.h"
@@ -68,6 +70,7 @@ class OCSPBrowserTest : public PlatformBrowserTest,
   }
 
   void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
     network::mojom::NetworkContextParamsPtr context_params =
         g_browser_process->system_network_context_manager()
             ->CreateDefaultNetworkContextParams();
@@ -119,6 +122,7 @@ class OCSPBrowserTest : public PlatformBrowserTest,
   }
 
   void DoConnection(
+      base::StringPiece hostname,
       const net::EmbeddedTestServer::ServerCertificateConfig& config) {
     net::EmbeddedTestServer server(net::EmbeddedTestServer::TYPE_HTTPS);
 
@@ -127,7 +131,12 @@ class OCSPBrowserTest : public PlatformBrowserTest,
     ASSERT_TRUE(server.Start());
 
     ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), server.GetURL("/ssl/google.html")));
+        browser(), server.GetURL(hostname, "/ssl/google.html")));
+  }
+
+  void DoConnection(
+      const net::EmbeddedTestServer::ServerCertificateConfig& config) {
+    DoConnection("127.0.0.1", config);
   }
 
   net::CertStatus GetCurrentCertStatus() {
@@ -290,22 +299,46 @@ IN_PROC_BROWSER_TEST_F(OCSPBrowserTest,
   DoConnection(cert_config);
 
   net::CertStatus cert_status = GetCurrentCertStatus();
+  ssl_test_util::CheckAuthenticationBrokenState(
+      chrome_test_utils::GetActiveWebContents(this), net::CERT_STATUS_REVOKED,
+      AuthState::SHOWING_INTERSTITIAL);
+  EXPECT_TRUE(cert_status & net::CERT_STATUS_REV_CHECKING_ENABLED);
+}
+
+IN_PROC_BROWSER_TEST_F(OCSPBrowserTest,
+                       TestHTTPSOCSPIntermediateResponseTooOldKnownRoot) {
+  EnableRevocationChecking();
+
+  scoped_refptr<net::X509Certificate> root_cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), "root_ca_cert.pem");
+  ASSERT_TRUE(root_cert);
+  net::ScopedTestKnownRoot scoped_known_root(root_cert.get());
+
+  net::EmbeddedTestServer::ServerCertificateConfig cert_config;
+  cert_config.intermediate =
+      net::EmbeddedTestServer::IntermediateType::kInHandshake;
+  cert_config.ocsp_config = net::EmbeddedTestServer::OCSPConfig(
+      {{net::OCSPRevocationStatus::GOOD,
+        net::EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
+  // OCSP Response is too old and so should be ignored.
+  cert_config.intermediate_ocsp_config = net::EmbeddedTestServer::OCSPConfig(
+      {{net::OCSPRevocationStatus::REVOKED,
+        net::EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLonger}});
+  cert_config.dns_names = {"example.com"};
+
+  DoConnection("example.com", cert_config);
+  net::CertStatus cert_status = GetCurrentCertStatus();
+
   if (ssl_test_util::UsingBuiltinCertVerifier()) {
-    ssl_test_util::CheckAuthenticationBrokenState(
-        chrome_test_utils::GetActiveWebContents(this), net::CERT_STATUS_REVOKED,
-        AuthState::SHOWING_INTERSTITIAL);
+    // The builtin verifier enforces the baseline requirements for max age
+    // of an intermediate's OCSP response.
+    ssl_test_util::CheckAuthenticatedState(
+        chrome_test_utils::GetActiveWebContents(this), AuthState::NONE);
   } else {
-#if BUILDFLAG(IS_WIN)
-    // TODO(mattm): Seems to be flaky on Windows. Either returns
-    // CERT_STATUS_UNABLE_TO_CHECK_REVOCATION (which gets masked off due to
-    // soft-fail), or CERT_STATUS_REVOKED.
-    EXPECT_THAT(cert_status & net::CERT_STATUS_ALL_ERRORS,
-                ::testing::AnyOf(0u, net::CERT_STATUS_REVOKED));
-#else
+    // The platform verifiers are more lenient.
     ssl_test_util::CheckAuthenticationBrokenState(
         chrome_test_utils::GetActiveWebContents(this), net::CERT_STATUS_REVOKED,
         AuthState::SHOWING_INTERSTITIAL);
-#endif
   }
 
   EXPECT_TRUE(cert_status & net::CERT_STATUS_REV_CHECKING_ENABLED);
@@ -321,7 +354,6 @@ IN_PROC_BROWSER_TEST_F(OCSPBrowserTest,
   cert_config.ocsp_config = net::EmbeddedTestServer::OCSPConfig(
       {{net::OCSPRevocationStatus::GOOD,
         net::EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
-  // OCSP Response is too old and so should be ignored.
   cert_config.intermediate_ocsp_config = net::EmbeddedTestServer::OCSPConfig(
       {{net::OCSPRevocationStatus::REVOKED,
         net::EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLonger}});
@@ -329,27 +361,10 @@ IN_PROC_BROWSER_TEST_F(OCSPBrowserTest,
   DoConnection(cert_config);
   net::CertStatus cert_status = GetCurrentCertStatus();
 
-  if (ssl_test_util::UsingBuiltinCertVerifier()) {
-    // The builtin verifier enforces the baseline requirements for max age
-    // of an intermediate's OCSP response.
-    ssl_test_util::CheckAuthenticatedState(
-        chrome_test_utils::GetActiveWebContents(this), AuthState::NONE);
-  } else {
-#if BUILDFLAG(IS_WIN)
-    // TODO(mattm): Seems to be flaky on Windows. Either returns
-    // CERT_STATUS_UNABLE_TO_CHECK_REVOCATION (which gets masked off due to
-    // soft-fail), or CERT_STATUS_REVOKED.
-
-    EXPECT_THAT(cert_status & net::CERT_STATUS_ALL_ERRORS,
-                ::testing::AnyOf(0u, net::CERT_STATUS_REVOKED));
-#else
-    // The platform verifiers are more lenient.
-    ssl_test_util::CheckAuthenticationBrokenState(
-        chrome_test_utils::GetActiveWebContents(this), net::CERT_STATUS_REVOKED,
-        AuthState::SHOWING_INTERSTITIAL);
-
-#endif
-  }
+  // No limitation on response age for locally trusted roots.
+  ssl_test_util::CheckAuthenticationBrokenState(
+      chrome_test_utils::GetActiveWebContents(this), net::CERT_STATUS_REVOKED,
+      AuthState::SHOWING_INTERSTITIAL);
 
   EXPECT_TRUE(cert_status & net::CERT_STATUS_REV_CHECKING_ENABLED);
 }
@@ -370,23 +385,9 @@ IN_PROC_BROWSER_TEST_F(OCSPBrowserTest, TestHTTPSOCSPIntermediateRevoked) {
   DoConnection(cert_config);
 
   net::CertStatus cert_status = GetCurrentCertStatus();
-  if (ssl_test_util::UsingBuiltinCertVerifier()) {
-    ssl_test_util::CheckAuthenticationBrokenState(
-        chrome_test_utils::GetActiveWebContents(this), net::CERT_STATUS_REVOKED,
-        AuthState::SHOWING_INTERSTITIAL);
-  } else {
-#if BUILDFLAG(IS_WIN)
-    // TODO(mattm): Seems to be flaky on Windows. Either returns
-    // CERT_STATUS_UNABLE_TO_CHECK_REVOCATION (which gets masked off due to
-    // soft-fail), or CERT_STATUS_REVOKED.
-    EXPECT_THAT(cert_status & net::CERT_STATUS_ALL_ERRORS,
-                ::testing::AnyOf(0u, net::CERT_STATUS_REVOKED));
-#else
-    ssl_test_util::CheckAuthenticationBrokenState(
-        chrome_test_utils::GetActiveWebContents(this), net::CERT_STATUS_REVOKED,
-        AuthState::SHOWING_INTERSTITIAL);
-#endif
-  }
+  ssl_test_util::CheckAuthenticationBrokenState(
+      chrome_test_utils::GetActiveWebContents(this), net::CERT_STATUS_REVOKED,
+      AuthState::SHOWING_INTERSTITIAL);
   EXPECT_TRUE(cert_status & net::CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
@@ -503,8 +504,8 @@ IN_PROC_BROWSER_TEST_F(OCSPBrowserTest, TestHTTPSOCSPOldStapledButValidAIA) {
   EXPECT_TRUE(cert_status & net::CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || \
-    BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_FUCHSIA) || \
+    BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 IN_PROC_BROWSER_TEST_F(OCSPBrowserTest, HardFailOnOCSPInvalid) {
   if (!ssl_test_util::SystemSupportsHardFailRevocationChecking()) {
     LOG(WARNING) << "Skipping test because system doesn't support hard fail "
@@ -706,8 +707,8 @@ IN_PROC_BROWSER_TEST_F(OCSPBrowserTest,
   net::CertStatus cert_status = GetCurrentCertStatus();
   EXPECT_TRUE(cert_status & net::CERT_STATUS_REV_CHECKING_ENABLED);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-        // || BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_MAC)
+#endif  //  BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || \
+        //  BUILDFLAG(IS_FUCHSIA) ||  BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 
 using AIABrowserTest = OCSPBrowserTest;
 

@@ -4,7 +4,11 @@
 
 package org.chromium.chrome.browser.customtabs.content;
 
+import static org.chromium.cc.mojom.RootScrollOffsetUpdateFrequency.NONE;
+import static org.chromium.cc.mojom.RootScrollOffsetUpdateFrequency.ON_SCROLL_END;
+
 import android.graphics.Point;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -13,7 +17,10 @@ import androidx.browser.customtabs.CustomTabsSessionToken;
 
 import org.chromium.base.MathUtils;
 import org.chromium.base.UserData;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.cc.mojom.RootScrollOffsetUpdateFrequency;
+import org.chromium.cc.mojom.RootScrollOffsetUpdateFrequency.EnumType;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar.CustomTabTabObserver;
 import org.chromium.chrome.browser.customtabs.features.TabInteractionRecorder;
@@ -41,7 +48,6 @@ import org.chromium.ui.base.WindowAndroid;
  *
  * The engagement signal will reset in navigation.
  */
-// TODO(https://crbug.com/1381619): Reset scroll state during tab switching.
 @ActivityScope
 class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
     private static final int SCROLL_STATE_MAX_PERCENTAGE_NOT_INCREASING = -1;
@@ -52,6 +58,14 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
     @VisibleForTesting
     protected static final String REAL_VALUES = "real_values";
     private static final int STUB_PERCENT = 0;
+
+    // Feature param for the time after the scroll-end a scroll update is allowed.
+    @VisibleForTesting
+    protected static final String TIME_CAN_UPDATE_AFTER_END = "time_can_update_after_end";
+    private static final int DEFAULT_AFTER_SCROLL_END_THRESHOLD_MS = 100;
+
+    private static final String TIME_SCROLL_UPDATE_RECEIVED_AFTER_SCROLL_END =
+            "CustomTabs.TimeScrollUpdateReceivedAfterScrollEnd";
 
     private final CustomTabsConnection mConnection;
     private final TabObserverRegistrar mTabObserverRegistrar;
@@ -69,13 +83,16 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
     private WebContentsObserver mEngagementSignalWebContentsObserver;
     @Nullable
     private ScrollState mScrollState;
+    private @RootScrollOffsetUpdateFrequency.EnumType int mScrollOffsetUpdateFrequency;
+    private int mAfterScrollEndThresholdMs;
+    // Tracks the user interaction state across multiple tabs and WebContents.
+    private boolean mDidGetUserInteraction;
 
     /**
      * A tab observer that will send real time scrolling signals to CustomTabsConnection, if a
      * active session exists.
      * @param tabObserverRegistrar See {@link
      *         BaseCustomTabActivityComponent#resolveTabObserverRegistrar()}.
-     * @param initialTab The initial tab that this observer should attach to.
      * @param connection See {@link ChromeAppComponent#resolveCustomTabsConnection()}.
      * @param session See {@link CustomTabIntentDataProvider#getSession()}.
      */
@@ -86,6 +103,15 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
         mSession = session;
         mTabObserverRegistrar = tabObserverRegistrar;
 
+        mScrollOffsetUpdateFrequency =
+                ChromeFeatureList.isEnabled(
+                        ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS_ALTERNATIVE_IMPL)
+                ? ON_SCROLL_END
+                : NONE;
+        mAfterScrollEndThresholdMs = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
+                ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS_ALTERNATIVE_IMPL,
+                TIME_CAN_UPDATE_AFTER_END, DEFAULT_AFTER_SCROLL_END_THRESHOLD_MS);
+
         // Do not register observer via tab#addObserver, so it can change tabs when necessary.
         mTabObserverRegistrar.registerActivityTabObserver(this);
 
@@ -93,20 +119,34 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
         initializeGreatestScrollPercentageSupplier();
     }
 
+    public void destroy() {
+        removeWebContentsDependencies(mWebContents);
+        mConnection.setEngagementSignalsAvailableSupplier(mSession, null);
+        mConnection.setGreatestScrollPercentageSupplier(mSession, null);
+        mTabObserverRegistrar.unregisterActivityTabObserver(this);
+    }
+
     // extends CustomTabTabObserver
     @Override
     protected void onAttachedToInitialTab(@NonNull Tab tab) {
+        mConnection.setEngagementSignalsAvailableSupplier(
+                mSession, () -> shouldSendEngagementSignal(tab));
         maybeStartSendingRealTimeEngagementSignals(tab);
     }
 
     @Override
     protected void onObservingDifferentTab(@NonNull Tab tab) {
+        mConnection.setEngagementSignalsAvailableSupplier(
+                mSession, () -> shouldSendEngagementSignal(tab));
         removeWebContentsDependencies(mWebContents);
         maybeStartSendingRealTimeEngagementSignals(tab);
     }
 
     @Override
     protected void onAllTabsClosed() {
+        mConnection.notifyDidGetUserInteraction(mSession, mDidGetUserInteraction);
+        mDidGetUserInteraction = false;
+        mConnection.setEngagementSignalsAvailableSupplier(mSession, null);
         removeWebContentsDependencies(mWebContents);
     }
 
@@ -124,26 +164,28 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
 
     @Override
     public void webContentsWillSwap(Tab tab) {
+        collectUserInteraction(tab);
         removeWebContentsDependencies(tab.getWebContents());
     }
 
     @Override
-    public void onHidden(Tab tab, int reason) {
-        if (reason == TabHidingType.ACTIVITY_HIDDEN) {
-            collectUserInteraction(tab);
+    public void onHidden(Tab tab, @TabHidingType int reason) {
+        if (reason == TabHidingType.CHANGED_TABS) {
+            ScrollState.from(tab).resetMaxScrollPercentage();
         }
     }
 
     @Override
     public void onClosingStateChanged(Tab tab, boolean closing) {
         if (!closing) return;
+        collectUserInteraction(tab);
         removeWebContentsDependencies(mWebContents);
     }
 
     @Override
     public void onDestroyed(Tab tab) {
-        collectUserInteraction(tab);
         removeWebContentsDependencies(tab.getWebContents());
+        mConnection.setEngagementSignalsAvailableSupplier(mSession, null);
     }
 
     private void initializeGreatestScrollPercentageSupplier() {
@@ -154,7 +196,7 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
             }
             return null;
         };
-        mConnection.setGreatestScrollPercentageSupplier(percentageSupplier);
+        mConnection.setGreatestScrollPercentageSupplier(mSession, percentageSupplier);
     }
 
     /**
@@ -163,6 +205,7 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
      */
     private void maybeStartSendingRealTimeEngagementSignals(Tab tab) {
         if (!shouldSendEngagementSignal(tab)) {
+            mScrollState = null;
             return;
         }
 
@@ -178,6 +221,7 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
 
         mWebContents = tab.getWebContents();
         mScrollState = ScrollState.from(tab);
+        mScrollState.setParams(mScrollOffsetUpdateFrequency, mAfterScrollEndThresholdMs);
 
         mGestureStateListener = new GestureStateListener() {
             @Override
@@ -191,11 +235,33 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
 
             @Override
             public void onScrollUpdateGestureConsumed(@Nullable Point rootScrollOffset) {
+                if (mScrollOffsetUpdateFrequency == ON_SCROLL_END) return;
+
                 if (rootScrollOffset != null) {
                     RenderCoordinates renderCoordinates =
                             RenderCoordinates.fromWebContents(tab.getWebContents());
+                    // We don't care about the return value of #onScrollUpdate here because this
+                    // method will always be called before #onScrollEnded.
                     mScrollState.onScrollUpdate(
                             rootScrollOffset.y, renderCoordinates.getMaxVerticalScrollPixInt());
+                }
+            }
+
+            @Override
+            public void onScrollOffsetOrExtentChanged(int scrollOffsetY, int scrollExtentY) {
+                if (mScrollOffsetUpdateFrequency == NONE) return;
+
+                assert tab != null;
+                RenderCoordinates renderCoordinates =
+                        RenderCoordinates.fromWebContents(tab.getWebContents());
+                boolean validUpdateAfterScrollEnd =
+                        mScrollState.onScrollUpdate(renderCoordinates.getScrollYPixInt(),
+                                renderCoordinates.getMaxVerticalScrollPixInt());
+                if (validUpdateAfterScrollEnd) {
+                    // #onScrollEnded was called before the final #onScrollOffsetOrExtentChanged, so
+                    // we need to call #onScrollEnded to make sure the latest scroll percentage is
+                    // reported in a timely manner.
+                    onScrollEndedInternal(false);
                 }
             }
 
@@ -210,7 +276,16 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
 
             @Override
             public void onScrollEnded(int scrollOffsetY, int scrollExtentY) {
-                int resultPercentage = mScrollState.onScrollEnded();
+                onScrollEndedInternal(true);
+            }
+
+            /**
+             * @param allowUpdateAfter Whether an |#onScrollOffsetOrExtentChanged()| should be
+             *     allowed. If false, updates after |#onScrollEnded()| will be
+             *     ignored.
+             */
+            private void onScrollEndedInternal(boolean allowUpdateAfter) {
+                int resultPercentage = mScrollState.onScrollEnded(allowUpdateAfter);
                 if (resultPercentage != SCROLL_STATE_MAX_PERCENTAGE_NOT_INCREASING) {
                     mConnection.notifyGreatestScrollPercentageIncreased(
                             mSession, mShouldSendRealValues ? resultPercentage : STUB_PERCENT);
@@ -221,8 +296,6 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
         mEngagementSignalWebContentsObserver = new WebContentsObserver() {
             @Override
             public void navigationEntryCommitted(LoadCommittedDetails details) {
-                // TODO(https://crbug.com/1351026): Look into back navigation/scroll
-                // restoration to see if we need any changes to match PRD specs.
                 if (details.isMainFrame() && !details.isSameDocument()) {
                     mScrollState.resetMaxScrollPercentage();
                 }
@@ -232,7 +305,7 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
         GestureListenerManager gestureListenerManager =
                 GestureListenerManager.fromWebContents(mWebContents);
         if (!gestureListenerManager.hasListener(mGestureStateListener)) {
-            gestureListenerManager.addListener(mGestureStateListener);
+            gestureListenerManager.addListener(mGestureStateListener, mScrollOffsetUpdateFrequency);
         }
         mWebContents.addObserver(mEngagementSignalWebContentsObserver);
     }
@@ -243,7 +316,7 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
         TabInteractionRecorder recorder = TabInteractionRecorder.getFromTab(tab);
         if (recorder == null) return;
 
-        mConnection.notifyDidGetUserInteraction(mSession, recorder.didGetUserInteraction());
+        mDidGetUserInteraction |= recorder.didGetUserInteraction();
     }
 
     private void removeWebContentsDependencies(@Nullable WebContents webContents) {
@@ -281,17 +354,42 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
         boolean mIsDirectionUp;
         int mMaxScrollPercentage;
         int mMaxReportedScrollPercentage;
+        @RootScrollOffsetUpdateFrequency.EnumType
+        int mScrollOffsetUpdateFrequency = NONE;
+        int mAfterScrollEndThresholdMs = DEFAULT_AFTER_SCROLL_END_THRESHOLD_MS;
+        Long mTimeLastOnScrollEnded;
+
+        /**
+         * @param frequency The {@link RootScrollOffsetUpdateFrequency.EnumType}, can be |NONE| or
+         *                  |ON_SCROLL_END|.
+         * @param afterScrollEndThreshold The after scroll-end threshold in ms, ignored if the
+         *                                frequency isn't |ON_SCROLL_END|.
+         */
+        void setParams(@EnumType int frequency, int afterScrollEndThreshold) {
+            mScrollOffsetUpdateFrequency = frequency;
+            mAfterScrollEndThresholdMs = afterScrollEndThreshold;
+        }
 
         void onScrollStarted(boolean isDirectionUp) {
             // We shouldn't get an |onScrollStarted()| call while a scroll is still in progress,
             // but it can happen. Call |onScrollEnded()| to make sure we're in a valid state.
-            if (mIsScrollActive) onScrollEnded();
+            if (mIsScrollActive) onScrollEnded(false);
             mIsScrollActive = true;
             mIsDirectionUp = isDirectionUp;
+            mTimeLastOnScrollEnded = null;
         }
 
-        void onScrollUpdate(int verticalScrollOffset, int maxVerticalScrollOffset) {
-            if (mIsScrollActive) {
+        /**
+         * Updates internal state and returns whether this was a valid scroll update after a
+         * scroll-end.
+         */
+        boolean onScrollUpdate(int verticalScrollOffset, int maxVerticalScrollOffset) {
+            if (!mIsScrollActive && mTimeLastOnScrollEnded != null) {
+                RecordHistogram.recordTimesHistogram(TIME_SCROLL_UPDATE_RECEIVED_AFTER_SCROLL_END,
+                        timeSinceLastOnScrollEndedMillis());
+            }
+            boolean validUpdateAfterScrollEnd = isValidUpdateAfterScrollEnd();
+            if (mIsScrollActive || validUpdateAfterScrollEnd) {
                 int scrollPercentage =
                         Math.round(((float) verticalScrollOffset / maxVerticalScrollOffset) * 100);
                 scrollPercentage = MathUtils.clamp(scrollPercentage, 0, 100);
@@ -299,6 +397,8 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
                     mMaxScrollPercentage = scrollPercentage;
                 }
             }
+            mTimeLastOnScrollEnded = null;
+            return validUpdateAfterScrollEnd;
         }
 
         /**
@@ -313,16 +413,21 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
         }
 
         /**
+         * @param allowUpdateAfter Whether to allow a scroll update event to be processed after this
+         *        event.
          * @return the MaxReportedScrollPercentage, or SCROLL_STATE_MAX_PERCENTAGE_NOT_INCREASING if
          *         we don't want to report.
          */
-        int onScrollEnded() {
+        int onScrollEnded(boolean allowUpdateAfter) {
             int reportedPercentage = SCROLL_STATE_MAX_PERCENTAGE_NOT_INCREASING;
             int maxScrollPercentageFivesMultiple =
                     mMaxScrollPercentage - (mMaxScrollPercentage % SCROLL_PERCENTAGE_GRANULARITY);
             if (maxScrollPercentageFivesMultiple > mMaxReportedScrollPercentage) {
                 mMaxReportedScrollPercentage = maxScrollPercentageFivesMultiple;
                 reportedPercentage = mMaxReportedScrollPercentage;
+            }
+            if (mScrollOffsetUpdateFrequency == ON_SCROLL_END && allowUpdateAfter) {
+                mTimeLastOnScrollEnded = SystemClock.elapsedRealtime();
             }
             mIsScrollActive = false;
             return reportedPercentage;
@@ -342,6 +447,16 @@ class RealtimeEngagementSignalObserver extends CustomTabTabObserver {
                 tab.getUserDataHost().setUserData(ScrollState.class, scrollState);
             }
             return scrollState;
+        }
+
+        private boolean isValidUpdateAfterScrollEnd() {
+            return !mIsScrollActive && mTimeLastOnScrollEnded != null
+                    && timeSinceLastOnScrollEndedMillis() <= mAfterScrollEndThresholdMs;
+        }
+
+        private long timeSinceLastOnScrollEndedMillis() {
+            assert mTimeLastOnScrollEnded != null;
+            return SystemClock.elapsedRealtime() - mTimeLastOnScrollEnded;
         }
 
         @VisibleForTesting

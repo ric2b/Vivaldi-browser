@@ -15,17 +15,16 @@
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desk_action_context_menu.h"
 #include "ash/wm/desks/desk_action_view.h"
+#include "ash/wm/desks/desk_bar_view_base.h"
 #include "ash/wm/desks/desk_name_view.h"
 #include "ash/wm/desks/desk_preview_view.h"
-#include "ash/wm/desks/desks_bar_view.h"
+#include "ash/wm/desks/desk_textfield.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_restore_util.h"
-#include "ash/wm/desks/desks_textfield.h"
 #include "ash/wm/float/float_controller.h"
 #include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_utils.h"
-#include "base/cxx17_backports.h"
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/string_util.h"
@@ -90,7 +89,7 @@ gfx::Rect DeskMiniView::GetDeskPreviewBounds(aura::Window* root_window) {
   return gfx::Rect(GetPreviewWidth(root_size, preview_height), preview_height);
 }
 
-DeskMiniView::DeskMiniView(DesksBarView* owner_bar,
+DeskMiniView::DeskMiniView(DeskBarViewBase* owner_bar,
                            aura::Window* root_window,
                            Desk* desk)
     : owner_bar_(owner_bar), root_window_(root_window), desk_(desk) {
@@ -134,7 +133,7 @@ DeskMiniView::DeskMiniView(DesksBarView* owner_bar,
             IsPointOnMiniView(
                 owner_bar_->last_dragged_item_screen_location())) ||
            desk_preview_->IsViewHighlighted() ||
-           (desk_ && desk_->is_active() &&
+           (desk_ && desk_->is_active() && owner_bar_->overview_grid() &&
             !owner_bar_->overview_grid()->IsShowingSavedDeskLibrary());
   });
 
@@ -191,7 +190,7 @@ void DeskMiniView::UpdateDeskButtonVisibility() {
   auto* controller = DesksController::Get();
 
   // Don't show desk buttons when hovered while the dragged window is on
-  // the DesksBarView.
+  // the desk bar view.
   // For switch access, setting desk buttons to visible allows users to
   // navigate to it.
   const bool visible =
@@ -233,7 +232,7 @@ void DeskMiniView::UpdateFocusColor() {
        IsPointOnMiniView(owner_bar_->last_dragged_item_screen_location())) ||
       desk_preview_->IsViewHighlighted()) {
     new_focus_color_id = ui::kColorAshFocusRing;
-  } else if (desk_->is_active() &&
+  } else if (desk_->is_active() && owner_bar_->overview_grid() &&
              !owner_bar_->overview_grid()->IsShowingSavedDeskLibrary()) {
     new_focus_color_id = kColorAshCurrentDeskColor;
   } else {
@@ -422,9 +421,9 @@ void DeskMiniView::ContentsChanged(views::Textfield* sender,
   // To avoid potential security and memory issues, we don't allow desk names to
   // have an unbounded length. Therefore we trim if needed at kMaxLength UTF-16
   // boundary. Note that we don't care about code point boundaries in this case.
-  if (new_contents.size() > DesksTextfield::kMaxLength) {
+  if (new_contents.size() > DeskTextfield::kMaxLength) {
     std::u16string trimmed_new_contents = new_contents;
-    trimmed_new_contents.resize(DesksTextfield::kMaxLength);
+    trimmed_new_contents.resize(DeskTextfield::kMaxLength);
     desk_name_view_->SetText(trimmed_new_contents);
   }
 
@@ -500,7 +499,9 @@ void DeskMiniView::OnViewFocused(views::View* observed_view) {
   should_commit_name_changes_ = true;
 
   // Set the Overview highlight to move focus with the DeskNameView.
-  UpdateOverviewHighlightForFocus(desk_name_view_);
+  if (owner_bar_->overview_grid()) {
+    UpdateOverviewHighlightForFocus(desk_name_view_);
+  }
 
   if (!defer_select_all_)
     desk_name_view_->SelectAll(false);
@@ -581,7 +582,7 @@ void DeskMiniView::LayoutDeskNameView(const gfx::Rect& preview_bounds) {
   const int max_width = std::max(preview_bounds.width() - focus_ring_length,
                                  kMinDeskNameViewWidth);
   const int text_width =
-      base::clamp(desk_name_view_size.width(), min_width, max_width);
+      std::clamp(desk_name_view_size.width(), min_width, max_width);
   const int desk_name_view_x =
       preview_bounds.x() + (preview_bounds.width() - text_width) / 2;
   gfx::Rect desk_name_view_bounds{desk_name_view_x,

@@ -95,7 +95,7 @@ class VivaldiWindowClientView : public views::ClientView {
   }
 
  private:
-  VivaldiBrowserWindow* const window_;
+  const raw_ptr<VivaldiBrowserWindow> window_;
 };
 
 #if !BUILDFLAG(IS_WIN)
@@ -212,6 +212,9 @@ views::ClientView* VivaldiWindowWidgetDelegate::CreateClientView(
   web_view->SetCanProcessEventsWithinSubtree(false);
   web_view->SetWebContents(contents);
 
+  // The purpose of setting a background color for settings & popup windows is
+  // to have something to render when resizing windows. Additionally for
+  // browser windows is to show splash logo before first content is rendered.
   bool show_logo = window_->browser()->is_type_normal();
   web_view->SetBackground(std::make_unique<VivaldiSplashBackground>(show_logo));
 

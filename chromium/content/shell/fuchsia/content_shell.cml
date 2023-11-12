@@ -35,12 +35,15 @@
         "fuchsia.net.name.Lookup",
         "fuchsia.posix.socket.Provider",
         "fuchsia.process.Launcher",
-        "fuchsia.sys.Launcher",
         "fuchsia.ui.composition.Allocator",
         "fuchsia.ui.composition.Flatland",
         "fuchsia.ui.input3.Keyboard",
         "fuchsia.ui.scenic.Scenic",
       ],
+    },
+    {
+      protocol: "fuchsia.element.GraphicalPresenter",
+      availability: "optional",
     },
     {
       storage: "data",

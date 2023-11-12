@@ -4,18 +4,19 @@
 
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_factory.h"
 
+#import "base/ios/ios_util.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_actions_handler.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_button_visibility_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_new_tab_button.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tab_grid_button.h"
-#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_tools_menu_button.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -57,10 +58,12 @@ const CGFloat kSymbolToolbarPointSize = 24;
 #pragma mark - Buttons
 
 - (ToolbarButton*)backButton {
-  UIImage* backImage;
-  backImage = UseSymbols() ? DefaultSymbolWithPointSize(kBackSymbol,
-                                                        kSymbolToolbarPointSize)
-                           : [UIImage imageNamed:@"toolbar_back"];
+  UIImage* backImage =
+      DefaultSymbolWithPointSize(kBackSymbol, kSymbolToolbarPointSize);
+
+  if (IsVivaldiRunning())
+    backImage = [UIImage imageNamed:@"toolbar_back"]; // End Vivaldi
+
   ToolbarButton* backButton = [ToolbarButton
       toolbarButtonWithImage:[backImage
                                  imageFlippedForRightToLeftLayoutDirection]];
@@ -76,9 +79,11 @@ const CGFloat kSymbolToolbarPointSize = 24;
 // Returns a forward button without visibility mask configured.
 - (ToolbarButton*)forwardButton {
   UIImage* forwardImage =
-      UseSymbols()
-          ? DefaultSymbolWithPointSize(kForwardSymbol, kSymbolToolbarPointSize)
-          : [UIImage imageNamed:@"toolbar_forward"];
+      DefaultSymbolWithPointSize(kForwardSymbol, kSymbolToolbarPointSize);
+
+  if (IsVivaldiRunning())
+    forwardImage = [UIImage imageNamed:@"toolbar_forward"]; // End Vivaldi
+
   ToolbarButton* forwardButton = [ToolbarButton
       toolbarButtonWithImage:[forwardImage
                                  imageFlippedForRightToLeftLayoutDirection]];
@@ -95,9 +100,11 @@ const CGFloat kSymbolToolbarPointSize = 24;
 
 - (ToolbarTabGridButton*)tabGridButton {
   UIImage* tabGridImage =
-      UseSymbols() ? CustomSymbolWithPointSize(kSquareNumberSymbol,
-                                               kSymbolToolbarPointSize)
-                   : tabGridImage = [UIImage imageNamed:@"toolbar_switcher"];
+      CustomSymbolWithPointSize(kSquareNumberSymbol, kSymbolToolbarPointSize);
+
+  if (IsVivaldiRunning())
+    tabGridImage = [UIImage imageNamed:@"toolbar_switcher"]; // End Vivaldi
+
   ToolbarTabGridButton* tabGridButton =
       [ToolbarTabGridButton toolbarButtonWithImage:tabGridImage];
   [self configureButton:tabGridButton width:kAdaptiveToolbarButtonWidth];
@@ -115,18 +122,13 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarButton*)toolsMenuButton {
-  ToolbarButton* toolsMenuButton;
-  if (UseSymbols()) {
-    toolsMenuButton = [ToolbarButton
-        toolbarButtonWithImage:DefaultSymbolWithPointSize(
-                                   kMenuSymbol, kSymbolToolbarPointSize)];
-  } else {
-    toolsMenuButton = [[ToolbarToolsMenuButton alloc] initWithFrame:CGRectZero];
-  }
+  ToolbarButton* toolsMenuButton = [ToolbarButton
+      toolbarButtonWithImage:DefaultSymbolWithPointSize(
+                                 kMenuSymbol, kSymbolToolbarPointSize)];
 
   if (IsVivaldiRunning()) {
     UIImage* menuImage = [UIImage imageNamed:@"toolbar_menu"];
-    toolsMenuButton = [ToolbarToolsMenuButton toolbarButtonWithImage:menuImage];
+    toolsMenuButton = [ToolbarButton toolbarButtonWithImage:menuImage];
   } // End Vivaldi
 
   SetA11yLabelAndUiAutomationName(toolsMenuButton, IDS_IOS_TOOLBAR_SETTINGS,
@@ -145,9 +147,11 @@ const CGFloat kSymbolToolbarPointSize = 24;
 
 - (ToolbarButton*)shareButton {
   UIImage* shareImage =
-      UseSymbols()
-          ? DefaultSymbolWithPointSize(kShareSymbol, kSymbolToolbarPointSize)
-          : [UIImage imageNamed:@"toolbar_share"];
+      DefaultSymbolWithPointSize(kShareSymbol, kSymbolToolbarPointSize);
+
+  if (IsVivaldiRunning())
+    shareImage = [UIImage imageNamed:@"toolbar_share"]; // End Vivaldi
+
   ToolbarButton* shareButton =
       [ToolbarButton toolbarButtonWithImage:shareImage];
   [self configureButton:shareButton width:kAdaptiveToolbarButtonWidth];
@@ -164,9 +168,11 @@ const CGFloat kSymbolToolbarPointSize = 24;
 
 - (ToolbarButton*)reloadButton {
   UIImage* reloadImage =
-      UseSymbols() ? CustomSymbolWithPointSize(kArrowClockWiseSymbol,
-                                               kSymbolToolbarPointSize)
-                   : [UIImage imageNamed:@"toolbar_reload"];
+      CustomSymbolWithPointSize(kArrowClockWiseSymbol, kSymbolToolbarPointSize);
+
+  if (IsVivaldiRunning())
+    reloadImage = [UIImage imageNamed:@"toolbar_reload"]; // End Vivaldi
+
   ToolbarButton* reloadButton = [ToolbarButton
       toolbarButtonWithImage:[reloadImage
                                  imageFlippedForRightToLeftLayoutDirection]];
@@ -182,9 +188,12 @@ const CGFloat kSymbolToolbarPointSize = 24;
 }
 
 - (ToolbarButton*)stopButton {
-  UIImage* stopImage = UseSymbols() ? DefaultSymbolWithPointSize(
-                                          kXMarkSymbol, kSymbolToolbarPointSize)
-                                    : [UIImage imageNamed:@"toolbar_stop"];
+  UIImage* stopImage =
+      DefaultSymbolWithPointSize(kXMarkSymbol, kSymbolToolbarPointSize);
+
+  if (IsVivaldiRunning())
+    stopImage = [UIImage imageNamed:@"toolbar_stop"]; // End Vivaldi
+
   ToolbarButton* stopButton = [ToolbarButton toolbarButtonWithImage:stopImage];
   [self configureButton:stopButton width:kAdaptiveToolbarButtonWidth];
   stopButton.accessibilityLabel = l10n_util::GetNSString(IDS_IOS_ACCNAME_STOP);
@@ -197,30 +206,35 @@ const CGFloat kSymbolToolbarPointSize = 24;
 
 - (ToolbarButton*)openNewTabButton {
   ToolbarButton* newTabButton;
-  if (UseSymbols()) {
-    if (@available(iOS 15, *)) {
-      UIImage* image = SymbolWithPalette(
-          CustomSymbolWithPointSize(kNewTabSymbol, kSymbolToolbarPointSize), @[
-            [UIColor colorNamed:kGrey600Color],
-            [self.toolbarConfiguration
-                locationBarBackgroundColorWithVisibility:1]
-          ]);
-      newTabButton = [ToolbarButton toolbarButtonWithImage:image];
-    } else {
-      newTabButton = [ToolbarButton
-          toolbarButtonWithImage:
-              [[UIImage imageNamed:@"plus_circle_fill_ios14"]
-                  imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]];
-    }
+
+  if (IsVivaldiRunning()) {
+    newTabButton = [ToolbarButton
+        toolbarButtonWithImage:
+            [[UIImage imageNamed:@"toolbar_new_tab_page"]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]];
   } else {
-    newTabButton = [ToolbarNewTabButton
-        toolbarButtonWithImage:[UIImage imageNamed:@"toolbar_new_tab_page"]];
+  if (@available(iOS 15, *)) {
+    NSString* symbolName = base::FeatureList::IsEnabled(kSFSymbolsFollowUp)
+                               ? kPlusCircleFillSymbol
+                               : kLegacyPlusCircleFillSymbol;
+    UIImage* image = SymbolWithPalette(
+        CustomSymbolWithPointSize(symbolName, kSymbolToolbarPointSize), @[
+          [UIColor colorNamed:kGrey600Color],
+          [self.toolbarConfiguration locationBarBackgroundColorWithVisibility:1]
+        ]);
+    newTabButton = [ToolbarButton toolbarButtonWithImage:image];
+  } else {
+    newTabButton = [ToolbarButton
+        toolbarButtonWithImage:
+            [[UIImage imageNamed:@"plus_circle_fill_ios14"]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal]];
   }
+  } // End Vivaldi
 
   [newTabButton addTarget:self.actionHandler
                    action:@selector(newTabAction:)
          forControlEvents:UIControlEventTouchUpInside];
-  BOOL isIncognito = self.style == INCOGNITO;
+  BOOL isIncognito = self.style == ToolbarStyle::kIncognito;
 
   [self configureButton:newTabButton width:kAdaptiveToolbarButtonWidth];
 
@@ -247,15 +261,22 @@ const CGFloat kSymbolToolbarPointSize = 24;
       setContentCompressionResistancePriority:UILayoutPriorityRequired
                                       forAxis:UILayoutConstraintAxisHorizontal];
 
-  // TODO(crbug.com/1418068): Remove after minimum version required is >=
+  // TODO(crbug.com/1418068): Simplify after minimum version required is >=
   // iOS 15.
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
-  cancelButton.configuration.contentInsets = NSDirectionalEdgeInsetsMake(
-      0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
-#else
-  cancelButton.contentEdgeInsets = UIEdgeInsetsMake(
-      0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
-#endif  // __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
+  if (base::ios::IsRunningOnIOS15OrLater() &&
+      IsUIButtonConfigurationEnabled()) {
+    if (@available(iOS 15, *)) {
+      UIButtonConfiguration* buttonConfiguration =
+          [UIButtonConfiguration plainButtonConfiguration];
+      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+          0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
+      cancelButton.configuration = buttonConfiguration;
+    }
+  } else {
+    UIEdgeInsets contentInsets = UIEdgeInsetsMake(
+        0, kCancelButtonHorizontalInset, 0, kCancelButtonHorizontalInset);
+    SetContentEdgeInsets(cancelButton, contentInsets);
+  }
 
   cancelButton.hidden = YES;
   [cancelButton addTarget:self.actionHandler
@@ -311,6 +332,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
          forControlEvents:UIControlEventTouchUpInside];
   shieldButton.visibilityMask =
     self.visibilityConfiguration.toolsMenuButtonVisibility;
+  shieldButton.tintColor = UIColor.labelColor;
   return shieldButton;
 }
 
@@ -345,17 +367,6 @@ const CGFloat kSymbolToolbarPointSize = 24;
       }];
   atbAction.accessibilityLabel = atbTitle;
 
-  NSString* shareTitle = GetNSString(IDS_IOS_TOOLBAR_VIVALDI_SHARE);
-  UIAction* shareAction =
-      [UIAction actionWithTitle:shareTitle
-                          image:[UIImage imageNamed:@"toolbar_share"]
-                     identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                  action) {
-        [self.actionHandler shareAction];
-      }];
-  shareAction.accessibilityLabel = shareTitle;
-
   NSString* panelTitle = GetNSString(IDS_IOS_TOOLBAR_VIVALDI_PANEL);
   UIAction* panelAction =
       [UIAction actionWithTitle:panelTitle
@@ -370,7 +381,7 @@ const CGFloat kSymbolToolbarPointSize = 24;
   NSArray* moreActions = [[NSArray alloc] initWithObjects:@[], nil];
 
   if (allButtons) {
-    moreActions = @[atbAction, shareAction, panelAction];
+    moreActions = @[atbAction, panelAction];
   } else {
     moreActions = @[panelAction];
   }

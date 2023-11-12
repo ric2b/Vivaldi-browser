@@ -9,6 +9,7 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
+#include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
@@ -95,10 +96,11 @@ void SharedImageBacking::OnContextLost() {
   have_context_ = false;
 }
 
-SkImageInfo SharedImageBacking::AsSkImageInfo() const {
-  return SkImageInfo::Make(size_.width(), size_.height(),
+SkImageInfo SharedImageBacking::AsSkImageInfo(int plane_index) const {
+  gfx::Size plane_size = format_.GetPlaneSize(plane_index, size_);
+  return SkImageInfo::Make(plane_size.width(), plane_size.height(),
                            viz::ToClosestSkColorType(
-                               /*gpu_compositing=*/true, format()),
+                               /*gpu_compositing=*/true, format(), plane_index),
                            alpha_type_, color_space_.ToSkColorSpace());
 }
 
@@ -144,7 +146,8 @@ base::trace_event::MemoryAllocatorDump* SharedImageBacking::OnMemoryDump(
   // Add ownership edge to `client_guid` which expresses shared ownership with
   // the client process.
   pmd->CreateSharedGlobalAllocatorDump(client_guid);
-  pmd->AddOwnershipEdge(dump->guid(), client_guid, kNonOwningEdgeImportance);
+  pmd->AddOwnershipEdge(dump->guid(), client_guid,
+                        static_cast<int>(gpu::TracingImportance::kNotOwner));
 
   return dump;
 }
@@ -162,6 +165,14 @@ SharedImageBacking::ProduceGLTexturePassthrough(SharedImageManager* manager,
 }
 
 std::unique_ptr<SkiaImageRepresentation> SharedImageBacking::ProduceSkia(
+    SharedImageManager* manager,
+    MemoryTypeTracker* tracker,
+    scoped_refptr<SharedContextState> context_state) {
+  return ProduceSkiaGanesh(manager, tracker, context_state);
+}
+
+std::unique_ptr<SkiaGaneshImageRepresentation>
+SharedImageBacking::ProduceSkiaGanesh(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {

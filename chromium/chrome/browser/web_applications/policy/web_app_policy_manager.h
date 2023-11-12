@@ -67,9 +67,9 @@ class WebAppPolicyManager {
       const ash::SystemWebAppDelegateMap* system_web_apps_delegate_map);
 #endif
 
-  // `initialization_complete` waits for the first `SynchronizeInstalledApps` to
-  // finish if it's triggered on `Start`.
-  void Start(base::OnceClosure initialization_complete);
+  // `policy_settings_and_force_installs_applied_` waits for the first
+  // `SynchronizeInstalledApps` to finish if it's triggered on `Start`.
+  void Start(base::OnceClosure policy_settings_and_force_installs_applied);
 
   void ReinstallPlaceholderAppIfNecessary(
       const GURL& url,
@@ -107,6 +107,8 @@ class WebAppPolicyManager {
   void MaybeOverrideManifest(content::RenderFrameHost* frame_host,
                              blink::mojom::ManifestPtr& manifest) const;
 
+  bool IsPreventCloseEnabled(const AppId& app_id) const;
+
  private:
   friend class WebAppPolicyManagerTest;
 
@@ -120,6 +122,7 @@ class WebAppPolicyManager {
     void ResetSettings();
 
     RunOnOsLoginPolicy run_on_os_login_policy;
+    bool prevent_close;
   };
 
   struct CustomManifestValues {
@@ -142,6 +145,7 @@ class WebAppPolicyManager {
 #if BUILDFLAG(IS_CHROMEOS)
   void RefreshPolicyInstalledIsolatedWebApps();
 #endif
+  void ParsePolicySettings();
   void RefreshPolicySettings();
   void OnAppsSynchronized(
       std::map<GURL, ExternallyManagedAppManager::InstallResult>
@@ -164,7 +168,7 @@ class WebAppPolicyManager {
 
   void OnDisableModePolicyChanged();
 
-  void OnSyncCommandsComplete(std::vector<std::string> app_ids);
+  void OnSyncPolicySettingsCommandsComplete(std::vector<std::string> app_ids);
 
   // Populates ids lists of web apps disabled by SystemFeaturesDisableList
   // policy.
@@ -186,7 +190,6 @@ class WebAppPolicyManager {
 #endif
   raw_ptr<OsIntegrationManager, DanglingUntriaged> os_integration_manager_ =
       nullptr;
-
   PrefChangeRegistrar pref_change_registrar_;
   PrefChangeRegistrar local_state_pref_change_registrar_;
 
@@ -211,7 +214,7 @@ class WebAppPolicyManager {
 
   ExternallyInstalledWebAppPrefs externally_installed_app_prefs_;
 
-  base::OnceClosure initialization_complete_;
+  base::OnceClosure policy_settings_and_force_installs_applied_;
 
 #if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<IsolatedWebAppPolicyManager> iwa_policy_manager_;

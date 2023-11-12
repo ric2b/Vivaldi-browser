@@ -6,14 +6,17 @@ package org.chromium.chrome.browser.partnercustomizations;
 
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
+import android.os.SystemClock;
 
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -22,7 +25,6 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.components.version_info.VersionInfo;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.url.GURL;
 
@@ -188,10 +190,12 @@ public class PartnerBrowserCustomizations {
         // Setup an initializing async task.
         final AsyncTask<Void> initializeAsyncTask = new AsyncTask<Void>() {
             private boolean mHomepageUriChanged;
+            private long mStartTime;
 
             @Override
             protected Void doInBackground() {
                 try {
+                    mStartTime = SystemClock.elapsedRealtime();
                     boolean systemOrPreStable =
                             (context.getApplicationInfo().flags & ApplicationInfo.FLAG_SYSTEM) == 1
                             || !VersionInfo.isStableBuild();
@@ -239,7 +243,13 @@ public class PartnerBrowserCustomizations {
             }
 
             private void onFinalized() {
+                boolean isFirstFinalized = !mIsInitialized;
                 mIsInitialized = true;
+                if (isFirstFinalized) {
+                    RecordHistogram.recordTimesHistogram(
+                            "Android.PartnerBrowserCustomizationInitDuration",
+                            SystemClock.elapsedRealtime() - mStartTime);
+                }
 
                 for (Runnable callback : mInitializeAsyncCallbacks) {
                     callback.run();
@@ -249,6 +259,11 @@ public class PartnerBrowserCustomizations {
                 if (mHomepageUriChanged && mListener != null) {
                     mListener.onHomepageUpdate();
                 }
+                if (isFirstFinalized) {
+                    RecordHistogram.recordTimesHistogram(
+                            "Android.PartnerBrowserCustomizationInitDuration.WithCallbacks",
+                            SystemClock.elapsedRealtime() - mStartTime);
+                }
             }
         };
 
@@ -256,7 +271,7 @@ public class PartnerBrowserCustomizations {
 
         // Cancel the initialization if it reaches timeout.
         PostTask.postDelayedTask(
-                UiThreadTaskTraits.DEFAULT, () -> initializeAsyncTask.cancel(true), timeoutMs);
+                TaskTraits.UI_DEFAULT, () -> initializeAsyncTask.cancel(true), timeoutMs);
     }
 
     @VisibleForTesting
@@ -320,7 +335,7 @@ public class PartnerBrowserCustomizations {
      */
     public void setOnInitializeAsyncFinished(final Runnable callback) {
         if (mIsInitialized) {
-            PostTask.postTask(UiThreadTaskTraits.DEFAULT, callback);
+            PostTask.postTask(TaskTraits.UI_DEFAULT, callback);
         } else {
             mInitializeAsyncCallbacks.add(callback);
         }
@@ -336,7 +351,7 @@ public class PartnerBrowserCustomizations {
     public void setOnInitializeAsyncFinished(final Runnable callback, long timeoutMs) {
         mInitializeAsyncCallbacks.add(callback);
 
-        PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.postDelayedTask(TaskTraits.UI_DEFAULT, () -> {
             if (mInitializeAsyncCallbacks.remove(callback)) {
                 if (!mIsInitialized) {
                     Log.w(TAG, "mInitializeAsyncCallbacks executed as timeout expired.");

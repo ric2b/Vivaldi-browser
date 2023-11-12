@@ -11,12 +11,12 @@
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/thread_pool.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "components/aggregation_service/aggregation_service.mojom.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
@@ -26,9 +26,9 @@
 #include "content/browser/aggregation_service/aggregation_service_storage_sql.h"
 #include "content/browser/aggregation_service/aggregation_service_test_utils.h"
 #include "content/browser/aggregation_service/public_key.h"
-#include "content/common/aggregatable_report.mojom.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -44,13 +44,13 @@ AggregationServicePayloadContents::Operation ConvertToOperation(
   }
 }
 
-mojom::AggregationServiceMode ConvertToAggregationMode(
+blink::mojom::AggregationServiceMode ConvertToAggregationMode(
     TestAggregationService::AggregationMode aggregation_mode) {
   switch (aggregation_mode) {
     case TestAggregationService::AggregationMode::kTeeBased:
-      return mojom::AggregationServiceMode::kTeeBased;
+      return blink::mojom::AggregationServiceMode::kTeeBased;
     case TestAggregationService::AggregationMode::kExperimentalPoplar:
-      return mojom::AggregationServiceMode::kExperimentalPoplar;
+      return blink::mojom::AggregationServiceMode::kExperimentalPoplar;
   }
 }
 
@@ -127,14 +127,14 @@ void TestAggregationServiceImpl::AssembleReport(
     base::OnceCallback<void(base::Value::Dict)> callback) {
   AggregationServicePayloadContents payload_contents(
       ConvertToOperation(request.operation),
-      {mojom::AggregatableReportHistogramContribution(
+      {blink::mojom::AggregatableReportHistogramContribution(
           /*bucket=*/request.bucket, /*value=*/request.value)},
       ConvertToAggregationMode(request.aggregation_mode),
       ::aggregation_service::mojom::AggregationCoordinator::kDefault);
 
   AggregatableReportSharedInfo shared_info(
       /*scheduled_report_time=*/base::Time::Now() + base::Seconds(30),
-      /*report_id=*/base::GUID::GenerateRandomV4(),
+      /*report_id=*/base::Uuid::GenerateRandomV4(),
       std::move(request.reporting_origin),
       request.is_debug_mode_enabled
           ? AggregatableReportSharedInfo::DebugMode::kEnabled

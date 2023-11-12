@@ -848,6 +848,8 @@ TEST_F(TransportSecurityStateTest, PreloadedPKPReportUri) {
       cert1.get(), cert2.get(), pkp_state.spki_hashes));
   EXPECT_EQ(network_anonymization_key,
             mock_report_sender.latest_network_anonymization_key());
+
+  state.SetReportSender(nullptr);
 }
 
 // Tests that report URIs are thrown out if they point to the same host,
@@ -905,6 +907,8 @@ TEST_F(TransportSecurityStateTest, HPKPReportUriToSameHost) {
   EXPECT_EQ(http_report_uri, mock_report_sender.latest_report_uri());
   EXPECT_EQ(network_anonymization_key,
             mock_report_sender.latest_network_anonymization_key());
+
+  state.SetReportSender(nullptr);
 }
 
 // Simple test for the HSTS preload process. The trie (generated from
@@ -1884,8 +1888,6 @@ TEST_F(TransportSecurityStateStaticTest, PreloadedPins) {
   EXPECT_TRUE(state.GetStaticPKPState("blog.torproject.org", &pkp_state));
   EXPECT_FALSE(pkp_state.spki_hashes.empty());
 
-  EXPECT_TRUE(HasStaticPublicKeyPins("www.twitter.com"));
-
   // Facebook has pinning and hsts on facebook.com, but only pinning on
   // subdomains.
   EXPECT_TRUE(state.GetStaticPKPState("facebook.com", &pkp_state));
@@ -1952,17 +1954,6 @@ TEST_F(TransportSecurityStateStaticTest, BuiltinCertPins) {
   EXPECT_TRUE(HasStaticPublicKeyPins("www.gstatic.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("ssl.google-analytics.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("www.googleplex.com"));
-
-  EXPECT_TRUE(HasStaticPublicKeyPins("twitter.com"));
-  EXPECT_FALSE(HasStaticPublicKeyPins("foo.twitter.com"));
-  EXPECT_TRUE(HasStaticPublicKeyPins("www.twitter.com"));
-  EXPECT_TRUE(HasStaticPublicKeyPins("api.twitter.com"));
-  EXPECT_TRUE(HasStaticPublicKeyPins("oauth.twitter.com"));
-  EXPECT_TRUE(HasStaticPublicKeyPins("mobile.twitter.com"));
-  EXPECT_TRUE(HasStaticPublicKeyPins("dev.twitter.com"));
-  EXPECT_TRUE(HasStaticPublicKeyPins("business.twitter.com"));
-  EXPECT_TRUE(HasStaticPublicKeyPins("platform.twitter.com"));
-  EXPECT_TRUE(HasStaticPublicKeyPins("si0.twimg.com"));
 }
 
 TEST_F(TransportSecurityStateStaticTest, OptionalHSTSCertPins) {
@@ -2073,6 +2064,8 @@ TEST_F(TransportSecurityStateStaticTest, HPKPReportRateLimiting) {
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
   EXPECT_EQ(NetworkAnonymizationKey(),
             mock_report_sender.latest_network_anonymization_key());
+
+  state.SetReportSender(nullptr);
 }
 
 TEST_F(TransportSecurityStateStaticTest, HPKPReporting) {
@@ -2187,6 +2180,8 @@ TEST_F(TransportSecurityStateStaticTest, HPKPReporting) {
                                           good_hashes));
   EXPECT_EQ(network_anonymization_key,
             mock_report_sender.latest_network_anonymization_key());
+
+  state.SetReportSender(nullptr);
 }
 
 TEST_F(TransportSecurityStateTest, WriteSizeDecodeSize) {

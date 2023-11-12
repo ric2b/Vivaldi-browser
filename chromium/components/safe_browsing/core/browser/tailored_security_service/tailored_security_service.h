@@ -19,14 +19,11 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/values.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
-
-namespace base {
-class Value;
-}
 
 namespace signin {
 class IdentityManager;
@@ -111,6 +108,9 @@ class TailoredSecurityService : public KeyedService {
   void Shutdown() override;
 
  protected:
+  // Callback when the `kAccountTailoredSecurityUpdateTimestamp` is updated
+  virtual void TailoredSecurityTimestampUpdateCallback();
+
   // This function is pulled out for testing purposes. Caller takes ownership of
   // the new Request.
   virtual std::unique_ptr<Request> CreateRequest(
@@ -122,7 +122,7 @@ class TailoredSecurityService : public KeyedService {
   size_t GetNumberOfPendingTailoredSecurityServiceRequests();
 
   // Extracts a JSON-encoded HTTP response into a dictionary.
-  static base::Value ReadResponse(Request* request);
+  static base::Value::Dict ReadResponse(Request* request);
 
   // Unpacks the response and calls `callback`. Called by a `Request` when a
   // tailored security service query sequence has completed. When `success` is
@@ -155,9 +155,6 @@ class TailoredSecurityService : public KeyedService {
   GetURLLoaderFactory() = 0;
 
  private:
-  // Callback when the `kAccountTailoredSecurityUpdateTimestamp` is updated
-  void TailoredSecurityTimestampUpdateCallback();
-
   // Stores pointer to IdentityManager instance. It must outlive the
   // TailoredSecurityService and can be null during tests.
   raw_ptr<signin::IdentityManager> identity_manager_;

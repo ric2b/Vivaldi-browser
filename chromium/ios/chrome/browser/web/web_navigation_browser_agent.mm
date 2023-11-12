@@ -9,8 +9,8 @@
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/lens/lens_browser_agent.h"
 #import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/lens_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/web/web_navigation_ntp_delegate.h"
 #import "ios/chrome/browser/web/web_navigation_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -149,11 +149,11 @@ web::UserAgentType WebNavigationBrowserAgent::UserAgentType(
   if (!web_state) {
     return web::UserAgentType::NONE;
   }
-  web::NavigationItem* visibleItem =
+  web::NavigationItem* visible_item =
       web_state->GetNavigationManager()->GetVisibleItem();
-  if (!visibleItem) {
+  if (!visible_item) {
     return web::UserAgentType::NONE;
   }
 
-  return visibleItem->GetUserAgentType();
+  return visible_item->GetUserAgentType();
 }

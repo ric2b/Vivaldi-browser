@@ -121,8 +121,8 @@ def main():
 
     # mc.exe invocation and post-processing are complete, now compare the output
     # in tmp_dir to the checked-in outputs.
-    # diff = filecmp.dircmp(tmp_dir, source)
-    if False: #diff.diff_files or set(diff.left_list) != set(diff.right_list):
+    diff = filecmp.dircmp(tmp_dir, source)
+    if diff.diff_files or set(diff.left_list) != set(diff.right_list):
       print('mc.exe output different from files in %s, see %s' % (source,
                                                                   tmp_dir))
       diff.report()

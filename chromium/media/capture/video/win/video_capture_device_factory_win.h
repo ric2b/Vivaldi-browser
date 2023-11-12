@@ -15,6 +15,8 @@
 #include <windows.devices.enumeration.h>
 #include <wrl.h>
 
+#include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "media/base/win/dxgi_device_manager.h"
@@ -38,6 +40,7 @@ enum class MFSourceOutcome {
 class CAPTURE_EXPORT VideoCaptureDeviceFactoryWin
     : public VideoCaptureDeviceFactory {
  public:
+  class ComThreadData;
   static bool PlatformSupportsMediaFoundation();
 
   VideoCaptureDeviceFactoryWin();
@@ -73,9 +76,11 @@ class CAPTURE_EXPORT VideoCaptureDeviceFactoryWin
   virtual MFSourceOutcome CreateDeviceSourceMediaFoundation(
       const std::string& device_id,
       VideoCaptureApi capture_api,
+      const bool banned_for_d3d11,
       IMFMediaSource** source_out);
   virtual MFSourceOutcome CreateDeviceSourceMediaFoundation(
       Microsoft::WRL::ComPtr<IMFAttributes> attributes,
+      const bool banned_for_d3d11,
       IMFMediaSource** source);
   virtual bool EnumerateDeviceSourcesMediaFoundation(
       Microsoft::WRL::ComPtr<IMFAttributes> attributes,
@@ -86,6 +91,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceFactoryWin
       const std::string& display_name);
   virtual VideoCaptureFormats GetSupportedFormatsMediaFoundation(
       Microsoft::WRL::ComPtr<IMFMediaSource> source,
+      const bool banned_for_d3d11,
       const std::string& display_name);
 
   bool use_d3d11_with_media_foundation_for_testing() {
@@ -95,12 +101,6 @@ class CAPTURE_EXPORT VideoCaptureDeviceFactoryWin
   void OnGpuInfoUpdate(const CHROME_LUID& luid) override;
 
  private:
-  void EnumerateDevicesUWP(std::vector<VideoCaptureDeviceInfo> devices_info,
-                           GetDevicesInfoCallback result_callback);
-  void FoundAllDevicesUWP(
-      std::vector<VideoCaptureDeviceInfo> devices_info,
-      GetDevicesInfoCallback result_callback,
-      IAsyncOperation<DeviceInformationCollection*>* operation);
   void DeviceInfoReady(std::vector<VideoCaptureDeviceInfo> devices_info,
                        GetDevicesInfoCallback result_callback);
   std::vector<VideoCaptureDeviceInfo> GetDevicesInfoMediaFoundation();
@@ -119,8 +119,7 @@ class CAPTURE_EXPORT VideoCaptureDeviceFactoryWin
 
   // For calling WinRT methods on a COM initiated thread.
   base::Thread com_thread_;
-  scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner_;
-  std::unordered_set<IAsyncOperation<DeviceInformationCollection*>*> async_ops_;
+  scoped_refptr<ComThreadData> com_thread_data_;
   // For hardware acceleration in MediaFoundation capture engine
   scoped_refptr<DXGIDeviceManager> dxgi_device_manager_;
   base::WeakPtrFactory<VideoCaptureDeviceFactoryWin> weak_ptr_factory_{this};

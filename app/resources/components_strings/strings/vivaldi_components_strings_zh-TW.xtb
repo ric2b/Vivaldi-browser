@@ -65,7 +65,7 @@
 <translation id="3447661539832366887">這個裝置的擁有者已關閉恐龍遊戲。</translation>
 <translation id="3447884698081792621">顯示憑證 (核發者：<ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">隱藏詳細資料</translation>
-<translation id="3484560055331845446">您可能失去 Google 帳戶存取權，Chrome 建議立即更改密碼，系統會請求登入帳戶。</translation>
+<translation id="3484560055331845446">您可能會失去您的 Google 帳號存取權。Vivaldi 建議您立即更改密碼。您將會被要求重新登入帳號。</translation>
 <translation id="3566021033012934673">你的連線不是私人連線</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" />，<ph name="STATE" />，<ph name="CITY" /></translation>
 <translation id="3586931643579894722">隱藏詳細資訊</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 個 Cookie 正在使用)}other{(# 個 Cookie 正在使用)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />檢查代理地址<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 位元)</translation>
-<translation id="5287240709317226393">顯示 Cookie</translation>
 <translation id="5355557959165512791">目前無法造訪 <ph name="SITE" />，因為這個網站的憑證已遭撤銷。網路錯誤和攻擊行為通常是暫時性的，因此這個網頁可能稍後就會恢復正常狀態。</translation>
 <translation id="5386426401304769735">這個網站的憑證鏈結包含使用 SHA-1 進行簽署的憑證。</translation>
 <translation id="5452270690849572955">找不到網頁「<ph name="HOST_NAME" />」</translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">密碼</translation>
 <translation id="6711464428925977395">代理伺服器發生錯誤，或是網址不正確。</translation>
 <translation id="6757797048963528358">您的裝置已休眠。</translation>
+<translation id="6890956352250146925">Cookies 和網站資料的選項</translation>
 <translation id="6897140037006041989">使用者代理</translation>
 <translation id="7053983685419859001">封鎖</translation>
 <translation id="7079718277001814089">這個網站含有惡意軟體</translation>

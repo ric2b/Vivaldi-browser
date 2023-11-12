@@ -1694,11 +1694,12 @@ std::wstring ComputeUserChoiceHash(const std::wstring& extension,
       base::span<uint8_t>(reinterpret_cast<uint8_t*>(input), sizeof(input))));
 }
 
-bool IsUserChoiceHashValid(const base::win::RegKey& user_choice_reg_key,
-                           const std::wstring& extension,
-                           const std::wstring& sid,
-                           const std::wstring& prog_id,
-                           const std::wstring& salt) {
+bool IsUserChoiceHashValid(
+    const base::win::ExportDerivedRegKey& user_choice_reg_key,
+    const std::wstring& extension,
+    const std::wstring& sid,
+    const std::wstring& prog_id,
+    const std::wstring& salt) {
   // Manually validate the hash instead of using
   // IApplicationAssociationRegistration because
   // IApplicationAssociationRegistration may trigger a UI notification and reset
@@ -1722,7 +1723,7 @@ bool IsUserChoiceHashValid(const base::win::RegKey& user_choice_reg_key,
   return current_hash == expected_hash;
 }
 
-bool WriteUserChoiceValues(base::win::RegKey& user_choice_reg_key,
+bool WriteUserChoiceValues(base::win::ExportDerivedRegKey& user_choice_reg_key,
                            const std::wstring& extension,
                            const std::wstring& sid,
                            const std::wstring& prog_id,
@@ -2040,8 +2041,12 @@ bool ShellUtil::CreateOrUpdateShortcut(ShortcutLocation location,
     return false;
   }
 
+  // NOTE(andre@vivaldi.com) : Do not try to pin the shortcut if it is already
+  // pinned. VB-97113
+  absl::optional<bool> override_pinning = IsShortcutPinnedToTaskbar(shortcut_path);
   if (shortcut_operation == base::win::ShortcutOperation::kCreateAlways &&
-      properties.pin_to_taskbar && CanPinShortcutToTaskbar()) {
+        properties.pin_to_taskbar && CanPinShortcutToTaskbar() &&
+        !(override_pinning == true)) {
     bool pin_succeeded = PinShortcutToTaskbar(shortcut_path);
     LOG_IF(ERROR, !pin_succeeded)
         << "Failed to pin to taskbar " << shortcut_path.value();
@@ -2351,7 +2356,7 @@ bool ShellUtil::MakeChromeDefaultDirectly(int shell_change,
     return false;
   }
 
-  base::win::RegKey url_associations_key(
+  base::win::ExportDerivedRegKey url_associations_key(
       HKEY_CURRENT_USER,
       L"SOFTWARE\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations",
       KEY_READ | KEY_WRITE);
@@ -2360,8 +2365,9 @@ bool ShellUtil::MakeChromeDefaultDirectly(int shell_change,
         base::StrCat({kBrowserProtocolAssociations[i], L"\\UserChoice"}));
     // Deleting the key works around the deny set value ACL on UserChoice.
     url_associations_key.DeleteKey(subkey_path.c_str());
-    base::win::RegKey key(url_associations_key.Handle(), subkey_path.c_str(),
-                          KEY_READ | KEY_WRITE);
+    base::win::ExportDerivedRegKey key(url_associations_key.Handle(),
+                                       subkey_path.c_str(),
+                                       KEY_READ | KEY_WRITE);
     if (!WriteUserChoiceValues(key, kBrowserProtocolAssociations[i], sid,
                                prog_id, shell_salt)) {
       ReportDirectSettingResult(DirectSettingAttemptResult::kFailedRegistrySet);
@@ -2369,7 +2375,7 @@ bool ShellUtil::MakeChromeDefaultDirectly(int shell_change,
     }
   }
 
-  base::win::RegKey file_extensions_key(
+  base::win::ExportDerivedRegKey file_extensions_key(
       HKEY_CURRENT_USER,
       L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts",
       KEY_READ | KEY_WRITE);
@@ -2378,8 +2384,9 @@ bool ShellUtil::MakeChromeDefaultDirectly(int shell_change,
         base::StrCat({kDefaultFileAssociations[i], L"\\UserChoice"}));
     // Deleting the key works around the deny set value ACL on UserChoice.
     file_extensions_key.DeleteKey(subkey_path.c_str());
-    base::win::RegKey key(file_extensions_key.Handle(), subkey_path.c_str(),
-                          KEY_READ | KEY_WRITE);
+    base::win::ExportDerivedRegKey key(file_extensions_key.Handle(),
+                                       subkey_path.c_str(),
+                                       KEY_READ | KEY_WRITE);
     if (!WriteUserChoiceValues(key, kDefaultFileAssociations[i], sid, prog_id,
                                shell_salt)) {
       ReportDirectSettingResult(DirectSettingAttemptResult::kFailedRegistrySet);

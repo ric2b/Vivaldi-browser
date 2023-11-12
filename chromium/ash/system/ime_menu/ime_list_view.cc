@@ -19,6 +19,7 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/rounded_container.h"
+#include "ash/style/switch.h"
 #include "ash/system/tray/actionable_view.h"
 #include "ash/system/tray/system_menu_button.h"
 #include "ash/system/tray/tray_detailed_view.h"
@@ -26,6 +27,7 @@
 #include "ash/system/tray/tray_toggle_button.h"
 #include "ash/system/tray/tri_view.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -142,7 +144,7 @@ class ImeListItemView : public ActionableView {
   }
 
  private:
-  ImeListView* ime_list_view_;
+  raw_ptr<ImeListView, ExperimentalAsh> ime_list_view_;
   bool selected_;
 };
 
@@ -165,6 +167,7 @@ class KeyboardStatusRow : public views::View {
   ~KeyboardStatusRow() override = default;
 
   views::ToggleButton* toggle() const { return toggle_; }
+  Switch* qs_toggle() const { return qs_toggle_; }
 
   void Init(views::Button::PressedCallback callback) {
     const bool is_qs_revamp = features::IsQsRevampEnabled();
@@ -196,16 +199,29 @@ class KeyboardStatusRow : public views::View {
     tri_view->AddView(TriView::Container::CENTER, label);
 
     // The on-screen keyboard toggle button.
-    toggle_ = new TrayToggleButton(
-        std::move(callback), IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD,
-        /*use_empty_border=*/is_qs_revamp);
-    toggle_->SetIsOn(keyboard::IsKeyboardEnabled());
-    tri_view->AddView(TriView::Container::END, toggle_);
+    if (!is_qs_revamp) {
+      toggle_ = new TrayToggleButton(
+          std::move(callback),
+          IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD,
+          /*use_empty_border=*/is_qs_revamp);
+      toggle_->SetIsOn(keyboard::IsKeyboardEnabled());
+      tri_view->AddView(TriView::Container::END, toggle_);
+    } else {
+      auto qs_toggle = std::make_unique<Switch>(std::move(callback));
+      qs_toggle->SetAccessibleName(l10n_util::GetStringUTF16(
+          IDS_ASH_STATUS_TRAY_ACCESSIBILITY_VIRTUAL_KEYBOARD));
+      qs_toggle->SetIsOn(keyboard::IsKeyboardEnabled());
+      qs_toggle_ = qs_toggle.release();
+      tri_view->AddView(TriView::Container::END, qs_toggle_);
+    }
   }
 
  private:
-  // ToggleButton to toggle keyboard on or off.
-  views::ToggleButton* toggle_ = nullptr;
+  // `ToggleButton` to toggle keyboard on or off.
+  raw_ptr<views::ToggleButton, ExperimentalAsh> toggle_ = nullptr;
+
+  // For QsRevamp: `KnobSwitch` to toggle keyboard on or off.
+  raw_ptr<Switch, ExperimentalAsh> qs_toggle_ = nullptr;
 };
 
 BEGIN_METADATA(KeyboardStatusRow, views::View)
@@ -325,7 +341,7 @@ void ImeListView::PrependKeyboardStatusRow() {
   keyboard_status_row_ = new KeyboardStatusRow;
   keyboard_status_row_->Init(base::BindRepeating(
       &ImeListView::KeyboardStatusTogglePressed, base::Unretained(this)));
-  container_->AddChildViewAt(keyboard_status_row_, 0);
+  container_->AddChildViewAt(keyboard_status_row_.get(), 0);
 }
 
 void ImeListView::KeyboardStatusTogglePressed() {
@@ -405,6 +421,9 @@ ImeListViewTestApi::~ImeListViewTestApi() = default;
 views::View* ImeListViewTestApi::GetToggleView() const {
   if (!ime_list_view_->keyboard_status_row_)
     return nullptr;
+  if (features::IsQsRevampEnabled()) {
+    return ime_list_view_->keyboard_status_row_->qs_toggle();
+  }
   return ime_list_view_->keyboard_status_row_->toggle();
 }
 

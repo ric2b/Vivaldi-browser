@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 i bruk)} other {(# i bruk)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Sjekk proxy-adressen<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-biters)</translation>
-<translation id="5287240709317226393">Vis infokapsler</translation>
 <translation id="5355557959165512791">Du kan ikke besøke <ph name="SITE" /> akkurat nå, fordi sertifikatet har blitt tilbakekalt. Nettverksfeil og -angrep er ofte midlertidige, så denne siden vil trolig virke igjen senere.</translation>
 <translation id="5386426401304769735">Sertifikatkjeden for dette nettstedet inneholder et sertifikat signert med SHA-1.</translation>
 <translation id="5452270690849572955">Denne <ph name="HOST_NAME" />-siden ble ikke funnet</translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Passord</translation>
 <translation id="6711464428925977395">Enter er det noe galt med mellomtjeneren, eller så er adressen feil.</translation>
 <translation id="6757797048963528358">Enheten din gikk inn i hvilemodus.</translation>
+<translation id="6890956352250146925">Alternativer for informasjonskapsler og nettstedsdata</translation>
 <translation id="6897140037006041989">Brukeragent</translation>
 <translation id="7053983685419859001">Blokker</translation>
 <translation id="7079718277001814089">Denne siden inneholder ondsinnet programvare</translation>

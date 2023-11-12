@@ -23,12 +23,13 @@
 #include "components/history/core/browser/url_database.h"
 #include "components/omnibox/browser/url_index_private_data.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/optimization_guide/machine_learning_tflite_buildflags.h"
 #include "components/search/search.h"
 #include "components/variations/active_field_trials.h"
 #include "components/variations/hashing.h"
 #include "components/variations/variations_associated_data.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
-#include "ui/base/pointer/touch_ui_controller.h"
+#include "ui/base/ui_base_features.h"
 
 using metrics::OmniboxEventProto;
 
@@ -201,7 +202,7 @@ size_t HUPScoringParams::EstimateMemoryUsage() const {
 }
 
 int OmniboxFieldTrial::GetDisabledProviderTypes() {
-  const std::string& types_string = variations::GetVariationParamValue(
+  const std::string& types_string = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName, kDisableProvidersRule);
   int types = 0;
   if (types_string.empty() || !base::StringToInt(types_string, &types)) {
@@ -358,8 +359,7 @@ void OmniboxFieldTrial::GetDefaultHUPScoringParams(
 void OmniboxFieldTrial::GetExperimentalHUPScoringParams(
     HUPScoringParams* scoring_params) {
   VariationParams params;
-  if (!variations::GetVariationParams(kBundledExperimentFieldTrialName,
-                                      &params)) {
+  if (!base::GetFieldTrialParams(kBundledExperimentFieldTrialName, &params)) {
     return;
   }
 
@@ -376,7 +376,7 @@ void OmniboxFieldTrial::GetExperimentalHUPScoringParams(
 }
 
 float OmniboxFieldTrial::HQPBookmarkValue() {
-  std::string bookmark_value_str = variations::GetVariationParamValue(
+  std::string bookmark_value_str = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName, kHQPBookmarkValueRule);
   if (bookmark_value_str.empty()) {
     return 10;
@@ -390,24 +390,23 @@ float OmniboxFieldTrial::HQPBookmarkValue() {
 }
 
 bool OmniboxFieldTrial::HQPAllowMatchInTLDValue() {
-  return variations::GetVariationParamValue(kBundledExperimentFieldTrialName,
-                                            kHQPAllowMatchInTLDRule) == "true";
+  return base::GetFieldTrialParamValue(kBundledExperimentFieldTrialName,
+                                       kHQPAllowMatchInTLDRule) == "true";
 }
 
 bool OmniboxFieldTrial::HQPAllowMatchInSchemeValue() {
-  return variations::GetVariationParamValue(kBundledExperimentFieldTrialName,
-                                            kHQPAllowMatchInSchemeRule) ==
-         "true";
+  return base::GetFieldTrialParamValue(kBundledExperimentFieldTrialName,
+                                       kHQPAllowMatchInSchemeRule) == "true";
 }
 
 void OmniboxFieldTrial::GetSuggestPollingStrategy(bool* from_last_keystroke,
                                                   int* polling_delay_ms) {
   *from_last_keystroke =
-      variations::GetVariationParamValue(
+      base::GetFieldTrialParamValue(
           kBundledExperimentFieldTrialName,
           kMeasureSuggestPollingDelayFromLastKeystrokeRule) == "true";
 
-  const std::string& polling_delay_string = variations::GetVariationParamValue(
+  const std::string& polling_delay_string = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName, kSuggestPollingDelayMsRule);
   if (polling_delay_string.empty() ||
       !base::StringToInt(polling_delay_string, polling_delay_ms) ||
@@ -417,12 +416,12 @@ void OmniboxFieldTrial::GetSuggestPollingStrategy(bool* from_last_keystroke,
 }
 
 std::string OmniboxFieldTrial::HQPExperimentalScoringBuckets() {
-  return variations::GetVariationParamValue(
-      kBundledExperimentFieldTrialName, kHQPExperimentalScoringBucketsParam);
+  return base::GetFieldTrialParamValue(kBundledExperimentFieldTrialName,
+                                       kHQPExperimentalScoringBucketsParam);
 }
 
 float OmniboxFieldTrial::HQPExperimentalTopicalityThreshold() {
-  std::string topicality_threshold_str = variations::GetVariationParamValue(
+  std::string topicality_threshold_str = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName,
       kHQPExperimentalScoringTopicalityThresholdParam);
 
@@ -449,7 +448,7 @@ int OmniboxFieldTrial::MaxNumHQPUrlsIndexedAtStartup() {
   constexpr int kDefaultOnNonLowEndDevices = 20000;
 #endif
 
-  if (base::SysInfo::IsLowEndDevice()) {
+  if (base::SysInfo::IsLowEndDeviceOrPartialLowEndModeEnabled()) {
     return kDefaultOnLowEndDevices;
   } else {
     return kDefaultOnNonLowEndDevices;
@@ -457,7 +456,7 @@ int OmniboxFieldTrial::MaxNumHQPUrlsIndexedAtStartup() {
 }
 
 size_t OmniboxFieldTrial::HQPMaxVisitsToScore() {
-  std::string max_visits_str = variations::GetVariationParamValue(
+  std::string max_visits_str = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName, kHQPMaxVisitsToScoreRule);
   constexpr size_t kDefaultMaxVisitsToScore = 10;
   static_assert(
@@ -475,7 +474,7 @@ size_t OmniboxFieldTrial::HQPMaxVisitsToScore() {
 }
 
 float OmniboxFieldTrial::HQPTypedValue() {
-  std::string typed_value_str = variations::GetVariationParamValue(
+  std::string typed_value_str = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName, kHQPTypedValueRule);
   if (typed_value_str.empty()) {
     return 1.5;
@@ -489,7 +488,7 @@ float OmniboxFieldTrial::HQPTypedValue() {
 }
 
 OmniboxFieldTrial::NumMatchesScores OmniboxFieldTrial::HQPNumMatchesScores() {
-  std::string str = variations::GetVariationParamValue(
+  std::string str = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName, kHQPNumMatchesScoresRule);
   static constexpr char kDefaultNumMatchesScores[] = "1:3,2:2.5,3:2,4:1.5";
   if (str.empty()) {
@@ -520,8 +519,8 @@ size_t OmniboxFieldTrial::HQPNumTitleWordsToAllow() {
   // size_t) containing the number of words.
   size_t num_title_words;
   if (!base::StringToSizeT(
-          variations::GetVariationParamValue(kBundledExperimentFieldTrialName,
-                                             kHQPNumTitleWordsRule),
+          base::GetFieldTrialParamValue(kBundledExperimentFieldTrialName,
+                                        kHQPNumTitleWordsRule),
           &num_title_words)) {
     return 20;
   }
@@ -529,19 +528,18 @@ size_t OmniboxFieldTrial::HQPNumTitleWordsToAllow() {
 }
 
 bool OmniboxFieldTrial::HQPAlsoDoHUPLikeScoring() {
-  return variations::GetVariationParamValue(kBundledExperimentFieldTrialName,
-                                            kHQPAlsoDoHUPLikeScoringRule) ==
-         "true";
+  return base::GetFieldTrialParamValue(kBundledExperimentFieldTrialName,
+                                       kHQPAlsoDoHUPLikeScoringRule) == "true";
 }
 
 bool OmniboxFieldTrial::HUPSearchDatabase() {
-  const std::string& value = variations::GetVariationParamValue(
+  const std::string& value = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName, kHUPSearchDatabaseRule);
   return value.empty() || (value == "true");
 }
 
 int OmniboxFieldTrial::KeywordScoreForSufficientlyCompleteMatch() {
-  std::string value_str = variations::GetVariationParamValue(
+  std::string value_str = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName,
       kKeywordScoreForSufficientlyCompleteMatchRule);
   if (value_str.empty()) {
@@ -580,7 +578,7 @@ const base::FeatureParam<int>
     OmniboxFieldTrial::kFuzzyUrlSuggestionsMinInputLength(
         &omnibox::kOmniboxFuzzyUrlSuggestions,
         "FuzzyUrlSuggestionsMinInputLength",
-        2);
+        3);
 
 // Note about this default, which produces good results for most inputs:
 // Using 10% reasonably took a 1334 relevance match down to 1200,
@@ -608,27 +606,6 @@ const base::FeatureParam<int>
         &omnibox::kOmniboxFuzzyUrlSuggestions,
         "FuzzyUrlSuggestionsPenaltyTaperLength",
         0);
-
-bool OmniboxFieldTrial::IsDefaultBrowserPedalEnabled() {
-  return base::FeatureList::IsEnabled(omnibox::kOmniboxDefaultBrowserPedal);
-}
-
-const base::FeatureParam<bool> OmniboxFieldTrial::kDefaultBrowserPedalImmediate(
-    &omnibox::kOmniboxDefaultBrowserPedal,
-    "DefaultBrowserPedalImmediate",
-    false);
-
-const base::FeatureParam<bool>
-    OmniboxFieldTrial::kDefaultBrowserPedalInteractive(
-        &omnibox::kOmniboxDefaultBrowserPedal,
-        "DefaultBrowserPedalInteractive",
-        true);
-
-const base::FeatureParam<bool>
-    OmniboxFieldTrial::kDefaultBrowserPedalUnattended(
-        &omnibox::kOmniboxDefaultBrowserPedal,
-        "DefaultBrowserPedalUnattended",
-        true);
 
 bool OmniboxFieldTrial::IsExperimentalKeywordModeEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kExperimentalKeywordMode);
@@ -710,6 +687,46 @@ const base::FeatureParam<int> OmniboxFieldTrial::kRichSuggestionVerticalMargin(
     &omnibox::kUniformRowHeight,
     "OmniboxRichSuggestionVerticalMargin",
     4);
+
+bool OmniboxFieldTrial::IsChromeRefreshIconsEnabled() {
+  return features::GetChromeRefresh2023Level() ==
+             features::ChromeRefresh2023Level::kLevel2 ||
+         base::FeatureList::IsEnabled(omnibox::kOmniboxCR23SteadyStateIcons);
+}
+
+bool OmniboxFieldTrial::IsGM3TextStyleEnabled() {
+  return features::GetChromeRefresh2023Level() ==
+             features::ChromeRefresh2023Level::kLevel2 ||
+         base::FeatureList::IsEnabled(omnibox::kOmniboxSteadyStateTextStyle);
+}
+
+// In order to control the value of this "font size" param via Finch, the
+// `kOmniboxSteadyStateTextStyle` feature flag must be enabled.
+//
+// Enabling `ChromeRefresh2023` Level 2 while leaving the
+// `kOmniboxSteadyStateTextStyle` flag disabled, will result in the param being
+// locked to its default value and ignoring any overrides provided via Finch.
+//
+// If neither `ChromeRefresh2023` Level 2 nor `kOmniboxSteadyStateTextStyle` are
+// enabled, then this "font size" param will have zero effect on Chrome UI.
+const base::FeatureParam<int> OmniboxFieldTrial::kFontSizeTouchUI(
+    &omnibox::kOmniboxSteadyStateTextStyle,
+    "OmniboxFontSizeTouchUI",
+    15);
+
+// In order to control the value of this "font size" param via Finch, the
+// `kOmniboxSteadyStateTextStyle` feature flag must be enabled.
+//
+// Enabling `ChromeRefresh2023` Level 2 while leaving the
+// `kOmniboxSteadyStateTextStyle` flag disabled, will result in the param being
+// locked to its default value and ignoring any overrides provided via Finch.
+//
+// If neither `ChromeRefresh2023` Level 2 nor `kOmniboxSteadyStateTextStyle` are
+// enabled, then this "font size" param will have zero effect on Chrome UI.
+const base::FeatureParam<int> OmniboxFieldTrial::kFontSizeNonTouchUI(
+    &omnibox::kOmniboxSteadyStateTextStyle,
+    "OmniboxFontSizeNonTouchUI",
+    12);
 
 const char OmniboxFieldTrial::kBundledExperimentFieldTrialName[] =
     "OmniboxBundledExperimentV1";
@@ -911,13 +928,6 @@ const base::FeatureParam<int>
         "ShortBookmarkSuggestionsByTotalInputLengthThreshold",
         3);
 
-// Bookmark paths.
-
-const base::FeatureParam<std::string> kBookmarkPathsCounterfactual(
-    &omnibox::kBookmarkPaths,
-    "OmniboxBookmarkPathsCounterfactual",
-    "");
-
 // Shortcut Expanding
 
 bool IsShortcutExpandingEnabled() {
@@ -1020,10 +1030,12 @@ const base::FeatureParam<int> kSiteSearchStarterPackRelevanceScore(
 
 // Rather than have a special default value of -1 to signify no limit, simply
 // set it to a large value that'll never be reached in practice.
+// TODO(manukh): Launched (set to 1) 3/2/23 m113. Clean up feature code 5/2 when
+//   m113 reaches stable.
 const base::FeatureParam<int> kDocumentProviderMaxLowQualitySuggestions(
     &omnibox::kDocumentProvider,
     "DocumentProviderMaxLowQualitySuggestions",
-    100);
+    1);
 
 const base::FeatureParam<bool> kDomainSuggestionsCounterfactual(
     &omnibox::kDomainSuggestions,
@@ -1078,14 +1090,56 @@ const base::FeatureParam<bool> kDomainSuggestionsAlternativeScoring(
 // ---------------------------------------------------------
 // ML Relevance Scoring ->
 
+// If true, enables scoring signal annotators for logging Omnibox scoring
+// signals to OmniboxEventProto.
+const base::FeatureParam<bool> kEnableScoringSignalsAnnotators(
+    &omnibox::kLogUrlScoringSignals,
+    "enable_scoring_signals_annotators",
+    false);
+
+// If true, runs the ML scoring model but does not assign new relevance scores
+// to the URL suggestions and does not rerank them.
+const base::FeatureParam<bool> kMlUrlScoringCounterfactual(
+    &omnibox::kMlUrlScoring,
+    "MlUrlScoringCounterfactual",
+    false);
+
+// If true, increases the number of candidates the URL autocomplete providers
+// pass to the controller beyond `provider_max_matches`.
+const base::FeatureParam<bool> kMlUrlScoringIncreaseNumCandidates(
+    &omnibox::kMlUrlScoring,
+    "MlUrlScoringIncreaseNumCandidates",
+    false);
+
+// If true, the ML model only re-scores and re-ranks the final set of matches
+// that would be shown in the legacy scoring system. The full legacy system
+// including the final call to `SortAndCull()` is completed before the ML model
+// is invoked.
+const base::FeatureParam<bool> kMlUrlscoringRerankFinalMatchesOnly(
+    &omnibox::kMlUrlScoring,
+    "MlUrlScoringRerankFinalMatchesOnly",
+    false);
+
+// If true, the would-be default match from the legacy system is determined
+// before ML scoring is invoked, and preserved even after re-scoring and
+// re-ranking with the new scores. This also means only the final set of matches
+// from the legacy system will be re-scored and re-ranked.
+const base::FeatureParam<bool> kMlUrlScoringPreserveDefault(
+    &omnibox::kMlUrlScoring,
+    "MlUrlScoringPreserveDefault",
+    false);
+
 MLConfig::MLConfig() {
   log_url_scoring_signals =
       base::FeatureList::IsEnabled(omnibox::kLogUrlScoringSignals);
-  enable_scoring_signals_annotators = base::GetFieldTrialParamByFeatureAsBool(
-      omnibox::kLogUrlScoringSignals, "enable_scoring_signals_annotators",
-      /*default_value=*/false);
-  ml_relevance_scoring =
-      base::FeatureList::IsEnabled(omnibox::kMlRelevanceScoring);
+  enable_scoring_signals_annotators = kEnableScoringSignalsAnnotators.Get();
+  ml_url_scoring = base::FeatureList::IsEnabled(omnibox::kMlUrlScoring);
+  ml_url_scoring_counterfactual = kMlUrlScoringCounterfactual.Get();
+  ml_url_scoring_increase_num_candidates =
+      kMlUrlScoringIncreaseNumCandidates.Get();
+  ml_url_scoring_preserve_default = kMlUrlScoringPreserveDefault.Get();
+  ml_url_scoring_rerank_final_matches_only =
+      kMlUrlscoringRerankFinalMatchesOnly.Get();
   url_scoring_model = base::FeatureList::IsEnabled(omnibox::kUrlScoringModel);
 }
 
@@ -1107,20 +1161,65 @@ const MLConfig& GetMLConfig() {
 bool IsLogUrlScoringSignalsEnabled() {
   return GetMLConfig().log_url_scoring_signals;
 }
-
 bool AreScoringSignalsAnnotatorsEnabled() {
   return GetMLConfig().enable_scoring_signals_annotators;
 }
-
-bool IsMlRelevanceScoringEnabled() {
-  return GetMLConfig().ml_relevance_scoring && IsUrlScoringModelEnabled();
+bool IsMlUrlScoringEnabled() {
+#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+  return IsUrlScoringModelEnabled() && GetMLConfig().ml_url_scoring;
+#else
+  return false;
+#endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 }
-
+bool IsMlUrlScoringCounterfactual() {
+  return IsMlUrlScoringEnabled() && GetMLConfig().ml_url_scoring_counterfactual;
+}
+bool IsMlUrlScoringIncreaseNumCandidatesEnabled() {
+  return IsMlUrlScoringEnabled() &&
+         GetMLConfig().ml_url_scoring_increase_num_candidates;
+}
 bool IsUrlScoringModelEnabled() {
   return GetMLConfig().url_scoring_model;
 }
 
 // <- ML Relevance Scoring
+// ---------------------------------------------------------
+// Two-column realbox ->
+
+const base::FeatureParam<int> kRealboxMaxPreviousSearchRelatedSuggestions(
+    &omnibox::kRealboxSecondaryZeroSuggest,
+    "RealboxMaxPreviousSearchRelatedSuggestions",
+    3);
+
+const base::FeatureParam<bool> kRealboxSecondaryZeroSuggestCounterfactual(
+    &omnibox::kRealboxSecondaryZeroSuggest,
+    "RealboxSecondaryZeroSuggestCounterfactual",
+    false);
+
+// <- Two-column realbox
+// ---------------------------------------------------------
+// Inspire Me ->
+
+const base::FeatureParam<int> kInspireMeAdditionalRelatedQueries(
+    &omnibox::kInspireMe,
+    "AdditionalRelatedQueries",
+    0);
+
+const base::FeatureParam<int> kInspireMeAdditionalTrendingQueries(
+    &omnibox::kInspireMe,
+    "AdditionalTrendingQueries",
+    0);
+
+// <- Inspire Me
+// ---------------------------------------------------------
+// Actions In Suggest ->
+// When set to true, permits Entity suggestion with associated Actions to be
+// promoted over the Escape Hatch.
+const base::FeatureParam<bool> kActionsInSuggestPromoteEntitySuggestion(
+    &omnibox::kActionsInSuggest,
+    "PromoteEntitySuggestion",
+    false);
+// <- Actions In Suggest
 // ---------------------------------------------------------
 
 }  // namespace OmniboxFieldTrial

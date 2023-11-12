@@ -42,6 +42,7 @@
 #include "extensions/tools/vivaldi_tools.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "ui/window_registry_service.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace extensions {
@@ -227,12 +228,13 @@ void VivaldiBrowserObserver::OnTabStripModelChanged(
   // Synthesize webcontents OnWebContentsLostFocus/OnWebContentsFocused
   if (selection.active_tab_changed()) {
     autofill::ChromeAutofillClient* old_fill_client =
-        selection.old_contents
-            ? autofill::ChromeAutofillClient::FromWebContents(
-                  selection.old_contents)
-            : nullptr;
+      selection.old_contents
+      ? static_cast<autofill::ChromeAutofillClient*>(
+        autofill::ChromeAutofillClient::FromWebContents(selection.old_contents))
+      : nullptr;
     autofill::ChromeAutofillClient* new_fill_client =
-        autofill::ChromeAutofillClient::FromWebContents(selection.new_contents);
+      static_cast<autofill::ChromeAutofillClient*>(
+        autofill::ChromeAutofillClient::FromWebContents(selection.new_contents));
 
     if (old_fill_client) {
       old_fill_client->OnWebContentsLostFocus(
@@ -278,8 +280,8 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   using vivaldi::window_private::Create::Params;
   namespace Results = vivaldi::window_private::Create::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   int min_width = 0;
   int min_height = 0;
@@ -287,6 +289,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   bool focused = true;
   std::string tab_url;
   std::string viv_ext_data;
+  std::string window_key;
 
   if (params->options.incognito.has_value()) {
     incognito = params->options.incognito.value();
@@ -299,6 +302,9 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   }
   if (params->options.viv_ext_data.has_value()) {
     viv_ext_data = params->options.viv_ext_data.value();
+  }
+  if (params->options.window_key.has_value()) {
+    window_key = params->options.window_key.value();
   }
   Profile* profile = Profile::FromBrowserContext(browser_context());
   if (incognito) {
@@ -352,9 +358,12 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   }
 
   window_params.minimum_size = gfx::Size(min_width, min_height);
-  window_params.state = ui::SHOW_STATE_DEFAULT;
+  window_params.state = params->options.state
+    ? vivaldi::ConvertToWindowShowState(params->options.state)
+    : ui::SHOW_STATE_DEFAULT;
   window_params.resource_relative_url = std::move(params->url);
   window_params.creator_frame = render_frame_host();
+  window_params.window_key = window_key;
 
   if (profile->IsGuestSession() && !incognito) {
     // Opening a new window from a guest session is only allowed for
@@ -364,7 +373,20 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
         Error("New guest window can only be opened from incognito window"));
   }
 
-  VivaldiBrowserWindow* window = new VivaldiBrowserWindow();
+  VivaldiBrowserWindow* window =
+      ::vivaldi::WindowRegistryService::Get(profile)->GetNamedWindow(
+          window_key);
+  if (window) {
+    window->Activate();
+    return RespondNow(ArgumentList(Results::Create(window->id())));
+  } else {
+    window = new VivaldiBrowserWindow();
+  }
+
+  if (!window_key.empty()) {
+    window->SetWindowKey(window_key);
+    ::vivaldi::WindowRegistryService::Get(profile)->AddWindow(window, window_key);
+  }
   // Delay sending the response until the newly created window has finished its
   // navigation or was closed during that process.
   window->SetDidFinishNavigationCallback(
@@ -372,9 +394,15 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
 
   Browser::Type window_type = Browser::TYPE_NORMAL;
   // Popup and settingswindow should open as popup and not stored in session.
-  if (params->type != vivaldi::window_private::WindowType::WINDOW_TYPE_NORMAL) {
+  if (params->type == vivaldi::window_private::WindowType::WINDOW_TYPE_POPUP ||
+      params->type ==
+          vivaldi::window_private::WindowType::WINDOW_TYPE_SETTINGS) {
     window_type = Browser::TYPE_POPUP;
+  } else if (params->type ==
+             vivaldi::window_private::WindowType::WINDOW_TYPE_DEVTOOLS) {
+    window_type = Browser::TYPE_DEVTOOLS;
   }
+
   Browser::CreateParams create_params(window_type, profile, false);
 
   create_params.initial_bounds = window_bounds;
@@ -427,8 +455,8 @@ ExtensionFunction::ResponseAction WindowPrivateGetCurrentIdFunction::Run() {
 ExtensionFunction::ResponseAction WindowPrivateSetStateFunction::Run() {
   using vivaldi::window_private::SetState::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   Browser* browser;
   std::string error;
@@ -499,8 +527,8 @@ ExtensionFunction::ResponseAction
 WindowPrivateUpdateMaximizeButtonPositionFunction::Run() {
   using vivaldi::window_private::UpdateMaximizeButtonPosition::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   Browser* browser;
   std::string error;
@@ -524,7 +552,7 @@ ExtensionFunction::ResponseAction
 WindowPrivateGetFocusedElementInfoFunction::Run() {
   using vivaldi::window_private::GetFocusedElementInfo::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
+  absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
@@ -569,7 +597,7 @@ ExtensionFunction::ResponseAction WindowPrivateIsOnScreenWithNotchFunction::Run(
   namespace Results = vivaldi::window_private::IsOnScreenWithNotch::Results;
   using vivaldi::window_private::IsOnScreenWithNotch::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
+  absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =

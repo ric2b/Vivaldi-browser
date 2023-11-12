@@ -8,8 +8,10 @@
 import argparse
 import sys
 
+import javac_output_processor
 from util import build_utils
 from util import server_utils
+import action_helpers  # build_utils adds //build to sys.path.
 
 
 def _AddSwitch(parser, val):
@@ -47,13 +49,15 @@ def main(argv):
                                   force=args.use_build_server):
     return
 
-  args.sdk_classpath_jars = build_utils.ParseGnList(args.sdk_classpath_jars)
-  args.direct_classpath_jars = build_utils.ParseGnList(
+  args.sdk_classpath_jars = action_helpers.parse_gn_list(
+      args.sdk_classpath_jars)
+  args.direct_classpath_jars = action_helpers.parse_gn_list(
       args.direct_classpath_jars)
-  args.full_classpath_jars = build_utils.ParseGnList(args.full_classpath_jars)
-  args.full_classpath_gn_targets = build_utils.ParseGnList(
+  args.full_classpath_jars = action_helpers.parse_gn_list(
+      args.full_classpath_jars)
+  args.full_classpath_gn_targets = action_helpers.parse_gn_list(
       args.full_classpath_gn_targets)
-  args.missing_classes_allowlist = build_utils.ParseGnList(
+  args.missing_classes_allowlist = action_helpers.parse_gn_list(
       args.missing_classes_allowlist)
 
   verbose = '--verbose' if args.verbose else '--not-verbose'
@@ -68,11 +72,20 @@ def main(argv):
   cmd += [str(len(args.full_classpath_jars))]
   cmd += args.full_classpath_jars
   cmd += [str(len(args.full_classpath_gn_targets))]
-  cmd += args.full_classpath_gn_targets
-  build_utils.CheckOutput(cmd,
-                          print_stdout=True,
-                          fail_func=None,
-                          fail_on_output=args.warnings_as_errors)
+  cmd += [
+      javac_output_processor.ReplaceGmsPackageIfNeeded(t)
+      for t in args.full_classpath_gn_targets
+  ]
+  try:
+    build_utils.CheckOutput(cmd,
+                            print_stdout=True,
+                            fail_func=None,
+                            fail_on_output=args.warnings_as_errors)
+  except build_utils.CalledProcessError as e:
+    # Do not output command line because it is massive and makes the actual
+    # error message hard to find.
+    sys.stderr.write(e.output)
+    sys.exit(1)
 
   if args.stamp:
     build_utils.Touch(args.stamp)

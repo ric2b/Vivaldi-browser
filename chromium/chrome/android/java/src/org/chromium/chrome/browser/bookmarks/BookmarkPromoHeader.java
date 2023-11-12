@@ -47,7 +47,7 @@ public class BookmarkPromoHeader implements SyncService.SyncStateChangedListener
     private static @Nullable @SyncPromoState Integer sPromoStateForTests;
 
     private final Context mContext;
-    private final SigninManager mSignInManager;
+    private final SigninManager mSigninManager;
     private final AccountManagerFacade mAccountManagerFacade;
     private final Runnable mPromoHeaderChangeAction;
 
@@ -55,21 +55,22 @@ public class BookmarkPromoHeader implements SyncService.SyncStateChangedListener
     private final @Nullable SyncPromoController mSyncPromoController;
     private @SyncPromoState int mPromoState = SyncPromoState.NO_PROMO;
     private final @Nullable SyncService mSyncService;
+    private final Profile mProfile;
 
     /**
      * Initializes the class. Note that this will start listening to signin related events and
      * update itself if needed.
      */
-    BookmarkPromoHeader(Context context, Runnable promoHeaderChangeAction) {
+    BookmarkPromoHeader(Context context, Profile profile, Runnable promoHeaderChangeAction) {
         mContext = context;
+        mProfile = profile;
         mPromoHeaderChangeAction = promoHeaderChangeAction;
 
         mSyncService = SyncService.get();
         if (mSyncService != null) mSyncService.addSyncStateChangedListener(this);
 
-        mSignInManager = IdentityServicesProvider.get().getSigninManager(
-                Profile.getLastUsedRegularProfile());
-        mSignInManager.addSignInStateObserver(this);
+        mSigninManager = IdentityServicesProvider.get().getSigninManager(mProfile);
+        mSigninManager.addSignInStateObserver(this);
 
         mAccountManagerFacade = AccountManagerFacadeProvider.getInstance();
 
@@ -97,7 +98,7 @@ public class BookmarkPromoHeader implements SyncService.SyncStateChangedListener
             mProfileDataCache.removeObserver(this);
         }
 
-        mSignInManager.removeSignInStateObserver(this);
+        mSigninManager.removeSignInStateObserver(this);
     }
 
     /**
@@ -146,7 +147,7 @@ public class BookmarkPromoHeader implements SyncService.SyncStateChangedListener
      * @return Whether the personalized signin promo should be shown to user.
      */
     private boolean shouldShowBookmarkSigninPromo() {
-        return mSignInManager.isSyncOptInAllowed()
+        return mSigninManager.isSyncOptInAllowed()
                 && SyncPromoController.canShowSyncPromo(SigninAccessPoint.BOOKMARK_MANAGER);
     }
 
@@ -161,12 +162,12 @@ public class BookmarkPromoHeader implements SyncService.SyncStateChangedListener
             return SyncPromoState.NO_PROMO;
         }
 
-        if (!mSignInManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SYNC)) {
+        if (!mSigninManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SYNC)) {
             if (!shouldShowBookmarkSigninPromo()) {
                 return SyncPromoState.NO_PROMO;
             }
 
-            return mSignInManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SIGNIN)
+            return mSigninManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SIGNIN)
                     ? SyncPromoState.PROMO_FOR_SIGNED_IN_STATE
                     : SyncPromoState.PROMO_FOR_SIGNED_OUT_STATE;
         }
@@ -175,8 +176,7 @@ public class BookmarkPromoHeader implements SyncService.SyncStateChangedListener
                 SharedPreferencesManager.getInstance().readInt(
                         ChromePreferenceKeys.SIGNIN_AND_SYNC_PROMO_SHOW_COUNT)
                 < MAX_SIGNIN_AND_SYNC_PROMO_SHOW_COUNT;
-        if ((!mSyncService.isSyncRequested() || mSyncService.getSelectedTypes().isEmpty())
-                && impressionLimitNotReached) {
+        if (mSyncService.getSelectedTypes().isEmpty() && impressionLimitNotReached) {
             return SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE;
         }
         return SyncPromoState.NO_PROMO;
@@ -246,7 +246,7 @@ public class BookmarkPromoHeader implements SyncService.SyncStateChangedListener
      * @param promoState The promo state to which the header will be set to.
      */
     @VisibleForTesting
-    public static void forcePromoStateForTests(@Nullable @SyncPromoState Integer promoState) {
+    public static void forcePromoStateForTesting(@Nullable @SyncPromoState Integer promoState) {
         sPromoStateForTests = promoState;
     }
 }

@@ -22,12 +22,12 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/parent_node.h"
+#include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/testing/page_test_base.h"
-#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
 
@@ -632,46 +632,7 @@ TEST_F(ContainerQueryEvaluatorTest, EvaluatorDisplayNone) {
   EXPECT_TRUE(inner->GetContainerQueryEvaluator());
 }
 
-TEST_F(ContainerQueryEvaluatorTest, LegacyPrinting) {
-  ScopedLayoutNGPrintingForTest legacy_print(false);
-
-  SetBodyInnerHTML(R"HTML(
-    <style>
-      #container {
-        container-type: size;
-        width: 100px;
-        height: 100px;
-      }
-      @container (width >= 0px) {
-        #inner { z-index: 1; }
-      }
-    </style>
-    <div id="container">
-      <div id="inner"></div>
-    </div>
-  )HTML");
-
-  Element* inner = GetDocument().getElementById("inner");
-  ASSERT_TRUE(inner);
-
-  EXPECT_EQ(inner->ComputedStyleRef().ZIndex(), 1);
-
-  constexpr gfx::SizeF initial_page_size(800, 600);
-
-  GetDocument().GetFrame()->StartPrinting(initial_page_size, initial_page_size);
-  GetDocument().View()->UpdateLifecyclePhasesForPrinting();
-
-  EXPECT_EQ(inner->ComputedStyleRef().ZIndex(), 0);
-
-  GetDocument().GetFrame()->EndPrinting();
-  UpdateAllLifecyclePhasesForTest();
-
-  EXPECT_EQ(inner->ComputedStyleRef().ZIndex(), 1);
-}
-
 TEST_F(ContainerQueryEvaluatorTest, Printing) {
-  ScopedLayoutNGPrintingForTest ng_printing_scope(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @page { size: 400px 400px; }
@@ -741,21 +702,74 @@ TEST_F(ContainerQueryEvaluatorTest, FindContainer) {
   Element* inner = ParentNode::firstElementChild(*inner_size);
 
   EXPECT_EQ(ContainerQueryEvaluator::FindContainer(
-                inner, ParseContainer("style(--foo: bar)")->Selector()),
+                inner, ParseContainer("style(--foo: bar)")->Selector(),
+                &GetDocument()),
             inner);
   EXPECT_EQ(
       ContainerQueryEvaluator::FindContainer(
           inner,
-          ParseContainer("(width > 100px) and style(--foo: bar)")->Selector()),
+          ParseContainer("(width > 100px) and style(--foo: bar)")->Selector(),
+          &GetDocument()),
       inner_size);
   EXPECT_EQ(ContainerQueryEvaluator::FindContainer(
-                inner, ParseContainer("outer style(--foo: bar)")->Selector()),
+                inner, ParseContainer("outer style(--foo: bar)")->Selector(),
+                &GetDocument()),
             outer);
-  EXPECT_EQ(
-      ContainerQueryEvaluator::FindContainer(
-          inner, ParseContainer("outer (width > 100px) and style(--foo: bar)")
-                     ->Selector()),
-      outer_size);
+  EXPECT_EQ(ContainerQueryEvaluator::FindContainer(
+                inner,
+                ParseContainer("outer (width > 100px) and style(--foo: bar)")
+                    ->Selector(),
+                &GetDocument()),
+            outer_size);
+}
+
+TEST_F(ContainerQueryEvaluatorTest, ScopedCaching) {
+  GetDocument()
+      .documentElement()
+      ->setInnerHTMLWithDeclarativeShadowDOMForTesting(R"HTML(
+    <div id="host" style="container-name: n1">
+      <template shadowroot=open>
+        <div style="container-name: n1">
+          <slot id="slot"></slot>
+        </div>
+      </template>
+      <div id="slotted"></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  ContainerSelectorCache cache;
+  StyleRecalcContext context;
+  MatchResult result;
+  ContainerQuery* query1 = ParseContainer("n1 style(--foo: bar)");
+  ContainerQuery* query2 = ParseContainer("n1 style(--foo: bar)");
+
+  ASSERT_TRUE(query1);
+  ASSERT_TRUE(query2);
+
+  //  Element* slotted = GetElementById("slotted");
+  Element* host = GetElementById("host");
+  ShadowRoot* shadow_root = host->GetShadowRoot();
+  Element* slot = shadow_root->getElementById("slot");
+
+  result.BeginAddingAuthorRulesForTreeScope(*shadow_root);
+
+  ContainerQueryEvaluator::EvalAndAdd(slot, context, *query1, cache, result);
+  EXPECT_EQ(cache.size(), 1u);
+  ContainerQueryEvaluator::EvalAndAdd(slot, context, *query1, cache, result);
+  EXPECT_EQ(cache.size(), 1u);
+  ContainerQueryEvaluator::EvalAndAdd(slot, context, *query2, cache, result);
+  EXPECT_EQ(cache.size(), 1u);
+  ContainerQueryEvaluator::EvalAndAdd(slot, context, *query2, cache, result);
+  EXPECT_EQ(cache.size(), 1u);
+
+  result.BeginAddingAuthorRulesForTreeScope(GetDocument());
+
+  ContainerQueryEvaluator::EvalAndAdd(host, context, *query1, cache, result);
+  EXPECT_EQ(cache.size(), 2u);
+  ContainerQueryEvaluator::EvalAndAdd(host, context, *query2, cache, result);
+  EXPECT_EQ(cache.size(), 2u);
 }
 
 }  // namespace blink

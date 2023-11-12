@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://os-settings/chromeos/lazy_load.js';
+
 import {MultiDeviceBrowserProxyImpl, MultiDeviceFeatureState} from 'chrome://os-settings/chromeos/os_settings.js';
 import {CellularSetupPageName} from 'chrome://resources/ash/common/cellular_setup/cellular_types.js';
 import {setESimManagerRemoteForTesting} from 'chrome://resources/ash/common/cellular_setup/mojo_interface_provider.js';
@@ -10,14 +12,13 @@ import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
 import {CrosNetworkConfigRemote, InhibitReason} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {DeviceStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {FakeNetworkConfig} from 'chrome://webui-test/chromeos/fake_network_config_mojom.js';
 import {FakeESimManagerRemote} from 'chrome://webui-test/cr_components/chromeos/cellular_setup/fake_esim_manager_remote.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
-import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-
-import {TestMultideviceBrowserProxy} from './test_multidevice_browser_proxy.js';
+import {TestMultideviceBrowserProxy} from './multidevice_page/test_multidevice_browser_proxy.js';
 
 suite('CellularNetworksList', function() {
   let cellularNetworkList;
@@ -181,33 +182,6 @@ suite('CellularNetworksList', function() {
             eSimCellularEvent.detail.pageName,
             CellularSetupPageName.ESIM_FLOW_UI);
       });
-
-  test('Show EID and QR code dialog', async () => {
-    eSimManagerRemote.addEuiccForTest(1);
-    init();
-    addESimSlot();
-    await flushAsync();
-    let eidDialog = cellularNetworkList.shadowRoot.querySelector('.eid-dialog');
-    assertFalse(!!eidDialog);
-
-    const tripleDot = cellularNetworkList.shadowRoot.querySelector('#moreESim');
-    assertTrue(!!tripleDot);
-    tripleDot.click();
-    await flushAsync();
-
-    const actionMenu =
-        cellularNetworkList.shadowRoot.querySelector('cr-action-menu');
-    assertTrue(!!actionMenu);
-    assertTrue(actionMenu.open);
-
-    const showEidBtn = actionMenu.querySelector('button');
-    assertTrue(!!showEidBtn);
-    showEidBtn.click();
-    await flushAsync();
-
-    eidDialog = cellularNetworkList.shadowRoot.querySelector('.eid-dialog');
-    assertTrue(!!eidDialog);
-  });
 
   test('Install pending eSIM profile', async () => {
     eSimManagerRemote.addEuiccForTest(1);
@@ -400,8 +374,7 @@ suite('CellularNetworksList', function() {
       });
 
   test(
-      'Hide download eSIM link when installing new profile or restrict ' +
-          'cellular network',
+      'Hide download eSIM link when installing / refreshing / restricted by policy',
       async () => {
         eSimManagerRemote.addEuiccForTest(0);
         init();
@@ -433,15 +406,19 @@ suite('CellularNetworksList', function() {
         assertFalse(esimLocalizedLink.hidden);
         assertTrue(noESimFoundMessage.hidden);
 
-        cellularNetworkList.cellularDeviceState = {
-          type: NetworkType.kCellular,
-          deviceState: DeviceStateType.kEnabled,
-          inhibitReason: InhibitReason.kInstallingProfile,
-        };
-        addESimSlot();
-        await flushAsync();
-        assertFalse(!!cellularNetworkList.shadowRoot.querySelector(
-            '#eSimNoNetworkFound'));
+        for (const inhibitReason
+                 of [InhibitReason.kInstallingProfile,
+                     InhibitReason.kRefreshingProfileList]) {
+          cellularNetworkList.cellularDeviceState = {
+            type: NetworkType.kCellular,
+            deviceState: DeviceStateType.kEnabled,
+            inhibitReason: inhibitReason,
+          };
+          addESimSlot();
+          await flushAsync();
+          assertFalse(!!cellularNetworkList.shadowRoot.querySelector(
+              '#eSimNoNetworkFound'));
+        }
       });
 
   test('Fire show cellular setup event on add cellular clicked', async () => {
@@ -540,7 +517,7 @@ suite('CellularNetworksList', function() {
     cellularNetworkList.cellularDeviceState = {
       type: NetworkType.kCellular,
       deviceState: DeviceStateType.kEnabled,
-      inhibitReason: InhibitReason.kRefreshingProfileList,
+      inhibitReason: InhibitReason.kResettingEuiccMemory,
     };
     addESimSlot();
     await flushAsync();

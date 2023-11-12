@@ -7,8 +7,6 @@ import("//testing/libfuzzer/fuzzer_test.gni")
 
 mojom("mojom") {
   sources = [
-    "eligibility_error.mojom",
-    "os_support.mojom",
     "registration_type.mojom",
     "source_registration_error.mojom",
     "trigger_registration_error.mojom",
@@ -16,8 +14,7 @@ mojom("mojom") {
   webui_module_path = "/"
   use_typescript_sources = true
 
-  # The 3 legacy JS bindings types are required by Blink and by the fuzzer
-  # targets below.
+  # Used by Blink, so requires legacy JS bindings.
   generate_legacy_js_bindings = true
   generate_java = true
 }
@@ -32,12 +29,9 @@ component("attribution_reporting") {
     "aggregatable_values.h",
     "aggregation_keys.cc",
     "aggregation_keys.h",
-    "bounded_list.h",
     "constants.h",
     "destination_set.cc",
     "destination_set.h",
-    "eligibility.cc",
-    "eligibility.h",
     "event_trigger_data.cc",
     "event_trigger_data.h",
     "filters.cc",
@@ -79,9 +73,7 @@ source_set("unit_tests") {
     "aggregatable_trigger_data_unittest.cc",
     "aggregatable_values_unittest.cc",
     "aggregation_keys_unittest.cc",
-    "bounded_list_unittest.cc",
     "destination_set_unittest.cc",
-    "eligibility_unittest.cc",
     "event_trigger_data_unittest.cc",
     "filters_unittest.cc",
     "os_registration_unittest.cc",
@@ -156,18 +148,6 @@ fuzzer_test("trigger_registration_fuzzer") {
       "//components/attribution_reporting/trigger_registration_fuzzer_corpus"
 }
 
-fuzzer_test("parse_eligible_header_fuzzer") {
-  sources = [ "parse_eligible_header_fuzzer.cc" ]
-  deps = [
-    ":attribution_reporting",
-    "//base",
-    "//base:i18n",
-  ]
-
-  seed_corpus =
-      "//components/attribution_reporting/parse_eligible_header_fuzzer_corpus/"
-}
-
 mojom("registration_mojom") {
   sources = [ "registration.mojom" ]
 
@@ -206,6 +186,8 @@ mojom("registration_mojom") {
           forward_declaration =
               "namespace attribution_reporting { class SuitableOrigin; }"
 
+          default_constructible = false
+
           # Avoid expensive copies by forcing Mojo methods to take the type by
           # value, not const ref
           move_only = true
@@ -228,15 +210,11 @@ mojom("registration_mojom") {
           forward_declaration =
               "namespace attribution_reporting { struct SourceRegistration; }"
 
+          default_constructible = false
+
           # Avoid expensive copies by forcing Mojo methods to take the type by
           # value, not const ref
           move_only = true
-        },
-        {
-          mojom = "attribution_reporting.mojom.Filters"
-          cpp = "::attribution_reporting::Filters"
-          forward_declaration =
-              "namespace attribution_reporting { class Filters; }"
         },
         {
           mojom = "attribution_reporting.mojom.FilterPair"
@@ -270,6 +248,13 @@ mojom("registration_mojom") {
           # Avoid expensive copies by forcing Mojo methods to take the type by
           # value, not const ref
           move_only = true
+        },
+        {
+          mojom = "attribution_reporting.mojom.DestinationSet"
+          cpp = "::attribution_reporting::DestinationSet"
+          default_constructible = false
+          forward_declaration =
+              "namespace attribution_reporting { class DestinationSet; }"
         },
       ]
       traits_headers = [ "registration_mojom_traits.h" ]
@@ -305,9 +290,4 @@ mojom("source_type_mojom") {
   sources = [ "source_type.mojom" ]
   webui_module_path = "/"
   use_typescript_sources = true
-
-  # Fuzzers use the 3 legacy JS bindings types. This mojom is a dependency of
-  # the attribution_reporting component, which is used by the fuzzer tests
-  # above.
-  generate_legacy_js_bindings = enable_mojom_fuzzer
 }

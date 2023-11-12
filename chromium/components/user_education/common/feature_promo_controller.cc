@@ -354,6 +354,8 @@ std::unique_ptr<HelpBubble> FeaturePromoControllerCommon::ShowPromoBubbleImpl(
                       .GetShortcutText())
             : l10n_util::GetStringUTF16(spec.screen_reader_string_id());
   }
+  create_params.close_button_alt_text =
+      l10n_util::GetStringUTF16(IDS_CLOSE_PROMO);
   create_params.body_icon = spec.bubble_icon();
   if (spec.bubble_body_string_id())
     create_params.body_icon_alt_text = GetBodyIconAltText();
@@ -379,9 +381,6 @@ std::unique_ptr<HelpBubble> FeaturePromoControllerCommon::ShowPromoBubbleImpl(
       CHECK(spec.feature());
       create_params.buttons =
           CreateTutorialButtons(*spec.feature(), spec.tutorial_id());
-      create_params.force_close_button = true;
-      create_params.close_button_alt_text =
-          l10n_util::GetStringUTF16(IDS_CLOSE_PROMO);
       create_params.dismiss_callback = base::BindOnce(
           &FeaturePromoControllerCommon::OnTutorialHelpBubbleDismissed,
           weak_ptr_factory_.GetWeakPtr(), base::Unretained(spec.feature()),
@@ -508,15 +507,17 @@ void FeaturePromoControllerCommon::OnTutorialStarted(
     DCHECK_EQ(current_iph_feature_, iph_feature);
     tutorial_promo_handle_ = CloseBubbleAndContinuePromo(*iph_feature);
     DCHECK(tutorial_promo_handle_.is_valid());
-    if (tutorial_service_->StartTutorial(
-            tutorial_id, GetAnchorContext(),
-            base::BindOnce(&FeaturePromoControllerCommon::OnTutorialComplete,
-                           weak_ptr_factory_.GetWeakPtr(),
-                           base::Unretained(iph_feature)),
-            base::BindOnce(&FeaturePromoControllerCommon::OnTutorialAborted,
-                           weak_ptr_factory_.GetWeakPtr(),
-                           base::Unretained(iph_feature))))
+    tutorial_service_->StartTutorial(
+        tutorial_id, GetAnchorContext(),
+        base::BindOnce(&FeaturePromoControllerCommon::OnTutorialComplete,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       base::Unretained(iph_feature)),
+        base::BindOnce(&FeaturePromoControllerCommon::OnTutorialAborted,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       base::Unretained(iph_feature)));
+    if (tutorial_service_->IsRunningTutorial()) {
       tutorial_service_->LogIPHLinkClicked(tutorial_id, true);
+    }
   }
 }
 

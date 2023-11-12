@@ -23,6 +23,7 @@
 #import "components/policy/core/browser/webui/machine_level_user_cloud_policy_status_provider.h"
 #import "components/policy/core/browser/webui/policy_webui_constants.h"
 #import "components/policy/core/common/cloud/machine_level_user_cloud_policy_manager.h"
+#import "components/policy/core/common/policy_logger.h"
 #import "components/policy/core/common/policy_map.h"
 #import "components/policy/core/common/policy_types.h"
 #import "components/policy/core/common/schema.h"
@@ -36,6 +37,7 @@
 #import "ios/chrome/browser/policy/browser_policy_connector_ios.h"
 #import "ios/chrome/browser/policy/browser_state_policy_connector.h"
 #import "ios/chrome/browser/policy/policy_conversions_client_ios.h"
+#import "ios/chrome/browser/shared/ui/util/pasteboard_util.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -143,11 +145,15 @@ void PolicyUIHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "uploadReport", base::BindRepeating(&PolicyUIHandler::HandleUploadReport,
                                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "getPolicyLogs",
+      base::BindRepeating(&PolicyUIHandler::HandleGetPolicyLogs,
+                          base::Unretained(this)));
 }
 
 void PolicyUIHandler::HandleCopyPoliciesJson(const base::Value::List& args) {
   NSString* jsonString = base::SysUTF8ToNSString(GetPoliciesAsJson());
-  [UIPasteboard generalPasteboard].string = jsonString;
+  StoreTextInPasteboard(jsonString);
 }
 
 void PolicyUIHandler::HandleUploadReport(const base::Value::List& args) {
@@ -164,6 +170,12 @@ void PolicyUIHandler::HandleUploadReport(const base::Value::List& args) {
   } else {
     OnReportUploaded(callback_id);
   }
+}
+
+void PolicyUIHandler::HandleGetPolicyLogs(const base::Value::List& args) {
+  DCHECK(policy::PolicyLogger::GetInstance()->IsPolicyLoggingEnabled());
+  web_ui()->ResolveJavascriptCallback(
+      args[0], policy::PolicyLogger::GetInstance()->GetAsList());
 }
 
 std::string PolicyUIHandler::GetPoliciesAsJson() {

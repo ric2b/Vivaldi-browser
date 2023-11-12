@@ -17,13 +17,13 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
-#include "base/trace_event/trace_event.h"
 #include "base/types/pass_key.h"
 #include "dns_reloader.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_interfaces.h"
 #include "net/base/sys_addrinfo.h"
 #include "net/base/trace_constants.h"
+#include "net/base/tracing.h"
 #include "net/dns/address_info.h"
 #include "net/dns/dns_names_util.h"
 
@@ -116,9 +116,10 @@ int ResolveOnWorkerThread(scoped_refptr<HostResolverProc> resolver_proc,
 }
 
 // Creates NetLog parameters when the resolve failed.
-base::Value NetLogHostResolverSystemTaskFailedParams(uint32_t attempt_number,
-                                                     int net_error,
-                                                     int os_error) {
+base::Value::Dict NetLogHostResolverSystemTaskFailedParams(
+    uint32_t attempt_number,
+    int net_error,
+    int os_error) {
   base::Value::Dict dict;
   if (attempt_number)
     dict.Set("attempt_number", base::saturated_cast<int>(attempt_number));
@@ -144,7 +145,7 @@ base::Value NetLogHostResolverSystemTaskFailedParams(uint32_t attempt_number,
 #endif
   }
 
-  return base::Value(std::move(dict));
+  return dict;
 }
 
 using SystemDnsResolverOverrideCallback =

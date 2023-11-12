@@ -6,7 +6,12 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece_forward.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_file_destination.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
+#include "chrome/browser/chromeos/policy/dlp/mock_dlp_rules_manager.h"
 #include "chrome/browser/extensions/api/file_system/file_entry_picker.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -25,6 +30,7 @@ namespace policy {
 namespace {
 
 constexpr char kExampleUrl[] = "https://example.com";
+constexpr char kExampleUrl1[] = "https://example1.com";
 
 // A listener that compares the list of files chosen with files expected.
 class TestFileSelectListener : public content::FileSelectListener {
@@ -65,7 +71,41 @@ class DlpFilesControllerBrowserTest : public InProcessBrowserTest {
     InProcessBrowserTest::SetUp();
   }
 
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+
+    DlpRulesManagerFactory::GetInstance()->SetTestingFactory(
+        browser()->profile(),
+        base::BindRepeating(&DlpFilesControllerBrowserTest::SetDlpRulesManager,
+                            base::Unretained(this)));
+    ASSERT_TRUE(DlpRulesManagerFactory::GetForPrimaryProfile());
+  }
+
+  std::unique_ptr<KeyedService> SetDlpRulesManager(
+      content::BrowserContext* context) {
+    auto dlp_rules_manager =
+        std::make_unique<testing::StrictMock<MockDlpRulesManager>>();
+    mock_rules_manager_ = dlp_rules_manager.get();
+    ON_CALL(*mock_rules_manager_, IsFilesPolicyEnabled)
+        .WillByDefault(testing::Return(true));
+    ON_CALL(*mock_rules_manager_, GetReportingManager)
+        .WillByDefault(testing::Return(nullptr));
+
+    files_controller_ =
+        std::make_unique<DlpFilesController>(*mock_rules_manager_);
+    ON_CALL(*mock_rules_manager_, GetDlpFilesController)
+        .WillByDefault(testing::Return(files_controller_.get()));
+
+    return dlp_rules_manager;
+  }
+
  protected:
+  // MockDlpRulesManager is owned by KeyedService and is guaranteed to outlive
+  // this class.
+  raw_ptr<MockDlpRulesManager, ExperimentalAsh> mock_rules_manager_ = nullptr;
+
+  std::unique_ptr<DlpFilesController> files_controller_ = nullptr;
+
   base::ScopedTempDir temp_dir_;
   std::vector<base::FilePath> file_paths_;
 };
@@ -136,6 +176,48 @@ IN_PROC_BROWSER_TEST_F(DlpFilesControllerBrowserTest,
   const GURL* caller = select_file_dialog_factory->GetLastDialog()->caller();
   ASSERT_TRUE(caller);
   EXPECT_EQ(*caller, GURL(kExampleUrl));
+}
+
+// (b/273269211): This is a test for the crash that happens upon showing a
+// warning dialog when a file is moved to Google Drive.
+IN_PROC_BROWSER_TEST_F(DlpFilesControllerBrowserTest,
+                       WarningDialog_ComponentDestination) {
+  EXPECT_CALL(*mock_rules_manager_, GetReportingManager);
+  EXPECT_CALL(*mock_rules_manager_,
+              IsRestrictedComponent(
+                  GURL(kExampleUrl), DlpRulesManager::Component::kDrive,
+                  DlpRulesManager::Restriction::kFiles, testing::_, testing::_))
+      .WillOnce(testing::Return(DlpRulesManager::Level::kWarn));
+
+  std::vector<DlpFilesController::FileDaemonInfo> transferred_files;
+  transferred_files.emplace_back(1234, base::FilePath("file1.txt"),
+                                 kExampleUrl);
+  EXPECT_EQ(files_controller_->GetWarnDialogForTesting(), nullptr);
+  files_controller_->IsFilesTransferRestricted(
+      transferred_files, DlpFileDestination(DlpRulesManager::Component::kDrive),
+      DlpFilesController::FileAction::kMove, base::DoNothing());
+  EXPECT_NE(files_controller_->GetWarnDialogForTesting(), nullptr);
+}
+
+// (b/277594200): This is a test for the crash that happens upon showing a
+// warning dialog when a file is dragged to a webpage.
+IN_PROC_BROWSER_TEST_F(DlpFilesControllerBrowserTest,
+                       WarningDialog_UrlDestination) {
+  EXPECT_CALL(*mock_rules_manager_, GetReportingManager);
+  EXPECT_CALL(*mock_rules_manager_,
+              IsRestrictedDestination(GURL(kExampleUrl), GURL(kExampleUrl1),
+                                      DlpRulesManager::Restriction::kFiles,
+                                      testing::_, testing::_, testing::_))
+      .WillOnce(testing::Return(DlpRulesManager::Level::kWarn));
+
+  std::vector<DlpFilesController::FileDaemonInfo> transferred_files;
+  transferred_files.emplace_back(1234, base::FilePath("file1.txt"),
+                                 kExampleUrl);
+  EXPECT_EQ(files_controller_->GetWarnDialogForTesting(), nullptr);
+  files_controller_->IsFilesTransferRestricted(
+      transferred_files, DlpFileDestination(kExampleUrl1),
+      DlpFilesController::FileAction::kMove, base::DoNothing());
+  EXPECT_NE(files_controller_->GetWarnDialogForTesting(), nullptr);
 }
 
 }  // namespace policy

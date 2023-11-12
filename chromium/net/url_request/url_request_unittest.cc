@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -65,7 +66,10 @@
 #include "net/base/upload_file_element_reader.h"
 #include "net/base/url_util.h"
 #include "net/cert/asn1_util.h"
+#include "net/cert/caching_cert_verifier.h"
 #include "net/cert/cert_net_fetcher.h"
+#include "net/cert/cert_verifier.h"
+#include "net/cert/coalescing_cert_verifier.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
@@ -712,8 +716,8 @@ class URLRequestTest : public PlatformTest, public WithTaskEnvironment {
         base::MakeAbsoluteFilePath(temp_dir_.GetPath());
 
     ASSERT_TRUE(base::CreateTemporaryFileInDir(absolute_temp_dir, test_file));
-    ASSERT_EQ(static_cast<int>(data_size),
-              base::WriteFile(*test_file, data, data_size));
+    ASSERT_TRUE(
+        base::WriteFile(*test_file, base::StringPiece(data, data_size)));
   }
 
   static std::unique_ptr<ConfiguredProxyResolutionService>
@@ -10422,10 +10426,14 @@ class HTTPSCertNetFetchingTest : public HTTPSRequestTest {
   HTTPSCertNetFetchingTest() = default;
 
   void SetUp() override {
-    auto context_builder = CreateTestURLRequestContextBuilder();
     cert_net_fetcher_ = base::MakeRefCounted<CertNetFetcherURLRequest>();
-    context_builder->SetCertVerifier(
-        CertVerifier::CreateDefault(cert_net_fetcher_));
+    auto cert_verifier =
+        CertVerifier::CreateDefaultWithoutCaching(cert_net_fetcher_);
+    updatable_cert_verifier_ = cert_verifier.get();
+
+    auto context_builder = CreateTestURLRequestContextBuilder();
+    context_builder->SetCertVerifier(std::make_unique<CachingCertVerifier>(
+        std::make_unique<CoalescingCertVerifier>(std::move(cert_verifier))));
     context_ = context_builder->Build();
 
     net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
@@ -10441,6 +10449,7 @@ class HTTPSCertNetFetchingTest : public HTTPSRequestTest {
   }
 
   void DoConnectionWithDelegate(
+      base::StringPiece hostname,
       const EmbeddedTestServer::ServerCertificateConfig& cert_config,
       TestDelegate* delegate,
       SSLInfo* out_ssl_info) {
@@ -10453,9 +10462,9 @@ class HTTPSCertNetFetchingTest : public HTTPSRequestTest {
     ASSERT_TRUE(test_server.Start());
 
     delegate->set_allow_certificate_errors(true);
-    std::unique_ptr<URLRequest> r(
-        context_->CreateRequest(test_server.GetURL("/"), DEFAULT_PRIORITY,
-                                delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
+    std::unique_ptr<URLRequest> r(context_->CreateRequest(
+        test_server.GetURL(hostname, "/"), DEFAULT_PRIORITY, delegate,
+        TRAFFIC_ANNOTATION_FOR_TESTS));
     r->Start();
 
     delegate->RunUntilComplete();
@@ -10464,7 +10473,15 @@ class HTTPSCertNetFetchingTest : public HTTPSRequestTest {
     *out_ssl_info = r->ssl_info();
   }
 
+  void DoConnectionWithDelegate(
+      const EmbeddedTestServer::ServerCertificateConfig& cert_config,
+      TestDelegate* delegate,
+      SSLInfo* out_ssl_info) {
+    DoConnectionWithDelegate("127.0.0.1", cert_config, delegate, out_ssl_info);
+  }
+
   void DoConnection(
+      base::StringPiece hostname,
       const EmbeddedTestServer::ServerCertificateConfig& cert_config,
       CertStatus* out_cert_status) {
     // Always overwrite |out_cert_status|.
@@ -10473,9 +10490,15 @@ class HTTPSCertNetFetchingTest : public HTTPSRequestTest {
     TestDelegate d;
     SSLInfo ssl_info;
     ASSERT_NO_FATAL_FAILURE(
-        DoConnectionWithDelegate(cert_config, &d, &ssl_info));
+        DoConnectionWithDelegate(hostname, cert_config, &d, &ssl_info));
 
     *out_cert_status = ssl_info.cert_status;
+  }
+
+  void DoConnection(
+      const EmbeddedTestServer::ServerCertificateConfig& cert_config,
+      CertStatus* out_cert_status) {
+    DoConnection("127.0.0.1", cert_config, out_cert_status);
   }
 
  protected:
@@ -10487,9 +10510,15 @@ class HTTPSCertNetFetchingTest : public HTTPSRequestTest {
     return config;
   }
 
+  void UpdateCertVerifier(scoped_refptr<CRLSet> crl_set) {
+    net::CertVerifyProcFactory::ImplParams params;
+    params.crl_set = std::move(crl_set);
+    updatable_cert_verifier_->UpdateVerifyProcData(cert_net_fetcher_, params);
+  }
+
   scoped_refptr<CertNetFetcherURLRequest> cert_net_fetcher_;
-  std::unique_ptr<CertVerifier> cert_verifier_;
   std::unique_ptr<URLRequestContext> context_;
+  raw_ptr<CertVerifierWithUpdatableProc> updatable_cert_verifier_;
 };
 
 // The test EV policy OID used for generated certs.
@@ -10526,13 +10555,12 @@ class HTTPSOCSPTest : public HTTPSCertNetFetchingTest {
 };
 
 static bool UsingBuiltinCertVerifier() {
-#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || \
+    BUILDFLAG(CHROME_ROOT_STORE_ONLY)
   return true;
+#elif BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
+  return base::FeatureList::IsEnabled(features::kChromeRootStoreUsed);
 #else
-#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-  if (base::FeatureList::IsEnabled(features::kChromeRootStoreUsed))
-    return true;
-#endif
   return false;
 #endif
 }
@@ -10545,13 +10573,7 @@ static bool UsingBuiltinCertVerifier() {
 // If it does not, then tests which rely on 'hard fail' behaviour should be
 // skipped.
 static bool SystemSupportsHardFailRevocationChecking() {
-  if (UsingBuiltinCertVerifier())
-    return true;
-#if BUILDFLAG(IS_WIN)
-  return true;
-#else
-  return false;
-#endif
+  return UsingBuiltinCertVerifier();
 }
 
 // SystemUsesChromiumEVMetadata returns true iff the current operating system
@@ -10717,18 +10739,42 @@ TEST_F(HTTPSOCSPTest, IntermediateResponseOldButStillValid) {
   CertStatus cert_status;
   DoConnection(cert_config, &cert_status);
 
+  EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_ALL_ERRORS);
+  EXPECT_TRUE(cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
+}
+
+TEST_F(HTTPSOCSPTest, IntermediateResponseTooOldKnownRoot) {
+  if (!SystemSupportsOCSP()) {
+    LOG(WARNING) << "Skipping test because system doesn't support OCSP";
+    return;
+  }
+
+  scoped_refptr<X509Certificate> root_cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "root_ca_cert.pem");
+  ASSERT_TRUE(root_cert);
+  ScopedTestKnownRoot scoped_known_root(root_cert.get());
+
+  EmbeddedTestServer::ServerCertificateConfig cert_config;
+  cert_config.intermediate = EmbeddedTestServer::IntermediateType::kInHandshake;
+  cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
+      {{OCSPRevocationStatus::GOOD,
+        EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
+  cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
+      {{OCSPRevocationStatus::REVOKED,
+        EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLonger}});
+  cert_config.dns_names = {"example.com"};
+
+  CertStatus cert_status;
+  DoConnection("example.com", cert_config, &cert_status);
+
   if (UsingBuiltinCertVerifier()) {
-    EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_ALL_ERRORS);
+    // The intermediate certificate is marked as a known root and has an OCSP
+    // response indicating REVOKED status, but the response is too old
+    // according to the Baseline Requirements, thus the response should be
+    // ignored and the verification succeeds.
+    EXPECT_EQ(0u, cert_status & CERT_STATUS_ALL_ERRORS);
   } else {
-#if BUILDFLAG(IS_WIN)
-    // TODO(mattm): Seems to be flaky on Windows. Either returns
-    // CERT_STATUS_UNABLE_TO_CHECK_REVOCATION (which gets masked off due to
-    // soft-fail), or CERT_STATUS_REVOKED.
-    EXPECT_THAT(cert_status & CERT_STATUS_ALL_ERRORS,
-                AnyOf(0u, CERT_STATUS_REVOKED));
-#else
     EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_ALL_ERRORS);
-#endif
   }
   EXPECT_TRUE(cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
@@ -10751,19 +10797,10 @@ TEST_F(HTTPSOCSPTest, IntermediateResponseTooOld) {
   CertStatus cert_status;
   DoConnection(cert_config, &cert_status);
 
-  if (UsingBuiltinCertVerifier()) {
-    EXPECT_EQ(0u, cert_status & CERT_STATUS_ALL_ERRORS);
-  } else {
-#if BUILDFLAG(IS_WIN)
-    // TODO(mattm): Seems to be flaky on Windows. Either returns
-    // CERT_STATUS_UNABLE_TO_CHECK_REVOCATION (which gets masked off due to
-    // soft-fail), or CERT_STATUS_REVOKED.
-    EXPECT_THAT(cert_status & CERT_STATUS_ALL_ERRORS,
-                AnyOf(0u, CERT_STATUS_REVOKED));
-#else
-    EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_ALL_ERRORS);
-#endif
-  }
+  // The test root is not a known root, therefore the Baseline Requirements
+  // limits on maximum age of a response do not apply and the intermediate OCSP
+  // response indicating revoked is honored.
+  EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_ALL_ERRORS);
   EXPECT_TRUE(cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
@@ -10785,19 +10822,7 @@ TEST_F(HTTPSOCSPTest, IntermediateRevoked) {
   CertStatus cert_status;
   DoConnection(cert_config, &cert_status);
 
-  if (UsingBuiltinCertVerifier()) {
-    EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_ALL_ERRORS);
-  } else {
-#if BUILDFLAG(IS_WIN)
-  // TODO(mattm): Seems to be flaky on Windows. Either returns
-  // CERT_STATUS_UNABLE_TO_CHECK_REVOCATION (which gets masked off due to
-  // soft-fail), or CERT_STATUS_REVOKED.
-  EXPECT_THAT(cert_status & CERT_STATUS_ALL_ERRORS,
-              AnyOf(0u, CERT_STATUS_REVOKED));
-#else
   EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_ALL_ERRORS);
-#endif
-  }
   EXPECT_TRUE(cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
@@ -11107,13 +11132,19 @@ class HTTPSOCSPVerifyTest
 TEST_P(HTTPSOCSPVerifyTest, VerifyResult) {
   OCSPVerifyTestData test = GetParam();
 
+  scoped_refptr<X509Certificate> root_cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "root_ca_cert.pem");
+  ASSERT_TRUE(root_cert);
+  ScopedTestKnownRoot scoped_known_root(root_cert.get());
+
   EmbeddedTestServer::ServerCertificateConfig cert_config;
   cert_config.stapled_ocsp_config = test.ocsp_config;
+  cert_config.dns_names = {"example.com"};
 
   SSLInfo ssl_info;
   OCSPErrorTestDelegate delegate;
-  ASSERT_NO_FATAL_FAILURE(
-      DoConnectionWithDelegate(cert_config, &delegate, &ssl_info));
+  ASSERT_NO_FATAL_FAILURE(DoConnectionWithDelegate("example.com", cert_config,
+                                                   &delegate, &ssl_info));
 
   // The SSLInfo must be extracted from |delegate| on error, due to how
   // URLRequest caches certificate errors.
@@ -11296,7 +11327,8 @@ TEST_F(HTTPSHardFailTest, IntermediateResponseTooOld) {
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
       {{OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
-  // Use an OCSP response for the intermediate that is too old.
+  // Use an OCSP response for the intermediate that is too old according to
+  // BRs, but is fine for a locally trusted root.
   cert_config.intermediate_ocsp_config = EmbeddedTestServer::OCSPConfig(
       {{OCSPRevocationStatus::GOOD,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kLonger}});
@@ -11304,14 +11336,7 @@ TEST_F(HTTPSHardFailTest, IntermediateResponseTooOld) {
   CertStatus cert_status;
   DoConnection(cert_config, &cert_status);
 
-  if (UsingBuiltinCertVerifier()) {
-    EXPECT_EQ(CERT_STATUS_UNABLE_TO_CHECK_REVOCATION,
-              cert_status & CERT_STATUS_ALL_ERRORS);
-  } else {
-    // Platform verifier are more lenient.
-    EXPECT_EQ(0u, cert_status & CERT_STATUS_ALL_ERRORS);
-  }
-
+  EXPECT_EQ(0u, cert_status & CERT_STATUS_ALL_ERRORS);
   EXPECT_TRUE(cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
@@ -11446,9 +11471,7 @@ TEST_F(HTTPSCRLSetTest, ExpiredCRLSet) {
   cert_config.ocsp_config = EmbeddedTestServer::OCSPConfig(
       EmbeddedTestServer::OCSPConfig::ResponseType::kInvalidResponse);
 
-  CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
-  cert_verifier_config.crl_set = CRLSet::ExpiredCRLSetForTesting();
-  context_->cert_verifier()->SetConfig(cert_verifier_config);
+  UpdateCertVerifier(CRLSet::ExpiredCRLSetForTesting());
 
   CertStatus cert_status;
   DoConnection(cert_config, &cert_status);
@@ -11473,9 +11496,7 @@ TEST_F(HTTPSCRLSetTest, ExpiredCRLSetAndRevoked) {
       {{OCSPRevocationStatus::REVOKED,
         EmbeddedTestServer::OCSPConfig::SingleResponse::Date::kValid}});
 
-  CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
-  cert_verifier_config.crl_set = CRLSet::ExpiredCRLSetForTesting();
-  context_->cert_verifier()->SetConfig(cert_verifier_config);
+  UpdateCertVerifier(CRLSet::ExpiredCRLSetForTesting());
 
   CertStatus cert_status;
   DoConnection(cert_config, &cert_status);
@@ -11504,10 +11525,11 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
   CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
   SHA256HashValue root_cert_spki_hash;
   ASSERT_TRUE(GetTestRootCertSPKIHash(&root_cert_spki_hash));
-  cert_verifier_config.crl_set =
+  auto crl_set =
       CRLSet::ForTesting(false, &root_cert_spki_hash,
                          test_server.GetCertificate()->serial_number(), "", {});
-  context_->cert_verifier()->SetConfig(cert_verifier_config);
+  ASSERT_TRUE(crl_set);
+  UpdateCertVerifier(crl_set);
 
   TestDelegate d;
   d.set_allow_certificate_errors(true);
@@ -11545,11 +11567,9 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
   std::string common_name = test_server.GetCertificate()->subject().common_name;
 
   {
-    CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
-    cert_verifier_config.crl_set =
-        CRLSet::ForTesting(false, nullptr, "", common_name, {});
-    ASSERT_TRUE(cert_verifier_config.crl_set);
-    context_->cert_verifier()->SetConfig(cert_verifier_config);
+    auto crl_set = CRLSet::ForTesting(false, nullptr, "", common_name, {});
+    ASSERT_TRUE(crl_set);
+    UpdateCertVerifier(crl_set);
 
     TestDelegate d;
     d.set_allow_certificate_errors(true);
@@ -11575,10 +11595,10 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
   std::string spki_hash(spki_hash_value.data(),
                         spki_hash_value.data() + spki_hash_value.size());
   {
-    CertVerifier::Config cert_verifier_config = GetCertVerifierConfig();
-    cert_verifier_config.crl_set =
+    auto crl_set =
         CRLSet::ForTesting(false, nullptr, "", common_name, {spki_hash});
-    context_->cert_verifier()->SetConfig(cert_verifier_config);
+    ASSERT_TRUE(crl_set);
+    UpdateCertVerifier(crl_set);
 
     TestDelegate d;
     d.set_allow_certificate_errors(true);
@@ -11604,9 +11624,13 @@ using HTTPSLocalCRLSetTest = TestWithTaskEnvironment;
 // that when a CRLSet is provided that marks a given SPKI (the TestServer's
 // root SPKI) as known for interception, that it's adequately flagged.
 TEST_F(HTTPSLocalCRLSetTest, KnownInterceptionBlocked) {
+  auto cert_verifier = CertVerifier::CreateDefaultWithoutCaching(
+      /*cert_net_fetcher=*/nullptr);
+  CertVerifierWithUpdatableProc* updatable_cert_verifier_ = cert_verifier.get();
+
   auto context_builder = CreateTestURLRequestContextBuilder();
-  context_builder->SetCertVerifier(
-      CertVerifier::CreateDefault(/*cert_net_fetcher=*/nullptr));
+  context_builder->SetCertVerifier(std::make_unique<CachingCertVerifier>(
+      std::make_unique<CoalescingCertVerifier>(std::move(cert_verifier))));
   auto context = context_builder->Build();
 
   // Verify the connection succeeds without being flagged.
@@ -11633,16 +11657,15 @@ TEST_F(HTTPSLocalCRLSetTest, KnownInterceptionBlocked) {
   // Configure a CRL that will mark |root_ca_cert| as a blocked interception
   // root.
   std::string crl_set_bytes;
-  scoped_refptr<CRLSet> crl_set;
+  net::CertVerifyProcFactory::ImplParams params;
   ASSERT_TRUE(
       base::ReadFileToString(GetTestCertsDirectory().AppendASCII(
                                  "crlset_blocked_interception_by_root.raw"),
                              &crl_set_bytes));
-  ASSERT_TRUE(CRLSet::Parse(crl_set_bytes, &crl_set));
+  ASSERT_TRUE(CRLSet::Parse(crl_set_bytes, &params.crl_set));
 
-  CertVerifier::Config config_with_crlset;
-  config_with_crlset.crl_set = crl_set;
-  context->cert_verifier()->SetConfig(config_with_crlset);
+  updatable_cert_verifier_->UpdateVerifyProcData(
+      /*cert_net_fetcher=*/nullptr, params);
 
   // Verify the connection fails as being a known interception root.
   {
@@ -12883,32 +12906,27 @@ TEST_F(URLRequestTest, SetURLChain) {
   }
 }
 
-TEST_F(URLRequestTest,
-       SetIsolationInfoFromNakTripleNikDoublePlusCrossSiteBitNak) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(
-      net::features::kEnableCrossSiteFlagNetworkAnonymizationKey);
-
+TEST_F(URLRequestTest, SetIsolationInfoFromNak) {
   TestDelegate d;
   SchemefulSite site_a = SchemefulSite(GURL("https://a.com/"));
   SchemefulSite site_b = SchemefulSite(GURL("https://b.com/"));
   base::UnguessableToken nak_nonce = base::UnguessableToken::Create();
-  NetworkAnonymizationKey populated_cross_site_nak(site_a, site_b, true,
-                                                   nak_nonce);
+  auto populated_cross_site_nak = NetworkAnonymizationKey::CreateFromParts(
+      site_a, /*is_cross_site=*/true, nak_nonce);
   IsolationInfo expected_isolation_info_populated_cross_site_nak =
       IsolationInfo::Create(IsolationInfo::RequestType::kOther,
                             url::Origin::Create(GURL("https://a.com/")),
                             url::Origin(), SiteForCookies(),
-                            /*party_context=*/absl::nullopt, &nak_nonce);
+                            /*party_context=*/absl::nullopt, nak_nonce);
 
-  NetworkAnonymizationKey populated_same_site_nak(site_a, site_a, false,
-                                                  nak_nonce);
+  auto populated_same_site_nak = NetworkAnonymizationKey::CreateFromParts(
+      site_a, /*is_cross_site=*/false, nak_nonce);
   IsolationInfo expected_isolation_info_populated_same_site_nak =
       IsolationInfo::Create(IsolationInfo::RequestType::kOther,
                             url::Origin::Create(GURL("https://a.com/")),
                             url::Origin::Create(GURL("https://a.com/")),
                             SiteForCookies(),
-                            /*party_context=*/absl::nullopt, &nak_nonce);
+                            /*party_context=*/absl::nullopt, nak_nonce);
 
   NetworkAnonymizationKey empty_nak;
   GURL original_url("http://localhost");
@@ -12942,119 +12960,6 @@ TEST_F(URLRequestTest,
   EXPECT_TRUE(r->is_created_from_network_anonymization_key());
   EXPECT_EQ(r->isolation_info().network_anonymization_key(), empty_nak);
   EXPECT_TRUE(r->isolation_info().IsEqualForTesting(net::IsolationInfo()));
-  r->Start();
-  d.RunUntilComplete();
-}
-
-TEST_F(URLRequestTest, SetIsolationInfoFromNakTripleNikDoubleNak) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndDisableFeature(
-      net::features::kEnableCrossSiteFlagNetworkAnonymizationKey);
-
-  TestDelegate d;
-  SchemefulSite site_a = SchemefulSite(GURL("https://a.com/"));
-  SchemefulSite site_b = SchemefulSite(GURL("https://b.com/"));
-  base::UnguessableToken nak_nonce = base::UnguessableToken::Create();
-  NetworkAnonymizationKey populated_cross_site_nak(site_a, site_b, true,
-                                                   nak_nonce);
-  NetworkAnonymizationKey populated_same_site_nak(site_a, site_a, false,
-                                                  nak_nonce);
-  IsolationInfo expected_isolation_info_populated_same_site_nak =
-      IsolationInfo::Create(IsolationInfo::RequestType::kOther,
-                            url::Origin::Create(GURL("https://a.com/")),
-                            url::Origin::Create(GURL("https://a.com/")),
-                            SiteForCookies(),
-                            /*party_context=*/absl::nullopt, &nak_nonce);
-  NetworkAnonymizationKey empty_nak;
-
-  GURL original_url("http://localhost");
-  std::unique_ptr<URLRequest> r(default_context().CreateRequest(
-      original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
-
-  r->set_isolation_info_from_network_anonymization_key(
-      populated_cross_site_nak);
-  r->SetLoadFlags(LOAD_DISABLE_CACHE);
-  r->set_allow_credentials(false);
-  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
-  EXPECT_EQ(r->isolation_info().network_anonymization_key(),
-            populated_cross_site_nak);
-  EXPECT_EQ(r->isolation_info().top_frame_origin(),
-            url::Origin::Create(GURL("https://a.com/")));
-  // When double key is enabled for NAK but not for NIK, the frame site of the
-  // IsolationInfo will be set to the top level site.
-  EXPECT_EQ(r->isolation_info().frame_origin(),
-            url::Origin::Create(GURL("https://a.com/")));
-
-  r->set_isolation_info_from_network_anonymization_key(populated_same_site_nak);
-  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
-  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
-  EXPECT_EQ(r->isolation_info().network_anonymization_key(),
-            populated_same_site_nak);
-  EXPECT_TRUE(r->isolation_info().IsEqualForTesting(
-      expected_isolation_info_populated_same_site_nak));
-
-  r->set_isolation_info_from_network_anonymization_key(empty_nak);
-  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
-  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
-  EXPECT_EQ(r->isolation_info().network_anonymization_key(), empty_nak);
-  EXPECT_FALSE(r->isolation_info().top_frame_origin());
-  EXPECT_FALSE(r->isolation_info().frame_origin());
-  r->Start();
-  d.RunUntilComplete();
-}
-
-TEST_F(URLRequestTest,
-       SetIsolationInfoFromNakTripleNikDoubleWithCrossSiteFlagNak) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(
-      net::features::kEnableCrossSiteFlagNetworkAnonymizationKey);
-
-  TestDelegate d;
-  SchemefulSite site_a = SchemefulSite(GURL("https://a.com/"));
-  SchemefulSite site_b = SchemefulSite(GURL("https://b.com/"));
-  base::UnguessableToken nak_nonce = base::UnguessableToken::Create();
-  NetworkAnonymizationKey populated_cross_site_nak(
-      site_a, site_b, /*is_cross_site=*/true, nak_nonce);
-  NetworkAnonymizationKey populated_same_site_nak(
-      site_a, site_a, /*is_cross_site=*/false, nak_nonce);
-
-  NetworkAnonymizationKey empty_nak;
-  GURL original_url("http://localhost");
-  std::unique_ptr<URLRequest> r(default_context().CreateRequest(
-      original_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
-
-  r->set_isolation_info_from_network_anonymization_key(
-      populated_cross_site_nak);
-  r->SetLoadFlags(LOAD_DISABLE_CACHE);
-  r->set_allow_credentials(false);
-  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
-  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
-  EXPECT_EQ(r->isolation_info().network_anonymization_key().ToDebugString(),
-            populated_cross_site_nak.ToDebugString());
-  EXPECT_EQ(r->isolation_info().top_frame_origin(),
-            url::Origin::Create(GURL("https://a.com/")));
-  // When double key is enabled for NAK but not for NIK, the frame site of the
-  // IsolationInfo will be set to the top level site.
-  EXPECT_TRUE(r->isolation_info().frame_origin());
-
-  r->set_isolation_info_from_network_anonymization_key(populated_same_site_nak);
-  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
-  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
-  EXPECT_EQ(r->isolation_info().network_anonymization_key().ToDebugString(),
-            populated_same_site_nak.ToDebugString());
-  EXPECT_EQ(r->isolation_info().top_frame_origin(),
-            url::Origin::Create(GURL("https://a.com/")));
-  // Cross site double keyed NAKs should set a cross site dummy origin on the
-  // IsolationInfo.
-  EXPECT_TRUE(r->isolation_info().frame_origin());
-
-  r->set_isolation_info_from_network_anonymization_key(empty_nak);
-  EXPECT_TRUE(r->is_created_from_network_anonymization_key());
-  EXPECT_TRUE(r->load_flags() & LOAD_DISABLE_CACHE);
-  EXPECT_EQ(r->isolation_info().network_anonymization_key(), empty_nak);
-  EXPECT_FALSE(r->isolation_info().top_frame_origin());
-  EXPECT_FALSE(r->isolation_info().frame_origin());
-
   r->Start();
   d.RunUntilComplete();
 }
@@ -13172,53 +13077,14 @@ INSTANTIATE_TEST_SUITE_P(,
                          URLRequestMaybeAsyncFirstPartySetsTest,
                          testing::Bool());
 
-namespace {
-
-// `EnabledFeatureFlagsTestingParam ` allows enabling and disabling
-// the feature flags that control the key schemes for NetworkAnonymizationKey.
-// This allows us to test the possible combinations of flags that will be
-// allowed for experimentation.
-//
-// Presently, only one flag is used, but future experiments will add more.
-struct EnabledFeatureFlagsTestingParam {
-  // True = 2.5-keyed NAK, false = double-keyed NAK.
-  const bool enable_cross_site_flag_network_anonymization_key;
-};
-
-const EnabledFeatureFlagsTestingParam kFlagsParam[] = {
-    // 0. Double-keying is enabled for NetworkAnonymizationKey.
-    {/*enable_cross_site_flag_network_anonymization_key=*/false},
-
-    // 1. Double-keying + cross-site-bit is enabled for NetworkAnonymizationKey.
-    {/*enable_cross_site_flag_network_anonymization_key=*/true}};
-
-}  // namespace
-
-class PartitionConnectionsByNetworkAnonymizationKey
-    : public URLRequestTest,
-      public testing::WithParamInterface<EnabledFeatureFlagsTestingParam> {
+class PartitionConnectionsByNetworkAnonymizationKey : public URLRequestTest {
  public:
   PartitionConnectionsByNetworkAnonymizationKey() {
-    std::vector<base::test::FeatureRef> enabled_features = {
-        net::features::kPartitionConnectionsByNetworkIsolationKey,
-        net::features::kPartitionSSLSessionsByNetworkIsolationKey};
-    std::vector<base::test::FeatureRef> disabled_features = {};
-
-    if (IsCrossSiteFlagEnabled()) {
-      enabled_features.push_back(
-          net::features::kEnableCrossSiteFlagNetworkAnonymizationKey);
-    } else {
-      disabled_features.push_back(
-          net::features::kEnableCrossSiteFlagNetworkAnonymizationKey);
-    }
-
-    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+    scoped_feature_list_.InitWithFeatures(
+        {net::features::kPartitionConnectionsByNetworkIsolationKey,
+         net::features::kPartitionSSLSessionsByNetworkIsolationKey},
+        {});
   }
-
-  bool IsCrossSiteFlagEnabled() const {
-    return GetParam().enable_cross_site_flag_network_anonymization_key;
-  }
-
   const SchemefulSite kTestSiteA = SchemefulSite(GURL("http://a.test/"));
   const SchemefulSite kTestSiteB = SchemefulSite(GURL("http://b.test/"));
   const SchemefulSite kTestSiteC = SchemefulSite(GURL("http://c.test/"));
@@ -13229,15 +13095,17 @@ class PartitionConnectionsByNetworkAnonymizationKey
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
+TEST_F(PartitionConnectionsByNetworkAnonymizationKey,
        DifferentTopFrameSitesNeverShareConnections) {
   // Start server
   EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
   RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
   const auto original_url = test_server.GetURL("/echo");
-  NetworkAnonymizationKey network_anonymization_key1(kTestSiteA, kTestSiteA);
-  NetworkAnonymizationKey network_anonymization_key2(kTestSiteB, kTestSiteB);
+  const auto network_anonymization_key1 =
+      NetworkAnonymizationKey::CreateSameSite(kTestSiteA);
+  const auto network_anonymization_key2 =
+      NetworkAnonymizationKey::CreateSameSite(kTestSiteB);
 
   // Create a request from first party `kTestSiteA`.
   {
@@ -13289,15 +13157,17 @@ TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
   }
 }
 
-TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
+TEST_F(PartitionConnectionsByNetworkAnonymizationKey,
        FirstPartyIsSeparatedFromCrossSiteFrames) {
   // Start server
   EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
   RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
   const auto original_url = test_server.GetURL("/echo");
-  NetworkAnonymizationKey network_anonymization_key1(kTestSiteA, kTestSiteA);
-  NetworkAnonymizationKey network_anonymization_key2(kTestSiteA, kTestSiteB);
+  const auto network_anonymization_key1 =
+      NetworkAnonymizationKey::CreateSameSite(kTestSiteA);
+  const auto network_anonymization_key2 =
+      NetworkAnonymizationKey::CreateCrossSite(kTestSiteA);
 
   // Create a request from first party `kTestSiteA`.
   {
@@ -13343,17 +13213,12 @@ TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
     d.RunUntilComplete();
 
     EXPECT_THAT(d.request_status(), IsOk());
-    // We should only share a connection with r1 if double key
-    // NetworkAnonymizationKey scheme is enabled.
-    if (!IsCrossSiteFlagEnabled()) {
-      EXPECT_EQ(SSLInfo::HANDSHAKE_RESUME, r2->ssl_info().handshake_type);
-    } else {
-      EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r2->ssl_info().handshake_type);
-    }
+    // We should not share a connection with r1.
+    EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r2->ssl_info().handshake_type);
   }
 }
 
-TEST_P(
+TEST_F(
     PartitionConnectionsByNetworkAnonymizationKey,
     DifferentCrossSiteFramesAreSeparatedOnlyWhenNetworkAnonymizationKeyIsTripleKeyed) {
   // Start server
@@ -13361,8 +13226,10 @@ TEST_P(
   RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
   const auto original_url = test_server.GetURL("/echo");
-  NetworkAnonymizationKey network_anonymization_key1(kTestSiteA, kTestSiteB);
-  NetworkAnonymizationKey network_anonymization_key2(kTestSiteA, kTestSiteC);
+  const auto network_anonymization_key1 =
+      NetworkAnonymizationKey::CreateCrossSite(kTestSiteA);
+  const auto network_anonymization_key2 =
+      NetworkAnonymizationKey::CreateCrossSite(kTestSiteA);
 
   // Create a request from first party `kTestSiteA`.
   {
@@ -13415,17 +13282,19 @@ TEST_P(
   }
 }
 
-TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
+TEST_F(PartitionConnectionsByNetworkAnonymizationKey,
        DifferentNoncesAreAlwaysSeparated) {
   // Start server
   EmbeddedTestServer test_server(EmbeddedTestServer::TYPE_HTTPS);
   RegisterDefaultHandlers(&test_server);
   ASSERT_TRUE(test_server.Start());
   const auto original_url = test_server.GetURL("/echo");
-  NetworkAnonymizationKey network_anonymization_key1(kTestSiteA, kTestSiteA,
-                                                     false, kNonceA);
-  NetworkAnonymizationKey network_anonymization_key2(kTestSiteA, kTestSiteA,
-                                                     false, kNonceB);
+  const auto network_anonymization_key1 =
+      NetworkAnonymizationKey::CreateFromParts(
+          kTestSiteA, /*is_cross_site=*/false, kNonceA);
+  const auto network_anonymization_key2 =
+      NetworkAnonymizationKey::CreateFromParts(
+          kTestSiteA, /*is_cross_site=*/false, kNonceB);
 
   // Create a request from first party `kTestSiteA`.
   {
@@ -13478,9 +13347,5 @@ TEST_P(PartitionConnectionsByNetworkAnonymizationKey,
     EXPECT_EQ(SSLInfo::HANDSHAKE_FULL, r2->ssl_info().handshake_type);
   }
 }
-
-INSTANTIATE_TEST_SUITE_P(All,
-                         PartitionConnectionsByNetworkAnonymizationKey,
-                         testing::ValuesIn(kFlagsParam));
 
 }  // namespace net

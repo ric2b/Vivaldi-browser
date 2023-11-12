@@ -26,10 +26,10 @@ static jlong JNI_VivaldiSyncService_Init(
 
 VivaldiSyncServiceAndroid::VivaldiSyncServiceAndroid(JNIEnv* env, jobject obj)
     : weak_java_ref_(env, obj) {
-  profile_ = ProfileManager::GetActiveUserProfile();
-  DCHECK(profile_);
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  DCHECK(profile);
   sync_service_ =
-      vivaldi::VivaldiSyncServiceFactory::GetForProfileVivaldi(profile_);
+      vivaldi::VivaldiSyncServiceFactory::GetForProfileVivaldi(profile);
 
   SendCycleData();
 }

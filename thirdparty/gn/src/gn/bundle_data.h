@@ -162,6 +162,11 @@ class BundleData {
   // Recursive collection of all bundle_data that the target depends on.
   const UniqueTargets& bundle_deps() const { return bundle_deps_; }
 
+  // Returns whether the bundle is an application bundle.
+  bool is_application() const {
+    return product_type_ == "com.apple.product-type.application";
+  }
+
   // Returns whether the bundle is a framework bundle.
   bool is_framework() const {
     return product_type_ == "com.apple.product-type.framework";

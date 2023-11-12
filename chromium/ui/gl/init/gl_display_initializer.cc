@@ -8,6 +8,7 @@
 #include "base/containers/contains.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 namespace gl::init {
@@ -44,26 +45,18 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
 
   // If we're already requesting software GL, make sure we don't fallback to the
   // GPU
-  bool forceSoftwareGL = IsSoftwareGLImplementation(GetGLImplementationParts());
+  bool force_software_gl =
+      IsSoftwareGLImplementation(GetGLImplementationParts());
 
   std::string requested_renderer =
-      forceSoftwareGL ? kANGLEImplementationSwiftShaderName
-                      : command_line->GetSwitchValueASCII(switches::kUseANGLE);
+      force_software_gl
+          ? kANGLEImplementationSwiftShaderName
+          : command_line->GetSwitchValueASCII(switches::kUseANGLE);
 
   bool use_angle_default =
-      !forceSoftwareGL &&
+      !force_software_gl &&
       (!command_line->HasSwitch(switches::kUseANGLE) ||
        requested_renderer == kANGLEImplementationDefaultName);
-
-  // If we're already requesting an ANGLE implementation, use it instead of the
-  // default.
-  // if ((requested_renderer.empty() ||
-  //      requested_renderer == kANGLEImplementationDefaultName) &&
-  //     gl::GetGLImplementationParts().gl == gl::kGLImplementationEGLANGLE) {
-  //   use_angle_default = false;
-  //   requested_renderer =
-  //       GetGLImplementationANGLEName(gl::GetGLImplementationParts());
-  // }
 
   if (supports_angle_null &&
       (requested_renderer == kANGLEImplementationNullName ||
@@ -81,7 +74,8 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
     AddInitDisplay(init_displays, ANGLE_OPENGLES);
   }
 
-  if (supports_angle_metal && use_angle_default && default_angle_metal) {
+  if (supports_angle_metal && use_angle_default && default_angle_metal &&
+      !GetGlWorkarounds().disable_metal) {
     AddInitDisplay(init_displays, ANGLE_METAL);
   }
 
@@ -92,7 +86,7 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
   if (supports_angle_d3d) {
     if (use_angle_default) {
       // Default mode for ANGLE - try D3D11, else try D3D9
-      if (!command_line->HasSwitch(switches::kDisableD3D11)) {
+      if (!GetGlWorkarounds().disable_d3d11) {
         AddInitDisplay(init_displays, ANGLE_D3D11);
       }
       AddInitDisplay(init_displays, ANGLE_D3D9);

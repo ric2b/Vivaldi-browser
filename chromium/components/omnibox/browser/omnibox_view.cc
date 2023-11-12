@@ -12,6 +12,8 @@
 #include <string>
 #include <utility>
 
+#include "base/feature_list.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -26,8 +28,11 @@
 #include "components/omnibox/browser/omnibox_edit_model_delegate.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/search/search.h"
+#include "components/search_engines/template_url_service.h"
 #include "extensions/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "url/url_constants.h"
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
@@ -163,19 +168,6 @@ std::u16string OmniboxView::SanitizeTextForPaste(const std::u16string& text) {
 
 OmniboxView::~OmniboxView() = default;
 
-void OmniboxView::OpenMatch(const AutocompleteMatch& match,
-                            WindowOpenDisposition disposition,
-                            const GURL& alternate_nav_url,
-                            const std::u16string& pasted_text,
-                            size_t selected_line,
-                            base::TimeTicks match_selection_timestamp) {
-  // Invalid URLs such as chrome://history can end up here.
-  if (!match.destination_url.is_valid() || !model_)
-    return;
-  model_->OpenMatch(match, disposition, alternate_nav_url, pasted_text,
-                    selected_line, match_selection_timestamp);
-}
-
 bool OmniboxView::IsEditingOrEmpty() const {
   return (model_.get() && model_->user_input_in_progress()) ||
          (GetOmniboxTextLength() == 0);
@@ -191,7 +183,8 @@ ui::ImageModel OmniboxView::GetIcon(int dip_size,
                                     SkColor color_current_page_icon,
                                     SkColor color_vectors,
                                     SkColor color_bright_vectors,
-                                    IconFetchedCallback on_icon_fetched) const {
+                                    IconFetchedCallback on_icon_fetched,
+                                    bool dark_mode) const {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   // This is used on desktop only.
   NOTREACHED();
@@ -217,7 +210,21 @@ ui::ImageModel OmniboxView::GetIcon(int dip_size,
   gfx::Image favicon;
   AutocompleteMatch match = model_->CurrentMatch(nullptr);
   if (AutocompleteMatch::IsSearchType(match.type)) {
-    // For search queries, display default search engine's favicon.
+    // For search queries, display default search engine's favicon. If the
+    // default search engine is google return the icon instead of favicon for
+    // search queries with the chrome refresh feature.
+    if (OmniboxFieldTrial::IsChromeRefreshIconsEnabled()) {
+      if (search::DefaultSearchProviderIsGoogle(
+              model_->client()->GetTemplateURLService())) {
+        // For non chrome builds this would return an empty image model. In
+        // those cases revert to using the favicon.
+        ui::ImageModel icon = model_->GetSuperGIcon(dip_size, dark_mode);
+        if (!icon.IsEmpty()) {
+          return icon;
+        }
+      }
+    }
+
     favicon = model_->client()->GetFaviconForDefaultSearchProvider(
         std::move(on_icon_fetched));
 
@@ -258,9 +265,28 @@ void OmniboxView::SetUserText(const std::u16string& text, bool update_popup) {
 }
 
 void OmniboxView::RevertAll() {
-  CloseOmniboxPopup();
-  if (model_)
-    model_->Revert();
+  // TODO(manukh): Remove this histogram when `kRedoCurrentMatch` &
+  //   `kRevertModelBeforeClosingPopup` launch or are abandoned.
+  SCOPED_UMA_HISTOGRAM_TIMER_MICROS("Omnibox.OmniboxViewRevertAll");
+
+  if (base::FeatureList::IsEnabled(omnibox::kRevertModelBeforeClosingPopup)) {
+    // This will clear the model's `user_input_in_progress_`.
+    if (model_)
+      model_->Revert();
+
+    // This will stop the `AutocompleteController`. This should happen after
+    // `user_input_in_progress_` is cleared above; otherwise, closing the popup
+    // will trigger unnecessary `AutocompleteClassifier::Classify()` calls to
+    // try to update the views which are unnecessary since they'll be thrown
+    // away during the model revert anyways.
+    CloseOmniboxPopup();
+  } else {
+    // Same as above, but in reverse order.
+    CloseOmniboxPopup();
+    if (model_)
+      model_->Revert();
+  }
+
   TextChanged();
 }
 

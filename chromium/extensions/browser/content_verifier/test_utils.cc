@@ -11,7 +11,7 @@
 #include "base/json/json_writer.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
 #include "crypto/signature_creator.h"
 #include "extensions/browser/extension_file_task_runner.h"
@@ -460,9 +460,7 @@ void TestExtensionBuilder::WriteVerifiedContents() {
 
   base::FilePath verified_contents_path =
       file_util::GetVerifiedContentsPath(extension_dir_.UnpackedPath());
-  ASSERT_EQ(static_cast<int>(verified_contents.size()),
-            base::WriteFile(verified_contents_path, verified_contents.data(),
-                            verified_contents.size()));
+  ASSERT_TRUE(base::WriteFile(verified_contents_path, verified_contents));
 }
 
 std::vector<uint8_t> TestExtensionBuilder::GetTestContentVerifierPublicKey()

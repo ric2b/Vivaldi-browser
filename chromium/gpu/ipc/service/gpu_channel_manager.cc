@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 
@@ -55,10 +56,21 @@
 #endif
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_enums.h"
+#include "ui/gl/gl_features.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/init/gl_factory.h"
+
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_fence_helper.h"
+#endif
+
+#if BUILDFLAG(IS_MAC)
+#include "gpu/ipc/service/built_in_shader_cache_loader.h"
+#include "gpu/ipc/service/built_in_shader_cache_writer.h"
+#endif
 
 namespace gpu {
 
@@ -377,7 +389,6 @@ GpuChannelManager::GpuChannelManager(
 
 GpuChannelManager::~GpuChannelManager() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
   // Clear |gpu_channels_| first to prevent reentrancy problems from GpuChannel
   // destructor.
   auto gpu_channels = std::move(gpu_channels_);
@@ -420,8 +431,25 @@ gles2::ProgramCache* GpuChannelManager::program_cache() {
 
     // Use the EGL blob cache extension for the passthrough decoder.
     if (use_passthrough_cmd_decoder()) {
-      program_cache_ = std::make_unique<gles2::PassthroughProgramCache>(
-          gpu_preferences_.gpu_program_cache_size, disable_disk_cache);
+      gles2::PassthroughProgramCache::ValueAddedHook* value_add_hook = nullptr;
+#if BUILDFLAG(IS_MAC)
+      if (base::FeatureList::IsEnabled(
+              features::kWriteMetalShaderCacheToDisk)) {
+        shader_cache_writer_ = std::make_unique<BuiltInShaderCacheWriter>();
+        value_add_hook = shader_cache_writer_.get();
+      }
+#endif
+      std::unique_ptr<gles2::PassthroughProgramCache> cache =
+          std::make_unique<gles2::PassthroughProgramCache>(
+              gpu_preferences_.gpu_program_cache_size, disable_disk_cache,
+              value_add_hook);
+#if BUILDFLAG(IS_MAC)
+      auto entries = BuiltInShaderCacheLoader::TakeEntries();
+      for (auto& entry : *entries) {
+        cache->Set(std::move(entry.key), std::move(entry.value));
+      }
+#endif
+      program_cache_ = std::move(cache);
     } else {
       program_cache_ = std::make_unique<gles2::MemoryProgramCache>(
           gpu_preferences_.gpu_program_cache_size, disable_disk_cache,
@@ -776,6 +804,36 @@ void GpuChannelManager::OnApplicationBackgrounded() {
 
   // Release all skia caching when the application is backgrounded.
   SkGraphics::PurgeAllCaches();
+  if (base::FeatureList::IsEnabled(features::kGpuCleanupInBackground)) {
+    // At that point, no frames are going to be produced. Make sure that
+    // e.g. pending SharedImage deletions happens promptly.
+    PerformImmediateCleanup();
+  }
+  application_backgrounded_ = true;
+}
+
+void GpuChannelManager::OnApplicationForegounded() {
+  application_backgrounded_ = false;
+}
+
+void GpuChannelManager::PerformImmediateCleanup() {
+  TRACE_EVENT0("viz", __PRETTY_FUNCTION__);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  if (!shared_context_state_) {
+    return;
+  }
+
+#if BUILDFLAG(ENABLE_VULKAN)
+  if (shared_context_state_->GrContextIsVulkan()) {
+    DCHECK(vulkan_context_provider_);
+    auto* fence_helper =
+        vulkan_context_provider_->GetDeviceQueue()->GetFenceHelper();
+    fence_helper->PerformImmediateCleanup();
+  }
+#endif
+  if (auto* context = shared_context_state_->gr_context()) {
+    context->flushAndSubmit(true);
+  }
 }
 
 void GpuChannelManager::HandleMemoryPressure(
@@ -809,6 +867,12 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
     *result = ContextResult::kSuccess;
     return shared_context_state_;
   }
+
+  // Temporarily check the ANGLE metal experiment early in GPU process
+  // initialization. This will help us determine why users sometimes do not
+  // check the feature on subsequent runs of Chrome. crbug.com/1423439
+  [[maybe_unused]] bool default_angle_metal =
+      base::FeatureList::IsEnabled(features::kDefaultANGLEMetal);
 
   scoped_refptr<gl::GLSurface> surface = default_offscreen_surface();
   bool use_virtualized_gl_contexts = false;
@@ -917,11 +981,11 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
 
   // Initialize GL context, so Vulkan and GL interop can work properly.
   auto feature_info = base::MakeRefCounted<gles2::FeatureInfo>(
-    gpu_driver_bug_workarounds(), gpu_feature_info());
+      gpu_driver_bug_workarounds(), gpu_feature_info());
   if (!shared_context_state->InitializeGL(gpu_preferences_,
                                           feature_info.get())) {
     LOG(ERROR) << "ContextResult::kFatalFailure: Failed to Initialize GL for "
-        " SharedContextState";
+                  " SharedContextState";
     *result = ContextResult::kFatalFailure;
     return nullptr;
   }
@@ -936,14 +1000,15 @@ scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(
                                     &remaining_gl_error_reports);
   }
 
-  if (!shared_context_state->InitializeGrContext(
+  if (!shared_context_state->InitializeSkia(
           gpu_preferences_, gpu_driver_bug_workarounds_, gr_shader_cache(),
           &activity_flags_, watchdog_)) {
-    LOG(ERROR) << "ContextResult::kFatalFailure: Failed to Initialize"
-                  "GrContext for SharedContextState";
+    LOG(ERROR) << "ContextResult::kFatalFailure: Failed to initialize Skia for "
+                  "SharedContextState";
     *result = ContextResult::kFatalFailure;
     return nullptr;
   }
+
   shared_context_state_ = std::move(shared_context_state);
 
   *result = ContextResult::kSuccess;
@@ -1011,7 +1076,7 @@ void GpuChannelManager::OnContextLost(int context_lost_count,
   // Work around issues with recovery by allowing a new GPU process to launch.
   if (force_restart || gpu_driver_bug_workarounds_.exit_on_context_lost ||
       (shared_context_state_ && !shared_context_state_->GrContextIsGL())) {
-    delegate_->MaybeExitOnContextLost();
+    delegate_->MaybeExitOnContextLost(synthetic_loss);
   }
 }
 

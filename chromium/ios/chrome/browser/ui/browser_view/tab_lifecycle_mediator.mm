@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/browser_view/tab_lifecycle_mediator.h"
 
 #import "ios/chrome/browser/autofill/autofill_tab_helper.h"
+#import "ios/chrome/browser/autofill/bottom_sheet/bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/commerce/price_notifications/price_notifications_iph_presenter.h"
 #import "ios/chrome/browser/commerce/price_notifications/price_notifications_tab_helper.h"
 #import "ios/chrome/browser/download/download_manager_tab_helper.h"
@@ -16,10 +17,11 @@
 #import "ios/chrome/browser/overscroll_actions/overscroll_actions_tab_helper.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/password_bottom_sheet_commands.h"
+#import "ios/chrome/browser/shared/public/commands/web_content_commands.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/ssl/captive_portal_tab_helper.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/web_content_commands.h"
 #import "ios/chrome/browser/ui/download/download_manager_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator.h"
 #import "ios/chrome/browser/ui/print/print_controller.h"
@@ -34,7 +36,6 @@
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/webui/net_export_tab_helper.h"
 #import "ios/chrome/browser/webui/net_export_tab_helper_delegate.h"
-#import "ios/web/public/deprecated/crw_web_controller_util.h"
 #import "ui/base/device_form_factor.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -86,11 +87,13 @@
   passwordTabHelper->SetPasswordControllerDelegate(_delegate);
   passwordTabHelper->SetDispatcher(_commandDispatcher);
 
+  BottomSheetTabHelper* bottomSheetTabHelper =
+      BottomSheetTabHelper::FromWebState(webState);
+  bottomSheetTabHelper->SetPasswordBottomSheetHandler(
+      HandlerForProtocol(_commandDispatcher, PasswordBottomSheetCommands));
+
   DCHECK(_delegate);
   OverscrollActionsTabHelper::FromWebState(webState)->SetDelegate(_delegate);
-
-  DCHECK(_sideSwipeController);
-  web_deprecated::SetSwipeRecognizerProvider(webState, _sideSwipeController);
 
   // DownloadManagerTabHelper cannot function without its delegate.
   DCHECK(_downloadManagerCoordinator);
@@ -159,9 +162,11 @@
   passwordTabHelper->SetPasswordControllerDelegate(nil);
   passwordTabHelper->SetDispatcher(nil);
 
-  OverscrollActionsTabHelper::FromWebState(webState)->SetDelegate(nil);
+  BottomSheetTabHelper* bottomSheetTabHelper =
+      BottomSheetTabHelper::FromWebState(webState);
+  bottomSheetTabHelper->SetPasswordBottomSheetHandler(nil);
 
-  web_deprecated::SetSwipeRecognizerProvider(webState, nil);
+  OverscrollActionsTabHelper::FromWebState(webState)->SetDelegate(nil);
 
   DownloadManagerTabHelper::FromWebState(webState)->SetDelegate(nil);
 
@@ -192,7 +197,6 @@
   if (priceNotificationsTabHelper) {
     priceNotificationsTabHelper->SetPriceNotificationsIPHPresenter(nil);
   }
-  [self.NTPCoordinator stopIfNeeded];
 }
 
 @end

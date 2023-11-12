@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_TEST_WEB_APP_TEST_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_TEST_WEB_APP_TEST_H_
 
+#include "build/build_config.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -15,6 +16,8 @@
 class WebAppTest : public content::RenderViewHostTestHarness {
  public:
   using content::RenderViewHostTestHarness::RenderViewHostTestHarness;
+
+  WebAppTest();
 
   void SetUp() override;
   void TearDown() override;

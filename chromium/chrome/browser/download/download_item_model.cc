@@ -57,6 +57,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/text/bytes_formatting.h"
+#include "ui/color/color_id.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
@@ -827,6 +828,15 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
       CompleteSafeBrowsingScan();
       SetOpenWhenComplete(true);
 #endif
+      if (GetDangerType() == download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING) {
+        base::UmaHistogramEnumeration(
+            "SBClientDownload.DeepScanEvent",
+            safe_browsing::DeepScanEvent::kScanCanceled);
+      } else {
+        base::UmaHistogramEnumeration(
+            "SBClientDownload.DeepScanEvent",
+            safe_browsing::DeepScanEvent::kPromptBypassed);
+      }
       [[fallthrough]];
     case DownloadCommands::KEEP:
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -921,8 +931,11 @@ void DownloadItemModel::ExecuteCommand(DownloadCommands* download_commands,
               &ChromeDownloadManagerDelegate::CheckClientDownloadDone,
               delegate->GetWeakPtr(), download_->GetId()),
           safe_browsing::DeepScanningRequest::DeepScanTrigger::
-              TRIGGER_APP_PROMPT,
+              TRIGGER_CONSUMER_PROMPT,
           safe_browsing::DownloadCheckResult::UNKNOWN, std::move(settings));
+      base::UmaHistogramEnumeration(
+          "SBClientDownload.DeepScanEvent",
+          safe_browsing::DeepScanEvent::kPromptAccepted);
       break;
   }
 }
@@ -941,7 +954,8 @@ DownloadItemModel::GetBubbleUIInfoForTailoredWarning() const {
                l10n_util::GetStringUTF16(
                    IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_SUSPICIOUS_ARCHIVE))
         .AddIconAndColor(vector_icons::kNotSecureWarningIcon,
-                         ui::kColorAlertMediumSeverity)
+                         ui::kColorAlertMediumSeverityIcon)
+        .AddSecondaryTextColor(ui::kColorAlertMediumSeverityText)
         .AddPrimaryButton(DownloadCommands::Command::DISCARD)
         .AddSubpageButton(l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_DELETE),
                           DownloadCommands::Command::DISCARD,

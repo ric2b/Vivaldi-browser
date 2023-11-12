@@ -17,7 +17,7 @@
 #import "ios/chrome/browser/overlays/public/infobar_banner/infobar_banner_overlay_responses.h"
 #import "ios/chrome/browser/overlays/public/infobar_banner/save_address_profile_infobar_banner_overlay_request_config.h"
 #import "ios/chrome/browser/overlays/test/fake_overlay_request_callback_installer.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/infobars/banners/test/fake_infobar_banner_consumer.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
@@ -50,7 +50,10 @@ TEST_F(SaveAddressProfileInfobarBannerOverlayMediatorTest, SetUpConsumer) {
   std::unique_ptr<autofill::AutofillSaveUpdateAddressProfileDelegateIOS>
       passed_delegate = std::make_unique<
           autofill::AutofillSaveUpdateAddressProfileDelegateIOS>(
-          profile, /*original_profile=*/nullptr, /*locale=*/"en-US",
+          profile, /*original_profile=*/nullptr,
+          /*syncing_user_email=*/absl::nullopt,
+          /*locale=*/"en-US",
+          autofill::AutofillClient::SaveAddressProfilePromptOptions{},
           base::DoNothing());
   autofill::AutofillSaveUpdateAddressProfileDelegateIOS* delegate =
       passed_delegate.get();
@@ -75,13 +78,9 @@ TEST_F(SaveAddressProfileInfobarBannerOverlayMediatorTest, SetUpConsumer) {
               consumer.buttonText);
   EXPECT_NSEQ(base::SysUTF16ToNSString(delegate->GetDescription()),
               consumer.subtitleText);
-  if (UseSymbols()) {
-    EXPECT_NSEQ(
-        CustomSymbolWithPointSize(kLocationFillSymbol, kInfobarSymbolPointSize),
-        consumer.iconImage);
-  } else {
-    EXPECT_NSEQ([UIImage imageNamed:@"ic_place"], consumer.iconImage);
-  }
+  EXPECT_NSEQ(
+      CustomSymbolWithPointSize(kLocationFillSymbol, kInfobarSymbolPointSize),
+      consumer.iconImage);
 }
 
 // Tests that the modal is shown when infobar button is pressed.
@@ -92,7 +91,10 @@ TEST_F(SaveAddressProfileInfobarBannerOverlayMediatorTest,
   std::unique_ptr<autofill::AutofillSaveUpdateAddressProfileDelegateIOS>
       passed_delegate = std::make_unique<
           autofill::AutofillSaveUpdateAddressProfileDelegateIOS>(
-          profile, /*original_profile=*/nullptr, /*locale=*/"en-US",
+          profile, /*original_profile=*/nullptr,
+          /*syncing_user_email=*/absl::nullopt,
+          /*locale=*/"en-US",
+          autofill::AutofillClient::SaveAddressProfilePromptOptions{},
           base::DoNothing());
   InfoBarIOS infobar(InfobarType::kInfobarTypeSaveAutofillAddressProfile,
                      std::move(passed_delegate));

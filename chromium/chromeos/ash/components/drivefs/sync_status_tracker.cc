@@ -4,15 +4,20 @@
 
 #include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 
+#include <math.h>
 #include <cstdint>
 #include <memory>
 #include <ranges>
 #include <utility>
 #include <vector>
 
+#include <base/logging.h>
 #include "base/containers/span.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
+#include "base/time/time.h"
 
 namespace drivefs {
 
@@ -46,6 +51,8 @@ SyncStatusTracker::SyncStatusTracker() = default;
 SyncStatusTracker::~SyncStatusTracker() = default;
 
 SyncState SyncStatusTracker::GetSyncState(const base::FilePath path) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   if (path.empty() || !path.IsAbsolute()) {
     return SyncState::CreateNotFound(path);
   }
@@ -56,8 +63,19 @@ SyncState SyncStatusTracker::GetSyncState(const base::FilePath path) const {
               : SyncState::CreateNotFound(std::move(path));
 }
 
-const std::vector<const SyncState> SyncStatusTracker::GetChangesAndClean() {
-  std::vector<const SyncState> updated_sync_states;
+std::vector<SyncState> SyncStatusTracker::GetChangesAndClean() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  std::vector<SyncState> updated_sync_states;
+
+  int64_t total_mem_usage_in_bytes = 0;
+
+  for (const auto& [id, node] : id_to_leaf_) {
+    // If the node is stale, set it as "completed" so that it's later removed.
+    if (base::Time::Now() - node->last_update > kMaxStaleTime) {
+      SetNodeState(node, kNotFound, 0, 0);
+    }
+  }
 
   // Traverse trie.
   std::vector<Node*> stack = {root_.get()};
@@ -68,6 +86,10 @@ const std::vector<const SyncState> SyncStatusTracker::GetChangesAndClean() {
     for (auto& child : node->children) {
       stack.emplace_back(child.second.get());
     }
+
+    total_mem_usage_in_bytes +=
+        sizeof(SyncStatusTracker::Node) +
+        node->path_part.size() * sizeof(base::FilePath::StringType::value_type);
 
     // Collect dirty nodes and flip them back to pristine.
     if (node->state.IsDirty()) {
@@ -81,15 +103,20 @@ const std::vector<const SyncState> SyncStatusTracker::GetChangesAndClean() {
   }
 
   // Reset root node if it's childless.
-  if (root_->children.empty()) {
+  if (root_->IsLeaf()) {
     root_->state.Set(kNotFound, 0, 0);
   }
+
+  UMA_HISTOGRAM_MEMORY_KB("FileBrowser.SyncStatusTrackerMemoryUsage",
+                          total_mem_usage_in_bytes / 1024);
 
   return updated_sync_states;
 }
 
 SyncStatusTracker::Node* SyncStatusTracker::FindNode(
     const base::FilePath& path) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   const auto components = path.GetComponents();
   DCHECK(!components.empty() && components.front() == "/");
   const base::span<const base::FilePath::StringType> path_parts(
@@ -111,9 +138,13 @@ void SyncStatusTracker::SetSyncState(const int64_t id,
                                      const SyncStatus status,
                                      const int64_t transferred,
                                      const int64_t total) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   if (path.empty() || !path.IsAbsolute()) {
     return;
   }
+
+  DCHECK_GT(id, 0) << "Only ids greater than 0 are considered valid";
 
   const auto components = path.GetComponents();
   DCHECK(!components.empty() && components.front() == "/");
@@ -127,42 +158,60 @@ void SyncStatusTracker::SetSyncState(const int64_t id,
       matching_node = std::make_unique<Node>();
       matching_node->path_part = path_part;
       matching_node->parent = node;
-      matching_node->id = id;
     }
     node = matching_node.get();
   }
+
+  // If attempting to override existing node with different id, remove old id
+  // from id_to_leaf_;
+  if (node->id != 0 && node->id != id) {
+    id_to_leaf_.erase(node->id);
+  }
+  node->id = id;
+
   SetNodeState(node, status, transferred, total);
 
   // If the entry with the given id has changed its path, this means it has been
   // moved/renamed. Mark it as "moved" and remove its status/progress changes
   // from its current ancestors so they are not duplicated with its new
   // ancestors in the trie.
-  if (auto it = id_to_node_.find(id);
-      it != id_to_node_.end() && it->second != node) {
+  if (auto it = id_to_leaf_.find(id);
+      it != id_to_leaf_.end() && it->second != node) {
     SetNodeState(it->second, kMoved, 0, 0);
+    // Reset node id to 0 to prevent 2 nodes with the same id at the same time.
+    it->second->id = 0;
   }
-  id_to_node_[id] = node;
+  id_to_leaf_[id] = node;
 }
 
 bool SyncStatusTracker::ShouldRemoveNode(const Node* node) const {
   DCHECK(node);
   const auto status = node->state.GetStatus();
-  return node->children.empty() &&
+  return node->IsLeaf() &&
          (status == SyncStatus::kCompleted || status == SyncStatus::kMoved);
 }
 
 void SyncStatusTracker::RemoveNode(const Node* node) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   DCHECK(node);
   Node* parent = node->parent;
   if (!parent) {
     return;
   }
   if (node->id) {
-    id_to_node_.erase(node->id);
+    id_to_leaf_.erase(node->id);
   }
+  DCHECK(node->children.size() == 0);
   parent->children.erase(node->path_part);
   Node* grandparent = parent->parent;
-  while (grandparent && parent->children.empty()) {
+  while (grandparent && parent->IsLeaf()) {
+    if (parent->id) {
+      LOG(ERROR)
+          << "Ancestor nodes should not have ids or be tracked in id_to_leaf_";
+      base::debug::DumpWithoutCrashing();
+      id_to_leaf_.erase(parent->id);
+    }
     grandparent->children.erase(parent->path_part);
     parent = grandparent;
     grandparent = grandparent->parent;
@@ -182,7 +231,14 @@ void SyncStatusTracker::SetNodeState(Node* const node,
                                      const SyncStatus status,
                                      const int64_t transferred = 0,
                                      const int64_t total = 0) {
-  const NodeState& delta = node->state.Set(status, transferred, total);
+  if (!node) {
+    LOG(ERROR) << "Node is a null pointer.";
+    base::debug::DumpWithoutCrashing();
+    return;
+  }
+
+  const NodeState delta = node->state.Set(status, transferred, total);
+  node->last_update = base::Time::Now();
 
   // Nothing to do if there were no changes.
   if (delta.IsPristine()) {

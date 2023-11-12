@@ -4,6 +4,7 @@
 #include "content/browser/tracing/background_tracing_rule.h"
 
 #include <limits>
+#include <optional>
 #include <string>
 #include <type_traits>
 
@@ -20,6 +21,7 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_id_helper.h"
 #include "base/values.h"
+#include "components/variations/hashing.h"
 #include "content/browser/tracing/background_tracing_manager_impl.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -53,17 +55,41 @@ const char kConfigRuleTypeMonitorHistogram[] =
 namespace content {
 
 BackgroundTracingRule::BackgroundTracingRule() = default;
-BackgroundTracingRule::BackgroundTracingRule(int trigger_delay)
+BackgroundTracingRule::BackgroundTracingRule(base::TimeDelta trigger_delay)
     : trigger_delay_(trigger_delay) {}
 
-BackgroundTracingRule::~BackgroundTracingRule() = default;
-
-bool BackgroundTracingRule::ShouldTriggerNamedEvent(
-    const std::string& named_event) const {
-  return false;
+BackgroundTracingRule::~BackgroundTracingRule() {
+  DCHECK(!installed());
 }
 
-int BackgroundTracingRule::GetTraceDelay() const {
+void BackgroundTracingRule::Install(RuleTriggeredCallback trigger_callback) {
+  DCHECK(!installed());
+  installed_ = true;
+  trigger_callback_ = std::move(trigger_callback);
+  DoInstall();
+}
+
+void BackgroundTracingRule::Uninstall() {
+  if (!installed()) {
+    return;
+  }
+  installed_ = false;
+  trigger_callback_.Reset();
+  DoUninstall();
+}
+
+bool BackgroundTracingRule::OnRuleTriggered() const {
+  if (!installed()) {
+    return false;
+  }
+  DCHECK(trigger_callback_);
+  if (trigger_chance_ < 1.0 && base::RandDouble() > trigger_chance_) {
+    return false;
+  }
+  return trigger_callback_.Run(this);
+}
+
+base::TimeDelta BackgroundTracingRule::GetTraceDelay() const {
   return trigger_delay_;
 }
 
@@ -77,8 +103,10 @@ base::Value::Dict BackgroundTracingRule::ToDict() const {
   if (trigger_chance_ < 1.0)
     dict.Set(kConfigRuleTriggerChance, trigger_chance_);
 
-  if (trigger_delay_ != -1)
-    dict.Set(kConfigRuleTriggerDelay, trigger_delay_);
+  if (!trigger_delay_.is_zero()) {
+    dict.Set(kConfigRuleTriggerDelay,
+             static_cast<int>(trigger_delay_.InSeconds()));
+  }
 
   if (rule_id_ != GetDefaultRuleId()) {
     dict.Set(kConfigRuleIdKey, rule_id_);
@@ -92,14 +120,17 @@ base::Value::Dict BackgroundTracingRule::ToDict() const {
 }
 
 void BackgroundTracingRule::GenerateMetadataProto(
-    BackgroundTracingRule::MetadataProto* out) const {}
+    BackgroundTracingRule::MetadataProto* out) const {
+  uint32_t name_hash = variations::HashName(rule_id());
+  out->set_name_hash(name_hash);
+}
 
 void BackgroundTracingRule::Setup(const base::Value::Dict& dict) {
   if (auto trigger_chance = dict.FindDouble(kConfigRuleTriggerChance)) {
     trigger_chance_ = *trigger_chance;
   }
   if (auto trigger_delay = dict.FindInt(kConfigRuleTriggerDelay)) {
-    trigger_delay_ = *trigger_delay;
+    trigger_delay_ = base::Seconds(*trigger_delay);
   }
   if (const std::string* rule_id = dict.FindString(kConfigRuleIdKey)) {
     rule_id_ = *rule_id;
@@ -127,6 +158,17 @@ class NamedTriggerRule : public BackgroundTracingRule {
           new NamedTriggerRule(*trigger_name));
     }
     return nullptr;
+  }
+
+  void DoInstall() override {
+    BackgroundTracingManagerImpl::GetInstance().SetNamedTriggerCallback(
+        named_event_, base::BindRepeating(&NamedTriggerRule::OnRuleTriggered,
+                                          base::Unretained(this)));
+  }
+
+  void DoUninstall() override {
+    BackgroundTracingManagerImpl::GetInstance().SetNamedTriggerCallback(
+        named_event_, base::NullCallback());
   }
 
   base::Value::Dict ToDict() const override {
@@ -159,10 +201,6 @@ class NamedTriggerRule : public BackgroundTracingRule {
     }
   }
 
-  bool ShouldTriggerNamedEvent(const std::string& named_event) const override {
-    return named_event == named_event_;
-  }
-
  protected:
   std::string GetDefaultRuleId() const override {
     return base::StrCat({"org.chromium.background_tracing.", named_event_});
@@ -180,8 +218,7 @@ class HistogramRule : public BackgroundTracingRule,
                 int histogram_upper_value)
       : histogram_name_(histogram_name),
         histogram_lower_value_(histogram_lower_value),
-        histogram_upper_value_(histogram_upper_value),
-        installed_(false) {}
+        histogram_upper_value_(histogram_upper_value) {}
 
  public:
   static std::unique_ptr<BackgroundTracingRule> Create(
@@ -212,22 +249,26 @@ class HistogramRule : public BackgroundTracingRule,
     return rule;
   }
 
-  ~HistogramRule() override {
-    if (installed_) {
-      BackgroundTracingManagerImpl::GetInstance().RemoveAgentObserver(this);
-    }
-  }
+  ~HistogramRule() override = default;
 
   // BackgroundTracingRule implementation
-  void Install() override {
-    histogram_sample_callback_ = std::make_unique<
-        base::StatisticsRecorder::ScopedHistogramSampleObserver>(
+  void DoInstall() override {
+    histogram_sample_callback_.emplace(
         histogram_name_,
         base::BindRepeating(&HistogramRule::OnHistogramChangedCallback,
                             base::Unretained(this), histogram_lower_value_,
                             histogram_upper_value_));
+    BackgroundTracingManagerImpl::GetInstance().SetNamedTriggerCallback(
+        GetDefaultRuleId(), base::BindRepeating(&HistogramRule::OnRuleTriggered,
+                                                base::Unretained(this)));
     BackgroundTracingManagerImpl::GetInstance().AddAgentObserver(this);
-    installed_ = true;
+  }
+
+  void DoUninstall() override {
+    histogram_sample_callback_.reset();
+    BackgroundTracingManagerImpl::GetInstance().RemoveAgentObserver(this);
+    BackgroundTracingManagerImpl::GetInstance().SetNamedTriggerCallback(
+        GetDefaultRuleId(), base::NullCallback());
   }
 
   base::Value::Dict ToDict() const override {
@@ -251,26 +292,6 @@ class HistogramRule : public BackgroundTracingRule,
     rule->set_histogram_max_trigger(histogram_upper_value_);
   }
 
-  void OnHistogramTrigger(const std::string& histogram_name) const {
-    if (histogram_name != histogram_name_)
-      return;
-
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            &BackgroundTracingManagerImpl::OnRuleTriggered,
-            base::Unretained(&BackgroundTracingManagerImpl::GetInstance()),
-            this, BackgroundTracingManager::StartedFinalizingCallback()));
-  }
-
-  void AbortTracing() {
-    content::GetUIThreadTaskRunner({})->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            &BackgroundTracingManagerImpl::AbortScenario,
-            base::Unretained(&BackgroundTracingManagerImpl::GetInstance())));
-  }
-
   // BackgroundTracingManagerImpl::AgentObserver implementation
   void OnAgentAdded(tracing::mojom::BackgroundTracingAgent* agent) override {
     agent->SetUMACallback(histogram_name_, histogram_lower_value_,
@@ -286,6 +307,7 @@ class HistogramRule : public BackgroundTracingRule,
                                   const char* histogram_name,
                                   uint64_t name_hash,
                                   base::Histogram::Sample actual_value) {
+    DCHECK_EQ(histogram_name, histogram_name_);
     if (reference_lower_value > actual_value ||
         reference_upper_value < actual_value) {
       return;
@@ -306,11 +328,7 @@ class HistogramRule : public BackgroundTracingRule,
         perfetto::Track::FromPointer(this, perfetto::ProcessTrack::Current());
     TRACE_EVENT_INSTANT("toplevel", "HistogramSampleTrigger", track,
                         base::TimeTicks::Now(), trace_details);
-    OnHistogramTrigger(histogram_name);
-  }
-
-  bool ShouldTriggerNamedEvent(const std::string& named_event) const override {
-    return named_event == histogram_name_;
+    OnRuleTriggered();
   }
 
  protected:
@@ -322,8 +340,7 @@ class HistogramRule : public BackgroundTracingRule,
   std::string histogram_name_;
   int histogram_lower_value_;
   int histogram_upper_value_;
-  bool installed_;
-  std::unique_ptr<base::StatisticsRecorder::ScopedHistogramSampleObserver>
+  absl::optional<base::StatisticsRecorder::ScopedHistogramSampleObserver>
       histogram_sample_callback_;
 };
 

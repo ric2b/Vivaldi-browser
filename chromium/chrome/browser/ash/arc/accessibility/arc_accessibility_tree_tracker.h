@@ -11,6 +11,8 @@
 #include <string>
 #include <tuple>
 
+#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ash/arc/accessibility/accessibility_helper_instance_remote_proxy.h"
@@ -122,9 +124,13 @@ class ArcAccessibilityTreeTracker : public aura::EnvObserver {
   // Start observing the given window.
   void TrackWindow(aura::Window* window);
 
+  // Start observing the given window as a children of the toplevel ARC window.
+  void TrackChildWindow(aura::Window* window);
+
  private:
   class FocusChangeObserver;
   class WindowsObserver;
+  class ChildWindowsObserver;
   class ArcInputMethodManagerServiceObserver;
   class MojoConnectionObserver;
   class ArcNotificationSurfaceManagerObserver;
@@ -133,9 +139,17 @@ class ArcAccessibilityTreeTracker : public aura::EnvObserver {
   AXTreeSourceArc* GetFromKey(const TreeKey&);
   AXTreeSourceArc* CreateFromKey(TreeKey, aura::Window* window);
 
-  // Update |window_id_to_task_id_| with a given window if necessary.
-  void UpdateWindowIdMapping(aura::Window* window);
+  // Updates task_id and window_id properties when properties of the toplevel
+  // ARC++ window change.
+  // As a side-effect, when a new task id is assigned to the window, it may
+  // also trigger updating child window ids.
+  void UpdateTopWindowIds(aura::Window* window);
 
+  // Updates task_id and window_id propertied when properties of child ARC++
+  // window change.
+  void UpdateChildWindowIds(aura::Window* window);
+
+  // Updates properties set to the given aura::Window.
   void UpdateWindowProperties(aura::Window* window);
 
   void StartTrackingWindows();
@@ -146,14 +160,16 @@ class ArcAccessibilityTreeTracker : public aura::EnvObserver {
   virtual void DispatchCustomSpokenFeedbackToggled(bool enabled);
   virtual aura::Window* GetFocusedArcWindow() const;
 
-  Profile* const profile_;
-  AXTreeSourceArc::Delegate* tree_source_delegate_;
-  const AccessibilityHelperInstanceRemoteProxy& accessibility_helper_instance_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<AXTreeSourceArc::Delegate, ExperimentalAsh> tree_source_delegate_;
+  const raw_ref<const AccessibilityHelperInstanceRemoteProxy, ExperimentalAsh>
+      accessibility_helper_instance_;
 
   TreeMap trees_;
 
   std::unique_ptr<FocusChangeObserver> focus_change_observer_;
   std::unique_ptr<WindowsObserver> windows_observer_;
+  std::unique_ptr<ChildWindowsObserver> child_windows_observer_;
   std::unique_ptr<ArcInputMethodManagerServiceObserver>
       input_manager_service_observer_;
   std::unique_ptr<MojoConnectionObserver> connection_observer_;
@@ -164,7 +180,9 @@ class ArcAccessibilityTreeTracker : public aura::EnvObserver {
 
   base::ScopedObservation<aura::Env, aura::EnvObserver> env_observation_{this};
 
+  // a11y window id (obtained from exo, put for each window) to task id.
   std::map<int32_t, int32_t> window_id_to_task_id_;
+  // task id to top aura::window.
   std::map<int32_t, aura::Window*> task_id_to_window_;
 
   arc::mojom::AccessibilityFilterType filter_type_ =

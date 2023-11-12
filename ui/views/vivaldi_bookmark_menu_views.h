@@ -51,10 +51,10 @@ class VivaldiBookmarkMenuViews : public VivaldiBookmarkMenu,
   base::RepeatingCallback<content::PageNavigator*()> GetPageNavigatorGetter();
 
  private:
-  content::WebContents* web_contents_;
+  const raw_ptr<content::WebContents> web_contents_;
   gfx::Rect button_rect_;
-  BookmarkMenuController* controller_;  // Deletes iself
-  VivaldiBookmarkMenuObserver* observer_;
+  raw_ptr<BookmarkMenuController> controller_ = nullptr;  // Deletes iself
+  raw_ptr<VivaldiBookmarkMenuObserver> observer_ = nullptr;
 
   // Returns WeakPtrs used in GetPageNavigatorGetter(). Used to ensure
   // safety if BookmarkBarView is deleted after getting the callback.

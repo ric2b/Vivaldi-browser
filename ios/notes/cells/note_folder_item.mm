@@ -4,8 +4,7 @@
 
 #import "base/i18n/rtl.h"
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/cells/note_table_cell_title_edit_delegate.h"
 #import "ios/notes/note_ui_constants.h"
@@ -57,7 +56,7 @@ const CGFloat textStackSpacing = 4;
           l10n_util::GetNSString(IDS_VIVALDI_NOTE_CREATE_GROUP);
       // Note using the same image for folders as bookmarks now
       folderCell.folderImageView.image =
-          [UIImage imageNamed:vBookmarkAddFolder];
+          [UIImage imageNamed:vNoteAddFolder];
       folderCell.accessibilityIdentifier =
           kNoteCreateNewFolderCellIdentifier;
       folderCell.accessibilityTraits |= UIAccessibilityTraitButton;
@@ -76,7 +75,7 @@ const CGFloat textStackSpacing = 4;
           folderCell.indentationConstraint.constant +
           kFolderCellIndentationWidth * self.indentationLevel;
       folderCell.folderImageView.image =
-          [UIImage imageNamed:vBookmarksFolderIcon];
+          [UIImage imageNamed:vNotesFolderIcon];
       break;
     }
   }
@@ -186,7 +185,7 @@ const CGFloat textStackSpacing = 4;
   switch (_noteAccessoryType) {
     case TableViewNoteFolderAccessoryTypeCheckmark:
       self.accessoryView = [[UIImageView alloc]
-          initWithImage:[UIImage imageNamed:@"note_blue_check"]];
+          initWithImage:[UIImage imageNamed:vNoteFolderSelectionCheckmark]];
       break;
     case TableViewNoteFolderAccessoryTypeDisclosureIndicator: {
       self.accessoryView = [[UIImageView alloc]

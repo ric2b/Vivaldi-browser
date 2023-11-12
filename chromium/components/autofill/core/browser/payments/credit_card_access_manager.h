@@ -36,7 +36,7 @@ namespace autofill {
 class BrowserAutofillManager;
 enum class WebauthnDialogCallbackType;
 
-namespace metrics {
+namespace autofill_metrics {
 class AutofillMetricsBaseTest;
 }
 
@@ -100,11 +100,11 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
                                      const std::u16string& cvc) = 0;
   };
 
-  CreditCardAccessManager(
-      AutofillDriver* driver,
-      AutofillClient* client,
-      PersonalDataManager* personal_data_manager,
-      CreditCardFormEventLogger* credit_card_form_event_logger);
+  CreditCardAccessManager(AutofillDriver* driver,
+                          AutofillClient* client,
+                          PersonalDataManager* personal_data_manager,
+                          autofill_metrics::CreditCardFormEventLogger*
+                              credit_card_form_event_logger);
 
   CreditCardAccessManager(const CreditCardAccessManager&) = delete;
   CreditCardAccessManager& operator=(const CreditCardAccessManager&) = delete;
@@ -141,8 +141,7 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   void OnSettingsPageFIDOAuthToggled(bool opt_in);
 
   // Resets the rate limiter for fetching unmask deatils. Used with
-  // PostTaskWithDelay() with a timeout, and also called by AutofillDriver on
-  // page refresh.
+  // PostTaskWithDelay() with a timeout.
   void SignalCanFetchUnmaskDetails();
 
   // Caches CreditCard and corresponding CVC for unmasked card so that
@@ -180,6 +179,10 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
       const CreditCardCvcAuthenticator::CvcAuthenticationResponse& response) {
     return ShouldOfferFidoOptInDialog(response);
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  bool ShouldOfferFidoAuthForTesting() { return ShouldOfferFidoAuth(); }
+#endif
 
  private:
   // TODO(crbug.com/1249665): Remove FRIEND and change everything to _ForTesting
@@ -224,7 +227,7 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
       RiskBasedVirtualCardUnmasking_Failure_VirtualCardRetrievalError);
   FRIEND_TEST_ALL_PREFIXES(CreditCardAccessManagerTest,
                            RiskBasedVirtualCardUnmasking_FlowCancelled);
-  friend class metrics::AutofillMetricsBaseTest;
+  friend class autofill_metrics::AutofillMetricsBaseTest;
   friend class CreditCardAccessManagerTest;
 
 #if !BUILDFLAG(IS_IOS)
@@ -346,6 +349,9 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   // Helper function to fetch virtual cards.
   void FetchVirtualCard();
 
+  // Helper function to fetch local or full server cards.
+  void FetchLocalOrFullServerCard();
+
   // Callback function invoked when risk data is fetched.
   void OnDidGetUnmaskRiskData(const std::string& risk_data);
 
@@ -393,6 +399,30 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   bool ShouldLogServerCardUnmaskAttemptMetrics(
       CreditCard::RecordType record_type);
 
+  // Starts the device authentication flow during a payments autofill form fill.
+  // `OnDeviceAuthenticationResponseForFilling()` will be invoked when we
+  // receive a response from the device authentication. `accessor` will be used
+  // to handle the response of the authentication, and possibly fill the card
+  // into the form. `card` is the card that needs to be filled. `cvc` is the CVC
+  // of the card that needs to be filled, and can be empty if we are autofilling
+  // a card that does not have a CVC saved (for example, a local card). This
+  // function should only be called on platforms where DeviceAuthenticator is
+  // present.
+  void StartDeviceAuthenticationForFilling(base::WeakPtr<Accessor> accessor,
+                                           const CreditCard* card,
+                                           const std::u16string& cvc);
+
+  // Callback function invoked when we receive a response from a mandatory
+  // re-auth authentication in a flow where we might fill the card after the
+  // response. If it is successful, we will fill `card` and `cvc` into the form
+  // using `accessor`, otherwise we will handle the error. `successful_auth` is
+  // true if the authentication waas successful, false otherwise.
+  void OnDeviceAuthenticationResponseForFilling(
+      base::WeakPtr<Accessor> accessor,
+      const CreditCard* card,
+      const std::u16string& cvc,
+      bool successful_auth);
+
   // The current form of authentication in progress.
   UnmaskAuthFlowType unmask_auth_flow_type_ = UnmaskAuthFlowType::kNone;
 
@@ -416,7 +446,8 @@ class CreditCardAccessManager : public CreditCardCvcAuthenticator::Requester,
   raw_ptr<PersonalDataManager> personal_data_manager_;
 
   // For logging metrics.
-  raw_ptr<CreditCardFormEventLogger, DanglingUntriaged> form_event_logger_;
+  raw_ptr<autofill_metrics::CreditCardFormEventLogger, DanglingUntriaged>
+      form_event_logger_;
 
   // Timestamp used for preflight call metrics.
   absl::optional<base::TimeTicks> preflight_call_timestamp_;

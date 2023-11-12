@@ -114,7 +114,7 @@ class VivaldiSubresourceFilterBrowserTest
 
  private:
   std::unique_ptr<VivaldiContentBrowserClient> browser_content_client_;
-  AdverseAdFilterListService* adblock_;
+  raw_ptr<AdverseAdFilterListService> adblock_ = nullptr;
 };
 
 // Tests -----------------------------------------------------------------------

@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 
+#include "base/memory/raw_ptr.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/apps/app_service/metrics/app_platform_metrics.h"
 #include "chrome/browser/profiles/profile.h"
@@ -68,16 +69,36 @@ class AppDiscoveryMetrics : public AppPlatformMetrics::Observer,
   // Records app state metrics if there has been a change.
   void RecordAppState(const InstanceUpdate& instance_update);
 
-  void RecordFromInactiveState(const InstanceUpdate& instance_update);
-  void RecordFromActiveState(const InstanceUpdate& instance_update);
-  void RecordFromStartState(const InstanceUpdate& instance_update);
+  // Checks whether |instance_update| moves from an active app state to inactive
+  // app state. If there are any other instances that are active other than
+  // the instance specified in |instance_update|, then the app is still
+  // considered to be active and will return false.
+  //
+  // If there was no previous state, the check for whether the previous state is
+  // Active will be ignored.
+  bool IsUpdateActiveToInactive(const InstanceUpdate& instance_update);
+
+  // Checks whether |instance_update| moves from an inactive app state to active
+  // app state. If there are any other instances that are active other than
+  // the instance specified in |instance_update|, then the app is still
+  // considered to be active and will return false.
+  //
+  // If there was no previous state, the check for whether the previous state is
+  // Inactive will be ignored.
+  bool IsUpdateInactiveToActive(const InstanceUpdate& instance_update);
+
+  bool IsStateInactive(InstanceState instance_state);
+  bool IsStateActive(InstanceState instance_state);
+
+  void RecordAppActive(const std::string& app_id);
+  void RecordAppInactive(const std::string& app_id);
   void RecordAppClosed(const InstanceUpdate& instance_update);
 
   // Profile for which apps discovery metrics are being recorded for.
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
 
   // Instance of AppPlatformMetrics |this| is observing.
-  AppPlatformMetrics* app_platform_metrics_ = nullptr;
+  raw_ptr<AppPlatformMetrics, ExperimentalAsh> app_platform_metrics_ = nullptr;
 
   // Map associating instance_ids to current state.
   std::map<base::UnguessableToken, InstanceState> instance_to_state_;

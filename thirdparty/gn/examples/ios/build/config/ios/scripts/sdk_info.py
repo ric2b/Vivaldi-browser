@@ -16,6 +16,11 @@ XCODE_VERSION_PATTERN = re.compile(r'Xcode (\d+)\.(\d+)')
 XCODE_BUILD_PATTERN = re.compile(r'Build version (.*)')
 
 
+def GetCommandOutput(command):
+  """Returns the output of `command` as a string."""
+  return subprocess.check_output(command, encoding='utf-8')
+
+
 def GetAppleCpuName(target_cpu):
   """Returns the name of the |target_cpu| using Apple's convention."""
   return {
@@ -25,36 +30,31 @@ def GetAppleCpuName(target_cpu):
   }.get(target_cpu, target_cpu)
 
 
-def IsSimulator(target_cpu):
-  """Returns whether the |target_cpu| corresponds to a simulator build."""
-  return not target_cpu.startswith('arm')
+def GetPlatform(target_environment):
+  """Returns the platform for |target_environment|."""
+  return {
+      'simulator': 'iphonesimulator',
+      'device': 'iphoneos'
+  }[target_environment]
 
 
-def GetPlatform(target_cpu):
-  """Returns the platform for the |target_cpu|."""
-  if IsSimulator(target_cpu):
-    return 'iphonesimulator'
-  else:
-    return 'iphoneos'
-
-
-def GetPlaformDisplayName(target_cpu):
-  """Returns the platform display name for the |target_cpu|."""
-  if IsSimulator(target_cpu):
-    return 'iPhoneSimulator'
-  else:
-    return 'iPhoneOS'
+def GetPlaformDisplayName(target_environment):
+  """Returns the platform display name for |target_environment|."""
+  return {
+      'simulator': 'iPhoneSimulator',
+      'device': 'iPhoneOS'
+  }[target_environment]
 
 
 def ExtractOSVersion():
   """Extract the version of macOS of the current machine."""
-  return subprocess.check_output(['sw_vers', '-buildVersion']).strip()
+  return GetCommandOutput(['sw_vers', '-buildVersion']).strip()
 
 
 def ExtractXcodeInfo():
   """Extract Xcode version and build version."""
   version, build = None, None
-  for line in subprocess.check_output(['xcodebuild', '-version']).splitlines():
+  for line in GetCommandOutput(['xcodebuild', '-version']).splitlines():
     match = XCODE_VERSION_PATTERN.search(line)
     if match:
       major, minor = match.group(1), match.group(2)
@@ -72,23 +72,22 @@ def ExtractXcodeInfo():
 
 def ExtractSDKInfo(info, sdk):
   """Extract information about the SDK."""
-  return subprocess.check_output(
-      ['xcrun', '--sdk', sdk, '--show-sdk-' + info]).strip()
+  return GetCommandOutput(['xcrun', '--sdk', sdk, '--show-sdk-' + info]).strip()
 
 
 def GetDeveloperDir():
   """Returns the developer dir."""
-  return subprocess.check_output(['xcode-select', '-print-path']).strip()
+  return GetCommandOutput(['xcode-select', '-print-path']).strip()
 
 
-def GetSDKInfoForCpu(target_cpu, sdk_version, deployment_target):
+def GetSDKInfoForCpu(target_cpu, environment, sdk_version, deployment_target):
   """Returns a dictionary with information about the SDK."""
-  platform = GetPlatform(target_cpu)
+  platform = GetPlatform(environment)
   sdk_version = sdk_version or ExtractSDKInfo('version', platform)
   deployment_target = deployment_target or sdk_version
 
   target = target_cpu + '-apple-ios' + deployment_target
-  if IsSimulator(target_cpu):
+  if environment == 'simulator':
     target = target + '-simulator'
 
   xcode_version, xcode_build = ExtractXcodeInfo()
@@ -96,10 +95,10 @@ def GetSDKInfoForCpu(target_cpu, sdk_version, deployment_target):
 
   sdk_info = {}
   sdk_info['compiler'] = 'com.apple.compilers.llvm.clang.1_0'
-  sdk_info['is_simulator'] = IsSimulator(target_cpu)
+  sdk_info['is_simulator'] = environment == 'simulator'
   sdk_info['macos_build'] = ExtractOSVersion()
   sdk_info['platform'] = platform
-  sdk_info['platform_name'] = GetPlaformDisplayName(target_cpu)
+  sdk_info['platform_name'] = GetPlaformDisplayName(environment)
   sdk_info['sdk'] = effective_sdk
   sdk_info['sdk_build'] = ExtractSDKInfo('build-version', effective_sdk)
   sdk_info['sdk_path'] = ExtractSDKInfo('path', effective_sdk)
@@ -124,6 +123,12 @@ def ParseArgs(argv):
       choices=('x86', 'x64', 'arm', 'arm64'),
       help='target cpu')
   parser.add_argument(
+      '-e',
+      '--target-environment',
+      default='simulator',
+      choices=('simulator', 'device'),
+      help='target environment')
+  parser.add_argument(
       '-s', '--sdk-version',
       help='version of the sdk')
   parser.add_argument(
@@ -140,9 +145,8 @@ def main(argv):
   args = ParseArgs(argv)
 
   sdk_info = GetSDKInfoForCpu(
-      GetAppleCpuName(args.target_cpu),
-      args.sdk_version,
-      args.deployment_target)
+      GetAppleCpuName(args.target_cpu), args.target_environment,
+      args.sdk_version, args.deployment_target)
 
   if args.output == '-':
     sys.stdout.write(json.dumps(sdk_info))

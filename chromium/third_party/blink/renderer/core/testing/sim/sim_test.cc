@@ -99,7 +99,8 @@ void SimTest::InitializeRemote() {
       local_frame_root_->FrameWidgetImpl()->LayerTreeHostForTesting());
 }
 
-void SimTest::InitializeFencedFrameRoot(mojom::blink::FencedFrameMode mode) {
+void SimTest::InitializeFencedFrameRoot(
+    blink::FencedFrame::DeprecatedFencedFrameMode mode) {
   web_view_helper_->InitializeWithOpener(/*opener=*/nullptr,
                                          /*frame_client=*/nullptr,
                                          /*view_client=*/nullptr,
@@ -217,6 +218,10 @@ frame_test_helpers::TestWebFrameWidget* SimTest::CreateTestWebFrameWidget(
       std::move(task_runner), frame_sink_id, hidden, never_composited,
       is_for_child_local_root, is_for_nested_main_frame, is_for_scalable_page,
       compositor_.get());
+}
+
+void SimTest::SetPreferCompositingToLCDText(bool enabled) {
+  GetDocument().GetSettings()->SetPreferCompositingToLCDTextForTesting(enabled);
 }
 
 }  // namespace blink

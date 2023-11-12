@@ -11,40 +11,40 @@
 #import "base/notreached.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/time/time.h"
-#import "ios/notes/notes_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
-#import "ios/notes/note_add_edit_view_controller.h"
-#import "ios/notes/note_folder_editor_view_controller.h"
-#import "ios/notes/note_folder_view_controller.h"
-#import "ios/notes/note_home_view_controller.h"
-#import "ios/notes/note_interaction_controller_delegate.h"
-#import "ios/notes/note_mediator.h"
-#import "ios/notes/note_navigation_controller.h"
-#import "ios/notes/note_navigation_controller_delegate.h"
-#import "ios/notes/note_path_cache.h"
-#import "ios/notes/note_transitioning_delegate.h"
-#import "ios/notes/note_utils_ios.h"
-#import "notes/note_node.h"
-#import "notes/notes_model.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
-#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/url_with_title.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/notes/note_add_edit_folder_view_controller.h"
+#import "ios/notes/note_add_edit_view_controller.h"
+#import "ios/notes/note_folder_chooser_view_controller.h"
+#import "ios/notes/note_home_view_controller.h"
+#import "ios/notes/note_interaction_controller_delegate.h"
+#import "ios/notes/note_mediator.h"
+#import "ios/notes/note_navigation_controller_delegate.h"
+#import "ios/notes/note_navigation_controller.h"
+#import "ios/notes/note_path_cache.h"
+#import "ios/notes/note_transitioning_delegate.h"
+#import "ios/notes/note_utils_ios.h"
+#import "ios/notes/notes_factory.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
 #import "ios/web/public/web_state.h"
+#import "notes/note_node.h"
+#import "notes/notes_model.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -67,9 +67,7 @@ enum class PresentedState {
 }  // namespace
 
 @interface NoteInteractionController () <
-    NoteAddEditViewControllerDelegate,
-    NoteFolderEditorViewControllerDelegate,
-    NoteFolderViewControllerDelegate,
+    NoteFolderChooserViewControllerDelegate,
     NoteHomeViewControllerDelegate> {
   // The browser notes are presented in.
   Browser* _browser;  // weak
@@ -106,13 +104,9 @@ enum class PresentedState {
 // non-nil when |currentPresentedState| is NOTE_EDITOR.
 @property(nonatomic, strong) NoteAddEditViewController* noteEditor;
 
-// A reference to the potentially presented folder editor. This will be non-nil
-// when |currentPresentedState| is FOLDER_EDITOR.
-@property(nonatomic, strong) NoteFolderEditorViewController* folderEditor;
-
 // A reference to the potentially presented folder selector. This will be
 // non-nil when |currentPresentedState| is FOLDER_SELECTION.
-@property(nonatomic, strong) NoteFolderViewController* folderSelector;
+@property(nonatomic, strong) NoteFolderChooserViewController* folderSelector;
 
 @property(nonatomic, copy) void (^folderSelectionCompletionBlock)
     (const vivaldi::NoteNode*);
@@ -141,9 +135,6 @@ enum class PresentedState {
 // Dismisses the note editor.
 - (void)dismissNoteEditorAnimated:(BOOL)animated;
 
-// Dismisses the folder editor.
-- (void)dismissFolderEditorAnimated:(BOOL)animated;
-
 @end
 
 @implementation NoteInteractionController
@@ -158,8 +149,8 @@ enum class PresentedState {
 @synthesize currentPresentedState = _currentPresentedState;
 @synthesize delegate = _delegate;
 @synthesize handler = _handler;
-@synthesize folderEditor = _folderEditor;
 @synthesize mediator = _mediator;
+@synthesize baseViewController = _baseViewController;
 
 - (instancetype)initWithBrowser:(Browser*)browser
                parentController:(UIViewController*)parentController {
@@ -198,7 +189,6 @@ enum class PresentedState {
   _noteBrowser = nil;
 
   _noteEditor.delegate = nil;
-  [_noteEditor shutdown];
   _noteEditor = nil;
 
   _panelDelegate = nil;
@@ -216,8 +206,6 @@ enum class PresentedState {
 }
 
 - (void)showNotes {
-  DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
-  DCHECK(!self.noteNavigationController);
   self.noteBrowser =
       [[NoteHomeViewController alloc] initWithBrowser:_browser];
   self.noteBrowser.homeDelegate = self;
@@ -238,31 +226,6 @@ enum class PresentedState {
       withReplacementViewControllers:replacementViewControllers];
 }
 
-- (void)presentFolderPickerWithCompletion:
-    (void (^)(const vivaldi::NoteNode*))block {
-  DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
-  DCHECK(block);
-
-  [self dismissSnackbar];
-
-  self.currentPresentedState = PresentedState::NOTE_FOLDER_SELECTION;
-  self.folderSelectionCompletionBlock = [block copy];
-
-  std::set<const NoteNode*> editedNodes;
-  self.folderSelector = [[NoteFolderViewController alloc]
-      initWithNotesModel:self.noteModel
-           allowsNewFolders:YES
-                editedNodes:editedNodes
-               allowsCancel:YES
-             selectedFolder:nil
-                    browser:_browser];
-  self.folderSelector.delegate = self;
-  self.folderSelector.snackbarCommandsHandler = self.snackbarCommandsHandler;
-
-  [self presentTableViewController:self.folderSelector
-      withReplacementViewControllers:nil];
-}
-
 - (void)presentEditorForNode:(const vivaldi::NoteNode*)node {
   DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
   [self dismissSnackbar];
@@ -276,51 +239,20 @@ enum class PresentedState {
     return;
   }
 
-  ChromeTableViewController<UIAdaptivePresentationControllerDelegate>*
-      editorController = nil;
-  if (node->type() == vivaldi::NoteNode::NOTE) {
-    self.currentPresentedState = PresentedState::NOTE_EDITOR;
-    NoteAddEditViewController* noteEditor =
-        [[NoteAddEditViewController alloc] initWithNote:node
-         parent:nil
-         browser:_browser];
-    self.noteEditor = noteEditor;
-    self.noteEditor.delegate = self;
-    self.noteEditor.snackbarCommandsHandler = self.snackbarCommandsHandler;
-
-    editorController = noteEditor;
-  } else if (node->type() == NoteNode::FOLDER) {
-    self.currentPresentedState = PresentedState::NOTE_FOLDER_EDITOR;
-    NoteFolderEditorViewController* folderEditor =
-        [NoteFolderEditorViewController
-            folderEditorWithNotesModel:self.noteModel
-                                   folder:node
-                                  browser:_browser];
-    folderEditor.delegate = self;
-    self.noteEditor.snackbarCommandsHandler = self.snackbarCommandsHandler;
-
-    self.folderEditor = folderEditor;
-    editorController = folderEditor;
-  } else {
-    NOTREACHED();
+  if (node->type() == vivaldi::NoteNode::NOTE)
+      [self presentNoteEditorWithEditingNode:node
+                                  parentNode:nil isEditing:YES isFolder:NO];
+  else {
+      [self presentNoteFolderEditor:node parent:nil isEditing:YES];
   }
-
-  [self presentTableViewController:editorController
-      withReplacementViewControllers:nil];
 }
 
 - (void)presentAddViewController:(const NoteNode*)parent {
   DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
   [self dismissSnackbar];
-  self.currentPresentedState = PresentedState::NOTE_EDITOR;
-  NoteAddEditViewController* noteEditor =
-      [[NoteAddEditViewController alloc] initWithNote:nil
-       parent:parent
-      browser:_browser];
-  self.noteEditor = noteEditor;
-  self.noteEditor.delegate = self;
-  [self presentTableViewController:noteEditor
-      withReplacementViewControllers:nil];
+  [self presentNoteEditorWithEditingNode:nil parentNode:parent
+                               isEditing:NO isFolder:NO];
+  [self.baseViewController showViewController:_noteEditor sender:self];
 }
 
 - (void)dismissNoteBrowserAnimated:(BOOL)animated
@@ -359,8 +291,9 @@ enum class PresentedState {
 }
 
 - (void)dismissNoteEditorAnimated:(BOOL)animated {
-  if (self.currentPresentedState != PresentedState::NOTE_EDITOR)
-    return;
+  if (self.currentPresentedState != PresentedState::NOTE_EDITOR) {
+      return;
+  }
   DCHECK(self.noteNavigationController);
 
   self.noteEditor.delegate = nil;
@@ -368,22 +301,6 @@ enum class PresentedState {
   [self.noteNavigationController
       dismissViewControllerAnimated:animated
                          completion:^{
-                           self.noteNavigationController = nil;
-                           self.noteTransitioningDelegate = nil;
-                         }];
-  self.currentPresentedState = PresentedState::NONE;
-}
-
-- (void)dismissFolderEditorAnimated:(BOOL)animated {
-  if (self.currentPresentedState != PresentedState::NOTE_FOLDER_EDITOR)
-    return;
-  DCHECK(self.noteNavigationController);
-
-  [self.noteNavigationController
-      dismissViewControllerAnimated:animated
-                         completion:^{
-                           self.folderEditor.delegate = nil;
-                           self.folderEditor = nil;
                            self.noteNavigationController = nil;
                            self.noteTransitioningDelegate = nil;
                          }];
@@ -438,32 +355,9 @@ enum class PresentedState {
   [self.delegate noteInteractionControllerWillCommitContentChange:self];
 }
 
-#pragma mark - NoteFolderEditorViewControllerDelegate
+#pragma mark - NoteFolderChooserViewControllerDelegate
 
-- (void)noteFolderEditor:(NoteFolderEditorViewController*)folderEditor
-      didFinishEditingFolder:(const NoteNode*)folder {
-  DCHECK(folder);
-  [self dismissFolderEditorAnimated:YES];
-}
-
-- (void)noteFolderEditorDidDeleteEditedFolder:
-    (NoteFolderEditorViewController*)folderEditor {
-  [self dismissFolderEditorAnimated:YES];
-}
-
-- (void)noteFolderEditorDidCancel:
-    (NoteFolderEditorViewController*)folderEditor {
-  [self dismissFolderEditorAnimated:YES];
-}
-
-- (void)noteFolderEditorWillCommitTitleChange:
-    (NoteFolderEditorViewController*)controller {
-  [self.delegate noteInteractionControllerWillCommitContentChange:self];
-}
-
-#pragma mark - NoteFolderViewControllerDelegate
-
-- (void)folderPicker:(NoteFolderViewController*)folderPicker
+- (void)folderPicker:(NoteFolderChooserViewController*)folderPicker
     didFinishWithFolder:(const  vivaldi::NoteNode*)folder {
   [self dismissFolderSelectionAnimated:YES];
 
@@ -472,11 +366,11 @@ enum class PresentedState {
   }
 }
 
-- (void)folderPickerDidCancel:(NoteFolderViewController*)folderPicker {
+- (void)folderPickerDidCancel:(NoteFolderChooserViewController*)folderPicker {
   [self dismissFolderSelectionAnimated:YES];
 }
 
-- (void)folderPickerDidDismiss:(NoteFolderViewController*)folderPicker {
+- (void)folderPickerDidDismiss:(NoteFolderChooserViewController*)folderPicker {
   [self dismissFolderSelectionAnimated:YES];
 }
 
@@ -568,6 +462,67 @@ noteHomeViewControllerWantsDismissal:(NoteHomeViewController*)controller
   self.noteNavigationControllerDelegate =
       [[NoteNavigationControllerDelegate alloc] init];
   navController.delegate = self.noteNavigationControllerDelegate;
+}
+
+- (void)presentNoteEditorWithEditingNode:(const NoteNode*)editingNode
+                                  parentNode:(const NoteNode*)parentNode
+                                   isEditing:(BOOL)isEditing
+                                    isFolder:(BOOL)isFolder {
+  if (isFolder)
+    [self presentNoteFolderEditor:editingNode
+                                  parent:parentNode
+                                   isEditing:isEditing];
+  else {
+      [self presentNoteEditor:editingNode
+                   parentNode:parentNode
+                    isEditing:isEditing];
+  }
+}
+
+/// 'editingItem' can be nil as this editor will be presented for both adding
+/// and editing item
+- (void)presentNoteEditor:(const NoteNode*)node
+               parentNode:(const NoteNode*)parentNode
+                isEditing:(BOOL)isEditing {
+
+  NoteAddEditViewController* controller =
+    [NoteAddEditViewController
+     initWithBrowser:_browser
+                item:node
+              parent:parentNode
+           isEditing:isEditing
+        allowsCancel:YES];
+  self.noteEditor = controller;
+
+  UINavigationController *newVC =
+      [[UINavigationController alloc]
+        initWithRootViewController:controller];
+
+  // Present the nav bar controller on top of the parent
+  [_parentController presentViewController:newVC
+                                      animated:YES
+                                    completion:nil];
+}
+
+/// 'editingItem' can be nil as this editor will be presented for both adding
+/// and editing item
+- (void)presentNoteFolderEditor:(const NoteNode*)node
+                                parent:(const NoteNode*)parentNode
+                                 isEditing:(BOOL)isEditing {
+   NoteAddEditFolderViewController* controller =
+    [NoteAddEditFolderViewController
+       initWithBrowser:_browser
+                  item:node
+                parent:parentNode
+             isEditing:isEditing
+          allowsCancel:YES];
+  UINavigationController *newVC =
+      [[UINavigationController alloc]
+        initWithRootViewController:controller];
+  // Present the nav bar controller on top of the parent
+  [_parentController presentViewController:newVC
+                                      animated:YES
+                                    completion:nil];
 }
 
 @end

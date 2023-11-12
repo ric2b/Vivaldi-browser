@@ -6,11 +6,13 @@ package org.chromium.chrome.browser.share;
 
 import android.app.Activity;
 
+import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.annotation.VisibleForTesting;
+import androidx.core.os.BuildCompat;
 
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.AppHooks;
@@ -21,9 +23,10 @@ import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.share.ShareContentTypeHelper.ContentType;
+import org.chromium.chrome.browser.share.android_share_sheet.AndroidShareSheetController;
 import org.chromium.chrome.browser.share.link_to_text.LinkToTextHelper;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetCoordinator;
-import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -39,6 +42,8 @@ import org.chromium.printing.PrintingController;
 import org.chromium.printing.PrintingControllerImpl;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.GURL;
+
+import java.util.Set;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -167,10 +172,8 @@ public class ShareDelegateImpl implements ShareDelegate {
             final WebContents webContents, final String title, final @NonNull GURL visibleUrl,
             final GURL canonicalUrl, @ShareOrigin final int shareOrigin,
             final boolean shareDirectly) {
-        ShareParams.Builder builder =
-                new ShareParams.Builder(window, title, getUrlToShare(visibleUrl, canonicalUrl))
-                        .setScreenshotUri(null);
-        share(builder.build(),
+        share(new ShareParams.Builder(window, title, getUrlToShare(visibleUrl, canonicalUrl))
+                        .build(),
                 new ChromeShareExtras.Builder()
                         .setSaveLastUsed(!shareDirectly)
                         .setShareDirectly(shareDirectly)
@@ -247,12 +250,14 @@ public class ShareDelegateImpl implements ShareDelegate {
     }
 
     @Override
+    @OptIn(markerClass = androidx.core.os.BuildCompat.PrereleaseSdkCheck.class)
     public boolean isSharingHubEnabled() {
         // Vivaldi
         if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
 
         return !(mIsCustomTab
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.SHARE_SHEET_MIGRATION_ANDROID));
+                || (ChromeFeatureList.isEnabled(ChromeFeatureList.SHARE_SHEET_MIGRATION_ANDROID)
+                        && BuildCompat.isAtLeastU()));
     }
 
     /**
@@ -285,21 +290,71 @@ public class ShareDelegateImpl implements ShareDelegate {
                 ShareHelper.recordShareSource(ShareHelper.ShareSourceAndroid.CHROME_SHARE_SHEET);
                 boolean isIncognito = tabModelSelectorSupplier.hasValue()
                         && tabModelSelectorSupplier.get().isIncognitoSelected();
-                ShareSheetCoordinator coordinator = new ShareSheetCoordinator(controller,
-                        lifecycleDispatcher, tabProvider,
-                        new ShareSheetPropertyModelBuilder(controller,
-                                ContextUtils.getApplicationContext().getPackageManager(), profile),
-                        printCallback, new LargeIconBridge(profile), isIncognito,
-                        AppHooks.get().getImageEditorModuleProvider(),
-                        TrackerFactory.getTrackerForProfile(profile), profile);
+                ShareSheetCoordinator coordinator =
+                        new ShareSheetCoordinator(controller, lifecycleDispatcher, tabProvider,
+                                printCallback, new LargeIconBridge(profile), isIncognito,
+                                AppHooks.get().getImageEditorModuleProvider(),
+                                TrackerFactory.getTrackerForProfile(profile), profile);
                 coordinator.showInitialShareSheet(params, chromeShareExtras, shareStartTime);
+                RecordHistogram.recordEnumeratedHistogram(
+                        "Sharing.SharingHubAndroid.ShareContentType",
+                        getShareContentType(params, chromeShareExtras), ShareContentType.COUNT);
             } else {
                 RecordHistogram.recordEnumeratedHistogram(
                         "Sharing.DefaultSharesheetAndroid.Opened", shareOrigin, ShareOrigin.COUNT);
-                // Profile can be null here since it is checked later on before being used.
-                ShareHelper.shareWithSystemShareSheetUi(
-                        params, profile, chromeShareExtras.saveLastUsed());
+                RecordHistogram.recordEnumeratedHistogram(
+                        "Sharing.DefaultSharesheetAndroid.ShareContentType",
+                        getShareContentType(params, chromeShareExtras), ShareContentType.COUNT);
+                AndroidShareSheetController.showShareSheet(params, chromeShareExtras, controller,
+                        tabProvider, tabModelSelectorSupplier, profileSupplier, printCallback);
+                RecordHistogram.recordEnumeratedHistogram(
+                        "Sharing.SharingHubAndroid.ShareContentType",
+                        getShareContentType(params, chromeShareExtras), ShareContentType.COUNT);
             }
         }
+    }
+
+    // These values are recorded as histogram values. Entries should not be
+    // renumbered and numeric values should never be reused.
+    @IntDef({ShareContentType.UNKNOWN, ShareContentType.TEXT, ShareContentType.TEXT_WITH_LINK,
+            ShareContentType.LINK, ShareContentType.IMAGE, ShareContentType.IMAGE_WITH_LINK,
+            ShareContentType.FILES, ShareContentType.COUNT})
+    @interface ShareContentType {
+        int UNKNOWN = 0;
+        int TEXT = 1;
+        int TEXT_WITH_LINK = 2;
+        int LINK = 3;
+        int IMAGE = 4;
+        int IMAGE_WITH_LINK = 5;
+        int FILES = 6;
+
+        int COUNT = 7;
+    }
+
+    static @ShareContentType int getShareContentType(
+            ShareParams params, ChromeShareExtras chromeShareExtras) {
+        @ContentType
+        Set<Integer> types = ShareContentTypeHelper.getContentTypes(params, chromeShareExtras);
+        if (types.contains(ContentType.OTHER_FILE_TYPE)) {
+            return ShareContentType.FILES;
+        }
+        if (types.contains(ContentType.IMAGE_AND_LINK)) {
+            return ShareContentType.IMAGE_WITH_LINK;
+        }
+        if (types.contains(ContentType.IMAGE)) {
+            return ShareContentType.IMAGE;
+        }
+        if (types.contains(ContentType.HIGHLIGHTED_TEXT)
+                || types.contains(ContentType.LINK_AND_TEXT)) {
+            return ShareContentType.TEXT_WITH_LINK;
+        }
+        if (types.contains(ContentType.LINK_PAGE_NOT_VISIBLE)
+                || types.contains(ContentType.LINK_PAGE_VISIBLE)) {
+            return ShareContentType.LINK;
+        }
+        if (types.contains(ContentType.TEXT)) {
+            return ShareContentType.TEXT;
+        }
+        return ShareContentType.UNKNOWN;
     }
 }

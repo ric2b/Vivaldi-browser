@@ -4,6 +4,7 @@
 
 import("//build/config/chromeos/ui_mode.gni")
 import("//chrome/test/base/js2gtest.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/grit/preprocess_if_expr.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
@@ -22,14 +23,60 @@ static_library("eche_app_ui_pref") {
   deps = [ "//base:base" ]
 }
 
+static_library("feature_status") {
+  sources = [
+    "feature_status.cc",
+    "feature_status.h",
+  ]
+}
+
+static_library("eche_connection_status") {
+  sources = [
+    "eche_connection_status_handler.cc",
+    "eche_connection_status_handler.h",
+  ]
+
+  deps = [
+    ":feature_status",
+    "//ash/constants",
+    "//ash/webui/eche_app_ui/mojom",
+    "//base:base",
+    "//chromeos/ash/components/multidevice/logging",
+  ]
+}
+
+static_library("system_info_provider") {
+  sources = [
+    "system_info.cc",
+    "system_info.h",
+    "system_info_provider.cc",
+    "system_info_provider.h",
+  ]
+
+  deps = [
+    "//ash/constants",
+    "//ash/public/cpp",
+    "//ash/webui/eche_app_ui/mojom",
+    "//base:base",
+    "//chromeos/ash/components/multidevice/logging",
+    "//chromeos/services/network_config/public/cpp",
+  ]
+}
+
 static_library("eche_app_ui") {
   sources = [
+    "accessibility_provider.cc",
+    "accessibility_provider.h",
+    "accessibility_tree_converter.cc",
+    "accessibility_tree_converter.h",
     "apps_access_manager.cc",
     "apps_access_manager.h",
     "apps_access_manager_impl.cc",
     "apps_access_manager_impl.h",
     "apps_access_setup_operation.cc",
     "apps_access_setup_operation.h",
+    "apps_launch_info_provider.cc",
+    "apps_launch_info_provider.h",
     "eche_alert_generator.cc",
     "eche_alert_generator.h",
     "eche_app_manager.cc",
@@ -66,16 +113,12 @@ static_library("eche_app_ui") {
     "eche_tray_stream_status_observer.h",
     "eche_uid_provider.cc",
     "eche_uid_provider.h",
-    "feature_status.cc",
-    "feature_status.h",
     "feature_status_provider.cc",
     "feature_status_provider.h",
     "launch_app_helper.cc",
     "launch_app_helper.h",
     "system_info.cc",
     "system_info.h",
-    "system_info_provider.cc",
-    "system_info_provider.h",
     "untrusted_eche_app_ui.cc",
     "untrusted_eche_app_ui.h",
     "url_constants.cc",
@@ -84,7 +127,11 @@ static_library("eche_app_ui") {
 
   deps = [
     ":eche_app_ui_pref",
+    ":eche_connection_status",
+    ":feature_status",
+    ":system_info_provider",
     "//ash",
+    "//ash/components/arc/mojom:mojom",
     "//ash/constants",
     "//ash/public/cpp",
     "//ash/webui/eche_app_ui/mojom",
@@ -139,9 +186,11 @@ source_set("unit_tests") {
   sources = [
     "apps_access_manager_impl_unittest.cc",
     "apps_access_setup_operation_unittest.cc",
+    "apps_launch_info_provider_unittest.cc",
     "eche_alert_generator_unittest.cc",
     "eche_app_manager_unittest.cc",
     "eche_connection_scheduler_impl_unittest.cc",
+    "eche_connection_status_handler_unittest.cc",
     "eche_connector_impl_unittest.cc",
     "eche_feature_status_provider_unittest.cc",
     "eche_message_receiver_impl_unittest.cc",
@@ -159,10 +208,13 @@ source_set("unit_tests") {
   deps = [
     ":eche_app_ui",
     ":eche_app_ui_pref",
+    ":eche_connection_status",
+    ":feature_status",
+    ":system_info_provider",
     ":test_support",
     "//ash:test_support",
     "//ash/public/cpp",
-    "//ash/webui/eche_app_ui/proto",
+    "//ash/webui/eche_app_ui/proto:proto",
     "//base",
     "//base/test:test_support",
     "//chromeos/ash/components:test_support",
@@ -178,6 +230,7 @@ source_set("unit_tests") {
     "//chromeos/ash/services/secure_channel/public/cpp/client:client",
     "//chromeos/ash/services/secure_channel/public/cpp/client:test_support",
     "//chromeos/ash/services/secure_channel/public/cpp/shared:shared",
+    "//components/arc:arc",
     "//components/prefs:test_support",
     "//components/sync_preferences:test_support",
     "//dbus",
@@ -246,4 +299,18 @@ preprocess_if_expr("preprocess_mojo") {
   out_folder = "$target_gen_dir/$preprocess_folder"
   out_manifest = "$target_gen_dir/$preprocess_mojo_manifest"
   in_files = [ "ash/webui/eche_app_ui/mojom/eche_app.mojom-lite.js" ]
+}
+
+if (use_libfuzzer) {
+  fuzzer_test("accessibility_event_fuzzer") {
+    sources = [ "accessibility_proto_fuzzer.cc" ]
+    deps = [
+      ":eche_app_ui",
+      "//ash/webui/eche_app_ui/proto:proto",
+      "//base",
+      "//base/test:test_support",
+      "//components/arc",
+      "//third_party/libprotobuf-mutator",
+    ]
+  }
 }

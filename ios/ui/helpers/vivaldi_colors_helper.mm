@@ -72,4 +72,8 @@
   return [UIColor colorNamed:vSystemGray07];
 }
 
++(UIColor*)vTopToolbarTintColor {
+  return [UIColor colorNamed:vTopToolbarTintColor];
+}
+
 @end

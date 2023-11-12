@@ -9,6 +9,7 @@ import static androidx.test.espresso.Espresso.pressBack;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
@@ -26,10 +27,11 @@ import static org.chromium.components.browser_ui.modaldialog.ModalDialogTestUtil
 import static org.chromium.components.browser_ui.modaldialog.ModalDialogTestUtils.showDialog;
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 
-import android.support.test.InstrumentationRegistry;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.espresso.Espresso;
 import androidx.test.filters.SmallTest;
 
@@ -50,7 +52,6 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.cc.input.BrowserControlsState;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.omnibox.UrlBar;
@@ -59,6 +60,7 @@ import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
@@ -155,7 +157,7 @@ public class ChromeTabModalPresenterTest {
         ensureDialogContainerVisible();
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertThat(containerParent.indexOfChild(dialogContainer),
+            assertThat(containerParent.indexOfChild(dialogContainer),
                     Matchers.greaterThan(containerParent.indexOfChild(controlContainer)));
         });
 
@@ -165,7 +167,7 @@ public class ChromeTabModalPresenterTest {
         mOmnibox.requestFocus();
         mTestObserver.onUrlFocusChangedCallback.waitForCallback(callCount);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertThat(containerParent.indexOfChild(dialogContainer),
+            assertThat(containerParent.indexOfChild(dialogContainer),
                     Matchers.lessThan(containerParent.indexOfChild(controlContainer)));
         });
 
@@ -174,7 +176,7 @@ public class ChromeTabModalPresenterTest {
         mOmnibox.clearFocus();
         mTestObserver.onUrlFocusChangedCallback.waitForCallback(callCount);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertThat(containerParent.indexOfChild(dialogContainer),
+            assertThat(containerParent.indexOfChild(dialogContainer),
                     Matchers.greaterThan(containerParent.indexOfChild(controlContainer)));
         });
 
@@ -186,6 +188,7 @@ public class ChromeTabModalPresenterTest {
     @SmallTest
     @Feature({"ModalDialog"})
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @DisabledTest(message = "https://crbug.com/1420186")
     public void testSuspend_ToggleOverview() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> mActivity.getActivityTab().addObserver(mTestObserver));
@@ -527,8 +530,8 @@ public class ChromeTabModalPresenterTest {
 
         // Show a tab modal dialog and then navigate to a different page.
         showDialog(mManager, dialog1, ModalDialogType.TAB);
-        EmbeddedTestServer server =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        EmbeddedTestServer server = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         sActivityTestRule.loadUrl(server.getURL("/chrome/test/data/android/simple.html"));
         mTestObserver.onDialogDismissedCallback.waitForCallback(callCount);
 

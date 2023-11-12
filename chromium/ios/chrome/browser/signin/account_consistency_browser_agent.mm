@@ -8,11 +8,11 @@
 
 #import "components/signin/core/browser/account_reconcilor.h"
 #import "components/signin/ios/browser/account_consistency_service.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/show_signin_command.h"
 #import "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #import "ios/chrome/browser/signin/account_reconcilor_factory.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/web_state_dependency_installation_observer.h"
 
@@ -88,9 +88,16 @@ void AccountConsistencyBrowserAgent::OnShowConsistencyPromo(
 }
 
 void AccountConsistencyBrowserAgent::OnAddAccount() {
+  if ([base_view_controller_ presentedViewController]) {
+    // If the base view controller is already presenting a view, the sign-in
+    // should not appear on top of it.
+    // See http://crbug.com/1399464.
+    return;
+  }
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
       initWithOperation:AuthenticationOperationAddAccount
-            accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN];
+            accessPoint:signin_metrics::AccessPoint::
+                            ACCESS_POINT_ACCOUNT_CONSISTENCY_SERVICE];
   [handler_ showSignin:command baseViewController:base_view_controller_];
 }
 
@@ -112,7 +119,7 @@ void AccountConsistencyBrowserAgent::OnGoIncognito(const GURL& url) {
           referrer:web::Referrer()  // Strip referrer when switching modes.
        inIncognito:YES
       inBackground:NO
-          appendTo:kLastTab];
+          appendTo:OpenPosition::kLastTab];
   [handler_ openURLInNewTab:command];
 }
 

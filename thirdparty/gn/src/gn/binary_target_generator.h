@@ -30,6 +30,7 @@ class BinaryTargetGenerator : public TargetGenerator {
   bool FillOutputPrefixOverride();
   bool FillOutputDir();
   bool FillAllowCircularIncludesFrom();
+  bool FillPool();
   bool ValidateSources();
 
   Target::OutputType output_type_;

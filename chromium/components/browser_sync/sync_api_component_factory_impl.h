@@ -62,7 +62,9 @@ class SyncApiComponentFactoryImpl : public syncer::SyncApiComponentFactory {
           profile_password_store,
       const scoped_refptr<password_manager::PasswordStoreInterface>&
           account_password_store,
-      sync_bookmarks::BookmarkSyncService* bookmark_sync_service,
+      sync_bookmarks::BookmarkSyncService*
+          local_or_syncable_bookmark_sync_service,
+      sync_bookmarks::BookmarkSyncService* account_bookmark_sync_service,
       power_bookmarks::PowerBookmarkService* power_bookmark_service,
       sync_notes::NoteSyncService* note_sync_service);
   SyncApiComponentFactoryImpl(const SyncApiComponentFactoryImpl&) = delete;
@@ -129,10 +131,13 @@ class SyncApiComponentFactoryImpl : public syncer::SyncApiComponentFactory {
       profile_password_store_;
   const scoped_refptr<password_manager::PasswordStoreInterface>
       account_password_store_;
-  const raw_ptr<sync_bookmarks::BookmarkSyncService> bookmark_sync_service_;
+  const raw_ptr<sync_bookmarks::BookmarkSyncService>
+      local_or_syncable_bookmark_sync_service_;
+  const raw_ptr<sync_bookmarks::BookmarkSyncService>
+      account_bookmark_sync_service_;
   const raw_ptr<power_bookmarks::PowerBookmarkService> power_bookmark_service_;
 
-  sync_notes::NoteSyncService* const note_sync_service_;
+  const raw_ptr<sync_notes::NoteSyncService> note_sync_service_;
 
 };
 

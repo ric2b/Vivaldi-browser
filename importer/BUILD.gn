@@ -36,7 +36,7 @@ static_library("importer") {
       "//vivaldi/app:vivaldi_unscaled_native_resources",
     ]
     public_deps = [
-      "//components/os_crypt:os_crypt",
+      "//components/os_crypt/sync:os_crypt",
     ]
   }
 }

@@ -39,10 +39,10 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/hdr_metadata.h"
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 #include <CoreVideo/CVPixelBuffer.h>
 #include "base/mac/scoped_cftyperef.h"
-#endif  // BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_APPLE)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #include "base/files/scoped_file.h"
@@ -168,6 +168,14 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
                             const gfx::Rect& visible_rect,
                             const gfx::Size& natural_size);
 
+  // Compute a strided layout for `format` and `coded_size`, and return a fully
+  // specified layout including offsets and plane sizes. Except that VideoFrame
+  // knows how to compute plane sizes, this method should be in
+  // `VideoFrameLayout`, probably just folded into `CreateWithStrides()`.
+  static absl::optional<VideoFrameLayout> CreateFullySpecifiedLayoutWithStrides(
+      VideoPixelFormat format,
+      const gfx::Size& coded_size);
+
   // Creates a new frame in system memory with given parameters. Buffers for the
   // frame are allocated but not initialized. The caller must not make
   // assumptions about the actual underlying size(s), but check the returned
@@ -227,7 +235,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
-      uint8_t* data,
+      const uint8_t* data,
       size_t data_size,
       base::TimeDelta timestamp);
 
@@ -235,7 +243,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const VideoFrameLayout& layout,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
-      uint8_t* data,
+      const uint8_t* data,
       size_t data_size,
       base::TimeDelta timestamp);
 
@@ -249,9 +257,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       int32_t y_stride,
       int32_t u_stride,
       int32_t v_stride,
-      uint8_t* y_data,
-      uint8_t* u_data,
-      uint8_t* v_data,
+      const uint8_t* y_data,
+      const uint8_t* u_data,
+      const uint8_t* v_data,
       base::TimeDelta timestamp);
 
   // Wraps external YUV data with VideoFrameLayout. The returned VideoFrame does
@@ -260,9 +268,9 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const VideoFrameLayout& layout,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
-      uint8_t* y_data,
-      uint8_t* u_data,
-      uint8_t* v_data,
+      const uint8_t* y_data,
+      const uint8_t* u_data,
+      const uint8_t* v_data,
       base::TimeDelta timestamp);
 
   // Wraps external YUVA data of the given parameters with a VideoFrame.
@@ -276,10 +284,10 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       int32_t u_stride,
       int32_t v_stride,
       int32_t a_stride,
-      uint8_t* y_data,
-      uint8_t* u_data,
-      uint8_t* v_data,
-      uint8_t* a_data,
+      const uint8_t* y_data,
+      const uint8_t* u_data,
+      const uint8_t* v_data,
+      const uint8_t* a_data,
       base::TimeDelta timestamp);
 
   // Wraps external NV12 data of the given parameters with a VideoFrame.
@@ -291,8 +299,8 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const gfx::Size& natural_size,
       int32_t y_stride,
       int32_t uv_stride,
-      uint8_t* y_data,
-      uint8_t* uv_data,
+      const uint8_t* y_data,
+      const uint8_t* uv_data,
       base::TimeDelta timestamp);
 
   // Wraps |gpu_memory_buffer| along with the mailboxes created from
@@ -327,7 +335,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       base::TimeDelta timestamp);
 #endif
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   // Wraps a provided CVPixelBuffer with a VideoFrame. The pixel buffer is
   // retained for the lifetime of the VideoFrame and released upon destruction.
   // The image data is only accessible via the pixel buffer, which could be
@@ -562,22 +570,17 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // IsMappable() frame type. The memory is owned by VideoFrame object and must
   // not be freed by the caller.
   const uint8_t* data(size_t plane) const {
-    DCHECK(IsValidPlane(format(), plane));
-    DCHECK(IsMappable());
-    if (UNLIKELY(plane >= kMaxPlanes)) {
-      NOTREACHED();
-      return nullptr;
-    }
+    CHECK(IsValidPlane(format(), plane));
+    CHECK(IsMappable());
     return data_[plane];
   }
   uint8_t* writable_data(size_t plane) {
-    DCHECK(IsValidPlane(format(), plane));
-    DCHECK(IsMappable());
-    if (UNLIKELY(plane >= kMaxPlanes)) {
-      NOTREACHED();
-      return nullptr;
-    }
-    return data_[plane];
+    // TODO(crbug.com/1435549): Also CHECK that the storage type isn't
+    // STORAGE_UNOWNED_MEMORY once non-compliant usages are fixed.
+    CHECK_NE(storage_type_, STORAGE_SHMEM);
+    CHECK(IsValidPlane(format(), plane));
+    CHECK(IsMappable());
+    return const_cast<uint8_t*>(data_[plane]);
   }
 
   const absl::optional<gpu::VulkanYCbCrInfo>& ycbcr_info() const {
@@ -615,7 +618,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   bool IsSameDmaBufsAs(const VideoFrame& frame) const;
 #endif
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   // Returns the backing CVPixelBuffer, if present.
   CVPixelBufferRef CvPixelBuffer() const;
 #endif
@@ -720,7 +723,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
                                     const gfx::Rect& visible_rect,
                                     const gfx::Size& natural_size);
 
-  void set_data(size_t plane, uint8_t* ptr) {
+  void set_data(size_t plane, const uint8_t* ptr) {
     DCHECK(IsValidPlane(format(), plane));
     DCHECK(ptr);
     data_[plane] = ptr;
@@ -752,13 +755,18 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // false if this would cause an out of memory error.
   [[nodiscard]] bool AllocateMemory(bool zero_initialize_memory);
 
-  // Calculates plane size.
-  // It first considers buffer size layout_ object provides. If layout's
+  // Return plane sizes for the given layout.
+  //
+  // It first considers buffer size layout object provides. If layout's
   // number of buffers equals to number of planes, and buffer size is assigned
   // (non-zero), it returns buffers' size.
+  //
   // Otherwise, it uses the first (num_buffers - 1) assigned buffers' size as
   // plane size. Then for the rest unassigned planes, calculates their size
   // based on format, coded size and stride for the plane.
+  static std::vector<size_t> CalculatePlaneSize(const VideoFrameLayout& layout);
+
+  // Calculates plane size for `layout_`.
   std::vector<size_t> CalculatePlaneSize() const;
 
   // Returns true iff the frame has a shared memory storage type, and the
@@ -791,7 +799,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // TODO(mcasas): we don't know on ctor if we own |data_| or not. Change
   // to std::unique_ptr<uint8_t, AlignedFreeDeleter> after refactoring
   // VideoFrame.
-  uint8_t* data_[kMaxPlanes];
+  const uint8_t* data_[kMaxPlanes];
 
   // Native texture mailboxes, if this is a IsTexture() frame.
   gpu::MailboxHolder mailbox_holders_[kMaxPlanes];
@@ -823,7 +831,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   scoped_refptr<DmabufHolder> dmabuf_fds_;
 #endif
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   // CVPixelBuffer, if this frame is wrapping one.
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer_;
 #endif

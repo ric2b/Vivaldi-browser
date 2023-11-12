@@ -14,6 +14,7 @@
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_observer.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/timer/timer.h"
@@ -60,7 +61,8 @@ class ASH_EXPORT DragHandle : public views::Button,
 
   // Immediately begins the animation to return the drag handle back to its
   // original position and hide the tooltip.
-  void HideDragHandleNudge(contextual_tooltip::DismissNudgeReason reason);
+  void HideDragHandleNudge(contextual_tooltip::DismissNudgeReason reason,
+                           bool animate);
 
   // Called when the window drag from shelf starts or ends. The drag handle
   // contextual nudge will remain visible while the gesture is in progress.
@@ -130,7 +132,7 @@ class ASH_EXPORT DragHandle : public views::Button,
 
   // Helper function to hide the drag handle nudge. Called by
   // |hide_drag_handle_nudge_timer_|.
-  void HideDragHandleNudgeHelper(bool hidden_by_tap);
+  void HideDragHandleNudgeHelper(bool hidden_by_tap, bool animate);
 
   // Helper function to animate the drag handle for the drag handle gesture
   // contextual nudge.
@@ -151,7 +153,7 @@ class ASH_EXPORT DragHandle : public views::Button,
   void StopDragHandleNudgeShowTimer();
 
   // Pointer to the shelf that owns the drag handle.
-  Shelf* const shelf_;
+  const raw_ptr<Shelf, ExperimentalAsh> shelf_;
 
   // Timer to hide drag handle nudge if it has a timed life.
   base::OneShotTimer hide_drag_handle_nudge_timer_;
@@ -174,7 +176,7 @@ class ASH_EXPORT DragHandle : public views::Button,
   bool window_drag_from_shelf_in_progress_ = false;
 
   // A label used to educate users about swipe gestures on the drag handle.
-  ContextualNudge* drag_handle_nudge_ = nullptr;
+  raw_ptr<ContextualNudge, ExperimentalAsh> drag_handle_nudge_ = nullptr;
 
   std::unique_ptr<Shelf::ScopedAutoHideLock> auto_hide_lock_;
 

@@ -115,12 +115,8 @@ const char kOtherAdUrl[] = "https://other-ads.com/ad/disallowed.html";
 const char kNonAdUrl[] = "https://foo.com/";
 const char kNonAdUrlSameOrigin[] = "https://ads.com/foo";
 const char kAllowedUrl[] = "https://foo.com/ad/not_disallowed.html";
-const char kMemoryAggregateMaxHistogramId[] =
-    "PageLoad.Clients.Ads.Memory.Aggregate.Max";
 const char kMemoryMainFrameMaxHistogramId[] =
     "PageLoad.Clients.Ads.Memory.MainFrame.Max";
-const char kMemoryPerFrameMaxHistogramId[] =
-    "PageLoad.Clients.Ads.Memory.PerFrame.Max";
 const char kMemoryUpdateCountHistogramId[] =
     "PageLoad.Clients.Ads.Memory.UpdateCount";
 
@@ -210,8 +206,7 @@ class ResourceLoadingCancellingThrottle
         std::vector<blink::UseCounterFeature>(), resources,
         mojom::FrameRenderDataUpdatePtr(absl::in_place),
         mojom::CpuTimingPtr(absl::in_place),
-        mojom::InputTimingPtr(absl::in_place),
-        mojom::SubresourceLoadMetricsPtr(absl::in_place), 0);
+        mojom::InputTimingPtr(absl::in_place), absl::nullopt, 0);
   }
 };
 
@@ -3140,10 +3135,6 @@ TEST_P(AdsMemoryMeasurementTest, SingleAdFrame_MaxMemoryBytesRecorded) {
   // Navigate main frame to record histograms.
   NavigateMainFrame(kNonAdUrl);
 
-  histogram_tester().ExpectUniqueSample(kMemoryPerFrameMaxHistogramId, 10 + 30,
-                                        1);
-  histogram_tester().ExpectUniqueSample(kMemoryAggregateMaxHistogramId, 10 + 30,
-                                        1);
   histogram_tester().ExpectUniqueSample(kMemoryUpdateCountHistogramId, 3, 1);
 }
 
@@ -3175,10 +3166,6 @@ TEST_P(AdsMemoryMeasurementTest, MultiAdFramesNested_MaxMemoryBytesRecorded) {
   // Navigate main frame to record histograms.
   NavigateMainFrame(kNonAdUrl);
 
-  histogram_tester().ExpectUniqueSample(kMemoryPerFrameMaxHistogramId,
-                                        10 + 10 + 30 + 10, 1);
-  histogram_tester().ExpectUniqueSample(kMemoryAggregateMaxHistogramId,
-                                        10 + 10 + 30 + 10, 1);
   histogram_tester().ExpectUniqueSample(kMemoryUpdateCountHistogramId, 6, 1);
 }
 
@@ -3216,12 +3203,6 @@ TEST_P(AdsMemoryMeasurementTest,
   // Navigate main frame to record histograms.
   NavigateMainFrame(kNonAdUrl);
 
-  histogram_tester().ExpectBucketCount(kMemoryPerFrameMaxHistogramId,
-                                       10 - 9 + 1 + 50, 1);
-  histogram_tester().ExpectBucketCount(kMemoryPerFrameMaxHistogramId, 10 + 100,
-                                       1);
-  histogram_tester().ExpectUniqueSample(kMemoryAggregateMaxHistogramId,
-                                        10 - 9 + 10 + 100 + 1, 1);
   histogram_tester().ExpectUniqueSample(kMemoryUpdateCountHistogramId, 8, 1);
 }
 

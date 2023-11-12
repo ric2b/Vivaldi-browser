@@ -51,6 +51,11 @@ public class AdaptiveToolbarFeatures {
      */
     public static final int DEFAULT_CONTEXTUAL_PAGE_ACTION_CHIP_DELAY_MS = 3000;
 
+    /**
+     * Default action chip delay for price tracking.
+     */
+    public static final int DEFAULT_PRICE_TRACKING_ACTION_CHIP_DELAY_MS = 6000;
+
     @AdaptiveToolbarButtonVariant
     private static Integer sButtonVariant;
 
@@ -109,6 +114,11 @@ public class AdaptiveToolbarFeatures {
     /** @return Whether the contextual page actions should show the action chip version. */
     public static boolean shouldShowActionChip(@AdaptiveToolbarButtonVariant int buttonVariant) {
         if (!isDynamicAction(buttonVariant)) return false;
+        if (buttonVariant == AdaptiveToolbarButtonVariant.PRICE_TRACKING) {
+            // Price tracking launched with the action chip variant.
+            return true;
+        }
+
         return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                 getFeatureNameForButtonVariant(buttonVariant), "action_chip", false);
     }
@@ -119,6 +129,11 @@ public class AdaptiveToolbarFeatures {
      */
     public static int getContextualPageActionDelayMs(
             @AdaptiveToolbarButtonVariant int buttonVariant) {
+        if (buttonVariant == AdaptiveToolbarButtonVariant.PRICE_TRACKING) {
+            // Price tracking launched with an action chip delay of 6 seconds.
+            return DEFAULT_PRICE_TRACKING_ACTION_CHIP_DELAY_MS;
+        }
+
         return ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
                 getFeatureNameForButtonVariant(buttonVariant), "action_chip_time_ms",
                 DEFAULT_CONTEXTUAL_PAGE_ACTION_CHIP_DELAY_MS);
@@ -129,6 +144,11 @@ public class AdaptiveToolbarFeatures {
      */
     public static boolean shouldUseAlternativeActionChipColor(
             @AdaptiveToolbarButtonVariant int buttonVariant) {
+        if (buttonVariant == AdaptiveToolbarButtonVariant.PRICE_TRACKING) {
+            // Price tracking launched without using alternative color.
+            return false;
+        }
+
         return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
                 getFeatureNameForButtonVariant(buttonVariant), "action_chip_with_different_color",
                 false);
@@ -142,6 +162,16 @@ public class AdaptiveToolbarFeatures {
         // a something common for android clients.
         return ChromeFeatureList.isEnabled(ChromeFeatureList.CONTEXTUAL_PAGE_ACTIONS)
                 && isAnyContextualPageActionButtonEnabled();
+    }
+
+    public static boolean isAdaptiveToolbarTranslateEnabled() {
+        return ChromeFeatureList.isEnabled(
+                ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_TRANSLATE);
+    }
+
+    public static boolean isAdaptiveToolbarAddToBookmarksEnabled() {
+        return ChromeFeatureList.isEnabled(
+                ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_ADD_TO_BOOKMARKS);
     }
 
     private static boolean isAnyContextualPageActionButtonEnabled() {

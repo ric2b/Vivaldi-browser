@@ -113,6 +113,7 @@
 #include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/constants/chromeos_features.h"
@@ -125,6 +126,11 @@
 #include "storage/browser/file_system/file_system_backend.h"
 #include "storage/browser/file_system/file_system_context.h"
 #endif
+
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -239,7 +245,7 @@ bool ExtensionService::OnExternalExtensionUpdateUrlFound(
 
       // Fetch the installation info from the prefs, and reload the extension
       // with a modified install location.
-      std::unique_ptr<ExtensionInfo> installed_extension(
+      absl::optional<ExtensionInfo> installed_extension(
           extension_prefs_->GetInstalledExtensionInfo(info.extension_id));
       installed_extension->extension_location = info.download_location;
 
@@ -395,8 +401,6 @@ ExtensionService::ExtensionService(
   on_app_terminating_subscription_ =
       browser_shutdown::AddAppTerminatingCallback(base::BindOnce(
           &ExtensionService::OnAppTerminating, base::Unretained(this)));
-  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_TERMINATED,
-                 content::NotificationService::AllBrowserContextsAndSources());
 
   host_registry_observation_.Observe(ExtensionHostRegistry::Get(profile));
 
@@ -552,13 +556,13 @@ void ExtensionService::MaybeFinishShutdownDelayed() {
       extension_prefs_->GetAllDelayedInstallInfo();
   for (const auto& info : delayed_info) {
     scoped_refptr<const Extension> extension;
-    if (info->extension_manifest) {
+    if (info.extension_manifest) {
       std::string error;
       extension = Extension::Create(
-          info->extension_path, info->extension_location,
-          *info->extension_manifest,
-          extension_prefs_->GetDelayedInstallCreationFlags(info->extension_id),
-          info->extension_id, &error);
+          info.extension_path, info.extension_location,
+          *info.extension_manifest,
+          extension_prefs_->GetDelayedInstallCreationFlags(info.extension_id),
+          info.extension_id, &error);
       if (extension.get()) {
         delayed_installs_.Insert(extension);
       }
@@ -717,10 +721,9 @@ void ExtensionService::LoadExtensionForReload(
 
   // Check the installed extensions to see if what we're reloading was already
   // installed.
-  std::unique_ptr<ExtensionInfo> installed_extension(
+  absl::optional<ExtensionInfo> installed_extension(
       extension_prefs_->GetInstalledExtensionInfo(extension_id));
-  if (installed_extension.get() &&
-      installed_extension->extension_manifest.get()) {
+  if (installed_extension && installed_extension->extension_manifest.get()) {
     InstalledLoader(this).Load(*installed_extension, false);
   } else {
     // Otherwise, the extension is unpacked (location LOAD). We must load it
@@ -826,7 +829,8 @@ bool ExtensionService::UninstallExtension(
             FROM_HERE,
             base::BindOnce(&ExtensionService::UninstallExtensionOnFileThread,
                            extension->id(), profile_->GetProfileUserName(),
-                           install_directory_, extension->path()),
+                           install_directory_, extension->path(),
+                           profile_->GetPath()),
             subtask_done_callback)) {
       NOTREACHED();
     }
@@ -852,11 +856,12 @@ void ExtensionService::UninstallExtensionOnFileThread(
     const std::string& id,
     const std::string& profile_user_name,
     const base::FilePath& install_dir,
-    const base::FilePath& extension_path) {
+    const base::FilePath& extension_path,
+    const base::FilePath& profile_dir) {
   ExtensionAssetsManager* assets_manager =
       ExtensionAssetsManager::GetInstance();
   assets_manager->UninstallExtension(id, profile_user_name, install_dir,
-                                     extension_path);
+                                     extension_path, profile_dir);
 }
 
 bool ExtensionService::IsExtensionEnabled(
@@ -1038,12 +1043,11 @@ void ExtensionService::BlockAllExtensions() {
   block_extensions_ = true;
 
   // Blocklisted extensions are already unloaded, need not be blocked.
-  std::unique_ptr<ExtensionSet> extensions =
-      registry_->GenerateInstalledExtensionsSet(ExtensionRegistry::ENABLED |
-                                                ExtensionRegistry::DISABLED |
-                                                ExtensionRegistry::TERMINATED);
+  const ExtensionSet extensions = registry_->GenerateInstalledExtensionsSet(
+      ExtensionRegistry::ENABLED | ExtensionRegistry::DISABLED |
+      ExtensionRegistry::TERMINATED);
 
-  for (const auto& extension : *extensions) {
+  for (const auto& extension : extensions) {
     const std::string& id = extension->id();
 
     if (!CanBlockExtension(extension.get()))
@@ -1058,10 +1062,10 @@ void ExtensionService::BlockAllExtensions() {
 // as appropriate.
 void ExtensionService::UnblockAllExtensions() {
   block_extensions_ = false;
-  std::unique_ptr<ExtensionSet> to_unblock =
+  const ExtensionSet to_unblock =
       registry_->GenerateInstalledExtensionsSet(ExtensionRegistry::BLOCKED);
 
-  for (const auto& extension : *to_unblock) {
+  for (const auto& extension : to_unblock) {
     registry_->RemoveBlocked(extension->id());
     AddExtension(extension.get());
   }
@@ -1124,7 +1128,7 @@ void ExtensionService::PostActivateExtension(
   // TODO(kalman): Convert ExtensionSpecialStoragePolicy to a
   // BrowserContextKeyedService and use ExtensionRegistryObserver.
   profile_->GetExtensionSpecialStoragePolicy()->GrantRightsForExtension(
-      extension.get());
+      extension.get(), profile_);
 
   // TODO(kalman): This is broken. The crash reporter is process-wide so doesn't
   // work properly multi-profile. Besides which, it should be using
@@ -1165,7 +1169,7 @@ void ExtensionService::PostDeactivateExtension(
   // TODO(kalman): Convert ExtensionSpecialStoragePolicy to a
   // BrowserContextKeyedService and use ExtensionRegistryObserver.
   profile_->GetExtensionSpecialStoragePolicy()->RevokeRightsForExtension(
-      extension.get());
+      extension.get(), profile_);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Revoke external file access for the extension from its file system context.
@@ -1235,7 +1239,14 @@ void ExtensionService::CheckManagementPolicy() {
 
     // If this profile is not supervised, then remove any supervised user
     // related disable reasons.
-    if (!profile()->IsChild()) {
+    bool is_supervised;
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+    is_supervised = SupervisedUserServiceFactory::GetForProfile(profile())
+                        ->IsSubjectToParentalControls();
+#else
+    is_supervised = false;
+#endif
+    if (!is_supervised) {
       disable_reasons &= (~disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
     }
 
@@ -1386,8 +1397,8 @@ void ExtensionService::OnAllExternalProvidersReady() {
   ExtensionPrefs::ExtensionsInfo extensions_info =
       extension_prefs_->GetInstalledExtensionsInfo();
   for (const auto& info : extensions_info) {
-    if (Manifest::IsExternalLocation(info->extension_location)) {
-      CheckExternalUninstall(info->extension_id);
+    if (Manifest::IsExternalLocation(info.extension_location)) {
+      CheckExternalUninstall(info.extension_id);
     }
   }
 
@@ -1795,9 +1806,9 @@ void ExtensionService::OnExtensionManagementSettingsChanged() {
   ExtensionManagement* settings =
       ExtensionManagementFactory::GetForBrowserContext(profile());
   CHECK(settings);
-  std::unique_ptr<ExtensionSet> all_extensions(
-      registry_->GenerateInstalledExtensionsSet());
-  for (const auto& extension : *all_extensions) {
+  const ExtensionSet all_extensions =
+      registry_->GenerateInstalledExtensionsSet();
+  for (const auto& extension : all_extensions) {
     if (!settings->IsPermissionSetAllowed(
             extension.get(),
             extension->permissions_data()->active_permissions()) &&
@@ -1849,7 +1860,7 @@ bool ExtensionService::FinishDelayedInstallationIfReady(
       delayed_installs_.Remove(extension_id);
       // Make sure no version of the extension is actually installed, (i.e.,
       // that this delayed install was not an update).
-      CHECK(!extension_prefs_->GetInstalledExtensionInfo(extension_id).get());
+      CHECK(!extension_prefs_->GetInstalledExtensionInfo(extension_id));
       extension_prefs_->DeleteExtensionPrefs(extension_id);
       return false;
   }
@@ -2033,23 +2044,28 @@ void ExtensionService::OnAppTerminating() {
   browser_terminating_ = true;
 }
 
-void ExtensionService::Observe(int type,
-                               const content::NotificationSource& source,
-                               const content::NotificationDetails& details) {
-  DCHECK(type == content::NOTIFICATION_RENDERER_PROCESS_TERMINATED);
-  content::RenderProcessHost* process =
-      content::Source<content::RenderProcessHost>(source).ptr();
+void ExtensionService::OnRenderProcessHostCreated(
+    content::RenderProcessHost* host) {
+  if (!host_observation_.IsObservingSource(host)) {
+    host_observation_.AddObservation(host);
+  }
+}
+
+void ExtensionService::RenderProcessHostDestroyed(
+    content::RenderProcessHost* host) {
+  host_observation_.RemoveObservation(host);
+
   Profile* host_profile =
-      Profile::FromBrowserContext(process->GetBrowserContext());
+      Profile::FromBrowserContext(host->GetBrowserContext());
   if (!profile_->IsSameOrParent(host_profile->GetOriginalProfile()))
     return;
 
   ProcessMap* process_map = ProcessMap::Get(profile_);
-  if (process_map->Contains(process->GetID())) {
+  if (process_map->Contains(host->GetID())) {
     // An extension process was terminated, this might have resulted in an
     // app or extension becoming idle.
     std::set<std::string> extension_ids =
-        process_map->GetExtensionsInProcess(process->GetID());
+        process_map->GetExtensionsInProcess(host->GetID());
     // In addition to the extensions listed in the process map, one of those
     // extensions could be referencing a shared module which is waiting for
     // idle to update. Check all imports of these extensions, too.
@@ -2080,7 +2096,7 @@ void ExtensionService::Observe(int type,
       }
     }
   }
-  process_map->RemoveAllFromProcess(process->GetID());
+  process_map->RemoveAllFromProcess(host->GetID());
 }
 
 int ExtensionService::GetDisableReasonsOnInstalled(const Extension* extension) {
@@ -2175,7 +2191,7 @@ void ExtensionService::MaybeFinishDelayedInstallations() {
 
 void ExtensionService::OnBlocklistUpdated() {
   blocklist_->GetBlocklistedIDs(
-      registry_->GenerateInstalledExtensionsSet()->GetIDs(),
+      registry_->GenerateInstalledExtensionsSet().GetIDs(),
       base::BindOnce(&ExtensionService::ManageBlocklist,
                      AsExtensionServiceWeakPtr()));
 }
@@ -2290,10 +2306,13 @@ bool ExtensionService::UserCanDisableInstalledExtension(
 void ExtensionService::UnloadAllExtensionsInternal() {
   profile_->GetExtensionSpecialStoragePolicy()->RevokeRightsForAllExtensions();
 
-  registry_->ClearAll();
+  const ExtensionSet extensions = registry_->GenerateInstalledExtensionsSet(
+      ExtensionRegistry::ENABLED | ExtensionRegistry::DISABLED |
+      ExtensionRegistry::TERMINATED);
 
-  RendererStartupHelperFactory::GetForBrowserContext(profile())
-      ->UnloadAllExtensionsForTest();  // IN-TEST
+  for (const auto& extension : extensions) {
+    UnloadExtension(extension->id(), UnloadedExtensionReason::UNINSTALL);
+  }
 
   // TODO(erikkay) should there be a notification for this?  We can't use
   // EXTENSION_UNLOADED since that implies that the extension has
@@ -2335,10 +2354,10 @@ void ExtensionService::OnInstalledExtensionsLoaded() {
 }
 
 void ExtensionService::UninstallMigratedExtensions() {
-  std::unique_ptr<ExtensionSet> installed_extensions =
+  const ExtensionSet installed_extensions =
       registry_->GenerateInstalledExtensionsSet();
   for (const std::string& extension_id : kObsoleteComponentExtensionIds) {
-    auto* extension = installed_extensions->GetByID(extension_id);
+    auto* extension = installed_extensions.GetByID(extension_id);
     if (extension) {
       UninstallExtension(extension_id, UNINSTALL_REASON_COMPONENT_REMOVED,
                          nullptr);

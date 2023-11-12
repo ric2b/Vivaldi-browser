@@ -183,7 +183,7 @@ DCompSurfaceImageBacking::DCompSurfaceImageBacking(
           alpha_type,
           usage,
           gfx::BufferSizeForBufferFormat(size, ToBufferFormat(format)),
-          false /* is_thread_safe */),
+          /*is_thread_safe=*/false),
       gl_surface_(scoped_refptr(
           new D3DTextureGLSurfaceEGL(gl::GLSurfaceEGL::GetGLDisplayEGL(),
                                      size))),
@@ -216,7 +216,8 @@ DCompSurfaceImageBacking::ProduceOverlay(SharedImageManager* manager,
                                                                   tracker);
 }
 
-std::unique_ptr<SkiaImageRepresentation> DCompSurfaceImageBacking::ProduceSkia(
+std::unique_ptr<SkiaGaneshImageRepresentation>
+DCompSurfaceImageBacking::ProduceSkiaGanesh(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
@@ -308,10 +309,7 @@ sk_sp<SkSurface> DCompSurfaceImageBacking::BeginDraw(
                                       final_msaa_count, 0, framebuffer_info);
   auto surface = SkSurface::MakeFromBackendRenderTarget(
       context_state->gr_context(), render_target, surface_origin(), color_type,
-      color_space().ToSkColorSpace(
-          // TODO(crbug/1385874): Read SDR white level from current frame
-          gfx::ColorSpace::kDefaultSDRWhiteLevel),
-      &surface_props);
+      color_space().ToSkColorSpace(), &surface_props);
   DCHECK(surface);
 
   return surface;

@@ -13,6 +13,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "base/test/scoped_feature_list.h"
+#import "base/threading/thread_restrictions.h"
 #import "base/values.h"
 #import "components/autofill/core/browser/personal_data_manager.h"
 #import "components/autofill/core/common/autofill_features.h"
@@ -32,21 +33,24 @@
 #import "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
+#import "ios/chrome/browser/default_browser/utils.h"
+#import "ios/chrome/browser/default_browser/utils_test_support.h"
+#import "ios/chrome/browser/main/browser_provider.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
+#import "ios/chrome/browser/sessions/session_service_ios.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_utils_test_support.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
@@ -67,7 +71,7 @@
 #import "ios/web/common/features.h"
 #import "ios/web/js_messaging/web_view_js_utils.h"
 #import "ios/web/public/js_messaging/web_frame.h"
-#import "ios/web/public/js_messaging/web_frame_util.h"
+#import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/test/element_selector.h"
 #import "ios/web/public/test/url_test_util.h"
@@ -168,6 +172,18 @@ NSString* SerializedValue(const base::Value* value) {
 
   return testing::NSErrorWithLocalizedDescription(
       @"Clearing browser cache for main tabs timed out");
+}
+
++ (void)saveSessionImmediately {
+  SessionRestorationBrowserAgent::FromBrowser(
+      chrome_test_util::GetMainBrowser())
+      ->SaveSession(/*immediately=*/true);
+  dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+  ProceduralBlock completionBlock = ^{
+    dispatch_semaphore_signal(semaphore);
+  };
+  [[SessionServiceIOS sharedService] shutdownWithCompletion:completionBlock];
+  dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
 }
 
 + (NSError*)clearAllWebStateBrowsingData {
@@ -515,6 +531,22 @@ NSString* SerializedValue(const base::Value* value) {
       windowNumber);
 }
 
++ (UIWindow*)keyWindow {
+  NSSet<UIScene*>* scenes = UIApplication.sharedApplication.connectedScenes;
+  for (UIScene* scene in scenes) {
+    UIWindowScene* windowScene =
+        base::mac::ObjCCastStrict<UIWindowScene>(scene);
+
+    for (UIWindow* window in windowScene.windows) {
+      if (window.isKeyWindow) {
+        return window;
+      }
+    }
+  }
+
+  return nil;
+}
+
 #pragma mark - WebState Utilities (EG2)
 
 + (NSError*)tapWebStateElementInIFrameWithID:(NSString*)elementID {
@@ -716,7 +748,8 @@ NSString* SerializedValue(const base::Value* value) {
 + (void)stopAllWebStatesLoading {
   WebStateList* web_state_list =
       chrome_test_util::GetMainController()
-          .interfaceProvider.currentInterface.browser->GetWebStateList();
+          .browserProviderInterface.currentBrowserProvider.browser
+          ->GetWebStateList();
   for (int index = 0; index < web_state_list->count(); ++index) {
     web::WebState* web_state = web_state_list->GetWebStateAt(index);
     if (web_state->IsLoading()) {
@@ -778,6 +811,10 @@ NSString* SerializedValue(const base::Value* value) {
   chrome_test_util::AddTypedURLToFakeSyncServer(base::SysNSStringToUTF8(URL));
 }
 
++ (void)addFakeSyncServerHistoryVisit:(NSURL*)URL {
+  chrome_test_util::AddHistoryVisitToFakeSyncServer(net::GURLWithNSURL(URL));
+}
+
 + (void)addFakeSyncServerDeviceInfo:(NSString*)deviceName
                lastUpdatedTimestamp:(base::Time)lastUpdatedTimestamp {
   chrome_test_util::AddDeviceInfoToFakeSyncServer(
@@ -793,11 +830,11 @@ NSString* SerializedValue(const base::Value* value) {
       GURL(base::SysNSStringToUTF8(URL)));
 }
 
-+ (BOOL)isTypedURL:(NSString*)spec presentOnClient:(BOOL)expectPresent {
++ (BOOL)isURL:(NSString*)spec presentOnClient:(BOOL)expectPresent {
   NSError* error = nil;
   GURL URL(base::SysNSStringToUTF8(spec));
   BOOL success =
-      chrome_test_util::IsTypedUrlPresentOnClient(URL, expectPresent, &error);
+      chrome_test_util::IsUrlPresentOnClient(URL, expectPresent, &error);
   return success && !error;
 }
 
@@ -845,14 +882,6 @@ NSString* SerializedValue(const base::Value* value) {
   chrome_test_util::ClearSyncServerData();
 }
 
-+ (void)startSync {
-  chrome_test_util::StartSync();
-}
-
-+ (void)stopSync {
-  chrome_test_util::StopSync();
-}
-
 + (NSError*)waitForSyncEngineInitialized:(BOOL)isInitialized
                              syncTimeout:(base::TimeDelta)timeout {
   bool success = WaitUntilConditionOrTimeout(timeout, ^{
@@ -898,7 +927,13 @@ NSString* SerializedValue(const base::Value* value) {
            syncer::SyncService::TransportState::ACTIVE;
   });
   if (!success) {
-    NSString* errorDescription = @"Sync feature must be active";
+    ChromeBrowserState* browser_state =
+        chrome_test_util::GetOriginalBrowserState();
+    NSString* errorDescription = [NSString
+        stringWithFormat:
+            @"Sync transport must be active, but actual state was: %d",
+            (int)SyncServiceFactory::GetForBrowserState(browser_state)
+                ->GetTransportState()];
     return testing::NSErrorWithLocalizedDescription(errorDescription);
   }
   return nil;
@@ -995,7 +1030,9 @@ NSString* SerializedValue(const base::Value* value) {
   __block web::WebFrame* main_frame = nullptr;
   bool completed =
       WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
-        main_frame = web::GetMainFrame(chrome_test_util::GetCurrentWebState());
+        main_frame = chrome_test_util::GetCurrentWebState()
+                         ->GetPageWorldWebFramesManager()
+                         ->GetMainWebFrame();
         return main_frame != nullptr;
       });
 
@@ -1020,8 +1057,12 @@ NSString* SerializedValue(const base::Value* value) {
     return handlerCalled;
   });
 
-  BOOL success = completed && !blockError;
+  DLOG_IF(ERROR, !completed) << "JavaScript execution timed out.";
+  DLOG_IF(ERROR, blockError) << "JavaScript execution of:\n"
+                             << script << "\nfailed with error:\n"
+                             << base::SysNSStringToUTF8(blockError.description);
 
+  BOOL success = completed && !blockError;
   JavaScriptExecutionResult* result =
       [[JavaScriptExecutionResult alloc] initWithResult:blockResult
                                     successfulExecution:success];
@@ -1135,10 +1176,9 @@ NSString* SerializedValue(const base::Value* value) {
   return base::FeatureList::IsEnabled(kEnableWebChannels);
 }
 
-+ (BOOL)isSFSymbolEnabled {
-  return UseSymbols();
++ (BOOL)isUIButtonConfigurationEnabled {
+  return IsUIButtonConfigurationEnabled();
 }
-
 #pragma mark - ContentSettings
 
 + (ContentSetting)popupPrefValue {
@@ -1158,6 +1198,16 @@ NSString* SerializedValue(const base::Value* value) {
       chrome_test_util::GetOriginalBrowserState())
       ->SetDefaultContentSetting(ContentSettingsType::REQUEST_DESKTOP_SITE,
                                  CONTENT_SETTING_BLOCK);
+}
+
+#pragma mark - Default Utilities (EG2)
+
++ (void)setUserDefaultObject:(id)value forKey:(NSString*)defaultName {
+  [[NSUserDefaults standardUserDefaults] setObject:value forKey:defaultName];
+}
+
++ (void)removeUserDefaultObjectForKey:(NSString*)key {
+  [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
 }
 
 #pragma mark - Pref Utilities (EG2)
@@ -1233,7 +1283,7 @@ NSString* SerializedValue(const base::Value* value) {
 + (NSInteger)registeredKeyCommandCount {
   UIViewController* browserViewController =
       chrome_test_util::GetMainController()
-          .interfaceProvider.mainInterface.viewController;
+          .browserProviderInterface.mainBrowserProvider.viewController;
   // The BVC delegates its key commands to its next responder,
   // KeyCommandsProvider.
   return browserViewController.nextResponder.keyCommands.count;
@@ -1320,8 +1370,15 @@ int watchRunNumber = 0;
           if (!watchingButtons.count || runNumber != watchRunNumber)
             return;
 
-          [self findButtonsWithLabelsInViews:[UIApplication sharedApplication]
-                                                 .windows];
+          NSMutableArray<UIWindow*>* windows = [[NSMutableArray alloc] init];
+          for (UIScene* scene in UIApplication.sharedApplication
+                   .connectedScenes) {
+            UIWindowScene* windowScene =
+                base::mac::ObjCCastStrict<UIWindowScene>(scene);
+            [windows addObjectsFromArray:windowScene.windows];
+          }
+
+          [self findButtonsWithLabelsInViews:windows];
 
           if (watchingButtons.count && timeout.is_positive()) {
             [self scheduleNextWatchForButtonsWithTimeout:timeout -

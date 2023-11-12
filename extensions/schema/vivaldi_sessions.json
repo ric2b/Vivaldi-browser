@@ -15,6 +15,37 @@
         "enum": [ "window", "workspace", "pinned", "group", "tab" ]
       },
       {
+        "id": "ContentTarget",
+        "type": "object",
+        "description": "Settings used when moving an element in a saved session.",
+        "properties": {
+          "beforeTabId": {
+            "type": "number",
+            "description": "Target id. Move items before tab with this id. At end if negative."
+          },
+          "group": {
+            "type": "string",
+            "optional": true,
+            "description": "Target tab stack id. Remove id if empty."
+          },
+          "pinned": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Target pinned state."
+          },
+          "windowId": {
+            "type": "number",
+            "optional": true,
+            "description": "Target window id. Not set when target is within a workspace."
+          },
+          "workspace": {
+            "type": "number",
+            "optional": true,
+            "description": "Target workspace id. Remove id if negative."
+          }
+        }
+      },
+      {
         "id": "WorkspaceItem",
         "type": "object",
         "description": "Holds information of a workspace. Not actual tabs, but the workspace itself.",
@@ -46,6 +77,10 @@
             "type": "number",
             "description": "Unique identifier."
           },
+          "index": {
+            "type": "number",
+            "description": "Index as stored in database."
+          },
           "name": {
             "type": "string",
             "description": "Active page title. Can be empty."
@@ -75,7 +110,7 @@
       {
         "id": "WindowContent",
         "type": "object",
-        "description": "Holds information of a window",
+        "description": "Holds information of a window.",
         "properties": {
           "id": {
             "type": "number",
@@ -83,7 +118,7 @@
           },
           "quarantine": {
             "type": "boolean",
-            "description": "Window is not installed if true"
+            "description": "Window is not installed if true."
           },
           "tabs": {
             "type": "array",
@@ -103,7 +138,7 @@
           },
           "quarantine": {
             "type": "boolean",
-            "description": "Window is not installed if true"
+            "description": "Workspace is not installed if true."
           },
           "tabs": {
             "type": "array",
@@ -143,6 +178,35 @@
         }
       },
       {
+        "id": "GroupAlias",
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "Existing group id."
+          },
+          "alias": {
+            "type": "string",
+            "description": "A new unique id that can be used instead of the existing."
+          }
+        }
+      },
+      {
+        "id": "WorkspaceState",
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": { "$ref": "GroupAlias" },
+            "description": "List of new group ids. There must be one entry for each affected group."
+          },
+          "item": {
+            "$ref": "WorkspaceItem",
+            "description": "List of workspaces in session."
+          }
+        }
+      },
+      {
         "id": "ContentCommands",
         "type": "object",
         "properties": {
@@ -151,20 +215,71 @@
             "items": { "type": "number" },
             "description": "Tabs and windows in a session."
           },
-          "type": {
-            "$ref": "ContentType",
+          "groupAliases": {
+            "type": "array",
+            "items": { "$ref": "GroupAlias" },
             "optional": true,
-            "description": "Used for commands: ['title']."
+            "description": "A list of new group ids that must be supplied when creating a window. There must be one entry for each affected group."
+          },
+          "move": {
+            "type": "boolean",
+            "optional": true,
+            "description": "For moving tabs."
+          },
+          "pin": {
+            "type": "boolean",
+            "optional": true,
+            "description": "For setting pinned state."
           },
           "quarantine": {
             "type": "boolean",
             "optional": true,
             "description": "For setting quarantine state."
           },
+          "remove": {
+            "type": "boolean",
+            "optional": true,
+            "description": "For deleting a tab."
+          },
+          "tabstack": {
+            "type": "boolean",
+            "optional": true,
+            "description": "For creating a stack. There must be at least two tabs in the 'ids' list."
+          },
           "title": {
             "type": "string",
             "optional": true,
             "description": "For setting title. Ignored if number of ids is not 1."
+          },
+          "target": {
+            "$ref": "ContentTarget",
+            "optional": true,
+            "description": "Used for commands: ['move', 'tabstack']."
+          },
+          "type": {
+            "$ref": "ContentType",
+            "optional": true,
+            "description": "Used for commands: ['title']."
+          },
+          "window": {
+            "type": "boolean",
+            "optional": true,
+            "description": "For creating a window."
+          },
+          "workspace": {
+            "type": "boolean",
+            "optional": true,
+            "description": "For creating a workspace."
+          },
+          "workspaceState": {
+            "$ref": "WorkspaceState",
+            "optional": true,
+            "description": "Used for commands: ['workspace']"
+          },
+          "workspaceId": {
+            "type": "number",
+            "optional": true,
+            "description": "Used for commands: ['workspace']"
           }
         }
       },
@@ -173,6 +288,21 @@
         "type": "string",
         "description": "Defines supported items",
         "enum": [ "folder", "node", "history" ]
+      },
+      {
+        "id": "GroupName",
+        "type": "object",
+        "description": "Holds custom name for a group (tab stack).",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Group identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Visible name in UI."
+          }
+        }
       },
       {
         "id": "SessionItem",
@@ -207,10 +337,21 @@
             "type": "number",
             "description": "Number of tabs in this session."
           },
+          "quarantined": {
+            "type": "number",
+            "description": "Number of quarantined (inactive) tabs in this session."
+          },
           "workspaces": {
             "type": "array",
             "items": { "$ref": "WorkspaceItem" },
             "description": "List of workspaces in session."
+          },
+          "groupNames": {
+            "type": "array",
+            "items": {
+              "$ref": "GroupName"
+            },
+            "description": "List of custom group names (tab stack names) in session. Can be empty."
           },
           "parentId": {
             "type": "number",
@@ -234,18 +375,14 @@
         }
       },
       {
-        "id": "SessionList",
-        "type": "array",
-        "items": {
-          "$ref": "SessionItem"
-        }
-      },
-      {
         "id": "SessionModel",
         "type": "object",
         "properties": {
           "items": {
-            "$ref": "SessionList"
+            "type": "array",
+            "items": {
+              "$ref": "SessionItem"
+            }
           },
           "rootId": {
             "type": "number"
@@ -277,6 +414,13 @@
           "withWorkspace": {
             "type": "boolean",
             "description": "Open workspace tabs."
+          },
+          "tabIds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "Open given tabs only."
           }
         }
       },
@@ -354,6 +498,11 @@
             "$ref": "SessionItem",
             "optional": true,
             "description": "Set for 'added' and 'changed' event."
+          },
+          "content": {
+            "$ref": "ContentModel",
+            "optional": true,
+            "description": "Set for 'content' event."
           }
         }
       }
@@ -646,6 +795,17 @@
           {
             "name": "data",
             "$ref": "SessionChangeData"
+          }
+        ]
+      },
+      {
+        "name": "onPersistentLoad",
+        "type": "function",
+        "description": "Fired when a persisted session is loaded.",
+        "parameters": [
+          {
+            "name": "state",
+            "type": "boolean"
           }
         ]
       }

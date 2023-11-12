@@ -7,6 +7,7 @@
 <translation id="1244303850296295656">שגיאת תוסף</translation>
 <translation id="1546280085599573572">התוסף הזה שינה את הדף שמוצג כשאתה לוחץ על הלחצן 'דף הבית'.</translation>
 <translation id="1588438908519853928">רגיל</translation>
+<translation id="1708338024780164500">(לא פעיל)</translation>
 <translation id="1729533290416704613">הגדרה זו גם קובעת איזה דף מוצג כשאתה מבצע חיפוש מסרגל הכתובות.</translation>
 <translation id="2087822576218954668">הדפס: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">כרטיסיית גלישה בסתר: <ph name="TAB_NAME" /></translation>
@@ -51,6 +52,7 @@
 <translation id="4130207949184424187">התוסף הזה שינה את הדף שמוצג כשאתה מבצע חיפוש מסרגל הכתובות.</translation>
 <translation id="4176463684765177261">מושבת</translation>
 <translation id="4309420042698375243">‏‎<ph name="NUM_KILOBYTES" />K ‏‎(<ph name="NUM_KILOBYTES_LIVE" />K בשימוש)‎‎</translation>
+<translation id="431076611119798497">&amp;פרטים</translation>
 <translation id="4384652540891215547">הפעל את התוסף</translation>
 <translation id="4394049700291259645">השבת</translation>
 <translation id="4593021220803146968">&amp;עבור אל <ph name="URL" /></translation>
@@ -98,6 +100,7 @@
 <translation id="7704305437604973648">משימה</translation>
 <translation id="7760004034676677601">האם זהו דף הפתיחה שציפית לראות?</translation>
 <translation id="7791543448312431591">הוסף</translation>
+<translation id="7814458197256864873">&amp;העתק</translation>
 <translation id="7818135753970109980">עיצוב חדש נוסף (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="7857949311770343000">האם זהו דף הכרטיסייה החדשה שציפית לראות?</translation>
 <translation id="786073089922909430">שירות: <ph name="ARC_PROCESS_NAME" /></translation>

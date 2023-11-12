@@ -34,6 +34,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/menu/menu_controller.h"
+#include "ui/views/drag_controller.h"
 #include "ui/views/event_monitor.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/focus/focus_manager_factory.h"
@@ -953,8 +954,19 @@ void Widget::SetOpacity(float opacity) {
 }
 
 void Widget::SetAspectRatio(const gfx::SizeF& aspect_ratio) {
-  if (native_widget_)
-    native_widget_->SetAspectRatio(aspect_ratio);
+  if (!native_widget_) {
+    return;
+  }
+
+  // The aspect ratio affects the client view only, so figure out how much of
+  // the widget isn't taken up by the client view.
+  gfx::Size excluded_margin;
+  if (non_client_view() && non_client_view()->frame_view()) {
+    excluded_margin =
+        non_client_view()->bounds().size() -
+        non_client_view()->frame_view()->GetBoundsForClientView().size();
+  }
+  native_widget_->SetAspectRatio(aspect_ratio, excluded_margin);
 }
 
 void Widget::FlashFrame(bool flash) {
@@ -1031,6 +1043,10 @@ void Widget::RunShellDrag(View* view,
 
   for (WidgetObserver& observer : observers_)
     observer.OnWidgetDragWillStart(this);
+
+  if (view && view->drag_controller()) {
+    view->drag_controller()->OnWillStartDragForView(view);
+  }
 
   WidgetDeletionObserver widget_deletion_observer(this);
   native_widget_->RunShellDrag(view, std::move(data), location, operation,
@@ -1331,7 +1347,7 @@ std::unique_ptr<Widget::PaintAsActiveLock> Widget::LockPaintAsActive() {
   const bool was_paint_as_active = ShouldPaintAsActive();
   ++paint_as_active_refcount_;
   if (ShouldPaintAsActive() != was_paint_as_active) {
-    paint_as_active_callbacks_.Notify();
+    NotifyPaintAsActiveChanged();
     if (parent() && !parent_paint_as_active_lock_)
       parent_paint_as_active_lock_ = parent()->LockPaintAsActive();
   }
@@ -1368,7 +1384,14 @@ void Widget::OnParentShouldPaintAsActiveChanged() {
   // this->ShouldPaintAsActive() changes iff the native widget is
   // inactive and there's no lock on this widget.
   if (!(native_widget_active_ || paint_as_active_refcount_))
-    paint_as_active_callbacks_.Notify();
+    NotifyPaintAsActiveChanged();
+}
+
+void Widget::NotifyPaintAsActiveChanged() {
+  paint_as_active_callbacks_.Notify();
+  if (native_widget_) {
+    native_widget_->PaintAsActiveChanged();
+  }
 }
 
 void Widget::SetNativeTheme(ui::NativeTheme* native_theme) {
@@ -1506,7 +1529,7 @@ bool Widget::OnNativeWidgetActivationChanged(bool active) {
   // Notify controls (e.g. LabelButton) and children widgets about the
   // paint-as-active change.
   if (ShouldPaintAsActive() != was_paint_as_active)
-    paint_as_active_callbacks_.Notify();
+    NotifyPaintAsActiveChanged();
 
   return true;
 }
@@ -1943,6 +1966,11 @@ void Widget::OnNativeThemeUpdated(ui::NativeTheme* observed_theme) {
   ThemeChanged();
 }
 
+void Widget::SetColorModeOverride(
+    absl::optional<ui::ColorProviderManager::ColorMode> color_mode) {
+  color_mode_override_ = color_mode;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, ui::ColorProviderSource:
 
@@ -1952,7 +1980,17 @@ ui::ColorProviderManager::Key Widget::GetColorProviderKey() const {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   key.elevation_mode = background_elevation_;
 #endif
+  key.user_color = GetUserColor();
+  if (color_mode_override_) {
+    key.color_mode = color_mode_override_.value();
+  }
   return key;
+}
+
+absl::optional<SkColor> Widget::GetUserColor() const {
+  // Fall back to the user color defined in the NativeTheme if a user color is
+  // not provided by any widgets in this UI hierarchy.
+  return parent_ ? parent_->GetUserColor() : GetNativeTheme()->user_color();
 }
 
 const ui::ColorProvider* Widget::GetColorProvider() const {
@@ -2137,7 +2175,7 @@ void Widget::UnlockPaintAsActive() {
     parent_paint_as_active_lock_.reset();
 
   if (ShouldPaintAsActive() != was_paint_as_active)
-    paint_as_active_callbacks_.Notify();
+    NotifyPaintAsActiveChanged();
 }
 
 void Widget::ClearFocusFromWidget() {

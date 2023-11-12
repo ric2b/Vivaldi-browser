@@ -114,11 +114,11 @@ class MoveLoopMouseWatcher {
   const bool hide_on_escape_;
 
   // Did we get a mouse up?
-  bool got_mouse_up_;
+  bool got_mouse_up_ = false;
 
   // Hook identifiers.
-  HHOOK mouse_hook_;
-  HHOOK key_hook_;
+  HHOOK mouse_hook_ = nullptr;
+  HHOOK key_hook_ = nullptr;
 };
 
 // static
@@ -126,11 +126,7 @@ MoveLoopMouseWatcher* MoveLoopMouseWatcher::instance_ = nullptr;
 
 MoveLoopMouseWatcher::MoveLoopMouseWatcher(HWNDMessageHandler* host,
                                            bool hide_on_escape)
-    : host_(host),
-      hide_on_escape_(hide_on_escape),
-      got_mouse_up_(false),
-      mouse_hook_(nullptr),
-      key_hook_(nullptr) {
+    : host_(host), hide_on_escape_(hide_on_escape) {
   // Only one instance can be active at a time.
   if (instance_)
     instance_->Unhook();
@@ -373,7 +369,6 @@ class HWNDMessageHandler::ScopedRedrawLock {
   explicit ScopedRedrawLock(HWNDMessageHandler* owner)
       : owner_(owner),
         hwnd_(owner_->hwnd()),
-        cancel_unlock_(false),
         should_lock_(owner_->IsVisible() && !owner->HasChildRenderingWindow() &&
                      ::IsWindow(hwnd_) && !owner_->IsHeadless() &&
                      (!(GetWindowLong(hwnd_, GWL_STYLE) & WS_CAPTION))) {
@@ -398,7 +393,7 @@ class HWNDMessageHandler::ScopedRedrawLock {
   // The owner's HWND, cached to avoid action after window destruction.
   HWND hwnd_;
   // A flag indicating that the unlock operation was canceled.
-  bool cancel_unlock_;
+  bool cancel_unlock_ = false;
   // If false, don't use redraw lock.
   const bool should_lock_;
 };
@@ -473,21 +468,21 @@ void HWNDMessageHandler::Init(HWND parent,
   // according to the scale factor.
   if (headless_mode) {
     if (initial_bounds_valid_) {
-      headless_mode_window_->bounds = bounds;
+      SetHeadlessWindowBounds(bounds);
     } else {
       // If initial window bounds were not provided, use the newly created
       // platform window size or fall back to the default headless window size
       // as the last resort.
       RECT window_rect;
       if (GetWindowRect(hwnd(), &window_rect)) {
-        headless_mode_window_->bounds = gfx::Rect(window_rect);
+        SetHeadlessWindowBounds(gfx::Rect(window_rect));
       } else {
         // Even if the window rectangle cannot be retrieved, there is still a
         // chance that ScreenWin::GetScaleFactorForHWND() will be able to figure
         // out the scale factor.
         constexpr gfx::Rect kDefaultHeadlessBounds(800, 600);
-        headless_mode_window_->bounds =
-            ScaleWindowBoundsMaybe(hwnd(), kDefaultHeadlessBounds);
+        SetHeadlessWindowBounds(
+            ScaleWindowBoundsMaybe(hwnd(), kDefaultHeadlessBounds));
       }
     }
   }
@@ -711,7 +706,9 @@ void HWNDMessageHandler::SetSize(const gfx::Size& size) {
   // window size was updated.
   if (IsHeadless()) {
     bool size_changed = headless_mode_window_->bounds.size() != size;
-    headless_mode_window_->bounds.set_size(size);
+    gfx::Rect bounds = headless_mode_window_->bounds;
+    bounds.set_size(size);
+    SetHeadlessWindowBounds(bounds);
     if (size_changed) {
       delegate_->HandleClientSizeChanged(GetClientAreaBounds().size());
     }
@@ -1076,6 +1073,17 @@ void HWNDMessageHandler::FrameTypeChanged() {
     PerformDwmTransition();
 }
 
+void HWNDMessageHandler::PaintAsActiveChanged() {
+  if (!delegate_->HasNonClientView() || !delegate_->CanActivate() ||
+      !delegate_->HasFrame() ||
+      (delegate_->GetFrameMode() == FrameMode::CUSTOM_DRAWN)) {
+    return;
+  }
+
+  DefWindowProcWithRedrawLock(WM_NCACTIVATE, delegate_->ShouldPaintAsActive(),
+                              0);
+}
+
 void HWNDMessageHandler::SetWindowIcons(const gfx::ImageSkia& window_icon,
                                         const gfx::ImageSkia& app_icon) {
   if (!window_icon.isNull()) {
@@ -1125,11 +1133,16 @@ void HWNDMessageHandler::SetFullscreen(bool fullscreen,
     PerformDwmTransition();
 }
 
-void HWNDMessageHandler::SetAspectRatio(float aspect_ratio) {
+void HWNDMessageHandler::SetAspectRatio(float aspect_ratio,
+                                        const gfx::Size& excluded_margin) {
   // If the aspect ratio is not in the valid range, do nothing.
   DCHECK_GT(aspect_ratio, 0.0f);
 
   aspect_ratio_ = aspect_ratio;
+
+  // Convert to pixels.
+  excluded_margin_ =
+      display::win::ScreenWin::DIPToScreenSize(hwnd(), excluded_margin);
 
   // When the aspect ratio is set, size the window to adhere to it. This keeps
   // the same origin point as the original window.
@@ -2782,6 +2795,11 @@ void HWNDMessageHandler::OnSizing(UINT param, RECT* rect) {
   if (!aspect_ratio_.has_value())
     return;
 
+  // Validate the window edge param because we are seeing DCHECKs caused by
+  // invalid values. See https://crbug.com/1418231.
+  if (param < WMSZ_LEFT || param > WMSZ_BOTTOMRIGHT) {
+    return;
+  }
   gfx::Rect window_rect(*rect);
   SizeWindowToAspectRatio(param, &window_rect);
 
@@ -3494,21 +3512,10 @@ LRESULT HWNDMessageHandler::HandlePointerEventTypeTouchOrNonClient(
   return 0;
 }
 
-LRESULT HWNDMessageHandler::HandlePointerEventTypePenClient(UINT message,
-                                                            WPARAM w_param,
-                                                            LPARAM l_param) {
-  UINT32 pointer_id = GET_POINTERID_WPARAM(w_param);
-  using GetPointerPenInfoFn = BOOL(WINAPI*)(UINT32, POINTER_PEN_INFO*);
-  POINTER_PEN_INFO pointer_pen_info;
-  static const auto get_pointer_pen_info =
-      reinterpret_cast<GetPointerPenInfoFn>(
-          base::win::GetUser32FunctionPointer("GetPointerPenInfo"));
-  if (!get_pointer_pen_info ||
-      !get_pointer_pen_info(pointer_id, &pointer_pen_info)) {
-    SetMsgHandled(FALSE);
-    return -1;
-  }
-
+LRESULT HWNDMessageHandler::HandlePointerEventTypePen(
+    UINT message,
+    UINT32 pointer_id,
+    POINTER_PEN_INFO pointer_pen_info) {
   POINT client_point = pointer_pen_info.pointerInfo.ptPixelLocationRaw;
   ScreenToClient(hwnd(), &client_point);
   gfx::Point point = gfx::Point(client_point.x, client_point.y);
@@ -3536,6 +3543,19 @@ LRESULT HWNDMessageHandler::HandlePointerEventTypePenClient(UINT message,
   if (ref)
     SetMsgHandled(TRUE);
   return 0;
+}
+
+LRESULT HWNDMessageHandler::HandlePointerEventTypePenClient(UINT message,
+                                                            WPARAM w_param,
+                                                            LPARAM l_param) {
+  UINT32 pointer_id = GET_POINTERID_WPARAM(w_param);
+  POINTER_PEN_INFO pointer_pen_info;
+  if (!GetPointerPenInfo(pointer_id, &pointer_pen_info)) {
+    SetMsgHandled(FALSE);
+    return -1;
+  }
+
+  return HandlePointerEventTypePen(message, pointer_id, pointer_pen_info);
 }
 
 bool HWNDMessageHandler::IsSynthesizedMouseMessage(unsigned int message,
@@ -3714,7 +3734,7 @@ void HWNDMessageHandler::SetBoundsInternal(const gfx::Rect& bounds_in_pixels,
   // In headless update the expected window bounds and notify the delegate
   // pretending the platform window size has been changed.
   if (IsHeadless()) {
-    headless_mode_window_->bounds = bounds_in_pixels;
+    SetHeadlessWindowBounds(bounds_in_pixels);
     if (old_size != bounds_in_pixels.size() || force_size_changed) {
       delegate_->HandleClientSizeChanged(GetClientAreaBounds().size());
     }
@@ -3782,8 +3802,9 @@ void HWNDMessageHandler::SizeWindowToAspectRatio(UINT param,
   if (!max_window_size.IsEmpty())
     max_size_param = max_window_size;
 
-  gfx::SizeRectToAspectRatio(GetWindowResizeEdge(param), aspect_ratio_.value(),
-                             min_window_size, max_size_param, window_rect);
+  gfx::SizeRectToAspectRatioWithExcludedMargin(
+      GetWindowResizeEdge(param), aspect_ratio_.value(), min_window_size,
+      max_size_param, excluded_margin_, *window_rect);
 }
 
 POINT HWNDMessageHandler::GetCursorPos() const {
@@ -3794,6 +3815,15 @@ POINT HWNDMessageHandler::GetCursorPos() const {
   ::GetCursorPos(&cursor_pos);
 
   return cursor_pos;
+}
+
+void HWNDMessageHandler::SetHeadlessWindowBounds(const gfx::Rect& bounds) {
+  DCHECK(IsHeadless());
+
+  if (headless_mode_window_->bounds != bounds) {
+    headless_mode_window_->bounds = bounds;
+    delegate_->HandleHeadlessWindowBoundsChanged(bounds);
+  }
 }
 
 }  // namespace views

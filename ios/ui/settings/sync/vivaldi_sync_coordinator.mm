@@ -5,14 +5,15 @@
 #import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/sync/vivaldi_sync_service_factory.h"
 #import "ios/ui/modal_page/modal_page_commands.h"
 #import "ios/ui/modal_page/modal_page_coordinator.h"
 #import "ios/ui/settings/sync/vivaldi_sync_activate_account_view_controller.h"
 #import "ios/ui/settings/sync/vivaldi_sync_create_account_password_view_controller.h"
 #import "ios/ui/settings/sync/vivaldi_sync_create_account_user_view_controller.h"
+#import "ios/ui/settings/sync/vivaldi_sync_create_encryption_password_view_controller.h"
 #import "ios/ui/settings/sync/vivaldi_sync_encryption_password_view_controller.h"
 #import "ios/ui/settings/sync/vivaldi_sync_login_view_controller.h"
 #import "ios/ui/settings/sync/vivaldi_sync_mediator.h"
@@ -30,6 +31,7 @@
   VivaldiSyncActivateAccountViewControllerDelegate,
   VivaldiSyncCreateAccountUserViewControllerDelegate,
   VivaldiSyncCreateAccountPasswordViewControllerDelegate,
+  VivaldiSyncCreateEncryptionPasswordViewControllerDelegate,
   VivaldiSyncEncryptionPasswordViewControllerDelegate,
   VivaldiSyncLoginViewControllerDelegate,
   VivaldiSyncSettingsViewControllerDelegate,
@@ -45,6 +47,8 @@
         syncCreateAccountPasswordViewController;
 @property(nonatomic, strong) VivaldiSyncEncryptionPasswordViewController*
         syncEncryptionPasswordViewController;
+@property(nonatomic, strong) VivaldiSyncCreateEncryptionPasswordViewController*
+        syncCreateEncryptionPasswordViewController;
 @property(nonatomic, strong)
     VivaldiSyncLoginViewController* syncLoginViewController;
 @property(nonatomic, strong)
@@ -71,6 +75,7 @@
 - (void)dealloc {
   DCHECK(!self.delegate);
   DCHECK(!self.syncLoginViewController);
+  DCHECK(!self.syncCreateEncryptionPasswordViewController);
   DCHECK(!self.syncEncryptionPasswordViewController);
   DCHECK(!self.syncSettingsViewController);
   DCHECK(!self.syncCreateAccountUserViewController);
@@ -103,6 +108,7 @@
   self.delegate = nil;
   self.syncLoginViewController = nil;
   self.syncSettingsViewController = nil;
+  self.syncCreateEncryptionPasswordViewController = nil;
   self.syncEncryptionPasswordViewController = nil;
   self.syncCreateAccountUserViewController = nil;
   self.syncCreateAccountPasswordViewController = nil;
@@ -211,7 +217,7 @@
   }
 }
 
-- (void)showSyncEncryptionPasswordView:(BOOL)creatingPasscode {
+- (void)showSyncEncryptionPasswordView {
   if ([self.baseNavigationController.viewControllers.lastObject
       isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
     return;
@@ -228,9 +234,28 @@
 
   self.syncEncryptionPasswordViewController.delegate = self;
   self.mediator.settingsConsumer = nil;
-  [self.syncEncryptionPasswordViewController
-      setCreatingPasscode:creatingPasscode];
   [controllers addObject:self.syncEncryptionPasswordViewController];
+  [self.baseNavigationController setViewControllers:controllers animated:YES];
+}
+
+- (void)showSyncCreateEncryptionPasswordView {
+  if ([self.baseNavigationController.viewControllers.lastObject
+     isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
+    return;
+  }
+  NSMutableArray* controllers = [self removeSyncViewsFromArray:
+      self.baseNavigationController.viewControllers];
+
+  if (!self.syncCreateEncryptionPasswordViewController) {
+    self.syncCreateEncryptionPasswordViewController =[
+        [VivaldiSyncCreateEncryptionPasswordViewController alloc]
+            initWithStyle:ChromeTableViewStyle()
+    ];
+  }
+
+  self.syncCreateEncryptionPasswordViewController.delegate = self;
+  self.mediator.settingsConsumer = nil;
+  [controllers addObject:self.syncCreateEncryptionPasswordViewController];
   [self.baseNavigationController setViewControllers:controllers animated:YES];
 }
 
@@ -298,7 +323,7 @@
     (VivaldiSyncActivateAccountViewController*)controller {
   DCHECK_EQ(self.syncActivateAccountViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
+      isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
@@ -331,6 +356,10 @@
   DCHECK_EQ(self.syncLoginViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
       isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
+    return;
+  }
+  if ([self.baseNavigationController.viewControllers.lastObject
+      isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
@@ -379,6 +408,33 @@
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
 }
 
+#pragma mark - VivaldiSyncCreateEncryptionPasswordViewControllerDelegate
+
+- (void)vivaldiSyncCreateEncryptionPasswordViewControllerWasRemoved:
+    (VivaldiSyncCreateEncryptionPasswordViewController*)controller {
+  DCHECK_EQ(self.syncCreateEncryptionPasswordViewController, controller);
+  if ([self.baseNavigationController.viewControllers.lastObject
+      isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
+    return;
+  }
+  if ([self.baseNavigationController.viewControllers.lastObject
+      isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+    return;
+  }
+  [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
+}
+
+- (void)saveEncryptionKeyButtonPressed:(NSString*)encryptionPassword
+           completionHandler:(void (^)(BOOL success))completionHandler {
+  if (!encryptionPassword) {
+    return;
+  }
+  BOOL success = [self.mediator
+      setEncryptionPassword:base::SysNSStringToUTF8(encryptionPassword)];
+  if (completionHandler) {
+    completionHandler(success);
+  }
+}
 
 #pragma mark - VivaldiSyncEncryptionPasswordViewControllerDelegate
 
@@ -396,13 +452,40 @@
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
 }
 
+- (void)decryptButtonPressed:(NSString*)encryptionPassword
+           completionHandler:(void (^)(BOOL success))completionHandler {
+  if (!encryptionPassword) {
+    return;
+  }
+  BOOL success = [self.mediator
+      setEncryptionPassword:base::SysNSStringToUTF8(encryptionPassword)];
+  if (completionHandler) {
+    completionHandler(success);
+  }
+}
+
+- (void)importPasskey:(NSURL*)fileSelected
+    completionHandler:(void (^)(BOOL success))completionHandler {
+  if (!fileSelected) {
+    return;
+  }
+  BOOL success = [self.mediator importEncryptionPassword:fileSelected];
+  if (completionHandler) {
+    completionHandler(success);
+  }
+}
+
+- (void)logOutButtonPressed {
+  [self.mediator logOutButtonPressed];
+}
+
 #pragma mark - VivaldiSyncCreateAccountUserViewControllerDelegate
 
 - (void)vivaldiSyncCreateAccountUserViewControllerWasRemoved:
     (VivaldiSyncCreateAccountUserViewController*)controller {
   DCHECK_EQ(self.syncCreateAccountUserViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
+      isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
@@ -439,7 +522,7 @@
     (VivaldiSyncCreateAccountPasswordViewController*)controller {
   DCHECK_EQ(self.syncCreateAccountPasswordViewController, controller);
   if ([self.baseNavigationController.viewControllers.lastObject
-      isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]]) {
+      isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]]) {
     return;
   }
   if ([self.baseNavigationController.viewControllers.lastObject
@@ -488,19 +571,12 @@
 
 #pragma mark - Private Methods
 
-- (void)decryptButtonPressed:(NSString*)encryptionPassword {
-  if (!encryptionPassword) {
-    return;
-  }
-  [self.mediator
-      setEncryptionPassword:base::SysNSStringToUTF8(encryptionPassword)];
-}
-
 - (NSMutableArray*)removeSyncViewsFromArray:(NSArray*)controllers {
   NSMutableArray* new_controllers = [[NSMutableArray alloc] init];
   for (SettingsRootTableViewController* c in controllers) {
     if (c && !(
       [c isKindOfClass:[VivaldiSyncSettingsViewController class]] ||
+      [c isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController class]] ||
       [c isKindOfClass:[VivaldiSyncEncryptionPasswordViewController class]] ||
       [c isKindOfClass:[VivaldiSyncCreateAccountPasswordViewController class]] ||
       [c isKindOfClass:[VivaldiSyncCreateAccountUserViewController class]] ||

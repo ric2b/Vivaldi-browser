@@ -16,6 +16,7 @@
 #include "content/public/browser/xr_runtime_manager.h"
 #include "device/vr/public/cpp/vr_device_provider.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
+#include "device/vr/public/mojom/xr_session.mojom.h"
 #include "device/vr/test/fake_vr_device.h"
 #include "device/vr/test/fake_vr_device_provider.h"
 #include "device/vr/test/fake_vr_service_client.h"
@@ -107,7 +108,7 @@ TEST_F(XRRuntimeManagerTest, GetNoDevicesTest) {
 
   // GetDeviceByIndex should return nullptr if an invalid index in queried.
   device::mojom::XRRuntime* queried_device =
-      GetRuntimeForTest(device::mojom::XRDeviceId::GVR_DEVICE_ID);
+      GetRuntimeForTest(device::mojom::XRDeviceId::FAKE_DEVICE_ID);
   EXPECT_EQ(nullptr, queried_device);
 }
 

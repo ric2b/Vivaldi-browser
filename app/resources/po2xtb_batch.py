@@ -24,6 +24,7 @@ filemap = {
   "vivaldi_android_strings": os.path.join("..", "android"),
   # iOS
   "vivaldi_ios_strings": "ios_strings",
+  "vivaldi_ios_native_strings": os.path.join("..", "ios"),
   # Desktop
   "vivaldi_components_strings": "components_strings",
   "vivaldi_components": "components",

@@ -6,30 +6,31 @@
 
 #import <objc/runtime.h>
 
+#import "base/memory/weak_ptr.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/sessions/core/tab_restore_service_helper.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/find_in_page/abstract_find_tab_helper.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/ntp/new_tab_page_util.h"
+#import "ios/chrome/browser/reading_list/reading_list_browser_agent.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
+#import "ios/chrome/browser/shared/public/commands/bookmark_add_command.h"
+#import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
+#import "ios/chrome/browser/shared/ui/util/keyboard_observer_helper.h"
+#import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
-#import "ios/chrome/browser/ui/commands/bookmark_add_command.h"
-#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
-#import "ios/chrome/browser/ui/keyboard/features.h"
-#import "ios/chrome/browser/ui/main/layout_guide_util.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_util.h"
-#import "ios/chrome/browser/ui/util/keyboard_observer_helper.h"
-#import "ios/chrome/browser/ui/util/layout_guide_names.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_util.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
@@ -50,10 +51,10 @@
 using base::RecordAction;
 using base::UserMetricsAction;
 
-@interface KeyCommandsProvider ()
-
-// The current browser object.
-@property(nonatomic, assign) Browser* browser;
+@interface KeyCommandsProvider () {
+  // The current browser object.
+  base::WeakPtr<Browser> _browser;
+}
 
 // The view controller delegating key command actions handling.
 @property(nonatomic, weak) UIViewController* viewController;
@@ -85,7 +86,7 @@ using base::UserMetricsAction;
   DCHECK(browser);
   self = [super init];
   if (self) {
-    _browser = browser;
+    _browser = browser->AsWeakPtr();
   }
   return self;
 }
@@ -103,9 +104,10 @@ using base::UserMetricsAction;
 }
 
 - (NSArray<UIKeyCommand*>*)keyCommands {
-  if (IsKeyboardShortcutsMenuEnabled()) {
-    // Return the key commands that are not already present in the menu (see
-    // i/c/b/ui/keyboard/menu_builder.h).
+  // On iOS 15+, key commands visible in the app's menu are created in
+  // MenuBuilder.
+  if (@available(iOS 15, *)) {
+    // Return the key commands that are not already present in the menu.
     return @[
       UIKeyCommand.cr_openNewRegularTab,
       UIKeyCommand.cr_showNextTab_2,
@@ -125,6 +127,7 @@ using base::UserMetricsAction;
       UIKeyCommand.cr_reportAnIssue_2,
     ];
   } else {
+    // Return all the commands supported by BrowserViewController.
     return @[
       UIKeyCommand.cr_openNewTab,
       UIKeyCommand.cr_openNewIncognitoTab,
@@ -169,6 +172,11 @@ using base::UserMetricsAction;
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+  // If the browser disappeared, prevent any command handling.
+  if (!_browser) {
+    return NO;
+  }
+
   // BVC prevents KeyCommandsProvider from providing key commands when it has
   // `presentedViewController` set. But there is an interval between presenting
   // a view controller and having `presentedViewController` set. In that window,
@@ -236,7 +244,7 @@ using base::UserMetricsAction;
   if (sel_isEqual(action, @selector(keyCommand_reopenLastClosedTab))) {
     sessions::TabRestoreService* const tabRestoreService =
         IOSChromeTabRestoreServiceFactory::GetForBrowserState(
-            self.browser->GetBrowserState());
+            _browser->GetBrowserState());
     return tabRestoreService && !tabRestoreService->entries().empty();
   }
   if (sel_isEqual(action, @selector(keyCommand_reportAnIssue))) {
@@ -269,7 +277,7 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_openNewTab {
   RecordAction(UserMetricsAction("MobileKeyCommandOpenNewTab"));
-  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
+  if (_browser->GetBrowserState()->IsOffTheRecord()) {
     [self openNewIncognitoTab];
   } else {
     [self openNewRegularTab];
@@ -304,21 +312,23 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_reopenLastClosedTab {
   RecordAction(UserMetricsAction("MobileKeyCommandReopenLastClosedTab"));
-  ChromeBrowserState* browserState = self.browser->GetBrowserState();
+  ChromeBrowserState* browserState = _browser->GetBrowserState();
   sessions::TabRestoreService* const tabRestoreService =
       IOSChromeTabRestoreServiceFactory::GetForBrowserState(browserState);
-  if (!tabRestoreService || tabRestoreService->entries().empty())
+  if (!tabRestoreService || tabRestoreService->entries().empty()) {
     return;
+  }
 
   const std::unique_ptr<sessions::TabRestoreService::Entry>& entry =
       tabRestoreService->entries().front();
   // Only handle the TAB type.
   // TODO(crbug.com/1056596) : Support WINDOW restoration under multi-window.
-  if (entry->type != sessions::TabRestoreService::TAB)
+  if (entry->type != sessions::TabRestoreService::TAB) {
     return;
+  }
 
   [self.dispatcher openURLInNewTab:[OpenNewTabCommand command]];
-  RestoreTab(entry->id, WindowOpenDisposition::CURRENT_TAB, self.browser);
+  RestoreTab(entry->id, WindowOpenDisposition::CURRENT_TAB, _browser.get());
 }
 
 - (void)keyCommand_find {
@@ -348,10 +358,11 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_showNextTab {
   RecordAction(UserMetricsAction("MobileKeyCommandShowNextTab"));
-  WebStateList* webStateList = self.browser->GetWebStateList();
+  WebStateList* webStateList = _browser->GetWebStateList();
   int activeIndex = webStateList->active_index();
-  if (activeIndex == WebStateList::kInvalidIndex)
+  if (activeIndex == WebStateList::kInvalidIndex) {
     return;
+  }
 
   // If the active index isn't the last index, activate the next index.
   // (the last index is always `count() - 1`).
@@ -365,10 +376,11 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_showPreviousTab {
   RecordAction(UserMetricsAction("MobileKeyCommandShowPreviousTab"));
-  WebStateList* webStateList = self.browser->GetWebStateList();
+  WebStateList* webStateList = _browser->GetWebStateList();
   int activeIndex = webStateList->active_index();
-  if (activeIndex == WebStateList::kInvalidIndex)
+  if (activeIndex == WebStateList::kInvalidIndex) {
     return;
+  }
 
   // If the active index isn't the first index, activate the prior index.
   // Otherwise index the last index (`count() - 1`).
@@ -410,14 +422,16 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_back {
   RecordAction(UserMetricsAction("MobileKeyCommandBack"));
-  if (self.navigationAgent->CanGoBack())
+  if (self.navigationAgent->CanGoBack()) {
     self.navigationAgent->GoBack();
+  }
 }
 
 - (void)keyCommand_forward {
   RecordAction(UserMetricsAction("MobileKeyCommandForward"));
-  if (self.navigationAgent->CanGoForward())
+  if (self.navigationAgent->CanGoForward()) {
     self.navigationAgent->GoForward();
+  }
 }
 
 - (void)keyCommand_showHistory {
@@ -427,8 +441,9 @@ using base::UserMetricsAction;
 
 - (void)keyCommand_voiceSearch {
   RecordAction(UserMetricsAction("MobileKeyCommandVoiceSearch"));
-  [LayoutGuideCenterForBrowser(_browser) referenceView:nil
-                                             underName:kVoiceSearchButtonGuide];
+  [LayoutGuideCenterForBrowser(_browser.get())
+      referenceView:nil
+          underName:kVoiceSearchButtonGuide];
   [_dispatcher startVoiceSearch];
 }
 
@@ -519,8 +534,9 @@ using base::UserMetricsAction;
   NSString* title = tab_util::GetTabTitle(currentWebState);
   ReadingListAddCommand* command =
       [[ReadingListAddCommand alloc] initWithURL:URL title:title];
-  // TODO(crbug.com/1272540): Migrate to the new API once available.
-  [_dispatcher addToReadingList:command];
+  ReadingListBrowserAgent* readingListBrowserAgent =
+      ReadingListBrowserAgent::FromBrowser(_browser.get());
+  readingListBrowserAgent->AddURLsToReadingList(command.URLs);
 }
 
 - (void)keyCommand_showReadingList {
@@ -542,12 +558,12 @@ using base::UserMetricsAction;
 #pragma mark - Private
 
 - (WebNavigationBrowserAgent*)navigationAgent {
-  return WebNavigationBrowserAgent::FromBrowser(self.browser);
+  return WebNavigationBrowserAgent::FromBrowser(_browser.get());
 }
 
 - (BOOL)isFindInPageAvailable {
   web::WebState* currentWebState =
-      self.browser->GetWebStateList()->GetActiveWebState();
+      _browser->GetWebStateList()->GetActiveWebState();
   if (!currentWebState) {
     return NO;
   }
@@ -558,7 +574,7 @@ using base::UserMetricsAction;
 
 - (BOOL)isFindInPageActive {
   web::WebState* currentWebState =
-      self.browser->GetWebStateList()->GetActiveWebState();
+      _browser->GetWebStateList()->GetActiveWebState();
   if (!currentWebState) {
     return NO;
   }
@@ -568,7 +584,7 @@ using base::UserMetricsAction;
 }
 
 - (NSUInteger)tabsCount {
-  return self.browser->GetWebStateList()->count();
+  return _browser->GetWebStateList()->count();
 }
 
 - (BOOL)isEditingText {
@@ -592,7 +608,7 @@ using base::UserMetricsAction;
 }
 
 - (void)showTabAtIndex:(NSUInteger)index {
-  WebStateList* webStateList = self.browser->GetWebStateList();
+  WebStateList* webStateList = _browser->GetWebStateList();
   if (webStateList->ContainsIndex(index)) {
     webStateList->ActivateWebStateAt(static_cast<int>(index));
   }
@@ -600,7 +616,7 @@ using base::UserMetricsAction;
 
 - (BOOL)isHTTPOrHTTPSPage {
   web::WebState* currentWebState =
-      self.browser->GetWebStateList()->GetActiveWebState();
+      _browser->GetWebStateList()->GetActiveWebState();
   if (!currentWebState) {
     return NO;
   }
@@ -611,15 +627,15 @@ using base::UserMetricsAction;
 
 - (BOOL)isBookmarkedPage {
   web::WebState* currentWebState =
-      self.browser->GetWebStateList()->GetActiveWebState();
+      _browser->GetWebStateList()->GetActiveWebState();
   if (!currentWebState) {
     return NO;
   }
 
   const GURL& url = currentWebState->GetLastCommittedURL();
   bookmarks::BookmarkModel* bookmarkModel =
-      ios::BookmarkModelFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
+      ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
+          _browser->GetBrowserState());
   return bookmarkModel->IsBookmarked(url);
 }
 

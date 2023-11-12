@@ -78,4 +78,17 @@ if (!is_ios) {
 
 if (is_ios) {
   import("//vivaldi/ios/source_updates.gni")
+
+  update_template_instance("//components/version_info:generate_version_info") {
+    sources += [ vivaldi_version_path ]
+    if (!defined(extra_args)) {
+      extra_args = []
+    }
+    extra_args += [
+      "-e",
+      "VIVALDI_BUILD=$vivaldi_global_build_number",
+      "--vivaldi",
+    ]
+  }
+
 }

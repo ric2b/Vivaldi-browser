@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/css/css_property_value.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/css_selector.h"
+#include "third_party/blink/renderer/core/css/parser/css_nesting_type.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenized_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
@@ -121,6 +122,7 @@ class CORE_EXPORT CSSParserImpl {
                                    const CSSParserContext*);
   static StyleRuleBase* ParseRule(const String&,
                                   const CSSParserContext*,
+                                  CSSNestingType,
                                   StyleRule* parent_rule_for_nesting,
                                   StyleSheetContents*,
                                   AllowedRulesType);
@@ -175,19 +177,23 @@ class CORE_EXPORT CSSParserImpl {
   template <typename T>
   bool ConsumeRuleList(CSSParserTokenStream&,
                        RuleListType,
+                       CSSNestingType,
                        StyleRule* parent_rule_for_nesting,
                        T callback);
 
   // These functions update the range/stream they're given
   StyleRuleBase* ConsumeAtRule(CSSParserTokenStream&,
                                AllowedRulesType,
+                               CSSNestingType,
                                StyleRule* parent_rule_for_nesting);
   StyleRuleBase* ConsumeAtRuleContents(CSSAtRuleID id,
                                        CSSParserTokenStream& stream,
                                        AllowedRulesType allowed_rules,
+                                       CSSNestingType,
                                        StyleRule* parent_rule_for_nesting);
   StyleRuleBase* ConsumeQualifiedRule(CSSParserTokenStream&,
                                       AllowedRulesType,
+                                      CSSNestingType,
                                       StyleRule* parent_rule_for_nesting);
 
   static StyleRuleCharset* ConsumeCharsetRule(CSSParserTokenStream&);
@@ -195,9 +201,14 @@ class CORE_EXPORT CSSParserImpl {
                                      CSSParserTokenStream&);
   StyleRuleNamespace* ConsumeNamespaceRule(CSSParserTokenStream&);
   StyleRuleMedia* ConsumeMediaRule(CSSParserTokenStream& stream,
+                                   CSSNestingType,
                                    StyleRule* parent_rule_for_nesting);
   StyleRuleSupports* ConsumeSupportsRule(CSSParserTokenStream& stream,
+                                         CSSNestingType,
                                          StyleRule* parent_rule_for_nesting);
+  StyleRuleInitial* ConsumeInitialRule(CSSParserTokenStream& stream,
+                                       CSSNestingType,
+                                       StyleRule* parent_rule_for_nesting);
   StyleRuleFontFace* ConsumeFontFaceRule(CSSParserTokenStream&);
   StyleRuleFontPaletteValues* ConsumeFontPaletteValuesRule(
       CSSParserTokenStream&);
@@ -212,6 +223,7 @@ class CORE_EXPORT CSSParserImpl {
   StyleRuleCounterStyle* ConsumeCounterStyleRule(CSSParserTokenStream&);
   StyleRuleBase* ConsumeScopeRule(CSSParserTokenStream&);
   StyleRuleContainer* ConsumeContainerRule(CSSParserTokenStream& stream,
+                                           CSSNestingType,
                                            StyleRule* parent_rule_for_nesting);
   StyleRuleBase* ConsumeLayerRule(CSSParserTokenStream&);
   StyleRulePositionFallback* ConsumePositionFallbackRule(CSSParserTokenStream&);
@@ -221,6 +233,7 @@ class CORE_EXPORT CSSParserImpl {
                                               const RangeOffset& prelude_offset,
                                               CSSParserTokenStream& block);
   StyleRule* ConsumeStyleRule(CSSParserTokenStream&,
+                              CSSNestingType,
                               StyleRule* parent_rule_for_nesting);
   StyleRule* ConsumeStyleRuleContents(base::span<CSSSelector> selector_vector,
                                       CSSParserTokenStream& stream);
@@ -228,14 +241,18 @@ class CORE_EXPORT CSSParserImpl {
   void ConsumeDeclarationList(
       CSSParserTokenStream&,
       StyleRule::RuleType,
+      CSSNestingType,
       StyleRule* parent_rule_for_nesting,
       HeapVector<Member<StyleRuleBase>, 4>* child_rules);
   // If id is absl::nullopt, we're parsing a qualified style rule;
   // otherwise, we're parsing an at-rule.
   StyleRuleBase* ConsumeNestedRule(absl::optional<CSSAtRuleID> id,
                                    CSSParserTokenStream& stream,
+                                   CSSNestingType,
                                    StyleRule* parent_rule_for_nesting);
-  void ConsumeDeclaration(CSSParserTokenStream&, StyleRule::RuleType);
+  // Returns true if a declaration was parsed and added to parsed_properties_,
+  // and false otherwise.
+  bool ConsumeDeclaration(CSSParserTokenStream&, StyleRule::RuleType);
   void ConsumeDeclarationValue(const CSSTokenizedValue&,
                                CSSPropertyID,
                                bool important,
@@ -252,8 +269,10 @@ class CORE_EXPORT CSSParserImpl {
   // Finds a previously parsed MediaQuerySet for the given `prelude_string`
   // and returns it. If no MediaQuerySet is found, parses one using `prelude`,
   // and returns the result after caching it.
-  const MediaQuerySet* CachedMediaQuerySet(String prelude_string,
-                                           CSSParserTokenRange prelude);
+  const MediaQuerySet* CachedMediaQuerySet(
+      String prelude_string,
+      CSSParserTokenRange prelude,
+      const CSSParserTokenOffsets& offsets);
 
   // Create an implicit & {} rule to wrap properties in, and insert every
   // property from parsed_properties_ in it. Used when there are properties
@@ -276,6 +295,9 @@ class CORE_EXPORT CSSParserImpl {
   // Used for temporary allocations of CSSParserSelector (we send it down
   // to CSSSelectorParser, which temporarily holds on to a reference to it).
   HeapVector<CSSSelector> arena_;
+
+  // True when parsing a StyleRule via ConsumeNestedRule.
+  bool in_nested_style_rule_ = false;
 
   HeapHashMap<String, Member<const MediaQuerySet>> media_query_cache_;
 };

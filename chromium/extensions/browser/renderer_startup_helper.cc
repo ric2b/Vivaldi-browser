@@ -12,20 +12,19 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/functional/callback_helpers.h"
 #include "base/strings/string_util.h"
+#include "base/unguessable_token.h"
 #include "base/values.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #include "extensions/browser/network_permissions_updater.h"
 #include "extensions/browser/service_worker_task_queue.h"
-#include "extensions/common/activation_sequence.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/extensions_client.h"
@@ -44,14 +43,14 @@ namespace {
 
 using ::content::BrowserContext;
 
-// Returns the current ActivationSequence of |extension| if the extension is
+// Returns the current activation sequence of |extension| if the extension is
 // Service Worker-based, otherwise returns absl::nullopt.
-absl::optional<ActivationSequence> GetWorkerActivationSequence(
+absl::optional<base::UnguessableToken> GetWorkerActivationToken(
     BrowserContext* browser_context,
     const Extension& extension) {
   if (BackgroundInfo::IsServiceWorkerBased(&extension)) {
     return ServiceWorkerTaskQueue::Get(browser_context)
-        ->GetCurrentSequence(extension.id());
+        ->GetCurrentActivationToken(extension.id());
   }
   return absl::nullopt;
 }
@@ -84,7 +83,7 @@ mojom::ExtensionLoadedParamsPtr CreateExtensionLoadedParams(
       permissions_data->policy_blocked_hosts(),
       permissions_data->policy_allowed_hosts(),
       permissions_data->UsesDefaultPolicyHostRestrictions(), extension.id(),
-      GetWorkerActivationSequence(browser_context, extension),
+      GetWorkerActivationToken(browser_context, extension),
       extension.creation_flags(), extension.guid());
 }
 
@@ -157,8 +156,8 @@ void RendererStartupHelper::InitializeProcess(
 
   // If the new render process is a WebView guest process, propagate the WebView
   // partition ID to it.
-  std::string webview_partition_id = WebViewGuest::GetPartitionID(process);
-  if (!webview_partition_id.empty()) {
+  if (WebViewRendererState::GetInstance()->IsGuest(process->GetID())) {
+    std::string webview_partition_id = WebViewGuest::GetPartitionID(process);
     renderer->SetWebViewPartitionID(webview_partition_id);
   }
 
@@ -338,8 +337,24 @@ void RendererStartupHelper::OnDeveloperModeChanged(bool in_developer_mode) {
   }
 }
 
-void RendererStartupHelper::UnloadAllExtensionsForTest() {
-  extension_process_map_.clear();
+void RendererStartupHelper::SetUserScriptWorldCsp(const Extension& extension,
+                                                  const std::string& csp) {
+  mojom::UserScriptWorldInfoPtr info =
+      mojom::UserScriptWorldInfo::New(extension.id(), csp);
+  for (auto& process_entry : process_mojo_map_) {
+    content::RenderProcessHost* process = process_entry.first;
+    mojom::Renderer* renderer = GetRenderer(process);
+    if (!renderer) {
+      continue;
+    }
+
+    if (!util::IsExtensionVisibleToContext(extension,
+                                           process->GetBrowserContext())) {
+      continue;
+    }
+
+    renderer->UpdateUserScriptWorld(info.Clone());
+  }
 }
 
 mojo::PendingAssociatedRemote<mojom::Renderer>

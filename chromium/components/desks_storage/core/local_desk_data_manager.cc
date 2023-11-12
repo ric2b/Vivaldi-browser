@@ -11,12 +11,12 @@
 #include "base/containers/fixed_flat_set.h"
 #include "base/files/dir_reader_posix.h"
 #include "base/files/file_util.h"
-#include "base/guid.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/values_util.h"
 #include "base/logging.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "components/account_id/account_id.h"
 #include "components/app_restore/restore_data.h"
@@ -38,14 +38,6 @@ namespace {
 // Setting this to true allows us to add more than the maximum number of
 // desk templates. Used only for testing.
 bool g_disable_max_template_limit = false;
-
-// Setting this to true allows us to exclude the max count of save and recall
-// desk entries as part of `GetMaxEntryCount` since there are some tests
-// treating save and recall desks behavior as regular desk templates (such as
-// button enablement). Also, since save and recall desks and desk templates are
-// currently being treated as desk templates, exclude save and recall desks
-// limit until save and recall desks are enabled.
-bool g_exclude_save_and_recall_desk_in_max_entry_count = true;
 
 // File extension for saving template entries.
 constexpr char kFileExtension[] = ".saveddesk";
@@ -123,7 +115,7 @@ bool WriteTemplateFile(const base::FilePath& path_to_template,
 // file given the `file_path` to the desk template or save and recall desk
 // directory and the entry's `uuid`.
 base::FilePath GetFullyQualifiedPath(base::FilePath file_path,
-                                     const base::GUID& uuid) {
+                                     const base::Uuid& uuid) {
   std::string filename = uuid.AsLowercaseString();
   filename.append(kFileExtension);
 
@@ -198,7 +190,7 @@ DeskModel::GetAllEntriesResult LocalDeskDataManager::GetAllEntries() {
 }
 
 DeskModel::GetEntryByUuidResult LocalDeskDataManager::GetEntryByUUID(
-    const base::GUID& uuid) {
+    const base::Uuid& uuid) {
   if (cache_status_ != LocalDeskDataManager::CacheStatus::kOk) {
     return DeskModel::GetEntryByUuidResult(
         DeskModel::GetEntryByUuidStatus::kFailure, nullptr);
@@ -240,7 +232,7 @@ void LocalDeskDataManager::AddOrUpdateEntry(
   }
 
   const ash::DeskTemplateType desk_type = new_entry->type();
-  const base::GUID uuid = new_entry->uuid();
+  const base::Uuid uuid = new_entry->uuid();
   if (!uuid.is_valid() || desk_type == ash::DeskTemplateType::kUnknown) {
     std::move(callback).Run(AddOrUpdateEntryStatus::kInvalidArgument,
                             std::move(new_entry));
@@ -288,7 +280,7 @@ void LocalDeskDataManager::AddOrUpdateEntry(
                      std::move(new_entry)));
 }
 
-void LocalDeskDataManager::DeleteEntry(const base::GUID& uuid,
+void LocalDeskDataManager::DeleteEntry(const base::Uuid& uuid,
                                        DeleteEntryCallback callback) {
   if (cache_status_ != CacheStatus::kOk) {
     std::move(callback).Run(DeleteEntryStatus::kFailure);
@@ -367,14 +359,6 @@ size_t LocalDeskDataManager::GetDeskTemplateEntryCount() const {
          policy_entries_.size();
 }
 
-size_t LocalDeskDataManager::GetMaxEntryCount() const {
-  return kMaxDeskTemplateCount +
-         (!g_exclude_save_and_recall_desk_in_max_entry_count
-              ? kMaxSaveAndRecallDeskCount
-              : 0u) +
-         policy_entries_.size();
-}
-
 size_t LocalDeskDataManager::GetMaxSaveAndRecallDeskEntryCount() const {
   return kMaxSaveAndRecallDeskCount;
 }
@@ -383,8 +367,8 @@ size_t LocalDeskDataManager::GetMaxDeskTemplateEntryCount() const {
   return kMaxDeskTemplateCount + policy_entries_.size();
 }
 
-std::vector<base::GUID> LocalDeskDataManager::GetAllEntryUuids() const {
-  std::vector<base::GUID> keys;
+std::vector<base::Uuid> LocalDeskDataManager::GetAllEntryUuids() const {
+  std::vector<base::Uuid> keys;
   for (const auto& type_and_saved_desks : saved_desks_list_) {
     for (const auto& [uuid, template_entry] : type_and_saved_desks.second) {
       DCHECK_EQ(uuid, template_entry->uuid());
@@ -406,7 +390,7 @@ bool LocalDeskDataManager::IsSyncing() const {
 ash::DeskTemplate* LocalDeskDataManager::FindOtherEntryWithName(
     const std::u16string& name,
     ash::DeskTemplateType type,
-    const base::GUID& uuid) const {
+    const base::Uuid& uuid) const {
   return desk_template_util::FindOtherEntryWithName(name, uuid,
                                                     saved_desks_list_.at(type));
 }
@@ -414,12 +398,6 @@ ash::DeskTemplate* LocalDeskDataManager::FindOtherEntryWithName(
 // static
 void LocalDeskDataManager::SetDisableMaxTemplateLimitForTesting(bool disabled) {
   g_disable_max_template_limit = disabled;
-}
-
-// static
-void LocalDeskDataManager::SetExcludeSaveAndRecallDeskInMaxEntryCountForTesting(
-    bool exclude) {
-  g_exclude_save_and_recall_desk_in_max_entry_count = exclude;
 }
 
 // static
@@ -482,7 +460,7 @@ LocalDeskDataManager::LoadCacheOnBackgroundSequence(
 
 DeskModel::AddOrUpdateEntryStatus LocalDeskDataManager::AddOrUpdateEntryTask(
     const base::FilePath& local_saved_desk_path,
-    const base::GUID uuid,
+    const base::Uuid uuid,
     base::Value entry_base_value,
     ash::DeskTemplateType desk_type) {
   const base::FilePath fully_qualified_path =
@@ -500,7 +478,7 @@ void LocalDeskDataManager::OnAddOrUpdateEntry(
     AddOrUpdateEntryCallback callback,
     bool is_update,
     ash::DeskTemplateType desk_type,
-    const base::GUID uuid,
+    const base::Uuid uuid,
     std::unique_ptr<ash::DeskTemplate> old_entry,
     std::unique_ptr<ash::DeskTemplate> new_entry,
     AddOrUpdateEntryStatus status) {
@@ -518,7 +496,7 @@ void LocalDeskDataManager::OnAddOrUpdateEntry(
 // static
 LocalDeskDataManager::DeleteTaskResult LocalDeskDataManager::DeleteEntryTask(
     const base::FilePath& local_saved_desk_path,
-    const base::GUID& uuid,
+    const base::Uuid& uuid,
     std::vector<std::unique_ptr<ash::DeskTemplate>> roll_back_entry) {
   const base::FilePath fully_qualified_path =
       GetFullyQualifiedPath(local_saved_desk_path, uuid);
@@ -570,7 +548,7 @@ void LocalDeskDataManager::OnDeleteEntry(
 }
 
 ash::DeskTemplateType LocalDeskDataManager::GetDeskTypeOfUuid(
-    const base::GUID uuid) const {
+    const base::Uuid uuid) const {
   for (const auto& [desk_type, saved_desk] : saved_desks_list_) {
     if (base::Contains(saved_desk, uuid))
       return desk_type;
@@ -582,7 +560,7 @@ size_t LocalDeskDataManager::GetMaxEntryCountByDeskType(
     ash::DeskTemplateType desk_type) const {
   switch (desk_type) {
     case ash::DeskTemplateType::kTemplate:
-      return kMaxDeskTemplateCount;
+      return kMaxDeskTemplateCount + policy_entries_.size();
     case ash::DeskTemplateType::kSaveAndRecall:
       return kMaxSaveAndRecallDeskCount;
     case ash::DeskTemplateType::kFloatingWorkspace:

@@ -216,7 +216,7 @@ class CORE_EXPORT HTMLInputElement
                                    ExceptionState&);
 
   bool LayoutObjectIsNeeded(const DisplayStyle&) const final;
-  LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout) override;
+  LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   void DetachLayoutTree(bool performing_reattach) final;
   void UpdateSelectionOnFocus(SelectionBehaviorOnFocus,
                               const FocusOptions*) final;
@@ -370,9 +370,10 @@ class CORE_EXPORT HTMLInputElement
   bool isMutable();
   void showPicker(ExceptionState&);
 
+  ShadowRoot* EnsureShadowSubtree();
+
  protected:
   void DefaultEventHandler(Event&) override;
-  void CreateShadowSubtree();
 
  private:
   enum AutoCompleteSetting { kUninitialized, kOn, kOff };
@@ -439,6 +440,7 @@ class CORE_EXPORT HTMLInputElement
   bool TooLong(const String&, NeedsToCheckDirtyFlag) const;
   bool TooShort(const String&, NeedsToCheckDirtyFlag) const;
 
+  TextControlInnerEditorElement* EnsureInnerEditorElement() const final;
   void UpdatePlaceholderText() final;
   bool IsEmptyValue() const final { return InnerEditorValue().empty(); }
   void HandleBlurEvent() final;

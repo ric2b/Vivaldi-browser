@@ -240,6 +240,12 @@ void ConvertRequestDeviceOptions(
     mojom::blink::WebBluetoothRequestDeviceOptionsPtr& result,
     ExecutionContext* execution_context,
     ExceptionState& exception_state) {
+  if (options->hasExclusionFilters() && !options->hasFilters()) {
+    exception_state.ThrowTypeError(
+        "'filters' member must be present if 'exclusionFilters' is present.");
+    return;
+  }
+
   if (!(options->hasFilters() ^ options->acceptAllDevices())) {
     exception_state.ThrowTypeError(
         "Either 'filters' should be present or 'acceptAllDevices' should be "
@@ -262,7 +268,6 @@ void ConvertRequestDeviceOptions(
       auto canonicalized_filter = mojom::blink::WebBluetoothLeScanFilter::New();
 
       CanonicalizeFilter(filter, canonicalized_filter, exception_state);
-
       if (exception_state.HadException())
         return;
 
@@ -272,6 +277,28 @@ void ConvertRequestDeviceOptions(
       }
 
       result->filters->push_back(std::move(canonicalized_filter));
+    }
+  }
+
+  if (options->hasExclusionFilters()) {
+    if (options->exclusionFilters().empty()) {
+      exception_state.ThrowTypeError(
+          "'exclusionFilters' member must be non-empty to exclude any device.");
+      return;
+    }
+
+    result->exclusion_filters.emplace();
+
+    for (const BluetoothLEScanFilterInit* filter :
+         options->exclusionFilters()) {
+      auto canonicalized_filter = mojom::blink::WebBluetoothLeScanFilter::New();
+
+      CanonicalizeFilter(filter, canonicalized_filter, exception_state);
+      if (exception_state.HadException()) {
+        return;
+      }
+
+      result->exclusion_filters->push_back(std::move(canonicalized_filter));
     }
   }
 
@@ -315,7 +342,8 @@ ScriptPromise Bluetooth::getAvailability(ScriptState* script_state,
   EnsureServiceConnection(window);
 
   // Subsequent steps are handled in the browser process.
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
   service_->GetAvailability(
       WTF::BindOnce([](ScriptPromiseResolver* resolver,
@@ -376,7 +404,8 @@ ScriptPromise Bluetooth::getDevices(ScriptState* script_state,
   CHECK(window->IsSecureContext());
 
   EnsureServiceConnection(window);
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
 
   service_->GetDevices(WTF::BindOnce(&Bluetooth::GetDevicesCallback,
@@ -424,7 +453,8 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
     return ScriptPromise();
 
   // Subsequent steps are handled in the browser process.
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
 
   service_->RequestDevice(
@@ -461,7 +491,6 @@ static void ConvertRequestLEScanOptions(
       auto canonicalized_filter = mojom::blink::WebBluetoothLeScanFilter::New();
 
       CanonicalizeFilter(filter, canonicalized_filter, exception_state);
-
       if (exception_state.HadException())
         return;
 
@@ -536,7 +565,8 @@ ScriptPromise Bluetooth::requestLEScan(ScriptState* script_state,
     return ScriptPromise();
 
   // Subsequent steps are handled in the browser process.
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
 
   mojo::PendingAssociatedRemote<mojom::blink::WebBluetoothAdvertisementClient>

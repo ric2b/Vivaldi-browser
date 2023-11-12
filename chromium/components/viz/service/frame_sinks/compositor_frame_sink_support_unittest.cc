@@ -257,6 +257,22 @@ class CompositorFrameSinkSupportTest : public testing::Test {
                                   /*flags=*/0));
   }
 
+  bool HasAnimationManagerForNavigation(NavigationID id) const {
+    return manager_.navigation_to_animation_manager_.contains(id);
+  }
+
+  void ProcessCompositorFrameTransitionDirective(
+      CompositorFrameSinkSupport* support,
+      const CompositorFrameTransitionDirective& directive,
+      Surface* surface) {
+    support->ProcessCompositorFrameTransitionDirective(directive, surface);
+  }
+
+  bool SupportHasSurfaceAnimationManager(
+      CompositorFrameSinkSupport* support) const {
+    return !!support->surface_animation_manager_;
+  }
+
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<base::SimpleTestTickClock> now_src_;
@@ -302,8 +318,9 @@ class OnBeginFrameAcksCompositorFrameSinkSupportTest
 
   bool BeginFrameAcksEnabled() const { return GetParam(); }
 
-  int ack_pending_count(const CompositorFrameSinkSupport* support) const {
-    return support->ack_pending_count_;
+  int ack_pending_from_surface_count(
+      const CompositorFrameSinkSupport* support) const {
+    return support->ack_pending_from_surface_count_;
   }
 
  private:
@@ -316,6 +333,7 @@ OnBeginFrameAcksCompositorFrameSinkSupportTest::
     : CompositorFrameSinkSupportTest(override_throttled_frame_rate_params) {
   if (BeginFrameAcksEnabled()) {
     scoped_feature_list_.InitAndEnableFeature(features::kOnBeginFrameAcks);
+    support_->SetWantsBeginFrameAcks();
   } else {
     scoped_feature_list_.InitAndDisableFeature(features::kOnBeginFrameAcks);
   }
@@ -574,7 +592,7 @@ TEST_P(OnBeginFrameAcksCompositorFrameSinkSupportTest, ResourceLifetime) {
 
   // This test relied on CompositorFrameSinkSupport::ReturnResources to not send
   // as long as there has been no DidReceiveCompositorFrameAck. Such that
-  // `ack_pending_count_` is always greater than 1.
+  // `ack_pending_from_surface_count_` is always greater than 1.
   //
   // With features::kOnBeginFrameAcks we now return the resources during
   // OnBeginFrame, however that is throttled while we await any ack.
@@ -690,6 +708,9 @@ TEST_P(OnBeginFrameAcksCompositorFrameSinkSupportTest, AddDuringEviction) {
   MockCompositorFrameSinkClient mock_client;
   auto support = std::make_unique<CompositorFrameSinkSupport>(
       &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot);
+  if (BeginFrameAcksEnabled()) {
+    support->SetWantsBeginFrameAcks();
+  }
   LocalSurfaceId local_surface_id(6, kArbitraryToken);
   support->SubmitCompositorFrame(
       local_surface_id, MakeDefaultCompositorFrame(kBeginFrameSourceId));
@@ -718,7 +739,7 @@ TEST_P(OnBeginFrameAcksCompositorFrameSinkSupportTest, AddDuringEviction) {
     testing::Mock::VerifyAndClearExpectations(&mock_client);
   }
 
-  EXPECT_EQ(1, ack_pending_count(support.get()));
+  EXPECT_EQ(1, ack_pending_from_surface_count(support.get()));
 }
 
 // Verifies that only monotonically increasing LocalSurfaceIds are accepted.
@@ -828,6 +849,9 @@ TEST_P(OnBeginFrameAcksCompositorFrameSinkSupportTest,
   MockCompositorFrameSinkClient mock_client;
   auto support = std::make_unique<CompositorFrameSinkSupport>(
       &mock_client, &manager_, kAnotherArbitraryFrameSinkId, kIsRoot);
+  if (BeginFrameAcksEnabled()) {
+    support->SetWantsBeginFrameAcks();
+  }
   LocalSurfaceId local_surface_id(7, kArbitraryToken);
   SurfaceId id(kAnotherArbitraryFrameSinkId, local_surface_id);
 
@@ -1897,6 +1921,37 @@ TEST_F(CompositorFrameSinkSupportTest, ForceFullFrameToActivateSurface) {
                                           testing::IsFalse()),
                            _, _, _));
   begin_frame_source.TestOnBeginFrame(args_animate_only);
+}
+
+TEST_F(CompositorFrameSinkSupportTest,
+       ReleaseTransitionDirectiveClearsFrameSinkManagerEntry) {
+  auto result = support_->MaybeSubmitCompositorFrame(
+      local_surface_id_, MakeDefaultCompositorFrame(), absl::nullopt, 0,
+      mojom::CompositorFrameSink::SubmitCompositorFrameSyncCallback());
+  EXPECT_EQ(SubmitResult::ACCEPTED, result);
+
+  NavigationID navigation_id = NavigationID::Create();
+  Surface* surface = support_->GetLastCreatedSurfaceForTesting();
+  ASSERT_TRUE(surface);
+
+  std::unique_ptr<SurfaceAnimationManager> animation_manager =
+      SurfaceAnimationManager::CreateWithSave(
+          CompositorFrameTransitionDirective::CreateSave(navigation_id,
+                                                         /*sequence_id=*/1, {}),
+          surface, &shared_bitmap_manager_, base::DoNothing());
+  ASSERT_TRUE(animation_manager);
+
+  EXPECT_FALSE(HasAnimationManagerForNavigation(navigation_id));
+  manager_.CacheSurfaceAnimationManager(navigation_id,
+                                        std::move(animation_manager));
+  EXPECT_TRUE(HasAnimationManagerForNavigation(navigation_id));
+
+  auto release_directive = CompositorFrameTransitionDirective::CreateRelease(
+      navigation_id, /*sequence_id=*/2);
+  ProcessCompositorFrameTransitionDirective(support_.get(), release_directive,
+                                            surface);
+  EXPECT_FALSE(HasAnimationManagerForNavigation(navigation_id));
+  EXPECT_FALSE(SupportHasSurfaceAnimationManager(support_.get()));
 }
 
 TEST_F(CompositorFrameSinkSupportTest, GetCopyOutputRequestRegion) {

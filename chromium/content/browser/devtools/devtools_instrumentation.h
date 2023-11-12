@@ -72,11 +72,9 @@ class WebContents;
 
 struct SignedExchangeError;
 
-namespace protocol {
-namespace Audits {
+namespace protocol::Audits {
 class InspectorIssue;
-}  // namespace Audits
-}  // namespace protocol
+}  // namespace protocol::Audits
 
 namespace devtools_instrumentation {
 
@@ -189,24 +187,32 @@ void WillSwapFrameTreeNode(FrameTreeNode& old_node, FrameTreeNode& new_node);
 void OnFrameTreeNodeDestroyed(FrameTreeNode& frame_tree_node);
 
 void WillInitiatePrerender(FrameTree& frame_tree);
-void DidActivatePrerender(const NavigationRequest& nav_request);
+void DidActivatePrerender(
+    const NavigationRequest& nav_request,
+    const base::UnguessableToken& initiator_devtools_navigation_token);
 // This function reports cancellation status to DevTools with the
 // `disallowed_api_method`, which is used to give users more information about
 // the cancellation details if the prerendering uses disallowed API method, and
 // disallowed_api_method will be formatted for display in the DevTools. See the
 // DevTools implementation for the format.
-void DidCancelPrerender(const GURL& prerendering_url,
-                        FrameTreeNode* ftn,
-                        PrerenderFinalStatus status,
-                        const std::string& disallowed_api_method);
+void DidCancelPrerender(
+    FrameTreeNode* ftn,
+    const GURL& prerendering_url,
+    const base::UnguessableToken& initiator_devtools_navigation_token,
+    PrerenderFinalStatus status,
+    const std::string& disallowed_api_method);
 
-void DidUpdatePrefetchStatus(FrameTreeNode* ftn,
-                             const GURL& prefetch_url,
-                             PreloadingTriggeringOutcome status);
+void DidUpdatePrefetchStatus(
+    FrameTreeNode* ftn,
+    const base::UnguessableToken& initiator_devtools_navigation_token,
+    const GURL& prefetch_url,
+    PreloadingTriggeringOutcome status);
 
-void DidUpdatePrerenderStatus(int initiator_frame_tree_node_id,
-                              const GURL& prerender_url,
-                              PreloadingTriggeringOutcome status);
+void DidUpdatePrerenderStatus(
+    int initiator_frame_tree_node_id,
+    const base::UnguessableToken& initiator_devtools_navigation_token,
+    const GURL& prerender_url,
+    PreloadingTriggeringOutcome status);
 
 void OnSignedExchangeReceived(
     FrameTreeNode* frame_tree_node,
@@ -271,6 +277,8 @@ void WillStartDragging(FrameTreeNode* main_frame_tree_node,
                        blink::DragOperationsMask drag_operations_mask,
                        bool* intercepted);
 
+void DragEnded(FrameTreeNode& node);
+
 // Asks any interested agents to handle the given certificate error. Returns
 // |true| if the error was handled, |false| otherwise.
 using CertErrorCallback =
@@ -321,12 +329,6 @@ ReportBrowserInitiatedIssue(RenderFrameHostImpl* frame,
 void BuildAndReportBrowserInitiatedIssue(
     RenderFrameHostImpl* frame,
     blink::mojom::InspectorIssueInfoPtr info);
-
-// Produces a Heavy Ad Issue based on the parameters passed in.
-std::unique_ptr<protocol::Audits::InspectorIssue> GetHeavyAdIssue(
-    RenderFrameHostImpl* frame,
-    blink::mojom::HeavyAdResolutionStatus resolution,
-    blink::mojom::HeavyAdReason reason);
 
 void OnWebTransportHandshakeFailed(
     RenderFrameHostImpl* frame_host,
@@ -391,6 +393,16 @@ void UpdateDeviceRequestPrompt(RenderFrameHost* render_frame_host,
 
 void CleanUpDeviceRequestPrompt(RenderFrameHost* render_frame_host,
                                 DevtoolsDeviceRequestPromptInfo* prompt_info);
+
+// Notifies the active FedCmHandlers that a FedCM request is starting.
+// `intercept` should be set to true if the handler is active.
+// `disable_delay` should be set to true if the handler wants to disable
+// the normal FedCM delay in notifying the renderer of success/failure.
+void WillSendFedCmRequest(RenderFrameHost* render_frame_host,
+                          bool* intercept,
+                          bool* disable_delay);
+void WillShowFedCmDialog(RenderFrameHost* render_frame_host, bool* intercept);
+void OnFedCmAccountsDialogShown(RenderFrameHost* render_frame_host);
 
 }  // namespace devtools_instrumentation
 

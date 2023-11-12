@@ -81,6 +81,9 @@ BASE_FEATURE(kFeedBackToTop,
 BASE_FEATURE(kFeedBottomSyncBanner,
              "FeedBottomSyncBanner",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kFeedBoCSigninInterstitial,
+             "FeedBoCSigninInterstitial",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kFeedStamp, "FeedStamp", base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kDefaultReferrerUrl[] = "https://www.google.com/";
@@ -168,4 +171,8 @@ BASE_FEATURE(kSyntheticCapabilities,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kCormorant, "Cormorant", base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFeedUserInteractionReliabilityReport,
+             "FeedUserInteractionReliabilityReport",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace feed

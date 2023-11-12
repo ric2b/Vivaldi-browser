@@ -92,6 +92,8 @@ TaskType GetTaskType(apps::AppType app_type) {
       // because both are executed through App Service, which can tell the
       // difference itself.
       return TASK_TYPE_FILE_HANDLER;
+    case apps::AppType::kBruschetta:
+      return TASK_TYPE_BRUSCHETTA_APP;
     case apps::AppType::kCrostini:
       return TASK_TYPE_CROSTINI_APP;
     case apps::AppType::kPluginVm:
@@ -102,18 +104,23 @@ TaskType GetTaskType(apps::AppType app_type) {
     case apps::AppType::kStandaloneBrowser:
     case apps::AppType::kRemote:
     case apps::AppType::kBorealis:
-    case apps::AppType::kBruschetta:
       return TASK_TYPE_UNKNOWN;
   }
 }
 
-const char kImportCrostiniImageHandlerId[] = "import-crostini-image";
-const char kInstallLinuxPackageHandlerId[] = "install-linux-package";
+const char kImportCrostiniImageHandlerId[] =
+    "chrome://file-manager/?import-crostini-image";
+const char kInstallLinuxPackageHandlerId[] =
+    "chrome://file-manager/?install-linux-package";
 
 }  // namespace
 
 bool FileHandlerIsEnabled(Profile* profile,
+                          const std::string& app_id,
                           const std::string& file_handler_id) {
+  if (app_id != kFileManagerSwaAppId) {
+    return true;
+  }
   // Crostini deb files and backup files can be disabled by policy.
   if (file_handler_id == kInstallLinuxPackageHandlerId) {
     return crostini::CrostiniFeatures::Get()->IsRootAccessAllowed(profile);
@@ -191,8 +198,9 @@ void FindAppServiceTasks(Profile* profile,
   // App Service uses the file extension in the URL for file_handlers for Web
   // Apps.
 #if DCHECK_IS_ON()
-  for (const GURL& url : file_urls)
+  for (const GURL& url : file_urls) {
     DCHECK(url.is_valid());
+  }
 #endif  // DCHECK_IS_ON()
 
   // WebApps only have full support for files backed by inodes, so tasks
@@ -238,13 +246,13 @@ void FindAppServiceTasks(Profile* profile,
       apps::AppType::kChromeApp,
       apps::AppType::kExtension,
       apps::AppType::kStandaloneBrowserChromeApp,
-      apps::AppType::kStandaloneBrowserExtension};
+      apps::AppType::kStandaloneBrowserExtension,
+      apps::AppType::kBruschetta,
+      apps::AppType::kCrostini,
+      apps::AppType::kPluginVm,
+  };
   if (ash::features::ShouldArcFileTasksUseAppService()) {
     supported_app_types.push_back(apps::AppType::kArc);
-  }
-  if (ash::features::ShouldGuestOsFileTasksUseAppService()) {
-    supported_app_types.push_back(apps::AppType::kCrostini);
-    supported_app_types.push_back(apps::AppType::kPluginVm);
   }
   for (auto& launch_entry : intent_launch_info) {
     auto app_type = proxy->AppRegistryCache().GetAppType(launch_entry.app_id);
@@ -270,23 +278,28 @@ void FindAppServiceTasks(Profile* profile,
       web_app::OsIntegrationManager& os_integration_manager =
           provider->os_integration_manager();
       if (!os_integration_manager.IsFileHandlingAPIAvailable(
-              launch_entry.app_id))
+              launch_entry.app_id)) {
         continue;
+      }
     }
 
     if (app_type == apps::AppType::kChromeApp ||
         app_type == apps::AppType::kExtension) {
       if (profile->IsOffTheRecord() &&
-          !extensions::util::IsIncognitoEnabled(launch_entry.app_id, profile))
+          !extensions::util::IsIncognitoEnabled(launch_entry.app_id, profile)) {
         continue;
-      if (!FileHandlerIsEnabled(profile_with_app_service,
-                                launch_entry.activity_name))
-        continue;
+      }
     }
 
-    if ((app_type == apps::AppType::kCrostini ||
+    if ((app_type == apps::AppType::kBruschetta ||
+         app_type == apps::AppType::kCrostini ||
          app_type == apps::AppType::kPluginVm) &&
         !files_shareable_to_vm) {
+      continue;
+    }
+
+    if (!FileHandlerIsEnabled(profile_with_app_service, launch_entry.app_id,
+                              launch_entry.activity_name)) {
       continue;
     }
 
@@ -342,11 +355,11 @@ void ExecuteAppServiceTask(
 
   DCHECK(task.task_type == TASK_TYPE_WEB_APP ||
          task.task_type == TASK_TYPE_FILE_HANDLER ||
+         task.task_type == TASK_TYPE_BRUSCHETTA_APP ||
+         task.task_type == TASK_TYPE_CROSTINI_APP ||
+         task.task_type == TASK_TYPE_PLUGIN_VM_APP ||
          (ash::features::ShouldArcFileTasksUseAppService() &&
-          task.task_type == TASK_TYPE_ARC_APP) ||
-         (ash::features::ShouldGuestOsFileTasksUseAppService() &&
-          (task.task_type == TASK_TYPE_CROSTINI_APP ||
-           task.task_type == TASK_TYPE_PLUGIN_VM_APP)));
+          task.task_type == TASK_TYPE_ARC_APP));
 
   apps::IntentPtr intent = std::make_unique<apps::Intent>(
       apps_util::kIntentActionView, std::move(intent_files));

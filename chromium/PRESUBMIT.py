@@ -50,6 +50,8 @@ _EXCLUDED_PATHS = (
     r"tools/perf/page_sets/maps_perf_test.*",
     # Test pages for WebRTC telemetry tests.
     r"tools/perf/page_sets/webrtc_cases.*",
+    # Test file compared with generated output.
+    r"tools/polymer/tests/html_to_wrapper/.*.html.ts$",
 )
 
 _EXCLUDED_SET_NO_PARENT_PATHS = (
@@ -161,7 +163,7 @@ _BANNED_JAVA_IMPORTS : Sequence[BanRule] = (
       ),
     ),
     BanRule(
-      'import android.support.test.rule.UiThreadTestRule;',
+      'import androidx.test.rule.UiThreadTestRule;',
       (
        'Do not use UiThreadTestRule, just use '
        '@org.chromium.base.test.UiThreadTest on test methods that should run '
@@ -169,14 +171,14 @@ _BANNED_JAVA_IMPORTS : Sequence[BanRule] = (
       ),
     ),
     BanRule(
-      'import android.support.test.annotation.UiThreadTest;',
-      ('Do not use android.support.test.annotation.UiThreadTest, use '
+      'import androidx.test.annotation.UiThreadTest;',
+      ('Do not use androidx.test.annotation.UiThreadTest, use '
        'org.chromium.base.test.UiThreadTest instead. See '
        'https://crbug.com/1111893.',
       ),
     ),
     BanRule(
-      'import android.support.test.rule.ActivityTestRule;',
+      'import androidx.test.rule.ActivityTestRule;',
       (
        'Do not use ActivityTestRule, use '
        'org.chromium.base.test.BaseActivityTestRule instead.',
@@ -283,6 +285,18 @@ _BANNED_JAVA_FUNCTIONS : Sequence[BanRule] = (
       False,
       excluded_paths=(
         r'.*Test[A-Z]?.*\.java',
+      ),
+    ),
+    BanRule(
+      r'/RecordHistogram\.getHistogram(ValueCount|TotalCount|Samples)ForTesting\(',
+      (
+       'Raw histogram counts are easy to misuse; for example they don\'t reset '
+       'between batched tests. Use HistogramWatcher to check histogram records instead.',
+      ),
+      False,
+      excluded_paths=(
+        'base/android/javatests/src/org/chromium/base/metrics/RecordHistogramTest.java',
+        'base/test/android/javatests/src/org/chromium/base/test/util/HistogramWatcher.java',
       ),
     ),
 )
@@ -444,7 +458,8 @@ _BANNED_IOS_OBJC_FUNCTIONS = (
       ),
       True,
       excluded_paths=(
-        'ios/chrome/browser/ui/icons/symbol_helpers.mm',
+        'ios/chrome/browser/shared/ui/symbols/symbol_helpers.mm',
+        'ios/chrome/search_widget_extension/',
       ),
     ),
 )
@@ -788,16 +803,14 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
     ),
     BanRule(
       (
-        r'/\b(?:'
-        r'std::linear_congruential_engine|std::mersenne_twister_engine|'
-        r'std::subtract_with_carry_engine|std::discard_block_engine|'
-        r'std::independent_bits_engine|std::shuffle_order_engine|'
-        r'std::minstd_rand0|std::minstd_rand|'
-        r'std::mt19937|std::mt19937_64|'
-        r'std::ranlux24_base|std::ranlux48_base|std::ranlux24|std::ranlux48|'
-        r'std::knuth_b|'
-        r'std::default_random_engine|'
-        r'std::random_device'
+        r'/\bstd::(?:'
+        r'linear_congruential_engine|mersenne_twister_engine|'
+        r'subtract_with_carry_engine|discard_block_engine|'
+        r'independent_bits_engine|shuffle_order_engine|'
+        r'minstd_rand0?|mt19937(_64)?|ranlux(24|48)(_base)?|knuth_b|'
+        r'default_random_engine|'
+        r'random_device|'
+        r'seed_seq'
         r')\b'
       ),
       (
@@ -921,6 +934,7 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       [
         # Needed to use liburlpattern API.
         r'third_party/blink/renderer/core/url_pattern/.*',
+        r'third_party/blink/renderer/modules/manifest/manifest_parser\.cc',
         # Not an error in third_party folders.
         _THIRD_PARTY_EXCEPT_BLINK
       ],
@@ -935,21 +949,42 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
     BanRule(
-      r'/\b(absl|std)::(u16)?string_view\b',
+      r'/\babsl::string_view\b',
       (
-        'absl::string_view is banned and std::[u16]string_view are not allowed',
-        ' yet (https://crbug.com/691162). Use base::StringPiece[16] instead.',
+        'absl::string_view is a legacy spelling of std::string_view, which is ',
+        'not allowed yet (https://crbug.com/691162). Use base::StringPiece ',
+        'instead, unless std::string_view is needed to use with an external ',
+        'API.',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
+    ),
+    BanRule(
+      r'/\bstd::(u16)?string_view\b',
+      (
+        'std::[u16]string_view is not yet allowed (crbug.com/691162). Use ',
+        'base::StringPiece[16] instead, unless std::[u16]string_view is ',
+        'needed to use an external API.',
       ),
       True,
       [
+        # Needed to implement and test std::string_view interoperability.
+        r'base/strings/string_piece.*',
         # Needed to use liburlpattern API.
         r'third_party/blink/renderer/core/url_pattern/.*',
+        r'third_party/blink/renderer/modules/manifest/manifest_parser\.cc',
         # Needed to use QUICHE API.
         r'net/quic/.*',
         r'net/spdy/.*',
         r'net/test/embedded_test_server/.*',
         r'net/third_party/quiche/.*',
         r'services/network/web_transport\.cc',
+        # This code is in the process of being extracted into an external
+        # library, where //base will be unavailable.
+        r'net/cert/pki/.*',
+        r'net/der/.*',
+        # Needed to use APIs from the above.
+        r'net/cert/.*',
         # Not an error in third_party folders.
         _THIRD_PARTY_EXCEPT_BLINK
       ],
@@ -1091,14 +1126,6 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       ],
     ),
     BanRule(
-      r'/#include <random>',
-      (
-        '<random> is banned. Use base::RandomBitGenerator instead.',
-      ),
-      True,
-      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
-    ),
-    BanRule(
       r'/#include <X11/',
       (
         'Do not use Xlib. Use xproto (from //ui/gfx/x:xproto) instead.',
@@ -1119,15 +1146,6 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       (
         'std::aligned_alloc() is not yet allowed (crbug.com/1412818). Use ',
         'base::AlignedAlloc() instead.',
-      ),
-      True,
-      [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
-    ),
-    BanRule(
-      r'/\bstd::(u16)?string_view\b',
-      (
-        'std::[u16]string_view is not yet allowed (crbug.com/691162). Use ',
-        'base::StringPiece[16] instead.',
       ),
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
@@ -1156,12 +1174,25 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         ' char and std::string instead?',
       ),
       True,
-      [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
+      [
+        # The demangler does not use this type but needs to know about it.
+        'base/third_party/symbolize/demangle\.cc',
+        # Don't warn in third_party folders.
+        _THIRD_PARTY_EXCEPT_BLINK
+      ],
     ),
     BanRule(
       r'/(\b(co_await|co_return|co_yield)\b|#include <coroutine>)',
       (
         'Coroutines are not yet allowed (https://crbug.com/1403840).',
+      ),
+      True,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
+    ),
+    BanRule(
+      r'/^\s*(export\s|import\s+["<:\w]|module(;|\s+[:\w]))',
+      (
+        'Modules are disallowed for now due to lack of toolchain support.',
       ),
       True,
       [_THIRD_PARTY_EXCEPT_BLINK],  # Don't warn in third_party folders.
@@ -1507,7 +1538,7 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       ],
     ),
     BanRule(
-      r'\bchartorune\b',
+      r'/\bchartorune\b',
       (
         'chartorune is not memory-safe, unless you can guarantee the input ',
         'string is always null-terminated. Otherwise, please use charntorune ',
@@ -1519,16 +1550,52 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
         # Exceptions to this rule should have a fuzzer.
       ],
     ),
-  BanRule(
-    r'/\b#include "base/atomicops\.h"\b',
-    (
-      'Do not use base::subtle atomics, but std::atomic, which are simpler to '
-      'use, have better understood, clearer and richer semantics, and are '
-      'harder to mis-use. See details in base/atomicops.h.'
+    BanRule(
+      r'/\b#include "base/atomicops\.h"\b',
+      (
+        'Do not use base::subtle atomics, but std::atomic, which are simpler '
+        'to use, have better understood, clearer and richer semantics, and are '
+        'harder to mis-use. See details in base/atomicops.h.',
+      ),
+      False,
+      [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
     ),
-    False,
-    [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
-  ),
+    BanRule(
+      r'CrossThreadPersistent<',
+      (
+        'Do not use blink::CrossThreadPersistent, but '
+        'blink::CrossThreadHandle. It is harder to mis-use.',
+        'More info: '
+        'https://docs.google.com/document/d/1GIT0ysdQ84sGhIo1r9EscF_fFt93lmNVM_q4vvHj2FQ/edit#heading=h.3e4d6y61tgs',
+        'Please contact platform-architecture-dev@ before adding new instances.'
+      ),
+      False,
+      []
+    ),
+    BanRule(
+      r'CrossThreadWeakPersistent<',
+      (
+        'Do not use blink::CrossThreadWeakPersistent, but '
+        'blink::CrossThreadWeakHandle. It is harder to mis-use.',
+        'More info: '
+        'https://docs.google.com/document/d/1GIT0ysdQ84sGhIo1r9EscF_fFt93lmNVM_q4vvHj2FQ/edit#heading=h.3e4d6y61tgs',
+        'Please contact platform-architecture-dev@ before adding new instances.'
+      ),
+      False,
+      []
+    ),
+    BanRule(
+      r'objc/objc.h',
+      (
+        'Do not include <objc/objc.h>. It defines away ARC lifetime '
+        'annotations, and is thus dangerous.',
+        'Please use the pimpl pattern; search for `ObjCStorage` for examples.',
+        'For further reading on how to safely mix C++ and Obj-C, see',
+        'https://chromium.googlesource.com/chromium/src/+/main/docs/mac/mixing_cpp_and_objc.md'
+      ),
+      True,
+      []
+    ),
 )
 
 _BANNED_MOJOM_PATTERNS : Sequence[BanRule] = (
@@ -1601,6 +1668,7 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/allot_native_libraries.pydeps',
     'build/android/gyp/apkbuilder.pydeps',
     'build/android/gyp/assert_static_initializers.pydeps',
+    'build/android/gyp/binary_baseline_profile.pydeps',
     'build/android/gyp/bytecode_processor.pydeps',
     'build/android/gyp/bytecode_rewriter.pydeps',
     'build/android/gyp/check_flag_expectations.pydeps',
@@ -3205,8 +3273,8 @@ def CheckUserActionUpdate(input_api, output_api):
                 # Loads contents in tools/metrics/actions/actions.xml to memory. It's
                 # loaded only once.
                 if not current_actions:
-                    with open(
-                            'tools/metrics/actions/actions.xml') as actions_f:
+                    with open('tools/metrics/actions/actions.xml',
+                              encoding='utf-8') as actions_f:
                         current_actions = actions_f.read()
                 # Search for the matched user action name in |current_actions|.
                 for action_name in match.groups():
@@ -3797,7 +3865,7 @@ def CheckSetNoParent(input_api, output_api):
 
     allowed_owners_files_file = 'build/OWNERS.setnoparent'
     allowed_owners_files = set()
-    with open(allowed_owners_files_file, 'r') as f:
+    with open(allowed_owners_files_file, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith('#'):
@@ -4169,8 +4237,8 @@ def _CheckAndroidTestAnnotationUsage(input_api, output_api):
         results.append(
             output_api.PresubmitError(
                 'Annotations in android.test.suitebuilder.annotation have been'
-                ' deprecated since API level 24. Please use android.support.test.filters'
-                ' from //third_party/android_support_test_runner:runner_java instead.'
+                ' deprecated since API level 24. Please use androidx.test.filters'
+                ' from //third_party/androidx:androidx_test_runner_java instead.'
                 ' Contact yolandyan@chromium.org if you have any questions.',
                 errors))
     return results
@@ -4930,19 +4998,13 @@ def CheckForTooLargeFiles(input_api, output_api):
     # files seems to be 1-2 MB, with a handful around 5-8 MB, so
     # anything over 20 MB is exceptional.
     TOO_LARGE_FILE_SIZE_LIMIT = 20 * 1024 * 1024
-    # Special exemption for a file that is slightly over the limit.
-    SPECIAL_FILE_SIZE_LIMIT = 25 * 1024 * 1024
-    SPECIAL_FILE_NAME = 'transport_security_state_static.json'
 
     too_large_files = []
     for f in input_api.AffectedFiles():
         # Check both added and modified files (but not deleted files).
         if f.Action() in ('A', 'M'):
             size = input_api.os_path.getsize(f.AbsoluteLocalPath())
-            limit = (SPECIAL_FILE_SIZE_LIMIT if
-                f.AbsoluteLocalPath().endswith(SPECIAL_FILE_NAME) else
-                TOO_LARGE_FILE_SIZE_LIMIT)
-            if size > limit:
+            if size > TOO_LARGE_FILE_SIZE_LIMIT:
                 too_large_files.append("%s: %d bytes" % (f.LocalPath(), size))
 
     if too_large_files:
@@ -5338,7 +5400,7 @@ def ChecksCommon(input_api, output_api):
             continue
 
         use_python3 = False
-        with open(f.LocalPath()) as fp:
+        with open(f.LocalPath(), encoding='utf-8') as fp:
             use_python3 = any(
                 line.startswith('USE_PYTHON3 = True')
                 for line in fp.readlines())
@@ -6648,6 +6710,7 @@ Instrumentation tests should use either @Batch or @DoNotBatch. Use
 @Batch(Batch.PER_CLASS) in most cases. Use @Batch(Batch.UNIT_TESTS) when tests
 have no side-effects. If the tests are not safe to run in batch, please use
 @DoNotBatch with reasons.
+See https://source.chromium.org/chromium/chromium/src/+/main:docs/testing/batching_instrumentation_tests.md
 """, missing_annotation_errors))
     if extra_annotation_errors:
         results.append(
@@ -6779,7 +6842,17 @@ def CheckNoJsInIos(input_api, output_api):
                           (r'^ios/third_party/*', r'^third_party/*'),
             files_to_check=[r'^ios/.*\.js$', r'.*/ios/.*\.js$'])
 
+    deleted_files = []
+
+    # Collect filenames of all removed JS files.
+    for f in input_api.AffectedSourceFiles(_FilterFile):
+        local_path = f.LocalPath()
+
+        if input_api.os_path.splitext(local_path)[1] == '.js' and f.Action() == 'D':
+            deleted_files.append(input_api.os_path.basename(local_path))
+
     error_paths = []
+    moved_paths = []
     warning_paths = []
 
     for f in input_api.AffectedSourceFiles(_FilterFile):
@@ -6787,7 +6860,12 @@ def CheckNoJsInIos(input_api, output_api):
 
         if input_api.os_path.splitext(local_path)[1] == '.js':
             if f.Action() == 'A':
-                error_paths.append(local_path)
+                if input_api.os_path.basename(local_path) in deleted_files:
+                    # This script was probably moved rather than newly created.
+                    # Present a warning instead of an error for these cases.
+                    moved_paths.append(local_path)
+                else:
+                    error_paths.append(local_path)
             elif f.Action() != 'D':
                 warning_paths.append(local_path)
 
@@ -6800,6 +6878,13 @@ def CheckNoJsInIos(input_api, output_api):
             '//ios/web/public/js_messaging/README.md for more details.',
             warning_paths))
 
+    if moved_paths:
+        results.append(output_api.PresubmitPromptWarning(
+            'Do not use JavaScript on iOS for new files as TypeScript is '
+            'fully supported. (If this is a moved file, you may leave the '
+            'script unconverted.) See //ios/web/public/js_messaging/README.md '
+            'for help using scripts on iOS.', moved_paths))
+
     if error_paths:
         results.append(output_api.PresubmitError(
             'Do not use JavaScript on iOS as TypeScript is fully supported. '
@@ -6807,3 +6892,31 @@ def CheckNoJsInIos(input_api, output_api):
             'scripts on iOS.', error_paths))
 
     return results
+
+def CheckLibcxxRevisionsMatch(input_api, output_api):
+    """Check to make sure the libc++ version matches across deps files."""
+    # Disable check for changes to sub-repositories.
+    if input_api.PresubmitLocalPath() != input_api.change.RepositoryRoot():
+      return []
+
+    DEPS_FILES = [ 'DEPS', 'buildtools/deps_revisions.gni' ]
+
+    file_filter = lambda f: f.LocalPath().replace(
+            input_api.os_path.sep, '/') in DEPS_FILES
+    changed_deps_files = input_api.AffectedFiles(file_filter=file_filter)
+    if not changed_deps_files:
+        return []
+
+    def LibcxxRevision(file):
+        file = input_api.os_path.join(input_api.PresubmitLocalPath(),
+                                      *file.split('/'))
+        return input_api.re.search(
+                r'libcxx_revision.*[:=].*[\'"](\w+)[\'"]',
+                input_api.ReadFile(file)).group(1)
+
+    if len(set([LibcxxRevision(f) for f in DEPS_FILES])) == 1:
+        return []
+
+    return [output_api.PresubmitError(
+        'libcxx_revision not equal across %s' % ', '.join(DEPS_FILES),
+        changed_deps_files)]

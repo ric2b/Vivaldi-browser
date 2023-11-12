@@ -28,8 +28,8 @@
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
 #include "chrome/grit/chromium_strings.h"
-#include "components/os_crypt/key_storage_config_linux.h"
-#include "components/os_crypt/os_crypt.h"
+#include "components/os_crypt/sync/key_storage_config_linux.h"
+#include "components/os_crypt/sync/os_crypt.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "importer/chrome_importer_utils.h"
 #include "sql/statement.h"
@@ -113,7 +113,7 @@ void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
   }
 
   if (local_state->is_dict()) {
-    base::Value* os_crypt_dict = local_state->FindDictKey("os_crypt");
+    base::Value* os_crypt_dict = local_state->GetDict().Find("os_crypt");
     if (!os_crypt_dict) {
       LOG(ERROR) << "Unable to find 'os_cypt' entry for import browser.";
       return;

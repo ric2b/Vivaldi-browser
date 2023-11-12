@@ -30,7 +30,6 @@
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/input_method/input_method_persistence.h"
 #include "chrome/browser/ash/input_method/input_method_syncer.h"
-#include "chrome/browser/ash/login/consolidated_consent_field_trial.h"
 #include "chrome/browser/ash/login/hid_detection_revamp_field_trial.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
@@ -76,8 +75,8 @@
 #include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/ime/ash/ime_keyboard.h"
 #include "ui/base/ime/ash/input_method_manager.h"
-#include "ui/chromeos/events/mojom/modifier_key.mojom.h"
-#include "ui/chromeos/events/pref_names.h"
+#include "ui/events/ash/mojom/modifier_key.mojom.h"
+#include "ui/events/ash/pref_names.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
 #include "url/gurl.h"
@@ -129,10 +128,10 @@ Preferences::~Preferences() {
 
 // static
 void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
-  registry->RegisterBooleanPref(::prefs::kOwnerPrimaryMouseButtonRight, false);
-  registry->RegisterBooleanPref(::prefs::kOwnerPrimaryPointingStickButtonRight,
+  registry->RegisterBooleanPref(prefs::kOwnerPrimaryMouseButtonRight, false);
+  registry->RegisterBooleanPref(prefs::kOwnerPrimaryPointingStickButtonRight,
                                 false);
-  registry->RegisterBooleanPref(::prefs::kOwnerTapToClickEnabled, true);
+  registry->RegisterBooleanPref(prefs::kOwnerTapToClickEnabled, true);
   // TODO(jamescook): Move ownership and registration into ash.
   registry->RegisterStringPref(::prefs::kLogoutStartedLast, std::string());
   registry->RegisterStringPref(::prefs::kSigninScreenTimezone, std::string());
@@ -165,7 +164,6 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
                                 false);
 
   RegisterLocalStatePrefs(registry);
-  ash::consolidated_consent_field_trial::RegisterLocalStatePrefs(registry);
   ash::hid_detection_revamp_field_trial::RegisterLocalStatePrefs(registry);
 }
 
@@ -191,10 +189,9 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(::prefs::kPerformanceTracingEnabled, false);
 
   registry->RegisterBooleanPref(
-      ::prefs::kTapToClickEnabled, true,
+      prefs::kTapToClickEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
-  registry->RegisterBooleanPref(::prefs::kEnableTouchpadThreeFingerClick,
-                                false);
+  registry->RegisterBooleanPref(prefs::kEnableTouchpadThreeFingerClick, false);
   // This preference can only be set to true by policy or command_line flag
   // and it should not carry over to sessions were neither of these is set.
   registry->RegisterBooleanPref(::prefs::kUnifiedDesktopEnabledByDefault, false,
@@ -213,7 +210,7 @@ void Preferences::RegisterProfilePrefs(
       prefs::kPrimaryMouseButtonRight, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      ::prefs::kPrimaryPointingStickButtonRight, false,
+      prefs::kPrimaryPointingStickButtonRight, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
       prefs::kMouseAcceleration, true,
@@ -222,16 +219,16 @@ void Preferences::RegisterProfilePrefs(
       prefs::kMouseScrollAcceleration, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      ::prefs::kPointingStickAcceleration, true,
+      prefs::kPointingStickAcceleration, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      ::prefs::kTouchpadAcceleration, true,
+      prefs::kTouchpadAcceleration, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      ::prefs::kTouchpadScrollAcceleration, true,
+      prefs::kTouchpadScrollAcceleration, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      ::prefs::kTouchpadHapticFeedback, true,
+      prefs::kTouchpadHapticFeedback, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(::prefs::kLabsMediaplayerEnabled, false);
   registry->RegisterBooleanPref(::prefs::kLabsAdvancedFilesystemEnabled, false);
@@ -245,16 +242,16 @@ void Preferences::RegisterProfilePrefs(
       prefs::kMouseScrollSensitivity, 3,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
-      ::prefs::kPointingStickSensitivity, 3,
+      prefs::kPointingStickSensitivity, 3,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
-      ::prefs::kTouchpadSensitivity, 3,
+      prefs::kTouchpadSensitivity, 3,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
-      ::prefs::kTouchpadScrollSensitivity, 3,
+      prefs::kTouchpadScrollSensitivity, 3,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
-      ::prefs::kTouchpadHapticClickSensitivity, 3,
+      prefs::kTouchpadHapticClickSensitivity, 3,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
       ::prefs::kUse24HourClock, base::GetHourClockType() == base::k24HourClock,
@@ -414,11 +411,6 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(::prefs::kLanguageImeMenuActivated, false);
 
-  // TODO(b/227674947): Eventually delete this after Sign in with Smart Lock has
-  // been removed and enough time has elapsed for users to be notified.
-  registry->RegisterBooleanPref(
-      ::prefs::kHasSeenSmartLockSignInRemovedNotification, false);
-
   registry->RegisterInt64Pref(::prefs::kHatsLastInteractionTimestamp, 0);
 
   registry->RegisterInt64Pref(::prefs::kHatsSurveyCycleEndTimestamp, 0);
@@ -471,6 +463,10 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(::prefs::kHatsBluetoothRevampIsSelected, false);
 
+  registry->RegisterInt64Pref(::prefs::kHatsBatteryLifeCycleEndTs, 0);
+
+  registry->RegisterBooleanPref(::prefs::kHatsBatteryLifeIsSelected, false);
+
   registry->RegisterBooleanPref(::prefs::kHatsPrivacyHubBaselineIsSelected,
                                 false);
 
@@ -508,6 +504,11 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterTimePref(::prefs::kEndOfLifeDate, base::Time());
   registry->RegisterBooleanPref(::prefs::kFirstEolWarningDismissed, false);
   registry->RegisterBooleanPref(::prefs::kSecondEolWarningDismissed, false);
+
+  registry->RegisterBooleanPref(
+      ::prefs::kEolApproachingIncentiveNotificationDismissed, false);
+  registry->RegisterBooleanPref(::prefs::kEolPassedFinalIncentiveDismissed,
+                                false);
 
   registry->RegisterBooleanPref(::prefs::kCastReceiverEnabled, false);
   registry->RegisterBooleanPref(::prefs::kShowArcSettingsOnSessionStart, false);
@@ -570,6 +571,12 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kUsbDetectorNotificationEnabled, true);
 
   registry->RegisterBooleanPref(prefs::kShowTouchpadScrollScreenEnabled, true);
+
+  // Settings HaTS survey prefs for Settings and Settings Search features.
+  registry->RegisterInt64Pref(::prefs::kHatsOsSettingsSearchSurveyCycleEndTs,
+                              0);
+  registry->RegisterBooleanPref(::prefs::kHatsOsSettingsSearchSurveyIsSelected,
+                                false);
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
@@ -580,8 +587,8 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
 
   performance_tracing_enabled_.Init(::prefs::kPerformanceTracingEnabled, prefs,
                                     callback);
-  tap_to_click_enabled_.Init(::prefs::kTapToClickEnabled, prefs, callback);
-  three_finger_click_enabled_.Init(::prefs::kEnableTouchpadThreeFingerClick,
+  tap_to_click_enabled_.Init(prefs::kTapToClickEnabled, prefs, callback);
+  three_finger_click_enabled_.Init(prefs::kEnableTouchpadThreeFingerClick,
                                    prefs, callback);
   unified_desktop_enabled_by_default_.Init(
       ::prefs::kUnifiedDesktopEnabledByDefault, prefs, callback);
@@ -592,27 +599,27 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   mouse_sensitivity_.Init(prefs::kMouseSensitivity, prefs, callback);
   mouse_scroll_sensitivity_.Init(prefs::kMouseScrollSensitivity, prefs,
                                  callback);
-  touchpad_sensitivity_.Init(::prefs::kTouchpadSensitivity, prefs, callback);
-  touchpad_scroll_sensitivity_.Init(::prefs::kTouchpadScrollSensitivity, prefs,
+  touchpad_sensitivity_.Init(prefs::kTouchpadSensitivity, prefs, callback);
+  touchpad_scroll_sensitivity_.Init(prefs::kTouchpadScrollSensitivity, prefs,
                                     callback);
-  pointing_stick_sensitivity_.Init(::prefs::kPointingStickSensitivity, prefs,
+  pointing_stick_sensitivity_.Init(prefs::kPointingStickSensitivity, prefs,
                                    callback);
   primary_mouse_button_right_.Init(prefs::kPrimaryMouseButtonRight, prefs,
                                    callback);
   primary_pointing_stick_button_right_.Init(
-      ::prefs::kPrimaryPointingStickButtonRight, prefs, callback);
+      prefs::kPrimaryPointingStickButtonRight, prefs, callback);
   mouse_acceleration_.Init(prefs::kMouseAcceleration, prefs, callback);
   mouse_scroll_acceleration_.Init(prefs::kMouseScrollAcceleration, prefs,
                                   callback);
-  pointing_stick_acceleration_.Init(::prefs::kPointingStickAcceleration, prefs,
+  pointing_stick_acceleration_.Init(prefs::kPointingStickAcceleration, prefs,
                                     callback);
-  touchpad_acceleration_.Init(::prefs::kTouchpadAcceleration, prefs, callback);
-  touchpad_scroll_acceleration_.Init(::prefs::kTouchpadScrollAcceleration,
-                                     prefs, callback);
-  touchpad_haptic_feedback_.Init(::prefs::kTouchpadHapticFeedback, prefs,
+  touchpad_acceleration_.Init(prefs::kTouchpadAcceleration, prefs, callback);
+  touchpad_scroll_acceleration_.Init(prefs::kTouchpadScrollAcceleration, prefs,
+                                     callback);
+  touchpad_haptic_feedback_.Init(prefs::kTouchpadHapticFeedback, prefs,
                                  callback);
   touchpad_haptic_click_sensitivity_.Init(
-      ::prefs::kTouchpadHapticClickSensitivity, prefs, callback);
+      prefs::kTouchpadHapticClickSensitivity, prefs, callback);
   download_default_directory_.Init(::prefs::kDownloadDefaultDirectory, prefs,
                                    callback);
   preload_engines_.Init(::prefs::kLanguagePreloadEngines, prefs, callback);
@@ -631,6 +638,8 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   if (ime_menu_activated_.GetValue())
     input_method::InputMethodManager::Get()->ImeMenuActivationChanged(true);
 
+  long_press_diacritics_enabled_.Init(prefs::kLongPressDiacriticsEnabled, prefs,
+                                      callback);
   xkb_auto_repeat_enabled_.Init(prefs::kXkbAutoRepeatEnabled, prefs, callback);
   xkb_auto_repeat_delay_pref_.Init(prefs::kXkbAutoRepeatDelay, prefs, callback);
   xkb_auto_repeat_interval_pref_.Init(prefs::kXkbAutoRepeatInterval, prefs,
@@ -644,6 +653,7 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
                                          callback);
 
   pref_change_registrar_.Init(prefs);
+  pref_change_registrar_.Add(ash::prefs::kUserGeolocationAllowed, callback);
   pref_change_registrar_.Add(::prefs::kUserTimezone, callback);
   pref_change_registrar_.Add(::prefs::kResolveTimezoneByGeolocationMethod,
                              callback);
@@ -803,8 +813,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
       tracing_manager_.reset();
     SystemTrayClientImpl::Get()->SetPerformanceTracingIconVisible(enabled);
   }
-  if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kTapToClickEnabled) {
+  if (reason != REASON_PREF_CHANGED || pref_name == prefs::kTapToClickEnabled) {
     const bool enabled = tap_to_click_enabled_.GetValue();
     if (user_is_active)
       touchpad_settings.SetTapToClick(enabled);
@@ -814,12 +823,13 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     // Save owner preference in local state to use on login screen.
     if (user_is_owner) {
       PrefService* prefs = g_browser_process->local_state();
-      if (prefs->GetBoolean(::prefs::kOwnerTapToClickEnabled) != enabled)
-        prefs->SetBoolean(::prefs::kOwnerTapToClickEnabled, enabled);
+      if (prefs->GetBoolean(prefs::kOwnerTapToClickEnabled) != enabled) {
+        prefs->SetBoolean(prefs::kOwnerTapToClickEnabled, enabled);
+      }
     }
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kEnableTouchpadThreeFingerClick) {
+      pref_name == prefs::kEnableTouchpadThreeFingerClick) {
     const bool enabled = three_finger_click_enabled_.GetValue();
     if (user_is_active)
       touchpad_settings.SetThreeFingerClick(enabled);
@@ -881,14 +891,14 @@ void Preferences::ApplyPreferences(ApplyReason reason,
                                      sensitivity_int);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kPointingStickSensitivity) {
+      pref_name == prefs::kPointingStickSensitivity) {
     const int sensitivity_int = pointing_stick_sensitivity_.GetValue();
     if (user_is_active) {
       pointing_stick_settings.SetSensitivity(sensitivity_int);
     }
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kTouchpadSensitivity) {
+      pref_name == prefs::kTouchpadSensitivity) {
     const int sensitivity_int = touchpad_sensitivity_.GetValue();
     if (user_is_active) {
       touchpad_settings.SetSensitivity(sensitivity_int);
@@ -903,7 +913,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
         "Touchpad.PointerSensitivity.Started", sensitivity_int);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kTouchpadScrollSensitivity) {
+      pref_name == prefs::kTouchpadScrollSensitivity) {
     // With the flag off, use normal sensitivity (legacy fallback).
     // TODO(https://crbug.com/836258): Remove check when flag is removed.
     const int sensitivity_int = AreScrollSettingsAllowed()
@@ -925,22 +935,22 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     // Save owner preference in local state to use on login screen.
     if (user_is_owner) {
       PrefService* prefs = g_browser_process->local_state();
-      if (prefs->GetBoolean(::prefs::kOwnerPrimaryMouseButtonRight) != right)
-        prefs->SetBoolean(::prefs::kOwnerPrimaryMouseButtonRight, right);
+      if (prefs->GetBoolean(prefs::kOwnerPrimaryMouseButtonRight) != right) {
+        prefs->SetBoolean(prefs::kOwnerPrimaryMouseButtonRight, right);
+      }
     }
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kPrimaryPointingStickButtonRight) {
+      pref_name == prefs::kPrimaryPointingStickButtonRight) {
     const bool right = primary_pointing_stick_button_right_.GetValue();
     if (user_is_active)
       pointing_stick_settings.SetPrimaryButtonRight(right);
     // Save owner preference in local state to use on login screen.
     if (user_is_owner) {
       PrefService* prefs = g_browser_process->local_state();
-      if (prefs->GetBoolean(::prefs::kOwnerPrimaryPointingStickButtonRight) !=
+      if (prefs->GetBoolean(prefs::kOwnerPrimaryPointingStickButtonRight) !=
           right) {
-        prefs->SetBoolean(::prefs::kOwnerPrimaryPointingStickButtonRight,
-                          right);
+        prefs->SetBoolean(prefs::kOwnerPrimaryPointingStickButtonRight, right);
       }
     }
   }
@@ -958,19 +968,19 @@ void Preferences::ApplyPreferences(ApplyReason reason,
                                  "Mouse.ScrollAcceleration.Started", enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kPointingStickAcceleration) {
+      pref_name == prefs::kPointingStickAcceleration) {
     const bool enabled = pointing_stick_acceleration_.GetValue();
     if (user_is_active)
       pointing_stick_settings.SetAcceleration(enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kTouchpadAcceleration) {
+      pref_name == prefs::kTouchpadAcceleration) {
     const bool enabled = touchpad_acceleration_.GetValue();
     if (user_is_active)
       touchpad_settings.SetAcceleration(enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kTouchpadScrollAcceleration) {
+      pref_name == prefs::kTouchpadScrollAcceleration) {
     const bool enabled = touchpad_scroll_acceleration_.GetValue();
     if (user_is_active)
       touchpad_settings.SetScrollAcceleration(enabled);
@@ -979,7 +989,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
                                  enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kTouchpadHapticFeedback) {
+      pref_name == prefs::kTouchpadHapticFeedback) {
     const bool enabled = touchpad_haptic_feedback_.GetValue();
     if (user_is_active)
       touchpad_settings.SetHapticFeedback(enabled);
@@ -987,7 +997,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
                                  "Touchpad.HapticFeedback.Started", enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kTouchpadHapticClickSensitivity) {
+      pref_name == prefs::kTouchpadHapticClickSensitivity) {
     const int sensitivity_int = touchpad_haptic_click_sensitivity_.GetValue();
     if (user_is_active)
       touchpad_settings.SetHapticClickSensitivity(sensitivity_int);
@@ -1090,6 +1100,35 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     system::InputDeviceSettings::Get()->UpdateMouseSettings(mouse_settings);
     system::InputDeviceSettings::Get()->UpdatePointingStickSettings(
         pointing_stick_settings);
+  }
+
+  // TODO(b/277061508): Move this logic inside
+  // GeolocationPrivacySwitchController.
+  if (pref_name == ash::prefs::kUserGeolocationAllowed &&
+      reason != REASON_ACTIVE_USER_CHANGED) {
+    const bool user_disabled_geolocation =
+        !prefs_->GetBoolean(ash::prefs::kUserGeolocationAllowed);
+    const system::TimeZoneResolverManager::TimeZoneResolveMethod
+        automatic_timezone_setting =
+            system::TimeZoneResolverManager::TimeZoneResolveMethodFromInt(
+                prefs_->GetInteger(
+                    ::prefs::kResolveTimezoneByGeolocationMethod));
+    const bool precise_timezone_resolution_selected =
+        automatic_timezone_setting ==
+            system::TimeZoneResolverManager::TimeZoneResolveMethod::
+                SEND_WIFI_ACCESS_POINTS ||
+        automatic_timezone_setting ==
+            system::TimeZoneResolverManager::TimeZoneResolveMethod::
+                SEND_ALL_LOCATION_INFO;
+    // `kUserGeolocationAllowed` pref controls the precise location access. If
+    // the user had Wi-Fi based timezone resolving active, we silently fall it
+    // back to the IP-based resolution.
+    if (user_disabled_geolocation && precise_timezone_resolution_selected) {
+      prefs_->SetInteger(
+          ::prefs::kResolveTimezoneByGeolocationMethod,
+          static_cast<int>(
+              system::TimeZoneResolverManager::TimeZoneResolveMethod::IP_ONLY));
+    }
   }
 
   if (pref_name == ::prefs::kUserTimezone &&

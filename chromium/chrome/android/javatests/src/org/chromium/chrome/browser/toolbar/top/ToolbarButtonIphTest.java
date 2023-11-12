@@ -34,7 +34,6 @@ import org.chromium.base.FeatureList;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Restriction;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -43,6 +42,7 @@ import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
@@ -154,9 +154,6 @@ public class ToolbarButtonIphTest {
 
         toolbarTabButtonInteraction.perform(ViewActions.click());
         onView(withId(R.id.new_tab_button)).check(ViewAssertions.matches(withHighlight(true)));
-
-        onView(withId(R.id.tab_switcher_mode_tab_switcher_button)).perform(ViewActions.click());
-        toolbarTabButtonInteraction.check(ViewAssertions.matches(withHighlight(false)));
     }
 
     private void setPriceTrackingFeatures() {
@@ -164,11 +161,10 @@ public class ToolbarButtonIphTest {
         FeatureList.TestValues testValues = new FeatureList.TestValues();
 
         // Enables price tracking.
-        testValues.addFeatureFlagOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING, true);
-        testValues.addFieldTrialParamOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING,
-                PriceTrackingFeatures.PRICE_TRACKING_PARAM, String.valueOf(true));
+        PriceTrackingFeatures.setPriceTrackingEnabledForTesting(true);
 
         // Enables the price tracking IPH.
+        testValues.addFeatureFlagOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING, true);
         testValues.addFieldTrialParamOverride(ChromeFeatureList.COMMERCE_PRICE_TRACKING,
                 PriceTrackingFeatures.PRICE_DROP_IPH_ENABLED_PARAM, String.valueOf(true));
         FeatureList.setTestValues(testValues);

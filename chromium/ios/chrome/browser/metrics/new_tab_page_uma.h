@@ -7,7 +7,6 @@
 
 #include "ui/base/page_transition_types.h"
 
-class ChromeBrowserState;
 class GURL;
 namespace web {
 class WebState;
@@ -34,15 +33,14 @@ enum ActionType {
   NUM_ACTION_TYPES,
 };
 
-void RecordAction(ChromeBrowserState* browser_state,
+void RecordAction(bool is_incognito,
                   web::WebState* web_state,
                   ActionType action);
 
-void RecordActionFromOmnibox(ChromeBrowserState* browser_state,
+void RecordActionFromOmnibox(bool is_incognito,
                              web::WebState* web_state,
                              const GURL& url,
-                             ui::PageTransition transition,
-                             bool is_expecting_voice_search);
+                             ui::PageTransition transition);
 
 }  // namespace new_tab_page_uma
 

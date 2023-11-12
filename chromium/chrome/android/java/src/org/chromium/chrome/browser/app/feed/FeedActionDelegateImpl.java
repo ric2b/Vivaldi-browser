@@ -14,24 +14,28 @@ import org.chromium.chrome.browser.app.creator.CreatorActivity;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
+import org.chromium.chrome.browser.feed.SingleWebFeedEntryPoint;
+import org.chromium.chrome.browser.feed.signinbottomsheet.SigninBottomSheetCoordinator;
+import org.chromium.chrome.browser.feed.webfeed.CreatorIntentConstants;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.native_page.NativePageNavigationDelegate;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.offlinepages.RequestCoordinatorBridge;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.share.crow.CrowButtonDelegate;
 import org.chromium.chrome.browser.signin.SyncConsentActivityLauncherImpl;
+import org.chromium.chrome.browser.signin.services.SigninMetricsUtils;
 import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.url.GURL;
 
@@ -42,19 +46,17 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
     private final BookmarkModel mBookmarkModel;
     private final Context mActivityContext;
     private final SnackbarManager mSnackbarManager;
-    private final CrowButtonDelegate mCrowButtonDelegate;
 
     @BrowserUiUtils.HostSurface
     private int mHostSurface;
 
     public FeedActionDelegateImpl(Context activityContext, SnackbarManager snackbarManager,
             NativePageNavigationDelegate navigationDelegate, BookmarkModel bookmarkModel,
-            CrowButtonDelegate crowButtonDelegate, @BrowserUiUtils.HostSurface int hostSurface) {
+            @BrowserUiUtils.HostSurface int hostSurface) {
         mActivityContext = activityContext;
         mNavigationDelegate = navigationDelegate;
         mBookmarkModel = bookmarkModel;
         mSnackbarManager = snackbarManager;
-        mCrowButtonDelegate = crowButtonDelegate;
         mHostSurface = hostSurface;
     }
     @Override
@@ -89,7 +91,6 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
                 onVisitComplete.onResult(result);
             });
         }
-        ReturnToChromeUtil.onFeedCardOpened();
 
         BrowserUiUtils.recordModuleClickHistogram(
                 mHostSurface, BrowserUiUtils.ModuleTypeOnStartAndNTP.FEED);
@@ -119,22 +120,7 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
     }
 
     @Override
-    public void openCrow(String url) {
-        if (FeatureList.isInitialized()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.SHARE_CROW_BUTTON_LAUNCH_TAB)) {
-            String tabUrl = mCrowButtonDelegate.getUrlForWebFlow(
-                    new GURL(url), GURL.emptyGURL(), /*isFollowing=*/true);
-            mNavigationDelegate.openUrl(
-                    WindowOpenDisposition.NEW_FOREGROUND_TAB, new LoadUrlParams(tabUrl));
-        } else {
-            mCrowButtonDelegate.launchCustomTab(
-                    /*tab=*/null, mActivityContext, new GURL(url), GURL.emptyGURL(),
-                    /*isFollowing=*/true);
-        }
-    }
-
-    @Override
-    public void openWebFeed(String webFeedName) {
+    public void openWebFeed(String webFeedName, @SingleWebFeedEntryPoint int entryPoint) {
         if (!FeatureList.isInitialized()
                 || !ChromeFeatureList.isEnabled(ChromeFeatureList.CORMORANT)) {
             return;
@@ -143,21 +129,29 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
         assert ThreadUtils.runningOnUiThread();
         Class<?> creatorActivityClass = CreatorActivity.class;
         Intent intent = new Intent(mActivityContext, creatorActivityClass);
-        intent.putExtra("CREATOR_WEB_FEED_ID", webFeedName.getBytes());
+        intent.putExtra(CreatorIntentConstants.CREATOR_WEB_FEED_ID, webFeedName.getBytes());
+        intent.putExtra(CreatorIntentConstants.CREATOR_ENTRY_POINT, entryPoint);
         mActivityContext.startActivity(intent);
     }
 
     @Override
-    public void onContentsChanged() {}
-
-    @Override
-    public void onStreamCreated() {}
-
-    @Override
-    public void showSignInActivity() {
+    public void showSyncConsentActivity(@SigninAccessPoint int signinAccessPoint) {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_SHOW_SIGN_IN_COMMAND)) {
             SyncConsentActivityLauncherImpl.get().launchActivityIfAllowed(
-                    mActivityContext, SigninAccessPoint.NTP_CONTENT_SUGGESTIONS);
+                    mActivityContext, signinAccessPoint);
+        }
+    }
+
+    @Override
+    public void showSignInInterstitial(@SigninAccessPoint int signinAccessPoint,
+            BottomSheetController bottomSheetController, WindowAndroid windowAndroid) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_BOC_SIGN_IN_INTERSTITIAL)) {
+            SigninMetricsUtils.logSigninStartAccessPoint(signinAccessPoint);
+            SigninMetricsUtils.logSigninUserActionForAccessPoint(signinAccessPoint);
+            SigninBottomSheetCoordinator signinCoordinator =
+                    new SigninBottomSheetCoordinator(windowAndroid, bottomSheetController,
+                            Profile.getLastUsedRegularProfile(), null, signinAccessPoint);
+            signinCoordinator.show();
         }
     }
 
@@ -166,11 +160,9 @@ public class FeedActionDelegateImpl implements FeedActionDelegate {
      * interactions. Calls reportPageLoaded when navigation completes.
      */
     private class FeedTabNavigationObserver extends EmptyTabObserver {
-        private final boolean mInNewTab;
         private final Runnable mCallback;
 
         FeedTabNavigationObserver(boolean inNewTab, Runnable callback) {
-            mInNewTab = inNewTab;
             mCallback = callback;
         }
 

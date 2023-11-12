@@ -14,32 +14,33 @@
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
-#import "ios/chrome/browser/ui/commands/omnibox_commands.h"
-#import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
-#import "ios/chrome/browser/ui/commands/text_zoom_commands.h"
+#import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/find_in_page_commands.h"
+#import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
+#import "ios/chrome/browser/shared/public/commands/popup_menu_commands.h"
+#import "ios/chrome/browser/shared/public/commands/text_zoom_commands.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_coordinator.h"
-#import "ios/chrome/browser/ui/main/layout_guide_util.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/orchestrator/omnibox_focus_orchestrator.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_coordinator+subclassing.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_mediator.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller_delegate.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/components/webui/web_ui_url_constants.h"
 #import "ios/web/public/navigation/referrer.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -49,6 +50,11 @@ using vivaldi::IsVivaldiRunning;
 #endif
 
 @interface PrimaryToolbarCoordinator () <PrimaryToolbarMediatorDelegate,
+
+                                        // Vivaldi
+                                        VivaldiATBConsumer,
+                                        // End Vivaldi
+
                                          PrimaryToolbarViewControllerDelegate> {
   // Observer that updates `toolbarViewController` for fullscreen events.
   std::unique_ptr<FullscreenUIUpdater> _fullscreenUIUpdater;
@@ -61,8 +67,6 @@ using vivaldi::IsVivaldiRunning;
 @property(nonatomic, strong) PrimaryToolbarMediator* primaryToolbarMediator;
 // Redefined as PrimaryToolbarViewController.
 @property(nonatomic, strong) PrimaryToolbarViewController* viewController;
-// The coordinator for the location bar in the toolbar.
-@property(nonatomic, strong) LocationBarCoordinator* locationBarCoordinator;
 // Orchestrator for the expansion animation.
 @property(nonatomic, strong) OmniboxFocusOrchestrator* orchestrator;
 // Whether the omnibox focusing should happen with animation.
@@ -70,13 +74,19 @@ using vivaldi::IsVivaldiRunning;
 // Whether the omnibox is currently focused.
 @property(nonatomic, assign) BOOL locationBarFocused;
 
+// Vivaldi
+@property(nonatomic, strong) VivaldiATBManager* adblockManager;
+// End Vivaldi
+
 @end
 
 @implementation PrimaryToolbarCoordinator
 
+// Vivaldi
+@synthesize adblockManager = _adblockManager;
+// End Vivaldi
+
 @dynamic viewController;
-@synthesize popupPresenterDelegate = _popupPresenterDelegate;
-@synthesize delegate = _delegate;
 
 #pragma mark - ChromeCoordinator
 
@@ -94,10 +104,6 @@ using vivaldi::IsVivaldiRunning;
   self.primaryToolbarMediator = [[PrimaryToolbarMediator alloc]
       initWithWebStateList:self.browser->GetWebStateList()];
   self.primaryToolbarMediator.delegate = self;
-
-  // LocationBarCoordinator dispatches OmniboxCommands therefore Location Bar
-  // setup should be done before using OmniboxCommands handler (below).
-  [self setUpLocationBar];
 
   self.viewController = [[PrimaryToolbarViewController alloc] init];
 
@@ -136,6 +142,10 @@ using vivaldi::IsVivaldiRunning;
   _prerenderService = PrerenderServiceFactory::GetForBrowserState(
       self.browser->GetBrowserState());
 
+  // Vivaldi
+  [self initialiseAdblockManager];
+  // End Vivaldi
+
   [super start];
   self.started = YES;
 }
@@ -147,8 +157,15 @@ using vivaldi::IsVivaldiRunning;
   self.primaryToolbarMediator.delegate = nil;
   [self.primaryToolbarMediator disconnect];
   [self.browser->GetCommandDispatcher() stopDispatchingToTarget:self];
-  [self.locationBarCoordinator stop];
   _fullscreenUIUpdater = nullptr;
+
+  // Vivaldi
+  if (!self.adblockManager)
+    return;
+  self.adblockManager.consumer = nil;
+  [self.adblockManager disconnect];
+  // End Vivaldi
+
   self.started = NO;
 }
 
@@ -167,14 +184,6 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)showPrerenderingAnimation {
   [self.viewController showPrerenderingAnimation];
-}
-
-- (BOOL)isOmniboxFirstResponder {
-  return [self.locationBarCoordinator isOmniboxFirstResponder];
-}
-
-- (BOOL)showingOmniboxPopup {
-  return [self.locationBarCoordinator showingOmniboxPopup];
 }
 
 - (void)transitionToLocationBarFocusedState:(BOOL)focused {
@@ -354,17 +363,30 @@ using vivaldi::IsVivaldiRunning;
   [self.locationBarCoordinator.locationBarViewController.view setHidden:NO];
 }
 
-#pragma mark - Private
+#pragma mark - VIVALDI
 
-// Sets the location bar up.
-- (void)setUpLocationBar {
-  self.locationBarCoordinator =
-      [[LocationBarCoordinator alloc] initWithBaseViewController:nil
-                                                         browser:self.browser];
-  self.locationBarCoordinator.delegate = self.delegate;
-  self.locationBarCoordinator.popupPresenterDelegate =
-      self.popupPresenterDelegate;
-  [self.locationBarCoordinator start];
+- (void)initialiseAdblockManager {
+  if (!self.browser)
+    return;
+  self.adblockManager =
+      [[VivaldiATBManager alloc] initWithBrowser:self.browser];
+  self.adblockManager.consumer = self;
+  [self updateVivaldiShieldState];
+}
+
+- (void)updateVivaldiShieldState {
+  [self.viewController
+      updateVivaldiShieldState:[self.adblockManager globalBlockingSetting]];
+}
+
+#pragma mark: - VivaldiATBConsumer
+- (void)didRefreshSettingOptions:(NSArray*)options {
+  if (options.count > 0)
+    [self updateVivaldiShieldState];
+}
+
+- (void)ruleServiceStateDidLoad {
+  [self updateVivaldiShieldState];
 }
 
 @end

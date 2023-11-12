@@ -43,6 +43,7 @@ enum class ScreenAILoadLibraryResult {
   kMaxValue = kFunctionsLoadFailed,
 };
 
+// Returns an empty result if load or initialization fail.
 std::unique_ptr<ScreenAILibraryWrapper> LoadAndInitializeLibraryInternal(
     base::File model_config,
     base::File model_tflite,
@@ -102,15 +103,13 @@ std::unique_ptr<ScreenAILibraryWrapper> LoadAndInitializeLibraryInternal(
     }
   }
 
-  if (!init_ok) {
+  if (init_ok) {
+    base::UmaHistogramEnumeration("Accessibility.ScreenAI.LoadLibraryResult",
+                                  ScreenAILoadLibraryResult::kAllOk);
+  } else {
     VLOG(0) << "Screen AI library initialization failed.";
-    // TODO(crbug.com/1278249): Add a function that lets ScreenAIState confirm
-    // that the service is available.
-    base::Process::TerminateCurrentProcessImmediately(-1);
+    library.reset();
   }
-
-  base::UmaHistogramEnumeration("Accessibility.ScreenAI.LoadLibraryResult",
-                                ScreenAILoadLibraryResult::kAllOk);
 
   return library;
 }
@@ -128,20 +127,28 @@ ScreenAIService::~ScreenAIService() = default;
 void ScreenAIService::LoadAndInitializeLibrary(
     base::File model_config,
     base::File model_tflite,
-    const base::FilePath& library_path) {
+    const base::FilePath& library_path,
+    LoadAndInitializeLibraryCallback callback) {
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&LoadAndInitializeLibraryInternal, std::move(model_config),
                      std::move(model_tflite), library_path),
       base::BindOnce(&ScreenAIService::SetLibraryAndStartTaskRunner,
-                     weak_ptr_factory_.GetWeakPtr()));
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void ScreenAIService::SetLibraryAndStartTaskRunner(
+    LoadAndInitializeLibraryCallback success_callback,
     std::unique_ptr<ScreenAILibraryWrapper> library) {
-  library_ = std::move(library);
-  task_runner_->Start();
+  std::move(success_callback).Run((bool)library);
+
+  if (library) {
+    library_ = std::move(library);
+    task_runner_->Start();
+  } else {
+    base::Process::TerminateCurrentProcessImmediately(-1);
+  }
 }
 
 void ScreenAIService::BindAnnotator(
@@ -162,102 +169,108 @@ void ScreenAIService::BindMainContentExtractor(
                                          std::move(main_content_extractor));
 }
 
-void ScreenAIService::PerformVisualAnnotation(
+void ScreenAIService::ExtractSemanticLayout(
     const SkBitmap& image,
     const ui::AXTreeID& parent_tree_id,
-    AnnotationCallback callback,
-    bool run_ocr,
-    bool run_layout_extraction) {
+    ExtractSemanticLayoutCallback callback) {
   std::unique_ptr<ui::AXTreeUpdate> annotation =
       std::make_unique<ui::AXTreeUpdate>();
   ui::AXTreeUpdate* annotation_ptr = annotation.get();
 
-  // Ownership of |annotation| is passed to the reply function, and hence it is
-  // destroyed after the task function is called, or both functions get
-  // cancelled, so it's safe to pass |annotation_ptr| unretained.
   // We need to get the pointer beforehand since compiler optimizations may
-  // result in binding the reply function (and moving |annotation|) before
+  // result in binding the reply function (and moving `annotation`) before
   // binding the task.
   task_runner_->PostTaskAndReply(
       FROM_HERE,
       base::BindOnce(&ScreenAIService::VisualAnnotationInternal,
                      weak_ptr_factory_.GetWeakPtr(), std::move(image),
-                     std::move(parent_tree_id), run_ocr, run_layout_extraction,
-                     base::Unretained(annotation_ptr)),
+                     /*run_ocr=*/false, /*run_layout_extraction=*/true,
+                     annotation_ptr),
       base::BindOnce(
           [](mojo::Remote<mojom::ScreenAIAnnotatorClient>* client,
-             AnnotationCallback callback,
+             const ui::AXTreeID& parent_tree_id,
+             ExtractSemanticLayoutCallback callback,
              std::unique_ptr<ui::AXTreeUpdate> update) {
             // The original caller is always replied to, and an AXTreeIDUnknown
             // is sent to tell it that the annotation function was not
             // successful. However the client is only contacted for successful
             // runs and when we have an update.
+            ScreenAIAXTreeSerializer serializer(parent_tree_id,
+                                                std::move(update->nodes));
+            *update = serializer.Serialize();
+            // `ScreenAIAXTreeSerializer` should have assigned a new tree ID to
+            // `update`. Thereby, it should never be an unknown tree ID,
+            // otherwise there has been an unexpected serialization bug.
+            DCHECK_NE(update->tree_data.tree_id, ui::AXTreeIDUnknown())
+                << "Invalid serialization.\n"
+                << update->ToString();
             std::move(callback).Run(update->tree_data.tree_id);
             if (update->tree_data.tree_id != ui::AXTreeIDUnknown())
               (*client)->HandleAXTreeUpdate(*update);
           },
-          &screen_ai_annotator_client_, std::move(callback),
-          std::move(annotation)));
+          &screen_ai_annotator_client_, std::move(parent_tree_id),
+          std::move(callback), std::move(annotation)));
 }
 
-void ScreenAIService::ExtractSemanticLayout(const SkBitmap& image,
-                                            const ui::AXTreeID& parent_tree_id,
-                                            AnnotationCallback callback) {
-  PerformVisualAnnotation(std::move(image), parent_tree_id, std::move(callback),
-                          /*run_ocr=*/false,
-                          /*run_layout_extraction=*/true);
-}
-
-void ScreenAIService::PerformOcr(const SkBitmap& image,
-                                 const ui::AXTreeID& parent_tree_id,
-                                 AnnotationCallback callback) {
-  PerformVisualAnnotation(std::move(image), parent_tree_id, std::move(callback),
-                          /*run_ocr=*/true,
-                          /*run_layout_extraction=*/false);
-}
-
-void ScreenAIService::VisualAnnotationInternal(
+void ScreenAIService::PerformOcrAndReturnAXTreeUpdate(
     const SkBitmap& image,
-    const ui::AXTreeID& parent_tree_id,
-    bool run_ocr,
-    bool run_layout_extraction,
-    ui::AXTreeUpdate* annotation) {
+    PerformOcrAndReturnAXTreeUpdateCallback callback) {
+  std::unique_ptr<ui::AXTreeUpdate> annotation =
+      std::make_unique<ui::AXTreeUpdate>();
+  ui::AXTreeUpdate* annotation_ptr = annotation.get();
+
+  // We need to get the pointer beforehand since compiler optimizations may
+  // result in binding the reply function (and moving `annotation`) before
+  // binding the task.
+  task_runner_->PostTaskAndReply(
+      FROM_HERE,
+      base::BindOnce(&ScreenAIService::VisualAnnotationInternal,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(image),
+                     /*run_ocr=*/true, /*run_layout_extraction=*/false,
+                     annotation_ptr),
+      base::BindOnce(
+          [](PerformOcrAndReturnAXTreeUpdateCallback callback,
+             std::unique_ptr<ui::AXTreeUpdate> update) {
+            // The original caller is always replied to, and an empty
+            // AXTreeUpdate tells that the annotation function was not
+            // successful.
+            std::move(callback).Run(*update);
+            // TODO(crbug.com/1434701): Send the AXTreeUpdate to the browser
+            // side client for Backlight.
+          },
+          std::move(callback), std::move(annotation)));
+}
+
+void ScreenAIService::VisualAnnotationInternal(const SkBitmap& image,
+                                               bool run_ocr,
+                                               bool run_layout_extraction,
+                                               ui::AXTreeUpdate* annotation) {
   // Currently we only support either of OCR or LayoutExtraction features.
   DCHECK_NE(run_ocr, run_layout_extraction);
   DCHECK(screen_ai_annotator_client_.is_bound());
 
-  std::string proto_as_string;
+  chrome_screen_ai::VisualAnnotation annotation_proto;
   // TODO(https://crbug.com/1278249): Consider adding a signature that
   // verifies the data integrity and source.
   bool result = false;
   if (run_ocr) {
-    result = library_->PerformOcr(image, proto_as_string);
+    result = library_->PerformOcr(image, annotation_proto);
   } else /* if (run_layout_extraction) */ {
-    result = library_->ExtractLayout(image, proto_as_string);
+    result = library_->ExtractLayout(image, annotation_proto);
   }
-  if (!result || proto_as_string.empty()) {
+  if (!result) {
     DCHECK_EQ(annotation->tree_data.tree_id, ui::AXTreeIDUnknown());
     VLOG(1) << "Screen AI library could not process snapshot or no OCR data.";
     return;
   }
 
   gfx::Rect image_rect(image.width(), image.height());
-  *annotation = VisualAnnotationToAXTreeUpdate(proto_as_string, image_rect);
-  ScreenAIAXTreeSerializer serializer(parent_tree_id,
-                                      std::move(annotation->nodes));
-  *annotation = serializer.Serialize();
-
-  // `ScreenAIAXTreeSerializer` should have assigned a new tree ID to `update`.
-  // Thereby, it should never be an unknown tree ID, otherwise there has been an
-  // unexpected serialization bug.
-  DCHECK_NE(annotation->tree_data.tree_id, ui::AXTreeIDUnknown())
-      << "Invalid serialization.\n"
-      << annotation->ToString();
+  *annotation = VisualAnnotationToAXTreeUpdate(annotation_proto, image_rect);
 }
 
 void ScreenAIService::ExtractMainContent(const ui::AXTreeUpdate& snapshot,
                                          ukm::SourceId ukm_source_id,
-                                         ContentExtractionCallback callback) {
+                                         ExtractMainContentCallback callback) {
   std::unique_ptr<std::vector<int32_t>> content_node_ids =
       std::make_unique<std::vector<int32_t>>();
   std::vector<int32_t>* node_ids_ptr = content_node_ids.get();
@@ -270,7 +283,7 @@ void ScreenAIService::ExtractMainContent(const ui::AXTreeUpdate& snapshot,
                      weak_ptr_factory_.GetWeakPtr(), std::move(snapshot),
                      std::move(ukm_source_id), base::Unretained(node_ids_ptr)),
       base::BindOnce(
-          [](ContentExtractionCallback callback,
+          [](ExtractMainContentCallback callback,
              std::unique_ptr<std::vector<int32_t>> content_node_ids) {
             std::move(callback).Run(*content_node_ids);
           },

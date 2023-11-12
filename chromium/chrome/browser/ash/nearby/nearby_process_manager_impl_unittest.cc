@@ -10,6 +10,7 @@
 #include "ash/public/cpp/network_config_service.h"
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -25,13 +26,16 @@
 #include "chrome/services/sharing/nearby/test_support/fake_adapter.h"
 #include "chrome/services/sharing/nearby/test_support/mock_webrtc_dependencies.h"
 #include "chromeos/ash/services/nearby/public/cpp/fake_firewall_hole_factory.h"
+#include "chromeos/ash/services/nearby/public/cpp/fake_nearby_presence.h"
 #include "chromeos/ash/services/nearby/public/cpp/fake_tcp_socket_factory.h"
 #include "chromeos/ash/services/nearby/public/cpp/mock_nearby_connections.h"
 #include "chromeos/ash/services/nearby/public/cpp/mock_nearby_sharing_decoder.h"
+#include "chromeos/ash/services/nearby/public/cpp/mock_quick_start_decoder.h"
 #include "chromeos/ash/services/nearby/public/mojom/firewall_hole.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/nearby_connections.mojom.h"
-#include "chromeos/ash/services/nearby/public/mojom/nearby_connections_types.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/nearby_decoder.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/nearby_presence.mojom.h"
+#include "chromeos/ash/services/nearby/public/mojom/quick_start_decoder.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/sharing.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/tcp_socket_factory.mojom.h"
 #include "chromeos/ash/services/nearby/public/mojom/webrtc.mojom.h"
@@ -66,6 +70,7 @@ class FakeSharingMojoService : public sharing::mojom::Sharing {
     receiver_.reset();
     mock_connections_.reset();
     mock_decoder_.reset();
+    mock_quick_start_decoder_.reset();
   }
 
  private:
@@ -73,26 +78,42 @@ class FakeSharingMojoService : public sharing::mojom::Sharing {
   void Connect(
       sharing::mojom::NearbyDependenciesPtr deps,
       mojo::PendingReceiver<NearbyConnectionsMojom> connections_receiver,
+      mojo::PendingReceiver<NearbyPresenceMojom> presence_receiver,
       mojo::PendingReceiver<sharing::mojom::NearbySharingDecoder>
-          decoder_receiver) override {
+          decoder_receiver,
+      mojo::PendingReceiver<ash::quick_start::mojom::QuickStartDecoder>
+          quick_start_decoder_receiver) override {
     EXPECT_FALSE(mock_connections_);
+    EXPECT_FALSE(fake_presence_);
     EXPECT_FALSE(mock_decoder_);
+    EXPECT_FALSE(mock_quick_start_decoder_);
 
     mock_connections_ = std::make_unique<MockNearbyConnections>();
     mock_connections_->BindInterface(std::move(connections_receiver));
 
+    fake_presence_ = std::make_unique<presence::FakeNearbyPresence>();
+    fake_presence_->BindInterface(std::move(presence_receiver));
+
     mock_decoder_ = std::make_unique<MockNearbySharingDecoder>();
     mock_decoder_->BindInterface(std::move(decoder_receiver));
+
+    mock_quick_start_decoder_ = std::make_unique<MockQuickStartDecoder>();
+    mock_quick_start_decoder_->BindInterface(
+        std::move(quick_start_decoder_receiver));
   }
 
   void ShutDown(ShutDownCallback callback) override {
     mock_connections_.reset();
+    fake_presence_.reset();
     mock_decoder_.reset();
+    mock_quick_start_decoder_.reset();
     std::move(callback).Run();
   }
 
   std::unique_ptr<MockNearbyConnections> mock_connections_;
+  std::unique_ptr<presence::FakeNearbyPresence> fake_presence_;
   std::unique_ptr<MockNearbySharingDecoder> mock_decoder_;
+  std::unique_ptr<MockQuickStartDecoder> mock_quick_start_decoder_;
   mojo::Receiver<sharing::mojom::Sharing> receiver_{this};
 };
 
@@ -200,7 +221,9 @@ class NearbyProcessManagerImplTest : public testing::Test {
       const NearbyProcessManager::NearbyProcessReference* reference) {
     EXPECT_TRUE(GetImpl()->sharing_.is_bound());
     EXPECT_TRUE(reference->GetNearbyConnections().is_bound());
+    EXPECT_TRUE(reference->GetNearbyPresence().is_bound());
     EXPECT_TRUE(reference->GetNearbySharingDecoder().is_bound());
+    EXPECT_TRUE(reference->GetQuickStartDecoder().is_bound());
     EXPECT_TRUE(fake_sharing_mojo_service_.AreMocksSet());
   }
 
@@ -231,7 +254,7 @@ class NearbyProcessManagerImplTest : public testing::Test {
 
   std::unique_ptr<NearbyProcessManager> nearby_process_manager_;
 
-  base::MockOneShotTimer* mock_timer_ = nullptr;
+  raw_ptr<base::MockOneShotTimer, ExperimentalAsh> mock_timer_ = nullptr;
 };
 
 TEST_F(NearbyProcessManagerImplTest, StartAndStop) {

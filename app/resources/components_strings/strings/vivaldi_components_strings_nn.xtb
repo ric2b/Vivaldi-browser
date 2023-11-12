@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 i bruk)} other {(# i bruk)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />sjå over mellomtenaradressa<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5287240709317226393">Syn informasjonskapslar</translation>
 <translation id="5355557959165512791">Du kan ikkje besøkja <ph name="SITE" /> nett no fordi nettstaden har fått trekt attende sertifikatet sitt. Nettverksfeil og -åtak er ofte mellombelse, so denne sida vil sannsynlegvis fungera seinare.</translation>
 <translation id="5386426401304769735">Sertifikatkjeda for denne nettstaden inneheld eit sertifikat som nyttar SHA-1.</translation>
 <translation id="5452270690849572955">Denne <ph name="HOST_NAME" /> sida finst ikkje</translation>

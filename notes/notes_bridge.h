@@ -344,12 +344,9 @@ class NotesBridge : public vivaldi::NotesModelObserver {
   void ExtensiveNoteChangesBeginning(vivaldi::NotesModel* model);
   void ExtensiveNoteChangesEnded(vivaldi::NotesModel* model);
 
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
+  const raw_ptr<vivaldi::NotesModel> notes_model_;
   JavaObjectWeakGlobalRef weak_java_ref_;
-  vivaldi::NotesModel*
-      notes_model_;  // weak
-                     // std::unique_ptr<vivaldi::ScopedGroupNoteActions>
-                     //    grouped_note_actions_;
   PrefChangeRegistrar pref_change_registrar_;
 };
 

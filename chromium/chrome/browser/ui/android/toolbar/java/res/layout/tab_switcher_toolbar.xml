@@ -38,6 +38,7 @@ found in the LICENSE file.
             android:paddingEnd="16dp"
             app:tint="@macro/default_icon_color"
             app:srcCompat="@drawable/new_tab_icon"
+            android:duplicateParentState="true"
             android:contentDescription="@string/accessibility_toolbar_btn_new_tab"/>
         <TextView
             android:id="@+id/new_tab_view_desc"
@@ -46,6 +47,7 @@ found in the LICENSE file.
             android:paddingEnd="16dp"
             android:gravity="center_vertical"
             android:text="@string/button_new_tab"
+            android:duplicateParentState="true"
             android:textAppearance="@style/TextAppearance.TextMediumThick.Primary" />
     </LinearLayout>
 
@@ -83,15 +85,6 @@ found in the LICENSE file.
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:layout_gravity="center|end" >
-
-        <!-- TODO(crbug.com/912358): Enable touch highlight on this button. -->
-        <org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton
-            android:id="@+id/tab_switcher_mode_tab_switcher_button"
-            style="@style/ToolbarButton"
-            android:background="@android:color/transparent"
-            android:paddingStart="8dp"
-            android:layout_gravity="top"
-            android:contentDescription="@string/accessibility_toolbar_btn_tabswitcher_toggle_default" />
 
         <Switch
             android:id="@+id/incognito_switch"

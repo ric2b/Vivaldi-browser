@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_texture_alpha_clearer.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
+#include "third_party/skia/include/core/SkImage.h"
 
 namespace blink {
 
@@ -125,7 +126,8 @@ void GPUCanvasContext::Reshape(int width, int height) {
   Host()->SetNeedsCompositingUpdate();
 }
 
-scoped_refptr<StaticBitmapImage> GPUCanvasContext::GetImage() {
+scoped_refptr<StaticBitmapImage> GPUCanvasContext::GetImage(
+    CanvasResourceProvider::FlushReason) {
   if (!swap_buffers_)
     return nullptr;
 
@@ -266,7 +268,7 @@ ImageBitmap* GPUCanvasContext::TransferToImageBitmap(
 
     return MakeGarbageCollected<ImageBitmap>(
         UnacceleratedStaticBitmapImage::Create(
-            SkImage::MakeFromBitmap(black_bitmap)));
+            SkImages::RasterFromBitmap(black_bitmap)));
   };
 
   // If the canvas configuration is invalid, WebGPU requires that we give a
@@ -415,10 +417,17 @@ void GPUCanvasContext::configure(const GPUCanvasConfiguration* descriptor,
     return;
   }
 
+  gfx::HDRMode hdr_mode = gfx::HDRMode::kDefault;
+  absl::optional<gfx::HDRMetadata> hdr_metadata;
+  if (descriptor->hasHdrOptions()) {
+    ParseCanvasHighDynamicRangeOptions(descriptor->hdrOptions(), hdr_mode,
+                                       hdr_metadata);
+  }
+
   swap_buffers_ = base::AdoptRef(new WebGPUSwapBufferProvider(
       this, device_->GetDawnControlClient(), device_->GetHandle(),
       static_cast<WGPUTextureUsage>(texture_descriptor_.usage),
-      texture_descriptor_.format, color_space_));
+      texture_descriptor_.format, color_space_, hdr_mode, hdr_metadata));
   swap_buffers_->SetFilterQuality(filter_quality_);
 
   // Note: SetContentsOpaque is only an optimization hint. It doesn't
@@ -465,7 +474,7 @@ void GPUCanvasContext::unconfigure() {
 GPUTexture* GPUCanvasContext::getCurrentTexture(
     ExceptionState& exception_state) {
   if (!configured_) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "context is not configured");
     return nullptr;
   }
@@ -537,7 +546,7 @@ void GPUCanvasContext::ReplaceDrawingBuffer(bool destroy_swap_buffers) {
   }
 }
 
-void GPUCanvasContext::FinalizeFrame(bool /*printing*/) {
+void GPUCanvasContext::FinalizeFrame(CanvasResourceProvider::FlushReason) {
   // In some cases, such as when a canvas is hidden of offscreen, compositing
   // will never happen and thus OnTextureTransferred will never be called. In
   // those cases, getCurrentTexture is still required to return a new texture
@@ -697,7 +706,8 @@ scoped_refptr<StaticBitmapImage> GPUCanvasContext::SnapshotInternal(
   if (!CopyTextureToResourceProvider(texture, size, resource_provider.get()))
     return nullptr;
 
-  return resource_provider->Snapshot();
+  return resource_provider->Snapshot(
+      CanvasResourceProvider::FlushReason::kNone);
 }
 
 // DawnObjectBase substitute methods

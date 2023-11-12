@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 29
+// Next MinVersion: 30
 
 module arc.mojom;
 
@@ -141,10 +141,10 @@ struct ArcNotificationData {
   // DEPRECATED: Image for image notifications.
   [MinVersion=3]
   ArcBitmap? deprecated_big_picture;
-  // DEPRECATED: Flag if a notification is a custom notification backed by a
+  // Flag if a notification is a custom notification backed by a
   // notification surface.
   [MinVersion=5]
-  bool deprecated_use_custom_notification;
+  bool is_custom_notification;
   [MinVersion=6]
   ArcBitmap? small_icon;
   // A snapshot image to show before the notification window is created.
@@ -188,8 +188,12 @@ struct ArcNotificationData {
   // available for the user to trigger remote input.
   [MinVersion=27]
   bool is_inline_reply_enabled;
+  // True if rendering should be done on the Chrome side
   [MinVersion=28]
-  bool is_custom_notification;
+  bool render_on_chrome;
+  [MinVersion=29]
+  // Identifier of the group to which the notification is assigned
+  string? group_key;
 };
 
 struct ArcDoNotDisturbStatus {

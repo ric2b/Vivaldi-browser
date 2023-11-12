@@ -19,10 +19,14 @@ extern const char kSupervisedUserSecondCustodianProfileImageURL[];
 extern const char kSupervisedUserSecondCustodianProfileURL[];
 
 extern const char kSupervisedUserExtensionsMayRequestPermissions[];
+extern const char kSupervisedUserId[];
 extern const char kSupervisedUserManualHosts[];
 extern const char kSupervisedUserManualURLs[];
+extern const char kSupervisedUserMetricsDayId[];
 extern const char kSupervisedUserSafeSites[];
 extern const char kSupervisedUserSharedSettings[];
+
+extern const char kDefaultSupervisedUserFilteringBehavior[];
 
 }  // namespace prefs
 

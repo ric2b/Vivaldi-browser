@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ash/file_system_provider/operations/create_file.h"
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -74,8 +73,8 @@ TEST_F(FileSystemProviderOperationsCreateFileTest, Execute) {
   ASSERT_TRUE(options_as_value->is_dict());
 
   CreateFileRequestedOptions options;
-  ASSERT_TRUE(
-      CreateFileRequestedOptions::Populate(*options_as_value, &options));
+  ASSERT_TRUE(CreateFileRequestedOptions::Populate(options_as_value->GetDict(),
+                                                   options));
   EXPECT_EQ(kFileSystemId, options.file_system_id);
   EXPECT_EQ(kRequestId, options.request_id);
   EXPECT_EQ(kFilePath, options.file_path);
@@ -118,8 +117,7 @@ TEST_F(FileSystemProviderOperationsCreateFileTest, OnSuccess) {
 
   EXPECT_TRUE(create_file.Execute(kRequestId));
 
-  create_file.OnSuccess(kRequestId, std::make_unique<RequestValue>(),
-                        false /* has_more */);
+  create_file.OnSuccess(kRequestId, RequestValue(), false /* has_more */);
   ASSERT_EQ(1u, callback_log.size());
   EXPECT_EQ(base::File::FILE_OK, callback_log[0]);
 }
@@ -134,7 +132,7 @@ TEST_F(FileSystemProviderOperationsCreateFileTest, OnError) {
 
   EXPECT_TRUE(create_file.Execute(kRequestId));
 
-  create_file.OnError(kRequestId, std::make_unique<RequestValue>(),
+  create_file.OnError(kRequestId, RequestValue(),
                       base::File::FILE_ERROR_TOO_MANY_OPENED);
   ASSERT_EQ(1u, callback_log.size());
   EXPECT_EQ(base::File::FILE_ERROR_TOO_MANY_OPENED, callback_log[0]);

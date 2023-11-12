@@ -8,7 +8,6 @@
 #include "base/containers/cxx20_erase.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/strings/abseil_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "net/base/address_list.h"
 #include "net/base/port_util.h"
@@ -109,7 +108,7 @@ void RecordNetLogQuicSessionClientStateChanged(
           error_dict.Set("details", error->details);
           dict.Set("error", std::move(error_dict));
         }
-        return base::Value(std::move(dict));
+        return dict;
       });
 }
 
@@ -129,7 +128,7 @@ class ConnectStream : public quic::QuicSpdyClientStream {
       const quic::QuicHeaderList& header_list) override {
     quic::QuicSpdyClientStream::OnInitialHeadersComplete(fin, frame_len,
                                                          header_list);
-    client_->OnHeadersComplete();
+    client_->OnHeadersComplete(response_headers());
   }
 
   void OnClose() override {
@@ -184,7 +183,7 @@ class DedicatedWebTransportHttp3ClientSession
 
   bool ShouldNegotiateWebTransport() override { return true; }
   quic::HttpDatagramSupport LocalHttpDatagramSupport() override {
-    return quic::HttpDatagramSupport::kDraft04;
+    return quic::HttpDatagramSupport::kRfcAndDraft04;
   }
 
   void OnConnectionClosed(const quic::QuicConnectionCloseFrame& frame,
@@ -288,7 +287,7 @@ DedicatedWebTransportHttp3Client::DedicatedWebTransportHttp3Client(
         dict.Set("url", url.possibly_invalid_spec());
         dict.Set("network_anonymization_key",
                  anonymization_key.ToDebugString());
-        return base::Value(std::move(dict));
+        return dict;
       });
 }
 
@@ -579,7 +578,20 @@ void DedicatedWebTransportHttp3Client::OnSettingsReceived() {
                                 weak_factory_.GetWeakPtr(), OK));
 }
 
-void DedicatedWebTransportHttp3Client::OnHeadersComplete() {
+void DedicatedWebTransportHttp3Client::OnHeadersComplete(
+    const spdy::Http2HeaderBlock& headers) {
+  http_response_info_ = std::make_unique<HttpResponseInfo>();
+  const int rv = SpdyHeadersToHttpResponse(headers, http_response_info_.get());
+  if (rv != OK) {
+    SetErrorIfNecessary(ERR_QUIC_PROTOCOL_ERROR);
+    TransitionToState(WebTransportState::FAILED);
+    return;
+  }
+  // TODO(vasilvv): add support for this header in downstream tests and remove
+  // this.
+  DCHECK(http_response_info_->headers);
+  http_response_info_->headers->RemoveHeader("sec-webtransport-http3-draft");
+
   DCHECK_EQ(next_connect_state_, CONNECT_STATE_CONFIRM_CONNECTION);
   DoLoop(OK);
 }
@@ -713,20 +725,8 @@ void DedicatedWebTransportHttp3Client::SetErrorIfNecessary(
 }
 
 void DedicatedWebTransportHttp3Client::OnSessionReady(
-    const spdy::Http2HeaderBlock& spdy_headers) {
+    const spdy::Http2HeaderBlock& /*spdy_headers*/) {
   session_ready_ = true;
-  http_response_info_ = std::make_unique<HttpResponseInfo>();
-  const int rv =
-      SpdyHeadersToHttpResponse(spdy_headers, http_response_info_.get());
-  if (rv != OK) {
-    SetErrorIfNecessary(ERR_QUIC_PROTOCOL_ERROR);
-    TransitionToState(WebTransportState::FAILED);
-    return;
-  }
-  // TODO(vasilvv): add support for this header in downstream tests and remove
-  // this.
-  http_response_info_->headers->RemoveHeader("sec-webtransport-http3-draft");
-  DCHECK(http_response_info_->headers);
 }
 
 void DedicatedWebTransportHttp3Client::OnSessionClosed(
@@ -751,7 +751,7 @@ void DedicatedWebTransportHttp3Client::
 
 void DedicatedWebTransportHttp3Client::OnDatagramReceived(
     absl::string_view datagram) {
-  visitor_->OnDatagramReceived(base::StringViewToStringPiece(datagram));
+  visitor_->OnDatagramReceived(datagram);
 }
 
 void DedicatedWebTransportHttp3Client::

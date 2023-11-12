@@ -1681,6 +1681,58 @@ void GL_APIENTRY GLES2CopySharedImageINTERNAL(GLint xoffset,
   gles2::GetGLContext()->CopySharedImageINTERNAL(
       xoffset, yoffset, x, y, width, height, unpack_flip_y, mailboxes);
 }
+void GL_APIENTRY
+GLES2CopySharedImageToTextureINTERNAL(GLuint texture,
+                                      GLenum target,
+                                      GLuint internal_format,
+                                      GLenum type,
+                                      GLint src_x,
+                                      GLint src_y,
+                                      GLsizei width,
+                                      GLsizei height,
+                                      GLboolean flip_y,
+                                      const GLbyte* src_mailbox) {
+  gles2::GetGLContext()->CopySharedImageToTextureINTERNAL(
+      texture, target, internal_format, type, src_x, src_y, width, height,
+      flip_y, src_mailbox);
+}
+void GL_APIENTRY
+GLES2ReadbackARGBImagePixelsINTERNAL(const GLbyte* mailbox,
+                                     const void* dst_color_space,
+                                     GLuint dst_color_space_size,
+                                     GLuint dst_size,
+                                     GLuint dst_width,
+                                     GLuint dst_height,
+                                     GLuint dst_color_type,
+                                     GLuint dst_alpha_type,
+                                     GLuint dst_row_bytes,
+                                     GLint src_x,
+                                     GLint src_y,
+                                     GLint plane_index,
+                                     void* pixels) {
+  gles2::GetGLContext()->ReadbackARGBImagePixelsINTERNAL(
+      mailbox, dst_color_space, dst_color_space_size, dst_size, dst_width,
+      dst_height, dst_color_type, dst_alpha_type, dst_row_bytes, src_x, src_y,
+      plane_index, pixels);
+}
+void GL_APIENTRY GLES2WritePixelsINTERNAL(const GLbyte* mailbox,
+                                          const void* src_color_space,
+                                          GLuint src_color_space_size,
+                                          GLuint src_size,
+                                          GLuint src_width,
+                                          GLuint src_height,
+                                          GLuint src_sk_color_type,
+                                          GLuint src_sk_alpha_type,
+                                          GLuint src_row_bytes,
+                                          GLint x_offset,
+                                          GLint y_offset,
+                                          GLint plane_index,
+                                          const void* src_pixels) {
+  gles2::GetGLContext()->WritePixelsINTERNAL(
+      mailbox, src_color_space, src_color_space_size, src_size, src_width,
+      src_height, src_sk_color_type, src_sk_alpha_type, src_row_bytes, x_offset,
+      y_offset, plane_index, src_pixels);
+}
 void GL_APIENTRY GLES2EnableiOES(GLenum target, GLuint index) {
   gles2::GetGLContext()->EnableiOES(target, index);
 }
@@ -1718,6 +1770,63 @@ GLboolean GL_APIENTRY GLES2IsEnablediOES(GLenum target, GLuint index) {
 }
 void GL_APIENTRY GLES2ProvokingVertexANGLE(GLenum provokeMode) {
   gles2::GetGLContext()->ProvokingVertexANGLE(provokeMode);
+}
+void GL_APIENTRY
+GLES2FramebufferMemorylessPixelLocalStorageANGLE(GLint plane,
+                                                 GLenum internalformat) {
+  gles2::GetGLContext()->FramebufferMemorylessPixelLocalStorageANGLE(
+      plane, internalformat);
+}
+void GL_APIENTRY
+GLES2FramebufferTexturePixelLocalStorageANGLE(GLint plane,
+                                              GLuint backingtexture,
+                                              GLint level,
+                                              GLint layer) {
+  gles2::GetGLContext()->FramebufferTexturePixelLocalStorageANGLE(
+      plane, backingtexture, level, layer);
+}
+void GL_APIENTRY
+GLES2FramebufferPixelLocalClearValuefvANGLE(GLint plane, const GLfloat* value) {
+  gles2::GetGLContext()->FramebufferPixelLocalClearValuefvANGLE(plane, value);
+}
+void GL_APIENTRY
+GLES2FramebufferPixelLocalClearValueivANGLE(GLint plane, const GLint* value) {
+  gles2::GetGLContext()->FramebufferPixelLocalClearValueivANGLE(plane, value);
+}
+void GL_APIENTRY
+GLES2FramebufferPixelLocalClearValueuivANGLE(GLint plane, const GLuint* value) {
+  gles2::GetGLContext()->FramebufferPixelLocalClearValueuivANGLE(plane, value);
+}
+void GL_APIENTRY GLES2BeginPixelLocalStorageANGLE(GLsizei count,
+                                                  const GLenum* loadops) {
+  gles2::GetGLContext()->BeginPixelLocalStorageANGLE(count, loadops);
+}
+void GL_APIENTRY GLES2EndPixelLocalStorageANGLE(GLsizei count,
+                                                const GLenum* storeops) {
+  gles2::GetGLContext()->EndPixelLocalStorageANGLE(count, storeops);
+}
+void GL_APIENTRY GLES2PixelLocalStorageBarrierANGLE() {
+  gles2::GetGLContext()->PixelLocalStorageBarrierANGLE();
+}
+void GL_APIENTRY GLES2FramebufferPixelLocalStorageInterruptANGLE() {
+  gles2::GetGLContext()->FramebufferPixelLocalStorageInterruptANGLE();
+}
+void GL_APIENTRY GLES2FramebufferPixelLocalStorageRestoreANGLE() {
+  gles2::GetGLContext()->FramebufferPixelLocalStorageRestoreANGLE();
+}
+void GL_APIENTRY
+GLES2GetFramebufferPixelLocalStorageParameterfvANGLE(GLint plane,
+                                                     GLenum pname,
+                                                     GLfloat* params) {
+  gles2::GetGLContext()->GetFramebufferPixelLocalStorageParameterfvANGLE(
+      plane, pname, params);
+}
+void GL_APIENTRY
+GLES2GetFramebufferPixelLocalStorageParameterivANGLE(GLint plane,
+                                                     GLenum pname,
+                                                     GLint* params) {
+  gles2::GetGLContext()->GetFramebufferPixelLocalStorageParameterivANGLE(
+      plane, pname, params);
 }
 
 namespace gles2 {
@@ -3074,6 +3183,20 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glCopySharedImageINTERNAL),
     },
     {
+        "glCopySharedImageToTextureINTERNAL",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glCopySharedImageToTextureINTERNAL),
+    },
+    {
+        "glReadbackARGBImagePixelsINTERNAL",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glReadbackARGBImagePixelsINTERNAL),
+    },
+    {
+        "glWritePixelsINTERNAL",
+        reinterpret_cast<GLES2FunctionPointer>(glWritePixelsINTERNAL),
+    },
+    {
         "glEnableiOES",
         reinterpret_cast<GLES2FunctionPointer>(glEnableiOES),
     },
@@ -3108,6 +3231,63 @@ extern const NameToFunc g_gles2_function_table[] = {
     {
         "glProvokingVertexANGLE",
         reinterpret_cast<GLES2FunctionPointer>(glProvokingVertexANGLE),
+    },
+    {
+        "glFramebufferMemorylessPixelLocalStorageANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glFramebufferMemorylessPixelLocalStorageANGLE),
+    },
+    {
+        "glFramebufferTexturePixelLocalStorageANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glFramebufferTexturePixelLocalStorageANGLE),
+    },
+    {
+        "glFramebufferPixelLocalClearValuefvANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glFramebufferPixelLocalClearValuefvANGLE),
+    },
+    {
+        "glFramebufferPixelLocalClearValueivANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glFramebufferPixelLocalClearValueivANGLE),
+    },
+    {
+        "glFramebufferPixelLocalClearValueuivANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glFramebufferPixelLocalClearValueuivANGLE),
+    },
+    {
+        "glBeginPixelLocalStorageANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(glBeginPixelLocalStorageANGLE),
+    },
+    {
+        "glEndPixelLocalStorageANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(glEndPixelLocalStorageANGLE),
+    },
+    {
+        "glPixelLocalStorageBarrierANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(glPixelLocalStorageBarrierANGLE),
+    },
+    {
+        "glFramebufferPixelLocalStorageInterruptANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glFramebufferPixelLocalStorageInterruptANGLE),
+    },
+    {
+        "glFramebufferPixelLocalStorageRestoreANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glFramebufferPixelLocalStorageRestoreANGLE),
+    },
+    {
+        "glGetFramebufferPixelLocalStorageParameterfvANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glGetFramebufferPixelLocalStorageParameterfvANGLE),
+    },
+    {
+        "glGetFramebufferPixelLocalStorageParameterivANGLE",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glGetFramebufferPixelLocalStorageParameterivANGLE),
     },
     {
         nullptr,

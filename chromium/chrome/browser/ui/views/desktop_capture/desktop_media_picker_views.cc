@@ -142,28 +142,24 @@ void RecordUmaSelection(DialogType dialog_type,
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   switch (source_type) {
-    case DesktopMediaList::Type::kNone: {
-      NOTREACHED();
-      break;
-    }
+    case DesktopMediaList::Type::kNone:
+      NOTREACHED_NORETURN();
 
-    case DesktopMediaList::Type::kScreen: {
+    case DesktopMediaList::Type::kScreen:
       if (dialog_type == DialogType::kPreferCurrentTab) {
         RecordUma(GDMPreferCurrentTabResult::kUserSelectedScreen);
       } else {
         RecordUma(GDMResult::kUserSelectedScreen);
       }
       break;
-    }
 
-    case DesktopMediaList::Type::kWindow: {
+    case DesktopMediaList::Type::kWindow:
       if (dialog_type == DialogType::kPreferCurrentTab) {
         RecordUma(GDMPreferCurrentTabResult::kUserSelectedWindow);
       } else {
         RecordUma(GDMResult::kUserSelectedWindow);
       }
       break;
-    }
 
     case DesktopMediaList::Type::kWebContents: {
       // Whether the current tab was selected. Note that this can happen
@@ -187,10 +183,9 @@ void RecordUmaSelection(DialogType dialog_type,
       break;
     }
 
-    case DesktopMediaList::Type::kCurrentTab: {
+    case DesktopMediaList::Type::kCurrentTab:
       RecordUma(GDMPreferCurrentTabResult::kUserSelectedThisTab);
       break;
-    }
   }
 }
 
@@ -223,8 +218,7 @@ std::u16string GetLabelForAudioCheckbox(DesktopMediaList::Type type,
     case DesktopMediaList::Type::kNone:
       break;
   }
-  NOTREACHED();
-  return u"";
+  NOTREACHED_NORETURN();
 }
 
 std::u16string GetLabelForReselectButton(DesktopMediaList::Type type) {
@@ -241,8 +235,7 @@ std::u16string GetLabelForReselectButton(DesktopMediaList::Type type) {
       break;
   }
 
-  NOTREACHED();
-  return u"";
+  NOTREACHED_NORETURN();
 }
 
 bool AreEquivalentTypesForAudioCheckbox(DesktopMediaList::Type lhs,
@@ -296,8 +289,7 @@ bool ShouldSelectTab(DesktopMediaList::Type type,
     case DesktopMediaList::Type::kCurrentTab:
       return display_surface == blink::mojom::PreferredDisplaySurface::BROWSER;
   }
-  NOTREACHED();
-  return false;
+  NOTREACHED_NORETURN();
 }
 
 }  // namespace
@@ -317,8 +309,7 @@ bool DesktopMediaPickerDialogView::AudioSupported(DesktopMediaList::Type type) {
     case DesktopMediaList::Type::kNone:
       break;
   }
-  NOTREACHED();
-  return false;
+  NOTREACHED_NORETURN();
 }
 
 DesktopMediaPickerDialogView::DisplaySurfaceCategory::DisplaySurfaceCategory(
@@ -350,6 +341,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     std::vector<std::unique_ptr<DesktopMediaList>> source_lists)
     : web_contents_(params.web_contents),
       is_get_display_media_call_(params.is_get_display_media_call),
+      app_name_(params.app_name),
       audio_requested_(params.request_audio),
       suppress_local_audio_playback_(params.suppress_local_audio_playback),
       capturer_global_id_(
@@ -402,10 +394,8 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
 
   for (auto& source_list : source_lists) {
     switch (source_list->GetMediaListType()) {
-      case DesktopMediaList::Type::kNone: {
-        NOTREACHED();
-        break;
-      }
+      case DesktopMediaList::Type::kNone:
+        NOTREACHED_NORETURN();
       case DesktopMediaList::Type::kScreen: {
         const DesktopMediaSourceViewStyle kSingleScreenStyle(
             1,                                       // columns
@@ -569,13 +559,18 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     AddChildView(std::move(panes.front().second));
   }
 
-  if (params.app_name == params.target_name) {
-    description_label_->SetText(l10n_util::GetStringFUTF16(
-        IDS_DESKTOP_MEDIA_PICKER_TEXT, params.app_name));
-  } else {
+  if (is_get_display_media_call_) {
     description_label_->SetText(
-        l10n_util::GetStringFUTF16(IDS_DESKTOP_MEDIA_PICKER_TEXT_DELEGATED,
-                                   params.app_name, params.target_name));
+        l10n_util::GetStringUTF16(IDS_DISPLAY_MEDIA_PICKER_TEXT));
+  } else {
+    if (params.app_name == params.target_name) {
+      description_label_->SetText(l10n_util::GetStringFUTF16(
+          IDS_DESKTOP_MEDIA_PICKER_TEXT, params.app_name));
+    } else {
+      description_label_->SetText(
+          l10n_util::GetStringFUTF16(IDS_DESKTOP_MEDIA_PICKER_TEXT_DELEGATED,
+                                     params.app_name, params.target_name));
+    }
   }
 
   DCHECK(!categories_.empty());
@@ -802,6 +797,11 @@ gfx::Size DesktopMediaPickerDialogView::CalculatePreferredSize() const {
 }
 
 std::u16string DesktopMediaPickerDialogView::GetWindowTitle() const {
+  if (is_get_display_media_call_) {
+    return l10n_util::GetStringFUTF16(IDS_DISPLAY_MEDIA_PICKER_TITLE,
+                                      app_name_);
+  }
+
   int title_id = IDS_DESKTOP_MEDIA_PICKER_TITLE;
 
   if (!tabbed_pane_) {

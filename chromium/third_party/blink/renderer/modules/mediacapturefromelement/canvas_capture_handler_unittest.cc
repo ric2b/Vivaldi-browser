@@ -21,6 +21,8 @@
 #include "third_party/blink/renderer/platform/testing/io_task_runner_testing_platform_support.h"
 #include "third_party/blink/renderer/platform/video_capture/video_capturer_source.h"
 #include "third_party/skia/include/core/SkImage.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -104,7 +106,7 @@ class CanvasCaptureHandlerTest
     testBitmap.allocPixels(info);
     testBitmap.eraseARGB(opaque ? 255 : kTestAlphaValue, 30, 60, 200);
     return UnacceleratedStaticBitmapImage::Create(
-        SkImage::MakeFromBitmap(testBitmap));
+        SkImages::RasterFromBitmap(testBitmap));
   }
 
   void OnVerifyDeliveredFrame(

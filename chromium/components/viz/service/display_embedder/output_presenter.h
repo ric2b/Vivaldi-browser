@@ -102,8 +102,9 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
 
   virtual void InitializeCapabilities(
       OutputSurface::Capabilities* capabilities) = 0;
-  virtual bool Reshape(const SkSurfaceCharacterization& characterization,
+  virtual bool Reshape(const SkImageInfo& image_info,
                        const gfx::ColorSpace& color_space,
+                       int sample_count,
                        float device_scale_factor,
                        gfx::OverlayTransform transform) = 0;
   virtual std::vector<std::unique_ptr<Image>> AllocateImages(
@@ -115,27 +116,15 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
   virtual std::unique_ptr<Image> AllocateSingleImage(
       gfx::ColorSpace color_space,
       gfx::Size image_size);
-  virtual void SwapBuffers(SwapCompletionCallback completion_callback,
-                           BufferPresentedCallback presentation_callback,
-                           gfx::FrameData data) = 0;
-  virtual void PostSubBuffer(const gfx::Rect& rect,
-                             SwapCompletionCallback completion_callback,
-                             BufferPresentedCallback presentation_callback,
-                             gfx::FrameData data) = 0;
-  virtual void CommitOverlayPlanes(
-      SwapCompletionCallback completion_callback,
-      BufferPresentedCallback presentation_callback,
-      gfx::FrameData data) = 0;
+  virtual void Present(SwapCompletionCallback completion_callback,
+                       BufferPresentedCallback presentation_callback,
+                       gfx::FrameData data) = 0;
   virtual void SchedulePrimaryPlane(
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane,
       Image* image,
       bool is_submitted) = 0;
-#if BUILDFLAG(IS_APPLE)
-  using OverlayPlaneCandidate = CALayerOverlay;
-#else
-  // Default.
+
   using OverlayPlaneCandidate = OverlayCandidate;
-#endif
   using ScopedOverlayAccess = gpu::OverlayImageRepresentation::ScopedReadAccess;
   virtual void ScheduleOverlayPlane(
       const OverlayPlaneCandidate& overlay_plane_candidate,

@@ -1,36 +1,28 @@
-<style include="settings-shared">
-  h2 {
-    padding-inline-start: var(--cr-section-padding);
-  }
-
-  .subsection {
-    padding-inline-end: var(--cr-section-padding);
-    padding-inline-start: var(--cr-section-indent-padding);
-  }
-
-  .subsection > settings-toggle-button,
-  .subsection > .settings-box  {
-    padding-inline-end: 0;
-    padding-inline-start: 0;
+<style include="settings-shared input-device-settings-shared">
+  .settings-box:first-of-type {
+    border-top: none;
   }
 </style>
 <div id="mouse">
-  <h2>[[mouse.name]]</h2>
+  <h2 class="device-name">[[mouse.name]]</h2>
   <div class="subsection">
     <div class="settings-box">
       <div class="start settings-box-text" id="mouseSwapButtonLabel">
         $i18n{mouseSwapButtons}
       </div>
       <settings-dropdown-menu id="mouseSwapButtonDropdown"
-          aria-labeledby="mouseSwapButtonLabel"
+          label="[[mouse.name]]"
           pref="{{primaryRightPref}}"
-          menu-options="[[swapPrimaryOptions]]">
+          menu-options="[[swapPrimaryOptions]]"
+          deep-link-focus-id$="[[Setting.kMouseSwapPrimaryButtons]]">
       </settings-dropdown-menu>
     </div>
     <settings-toggle-button id="mouseAcceleration"
         class="hr"
         pref="{{accelerationPref}}"
-        label="$i18n{mouseAccelerationLabel}">
+        label="$i18n{mouseAccelerationLabel}"
+        aria-label="[[mouse.name]] $i18n{mouseAccelerationLabel}"
+        deep-link-focus-id$="[[Setting.kMouseAcceleration]]">
     </settings-toggle-button>
     <div class="settings-box">
       <div class="start" id="mouseSpeedLabel" aria-hidden="true">
@@ -39,16 +31,19 @@
       <settings-slider id="mouseSpeedSlider"
           pref="{{sensitivityPref}}"
           ticks="[[sensitivityValues_]]"
-          label-aria="$i18n{mouseSpeed}"
+          label-aria="[[mouse.name]] $i18n{mouseSpeed}"
           label-min="$i18n{pointerSlow}"
-          label-max="$i18n{pointerFast}">
+          label-max="$i18n{pointerFast}"
+          deep-link-focus-id$="[[Setting.kMouseSpeed]]">
       </settings-slider>
     </div>
-    <template is="dom-if" if="[[allowScrollSettings_]]">
+    <template is="dom-if" if="[[allowScrollSettings_]]" restamp>
       <settings-toggle-button id="mouseScrollAcceleration"
+          aria-label="[[mouse.name]] $i18n{mouseScrollAccelerationLabel}"
           class="hr"
           pref="{{scrollAccelerationPref}}"
-          label="$i18n{mouseScrollAccelerationLabel}">
+          label="$i18n{mouseScrollAccelerationLabel}"
+          deep-link-focus-id$="[[Setting.kMouseScrollAcceleration]]">
       </settings-toggle-button>
       <div class="settings-box">
         <div class="start" id="mouseScrollSpeedLabel" aria-hidden="true">
@@ -57,7 +52,7 @@
         <settings-slider id="mouseScrollSpeedSlider"
             pref="{{scrollSensitivityPref}}"
             ticks="[[sensitivityValues_]]"
-            label-aria="$i18n{mouseScrollSpeed}"
+            label-aria="[[mouse.name]] $i18n{mouseScrollSpeed}"
             label-min="$i18n{pointerSlow}"
             label-max="$i18n{pointerFast}">
         </settings-slider>
@@ -74,8 +69,9 @@
         </localized-link>
       </div>
       <cr-toggle id="mouseReverseScroll"
-          checked="[[reverseScrollValue]]"
-          aria-labelledby="enableMouseReverseScrollingLabel">
+          checked="{{reverseScrollValue}}"
+          aria-label="[[mouse.name]] $i18n{learnMoreLabel}"
+          deep-link-focus-id$="[[Setting.kMouseReverseScrolling]]">
       </cr-toggle>
     </div>
   </div>

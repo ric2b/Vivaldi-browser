@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
+#include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_suite.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -665,7 +666,9 @@ class ChromiumLevelDBRebuildTest : public ::testing::Test {
   const base::FilePath& temp_path() const { return scoped_temp_dir_.GetPath(); }
 
  private:
-  base::ScopedAllowBlockingForTesting allow_blocking_;
+  // TODO(https://github.com/llvm/llvm-project/issues/61334): Explicit
+  // [[maybe_unused]] attribute shouuld not be necessary here.
+  [[maybe_unused]] base::ScopedAllowBlockingForTesting allow_blocking_;
   base::ScopedTempDir scoped_temp_dir_;
 };
 
@@ -676,16 +679,15 @@ TEST_F(ChromiumLevelDBRebuildTest, RebuildDb) {
   options.create_if_missing = true;
 
   auto s = leveldb_env::OpenDB(options, db_path.AsUTF8Unsafe(), &db);
-  ASSERT_TRUE(s.ok());
+  EXPECT_TRUE(s.ok());
+  ASSERT_TRUE(db);
   db->Put(leveldb::WriteOptions(), "key1", "value1");
   db->Put(leveldb::WriteOptions(), "key2", "value2");
   db->Delete(leveldb::WriteOptions(), "key1");
 
-  leveldb::DB* old_db_ptr = db.get();
   s = leveldb_env::RewriteDB(options, db_path.AsUTF8Unsafe(), &db);
   EXPECT_TRUE(s.ok());
-  EXPECT_NE(old_db_ptr, db.get());
-  EXPECT_TRUE(db);
+  ASSERT_TRUE(db);
 
   std::string value;
   s = db->Get(leveldb::ReadOptions(), "key1", &value);
@@ -789,4 +791,10 @@ TEST_F(ChromiumLevelDBRebuildTest, FinishCleanup) {
 
 }  // namespace leveldb_env
 
-int main(int argc, char** argv) { return base::TestSuite(argc, argv).Run(); }
+int main(int argc, char** argv) {
+  base::TestSuite test_suite(argc, argv);
+
+  // Many tests reuse the same database path and so must run serially.
+  return base::LaunchUnitTestsSerially(
+      argc, argv, BindOnce(&base::TestSuite::Run, Unretained(&test_suite)));
+}

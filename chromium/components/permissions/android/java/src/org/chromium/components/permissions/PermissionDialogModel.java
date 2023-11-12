@@ -11,8 +11,8 @@ import android.widget.TextView;
 
 import androidx.core.widget.TextViewCompat;
 
-import org.chromium.components.browser_ui.modaldialog.R;
 import org.chromium.ui.LayoutInflaterUtils;
+import org.chromium.ui.UiUtils;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -48,6 +48,8 @@ class PermissionDialogModel {
                         // and trigger the FilteredTouchEventDialog. Ref. POLE-67.
                         !BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
                 .with(ModalDialogProperties.TOUCH_FILTERED_CALLBACK, touchFilteredCallback)
+                .with(ModalDialogProperties.BUTTON_TAP_PROTECTION_PERIOD_MS,
+                        UiUtils.PROMPT_INPUT_PROTECTION_SHORT_DELAY_MS)
                 .build();
     }
 

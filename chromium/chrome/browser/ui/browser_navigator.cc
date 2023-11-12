@@ -45,6 +45,7 @@
 #include "components/captive_portal/core/buildflags.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
 #include "components/password_manager/content/common/web_ui_constants.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/navigation_entry.h"
@@ -86,8 +87,7 @@
 using content::GlobalRequestID;
 using content::NavigationController;
 using content::WebContents;
-using WebExposedIsolationLevel =
-    content::RenderFrameHost::WebExposedIsolationLevel;
+using WebExposedIsolationLevel = content::WebExposedIsolationLevel;
 
 class BrowserNavigatorWebContentsAdoption {
  public:
@@ -157,7 +157,7 @@ bool AdjustNavigateParamsForURL(NavigateParams* params) {
     // If incognito is forced, we punt.
     PrefService* prefs = profile->GetPrefs();
     if (prefs && IncognitoModePrefs::GetAvailability(prefs) ==
-                     IncognitoModePrefs::Availability::kForced) {
+                     policy::IncognitoModeAvailability::kForced) {
       return false;
     }
 
@@ -639,6 +639,15 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   if (source_browser && source_browser->is_type_app() &&
       params->disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
     params->disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  }
+
+  // Picture-in-picture browser windows must have a source contents in order for
+  // the window to function correctly. If we have no source contents to work
+  // with (e.g. if an extension popup attempts to open a PiP window), we should
+  // cancel the navigation.
+  if (!params->source_contents &&
+      params->disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
+    return nullptr;
   }
 
   // If no source WebContents was specified, we use the selected one from

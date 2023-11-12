@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Schede aperte</translation>
 <translation id="1829244130665387512">Trova nella pagina</translation>
 <translation id="1910514478706885609">Apri in nuovo gruppo schede</translation>
+<translation id="1925021887439448749">Inserisci indirizzo web personalizzato</translation>
 <translation id="2038563949887743358">Attiva Richiedi sito desktop</translation>
 <translation id="2139186145475833000">Aggiungi a schermata Home</translation>
+<translation id="2149973817440762519">Modifica segnalibro</translation>
 <translation id="2306442503286132111">Segnalibro salvato nella cartella <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aspetto</translation>
 <translation id="2501278716633472235">Vai indietro</translation>
 <translation id="2633278372998075009">Schede private</translation>
+<translation id="2951071800649516099">Aggiungi pagine alla tua lista di lettura per dopo</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> segnalibro}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> segnalibri}}</translation>
@@ -30,12 +33,15 @@
 <translation id="4121750346708795461">Se utilizzi questa applicazione, accetti il <ph name="BEGIN_LINK1" />Contratto di licenza con l'utente finale<ph name="END_LINK1" /> e l'<ph name="BEGIN_LINK2" />Informativa sulla privacy<ph name="END_LINK2" /> di Vivaldi.</translation>
 <translation id="4137746084635924146">Lingua del dispositivo</translation>
 <translation id="4167670741834902166">Nuova scheda privata</translation>
+<translation id="4195643157523330669">Apri in nuova scheda</translation>
 <translation id="4243710787042215766">Apri in scheda privata</translation>
+<translation id="451872707440238414">Cerca nei segnalibri</translation>
 <translation id="4526803704855831732">Schede private</translation>
 <translation id="4719086422742491124">Scopri gli argomenti sui siti Web senza uscire dalla pagina. Seleziona una o più parole nella pagina per cercarle.
 
 Tocca per cercare è una funzione disponibile solo quando Google è impostato come motore di ricerca predefinito in Vivaldi.</translation>
 <translation id="4759238208242260848">Trasferimenti</translation>
+<translation id="4850886885716139402">Guarda</translation>
 <translation id="4883379392681899581">Esci dalla modalità privata</translation>
 <translation id="4943872375798546930">Nessun risultato</translation>
 <translation id="49576331685473090">Blocco dei contenuti</translation>
@@ -48,7 +54,9 @@ Tocca per cercare è una funzione disponibile solo quando Google è impostato co
 Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfezionare la ricerca, fai scorrere il pannello completamente in alto e tocca la casella di ricerca.</translation>
 <translation id="572328651809341494">Schede recenti</translation>
 <translation id="6150320133806434356">Segnalibro salvato</translation>
+<translation id="6301525844455696527">Recupera la tua lista di lettura</translation>
 <translation id="6336451774241870485">Nuova scheda privata</translation>
+<translation id="6404511346730675251">Modifica segnalibro</translation>
 <translation id="6585139692466700358">Offre di tradurre le pagine in altre lingue usando il servizio di traduzione di Vivaldi</translation>
 <translation id="6593061639179217415">Sito desktop</translation>
 <translation id="6610147964972079463">Chiudi schede private</translation>
@@ -57,9 +65,15 @@ Per modificare il termine di ricerca, premere a lungo per selezionare. Per perfe
 <translation id="732145680195464316">Segnalibro salvato in <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Informazioni su Vivaldi</translation>
 <translation id="7465104139234185284">Chiudi tutte le schede private</translation>
+<translation id="7481312909269577407">Avanti</translation>
+<translation id="7583262514280211622">Qui troverai la tua lista di lettura</translation>
+<translation id="7968014550143838305">Aggiunto alla lista di lettura</translation>
 <translation id="804786196054284061">Contratto di licenza con l'utente finale</translation>
+<translation id="8127542551745560481">Modifica pagina iniziale</translation>
+<translation id="8560602726703398413">Trova la tua lista di lettura nei segnalibri</translation>
 <translation id="85991616550051997">Vai alla pagina iniziale</translation>
 <translation id="8820817407110198400">Segnalibri</translation>
 <translation id="9063523880881406963">Disattiva Richiedi sito desktop</translation>
 <translation id="9080642952018487277">Entra in modalità privata</translation>
+<translation id="96681097142096641">Vuoi vedere la pagina semplificata?</translation>
 </translationbundle>

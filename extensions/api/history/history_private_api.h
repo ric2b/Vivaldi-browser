@@ -34,7 +34,7 @@ class HistoryPrivateEventRouter : public history::HistoryServiceObserver {
   void DispatchEvent(Profile* profile,
                      const std::string& event_name,
                      base::Value::List event_args);
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
   base::ScopedObservation<history::HistoryService,
                           history::HistoryServiceObserver>
       history_service_observer_;
@@ -62,7 +62,7 @@ class HistoryPrivateAPI : public BrowserContextKeyedAPI,
 
  private:
   friend class BrowserContextKeyedAPIFactory<HistoryPrivateAPI>;
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "HistoryPrivateAPI"; }

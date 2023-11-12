@@ -37,10 +37,10 @@ class ConfigValuesGenerator {
 };
 
 // For using in documentation for functions which use this.
-#define CONFIG_VALUES_VARS_HELP                                            \
-  "  Flags: cflags, cflags_c, cflags_cc, cflags_objc, cflags_objcc,\n"     \
-  "         asmflags, defines, include_dirs, inputs, ldflags, lib_dirs,\n" \
-  "         libs, precompiled_header, precompiled_source, rustflags,\n"    \
-  "         rustenv, swiftflags, testonly\n"
+#define CONFIG_VALUES_VARS_HELP                                        \
+  "  Flags: asmflags, cflags, cflags_c, cflags_cc, cflags_objc,\n"     \
+  "         cflags_objcc, defines, include_dirs, inputs, ldflags,\n"   \
+  "         lib_dirs, libs, precompiled_header, precompiled_source,\n" \
+  "         rustenv, rustflags, swiftflags, testonly\n"
 
 #endif  // TOOLS_GN_CONFIG_VALUES_GENERATOR_H_

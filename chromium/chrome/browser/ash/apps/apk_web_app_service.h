@@ -11,6 +11,7 @@
 #include "ash/components/arc/mojom/app.mojom-forward.h"
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
@@ -88,7 +89,6 @@ class ApkWebAppService : public KeyedService,
   void SetArcAppListPrefsForTesting(ArcAppListPrefs* prefs);
 
   bool IsWebOnlyTwa(const web_app::AppId& app_id);
-  bool IsWebOnlyTwaDeprecated(const web_app::AppId& app_id);
 
   bool IsWebAppInstalledFromArc(const web_app::AppId& web_app_id);
 
@@ -103,8 +103,6 @@ class ApkWebAppService : public KeyedService,
       const std::string& package_name);
 
   absl::optional<std::string> GetCertificateSha256Fingerprint(
-      const web_app::AppId& app_id);
-  absl::optional<std::string> GetCertificateSha256FingerprintDeprecated(
       const web_app::AppId& app_id);
 
   using WebAppCallbackForTesting =
@@ -178,16 +176,22 @@ class ApkWebAppService : public KeyedService,
   const base::Value::Dict& WebAppToApks() const;
   void SyncArcAndWebApps();
 
+  void RemoveObsoletePrefValues(const web_app::AppId& web_app_id);
+
   WebAppCallbackForTesting web_app_installed_callback_;
   WebAppCallbackForTesting web_app_uninstalled_callback_;
 
-  Profile* profile_;
-  ArcAppListPrefs* arc_app_list_prefs_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
+  raw_ptr<ArcAppListPrefs, ExperimentalAsh> arc_app_list_prefs_;
 
   // Delegate implementation used in production.
   std::unique_ptr<Delegate> real_delegate_;
   // And override delegate implementation for tests. See |GetDelegate()|.
   raw_ptr<Delegate> test_delegate_;
+
+  // True when ARC is fully initialized, after ArcAppLauncher has sent the
+  // initial package list.
+  bool arc_initialized_ = false;
 
   base::ScopedObservation<apps::AppRegistryCache,
                           apps::AppRegistryCache::Observer>

@@ -6,24 +6,25 @@
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_STORAGE_DELEGATE_H_
 
 #include <stdint.h>
+
 #include <vector>
 
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "content/browser/attribution_reporting/attribution_config.h"
-#include "content/browser/attribution_reporting/attribution_report.h"
+#include "content/browser/attribution_reporting/attribution_reporting.mojom-forward.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace base {
-class GUID;
-}  // namespace base
-
 namespace content {
 
+class AttributionReport;
+class AttributionTrigger;
 class CommonSourceInfo;
+class StoredSource;
 
 // Storage delegate that can supplied to extend basic attribution storage
 // functionality like annotating reports.
@@ -48,13 +49,17 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   // non-empty vector -> `StoredSource::AttributionLogic::kFalsely`
   using RandomizedResponse = absl::optional<std::vector<FakeReport>>;
 
+  struct NullAggregatableReport {
+    base::Time fake_source_time;
+  };
+
   explicit AttributionStorageDelegate(const AttributionConfig& config);
 
   virtual ~AttributionStorageDelegate() = default;
 
   // Returns the time an event-level report should be sent for a given trigger
   // time and its corresponding source.
-  virtual base::Time GetEventLevelReportTime(const CommonSourceInfo& source,
+  virtual base::Time GetEventLevelReportTime(const StoredSource& source,
                                              base::Time trigger_time) const = 0;
 
   // Returns the time an aggregatable report should be sent for a given trigger
@@ -82,7 +87,8 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   // reporting origins are the actual entities that invoke attribution
   // registration, we could consider changing this limit to be keyed by an
   // <attribution origin, reporting origin> tuple.
-  int GetMaxReportsPerDestination(AttributionReport::Type) const;
+  int GetMaxReportsPerDestination(
+      attribution_reporting::mojom::ReportType) const;
 
   // Returns the maximum number of distinct attribution destinations that can
   // be in storage at any time for sources with the same <source site,
@@ -101,7 +107,7 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   virtual base::TimeDelta GetDeleteExpiredRateLimitsFrequency() const = 0;
 
   // Returns a new report ID.
-  virtual base::GUID NewReportID() const = 0;
+  virtual base::Uuid NewReportID() const = 0;
 
   // Delays reports that missed their report time, such as the browser not
   // being open, or internet being disconnected. This gives them a noisy
@@ -118,17 +124,28 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   virtual void ShuffleReports(std::vector<AttributionReport>& reports) = 0;
 
   // Returns the rate used to determine whether to randomize the response to a
-  // source with the given source type, as implemented by
+  // source with the given source type and expiry deadline, as implemented by
   // `GetRandomizedResponse()`. Must be in the range [0, 1] and remain constant
-  // for the lifetime of the delegate.
-  double GetRandomizedResponseRate(
-      attribution_reporting::mojom::SourceType) const;
+  // for the lifetime of the delegate for calls with identical inputs.
+  virtual double GetRandomizedResponseRate(
+      attribution_reporting::mojom::SourceType,
+      base::TimeDelta expiry_deadline) const = 0;
 
   // Returns a randomized response for the given source, consisting of zero or
   // more fake reports. Returns `absl::nullopt` to indicate that the response
   // should not be randomized.
   virtual RandomizedResponse GetRandomizedResponse(
-      const CommonSourceInfo& source) = 0;
+      const CommonSourceInfo& source,
+      base::Time event_report_window_time) = 0;
+
+  virtual base::Time GetExpiryTime(
+      absl::optional<base::TimeDelta> declared_expiry,
+      base::Time source_time,
+      attribution_reporting::mojom::SourceType) = 0;
+
+  virtual absl::optional<base::Time> GetReportWindowTime(
+      absl::optional<base::TimeDelta> declared_window,
+      base::Time source_time) = 0;
 
   // Returns the maximum sum of the contributions (values) across all buckets
   // per source.
@@ -138,8 +155,11 @@ class CONTENT_EXPORT AttributionStorageDelegate {
   uint64_t SanitizeTriggerData(uint64_t trigger_data,
                                attribution_reporting::mojom::SourceType) const;
 
-  // Sanitizes `source_event_id` according to the data limit.
-  uint64_t SanitizeSourceEventId(uint64_t source_event_id) const;
+  // Returns zero or more null aggregatable reports for the given trigger.
+  virtual std::vector<NullAggregatableReport> GetNullAggregatableReports(
+      const AttributionTrigger&,
+      base::Time trigger_time,
+      absl::optional<base::Time> attributed_source_time) const = 0;
 
  protected:
   uint64_t TriggerDataCardinality(

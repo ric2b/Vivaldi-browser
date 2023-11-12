@@ -137,7 +137,6 @@ class BASE_EXPORT SequenceManagerImpl
       const TaskQueue::Spec& spec) override;
   std::string DescribeAllPendingTasks() const override;
   void PrioritizeYieldingToNative(base::TimeTicks prioritize_until) override;
-  void EnablePeriodicYieldingToNative(base::TimeDelta interval) override;
   void AddTaskObserver(TaskObserver* task_observer) override;
   void RemoveTaskObserver(TaskObserver* task_observer) override;
   absl::optional<WakeUp> GetNextDelayedWakeUp() const override;
@@ -351,9 +350,11 @@ class BASE_EXPORT SequenceManagerImpl
     bool task_was_run_on_quiescence_monitored_queue = false;
     bool nesting_observer_registered_ = false;
 
-    // Due to nested runloops more than one task can be executing concurrently.
-    // Note that this uses std::deque for pointer stability, since pointers to
-    // objects in this container are stored in TLS.
+    // Use std::deque() so that references returned by SelectNextTask() remain
+    // valid until the matching call to DidRunTask(), even when nested RunLoops
+    // cause tasks to be pushed on the stack in-between. This is needed because
+    // references are kept in local variables by calling code between
+    // SelectNextTask()/DidRunTask().
     std::deque<ExecutingTask> task_execution_stack;
 
     raw_ptr<Observer> observer = nullptr;  // NOT OWNED

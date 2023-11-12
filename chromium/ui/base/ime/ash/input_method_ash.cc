@@ -29,8 +29,10 @@
 #include "ui/base/ime/ime_key_event_dispatcher.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_flags.h"
+#include "ui/base/ime/text_input_type.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/events/ozone/events_ozone.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace ash {
@@ -608,6 +610,11 @@ ui::EventDispatchDetails InputMethodAsh::ProcessKeyEventPostIME(
     ui::ime::KeyEventHandledState handled_state,
     bool stopped_propagation) {
   bool handled = (handled_state != ui::ime::KeyEventHandledState::kNotHandled);
+
+  // Mark whether the key is handled by IME or not.
+  ui::SetKeyboardImeFlags(event, handled ? ui::kPropertyKeyboardImeHandledFlag
+                                         : ui::kPropertyKeyboardImeIgnoredFlag);
+
   TextInputClient* client = GetTextInputClient();
   if (!client) {
     // As ibus works asynchronously, there is a chance that the focused client
@@ -662,6 +669,9 @@ ui::EventDispatchDetails InputMethodAsh::ProcessFilteredKeyPressEvent(
   ui::KeyEvent fabricated_event(ui::ET_KEY_PRESSED, ui::VKEY_PROCESSKEY,
                                 event->code(), event->flags(),
                                 ui::DomKey::PROCESS, event->time_stamp());
+  if (const auto* properties = event->properties()) {
+    fabricated_event.SetProperties(*properties);
+  }
   ui::EventDispatchDetails dispatch_details =
       DispatchKeyEventPostIME(&fabricated_event);
   if (fabricated_event.stopped_propagation())
@@ -886,9 +896,12 @@ TextInputMethod::InputContext InputMethodAsh::GetInputContext() const {
     return TextInputMethod::InputContext(ui::TEXT_INPUT_TYPE_NONE);
   }
 
-  TextInputMethod::InputContext input_context(client->GetTextInputType());
-  input_context.mode = client->GetTextInputMode();
   const int flags = client->GetTextInputFlags();
+  TextInputMethod::InputContext input_context(
+      flags & ui::TEXT_INPUT_FLAG_HAS_BEEN_PASSWORD
+          ? ui::TEXT_INPUT_TYPE_PASSWORD
+          : client->GetTextInputType());
+  input_context.mode = client->GetTextInputMode();
   input_context.autocompletion_mode =
       ConvertTextInputFlagToEnum<AutocompletionMode>(
           flags, ui::TEXT_INPUT_FLAG_AUTOCOMPLETE_ON,
@@ -1078,6 +1091,8 @@ bool InputMethodAsh::SendFakeProcessKeyEvent(bool pressed) const {
   ui::KeyEvent evt(pressed ? ui::ET_KEY_PRESSED : ui::ET_KEY_RELEASED,
                    pressed ? ui::VKEY_PROCESSKEY : ui::VKEY_UNKNOWN,
                    ui::EF_IME_FABRICATED_KEY);
+  ui::SetKeyboardImeFlags(&evt, ui::kPropertyKeyboardImeHandledFlag);
+
   std::ignore = DispatchKeyEventPostIME(&evt);
   return evt.stopped_propagation();
 }

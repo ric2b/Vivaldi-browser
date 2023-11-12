@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
@@ -55,6 +56,11 @@ class ProfileAttributesStorage
 
   // Register cache related preferences in Local State.
   static void RegisterPrefs(PrefRegistrySimple* registry);
+
+  // Return the keys for all the profiles; exposed as a static method so that
+  // it can be called very early in Chrome initialization.
+  static base::flat_set<std::string> GetAllProfilesKeys(
+      PrefService* local_prefs);
 
   // Adds a new profile with `params` to the attributes storage.
   // `params.profile_path` must be a valid path within the user data directory
@@ -174,6 +180,10 @@ class ProfileAttributesStorage
   void NotifyProfileHostedDomainChanged(
       const base::FilePath& profile_path) const;
   void NotifyProfileUserManagementAcceptanceChanged(
+      const base::FilePath& profile_path) const;
+  void NotifyProfileManagementEnrollmentTokenChanged(
+      const base::FilePath& profile_path) const;
+  void NotifyProfileManagementIdChanged(
       const base::FilePath& profile_path) const;
 
   // Returns a pref dictionary key of a profile at `profile_path`.

@@ -31,7 +31,6 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.suggestions.FaviconFetcher;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
 import org.chromium.chrome.browser.omnibox.suggestions.UrlBarDelegate;
@@ -45,6 +44,7 @@ import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.omnibox.AutocompleteMatch;
+import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.base.Clipboard;
@@ -261,7 +261,7 @@ public final class EditUrlSuggestionUnitTest {
         mProcessor.doesProcessSuggestion(mWhatYouTypedSuggestion, 0);
         mProcessor.populateModel(mWhatYouTypedSuggestion, mModel, 0);
 
-        List<Action> actions = mModel.get(BaseSuggestionViewProperties.ACTIONS);
+        List<Action> actions = mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS);
         Assert.assertEquals("EditUrl suggestion should have 3 action buttons.", 3, actions.size());
         actions.get(ACTION_EDIT).callback.run();
         verify(mUrlBarDelegate).setOmniboxEditingText(WEB_URL.getSpec());
@@ -273,7 +273,7 @@ public final class EditUrlSuggestionUnitTest {
         mProcessor.doesProcessSuggestion(mWhatYouTypedSuggestion, 0);
         mProcessor.populateModel(mWhatYouTypedSuggestion, mModel, 0);
 
-        List<Action> actions = mModel.get(BaseSuggestionViewProperties.ACTIONS);
+        List<Action> actions = mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS);
         Assert.assertEquals("EditUrl suggestion should have 3 action buttons.", 3, actions.size());
         actions.get(ACTION_SHARE).callback.run();
         verify(mShareDelegate, times(1))
@@ -286,7 +286,7 @@ public final class EditUrlSuggestionUnitTest {
         mProcessor.doesProcessSuggestion(mWhatYouTypedSuggestion, 0);
         mProcessor.populateModel(mWhatYouTypedSuggestion, mModel, 0);
 
-        List<Action> actions = mModel.get(BaseSuggestionViewProperties.ACTIONS);
+        List<Action> actions = mModel.get(BaseSuggestionViewProperties.ACTION_BUTTONS);
 
         Assert.assertEquals("EditUrl suggestion should have 3 action buttons.", 3, actions.size());
         ArgumentCaptor<ClipData> argument = ArgumentCaptor.forClass(ClipData.class);

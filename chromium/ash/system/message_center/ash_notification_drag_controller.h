@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/gtest_prod_util.h"
 #include "base/scoped_observation.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/drag_drop_client_observer.h"
@@ -43,9 +44,32 @@ class AshNotificationDragController
   ~AshNotificationDragController() override;
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(AshNotificationViewDragTest, Basics);
+
+  // Lists notification drag end states.
+  // NOTE: used by metrics. Therefore, current values should not be renumbered
+  // or removed. This should be kept in sync with the enum in
+  // tools/metrics/histograms/enums.xml.
+  enum class DragEndState {
+    // Interrupted by a new drag session before the current one finishes.
+    kInterruptedByNewDrag = 0,
+
+    // Cancelled by users.
+    kCancelled = 1,
+
+    // Drag completes and the notification image is dropped to the target.
+    kCompletedWithDrop = 2,
+
+    // Drag completes and the notification image is NOT dropped to the target.
+    kCompletedWithoutDrop = 3,
+
+    kMaxValue = kCompletedWithoutDrop,
+  };
+
   // aura::client::DragDropClientObserver:
-  void OnDragCompleted(const ui::DropTargetEvent& event) override;
+  void OnDragStarted() override;
   void OnDragCancelled() override;
+  void OnDropCompleted(ui::mojom::DragOperation drag_operation) override;
 
   // views::DragController:
   void WriteDragDataForView(views::View* sender,
@@ -56,9 +80,20 @@ class AshNotificationDragController
   bool CanStartDragForView(views::View* sender,
                            const gfx::Point& press_pt,
                            const gfx::Point& p) override;
+  void OnWillStartDragForView(views::View* dragged_view) override;
 
-  void OnNotificationViewDragStarted(AshNotificationView* dragged_view);
-  void OnNotificationViewDragEnded();
+  void OnNotificationDragWillStart(AshNotificationView* dragged_view);
+
+  // Cleans up the data members for the current drag-and-drop session. This
+  // method gets called when:
+  // 1. Drag is cancelled; or
+  // 2. Drop is completed; or
+  // 3. A new drag-and-drop session starts without waiting for the current
+  // async drop to finish.
+  void CleanUp(DragEndState state);
+
+  // True if there is a notification drag being handled.
+  bool drag_in_progress_ = false;
 
   // Corresponds to the notification view under drag. Set/reset when the drag on
   // a notification view starts/ends.

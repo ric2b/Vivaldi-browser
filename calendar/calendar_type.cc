@@ -121,14 +121,4 @@ void CalendarResult::SwapResult(CalendarResult* other) {
   CalendarRow::Swap(other);
 }
 
-CalendarQueryResults::CalendarQueryResults() {}
-CalendarQueryResults::~CalendarQueryResults() {}
-
-void CalendarQueryResults::AppendCalendarBySwapping(CalendarResult* result) {
-  results_.push_back(std::move(*result));
-}
-
-UpdateCalendarResult::UpdateCalendarResult() {}
-
-DeleteCalendarResult::DeleteCalendarResult() {}
 }  // namespace calendar

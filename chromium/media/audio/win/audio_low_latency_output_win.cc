@@ -29,6 +29,7 @@
 #include "media/audio/win/audio_session_event_listener_win.h"
 #include "media/audio/win/avrt_wrapper_win.h"
 #include "media/audio/win/core_audio_util_win.h"
+#include "media/base/amplitude_peak_detector.h"
 #include "media/base/audio_glitch_info.h"
 #include "media/base/audio_sample_types.h"
 #include "media/base/limits.h"
@@ -196,6 +197,8 @@ WASAPIAudioOutputStream::WASAPIAudioOutputStream(
 
 WASAPIAudioOutputStream::~WASAPIAudioOutputStream() {
   DCHECK_EQ(GetCurrentThreadId(), creating_thread_id_);
+
+  StopAudioSessionEventListener();
 }
 
 bool WASAPIAudioOutputStream::Open() {
@@ -324,10 +327,7 @@ bool WASAPIAudioOutputStream::Open() {
     return false;
   }
 
-  session_listener_ = std::make_unique<AudioSessionEventListener>(
-      audio_client_.Get(), base::BindPostTaskToCurrentDefault(base::BindOnce(
-                               &WASAPIAudioOutputStream::OnDeviceChanged,
-                               weak_factory_.GetWeakPtr())));
+  StartAudioSessionEventListener();
 
   opened_ = true;
   return true;
@@ -387,6 +387,12 @@ void WASAPIAudioOutputStream::Start(AudioSourceCallback* callback) {
   num_written_frames_ = endpoint_buffer_size_frames_;
   last_position_ = 0;
   last_qpc_position_ = 0;
+
+  // Recreate `peak_detector_` everytime we create a new `render_thread_`, to
+  // avoid ThreadChecker DCHECKs.
+  peak_detector_ = std::make_unique<AmplitudePeakDetector>(base::BindRepeating(
+      &AudioManager::TraceAmplitudePeak, base::Unretained(manager_),
+      /*trace_start=*/false));
 
   // Create and start the thread that will drive the rendering by waiting for
   // render events.
@@ -467,7 +473,7 @@ void WASAPIAudioOutputStream::Close() {
   DCHECK_EQ(GetCurrentThreadId(), creating_thread_id_);
   SendLogMessage("%s()", __func__);
 
-  session_listener_.reset();
+  StopAudioSessionEventListener();
 
   // It is valid to call Close() before calling open or Start().
   // It is also valid to call Close() after Start() has been called.
@@ -751,8 +757,11 @@ bool WASAPIAudioOutputStream::RenderAudioFromSource(UINT64 device_frequency) {
           audio_bus.get());
 
       // During pause/seek, keep the pipeline filled with zero'ed frames.
-      if (!frames_filled)
+      if (!frames_filled) {
         memset(audio_data, 0, packet_size_frames_);
+      }
+
+      peak_detector_->FindPeak(audio_bus_.get());
 
       // Release the buffer space acquired in the GetBuffer() call.
       // Render silence if we were not able to fill up the buffer totally.
@@ -771,6 +780,8 @@ bool WASAPIAudioOutputStream::RenderAudioFromSource(UINT64 device_frequency) {
     // We skip clipping since that occurs at the shared memory boundary.
     audio_bus_->ToInterleaved<Float32SampleTypeTraitsNoClip>(
         frames_filled, reinterpret_cast<float*>(audio_data));
+
+    peak_detector_->FindPeak(audio_bus_.get());
 
     // Release the buffer space acquired in the GetBuffer() call.
     // Render silence if we were not able to fill up the buffer totally.
@@ -872,6 +883,7 @@ void WASAPIAudioOutputStream::StopThread() {
     }
 
     render_thread_.reset();
+    peak_detector_.reset();
 
     // Ensure that we don't quit the main thread loop immediately next
     // time Start() is called.
@@ -892,7 +904,56 @@ void WASAPIAudioOutputStream::ReportAndResetStats() {
       stats.largest_glitch_duration.InMilliseconds());
 }
 
+void WASAPIAudioOutputStream::StartAudioSessionEventListener() {
+  DCHECK_EQ(GetCurrentThreadId(), creating_thread_id_);
+
+  if (session_listener_) {
+    // Already started listening!
+    return;
+  }
+
+  HRESULT hr = audio_client_->GetService(IID_PPV_ARGS(&audio_session_control_));
+  if (FAILED(hr)) {
+    DLOG(ERROR) << "Failed to get IAudioSessionControl service: " << std::hex
+                << hr;
+    return;
+  }
+
+  session_listener_ = Microsoft::WRL::Make<AudioSessionEventListener>(
+      base::BindPostTaskToCurrentDefault(
+          base::BindOnce(&WASAPIAudioOutputStream::OnDeviceChanged,
+                         weak_factory_.GetWeakPtr())));
+
+  hr = audio_session_control_->RegisterAudioSessionNotification(
+      session_listener_.Get());
+
+  DLOG_IF(ERROR, FAILED(hr))
+      << "IAudioSessionControl::RegisterAudioSessionNotification() failed: "
+      << std::hex << hr;
+}
+
+void WASAPIAudioOutputStream::StopAudioSessionEventListener() {
+  DCHECK_EQ(GetCurrentThreadId(), creating_thread_id_);
+
+  if (!session_listener_) {
+    // Already stopped listening!
+    return;
+  }
+
+  HRESULT hr = audio_session_control_->UnregisterAudioSessionNotification(
+      session_listener_.Get());
+
+  DLOG_IF(ERROR, FAILED(hr))
+      << "IAudioSessionControl::UnregisterAudioSessionNotification() failed: "
+      << std::hex << hr;
+
+  audio_session_control_.Reset();
+  session_listener_.Reset();
+}
+
 void WASAPIAudioOutputStream::OnDeviceChanged() {
+  DCHECK_EQ(GetCurrentThreadId(), creating_thread_id_);
+
   device_changed_ = true;
   if (source_)
     source_->OnError(AudioSourceCallback::ErrorType::kDeviceChange);

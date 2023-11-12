@@ -14,10 +14,12 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/types/optional_ref.h"
+#include "content/browser/interest_group/auction_metrics_recorder.h"
 #include "content/browser/interest_group/interest_group_auction_reporter.h"
 #include "content/browser/interest_group/interest_group_manager_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
@@ -62,24 +64,26 @@ blink::AuctionConfig* LookupAuction(
 std::unique_ptr<AuctionRunner> AuctionRunner::CreateAndStart(
     AuctionWorkletManager* auction_worklet_manager,
     InterestGroupManagerImpl* interest_group_manager,
-    AttributionDataHostManager* attribution_data_host_manager,
+    AttributionManager* attribution_manager,
     PrivateAggregationManager* private_aggregation_manager,
     InterestGroupAuctionReporter::LogPrivateAggregationRequestsCallback
         log_private_aggregation_requests_callback,
     const blink::AuctionConfig& auction_config,
     const url::Origin& main_frame_origin,
     const url::Origin& frame_origin,
+    ukm::SourceId ukm_source_id,
     network::mojom::ClientSecurityStatePtr client_security_state,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     IsInterestGroupApiAllowedCallback is_interest_group_api_allowed_callback,
     mojo::PendingReceiver<AbortableAdAuction> abort_receiver,
     RunAuctionCallback callback) {
   std::unique_ptr<AuctionRunner> instance(new AuctionRunner(
-      auction_worklet_manager, interest_group_manager,
-      attribution_data_host_manager, private_aggregation_manager,
-      log_private_aggregation_requests_callback, DetermineKAnonMode(),
-      std::move(auction_config), main_frame_origin, frame_origin,
-      std::move(client_security_state), std::move(url_loader_factory),
+      auction_worklet_manager, interest_group_manager, attribution_manager,
+      private_aggregation_manager,
+      std::move(log_private_aggregation_requests_callback),
+      DetermineKAnonMode(), std::move(auction_config), main_frame_origin,
+      frame_origin, ukm_source_id, std::move(client_security_state),
+      std::move(url_loader_factory),
       std::move(is_interest_group_api_allowed_callback),
       std::move(abort_receiver), std::move(callback)));
   instance->StartAuction();
@@ -193,6 +197,33 @@ void AuctionRunner::ResolvedBuyerTimeoutsPromise(
   NotifyPromiseResolved(auction_id.get(), config);
 }
 
+void AuctionRunner::ResolvedBuyerCurrenciesPromise(
+    blink::mojom::AuctionAdConfigAuctionIdPtr auction_id,
+    const blink::AuctionConfig::BuyerCurrencies& buyer_currencies) {
+  if (state_ == State::kFailed) {
+    return;
+  }
+
+  blink::AuctionConfig* config =
+      LookupAuction(*owned_auction_config_, auction_id);
+  if (!config) {
+    mojo::ReportBadMessage(
+        "Invalid auction ID in ResolvedBuyerCurrenciesPromise");
+    return;
+  }
+
+  if (!config->non_shared_params.buyer_currencies.is_promise()) {
+    mojo::ReportBadMessage(
+        "ResolvedBuyerCurrenciesPromise updating non-promise");
+    return;
+  }
+
+  config->non_shared_params.buyer_currencies =
+      blink::AuctionConfig::MaybePromiseBuyerCurrencies::FromValue(
+          buyer_currencies);
+  NotifyPromiseResolved(auction_id.get(), config);
+}
+
 void AuctionRunner::ResolvedDirectFromSellerSignalsPromise(
     blink::mojom::AuctionAdConfigAuctionIdPtr auction_id,
     const absl::optional<blink::DirectFromSellerSignals>&
@@ -259,8 +290,7 @@ void AuctionRunner::FailAuction(
         *client_security_state_, url_loader_factory_);
 
     InterestGroupAuctionReporter::OnFledgePrivateAggregationRequests(
-        private_aggregation_manager_,
-        log_private_aggregation_requests_callback_, main_frame_origin_,
+        private_aggregation_manager_, main_frame_origin_,
         auction_.TakeReservedPrivateAggregationRequests());
   }
 
@@ -272,15 +302,17 @@ void AuctionRunner::FailAuction(
   // types cannot be triggered anyway, so no need to pass it along.
   std::move(callback_).Run(this, manually_aborted,
                            /*winning_group_key=*/absl::nullopt,
-                           /*render_url=*/absl::nullopt,
-                           /*ad_component_urls=*/{}, auction_.TakeErrors(),
+                           /*requested_ad_size=*/absl::nullopt,
+                           /*ad_descriptor=*/absl::nullopt,
+                           /*ad_component_descriptors=*/{},
+                           auction_.TakeErrors(),
                            /*reporter=*/nullptr);
 }
 
 AuctionRunner::AuctionRunner(
     AuctionWorkletManager* auction_worklet_manager,
     InterestGroupManagerImpl* interest_group_manager,
-    AttributionDataHostManager* attribution_data_host_manager,
+    AttributionManager* attribution_manager,
     PrivateAggregationManager* private_aggregation_manager,
     InterestGroupAuctionReporter::LogPrivateAggregationRequestsCallback
         log_private_aggregation_requests_callback,
@@ -288,16 +320,15 @@ AuctionRunner::AuctionRunner(
     const blink::AuctionConfig& auction_config,
     const url::Origin& main_frame_origin,
     const url::Origin& frame_origin,
+    ukm::SourceId ukm_source_id,
     network::mojom::ClientSecurityStatePtr client_security_state,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     IsInterestGroupApiAllowedCallback is_interest_group_api_allowed_callback,
     mojo::PendingReceiver<AbortableAdAuction> abort_receiver,
     RunAuctionCallback callback)
     : interest_group_manager_(interest_group_manager),
-      attribution_data_host_manager_(attribution_data_host_manager),
+      attribution_manager_(attribution_manager),
       private_aggregation_manager_(private_aggregation_manager),
-      log_private_aggregation_requests_callback_(
-          log_private_aggregation_requests_callback),
       main_frame_origin_(main_frame_origin),
       frame_origin_(frame_origin),
       client_security_state_(std::move(client_security_state)),
@@ -310,12 +341,15 @@ AuctionRunner::AuctionRunner(
           std::make_unique<blink::AuctionConfig>(auction_config)),
       callback_(std::move(callback)),
       promise_fields_in_auction_config_(owned_auction_config_->NumPromises()),
+      auction_metrics_recorder_(ukm_source_id),
       auction_(kanon_mode_,
                owned_auction_config_.get(),
                /*parent=*/nullptr,
                auction_worklet_manager,
                interest_group_manager,
-               /*auction_start_time=*/base::Time::Now()) {}
+               &auction_metrics_recorder_,
+               /*auction_start_time=*/base::Time::Now(),
+               std::move(log_private_aggregation_requests_callback)) {}
 
 void AuctionRunner::StartAuction() {
   auction_.StartLoadInterestGroupsPhase(
@@ -360,18 +394,18 @@ void AuctionRunner::OnBidsGeneratedAndScored(bool success) {
 
   std::unique_ptr<InterestGroupAuctionReporter> reporter =
       auction_.CreateReporter(
-          attribution_data_host_manager_, private_aggregation_manager_,
-          log_private_aggregation_requests_callback_, url_loader_factory_,
-          std::move(owned_auction_config_), main_frame_origin_, frame_origin_,
-          client_security_state_.Clone(), std::move(interest_groups_that_bid));
+          attribution_manager_, private_aggregation_manager_,
+          url_loader_factory_, std::move(owned_auction_config_),
+          main_frame_origin_, frame_origin_, client_security_state_.Clone(),
+          std::move(interest_groups_that_bid));
   DCHECK(reporter);
 
   state_ = State::kSucceeded;
-  std::move(callback_).Run(this, /*manually_aborted=*/false,
-                           std::move(winning_group_key),
-                           auction_.top_bid()->bid->render_url,
-                           auction_.top_bid()->bid->ad_components,
-                           std::move(errors), std::move(reporter));
+  std::move(callback_).Run(
+      this, /*manually_aborted=*/false, std::move(winning_group_key),
+      auction_.RequestedAdSize(), auction_.top_bid()->bid->ad_descriptor,
+      auction_.top_bid()->bid->ad_component_descriptors, std::move(errors),
+      std::move(reporter));
 }
 
 void AuctionRunner::UpdateInterestGroupsPostAuction() {

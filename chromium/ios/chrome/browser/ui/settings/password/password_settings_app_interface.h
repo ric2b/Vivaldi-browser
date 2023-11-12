@@ -18,7 +18,7 @@
 // view password) and its options for next test.
 + (void)setUpMockReauthenticationModule;
 + (void)setUpMockReauthenticationModuleForAddPassword;
-+ (void)setUpMockReauthenticationModuleForExport;
++ (void)setUpMockReauthenticationModuleForPasswordManager;
 + (void)mockReauthenticationModuleExpectedResult:
     (ReauthenticationResult)expectedResult;
 + (void)mockReauthenticationModuleCanAttempt:(BOOL)canAttempt;
@@ -48,10 +48,25 @@
                userName:(NSString*)userName
                  origin:(NSString*)origin;
 
-// Creates password form which is leaked.
-+ (BOOL)saveInsecurePassword:(NSString*)password
-                    userName:(NSString*)userName
-                      origin:(NSString*)origin;
+// Creates a compromised password form.
++ (BOOL)saveCompromisedPassword:(NSString*)password
+                       userName:(NSString*)userName
+                         origin:(NSString*)origin;
+
+// Creates a muted compromised password form.
++ (BOOL)saveMutedCompromisedPassword:(NSString*)password
+                            userName:(NSString*)userName
+                              origin:(NSString*)origin;
+
+// Creates a reused password form.
++ (BOOL)saveReusedPassword:(NSString*)password
+                  userName:(NSString*)userName
+                    origin:(NSString*)origin;
+
+// Creates a weak password form.
++ (BOOL)saveWeakPassword:(NSString*)password
+                userName:(NSString*)userName
+                  origin:(NSString*)origin;
 
 // Creates a blocked password form for given origin.
 + (BOOL)saveExampleBlockedOrigin:(NSString*)origin;

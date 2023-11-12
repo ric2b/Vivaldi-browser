@@ -11,6 +11,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/dbus/userdataauth/fake_userdataauth_client.h"
@@ -127,22 +128,6 @@ class UserDataAuthClientImpl : public UserDataAuthClient {
   void CheckKey(const ::user_data_auth::CheckKeyRequest& request,
                 CheckKeyCallback callback) override {
     CallProtoMethod(::user_data_auth::kCheckKey,
-                    ::user_data_auth::kUserDataAuthInterface, request,
-                    std::move(callback));
-  }
-
-  void StartFingerprintAuthSession(
-      const ::user_data_auth::StartFingerprintAuthSessionRequest& request,
-      StartFingerprintAuthSessionCallback callback) override {
-    CallProtoMethod(::user_data_auth::kStartFingerprintAuthSession,
-                    ::user_data_auth::kUserDataAuthInterface, request,
-                    std::move(callback));
-  }
-
-  void EndFingerprintAuthSession(
-      const ::user_data_auth::EndFingerprintAuthSessionRequest& request,
-      EndFingerprintAuthSessionCallback callback) override {
-    CallProtoMethod(::user_data_auth::kEndFingerprintAuthSession,
                     ::user_data_auth::kUserDataAuthInterface, request,
                     std::move(callback));
   }
@@ -463,7 +448,7 @@ class UserDataAuthClientImpl : public UserDataAuthClient {
   }
 
   // D-Bus proxy for cryptohomed, not owned.
-  dbus::ObjectProxy* proxy_ = nullptr;
+  raw_ptr<dbus::ObjectProxy, ExperimentalAsh> proxy_ = nullptr;
 
   // List of observers for dbus signals.
   base::ObserverList<Observer> observer_list_;

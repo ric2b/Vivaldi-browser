@@ -49,6 +49,10 @@ namespace gcm {
 class GCMDriver;
 }
 
+namespace metrics {
+class MetricsService;
+}
+
 namespace network {
 class TestNetworkConnectionTracker;
 class TestNetworkQualityTracker;
@@ -73,6 +77,10 @@ class TestingBrowserProcess : public BrowserProcess {
   // Convenience method to get g_browser_process as a TestingBrowserProcess*.
   static TestingBrowserProcess* GetGlobal();
 
+  // Convenience method to both teardown and destroy the TestingBrowserProcess
+  // instance
+  static void TearDownAndDeleteInstance();
+
   TestingBrowserProcess(const TestingBrowserProcess&) = delete;
   TestingBrowserProcess& operator=(const TestingBrowserProcess&) = delete;
 
@@ -82,6 +90,7 @@ class TestingBrowserProcess : public BrowserProcess {
   metrics_services_manager::MetricsServicesManager* GetMetricsServicesManager()
       override;
   metrics::MetricsService* metrics_service() override;
+  device::GeolocationManager* geolocation_manager() override;
   SystemNetworkContextManager* system_network_context_manager() override;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory()
       override;
@@ -98,6 +107,8 @@ class TestingBrowserProcess : public BrowserProcess {
   void set_background_mode_manager_for_test(
       std::unique_ptr<BackgroundModeManager> manager) override;
 #endif
+  void SetGeolocationManager(
+      std::unique_ptr<device::GeolocationManager>) override;
   StatusTray* status_tray() override;
   safe_browsing::SafeBrowsingService* safe_browsing_service() override;
   subresource_filter::RulesetService* subresource_filter_ruleset_service()
@@ -148,12 +159,11 @@ class TestingBrowserProcess : public BrowserProcess {
   HidSystemTrayIcon* hid_system_tray_icon() override;
 #endif
   BuildState* GetBuildState() override;
-  breadcrumbs::BreadcrumbPersistentStorageManager*
-  GetBreadcrumbPersistentStorageManager() override;
 
   // Set the local state for tests. Consumer is responsible for cleaning it up
   // afterwards (using ScopedTestingLocalState, for example).
   void SetLocalState(PrefService* local_state);
+  void SetMetricsService(metrics::MetricsService* metrics_service);
   void SetProfileManager(std::unique_ptr<ProfileManager> profile_manager);
   void SetSafeBrowsingService(safe_browsing::SafeBrowsingService* sb_service);
   void SetRulesetService(
@@ -176,6 +186,9 @@ class TestingBrowserProcess : public BrowserProcess {
 #endif
 
  private:
+  // Perform necessary cleanup prior to destruction of |g_browser_process|
+  static void StartTearDown();
+
   // See CreateInstance() and DestoryInstance() above.
   TestingBrowserProcess();
   ~TestingBrowserProcess() override;
@@ -191,6 +204,8 @@ class TestingBrowserProcess : public BrowserProcess {
   bool created_browser_policy_connector_ = false;
   std::unique_ptr<network::TestNetworkQualityTracker>
       test_network_quality_tracker_;
+  std::unique_ptr<device::GeolocationManager> geolocation_manager_;
+  raw_ptr<metrics::MetricsService> metrics_service_ = nullptr;
   std::unique_ptr<ProfileManager> profile_manager_;
 
 #if BUILDFLAG(ENABLE_CHROME_NOTIFICATIONS)

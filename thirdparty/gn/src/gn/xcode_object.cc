@@ -116,6 +116,7 @@ const SourceTypeForExt kSourceTypeForExt[] = {
     {"js", "sourcecode.javascript"},
     {"kext", "wrapper.kext"},
     {"m", "sourcecode.c.objc"},
+    {"md", "net.daringfireball.markdown"},
     {"mm", "sourcecode.cpp.objcpp"},
     {"nib", "wrapper.nib"},
     {"o", "compiled.mach-o.objfile"},
@@ -131,14 +132,15 @@ const SourceTypeForExt kSourceTypeForExt[] = {
     {"storyboard", "file.storyboard"},
     {"strings", "text.plist.strings"},
     {"swift", "sourcecode.swift"},
+    {"ts", "sourcecode.javascript"},
     {"ttf", "file"},
     {"xcassets", "folder.assetcatalog"},
     {"xcconfig", "text.xcconfig"},
     {"xcdatamodel", "wrapper.xcdatamodel"},
     {"xcdatamodeld", "wrapper.xcdatamodeld"},
     {"xctest", "wrapper.cfbundle"},
-    {"xpc", "wrapper.xpc-service"},
     {"xib", "file.xib"},
+    {"xpc", "wrapper.xpc-service"},
     {"y", "sourcecode.yacc"},
 };
 
@@ -152,7 +154,7 @@ const char* GetSourceType(std::string_view ext) {
 }
 
 bool HasExplicitFileType(std::string_view ext) {
-  return ext == "dart";
+  return ext == "dart" || ext == "ts";
 }
 
 bool IsSourceFileForIndexing(std::string_view ext) {
@@ -253,19 +255,26 @@ void PrintProperty(std::ostream& out,
 struct PBXGroupComparator {
   using PBXObjectPtr = std::unique_ptr<PBXObject>;
   bool operator()(const PBXObjectPtr& lhs, const PBXObjectPtr& rhs) {
+    if (lhs.get() == rhs.get())
+      return false;
+
+    // Ensure that PBXGroup that should sort last are sorted last.
+    const bool lhs_sort_last = SortLast(lhs);
+    const bool rhs_sort_last = SortLast(rhs);
+    if (lhs_sort_last != rhs_sort_last)
+      return rhs_sort_last;
+
     if (lhs->Class() != rhs->Class())
       return rhs->Class() < lhs->Class();
 
-    if (lhs->Class() == PBXGroupClass) {
-      PBXGroup* lhs_group = static_cast<PBXGroup*>(lhs.get());
-      PBXGroup* rhs_group = static_cast<PBXGroup*>(rhs.get());
-      return lhs_group->name() < rhs_group->name();
-    }
+    return lhs->Name() < rhs->Name();
+  }
 
-    DCHECK_EQ(lhs->Class(), PBXFileReferenceClass);
-    PBXFileReference* lhs_file = static_cast<PBXFileReference*>(lhs.get());
-    PBXFileReference* rhs_file = static_cast<PBXFileReference*>(rhs.get());
-    return lhs_file->Name() < rhs_file->Name();
+  bool SortLast(const PBXObjectPtr& ptr) {
+    if (ptr->Class() != PBXGroupClass)
+      return false;
+
+    return static_cast<PBXGroup*>(ptr.get())->SortLast();
   }
 };
 }  // namespace
@@ -380,10 +389,10 @@ void PBXBuildPhase::Visit(PBXObjectVisitorConst& visitor) const {
 
 PBXTarget::PBXTarget(const std::string& name,
                      const std::string& shell_script,
-                     const std::string& config_name,
+                     const std::vector<std::string>& configs,
                      const PBXAttributes& attributes)
     : configurations_(
-          std::make_unique<XCConfigurationList>(config_name, attributes, this)),
+          std::make_unique<XCConfigurationList>(configs, attributes, this)),
       name_(name) {
   if (!shell_script.empty()) {
     build_phases_.push_back(
@@ -424,9 +433,9 @@ void PBXTarget::Visit(PBXObjectVisitorConst& visitor) const {
 
 PBXAggregateTarget::PBXAggregateTarget(const std::string& name,
                                        const std::string& shell_script,
-                                       const std::string& config_name,
+                                       const std::vector<std::string>& configs,
                                        const PBXAttributes& attributes)
-    : PBXTarget(name, shell_script, config_name, attributes) {}
+    : PBXTarget(name, shell_script, configs, attributes) {}
 
 PBXAggregateTarget::~PBXAggregateTarget() = default;
 
@@ -534,10 +543,9 @@ void PBXFileReference::Print(std::ostream& out, unsigned indent) const {
     PrintProperty(out, rules, "includeInIndex", 0u);
   } else {
     std::string_view ext = FindExtension(&name_);
-    if (HasExplicitFileType(ext))
-      PrintProperty(out, rules, "explicitFileType", GetSourceType(ext));
-    else
-      PrintProperty(out, rules, "lastKnownFileType", GetSourceType(ext));
+    const char* prop_name =
+        HasExplicitFileType(ext) ? "explicitFileType" : "lastKnownFileType";
+    PrintProperty(out, rules, prop_name, GetSourceType(ext));
   }
 
   if (!name_.empty() && name_ != path_)
@@ -586,6 +594,7 @@ PBXFileReference* PBXGroup::AddSourceFile(const std::string& navigator_path,
                                           const std::string& source_path) {
   DCHECK(!navigator_path.empty());
   DCHECK(!source_path.empty());
+
   std::string::size_type sep = navigator_path.find("/");
   if (sep == std::string::npos) {
     // Prevent same file reference being created and added multiple times.
@@ -596,12 +605,12 @@ PBXFileReference* PBXGroup::AddSourceFile(const std::string& navigator_path,
       PBXFileReference* child_as_file_reference =
           static_cast<PBXFileReference*>(child.get());
       if (child_as_file_reference->Name() == navigator_path &&
-          child_as_file_reference->path() == source_path) {
+          child_as_file_reference->path() == navigator_path) {
         return child_as_file_reference;
       }
     }
 
-    return CreateChild<PBXFileReference>(navigator_path, source_path,
+    return CreateChild<PBXFileReference>(navigator_path, navigator_path,
                                          std::string());
   }
 
@@ -660,12 +669,16 @@ void PBXGroup::Print(std::ostream& out, unsigned indent) const {
   out << indent_str << Reference() << " = {\n";
   PrintProperty(out, rules, "isa", ToString(Class()));
   PrintProperty(out, rules, "children", children_);
-  if (!name_.empty())
+  if (!name_.empty() && name_ != path_)
     PrintProperty(out, rules, "name", name_);
-  if (is_source_ && !path_.empty())
+  if (!path_.empty())
     PrintProperty(out, rules, "path", path_);
   PrintProperty(out, rules, "sourceTree", "<group>");
   out << indent_str << "};\n";
+}
+
+bool PBXGroup::SortLast() const {
+  return false;
 }
 
 PBXObject* PBXGroup::AddChildImpl(std::unique_ptr<PBXObject> child) {
@@ -673,27 +686,42 @@ PBXObject* PBXGroup::AddChildImpl(std::unique_ptr<PBXObject> child) {
   DCHECK(child->Class() == PBXGroupClass ||
          child->Class() == PBXFileReferenceClass);
 
-  PBXObject* child_ptr = child.get();
-  if (autosorted()) {
-    auto iter = std::lower_bound(children_.begin(), children_.end(), child,
-                                 PBXGroupComparator());
-    children_.insert(iter, std::move(child));
-  } else {
-    children_.push_back(std::move(child));
-  }
-  return child_ptr;
+  auto iter = std::lower_bound(children_.begin(), children_.end(), child,
+                               PBXGroupComparator());
+  return children_.insert(iter, std::move(child))->get();
+}
+
+// PBXMainGroup ---------------------------------------------------------------
+
+PBXMainGroup::PBXMainGroup(const std::string& source_path)
+    : PBXGroup(source_path, std::string()) {}
+
+PBXMainGroup::~PBXMainGroup() = default;
+
+std::string PBXMainGroup::Name() const {
+  return std::string();
+}
+
+// PBXProductsGroup -----------------------------------------------------------
+
+PBXProductsGroup::PBXProductsGroup() : PBXGroup(std::string(), "Products") {}
+
+PBXProductsGroup::~PBXProductsGroup() = default;
+
+bool PBXProductsGroup::SortLast() const {
+  return true;
 }
 
 // PBXNativeTarget ------------------------------------------------------------
 
 PBXNativeTarget::PBXNativeTarget(const std::string& name,
                                  const std::string& shell_script,
-                                 const std::string& config_name,
+                                 const std::vector<std::string>& configs,
                                  const PBXAttributes& attributes,
                                  const std::string& product_type,
                                  const std::string& product_name,
                                  const PBXFileReference* product_reference)
-    : PBXTarget(name, shell_script, config_name, attributes),
+    : PBXTarget(name, shell_script, configs, attributes),
       product_reference_(product_reference),
       product_type_(product_type),
       product_name_(product_name) {
@@ -746,20 +774,15 @@ void PBXNativeTarget::Print(std::ostream& out, unsigned indent) const {
 // PBXProject -----------------------------------------------------------------
 
 PBXProject::PBXProject(const std::string& name,
-                       const std::string& config_name,
+                       std::vector<std::string> configs,
                        const std::string& source_path,
                        const PBXAttributes& attributes)
-    : name_(name), config_name_(config_name), target_for_indexing_(nullptr) {
-  main_group_ = std::make_unique<PBXGroup>();
-  main_group_->set_autosorted(false);
-
-  sources_ = main_group_->CreateChild<PBXGroup>(source_path, "Source");
-  sources_->set_is_source(true);
-
-  products_ = main_group_->CreateChild<PBXGroup>(std::string(), "Products");
+    : name_(name), configs_(std::move(configs)), target_for_indexing_(nullptr) {
+  main_group_ = std::make_unique<PBXMainGroup>(source_path);
+  products_ = main_group_->CreateChild<PBXProductsGroup>();
 
   configurations_ =
-      std::make_unique<XCConfigurationList>(config_name, attributes, this);
+      std::make_unique<XCConfigurationList>(configs_, attributes, this);
 }
 
 PBXProject::~PBXProject() = default;
@@ -777,7 +800,7 @@ void PBXProject::AddSourceFile(const std::string& navigator_path,
                                const std::string& source_path,
                                PBXNativeTarget* target) {
   PBXFileReference* file_reference =
-      sources_->AddSourceFile(navigator_path, source_path);
+      main_group_->AddSourceFile(navigator_path, source_path);
   std::string_view ext = FindExtension(&source_path);
   if (!IsSourceFileForIndexing(ext))
     return;
@@ -787,15 +810,16 @@ void PBXProject::AddSourceFile(const std::string& navigator_path,
 }
 
 void PBXProject::AddAggregateTarget(const std::string& name,
+                                    const std::string& output_dir,
                                     const std::string& shell_script) {
   PBXAttributes attributes;
   attributes["CLANG_ENABLE_OBJC_WEAK"] = "YES";
   attributes["CODE_SIGNING_REQUIRED"] = "NO";
-  attributes["CONFIGURATION_BUILD_DIR"] = ".";
+  attributes["CONFIGURATION_BUILD_DIR"] = output_dir;
   attributes["PRODUCT_NAME"] = name;
 
   targets_.push_back(std::make_unique<PBXAggregateTarget>(
-      name, shell_script, config_name_, attributes));
+      name, shell_script, configs_, attributes));
 }
 
 void PBXProject::AddIndexingTarget() {
@@ -804,7 +828,7 @@ void PBXProject::AddIndexingTarget() {
   attributes["CLANG_ENABLE_OBJC_WEAK"] = "YES";
   attributes["CODE_SIGNING_REQUIRED"] = "NO";
   attributes["EXECUTABLE_PREFIX"] = "";
-  attributes["HEADER_SEARCH_PATHS"] = sources_->path();
+  attributes["HEADER_SEARCH_PATHS"] = main_group_->path();
   attributes["PRODUCT_NAME"] = "sources";
 
   PBXFileReference* product_reference =
@@ -813,8 +837,8 @@ void PBXProject::AddIndexingTarget() {
 
   const char product_type[] = "com.apple.product-type.tool";
   targets_.push_back(std::make_unique<PBXNativeTarget>(
-      "sources", std::string(), config_name_, attributes, product_type,
-      "sources", product_reference));
+      "sources", std::string(), configs_, attributes, product_type, "sources",
+      product_reference));
   target_for_indexing_ = static_cast<PBXNativeTarget*>(targets_.back().get());
 }
 
@@ -851,7 +875,7 @@ PBXNativeTarget* PBXProject::AddNativeTarget(
   attributes["EXCLUDED_SOURCE_FILE_NAMES"] = "*.*";
 
   targets_.push_back(std::make_unique<PBXNativeTarget>(
-      name, shell_script, config_name_, attributes, output_type, product_name,
+      name, shell_script, configs_, attributes, output_type, product_name,
       product));
   return static_cast<PBXNativeTarget*>(targets_.back().get());
 }
@@ -913,6 +937,7 @@ void PBXProject::Print(std::ostream& out, unsigned indent) const {
   PrintProperty(out, rules, "knownRegions",
                 std::vector<std::string>({"en", "Base"}));
   PrintProperty(out, rules, "mainGroup", main_group_);
+  PrintProperty(out, rules, "productRefGroup", products_);
   PrintProperty(out, rules, "projectDirPath", project_dir_path_);
   PrintProperty(out, rules, "projectRoot", project_root_);
   PrintProperty(out, rules, "targets", targets_);
@@ -967,6 +992,7 @@ void PBXShellScriptBuildPhase::Print(std::ostream& out, unsigned indent) const {
   const IndentRules rules = {false, indent + 1};
   out << indent_str << Reference() << " = {\n";
   PrintProperty(out, rules, "isa", ToString(Class()));
+  PrintProperty(out, rules, "alwaysOutOfDate", 1u);
   PrintProperty(out, rules, "buildActionMask", 0x7fffffffu);
   PrintProperty(out, rules, "files", files_);
   PrintProperty(out, rules, "inputPaths", EmptyPBXObjectVector());
@@ -1067,13 +1093,16 @@ void XCBuildConfiguration::Print(std::ostream& out, unsigned indent) const {
 
 // XCConfigurationList --------------------------------------------------------
 
-XCConfigurationList::XCConfigurationList(const std::string& name,
-                                         const PBXAttributes& attributes,
-                                         const PBXObject* owner_reference)
+XCConfigurationList::XCConfigurationList(
+    const std::vector<std::string>& configs,
+    const PBXAttributes& attributes,
+    const PBXObject* owner_reference)
     : owner_reference_(owner_reference) {
   DCHECK(owner_reference_);
-  configurations_.push_back(
-      std::make_unique<XCBuildConfiguration>(name, attributes));
+  for (const std::string& config_name : configs) {
+    configurations_.push_back(
+        std::make_unique<XCBuildConfiguration>(config_name, attributes));
+  }
 }
 
 XCConfigurationList::~XCConfigurationList() = default;
@@ -1110,7 +1139,7 @@ void XCConfigurationList::Print(std::ostream& out, unsigned indent) const {
   out << indent_str << Reference() << " = {\n";
   PrintProperty(out, rules, "isa", ToString(Class()));
   PrintProperty(out, rules, "buildConfigurations", configurations_);
-  PrintProperty(out, rules, "defaultConfigurationIsVisible", 1u);
+  PrintProperty(out, rules, "defaultConfigurationIsVisible", 0u);
   PrintProperty(out, rules, "defaultConfigurationName",
                 configurations_[0]->Name());
   out << indent_str << "};\n";

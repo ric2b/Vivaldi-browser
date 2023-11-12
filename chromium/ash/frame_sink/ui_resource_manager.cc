@@ -27,7 +27,7 @@ UiResourceManager::~UiResourceManager() {
 
 viz::ResourceId UiResourceManager::FindResourceToReuse(
     const gfx::Size& size,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     UiSourceId ui_source_id) const {
   // UiResourceManager is expected to handle a few resources at a given time (
   // less than 30), therefore just using a simple linear search to find the
@@ -124,7 +124,7 @@ viz::TransferableResource UiResourceManager::PrepareResourceForExport(
 
   viz::TransferableResource transferable_resource =
       viz::TransferableResource::MakeGpu(
-          to_be_exported_resource->mailbox, GL_LINEAR, GL_TEXTURE_2D,
+          to_be_exported_resource->mailbox, GL_TEXTURE_2D,
           to_be_exported_resource->sync_token,
           to_be_exported_resource->resource_size,
           to_be_exported_resource->format,

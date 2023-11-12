@@ -18,6 +18,7 @@
 #include "ui/gl/gl_features.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/gl_utils.h"
 
 namespace gl {
 namespace {
@@ -29,7 +30,7 @@ bool g_supports_overlays = false;
 // Whether the GPU can support hardware overlays or not.
 bool g_supports_hardware_overlays = false;
 // Whether the DecodeSwapChain is disabled or not.
-bool g_decode_swap_chain_disabled = false;
+bool g_disable_decode_swap_chain = false;
 // Whether to force the nv12 overlay support.
 bool g_force_nv12_overlay_support = false;
 // Whether software overlays have been disabled.
@@ -382,9 +383,9 @@ void UpdateMonitorInfo() {
 void InitializeDirectComposition(GLDisplayEGL* display) {
   DCHECK(!g_dcomp_device);
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableDirectComposition))
+  if (GetGlWorkarounds().disable_direct_composition) {
     return;
+  }
 
   // Direct composition can only be used with ANGLE.
   if (gl::GetGLImplementation() != gl::kGLImplementationEGLANGLE)
@@ -409,13 +410,6 @@ void InitializeDirectComposition(GLDisplayEGL* display) {
       QueryD3D11DeviceObjectFromANGLE();
   if (!d3d11_device) {
     DLOG(ERROR) << "Failed to retrieve D3D11 device";
-    return;
-  }
-
-  // This will fail if the D3D device is "Microsoft Basic Display Adapter".
-  Microsoft::WRL::ComPtr<ID3D11VideoDevice> video_device;
-  if (FAILED(d3d11_device.As(&video_device))) {
-    DLOG(ERROR) << "Failed to retrieve video device";
     return;
   }
 
@@ -481,12 +475,15 @@ bool DirectCompositionOverlaysSupported() {
   UpdateOverlaySupport();
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  // Enable flag should be checked before the disable flag, so we could
+  // Enable flag should be checked before the disable workaround, so we could
   // overwrite GPU driver bug workarounds in testing.
-  if (command_line->HasSwitch(switches::kEnableDirectCompositionVideoOverlays))
+  if (command_line->HasSwitch(
+          switches::kEnableDirectCompositionVideoOverlays)) {
     return true;
-  if (command_line->HasSwitch(switches::kDisableDirectCompositionVideoOverlays))
+  }
+  if (GetGlWorkarounds().disable_direct_composition_video_overlays) {
     return false;
+  }
 
   return SupportsOverlays();
 }
@@ -497,25 +494,17 @@ bool DirectCompositionHardwareOverlaysSupported() {
 }
 
 bool DirectCompositionDecodeSwapChainSupported() {
-  if (!g_decode_swap_chain_disabled) {
+  if (!g_disable_decode_swap_chain) {
     UpdateOverlaySupport();
     return GetDirectCompositionSDROverlayFormat() == DXGI_FORMAT_NV12;
   }
   return false;
 }
 
-void DisableDirectCompositionDecodeSwapChain() {
-  g_decode_swap_chain_disabled = true;
-}
-
 void DisableDirectCompositionOverlays() {
   SetSupportsOverlays(false);
   DirectCompositionOverlayCapsMonitor::GetInstance()
       ->NotifyOverlayCapsChanged();
-}
-
-void DisableDirectCompositionSoftwareOverlays() {
-  g_disable_sw_overlays = true;
 }
 
 bool DirectCompositionScaledOverlaysSupported() {
@@ -731,6 +720,8 @@ void SetDirectCompositionOverlayWorkarounds(
     const DirectCompositionOverlayWorkarounds& workarounds) {
   // This has to be set before initializing overlay caps.
   DCHECK(!OverlayCapsValid());
+  g_disable_sw_overlays = workarounds.disable_sw_video_overlays;
+  g_disable_decode_swap_chain = workarounds.disable_decode_swap_chain;
   g_enable_bgra8_overlays_with_yuv_overlay_support =
       workarounds.enable_bgra8_overlays_with_yuv_overlay_support;
   g_force_nv12_overlay_support = workarounds.force_nv12_overlay_support;

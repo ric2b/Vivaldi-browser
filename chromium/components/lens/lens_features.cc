@@ -44,11 +44,15 @@ BASE_FEATURE(kLensRegionSearchStaticPage,
 
 BASE_FEATURE(kLensImageFormatOptimizations,
              "LensImageFormatOptimizations",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableContextMenuInLensSidePanel,
              "EnableContextMenuInLensSidePanel",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableLensPing,
+             "EnableLensPing",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 constexpr base::FeatureParam<std::string> kHomepageURLForLens{
     &kLensStandalone, "lens-homepage-url", "https://lens.google.com/"};
@@ -72,19 +76,26 @@ const base::FeatureParam<bool> kLensContextMenuUseAlternateText{
     &kLensSearchOptimizations, "use-lens-context-menu-alternate-text", false};
 
 const base::FeatureParam<bool> kUseWebpInImageSearch{
-    &kLensImageFormatOptimizations, "use-webp-image-search", true};
+    &kLensImageFormatOptimizations, "use-webp-image-search", false};
 
 const base::FeatureParam<int> kEncodingQualityImageSearch{
     &kLensImageFormatOptimizations, "encoding-quality-image-search", 90};
 
 const base::FeatureParam<bool> kUseWebpInRegionSearch{
-    &kLensImageFormatOptimizations, "use-webp-region-search", true};
+    &kLensImageFormatOptimizations, "use-webp-region-search", false};
 
 const base::FeatureParam<bool> kUseJpegInRegionSearch{
-    &kLensImageFormatOptimizations, "use-jpeg-region-search", false};
+    &kLensImageFormatOptimizations, "use-jpeg-region-search", true};
 
 const base::FeatureParam<int> kEncodingQualityRegionSearch{
     &kLensImageFormatOptimizations, "encoding-quality-region-search", 90};
+
+constexpr base::FeatureParam<std::string> kLensPingURL{
+    &kEnableLensPing, "lens-ping-url",
+    "https://lens.google.com/_/LensWebStandaloneUi/gen204/"};
+
+const base::FeatureParam<bool> kPingLensSequentially{
+    &kEnableLensPing, "ping-lens-sequentially", true};
 
 bool GetEnableLatencyLogging() {
   return base::FeatureList::IsEnabled(kEnableLatencyLogging) &&
@@ -164,6 +175,18 @@ int GetRegionSearchEncodingQuality() {
 
 bool GetEnableContextMenuInLensSidePanel() {
   return base::FeatureList::IsEnabled(kEnableContextMenuInLensSidePanel);
+}
+
+bool GetEnableLensPing() {
+  return base::FeatureList::IsEnabled(kEnableLensPing);
+}
+
+std::string GetLensPingURL() {
+  return kLensPingURL.Get();
+}
+
+bool GetLensPingIsSequential() {
+  return kPingLensSequentially.Get();
 }
 
 }  // namespace features

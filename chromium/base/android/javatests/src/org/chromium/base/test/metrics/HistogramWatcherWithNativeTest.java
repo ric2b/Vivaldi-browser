@@ -54,6 +54,18 @@ public class HistogramWatcherWithNativeTest extends HistogramWatcherTestBase {
 
     @Test
     @MediumTest
+    public void testExtraRecordAllowedAny_success() {
+        doTestExtraRecordAllowedAny_success(TestScenario.WITH_NATIVE);
+    }
+
+    @Test
+    @MediumTest
+    public void testExtraRecordAllowedAny_failure() {
+        doTestExtraRecordAllowedAny_failure(TestScenario.WITH_NATIVE);
+    }
+
+    @Test
+    @MediumTest
     public void testMissingRecord_failure() {
         doTestMissingLastRecord_failure(TestScenario.WITH_NATIVE);
     }
@@ -98,6 +110,18 @@ public class HistogramWatcherWithNativeTest extends HistogramWatcherTestBase {
     @MediumTest
     public void testIgnoreOtherHistograms_success() {
         doTestIgnoreOtherHistograms_success(TestScenario.WITH_NATIVE);
+    }
+
+    @Test
+    @MediumTest
+    public void testExpectIntRecords_success() {
+        doTestExpectIntRecords_success(TestScenario.WITH_NATIVE);
+    }
+
+    @Test
+    @MediumTest
+    public void testExpectIntRecords_failure() {
+        doTestExpectIntRecords_failure(TestScenario.WITH_NATIVE);
     }
 
     @Test

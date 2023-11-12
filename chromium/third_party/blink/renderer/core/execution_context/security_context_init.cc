@@ -200,14 +200,16 @@ void SecurityContextInit::ApplyPermissionsPolicy(
         std::move(permissions_policy));
   } else {
     std::unique_ptr<PermissionsPolicy> permissions_policy;
-    if (frame.IsInFencedFrameTree()) {
+    if (frame.IsFencedFrameRoot()) {
       // Fenced frames have a list of required permission policies to load and
       // can't be granted extra policies, so use the required policies instead
       // of inheriting from its parent. Note that the parent policies must allow
       // the required policies, which is checked separately in
       // NavigationRequest::CheckPermissionsPoliciesForFencedFrames.
       permissions_policy = PermissionsPolicy::CreateForFencedFrame(
-          origin, frame.GetFencedFrameMode().value());
+          origin,
+          /*is_opaque_ads_mode=*/frame.GetDeprecatedFencedFrameMode().value() ==
+              blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds);
     } else {
       auto* parent_permissions_policy = frame.Tree().Parent()
                                             ? frame.Tree()

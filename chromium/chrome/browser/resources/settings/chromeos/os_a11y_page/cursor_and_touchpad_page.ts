@@ -17,6 +17,7 @@ import '../../controls/settings_toggle_button.js';
 import '../../settings_shared.css.js';
 import 'chrome://resources/cr_components/localized_link/localized_link.js';
 
+import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
@@ -24,10 +25,9 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsToggleButtonElement} from '../../controls/settings_toggle_button.js';
-import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
-import {PrefsMixin} from '../../prefs/prefs_mixin.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
 import {DevicePageBrowserProxy, DevicePageBrowserProxyImpl} from '../device_page/device_page_browser_proxy.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {routes} from '../os_settings_routes.js';
 import {RouteOriginMixin} from '../route_origin_mixin.js';
 import {Route, Router} from '../router.js';
@@ -42,7 +42,7 @@ interface Option {
   value: number;
 }
 
-interface SettingsCursorAndTouchpadPageElement {
+export interface SettingsCursorAndTouchpadPageElement {
   $: {
     pointerSubpageButton: CrLinkRowElement,
   };
@@ -52,7 +52,7 @@ const SettingsCursorAndTouchpadPageElementBase =
     DeepLinkingMixin(RouteOriginMixin(
         PrefsMixin(WebUiListenerMixin(I18nMixin(PolymerElement)))));
 
-class SettingsCursorAndTouchpadPageElement extends
+export class SettingsCursorAndTouchpadPageElement extends
     SettingsCursorAndTouchpadPageElementBase {
   static get is() {
     return 'settings-cursor-and-touchpad-page';
@@ -384,7 +384,7 @@ class SettingsCursorAndTouchpadPageElement extends
   }
 
 
-  private onMouseTap_(): void {
+  private onMouseClick_(): void {
     Router.getInstance().navigateTo(
         routes.POINTERS,
         /* dynamicParams= */ undefined, /* removeSearch= */ true);

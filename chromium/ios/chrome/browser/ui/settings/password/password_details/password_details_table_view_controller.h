@@ -19,10 +19,7 @@
     : AutofillEditTableViewController <PasswordDetailsConsumer>
 
 // The designated initializer.
-// `syncingUserEmail` stores the user email if the user is authenticated and
-// syncing passwords.
-- (instancetype)initWithSyncingUserEmail:(NSString*)syncingUserEmail
-    NS_DESIGNATED_INITIALIZER;
+- (instancetype)init;
 
 - (instancetype)initWithStyle:(UITableViewStyle)style NS_UNAVAILABLE;
 
@@ -48,6 +45,9 @@
 
 // Shows the password details in edit mode without requiring any authentication.
 - (void)showEditViewWithoutAuthentication;
+
+// Setup the cancel button on the navigation's left bar button.
+- (void)setupLeftCancelButton;
 
 @end
 

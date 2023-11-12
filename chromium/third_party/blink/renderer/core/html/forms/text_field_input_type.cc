@@ -45,7 +45,7 @@
 #include "third_party/blink/renderer/core/html/forms/text_control_inner_elements.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#include "third_party/blink/renderer/core/layout/layout_object_factory.h"
+#include "third_party/blink/renderer/core/layout/ng/layout_ng_text_control_single_line.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
@@ -127,6 +127,9 @@ InputType::ValueMode TextFieldInputType::GetValueMode() const {
 }
 
 SpinButtonElement* TextFieldInputType::GetSpinButtonElement() const {
+  if (!HasCreatedShadowSubtree()) {
+    return nullptr;
+  }
   auto* element = GetElement().UserAgentShadowRoot()->getElementById(
       shadow_element_names::kIdSpinButton);
   CHECK(!element || IsA<SpinButtonElement>(element));
@@ -296,10 +299,8 @@ void TextFieldInputType::AdjustStyle(ComputedStyleBuilder& builder) {
 }
 
 LayoutObject* TextFieldInputType::CreateLayoutObject(
-    const ComputedStyle& style,
-    LegacyLayout legacy) const {
-  return LayoutObjectFactory::CreateTextControlSingleLine(GetElement(), style,
-                                                          legacy);
+    const ComputedStyle&) const {
+  return MakeGarbageCollected<LayoutNGTextControlSingleLine>(&GetElement());
 }
 
 ControlPart TextFieldInputType::AutoAppearance() const {
@@ -353,7 +354,7 @@ void TextFieldInputType::CreateShadowSubtree() {
 }
 
 Element* TextFieldInputType::ContainerElement() const {
-  return GetElement().UserAgentShadowRoot()->getElementById(
+  return GetElement().EnsureShadowSubtree()->getElementById(
       shadow_element_names::kIdTextFieldContainer);
 }
 
@@ -364,6 +365,9 @@ void TextFieldInputType::DestroyShadowSubtree() {
 }
 
 void TextFieldInputType::ListAttributeTargetChanged() {
+  if (!HasCreatedShadowSubtree()) {
+    return;
+  }
   if (ChromeClient* chrome_client = GetChromeClient())
     chrome_client->TextFieldDataListChanged(GetElement());
   Element* picker = GetElement().UserAgentShadowRoot()->getElementById(
@@ -417,10 +421,16 @@ void TextFieldInputType::DisabledOrReadonlyAttributeChanged() {
 }
 
 void TextFieldInputType::DisabledAttributeChanged() {
+  if (!HasCreatedShadowSubtree()) {
+    return;
+  }
   DisabledOrReadonlyAttributeChanged();
 }
 
 void TextFieldInputType::ReadonlyAttributeChanged() {
+  if (!HasCreatedShadowSubtree()) {
+    return;
+  }
   DisabledOrReadonlyAttributeChanged();
 }
 
@@ -529,6 +539,7 @@ void TextFieldInputType::UpdatePlaceholderText(bool is_suggested_value) {
     return;
   }
   if (!placeholder) {
+    GetElement().EnsureShadowSubtree();
     auto* new_element =
         MakeGarbageCollected<HTMLDivElement>(GetElement().GetDocument());
     placeholder = new_element;

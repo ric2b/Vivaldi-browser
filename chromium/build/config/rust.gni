@@ -15,27 +15,28 @@ declare_args() {
   # Whether to allow Rust code to be part of the Chromium *build process*.
   # This can be used to create Rust test binaries, even if the flag below
   # is false.
-  enable_rust = false
+  # This only applies to Chromium itself, so the build_with_chromium check
+  # should not be removed.
+  # TODO(crbug.com/1386212): Mac
+  # TODO(crbug.com/1271215): Windows
+  # TODO(crbug.com/1426472): use_clang_coverage
+  # TODO(crbug.com/1427362): using_sanitizer
+  # TODO(crbug.com/1427364): target_cpu != "x86"
+  # There is no specific bug for !is_official_build or other platforms, since
+  # this is just a matter of rolling things out slowly and carefully and there
+  # may be no actual bugs there.
+  enable_rust = (is_linux || is_android) && !is_official_build &&
+                !using_sanitizer && target_cpu != "x86" &&
+                !use_clang_coverage && is_clang && build_with_chromium
 
-  # Individual Rust components.
-  #
-  # The base::JSONReader implementation.
-  enable_rust_json = true
+  # As we incrementally enable Rust on mainstream builders, we want to enable
+  # the toolchain (by switching 'enable_rust' to true) while still disabling
+  # almost all Rust features). Yet we still want to have some builders with
+  # all Rust features enabled.
+  enable_all_rust_features = false
 
-  # Support for chrome://crash-rust to check crash dump collection works.
-  enable_rust_crash = true
-
-  # Use experimental Rust toolchain built in-tree. See //tools/rust. For now,
-  # only use it for linux targets. The package only has prebuilt libs for linux.
-  # More targets will be added later.
-  #
-  # Ideally this should check `current_os` so that e.g. Android builds will use
-  # the Android toolchain for target artifacts and the Chromium Rust toolchain
-  # for host artifacts. Currently there is an std mixup in //build/rust/std that
-  # prevents this.
-  #
-  # TODO(https://crbug.com/1245714): fix std handling and check `current_os`.
-  use_chromium_rust_toolchain = target_os == "linux" && host_os == "linux"
+  # Use the Rust toolchain built in-tree. See //tools/rust.
+  use_chromium_rust_toolchain = true
 
   # Build libstd locally with GN and use that instead of the prebuilts, where
   # applicable. If this is false the prebuilt libstd will always be used. If
@@ -51,16 +52,20 @@ declare_args() {
   # <home dir>/.rustup/toolchains/nightly-<something>-<something>
   rust_sysroot_absolute = ""
 
+  # If you're using an external Rust toolchain, set this to a Rust
+  # the output of rustc -V.
+  rustc_version = ""
+
   # If you're using a Rust toolchain as specified by rust_sysroot_absolute,
   # you can specify whether it supports nacl here.
   rust_toolchain_supports_nacl = false
 
   # Any extra std rlibs in your Rust toolchain, relative to the standard
-  # Rust toolchain. Typically used with 'use_unverified_rust_toolchain' = true
+  # Rust toolchain. Typically used with 'rust_sysroot_absolute'
   added_rust_stdlib_libs = []
 
   # Any removed std rlibs in your Rust toolchain, relative to the standard
-  # Rust toolchain. Typically used with 'use_unverified_rust_toolchain' = true
+  # Rust toolchain. Typically used with 'rust_sysroot_absolute'
   removed_rust_stdlib_libs = []
 
   # Non-rlib libs provided in the toolchain sysroot. Usually this is empty, but
@@ -78,14 +83,48 @@ declare_args() {
   host_toolchain_no_sanitizers = host_toolchain
 }
 
+declare_args() {
+  # Use a separate declare_args so these variables' defaults can depend on the
+  # ones above.
+
+  # When true, uses the locally-built std in all Rust targets.
+  #
+  # As an internal implementation detail this can be overridden on specific
+  # targets (e.g. to run build.rs scripts while building std), but this
+  # generally should not be done.
+  use_local_std_by_default = enable_local_libstd && use_chromium_rust_toolchain
+
+  # Individual Rust components.
+
+  # Conversions between Rust types and C++ types.
+  enable_rust_base_conversions = enable_all_rust_features
+
+  # The base::JSONReader implementation. Requires base conversions.
+  enable_rust_json = enable_all_rust_features
+
+  # Support for chrome://crash-rust to check crash dump collection works.
+  enable_rust_crash = enable_all_rust_features
+
+  # Support for Rust mojo bindings.
+  enable_rust_mojo = enable_all_rust_features
+
+  # Support for the 'gnrt' Rust tool.
+  enable_rust_gnrt = enable_all_rust_features
+
+  # Rust gtest interop
+  enable_rust_gtest_interop = enable_all_rust_features
+
+  # Enable Boringssl Rust bindings generation
+  enable_rust_boringssl = enable_all_rust_features
+}
+
 # Platform support for "official" toolchains (Android or Chromium)
 android_toolchain_supports_platform =
     (!is_nacl &&
      (is_android && (current_cpu == "arm" || current_cpu == "arm64" ||
                      current_cpu == "x64" || current_cpu == "x86"))) ||
     (is_linux && current_cpu == "x64")
-chromium_toolchain_supports_platform =
-    !is_nacl && is_linux && current_cpu == "x64"
+chromium_toolchain_supports_platform = !is_nacl
 custom_toolchain_supports_platform = !is_nacl || rust_toolchain_supports_nacl
 
 toolchain_has_rust =
@@ -98,12 +137,14 @@ toolchain_has_rust =
 # (so e.g. rust targets are rebuilt, and the standard library is re-copied when
 # the toolchain changes). It is left empty for custom toolchains.
 rustc_revision = ""
-if (toolchain_has_rust && rust_sysroot_absolute == "") {
+if (toolchain_has_rust) {
   if (use_chromium_rust_toolchain) {
     update_rust_args = [ "--print-package-version" ]
     rustc_revision = exec_script("//tools/rust/update_rust.py",
                                  update_rust_args,
                                  "trim string")
+  } else if (rust_sysroot_absolute != "") {
+    rustc_revision = rustc_version
   } else {
     # Android toolchain version.
     rustc_revision = "rustc 1.64.0-dev (Android Rust Toolchain version 9099361)"
@@ -126,12 +167,6 @@ if (enable_rust) {
     rust_sysroot = get_path_info(rust_sysroot_absolute, "abspath")
     use_unverified_rust_toolchain = true
   } else if (use_chromium_rust_toolchain) {
-    if (host_os != "linux") {
-      assert(
-          false,
-          "Attempt to use Chromium Rust toolchain on an unsupported platform")
-    }
-
     rust_sysroot = "//third_party/rust-toolchain"
     use_unverified_rust_toolchain = false
   } else {
@@ -158,7 +193,7 @@ if (enable_rust) {
 # (see '*_toolchain_supports_platform above') to enable experimentation with
 # other toolchains.
 rust_abi_target = ""
-if (is_linux) {
+if (is_linux || is_chromeos) {
   cpu = current_cpu
   if (cpu == "arm64") {
     cpu = "aarch64"
@@ -198,8 +233,22 @@ if (is_linux) {
   } else {
     assert(false, "Architecture not supported")
   }
+} else if (is_mac) {
+  if (current_cpu == "arm64") {
+    rust_abi_target = "aarch64-apple-darwin"
+  } else if (current_cpu == "x64") {
+    rust_abi_target = "x86_64-apple-darwin"
+  } else {
+    assert(false, "Architecture not supported")
+  }
 } else if (is_win) {
-  rust_abi_target = "x86_64-pc-windows-msvc"
+  if (current_cpu == "arm64") {
+    rust_abi_target = "aarch64-pc-windows-msvc"
+  } else if (current_cpu == "x86" || current_cpu == "x64") {
+    rust_abi_target = "x86_64-pc-windows-msvc"
+  } else {
+    assert(false, "Architecture not supported")
+  }
 }
 
 assert(!toolchain_has_rust || rust_abi_target != "")
@@ -228,8 +277,19 @@ if (current_cpu == "x86") {
 
 assert(!toolchain_has_rust || rust_target_arch != "")
 
+# Must use Chromium Rust toolchain to get precisely matching LLVM versions
+# in order to enable LTO. Some say that LTO probably works if LLVM is "close
+# enough", but we don't want to take that risk.
+assert(!use_thin_lto || !enable_rust || use_chromium_rust_toolchain ||
+           use_unverified_rust_toolchain,
+       "Must use Chromium Rust toolchain for LTO")
+
 # Determine whether the local libstd can and should be built.
 local_libstd_supported = enable_local_libstd && use_chromium_rust_toolchain
+
+# Determine whether the prebuilt libstd can be used
+prebuilt_libstd_supported = !use_chromium_rust_toolchain ||
+                            (target_os == "linux" && target_cpu == "x64")
 
 # Arguments for Rust invocation.
 # This is common between gcc/clang, Mac and Windows toolchains so specify once,

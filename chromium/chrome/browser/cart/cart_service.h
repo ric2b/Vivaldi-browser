@@ -4,6 +4,7 @@
 #ifndef CHROME_BROWSER_CART_CART_SERVICE_H_
 #define CHROME_BROWSER_CART_CART_SERVICE_H_
 
+#include "base/containers/flat_map.h"
 #include "base/functional/callback_helpers.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -68,7 +69,7 @@ class CartService : public history::HistoryServiceObserver,
   // Load the cart for a domain.
   void LoadCart(const std::string& domain, CartDB::LoadCallback callback);
   // Load all active carts in this service.
-  void LoadAllActiveCarts(CartDB::LoadCallback callback);
+  virtual void LoadAllActiveCarts(CartDB::LoadCallback callback);
   // Add a cart to the cart service.
   void AddCart(const GURL& navigation_url,
                const absl::optional<GURL>& cart_url,
@@ -164,6 +165,8 @@ class CartService : public history::HistoryServiceObserver,
   // returns the result in the callback.
   virtual void HasActiveCartForURL(const GURL& url,
                                    base::OnceCallback<void(bool)> callback);
+  // Checks if the cart feature is enabled based on user's setting.
+  virtual bool IsCartEnabled();
 
  private:
   friend class CartServiceFactory;
@@ -255,6 +258,7 @@ class CartService : public history::HistoryServiceObserver,
       base::OnceCallback<void(bool)> callback,
       bool success,
       std::vector<CartDB::KeyAndValue> proto_pairs);
+  void MaybeCommitDeletion(GURL url);
 
   raw_ptr<Profile> profile_;
   std::unique_ptr<CartDB> cart_db_;
@@ -272,6 +276,8 @@ class CartService : public history::HistoryServiceObserver,
   raw_ptr<CouponService> coupon_service_;
   PrefChangeRegistrar pref_change_registrar_;
   raw_ptr<commerce::ShoppingService, DanglingUntriaged> shopping_service_;
+  base::flat_map<std::string, cart_db::ChromeCartContentProto>
+      pending_deletion_map_;
   base::WeakPtrFactory<CartService> weak_ptr_factory_{this};
 };
 

@@ -58,8 +58,8 @@ ThemePrivateAPI::~ThemePrivateAPI() {}
 ExtensionFunction::ResponseAction ThemePrivateExportFunction::Run() {
   using extensions::vivaldi::theme_private::Export::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   theme_object_ = base::Value(params->theme.ToValue());
   std::string error;
@@ -130,8 +130,8 @@ void ThemePrivateExportFunction::SendResult(std::vector<uint8_t> dataBlob,
 ExtensionFunction::ResponseAction ThemePrivateImportFunction::Run() {
   using extensions::vivaldi::theme_private::Import::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   StartImport(std::move(params->options.data_blob));
   return RespondLater();
@@ -224,8 +224,8 @@ void ThemePrivateDownloadFunction::DownloadCompleted(
 ExtensionFunction::ResponseAction ThemePrivateDownloadFunction::Run() {
   using extensions::vivaldi::theme_private::Download::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   GURL url(params->url);
 
@@ -256,8 +256,8 @@ ExtensionFunction::ResponseAction ThemePrivateGetThemeDataFunction::Run() {
   using extensions::vivaldi::theme_private::GetThemeData::Params;
   namespace Results = vivaldi::theme_private::GetThemeData::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   PrefService* prefs = profile->GetPrefs();

@@ -130,6 +130,11 @@ void FakeCrosHealthd::SetProbeTelemetryInfoResponseForTesting(
   telemetry_response_info_.Swap(&response_info);
 }
 
+void FakeCrosHealthd::SetIsEventSupportedResponseForTesting(
+    mojom::SupportStatusPtr& result) {
+  is_event_supported_response_.Swap(&result);
+}
+
 void FakeCrosHealthd::SetProbeProcessInfoResponseForTesting(
     mojom::ProcessResultPtr& result) {
   process_response_.Swap(&result);
@@ -167,6 +172,16 @@ void FakeCrosHealthd::EmitEventForCategory(mojom::EventCategoryEnum category,
   for (auto& observer : it->second) {
     observer->OnEvent(info.Clone());
   }
+}
+
+mojo::RemoteSet<mojom::EventObserver>* FakeCrosHealthd::GetObserversByCategory(
+    mojom::EventCategoryEnum category) {
+  auto it = event_observers_.find(category);
+  if (it == event_observers_.end()) {
+    return nullptr;
+  }
+
+  return &it->second;
 }
 
 void FakeCrosHealthd::EmitConnectionStateChangedEventForTesting(
@@ -366,15 +381,7 @@ void FakeCrosHealthd::RunFloatingPointAccuracyRoutine(
 void FakeCrosHealthd::DEPRECATED_RunNvmeWearLevelRoutine(
     uint32_t wear_level_threshold,
     RunNvmeWearLevelRoutineCallback callback) {
-  actual_passed_parameters_.clear();
-  actual_passed_parameters_.Set("wear_level_threshold",
-                                static_cast<int>(wear_level_threshold));
-
-  last_run_routine_ = mojom::DiagnosticRoutineEnum::kNvmeWearLevel;
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(std::move(callback), run_routine_response_.Clone()),
-      callback_delay_);
+  NOTREACHED();
 }
 
 void FakeCrosHealthd::RunNvmeWearLevelRoutine(
@@ -697,17 +704,17 @@ void FakeCrosHealthd::RunBluetoothPairingRoutine(
   std::move(callback).Run(run_routine_response_.Clone());
 }
 
-void FakeCrosHealthd::AddBluetoothObserver(
+void FakeCrosHealthd::DEPRECATED_AddBluetoothObserver(
     mojo::PendingRemote<mojom::CrosHealthdBluetoothObserver> observer) {
   NOTREACHED();
 }
 
-void FakeCrosHealthd::AddLidObserver(
+void FakeCrosHealthd::DEPRECATED_AddLidObserver(
     mojo::PendingRemote<mojom::CrosHealthdLidObserver> observer) {
   NOTREACHED();
 }
 
-void FakeCrosHealthd::AddPowerObserver(
+void FakeCrosHealthd::DEPRECATED_AddPowerObserver(
     mojo::PendingRemote<mojom::CrosHealthdPowerObserver> observer) {
   NOTREACHED();
 }
@@ -718,17 +725,17 @@ void FakeCrosHealthd::AddNetworkObserver(
   network_observers_.Add(std::move(observer));
 }
 
-void FakeCrosHealthd::AddAudioObserver(
+void FakeCrosHealthd::DEPRECATED_AddAudioObserver(
     mojo::PendingRemote<mojom::CrosHealthdAudioObserver> observer) {
   NOTREACHED();
 }
 
-void FakeCrosHealthd::AddThunderboltObserver(
+void FakeCrosHealthd::DEPRECATED_AddThunderboltObserver(
     mojo::PendingRemote<mojom::CrosHealthdThunderboltObserver> observer) {
   NOTREACHED();
 }
 
-void FakeCrosHealthd::AddUsbObserver(
+void FakeCrosHealthd::DEPRECATED_AddUsbObserver(
     mojo::PendingRemote<mojom::CrosHealthdUsbObserver> observer) {
   NOTREACHED();
 }
@@ -744,6 +751,12 @@ void FakeCrosHealthd::AddEventObserver(
   }
 
   it->second.Add(std::move(observer));
+}
+
+void FakeCrosHealthd::IsEventSupported(
+    ash::cros_healthd::mojom::EventCategoryEnum category,
+    IsEventSupportedCallback callback) {
+  std::move(callback).Run(is_event_supported_response_.Clone());
 }
 
 void FakeCrosHealthd::ProbeTelemetryInfo(

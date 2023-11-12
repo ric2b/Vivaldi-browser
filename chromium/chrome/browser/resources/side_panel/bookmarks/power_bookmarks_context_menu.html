@@ -1,8 +1,6 @@
 <style include="cr-icons cr-hidden-style">
-  iron-icon {
-    --icon-size: 16px;
-    height: var(--icon-size);
-    width: var(--icon-size);
+  hr {
+    border: var(--cr-hairline);
   }
 
   .dropdown-item {
@@ -15,10 +13,9 @@
       items="[[getMenuItemsForBookmarks_(
                    bookmarks_, priceTracked_, priceTrackingEligible_)]]">
     <template is="dom-if" if="[[!showDivider_(item)]]" restamp>
-      <button class="dropdown-item" on-click="onMenuItemClicked_">
+      <button class="dropdown-item" on-click="onMenuItemClicked_"
+          disabled="[[item.disabled]]">
         [[item.label]]
-        <iron-icon icon="[[item.trailingIcon]]"
-            hidden="[[!item.trailingIcon]]"></iron-icon>
       </button>
     </template>
     <template is="dom-if" if="[[showDivider_(item)]]" restamp>

@@ -20,10 +20,12 @@ import '../settings_scheduler_slider/settings_scheduler_slider.js';
 import '../../controls/settings_slider.js';
 import '../../settings_shared.css.js';
 import '../../settings_vars.css.js';
-import '../../controls/settings_dropdown_menu.js';
+import '/shared/settings/controls/settings_dropdown_menu.js';
 import 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 
+import {DropdownMenuOptionList} from '/shared/settings/controls/settings_dropdown_menu.js';
+import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import {CrSliderElement, SliderTick} from 'chrome://resources/cr_elements/cr_slider/cr_slider.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
@@ -32,12 +34,10 @@ import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {flush, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {DropdownMenuOptionList} from '../../controls/settings_dropdown_menu.js';
 import {SettingsSliderElement} from '../../controls/settings_slider.js';
-import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
-import {PrefsMixin} from '../../prefs/prefs_mixin.js';
 import {assertExists, cast, castExists} from '../assert_extras.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route} from '../router.js';
@@ -1083,7 +1083,7 @@ class SettingsDisplayElement extends SettingsDisplayElementBase {
   /**
    * Handles event when a touch calibration option is selected.
    */
-  private onTouchCalibrationTap_() {
+  private onTouchCalibrationClick_() {
     getDisplayApi().showNativeTouchCalibration(this.selectedDisplay!.id);
   }
 
@@ -1229,7 +1229,7 @@ class SettingsDisplayElement extends SettingsDisplayElementBase {
         .then(() => this.setPropertiesCallback_());
   }
 
-  private onMirroredTap_(event: Event) {
+  private onMirroredClick_(event: Event) {
     // Blur the control so that when the transition animation completes and
     // the UI is focused, the control does not receive focus. crbug.com/785070
     (event.currentTarget as CrCheckboxElement).blur();
@@ -1246,7 +1246,7 @@ class SettingsDisplayElement extends SettingsDisplayElementBase {
     });
   }
 
-  private onUnifiedDesktopTap_() {
+  private onUnifiedDesktopClick_() {
     const properties: DisplayProperties = {
       isUnified: !this.unifiedDesktopMode_,
     };
@@ -1255,7 +1255,7 @@ class SettingsDisplayElement extends SettingsDisplayElementBase {
         .then(() => this.setPropertiesCallback_());
   }
 
-  private onOverscanTap_(e: Event) {
+  private onOverscanClick_(e: Event) {
     e.preventDefault();
     this.overscanDisplayId = this.selectedDisplay!.id;
     this.showOverscanDialog_(true);

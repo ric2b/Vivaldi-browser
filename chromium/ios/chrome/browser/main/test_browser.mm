@@ -6,7 +6,7 @@
 
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser_observer.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 
@@ -64,4 +64,20 @@ base::WeakPtr<Browser> TestBrowser::AsWeakPtr() {
 
 bool TestBrowser::IsInactive() const {
   return false;
+}
+
+Browser* TestBrowser::GetActiveBrowser() {
+  return this;
+}
+
+Browser* TestBrowser::GetInactiveBrowser() {
+  return nullptr;
+}
+
+Browser* TestBrowser::CreateInactiveBrowser() {
+  NOTREACHED_NORETURN();
+}
+
+void TestBrowser::DestroyInactiveBrowser() {
+  NOTREACHED_NORETURN();
 }

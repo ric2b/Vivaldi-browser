@@ -48,6 +48,7 @@
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/services/screen_ai/buildflags/buildflags.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "components/translate/core/browser/translate_pref_names.h"
@@ -86,7 +87,7 @@
 #include "components/account_manager_core/pref_names.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
-#include "ui/chromeos/events/pref_names.h"
+#include "ui/events/ash/pref_names.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_CHROMEOS_ASH)
@@ -182,6 +183,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[autofill::prefs::kAutofillCreditCardFidoAuthEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  (*s_allowlist)[autofill::prefs::kAutofillPaymentMethodsMandatoryReauth] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#endif
   (*s_allowlist)[payments::kCanMakePaymentEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[bookmarks::prefs::kShowBookmarkBar] =
@@ -257,7 +262,11 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kMostRecentlyUsedNetworkFileShareURL] =
       settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[drive::prefs::kDriveFsBulkPinningEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 #endif
+  (*s_allowlist)[::prefs::kDownloadBubblePartialViewEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Miscellaneous. TODO(stevenjb): categorize.
   (*s_allowlist)[::prefs::kEnableDoNotTrack] =
@@ -402,7 +411,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
 
   // Files page.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  (*s_allowlist)[::prefs::kOfficeFilesAlwaysMove] =
+  (*s_allowlist)[::prefs::kOfficeFilesAlwaysMoveToDrive] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[::prefs::kOfficeFilesAlwaysMoveToOneDrive] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 #endif
 
@@ -491,6 +502,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kLiveCaptionLanguageCode] =
       settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[::prefs::kLiveTranslateEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[::prefs::kLiveTranslateTargetLanguageCode] =
+      settings_api::PrefType::PREF_TYPE_STRING;
 #endif
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   (*s_allowlist)[::prefs::kAccessibilityPdfOcrAlwaysActive] =
@@ -533,6 +548,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kAccessibilityAutoclickMovementThreshold] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::prefs::kAccessibilityColorFiltering] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kAccessibilityGreyscaleAmount] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::prefs::kAccessibilitySaturationAmount] =
@@ -540,6 +557,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[ash::prefs::kAccessibilitySepiaAmount] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::prefs::kAccessibilityHueRotationAmount] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::prefs::kAccessibilityColorVisionCorrectionAmount] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::prefs::kAccessibilityColorVisionDeficiencyType] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::prefs::kShouldAlwaysShowAccessibilityMenu] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -716,6 +737,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::ambient::prefs::kAmbientModeAnimationPlaybackSpeed] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::ambient::prefs::kAmbientModeRunningDurationMinutes] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Google Assistant.
   (*s_allowlist)[ash::assistant::prefs::kAssistantConsentStatus] =
@@ -842,21 +865,21 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_LIST;
 
   // Device settings.
-  (*s_allowlist)[::prefs::kTapToClickEnabled] =
+  (*s_allowlist)[ash::prefs::kTapToClickEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kNaturalScroll] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kTouchpadSensitivity] =
+  (*s_allowlist)[ash::prefs::kTouchpadSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
-  (*s_allowlist)[::prefs::kTouchpadScrollSensitivity] =
+  (*s_allowlist)[ash::prefs::kTouchpadScrollSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
-  (*s_allowlist)[::prefs::kTouchpadHapticFeedback] =
+  (*s_allowlist)[ash::prefs::kTouchpadHapticFeedback] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kTouchpadHapticClickSensitivity] =
+  (*s_allowlist)[ash::prefs::kTouchpadHapticClickSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::prefs::kPrimaryMouseButtonRight] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kPrimaryPointingStickButtonRight] =
+  (*s_allowlist)[ash::prefs::kPrimaryPointingStickButtonRight] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kMouseReverseScroll] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -864,17 +887,17 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kMouseScrollAcceleration] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kPointingStickAcceleration] =
+  (*s_allowlist)[ash::prefs::kPointingStickAcceleration] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kTouchpadAcceleration] =
+  (*s_allowlist)[ash::prefs::kTouchpadAcceleration] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kTouchpadScrollAcceleration] =
+  (*s_allowlist)[ash::prefs::kTouchpadScrollAcceleration] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kMouseSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::prefs::kMouseScrollSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
-  (*s_allowlist)[::prefs::kPointingStickSensitivity] =
+  (*s_allowlist)[ash::prefs::kPointingStickSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[::prefs::kLanguageRemapSearchKeyTo] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
@@ -895,6 +918,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[::prefs::kLanguageRemapExternalMetaKeyTo] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[::ash::prefs::kSendFunctionKeys] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[::ash::prefs::kLongPressDiacriticsEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::ash::prefs::kXkbAutoRepeatEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;

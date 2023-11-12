@@ -53,7 +53,9 @@ def build_preload_images_js(outdir):
             re.search(r'in_app_images\s*=\s*(\[.*?\])', f.read(),
                       re.DOTALL).group(1))
     with tempfile.NamedTemporaryFile('w') as f:
-        f.writelines(asset + '\n' for asset in in_app_images)
+        f.writelines(
+            os.path.abspath(f'images/{asset}') + '\n'
+            for asset in in_app_images)
         f.flush()
         cmd = [
             'utils/gen_preload_images_js.py',
@@ -104,18 +106,51 @@ def get_tsc_paths(board):
     root_dir = get_chromium_root()
     target_gen_dir = os.path.join(root_dir, f'out_{board}/Release/gen')
 
-    cca_root = os.getcwd()
-    src_relative_dir = os.path.relpath(cca_root, root_dir)
-
-    webui_dir = os.path.join(target_gen_dir, src_relative_dir,
-                             'js/mojom-webui/*')
     resources_dir = os.path.join(target_gen_dir, 'ui/webui/resources/tsc/*')
 
+    lit_d_ts = os.path.join(
+        root_dir, 'third_party/material_web_components/lit_exports.d.ts')
+
     return {
-        '/mojom-webui/*': [os.path.relpath(webui_dir)],
         '//resources/*': [os.path.relpath(resources_dir)],
         'chrome://resources/*': [os.path.relpath(resources_dir)],
+        'chrome://resources/mwc/lit/index.js': [os.path.relpath(lit_d_ts)],
     }
+
+
+def make_mojom_symlink(board):
+    cca_root = os.getcwd()
+    root_dir = get_chromium_root()
+    target_gen_dir = os.path.join(root_dir, f'out_{board}/Release/gen')
+    src_relative_dir = os.path.relpath(cca_root, root_dir)
+    generated_mojom_dir = os.path.join(target_gen_dir, src_relative_dir,
+                                       'mojom')
+    target = os.path.join(cca_root, 'mojom')
+
+    if os.path.islink(target):
+        if os.readlink(target) != generated_mojom_dir:
+            # There's a symlink here that's not pointing to the correct path.
+            # This might happen when changing board. Remove the symlink and
+            # recreate in this case.
+            os.remove(target)
+            os.symlink(generated_mojom_dir, target)
+    elif os.path.exists(target):
+        # Some other things are at the mojom path. cca.py won't work in
+        # this case.
+        raise Exception("resources/mojom exists but not a symlink."
+                        " Please remove it and try again.")
+    else:
+        os.symlink(generated_mojom_dir, target)
+
+
+def get_tsc_references(board):
+    root_dir = get_chromium_root()
+    target_gen_dir = os.path.join(root_dir, f'out_{board}/Release/gen')
+    mwc_tsconfig_path = os.path.join(
+        target_gen_dir,
+        'third_party/material_web_components/tsconfig_library.json')
+
+    return [{'path': os.path.relpath(mwc_tsconfig_path)}]
 
 
 def generate_tsconfig(board):
@@ -126,13 +161,28 @@ def generate_tsconfig(board):
     root_dir = get_chromium_root()
     common_definitions = os.path.join(root_dir, 'tools/typescript/definitions')
 
+    target_gen_dir = os.path.join(root_dir, f'out_{board}/Release/gen')
+    assert os.path.exists(target_gen_dir), (
+        f"Failed to find the build output dir {target_gen_dir}."
+        " Please check the board name and build Chrome once.")
+
     with open(os.path.join(cca_root, 'tsconfig_base.json')) as f:
         tsconfig = json.load(f)
 
+    make_mojom_symlink(board)
+
     tsconfig['files'] = glob.glob('js/**/*.ts', recursive=True)
     tsconfig['files'].append(os.path.join(common_definitions, 'pending.d.ts'))
+    tsconfig['compilerOptions']['rootDir'] = cca_root
     tsconfig['compilerOptions']['noEmit'] = True
     tsconfig['compilerOptions']['paths'] = get_tsc_paths(board)
+    # TODO(b:269971867): Remove this once we have type definition for ffmpeg.js
+    tsconfig['compilerOptions']['allowJs'] = True
+    tsconfig['compilerOptions']['plugins'] = [{
+        "name": "ts-lit-plugin",
+        "strict": True
+    }]
+    tsconfig['references'] = get_tsc_references(board)
 
     with open(os.path.join(cca_root, 'tsconfig.json'), 'w') as f:
         json.dump(tsconfig, f)
@@ -155,7 +205,7 @@ def deploy(args):
     run_node([
         'typescript/bin/tsc',
         '--outDir',
-        js_out_dir,
+        DEPLOY_OUTPUT_TEMP_DIR,
         '--noEmit',
         'false',
         # Makes compilation faster
@@ -253,6 +303,10 @@ def lint(args):
         run_node(cmd)
     except subprocess.CalledProcessError as e:
         print('ESLint check failed, return code =', e.returncode)
+    # TODO(pihsun): Add lit-analyzer to the check. It's not included in the
+    # chrome source tree and can be manually installed with `npm install -g
+    # lit-analyzer ts-lit-plugin`. Maybe this can be added as an optional check
+    # for now?
 
 
 def tsc(args):
@@ -366,8 +420,8 @@ def check_strings(args):
             unused_ids.append(id)
 
         if len(unused_ids) > 0:
-            print(f'The following strings are defined in i18n_string.ts but \
-unused. Please remove them:')
+            print('The following strings are defined in i18n_string.ts but '
+                  'unused. Please remove them:')
             for id in unused_ids:
                 print(f'    {id}')
             returncode = 1

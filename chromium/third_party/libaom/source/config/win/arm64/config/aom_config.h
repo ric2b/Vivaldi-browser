@@ -34,7 +34,7 @@
 #define CONFIG_ENTROPY_STATS 0
 #define CONFIG_EXCLUDE_SIMD_MISMATCH 0
 #define CONFIG_FPMT_TEST 0
-#define CONFIG_GCC 0
+#define CONFIG_GCC  0
 #define CONFIG_GCOV 0
 #define CONFIG_GPROF 0
 #define CONFIG_INSPECTION 0
@@ -57,6 +57,7 @@
 #define CONFIG_REALTIME_ONLY 1
 #define CONFIG_RT_ML_PARTITIONING 0
 #define CONFIG_RUNTIME_CPU_DETECT 0
+#define CONFIG_SALIENCY_MAP 0
 #define CONFIG_SHARED 0
 #define CONFIG_SIZE_LIMIT 1
 #define CONFIG_SPATIAL_RESAMPLING 1
@@ -75,16 +76,16 @@
 #define HAVE_FEXCEPT 1
 #define HAVE_MMX 0
 #define HAVE_NEON 1
-#define HAVE_PTHREAD_H 0
+#define HAVE_PTHREAD_H  0
 #define HAVE_SSE 0
 #define HAVE_SSE2 0
 #define HAVE_SSE3 0
 #define HAVE_SSE4_1 0
 #define HAVE_SSE4_2 0
 #define HAVE_SSSE3 0
-#define HAVE_UNISTD_H 0
+#define HAVE_UNISTD_H  0
 #define HAVE_VSX 0
 #define HAVE_WXWIDGETS 0
-#define INLINE __inline
+#define INLINE  __inline
 #define STATIC_LINK_JXL 0
 #endif  // AOM_CONFIG_H_

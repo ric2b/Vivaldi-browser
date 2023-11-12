@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Avatud kaardid</translation>
 <translation id="1829244130665387512">Otsi leheküljelt</translation>
 <translation id="1910514478706885609">Ava uues kaardivirnas</translation>
+<translation id="1925021887439448749">Sisesta kohandatud veebiaadress</translation>
 <translation id="2038563949887743358">Lülita saitide arvutiversiooni taotlemine sisse</translation>
 <translation id="2139186145475833000">Avakuvale lisamine</translation>
+<translation id="2149973817440762519">Muuda järjehoidjat</translation>
 <translation id="2306442503286132111">Järjehoidja salvestatud kausta „<ph name="FOLDER_NAME" />”</translation>
 <translation id="2433507940547922241">Välimus</translation>
 <translation id="2501278716633472235">Mine tagasi</translation>
 <translation id="2633278372998075009">Privaatsed kaardid</translation>
+<translation id="2951071800649516099">Lugemisnimekirja saab lisada lehti, mida hiljem lugeda</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> järjehoidja}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> järjehoidjat}}</translation>
@@ -36,6 +39,7 @@
 
 Puute peale otsimise funktsioon on saadaval vaid siis, kui Vivaldi vaikimisi otsingumootor on Google.</translation>
 <translation id="4759238208242260848">Allalaadimised</translation>
+<translation id="4850886885716139402">Näita</translation>
 <translation id="4883379392681899581">Välju privaatsest režiimist</translation>
 <translation id="4943872375798546930">Tulemusi pole</translation>
 <translation id="49576331685473090">Sisublokeerija</translation>
@@ -48,7 +52,9 @@ Puute peale otsimise funktsioon on saadaval vaid siis, kui Vivaldi vaikimisi ots
 Otsimiseks puuduta pikalt mõnd sõna. Otsingu täpsustamiseks libista paneel täiesti üles ja puuduta otsingukasti.</translation>
 <translation id="572328651809341494">Viimatised kaardid</translation>
 <translation id="6150320133806434356">Järjehoidja lisatud</translation>
+<translation id="6301525844455696527">Lugemisnimekirja on üht-teist kogunenud</translation>
 <translation id="6336451774241870485">Uus privaatne kaart</translation>
+<translation id="6404511346730675251">Järjehoidja muutmine</translation>
 <translation id="6585139692466700358">Pakutakse teistes keeltes sisu tõlkimist Vivaldi tõlketeenuse abil</translation>
 <translation id="6593061639179217415">Saidi arvutiversioon</translation>
 <translation id="6610147964972079463">Sulge privaatsed kaardid</translation>
@@ -57,9 +63,15 @@ Otsimiseks puuduta pikalt mõnd sõna. Otsingu täpsustamiseks libista paneel t�
 <translation id="732145680195464316">Järjehoidja salvestatud <ph name="PRODUCT_NAME" />s</translation>
 <translation id="7427132068601343474">Teave Vivaldi kohta</translation>
 <translation id="7465104139234185284">Sulge kõik privaatsed kaardid</translation>
+<translation id="7481312909269577407">Edasi</translation>
+<translation id="7583262514280211622">Lugemisnimekirjas pole veel midagi.</translation>
+<translation id="7968014550143838305">Lisati lugemisnimekirja</translation>
 <translation id="804786196054284061">Tarkvara litsentsileping</translation>
+<translation id="8127542551745560481">Kodulehe muutmine</translation>
+<translation id="8560602726703398413">Lugemisnimekirja leiad järjehoidjate alt.</translation>
 <translation id="85991616550051997">Mine kodulehele</translation>
 <translation id="8820817407110198400">Järjehoidjad</translation>
 <translation id="9063523880881406963">Lülita saitide arvutiversiooni taotlemine välja</translation>
 <translation id="9080642952018487277">Sisene privaatsesse režiimi</translation>
+<translation id="96681097142096641">Kas näidata lehte lihtsustatud kujul?</translation>
 </translationbundle>

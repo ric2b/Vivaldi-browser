@@ -31,8 +31,6 @@
 #include "base/functional/identity.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_base.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/one_shot_event.h"
 #include "base/ranges/algorithm.h"
@@ -60,7 +58,6 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/web_app_dialog_manager.h"
-#include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_ui_manager_impl.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
@@ -77,18 +74,17 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
-#include "chrome/common/extensions/extension_constants.h"
 #include "components/content_settings/core/browser/content_settings_type_set.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/services/app_service/public/cpp/run_on_os_login_types.h"
 #include "components/services/app_service/public/cpp/share_target.h"
-#include "components/services/app_service/public/cpp/shortcut.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/clear_site_data_utils.h"
 #include "content/public/browser/render_frame_host.h"
@@ -114,6 +110,7 @@
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
 #include "chrome/common/chrome_features.h"
+#include "chromeos/constants/chromeos_features.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -136,6 +133,8 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/lacros/lacros_service.h"
 #endif
 
@@ -259,6 +258,7 @@ apps::InstallSource GetInstallSource(
     case webapps::WebappInstallSource::CHROME_SERVICE:
     case webapps::WebappInstallSource::KIOSK:
     case webapps::WebappInstallSource::MICROSOFT_365_SETUP:
+    case webapps::WebappInstallSource::PROFILE_MENU:
       return apps::InstallSource::kBrowser;
     case webapps::WebappInstallSource::ARC:
       return apps::InstallSource::kPlayStore;
@@ -273,6 +273,34 @@ apps::InstallSource GetInstallSource(
     case webapps::WebappInstallSource::COUNT:
       NOTREACHED();
       return apps::InstallSource::kUnknown;
+  }
+}
+
+apps::Readiness ConvertWebappUninstallSourceToReadiness(
+    webapps::WebappUninstallSource source) {
+  switch (source) {
+    case webapps::WebappUninstallSource::kUnknown:
+    case webapps::WebappUninstallSource::kAppMenu:
+    case webapps::WebappUninstallSource::kAppsPage:
+    case webapps::WebappUninstallSource::kOsSettings:
+    case webapps::WebappUninstallSource::kSync:
+    case webapps::WebappUninstallSource::kAppManagement:
+    case webapps::WebappUninstallSource::kAppList:
+    case webapps::WebappUninstallSource::kShelf:
+    case webapps::WebappUninstallSource::kPlaceholderReplacement:
+    case webapps::WebappUninstallSource::kArc:
+    case webapps::WebappUninstallSource::kSubApp:
+    case webapps::WebappUninstallSource::kStartupCleanup:
+    case webapps::WebappUninstallSource::kParentUninstall:
+    case webapps::WebappUninstallSource::kTestCleanup:
+      return apps::Readiness::kUninstalledByUser;
+    case webapps::WebappUninstallSource::kMigration:
+    case webapps::WebappUninstallSource::kInternalPreinstalled:
+    case webapps::WebappUninstallSource::kExternalPreinstalled:
+    case webapps::WebappUninstallSource::kExternalPolicy:
+    case webapps::WebappUninstallSource::kSystemPreinstalled:
+    case webapps::WebappUninstallSource::kExternalLockScreen:
+      return apps::Readiness::kUninstalledByNonUser;
   }
 }
 
@@ -584,8 +612,7 @@ apps::IntentFilters WebAppPublisherHelper::CreateIntentFiltersForWebApp(
   }
 
 #if BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(
-          features::kMicrosoftOfficeWebAppExperiment)) {
+  if (chromeos::features::IsUploadOfficeToCloudEnabled()) {
     for (const char* scope_extension :
          ChromeOsWebAppExperiments::GetScopeExtensions(app_id)) {
       filters.push_back(
@@ -633,9 +660,8 @@ apps::AppPtr WebAppPublisherHelper::CreateWebApp(const WebApp* web_app) {
       app_type(), web_app->app_id(), readiness,
       provider_->registrar_unsafe().GetAppShortName(web_app->app_id()),
       GetHighestPriorityInstallReason(web_app),
-      GetInstallSource(
-          provider_->registrar_unsafe().GetAppInstallSourceForMetrics(
-              web_app->app_id())));
+      GetInstallSource(provider_->registrar_unsafe().GetLatestAppInstallSource(
+          web_app->app_id())));
 
   app->description =
       provider_->registrar_unsafe().GetAppDescription(web_app->app_id());
@@ -731,12 +757,11 @@ apps::AppPtr WebAppPublisherHelper::CreateWebApp(const WebApp* web_app) {
 }
 
 apps::AppPtr WebAppPublisherHelper::ConvertUninstalledWebApp(
-    const WebApp* web_app) {
-  auto app = std::make_unique<apps::App>(app_type(), web_app->app_id());
-  // TODO(loyso): Plumb uninstall source (reason) here.
-  app->readiness = apps::Readiness::kUninstalledByUser;
+    const AppId& app_id,
+    webapps::WebappUninstallSource uninstall_source) {
+  auto app = std::make_unique<apps::App>(app_type(), app_id);
+  app->readiness = ConvertWebappUninstallSourceToReadiness(uninstall_source);
 
-  SetWebAppShowInFields(web_app, *app);
   return app;
 }
 
@@ -776,16 +801,17 @@ void WebAppPublisherHelper::UninstallWebApp(
   constexpr bool kClearCache = true;
   constexpr bool kAvoidClosingConnections = false;
 
-  content::ClearSiteData(base::BindRepeating(
-                             [](content::BrowserContext* browser_context) {
-                               return browser_context;
-                             },
-                             base::Unretained(profile())),
-                         origin, kClearCookies, kClearStorage, kClearCache,
-                         /*storage_buckets_to_remove=*/{},
-                         kAvoidClosingConnections,
-                         /*cookie_partition_key=*/absl::nullopt,
-                         /*storage_key=*/absl::nullopt, base::DoNothing());
+  content::ClearSiteData(
+      base::BindRepeating(
+          [](content::BrowserContext* browser_context) {
+            return browser_context;
+          },
+          base::Unretained(profile())),
+      origin, kClearCookies, kClearStorage, kClearCache,
+      /*storage_buckets_to_remove=*/{}, kAvoidClosingConnections,
+      /*cookie_partition_key=*/absl::nullopt,
+      /*storage_key=*/absl::nullopt,
+      /*partitioned_state_allowed_only=*/false, base::DoNothing());
 }
 
 void WebAppPublisherHelper::SetIconEffect(const std::string& app_id) {
@@ -878,54 +904,6 @@ void WebAppPublisherHelper::Launch(
   if (!web_app) {
     std::move(on_complete).Run(nullptr);
     return;
-  }
-
-  switch (launch_source) {
-    case apps::LaunchSource::kUnknown:
-    case apps::LaunchSource::kFromParentalControls:
-      break;
-    case apps::LaunchSource::kFromAppListGrid:
-    case apps::LaunchSource::kFromAppListGridContextMenu:
-      UMA_HISTOGRAM_ENUMERATION("Extensions.AppLaunch",
-                                extension_misc::APP_LAUNCH_APP_LIST_MAIN,
-                                extension_misc::APP_LAUNCH_BUCKET_BOUNDARY);
-
-      break;
-    case apps::LaunchSource::kFromAppListQuery:
-    case apps::LaunchSource::kFromAppListQueryContextMenu:
-      UMA_HISTOGRAM_ENUMERATION("Extensions.AppLaunch",
-                                extension_misc::APP_LAUNCH_APP_LIST_SEARCH,
-                                extension_misc::APP_LAUNCH_BUCKET_BOUNDARY);
-      break;
-    case apps::LaunchSource::kFromAppListRecommendation:
-    case apps::LaunchSource::kFromShelf:
-    case apps::LaunchSource::kFromFileManager:
-    case apps::LaunchSource::kFromLink:
-    case apps::LaunchSource::kFromOmnibox:
-    case apps::LaunchSource::kFromChromeInternal:
-    case apps::LaunchSource::kFromKeyboard:
-    case apps::LaunchSource::kFromOtherApp:
-    case apps::LaunchSource::kFromMenu:
-    case apps::LaunchSource::kFromInstalledNotification:
-    case apps::LaunchSource::kFromTest:
-    case apps::LaunchSource::kFromArc:
-    case apps::LaunchSource::kFromSharesheet:
-    case apps::LaunchSource::kFromReleaseNotesNotification:
-    case apps::LaunchSource::kFromFullRestore:
-    case apps::LaunchSource::kFromSmartTextContextMenu:
-    case apps::LaunchSource::kFromDiscoverTabNotification:
-    case apps::LaunchSource::kFromManagementApi:
-    case apps::LaunchSource::kFromKiosk:
-    case apps::LaunchSource::kFromCommandLine:
-    case apps::LaunchSource::kFromBackgroundMode:
-    case apps::LaunchSource::kFromNewTabPage:
-    case apps::LaunchSource::kFromIntentUrl:
-    case apps::LaunchSource::kFromOsLogin:
-    case apps::LaunchSource::kFromProtocolHandler:
-    case apps::LaunchSource::kFromUrlHandler:
-    case apps::LaunchSource::kFromLockScreen:
-    case apps::LaunchSource::kFromAppHomePage:
-      break;
   }
 
   DisplayMode display_mode = registrar().GetAppEffectiveDisplayMode(app_id);
@@ -1024,6 +1002,14 @@ void WebAppPublisherHelper::LaunchAppWithParams(
     return;
   }
 
+  apps::AppLaunchParams params_for_restore(
+      params.app_id, params.container, params.disposition, params.override_url,
+      params.launch_source, params.display_id, params.launch_files,
+      params.intent);
+
+  bool is_system_web_app = false;
+  absl::optional<GURL> override_url = absl::nullopt;
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Terminal SWA has custom launch code and manages its own restore data.
   if (params.app_id == guest_os::kTerminalSystemAppId) {
@@ -1032,54 +1018,63 @@ void WebAppPublisherHelper::LaunchAppWithParams(
     return;
   }
 
-  apps::AppLaunchParams params_for_restore(
-      params.app_id, params.container, params.disposition, params.override_url,
-      params.launch_source, params.display_id, params.launch_files,
-      params.intent);
+  auto* swa_manager = ash::SystemWebAppManager::Get(profile());
+  if (swa_manager) {
+    const WebApp* web_app = GetWebApp(params_for_restore.app_id);
+    is_system_web_app = web_app && web_app->IsSystemApp();
+
+    // TODO(crbug.com/1368285): Determine whether override URL can
+    // be restored for all SWAs.
+    auto system_app_type =
+        swa_manager->GetSystemAppTypeForAppId(params_for_restore.app_id);
+    if (system_app_type.has_value()) {
+      auto* system_app = swa_manager->GetSystemApp(*system_app_type);
+      CHECK(system_app);
+      if (system_app->ShouldRestoreOverrideUrl()) {
+        override_url = params.override_url;
+      }
+    }
+  }
 
   // Create the FullRestoreSaveHandler instance before launching the app to
   // observe the browser window.
   full_restore::FullRestoreSaveHandler::GetInstance();
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-  content::WebContents* const web_contents =
-      web_app_launch_manager_->OpenApplication(std::move(params));
+  auto launch_web_app_callback = base::BindOnce(
+      &WebAppPublisherHelper::OnLaunchCompleted, weak_ptr_factory_.GetWeakPtr(),
+      std::move(params_for_restore), is_system_web_app, override_url,
+      std::move(on_complete));
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Save all launch information for system web apps, because the browser
-  // session restore can't restore system web apps.
-  int session_id = apps::GetSessionIdForRestoreFromWebContents(web_contents);
-  auto* swa_manager = ash::SystemWebAppManager::Get(profile());
-  if (swa_manager && SessionID::IsValidValue(session_id)) {
-    const WebApp* web_app = GetWebApp(params_for_restore.app_id);
-    const bool is_system_web_app = web_app && web_app->IsSystemApp();
-    if (is_system_web_app) {
-      std::unique_ptr<app_restore::AppLaunchInfo> launch_info =
-          std::make_unique<app_restore::AppLaunchInfo>(
-              params_for_restore.app_id, session_id,
-              params_for_restore.container, params_for_restore.disposition,
-              params_for_restore.display_id,
-              std::move(params_for_restore.launch_files),
-              std::move(params_for_restore.intent));
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kExperimentalWebAppProfileIsolation)) {
+    WebAppRegistrar& registrar = provider_->registrar_unsafe();
+    const WebApp* web_app = registrar.GetAppById(params.app_id);
+    const auto& chromeos_data = web_app->chromeos_data();
+    if (chromeos_data.has_value() &&
+        chromeos_data->app_profile_path.has_value()) {
+      // Redirect the launch to the app profile.
+      g_browser_process->profile_manager()->LoadProfileByPath(
+          chromeos_data->app_profile_path.value(),
+          /*incognito=*/false,
+          base::BindOnce(
+              [](apps::AppLaunchParams params, LaunchWebAppCallback on_complete,
+                 Profile* profile) {
+                WebAppProvider::GetForWebApps(profile)
+                    ->scheduler()
+                    .LaunchAppWithCustomParams(std::move(params),
+                                               std::move(on_complete));
+              },
+              std::move(params), std::move(launch_web_app_callback)));
 
-      // TODO(crbug.com/1368285): Determine whether override URL can be restored
-      // for all SWAs.
-      auto system_app_type =
-          swa_manager->GetSystemAppTypeForAppId(params_for_restore.app_id);
-      if (system_app_type.has_value()) {
-        auto* system_app = swa_manager->GetSystemApp(*system_app_type);
-        DCHECK(system_app);
-        if (system_app->ShouldRestoreOverrideUrl())
-          launch_info->override_url = params_for_restore.override_url;
-      }
-
-      full_restore::SaveAppLaunchInfo(profile()->GetPath(),
-                                      std::move(launch_info));
+      return;
     }
   }
-#endif
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
-  std::move(on_complete).Run(web_contents);
+  provider_->scheduler().LaunchAppWithCustomParams(
+      std::move(params), std::move(launch_web_app_callback));
 }
 
 void WebAppPublisherHelper::SetPermission(const std::string& app_id,
@@ -1342,12 +1337,9 @@ void WebAppPublisherHelper::OnWebAppManifestUpdated(
   }
 }
 
-void WebAppPublisherHelper::OnWebAppWillBeUninstalled(const AppId& app_id) {
-  const WebApp* web_app = GetWebApp(app_id);
-  if (!web_app) {
-    return;
-  }
-
+void WebAppPublisherHelper::OnWebAppUninstalled(
+    const AppId& app_id,
+    webapps::WebappUninstallSource uninstall_source) {
   paused_apps_.MaybeRemoveApp(app_id);
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -1358,7 +1350,7 @@ void WebAppPublisherHelper::OnWebAppWillBeUninstalled(const AppId& app_id) {
                                           result.microphone);
 #endif
 
-  delegate_->PublishWebApp(ConvertUninstalledWebApp(web_app));
+  delegate_->PublishWebApp(ConvertUninstalledWebApp(app_id, uninstall_source));
 }
 
 void WebAppPublisherHelper::OnWebAppInstallManagerDestroyed() {
@@ -1594,8 +1586,6 @@ void WebAppPublisherHelper::Init(bool observe_media_requests) {
   }
 #endif
 
-  web_app_launch_manager_ = std::make_unique<WebAppLaunchManager>(profile_);
-
 #if BUILDFLAG(IS_CHROMEOS)
   if (observe_media_requests) {
     media_dispatcher_.Observe(MediaCaptureDevicesDispatcher::GetInstance());
@@ -1697,6 +1687,14 @@ std::vector<std::string> WebAppPublisherHelper::GetPolicyIds(
     }
   }
 #endif  // BUIDLFLAG(IS_CHROMEOS_ASH)
+
+  for (const auto& [source, external_config] :
+       web_app.management_to_external_config_map()) {
+    if (!external_config.additional_policy_ids.empty()) {
+      base::ranges::copy(external_config.additional_policy_ids,
+                         std::back_inserter(policy_ids));
+    }
+  }
 
   if (!registrar().HasExternalAppWithInstallSource(
           app_id, ExternalInstallSource::kExternalPolicy)) {
@@ -1902,6 +1900,42 @@ void WebAppPublisherHelper::OnFileHandlerDialogCompleted(
     LaunchAppWithParams(std::move(params_for_file_launch),
                         launch_complete_barrier);
   }
+}
+
+void WebAppPublisherHelper::OnLaunchCompleted(
+    apps::AppLaunchParams params_for_restore,
+    bool is_system_web_app,
+    absl::optional<GURL> override_url,
+    base::OnceCallback<void(content::WebContents*)> on_complete,
+    base::WeakPtr<Browser> browser,
+    base::WeakPtr<content::WebContents> web_contents,
+    apps::LaunchContainer container) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Save all launch information for system web apps, because the
+  // browser session restore can't restore system web apps.
+  int session_id =
+      apps::GetSessionIdForRestoreFromWebContents(web_contents.get());
+  if (SessionID::IsValidValue(session_id)) {
+    if (is_system_web_app) {
+      std::unique_ptr<app_restore::AppLaunchInfo> launch_info =
+          std::make_unique<app_restore::AppLaunchInfo>(
+              params_for_restore.app_id, session_id,
+              params_for_restore.container, params_for_restore.disposition,
+              params_for_restore.display_id,
+              std::move(params_for_restore.launch_files),
+              std::move(params_for_restore.intent));
+
+      if (override_url) {
+        launch_info->override_url = override_url.value();
+      }
+
+      full_restore::SaveAppLaunchInfo(profile()->GetPath(),
+                                      std::move(launch_info));
+    }
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+  std::move(on_complete).Run(web_contents.get());
 }
 
 }  // namespace web_app

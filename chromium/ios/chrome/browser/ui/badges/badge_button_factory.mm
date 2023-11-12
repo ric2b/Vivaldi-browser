@@ -8,12 +8,14 @@
 
 #import "base/notreached.h"
 #import "build/build_config.h"
+#import "components/autofill/core/browser/autofill_save_update_address_profile_delegate_ios.h"
 #import "components/password_manager/core/common/password_manager_features.h"
+#import "ios/chrome/browser/infobars/infobar_ios.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/badges/badge_button.h"
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/badges/badge_delegate.h"
 #import "ios/chrome/browser/ui/badges/badge_overflow_menu_util.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -43,7 +45,8 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 
 @implementation BadgeButtonFactory
 
-- (BadgeButton*)badgeButtonForBadgeType:(BadgeType)badgeType {
+- (BadgeButton*)badgeButtonForBadgeType:(BadgeType)badgeType
+                           usingInfoBar:(InfoBarIOS*)infoBar {
   switch (badgeType) {
     case kBadgeTypePasswordSave:
       return [self passwordsSaveBadgeButton];
@@ -58,7 +61,7 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
     case kBadgeTypeOverflow:
       return [self overflowBadgeButton];
     case kBadgeTypeSaveAddressProfile:
-      return [self saveAddressProfileBadgeButton];
+      return [self saveAddressProfileBadgeButton:infoBar];
     case kBadgeTypePermissionsCamera:
       return [self permissionsCameraBadgeButton];
     case kBadgeTypePermissionsMicrophone:
@@ -80,10 +83,8 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
                                       kInfobarSymbolPointSize);
   }
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypePasswordSave
-                          image:[image imageWithRenderingMode:
-                                           UIImageRenderingModeAlwaysTemplate]];
+  BadgeButton* button = [self createButtonForType:kBadgeTypePasswordSave
+                                            image:image];
   [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -104,10 +105,8 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
                                       kInfobarSymbolPointSize);
   }
 #endif  // BUILDFLAG(IS_IOS_MACCATALYST)
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypePasswordUpdate
-                          image:[image imageWithRenderingMode:
-                                           UIImageRenderingModeAlwaysTemplate]];
+  BadgeButton* button = [self createButtonForType:kBadgeTypePasswordUpdate
+                                            image:image];
   [button addTarget:self.delegate
                 action:@selector(passwordsBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -119,14 +118,10 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 }
 
 - (BadgeButton*)saveCardBadgeButton {
-  UIImage* image;
-  image = UseSymbols() ? DefaultSymbolWithPointSize(kCreditCardSymbol,
-                                                    kInfobarSymbolPointSize)
-                       : [UIImage imageNamed:@"infobar_save_card_icon"];
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypeSaveCard
-                          image:[image imageWithRenderingMode:
-                                           UIImageRenderingModeAlwaysTemplate]];
+  UIImage* image =
+      DefaultSymbolWithPointSize(kCreditCardSymbol, kInfobarSymbolPointSize);
+  BadgeButton* button = [self createButtonForType:kBadgeTypeSaveCard
+                                            image:image];
   [button addTarget:self.delegate
                 action:@selector(saveCardBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -137,14 +132,10 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 }
 
 - (BadgeButton*)translateBadgeButton {
-  UIImage* image;
-  image = UseSymbols() ? CustomSymbolWithPointSize(kTranslateSymbol,
-                                                   kInfobarSymbolPointSize)
-                       : [UIImage imageNamed:@"infobar_translate_icon"];
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypeTranslate
-                          image:[image imageWithRenderingMode:
-                                           UIImageRenderingModeAlwaysTemplate]];
+  UIImage* image =
+      CustomSymbolWithPointSize(kTranslateSymbol, kInfobarSymbolPointSize);
+  BadgeButton* button = [self createButtonForType:kBadgeTypeTranslate
+                                            image:image];
   [button addTarget:self.delegate
                 action:@selector(translateBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];
@@ -167,29 +158,19 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
     button.tintColor =
       [[UIColor colorNamed:kTextPrimaryColor] colorWithAlphaComponent:0.5];
   } else {
-  if (UseSymbols()) {
-    UIImage* image;
-    if (@available(iOS 15, *)) {
-      image = SymbolWithPalette(
-          CustomSymbolWithPointSize(kIncognitoCircleFillSymbol,
-                                    kSymbolIncognitoPointSize),
-          SmallIncognitoPalette());
-    } else {
-      image = [[UIImage imageNamed:@"incognito_badge_ios14"]
-          imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-    }
-    button = [self createButtonForType:kBadgeTypeIncognito image:image];
-    button.fullScreenImage = CustomSymbolTemplateWithPointSize(
-        kIncognitoSymbol, kSymbolIncognitoFullScreenPointSize);
+  UIImage* image;
+  if (@available(iOS 15, *)) {
+    image =
+        SymbolWithPalette(CustomSymbolWithPointSize(kIncognitoCircleFillSymbol,
+                                                    kSymbolIncognitoPointSize),
+                          SmallIncognitoPalette());
   } else {
-    button =
-        [self createButtonForType:kBadgeTypeIncognito
-                            image:[[UIImage imageNamed:@"incognito_badge"]
-                                      imageWithRenderingMode:
-                                          UIImageRenderingModeAlwaysOriginal]];
-    button.fullScreenImage = [[UIImage imageNamed:@"incognito_small_badge"]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    image = [[UIImage imageNamed:@"incognito_badge_ios14"]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
   }
+  button = [self createButtonForType:kBadgeTypeIncognito image:image];
+  button.fullScreenImage = CustomSymbolTemplateWithPointSize(
+      kIncognitoSymbol, kSymbolIncognitoFullScreenPointSize);
 
   button.tintColor = [UIColor colorNamed:kTextPrimaryColor];
   } // End Vivaldi
@@ -203,66 +184,62 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 }
 
 - (BadgeButton*)overflowBadgeButton {
-  UIImage* image = UseSymbols()
-                       ? DefaultSymbolWithPointSize(kEllipsisCircleFillSymbol,
-                                                    kInfobarSymbolPointSize)
-                       : [UIImage imageNamed:@"wrench_badge"];
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypeOverflow
-                          image:[image imageWithRenderingMode:
-                                           UIImageRenderingModeAlwaysTemplate]];
+  UIImage* image = DefaultSymbolWithPointSize(kEllipsisCircleFillSymbol,
+                                              kInfobarSymbolPointSize);
+  BadgeButton* button = [self createButtonForType:kBadgeTypeOverflow
+                                            image:image];
   button.accessibilityIdentifier = kBadgeButtonOverflowAccessibilityIdentifier;
   button.accessibilityLabel =
       l10n_util::GetNSString(IDS_IOS_OVERFLOW_BADGE_HINT);
 
   // Configure new overflow popup menu if enabled.
-  if (UseSymbols()) {
-    button.showsMenuAsPrimaryAction = YES;
+  button.showsMenuAsPrimaryAction = YES;
 
-    // Adds an empty menu so the event triggers the first time.
-    button.menu = [UIMenu menuWithChildren:@[]];
-    [button removeActionForIdentifier:kOverflowPopupMenuActionIdentifier
-                     forControlEvents:UIControlEventMenuActionTriggered];
+  // Adds an empty menu so the event triggers the first time.
+  button.menu = [UIMenu menuWithChildren:@[]];
+  [button removeActionForIdentifier:kOverflowPopupMenuActionIdentifier
+                   forControlEvents:UIControlEventMenuActionTriggered];
 
-    // Configure actions that should be executed on each tap of the overflow
-    // badge button to make sure the right overflow menu items are showing up.
-    __weak UIButton* weakButton = button;
-    __weak BadgeButtonFactory* weakSelf = self;
-    void (^showModalFunction)(BadgeType) = ^(BadgeType badgeType) {
-      [weakSelf.delegate showModalForBadgeType:badgeType];
-    };
-    void (^buttonTapHandler)(UIAction*) = ^(UIAction* action) {
-      [weakSelf.delegate overflowBadgeButtonTapped:weakButton];
-      weakButton.menu = GetOverflowMenuFromBadgeTypes(
-          weakSelf.delegate.badgeTypesForOverflowMenu, showModalFunction);
-    };
-    UIAction* action =
-        [UIAction actionWithTitle:@""
-                            image:nil
-                       identifier:kOverflowPopupMenuActionIdentifier
-                          handler:buttonTapHandler];
+  // Configure actions that should be executed on each tap of the overflow
+  // badge button to make sure the right overflow menu items are showing up.
+  __weak UIButton* weakButton = button;
+  __weak BadgeButtonFactory* weakSelf = self;
+  void (^showModalFunction)(BadgeType) = ^(BadgeType badgeType) {
+    [weakSelf.delegate showModalForBadgeType:badgeType];
+  };
+  void (^buttonTapHandler)(UIAction*) = ^(UIAction* action) {
+    [weakSelf.delegate overflowBadgeButtonTapped:weakButton];
+    weakButton.menu = GetOverflowMenuFromBadgeTypes(
+        weakSelf.delegate.badgeTypesForOverflowMenu, showModalFunction);
+  };
+  UIAction* action =
+      [UIAction actionWithTitle:@""
+                          image:nil
+                     identifier:kOverflowPopupMenuActionIdentifier
+                        handler:buttonTapHandler];
 
-    // Attach the action to the button.
-    [button addAction:action
-        forControlEvents:UIControlEventMenuActionTriggered];
-  } else {
-    [button addTarget:self.delegate
-                  action:@selector(overflowBadgeButtonTapped:)
-        forControlEvents:UIControlEventTouchUpInside];
-  }
+  // Attach the action to the button.
+  [button addAction:action forControlEvents:UIControlEventMenuActionTriggered];
   return button;
 }
 
-- (BadgeButton*)saveAddressProfileBadgeButton {
-  UIImage* image;
-  image = UseSymbols() ? CustomSymbolWithPointSize(kLocationFillSymbol,
-                                                   kInfobarSymbolPointSize)
-                       : [UIImage imageNamed:@"ic_place"];
+- (BadgeButton*)saveAddressProfileBadgeButton:(InfoBarIOS*)infoBar {
+  UIImage* image =
+      CustomSymbolWithPointSize(kLocationFillSymbol, kInfobarSymbolPointSize);
 
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypeSaveAddressProfile
-                          image:[image imageWithRenderingMode:
-                                           UIImageRenderingModeAlwaysTemplate]];
+  if (infoBar) {
+    autofill::AutofillSaveUpdateAddressProfileDelegateIOS* delegate =
+        static_cast<autofill::AutofillSaveUpdateAddressProfileDelegateIOS*>(
+            infoBar->delegate());
+    CHECK(delegate);
+    if (delegate->IsMigrationToAccount()) {
+      image = CustomSymbolWithPointSize(kCloudAndArrowUpSymbol,
+                                        kInfobarSymbolPointSize);
+    }
+  }
+
+  BadgeButton* button = [self createButtonForType:kBadgeTypeSaveAddressProfile
+                                            image:image];
   [button addTarget:self.delegate
                 action:@selector(saveAddressProfileBadgeButtonTapped:)
       forControlEvents:UIControlEventTouchUpInside];

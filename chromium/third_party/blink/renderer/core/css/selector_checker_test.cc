@@ -120,6 +120,26 @@ ScopeProximityTestData scope_proximity_test_data[] = {
       )CSS",
       3
     },
+
+    // @scope(.a) creates two scopes, but the selector only matches in the
+    // outermost scope.
+    {
+      R"HTML(
+        <div class=b>
+          <div class=a>
+            <div class=a>
+              <div id=target></div>
+            </div>
+          </div>
+        </div>
+      )HTML",
+      R"CSS(
+        @scope (.a) {
+          .b > :scope #target { z-index: 1; }
+        }
+      )CSS",
+      2
+    },
     // clang-format on
 };
 
@@ -160,7 +180,6 @@ TEST_P(ScopeProximityTest, All) {
 
   auto* style_rule = DynamicTo<StyleRule>(rule);
   ASSERT_TRUE(style_rule);
-  ASSERT_TRUE(style_rule->FirstSelector()->IsLastInSelectorList());
 
   Element* target = GetDocument().getElementById("target");
   ASSERT_TRUE(target);
@@ -343,7 +362,7 @@ bool EasySelectorCheckerTest::Matches(const String& selector_text,
                                     GetDocument().getElementById(id));
 }
 
-#ifndef NDEBUG  // Requires all_rules_, to find back the rules we add.
+#if DCHECK_IS_ON()  // Requires all_rules_, to find back the rules we add.
 
 // Parse the given selector, buckets it and returns whether it was counted
 // as easy or not.
@@ -353,12 +372,19 @@ bool EasySelectorCheckerTest::IsEasy(const String& selector_text) {
   sheet.AddCSSRules(selector_text + " { }");
   RuleSet& rule_set = sheet.GetRuleSet();
   const HeapVector<RuleData>& rules = rule_set.AllRulesForTest();
-  EXPECT_EQ(1u, rules.size());
-  if (rules.size() != 1) {
-    return false;  // Test will fail anyway.
-  } else {
-    return EasySelectorChecker::IsEasy(&rules.front().Selector());
+
+  wtf_size_t easy_count = 0;
+  for (const RuleData& rule_data : rules) {
+    if (EasySelectorChecker::IsEasy(&rule_data.Selector())) {
+      ++easy_count;
+    }
   }
+
+  // Visited-dependent rules are added twice to the RuleSet. This verifies
+  // that both RuleData objects have the same easy-status.
+  EXPECT_TRUE((easy_count == 0) || (easy_count == rules.size()));
+
+  return easy_count;
 }
 
 TEST_F(EasySelectorCheckerTest, IsEasy) {
@@ -386,7 +412,7 @@ TEST_F(EasySelectorCheckerTest, IsEasy) {
   EXPECT_FALSE(IsEasy(":not(.a)"));
 }
 
-#endif
+#endif  // DCHECK_IS_ON()
 
 TEST_F(EasySelectorCheckerTest, SmokeTest) {
   SetHtmlInnerHTML(
@@ -411,6 +437,51 @@ TEST_F(EasySelectorCheckerTest, SmokeTest) {
   EXPECT_FALSE(Matches("div#a #c.cls1", "b"));
   EXPECT_FALSE(Matches("#c .cls1", "c"));
   EXPECT_FALSE(Matches("div #a .cls1", "c"));
+}
+
+class SelectorCheckerTest : public PageTestBase {};
+
+TEST_F(SelectorCheckerTest, PseudoScopeWithoutScope) {
+  GetDocument().body()->setInnerHTML("<div id=foo></div>");
+  UpdateAllLifecyclePhasesForTest();
+
+  CSSSelectorList* selector_list =
+      css_test_helpers::ParseSelectorList(":scope #foo");
+  ASSERT_TRUE(selector_list);
+  ASSERT_TRUE(selector_list->First());
+
+  Element* foo = GetDocument().getElementById("foo");
+  ASSERT_TRUE(foo);
+
+  SelectorChecker checker(SelectorChecker::kResolvingStyle);
+  SelectorChecker::SelectorCheckingContext context(foo);
+  context.selector = selector_list->First();
+  // We have a selector with :scope, but no context.scope:
+  context.scope = nullptr;
+
+  SelectorChecker::MatchResult result;
+
+  // Don't crash.
+  EXPECT_FALSE(checker.Match(context, result));
+}
+
+TEST_F(SelectorCheckerTest, PseudoTrue) {
+  GetDocument().body()->setInnerHTML("<div id=foo></div>");
+  UpdateAllLifecyclePhasesForTest();
+
+  CSSSelector selector;
+  selector.SetTrue();
+  selector.SetLastInComplexSelector(true);
+
+  Element* foo = GetDocument().getElementById("foo");
+  ASSERT_TRUE(foo);
+
+  SelectorChecker checker(SelectorChecker::kResolvingStyle);
+  SelectorChecker::SelectorCheckingContext context(foo);
+  context.selector = &selector;
+
+  SelectorChecker::MatchResult result;
+  EXPECT_TRUE(checker.Match(context, result));
 }
 
 }  // namespace blink

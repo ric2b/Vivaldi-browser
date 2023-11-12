@@ -35,10 +35,11 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.share.ChromeShareExtras.DetailedContentType;
+import org.chromium.chrome.browser.share.ShareContentTypeHelper.ContentType;
 import org.chromium.chrome.browser.share.link_to_text.LinkToTextCoordinator.LinkGeneration;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetLinkToggleCoordinator.LinkToggleState;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetLinkToggleMetricsHelper.LinkToggleMetricsDetails;
-import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder.ContentType;
+import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
@@ -249,7 +250,8 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
 
         if (contentTypes.contains(ContentType.IMAGE)
                 || contentTypes.contains(ContentType.IMAGE_AND_LINK)) {
-            setImageForPreviewFromUri(mParams.getFileUris().get(0));
+            assert mParams.getImageUriToShare() != null;
+            setImageForPreviewFromUri(mParams.getImageUriToShare());
             if (TextUtils.isEmpty(subtitle)) {
                 subtitle = getFileType(fileContentType);
             }
@@ -518,20 +520,20 @@ class ShareSheetBottomSheetContent implements BottomSheetContent, OnItemClickLis
      */
     private void onFaviconAvailable(@Nullable Bitmap icon, @ColorInt int fallbackColor,
             boolean isColorDefault, @IconType int iconType) {
+        int size = mActivity.getResources().getDimensionPixelSize(
+                R.dimen.sharing_hub_preview_inner_icon_size);
         // If we didn't get a favicon, use the generic favicon instead.
+        Bitmap scaledIcon;
         if (icon == null) {
-            setDefaultIconForPreview(
-                    AppCompatResources.getDrawable(mActivity, R.drawable.generic_favicon));
+            scaledIcon = FaviconUtils.createGenericFaviconBitmap(mActivity, size, null);
             RecordUserAction.record("SharingHubAndroid.GenericFaviconShown");
         } else {
-            int size = mActivity.getResources().getDimensionPixelSize(
-                    R.dimen.sharing_hub_preview_inner_icon_size);
-            Bitmap scaledIcon = Bitmap.createScaledBitmap(icon, size, size, true);
-            ImageView imageView = this.getContentView().findViewById(R.id.image_preview);
-            imageView.setImageBitmap(scaledIcon);
-            centerIcon(imageView);
+            scaledIcon = Bitmap.createScaledBitmap(icon, size, size, true);
             RecordUserAction.record("SharingHubAndroid.LinkFaviconShown");
         }
+        ImageView imageView = this.getContentView().findViewById(R.id.image_preview);
+        imageView.setImageBitmap(scaledIcon);
+        centerIcon(imageView);
     }
 
     private String getFileType(String mimeType) {

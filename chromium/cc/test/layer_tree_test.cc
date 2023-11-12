@@ -427,7 +427,6 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
       bool,
       PaintHoldingReason,
       absl::optional<PaintHoldingCommitTrigger>) override {}
-  void OnPauseRenderingChanged(bool) override {}
   void OnCommitRequested() override {}
 
   void RecordStartOfFrameMetrics() override {}
@@ -715,8 +714,8 @@ LayerTreeTest::LayerTreeTest(viz::RendererType renderer_type)
   if (renderer_type_ == viz::RendererType::kSkiaVk) {
     scoped_feature_list_.InitAndEnableFeature(features::kVulkan);
     init_vulkan = true;
-  } else if (renderer_type_ == viz::RendererType::kSkiaDawn) {
-    scoped_feature_list_.InitAndEnableFeature(features::kSkiaDawn);
+  } else if (renderer_type_ == viz::RendererType::kSkiaGraphite) {
+    scoped_feature_list_.InitAndEnableFeature(features::kSkiaGraphite);
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     init_vulkan = true;
 #elif BUILDFLAG(IS_WIN)

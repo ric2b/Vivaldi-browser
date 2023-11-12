@@ -85,6 +85,7 @@
 <translation id="1722487484194605434">Συμπίεση <ph name="NUMBER_OF_ITEMS" /> στοιχείων...</translation>
 <translation id="1722687688096767818">Προσθήκη προφίλ…</translation>
 <translation id="1726100011689679555">Διακομιστές ονομάτων</translation>
+<translation id="1727562178154619254">Έτοιμο για συγχρονισμό</translation>
 <translation id="1729953886957086472">Γερμανικά (Γερμανίας)</translation>
 <translation id="1730235522912993863">Κινεζικά Cangjie</translation>
 <translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> στοιχεία αντιγράφηκαν.</translation>
@@ -107,7 +108,6 @@
 <translation id="1834290891154666894">Μη έγκυρη εισαγωγή αντιστοιχίας εναλλακτικού ονόματος υποκειμένου</translation>
 <translation id="1838709767668011582">Ιστότοπος Google</translation>
 <translation id="1853795129690976061">Αυτός ο φάκελος χρησιμοποιείται από κοινού με το Linux.</translation>
-<translation id="1859422890169495746">Αυτό το Chromebook</translation>
 <translation id="1864756863218646478">Δεν ήταν δυνατή η εύρεση του αρχείου.</translation>
 <translation id="1884013283844450420">Δίκτυο <ph name="NETWORK_INDEX" /> από <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Σύνδεση</translation>
 <translation id="1920670151694390848">Μεταγραφή στα Μαλαγιαλαμικά</translation>
@@ -120,7 +120,6 @@
 <translation id="1942765061641586207">Ανάλυση εικόνας</translation>
 <translation id="1972984168337863910">Ανάπτυξη πλαισίων σχολίων αρχείων</translation>
 <translation id="1995337122023280937">Μετάβαση στην τοποθεσία αρχείου</translation>
-<translation id="1999709132469742660">Πρόσβαση στο αρχείο για όλα τα URL</translation>
 <translation id="2001796770603320721">Διαχείριση στο Drive</translation>
 <translation id="2009067268969781306">Η διαμόρφωση ενός δίσκου θα διαγράψει όλα τα δεδομένα που έχουν αποθηκευτεί σε αυτόν. Δεν είναι δυνατή η αναίρεση αυτής της ενέργειας.</translation>
 <translation id="2025955442973426285">Τιγκρίνια</translation>
@@ -132,6 +131,7 @@
 <translation id="2084108471225856927">Ρυθμίσεις συσκευής</translation>
 <translation id="2084809735218147718">Άτομο που λέει ευχαριστώ στη νοηματική γλώσσα</translation>
 <translation id="2088690981887365033">Δίκτυο VPN</translation>
+<translation id="2111134541987263231">Ενεργοποιήστε την επιλογή <ph name="BEGIN_BOLD" />Να επιτρέπεται στην ανώνυμη περιήγηση<ph name="END_BOLD" />.</translation>
 <translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> στοιχεία θα διαγραφούν και δεν θα είστε σε θέση να τα επαναφέρετε.</translation>
 <translation id="2122305276694332719">Η αυτόματη σύνδεση σε ένα κρυφό δίκτυο επιτρέπει σε άλλα άτομα να βλέπουν τη συσκευή σας και ορισμένες ρυθμίσεις δικτύου σας και δεν συνιστάται.</translation>
 <translation id="2125607626296734455">Xμερ</translation>
@@ -152,6 +152,7 @@
 <translation id="2236732657580416950">Η κρυφή μνήμη του Google Drive διαγράφηκε.</translation>
 <translation id="2239068707900391003">Άτομο με καφέ</translation>
 <translation id="2251368349685848079">Επαναφορά από τον κάδο</translation>
+<translation id="2278133026967558505">Πρόσβαση στο αρχείο από όλους τους ιστοτόπους και τα URL</translation>
 <translation id="2282155092769082568">Αυτόματη διαμόρφωση URL</translation>
 <translation id="2284767815536050991">αφαιρούμενος αποθηκευτικός χώρος</translation>
 <translation id="2288278176040912387">Πικάπ</translation>
@@ -160,6 +161,7 @@
 <translation id="2304820083631266885">Πλανήτης</translation>
 <translation id="2305020378527873881">Το στοιχείο <ph name="VOLUME_NAME" /> καταργήθηκε.</translation>
 <translation id="2307462900900812319">Διαμόρφωση δικτύου</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{Δεν είναι δυνατός ο εντοπισμός μιας επέκτασης με το αναγνωριστικό <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Επικοινωνήστε με τον διαχειριστή σας.}other{Δεν είναι δυνατός ο εντοπισμός των επεκτάσεων με τα αναγνωριστικά <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Επικοινωνήστε με τον διαχειριστή σας.}}</translation>
 <translation id="2325650632570794183">Αυτός ο τύπος αρχείου δεν υποστηρίζεται. Επισκεφτείτε το Chrome Web Store για να εντοπίσετε μια εφαρμογή που να μπορεί να ανοίξει αυτόν τον τύπο αρχείου.</translation>
 <translation id="2326539130272988168">Βουλγαρικά</translation>
 <translation id="2337715497728194187">Κοινοποίηση στο Bruschetta</translation>
@@ -231,6 +233,7 @@
 <translation id="2923240520113693977">Εσθονικά
 </translation>
 <translation id="2938685643439809023">Μογγολικά</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{Δεν είναι δυνατή η εύρεση της επέκτασης}other{Δεν είναι δυνατή η εύρεση των επεκτάσεων}}</translation>
 <translation id="2943503720238418293">Χρησιμοποιήστε πιο σύντομο όνομα</translation>
 <translation id="2949781154072577687">Μορφοποίηση <ph name="DRIVE_NAME" />…</translation>
 <translation id="2951236788251446349">Μέδουσα</translation>
@@ -277,6 +280,7 @@
 <translation id="3290356915286466215">Μη ασφαλές</translation>
 <translation id="3291218047831493686">Συνδεθείτε σε αυτό το δίκτυο για να αλλάξετε τη ρύθμιση κλειδώματος SIM</translation>
 <translation id="3293023191599135697">Δεν υποστηρίζονται δίκτυα WEP</translation>
+<translation id="3295006446256079333">Αυτός ο τόμος</translation>
 <translation id="3295357220137379386">Η συσκευή εργάζεται</translation>
 <translation id="3296763833017966289">Γεωργιανά
 </translation>
@@ -287,6 +291,7 @@
 <translation id="3356580349448036450">Ολοκληρώθηκε</translation>
 <translation id="3358452157379365236">Κιθάρα</translation>
 <translation id="3368922792935385530">Σε σύνδεση</translation>
+<translation id="3372635229069101468">Κάντε κλικ στο στοιχείο <ph name="BEGIN_BOLD" />Λεπτομέρειες<ph name="END_BOLD" />.</translation>
 <translation id="3382143449143186018">Νεπαλικά με πληκτρολόγιο InScript</translation>
 <translation id="338691029516748599">Δίκτυο <ph name="NETWORK_INDEX" /> από <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, Ισχύς σήματος <ph name="SIGNAL_STRENGTH" />%, Διαχειριζόμενο από τον διαχειριστή σας, Σύνδεση</translation>
 <translation id="3408072735282270043">Ενεργοποίηση, <ph name="NETWORK_NAME" /></translation>
@@ -373,6 +378,7 @@
 <translation id="4124935795427217608">Μονόκερος</translation>
 <translation id="4131235941541910880">Μεταφέρετε τα στοιχεία που δεν θέλετε στον κάδο</translation>
 <translation id="4134804435730168042">Δίκτυο <ph name="NETWORK_INDEX" /> από <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Ενεργοποίηση μετά τη ρύθμιση συσκευής</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{Ενεργοποιήστε την παρακάτω επέκταση στην ανώνυμη περιήγηση:}other{Ενεργοποιήστε τις παρακάτω επεκτάσεις στην ανώνυμη περιήγηση:}}</translation>
 <translation id="4153015322587141338">Κάντε δεξί κλικ σε ένα αρχείο και επιλέξτε <ph name="PIN_COMMAND" /> για γρήγορη πρόσβαση στα αρχεία σας που βρίσκονται στο ράφι.</translation>
 <translation id="4157569377477607576">Η πολιτική διαχειριστή δεν συνιστά:</translation>
 <translation id="4159731583141908892">Το αρχείο <ph name="FILE_NAME" /> μετακινήθηκε.</translation>
@@ -470,13 +476,16 @@
 <translation id="4801956050125744859">Διατήρηση και των δύο</translation>
 <translation id="4804827417948292437">Αβοκάντο</translation>
 <translation id="4805966553127040832">Επαναφορά <ph name="COUNT" /> στοιχείων</translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{Ο οργανισμός σας απαιτεί μια επέκταση για να χρησιμοποιήσετε την ανώνυμη περιήγηση}other{Ο οργανισμός σας απαιτεί ορισμένες επεκτάσεις για να χρησιμοποιήσετε την ανώνυμη περιήγηση.}}</translation>
 <translation id="4823651846660089135">Η συσκευή είναι μόνο για ανάγνωση</translation>
 <translation id="4826849268470072925">Ταμίλ ITRANS</translation>
+<translation id="482932175346970750">Πληκτρολογήστε <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" /> στο πρόγραμμα περιήγησης</translation>
 <translation id="4839847978919684242">Έχουν επιλεγεί <ph name="SELCTED_FILES_COUNT" /> στοιχεία</translation>
 <translation id="4843566743023903107">Chromebase</translation>
 <translation id="4850886885716139402">Προβολή</translation>
 <translation id="485316830061041779">Γερμανικά
 </translation>
+<translation id="4862885579661885411">Ρυθμίσεις αρχείων</translation>
 <translation id="4867079195717347957">Κάντε κλικ για ταξινόμηση της στήλης σε φθίνουσα σειρά.</translation>
 <translation id="4867297348137739678">Τελευταία εβδομάδα</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> byte</translation>
@@ -544,6 +553,7 @@
     σε αρχεία με άλλους χρήστες σε ένα μέρος.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">Ανακτημένα αρχεία από το Google Drive</translation>
 <translation id="5278111733643988471">Για να επαναφέρετε αυτό το στοιχείο, σύρετέ το σε έναν νέο φάκελο εκτός του κάδου. Ο αρχικός φάκελος "<ph name="PARENT_FOLDER_NAME" />" αυτού του στοιχείου έχει διαγραφεί.</translation>
+<translation id="5283101102242354279">Ενεργοποιήστε μια επέκταση στην ανώνυμη περιήγηση:</translation>
 <translation id="5286194356314741248">Σάρωση</translation>
 <translation id="5288441970121584418">Μπέργκερ</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -554,7 +564,6 @@
 <translation id="5323213332664049067">Λατινικής Αμερικής</translation>
 <translation id="5330145655348521461">Αυτά τα αρχεία άνοιξαν σε διαφορετικό προφίλ. Μεταφερθείτε στο προφίλ <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) για να τα δείτε.</translation>
 <translation id="5330512191124428349">Λήψη πληροφοριών</translation>
-<translation id="5337538975554986899">Πρόσβαση στο αρχείο για όλα τα URL εκτός από <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="5344246330454251646">Διαχείριση κοινοποίησης στο Bruschetta</translation>
 <translation id="535792325654997756">Άτομο με γάτες</translation>
 <translation id="5358764674931277">Ρυθμός καρέ</translation>
@@ -628,6 +637,7 @@
 <translation id="5911887972742538906">Παρουσιάστηκε σφάλμα κατά την εγκατάσταση της εφαρμογής σας Linux.</translation>
 <translation id="5912396950572065471">Διαμόρφωση</translation>
 <translation id="5913638992615760742">Αποτυχία λειτουργίας αντιγραφής, μη αναμενόμενο σφάλμα: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">Νέες διαθέσιμες λειτουργίες αναζήτησης</translation>
 <translation id="5926082595146149752">Ολλανδικά (Ολλανδία) με πληκτρολόγιο υπολογιστή Διεθνές ΗΠΑ</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063">Δίκτυο <ph name="NETWORK_INDEX" /> από <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Ενεργοποίηση μετά τη ρύθμιση συσκευής</translation>
@@ -640,6 +650,7 @@
 <translation id="603895874132768835">Δεν θα μπορείτε να χρησιμοποιήσετε αυτό το δίκτυο μέχρι να ρυθμίσετε ένα νέο PIN.</translation>
 <translation id="6040143037577758943">Κλείσιμο</translation>
 <translation id="6055907707645252013">Δίκτυο <ph name="NETWORK_TYPE" />, δεν είναι συνδεδεμένο</translation>
+<translation id="6073060579181816027">Πολλές τοποθεσίες αρχείων</translation>
 <translation id="6074825444536523002">Φόρμα Google</translation>
 <translation id="6079871810119356840">Ουγγρικά με πληκτρολόγιο QWERTY</translation>
 <translation id="6096979789310008754">Έγινε κατάργηση του κειμένου αναζήτησης, εμφανίζονται όλα τα αρχεία και οι φάκελοι.</translation>
@@ -717,6 +728,7 @@
 <translation id="6732801395666424405">Δεν έχουν φορτωθεί τα πιστοποιητικά</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6740270213273127264">Κοινοποίηση φακέλου στο Bruschetta</translation>
+<translation id="6750737795876287924">Τρέχων κατάλογος</translation>
 <translation id="6751256176799620176">Επιλέχθηκε 1 φάκελος</translation>
 <translation id="6755827872271341378">Συσκευή ChromeOS Flex</translation>
 <translation id="6790428901817661496">Αναπαραγωγή</translation>
@@ -755,7 +767,6 @@
 <translation id="6973630695168034713">Φάκελοι</translation>
 <translation id="6976795442547527108">Λιοντάρι</translation>
 <translation id="6979158407327259162">Google Drive</translation>
-<translation id="6979737339423435258">Από την αρχή</translation>
 <translation id="6989942356279143254">Σουηδικά</translation>
 <translation id="6990081529015358884">Δεν υπάρχει ελεύθερος χώρος</translation>
 <translation id="6993826899923627728">Αυτά τα στοιχεία βρίσκονται στον κάδο</translation>
@@ -781,6 +792,7 @@
 <translation id="7162080671816799010">Λείπουν τα στοιχεία Αντιστοιχία εναλλακτικού ονόματος υποκειμένου ή Αντιστοιχία επιθήματος τομέα, για επικύρωση της ταυτότητας διακομιστή ελέγχου ταυτότητας.</translation>
 <translation id="7165320105431587207">Αποτυχία διαμόρφωσης δικτύου</translation>
 <translation id="7170041865419449892">Εκτός εύρους τιμών</translation>
+<translation id="7179579940054351344">Πρόσβαση στο αρχείο από όλους τους ιστοτόπους και τα URL εκτός από <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="7180611975245234373">Ανανέωση</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> GB</translation>
 <translation id="7191454237977785534">Αποθήκευση αρχείου ως</translation>
@@ -790,6 +802,7 @@
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />, Λεπτομέρειες</translation>
 <translation id="7246947237293279874">Διακομιστής μεσολάβησης FTP</translation>
 <translation id="7248671827512403053">Εφαρμογή</translation>
+<translation id="7252604552361840748">Βρείτε την επέκταση παραπάνω</translation>
 <translation id="7256405249507348194">Μη αναγνωρίσιμο σφάλμα: <ph name="DESC" /></translation>
 <translation id="7268659760406822741">Διαθέσιμες υπηρεσίες</translation>
 <translation id="7292816689782057017">Η πολιτική διαχειριστή περιορίζει την αποθήκευση σε ορισμένες τοποθεσίες.</translation>
@@ -812,7 +825,6 @@
 <translation id="7460898608667578234">Ουκρανικά
 </translation>
 <translation id="7469894403370665791">Αυτόματη σύνδεση σε αυτό το δίκτυο</translation>
-<translation id="7481358317100446445">Έτοιμο</translation>
 <translation id="7486315294984620427">Για να αποθέσετε αρχεία στο Parallels Desktop, το αρχείο θα πρέπει να αντιγραφεί στα αρχεία των Windows.</translation>
 <translation id="749452993132003881">Χιραγκάνα</translation>
 <translation id="7495372004724182530">Φωνητική εισαγωγή Μαλαγιαλαμικών</translation>
@@ -960,6 +972,7 @@
 <translation id="8492972329130824181">Το οικιακό δίκτυο δεν είναι διαθέσιμο. Για να συνδεθείτε, πρέπει να ενεργοποιήσετε την περιαγωγή δεδομένων κινητής τηλεφωνίας.</translation>
 <translation id="8499098729323186194">Εξαγωγή <ph name="NUMBER_OF_ITEMS" /> στοιχείων…</translation>
 <translation id="8502913769543567768">Δίκτυο <ph name="NETWORK_INDEX" /> από <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Ενεργοποίηση μετά τη ρύθμιση συσκευής, Διαχειριζόμενο από τον διαχειριστή σας</translation>
+<translation id="8512483403832814140">Οποιαδήποτε στιγμή</translation>
 <translation id="8521441079177373948">ΗΒ</translation>
 <translation id="853494022971700746">Γαλλικά (Γαλλίας)</translation>
 <translation id="8540608333167683902">Δίκτυο <ph name="NETWORK_INDEX" /> από <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, Ισχύς σήματος <ph name="SIGNAL_STRENGTH" />%, Λεπτομέρειες</translation>

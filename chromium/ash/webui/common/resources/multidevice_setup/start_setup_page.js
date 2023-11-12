@@ -17,6 +17,7 @@ import {Polymer} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {ConnectivityStatus} from 'chrome://resources/mojo/chromeos/ash/services/device_sync/public/mojom/device_sync.mojom-webui.js';
 import {HostDevice} from 'chrome://resources/mojo/chromeos/ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom-webui.js';
 
+import {MojoInterfaceProvider, MojoInterfaceProviderImpl} from './mojo_api.js';
 import {MultiDeviceSetupDelegate} from './multidevice_setup_delegate.js';
 import {getTemplate} from './start_setup_page.html.js';
 import {UiPageContainerBehavior} from './ui_page_container_behavior.js';
@@ -40,6 +41,17 @@ Polymer({
   is: 'start-setup-page',
 
   properties: {
+    /* The localized loadTimeData string for the
+     * StartSetupPage header text, dependent on whether
+     * a user is on OOBE and previously connected their phone during Quick
+     * Start.
+     * */
+    headerTextId: {
+      type: String,
+      value: 'startSetupPageHeader',
+      notify: true,
+    },
+
     /** Overridden from UiPageContainerBehavior. */
     forwardButtonTextId: {
       type: String,
@@ -112,12 +124,29 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * ID of phone a user used to complete Quick Start earlier in OOBE flow.
+     * @private {string|undefined}
+     */
+    quickStartPhoneInstanceId_: String,
+
+    /**
+     * Provider of an interface to the MultiDeviceSetup Mojo service.
+     * @private {!MojoInterfaceProvider}
+     */
+    mojoInterfaceProvider_: Object,
   },
 
   behaviors: [
     UiPageContainerBehavior,
     WebUIListenerBehavior,
   ],
+
+  /** @override */
+  created() {
+    this.mojoInterfaceProvider_ = MojoInterfaceProviderImpl.getInstance();
+  },
 
   /** @override */
   attached() {
@@ -154,6 +183,19 @@ Polymer({
       helpArticleLinks[i].onclick = this.fire.bind(
           this, 'open-learn-more-webview-requested', helpArticleLinks[i].href);
     }
+
+    this.mojoInterfaceProvider_.getMojoServiceRemote()
+        .getQuickStartPhoneInstanceID()
+        .then(({qsPhoneInstanceId}) => {
+          if (!qsPhoneInstanceId) {
+            return;
+          }
+
+          this.quickStartPhoneInstanceId_ = qsPhoneInstanceId;
+        })
+        .catch((error) => {
+          console.warn('Mojo service failure: ' + error);
+        });
   },
 
   /**
@@ -270,9 +312,40 @@ Polymer({
   /** @private */
   devicesChanged_() {
     if (this.devices.length > 0) {
+      if (this.quickStartPhoneInstanceId_ &&
+          this.moveDeviceToFront_(this.quickStartPhoneInstanceId_)) {
+        // Adjust the title to reflect that the Quick Start phone was moved to
+        // top of list.
+        this.headerTextId = 'startSetupPageAfterQuickStartHeader';
+      }
+
       this.selectedInstanceIdOrLegacyDeviceId =
           this.getInstanceIdOrLegacyDeviceId_(this.devices[0]);
     }
+  },
+
+  /**
+   * Checks if the devices list contains a phone matching the provided
+   * device_id. If so, that phone is moved to the front of the devices list.
+   * @param {string} device_id
+   * @return {boolean} Whether the device matching the provided ID is moved to
+   *     the front of the devices list. Returns false if no matching device is
+   *     found. Returns true and moves the matching device to index 0 if a
+   *     matching device is found.
+   * @private
+   */
+  moveDeviceToFront_(device_id) {
+    const matchingDeviceIdx = this.devices.findIndex(
+        device => this.getInstanceIdOrLegacyDeviceId_(device) === device_id);
+
+    if (matchingDeviceIdx === -1) {
+      return false;
+    }
+
+    // Move device located at the matchingDeviceIdx to the front of the
+    // devices list.
+    this.devices.unshift(this.devices.splice(matchingDeviceIdx, 1)[0]);
+    return true;
   },
 
   /** @private */

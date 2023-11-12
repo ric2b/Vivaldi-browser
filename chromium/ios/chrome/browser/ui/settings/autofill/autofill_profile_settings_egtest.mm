@@ -8,8 +8,8 @@
 #import "base/test/ios/wait_util.h"
 #import "components/autofill/core/common/autofill_features.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/shared/ui/elements/activity_overlay_egtest_util.h"
 #import "ios/chrome/browser/ui/autofill/autofill_app_interface.h"
-#import "ios/chrome/browser/ui/elements/activity_overlay_egtest_util.h"
 #import "ios/chrome/browser/ui/settings/autofill/autofill_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
@@ -145,6 +145,13 @@ id<GREYMatcher> SearchBarScrim() {
         autofill::features::kAutofillAccountProfilesUnionView);
   }
 
+  // Either the test is a duplicate or incompatible with the feature.
+  if ([self isRunningTest:@selector(testAutofillProfileEditing)] ||
+      [self isRunningTest:@selector(testDeletionOfAddressProfile)]) {
+    config.features_disabled.push_back(
+        autofill::features::kAutofillAccountProfilesUnionView);
+  }
+
   return config;
 }
 
@@ -210,10 +217,17 @@ id<GREYMatcher> SearchBarScrim() {
 
   // Check that all fields and values match the expectations.
   for (const DisplayStringIDToExpectedResult& expectation : kExpectedFields) {
-    id<GREYMatcher> elementMatcher = grey_accessibilityLabel([NSString
-        stringWithFormat:@"%@, %@",
-                         l10n_util::GetNSString(expectation.display_string_id),
-                         expectation.expected_result]);
+    id<GREYMatcher> elementMatcher = nil;
+    if (expectation.display_string_id == IDS_IOS_AUTOFILL_COUNTRY) {
+      elementMatcher = grey_accessibilityLabel(
+          l10n_util::GetNSString(IDS_IOS_AUTOFILL_COUNTRY));
+    } else {
+      elementMatcher = grey_accessibilityLabel(
+          [NSString stringWithFormat:@"%@, %@",
+                                     l10n_util::GetNSString(
+                                         expectation.display_string_id),
+                                     expectation.expected_result]);
+    }
     [[[EarlGrey
         selectElementWithMatcher:grey_allOf(elementMatcher,
                                             grey_sufficientlyVisible(), nil)]

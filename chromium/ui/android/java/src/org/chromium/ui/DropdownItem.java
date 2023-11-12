@@ -4,7 +4,7 @@
 
 package org.chromium.ui;
 
-import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 
 import androidx.annotation.Nullable;
 
@@ -50,11 +50,11 @@ public interface DropdownItem {
      */
     GURL getCustomIconUrl();
     /**
-     * Returns the bitmap for the icon. If present, then it should be preferred over the drawable id
-     * returned by getIconId().
+     * Returns the drawable for the icon. It is either the custom card art if available, or the
+     * drawable of the id returned by getIconId().
      */
     @Nullable
-    Bitmap getCustomIcon();
+    Drawable getIconDrawable();
     /**
      * Returns true if the item should be enabled in the dropdown.
      */
@@ -75,6 +75,14 @@ public interface DropdownItem {
      * Returns resource ID of label's font color.
      */
     int getLabelFontColorResId();
+    /**
+     * Returns resource ID of label's font size.
+     */
+    int getLabelFontSizeResId();
+    /**
+     * Returns resource ID of sublabel's font color.
+     */
+    int getSublabelFontColorResId();
     /**
      * Returns resource ID of sublabel's font size.
      */

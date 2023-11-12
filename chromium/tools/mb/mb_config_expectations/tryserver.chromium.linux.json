@@ -10,6 +10,19 @@
       "use_goma": true
     }
   },
+  "chromeos-js-code-coverage": {
+    "gn_args": {
+      "dcheck_always_on": false,
+      "enable_webui_inline_sourcemaps": true,
+      "is_clang": true,
+      "is_component_build": false,
+      "is_debug": false,
+      "optimize_webui": false,
+      "symbol_level": 0,
+      "use_javascript_coverage": true,
+      "use_remoteexec": true
+    }
+  },
   "gpu-fyi-try-lacros-amd-rel": {
     "gn_args": {
       "dcheck_always_on": true,
@@ -131,7 +144,7 @@
       "is_debug": true,
       "proprietary_codecs": true,
       "symbol_level": 1,
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "gpu-try-linux-nvidia-rel": {
@@ -142,7 +155,7 @@
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 0,
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "layout_test_leak_detection": {
@@ -169,6 +182,24 @@
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 0,
+      "use_remoteexec": true
+    }
+  },
+  "linux-afl-asan-rel": {
+    "gn_args": {
+      "dcheck_always_on": true,
+      "enable_mojom_fuzzer": true,
+      "enable_nacl": false,
+      "ffmpeg_branding": "ChromeOS",
+      "generate_fuzzer_owners": false,
+      "is_asan": true,
+      "is_component_build": true,
+      "is_debug": false,
+      "optimize_for_fuzzing": true,
+      "pdf_enable_xfa": true,
+      "proprietary_codecs": true,
+      "symbol_level": 0,
+      "use_afl": true,
       "use_remoteexec": true
     }
   },
@@ -222,6 +253,24 @@
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 1,
+      "use_remoteexec": true
+    }
+  },
+  "linux-centipede-asan-rel": {
+    "gn_args": {
+      "dcheck_always_on": true,
+      "enable_mojom_fuzzer": true,
+      "enable_nacl": false,
+      "ffmpeg_branding": "ChromeOS",
+      "generate_fuzzer_owners": false,
+      "is_asan": true,
+      "is_component_build": true,
+      "is_debug": false,
+      "optimize_for_fuzzing": true,
+      "pdf_enable_xfa": true,
+      "proprietary_codecs": true,
+      "symbol_level": 0,
+      "use_centipede": true,
       "use_remoteexec": true
     }
   },
@@ -443,6 +492,9 @@
       "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "dcheck_always_on": true,
       "devtools_skip_typecheck": false,
+      "enable_backup_ref_ptr_feature_flag": true,
+      "enable_dangling_raw_ptr_checks": true,
+      "enable_dangling_raw_ptr_feature_flag": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,

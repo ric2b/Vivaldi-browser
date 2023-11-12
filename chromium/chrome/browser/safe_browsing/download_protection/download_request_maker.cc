@@ -18,6 +18,7 @@
 #include "chrome/browser/safe_browsing/chrome_user_population_helper.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/proto/csd.pb.h"
 #include "components/safe_browsing/core/common/utils.h"
 #include "content/public/browser/browser_context.h"
@@ -164,7 +165,12 @@ void DownloadRequestMaker::Start(DownloadRequestMaker::Callback callback) {
       profile && AdvancedProtectionStatusManagerFactory::GetForProfile(profile)
                      ->IsUnderAdvancedProtection();
 
-  *request_->mutable_population() = GetUserPopulationForProfile(profile);
+  *request_->mutable_population() =
+      GetUserPopulationForProfileWithCookieTheftExperiments(profile);
+  if (base::FeatureList::IsEnabled(kNestedArchives)) {
+    request_->mutable_population()->add_finch_active_groups(
+        "SafeBrowsingArchiveImprovements.Enabled");
+  }
   request_->set_request_ap_verdicts(is_under_advanced_protection);
   request_->set_locale(g_browser_process->GetApplicationLocale());
   request_->set_file_basename(target_file_path_.BaseName().AsUTF8Unsafe());

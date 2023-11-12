@@ -24,10 +24,15 @@ class CosmeticFilter;
 
 class RuleService : public KeyedService {
  public:
+  enum IndexBuildResult { kBuildSuccess = 0, kTooManyAllowRules = 1, };
+
   class Observer : public base::CheckedObserver {
    public:
     ~Observer() override;
     virtual void OnRuleServiceStateLoaded(RuleService* rule_service) {}
+
+    virtual void OnRulesIndexBuilt(RuleGroup group, IndexBuildResult status) {}
+    virtual void OnIosRulesApplied(RuleGroup group) {}
 
     // This is called when enabling/disabling groups
     virtual void OnGroupStateChanged(RuleGroup group) {}
@@ -47,7 +52,14 @@ class RuleService : public KeyedService {
   // This will be an empty string until an index gets built for the first time.
   // If it remains empty or becomes empty later on, this means saving the index
   // to disk is failing.
+  // On iOS, this gives the checksum for the organized rules instead, which
+  // are just the rules from all lists put together in a way that overcomes
+  // some of the limitations of WebKit
   virtual std::string GetRulesIndexChecksum(RuleGroup group) = 0;
+
+  // This is currently only meaningful on iOS where the rules organizer can
+  // fail.
+  virtual IndexBuildResult GetRulesIndexBuildResult(RuleGroup group) = 0;
 
   virtual RuleManager* GetRuleManager() = 0;
   virtual KnownRuleSourcesHandler* GetKnownSourcesHandler() = 0;

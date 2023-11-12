@@ -77,11 +77,22 @@ void RecordTrustedVaultURLFetchResponse(
 
 void RecordTrustedVaultDownloadKeysStatus(
     TrustedVaultDownloadKeysStatusForUMA status,
-    bool also_log_with_v1_suffx) {
+    bool also_log_with_v1_suffix) {
   base::UmaHistogramEnumeration("Sync.TrustedVaultDownloadKeysStatus", status);
-  if (also_log_with_v1_suffx) {
+  if (also_log_with_v1_suffix) {
     base::UmaHistogramEnumeration("Sync.TrustedVaultDownloadKeysStatusV1",
                                   status);
+  }
+}
+
+void RecordVerifyRegistrationStatus(TrustedVaultDownloadKeysStatusForUMA status,
+                                    bool also_log_with_v1_suffix) {
+  base::UmaHistogramEnumeration(
+      "Sync.TrustedVaultVerifyDeviceRegistrationState", status);
+
+  if (also_log_with_v1_suffix) {
+    base::UmaHistogramEnumeration(
+        "Sync.TrustedVaultVerifyDeviceRegistrationStateV1", status);
   }
 }
 
@@ -100,6 +111,14 @@ void RecordTrustedVaultHistogramBooleanWithMigrationSuffix(
 
   if (time_delta_since_migration.is_negative()) {
     return;
+  }
+
+  if (time_delta_since_migration < base::Days(180)) {
+    base::UmaHistogramBoolean(histogram_name + ".MigratedLast180Days", sample);
+  }
+
+  if (time_delta_since_migration < base::Days(90)) {
+    base::UmaHistogramBoolean(histogram_name + ".MigratedLast90Days", sample);
   }
 
   if (time_delta_since_migration < base::Days(28)) {

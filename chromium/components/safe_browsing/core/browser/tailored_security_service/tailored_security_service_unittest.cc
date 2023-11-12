@@ -57,7 +57,7 @@ class TestingTailoredSecurityService : public TailoredSecurityService {
 
   // This is sorta an override but override and static don't mix.
   // This function just calls TailoredSecurityService::ReadResponse.
-  static base::Value ReadResponse(Request* request);
+  static base::Value::Dict ReadResponse(Request* request);
 
   const std::string& GetExpectedPostData(
       TailoredSecurityService::Request* request);
@@ -101,9 +101,6 @@ class TestingTailoredSecurityService : public TailoredSecurityService {
  protected:
   void MaybeNotifySyncUser(bool is_enabled,
                            base::Time previous_update) override;
-
-  // Mock subclass overrides.
-  MOCK_METHOD1(ShowSyncNotification, void(bool));
 
   scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory()
       override {
@@ -208,7 +205,8 @@ TestingTailoredSecurityService::CreateRequest(
   return request;
 }
 
-base::Value TestingTailoredSecurityService::ReadResponse(Request* request) {
+base::Value::Dict TestingTailoredSecurityService::ReadResponse(
+    Request* request) {
   return TailoredSecurityService::ReadResponse(request);
 }
 
@@ -399,12 +397,10 @@ TEST_F(TailoredSecurityServiceTest, VerifyReadResponse) {
                       "  \"history_recording_enabled\": true\n"
                       "}"));
   // ReadResponse deletes the request
-  base::Value response_value =
+  base::Value::Dict response_value =
       TestingTailoredSecurityService::ReadResponse(request.get());
-  ASSERT_TRUE(response_value.is_dict());
-  EXPECT_TRUE(response_value.GetDict()
-                  .FindBool("history_recording_enabled")
-                  .value_or(false));
+  EXPECT_TRUE(
+      response_value.FindBool("history_recording_enabled").value_or(false));
   // Test that properly formatted response with good response code returns false
   // as expected.
   std::unique_ptr<TailoredSecurityService::Request> request2(new TestRequest(
@@ -413,12 +409,10 @@ TEST_F(TailoredSecurityServiceTest, VerifyReadResponse) {
       "  \"history_recording_enabled\": false\n"
       "}"));
   // ReadResponse deletes the request
-  base::Value response_value2 =
+  base::Value::Dict response_value2 =
       TestingTailoredSecurityService::ReadResponse(request2.get());
-  ASSERT_TRUE(response_value2.is_dict());
-  EXPECT_FALSE(response_value2.GetDict()
-                   .FindBool("history_recording_enabled")
-                   .value_or(false));
+  EXPECT_FALSE(
+      response_value2.FindBool("history_recording_enabled").value_or(false));
 
   // Test that a bad response code returns false.
   std::unique_ptr<TailoredSecurityService::Request> request3(
@@ -428,9 +422,9 @@ TEST_F(TailoredSecurityServiceTest, VerifyReadResponse) {
                       "  \"history_recording_enabled\": true\n"
                       "}"));
   // ReadResponse deletes the request
-  base::Value response_value3 =
+  base::Value::Dict response_value3 =
       TestingTailoredSecurityService::ReadResponse(request3.get());
-  EXPECT_TRUE(response_value3.is_none());
+  EXPECT_TRUE(response_value3.empty());
 
   // Test that improperly formatted response returns false.
   // Note: we expect to see a warning when running this test similar to
@@ -442,9 +436,9 @@ TEST_F(TailoredSecurityServiceTest, VerifyReadResponse) {
       "  \"history_recording_enabled\": not true\n"
       "}"));
   // ReadResponse deletes the request
-  base::Value response_value4 =
+  base::Value::Dict response_value4 =
       TestingTailoredSecurityService::ReadResponse(request4.get());
-  EXPECT_TRUE(response_value4.is_none());
+  EXPECT_TRUE(response_value4.empty());
 
   // Test that improperly formatted response (different key) returns false.
   std::unique_ptr<TailoredSecurityService::Request> request5(new TestRequest(
@@ -453,12 +447,10 @@ TEST_F(TailoredSecurityServiceTest, VerifyReadResponse) {
       "  \"history_recording\": true\n"
       "}"));
   // ReadResponse deletes the request
-  base::Value response_value5 =
+  base::Value::Dict response_value5 =
       TestingTailoredSecurityService::ReadResponse(request5.get());
-  ASSERT_TRUE(response_value5.is_dict());
-  EXPECT_FALSE(response_value2.GetDict()
-                   .FindBool("history_recording_enabled")
-                   .value_or(false));
+  EXPECT_FALSE(
+      response_value2.FindBool("history_recording_enabled").value_or(false));
 }
 
 TEST_F(TailoredSecurityServiceTest, TestShutdown) {

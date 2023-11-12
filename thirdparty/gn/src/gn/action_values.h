@@ -51,17 +51,12 @@ class ActionValues {
   }
   bool uses_rsp_file() const { return !rsp_file_contents_.list().empty(); }
 
-  // Pool option
-  const LabelPtrPair<Pool>& pool() const { return pool_; }
-  void set_pool(LabelPtrPair<Pool> pool) { pool_ = std::move(pool); }
-
  private:
   SourceFile script_;
   SubstitutionList args_;
   SubstitutionList outputs_;
   SubstitutionPattern depfile_;
   SubstitutionList rsp_file_contents_;
-  LabelPtrPair<Pool> pool_;
 
   ActionValues(const ActionValues&) = delete;
   ActionValues& operator=(const ActionValues&) = delete;

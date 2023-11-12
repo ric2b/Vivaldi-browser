@@ -22,21 +22,21 @@
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "base/supports_user_data.h"
+#include "base/uuid.h"
+#include "build/build_config.h"
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_undo_provider.h"
 #include "components/bookmarks/common/bookmark_metrics.h"
+#include "components/bookmarks/common/storage_type.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
-class PrefService;
-
 namespace base {
 class FilePath;
-class GUID;
-}
+}  // namespace base
 
 namespace favicon_base {
 struct FaviconImageResult;
@@ -53,7 +53,6 @@ class SyncedFileStore;
 namespace bookmarks {
 
 class BookmarkCodecTest;
-class BookmarkExpandedStateTracker;
 class BookmarkLoadDetails;
 class BookmarkModelObserver;
 class BookmarkStorage;
@@ -91,8 +90,13 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Triggers the loading of bookmarks, which is an asynchronous operation with
   // most heavy-lifting taking place in a background sequence. Upon completion,
   // loaded() will return true and observers will be notified via
-  // BookmarkModelLoaded().
-  void Load(PrefService* pref_service, const base::FilePath& profile_path);
+  // BookmarkModelLoaded(). Uses different files depending on
+  // |sync_storage_type| to support local and account storages.
+  // Please note that for the time being the local storage is also used when
+  // sync is on.
+  // TODO(crbug.com/1422201): Update the note above when the local storage is
+  //                          no longer used for sync.
+  void Load(const base::FilePath& profile_path, StorageType storage_type);
 
   // Returns true if the model finished loading.
   bool loaded() const {
@@ -156,10 +160,11 @@ class BookmarkModel : public BookmarkUndoProvider,
   // state during their own initializer, such as the NTP.
   bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
 
-  // Removes |node| from the model and deletes it. Removing a folder node
-  // recursively removes all nodes. Observers are notified immediately. |node|
-  // must not be a permanent node.
-  void Remove(const BookmarkNode* node);
+  // Removes `node` from the model and deletes it. Removing a folder node
+  // recursively removes all nodes. Observers are notified immediately. `node`
+  // must not be a permanent node. The source of the removal is passed through
+  // `source`.
+  void Remove(const BookmarkNode* node, metrics::BookmarkEditSource source);
 
   // Removes all the non-permanent bookmark nodes that are editable by the user.
   // Observers are only notified when all nodes have been removed. There is no
@@ -219,9 +224,13 @@ class BookmarkModel : public BookmarkUndoProvider,
   // same or not.
   void GetBookmarks(std::vector<UrlAndTitle>* urls);
 
+  // Returns the type of |folder| as represented in metrics.
+  metrics::BookmarkFolderTypeForUMA GetFolderType(
+      const BookmarkNode* folder) const;
+
   // Adds a new folder node at the specified position with the given
-  // |creation_time|, |guid| and |meta_info|. If no GUID is provided (i.e.
-  // nullopt), then a random one will be generated. If a GUID is provided, it
+  // |creation_time|, |uuid| and |meta_info|. If no UUID is provided (i.e.
+  // nullopt), then a random one will be generated. If a UUID is provided, it
   // must be valid.
   const BookmarkNode* AddFolder(
       const BookmarkNode* parent,
@@ -229,7 +238,7 @@ class BookmarkModel : public BookmarkUndoProvider,
       const std::u16string& title,
       const BookmarkNode::MetaInfoMap* meta_info = nullptr,
       absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::GUID> guid = absl::nullopt);
+      absl::optional<base::Uuid> uuid = absl::nullopt);
 
   // Adds a new bookmark for the given `url` at the specified position with the
   // given `meta_info`. Used for bookmarks being added through some direct user
@@ -242,8 +251,8 @@ class BookmarkModel : public BookmarkUndoProvider,
       const BookmarkNode::MetaInfoMap* meta_info = nullptr);
 
   // Adds a url at the specified position with the given `creation_time`,
-  // `meta_info`, `guid`, and `last_used_time`. If no GUID is provided
-  // (i.e. nullopt), then a random one will be generated. If a GUID is
+  // `meta_info`, `uuid`, and `last_used_time`. If no UUID is provided
+  // (i.e. nullopt), then a random one will be generated. If a UUID is
   // provided, it must be valid. Used for bookmarks not being added from
   // direct user actions (e.g. created via sync, locally modified bookmark
   // or pre-existing bookmark). `added_by_user` is true when a new bookmark was
@@ -255,7 +264,7 @@ class BookmarkModel : public BookmarkUndoProvider,
       const GURL& url,
       const BookmarkNode::MetaInfoMap* meta_info = nullptr,
       absl::optional<base::Time> creation_time = absl::nullopt,
-      absl::optional<base::GUID> guid = absl::nullopt,
+      absl::optional<base::Uuid> uuid = absl::nullopt,
       bool added_by_user = false);
 
   // Sorts the children of |parent|, notifying observers by way of the
@@ -291,14 +300,12 @@ class BookmarkModel : public BookmarkUndoProvider,
                                 const base::Time delete_end);
 
   // Returns up to |max_count| bookmarks containing each term from |query| in
-  // either the title, URL, or, if |match_ancestor_titles| is true, the titles
-  // of ancestors. |matching_algorithm| determines the algorithm used by
-  // QueryParser internally to parse |query|.
+  // either the title, URL, or the titles of ancestors. |matching_algorithm|
+  // determines the algorithm used by QueryParser internally to parse |query|.
   std::vector<TitledUrlMatch> GetBookmarksMatching(
       const std::u16string& query,
       size_t max_count,
-      query_parser::MatchingAlgorithm matching_algorithm,
-      bool match_ancestor_titles = false);
+      query_parser::MatchingAlgorithm matching_algorithm);
 
   // Sets the store to NULL, making it so the BookmarkModel does not persist
   // any changes to disk. This is only useful during testing to speed up
@@ -308,20 +315,13 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Returns the next node ID.
   int64_t next_node_id() const { return next_node_id_; }
 
-  // Returns the object responsible for tracking the set of expanded nodes in
-  // the bookmark editor.
-  BookmarkExpandedStateTracker* expanded_state_tracker() {
-    return expanded_state_tracker_.get();
-  }
-
   // Sets/deletes meta info of |node|.
   void SetNodeMetaInfo(const BookmarkNode* node,
                        const std::string& key,
                        const std::string& value);
   void SetNodeMetaInfoMap(const BookmarkNode* node,
                           const BookmarkNode::MetaInfoMap& meta_info_map);
-  void DeleteNodeMetaInfo(const BookmarkNode* node,
-                          const std::string& key);
+  void DeleteNodeMetaInfo(const BookmarkNode* node, const std::string& key);
 
   // Sets/deletes local meta info of |node|.
   void SetNodeUnsyncedMetaInfo(const BookmarkNode* node,
@@ -348,8 +348,7 @@ class BookmarkModel : public BookmarkUndoProvider,
   // http://www.google.com/favicon.ico) have changed. It is valid to call
   // OnFaviconsChanged() with non-empty |page_urls| and an empty |icon_url| and
   // vice versa.
-  void OnFaviconsChanged(const std::set<GURL>& page_urls,
-                         const GURL& icon_url);
+  void OnFaviconsChanged(const std::set<GURL>& page_urls, const GURL& icon_url);
 
   // Returns the client used by this BookmarkModel.
   BookmarkClient* client() const { return client_.get(); }
@@ -449,7 +448,7 @@ class BookmarkModel : public BookmarkUndoProvider,
                                          const base::Time delete_begin,
                                          const base::Time delete_end);
 
-  std::unique_ptr<BookmarkClient> client_;
+  const std::unique_ptr<BookmarkClient> client_;
 
   // Whether the initial set of data has been loaded.
   bool loaded_ = false;
@@ -493,8 +492,6 @@ class BookmarkModel : public BookmarkUndoProvider,
   // See description of IsDoingExtensiveChanges above.
   int extensive_changes_ = 0;
 
-  std::unique_ptr<BookmarkExpandedStateTracker> expanded_state_tracker_;
-
   std::set<std::string> non_cloned_keys_;
 
   raw_ptr<BookmarkUndoDelegate, DanglingUntriaged> undo_delegate_ = nullptr;
@@ -503,7 +500,7 @@ class BookmarkModel : public BookmarkUndoProvider,
   scoped_refptr<ModelLoader> model_loader_;
 
   friend class VivaldiBookmarkModelFriend;
-  BookmarkPermanentNode* trash_node_ = nullptr;
+  raw_ptr<BookmarkPermanentNode, DanglingUntriaged> trash_node_ = nullptr;
   raw_ptr<file_sync::SyncedFileStore> vivaldi_synced_file_store_ = nullptr;
 
   SEQUENCE_CHECKER(sequence_checker_);

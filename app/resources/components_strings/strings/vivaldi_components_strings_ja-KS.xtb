@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（1 個が使用中）}other{（# 個が使用中）}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />プロキシーアドレス確認する<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5287240709317226393">Cookie出す</translation>
 <translation id="5355557959165512791"><ph name="SITE" />は証明書が失効してるから、今アクセスできへんで。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="5386426401304769735">このサイトの証明書チェーンには SHA-1 使て署名された証明書が含まれてるわ。</translation>
 <translation id="5452270690849572955">この<ph name="HOST_NAME" />ページ、どこにも見当たらへん</translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">パスワード</translation>
 <translation id="6711464428925977395">プロキシーサーバーに問題があるか、アドレスが合ってないかも。</translation>
 <translation id="6757797048963528358">あんたのデバイス、さっきまで寝とったで。</translation>
+<translation id="6890956352250146925">Cookieとサイトデータのオプション</translation>
 <translation id="6897140037006041989">ユーザーエージェント</translation>
 <translation id="7053983685419859001">ブロック</translation>
 <translation id="7079718277001814089">このサイト、悪さするソフトウェア入ってるで</translation>

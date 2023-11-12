@@ -43,6 +43,7 @@ namespace blink {
 
 class CSSParserContext;
 class CSSParserTokenRange;
+class CSSParserTokenOffsets;
 
 class CORE_EXPORT MediaQueryExpValue {
   DISALLOW_NEW();
@@ -65,21 +66,16 @@ class CORE_EXPORT MediaQueryExpValue {
   bool IsNumeric() const { return type_ == Type::kNumeric; }
   bool IsRatio() const { return type_ == Type::kRatio; }
   bool IsCSSValue() const { return type_ == Type::kCSSValue; }
+  bool IsResolution() const;
 
   CSSValueID Id() const {
     DCHECK(IsId());
     return id_;
   }
 
-  double Value() const {
-    DCHECK(IsNumeric());
-    return numeric_.value;
-  }
+  double Value() const;
 
-  CSSPrimitiveValue::UnitType Unit() const {
-    DCHECK(IsNumeric());
-    return numeric_.unit;
-  }
+  CSSPrimitiveValue::UnitType Unit() const;
 
   double Numerator() const {
     DCHECK(IsRatio());
@@ -141,6 +137,7 @@ class CORE_EXPORT MediaQueryExpValue {
   static absl::optional<MediaQueryExpValue> Consume(
       const String& lower_media_feature,
       CSSParserTokenRange&,
+      const CSSParserTokenOffsets&,
       const CSSParserContext&);
 
  private:
@@ -257,6 +254,7 @@ class CORE_EXPORT MediaQueryExp {
   // Returns an invalid MediaQueryExp if the arguments are invalid.
   static MediaQueryExp Create(const String& media_feature,
                               CSSParserTokenRange&,
+                              const CSSParserTokenOffsets&,
                               const CSSParserContext&);
   static MediaQueryExp Create(const String& media_feature,
                               const MediaQueryExpBounds&);

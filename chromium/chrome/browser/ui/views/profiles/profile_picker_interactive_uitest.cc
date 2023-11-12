@@ -11,15 +11,16 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
+#include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/views/profiles/profile_picker_interactive_uitest_base.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_test_base.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
-#include "google_apis/gaia/gaia_urls.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "ui/events/keycodes/dom/dom_key.h"
@@ -55,7 +56,9 @@ class WidgetBoundsChangeWaiter : public views::WidgetObserver {
 
 }  // namespace
 
-class ProfilePickerInteractiveUiTest : public ProfilePickerTestBase {
+class ProfilePickerInteractiveUiTest
+    : public InProcessBrowserTest,
+      public WithProfilePickerInteractiveUiTestHelpers {
  public:
   ProfilePickerInteractiveUiTest() = default;
   ~ProfilePickerInteractiveUiTest() override = default;
@@ -66,55 +69,6 @@ class ProfilePickerInteractiveUiTest : public ProfilePickerTestBase {
     WaitForLoadStop(expected_url);
     EXPECT_TRUE(
         ui_test_utils::ShowAndFocusNativeWindow(widget()->GetNativeWindow()));
-  }
-
-  void SendCloseWindowKeyboardCommand() {
-    // Close window using keyboard.
-#if BUILDFLAG(IS_MAC)
-    // Use Cmd-W on Mac.
-    bool control = false;
-    bool shift = false;
-    bool command = true;
-#else
-    // Use Ctrl-Shift-W on other platforms.
-    bool control = true;
-    bool shift = true;
-    bool command = false;
-#endif
-    SendKeyPress(ui::VKEY_W, control, shift, /*alt=*/false, command);
-  }
-
-  void SendBackKeyboardCommand() {
-    // Close window using keyboard.
-#if BUILDFLAG(IS_MAC)
-    // Use Cmd-[ on Mac.
-    bool alt = false;
-    bool command = true;
-    ui::KeyboardCode key = ui::VKEY_OEM_4;
-#else
-    // Use Ctrl-left on other platforms.
-    bool alt = true;
-    bool command = false;
-    ui::KeyboardCode key = ui::VKEY_LEFT;
-#endif
-    SendKeyPress(key, /*control=*/false, /*shift=*/false, alt, command);
-  }
-
-  void SendKeyPress(ui::KeyboardCode key,
-                    bool control,
-                    bool shift,
-                    bool alt,
-                    bool command) {
-#if BUILDFLAG(IS_MAC)
-    // Mac needs the widget to get focused (once again) for
-    // SendKeyPressToWindowSync to work. A test-only particularity, pressing the
-    // keybinding manually right in the run of the test actually replaces the
-    // need of this call.
-    ASSERT_TRUE(
-        ui_test_utils::ShowAndFocusNativeWindow(widget()->GetNativeWindow()));
-#endif
-    ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
-        widget()->GetNativeWindow(), key, control, shift, alt, command));
   }
 
   void SimulateUserActivation() {
@@ -147,9 +101,7 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest, ExitWithKeyboard) {
                      GURL("chrome://profile-picker"));
   EXPECT_TRUE(ProfilePicker::IsOpen());
 
-  // Send Cmd-Q.
-  SendKeyPress(ui::VKEY_Q, /*control=*/false, /*shift=*/false, /*alt=*/false,
-               /*command=*/true);
+  SendQuitAppKeyboardCommand();
   WaitForPickerClosed();
   EXPECT_TRUE(browser_shutdown::IsTryingToQuit());
 }
@@ -164,19 +116,8 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest, FullscreenWithKeyboard) {
   EXPECT_FALSE(widget()->IsFullscreen());
   WidgetBoundsChangeWaiter bounds_waiter(widget());
 
-  // Toggle fullscreen with keyboard.
-#if BUILDFLAG(IS_MAC)
-  // Use Cmd-Ctrl-F on Mac.
-  bool control = true;
-  bool command = true;
-  ui::KeyboardCode key_code = ui::VKEY_F;
-#else
-  // Use F11 on other platforms.
-  bool control = false;
-  bool command = false;
-  ui::KeyboardCode key_code = ui::VKEY_F11;
-#endif
-  SendKeyPress(key_code, control, /*shift=*/false, /*alt=*/false, command);
+  SendToggleFullscreenKeyboardCommand();
+
   // Fullscreen causes the bounds of the widget to change.
   bounds_waiter.Wait();
   EXPECT_TRUE(widget()->IsFullscreen());
@@ -202,7 +143,7 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest,
                                     switch_finished_callback.Get());
 
   // Switch to the signin webview.
-  WaitForLoadStop(GaiaUrls::GetInstance()->signin_chrome_sync_dice());
+  WaitForLoadStop(signin::GetChromeSyncURLForDice({.for_promo_flow = true}));
 
   // Close the picker with the keyboard.
   EXPECT_TRUE(ProfilePicker::IsOpen());
@@ -243,7 +184,7 @@ IN_PROC_BROWSER_TEST_F(ProfilePickerInteractiveUiTest,
                                     switch_finished_callback.Get());
 
   // Switch to the signin webview.
-  WaitForLoadStop(GaiaUrls::GetInstance()->signin_chrome_sync_dice());
+  WaitForLoadStop(signin::GetChromeSyncURLForDice({.for_promo_flow = true}));
 
   // Navigate back with the keyboard.
   SendBackKeyboardCommand();

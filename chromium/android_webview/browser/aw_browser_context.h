@@ -5,7 +5,9 @@
 #ifndef ANDROID_WEBVIEW_BROWSER_AW_BROWSER_CONTEXT_H_
 #define ANDROID_WEBVIEW_BROWSER_AW_BROWSER_CONTEXT_H_
 
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "android_webview/browser/aw_contents_origin_matcher.h"
@@ -49,6 +51,7 @@ namespace android_webview {
 class AwContentsOriginMatcher;
 class AwFormDatabaseService;
 class AwQuotaManagerBridge;
+class CookieManager;
 
 class AwBrowserContext : public content::BrowserContext,
                          public visitedlink::VisitedLinkDelegate {
@@ -145,6 +148,9 @@ class AwBrowserContext : public content::BrowserContext,
 
   scoped_refptr<AwContentsOriginMatcher> service_worker_xrw_allowlist_matcher();
 
+  void SetExtraHeaders(const GURL& url, const std::string& headers);
+  std::string GetExtraHeaders(const GURL& url);
+
  private:
   void CreateUserPrefService();
   void MigrateLocalStatePrefs();
@@ -171,6 +177,8 @@ class AwBrowserContext : public content::BrowserContext,
   SimpleFactoryKey simple_factory_key_;
 
   scoped_refptr<AwContentsOriginMatcher> service_worker_xrw_allowlist_matcher_;
+
+  std::map<std::string, std::string> extra_headers_;
 
   base::android::ScopedJavaGlobalRef<jobject> obj_;
 };

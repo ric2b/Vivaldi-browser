@@ -317,12 +317,12 @@ component("headless_non_renderer") {
     "lib/browser/headless_browser_impl.h",
     "lib/browser/headless_browser_main_parts.cc",
     "lib/browser/headless_browser_main_parts.h",
+    "lib/browser/headless_client_hints_controller_delegate.cc",
+    "lib/browser/headless_client_hints_controller_delegate.h",
     "lib/browser/headless_content_browser_client.cc",
     "lib/browser/headless_content_browser_client.h",
     "lib/browser/headless_devtools.cc",
     "lib/browser/headless_devtools.h",
-    "lib/browser/headless_devtools_agent_host_client.cc",
-    "lib/browser/headless_devtools_agent_host_client.h",
     "lib/browser/headless_devtools_manager_delegate.cc",
     "lib/browser/headless_devtools_manager_delegate.h",
     "lib/browser/headless_permission_manager.cc",
@@ -358,9 +358,6 @@ component("headless_non_renderer") {
     "lib/utility/headless_content_utility_client.h",
     "public/headless_browser.h",
     "public/headless_browser_context.h",
-    "public/headless_devtools_channel.h",
-    "public/headless_devtools_client.h",
-    "public/headless_devtools_target.h",
     "public/headless_export.h",
     "public/headless_web_contents.h",
     "public/internal/message_dispatcher.h",
@@ -424,8 +421,6 @@ component("headless_non_renderer") {
   deps = [
     ":backend_cdp_bindings",
     ":gen_devtools_client_api",
-    ":version_header",
-    ":version_header",
     "//base:base_static",
     "//base:base_static",
     "//build:branding_buildflags",
@@ -433,7 +428,9 @@ component("headless_non_renderer") {
     "//build:chromeos_buildflags",
     "//components/cookie_config",
     "//components/crash/core/common:common",
+    "//components/devtools/devtools_pipe",
     "//components/embedder_support",
+    "//components/embedder_support:browser_util",
     "//components/embedder_support:embedder_support",
     "//components/embedder_support/origin_trials",
     "//components/headless/clipboard",
@@ -441,7 +438,7 @@ component("headless_non_renderer") {
     "//components/keyed_service/content:content",
     "//components/origin_trials:browser",
     "//components/origin_trials:common",
-    "//components/os_crypt:os_crypt",
+    "//components/os_crypt/sync",
     "//components/policy:generated",
     "//components/policy/content:content",
     "//components/policy/core/common:common_constants",
@@ -452,6 +449,7 @@ component("headless_non_renderer") {
     "//components/profile_metrics",
     "//components/profile_metrics:profile_metrics",
     "//components/security_state/core",
+    "//components/version_info",
     "//content/public/app",
     "//content/public/app:app",
     "//content/public/browser",
@@ -549,7 +547,7 @@ component("headless_non_renderer") {
     }
 
     if (headless_use_prefs) {
-      deps += [ "//components/os_crypt" ]
+      deps += [ "//components/os_crypt/sync" ]
     }
   }
 
@@ -633,6 +631,8 @@ group("headless_tests") {
 
 test("headless_unittests") {
   sources = [
+    "lib/browser/headless_browser_impl_unittest.cc",
+    "lib/browser/headless_client_hints_controller_delegate_unittest.cc",
     "public/domains/types_unittest.cc",
     "public/util/error_reporter_unittest.cc",
 
@@ -652,12 +652,16 @@ test("headless_unittests") {
     ":headless_shell_lib",
     "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//components/embedder_support",
+    "//components/embedder_support:browser_util",
+    "//components/embedder_support/origin_trials",
     "//components/security_state/content",
     "//content/public/app",
     "//content/public/child:child",
     "//content/public/common",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/gfx:test_support",
   ]
 
   if (is_win) {
@@ -699,6 +703,7 @@ test("headless_browsertests") {
     "test/headless_browser_test.h",
     "test/headless_browser_test_utils.cc",
     "test/headless_browser_test_utils.h",
+    "test/headless_browser_user_agent_metadata_browsertest.cc",
     "test/headless_client_browsertest.cc",
     "test/headless_devtooled_browsertest.cc",
     "test/headless_devtooled_browsertest.h",
@@ -773,9 +778,13 @@ test("headless_browsertests") {
     "//base",
     "//cc:test_support",
     "//components/devtools/simple_devtools_protocol_client",
+    "//components/embedder_support",
+    "//components/embedder_support:browser_util",
+    "//components/embedder_support:embedder_support",
     "//components/headless/test",
     "//components/policy/core/browser",
     "//components/security_state/content",
+    "//components/version_info",
     "//content/test:browsertest_support",
     "//content/test:test_support",
     "//gin",
@@ -941,7 +950,7 @@ static_library("headless_shell_lib") {
   }
 
   if (is_mac) {
-    deps += [ "//components/os_crypt" ]
+    deps += [ "//components/os_crypt/sync" ]
   }
 
   if (is_win || (is_posix && !is_mac)) {
@@ -979,13 +988,4 @@ executable("headless_shell") {
   }
 
   configs += [ ":headless_defines_config" ]
-}
-
-process_version("version_header") {
-  template_file = "public/version.h.in"
-  sources = [
-    "//chrome/VERSION",
-    lastchange_file,
-  ]
-  output = "$target_gen_dir/public/version.h"
 }

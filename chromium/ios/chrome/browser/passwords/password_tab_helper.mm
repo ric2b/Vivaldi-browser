@@ -10,8 +10,8 @@
 #import "components/password_manager/core/browser/manage_passwords_referrer.h"
 #import "components/password_manager/core/browser/password_manager_constants.h"
 #import "ios/chrome/browser/passwords/password_controller.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "net/base/mac/url_conversions.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -36,6 +36,11 @@ void PasswordTabHelper::SetDispatcher(CommandDispatcher* dispatcher) {
 
 id<FormSuggestionProvider> PasswordTabHelper::GetSuggestionProvider() {
   return controller_.suggestionProvider;
+}
+
+id<PasswordsAccountStorageNoticeHandler>
+PasswordTabHelper::GetPasswordsAccountStorageNoticeHandler() {
+  return controller_;
 }
 
 password_manager::PasswordGenerationFrameHelper*
@@ -81,7 +86,8 @@ void PasswordTabHelper::ShouldAllowRequest(
         HandlerForProtocol(controller_.dispatcher, ApplicationSettingsCommands);
 
     [settings_command_handler showSavedPasswordsSettingsFromViewController:nil
-                                                          showCancelButton:NO];
+                                                          showCancelButton:NO
+                                                        startPasswordCheck:NO];
     std::move(callback).Run(
         web::WebStatePolicyDecider::PolicyDecision::Cancel());
     UMA_HISTOGRAM_ENUMERATION(

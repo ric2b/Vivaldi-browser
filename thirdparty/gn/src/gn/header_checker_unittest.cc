@@ -391,6 +391,16 @@ TEST_F(HeaderCheckerTest, SourceFileForInclude_FileNotFound) {
   EXPECT_FALSE(err.has_error());
 }
 
+TEST_F(HeaderCheckerTest, SourceFileForInclude_SwiftBridgeHeader) {
+  const SourceFile bridge_header("//a/bridge_header.h");
+  a_.swift_values().bridge_header() = bridge_header;
+  auto checker = CreateChecker();
+
+  HeaderChecker::FileMap file_map;
+  checker->AddTargetToFileMap(&a_, &file_map);
+  EXPECT_NE(file_map.find(bridge_header), file_map.end());
+}
+
 TEST_F(HeaderCheckerTest, Friend) {
   // Note: we have a public dependency chain A -> B -> C set up already.
   InputFile input_file(SourceFile("//some_file.cc"));

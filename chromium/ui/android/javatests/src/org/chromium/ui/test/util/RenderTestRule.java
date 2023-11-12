@@ -16,6 +16,8 @@ import android.widget.ImageView;
 import androidx.annotation.StringDef;
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat;
 
+import com.google.android.material.textfield.TextInputLayout;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Assert;
@@ -25,6 +27,7 @@ import org.junit.runner.Description;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.TestThreadUtils;
 import org.chromium.ui.UiUtils;
 
 import java.io.File;
@@ -228,8 +231,12 @@ public class RenderTestRule extends TestWatcher {
      * @throws IOException if the rendered image cannot be saved to the device.
      */
     public void render(final View view, String id) throws IOException {
+        Assert.assertNotNull(view);
         Assert.assertTrue("Render Tests must have the RenderTest feature.", mHasRenderTestFeature);
 
+        // De-flake by flushing the tasks that are already queued on the Looper's Handler.
+        // TODO(https://crbug.com/1424788): Remove this and properly fix flaky tests.
+        TestThreadUtils.flushNonDelayedLooperTasks();
         Bitmap testBitmap = ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Bitmap>() {
             @Override
             public Bitmap call() {
@@ -312,6 +319,10 @@ public class RenderTestRule extends TestWatcher {
             if (drawable instanceof AnimatedVectorDrawableCompat) {
                 ((AnimatedVectorDrawableCompat) drawable).stop();
             }
+        }
+        if (view instanceof TextInputLayout) {
+            TextInputLayout textInputLayout = (TextInputLayout) view;
+            textInputLayout.setHintAnimationEnabled(false);
         }
         // Scrollbars fade slowly, making tests flaky due to differences in rendered images.
         view.setVerticalScrollBarEnabled(false);

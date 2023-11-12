@@ -16,27 +16,25 @@ import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.runner.lifecycle.Stage;
 import android.text.Spanned;
 import android.text.style.ClickableSpan;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.annotation.IdRes;
+import androidx.test.InstrumentationRegistry;
 import androidx.test.espresso.Espresso;
 import androidx.test.espresso.UiController;
 import androidx.test.espresso.ViewAction;
 import androidx.test.espresso.matcher.ViewMatchers.Visibility;
-import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
+import androidx.test.runner.lifecycle.Stage;
 
 import org.hamcrest.Matcher;
 import org.junit.Before;
@@ -48,33 +46,27 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-import org.chromium.base.CommandLine;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Matchers;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.locale.LocaleManagerDelegate;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.signin.SigninFirstRunFragment;
-import org.chromium.chrome.browser.signin.services.FREMobileIdentityConsistencyFieldTrial;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.policy.test.annotations.Policies;
-import org.chromium.components.signin.base.AccountInfo;
-import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.test.util.FakeAccountManagerFacade;
@@ -84,7 +76,6 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
  * Integration tests for the first run experience with sign-in and sync decoupled.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.FORCE_ENABLE_SIGNIN_FRE})
 @DoNotBatch(reason = "This test interacts with native initialization")
 public class FirstRunActivitySigninAndSyncTest {
     private static final String TEST_EMAIL = "test.account@gmail.com";
@@ -156,73 +147,6 @@ public class FirstRunActivitySigninAndSyncTest {
         clickButton(R.id.signin_fre_continue_button);
 
         waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
-    }
-
-    @Test
-    @LargeTest
-    public void continueButtonCanBeClickedBeforeNativeIsLoaded() {
-        FREMobileIdentityConsistencyFieldTrial.setFirstRunTrialGroupForTesting(
-                FREMobileIdentityConsistencyFieldTrial.INITIALIZATION_FLOW_NEW_GROUP);
-        // Suppress native initialization to verify that SigninFirstRunFragment doesn't require it
-        // to proceed past the initial loading spinner.
-        CommandLine.getInstance().appendSwitch(ChromeSwitches.DISABLE_NATIVE_INITIALIZATION);
-        AccountInfo accountInfo = mAccountManagerTestRule.addAccount(TEST_EMAIL);
-
-        launchFirstRunActivity();
-        waitUntilCurrentPageIs(SigninFirstRunFragment.class);
-        onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
-
-        clickButton(R.id.signin_fre_continue_button);
-
-        // Native should still be uninitialized.
-        assertFalse(ChromeBrowserInitializer.getInstance().isFullBrowserInitialized());
-
-        CommandLine.getInstance().removeSwitch(ChromeSwitches.DISABLE_NATIVE_INITIALIZATION);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mFirstRunActivity.startDelayedNativeInitializationForTests());
-
-        waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
-                    Profile.getLastUsedRegularProfile());
-            assertEquals(CoreAccountInfo.getIdFrom(
-                                 identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN)),
-                    accountInfo.getId());
-        });
-    }
-
-    @Test
-    @LargeTest
-    public void dismissButtonCanBeClickedBeforeNativeIsLoaded() {
-        FREMobileIdentityConsistencyFieldTrial.setFirstRunTrialGroupForTesting(
-                FREMobileIdentityConsistencyFieldTrial.INITIALIZATION_FLOW_NEW_GROUP);
-        // Suppress native initialization to verify that SigninFirstRunFragment doesn't require it
-        // to proceed past the initial loading spinner.
-        CommandLine.getInstance().appendSwitch(ChromeSwitches.DISABLE_NATIVE_INITIALIZATION);
-        mAccountManagerTestRule.addAccount(TEST_EMAIL);
-
-        launchFirstRunActivity();
-        waitUntilCurrentPageIs(SigninFirstRunFragment.class);
-        onView(withId(R.id.signin_fre_selected_account)).check(matches(isDisplayed()));
-
-        clickButton(R.id.signin_fre_dismiss_button);
-
-        // Native should still be uninitialized.
-        assertFalse(ChromeBrowserInitializer.getInstance().isFullBrowserInitialized());
-
-        CommandLine.getInstance().removeSwitch(ChromeSwitches.DISABLE_NATIVE_INITIALIZATION);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mFirstRunActivity.startDelayedNativeInitializationForTests());
-
-        // When the native is loaded, First Run should be completed.
-        ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            IdentityManager identityManager = IdentityServicesProvider.get().getIdentityManager(
-                    Profile.getLastUsedRegularProfile());
-            assertNull(identityManager.getPrimaryAccountInfo(ConsentLevel.SIGNIN));
-        });
     }
 
     @Test
@@ -322,7 +246,7 @@ public class FirstRunActivitySigninAndSyncTest {
         clickButton(R.id.signin_fre_continue_button);
         waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
 
-        clickButton(R.id.positive_button);
+        clickButton(R.id.button_primary);
 
         ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
         SyncTestUtil.waitForSyncFeatureEnabled();
@@ -355,7 +279,7 @@ public class FirstRunActivitySigninAndSyncTest {
         clickButton(R.id.signin_fre_continue_button);
         waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
 
-        clickButton(R.id.negative_button);
+        clickButton(R.id.button_secondary);
 
         ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
 
@@ -414,7 +338,7 @@ public class FirstRunActivitySigninAndSyncTest {
         clickButton(R.id.signin_fre_continue_button);
         waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
 
-        clickButton(R.id.positive_button);
+        clickButton(R.id.button_primary);
 
         ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
         SyncTestUtil.waitForSyncFeatureEnabled();
@@ -434,7 +358,7 @@ public class FirstRunActivitySigninAndSyncTest {
         clickButton(R.id.signin_fre_continue_button);
         waitUntilCurrentPageIs(SyncConsentFirstRunFragment.class);
 
-        clickButton(R.id.negative_button);
+        clickButton(R.id.button_secondary);
 
         ApplicationTestUtils.waitForActivityState(mFirstRunActivity, Stage.DESTROYED);
 

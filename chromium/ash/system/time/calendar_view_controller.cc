@@ -214,6 +214,12 @@ void CalendarViewController::OnEventListClosed() {
   is_event_list_showing_ = false;
 }
 
+void CalendarViewController::CalendarLoaded() {
+  for (auto& observer : observers_) {
+    observer.OnCalendarLoaded();
+  }
+}
+
 void CalendarViewController::RecordEventListItemActivated(
     const ui::Event& event) {
   // The EventListItemView is used by both the event list view and the up next
@@ -255,6 +261,17 @@ void CalendarViewController::OnTodaysEventFetchComplete() {
   UmaHistogramMediumTimes("Ash.Calendar.TimeToSeeTodaysEventDots",
                           base::TimeTicks::Now() - calendar_open_time_);
   todays_date_cell_fetch_recorded_ = true;
+}
+
+void CalendarViewController::EventsDisplayedToUser() {
+  // Only record this once per lifetime of the `CalendarView` (and therefore the
+  // controller).
+  if (events_shown_to_user_recorded_) {
+    return;
+  }
+
+  calendar_metrics::RecordEventsDisplayedToUser();
+  events_shown_to_user_recorded_ = true;
 }
 
 bool CalendarViewController::IsSelectedDateInCurrentMonth() {

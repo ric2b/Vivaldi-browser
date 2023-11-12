@@ -84,6 +84,7 @@
 <translation id="1722487484194605434"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ಝಿಪ್ ಮಾಡಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="1722687688096767818">ಪ್ರೊಫೈಲ್ ಅನ್ನು ಸೇರಿಸಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="1726100011689679555">ಹೆಸರಿನ ಸರ್ವರ್‌ಗಳು</translation>
+<translation id="1727562178154619254">ಸಿಂಕ್ ಮಾಡಲು ಸಿದ್ಧವಾಗಿದೆ</translation>
 <translation id="1729953886957086472">ಜರ್ಮನ್ (ಜರ್ಮನಿ)</translation>
 <translation id="1730235522912993863">ಚೈನೀಸ್ ಕಾಂಗ್‌ಜೀ</translation>
 <translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ನಕಲಿಸಲಾಗಿದೆ.</translation>
@@ -106,7 +107,6 @@
 <translation id="1834290891154666894">ಅಮಾನ್ಯವಾದ ವಿಷಯದ ಪರ್ಯಾಯ ಹೆಸರಿನ ಹೊಂದಾಣಿಕೆಯ ನಮೂದು</translation>
 <translation id="1838709767668011582">Google ಸೈಟ್</translation>
 <translation id="1853795129690976061">ಈ ಫೋಲ್ಡರ್ ಅನ್ನು Linux ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಲಾಗಿದೆ</translation>
-<translation id="1859422890169495746">ಈ Chromebook</translation>
 <translation id="1864756863218646478">ಫೈಲ್ ಅನ್ನು ಕಂಡುಹಿಡಿಯಲಾಗಲಿಲ್ಲ.</translation>
 <translation id="1884013283844450420"><ph name="NETWORK_COUNT" /> ರಲ್ಲಿ <ph name="NETWORK_INDEX" /> ನೆಟ್‌ವರ್ಕ್, <ph name="NETWORK_NAME" />, ಕನೆಕ್ಟ್</translation>
 <translation id="1920670151694390848">ಮಲಯಾಳಂ ಲಿಪ್ಯಂತರಣ</translation>
@@ -118,7 +118,6 @@
 <translation id="1942765061641586207">ಚಿತ್ರದ ರೆಸಲ್ಯೂಷನ್‌‌</translation>
 <translation id="1972984168337863910">ಫೈಲ್‌ಗಳ ಪ್ರತಿಕ್ರಿಯೆ ಫಲಕಗಳನ್ನು ವಿಸ್ತರಿಸಿ</translation>
 <translation id="1995337122023280937">ಫೈಲ್ ಸ್ಥಳಕ್ಕೆ ಹೋಗಿ</translation>
-<translation id="1999709132469742660">ಎಲ್ಲಾ URL ಗಳ ಮೂಲಕ ಫೈಲ್ ಅನ್ನು ಆ್ಯಕ್ಸೆಸ್ ಮಾಡುವುದು</translation>
 <translation id="2001796770603320721">ಡ್ರೈವ್‌ನಲ್ಲಿ ನಿರ್ವಹಿಸಿ</translation>
 <translation id="2009067268969781306">ಡ್ರೈವ್ ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡುವುದರಿಂದ, ಅದರಲ್ಲಿ ಸಂಗ್ರಣೆಯಾಗಿರುವ ಎಲ್ಲಾ ಡೇಟಾವನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ. ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಪಡಿಸಲಾಗುವುದಿಲ್ಲ.</translation>
 <translation id="2025955442973426285">ಟಿಗ್ರಿನ್ಯಾ</translation>
@@ -130,6 +129,7 @@
 <translation id="2084108471225856927">ಸಾಧನ ಸೆಟ್ಟಿಂಗ್‌ಗಳು</translation>
 <translation id="2084809735218147718">ಧನ್ಯವಾದಗಳು ಎಂದು ಹಸ್ತಾಕ್ಷರ ಮಾಡುತ್ತಿರುವ ವ್ಯಕ್ತಿ</translation>
 <translation id="2088690981887365033">VPN ನೆಟ್‌ವರ್ಕ್</translation>
+<translation id="2111134541987263231"><ph name="BEGIN_BOLD" />ಅಜ್ಞಾತ ಮೋಡ್‌ನಲ್ಲಿ ಅನುಮತಿಸಿ<ph name="END_BOLD" /> ಎಂಬುದನ್ನು ಆನ್ ಮಾಡಿ</translation>
 <translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ಅಳಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಅವುಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲು ನಿಮಗೆ ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ.</translation>
 <translation id="2122305276694332719">ಮರೆ ಮಾಡಿರುವ ನೆಟ್‌ವರ್ಕ್‌ಗೆ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸಂಪರ್ಕಗೊಳ್ಳುವುದರಿಂದ ಇತರರು ನಿಮ್ಮ ಸಾಧನ ಮತ್ತು ಕೆಲವು ನೆಟ್‌ವರ್ಕ್‌ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ನೋಡಲು ಅನುಮತಿಸುತ್ತದೆ, ಆದ್ದರಿಂದ ಇದನ್ನು ಬಳಸಲು ಶಿಫಾರಸು ಮಾಡುವುದಿಲ್ಲ.</translation>
 <translation id="2125607626296734455">ಖ್ಮೇರ್</translation>
@@ -150,6 +150,7 @@
 <translation id="2236732657580416950">ನಿಮ್ಮ Google Drive ಕ್ಯಾಷ್ ಅನ್ನು ತೆರವುಗೊಳಿಸಲಾಗಿದೆ.</translation>
 <translation id="2239068707900391003">ಕಾಫಿ ಕುಡಿಯುತ್ತಿರುವ ವ್ಯಕ್ತಿ</translation>
 <translation id="2251368349685848079">ಅನುಪಯುಕ್ತದಿಂದ ಮರುಸ್ಥಾಪಿಸಿ</translation>
+<translation id="2278133026967558505">ಎಲ್ಲಾ ವೆಬ್‌ಸೈಟ್‌ಗಳು ಹಾಗೂ URL ಗಳಿಂದ ಫೈಲ್ ಅನ್ನು ಆ್ಯಕ್ಸೆಸ್ ಮಾಡಿ</translation>
 <translation id="2282155092769082568">ಸ್ವಯಂ ಕಾನ್ಫಿಗರೇಶನ್ URL:</translation>
 <translation id="2284767815536050991">ತೆಗೆದುಹಾಕಬಹುದಾದ ಸಂಗ್ರಹಣೆ</translation>
 <translation id="2288278176040912387">ರೆಕಾರ್ಡ್ ಪ್ಲೇಯರ್</translation>
@@ -158,6 +159,7 @@
 <translation id="2304820083631266885">ಗ್ರಹ</translation>
 <translation id="2305020378527873881"><ph name="VOLUME_NAME" /> ಅನ್ನು ಎಜೆಕ್ಟ್ ಮಾಡಲಾಗಿದೆ.</translation>
 <translation id="2307462900900812319">ನೆಟ್‌ವರ್ಕ್ ಕಾನ್ಫಿಗರ್ ಮಾಡು</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{ID <ph name="BEGIN_LIST" /><ph name="END_LIST" /> ಜೊತೆಗಿನ ವಿಸ್ತರಣೆಯನ್ನು ಪತ್ತೆಹಚ್ಚಲು ಸಾಧ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ.}one{ID ಗಳ <ph name="BEGIN_LIST" /><ph name="END_LIST" /> ಜೊತೆಗಿನ ವಿಸ್ತರಣೆಗಳನ್ನು ಪತ್ತೆಹಚ್ಚಲು ಸಾಧ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ.}other{ID ಗಳ <ph name="BEGIN_LIST" /><ph name="END_LIST" /> ಜೊತೆಗಿನ ವಿಸ್ತರಣೆಗಳನ್ನು ಪತ್ತೆಹಚ್ಚಲು ಸಾಧ್ಯವಿಲ್ಲ. ನಿಮ್ಮ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ.}}</translation>
 <translation id="2325650632570794183">ಈ ಫೈಲ್ ಪ್ರಕಾರವು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ. ದಯವಿಟ್ಟು ಈ ಪ್ರಕಾರ ಫೈಲ್ ತೆರೆಯಬಹುದಾದ ಅಪ್ಲಿಕೇಶನ್ ಹುಡುಕಲು Chrome ವೆಬ್ ಸ್ಟೋರ್‌‌ಗೆ ಭೇಟಿ ನೀಡಿ.</translation>
 <translation id="2326539130272988168">ಬಲ್ಗೇರಿಯನ್</translation>
 <translation id="2337715497728194187">Bruschetta ಮೂಲಕ ಹಂಚಿಕೊಳ್ಳಿ</translation>
@@ -217,7 +219,7 @@
 <translation id="2820957248982571256">ಸ್ಕ್ಯಾನ್‌ ಮಾಡಲಾಗುತ್ತಿದೆ…</translation>
 <translation id="2830077785865012357">ಚೈನೀಸ್ ಜುಯೆನ್</translation>
 <translation id="2843806747483486897">ಡಿಫಾಲ್ಟ್‌ ಅನ್ನು ಬದಲಾಯಿಸಿ...</translation>
-<translation id="2873951654529031587">ಅನುಪಯುಕ್ತ</translation>
+<translation id="2873951654529031587">ಟ್ರ್ಯಾಶ್</translation>
 <translation id="288024221176729610">ಜೆಕ್</translation>
 <translation id="2887525882758501333">PDF  ಡಾಕ್ಯುಮೆಂಟ್</translation>
 <translation id="2888807692577297075">&lt;b&gt;"<ph name="SEARCH_STRING" />"&lt;/b&gt; ಗೆ ಯಾವ ಐಟಂಗಳೂ ಹೊಂದಿಕೆಯಾಗುವುದಿಲ್ಲ</translation>
@@ -227,6 +229,7 @@
 <translation id="290843123675549676">ಮರಾಠಿ</translation>
 <translation id="2923240520113693977">ಎಸ್ಟೋನಿಯನ್</translation>
 <translation id="2938685643439809023">ಮಂಗೋಲಿಯನ್</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{ವಿಸ್ತರಣೆಯನ್ನು ಹುಡುಕಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ}one{ವಿಸ್ತರಣೆಗಳನ್ನು ಹುಡುಕಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ}other{ವಿಸ್ತರಣೆಗಳನ್ನು ಹುಡುಕಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ}}</translation>
 <translation id="2943503720238418293">ಕಡಿಮೆ ಅಕ್ಷರಗಳನ್ನು ಹೊಂದಿರುವ ಹೆಸರನ್ನು ಬಳಸಿ</translation>
 <translation id="2949781154072577687"><ph name="DRIVE_NAME" /> ಅನ್ನು ಫಾರ್ಮ್ಯಾಟ್ ಮಾಡಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="2951236788251446349">ಜೆಲ್ಲಿಫಿಶ್</translation>
@@ -272,6 +275,7 @@
 <translation id="3290356915286466215">ಅಸುರಕ್ಷಿತ</translation>
 <translation id="3291218047831493686">ಸಿಮ್ ಲಾಕ್ ಸೆಟ್ಟಿಂಗ್ ಅನ್ನು ಬದಲಾಯಿಸಲು ಈ ನೆಟ್‌ವರ್ಕ್‌ಗೆ ಕನೆಕ್ಟ್ ಮಾಡಿ</translation>
 <translation id="3293023191599135697">WEP ನೆಟ್‌ವರ್ಕ್‌ಗಳು ಬೆಂಬಲಿತವಾಗಿಲ್ಲ</translation>
+<translation id="3295006446256079333">ಈ ಸಂಪುಟ</translation>
 <translation id="3295357220137379386">ಸಾಧನವು ಕಾರ್ಯನಿರತವಾಗಿದೆ</translation>
 <translation id="3296763833017966289">ಜಾರ್ಜಿಯನ್</translation>
 <translation id="3307875152560779385">ಉಕ್ರೇನಿಯನ್</translation>
@@ -281,6 +285,7 @@
 <translation id="3356580349448036450">ಪೂರ್ಣಗೊಂಡಿದೆ</translation>
 <translation id="3358452157379365236">ಗಿಟಾರ್</translation>
 <translation id="3368922792935385530">ಕನೆಕ್ಟ್ ಆಗಿದೆ</translation>
+<translation id="3372635229069101468"><ph name="BEGIN_BOLD" />ವಿವರಗಳು<ph name="END_BOLD" /> ಎಂಬುದನ್ನು ಕ್ಲಿಕ್ ಮಾಡಿ</translation>
 <translation id="3382143449143186018">ಇನ್‌ಸ್ಕ್ರಿಪ್ಟ್ ಕೀಬೋರ್ಡ್‌ನಲ್ಲಿ ನೇಪಾಳಿ</translation>
 <translation id="338691029516748599"><ph name="NETWORK_COUNT" /> ರಲ್ಲಿ <ph name="NETWORK_INDEX" /> ನೆಟ್‌ವರ್ಕ್, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, ಸಿಗ್ನಲ್ ಸಾಮರ್ಥ್ಯ <ph name="SIGNAL_STRENGTH" />%, ನಿಮ್ಮ ನಿರ್ವಾಹಕರು ನಿರ್ವಹಿಸಿದ್ದಾರೆ, ಕನೆಕ್ಟ್</translation>
 <translation id="3408072735282270043"><ph name="NETWORK_NAME" /> ಅನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
@@ -365,6 +370,7 @@
 <translation id="4124935795427217608">ಯುನಿಕಾರ್ನ್</translation>
 <translation id="4131235941541910880">ನಿಮಗೆ ಬೇಡದ ಐಟಂಗಳನ್ನು ಅನುಪಯುಕ್ತಕ್ಕೆ ಸರಿಸಿ</translation>
 <translation id="4134804435730168042"><ph name="NETWORK_COUNT" /> ರಲ್ಲಿ <ph name="NETWORK_INDEX" /> ನೆಟ್‌ವರ್ಕ್, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, ಸಾಧನದ ಸೆಟಪ್ ನಂತರ ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{ಅಜ್ಞಾತ ಮೋಡ್‌ನಲ್ಲಿ ಕೆಳಗಿನ ವಿಸ್ತರಣೆಯನ್ನು ಆನ್ ಮಾಡಿ:}one{ಅಜ್ಞಾತ ಮೋಡ್‌ನಲ್ಲಿ ಕೆಳಗಿನ ವಿಸ್ತರಣೆಗಳನ್ನು ಆನ್ ಮಾಡಿ:}other{ಅಜ್ಞಾತ ಮೋಡ್‌ನಲ್ಲಿ ಕೆಳಗಿನ ವಿಸ್ತರಣೆಗಳನ್ನು ಆನ್ ಮಾಡಿ:}}</translation>
 <translation id="4153015322587141338">ಶೆಲ್ಫ್‌ನಲ್ಲಿರುವ ನಿಮ್ಮ ಫೈಲ್‌ಗಳಿಗೆ ತ್ವರಿತ ಆ್ಯಕ್ಸೆಸ್ ಪಡೆಯಲು, ಫೈಲ್ ಮೇಲೆ ಬಲ-ಕ್ಲಿಕ್ ಮಾಡಿ ಮತ್ತು "<ph name="PIN_COMMAND" />" ಅನ್ನು ಆಯ್ಕೆಮಾಡಿ.</translation>
 <translation id="4157569377477607576">ನಿರ್ವಾಹಕರ ನೀತಿ ಇವುಗಳನ್ನು ಶಿಫಾರಸು ಮಾಡುವುದಿಲ್ಲ:</translation>
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> ಐಟಂಗಳನ್ನು ಸರಿಸಲಾಗಿದೆ.</translation>
@@ -379,7 +385,7 @@
 <translation id="421017592316736757">ಈ ಫೈಲ್ ಅನ್ನು ಪ್ರವೇಶಿಸಲು ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿರಬೇಕು.</translation>
 <translation id="4212740939091998969">"<ph name="FOLDER_NAME" />" ಹೆಸರಿನ ಫೋಲ್ಡರ್ ಈಗಾಗಲೇ ಇದೆ. ಬೇರೊಂದು ಹೆಸರನ್ನು ಆಯ್ಕೆಮಾಡಿ.</translation>
 <translation id="4218274196133425560"><ph name="HOST_NAME" /> ಗಾಗಿ ವಿನಾಯಿತಿಯನ್ನು ತೆಗೆದುಹಾಕಿ</translation>
-<translation id="4261901459838235729">Google ಪ್ರಸ್ತುತಿ</translation>
+<translation id="4261901459838235729">Google ಪ್ರೆಸೆಂಟೇಷನ್</translation>
 <translation id="4277536868133419688"><ph name="FILTER_NAME" /> ಫಿಲ್ಟರ್ ಆನ್ ಆಗಿದೆ.</translation>
 <translation id="4290535918735525311">Linux ಮೂಲಕ 1 ಫೋಲ್ಡರ್ ಅನ್ನು ಹಂಚಿಕೊಳ್ಳಲಾಗಿದೆ</translation>
 <translation id="4299729908419173967">ಬ್ರೆಜಿಲಿಯನ್</translation>
@@ -461,12 +467,15 @@
 <translation id="4801956050125744859">ಎರಡನ್ನೂ ಇರಿಸಿಕೊಳ್ಳಿ</translation>
 <translation id="4804827417948292437">ಆವಕಾಡೊ</translation>
 <translation id="4805966553127040832"><ph name="COUNT" /> ಐಟಂಗಳನ್ನು ಮರುಸ್ಥಾಪಿಸಲಾಗುತ್ತಿದೆ</translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{ಅಜ್ಞಾತ ಮೋಡ್ ಅನ್ನು ಬಳಸಲು, ನಿಮ್ಮ ಸಂಸ್ಥೆಗೆ ವಿಸ್ತರಣೆಯ ಅಗತ್ಯವಿದೆ}one{ಅಜ್ಞಾತ ಮೋಡ್ ಅನ್ನು ಬಳಸಲು, ನಿಮ್ಮ ಸಂಸ್ಥೆಗೆ ಕೆಲವು ವಿಸ್ತರಣೆಗಳ ಅಗತ್ಯವಿದೆ}other{ಅಜ್ಞಾತ ಮೋಡ್ ಅನ್ನು ಬಳಸಲು, ನಿಮ್ಮ ಸಂಸ್ಥೆಗೆ ಕೆಲವು ವಿಸ್ತರಣೆಗಳ ಅಗತ್ಯವಿದೆ}}</translation>
 <translation id="4823651846660089135">ಸಾಧನ ಓದಲು ಮಾತ್ರ ಆಗಿದೆ</translation>
 <translation id="4826849268470072925">ತಮಿಳು ITRANS</translation>
+<translation id="482932175346970750">ನಿಮ್ಮ ಬ್ರೌಸರ್‌ನಲ್ಲಿ <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" /> ಟೈಪ್ ಮಾಡಿ</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> ಐಟಂಗಳನ್ನು ಆಯ್ಕೆ ಮಾಡಲಾಗಿದೆ</translation>
 <translation id="4843566743023903107">Chromebases</translation>
 <translation id="4850886885716139402">ವೀಕ್ಷಣೆ</translation>
 <translation id="485316830061041779">ಜರ್ಮನ್</translation>
+<translation id="4862885579661885411">ಫೈಲ್‌ಗಳ ಸೆಟ್ಟಿಂಗ್‌ಗಳು</translation>
 <translation id="4867079195717347957">ಕಾಲಮ್ ಅನ್ನು ಕೆಳಗಿನಿಂದ ಮೇಲಕ್ಕೆ ಕ್ರಮದಲ್ಲಿ ವಿಂಗಡಿಸಲು ಕ್ಲಿಕ್ ಮಾಡಿ.</translation>
 <translation id="4867297348137739678">ಕಳೆದ ವಾರ</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> ಬೈಟ್‌ಗಳು</translation>
@@ -534,6 +543,7 @@
         ಹಂಚಿ, ರಚಿಸಿ ಮತ್ತು ಸಹಯೋಗಿಸಿ.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">Google ಡ್ರೈವ್‌ನಿಂದ ಮರುಪಡೆಯಲಾದ ಫೈಲ್‌ಗಳು</translation>
 <translation id="5278111733643988471">ಈ ಐಟಂ ಅನ್ನು ಮರುಸ್ಥಾಪಿಸಲು, ಅದನ್ನು ಅನುಪಯುಕ್ತದ ಹೊರಗಿನ ಹೊಸ ಫೋಲ್ಡರ್‌ಗೆ ಡ್ರ್ಯಾಗ್ ಮಾಡಿ. ಈ ಐಟಂಗಾಗಿ ಮೂಲ ಫೋಲ್ಡರ್ "<ph name="PARENT_FOLDER_NAME" />" ಅನ್ನು ಅಳಿಸಲಾಗಿದೆ.</translation>
+<translation id="5283101102242354279">ಅಜ್ಞಾತ ಮೋಡ್‌ನಲ್ಲಿ ವಿಸ್ತರಣೆಯೊಂದನ್ನು ಆನ್ ಮಾಡಿ:</translation>
 <translation id="5286194356314741248">ಸ್ಕ್ಯಾನಿಂಗ್</translation>
 <translation id="5288441970121584418">ಬರ್ಗರ್</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -544,7 +554,6 @@
 <translation id="5323213332664049067">ಲ್ಯಾಟಿನ್ ಅಮೇರಿಕನ್</translation>
 <translation id="5330145655348521461">ಈ ಫೈಲ್‍‍ಗಳನ್ನು ವಿವಿಧ ಡೆಸ್ಕ್‌ಟಾಪ್‍‍ಗಳಲ್ಲಿ ತೆರೆಯಲಾಗಿದೆ. ಅದನ್ನು ವೀಕ್ಷಿಸಲು <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) ಗೆ ಸರಿಸಿ.</translation>
 <translation id="5330512191124428349">ಮಾಹಿತಿ ಪಡೆಯಿರಿ</translation>
-<translation id="5337538975554986899"><ph name="NON_RESTRICTED_DESTINATIONS" /> ಹೊರತುಪಡಿಸಿ ಎಲ್ಲಾ URL ಗಳ ಮೂಲಕ ಫೈಲ್ ಅನ್ನು ಆ್ಯಕ್ಸೆಸ್ ಮಾಡುವುದು</translation>
 <translation id="5344246330454251646">Bruschetta ಹಂಚಿಕೆಯನ್ನು ನಿರ್ವಹಿಸಿ</translation>
 <translation id="535792325654997756">ಬೆಕ್ಕುಗಳ ಜೊತೆಯಲ್ಲಿರುವ ವ್ಯಕ್ತಿ</translation>
 <translation id="5358764674931277">ಫ್ರೇಮ್‌ ರೇಟ್</translation>
@@ -554,7 +563,7 @@
 <translation id="5402367795255837559">ಬ್ರೈಲಿ</translation>
 <translation id="5411472733320185105">ಈ ಹೋಸ್ಟ್‌ಗಳಿಗೆ ಮತ್ತು ಡೊಮೇನ್‌ಗಳಿಗೆ ಪ್ರಾಕ್ಸಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಉಪಯೋಗಿಸಬೇಡಿ:</translation>
 <translation id="541890217011173530">ಇಂಗ್ಲಿಷ್-ಆಧಾರಿತ ಕೀಬೋರ್ಡ್‌ನಲ್ಲಿ ಸೊರಾನಿ ಕುರ್ದಿಶ್</translation>
-<translation id="5422221874247253874">ಪ್ರವೇಶ ಬಿಂದು</translation>
+<translation id="5422221874247253874">ಆ್ಯಕ್ಸೆಸ್ ಪಾಯಿಂಟ್</translation>
 <translation id="5428105026674456456">ಸ್ಪ್ಯಾನಿಶ್</translation>
 <translation id="5438282218546237410"><ph name="SEARCH_TERM" /> ಗಾಗಿ ಯಾವುದೇ ಫಲಿತಾಂಶಗಳಿಲ್ಲ.</translation>
 <translation id="5449551289610225147">ಅಮಾನ್ಯ ಪಾಸ್‌ವರ್ಡ್</translation>
@@ -615,6 +624,7 @@
 <translation id="5911887972742538906">ನಿಮ್ಮ Linux ಅಪ್ಲಿಕೇಶನ್ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡುವಾಗ ಒಂದು ದೋಷ ಸಂಭವಿಸಿದೆ.</translation>
 <translation id="5912396950572065471">ಫಾರ್ಮ್ಯಾಟ್‌</translation>
 <translation id="5913638992615760742">ನಕಲಿಸುವಿಕೆ ಕಾರ್ಯಾಚರಣೆ ವಿಫಲವಾಗಿದೆ, ಅನಿರೀಕ್ಷಿತ ದೋಷ: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">ಹೊಸ ಹುಡುಕಾಟ ಫೀಚರ್‌ಗಳು ಲಭ್ಯವಿವೆ</translation>
 <translation id="5926082595146149752">ಯುಎಸ್ ಅಂತರರಾಷ್ಟ್ರೀಯ PC ಕೀಬೋರ್ಡ್‌ನಲ್ಲಿ ಡಚ್ (ನೆದರ್‌ಲ್ಯಾಂಡ್ಸ್)</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063"><ph name="NETWORK_COUNT" /> ರಲ್ಲಿ <ph name="NETWORK_INDEX" /> ನೆಟ್‌ವರ್ಕ್, <ph name="NETWORK_NAME" />, ಸಾಧನದ ಸೆಟಪ್ ನಂತರ ಸಕ್ರಿಯಗೊಳಿಸಿ</translation>
@@ -627,6 +637,7 @@
 <translation id="603895874132768835">ಹೊಸ ಪಿನ್ ಅನ್ನು ಸೆಟಪ್ ಮಾಡುವವರೆಗೆ ಈ ನೆಟ್‌ವರ್ಕ್ ಅನ್ನು ಬಳಸಲು ನಿಮಗೆ ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ</translation>
 <translation id="6040143037577758943">ಮುಚ್ಚಿರಿ</translation>
 <translation id="6055907707645252013"><ph name="NETWORK_TYPE" /> ನೆಟ್‌ವರ್ಕ್, ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ</translation>
+<translation id="6073060579181816027">ಬಹು ಫೈಲ್ ಸ್ಥಳಗಳು</translation>
 <translation id="6074825444536523002">Google ಫಾರ್ಮ್</translation>
 <translation id="6079871810119356840">Qwerty ಕೀಬೋರ್ಡ್‌ನಲ್ಲಿ ಹಂಗೇರಿಯನ್</translation>
 <translation id="6096979789310008754">ಹುಡುಕಾಟ ಪಠ್ಯವನ್ನು ತೆರವುಗೊಳಿಸಲಾಗಿದೆ, ಎಲ್ಲಾ ಫೈಲ್‌ಗಳು ಮತ್ತು ಫೋಲ್ಡರ್‌ಗಳನ್ನು ತೋರಿಸಲಾಗುತ್ತಿದೆ.</translation>
@@ -664,7 +675,7 @@
 <translation id="6327785803543103246">ವೆಬ್‌ ಪ್ರಾಕ್ಸಿಯ ಸ್ವಯಂಅನ್ವೇಷಣೆ</translation>
 <translation id="6337014272874260727">ತ್ವರಿತ ಫೈಲ್‌ಗಳಿಂದ ಅನ್‌ಪಿನ್ ಮಾಡಿ</translation>
 <translation id="6339145975392024142">US ಅಂತರಾಷ್ಟ್ರೀಯ (PC)</translation>
-<translation id="6346310558342052870">ಪ್ರವೇಶ ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ</translation>
+<translation id="6346310558342052870">ಆ್ಯಕ್ಸೆಸ್ ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ</translation>
 <translation id="6356685157277930264">ಫೈಲ್‌ಗಳ ಪ್ರತಿಕ್ರಿಯೆ ವಿಂಡೋ</translation>
 <translation id="6358884629796491903">ಡ್ರ್ಯಾಗನ್‌</translation>
 <translation id="636254897931573416">ಅಮಾನ್ಯವಾದ ಡೊಮೇನ್ ಸಫಿಕ್ಸ್ ಹೊಂದಾಣಿಕೆಯ ಮೌಲ್ಯ</translation>
@@ -704,6 +715,7 @@
 <translation id="6732801395666424405">ಪ್ರಮಾಣಪತ್ರಗಳನ್ನು ಲೋಡ್‌ ಮಾಡಲಾಗಲಿಲ್ಲ</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6740270213273127264">Bruschetta ಜೊತೆಗೆ ಫೋಲ್ಡರ್ ಹಂಚಿಕೊಳ್ಳಿ</translation>
+<translation id="6750737795876287924">ಪ್ರಸ್ತುತ ಡೈರೆಕ್ಟರಿ</translation>
 <translation id="6751256176799620176">1 ಫೋಲ್ಡರ್ ಆಯ್ಕೆಮಾಡಲಾಗಿದೆ</translation>
 <translation id="6755827872271341378">ChromeOS Flex ಸಾಧನ</translation>
 <translation id="6790428901817661496">ಪ್ಲೇ ಮಾಡು</translation>
@@ -741,7 +753,6 @@
 <translation id="6973630695168034713">ಫೋಲ್ಡರ್‌ಗಳು</translation>
 <translation id="6976795442547527108">ಸಿಂಹ</translation>
 <translation id="6979158407327259162">Google Drive</translation>
-<translation id="6979737339423435258">ಎಲ್ಲ ಸಮಯ</translation>
 <translation id="6989942356279143254">ಸ್ವೀಡಿಶ್</translation>
 <translation id="6990081529015358884">ನಿಮ್ಮ ಬಳಿ ಇದ್ದ ಸ್ಥಳ ಖಾಲಿಯಾಗಿದೆ</translation>
 <translation id="6993826899923627728">ಈ ಐಟಂಗಳು ನಿಮ್ಮ ಅನುಪಯುಕ್ತದಲ್ಲಿವೆ</translation>
@@ -767,6 +778,7 @@
 <translation id="7162080671816799010">ದೃಢೀಕರಣದ ಸರ್ವರ್ ಗುರುತನ್ನು ಮೌಲ್ಯೀಕರಿಸಲು 'ವಿಷಯ ಬದಲಿಯ ಹೆಸರಿನ ಹೊಂದಾಣಿಕೆ' ಅಥವಾ 'ಡೊಮೇನ್ ಸಫಿಕ್ಸ್ ಹೊಂದಾಣಿಕೆ' ಕಾಣೆಯಾಗಿದೆ</translation>
 <translation id="7165320105431587207">ನೆಟ್‌ವರ್ಕ್ ಕಾನ್ಫಿಗರ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ</translation>
 <translation id="7170041865419449892">ವ್ಯಾಪ್ತಿಯ ಹೊರಗಿದೆ</translation>
+<translation id="7179579940054351344"><ph name="NON_RESTRICTED_DESTINATIONS" /> ಅನ್ನು ಹೊರತುಪಡಿಸಿ ಎಲ್ಲಾ ವೆಬ್‌ಸೈಟ್‌ಗಳು ಹಾಗೂ URL ಗಳಿಂದ ಫೈಲ್ ಅನ್ನು ಆ್ಯಕ್ಸೆಸ್ ಮಾಡಿ</translation>
 <translation id="7180611975245234373">ರಿಫ್ರೆಶ್ ಮಾಡಿ</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> GB</translation>
 <translation id="7191454237977785534">ಇದರಂತೆ ಫೈಲ್ ಉಳಿಸಿ</translation>
@@ -776,6 +788,7 @@
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />, ವಿವರಗಳು</translation>
 <translation id="7246947237293279874">FTP ಪ್ರಾಕ್ಸಿ</translation>
 <translation id="7248671827512403053">ಅಪ್ಲಿಕೇಶನ್</translation>
+<translation id="7252604552361840748">ಮೇಲಿನ ವಿಸ್ತರಣೆಯನ್ನು ಹುಡುಕಿ</translation>
 <translation id="7256405249507348194">ಗುರುತಿಸದಿರುವ ದೋಷ: <ph name="DESC" /></translation>
 <translation id="7268659760406822741">ಲಭ್ಯವಿರುವ ಸೇವೆಗಳು</translation>
 <translation id="7292816689782057017">ನಿರ್ವಾಹಕರ ನೀತಿಯು ಕೆಲವು ಸ್ಥಳಗಳಲ್ಲಿ ಉಳಿಸುವುದನ್ನು ನಿರ್ಬಂಧಿಸುತ್ತದೆ.</translation>
@@ -797,7 +810,6 @@
 <translation id="7458955835361612701">ಯಾವುದೇ ಇತ್ತೀಚಿನ ಚಿತ್ರಗಳಿಲ್ಲ</translation>
 <translation id="7460898608667578234">ಉಕ್ರೇನಿಯನ್</translation>
 <translation id="7469894403370665791">ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಈ ನೆಟ್‌ವರ್ಕ್‌ಗೆ ಸಂಪರ್ಕಿಸಿ</translation>
-<translation id="7481358317100446445">ಸಿದ್ಧ</translation>
 <translation id="7486315294984620427">‌Parallels Desktop ನಲ್ಲಿ ಫೈಲ್‌ಗಳನ್ನು ಡ್ರಾಪ್ ಮಾಡಲು, ಫೈಲ್ ಅನ್ನು Windows ಫೈಲ್‌ಗಳಿಗೆ ನಕಲಿಸಬೇಕು.</translation>
 <translation id="749452993132003881">ಹಿರಾಗನ</translation>
 <translation id="7495372004724182530">ಮಲಯಾಳಂ ಫೋನೆಟಿಕ್</translation>
@@ -941,6 +953,7 @@
 <translation id="8492972329130824181">ಗೃಹ ನೆಟ್‌ವರ್ಕ್ ಲಭ್ಯವಿಲ್ಲ. ಕನೆಕ್ಟ್ ಮಾಡಲು ಮೊಬೈಲ್ ಡೇಟಾ ರೋಮಿಂಗ್ ಅನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಬೇಕಾಗುತ್ತದೆ.</translation>
 <translation id="8499098729323186194"><ph name="NUMBER_OF_ITEMS" /> ಐಟಂಗಳನ್ನು ಬೇರ್ಪಡಿಸಲಾಗುತ್ತಿದೆ...</translation>
 <translation id="8502913769543567768"><ph name="NETWORK_COUNT" /> ರಲ್ಲಿ <ph name="NETWORK_INDEX" /> ನೆಟ್‌ವರ್ಕ್, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, ಸಾಧನದ ಸೆಟಪ್ ನಂತರ ಸಕ್ರಿಯಗೊಳಿಸಿ, ನಿಮ್ಮ ನಿರ್ವಾಹಕರು ನಿರ್ವಹಿಸಿಸುತ್ತಿದ್ದಾರೆ</translation>
+<translation id="8512483403832814140">ಯಾವುದೇ ಸಮಯದಲ್ಲಿ</translation>
 <translation id="8521441079177373948">UK</translation>
 <translation id="853494022971700746">ಫ್ರೆಂಚ್ (ಫ್ರಾನ್ಸ್)</translation>
 <translation id="8540608333167683902"><ph name="NETWORK_COUNT" /> ರಲ್ಲಿ <ph name="NETWORK_INDEX" /> ನೆಟ್‌ವರ್ಕ್, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, ಸಿಗ್ನಲ್ ಸಾಮರ್ಥ್ಯ <ph name="SIGNAL_STRENGTH" />%, ವಿವರಗಳು</translation>
@@ -1009,7 +1022,7 @@
 <translation id="9111102763498581341">ಅನ್‌ಲಾಕ್</translation>
 <translation id="9116909380156770361"><ph name="RESTRICTED_COMPONENTS" /> ಗೆ ಫೈಲ್ ಅನ್ನು ವರ್ಗಾಯಿಸುವುದು</translation>
 <translation id="912419004897138677">ಕೋಡೆಕ್</translation>
-<translation id="9130775360844693113">ಈ ಐಟಂಗಳಿಗೆ '<ph name="DESTINATION_NAME" />' ನ ಸದಸ್ಯರು ಪ್ರವೇಶ ಪಡೆದುಕೊಳ್ಳುವರು.</translation>
+<translation id="9130775360844693113">ಈ ಐಟಂಗಳಿಗೆ '<ph name="DESTINATION_NAME" />' ನ ಸದಸ್ಯರು ಆ್ಯಕ್ಸೆಸ್ ಪಡೆದುಕೊಳ್ಳುವರು.</translation>
 <translation id="9131598836763251128">ಒಂದು ಅಥವಾ ಹೆಚ್ಚು ಫೈಲ್‌ಗಳನ್ನು ಆಯ್ಕೆಮಾಡಿ</translation>
 <translation id="9133055936679483811">ಜಿಪ್ ಮಾಡುವಿಕೆಯು ವಿಫಲವಾಗಿದೆ. <ph name="ERROR_MESSAGE" /></translation>
 <translation id="9144340019284012223">ಕೆಟಲಾನ್</translation>

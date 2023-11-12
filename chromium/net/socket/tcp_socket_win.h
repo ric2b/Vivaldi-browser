@@ -39,6 +39,10 @@ class NET_EXPORT TCPSocketWin : public base::win::ObjectWatcher::Delegate {
       NetLog* net_log,
       const NetLogSource& source);
 
+  TCPSocketWin(
+      std::unique_ptr<SocketPerformanceWatcher> socket_performance_watcher,
+      NetLogWithSource net_log_source);
+
   TCPSocketWin(const TCPSocketWin&) = delete;
   TCPSocketWin& operator=(const TCPSocketWin&) = delete;
 
@@ -94,6 +98,7 @@ class NET_EXPORT TCPSocketWin : public base::win::ObjectWatcher::Delegate {
   int SetSendBufferSize(int32_t size);
   bool SetKeepAlive(bool enable, int delay);
   bool SetNoDelay(bool no_delay);
+  int SetIPv6Only(bool ipv6_only);
 
   // Gets the estimated RTT. Returns false if the RTT is
   // unavailable. May also return false when estimated RTT is 0.

@@ -62,8 +62,8 @@ class RuleManagerImpl : public RuleManager {
   bool IsExemptOfFiltering(RuleGroup group, url::Origin origin) const override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
-  void OnRulesBufferReadFailCallback(RuleGroup rule_group,
-                                     uint32_t source_id) override;
+  void OnCompiledRulesReadFailCallback(RuleGroup rule_group,
+                                       uint32_t source_id) override;
 
  private:
   void OnSourceUpdated(RuleSourceHandler* rule_source_handler);

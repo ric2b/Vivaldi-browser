@@ -4,15 +4,20 @@
 
 package org.chromium.components.paintpreview.player;
 
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.equalTo;
+
 import android.graphics.Rect;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
-import android.support.test.InstrumentationRegistry;
 import android.util.Size;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.UiDevice;
@@ -26,15 +31,16 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.test.util.BlankUiTestActivityTestCase;
 import org.chromium.ui.test.util.RenderTestRule;
+import org.chromium.ui.test.util.ViewUtils;
 import org.chromium.url.GURL;
 
 import java.util.List;
@@ -91,7 +97,7 @@ public class PaintPreviewPlayerTest extends BlankUiTestActivityTestCase {
     @Override
     public void setUpTest() throws Exception {
         super.setUpTest();
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.postTask(TaskTraits.UI_DEFAULT, () -> {
             mLayout = new FrameLayout(getActivity());
             getActivity().setContentView(mLayout);
         });
@@ -101,7 +107,7 @@ public class PaintPreviewPlayerTest extends BlankUiTestActivityTestCase {
     public void tearDownTest() throws Exception {
         super.tearDownTest();
         CallbackHelper destroyed = new CallbackHelper();
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.postTask(TaskTraits.UI_DEFAULT, () -> {
             mPlayerManager.destroy();
             destroyed.notifyCalled();
         });
@@ -231,7 +237,7 @@ public class PaintPreviewPlayerTest extends BlankUiTestActivityTestCase {
     public void initializationCallbackErrorReported() throws Exception {
         CallbackHelper compositorErrorCallback = new CallbackHelper();
         mLinkClickHandler = new TestLinkClickHandler();
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.postTask(TaskTraits.UI_DEFAULT, () -> {
             PaintPreviewTestService service =
                     new PaintPreviewTestService(mTempFolder.getRoot().getPath());
             // Use the wrong URL to simulate a failure.
@@ -437,7 +443,7 @@ public class PaintPreviewPlayerTest extends BlankUiTestActivityTestCase {
         CallbackHelper firstPaint = new CallbackHelper();
         mInitializationFailed = false;
 
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.postTask(TaskTraits.UI_DEFAULT, () -> {
             PaintPreviewTestService service =
                     new PaintPreviewTestService(mTempFolder.getRoot().getPath());
             if (multiSkp) {
@@ -514,6 +520,9 @@ public class PaintPreviewPlayerTest extends BlankUiTestActivityTestCase {
                     Matchers.greaterThan(0));
         }, TIMEOUT_MS, CriteriaHelper.DEFAULT_POLLING_INTERVAL);
 
+        ViewUtils.onViewWaiting(allOf(
+                equalTo(((ViewGroup) mPlayerManager.getView()).getChildAt(0)), isDisplayed()));
+
         CriteriaHelper.pollUiThread(() -> {
             Criteria.checkThat("Required bitmaps were not loaded.",
                     mPlayerManager.checkRequiredBitmapsLoadedForTest(), Matchers.is(true));
@@ -569,7 +578,7 @@ public class PaintPreviewPlayerTest extends BlankUiTestActivityTestCase {
 
     private void makeLayoutWide() throws Exception {
         CallbackHelper widened = new CallbackHelper();
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.postTask(TaskTraits.UI_DEFAULT, () -> {
             FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) mLayout.getLayoutParams();
             params.width = mLayout.getWidth() * 2;
             params.height = mLayout.getHeight() * 2;

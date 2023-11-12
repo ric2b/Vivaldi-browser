@@ -62,10 +62,12 @@ class SkiaOutputDeviceBufferQueue::OverlayData {
 
   OverlayData(std::unique_ptr<gpu::OverlayImageRepresentation> representation,
               std::unique_ptr<gpu::OverlayImageRepresentation::ScopedReadAccess>
-                  scoped_read_access)
+                  scoped_read_access,
+              bool is_root_render_pass)
       : representation_(std::move(representation)),
         scoped_read_access_(std::move(scoped_read_access)),
-        ref_(1) {
+        ref_(1),
+        is_root_render_pass_(is_root_render_pass) {
     DCHECK(representation_);
     DCHECK(scoped_read_access_);
   }
@@ -83,13 +85,20 @@ class SkiaOutputDeviceBufferQueue::OverlayData {
     representation_ = std::move(other.representation_);
     ref_ = other.ref_;
     other.ref_ = 0;
+    is_root_render_pass_ = other.is_root_render_pass_;
     return *this;
   }
 
   bool IsInUseByWindowServer() const {
 #if BUILDFLAG(IS_APPLE)
-    if (!scoped_read_access_)
+    if (!scoped_read_access_) {
       return false;
+    }
+    // The root render pass buffers are managed by SkiaRenderer so we don't care
+    // if they're in use by the window server.
+    if (is_root_render_pass_) {
+      return false;
+    }
     return scoped_read_access_->IsInUseByWindowServer();
 #else
     return false;
@@ -117,6 +126,8 @@ class SkiaOutputDeviceBufferQueue::OverlayData {
     return scoped_read_access_.get();
   }
 
+  bool IsRootRenderPass() { return is_root_render_pass_; }
+
  private:
   void Reset() {
     scoped_read_access_.reset();
@@ -128,6 +139,7 @@ class SkiaOutputDeviceBufferQueue::OverlayData {
   std::unique_ptr<gpu::OverlayImageRepresentation::ScopedReadAccess>
       scoped_read_access_;
   int ref_ = 0;
+  bool is_root_render_pass_ = false;
 };
 
 SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
@@ -151,6 +163,8 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
       ui::OzonePlatform::GetInstance()
           ->GetPlatformRuntimeProperties()
           .supports_non_backed_solid_color_buffers;
+#elif BUILDFLAG(IS_APPLE)
+  capabilities_.supports_non_backed_solid_color_overlays = true;
 #endif  // BUILDFLAG(IS_OZONE)
 
   capabilities_.uses_default_gl_framebuffer = false;
@@ -322,6 +336,7 @@ void SkiaOutputDeviceBufferQueue::SchedulePrimaryPlane(
 
 SkiaOutputDeviceBufferQueue::OverlayData*
 SkiaOutputDeviceBufferQueue::GetOrCreateOverlayData(const gpu::Mailbox& mailbox,
+                                                    bool is_root_render_pass,
                                                     bool* is_existing) {
   if (is_existing)
     *is_existing = false;
@@ -355,8 +370,9 @@ SkiaOutputDeviceBufferQueue::GetOrCreateOverlayData(const gpu::Mailbox& mailbox,
   }
 
   bool result;
-  std::tie(it, result) = overlays_.emplace(std::move(shared_image),
-                                           std::move(shared_image_access));
+  std::tie(it, result) =
+      overlays_.emplace(std::move(shared_image), std::move(shared_image_access),
+                        is_root_render_pass);
   DCHECK(result);
   DCHECK(it->unique());
 
@@ -395,8 +411,8 @@ void SkiaOutputDeviceBufferQueue::ScheduleOverlays(
 
     OutputPresenter::ScopedOverlayAccess* access = nullptr;
     bool overlay_has_been_submitted;
-    auto* overlay_data =
-        GetOrCreateOverlayData(mailbox, &overlay_has_been_submitted);
+    auto* overlay_data = GetOrCreateOverlayData(
+        mailbox, overlay.is_root_render_pass, &overlay_has_been_submitted);
     if (overlay_data) {
       access = overlay_data->scoped_read_access();
       pending_overlay_mailboxes_.emplace_back(mailbox);
@@ -442,40 +458,8 @@ void SkiaOutputDeviceBufferQueue::Submit(bool sync_cpu,
   SkiaOutputDevice::Submit(sync_cpu, std::move(callback));
 }
 
-void SkiaOutputDeviceBufferQueue::SwapBuffers(BufferPresentedCallback feedback,
-                                              OutputSurfaceFrame frame) {
-  StartSwapBuffers({});
-
-  if (current_frame_has_no_primary_plane_) {
-    DCHECK(!current_image_);
-    submitted_image_ = nullptr;
-    current_frame_has_no_primary_plane_ = false;
-  } else {
-    DCHECK(current_image_);
-    submitted_image_ = current_image_;
-    current_image_ = nullptr;
-  }
-
-  // Cancelable callback uses weak ptr to drop this task upon destruction.
-  // Thus it is safe to use |base::Unretained(this)|.
-  // Bind submitted_image_->GetWeakPtr(), since the |submitted_image_| could
-  // be released due to reshape() or destruction.
-  auto data = frame.data;
-  swap_completion_callbacks_.emplace_back(
-      std::make_unique<CancelableSwapCompletionCallback>(base::BindOnce(
-          &SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers,
-          base::Unretained(this), GetSwapBuffersSize(), std::move(frame),
-          submitted_image_ ? submitted_image_->GetWeakPtr() : nullptr,
-          std::move(committed_overlay_mailboxes_))));
-  committed_overlay_mailboxes_.clear();
-
-  presenter_->SwapBuffers(swap_completion_callbacks_.back()->callback(),
-                          std::move(feedback), data);
-  std::swap(committed_overlay_mailboxes_, pending_overlay_mailboxes_);
-}
-
-void SkiaOutputDeviceBufferQueue::PostSubBuffer(
-    const gfx::Rect& rect,
+void SkiaOutputDeviceBufferQueue::Present(
+    const absl::optional<gfx::Rect>& update_rect,
     BufferPresentedCallback feedback,
     OutputSurfaceFrame frame) {
   StartSwapBuffers({});
@@ -509,40 +493,8 @@ void SkiaOutputDeviceBufferQueue::PostSubBuffer(
           std::move(committed_overlay_mailboxes_))));
   committed_overlay_mailboxes_.clear();
 
-  presenter_->PostSubBuffer(rect, swap_completion_callbacks_.back()->callback(),
-                            std::move(feedback), data);
-  std::swap(committed_overlay_mailboxes_, pending_overlay_mailboxes_);
-}
-
-void SkiaOutputDeviceBufferQueue::CommitOverlayPlanes(
-    BufferPresentedCallback feedback,
-    OutputSurfaceFrame frame) {
-  StartSwapBuffers({});
-
-  // There is no drawing for this frame on the main buffer.
-  DCHECK(!current_image_);
-  if (current_frame_has_no_primary_plane_) {
-    submitted_image_ = nullptr;
-    current_frame_has_no_primary_plane_ = false;
-  } else {
-    DCHECK(submitted_image_);
-  }
-
-  // Cancelable callback uses weak ptr to drop this task upon destruction.
-  // Thus it is safe to use |base::Unretained(this)|.
-  // Bind submitted_image_->GetWeakPtr(), since the |submitted_image_| could
-  // be released due to reshape() or destruction.
-  auto data = frame.data;
-  swap_completion_callbacks_.emplace_back(
-      std::make_unique<CancelableSwapCompletionCallback>(base::BindOnce(
-          &SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers,
-          base::Unretained(this), GetSwapBuffersSize(), std::move(frame),
-          submitted_image_ ? submitted_image_->GetWeakPtr() : nullptr,
-          std::move(committed_overlay_mailboxes_))));
-  committed_overlay_mailboxes_.clear();
-
-  presenter_->CommitOverlayPlanes(swap_completion_callbacks_.back()->callback(),
-                                  std::move(feedback), data);
+  presenter_->Present(swap_completion_callbacks_.back()->callback(),
+                      std::move(feedback), data);
   std::swap(committed_overlay_mailboxes_, pending_overlay_mailboxes_);
 }
 
@@ -599,7 +551,11 @@ void SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers(
     // Right now, only macOS and LaCros needs to return maliboxes of released
     // overlays, so SkiaRenderer can unlock resources for them.
 #if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_OZONE)
-    released_overlays.push_back(overlay.mailbox());
+    // The root render pass buffers are managed by SkiaRenderer so we don't need
+    // to explicitly return them via callback.
+    if (!overlay.IsRootRenderPass()) {
+      released_overlays.push_back(overlay.mailbox());
+    }
 #else
     (void)released_overlays;
 #endif
@@ -643,14 +599,14 @@ gfx::Size SkiaOutputDeviceBufferQueue::GetSwapBuffersSize() {
   }
 }
 
-bool SkiaOutputDeviceBufferQueue::Reshape(
-    const SkSurfaceCharacterization& characterization,
-    const gfx::ColorSpace& color_space,
-    float device_scale_factor,
-    gfx::OverlayTransform transform) {
+bool SkiaOutputDeviceBufferQueue::Reshape(const SkImageInfo& image_info,
+                                          const gfx::ColorSpace& color_space,
+                                          int sample_count,
+                                          float device_scale_factor,
+                                          gfx::OverlayTransform transform) {
   DCHECK(pending_overlay_mailboxes_.empty());
-  if (!presenter_->Reshape(characterization, color_space, device_scale_factor,
-                           transform)) {
+  if (!presenter_->Reshape(image_info, color_space, sample_count,
+                           device_scale_factor, transform)) {
     LOG(ERROR) << "Failed to resize.";
     CheckForLoopFailuresBufferQueue();
     // To prevent tail call, so we can see the stack.
@@ -659,12 +615,12 @@ bool SkiaOutputDeviceBufferQueue::Reshape(
   }
 
   overlay_transform_ = transform;
-  gfx::Size size = gfx::SkISizeToSize(characterization.dimensions());
+  gfx::Size size = gfx::SkISizeToSize(image_info.dimensions());
   if (color_space_ == color_space && image_size_ == size)
     return true;
   color_space_ = color_space;
   image_size_ = size;
-  sample_count_ = characterization.sampleCount();
+  sample_count_ = sample_count;
 
   bool success = RecreateImages();
   if (!success) {

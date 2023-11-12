@@ -13,6 +13,10 @@
 #include "components/sync/test/mock_model_type_change_processor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/web_applications/web_app_run_on_os_login_manager.h"
+#endif
+
 class KeyedService;
 class Profile;
 
@@ -87,9 +91,16 @@ class FakeWebAppProvider : public WebAppProvider {
   void SetWebAppUiManager(std::unique_ptr<WebAppUiManager> ui_manager);
   void SetWebAppPolicyManager(
       std::unique_ptr<WebAppPolicyManager> web_app_policy_manager);
+#if BUILDFLAG(IS_CHROMEOS)
+  void SetWebAppRunOnOsLoginManager(std::unique_ptr<WebAppRunOnOsLoginManager>
+                                        web_app_run_on_os_login_manager);
+#endif
   void SetCommandManager(std::unique_ptr<WebAppCommandManager> command_manager);
   void SetPreinstalledWebAppManager(
       std::unique_ptr<PreinstalledWebAppManager> preinstalled_web_app_manager);
+  void SetOriginAssociationManager(
+      std::unique_ptr<WebAppOriginAssociationManager>
+          origin_association_manager);
 
   // These getters can be called at any time: no
   // WebAppProvider::CheckIsConnected() check performed. See
@@ -103,6 +114,9 @@ class FakeWebAppProvider : public WebAppProvider {
   WebAppUiManager& GetUiManager() const;
   WebAppInstallManager& GetInstallManager() const;
   OsIntegrationManager& GetOsIntegrationManager() const;
+#if BUILDFLAG(IS_CHROMEOS)
+  WebAppRunOnOsLoginManager& GetWebAppRunOnOsLoginManager() const;
+#endif
 
   // Starts this WebAppProvider and its subsystems. It does not wait for systems
   // to be ready.

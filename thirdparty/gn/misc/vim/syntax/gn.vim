@@ -43,7 +43,7 @@ hi def link     gnFunctions         Macro
 
 " Variables
 syn keyword     gnVariable all_dependent_configs allow_circular_includes_from
-syn keyword     gnVariable args asmflags assert_no_deps
+syn keyword     gnVariable args arflags asmflags assert_no_deps
 syn keyword     gnVariable cflags cflags_c cflags_cc cflags_objc cflags_objcc
 syn keyword     gnVariable check_includes complete_static_lib configs
 syn keyword     gnVariable data data_deps data_keys defines depfile deps

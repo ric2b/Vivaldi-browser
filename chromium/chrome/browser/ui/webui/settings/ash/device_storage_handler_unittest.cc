@@ -14,6 +14,7 @@
 #include "base/containers/adapters.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -153,9 +154,23 @@ class StorageHandlerTest : public testing::Test {
 
  protected:
   // From a given amount of total size and available size as input, returns the
-  // space state determined by the OnGetSizeState function.
+  // space state determined by the UpdateOverallStatistics function.
   int GetSpaceState(int64_t total_size, int64_t available_size) {
     total_disk_space_test_api_->SimulateOnGetRootDeviceSize(total_size);
+    free_disk_space_test_api_->SimulateOnGetUserFreeDiskSpace(available_size);
+    task_environment_.RunUntilIdle();
+    const base::Value* dictionary =
+        GetWebUICallbackMessage("storage-size-stat-changed");
+    EXPECT_TRUE(dictionary) << "No 'storage-size-stat-changed' callback";
+    int space_state = *dictionary->GetDict().FindInt("spaceState");
+    return space_state;
+  }
+
+  // From a given amount of total size and available size as input, returns the
+  // space state determined by the UpdateOverallStatistics function, provided
+  // that the spaced client is not available.
+  int GetSpaceStateNoSpacedClient(int64_t total_size, int64_t available_size) {
+    total_disk_space_test_api_->SimulateOnGetTotalDiskSpace(&total_size);
     free_disk_space_test_api_->SimulateOnGetFreeDiskSpace(&available_size);
     task_environment_.RunUntilIdle();
     const base::Value* dictionary =
@@ -214,11 +229,11 @@ class StorageHandlerTest : public testing::Test {
     ASSERT_EQ(expected_size, stat.st_size);
   }
 
-  StorageHandler* handler_;
+  raw_ptr<StorageHandler, ExperimentalAsh> handler_;
   std::unique_ptr<content::TestWebUI> web_ui_;
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   base::test::ScopedFeatureList features_;
   std::unique_ptr<TotalDiskSpaceTestAPI> total_disk_space_test_api_;
   std::unique_ptr<FreeDiskSpaceTestAPI> free_disk_space_test_api_;
@@ -228,7 +243,7 @@ class StorageHandlerTest : public testing::Test {
   std::unique_ptr<DriveOfflineSizeTestAPI> drive_offline_size_test_api_;
   std::unique_ptr<CrostiniSizeTestAPI> crostini_size_test_api_;
   std::unique_ptr<OtherUsersSizeTestAPI> other_users_size_test_api_;
-  MockNewWindowDelegate* new_window_delegate_primary_;
+  raw_ptr<MockNewWindowDelegate, ExperimentalAsh> new_window_delegate_primary_;
 
  private:
   std::unique_ptr<arc::ArcServiceManager> arc_service_manager_;
@@ -328,6 +343,29 @@ TEST_F(StorageHandlerTest, StorageSpaceState) {
   // From 1GB, normal space state.
   available_size = 1024 * 1024 * 1024;
   space_state = GetSpaceState(total_size, available_size);
+  EXPECT_EQ(static_cast<int>(StorageSpaceState::kStorageSpaceNormal),
+            space_state);
+}
+
+TEST_F(StorageHandlerTest, StorageSpaceStateNoSpacedClient) {
+  // Less than 512 MB available, space state is critically low.
+  int64_t total_size = 1024 * 1024 * 1024;
+  int64_t available_size = 512 * 1024 * 1024 - 1;
+  int space_state = GetSpaceStateNoSpacedClient(total_size, available_size);
+  EXPECT_EQ(static_cast<int>(StorageSpaceState::kStorageSpaceCriticallyLow),
+            space_state);
+
+  // Less than 1GB available, space state is low.
+  available_size = 512 * 1024 * 1024;
+  space_state = GetSpaceStateNoSpacedClient(total_size, available_size);
+  EXPECT_EQ(static_cast<int>(StorageSpaceState::kStorageSpaceLow), space_state);
+  available_size = 1024 * 1024 * 1024 - 1;
+  space_state = GetSpaceStateNoSpacedClient(total_size, available_size);
+  EXPECT_EQ(static_cast<int>(StorageSpaceState::kStorageSpaceLow), space_state);
+
+  // From 1GB, normal space state.
+  available_size = 1024 * 1024 * 1024;
+  space_state = GetSpaceStateNoSpacedClient(total_size, available_size);
   EXPECT_EQ(static_cast<int>(StorageSpaceState::kStorageSpaceNormal),
             space_state);
 }
@@ -498,7 +536,7 @@ TEST_F(StorageHandlerTest, SystemSize) {
   int64_t available_size = 100 * GB;
   total_disk_space_test_api_->SimulateOnGetRootDeviceSize(total_size);
   free_disk_space_test_api_->SimulateOnGetFreeDiskSpace(&available_size);
-  drive_offline_size_test_api_->SimulateOnGetOfflineItemsSize(available_size);
+  drive_offline_size_test_api_->SimulateOnGetOfflineItemsSize(50 * GB);
   const base::Value* callback =
       GetWebUICallbackMessage("storage-size-stat-changed");
   ASSERT_TRUE(callback) << "No 'storage-size-stat-changed' callback";
@@ -587,22 +625,22 @@ TEST_F(StorageHandlerTest, SystemSize) {
       // updated.
       callback = GetWebUICallbackMessage("storage-system-size-changed");
       ASSERT_TRUE(callback) << "No 'storage-system-size-changed' callback";
-      EXPECT_EQ("110 GB", callback->GetString());
+      EXPECT_EQ("60.0 GB", callback->GetString());
     }
   }
 
-  // If there's an error while calculating the size of browsing data, the size
-  // of browsing data and system should be displayed as "Unknown".
+  // If there is an error while calculating the size of browsing data, the size
+  // of browsing data should be displayed as "Unknown".
   browsing_data_size_test_api_->SimulateOnGetBrowsingDataSize(
       true /* is_site_data */, -1);
   callback = GetWebUICallbackMessage("storage-browsing-data-size-changed");
   ASSERT_TRUE(callback) << "No 'storage-browsing-data-size-changed' callback";
   EXPECT_EQ("Unknown", callback->GetString());
-  // The missing 24.0 GB of browsing data should be reflected in the system
-  // section instead. We expect the displayed size to be 100 + 24 GB.
+  // The missing 24 GB of browsing data should be reflected in the system
+  // section instead. We expect the displayed size to be 60 + 24 GB.
   callback = GetWebUICallbackMessage("storage-system-size-changed");
   ASSERT_TRUE(callback) << "No 'storage-system-size-changed' callback";
-  EXPECT_EQ("134 GB", callback->GetString());
+  EXPECT_EQ("84.0 GB", callback->GetString());
 
   // No error while recalculating browsing data size, the UI should be updated
   // with the right sizes.
@@ -613,7 +651,7 @@ TEST_F(StorageHandlerTest, SystemSize) {
   EXPECT_EQ("24.0 GB", callback->GetString());
   callback = GetWebUICallbackMessage("storage-system-size-changed");
   ASSERT_TRUE(callback) << "No 'storage-system-size-changed' callback";
-  EXPECT_EQ("110 GB", callback->GetString());
+  EXPECT_EQ("60.0 GB", callback->GetString());
 }
 
 TEST_F(StorageHandlerTest, OpenBrowsingDataSettings) {

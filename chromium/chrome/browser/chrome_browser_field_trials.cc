@@ -39,7 +39,6 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/login/consolidated_consent_field_trial.h"
 #include "chrome/common/channel_info.h"
 #include "chromeos/ash/components/login/auth/recovery/recovery_utils.h"
 #include "chromeos/ash/services/multidevice_setup/public/cpp/first_run_field_trial.h"
@@ -70,11 +69,6 @@ void ChromeBrowserFieldTrials::SetUpClientSideFieldTrials(
     bool has_seed,
     const variations::EntropyProviders& entropy_providers,
     base::FeatureList* feature_list) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  ash::consolidated_consent_field_trial::Create(
-      entropy_providers.default_entropy(), feature_list, local_state_);
-#endif
-
   // Only create the fallback trials if there isn't already a variations seed
   // being applied. This should occur during first run when first-run variations
   // isn't supported. It's assumed that, if there is a seed, then it either
@@ -98,6 +92,10 @@ void ChromeBrowserFieldTrials::SetUpClientSideFieldTrials(
     ash::multidevice_setup::CreateFirstRunFieldTrial(feature_list);
 #endif
   }
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) && !BUILDFLAG(IS_WIN)
+  FirstRunService::SetUpClientSideFieldTrialIfNeeded(
+      entropy_providers.default_entropy(), feature_list);
+#endif
 
 #if BUILDFLAG(IS_ANDROID)
   // RegisterSyntheticTrials doesn't have access to entropy providers which are
@@ -166,18 +164,21 @@ void ChromeBrowserFieldTrials::RegisterSyntheticTrials() {
         kBackgroundThreadPoolTrial, group_name);
   }
 
-  // MobileIdentityConsistencyFRESynthetic field trial.
-  static constexpr char kFREMobileIdentityConsistencyTrial[] =
-      "FREMobileIdentityConsistencySynthetic";
-  const std::string group =
-      fre_mobile_identity_consistency_field_trial::GetFREFieldTrialGroup();
+  // MobileIdentityConsistencyFREVariationsSynthetic field trial.
+  // This trial experiments with different title and subtitle variation in
+  // the FRE UI. This is a follow up experiment to
+  // MobileIdentityConsistencyFRESynthetic.
+  static constexpr char kFREMobileIdentityConsistencyVariationsTrial[] =
+      "FREMobileIdentityConsistencyVariationsSynthetic";
+  const std::string variation_group =
+      fre_mobile_identity_consistency_field_trial::GetFREFieldTrialGroupName();
   ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
-      kFREMobileIdentityConsistencyTrial, group,
+      kFREMobileIdentityConsistencyVariationsTrial, variation_group,
       variations::SyntheticTrialAnnotationMode::kCurrentLog);
   if (fre_consistency_trial_variation_id_ != variations::EMPTY_ID) {
     variations::AssociateGoogleVariationID(
         variations::GOOGLE_WEB_PROPERTIES_ANY_CONTEXT,
-        kFREMobileIdentityConsistencyTrial, group,
+        kFREMobileIdentityConsistencyVariationsTrial, variation_group,
         fre_consistency_trial_variation_id_);
   }
 #endif  // BUILDFLAG(IS_ANDROID)

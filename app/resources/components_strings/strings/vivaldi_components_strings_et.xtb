@@ -91,7 +91,7 @@
 <translation id="4265872034478892965">Administraatori poolt lubatud</translation>
 <translation id="4305666528087210886">Failile ei pääsetud juurde</translation>
 <translation id="4312866146174492540">Blokeeritud (vaikimisi)</translation>
-<translation id="4356973930735388585">Selle saidi taga peituvad ründajad võivad üritada installida sinu arvutisse ohtlikke programme, mis varastavad või kustutavad sinu andmeid (nt fotosid, paroole, sõnumeid, krediitkaardi numbreid).</translation>
+<translation id="4356973930735388585">Selle saidi taga peituvad ründajad võivad üritada installida sinu arvutisse ohtlikke programme, mis varastavad või kustutavad sinu andmeid (nt fotosid, paroole, sõnumeid, krediitkaardi andmeid).</translation>
 <translation id="4408413947728134509">Küpsised <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544">Host <ph name="HOST_NAME" /> ei aktsepteerinud sisselogimise sertifikaati või sa ei esitanud seda.</translation>
 <translation id="4506599922270137252">Võta ühendust süsteemiadministraatoriga</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 kasutusel)} other {(# kasutusel)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Kontrolli puhverserveri aadressi<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bitine)</translation>
-<translation id="5287240709317226393">Näita küpsiseid</translation>
 <translation id="5355557959165512791">Saiti <ph name="SITE" /> ei saa praegu külastada, sest selle sertifikaat on tühistatud. Võrguvead ja -rünnakud on tavaliselt ajutised, nii et tõenäoliselt leht hiljem taas töötab.</translation>
 <translation id="5386426401304769735">Selle saidi sertifikaadiahel sisaldab SHA-1-ga allkirjastatud sertifikaati.</translation>
 <translation id="5452270690849572955">Seda lehte saidilt <ph name="HOST_NAME" /> ei leita</translation>
@@ -154,9 +153,10 @@
 <translation id="6657585470893396449">Parool</translation>
 <translation id="6711464428925977395">Puhverserveriga on midagi valesti või aadress on vale.</translation>
 <translation id="6757797048963528358">Seade läks unerežiimi.</translation>
+<translation id="6890956352250146925">Küpsiste ja saidiandmete valikud</translation>
 <translation id="6897140037006041989">Kasutajaagent</translation>
 <translation id="7053983685419859001">Blokeeri</translation>
-<translation id="7079718277001814089">See sait sisaldab pahavara</translation>
+<translation id="7079718277001814089">See sait sisaldab kahjurvara</translation>
 <translation id="7096937462164235847">Selle veebisaidi identiteet pole verifitseeritud.</translation>
 <translation id="7108819624672055576">Laienduse poolt lubatud</translation>
 <translation id="7111012039238467737">(kehtiv)</translation>

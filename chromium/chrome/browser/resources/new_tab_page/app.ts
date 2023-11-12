@@ -229,6 +229,11 @@ export class AppElement extends AppElementBase {
         value: () => loadTimeData.getBoolean('shortcutsEnabled'),
       },
 
+      singleRowShortcutsEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('singleRowShortcutsEnabled'),
+      },
+
       modulesFreShown: {
         type: Boolean,
         reflectToAttribute: true,
@@ -253,6 +258,12 @@ export class AppElement extends AppElementBase {
       modulesRedesignedEnabled_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('modulesRedesignedEnabled'),
+        reflectToAttribute: true,
+      },
+
+      wideModulesEnabled_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('wideModulesEnabled'),
         reflectToAttribute: true,
       },
 
@@ -371,7 +382,16 @@ export class AppElement extends AppElementBase {
           max: 1000,
           buckets: 200,
         },
-        Math.floor(document.documentElement.clientHeight));
+        Math.floor(window.innerHeight));
+    chrome.metricsPrivate.recordValue(
+        {
+          metricName: 'NewTabPage.Width',
+          type: chrome.metricsPrivate.MetricTypeType.HISTOGRAM_LINEAR,
+          min: 1,
+          max: 1920,
+          buckets: 384,
+        },
+        Math.floor(window.innerWidth));
 
     startColorChangeUpdater();
   }
@@ -429,13 +449,6 @@ export class AppElement extends AppElementBase {
           });
     }
     FocusOutlineManager.forDocument(document);
-
-    if (loadTimeData.valueExists('modulesMaxWidthPx')) {
-      this.updateStyles({
-        '--ntp-module-max-width':
-            `${loadTimeData.getInteger('modulesMaxWidthPx')}px`,
-      });
-    }
   }
 
   override disconnectedCallback() {
@@ -511,6 +524,7 @@ export class AppElement extends AppElementBase {
     document.documentElement.setAttribute('lazy-loaded', String(true));
     this.registerHelpBubble(
         CUSTOMIZE_CHROME_BUTTON_ELEMENT_ID, '#customizeButton', {fixed: true});
+    this.pageHandler_.maybeShowCustomizeChromeFeaturePromo();
   }
 
   private onOpenVoiceSearch_() {

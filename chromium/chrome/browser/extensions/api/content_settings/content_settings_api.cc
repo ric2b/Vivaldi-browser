@@ -4,7 +4,6 @@
 
 #include "chrome/browser/extensions/api/content_settings/content_settings_api.h"
 
-#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -26,6 +25,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/webplugininfo.h"
@@ -80,8 +80,8 @@ ContentSettingsContentSettingClearFunction::Run() {
   ContentSettingsType content_type;
   EXTENSION_FUNCTION_VALIDATE(RemoveContentType(mutable_args(), &content_type));
 
-  std::unique_ptr<Clear::Params> params(Clear::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Clear::Params> params = Clear::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   if (content_type == ContentSettingsType::DEPRECATED_PPAPI_BROKER) {
     NOTREACHED();
@@ -110,7 +110,7 @@ ContentSettingsContentSettingClearFunction::Run() {
   store->ClearContentSettingsForExtensionAndContentType(extension_id(), scope,
                                                         content_type);
 
-  return RespondNow(WithArguments());
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
@@ -118,8 +118,8 @@ ContentSettingsContentSettingGetFunction::Run() {
   ContentSettingsType content_type;
   EXTENSION_FUNCTION_VALIDATE(RemoveContentType(mutable_args(), &content_type));
 
-  std::unique_ptr<Get::Params> params(Get::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Get::Params> params = Get::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   if (content_type == ContentSettingsType::DEPRECATED_PPAPI_BROKER) {
     NOTREACHED();
@@ -189,8 +189,8 @@ ContentSettingsContentSettingSetFunction::Run() {
   ContentSettingsType content_type;
   EXTENSION_FUNCTION_VALIDATE(RemoveContentType(mutable_args(), &content_type));
 
-  std::unique_ptr<Set::Params> params(Set::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Set::Params> params = Set::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   if (content_type == ContentSettingsType::DEPRECATED_PPAPI_BROKER) {
     NOTREACHED();
@@ -229,6 +229,15 @@ ContentSettingsContentSettingSetFunction::Run() {
   const content_settings::ContentSettingsInfo* info =
       content_settings::ContentSettingsRegistry::GetInstance()->Get(
           content_type);
+
+  // The ANTI_ABUSE content setting does not support site-specific settings.
+  if (content_type == ContentSettingsType::ANTI_ABUSE &&
+      (primary_pattern != ContentSettingsPattern::Wildcard() ||
+       secondary_pattern != ContentSettingsPattern::Wildcard())) {
+    return RespondNow(
+        Error("Site-specific settings are not allowed for this type. The URL "
+              "pattern must be '<all_urls>'."));
+  }
 
   // Some content setting types support the full set of values listed in
   // content_settings.json only for exceptions. For the default setting,
@@ -311,7 +320,7 @@ ContentSettingsContentSettingSetFunction::Run() {
                                     secondary_pattern, content_type, setting,
                                     scope);
 
-  return RespondNow(WithArguments());
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
@@ -320,7 +329,7 @@ ContentSettingsContentSettingGetResourceIdentifiersFunction::Run() {
   // plugins have been deprecated since Chrome 87, there are no resource
   // identifiers for existing settings (but we retain the function for
   // backwards and potential forwards compatibility).
-  return RespondNow(WithArguments());
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

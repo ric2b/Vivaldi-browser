@@ -38,10 +38,6 @@ base::WeakPtr<AutofillManager> AndroidAutofillManager::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-AutofillOfferManager* AndroidAutofillManager::GetOfferManager() {
-  return nullptr;
-}
-
 CreditCardAccessManager* AndroidAutofillManager::GetCreditCardAccessManager() {
   return nullptr;
 }
@@ -54,14 +50,16 @@ void AndroidAutofillManager::FillCreditCardFormImpl(
     const FormData& form,
     const FormFieldData& field,
     const CreditCard& credit_card,
-    const std::u16string& cvc) {
+    const std::u16string& cvc,
+    AutofillTriggerSource trigger_source) {
   NOTREACHED();
 }
 
 void AndroidAutofillManager::FillProfileFormImpl(
     const FormData& form,
     const FormFieldData& field,
-    const autofill::AutofillProfile& profile) {
+    const autofill::AutofillProfile& profile,
+    AutofillTriggerSource trigger_source) {
   NOTREACHED();
 }
 
@@ -71,6 +69,7 @@ void AndroidAutofillManager::OnFormSubmittedImpl(
     mojom::SubmissionSource source) {
   address_logger_->OnWillSubmitForm();
   payments_logger_->OnWillSubmitForm();
+  password_logger_->OnWillSubmitForm();
   if (auto* provider = GetAutofillProvider())
     provider->OnFormSubmitted(this, form, known_success, source);
 }
@@ -144,10 +143,7 @@ void AndroidAutofillManager::OnSelectControlDidChangeImpl(
     provider->OnSelectControlDidChange(this, form, field, bounding_box);
 }
 
-bool AndroidAutofillManager::ShouldParseForms(
-    const std::vector<FormData>& forms) {
-  // Need to parse the |forms| to FormStructure, so heuristic_type can be
-  // retrieved later.
+bool AndroidAutofillManager::ShouldParseForms() {
   return true;
 }
 
@@ -251,6 +247,8 @@ void AndroidAutofillManager::StartNewLoggingSession() {
   address_logger_ = std::make_unique<FormEventLoggerWeblayerAndroid>("Address");
   payments_logger_ =
       std::make_unique<FormEventLoggerWeblayerAndroid>("CreditCard");
+  password_logger_ =
+      std::make_unique<FormEventLoggerWeblayerAndroid>("Password");
 }
 
 FormEventLoggerWeblayerAndroid* AndroidAutofillManager::GetEventFormLogger(
@@ -272,6 +270,7 @@ FormEventLoggerWeblayerAndroid* AndroidAutofillManager::GetEventFormLogger(
     case FormType::kCreditCardForm:
       return payments_logger_.get();
     case FormType::kPasswordForm:
+      return password_logger_.get();
     case FormType::kUnknownFormType:
       return nullptr;
   }

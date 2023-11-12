@@ -10,6 +10,7 @@
 #include "ash/constants/ash_features.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "chrome/browser/ash/borealis/borealis_context.h"
 #include "chrome/browser/ash/borealis/borealis_disk_manager_dispatcher.h"
@@ -22,10 +23,10 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/dbus/cicerone/fake_cicerone_client.h"
-#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/ash/components/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/seneschal/seneschal_client.h"
+#include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -160,8 +161,8 @@ class BorealisDiskManagerTest : public testing::Test,
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<BorealisContext> context_;
   std::unique_ptr<BorealisDiskManagerImpl> disk_manager_;
-  FreeSpaceProviderMock* free_space_provider_;
-  BorealisServiceFake* service_fake_;
+  raw_ptr<FreeSpaceProviderMock, ExperimentalAsh> free_space_provider_;
+  raw_ptr<BorealisServiceFake, ExperimentalAsh> service_fake_;
   std::unique_ptr<testing::NiceMock<BorealisDiskDispatcherMock>>
       mock_dispatcher_;
   std::unique_ptr<BorealisFeatures> borealis_features_;

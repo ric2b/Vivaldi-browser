@@ -44,8 +44,8 @@ class ActionEditButton::CircleBackground : public views::Background {
 
 ActionEditButton::ActionEditButton(PressedCallback callback)
     : views::ImageButton(std::move(callback)) {
-  auto dots_icon = gfx::CreateVectorIcon(
-      ash::kPersistentDesksBarVerticalDotsIcon, kDotsIconSize, kDotsIconColor);
+  auto dots_icon = gfx::CreateVectorIcon(ash::kVerticalDotsIcon, kDotsIconSize,
+                                         kDotsIconColor);
   SetImage(views::Button::STATE_NORMAL, dots_icon);
   SetAccessibleName(base::UTF8ToUTF16(GetClassName()));
   SetSize(gfx::Size(kDotsButtonSize, kDotsButtonSize));
@@ -60,8 +60,9 @@ ActionEditButton::ActionEditButton(PressedCallback callback)
   auto* color_provider = ash::AshColorProvider::Get();
   DCHECK(focus_ring);
   DCHECK(color_provider);
-  if (!focus_ring || !color_provider)
+  if (!focus_ring || !color_provider) {
     return;
+  }
   focus_ring->SetColorId(ui::kColorAshFocusRing);
   focus_ring->SetHaloThickness(kFocusRingStrokeWidth);
   focus_ring->SetPathGenerator(

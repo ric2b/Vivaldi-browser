@@ -250,8 +250,8 @@ std::pair<Node*, Element*> SerializerMarkupAccumulator::GetAuxiliaryDOMTree(
 
 void SerializerMarkupAccumulator::AppendAttributeValue(
     const String& attribute_value) {
-  MarkupFormatter::AppendAttributeValue(markup_, attribute_value,
-                                        IsA<HTMLDocument>(document_));
+  MarkupFormatter::AppendAttributeValue(
+      markup_, attribute_value, IsA<HTMLDocument>(document_), *document_);
 }
 
 void SerializerMarkupAccumulator::AppendRewrittenAttribute(
@@ -436,7 +436,8 @@ void FrameSerializer::SerializeCSSRule(CSSRule* rule) {
     case CSSRule::kSupportsRule:
     case CSSRule::kContainerRule:
     case CSSRule::kLayerBlockRule:
-    case CSSRule::kScopeRule: {
+    case CSSRule::kScopeRule:
+    case CSSRule::kInitialRule: {
       CSSRuleList* rule_list = rule->cssRules();
       for (unsigned i = 0; i < rule_list->length(); ++i)
         SerializeCSSRule(rule_list->item(i));

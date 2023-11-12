@@ -22,7 +22,6 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -180,10 +179,10 @@ public class TopToolbarCoordinator implements Toolbar {
             Supplier<ButtonData> identityDiscButtonSupplier,
             Supplier<ResourceManager> resourceManagerSupplier,
             BooleanSupplier isIncognitoModeEnabledSupplier, boolean isGridTabSwitcherEnabled,
-            boolean isTabletGtsPolishEnabled, boolean isTabToGtsAnimationEnabled,
-            boolean isStartSurfaceEnabled, boolean isTabGroupsAndroidContinuationEnabled,
-            HistoryDelegate historyDelegate, BooleanSupplier partnerHomepageEnabledSupplier,
-            OfflineDownloader offlineDownloader, boolean initializeWithIncognitoColors,
+            boolean isTabToGtsAnimationEnabled, boolean isStartSurfaceEnabled,
+            boolean isTabGroupsAndroidContinuationEnabled, HistoryDelegate historyDelegate,
+            BooleanSupplier partnerHomepageEnabledSupplier, OfflineDownloader offlineDownloader,
+            boolean initializeWithIncognitoColors,
             Callback<LoadUrlParams> startSurfaceLogoClickedCallback,
             boolean isStartSurfaceRefactorEnabled, ObservableSupplier<Integer> constraintsSupplier,
             ObservableSupplier<Boolean> compositorInMotionSupplier,
@@ -214,16 +213,17 @@ public class TopToolbarCoordinator implements Toolbar {
                     startSurfaceLogoClickedCallback, mIsStartSurfaceRefactorEnabled,
                     shouldCreateLogoInStartToolbar, this::onStartSurfaceToolbarTransitionFinished,
                     mToolbarColorObserverManager);
-        } else if (mToolbarLayout instanceof ToolbarPhone || isTabletGridTabSwitcherEnabled()) {
+        } else if (mToolbarLayout instanceof ToolbarPhone
+                || mToolbarLayout instanceof ToolbarTablet) {
             mTabSwitcherModeCoordinator = new TabSwitcherModeTTCoordinator(toolbarStub,
                     fullscreenToolbarStub, overviewModeMenuButtonCoordinator,
-                    isGridTabSwitcherEnabled, isTabletGtsPolishEnabled, isTabToGtsAnimationEnabled,
+                    isGridTabSwitcherEnabled, isTabToGtsAnimationEnabled,
                     isIncognitoModeEnabledSupplier, mToolbarColorObserverManager);
         }
         } // vivaldi
         controlContainer.setPostInitializationDependencies(this, initializeWithIncognitoColors,
                 constraintsSupplier, toolbarDataProvider::getTab, compositorInMotionSupplier,
-                browserStateBrowserControlsVisibilityDelegate);
+                browserStateBrowserControlsVisibilityDelegate, layoutStateProviderSupplier);
         mToolbarLayout.initialize(toolbarDataProvider, tabController, mMenuButtonCoordinator,
                 historyDelegate, partnerHomepageEnabledSupplier, offlineDownloader);
         mToolbarLayout.setThemeColorProvider(normalThemeColorProvider);
@@ -241,10 +241,6 @@ public class TopToolbarCoordinator implements Toolbar {
         if (mTabSwitcherModeCoordinator != null) {
             mTabSwitcherModeCoordinator.setFullScreenToolbarStub(toolbarStub);
         }
-    }
-
-    private boolean isTabletGridTabSwitcherEnabled() {
-        return ChromeFeatureList.sGridTabSwitcherForTablets.isEnabled();
     }
 
     /**
@@ -282,7 +278,6 @@ public class TopToolbarCoordinator implements Toolbar {
         Callback<Integer> tabSwitcherLongClickCallback =
                 menuItemId -> appMenuDelegate.onOptionsItemSelected(menuItemId, null);
         if (mTabSwitcherModeCoordinator != null) {
-            mTabSwitcherModeCoordinator.setOnTabSwitcherClickHandler(tabSwitcherClickHandler);
             mTabSwitcherModeCoordinator.setOnNewTabClickHandler(newTabClickHandler);
             mTabSwitcherModeCoordinator.setTabModelSelector(mTabModelSelectorSupplier.get());
         } else if (mStartSurfaceToolbarCoordinator != null) {
@@ -513,6 +508,7 @@ public class TopToolbarCoordinator implements Toolbar {
      */
     public void onTabOrModelChanged() {
         mToolbarLayout.onTabOrModelChanged();
+        mControlContainer.onTabOrModelChanged(mToolbarLayout.isIncognito());
     }
 
     /**
@@ -816,5 +812,13 @@ public class TopToolbarCoordinator implements Toolbar {
     @Override
     public boolean isBrowsingModeToolbarVisible() {
         return mToolbarLayout.getVisibility() == View.VISIBLE;
+    }
+
+    public void onTransitionStart() {
+        mToolbarLayout.onTransitionStart();
+    }
+
+    public void onTransitionEnd() {
+        mToolbarLayout.onTransitionEnd();
     }
 }

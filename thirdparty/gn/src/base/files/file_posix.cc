@@ -330,6 +330,8 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   DCHECK(!IsValid());
 
   int open_flags = 0;
+  if (flags & FLAG_CREATE)
+    open_flags = O_CREAT | O_EXCL;
 
   if (flags & FLAG_CREATE_ALWAYS) {
     DCHECK(!open_flags);

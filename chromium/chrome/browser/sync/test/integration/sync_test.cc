@@ -68,7 +68,7 @@
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/os_crypt/os_crypt_mocker.h"
+#include "components/os_crypt/sync/os_crypt_mocker.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/sync/base/command_line_switches.h"
@@ -100,7 +100,6 @@
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs_factory.h"
 #include "chrome/browser/ash/app_list/test/fake_app_list_model_updater.h"
-#include "chrome/browser/sync/test/integration/printers_helper.h"
 #include "chrome/browser/sync/test/integration/sync_arc_package_helper.h"
 #include "chromeos/ash/components/account_manager/account_manager_factory.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
@@ -159,8 +158,7 @@ class FakePerUserTopicSubscriptionManager
             /*identity_provider=*/nullptr,
             /*pref_service=*/local_state,
             /*url_loader_factory=*/nullptr,
-            /*project_id*/ kInvalidationGCMSenderId,
-            /*migrate_prefs=*/false) {}
+            /*project_id*/ kInvalidationGCMSenderId) {}
 
   FakePerUserTopicSubscriptionManager(
       const FakePerUserTopicSubscriptionManager&) = delete;
@@ -189,8 +187,7 @@ std::unique_ptr<invalidation::FCMNetworkHandler> CreateFCMNetworkHandler(
 
 std::unique_ptr<invalidation::PerUserTopicSubscriptionManager>
 CreatePerUserTopicSubscriptionManager(PrefService* local_state,
-                                      const std::string& project_id,
-                                      bool migrate_prefs) {
+                                      const std::string& project_id) {
   return std::make_unique<FakePerUserTopicSubscriptionManager>(local_state);
 }
 
@@ -438,7 +435,7 @@ bool SyncTest::CreateProfile(int index) {
 // static
 Profile* SyncTest::MakeProfileForUISignin(base::FilePath profile_path) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
-  return profiles::testing::CreateProfileSync(profile_manager, profile_path);
+  return &profiles::testing::CreateProfileSync(profile_manager, profile_path);
 }
 
 Profile* SyncTest::GetProfile(int index) const {
@@ -551,6 +548,17 @@ bool SyncTest::UseVerifier() {
   return false;
 }
 
+bool SyncTest::UseArcPackage() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // ARC_PACKAGE do not support supervised users, switches::kSupervisedUserId
+  // need to be set in SetUpCommandLine() when a test will use supervise users.
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kSupervisedUserId);
+#else   // BUILDFLAG(IS_CHROMEOS_ASH)
+  return false;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
+
 bool SyncTest::SetupClients() {
   previous_profile_ =
       g_browser_process->profile_manager()->GetLastUsedProfile();
@@ -578,9 +586,7 @@ bool SyncTest::SetupClients() {
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // ARC_PACKAGE do not support supervised users, switches::kSupervisedUserId
-  // need to be set in SetUpCommandLine() when a test will use supervise users.
-  if (!cl->HasSwitch(switches::kSupervisedUserId)) {
+  if (UseArcPackage()) {
     // Sets Arc flags, need to be called before create test profiles.
     ArcAppListPrefsFactory::SetFactoryForSyncTest();
   }
@@ -1099,12 +1105,12 @@ void SyncTest::SetUpOnMainThread() {
 }
 
 void SyncTest::WaitForDataModels(Profile* profile) {
+  // Ideally the waiting for bookmarks should be done exclusively for
+  // bookmark-related tests, but there are several tests that use bookmarks as
+  // a way to generally check if sync is working, although the test is not
+  // really about bookmarks.
   bookmarks::test::WaitForBookmarkModelToLoad(
       BookmarkModelFactory::GetForBrowserContext(profile));
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  printers_helper::WaitForPrinterStoreToLoad(profile);
-#endif
 }
 
 void SyncTest::ReadPasswordFile() {

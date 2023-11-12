@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/wm/overview/scoped_overview_transform_window.h"
+#include "base/memory/raw_ptr.h"
 
 #include <algorithm>
 #include <utility>
@@ -10,12 +11,14 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
+#include "ash/style/system_shadow.h"
 #include "ash/wm/float/float_controller.h"
 #include "ash/wm/overview/delayed_animation_observer_impl.h"
 #include "ash/wm/overview/overview_constants.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_item.h"
+#include "ash/wm/overview/overview_item_view.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/splitview/split_view_controller.h"
@@ -26,6 +29,7 @@
 #include "ash/wm/window_util.h"
 #include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/transient_window_client.h"
@@ -55,6 +59,10 @@ bool immediate_close_for_tests = false;
 
 // Delay closing window to allow it to shrink and fade out.
 constexpr int kCloseWindowDelayInMilliseconds = 150;
+
+// The maximum difference of the side length between backdrop view and
+// transformed window in order to apply the corner radius on the window.
+constexpr int kLengthDiffToApplyCornerRadiusOnWindow = 12;
 
 // Layer animation observer that is attached to a clip animation. Removes the
 // clip and then self destructs after the animation is finished.
@@ -94,7 +102,7 @@ class RemoveClipObserver : public ui::ImplicitAnimationObserver,
   }
 
   // Guaranteed to be not null for the duration of |this|.
-  aura::Window* window_;
+  raw_ptr<aura::Window, ExperimentalAsh> window_;
 };
 
 // Clips |window| to |clip_rect|. If |clip_rect| is empty and there is an
@@ -154,7 +162,7 @@ class ScopedOverviewTransformWindow::LayerCachingAndFilteringObserver
   }
 
  private:
-  ui::Layer* layer_;
+  raw_ptr<ui::Layer, ExperimentalAsh> layer_;
 };
 
 ScopedOverviewTransformWindow::ScopedOverviewTransformWindow(
@@ -537,18 +545,47 @@ void ScopedOverviewTransformWindow::UpdateWindowDimensionsType() {
 }
 
 void ScopedOverviewTransformWindow::UpdateRoundedCorners(bool show) {
+  // TODO(b/274470528): Keep track of the corner radius animations.
+
   // Hide the corners if minimized, OverviewItemView will handle showing the
   // rounded corners on the UI.
   if (IsMinimized())
     DCHECK(!show);
 
   ui::Layer* layer = window_->layer();
+  layer->SetIsFastRoundedCorner(true);
+
   const float scale = layer->transform().To2dScale().x();
   const int radius = views::LayoutProvider::Get()->GetCornerRadiusMetric(
       views::Emphasis::kLow);
-  const gfx::RoundedCornersF radii(show ? (radius / scale) : 0.0f);
+
+  if (!show) {
+    layer->SetRoundedCornerRadius(gfx::RoundedCornersF());
+    return;
+  }
+
+  if (!chromeos::features::IsJellyrollEnabled()) {
+    layer->SetRoundedCornerRadius(gfx::RoundedCornersF(radius / scale));
+    return;
+  }
+
+  gfx::RoundedCornersF radii(0);
+  // Corner radius is applied to the preview view if the
+  // `backdrop_view_` is not visible or if `backdrop_view_` is visible but
+  // couldn't cover the window with applied corner radius.
+  auto* backdrop_view = overview_item_->overview_item_view()->backdrop_view();
+  const bool is_backdrop_view_visible =
+      backdrop_view && backdrop_view->GetVisible();
+  if (!is_backdrop_view_visible ||
+      (backdrop_view->height() - GetTransformedBounds().height() <
+           kLengthDiffToApplyCornerRadiusOnWindow &&
+       backdrop_view->width() - GetTransformedBounds().width() <
+           kLengthDiffToApplyCornerRadiusOnWindow)) {
+    radii = gfx::RoundedCornersF(0, 0, kOverviewItemCornerRadius / scale,
+                                 kOverviewItemCornerRadius / scale);
+  }
+
   layer->SetRoundedCornerRadius(radii);
-  layer->SetIsFastRoundedCorner(true);
 }
 
 void ScopedOverviewTransformWindow::OnTransientChildWindowAdded(
@@ -566,8 +603,9 @@ void ScopedOverviewTransformWindow::OnTransientChildWindowAdded(
   // Hide transient children which have been specified to be hidden in
   // overview mode.
   if (transient_child != window_ &&
-      transient_child->GetProperty(kHideInOverviewKey))
+      transient_child->GetProperty(kHideInOverviewKey)) {
     AddHiddenTransientWindows({transient_child});
+  }
 
   // Add this as |aura::WindowObserver| for observing |kHideInOverviewKey|
   // property changes.

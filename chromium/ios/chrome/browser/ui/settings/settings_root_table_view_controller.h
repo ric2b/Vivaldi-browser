@@ -7,9 +7,9 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_root_view_controlling.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
 
 // SettingsRootTableViewController is a base class for integrating UITableViews
 // into the Settings UI. This class is made to be subclassed and contains the
@@ -32,6 +32,10 @@
 // side of the toolbar. Default is nil.
 @property(nonatomic, strong, readonly)
     UIBarButtonItem* customRightToolbarButton;
+
+// Back button on navigation panel. This is used to store back button while it
+// is replaced with Cancel during editing.
+@property(nonatomic, strong) UIBarButtonItem* backButtonItem;
 
 // Whether this table view controller should hide the "Done" button (the right
 // navigation bar button). Default is NO.

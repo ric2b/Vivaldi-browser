@@ -4,6 +4,7 @@
 
 package org.chromium.webengine;
 
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -53,7 +54,7 @@ class TabObserverDelegate extends ITabObserverDelegate.Stub {
         mHandler.post(() -> {
             mTab.setDisplayUri(Uri.parse(uri));
             for (TabObserver observer : mTabObservers) {
-                observer.onVisibleUriChanged(uri);
+                observer.onVisibleUriChanged(mTab, uri);
             }
         });
     }
@@ -62,7 +63,7 @@ class TabObserverDelegate extends ITabObserverDelegate.Stub {
     public void notifyTitleUpdated(@NonNull String title) {
         mHandler.post(() -> {
             for (TabObserver observer : mTabObservers) {
-                observer.onTitleUpdated(title);
+                observer.onTitleUpdated(mTab, title);
             }
         });
     }
@@ -71,7 +72,16 @@ class TabObserverDelegate extends ITabObserverDelegate.Stub {
     public void notifyRenderProcessGone() {
         mHandler.post(() -> {
             for (TabObserver observer : mTabObservers) {
-                observer.onRenderProcessGone();
+                observer.onRenderProcessGone(mTab);
+            }
+        });
+    }
+
+    @Override
+    public void notifyFaviconChanged(Bitmap favicon) {
+        mHandler.post(() -> {
+            for (TabObserver observer : mTabObservers) {
+                observer.onFaviconChanged(mTab, favicon);
             }
         });
     }

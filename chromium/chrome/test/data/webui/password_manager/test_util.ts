@@ -31,6 +31,7 @@ export interface PasswordEntryParams {
   inProfileStore?: boolean;
   isAndroidCredential?: boolean;
   note?: string;
+  affiliatedDomains?: chrome.passwordsPrivate.DomainInfo[];
 }
 
 /**
@@ -73,6 +74,7 @@ export function createPasswordEntry(params?: PasswordEntryParams):
     isAndroidCredential: params.isAndroidCredential || false,
     note: note,
     password: params.password || '',
+    affiliatedDomains: params.affiliatedDomains,
   };
 }
 
@@ -111,37 +113,41 @@ export function createBlockedSiteEntry(
   };
 }
 
-export function makePasswordManagerPrefs():
-    chrome.settingsPrivate.PrefObject[] {
-  return [
-    {
+export function makePasswordManagerPrefs() {
+  return {
+    credentials_enable_service: {
       key: 'credentials_enable_service',
       type: chrome.settingsPrivate.PrefType.BOOLEAN,
       value: true,
     },
-    {
+    credentials_enable_autosignin: {
       key: 'credentials_enable_autosignin',
       type: chrome.settingsPrivate.PrefType.BOOLEAN,
       value: true,
     },
-    {
-      key: 'profile.password_dismiss_compromised_alert',
-      type: chrome.settingsPrivate.PrefType.BOOLEAN,
-      value: true,
+    profile: {
+      password_dismiss_compromised_alert: {
+        key: 'profile.password_dismiss_compromised_alert',
+        type: chrome.settingsPrivate.PrefType.BOOLEAN,
+        value: true,
+      },
     },
     // <if expr="is_win or is_macosx">
-    {
-      key: 'password_manager.biometric_authentication_filling',
-      type: chrome.settingsPrivate.PrefType.BOOLEAN,
-      value: true,
+    password_manager: {
+      biometric_authentication_filling: {
+        key: 'password_manager.biometric_authentication_filling',
+        type: chrome.settingsPrivate.PrefType.BOOLEAN,
+        value: true,
+      },
     },
     // </if>
-  ];
+  };
 }
 
 export interface InsecureCredentialsParams {
   url?: string;
   username?: string;
+  password?: string;
   types?: chrome.passwordsPrivate.CompromiseType[];
   id?: number;
   elapsedMinSinceCompromise?: number;
@@ -176,8 +182,18 @@ export function makeInsecureCredential(params: InsecureCredentialsParams):
       link: `https://${url}/`,
     },
     username: username,
+    password: params.password,
     note: '',
     isAndroidCredential: false,
     compromisedInfo: types.length ? compromisedInfo : undefined,
+  };
+}
+
+export function createAffiliatedDomain(domain: string):
+    chrome.passwordsPrivate.DomainInfo {
+  return {
+    name: domain,
+    url: `https://${domain}/login`,
+    signonRealm: `https://${domain}/login`,
   };
 }

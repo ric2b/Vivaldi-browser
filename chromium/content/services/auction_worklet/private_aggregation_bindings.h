@@ -9,9 +9,9 @@
 
 #include "base/memory/raw_ptr.h"
 #include "content/common/content_export.h"
-#include "content/common/private_aggregation_host.mojom.h"
 #include "content/services/auction_worklet/context_recycler.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom-forward.h"
+#include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
 #include "v8/include/v8-forward.h"
 
 namespace auction_worklet {
@@ -36,10 +36,9 @@ class CONTENT_EXPORT PrivateAggregationBindings : public Bindings {
       delete;
   ~PrivateAggregationBindings() override;
 
-  // Add privateAggregation object to `global_template`. `this` must outlive the
-  // template.
-  void FillInGlobalTemplate(
-      v8::Local<v8::ObjectTemplate> global_template) override;
+  // Add privateAggregation object to global context. `this` must outlive the
+  // context.
+  void AttachToContext(v8::Local<v8::Context> context) override;
   void Reset() override;
 
   std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>
@@ -57,7 +56,7 @@ class CONTENT_EXPORT PrivateAggregationBindings : public Bindings {
   bool private_aggregation_permissions_policy_allowed_;
 
   // Defaults to debug mode being disabled.
-  content::mojom::DebugModeDetails debug_mode_details_;
+  blink::mojom::DebugModeDetails debug_mode_details_;
 
   // Contributions from calling Private Aggregation APIs.
   std::vector<auction_worklet::mojom::AggregatableReportContributionPtr>

@@ -37,8 +37,7 @@ class PageActionsServiceAndroid : public page_actions::Service::Observer {
   void OnScriptPathsChanged() override;
 
  private:
-  Profile* profile_;
-  page_actions::Service* service_;
+  raw_ptr<page_actions::Service> service_;
 
   JavaObjectWeakGlobalRef weak_java_ref_;
 };

@@ -18,6 +18,7 @@ import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -99,7 +100,6 @@ public class StartSurfaceToolbarCoordinator {
                 },
                 StartSurfaceConfiguration.START_SURFACE_HIDE_INCOGNITO_SWITCH_NO_TAB.getValue(),
                 menuButtonCoordinator, identityDiscController, identityDiscButtonSupplier,
-                StartSurfaceConfiguration.TAB_COUNT_BUTTON_ON_START_SURFACE.getValue(),
                 isTabToGtsFadeAnimationEnabled, isTabGroupsAndroidContinuationEnabled,
                 isIncognitoModeEnabledSupplier, logoClickedCallback, isRefactorEnabled,
                 StartSurfaceConfiguration.IS_DOODLE_SUPPORTED.getValue(), shouldCreateLogoInToolbar,
@@ -233,7 +233,8 @@ public class StartSurfaceToolbarCoordinator {
      */
     boolean shouldShowRealSearchBox() {
         boolean isBigLogoShownInContent = !mShouldCreateLogoInToolbar && mIsNativeInitialized
-                && TemplateUrlServiceFactory.get().doesDefaultSearchEngineHaveLogo();
+                && TemplateUrlServiceFactory.getForProfile(Profile.getLastUsedRegularProfile())
+                           .doesDefaultSearchEngineHaveLogo();
         // This value should be equal to
         // |fakeSearchBoxToRealSearchBoxTop + realVerticalMargin| in
         // StartSurfaceCoordinator#initializeOffsetChangedListener
@@ -276,23 +277,20 @@ public class StartSurfaceToolbarCoordinator {
 
         mToolbarMediator.onLogoViewReady(mView.findViewById(R.id.logo));
 
-        if (StartSurfaceConfiguration.TAB_COUNT_BUTTON_ON_START_SURFACE.getValue()) {
-            mTabSwitcherButtonView = mView.findViewById(R.id.start_tab_switcher_button);
-            if (mTabSwitcherLongClickListener != null) {
-                mTabSwitcherButtonView.setOnLongClickListener(mTabSwitcherLongClickListener);
-                mTabSwitcherLongClickListener = null;
-            }
-            mTabSwitcherButtonCoordinator =
-                    new TabSwitcherButtonCoordinator(mTabSwitcherButtonView);
-            mTabSwitcherButtonCoordinator.setThemeColorProvider(mThemeColorProvider);
-            if (mTabCountProvider != null) {
-                mTabSwitcherButtonCoordinator.setTabCountProvider(mTabCountProvider);
-                mTabCountProvider = null;
-            }
-            if (mTabSwitcherClickListener != null) {
-                mTabSwitcherButtonCoordinator.setTabSwitcherListener(mTabSwitcherClickListener);
-                mTabSwitcherClickListener = null;
-            }
+        mTabSwitcherButtonView = mView.findViewById(R.id.start_tab_switcher_button);
+        if (mTabSwitcherLongClickListener != null) {
+            mTabSwitcherButtonView.setOnLongClickListener(mTabSwitcherLongClickListener);
+            mTabSwitcherLongClickListener = null;
+        }
+        mTabSwitcherButtonCoordinator = new TabSwitcherButtonCoordinator(mTabSwitcherButtonView);
+        mTabSwitcherButtonCoordinator.setThemeColorProvider(mThemeColorProvider);
+        if (mTabCountProvider != null) {
+            mTabSwitcherButtonCoordinator.setTabCountProvider(mTabCountProvider);
+            mTabCountProvider = null;
+        }
+        if (mTabSwitcherClickListener != null) {
+            mTabSwitcherButtonCoordinator.setTabSwitcherListener(mTabSwitcherClickListener);
+            mTabSwitcherClickListener = null;
         }
     }
 

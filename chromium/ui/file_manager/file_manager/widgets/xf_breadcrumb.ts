@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
+import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
 
-import {addCSSPrefixSelector, mouseEnterMaybeShowTooltip} from '../common/js/dom_utils.js';
+import {addCSSPrefixSelector, getCrActionMenuTop, mouseEnterMaybeShowTooltip} from '../common/js/dom_utils.js';
 import {str} from '../common/js/util.js';
 
-import {customElement, property, query, state, css, html, XfBase, PropertyValues} from './xf_base.js';
+import {css, customElement, html, property, PropertyValues, query, state, XfBase} from './xf_base.js';
 
 
 /**
@@ -226,17 +226,7 @@ export class XfBreadcrumb extends XfBase {
     }
 
     // Show drop-down below the elider button.
-    let offsetElement: Element|null = this.$eliderButton_!;
-    let top = this.$eliderButton_!.offsetHeight;
-    // We need to go upwards to add all offsetTop all offset parents because
-    // each level can have its own offsetTop.
-    while (offsetElement instanceof HTMLElement) {
-      top += offsetElement.offsetTop;
-      offsetElement = offsetElement.offsetParent;
-    }
-    // The gap between the elider button bottom and the dropdown menu top.
-    const gap = 8;
-    top += gap;
+    const top = getCrActionMenuTop(this.$eliderButton_!, 8);
     this.$actionMenu_!.showAt(this.$eliderButton_!, {top: top});
 
     // Style drop-down and horizontal position.
@@ -461,7 +451,7 @@ function getCSS() {
       -webkit-mask-image: url(/foreground/images/files/ui/arrow_right.svg);
       -webkit-mask-position: center;
       -webkit-mask-repeat: no-repeat;
-      background-color: var(--cros-sys-secondary);
+      background-color: var(--cros-sys-on_surface_variant);
       display: inline-flex;
       height: 20px;
       min-width: 20px;
@@ -476,7 +466,7 @@ function getCSS() {
       /* don't use browser's background-color. */
       background-color: unset;
       border: none;
-      color: var(--cros-sys-secondary);
+      color: var(--cros-sys-on_surface_variant);
       cursor: pointer;
       display: inline-block;
       position: relative;
@@ -509,7 +499,7 @@ function getCSS() {
       -webkit-mask-image: url(/foreground/images/files/ui/menu_ng.svg);
       -webkit-mask-position: center;
       -webkit-mask-repeat: no-repeat;
-      background-color: var(--cros-sys-secondary);
+      background-color: currentColor;
       height: 48px;
       margin-inline-start: var(--tap-target-shift);
       margin-top: var(--tap-target-shift);
@@ -589,7 +579,7 @@ function getCSS() {
     }
 
     cr-action-menu {
-      --cr-menu-background-color: var(--cros-sys-app_base_elevated);
+      --cr-menu-background-color: var(--cros-sys-base_elevated);
       --cr-menu-background-sheen: none;
       /* TODO(wenbojie): use elevation variable when it's ready.
       --cros-sys-elevation3 */

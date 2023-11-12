@@ -7,6 +7,8 @@
 #import "base/files/file_path.h"
 #import "base/path_service.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "components/password_manager/core/browser/password_manager_util.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/application_context/application_context.h"
@@ -15,7 +17,7 @@
 #import "ios/chrome/browser/promos_manager/constants.h"
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/promos_manager/promos_manager.h"
-#import "ios/chrome/browser/ui/commands/credential_provider_promo_commands.h"
+#import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
 #import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_consumer.h"
 #import "ios/chrome/grit/ios_google_chrome_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -60,6 +62,10 @@ NSString* const kLearnMoreAnimation = @"CPE_promo_animation_edu_how_to_enable";
             (CredentialProviderPromoTrigger)trigger
                                         promoSeen:
                                             (BOOL)promoSeenInCurrentSession {
+  if (trigger == CredentialProviderPromoTrigger::SetUpList) {
+    // Always allow showing when triggered by user via the SetUpList.
+    return YES;
+  }
   BOOL impressionLimitMet =
       GetApplicationContext()->GetLocalState()->GetBoolean(
           prefs::kIosCredentialProviderPromoStopPromo) ||
@@ -106,6 +112,10 @@ NSString* const kLearnMoreAnimation = @"CPE_promo_animation_edu_how_to_enable";
 
       [self setAnimation];
       break;
+    case CredentialProviderPromoTrigger::SetUpList:
+      source = IOSCredentialProviderPromoSource::kSetUpList;
+      [self setAnimation];
+      break;
   }
 
   [self setTextAndImageWithSource:source];
@@ -119,11 +129,16 @@ NSString* const kLearnMoreAnimation = @"CPE_promo_animation_edu_how_to_enable";
 }
 
 - (void)registerPromoWithPromosManager {
-  if (!self.promosManager || !IsFullscreenPromosManagerEnabled()) {
+  if (!self.promosManager) {
     return;
   }
   self.promosManager->RegisterPromoForSingleDisplay(
       promos_manager::Promo::CredentialProviderExtension, base::Hours(24));
+
+  if (self.tracker) {
+    self.tracker->NotifyEvent(
+        feature_engagement::events::kCredentialProviderExtensionPromoSnoozed);
+  }
 
   GetApplicationContext()->GetLocalState()->SetBoolean(
       prefs::kIosCredentialProviderPromoHasRegisteredWithPromoManager, true);

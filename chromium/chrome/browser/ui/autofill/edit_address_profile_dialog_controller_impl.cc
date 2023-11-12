@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/autofill/edit_address_profile_dialog_controller_impl.h"
+#include <string>
 
 #include "base/types/optional_util.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
@@ -12,6 +13,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -32,8 +34,10 @@ EditAddressProfileDialogControllerImpl::
 void EditAddressProfileDialogControllerImpl::OfferEdit(
     const AutofillProfile& profile,
     const AutofillProfile* original_profile,
+    const std::u16string& footer_message,
     AutofillClient::AddressProfileSavePromptCallback
-        address_profile_save_prompt_callback) {
+        address_profile_save_prompt_callback,
+    bool is_migration_to_account) {
   // Don't show the bubble if it's already visible, and inform the backend.
   if (dialog_view_) {
     std::move(address_profile_save_prompt_callback)
@@ -43,8 +47,10 @@ void EditAddressProfileDialogControllerImpl::OfferEdit(
   }
   address_profile_to_edit_ = profile;
   original_profile_ = base::OptionalFromPtr(original_profile);
+  footer_message_ = footer_message;
   address_profile_save_prompt_callback_ =
       std::move(address_profile_save_prompt_callback);
+  is_migration_to_account_ = is_migration_to_account;
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
   dialog_view_ = browser->window()
                      ->GetAutofillBubbleHandler()
@@ -53,6 +59,11 @@ void EditAddressProfileDialogControllerImpl::OfferEdit(
 
 std::u16string EditAddressProfileDialogControllerImpl::GetWindowTitle() const {
   return l10n_util::GetStringUTF16(IDS_AUTOFILL_EDIT_ADDRESS_DIALOG_TITLE);
+}
+
+const std::u16string& EditAddressProfileDialogControllerImpl::GetFooterMessage()
+    const {
+  return footer_message_;
 }
 
 std::u16string EditAddressProfileDialogControllerImpl::GetOkButtonLabel()
@@ -66,6 +77,15 @@ std::u16string EditAddressProfileDialogControllerImpl::GetOkButtonLabel()
 const AutofillProfile&
 EditAddressProfileDialogControllerImpl::GetProfileToEdit() const {
   return address_profile_to_edit_;
+}
+
+bool EditAddressProfileDialogControllerImpl::GetIsValidatable() const {
+  // Only account address profiles should be validated, i.e. the ones already
+  // stored in account (the source property) and those that are currently
+  // migrating.
+  return address_profile_to_edit_.source() ==
+             AutofillProfile::Source::kAccount ||
+         is_migration_to_account_;
 }
 
 void EditAddressProfileDialogControllerImpl::OnUserDecision(
@@ -86,7 +106,9 @@ void EditAddressProfileDialogControllerImpl::OnUserDecision(
           web_contents());
   controller->OfferSave(
       address_profile_to_edit_, base::OptionalToPtr(original_profile_),
-      AutofillClient::SaveAddressProfilePromptOptions{.show_prompt = true},
+      AutofillClient::SaveAddressProfilePromptOptions{
+          .show_prompt = true,
+          .is_migration_to_account = is_migration_to_account_},
       std::move(address_profile_save_prompt_callback_));
 }
 

@@ -35,7 +35,10 @@ MutableCSSPropertyValueSet* CreateCssPropertyValueSet() {
 using PropertyResolver = StringKeyframe::PropertyResolver;
 
 StringKeyframe::StringKeyframe(const StringKeyframe& copy_from)
-    : Keyframe(copy_from.offset_, copy_from.composite_, copy_from.easing_),
+    : Keyframe(copy_from.offset_,
+               copy_from.timeline_offset_,
+               copy_from.composite_,
+               copy_from.easing_),
       tree_scope_(copy_from.tree_scope_),
       input_properties_(copy_from.input_properties_),
       presentation_attribute_map_(
@@ -172,6 +175,7 @@ PropertyHandleSet StringKeyframe::Properties() const {
   // worry about caching this result.
   EnsureCssPropertyMap();
   PropertyHandleSet properties;
+
   for (unsigned i = 0; i < css_property_map_->PropertyCount(); ++i) {
     CSSPropertyValueSet::PropertyReference property_reference =
         css_property_map_->PropertyAt(i);

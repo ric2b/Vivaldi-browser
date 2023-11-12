@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://os-settings/chromeos/os_settings.js';
+import 'chrome://os-settings/chromeos/lazy_load.js';
+
 import {CrPolicyIndicatorType} from '//resources/ash/common/cr_policy_indicator_behavior.js';
 import {AboutPageBrowserProxyImpl, BrowserChannel, DeviceNameBrowserProxyImpl, DeviceNameState, LifetimeBrowserProxyImpl, Router, routes, SetDeviceNameResult, UpdateStatus} from 'chrome://os-settings/chromeos/os_settings.js';
 import {webUIListenerCallback} from 'chrome://resources/ash/common/cr.m.js';
-import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
+import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
@@ -541,6 +544,37 @@ suite('AboutPageTest', function() {
     await checkHasEndOfLife(false);
   });
 
+  test('DeviceEndOfLifeIncentive', async () => {
+    async function checkEndOfLifeIncentive(isShowing) {
+      await aboutBrowserProxy.whenCalled('getEndOfLifeInfo');
+      const eolSection = page.shadowRoot.querySelector('eol-offer-section');
+      assertEquals(isShowing, !!eolSection);
+
+      if (isShowing) {
+        eolSection.$.eolIncentiveButton.click();
+        await aboutBrowserProxy.whenCalled('endOfLifeIncentiveButtonClicked');
+      }
+    }
+
+    aboutBrowserProxy.setEndOfLifeInfo({
+      hasEndOfLife: false,
+      endOfLifeAboutMessage: '',
+      shouldShowEndOfLifeIncentive: false,
+      shouldShowOfferText: false,
+    });
+    await initNewPage();
+    await checkEndOfLifeIncentive(false);
+
+    aboutBrowserProxy.setEndOfLifeInfo({
+      hasEndOfLife: false,
+      endOfLifeAboutMessage: '',
+      shouldShowEndOfLifeIncentive: true,
+      shouldShowOfferText: false,
+    });
+    await initNewPage();
+    await checkEndOfLifeIncentive(true);
+  });
+
   test('managed detailed build info page', async () => {
     loadTimeData.overrideValues({
       isManaged: true,
@@ -556,7 +590,7 @@ suite('AboutPageTest', function() {
     assertTrue(!!page.$['detailed-build-info-trigger']);
     page.$['detailed-build-info-trigger'].click();
     const buildInfoPage =
-        page.shadowRoot.querySelector('settings-detailed-build-info');
+        page.shadowRoot.querySelector('settings-detailed-build-info-subpage');
     assertTrue(!!buildInfoPage);
     assertTrue(!!buildInfoPage.$['endOfLifeSectionContainer']);
     assertTrue(buildInfoPage.$['endOfLifeSectionContainer'].hidden);
@@ -570,7 +604,7 @@ suite('AboutPageTest', function() {
     async function checkEndOfLifeSection() {
       await aboutBrowserProxy.whenCalled('getEndOfLifeInfo');
       const buildInfoPage =
-          page.shadowRoot.querySelector('settings-detailed-build-info');
+          page.shadowRoot.querySelector('settings-detailed-build-info-subpage');
       assertTrue(!!buildInfoPage.$['endOfLifeSectionContainer']);
       assertFalse(buildInfoPage.$['endOfLifeSectionContainer'].hidden);
     }
@@ -583,7 +617,7 @@ suite('AboutPageTest', function() {
     assertTrue(!!page.$['detailed-build-info-trigger']);
     page.$['detailed-build-info-trigger'].click();
     const buildInfoPage =
-        page.shadowRoot.querySelector('settings-detailed-build-info');
+        page.shadowRoot.querySelector('settings-detailed-build-info-subpage');
     assertTrue(!!buildInfoPage);
     assertTrue(!!buildInfoPage.$['endOfLifeSectionContainer']);
     assertTrue(buildInfoPage.$['endOfLifeSectionContainer'].hidden);
@@ -602,7 +636,7 @@ suite('AboutPageTest', function() {
     assertTrue(!!page.$['detailed-build-info-trigger']);
     page.$['detailed-build-info-trigger'].click();
     const buildInfoPage =
-        page.shadowRoot.querySelector('settings-detailed-build-info');
+        page.shadowRoot.querySelector('settings-detailed-build-info-subpage');
     assertTrue(!!buildInfoPage);
     return buildInfoPage;
   }
@@ -882,7 +916,7 @@ suite('DetailedBuildInfoTest', function() {
       isManaged: false,
     });
 
-    page = document.createElement('settings-detailed-build-info');
+    page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
 
     await Promise.all([
@@ -900,7 +934,7 @@ suite('DetailedBuildInfoTest', function() {
       isManaged: true,
     });
 
-    page = document.createElement('settings-detailed-build-info');
+    page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
 
     await Promise.all([
@@ -922,7 +956,7 @@ suite('DetailedBuildInfoTest', function() {
    */
   async function checkChangeChannelButton(canChangeChannel) {
     browserProxy.setCanChangeChannel(canChangeChannel);
-    page = document.createElement('settings-detailed-build-info');
+    page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
     await browserProxy.whenCalled('canChangeChannel');
     await waitAfterNextRender(page);
@@ -947,7 +981,7 @@ suite('DetailedBuildInfoTest', function() {
       });
     }
     browserProxy.setCanChangeChannel(canChangeChannel);
-    page = document.createElement('settings-detailed-build-info');
+    page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
     await browserProxy.whenCalled('canChangeChannel');
     await waitAfterNextRender(page);
@@ -1026,7 +1060,7 @@ suite('DetailedBuildInfoTest', function() {
     loadTimeData.overrideValues({
       isDeepLinkingEnabled: true,
     });
-    page = document.createElement('settings-detailed-build-info');
+    page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
 
     const params = new URLSearchParams();
@@ -1043,7 +1077,7 @@ suite('DetailedBuildInfoTest', function() {
   });
 
   async function checkCopyBuildDetailsButton() {
-    page = document.createElement('settings-detailed-build-info');
+    page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
     const copyBuildDetailsButton =
         page.shadowRoot.querySelector('cr-icon-button');
@@ -1079,7 +1113,7 @@ suite('DetailedBuildInfoTest', function() {
     loadTimeData.overrideValues({
       isDeepLinkingEnabled: true,
     });
-    page = document.createElement('settings-detailed-build-info');
+    page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
 
     const params = new URLSearchParams();
@@ -1154,7 +1188,7 @@ suite('DetailedBuildInfoTest', function() {
       isHostnameSettingEnabled: true,
     });
 
-    page = document.createElement('settings-detailed-build-info');
+    page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
 
     await deviceNameBrowserProxy.whenCalled('notifyReadyForDeviceName');
@@ -1198,7 +1232,7 @@ suite('EditHostnameDialogTest', function() {
       isHostnameSettingEnabled: true,
     });
 
-    const page = document.createElement('settings-detailed-build-info');
+    const page = document.createElement('settings-detailed-build-info-subpage');
     document.body.appendChild(page);
 
     await deviceNameBrowserProxy.whenCalled('notifyReadyForDeviceName');

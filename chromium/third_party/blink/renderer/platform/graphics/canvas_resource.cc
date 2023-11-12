@@ -22,6 +22,7 @@
 #include "gpu/command_buffer/client/webgpu_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
+#include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/common/sync_token.h"
@@ -38,6 +39,7 @@
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_gpu.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/color_space.h"
@@ -128,6 +130,7 @@ void CanvasResource::WaitSyncToken(const gpu::SyncToken& sync_token) {
 
 static void ReleaseFrameResources(
     base::WeakPtr<CanvasResourceProvider> resource_provider,
+    viz::ReleaseCallback&& viz_release_callback,
     scoped_refptr<CanvasResource>&& resource,
     const gpu::SyncToken& sync_token,
     bool lost_resource) {
@@ -136,8 +139,24 @@ static void ReleaseFrameResources(
   // In such cases, ReleaseFrameResources will be called again when
   // CanvasResourceDispatcher destroys the corresponding FrameResource object,
   // at which time this resource will be safely recycled.
-  if (!resource || resource->HasLastUnrefCallback())
+  if (!resource) {
     return;
+  }
+
+  if (resource->HasLastUnrefCallback()) {
+    // Currently, there is no code path that should end up here with
+    // a viz_release_callback, but if we ever change ExternalCanvasResource's
+    // Bitmap() method to register a non-trivial release callback that needs
+    // to call the viz_release_callback, then we'll need to find another way
+    // hold on to the viz_release_callback in the current thread.  The CHECK
+    // below guards the current assumption that only the
+    // CanvasResourceDispatcher triggers calls to this method for
+    // ExternalCanvasResource objects.
+    CHECK(!viz_release_callback);
+    return;
+  }
+
+  resource->SetVizReleaseCallback(std::move(viz_release_callback));
 
   resource->WaitSyncToken(sync_token);
 
@@ -162,7 +181,13 @@ bool CanvasResource::PrepareTransferableResource(
   DCHECK(IsValid());
 
   DCHECK(out_callback);
-  *out_callback = WTF::BindOnce(&ReleaseFrameResources, provider_);
+  // out_callback is stored in CanvasResourceDispatcher, which never leaves
+  // the current thread, so we used a bound argument to hold onto the
+  // viz::ReleaseCallback, which is not thread safe.  We will re-attach
+  // the callback to this CanvasResource in ReleaseFrameResources(), after
+  // references held by other threads have been released.
+  *out_callback = WTF::BindOnce(&ReleaseFrameResources, provider_,
+                                TakeVizReleaseCallback());
 
   if (!out_resource)
     return true;
@@ -185,8 +210,8 @@ bool CanvasResource::PrepareAcceleratedTransferableResource(
     return false;
 
   *out_resource = viz::TransferableResource::MakeGpu(
-      mailbox, GLFilter(), TextureTarget(), GetSyncToken(), Size(),
-      GetResourceFormat(), IsOverlayCandidate());
+      mailbox, TextureTarget(), GetSyncToken(), Size(), GetSharedImageFormat(),
+      IsOverlayCandidate());
 
   out_resource->color_space = GetColorSpace();
   if (NeedsReadLockFences()) {
@@ -209,8 +234,8 @@ bool CanvasResource::PrepareUnacceleratedTransferableResource(
   // the resource type and completely ignores the format set on the
   // TransferableResource. Clients are expected to render in N32 format but use
   // RGBA as the tagged format on resources.
-  *out_resource =
-      viz::TransferableResource::MakeSoftware(mailbox, Size(), viz::RGBA_8888);
+  *out_resource = viz::TransferableResource::MakeSoftware(
+      mailbox, Size(), viz::SinglePlaneFormat::kRGBA_8888);
 
   out_resource->color_space = GetColorSpace();
 
@@ -228,17 +253,13 @@ SkImageInfo CanvasResource::CreateSkImageInfo() const {
                            info_);
 }
 
-GLenum CanvasResource::GLFilter() const {
-  return filter_quality_ == cc::PaintFlags::FilterQuality::kNone ? GL_NEAREST
-                                                                 : GL_LINEAR;
-}
-
-viz::ResourceFormat CanvasResource::GetResourceFormat() const {
-  return viz::SkColorTypeToResourceFormat(info_.colorType());
+viz::SharedImageFormat CanvasResource::GetSharedImageFormat() const {
+  return viz::SharedImageFormat::SinglePlane(
+      viz::SkColorTypeToResourceFormat(info_.colorType()));
 }
 
 gfx::BufferFormat CanvasResource::GetBufferFormat() const {
-  return viz::BufferFormat(GetResourceFormat());
+  return viz::BufferFormat(GetSharedImageFormat().resource_format());
 }
 
 gfx::ColorSpace CanvasResource::GetColorSpace() const {
@@ -258,8 +279,8 @@ CanvasResourceSharedBitmap::CanvasResourceSharedBitmap(
       size_(info.width(), info.height()) {
   // Software compositing lazily uses RGBA_8888 as the resource format
   // everywhere but the content is expected to be rendered in N32 format.
-  base::MappedReadOnlyRegion shm =
-      viz::bitmap_allocation::AllocateSharedBitmap(Size(), viz::RGBA_8888);
+  base::MappedReadOnlyRegion shm = viz::bitmap_allocation::AllocateSharedBitmap(
+      Size(), viz::SinglePlaneFormat::kRGBA_8888);
 
   if (!shm.IsValid())
     return;
@@ -299,7 +320,7 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSharedBitmap::Bitmap() {
   SkPixmap pixmap(image_info, shared_mapping_.memory(),
                   image_info.minRowBytes());
   AddRef();
-  sk_sp<SkImage> sk_image = SkImage::MakeFromRaster(
+  sk_sp<SkImage> sk_image = SkImages::RasterFromPixmap(
       pixmap,
       [](const void*, SkImage::ReleaseContext resource_to_unref) {
         static_cast<CanvasResourceSharedBitmap*>(resource_to_unref)->Release();
@@ -408,7 +429,7 @@ CanvasResourceRasterSharedImage::CanvasResourceRasterSharedImage(
                                  ->GetCapabilities()
                                  .supports_oop_raster) {
   auto* gpu_memory_buffer_manager =
-      Platform::Current()->GetGpuMemoryBufferManager();
+      SharedGpuContext::GetGpuMemoryBufferManager();
   if (!is_accelerated_) {
     DCHECK(gpu_memory_buffer_manager);
     DCHECK(shared_image_usage_flags & gpu::SHARED_IMAGE_USAGE_DISPLAY_READ);
@@ -450,12 +471,13 @@ CanvasResourceRasterSharedImage::CanvasResourceRasterSharedImage(
   if (gpu_memory_buffer_) {
     shared_image_mailbox = shared_image_interface->CreateSharedImage(
         gpu_memory_buffer_.get(), gpu_memory_buffer_manager, GetColorSpace(),
-        surface_origin, surface_alpha_type, shared_image_usage_flags);
+        surface_origin, surface_alpha_type, shared_image_usage_flags,
+        "CanvasResourceRasterGmb");
   } else {
     shared_image_mailbox = shared_image_interface->CreateSharedImage(
-        viz::SharedImageFormat::SinglePlane(GetResourceFormat()), Size(),
-        GetColorSpace(), surface_origin, surface_alpha_type,
-        shared_image_usage_flags, gpu::kNullSurfaceHandle);
+        GetSharedImageFormat(), Size(), GetColorSpace(), surface_origin,
+        surface_alpha_type, shared_image_usage_flags, "CanvasResourceRaster",
+        gpu::kNullSurfaceHandle);
   }
 
   // Wait for the mailbox to be ready to be used.
@@ -535,8 +557,9 @@ GrBackendTexture CanvasResourceRasterSharedImage::CreateGrTexture() const {
   GrGLTextureInfo texture_info = {};
   texture_info.fID = GetTextureIdForWriteAccess();
   texture_info.fTarget = TextureTarget();
-  texture_info.fFormat = viz::TextureStorageFormat(
-      GetResourceFormat(), capabilities.angle_rgbx_internal_format);
+  texture_info.fFormat =
+      viz::TextureStorageFormat(GetSharedImageFormat().resource_format(),
+                                capabilities.angle_rgbx_internal_format);
   return GrBackendTexture(Size().width(), Size().height(), GrMipMapped::kNo,
                           texture_info);
 }
@@ -617,8 +640,8 @@ void CanvasResourceRasterSharedImage::OnBitmapImageDestroyed(
   }
 
   auto weak_provider = resource->WeakProvider();
-  ReleaseFrameResources(std::move(weak_provider), std::move(resource),
-                        sync_token, is_lost);
+  ReleaseFrameResources(std::move(weak_provider), viz::ReleaseCallback(),
+                        std::move(resource), sync_token, is_lost);
 }
 
 void CanvasResourceRasterSharedImage::Transfer() {
@@ -642,7 +665,7 @@ scoped_refptr<StaticBitmapImage> CanvasResourceRasterSharedImage::Bitmap() {
 
     SkPixmap pixmap(CreateSkImageInfo(), gpu_memory_buffer_->memory(0),
                     gpu_memory_buffer_->stride(0));
-    auto sk_image = SkImage::MakeRasterCopy(pixmap);
+    auto sk_image = SkImages::RasterFromPixmapCopy(pixmap);
     gpu_memory_buffer_->Unmap();
     return sk_image ? UnacceleratedStaticBitmapImage::Create(sk_image)
                     : nullptr;
@@ -707,7 +730,9 @@ void CanvasResourceRasterSharedImage::CopyRenderingResultsToGpuMemoryBuffer(
   auto surface = SkSurface::MakeRasterDirect(CreateSkImageInfo(),
                                              gpu_memory_buffer_->memory(0),
                                              gpu_memory_buffer_->stride(0));
-  surface->getCanvas()->drawImage(image, 0, 0);
+  SkPixmap pixmap;
+  image->peekPixels(&pixmap);
+  surface->writePixels(pixmap, 0, 0);
   auto* sii =
       ContextProviderWrapper()->ContextProvider()->SharedImageInterface();
   gpu_memory_buffer_->Unmap();
@@ -790,9 +815,8 @@ void CanvasResourceRasterSharedImage::OnMemoryDump(
 
   auto guid = gpu::GetSharedImageGUIDForTracing(mailbox());
   pmd->CreateSharedGlobalAllocatorDump(guid);
-  // This memory is allocated on our behalf, claim it by setting the importance
-  // to >0.
-  pmd->AddOwnershipEdge(dump->guid(), guid, 1);
+  pmd->AddOwnershipEdge(dump->guid(), guid,
+                        static_cast<int>(gpu::TracingImportance::kClientOwner));
 }
 
 // ExternalCanvasResource
@@ -1043,16 +1067,27 @@ void CanvasResourceSwapChain::PresentSwapChain() {
   sync_token_ = sii->GenVerifiedSyncToken();
   raster_interface->WaitSyncTokenCHROMIUM(sync_token_.GetData());
 
+  // Relinquish shared image access before copy when using legacy GL raster.
+  if (!use_oop_rasterization_) {
+    raster_interface->EndSharedImageAccessDirectCHROMIUM(
+        back_buffer_texture_id_);
+  }
   // PresentSwapChain() flips the front and back buffers, but the mailboxes
   // still refer to the current front and back buffer after present.  So the
   // front buffer contains the content we just rendered, and it needs to be
   // copied into the back buffer to support a retained mode like canvas expects.
   // The wait sync token ensure that the present executes before we do the copy.
+  // Don't generate sync token after the copy so that it's not on critical path.
   raster_interface->CopySharedImage(front_buffer_mailbox_, back_buffer_mailbox_,
                                     GL_TEXTURE_2D, 0, 0, 0, 0, size_.width(),
                                     size_.height(), false /* unpack_flip_y */,
                                     false /* unpack_premultiply_alpha */);
-  // Don't generate sync token here so that the copy is not on critical path.
+  // Restore shared image access after copy when using legacy GL raster.
+  if (!use_oop_rasterization_) {
+    raster_interface->BeginSharedImageAccessDirectCHROMIUM(
+        back_buffer_texture_id_,
+        GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
+  }
 }
 
 base::WeakPtr<WebGraphicsContext3DProviderWrapper>
@@ -1088,7 +1123,7 @@ CanvasResourceSwapChain::CanvasResourceSwapChain(
       context_provider_wrapper_->ContextProvider()->SharedImageInterface();
   DCHECK(sii);
   gpu::SharedImageInterface::SwapChainMailboxes mailboxes =
-      sii->CreateSwapChain(GetResourceFormat(), Size(), GetColorSpace(),
+      sii->CreateSwapChain(GetSharedImageFormat(), Size(), GetColorSpace(),
                            kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
                            usage);
   back_buffer_mailbox_ = mailboxes.back_buffer;

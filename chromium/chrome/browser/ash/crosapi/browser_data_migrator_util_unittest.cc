@@ -19,6 +19,7 @@
 #include "base/system/sys_info.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/crosapi/fake_migration_progress_tracker.h"
+#include "chrome/common/chrome_constants.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/storage_type.h"
 #include "components/sync/model/blocking_model_type_store_impl.h"
@@ -37,8 +38,7 @@ constexpr char kCookiesPath[] = "Cookies";
 constexpr char kCachePath[] = "Cache";
 constexpr char kCodeCachePath[] = "Code Cache";
 constexpr char kCodeCacheUMAName[] = "CodeCache";
-constexpr char kTextFileContent[] = "Hello, World!";
-constexpr int kTextFileSize = sizeof(kTextFileContent);
+constexpr base::StringPiece kTextFileContent = "Hello, World!";
 constexpr char kMoveExtensionId[] = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
 
 constexpr syncer::ModelType kAshSyncDataType =
@@ -241,26 +241,24 @@ TEST(BrowserDataMigratorUtilTest, ComputeDirectorySizeWithoutLinks) {
   base::ScopedTempDir dir_1;
   ASSERT_TRUE(dir_1.CreateUniqueTempDir());
 
-  ASSERT_TRUE(
-      base::WriteFile(dir_1.GetPath().Append(FILE_PATH_LITERAL("file1")),
-                      kTextFileContent, kTextFileSize));
+  ASSERT_TRUE(base::WriteFile(
+      dir_1.GetPath().Append(FILE_PATH_LITERAL("file1")), kTextFileContent));
   ASSERT_TRUE(
       base::CreateDirectory(dir_1.GetPath().Append(FILE_PATH_LITERAL("dir"))));
   ASSERT_TRUE(base::WriteFile(dir_1.GetPath()
                                   .Append(FILE_PATH_LITERAL("dir"))
                                   .Append(FILE_PATH_LITERAL("file2")),
-                              kTextFileContent, kTextFileSize));
+                              kTextFileContent));
 
   // Check that `ComputeDirectorySizeWithoutLinks` returns the sum of sizes of
   // the two files in the directory.
   EXPECT_EQ(ComputeDirectorySizeWithoutLinks(dir_1.GetPath()),
-            kTextFileSize * 2);
+            static_cast<int>(kTextFileContent.size() * 2));
 
   base::ScopedTempDir dir_2;
   ASSERT_TRUE(dir_2.CreateUniqueTempDir());
-  ASSERT_TRUE(
-      base::WriteFile(dir_2.GetPath().Append(FILE_PATH_LITERAL("file3")),
-                      kTextFileContent, kTextFileSize));
+  ASSERT_TRUE(base::WriteFile(
+      dir_2.GetPath().Append(FILE_PATH_LITERAL("file3")), kTextFileContent));
 
   ASSERT_TRUE(CreateSymbolicLink(
       dir_2.GetPath().Append(FILE_PATH_LITERAL("file3")),
@@ -269,7 +267,7 @@ TEST(BrowserDataMigratorUtilTest, ComputeDirectorySizeWithoutLinks) {
   // Check that `ComputeDirectorySizeWithoutLinks` does not follow symlinks from
   // `dir_1` to `dir_2`.
   EXPECT_EQ(ComputeDirectorySizeWithoutLinks(dir_1.GetPath()),
-            kTextFileSize * 2);
+            static_cast<int>(kTextFileContent.size() * 2));
 }
 
 TEST(BrowserDataMigratorUtilTest, GetUMAItemName) {
@@ -506,7 +504,7 @@ TEST(BrowserDataMigratorUtilTest, CreateHardLink) {
       scoped_temp_dir.GetPath().Append(FILE_PATH_LITERAL("from_file"));
   const base::FilePath to_file =
       scoped_temp_dir.GetPath().Append(FILE_PATH_LITERAL("to_file"));
-  base::WriteFile(from_file, "Hello, World", sizeof("Hello, World"));
+  ASSERT_TRUE(base::WriteFile(from_file, "Hello, World"));
 
   ASSERT_TRUE(CreateHardLink(from_file, to_file));
 
@@ -537,24 +535,24 @@ TEST(BrowserDataMigratorUtilTest, CopyDirectory) {
   //         |- data
   //         |- Subdirectory/data
   //     |- symlink  /* symlink to original */
-
+  ASSERT_TRUE(
+      base::CreateDirectory(scoped_temp_dir.GetPath().Append(sensitive)));
   ASSERT_TRUE(base::WriteFile(
       scoped_temp_dir.GetPath().Append(sensitive).Append(original),
-      kTextFileContent, kTextFileSize));
+      kTextFileContent));
   ASSERT_TRUE(base::CreateDirectory(copy_from));
   ASSERT_TRUE(base::CreateDirectory(copy_from.Append(subdirectory)));
   ASSERT_TRUE(base::CreateDirectory(
       copy_from.Append(subdirectory).Append(subdirectory)));
-  ASSERT_TRUE(base::WriteFile(copy_from.Append(data_file), kTextFileContent,
-                              kTextFileSize));
+  ASSERT_TRUE(base::WriteFile(copy_from.Append(data_file), kTextFileContent));
   ASSERT_TRUE(base::WriteFile(copy_from.Append(subdirectory).Append(data_file),
-                              kTextFileContent, kTextFileSize));
+                              kTextFileContent));
   ASSERT_TRUE(base::WriteFile(
       copy_from.Append(subdirectory).Append(subdirectory).Append(data_file),
-      kTextFileContent, kTextFileSize));
-  base::CreateSymbolicLink(
+      kTextFileContent));
+  ASSERT_TRUE(base::CreateSymbolicLink(
       scoped_temp_dir.GetPath().Append(sensitive).Append(original),
-      copy_from.Append(symlink));
+      copy_from.Append(symlink)));
 
   // Test `CopyDirectory()`.
   scoped_refptr<CancelFlag> cancelled = base::MakeRefCounted<CancelFlag>();
@@ -612,32 +610,33 @@ TEST(BrowserDataMigratorUtilTest, CopyDirectory) {
           .Append(data_file)));
 }
 
-TEST(BrowserDataMigratorUtilTest, HasEnoughDiskSpace) {
+TEST(BrowserDataMigratorUtilTest, EstimatedExtraBytesCreated) {
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  const int64_t free_disk_space =
-      base::SysInfo::AmountOfFreeDiskSpace(temp_dir.GetPath());
-  ASSERT_GE(free_disk_space, 0);
-  ASSERT_GE(static_cast<uint64_t>(free_disk_space), kBuffer);
+  // Set up the directory as below. 'Preferences' and 'Sync Data' are files that
+  // are split during the migration. 'shared_proto_db' is one of the
+  // need-to-copy items in `kNeedCopyForMoveDataPaths`.
+  // |- Preferences
+  // |- Sync Data/
+  //     |- data
+  // |- shared_proto_db
+  const std::string pref_text = "*";
+  const std::string sync_text(10, '*');
+  const std::string spdb_text(100, '*');
+  ASSERT_TRUE(CreateDirectory(temp_dir.GetPath().Append(kSyncDataFilePath)));
+  ASSERT_TRUE(base::WriteFile(temp_dir.GetPath()
+                                  .Append(kSyncDataFilePath)
+                                  .Append(FILE_PATH_LITERAL("data")),
+                              sync_text));
+  ASSERT_TRUE(base::WriteFile(temp_dir.GetPath().Append(kSharedProtoDBPath),
+                              spdb_text));
+  ASSERT_TRUE(base::WriteFile(
+      temp_dir.GetPath().Append(chrome::kPreferencesFilename), pref_text));
 
-  // If total copy size is the same as `free_disk_space` then the disk is
-  // exactly `kBuffer` bytes short of free space.
-  EXPECT_EQ(ExtraBytesRequiredToBeFreed(free_disk_space, temp_dir.GetPath()),
-            kBuffer);
-  EXPECT_FALSE(HasEnoughDiskSpace(free_disk_space, temp_dir.GetPath()));
-
-  // If total copy size is the same as `free_disk_space - kBuffer` then the disk
-  // has just enough space for the migration.
-  EXPECT_EQ(ExtraBytesRequiredToBeFreed(free_disk_space - kBuffer,
-                                        temp_dir.GetPath()),
-            0u);
-  EXPECT_TRUE(
-      HasEnoughDiskSpace(free_disk_space - kBuffer, temp_dir.GetPath()));
-
-  // If there is nothing to be copied then as long as `free_disk_space >=
-  // kBuffer`, there should be no extra space required to be freed.
-  EXPECT_EQ(ExtraBytesRequiredToBeFreed(0, temp_dir.GetPath()), 0u);
-  EXPECT_TRUE(HasEnoughDiskSpace(0, temp_dir.GetPath()));
+  // Expected size should be size(NeedToCopy) + size(Preferences) * 2 +
+  // size(Sync Data).
+  const int64_t expected_size = 1 * 2 + 10 + 100;
+  EXPECT_EQ(EstimatedExtraBytesCreated(temp_dir.GetPath()), expected_size);
 }
 
 TEST(BrowserDataMigratorUtilTest, IsAshOnlySyncDataType) {
@@ -707,31 +706,31 @@ class BrowserDataMigratorUtilWithTargetsTest : public ::testing::Test {
 
     // Lacros items.
     ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kBookmarksPath),
-                                kTextFileContent, kTextFileSize));
+                                kTextFileContent));
     ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kCookiesPath),
-                                kTextFileContent, kTextFileSize));
+                                kTextFileContent));
     // Remain in ash items.
     ASSERT_TRUE(
         base::CreateDirectory(profile_data_dir_.Append(kDownloadsPath)));
     ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kDownloadsPath)
                                     .Append(FILE_PATH_LITERAL("file")),
-                                kTextFileContent, kTextFileSize));
+                                kTextFileContent));
     ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kDownloadsPath)
                                     .Append(FILE_PATH_LITERAL("file 2")),
-                                kTextFileContent, kTextFileSize));
+                                kTextFileContent));
 
     // Need to copy items.
     ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kSharedProtoDBPath),
-                                kTextFileContent, kTextFileSize));
+                                kTextFileContent));
 
     // Deletable items.
     ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kCachePath),
-                                kTextFileContent, kTextFileSize));
+                                kTextFileContent));
     ASSERT_TRUE(
         base::CreateDirectory(profile_data_dir_.Append(kCodeCachePath)));
     ASSERT_TRUE(base::WriteFile(profile_data_dir_.Append(kCodeCachePath)
                                     .Append(FILE_PATH_LITERAL("file")),
-                                kTextFileContent, kTextFileSize));
+                                kTextFileContent));
   }
 
   void TearDown() override { EXPECT_TRUE(scoped_temp_dir_.Delete()); }
@@ -743,13 +742,14 @@ class BrowserDataMigratorUtilWithTargetsTest : public ::testing::Test {
 TEST_F(BrowserDataMigratorUtilWithTargetsTest, GetTargetItems) {
   // Check for lacros data.
   std::vector<TargetItem> expected_lacros_items = {
-      {profile_data_dir_.Append(kBookmarksPath), kTextFileSize,
+      {profile_data_dir_.Append(kBookmarksPath), kTextFileContent.size(),
        TargetItem::ItemType::kFile},
-      {profile_data_dir_.Append(kCookiesPath), kTextFileSize,
+      {profile_data_dir_.Append(kCookiesPath), kTextFileContent.size(),
        TargetItem::ItemType::kFile}};
   TargetItems lacros_items =
       GetTargetItems(profile_data_dir_, ItemType::kLacros);
-  EXPECT_EQ(lacros_items.total_size, kTextFileSize * 2);
+  EXPECT_EQ(lacros_items.total_size,
+            static_cast<int>(kTextFileContent.size() * 2));
   ASSERT_EQ(lacros_items.items.size(), expected_lacros_items.size());
   std::sort(lacros_items.items.begin(), lacros_items.items.end(),
             TargetItemComparator());
@@ -760,36 +760,39 @@ TEST_F(BrowserDataMigratorUtilWithTargetsTest, GetTargetItems) {
 
   // Check for remain in ash data.
   std::vector<TargetItem> expected_remain_in_ash_items = {
-      {profile_data_dir_.Append(kDownloadsPath), kTextFileSize * 2,
+      {profile_data_dir_.Append(kDownloadsPath), kTextFileContent.size() * 2,
        TargetItem::ItemType::kDirectory}};
   TargetItems remain_in_ash_items =
       GetTargetItems(profile_data_dir_, ItemType::kRemainInAsh);
-  EXPECT_EQ(remain_in_ash_items.total_size, kTextFileSize * 2);
+  EXPECT_EQ(remain_in_ash_items.total_size,
+            static_cast<int>(kTextFileContent.size() * 2));
   ASSERT_EQ(remain_in_ash_items.items.size(),
             expected_remain_in_ash_items.size());
   EXPECT_EQ(remain_in_ash_items.items[0], expected_remain_in_ash_items[0]);
 
   // Check for items that need copies in lacros.
   std::vector<TargetItem> expected_need_copy_items = {
-      {profile_data_dir_.Append(kSharedProtoDBPath), kTextFileSize,
+      {profile_data_dir_.Append(kSharedProtoDBPath), kTextFileContent.size(),
        TargetItem::ItemType::kFile}};
   TargetItems need_copy_items =
       GetTargetItems(profile_data_dir_, ItemType::kNeedCopyForMove);
-  EXPECT_EQ(need_copy_items.total_size, kTextFileSize);
+  EXPECT_EQ(need_copy_items.total_size,
+            static_cast<int>(kTextFileContent.size()));
   ASSERT_EQ(need_copy_items.items.size(), expected_need_copy_items.size());
   EXPECT_EQ(need_copy_items.items[0], expected_need_copy_items[0]);
 
   // Check for deletable items.
   std::vector<TargetItem> expected_deletable_items = {
-      {profile_data_dir_.Append(kCachePath), kTextFileSize,
+      {profile_data_dir_.Append(kCachePath), kTextFileContent.size(),
        TargetItem::ItemType::kFile},
-      {profile_data_dir_.Append(kCodeCachePath), kTextFileSize,
+      {profile_data_dir_.Append(kCodeCachePath), kTextFileContent.size(),
        TargetItem::ItemType::kDirectory}};
   TargetItems deletable_items =
       GetTargetItems(profile_data_dir_, ItemType::kDeletable);
   std::sort(deletable_items.items.begin(), deletable_items.items.end(),
             TargetItemComparator());
-  EXPECT_EQ(deletable_items.total_size, kTextFileSize * 2);
+  EXPECT_EQ(deletable_items.total_size,
+            static_cast<int>(kTextFileContent.size() * 2));
   ASSERT_EQ(deletable_items.items.size(), expected_deletable_items.size());
   for (size_t i = 0; i < deletable_items.items.size(); i++) {
     SCOPED_TRACE(deletable_items.items[i].path.value());
@@ -822,26 +825,26 @@ TEST_F(BrowserDataMigratorUtilWithTargetsTest, DryRunToCollectUMA) {
       "CodeCache";
 
   histogram_tester.ExpectBucketCount(uma_name_bookmarks,
-                                     kTextFileSize / 1024 / 1024, 1);
+                                     kTextFileContent.size() / 1024 / 1024, 1);
   histogram_tester.ExpectBucketCount(uma_name_cookies,
-                                     kTextFileSize / 1024 / 1024, 1);
-  histogram_tester.ExpectBucketCount(uma_name_downloads,
-                                     kTextFileSize * 2 / 1024 / 1024, 1);
+                                     kTextFileContent.size() / 1024 / 1024, 1);
+  histogram_tester.ExpectBucketCount(
+      uma_name_downloads, kTextFileContent.size() * 2 / 1024 / 1024, 1);
   histogram_tester.ExpectBucketCount(uma_name_shared_proto_db,
-                                     kTextFileSize / 1024 / 1024, 1);
+                                     kTextFileContent.size() / 1024 / 1024, 1);
   histogram_tester.ExpectBucketCount(uma_name_cache,
-                                     kTextFileSize / 1024 / 1024, 1);
+                                     kTextFileContent.size() / 1024 / 1024, 1);
   histogram_tester.ExpectBucketCount(uma_name_code_cache,
-                                     kTextFileSize / 1024 / 1024, 1);
+                                     kTextFileContent.size() / 1024 / 1024, 1);
 
-  histogram_tester.ExpectBucketCount(kDryRunLacrosDataSize,
-                                     kTextFileSize * 2 / 1024 / 1024, 1);
-  histogram_tester.ExpectBucketCount(kDryRunAshDataSize,
-                                     kTextFileSize * 2 / 1024 / 1024, 1);
+  histogram_tester.ExpectBucketCount(
+      kDryRunLacrosDataSize, kTextFileContent.size() * 2 / 1024 / 1024, 1);
+  histogram_tester.ExpectBucketCount(
+      kDryRunAshDataSize, kTextFileContent.size() * 2 / 1024 / 1024, 1);
   histogram_tester.ExpectBucketCount(kDryRunCommonDataSize,
-                                     kTextFileSize / 1024 / 1024, 1);
-  histogram_tester.ExpectBucketCount(kDryRunNoCopyDataSize,
-                                     kTextFileSize * 2 / 1024 / 1024, 1);
+                                     kTextFileContent.size() / 1024 / 1024, 1);
+  histogram_tester.ExpectBucketCount(
+      kDryRunNoCopyDataSize, kTextFileContent.size() * 2 / 1024 / 1024, 1);
 
   histogram_tester.ExpectTotalCount(kDryRunCopyMigrationHasEnoughDiskSpace, 1);
   histogram_tester.ExpectTotalCount(

@@ -5,12 +5,12 @@
 #import "ios/chrome/browser/ui/browser_view/key_commands_provider.h"
 
 #import "base/test/metrics/user_action_tester.h"
-#import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/browser/bookmark_node.h"
+#import "components/bookmarks/common/bookmark_metrics.h"
 #import "components/bookmarks/test/bookmark_test_helpers.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/find_in_page/java_script_find_tab_helper.h"
 #import "ios/chrome/browser/lens/lens_browser_agent.h"
@@ -19,15 +19,14 @@
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper_delegate.h"
 #import "ios/chrome/browser/sessions/fake_tab_restore_service.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
+#import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/tabs/closing_web_state_observer_browser_agent.h"
-#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
-#import "ios/chrome/browser/ui/keyboard/features.h"
-#import "ios/chrome/browser/ui/main/scene_state.h"
-#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#import "ios/chrome/browser/ui/util/url_with_title.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web/web_navigation_util.h"
@@ -39,6 +38,7 @@
 #import "ios/web/find_in_page/java_script_find_in_page_manager_impl.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
+#import "ios/web/public/test/fakes/fake_web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
@@ -65,8 +65,9 @@ class KeyCommandsProviderTest : public PlatformTest {
     TestChromeBrowserState::Builder builder;
     builder.AddTestingFactory(IOSChromeTabRestoreServiceFactory::GetInstance(),
                               base::BindRepeating(BuildFakeTabRestoreService));
-    builder.AddTestingFactory(ios::BookmarkModelFactory::GetInstance(),
-                              ios::BookmarkModelFactory::GetDefaultFactory());
+    builder.AddTestingFactory(
+        ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
+        ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
     browser_state_ = builder.Build();
     browser_ = std::make_unique<TestBrowser>(browser_state_.get());
     web_state_list_ = browser_->GetWebStateList();
@@ -75,7 +76,8 @@ class KeyCommandsProviderTest : public PlatformTest {
     scene_state_ = [[SceneState alloc] initWithAppState:nil];
     SceneStateBrowserAgent::CreateForBrowser(browser_.get(), scene_state_);
     bookmark_model_ =
-        ios::BookmarkModelFactory::GetForBrowserState(browser_state_.get());
+        ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
+            browser_state_.get());
     bookmarks::test::WaitForBookmarkModelToLoad(bookmark_model_);
     provider_ = [[KeyCommandsProvider alloc] initWithBrowser:browser_.get()];
   }
@@ -166,6 +168,11 @@ class KeyCommandsProviderTest : public PlatformTest {
   KeyCommandsProvider* provider_;
 };
 
+// Checks that KeyCommandsProvider returns key commands.
+TEST_F(KeyCommandsProviderTest, ReturnsKeyCommands) {
+  EXPECT_NE(0u, provider_.keyCommands.count);
+}
+
 #pragma mark - Responder Chain Tests
 
 // Checks that the nextResponder is nil by default.
@@ -191,30 +198,6 @@ TEST_F(KeyCommandsProviderTest, NextResponderReset) {
   [provider_ respondBetweenViewController:nil andResponder:nil];
 
   EXPECT_EQ(provider_.nextResponder, nil);
-}
-
-#pragma mark - Finch Feature Tests
-
-// Checks that KeyCommandsProvider returns key commands when the Keyboard
-// Shortcuts Menu feature is enabled.
-TEST_F(KeyCommandsProviderTest, ReturnsKeyCommands_MenuEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{kKeyboardShortcutsMenu},
-      /*disabled_features=*/{});
-
-  EXPECT_NE(0u, provider_.keyCommands.count);
-}
-
-// Checks that KeyCommandsProvider returns key commands when the Keyboard
-// Shortcuts Menu feature is disabled.
-TEST_F(KeyCommandsProviderTest, ReturnsKeyCommands_MenuDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{},
-      /*disabled_features=*/{kKeyboardShortcutsMenu});
-
-  EXPECT_NE(0u, provider_.keyCommands.count);
 }
 
 #pragma mark - CanPerform Tests
@@ -302,6 +285,8 @@ TEST_F(KeyCommandsProviderTest, CanPerform_FindInPageActions) {
 
   // Open a tab.
   web::FakeWebState* web_state = InsertNewWebState(0);
+  web_state->SetWebFramesManager(web::ContentWorld::kIsolatedWorld,
+                                 std::make_unique<web::FakeWebFramesManager>());
   web::JavaScriptFindInPageManagerImpl::CreateForWebState(web_state);
   JavaScriptFindTabHelper::CreateForWebState(web_state);
 
@@ -739,23 +724,6 @@ TEST_F(KeyCommandsProviderTest, AddToReadingList_DoesntAddWhenNTP) {
   [provider_ keyCommand_addToReadingList];
 }
 
-// Verifies that the correct URL is added to Reading List.
-TEST_F(KeyCommandsProviderTest, AddToReadingList_AddURL) {
-  id handler = OCMStrictProtocolMock(@protocol(BrowserCommands));
-  provider_.dispatcher = handler;
-  GURL url = GURL("https://e.test");
-  id addCommand = [OCMArg checkWithBlock:^BOOL(ReadingListAddCommand* command) {
-    return command.URLs.count == 1 && command.URLs.firstObject.URL == url;
-  }];
-  OCMExpect([provider_.dispatcher addToReadingList:addCommand]);
-  web::FakeWebState* web_state = InsertNewWebState(0);
-  web_state->SetCurrentURL(url);
-
-  [provider_ keyCommand_addToReadingList];
-
-  [handler verify];
-}
-
 // Verifies that showing the tab at a given index is a no-op when there are no
 // tabs.
 TEST_F(KeyCommandsProviderTest, ShowTabAtIndex_NoTab) {
@@ -868,6 +836,8 @@ TEST_F(KeyCommandsProviderTest, BackForward) {
 TEST_F(KeyCommandsProviderTest, ValidateCommands) {
   // Open a tab.
   web::FakeWebState* web_state = InsertNewWebState(0);
+  web_state->SetWebFramesManager(web::ContentWorld::kIsolatedWorld,
+                                 std::make_unique<web::FakeWebFramesManager>());
   web::JavaScriptFindInPageManagerImpl::CreateForWebState(web_state);
   JavaScriptFindTabHelper::CreateForWebState(web_state);
 
@@ -923,7 +893,8 @@ TEST_F(KeyCommandsProviderTest, ValidateBookmarkCommand) {
   }
 
   // Remove the bookmark.
-  bookmark_model_->Remove(bookmark);
+  bookmark_model_->Remove(bookmark,
+                          bookmarks::metrics::BookmarkEditSource::kOther);
 
   for (UIKeyCommand* command in provider_.keyCommands) {
     [provider_ validateCommand:command];
@@ -933,6 +904,16 @@ TEST_F(KeyCommandsProviderTest, ValidateBookmarkCommand) {
           l10n_util::GetNSStringWithFixup(IDS_IOS_KEYBOARD_ADD_TO_BOOKMARKS));
     }
   }
+}
+
+// Checks that clearing the Browser doesn't lead to a crash.
+TEST_F(KeyCommandsProviderTest, ClearingBrowserDoesntCrash) {
+  InsertNewWebState(0);
+  EXPECT_TRUE(CanPerform(@"keyCommand_showNextTab"));
+
+  browser_.reset();
+
+  EXPECT_FALSE(CanPerform(@"keyCommand_showNextTab"));
 }
 
 }  // namespace

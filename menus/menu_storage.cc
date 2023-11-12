@@ -318,15 +318,19 @@ void MenuStorage::OnModelWillBeDeleted() {
   if (writer_.HasPendingWrite())
     SaveNow();
 
-  model_ = NULL;
+  model_ = nullptr;
 }
 
-bool MenuStorage::SerializeData(std::string* output) {
+absl::optional<std::string> MenuStorage::SerializeData() {
   MenuCodec codec;
-  JSONStringValueSerializer serializer(output);
+  std::string output;
+  JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(true);
   base::Value value = codec.Encode(model_);
-  return serializer.Serialize(value);
+  if (!serializer.Serialize(value))
+    return absl::nullopt;
+
+  return output;
 }
 
 void MenuStorage::OnLoadFinished(std::unique_ptr<MenuLoadDetails> details) {
@@ -346,10 +350,10 @@ bool MenuStorage::SaveNow() {
     return false;
   }
 
-  std::unique_ptr<std::string> data(new std::string);
-  if (!SerializeData(data.get()))
+  absl::optional<std::string> data = SerializeData();
+  if (!data)
     return false;
-  writer_.WriteNow(std::move(data));
+  writer_.WriteNow(data.value());
   return true;
 }
 
@@ -357,10 +361,10 @@ bool MenuStorage::SaveValue(const std::unique_ptr<base::Value>& value) {
   std::unique_ptr<std::string> data(new std::string);
   JSONStringValueSerializer serializer(data.get());
   serializer.set_pretty_print(true);
-  if (!serializer.Serialize(*(value.get()))) {
+  absl::optional<std::string> datavalue = SerializeData();
+  if (!datavalue)
     return false;
-  }
-  writer_.WriteNow(std::move(data));
+  writer_.WriteNow(datavalue.value());
   return true;
 }
 

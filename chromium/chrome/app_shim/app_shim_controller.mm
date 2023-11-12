@@ -182,7 +182,20 @@ bool AppShimController::FindOrLaunchChrome() {
             runningApplicationWithProcessIdentifier:chrome_pid],
         base::scoped_policy::RETAIN);
     if (!chrome_to_connect_to_) {
-      LOG(FATAL) << "Failed to open process with PID: " << chrome_pid;
+      // Sometimes runningApplicationWithProcessIdentifier fails to return the
+      // application, even though it exists. If that happens, try to find the
+      // running application in the full list of running applications manually.
+      // See https://crbug.com/1426897.
+      NSArray<NSRunningApplication*>* apps =
+          [NSWorkspace sharedWorkspace].runningApplications;
+      for (unsigned i = 0; i < [apps count]; ++i) {
+        if (apps[i].processIdentifier == chrome_pid) {
+          chrome_to_connect_to_.reset(apps[i], base::scoped_policy::RETAIN);
+        }
+      }
+      if (!chrome_to_connect_to_) {
+        LOG(FATAL) << "Failed to open process with PID: " << chrome_pid;
+      }
     }
 
     return true;
@@ -496,17 +509,17 @@ void AppShimController::CreateRenderWidgetHostNSView(
     mojo::ScopedInterfaceEndpointHandle host_handle,
     mojo::ScopedInterfaceEndpointHandle view_request_handle) {
   remote_cocoa::RenderWidgetHostViewMacDelegateCallback
-      responder_delegate_creation_callback = base::BindOnce(
-          &AppShimController::CreateRenderWidgetHostViewDelegate, view_id);
+      responder_delegate_creation_callback =
+          base::BindOnce(&AppShimController::GetDelegateForHost, view_id);
   remote_cocoa::CreateRenderWidgetHostNSView(
       view_id, std::move(host_handle), std::move(view_request_handle),
       std::move(responder_delegate_creation_callback));
 }
 
 NSObject<RenderWidgetHostViewMacDelegate>*
-AppShimController::CreateRenderWidgetHostViewDelegate(uint64_t view_id) {
-  return [[AppShimRenderWidgetHostViewMacDelegate alloc]
-      initWithRenderWidgetHostNSViewID:view_id];
+AppShimController::GetDelegateForHost(uint64_t view_id) {
+  return [[[AppShimRenderWidgetHostViewMacDelegate alloc]
+      initWithRenderWidgetHostNSViewID:view_id] autorelease];
 }
 
 void AppShimController::CreateCommandDispatcherForWidget(uint64_t widget_id) {
@@ -633,4 +646,8 @@ NSMenu* AppShimController::GetApplicationDockMenu() {
   }
 
   return dockMenu;
+}
+
+void AppShimController::ApplicationWillTerminate() {
+  host_->ApplicationWillTerminate();
 }

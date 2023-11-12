@@ -18,10 +18,10 @@
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_id.h"
-#include "third_party/metrics_proto/chrome_searchbox_stats.pb.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
+#include "third_party/omnibox_proto/chrome_searchbox_stats.pb.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 #include "url/third_party/mozilla/url_parse.h"
@@ -116,6 +116,11 @@ class TemplateURLRef {
       // indicates experiment status and server processing results so that
       // can be logged in GWS Sawmill logs for offline analysis for the
       // Related Searches MVP experiment.
+      // The |apply_lang_hint| specifies whether or not the |source_lang| should
+      // be used as a hint for backend language detection. Otherwise, backend
+      // translation is forced using |source_lang|. Note that this only supports
+      // Partial Translate and so may only be enabled for select clients on the
+      // server.
       ContextualSearchParams(int version,
                              int contextual_cards_version,
                              std::string home_country,
@@ -125,7 +130,8 @@ class TemplateURLRef {
                              std::string source_lang,
                              std::string target_lang,
                              std::string fluent_languages,
-                             std::string related_searches_stamp);
+                             std::string related_searches_stamp,
+                             bool apply_lang_hint);
       ContextualSearchParams(const ContextualSearchParams& other);
       ~ContextualSearchParams();
 
@@ -171,6 +177,9 @@ class TemplateURLRef {
       // experiment. The value is an arbitrary string that starts with a
       // schema version number.
       std::string related_searches_stamp;
+
+      // Whether hinted language detection should be used on the backend.
+      bool apply_lang_hint = false;
     };
 
     // Estimates dynamic memory usage.
@@ -204,7 +213,7 @@ class TemplateURLRef {
     // For privacy reasons, we require the search provider to support HTTPS
     // protocol in order to receive the gs_lcrp param.
     // For more details, see go/chrome-suggest-logging-improvement.
-    metrics::ChromeSearchboxStats searchbox_stats;
+    omnibox::metrics::ChromeSearchboxStats searchbox_stats;
 
     // TODO: Remove along with "aq" CGI param.
     int accepted_suggestion = NO_SUGGESTIONS_AVAILABLE;
@@ -246,6 +255,9 @@ class TemplateURLRef {
 
     // The content type string for `image_thumbnail_content`.
     std::string image_thumbnail_content_type;
+
+    // The image dimension data for a Google search-by-image query.
+    std::string processed_image_dimensions;
 
     // When searching for an image, the URL of the original image. Callers
     // should leave this empty for images specified via data: URLs.
@@ -427,6 +439,7 @@ class TemplateURLRef {
     GOOGLE_PAGE_CLASSIFICATION,
     GOOGLE_PREFETCH_QUERY,
     GOOGLE_PREFETCH_SOURCE,
+    GOOGLE_PROCESSED_IMAGE_DIMENSIONS,
     GOOGLE_RLZ,
     GOOGLE_SEARCH_CLIENT,
     GOOGLE_SEARCH_FIELDTRIAL_GROUP,
@@ -770,6 +783,7 @@ class TemplateURL {
   base::Time last_visited() const { return data_.last_visited; }
 
   bool created_by_policy() const { return data_.created_by_policy; }
+  bool enforced_by_policy() const { return data_.enforced_by_policy; }
   bool created_from_play_api() const { return data_.created_from_play_api; }
 
   int usage_count() const { return data_.usage_count; }

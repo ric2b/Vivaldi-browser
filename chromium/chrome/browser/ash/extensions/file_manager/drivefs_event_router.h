@@ -11,9 +11,12 @@
 #include <vector>
 
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
+#include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/extensions/file_manager/system_notification_manager.h"
 #include "chromeos/ash/components/drivefs/drivefs_host_observer.h"
+#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
 #include "chromeos/ash/components/drivefs/mojom/drivefs.mojom.h"
 #include "chromeos/ash/components/drivefs/sync_status_tracker.h"
 #include "extensions/browser/extension_event_histogram_value.h"
@@ -40,7 +43,8 @@ using IndividualFileTransferStatus =
     extensions::api::file_manager_private::SyncState;
 
 // Files app's event router handling DriveFS-related events.
-class DriveFsEventRouter : public drivefs::DriveFsHostObserver {
+class DriveFsEventRouter : public drivefs::DriveFsHostObserver,
+                           public drive::DriveIntegrationServiceObserver {
  public:
   explicit DriveFsEventRouter(SystemNotificationManager* notification_manager);
   DriveFsEventRouter(const DriveFsEventRouter&) = delete;
@@ -74,8 +78,14 @@ class DriveFsEventRouter : public drivefs::DriveFsHostObserver {
     SyncingStatusState(const SyncingStatusState& other);
     ~SyncingStatusState();
 
-    std::map<int64_t, int64_t> group_id_to_bytes_to_transfer;
+    std::unordered_map<int64_t, int64_t> group_id_to_bytes_to_transfer;
     int64_t completed_bytes = 0;
+
+    // A given queued item that was received in one batch of events might not
+    // necessarily appear in the next batch. Because of that, we keep track of
+    // queued bytes and the total of queued items in the state.
+    std::unordered_map<int64_t, int64_t> group_id_to_queued_bytes;
+    int64_t queued_bytes = 0;
   };
 
   // DriveFsHostObserver:
@@ -87,6 +97,9 @@ class DriveFsEventRouter : public drivefs::DriveFsHostObserver {
   void OnFilesChanged(
       const std::vector<drivefs::mojom::FileChange>& changes) override;
   void OnError(const drivefs::mojom::DriveError& error) override;
+
+  // DriveIntegrationServiceObserver:
+  void OnBulkPinProgress(const drivefs::pinning::Progress& progress) override;
 
   virtual std::set<GURL> GetEventListenerURLs(
       const std::string& event_name) = 0;
@@ -137,7 +150,7 @@ class DriveFsEventRouter : public drivefs::DriveFsHostObserver {
       const std::string& event_name);
 
   // This is owned by EventRouter and only shared with this class.
-  SystemNotificationManager* notification_manager_;
+  raw_ptr<SystemNotificationManager, ExperimentalAsh> notification_manager_;
 
   SyncingStatusState sync_status_state_;
   SyncingStatusState pin_status_state_;

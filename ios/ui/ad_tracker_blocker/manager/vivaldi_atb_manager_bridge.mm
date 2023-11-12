@@ -41,6 +41,13 @@ void VivaldiATBManagerBridge::OnRuleServiceStateLoaded(
   this->StartObservingRuleSourceManager();
 }
 
+void VivaldiATBManagerBridge::OnIosRulesApplied(RuleGroup group) {
+  id<VivaldiATBConsumer> observer = observer_;
+  if (!observer)
+    return;
+  [observer rulesListDidApply:group];
+}
+
 void VivaldiATBManagerBridge::OnRulesSourceUpdated(
    const RuleSource& rule_source) {
   id<VivaldiATBConsumer> observer = observer_;

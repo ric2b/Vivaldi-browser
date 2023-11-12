@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/functional/callback_forward.h"
 #include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
@@ -70,6 +71,15 @@ class PLATFORM_EXPORT MainThreadScheduler : public ThreadScheduler {
     return {};
   }
 
+  // Test helpers
+
+  // Starts an idle period, allowing pending idle tasks to run. Idle tasks can
+  // only run within an idle period, which is determined based on compositor
+  // signals. This method enables idle tasks to run in tests outside of a
+  // detected idle period. The idle period ends once all idle tasks scheduled
+  // before this method was called have run.
+  virtual void StartIdlePeriodForTesting() = 0;
+
  private:
   // For `ToWebMainThreadScheduler`.
   friend class scheduler::WebThreadScheduler;
@@ -83,8 +93,8 @@ class PLATFORM_EXPORT MainThreadScheduler : public ThreadScheduler {
   virtual v8::Isolate* Isolate() = 0;
 
   // Return a reference to an underlying main thread WebThreadScheduler object.
-  // Can be null if there is no underlying main thread WebThreadScheduler
-  // (e.g. worker threads).
+  // This will be null if the `MainThreadScheduler` object doesn't support this,
+  // which can happen in tests if not using a real scheduler.
   virtual scheduler::WebThreadScheduler* ToWebMainThreadScheduler() {
     return nullptr;
   }

@@ -80,7 +80,9 @@ int32_t AXTreeSourceViews::GetId(AXAuraObjWrapper* node) const {
 }
 
 void AXTreeSourceViews::CacheChildrenIfNeeded(AXAuraObjWrapper* node) {
-  DCHECK(!node->cached_children_);
+  if (node->cached_children_) {
+    return;
+  }
 
   node->cached_children_.emplace();
 
@@ -122,10 +124,6 @@ bool AXTreeSourceViews::IsIgnored(AXAuraObjWrapper* node) const {
   ui::AXNodeData out_data;
   node->Serialize(&out_data);
   return out_data.IsIgnored();
-}
-
-bool AXTreeSourceViews::IsValid(AXAuraObjWrapper* node) const {
-  return node;
 }
 
 bool AXTreeSourceViews::IsEqual(AXAuraObjWrapper* node1,

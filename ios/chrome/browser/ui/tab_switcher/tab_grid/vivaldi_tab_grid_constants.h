@@ -51,4 +51,7 @@ extern const CGFloat vTabGridSectionPaddingiPadPortrait;
 // Tab grid section padding for iPad landscape
 extern const CGFloat vTabGridSectionPaddingiPadLandscape;
 
+// Section header height for recent and sync tabs.
+extern const CGFloat vSectionHeaderHeight;
+
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_TAB_GRID_CONSTANTS_VIVALDI_H_

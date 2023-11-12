@@ -44,9 +44,10 @@
         --cr-checkbox-checked-box-color: var(--color-checkbox-foreground-checked,
             var(--cr-fallback-color-primary));
         --cr-checkbox-unchecked-box-color: var(--color-checkbox-foreground-unchecked,
-            var(--cr-fallback-color-on-surface-variant));
+            var(--cr-fallback-color-outline));
         --cr-checkbox-ripple-checked-color: var(--cr-active-background-color);
         --cr-checkbox-ripple-unchecked-color: var(--cr-active-background-color);
+        --cr-checkbox-ripple-offset: 50%;
         --cr-checkbox-ripple-opacity: 1;
       }
 
@@ -114,12 +115,19 @@
       }
 
       :host-context([chrome-refresh-2023]) #checkbox:focus-visible {
-        border: 2px solid var(--cr-focus-outline-color);
+        border: none;
+        outline: 2px solid var(--cr-focus-outline-color);
       }
 
       #checkmark {
         display: block;
+        /* Automatically adjust color of the checkmark SVG in forced colors mode.
+         * Otherwise, this property defaults to preserve-parent-color.
+         * https://www.w3.org/TR/css-color-adjust-1/#forced-color-adjust-prop */
+        forced-color-adjust: auto;
+        position: relative;
         transform: scale(0);
+        z-index: 1;
       }
 
       #checkmark path {
@@ -140,8 +148,7 @@
 
       :host-context([chrome-refresh-2023]):host([checked]) #checkbox:focus-visible {
         background-clip: padding-box;
-        border-color: transparent;
-        outline: 2px solid var(--cr-focus-outline-color);
+        border: 2px solid transparent;
       }
 
       paper-ripple {
@@ -168,10 +175,20 @@
         right: var(--cr-checkbox-ripple-offset);
       }
 
+      :host-context([chrome-refresh-2023]) paper-ripple {
+        transform: translate(-50%, -50%);
+      }
+
       #label-container {
         color: var(--cr-checkbox-label-color, var(--cr-primary-text-color));
         padding-inline-start: var(--cr-checkbox-label-padding-start, 20px);
         white-space: normal;
+      }
+
+      :host(.label-first) #label-container {
+        order: -1;
+        padding-inline-end: var(--cr-checkbox-label-padding-end, 20px);
+        padding-inline-start: 0;
       }
 
       :host(.no-label) #label-container {

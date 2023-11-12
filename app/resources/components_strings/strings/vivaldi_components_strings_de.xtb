@@ -65,7 +65,7 @@
 <translation id="3447661539832366887">Der Besitzer dieses Geräts hat das Antonio-Spiel deaktiviert.</translation>
 <translation id="3447884698081792621">Zertifikat anzeigen (ausgestellt von <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Erweiterte Informationen ausblenden</translation>
-<translation id="3484560055331845446">Sie könnten den Zugriff auf Ihr Google-Konto verlieren. Chrome empfiehlt Ihnen, Ihr Passwort jetzt zu ändern. Sie werden dazu aufgefordert, sich anzumelden.</translation>
+<translation id="3484560055331845446">Sie könnten den Zugriff auf Ihr Google-Konto verlieren. Vivaldi empfiehlt, Ihr Passwort jetzt zu ändern. Sie werden gebeten, sich anzumelden.</translation>
 <translation id="3566021033012934673">Dies ist keine sichere Verbindung</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details ausblenden</translation>
@@ -111,7 +111,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 wird verwendet)}other{(# werden verwendet)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Proxyadresse prüfen<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-Bit)</translation>
-<translation id="5287240709317226393">Cookies anzeigen</translation>
 <translation id="5355557959165512791">Sie können <ph name="SITE" /> zurzeit nicht aufrufen, da das Zertifikat widerrufen wurde. Netzwerkfehler und Angriffe sind in der Regel nur vorübergehend, sodass die Seite wahrscheinlich später wieder funktioniert.</translation>
 <translation id="5386426401304769735">Die Zertifikatskette für diese Site enthält ein mit SHA-1 signiertes Zertifikat.</translation>
 <translation id="5452270690849572955">Die Seite wurde auf <ph name="HOST_NAME" /> nicht gefunden</translation>
@@ -153,6 +152,7 @@
 <translation id="6657585470893396449">Passwort</translation>
 <translation id="6711464428925977395">Bei der Verbindungsaufnahme mit dem Proxyserver ist ein Problem aufgetreten oder dessen Adresse ist ungültig.</translation>
 <translation id="6757797048963528358">Ihr Gerät geht in den Ruhemodus.</translation>
+<translation id="6890956352250146925">Optionen für Cookies und Websitedaten</translation>
 <translation id="6897140037006041989">User-Agent</translation>
 <translation id="7053983685419859001">Blockieren</translation>
 <translation id="7079718277001814089">Diese Website enthält Malware</translation>

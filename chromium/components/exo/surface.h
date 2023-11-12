@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -333,6 +334,9 @@ class Surface final : public ui::PropertyHandler {
   // Returns true if surface has been assigned a surface delegate.
   bool HasSurfaceDelegate() const;
 
+  // Returns a pointer to the SurfaceDelegate for this surface, used by tests.
+  SurfaceDelegate* GetDelegateForTesting();
+
   // Surface does not own observers. It is the responsibility of the observer
   // to remove itself when it is done observing.
   void AddSurfaceObserver(SurfaceObserver* observer);
@@ -369,6 +373,10 @@ class Surface final : public ui::PropertyHandler {
 
   bool HasPendingDamageForTesting(const gfx::Rect& damage) const {
     return pending_state_.damage.Contains(damage);
+  }
+
+  bool HasLeaveEnterCallbackForTesting() const {
+    return !leave_enter_callback_.is_null();
   }
 
   // Set occlusion tracking region for surface.
@@ -449,6 +457,17 @@ class Surface final : public ui::PropertyHandler {
   // Returns the SecurityDelegate associated with this surface, or nullptr
   // if one can not be determined. See go/secure-exo-ids for more details.
   SecurityDelegate* GetSecurityDelegate();
+
+  // Sets the accessibility window ID sent from the shell client to the window.
+  // A negative number removes it.
+  void SetClientAccessibilityId(int id);
+
+  // Inform observers and subsurfaces about new fullscreen state
+  void OnFullscreenStateChanged(bool fullscreen);
+
+  OverlayPriority GetOverlayPriorityHint() {
+    return state_.overlay_priority_hint;
+  }
 
  private:
   struct State {
@@ -571,6 +590,9 @@ class Surface final : public ui::PropertyHandler {
   // Updates buffer_transform_ to match the current buffer parameters.
   void UpdateBufferTransform(bool y_invert);
 
+  // Update state_.overlay_priority_hint and notify observers
+  void UpdateOverlayPriorityHint(OverlayPriority overlay_priority_hint);
+
   // Puts the current surface into a draw quad, and appends the draw quads into
   // the |frame|.
   void AppendContentsToFrame(const gfx::PointF& origin,
@@ -647,7 +669,7 @@ class Surface final : public ui::PropertyHandler {
   // This can be set to have some functions delegated. E.g. ShellSurface class
   // can set this to handle Commit() and apply any double buffered state it
   // maintains.
-  SurfaceDelegate* delegate_ = nullptr;
+  raw_ptr<SurfaceDelegate, ExperimentalAsh> delegate_ = nullptr;
 
   // Surface observer list. Surface does not own the observers.
   base::ObserverList<SurfaceObserver, true>::Unchecked observers_;
@@ -679,8 +701,8 @@ class ScopedSurface {
   Surface* get() { return surface_; }
 
  private:
-  Surface* const surface_;
-  SurfaceObserver* const observer_;
+  const raw_ptr<Surface, ExperimentalAsh> surface_;
+  const raw_ptr<SurfaceObserver, ExperimentalAsh> observer_;
 };
 
 }  // namespace exo

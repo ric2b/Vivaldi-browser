@@ -8,7 +8,7 @@
 
 #import "base/test/scoped_feature_list.h"
 #import "components/bookmarks/test/bookmark_test_helpers.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
@@ -22,11 +22,15 @@
 #import "ios/chrome/browser/sessions/scene_util_test_support.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
 #import "ios/chrome/browser/sessions/test_session_service.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
 #import "ios/chrome/browser/tabs/inactive_tabs/features.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
-#import "ios/chrome/browser/ui/main/scene_state.h"
-#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
+#import "ios/chrome/browser/ui/main/wrangled_browser.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/testing/scoped_block_swizzler.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
@@ -88,11 +92,17 @@ class BrowserViewWranglerTest : public PlatformTest {
         PrerenderServiceFactory::GetInstance(),
         PrerenderServiceFactory::GetDefaultFactory());
     test_cbs_builder.AddTestingFactory(
-        ios::BookmarkModelFactory::GetInstance(),
-        ios::BookmarkModelFactory::GetDefaultFactory());
+        ios::LocalOrSyncableBookmarkModelFactory::GetInstance(),
+        ios::LocalOrSyncableBookmarkModelFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
+        AuthenticationServiceFactory::GetInstance(),
+        AuthenticationServiceFactory::GetDefaultFactory());
 
     chrome_browser_state_ = test_cbs_builder.Build();
 
+    AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
+        chrome_browser_state_.get(),
+        std::make_unique<FakeAuthenticationServiceDelegate>());
     session_service_block_ = ^SessionServiceIOS*(id self) {
       return test_session_service_;
     };
@@ -102,6 +112,7 @@ class BrowserViewWranglerTest : public PlatformTest {
   }
 
   web::WebTaskEnvironment task_environment_;
+  IOSChromeScopedTestingLocalState local_state_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
   id fake_scene_;
   SceneState* scene_state_;
@@ -174,11 +185,12 @@ TEST_F(BrowserViewWranglerTest, TestBrowserList) {
   EXPECT_EQ(wrangler.mainInterface.browser, observer.GetLastAddedBrowser());
   EXPECT_EQ(1UL, browser_list->AllRegularBrowsers().size());
 
-  // Create the inactive browser but as the feature is disabled, ensure it is
-  // not added to the main interface.
+  // Create the inactive browser. Sould be added in the main interface and in
+  // the browser list even if the feature is disabled.
   [wrangler createInactiveBrowser];
   EXPECT_EQ(2UL, browser_list->AllRegularBrowsers().size());
-  EXPECT_EQ(wrangler.mainInterface.inactiveBrowser, nullptr);
+  EXPECT_EQ(wrangler.mainInterface.inactiveBrowser,
+            observer.GetLastAddedBrowser());
 
   // The lazy OTR browser creation should involve an addition to the browser
   // list.

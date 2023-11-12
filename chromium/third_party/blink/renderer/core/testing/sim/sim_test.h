@@ -33,7 +33,8 @@ class SimTest : public testing::Test {
   void InitializeRemote();
 
   // Create a WebView with a main frame being a fenced frame root.
-  void InitializeFencedFrameRoot(mojom::blink::FencedFrameMode mode);
+  void InitializeFencedFrameRoot(
+      blink::FencedFrame::DeprecatedFencedFrameMode mode);
 
   // Load URL in the local frame root.
   void LoadURL(const String& url);
@@ -74,6 +75,8 @@ class SimTest : public testing::Test {
       bool is_for_nested_main_frame,
       bool is_for_scalable_page,
       SimCompositor* compositor);
+
+  void SetPreferCompositingToLCDText(bool enabled);
 
  private:
   frame_test_helpers::TestWebFrameWidget* CreateTestWebFrameWidget(

@@ -34,7 +34,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ErrorCollector;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -42,14 +41,11 @@ import org.chromium.base.BaseSwitches;
 import org.chromium.base.Callback;
 import org.chromium.base.NativeLibraryLoadedStatus;
 import org.chromium.base.SysUtils;
-import org.chromium.base.jank_tracker.JankMetricUMARecorder;
-import org.chromium.base.jank_tracker.JankMetricUMARecorderJni;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.JniMocker;
@@ -110,8 +106,6 @@ public class InstantStartTest {
     // clang-format on
     private static final String IMMEDIATE_RETURN_PARAMS = "force-fieldtrial-params=Study.Group:"
             + StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_SECONDS_PARAM + "/0";
-    private static final String START_PARAMS =
-            "force-fieldtrial-params=Study.Group:start_surface_variation/single";
     private Bitmap mBitmap;
     private int mThumbnailFetchCount;
 
@@ -137,12 +131,8 @@ public class InstantStartTest {
     @Rule
     public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
 
-    @Mock
-    JankMetricUMARecorder.Natives mJankRecorderNativeMock;
-
     @Before
     public void setUp() {
-        mJniMocker.mock(JankMetricUMARecorderJni.TEST_HOOKS, mJankRecorderNativeMock);
         ReturnToChromeUtil.setSkipInitializationCheckForTesting(true);
     }
 
@@ -210,7 +200,7 @@ public class InstantStartTest {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         Assert.assertFalse(cta.isTablet());
         Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
-        Assert.assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(-1));
+        Assert.assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(-1, false));
 
         StartSurfaceTestUtils.waitForStartSurfaceVisible(cta);
 
@@ -241,8 +231,7 @@ public class InstantStartTest {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         Assert.assertFalse(cta.isTablet());
         Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
-        Assert.assertEquals("single", StartSurfaceConfiguration.START_SURFACE_VARIATION.getValue());
-        Assert.assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(-1));
+        Assert.assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(-1, false));
 
         StartSurfaceTestUtils.waitForStartSurfaceVisible(cta);
 
@@ -289,11 +278,11 @@ public class InstantStartTest {
     @SmallTest
     @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
     // clang-format off
-    @CommandLineFlags.Add({ChromeSwitches.DISABLE_NATIVE_INITIALIZATION, START_PARAMS})
+    @CommandLineFlags.Add({ChromeSwitches.DISABLE_NATIVE_INITIALIZATION})
     public void testShouldShowStartSurfaceAsTheHomePagePreNative() {
         // clang-format on
         StartSurfaceTestUtils.startMainActivityFromLauncher(mActivityTestRule);
-        Assert.assertTrue(StartSurfaceConfiguration.isStartSurfaceSinglePaneEnabled());
+        Assert.assertTrue(StartSurfaceConfiguration.isStartSurfaceFlagEnabled());
         Assert.assertFalse(TextUtils.isEmpty(HomepageManager.getHomepageUri()));
 
         TestThreadUtils.runOnUiThreadBlocking(
@@ -356,7 +345,6 @@ public class InstantStartTest {
     // clang-format off
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID,
             ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID})
-    @DisabledTest(message = "Failing at least on M, O and P: https://crbug.com/1254327")
     public void testInstantStartDisabledOnLowEndDevice() throws IOException {
         // clang-format on
         StartSurfaceTestUtils.createTabStateFile(new int[] {123});
@@ -375,21 +363,21 @@ public class InstantStartTest {
     @SmallTest
     @EnableFeatures({ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
     // clang-format off
-    @CommandLineFlags.Add({ChromeSwitches.DISABLE_NATIVE_INITIALIZATION, START_PARAMS})
+    @CommandLineFlags.Add({ChromeSwitches.DISABLE_NATIVE_INITIALIZATION})
     public void testNoGURLPreNative() {
         // clang-format on
         if (!BuildConfig.ENABLE_ASSERTS) return;
         StartSurfaceTestUtils.startMainActivityFromLauncher(mActivityTestRule);
-        collector.checkThat(StartSurfaceConfiguration.isStartSurfaceSinglePaneEnabled(), is(true));
+        collector.checkThat(StartSurfaceConfiguration.isStartSurfaceFlagEnabled(), is(true));
         collector.checkThat(TextUtils.isEmpty(HomepageManager.getHomepageUri()), is(false));
         Assert.assertFalse(
-                NativeLibraryLoadedStatus.getProviderForTesting().areMainDexNativeMethodsReady());
+                NativeLibraryLoadedStatus.getProviderForTesting().areNativeMethodsReady());
         ReturnToChromeUtil.shouldShowStartSurfaceAsTheHomePage(mActivityTestRule.getActivity());
         ReturnToChromeUtil.isStartSurfaceEnabled(mActivityTestRule.getActivity());
         PseudoTab.getAllPseudoTabsFromStateFile(mActivityTestRule.getActivity());
 
         Assert.assertFalse("There should be no GURL usages triggering native library loading",
-                NativeLibraryLoadedStatus.getProviderForTesting().areMainDexNativeMethodsReady());
+                NativeLibraryLoadedStatus.getProviderForTesting().areNativeMethodsReady());
     }
 
     @Test
@@ -426,7 +414,6 @@ public class InstantStartTest {
     // clang-format off
     @EnableFeatures({ChromeFeatureList.START_SURFACE_RETURN_TIME + "<Study,",
         ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
-    @CommandLineFlags.Add({START_PARAMS})
     public void testShowLastTabWhenHomepageDisabledNoImmediateReturn() throws IOException {
         // clang-format on
         Assert.assertTrue(ChromeFeatureList.sInstantStart.isEnabled());
@@ -447,7 +434,6 @@ public class InstantStartTest {
     @EnableFeatures({ChromeFeatureList.START_SURFACE_RETURN_TIME + "<Study,",
         ChromeFeatureList.START_SURFACE_ANDROID + "<Study"})
     @DisableFeatures(ChromeFeatureList.INSTANT_START)
-    @CommandLineFlags.Add({START_PARAMS})
     public void testShowLastTabWhenHomepageDisabledNoImmediateReturn_NoInstant()
           throws IOException {
         // clang-format on

@@ -30,6 +30,7 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
+#include "gpu/command_buffer/common/mailbox.h"
 
 using base::trace_event::MemoryAllocatorDump;
 using base::trace_event::MemoryDumpLevelOfDetail;
@@ -74,15 +75,16 @@ constexpr base::TimeDelta ResourcePool::kDefaultExpirationDelay;
 constexpr base::TimeDelta ResourcePool::kDefaultMaxFlushDelay;
 
 void ResourcePool::GpuBacking::InitOverlayCandidateAndTextureTarget(
-    const viz::ResourceFormat format,
+    const viz::SharedImageFormat format,
     const gpu::Capabilities& caps,
     bool use_gpu_memory_buffer_resources) {
-  overlay_candidate = use_gpu_memory_buffer_resources &&
-                      caps.supports_scanout_shared_images &&
-                      IsGpuMemoryBufferFormatSupported(format);
+  overlay_candidate =
+      use_gpu_memory_buffer_resources && caps.supports_scanout_shared_images &&
+      IsGpuMemoryBufferFormatSupported(format.resource_format());
   if (overlay_candidate) {
-    texture_target = gpu::GetBufferTextureTarget(gfx::BufferUsage::SCANOUT,
-                                                 BufferFormat(format), caps);
+    texture_target = gpu::GetBufferTextureTarget(
+        gfx::BufferUsage::SCANOUT, BufferFormat(format.resource_format()),
+        caps);
   } else {
     texture_target = GL_TEXTURE_2D;
   }
@@ -128,7 +130,7 @@ ResourcePool::~ResourcePool() {
 
 ResourcePool::PoolResource* ResourcePool::ReuseResource(
     const gfx::Size& size,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::ColorSpace& color_space) {
   // Finding resources in |unused_resources_| from MRU to LRU direction, touches
   // LRU resources only if needed, which increases possibility of expiring more
@@ -138,8 +140,9 @@ ResourcePool::PoolResource* ResourcePool::ReuseResource(
     PoolResource* resource = it->get();
     DCHECK(!resource->resource_id());
 
-    if (resource->format() != format)
+    if (resource->format() != format) {
       continue;
+    }
     if (!ResourceMeetsSizeRequirements(size, resource->size(),
                                        disallow_non_exact_reuse_))
       continue;
@@ -160,9 +163,10 @@ ResourcePool::PoolResource* ResourcePool::ReuseResource(
 
 ResourcePool::PoolResource* ResourcePool::CreateResource(
     const gfx::Size& size,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::ColorSpace& color_space) {
-  DCHECK(viz::ResourceSizes::VerifySizeInBytes<size_t>(size, format));
+  DCHECK(viz::ResourceSizes::VerifySizeInBytes<size_t>(
+      size, format.resource_format()));
 
   auto pool_resource = std::make_unique<PoolResource>(
       this, next_resource_unique_id_++, size, format, color_space);
@@ -180,7 +184,7 @@ ResourcePool::PoolResource* ResourcePool::CreateResource(
 
 ResourcePool::InUsePoolResource ResourcePool::AcquireResource(
     const gfx::Size& size,
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::ColorSpace& color_space,
     const std::string& debug_name) {
   PoolResource* resource = ReuseResource(size, format, color_space);
@@ -336,7 +340,7 @@ bool ResourcePool::PrepareForExport(const InUsePoolResource& in_use_resource) {
       return false;
     }
     transferable = viz::TransferableResource::MakeGpu(
-        gpu_backing->mailbox, GL_LINEAR, gpu_backing->texture_target,
+        gpu_backing->mailbox, gpu_backing->texture_target,
         gpu_backing->mailbox_sync_token, resource->size(), resource->format(),
         gpu_backing->overlay_candidate);
     if (gpu_backing->wait_on_fence_required)
@@ -624,7 +628,7 @@ void ResourcePool::OnMemoryPressure(
 ResourcePool::PoolResource::PoolResource(ResourcePool* resource_pool,
                                          size_t unique_id,
                                          const gfx::Size& size,
-                                         viz::ResourceFormat format,
+                                         viz::SharedImageFormat format,
                                          const gfx::ColorSpace& color_space)
     : resource_pool_(resource_pool),
       unique_id_(unique_id),
@@ -650,9 +654,9 @@ void ResourcePool::PoolResource::OnMemoryDump(
 
   // The importance value used here needs to be greater than the importance
   // used in other places that use this GUID to inform the system that this is
-  // the root ownership. The gpu processes uses 0, so 2 is sufficient, and was
-  // chosen historically and there is no need to adjust it.
-  const int kImportance = 2;
+  // the root ownership.
+  const int kImportance =
+      static_cast<int>(gpu::TracingImportance::kClientOwner);
   auto* dump_manager = base::trace_event::MemoryDumpManager::GetInstance();
   uint64_t tracing_process_id = dump_manager->GetTracingProcessId();
   if (software_backing_) {

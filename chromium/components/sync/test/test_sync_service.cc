@@ -61,24 +61,11 @@ void TestSyncService::SetHasSyncConsent(bool has_sync_consent) {
   has_sync_consent_ = has_sync_consent;
 }
 
-void TestSyncService::SetPersistentAuthErrorOtherThanWebSignout() {
+void TestSyncService::SetPersistentAuthError() {
   transport_state_ = TransportState::PAUSED;
-  auth_error_ = GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
-      GoogleServiceAuthError::InvalidGaiaCredentialsReason::
-          CREDENTIALS_REJECTED_BY_SERVER);
-  CHECK(auth_error_.IsPersistentError());
-}
-
-void TestSyncService::SetPersistentAuthErrorWithWebSignout() {
-  transport_state_ = TransportState::PAUSED;
-  auth_error_ = GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
-      GoogleServiceAuthError::InvalidGaiaCredentialsReason::
-          CREDENTIALS_REJECTED_BY_CLIENT);
-  CHECK(auth_error_.IsPersistentError());
 }
 
 void TestSyncService::ClearAuthError() {
-  auth_error_ = GoogleServiceAuthError::AuthErrorNone();
   if (transport_state_ == TransportState::PAUSED) {
     transport_state_ = TransportState::ACTIVE;
   }
@@ -149,11 +136,15 @@ void TestSyncService::FireSyncCycleCompleted() {
     observer.OnSyncCycleCompleted(this);
 }
 
-SyncUserSettings* TestSyncService::GetUserSettings() {
+void TestSyncService::SetSyncFeatureRequested() {
+  disable_reasons_.Remove(SyncService::DISABLE_REASON_USER_CHOICE);
+}
+
+TestSyncUserSettings* TestSyncService::GetUserSettings() {
   return &user_settings_;
 }
 
-const SyncUserSettings* TestSyncService::GetUserSettings() const {
+const TestSyncUserSettings* TestSyncService::GetUserSettings() const {
   return &user_settings_;
 }
 
@@ -167,8 +158,11 @@ SyncService::TransportState TestSyncService::GetTransportState() const {
 
 SyncService::UserActionableError TestSyncService::GetUserActionableError()
     const {
-  if (auth_error_.IsPersistentError()) {
+  if (transport_state_ == TransportState::PAUSED) {
     return UserActionableError::kSignInNeedsUpdate;
+  }
+  if (user_settings_.IsPassphraseRequiredForPreferredDataTypes()) {
+    return UserActionableError::kNeedsPassphrase;
   }
   return UserActionableError::kNone;
 }
@@ -186,7 +180,7 @@ bool TestSyncService::HasSyncConsent() const {
 }
 
 GoogleServiceAuthError TestSyncService::GetAuthError() const {
-  return auth_error_;
+  return GoogleServiceAuthError();
 }
 
 base::Time TestSyncService::GetAuthErrorTime() const {
@@ -218,6 +212,14 @@ ModelTypeSet TestSyncService::GetActiveDataTypes() const {
   return Difference(GetPreferredDataTypes(), failed_data_types_);
 }
 
+ModelTypeSet TestSyncService::GetTypesWithPendingDownloadForInitialSync()
+    const {
+  if (transport_state_ != TransportState::CONFIGURING) {
+    return ModelTypeSet();
+  }
+  return Difference(GetPreferredDataTypes(), failed_data_types_);
+}
+
 void TestSyncService::StopAndClear() {}
 
 void TestSyncService::OnDataTypeRequestsSyncStartup(ModelType type) {}
@@ -239,15 +241,7 @@ bool TestSyncService::HasObserver(const SyncServiceObserver* observer) const {
 }
 
 SyncTokenStatus TestSyncService::GetSyncTokenStatusForDebugging() const {
-  SyncTokenStatus token;
-
-  if (GetAuthError().state() != GoogleServiceAuthError::NONE) {
-    token.connection_status = ConnectionStatus::CONNECTION_AUTH_ERROR;
-    token.last_get_token_error =
-        GoogleServiceAuthError::FromServiceError("error");
-  }
-
-  return token;
+  return SyncTokenStatus();
 }
 
 bool TestSyncService::QueryDetailedSyncStatusForDebugging(

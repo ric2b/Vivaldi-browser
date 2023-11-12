@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider.SYNTHETIC_TRIAL_POSTFIX;
-
 import android.app.Activity;
 import android.content.Context;
 import android.view.LayoutInflater;
@@ -19,15 +17,13 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
-import org.chromium.chrome.browser.metrics.UmaSessionStats;
-import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
@@ -79,13 +75,13 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     private final TabModelSelector mTabModelSelector;
     private final OneshotSupplier<LayoutStateProvider> mLayoutStateProviderSupplier;
     private final SnackbarManager mSnackbarManager;
-    private final Supplier<ShareDelegate> mShareDelegateSupplier;
     private final TabCreatorManager mTabCreatorManager;
     private final Supplier<DynamicResourceLoader> mDynamicResourceLoaderSupplier;
     private final TabContentManager mTabContentManager;
     private PropertyModelChangeProcessor mModelChangeProcessor;
     private TabGridDialogCoordinator mTabGridDialogCoordinator;
-    private Supplier<TabGridDialogMediator.DialogController> mTabGridDialogControllerSupplier;
+    private OneshotSupplierImpl<TabGridDialogMediator.DialogController>
+            mTabGridDialogControllerSupplier;
     private TabListCoordinator mTabStripCoordinator;
     private TabGroupUiMediator mMediator;
 
@@ -103,7 +99,6 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             @NonNull TabContentManager tabContentManager, @NonNull ViewGroup rootView,
             @NonNull Supplier<DynamicResourceLoader> dynamicResourceLoaderSupplier,
             @NonNull TabCreatorManager tabCreatorManager,
-            @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
             @NonNull OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
             @NonNull SnackbarManager snackbarManager) {
         try (TraceEvent e = TraceEvent.scoped("TabGroupUiCoordinator.constructor")) {
@@ -124,7 +119,6 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             mLayoutStateProviderSupplier = layoutStateProviderSupplier;
             mRootView = rootView;
             mSnackbarManager = snackbarManager;
-            mShareDelegateSupplier = shareDelegateSupplier;
             mTabCreatorManager = tabCreatorManager;
             mDynamicResourceLoaderSupplier = dynamicResourceLoaderSupplier;
             mTabContentManager = tabContentManager;
@@ -138,8 +132,9 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
 
         mTabGridDialogCoordinator = new TabGridDialogCoordinator(mActivity, mTabModelSelector,
                 mTabContentManager, mTabCreatorManager, mActivity.findViewById(R.id.coordinator),
-                null, null, null, mShareDelegateSupplier, mScrimCoordinator,
-                mTabStripCoordinator.getTabGroupTitleEditor(), mRootView);
+                null, null, null, mScrimCoordinator, mTabStripCoordinator.getTabGroupTitleEditor(),
+                mRootView);
+        mTabGridDialogControllerSupplier.set(mTabGridDialogCoordinator);
     }
 
     /**
@@ -150,16 +145,10 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             BottomControlsCoordinator.BottomControlsVisibilityController visibilityController,
             Callback<Object> onModelTokenChange) {
         try (TraceEvent e = TraceEvent.scoped("TabGroupUiCoordinator.initializeWithNative")) {
-            if (UmaSessionStats.isMetricsServiceAvailable()) {
-                UmaSessionStats.registerSyntheticFieldTrial(
-                        ChromeFeatureList.TAB_GROUPS_ANDROID + SYNTHETIC_TRIAL_POSTFIX,
-                        "Downloaded_Enabled");
-            }
-
             mTabStripCoordinator = new TabListCoordinator(TabListCoordinator.TabListMode.STRIP,
                     mContext, mTabModelSelector, null, null, false, null, null,
                     TabProperties.UiType.STRIP, null, null, mTabListContainerView, true,
-                    COMPONENT_NAME, mRootView, onModelTokenChange, null);
+                    COMPONENT_NAME, mRootView, onModelTokenChange);
             mTabStripCoordinator.initWithNative(mDynamicResourceLoaderSupplier.get());
 
             mModelChangeProcessor = PropertyModelChangeProcessor.create(mModel,
@@ -172,7 +161,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
             if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(activity)
                     && mScrimCoordinator != null) {
                 mTabGridDialogControllerSupplier =
-                        new Supplier<TabGridDialogMediator.DialogController>() {
+                        new OneshotSupplierImpl<>() {
                             @Override
                             public TabGridDialogMediator.DialogController get() {
                                 initTabGridDialogCoordinator();
@@ -230,7 +219,9 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                         == BottomSheetController.SheetState.HIDDEN) {
             TabGroupUtils.maybeShowIPH(FeatureConstants.TAB_GROUPS_TAP_TO_SEE_ANOTHER_TAB_FEATURE,
                     mTabStripCoordinator.getContainerView(),
-                    TabUiFeatureUtilities.isLaunchBugFixEnabled() ? mBottomSheetController : null);
+                    TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)
+                            ? mBottomSheetController
+                            : null);
         }
         mTabStripCoordinator.resetWithListOfTabs(tabs);
     }
@@ -305,19 +296,17 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         if (mTabModelSelector == null) return;
         TabModelFilterProvider provider = mTabModelSelector.getTabModelFilterProvider();
 
-        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
-            TabModelFilter normalTabModelFilter = provider.getTabModelFilter(false);
+        TabModelFilter normalTabModelFilter = provider.getTabModelFilter(false);
 
-            if (!(normalTabModelFilter instanceof TabGroupModelFilter)) {
-                String actualType = normalTabModelFilter == null
-                        ? "null"
-                        : normalTabModelFilter.getClass().getName();
-                assert false
-                    : "Please file bug, this is unexpected. Expected TabGroupModelFilter, but was "
-                      + actualType;
+        if (!(normalTabModelFilter instanceof TabGroupModelFilter)) {
+            String actualType = normalTabModelFilter == null
+                    ? "null"
+                    : normalTabModelFilter.getClass().getName();
+            assert false
+                : "Please file bug, this is unexpected. Expected TabGroupModelFilter, but was "
+                  + actualType;
 
-                return;
-            }
+            return;
         }
 
         TabGroupModelFilter normalFilter = (TabGroupModelFilter) provider.getTabModelFilter(false);
@@ -348,20 +337,18 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         // Note(david@vivaldi.com): Nothing will be recorded.
         if (ChromeApplicationImpl.isVivaldi()) return;
 
-        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
-            TabModelFilter normalTabModelFilter =
-                    mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false);
+        TabModelFilter normalTabModelFilter =
+                mTabModelSelector.getTabModelFilterProvider().getTabModelFilter(false);
 
-            if (!(normalTabModelFilter instanceof TabGroupModelFilter)) {
-                String actualType = normalTabModelFilter == null
-                        ? "null"
-                        : normalTabModelFilter.getClass().getName();
-                assert false
-                    : "Please file bug, this is unexpected. Expected TabGroupModelFilter, but was "
-                      + actualType;
+        if (!(normalTabModelFilter instanceof TabGroupModelFilter)) {
+            String actualType = normalTabModelFilter == null
+                    ? "null"
+                    : normalTabModelFilter.getClass().getName();
+            assert false
+                : "Please file bug, this is unexpected. Expected TabGroupModelFilter, but was "
+                  + actualType;
 
-                return;
-            }
+            return;
         }
 
         LayoutStateProvider layoutStateProvider = mLayoutStateProviderSupplier.get();

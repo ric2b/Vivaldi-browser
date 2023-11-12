@@ -265,15 +265,14 @@ class LocalDeviceInstrumentationTestRun(
         @trace_event.traced
         def install_helper_internal(d, apk_path=None):
           # pylint: disable=unused-argument
-          with self._ArchiveLogcat(d, 'install_apk'):
-            d.Install(
-                apk,
-                modules=modules,
-                fake_modules=fake_modules,
-                permissions=permissions,
-                additional_locales=additional_locales,
-                instant_app=instant_app,
-                force_queryable=self._test_instance.IsApkForceQueryable(apk))
+          d.Install(
+              apk,
+              modules=modules,
+              fake_modules=fake_modules,
+              permissions=permissions,
+              additional_locales=additional_locales,
+              instant_app=instant_app,
+              force_queryable=self._test_instance.IsApkForceQueryable(apk))
 
         return install_helper_internal
 
@@ -962,6 +961,25 @@ class LocalDeviceInstrumentationTestRun(
                          self._chrome_proxy.wpr_archive_path)
           self._chrome_proxy = None
 
+      def pull_baseline_profile():
+        # Search though status responses for the one with the key we are
+        # looking for.
+        for _, bundle in statuses:
+          baseline_profile_path = bundle.get(
+              'additionalTestOutputFile_baseline-profile-ts')
+          if baseline_profile_path:
+            # Found it.
+            break
+        else:
+          # This test does not generate a baseline profile.
+          return
+        with self._env.output_manager.ArchivedTempfile(
+            'baseline_profile.txt', 'baseline_profile') as baseline_profile:
+          device.PullFile(baseline_profile_path, baseline_profile.name)
+        _SetLinkOnResults(results, test_name, 'baseline_profile',
+                          baseline_profile.Link())
+        logging.warning('Baseline Profile Location %s', baseline_profile.Link())
+
 
       # While constructing the TestResult objects, we can parallelize several
       # steps that involve ADB. These steps should NOT depend on any info in
@@ -969,7 +987,8 @@ class LocalDeviceInstrumentationTestRun(
       # determined.
       post_test_steps = [
           restore_flags, restore_timeout_scale, stop_chrome_proxy,
-          handle_coverage_data, handle_render_test_data, pull_ui_screen_captures
+          handle_coverage_data, handle_render_test_data,
+          pull_ui_screen_captures, pull_baseline_profile
       ]
       if self._env.concurrent_adb:
         reraiser_thread.RunAsync(post_test_steps)
@@ -1209,19 +1228,17 @@ class LocalDeviceInstrumentationTestRun(
     logcat_file = None
     logmon = None
     try:
-      with self._env.output_manager.ArchivedTempfile(
-          stream_name, 'logcat') as logcat_file:
+      with self._env.output_manager.ArchivedTempfile(stream_name,
+                                                     'logcat') as logcat_file:
         with logcat_monitor.LogcatMonitor(
             device.adb,
             filter_specs=local_device_environment.LOGCAT_FILTERS,
             output_file=logcat_file.name,
             transform_func=self._test_instance.MaybeDeobfuscateLines,
             check_error=False) as logmon:
-          with _LogTestEndpoints(device, test_name):
-            with contextlib_ext.Optional(
-                trace_event.trace(test_name),
-                self._env.trace_output):
-              yield logcat_file
+          with contextlib_ext.Optional(trace_event.trace(test_name),
+                                       self._env.trace_output):
+            yield logcat_file
     finally:
       if logmon:
         logmon.Close()

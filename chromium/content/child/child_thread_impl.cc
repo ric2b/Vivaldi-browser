@@ -20,7 +20,6 @@
 #include "base/files/file.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/memory_pressure_listener.h"
@@ -38,7 +37,6 @@
 #include "base/synchronization/lock.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_local.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
@@ -78,6 +76,7 @@
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/tracing/public/cpp/background_tracing/background_tracing_agent_impl.h"
 #include "services/tracing/public/cpp/background_tracing/background_tracing_agent_provider_impl.h"
+#include "third_party/abseil-cpp/absl/base/attributes.h"
 
 #if BUILDFLAG(IS_POSIX)
 #include "base/posix/global_descriptors.h"
@@ -88,7 +87,7 @@
 #endif  // !BUILDFLAG(IS_ANDROID)
 #endif  // BUILDFLAG(IS_POSIX)
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 #include "base/mac/mach_port_rendezvous.h"
 #endif
 
@@ -96,6 +95,9 @@
 #include <stdio.h>
 #include "base/test/clang_profiling.h"
 #include "build/config/compiler/compiler_buildflags.h"
+#if BUILDFLAG(IS_POSIX)
+#include "base/files/scoped_file.h"
+#endif
 #if BUILDFLAG(IS_WIN)
 #include <io.h>
 #endif
@@ -110,8 +112,7 @@ namespace {
 // How long to wait for a connection to the browser process before giving up.
 const int kConnectionTimeoutS = 15;
 
-base::LazyInstance<base::ThreadLocalPointer<ChildThreadImpl>>::DestructorAtExit
-    g_lazy_child_thread_impl_tls = LAZY_INSTANCE_INITIALIZER;
+ABSL_CONST_INIT thread_local ChildThreadImpl* child_thread_impl = nullptr;
 
 // This isn't needed on Windows because there the sandbox's job object
 // terminates child processes automatically. For unsandboxed processes (i.e.
@@ -224,7 +225,7 @@ mojo::IncomingInvitation InitializeMojoIPCChannel() {
 #elif BUILDFLAG(IS_FUCHSIA)
   endpoint = mojo::PlatformChannel::RecoverPassedEndpointFromCommandLine(
       *base::CommandLine::ForCurrentProcess());
-#elif BUILDFLAG(IS_MAC)
+#elif BUILDFLAG(IS_APPLE)
   auto* client = base::MachPortRendezvousClient::GetInstance();
   if (!client) {
     LOG(ERROR) << "Mach rendezvous failed, terminating process (parent died?)";
@@ -300,7 +301,7 @@ class ChildThreadImpl::IOThreadState
                                        base::BindOnce(quit_closure_));
   }
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   void GetTaskPort(GetTaskPortCallback callback) override {
     mojo::PlatformHandle task_port(
         (base::mac::ScopedMachSendRight(task_self_trap())));
@@ -382,17 +383,31 @@ class ChildThreadImpl::IOThreadState
 
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
   void SetProfilingFile(base::File file) override {
-    // TODO(crbug.com/985574) Remove Android check when possible.
-#if BUILDFLAG(IS_POSIX) && (!BUILDFLAG(IS_ANDROID) || defined(CLANG_PGO))
+    // If |file| is unused, its DTOR will call base::File::Close(), but this
+    // would trigger DCHECK on the UI thread. Rejected fixes:
+    // * Run on IO thread: This causes sequencing checker failure, whose fix
+    //   might upend PGO use case.
+    // * Use base::ScopedDisallowBlocking: This requires making
+    //   ChildThreadImpl::IOThreadState a friend of the class. Unfortunately,
+    //   inner classes cannot be forward declared.
+    // The simple fix adopted is to explicitly close |file| if unused, thus
+    // eliding checks -- this function is rather low-level anyway.
+#if BUILDFLAG(IS_POSIX)
     // Take the file descriptor so that |file| does not close it.
-    int fd = file.TakePlatformFile();
-    FILE* f = fdopen(fd, "r+b");
+    base::ScopedFD fd(file.TakePlatformFile());
+#if BUILDFLAG(CLANG_PGO)
+    FILE* f = fdopen(fd.release(), "r+b");
     __llvm_profile_set_file_object(f, 1);
+#else
+    // Let |fd| close file descriptor.
+#endif
 #elif BUILDFLAG(IS_WIN)
     HANDLE handle = file.TakePlatformFile();
     int fd = _open_osfhandle((intptr_t)handle, 0);
     FILE* f = _fdopen(fd, "r+b");
     __llvm_profile_set_file_object(f, 1);
+#else
+#error Unsupported architecture for profiling.
 #endif
   }
 
@@ -425,8 +440,10 @@ class ChildThreadImpl::IOThreadState
 #if BUILDFLAG(IS_ANDROID)
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel level) override {
-    // Forward the notification to the registry of MemoryPressureListeners.
-    base::MemoryPressureListener::NotifyMemoryPressure(level);
+    main_thread_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ChildThreadImpl::OnMemoryPressureFromBrowserReceived,
+                       weak_main_thread_, level));
   }
 #endif
 
@@ -527,7 +544,8 @@ ChildThreadImpl::ChildThreadImpl(base::RepeatingClosure quit_closure)
 
 ChildThreadImpl::ChildThreadImpl(base::RepeatingClosure quit_closure,
                                  const Options& options)
-    : router_(this),
+    : resetter_(&child_thread_impl, this),
+      router_(this),
       quit_closure_(std::move(quit_closure)),
       browser_process_io_runner_(options.browser_process_io_runner),
       channel_connected_factory_(
@@ -566,7 +584,6 @@ void ChildThreadImpl::SetFieldTrialGroup(const std::string& trial_name,
 
 void ChildThreadImpl::Init(const Options& options) {
   TRACE_EVENT0("startup", "ChildThreadImpl::Init");
-  g_lazy_child_thread_impl_tls.Pointer()->Set(this);
   on_channel_error_called_ = false;
   main_thread_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
 #if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
@@ -772,8 +789,6 @@ ChildThreadImpl::~ChildThreadImpl() {
     [[maybe_unused]] auto* leaked_remote_ptr = leaked_remote.release();
     ANNOTATE_LEAKING_OBJECT_PTR(leaked_remote_ptr);
   }
-
-  g_lazy_child_thread_impl_tls.Pointer()->Set(nullptr);
 }
 
 void ChildThreadImpl::Shutdown() {
@@ -902,7 +917,7 @@ void ChildThreadImpl::BindServiceInterface(
 void ChildThreadImpl::OnBindReceiver(mojo::GenericPendingReceiver receiver) {}
 
 ChildThreadImpl* ChildThreadImpl::current() {
-  return g_lazy_child_thread_impl_tls.Pointer()->Get();
+  return child_thread_impl;
 }
 
 void ChildThreadImpl::OnProcessFinalRelease() {
@@ -920,5 +935,19 @@ void ChildThreadImpl::EnsureConnected() {
 bool ChildThreadImpl::IsInBrowserProcess() const {
   return static_cast<bool>(browser_process_io_runner_);
 }
+
+#if BUILDFLAG(IS_ANDROID)
+void ChildThreadImpl::OnMemoryPressureFromBrowserReceived(
+    base::MemoryPressureListener::MemoryPressureLevel level) {
+  // Generate no memory pressure signals when --single-process is specified.
+  // Because we expect a signal for the browser process has been already
+  // generated.
+  if (IsInBrowserProcess()) {
+    return;
+  }
+  // Forward the notification to the registry of MemoryPressureListeners.
+  base::MemoryPressureListener::NotifyMemoryPressure(level);
+}
+#endif
 
 }  // namespace content

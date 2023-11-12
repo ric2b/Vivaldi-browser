@@ -42,6 +42,7 @@
 
 namespace blink {
 
+enum class LCDTextPreference;
 class WebString;
 
 // WebSettings is owned by the WebView and allows code to modify the settings
@@ -91,7 +92,7 @@ class WebSettings {
   virtual bool ShrinksViewportContentToFit() const = 0;
   virtual bool ViewportEnabled() const = 0;
   virtual void SetAccelerated2dCanvasMSAASampleCount(int) = 0;
-  virtual void SetPreferCompositingToLCDTextEnabled(bool) = 0;
+  virtual void SetLCDTextPreference(LCDTextPreference) = 0;
   // Not implemented yet, see http://crbug.com/178119
   virtual void SetAcceleratedCompositingForTransitionEnabled(bool) {}
   // If set to true, allows frames with an https origin to display passive
@@ -113,6 +114,9 @@ class WebSettings {
   virtual void SetAntialiased2dCanvasEnabled(bool) = 0;
   virtual void SetAntialiasedClips2dCanvasEnabled(bool) = 0;
   virtual void SetAutoplayPolicy(mojom::AutoplayPolicy) = 0;
+  virtual void SetRequireTransientActivationForGetDisplayMedia(bool) = 0;
+  virtual void SetRequireTransientActivationForShowFileOrDirectoryPicker(
+      bool) = 0;
   virtual void SetAutoZoomFocusedEditableToLegibleScale(bool) = 0;
   virtual void SetCaretBrowsingEnabled(bool) = 0;
   virtual void SetClobberUserAgentInitialScaleQuirk(bool) = 0;
@@ -180,6 +184,8 @@ class WebSettings {
   virtual void SetPrimaryPointerType(blink::mojom::PointerType) = 0;
   virtual void SetAvailableHoverTypes(int) = 0;
   virtual void SetPrimaryHoverType(blink::mojom::HoverType) = 0;
+  virtual void SetOutputDeviceUpdateAbilityType(
+      blink::mojom::OutputDeviceUpdateAbilityType) = 0;
   virtual void SetPreferHiddenVolumeControls(bool) = 0;
   virtual void SetShouldProtectAgainstIpcFlooding(bool) = 0;
   virtual void SetRenderVSyncNotificationEnabled(bool) = 0;

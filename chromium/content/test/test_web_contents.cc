@@ -291,7 +291,8 @@ void TestWebContents::NavigateAndFail(const GURL& url, int error_code) {
 
 void TestWebContents::TestSetIsLoading(bool value) {
   if (value) {
-    DidStartLoading(GetPrimaryMainFrame()->frame_tree_node(), true);
+    DidStartLoading(GetPrimaryMainFrame()->frame_tree_node());
+    LoadingStateChanged(LoadingState::LOADING_UI_REQUESTED);
   } else {
     for (FrameTreeNode* node : primary_frame_tree_.Nodes()) {
       RenderFrameHostImpl* current_frame_host =
@@ -511,6 +512,28 @@ void TestWebContents::ActivatePrerenderedPage(const GURL& url) {
   navigation->SetReferrer(blink::mojom::Referrer::New(
       GetPrimaryMainFrame()->GetLastCommittedURL(),
       network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin));
+  navigation->Commit();
+  prerender_host_observer.WaitForDestroyed();
+
+  DCHECK_EQ(GetPrimaryMainFrame()->GetLastCommittedURL(), url);
+
+  DCHECK(prerender_host_observer.was_activated());
+  DCHECK_EQ(registry->FindReservedHostById(prerender_host_id), nullptr);
+}
+
+void TestWebContents::ActivatePrerenderedPageFromAddressBar(const GURL& url) {
+  // Make sure the page for `url` has been prerendered.
+  PrerenderHostRegistry* registry = GetPrerenderHostRegistry();
+  PrerenderHost* prerender_host = registry->FindHostByUrlForTesting(url);
+  DCHECK(prerender_host);
+  int prerender_host_id = prerender_host->frame_tree_node_id();
+
+  // Activate the prerendered page by navigation initiated by the address bar.
+  test::PrerenderHostObserver prerender_host_observer(*this, prerender_host_id);
+  std::unique_ptr<NavigationSimulatorImpl> navigation =
+      NavigationSimulatorImpl::CreateBrowserInitiated(url, this);
+  navigation->SetTransition(ui::PageTransitionFromInt(
+      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR));
   navigation->Commit();
   prerender_host_observer.WaitForDestroyed();
 

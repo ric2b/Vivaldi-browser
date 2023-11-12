@@ -17,6 +17,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/webui/ash/parent_access/parent_access_callback.pb.h"
 #include "chrome/browser/ui/webui/ash/parent_access/parent_access_dialog.h"
+#include "chrome/browser/ui/webui/ash/parent_access/parent_access_metrics_utils.h"
 #include "chrome/browser/ui/webui/ash/parent_access/parent_access_ui.mojom.h"
 #include "components/google/core/common/google_util.h"
 #include "components/signin/public/base/consent_level.h"
@@ -26,6 +27,7 @@
 #include "components/signin/public/identity_manager/scope_set.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 namespace ash {
@@ -50,50 +52,22 @@ std::string GetCallerId(
       // types to ParentAccessParams forces this case statement to be updated.
   }
 }
-
-constexpr char kParentAccessWidgetErrorHistogramBase[] =
-    "ChromeOS.FamilyLinkUser.ParentAccessWidgetError";
-// TODO(b/262555804) use shared constants for flow type variant suffixes.
-constexpr char kParentAccessWidgetErrorSuffixAll[] = "All";
-constexpr char kParentAccessWidgetErrorSuffixWebApprovals[] = "WebApprovals";
 }  // namespace
-
-// static
-std::string
-ParentAccessUIHandlerImpl::GetParentAccessWidgetErrorHistogramForFlowType(
-    absl::optional<parent_access_ui::mojom::ParentAccessParams::FlowType>
-        flow_type) {
-  const std::string separator = ".";
-  if (!flow_type.has_value()) {
-    return base::JoinString({kParentAccessWidgetErrorHistogramBase,
-                             kParentAccessWidgetErrorSuffixAll},
-                            separator);
-  }
-  switch (flow_type.value()) {
-    case parent_access_ui::mojom::ParentAccessParams::FlowType::kWebsiteAccess:
-      return base::JoinString({kParentAccessWidgetErrorHistogramBase,
-                               kParentAccessWidgetErrorSuffixWebApprovals},
-                              separator);
-    case parent_access_ui::mojom::ParentAccessParams::FlowType::
-        kExtensionAccess:
-      // TODO(b/262451256): Implement metrics for extension flow.
-      return std::string();
-  }
-}
 
 void ParentAccessUIHandlerImpl::RecordParentAccessWidgetError(
     ParentAccessUIHandlerImpl::ParentAccessWidgetError error) {
   if (delegate_) {
     base::UmaHistogramEnumeration(
-        ParentAccessUIHandlerImpl::
-            GetParentAccessWidgetErrorHistogramForFlowType(params_->flow_type),
+        parent_access::GetHistogramTitleForFlowType(
+            parent_access::kParentAccessWidgetErrorHistogramBase,
+            params_->flow_type),
         error);
   }
 
   // Always record metric for "all" flow type.
   base::UmaHistogramEnumeration(
-      ParentAccessUIHandlerImpl::GetParentAccessWidgetErrorHistogramForFlowType(
-          absl::nullopt),
+      parent_access::GetHistogramTitleForFlowType(
+          parent_access::kParentAccessWidgetErrorHistogramBase, absl::nullopt),
       error);
 }
 
@@ -109,8 +83,8 @@ ParentAccessUIHandlerImpl::ParentAccessUIHandlerImpl(
   // ParentAccess state is only tracked when a dialog is created. i.e. not when
   // chrome://parent-access is directly accessed.
   if (delegate_) {
-    state_tracker_ =
-        std::make_unique<ParentAccessStateTracker>(params_->flow_type);
+    state_tracker_ = std::make_unique<ParentAccessStateTracker>(
+        params_->flow_type, params_->is_disabled);
   }
 }
 
@@ -214,6 +188,9 @@ void ParentAccessUIHandlerImpl::OnParentAccessDone(
       }
       delegate_->SetError();
       break;
+    case parent_access_ui::mojom::ParentAccessResult::kDisabled:
+      delegate_->SetDisabled();
+      break;
   }
 
   std::move(callback).Run();
@@ -256,6 +233,15 @@ void ParentAccessUIHandlerImpl::GetParentAccessURL(
   DCHECK(result.is_valid()) << "Invalid URL \"" << url << "\" for switch \""
                             << kParentAccessSwitch << "\"";
   std::move(callback).Run(result.spec());
+}
+
+void ParentAccessUIHandlerImpl::OnBeforeScreenDone(
+    OnBeforeScreenDoneCallback callback) {
+  if (state_tracker_) {
+    state_tracker_->OnWebUiStateChanged(
+        ParentAccessStateTracker::FlowResult::kParentAuthentication);
+  }
+  std::move(callback).Run();
 }
 
 const kids::platform::parentaccess::client::proto::ParentAccessToken*

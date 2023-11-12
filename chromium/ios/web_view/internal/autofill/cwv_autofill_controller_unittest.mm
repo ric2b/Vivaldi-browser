@@ -85,15 +85,18 @@ class CWVAutofillControllerTest : public web::WebTest {
 
     UniqueIDDataTabHelper::CreateForWebState(&web_state_);
 
-    autofill_agent_ =
-        [[FakeAutofillAgent alloc] initWithPrefService:&pref_service_
-                                              webState:&web_state_];
-
     frame_id_ = base::SysUTF8ToNSString(web::kMainFakeFrameId);
 
     auto frames_manager = std::make_unique<web::FakeWebFramesManager>();
     web_frames_manager_ = frames_manager.get();
-    web_state_.SetWebFramesManager(std::move(frames_manager));
+    web::ContentWorld content_world =
+        autofill::AutofillJavaScriptFeature::GetInstance()
+            ->GetSupportedContentWorld();
+    web_state_.SetWebFramesManager(content_world, std::move(frames_manager));
+
+    autofill_agent_ =
+        [[FakeAutofillAgent alloc] initWithPrefService:&pref_service_
+                                              webState:&web_state_];
 
     auto password_manager_client =
         std::make_unique<WebViewPasswordManagerClient>(
@@ -135,9 +138,7 @@ class CWVAutofillControllerTest : public web::WebTest {
   }
 
   void AddWebFrame(std::unique_ptr<web::WebFrame> frame) {
-    web::WebFrame* frame_ptr = frame.get();
     web_frames_manager_->AddWebFrame(std::move(frame));
-    web_state_.OnWebFrameDidBecomeAvailable(frame_ptr);
   }
 
   TestingPrefServiceSimple pref_service_;

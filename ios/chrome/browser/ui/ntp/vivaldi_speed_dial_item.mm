@@ -6,7 +6,7 @@
 #import "components/bookmarks/browser/bookmark_node.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
-#import "ios/chrome/browser/ui/bookmarks/cells/bookmark_folder_item.h"
+#import "ios/chrome/browser/ui/bookmarks/cells/table_view_bookmarks_folder_item.h"
 
 using vivaldi_bookmark_kit::GetNickname;
 using vivaldi_bookmark_kit::GetThumbnail;

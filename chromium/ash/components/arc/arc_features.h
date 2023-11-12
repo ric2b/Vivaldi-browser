@@ -24,13 +24,12 @@ BASE_DECLARE_FEATURE(kEnableArcNearbyShareFuseBox);
 BASE_DECLARE_FEATURE(kEnableArcVmDataMigration);
 BASE_DECLARE_FEATURE(kEnableLazyWebViewInit);
 BASE_DECLARE_FEATURE(kEnablePerVmCoreScheduling);
-BASE_DECLARE_FEATURE(kEnableTokenBootstrapEndpoint);
-BASE_DECLARE_FEATURE(kEnableTTSCaching);
-BASE_DECLARE_FEATURE(kEnableTTSCacheSetup);
+BASE_DECLARE_FEATURE(kEnableReadOnlyPermissions);
 BASE_DECLARE_FEATURE(kEnableUnifiedAudioFocusFeature);
 BASE_DECLARE_FEATURE(kEnableUnmanagedToManagedTransitionFeature);
 BASE_DECLARE_FEATURE(kEnableUsap);
 BASE_DECLARE_FEATURE(kEnableVirtioBlkForData);
+BASE_DECLARE_FEATURE(kExternalStorageAccess);
 BASE_DECLARE_FEATURE(kFixupWindowFeature);
 BASE_DECLARE_FEATURE(kGhostWindowNewStyle);
 BASE_DECLARE_FEATURE(kVirtioBlkDataConfigOverride);
@@ -41,6 +40,8 @@ BASE_DECLARE_FEATURE(kGmsCoreLowMemoryKillerProtection);
 BASE_DECLARE_FEATURE(kGuestZram);
 extern const base::FeatureParam<int> kGuestZramSize;
 extern const base::FeatureParam<int> kGuestZramSwappiness;
+extern const base::FeatureParam<bool> kGuestReclaimEnabled;
+extern const base::FeatureParam<bool> kGuestReclaimOnlyAnonymous;
 BASE_DECLARE_FEATURE(kInstantResponseWindowOpen);
 BASE_DECLARE_FEATURE(kLockGuestMemory);
 BASE_DECLARE_FEATURE(kLvmApplicationContainers);
@@ -68,9 +69,14 @@ BASE_DECLARE_FEATURE(kVmMemorySize);
 extern const base::FeatureParam<int> kVmMemorySizeShiftMiB;
 extern const base::FeatureParam<int> kVmMemorySizeMaxMiB;
 BASE_DECLARE_FEATURE(kVmBroadcastPreNotifyANR);
-BASE_DECLARE_FEATURE(kVmGmsCoreLowMemoryKillerProtection);
 BASE_DECLARE_FEATURE(kVmmSwapKeyboardShortcut);
-
+BASE_DECLARE_FEATURE(kVmmSwapPolicy);
+extern const base::FeatureParam<int> kVmmSwapOutDelaySecond;
+extern const base::FeatureParam<int> kVmmSwapOutTimeIntervalSecond;
+extern const base::FeatureParam<int> kVmmSwapArcSilenceIntervalSecond;
+BASE_DECLARE_FEATURE(kPriorityAppLmkDelay);
+extern const base::FeatureParam<int> kPriorityAppLmkDelaySecond;
+extern const base::FeatureParam<std::string> kPriorityAppLmkDelayList;
 }  // namespace arc
 
 #endif  // ASH_COMPONENTS_ARC_ARC_FEATURES_H_

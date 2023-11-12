@@ -1,3 +1,6 @@
 update_template_instance("//base:base") {
-  deps += [ "//components/version_info:generate_version_info" ]
+  deps += [
+    "//components/version_info:generate_version_info",
+    "//vivaldi/base:edge_version",
+  ]
 }

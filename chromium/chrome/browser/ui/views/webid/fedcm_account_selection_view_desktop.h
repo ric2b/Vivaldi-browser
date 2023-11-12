@@ -48,12 +48,18 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
   // AccountSelectionView:
   void Show(
-      const std::string& rp_etld_plus_one,
+      const std::string& top_frame_etld_plus_one,
+      const absl::optional<std::string>& iframe_etld_plus_one,
       const std::vector<content::IdentityProviderData>& identity_provider_data,
       Account::SignInMode sign_in_mode,
       bool show_auto_reauthn_checkbox) override;
-  void ShowFailureDialog(const std::string& rp_etld_plus_one,
-                         const std::string& idp_etld_plus_one) override;
+  void ShowFailureDialog(
+      const std::string& top_frame_etld_plus_one,
+      const absl::optional<std::string>& iframe_etld_plus_one,
+      const std::string& idp_etld_plus_one,
+      const content::IdentityProviderMetadata& idp_metadata) override;
+  std::string GetTitle() const override;
+  absl::optional<std::string> GetSubtitle() const override;
 
   // content::WebContentsObserver
   void OnVisibilityChanged(content::Visibility visibility) override;
@@ -74,13 +80,15 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // Creates the bubble. Sets the bubble's accessible title. Registers any
   // observers.
   virtual views::Widget* CreateBubbleWithAccessibleTitle(
-      const std::u16string& rp_etld_plus_one,
+      const std::u16string& top_frame_etld_plus_one,
+      const absl::optional<std::u16string>& iframe_etld_plus_one,
       const absl::optional<std::u16string>& idp_title,
       blink::mojom::RpContext rp_context,
       bool show_auto_reauthn_checkbox);
 
   // Returns AccountSelectionBubbleViewInterface for bubble views::Widget.
   virtual AccountSelectionBubbleViewInterface* GetBubbleView();
+  virtual const AccountSelectionBubbleViewInterface* GetBubbleView() const;
 
  private:
   enum class State {
@@ -117,6 +125,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
                      const ui::Event& event) override;
   void OnBackButtonClicked() override;
   void OnCloseButtonClicked(const ui::Event& event) override;
+  void ShowModalDialogView(const GURL& url) override;
 
   void ShowVerifyingSheet(const Account& account,
                           const IdentityProviderDisplayData& idp_display_data);
@@ -134,7 +143,9 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
   std::vector<IdentityProviderDisplayData> idp_display_data_list_;
 
-  std::u16string rp_for_display_;
+  std::u16string top_frame_for_display_;
+
+  absl::optional<std::u16string> iframe_for_display_;
 
   State state_{State::ACCOUNT_PICKER};
 

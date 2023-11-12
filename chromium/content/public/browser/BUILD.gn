@@ -39,7 +39,6 @@ source_set("browser_sources") {
     "audio_stream_broker.cc",
     "audio_stream_broker.h",
     "authenticator_common.h",
-    "authenticator_environment.h",
     "authenticator_request_client_delegate.cc",
     "authenticator_request_client_delegate.h",
     "ax_event_notification_details.cc",
@@ -88,7 +87,6 @@ source_set("browser_sources") {
     "browser_plugin_guest_delegate.h",
     "browser_plugin_guest_manager.cc",
     "browser_plugin_guest_manager.h",
-    "browser_task_traits.cc",
     "browser_task_traits.h",
     "browser_thread.h",
     "browser_url_handler.h",
@@ -344,6 +342,7 @@ source_set("browser_sources") {
     "resource_coordinator_service.h",
     "restore_type.h",
     "save_page_type.h",
+    "scoped_authenticator_environment_for_testing.h",
     "screen_orientation_delegate.h",
     "screenlock_observer.h",
     "serial_chooser.cc",
@@ -404,6 +403,8 @@ source_set("browser_sources") {
     "tracing_delegate.cc",
     "tracing_delegate.h",
     "tracing_service.h",
+    "trust_token_access_details.cc",
+    "trust_token_access_details.h",
     "tts_controller.h",
     "tts_platform.h",
     "tts_utterance.h",
@@ -415,6 +416,8 @@ source_set("browser_sources") {
     "usb_chooser.cc",
     "usb_chooser.h",
     "usb_delegate.h",
+    "user_level_memory_pressure_signal_features.cc",
+    "user_level_memory_pressure_signal_features.h",
     "video_capture_device_launcher.cc",
     "video_capture_device_launcher.h",
     "video_capture_service.h",
@@ -425,6 +428,8 @@ source_set("browser_sources") {
     "weak_document_ptr.h",
     "web_contents.cc",
     "web_contents.h",
+    "web_contents_ax_mode_notifier.cc",
+    "web_contents_ax_mode_notifier.h",
     "web_contents_delegate.cc",
     "web_contents_delegate.h",
     "web_contents_media_capture_id.cc",
@@ -435,6 +440,7 @@ source_set("browser_sources") {
     "web_contents_view_delegate.cc",
     "web_contents_view_delegate.h",
     "web_drag_dest_delegate.h",
+    "web_exposed_isolation_level.h",
     "web_ui.h",
     "web_ui_browser_interface_broker_registry.h",
     "web_ui_controller.cc",
@@ -532,6 +538,7 @@ source_set("browser_sources") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/clipboard",
+    "//ui/base/cursor/mojom:cursor_type_shared",
     "//ui/events",
     "//ui/gl",
     "//ui/shell_dialogs",
@@ -630,8 +637,8 @@ source_set("browser_sources") {
     sources += [
       "chromeos/multi_capture_service.cc",
       "chromeos/multi_capture_service.h",
-      "firewall_hole_proxy.h",
       "lock_screen_storage.h",
+      "smart_card_delegate.h",
     ]
   }
 
@@ -643,12 +650,6 @@ source_set("browser_sources") {
       # Android provides its own native implementation of that API.
       "web_authentication_request_proxy.h",
     ]
-    if (!is_fuchsia) {
-      sources += [
-        "smart_card_delegate.cc",
-        "smart_card_delegate.h",
-      ]
-    }
   }
 
   if (is_chromeos_ash) {

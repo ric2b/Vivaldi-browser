@@ -37,7 +37,6 @@
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/startup/startup_types.h"
-#include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -101,9 +100,16 @@ class StartupWebAppCreator
     if (app_id.empty())
       return false;
 
-    base::AdoptRef(new StartupWebAppCreator(command_line, cur_dir, profile,
-                                            is_first_run, app_id))
-        ->Start();
+    scoped_refptr<StartupWebAppCreator> web_app_startup =
+        base::AdoptRef(new StartupWebAppCreator(command_line, cur_dir, profile,
+                                                is_first_run, app_id));
+    // Even though the launch commands can be scheduled before the provider is
+    // started, there is logic filtering out incorrect file & protocol launches
+    // that happens without locks first, and that has to wait until the database
+    // is loaded.
+    WebAppProvider::GetForWebApps(profile)->on_registry_ready().Post(
+        FROM_HERE,
+        base::BindOnce(&StartupWebAppCreator::Start, web_app_startup));
     return true;
   }
 
@@ -316,15 +322,15 @@ class StartupWebAppCreator
     }
   }
 
-  void OnAppLaunched(Browser* browser,
-                     content::WebContents* web_contents,
+  void OnAppLaunched(base::WeakPtr<Browser> browser,
+                     base::WeakPtr<content::WebContents> web_contents,
                      apps::LaunchContainer container) {
     // The finalization step should only occur for the first app launch.
     if (app_window_has_been_launched_)
       return;
 
-    FinalizeWebAppLaunch(open_mode_, command_line_, is_first_run_, browser,
-                         container);
+    FinalizeWebAppLaunch(open_mode_, command_line_, is_first_run_,
+                         browser.get(), container);
     app_window_has_been_launched_ = true;
   }
 

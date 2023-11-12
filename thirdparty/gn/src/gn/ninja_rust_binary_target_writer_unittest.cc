@@ -5,6 +5,7 @@
 #include "gn/ninja_rust_binary_target_writer.h"
 
 #include "gn/config.h"
+#include "gn/pool.h"
 #include "gn/rust_values.h"
 #include "gn/scheduler.h"
 #include "gn/target.h"
@@ -1759,4 +1760,52 @@ TEST_F(NinjaRustBinaryTargetWriterTest, TransitiveRustDepsThroughSourceSet) {
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
+}
+
+TEST_F(NinjaRustBinaryTargetWriterTest, Pool) {
+  Err err;
+  TestWithScope setup;
+
+  Pool pool(setup.settings(),
+            Label(SourceDir("//foo/"), "pool", setup.toolchain()->label().dir(),
+                  setup.toolchain()->label().name()));
+  pool.set_depth(42);
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  SourceFile main("//foo/source.rs");
+  target.sources().push_back(main);
+  target.source_types_used().Set(SourceFile::SOURCE_RS);
+  target.rust_values().set_crate_root(main);
+  target.rust_values().crate_name() = "bar";
+  target.set_output_type(Target::EXECUTABLE);
+  target.set_pool(LabelPtrPair<Pool>(&pool));
+  target.visibility().SetPublic();
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "crate_name = bar\n"
+      "crate_type = bin\n"
+      "output_extension = \n"
+      "output_dir = \n"
+      "rustflags =\n"
+      "rustenv =\n"
+      "root_out_dir = .\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = bar\n"
+      "\n"
+      "build ./bar: rust_bin ../../foo/source.rs | ../../foo/source.rs\n"
+      "  source_file_part = source.rs\n"
+      "  source_name_part = source\n"
+      "  externs =\n"
+      "  rustdeps =\n"
+      "  ldflags =\n"
+      "  sources = ../../foo/source.rs\n"
+      "  pool = foo_pool\n";
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }

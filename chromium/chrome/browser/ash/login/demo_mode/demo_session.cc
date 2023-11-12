@@ -16,6 +16,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/hash/md5.h"
 #include "base/i18n/string_compare.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
@@ -47,11 +49,13 @@
 #include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/language/core/browser/pref_names.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/user_manager/user.h"
+#include "components/variations/synthetic_trials.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_instance.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -457,7 +461,7 @@ base::OneShotTimer* DemoSession::GetTimerForTesting() {
 void DemoSession::ActiveUserChanged(user_manager::User* active_user) {
   const base::RepeatingClosure hide_web_store_icon = base::BindRepeating([]() {
     ProfileManager::GetActiveUserProfile()->GetPrefs()->SetBoolean(
-        prefs::kHideWebStoreIcon, true);
+        policy::policy_prefs::kHideWebStoreIcon, true);
   });
   active_user->AddProfileCreatedObserver(hide_web_store_icon);
 }
@@ -558,6 +562,39 @@ void DemoSession::SetKeyboardBrightnessToOneHundredPercentFromCurrentLevel(
   }
 }
 
+void DemoSession::RegisterDemoModeAAExperiment() {
+  if (g_browser_process->local_state()->GetString(prefs::kDemoModeCountry) ==
+      std::string("US")) {
+    // The hashing salt for the AA experiment.
+    std::string demo_mode_aa_experiment_hashing_salt = "fae448044d545f9c";
+
+    std::vector<std::string> best_buy_retailer_names = {"bby", "bestbuy",
+                                                        "bbt"};
+    std::vector<std::string>::iterator it;
+
+    it = std::find(best_buy_retailer_names.begin(),
+                   best_buy_retailer_names.end(),
+                   g_browser_process->local_state()->GetString(
+                       prefs::kDemoModeRetailerId));
+    if (it != best_buy_retailer_names.end()) {
+      std::string store_number_and_hash_salt =
+          g_browser_process->local_state()->GetString(prefs::kDemoModeStoreId) +
+          demo_mode_aa_experiment_hashing_salt;
+      std::string md5_store_number =
+          base::MD5String(store_number_and_hash_salt);
+
+      char& last_char = md5_store_number.back();
+      int md5_last_char_int =
+          (last_char >= 'a') ? (last_char - 'a' + 10) : (last_char - '0');
+
+      ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+          "DemoModeAAExperimentBasedOnStoreId",
+          md5_last_char_int % 2 ? "Experiment" : "Control",
+          variations::SyntheticTrialAnnotationMode::kCurrentLog);
+    }
+  }
+}
+
 void DemoSession::OnSessionStateChanged() {
   switch (session_manager::SessionManager::Get()->session_state()) {
     case session_manager::SessionState::LOGIN_PRIMARY:
@@ -607,6 +644,10 @@ void DemoSession::OnSessionStateChanged() {
 
       EnsureResourcesLoaded(base::BindOnce(&DemoSession::InstallDemoResources,
                                            weak_ptr_factory_.GetWeakPtr()));
+
+      // Register the device with in the A/A experiment
+      RegisterDemoModeAAExperiment();
+
       break;
     default:
       break;
@@ -650,7 +691,8 @@ base::FilePath GetSplashScreenImagePath(base::FilePath localized_image_path,
 }
 
 void DemoSession::ShowSplashScreen(base::FilePath image_path) {
-  WallpaperControllerClientImpl::Get()->ShowAlwaysOnTopWallpaper(image_path);
+  WallpaperControllerClientImpl::Get()->ShowOverrideWallpaper(
+      image_path, /*always_on_top=*/true);
   remove_splash_screen_fallback_timer_->Start(
       FROM_HERE, kRemoveSplashScreenTimeout,
       base::BindOnce(&DemoSession::RemoveSplashScreen,
@@ -676,7 +718,7 @@ void DemoSession::ConfigureAndStartSplashScreen() {
 void DemoSession::RemoveSplashScreen() {
   if (splash_screen_removed_)
     return;
-  WallpaperControllerClientImpl::Get()->RemoveAlwaysOnTopWallpaper();
+  WallpaperControllerClientImpl::Get()->RemoveOverrideWallpaper();
   remove_splash_screen_fallback_timer_.reset();
   app_window_registry_observations_.RemoveAllObservations();
   splash_screen_removed_ = true;

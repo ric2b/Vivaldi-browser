@@ -84,6 +84,7 @@
 <translation id="1722487484194605434">Prebieha komprimovanie <ph name="NUMBER_OF_ITEMS" /> položiek…</translation>
 <translation id="1722687688096767818">Pridáva sa profil…</translation>
 <translation id="1726100011689679555">Menné servery</translation>
+<translation id="1727562178154619254">Pripravené na synchronizáciu</translation>
 <translation id="1729953886957086472">Nemecká (Nemecko) klávesnica</translation>
 <translation id="1730235522912993863">Čínska klávesnica Cangjie</translation>
 <translation id="1731889557567069540">Počet skopírovaných položiek: <ph name="NUMBER_OF_ITEMS" />.</translation>
@@ -106,7 +107,6 @@
 <translation id="1834290891154666894">Neplatný vstup zhody alternatívneho názvu subjektu</translation>
 <translation id="1838709767668011582">Web Google</translation>
 <translation id="1853795129690976061">Tento priečinok je zdieľaný systémom Linux</translation>
-<translation id="1859422890169495746">Tento Chromebook</translation>
 <translation id="1864756863218646478">Súbor sa nepodarilo nájsť.</translation>
 <translation id="1884013283844450420"><ph name="NETWORK_INDEX" />. sieť z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, pripojenie</translation>
 <translation id="1920670151694390848">Malajámska klávesnica (prepis)</translation>
@@ -118,7 +118,6 @@
 <translation id="1942765061641586207">Rozlíšenie obrázka</translation>
 <translation id="1972984168337863910">Rozbaliť panely so spätnou väzbou týkajúcou sa súborov</translation>
 <translation id="1995337122023280937">Prejsť na umiestnenie súboru</translation>
-<translation id="1999709132469742660">Prístupu všetkých webových adries k súboru</translation>
 <translation id="2001796770603320721">Spravovať na Disku</translation>
 <translation id="2009067268969781306">Formátovaním kľúča odstránite všetky dáta, ktoré sú v ňom uložené. Túto akciu nie je možné vrátiť späť.</translation>
 <translation id="2025955442973426285">Tigrinská klávesnica</translation>
@@ -130,6 +129,7 @@
 <translation id="2084108471225856927">Nastavenia zariadenia</translation>
 <translation id="2084809735218147718">Osoba ďakujúca posunkovou rečou</translation>
 <translation id="2088690981887365033">Sieť VPN</translation>
+<translation id="2111134541987263231">Zapnite <ph name="BEGIN_BOLD" />Povoliť v režime inkognito<ph name="END_BOLD" />.</translation>
 <translation id="2114191879048183086">Položky (<ph name="NUMBER_OF_ITEMS" />) budú odstránené a nebudete ich môcť obnoviť.</translation>
 <translation id="2122305276694332719">Automatické pripájanie k skrytej sieti umožňuje ostatným zobraziť si vaše zariadenie a niektoré nastavenia sietí, a preto sa neodporúča.</translation>
 <translation id="2125607626296734455">Khmérska klávesnica</translation>
@@ -150,6 +150,7 @@
 <translation id="2236732657580416950">Vyrovnávacia pamäť Disku Google bola vymazaná.</translation>
 <translation id="2239068707900391003">Osoba s kávou</translation>
 <translation id="2251368349685848079">Obnoviť z koša</translation>
+<translation id="2278133026967558505">Prístup k súborom zo všetkých webov a webových adries</translation>
 <translation id="2282155092769082568">Webová adresa automatickej konfigurácie</translation>
 <translation id="2284767815536050991">vymeniteľné úložisko</translation>
 <translation id="2288278176040912387">Gramofón</translation>
@@ -158,6 +159,7 @@
 <translation id="2304820083631266885">Planéta</translation>
 <translation id="2305020378527873881">Zväzok <ph name="VOLUME_NAME" /> bol odpojený.</translation>
 <translation id="2307462900900812319">Konfigurovať sieť</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{Rozšírenie s identifikátorom <ph name="BEGIN_LIST" /><ph name="END_LIST" /> sa nedá nájsť. Kontaktujte svojho správcu.}few{Rozšírenia s identifikátormi <ph name="BEGIN_LIST" /><ph name="END_LIST" /> sa nedajú nájsť. Kontaktujte svojho správcu.}many{Extensions with the IDs <ph name="BEGIN_LIST" /><ph name="END_LIST" /> can’t be located. Contact your administrator.}other{Rozšírenia s identifikátormi <ph name="BEGIN_LIST" /><ph name="END_LIST" /> sa nedajú nájsť. Kontaktujte svojho správcu.}}</translation>
 <translation id="2325650632570794183">Tento typ súboru nie je podporovaný. Navštívte Internetový obchod Chrome, kde nájdete aplikáciu, pomocou ktorej môžete tento typ súboru otvoriť.</translation>
 <translation id="2326539130272988168">Bulharská klávesnica</translation>
 <translation id="2337715497728194187">Zdieľať s virtuálnym počítačom Bruschetta</translation>
@@ -227,6 +229,7 @@
 <translation id="290843123675549676">Maráthska klávesnica</translation>
 <translation id="2923240520113693977">Estónčina</translation>
 <translation id="2938685643439809023">Mongolčina</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{Rozšírenie sa nedá nájsť}few{Rozšírenia sa nedajú nájsť}many{Rozšírenia sa nedajú nájsť}other{Rozšírenia sa nedajú nájsť}}</translation>
 <translation id="2943503720238418293">Použite kratší názov</translation>
 <translation id="2949781154072577687">Disk <ph name="DRIVE_NAME" /> sa formátuje...</translation>
 <translation id="2951236788251446349">Medúza</translation>
@@ -272,6 +275,7 @@
 <translation id="3290356915286466215">Nezabezpečené</translation>
 <translation id="3291218047831493686">Ak chcete zmeniť nastavenie zámky SIM karty, pripojte sa k tejto sieti</translation>
 <translation id="3293023191599135697">Siete WEP nie sú podporované</translation>
+<translation id="3295006446256079333">Tento objem</translation>
 <translation id="3295357220137379386">Zariadenie je zaneprázdnené</translation>
 <translation id="3296763833017966289">Gruzínčina</translation>
 <translation id="3307875152560779385">Ukrajinská klávesnica</translation>
@@ -281,6 +285,7 @@
 <translation id="3356580349448036450">Dokončené</translation>
 <translation id="3358452157379365236">Gitara</translation>
 <translation id="3368922792935385530">Pripojené</translation>
+<translation id="3372635229069101468">Kliknite na <ph name="BEGIN_BOLD" />Podrobnosti<ph name="END_BOLD" />.</translation>
 <translation id="3382143449143186018">Nepálska klávesnica s rozložením InScript</translation>
 <translation id="338691029516748599"><ph name="NETWORK_INDEX" />. sieť z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, sila signálu <ph name="SIGNAL_STRENGTH" /> %, ovládané správcom, pripojenie</translation>
 <translation id="3408072735282270043">Aktivovať <ph name="NETWORK_NAME" /></translation>
@@ -365,6 +370,7 @@
 <translation id="4124935795427217608">Jednorožec</translation>
 <translation id="4131235941541910880">Položky, ktoré nepotrebujete, presuňte do koša</translation>
 <translation id="4134804435730168042"><ph name="NETWORK_INDEX" />. sieť z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, aktivovať po nastavení zariadenia</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{V režime inkognito zapnite nasledujúce rozšírenie:}few{V režime inkognito zapnite nasledujúce rozšírenia:}many{V režime inkognito zapnite nasledujúce rozšírenia:}other{V režime inkognito zapnite nasledujúce rozšírenia:}}</translation>
 <translation id="4153015322587141338">Ak chcete mať rýchly prístup k súboru na poličke, kliknite naň pravým tlačidlom a vyberte <ph name="PIN_COMMAND" />.</translation>
 <translation id="4157569377477607576">Pravidlá správcu neodporúčajú:</translation>
 <translation id="4159731583141908892">Súbor <ph name="FILE_NAME" /> bol presunutý.</translation>
@@ -461,12 +467,15 @@
 <translation id="4801956050125744859">Ponechať obidve</translation>
 <translation id="4804827417948292437">Avokádo</translation>
 <translation id="4805966553127040832">Obnovujú sa položky (<ph name="COUNT" />)</translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{Ak chcete používať režim inkognito, vaša organizácia vyžaduje rozšírenie}few{Ak chcete používať režim inkognito, vaša organizácia vyžaduje niektoré rozšírenia}many{Ak chcete používať režim inkognito, vaša organizácia vyžaduje niektoré rozšírenia}other{Ak chcete používať režim inkognito, vaša organizácia vyžaduje niektoré rozšírenia}}</translation>
 <translation id="4823651846660089135">Zariadenie je len na čítanie</translation>
 <translation id="4826849268470072925">Tamilská klávesnica s rozložením ITRANS</translation>
+<translation id="482932175346970750">Zadajte v prehliadači <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" />.</translation>
 <translation id="4839847978919684242">Počet vybratých položiek: <ph name="SELCTED_FILES_COUNT" /></translation>
 <translation id="4843566743023903107">Zariadenia Chromebase</translation>
 <translation id="4850886885716139402">Zobraziť</translation>
 <translation id="485316830061041779">Nemčina</translation>
+<translation id="4862885579661885411">Nastavenia súborov</translation>
 <translation id="4867079195717347957">Kliknutím zoradíte stĺpec v zostupnom poradí.</translation>
 <translation id="4867297348137739678">Posledný týždeň</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> B</translation>
@@ -532,6 +541,7 @@ Vaše súbory sú bezpečne uložené na Disku Google bez ohľadu na to, čo sa 
 s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">Obnovené súbory z Disku Google</translation>
 <translation id="5278111733643988471">Ak chcete túto položku obnoviť, presuňte ju do nového priečinka mimo koša. Pôvodný priečinok <ph name="PARENT_FOLDER_NAME" /> pre túto položku bol odstránený.</translation>
+<translation id="5283101102242354279">Ak chcete zapnúť rozšírenie v režime inkognito:</translation>
 <translation id="5286194356314741248">Prebieha vyhľadávanie</translation>
 <translation id="5288441970121584418">Hamburger</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -542,7 +552,6 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="5323213332664049067">Latinskoamerická</translation>
 <translation id="5330145655348521461">Tieto súbory sú otvorené na inej pracovnej ploche. Ak ich chcete zobraziť, prejdite do profilu <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />).</translation>
 <translation id="5330512191124428349">Získať informácie</translation>
-<translation id="5337538975554986899">Prístupu všetkých webových adries okrem adresy <ph name="NON_RESTRICTED_DESTINATIONS" /> k súboru</translation>
 <translation id="5344246330454251646">Spravovať zdieľanie virtuálneho počítača Bruschetta</translation>
 <translation id="535792325654997756">Osoba s mačkami</translation>
 <translation id="5358764674931277">Snímková frekvencia</translation>
@@ -615,6 +624,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="5911887972742538906">Pri inštalácii aplikácie pre Linux sa vyskytla chyba.</translation>
 <translation id="5912396950572065471">Formát</translation>
 <translation id="5913638992615760742">Kopírovanie zlyhalo, neočakávaná chyba: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">K dispozícii sú nové funkcie výsledkov vyhľadávania</translation>
 <translation id="5926082595146149752">Holandská klávesnica (Holandsko) s americkou klávesnicou s medzinárodným rozložením klávesov (PC)</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063"><ph name="NETWORK_INDEX" />. sieť z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, aktivovať po nastavení zariadenia</translation>
@@ -627,6 +637,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="603895874132768835">Túto sieť budete môcť používať, až keď nastavíte nový PIN</translation>
 <translation id="6040143037577758943">Zavrieť</translation>
 <translation id="6055907707645252013">Sieť <ph name="NETWORK_TYPE" /> nie je pripojená</translation>
+<translation id="6073060579181816027">Viaceré umiestnenia súborov</translation>
 <translation id="6074825444536523002">Formulár Google</translation>
 <translation id="6079871810119356840">Maďarská klávesnica s rozložením Qwerty</translation>
 <translation id="6096979789310008754">Text vyhľadávania bol vymazaný, zobrazujú sa všetky súbory a priečinky</translation>
@@ -704,7 +715,8 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="6732801395666424405">Certifikáty neboli načítané</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [ <ph name="ISSUED_TO" /> ]</translation>
 <translation id="6740270213273127264">Zdieľanie priečinka s virtuálnym počítačom Bruschetta</translation>
-<translation id="6751256176799620176">1 vybratý súbor</translation>
+<translation id="6750737795876287924">Aktuálny adresár</translation>
+<translation id="6751256176799620176">1 vybratý priečinok</translation>
 <translation id="6755827872271341378">Zariadenie so systémom Chrome OS Flex</translation>
 <translation id="6790428901817661496">Prehrať</translation>
 <translation id="6794539005637808366">Obnovte položku alebo ju presuňte do nového priečinka mimo koša</translation>
@@ -741,7 +753,6 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="6973630695168034713">Priečinky</translation>
 <translation id="6976795442547527108">Lev</translation>
 <translation id="6979158407327259162">Disk Google</translation>
-<translation id="6979737339423435258">Celé obdobie</translation>
 <translation id="6989942356279143254">Švédska klávesnica</translation>
 <translation id="6990081529015358884">Nemáte dostatok miesta</translation>
 <translation id="6993826899923627728">Tieto položky sú vo vašom koši</translation>
@@ -767,6 +778,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="7162080671816799010">Na potvrdenie overenia identity servera chýba položka Zhoda alternatívneho názvu subjektu alebo Zhoda prípony domény.</translation>
 <translation id="7165320105431587207">Sieť sa nepodarilo nakonfigurovať</translation>
 <translation id="7170041865419449892">Mimo rozsah</translation>
+<translation id="7179579940054351344">Prístup k súborom zo všetkých webov a webových adries okrem <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="7180611975245234373">Obnoviť</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> GB</translation>
 <translation id="7191454237977785534">Uložiť súbor ako</translation>
@@ -776,6 +788,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />, podrobnosti</translation>
 <translation id="7246947237293279874">Proxy server FTP</translation>
 <translation id="7248671827512403053">Aplikácia</translation>
+<translation id="7252604552361840748">Vyhľadajte rozšírenie vyššie.</translation>
 <translation id="7256405249507348194">Nerozpoznaná chyba: <ph name="DESC" /></translation>
 <translation id="7268659760406822741">Dostupné služby</translation>
 <translation id="7292816689782057017">Pravidlá správcu obmedzujú ukladanie obsahu do niektorých umiestnení.</translation>
@@ -797,7 +810,6 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="7458955835361612701">Žiadne nedávne obrázky</translation>
 <translation id="7460898608667578234">Ukrajinčina</translation>
 <translation id="7469894403370665791">Automaticky sa pripojiť k tejto sieti</translation>
-<translation id="7481358317100446445">Pripravené</translation>
 <translation id="7486315294984620427">Ak chcete vložiť súbory do aplikácie Parallels Desktop, musíte ich skopírovať do súborov pre Windows.</translation>
 <translation id="749452993132003881">Hiragana</translation>
 <translation id="7495372004724182530">Malajámská fonetická klávesnica</translation>
@@ -941,6 +953,7 @@ s ostatnými, a to všetko na jednom mieste.<ph name="MARKUP_9" /></translatio
 <translation id="8492972329130824181">Domáca sieť nie je k dispozícii. Ak sa chcete pripojiť, musíte zapnúť mobilný dátový roaming.</translation>
 <translation id="8499098729323186194">Extrahujú sa položky (<ph name="NUMBER_OF_ITEMS" />)…</translation>
 <translation id="8502913769543567768"><ph name="NETWORK_INDEX" />. sieť z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, aktivovať po nastavení zariadenia, ovláda váš správca</translation>
+<translation id="8512483403832814140">Kedykoľvek</translation>
 <translation id="8521441079177373948">Anglická klávesnica</translation>
 <translation id="853494022971700746">Francúzska (Francúzsko) klávesnica</translation>
 <translation id="8540608333167683902"><ph name="NETWORK_INDEX" />. sieť z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, sila signálu <ph name="SIGNAL_STRENGTH" /> %, podrobnosti</translation>

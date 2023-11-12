@@ -300,7 +300,8 @@ Page* ChromeClientImpl::CreateWindowDelegate(
           WrappedResourceRequest(r.GetResourceRequest()), features, frame_name,
           static_cast<WebNavigationPolicy>(r.GetNavigationPolicy()),
           sandbox_flags, session_storage_namespace_id, consumed_user_gesture,
-          r.Impression(), r.GetPictureInPictureWindowOptions()));
+          r.Impression(), r.GetPictureInPictureWindowOptions(),
+          r.GetRequestorBaseURL()));
   if (!new_view)
     return nullptr;
   return new_view->GetPage();
@@ -548,7 +549,10 @@ float ChromeClientImpl::WindowToViewportScalar(LocalFrame* frame,
     return scalar_value;
   }
 
-  return frame->GetWidgetForLocalRoot()->DIPsToBlinkSpace(scalar_value);
+  if (auto* widget = frame->GetWidgetForLocalRoot()) {
+    return widget->DIPsToBlinkSpace(scalar_value);
+  }
+  return scalar_value;
 }
 
 const display::ScreenInfo& ChromeClientImpl::GetScreenInfo(
@@ -1072,6 +1076,13 @@ std::unique_ptr<cc::ScopedPauseRendering> ChromeClientImpl::PauseRendering(
       ->PauseRendering();
 }
 
+absl::optional<int> ChromeClientImpl::GetMaxRenderBufferBounds(
+    LocalFrame& frame) const {
+  return WebLocalFrameImpl::FromFrame(frame)
+      ->LocalRootFrameWidget()
+      ->GetMaxRenderBufferBounds();
+}
+
 bool ChromeClientImpl::StartDeferringCommits(LocalFrame& main_frame,
                                              base::TimeDelta timeout,
                                              cc::PaintHoldingReason reason) {
@@ -1158,9 +1169,10 @@ void ChromeClientImpl::SetPanAction(LocalFrame* frame,
   widget->SetPanAction(pan_action);
 }
 
-void ChromeClientImpl::DidAssociateFormControlsAfterLoad(LocalFrame* frame) {
+void ChromeClientImpl::DidAddOrRemoveFormRelatedElementsAfterLoad(
+    LocalFrame* frame) {
   if (auto* fill_client = AutofillClientFromFrame(frame))
-    fill_client->DidAssociateFormControlsDynamically();
+    fill_client->DidAddOrRemoveFormRelatedElementsDynamically();
 }
 
 void ChromeClientImpl::ShowVirtualKeyboardOnElementFocus(LocalFrame& frame) {

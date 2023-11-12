@@ -67,7 +67,7 @@ source_set("eg_test_support+eg2") {
     "permissions_app_interface.h",
     "permissions_app_interface_stub.mm",
   ]
-  deps = [ "//ios/third_party/earl_grey2:test_lib" ]
+  deps = [ "//ios/testing/earl_grey:eg_test_support+eg2" ]
 }
 
 source_set("eg2_tests") {
@@ -84,6 +84,7 @@ source_set("eg2_tests") {
     "//base/test:test_support",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/overlays/public/web_content_area:constants",
+    "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/ui/badges:public",
     "//ios/chrome/browser/ui/infobars/banners:public",
     "//ios/chrome/browser/ui/infobars/modals:public",
@@ -91,7 +92,6 @@ source_set("eg2_tests") {
     "//ios/chrome/browser/ui/permissions:permission_info",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/testing/earl_grey:eg_test_support+eg2",
-    "//ios/third_party/earl_grey2:test_lib",
     "//ios/web/common",
     "//ios/web/public/permissions",
     "//net:test_support",

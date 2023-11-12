@@ -18,7 +18,7 @@
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
 #include "content/browser/network/cross_origin_embedder_policy_reporter.h"
 #include "content/browser/renderer_host/code_cache_host_impl.h"
-#include "content/browser/renderer_host/private_network_access_util.h"
+#include "content/browser/renderer_host/local_network_access_util.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
 #include "content/browser/service_worker/service_worker_object_host.h"
@@ -233,8 +233,8 @@ void SharedWorkerHost::Start(
     } else {
       auto policy = base::FeatureList::IsEnabled(
                         features::kPrivateNetworkAccessForWorkers)
-                        ? network::mojom::PrivateNetworkRequestPolicy::kBlock
-                        : network::mojom::PrivateNetworkRequestPolicy::kAllow;
+                        ? network::mojom::LocalNetworkRequestPolicy::kBlock
+                        : network::mojom::LocalNetworkRequestPolicy::kAllow;
 
       // Create a maximally restricted client security state if the policy
       // container is missing.
@@ -428,16 +428,13 @@ SharedWorkerHost::CreateNetworkFactoryParamsForSubresources() {
   network::mojom::URLLoaderFactoryParamsPtr factory_params =
       URLLoaderFactoryParamsHelper::CreateForWorker(
           GetProcessHost(), origin,
-          net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
-                                     // TODO(https://crbug.com/1147281): We
-                                     // should pass the top_level_site from
-                                     // `GetStorageKey()` instead.
-                                     origin, origin,
-                                     net::SiteForCookies::FromOrigin(origin),
-                                     /*party_context=*/absl::nullopt,
-                                     GetStorageKey().nonce().has_value()
-                                         ? &GetStorageKey().nonce().value()
-                                         : nullptr),
+          net::IsolationInfo::Create(
+              net::IsolationInfo::RequestType::kOther,
+              // TODO(https://crbug.com/1147281): We
+              // should pass the top_level_site from
+              // `GetStorageKey()` instead.
+              origin, origin, net::SiteForCookies::FromOrigin(origin),
+              /*party_context=*/absl::nullopt, GetStorageKey().nonce()),
           std::move(coep_reporter),
           /*url_loader_network_observer=*/mojo::NullRemote(),
           /*devtools_observer=*/mojo::NullRemote(),
@@ -580,7 +577,8 @@ void SharedWorkerHost::CreateCodeCacheHost(
     mojo::PendingReceiver<blink::mojom::CodeCacheHost> receiver) {
   // Create a new CodeCacheHostImpl and bind it to the given receiver.
   code_cache_host_receivers_.Add(GetProcessHost()->GetID(),
-                                 GetNetworkIsolationKey(), std::move(receiver));
+                                 GetNetworkIsolationKey(), GetStorageKey(),
+                                 std::move(receiver));
 }
 
 void SharedWorkerHost::Destruct() {

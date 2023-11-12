@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
@@ -49,6 +50,16 @@ class SharedURLLoaderFactory;
 namespace safe_browsing {
 class ClientPhishingRequest;
 class ClientSideDetectionHost;
+
+// Enum used to keep stats on classification using threshold comparison.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class SBClientDetectionClassifyThresholdsResult {
+  kSuccess = 0,
+  kModelSizeMismatch = 1,
+  kModelLabelNotFound = 2,
+  kMaxValue = kModelLabelNotFound,
+};
 
 // Main service which pushes models to the renderers, responds to classification
 // requests. This owns two ModelLoader objects.
@@ -152,6 +163,13 @@ class ClientSideDetectionService
   // override it.
   virtual const base::File& GetVisualTfLiteModel();
 
+  // Returns the visual TFLite model thresholds from the model class
+  virtual const base::flat_map<std::string, TfLiteModelMetadata::Threshold>&
+  GetVisualTfLiteModelThresholds();
+
+  // Compare the scores from classification to TFLite model thresholds
+  void ClassifyPhishingThroughThresholds(ClientPhishingRequest* verdict);
+
   // Overrides the SharedURLLoaderFactory
   void SetURLLoaderFactoryForTesting(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
@@ -177,6 +195,7 @@ class ClientSideDetectionService
   FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionServiceTest,
                            SendClientReportPhishingRequest);
   FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionServiceTest, GetNumReportTest);
+  FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionServiceTest, GetNumReportTestESB);
   FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionServiceTest,
                            TestModelFollowsPrefs);
 

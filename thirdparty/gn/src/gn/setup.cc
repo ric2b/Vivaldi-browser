@@ -23,6 +23,7 @@
 #include "gn/exec_process.h"
 #include "gn/filesystem_utils.h"
 #include "gn/input_file.h"
+#include "gn/label_pattern.h"
 #include "gn/parse_tree.h"
 #include "gn/parser.h"
 #include "gn/source_dir.h"
@@ -114,6 +115,28 @@ Variables
         exec_script_whitelist = [
           "//base/BUILD.gn",
           "//build/my_config.gni",
+        ]
+
+  export_compile_commands [optional]
+      A list of label patterns for which to generate a Clang compilation
+      database (see "gn help label_pattern" for the string format).
+
+      When specified, GN will generate a compile_commands.json file in the root
+      of the build directory containing information on how to compile each
+      source file reachable from any label matching any pattern in the list.
+      This is used for Clang-based tooling and some editor integration. See
+      https://clang.llvm.org/docs/JSONCompilationDatabase.html
+
+      The switch --add-export-compile-commands to "gn gen" (see "gn help gen")
+      appends to this value which provides a per-user way to customize it.
+
+      The deprecated switch --export-compile-commands to "gn gen" (see "gn help
+      gen") adds to the export target list using a different format.
+
+      Example:
+        export_compile_commands = [
+          "//base/*",
+          "//tools:doom_melon",
         ]
 
   root [optional]
@@ -515,7 +538,7 @@ bool Setup::FillArguments(const base::CommandLine& cmdline, Err* err) {
 
   base::FilePath build_arg_file =
       build_settings_.GetFullPath(GetBuildArgFile());
-  auto switch_value = cmdline.GetSwitchValueASCII(switches::kArgs);
+  auto switch_value = cmdline.GetSwitchValueString(switches::kArgs);
   if (cmdline.HasSwitch(switches::kArgs) ||
       (gen_empty_args_ && !PathExists(build_arg_file))) {
     if (!FillArgsFromCommandLine(
@@ -918,7 +941,7 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
 
   // Root build file.
   if (cmdline.HasSwitch(switches::kRootTarget)) {
-    auto switch_value = cmdline.GetSwitchValueASCII(switches::kRootTarget);
+    auto switch_value = cmdline.GetSwitchValueString(switches::kRootTarget);
     Value root_value(nullptr, switch_value);
     root_target_label = Label::Resolve(current_dir, std::string_view(), Label(),
                                        root_value, err);
@@ -1057,7 +1080,34 @@ bool Setup::FillOtherConfig(const base::CommandLine& cmdline, Err* err) {
       return false;
     }
     build_settings_.set_no_stamp_files(no_stamp_files_value->boolean_value());
-    CHECK(!build_settings_.no_stamp_files()) << "no_stamp_files does not work yet!";
+    CHECK(!build_settings_.no_stamp_files())
+        << "no_stamp_files does not work yet!";
+  }
+
+  // Export compile commands.
+  const Value* export_cc_value =
+      dotfile_scope_.GetValue("export_compile_commands", true);
+  if (export_cc_value) {
+    if (!ExtractListOfLabelPatterns(&build_settings_, *export_cc_value,
+                                    SourceDir("//"), &export_compile_commands_,
+                                    err)) {
+      return false;
+    }
+  }
+
+  // Append any additional export compile command patterns from the cmdline.
+  for (const std::string& cur :
+       cmdline.GetSwitchValueStrings(switches::kAddExportCompileCommands)) {
+    LabelPattern pat = LabelPattern::GetPattern(
+        SourceDir("//"), build_settings_.root_path_utf8(), Value(nullptr, cur),
+        err);
+    if (err->has_error()) {
+      err->AppendSubErr(Err(
+          Location(),
+          "for the command-line switch --add-export-compile-commands=" + cur));
+      return false;
+    }
+    export_compile_commands_.push_back(std::move(pat));
   }
 
   return true;

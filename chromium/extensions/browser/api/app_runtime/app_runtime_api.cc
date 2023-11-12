@@ -12,6 +12,7 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
+#include "base/types/cxx23_to_underlying.h"
 #include "extensions/browser/entry_info.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
@@ -39,19 +40,18 @@ void DispatchOnEmbedRequestedEventImpl(
   auto event = std::make_unique<Event>(
       events::APP_RUNTIME_ON_EMBED_REQUESTED,
       app_runtime::OnEmbedRequested::kEventName, std::move(args), context);
-  EventRouter::Get(context)
-      ->DispatchEventWithLazyListener(extension_id, std::move(event));
+  EventRouter::Get(context)->DispatchEventWithLazyListener(extension_id,
+                                                           std::move(event));
 
-  ExtensionPrefs::Get(context)
-      ->SetLastLaunchTime(extension_id, base::Time::Now());
+  ExtensionPrefs::Get(context)->SetLastLaunchTime(extension_id,
+                                                  base::Time::Now());
 }
 
 void DispatchOnLaunchedEventImpl(const std::string& extension_id,
                                  app_runtime::LaunchSource source,
                                  base::Value::Dict launch_data,
                                  BrowserContext* context) {
-  UMA_HISTOGRAM_ENUMERATION("Extensions.AppLaunchSource", source,
-                            app_runtime::LaunchSource::LAUNCH_SOURCE_LAST + 1);
+  UMA_HISTOGRAM_ENUMERATION("Extensions.AppLaunchSource", source);
 
   launch_data.Set("isDemoSession",
                   ExtensionsBrowserClient::Get()->IsInDemoMode());
@@ -68,60 +68,61 @@ void DispatchOnLaunchedEventImpl(const std::string& extension_id,
   auto event = std::make_unique<Event>(events::APP_RUNTIME_ON_LAUNCHED,
                                        app_runtime::OnLaunched::kEventName,
                                        std::move(args), context);
-  EventRouter::Get(context)
-      ->DispatchEventWithLazyListener(extension_id, std::move(event));
-  ExtensionPrefs::Get(context)
-      ->SetLastLaunchTime(extension_id, base::Time::Now());
+  EventRouter::Get(context)->DispatchEventWithLazyListener(extension_id,
+                                                           std::move(event));
+  ExtensionPrefs::Get(context)->SetLastLaunchTime(extension_id,
+                                                  base::Time::Now());
 }
 
-#define ASSERT_ENUM_EQUAL(Name, Name2)                                 \
-  static_assert(static_cast<int>(extensions::AppLaunchSource::Name) == \
-                    static_cast<int>(app_runtime::LAUNCH_##Name2),     \
-                "The value of extensions::" #Name                      \
+#define ASSERT_ENUM_EQUAL(Name, Name2)                                     \
+  static_assert(base::to_underlying(extensions::AppLaunchSource::Name) ==  \
+                    base::to_underlying(app_runtime::LaunchSource::Name2), \
+                "The value of extensions::" #Name                          \
                 " and app_runtime::LAUNCH_" #Name2 " should be the same");
 
 app_runtime::LaunchSource GetLaunchSourceEnum(
     extensions::AppLaunchSource source) {
-  ASSERT_ENUM_EQUAL(kSourceNone, SOURCE_NONE);
-  ASSERT_ENUM_EQUAL(kSourceUntracked, SOURCE_UNTRACKED);
-  ASSERT_ENUM_EQUAL(kSourceAppLauncher, SOURCE_APP_LAUNCHER);
-  ASSERT_ENUM_EQUAL(kSourceNewTabPage, SOURCE_NEW_TAB_PAGE);
-  ASSERT_ENUM_EQUAL(kSourceReload, SOURCE_RELOAD);
-  ASSERT_ENUM_EQUAL(kSourceRestart, SOURCE_RESTART);
-  ASSERT_ENUM_EQUAL(kSourceLoadAndLaunch, SOURCE_LOAD_AND_LAUNCH);
-  ASSERT_ENUM_EQUAL(kSourceCommandLine, SOURCE_COMMAND_LINE);
-  ASSERT_ENUM_EQUAL(kSourceFileHandler, SOURCE_FILE_HANDLER);
-  ASSERT_ENUM_EQUAL(kSourceUrlHandler, SOURCE_URL_HANDLER);
-  ASSERT_ENUM_EQUAL(kSourceSystemTray, SOURCE_SYSTEM_TRAY);
-  ASSERT_ENUM_EQUAL(kSourceAboutPage, SOURCE_ABOUT_PAGE);
-  ASSERT_ENUM_EQUAL(kSourceKeyboard, SOURCE_KEYBOARD);
-  ASSERT_ENUM_EQUAL(kSourceExtensionsPage, SOURCE_EXTENSIONS_PAGE);
-  ASSERT_ENUM_EQUAL(kSourceManagementApi, SOURCE_MANAGEMENT_API);
-  ASSERT_ENUM_EQUAL(kSourceEphemeralAppDeprecated, SOURCE_EPHEMERAL_APP);
-  ASSERT_ENUM_EQUAL(kSourceBackground, SOURCE_BACKGROUND);
-  ASSERT_ENUM_EQUAL(kSourceKiosk, SOURCE_KIOSK);
-  ASSERT_ENUM_EQUAL(kSourceChromeInternal, SOURCE_CHROME_INTERNAL);
-  ASSERT_ENUM_EQUAL(kSourceTest, SOURCE_TEST);
-  ASSERT_ENUM_EQUAL(kSourceInstalledNotification,
-                    SOURCE_INSTALLED_NOTIFICATION);
-  ASSERT_ENUM_EQUAL(kSourceContextMenu, SOURCE_CONTEXT_MENU);
-  ASSERT_ENUM_EQUAL(kSourceArc, SOURCE_ARC);
-  ASSERT_ENUM_EQUAL(kSourceIntentUrl, SOURCE_INTENT_URL);
+  ASSERT_ENUM_EQUAL(kSourceNone, kNone);
+  ASSERT_ENUM_EQUAL(kSourceUntracked, kUntracked);
+  ASSERT_ENUM_EQUAL(kSourceAppLauncher, kAppLauncher);
+  ASSERT_ENUM_EQUAL(kSourceNewTabPage, kNewTabPage);
+  ASSERT_ENUM_EQUAL(kSourceReload, kReload);
+  ASSERT_ENUM_EQUAL(kSourceRestart, kRestart);
+  ASSERT_ENUM_EQUAL(kSourceLoadAndLaunch, kLoadAndLaunch);
+  ASSERT_ENUM_EQUAL(kSourceCommandLine, kCommandLine);
+  ASSERT_ENUM_EQUAL(kSourceFileHandler, kFileHandler);
+  ASSERT_ENUM_EQUAL(kSourceUrlHandler, kUrlHandler);
+  ASSERT_ENUM_EQUAL(kSourceSystemTray, kSystemTray);
+  ASSERT_ENUM_EQUAL(kSourceAboutPage, kAboutPage);
+  ASSERT_ENUM_EQUAL(kSourceKeyboard, kKeyboard);
+  ASSERT_ENUM_EQUAL(kSourceExtensionsPage, kExtensionsPage);
+  ASSERT_ENUM_EQUAL(kSourceManagementApi, kManagementApi);
+  ASSERT_ENUM_EQUAL(kSourceEphemeralAppDeprecated, kEphemeralApp);
+  ASSERT_ENUM_EQUAL(kSourceBackground, kBackground);
+  ASSERT_ENUM_EQUAL(kSourceKiosk, kKiosk);
+  ASSERT_ENUM_EQUAL(kSourceChromeInternal, kChromeInternal);
+  ASSERT_ENUM_EQUAL(kSourceTest, kTest);
+  ASSERT_ENUM_EQUAL(kSourceInstalledNotification, kInstalledNotification);
+  ASSERT_ENUM_EQUAL(kSourceContextMenu, kContextMenu);
+  ASSERT_ENUM_EQUAL(kSourceArc, kArc);
+  ASSERT_ENUM_EQUAL(kSourceIntentUrl, kIntentUrl);
 
   // We don't allow extensions to launch an app specifying RunOnOSLogin,
   // ProtocolHandler or Reparenting as the source. In this case we map
   // it to SOURCE_CHROME_INTERNAL.
   if (source == extensions::AppLaunchSource::kSourceRunOnOsLogin ||
       source == extensions::AppLaunchSource::kSourceProtocolHandler ||
-      source == extensions::AppLaunchSource::kSourceReparenting)
+      source == extensions::AppLaunchSource::kSourceReparenting) {
     source = extensions::AppLaunchSource::kSourceChromeInternal;
+  }
 
   // The +3 accounts for kSourceRunOnOsLogin, kSourceProtocolHandler and
   // kSourceReparenting not having a corresponding entry in
   // app_runtime::LaunchSource.
-  static_assert(static_cast<int>(extensions::AppLaunchSource::kMaxValue) ==
-                    app_runtime::LaunchSource::LAUNCH_SOURCE_LAST + 3,
-                "");
+  static_assert(
+      base::to_underlying(extensions::AppLaunchSource::kMaxValue) ==
+          base::to_underlying(app_runtime::LaunchSource::kMaxValue) + 3,
+      "");
 
   return static_cast<app_runtime::LaunchSource>(source);
 }
@@ -143,8 +144,9 @@ void AppRuntimeEventRouter::DispatchOnLaunchedEvent(
     const Extension* extension,
     extensions::AppLaunchSource source,
     absl::optional<app_runtime::LaunchData> launch_data) {
-  if (!launch_data)
+  if (!launch_data) {
     launch_data.emplace();
+  }
   app_runtime::LaunchSource source_enum = GetLaunchSourceEnum(source);
   if (extensions::FeatureSwitch::trace_app_source()->IsEnabled()) {
     launch_data->source = source_enum;
@@ -161,8 +163,8 @@ void AppRuntimeEventRouter::DispatchOnRestartedEvent(
   auto event = std::make_unique<Event>(events::APP_RUNTIME_ON_RESTARTED,
                                        app_runtime::OnRestarted::kEventName,
                                        base::Value::List(), context);
-  EventRouter::Get(context)
-      ->DispatchEventToExtension(extension->id(), std::move(event));
+  EventRouter::Get(context)->DispatchEventToExtension(extension->id(),
+                                                      std::move(event));
 }
 
 // static
@@ -185,8 +187,9 @@ void AppRuntimeEventRouter::DispatchOnLaunchedEventWithFileEntries(
     launch_data.Set("source", app_runtime::ToString(source_enum));
   }
 
-  if (action_data)
+  if (action_data) {
     launch_data.Set("actionData", action_data->ToValue());
+  }
 
   base::Value::List items;
   DCHECK(file_entries.size() == entries.size());
@@ -217,7 +220,7 @@ void AppRuntimeEventRouter::DispatchOnLaunchedEventWithUrl(
     const GURL& referrer_url) {
   app_runtime::LaunchData launch_data;
   app_runtime::LaunchSource source_enum =
-      app_runtime::LAUNCH_SOURCE_URL_HANDLER;
+      app_runtime::LaunchSource::kUrlHandler;
   launch_data.id = handler_id;
   launch_data.url = url.spec();
   launch_data.referrer_url = referrer_url.spec();

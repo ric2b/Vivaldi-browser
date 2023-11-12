@@ -15,7 +15,6 @@ import org.chromium.chrome.browser.download.internal.R;
 import org.chromium.components.browser_ui.share.ShareHelper;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.OfflineItemFilter;
-import org.chromium.components.offline_items_collection.RenameResult;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -56,24 +55,6 @@ public class UmaUtils {
         int MENU_RENAME = 7;
         int MENU_CHANGE = 8;
         int NUM_ENTRIES = 9;
-    }
-
-    // Please treat this list as append only and keep it in sync with
-    // Android.Download.Rename.Dialog.Action in enums.xml.
-    @IntDef({RenameDialogAction.RENAME_DIALOG_CONFIRM, RenameDialogAction.RENAME_DIALOG_CANCEL,
-            RenameDialogAction.RENAME_DIALOG_OTHER,
-            RenameDialogAction.RENAME_EXTENSION_DIALOG_CONFIRM,
-            RenameDialogAction.RENAME_EXTENSION_DIALOG_CANCEL,
-            RenameDialogAction.RENAME_EXTENSION_DIALOG_OTHER})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface RenameDialogAction {
-        int RENAME_DIALOG_CONFIRM = 0;
-        int RENAME_DIALOG_CANCEL = 1;
-        int RENAME_DIALOG_OTHER = 2;
-        int RENAME_EXTENSION_DIALOG_CONFIRM = 3;
-        int RENAME_EXTENSION_DIALOG_CANCEL = 4;
-        int RENAME_EXTENSION_DIALOG_OTHER = 5;
-        int NUM_ENTRIES = 6;
     }
 
     /**
@@ -154,24 +135,6 @@ public class UmaUtils {
     }
 
     /**
-     * Called to log the number of items that were shared through the multi-share top menu action.
-     * @param count The number of items that were shared.
-     */
-    public static void recordTopMenuShareCount(int count) {
-        RecordHistogram.recordCount100Histogram(
-                "Android.DownloadManager.Menu.Share.SelectedCount", count);
-    }
-
-    /**
-     * Called to log the number of items that were deleted through the multi-delete top menu action.
-     * @param count The number of items that were deleted.
-     */
-    public static void recordTopMenuDeleteCount(int count) {
-        RecordHistogram.recordCount100Histogram(
-                "Android.DownloadManager.Menu.Delete.SelectedCount", count);
-    }
-
-    /**
      * Called to log metrics about shared {@link OfflineItem}s.  Note that this relies on both
      * {@link OfflineItemFilter} and {@link Filters#FilterType} to determine what to log.
      * @param items The {@link OfflineItem}s that were shared.
@@ -181,16 +144,8 @@ public class UmaUtils {
             if (item.filter == OfflineItemFilter.PAGE) {
                 RecordUserAction.record("OfflinePages.Sharing.SharePageFromDownloadHome");
             }
-
-            @Filters.FilterType
-            int filterType = Filters.fromOfflineItem(item);
-
-            RecordHistogram.recordEnumeratedHistogram("Android.DownloadManager.Share.FileTypes",
-                    filterType, Filters.FilterType.NUM_ENTRIES);
         }
 
-        RecordHistogram.recordLinearCountHistogram(
-                "Android.DownloadManager.Share.Count", items.size(), 1, 20, 20);
         ShareHelper.recordShareSource(ShareHelper.ShareSourceAndroid.ANDROID_SHARE_SHEET);
     }
 
@@ -237,23 +192,5 @@ public class UmaUtils {
                 "Android.DownloadManager.Thumbnail.MaxRequiredStretch."
                         + getSuffixForFilter(filter),
                 (int) (maxRequiredStretch * 100), 10, 1000, 50);
-    }
-
-    /**
-     * Called to record metrics for the given rename action.
-     * @param action The given rename action.
-     */
-    public static void recordRenameAction(@RenameDialogAction int action) {
-        RecordHistogram.recordEnumeratedHistogram(
-                "Android.Download.Rename.Dialog.Action", action, RenameDialogAction.NUM_ENTRIES);
-    }
-
-    /**
-     * Called to record metrics for the given rename result.
-     * @param result The given rename result.
-     */
-    public static void recordRenameResult(@RenameResult int result) {
-        RecordHistogram.recordEnumeratedHistogram(
-                "Android.Download.Rename.Result", result, RenameResult.MAX_VALUE);
     }
 }

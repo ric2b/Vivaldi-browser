@@ -119,6 +119,7 @@ export function createSiteSettingsPrefs(
     defaults[ContentSettingsTypes[type as keyof typeof ContentSettingsTypes]] =
         createDefaultContentSetting({});
   }
+  defaults[ContentSettingsTypes.ANTI_ABUSE].setting = ContentSetting.ALLOW;
   defaults[ContentSettingsTypes.COOKIES].setting = ContentSetting.ALLOW;
   defaults[ContentSettingsTypes.IMAGES].setting = ContentSetting.ALLOW;
   defaults[ContentSettingsTypes.JAVASCRIPT].setting = ContentSetting.ALLOW;
@@ -174,6 +175,7 @@ export function createSiteGroup(
       originList.map((origin) => createOriginInfo(origin, {usage: mockUsage}));
   return {
     etldPlus1: eTLDPlus1Name,
+    displayName: eTLDPlus1Name,
     origins: originInfoList,
     numCookies: 0,
     hasInstalledPWA: false,

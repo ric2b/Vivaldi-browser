@@ -44,11 +44,14 @@
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
+#include "third_party/blink/public/common/subresource_load_metrics.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/triggering_event_info.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/content_security_notifier.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/mhtml_load_result.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/same_document_navigation_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/navigation/navigation_params.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/navigation/navigation_params.mojom-shared.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page_state/page_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/service_worker/controller_service_worker_mode.mojom-blink.h"
@@ -83,9 +86,9 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/storage/blink_storage_key.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
-#include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
 
@@ -316,7 +319,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   enum State { kNotStarted, kProvisional, kCommitted, kSentDidFinishLoad };
 
   void DispatchLinkHeaderPreloads(const ViewportDescription*,
-                                  PreloadHelper::MediaPreloadPolicy);
+                                  PreloadHelper::LoadLinksFromHeaderMode);
 
   void LoadFailed(const ResourceError&);
 
@@ -403,8 +406,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
     return ad_auction_components_;
   }
 
-  bool HasFencedFrameReporting() const { return has_fenced_frame_reporting_; }
-
   const absl::optional<FencedFrame::RedactedFencedFrameProperties>&
   FencedFrameProperties() const {
     return fenced_frame_properties_;
@@ -461,11 +462,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   }
 
   void UpdateSubresourceLoadMetrics(
-      uint32_t number_of_subresources_loaded,
-      uint32_t number_of_subresource_loads_handled_by_service_worker,
-      bool pervasive_payload_requested,
-      int64_t pervasive_bytes_fetched,
-      int64_t total_bytes_fetched);
+      const SubresourceLoadMetrics& subresource_load_metrics);
 
  protected:
   // Based on its MIME type, if the main document's response corresponds to an
@@ -601,6 +598,11 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   ContentSecurityPolicy* CreateCSP();
 
   bool IsSameOriginInitiator() const;
+
+  // This initiates a view transition if the `view_transition_state_` has been
+  // specified.
+  void StartViewTransitionIfNeeded(Document& document);
+
   // Params are saved in constructor and are cleared after StartLoading().
   // TODO(dgozman): remove once StartLoading is merged with constructor.
   std::unique_ptr<WebNavigationParams> params_;
@@ -656,8 +658,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   bool data_received_;
   const bool is_error_page_for_failed_navigation_;
 
-  GC_PLUGIN_IGNORE("https://crbug.com/1381979")
-  mojo::Remote<mojom::blink::ContentSecurityNotifier>
+  HeapMojoRemote<mojom::blink::ContentSecurityNotifier>
       content_security_notifier_;
 
   const scoped_refptr<SecurityOrigin> origin_to_commit_;
@@ -747,13 +748,12 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // |archive_|, but won't have |loading_main_document_from_mhtml_archive_| set.
   bool loading_main_document_from_mhtml_archive_ = false;
   const bool loading_srcdoc_ = false;
-  const KURL fallback_srcdoc_base_url_;
+  const KURL fallback_base_url_;
   const bool loading_url_as_empty_document_ = false;
   const bool is_static_data_ = false;
   CommitReason commit_reason_ = CommitReason::kRegular;
   uint64_t main_resource_identifier_ = 0;
   mojom::blink::ResourceTimingInfoPtr resource_timing_info_for_parent_;
-  base::TimeTicks redirect_end_time_;
   WebScopedVirtualTimePauser virtual_time_pauser_;
   Member<PrefetchedSignedExchangeManager> prefetched_signed_exchange_manager_;
   ukm::SourceId ukm_source_id_;
@@ -795,11 +795,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // otherwise.
   absl::optional<Vector<KURL>> ad_auction_components_;
 
-  // This boolean flag indicates whether there is associated reporting metadata
-  // with the fenced frame.
-  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
-  bool has_fenced_frame_reporting_;
-
   std::unique_ptr<ExtraData> extra_data_;
 
   // Reduced accept language for top-level frame.
@@ -816,7 +811,11 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   // Indicates whether the document should be loaded with its has_storage_access
   // bit set.
-  const bool has_storage_access_;
+  const bool load_with_storage_access_;
+
+  // Only container-initiated navigations (e.g. iframe change src) report
+  // their resource timing to the parent.
+  mojom::blink::ParentResourceTimingAccess parent_resource_timing_access_;
 };
 
 DECLARE_WEAK_IDENTIFIER_MAP(DocumentLoader);

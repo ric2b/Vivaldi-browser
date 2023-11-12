@@ -4,7 +4,7 @@
   }
 
   cr-policy-pref-indicator {
-    margin-inline-end: var(--settings-controlled-by-spacing);
+    margin-inline-end: var(--cr-controlled-by-spacing);
   }
 
   cr-policy-pref-indicator + cr-icon-button {
@@ -48,10 +48,6 @@
 
   iron-icon[icon='cr20:domain'] {
     margin-inline-end: 10px;
-  }
-
-  iron-icon[icon='cr:add'] {
-    margin-inline-end: 8px;
   }
 
   /* Used to maintain vertical alignment for the error icon. */
@@ -191,7 +187,7 @@
       <div class="list-item">
         <cr-button id="addInputMethod" on-click="onAddInputMethodClick_"
             deep-link-focus-id$="[[Setting.kAddInputMethod]]">
-          <iron-icon icon="cr:add"></iron-icon>
+          <iron-icon icon="cr:add" slot="prefix-icon"></iron-icon>
           $i18n{addInputMethodLabel}
         </cr-button>
       </div>
@@ -350,7 +346,7 @@
             <cr-button id="addSpellcheckLanguages"
                 on-click="onAddSpellcheckLanguagesClick_"
                 disabled="[[!prefs.browser.enable_spellchecking.value]]">
-              <iron-icon icon="cr:add"></iron-icon>
+              <iron-icon icon="cr:add" slot="prefix-icon"></iron-icon>
               $i18n{addLanguages}
             </cr-button>
           </div>

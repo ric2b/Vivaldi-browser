@@ -12,6 +12,7 @@
 #include "ash/drag_drop/drag_drop_capture_delegate.h"
 #include "ash/drag_drop/tab_drag_drop_delegate.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -159,21 +160,21 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
 
   void CleanupPendingLongTap();
 
-  // Helper method to perform the drop if allowed by
-  // DataTransferPolicyController. If it's run, `drag_cancel` will be replaced.
-  // Otherwise `drag_cancel` will run to cancel the drag.
+  // Performs data drop. NOTE: this method does not run in an async drop if
+  // disallowed by `ui::DataTransferPolicyController`. `cancel_drag_callback`
+  // runs if this method does not run.
   void PerformDrop(const gfx::Point drop_location_in_screen,
                    ui::DropTargetEvent event,
                    std::unique_ptr<ui::OSExchangeData> drag_data,
                    aura::client::DragDropDelegate::DropCallback drop_cb,
                    std::unique_ptr<TabDragDropDelegate> tab_drag_drop_delegate,
-                   base::ScopedClosureRunner drag_cancel);
+                   base::ScopedClosureRunner cancel_drag_callback);
 
   void CancelIfInProgress();
 
   bool enabled_ = false;
   bool drag_drop_completed_ = true;
-  views::UniqueWidgetPtr drag_image_widget_;
+  std::unique_ptr<views::Widget> drag_image_widget_;
   gfx::Vector2d drag_image_offset_;
   std::unique_ptr<ui::OSExchangeData> drag_data_;
   int allowed_operations_ = 0;
@@ -187,7 +188,7 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
   std::unique_ptr<DragDropCaptureDelegate> touch_drag_drop_delegate_;
 
   // Window that is currently under the drag cursor.
-  aura::Window* drag_window_ = nullptr;
+  raw_ptr<aura::Window, ExperimentalAsh> drag_window_ = nullptr;
 
   // Starting and final bounds for the drag image for the drag cancel animation.
   gfx::Rect drag_image_initial_bounds_for_cancel_animation_;
@@ -197,7 +198,7 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
   std::unique_ptr<gfx::AnimationDelegate> cancel_animation_notifier_;
 
   // Window that started the drag.
-  aura::Window* drag_source_window_ = nullptr;
+  raw_ptr<aura::Window, ExperimentalAsh> drag_source_window_ = nullptr;
 
   // A closure that allows a test to implement the actions within
   // drag and drop event loop.
@@ -210,7 +211,7 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
   base::OnceClosure quit_closure_;
 
   // If non-null, a drag is active which required a capture window.
-  DragDropCaptureDelegate* capture_delegate_ = nullptr;
+  raw_ptr<DragDropCaptureDelegate, ExperimentalAsh> capture_delegate_ = nullptr;
 
   ui::mojom::DragEventSource current_drag_event_source_ =
       ui::mojom::DragEventSource::kMouse;
@@ -229,7 +230,8 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
   base::ObserverList<aura::client::DragDropClientObserver>::Unchecked
       observers_;
 
-  ToplevelWindowDragDelegate* toplevel_window_drag_delegate_ = nullptr;
+  raw_ptr<ToplevelWindowDragDelegate, ExperimentalAsh>
+      toplevel_window_drag_delegate_ = nullptr;
 
   // Weak ptr for async callbacks to be invalidated if a new drag starts.
   base::WeakPtrFactory<DragDropController> weak_factory_{this};

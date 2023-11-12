@@ -12,6 +12,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.google.android.material.textfield.TextInputLayout;
 
@@ -34,6 +35,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 
 /**
  * Prompt that asks users to confirm saving an address profile imported from a form submission.
+ * TODO(crbug.com/1432549): cover with render tests.
  */
 @JNINamespace("autofill")
 @JNIAdditionalImport(PersonalDataManager.class)
@@ -43,7 +45,7 @@ public class SaveUpdateAddressProfilePrompt {
     private final PropertyModel mDialogModel;
     private final View mDialogView;
     private final EditorDialog mEditorDialog;
-    private final AddressEditor mAddressEditor;
+    private AddressEditor mAddressEditor;
     private boolean mEditorClosingPending;
 
     /**
@@ -51,15 +53,21 @@ public class SaveUpdateAddressProfilePrompt {
      */
     public SaveUpdateAddressProfilePrompt(SaveUpdateAddressProfilePromptController controller,
             ModalDialogManager modalDialogManager, Activity activity, Profile browserProfile,
-            PersonalDataManager.AutofillProfile autofillProfile, boolean isUpdate) {
+            PersonalDataManager.AutofillProfile autofillProfile, boolean isUpdate,
+            boolean isMigrationToAccount) {
         mController = controller;
         mModalDialogManager = modalDialogManager;
 
         LayoutInflater inflater = LayoutInflater.from(activity);
-        mDialogView = inflater.inflate(isUpdate ? R.layout.autofill_update_address_profile_prompt
-                                                : R.layout.autofill_save_address_profile_prompt,
-                null);
-        if (!isUpdate) setupAddressNickname();
+        if (isMigrationToAccount) {
+            mDialogView = inflater.inflate(R.layout.autofill_migrate_address_profile_prompt, null);
+        } else if (isUpdate) {
+            mDialogView = inflater.inflate(R.layout.autofill_update_address_profile_prompt, null);
+        } else {
+            mDialogView = inflater.inflate(R.layout.autofill_save_address_profile_prompt, null);
+        }
+
+        if (!isUpdate && !isMigrationToAccount) setupAddressNickname();
 
         PropertyModel.Builder builder =
                 new PropertyModel.Builder(ModalDialogProperties.ALL_KEYS)
@@ -71,9 +79,10 @@ public class SaveUpdateAddressProfilePrompt {
                         .with(ModalDialogProperties.CUSTOM_VIEW, mDialogView);
         mDialogModel = builder.build();
 
-        mEditorDialog = new EditorDialog(activity, /*deleteRunnable=*/null, browserProfile);
+        mEditorDialog = new EditorDialog(
+                activity, /*deleteRunnable=*/null, browserProfile, /*requiredIndicator=*/false);
         mEditorDialog.setShouldTriggerDoneCallbackBeforeCloseAnimation(true);
-        mAddressEditor = new AddressEditor(/*saveToDisk=*/false);
+        mAddressEditor = new AddressEditor(/*saveToDisk=*/false, isUpdate, isMigrationToAccount);
         mAddressEditor.setEditorDialog(mEditorDialog);
         AutofillAddress autofillAddress = new AutofillAddress(activity, autofillProfile);
         mDialogView.findViewById(R.id.edit_button).setOnClickListener(v -> {
@@ -86,7 +95,8 @@ public class SaveUpdateAddressProfilePrompt {
      * Shows the dialog for saving an address.
      */
     @CalledByNative
-    private void show() {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    void show() {
         mModalDialogManager.showDialog(mDialogModel, ModalDialogManager.ModalDialogType.APP);
     }
 
@@ -98,19 +108,22 @@ public class SaveUpdateAddressProfilePrompt {
      * @param browserProfile the Chrome profile being used.
      * @param autofillProfile the address data to be saved.
      * @param isUpdate true if there's an existing profile which will be updated, false otherwise.
+     * @param isMigrationToAccount true if address profile is going to be saved in user's Google
+     *         account, false otherwise.
      * @return instance of the SaveUpdateAddressProfilePrompt or null if the call failed.
      */
     @CalledByNative
     @Nullable
     private static SaveUpdateAddressProfilePrompt create(WindowAndroid windowAndroid,
             SaveUpdateAddressProfilePromptController controller, Profile browserProfile,
-            PersonalDataManager.AutofillProfile autofillProfile, boolean isUpdate) {
+            PersonalDataManager.AutofillProfile autofillProfile, boolean isUpdate,
+            boolean isMigrationToAccount) {
         Activity activity = windowAndroid.getActivity().get();
         ModalDialogManager modalDialogManager = windowAndroid.getModalDialogManager();
         if (activity == null || modalDialogManager == null) return null;
 
         return new SaveUpdateAddressProfilePrompt(controller, modalDialogManager, activity,
-                browserProfile, autofillProfile, isUpdate);
+                browserProfile, autofillProfile, isUpdate, isMigrationToAccount);
     }
 
     /**
@@ -121,13 +134,27 @@ public class SaveUpdateAddressProfilePrompt {
      * @param negativeButtonText the text on the negative button.
      */
     @CalledByNative
-    private void setDialogDetails(
-            String title, String positiveButtonText, String negativeButtonText) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    void setDialogDetails(String title, String positiveButtonText, String negativeButtonText) {
         mDialogModel.set(ModalDialogProperties.TITLE, title);
         mDialogModel.set(ModalDialogProperties.POSITIVE_BUTTON_TEXT, positiveButtonText);
         mDialogModel.set(ModalDialogProperties.NEGATIVE_BUTTON_TEXT, negativeButtonText);
         // The text in the editor should match the text in the dialog.
         mAddressEditor.setCustomDoneButtonText(positiveButtonText);
+    }
+
+    /**
+     * Displays an optional notification for the user in case the autofill profile is going
+     * to be saved in account storage.
+     *
+     * @param sourceNotice the footer notification for the user.
+     */
+    @CalledByNative
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    void setSourceNotice(String sourceNotice) {
+        showTextIfNotEmpty(
+                mDialogView.findViewById(R.id.autofill_address_profile_prompt_source_notice),
+                sourceNotice);
     }
 
     /**
@@ -138,7 +165,8 @@ public class SaveUpdateAddressProfilePrompt {
      * @param phone the phone to be saved.
      */
     @CalledByNative
-    private void setSaveDetails(String address, String email, String phone) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    void setSaveOrMigrateDetails(String address, String email, String phone) {
         showTextIfNotEmpty(mDialogView.findViewById(R.id.address), address);
         showTextIfNotEmpty(mDialogView.findViewById(R.id.email), email);
         showTextIfNotEmpty(mDialogView.findViewById(R.id.phone), phone);
@@ -153,7 +181,8 @@ public class SaveUpdateAddressProfilePrompt {
      * @param newDetails details in the new profile that differ.
      */
     @CalledByNative
-    private void setUpdateDetails(String subtitle, String oldDetails, String newDetails) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    void setUpdateDetails(String subtitle, String oldDetails, String newDetails) {
         showTextIfNotEmpty(mDialogView.findViewById(R.id.subtitle), subtitle);
         showHeaders(!TextUtils.isEmpty(oldDetails));
         showTextIfNotEmpty(mDialogView.findViewById(R.id.details_old), oldDetails);
@@ -164,7 +193,8 @@ public class SaveUpdateAddressProfilePrompt {
      * Dismisses the prompt without returning any user response.
      */
     @CalledByNative
-    private void dismiss() {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    void dismiss() {
         // Do not dismiss the editor if closing is pending to not abort the animation.
         if (!mEditorClosingPending && mEditorDialog.isShowing()) mEditorDialog.dismiss();
         mModalDialogManager.dismissDialog(mDialogModel, DialogDismissalCause.DISMISSED_BY_NATIVE);
@@ -228,5 +258,13 @@ public class SaveUpdateAddressProfilePrompt {
         KeyboardVisibilityDelegate.getInstance().addKeyboardVisibilityListener(isShowing -> {
             if (!isShowing && nicknameInput.hasFocus()) nicknameInput.clearFocus();
         });
+    }
+
+    void setAddressEditorForTesting(AddressEditor addressEditor) {
+        mAddressEditor = addressEditor;
+    }
+
+    View getDialogViewForTesting() {
+        return mDialogView;
     }
 }

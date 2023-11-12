@@ -287,10 +287,7 @@ void ProxyMain::BeginMainFrame(
   // At this point the main frame may have deferred main frame updates to
   // avoid committing right now, or may have allowed commits to go through. So
   // evaluate this flag now.
-  bool skip_commit = layer_tree_host_->GetSettings()
-                         .skip_commits_if_not_synchronizing_compositor_state &&
-                     !scroll_and_viewport_changes_synced;
-  skip_commit |= defer_main_frame_update_ || IsDeferringCommits();
+  bool skip_commit = defer_main_frame_update_ || IsDeferringCommits();
 
   // When we don't need to produce a CompositorFrame, there's also no need to
   // commit our updates. We still need to run layout and paint though, as it can
@@ -633,8 +630,6 @@ void ProxyMain::SetPauseRendering(bool pause_rendering) {
     TRACE_EVENT_NESTABLE_ASYNC_END0("cc", "ProxyMain::SetPauseRendering",
                                     TRACE_ID_LOCAL(this));
   }
-
-  layer_tree_host_->OnPauseRenderingChanged(pause_rendering_);
 
   // The impl thread needs to know that it should not issue BeginFrames.
   ImplThreadTaskRunner()->PostTask(

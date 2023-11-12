@@ -381,6 +381,14 @@ void VideoEncodeAcceleratorAdapter::InitializeOnAcceleratorThread(
     return;
   }
 
+  if (options.bitrate.has_value() &&
+      options.bitrate->mode() == Bitrate::Mode::kExternal) {
+    std::move(done_cb).Run(
+        EncoderStatus(EncoderStatus::Codes::kEncoderUnsupportedConfig,
+                      "Unsupported bitrate mode"));
+    return;
+  }
+
   if (!options.frame_size.GetCheckedArea().IsValid()) {
     std::move(done_cb).Run(
         EncoderStatus(EncoderStatus::Codes::kEncoderUnsupportedConfig,
@@ -491,19 +499,19 @@ void VideoEncodeAcceleratorAdapter::InitializeInternalOnAcceleratorThread() {
 }
 
 void VideoEncodeAcceleratorAdapter::Encode(scoped_refptr<VideoFrame> frame,
-                                           bool key_frame,
+                                           const EncodeOptions& encode_options,
                                            EncoderStatusCB done_cb) {
   DCHECK(!accelerator_task_runner_->RunsTasksInCurrentSequence());
   accelerator_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&VideoEncodeAcceleratorAdapter::EncodeOnAcceleratorThread,
-                     base::Unretained(this), std::move(frame), key_frame,
+                     base::Unretained(this), std::move(frame), encode_options,
                      WrapCallback(std::move(done_cb))));
 }
 
 void VideoEncodeAcceleratorAdapter::EncodeOnAcceleratorThread(
     scoped_refptr<VideoFrame> frame,
-    bool key_frame,
+    const EncodeOptions& encode_options,
     EncoderStatusCB done_cb) {
   TRACE_EVENT1("media",
                "VideoEncodeAcceleratorAdapter::EncodeOnAcceleratorThread",
@@ -515,7 +523,7 @@ void VideoEncodeAcceleratorAdapter::EncodeOnAcceleratorThread(
     auto pending_encode = std::make_unique<PendingEncode>();
     pending_encode->done_callback = std::move(done_cb);
     pending_encode->frame = std::move(frame);
-    pending_encode->key_frame = key_frame;
+    pending_encode->options = encode_options;
     pending_encodes_.push_back(std::move(pending_encode));
     if (state_ == State::kWaitingForFirstFrame)
       InitializeInternalOnAcceleratorThread();
@@ -563,6 +571,7 @@ void VideoEncodeAcceleratorAdapter::EncodeOnAcceleratorThread(
 
   frame = std::move(result).value();
 
+  bool key_frame = encode_options.key_frame;
   if (last_frame_color_space_ != frame->ColorSpace()) {
     last_frame_color_space_ = frame->ColorSpace();
     key_frame = true;
@@ -701,17 +710,21 @@ void VideoEncodeAcceleratorAdapter::RequireBitstreamBuffers(
 
   input_coded_size_ = input_coded_size;
 
-  output_handle_holder_ = output_pool_->MaybeAllocateBuffer(output_buffer_size);
-  if (!output_handle_holder_) {
-    InitCompleted(EncoderStatus::Codes::kEncoderInitializationError);
-    return;
+  constexpr int kOutputBufferNumber = 2;
+  output_buffer_handles_.clear();
+  for (int id = 0; id < kOutputBufferNumber; id++) {
+    auto handle = output_pool_->MaybeAllocateBuffer(output_buffer_size);
+    if (!handle) {
+      InitCompleted(EncoderStatus::Codes::kEncoderInitializationError);
+      return;
+    }
+
+    const base::UnsafeSharedMemoryRegion& region = handle->GetRegion();
+    accelerator_->UseOutputBitstreamBuffer(
+        BitstreamBuffer(id, region.Duplicate(), region.GetSize()));
+    output_buffer_handles_.push_back(std::move(handle));
   }
 
-  const base::UnsafeSharedMemoryRegion& region =
-      output_handle_holder_->GetRegion();
-  // There is always one output buffer.
-  accelerator_->UseOutputBitstreamBuffer(
-      BitstreamBuffer(0, region.Duplicate(), region.GetSize()));
   InitCompleted(EncoderStatus::Codes::kOk);
 }
 
@@ -737,10 +750,19 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
   if (metadata.encoded_size)
     result.encoded_size = metadata.encoded_size;
 
-  DCHECK_EQ(buffer_id, 0);
-  // There is always one output buffer.
+  if (buffer_id < 0 ||
+      buffer_id >= static_cast<int>(output_buffer_handles_.size())) {
+    NotifyErrorStatus(
+        {EncoderStatus::Codes::kInvalidOutputBuffer,
+         "Buffer id is out of bounds: " + base::NumberToString(buffer_id)});
+  }
+  if (!output_buffer_handles_[buffer_id]) {
+    NotifyErrorStatus(
+        {EncoderStatus::Codes::kInvalidOutputBuffer, "Invalid output buffer"});
+  }
+
   const base::WritableSharedMemoryMapping& mapping =
-      output_handle_holder_->GetMapping();
+      output_buffer_handles_[buffer_id]->GetMapping();
   DCHECK_LE(result.size, mapping.size());
 
   if (result.size > 0) {
@@ -771,8 +793,8 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
       }
 
       if (!status.is_ok()) {
-        LOG(ERROR) << status.message();
-        NotifyError(VideoEncodeAccelerator::kPlatformFailureError);
+        NotifyErrorStatus({EncoderStatus::Codes::kEncoderFailedEncode,
+                           "Failed to convert a buffer to h264 chunk"});
         return;
       }
       result.size = actual_output_size;
@@ -783,7 +805,8 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
         const auto& config = h264_converter_->GetCurrentConfig();
         desc = CodecDescription();
         if (!config.Serialize(desc.value())) {
-          NotifyError(VideoEncodeAccelerator::kPlatformFailureError);
+          NotifyErrorStatus({media::EncoderStatus::Codes::kEncoderFailedEncode,
+                             "Failed to get h264 config"});
           return;
         }
       }
@@ -805,8 +828,8 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
         }
 
         if (!status.is_ok()) {
-          LOG(ERROR) << status.message();
-          NotifyError(VideoEncodeAccelerator::kPlatformFailureError);
+          NotifyErrorStatus({EncoderStatus::Codes::kEncoderFailedEncode,
+                             "Failed to convert a buffer to h265 chunk"});
           return;
         }
         result.size = actual_output_size;
@@ -817,7 +840,9 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
           const auto& config = h265_converter_->GetCurrentConfig();
           desc = CodecDescription();
           if (!config.Serialize(desc.value())) {
-            NotifyError(VideoEncodeAccelerator::kPlatformFailureError);
+            NotifyErrorStatus(
+                {media::EncoderStatus::Codes::kEncoderFailedEncode,
+                 "Failed to get h265 config"});
             return;
           }
         }
@@ -834,14 +859,15 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
 
   // Give the buffer back to |accelerator_|
   const base::UnsafeSharedMemoryRegion& region =
-      output_handle_holder_->GetRegion();
+      output_buffer_handles_[buffer_id]->GetRegion();
   accelerator_->UseOutputBitstreamBuffer(
       BitstreamBuffer(buffer_id, region.Duplicate(), region.GetSize()));
 
   bool erased_active_encode = false;
   for (auto it = active_encodes_.begin(); it != active_encodes_.end(); ++it) {
     if ((*it)->timestamp == result.timestamp) {
-      result.color_space = (*it)->color_space;
+      result.color_space =
+          metadata.encoded_color_space.value_or((*it)->color_space);
       std::move((*it)->done_callback).Run(EncoderStatus::Codes::kOk);
       active_encodes_.erase(it);
       erased_active_encode = true;
@@ -860,13 +886,18 @@ void VideoEncodeAcceleratorAdapter::BitstreamBufferReady(
   }
 }
 
-void VideoEncodeAcceleratorAdapter::NotifyError(
-    VideoEncodeAccelerator::Error error) {
+void VideoEncodeAcceleratorAdapter::NotifyErrorStatus(
+    const EncoderStatus& status) {
+  CHECK(!status.is_ok());
+  LOG(ERROR) << "NotifyErrorStatus() is called, code="
+             << static_cast<int32_t>(status.code())
+             << ", message=" << status.message();
   if (state_ == State::kInitializing) {
     InitCompleted(
         EncoderStatus(EncoderStatus::Codes::kEncoderInitializationError,
                       "VideoEncodeAccelerator encountered an error")
-            .WithData("VideoEncodeAccelerator::Error", int32_t{error}));
+            .WithData("VideoEncodeAccelerator status code",
+                      static_cast<int32_t>(status.code())));
     return;
   }
 
@@ -875,11 +906,11 @@ void VideoEncodeAcceleratorAdapter::NotifyError(
 
   // Report the error to all encoding-done callbacks
   for (auto& encode : active_encodes_) {
-    auto status =
-        EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
-                      "VideoEncodeAccelerator encountered an error")
-            .WithData("VideoEncodeAccelerator::Error", int32_t{error});
-    std::move(encode->done_callback).Run(status);
+    std::move(encode->done_callback)
+        .Run(EncoderStatus(EncoderStatus::Codes::kEncoderFailedEncode,
+                           "VideoEncodeAccelerator encountered an error")
+                 .WithData("VideoEncodeAccelerator status code",
+                           static_cast<int32_t>(status.code())));
   }
   active_encodes_.clear();
   state_ = State::kNotInitialized;
@@ -914,7 +945,7 @@ void VideoEncodeAcceleratorAdapter::InitCompleted(EncoderStatus status) {
 
   // Send off the encodes that came in while we were waiting for initialization.
   for (auto& encode : pending_encodes_) {
-    EncodeOnAcceleratorThread(std::move(encode->frame), encode->key_frame,
+    EncodeOnAcceleratorThread(std::move(encode->frame), encode->options,
                               std::move(encode->done_callback));
   }
   pending_encodes_.clear();

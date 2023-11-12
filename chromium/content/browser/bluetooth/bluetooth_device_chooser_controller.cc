@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/types/optional_util.h"
 #include "content/browser/bluetooth/bluetooth_blocklist.h"
 #include "content/browser/bluetooth/bluetooth_metrics.h"
 #include "content/browser/bluetooth/bluetooth_util.h"
@@ -48,41 +49,18 @@ namespace {
 // signal strength levels, thus we want to spread RSSI values out evenly accross
 // displayed levels.
 //
-// RSSI values from UMA in RecordRSSISignalStrength are charted here:
-// https://photos.app.goo.gl/6R0ksxWzBsfvrbXH2 (2017-10-18)
-// with a copy-paste of table data at every 5dBm:
-//  dBm   CDF* Histogram Bucket Quantity (hand drawn estimate)
-// -100 00.26%
-//  -95 01.22% ---
-//  -90 04.14% -----------
-//  -85 11.24% ----------------------------
-//  -80 18.29% ----------------------------
-//  -75 27.13% -----------------------------------
-//  -70 37.72% ------------------------------------------
-//  -65 49.42% ----------------------------------------------
-//  -60 62.91% -----------------------------------------------------
-//  -55 74.35% ---------------------------------------------
-//  -50 83.07% ----------------------------------
-//  -45 88.43% ---------------------
-//  -40 92.41% ---------------
-//  -35 94.84% ---------
-//  -30 95.96% ----
-//  -25 96.60% --
-//  -20 96.90% -
-//  -15 97.07%
-//  -10 97.21%
-//   -5 97.34%
-//    0 97.47%
+// Real-world RSSI values from UMA in RecordRSSISignalStrength are used to
+// select 4 threshold points equally spaced through the CDF.
 //
 // CDF: Cumulative Distribution Function:
 // https://en.wikipedia.org/wiki/Cumulative_distribution_function
 //
-// Conversion to signal strengths is done by selecting 4 threshold points
-// equally spaced through the CDF.
-const int k20thPercentileRSSI = -79;
-const int k40thPercentileRSSI = -69;
-const int k60thPercentileRSSI = -61;
-const int k80thPercentileRSSI = -52;
+// This data was last updated using a 28-day average of metrics recorded on
+// 2023-03-12.
+const int k20thPercentileRSSI = -81;
+const int k40thPercentileRSSI = -73;
+const int k60thPercentileRSSI = -65;
+const int k80thPercentileRSSI = -55;
 
 // Client name for logging in BLE scanning.
 constexpr char kScanClientName[] = "Web Bluetooth Device Chooser";
@@ -382,24 +360,30 @@ void BluetoothDeviceChooserController::GetDevice(
 
 void BluetoothDeviceChooserController::AddFilteredDevice(
     const device::BluetoothDevice& device) {
-  absl::optional<std::string> device_name = device.GetName();
-  if (chooser_.get()) {
-    if (options_->accept_all_devices ||
-        MatchesFilters(device_name ? &device_name.value() : nullptr,
-                       device.GetUUIDs(), device.GetManufacturerData(),
-                       options_->filters)) {
-      absl::optional<int8_t> rssi = device.GetInquiryRSSI();
-      std::string device_id = device.GetAddress();
-      device_ids_.insert(device_id);
-      chooser_->AddOrUpdateDevice(
-          device_id, !!device.GetName() /* should_update_name */,
-          device.GetNameForDisplay(), device.IsGattConnected(),
-          web_bluetooth_service_->IsDevicePaired(device.GetAddress()),
-          rssi ? CalculateSignalStrengthLevel(rssi.value()) : -1);
+  if (!chooser_) {
+    // If the dialog's closing, no need to do any of the rest of this.
+    return;
+  }
+  const bool device_matches =
+      options_->filters.has_value() &&
+      MatchesFilters(base::OptionalToPtr(device.GetName()), device.GetUUIDs(),
+                     device.GetManufacturerData(), options_->filters);
+  const bool device_excluded =
+      options_->exclusion_filters.has_value() &&
+      MatchesFilters(base::OptionalToPtr(device.GetName()), device.GetUUIDs(),
+                     device.GetManufacturerData(), options_->exclusion_filters);
+  if (options_->accept_all_devices || (device_matches && !device_excluded)) {
+    absl::optional<int8_t> rssi = device.GetInquiryRSSI();
+    std::string device_id = device.GetAddress();
+    device_ids_.insert(device_id);
+    chooser_->AddOrUpdateDevice(
+        device_id, !!device.GetName() /* should_update_name */,
+        device.GetNameForDisplay(), device.IsGattConnected(),
+        web_bluetooth_service_->IsDevicePaired(device.GetAddress()),
+        rssi ? CalculateSignalStrengthLevel(rssi.value()) : -1);
 
-      devtools_instrumentation::UpdateDeviceRequestPrompt(&*render_frame_host_,
-                                                          &prompt_info_);
-    }
+    devtools_instrumentation::UpdateDeviceRequestPrompt(&*render_frame_host_,
+                                                        &prompt_info_);
   }
 }
 

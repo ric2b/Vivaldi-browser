@@ -5,7 +5,10 @@
 
 #include "base/files/file.h"
 #include "base/values.h"
+#include "browser/sessions/vivaldi_session_service.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
+
+class Browser;
 
 namespace content {
 class BrowserContext;
@@ -28,6 +31,8 @@ enum SessionErrorCodes {
   kErrorUnknownId,
   kErrorNoModel,
   kErrorNoContent,
+  kErrorWrongProfile,
+  kErrorEmpty,
 };
 
 struct SessionContent {
@@ -52,12 +57,23 @@ struct WriteSessionOptions {
   base::FilePath path;
 };
 
+struct GroupAlias {
+  std::string group;
+  std::string alias;
+};
+
+// Opens a session.
+int Open(Browser* browser, Index_Node* node,
+         const ::vivaldi::SessionOptions& opts);
+// Opens a session with persistent tabs.
+int OpenPersistentTabs(Browser* browser);
 // Returns the full path to the session file.
 base::FilePath GetPathFromNode(content::BrowserContext* browser_context,
                                Index_Node* node);
 // Updates node settings with data from session file.
-int SetNodeStateFromPath(content::BrowserContext* browser_context,
-                         const base::FilePath& path, Index_Node* node);
+
+int SetNodeState(content::BrowserContext* browser_context,
+                 const base::FilePath& file, bool is_new, Index_Node* node);
 // Writes session file with content and location controlled by opts.
 int WriteSessionFile(content::BrowserContext* browser_context,
                      WriteSessionOptions& opts);
@@ -68,23 +84,52 @@ int DeleteSessionFile(content::BrowserContext* browser_context,
 void AutoSave(content::BrowserContext* browser_context);
 // Moves timed backup into auto saved sessions.
 int AutoSaveFromBackup(content::BrowserContext* browser_context);
-// Sets quarantine flag in ext data of given tabs.
-bool SetQuarantine(content::BrowserContext* browser_context,
+// Saves tabs to a special session that holds persistent entries.
+int SavePersistentTabs(content::BrowserContext* browser_context,
+                     std::vector<int> ids);
+// Remove given tabs from session file.
+int DeleteTabs(content::BrowserContext* browser_context,
+               base::FilePath path,
+               std::vector<int32_t> ids);
+// Pin or unpin tabs.
+int PinTabs(content::BrowserContext* browser_context,
+            base::FilePath path, bool value, std::vector<int32_t> ids);
+// Move one or more tabs to window and index.
+int MoveTabs(content::BrowserContext* browser_context,
+            base::FilePath path, std::vector<int32_t> ids, int before_tab_id,
+            absl::optional<int32_t> window_id, absl::optional<bool> pinned,
+            absl::optional<std::string> group, absl::optional<double> workspace);
+// Turn tabs specified in 'ids' into tabstack tabs or removes the tabs if
+// group is empty.
+int SetTabStack(content::BrowserContext* browser_context, base::FilePath path,
+                 std::vector<int32_t> ids, std::string group);
+// Moves specified tabs into a new window. Pinned state and tab stacks are kept
+// (the latter if at least two tabs from a stack is affected). Workspace
+// information is removed.
+int SetWindow(content::BrowserContext* browser_context, base::FilePath path,
+              std::vector<int32_t> ids,
+              const std::vector<GroupAlias>& group_aliases);
+// Moves specified tabs into a new workspace. Pinned state and tab stacks are
+// kept (the latter if at least two tabs from a stack is affected).
+int SetWorkspace(content::BrowserContext* browser_context, base::FilePath path,
+                 std::vector<int32_t> ids,
+                 double workspace_id,
+                 const std::vector<GroupAlias>& group_aliases);
+// Sets quarantine state for the list of tabs given by the ids.
+int QuarantineTabs(content::BrowserContext* browser_context,
                    base::FilePath name, bool value, std::vector<int32_t> ids);
-// Returns true if ext data holds a quarantine flag set to true.
-bool IsQuarantined(const std::string& viv_extdata);
-
-bool SetTabStackTitle(content::BrowserContext* browser_context,
-                      base::FilePath name,
-                      int32_t window_id,
-                      std::string group,
-                      std::string title);
-// Returns tab stack id of a tab. Returned string is empty if no stack id is set.
-std::string GetTabStackId(const std::string& viv_extdata);
+// Returns quarantine state.
+bool IsTabQuarantined(const SessionTab* tab);
+// Saves title. tab_id must refer to a tab that is part of a tab stack.
+int SetTabStackTitle(content::BrowserContext* browser_context,
+                     base::FilePath name, int32_t tab_id, std::string title);
+// Returns tab stack id of a tab. String is empty if no stack id is set.
+std::string GetTabStackId(const SessionTab* tab);
 // Returns all tabstacks of a window (id and opitonally title).
 // ext data must be fecthed from the window object (not tab).
 std::unique_ptr<base::Value::Dict> GetTabStackTitles(
-    const std::string& viv_extdata);
+  const SessionWindow* window);
+
 void GetContent(base::FilePath name, SessionContent& content);
 // Dump cpntent of a tab
 void DumpContent(base::FilePath name);

@@ -5,21 +5,15 @@
 #ifndef COMPONENTS_WEBAPPS_BROWSER_ANDROID_AMBIENT_BADGE_METRICS_H_
 #define COMPONENTS_WEBAPPS_BROWSER_ANDROID_AMBIENT_BADGE_METRICS_H_
 
-#include "components/messages/android/message_enums.h"
+#include "components/webapps/browser/android/add_to_homescreen_params.h"
+#include "components/webapps/browser/android/ambient_badge_manager.h"
 
 namespace webapps {
 
-// This enum backs a UMA histogram, so it should be treated as append-only.
-enum class AppType {
-  kNativeApp = 0,
-  kWebApp = 1,
-  kMaxValue = kWebApp,
-};
-
-void RecordAmbientBadgeDisplayEvent(bool native_app);
-void RecordAmbientBadgeDismissEvent(bool native_app);
-void RecordAmbientBadgeClickEvent(bool native_app);
-void RecordAmbientBadgeMessageDismissReason(messages::DismissReason event);
+void RecordAmbientBadgeDisplayEvent(AddToHomescreenParams::AppType type);
+void RecordAmbientBadgeDismissEvent(AddToHomescreenParams::AppType type);
+void RecordAmbientBadgeClickEvent(AddToHomescreenParams::AppType type);
+void RecordAmbientBadgeTeminateState(AmbientBadgeManager::State state);
 
 }  // namespace webapps
 

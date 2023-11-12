@@ -36,6 +36,7 @@
 #include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/tribool.h"
+#include "google_apis/gaia/core_account_id.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -51,6 +52,10 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#endif
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#include "components/supervised_user/core/common/features.h"
 #endif
 
 namespace {
@@ -340,6 +345,15 @@ class AccountTrackerServiceTest : public testing::Test {
   void ReturnAccountImageFetchSuccess(AccountKey account_key);
   void ReturnAccountImageFetchFailure(AccountKey account_key);
   void ReturnAccountCapabilitiesFetchSuccess(AccountKey account_key);
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  void ReturnAccountCapabilitiesFetchIsSubjectToParentalSupervision(
+      AccountKey account_key,
+      bool is_subject_to_parental_controls);
+  void TestAccountCapabilitiesSubjectToParentalSupervision(
+      bool enable_supervision_on_desktop,
+      bool capability_value,
+      signin::Tribool expected_is_child_account);
+#endif
   void ReturnAccountCapabilitiesFetchFailure(AccountKey account_key);
 
   AccountFetcherService* account_fetcher() { return account_fetcher_.get(); }
@@ -473,6 +487,54 @@ void AccountTrackerServiceTest::ReturnAccountCapabilitiesFetchSuccess(
       AccountKeyToAccountId(account_key), capabilities);
 }
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+void AccountTrackerServiceTest::
+    ReturnAccountCapabilitiesFetchIsSubjectToParentalSupervision(
+        AccountKey account_key,
+        bool is_subject_to_parental_controls) {
+  IssueAccessToken(account_key);
+  AccountCapabilities capabilities;
+  AccountCapabilitiesTestMutator mutator(&capabilities);
+  mutator.set_is_subject_to_parental_controls(is_subject_to_parental_controls);
+  fake_account_capabilities_fetcher_factory_->CompleteAccountCapabilitiesFetch(
+      AccountKeyToAccountId(account_key), capabilities);
+}
+
+void AccountTrackerServiceTest::
+    TestAccountCapabilitiesSubjectToParentalSupervision(
+        bool enable_supervision_on_desktop,
+        bool capability_value,
+        signin::Tribool expected_is_child_account) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  if (enable_supervision_on_desktop) {
+    scoped_feature_list.InitAndEnableFeature(
+        supervised_user::kEnableSupervisionOnDesktopAndIOS);
+  } else {
+    scoped_feature_list.InitAndDisableFeature(
+        supervised_user::kEnableSupervisionOnDesktopAndIOS);
+  }
+
+  SimulateTokenAvailable(kAccountKeyChild);
+  AccountInfo account_info = account_tracker()->GetAccountInfo(
+      AccountKeyToAccountId(kAccountKeyChild));
+  EXPECT_EQ(account_info.is_child_account, signin::Tribool::kUnknown);
+
+  // AccountUpdated notification requires account's gaia to be known.
+  // Set account's user info first to receive an UPDATED event when capabilities
+  // are fetched.
+  ReturnAccountInfoFetchSuccess(kAccountKeyChild);
+  ClearAccountTrackerEvents();
+
+  ReturnAccountCapabilitiesFetchIsSubjectToParentalSupervision(
+      kAccountKeyChild, capability_value);
+
+  account_info = account_tracker()->GetAccountInfo(
+      AccountKeyToAccountId(kAccountKeyChild));
+
+  EXPECT_EQ(account_info.is_child_account, expected_is_child_account);
+}
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+
 void AccountTrackerServiceTest::ReturnAccountCapabilitiesFetchFailure(
     AccountKey account_key) {
   IssueAccessToken(account_key);
@@ -605,6 +667,36 @@ TEST_F(AccountTrackerServiceTest, TokenAvailable_AccountCapabilitiesSuccess) {
       AccountKeyToAccountId(kAccountKeyAlpha));
   CheckAccountCapabilities(kAccountKeyAlpha, account_info);
 }
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+TEST_F(
+    AccountTrackerServiceTest,
+    TokenAvailable_AccountCapabilitiesSubjectToParentalSupervisionDisabledForDesktop) {
+  TestAccountCapabilitiesSubjectToParentalSupervision(
+      false, true, signin::Tribool::kUnknown);
+}
+
+TEST_F(
+    AccountTrackerServiceTest,
+    TokenAvailable_AccountCapabilitiesSubjectToParentalSupervisionEnabledForDesktop) {
+  TestAccountCapabilitiesSubjectToParentalSupervision(true, true,
+                                                      signin::Tribool::kTrue);
+}
+
+TEST_F(
+    AccountTrackerServiceTest,
+    TokenAvailable_AccountCapabilitiesNotSubjectToParentalSupervisionDisabledForDesktop) {
+  TestAccountCapabilitiesSubjectToParentalSupervision(
+      false, false, signin::Tribool::kUnknown);
+}
+
+TEST_F(
+    AccountTrackerServiceTest,
+    TokenAvailable_AccountCapabilitiesNotSubjectToParentalSupervisionEnabledForDesktop) {
+  TestAccountCapabilitiesSubjectToParentalSupervision(true, false,
+                                                      signin::Tribool::kFalse);
+}
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 
 TEST_F(AccountTrackerServiceTest, TokenAvailable_AccountCapabilitiesFailed) {
   SimulateTokenAvailable(kAccountKeyAlpha);
@@ -1209,15 +1301,16 @@ TEST_F(AccountTrackerServiceTest, MigrateAccountIdToGaiaId) {
   EXPECT_EQ(account_tracker()->GetMigrationState(),
             AccountTrackerService::MIGRATION_IN_PROGRESS);
 
-  CoreAccountId gaia_alpha_account_id(gaia_alpha);
+  CoreAccountId gaia_alpha_account_id = CoreAccountId::FromGaiaId(gaia_alpha);
   AccountInfo account_info =
       account_tracker()->GetAccountInfo(gaia_alpha_account_id);
   EXPECT_EQ(account_info.account_id, gaia_alpha_account_id);
   EXPECT_EQ(account_info.gaia, gaia_alpha);
   EXPECT_EQ(account_info.email, email_alpha);
 
-  account_info = account_tracker()->GetAccountInfo(CoreAccountId(gaia_beta));
-  EXPECT_EQ(account_info.account_id, CoreAccountId(gaia_beta));
+  account_info =
+      account_tracker()->GetAccountInfo(CoreAccountId::FromGaiaId(gaia_beta));
+  EXPECT_EQ(account_info.account_id, CoreAccountId::FromGaiaId(gaia_beta));
   EXPECT_EQ(account_info.gaia, gaia_beta);
   EXPECT_EQ(account_info.email, email_beta);
 
@@ -1252,14 +1345,14 @@ TEST_F(AccountTrackerServiceTest, CanNotMigrateAccountIdToGaiaId) {
   EXPECT_EQ(account_tracker()->GetMigrationState(),
             AccountTrackerService::MIGRATION_NOT_STARTED);
 
-  CoreAccountId email_alpha_account_id(email_alpha);
+  CoreAccountId email_alpha_account_id = CoreAccountId::FromEmail(email_alpha);
   AccountInfo account_info =
       account_tracker()->GetAccountInfo(email_alpha_account_id);
   EXPECT_EQ(account_info.account_id, email_alpha_account_id);
   EXPECT_EQ(account_info.gaia, gaia_alpha);
   EXPECT_EQ(account_info.email, email_alpha);
 
-  CoreAccountId email_beta_account_id(email_beta);
+  CoreAccountId email_beta_account_id = CoreAccountId::FromEmail(email_beta);
   account_info = account_tracker()->GetAccountInfo(email_beta_account_id);
   EXPECT_EQ(account_info.account_id, email_beta_account_id);
   EXPECT_EQ(account_info.email, email_beta);
@@ -1303,14 +1396,14 @@ TEST_F(AccountTrackerServiceTest, GaiaIdMigrationCrashInTheMiddle) {
   EXPECT_EQ(account_tracker()->GetMigrationState(),
             AccountTrackerService::MIGRATION_IN_PROGRESS);
 
-  CoreAccountId gaia_alpha_account_id(gaia_alpha);
+  CoreAccountId gaia_alpha_account_id = CoreAccountId::FromGaiaId(gaia_alpha);
   AccountInfo account_info =
       account_tracker()->GetAccountInfo(gaia_alpha_account_id);
   EXPECT_EQ(account_info.account_id, gaia_alpha_account_id);
   EXPECT_EQ(account_info.gaia, gaia_alpha);
   EXPECT_EQ(account_info.email, email_alpha);
 
-  CoreAccountId gaia_beta_account_id(gaia_beta);
+  CoreAccountId gaia_beta_account_id = CoreAccountId::FromGaiaId(gaia_beta);
   account_info = account_tracker()->GetAccountInfo(gaia_beta_account_id);
   EXPECT_EQ(account_info.account_id, gaia_beta_account_id);
   EXPECT_EQ(account_info.gaia, gaia_beta);

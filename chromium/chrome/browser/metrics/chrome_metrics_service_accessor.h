@@ -30,6 +30,10 @@ class CrashesDOMHandler;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 class ChromeCameraAppUIDelegate;
+
+namespace app_list::federated {
+class FederatedMetricsManager;
+}  // namespace app_list::federated
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace domain_reliability {
@@ -83,6 +87,10 @@ namespace authenticator {
 class IsMetricsAndCrashReportingEnabled;
 }
 }  // namespace webauthn
+
+namespace ash {
+class DemoSession;
+}
 
 // This class limits and documents access to metrics service helper methods.
 // Since these methods are private, each user has to be explicitly declared
@@ -140,9 +148,11 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class browser_sync::DeviceInfoSyncClientImpl;
   friend class feed::WebFeedSubscriptionCoordinator;
   friend class HttpsFirstModeService;
+  friend class ash::DemoSession;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   friend class ChromeCameraAppUIDelegate;
+  friend class app_list::federated::FederatedMetricsManager;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)

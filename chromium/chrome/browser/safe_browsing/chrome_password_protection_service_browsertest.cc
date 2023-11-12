@@ -77,8 +77,9 @@ PasswordForm CreatePasswordFormWithPhishedEntry(std::string signon_realm,
   form.in_store = PasswordForm::Store::kProfileStore;
   form.password_issues = {
       {password_manager::InsecureType::kPhished,
-       password_manager::InsecurityMetadata(base::Time::FromTimeT(1),
-                                            password_manager::IsMuted(false))}};
+       password_manager::InsecurityMetadata(
+           base::Time::FromTimeT(1), password_manager::IsMuted(false),
+           password_manager::TriggerBackendNotification(false))}};
 
   return form;
 }
@@ -1115,12 +1116,9 @@ class ChromePasswordProtectionServiceDeferActivationBrowserTest
             &ChromePasswordProtectionServiceDeferActivationBrowserTest::
                 GetWebContents,
             base::Unretained(this))) {
-    std::vector<base::test::FeatureRefAndParams> additional_features = {
-        {features::kBackForwardCache, {}}};
     scoped_feature_list_.InitWithFeaturesAndParameters(
-        content::DefaultEnabledBackForwardCacheParametersForTests(
-            additional_features),
-        content::DefaultDisabledBackForwardCacheParametersForTests());
+        content::GetDefaultEnabledBackForwardCacheFeaturesForTesting(),
+        content::GetDefaultDisabledBackForwardCacheFeaturesForTesting());
   }
 
   void SetUp() override {

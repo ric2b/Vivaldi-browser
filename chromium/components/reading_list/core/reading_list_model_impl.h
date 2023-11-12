@@ -18,6 +18,7 @@
 #include "components/reading_list/core/reading_list_model_storage.h"
 #include "components/reading_list/core/reading_list_sync_bridge.h"
 #include "components/sync/base/storage_type.h"
+#include "google_apis/gaia/core_account_id.h"
 
 namespace base {
 class Clock;
@@ -60,6 +61,7 @@ class ReadingListModelImpl : public ReadingListModel {
   scoped_refptr<const ReadingListEntry> GetEntryByURL(
       const GURL& gurl) const override;
   bool IsUrlSupported(const GURL& url) override;
+  CoreAccountId GetAccountWhereEntryIsSavedTo(const GURL& url) override;
   bool NeedsExplicitUploadToSyncServer(const GURL& url) const override;
   const ReadingListEntry& AddOrReplaceEntry(
       const GURL& url,
@@ -108,6 +110,10 @@ class ReadingListModelImpl : public ReadingListModel {
     std::unique_ptr<ReadingListModelStorage::ScopedBatchUpdate> storage_token_;
   };
 
+  // If an entry exists with `url` and is unseen, it gets marked as seen (but
+  // unread).
+  void MarkEntrySeenIfExists(const GURL& url);
+
   // Same as BeginBatchUpdates(), but returns specifically
   // ReadingListModelImpl's ScopedReadingListBatchUpdateImpl.
   std::unique_ptr<ScopedReadingListBatchUpdateImpl>
@@ -116,6 +122,8 @@ class ReadingListModelImpl : public ReadingListModel {
   // Returns true if the model is sync-ing with the server and the initial
   // download of data and corresponding merge has completed.
   bool IsTrackingSyncMetadata() const;
+
+  static std::string TrimTitle(const std::string& title);
 
   // Test-only factory function to inject an arbitrary change processor.
   static std::unique_ptr<ReadingListModelImpl> BuildNewForTest(
@@ -146,6 +154,8 @@ class ReadingListModelImpl : public ReadingListModel {
 
   // Returns the |storage_layer_| of the model.
   ReadingListModelStorage* StorageLayer();
+
+  void MarkEntrySeenImpl(ReadingListEntry* entry);
 
   // Add |entry| to the model, which must not exist before, and notify the sync
   // bridge if |source| is not ADDED_VIA_SYNC.

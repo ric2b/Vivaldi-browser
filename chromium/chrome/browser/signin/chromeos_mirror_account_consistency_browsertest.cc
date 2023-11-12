@@ -12,11 +12,11 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/account_id/account_id.h"
 #include "components/google/core/common/google_switches.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -55,10 +55,10 @@ void TestMirrorRequestForProfile(net::EmbeddedTestServer* test_server,
       browser, gaia_url, WindowOpenDisposition::SINGLETON_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
-  std::string inner_text;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      browser->tab_strip_model()->GetActiveWebContents(),
-      "domAutomationController.send(document.body.innerText);", &inner_text));
+  std::string inner_text =
+      content::EvalJs(browser->tab_strip_model()->GetActiveWebContents(),
+                      "document.body.innerText;")
+          .ExtractString();
   // /echoheader returns "None" if the header isn't set.
   inner_text = (inner_text == "None") ? "" : inner_text;
   EXPECT_EQ(expected_header_value, inner_text);
@@ -139,8 +139,8 @@ IN_PROC_BROWSER_TEST_F(ChromeOsMirrorAccountConsistencyTest,
   // Incognito is always disabled for child accounts.
   PrefService* prefs = profile->GetPrefs();
   prefs->SetInteger(
-      prefs::kIncognitoModeAvailability,
-      static_cast<int>(IncognitoModePrefs::Availability::kDisabled));
+      policy::policy_prefs::kIncognitoModeAvailability,
+      static_cast<int>(policy::IncognitoModeAvailability::kDisabled));
   ASSERT_EQ(1, signin::PROFILE_MODE_INCOGNITO_DISABLED);
 
   // TODO(http://crbug.com/1134144): This test seems to test supervised profiles

@@ -122,6 +122,88 @@ TEST(AdBlockIosRuleCompilerTest, RuleWithResource) {
   EXPECT_EQ(CompileIosRulesToString(parse_result, true), expected);
 }
 
+TEST(AdBlockIosRuleCompilerTest, SubdocumentRule) {
+  ParseResult parse_result;
+  RuleParser rule_parser(&parse_result, false);
+  rule_parser.Parse("something$subdocument");
+  std::string expected(R"===({
+    "network": {
+      "block": {
+        "generic": [
+          {
+            "trigger": {
+              "url-filter": "something",
+              "url-filter-is-case-sensitive": false,
+              "load-context": [
+                "child-frame"
+              ],
+              "resource-type": [
+                "document"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          }
+        ]
+      }
+    },
+    "cosmetic": {},
+    "version": 1
+  })===");
+  ASSERT_TRUE(FormatJSON(expected));
+  EXPECT_EQ(CompileIosRulesToString(parse_result, true), expected);
+}
+
+TEST(AdBlockIosRuleCompilerTest, RuleWithParty) {
+  ParseResult parse_result;
+  RuleParser rule_parser(&parse_result, false);
+  rule_parser.Parse("something_from_self$script,~third-party");
+  rule_parser.Parse("something_from_others$script,third-party");
+  std::string expected(R"===({
+    "network": {
+      "block": {
+        "generic": [
+          {
+            "trigger": {
+              "url-filter": "something_from_self",
+              "url-filter-is-case-sensitive": false,
+              "load-type": [
+                "first-party"
+              ],
+              "resource-type": [
+                "script"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          },
+          {
+            "trigger": {
+              "url-filter": "something_from_others",
+              "url-filter-is-case-sensitive": false,
+              "load-type": [
+                "third-party"
+              ],
+              "resource-type": [
+                "script"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          }
+        ]
+      }
+    },
+    "cosmetic": {},
+    "version": 1
+  })===");
+  ASSERT_TRUE(FormatJSON(expected));
+  EXPECT_EQ(CompileIosRulesToString(parse_result, true), expected);
+}
+
 TEST(AdBlockIosRuleCompilerTest, AllowRuleWithResource) {
   ParseResult parse_result;
   RuleParser rule_parser(&parse_result, false);
@@ -267,7 +349,12 @@ TEST(AdBlockIosRuleCompilerTest, RulesWithHost) {
   ParseResult parse_result;
   RuleParser rule_parser(&parse_result, false);
   rule_parser.Parse("advert$host=example.com,image");
+  rule_parser.Parse("foo.com/bar$host=foo.com,image");
   rule_parser.Parse("google.com/something$host=evil.google.com,image");
+  rule_parser.Parse("ads.example.com/something$host=example.com,image");
+  rule_parser.Parse("baz$host=baz.com,image");
+  rule_parser.Parse("xxx.elg.no$host=elg.no,image");
+  rule_parser.Parse("ulv.no.zzz$host=ulv.no,image");
   std::string expected(R"===({
     "network": {
       "block": {
@@ -286,7 +373,67 @@ TEST(AdBlockIosRuleCompilerTest, RulesWithHost) {
           },
           {
             "trigger": {
+              "url-filter": "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?foo\\.com\\/bar",
+              "url-filter-is-case-sensitive": false,
+              "resource-type": [
+                "image"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          },
+          {
+            "trigger": {
               "url-filter": "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?evil\\.google\\.com\\/something",
+              "url-filter-is-case-sensitive": false,
+              "resource-type": [
+                "image"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          },
+          {
+            "trigger": {
+              "url-filter": "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?ads\\.example\\.com\\/something",
+              "url-filter-is-case-sensitive": false,
+              "resource-type": [
+                "image"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          },
+          {
+            "trigger": {
+              "url-filter": "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?baz\\.com[^a-zA-Z0-9_.%-]",
+              "url-filter-is-case-sensitive": false,
+              "resource-type": [
+                "image"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          },
+          {
+            "trigger": {
+              "url-filter": "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?xxx\\.elg\\.no[^a-zA-Z0-9_.%-]",
+              "url-filter-is-case-sensitive": false,
+              "resource-type": [
+                "image"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          },
+          {
+            "trigger": {
+              "url-filter": "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?ulv\\.no[^a-zA-Z0-9_.%-].*ulv\\.no\\.zzz",
               "url-filter-is-case-sensitive": false,
               "resource-type": [
                 "image"
@@ -400,7 +547,21 @@ TEST(AdBlockIosRuleCompilerTest, DocumentActivationRules) {
         }
       ]
     },
-    "cosmetic": {},
+    "cosmetic": {
+      "allow": [
+        {
+          "trigger": {
+            "url-filter": ".*",
+            "url-filter-is-case-sensitive": false,
+            "if-top-url": [ "good" ],
+            "top-url-filter-is-case-sensitive": false
+          },
+          "action": {
+            "type": "ignore-previous-rules"
+          }
+        }
+      ]
+    },
     "version": 1
   })===");
   ASSERT_TRUE(FormatJSON(expected));
@@ -572,58 +733,56 @@ TEST(AdBlockIosRuleCompilerTest, BlockRuleWithInclusionsAndExclusions) {
     "network": {
       "block-allow-pairs": [
         [
-          [
-            {
-              "trigger": {
-                "url-filter": "something",
-                "url-filter-is-case-sensitive": false,
-                "if-top-url": [
-                  "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?danger\\.com[:\\/]" ,
-                  "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?evil\\.com[:\\/]"
-                ],
-                "top-url-filter-is-case-sensitive": true,
-                "resource-type": [
-                  "script"
-                ]
-              },
-              "action": {
-                "type": "block"
-              }
+          {
+            "trigger": {
+              "url-filter": "something",
+              "url-filter-is-case-sensitive": false,
+              "if-top-url": [
+                "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?danger\\.com[:\\/]" ,
+                "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?evil\\.com[:\\/]"
+              ],
+              "top-url-filter-is-case-sensitive": true,
+              "resource-type": [
+                "script"
+              ]
             },
-            {
-              "trigger": {
-                "url-filter": "something",
-                "url-filter-is-case-sensitive": false,
-                "if-top-url": [
-                  "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?safe\\.danger\\.com[:\\/]",
-                  "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?good\\.evil\\.com[:\\/]"
-                ],
-                "top-url-filter-is-case-sensitive": true,
-                "resource-type": [
-                  "script"
-                ]
-              },
-              "action": {
-                "type": "ignore-previous-rules"
-              }
+            "action": {
+              "type": "block"
             }
-          ],
-          [
-            {
-              "trigger": {
-                "url-filter": "something",
-                "url-filter-is-case-sensitive": false,
-                "if-top-url": [ "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?except\\.good\\.evil\\.com[:\\/]" ],
-                "top-url-filter-is-case-sensitive": true,
-                "resource-type": [
-                  "script"
-                ]
-              },
-              "action": {
-                "type": "block"
-              }
+          },
+          {
+            "trigger": {
+              "url-filter": "something",
+              "url-filter-is-case-sensitive": false,
+              "if-top-url": [
+                "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?safe\\.danger\\.com[:\\/]",
+                "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?good\\.evil\\.com[:\\/]"
+              ],
+              "top-url-filter-is-case-sensitive": true,
+              "resource-type": [
+                "script"
+              ]
+            },
+            "action": {
+              "type": "ignore-previous-rules"
             }
-          ]
+          }
+        ],
+        [
+          {
+            "trigger": {
+              "url-filter": "something",
+              "url-filter-is-case-sensitive": false,
+              "if-top-url": [ "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?except\\.good\\.evil\\.com[:\\/]" ],
+              "top-url-filter-is-case-sensitive": true,
+              "resource-type": [
+                "script"
+              ]
+            },
+            "action": {
+              "type": "block"
+            }
+          }
         ]
       ]
     },
@@ -723,8 +882,39 @@ TEST(AdBlockIosRuleCompilerTest, GenericCosmeticHideRule) {
   std::string expected(R"===({
     "network": {},
     "cosmetic": {
-      "block": {
-        "selector": [ ".adfoo" ,".adbar" ]
+        "selector": {
+        ".adbar" : {
+          "block": {
+            "generic" : [
+              {
+                "trigger": {
+                  "url-filter": ".*",
+                  "url-filter-is-case-sensitive": false
+                },
+                "action": {
+                  "type": "css-display-none",
+                  "selector": ".adbar"
+                }
+              }
+            ]
+          }
+        },
+        ".adfoo" : {
+          "block": {
+            "generic" : [
+            {
+                "trigger": {
+                  "url-filter": ".*",
+                  "url-filter-is-case-sensitive": false
+                },
+                "action": {
+                  "type": "css-display-none",
+                  "selector": ".adfoo"
+                }
+              }
+            ]
+          }
+        }
       }
     },
     "version": 1
@@ -740,23 +930,27 @@ TEST(AdBlockIosRuleCompilerTest, SpecificCosmeticHideRule) {
   std::string expected(R"===({
     "network": {},
     "cosmetic": {
-      "block": {
-        "specific": [
-          {
-            "trigger": {
-              "url-filter": ".*",
-              "url-filter-is-case-sensitive": false,
-              "if-top-url": [
-                "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?example\\.com[:\\/]"
-              ],
-              "top-url-filter-is-case-sensitive": true
-            },
-            "action": {
-              "type": "css-display-none",
-              "selector": ".ad"
-            }
+        "selector": {
+        ".ad": {
+          "block": {
+            "specific": [
+              {
+                "trigger": {
+                  "url-filter": ".*",
+                  "url-filter-is-case-sensitive": false,
+                  "if-top-url": [
+                    "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?example\\.com[:\\/]"
+                  ],
+                  "top-url-filter-is-case-sensitive": true
+                },
+                "action": {
+                  "type": "css-display-none",
+                  "selector": ".ad"
+                }
+              }
+            ]
           }
-        ]
+        }
       }
     },
     "version": 1
@@ -773,21 +967,38 @@ TEST(AdBlockIosRuleCompilerTest, CosmeticAllowRule) {
   std::string expected(R"===({
     "network": {},
     "cosmetic": {
-      "allow": [
-        {
-          "trigger": {
-            "url-filter": ".*",
-            "url-filter-is-case-sensitive": false,
-            "if-top-url": [
-              "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?example\\.com[:\\/]"
-            ],
-            "top-url-filter-is-case-sensitive": true
-          },
-          "action": {
-            "type": "ignore-previous-rules"
-          }
+      "selector": {
+        ".show": {
+          "allow": [
+            {
+              "trigger": {
+                "url-filter": ".*",
+                "url-filter-is-case-sensitive": false,
+                "if-top-url": [
+                  "^[a-z][a-z0-9.+-]*:(\\/\\/)?(([^\\/]+@)?[^@:\\/\\[]+\\.)?example\\.com[:\\/]"
+                ],
+                "top-url-filter-is-case-sensitive": true
+              },
+              "action": {
+                "type": "ignore-previous-rules"
+              }
+            }
+          ]
+        },
+        ".nice": {
+          "allow": [
+            {
+              "trigger": {
+                "url-filter": ".*",
+                "url-filter-is-case-sensitive": false
+              },
+              "action": {
+                "type": "ignore-previous-rules"
+              }
+            }
+          ]
         }
-      ]
+      }
     },
     "version": 1
   })===");

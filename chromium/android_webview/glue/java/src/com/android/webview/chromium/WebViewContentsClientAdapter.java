@@ -44,6 +44,7 @@ import org.chromium.android_webview.AwHttpAuthHandler;
 import org.chromium.android_webview.AwRenderProcessGoneDetail;
 import org.chromium.android_webview.JsPromptResultReceiver;
 import org.chromium.android_webview.JsResultReceiver;
+import org.chromium.android_webview.R;
 import org.chromium.android_webview.permission.AwPermissionRequest;
 import org.chromium.android_webview.permission.Resource;
 import org.chromium.base.Callback;
@@ -52,8 +53,8 @@ import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.components.embedder_support.util.WebResourceResponseInfo;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.lang.ref.WeakReference;
 import java.security.Principal;
@@ -439,7 +440,7 @@ class WebViewContentsClientAdapter extends SharedWebViewContentsClientAdapter {
             // no further updates after onPageStarted, we'll fail the test by timing
             // out waiting for a Picture.
             if (mPictureListener != null) {
-                PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT, () -> {
+                PostTask.postDelayedTask(TaskTraits.UI_DEFAULT, () -> {
                     if (mPictureListener != null) {
                         if (TRACE) Log.i(TAG, "onNewPicture - from onPageFinished workaround.");
                         mPictureListener.onNewPicture(
@@ -1010,8 +1011,7 @@ class WebViewContentsClientAdapter extends SharedWebViewContentsClientAdapter {
                 // The ic_play_circle_outline_black_48dp icon is transparent so we need to draw it
                 // on a gray background.
                 Bitmap poster = BitmapFactory.decodeResource(
-                        mContext.getResources(),
-                        org.chromium.android_webview.R.drawable.ic_play_circle_outline_black_48dp);
+                        mContext.getResources(), R.drawable.ic_play_circle_outline_black_48dp);
                 result = Bitmap.createBitmap(
                         poster.getWidth(), poster.getHeight(), poster.getConfig());
                 result.eraseColor(Color.GRAY);

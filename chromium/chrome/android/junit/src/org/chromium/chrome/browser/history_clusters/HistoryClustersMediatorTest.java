@@ -4,10 +4,11 @@
 
 package org.chromium.chrome.browser.history_clusters;
 
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalMatchers.geq;
 import static org.mockito.ArgumentMatchers.any;
@@ -996,6 +997,21 @@ public class HistoryClustersMediatorTest {
         assertTrue(mSelectionDelegate.getSelectedItems().isEmpty());
         assertThat(mModelList, hasExactItemTypes(ItemType.MORE_PROGRESS));
         verify(mBridge, times(2)).queryClusters("query");
+    }
+
+    @Test
+    public void testContinueQueryAfterDestroy() {
+        Promise promise = new Promise<>();
+        doReturn(promise).when(mBridge).queryClusters("query");
+
+        doReturn(3).when(mLayoutManager).findLastVisibleItemPosition();
+
+        mMediator.setQueryState(QueryState.forQuery("query", ""));
+        fulfillPromise(promise, mHistoryClustersResultWithQuery);
+        mMediator.onScrolled(mRecyclerView, 1, 1);
+        mMediator.destroy();
+
+        ShadowLooper.idleMainLooper();
     }
 
     private <T> void fulfillPromise(Promise<T> promise, T result) {

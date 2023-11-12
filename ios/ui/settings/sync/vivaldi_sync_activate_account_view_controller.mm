@@ -9,9 +9,10 @@
 #import "components/language/core/browser/pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_link_and_button_item.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_text_edit_item.h"
 #import "ios/ui/settings/sync/vivaldi_create_account_ui_helper.h"
@@ -124,7 +125,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   linkAndButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_ACTIVATE_ACCOUNT_BUTTON);
   linkAndButton.textAlignment = NSTextAlignmentCenter;
-  linkAndButton.disableButtonIntrinsicWidth = YES;
 
   NSDictionary* linkAttributes = @{
       NSLinkAttributeName : [NSURL URLWithString:@""],

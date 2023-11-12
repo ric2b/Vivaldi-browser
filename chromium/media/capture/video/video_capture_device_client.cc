@@ -17,7 +17,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
 #include "media/capture/video/scoped_buffer_pool_reservation.h"
 #include "media/capture/video/video_capture_buffer_handle.h"
@@ -643,6 +642,8 @@ void VideoCaptureDeviceClient::OnIncomingCapturedBufferExt(
     base::TimeDelta timestamp,
     gfx::Rect visible_rect,
     const VideoFrameMetadata& additional_metadata) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("video_and_image_capture"),
+               "VideoCaptureDeviceClient::OnIncomingCapturedBufferExt");
   DFAKE_SCOPED_RECURSIVE_LOCK(call_from_producer_);
 
   VideoFrameMetadata metadata = additional_metadata;

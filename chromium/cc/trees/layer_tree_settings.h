@@ -134,10 +134,6 @@ class CC_EXPORT LayerTreeSettings {
   // deadlines.
   bool wait_for_all_pipeline_stages_before_draw = false;
 
-  // Determines whether mouse interactions on composited scrollbars are handled
-  // on the compositor thread.
-  bool compositor_threaded_scrollbar_scrolling = true;
-
   // If enabled, the scroll deltas will be a percentage of the target scroller.
   bool percent_based_scrolling = false;
 
@@ -216,14 +212,14 @@ class CC_EXPORT LayerTreeSettings {
   // Whether to disable the frame rate limit in the scheduler.
   bool disable_frame_rate_limit = false;
 
-  // When enabled commits are aborted if scroll and viewport state from CC could
-  // not be synchronized at the beginning of the frame because main frames were
-  // being deferred.
-  bool skip_commits_if_not_synchronizing_compositor_state = true;
-
   // Enables shared image cache for gpu.
   // TODO(crbug.com/1378251): not ready to be used by renderer cc instance yet.
   bool enable_shared_image_cache_for_gpu = false;
+
+  // Maximum size for buffers allocated for rendering when GPU compositing is
+  // disabled. This size is equivalent to the max texture size in GPU mode.
+  // This is an arbitrary limit here similar to what hardware might have.
+  int max_render_buffer_bounds_for_sw = 16 * 1024;
 };
 
 class CC_EXPORT LayerListSettings : public LayerTreeSettings {

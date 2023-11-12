@@ -11,10 +11,6 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-if (is_ios) {
-  import("//build/config/ios/bundle_data_from_filelist.gni")
-}
-
 cc_component("cc") {
   sources = [
     "benchmarks/benchmark_instrumentation.cc",
@@ -207,6 +203,8 @@ cc_component("cc") {
     "metrics/latency_ukm_reporter.h",
     "metrics/lcd_text_metrics_reporter.cc",
     "metrics/lcd_text_metrics_reporter.h",
+    "metrics/predictor_jank_tracker.cc",
+    "metrics/predictor_jank_tracker.h",
     "metrics/shared_metrics_buffer.h",
     "metrics/total_frame_counter.cc",
     "metrics/total_frame_counter.h",
@@ -218,6 +216,8 @@ cc_component("cc") {
     "metrics/web_vital_metrics.h",
     "raster/bitmap_raster_buffer_provider.cc",
     "raster/bitmap_raster_buffer_provider.h",
+    "raster/categorized_worker_pool.cc",
+    "raster/categorized_worker_pool.h",
     "raster/gpu_raster_buffer_provider.cc",
     "raster/gpu_raster_buffer_provider.h",
     "raster/lcd_text_disallowed_reason.cc",
@@ -366,6 +366,8 @@ cc_component("cc") {
     "trees/latency_info_swap_promise.h",
     "trees/latency_info_swap_promise_monitor.cc",
     "trees/latency_info_swap_promise_monitor.h",
+    "trees/layer_context.h",
+    "trees/layer_context_client.h",
     "trees/layer_tree_frame_sink.cc",
     "trees/layer_tree_frame_sink.h",
     "trees/layer_tree_frame_sink_client.h",
@@ -381,6 +383,8 @@ cc_component("cc") {
     "trees/layer_tree_mutator.h",
     "trees/layer_tree_settings.cc",
     "trees/layer_tree_settings.h",
+    "trees/local_layer_context.cc",
+    "trees/local_layer_context.h",
     "trees/managed_memory_policy.cc",
     "trees/managed_memory_policy.h",
     "trees/mobile_optimized_viewport_util.cc",
@@ -674,9 +678,11 @@ cc_test_static_library("test_support") {
 }
 
 if (is_ios) {
-  bundle_data_from_filelist("unit_tests_bundle_data") {
+  bundle_data("unit_tests_bundle_data") {
     testonly = true
-    filelist_name = "unit_tests_bundle_data.filelist"
+    sources = [ "test/data/lottie/animation_with_2_text_nodes.json" ]
+    outputs = [ "{{bundle_resources_dir}}/" +
+                "{{source_root_relative_dir}}/{{source_file_part}}" ]
   }
 }
 
@@ -751,6 +757,7 @@ cc_test("cc_unittests") {
     "metrics/frame_sorter_unittest.cc",
     "metrics/jank_injector_unittest.cc",
     "metrics/jank_metrics_unittest.cc",
+    "metrics/predictor_jank_tracker_unittest.cc",
     "metrics/total_frame_counter_unittest.cc",
     "metrics/video_playback_roughness_reporter_unittest.cc",
     "mojo_embedder/async_layer_tree_frame_sink_unittest.cc",
@@ -772,6 +779,7 @@ cc_test("cc_unittests") {
     "paint/skia_paint_canvas_unittest.cc",
     "paint/solid_color_analyzer_unittest.cc",
     "paint/transfer_cache_unittest.cc",
+    "raster/categorized_worker_pool_unittest.cc",
     "raster/playback_image_provider_unittest.cc",
     "raster/raster_buffer_provider_unittest.cc",
     "raster/raster_source_unittest.cc",
@@ -783,6 +791,7 @@ cc_test("cc_unittests") {
     "resources/resource_pool_unittest.cc",
     "scheduler/scheduler_state_machine_unittest.cc",
     "scheduler/scheduler_unittest.cc",
+    "slim/delayer_scheduler_unittest.cc",
     "slim/slim_layer_tree_compositor_frame_unittest.cc",
     "slim/slim_layer_tree_unittest.cc",
     "slim/slim_layer_unittest.cc",
@@ -910,7 +919,7 @@ cc_test("cc_unittests") {
     "//ui/gl:test_support",
   ]
 
-  data = [ "//components/viz/test/data/" ]
+  data = [ "//components/test/data/viz/" ]
   data_deps = [
     "//testing/buildbot/filters:cc_unittests_filters",
     "//third_party/mesa_headers",
@@ -944,7 +953,10 @@ cc_test("cc_unittests") {
   }
 
   if (is_ios) {
-    public_deps = [ ":unit_tests_bundle_data" ]
+    public_deps = [
+      ":unit_tests_bundle_data",
+      "//components/test:viz_test_bundle_data",
+    ]
   }
 }
 
@@ -1000,7 +1012,7 @@ cc_test("cc_perftests") {
   # This target should not require the Chrome executable to run.
   assert_no_deps = [ "//chrome" ]
 
-  data = [ "//components/viz/test/data/" ]
+  data = [ "//components/test/data/viz/" ]
 
   data_deps = [
     # Needed for isolate script to execute.

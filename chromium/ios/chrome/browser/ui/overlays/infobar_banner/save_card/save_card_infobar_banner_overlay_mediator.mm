@@ -9,7 +9,7 @@
 #import "ios/chrome/browser/overlays/public/infobar_banner/save_card_infobar_banner_overlay_request_config.h"
 #import "ios/chrome/browser/overlays/public/infobar_modal/save_card_infobar_modal_overlay_responses.h"
 #import "ios/chrome/browser/overlays/public/overlay_response.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_consumer.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_overlay_mediator+consumer_support.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_overlay_mediator.h"
@@ -22,13 +22,6 @@
 
 using save_card_infobar_overlays::SaveCardBannerRequestConfig;
 using save_card_infobar_overlays::SaveCardMainAction;
-
-namespace {
-
-// The name of the save card icon image.
-NSString* const kSaveCardImageName = @"infobar_save_card_icon";
-
-}  // namespace
 
 @interface SaveCardInfobarBannerOverlayMediator ()
 // The save card banner config from the request.
@@ -83,10 +76,8 @@ NSString* const kSaveCardImageName = @"infobar_save_card_icon";
 
   [self.consumer
       setButtonText:base::SysUTF16ToNSString(self.config->button_label_text())];
-  UIImage* iconImage = UseSymbols()
-                           ? DefaultSymbolTemplateWithPointSize(
-                                 kCreditCardSymbol, kInfobarSymbolPointSize)
-                           : [UIImage imageNamed:kSaveCardImageName];
+  UIImage* iconImage = DefaultSymbolTemplateWithPointSize(
+      kCreditCardSymbol, kInfobarSymbolPointSize);
   [self.consumer setIconImage:iconImage];
   [self.consumer
       setTitleText:base::SysUTF16ToNSString(self.config->message_text())];

@@ -11,8 +11,6 @@
 
 #include "base/command_line.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback.h"
-#include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/onc/onc_constants.h"
@@ -48,7 +46,7 @@ class TestNetworkingPrivateDelegate : public NetworkingPrivateDelegate {
   TestNetworkingPrivateDelegate& operator=(
       const TestNetworkingPrivateDelegate&) = delete;
 
-  ~TestNetworkingPrivateDelegate() override {}
+  ~TestNetworkingPrivateDelegate() override = default;
 
   // Asynchronous methods
   void GetProperties(const std::string& guid,
@@ -77,7 +75,7 @@ class TestNetworkingPrivateDelegate : public NetworkingPrivateDelegate {
   }
 
   void CreateNetwork(bool shared,
-                     base::Value properties,
+                     base::Value::Dict properties,
                      StringCallback success_callback,
                      FailureCallback failure_callback) override {
     StringResult(std::move(success_callback), std::move(failure_callback),
@@ -174,8 +172,8 @@ class TestNetworkingPrivateDelegate : public NetworkingPrivateDelegate {
       result = std::make_unique<DeviceStateList>();
       std::unique_ptr<api::networking_private::DeviceStateProperties>
           properties(new api::networking_private::DeviceStateProperties);
-      properties->type = api::networking_private::NETWORK_TYPE_ETHERNET;
-      properties->state = api::networking_private::DEVICE_STATE_TYPE_ENABLED;
+      properties->type = api::networking_private::NetworkType::kEthernet;
+      properties->state = api::networking_private::DeviceStateType::kEnabled;
       result->push_back(std::move(properties));
     }
     std::move(callback).Run(std::move(result));

@@ -51,8 +51,8 @@ class VivaldiAccountManagerAndroid
   void OnVivaldiAccountShutdown() override;
 
  private:
-  Profile* profile_;
-  vivaldi::VivaldiAccountManager* account_manager_;
+  const raw_ptr<Profile> profile_;
+  raw_ptr<vivaldi::VivaldiAccountManager> account_manager_;
 
   void SendStateUpdate();
 

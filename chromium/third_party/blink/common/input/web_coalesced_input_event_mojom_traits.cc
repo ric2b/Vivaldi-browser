@@ -13,6 +13,7 @@
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
+#include "ui/events/mojom/event_latency_metadata_mojom_traits.h"
 #include "ui/latency/mojom/latency_info_mojom_traits.h"
 
 namespace mojo {
@@ -36,7 +37,7 @@ blink::mojom::PointerDataPtr PointerDataFromPointerProperties(
       pointer.tangential_pressure, pointer.twist, pointer.button,
       pointer.pointer_type, pointer.movement_x, pointer.movement_y,
       pointer.is_raw_movement_event, pointer.PositionInWidget(),
-      pointer.PositionInScreen(), std::move(mouse_data));
+      pointer.PositionInScreen(), std::move(mouse_data), pointer.device_id);
 }
 
 void PointerPropertiesFromPointerData(
@@ -54,6 +55,7 @@ void PointerPropertiesFromPointerData(
   pointer_properties->movement_y = pointer_data->movement_y;
   pointer_properties->is_raw_movement_event =
       pointer_data->is_raw_movement_event;
+  pointer_properties->device_id = pointer_data->device_id;
 }
 
 void TouchPointPropertiesFromPointerData(
@@ -360,6 +362,12 @@ bool StructTraits<blink::mojom::EventDataView,
     return false;
   }
 
+  ui::EventLatencyMetadata event_latency_metadata;
+  if (!event.ReadEventLatencyMetadata(&event_latency_metadata)) {
+    return false;
+  };
+  input_event->GetModifiableEventLatencyMetadata() =
+      std::move(event_latency_metadata);
   ui::LatencyInfo latency_info;
   if (!event.ReadLatency(&latency_info))
     return false;

@@ -53,7 +53,6 @@
 #include "chrome/browser/ash/crosapi/field_trial_service_ash.h"
 #include "chrome/browser/ash/crosapi/file_manager_ash.h"
 #include "chrome/browser/ash/crosapi/file_system_provider_service_ash.h"
-#include "chrome/browser/ash/crosapi/firewall_hole_ash.h"
 #include "chrome/browser/ash/crosapi/force_installed_tracker_ash.h"
 #include "chrome/browser/ash/crosapi/fullscreen_controller_ash.h"
 #include "chrome/browser/ash/crosapi/geolocation_service_ash.h"
@@ -67,6 +66,7 @@
 #include "chrome/browser/ash/crosapi/login_ash.h"
 #include "chrome/browser/ash/crosapi/login_screen_storage_ash.h"
 #include "chrome/browser/ash/crosapi/login_state_ash.h"
+#include "chrome/browser/ash/crosapi/media_ui_ash.h"
 #include "chrome/browser/ash/crosapi/message_center_ash.h"
 #include "chrome/browser/ash/crosapi/metrics_ash.h"
 #include "chrome/browser/ash/crosapi/metrics_reporting_ash.h"
@@ -104,6 +104,7 @@
 #include "chrome/browser/ash/sync/sync_mojo_service_factory_ash.h"
 #include "chrome/browser/ash/telemetry_extension/diagnostics_service_ash.h"
 #include "chrome/browser/ash/telemetry_extension/probe_service_ash.h"
+#include "chrome/browser/ash/telemetry_extension/telemetry_event_service_ash.h"
 #include "chrome/browser/ash/video_conference/video_conference_manager_ash.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -213,7 +214,6 @@ CrosapiAsh::CrosapiAsh(CrosapiDependencyRegistry* registry)
       file_manager_ash_(std::make_unique<FileManagerAsh>()),
       file_system_provider_service_ash_(
           std::make_unique<FileSystemProviderServiceAsh>()),
-      firewall_hole_service_ash_(std::make_unique<FirewallHoleServiceAsh>()),
       force_installed_tracker_ash_(
           std::make_unique<ForceInstalledTrackerAsh>()),
       fullscreen_controller_ash_(std::make_unique<FullscreenControllerAsh>()),
@@ -228,6 +228,7 @@ CrosapiAsh::CrosapiAsh(CrosapiDependencyRegistry* registry)
       login_ash_(std::make_unique<LoginAsh>()),
       login_screen_storage_ash_(std::make_unique<LoginScreenStorageAsh>()),
       login_state_ash_(std::make_unique<LoginStateAsh>()),
+      media_ui_ash_(std::make_unique<MediaUIAsh>()),
       message_center_ash_(std::make_unique<MessageCenterAsh>()),
       metrics_ash_(std::make_unique<MetricsAsh>()),
       metrics_reporting_ash_(registry->CreateMetricsReportingAsh(
@@ -248,6 +249,8 @@ CrosapiAsh::CrosapiAsh(CrosapiDependencyRegistry* registry)
 #if BUILDFLAG(USE_CUPS)
       printing_metrics_ash_(std::make_unique<PrintingMetricsAsh>()),
 #endif  // BUILDFLAG(USE_CUPS)
+      telemetry_event_service_ash_(
+          std::make_unique<ash::TelemetryEventServiceAsh>()),
       probe_service_ash_(std::make_unique<ash::ProbeServiceAsh>()),
       remoting_ash_(std::make_unique<RemotingAsh>()),
       resource_manager_ash_(std::make_unique<ResourceManagerAsh>()),
@@ -255,6 +258,7 @@ CrosapiAsh::CrosapiAsh(CrosapiDependencyRegistry* registry)
       search_provider_ash_(std::make_unique<SearchProviderAsh>()),
       select_file_ash_(std::make_unique<SelectFileAsh>()),
       sharesheet_ash_(std::make_unique<SharesheetAsh>()),
+      smart_reader_manager_ash_(std::make_unique<ash::SmartReaderManagerAsh>()),
       speech_recognition_ash_(std::make_unique<SpeechRecognitionAsh>()),
       structured_metrics_service_ash_(
           std::make_unique<StructuredMetricsServiceAsh>()),
@@ -506,11 +510,6 @@ void CrosapiAsh::BindFileSystemProviderService(
   file_system_provider_service_ash_->BindReceiver(std::move(receiver));
 }
 
-void CrosapiAsh::BindFirewallHoleService(
-    mojo::PendingReceiver<crosapi::mojom::FirewallHoleService> receiver) {
-  firewall_hole_service_ash_->BindReceiver(std::move(receiver));
-}
-
 void CrosapiAsh::BindForceInstalledTracker(
     mojo::PendingReceiver<crosapi::mojom::ForceInstalledTracker> receiver) {
   force_installed_tracker_ash_->BindReceiver(std::move(receiver));
@@ -598,6 +597,10 @@ void CrosapiAsh::BindMachineLearningService(
         chromeos::machine_learning::mojom::MachineLearningService> receiver) {
   chromeos::machine_learning::ServiceConnection::GetInstance()
       ->BindMachineLearningService(std::move(receiver));
+}
+
+void CrosapiAsh::BindMediaUI(mojo::PendingReceiver<mojom::MediaUI> receiver) {
+  media_ui_ash_->BindReceiver(std::move(receiver));
 }
 
 void CrosapiAsh::BindMediaSessionAudioFocus(
@@ -748,6 +751,11 @@ void CrosapiAsh::BindSharesheet(
   sharesheet_ash_->BindReceiver(std::move(receiver));
 }
 
+void CrosapiAsh::BindSmartReaderClient(
+    mojo::PendingRemote<mojom::SmartReaderClient> remote) {
+  smart_reader_manager_ash_->BindRemote(std::move(remote));
+}
+
 void CrosapiAsh::BindSpeechRecognition(
     mojo::PendingReceiver<mojom::SpeechRecognition> receiver) {
   speech_recognition_ash_->BindReceiver(std::move(receiver));
@@ -756,13 +764,11 @@ void CrosapiAsh::BindSpeechRecognition(
 void CrosapiAsh::BindStableVideoDecoderFactory(
     mojo::GenericPendingReceiver receiver) {
 #if BUILDFLAG(USE_VAAPI) || BUILDFLAG(USE_V4L2_CODEC)
-  // TODO(b/171813538): if launching out-of-process video decoding for LaCrOS
-  // with Finch, we may need to tell LaCrOS somehow if this feature is enabled
-  // in ash-chrome. Otherwise, we may run into a situation in which the feature
-  // is enabled for LaCrOS but not for ash-chrome.
   auto r = receiver.As<media::stable::mojom::StableVideoDecoderFactory>();
-  if (r && base::FeatureList::IsEnabled(media::kUseOutOfProcessVideoDecoding))
+  if (r && base::FeatureList::IsEnabled(
+               media::kExposeOutOfProcessVideoDecodingToLacros)) {
     content::LaunchStableVideoDecoderFactory(std::move(r));
+  }
 #endif  // BUILDFLAG(USE_VAAPI) || BUILDFLAG(USE_V4L2_CODEC)
 }
 
@@ -786,6 +792,11 @@ void CrosapiAsh::BindSyncService(
 void CrosapiAsh::BindTaskManager(
     mojo::PendingReceiver<mojom::TaskManager> receiver) {
   task_manager_ash_->BindReceiver(std::move(receiver));
+}
+
+void CrosapiAsh::BindTelemetryEventService(
+    mojo::PendingReceiver<mojom::TelemetryEventService> receiver) {
+  telemetry_event_service_ash_->BindReceiver(std::move(receiver));
 }
 
 void CrosapiAsh::BindTelemetryProbeService(
@@ -873,6 +884,12 @@ void CrosapiAsh::OnBrowserStartup(mojom::BrowserInfoPtr browser_info) {
 
 void CrosapiAsh::REMOVED_29(
     mojo::PendingReceiver<mojom::SystemDisplayDeprecated> receiver) {
+  NOTIMPLEMENTED();
+}
+
+void CrosapiAsh::REMOVED_105(
+    mojo::PendingReceiver<crosapi::mojom::FirewallHoleServiceDeprecated>
+        receiver) {
   NOTIMPLEMENTED();
 }
 

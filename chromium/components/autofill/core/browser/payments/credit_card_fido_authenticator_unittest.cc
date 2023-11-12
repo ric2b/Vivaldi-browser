@@ -23,7 +23,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -113,6 +112,7 @@ class CreditCardFidoAuthenticatorTest : public testing::Test {
                                 /*local_state=*/autofill_client_.GetPrefs(),
                                 /*identity_manager=*/nullptr,
                                 /*history_service=*/nullptr,
+                                /*sync_service=*/nullptr,
                                 /*strike_database=*/nullptr,
                                 /*image_fetcher=*/nullptr,
                                 /*is_off_the_record=*/false);
@@ -245,26 +245,15 @@ class CreditCardFidoAuthenticatorTest : public testing::Test {
   std::unique_ptr<TestAutofillDriver> autofill_driver_;
   scoped_refptr<AutofillWebDataService> database_;
   TestPersonalDataManager personal_data_manager_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<CreditCardFidoAuthenticator> fido_authenticator_;
 };
 
-TEST_F(CreditCardFidoAuthenticatorTest, IsUserOptedIn_FlagDisabled) {
-  scoped_feature_list_.InitAndDisableFeature(
-      features::kAutofillCreditCardAuthentication);
-  EXPECT_FALSE(fido_authenticator_->IsUserOptedIn());
-}
-
 TEST_F(CreditCardFidoAuthenticatorTest, IsUserOptedIn_False) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   SetUserOptInPreference(false);
   EXPECT_FALSE(fido_authenticator_->IsUserOptedIn());
 }
 
 TEST_F(CreditCardFidoAuthenticatorTest, IsUserOptedIn_True) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   SetUserOptInPreference(true);
   EXPECT_TRUE(fido_authenticator_->IsUserOptedIn());
 }
@@ -272,8 +261,6 @@ TEST_F(CreditCardFidoAuthenticatorTest, IsUserOptedIn_True) {
 #if BUILDFLAG(IS_ANDROID)
 TEST_F(CreditCardFidoAuthenticatorTest,
        GetUserOptInIntention_IntentToOptIn_Android) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   // If payments is offering to opt-in, then that means user is not opted in
   // from payments.
   payments::PaymentsClient::UnmaskDetails unmask_details;
@@ -292,8 +279,6 @@ TEST_F(CreditCardFidoAuthenticatorTest,
 #else
 TEST_F(CreditCardFidoAuthenticatorTest,
        GetUserOptInIntention_IntentToOptIn_Desktop) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   // If payments is offering to opt-in, then that means user is not opted in
   // from payments.
   payments::PaymentsClient::UnmaskDetails unmask_details;
@@ -314,8 +299,6 @@ TEST_F(CreditCardFidoAuthenticatorTest,
 #endif
 
 TEST_F(CreditCardFidoAuthenticatorTest, GetUserOptInIntention_IntentToOptOut) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   // If payments is requesting a FIDO auth, then that means user is opted in
   // from payments.
   payments::PaymentsClient::UnmaskDetails unmask_details;
@@ -483,8 +466,6 @@ TEST_F(CreditCardFidoAuthenticatorTest, AuthenticateCard_Success) {
 }
 
 TEST_F(CreditCardFidoAuthenticatorTest, OptIn_PaymentsResponseError) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   base::HistogramTester histogram_tester;
   std::string histogram_name =
       "Autofill.BetterAuth.OptInCalled.FromCheckoutFlow";
@@ -505,8 +486,6 @@ TEST_F(CreditCardFidoAuthenticatorTest, OptIn_PaymentsResponseError) {
 }
 
 TEST_F(CreditCardFidoAuthenticatorTest, OptIn_Success) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   base::HistogramTester histogram_tester;
   std::string histogram_name =
       "Autofill.BetterAuth.OptInCalled.FromCheckoutFlow";
@@ -527,8 +506,6 @@ TEST_F(CreditCardFidoAuthenticatorTest, OptIn_Success) {
 }
 
 TEST_F(CreditCardFidoAuthenticatorTest, Register_BadCreationOptions) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   EXPECT_FALSE(fido_authenticator_->IsUserOptedIn());
 
   fido_authenticator_->Register(
@@ -539,8 +516,6 @@ TEST_F(CreditCardFidoAuthenticatorTest, Register_BadCreationOptions) {
 }
 
 TEST_F(CreditCardFidoAuthenticatorTest, Register_UserResponseFailure) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   EXPECT_FALSE(fido_authenticator_->IsUserOptedIn());
 
   fido_authenticator_->Register(
@@ -556,8 +531,6 @@ TEST_F(CreditCardFidoAuthenticatorTest, Register_UserResponseFailure) {
 }
 
 TEST_F(CreditCardFidoAuthenticatorTest, Register_Success) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   base::HistogramTester histogram_tester;
   std::string histogram_name =
       "Autofill.BetterAuth.OptInCalled.FromCheckoutFlow";
@@ -584,8 +557,6 @@ TEST_F(CreditCardFidoAuthenticatorTest, Register_Success) {
 
 TEST_F(CreditCardFidoAuthenticatorTest,
        Register_EnrollAttemptReturnsCreationOptions) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   base::HistogramTester histogram_tester;
   std::string histogram_name =
       "Autofill.BetterAuth.OptInCalled.FromCheckoutFlow";
@@ -623,8 +594,6 @@ TEST_F(CreditCardFidoAuthenticatorTest,
 // This test is not applicable for Android (we won't opt-in with Register).
 TEST_F(CreditCardFidoAuthenticatorTest,
        Register_OptInAttemptReturnsRequestOptions) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   EXPECT_FALSE(fido_authenticator_->IsUserOptedIn());
 
   fido_authenticator_->Register(kTestAuthToken);
@@ -649,8 +618,6 @@ TEST_F(CreditCardFidoAuthenticatorTest,
 #endif
 
 TEST_F(CreditCardFidoAuthenticatorTest, Register_NewCardAuthorization) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   SetUserOptInPreference(true);
   EXPECT_TRUE(fido_authenticator_->IsUserOptedIn());
 
@@ -670,8 +637,6 @@ TEST_F(CreditCardFidoAuthenticatorTest, Register_NewCardAuthorization) {
 }
 
 TEST_F(CreditCardFidoAuthenticatorTest, OptOut_Success) {
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillCreditCardAuthentication);
   base::HistogramTester histogram_tester;
   SetUserOptInPreference(true);
 

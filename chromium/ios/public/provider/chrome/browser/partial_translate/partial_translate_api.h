@@ -21,6 +21,9 @@
 
 @end
 
+namespace ios {
+namespace provider {
+
 // Creates a PartialTranslateController to present the translate string for
 // `source_text`. `anchor` is the position of `sourceText` in window
 // coordinates. `incognito` is true if `source_text` was retrieved in an
@@ -34,5 +37,8 @@ id<PartialTranslateController> NewPartialTranslateController(
 // PartialTranslateController with a longer string and trying to present it will
 // fail.
 NSUInteger PartialTranslateLimitMaxCharacters();
+
+}  // namespace provider
+}  // namespace ios
 
 #endif  // IOS_PUBLIC_PROVIDER_CHROME_BROWSER_PARTIAL_TRANSLATE_PARTIAL_TRANSLATE_API_H_

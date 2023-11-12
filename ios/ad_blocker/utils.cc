@@ -8,10 +8,15 @@
 namespace adblock_filter {
 namespace {
 constexpr int kIntermediateRepresentationVersionNumber = 1;
+constexpr int kOrganizedRulesVersionNumber = 1;
 }
 
 int GetIntermediateRepresentationVersionNumber() {
   return kIntermediateRepresentationVersionNumber;
+}
+
+int GetOrganizedRulesVersionNumber() {
+  return kOrganizedRulesVersionNumber;
 }
 
 std::string CalculateBufferChecksum(const std::string& data) {

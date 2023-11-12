@@ -7,8 +7,10 @@
 
 #include <string>
 
+#include "ash/webui/help_app_ui/help_app_ui.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+class GURL;
 class PrefService;
 
 namespace ash {
@@ -39,6 +41,15 @@ class HelpAppUIDelegate {
   // notification if a notification for the help app has not yet been shown in
   // the current milestone.
   virtual void MaybeShowReleaseNotesNotification() = 0;
+
+  // Gets device info obtained asynchronously via the DeviceInfoManager.
+  virtual void GetDeviceInfo(
+      ash::help_app::mojom::PageHandler::GetDeviceInfoCallback callback) = 0;
+
+  // Opens a valid https:// URL in a new browser tab without getting intercepted
+  // by URL capturing logic. Failure to provide a valid https:// URL will cause
+  // the Help app renderer process to crash.
+  virtual absl::optional<std::string> OpenUrlInBrowser(const GURL& url) = 0;
 };
 
 }  // namespace ash

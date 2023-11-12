@@ -34,7 +34,10 @@ SkiaVkOzoneImageRepresentation::SkiaVkOzoneImageRepresentation(
     scoped_refptr<SharedContextState> context_state,
     std::unique_ptr<VulkanImage> vulkan_image,
     MemoryTypeTracker* tracker)
-    : SkiaImageRepresentation(manager, backing, tracker),
+    : SkiaGaneshImageRepresentation(context_state->gr_context(),
+                                    manager,
+                                    backing,
+                                    tracker),
       vulkan_image_(std::move(vulkan_image)),
       context_state_(std::move(context_state)) {
   DCHECK(backing);
@@ -115,8 +118,9 @@ SkiaVkOzoneImageRepresentation::BeginWriteAccess(
   DCHECK_EQ(mode_, RepresentationAccessMode::kNone);
   DCHECK(promise_texture_);
 
-  if (!BeginAccess(false /* readonly */, begin_semaphores, end_semaphores))
+  if (!BeginAccess(/*readonly=*/false, begin_semaphores, end_semaphores)) {
     return {};
+  }
 
   *end_state = GetEndAccessState();
 
@@ -129,7 +133,7 @@ void SkiaVkOzoneImageRepresentation::EndWriteAccess() {
   DCHECK_EQ(mode_, RepresentationAccessMode::kWrite);
   if (surface_)
     DCHECK(surface_->unique());
-  EndAccess(false /* readonly */);
+  EndAccess(/*readonly=*/false);
 }
 
 std::vector<sk_sp<SkPromiseImageTexture>>
@@ -141,8 +145,9 @@ SkiaVkOzoneImageRepresentation::BeginReadAccess(
   DCHECK(!surface_);
   DCHECK(promise_texture_);
 
-  if (!BeginAccess(true /* readonly */, begin_semaphores, end_semaphores))
+  if (!BeginAccess(/*readonly=*/true, begin_semaphores, end_semaphores)) {
     return {};
+  }
 
   *end_state = GetEndAccessState();
 
@@ -155,7 +160,7 @@ void SkiaVkOzoneImageRepresentation::EndReadAccess() {
   DCHECK_EQ(mode_, RepresentationAccessMode::kRead);
   DCHECK(!surface_);
 
-  EndAccess(true /* readonly */);
+  EndAccess(/*readonly=*/true);
 }
 
 gpu::VulkanImplementation* SkiaVkOzoneImageRepresentation::vk_implementation() {

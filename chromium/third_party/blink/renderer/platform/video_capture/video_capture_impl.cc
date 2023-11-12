@@ -31,7 +31,6 @@
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_frame.h"
@@ -533,22 +532,38 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::BindVideoFrameOnMediaThread(
   usage |= gpu::SHARED_IMAGE_USAGE_WEBGPU;
 #endif
 
+  bool create_multiplanar_image = false;
+
   if (base::FeatureList::IsEnabled(
-          media::kMultiPlaneVideoCaptureSharedImages)) {
+          media::kMultiPlaneVideoCaptureSharedImages) &&
+      media::IsMultiPlaneFormatForHardwareVideoEnabled()) {
+    create_multiplanar_image = true;
+    planes.push_back(gfx::BufferPlane::DEFAULT);
+  } else if (base::FeatureList::IsEnabled(
+                 media::kMultiPlaneVideoCaptureSharedImages)) {
     planes.push_back(gfx::BufferPlane::Y);
     planes.push_back(gfx::BufferPlane::UV);
   } else {
     planes.push_back(gfx::BufferPlane::DEFAULT);
   }
+  CHECK(planes.size() == 1 || !create_multiplanar_image);
+
   for (size_t plane = 0; plane < planes.size(); ++plane) {
     if (should_recreate_shared_image ||
         buffer_context_->gmb_resources()->mailboxes[plane].IsZero()) {
       buffer_context_->gmb_resources()->mailboxes[plane] =
-          sii->CreateSharedImage(
-              gpu_memory_buffer_.get(),
-              buffer_context_->gpu_factories()->GpuMemoryBufferManager(),
-              planes[plane], *(frame_info_->color_space),
-              kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage);
+          create_multiplanar_image
+              ? sii->CreateSharedImage(
+                    viz::MultiPlaneFormat::kNV12, gpu_memory_buffer_->GetSize(),
+                    *(frame_info_->color_space), kTopLeft_GrSurfaceOrigin,
+                    kPremul_SkAlphaType, usage, "VideoCaptureFrameBuffer",
+                    gpu_memory_buffer_->CloneHandle())
+              : sii->CreateSharedImage(
+                    gpu_memory_buffer_.get(),
+                    buffer_context_->gpu_factories()->GpuMemoryBufferManager(),
+                    planes[plane], *(frame_info_->color_space),
+                    kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
+                    "VideoCaptureFrameBuffer");
     } else {
       sii->UpdateSharedImage(
           buffer_context_->gmb_resources()->release_sync_token,
@@ -557,8 +572,16 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::BindVideoFrameOnMediaThread(
   }
 
   const unsigned texture_target =
-      buffer_context_->gpu_factories()->ImageTextureTarget(
-          gpu_memory_buffer_->GetFormat());
+#if BUILDFLAG(IS_LINUX)
+      // Explicitly set GL_TEXTURE_EXTERNAL_OES as the
+      // `media::VideoFrame::RequiresExternalSampler()` requires it for NV12
+      // format, while the `ImageTextureTarget()` will return GL_TEXTURE_2D.
+      (frame_info_->pixel_format == media::PIXEL_FORMAT_NV12)
+          ? GL_TEXTURE_EXTERNAL_OES
+          :
+#endif
+          buffer_context_->gpu_factories()->ImageTextureTarget(
+              gpu_memory_buffer_->GetFormat());
 
   const gpu::SyncToken sync_token = sii->GenVerifiedSyncToken();
 
@@ -581,6 +604,15 @@ bool VideoCaptureImpl::VideoFrameBufferPreparer::BindVideoFrameOnMediaThread(
     LOG(ERROR) << "Can't wrap GpuMemoryBuffer as VideoFrame";
     return false;
   }
+
+  // If we created a single multiplanar image, inform the VideoFrame that it
+  // should go down the normal SharedImageFormat codepath rather than the
+  // codepath used for legacy multiplanar formats.
+  if (create_multiplanar_image) {
+    frame_->set_shared_image_format_type(
+        media::SharedImageFormatType::kSharedImageFormat);
+  }
+
   frame_->metadata().allow_overlay = true;
   frame_->metadata().read_lock_fences_enabled = true;
 #if BUILDFLAG(IS_CHROMEOS)
@@ -593,7 +625,7 @@ void VideoCaptureImpl::VideoFrameBufferPreparer::Finalize() {
   DCHECK(frame_);
   frame_->AddDestructionObserver(
       base::BindOnce(&VideoCaptureImpl::DidFinishConsumingFrame,
-                     media::BindToCurrentLoop(base::BindOnce(
+                     base::BindPostTaskToCurrentDefault(base::BindOnce(
                          &VideoCaptureImpl::OnAllClientsFinishedConsumingFrame,
                          video_capture_impl_.weak_factory_.GetWeakPtr(),
                          buffer_id_, buffer_context_))));
@@ -969,7 +1001,7 @@ void VideoCaptureImpl::OnBufferReady(
         base::BindOnce(&VideoCaptureImpl::BindVideoFramesOnMediaThread,
                        gpu_factories_, std::move(frame_preparer),
                        std::move(scaled_frame_preparers),
-                       media::BindToCurrentLoop(base::BindOnce(
+                       base::BindPostTaskToCurrentDefault(base::BindOnce(
                            &VideoCaptureImpl::OnVideoFrameReady,
                            weak_factory_.GetWeakPtr(), reference_time)),
                        base::BindPostTask(

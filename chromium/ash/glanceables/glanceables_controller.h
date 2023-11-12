@@ -7,8 +7,10 @@
 
 #include <memory>
 
+#include "ash/ambient/ambient_weather_controller.h"
 #include "ash/ash_export.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "ui/wm/public/activation_change_observer.h"
 
@@ -20,7 +22,6 @@ namespace ash {
 
 class GlanceablesDelegate;
 class GlanceablesView;
-class GlanceablesWindowHider;
 
 // Controls the "welcome back" glanceables screen shown on login.
 class ASH_EXPORT GlanceablesController : public wm::ActivationChangeObserver,
@@ -37,9 +38,6 @@ class ASH_EXPORT GlanceablesController : public wm::ActivationChangeObserver,
   // Creates the UI and starts fetching data.
   void ShowOnLogin();
 
-  // Shows from the UI affordance in overview mode / desks bar.
-  void ShowFromOverview();
-
   // Returns true if the glanceables screen is showing.
   bool IsShowing() const;
 
@@ -48,12 +46,6 @@ class ASH_EXPORT GlanceablesController : public wm::ActivationChangeObserver,
 
   // Destroys the glanceables widget and view.
   void DestroyUi();
-
-  // Triggers a session restore.
-  void RestoreSession();
-
-  // Returns true if a signout screenshot should be taken for this session.
-  bool ShouldTakeSignoutScreenshot() const;
 
   // wm::ActivationChangeObserver:
   void OnWindowActivated(wm::ActivationChangeObserver::ActivationReason reason,
@@ -76,11 +68,8 @@ class ASH_EXPORT GlanceablesController : public wm::ActivationChangeObserver,
 
   std::unique_ptr<GlanceablesDelegate> delegate_;
   std::unique_ptr<views::Widget> widget_;
-  GlanceablesView* view_ = nullptr;
-  bool show_session_restore_ = true;
-
-  // Hides windows while glanceables are showing.
-  std::unique_ptr<GlanceablesWindowHider> window_hider_;
+  raw_ptr<GlanceablesView, ExperimentalAsh> view_ = nullptr;
+  std::unique_ptr<AmbientWeatherController::ScopedRefresher> weather_refresher_;
 
   // The start of current month in UTC. Used for fetching calendar events.
   // TODO(crbug.com/1353495): Update value at the beginning of the next month

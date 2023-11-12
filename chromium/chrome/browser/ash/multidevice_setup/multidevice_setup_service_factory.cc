@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/raw_ptr.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/ash/android_sms/android_sms_app_manager.h"
 #include "chrome/browser/ash/android_sms/android_sms_pairing_state_tracker_impl.h"
@@ -70,7 +71,7 @@ class MultiDeviceSetupServiceHolder : public KeyedService {
   // KeyedService:
   void Shutdown() override { multidevice_setup_service_.reset(); }
 
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
   std::unique_ptr<MultiDeviceSetupService> multidevice_setup_service_;
 };
 
@@ -106,7 +107,14 @@ MultiDeviceSetupServiceFactory* MultiDeviceSetupServiceFactory::GetInstance() {
 }
 
 MultiDeviceSetupServiceFactory::MultiDeviceSetupServiceFactory()
-    : ProfileKeyedServiceFactory("MultiDeviceSetupService") {
+    : ProfileKeyedServiceFactory(
+          "MultiDeviceSetupService",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOriginalOnly)
+              .Build()) {
   DependsOn(device_sync::DeviceSyncClientFactory::GetInstance());
   DependsOn(AuthTokenValidatorFactory::GetInstance());
   DependsOn(OobeCompletionTrackerFactory::GetInstance());

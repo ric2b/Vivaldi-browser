@@ -5,11 +5,11 @@
 #ifndef CHROMEOS_ASH_COMPONENTS_PROXIMITY_AUTH_PROXIMITY_AUTH_PROFILE_PREF_MANAGER_H_
 #define CHROMEOS_ASH_COMPONENTS_PROXIMITY_AUTH_PROXIMITY_AUTH_PROFILE_PREF_MANAGER_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/ash/components/proximity_auth/proximity_auth_pref_manager.h"
 #include "chromeos/ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
 #include "components/account_id/account_id.h"
-#include "components/prefs/pref_change_registrar.h"
 
 class PrefService;
 
@@ -40,11 +40,6 @@ class ProximityAuthProfilePrefManager
 
   ~ProximityAuthProfilePrefManager() override;
 
-  // Initializes the manager to listen to pref changes and sync prefs to the
-  // user's local state.
-  void StartSyncingToLocalState(PrefService* local_state,
-                                const AccountId& account_id);
-
   // Registers the prefs used by this class to the given |pref_service|.
   static void RegisterPrefs(user_prefs::PrefRegistrySyncable* registry);
 
@@ -58,11 +53,6 @@ class ProximityAuthProfilePrefManager
   int64_t GetLastPromotionCheckTimestampMs() const override;
   void SetPromotionShownCount(int count) override;
   int GetPromotionShownCount() const override;
-  bool IsChromeOSLoginAllowed() const override;
-  void SetIsChromeOSLoginEnabled(bool is_enabled) override;
-  bool IsChromeOSLoginEnabled() const override;
-  void SetHasShownLoginDisabledMessage(bool has_shown) override;
-  bool HasShownLoginDisabledMessage() const override;
 
   // ash::multidevice_setup::MultiDeviceSetupClient::Observer:
   void OnFeatureStatesChanged(
@@ -70,24 +60,16 @@ class ProximityAuthProfilePrefManager
           feature_states_map) override;
 
  private:
-  void SyncPrefsToLocalState();
-
   // Contains perferences that outlive the lifetime of this object and across
   // process restarts. Not owned and must outlive this instance.
-  PrefService* pref_service_ = nullptr;
-
-  // Listens to pref changes so they can be synced to the local state.
-  PrefChangeRegistrar registrar_;
-
-  // The local state to which to sync the profile prefs.
-  PrefService* local_state_ = nullptr;
+  raw_ptr<PrefService, ExperimentalAsh> pref_service_ = nullptr;
 
   // The account id of the current profile.
   AccountId account_id_;
 
   // Used to determine the FeatureState of Smart Lock.
-  ash::multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client_ =
-      nullptr;
+  raw_ptr<ash::multidevice_setup::MultiDeviceSetupClient, ExperimentalAsh>
+      multidevice_setup_client_ = nullptr;
 
   base::WeakPtrFactory<ProximityAuthProfilePrefManager> weak_ptr_factory_{this};
 };

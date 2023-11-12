@@ -5,9 +5,11 @@
 #include "chrome/browser/touch_to_fill/touch_to_fill_controller_webauthn_delegate.h"
 
 #include <memory>
+#include <string>
 
 #include "base/base64.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/password_manager/android/password_manager_launcher_android.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_controller.h"
 #include "chrome/browser/webauthn/android/webauthn_request_delegate_android.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
@@ -25,32 +27,24 @@ namespace {
 using password_manager::PasskeyCredential;
 using password_manager::UiCredential;
 using IsOriginSecure = TouchToFillView::IsOriginSecure;
+using ::testing::_;
 using ::testing::ElementsAreArray;
 using ::testing::Eq;
 
+constexpr char kRpId[] = "example.com";
 constexpr char kExampleCom[] = "https://example.com/";
-constexpr uint8_t kUserId1[] = {'1', '2', '3', '4'};
-constexpr uint8_t kUserId2[] = {'5', '6', '7', '8'};
+const std::vector<uint8_t> kCredentialId1 = {'a', 'b', 'c', 'd'};
+const std::vector<uint8_t> kCredentialId2 = {'e', 'f', 'g', 'h'};
+const std::vector<uint8_t> kUserId1 = {'1', '2', '3', '4'};
 constexpr char kUserName1[] = "John.Doe@example.com";
-constexpr char kUserName2[] = "Jane.Doe@example.com";
 
-std::vector<uint8_t> UserId1AsVector() {
-  return std::vector<uint8_t>(std::begin(kUserId1), std::end(kUserId1));
-}
-std::vector<uint8_t> UserId2AsVector() {
-  return std::vector<uint8_t>(std::begin(kUserId2), std::end(kUserId2));
-}
-std::string UserId1AsString() {
-  return base::Base64Encode(kUserId1);
-}
-std::string UserId2AsString() {
-  return base::Base64Encode(kUserId2);
-}
-std::u16string UserName1() {
-  return base::UTF8ToUTF16(std::string(kUserName1));
-}
-std::u16string UserName2() {
-  return base::UTF8ToUTF16(std::string(kUserName2));
+PasskeyCredential CreatePasskey(
+    std::vector<uint8_t> credential_id = kCredentialId1,
+    std::vector<uint8_t> user_id = kUserId1,
+    std::string username = kUserName1) {
+  return PasskeyCredential(PasskeyCredential::Source::kAndroidPhone, kRpId,
+                           std::move(credential_id), std::move(user_id),
+                           std::move(username));
 }
 
 class MockWebAuthnRequestDelegateAndroid
@@ -74,6 +68,7 @@ struct MockTouchToFillView : public TouchToFillView {
                IsOriginSecure,
                base::span<const UiCredential>,
                base::span<const PasskeyCredential>,
+               bool,
                bool),
               (override));
   MOCK_METHOD(void, OnCredentialSelected, (const UiCredential&));
@@ -88,6 +83,9 @@ class TouchToFillControllerWebAuthnTest
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+
+    password_manager_launcher::
+        OverrideManagePasswordWhenPasskeysPresentForTesting(false);
 
     auto mock_view = std::make_unique<MockTouchToFillView>();
     mock_view_ = mock_view.get();
@@ -135,51 +133,47 @@ class TouchToFillControllerWebAuthnTest
 };
 
 TEST_F(TouchToFillControllerWebAuthnTest, ShowAndSelectCredential) {
-  PasskeyCredential credential((PasskeyCredential::Username(UserName1())),
-                               PasskeyCredential::BackendId(UserId1AsString()));
-  std::vector<PasskeyCredential> credentials({credential});
+  std::vector<PasskeyCredential> credentials{CreatePasskey()};
 
-  EXPECT_CALL(view(), Show(Eq(GURL(kExampleCom)), IsOriginSecure(true),
-                           ElementsAreArray(std::vector<UiCredential>()),
-                           ElementsAreArray(credentials),
-                           /*trigger_submission=*/false));
+  EXPECT_CALL(view(),
+              Show(Eq(GURL(kExampleCom)), IsOriginSecure(true),
+                   ElementsAreArray(std::vector<UiCredential>()),
+                   ElementsAreArray(credentials),
+                   /*trigger_submission=*/false,
+                   /*can_manage_passwords_when_passkeys_present*/ false));
   touch_to_fill_controller().Show({}, credentials,
                                   MakeTouchToFillControllerDelegate());
 
-  EXPECT_CALL(request_delegate(), OnWebAuthnAccountSelected(UserId1AsVector()));
+  EXPECT_CALL(request_delegate(), OnWebAuthnAccountSelected(kCredentialId1));
   touch_to_fill_controller().OnPasskeyCredentialSelected(credentials[0]);
 }
 
 TEST_F(TouchToFillControllerWebAuthnTest, ShowAndSelectWithMultipleCredential) {
-  PasskeyCredential::Username passkeyName(UserName1());
-  PasskeyCredential credential1(
-      passkeyName, PasskeyCredential::BackendId(UserId1AsString()));
-  PasskeyCredential credential2(
-      (PasskeyCredential::Username(UserName2())),
-      PasskeyCredential::BackendId(UserId2AsString()));
-  std::vector<PasskeyCredential> credentials({credential1, credential2});
+  std::vector<PasskeyCredential> credentials(
+      {CreatePasskey(kCredentialId1), CreatePasskey(kCredentialId2)});
 
-  EXPECT_CALL(view(), Show(Eq(GURL(kExampleCom)), IsOriginSecure(true),
-                           ElementsAreArray(std::vector<UiCredential>()),
-                           ElementsAreArray(credentials),
-                           /*trigger_submission=*/false));
+  EXPECT_CALL(view(),
+              Show(Eq(GURL(kExampleCom)), IsOriginSecure(true),
+                   ElementsAreArray(std::vector<UiCredential>()),
+                   ElementsAreArray(credentials),
+                   /*trigger_submission=*/false,
+                   /*can_manage_passwords_when_passkeys_present*/ false));
   touch_to_fill_controller().Show({}, credentials,
                                   MakeTouchToFillControllerDelegate());
 
-  EXPECT_CALL(request_delegate(), OnWebAuthnAccountSelected(UserId2AsVector()));
+  EXPECT_CALL(request_delegate(), OnWebAuthnAccountSelected(kCredentialId2));
   touch_to_fill_controller().OnPasskeyCredentialSelected(credentials[1]);
 }
 
 TEST_F(TouchToFillControllerWebAuthnTest, ShowAndCancel) {
-  PasskeyCredential::Username passkeyName(UserName1());
-  PasskeyCredential credential(passkeyName,
-                               PasskeyCredential::BackendId(UserId1AsString()));
-  std::vector<PasskeyCredential> credentials({credential});
+  std::vector<PasskeyCredential> credentials({CreatePasskey()});
 
-  EXPECT_CALL(view(), Show(Eq(GURL(kExampleCom)), IsOriginSecure(true),
-                           ElementsAreArray(std::vector<UiCredential>()),
-                           ElementsAreArray(credentials),
-                           /*trigger_submission=*/false));
+  EXPECT_CALL(view(),
+              Show(Eq(GURL(kExampleCom)), IsOriginSecure(true),
+                   ElementsAreArray(std::vector<UiCredential>()),
+                   ElementsAreArray(credentials),
+                   /*trigger_submission=*/false,
+                   /*can_manage_passwords_when_passkeys_present*/ false));
   touch_to_fill_controller().Show({}, credentials,
                                   MakeTouchToFillControllerDelegate());
 

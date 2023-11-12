@@ -142,6 +142,8 @@ static_library("test_support") {
     "test/result_catcher.h",
     "test/test_content_script_load_waiter.cc",
     "test/test_content_script_load_waiter.h",
+    "test/test_context_data.cc",
+    "test/test_context_data.h",
     "test/test_extension_dir.cc",
     "test/test_extension_dir.h",
     "test/test_extensions_client.cc",
@@ -289,6 +291,12 @@ test("extensions_unittests") {
       "//third_party/fuchsia-sdk/sdk/pkg/vulkan/client.shard.cml",
     ]
   }
+
+  if (is_chromeos) {
+    deps += [
+      "//chrome/browser/chromeos/extensions/telemetry/api:extensions_unittests",
+    ]
+  }
 }
 
 test("extensions_browsertests") {
@@ -372,6 +380,7 @@ source_set("chrome_extensions_browsertests_sources") {
     "//third_party/widevine/cdm:headers",
     "//ui/accessibility:test_support",
     "//ui/base:test_support",
+    "//ui/base/idle:test_support",
     "//ui/compositor:test_support",
     "//ui/resources",
     "//ui/web_dialogs:test_support",

@@ -1,4 +1,34 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sq">
+<translation id="1116694919640316211">Info</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> zëra</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Kushtet e përdorimit ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Politika e privatësisë ➔<ph name="END_LINK2" /></translation>
+<translation id="1751280147639351837">Bllokuesi i reklamave / gjurmuesve</translation>
+<translation id="2272338747456392228">Kontoja është bllokuar</translation>
+<translation id="2324160330092901720">Kodi i verifikimit është dërguar te <ph name="EMAIL_ID" /></translation>
+<translation id="2386793615875593361">1 i përzgjedhur</translation>
+<translation id="2392369802118427583">Aktivizoj</translation>
+<translation id="2677862276555105603">Reklamë
+e bllokuar</translation>
+<translation id="3894427358181296146">Shtoj dosje</translation>
+<translation id="4032606071208172574">(Standard)</translation>
+<translation id="4852383705713307704">Reklamë e bllokuar</translation>
+<translation id="4871370605780490696">Shtoj faqe interesante</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Dërgoj kodin<ph name="END_LINK" /></translation>
+<translation id="5822336771053074270">Mbaj shënim</translation>
+<translation id="5871497086027727873">1 zë i zhvendosur</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> zëra të zhvendosur</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> të përzgjedhur</translation>
+<translation id="6614744450826097546">Detajet e reklamës</translation>
+<translation id="6757792528048321576">Bllokuesi i reklamave / gjurmuesve</translation>
+<translation id="7388525939184421699">Shtoj burim të ri</translation>
+<translation id="750493650310597496">0 të përzgjedhur</translation>
+<translation id="7541020606126512786">Përmbledhje e reklamave dhe gjurmuesve të bllokuar</translation>
+<translation id="7574321014880720413">Shtoj domen të ri</translation>
+<translation id="8458397775385147834">1 zë i fshirë</translation>
+<translation id="8517852590337319813">Aktivizoni konton</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> zëra të fshirë</translation>
+<translation id="9083392325882095631">1 zë</translation>
+<translation id="984650419570014454">Kodi i aktivizimit duhet të ketë 6 shifra.</translation>
 </translationbundle>

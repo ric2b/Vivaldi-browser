@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
@@ -81,12 +82,12 @@ class PasswordSyncTokenFetcher final {
                                   signin::AccessTokenInfo token_info);
   void FetchSyncToken(const std::string& access_token);
   void OnSimpleLoaderComplete(std::unique_ptr<std::string> response_body);
-  void ProcessValidTokenResponse(std::unique_ptr<base::Value> json_response);
+  void ProcessValidTokenResponse(base::Value::Dict json_response);
 
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
   // `consumer_` to call back when this request completes.
-  Consumer* const consumer_;
+  const raw_ptr<Consumer, ExperimentalAsh> consumer_;
 
   std::unique_ptr<network::SimpleURLLoader> simple_url_loader_;
   std::unique_ptr<signin::PrimaryAccountAccessTokenFetcher>

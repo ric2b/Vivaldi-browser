@@ -60,7 +60,7 @@ class ContentBlockingEventRouter
       std::set<content::WebContents*> tabs_with_new_blocks) override;
 
  private:
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 };
 
 class ContentBlockingAPI : public BrowserContextKeyedAPI,
@@ -82,7 +82,7 @@ class ContentBlockingAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<ContentBlockingAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "contentBlockingAPI"; }

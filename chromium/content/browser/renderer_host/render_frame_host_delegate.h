@@ -130,6 +130,8 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   using JavaScriptDialogCallback =
       content::JavaScriptDialogManager::DialogClosedCallback;
 
+  using ClipboardPasteData = content::ClipboardPasteData;
+
   // This is used to give the delegate a chance to filter IPC messages.
   virtual bool OnMessageReceived(RenderFrameHostImpl* render_frame_host,
                                  const IPC::Message& message);
@@ -362,12 +364,6 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Called by when |source_rfh| advances focus to a RenderFrameProxyHost.
   virtual void OnAdvanceFocus(RenderFrameHostImpl* source_rfh) {}
 
-  // Creates a WebUI object for a frame navigating to |url|. If no WebUI
-  // applies, returns null.
-  virtual std::unique_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(
-      RenderFrameHostImpl* frame_host,
-      const GURL& url);
-
   // Called by |frame| to notify that it has received an update on focused
   // element. |bounds_in_root_view| is the rectangle containing the element that
   // is focused and is with respect to root frame's RenderWidgetHost's
@@ -533,7 +529,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   virtual void IsClipboardPasteContentAllowed(
       const GURL& url,
       const ui::ClipboardFormatType& data_type,
-      const std::string& data,
+      ClipboardPasteData clipboard_paste_data,
       IsClipboardPasteContentAllowedCallback callback);
 
   // Notified when the main frame of `source` adjusts the page scale.
@@ -593,6 +589,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
 
   virtual void OnCookiesAccessed(RenderFrameHostImpl* render_frame_host,
                                  const CookieAccessDetails& details) {}
+
+  virtual void OnTrustTokensAccessed(RenderFrameHostImpl* render_frame_host,
+                                     const TrustTokenAccessDetails& details) {}
 
   // Notified that the renderer responded after calling GetSavableResourceLinks.
   virtual void SavableResourceLinksResponse(

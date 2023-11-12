@@ -39,9 +39,9 @@ class ContentInjectionProvider : public content_injection::Provider,
  private:
   void BuildStaticContent();
 
-  content::BrowserContext* context_;
+  const raw_ptr<content::BrowserContext> context_;
   std::array<RulesIndexManager*, kRuleGroupCount> index_managers_;
-  Resources* resources_;
+  const raw_ptr<Resources> resources_;
 
   absl::optional<int> javascript_world_id_;
   std::map<std::string, content_injection::StaticInjectionItem> static_content_;

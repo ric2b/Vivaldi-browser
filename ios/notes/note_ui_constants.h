@@ -9,8 +9,6 @@
 #import "chromium/build/build_config.h"
 
 // Note container constants:
-// Accessibility identifier of the Note Home View container.
-extern NSString* const kNoteHomeViewContainerIdentifier;
 // Accessibility identifier of the Note Edit View container.
 extern NSString* const kNoteAddEditViewContainerIdentifier;
 // Accessibility identifier of the Note Folder Edit View container.
@@ -48,6 +46,7 @@ extern NSString* const kNoteHomeCenterButtonIdentifier;
 extern NSString* const kNoteHomeTrailingButtonIdentifier;
 // Accessibility identifier of the NoteHomeVC UIToolbar.
 extern NSString* const kNoteHomeUIToolbarIdentifier;
+// TODO - @karianne@vivaldi.com Add Search
 // Accessibility identifier of the NoteHomeVC search bar.
 extern NSString* const kNoteHomeSearchBarIdentifier;
 // Accessibility identifier of the search scrim.
@@ -60,8 +59,6 @@ extern const CGFloat kNoteCellViewSpacing;
 extern const CGFloat kNoteCellVerticalInset;
 // The horizontal leading space between the Cell margin and its contents.
 extern const CGFloat kNoteCellHorizontalLeadingInset;
-// The horizontal trailing space between the Cell margin and its contents.
-extern const CGFloat kNoteCellHorizontalTrailingInset;
 // The horizontal space between the Cell content and its accessory view.
 extern const CGFloat kNoteCellHorizontalAccessoryViewSpacing;
 
@@ -77,5 +74,27 @@ extern NSString* const kNoteEmptyStateExplanatoryLabelIdentifier;
 extern NSString* const kToolsMenuNotesId;
 extern NSString* const kToolsMenuAddToNotes;
 #endif
+
+#pragma mark - ICONS
+// Image name for the note folder icon.
+extern NSString* vNotesFolderIcon;
+// Image name for the folder selection chevron.
+extern NSString* vNoteFolderSelectionChevron;
+// Image name for the folder selection checkmark.
+extern NSString* vNoteFolderSelectionCheckmark;
+// Image name for add folder
+extern NSString* vNoteAddFolder;
+
+#pragma mark - SIZE
+// Corner radius for the note body container view
+extern CGFloat vNoteBodyCornerRadius;
+// Note editor text view height
+extern CGFloat vNoteTextViewHeight;
+// Note folder selection header view height
+extern CGFloat vNoteFolderSelectionHeaderViewHeight;
+
+#pragma mark - OTHERS
+// Maximum number of entries to fetch when searching on notes folder page.
+extern const int vMaxNoteFolderSearchResults; // TODO
 
 #endif  // IOS_NOTES_NOTE_UI_CONSTANTS_H_

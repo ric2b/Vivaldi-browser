@@ -6,8 +6,8 @@
 #define CHROME_BROWSER_ASH_LOGIN_APP_MODE_TEST_WEB_KIOSK_BASE_TEST_H_
 
 #include "base/time/time.h"
+#include "chrome/browser/ash/login/app_mode/test/kiosk_test_helpers.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
-#include "chrome/browser/ash/login/test/kiosk_test_helpers.h"
 #include "chrome/browser/ash/login/test/network_portal_detector_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_base_test.h"
 #include "components/account_id/account_id.h"
@@ -54,9 +54,8 @@ class WebKioskBaseTest : public OobeBaseTest {
 
   std::unique_ptr<base::AutoReset<bool>> skip_splash_wait_override_;
   std::unique_ptr<base::AutoReset<base::TimeDelta>> network_wait_override_;
-  // Web kiosks do not support consumer-based kiosk. Network can always be
-  // configured.
-  ScopedCanConfigureNetwork can_configure_network_override_{true, false};
+  // Network can always be configured.
+  ScopedCanConfigureNetwork can_configure_network_override_{true};
 };
 
 }  // namespace ash

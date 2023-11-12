@@ -14,6 +14,7 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/message_loop/message_pump.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
@@ -76,7 +77,9 @@ class BASE_EXPORT MessagePumpWin : public MessagePump {
   std::atomic_bool work_scheduled_{false};
 
   // State for the current invocation of Run(). null if not running.
-  RunState* run_state_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #addr-of
+  RAW_PTR_EXCLUSION RunState* run_state_ = nullptr;
 
   THREAD_CHECKER(bound_thread_);
 };
@@ -154,8 +157,8 @@ class BASE_EXPORT MessagePumpForUI : public MessagePumpWin {
                        LPARAM lparam,
                        LRESULT* result);
   void DoRunLoop() override;
-  NOINLINE void NOT_TAIL_CALLED
-  WaitForWork(Delegate::NextWorkInfo next_work_info);
+  NOINLINE NOT_TAIL_CALLED void WaitForWork(
+      Delegate::NextWorkInfo next_work_info);
   void HandleWorkMessage();
   void HandleTimerMessage();
   void ScheduleNativeTimer(Delegate::NextWorkInfo next_work_info);
@@ -278,8 +281,8 @@ class BASE_EXPORT MessagePumpForIO : public MessagePumpWin {
   };
 
   void DoRunLoop() override;
-  NOINLINE void NOT_TAIL_CALLED
-  WaitForWork(Delegate::NextWorkInfo next_work_info);
+  NOINLINE NOT_TAIL_CALLED void WaitForWork(
+      Delegate::NextWorkInfo next_work_info);
   bool GetIOItem(DWORD timeout, IOItem* item);
   bool ProcessInternalIOItem(const IOItem& item);
   // Waits for the next IO completion for up to |timeout| milliseconds.

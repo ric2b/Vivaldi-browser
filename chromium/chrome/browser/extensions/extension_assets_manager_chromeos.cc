@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
@@ -35,6 +36,7 @@
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_url_handlers.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 using content::BrowserThread;
 
@@ -55,7 +57,7 @@ class ExtensionAssetsManagerHelper {
   struct PendingInstallInfo {
     base::FilePath unpacked_extension_root;
     base::FilePath local_install_dir;
-    Profile* profile;
+    raw_ptr<Profile, ExperimentalAsh> profile;
     ExtensionAssetsManager::InstallExtensionCallback callback;
   };
   typedef std::vector<PendingInstallInfo> PendingInstallList;
@@ -174,9 +176,10 @@ void ExtensionAssetsManagerChromeOS::UninstallExtension(
     const std::string& id,
     const std::string& profile_user_name,
     const base::FilePath& local_install_dir,
-    const base::FilePath& extension_root) {
+    const base::FilePath& extension_root,
+    const base::FilePath& profile_dir) {
   if (local_install_dir.IsParent(extension_root)) {
-    file_util::UninstallExtension(local_install_dir, id);
+    file_util::UninstallExtension(profile_dir, local_install_dir, id);
     return;
   }
 
@@ -534,7 +537,7 @@ bool ExtensionAssetsManagerChromeOS::CleanUpExtension(
         if (!extension_prefs || extension_prefs->pref_service()->ReadOnly())
           return false;
 
-        std::unique_ptr<ExtensionInfo> info =
+        absl::optional<ExtensionInfo> info =
             extension_prefs->GetInstalledExtensionInfo(id);
         if (!info || info->extension_path != base::FilePath(*shared_path)) {
           info = extension_prefs->GetDelayedInstallInfo(id);

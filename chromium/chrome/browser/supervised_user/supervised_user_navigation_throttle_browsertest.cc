@@ -11,6 +11,7 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -28,12 +29,12 @@
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
-#include "chrome/browser/supervised_user/supervised_user_url_filter.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/supervised_user/core/browser/supervised_user_settings_service.h"
+#include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "content/public/browser/navigation_controller.h"
@@ -325,7 +326,7 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
               profile->GetProfileKey());
   supervised_user_settings_service->SetLocalSetting(
       supervised_user::kContentPackDefaultFilteringBehavior,
-      base::Value(SupervisedUserURLFilter::BLOCK));
+      base::Value(supervised_user::SupervisedUserURLFilter::BLOCK));
 
   std::unique_ptr<WebContents> web_contents(
       WebContents::Create(WebContents::CreateParams(profile)));
@@ -441,7 +442,7 @@ class SupervisedUserIframeFilterTest
                                         const std::string& command);
 
   std::unique_ptr<RenderFrameTracker> tracker_;
-  PermissionRequestCreatorMock* permission_creator_;
+  raw_ptr<PermissionRequestCreatorMock, ExperimentalAsh> permission_creator_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -450,13 +451,13 @@ void SupervisedUserIframeFilterTest::SetUpOnMainThread() {
 
   SupervisedUserService* service =
       SupervisedUserServiceFactory::GetForProfile(browser()->profile());
-  std::unique_ptr<PermissionRequestCreator> creator =
+  std::unique_ptr<supervised_user::PermissionRequestCreator> creator =
       std::make_unique<PermissionRequestCreatorMock>(browser()->profile());
   permission_creator_ =
       static_cast<PermissionRequestCreatorMock*>(creator.get());
   permission_creator_->SetEnabled();
-  service->web_approvals_manager().ClearRemoteApprovalRequestsCreators();
-  service->web_approvals_manager().AddRemoteApprovalRequestCreator(
+  service->remote_web_approvals_manager().ClearApprovalRequestsCreators();
+  service->remote_web_approvals_manager().AddApprovalRequestCreator(
       std::move(creator));
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
@@ -495,27 +496,21 @@ const GURL& SupervisedUserIframeFilterTest::GetBlockedFrameURL(int frame_id) {
 bool SupervisedUserIframeFilterTest::IsInterstitialBeingShownInFrame(
     int frame_id) {
   std::string command =
-      "domAutomationController.send("
-      "(document.getElementsByClassName('supervised-user-block') != null) "
-      "? (true) : (false));";
+      "document.getElementsByClassName('supervised-user-block') != null";
   return RunCommandAndGetBooleanFromFrame(frame_id, command);
 }
 
 bool SupervisedUserIframeFilterTest::IsRemoteApprovalsButtonBeingShown(
     int frame_id) {
   std::string command =
-      "domAutomationController.send("
-      "(document.getElementById('remote-approvals-button').hidden"
-      "? (false) : (true)));";
+      "!document.getElementById('remote-approvals-button').hidden";
   return RunCommandAndGetBooleanFromFrame(frame_id, command);
 }
 
 bool SupervisedUserIframeFilterTest::IsLocalApprovalsButtonBeingShown(
     int frame_id) {
   std::string command =
-      "domAutomationController.send("
-      "(document.getElementById('local-approvals-button').hidden"
-      "? (false) : (true)));";
+      "!document.getElementById('local-approvals-button').hidden";
   return RunCommandAndGetBooleanFromFrame(frame_id, command);
 }
 
@@ -523,27 +518,25 @@ void SupervisedUserIframeFilterTest::CheckPreferredApprovalButton(
     int frame_id) {
   if (supervised_user::IsLocalWebApprovalThePreferredButton()) {
     std::string command =
-        "domAutomationController.send("
-        "(document.getElementById('local-approvals-button').classList.contains("
+        "document.getElementById('local-approvals-button').classList.contains("
         "'primary-button') &&"
         " !document.getElementById('local-approvals-button').classList."
         "contains('secondary-button') &&"
         " document.getElementById('remote-approvals-button').classList."
         "contains('secondary-button') &&"
         " !document.getElementById('remote-approvals-button').classList."
-        "contains('primary-button')));";
+        "contains('primary-button');";
     ASSERT_TRUE(RunCommandAndGetBooleanFromFrame(frame_id, command));
   } else {
     std::string command =
-        "domAutomationController.send("
-        "(document.getElementById('remote-approvals-button').classList."
+        "document.getElementById('remote-approvals-button').classList."
         "contains('primary-button') &&"
         " !document.getElementById('remote-approvals-button').classList."
         "contains('secondary-button') &&"
         " document.getElementById('local-approvals-button').classList.contains("
         "'secondary-button') &&"
         " !document.getElementById('local-approvals-button').classList."
-        "contains('primary-button')));";
+        "contains('primary-button');";
     ASSERT_TRUE(RunCommandAndGetBooleanFromFrame(frame_id, command));
   }
 }
@@ -551,10 +544,8 @@ void SupervisedUserIframeFilterTest::CheckPreferredApprovalButton(
 bool SupervisedUserIframeFilterTest::IsLocalApprovalsInsteadButtonBeingShown(
     int frame_id) {
   std::string command =
-      "domAutomationController.send("
-      "(document.getElementById('local-approvals-remote-request-sent-button')."
-      "hidden"
-      "? (false) : (true)));";
+      "!document.getElementById('local-approvals-remote-request-sent-button')."
+      "hidden";
   return RunCommandAndGetBooleanFromFrame(frame_id, command);
 }
 
@@ -593,11 +584,10 @@ bool SupervisedUserIframeFilterTest::RunCommandAndGetBooleanFromFrame(
   auto* render_frame_host = tracker()->GetHost(frame_id);
   DCHECK(render_frame_host->IsRenderFrameLive());
 
-  bool value = false;
   auto target = content::ToRenderFrameHost(render_frame_host);
-  EXPECT_TRUE(content::ExecuteScriptWithoutUserGestureAndExtractBool(
-      target, command, &value));
-  return value;
+  return content::EvalJs(target, command,
+                         content::EXECUTE_SCRIPT_NO_USER_GESTURE)
+      .ExtractBool();
 }
 
 void SupervisedUserIframeFilterTest::InitFeatures() {
@@ -759,19 +749,14 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest, TestBackButton) {
 
   SendCommandToFrame(kRemoteUrlAccessCommand, blocked[0]);
 
-  std::string command =
-      "domAutomationController.send("
-      "(document.getElementById('back-button').hidden));";
+  std::string command = "document.getElementById('back-button').hidden;";
 
   auto* render_frame_host = tracker()->GetHost(blocked[0]);
   DCHECK(render_frame_host->IsRenderFrameLive());
-  bool value = false;
   auto target = content::ToRenderFrameHost(render_frame_host);
-  EXPECT_TRUE(content::ExecuteScriptWithoutUserGestureAndExtractBool(
-      target, command, &value));
-
   // Back button should be hidden in iframes.
-  EXPECT_TRUE(value);
+  EXPECT_EQ(true, content::EvalJs(target, command,
+                                  content::EXECUTE_SCRIPT_NO_USER_GESTURE));
 }
 
 IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
@@ -792,16 +777,14 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
 
   SendCommandToFrame(kRemoteUrlAccessCommand, blocked[0]);
 
-  std::string command =
-      "domAutomationController.send("
-      "(document.getElementById('back-button').hidden));";
+  std::string command = "document.getElementById('back-button').hidden;";
   auto* render_frame_host = tracker()->GetHost(blocked[0]);
   DCHECK(render_frame_host->IsRenderFrameLive());
 
-  bool value = false;
   auto target = content::ToRenderFrameHost(render_frame_host);
-  EXPECT_TRUE(content::ExecuteScriptWithoutUserGestureAndExtractBool(
-      target, command, &value));
+  bool value =
+      content::EvalJs(target, command, content::EXECUTE_SCRIPT_NO_USER_GESTURE)
+          .ExtractBool();
 
   // Back button should be hidden only when local web approvals is enabled due
   // to new UI for local web approvals.
@@ -893,10 +876,11 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
                        IframesWithSameDomainAsMainFrameAllowed) {
   SupervisedUserService* service =
       SupervisedUserServiceFactory::GetForProfile(browser()->profile());
-  SupervisedUserURLFilter* filter = service->GetURLFilter();
+  supervised_user::SupervisedUserURLFilter* filter = service->GetURLFilter();
 
   // Set the default behavior to block.
-  filter->SetDefaultFilteringBehavior(SupervisedUserURLFilter::BLOCK);
+  filter->SetDefaultFilteringBehavior(
+      supervised_user::SupervisedUserURLFilter::BLOCK);
 
   // The async checker will make rpc calls to check if the url should be
   // blocked or not. This may cause flakiness.

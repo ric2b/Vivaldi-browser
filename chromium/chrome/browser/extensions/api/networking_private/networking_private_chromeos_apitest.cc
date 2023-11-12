@@ -8,28 +8,19 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
-#include "base/functional/callback_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
-#include "base/threading/thread_restrictions.h"
-#include "chrome/browser/ash/login/helper.h"
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/extensions/api/networking_private/networking_private_ui_delegate_chromeos.h"
+#include "base/values.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "components/onc/onc_constants.h"
-#include "components/onc/onc_pref_names.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
-#include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
-#include "components/proxy_config/proxy_config_dictionary.h"
-#include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
@@ -39,15 +30,12 @@
 #include "extensions/browser/api/networking_private/networking_private_chromeos.h"
 #include "extensions/browser/api/networking_private/networking_private_delegate_factory.h"
 #include "extensions/common/switches.h"
-#include "extensions/common/value_builder.h"
 #include "extensions/test/extension_test_message_listener.h"
-#include "testing/gmock/include/gmock/gmock.h"
-#include "third_party/cros_system_api/dbus/service_constants.h"
+#include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_switches.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
-#include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/shill/shill_device_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_ipconfig_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
@@ -55,14 +43,12 @@
 #include "chromeos/ash/components/dbus/shill/shill_service_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/cryptohome_misc_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
-#include "chromeos/ash/components/network/cellular_metrics_logger.h"
 #include "chromeos/ash/components/network/managed_network_configuration_handler.h"
 #include "chromeos/ash/components/network/network_certificate_handler.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_handler_test_helper.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
-#include "chromeos/ash/components/network/network_type_pattern.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -79,8 +65,8 @@ using crosapi::mojom::ShillClientTestInterfaceAsyncWaiter;
 // win/mac (NetworkingPrivateServiceClient) are different to reflect the
 // different implementations, but should be kept similar where possible.
 
-using testing::Return;
 using testing::_;
+using testing::Return;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 using ash::ShillDeviceClient;
@@ -90,9 +76,9 @@ using ash::ShillProfileClient;
 using ash::ShillServiceClient;
 using ash::UserDataAuthClient;
 
+using extensions::NetworkingPrivateChromeOS;
 using extensions::NetworkingPrivateDelegate;
 using extensions::NetworkingPrivateDelegateFactory;
-using extensions::NetworkingPrivateChromeOS;
 #endif
 
 namespace {
@@ -1079,18 +1065,15 @@ IN_PROC_BROWSER_TEST_F(NetworkingPrivateChromeOSApiTest,
   SetupCellular();
   // Create fake list of found networks.
   base::Value::List found_networks =
-      extensions::ListBuilder()
-          .Append(extensions::DictionaryBuilder()
+      base::Value::List()
+          .Append(base::Value::Dict()
                       .Set(shill::kNetworkIdProperty, "network1")
                       .Set(shill::kTechnologyProperty, "GSM")
-                      .Set(shill::kStatusProperty, "current")
-                      .Build())
-          .Append(extensions::DictionaryBuilder()
+                      .Set(shill::kStatusProperty, "current"))
+          .Append(base::Value::Dict()
                       .Set(shill::kNetworkIdProperty, "network2")
                       .Set(shill::kTechnologyProperty, "GSM")
-                      .Set(shill::kStatusProperty, "available")
-                      .Build())
-          .Build();
+                      .Set(shill::kStatusProperty, "available"));
   SetDeviceProperty(kCellularDevicePath, shill::kFoundNetworksProperty,
                     base::Value(std::move(found_networks)));
   EXPECT_TRUE(RunNetworkingSubtest("selectCellularMobileNetwork")) << message_;

@@ -59,7 +59,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   // live via MenuClosed.
   ContextMenuController(content::WebContents* window_web_contents,
                         VivaldiRenderViewContextMenu* rv_context_menu,
-                        std::unique_ptr<Params> params);
+                        absl::optional<Params> params);
   ~ContextMenuController() override;
 
   Profile* GetProfile();
@@ -110,17 +110,17 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   typedef std::map<int, std::string> IdToStringMap;
   typedef std::map<int, ui::Accelerator> IdToAcceleratorMap;
 
-  content::WebContents* window_web_contents_;
-  VivaldiRenderViewContextMenu* rv_context_menu_;
+  const raw_ptr<content::WebContents> window_web_contents_;
+  raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;
   bool with_developer_tools_;
   bool has_shown_ = false;
-  std::unique_ptr<Params> params_;
+  absl::optional<Params> params_;
 
   // Loading favicons
   base::CancelableTaskTracker cancelable_task_tracker_;
-  favicon::FaviconService* favicon_service_ = nullptr;
+  raw_ptr<favicon::FaviconService> favicon_service_ = nullptr;
 
-  ui::SimpleMenuModel* root_menu_model_ = nullptr;
+  raw_ptr<ui::SimpleMenuModel> root_menu_model_ = nullptr;
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
   std::vector<ui::SimpleMenuModel*> container_folder_models_;
   std::unique_ptr<VivaldiContextMenu> menu_;

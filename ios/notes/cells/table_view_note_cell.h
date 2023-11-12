@@ -3,7 +3,7 @@
 #ifndef IOS_NOTES_CELLS_TABLE_VIEW_NOTE_CELL_H_
 #define IOS_NOTES_CELLS_TABLE_VIEW_NOTE_CELL_H_
 
-#import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 
 // TableViewCell that displays NoteItem data.
 // Used in note home table view

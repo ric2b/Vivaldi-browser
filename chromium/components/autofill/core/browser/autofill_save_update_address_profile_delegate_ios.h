@@ -23,7 +23,9 @@ class AutofillSaveUpdateAddressProfileDelegateIOS
   AutofillSaveUpdateAddressProfileDelegateIOS(
       const AutofillProfile& profile,
       const AutofillProfile* original_profile,
+      absl::optional<std::u16string> syncing_user_email,
       const std::string& locale,
+      AutofillClient::SaveAddressProfilePromptOptions options,
       AutofillClient::AddressProfileSavePromptCallback callback);
   AutofillSaveUpdateAddressProfileDelegateIOS(
       const AutofillSaveUpdateAddressProfileDelegateIOS&) = delete;
@@ -48,6 +50,9 @@ class AutofillSaveUpdateAddressProfileDelegateIOS
   // Returns the subtitle text to be displayed in the save/update banner.
   std::u16string GetDescription() const;
 
+  // Returns the profile description shown in the migration prompt.
+  std::u16string GetProfileDescriptionForMigrationPrompt() const;
+
   // Returns subtitle for the update modal.
   std::u16string GetSubtitle();
 
@@ -66,9 +71,11 @@ class AutofillSaveUpdateAddressProfileDelegateIOS
   void MessageTimeout();
   void MessageDeclined();
   void AutoDecline();
+  virtual bool Never();
 
   // Updates |profile_| |type| value to |value|.
   void SetProfileInfo(const ServerFieldType& type, const std::u16string& value);
+  void SetProfile(AutofillProfile* profile);
 
   const AutofillProfile* GetProfile() const;
   const AutofillProfile* GetOriginalProfile() const;
@@ -87,6 +94,18 @@ class AutofillSaveUpdateAddressProfileDelegateIOS
   bool Accept() override;
   bool Cancel() override;
   bool EqualsDelegate(infobars::InfoBarDelegate* delegate) const override;
+
+  bool IsMigrationToAccount() const { return is_migration_to_account_; }
+
+  absl::optional<std::u16string> SyncingUserEmail() const {
+    return syncing_user_email_;
+  }
+
+  // Returns true if the profile's source is
+  // `AutofillProfile::Source::kAccount`.
+  bool IsProfileAnAccountProfile() const {
+    return profile_.source() == autofill::AutofillProfile::Source::kAccount;
+  }
 
 #if defined(UNIT_TEST)
   // Getter for |user_decision_|. Used for the testing purposes.
@@ -120,6 +139,12 @@ class AutofillSaveUpdateAddressProfileDelegateIOS
 
   // True if the either of banner or modal is visible currently.
   bool is_infobar_visible_ = false;
+
+  // Denotes if an account migration prompt should be shown.
+  bool is_migration_to_account_;
+
+  // Denotes the email address of the syncing account.
+  absl::optional<std::u16string> syncing_user_email_;
 
   // Records the last user decision based on the interactions with the
   // banner/modal to be sent with |address_profile_save_prompt_callback_|.

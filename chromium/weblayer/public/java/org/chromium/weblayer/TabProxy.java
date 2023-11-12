@@ -4,16 +4,17 @@
 
 package org.chromium.weblayer;
 
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
 
 import org.chromium.webengine.interfaces.ExceptionType;
+import org.chromium.webengine.interfaces.IFullscreenCallbackDelegate;
 import org.chromium.webengine.interfaces.IPostMessageCallback;
 import org.chromium.webengine.interfaces.IStringCallback;
 import org.chromium.webengine.interfaces.ITabObserverDelegate;
 import org.chromium.webengine.interfaces.ITabProxy;
-import org.chromium.webengine.interfaces.IWebMessageCallback;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +33,9 @@ class TabProxy extends ITabProxy.Stub {
     private WebFragmentTabDelegate mTabObserverDelegate = new WebFragmentTabDelegate();
     private WebFragmentNavigationDelegate mNavigationObserverDelegate =
             new WebFragmentNavigationDelegate();
+    private FullscreenCallbackDelegate mFullscreenCallbackDelegate =
+            new FullscreenCallbackDelegate();
+    private FaviconFetcher mFaviconFetcher;
 
     // Only use one callback for all the message event listeners. This is to avoid sending the same
     // message over multiple times. The message can then be proxied to all valid listeners.
@@ -45,6 +49,13 @@ class TabProxy extends ITabProxy.Stub {
         mGuid = tab.getGuid();
 
         tab.registerTabCallback(mTabObserverDelegate);
+        tab.setFullscreenCallback(mFullscreenCallbackDelegate);
+        mFaviconFetcher = tab.createFaviconFetcher(new FaviconCallback() {
+            @Override
+            public void onFaviconChanged(Bitmap favicon) {
+                mTabObserverDelegate.notifyFaviconChanged(favicon);
+            }
+        });
     }
 
     void invalidate() {
@@ -53,6 +64,8 @@ class TabProxy extends ITabProxy.Stub {
 
         mTabObserverDelegate = null;
         mNavigationObserverDelegate = null;
+        mFaviconFetcher.destroy();
+        mFaviconFetcher = null;
     }
 
     boolean isValid() {
@@ -114,48 +127,6 @@ class TabProxy extends ITabProxy.Stub {
     }
 
     @Override
-    public void registerWebMessageCallback(
-            IWebMessageCallback callback, String jsObjectName, List<String> allowedOrigins) {
-        mHandler.post(() -> {
-            getTab().registerWebMessageCallback(new WebMessageCallback() {
-                @Override
-                public void onWebMessageReceived(
-                        WebMessageReplyProxy replyProxy, WebMessage message) {
-                    try {
-                        callback.onWebMessageReceived(
-                                new WebMessageReplyProxyProxy(replyProxy), message.getContents());
-                    } catch (RemoteException e) {
-                    }
-                }
-
-                @Override
-                public void onWebMessageReplyProxyClosed(WebMessageReplyProxy replyProxy) {
-                    try {
-                        callback.onWebMessageReplyProxyClosed(
-                                new WebMessageReplyProxyProxy(replyProxy));
-                    } catch (RemoteException e) {
-                    }
-                }
-
-                @Override
-                public void onWebMessageReplyProxyActiveStateChanged(
-                        WebMessageReplyProxy replyProxy) {
-                    try {
-                        callback.onWebMessageReplyProxyActiveStateChanged(
-                                new WebMessageReplyProxyProxy(replyProxy));
-                    } catch (RemoteException e) {
-                    }
-                }
-            }, jsObjectName, allowedOrigins);
-        });
-    }
-
-    @Override
-    public void unregisterWebMessageCallback(String jsObjectName) {
-        mHandler.post(() -> { getTab().unregisterWebMessageCallback(jsObjectName); });
-    }
-
-    @Override
     public void setTabObserverDelegate(ITabObserverDelegate tabObserverDelegate) {
         mTabObserverDelegate.setObserver(tabObserverDelegate);
     }
@@ -203,5 +174,11 @@ class TabProxy extends ITabProxy.Stub {
             mMessageEventListenerCallback.onPostMessage(message, origin);
         } catch (RemoteException e) {
         }
+    }
+
+    @Override
+    public void setFullscreenCallbackDelegate(
+            IFullscreenCallbackDelegate fullscreenCallbackDelegate) {
+        mFullscreenCallbackDelegate.setDelegate(fullscreenCallbackDelegate);
     }
 }

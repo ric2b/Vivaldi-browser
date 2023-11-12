@@ -27,6 +27,7 @@ class CryptohomeRecoveryScreen : public BaseScreen {
     kManualRecovery,
     kRetry,
     kNoRecoveryFactor,
+    kNotApplicable,
   };
   static std::string GetResultString(Result result);
   using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;

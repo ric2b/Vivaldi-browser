@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Відкриті вкладки</translation>
 <translation id="1829244130665387512">Знайти на сторінці</translation>
 <translation id="1910514478706885609">Відкрити у новій групі</translation>
+<translation id="1925021887439448749">Введіть веб-адресу</translation>
 <translation id="2038563949887743358">Увімкнути опцію "Запитувати версію сайту для комп'ютера"</translation>
 <translation id="2139186145475833000">Додати на головний екран</translation>
+<translation id="2149973817440762519">Редагувати закладку</translation>
 <translation id="2306442503286132111">Закладку збережено у теці <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Зовнішній вигляд</translation>
 <translation id="2501278716633472235">Перейти назад</translation>
 <translation id="2633278372998075009">Приватні вкладки</translation>
+<translation id="2951071800649516099">Додавайте сторінки в список читання, щоб переглядати їх пізніше</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> закладка}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> закладок}}</translation>
@@ -30,12 +33,15 @@
 <translation id="4121750346708795461">Користуючись цим додатком, ви приймаєте <ph name="BEGIN_LINK1" />Умови використання<ph name="END_LINK1" /> та <ph name="BEGIN_LINK2" />Політику конфіденційності<ph name="END_LINK2" /> Vivaldi.</translation>
 <translation id="4137746084635924146">Поточна мова пристрою</translation>
 <translation id="4167670741834902166">Нова приватна вкладка</translation>
+<translation id="4195643157523330669">Відкрити в новій вкладці</translation>
 <translation id="4243710787042215766">Відкрити у приватній вкладці</translation>
+<translation id="451872707440238414">Шукати у закладках</translation>
 <translation id="4526803704855831732">Приватні вкладки</translation>
 <translation id="4719086422742491124">Отримуйте інформацію одразу на сторінці. Виберіть одне або декілька слів на сторінці для пошуку.
 
 Швидкий пошук доступний тільки якщо Google вибраний типовою пошуковою системою у Vivaldi.</translation>
 <translation id="4759238208242260848">Завантаження</translation>
+<translation id="4850886885716139402">Переглянути</translation>
 <translation id="4883379392681899581">Покинути приватний режим</translation>
 <translation id="4943872375798546930">Немає результатів</translation>
 <translation id="49576331685473090">Блокування вмісту</translation>
@@ -48,7 +54,9 @@
 Для налаштування пошуку викорисовуйте довге натискання. Щоб уточнити запит, прокрутіть панель вгору до упору та натисніть на полі пошуку.</translation>
 <translation id="572328651809341494">Останні вкладки</translation>
 <translation id="6150320133806434356">Закладку збережено</translation>
+<translation id="6301525844455696527">Не забувайте про свій список читання</translation>
 <translation id="6336451774241870485">Приватна вкладка</translation>
+<translation id="6404511346730675251">Редагувати закладку</translation>
 <translation id="6585139692466700358">Пропонувати перекладати сторінки за допомогою сервісу перекладу Vivaldi</translation>
 <translation id="6593061639179217415">Версія для ПК</translation>
 <translation id="6610147964972079463">Закрити всі приватні вкладки</translation>
@@ -57,9 +65,15 @@
 <translation id="732145680195464316">Закладку збережено у <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Про браузер Vivaldi</translation>
 <translation id="7465104139234185284">Закрити всі приватні вкладки</translation>
+<translation id="7481312909269577407">Вперед</translation>
+<translation id="7583262514280211622">Тут ви знайдете список читання</translation>
+<translation id="7968014550143838305">Додано в список читання</translation>
 <translation id="804786196054284061">Умови використання Vivaldi</translation>
+<translation id="8127542551745560481">Редагувати головну сторінку</translation>
+<translation id="8560602726703398413">Знайдіть свій список читання в закладках</translation>
 <translation id="85991616550051997">Перехід на домашню сторінку</translation>
 <translation id="8820817407110198400">Закладки</translation>
 <translation id="9063523880881406963">Вимкнути функцію "Запитувати версію сайту для комп'ютера"</translation>
 <translation id="9080642952018487277">Відкрити приватний режим</translation>
+<translation id="96681097142096641">Переглянути спрощену сторінку?</translation>
 </translationbundle>

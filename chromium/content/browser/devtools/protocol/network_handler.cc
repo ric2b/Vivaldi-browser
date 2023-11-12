@@ -735,7 +735,7 @@ GetProtocolBlockedSetCookieReason(net::CookieInclusionStatus status) {
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)) {
-    if (status.HasDowngradeWarning()) {
+    if (status.HasSchemefulDowngradeWarning()) {
       blockedReasons->push_back(
           Network::SetCookieBlockedReasonEnum::SchemefulSameSiteStrict);
     } else {
@@ -745,7 +745,7 @@ GetProtocolBlockedSetCookieReason(net::CookieInclusionStatus status) {
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
-    if (status.HasDowngradeWarning()) {
+    if (status.HasSchemefulDowngradeWarning()) {
       blockedReasons->push_back(
           Network::SetCookieBlockedReasonEnum::SchemefulSameSiteLax);
     } else {
@@ -756,7 +756,7 @@ GetProtocolBlockedSetCookieReason(net::CookieInclusionStatus status) {
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::
               EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX)) {
-    if (status.HasDowngradeWarning()) {
+    if (status.HasSchemefulDowngradeWarning()) {
       blockedReasons->push_back(Network::SetCookieBlockedReasonEnum::
                                     SchemefulSameSiteUnspecifiedTreatedAsLax);
     } else {
@@ -847,7 +847,7 @@ GetProtocolBlockedCookieReason(net::CookieInclusionStatus status) {
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_STRICT)) {
-    if (status.HasDowngradeWarning()) {
+    if (status.HasSchemefulDowngradeWarning()) {
       blockedReasons->push_back(
           Network::CookieBlockedReasonEnum::SchemefulSameSiteStrict);
     } else {
@@ -857,7 +857,7 @@ GetProtocolBlockedCookieReason(net::CookieInclusionStatus status) {
   }
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::EXCLUDE_SAMESITE_LAX)) {
-    if (status.HasDowngradeWarning()) {
+    if (status.HasSchemefulDowngradeWarning()) {
       blockedReasons->push_back(
           Network::CookieBlockedReasonEnum::SchemefulSameSiteLax);
     } else {
@@ -867,7 +867,7 @@ GetProtocolBlockedCookieReason(net::CookieInclusionStatus status) {
   if (status.HasExclusionReason(
           net::CookieInclusionStatus::
               EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX)) {
-    if (status.HasDowngradeWarning()) {
+    if (status.HasSchemefulDowngradeWarning()) {
       blockedReasons->push_back(Network::CookieBlockedReasonEnum::
                                     SchemefulSameSiteUnspecifiedTreatedAsLax);
     } else {
@@ -1991,6 +1991,8 @@ String blockedReason(blink::ResourceRequestBlockedReason reason) {
           CorpNotSameOriginAfterDefaultedToSameOriginByCoep;
     case blink::ResourceRequestBlockedReason::kCorpNotSameSite:
       return protocol::Network::BlockedReasonEnum::CorpNotSameSite;
+    case blink::ResourceRequestBlockedReason::kContentRelationshipVerification:
+      return protocol::Network::BlockedReasonEnum::Other;
     case blink::ResourceRequestBlockedReason::kConversionRequest:
       // This is actually never reached, as the conversion request
       // is marked as successful and no blocking reason is reported.
@@ -3024,7 +3026,10 @@ CreateNetworkFactoryForDevTools(
 
   // Don't allow trust token redemption.
   params->trust_token_redemption_policy =
-      network::mojom::TrustTokenRedemptionPolicy::kForbid;
+      network::mojom::TrustTokenOperationPolicyVerdict::kForbid;
+  // Don't allow trust token issuance.
+  params->trust_token_issuance_policy =
+      network::mojom::TrustTokenOperationPolicyVerdict::kForbid;
   // Let DevTools fetch resources without CORS and CORB. Source maps are valid
   // JSON and would otherwise require a CORS fetch + correct response headers.
   // See BUG(chromium:1076435) for more context.
@@ -3110,7 +3115,8 @@ void NetworkHandler::LoadNetworkResource(
         frame->GetIsolationInfoForSubresources(),
         frame->BuildClientSecurityState(),
         /**coep_reporter=*/mojo::NullRemote(), frame->GetProcess(),
-        network::mojom::TrustTokenRedemptionPolicy::kForbid,
+        network::mojom::TrustTokenOperationPolicyVerdict::kForbid,
+        network::mojom::TrustTokenOperationPolicyVerdict::kForbid,
         frame->GetCookieSettingOverrides(),
         "NetworkHandler::LoadNetworkResource");
 
@@ -3270,21 +3276,21 @@ void NetworkHandler::OnSubresourceWebBundleInnerResponseError(
 }
 
 String NetworkHandler::BuildPrivateNetworkRequestPolicy(
-    network::mojom::PrivateNetworkRequestPolicy policy) {
+    network::mojom::LocalNetworkRequestPolicy policy) {
   switch (policy) {
-    case network::mojom::PrivateNetworkRequestPolicy::kAllow:
+    case network::mojom::LocalNetworkRequestPolicy::kAllow:
       return protocol::Network::PrivateNetworkRequestPolicyEnum::Allow;
-    case network::mojom::PrivateNetworkRequestPolicy::kBlock:
+    case network::mojom::LocalNetworkRequestPolicy::kBlock:
       // TODO(https://crbug.com/1141824): Fix this.
       return protocol::Network::PrivateNetworkRequestPolicyEnum::
           BlockFromInsecureToMorePrivate;
-    case network::mojom::PrivateNetworkRequestPolicy::kWarn:
+    case network::mojom::LocalNetworkRequestPolicy::kWarn:
       // TODO(https://crbug.com/1141824): Fix this.
       return protocol::Network::PrivateNetworkRequestPolicyEnum::
           WarnFromInsecureToMorePrivate;
-    case network::mojom::PrivateNetworkRequestPolicy::kPreflightBlock:
+    case network::mojom::LocalNetworkRequestPolicy::kPreflightBlock:
       return protocol::Network::PrivateNetworkRequestPolicyEnum::PreflightBlock;
-    case network::mojom::PrivateNetworkRequestPolicy::kPreflightWarn:
+    case network::mojom::LocalNetworkRequestPolicy::kPreflightWarn:
       return protocol::Network::PrivateNetworkRequestPolicyEnum::PreflightWarn;
   }
 }
@@ -3292,9 +3298,11 @@ String NetworkHandler::BuildPrivateNetworkRequestPolicy(
 String NetworkHandler::BuildIpAddressSpace(
     network::mojom::IPAddressSpace space) {
   switch (space) {
-    case network::mojom::IPAddressSpace::kLocal:
+    case network::mojom::IPAddressSpace::kLoopback:
+      // TODO(https://crbug.com/1418287): Rename as Loopback;
       return protocol::Network::IPAddressSpaceEnum::Local;
-    case network::mojom::IPAddressSpace::kPrivate:
+    case network::mojom::IPAddressSpace::kLocal:
+      // TODO(https://crbug.com/1418287): Rename as Local;
       return protocol::Network::IPAddressSpaceEnum::Private;
     case network::mojom::IPAddressSpace::kPublic:
       return protocol::Network::IPAddressSpaceEnum::Public;
@@ -3310,8 +3318,8 @@ NetworkHandler::MaybeBuildClientSecurityState(
     return {};
   }
   return protocol::Network::ClientSecurityState::Create()
-      .SetPrivateNetworkRequestPolicy(BuildPrivateNetworkRequestPolicy(
-          state->private_network_request_policy))
+      .SetPrivateNetworkRequestPolicy(
+          BuildPrivateNetworkRequestPolicy(state->local_network_request_policy))
       .SetInitiatorIPAddressSpace(BuildIpAddressSpace(state->ip_address_space))
       .SetInitiatorIsSecureContext(state->is_web_secure_context)
       .Build();

@@ -19,7 +19,7 @@
 #include "content/browser/devtools/protocol/network.h"
 #include "content/browser/devtools/protocol/network_handler.h"
 #include "content/browser/loader/download_utils_impl.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_client.h"
@@ -1702,7 +1702,8 @@ void InterceptionJob::OnComplete(
   }
   // Since we're not forwarding OnComplete right now, make sure
   // we're in the proper state. The completion is due upon client response.
-  DCHECK(state_ == State::kResponseReceived || state_ == State::kResponseTaken);
+  DCHECK(state_ == State::kResponseReceived || state_ == State::kResponseTaken)
+      << "Unexpected state " << static_cast<int>(state_);
   DCHECK(waiting_for_resolution_);
 
   response_metadata_->status = status;

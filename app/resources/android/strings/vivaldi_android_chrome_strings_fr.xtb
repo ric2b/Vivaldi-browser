@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Onglets ouverts</translation>
 <translation id="1829244130665387512">Rechercher sur la page</translation>
 <translation id="1910514478706885609">Ouvrir dans une nouvelle pile d’onglets</translation>
+<translation id="1925021887439448749">Saisissez une adresse Web personnalisée</translation>
 <translation id="2038563949887743358">Activer la requête pour la « version ordinateur »</translation>
 <translation id="2139186145475833000">Ajouter à l’écran d’accueil</translation>
+<translation id="2149973817440762519">Modifier le signet</translation>
 <translation id="2306442503286132111">Signet sauvegardé dans le dossier <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Apparence</translation>
 <translation id="2501278716633472235">Revenir à la page précédente</translation>
 <translation id="2633278372998075009">Onglets privés</translation>
+<translation id="2951071800649516099">Ajoutez des pages à votre liste de lecture pour plus tard</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> signet}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> signets}}</translation>
@@ -30,12 +33,15 @@
 <translation id="4121750346708795461">En utilisant cette application, vous acceptez les <ph name="BEGIN_LINK1" />conditions d’utilisation<ph name="END_LINK1" /> et la <ph name="BEGIN_LINK2" />charte de confidentialité<ph name="END_LINK2" /> de Vivaldi.</translation>
 <translation id="4137746084635924146">Langue actuelle de l’appareil</translation>
 <translation id="4167670741834902166">Nouvel onglet privé</translation>
+<translation id="4195643157523330669">Ouvrir dans un nouvel onglet</translation>
 <translation id="4243710787042215766">Ouvrir dans un onglet privé</translation>
+<translation id="451872707440238414">Rechercher dans vos signets</translation>
 <translation id="4526803704855831732">Onglets privés</translation>
 <translation id="4719086422742491124">Découvrez des sujets sur des sites Web sans quitter la page. Sélectionnez un ou plusieurs mots sur la page pour les rechercher.
 
 Touch to Search est une fonctionnalité qui n’est disponible que lorsque Google est défini comme moteur de recherche par défaut dans Vivaldi.</translation>
 <translation id="4759238208242260848">Téléchargements</translation>
+<translation id="4850886885716139402">Afficher</translation>
 <translation id="4883379392681899581">Quitter le mode navigation privée</translation>
 <translation id="4943872375798546930">Aucun résultat</translation>
 <translation id="49576331685473090">Bloqueur de contenus</translation>
@@ -48,7 +54,9 @@ Touch to Search est une fonctionnalité qui n’est disponible que lorsque Googl
 Pour ajuster votre terme de recherche, appuyez longuement pour sélectionner. Pour affiner votre recherche, faites glisser le panneau tout le long et appuyez sur la zone de recherche.</translation>
 <translation id="572328651809341494">Onglets récents</translation>
 <translation id="6150320133806434356">Signet sauvegardé</translation>
+<translation id="6301525844455696527">Rattrapez votre retard sur votre liste de lecture</translation>
 <translation id="6336451774241870485">Nouvel onglet privé</translation>
+<translation id="6404511346730675251">Modifier le signet</translation>
 <translation id="6585139692466700358">Proposer de traduire les pages dans d’autres langues en utilisant le service de traduction de Vivaldi</translation>
 <translation id="6593061639179217415">Version pour ordinateur</translation>
 <translation id="6610147964972079463">Fermer les onglets privés</translation>
@@ -57,9 +65,15 @@ Pour ajuster votre terme de recherche, appuyez longuement pour sélectionner. Po
 <translation id="732145680195464316">Signet sauvegardé dans <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">À propos de Vivaldi</translation>
 <translation id="7465104139234185284">Fermer tous les onglets privés</translation>
+<translation id="7481312909269577407">Page suivante</translation>
+<translation id="7583262514280211622">Votre liste de lecture s’affichera ici</translation>
+<translation id="7968014550143838305">Ajouté à la liste de lecture</translation>
 <translation id="804786196054284061">Conditions d’utilisation de Vivaldi</translation>
+<translation id="8127542551745560481">Modifier la page d’accueil</translation>
+<translation id="8560602726703398413">Retrouvez votre liste de lecture dans les signets</translation>
 <translation id="85991616550051997">Aller à la page d’accueil</translation>
 <translation id="8820817407110198400">Signets</translation>
 <translation id="9063523880881406963">Désactiver la requête pour la « version ordinateur »</translation>
 <translation id="9080642952018487277">Passer en mode de navigation privée</translation>
+<translation id="96681097142096641">Afficher la page simplifiée ?</translation>
 </translationbundle>

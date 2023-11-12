@@ -63,7 +63,9 @@ class MockServerSocket : public net::ServerSocket {
   ~MockServerSocket() override {}
 
   // net::ServerSocket implementation.
-  int Listen(const net::IPEndPoint& address, int backlog) override {
+  int Listen(const net::IPEndPoint& address,
+             int backlog,
+             absl::optional<bool> ipv6_only) override {
     return net::OK;
   }
 
@@ -163,8 +165,10 @@ class TestServer {
   void Start(uint32_t backlog) {
     int net_error = net::ERR_FAILED;
     base::RunLoop run_loop;
+    auto options = mojom::TCPServerSocketOptions::New();
+    options->backlog = backlog;
     factory_.CreateTCPServerSocket(
-        server_addr_, backlog, TRAFFIC_ANNOTATION_FOR_TESTS,
+        server_addr_, std::move(options), TRAFFIC_ANNOTATION_FOR_TESTS,
         server_socket_.BindNewPipeAndPassReceiver(),
         base::BindLambdaForTesting(
             [&](int result, const absl::optional<net::IPEndPoint>& local_addr) {
@@ -321,8 +325,9 @@ class TCPSocketTest : public testing::Test {
         factory_.get(), nullptr /*netlog*/, TRAFFIC_ANNOTATION_FOR_TESTS);
     server_socket_impl->SetSocketForTest(std::move(socket));
     net::IPEndPoint local_addr;
-    EXPECT_EQ(net::OK,
-              server_socket_impl->Listen(local_addr, backlog, &local_addr));
+    auto result = server_socket_impl->Listen(local_addr, backlog,
+                                             /*ipv6_only=*/absl::nullopt);
+    EXPECT_TRUE(result.has_value());
     tcp_server_socket_receiver_.Add(std::move(server_socket_impl),
                                     std::move(receiver));
   }
@@ -1556,7 +1561,9 @@ TEST(TCPServerSocketTest, GetLocalAddressFailedInListen) {
                          TRAFFIC_ANNOTATION_FOR_TESTS);
   socket.SetSocketForTest(std::make_unique<FailingServerSocket>());
   net::IPEndPoint local_addr;
-  EXPECT_EQ(net::ERR_FAILED, socket.Listen(local_addr, 1, &local_addr));
+  auto result = socket.Listen(local_addr, 1, /*ipv6_only=*/absl::nullopt);
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(net::ERR_FAILED, result.error());
 }
 
 }  // namespace network

@@ -24,20 +24,21 @@ This information is collected by `device::CpuProbe` and bubbled up by
 `device::PlatformCollector` to `device::PressureManagerImpl`, which broadcasts
 the information to the `blink::PressureObserverManager` instances.
 
-`device::PlatformCollector` drives measuring the device's compute pressure
-state. The class is responsible for invoking platform-specific measurement
-code at regular intervals, and for straddling between sequences to meet
-the platform-specific code's requirements.
-
-`device::CpuProbe` is an abstract base class that interfaces between
-`device::PlatformCollector` and platform-specific code that retrieves the
-compute pressure state from the operating system. This interface is also
+`device::CpuProbe` is an abstract base class that drives measuring the
+device's compute pressure state from the operating system. The class
+is responsible for invoking platform-specific measurement code at
+regular intervals, and for straddling between sequences to meet
+the platform-specific code's requirements. This interface is also
 a dependency injection point for tests.
 
 `blink::PressureObserver` implements bindings for the PressureObserver
 interface. There can be more than one PressureObserver per frame.
 
-`blink::PressureObserverManager` maintains the list of active observers.
-The class receives `device::mojom::PressureUpdate` from
+`blink::PressureObserverManager` keeps track of `blink::PressureClientImpl` and
+the connection to the `device::mojom::PressureManager` remote.
+
+`blink::PressureClientImpl` implements the `device::mojom::PressureClient`
+interface to receive `device::mojom::PressureUpdate` from
 `device::PressureManagerImpl` and broadcasts the information to active
-observers.
+`blink::PressureObserver`. This class also keeps track of State and active
+`blink::PressureObserver` per source type.

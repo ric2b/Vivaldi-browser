@@ -18,14 +18,17 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/user_manager/user_type.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/layer_animator.h"
@@ -166,7 +169,7 @@ class LoginUserView::UserImage : public NonAccessibleView {
     views::View* enterprise_icon() const { return view_->enterprise_icon_; }
 
    private:
-    LoginUserView::UserImage* const view_;
+    const raw_ptr<LoginUserView::UserImage, ExperimentalAsh> view_;
   };
 
   explicit UserImage(LoginDisplayStyle style)
@@ -176,12 +179,12 @@ class LoginUserView::UserImage : public NonAccessibleView {
     const int image_size = GetImageSize(style);
     image_ = new AnimatedRoundedImageView(gfx::Size(image_size, image_size),
                                           image_size / 2);
-    AddChildView(image_);
+    AddChildView(image_.get());
 
     const int icon_size = GetIconSize(style);
     enterprise_icon_ = new IconRoundedView(icon_size);
     enterprise_icon_->SetVisible(false);
-    AddChildView(enterprise_icon_);
+    AddChildView(enterprise_icon_.get());
   }
 
   UserImage(const UserImage&) = delete;
@@ -256,8 +259,8 @@ class LoginUserView::UserImage : public NonAccessibleView {
     }
   }
 
-  AnimatedRoundedImageView* image_ = nullptr;
-  IconRoundedView* enterprise_icon_ = nullptr;
+  raw_ptr<AnimatedRoundedImageView, ExperimentalAsh> image_ = nullptr;
+  raw_ptr<IconRoundedView, ExperimentalAsh> enterprise_icon_ = nullptr;
   bool animation_enabled_ = false;
 
   base::WeakPtrFactory<UserImage> weak_factory_{this};
@@ -273,6 +276,7 @@ class LoginUserView::UserLabel : public NonAccessibleView {
     user_name_ = new views::Label();
     user_name_->SetSubpixelRenderingEnabled(false);
     user_name_->SetAutoColorReadabilityEnabled(false);
+    user_name_->SetEnabledColorId(kColorAshTextColorPrimary);
 
     const gfx::FontList& base_font_list = views::Label::GetDefaultFontList();
     const gfx::FontList font_list(
@@ -295,7 +299,7 @@ class LoginUserView::UserLabel : public NonAccessibleView {
         break;
     }
 
-    AddChildView(user_name_);
+    AddChildView(user_name_.get());
   }
 
   UserLabel(const UserLabel&) = delete;
@@ -315,17 +319,10 @@ class LoginUserView::UserLabel : public NonAccessibleView {
                                        gfx::ElideBehavior::ELIDE_TAIL));
   }
 
-  // NonAccessibleView:
-  void OnThemeChanged() override {
-    NonAccessibleView::OnThemeChanged();
-    user_name_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorPrimary));
-  }
-
   const std::u16string& displayed_name() const { return user_name_->GetText(); }
 
  private:
-  views::Label* user_name_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> user_name_ = nullptr;
   const int label_width_;
 };
 
@@ -359,7 +356,7 @@ class LoginUserView::TapButton : public views::Button {
   }
 
  private:
-  LoginUserView* const parent_;
+  const raw_ptr<LoginUserView, ExperimentalAsh> parent_;
 };
 
 // LoginUserView is defined after LoginUserView::UserLabel so it can access the
@@ -449,6 +446,10 @@ LoginUserView::LoginUserView(
     dropdown_->SetPreferredSize(
         gfx::Size(kDropdownIconSizeDp, kDropdownIconSizeDp));
     dropdown_->SetFocusBehavior(FocusBehavior::ALWAYS);
+    dropdown_->SetImageModel(
+        views::Button::STATE_NORMAL,
+        ui::ImageModel::FromVectorIcon(kLockScreenDropdownIcon,
+                                       kColorAshIconColorPrimary));
   }
   tap_button_ = new TapButton(on_tap_, this);
   SetTapEnabled(true);
@@ -591,18 +592,6 @@ void LoginUserView::RequestFocus() {
   tap_button_->RequestFocus();
 }
 
-void LoginUserView::OnThemeChanged() {
-  views::View::OnThemeChanged();
-  if (dropdown_) {
-    dropdown_->SetImage(
-        views::Button::STATE_NORMAL,
-        gfx::CreateVectorIcon(
-            kLockScreenDropdownIcon,
-            AshColorProvider::Get()->GetContentLayerColor(
-                AshColorProvider::ContentLayerType::kIconColorPrimary)));
-  }
-}
-
 views::View::Views LoginUserView::GetChildrenInZOrder() {
   auto children = views::View::GetChildrenInZOrder();
   const auto move_child_to_top = [&](View* child) {
@@ -636,7 +625,7 @@ void LoginUserView::DropdownButtonPressed() {
 
   if (!remove_account_dialog_->parent()) {
     login_views_utils::GetBubbleContainer(this)->AddChildView(
-        remove_account_dialog_);
+        remove_account_dialog_.get());
   }
 
   // Reset state in case the remove-user button was clicked once previously.
@@ -739,10 +728,10 @@ void LoginUserView::SetLargeLayout() {
                      kVerticalSpacingBetweenEntriesDp)
       .AddRows(1, views::TableLayout::kFixedSize);
 
-  AddChildView(tap_button_);
+  AddChildView(tap_button_.get());
   layout->SetChildViewIgnoredByLayout(tap_button_, true);
 
-  AddChildView(user_image_);
+  AddChildView(user_image_.get());
   user_image_->SetProperty(views::kTableColAndRowSpanKey, gfx::Size(5, 1));
   user_image_->SetProperty(views::kTableHorizAlignKey,
                            views::LayoutAlignment::kCenter);
@@ -752,10 +741,10 @@ void LoginUserView::SetLargeLayout() {
     skip_column->SetPreferredSize(dropdown_->GetPreferredSize());
   }
 
-  AddChildView(user_label_);
+  AddChildView(user_label_.get());
 
   if (dropdown_) {
-    AddChildView(dropdown_);
+    AddChildView(dropdown_.get());
   }
 }
 
@@ -763,11 +752,11 @@ void LoginUserView::SetSmallishLayout() {
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
       kSmallManyDistanceFromUserIconToUserLabelDp));
-  AddChildView(tap_button_);
+  AddChildView(tap_button_.get());
   tap_button_->SetProperty(views::kViewIgnoredByLayoutKey, true);
 
-  AddChildView(user_image_);
-  AddChildView(user_label_);
+  AddChildView(user_image_.get());
+  AddChildView(user_label_.get());
 }
 
 void LoginUserView::DeleteDialog() {

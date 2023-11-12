@@ -38,16 +38,17 @@ void TouchToFillControllerWebAuthnDelegate::OnCredentialSelected(
 void TouchToFillControllerWebAuthnDelegate::OnPasskeyCredentialSelected(
     const password_manager::PasskeyCredential& credential,
     base::OnceClosure action_complete) {
-  request_delegate_->OnWebAuthnAccountSelected(
-      *base::Base64Decode(credential.id().value()));
+  request_delegate_->OnWebAuthnAccountSelected(credential.credential_id());
   std::move(action_complete).Run();
 }
 
 void TouchToFillControllerWebAuthnDelegate::OnManagePasswordsSelected(
+    bool passkeys_shown,
     base::OnceClosure action_complete) {
   password_manager_launcher::ShowPasswordSettings(
       request_delegate_->web_contents(),
-      password_manager::ManagePasswordsReferrer::kTouchToFill);
+      password_manager::ManagePasswordsReferrer::kTouchToFill,
+      /*manage_passkeys=*/true);
   OnDismiss(std::move(action_complete));
 }
 

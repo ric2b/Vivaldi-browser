@@ -20,6 +20,7 @@ build_webui("build") {
     "images/cookies_banner_dark.svg",
     "images/cookies_banner.svg",
     "images/googleg_standard_clr_32px.svg",
+    "images/iban.svg",
     "images/password_check_neutral_dark.svg",
     "images/password_check_neutral.svg",
     "images/password_check_positive_dark.svg",
@@ -83,12 +84,12 @@ build_webui("build") {
     "autofill_page/credit_card_list_entry.ts",
     "autofill_page/iban_edit_dialog.ts",
     "autofill_page/iban_list_entry.ts",
-    "autofill_page/local_credit_card_remove_confirmation_dialog.ts",
     "autofill_page/password_check_edit_disclaimer_dialog.ts",
     "autofill_page/password_check_list_item.ts",
     "autofill_page/password_check.ts",
     "autofill_page/password_edit_dialog.ts",
     "autofill_page/password_list_item.ts",
+    "autofill_page/password_preview_item.ts",
     "autofill_page/password_move_multiple_passwords_to_account_dialog.ts",
     "autofill_page/password_move_to_account_dialog.ts",
     "autofill_page/password_remove_confirmation_dialog.ts",
@@ -109,9 +110,7 @@ build_webui("build") {
     "clear_browsing_data_dialog/passwords_deletion_dialog.ts",
     "controls/controlled_button.ts",
     "controls/controlled_radio_button.ts",
-    "controls/extension_controlled_indicator.ts",
     "controls/settings_checkbox.ts",
-    "controls/settings_dropdown_menu.ts",
     "controls/settings_radio_group.ts",
     "controls/settings_slider.ts",
     "controls/settings_toggle_button.ts",
@@ -134,11 +133,9 @@ build_webui("build") {
     "privacy_page/anti_abuse_page.ts",
     "privacy_page/collapse_radio_button.ts",
     "privacy_page/cookies_page.ts",
-    "privacy_page/disable_safebrowsing_dialog.ts",
     "privacy_page/do_not_track_toggle.ts",
     "privacy_page/personalization_options.ts",
     "privacy_page/preloading_page.ts",
-    "privacy_page/privacy_guide_promo.ts",
     "privacy_page/privacy_guide/privacy_guide_completion_fragment.ts",
     "privacy_page/privacy_guide/privacy_guide_completion_link_row.ts",
     "privacy_page/privacy_guide/privacy_guide_cookies_fragment.ts",
@@ -147,6 +144,7 @@ build_webui("build") {
     "privacy_page/privacy_guide/privacy_guide_history_sync_fragment.ts",
     "privacy_page/privacy_guide/privacy_guide_msbb_fragment.ts",
     "privacy_page/privacy_guide/privacy_guide_page.ts",
+    "privacy_page/privacy_guide/privacy_guide_promo.ts",
     "privacy_page/privacy_guide/privacy_guide_safe_browsing_fragment.ts",
     "privacy_page/privacy_guide/privacy_guide_welcome_fragment.ts",
     "privacy_page/privacy_guide/step_indicator.ts",
@@ -182,7 +180,6 @@ build_webui("build") {
     "safety_check_page/safety_check_unused_site_permissions.ts",
     "safety_check_page/safety_check_updates_child.ts",
     "search_engines_page/omnibox_extension_entry.ts",
-    "search_engines_page/search_engine_delete_confirmation_dialog.ts",
     "search_engines_page/search_engine_edit_dialog.ts",
     "search_engines_page/search_engine_entry.ts",
     "search_engines_page/search_engines_list.ts",
@@ -194,6 +191,7 @@ build_webui("build") {
     "settings_page/settings_section.ts",
     "settings_page/settings_subpage.ts",
     "settings_ui/settings_ui.ts",
+    "simple_confirmation_dialog.ts",
     "site_favicon.ts",
     "site_settings/add_site_dialog.ts",
     "site_settings/all_sites.ts",
@@ -203,6 +201,9 @@ build_webui("build") {
     "site_settings/chooser_exception_list.ts",
     "site_settings/site_details_permission_device_entry.ts",
     "site_settings/edit_exception_dialog.ts",
+    "site_settings/file_system_site_entry.ts",
+    "site_settings/file_system_site_entry_item.ts",
+    "site_settings/file_system_site_list.ts",
     "site_settings/media_picker.ts",
     "site_settings/review_notification_permissions.ts",
     "site_settings_page/recent_site_permissions.ts",
@@ -223,6 +224,7 @@ build_webui("build") {
 
   if (!is_chromeos_ash) {
     web_component_files += [
+      "a11y_page/live_translate_section.ts",
       "people_page/manage_profile.ts",
       "relaunch_confirmation_dialog.ts",
       "languages_page/add_languages_dialog.ts",
@@ -257,13 +259,13 @@ build_webui("build") {
     ]
   }
   if (is_win || is_mac) {
-    web_component_files += [
-      "autofill_page/passkeys_subpage.ts",
-      "autofill_page/passkeys_delete_confirmation_dialog.ts",
-    ]
+    web_component_files += [ "autofill_page/passkeys_subpage.ts" ]
   }
   if (is_chromeos) {
     web_component_files += [ "controls/password_prompt_dialog.ts" ]
+  }
+  if (is_chrome_branded) {
+    web_component_files += [ "get_most_chrome_page/get_most_chrome_page.ts" ]
   }
 
   # -----------------web_component_files end ----------------------------------
@@ -271,10 +273,8 @@ build_webui("build") {
   # -----------------non_web_component_files start ----------------------------
 
   non_web_component_files = [
-    "a11y_page/captions_browser_proxy.ts",
     "about_page/about_page_browser_proxy.ts",
     "appearance_page/appearance_browser_proxy.ts",
-    "appearance_page/fonts_browser_proxy.ts",
     "autofill_page/address_edit_dialog_components.ts",
     "autofill_page/autofill_manager_proxy.ts",
     "autofill_page/merge_passwords_store_copies_mixin.ts",
@@ -287,34 +287,23 @@ build_webui("build") {
     "autofill_page/show_password_mixin.ts",
     "base_mixin.ts",
     "clear_browsing_data_dialog/clear_browsing_data_browser_proxy.ts",
-    "controls/cr_policy_pref_mixin.ts",
-    "controls/pref_control_mixin.ts",
-    "controls/settings_boolean_control_mixin.ts",
     "controls/settings_idle_load.ts",
     "downloads_page/downloads_browser_proxy.ts",
     "ensure_lazy_loaded.ts",
-    "extension_control_browser_proxy.ts",
     "focus_config.ts",
     "global_scroll_target_mixin.ts",
     "hats_browser_proxy.ts",
     "i18n_setup.ts",
     "lazy_load.ts",
-    "lifetime_browser_proxy.ts",
     "metrics_browser_proxy.ts",
     "on_startup_page/on_startup_browser_proxy.ts",
     "on_startup_page/startup_urls_page_browser_proxy.ts",
     "page_visibility.ts",
-    "people_page/sync_browser_proxy.ts",
-    "people_page/profile_info_browser_proxy.ts",
     "performance_page/performance_browser_proxy.ts",
     "performance_page/performance_metrics_proxy.ts",
-    "prefs/prefs_mixin.ts",
-    "prefs/prefs.ts",
-    "prefs/prefs_types.ts",
-    "prefs/pref_util.ts",
     "privacy_page/privacy_guide/constants.ts",
+    "privacy_page/privacy_guide/privacy_guide_availability_mixin.ts",
     "privacy_page/privacy_guide/privacy_guide_browser_proxy.ts",
-    "privacy_page/privacy_page_browser_proxy.ts",
     "privacy_page/privacy_sandbox/privacy_sandbox_browser_proxy.ts",
     "privacy_page/security_keys_browser_proxy.ts",
     "privacy_sandbox/icons.html.ts",
@@ -322,6 +311,7 @@ build_webui("build") {
     "reset_page/reset_browser_proxy.ts",
     "route.ts",
     "router.ts",
+    "safety_check_page/extensions_safety_check_browser_proxy.ts",
     "safety_check_page/safety_check_browser_proxy.ts",
     "search_engines_page/search_engines_browser_proxy.ts",
     "search_settings.ts",
@@ -408,11 +398,13 @@ build_webui("build") {
   }
 
   ts_deps = [
+    "//chrome/browser/resources/settings_shared:build_ts",
     "//third_party/polymer/v3_0:library",
     "//ui/webui/resources/cr_components/help_bubble:build_ts",
     "//ui/webui/resources/cr_components/localized_link:build_ts",
     "//ui/webui/resources/cr_components/managed_dialog:build_ts",
     "//ui/webui/resources/cr_components/managed_footnote:build_ts",
+    "//ui/webui/resources/cr_components/settings_prefs:build_ts",
     "//ui/webui/resources/cr_elements:build_ts",
     "//ui/webui/resources/js:build_ts",
   ]
@@ -420,12 +412,19 @@ build_webui("build") {
   if (!is_chromeos_ash) {
     ts_deps +=
         [ "//ui/webui/resources/cr_components/customize_themes:build_ts" ]
+  } else {
+    ts_deps += [ "//ash/webui/common/resources:build_ts" ]
   }
 
   if (use_nss_certs) {
     ts_deps +=
         [ "//ui/webui/resources/cr_components/certificate_manager:build_ts" ]
   }
+
+  ts_path_mappings =
+      [ "/shared/settings/*|" + rebase_path(
+            "$root_gen_dir/chrome/browser/resources/settings_shared/tsc/*",
+            target_gen_dir) ]
 
   if (is_chromeos_ash) {
     # TODO(crbug.com/1013466): Browser Settings should not depend on ash/webui/
@@ -449,5 +448,11 @@ build_webui("build") {
     ]
     optimize_webui_excludes =
         [ "chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js" ]
+    optimize_webui_external_paths =
+        [ "/shared/settings|" + rebase_path(
+              "$root_gen_dir/chrome/browser/resources/settings_shared/tsc",
+              root_build_dir) ]
   }
+
+  enable_source_maps = enable_webui_inline_sourcemaps
 }

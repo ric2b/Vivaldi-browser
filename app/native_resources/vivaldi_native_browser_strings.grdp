@@ -191,6 +191,9 @@
   <message name="IDS_VIVALDI_VERSION_UI_CREDITS" desc="The label below the copyright message, containing the credits URL.">
     Credits
   </message>
+  <message name="IDS_VIVALDI_ABOUT_TERMS_OF_SERVICE" desc="For chrome://version view">
+    Terms of Service
+  </message>
   <message name="IDS_WELCOME_PAGE_URL" translateable="false">
     chrome-extension://mpognobbkildjkofajifpdfhcoklimli/components/welcome/welcome.html
   </message>

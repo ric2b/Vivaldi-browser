@@ -17,6 +17,8 @@
 #include "extensions/browser/extension_function.h"
 #include "extensions/schema/calendar.h"
 
+class Profile;
+
 namespace base {
 class Value;
 }
@@ -62,7 +64,7 @@ class CalendarEventRouter : public CalendarModelObserver {
   void ExtensiveCalendarChangesBeginning(CalendarService* model) override;
   void ExtensiveCalendarChangesEnded(CalendarService* model) override;
 
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
   base::ScopedObservation<calendar::CalendarService, CalendarModelObserver>
       calendar_service_observation_{this};
 };
@@ -87,7 +89,7 @@ class CalendarAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<CalendarAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "CalendarAPI"; }
@@ -133,8 +135,7 @@ class CalendarGetAllEventsFunction : public CalendarFunctionWithCallback {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void GetAllEventsComplete(
-      std::shared_ptr<calendar::EventQueryResults> results);
+  void GetAllEventsComplete(std::vector<calendar::EventRow> results);
 };
 
 class CalendarEventCreateFunction : public CalendarAsyncFunction {
@@ -148,7 +149,7 @@ class CalendarEventCreateFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateEventComplete(std::shared_ptr<calendar::EventResultCB> results);
+  void CreateEventComplete(calendar::EventResultCB results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -165,8 +166,7 @@ class CalendarEventsCreateFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateEventsComplete(
-      std::shared_ptr<calendar::CreateEventsResult> results);
+  void CreateEventsComplete(calendar::CreateEventsResult results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -182,7 +182,7 @@ class CalendarUpdateEventFunction : public CalendarFunctionWithCallback {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdateEventComplete(std::shared_ptr<calendar::EventResultCB> results);
+  void UpdateEventComplete(calendar::EventResultCB results);
 };
 
 class CalendarDeleteEventFunction : public CalendarAsyncFunction {
@@ -195,8 +195,7 @@ class CalendarDeleteEventFunction : public CalendarAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void DeleteEventComplete(
-      std::shared_ptr<calendar::DeleteEventResult> results);
+  void DeleteEventComplete(bool results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -213,8 +212,7 @@ class CalendarUpdateRecurrenceExceptionFunction : public CalendarAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdateRecurrenceExceptionComplete(
-      std::shared_ptr<calendar::EventResultCB> results);
+  void UpdateRecurrenceExceptionComplete(calendar::EventResultCB results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -231,8 +229,7 @@ class CalendarDeleteEventExceptionFunction : public CalendarAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void DeleteEventExceptionComplete(
-      std::shared_ptr<calendar::EventResultCB> results);
+  void DeleteEventExceptionComplete(calendar::EventResultCB results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -249,7 +246,7 @@ class CalendarCreateFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateComplete(std::shared_ptr<calendar::CreateCalendarResult> results);
+  void CreateComplete(calendar::CreateCalendarResult results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -267,7 +264,7 @@ class CalendarGetAllFunction : public CalendarFunctionWithCallback {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void GetAllComplete(std::shared_ptr<calendar::CalendarQueryResults> results);
+  void GetAllComplete(calendar::CalendarRows results);
 };
 
 class CalendarUpdateFunction : public CalendarFunctionWithCallback {
@@ -280,8 +277,7 @@ class CalendarUpdateFunction : public CalendarFunctionWithCallback {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdateCalendarComplete(
-      std::shared_ptr<calendar::UpdateCalendarResult> results);
+  void UpdateCalendarComplete(bool results);
 };
 
 class CalendarDeleteFunction : public CalendarAsyncFunction {
@@ -294,8 +290,7 @@ class CalendarDeleteFunction : public CalendarAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void DeleteCalendarComplete(
-      std::shared_ptr<calendar::DeleteCalendarResult> results);
+  void DeleteCalendarComplete(bool results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -313,8 +308,7 @@ class CalendarGetAllEventTypesFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void GetAllEventTypesComplete(
-      std::shared_ptr<calendar::EventTypeRows> results);
+  void GetAllEventTypesComplete(calendar::EventTypeRows results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -332,8 +326,7 @@ class CalendarEventTypeCreateFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateEventTypeComplete(
-      std::shared_ptr<calendar::CreateEventTypeResult> results);
+  void CreateEventTypeComplete(bool results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -351,8 +344,7 @@ class CalendarEventTypeUpdateFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void UpdateEventTypeComplete(
-      std::shared_ptr<calendar::UpdateEventTypeResult> results);
+  void UpdateEventTypeComplete(bool results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -369,8 +361,7 @@ class CalendarDeleteEventTypeFunction : public CalendarAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void DeleteEventTypeComplete(
-      std::shared_ptr<calendar::DeleteEventTypeResult> result);
+  void DeleteEventTypeComplete(bool result);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -388,8 +379,7 @@ class CalendarCreateEventExceptionFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateEventExceptionComplete(
-      std::shared_ptr<calendar::EventResultCB> results);
+  void CreateEventExceptionComplete(calendar::EventResultCB results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -408,8 +398,7 @@ class CalendarGetAllNotificationsFunction
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void GetAllNotificationsComplete(
-      std::shared_ptr<calendar::GetAllNotificationResult> results);
+  void GetAllNotificationsComplete(calendar::GetAllNotificationResult results);
 };
 
 class CalendarCreateNotificationFunction : public CalendarAsyncFunction {
@@ -424,8 +413,7 @@ class CalendarCreateNotificationFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateNotificationComplete(
-      std::shared_ptr<calendar::NotificationResult> results);
+  void CreateNotificationComplete(calendar::NotificationResult results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -442,8 +430,7 @@ class CalendarUpdateNotificationFunction : public CalendarFunctionWithCallback {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdateNotificationComplete(
-      std::shared_ptr<calendar::NotificationResult> results);
+  void UpdateNotificationComplete(calendar::NotificationResult results);
 };
 
 class CalendarDeleteNotificationFunction : public CalendarAsyncFunction {
@@ -457,8 +444,7 @@ class CalendarDeleteNotificationFunction : public CalendarAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void DeleteNotificationComplete(
-      std::shared_ptr<calendar::DeleteNotificationResult> results);
+  void DeleteNotificationComplete(bool results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -475,7 +461,7 @@ class CalendarCreateInviteFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateInviteComplete(std::shared_ptr<calendar::InviteResult> results);
+  void CreateInviteComplete(calendar::InviteResult results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -491,8 +477,7 @@ class CalendarDeleteInviteFunction : public CalendarAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void DeleteInviteComplete(
-      std::shared_ptr<calendar::DeleteInviteResult> results);
+  void DeleteInviteComplete(bool results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -509,7 +494,7 @@ class CalendarUpdateInviteFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void UpdateInviteComplete(std::shared_ptr<calendar::InviteResult> results);
+  void UpdateInviteComplete(calendar::InviteResult results);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -526,8 +511,7 @@ class CalendarCreateAccountFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void CreateAccountComplete(
-      std::shared_ptr<calendar::CreateAccountResult> result);
+  void CreateAccountComplete(calendar::CreateAccountResult result);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -544,8 +528,7 @@ class CalendarDeleteAccountFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void DeleteAccountComplete(
-      std::shared_ptr<calendar::DeleteAccountResult> result);
+  void DeleteAccountComplete(calendar::DeleteAccountResult result);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -562,8 +545,7 @@ class CalendarUpdateAccountFunction : public CalendarAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void UpdateAccountComplete(
-      std::shared_ptr<calendar::UpdateAccountResult> result);
+  void UpdateAccountComplete(calendar::UpdateAccountResult result);
 
   // The task tracker for the CalendarService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -581,7 +563,7 @@ class CalendarGetAllAccountsFunction : public CalendarFunctionWithCallback {
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void GetAllAccountsComplete(std::shared_ptr<calendar::AccountRows> results);
+  void GetAllAccountsComplete(calendar::AccountRows results);
 };
 
 class CalendarGetAllEventTemplatesFunction
@@ -598,8 +580,7 @@ class CalendarGetAllEventTemplatesFunction
   ResponseAction Run() override;
 
   // Callback for the calendar function to provide results.
-  void GetAllEventTemplatesComplete(
-      std::shared_ptr<calendar::EventQueryResults> results);
+  void GetAllEventTemplatesComplete(std::vector<calendar::EventRow> results);
 };
 
 }  // namespace extensions

@@ -76,6 +76,9 @@ class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
   void SetRequestIdempotency(Idempotency idempotency) override;
   const std::set<std::string>& GetDnsAliases() const override;
   base::StringPiece GetAcceptChViaAlps() const override;
+  absl::optional<quic::QuicErrorCode> GetQuicErrorCode() const override;
+  absl::optional<quic::QuicRstStreamErrorCode> GetQuicRstStreamErrorCode()
+      const override;
 
   static HttpResponseInfo::ConnectionInfo ConnectionInfoFromQuicVersion(
       quic::ParsedQuicVersion quic_version);
@@ -166,7 +169,8 @@ class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
   bool can_send_early_ = false;
 
   // The request body to send, if any, owned by the caller.
-  raw_ptr<UploadDataStream> request_body_stream_ = nullptr;
+  // DanglingUntriaged because it is assigned a DanglingUntriaged pointer.
+  raw_ptr<UploadDataStream, DanglingUntriaged> request_body_stream_ = nullptr;
   // Time the request was issued.
   base::Time request_time_;
   // The priority of the request.
@@ -203,6 +207,9 @@ class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
   // the stream was closed. If |stream_| is failed to be created, this takes on
   // the default value of false.
   bool closed_is_first_stream_ = false;
+
+  absl::optional<quic::QuicErrorCode> connection_error_;
+  absl::optional<quic::QuicRstStreamErrorCode> stream_error_;
 
   // The caller's callback to be used for asynchronous operations.
   CompletionOnceCallback callback_;

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/test/bind.h"
+#include "extensions/common/extensions_client.h"
 #include "extensions/common/features/complex_feature.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/features/feature_provider.h"
@@ -110,6 +112,16 @@ void FeatureComparator::CompareFeature(const SimpleFeature* feature) {
 }
 
 TEST(FeaturesGenerationTest, FeaturesTest) {
+  Feature::FeatureDelegatedAvailabilityCheckMap map;
+  map.emplace("requires_delegated_availability_check",
+              base::BindLambdaForTesting(
+                  [&](const std::string& api_full_name,
+                      const Extension* extension, Feature::Context context,
+                      const GURL& url, Feature::Platform platform,
+                      int context_id, bool check_developer_mode,
+                      const ContextData& context_data) { return false; }));
+  ExtensionsClient::Get()->SetFeatureDelegatedAvailabilityCheckMap(
+      std::move(map));
   FeatureProvider provider;
   CompilerTestAddFeaturesMethod(&provider);
 
@@ -226,8 +238,9 @@ TEST(FeaturesGenerationTest, FeaturesTest) {
         {Feature::BLESSED_EXTENSION_CONTEXT, Feature::BLESSED_WEB_PAGE_CONTEXT,
          Feature::CONTENT_SCRIPT_CONTEXT,
          Feature::LOCK_SCREEN_EXTENSION_CONTEXT,
-         Feature::OFFSCREEN_EXTENSION_CONTEXT, Feature::WEB_PAGE_CONTEXT,
-         Feature::WEBUI_CONTEXT, Feature::WEBUI_UNTRUSTED_CONTEXT,
+         Feature::OFFSCREEN_EXTENSION_CONTEXT, Feature::USER_SCRIPT_CONTEXT,
+         Feature::WEB_PAGE_CONTEXT, Feature::WEBUI_CONTEXT,
+         Feature::WEBUI_UNTRUSTED_CONTEXT,
          Feature::UNBLESSED_EXTENSION_CONTEXT});
     comparator.extension_types = {Manifest::TYPE_EXTENSION,
                                   Manifest::TYPE_HOSTED_APP,

@@ -10,6 +10,9 @@ namespace ash::video_conference {
 // IDs used for the main views that comprise the video conference bubble view.
 // Use these for easy access to the views during the unittests. Note that these
 // IDs are only guaranteed to be unique inside the bubble view.
+// TODO(b/273786662): `kToggleEffectsButton` and `kSetValueButtonMin` belongs to
+// multiple buttons, and one id should only belong to one view, so we should
+// remove these.
 enum BubbleViewID {
   // Main outermost bubble view, what's actually launched from the tray. Start
   // from 1 because 0 is the default view ID.
@@ -32,6 +35,9 @@ enum BubbleViewID {
   // Button for toggling an individual "toggle" VC effect, a child of
   // `kToggleEffectsContainer`.
   kToggleEffectsButton,
+
+  // Icon which is a child of an individual "toggle" VC effect.
+  kToggleEffectIcon,
 
   // Buttons for setting an individual value of a "set-value" VC effect,
   // children of `kSetValueEffectsContainer`. Since the number of values for a

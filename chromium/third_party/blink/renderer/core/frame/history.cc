@@ -60,7 +60,7 @@ void ReportURLChange(LocalDOMWindow* window,
   if (window->GetFrame()->IsMainFrame() && window->Url() != url) {
     SoftNavigationHeuristics* heuristics =
         SoftNavigationHeuristics::From(*window);
-    heuristics->SawURLChange(script_state, url);
+    heuristics->SameDocumentNavigationStarted(script_state);
   }
 }
 }  // namespace
@@ -79,12 +79,6 @@ unsigned History::length(ExceptionState& exception_state) const {
         "May not use a History object associated with a Document that is not "
         "fully active");
     return 0;
-  }
-
-  // TODO(crbug.com/1262022): Remove this condition when Fenced Frames
-  // transition to MPArch completely.
-  if (DomWindow()->GetFrame()->IsInFencedFrameTree()) {
-    return 1;
   }
 
   return DomWindow()->GetFrame()->Client()->BackForwardLength();

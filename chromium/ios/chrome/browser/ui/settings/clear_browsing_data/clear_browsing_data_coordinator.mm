@@ -7,9 +7,9 @@
 #import "base/check_op.h"
 #import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_ui_delegate.h"
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
@@ -33,7 +33,9 @@
 - (instancetype)initWithBaseNavigationController:
                     (UINavigationController*)navigationController
                                          browser:(Browser*)browser {
-  if ([super initWithBaseViewController:navigationController browser:browser]) {
+  self = [super initWithBaseViewController:navigationController
+                                   browser:browser];
+  if (self) {
     _baseNavigationController = navigationController;
   }
   return self;
@@ -57,6 +59,9 @@
 }
 
 - (void)stop {
+  [self.viewController prepareForDismissal];
+  self.viewController.delegate = nil;
+  self.viewController.dispatcher = nil;
   self.viewController = nil;
 }
 

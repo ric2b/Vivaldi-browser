@@ -11,6 +11,7 @@
 #include "ios/chrome/app/spotlight/spotlight_util.h"
 
 class GURL;
+@class SpotlightInterface;
 
 namespace favicon {
 class LargeIconService;
@@ -21,9 +22,13 @@ class LargeIconService;
 - (instancetype)initWithLargeIconService:
                     (favicon::LargeIconService*)largeIconService
                                   domain:(spotlight::Domain)domain
+                      spotlightInterface:(SpotlightInterface*)spotlightInterface
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
+
+/// Facade interface for the spotlight API.
+@property(nonatomic, readonly) SpotlightInterface* spotlightInterface;
 
 // Refreshes all items that point to `URLToRefresh`, using title `title`, by
 // calling spotlightItemsWithURL on given URL. The values of `title` and `URL`
@@ -58,7 +63,7 @@ class LargeIconService;
 
 // Called before the instance is deallocated. This method should be overridden
 // by the subclasses and de-activate the instance.
-- (void)shutdown;
+- (void)shutdown NS_REQUIRES_SUPER;
 
 @end
 

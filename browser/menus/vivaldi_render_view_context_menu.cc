@@ -39,6 +39,7 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/search_engines/template_url.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -125,10 +126,10 @@ bool CanOpenInPrivateWindow(content::BrowserContext* browser_context,
   if (!IsURLAllowedInIncognito(link_url, browser_context))
     return false;
 
-  IncognitoModePrefs::Availability incognito_avail =
+  policy::IncognitoModeAvailability incognito_avail =
       IncognitoModePrefs::GetAvailability(
           user_prefs::UserPrefs::Get(browser_context));
-  return incognito_avail != IncognitoModePrefs::Availability::kDisabled;
+  return incognito_avail != policy::IncognitoModeAvailability::kDisabled;
 }
 
 }  // namespace

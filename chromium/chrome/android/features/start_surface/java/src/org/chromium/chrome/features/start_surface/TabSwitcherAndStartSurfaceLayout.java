@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.features.start_surface;
 
+import static org.chromium.chrome.browser.device.DeviceClassManager.GTS_ACCESSIBILITY_SUPPORT;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -21,8 +23,6 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.jank_tracker.JankScenario;
-import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
@@ -59,11 +59,13 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.LinkedList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+
+// Vivaldi
+import org.chromium.build.BuildConfig;
 
 /**
  * A {@link Layout} that shows all tabs in one grid or carousel view.
@@ -90,7 +92,6 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
 
     private TabListSceneLayer mSceneLayer;
     private final StartSurface mStartSurface;
-    private final JankTracker mJankTracker;
     private final TabSwitcherViewObserver mTabSwitcherObserver;
     @Nullable
     private final ViewGroup mScrimAnchor;
@@ -127,14 +128,13 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
     private PerfListener mPerfListenerForTesting;
 
     public TabSwitcherAndStartSurfaceLayout(Context context, LayoutUpdateHost updateHost,
-            LayoutRenderHost renderHost, StartSurface startSurface, JankTracker jankTracker,
+            LayoutRenderHost renderHost, StartSurface startSurface,
             ViewGroup tabSwitcherScrimAnchor, ScrimCoordinator scrimCoordinator) {
         super(context, updateHost, renderHost);
         mDummyLayoutTab = createLayoutTab(Tab.INVALID_TAB_ID, false);
         mDummyLayoutTab.setShowToolbar(true);
         mStartSurface = startSurface;
         mStartSurface.setOnTabSelectingListener(this::onTabSelecting);
-        mJankTracker = jankTracker;
         mScrimAnchor = tabSwitcherScrimAnchor;
         mScrimCoordinator = scrimCoordinator;
 
@@ -147,7 +147,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
             @Override
             public void finishedShowing() {
                 mAndroidViewFinishedShowing = true;
-                if (!TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(context)) {
+                if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
                     doneShowing();
                 }
                 // When Tab-to-GTS animation is done, it's time to renew the thumbnail without
@@ -249,13 +249,6 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
     private void show(long time, boolean animate, boolean isShowingStartSurfaceHomepage) {
         super.show(time, animate);
 
-        // When shown on StartSurface jank is tracked under
-        // JankScenario.START_SURFACE_TAB_SWITCHER and it's started/stopped on
-        // StartSurfaceMediator.
-        if (!StartSurfaceConfiguration.isStartSurfaceFlagEnabled()) {
-            mJankTracker.startTrackingScenario(JankScenario.TAB_SWITCHER);
-        }
-
         // Lazy initialization if needed.
         mStartSurface.initialize();
 
@@ -264,7 +257,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         LayoutTab sourceLayoutTab = createLayoutTab(
                 mTabModelSelector.getCurrentTabId(), mTabModelSelector.isIncognitoSelected());
         sourceLayoutTab.setDecorationAlpha(0);
-
+        updateCacheVisibleIds(Collections.singletonList(mTabModelSelector.getCurrentTabId()));
         mLayoutTabs = new LayoutTab[] {sourceLayoutTab};
 
         boolean quick;
@@ -283,7 +276,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         final boolean shouldAnimate =
                 animate && !isCurrentTabModelEmpty && !isShowingStartSurfaceHomepage;
 
-        if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(getContext())) {
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
             showOverviewWithTranslateUp(shouldAnimate);
         } else {
             if (isShowingStartSurfaceHomepage) {
@@ -301,20 +294,32 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
             if (mStartSurface.getStartSurfaceState() != StartSurfaceState.SHOWING_TABSWITCHER) {
                 mStartSurface.setStartSurfaceState(StartSurfaceState.SHOWING_TABSWITCHER);
             }
-            // Ensure the SceneLayer image for the GTS is in the correct position by deferring until
-            // the next layout pass.
-            mDeferredAnimationRunnable = () -> {
-                showOverviewWithTabShrink(shouldAnimate, () -> {
-                    return getGridTabListDelegate().getThumbnailLocationOfCurrentTab(false);
-                }, isShowingStartSurfaceHomepage, quick);
-            };
-            getGridTabListDelegate().runAnimationOnNextLayout(() -> {
-                if (mDeferredAnimationRunnable != null) {
-                    Runnable deferred = mDeferredAnimationRunnable;
-                    mDeferredAnimationRunnable = null;
-                    deferred.run();
-                }
-            });
+
+            if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(getContext())
+                    && GTS_ACCESSIBILITY_SUPPORT.getValue()
+                    && ChromeAccessibilityUtil.get().isTouchExplorationEnabled()) {
+                // Intentionally disable the shrinking animation when touch exploration is enabled.
+                // During the shrinking animation, since the ComponsitorViewHolder is not focusable,
+                // Chrome is in a temporary no "valid" focus target state. This result in focus
+                // shifting to the omnibox and triggers visual jank and accessibility announcement
+                // of the URL. Disable the animation and run immediately to avoid this state.
+                showOverviewWithTabShrink(false, () -> null, isShowingStartSurfaceHomepage, true);
+            } else {
+                // Ensure the SceneLayer image for the GTS is in the correct position by deferring
+                // until the next layout pass.
+                mDeferredAnimationRunnable = () -> {
+                    showOverviewWithTabShrink(shouldAnimate, () -> {
+                        return getGridTabListDelegate().getThumbnailLocationOfCurrentTab(false);
+                    }, isShowingStartSurfaceHomepage, quick);
+                };
+                getGridTabListDelegate().runAnimationOnNextLayout(() -> {
+                    if (mDeferredAnimationRunnable != null) {
+                        Runnable deferred = mDeferredAnimationRunnable;
+                        mDeferredAnimationRunnable = null;
+                        deferred.run();
+                    }
+                });
+            }
         }
     }
 
@@ -386,7 +391,9 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         sourceLayoutTab.setDecorationAlpha(0);
 
         List<LayoutTab> layoutTabs = new ArrayList<>();
+        List<Integer> tabIds = new ArrayList<>();
         layoutTabs.add(sourceLayoutTab);
+        tabIds.add(sourceLayoutTab.getId());
 
         if (sourceTabId != mTabModelSelector.getCurrentTabId()) {
             // Keep the original tab in mLayoutTabs to unblock thumbnail taking at the end of
@@ -396,13 +403,13 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
             originalTab.setScale(0);
             originalTab.setDecorationAlpha(0);
             layoutTabs.add(originalTab);
+            tabIds.add(originalTab.getId());
         }
         mLayoutTabs = layoutTabs.toArray(new LayoutTab[0]);
-
-        updateCacheVisibleIds(new LinkedList<>(Arrays.asList(sourceTabId)));
+        updateCacheVisibleIds(tabIds);
 
         mIsAnimatingHide = true;
-        if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(getContext())) {
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
             translateDown();
         } else {
             mStartSurface.hideTabSwitcherView(!isTabGtsAnimationEnabled());
@@ -414,12 +421,6 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         try (TraceEvent e = TraceEvent.scoped("StartSurfaceLayout.DoneHiding")) {
             super.doneHiding();
             RecordUserAction.record("MobileExitStackView");
-            // When shown on StartSurface jank is tracked under
-            // JankScenario.START_SURFACE_TAB_SWITCHER and it's started/stopped on
-            // StartSurfaceMediator.
-            if (!StartSurfaceConfiguration.isStartSurfaceFlagEnabled()) {
-                mJankTracker.finishTrackingScenario(JankScenario.TAB_SWITCHER);
-            }
         }
     }
 
@@ -493,8 +494,9 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         if (mBackgroundTabAnimation != null && mBackgroundTabAnimation.isStarted()) {
             mBackgroundTabAnimation.end();
         }
-        mBackgroundTabAnimation = BackgroundTabAnimation.create(this, primaryTasksSurface, originX,
-                originY, getOrientation() == Orientation.PORTRAIT);
+        float dpToPx = getContext().getResources().getDisplayMetrics().density;
+        mBackgroundTabAnimation = BackgroundTabAnimation.create(this, primaryTasksSurface,
+                originX * dpToPx, originY * dpToPx, getOrientation() == Orientation.PORTRAIT);
         mBackgroundTabAnimation.start();
     }
 
@@ -516,14 +518,6 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         if (skipSlowZooming) {
             showShrinkingAnimation &= quick;
         }
-        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
-            // Intentionally disable the shrinking animation when accessibility is enabled.
-            // During the shrinking animation, since the ComponsitorViewHolder is not focusable,
-            // I think we are in a temporary no "valid" focus target state, so the focus shifts
-            // to the omnibox and triggers an accessibility announcement of the URL and a
-            // keyboard hiding event. Disable the animation to avoid this temporary state.
-            showShrinkingAnimation &= !ChromeAccessibilityUtil.get().isAccessibilityEnabled();
-        }
 
         if (!showShrinkingAnimation || target.get() == null) {
             mStartSurface.showOverview(animate);
@@ -531,6 +525,16 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         }
 
         forceAnimationToFinish();
+        // TODO(crbug/1423109): mLayoutTabs shouldn't be null here, but it is possible the delayed
+        // removal via a handler in mTabSwitcherObserver#finishedShowing results in a null
+        // mLayoutTabs. This should be fixed by simplifying thumbnail capture logic.
+        if (mLayoutTabs == null) {
+            LayoutTab sourceLayoutTab = createLayoutTab(
+                    mTabModelSelector.getCurrentTabId(), mTabModelSelector.isIncognitoSelected());
+            sourceLayoutTab.setDecorationAlpha(0);
+
+            mLayoutTabs = new LayoutTab[] {sourceLayoutTab};
+        }
         LayoutTab sourceLayoutTab = mLayoutTabs[0];
         CompositorAnimationHandler handler = getAnimationHandler();
         Collection<Animator> animationList = new ArrayList<>(5);
@@ -573,6 +577,14 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         mTabToSwitcherAnimation = new AnimatorSet();
         mTabToSwitcherAnimation.playTogether(animationList);
         mTabToSwitcherAnimation.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+                TabSwitcher.Controller controller = mStartSurface.getGridTabSwitcherController();
+                if (controller != null) {
+                    controller.prepareShowTabSwitcherView();
+                }
+            }
+
             @Override
             public void onAnimationEnd(Animator animation) {
                 mTabToSwitcherAnimation = null;
@@ -649,6 +661,12 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
      * Animate translating grid tab switcher and its toolbar up.
      */
     private void showOverviewWithTranslateUp(boolean animate) {
+        // Note(david@vivaldi.com): We don't translate we just show the overview.
+        if (BuildConfig.IS_VIVALDI) {
+            mStartSurface.showOverview(animate);
+            return;
+        }
+
         forceAnimationToFinish();
         showBrowserScrim();
 
@@ -693,6 +711,12 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
      * Animate translating grid tab switcher and its toolbar down off-screen.
      */
     private void translateDown() {
+        // Note(david@vivaldi.com): We don't translate we just hide the overview.
+        if (BuildConfig.IS_VIVALDI) {
+            mStartSurface.hideTabSwitcherView(!isTabGtsAnimationEnabled());
+            return;
+        }
+
         forceAnimationToFinish();
         hideBrowserScrim();
 
@@ -867,7 +891,7 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
 
     @Override
     public boolean canHostBeFocusable() {
-        if (TabUiFeatureUtilities.isLaunchPolishEnabled()
+        if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(getContext())
                 && ChromeAccessibilityUtil.get().isAccessibilityEnabled()
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
             // We don't allow this layout to gain focus when accessibility is enabled so that the
@@ -881,12 +905,17 @@ public class TabSwitcherAndStartSurfaceLayout extends Layout {
         return super.canHostBeFocusable();
     }
 
+    @Override
+    public boolean isRunningAnimations() {
+        return mDeferredAnimationRunnable != null || mTabToSwitcherAnimation != null;
+    }
+
     /**
      * Shrink/Expand animation is disabled for Tablet TabSwitcher launch polish.
      * @return Whether shrink/expand animation is enabled.
      */
     private boolean isTabGtsAnimationEnabled() {
-        if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(getContext())) return false;
-        return TabUiFeatureUtilities.isTabToGtsAnimationEnabled();
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) return false;
+        return TabUiFeatureUtilities.isTabToGtsAnimationEnabled(getContext());
     }
 }

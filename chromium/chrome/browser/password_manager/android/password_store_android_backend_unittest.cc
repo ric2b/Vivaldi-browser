@@ -1173,11 +1173,6 @@ TEST_F(PasswordStoreAndroidBackendTest,
   error.api_error_code = absl::optional<int>(kInternalErrorCode);
   consumer().OnError(kJobId, std::move(error));
   RunUntilIdle();
-
-  constexpr char kAPIErrorMetric[] =
-      "PasswordManager.PasswordStoreAndroidBackend.APIError.SyncNotPaused";
-
-  histogram_tester.ExpectBucketCount(kAPIErrorMetric, kInternalErrorCode, 1);
 }
 
 TEST_F(PasswordStoreAndroidBackendTest,
@@ -1188,7 +1183,7 @@ TEST_F(PasswordStoreAndroidBackendTest,
                         base::RepeatingClosure(), base::DoNothing());
   backend().OnSyncServiceInitialized(sync_service());
 
-  sync_service()->SetPersistentAuthErrorOtherThanWebSignout();
+  sync_service()->SetPersistentAuthError();
 
   base::MockCallback<LoginsOrErrorReply> mock_reply;
   EXPECT_CALL(*bridge_helper(), GetAllLogins).WillOnce(Return(kJobId));
@@ -1204,11 +1199,6 @@ TEST_F(PasswordStoreAndroidBackendTest,
   error.api_error_code = absl::optional<int>(kInternalErrorCode);
   consumer().OnError(kJobId, std::move(error));
   RunUntilIdle();
-
-  constexpr char kAPIErrorMetric[] =
-      "PasswordManager.PasswordStoreAndroidBackend.APIError.SyncPaused";
-
-  histogram_tester.ExpectBucketCount(kAPIErrorMetric, kInternalErrorCode, 1);
 }
 
 TEST_F(PasswordStoreAndroidBackendTest,

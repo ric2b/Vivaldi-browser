@@ -27,6 +27,7 @@ import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.search_engines.TemplateUrlService;
+import org.chromium.url.GURL;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -112,7 +113,9 @@ public class SearchEngineLogoUtils {
             return logoUrlWithPath;
         }
 
-        return UrlUtilities.stripPath(logoUrlWithPath);
+        // The extra "/" would be added by GURL anyway and is required for ShadowGURL to work
+        // correctly in unit tests.
+        return UrlUtilities.stripPath(logoUrlWithPath) + "/";
     }
 
     /**
@@ -196,7 +199,7 @@ public class SearchEngineLogoUtils {
         Promise<StatusIconResource> promise = new Promise<>();
         final int logoSizePixels = getSearchEngineLogoSizePixels(resources);
         boolean willCallbackBeCalled = mFaviconHelper.getLocalFaviconImageForURL(
-                profile, logoUrl, logoSizePixels, (image, iconUrl) -> {
+                profile, new GURL(logoUrl), logoSizePixels, (image, iconUrl) -> {
                     if (image == null) {
                         promise.fulfill(getSearchLoupeResource(brandedColorScheme));
                         recordEvent(Events.FETCH_FAILED_RETURNED_BITMAP_NULL);

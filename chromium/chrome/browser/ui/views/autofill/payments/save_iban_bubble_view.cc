@@ -8,42 +8,25 @@
 #include "chrome/browser/ui/views/autofill/payments/dialog_view_ids.h"
 #include "chrome/browser/ui/views/autofill/payments/payments_view_util.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/autofill/core/browser/data_model/iban.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/color/color_id.h"
-#include "ui/color/color_provider.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/vector_icon_utils.h"
-#include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/flex_layout_types.h"
-#include "ui/views/vector_icons.h"
 #include "ui/views/view_class_properties.h"
 
 namespace autofill {
 
 namespace {
 
-// Creates eye icon view to toggle between the masked or revealed IBAN value
-// on click.
-std::unique_ptr<views::ToggleImageButton> CreateIbanMaskingToggle(
-    views::Button::PressedCallback callback) {
-  auto button = std::make_unique<views::ToggleImageButton>(std::move(callback));
-  button->SetTooltipText(
-      l10n_util::GetStringUTF16(IDS_MANAGE_IBAN_VALUE_SHOW_VALUE));
-  button->SetToggledTooltipText(
-      l10n_util::GetStringUTF16(IDS_MANAGE_IBAN_VALUE_HIDE_VALUE));
-  button->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
-  button->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
-  button->SetToggled(false);
-  return button;
-}
+const int kMaxNicknameChars = 25;
 
 }  // namespace
 
@@ -70,12 +53,6 @@ void SaveIbanBubbleView::Show(DisplayReason reason) {
   AssignIdsToDialogButtonsForTesting();  // IN-TEST
 }
 
-void SaveIbanBubbleView::ToggleIbanValueMasking() {
-  const bool is_value_masked = iban_value_masking_button_->GetToggled();
-  iban_value_masking_button_->SetToggled(!is_value_masked);
-  iban_value_->SetText(GetIbanIdentifierString(is_value_masked));
-}
-
 void SaveIbanBubbleView::Hide() {
   CloseBubble();
 
@@ -95,14 +72,10 @@ void SaveIbanBubbleView::AddedToWidget() {
 
   GetBubbleFrameView()->SetHeaderView(
       std::make_unique<ThemeTrackingNonAccessibleImageView>(
-          *bundle.GetImageSkiaNamed(IDR_SAVE_CARD_SECURELY),
-          *bundle.GetImageSkiaNamed(IDR_SAVE_CARD_SECURELY_DARK),
+          *bundle.GetImageSkiaNamed(IDR_SAVE_CARD),
+          *bundle.GetImageSkiaNamed(IDR_SAVE_CARD_DARK),
           base::BindRepeating(&views::BubbleDialogDelegate::GetBackgroundColor,
                               base::Unretained(this))));
-
-  GetBubbleFrameView()->SetTitleView(
-      std::make_unique<TitleWithIconAndSeparatorView>(
-          GetWindowTitle(), TitleWithIconAndSeparatorView::Icon::PRODUCT_LOGO));
 }
 
 std::u16string SaveIbanBubbleView::GetWindowTitle() const {
@@ -117,17 +90,28 @@ void SaveIbanBubbleView::WindowClosing() {
   }
 }
 
+void SaveIbanBubbleView::ContentsChanged(views::Textfield* sender,
+                                         const std::u16string& new_contents) {
+  if (new_contents.length() > kMaxNicknameChars) {
+    nickname_textfield_->SetText(new_contents.substr(0, kMaxNicknameChars));
+  }
+  // Update the IBAN nickname count label to current_length/max_length,
+  // e.g. "6/25".
+  UpdateNicknameLengthLabel();
+}
+
 SaveIbanBubbleView::~SaveIbanBubbleView() = default;
 
 void SaveIbanBubbleView::CreateMainContentView() {
-  SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical));
-  ChromeLayoutProvider* const provider = ChromeLayoutProvider::Get();
+  const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
-  auto* iban_view = AddChildView(std::make_unique<views::BoxLayoutView>());
-  iban_view->SetID(DialogViewId::MAIN_CONTENT_VIEW_LOCAL);
+  SetID(DialogViewId::MAIN_CONTENT_VIEW_LOCAL);
+  SetProperty(views::kMarginsKey, gfx::Insets());
+  const int row_height = views::style::GetLineHeight(
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_PRIMARY);
   views::TableLayout* layout =
-      iban_view->SetLayoutManager(std::make_unique<views::TableLayout>());
+      SetLayoutManager(std::make_unique<views::TableLayout>());
+
   layout
       ->AddColumn(views::LayoutAlignment::kStart,
                   views::LayoutAlignment::kCenter,
@@ -139,50 +123,74 @@ void SaveIbanBubbleView::CreateMainContentView() {
       .AddColumn(views::LayoutAlignment::kStretch,
                  views::LayoutAlignment::kStretch, 1.0,
                  views::TableLayout::ColumnSize::kFixed, 0, 0)
-      // Add a row for IBAN label and the value of IBAN.
-      .AddRows(1, views::TableLayout::kFixedSize)
+      // Add a row for IBAN label and the value of IBAN. It might happen that
+      // the revealed IBAN value is too long to fit in a single line while the
+      // obscured IBAN value can fit in one line, so fix the height to fit both
+      // cases so toggling visibility does not change the bubble's overall
+      // height.
+      .AddRows(1, views::TableLayout::kFixedSize, row_height * 2)
       .AddPaddingRow(views::TableLayout::kFixedSize,
                      ChromeLayoutProvider::Get()->GetDistanceMetric(
-                         DISTANCE_CONTROL_LIST_VERTICAL))
+                         views::DISTANCE_RELATED_CONTROL_VERTICAL))
       // Add a row for nickname label and the input text field.
       .AddRows(1, views::TableLayout::kFixedSize);
 
-  iban_view->AddChildView(std::make_unique<views::Label>(
+  AddChildView(std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_IBAN_LABEL),
-      views::style::CONTEXT_LABEL, views::style::STYLE_SECONDARY));
-  auto* iban_value_view =
-      iban_view->AddChildView(std::make_unique<views::BoxLayoutView>());
-  iban_value_ = iban_value_view->AddChildView(std::make_unique<views::Label>(
-      GetIbanIdentifierString(/*is_value_masked=*/true),
-      views::style::CONTEXT_LABEL, views::style::STYLE_SECONDARY));
-  iban_value_->SetProperty(
-      views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
-                               views::MaximumFlexSizeRule::kScaleToMaximum));
-  iban_value_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_PRIMARY));
 
-  iban_value_masking_button_ =
-      iban_value_view->AddChildView(CreateIbanMaskingToggle(
-          base::BindRepeating(&SaveIbanBubbleView::ToggleIbanValueMasking,
-                              base::Unretained(this))));
-  views::SetImageFromVectorIconWithColorId(iban_value_masking_button_,
-                                           views::kEyeIcon, ui::kColorIcon,
-                                           ui::kColorIconDisabled);
-  views::SetToggledImageFromVectorIconWithColorId(
-      iban_value_masking_button_, views::kEyeCrossedIcon, ui::kColorIcon,
-      ui::kColorIconDisabled);
+  iban_value_and_toggle_ =
+      AddChildView(std::make_unique<ObscurableLabelWithToggleButton>(
+          controller_->GetIBAN().GetIdentifierStringForAutofillDisplay(
+              /*is_value_masked=*/true),
+          controller_->GetIBAN().GetIdentifierStringForAutofillDisplay(
+              /*is_value_masked=*/false),
+          l10n_util::GetStringUTF16(IDS_MANAGE_IBAN_VALUE_SHOW_VALUE),
+          l10n_util::GetStringUTF16(IDS_MANAGE_IBAN_VALUE_HIDE_VALUE)));
 
-  iban_view->AddChildView(std::make_unique<views::Label>(
+  AddChildView(std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_IBAN_PROMPT_NICKNAME),
-      views::style::CONTEXT_LABEL, views::style::STYLE_SECONDARY));
-  nickname_textfield_ =
-      iban_view->AddChildView(std::make_unique<views::Textfield>());
+      views::style::CONTEXT_DIALOG_BODY_TEXT, views::style::STYLE_PRIMARY));
+
+  // Adds view that combines nickname textfield and nickname length count label.
+  auto* nickname_input_textfield_view =
+      AddChildView(std::make_unique<views::BoxLayoutView>());
+  nickname_input_textfield_view->SetBorder(
+      views::CreateSolidBorder(1, SK_ColorLTGRAY));
+  nickname_input_textfield_view->SetInsideBorderInsets(
+      views::LayoutProvider::Get()->GetInsetsMetric(
+          views::InsetsMetric::INSETS_LABEL_BUTTON));
+  nickname_input_textfield_view->SetOrientation(
+      views::BoxLayout::Orientation::kHorizontal);
+  nickname_input_textfield_view->SetBetweenChildSpacing(
+      ChromeLayoutProvider::Get()->GetDistanceMetric(
+          views::DISTANCE_RELATED_CONTROL_VERTICAL));
+
+  // Adds nickname textfield.
+  nickname_textfield_ = nickname_input_textfield_view->AddChildView(
+      std::make_unique<views::Textfield>());
   nickname_textfield_->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_IBAN_PROMPT_NICKNAME));
   nickname_textfield_->SetTextInputType(
       ui::TextInputType::TEXT_INPUT_TYPE_TEXT);
+  nickname_textfield_->set_controller(this);
   nickname_textfield_->SetPlaceholderText(
       l10n_util::GetStringUTF16(IDS_AUTOFILL_SAVE_IBAN_PLACEHOLDER));
+  nickname_textfield_->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                               views::MaximumFlexSizeRule::kScaleToMaximum));
+  nickname_textfield_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  nickname_textfield_->SetBorder(views::NullBorder());
+
+  // Adds nickname length count label.
+  // Note: nickname is empty at the prompt.
+  nickname_length_label_ = nickname_input_textfield_view->AddChildView(
+      std::make_unique<views::Label>(/*text=*/u"", views::style::CONTEXT_LABEL,
+                                     views::style::STYLE_SECONDARY));
+  nickname_length_label_->SetHorizontalAlignment(
+      gfx::HorizontalAlignment::ALIGN_RIGHT);
+  UpdateNicknameLengthLabel();
 }
 
 void SaveIbanBubbleView::AssignIdsToDialogButtonsForTesting() {
@@ -195,12 +203,10 @@ void SaveIbanBubbleView::AssignIdsToDialogButtonsForTesting() {
     cancel_button->SetID(DialogViewId::CANCEL_BUTTON);
   }
 
-  DCHECK(iban_value_masking_button_);
-  iban_value_masking_button_->SetID(
+  DCHECK(iban_value_and_toggle_);
+  iban_value_and_toggle_->value()->SetID(DialogViewId::IBAN_VALUE_LABEL);
+  iban_value_and_toggle_->toggle_obscured()->SetID(
       DialogViewId::TOGGLE_IBAN_VALUE_MASKING_BUTTON);
-
-  DCHECK(iban_value_);
-  iban_value_->SetID(DialogViewId::IBAN_VALUE_LABEL);
 
   if (nickname_textfield_) {
     nickname_textfield_->SetID(DialogViewId::NICKNAME_TEXTFIELD);
@@ -224,10 +230,11 @@ void SaveIbanBubbleView::Init() {
   CreateMainContentView();
 }
 
-std::u16string SaveIbanBubbleView::GetIbanIdentifierString(
-    bool is_value_masked) const {
-  return controller_->GetIBAN().GetIdentifierStringForAutofillDisplay(
-      is_value_masked);
+void SaveIbanBubbleView::UpdateNicknameLengthLabel() {
+  nickname_length_label_->SetText(l10n_util::GetStringFUTF16(
+      IDS_IBAN_NICKNAME_COUNT_BY,
+      base::NumberToString16(nickname_textfield_->GetText().length()),
+      base::NumberToString16(kMaxNicknameChars)));
 }
 
 }  // namespace autofill

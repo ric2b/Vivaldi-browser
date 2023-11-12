@@ -33,6 +33,7 @@ class CC_EXPORT ViewTransitionRequest {
   };
 
   using SharedElementMap = std::map<ViewTransitionElementId, SharedElementInfo>;
+  using Type = viz::CompositorFrameTransitionDirective::Type;
 
   // Creates a Type::kCapture type of request.
   static std::unique_ptr<ViewTransitionRequest> CreateCapture(
@@ -49,7 +50,8 @@ class CC_EXPORT ViewTransitionRequest {
 
   // Creates a Type::kRelease type of request.
   static std::unique_ptr<ViewTransitionRequest> CreateRelease(
-      uint32_t document_tag);
+      uint32_t document_tag,
+      viz::NavigationID navigation_id);
 
   ViewTransitionRequest(ViewTransitionRequest&) = delete;
   ~ViewTransitionRequest();
@@ -73,12 +75,12 @@ class CC_EXPORT ViewTransitionRequest {
   // Returns the sequence id for this request.
   uint32_t sequence_id() const { return sequence_id_; }
 
+  Type type() const { return type_; }
+
   // Testing / debugging functionality.
   std::string ToString() const;
 
  private:
-  using Type = viz::CompositorFrameTransitionDirective::Type;
-
   ViewTransitionRequest(
       Type type,
       uint32_t document_tag,

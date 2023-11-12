@@ -608,6 +608,7 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
   // NOTE(andre@vivaldi.com) : Clear any clsid target exe key.
   installer_state.ClearToastActivatorTargetExe();
 
+  // Delete Software\Classes\CLSID\|toast_activator_clsid|.
   std::wstring toast_activator_reg_path =
       InstallUtil::GetToastActivatorRegistryPath();
   if (!toast_activator_reg_path.empty()) {

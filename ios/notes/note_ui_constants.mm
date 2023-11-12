@@ -51,7 +51,6 @@ NSString* const kNoteHomeSearchScrimIdentifier =
 const CGFloat kNoteCellViewSpacing = 10.0f;
 const CGFloat kNoteCellVerticalInset = 11.0f;
 const CGFloat kNoteCellHorizontalLeadingInset = 16.0f;
-const CGFloat kNoteCellHorizontalTrailingInset = 24.0f;
 const CGFloat kNoteCellHorizontalAccessoryViewSpacing = 11.0f;
 
 NSString* const kNoteCreateNewFolderCellIdentifier =
@@ -64,3 +63,29 @@ NSString* const kNoteEmptyStateExplanatoryLabelIdentifier =
 NSString* const kToolsMenuNotesId = @"kToolsMenuNotesId";
 NSString* const kToolsMenuAddToNotes = @"kToolsMenuAddToNotes";
 #endif
+
+#pragma mark - ICONS
+// TODO - @karianne@vivaldi.com FIX ICONS
+// Image name for the note folder icon.
+NSString* vNotesFolderIcon = @"vivaldi_bookmarks_folder";
+// Image name for the folder selection chevron.
+NSString* vNoteFolderSelectionChevron =
+  @"vivald_bookmark_folder_selection_chevron";
+// Image name for the folder selection checkmark.
+NSString* vNoteFolderSelectionCheckmark =
+  @"vivald_bookmark_folder_selection_checkmark";
+// Image name for add folder
+NSString* vNoteAddFolder =
+  @"vivaldi_bookmark_add_new_folder";
+
+#pragma mark - SIZE
+// Corner radius for the note body container view
+CGFloat vNoteBodyCornerRadius = 6.0;
+// Note editor text view height
+CGFloat vNoteTextViewHeight = 44.0;
+//  Note folder selection header view height
+CGFloat vNoteFolderSelectionHeaderViewHeight = 60.0;
+
+#pragma mark - OTHERS
+// Maximum number of entries to fetch when searching on notes folder page.
+const int vMaxNoteFolderSearchResults = 50;

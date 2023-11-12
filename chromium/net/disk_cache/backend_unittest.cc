@@ -32,7 +32,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/process_memory_dump.h"
-#include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
 #include "net/base/cache_type.h"
 #include "net/base/completion_once_callback.h"
@@ -40,6 +39,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/base/test_completion_callback.h"
+#include "net/base/tracing.h"
 #include "net/disk_cache/backend_cleanup_tracker.h"
 #include "net/disk_cache/blockfile/backend_impl.h"
 #include "net/disk_cache/blockfile/entry_impl.h"
@@ -284,12 +284,9 @@ int DiskCacheBackendTest::GeneratePendingIO(net::TestCompletionCallback* cb) {
     // We are using the current thread as the cache thread because we want to
     // be able to call directly this method to make sure that the OS (instead
     // of us switching thread) is returning IO pending.
-    bool optimistic = false;
     if (!simple_cache_mode_) {
       rv = static_cast<disk_cache::EntryImpl*>(entry)->WriteDataImpl(
-          0, i, buffer.get(), kSize, cb->callback(), false, &optimistic);
-      if (optimistic)
-        rv = net::ERR_IO_PENDING;
+          0, i, buffer.get(), kSize, cb->callback(), false);
     } else {
       rv = entry->WriteData(0, i, buffer.get(), kSize, cb->callback(), false);
     }
@@ -897,7 +894,9 @@ TEST_F(DiskCacheBackendTest, ExternalFiles) {
   scoped_refptr<net::IOBuffer> buffer1 =
       base::MakeRefCounted<net::IOBuffer>(kSize);
   CacheTestFillBuffer(buffer1->data(), kSize, false);
-  ASSERT_EQ(kSize, base::WriteFile(filename, buffer1->data(), kSize));
+  ASSERT_TRUE(base::WriteFile(
+      filename,
+      base::StringPiece(buffer1->data(), static_cast<size_t>(kSize))));
 
   // Now let's create a file with the cache.
   disk_cache::Entry* entry;
@@ -1117,7 +1116,7 @@ TEST_F(DiskCacheBackendTest, ShutdownWithPendingDoom) {
 TEST_F(DiskCacheTest, TruncatedIndex) {
   ASSERT_TRUE(CleanupCacheDir());
   base::FilePath index = cache_path_.AppendASCII("index");
-  ASSERT_EQ(5, base::WriteFile(index, "hello", 5));
+  ASSERT_TRUE(base::WriteFile(index, "hello"));
 
   TestBackendResultCompletionCallback cb;
 
@@ -4125,9 +4124,8 @@ TEST_F(DiskCacheBackendTest, SimpleCacheOpenBadFile) {
 
   disk_cache::SimpleFileHeader header;
   header.initial_magic_number = UINT64_C(0xbadf00d);
-  EXPECT_EQ(static_cast<int>(sizeof(header)),
-            base::WriteFile(entry_file1_path, reinterpret_cast<char*>(&header),
-                            sizeof(header)));
+  EXPECT_TRUE(base::WriteFile(entry_file1_path,
+                              base::as_bytes(base::make_span(&header, 1u))));
   ASSERT_THAT(OpenEntry(key, &entry), IsError(net::ERR_FAILED));
 }
 
@@ -4927,8 +4925,7 @@ TEST_F(DiskCacheBackendTest, EmptyCorruptSimpleCacheRecovery) {
   // Create a corrupt fake index in an otherwise empty simple cache.
   ASSERT_TRUE(base::PathExists(cache_path_));
   const base::FilePath index = cache_path_.AppendASCII("index");
-  ASSERT_EQ(static_cast<int>(kCorruptData.length()),
-            base::WriteFile(index, kCorruptData.data(), kCorruptData.length()));
+  ASSERT_TRUE(base::WriteFile(index, kCorruptData));
 
   TestBackendResultCompletionCallback cb;
 
@@ -4950,8 +4947,7 @@ TEST_F(DiskCacheBackendTest, MAYBE_NonEmptyCorruptSimpleCacheDoesNotRecover) {
   // Corrupt the fake index file for the populated simple cache.
   ASSERT_TRUE(base::PathExists(cache_path_));
   const base::FilePath index = cache_path_.AppendASCII("index");
-  ASSERT_EQ(static_cast<int>(kCorruptData.length()),
-            base::WriteFile(index, kCorruptData.data(), kCorruptData.length()));
+  ASSERT_TRUE(base::WriteFile(index, kCorruptData));
 
   TestBackendResultCompletionCallback cb;
 

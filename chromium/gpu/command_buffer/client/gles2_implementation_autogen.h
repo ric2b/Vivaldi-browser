@@ -1180,6 +1180,45 @@ void CopySharedImageINTERNAL(GLint xoffset,
                              GLboolean unpack_flip_y,
                              const GLbyte* mailboxes) override;
 
+void CopySharedImageToTextureINTERNAL(GLuint texture,
+                                      GLenum target,
+                                      GLuint internal_format,
+                                      GLenum type,
+                                      GLint src_x,
+                                      GLint src_y,
+                                      GLsizei width,
+                                      GLsizei height,
+                                      GLboolean flip_y,
+                                      const GLbyte* src_mailbox) override;
+
+void ReadbackARGBImagePixelsINTERNAL(const GLbyte* mailbox,
+                                     const void* dst_color_space,
+                                     GLuint dst_color_space_size,
+                                     GLuint dst_size,
+                                     GLuint dst_width,
+                                     GLuint dst_height,
+                                     GLuint dst_color_type,
+                                     GLuint dst_alpha_type,
+                                     GLuint dst_row_bytes,
+                                     GLint src_x,
+                                     GLint src_y,
+                                     GLint plane_index,
+                                     void* pixels) override;
+
+void WritePixelsINTERNAL(const GLbyte* mailbox,
+                         const void* src_color_space,
+                         GLuint src_color_space_size,
+                         GLuint src_size,
+                         GLuint src_width,
+                         GLuint src_height,
+                         GLuint src_sk_color_type,
+                         GLuint src_sk_alpha_type,
+                         GLuint src_row_bytes,
+                         GLint x_offset,
+                         GLint y_offset,
+                         GLint plane_index,
+                         const void* src_pixels) override;
+
 void EnableiOES(GLenum target, GLuint index) override;
 
 void DisableiOES(GLenum target, GLuint index) override;
@@ -1207,5 +1246,41 @@ void ColorMaskiOES(GLuint buf,
 GLboolean IsEnablediOES(GLenum target, GLuint index) override;
 
 void ProvokingVertexANGLE(GLenum provokeMode) override;
+
+void FramebufferMemorylessPixelLocalStorageANGLE(
+    GLint plane,
+    GLenum internalformat) override;
+
+void FramebufferTexturePixelLocalStorageANGLE(GLint plane,
+                                              GLuint backingtexture,
+                                              GLint level,
+                                              GLint layer) override;
+
+void FramebufferPixelLocalClearValuefvANGLE(GLint plane,
+                                            const GLfloat* value) override;
+
+void FramebufferPixelLocalClearValueivANGLE(GLint plane,
+                                            const GLint* value) override;
+
+void FramebufferPixelLocalClearValueuivANGLE(GLint plane,
+                                             const GLuint* value) override;
+
+void BeginPixelLocalStorageANGLE(GLsizei count, const GLenum* loadops) override;
+
+void EndPixelLocalStorageANGLE(GLsizei count, const GLenum* storeops) override;
+
+void PixelLocalStorageBarrierANGLE() override;
+
+void FramebufferPixelLocalStorageInterruptANGLE() override;
+
+void FramebufferPixelLocalStorageRestoreANGLE() override;
+
+void GetFramebufferPixelLocalStorageParameterfvANGLE(GLint plane,
+                                                     GLenum pname,
+                                                     GLfloat* params) override;
+
+void GetFramebufferPixelLocalStorageParameterivANGLE(GLint plane,
+                                                     GLenum pname,
+                                                     GLint* params) override;
 
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_AUTOGEN_H_

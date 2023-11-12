@@ -13,10 +13,12 @@
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/compat_mode/arc_resize_lock_manager.h"
 #include "ash/components/arc/mojom/compatibility_mode.mojom.h"
+#include "ash/components/arc/net/arc_net_host_impl.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/connection_holder.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/metrics/login_unlock_throughput_recorder.h"
 #include "ash/shell.h"
@@ -25,6 +27,7 @@
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
@@ -34,6 +37,7 @@
 #include "base/task/thread_pool.h"
 #include "base/values.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs_factory.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_metrics_util.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_scoped_pref_update.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/app_list/arc/arc_default_app_list.h"
@@ -106,6 +110,7 @@ constexpr char kWindowBounds[] = "window_bounds";
 constexpr char kVersionName[] = "version_name";
 constexpr char kAppSizeBytesString[] = "app_size_bytes_string";
 constexpr char kDataSizeBytesString[] = "data_size_bytes_string";
+constexpr char kAppCategory[] = "app_category";
 // Deprecated perfs fields.
 constexpr char kDeprecatePackagePrefsSystem[] = "system";
 
@@ -153,7 +158,7 @@ class NotificationsEnabledDeferred {
   }
 
  private:
-  PrefService* const prefs_;
+  const raw_ptr<PrefService, ExperimentalAsh> prefs_;
 };
 
 bool WriteIconFile(const base::FilePath& icon_path,
@@ -163,10 +168,7 @@ bool WriteIconFile(const base::FilePath& icon_path,
 
   base::CreateDirectory(icon_path.DirName());
 
-  int wrote = base::WriteFile(icon_path,
-                              reinterpret_cast<const char*>(&icon_png_data[0]),
-                              icon_png_data.size());
-  if (wrote != static_cast<int>(icon_png_data.size())) {
+  if (!base::WriteFile(icon_path, icon_png_data)) {
     VLOG(2) << "Failed to write ARC icon file: " << icon_path.MaybeAsASCII()
             << ".";
     if (!base::DeleteFile(icon_path)) {
@@ -504,6 +506,7 @@ ArcAppListPrefs::ArcAppListPrefs(
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   const base::FilePath& base_path = profile->GetPath();
   base_path_ = base_path.AppendASCII(arc::prefs::kArcApps);
+  arc_app_metrics_util_ = std::make_unique<arc::ArcAppMetricsUtil>();
 
   // Once default apps are ready OnDefaultAppsReady is called.
   default_apps_ = std::make_unique<ArcDefaultAppList>(
@@ -531,6 +534,14 @@ ArcAppListPrefs::ArcAppListPrefs(
       arc::ArcResizeLockManager::GetForBrowserContext(profile_);
   if (resize_lock_manager)
     resize_lock_manager->SetPrefDelegate(this);
+
+  if (ash::features::IsPasspointARCSupportEnabled()) {
+    arc::ArcNetHostImpl* net_host =
+        arc::ArcNetHostImpl::GetForBrowserContext(profile_);
+    if (net_host) {
+      net_host->SetArcAppMetadataProvider(this);
+    }
+  }
 }
 
 ArcAppListPrefs::~ArcAppListPrefs() {
@@ -1000,6 +1011,10 @@ std::unique_ptr<ArcAppListPrefs::AppInfo> ArcAppListPrefs::GetAppFromPrefs(
   WindowLayout window_layout =
       WindowLayoutFromDict(app_dict->FindDict(kWindowLayout));
 
+  const auto app_category = static_cast<arc::mojom::AppCategory>(
+      app_dict->FindInt(kAppCategory)
+          .value_or(static_cast<int32_t>(arc::mojom::AppCategory::kUndefined)));
+
   return std::make_unique<AppInfo>(
       name, package_name, activity, intent_uri, icon_resource_id, version_name,
       last_launch_time, GetInstallTime(app_id),
@@ -1009,7 +1024,7 @@ std::unique_ptr<ArcAppListPrefs::AppInfo> ArcAppListPrefs::GetAppFromPrefs(
       window_layout, ready_apps_.count(app_id) > 0 /* ready */,
       app_dict->FindBool(kSuspended).value_or(false),
       launchable && arc::ShouldShowInLauncher(app_id), shortcut, launchable,
-      need_fixup, app_size_in_bytes, data_size_in_bytes);
+      need_fixup, app_size_in_bytes, data_size_in_bytes, app_category);
 }
 
 bool ArcAppListPrefs::IsRegistered(const std::string& app_id) const {
@@ -1179,6 +1194,10 @@ void ArcAppListPrefs::OnArcPlayStoreEnabledChanged(bool enabled) {
   }
 }
 
+void ArcAppListPrefs::OnArcSessionStopped(arc::ArcStopReason stop_reason) {
+  arc_app_metrics_util_->reportIncompleteInstalls();
+}
+
 void ArcAppListPrefs::SetDefaultAppsFilterLevel() {
   // There is no a blocklisting mechanism for Android apps. Until there is
   // one, we have no option but to ban all pre-installed apps on Android side.
@@ -1287,6 +1306,16 @@ arc::mojom::ArcResizeLockState ArcAppListPrefs::GetResizeLockState(
   return app_info->resize_lock_state;
 }
 
+arc::mojom::AppCategory ArcAppListPrefs::GetAppCategory(
+    const std::string& app_id) const {
+  std::unique_ptr<AppInfo> app_info = GetApp(app_id);
+  if (!app_info) {
+    VLOG(2) << "Failed to get app info: " << app_id << ".";
+    return arc::mojom::AppCategory::kUndefined;
+  }
+  return app_info->app_category;
+}
+
 void ArcAppListPrefs::SetResizeLockState(const std::string& app_id,
                                          arc::mojom::ArcResizeLockState state) {
   if (!IsRegistered(app_id)) {
@@ -1361,6 +1390,15 @@ void ArcAppListPrefs::SetShowSplashScreenDialogCount(int count) {
       arc::prefs::kArcShowResizeLockSplashScreenLimits, count);
 }
 
+std::string ArcAppListPrefs::GetAppPackageName(const std::string& app_id) {
+  std::unique_ptr<AppInfo> app_info = GetApp(app_id);
+  if (!app_info) {
+    VLOG(2) << "Failed to get app info: " << app_id << ".";
+    return std::string();
+  }
+  return app_info->package_name;
+}
+
 void ArcAppListPrefs::Shutdown() {
   arc::ArcPolicyBridge* policy_bridge =
       arc::ArcPolicyBridge::GetForBrowserContext(profile_);
@@ -1392,7 +1430,8 @@ void ArcAppListPrefs::RegisterDefaultApps() {
         false /* notifications_enabled */, false /* app_ready */,
         false /* suspended */, false /* shortcut */, true /* launchable */,
         false /* need_fixup */, ArcAppListPrefs::WindowLayout(),
-        absl::nullopt /* app_size */, absl::nullopt /* data_size */);
+        absl::nullopt /* app_size */, absl::nullopt /* data_size */,
+        GetAppCategory(app_id));
   }
 }
 
@@ -1492,7 +1531,8 @@ void ArcAppListPrefs::HandleTaskCreated(const absl::optional<std::string>& name,
         false /* notifications_enabled */, true /* app_ready */,
         false /* suspended */, false /* shortcut */, false /* launchable */,
         false /* need_fixup */, ArcAppListPrefs::WindowLayout(),
-        absl::nullopt /* app_size */, absl::nullopt /* data_size */);
+        absl::nullopt /* app_size */, absl::nullopt /* data_size */,
+        GetAppCategory(app_id));
   }
 }
 
@@ -1512,7 +1552,8 @@ void ArcAppListPrefs::AddAppAndShortcut(
     const bool need_fixup,
     const WindowLayout& initial_window_layout,
     const absl::optional<uint64_t> app_size_in_bytes,
-    const absl::optional<uint64_t> data_size_in_bytes) {
+    const absl::optional<uint64_t> data_size_in_bytes,
+    const arc::mojom::AppCategory app_category) {
   const std::string app_id = shortcut ? GetAppId(package_name, intent_uri)
                                       : GetAppId(package_name, activity);
 
@@ -1570,6 +1611,7 @@ void ArcAppListPrefs::AddAppAndShortcut(
   app_dict.Set(kShortcut, shortcut);
   app_dict.Set(kLaunchable, launchable);
   app_dict.Set(kNeedFixup, need_fixup);
+  app_dict.Set(kAppCategory, static_cast<int32_t>(app_category));
 
   app_dict.Set(kWindowLayout, WindowLayoutToDict(initial_window_layout));
 
@@ -1599,7 +1641,7 @@ void ArcAppListPrefs::AddAppAndShortcut(
       notifications_enabled, resize_lock_state, resize_lock_needs_confirmation,
       initial_window_layout, app_ready, suspended,
       launchable && arc::ShouldShowInLauncher(app_id), shortcut, launchable,
-      need_fixup, app_size_in_bytes, data_size_in_bytes);
+      need_fixup, app_size_in_bytes, data_size_in_bytes, app_category);
 
   if (was_tracked) {
     if (AreAppStatesChanged(*app_old_info, app_info)) {
@@ -1785,6 +1827,7 @@ void ArcAppListPrefs::AddOrUpdatePackagePrefs(
 
 void ArcAppListPrefs::RemovePackageFromPrefs(const std::string& package_name) {
   ScopedDictPrefUpdate(prefs_, arc::prefs::kArcPackages)->Remove(package_name);
+  OnArcAppListRefreshed(profile_);
 }
 
 void ArcAppListPrefs::OnAppListRefreshed(
@@ -1818,7 +1861,7 @@ void ArcAppListPrefs::OnAppListRefreshed(
         app->version_name, app->sticky, app->notifications_enabled,
         true /* app_ready */, app->suspended, false /* shortcut */,
         true /* launchable */, app->need_fixup, WindowLayoutFromApp(*app),
-        app_size_in_bytes, data_size_in_bytes);
+        app_size_in_bytes, data_size_in_bytes, app->app_category);
   }
 
   // Detect removed ARC apps after current refresh.
@@ -1905,7 +1948,7 @@ void ArcAppListPrefs::AddApp(const arc::mojom::AppInfo& app_info) {
       app_info.version_name, app_info.sticky, app_info.notifications_enabled,
       true /* app_ready */, app_info.suspended, false /* shortcut */,
       true /* launchable */, app_info.need_fixup, WindowLayoutFromApp(app_info),
-      app_size_in_bytes, data_size_in_bytes);
+      app_size_in_bytes, data_size_in_bytes, app_info.app_category);
 }
 
 void ArcAppListPrefs::OnAppAddedDeprecated(arc::mojom::AppInfoPtr app) {
@@ -1997,7 +2040,8 @@ void ArcAppListPrefs::OnInstallShortcut(arc::mojom::ShortcutInfoPtr shortcut) {
       false /* notifications_enabled */, true /* app_ready */,
       false /* suspended */, true /* shortcut */, true /* launchable */,
       false /* need_fixup */, ArcAppListPrefs::WindowLayout(),
-      absl::nullopt /* app_size */, absl::nullopt /* data_size */);
+      absl::nullopt /* app_size */, absl::nullopt /* data_size */,
+      GetAppCategory(GetAppId(shortcut->package_name, shortcut->intent_uri)));
 }
 
 void ArcAppListPrefs::OnUninstallShortcut(const std::string& package_name,
@@ -2363,6 +2407,15 @@ void ArcAppListPrefs::OnInstallationStarted(
 
   apps_installations_.insert(*package_name);
 
+  // Track install start time IFF app sync metrics are also being recorded
+  // and app is not a synced or default app. App sync metrics are only
+  // recorded if this is the initial session after opting in during the sync
+  // consent screen
+  if (prefs_->GetBoolean(ash::prefs::kRecordArcAppSyncMetrics) &&
+      !(sync_service_ && sync_service_->IsPackageSyncing(*package_name)) &&
+      !IsDefaultPackage(*package_name)) {
+    arc_app_metrics_util_->recordAppInstallStartTime(*package_name);
+  }
   for (auto& observer : observer_list_)
     observer.OnInstallationStarted(*package_name);
 }
@@ -2389,7 +2442,7 @@ void ArcAppListPrefs::OnInstallationFinished(
         reason = InstallationCounterReasonEnum::POLICY;
       }
       UMA_HISTOGRAM_ENUMERATION("Arc.AppInstalledReason", reason);
-
+      arc_app_metrics_util_->maybeReportInstallTimeDelta(result->package_name);
       packages_to_be_added_.insert(result->package_name);
     }
   }
@@ -2445,7 +2498,8 @@ ArcAppListPrefs::AppInfo::AppInfo(
     bool launchable,
     bool need_fixup,
     const absl::optional<uint64_t> app_size_in_bytes,
-    const absl::optional<uint64_t> data_size_in_bytes)
+    const absl::optional<uint64_t> data_size_in_bytes,
+    arc::mojom::AppCategory app_category)
     : name(name),
       package_name(package_name),
       activity(activity),
@@ -2466,7 +2520,8 @@ ArcAppListPrefs::AppInfo::AppInfo(
       launchable(launchable),
       need_fixup(need_fixup),
       app_size_in_bytes(app_size_in_bytes),
-      data_size_in_bytes(data_size_in_bytes) {
+      data_size_in_bytes(data_size_in_bytes),
+      app_category(app_category) {
   // If app is not launchable it also does not show in launcher.
   DCHECK(launchable || !show_in_launcher);
 }
@@ -2499,7 +2554,8 @@ bool ArcAppListPrefs::AppInfo::operator==(const AppInfo& other) const {
          shortcut == other.shortcut && launchable == other.launchable &&
          need_fixup == other.need_fixup &&
          app_size_in_bytes == other.app_size_in_bytes &&
-         data_size_in_bytes == other.data_size_in_bytes;
+         data_size_in_bytes == other.data_size_in_bytes &&
+         app_category == other.app_category;
 }
 
 ArcAppListPrefs::PackageInfo::PackageInfo(

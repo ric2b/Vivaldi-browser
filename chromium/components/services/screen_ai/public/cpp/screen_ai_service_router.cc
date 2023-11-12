@@ -12,7 +12,7 @@
 #include "base/location.h"
 #include "base/task/thread_pool.h"
 #include "components/services/screen_ai/public/cpp/screen_ai_install_state.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/service_process_host.h"
 
 namespace {
@@ -47,6 +47,12 @@ std::unique_ptr<ComponentModelFiles> ComponentModelFiles::LoadComponentFiles() {
   return std::make_unique<ComponentModelFiles>(
       screen_ai::ScreenAIInstallState::GetInstance()
           ->get_component_binary_path());
+}
+
+void LibraryInitState(bool successful) {
+  screen_ai::ScreenAIInstallState::GetInstance()->SetState(
+      successful ? screen_ai::ScreenAIInstallState::State::kReady
+                 : screen_ai::ScreenAIInstallState::State::kFailed);
 }
 
 }  // namespace
@@ -84,9 +90,9 @@ void ScreenAIServiceRouter::LaunchIfNotRunning() {
   if (screen_ai_service_.is_bound())
     return;
 
-  if (!ScreenAIInstallState::GetInstance()->IsComponentReady()) {
+  if (!ScreenAIInstallState::GetInstance()->IsComponentAvailable()) {
     VLOG(0)
-        << "ScreenAI service launch triggered before the component is ready.";
+        << "ScreenAI service launch triggered when component is not available.";
     return;
   }
 
@@ -112,7 +118,8 @@ void ScreenAIServiceRouter::LaunchIfNotRunning() {
             service_router->screen_ai_service_->LoadAndInitializeLibrary(
                 std::move(model_files->screen2x_model_config_),
                 std::move(model_files->screen2x_model_),
-                model_files->library_binary_path_);
+                model_files->library_binary_path_,
+                base::BindOnce(&LibraryInitState));
           },
           weak_ptr_factory_.GetWeakPtr()));
 }

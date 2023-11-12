@@ -32,6 +32,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -501,6 +502,7 @@ void AddStringsGeneric(base::Value::Dict* dict) {
   SET_STRING("FILE_ITEMS_EXTRACTED", IDS_FILE_BROWSER_FILE_ITEMS_EXTRACTED);
   SET_STRING("FILE_ITEMS_MOVED", IDS_FILE_BROWSER_FILE_ITEMS_MOVED);
   SET_STRING("FILE_MOVED", IDS_FILE_BROWSER_FILE_MOVED);
+  SET_STRING("FILES_SETTINGS_LABEL", IDS_FILE_BROWSER_FILES_SETTINGS_LABEL);
   SET_STRING("FOLDER_SHARED_WITH_CROSTINI",
              IDS_FILE_BROWSER_FOLDER_SHARED_WITH_CROSTINI);
   SET_STRING("FOLDER_SHARED_WITH_CROSTINI_PLURAL",
@@ -798,8 +800,8 @@ void AddStringsGeneric(base::Value::Dict* dict) {
              IDS_FILE_BROWSER_SEARCH_A11Y_CLEAR_SEARCH);
   SET_STRING("SEARCH_OPTIONS_LOCATION_EVERYWHERE",
              IDS_FILE_BROWSER_SEARCH_OPTIONS_LOCATION_EVERYWHERE);
-  SET_STRING("SEARCH_OPTIONS_LOCATION_THIS_CHROMEBOOK",
-             IDS_FILE_BROWSER_SEARCH_OPTIONS_LOCATION_THIS_CHROMEBOOK);
+  SET_STRING("SEARCH_OPTIONS_LOCATION_THIS_VOLUME",
+             IDS_FILE_BROWSER_SEARCH_OPTIONS_LOCATION_THIS_VOLUME);
   SET_STRING("SEARCH_OPTIONS_LOCATION_THIS_FOLDER",
              IDS_FILE_BROWSER_SEARCH_OPTIONS_LOCATION_THIS_FOLDER);
   SET_STRING("SEARCH_OPTIONS_RECENCY_ALL_TIME",
@@ -829,6 +831,10 @@ void AddStringsGeneric(base::Value::Dict* dict) {
   SET_STRING("SEARCH_NO_MATCHING_RESULTS_DESC",
              IDS_FILE_BROWSER_SEARCH_NO_MATCHING_RESULTS_DESC);
   SET_STRING("SEARCH_RESULTS_LABEL", IDS_FILE_BROWSER_SEARCH_RESULTS_LABEL);
+  SET_STRING("SEARCH_V2_EDUCATION_NUDGE",
+             IDS_FILE_BROWSER_SEARCH_V2_EDUCATION_NUDGE);
+  SET_STRING("SEARCH_RESULTS_MULTIPLE_SELECTION",
+             IDS_FILE_BROWSER_SEARCH_RESULTS_MULTIPLE_SELECTION);
 
   SET_STRING("SELECT_ALL_COMMAND_LABEL",
              IDS_FILE_BROWSER_SELECT_ALL_COMMAND_LABEL);
@@ -922,6 +928,8 @@ void AddStringsGeneric(base::Value::Dict* dict) {
   SET_STRING("SELECTION_ADD_RANGE", IDS_FILE_BROWSER_SELECTION_ADD_RANGE);
   SET_STRING("SELECTION_CANCELLATION", IDS_FILE_BROWSER_SELECTION_CANCELLATION);
   SET_STRING("SELECTION_ALL_ENTRIES", IDS_FILE_BROWSER_SELECTION_ALL_ENTRIES);
+  SET_STRING("CURRENT_DIRECTORY_LABEL",
+             IDS_FILE_BROWSER_CURRENT_DIRECTORY_LABEL);
   SET_STRING("SIZE_GB", IDS_FILE_BROWSER_SIZE_GB);
   SET_STRING("SIZE_KB", IDS_FILE_BROWSER_SIZE_KB);
   SET_STRING("SIZE_MB", IDS_FILE_BROWSER_SIZE_MB);
@@ -1073,18 +1081,17 @@ bool IsEligibleAndEnabledGoogleOneOfferFilesBanner() {
     return false;
   }
 
-  raw_ptr<user_manager::UserManager> user_manager =
-      user_manager::UserManager::Get();
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   if (!user_manager) {
     return false;
   }
 
-  raw_ptr<user_manager::User> user = user_manager->GetActiveUser();
+  user_manager::User* user = user_manager->GetActiveUser();
   if (!user) {
     return false;
   }
 
-  raw_ptr<Profile> profile = ash::ProfileHelper::Get()->GetProfileByUser(user);
+  Profile* profile = ash::ProfileHelper::Get()->GetProfileByUser(user);
   if (!profile) {
     return false;
   }
@@ -1189,6 +1196,8 @@ void AddFileManagerFeatureStrings(const std::string& locale,
             base::FeatureList::IsEnabled(ash::features::kFilesSearchV2));
   dict->Set("FILES_TRASH_ENABLED",
             base::FeatureList::IsEnabled(ash::features::kFilesTrash));
+  dict->Set("FILES_TRASH_DRIVE_ENABLED",
+            base::FeatureList::IsEnabled(ash::features::kFilesTrashDrive));
   dict->Set(
       "FILES_SINGLE_PARTITION_FORMAT_ENABLED",
       base::FeatureList::IsEnabled(ash::features::kFilesSinglePartitionFormat));
@@ -1207,7 +1216,7 @@ void AddFileManagerFeatureStrings(const std::string& locale,
 
   dict->Set("GUEST_OS", true);
 
-  dict->Set("JELLY", base::FeatureList::IsEnabled(ash::features::kJelly));
+  dict->Set("JELLY", chromeos::features::IsJellyEnabled());
 
   dict->Set("DRIVE_SHORTCUTS",
             base::FeatureList::IsEnabled(ash::features::kFilesDriveShortcuts));

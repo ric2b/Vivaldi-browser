@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Opnir flipar</translation>
 <translation id="1829244130665387512">Leita á síðunni</translation>
 <translation id="1910514478706885609">Opna í nýjum flipabunka</translation>
+<translation id="1925021887439448749">Færðu inn sérsniðna vefslóð</translation>
 <translation id="2038563949887743358">Kveiktu á borðtölvuútgáfu</translation>
 <translation id="2139186145475833000">Bæta við á aðalskjá</translation>
+<translation id="2149973817440762519">Breyta bókamerki</translation>
 <translation id="2306442503286132111">Bókamerki vistað í <ph name="FOLDER_NAME" /> möppu</translation>
 <translation id="2433507940547922241">Útlit</translation>
 <translation id="2501278716633472235">Fara til baka</translation>
 <translation id="2633278372998075009">Einkaflipar</translation>
+<translation id="2951071800649516099">Bæta síðum á leslistann þinn til síðari nota</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bókamerki}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> bókamerki}}</translation>
@@ -36,6 +39,7 @@
 
 Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er valin sem sjálfgefin leitarvél í Vivaldi.</translation>
 <translation id="4759238208242260848">Niðurhöl</translation>
+<translation id="4850886885716139402">Sjá</translation>
 <translation id="4883379392681899581">Fara úr einkaham</translation>
 <translation id="4943872375798546930">Engin niðurstaða</translation>
 <translation id="49576331685473090">Innihaldssía</translation>
@@ -48,7 +52,9 @@ Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er 
 Ýttu lengi til að velja leitarorð. Fyrir nákvæmari leitarskilyrði má draga spjald alla leið upp og slá á leitarboxið.</translation>
 <translation id="572328651809341494">Nýlegir flipar</translation>
 <translation id="6150320133806434356">Bókamerki vistað</translation>
+<translation id="6301525844455696527">Hafðu stjórn á leslistanum þínum</translation>
 <translation id="6336451774241870485">Nýr einkaflipi</translation>
+<translation id="6404511346730675251">Breyta bókamerki</translation>
 <translation id="6585139692466700358">Bjóða upp á að þýða síður af erlendum tungumálum með þýðingarþjónustu Vivaldi</translation>
 <translation id="6593061639179217415">Nota borðtölvuútlit</translation>
 <translation id="6610147964972079463">Loka einkagluggum</translation>
@@ -57,9 +63,15 @@ Að ýta til þess að leita er aðgerð, sem bara er í boði þegar Google er 
 <translation id="732145680195464316">Bókamerki vistað í <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Um Vivaldi</translation>
 <translation id="7465104139234185284">Loka öllum einkagluggum</translation>
+<translation id="7481312909269577407">Áfram</translation>
+<translation id="7583262514280211622">Þú finnur leslistann þinn hér</translation>
+<translation id="7968014550143838305">Bætt við leslista</translation>
 <translation id="804786196054284061">Leyfisskilmálar notenda</translation>
+<translation id="8127542551745560481">Breyta heimasíðu</translation>
+<translation id="8560602726703398413">Finndu leslistann þinn í bókamerkjum</translation>
 <translation id="85991616550051997">Fara á heimasíðu</translation>
 <translation id="8820817407110198400">Bókamerki</translation>
 <translation id="9063523880881406963">Slökktu á borðtölvuútgáfu</translation>
 <translation id="9080642952018487277">Fara í einkaham</translation>
+<translation id="96681097142096641">Skoða einfaldaða síðu?</translation>
 </translationbundle>

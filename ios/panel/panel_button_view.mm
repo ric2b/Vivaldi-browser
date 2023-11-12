@@ -25,7 +25,7 @@ CGFloat iconSize = 56.0;
 }
 
 @interface PanelButtonView() <UICollectionViewDelegate,
-                                    UICollectionViewDataSource> {
+                              UICollectionViewDataSource> {
     NSInteger activeIndex;
 }
 @property (weak,nonatomic) UICollectionView *collectionView;
@@ -42,7 +42,6 @@ CGFloat iconSize = 56.0;
   }
   return self;
 }
-
 
 #pragma mark - SET UP UI COMPONENTS
 - (void)setUpUI {

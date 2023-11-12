@@ -45,8 +45,8 @@ class TranslateHistoryAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<TranslateHistoryAPI>;
 
-  content::BrowserContext* browser_context_;
-  translate_history::TH_Model* model_ = nullptr;
+  const raw_ptr<content::BrowserContext> browser_context_;
+  raw_ptr<translate_history::TH_Model> model_ = nullptr;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "TranslateHistoryAPI"; }

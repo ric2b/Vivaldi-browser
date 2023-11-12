@@ -58,7 +58,8 @@ LocalFrame* SingleChildLocalFrameClient::CreateFrame(
 
   child->Init(/*opener=*/nullptr, DocumentToken(), std::move(policy_container),
               parent_frame->DomWindow()->GetStorageKey(),
-              /*document_ukm_source_id=*/ukm::kInvalidSourceId);
+              /*document_ukm_source_id=*/ukm::kInvalidSourceId,
+              /*creator_base_url=*/KURL());
 
   return child;
 }
@@ -83,7 +84,7 @@ void RenderingTestChromeClient::InjectGestureScrollEvent(
           delta, granularity);
   if (injected_type == WebInputEvent::Type::kGestureScrollBegin) {
     gesture_event->data.scroll_begin.scrollable_area_element_id =
-        scrollable_area_element_id.GetStableId();
+        scrollable_area_element_id.GetInternalValue();
   }
   local_frame.GetEventHandler().HandleGestureEvent(*gesture_event);
 }

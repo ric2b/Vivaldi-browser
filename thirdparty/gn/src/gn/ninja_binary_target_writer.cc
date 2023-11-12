@@ -15,6 +15,7 @@
 #include "gn/ninja_rust_binary_target_writer.h"
 #include "gn/ninja_target_command_util.h"
 #include "gn/ninja_utils.h"
+#include "gn/pool.h"
 #include "gn/settings.h"
 #include "gn/string_utils.h"
 #include "gn/substitution_writer.h"
@@ -418,5 +419,14 @@ void NinjaBinaryTargetWriter::WriteSwiftModules(
   for (const OutputFile& swiftmodule : swiftmodules) {
     out << " " << tool->swiftmodule_switch();
     swiftmodule_path_output.WriteFile(out, swiftmodule);
+  }
+}
+
+void NinjaBinaryTargetWriter::WritePool(std::ostream& out) {
+  if (target_->pool().ptr) {
+    out << "  pool = ";
+    out << target_->pool().ptr->GetNinjaName(
+        settings_->default_toolchain_label());
+    out << std::endl;
   }
 }

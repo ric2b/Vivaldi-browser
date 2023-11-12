@@ -58,14 +58,14 @@ TEST_F(RulesetMatcherTest, BlockingRule) {
   };
 
   GURL google_url("http://google.com");
+  GURL yahoo_url("http://yahoo.com");
+
   RequestParams params;
   params.url = &google_url;
   params.element_type = url_pattern_index::flat::ElementType_SUBDOCUMENT;
   params.is_third_party = true;
-
   EXPECT_TRUE(should_block_request(params));
 
-  GURL yahoo_url("http://yahoo.com");
   params.url = &yahoo_url;
   EXPECT_FALSE(should_block_request(params));
 }
@@ -164,8 +164,7 @@ TEST_F(RulesetMatcherTest, FailedVerification) {
   // Persist invalid data to the ruleset file and ensure that a version mismatch
   // occurs.
   std::string data = "invalid data";
-  ASSERT_EQ(static_cast<int>(data.size()),
-            base::WriteFile(source.indexed_path(), data.c_str(), data.size()));
+  ASSERT_TRUE(base::WriteFile(source.indexed_path(), data));
   EXPECT_EQ(LoadRulesetResult::kErrorVersionMismatch,
             source.CreateVerifiedMatcher(expected_checksum, &matcher));
 
@@ -173,8 +172,7 @@ TEST_F(RulesetMatcherTest, FailedVerification) {
   // correct version header. Ensure that it fails verification due to checksum
   // mismatch.
   data = GetVersionHeaderForTesting() + "invalid data";
-  ASSERT_EQ(static_cast<int>(data.size()),
-            base::WriteFile(source.indexed_path(), data.c_str(), data.size()));
+  ASSERT_TRUE(base::WriteFile(source.indexed_path(), data));
   EXPECT_EQ(LoadRulesetResult::kErrorChecksumMismatch,
             source.CreateVerifiedMatcher(expected_checksum, &matcher));
 }
@@ -228,14 +226,14 @@ TEST_F(RulesetMatcherTest, ModifyHeaders) {
   RequestAction expected_rule_1_action = CreateRequestActionForTesting(
       RequestAction::Type::MODIFY_HEADERS, *rule_1.id, *rule_1.priority);
   expected_rule_1_action.request_headers_to_modify = {RequestAction::HeaderInfo(
-      "header1", dnr_api::HEADER_OPERATION_REMOVE, absl::nullopt)};
+      "header1", dnr_api::HeaderOperation::kRemove, absl::nullopt)};
 
   RequestAction expected_rule_2_action = CreateRequestActionForTesting(
       RequestAction::Type::MODIFY_HEADERS, *rule_2.id, *rule_2.priority);
   expected_rule_2_action.request_headers_to_modify = {
-      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_SET,
+      RequestAction::HeaderInfo("header1", dnr_api::HeaderOperation::kSet,
                                 "value1"),
-      RequestAction::HeaderInfo("header2", dnr_api::HEADER_OPERATION_REMOVE,
+      RequestAction::HeaderInfo("header2", dnr_api::HeaderOperation::kRemove,
                                 absl::nullopt)};
 
   EXPECT_THAT(modify_header_actions,
@@ -574,7 +572,7 @@ TEST_F(RulesetMatcherTest, RegexRules) {
     test_case.expected_modify_header_action = CreateRequestActionForTesting(
         RequestAction::Type::MODIFY_HEADERS, *modify_headers_rule.id);
     test_case.expected_modify_header_action->request_headers_to_modify = {
-        RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_SET,
+        RequestAction::HeaderInfo("header1", dnr_api::HeaderOperation::kSet,
                                   "value1")};
     test_cases.push_back(std::move(test_case));
   }
@@ -949,9 +947,9 @@ TEST_F(RulesetMatcherTest, RegexAndFilterListRules_ModifyHeaders) {
   RequestAction action_1 = CreateRequestActionForTesting(
       RequestAction::Type::MODIFY_HEADERS, 1, *rule.priority);
   action_1.request_headers_to_modify = {
-      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE,
+      RequestAction::HeaderInfo("header1", dnr_api::HeaderOperation::kRemove,
                                 absl::nullopt),
-      RequestAction::HeaderInfo("header2", dnr_api::HEADER_OPERATION_REMOVE,
+      RequestAction::HeaderInfo("header2", dnr_api::HeaderOperation::kRemove,
                                 absl::nullopt)};
 
   rule = CreateGenericRule();
@@ -968,9 +966,9 @@ TEST_F(RulesetMatcherTest, RegexAndFilterListRules_ModifyHeaders) {
   RequestAction action_2 = CreateRequestActionForTesting(
       RequestAction::Type::MODIFY_HEADERS, 2, *rule.priority);
   action_2.request_headers_to_modify = {
-      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE,
+      RequestAction::HeaderInfo("header1", dnr_api::HeaderOperation::kRemove,
                                 absl::nullopt),
-      RequestAction::HeaderInfo("header3", dnr_api::HEADER_OPERATION_REMOVE,
+      RequestAction::HeaderInfo("header3", dnr_api::HeaderOperation::kRemove,
                                 absl::nullopt)};
 
   std::unique_ptr<RulesetMatcher> matcher;

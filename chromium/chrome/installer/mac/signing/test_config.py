@@ -22,8 +22,8 @@ class TestConfig(config.CodeSignConfig):
     def is_chrome_branded():
         return True
 
-    @staticmethod
-    def enable_updater():
+    @property
+    def enable_updater(self):
         return True
 
     @property
@@ -57,8 +57,8 @@ class TestConfigNonChromeBranded(TestConfig):
     def is_chrome_branded():
         return False
 
-    @staticmethod
-    def enable_updater():
+    @property
+    def enable_updater(self):
         return False
 
 
@@ -67,3 +67,10 @@ class TestConfigInjectGetTaskAllow(TestConfig):
     @property
     def inject_get_task_allow_entitlement(self):
         return True
+
+
+class TestConfigNotarizationToolOverride(TestConfig):
+
+    @property
+    def notarization_tool_path(self):
+        return f'/fun/bin/{self.notarization_tool}.custom'

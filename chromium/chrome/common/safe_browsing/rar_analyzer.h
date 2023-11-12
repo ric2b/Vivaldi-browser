@@ -22,26 +22,36 @@
 #define CHROME_COMMON_SAFE_BROWSING_RAR_ANALYZER_H_
 
 #include "base/files/file.h"
+#include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
+#include "chrome/common/safe_browsing/archive_analyzer.h"
+#include "components/safe_browsing/content/common/proto/download_file_types.pb.h"
+#include "third_party/unrar/google/unrar_wrapper.h"
 
 namespace safe_browsing {
 
-struct ArchiveAnalyzerResults;
+class RarAnalyzer : public ArchiveAnalyzer {
+ public:
+  RarAnalyzer();
 
-namespace rar_analyzer {
+  ~RarAnalyzer() override;
 
-// |rar_file| is a platform-agnostic handle to the file, and |temp_file| is a
-// handle for a temporary file the sandbox can write to. Since |AnalyzeRarFile|
-// runs inside a sandbox, it isn't allowed to open file handles. So both files
-// are opened in |SandboxedRarAnalyzer|, which runs in the browser process, and
-// the handles are passed here. The function populates the various fields in
-// |results| based on the results of parsing the rar file. If the parsing fails
-// for any reason, including crashing the sandbox process, the browser process
-// considers the file safe.
-void AnalyzeRarFile(base::File rar_file,
-                    base::File temp_file,
-                    ArchiveAnalyzerResults* results);
+  RarAnalyzer(const RarAnalyzer&) = delete;
+  RarAnalyzer& operator=(const RarAnalyzer&) = delete;
 
-}  // namespace rar_analyzer
+ private:
+  void Init() override;
+  bool ResumeExtraction() override;
+  base::WeakPtr<ArchiveAnalyzer> GetWeakPtr() override;
+
+  void OnGetTempFile(base::File temp_file);
+
+  base::File temp_file_;
+  third_party_unrar::RarReader reader_;
+
+  base::WeakPtrFactory<RarAnalyzer> weak_factory_{this};
+};
+
 }  // namespace safe_browsing
 
 #endif  // CHROME_COMMON_SAFE_BROWSING_RAR_ANALYZER_H_

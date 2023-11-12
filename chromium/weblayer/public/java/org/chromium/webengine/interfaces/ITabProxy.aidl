@@ -4,20 +4,17 @@
 
 package org.chromium.webengine.interfaces;
 
+import org.chromium.webengine.interfaces.IFullscreenCallbackDelegate;
 import org.chromium.webengine.interfaces.IPostMessageCallback;
 import org.chromium.webengine.interfaces.IStringCallback;
-import org.chromium.webengine.interfaces.IWebMessageCallback;
+import org.chromium.webengine.interfaces.ITabObserverDelegate;
 
 import java.util.List;
-import org.chromium.webengine.interfaces.ITabObserverDelegate;
 
 oneway interface ITabProxy {
   void setActive() = 1;
   void close() = 2;
   void executeScript(in String script, in boolean useSeparateIsolate, in IStringCallback callback) = 3;
-
-  void registerWebMessageCallback(in IWebMessageCallback callback, in String jsObjectName, in List<String> allowedOrigins) = 4;
-  void unregisterWebMessageCallback(in String jsObjectName) = 5;
 
   void setTabObserverDelegate(ITabObserverDelegate tabObserverDelegate) = 6;
 
@@ -26,4 +23,9 @@ oneway interface ITabProxy {
   void createMessageEventListener(in IPostMessageCallback callback, in List<String> allowedOrigins) = 8;
   void addMessageEventListener(in List<String> allowedOrigins) = 9;
   void removeMessageEventListener(in List<String> allowedOrigins) = 10;
+
+  // Fullscreen mode:
+  void setFullscreenCallbackDelegate(in IFullscreenCallbackDelegate fullscreenCallbackDelegate) = 11;
+
+  // Reserved Tags: 4, 5
 }

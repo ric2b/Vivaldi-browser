@@ -60,7 +60,7 @@ public class CustomTabActivityNavigationControllerTest {
     public void setUp() {
         ShadowPostTask.setTestImpl(new ShadowPostTask.TestImpl() {
             @Override
-            public void postDelayedTask(TaskTraits taskTraits, Runnable task, long delay) {}
+            public void postDelayedTask(@TaskTraits int taskTraits, Runnable task, long delay) {}
         });
         MockitoAnnotations.initMocks(this);
         mNavigationController = env.createNavigationController(mTabController);
@@ -71,11 +71,12 @@ public class CustomTabActivityNavigationControllerTest {
     }
 
     @Test
-    public void finishes_IfBackNavigationClosesTheOnlyTab() {
+    public void finishes_IfBackNavigationClosesTheOnlyTabWithNoUnloadEvents() {
         HistogramWatcher histogramWatcher = HistogramWatcher.newSingleRecordWatcher(
                 MinimizeAppAndCloseTabBackPressHandler.getHistogramNameForTesting(),
                 MinimizeAppAndCloseTabType.MINIMIZE_APP);
         when(mTabController.onlyOneTabRemaining()).thenReturn(true);
+        when(mTabController.dispatchBeforeUnloadIfNeeded()).thenReturn(false);
 
         mNavigationController.navigateOnBack();
         histogramWatcher.assertExpected();
@@ -91,6 +92,18 @@ public class CustomTabActivityNavigationControllerTest {
             env.tabProvider.swapTab(env.prepareTab());
             return null;
         }).when(mTabController).closeTab();
+
+        mNavigationController.navigateOnBack();
+        histogramWatcher.assertExpected();
+        verify(mFinishHandler, never()).onFinish(anyInt());
+    }
+
+    @Test
+    public void doesntFinish_IfBackNavigationHappensWithBeforeUnloadHandler() {
+        HistogramWatcher histogramWatcher = HistogramWatcher.newSingleRecordWatcher(
+                MinimizeAppAndCloseTabBackPressHandler.getHistogramNameForTesting(),
+                MinimizeAppAndCloseTabType.CLOSE_TAB);
+        when(mTabController.dispatchBeforeUnloadIfNeeded()).thenReturn(true);
 
         mNavigationController.navigateOnBack();
         histogramWatcher.assertExpected();
@@ -125,6 +138,7 @@ public class CustomTabActivityNavigationControllerTest {
         mNavigationController.openCurrentUrlInBrowser(false);
         verify(mTabController, never()).detachAndStartReparenting(any(), any(), any());
         verify(env.activity).startActivity(any(), any());
+        verify(mFinishHandler).onFinish(FinishReason.OPEN_IN_BROWSER);
     }
 
     @Test

@@ -10,6 +10,7 @@
 #include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
@@ -105,7 +106,7 @@ class ScopedAddListenerObserver : public EventRouter::Observer {
  private:
   const std::string extension_id_;
   base::OnceClosure callback_;
-  EventRouter* const event_router_;
+  const raw_ptr<EventRouter, ExperimentalAsh> event_router_;
 };
 
 // This class contains chrome.filesystem API test specific to Chrome OS, namely,
@@ -174,25 +175,22 @@ class FileSystemApiTestForDrive : public PlatformAppBrowserTest {
     CHECK(base::CreateDirectory(root));
 
     std::string data = "Can you see me?";
-    CHECK(base::WriteFile(root.Append("open_existing.txt"), data.data(),
-                          data.size()));
-    CHECK(base::WriteFile(root.Append("open_existing1.txt"), data.data(),
-                          data.size()));
-    CHECK(base::WriteFile(root.Append("open_existing2.txt"), data.data(),
-                          data.size()));
-    CHECK(base::WriteFile(root.Append("save_existing.txt"), data.data(),
-                          data.size()));
+    CHECK(base::WriteFile(root.Append("open_existing.txt"), data));
+    CHECK(base::WriteFile(root.Append("open_existing1.txt"), data));
+    CHECK(base::WriteFile(root.Append("open_existing2.txt"), data));
+    CHECK(base::WriteFile(root.Append("save_existing.txt"), data));
 
     CHECK(base::CreateDirectory(root.Append("subdir")));
     CHECK(base::WriteFile(root.Append("subdir").Append("open_existing.txt"),
-                          data.data(), data.size()));
+                          data));
   }
 
   base::ScopedTempDir test_cache_root_;
   base::ScopedTempDir drivefs_root_;
   base::FilePath drivefs_mount_point_;
   std::unique_ptr<drive::FakeDriveFsHelper> fake_drivefs_helper_;
-  drive::DriveIntegrationService* integration_service_ = nullptr;
+  raw_ptr<drive::DriveIntegrationService, ExperimentalAsh>
+      integration_service_ = nullptr;
   drive::DriveIntegrationServiceFactory::FactoryCallback
       create_drive_integration_service_;
   std::unique_ptr<drive::DriveIntegrationServiceFactory::ScopedFactoryForTest>
@@ -247,7 +245,7 @@ class FileSystemApiTestForRequestFileSystem : public PlatformAppBrowserTest {
 
  protected:
   base::ScopedTempDir temp_dir_;
-  ash::FakeChromeUserManager* fake_user_manager_;
+  raw_ptr<ash::FakeChromeUserManager, ExperimentalAsh> fake_user_manager_;
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 
   // Creates a testing file system in a testing directory.
@@ -273,7 +271,7 @@ class FileSystemApiTestForRequestFileSystem : public PlatformAppBrowserTest {
   void EnterKioskSession() {
     fake_user_manager_ = new ash::FakeChromeUserManager();
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
-        base::WrapUnique(fake_user_manager_));
+        base::WrapUnique(fake_user_manager_.get()));
 
     const AccountId kiosk_app_account_id =
         AccountId::FromUserEmail("kiosk@foobar.com");

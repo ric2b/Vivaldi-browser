@@ -25,7 +25,7 @@ extern const char kNoPictureURLFound[];
 
 // Stores the basic information about an account that is always known
 // about the account (from the moment it is added to the system until
-// it is removed). It will unfrequently, if ever, change.
+// it is removed). It will infrequently, if ever, change.
 struct CoreAccountInfo {
   CoreAccountInfo();
   ~CoreAccountInfo();
@@ -97,6 +97,16 @@ struct AccountInfo : public CoreAccountInfo {
 bool operator==(const CoreAccountInfo& l, const CoreAccountInfo& r);
 bool operator!=(const CoreAccountInfo& l, const CoreAccountInfo& r);
 std::ostream& operator<<(std::ostream& os, const CoreAccountInfo& account);
+
+// Comparing `AccountInfo`s is likely a mistake. You should compare either
+// `CoreAccountId` or `CoreAccountInfo` instead:
+//
+//   AccountInfo l, r;
+//   // if (l == r) {
+//   if (l.account_id == r.account_id) {}
+//
+bool operator==(const AccountInfo& l, const AccountInfo& r) = delete;
+bool operator!=(const AccountInfo& l, const AccountInfo& r) = delete;
 
 #if BUILDFLAG(IS_ANDROID)
 // Constructs a Java CoreAccountInfo from the provided C++ CoreAccountInfo

@@ -10,7 +10,6 @@
 
 #include "ash/components/arc/arc_features.h"
 #include "ash/components/arc/arc_prefs.h"
-#include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_session_runner.h"
 #include "ash/components/arc/test/arc_util_test_support.h"
@@ -22,12 +21,12 @@
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_command_line.h"
 #include "base/values.h"
-#include "chrome/browser/ash/arc/enterprise/arc_data_snapshotd_delegate.h"
 #include "chrome/browser/ash/arc/enterprise/cert_store/cert_store_service.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/arc/test/test_arc_session_manager.h"
@@ -351,9 +350,9 @@ class ArcPolicyBridgeTestBase {
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
   std::unique_ptr<TestingProfileManager> testing_profile_manager_;
   base::RunLoop run_loop_;
-  TestingProfile* profile_;
+  raw_ptr<TestingProfile, ExperimentalAsh> profile_;
   std::unique_ptr<ArcBridgeService> bridge_service_;
-  CertStoreService* cert_store_service_;  // Not owned.
+  raw_ptr<CertStoreService, ExperimentalAsh> cert_store_service_;  // Not owned.
 
   std::unique_ptr<ArcSessionManager> arc_session_manager_;
   std::unique_ptr<ArcPolicyBridge> policy_bridge_;
@@ -421,7 +420,7 @@ TEST_F(ArcPolicyBridgeTest, EmptyPolicyTest) {
                              kMountPhysicalMediaDisabledPolicySetting + "}");
 }
 
-TEST_F(ArcPolicyBridgeTest, DISABLED_ArcPolicyTest) {
+TEST_F(ArcPolicyBridgeTest, ArcPolicyTest) {
   policy_map().Set(
       policy::key::kArcPolicy, policy::POLICY_LEVEL_MANDATORY,
       policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
@@ -435,9 +434,35 @@ TEST_F(ArcPolicyBridgeTest, DISABLED_ArcPolicyTest) {
                   "}"),
       nullptr);
   GetPoliciesAndVerifyResult(
-      "\"apkCacheEnabled\":true,"
-      "{\"applications\":"
+      "{\"apkCacheEnabled\":true,"
+      "\"applications\":"
       "[{\"installType\":\"REQUIRED\","
+      "\"lockTaskAllowed\":false,"
+      "\"packageName\":\"com.google.android.apps.youtube.kids\","
+      "\"permissionGrants\":[]"
+      "}],"
+      "\"defaultPermissionPolicy\":\"GRANT\","
+      "\"guid\":\"" +
+      instance_guid() + "\"," + kMountPhysicalMediaDisabledPolicySetting + "}");
+}
+
+TEST_F(ArcPolicyBridgeTest, InstallTypeOptionalMigrationTest) {
+  policy_map().Set(
+      policy::key::kArcPolicy, policy::POLICY_LEVEL_MANDATORY,
+      policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+      base::Value("{\"applications\":"
+                  "[{\"packageName\":\"com.google.android.apps.youtube.kids\","
+                  "\"installType\":\"OPTIONAL\","
+                  "\"lockTaskAllowed\":false,"
+                  "\"permissionGrants\":[]"
+                  "}],"
+                  "\"defaultPermissionPolicy\":\"GRANT\""
+                  "}"),
+      nullptr);
+  GetPoliciesAndVerifyResult(
+      "{\"apkCacheEnabled\":true,"
+      "\"applications\":"
+      "[{\"installType\":\"AVAILABLE\","
       "\"lockTaskAllowed\":false,"
       "\"packageName\":\"com.google.android.apps.youtube.kids\","
       "\"permissionGrants\":[]"
@@ -779,63 +804,6 @@ TEST_F(ArcPolicyBridgeTest, ManualChildUserPoliciesSet) {
       base::StrCat({"{\"apkCacheEnabled\":true,\"guid\":\"", instance_guid(),
                     "\",", kMountPhysicalMediaDisabledPolicySetting, ",",
                     kSupervisedUserPlayStoreModePolicySetting, "}"}));
-}
-
-// Test that required and force-installed apps get disabled during ARC data
-// snapshot update.
-TEST_F(ArcPolicyBridgeTest, DisableAppsInSnapshot) {
-  constexpr char kDisabledApplicationsPolicyFormat[] =
-      "\"applications\":["
-      "{"
-      "\"disabled\":%s,"
-      "\"installType\":\"REQUIRED\","
-      "\"packageName\":\"com.android.vending\""
-      "},"
-      "{"
-      "\"disabled\":%s,"
-      "\"installType\":\"FORCE_INSTALLED\","
-      "\"packageName\":\"com.force.installed\""
-      "},"
-      "{"
-      "\"disabled\":%s,"
-      "\"installType\":\"OPTIONAL\","
-      "\"packageName\":\"com.optional\""
-      "}],"
-      "\"defaultPermissionPolicy\":\"GRANT\"";
-
-  constexpr char kFalse[] = "false";
-  constexpr char kTrue[] = "true";
-
-  auto upstart_client = std::make_unique<ash::FakeUpstartClient>();
-  arc::prefs::RegisterLocalStatePrefs(
-      profile()->GetTestingPrefService()->registry());
-
-  auto manager = std::make_unique<arc::data_snapshotd::ArcDataSnapshotdManager>(
-      profile()->GetTestingPrefService(),
-      std::make_unique<arc::data_snapshotd::ArcDataSnapshotdDelegate>(),
-      base::DoNothing());
-  EXPECT_TRUE(arc::data_snapshotd::ArcDataSnapshotdManager::Get());
-  manager->set_state_for_testing(
-      arc::data_snapshotd::ArcDataSnapshotdManager::State::kMgsLaunched);
-  EXPECT_TRUE(manager->IsSnapshotInProgress());
-  policy_map().Set(policy::key::kArcPolicy, policy::POLICY_LEVEL_MANDATORY,
-                   policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   base::Value(base::StrCat(
-                       {"{",
-                        base::StringPrintf(kDisabledApplicationsPolicyFormat,
-                                           kFalse, kFalse, kFalse),
-                        "}"})),
-                   nullptr);
-  GetPoliciesAndVerifyResult(
-      base::StrCat({"{\"apkCacheEnabled\":true,",
-                    base::StringPrintf(kDisabledApplicationsPolicyFormat, kTrue,
-                                       kTrue, kFalse),
-                    ",\"guid\":\"", instance_guid(), "\",",
-                    kMountPhysicalMediaDisabledPolicySetting, ",",
-                    "\"resetAndroidIdEnabled\":true}"}));
-
-  manager.reset();
-  upstart_client.reset();
 }
 
 TEST_P(ArcPolicyBridgeAffiliatedTest, ApkCacheEnabledTest) {

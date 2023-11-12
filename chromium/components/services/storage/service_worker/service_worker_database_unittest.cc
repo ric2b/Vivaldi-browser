@@ -490,6 +490,8 @@ TEST(ServiceWorkerDatabaseTest, GetStorageKeysWithRegistrations) {
             database->WriteRegistration(data6, resources6, &deleted_version));
 
   scoped_feature_list.Reset();
+  scoped_feature_list.InitAndDisableFeature(
+      net::features::kThirdPartyStoragePartitioning);
   // Because kThirdPartyStoragePartitioning is disabled now we shouldn't get the
   // partitioned keys in the following checks.
 
@@ -551,6 +553,7 @@ TEST(ServiceWorkerDatabaseTest, GetStorageKeysWithRegistrations) {
 
   // Now re-enable kThirdPartyStoragePartitioning and check for the partitioned
   // keys.
+  scoped_feature_list.Reset();
   scoped_feature_list.InitAndEnableFeature(
       net::features::kThirdPartyStoragePartitioning);
 
@@ -830,6 +833,8 @@ TEST(ServiceWorkerDatabaseTest, GetAllRegistrations) {
 
   // Disable partitioning to ensure the partitioned keys are not found.
   scoped_feature_list.Reset();
+  scoped_feature_list.InitAndDisableFeature(
+      net::features::kThirdPartyStoragePartitioning);
 
   // Keys with nonces should always be gettable.
   GURL origin7 = GURL("https://www7.example.com");
@@ -863,6 +868,7 @@ TEST(ServiceWorkerDatabaseTest, GetAllRegistrations) {
   VerifyRegistrationData(data7, *registrations[4]);
 
   // Re-enable partitioning and check for the partitioned keys.
+  scoped_feature_list.Reset();
   scoped_feature_list.InitAndEnableFeature(
       net::features::kThirdPartyStoragePartitioning);
 
@@ -2547,14 +2553,12 @@ void DeleteAllDataForStorageKeyTest::TestDeleteAllDataForStorageKey(
                                     CreateUserData(exiting_data.registration_id,
                                                    {{"key1", "value1"}})));
 
-  // invoke DeleteAllDataForStorageKeys
+  // invoke DeleteAllDataForOrigins
   std::vector<int64_t> newly_purgeable_resources;
   auto origin_obj = url::Origin::Create(GURL(deleted_origin));
-  const blink::StorageKey deleted_key =
-      blink::StorageKey::CreateFirstParty(origin_obj);
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
-            database->DeleteAllDataForStorageKeys({deleted_key},
-                                                  &newly_purgeable_resources));
+            database->DeleteAllDataForOrigins({origin_obj},
+                                              &newly_purgeable_resources));
 
   if (expect_key_deleted) {
     // `registered_key` should be removed from the unique origin list.
@@ -2725,21 +2729,20 @@ void DeleteAllDataForStorageKeyTest::
                 data2.registration_id, registered_key,
                 CreateUserData(data2.registration_id, {{"key4", "value4"}})));
 
-  // invoke DeleteAllDataForStorageKeys
+  // invoke DeleteAllDataForOrigins
   std::vector<int64_t> newly_purgeable_resources;
-  auto make_key = [](std::string origin) {
-    return blink::StorageKey::CreateFirstParty(
-        url::Origin::Create(GURL(origin)));
+  auto make_origin = [](std::string origin) {
+    return url::Origin::Create(GURL(origin));
   };
   ASSERT_EQ(ServiceWorkerDatabase::Status::kOk,
-            database->DeleteAllDataForStorageKeys(
+            database->DeleteAllDataForOrigins(
                 {
                     // This key does not correspond to the registered data.
-                    make_key("https://other.com"),
+                    make_origin("https://other.com"),
                     // Delete the registered data precisely.
-                    make_key("https://example.com"),
+                    make_origin("https://example.com"),
                     // With 3PSP enabled, this will delete the same data.
-                    make_key("https://sub2.example.com"),
+                    make_origin("https://sub2.example.com"),
                 },
                 &newly_purgeable_resources));
 
@@ -3340,8 +3343,8 @@ TEST(ServiceWorkerDatabaseTest, PolicyContainerPoliciesStoreRestore) {
     auto policies = blink::mojom::PolicyContainerPolicies::New();
 
     for (auto ip_address_space : {
+             network::mojom::IPAddressSpace::kLoopback,
              network::mojom::IPAddressSpace::kLocal,
-             network::mojom::IPAddressSpace::kPrivate,
              network::mojom::IPAddressSpace::kPublic,
              network::mojom::IPAddressSpace::kUnknown,
          }) {

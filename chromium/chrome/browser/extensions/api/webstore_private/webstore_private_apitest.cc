@@ -16,7 +16,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/webstore_private/webstore_private_api.h"
-#include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/mixin_based_extension_apitest.h"
@@ -25,6 +24,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/buildflags.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_test_util.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -35,6 +35,7 @@
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/allowlist_state.h"
 #include "extensions/browser/api/management/management_api.h"
+#include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/install/extension_install_ui.h"
@@ -42,6 +43,7 @@
 #include "gpu/config/gpu_feature_type.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gl/gl_switches.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -51,6 +53,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
+#include "chrome/browser/supervised_user/supervised_user_extensions_delegate_impl.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_test_util.h"  // nogncheck
@@ -62,9 +65,9 @@
 #include "extensions/common/extension_builder.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-namespace utils = extension_function_test_utils;
-
 namespace extensions {
+
+namespace utils = api_test_utils;
 
 namespace {
 
@@ -369,11 +372,18 @@ class ExtensionWebstorePrivateApiTestChild
     logged_in_user_mixin_.LogInUser(true /* issue_any_scope_token */);
     ExtensionWebstorePrivateApiTest::SetUpOnMainThread();
 
+    extensions_delegate_ =
+        std::make_unique<SupervisedUserExtensionsDelegateImpl>(profile());
+
     InitializeFamilyData();
-    SupervisedUserService* service =
-        SupervisedUserServiceFactory::GetForProfile(profile());
-    service->SetSupervisedUserExtensionsMayRequestPermissionsPrefForTesting(
-        true);
+    supervised_user_test_util::
+        SetSupervisedUserExtensionsMayRequestPermissionsPref(profile(), true);
+  }
+
+  void TearDownOnMainThread() override {
+    extensions_delegate_.reset();
+    identity_test_env_.reset();
+    ExtensionWebstorePrivateApiTest::TearDownOnMainThread();
   }
 
   ash::LoggedInUserMixin* GetLoggedInUserMixin() {
@@ -412,6 +422,7 @@ class ExtensionWebstorePrivateApiTestChild
 
  protected:
   std::unique_ptr<signin::IdentityTestEnvironment> identity_test_env_;
+  std::unique_ptr<SupervisedUserExtensionsDelegateImpl> extensions_delegate_;
 
  private:
   // Create another embedded test server to avoid starting the same one twice.
@@ -440,9 +451,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTestChild,
           .SetID(kTestAppId)
           .SetVersion(kTestAppVersion)
           .Build();
-  SupervisedUserService* service =
-      SupervisedUserServiceFactory::GetForProfile(profile());
-  ASSERT_TRUE(service->IsExtensionAllowed(*extension));
+  ASSERT_TRUE(extensions_delegate_->IsExtensionAllowedByParent(*extension));
 }
 
 // Tests no install occurs for a child when the parent permission
@@ -458,14 +467,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTestChild,
   ASSERT_EQ(kTestAppId, listener.id());
   ASSERT_EQ(listener.last_failure_reason(),
             WebstoreInstaller::FailureReason::FAILURE_REASON_CANCELLED);
+
   scoped_refptr<const Extension> extension =
       extensions::ExtensionBuilder("test extension")
           .SetID(kTestAppId)
           .SetVersion(kTestAppVersion)
           .Build();
-  SupervisedUserService* service =
-      SupervisedUserServiceFactory::GetForProfile(profile());
-  ASSERT_FALSE(service->IsExtensionAllowed(*extension));
+  ASSERT_FALSE(extensions_delegate_->IsExtensionAllowedByParent(*extension));
 }
 
 // Tests that no parent permission is required for a child to install a theme.
@@ -487,10 +495,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstorePrivateApiTestChild,
   base::HistogramTester histogram_tester;
   base::UserActionTester user_action_tester;
 
-  SupervisedUserService* service =
-      SupervisedUserServiceFactory::GetForProfile(profile());
-  service->SetSupervisedUserExtensionsMayRequestPermissionsPrefForTesting(
-      false);
+  supervised_user_test_util::
+      SetSupervisedUserExtensionsMayRequestPermissionsPref(profile(), false);
 
   set_next_dialog_action(NextDialogAction::kAccept);
   // Tell the Reauth API client to return a success for the next reauth
@@ -523,8 +529,9 @@ class ExtensionWebstoreGetWebGLStatusTest : public InProcessBrowserTest {
     static const char kWebGLStatusBlocked[] = "webgl_blocked";
     scoped_refptr<WebstorePrivateGetWebGLStatusFunction> function =
         new WebstorePrivateGetWebGLStatusFunction();
-    std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
-        function.get(), kEmptyArgs, browser()));
+    absl::optional<base::Value> result =
+        utils::RunFunctionAndReturnSingleResult(function.get(), kEmptyArgs,
+                                                browser()->profile());
     ASSERT_TRUE(result);
     EXPECT_EQ(base::Value::Type::STRING, result->type());
     EXPECT_TRUE(result->is_string());
@@ -557,6 +564,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebstoreGetWebGLStatusTest, Blocked) {
 class ExtensionWebstorePrivateGetReferrerChainApiTest
     : public ExtensionWebstorePrivateApiTest {
  public:
+  ExtensionWebstorePrivateGetReferrerChainApiTest() {
+    // TODO(crbug.com/1394910): Use HTTPS URLs in tests to avoid having to
+    // disable this feature.
+    feature_list_.InitAndDisableFeature(features::kHttpsUpgrades);
+  }
+
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("redirect1.com", "127.0.0.1");
     host_resolver()->AddRule("redirect2.com", "127.0.0.1");
@@ -578,6 +591,9 @@ class ExtensionWebstorePrivateGetReferrerChainApiTest
 
     return GURL(redirect_chain + GetTestServerURL(path).spec());
   }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // Tests that the GetReferrerChain API returns the redirect information.

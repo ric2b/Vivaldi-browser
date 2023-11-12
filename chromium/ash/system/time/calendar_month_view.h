@@ -8,6 +8,7 @@
 #include "ash/ash_export.h"
 #include "ash/system/time/calendar_model.h"
 #include "ash/system/time/calendar_view_controller.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "ui/views/controls/button/label_button.h"
@@ -120,7 +121,8 @@ class CalendarDateCellView : public CalendarViewController::Observer,
   base::TimeDelta time_difference_;
 
   // Owned by UnifiedCalendarViewController.
-  CalendarViewController* const calendar_view_controller_;
+  const raw_ptr<CalendarViewController, ExperimentalAsh>
+      calendar_view_controller_;
 
   base::ScopedObservation<CalendarViewController,
                           CalendarViewController::Observer>
@@ -160,6 +162,9 @@ class ASH_EXPORT CalendarMonthView : public views::View,
   // Returns the index of this month view's last row.
   int last_row_index() const { return last_row_index_; }
 
+  // If this month contains any events.
+  bool has_events() { return has_events_; }
+
  private:
   // For unit tests.
   friend class CalendarMonthViewTest;
@@ -177,13 +182,16 @@ class ASH_EXPORT CalendarMonthView : public views::View,
   void FetchEvents(const base::Time& month);
 
   // Owned by `CalendarView`.
-  CalendarViewController* const calendar_view_controller_;
+  const raw_ptr<CalendarViewController, ExperimentalAsh>
+      calendar_view_controller_;
 
   // If today's cell is in this view.
   bool has_today_ = false;
 
   // The index of this month view's last row.
   int last_row_index_;
+
+  bool has_events_ = false;
 
   // The cells of each row that should be first focused on. These
   // `CalendarDateCellView`s are the children of this view.
@@ -194,7 +202,7 @@ class ASH_EXPORT CalendarMonthView : public views::View,
 
   // Raw pointer to the (singleton) CalendarModel, to avoid a bunch of
   // daisy-chained calls to get the std::unique_ptr<>.
-  CalendarModel* const calendar_model_;
+  const raw_ptr<CalendarModel, ExperimentalAsh> calendar_model_;
 
   base::ScopedObservation<CalendarModel, CalendarModel::Observer>
       scoped_calendar_model_observer_{this};

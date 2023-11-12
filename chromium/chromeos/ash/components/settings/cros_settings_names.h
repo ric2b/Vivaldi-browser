@@ -47,6 +47,8 @@ extern const char kAccountsPrefDeviceLocalAccountsKeyWebKioskTitle[];
 COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_SETTINGS)
 extern const char kAccountsPrefDeviceLocalAccountsKeyWebKioskIconUrl[];
 COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_SETTINGS)
+extern const char kAccountsPrefDeviceLocalAccountsKeyEphemeralMode[];
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_SETTINGS)
 extern const char kAccountsPrefDeviceLocalAccountAutoLoginId[];
 COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_SETTINGS)
 extern const char kAccountsPrefDeviceLocalAccountAutoLoginDelay[];
@@ -166,6 +168,8 @@ COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_SETTINGS)
 extern const char kReportDeviceAudioStatusCheckingRateMs[];
 COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_SETTINGS)
 extern const char kReportDeviceSignalStrengthEventDrivenTelemetry[];
+COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_SETTINGS)
+extern const char kDeviceReportNetworkEvents[];
 
 COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_SETTINGS)
 extern const char kDeviceActivityHeartbeatCollectionRateMs[];

@@ -182,6 +182,10 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {POWER_BOOKMARK, "POWER_BOOKMARK", "power_bookmark", "Power Bookmark",
      sync_pb::EntitySpecifics::kPowerBookmarkFieldNumber,
      ModelTypeForHistograms::kPowerBookmark},
+    {WEBAUTHN_CREDENTIAL, "WEBAUTHN_CREDENTIAL", "webauthn_credential",
+     "WebAuthn Credentials",
+     sync_pb::EntitySpecifics::kWebauthnCredentialFieldNumber,
+     ModelTypeForHistograms::kWebAuthnCredentials},
     {NOTES, "NOTES", "vivaldi_notes", "Notes",
      sync_pb::EntitySpecifics::kNotesFieldNumber,
      ModelTypeForHistograms::kNotes},
@@ -196,7 +200,7 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
 static_assert(std::size(kModelTypeInfoMap) == GetNumModelTypes(),
               "kModelTypeInfoMap should have GetNumModelTypes() elements");
 
-static_assert(45 + 1 /* notes */ == syncer::GetNumModelTypes(),
+static_assert(46 + 1 /* notes */ == syncer::GetNumModelTypes(),
               "When adding a new type, update enum SyncModelTypes in enums.xml "
               "and suffix SyncModelType in histograms.xml.");
 
@@ -339,6 +343,9 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case POWER_BOOKMARK:
       specifics->mutable_power_bookmark();
       break;
+    case WEBAUTHN_CREDENTIAL:
+      specifics->mutable_webauthn_credential();
+      break;
 
     // <Vivaldi
     case NOTES:
@@ -375,7 +382,7 @@ void internal::GetModelTypeSetFromSpecificsFieldNumberListHelper(
 }
 
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
-  static_assert(45 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(46 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "When adding new protocol types, the following type lookup "
                 "logic must be updated.");
   if (specifics.has_bookmark())
@@ -464,6 +471,9 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return SAVED_TAB_GROUP;
   if (specifics.has_power_bookmark())
     return POWER_BOOKMARK;
+  if (specifics.has_webauthn_credential()) {
+    return WEBAUTHN_CREDENTIAL;
+  }
 
   if (specifics.has_notes())
     return NOTES;
@@ -474,7 +484,7 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
 }
 
 ModelTypeSet EncryptableUserTypes() {
-  static_assert(45 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(46 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "If adding an unencryptable type, remove from "
                 "encryptable_user_types below.");
   ModelTypeSet encryptable_user_types = UserTypes();

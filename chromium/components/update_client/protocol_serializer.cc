@@ -12,12 +12,12 @@
 #include "base/check.h"
 #include "base/containers/flat_map.h"
 #include "base/cpu.h"
-#include "base/guid.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -112,11 +112,12 @@ protocol_request::Request MakeProtocolRequest(
   request.is_machine = is_machine;
 
   // Session id and request id.
-  DCHECK(!session_id.empty());
-  DCHECK(base::StartsWith(session_id, "{", base::CompareCase::SENSITIVE));
-  DCHECK(base::EndsWith(session_id, "}", base::CompareCase::SENSITIVE));
+  CHECK(!session_id.empty());
+  CHECK(base::StartsWith(session_id, "{", base::CompareCase::SENSITIVE));
+  CHECK(base::EndsWith(session_id, "}", base::CompareCase::SENSITIVE));
   request.session_id = session_id;
-  request.request_id = base::StrCat({"{", base::GenerateGUID(), "}"});
+  request.request_id = base::StrCat(
+      {"{", base::Uuid::GenerateRandomV4().AsLowercaseString(), "}"});
 
   request.updatername = prod_id;
   request.updaterversion = browser_version;
@@ -162,12 +163,12 @@ protocol_request::Request MakeProtocolRequest(
       request.updater->version = it->second;
     it = updater_state_attributes.find("ismachine");
     if (it != updater_state_attributes.end()) {
-      DCHECK(it->second == "0" || it->second == "1");
+      CHECK(it->second == "0" || it->second == "1");
       request.updater->is_machine = it->second != "0";
     }
     it = updater_state_attributes.find("autoupdatecheckenabled");
     if (it != updater_state_attributes.end()) {
-      DCHECK(it->second == "0" || it->second == "1");
+      CHECK(it->second == "0" || it->second == "1");
       request.updater->autoupdate_check_enabled = it->second != "0";
     }
     it = updater_state_attributes.find("laststarted");
@@ -254,7 +255,7 @@ protocol_request::UpdateCheck MakeProtocolUpdateCheck(
 protocol_request::Ping MakeProtocolPing(const std::string& app_id,
                                         const PersistedData* metadata,
                                         bool active) {
-  DCHECK(metadata);
+  CHECK(metadata);
   protocol_request::Ping ping;
 
   if (active) {

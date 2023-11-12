@@ -25,8 +25,7 @@ class WebLayerAppBannerManagerAndroid
       WebLayerAppBannerManagerAndroid>::FromWebContents;
 
  protected:
-  webapps::InstallableParams ParamsToPerformInstallableWebAppCheck() override;
-  void ShowAmbientBadge() override;
+  void MaybeShowAmbientBadge() override;
   void ShowBannerUi(webapps::WebappInstallSource install_source) override;
 
  private:

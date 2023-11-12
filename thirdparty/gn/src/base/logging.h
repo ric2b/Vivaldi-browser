@@ -607,7 +607,7 @@ DEFINE_CHECK_OP_IMPL(GT, >)
 
 #if DCHECK_IS_ON()
 
-#if DCHECK_IS_CONFIGURABLE
+#if defined(DCHECK_IS_CONFIGURABLE)
 extern LogSeverity LOG_DCHECK;
 #else
 const LogSeverity LOG_DCHECK = LOG_FATAL;

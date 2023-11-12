@@ -218,7 +218,8 @@ bool DoesOriginMatchDomainList(const url::Origin& origin,
                                bool disable_generic_rules) {
   const bool is_generic = !rule.domains_included();
   DCHECK(is_generic || rule.domains_included()->size());
-  if (disable_generic_rules && is_generic)
+  if (disable_generic_rules && is_generic &&
+      (rule.options() & flat::OptionFlag_IS_ALLOW_RULE) == 0)
     return false;
 
   // Unique |origin| matches lists of exception domains only.
@@ -538,7 +539,8 @@ RulesIndex::ActivationsFound::ActivationsFound(const ActivationsFound& other) =
 RulesIndex::ActivationsFound::~ActivationsFound() = default;
 RulesIndex::ActivationsFound& RulesIndex::ActivationsFound::operator=(
     const ActivationsFound& other) = default;
-bool RulesIndex::ActivationsFound::operator==(const ActivationsFound& other) const {
+bool RulesIndex::ActivationsFound::operator==(
+    const ActivationsFound& other) const {
   return in_allow_rules == other.in_allow_rules &&
          in_block_rules == other.in_block_rules;
 }

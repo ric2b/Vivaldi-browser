@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I4493761b09bf6432d129b2498c829d98dfe353e5",
+  "upstream_commit_id": "Ic1c818f59254be09682ebc54f078d6ee7c6b2d74",
 }
 
 hooks = [
@@ -64,6 +64,13 @@ hooks = [
         'chromium/third_party/catapult',
         'chromium/third_party/mako', # Some failures triggered by crrev.com/c/3686969
         'chromium/tools',
+    ],
+  },
+  {
+    'name': 'load_build_support',
+    'pattern': '.',
+    'action': [
+      'python3', "-u", 'scripts/load_net_build_support.py',
     ],
   },
   {
@@ -473,6 +480,19 @@ hooks = [
                 '--target=linux',
                 'update',
                 '--gs-url-base=chromium-optimization-profiles/pgo_profiles',
+    ],
+  },
+  {
+    'name': 'Fetch PGO profiles for V8 builtins',
+    'pattern': '.',
+    # Always download profiles on Android builds. The GN arg `is_official_build`
+    # is required to consider the profiles during build time.
+    'condition': 'checkout_pgo_profiles or checkout_android',
+    'action': [ 'python3',
+                'chromium/v8/tools/builtins-pgo/download_profiles.py',
+                'download',
+                '--depot-tools',
+                'chromium/third_party/depot_tools',
     ],
   },
   {

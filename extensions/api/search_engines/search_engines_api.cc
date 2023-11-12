@@ -154,10 +154,10 @@ void SearchEnginesAPI::OnTemplateURLServiceShuttingDown() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesGetKeywordForUrlFunction::Run() {
-  std::unique_ptr<vivaldi::search_engines::GetKeywordForUrl::Params> params(
+  absl::optional<vivaldi::search_engines::GetKeywordForUrl::Params> params(
       vivaldi::search_engines::GetKeywordForUrl::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   return RespondNow(
       ArgumentList(vivaldi::search_engines::GetKeywordForUrl::Results::Create(
@@ -260,10 +260,10 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesAddTemplateUrlFunction::Run() {
-  std::unique_ptr<vivaldi::search_engines::AddTemplateUrl::Params> params(
+  absl::optional<vivaldi::search_engines::AddTemplateUrl::Params> params(
       vivaldi::search_engines::AddTemplateUrl::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
@@ -298,10 +298,10 @@ ExtensionFunction::ResponseAction SearchEnginesAddTemplateUrlFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesRemoveTemplateUrlFunction::Run() {
-  std::unique_ptr<vivaldi::search_engines::RemoveTemplateUrl::Params> params(
+  absl::optional<vivaldi::search_engines::RemoveTemplateUrl::Params> params(
       vivaldi::search_engines::RemoveTemplateUrl::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
@@ -365,10 +365,10 @@ SearchEnginesRemoveTemplateUrlFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesUpdateTemplateUrlFunction::Run() {
-  std::unique_ptr<vivaldi::search_engines::UpdateTemplateUrl::Params> params(
+  absl::optional<vivaldi::search_engines::UpdateTemplateUrl::Params> params(
       vivaldi::search_engines::UpdateTemplateUrl::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
@@ -402,10 +402,10 @@ SearchEnginesUpdateTemplateUrlFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesMoveTemplateUrlFunction::Run() {
-  std::unique_ptr<vivaldi::search_engines::MoveTemplateUrl::Params> params(
+  absl::optional<vivaldi::search_engines::MoveTemplateUrl::Params> params(
       vivaldi::search_engines::MoveTemplateUrl::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
@@ -441,10 +441,10 @@ ExtensionFunction::ResponseAction SearchEnginesMoveTemplateUrlFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
-  std::unique_ptr<vivaldi::search_engines::SetDefault::Params> params(
+  absl::optional<vivaldi::search_engines::SetDefault::Params> params(
       vivaldi::search_engines::SetDefault::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
@@ -492,10 +492,10 @@ ExtensionFunction::ResponseAction SearchEnginesSetDefaultFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SearchEnginesGetSearchRequestFunction::Run() {
-  std::unique_ptr<vivaldi::search_engines::GetSearchRequest::Params> params(
+  absl::optional<vivaldi::search_engines::GetSearchRequest::Params> params(
       vivaldi::search_engines::GetSearchRequest::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
@@ -521,10 +521,10 @@ ExtensionFunction::ResponseAction SearchEnginesGetSearchRequestFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesGetSuggestRequestFunction::Run() {
-  std::unique_ptr<vivaldi::search_engines::GetSuggestRequest::Params> params(
+  absl::optional<vivaldi::search_engines::GetSuggestRequest::Params> params(
       vivaldi::search_engines::GetSuggestRequest::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));
@@ -550,12 +550,12 @@ SearchEnginesGetSuggestRequestFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesRepairPrepopulatedTemplateUrlsFunction::Run() {
-  std::unique_ptr<
+  absl::optional<
       vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params>
       params(vivaldi::search_engines::RepairPrepopulatedTemplateUrls::Params::
                  Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* service = TemplateURLServiceFactory::GetForProfile(
       Profile::FromBrowserContext(browser_context()));

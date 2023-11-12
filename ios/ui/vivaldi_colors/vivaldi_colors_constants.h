@@ -21,5 +21,6 @@ extern NSString* const vSystemGray04;
 extern NSString* const vSystemGray05;
 extern NSString* const vSystemGray06;
 extern NSString* const vSystemGray07;
+extern NSString* const vTopToolbarTintColor;
 
 #endif  // IOS_UI_VIVALDI_COLORS_VIVALDI_COLORS_CONSTANTS_H_

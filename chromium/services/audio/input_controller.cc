@@ -11,7 +11,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/cxx17_backports.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -27,6 +26,7 @@
 #include "media/audio/audio_io.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/audio_bus.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/audio_processing.h"
 #include "media/base/media_switches.h"
 #include "media/base/user_input_monitor.h"
@@ -106,7 +106,7 @@ float AveragePower(const media::AudioBus& buffer) {
 
   // Update accumulated average results, with clamping for sanity.
   const float average_power =
-      base::clamp(sum_power / (frames * channels), 0.0f, 1.0f);
+      std::clamp(sum_power / (frames * channels), 0.0f, 1.0f);
 
   // Convert average power level to dBFS units, and pin it down to zero if it
   // is insignificantly small.
@@ -131,8 +131,11 @@ float AveragePower(const media::AudioBus& buffer) {
 //   (received_callback(), error_during_callback()).
 class AudioCallback : public media::AudioInputStream::AudioInputCallback {
  public:
-  using OnDataCallback = base::RepeatingCallback<
-      void(const media::AudioBus*, base::TimeTicks, double volume)>;
+  using OnDataCallback =
+      base::RepeatingCallback<void(const media::AudioBus*,
+                                   base::TimeTicks,
+                                   double volume,
+                                   const media::AudioGlitchInfo& glitch_info)>;
   using OnFirstDataCallback = base::OnceCallback<void()>;
   using OnErrorCallback = base::RepeatingCallback<void()>;
 
@@ -156,7 +159,8 @@ class AudioCallback : public media::AudioInputStream::AudioInputCallback {
  private:
   void OnData(const media::AudioBus* source,
               base::TimeTicks capture_time,
-              double volume) override {
+              double volume,
+              const media::AudioGlitchInfo& glitch_info) override {
     TRACE_EVENT1("audio", "InputController::OnData", "capture time (ms)",
                  (capture_time - base::TimeTicks()).InMillisecondsF());
 
@@ -165,7 +169,7 @@ class AudioCallback : public media::AudioInputStream::AudioInputCallback {
       // for logging purposes.
       std::move(on_first_data_callback_).Run();
     }
-    on_data_callback_.Run(source, capture_time, volume);
+    on_data_callback_.Run(source, capture_time, volume, glitch_info);
   }
 
   void OnError() override {
@@ -259,10 +263,7 @@ void InputController::MaybeSetUpAudioProcessing(
     return;
   }
 
-  int fifo_size =
-      media::IsChromeWideEchoCancellationEnabled()
-          ? media::kChromeWideEchoCancellationProcessingFifoSize.Get()
-          : 0;
+  int fifo_size = media::GetProcessingAudioFifoSize();
 
   // Only use the FIFO/new thread if its size is explicitly set.
   if (fifo_size) {
@@ -733,19 +734,21 @@ void InputController::ReportIsAlive() {
 
 void InputController::OnData(const media::AudioBus* source,
                              base::TimeTicks capture_time,
-                             double volume) {
+                             double volume,
+                             const media::AudioGlitchInfo& glitch_info) {
   const bool key_pressed = CheckForKeyboardInput();
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
   if (processing_fifo_) {
     DCHECK(audio_processor_handler_);
-    processing_fifo_->PushData(source, capture_time, volume, key_pressed);
+    processing_fifo_->PushData(source, capture_time, volume, key_pressed,
+                               glitch_info);
   } else if (audio_processor_handler_) {
-    audio_processor_handler_->ProcessCapturedAudio(*source, capture_time,
-                                                   volume, key_pressed);
+    audio_processor_handler_->ProcessCapturedAudio(
+        *source, capture_time, volume, key_pressed, glitch_info);
   } else
 #endif
   {
-    sync_writer_->Write(source, volume, key_pressed, capture_time);
+    sync_writer_->Write(source, volume, key_pressed, capture_time, glitch_info);
   }
 
   float average_power_dbfs;
@@ -762,13 +765,15 @@ void InputController::OnData(const media::AudioBus* source,
 }
 
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
-void InputController::DeliverProcessedAudio(const media::AudioBus& audio_bus,
-                                            base::TimeTicks audio_capture_time,
-                                            absl::optional<double> new_volume) {
+void InputController::DeliverProcessedAudio(
+    const media::AudioBus& audio_bus,
+    base::TimeTicks audio_capture_time,
+    absl::optional<double> new_volume,
+    const media::AudioGlitchInfo& glitch_info) {
   // When processing is performed in the audio service, the consumer is not
   // expected to use the input volume and keypress information.
   sync_writer_->Write(&audio_bus, /*volume=*/1.0,
-                      /*key_pressed=*/false, audio_capture_time);
+                      /*key_pressed=*/false, audio_capture_time, glitch_info);
   if (new_volume) {
     task_runner_->PostTask(
         FROM_HERE,

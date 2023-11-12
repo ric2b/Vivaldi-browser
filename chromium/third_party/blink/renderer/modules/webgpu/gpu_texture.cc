@@ -23,35 +23,33 @@ namespace blink {
 
 namespace {
 
-WGPUTextureDescriptor AsDawnType(
-    const GPUTextureDescriptor* webgpu_desc,
-    std::string* label,
-    std::unique_ptr<WGPUTextureFormat[]>* view_formats,
-    GPUDevice* device) {
-  DCHECK(webgpu_desc);
+bool ConvertToDawn(const GPUTextureDescriptor* in,
+                   WGPUTextureDescriptor* out,
+                   std::string* label,
+                   std::unique_ptr<WGPUTextureFormat[]>* view_formats,
+                   ExceptionState& exception_state) {
+  DCHECK(in);
+  DCHECK(out);
   DCHECK(label);
   DCHECK(view_formats);
-  DCHECK(device);
 
-  WGPUTextureDescriptor dawn_desc = {};
-  dawn_desc.nextInChain = nullptr;
-  dawn_desc.usage = static_cast<WGPUTextureUsage>(webgpu_desc->usage());
-  dawn_desc.dimension = AsDawnEnum(webgpu_desc->dimension());
-  dawn_desc.size = AsDawnType(webgpu_desc->size());
-  dawn_desc.format = AsDawnEnum(webgpu_desc->format());
-  dawn_desc.mipLevelCount = webgpu_desc->mipLevelCount();
-  dawn_desc.sampleCount = webgpu_desc->sampleCount();
+  *out = {};
+  out->usage = static_cast<WGPUTextureUsage>(in->usage());
+  out->dimension = AsDawnEnum(in->dimension());
+  out->format = AsDawnEnum(in->format());
+  out->mipLevelCount = in->mipLevelCount();
+  out->sampleCount = in->sampleCount();
 
-  if (webgpu_desc->hasLabel()) {
-    *label = webgpu_desc->label().Utf8();
-    dawn_desc.label = label->c_str();
+  if (in->hasLabel()) {
+    *label = in->label().Utf8();
+    out->label = label->c_str();
   }
 
-  *view_formats = AsDawnEnum<WGPUTextureFormat>(webgpu_desc->viewFormats());
-  dawn_desc.viewFormatCount = webgpu_desc->viewFormats().size();
-  dawn_desc.viewFormats = view_formats->get();
+  *view_formats = AsDawnEnum<WGPUTextureFormat>(in->viewFormats());
+  out->viewFormatCount = in->viewFormats().size();
+  out->viewFormats = view_formats->get();
 
-  return dawn_desc;
+  return ConvertToDawn(in->size(), &out->size, exception_state);
 }
 
 WGPUTextureViewDescriptor AsDawnType(
@@ -98,6 +96,14 @@ GPUTexture* GPUTexture::Create(GPUDevice* device,
   DCHECK(device);
   DCHECK(webgpu_desc);
 
+  WGPUTextureDescriptor dawn_desc;
+  std::string label;
+  std::unique_ptr<WGPUTextureFormat[]> view_formats;
+  if (!ConvertToDawn(webgpu_desc, &dawn_desc, &label, &view_formats,
+                     exception_state)) {
+    return nullptr;
+  }
+
   if (!device->ValidateTextureFormatUsage(webgpu_desc->format(),
                                           exception_state)) {
     return nullptr;
@@ -108,11 +114,6 @@ GPUTexture* GPUTexture::Create(GPUDevice* device,
       return nullptr;
     }
   }
-
-  std::string label;
-  std::unique_ptr<WGPUTextureFormat[]> view_formats;
-  WGPUTextureDescriptor dawn_desc =
-      AsDawnType(webgpu_desc, &label, &view_formats, device);
 
   GPUTexture* texture = MakeGarbageCollected<GPUTexture>(
       device,
@@ -130,100 +131,6 @@ GPUTexture* GPUTexture::CreateError(GPUDevice* device,
   return MakeGarbageCollected<GPUTexture>(
       device,
       device->GetProcs().deviceCreateErrorTexture(device->GetHandle(), desc));
-}
-
-// static
-GPUTexture* GPUTexture::FromCanvas(GPUDevice* device,
-                                   HTMLCanvasElement* canvas,
-                                   WGPUTextureUsage usage,
-                                   ExceptionState& exception_state) {
-  if (!canvas || !canvas->width() || !canvas->height()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
-                                      "Missing canvas source");
-    return nullptr;
-  }
-
-  if (!canvas->OriginClean()) {
-    exception_state.ThrowSecurityError(
-        "Canvas element is tainted by cross-origin data and may not be "
-        "loaded.");
-    return nullptr;
-  }
-
-  // TODO: Webgpu contexts also return true for Is3d(), but most of the webgl
-  // specific CanvasRenderingContext methods don't work for webgpu.
-  auto* canvas_context = canvas->RenderingContext();
-  if (!canvas_context) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
-                                      "Missing canvas rendering context");
-    return nullptr;
-  }
-
-  // If the context is lost, the resource provider would be invalid.
-  auto context_provider_wrapper = SharedGpuContext::ContextProviderWrapper();
-  if (!context_provider_wrapper ||
-      context_provider_wrapper->ContextProvider()->IsContextLost()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
-                                      "Shared GPU context lost");
-    return nullptr;
-  }
-
-  // Get a recyclable resource for producing WebGPU-compatible shared images.
-  // First texel i.e. UV (0, 0) should be mapped to top left of the source.
-  std::unique_ptr<RecyclableCanvasResource> recyclable_canvas_resource =
-      device->GetDawnControlClient()->GetOrCreateCanvasResource(
-          SkImageInfo::MakeN32Premul(canvas->Size().width(),
-                                     canvas->Size().height()),
-          /*is_origin_top_left=*/true);
-  if (!recyclable_canvas_resource) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
-                                      "Failed to create resource provider");
-    return nullptr;
-  }
-
-  CanvasResourceProvider* resource_provider =
-      recyclable_canvas_resource->resource_provider();
-  DCHECK(resource_provider);
-
-  // Extract the format. This is only used to validate experimentalImportTexture
-  // right now. We may want to reflect it from this function or validate it
-  // against some input parameters.
-  WGPUTextureFormat format =
-      AsDawnType(resource_provider->GetSkImageInfo().colorType());
-  if (format == WGPUTextureFormat_Undefined) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
-                                      "Unsupported format for import texture");
-    return nullptr;
-  }
-
-  if (!canvas_context->CopyRenderingResultsFromDrawingBuffer(resource_provider,
-                                                             kBackBuffer)) {
-    // Fallback to static bitmap image.
-    SourceImageStatus source_image_status = kInvalidSourceImageStatus;
-    auto image = canvas->GetSourceImageForCanvas(&source_image_status,
-                                                 gfx::SizeF(canvas->Size()));
-    if (source_image_status != kNormalSourceImageStatus) {
-      exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
-                                        "Failed to get image from canvas");
-      return nullptr;
-    }
-    auto* static_bitmap_image = DynamicTo<StaticBitmapImage>(image.get());
-    if (!static_bitmap_image ||
-        !static_bitmap_image->CopyToResourceProvider(resource_provider)) {
-      exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
-                                        "Failed to import texture from canvas");
-      return nullptr;
-    }
-  }
-
-  scoped_refptr<WebGPUMailboxTexture> mailbox_texture =
-      WebGPUMailboxTexture::FromCanvasResource(
-          device->GetDawnControlClient(), device->GetHandle(), usage,
-          std::move(recyclable_canvas_resource));
-  DCHECK(mailbox_texture->GetTexture());
-
-  return MakeGarbageCollected<GPUTexture>(device, format, usage,
-                                          std::move(mailbox_texture));
 }
 
 GPUTexture::GPUTexture(GPUDevice* device, WGPUTexture texture)

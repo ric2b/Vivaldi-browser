@@ -119,17 +119,17 @@ public class BookmarkModelTest {
         BookmarkId bookmarkAA = addBookmark(folderA, 0, "aa", AA_COM);
         BookmarkId folderAA = mBookmarkModel.addFolder(folderA, 0, "faa");
 
-        HashSet<BookmarkId> movedBookmarks = new HashSet<BookmarkId>(6);
+        HashSet<BookmarkId> movedBookmarks = new HashSet<>(6);
         movedBookmarks.add(bookmarkA);
         movedBookmarks.add(bookmarkB);
         movedBookmarks.add(bookmarkC);
         movedBookmarks.add(folderC);
         movedBookmarks.add(folderB);
         movedBookmarks.add(bookmarkAA);
-        mBookmarkModel.moveBookmarks(new ArrayList<BookmarkId>(movedBookmarks), folderAA);
+        mBookmarkModel.moveBookmarks(new ArrayList<>(movedBookmarks), folderAA);
 
         // Order of the moved bookmarks is not tested.
-        verifyBookmarkListNoOrder(mBookmarkModel.getChildIDs(folderAA), movedBookmarks);
+        verifyBookmarkListNoOrder(mBookmarkModel.getChildIds(folderAA), movedBookmarks);
     }
 
     @Test
@@ -141,13 +141,13 @@ public class BookmarkModelTest {
         BookmarkId bookmarkA = addBookmark(folder, 0, "a", A_COM);
         BookmarkId bookmarkB = addBookmark(folder, 1, "b", B_COM);
 
-        HashSet<BookmarkId> movedBookmarks = new HashSet<BookmarkId>(2);
+        HashSet<BookmarkId> movedBookmarks = new HashSet<>(2);
         movedBookmarks.add(bookmarkA);
         movedBookmarks.add(bookmarkB);
-        mBookmarkModel.moveBookmarks(new ArrayList<BookmarkId>(movedBookmarks), folder);
+        mBookmarkModel.moveBookmarks(new ArrayList<>(movedBookmarks), folder);
 
         // Order of the moved bookmarks is not tested.
-        verifyBookmarkListNoOrder(mBookmarkModel.getChildIDs(folder), movedBookmarks);
+        verifyBookmarkListNoOrder(mBookmarkModel.getChildIds(folder), movedBookmarks);
     }
 
     @Test
@@ -222,7 +222,7 @@ public class BookmarkModelTest {
         BookmarkId folderAA = mBookmarkModel.addFolder(folderA, 0, "faa");
         // folders and urls
         expectedChildren.add(folderAA);
-        verifyBookmarkListNoOrder(mBookmarkModel.getChildIDs(folderA), expectedChildren);
+        verifyBookmarkListNoOrder(mBookmarkModel.getChildIds(folderA), expectedChildren);
     }
 
     // Moved from BookmarkBridgeTest
@@ -263,7 +263,7 @@ public class BookmarkModelTest {
 
     public static BookmarkId addBookmark(BookmarkModel model, final BookmarkId parent,
             final int index, final String title, final GURL url) {
-        final AtomicReference<BookmarkId> result = new AtomicReference<BookmarkId>();
+        final AtomicReference<BookmarkId> result = new AtomicReference<>();
         final Semaphore semaphore = new Semaphore(0);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             result.set(model.addBookmark(parent, index, title, url));

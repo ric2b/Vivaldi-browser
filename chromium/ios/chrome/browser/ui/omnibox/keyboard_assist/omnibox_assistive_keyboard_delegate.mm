@@ -7,15 +7,16 @@
 #import "base/mac/foundation_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/lens_commands.h"
-#import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/shared/public/commands/lens_commands.h"
+#import "ios/chrome/browser/shared/public/commands/open_lens_input_selection_command.h"
+#import "ios/chrome/browser/shared/public/commands/qr_scanner_commands.h"
+#import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
+#import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
-#import "ios/chrome/browser/ui/util/layout_guide_names.h"
-#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -25,7 +26,8 @@
 @implementation OmniboxAssistiveKeyboardDelegateImpl
 
 @synthesize applicationCommandsHandler = _applicationCommandsHandler;
-@synthesize browserCommandsHandler = _browserCommandsHandler;
+@synthesize browserCoordinatorCommandsHandler =
+    _browserCoordinatorCommandsHandler;
 @synthesize layoutGuideCenter = _layoutGuideCenter;
 @synthesize qrScannerCommandsHandler = _qrScannerCommandsHandler;
 @synthesize omniboxTextField = _omniboxTextField;
@@ -34,7 +36,7 @@
 
 - (void)keyboardAccessoryVoiceSearchTapped:(id)sender {
   if (ios::provider::IsVoiceSearchEnabled()) {
-    [self.browserCommandsHandler preloadVoiceSearch];
+    [self.browserCoordinatorCommandsHandler preloadVoiceSearch];
     base::RecordAction(base::UserMetricsAction("MobileCustomRowVoiceSearch"));
     // Voice Search will query kVoiceSearchButtonGuide to know from where to
     // start its animation, so reference the sender under that name. The sender
@@ -59,8 +61,12 @@
 
 - (void)keyboardAccessoryLensTapped {
   base::RecordAction(base::UserMetricsAction("MobileCustomRowLensSearch"));
-  [self.lensCommandsHandler
-      openInputSelectionForEntrypoint:LensEntrypoint::Keyboard];
+  OpenLensInputSelectionCommand* command = [[OpenLensInputSelectionCommand
+      alloc]
+          initWithEntryPoint:LensEntrypoint::Keyboard
+           presentationStyle:LensInputSelectionPresentationStyle::SlideFromRight
+      presentationCompletion:nil];
+  [self.lensCommandsHandler openLensInputSelection:command];
 }
 
 - (void)keyPressed:(NSString*)title {

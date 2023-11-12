@@ -4,7 +4,6 @@
 
 #include "content/renderer/render_thread_impl.h"
 
-#include <algorithm>
 #include <limits>
 #include <map>
 #include <memory>
@@ -32,6 +31,7 @@
 #include "base/observer_list.h"
 #include "base/path_service.h"
 #include "base/process/process_metrics.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -44,7 +44,6 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/simple_thread.h"
-#include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_pressure_level_proto.h"
@@ -137,6 +136,7 @@
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
 #include "services/viz/public/cpp/gpu/gpu.h"
 #include "skia/ext/skia_memory_dump_provider.h"
+#include "third_party/abseil-cpp/absl/base/attributes.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/page/launching_process_state.h"
 #include "third_party/blink/public/common/privacy_budget/active_sampling.h"
@@ -157,6 +157,7 @@
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_render_theme.h"
 #include "third_party/blink/public/web/web_security_policy.h"
+#include "third_party/blink/public/web/web_user_level_memory_pressure_signal_generator.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkGraphics.h"
@@ -242,8 +243,7 @@ RendererBlinkPlatformImpl* g_current_blink_platform_impl_for_testing;
 
 // Keep the global RenderThreadImpl in a TLS slot so it is impossible to access
 // incorrectly from the wrong thread.
-base::LazyInstance<base::ThreadLocalPointer<RenderThreadImpl>>::DestructorAtExit
-    lazy_tls = LAZY_INSTANCE_INITIALIZER;
+ABSL_CONST_INIT thread_local RenderThreadImpl* render_thread = nullptr;
 
 base::LazyInstance<scoped_refptr<base::SingleThreadTaskRunner>>::
     DestructorAtExit g_main_task_runner = LAZY_INSTANCE_INITIALIZER;
@@ -377,11 +377,7 @@ static bool IsSingleProcess() {
 }  // namespace
 
 RenderThreadImpl::HistogramCustomizer::HistogramCustomizer() {
-  custom_histograms_.insert("V8.MemoryExternalFragmentationTotal");
   custom_histograms_.insert("V8.MemoryHeapSampleTotalCommitted");
-  custom_histograms_.insert("V8.MemoryHeapSampleTotalUsed");
-  custom_histograms_.insert("V8.MemoryHeapUsed");
-  custom_histograms_.insert("V8.MemoryHeapCommitted");
 }
 
 RenderThreadImpl::HistogramCustomizer::~HistogramCustomizer() {}
@@ -481,7 +477,7 @@ bool RenderThreadImpl::HistogramCustomizer::IsAlexaTop10NonGoogleSite(
 
 // static
 RenderThreadImpl* RenderThreadImpl::current() {
-  return lazy_tls.Pointer()->Get();
+  return render_thread;
 }
 
 // static
@@ -589,7 +585,7 @@ void RenderThreadImpl::Init() {
     blink::WebView::SetUseExternalPopupMenus(true);
 #endif
 
-  lazy_tls.Pointer()->Set(this);
+  render_thread = this;
   g_main_task_runner.Get() = base::SingleThreadTaskRunner::GetCurrentDefault();
 
   // Register this object as the main thread.
@@ -721,9 +717,9 @@ void RenderThreadImpl::Init() {
            ->FontFamiliesToActivelySample()
            .empty();
   if (should_actively_sample_fonts) {
-    mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder;
+    mojo::PendingRemote<ukm::mojom::UkmRecorderFactory> pending_factory;
     RenderThread::Get()->BindHostReceiver(
-        recorder.InitWithNewPipeAndPassReceiver());
+        pending_factory.InitWithNewPipeAndPassReceiver());
     scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner =
         base::ThreadPool::CreateSequencedTaskRunner(
             {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
@@ -731,13 +727,15 @@ void RenderThreadImpl::Init() {
     sequenced_task_runner->PostTask(
         FROM_HERE,
         base::BindOnce(
-            [](mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder) {
-              auto ukm_recorder =
-                  std::make_unique<ukm::MojoUkmRecorder>(std::move(recorder));
+            [](mojo::PendingRemote<ukm::mojom::UkmRecorderFactory>
+                   pending_factory) {
+              mojo::Remote<ukm::mojom::UkmRecorderFactory> factory(
+                  std::move(pending_factory));
+              auto ukm_recorder = ukm::MojoUkmRecorder::Create(*factory);
               blink::IdentifiabilityActiveSampler::ActivelySampleAvailableFonts(
                   ukm_recorder.get());
             },
-            std::move(recorder)));
+            std::move(pending_factory)));
   }
   UpdateForegroundCrashKey(
       /*foreground=*/!blink::kLaunchingProcessIsBackgrounded);
@@ -859,11 +857,6 @@ void RenderThreadImpl::RemoveObserver(RenderThreadObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void RenderThreadImpl::SetResourceRequestSenderDelegate(
-    blink::WebResourceRequestSenderDelegate* delegate) {
-  resource_request_sender_delegate_ = delegate;
-}
-
 void RenderThreadImpl::InitializeCompositorThread() {
   blink_platform_impl_->CreateAndSetCompositorThread();
   compositor_task_runner_ = blink_platform_impl_->CompositorThreadTaskRunner();
@@ -933,7 +926,7 @@ void RenderThreadImpl::InitializeRenderer(
     const std::string& reduced_user_agent,
     const blink::UserAgentMetadata& user_agent_metadata,
     const std::vector<std::string>& cors_exempt_header_list,
-    attribution_reporting::mojom::OsSupport attribution_os_support) {
+    network::mojom::AttributionSupport attribution_support) {
   DCHECK(user_agent_.IsNull());
   DCHECK(reduced_user_agent_.IsNull());
   DCHECK(full_user_agent_.IsNull());
@@ -944,14 +937,13 @@ void RenderThreadImpl::InitializeRenderer(
   reduced_user_agent_ = WebString::FromUTF8(reduced_user_agent);
   user_agent_metadata_ = user_agent_metadata;
   cors_exempt_header_list_ = cors_exempt_header_list;
-  attribution_os_support_ = attribution_os_support;
+  attribution_support_ = attribution_support;
 
   blink::WebVector<blink::WebString> web_cors_exempt_header_list(
       cors_exempt_header_list.size());
-  std::transform(cors_exempt_header_list.begin(), cors_exempt_header_list.end(),
-                 web_cors_exempt_header_list.begin(), [](const std::string& h) {
-                   return blink::WebString::FromLatin1(h);
-                 });
+  base::ranges::transform(
+      cors_exempt_header_list, web_cors_exempt_header_list.begin(),
+      [](const auto& header) { return blink::WebString::FromLatin1(header); });
   blink::SetCorsExemptHeaderList(web_cors_exempt_header_list);
 }
 
@@ -1576,30 +1568,21 @@ void RenderThreadImpl::UpdateScrollbarTheme(
           : absl::nullopt,
       params->preferred_scroller_style, params->redraw,
       params->jump_on_track_click);
-
+#endif  // BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   is_elastic_overscroll_enabled_ = params->scroll_view_rubber_banding;
 #else
   NOTREACHED();
-#endif
+#endif  // BUILDFLAG(IS_APPLE)
 }
 
-void RenderThreadImpl::OnSystemColorsChanged(
-    int32_t aqua_color_variant,
-    const std::string& highlight_text_color,
-    const std::string& highlight_color) {
+void RenderThreadImpl::OnSystemColorsChanged(int32_t aqua_color_variant) {
 #if BUILDFLAG(IS_MAC)
-  if (!IsSingleProcess()) {
-    // The purpose of this function is to send an IPC to the renderer notifying
-    // it that the browser received an NSNotificationCenter notification, which
-    // the renderer needs to repost in its own process so that AppKit-side state
-    // in its process can be updated. This makes no sense in single-process
-    // mode, since that state is already updated, and in fact is actively
-    // harmful: that IPC is received on a different thread, then the
-    // notification is reposted (again) from a different thread.
-    // See https://crbug.com/1162066
-    SystemColorsDidChange(aqua_color_variant, highlight_text_color,
-                          highlight_color);
-  }
+  SystemColorsDidChange(aqua_color_variant);
+
+  // Let blink know it should invalidate and recalculate styles for elements
+  // that rely on system colors, such as the accent and highlight colors.
+  blink::SystemColorsChanged();
 #else
   NOTREACHED();
 #endif
@@ -1847,15 +1830,17 @@ gfx::ColorSpace RenderThreadImpl::GetRenderingColorSpace() {
   return rendering_color_space_;
 }
 
-attribution_reporting::mojom::OsSupport
-RenderThreadImpl::GetOsSupportForAttributionReporting() {
-  return attribution_os_support_;
+network::mojom::AttributionSupport
+RenderThreadImpl::GetAttributionReportingSupport() {
+  return attribution_support_;
 }
 
-void RenderThreadImpl::SetOsSupportForAttributionReporting(
-    attribution_reporting::mojom::OsSupport attribution_os_support) {
-  attribution_os_support_ = attribution_os_support;
+#if BUILDFLAG(IS_ANDROID)
+void RenderThreadImpl::SetAttributionReportingSupport(
+    network::mojom::AttributionSupport attribution_support) {
+  attribution_support_ = attribution_support;
 }
+#endif
 
 std::unique_ptr<CodecFactory> RenderThreadImpl::CreateMediaCodecFactory(
     scoped_refptr<viz::ContextProviderCommandBuffer> context_provider,
@@ -1903,6 +1888,18 @@ void RenderThreadImpl::SetPrivateMemoryFootprint(
     uint64_t private_memory_footprint_bytes) {
   GetRendererHost()->SetPrivateMemoryFootprint(private_memory_footprint_bytes);
 }
+
+void RenderThreadImpl::OnMemoryPressureFromBrowserReceived(
+    base::MemoryPressureListener::MemoryPressureLevel level) {
+  // To avoid that the browser process requests a signal while a renderer
+  // is creating and blink has not been initialized yet, check
+  // |blink_platform_impl_| here.
+  if (!blink_platform_impl_) {
+    return;
+  }
+  blink::RequestUserLevelMemoryPressureSignal();
+}
+
 #endif
 
 }  // namespace content

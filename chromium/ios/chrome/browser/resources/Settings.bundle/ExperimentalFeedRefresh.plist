@@ -12,87 +12,73 @@
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
+			<string>PSTitleValueSpecifier</string>
 			<key>Title</key>
 			<string>feedModel: didBeginReload:</string>
 			<key>Key</key>
 			<string>FeedModelDidBeginReloadTimestamp</string>
 			<key>DefaultValue</key>
 			<string></string>
-			<key>KeyboardType</key>
-			<string>Alphabet</string>
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
+			<string>PSTitleValueSpecifier</string>
 			<key>Title</key>
 			<string>refresh FeedModel:</string>
 			<key>Key</key>
 			<string>RefreshFeedModelTimestamp</string>
 			<key>DefaultValue</key>
 			<string></string>
-			<key>KeyboardType</key>
-			<string>Alphabet</string>
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
+			<string>PSTitleValueSpecifier</string>
 			<key>Title</key>
 			<string>Forced foreground</string>
 			<key>Key</key>
 			<string>FeedLastForcedForegroundRefreshTimestamp</string>
 			<key>DefaultValue</key>
 			<string></string>
-			<key>KeyboardType</key>
-			<string>Alphabet</string>
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
+			<string>PSTitleValueSpecifier</string>
 			<key>Title</key>
 			<string>Non forced foreground</string>
 			<key>Key</key>
 			<string>FeedLastNonForcedForegroundRefreshTimestamp</string>
 			<key>DefaultValue</key>
 			<string></string>
-			<key>KeyboardType</key>
-			<string>Alphabet</string>
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
+			<string>PSTitleValueSpecifier</string>
 			<key>Title</key>
 			<string>Visible foreground</string>
 			<key>Key</key>
 			<string>FeedLastVisibleForegroundRefreshTimestamp</string>
 			<key>DefaultValue</key>
 			<string></string>
-			<key>KeyboardType</key>
-			<string>Alphabet</string>
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
+			<string>PSTitleValueSpecifier</string>
 			<key>Title</key>
 			<string>Non visible foreground</string>
 			<key>Key</key>
 			<string>FeedLastNonVisibleForegroundRefreshTimestamp</string>
 			<key>DefaultValue</key>
 			<string></string>
-			<key>KeyboardType</key>
-			<string>Alphabet</string>
 		</dict>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
+			<string>PSTitleValueSpecifier</string>
 			<key>Title</key>
 			<string>Background refresh</string>
 			<key>Key</key>
 			<string>FeedLastBackgroundRefreshTimestamp</string>
 			<key>DefaultValue</key>
 			<string></string>
-			<key>KeyboardType</key>
-			<string>Alphabet</string>
 		</dict>
 		<dict>
 			<key>Title</key>
@@ -104,9 +90,21 @@
 			<key>Type</key>
 			<string>PSTextFieldSpecifier</string>
 			<key>Title</key>
-			<string>Session end timeout in seconds</string>
+			<string>App close background refresh interval in seconds</string>
 			<key>Key</key>
-			<string>FeedSessionEndTimerTimeoutInSeconds</string>
+			<string>AppCloseBackgroundRefreshIntervalInSeconds</string>
+			<key>DefaultValue</key>
+			<string></string>
+			<key>KeyboardType</key>
+			<string>NumberPad</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Refresh timer timeout in seconds</string>
+			<key>Key</key>
+			<string>FeedRefreshTimerTimeoutInSeconds</string>
 			<key>DefaultValue</key>
 			<string></string>
 			<key>KeyboardType</key>
@@ -135,6 +133,26 @@
 			<string></string>
 			<key>KeyboardType</key>
 			<string>NumberPad</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Use Foreground bool overrides</string>
+			<key>Key</key>
+			<string>FeedOverrideForegroundDefaultsEnabled</string>
+			<key>DefaultValue</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Enable use interactivity invalidation</string>
+			<key>Key</key>
+			<string>FeedUseInteractivityInvalidationForForegroundRefreshesEnabled</string>
+			<key>DefaultValue</key>
+			<false/>
 		</dict>
 		<dict>
 			<key>Title</key>

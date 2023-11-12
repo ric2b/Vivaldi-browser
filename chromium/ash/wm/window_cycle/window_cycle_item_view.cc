@@ -4,10 +4,11 @@
 
 #include "ash/wm/window_cycle/window_cycle_item_view.h"
 
+#include <algorithm>
+
 #include "ash/shell.h"
 #include "ash/wm/window_cycle/window_cycle_controller.h"
 #include "ash/wm/window_preview_view.h"
-#include "base/cxx17_backports.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/window.h"
@@ -74,7 +75,7 @@ gfx::Size WindowCycleItemView::GetPreviewViewSize() const {
         kMaxPreviewWidthDp / static_cast<float>(preview_pref_size.width()),
         kFixedPreviewHeightDp / static_cast<float>(preview_pref_size.height()));
     preview_pref_size =
-        gfx::ScaleToFlooredSize(preview_pref_size, scale, scale);
+        gfx::ScaleToRoundedSize(preview_pref_size, scale, scale);
   }
 
   return preview_pref_size;
@@ -107,8 +108,8 @@ gfx::Size WindowCycleItemView::CalculatePreferredSize() const {
 
   // Previews should never be narrower than half or wider than double their
   // fixed height.
-  preview_size.set_width(base::clamp(preview_size.width(), kMinPreviewWidthDp,
-                                     kMaxPreviewWidthDp));
+  preview_size.set_width(
+      std::clamp(preview_size.width(), kMinPreviewWidthDp, kMaxPreviewWidthDp));
 
   const int margin = GetInsets().width();
   preview_size.Enlarge(margin, margin + WindowMiniView::kHeaderHeightDp);

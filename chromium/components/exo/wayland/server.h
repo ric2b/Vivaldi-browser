@@ -10,8 +10,10 @@
 
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
+#include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "components/exo/wayland/scoped_wl.h"
 #include "ui/display/display_observer.h"
@@ -67,18 +69,19 @@ class Server : public display::DisplayObserver {
   // used to delete it asynchronously as well.
   static void DestroyAsync(std::unique_ptr<Server> server);
 
+  // TODO(b/270254359): deprecate go/secure-exo-ids in favour of
+  // go/securer-exo-ids.
   void StartAsync(StartCallback callback);
   void StartWithDefaultPath(StartCallback callback);
+  void StartWithFdAsync(base::ScopedFD fd, StartCallback callback);
 
   void Initialize();
 
   bool Open(bool default_path);
 
-  void Finalize(StartCallback callback, bool success);
+  bool OpenFd(base::ScopedFD fd);
 
-  // This adds a Unix socket to the Wayland display server which can be used
-  // by clients to connect to the display server.
-  bool AddSocket(const std::string& name);
+  void Finalize(StartCallback callback, bool success);
 
   // Returns the file descriptor associated with the server.
   int GetFileDescriptor() const;
@@ -105,6 +108,8 @@ class Server : public display::DisplayObserver {
     return GetWaylandDisplay();
   }
 
+  // Returns the path to the wayland socket used by this server. Returns "" if
+  // StarTWithDefaultPath() hasn't been called, or StartWithFd() was called.
   const base::FilePath& socket_path() const { return socket_path_; }
 
  protected:
@@ -117,9 +122,13 @@ class Server : public display::DisplayObserver {
  private:
   friend class ScopedEventDispatchDisabler;
 
+  // This adds a Unix socket to the Wayland display server which can be used
+  // by clients to connect to the display server.
+  bool AddSocket(const std::string& name);
+
   // This has the server's socket inside it, so it must be deleted last.
   base::ScopedTempDir socket_dir_;
-  Display* const display_;
+  const raw_ptr<Display, ExperimentalAsh> display_;
   std::unique_ptr<SecurityDelegate> security_delegate_;
   // Deleting wl_display depends on SerialTracker.
   std::unique_ptr<SerialTracker> serial_tracker_;

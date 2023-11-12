@@ -23,17 +23,22 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/policy/developer_tools_policy_handler.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
+#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/browser/web_applications/web_app_tab_helper.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/browser_resources.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/devtools_agent_host_client_channel.h"
 #include "content/public/browser/render_frame_host.h"
@@ -43,14 +48,14 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/browser/view_type_utils.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/mojom/view_type.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_switches.h"
-#include "chrome/common/channel_info.h"
-#include "components/version_info/version_info.h"
-#include "third_party/cros_system_api/switches/chrome_switches.h"
 #endif
 
 using content::DevToolsAgentHost;
@@ -58,6 +63,7 @@ using content::DevToolsAgentHost;
 const char ChromeDevToolsManagerDelegate::kTypeApp[] = "app";
 const char ChromeDevToolsManagerDelegate::kTypeBackgroundPage[] =
     "background_page";
+const char ChromeDevToolsManagerDelegate::kTypePage[] = "page";
 
 namespace {
 
@@ -84,6 +90,16 @@ bool GetExtensionInfo(content::WebContents* wc,
       extension->is_platform_app()) {
     *name = extension->name();
     *type = ChromeDevToolsManagerDelegate::kTypeApp;
+    return true;
+  }
+
+  auto view_type = extensions::GetViewType(wc);
+  if (view_type == extensions::mojom::ViewType::kExtensionPopup ||
+      view_type == extensions::mojom::ViewType::kExtensionSidePanel) {
+    // Note that we are intentionally not setting name here, so that we can
+    // construct a name based on the URL or page title in
+    // RenderFrameDevToolsAgentHost::GetTitle()
+    *type = ChromeDevToolsManagerDelegate::kTypePage;
     return true;
   }
   return false;
@@ -172,10 +188,26 @@ bool ChromeDevToolsManagerDelegate::AllowInspectingRenderFrameHost(
   Profile* profile =
       Profile::FromBrowserContext(rfh->GetProcess()->GetBrowserContext());
   auto* process_manager = extensions::ProcessManager::Get(profile);
-  return AllowInspection(
-      profile, process_manager
-                   ? process_manager->GetExtensionForRenderFrameHost(rfh)
-                   : nullptr);
+  auto* extension = process_manager
+                        ? process_manager->GetExtensionForRenderFrameHost(rfh)
+                        : nullptr;
+  if (extension || !web_app::AreWebAppsEnabled(profile)) {
+    return AllowInspection(profile, extension);
+  }
+
+  if (auto* web_app_provider =
+          web_app::WebAppProvider::GetForWebApps(profile)) {
+    absl::optional<web_app::AppId> app_id =
+        web_app_provider->registrar_unsafe().FindAppWithUrlInScope(
+            rfh->GetMainFrame()->GetLastCommittedURL());
+    if (app_id) {
+      const auto* web_app =
+          web_app_provider->registrar_unsafe().GetAppById(app_id.value());
+      return AllowInspection(profile, web_app);
+    }
+  }
+  // |extension| is always nullptr here.
+  return AllowInspection(profile, extension);
 }
 
 // static
@@ -184,24 +216,25 @@ bool ChromeDevToolsManagerDelegate::AllowInspection(
     content::WebContents* web_contents) {
   const extensions::Extension* extension = nullptr;
   if (web_contents) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    GURL url = web_contents->GetLastCommittedURL();
-    if ((url.SchemeIs("chrome") && url.host() != "inspect") ||
-        url.SchemeIs("os")) {
-      base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-      if (chrome::GetChannel() != version_info::Channel::CANARY &&
-          !command_line->HasSwitch(chromeos::switches::kSystemInDevMode) &&
-          !command_line->HasSwitch(ash::switches::kForceDevToolsAvailable)) {
-        return false;
-      }
-    }
-#endif
-
     if (auto* process_manager = extensions::ProcessManager::Get(
             web_contents->GetBrowserContext())) {
       extension = process_manager->GetExtensionForWebContents(web_contents);
     }
+    if (extension || !web_app::AreWebAppsEnabled(profile)) {
+      return AllowInspection(profile, extension);
+    }
+
+    const web_app::AppId* app_id =
+        web_app::WebAppTabHelper::GetAppId(web_contents);
+    auto* web_app_provider =
+        web_app::WebAppProvider::GetForWebContents(web_contents);
+    if (app_id && web_app_provider) {
+      const web_app::WebApp* web_app =
+          web_app_provider->registrar_unsafe().GetAppById(*app_id);
+      return AllowInspection(profile, web_app);
+    }
   }
+  // |extension| is always nullptr here.
   return AllowInspection(profile, extension);
 }
 
@@ -209,38 +242,59 @@ bool ChromeDevToolsManagerDelegate::AllowInspection(
 bool ChromeDevToolsManagerDelegate::AllowInspection(
     Profile* profile,
     const extensions::Extension* extension) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(ash::switches::kForceDevToolsAvailable))
-    return true;
-#endif
-
   using Availability = policy::DeveloperToolsPolicyHandler::Availability;
   Availability availability =
-      policy::DeveloperToolsPolicyHandler::GetDevToolsAvailability(
-          profile->GetPrefs());
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  // Do not create DevTools if it's disabled for primary profile.
-  Profile* primary_profile = ProfileManager::GetPrimaryUserProfile();
-  if (primary_profile &&
-      policy::DeveloperToolsPolicyHandler::IsDevToolsAvailabilitySetByPolicy(
-          primary_profile->GetPrefs())) {
-    availability =
-        policy::DeveloperToolsPolicyHandler::GetMostRestrictiveAvailability(
-            availability,
-            policy::DeveloperToolsPolicyHandler::GetDevToolsAvailability(
-                primary_profile->GetPrefs()));
-  }
-#endif
-
+      policy::DeveloperToolsPolicyHandler::GetEffectiveAvailability(profile);
   switch (availability) {
     case Availability::kDisallowed:
       return false;
     case Availability::kAllowed:
       return true;
     case Availability::kDisallowedForForceInstalledExtensions:
-      return !extension ||
-             !extensions::Manifest::IsPolicyLocation(extension->location());
+      if (!extension) {
+        return true;
+      }
+      if (extensions::Manifest::IsPolicyLocation(extension->location())) {
+        return false;
+      }
+      // We also disallow inspecting component extensions, but only for managed
+      // profiles.
+      if (extensions::Manifest::IsComponentLocation(extension->location()) &&
+          profile->GetProfilePolicyConnector()->IsManaged()) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+        // This is an ugly carve out, but Tast tests for ChromeOS require the
+        // ability inspect these specific component extensions in order to run.
+        // TODO(crbug.com/1439649): Remove both of these extension ID based
+        // exceptions after modifying the Tast tests to always allow inspecting
+        // extensions.
+        if (extension->id() == extension_misc::kGuestModeTestExtensionId ||
+            extension->id() == extension_misc::kChromeOSXKB) {
+          return true;
+        }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+        return false;
+      }
+      return true;
+    default:
+      NOTREACHED() << "Unknown developer tools policy";
+      return true;
+  }
+}
+
+// static
+bool ChromeDevToolsManagerDelegate::AllowInspection(
+    Profile* profile,
+    const web_app::WebApp* web_app) {
+  using Availability = policy::DeveloperToolsPolicyHandler::Availability;
+  Availability availability =
+      policy::DeveloperToolsPolicyHandler::GetEffectiveAvailability(profile);
+  switch (availability) {
+    case Availability::kDisallowed:
+      return false;
+    case Availability::kAllowed:
+      return true;
+    case Availability::kDisallowedForForceInstalledExtensions:
+      return !web_app || !web_app->IsKioskInstalledApp();
     default:
       NOTREACHED() << "Unknown developer tools policy";
       return true;

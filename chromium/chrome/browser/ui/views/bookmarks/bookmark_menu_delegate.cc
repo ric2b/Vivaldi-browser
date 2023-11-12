@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/event_utils.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -35,6 +36,7 @@
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/theme_provider.h"
 #include "ui/base/window_open_disposition.h"
@@ -66,6 +68,13 @@ namespace {
 // Max width of a menu. There does not appear to be an OS value for this, yet
 // both IE and FF restrict the max width of a menu.
 const int kMaxMenuWidth = 400;
+
+ui::ImageModel GetFaviconForNode(BookmarkModel* model,
+                                 const BookmarkNode* node) {
+  const gfx::Image& image = model->GetFavicon(node);
+  return image.IsEmpty() ? favicon::GetDefaultFaviconModel()
+                         : ui::ImageModel::FromImage(image);
+}
 
 // The current behavior is that the menu gets closed (see MenuController) after
 // a drop is initiated, which deletes BookmarkMenuDelegate before the drop
@@ -178,9 +187,10 @@ void BookmarkMenuDelegate::Init(views::MenuDelegate* real_delegate,
     bool has_children =
         (start_child_index < node->children().size()) || show_managed;
     if (has_children && parent->GetSubmenu() &&
-        !parent->GetSubmenu()->GetMenuItems().empty())
+        !parent->GetSubmenu()->GetMenuItems().empty()) {
       parent->AppendSeparator();
     }
+    } // vivaldi
 
     if (show_managed)
       BuildMenuForManagedNode(parent);
@@ -417,7 +427,8 @@ views::View::DropCallback BookmarkMenuDelegate::GetDropCallback(
   return base::BindOnce(
       [](BookmarkModelDropObserver* drop_observer,
          const ui::DropTargetEvent& event,
-         ui::mojom::DragOperation& output_drag_op) {
+         ui::mojom::DragOperation& output_drag_op,
+         std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
         drop_observer->Drop(event, output_drag_op);
       },
       base::Owned(std::move(drop_observer)));
@@ -496,11 +507,7 @@ void BookmarkMenuDelegate::BookmarkNodeFaviconChanged(
   if (menu_pair == node_to_menu_map_.end())
     return;  // We're not showing a menu item for the node.
 
-  const gfx::Image& image = model->GetFavicon(node);
-  const gfx::ImageSkia* icon = image.IsEmpty()
-                                   ? favicon::GetDefaultFavicon().ToImageSkia()
-                                   : image.ToImageSkia();
-  menu_pair->second->SetIcon(ui::ImageModel::FromImageSkia(*icon));
+  menu_pair->second->SetIcon(GetFaviconForNode(model, node));
 }
 
 void BookmarkMenuDelegate::WillRemoveBookmarks(
@@ -685,25 +692,23 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
         // Ensure we do not call BookmarkModel::GetFavicon on this node as
         // the function will do an async lookup and on completion insert a
         // regular bookmark icon (since the url will not match anything).
-        const gfx::ImageSkia* icon = vivaldi::GetBookmarkletIcon(menu, parent_);
+        const auto icon = ui::ImageModel::FromImage(
+            vivaldi::GetBookmarkletIcon(menu, parent_));
         child_menu_item = vivaldi::AddMenuItem(menu, &menu_index, id,
-            MaybeEscapeLabel(node->GetTitle()), *icon,
+            MaybeEscapeLabel(node->GetTitle()), icon,
             MenuItemView::Type::kNormal);
       } else {
-      const gfx::Image& image = GetBookmarkModel()->GetFavicon(node);
-      const gfx::ImageSkia* icon =
-          (image.IsEmpty() ?
-           vivaldi::IsVivaldiRunning() ? vivaldi::GetBookmarkDefaultIcon() :
-           favicon::GetDefaultFavicon() : image)
-              .ToImageSkia();
       if (vivaldi::IsVivaldiRunning()) {
+        const gfx::Image& image = GetBookmarkModel()->GetFavicon(node);
+        const auto icon =
+          ui::ImageModel::FromImage(image.IsEmpty() ? vivaldi::GetBookmarkDefaultIcon() : image);
         child_menu_item = vivaldi::AddMenuItem(menu, &menu_index, id,
-            MaybeEscapeLabel(node->GetTitle()), *icon,
+            MaybeEscapeLabel(node->GetTitle()),  icon,
             MenuItemView::Type::kNormal);
       } else {
       child_menu_item =
           menu->AppendMenuItem(id, MaybeEscapeLabel(node->GetTitle()),
-                               ui::ImageModel::FromImageSkia(*icon));
+                               GetFaviconForNode(GetBookmarkModel(), node));
       }
       }
       child_menu_item->GetViewAccessibility().OverrideDescription(
@@ -715,10 +720,10 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
       if (vivaldi::IsVivaldiRunning()) {
         child_menu_item = vivaldi::AddMenuItem(
             menu, &menu_index, id, MaybeEscapeLabel(node->GetTitle()),
-            *(vivaldi_bookmark_kit::GetSpeeddial(node)
+            (vivaldi_bookmark_kit::GetSpeeddial(node)
                   ? vivaldi::GetBookmarkSpeeddialIcon(
                         menu, parent_/*ui::NativeTheme::kColorId_MenuIconColor*/)
-                  : folder_icon).GetImage().ToImageSkia(),
+                  : folder_icon),
             MenuItemView::Type::kSubMenu);
       } else {
       child_menu_item = menu->AppendSubMenu(

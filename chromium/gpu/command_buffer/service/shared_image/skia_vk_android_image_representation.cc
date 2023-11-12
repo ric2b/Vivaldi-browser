@@ -34,7 +34,10 @@ SkiaVkAndroidImageRepresentation::SkiaVkAndroidImageRepresentation(
     AndroidImageBacking* backing,
     scoped_refptr<SharedContextState> context_state,
     MemoryTypeTracker* tracker)
-    : SkiaImageRepresentation(manager, backing, tracker),
+    : SkiaGaneshImageRepresentation(context_state->gr_context(),
+                                    manager,
+                                    backing,
+                                    tracker),
       context_state_(std::move(context_state)) {
   DCHECK(backing);
   DCHECK(context_state_);
@@ -64,9 +67,10 @@ SkiaVkAndroidImageRepresentation::BeginWriteAccess(
   DCHECK_EQ(mode_, RepresentationAccessMode::kNone);
   DCHECK(promise_texture_);
 
-  if (!BeginAccess(false /* readonly */, begin_semaphores, end_semaphores,
-                   base::ScopedFD()))
+  if (!BeginAccess(/*readonly=*/false, begin_semaphores, end_semaphores,
+                   base::ScopedFD())) {
     return {};
+  }
 
   auto* gr_context = context_state_->gr_context();
   if (gr_context->abandoned()) {
@@ -104,9 +108,10 @@ SkiaVkAndroidImageRepresentation::BeginWriteAccess(
   DCHECK_EQ(mode_, RepresentationAccessMode::kNone);
   DCHECK(promise_texture_);
 
-  if (!BeginAccess(false /* readonly */, begin_semaphores, end_semaphores,
-                   base::ScopedFD()))
+  if (!BeginAccess(/*readonly=*/false, begin_semaphores, end_semaphores,
+                   base::ScopedFD())) {
     return {};
+  }
 
   *end_state = GetEndAccessState();
 
@@ -126,7 +131,7 @@ void SkiaVkAndroidImageRepresentation::EndWriteAccess() {
   // doesn't create a canvas and change the state of it, so we don't get any
   // render issues. But we shouldn't assume this backing will only be used in
   // this way.
-  EndAccess(false /* readonly */);
+  EndAccess(/*readonly=*/false);
 }
 
 std::vector<sk_sp<SkPromiseImageTexture>>
@@ -138,9 +143,10 @@ SkiaVkAndroidImageRepresentation::BeginReadAccess(
   DCHECK(!surface_);
   DCHECK(promise_texture_);
 
-  if (!BeginAccess(true /* readonly */, begin_semaphores, end_semaphores,
-                   std::move(init_read_fence_)))
+  if (!BeginAccess(/*readonly=*/true, begin_semaphores, end_semaphores,
+                   std::move(init_read_fence_))) {
     return {};
+  }
 
   *end_state = GetEndAccessState();
 
@@ -153,7 +159,7 @@ void SkiaVkAndroidImageRepresentation::EndReadAccess() {
   DCHECK_EQ(mode_, RepresentationAccessMode::kRead);
   DCHECK(!surface_);
 
-  EndAccess(true /* readonly */);
+  EndAccess(/*readonly=*/true);
 }
 
 gpu::VulkanImplementation*
@@ -218,7 +224,7 @@ bool SkiaVkAndroidImageRepresentation::BeginAccess(
       DLOG(ERROR) << "Failed to create the external semaphore.";
       if (begin_access_semaphore_ != VK_NULL_HANDLE) {
         vkDestroySemaphore(vk_device(), begin_access_semaphore_,
-                           nullptr /* pAllocator */);
+                           /*pAllocator=*/nullptr);
         begin_access_semaphore_ = VK_NULL_HANDLE;
       }
       return false;

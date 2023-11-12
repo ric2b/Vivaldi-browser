@@ -8,7 +8,7 @@
  */
 
 import '../icons.html.js';
-import '../prefs/prefs.js';
+import 'chrome://resources/cr_components/settings_prefs/prefs.js';
 // <if expr="not chromeos_ash">
 import '../relaunch_confirmation_dialog.js';
 // </if>
@@ -31,13 +31,20 @@ import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bu
 
 import {loadTimeData} from '../i18n_setup.js';
 import {RelaunchMixin, RestartType} from '../relaunch_mixin.js';
+// <if expr="_google_chrome">
+import {routes} from '../route.js';
+import {Router} from '../router.js';
+
+// </if>
 
 import {getTemplate} from './about_page.html.js';
 import {AboutPageBrowserProxy, AboutPageBrowserProxyImpl, UpdateStatus, UpdateStatusChangedEvent} from './about_page_browser_proxy.js';
+// clang-format off
 // <if expr="_google_chrome and is_macosx">
 import {PromoteUpdaterStatus} from './about_page_browser_proxy.js';
-
 // </if>
+// clang-format on
+
 
 const SettingsAboutPageElementBase =
     RelaunchMixin(WebUiListenerMixin(I18nMixin(PolymerElement)));
@@ -73,6 +80,19 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
           return loadTimeData.getBoolean('isManaged');
         },
       },
+
+      // <if expr="_google_chrome">
+      /**
+       * Whether to show the "Get the most out of Chrome" section.
+       */
+      showGetTheMostOutOfChromeSection_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('showGetTheMostOutOfChromeSection') &&
+              !loadTimeData.getBoolean('isGuest');
+        },
+      },
+      // </if>
 
       // <if expr="_google_chrome and is_macosx">
       promoteUpdaterStatus_: Object,
@@ -117,6 +137,10 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
 
   private currentUpdateStatusEvent_: UpdateStatusChangedEvent|null;
   private isManaged_: boolean;
+
+  // <if expr="_google_chrome">
+  private showGetTheMostOutOfChromeSection_: boolean;
+  // </if>
 
   // <if expr="_google_chrome and is_macosx">
   private promoteUpdaterStatus_: PromoteUpdaterStatus;
@@ -177,7 +201,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   /**
    * If #promoteUpdater isn't disabled, trigger update promotion.
    */
-  private onPromoteUpdaterTap_() {
+  private onPromoteUpdaterClick_() {
     // This is necessary because #promoteUpdater is not a button, so by default
     // disable doesn't do anything.
     if (this.promoteUpdaterStatus_.disabled) {
@@ -187,17 +211,17 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   }
   // </if>
 
-  private onLearnMoreTap_(event: Event) {
+  private onLearnMoreClick_(event: Event) {
     // Stop the propagation of events, so that clicking on links inside
     // actionable items won't trigger action.
     event.stopPropagation();
   }
 
-  private onHelpTap_() {
+  private onHelpClick_() {
     this.aboutBrowserProxy_.openHelpPage();
   }
 
-  private onRelaunchTap_() {
+  private onRelaunchClick_() {
     this.performRestart(RestartType.RELAUNCH);
   }
 
@@ -305,11 +329,11 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
     return this.currentUpdateStatusEvent_!.status === status;
   }
 
-  private onManagementPageTap_() {
+  private onManagementPageClick_() {
     window.location.href = 'chrome://management';
   }
 
-  private onProductLogoTap_() {
+  private onProductLogoClick_() {
     this.$['product-logo'].animate(
         {
           transform: ['none', 'rotate(-10turn)'],
@@ -321,8 +345,12 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase {
   }
 
   // <if expr="_google_chrome">
-  private onReportIssueTap_() {
+  private onReportIssueClick_() {
     this.aboutBrowserProxy_.openFeedbackDialog();
+  }
+
+  private onGetTheMostOutOfChromeClick_() {
+    Router.getInstance().navigateTo(routes.GET_MOST_CHROME);
   }
   // </if>
 

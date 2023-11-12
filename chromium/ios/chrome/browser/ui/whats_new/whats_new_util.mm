@@ -10,8 +10,15 @@
 #import "ios/chrome/browser/promos_manager/constants.h"
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/promos_manager/promos_manager.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/ui/whats_new/constants.h"
 #import "ios/chrome/browser/ui/whats_new/feature_flags.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -65,36 +72,30 @@ bool IsWhatsNewPromoRegistered() {
 
 }  // namespace
 
-NSString* const kWhatsNewPromoRegistrationKey = @"whatsNewPromoRegistration";
-
-NSString* const kWhatsNewDaysAfterFre = @"whatsNewDaysAfterFre";
-
-NSString* const kWhatsNewLaunchesAfterFre = @"whatsNewLaunchesAfterFre";
-
-NSString* const kWhatsNewUsageEntryKey = @"userHasInteractedWithWhatsNew";
-
 bool WasWhatsNewUsed() {
   return
       [[NSUserDefaults standardUserDefaults] boolForKey:kWhatsNewUsageEntryKey];
 }
 
-void SetWhatsNewUsed() {
+void SetWhatsNewUsed(PromosManager* promosManager) {
   if (WasWhatsNewUsed()) {
     return;
   }
 
   // Deregister What's New promo.
-  if (IsFullscreenPromosManagerEnabled()) {
-    PromosManager* promosManager = GetApplicationContext()->GetPromosManager();
-    DCHECK(promosManager);
-    promosManager->DeregisterPromo(promos_manager::Promo::WhatsNew);
-  }
+  DCHECK(promosManager);
+  promosManager->DeregisterPromo(promos_manager::Promo::WhatsNew);
 
   [[NSUserDefaults standardUserDefaults] setBool:YES
                                           forKey:kWhatsNewUsageEntryKey];
 }
 
 bool IsWhatsNewEnabled() {
+
+  // Enable this for us always. We will show the promo with our own logic.
+  if (IsVivaldiRunning())
+    return true; // End Vivaldi
+
   return base::FeatureList::IsEnabled(kWhatsNewIOS);
 }
 
@@ -107,3 +108,17 @@ bool ShouldRegisterWhatsNewPromo() {
   return !IsWhatsNewPromoRegistered() &&
          (IsSixLaunchAfterFre() || IsSixDaysAfterFre());
 }
+
+// Vivaldi
+NSString* vWhatsNewWasShownKey = @"vivaldiWhatsNewWasShownKey";
+
+bool IsVivaldiWhatsNewShown() {
+  return
+      [[NSUserDefaults standardUserDefaults] boolForKey:vWhatsNewWasShownKey];
+}
+
+void setVivaldiWhatsNewShown(bool shown) {
+  [[NSUserDefaults standardUserDefaults] setBool:shown
+                                          forKey:vWhatsNewWasShownKey];
+}
+// End Vivaldi

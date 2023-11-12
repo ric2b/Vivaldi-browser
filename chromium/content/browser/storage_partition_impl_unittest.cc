@@ -74,6 +74,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "net/base/network_isolation_key.h"
+#include "net/base/schemeful_site.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
@@ -1815,6 +1816,15 @@ TEST(StoragePartitionImplStaticTest, CreatePredicateForHostCookies) {
   }
 }
 
+TEST_F(StoragePartitionImplTest, AttributionManagerCreatedInIncognito) {
+  browser_context()->set_is_off_the_record(true);
+
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      browser_context()->GetDefaultStoragePartition());
+
+  EXPECT_TRUE(partition->GetAttributionManager());
+}
+
 TEST_F(StoragePartitionImplTest, ConversionsClearDataForOrigin) {
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
       browser_context()->GetDefaultStoragePartition());
@@ -1876,7 +1886,7 @@ TEST_F(StoragePartitionImplTest, ConversionsClearAllData) {
                       .SetExpiry(base::Days(2))
                       .SetSourceOrigin(origin)
                       .SetReportingOrigin(origin)
-                      .SetDestinationOrigin(origin)
+                      .SetDestinationSites({net::SchemefulSite(origin)})
                       .Build();
     attribution_manager->HandleSource(source, GlobalRenderFrameHostId());
   }
@@ -1903,13 +1913,14 @@ TEST_F(StoragePartitionImplTest, ConversionsClearDataForFilter) {
         base::StringPrintf("https://rep-%d.com/", i));
     auto conv = *SuitableOrigin::Deserialize(
         base::StringPrintf("https://conv-%d.com/", i));
-    attribution_manager->HandleSource(SourceBuilder(now)
-                                          .SetSourceOrigin(impression)
-                                          .SetReportingOrigin(reporter)
-                                          .SetDestinationOrigin(conv)
-                                          .SetExpiry(base::Days(2))
-                                          .Build(),
-                                      GlobalRenderFrameHostId());
+    attribution_manager->HandleSource(
+        SourceBuilder(now)
+            .SetSourceOrigin(impression)
+            .SetReportingOrigin(reporter)
+            .SetDestinationSites({net::SchemefulSite(conv)})
+            .SetExpiry(base::Days(2))
+            .Build(),
+        GlobalRenderFrameHostId());
     attribution_manager->HandleTrigger(TriggerBuilder()
                                            .SetDestinationOrigin(conv)
                                            .SetReportingOrigin(reporter)

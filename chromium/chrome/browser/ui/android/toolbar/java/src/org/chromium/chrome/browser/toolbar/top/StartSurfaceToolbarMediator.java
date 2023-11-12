@@ -37,6 +37,8 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.logo.LogoCoordinator;
 import org.chromium.chrome.browser.logo.LogoView;
@@ -68,7 +70,6 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
     private final PropertyModel mPropertyModel;
     private final Callback<IPHCommandBuilder> mShowIdentityIPHCallback;
     private final boolean mHideIncognitoSwitchWhenNoTabs;
-    private final boolean mShouldShowTabSwitcherButtonOnHomepage;
     private final Supplier<ButtonData> mIdentityDiscButtonSupplier;
     private final boolean mIsTabGroupsAndroidContinuationEnabled;
     private final boolean mIsTabToGtsFadeAnimationEnabled;
@@ -106,8 +107,7 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
             Callback<IPHCommandBuilder> showIdentityIPHCallback,
             boolean hideIncognitoSwitchWhenNoTabs, MenuButtonCoordinator menuButtonCoordinator,
             ButtonDataProvider identityDiscController,
-            Supplier<ButtonData> identityDiscButtonSupplier,
-            boolean shouldShowTabSwitcherButtonOnHomepage, boolean isTabToGtsFadeAnimationEnabled,
+            Supplier<ButtonData> identityDiscButtonSupplier, boolean isTabToGtsFadeAnimationEnabled,
             boolean isTabGroupsAndroidContinuationEnabled,
             BooleanSupplier isIncognitoModeEnabledSupplier,
             Callback<LoadUrlParams> logoClickedCallback, boolean isRefactorEnabled,
@@ -133,8 +133,6 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
         mFinishedTransitionCallback = finishedTransitionCallback;
         mToolbarAlphaInOverviewObserver = toolbarAlphaInOverviewObserver;
         mContext = context;
-
-        mShouldShowTabSwitcherButtonOnHomepage = shouldShowTabSwitcherButtonOnHomepage;
 
         mTabModelSelectorObserver = new TabModelSelectorObserver() {
             @Override
@@ -363,9 +361,15 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
         boolean shouldShowAnimation =
                 mIsTabToGtsFadeAnimationEnabled && (wasOnGridTabSwitcher || isOnGridTabSwitcher());
 
-        if (!shouldShowAnimation) {
-            finishAlphaAnimator(shouldShowStartSurfaceToolbar);
-            return;
+        // When animating into the TabSwitcherMode when the GTS supports accessibility then the
+        // transition should also be immediate if touch exploration is enabled as the animation
+        // causes races in the Android accessibility focus framework.
+        if (shouldShowAnimation && !wasOnGridTabSwitcher
+                && ChromeFeatureList.sTabGroupsContinuationAndroid.isEnabled()
+                && ChromeFeatureList.sTabGroupsAndroid.isEnabled()
+                && DeviceClassManager.GTS_ACCESSIBILITY_SUPPORT.getValue()
+                && ChromeAccessibilityUtil.get().isTouchExplorationEnabled()) {
+            shouldShowAnimation = false;
         }
 
         mPropertyModel.set(IS_VISIBLE, true);
@@ -393,7 +397,12 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
                 }
             });
         }
+
         mAlphaAnimator.start();
+        if (!shouldShowAnimation) {
+            mAlphaAnimator.end();
+            return;
+        }
     }
 
     private void finishAlphaAnimator(boolean shouldShowStartSurfaceToolbar) {
@@ -458,7 +467,7 @@ class StartSurfaceToolbarMediator implements ButtonDataProvider.ButtonDataObserv
     private void updateTabSwitcherButtonVisibility() {
         // This button should only be shown on homepage. On tab switcher page, new tab button is
         // shown.
-        boolean shouldShow = mShouldShowTabSwitcherButtonOnHomepage && isOnHomepage();
+        boolean shouldShow = isOnHomepage();
         mPropertyModel.set(TAB_SWITCHER_BUTTON_IS_VISIBLE, shouldShow);
         // If tab switcher button is visible, we should move identity disc to the left.
         mPropertyModel.set(IDENTITY_DISC_AT_START, shouldShow);

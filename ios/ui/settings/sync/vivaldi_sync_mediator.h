@@ -61,7 +61,8 @@ namespace syncer {
         password:(std::string)password
         save_password:(BOOL)save_password;
 
-- (void)setEncryptionPassword:(std::string)password;
+- (BOOL)setEncryptionPassword:(std::string)password;
+- (BOOL)importEncryptionPassword:(NSURL*)file;
 
 - (void)storeUsername:(NSString*)username
                   age:(int)age

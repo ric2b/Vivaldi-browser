@@ -60,7 +60,7 @@ class VivaldiAccountPasswordHandler
                             retained_passwords) override;
 
  private:
-  Delegate* delegate_;
+  const raw_ptr<Delegate> delegate_;
   scoped_refptr<password_manager::PasswordStoreInterface> password_store_;
 
   base::ObserverList<Observer> observers_;

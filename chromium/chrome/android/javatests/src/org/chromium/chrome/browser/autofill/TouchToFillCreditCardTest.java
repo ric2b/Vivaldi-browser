@@ -9,17 +9,17 @@ import static org.chromium.base.test.util.CriteriaHelper.pollUiThread;
 import static org.chromium.base.test.util.Matchers.containsString;
 import static org.chromium.base.test.util.Matchers.is;
 import static org.chromium.chrome.browser.autofill.AutofillTestHelper.createCreditCard;
-import static org.chromium.chrome.browser.touch_to_fill.payments.R.id.card_name;
-import static org.chromium.chrome.browser.touch_to_fill.payments.R.id.card_number;
-import static org.chromium.chrome.browser.touch_to_fill.payments.R.id.description_line_2;
-import static org.chromium.chrome.browser.touch_to_fill.payments.R.id.sheet_item_list;
+import static org.chromium.chrome.test.R.id.card_name;
+import static org.chromium.chrome.test.R.id.card_number;
+import static org.chromium.chrome.test.R.id.description_line_2;
+import static org.chromium.chrome.test.R.id.sheet_item_list;
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
-import android.support.test.InstrumentationRegistry;
 import android.view.View;
 import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -78,16 +78,19 @@ public class TouchToFillCreditCardTest {
     private static final String CARD_NAME = "Visa";
     private static final String CARD_NUMBER = "4111111111111111";
     private static final String CARD_EXP_YEAR = "2050";
+    private static final String CARD_EXP_2_DIGIT_YEAR = "50";
     private static final String CARD_EXP_MONTH = "05";
     private static final String MASKED_NUMBER = "• • • • 1111";
+    private static final String NETWORK_NAME = "visa";
+    private static final String CARD_NAME_FOR_AUTOFILL_DISPLAY = "Visa";
     private static final CreditCard VISA = createCreditCard(CARD_NAME, CARD_NUMBER, CARD_EXP_MONTH,
-            CARD_EXP_YEAR, /*isLocal=*/true, CARD_NAME, MASKED_NUMBER, 0);
+            CARD_EXP_YEAR, /*isLocal=*/true, CARD_NAME_FOR_AUTOFILL_DISPLAY, MASKED_NUMBER, 0,
+            NETWORK_NAME);
 
     private BottomSheetController mBottomSheetController;
     private WebContents mWebContents;
     private EmbeddedTestServer mServer;
     TestInputMethodManagerWrapper mInputMethodWrapper;
-
     @Before
     public void setup() throws TimeoutException {
         mServer = EmbeddedTestServer.createAndStartHTTPSServer(
@@ -156,6 +159,6 @@ public class TouchToFillCreditCardTest {
                 containsString(CARD_NUMBER.substring(CARD_NUMBER.length() - 4)));
         // Check that the expiration month and year are present in the card description
         checkThat(cardDescLayout.getText().toString(), containsString(CARD_EXP_MONTH));
-        checkThat(cardDescLayout.getText().toString(), containsString(CARD_EXP_YEAR));
+        checkThat(cardDescLayout.getText().toString(), containsString(CARD_EXP_2_DIGIT_YEAR));
     }
 }

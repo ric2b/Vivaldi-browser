@@ -184,6 +184,17 @@ CommandLine& CommandLine::operator=(const CommandLine& other) = default;
 CommandLine::~CommandLine() = default;
 
 #if defined(OS_WIN)
+
+// static
+std::string CommandLine::StringTypeToUTF8(const StringType& input) {
+  return UTF16ToUTF8(input);
+}
+
+// static
+CommandLine::StringType CommandLine::UTF8ToStringType(std::string_view input) {
+  return UTF8ToUTF16(input);
+}
+
 // static
 void CommandLine::set_slash_is_not_a_switch() {
   // The last switch prefix should be slash, so adjust the size to skip it.
@@ -202,6 +213,19 @@ void CommandLine::InitUsingArgvForTesting(int argc, const char* const* argv) {
     argv_vector.push_back(UTF8ToUTF16(argv[i]));
   current_process_commandline_->InitFromArgv(argv_vector);
 }
+
+#else
+
+// static
+std::string CommandLine::StringTypeToUTF8(const StringType& input) {
+  return input;
+}
+
+// static
+CommandLine::StringType CommandLine::UTF8ToStringType(std::string_view input) {
+  return CommandLine::StringType(input);
+}
+
 #endif
 
 // static
@@ -292,18 +316,9 @@ bool CommandLine::HasSwitch(const char switch_constant[]) const {
   return HasSwitch(std::string_view(switch_constant));
 }
 
-std::string CommandLine::GetSwitchValueASCII(
+std::string CommandLine::GetSwitchValueString(
     std::string_view switch_string) const {
-  StringType value = GetSwitchValueNative(switch_string);
-  if (!IsStringASCII(value)) {
-    DLOG(WARNING) << "Value of switch (" << switch_string << ") must be ASCII.";
-    return std::string();
-  }
-#if defined(OS_WIN)
-  return UTF16ToASCII(value);
-#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
-  return value;
-#endif
+  return StringTypeToUTF8(GetSwitchValueNative(switch_string));
 }
 
 FilePath CommandLine::GetSwitchValuePath(std::string_view switch_string) const {
@@ -313,8 +328,43 @@ FilePath CommandLine::GetSwitchValuePath(std::string_view switch_string) const {
 CommandLine::StringType CommandLine::GetSwitchValueNative(
     std::string_view switch_string) const {
   DCHECK_EQ(ToLowerASCII(switch_string), switch_string);
-  auto result = switches_.find(switch_string);
-  return result == switches_.end() ? StringType() : result->second;
+
+  // There can be multiple matches, we want to find the last one.
+  auto iter = switches_.upper_bound(switch_string);
+  if (iter == switches_.begin())
+    return StringType();
+
+  // We want the item right before the upper bound, if it's a match.
+  --iter;
+  if (iter->first == switch_string)
+    return iter->second;
+  return StringType();
+}
+
+std::vector<std::string> CommandLine::GetSwitchValueStrings(
+    std::string_view switch_string) const {
+  std::vector<StringType> matches = GetSwitchValuesNative(switch_string);
+
+  std::vector<std::string> result;
+  result.reserve(matches.size());
+
+  for (const StringType& cur : matches) {
+    result.push_back(StringTypeToUTF8(cur));
+  }
+  return result;
+}
+
+std::vector<CommandLine::StringType> CommandLine::GetSwitchValuesNative(
+    std::string_view switch_string) const {
+  std::vector<StringType> result;
+
+  auto [iter, end] = switches_.equal_range(switch_string);
+  while (iter != end) {
+    result.push_back(iter->second);
+    ++iter;
+  }
+
+  return result;
 }
 
 void CommandLine::AppendSwitch(const std::string& switch_string) {
@@ -335,11 +385,10 @@ void CommandLine::AppendSwitchNative(const std::string& switch_string,
   const std::string& switch_key = switch_string;
   StringType combined_switch_string(switch_key);
 #endif
+
   size_t prefix_length = GetSwitchPrefixLength(combined_switch_string);
-  auto insertion =
-      switches_.insert(make_pair(switch_key.substr(prefix_length), value));
-  if (!insertion.second)
-    insertion.first->second = value;
+  switches_.insert(make_pair(switch_key.substr(prefix_length), value));
+
   // Preserve existing switch prefixes in |argv_|; only append one if necessary.
   if (prefix_length == 0)
     combined_switch_string = kSwitchPrefixes[0] + combined_switch_string;
@@ -349,15 +398,9 @@ void CommandLine::AppendSwitchNative(const std::string& switch_string,
   argv_.insert(argv_.begin() + begin_args_++, combined_switch_string);
 }
 
-void CommandLine::AppendSwitchASCII(const std::string& switch_string,
-                                    const std::string& value_string) {
-#if defined(OS_WIN)
-  AppendSwitchNative(switch_string, ASCIIToUTF16(value_string));
-#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
-  AppendSwitchNative(switch_string, value_string);
-#else
-#error Unsupported platform
-#endif
+void CommandLine::AppendSwitch(const std::string& switch_string,
+                               const std::string& value_string) {
+  AppendSwitchNative(switch_string, UTF8ToStringType(value_string));
 }
 
 void CommandLine::CopySwitchesFrom(const CommandLine& source,

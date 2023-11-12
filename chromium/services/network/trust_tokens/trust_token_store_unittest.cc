@@ -100,24 +100,6 @@ TEST(TrustTokenStoreTest, DoesntReportNegativeTimeSinceLastIssuance) {
   EXPECT_EQ(my_store->TimeSinceLastIssuance(issuer), absl::nullopt);
 }
 
-TEST(TrustTokenStoreTest, DoesntReportMissingRedemptionTimestamps) {
-  auto my_persister = std::make_unique<InMemoryTrustTokenPersister>();
-  auto* raw_persister = my_persister.get();
-
-  auto my_store = TrustTokenStore::CreateForTesting(std::move(my_persister));
-  SuitableTrustTokenOrigin issuer =
-      *SuitableTrustTokenOrigin::Create(GURL("https://issuer.com"));
-  SuitableTrustTokenOrigin toplevel =
-      *SuitableTrustTokenOrigin::Create(GURL("https://toplevel.com"));
-
-  auto config_with_no_time =
-      std::make_unique<TrustTokenIssuerToplevelPairConfig>();
-  raw_persister->SetIssuerToplevelPairConfig(issuer, toplevel,
-                                             std::move(config_with_no_time));
-
-  EXPECT_EQ(my_store->TimeSinceLastRedemption(issuer, toplevel), absl::nullopt);
-}
-
 TEST(TrustTokenStoreTest, DoesntReportNegativeTimeSinceLastRedemption) {
   auto my_persister = std::make_unique<InMemoryTrustTokenPersister>();
   auto* raw_persister = my_persister.get();
@@ -136,6 +118,8 @@ TEST(TrustTokenStoreTest, DoesntReportNegativeTimeSinceLastRedemption) {
       std::make_unique<TrustTokenIssuerToplevelPairConfig>();
   *config_with_future_time->mutable_last_redemption() =
       internal::TimeToTimestamp(later_than_now);
+  *config_with_future_time->mutable_penultimate_redemption() =
+      internal::TimeToTimestamp(base::Time::UnixEpoch());
 
   raw_persister->SetIssuerToplevelPairConfig(
       issuer, toplevel, std::move(config_with_future_time));
@@ -494,8 +478,13 @@ TEST(TrustTokenStore, RetrieveRedemptionRecordHandlesConfigWithNoRecord) {
   SuitableTrustTokenOrigin toplevel =
       *SuitableTrustTokenOrigin::Create(GURL("https://toplevel.com"));
 
-  raw_persister->SetIssuerToplevelPairConfig(
-      issuer, toplevel, std::make_unique<TrustTokenIssuerToplevelPairConfig>());
+  auto config = std::make_unique<TrustTokenIssuerToplevelPairConfig>();
+  *config->mutable_last_redemption() =
+      internal::TimeToTimestamp(base::Time::UnixEpoch());
+  *config->mutable_penultimate_redemption() =
+      internal::TimeToTimestamp(base::Time::UnixEpoch());
+  raw_persister->SetIssuerToplevelPairConfig(issuer, toplevel,
+                                             std::move(config));
 
   EXPECT_EQ(my_store->RetrieveNonstaleRedemptionRecord(issuer, toplevel),
             absl::nullopt);
@@ -743,9 +732,7 @@ TEST(TrustTokenStore, RemovesTrustTokensByIssuerAndKeepsOthers) {
 }
 
 TEST(TrustTokenStore, RedemptionLimit) {
-  auto persister = std::make_unique<InMemoryTrustTokenPersister>();
-  auto* raw_persister = persister.get();
-  auto store = TrustTokenStore::CreateForTesting(std::move(persister));
+  auto store = TrustTokenStore::CreateForTesting();
 
   SuitableTrustTokenOrigin issuer =
       *SuitableTrustTokenOrigin::Create(GURL("https://issuer.com"));
@@ -755,55 +742,131 @@ TEST(TrustTokenStore, RedemptionLimit) {
   base::test::TaskEnvironment task_environment(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
-  // config pair is not set yet, limit not hit
+  // No redemptions yet, limit not hit.
   EXPECT_FALSE(store->IsRedemptionLimitHit(issuer, top_level));
 
-  // set config pair
-  auto pair_config = std::make_unique<TrustTokenIssuerToplevelPairConfig>();
-  raw_persister->SetIssuerToplevelPairConfig(issuer, top_level,
-                                             std::move(pair_config));
+  // Advance clock to some arbitrary time. Clock should be at least 2 days
+  // after unix epoch. Default time for penultimate redemption is
+  // unix epoch.
+  task_environment.AdvanceClock(base::Days(123));
 
-  // config pair is set, no redemptions yet, limit not hit
+  // Set first redemption.
+  store->SetRedemptionRecord(issuer, top_level,
+                             network::TrustTokenRedemptionRecord());
+
+  // Only one redemption so far, limit not hit.
   EXPECT_FALSE(store->IsRedemptionLimitHit(issuer, top_level));
 
-  // set first redemption
-  const auto first_redemption_time = base::Time::Now();
-  auto one_redemption_config =
-      std::make_unique<TrustTokenIssuerToplevelPairConfig>();
-  *one_redemption_config->mutable_last_redemption() =
-      internal::TimeToTimestamp(first_redemption_time);
-  raw_persister->SetIssuerToplevelPairConfig(issuer, top_level,
-                                             std::move(one_redemption_config));
-
-  // only one redemption, limit not hit
-  EXPECT_FALSE(store->IsRedemptionLimitHit(issuer, top_level));
-
-  // set second redemption
+  // Set second redemption after 321 seconds.
   const auto second_redemption_delta = base::Seconds(321);
   task_environment.AdvanceClock(second_redemption_delta);
-  const auto second_redemption_time = base::Time::Now();
-  auto two_redemptions_config =
-      std::make_unique<TrustTokenIssuerToplevelPairConfig>();
-  *two_redemptions_config->mutable_penultimate_redemption() =
-      internal::TimeToTimestamp(first_redemption_time);
-  *two_redemptions_config->mutable_last_redemption() =
-      internal::TimeToTimestamp(second_redemption_time);
-  raw_persister->SetIssuerToplevelPairConfig(issuer, top_level,
-                                             std::move(two_redemptions_config));
+  store->SetRedemptionRecord(issuer, top_level,
+                             network::TrustTokenRedemptionRecord());
 
+  // Pass some time but not enough to allow a third redemption.
   const auto not_enough_time =
       base::Seconds(
           kTrustTokenPerIssuerToplevelRedemptionFrequencyLimitInSeconds) -
       second_redemption_delta;
   task_environment.AdvanceClock(not_enough_time);
 
-  // already have two redemptions, not enough time passed yet for allowing the
-  // third
+  // Already have two redemptions, not enough time passed yet for allowing the
+  // third.
   EXPECT_TRUE(store->IsRedemptionLimitHit(issuer, top_level));
 
+  // Enough time is passed after 1 more second. Limit check should return
+  // correctly.
   task_environment.AdvanceClock(base::Seconds(1));
-  // enough time passed, third redemption should work
   EXPECT_FALSE(store->IsRedemptionLimitHit(issuer, top_level));
+}
+
+TEST(TrustTokenStore, ClearDataForPredicate) {
+  // Test setup adds following data.
+  // 1. Add two tokens for issuer1.
+  // 2. Add a token for issuer2.
+  // 3. Add two tokens for issuer3.
+  // 4. Add a redemption record for issuer1-toplevel2 pair
+  // 5. Add a redemption record for issuer3-toplevel1 pair
+  // 6. Add a redemption record for issuer3-toplevel2 pair
+  //
+  // Test creates a predicate that returns true for issuer1, issuer2 and
+  // toplevel1.
+  //
+  // ClearDataForPredicate should delete following data.
+  // 1. Two tokens from issuer1.
+  // 2. Token from issuer2.
+  // 3. Redemption record for issuer1-toplevel1 pair.
+  // 4. Redemption record for issuer3-toplevel1 pair.
+  //
+  // Following data should remain.
+  // 1. Two tokens from issuer3.
+  // 2. Redemption records for issuer3-toplevel2 pair.
+  //
+  auto store = TrustTokenStore::CreateForTesting();
+  auto issuer1 =
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuerone.com"));
+  auto issuer2 =
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuertwo.com"));
+  auto issuer3 =
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuerthree.com"));
+  auto toplevel1 =
+      *SuitableTrustTokenOrigin::Create(GURL("https://toplevelone.com"));
+  auto toplevel2 =
+      *SuitableTrustTokenOrigin::Create(GURL("https://topleveltwo.com"));
+
+  // Add tokens.
+  store->AddTokens(
+      issuer1,
+      std::vector<std::string>{"issuer1-token-one", "issuer1-token-two"},
+      "key");
+  store->AddTokens(issuer2, std::vector<std::string>{"issuer2-token"}, "key");
+  store->AddTokens(
+      issuer3,
+      std::vector<std::string>{"issuer3-token-one", "issuer3-token-two"},
+      "key");
+
+  // Add redemption records.
+  ASSERT_TRUE(store->SetAssociation(issuer1, toplevel2));
+  store->SetRedemptionRecord(issuer1, toplevel2, TrustTokenRedemptionRecord{});
+  ASSERT_TRUE(store->SetAssociation(issuer3, toplevel1));
+  store->SetRedemptionRecord(issuer3, toplevel1, TrustTokenRedemptionRecord{});
+  ASSERT_TRUE(store->SetAssociation(issuer3, toplevel2));
+  store->SetRedemptionRecord(issuer3, toplevel2, TrustTokenRedemptionRecord{});
+
+  // Create predicate that returns true for issuer1, issuer2 and toplevel1.
+  // Predicate will match issuerone.com when https://issuerone.com is added
+  // to clear on exit list.
+  auto predicate = base::BindRepeating([](const std::string& origin) -> bool {
+    if (origin == "issuerone.com" || origin == "issuertwo.com" ||
+        origin == "toplevelone.com") {
+      return true;
+    }
+    return false;
+  });
+
+  EXPECT_TRUE(store->ClearDataForPredicate(std::move(predicate)));
+
+  // Check whether tokens are cleared as expected.
+  EXPECT_EQ(store->CountTokens(issuer1), 0);
+  EXPECT_EQ(store->CountTokens(issuer2), 0);
+  EXPECT_EQ(store->CountTokens(issuer3), 2);
+
+  // Check whether redemption records are cleared as expected.
+  EXPECT_FALSE(store->RetrieveNonstaleRedemptionRecord(issuer1, toplevel1));
+  EXPECT_FALSE(store->RetrieveNonstaleRedemptionRecord(issuer3, toplevel1));
+  EXPECT_TRUE(store->RetrieveNonstaleRedemptionRecord(issuer3, toplevel2));
+
+  // Recall data clearing with the same predicate. Should return false this
+  // time.
+  predicate = base::BindRepeating([](const std::string& origin) -> bool {
+    if (origin == "issuerone.com" || origin == "issuertwo.com" ||
+        origin == "toplevelone.com") {
+      return true;
+    }
+    return false;
+  });
+
+  EXPECT_FALSE(store->ClearDataForPredicate(std::move(predicate)));
 }
 
 }  // namespace network::trust_tokens

@@ -60,8 +60,7 @@ TabStripScrollingOverflowIndicatorStrategy::CreateFromFeatureFlag(
       return std::make_unique<ShadowOverflowIndicatorStrategy>(
           scroll_view, get_frame_color, get_shadow_color);
     default:
-      NOTREACHED();
-      return nullptr;
+      NOTREACHED_NORETURN();
   }
 }
 
@@ -209,7 +208,7 @@ void FadeOverflowIndicatorStrategy::Init() {
           views::OverflowIndicatorAlignment::kRight);
   right_overflow_indicator_ = right_overflow_indicator.get();
 
-  const int min_tab_width = TabStyleViews::GetMinimumInactiveWidth();
+  const int min_tab_width = TabStyleViews::Create()->GetMinimumInactiveWidth();
 
   left_overflow_indicator_->SetShadowBlurWidth(std::min(64, min_tab_width * 2));
   right_overflow_indicator_->SetShadowBlurWidth(

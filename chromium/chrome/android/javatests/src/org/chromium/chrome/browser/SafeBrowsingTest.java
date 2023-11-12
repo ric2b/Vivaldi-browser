@@ -4,8 +4,7 @@
 
 package org.chromium.chrome.browser;
 
-import android.support.test.InstrumentationRegistry;
-
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matchers;
@@ -94,7 +93,8 @@ public final class SafeBrowsingTest {
     @Test
     @MediumTest
     public void noInterstitialPage() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         mActivityTestRule.startMainActivityOnBlankPage();
 
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
@@ -105,7 +105,8 @@ public final class SafeBrowsingTest {
     @Test
     @MediumTest
     public void interstitialPage() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
         MockSafeBrowsingApiHandler.addMockResponse(url, "{\"matches\":[{\"threat_type\":\"5\"}]}");
         mActivityTestRule.startMainActivityOnBlankPage();

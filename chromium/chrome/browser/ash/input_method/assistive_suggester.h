@@ -9,23 +9,22 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/input_method/assistive_suggester_switch.h"
 #include "chrome/browser/ash/input_method/emoji_suggester.h"
+#include "chrome/browser/ash/input_method/longpress_control_v_suggester.h"
 #include "chrome/browser/ash/input_method/longpress_diacritics_suggester.h"
 #include "chrome/browser/ash/input_method/multi_word_suggester.h"
-#include "chrome/browser/ash/input_method/personal_info_suggester.h"
 #include "chrome/browser/ash/input_method/suggester.h"
 #include "chrome/browser/ash/input_method/suggestion_enums.h"
 #include "chrome/browser/ash/input_method/suggestion_handler_interface.h"
 #include "chrome/browser/ash/input_method/suggestions_source.h"
 #include "chromeos/ash/services/ime/public/cpp/assistive_suggestions.h"
-#include "components/autofill/core/browser/personal_data_manager.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace ash {
-namespace input_method {
+namespace ash::input_method {
 
 // An agent to suggest assistive information when the user types, and adopt or
 // dismiss the suggestion according to the user action.
@@ -36,16 +35,12 @@ class AssistiveSuggester : public SuggestionsSource {
     kUnknown,  // Includes features not handled by assistive suggester.
     kEmojiSuggestion,
     kMultiWordSuggestion,
-    kPersonalInfoSuggestion,
   };
 
-  // personal_data_manager is only used for testing to override the default
-  // autofill data for PersonalInfoSuggester.
-  AssistiveSuggester(SuggestionHandlerInterface* suggestion_handler,
-                     Profile* profile,
-                     std::unique_ptr<AssistiveSuggesterSwitch> suggester_switch,
-                     autofill::PersonalDataManager*
-                         personal_data_manager_for_testing = nullptr);
+  AssistiveSuggester(
+      SuggestionHandlerInterface* suggestion_handler,
+      Profile* profile,
+      std::unique_ptr<AssistiveSuggesterSwitch> suggester_switch);
 
   ~AssistiveSuggester() override;
 
@@ -114,8 +109,6 @@ class AssistiveSuggester : public SuggestionsSource {
 
   void DismissSuggestion();
 
-  bool IsAssistPersonalInfoEnabled();
-
   bool IsEmojiSuggestAdditionEnabled();
 
   bool IsEnhancedEmojiSuggestEnabled();
@@ -139,10 +132,6 @@ class AssistiveSuggester : public SuggestionsSource {
 
   // Only the first applicable reason in DisabledReason enum is returned.
   DisabledReason GetDisabledReasonForEmoji(
-      const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions);
-
-  // Only the first applicable reason in DisabledReason enum is returned.
-  DisabledReason GetDisabledReasonForPersonalInfo(
       const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions);
 
   // Only the first applicable reason in DisabledReason enum is returned.
@@ -179,11 +168,15 @@ class AssistiveSuggester : public SuggestionsSource {
 
   void OnLongpressDetected();
 
-  Profile* profile_;
-  PersonalInfoSuggester personal_info_suggester_;
+  // Accepts or dismisses a Ctrl+V long-press suggestion based on the exit
+  // status of the clipboard history menu, as indicated by `will_paste_item`.
+  void OnClipboardHistoryMenuClosing(bool will_paste_item);
+
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   EmojiSuggester emoji_suggester_;
   MultiWordSuggester multi_word_suggester_;
   LongpressDiacriticsSuggester longpress_diacritics_suggester_;
+  LongpressControlVSuggester longpress_control_v_suggester_;
   std::unique_ptr<AssistiveSuggesterSwitch> suggester_switch_;
 
   // The id of the currently active input engine.
@@ -201,7 +194,7 @@ class AssistiveSuggester : public SuggestionsSource {
   base::OneShotTimer longpress_timer_;
 
   // The current suggester in use, nullptr means no suggestion is shown.
-  Suggester* current_suggester_ = nullptr;
+  raw_ptr<Suggester, ExperimentalAsh> current_suggester_ = nullptr;
 
   absl::optional<AssistiveSuggesterSwitch::EnabledSuggestions>
       enabled_suggestions_from_last_onfocus_;
@@ -217,7 +210,6 @@ class AssistiveSuggester : public SuggestionsSource {
   base::WeakPtrFactory<AssistiveSuggester> weak_ptr_factory_{this};
 };
 
-}  // namespace input_method
-}  // namespace ash
+}  // namespace ash::input_method
 
 #endif  // CHROME_BROWSER_ASH_INPUT_METHOD_ASSISTIVE_SUGGESTER_H_

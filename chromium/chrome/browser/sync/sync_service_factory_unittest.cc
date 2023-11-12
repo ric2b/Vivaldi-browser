@@ -86,7 +86,7 @@ class SyncServiceFactoryTest : public testing::Test {
 
   // Returns the collection of default datatypes.
   syncer::ModelTypeSet DefaultDatatypes() {
-    static_assert(45 + 1 /* notes */ == syncer::GetNumModelTypes(),
+    static_assert(46 + 1 /* notes */ == syncer::GetNumModelTypes(),
                   "When adding a new type, you probably want to add it here as "
                   "well (assuming it is already enabled).");
 
@@ -121,7 +121,7 @@ class SyncServiceFactoryTest : public testing::Test {
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
-    if (features::kTabGroupsSaveSyncIntegration.Get()) {
+    if (base::FeatureList::IsEnabled(features::kTabGroupsSaveSyncIntegration)) {
       datatypes.Put(syncer::SAVED_TAB_GROUP);
     }
 #endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
@@ -171,6 +171,9 @@ class SyncServiceFactoryTest : public testing::Test {
     datatypes.Put(syncer::USER_CONSENTS);
     datatypes.Put(syncer::SEND_TAB_TO_SELF);
     datatypes.Put(syncer::SHARING_MESSAGE);
+    if (base::FeatureList::IsEnabled(syncer::kSyncWebauthnCredentials)) {
+      datatypes.Put(syncer::WEBAUTHN_CREDENTIAL);
+    }
     return datatypes;
   }
 

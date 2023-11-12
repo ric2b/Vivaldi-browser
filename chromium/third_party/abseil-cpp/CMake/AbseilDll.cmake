@@ -360,15 +360,26 @@ set(ABSL_INTERNAL_DLL_FILES
   "synchronization/internal/create_thread_identity.cc"
   "synchronization/internal/create_thread_identity.h"
   "synchronization/internal/futex.h"
+  "synchronization/internal/futex_waiter.h"
+  "synchronization/internal/futex_waiter.cc"
   "synchronization/internal/graphcycles.cc"
   "synchronization/internal/graphcycles.h"
   "synchronization/internal/kernel_timeout.h"
   "synchronization/internal/kernel_timeout.cc"
   "synchronization/internal/per_thread_sem.cc"
   "synchronization/internal/per_thread_sem.h"
+  "synchronization/internal/pthread_waiter.h"
+  "synchronization/internal/pthread_waiter.cc"
+  "synchronization/internal/sem_waiter.h"
+  "synchronization/internal/sem_waiter.cc"
+  "synchronization/internal/stdcpp_waiter.h"
+  "synchronization/internal/stdcpp_waiter.cc"
   "synchronization/internal/thread_pool.h"
-  "synchronization/internal/waiter.cc"
   "synchronization/internal/waiter.h"
+  "synchronization/internal/waiter_base.h"
+  "synchronization/internal/waiter_base.cc"
+  "synchronization/internal/win32_waiter.h"
+  "synchronization/internal/win32_waiter.cc"
   "time/civil_time.cc"
   "time/civil_time.h"
   "time/clock.cc"
@@ -592,14 +603,6 @@ set(ABSL_INTERNAL_TEST_DLL_TARGETS
   "scoped_mock_log"
 )
 
-function(_absl_target_compile_features_if_available TARGET TYPE FEATURE)
-  if(FEATURE IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-    target_compile_features(${TARGET} ${TYPE} ${FEATURE})
-  else()
-    message(WARNING "Feature ${FEATURE} is unknown for the CXX compiler")
-  endif()
-endfunction()
-
 include(CheckCXXSourceCompiles)
 
 check_cxx_source_compiles(
@@ -787,18 +790,7 @@ Cflags: -I\${includedir}${PC_CFLAGS}\n")
     # Abseil libraries require C++14 as the current minimum standard. When
     # compiled with C++17 (either because it is the compiler's default or
     # explicitly requested), then Abseil requires C++17.
-    _absl_target_compile_features_if_available(${_dll} PUBLIC ${ABSL_INTERNAL_CXX_STD_FEATURE})
-  else()
-    # Note: This is legacy (before CMake 3.8) behavior. Setting the
-    # target-level CXX_STANDARD property to ABSL_CXX_STANDARD (which is
-    # initialized by CMAKE_CXX_STANDARD) should have no real effect, since
-    # that is the default value anyway.
-    #
-    # CXX_STANDARD_REQUIRED does guard against the top-level CMake project
-    # not having enabled CMAKE_CXX_STANDARD_REQUIRED (which prevents
-    # "decaying" to an older standard if the requested one isn't available).
-    set_property(TARGET ${_dll} PROPERTY CXX_STANDARD ${ABSL_CXX_STANDARD})
-    set_property(TARGET ${_dll} PROPERTY CXX_STANDARD_REQUIRED ON)
+    target_compile_features(${_dll} PUBLIC ${ABSL_INTERNAL_CXX_STD_FEATURE})
   endif()
 
   install(TARGETS ${_dll} EXPORT ${PROJECT_NAME}Targets

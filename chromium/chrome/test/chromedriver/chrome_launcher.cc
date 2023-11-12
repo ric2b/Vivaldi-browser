@@ -91,11 +91,6 @@ const char* const kDesktopSwitches[] = {
     "password-store=basic",
     "use-mock-keychain",
     "test-type=webdriver",
-    // TODO(yoichio): This is temporary switch to support chrome internal
-    // components migration from the old web APIs.
-    // After completion of the migration, we should remove this.
-    // See crbug.com/911943 for detail.
-    "enable-blink-features=ShadowDOMV0",
     "no-service-autorun",
 };
 
@@ -396,15 +391,9 @@ Status LaunchRemoteChromeSession(
                  << status.message();
   }
 
-  std::unique_ptr<DeviceMetrics> device_metrics;
-  if (capabilities.device_metrics) {
-    device_metrics =
-        std::make_unique<DeviceMetrics>(*capabilities.device_metrics);
-  }
-
   *chrome = std::make_unique<ChromeRemoteImpl>(
       std::move(devtools_http_client), std::move(devtools_websocket_client),
-      std::move(devtools_event_listeners), std::move(device_metrics),
+      std::move(devtools_event_listeners), capabilities.mobile_device,
       socket_factory, capabilities.page_load_strategy);
   return Status(kOk);
 }
@@ -661,16 +650,10 @@ Status LaunchDesktopChrome(network::mojom::URLLoaderFactory* factory,
                  << status.message();
   }
 
-  std::unique_ptr<DeviceMetrics> device_metrics;
-  if (capabilities.device_metrics) {
-    device_metrics =
-        std::make_unique<DeviceMetrics>(*capabilities.device_metrics);
-  }
-
   std::unique_ptr<ChromeDesktopImpl> chrome_desktop =
       std::make_unique<ChromeDesktopImpl>(
           std::move(devtools_http_client), std::move(devtools_websocket_client),
-          std::move(devtools_event_listeners), std::move(device_metrics),
+          std::move(devtools_event_listeners), capabilities.mobile_device,
           socket_factory, capabilities.page_load_strategy, std::move(process),
           command, &user_data_dir_temp_dir, &extension_dir,
           capabilities.network_emulation_enabled);
@@ -755,15 +738,9 @@ Status LaunchAndroidChrome(network::mojom::URLLoaderFactory* factory,
                  << status.message();
   }
 
-  std::unique_ptr<DeviceMetrics> device_metrics;
-  if (capabilities.device_metrics) {
-    device_metrics =
-        std::make_unique<DeviceMetrics>(*capabilities.device_metrics);
-  }
-
   *chrome = std::make_unique<ChromeAndroidImpl>(
       std::move(devtools_http_client), std::move(devtools_websocket_client),
-      std::move(devtools_event_listeners), std::move(device_metrics),
+      std::move(devtools_event_listeners), capabilities.mobile_device,
       socket_factory, capabilities.page_load_strategy, std::move(device));
   return Status(kOk);
 }
@@ -813,17 +790,11 @@ Status LaunchReplayChrome(network::mojom::URLLoaderFactory* factory,
                  << status.message();
   }
 
-  std::unique_ptr<DeviceMetrics> device_metrics;
-  if (capabilities.device_metrics) {
-    device_metrics =
-        std::make_unique<DeviceMetrics>(*capabilities.device_metrics);
-  }
-
   base::Process dummy_process;
   std::unique_ptr<ChromeDesktopImpl> chrome_impl =
       std::make_unique<ChromeReplayImpl>(
           std::move(devtools_http_client), std::move(devtools_websocket_client),
-          std::move(devtools_event_listeners), std::move(device_metrics),
+          std::move(devtools_event_listeners), capabilities.mobile_device,
           socket_factory, capabilities.page_load_strategy,
           std::move(dummy_process), command, &user_data_dir_temp_dir,
           &extension_dir, capabilities.network_emulation_enabled);
@@ -939,8 +910,7 @@ Status ProcessExtension(const std::string& extension,
   if (!temp_crx_dir.CreateUniqueTempDir())
     return Status(kUnknownError, "cannot create temp dir");
   base::FilePath extension_crx = temp_crx_dir.GetPath().AppendASCII("temp.crx");
-  int size = static_cast<int>(decoded_extension.length());
-  if (base::WriteFile(extension_crx, decoded_extension.c_str(), size) != size) {
+  if (!base::WriteFile(extension_crx, decoded_extension)) {
     return Status(kUnknownError, "cannot write file");
   }
 
@@ -1025,9 +995,7 @@ Status ProcessExtension(const std::string& extension,
   } else {
     manifest->Set("key", public_key_base64);
     base::JSONWriter::Write(*manifest, &manifest_data);
-    if (base::WriteFile(
-            manifest_path, manifest_data.c_str(), manifest_data.size()) !=
-        static_cast<int>(manifest_data.size())) {
+    if (!base::WriteFile(manifest_path, manifest_data)) {
       return Status(kUnknownError, "cannot add 'key' to manifest");
     }
   }
@@ -1107,11 +1075,9 @@ Status WritePrefsFile(const std::string& template_string,
   base::JSONWriter::Write(*prefs, &prefs_str);
   VLOG(0) << "Populating " << path.BaseName().value()
           << " file: " << PrettyPrintValue(base::Value(prefs->Clone()));
-  if (static_cast<int>(prefs_str.length()) != base::WriteFile(
-          path, prefs_str.c_str(), prefs_str.length())) {
-    return Status(kUnknownError, "failed to write prefs file");
-  }
-  return Status(kOk);
+  return base::WriteFile(path, prefs_str)
+             ? Status(kOk)
+             : Status(kUnknownError, "failed to write prefs file");
 }
 
 Status PrepareUserDataDir(const base::FilePath& user_data_dir,
@@ -1155,8 +1121,7 @@ Status PrepareUserDataDir(const base::FilePath& user_data_dir,
 
   // Write empty "First Run" file, otherwise Chrome will wipe the default
   // profile that was written.
-  if (base::WriteFile(
-          user_data_dir.Append(chrome::kFirstRunSentinel), "", 0) != 0) {
+  if (!base::WriteFile(user_data_dir.Append(chrome::kFirstRunSentinel), "")) {
     return Status(kUnknownError, "failed to write first run file");
   }
   return Status(kOk);

@@ -12,7 +12,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
@@ -22,6 +21,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -231,7 +231,7 @@ class NetworkContextConfigurationBrowserTest
 
     std::unique_ptr<net::test_server::BasicHttpResponse> response =
         std::make_unique<net::test_server::BasicHttpResponse>();
-    response->set_content(base::GenerateGUID());
+    response->set_content(base::Uuid::GenerateRandomV4().AsLowercaseString());
     response->set_content_type("text/plain");
     response->AddCustomHeader("Cache-Control", "max-age=60000");
     return std::move(response);
@@ -840,10 +840,10 @@ IN_PROC_BROWSER_TEST_P(NetworkContextConfigurationBrowserTest,
   std::string script = R"((url => {
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
-    xhr.onload = () => domAutomationController.send(xhr.responseText);
+    xhr.onload = () => chrome.test.sendScriptResult(xhr.responseText);
     xhr.send();
   }))";
-  std::string result =
+  base::Value result =
       extensions::browsertest_util::ExecuteScriptInBackgroundPage(
           GetProfile(), extension->id(), script + "('" + url.spec() + "')");
   EXPECT_EQ("cookie", result);

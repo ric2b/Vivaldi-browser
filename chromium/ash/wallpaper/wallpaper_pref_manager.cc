@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/session/session_types.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller_client.h"
@@ -17,6 +16,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/wallpaper/wallpaper_utils/wallpaper_ephemeral_user.h"
+#include "ash/wallpaper/wallpaper_utils/wallpaper_online_variant_utils.h"
 #include "base/check.h"
 #include "base/containers/adapters.h"
 #include "base/containers/flat_map.h"
@@ -27,6 +27,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -337,8 +338,7 @@ class WallpaperPrefManagerImpl : public WallpaperPrefManager {
     // Although `WallpaperType::kCustomized` typed wallpapers are syncable, we
     // don't set synced info until the image is stored in drivefs, so we know
     // when to retry saving it on failure.
-    if (IsWallpaperTypeSyncable(info.type) &&
-        info.type != WallpaperType::kCustomized) {
+    if (ShouldSyncOut(info) && info.type != WallpaperType::kCustomized) {
       SetSyncedWallpaperInfo(account_id, info);
     }
 
@@ -357,7 +357,7 @@ class WallpaperPrefManagerImpl : public WallpaperPrefManager {
     absl::optional<std::vector<SkColor>> cached_colors =
         GetCachedProminentColors(location);
     absl::optional<SkColor> cached_k_mean_color = GetCachedKMeanColor(location);
-    if (!features::IsJellyEnabled()) {
+    if (!chromeos::features::IsJellyEnabled()) {
       if (cached_colors.has_value() && cached_k_mean_color.has_value()) {
         return WallpaperCalculatedColors(cached_colors.value(),
                                          cached_k_mean_color.value(),
@@ -586,7 +586,7 @@ class WallpaperPrefManagerImpl : public WallpaperPrefManager {
     color_dict->Remove(old_info.location);
   }
 
-  PrefService* local_state_ = nullptr;
+  raw_ptr<PrefService, ExperimentalAsh> local_state_ = nullptr;
   std::unique_ptr<WallpaperProfileHelper> profile_helper_;
 
   // Cache of wallpapers for ephemeral users.
@@ -611,6 +611,37 @@ const char WallpaperPrefManager::kNewWallpaperVariantListNodeName[] =
 const char WallpaperPrefManager::kOnlineWallpaperTypeNodeName[] =
     "online_image_type";
 const char WallpaperPrefManager::kOnlineWallpaperUrlNodeName[] = "url";
+
+// static
+bool WallpaperPrefManager::ShouldSyncOut(const WallpaperInfo& local_info) {
+  if (IsTimeOfDayWallpaper(local_info)) {
+    // Time Of Day wallpapers are not syncable.
+    // TODO(b/277804153): Confirm the sync rules for time of day wallpapers.
+    return false;
+  }
+  return IsWallpaperTypeSyncable(local_info.type);
+}
+
+// static
+bool WallpaperPrefManager::ShouldSyncIn(const WallpaperInfo& synced_info,
+                                        const WallpaperInfo& local_info) {
+  if (!IsWallpaperTypeSyncable(synced_info.type)) {
+    LOG(ERROR) << " wallpaper type " << static_cast<int>(synced_info.type)
+               << " from remote prefs is not syncable.";
+    return false;
+  }
+  if (synced_info.MatchesSelection(local_info)) {
+    return false;
+  }
+  if (synced_info.date < local_info.date) {
+    return false;
+  }
+  // TODO(b/277804153): Confirm the sync rules for time of day wallpapers.
+  if (IsTimeOfDayWallpaper(local_info)) {
+    return false;
+  }
+  return true;
+}
 
 // static
 std::unique_ptr<WallpaperPrefManager> WallpaperPrefManager::Create(

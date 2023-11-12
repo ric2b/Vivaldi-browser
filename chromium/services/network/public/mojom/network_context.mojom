@@ -135,6 +135,10 @@ struct CertVerifierServiceRemoteParams {
   // A pipe to the CertVerifierService.
   pending_remote<cert_verifier.mojom.CertVerifierService>?
       cert_verifier_service;
+
+  // Receives notifications of changes to the CertVerifier.
+  pending_receiver<cert_verifier.mojom.CertVerifierServiceClient>?
+    cert_verifier_service_client_receiver;
 };
 
 // Client to update the custom proxy config.
@@ -312,9 +316,6 @@ struct NetworkContextParams {
   // If false, the referrer of requests is never populated.
   bool enable_referrers = true;
 
-  // Whether dns-prefetch and preconnect are allowed.
-  bool enable_preconnect = true;
-
   // If true, requests initiated with referrers that don't match their referrer
   // policy will fail.
   bool validate_referrer_policy_on_initial_request = true;
@@ -340,6 +341,13 @@ struct NetworkContextParams {
 
   // If true, cookies will be stored encrypted.
   bool enable_encrypted_cookies = true;
+
+  // On Windows, whether or not the cookie database should be opened with
+  // the sqlite3 flag `exclusive=true` which asks the sqlite VFS to open them
+  // without file sharing enabled. This has the consequence that other processes
+  // should not be able to open the cookie database file.
+  [EnableIf=is_win]
+  bool enable_locking_cookie_database = false;
 
   // If the cookie file is given, this controls whether previously written
   // session cookies are restored. Otherwise it should be false.
@@ -538,6 +546,11 @@ struct NetworkContextParams {
   // Is true, Trust Token operations should be blocked.
   bool block_trust_tokens;
 
+  // Whether "Compression dictionary transport" feature should be enabled.
+  // This feature is under construction. TODO(crbug.com/1413922): Update this
+  // comment when we finish the implementation.
+  bool shared_dictionary_enabled = false;
+
   // Parameters for constructing the FirstPartySetsAccessDelegate.
   // |first_party_sets_access_delegate_params| is the initial configuration to
   // use. If nullptr, uses the default configuration. Updated configurations
@@ -613,9 +626,25 @@ struct URLLoaderFactoryOverride {
   bool skip_cors_enabled_scheme_check = false;
 };
 
-// Whether to forbid all Trust Tokens redemption and signing operations
+// Type for verdict on whether to forbid a Trust Tokens operation, based on
+// permissions policy of the relevant context.
 // (https://github.com/wicg/trust-token-api).
-enum TrustTokenRedemptionPolicy {
+//
+// kForbid is for requests from subframes with the underlying operation's
+// Permissions Policy feature disabled by (1) policies inherited from their
+// parents, or (2) the frames' iframe tag attributes.
+//
+// Note: Response headers can also disable a Trust Token operation Permissions
+// Policy feature. This will not necessarily be reflected in the the enum's
+// value. The response headers' value is only available from an untrusted
+// source.
+// - If the renderer behaves correctly, renderer-side checks guarantee that
+// these operations will not be executed in frames with the policy disabled
+// via response headers.
+// - If the renderer doesn't behave correctly, there's no point in
+// propagating the renderer's untrusted report about the response headers'
+// value.
+enum TrustTokenOperationPolicyVerdict {
   kForbid,
   kPotentiallyPermit,
 };
@@ -741,28 +770,24 @@ struct URLLoaderFactoryParams {
   pending_remote<DevToolsObserver>? devtools_observer;
 
   // If this equals kForbid, the context to which this loader is bound does not
-  // allow any Trust Tokens (https://github.com/wicg/trust-token-api)
-  // redemption or signing operations.
-  //
-  // This is set to kForbid for requests from subframes with the
-  // `trust-token-redemption` Permissions Policy feature disabled by (1)
-  // policies inherited from their parents, or (2) the frames' iframe tag
-  // attributes.
-  //
-  // Note: Response headers can also disable this Permissions Policy feature.
-  // This will not necessarily be reflected in the the enum's value. The
-  // response headers' value is only available from an untrusted source.
-  // - If the renderer behaves correctly, renderer-side checks guarantee that
-  // these operations will not be executed in frames with the policy disabled
-  // via response headers.
-  // - If the renderer doesn't behave correctly, there's no point in
-  // propagating the renderer's untrusted report about the response headers'
-  // value.
+  // allow Trust Tokens (https://github.com/wicg/trust-token-api) issuance
+  // operation.
   //
   // TODO(crbug.com/1071848): Once Permissions Policy headers are available from
   // a trusted source, it would be good to set this depending on the headers'
   // values, too.
-  TrustTokenRedemptionPolicy trust_token_redemption_policy = kPotentiallyPermit;
+  TrustTokenOperationPolicyVerdict
+      trust_token_issuance_policy = kPotentiallyPermit;
+
+  // If this equals kForbid, the context to which this loader is bound does not
+  // allow any Trust Tokens (https://github.com/wicg/trust-token-api)
+  // redemption or signing operations.
+  //
+  // TODO(crbug.com/1071848): Once Permissions Policy headers are available from
+  // a trusted source, it would be good to set this depending on the headers'
+  // values, too.
+  TrustTokenOperationPolicyVerdict
+      trust_token_redemption_policy = kPotentiallyPermit;
 
   // TODO(lukasza): https://crbug.com/1151008: Consider removing this
   // diagnostic aid once the bug is understood.
@@ -880,6 +905,7 @@ interface NetworkContext {
       RestrictedCookieManagerRole role,
       url.mojom.Origin origin,
       IsolationInfo isolation_info,
+      CookieSettingOverrides cookie_setting_overrides,
       pending_remote<CookieAccessObserver>? cookie_observer);
 
   // Provides a TrustTokenQueryAnswerer scoped to the given top-frame origin
@@ -906,6 +932,10 @@ interface NetworkContext {
   //
   // A null |filter| indicates that all Trust Tokens data should be cleared.
   ClearTrustTokenData(ClearDataFilter? filter) => ();
+
+  // Clears session only Trust Tokens data. Depends on CookieSettings
+  // at determining which data is session only.
+  ClearTrustTokenSessionOnlyData() => (bool any_data_deleted);
 
   // Returns the number of signed-but-not-spent Trust Tokens.
   GetStoredTrustTokenCounts()
@@ -1093,9 +1123,6 @@ interface NetworkContext {
   // If false, the referrer of requests is never populated.
   SetEnableReferrers(bool enable_referrers);
 
-  // See 'enable_preconnect' above.
-  SetEnablePreconnect(bool enable_preconnect);
-
   // Updates the additional trust anchors for certificate verification.
   [EnableIf=is_chromeos]
   UpdateAdditionalCertificates(AdditionalCertificates? additional_certificates);
@@ -1116,7 +1143,7 @@ interface NetworkContext {
                   pending_remote<UDPSocketListener>? listener);
 
   // Creates a Restricted UDP socket that wraps an internal UDP Socket connected
-  // or bound to |addr| with |options| depending on the provided |mode|.
+  // or bound to |addr| with |params| depending on the provided |mode|.
   //
   // The socket created can only be used for the purpose specified in
   // |traffic_annotation|, and cannot be re-used for other purposes.
@@ -1134,7 +1161,7 @@ interface NetworkContext {
       IPEndPoint addr,
       RestrictedUDPSocketMode mode,
       MutableNetworkTrafficAnnotationTag traffic_annotation,
-      UDPSocketOptions? options,
+      RestrictedUDPSocketParams? params,
       pending_receiver<RestrictedUDPSocket> receiver,
       pending_remote<UDPSocketListener>? listener)
       => (int32 result, IPEndPoint? local_addr_out);
@@ -1144,15 +1171,14 @@ interface NetworkContext {
   // and cannot be re-used for other purposes. Caller must specify an address
   // family in |local_addr| to be either IPv4 or IPv6. If port in |local_addr|
   // is 0, the OS will pick an available port. If address bytes are 0, the OS
-  // will pick a local address of the specified address family. |backlog| will
-  // be passed to the OS to set the size of accept queue.
+  // will pick a local address of the specified address family.
   // On success, the resulting local address will be written to |local_addr_out|
   // and |result| is net::OK. On failure, |result| is a network error code.
   //
   // Any sockets that are created but are yet to be destroyed will be destroyed
   // when NetworkContext goes away.
   CreateTCPServerSocket(IPEndPoint local_addr,
-                        uint32 backlog,
+                        TCPServerSocketOptions options,
                         MutableNetworkTrafficAnnotationTag traffic_annotation,
                         pending_receiver<TCPServerSocket> socket)
       => (int32 result, IPEndPoint? local_addr_out);

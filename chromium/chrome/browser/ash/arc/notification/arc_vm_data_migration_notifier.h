@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_ASH_ARC_NOTIFICATION_ARC_VM_DATA_MIGRATION_NOTIFIER_H_
 #define CHROME_BROWSER_ASH_ARC_NOTIFICATION_ARC_VM_DATA_MIGRATION_NOTIFIER_H_
 
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/sequence_checker.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
@@ -28,9 +29,11 @@ class ArcVmDataMigrationNotifier : public ArcSessionManagerObserver {
   // ArcSessinoManagerObserver overrides:
   void OnArcStarted() override;
   void OnArcSessionStopped(ArcStopReason reason) override;
+  void OnArcSessionBlockedByArcVmDataMigration(
+      bool auto_resume_enabled) override;
 
  private:
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
 
   void ShowNotification();
 

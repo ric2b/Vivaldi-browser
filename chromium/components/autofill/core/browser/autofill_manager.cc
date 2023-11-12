@@ -14,6 +14,7 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
+#include "components/autofill/core/browser/metrics/quality_metrics.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -253,28 +254,32 @@ LanguageCode AutofillManager::GetCurrentPageLanguage() {
   return LanguageCode(language_state->current_language());
 }
 
-void AutofillManager::FillCreditCardForm(const FormData& form,
-                                         const FormFieldData& field,
-                                         const CreditCard& credit_card,
-                                         const std::u16string& cvc) {
+void AutofillManager::FillCreditCardForm(
+    const FormData& form,
+    const FormFieldData& field,
+    const CreditCard& credit_card,
+    const std::u16string& cvc,
+    const AutofillTriggerSource trigger_source) {
   if (!base::FeatureList::IsEnabled(features::kAutofillParseAsync)) {
-    FillCreditCardFormImpl(form, field, credit_card, cvc);
+    FillCreditCardFormImpl(form, field, credit_card, cvc, trigger_source);
     return;
   }
   ParseFormAsync(form, ParsingCallback(&AutofillManager::FillCreditCardFormImpl,
-                                       field, credit_card, cvc)
+                                       field, credit_card, cvc, trigger_source)
                            .Then(NotifyNoObserversCallback()));
 }
 
-void AutofillManager::FillProfileForm(const AutofillProfile& profile,
-                                      const FormData& form,
-                                      const FormFieldData& field) {
+void AutofillManager::FillProfileForm(
+    const AutofillProfile& profile,
+    const FormData& form,
+    const FormFieldData& field,
+    const AutofillTriggerSource trigger_source) {
   if (!base::FeatureList::IsEnabled(features::kAutofillParseAsync)) {
-    FillProfileFormImpl(form, field, profile);
+    FillProfileFormImpl(form, field, profile, trigger_source);
     return;
   }
   ParseFormAsync(form, ParsingCallback(&AutofillManager::FillProfileFormImpl,
-                                       field, profile)
+                                       field, profile, trigger_source)
                            .Then(NotifyNoObserversCallback()));
 }
 
@@ -324,10 +329,9 @@ void AutofillManager::OnFormsSeen(
   if (!IsValidFormDataVector(updated_forms) || !driver_->RendererIsAvailable())
     return;
 
-  // This should be called even forms is empty, AutofillProviderAndroid uses
-  // this event to detect form submission.
-  if (!ShouldParseForms(updated_forms))
+  if (!ShouldParseForms()) {
     return;
+  }
 
   NotifyObservers(&Observer::OnBeforeFormsSeen,
                   GetFormGlobalIds(updated_forms));
@@ -504,15 +508,7 @@ void AutofillManager::OnAskForValuesToFill(
 
   NotifyObservers(&Observer::OnBeforeAskForValuesToFill, form.global_id(),
                   field.global_id());
-  if (!base::FeatureList::IsEnabled(features::kAutofillParseAsync)
-#if BUILDFLAG(IS_ANDROID)
-      // TODO(crbug.com/1379149) Asynchronous parsing breaks Touch To Fill's
-      // keyboard suppression mechanism. Fast Checkout uses the same mechanism.
-      // Also see crbug.com/1375966.
-      || client()->IsTouchToFillCreditCardSupported() ||
-      client()->IsFastCheckoutSupported()
-#endif
-  ) {
+  if (!base::FeatureList::IsEnabled(features::kAutofillParseAsync)) {
     OnAskForValuesToFillImpl(form, field, bounding_box,
                              autoselect_first_suggestion,
                              form_element_was_clicked);
@@ -978,7 +974,7 @@ void AutofillManager::OnLoadedServerPredictions(
   // autocomplete attributes, if available.
   if (auto* logger = form_interactions_ukm_logger()) {
     for (FormStructure* cur_form : queried_forms) {
-      cur_form->LogQualityMetricsBasedOnAutocomplete(logger);
+      autofill_metrics::LogQualityMetricsBasedOnAutocomplete(*cur_form, logger);
     }
   }
 

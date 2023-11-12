@@ -11,7 +11,6 @@
 
 #include "chrome/browser/vr/ui.h"
 
-#include "base/cxx17_backports.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/numerics/math_constants.h"
@@ -273,7 +272,6 @@ void Ui::SetOmniboxSuggestions(std::vector<OmniboxSuggestion> suggestions) {
 
 void Ui::ShowSoftInput(bool show) {
   if (model_->needs_keyboard_update) {
-    browser_->OnUnsupportedMode(UiUnsupportedMode::kNeedsKeyboardUpdate);
     return;
   }
   model_->editing_web_input = show;
@@ -362,18 +360,13 @@ void Ui::OnMenuButtonClicked() {
   }
 
   if (model_->hosted_platform_ui.hosted_ui_enabled) {
-    browser_->CloseHostedDialog();
     return;
   }
 
   // Menu button click exits the WebVR presentation and fullscreen.
   browser_->ExitPresent();
-  browser_->ExitFullscreen();
 
   switch (model_->get_last_opaque_mode()) {
-    case kModeVoiceSearch:
-      browser_->SetVoiceSearchActive(false);
-      break;
     case kModeEditingOmnibox:
       model_->pop_mode(kModeEditingOmnibox);
       break;
@@ -667,10 +660,10 @@ FovRectangle Ui::GetMinimalFov(const gfx::Transform& view_matrix,
     }
 
     // Clamp to Z near plane's boundary.
-    bounds_left = base::clamp(bounds_left, z_near_left, z_near_right);
-    bounds_right = base::clamp(bounds_right, z_near_left, z_near_right);
-    bounds_bottom = base::clamp(bounds_bottom, z_near_bottom, z_near_top);
-    bounds_top = base::clamp(bounds_top, z_near_bottom, z_near_top);
+    bounds_left = std::clamp(bounds_left, z_near_left, z_near_right);
+    bounds_right = std::clamp(bounds_right, z_near_left, z_near_right);
+    bounds_bottom = std::clamp(bounds_bottom, z_near_bottom, z_near_top);
+    bounds_top = std::clamp(bounds_top, z_near_bottom, z_near_top);
 
     left = std::min(bounds_left, left);
     right = std::max(bounds_right, right);

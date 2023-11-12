@@ -43,10 +43,6 @@ namespace guest_view {
 
 namespace {
 
-using WebContentsGuestViewMap = std::map<const WebContents*, GuestViewBase*>;
-base::LazyInstance<WebContentsGuestViewMap>::Leaky g_webcontents_guestview_map =
-    LAZY_INSTANCE_INITIALIZER;
-
 void DestroyGuestIfUnattached(GuestViewBase* guest) {
   std::unique_ptr<GuestViewBase> owned_guest =
       guest->GetGuestViewManager()->TransferOwnership(guest);
@@ -144,8 +140,17 @@ class GuestViewBase::OpenerLifetimeObserver : public WebContentsObserver {
   void WebContentsDestroyed() override {
     // If the opener is destroyed and the guest has not been attached, then
     // destroy the guest.
+    // Note that the guest contents may be owned by content/ at this point. In
+    // this case, we expect content/ to safely destroy the contents without
+    // accessing delegate methods of the destroyed guest.
     // Destroys `this`.
+
+    // NOTE(andre@vivaldi.com) : Do not follow the openers lifetime for tabs.
+    // Was VB-97546. Note; web_contents() might be null at this point.
+    if (!guest_->web_contents() ||
+        !VivaldiTabCheck::IsVivaldiTab(guest_->web_contents())) {
     DestroyGuestIfUnattached(guest_);
+    }  // !IsVivaldiTab
   }
 
  private:
@@ -165,18 +170,14 @@ GuestViewBase::~GuestViewBase() {
   DCHECK(!is_being_destroyed_);
   is_being_destroyed_ = true;
 
-  // NOTE(andre@vivaldi.com) : This is only set in Vivaldi. See
-  // BrowserPluginGuestDelegate::delegate_to_browser_plugin_.
-  if (delegate_to_browser_plugin_) {
-    delegate_to_browser_plugin_->set_delegate(nullptr);
-  }
-
   // We can get here without starting to observe webcontents.
   if (web_contents()) {
   // Even out the observing in InitWithWebContents
     auto* zoom_controller =
         zoom::ZoomController::FromWebContents(web_contents());
-    zoom_controller->RemoveObserver(this);
+    if (zoom_controller) {
+      zoom_controller->RemoveObserver(this);
+    }
   }
   // If `this` was ever attached, it is important to clear `owner_web_contents_`
   // after the call to StopTrackingEmbedderZoomLevel(), but before the rest of
@@ -184,14 +185,9 @@ GuestViewBase::~GuestViewBase() {
   StopTrackingEmbedderZoomLevel();
   owner_web_contents_ = nullptr;
 
-  // NOTE(andre@vivaldi.com) : We need to update the map so that
-  // GuestViewBase::FromWebContents does not return destroyed guests. One case
-  // was VB-94399.
-  g_webcontents_guestview_map.Get().erase(web_contents());
-
   // This is not necessarily redundant with the removal when the guest contents
   // is destroyed, since we may never have initialized a guest WebContents.
-  GetGuestViewManager()->RemoveGuest(guest_instance_id_,
+  GetGuestViewManager()->RemoveGuest(this,
                                      /*invalidate_id=*/true);
 
   pending_events_.clear();
@@ -241,9 +237,7 @@ void GuestViewBase::InitWithWebContents(const base::Value::Dict& create_params,
     guest_web_contents->SetDelegate(GetDevToolsConnector());
   else
   guest_web_contents->SetDelegate(this);
-  g_webcontents_guestview_map.Get().insert(
-      std::make_pair(guest_web_contents, this));
-  GetGuestViewManager()->AddGuest(guest_instance_id_, guest_web_contents);
+  GetGuestViewManager()->AddGuest(this);
 
   // Populate the view instance ID if we have it on creation.
   view_instance_id_ =
@@ -292,7 +286,18 @@ gfx::Size GuestViewBase::GetDefaultSize() const {
   // Setting default size other than viewport makes detached/backgrounded pages
   // to be drawn with a small size when first shown. We do not want this in
   // Vivaldi.
-  if (!vivaldi::IsVivaldiRunning() && !is_full_page_plugin())
+  if (vivaldi::IsVivaldiRunning()) {
+    content::RenderWidgetHostView* view =
+        owner_web_contents()
+            ? owner_web_contents()->GetPrimaryMainFrame()->GetView()
+            : nullptr;
+    if (!view) {
+      return gfx::Size(kDefaultWidth, kDefaultHeight);
+    }
+    return view->GetVisibleViewportSize();
+  }
+
+  if (!is_full_page_plugin())
     return gfx::Size(kDefaultWidth, kDefaultHeight);
 
   // Full page plugins default to the size of the owner's viewport.
@@ -359,10 +364,14 @@ void GuestViewBase::SetSize(const SetSizeParams& params) {
 }
 
 // static
-GuestViewBase* GuestViewBase::FromWebContents(const WebContents* web_contents) {
-  WebContentsGuestViewMap* guest_map = g_webcontents_guestview_map.Pointer();
-  auto it = guest_map->find(web_contents);
-  return it == guest_map->end() ? nullptr : it->second;
+GuestViewBase* GuestViewBase::FromWebContents(WebContents* web_contents) {
+  if (!web_contents) {
+    return nullptr;
+  }
+
+  auto* manager =
+      GuestViewManager::FromBrowserContext(web_contents->GetBrowserContext());
+  return manager ? manager->GetGuestFromWebContents(web_contents) : nullptr;
 }
 
 // static
@@ -531,10 +540,9 @@ void GuestViewBase::WillAttach(
   // self-destruct in WebContentsDestroyed.
   owned_this.release();
   self_owned_ = true;
-
   std::unique_ptr<WebContents> owned_guest_contents =
       std::move(owned_guest_contents_);
-   DCHECK_EQ(owned_guest_contents.get(), web_contents());
+  DCHECK_EQ(owned_guest_contents.get(), web_contents());
 
   // Since this inner WebContents is created from the browser side we do
   // not have RemoteFrame mojo channels so we pass in
@@ -590,8 +598,14 @@ void GuestViewBase::RenderViewReady() {
 }
 
 void GuestViewBase::WebContentsDestroyed() {
-  g_webcontents_guestview_map.Get().erase(web_contents());
-  GetGuestViewManager()->RemoveGuest(guest_instance_id_,
+  // NOTE(andre@vivaldi.com) : If the observed webcontents is destroyed outside
+  // and it is owned by this we must release ownership. It is owned by the
+  // tabstrip. VB-93668.
+  if (web_contents() == owned_guest_contents_.get()) {
+    owned_guest_contents_.release();
+  }
+
+  GetGuestViewManager()->RemoveGuest(this,
                                      /*invalidate_id=*/false);
 
   // Self-destruct.
@@ -651,7 +665,10 @@ bool GuestViewBase::HandleKeyboardEvent(
 
 void GuestViewBase::LoadingStateChanged(WebContents* source,
                                         bool should_show_loading_ui) {
-  if (!attached() || !embedder_web_contents()->GetDelegate())
+  // NOTE(andre@vivaldi.com): Added check for embedder_web_contents as loading
+  // can happen in an unattached guest.
+  if (!attached() ||
+      (embedder_web_contents() && !embedder_web_contents()->GetDelegate()))
     return;
 
   embedder_web_contents()->GetDelegate()->LoadingStateChanged(
@@ -859,11 +876,6 @@ void GuestViewBase::TakeGuestContentsOwnership(
 }
 
 void GuestViewBase::ClearOwnedGuestContents() {
-  if (owned_guest_contents_ && VivaldiTabCheck::IsOwnedByTabStripOrDevTools(
-                                   owned_guest_contents_.get())) {
-    owned_guest_contents_.release();
-    return;
-  }
   owned_guest_contents_.reset();
 }
 
@@ -1010,8 +1022,7 @@ void GuestViewBase::UpdateGuestSize(const gfx::Size& new_size,
 }
 
 void GuestViewBase::SetOwnerHost() {
-  auto* manager = GuestViewManager::FromBrowserContext(browser_context_);
-  owner_host_ = manager->IsOwnedByExtension(this)
+  owner_host_ = GetGuestViewManager()->IsOwnedByExtension(this)
                     ? owner_web_contents()->GetLastCommittedURL().host()
                     : std::string();
 }
@@ -1027,6 +1038,11 @@ bool GuestViewBase::RequiresSslInterstitials() const {
 content::RenderFrameHost* GuestViewBase::GetGuestMainFrame() const {
   // TODO(crbug/1261928): Migrate the implementation for MPArch.
   return web_contents()->GetPrimaryMainFrame();
+}
+
+base::WeakPtr<content::BrowserPluginGuestDelegate>
+GuestViewBase::GetGuestDelegateWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 }  // namespace guest_view

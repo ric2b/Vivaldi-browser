@@ -43,7 +43,14 @@ RealTimeUrlLookupServiceFactory::GetInstance() {
 }
 
 RealTimeUrlLookupServiceFactory::RealTimeUrlLookupServiceFactory()
-    : ProfileKeyedServiceFactory("RealTimeUrlLookupService") {
+    : ProfileKeyedServiceFactory(
+          "RealTimeUrlLookupService",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOriginalOnly)
+              .Build()) {
   DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(SyncServiceFactory::GetInstance());
   DependsOn(VerdictCacheManagerFactory::GetInstance());
@@ -67,7 +74,9 @@ KeyedService* RealTimeUrlLookupServiceFactory::BuildServiceInstanceFor(
   return new RealTimeUrlLookupService(
       network::SharedURLLoaderFactory::Create(std::move(url_loader_factory)),
       VerdictCacheManagerFactory::GetForProfile(profile),
-      base::BindRepeating(&safe_browsing::GetUserPopulationForProfile, profile),
+      base::BindRepeating(
+          &safe_browsing::GetUserPopulationForProfileWithCookieTheftExperiments,
+          profile),
       profile->GetPrefs(),
       std::make_unique<SafeBrowsingPrimaryAccountTokenFetcher>(
           IdentityManagerFactory::GetForProfile(profile)),

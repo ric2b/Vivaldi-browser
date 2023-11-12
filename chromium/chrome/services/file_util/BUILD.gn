@@ -25,6 +25,7 @@ source_set("file_util") {
 
   public_deps = [
     "//chrome/services/file_util/public/mojom",
+    "//components/safe_browsing/core/common:common",
     "//mojo/public/cpp/bindings",
     "//mojo/public/mojom/base",
   ]
@@ -60,7 +61,7 @@ source_set("file_util") {
     deps += [
       "//chrome/common/safe_browsing",
       "//chrome/common/safe_browsing:archive_analyzer_results",
-      "//chrome/common/safe_browsing:rar_analyzer",
+      "//chrome/common/safe_browsing:safe_browsing",
     ]
 
     if (is_linux || is_win) {

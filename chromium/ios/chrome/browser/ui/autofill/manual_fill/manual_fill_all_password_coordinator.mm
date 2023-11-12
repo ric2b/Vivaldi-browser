@@ -11,16 +11,17 @@
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/passwords/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_injection_handler.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_password_mediator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/password_list_navigator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/password_view_controller.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -50,8 +51,11 @@
       initWithSearchController:searchController];
   self.passwordViewController.delegate = self;
 
-  auto passwordStore = IOSChromePasswordStoreFactory::GetForBrowserState(
+  auto profilePasswordStore = IOSChromePasswordStoreFactory::GetForBrowserState(
       self.browser->GetBrowserState(), ServiceAccessType::EXPLICIT_ACCESS);
+  auto accountPasswordStore =
+      IOSChromeAccountPasswordStoreFactory::GetForBrowserState(
+          self.browser->GetBrowserState(), ServiceAccessType::EXPLICIT_ACCESS);
   FaviconLoader* faviconLoader =
       IOSChromeFaviconLoaderFactory::GetForBrowserState(
           self.browser->GetBrowserState());
@@ -60,12 +64,13 @@
   SyncSetupService* syncService = SyncSetupServiceFactory::GetForBrowserState(
       self.browser->GetBrowserState());
   self.passwordMediator = [[ManualFillPasswordMediator alloc]
-       initWithPasswordStore:passwordStore
-               faviconLoader:faviconLoader
-                    webState:webState
-                 syncService:syncService
-                         URL:GURL::EmptyGURL()
-      invokedOnPasswordField:NO];
+      initWithProfilePasswordStore:profilePasswordStore
+              accountPasswordStore:accountPasswordStore
+                     faviconLoader:faviconLoader
+                          webState:webState
+                       syncService:syncService
+                               URL:GURL::EmptyGURL()
+            invokedOnPasswordField:NO];
   [self.passwordMediator fetchPasswords];
   self.passwordMediator.actionSectionEnabled = NO;
   self.passwordMediator.consumer = self.passwordViewController;

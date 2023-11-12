@@ -92,81 +92,60 @@ class CalendarBackend
   void Commit();
 
   // Creates an Event
-  void CreateCalendarEvent(EventRow ev,
-                           bool notify,
-                           std::shared_ptr<EventResultCB> result);
+  EventResultCB CreateCalendarEvent(EventRow ev, bool notify);
 
   // Creates multiple events
-  void CreateCalendarEvents(std::vector<calendar::EventRow> events,
-                            std::shared_ptr<CreateEventsResult> result);
+  CreateEventsResult CreateCalendarEvents(
+      std::vector<calendar::EventRow> events);
 
-  void GetAllEvents(std::shared_ptr<EventQueryResults> results);
+  std::vector<calendar::EventRow> GetAllEvents();
 
   // Updates an event
-  void UpdateEvent(EventID event_id,
-                   const EventRow& event,
-                   std::shared_ptr<EventResultCB> result);
-  void DeleteEvent(EventID event_id, std::shared_ptr<DeleteEventResult> result);
+  EventResultCB UpdateEvent(EventID event_id, const EventRow& event);
+  bool DeleteEvent(EventID event_id);
 
-  void CreateRecurrenceException(RecurrenceExceptionRow row,
-                                 std::shared_ptr<EventResultCB> result);
-  void UpdateRecurrenceException(RecurrenceExceptionID recurrence_id,
-                                 const RecurrenceExceptionRow& recurrence,
-                                 std::shared_ptr<EventResultCB> result);
-  void DeleteEventRecurrenceException(RecurrenceExceptionID exception_id,
-                                      std::shared_ptr<EventResultCB> result);
+  EventResultCB CreateRecurrenceException(RecurrenceExceptionRow row);
+  EventResultCB UpdateRecurrenceException(
+      RecurrenceExceptionID recurrence_id,
+      const RecurrenceExceptionRow& recurrence);
+  EventResultCB DeleteEventRecurrenceException(
+      RecurrenceExceptionID exception_id);
 
   // Creates an Calendar
-  void CreateCalendar(CalendarRow ev,
-                      std::shared_ptr<CreateCalendarResult> result);
-  void GetAllCalendars(std::shared_ptr<CalendarQueryResults> results);
-  void UpdateCalendar(CalendarID calendar_id,
-                      const Calendar& calendar,
-                      std::shared_ptr<UpdateCalendarResult> result);
-  void DeleteCalendar(CalendarID calendar_id,
-                      std::shared_ptr<DeleteCalendarResult> result);
+  CreateCalendarResult CreateCalendar(CalendarRow ev);
+  CalendarRows GetAllCalendars();
+  bool UpdateCalendar(CalendarID calendar_id, const Calendar& calendar);
+  bool DeleteCalendar(CalendarID calendar_id);
 
-  void GetAllEventTypes(std::shared_ptr<EventTypeRows> results);
-  void CreateEventType(EventTypeRow event_type_row,
-                       std::shared_ptr<CreateEventTypeResult> result);
-  void UpdateEventType(EventTypeID event_id,
-                       const EventType& event_type,
-                       std::shared_ptr<UpdateEventTypeResult> result);
-  void DeleteEventType(EventTypeID event_type_id,
-                       std::shared_ptr<DeleteEventTypeResult> result);
+  EventTypeRows GetAllEventTypes();
 
-  void GetAllNotifications(std::shared_ptr<GetAllNotificationResult> results);
+  bool CreateEventType(EventTypeRow event_type_row);
+  bool UpdateEventType(EventTypeID event_id, const EventType& event_type);
+  bool DeleteEventType(EventTypeID event_type_id);
 
-  void CreateNotification(calendar::NotificationRow row,
-                          std::shared_ptr<NotificationResult> result);
+  GetAllNotificationResult GetAllNotifications();
 
-  void UpdateNotification(calendar::UpdateNotificationRow row,
-                          std::shared_ptr<NotificationResult> result);
+  NotificationResult CreateNotification(calendar::NotificationRow row);
 
-  void DeleteNotification(NotificationID notification_id,
-                          std::shared_ptr<DeleteNotificationResult> result);
+  NotificationResult UpdateNotification(calendar::UpdateNotificationRow row);
 
-  void CreateInvite(calendar::InviteRow row,
-                    std::shared_ptr<InviteResult> result);
+  bool DeleteNotification(NotificationID notification_id);
 
-  void DeleteInvite(InviteID invite_id,
-                    std::shared_ptr<DeleteInviteResult> result);
+  InviteResult CreateInvite(calendar::InviteRow row);
 
-  void UpdateInvite(calendar::UpdateInviteRow row,
-                    std::shared_ptr<InviteResult> result);
+  bool DeleteInvite(InviteID invite_id);
 
-  void CreateAccount(AccountRow account_row,
-                     std::shared_ptr<CreateAccountResult> result);
+  InviteResult UpdateInvite(calendar::UpdateInviteRow row);
 
-  void DeleteAccount(calendar::AccountID account_id,
-                     std::shared_ptr<DeleteAccountResult> result);
+  CreateAccountResult CreateAccount(AccountRow account_row);
 
-  void UpdateAccount(calendar::AccountRow account_row,
-                     std::shared_ptr<calendar::UpdateAccountResult> result);
+  DeleteAccountResult DeleteAccount(calendar::AccountID account_id);
 
-  void GetAllAccounts(std::shared_ptr<AccountRows> results);
+  UpdateAccountResult UpdateAccount(calendar::AccountRow account_row);
 
-  void GetAllEventTemplates(std::shared_ptr<EventQueryResults> results);
+  AccountRows GetAllAccounts();
+
+  std::vector<calendar::EventRow> GetAllEventTemplates();
 
   EventResult FillEvent(EventID id);
 
@@ -184,7 +163,8 @@ class CalendarBackend
 
   // Does the work of Init.
   void InitImpl(const CalendarDatabaseParams& calendar_database_params);
-  void GetEvents(EventRows rows, std::shared_ptr<EventQueryResults> results);
+  void FillEventsWithExceptions(EventRows rows, EventRows* results);
+
   // Closes all databases managed by CalendarBackend. Commits any pending
   // transactions.
   void CloseAllDatabases();

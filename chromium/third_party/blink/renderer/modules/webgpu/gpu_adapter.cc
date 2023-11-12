@@ -46,12 +46,14 @@ absl::optional<V8GPUFeatureName::Enum> ToV8FeatureNameEnum(WGPUFeatureName f) {
       return V8GPUFeatureName::Enum::kIndirectFirstInstance;
     case WGPUFeatureName_DepthClipControl:
       return V8GPUFeatureName::Enum::kDepthClipControl;
-    case WGPUFeatureName_DawnShaderFloat16:
-      return V8GPUFeatureName::Enum::kShaderFloat16;
     case WGPUFeatureName_RG11B10UfloatRenderable:
       return V8GPUFeatureName::Enum::kRg11B10UfloatRenderable;
     case WGPUFeatureName_BGRA8UnormStorage:
       return V8GPUFeatureName::Enum::kBgra8UnormStorage;
+    case WGPUFeatureName_ChromiumExperimentalDp4a:
+      return V8GPUFeatureName::Enum::kChromiumExperimentalDp4A;
+    case WGPUFeatureName_ShaderF16:
+      return V8GPUFeatureName::Enum::kShaderF16;
     default:
       return absl::nullopt;
   }
@@ -86,16 +88,13 @@ GPUSupportedFeatures* MakeFeatureNameSet(const DawnProcTable& procs,
 
 GPUAdapter::GPUAdapter(
     GPU* gpu,
-    const String& name,
     WGPUAdapter handle,
     scoped_refptr<DawnControlClientHolder> dawn_control_client)
-    : DawnObjectBase(dawn_control_client),
-      name_(name),
-      handle_(handle),
-      gpu_(gpu) {
+    : DawnObjectBase(dawn_control_client), handle_(handle), gpu_(gpu) {
   WGPUAdapterProperties properties = {};
   GetProcs().adapterGetProperties(handle_, &properties);
   is_fallback_adapter_ = properties.adapterType == WGPUAdapterType_CPU;
+  backend_type_ = properties.backendType;
 
   vendor_ = properties.vendorName;
   architecture_ = properties.architecture;
@@ -135,16 +134,16 @@ void GPUAdapter::AddConsoleWarning(ExecutionContext* execution_context,
   }
 }
 
-const String& GPUAdapter::name() const {
-  return name_;
-}
-
 GPUSupportedFeatures* GPUAdapter::features() const {
   return features_;
 }
 
 bool GPUAdapter::isFallbackAdapter() const {
   return is_fallback_adapter_;
+}
+
+WGPUBackendType GPUAdapter::backendType() const {
+  return backend_type_;
 }
 
 bool GPUAdapter::SupportsMultiPlanarFormats() const {
@@ -161,18 +160,22 @@ void GPUAdapter::OnRequestDeviceCallback(ScriptState* script_state,
   switch (status) {
     case WGPURequestDeviceStatus_Success: {
       DCHECK(dawn_device);
+
+      if (is_consumed_) {
+        resolver->Reject(MakeGarbageCollected<DOMException>(
+            DOMExceptionCode::kInvalidStateError,
+            "The adapter is invalid because it has already been used to create "
+            "a device. NOTE: The behavior in this error case may change in a "
+            "future release."));
+        break;
+      }
+      is_consumed_ = true;
+
       ExecutionContext* execution_context =
           ExecutionContext::From(script_state);
-
       auto* device = MakeGarbageCollected<GPUDevice>(
           execution_context, GetDawnControlClient(), this, dawn_device,
           descriptor);
-      if (is_invalid_) {
-        GetProcs().deviceForceLoss(
-            device->GetHandle(), WGPUDeviceLostReason_Undefined,
-            "Cannot request device on invalidated adapter.");
-        FlushNow();
-      }
       resolver->Resolve(device);
 
       ukm::builders::ClientRenderingAPI(execution_context->UkmSourceID())

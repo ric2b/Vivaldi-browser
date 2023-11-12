@@ -23,6 +23,8 @@
 #include "ash/public/cpp/accelerators.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
+#include "base/timer/timer.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_map.h"
 #include "ui/base/ime/ash/input_method_manager.h"
@@ -86,7 +88,8 @@ class ASH_EXPORT AcceleratorControllerImpl
                                      const std::string& side);
 
    private:
-    AcceleratorControllerImpl* controller_;  // Not owned.
+    raw_ptr<AcceleratorControllerImpl, ExperimentalAsh>
+        controller_;  // Not owned.
   };
 
   explicit AcceleratorControllerImpl(AshAcceleratorConfiguration* config);
@@ -213,13 +216,17 @@ class ASH_EXPORT AcceleratorControllerImpl
       AcceleratorAction action,
       const ui::Accelerator& accelerator) const;
 
+  // Records when the user changes the output volume via keyboard to metrics.
+  void RecordVolumeSource();
+
   std::unique_ptr<ui::AcceleratorManager> accelerator_manager_;
 
   // A tracker for the current and previous accelerators.
   std::unique_ptr<AcceleratorHistoryImpl> accelerator_history_;
 
   // Manages all accelerator mappings.
-  AshAcceleratorConfiguration* accelerator_configuration_;
+  raw_ptr<AshAcceleratorConfiguration, ExperimentalAsh>
+      accelerator_configuration_;
 
   // Handles the exit accelerator which requires a double press to exit and
   // shows a popup with an explanation.
@@ -253,6 +260,10 @@ class ASH_EXPORT AcceleratorControllerImpl
 
   // Prevents the processing of all KB shortcuts in the controller.
   bool prevent_processing_accelerators_ = false;
+
+  // Timer used to prevent the input gain from recording each time the user
+  // presses a volume key while setting the desired volume.
+  base::DelayTimer output_volume_metric_delay_timer_;
 };
 
 }  // namespace ash

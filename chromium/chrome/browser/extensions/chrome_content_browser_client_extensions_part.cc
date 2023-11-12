@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
@@ -59,17 +60,18 @@
 #include "extensions/browser/extension_service_worker_message_filter.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/guest_view/extensions_guest_view.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
-#include "extensions/browser/info_map.h"
 #include "extensions/browser/process_map.h"
 #include "extensions/browser/renderer_startup_helper.h"
+#include "extensions/browser/service_worker/service_worker_host.h"
+#include "extensions/browser/service_worker_task_queue.h"
 #include "extensions/browser/url_loader_factory_manager.h"
 #include "extensions/browser/url_request_util.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_constants.h"
-#include "extensions/common/manifest_handlers/app_isolation_info.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_handlers/web_accessible_resources_info.h"
 #include "extensions/common/mojom/event_router.mojom.h"
@@ -96,14 +98,16 @@ namespace extensions {
 
 namespace {
 
+// If non-null, a scope of a service worker to always allow to be unregistered.
+const GURL* g_allow_service_worker_unregistration_scope = nullptr;
+
 // Used by the GetPrivilegeRequiredByUrl() and GetProcessPrivilege() functions
-// below.  Extension, and isolated apps require different privileges to be
+// below.  Extensions and hosted apps require different privileges to be
 // granted to their RenderProcessHosts.  This classification allows us to make
 // sure URLs are served by hosts with the right set of privileges.
 enum RenderProcessHostPrivilege {
   PRIV_NORMAL,
   PRIV_HOSTED,
-  PRIV_ISOLATED,
   PRIV_EXTENSION,
 };
 
@@ -124,8 +128,6 @@ RenderProcessHostPrivilege GetPrivilegeRequiredByUrl(
 
   const Extension* extension =
       registry->enabled_extensions().GetByID(url.host());
-  if (extension && AppIsolationInfo::HasIsolatedStorage(extension))
-    return PRIV_ISOLATED;
   if (extension && extension->is_hosted_app())
     return PRIV_HOSTED;
   return PRIV_EXTENSION;
@@ -143,8 +145,6 @@ RenderProcessHostPrivilege GetProcessPrivilege(
   for (const std::string& extension_id : extension_ids) {
     const Extension* extension =
         registry->enabled_extensions().GetByID(extension_id);
-    if (extension && AppIsolationInfo::HasIsolatedStorage(extension))
-      return PRIV_ISOLATED;
     if (extension && extension->is_hosted_app())
       return PRIV_HOSTED;
   }
@@ -292,6 +292,11 @@ bool ChromeContentBrowserClientExtensionsPart::
     return false;
   size_t candidate_active_contents_count =
       candidate_site_instance->GetRelatedActiveContentsCount();
+
+  // Intentionally only checks for hosted app effective URLs and not NTP-based
+  // effective URLs (which ChromeContentBrowserClient::GetEffectiveURL would
+  // include as well). This avoids keeping same-site popups in the NTP's
+  // process, per https://crbug.com/859062.
   bool src_has_effective_url = HasEffectiveUrl(browser_context, candidate_url);
   bool dest_has_effective_url =
       HasEffectiveUrl(browser_context, destination_url);
@@ -574,6 +579,53 @@ bool ChromeContentBrowserClientExtensionsPart::AllowServiceWorker(
   return ::extensions::AllowServiceWorker(scope, script_url, extension);
 }
 
+bool ChromeContentBrowserClientExtensionsPart::
+    MayDeleteServiceWorkerRegistration(
+        const GURL& scope,
+        content::BrowserContext* browser_context) {
+  // We only care about extension urls.
+  if (!scope.SchemeIs(kExtensionScheme)) {
+    return true;
+  }
+
+  // Check if we're allowed to unregister this worker for testing purposes.
+  if (g_allow_service_worker_unregistration_scope &&
+      *g_allow_service_worker_unregistration_scope == scope) {
+    return true;
+  }
+
+  const Extension* extension = ExtensionRegistry::Get(browser_context)
+                                   ->enabled_extensions()
+                                   .GetExtensionOrAppByURL(scope);
+  if (!extension) {
+    return true;
+  }
+
+  // We only consider service workers that are root-scoped and for service
+  // worker-based extensions.
+  if (scope != extension->url() ||
+      !BackgroundInfo::IsServiceWorkerBased(extension)) {
+    return true;
+  }
+
+  base::Version registered_version =
+      ServiceWorkerTaskQueue::Get(browser_context)
+          ->RetrieveRegisteredServiceWorkerVersion(extension->id());
+  // The service worker was never fully registered; this can happen in the case
+  // of e.g. throwing errors in response to installation events (where the
+  // worker is registered, but then immediately unregistered).
+  if (!registered_version.IsValid()) {
+    return true;
+  }
+
+  // Don't allow the unregistration of a valid, enabled service worker-based
+  // extension's background service worker. Doing so would put the extension in
+  // a broken state. The service worker registration is instead tied to the
+  // extension's enablement; it is unregistered when the extension is disabled
+  // or uninstalled.
+  return registered_version != extension->version();
+}
+
 // static
 std::vector<url::Origin> ChromeContentBrowserClientExtensionsPart::
     GetOriginsRequiringDedicatedProcess() {
@@ -627,10 +679,18 @@ bool ChromeContentBrowserClientExtensionsPart::IsBuiltinComponent(
       ->Exists(extension_id);
 }
 
+// static
 bool ChromeContentBrowserClientExtensionsPart::AreExtensionsDisabledForProfile(
     content::BrowserContext* browser_context) {
   return AreKeyedServicesDisabledForProfileByDefault(
       Profile::FromBrowserContext(browser_context));
+}
+
+// static
+base::AutoReset<const GURL*> ChromeContentBrowserClientExtensionsPart::
+    AllowServiceWorkerUnregistrationForScopeForTesting(const GURL* scope) {
+  return base::AutoReset<const GURL*>(
+      &g_allow_service_worker_unregistration_scope, scope);
 }
 
 void ChromeContentBrowserClientExtensionsPart::RenderProcessWillLaunch(
@@ -702,13 +762,26 @@ bool ChromeContentBrowserClientExtensionsPart::
   // of the process.
   //
   // Ensure that we are only granting extension preferences to URLs with
-  // the correct scheme. Without this check, chrome-guest:// schemes used by
-  // webview tags as well as hosts that happen to match the id of an
-  // installed extension would get the wrong preferences.
+  // the correct scheme. Without this check, hosts that happen to match the id
+  // of an installed extension would get the wrong preferences.
+  // TODO(crbug.com/1435121): Once the `web_prefs` have been set based on
+  // `extension` below, they are not unset when navigating a tab from an
+  // extension page to a regular web page. We should clear extension settings in
+  // this case.
   const GURL& site_url =
       web_contents->GetPrimaryMainFrame()->GetSiteInstance()->GetSiteURL();
   if (!site_url.SchemeIs(kExtensionScheme))
     return false;
+
+  // If a webview navigates to a webview accessible resource, extension
+  // preferences should not be applied to the webview.
+  // TODO(crbug.com/1435121): Once it is possible to clear extension settings
+  // after a navigation, we can remove this case so that extension settings can
+  // apply to webview accessible resources without impacting web pages
+  // subsequently loaded in the webview.
+  if (WebViewGuest::FromWebContents(web_contents)) {
+    return false;
+  }
 
   const Extension* extension =
       registry->enabled_extensions().GetByID(site_url.host());
@@ -781,6 +854,8 @@ void ChromeContentBrowserClientExtensionsPart::ExposeInterfacesToRenderer(
       &ExtensionsGuestView::CreateForExtensions, host->GetID()));
   associated_registry->AddInterface<mojom::RendererHost>(base::BindRepeating(
       &RendererStartupHelper::BindForRenderer, host->GetID()));
+  associated_registry->AddInterface<mojom::ServiceWorkerHost>(
+      base::BindRepeating(&ServiceWorkerHost::BindReceiver, host->GetID()));
 }
 
 }  // namespace extensions

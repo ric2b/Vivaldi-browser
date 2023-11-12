@@ -6,10 +6,8 @@
 
 #include <string>
 
-#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/observer_list.h"
-#include "net/base/features.h"
 #include "net/socket/ssl_client_socket_impl.h"
 #include "net/socket/stream_socket.h"
 #include "net/ssl/ssl_client_session_cache.h"
@@ -68,6 +66,7 @@ SSLClientContext::SSLClientContext(
     config_ = ssl_config_service_->GetSSLContextConfig();
     ssl_config_service_->AddObserver(this);
   }
+  cert_verifier_->AddObserver(this);
   CertDatabase::GetInstance()->AddObserver(this);
 }
 
@@ -75,12 +74,8 @@ SSLClientContext::~SSLClientContext() {
   if (ssl_config_service_) {
     ssl_config_service_->RemoveObserver(this);
   }
+  cert_verifier_->RemoveObserver(this);
   CertDatabase::GetInstance()->RemoveObserver(this);
-}
-
-bool SSLClientContext::EncryptedClientHelloEnabled() const {
-  return config_.ech_enabled &&
-         base::FeatureList::IsEnabled(features::kEncryptedClientHello);
 }
 
 std::unique_ptr<SSLClientSocket> SSLClientContext::CreateSSLClientSocket(
@@ -141,7 +136,11 @@ void SSLClientContext::OnSSLContextConfigChanged() {
   // never change version or cipher negotiation based on client-offered
   // sessions, other servers do.
   config_ = ssl_config_service_->GetSSLContextConfig();
-  NotifySSLConfigChanged(false /* not a cert database change */);
+  NotifySSLConfigChanged(SSLConfigChangeType::kSSLConfigChanged);
+}
+
+void SSLClientContext::OnCertVerifierChanged() {
+  NotifySSLConfigChanged(SSLConfigChangeType::kCertVerifierChanged);
 }
 
 void SSLClientContext::OnCertDBChanged() {
@@ -150,12 +149,12 @@ void SSLClientContext::OnCertDBChanged() {
   if (ssl_client_session_cache_) {
     ssl_client_session_cache_->Flush();
   }
-  NotifySSLConfigChanged(true /* cert database change */);
+  NotifySSLConfigChanged(SSLConfigChangeType::kCertDatabaseChanged);
 }
 
-void SSLClientContext::NotifySSLConfigChanged(bool is_cert_database_change) {
+void SSLClientContext::NotifySSLConfigChanged(SSLConfigChangeType change_type) {
   for (Observer& observer : observers_) {
-    observer.OnSSLConfigChanged(is_cert_database_change);
+    observer.OnSSLConfigChanged(change_type);
   }
 }
 

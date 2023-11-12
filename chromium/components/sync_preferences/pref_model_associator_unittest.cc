@@ -19,7 +19,9 @@
 #include "components/sync_preferences/pref_model_associator_client.h"
 #include "components/sync_preferences/pref_service_mock_factory.h"
 #include "components/sync_preferences/pref_service_syncable.h"
+#include "components/sync_preferences/preferences_merge_helper.h"
 #include "components/sync_preferences/syncable_prefs_database.h"
+#include "components/sync_preferences/test_syncable_prefs_database.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -34,19 +36,25 @@ const char kListPrefName[] = "pref.list";
 const char kDictionaryPrefName[] = "pref.dictionary";
 const char kCustomMergePrefName[] = "pref.custom";
 
-const std::unordered_set<std::string> kSyncablePrefsAllowlist = {
-    kStringPrefName, kListPrefName, kDictionaryPrefName, kCustomMergePrefName};
+const char kStringPriorityPrefName[] = "priority.pref.string";
+const char kStringOsPrefName[] = "os.pref.string";
+const char kStringOsPriorityPrefName[] = "os.priority.pref.string";
 
-class TestSyncablePrefsDatabase : public SyncablePrefsDatabase {
- public:
-  bool IsPreferenceSyncable(const std::string& pref_name) const override {
-    return kSyncablePrefsAllowlist.count(pref_name);
-  }
-};
+// Assigning an id of 0 to all the test prefs.
+const std::unordered_map<std::string, SyncablePrefMetadata>
+    kSyncablePrefsDatabase = {
+        {kStringPrefName, {0, syncer::PREFERENCES}},
+        {kListPrefName, {0, syncer::PREFERENCES}},
+        {kDictionaryPrefName, {0, syncer::PREFERENCES}},
+        {kCustomMergePrefName, {0, syncer::PREFERENCES}},
+        {kStringPriorityPrefName, {0, syncer::PRIORITY_PREFERENCES}},
+        {kStringOsPrefName, {0, syncer::OS_PREFERENCES}},
+        {kStringOsPriorityPrefName, {0, syncer::OS_PRIORITY_PREFERENCES}}};
 
 class TestPrefModelAssociatorClient : public PrefModelAssociatorClient {
  public:
-  TestPrefModelAssociatorClient() = default;
+  TestPrefModelAssociatorClient()
+      : syncable_prefs_database_(kSyncablePrefsDatabase) {}
 
   TestPrefModelAssociatorClient(const TestPrefModelAssociatorClient&) = delete;
   TestPrefModelAssociatorClient& operator=(
@@ -143,8 +151,8 @@ TEST_F(CustomPreferenceMergeTest, ClientMergesCustomPreference) {
       pref_service_->FindPreference(kCustomMergePrefName);
   base::Value local_value(pref->GetValue()->Clone());
   base::Value server_value("server");
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), server_value));
+  base::Value merged_value(helper::MergePreference(
+      &client_, pref->name(), *pref->GetValue(), server_value));
   // TestPrefModelAssociatorClient should have chosen local value instead of the
   // default server value.
   EXPECT_EQ(merged_value, local_value);
@@ -173,8 +181,8 @@ TEST_F(ListPreferenceMergeTest, NotListOrDictionary) {
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kStringPrefName);
   base::Value server_value(server_url0_);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), server_value));
+  base::Value merged_value(helper::MergePreference(
+      &client_, pref->name(), *pref->GetValue(), server_value));
   EXPECT_EQ(merged_value, server_value);
 }
 
@@ -182,8 +190,9 @@ TEST_F(ListPreferenceMergeTest, LocalEmpty) {
   SetPrefToEmpty(kListPrefName);
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kListPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), base::Value(server_url_list_.Clone())));
+  base::Value merged_value(
+      helper::MergePreference(&client_, pref->name(), *pref->GetValue(),
+                              base::Value(server_url_list_.Clone())));
   EXPECT_EQ(merged_value, server_url_list_);
 }
 
@@ -195,8 +204,8 @@ TEST_F(ListPreferenceMergeTest, ServerNull) {
 
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kListPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), base::Value()));
+  base::Value merged_value(helper::MergePreference(
+      &client_, pref->name(), *pref->GetValue(), base::Value()));
   const base::Value::List& local_list_value =
       pref_service_->GetList(kListPrefName);
   EXPECT_EQ(merged_value, local_list_value);
@@ -211,8 +220,24 @@ TEST_F(ListPreferenceMergeTest, ServerEmpty) {
 
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kListPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), base::Value(empty_value.Clone())));
+  base::Value merged_value(
+      helper::MergePreference(&client_, pref->name(), *pref->GetValue(),
+                              base::Value(empty_value.Clone())));
+  const base::Value::List& local_list_value =
+      pref_service_->GetList(kListPrefName);
+  EXPECT_EQ(merged_value, local_list_value);
+}
+
+TEST_F(ListPreferenceMergeTest, ServerCorrupt) {
+  {
+    ScopedListPrefUpdate update(pref_service_.get(), kListPrefName);
+    update->Append(local_url0_);
+  }
+
+  const PrefService::Preference* pref =
+      pref_service_->FindPreference(kListPrefName);
+  base::Value merged_value(helper::MergePreference(
+      &client_, pref->name(), *pref->GetValue(), base::Value("corrupt-type")));
   const base::Value::List& local_list_value =
       pref_service_->GetList(kListPrefName);
   EXPECT_EQ(merged_value, local_list_value);
@@ -227,8 +252,9 @@ TEST_F(ListPreferenceMergeTest, Merge) {
 
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kListPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), base::Value(server_url_list_.Clone())));
+  base::Value merged_value(
+      helper::MergePreference(&client_, pref->name(), *pref->GetValue(),
+                              base::Value(server_url_list_.Clone())));
 
   base::Value::List expected;
   expected.Append(server_url0_);
@@ -248,8 +274,9 @@ TEST_F(ListPreferenceMergeTest, Duplicates) {
 
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kListPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), base::Value(server_url_list_.Clone())));
+  base::Value merged_value(
+      helper::MergePreference(&client_, pref->name(), *pref->GetValue(),
+                              base::Value(server_url_list_.Clone())));
 
   base::Value::List expected;
   expected.Append(server_url0_);
@@ -268,8 +295,9 @@ TEST_F(ListPreferenceMergeTest, Equals) {
   base::Value::List original = server_url_list_.Clone();
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kListPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), base::Value(server_url_list_.Clone())));
+  base::Value merged_value(
+      helper::MergePreference(&client_, pref->name(), *pref->GetValue(),
+                              base::Value(server_url_list_.Clone())));
   EXPECT_EQ(merged_value, original);
 }
 
@@ -298,8 +326,8 @@ TEST_F(DictionaryPreferenceMergeTest, LocalEmpty) {
   SetPrefToEmpty(kDictionaryPrefName);
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kDictionaryPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), server_patterns_));
+  base::Value merged_value(helper::MergePreference(
+      &client_, pref->name(), *pref->GetValue(), server_patterns_));
   EXPECT_EQ(merged_value, server_patterns_);
 }
 
@@ -311,8 +339,8 @@ TEST_F(DictionaryPreferenceMergeTest, ServerNull) {
 
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kDictionaryPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), base::Value()));
+  base::Value merged_value(helper::MergePreference(
+      &client_, pref->name(), *pref->GetValue(), base::Value()));
   const base::Value::Dict& local_dict_value =
       pref_service_->GetDict(kDictionaryPrefName);
   EXPECT_EQ(merged_value, local_dict_value);
@@ -326,8 +354,23 @@ TEST_F(DictionaryPreferenceMergeTest, ServerEmpty) {
 
   const PrefService::Preference* pref =
       pref_service_->FindPreference(kDictionaryPrefName);
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      pref->name(), *pref->GetValue(), base::Value()));
+  base::Value merged_value(helper::MergePreference(
+      &client_, pref->name(), *pref->GetValue(), base::Value()));
+  const base::Value::Dict& local_dict_value =
+      pref_service_->GetDict(kDictionaryPrefName);
+  EXPECT_EQ(merged_value, local_dict_value);
+}
+
+TEST_F(DictionaryPreferenceMergeTest, ServerCorrupt) {
+  {
+    ScopedDictPrefUpdate update(pref_service_.get(), kDictionaryPrefName);
+    SetContentPattern(*update, expression3_, 1);
+  }
+
+  const PrefService::Preference* pref =
+      pref_service_->FindPreference(kDictionaryPrefName);
+  base::Value merged_value(helper::MergePreference(
+      &client_, pref->name(), *pref->GetValue(), base::Value("corrupt-type")));
   const base::Value::Dict& local_dict_value =
       pref_service_->GetDict(kDictionaryPrefName);
   EXPECT_EQ(merged_value, local_dict_value);
@@ -339,8 +382,8 @@ TEST_F(DictionaryPreferenceMergeTest, MergeNoConflicts) {
     SetContentPattern(*update, expression3_, 1);
   }
 
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      kDictionaryPrefName,
+  base::Value merged_value(helper::MergePreference(
+      &client_, kDictionaryPrefName,
       *pref_service_->FindPreference(kDictionaryPrefName)->GetValue(),
       server_patterns_));
 
@@ -361,8 +404,8 @@ TEST_F(DictionaryPreferenceMergeTest, MergeConflicts) {
     SetContentPattern(*update, expression4_, 2);
   }
 
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      kDictionaryPrefName,
+  base::Value merged_value(helper::MergePreference(
+      &client_, kDictionaryPrefName,
       *pref_service_->FindPreference(kDictionaryPrefName)->GetValue(),
       server_patterns_));
 
@@ -384,8 +427,8 @@ TEST_F(DictionaryPreferenceMergeTest, MergeValueToDictionary) {
 
   // TODO(https://crbug.com/1187026): Migrate MergePreference() to
   // take a base::Value::Dict.
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      kDictionaryPrefName, base::Value(local_dict_value.Clone()),
+  base::Value merged_value(helper::MergePreference(
+      &client_, kDictionaryPrefName, base::Value(local_dict_value.Clone()),
       base::Value(server_dict_value.Clone())));
 
   EXPECT_EQ(merged_value, server_dict_value);
@@ -399,8 +442,8 @@ TEST_F(DictionaryPreferenceMergeTest, Equal) {
     SetContentPattern(*update, expression2_, 1);
   }
 
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      kDictionaryPrefName,
+  base::Value merged_value(helper::MergePreference(
+      &client_, kDictionaryPrefName,
       *pref_service_->FindPreference(kDictionaryPrefName)->GetValue(),
       server_patterns_));
   EXPECT_EQ(merged_value, server_patterns_);
@@ -414,8 +457,8 @@ TEST_F(DictionaryPreferenceMergeTest, ConflictButServerWins) {
     SetContentPattern(*update, expression2_, 1);
   }
 
-  base::Value merged_value(pref_sync_service_->MergePreference(
-      kDictionaryPrefName,
+  base::Value merged_value(helper::MergePreference(
+      &client_, kDictionaryPrefName,
       *pref_service_->FindPreference(kDictionaryPrefName)->GetValue(),
       server_patterns_));
   EXPECT_EQ(merged_value, server_patterns_);
@@ -438,8 +481,8 @@ class IndividualPreferenceMergeTest : public AbstractPreferenceMergeTest {
       update->Append(url1_);
     }
 
-    base::Value merged_value(pref_sync_service_->MergePreference(
-        pref, *pref_service_->GetUserPrefValue(pref),
+    base::Value merged_value(helper::MergePreference(
+        &client_, pref, *pref_service_->GetUserPrefValue(pref),
         base::Value(server_url_list_.Clone())));
 
     base::Value::List expected;
@@ -454,8 +497,9 @@ class IndividualPreferenceMergeTest : public AbstractPreferenceMergeTest {
       SetContentPattern(*update, expression1_, 1);
     }
 
-    base::Value merged_value(pref_sync_service_->MergePreference(
-        pref, *pref_service_->GetUserPrefValue(pref), server_patterns_));
+    base::Value merged_value(helper::MergePreference(
+        &client_, pref, *pref_service_->GetUserPrefValue(pref),
+        server_patterns_));
 
     base::Value::Dict expected;
     SetContentPattern(expected, expression0_, 1);
@@ -509,46 +553,27 @@ TEST_F(SyncablePrefsDatabaseTest, ShouldAllowRegisteringSyncablePrefs) {
 
 TEST_F(SyncablePrefsDatabaseTest, ShouldAllowRegisteringSyncablePriorityPrefs) {
   pref_registry_->RegisterStringPref(
-      kStringPrefName, std::string(),
+      kStringPriorityPrefName, std::string(),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kStringPrefName), NotNull());
-  pref_registry_->RegisterListPref(
-      kListPrefName, user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kListPrefName), NotNull());
-  pref_registry_->RegisterDictionaryPref(
-      kDictionaryPrefName,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kDictionaryPrefName), NotNull());
+  EXPECT_THAT(pref_service_->FindPreference(kStringPriorityPrefName),
+              NotNull());
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(SyncablePrefsDatabaseTest, ShouldAllowRegisteringSyncableOSPrefs) {
   pref_registry_->RegisterStringPref(
-      kStringPrefName, std::string(),
+      kStringOsPrefName, std::string(),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kStringPrefName), NotNull());
-  pref_registry_->RegisterListPref(
-      kListPrefName, user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kListPrefName), NotNull());
-  pref_registry_->RegisterDictionaryPref(
-      kDictionaryPrefName, user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kDictionaryPrefName), NotNull());
+  EXPECT_THAT(pref_service_->FindPreference(kStringOsPrefName), NotNull());
 }
 
 TEST_F(SyncablePrefsDatabaseTest,
        ShouldAllowRegisteringSyncableOSPriorityPrefs) {
   pref_registry_->RegisterStringPref(
-      kStringPrefName, std::string(),
+      kStringOsPriorityPrefName, std::string(),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kStringPrefName), NotNull());
-  pref_registry_->RegisterListPref(
-      kListPrefName,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kListPrefName), NotNull());
-  pref_registry_->RegisterDictionaryPref(
-      kDictionaryPrefName,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
-  EXPECT_THAT(pref_service_->FindPreference(kDictionaryPrefName), NotNull());
+  EXPECT_THAT(pref_service_->FindPreference(kStringOsPriorityPrefName),
+              NotNull());
 }
 #endif
 using SyncablePrefsDatabaseDeathTest = SyncablePrefsDatabaseTest;
@@ -645,6 +670,32 @@ TEST_F(SyncablePrefsDatabaseDeathTest,
       kExpectedErrorMessageHint);
 }
 #endif
+
+TEST_F(SyncablePrefsDatabaseDeathTest,
+       ShouldFailRegisteringPrefsWithInvalidType) {
+  const std::string kExpectedErrorMessageHint = "has incorrect data";
+  EXPECT_DCHECK_DEATH_WITH(
+      pref_registry_->RegisterStringPref(
+          kStringPrefName, std::string(),
+          user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF),
+      kExpectedErrorMessageHint);
+  EXPECT_DCHECK_DEATH_WITH(pref_registry_->RegisterStringPref(
+                               kStringPriorityPrefName, std::string(),
+                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF),
+                           kExpectedErrorMessageHint);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  EXPECT_DCHECK_DEATH_WITH(
+      pref_registry_->RegisterStringPref(
+          kStringOsPrefName, std::string(),
+          user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF),
+      kExpectedErrorMessageHint);
+  EXPECT_DCHECK_DEATH_WITH(
+      pref_registry_->RegisterStringPref(
+          kStringOsPriorityPrefName, std::string(),
+          user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF),
+      kExpectedErrorMessageHint);
+#endif
+}
 
 }  // namespace
 

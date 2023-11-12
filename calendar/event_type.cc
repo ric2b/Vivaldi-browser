@@ -121,25 +121,6 @@ EventResult::EventResult() {}
 EventResult::~EventResult() {}
 EventResult::EventResult(const EventRow& event_row) : EventRow(event_row) {}
 
-void EventResult::SwapResult(EventResult* other) {
-  EventRow::Swap(other);
-}
-
-EventQueryResults::~EventQueryResults() {}
-
-EventQueryResults::EventQueryResults() {}
-
-void EventQueryResults::AppendEventBySwapping(EventResult* result) {
-  std::unique_ptr<EventResult> new_result = base::WrapUnique(new EventResult);
-  new_result->SwapResult(result);
-
-  results_.push_back(std::move(new_result));
-}
-
-DeleteEventResult::DeleteEventResult() {}
-
-UpdateEventTypeResult::UpdateEventTypeResult() {}
-
 EventType::EventType() : name(u""), color(""), iconindex(0), updateFields(0) {}
 
 EventType::EventType(const EventType& event_type)

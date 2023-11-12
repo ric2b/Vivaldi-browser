@@ -24,11 +24,8 @@ NativeThemeFluent::NativeThemeFluent(bool should_only_use_dark_colors)
   scrollbar_width_ = kFluentScrollbarThickness;
 
   const sk_sp<SkFontMgr> font_manager(SkFontMgr::RefDefault());
-  SkFontStyleSet* font_style_set =
-      font_manager->matchFamily(kFluentScrollbarFont);
-  if (font_style_set->count()) {
-    typeface_ = sk_sp<SkTypeface>(font_style_set->matchStyle(SkFontStyle()));
-  }
+  typeface_ = sk_sp<SkTypeface>(
+      font_manager->matchFamilyStyle(kFluentScrollbarFont, SkFontStyle()));
 }
 
 NativeThemeFluent::~NativeThemeFluent() = default;
@@ -85,7 +82,13 @@ void NativeThemeFluent::PaintScrollbarThumb(cc::PaintCanvas* canvas,
   path.addRRect(rrect);
   canvas->clipPath(path, true);
 
-  const SkColor thumb_color = color_provider->GetColor(kColorScrollbarThumb);
+  ColorId thumb_color_id = kColorScrollbarThumb;
+  if (state == NativeTheme::kPressed) {
+    thumb_color_id = kColorScrollbarThumbPressed;
+  } else if (state == NativeTheme::kHovered) {
+    thumb_color_id = kColorScrollbarThumbHovered;
+  }
+  const SkColor thumb_color = color_provider->GetColor(thumb_color_id);
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
   flags.setColor(thumb_color);

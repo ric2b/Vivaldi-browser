@@ -50,6 +50,10 @@ import org.chromium.ui.modelutil.PropertyModel;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.vivaldi.browser.vivaldi_account_manager.VivaldiAccountManager;
+
 /**
  * A message UI that informs the current sync error and contains a button to take action to resolve
  * it.
@@ -132,6 +136,12 @@ public class SyncErrorMessage implements SyncStateChangedListener, UnownedUserDa
                 // Show message next time when the previous message has disappeared.
                 return;
             }
+
+            if (ChromeApplicationImpl.isVivaldi()
+                    && !VivaldiAccountManager.get().getState().mHasToken) {
+                return;
+            }
+
             SYNC_ERROR_MESSAGE_KEY.attachToHost(
                     host, new SyncErrorMessage(dispatcher, windowAndroid.getActivity().get()));
         }
@@ -326,6 +336,9 @@ public class SyncErrorMessage implements SyncStateChangedListener, UnownedUserDa
 
     private static void openSyncSettings() {
         SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        if (ChromeApplicationImpl.isVivaldi())
+            settingsLauncher.launchSettingsActivity(getApplicationContext());
+        else
         settingsLauncher.launchSettingsActivity(getApplicationContext(), ManageSyncSettings.class,
                 ManageSyncSettings.createArguments(false));
     }

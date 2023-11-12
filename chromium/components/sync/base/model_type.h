@@ -130,10 +130,6 @@ enum ModelType {
   SHARING_MESSAGE,
   // A workspace desk saved by user. Chrome OS only.
   WORKSPACE_DESK,
-  // WebAuthn credentials. Commented out because this type is currently only
-  // used by the server and Play Services, not Chrome itself.
-  // (crbug.com/1223853)
-  // WEBAUTHN_CREDENTIAL,
   // Synced history. An entity roughly corresponds to a navigation.
   HISTORY,
   // Trusted Authorization Servers for printers. ChromeOS only.
@@ -147,6 +143,9 @@ enum ModelType {
   // Power bookmarks are features associated with bookmarks(i.e. notes, price
   // tracking). Their life cycle are synced with bookmarks.
   POWER_BOOKMARK,
+
+  // WebAuthn credentials, more commonly known as passkeys.
+  WEBAUTHN_CREDENTIAL,
 
   // Notes items
   NOTES,
@@ -253,6 +252,7 @@ enum class ModelTypeForHistograms {
   kSegmentation = 55,
   kSavedTabGroups = 56,
   kPowerBookmark = 57,
+  kWebAuthnCredentials = 58,
 
   // Vivaldi
   kNotes = 300,
@@ -281,7 +281,7 @@ constexpr ModelTypeSet ProtocolTypes() {
       USER_EVENTS, NIGORI, USER_CONSENTS, SEND_TAB_TO_SELF, SECURITY_EVENTS,
       WEB_APPS, WIFI_CONFIGURATIONS, OS_PREFERENCES, OS_PRIORITY_PREFERENCES,
       SHARING_MESSAGE, WORKSPACE_DESK, HISTORY, PRINTERS_AUTHORIZATION_SERVERS,
-      CONTACT_INFO, SAVED_TAB_GROUP, POWER_BOOKMARK);
+      CONTACT_INFO, SAVED_TAB_GROUP, POWER_BOOKMARK, WEBAUTHN_CREDENTIAL);
 }
 
 // These are the normal user-controlled types. This is to distinguish from
@@ -368,8 +368,9 @@ constexpr ModelTypeSet CommitOnlyTypes() {
 
 // Types for which downloaded updates are applied immediately, before all
 // updates are downloaded and the Sync cycle finishes.
-// For these types, ModelTypeSyncBridge::MergeSyncData() will never be called
-// (since without downloading all the data, no initial merge is possible).
+// For these types, ModelTypeSyncBridge::MergeFullSyncData() will never be
+// called (since without downloading all the data, no initial merge is
+// possible).
 constexpr ModelTypeSet ApplyUpdatesImmediatelyTypes() {
   return ModelTypeSet(HISTORY);
 }

@@ -5,7 +5,6 @@
 #ifndef CHROME_BROWSER_ASH_ARC_INPUT_OVERLAY_UI_ACTION_VIEW_H_
 #define CHROME_BROWSER_ASH_ARC_INPUT_OVERLAY_UI_ACTION_VIEW_H_
 
-#include "ash/wm/desks/persistent_desks_bar/persistent_desks_bar_button.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
@@ -20,7 +19,6 @@
 namespace arc::input_overlay {
 
 class Action;
-class DisplayOverlayController;
 class ActionEditButton;
 
 // Represents the default label index. Default -1 means all the index.
@@ -67,8 +65,7 @@ class ActionView : public views::View {
   // Show info/edu message.
   void ShowInfoMsg(const base::StringPiece& message,
                    ActionLabel* editing_label);
-  void ShowLabelFocusInfoMsg(const base::StringPiece& message,
-                             ActionLabel* editing_label);
+  void ShowFocusInfoMsg(const base::StringPiece& message, views::View* view);
   void RemoveMessage();
   // Change binding for |action| binding to |input_element| and set
   // |kEditedSuccess| on |action_label| if |action_label| is not nullptr.
@@ -93,7 +90,7 @@ class ActionView : public views::View {
   bool ApplyKeyReleased(const ui::KeyEvent& event);
 
   void SetTouchPointCenter(const gfx::Point& touch_point_center);
-  gfx::Point GetTouchCenterInWindow();
+  gfx::Point GetTouchCenterInWindow() const;
 
   Action* action() { return action_; }
   const std::vector<ActionLabel*>& labels() const { return labels_; }
@@ -113,8 +110,6 @@ class ActionView : public views::View {
 
  protected:
   virtual void MayUpdateLabelPosition(bool moving = true) = 0;
-
-  void UpdateTrashButtonPosition();
 
   void AddTouchPoint(ActionType action_type);
 
@@ -149,7 +144,6 @@ class ActionView : public views::View {
   void AddEditButton();
   void RemoveEditButton();
 
-  void AddTrashButton();
   void RemoveTrashButton();
   void OnTrashButtonPressed();
 

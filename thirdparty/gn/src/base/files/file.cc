@@ -23,6 +23,14 @@ File::File(const FilePath& path, uint32_t flags)
   Initialize(path, flags);
 }
 
+File::File(ScopedPlatformFile platform_file)
+    : file_(std::move(platform_file)),
+      error_details_(FILE_OK) {
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
+  DCHECK_GE(file_.get(), -1);
+#endif
+}
+
 File::File(PlatformFile platform_file)
     : file_(platform_file),
       error_details_(FILE_OK) {

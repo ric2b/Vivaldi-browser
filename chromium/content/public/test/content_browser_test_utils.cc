@@ -9,10 +9,10 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -211,6 +211,14 @@ void IsolateOriginsForTesting(
         url::Origin::Create(GURL(std::string("http://") + hostname + "/")));
   }
 
+  IsolateOriginsForTesting(embedded_test_server, web_contents,
+                           origins_to_isolate);
+}
+
+void IsolateOriginsForTesting(
+    net::test_server::EmbeddedTestServer* embedded_test_server,
+    WebContents* web_contents,
+    std::vector<url::Origin> origins_to_isolate) {
   auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
   policy->AddFutureIsolatedOrigins(
       origins_to_isolate,
@@ -223,7 +231,8 @@ void IsolateOriginsForTesting(
   do {
     old_site_instance = static_cast<SiteInstanceImpl*>(
         web_contents->GetPrimaryMainFrame()->GetSiteInstance());
-    std::string cross_site_hostname = base::GenerateGUID() + ".com";
+    std::string cross_site_hostname =
+        base::Uuid::GenerateRandomV4().AsLowercaseString() + ".com";
     EXPECT_TRUE(NavigateToURL(
         web_contents,
         embedded_test_server->GetURL(cross_site_hostname, "/title1.html")));

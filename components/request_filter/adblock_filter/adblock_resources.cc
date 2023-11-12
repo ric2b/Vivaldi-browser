@@ -240,11 +240,11 @@ std::map<std::string, base::StringPiece> Resources::GetInjections() {
 
   std::map<std::string, base::StringPiece> result;
 
-  for (auto resource : injectable_resources_.DictItems()) {
+  for (auto resource : injectable_resources_.GetDict()) {
     result[resource.first] = base::StringPiece(resource.second.GetString());
   }
 
-  for (auto resource : redirectable_resources_.DictItems()) {
+  for (auto resource : redirectable_resources_.GetDict()) {
     if (kInjectableRedirectables.count(resource.first)) {
       result[resource.first] = base::StringPiece(resource.second.GetString());
     }

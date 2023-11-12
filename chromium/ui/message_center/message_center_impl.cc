@@ -34,6 +34,17 @@
 #endif
 
 namespace message_center {
+namespace {
+
+bool IsNotificationsGroupingEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  return true;
+#else
+  return false;
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
+
+}  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // MessageCenterImpl
@@ -42,12 +53,9 @@ MessageCenterImpl::MessageCenterImpl(
     std::unique_ptr<LockScreenController> lock_screen_controller)
     : lock_screen_controller_(std::move(lock_screen_controller)),
       popup_timers_controller_(std::make_unique<PopupTimersController>(this)),
+      notifications_grouping_enabled_(IsNotificationsGroupingEnabled()),
       stats_collector_(this) {
   notification_list_ = std::make_unique<NotificationList>(this);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  notifications_grouping_enabled_ =
-      ash::features::IsNotificationsRefreshEnabled();
-#endif
 }
 
 MessageCenterImpl::~MessageCenterImpl() = default;
@@ -201,9 +209,19 @@ Notification* MessageCenterImpl::FindParentNotification(
       notification_list_->GetNotificationsByNotifierId(
           notification->notifier_id());
 
-  // `notifications` keeps notifications ordered with the most recent one in the
-  // front. If we have notifications for this notifier_id we return the last
-  // notification..
+  auto parent_notification_it = base::ranges::find_if(
+      notifications,
+      [](Notification* notification) { return notification->group_parent(); });
+
+  // If there's already a notification assigned to be the group parent,
+  // returns that notification immediately.
+  if (parent_notification_it != notifications.cend()) {
+    return *parent_notification_it;
+  }
+
+  // Otherwise, the parent notification should be the oldest one. Since
+  // `notifications` keeps notifications ordered with the most recent one in
+  // the front, the oldest one should be the last in the list.
   return notifications.size() ? *notifications.rbegin() : nullptr;
 }
 

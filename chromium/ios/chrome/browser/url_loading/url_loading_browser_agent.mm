@@ -11,13 +11,13 @@
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/crash_report/crash_reporter_url_observer.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
-#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_util.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/scene_url_loading_service.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
@@ -196,7 +196,7 @@ void UrlLoadingBrowserAgent::LoadUrlInCurrentTab(const UrlLoadParams& params) {
     return;
   }
 
-  PrerenderService* prerenderService =
+  PrerenderService* prerender_service =
       PrerenderServiceFactory::GetForBrowserState(browser_state);
 
   // Some URLs are not allowed while in incognito.  If we are in incognito and
@@ -205,8 +205,8 @@ void UrlLoadingBrowserAgent::LoadUrlInCurrentTab(const UrlLoadParams& params) {
   // to open in, so this also redirects to a new tab.
   if (!current_web_state || (browser_state->IsOffTheRecord() &&
                              !IsURLAllowedInIncognito(web_params.url))) {
-    if (prerenderService) {
-      prerenderService->CancelPrerender();
+    if (prerender_service) {
+      prerender_service->CancelPrerender();
     }
     notifier_->TabFailedToLoadUrl(web_params.url, web_params.transition_type);
 
@@ -218,7 +218,7 @@ void UrlLoadingBrowserAgent::LoadUrlInCurrentTab(const UrlLoadParams& params) {
     } else {
       UrlLoadParams fixed_params = UrlLoadParams::InNewTab(web_params);
       fixed_params.in_incognito = NO;
-      fixed_params.append_to = kCurrentTab;
+      fixed_params.append_to = OpenPosition::kCurrentTab;
       Load(fixed_params);
     }
     return;
@@ -226,8 +226,8 @@ void UrlLoadingBrowserAgent::LoadUrlInCurrentTab(const UrlLoadParams& params) {
 
   // Ask the prerender service to load this URL if it can, and return if it does
   // so.
-  if (prerenderService &&
-      prerenderService->MaybeLoadPrerenderedURL(
+  if (prerender_service &&
+      prerender_service->MaybeLoadPrerenderedURL(
           web_params.url, web_params.transition_type, browser_)) {
     notifier_->TabDidPrerenderUrl(web_params.url, web_params.transition_type);
     return;
@@ -281,7 +281,7 @@ void UrlLoadingBrowserAgent::SwitchToTab(const UrlLoadParams& params) {
           UrlLoadParams::InNewTab(web_params.url, web_params.virtual_url);
       new_tab_params.web_params.referrer = web::Referrer();
       new_tab_params.in_incognito = browser_state->IsOffTheRecord();
-      new_tab_params.append_to = kCurrentTab;
+      new_tab_params.append_to = OpenPosition::kCurrentTab;
       scene_service_->LoadUrlInNewTab(new_tab_params);
     }
     return;
@@ -308,10 +308,10 @@ void UrlLoadingBrowserAgent::LoadUrlInNewTab(const UrlLoadParams& params) {
   DCHECK(browser_);
 
   if (params.in_incognito) {
-    IncognitoReauthSceneAgent* reauthAgent = [IncognitoReauthSceneAgent
+    IncognitoReauthSceneAgent* reauth_agent = [IncognitoReauthSceneAgent
         agentFromScene:SceneStateBrowserAgent::FromBrowser(browser_)
                            ->GetSceneState()];
-    DCHECK(!reauthAgent.authenticationRequired);
+    DCHECK(!reauth_agent.authenticationRequired);
   }
 
   ChromeBrowserState* browser_state = browser_->GetBrowserState();
@@ -332,7 +332,7 @@ void UrlLoadingBrowserAgent::LoadUrlInNewTab(const UrlLoadParams& params) {
     // currently selected in the other mode. This is done with the `append_to`
     // parameter.
     UrlLoadParams scene_params = params;
-    scene_params.append_to = kLastTab;
+    scene_params.append_to = OpenPosition::kLastTab;
     scene_service_->LoadUrlInNewTab(scene_params);
     return;
   }
@@ -350,7 +350,7 @@ void UrlLoadingBrowserAgent::LoadUrlInNewTab(const UrlLoadParams& params) {
     __block base::WeakPtr<UrlLoadingBrowserAgent> weak_ptr =
         weak_ptr_factory_.GetWeakPtr();
 
-    if (params.append_to == kCurrentTab) {
+    if (params.append_to == OpenPosition::kCurrentTab) {
       hint = browser_->GetWebStateList()->GetActiveWebState();
     }
 
@@ -367,7 +367,7 @@ void UrlLoadingBrowserAgent::LoadUrlInNewTab(const UrlLoadParams& params) {
 void UrlLoadingBrowserAgent::LoadUrlInNewTabImpl(const UrlLoadParams& params,
                                                  absl::optional<void*> hint) {
   web::WebState* parent_web_state = nullptr;
-  if (params.append_to == kCurrentTab) {
+  if (params.append_to == OpenPosition::kCurrentTab) {
     parent_web_state = browser_->GetWebStateList()->GetActiveWebState();
 
     // Detect whether the active tab changed during the animation of opening
@@ -386,8 +386,9 @@ void UrlLoadingBrowserAgent::LoadUrlInNewTabImpl(const UrlLoadParams& params,
   }
 
   int insertion_index = TabInsertion::kPositionAutomatically;
-  if (params.append_to == kSpecifiedIndex)
+  if (params.append_to == OpenPosition::kSpecifiedIndex) {
     insertion_index = params.insertion_index;
+  }
 
   TabInsertionBrowserAgent* insertion_agent =
       TabInsertionBrowserAgent::FromBrowser(browser_);

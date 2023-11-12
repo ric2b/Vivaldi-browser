@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "chromeos/ash/services/device_sync/public/cpp/device_sync_client.h"
 #include "chromeos/ash/services/multidevice_setup/multidevice_setup_base.h"
 #include "chromeos/ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
@@ -127,6 +128,10 @@ class MultiDeviceSetupInitializer
   void TriggerEventForDebugging(
       mojom::EventTypeForDebugging type,
       TriggerEventForDebuggingCallback callback) override;
+  void SetQuickStartPhoneInstanceID(
+      const std::string& qs_phone_instance_id) override;
+  void GetQuickStartPhoneInstanceID(
+      GetQuickStartPhoneInstanceIDCallback callback) override;
 
   // MultiDeviceSetupBase:
   void SetHostDeviceWithoutAuthToken(
@@ -139,13 +144,16 @@ class MultiDeviceSetupInitializer
 
   void InitializeImplementation();
 
-  PrefService* pref_service_;
-  device_sync::DeviceSyncClient* device_sync_client_;
-  AuthTokenValidator* auth_token_validator_;
-  OobeCompletionTracker* oobe_completion_tracker_;
-  AndroidSmsAppHelperDelegate* android_sms_app_helper_delegate_;
-  AndroidSmsPairingStateTracker* android_sms_pairing_state_tracker_;
-  const device_sync::GcmDeviceInfoProvider* gcm_device_info_provider_;
+  raw_ptr<PrefService, ExperimentalAsh> pref_service_;
+  raw_ptr<device_sync::DeviceSyncClient, ExperimentalAsh> device_sync_client_;
+  raw_ptr<AuthTokenValidator, ExperimentalAsh> auth_token_validator_;
+  raw_ptr<OobeCompletionTracker, ExperimentalAsh> oobe_completion_tracker_;
+  raw_ptr<AndroidSmsAppHelperDelegate, ExperimentalAsh>
+      android_sms_app_helper_delegate_;
+  raw_ptr<AndroidSmsPairingStateTracker, ExperimentalAsh>
+      android_sms_pairing_state_tracker_;
+  raw_ptr<const device_sync::GcmDeviceInfoProvider, ExperimentalAsh>
+      gcm_device_info_provider_;
   bool is_secondary_user_;
 
   std::unique_ptr<MultiDeviceSetupBase> multidevice_setup_impl_;
@@ -169,6 +177,9 @@ class MultiDeviceSetupInitializer
       pending_set_feature_enabled_args_;
   std::vector<GetFeatureStatesCallback> pending_get_feature_states_args_;
   std::vector<RetrySetHostNowCallback> pending_retry_set_host_args_;
+  std::vector<std::string> pending_set_qs_phone_instance_id_args_;
+  std::vector<GetQuickStartPhoneInstanceIDCallback>
+      pending_get_qs_phone_instance_id_args_;
 
   // Special case: for SetHostDevice(), SetHostDeviceWithoutAuthToken(), and
   // RemoveHostDevice(), only keep track of the most recent call. Since each

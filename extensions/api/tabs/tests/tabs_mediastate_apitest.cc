@@ -71,7 +71,7 @@ class VivaldiExtensionApiTest : public extensions::PlatformAppBrowserTest {
   }
 
  private:
-  HostContentSettingsMap* host_content_settings_map_;
+  raw_ptr<HostContentSettingsMap> host_content_settings_map_ =nullptr;
 };
 
 // Testing that automuting does not interfere with sound sitesettings.

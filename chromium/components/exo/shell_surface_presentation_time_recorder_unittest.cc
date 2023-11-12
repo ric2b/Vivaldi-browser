@@ -8,11 +8,12 @@
 #include <vector>
 
 #include "base/auto_reset.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "components/exo/test/exo_test_base.h"
-#include "components/exo/test/exo_test_helper.h"
 #include "components/exo/test/shell_surface_builder.h"
+#include "components/exo/test/surface_tree_host_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/gfx/presentation_feedback.h"
 
@@ -121,7 +122,7 @@ class ShellSurfacePresentationTimeRecorderTest : public test::ExoTestBase {
  protected:
   std::unique_ptr<ShellSurface> shell_surface_;
   std::unique_ptr<TestRecorder> recorder_;
-  TestReporter* reporter_ = nullptr;
+  raw_ptr<TestReporter, ExperimentalAsh> reporter_ = nullptr;
 };
 
 TEST_F(ShellSurfacePresentationTimeRecorderTest, Request) {
@@ -180,7 +181,7 @@ TEST_F(ShellSurfacePresentationTimeRecorderTest,
   // Fake frame submission. No FakeFrameSubmitAndPresent() because it depends
   // on `recorder_`.
   root_surface()->Commit();
-  base::RunLoop().RunUntilIdle();
+  test::WaitForLastFramePresentation(shell_surface_.get());
 }
 
 TEST_F(ShellSurfacePresentationTimeRecorderTest,

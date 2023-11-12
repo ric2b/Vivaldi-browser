@@ -102,7 +102,6 @@ class CertVerifyImpl {
       return true;  // "skipping" is considered a successful return.
     }
 
-    scoped_refptr<net::CRLSet> crl_set = net::CRLSet::BuiltinCRLSet();
     // TODO(mattm): add command line flags to configure VerifyFlags.
     int flags = 0;
     // Don't add any additional trust anchors.
@@ -111,7 +110,7 @@ class CertVerifyImpl {
     // TODO(crbug.com/634484): use a real netlog and print the results?
     *error = proc_->Verify(&x509_target_and_intermediates, hostname,
                            /*ocsp_response=*/std::string(),
-                           /*sct_list=*/std::string(), flags, crl_set.get(),
+                           /*sct_list=*/std::string(), flags,
                            x509_additional_trust_anchors, result,
                            net::NetLogWithSource());
 
@@ -127,11 +126,13 @@ class CertVerifyImpl {
 std::unique_ptr<CertVerifyImpl> CreateCertVerifyImplFromName(
     base::StringPiece impl_name,
     scoped_refptr<net::CertNetFetcher> cert_net_fetcher) {
-#if !(BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
+#if !(BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_LINUX) || \
+      BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(CHROME_ROOT_STORE_ONLY))
   if (impl_name == "platform") {
     return std::make_unique<CertVerifyImpl>(
-        "CertVerifyProc (system)", net::CertVerifyProc::CreateSystemVerifyProc(
-                                       std::move(cert_net_fetcher)));
+        "CertVerifyProc (system)",
+        net::CertVerifyProc::CreateSystemVerifyProc(
+            std::move(cert_net_fetcher) net::CRLSet::BuiltinCRLSet()));
   }
 #endif
 
@@ -140,7 +141,7 @@ std::unique_ptr<CertVerifyImpl> CreateCertVerifyImplFromName(
     return std::make_unique<CertVerifyImpl>(
         "CertVerifyProcBuiltin",
         net::CreateCertVerifyProcBuiltin(
-            std::move(cert_net_fetcher),
+            std::move(cert_net_fetcher), net::CRLSet::BuiltinCRLSet(),
             net::CreateSslSystemTrustStoreChromeRoot(
                 std::make_unique<net::TrustStoreChrome>())));
 #endif
@@ -199,21 +200,15 @@ std::string TrialComparisonResultToString(net::TrialComparisonResult result) {
       return "both_valid_different_details";
     case net::TrialComparisonResult::kBothErrorDifferentDetails:
       return "both_error_different_details";
-    case net::TrialComparisonResult::kIgnoredMacUndesiredRevocationChecking:
-      return "ignored_mac_undesirable_rev_checking";
     case net::TrialComparisonResult::
         kIgnoredMultipleEVPoliciesAndOneMatchesRoot:
       return "ignored_multiple_ev_policies_one_matches_root";
     case net::TrialComparisonResult::kIgnoredDifferentPathReVerifiesEquivalent:
       return "ignored_different_path_reverifies_equivalent";
-    case net::TrialComparisonResult::kIgnoredLocallyTrustedLeaf:
-      return "ignored_locally_trusted_leaf";
     case net::TrialComparisonResult::kIgnoredConfigurationChanged:
       return "ignored_configuration_changed";
     case net::TrialComparisonResult::kIgnoredSHA1SignaturePresent:
       return "ignored_sha1_signature_present";
-    case net::TrialComparisonResult::kIgnoredWindowsRevCheckingEnabled:
-      return "ignored_windows_rev_checking_enabled";
     case net::TrialComparisonResult::kIgnoredBothAuthorityInvalid:
       return "ignored_both_authority_invalid";
     case net::TrialComparisonResult::kIgnoredBothKnownRoot:
@@ -223,6 +218,8 @@ std::string TrialComparisonResultToString(net::TrialComparisonResult result) {
       return "ignored_builtin_authority_invalid_platform_symantec";
     case net::TrialComparisonResult::kIgnoredLetsEncryptExpiredRoot:
       return "ignored_lets_encrypt_expired_root";
+    case net::TrialComparisonResult::kIgnoredAndroidErrorDatePriority:
+      return "ignored_android_error_date_priority";
   }
 }
 

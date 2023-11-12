@@ -24,8 +24,6 @@ void ChromeUntrustedProjectorUIDelegate::PopulateLoadTimeData(
   version_info::Channel channel = chrome::GetChannel();
   source->AddBoolean("isDevChannel", channel == version_info::Channel::DEV);
   source->AddBoolean("isDebugMode", ash::features::IsProjectorAppDebugMode());
-  source->AddBoolean("isExcludeTranscriptEnabled",
-                     ash::features::IsProjectorExcludeTranscriptEnabled());
   source->AddBoolean("isTutorialVideoViewEnabled",
                      ash::features::IsProjectorTutorialVideoViewEnabled());
   source->AddBoolean("isCustomThumbnailEnabled",
@@ -74,7 +72,8 @@ bool UntrustedProjectorUIConfig::IsWebUIEnabled(
 }
 
 std::unique_ptr<content::WebUIController>
-UntrustedProjectorUIConfig::CreateWebUIController(content::WebUI* web_ui) {
+UntrustedProjectorUIConfig::CreateWebUIController(content::WebUI* web_ui,
+                                                  const GURL& url) {
   ChromeUntrustedProjectorUIDelegate delegate;
   return std::make_unique<ash::UntrustedProjectorUI>(web_ui, &delegate);
 }

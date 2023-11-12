@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "build/build_config.h"
+#include "components/android_autofill/browser/android_autofill_manager.h"
 #include "components/autofill/core/browser/autofill_download_manager.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
@@ -268,23 +269,6 @@ void AutofillClientImpl::ScanCreditCard(CreditCardScanCallback callback) {
   NOTREACHED();
 }
 
-bool AutofillClientImpl::IsFastCheckoutSupported() {
-  return false;
-}
-
-bool AutofillClientImpl::TryToShowFastCheckout(
-    const autofill::FormData& form,
-    const autofill::FormFieldData& field,
-    base::WeakPtr<autofill::AutofillManager> autofill_manager) {
-  return false;
-}
-
-void AutofillClientImpl::HideFastCheckout(bool allow_further_runs) {}
-
-bool AutofillClientImpl::IsShowingFastCheckoutUI() {
-  return false;
-}
-
 bool AutofillClientImpl::IsTouchToFillCreditCardSupported() {
   return false;
 }
@@ -359,6 +343,13 @@ void AutofillClientImpl::PropagateAutofillPredictions(
   NOTREACHED();
 }
 
+void AutofillClientImpl::DidFillOrPreviewForm(
+    autofill::mojom::RendererFormDataAction action,
+    autofill::AutofillTriggerSource trigger_source,
+    bool is_refill) {
+  NOTREACHED();
+}
+
 void AutofillClientImpl::DidFillOrPreviewField(
     const std::u16string& autofilled_value,
     const std::u16string& profile_full_name) {
@@ -391,9 +382,9 @@ void AutofillClientImpl::LoadRiskData(
 }
 
 AutofillClientImpl::AutofillClientImpl(content::WebContents* web_contents)
-    : content::WebContentsUserData<AutofillClientImpl>(*web_contents),
+    : autofill::ContentAutofillClient(
+          web_contents,
+          base::BindRepeating(&autofill::AndroidDriverInitHook, this)),
       content::WebContentsObserver(web_contents) {}
-
-WEB_CONTENTS_USER_DATA_KEY_IMPL(AutofillClientImpl);
 
 }  // namespace weblayer

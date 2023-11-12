@@ -53,7 +53,6 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
-#include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_menu_model.h"
 #include "chrome/browser/ui/web_applications/web_app_ui_utils.h"
@@ -61,8 +60,8 @@
 #include "chrome/browser/web_applications/commands/run_on_os_login_command.h"
 #include "chrome/browser/web_applications/external_install_options.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
-#include "chrome/browser/web_applications/os_integration/os_integration_test_override.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut.h"
+#include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
@@ -106,14 +105,13 @@
 #include "ui/gfx/geometry/size.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/system_web_apps/color_helpers.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_installation.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
+#include "chromeos/constants/chromeos_features.h"
 #endif
 
 #if BUILDFLAG(IS_MAC)
-#include "chrome/browser/web_applications/os_integration/web_app_shortcut_mac.h"
 #include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
 
@@ -228,14 +226,11 @@ class WebAppBrowserTest : public WebAppControllerBrowserTest {
     EXPECT_TRUE(WaitForLoadStop(web_contents));
     EXPECT_EQ(app_url, web_contents->GetVisibleURL());
 
-    bool matches;
     const bool result = app_browser->app_controller()->HasMinimalUiButtons();
-    EXPECT_TRUE(ExecuteScriptAndExtractBool(
-        web_contents,
-        "window.domAutomationController.send(window.matchMedia('(display-mode: "
-        "minimal-ui)').matches)",
-        &matches));
-    EXPECT_EQ(result, matches);
+    EXPECT_EQ(
+        result,
+        EvalJs(web_contents,
+               "window.matchMedia('(display-mode: minimal-ui)').matches"));
     CloseAndWait(app_browser);
 
     return result;
@@ -454,7 +449,8 @@ class DynamicColorSystemWebAppBrowserTest
   bool UseSystemThemeColor() const { return GetParam(); }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_{ash::features::kJelly};
+  base::test::ScopedFeatureList scoped_feature_list_{
+      chromeos::features::kJelly};
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -1311,8 +1307,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest,
   os_hooks_suppress_.reset();
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
-      registration = OsIntegrationTestOverride::OverrideForTesting();
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
+      registration = OsIntegrationTestOverrideImpl::OverrideForTesting();
 
   NavigateToURLAndWait(
       browser(),
@@ -1381,8 +1377,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_ShortcutMenu, ShortcutsMenuSuccess) {
   os_hooks_suppress_.reset();
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
-      registration = OsIntegrationTestOverride::OverrideForTesting();
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
+      registration = OsIntegrationTestOverrideImpl::OverrideForTesting();
   NavigateToURLAndWait(
       browser(),
       https_server()->GetURL(
@@ -1462,8 +1458,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_ShortcutMenu,
   os_hooks_suppress_.reset();
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
-      registration = OsIntegrationTestOverride::OverrideForTesting();
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
+      registration = OsIntegrationTestOverrideImpl::OverrideForTesting();
   NavigateToURLAndWait(
       browser(),
       https_server()->GetURL("/banners/"
@@ -1527,8 +1523,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest, WebAppCreateAndDeleteShortcut) {
 
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
-      registration = OsIntegrationTestOverride::OverrideForTesting();
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
+      registration = OsIntegrationTestOverrideImpl::OverrideForTesting();
 
   auto* provider = WebAppProvider::GetForTest(profile());
 
@@ -1593,8 +1589,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest, RunOnOsLoginMetrics) {
 
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
-      registration = OsIntegrationTestOverride::OverrideForTesting();
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
+      registration = OsIntegrationTestOverrideImpl::OverrideForTesting();
 
   auto* provider = WebAppProvider::GetForTest(profile());
   const AppId& app_id = InstallPWA(pwa_url);
@@ -1611,11 +1607,11 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest, RunOnOsLoginMetrics) {
         run_loop.Quit();
       }));
   run_loop.Run();
-  EXPECT_TRUE(GetOsIntegrationTestOverride()->IsRunOnOsLoginEnabled(
+  EXPECT_TRUE(OsIntegrationTestOverrideImpl::Get()->IsRunOnOsLoginEnabled(
       profile(), app_id, provider->registrar_unsafe().GetAppShortName(app_id)));
 
   test::UninstallAllWebApps(profile());
-  EXPECT_FALSE(GetOsIntegrationTestOverride()->IsRunOnOsLoginEnabled(
+  EXPECT_FALSE(OsIntegrationTestOverrideImpl::Get()->IsRunOnOsLoginEnabled(
       profile(), app_id, provider->registrar_unsafe().GetAppShortName(app_id)));
   EXPECT_THAT(tester.GetAllSamples("WebApp.RunOnOsLogin.Unregistration.Result"),
               BucketsAre(base::Bucket(true, 1)));
@@ -1657,14 +1653,11 @@ class WebAppBrowserTestUpdateShortcutResult
 };
 
 IN_PROC_BROWSER_TEST_P(WebAppBrowserTestUpdateShortcutResult, UpdateShortcut) {
-#if BUILDFLAG(IS_MAC)
-  base::AutoReset<bool> scope_shortcut_app_update(
-      &g_app_shims_allow_update_and_launch_in_tests, true);
-#endif
+  os_hooks_suppress_.reset();
   base::ScopedAllowBlockingForTesting allow_blocking;
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
-      test_override =
-          OsIntegrationTestOverride::OverrideForTesting(base::GetHomeDir());
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
+      blocking_registration =
+          OsIntegrationTestOverrideImpl::OverrideForTesting(base::GetHomeDir());
 
   NavigateToURLAndWait(browser(), GetInstallableAppURL());
 
@@ -1731,6 +1724,9 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTestUpdateShortcutResult, UpdateShortcut) {
   auto shortcut_info = shortcut_future.Take();
   EXPECT_NE(shortcut_info, nullptr);
   EXPECT_EQ(shortcut_info->title, u"test_app_2");
+
+  test::UninstallAllWebApps(profile());
+  EXPECT_FALSE(provider->registrar_unsafe().IsInstalled(app_id));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1773,10 +1769,10 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest, ReparentDisplayBrowserApp) {
             DisplayMode::kMinimalUi);
   EXPECT_FALSE(
       provider->registrar_unsafe().GetAppLastLaunchTime(app_id).is_null());
-  tester.ExpectUniqueSample("Extensions.BookmarkAppLaunchContainer",
+  tester.ExpectUniqueSample("WebApp.LaunchContainer",
                             apps::LaunchContainer::kLaunchContainerWindow, 1);
-  tester.ExpectUniqueSample("Extensions.BookmarkAppLaunchSource",
-                            extensions::AppLaunchSource::kSourceReparenting, 1);
+  tester.ExpectUniqueSample("WebApp.LaunchSource",
+                            apps::LaunchSource::kFromReparenting, 1);
 }
 
 // Tests that the manifest name of the current installable site is used in the
@@ -1963,12 +1959,17 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest, NewAppWindow) {
   BrowserList* const browser_list = BrowserList::GetInstance();
   const GURL app_url = GetSecureAppURL();
   const AppId app_id = InstallPWA(app_url);
-  Browser* const app_browser = LaunchWebAppBrowser(app_id);
+  Browser* const app_browser = LaunchWebAppBrowserAndWait(app_id);
 
   EXPECT_EQ(browser_list->size(), 2U);
+
+  ui_test_utils::BrowserChangeObserver browser_change_observer(
+      nullptr, ui_test_utils::BrowserChangeObserver::ChangeType::kAdded);
   EXPECT_TRUE(chrome::ExecuteCommand(app_browser, IDC_NEW_WINDOW));
+  Browser* const new_browser = browser_change_observer.Wait();
+
+  EXPECT_EQ(new_browser, browser_list->GetLastActive());
   EXPECT_EQ(browser_list->size(), 3U);
-  Browser* const new_browser = browser_list->GetLastActive();
   EXPECT_NE(new_browser, browser());
   EXPECT_NE(new_browser, app_browser);
   EXPECT_TRUE(new_browser->is_type_app());
@@ -1979,12 +1980,16 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest, NewAppWindow) {
       .SetAppUserDisplayMode(app_id, web_app::mojom::UserDisplayMode::kBrowser,
                              /*is_user_action=*/false);
   EXPECT_EQ(browser()->tab_strip_model()->count(), 1);
+
+  ui_test_utils::AllBrowserTabAddedWaiter tab_waiter;
   EXPECT_TRUE(chrome::ExecuteCommand(app_browser, IDC_NEW_WINDOW));
+  content::WebContents* new_tab = tab_waiter.Wait();
+
+  ASSERT_TRUE(new_tab);
   EXPECT_EQ(browser_list->GetLastActive(), browser());
   EXPECT_EQ(browser()->tab_strip_model()->count(), 2);
-  EXPECT_EQ(
-      browser()->tab_strip_model()->GetActiveWebContents()->GetVisibleURL(),
-      app_url);
+  EXPECT_EQ(new_tab, browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_EQ(new_tab->GetVisibleURL(), app_url);
 }
 
 #endif
@@ -2098,6 +2103,8 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_Borderless,
   EXPECT_EQ(DisplayMode::kBorderless, app_display_mode_override[0]);
 
   Browser* const app_browser = LaunchWebAppBrowser(app_id);
+  app_browser->app_controller()->SetIsolatedWebAppTrueForTesting();
+
   EXPECT_TRUE(app_browser->app_controller()->AppUsesBorderlessMode());
 }
 
@@ -2225,9 +2232,9 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_FileHandler,
   base::ScopedAllowBlockingForTesting allow_blocking;
   base::HistogramTester tester;
 
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
       registration =
-          OsIntegrationTestOverride::OverrideForTesting(base::GetHomeDir());
+          OsIntegrationTestOverrideImpl::OverrideForTesting(base::GetHomeDir());
   std::vector<std::string> expected_extensions{"bar", "baz", "foo", "foobar"};
 
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -2266,9 +2273,7 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_FileHandler,
     const std::vector<std::wstring> file_extensions =
         GetFileExtensionsForProgId(file_handler_prog_id);
     for (const auto& file_extension : file_extensions) {
-      std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-      const std::string extension =
-          converter.to_bytes(file_extension.substr(1));
+      const std::string extension = base::WideToUTF8(file_extension.substr(1));
       EXPECT_TRUE(base::Contains(expected_extensions, extension))
           << "Missing file extension: " << extension;
       const std::wstring reg_key =
@@ -2327,9 +2332,9 @@ IN_PROC_BROWSER_TEST_F(WebAppBrowserTest_FileHandler,
   os_hooks_suppress_.reset();
   base::ScopedAllowBlockingForTesting allow_blocking;
 
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
       registration =
-          OsIntegrationTestOverride::OverrideForTesting(base::GetHomeDir());
+          OsIntegrationTestOverrideImpl::OverrideForTesting(base::GetHomeDir());
   std::vector<std::string> expected_extensions{"bar", "baz", "foo", "foobar"};
 
   ASSERT_TRUE(embedded_test_server()->Start());

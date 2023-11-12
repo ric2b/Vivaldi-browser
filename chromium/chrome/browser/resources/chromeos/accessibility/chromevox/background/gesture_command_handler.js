@@ -16,10 +16,10 @@ import {QueueMode} from '../common/tts_types.js';
 import {ChromeVoxRange} from './chromevox_range.js';
 import {ChromeVoxState} from './chromevox_state.js';
 import {CommandHandlerInterface} from './command_handler_interface.js';
+import {PointerHandler} from './event/pointer_handler.js';
 import {EventSource} from './event_source.js';
 import {GestureInterface} from './gesture_interface.js';
 import {Output} from './output/output.js';
-import {PointerHandler} from './pointer_handler.js';
 import {UserActionMonitor} from './user_action_monitor.js';
 
 const RoleType = chrome.automation.RoleType;
@@ -119,10 +119,9 @@ export class GestureCommandHandler {
     // Handle gestures mapped to keys. Global keys are handled in place of
     // commands, and menu key overrides are handled only in menus.
     let key;
-    const range = ChromeVoxRange.current;
-    if (range && range.start && range.start.node) {
+    if (ChromeVoxRange.current?.start?.node) {
       let inMenu = false;
-      let node = range.start.node;
+      let node = ChromeVoxRange.current.start.node;
       while (node) {
         if (AutomationPredicate.menuItem(node) ||
             (AutomationPredicate.popUpButton(node) && node.state.expanded)) {
@@ -137,10 +136,7 @@ export class GestureCommandHandler {
       }
     }
 
-    if (!key) {
-      key = commandData.globalKey;
-    }
-
+    key = key ?? commandData.globalKey;
     if (key) {
       EventGenerator.sendKeyPress(key.keyCode, key.modifiers);
       return;

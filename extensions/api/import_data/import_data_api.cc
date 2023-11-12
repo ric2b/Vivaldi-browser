@@ -186,7 +186,6 @@ const std::string ImportItemToString(importer::ImportItem item) {
 
 ImportDataAPI::ImportDataAPI(content::BrowserContext* context)
     : browser_context_(context),
-      importer_host_(nullptr),
       import_succeeded_count_(0) {}
 
 ImportDataAPI::~ImportDataAPI() {}
@@ -552,8 +551,8 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   using vivaldi::import_data::StartImport::Params;
   namespace Results = vivaldi::import_data::StartImport::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   int browser_index = params->profile_index;
 
@@ -627,8 +626,8 @@ ExtensionFunction::ResponseAction
 ImportDataOpenThunderbirdMailboxFunction::Run() {
   namespace Results = vivaldi::import_data::OpenThunderbirdMailbox::Results;
   using vivaldi::import_data::OpenThunderbirdMailbox::Params;
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::streampos fsize;
   std::string seekpos_str = *params->seek_position;

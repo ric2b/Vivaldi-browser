@@ -31,6 +31,8 @@
 #include "chrome/browser/resource_coordinator/time.h"
 #include "chrome/browser/resource_coordinator/utils.h"
 #include "chrome/browser/tab_contents/form_interaction_tab_helper.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
@@ -48,6 +50,7 @@
 #include "url/gurl.h"
 
 #include "app/vivaldi_apptools.h"
+#include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 
 namespace resource_coordinator {
@@ -319,7 +322,19 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::Load() {
   // session restore is handled by LifecycleManager.
   web_contents()->GetController().SetNeedsReload();
   web_contents()->GetController().LoadIfNecessary();
+
+  // NOTE(andre@vivaldi.com) : Avoid calling focus on childviews. This is a
+  // special case in Vivaldi since we have tabs in webviews. VB-96324.
+  bool can_focus = true;
+//  static_cast<content::WebContentsImpl*>(old_contents)
+  if (content::RenderWidgetHostViewBase* view =
+          static_cast<content::RenderWidgetHostViewBase*>(
+              web_contents()->GetRenderViewHost()->GetWidget()->GetView())) {
+    can_focus = !view->IsRenderWidgetHostViewChildFrame();
+  }
+  if (can_focus) {
   web_contents()->Focus();
+  }  // can_focus
   return true;
 }
 
@@ -602,6 +617,15 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::Discard(
     MEMORY_LOG(ERROR) << "Skipped discarding unit " << GetID()
                       << " because a transition from " << GetState()
                       << "to discarded is not allowed.";
+    return false;
+  }
+
+  // Can't discard a tab displayed in a picture-in-picture window. We check this
+  // here instead of in `CanDiscard` as not all calls to `Discard` check
+  // `CanDiscard` and discarding a picture-in-picture WebContents leaves the
+  // window in a bad state.
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  if (browser && browser->is_type_picture_in_picture()) {
     return false;
   }
 

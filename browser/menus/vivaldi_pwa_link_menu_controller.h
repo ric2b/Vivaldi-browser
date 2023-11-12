@@ -33,8 +33,8 @@ class PWALinkMenuController {
                 ui::SimpleMenuModel* menu_model);
 
  private:
-  VivaldiRenderViewContextMenu* rv_context_menu_;
-  Profile* profile_;
+  const raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;
+  const raw_ptr<Profile> profile_;
 };
 
 }  // namespace vivaldi

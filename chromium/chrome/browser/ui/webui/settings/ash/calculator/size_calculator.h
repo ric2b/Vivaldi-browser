@@ -14,6 +14,7 @@
 #include "ash/components/arc/session/connection_observer.h"
 #include "ash/components/arc/storage_manager/arc_storage_manager.h"
 #include "base/files/file_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list_types.h"
 #include "chrome/browser/ash/crostini/crostini_manager.h"
@@ -108,7 +109,7 @@ class TotalDiskSpaceCalculator : public SizeCalculator {
 
   void OnGetTotalDiskSpace(int64_t* total_bytes);
 
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   base::WeakPtrFactory<TotalDiskSpaceCalculator> weak_ptr_factory_{this};
 };
 
@@ -128,9 +129,15 @@ class FreeDiskSpaceCalculator : public SizeCalculator {
   // SizeCalculator:
   void PerformCalculation() override;
 
+  void GetUserFreeDiskSpace();
+
+  void OnGetUserFreeDiskSpace(absl::optional<int64_t> reply);
+
+  void GetFreeDiskSpace();
+
   void OnGetFreeDiskSpace(int64_t* available_bytes);
 
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   base::WeakPtrFactory<FreeDiskSpaceCalculator> weak_ptr_factory_{this};
 };
 
@@ -151,7 +158,7 @@ class DriveOfflineSizeCalculator : public SizeCalculator {
 
   void OnGetOfflineItemsSize(int64_t offline_bytes);
 
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   base::WeakPtrFactory<DriveOfflineSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -175,7 +182,7 @@ class MyFilesSizeCalculator : public SizeCalculator {
   // Updates the size of My Files and Play files.
   void OnGetMyFilesSize(int64_t total_bytes);
 
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   base::WeakPtrFactory<MyFilesSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -217,7 +224,7 @@ class BrowsingDataSizeCalculator : public SizeCalculator {
   // Helper to compute the total size of all types of site date.
   std::unique_ptr<SiteDataSizeCollector> site_data_size_collector_;
 
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   base::WeakPtrFactory<BrowsingDataSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -296,7 +303,7 @@ class AppsSizeCalculator
   // True if we have already received the size of Borealis apps.
   bool has_borealis_apps_size_ = false;
 
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   base::WeakPtrFactory<AppsSizeCalculator> weak_ptr_factory_{this};
 };
 
@@ -323,7 +330,7 @@ class CrostiniSizeCalculator : public SizeCalculator {
   // Helper function to simplify updating the reported size of Crostini.
   void UpdateSize(int64_t total_bytes);
 
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   base::WeakPtrFactory<CrostiniSizeCalculator> weak_ptr_factory_{this};
 };
 

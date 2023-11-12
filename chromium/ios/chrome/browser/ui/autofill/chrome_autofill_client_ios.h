@@ -110,13 +110,6 @@ class ChromeAutofillClientIOS : public AutofillClient {
       AddressProfileSavePromptCallback callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(CreditCardScanCallback callback) override;
-  bool TryToShowFastCheckout(
-      const FormData& form,
-      const FormFieldData& field,
-      base::WeakPtr<AutofillManager> autofill_manager) override;
-  void HideFastCheckout(bool allow_further_runs) override;
-  bool IsFastCheckoutSupported() override;
-  bool IsShowingFastCheckoutUI() override;
   bool IsTouchToFillCreditCardSupported() override;
   bool ShowTouchToFillCreditCard(
       base::WeakPtr<TouchToFillDelegate> delegate,
@@ -139,6 +132,9 @@ class ChromeAutofillClientIOS : public AutofillClient {
   void PropagateAutofillPredictions(
       AutofillDriver* driver,
       const std::vector<FormStructure*>& forms) override;
+  void DidFillOrPreviewForm(mojom::RendererFormDataAction action,
+                            AutofillTriggerSource trigger_source,
+                            bool is_refill) override;
   void DidFillOrPreviewField(const std::u16string& autofilled_value,
                              const std::u16string& profile_full_name) override;
   bool IsContextSecure() const override;
@@ -153,6 +149,9 @@ class ChromeAutofillClientIOS : public AutofillClient {
       base::OnceCallback<void(const std::string&)> callback) override;
 
  private:
+  // Returns the account email if the account is syncing.
+  absl::optional<std::u16string> SyncingUserEmail();
+
   PrefService* pref_service_;
   syncer::SyncService* sync_service_;
   std::unique_ptr<AutofillDownloadManager> download_manager_;

@@ -42,7 +42,9 @@ class SequencedTaskRunner;
 
 namespace ash {
 
+class CaptureModeBehavior;
 class CaptureModeCameraController;
+class CaptureModeObserver;
 class CaptureModeSession;
 
 // Defines a callback type that will be invoked when an attempt to delete the
@@ -115,6 +117,9 @@ class ASH_EXPORT CaptureModeController
   // `AudioCaptureAllowed` policy.
   bool IsAudioCaptureDisabledByPolicy() const;
 
+  // Returns true if there's an active video recording that is recording audio.
+  bool IsAudioRecordingInProgress() const;
+
   // Sets the capture source/type, and recording type, which will be applied to
   // an ongoing capture session (if any), or to a future capture session when
   // Start() is called.
@@ -179,10 +184,14 @@ class ASH_EXPORT CaptureModeController
   // "Downloads" folder, or a user-selected custom location.
   CaptureFolder GetCurrentCaptureFolder() const;
 
-  // Full screen capture for each available display if no restricted
-  // content exists on that display, each capture is saved as an individual
-  // file. Note: this won't start a capture mode session.
+  // Performs the instant full screen capture for each available display if no
+  // restricted content exists on that display, each capture is saved as an
+  // individual file. Note: this won't start a capture mode session.
   void CaptureScreenshotsOfAllDisplays();
+
+  // Performs the instantscreen capture for the `given_window` which bypasses
+  // the capture mode session.
+  void CaptureScreenshotOfGivenWindow(aura::Window* given_window);
 
   // Called only while a capture session is in progress to perform the actual
   // capture depending on the current selected |source_| and |type_|, and ends
@@ -276,6 +285,15 @@ class ASH_EXPORT CaptureModeController
   // projector-initiated capture mode session.
   void MaybeRestoreCachedCaptureConfigurations();
 
+  // Called when the "Share to YouTube" button is pressed to
+  // open the YouTube share video page.
+  // TODO(b/276982457): Hook this function with the "Share to YouTube" button to
+  // be shown in the notification area once implemented.
+  void OnShareToYouTubeButtonPressed();
+
+  void AddObserver(CaptureModeObserver* observer);
+  void RemoveObserver(CaptureModeObserver* observer);
+
   CaptureModeDelegate* delegate_for_testing() const { return delegate_.get(); }
   VideoRecordingWatcher* video_recording_watcher_for_testing() const {
     return video_recording_watcher_.get();
@@ -342,14 +360,18 @@ class ASH_EXPORT CaptureModeController
   absl::optional<CaptureParams> GetCaptureParams() const;
 
   // Launches the mojo service that handles audio and video recording, and
-  // begins recording according to the given |capture_params|. It creates an
-  // overlay on the video capturer so that can be used to record the mouse
+  // begins recording according to the given `capture_params`. It creates an
+  // overlay on the video capturer so that it can be used to record the mouse
   // cursor. It gives the pending receiver end to that overlay on Viz, and the
-  // other end should be owned by the |video_recording_watcher_|.
+  // other end should be owned by the `video_recording_watcher_`. If the given
+  // `should_record_audio` is true, it will setup the needed mojo connections to
+  // the Audio Service so that audio recording can be done by the recording
+  // service.
   void LaunchRecordingServiceAndStartRecording(
       const CaptureParams& capture_params,
       mojo::PendingReceiver<viz::mojom::FrameSinkVideoCaptureOverlay>
-          cursor_overlay);
+          cursor_overlay,
+      bool should_record_audio);
 
   // Called back when the mojo pipe to the recording service gets disconnected.
   void OnRecordingServiceDisconnected();
@@ -494,13 +516,37 @@ class ASH_EXPORT CaptureModeController
                                          bool in_projector_mode,
                                          bool proceed);
 
+  // Encapsulates the policy check and calls into DLP manager to do DLP check.
+  // `instant_screenshot_callback` will be moved and invoked in
+  // `OnDlpRestrictionCheckedAtCaptureScreenshot()` to perform the instant
+  // screenshot.
+  void CaptureInstantScreenshot(CaptureModeEntryType entry_type,
+                                CaptureModeSource source,
+                                base::OnceClosure instant_screenshot_callback);
   // Bound to a callback that will be called by DLP manager to let the user know
-  // whether full screen capture on all displays should `proceed` or abort due
-  // to some restricted contents on the screen.
-  void OnDlpRestrictionCheckedAtCaptureScreenshotsOfAllDisplays(bool proceed);
+  // whether screen capture should `proceed` or abort due to some restricted
+  // contents on the screen. Invokes the `instant_screenshot_callback` and
+  // records the metrics if `proceed` is true and screen capture is allowed by
+  // the enterprise policy.
+  void OnDlpRestrictionCheckedAtCaptureScreenshot(
+      CaptureModeEntryType entry_type,
+      CaptureModeSource source,
+      base::OnceClosure instant_screenshot_callback,
+      bool proceed);
+
+  // Takes screenshots of all the available displays and saves them to disk.
+  void PerformScreenshotsOfAllDisplays();
+
+  // Takes a screenshot of the `given_window` and save it to disk.
+  void PerformScreenshotOfGivenWindow(aura::Window* given_window);
 
   // Gets the corresponding `SaveLocation` enum value on the given `path`.
   CaptureModeSaveToLocation GetSaveToOption(const base::FilePath& path);
+
+  // Retrieves the instance of the `CaptureModeBehavior` by the given
+  // `behavior_type` from the `behaviors_map_` if exits, or creates an instance
+  // otherwise.
+  CaptureModeBehavior* GetBehavior(BehaviorType behavior_type);
 
   std::unique_ptr<CaptureModeDelegate> delegate_;
 
@@ -606,6 +652,12 @@ class ASH_EXPORT CaptureModeController
   // not in video recording mode, between sessions. Initially, this value is set
   // to false, ensuring that this is an opt-in feature.
   bool enable_demo_tools_ = false;
+
+  // Maps an instance of the `CaptureModeBehavior` by `BehaviorType`.
+  base::flat_map<BehaviorType, std::unique_ptr<CaptureModeBehavior>>
+      behaviors_map_;
+
+  base::ObserverList<CaptureModeObserver> observers_;
 
   base::WeakPtrFactory<CaptureModeController> weak_ptr_factory_{this};
 };

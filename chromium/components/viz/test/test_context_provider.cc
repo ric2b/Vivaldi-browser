@@ -135,6 +135,7 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    base::StringPiece debug_label,
     gpu::SurfaceHandle surface_handle) {
   base::AutoLock locked(lock_);
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
@@ -150,6 +151,7 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    base::StringPiece debug_label,
     base::span<const uint8_t> pixel_data) {
   base::AutoLock locked(lock_);
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
@@ -164,6 +166,7 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    base::StringPiece debug_label,
     gfx::GpuMemoryBufferHandle buffer_handle) {
   base::AutoLock locked(lock_);
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
@@ -179,7 +182,8 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
-    uint32_t usage) {
+    uint32_t usage,
+    base::StringPiece debug_label) {
   base::AutoLock locked(lock_);
   auto mailbox = gpu::Mailbox::GenerateForSharedImage();
   shared_images_.insert(mailbox);
@@ -202,6 +206,13 @@ void TestSharedImageInterface::UpdateSharedImage(
   DCHECK(shared_images_.find(mailbox) != shared_images_.end());
 }
 
+void TestSharedImageInterface::AddReferenceToSharedImage(
+    const gpu::SyncToken& sync_token,
+    const gpu::Mailbox& mailbox,
+    uint32_t usage) {
+  shared_images_.insert(mailbox);
+}
+
 void TestSharedImageInterface::DestroySharedImage(
     const gpu::SyncToken& sync_token,
     const gpu::Mailbox& mailbox) {
@@ -211,7 +222,7 @@ void TestSharedImageInterface::DestroySharedImage(
 }
 
 gpu::SharedImageInterface::SwapChainMailboxes
-TestSharedImageInterface::CreateSwapChain(ResourceFormat format,
+TestSharedImageInterface::CreateSwapChain(SharedImageFormat format,
                                           const gfx::Size& size,
                                           const gfx::ColorSpace& color_space,
                                           GrSurfaceOrigin surface_origin,

@@ -51,7 +51,7 @@ class VivaldiDataSource : public content::URLDataSource {
  private:
   using PathType = vivaldi_data_url_utils::PathType;
 
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
   base::flat_map<vivaldi_data_url_utils::PathType,
                  std::unique_ptr<VivaldiDataClassHandler>>
       data_class_handlers_;

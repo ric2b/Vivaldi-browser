@@ -32,7 +32,6 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/enterprise/util/affiliation.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
-#include "chrome/browser/policy/chrome_policy_conversions_client.h"
 #include "chrome/browser/policy/policy_ui_utils.h"
 #include "chrome/browser/policy/policy_value_and_status_aggregator.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
@@ -44,12 +43,14 @@
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/grit/chromium_strings.h"
+#include "components/crx_file/id_util.h"
 #include "components/enterprise/browser/controller/browser_dm_token_storage.h"
 #include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/policy/core/browser/configuration_policy_handler_list.h"
 #include "components/policy/core/browser/policy_conversions.h"
 #include "components/policy/core/browser/webui/json_generation.h"
+#include "components/policy/core/browser/webui/policy_webui_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
@@ -91,10 +92,9 @@
 #endif
 
 namespace {
-void DoWritePoliciesToJSONFile(const base::FilePath& path,
-                               const std::string& data) {
-  base::WriteFile(path, data.c_str(), data.size());
-}
+
+// Key under which extension policies are grouped in JSON policy exports.
+const char kExtensionsKey[] = "extensions";
 
 }  // namespace
 
@@ -355,16 +355,34 @@ void PolicyUIHandler::OnReportUploaded(const std::string& callback_id) {
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
 std::string PolicyUIHandler::GetPoliciesAsJson() {
-  auto client = std::make_unique<policy::ChromePolicyConversionsClient>(
-      web_ui()->GetWebContents()->GetBrowserContext());
+  base::Value::Dict policy_values =
+      policy_value_and_status_aggregator_->GetAggregatedPolicyValues();
+  policy_values.Remove(policy::kPolicyIdsKey);
+  base::Value::Dict* extensions_dict =
+      policy_values.FindDict(policy::kPolicyValuesKey)
+          ->EnsureDict(kExtensionsKey);
 
-  policy::JsonGenerationParams params = policy::GetChromeMetadataParams(
-      /*application_name=*/l10n_util::GetStringUTF8(IDS_PRODUCT_NAME));
+  // Iterate through all policy headings to identify extension policies.
+  for (auto entry : *policy_values.FindDict(policy::kPolicyValuesKey)) {
+    if (crx_file::id_util::IdIsValid(entry.first)) {
+      extensions_dict->Set(entry.first, base::Value::Dict());
+    }
+  }
+
+  // Extract identified extension policies into their own category.
+  for (auto entry : *extensions_dict) {
+    extensions_dict->Set(entry.first,
+                         policy_values.FindDict(policy::kPolicyValuesKey)
+                             ->Extract(entry.first)
+                             .value_or(base::Value()));
+  }
 
   return policy::GenerateJson(
-      /*policy_values=*/policy::DictionaryPolicyConversions(std::move(client))
-          .ToValueDict(),
-      policy_value_and_status_aggregator_->GetAggregatedPolicyStatus(), params);
+      std::move(policy_values),
+      policy_value_and_status_aggregator_->GetAggregatedPolicyStatus(),
+      /*params=*/
+      policy::GetChromeMetadataParams(
+          /*application_name=*/l10n_util::GetStringUTF8(IDS_PRODUCT_NAME)));
 }
 
 void PolicyUIHandler::WritePoliciesToJSONFile(const base::FilePath& path) {
@@ -373,5 +391,9 @@ void PolicyUIHandler::WritePoliciesToJSONFile(const base::FilePath& path) {
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-      base::BindOnce(&DoWritePoliciesToJSONFile, path, json_policies));
+      base::BindOnce(
+          [](const base::FilePath& path, base::StringPiece content) {
+            base::WriteFile(path, content);
+          },
+          path, json_policies));
 }

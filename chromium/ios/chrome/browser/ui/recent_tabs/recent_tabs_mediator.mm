@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/session_sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -22,6 +23,12 @@
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "url/gurl.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -69,9 +76,13 @@
 
 - (void)initObservers {
   if (!_syncedSessionsObserver) {
+    signin::IdentityManager* identityManager =
+        IdentityManagerFactory::GetForBrowserState(_browserState);
+    sync_sessions::SessionSyncService* syncService =
+        SessionSyncServiceFactory::GetForBrowserState(_browserState);
     _syncedSessionsObserver =
         std::make_unique<synced_sessions::SyncedSessionsObserverBridge>(
-            self, _browserState);
+            self, identityManager, syncService);
   }
   if (!_closedTabsObserver) {
     _closedTabsObserver =
@@ -80,6 +91,13 @@
         IOSChromeTabRestoreServiceFactory::GetForBrowserState(_browserState);
     if (restoreService)
       restoreService->AddObserver(_closedTabsObserver.get());
+
+    // Vivaldi: Load tabs from previous session before setting the tab restore
+    // service.
+    if (restoreService)
+      restoreService->LoadTabsFromLastSession();
+    // End Vivaldi
+
     [self.consumer setTabRestoreService:restoreService];
   }
 }
@@ -157,8 +175,8 @@
 
 #pragma mark - TableViewFaviconDataSource
 
-- (void)faviconForURL:(CrURL*)URL
-           completion:(void (^)(FaviconAttributes*))completion {
+- (void)faviconForPageURL:(CrURL*)URL
+               completion:(void (^)(FaviconAttributes*))completion {
   FaviconLoader* faviconLoader =
       IOSChromeFaviconLoaderFactory::GetForBrowserState(self.browserState);
   faviconLoader->FaviconForPageUrl(
@@ -195,8 +213,16 @@
 
 // Returns whether this profile has any foreign sessions to sync.
 - (SessionsSyncUserState)userSignedInState {
+
+  // Vivaldi: This is a temporary solution. Google has a two level of contsent
+  // system, one for SignIn and one for Sync. But, in our case its Sync only.
+  // It is quite important to find the better approach to solve this.
+  // TODO: - IMPORTANT! - @julien@vivaldi.com or @prio@vivaldi.com
+  if (!IsVivaldiRunning()) {
   if (![self hasSyncConsent])
     return SessionsSyncUserState::USER_SIGNED_OUT;
+  } // End Vivaldi
+
   if (![self isSyncTabsEnabled])
     return SessionsSyncUserState::USER_SIGNED_IN_SYNC_OFF;
   if (![self isSyncCompleted])

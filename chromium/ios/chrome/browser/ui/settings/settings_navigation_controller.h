@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/ui/keyboard/key_command_actions.h"
 #import "ios/chrome/browser/ui/settings/settings_controller_protocol.h"
 
@@ -17,6 +17,9 @@ class Browser;
 @protocol ImportDataControllerDelegate;
 @protocol SnackbarCommands;
 @class UserFeedbackData;
+namespace password_manager {
+struct CredentialUIEntry;
+}  // namespace password_manager
 
 // The accessibility identifier for the settings' "Done" button.
 extern NSString* const kSettingsDoneButtonId;
@@ -95,16 +98,27 @@ extern NSString* const kSettingsDoneButtonId;
 
 // Creates a new SavePasswordsCollectionViewController and the chrome around it.
 // `browser` is the browser where settings are being displayed and should not be
-// nil. `delegate` may be nil. `startCheck` indicates whether startPasswordCheck
-// should be called right after creating view controller. `showCancelButton`
-// indicates whether a cancel button should be shown in the upper left corner
-// if the navigation stack is empty.
+// nil. `delegate` may be nil. `showCancelButton` indicates whether a cancel
+// button should be shown in the upper left corner if the navigation stack is
+// empty.
 + (instancetype)
     savePasswordsControllerForBrowser:(Browser*)browser
                              delegate:(id<SettingsNavigationControllerDelegate>)
                                           delegate
-      startPasswordCheckAutomatically:(BOOL)startCheck
                      showCancelButton:(BOOL)showCancelButton;
+
+// Creates a new PasswordDetailsViewController and the chrome around it.
+// `browser` is the browser where the view is being displayed and should not be
+// nil. `delegate` button should be shown in the upper left corner if the
+// navigation stack is empty.
++ (instancetype)
+    passwordDetailsControllerForBrowser:(Browser*)browser
+                               delegate:
+                                   (id<SettingsNavigationControllerDelegate>)
+                                       delegate
+                             credential:
+                                 (password_manager::CredentialUIEntry)credential
+                       showCancelButton:(BOOL)showCancelButton;
 
 // Creates and displays a new UIViewController for user to report an issue.
 // `browser` is the browser where settings are being displayed and should not be
@@ -179,6 +193,14 @@ extern NSString* const kSettingsDoneButtonId;
 // should not be nil. `delegate` may be nil.
 + (instancetype)
     safeBrowsingControllerForBrowser:(Browser*)browser
+                            delegate:(id<SettingsNavigationControllerDelegate>)
+                                         delegate;
+
+// Creates a new InactiveTabsSettingsTableViewController and the chrome around
+// it. `browser` is the browser where settings are being displayed and
+// should not be nil. `delegate` may be nil.
++ (instancetype)
+    inactiveTabsControllerForBrowser:(Browser*)browser
                             delegate:(id<SettingsNavigationControllerDelegate>)
                                          delegate;
 

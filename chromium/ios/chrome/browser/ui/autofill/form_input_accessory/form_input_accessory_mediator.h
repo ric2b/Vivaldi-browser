@@ -36,6 +36,12 @@ class WebStateList;
 // The mediator detected that the keyboard input view should be reset.
 - (void)resetFormInputView;
 
+// The mediator shows autofill suggestion tip if needed.
+- (void)showAutofillSuggestionIPHIfNeeded;
+
+// The mediator notifies that the autofill suggestion has been selected.
+- (void)notifyAutofillSuggestionWithIPHSelected;
+
 @end
 
 // This class contains all the logic to get and provide keyboard input accessory
@@ -51,9 +57,12 @@ class WebStateList;
                    handler:(id<FormInputAccessoryMediatorHandler>)handler
               webStateList:(WebStateList*)webStateList
        personalDataManager:(autofill::PersonalDataManager*)personalDataManager
-             passwordStore:
-                 (scoped_refptr<password_manager::PasswordStoreInterface>)
-                     passwordStore
+      profilePasswordStore:
+          (scoped_refptr<password_manager::PasswordStoreInterface>)
+              profilePasswordStore
+      accountPasswordStore:
+          (scoped_refptr<password_manager::PasswordStoreInterface>)
+              accountPasswordStore
       securityAlertHandler:(id<SecurityAlertCommands>)securityAlertHandler
     reauthenticationModule:(ReauthenticationModule*)reauthenticationModule;
 

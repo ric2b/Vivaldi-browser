@@ -32,7 +32,6 @@
 #include "ui/accessibility/platform/ax_platform_node.h"
 #import "ui/base/clipboard/clipboard_util_mac.h"
 #import "ui/base/cocoa/appkit_utils.h"
-#include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/nsmenu_additions.h"
 #import "ui/base/cocoa/nsmenuitem_additions.h"
 #include "ui/base/cocoa/remote_accessibility_api.h"
@@ -1705,6 +1704,7 @@ void ExtractUnderlines(NSAttributedString* string,
   // TODO(suzhe): Plumb the "can*" methods up from WebCore.
   if (action == @selector(undo:) || action == @selector(redo:) ||
       action == @selector(cut:) || action == @selector(copy:) ||
+      action == @selector(centerSelectionInVisibleArea:) ||
       action == @selector(copyToFindPboard:) || action == @selector(paste:) ||
       action == @selector(pasteAndMatchStyle:)) {
     return is_for_main_frame;
@@ -1743,8 +1743,7 @@ void ExtractUnderlines(NSAttributedString* string,
 
   NSView* view = popup_parent_ns_view ? popup_parent_ns_view : self;
 
-  NSPoint point_in_window =
-      ui::ConvertPointFromScreenToWindow([view window], point);
+  NSPoint point_in_window = [view.window convertPointFromScreen:point];
   NSPoint local_point = [view convertPoint:point_in_window fromView:nil];
   local_point.y = NSHeight([view bounds]) - local_point.y;
 
@@ -1854,7 +1853,7 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   // |thePoint| is in screen coordinates, but needs to be converted to WebKit
   // coordinates (upper left origin). Scroll offsets will be taken care of in
   // the renderer.
-  thePoint = ui::ConvertPointFromScreenToWindow([self window], thePoint);
+  thePoint = [self.window convertPointFromScreen:thePoint];
   thePoint = [self convertPoint:thePoint fromView:nil];
   thePoint.y = NSHeight([self frame]) - thePoint.y;
   gfx::PointF rootPoint(thePoint.x, thePoint.y);
@@ -2208,6 +2207,10 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   _host->CopyToFindPboard();
 }
 
+- (void)centerSelectionInVisibleArea:(id)sender {
+  _host->CenterSelection();
+}
+
 - (void)paste:(id)sender {
   _host->Paste();
 }
@@ -2288,8 +2291,7 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   // |updateCursor:| might be called outside the view bounds. Check the mouse
   // location before setting the cursor. Also, do not set cursor if it's not a
   // key window.
-  NSPoint location = ui::ConvertPointFromScreenToWindow(
-      [self window], [NSEvent mouseLocation]);
+  NSPoint location = [self.window convertPointFromScreen:NSEvent.mouseLocation];
   location = [self convertPoint:location fromView:nil];
   if (![self mouse:location inRect:[self bounds]] ||
       ![[self window] isKeyWindow])

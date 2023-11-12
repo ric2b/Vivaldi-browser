@@ -4,10 +4,13 @@
 
 #include "components/segmentation_platform/internal/stats.h"
 
+#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
+#include "components/segmentation_platform/internal/post_processor/post_processor.h"
 #include "components/segmentation_platform/public/constants.h"
 #include "components/segmentation_platform/public/proto/model_metadata.pb.h"
 #include "components/segmentation_platform/public/proto/segmentation_platform.pb.h"
@@ -40,8 +43,10 @@ GetOptimizationTargetOutputDescription(SegmentId segment_id) {
     case SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_CHROME_LOW_USER_ENGAGEMENT:
     case SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_FEED_USER:
     case SegmentId::OPTIMIZATION_TARGET_CONTEXTUAL_PAGE_ACTION_PRICE_TRACKING:
+    case SegmentId::OPTIMIZATION_TARGET_WEB_APP_INSTALLATION_PROMO:
       return proto::SegmentationModelMetadata::RETURN_TYPE_PROBABILITY;
     case SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SEARCH_USER:
+    case SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_TABLET_PRODUCTIVITY_USER:
       return proto::SegmentationModelMetadata::RETURN_TYPE_MULTISEGMENT;
     default:
       return proto::SegmentationModelMetadata::UNKNOWN_RETURN_TYPE;
@@ -242,6 +247,60 @@ void RecordSegmentSelectionComputed(
   // to write custom logic for other kinds of segments.
 }
 
+void RecordClassificationResultComputed(
+    const Config& config,
+    const proto::PredictionResult& new_result) {
+  PostProcessor post_processor;
+  int new_result_top_label = post_processor.GetIndexOfTopLabel(new_result);
+  std::string computed_hist =
+      base::StrCat({"SegmentationPlatform.", config.segmentation_uma_name,
+                    ".PostProcessing.TopLabel.Computed"});
+  base::UmaHistogramSparse(computed_hist, new_result_top_label);
+}
+
+void RecordClassificationResultUpdated(
+    const Config& config,
+    const absl::optional<proto::PredictionResult>& old_result,
+    const proto::PredictionResult& new_result) {
+  if (config.on_demand_execution) {
+    return;
+  }
+
+  PostProcessor post_processor;
+  int new_result_top_label = post_processor.GetIndexOfTopLabel(new_result);
+  int old_result_top_label =
+      old_result.has_value()
+          ? post_processor.GetIndexOfTopLabel(old_result.value())
+          : -2;
+  if (old_result_top_label == new_result_top_label) {
+    return;
+  }
+
+  std::string switched_hist =
+      base::StrCat({"SegmentationPlatform.", config.segmentation_uma_name,
+                    ".PostProcessing.TopLabel.Switched"});
+  // There is no easy way to record this metric for label switch. So we encode
+  // it as follows: Multiply the index value of the old value by 100 and add the
+  // new index value. Note, there might be negative integers, but regardless
+  // this will generate a unique value for each type of label switch.
+  // For example, for a 3-label case, any transition will look like
+  // none -> label 0 : -200
+  // none -> label 1 : -199
+  // none -> label 2 : -198
+  // label 0 -> none : -2
+  // label 0 -> label 1 : 1
+  // label 0 -> label 2 : 2
+  // label 1 -> none : 98
+  // label 1 -> label 0 : 100
+  // label 1 -> label 2 : 102
+  // label 2 -> none : 198
+  // label 2 -> label 0 : 200
+  // label 2 -> label 1 : 201
+
+  int switch_value = old_result_top_label * 100 + new_result_top_label;
+  base::UmaHistogramSparse(switched_hist, switch_value);
+}
+
 void RecordMaintenanceCleanupSignalSuccessCount(size_t count) {
   UMA_HISTOGRAM_COUNTS_1000(
       "SegmentationPlatform.Maintenance.CleanupSignalSuccessCount", count);
@@ -343,6 +402,15 @@ void RecordModelExecutionDurationTotal(SegmentId segment_id,
       duration);
 }
 
+void RecordClassificationRequestTotalDuration(
+    const std::string& segmentation_key,
+    base::TimeDelta duration) {
+  std::string histogram_name =
+      base::StrCat({"SegmentationPlatform.ClassificationRequest.TotalDuration.",
+                    SegmentationKeyToUmaName(segmentation_key)});
+  base::UmaHistogramTimes(histogram_name, duration);
+}
+
 void RecordOnDemandSegmentSelectionDuration(
     const std::string& segmentation_key,
     const SegmentSelectionResult& result,
@@ -386,6 +454,36 @@ void RecordModelExecutionResult(
   base::UmaHistogramPercentage("SegmentationPlatform.ModelExecution.Result." +
                                    SegmentIdToHistogramVariant(segment_id),
                                result * 100);
+}
+
+void RecordModelExecutionResult(SegmentId segment_id,
+                                const ModelProvider::Response& result,
+                                proto::OutputConfig output_config) {
+  // Only for binary and multi-class classifier, we treat the score as a
+  // probability score and multiply by 100. For others, it's kept as is.
+  bool is_probability_score = false;
+  switch (output_config.predictor().PredictorType_case()) {
+    case proto::Predictor::kBinaryClassifier:
+      [[fallthrough]];
+    case proto::Predictor::kMultiClassClassifier:
+      is_probability_score = true;
+      break;
+    case proto::Predictor::kBinnedClassifier:
+      [[fallthrough]];
+    case proto::Predictor::kRegressor:
+      is_probability_score = false;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  for (size_t i = 0; i < result.size(); i++) {
+    std::string histogram_name = "SegmentationPlatform.ModelExecution.Result." +
+                                 base::NumberToString(i) + "." +
+                                 SegmentIdToHistogramVariant(segment_id);
+    int scaled_model_score = is_probability_score ? result[i] * 100 : result[i];
+    base::UmaHistogramPercentage(histogram_name, scaled_model_score);
+  }
 }
 
 void RecordModelExecutionSaveResult(SegmentId segment_id, bool success) {
@@ -469,6 +567,14 @@ void RecordSegmentSelectionFailure(const Config& config,
       reason);
 }
 
+void RecordSegmentSelectionFailure(const std::string& segmentation_key,
+                                   SegmentationSelectionFailureReason reason) {
+  base::UmaHistogramEnumeration(
+      base::StrCat({"SegmentationPlatform.SelectionFailedReason.",
+                    SegmentationKeyToUmaName(segmentation_key)}),
+      reason);
+}
+
 std::string FeatureProcessingErrorToString(FeatureProcessingError error) {
   switch (error) {
     case FeatureProcessingError::kUkmEngineDisabled:
@@ -517,6 +623,43 @@ void RecordTrainingDataCollectionEvent(SegmentId segment_id,
       "SegmentationPlatform.TrainingDataCollectionEvents." +
           SegmentIdToHistogramVariant(segment_id),
       event);
+}
+
+// This conversion exists because segment selector uses the result state
+// differently. TODO(ritikagup): Remove this conversion when selector is
+// deleted.
+SegmentationSelectionFailureReason GetSuccessOrFailureReason(
+    SegmentResultProvider::ResultState result_state) {
+  switch (result_state) {
+    case SegmentResultProvider::ResultState::kUnknown:
+      NOTREACHED();
+      return SegmentationSelectionFailureReason::kMaxValue;
+    case SegmentResultProvider::ResultState::kSuccessFromDatabase:
+      return SegmentationSelectionFailureReason::kScoreUsedFromDatabase;
+    case SegmentResultProvider::ResultState::kDefaultModelScoreUsed:
+      return SegmentationSelectionFailureReason::kScoreComputedFromDefaultModel;
+    case SegmentResultProvider::ResultState::kTfliteModelScoreUsed:
+      return SegmentationSelectionFailureReason::kScoreComputedFromTfliteModel;
+    case SegmentResultProvider::ResultState::kDatabaseScoreNotReady:
+      return SegmentationSelectionFailureReason::kAtLeastOneSegmentNotReady;
+    case SegmentResultProvider::ResultState::kSegmentNotAvailable:
+      return SegmentationSelectionFailureReason::kAtLeastOneSegmentNotAvailable;
+    case SegmentResultProvider::ResultState::kSignalsNotCollected:
+      return SegmentationSelectionFailureReason::
+          kAtLeastOneSegmentSignalsNotCollected;
+    case SegmentResultProvider::ResultState::kDefaultModelMetadataMissing:
+      return SegmentationSelectionFailureReason::
+          kAtLeastOneSegmentDefaultMissingMetadata;
+    case SegmentResultProvider::ResultState::kDefaultModelSignalNotCollected:
+      return SegmentationSelectionFailureReason::
+          kAtLeastOneSegmentDefaultSignalNotCollected;
+    case SegmentResultProvider::ResultState::kDefaultModelExecutionFailed:
+      return SegmentationSelectionFailureReason::
+          kAtLeastOneSegmentDefaultExecFailed;
+    case SegmentResultProvider::ResultState::kTfliteModelExecutionFailed:
+      return SegmentationSelectionFailureReason::
+          kAtLeastOneSegmentTfliteExecFailed;
+  }
 }
 
 }  // namespace segmentation_platform::stats

@@ -118,8 +118,8 @@ void FullscreenElementChanged(Document& document,
 
   // Any element not contained by the fullscreen element is inert (see
   // |Node::IsInert()|), so changing the fullscreen element will typically
-  // change the inertness of most elements. Clear the entire cache.
-  document.ClearAXObjectCache();
+  // change the inertness of most elements. Reserialize the entire document.
+  document.RefreshAccessibilityTree();
 
   if (LocalFrame* frame = document.GetFrame()) {
     // TODO(foolip): Synchronize hover state changes with animation frames.
@@ -210,7 +210,8 @@ void GoFullscreen(Element& element,
           document.GetExecutionContext())) {
     HTMLElement::HideAllPopoversUntil(
         nullptr, document, HidePopoverFocusBehavior::kNone,
-        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions);
+        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
+        HidePopoverIndependence::kHideUnrelated);
   }
 
   // To fullscreen an |element| within a |document|, set the |element|'s
@@ -345,6 +346,16 @@ bool AllowedToRequestFullscreen(Document& document) {
       ScopedAllowFullscreen::kOrientationChange) {
     UseCounter::Count(document,
                       WebFeature::kFullscreenAllowedByOrientationChange);
+    return true;
+  }
+
+  // The algorithm is triggered by a browser initiated fullscreen of the
+  // frame's document element. Used in cases like fullscreen popups where the
+  // browser triggers fullscreen after a navigation. See:
+  // https://chromestatus.com/feature/6002307972464640
+  if (ScopedAllowFullscreen::FullscreenAllowedReason() ==
+      ScopedAllowFullscreen::kWindowOpen) {
+    UseCounter::Count(document, WebFeature::kFullscreenAllowedByWindowOpen);
     return true;
   }
 
@@ -665,11 +676,9 @@ void Fullscreen::ContextDestroyed() {
 
 // https://fullscreen.spec.whatwg.org/#dom-element-requestfullscreen
 void Fullscreen::RequestFullscreen(Element& pending) {
-  // TODO(foolip): Make RequestType::Unprefixed the default when the unprefixed
-  // API is enabled. https://crbug.com/383813
   FullscreenOptions* options = FullscreenOptions::Create();
   options->setNavigationUI("hide");
-  RequestFullscreen(pending, options, FullscreenRequestType::kPrefixed);
+  RequestFullscreen(pending, options, FullscreenRequestType::kUnprefixed);
 }
 
 ScriptPromise Fullscreen::RequestFullscreen(Element& pending,

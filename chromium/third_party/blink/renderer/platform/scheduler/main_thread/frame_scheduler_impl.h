@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_visibility_state.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_priority.h"
+#include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_queue_type.h"
 #include "third_party/blink/renderer/platform/scheduler/worker/worker_scheduler_proxy.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
@@ -102,6 +103,8 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
 
   void TraceUrlChange(const String& url) override;
   void AddTaskTime(base::TimeDelta time) override;
+  void OnTaskCompleted(TaskQueue::TaskTiming*,
+                       base::TimeTicks desired_execution_time);
   FrameScheduler::FrameType GetFrameType() const override;
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType) override;
 
@@ -118,6 +121,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   void OnFirstContentfulPaintInMainFrame() override;
   void OnFirstMeaningfulPaint() override;
   void OnLoad() override;
+  void OnMainFrameInteractive() override;
   bool IsWaitingForContentfulPaint() const;
   bool IsWaitingForMeaningfulPaint() const;
 
@@ -187,6 +191,7 @@ class PLATFORM_EXPORT FrameSchedulerImpl : public FrameScheduler,
   GetActiveFeaturesTrackedForBackForwardCacheMetrics() override;
 
   std::unique_ptr<WebSchedulingTaskQueue> CreateWebSchedulingTaskQueue(
+      WebSchedulingQueueType,
       WebSchedulingPriority) override;
   void OnWebSchedulingTaskQueuePriorityChanged(MainThreadTaskQueue*);
   void OnWebSchedulingTaskQueueDestroyed(MainThreadTaskQueue*);

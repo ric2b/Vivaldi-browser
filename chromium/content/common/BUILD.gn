@@ -71,8 +71,6 @@ source_set("common") {
 
   sources = [
     "all_messages.h",
-    "ax_serialization_utils.cc",
-    "ax_serialization_utils.h",
     "background_fetch/background_fetch_types.cc",
     "background_fetch/background_fetch_types.h",
     "color_parser.cc",
@@ -95,8 +93,8 @@ source_set("common") {
     "content_switches_internal.h",
     "cursors/webcursor.cc",
     "cursors/webcursor.h",
+    "cursors/webcursor_ash.cc",
     "cursors/webcursor_aura.cc",
-    "cursors/webcursor_ozone.cc",
     "debug_utils.cc",
     "debug_utils.h",
     "features.cc",
@@ -143,13 +141,15 @@ source_set("common") {
     "navigation_gesture.h",
     "navigation_params_utils.h",
     "origin_util.cc",
-    "private_aggregation_features.cc",
-    "private_aggregation_features.h",
     "process_type.cc",
     "process_visibility_tracker.cc",
     "process_visibility_tracker.h",
     "pseudonymization_salt.cc",
     "pseudonymization_salt.h",
+    "service_worker/race_network_request_url_loader_client.cc",
+    "service_worker/race_network_request_url_loader_client.h",
+    "service_worker/service_worker_resource_loader.cc",
+    "service_worker/service_worker_resource_loader.h",
     "set_process_title.cc",
     "set_process_title.h",
     "skia_utils.cc",
@@ -309,21 +309,21 @@ source_set("common") {
 
   if (is_ios) {
     # TOOD: Create ios file instead of stealing android
-    sources += [
-      "cursors/webcursor_android.cc",
-      "font_list_android.cc",
-    ]
+    sources += [ "cursors/webcursor_android.cc" ]
   }
 
   if (is_mac) {
     sources += [
-      "font_list_mac.mm",
       "mac/attributed_string_type_converters.h",
       "mac/attributed_string_type_converters.mm",
       "mac/task_port_policy.cc",
       "mac/task_port_policy.h",
     ]
     deps += [ "//sandbox/mac:seatbelt" ]
+  }
+
+  if (is_apple) {
+    sources += [ "font_list_mac.mm" ]
   }
 
   if (is_win) {
@@ -350,8 +350,8 @@ source_set("common") {
     deps += [ "//ppapi/proxy:ipc_sources" ]
   }
 
-  if (!use_ozone) {
-    sources -= [ "cursors/webcursor_ozone.cc" ]
+  if (!is_chromeos_ash) {
+    sources -= [ "cursors/webcursor_ash.cc" ]
   }
 
   if (use_aura) {
@@ -454,7 +454,6 @@ mojom("mojo_bindings") {
 
   sources = [
     "agent_scheduling_group.mojom",
-    "aggregatable_report.mojom",
     "associated_interfaces.mojom",
     "child_process.mojom",
     "dom_automation_controller.mojom",
@@ -467,12 +466,10 @@ mojom("mojo_bindings") {
     "media/media_log_records.mojom",
     "native_types.mojom",
     "navigation_client.mojom",
-    "private_aggregation_host.mojom",
     "render_message_filter.mojom",
     "renderer.mojom",
     "renderer_host.mojom",
     "renderer_variations_configuration.mojom",
-    "shared_storage_worklet_service.mojom",
     "web_ui.mojom",
   ]
 
@@ -608,7 +605,6 @@ mojom("mojo_bindings") {
   public_deps = [
     "//cc/mojom",
     "//components/attribution_reporting:mojom",
-    "//components/services/storage/shared_storage/public/mojom",
     "//components/variations:variations_mojom",
     "//content/public/common:interfaces",
     "//ipc:mojom",
@@ -632,6 +628,7 @@ mojom("mojo_bindings") {
     "//ui/color:mojom",
     "//ui/display/mojom",
     "//ui/events/mojom",
+    "//ui/events/mojom:event_latency_metadata_mojom",
     "//ui/gfx/geometry/mojom",
     "//ui/gfx/image/mojom",
     "//ui/gfx/mojom",

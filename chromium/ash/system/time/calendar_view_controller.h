@@ -13,6 +13,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/time/calendar_model.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "google_apis/calendar/calendar_api_response_types.h"
@@ -47,6 +48,10 @@ class ASH_EXPORT CalendarViewController {
     // Invoked when the selected date is updated in the
     // `CalendarViewController`.
     virtual void OnSelectedDateUpdated() {}
+
+    // Invoked when the calendar UI has completed rendering (including business
+    // logic like scrolling to the current month).
+    virtual void OnCalendarLoaded() {}
   };
 
   void AddObserver(Observer* observer);
@@ -71,6 +76,9 @@ class ASH_EXPORT CalendarViewController {
   // Gets called when the `CalendarEventListView` is closed.
   void OnEventListClosed();
 
+  // Gets called when the `CalendarView` has completed loading its UI.
+  void CalendarLoaded();
+
   // Records the event list item being pressed on and the type of event.
   // Captures whether it was from the `CalendarEventListView` or implicitly the
   // `CalendarUpNextView` (the only other place the `CalendarEventListItemView`
@@ -88,6 +96,10 @@ class ASH_EXPORT CalendarViewController {
 
   // Called when the CalendarDateCellView representing today gets a fetch.
   void OnTodaysEventFetchComplete();
+
+  // Called when the on screen month has finished loading and has any events to
+  // display to the user. Logs a metric once per CalendarView lifetime.
+  void EventsDisplayedToUser();
 
   // If the selected date in the current month. This is used to inform the
   // `CalendarView` if the month should be updated when a date is selected.
@@ -228,14 +240,20 @@ class ASH_EXPORT CalendarViewController {
   // events has been recorded.
   bool todays_date_cell_fetch_recorded_ = false;
 
+  // Record if any events are displayed (via the dots in the current month) on
+  // screen to the user.
+  bool events_shown_to_user_recorded_ = false;
+
   // The currently selected date.
   absl::optional<base::Time> selected_date_;
 
   // The currently selected CalendarDateCellView
-  CalendarDateCellView* selected_date_cell_view_ = nullptr;
+  raw_ptr<CalendarDateCellView, ExperimentalAsh> selected_date_cell_view_ =
+      nullptr;
 
   // The CalendarDateCellView which represents today.
-  CalendarDateCellView* todays_date_cell_view_ = nullptr;
+  raw_ptr<CalendarDateCellView, ExperimentalAsh> todays_date_cell_view_ =
+      nullptr;
 
   // The midnight of the currently selected date adjusted to the local timezone.
   base::Time selected_date_midnight_;

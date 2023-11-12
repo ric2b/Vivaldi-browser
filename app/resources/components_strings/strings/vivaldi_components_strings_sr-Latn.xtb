@@ -65,7 +65,7 @@ Ako mislite da ne treba da koristite proksi server:
 <translation id="3447661539832366887">Vlasnik ovog uređaja je isključio ovu zastarelu igru.</translation>
 <translation id="3447884698081792621">Prikaži sertifikat (izdavač <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Sakrij napredno</translation>
-<translation id="3484560055331845446">Mogli biste izgubiti pristup svom Google nalogu. Preporučuje se da odmah promenite lozinku. Od vas će se tražiti da se prijavite.</translation>
+<translation id="3484560055331845446">Mogli biste izgubiti pristup svom Google nalogu. Preporučujemo da odmah promenite lozinku. Od vas će se zatražiti da se prijavite.</translation>
 <translation id="3566021033012934673">Veza nije privatna</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Sakrij detalje</translation>
@@ -112,7 +112,6 @@ pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {koristi se 1} one {koristi se #} few {koriste se #} other {koristi se #}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />da proverite adresu proksija<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bita)</translation>
-<translation id="5287240709317226393">Prikaži kolačiće</translation>
 <translation id="5355557959165512791">Ne možete posetiti sada <ph name="SITE" /> jer je njegov sertifikat opozvan. Greške i napadi na mreži su obično privremeni, pa će ova stranica verovatno funkcionisati kasnije.</translation>
 <translation id="5386426401304769735">Lanac sertifikata za ovaj sajt sadrži sertifikat potpisan pomoću algoritma SHA-1.</translation>
 <translation id="5452270690849572955">Nije moguće pronaći ovu stranicu na <ph name="HOST_NAME" /></translation>
@@ -154,6 +153,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="6657585470893396449">Lozinka</translation>
 <translation id="6711464428925977395">Nešto nije u redu sa proksi serverom ili je adresa netačna.</translation>
 <translation id="6757797048963528358">Vaš uređaj je prešao u stanje mirovanja.</translation>
+<translation id="6890956352250146925">Opcije za kolačiće i podatke o sajtovima</translation>
 <translation id="6897140037006041989">Korisnički agent</translation>
 <translation id="7053983685419859001">Blokiraj</translation>
 <translation id="7079718277001814089">Ovaj sajt sadrži malver</translation>
@@ -218,7 +218,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="9169664750068251925">Uvek blokiraj na ovom sajtu</translation>
 <translation id="9180553614777056266">Blokator reklama</translation>
 <translation id="9183425211371246419">Host <ph name="HOST_NAME" /> koristi nepodržani protokol.</translation>
-<translation id="936602727769022409">Mogli biste izgubiti pristup svom Google nalogu. Preporučuje se da odmah promenite lozinku. Od vas će se tražiti da se prijavite.</translation>
+<translation id="936602727769022409">Mogli biste izgubiti pristup svom Google nalogu. Preporučujemo da odmah promenite lozinku. Od vas će se zatražiti da se prijavite.</translation>
 <translation id="969892804517981540">Zvanična verzija</translation>
 <translation id="988159990683914416">Verzija za programere</translation>
 </translationbundle>

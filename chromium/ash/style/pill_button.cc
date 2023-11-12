@@ -8,6 +8,7 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/color_util.h"
 #include "ash/style/style_util.h"
+#include "ash/style/typography.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/chromeos/styles/cros_tokens_color_mappings.h"
@@ -30,7 +31,6 @@ constexpr int kPillButtonLargeHeight = 36;
 constexpr int kPillButtonMinimumWidth = 56;
 constexpr int kIconSize = 20;
 constexpr int kIconPillButtonImageLabelSpacingDp = 8;
-constexpr int kPaddingReductionForIcon = 4;
 
 // Including the thickness and inset of the focus ring in order to keep 2px
 // padding between the focus ring and content of the button.
@@ -156,31 +156,27 @@ PillButton::PillButton(PressedCallback callback,
                        PillButton::Type type,
                        const gfx::VectorIcon* icon,
                        int horizontal_spacing,
-                       bool use_light_colors,
-                       bool rounded_highlight_path)
+                       int padding_reduction_for_icon)
     : views::LabelButton(std::move(callback), text),
       type_(type),
       icon_(icon),
-      use_light_colors_(use_light_colors),
       horizontal_spacing_(horizontal_spacing),
-      rounded_highlight_path_(rounded_highlight_path) {
+      padding_reduction_for_icon_(padding_reduction_for_icon) {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
   label()->SetSubpixelRenderingEnabled(false);
-  // TODO: Unify the font size, weight under ash/style as well.
-  label()->SetFontList(views::Label::GetDefaultFontList().Derive(
-      1, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
-  StyleUtil::SetUpInkDropForButton(
-      this, gfx::Insets(),
-      /*highlight_on_hover=*/false,
-      /*highlight_on_focus=*/false,
-      /*background_color=*/
-      use_light_colors ? SK_ColorWHITE : gfx::kPlaceholderColor);
-  views::FocusRing::Get(this)->SetColorId(
-      (use_light_colors_ && !features::IsDarkLightModeEnabled())
-          ? ui::kColorAshLightFocusRing
-          : ui::kColorAshFocusRing);
+  TypographyProvider::Get()->StyleLabel(TypographyToken::kLegacyButton2,
+                                        *label());
+  StyleUtil::SetUpInkDropForButton(this, gfx::Insets(),
+                                   /*highlight_on_hover=*/false,
+                                   /*highlight_on_focus=*/false,
+                                   /*background_color=*/
+                                   gfx::kPlaceholderColor);
+  views::FocusRing::Get(this)->SetColorId(ui::kColorAshFocusRing);
   SetTooltipText(text);
+
+  // Initialize image and icon spacing.
+  SetImageLabelSpacing(kIconPillButtonImageLabelSpacingDp);
 
   enabled_changed_subscription_ = AddEnabledChangedCallback(base::BindRepeating(
       &PillButton::UpdateBackgroundColor, base::Unretained(this)));
@@ -201,7 +197,7 @@ gfx::Size PillButton::CalculatePreferredSize() const {
     button_width += horizontal_spacing_ + GetHorizontalSpacingWithIcon();
 
     // Add the icon width and the spacing between the icon and the text.
-    button_width += kIconSize + kIconPillButtonImageLabelSpacingDp;
+    button_width += kIconSize + GetImageLabelSpacing();
   } else {
     button_width += 2 * horizontal_spacing_;
   }
@@ -249,39 +245,79 @@ void PillButton::UpdateBackgroundColor() {
     return;
   }
 
+  // If custom color is set, use it to create a solid background.
   if (background_color_) {
     SetBackground(views::CreateRoundedRectBackground(background_color_.value(),
                                                      height / 2.f));
     return;
   }
 
-  auto background_color_id = GetDefaultBackgroundColorId(type_);
-  DCHECK(background_color_id);
+  // Otherwise, use custom ID if set or default color ID to create a themed
+  // background.
+  auto default_color_id = GetDefaultBackgroundColorId(type_);
+  DCHECK(default_color_id);
   SetBackground(views::CreateThemedRoundedRectBackground(
-      background_color_id.value(), height / 2.f));
+      background_color_id_.value_or(default_color_id.value()), height / 2.f));
 }
 
 void PillButton::SetBackgroundColor(const SkColor background_color) {
-  if (background_color_ == background_color)
+  if (background_color_ && background_color_.value() == background_color) {
     return;
+  }
 
   background_color_ = background_color;
+  background_color_id_ = absl::nullopt;
+  UpdateBackgroundColor();
+}
+
+void PillButton::SetBackgroundColorId(ui::ColorId background_color_id) {
+  if (background_color_id_ &&
+      background_color_id_.value() == background_color_id) {
+    return;
+  }
+
+  background_color_id_ = background_color_id;
+  background_color_ = absl::nullopt;
   UpdateBackgroundColor();
 }
 
 void PillButton::SetButtonTextColor(const SkColor text_color) {
-  if (text_color_ == text_color)
+  if (text_color_ && text_color_.value() == text_color) {
     return;
+  }
 
   text_color_ = text_color;
+  text_color_id_ = absl::nullopt;
+  UpdateTextColor();
+}
+
+void PillButton::SetButtonTextColorId(ui::ColorId text_color_id) {
+  if (text_color_id_ && text_color_id_.value() == text_color_id) {
+    return;
+  }
+
+  text_color_id_ = text_color_id;
+  text_color_ = absl::nullopt;
   UpdateTextColor();
 }
 
 void PillButton::SetIconColor(const SkColor icon_color) {
-  if (icon_color_ == icon_color)
+  if (icon_color_ && icon_color_.value() == icon_color) {
     return;
+  }
 
   icon_color_ = icon_color;
+  icon_color_id_ = absl::nullopt;
+  UpdateIconColor();
+}
+
+void PillButton::SetIconColorId(ui::ColorId icon_color_id) {
+  if (icon_color_id_ && icon_color_id_.value() == icon_color_id) {
+    return;
+  }
+
+  icon_color_id_ = icon_color_id;
+  icon_color_ = absl::nullopt;
   UpdateIconColor();
 }
 
@@ -290,9 +326,7 @@ void PillButton::SetPillButtonType(Type type) {
     return;
 
   type_ = type;
-
-  if (GetWidget())
-    Init();
+  Init();
 }
 
 void PillButton::SetUseDefaultLabelFont() {
@@ -300,29 +334,27 @@ void PillButton::SetUseDefaultLabelFont() {
 }
 
 void PillButton::Init() {
-  DCHECK(GetWidget());
-
-  if (type_ & kIconFollowing)
+  if (type_ & kIconFollowing) {
     SetHorizontalAlignment(gfx::ALIGN_RIGHT);
-  else
+  } else {
     SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  }
 
   const int height = GetButtonHeight(type_);
 
-  if (rounded_highlight_path_) {
-    if ((type_ & kButtonColorVariant) == kPrimary) {
-      views::InstallRoundRectHighlightPathGenerator(
-          this, gfx::Insets(-kFocusRingPadding),
-          height / 2.f + kFocusRingPadding);
-    } else {
-      views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
-                                                    height / 2.f);
-    }
+  if (chromeos::features::IsJellyrollEnabled() ||
+      (type_ & kButtonColorVariant) == kPrimary) {
+    views::InstallRoundRectHighlightPathGenerator(
+        this, gfx::Insets(-kFocusRingPadding),
+        height / 2.f + kFocusRingPadding);
+  } else {
+    views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
+                                                  height / 2.f);
   }
 
   UpdateBackgroundColor();
-  UpdateIconColor();
   UpdateTextColor();
+  UpdateIconColor();
 
   PreferredSizeChanged();
 }
@@ -332,40 +364,57 @@ void PillButton::UpdateTextColor() {
   if (!GetWidget())
     return;
 
-  // TODO(crbug.com/1383544): When LabelButton is able to use color ID, directly
+  // TODO(b:272787322): When LabelButton is able to use color ID, directly
   // use color ID for default text color.
   auto* color_provider = GetColorProvider();
-  auto default_color_id = GetDefaultButtonTextIconColorId(type_);
-  DCHECK(default_color_id);
-  SetEnabledTextColors(
-      text_color_.value_or(color_provider->GetColor(default_color_id.value())));
   SetTextColor(views::Button::STATE_DISABLED,
                color_provider->GetColor(cros_tokens::kCrosSysDisabled));
+
+  // If custom text color is set, use it to set text color.
+  if (text_color_) {
+    SetEnabledTextColors(text_color_.value());
+    return;
+  }
+
+  // Otherwise, use custom color ID if set or default color ID to set text
+  // color.
+  auto default_color_id = GetDefaultButtonTextIconColorId(type_);
+  DCHECK(default_color_id);
+  SetEnabledTextColors(color_provider->GetColor(
+      text_color_id_.value_or(default_color_id.value())));
 }
 
 void PillButton::UpdateIconColor() {
   if (!IsIconPillButton(type_))
     return;
 
-  DCHECK(icon_);
-  if (icon_color_) {
-    SetImage(views::Button::STATE_NORMAL,
-             gfx::CreateVectorIcon(*icon_, kIconSize, icon_color_.value()));
-  } else {
-    auto default_color_id = GetDefaultButtonTextIconColorId(type_);
-    DCHECK(default_color_id);
-    SetImageModel(views::Button::STATE_NORMAL,
-                  ui::ImageModel::FromVectorIcon(
-                      *icon_, default_color_id.value(), kIconSize));
+  if (!icon_) {
+    return;
   }
+
   SetImageModel(views::Button::STATE_DISABLED,
                 ui::ImageModel::FromVectorIcon(
                     *icon_, cros_tokens::kCrosSysDisabled, kIconSize));
-  SetImageLabelSpacing(kIconPillButtonImageLabelSpacingDp);
+
+  // If custom icon color is set, use it to set icon color.
+  if (icon_color_) {
+    SetImage(views::Button::STATE_NORMAL,
+             gfx::CreateVectorIcon(*icon_, kIconSize, icon_color_.value()));
+    return;
+  }
+
+  // Otherwise, use custom color ID if set or default color ID to set icon
+  // color.
+  auto default_color_id = GetDefaultButtonTextIconColorId(type_);
+  DCHECK(default_color_id);
+  SetImageModel(views::Button::STATE_NORMAL,
+                ui::ImageModel::FromVectorIcon(
+                    *icon_, icon_color_id_.value_or(default_color_id.value()),
+                    kIconSize));
 }
 
 int PillButton::GetHorizontalSpacingWithIcon() const {
-  return std::max(horizontal_spacing_ - kPaddingReductionForIcon, 0);
+  return std::max(horizontal_spacing_ - padding_reduction_for_icon_, 0);
 }
 
 BEGIN_METADATA(PillButton, views::LabelButton)

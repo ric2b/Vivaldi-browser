@@ -105,11 +105,16 @@ enum class PermissionRequest {
   }
   base::UmaHistogramEnumeration(kPermissionRequestsHistogram, request);
   if (web::features::IsFullscreenAPIEnabled()) {
-    [webView closeAllMediaPresentationsWithCompletionHandler:^{
-      [self displayPromptForPermissions:permissionsRequested
-                    withDecisionHandler:decisionHandler];
-    }];
-    return;
+    if (@available(iOS 16, *)) {
+      if (webView.fullscreenState == WKFullscreenStateInFullscreen ||
+          webView.fullscreenState == WKFullscreenStateEnteringFullscreen) {
+        [webView closeAllMediaPresentationsWithCompletionHandler:^{
+          [self displayPromptForPermissions:permissionsRequested
+                        withDecisionHandler:decisionHandler];
+        }];
+        return;
+      }
+    }
   }
   [self displayPromptForPermissions:permissionsRequested
                 withDecisionHandler:decisionHandler];
@@ -283,17 +288,39 @@ enum class PermissionRequest {
                 withDecisionHandler:
                     (void (^)(WKPermissionDecision decision))handler
     API_AVAILABLE(ios(15.0)) {
-  web::WebStateImpl* webStateImpl = self.webStateImpl;
-  if (!webStateImpl) {
+  // Calling WillDisplayMediaCapturePermissionPrompt(...) may
+  // cause the WebState to be closed and the last reference to
+  // the current object to be destroyed (e.g. if the WebState
+  // is used to pre-render).
+  //
+  // Use a local variable with precise lifetime to force the
+  // current object to be kept alive till the end of the method
+  // to prevent UaF.
+  __attribute__((objc_precise_lifetime)) CRWWKUIHandler* selfRetain = self;
+  if (!selfRetain.isBeingDestroyed) {
+    DCHECK(selfRetain.webStateImpl);
+    // This call may destroy the web state.
+    web::GetWebClient()->WillDisplayMediaCapturePermissionPrompt(
+        selfRetain.webStateImpl);
+  }
+
+  // By this point, the WebState may have been destroyed. If
+  // this is the case, then `-isBeingDestroyed` will be YES.
+  if (selfRetain.isBeingDestroyed) {
     // If the web state doesn't exist, it is likely that the web view isn't
     // visible to the user, or that some other issue has happened. Deny
     // permission.
     handler(WKPermissionDecisionDeny);
     return;
   }
-  web::GetWebClient()->WillDisplayMediaCapturePermissionPrompt(webStateImpl);
+
+  // The WebState must be valid if the object is not destroyed.
+  DCHECK(selfRetain.webStateImpl);
+
+  // Request permission.
   if (web::features::IsMediaPermissionsControlEnabled()) {
-    webStateImpl->RequestPermissionsWithDecisionHandler(permissions, handler);
+    selfRetain.webStateImpl->RequestPermissionsWithDecisionHandler(permissions,
+                                                                   handler);
   } else {
     handler(WKPermissionDecisionPrompt);
   }

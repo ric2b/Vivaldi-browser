@@ -34,12 +34,12 @@ struct PageAccessibilityConfiguration {
   };
 
 #if BUILDFLAG(ENABLE_PKEYS)
-  explicit constexpr PageAccessibilityConfiguration(Permissions permissions)
+  constexpr explicit PageAccessibilityConfiguration(Permissions permissions)
       : permissions(permissions), pkey(0) {}
   constexpr PageAccessibilityConfiguration(Permissions permissions, int pkey)
       : permissions(permissions), pkey(pkey) {}
 #else
-  explicit constexpr PageAccessibilityConfiguration(Permissions permissions)
+  constexpr explicit PageAccessibilityConfiguration(Permissions permissions)
       : permissions(permissions) {}
 #endif  // BUILDFLAG(ENABLE_PKEYS)
 
@@ -66,12 +66,19 @@ enum class PageAccessibilityDisposition {
 // these tags are used to name anonymous mappings.
 enum class PageTag {
   kFirst = 240,           // Minimum tag value.
+  kSimulation = 251,      // Memory simulator tool.
   kBlinkGC = 252,         // Blink GC pages.
   kPartitionAlloc = 253,  // PartitionAlloc, no matter the partition.
   kChromium = 254,        // Chromium page.
   kV8 = 255,              // V8 heap pages.
   kLast = kV8             // Maximum tag value.
 };
+
+// See
+// https://github.com/apple-oss-distributions/xnu/blob/5c2921b07a2480ab43ec66f5b9e41cb872bc554f/osfmk/mach/vm_statistics.h#L687
+static_assert(
+    static_cast<int>(PageTag::kLast) < 256,
+    "Tags are only 1 byte long on macOS, see vm_statistics.h in XNU.");
 
 PA_COMPONENT_EXPORT(PARTITION_ALLOC)
 uintptr_t NextAlignedWithOffset(uintptr_t ptr,
@@ -300,7 +307,7 @@ void DiscardSystemPages(void* address, size_t length);
 
 // Rounds up |address| to the next multiple of |SystemPageSize()|. Returns
 // 0 for an |address| of 0.
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE uintptr_t
+PA_ALWAYS_INLINE PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR uintptr_t
 RoundUpToSystemPage(uintptr_t address) {
   return (address + internal::SystemPageOffsetMask()) &
          internal::SystemPageBaseMask();
@@ -308,14 +315,14 @@ RoundUpToSystemPage(uintptr_t address) {
 
 // Rounds down |address| to the previous multiple of |SystemPageSize()|. Returns
 // 0 for an |address| of 0.
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE uintptr_t
+PA_ALWAYS_INLINE PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR uintptr_t
 RoundDownToSystemPage(uintptr_t address) {
   return address & internal::SystemPageBaseMask();
 }
 
 // Rounds up |address| to the next multiple of |PageAllocationGranularity()|.
 // Returns 0 for an |address| of 0.
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE uintptr_t
+PA_ALWAYS_INLINE PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR uintptr_t
 RoundUpToPageAllocationGranularity(uintptr_t address) {
   return (address + internal::PageAllocationGranularityOffsetMask()) &
          internal::PageAllocationGranularityBaseMask();
@@ -323,7 +330,7 @@ RoundUpToPageAllocationGranularity(uintptr_t address) {
 
 // Rounds down |address| to the previous multiple of
 // |PageAllocationGranularity()|. Returns 0 for an |address| of 0.
-PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE uintptr_t
+PA_ALWAYS_INLINE PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR uintptr_t
 RoundDownToPageAllocationGranularity(uintptr_t address) {
   return address & internal::PageAllocationGranularityBaseMask();
 }

@@ -10,12 +10,12 @@ import {LocalStorage} from '../../common/local_storage.js';
 import {Msgs} from '../common/msgs.js';
 import {PanelCommand, PanelCommandType} from '../common/panel_command.js';
 import {SettingsManager} from '../common/settings_manager.js';
-import {TtsCapturingEventListener, TtsInterface} from '../common/tts_interface.js';
 import * as ttsTypes from '../common/tts_types.js';
 
 import {AbstractTts} from './abstract_tts.js';
 import {ChromeVox} from './chromevox.js';
 import {PhoneticData} from './phonetic_data.js';
+import {TtsCapturingEventListener, TtsInterface} from './tts_interface.js';
 
 const Utterance = class {
   /**
@@ -519,7 +519,13 @@ export class PrimaryTts extends AbstractTts {
   /** @override */
   increaseOrDecreaseProperty(propertyName, increase) {
     super.increaseOrDecreaseProperty(propertyName, increase);
+    const value = this.ttsProperties[propertyName];
+    this.setProperty(propertyName, value);
+  }
 
+  /** @override */
+  setProperty(propertyName, value) {
+    super.setProperty(propertyName, value);
     let pref;
     switch (propertyName) {
       case ttsTypes.TtsSettings.RATE:
@@ -534,8 +540,7 @@ export class PrimaryTts extends AbstractTts {
       default:
         return;
     }
-    const value = this.ttsProperties[propertyName];
-    chrome.settingsPrivate.setPref(pref, value);
+    chrome.settingsPrivate.setPref(pref, this.ttsProperties[propertyName]);
   }
 
   /** @override */

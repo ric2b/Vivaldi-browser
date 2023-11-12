@@ -11,6 +11,13 @@
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -28,12 +35,8 @@ const CGFloat kIconWidth = 32.0f;
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
-    if (IsContentSuggestionsUIModuleRefreshEnabled()) {
-      [self.layer setBorderColor:ntp_home::NTPBackgroundColor().CGColor];
-    } else {
-      [self.layer
-          setBorderColor:[UIColor colorNamed:kTertiaryBackgroundColor].CGColor];
-    }
+    [self.layer
+        setBorderColor:[UIColor colorNamed:kTertiaryBackgroundColor].CGColor];
     [self.layer setBorderWidth:kContentViewBorderWidth];
     self.layer.cornerRadius = kContentViewCornerRadius;
     self.layer.masksToBounds = YES;
@@ -58,8 +61,14 @@ const CGFloat kIconWidth = 32.0f;
     textStackView.axis = UILayoutConstraintAxisVertical;
     [self addSubview:textStackView];
 
+    if (IsVivaldiRunning()) {
+      _iconImageView = [[UIImageView alloc]
+          initWithImage:[UIImage imageNamed:vNTPSDFallbackFavicon]];
+    } else {
     _iconImageView = [[UIImageView alloc]
         initWithImage:[UIImage imageNamed:@"default_world_favicon_regular"]];
+    } // End Vivaldi
+
     _iconImageView.layer.cornerRadius = kIconCornerRadius;
     _iconImageView.layer.masksToBounds = YES;
     [self addSubview:_iconImageView];
@@ -120,12 +129,8 @@ const CGFloat kIconWidth = 32.0f;
   if (self.traitCollection.userInterfaceStyle !=
       previousTraitCollection.userInterfaceStyle) {
     // CGColors are static RGB, so the border color needs to be reset.
-    if (IsContentSuggestionsUIModuleRefreshEnabled()) {
-      [self.layer setBorderColor:ntp_home::NTPBackgroundColor().CGColor];
-    } else {
-      [self.layer
-          setBorderColor:[UIColor colorNamed:kTertiaryBackgroundColor].CGColor];
-    }
+    [self.layer
+        setBorderColor:[UIColor colorNamed:kTertiaryBackgroundColor].CGColor];
   }
 }
 

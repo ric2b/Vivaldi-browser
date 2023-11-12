@@ -75,7 +75,7 @@ void LoadCounters(const base::Value& counters_value,
                   std::map<std::string, int>& counters) {
   DCHECK(counters_value.is_dict());
 
-  for (const auto counter : counters_value.DictItems()) {
+  for (const auto counter : counters_value.GetDict()) {
     if (!counter.second.is_int())
       continue;
     counters[counter.first] = counter.second.GetInt();
@@ -123,13 +123,13 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
       rule_sources.back().rules_list_checksum = std::move(*rules_list_checksum);
 
     absl::optional<base::Time> last_update =
-        base::ValueToTime(source_value.FindKey(kLastUpdateKey));
+        base::ValueToTime(source_value.GetDict().Find(kLastUpdateKey));
     if (last_update) {
       rule_sources.back().last_update = last_update.value();
     }
 
     absl::optional<base::Time> next_fetch =
-        base::ValueToTime(source_value.FindKey(kNextFetchKey));
+        base::ValueToTime(source_value.GetDict().Find(kNextFetchKey));
     if (next_fetch) {
       rule_sources.back().next_fetch = next_fetch.value();
     }
@@ -180,12 +180,12 @@ void LoadSourcesList(base::Value& sources_list, RuleSources& rule_sources) {
       rule_sources.back().unsafe_adblock_metadata.redirect = GURL(*redirect);
 
     absl::optional<int64_t> version =
-        base::ValueToInt64(source_value.FindKey(kVersionKey));
+        base::ValueToInt64(source_value.GetDict().Find(kVersionKey));
     if (version)
       rule_sources.back().unsafe_adblock_metadata.version = *version;
 
     absl::optional<base::TimeDelta> expires =
-        base::ValueToTimeDelta(source_value.FindKey(kExpiresKey));
+        base::ValueToTimeDelta(source_value.GetDict().Find(kExpiresKey));
     if (last_update) {
       rule_sources.back().unsafe_adblock_metadata.expires = expires.value();
     }
@@ -297,14 +297,14 @@ void LoadRulesGroup(RuleGroup group,
         load_result.deleted_presets[static_cast<size_t>(group)]);
 
   base::Value* blocked_domains_counters =
-      rule_group_value.FindDictKey(kBlockedDomainsCountersKey);
+      rule_group_value.GetDict().Find(kBlockedDomainsCountersKey);
   if (blocked_domains_counters)
     LoadCounters(
         *blocked_domains_counters,
         load_result.blocked_domains_counters[static_cast<size_t>(group)]);
 
   base::Value* blocked_for_origin_counters =
-      rule_group_value.FindDictKey(kBlockedForOriginCountersKey);
+      rule_group_value.GetDict().Find(kBlockedForOriginCountersKey);
   if (blocked_for_origin_counters)
     LoadCounters(
         *blocked_for_origin_counters,
@@ -318,18 +318,18 @@ RuleServiceStorage::LoadResult DoLoad(const base::FilePath& path) {
   std::unique_ptr<base::Value> root(serializer.Deserialize(nullptr, nullptr));
 
   if (root.get() && root->is_dict()) {
-    base::Value* tracking_rules = root->FindDictKey(kTrackingRulesKey);
+    base::Value* tracking_rules = root->GetDict().Find(kTrackingRulesKey);
     if (tracking_rules) {
       LoadRulesGroup(RuleGroup::kTrackingRules, *tracking_rules, load_result);
     }
-    base::Value* ad_blocking_rules = root->FindDictKey(kAdBlockingRulesKey);
+    base::Value* ad_blocking_rules = root->GetDict().Find(kAdBlockingRulesKey);
     if (ad_blocking_rules) {
       LoadRulesGroup(RuleGroup::kAdBlockingRules, *ad_blocking_rules,
                      load_result);
     }
 
     absl::optional<base::Time> blocked_reporting_start =
-        base::ValueToTime(root->FindKey(kBlockedReportingStartKey));
+        base::ValueToTime(root->GetDict().Find(kBlockedReportingStartKey));
     if (blocked_reporting_start)
       load_result.blocked_reporting_start = *blocked_reporting_start;
 
@@ -513,7 +513,7 @@ void RuleServiceStorage::OnRuleServiceShutdown() {
     writer_.DoScheduledWrite();
 }
 
-bool RuleServiceStorage::SerializeData(std::string* output) {
+absl::optional<std::string> RuleServiceStorage::SerializeData() {
   base::Value::Dict root;
 
   root.Set(kTrackingRulesKey,
@@ -527,9 +527,13 @@ bool RuleServiceStorage::SerializeData(std::string* output) {
   }
   root.Set(kVersionKey, kCurrentStorageVersion);
 
-  JSONStringValueSerializer serializer(output);
+  std::string output;
+  JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(true);
-  return serializer.Serialize(root);
+  if (!serializer.Serialize(root))
+    return absl::nullopt;
+
+  return output;
 }
 
 }  // namespace adblock_filter

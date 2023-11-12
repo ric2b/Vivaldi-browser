@@ -277,6 +277,32 @@ void AddAmdGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
   }
 }
 
+void AddNvidiaGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
+  static const char* const kReadOnlyList[] = {
+      // To support threads in mesa we use --gpu-sandbox-start-early and
+      // that requires the following libs and files to be accessible.
+      "/etc/ld.so.cache",
+      "/usr/lib64/dri/nouveau_dri.so",
+      "/usr/lib64/dri/radeonsi_dri.so",
+      "/usr/lib64/dri/swrast_dri.so",
+      "/usr/lib64/libEGL.so.1",
+      "/usr/lib64/libEGL_mesa.so.0",
+      "/usr/lib64/libGLESv2.so.2",
+      "/usr/lib64/libGLdispatch.so.0",
+      "/usr/lib64/libdrm_amdgpu.so.1",
+      "/usr/lib64/libdrm_nouveau.so.2",
+      "/usr/lib64/libdrm_radeon.so.1",
+      "/usr/lib64/libelf.so.1",
+      "/usr/lib64/libglapi.so.0",
+      "/usr/share/glvnd/egl_vendor.d",
+      "/usr/share/glvnd/egl_vendor.d/50_mesa.json"};
+  for (const char* item : kReadOnlyList) {
+    permissions->push_back(BrokerFilePermission::ReadOnly(item));
+  }
+
+  AddDrmGpuPermissions(permissions);
+}
+
 void AddIntelGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
   static const char* const kReadOnlyList[] = {
       // To support threads in mesa we use --gpu-sandbox-start-early and
@@ -309,18 +335,28 @@ void AddVirtIOGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
       // to use kms_swrast.
       "/sys",
       "/sys/dev",
+      "/usr/lib64/libdrm_amdgpu.so.1",
+      "/usr/lib64/libdrm_radeon.so.1",
+      "/usr/lib64/libdrm_nouveau.so.2",
+      "/usr/lib64/libelf.so.1",
       "/usr/lib64/libEGL.so.1",
       "/usr/lib64/libGLESv2.so.2",
+      "/usr/lib64/libEGL_mesa.so.0",
+      "/usr/lib64/libGLdispatch.so.0",
       "/usr/lib64/libglapi.so.0",
       "/usr/lib64/libc++.so.1",
       // If kms_swrast_dri is not usable, swrast_dri is used instead.
       "/usr/lib64/dri/swrast_dri.so",
       "/usr/lib64/dri/kms_swrast_dri.so",
       "/usr/lib64/dri/virtio_gpu_dri.so",
+      "/usr/share/glvnd/egl_vendor.d",
+      "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
   };
+
   for (const char* item : kReadOnlyList) {
     permissions->push_back(BrokerFilePermission::ReadOnly(item));
   }
+
   static const char* kDevices[] = {"/sys/dev/char", "/sys/devices"};
   for (const char* item : kDevices) {
     std::string path(item);
@@ -403,7 +439,6 @@ void AddStandardGpuPermissions(std::vector<BrokerFilePermission>* permissions) {
   static const char kNvidiaDeviceModeSetPath[] = "/dev/nvidia-modeset";
   static const char kNvidiaParamsPath[] = "/proc/driver/nvidia/params";
   static const char kDevShm[] = "/dev/shm/";
-
   // For shared memory.
   permissions->push_back(
       BrokerFilePermission::ReadWriteCreateTemporaryRecursive(kDevShm));
@@ -464,6 +499,7 @@ std::vector<BrokerFilePermission> FilePermissionsForGpu(
     }
     if (options.use_nvidia_specific_policies) {
       AddStandardGpuPermissions(&permissions);
+      AddNvidiaGpuPermissions(&permissions);
     }
     if (options.use_virtio_specific_policies) {
       AddVirtIOGpuPermissions(&permissions);
@@ -638,6 +674,7 @@ sandbox::syscall_broker::BrokerCommandSet CommandSetForGPU(
   if (IsChromeOS() &&
       (options.use_amd_specific_policies ||
        options.use_intel_specific_policies ||
+       options.use_nvidia_specific_policies ||
        options.use_virtio_specific_policies || IsArchitectureArm())) {
     command_set.set(sandbox::syscall_broker::COMMAND_READLINK);
   }

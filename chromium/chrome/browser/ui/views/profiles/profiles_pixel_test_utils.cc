@@ -13,6 +13,7 @@
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 
 namespace {
@@ -64,12 +65,13 @@ void SetUpPixelTestCommandLine(
     command_line->AppendSwitch(switches::kForceDarkMode);
   }
   if (params.use_right_to_left_language) {
-    command_line->AppendSwitchASCII(switches::kLang, "ar");
+    const std::string language = "ar-XB";
+    command_line->AppendSwitchASCII(switches::kLang, language);
 
     // On Linux & Lacros the command line switch has no effect, we need to use
     // environment variables to change the language.
     env_variables = std::make_unique<base::ScopedEnvironmentVariableOverride>(
-        "LANGUAGE", "ar");
+        "LANGUAGE", language);
   }
 }
 
@@ -80,6 +82,10 @@ void InitPixelTestFeatures(
     std::vector<base::test::FeatureRef>& disabled_features) {
   if (params.use_dark_theme) {
     enabled_features.push_back(features::kWebUIDarkMode);
+  }
+  if (params.use_chrome_refresh_2023_style) {
+    enabled_features.push_back(features::kChromeRefresh2023);
+    enabled_features.push_back(features::kChromeWebuiRefresh2023);
   }
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   if (params.use_fre_style) {

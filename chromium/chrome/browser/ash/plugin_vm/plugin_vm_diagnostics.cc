@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -23,7 +24,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
-#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
+#include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/protobuf/src/google/protobuf/repeated_field.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -280,7 +281,7 @@ class PluginVmDiagnostics : public base::RefCounted<PluginVmDiagnostics> {
     return base::ReplaceStringPlaceholders(string_template, subs, nullptr);
   }
 
-  Profile* const active_profile_;
+  const raw_ptr<Profile, ExperimentalAsh> active_profile_;
   DiagnosticsCallback callback_;
   guest_os::DiagnosticsBuilder builder_;
 };

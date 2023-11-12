@@ -11,6 +11,7 @@
 
 #include "base/functional/callback.h"
 #include "base/types/expected.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "extensions/common/features/feature.h"
@@ -67,7 +68,9 @@ class ExtensionTabUtil {
     absl::optional<bool> active;
     absl::optional<bool> pinned;
     absl::optional<int> index;
-    absl::optional<int> bookmark_id;
+    absl::optional<base::Uuid> bookmark_id;
+
+    // Vivaldi
     absl::optional<ui::PageTransition> transition;
     absl::optional<std::string> viv_ext_data;
   };
@@ -219,7 +222,8 @@ class ExtensionTabUtil {
   // Returns the url if successful, otherwise returns an error string.
   static base::expected<GURL, std::string> PrepareURLForNavigation(
       const std::string& url_string,
-      const Extension* extension);
+      const Extension* extension,
+      content::BrowserContext* browser_context);
 
   // Opens a tab for the specified |web_contents|.
   static void CreateTab(std::unique_ptr<content::WebContents> web_contents,

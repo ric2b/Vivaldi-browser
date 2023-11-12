@@ -8,6 +8,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ash_view_ids.h"
+#include "ash/public/cpp/test/test_system_tray_client.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/model/enterprise_domain_model.h"
@@ -18,9 +19,11 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test_shell_delegate.h"
 #include "base/check.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/user_manager/user_type.h"
 #include "components/version_info/channel.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/view_utils.h"
 
@@ -51,7 +54,8 @@ class QuickSettingsHeaderTest : public NoSessionAshTestBase {
   }
 
   void TearDown() override {
-    header_.reset();
+    header_ = nullptr;
+    widget_.reset();
     controller_.reset();
     model_.reset();
     NoSessionAshTestBase::TearDown();
@@ -60,7 +64,14 @@ class QuickSettingsHeaderTest : public NoSessionAshTestBase {
   // Creates the object under test. Not part of SetUp() because sometimes tests
   // need to setup the shell delegate or login before creating the header.
   void CreateQuickSettingsHeader() {
-    header_ = std::make_unique<QuickSettingsHeader>(controller_.get());
+    // Instantiate view.
+    auto header = std::make_unique<QuickSettingsHeader>(controller_.get());
+    header_ = header.get();
+
+    // Place the view in a large views::Widget so the buttons are clickable.
+    widget_ = CreateFramelessTestWidget();
+    widget_->SetFullscreen(true);
+    widget_->SetContentsView(std::move(header));
   }
 
   views::View* GetManagedButton() {
@@ -84,10 +95,11 @@ class QuickSettingsHeaderTest : public NoSessionAshTestBase {
   }
 
   base::test::ScopedFeatureList feature_list_;
-  TestShellDelegate* test_shell_delegate_ = nullptr;
+  raw_ptr<TestShellDelegate, ExperimentalAsh> test_shell_delegate_ = nullptr;
   scoped_refptr<UnifiedSystemTrayModel> model_;
   std::unique_ptr<UnifiedSystemTrayController> controller_;
-  std::unique_ptr<QuickSettingsHeader> header_;
+  std::unique_ptr<views::Widget> widget_;
+  raw_ptr<QuickSettingsHeader, ExperimentalAsh> header_ = nullptr;
 };
 
 TEST_F(QuickSettingsHeaderTest, HiddenByDefaultBeforeLogin) {
@@ -123,6 +135,51 @@ TEST_F(QuickSettingsHeaderTest, ShowsChannelViewAfterLogin) {
 
   // Header is shown.
   EXPECT_TRUE(header_->GetVisible());
+}
+
+TEST_F(QuickSettingsHeaderTest, EolNoticeVisible) {
+  Shell::Get()->system_tray_model()->SetShowEolNotice(true);
+  SimulateUserLogin("user@gmail.com");
+
+  CreateQuickSettingsHeader();
+  // Header is shown.
+  EXPECT_TRUE(header_->GetVisible());
+
+  // EOL notice is visible.
+  auto* eol_notice_view = header_->eol_notice_for_test();
+  ASSERT_TRUE(eol_notice_view);
+  EXPECT_TRUE(eol_notice_view->GetVisible());
+
+  LeftClickOn(eol_notice_view);
+  EXPECT_EQ(1, GetSystemTrayClient()->show_eol_info_count());
+}
+
+TEST_F(QuickSettingsHeaderTest, EolNoticeNotVisibleBeforeLogin) {
+  Shell::Get()->system_tray_model()->SetShowEolNotice(true);
+  CreateQuickSettingsHeader();
+  // Header is not shown.
+  EXPECT_FALSE(header_->GetVisible());
+
+  // EOL notice is not visible.
+  EXPECT_FALSE(header_->eol_notice_for_test());
+}
+
+TEST_F(QuickSettingsHeaderTest, ChannelIndicatorNotShownWithEolNotice) {
+  test_shell_delegate_->set_channel(version_info::Channel::BETA);
+  SimulateUserLogin("user@gmail.com");
+
+  Shell::Get()->system_tray_model()->SetShowEolNotice(true);
+
+  CreateQuickSettingsHeader();
+  // Header is shown.
+  EXPECT_TRUE(header_->GetVisible());
+
+  // No channel indicator.
+  EXPECT_FALSE(header_->channel_view_for_test());
+
+  // EOL notice is visible.
+  ASSERT_TRUE(header_->eol_notice_for_test());
+  EXPECT_TRUE(header_->eol_notice_for_test()->GetVisible());
 }
 
 TEST_F(QuickSettingsHeaderTest, EnterpriseManagedDeviceVisible) {
@@ -182,6 +239,27 @@ TEST_F(QuickSettingsHeaderTest, BothChannelAndEnterpriseVisible) {
   EXPECT_EQ(GetManagedButton()->GetTooltipText({}), u"Managed by example.com");
   EXPECT_TRUE(header_->channel_view_for_test());
   EXPECT_TRUE(header_->GetVisible());
+}
+
+TEST_F(QuickSettingsHeaderTest, BothEolNoticeAndEnterpriseVisible) {
+  GetEnterpriseDomainModel()->SetDeviceEnterpriseInfo(
+      DeviceEnterpriseInfo{"example.com", /*active_directory_managed=*/false,
+                           ManagementDeviceMode::kChromeEnterprise});
+  Shell::Get()->system_tray_model()->SetShowEolNotice(true);
+  SimulateUserLogin("user@gmail.com");
+
+  CreateQuickSettingsHeader();
+
+  EXPECT_TRUE(GetManagedButton()->GetVisible());
+  // The label is the shorter "Managed" due to the two-column layout.
+  EXPECT_EQ(GetManagedButtonLabel()->GetText(), u"Managed");
+  EXPECT_EQ(GetManagedButton()->GetTooltipText({}), u"Managed by example.com");
+  EXPECT_TRUE(header_->GetVisible());
+  ASSERT_TRUE(header_->eol_notice_for_test());
+  EXPECT_TRUE(header_->eol_notice_for_test()->GetVisible());
+
+  LeftClickOn(header_->eol_notice_for_test());
+  EXPECT_EQ(1, GetSystemTrayClient()->show_eol_info_count());
 }
 
 TEST_F(QuickSettingsHeaderTest, ChildVisible) {

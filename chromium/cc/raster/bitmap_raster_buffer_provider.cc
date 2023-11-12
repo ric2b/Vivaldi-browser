@@ -76,8 +76,8 @@ class BitmapRasterBufferImpl : public RasterBuffer {
 
     size_t stride = 0u;
     RasterBufferProvider::PlaybackToMemory(
-        pixels_, viz::RGBA_8888, resource_size_, stride, raster_source,
-        raster_full_rect, playback_rect, transform, color_space_,
+        pixels_, viz::SinglePlaneFormat::kRGBA_8888, resource_size_, stride,
+        raster_source, raster_full_rect, playback_rect, transform, color_space_,
         /*gpu_compositing=*/false, playback_settings);
   }
 
@@ -110,7 +110,7 @@ BitmapRasterBufferProvider::AcquireBufferForRaster(
     bool depends_on_at_raster_decodes,
     bool depends_on_hardware_accelerated_jpeg_candidates,
     bool depends_on_hardware_accelerated_webp_candidates) {
-  DCHECK_EQ(resource.format(), viz::RGBA_8888);
+  DCHECK_EQ(resource.format(), viz::SinglePlaneFormat::kRGBA_8888);
 
   const gfx::Size& size = resource.size();
   const gfx::ColorSpace& color_space = resource.color_space();
@@ -119,7 +119,8 @@ BitmapRasterBufferProvider::AcquireBufferForRaster(
     backing->frame_sink = frame_sink_;
     backing->shared_bitmap_id = viz::SharedBitmap::GenerateId();
     base::MappedReadOnlyRegion shm =
-        viz::bitmap_allocation::AllocateSharedBitmap(size, viz::RGBA_8888);
+        viz::bitmap_allocation::AllocateSharedBitmap(
+            size, viz::SinglePlaneFormat::kRGBA_8888);
     backing->mapping = std::move(shm.mapping);
     frame_sink_->DidAllocateSharedBitmap(std::move(shm.region),
                                          backing->shared_bitmap_id);
@@ -136,8 +137,8 @@ BitmapRasterBufferProvider::AcquireBufferForRaster(
 
 void BitmapRasterBufferProvider::Flush() {}
 
-viz::ResourceFormat BitmapRasterBufferProvider::GetResourceFormat() const {
-  return viz::RGBA_8888;
+viz::SharedImageFormat BitmapRasterBufferProvider::GetFormat() const {
+  return viz::SinglePlaneFormat::kRGBA_8888;
 }
 
 bool BitmapRasterBufferProvider::IsResourcePremultiplied() const {

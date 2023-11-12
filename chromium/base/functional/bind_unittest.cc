@@ -1778,6 +1778,44 @@ TEST_F(BindTest, BindAndCallbacks) {
   EXPECT_EQ(123, res);
 }
 
+}  // namespace
+
+// This simulates a race weak pointer that, unlike our `base::WeakPtr<>`,
+// may become invalidated between `operator bool()` is tested and `Lock()`
+// is called in the implementation of `Unwrap()`.
+template <typename T>
+struct MockRacyWeakPtr {
+  explicit MockRacyWeakPtr(T*) {}
+  T* Lock() const { return nullptr; }
+
+  explicit operator bool() const { return true; }
+};
+
+template <typename T>
+struct IsWeakReceiver<MockRacyWeakPtr<T>> : std::true_type {};
+
+template <typename T>
+struct BindUnwrapTraits<MockRacyWeakPtr<T>> {
+  static T* Unwrap(const MockRacyWeakPtr<T>& o) { return o.Lock(); }
+};
+
+template <typename T>
+struct MaybeValidTraits<MockRacyWeakPtr<T>> {
+  static bool MaybeValid(const MockRacyWeakPtr<T>& o) { return true; }
+};
+
+namespace {
+
+// Note this only covers a case of racy weak pointer invalidation. Other
+// weak pointer scenarios (such as a valid pointer) are covered
+// in BindTest.WeakPtrFor{Once,Repeating}.
+TEST_F(BindTest, BindRacyWeakPtrTest) {
+  MockRacyWeakPtr<NoRef> weak(&no_ref_);
+
+  RepeatingClosure cb = base::BindRepeating(&NoRef::VoidMethod0, weak);
+  cb.Run();
+}
+
 // Test null callbacks cause a DCHECK.
 TEST(BindDeathTest, NullCallback) {
   base::RepeatingCallback<void(int)> null_cb;
@@ -1849,14 +1887,16 @@ class BindUnretainedDanglingInternalFixture : public BindTest {
   // root so the test code doesn't interfere with various counters. Following
   // methods are helpers for managing allocations inside the separate allocator
   // root.
-  template <typename T, typename... Args>
-  raw_ptr<T> Alloc(Args&&... args) {
+  template <typename T,
+            RawPtrTraits Traits = RawPtrTraits::kEmpty,
+            typename... Args>
+  raw_ptr<T, Traits> Alloc(Args&&... args) {
     void* ptr = allocator_.root()->Alloc(sizeof(T), "");
     T* p = new (reinterpret_cast<T*>(ptr)) T(std::forward<Args>(args)...);
-    return raw_ptr<T>(p);
+    return raw_ptr<T, Traits>(p);
   }
-  template <typename T>
-  void Free(raw_ptr<T>& ptr) {
+  template <typename T, RawPtrTraits Traits>
+  void Free(raw_ptr<T, Traits>& ptr) {
     allocator_.root()->Free(ptr);
   }
 
@@ -1883,6 +1923,11 @@ bool MayBeDanglingCheckFn(MayBeDangling<int> p) {
   return p != nullptr;
 }
 
+bool MayBeDanglingAndDummyTraitCheckFn(
+    MayBeDangling<int, RawPtrTraits::kDummyForTest> p) {
+  return p != nullptr;
+}
+
 class ClassWithWeakPtr {
  public:
   ClassWithWeakPtr() = default;
@@ -1904,6 +1949,25 @@ TEST_F(BindUnretainedDanglingTest, UnretainedNoDanglingPtr) {
 TEST_F(BindUnretainedDanglingTest, UnsafeDanglingPtr) {
   raw_ptr<int> p = Alloc<int>(3);
   auto callback = base::BindOnce(MayBeDanglingCheckFn, base::UnsafeDangling(p));
+  Free(p);
+  EXPECT_EQ(std::move(callback).Run(), true);
+}
+
+TEST_F(BindUnretainedDanglingTest, UnsafeDanglingPtrWithDummyTrait) {
+  raw_ptr<int, RawPtrTraits::kDummyForTest> p =
+      Alloc<int, RawPtrTraits::kDummyForTest>(3);
+  auto callback = base::BindOnce(MayBeDanglingAndDummyTraitCheckFn,
+                                 base::UnsafeDangling(p));
+  Free(p);
+  EXPECT_EQ(std::move(callback).Run(), true);
+}
+
+TEST_F(BindUnretainedDanglingTest,
+       UnsafeDanglingPtrWithDummyAndDanglingTraits) {
+  raw_ptr<int, RawPtrTraits::kDummyForTest | RawPtrTraits::kMayDangle> p =
+      Alloc<int, RawPtrTraits::kDummyForTest | RawPtrTraits::kMayDangle>(3);
+  auto callback = base::BindOnce(MayBeDanglingAndDummyTraitCheckFn,
+                                 base::UnsafeDangling(p));
   Free(p);
   EXPECT_EQ(std::move(callback).Run(), true);
 }

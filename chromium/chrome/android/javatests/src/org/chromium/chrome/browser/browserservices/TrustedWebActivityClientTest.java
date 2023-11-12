@@ -15,10 +15,11 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.rule.ServiceTestRule;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
+import androidx.test.rule.ServiceTestRule;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -28,17 +29,17 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.DoNotBatch;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.dependency_injection.ChromeAppComponent;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.StandardNotificationBuilder;
+import org.chromium.chrome.test.R;
 import org.chromium.components.content_settings.ContentSettingValues;
 import org.chromium.components.embedder_support.util.Origin;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.Collections;
 import java.util.concurrent.TimeoutException;
@@ -184,7 +185,7 @@ public class TrustedWebActivityClientTest {
     }
 
     private void postNotification() throws TimeoutException {
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> {
             mClient.notifyNotification(SCOPE, NOTIFICATION_TAG, NOTIFICATION_ID, mBuilder,
                     NotificationUmaTracker.getInstance());
         });
@@ -199,7 +200,7 @@ public class TrustedWebActivityClientTest {
     @Test
     @SmallTest
     public void testCancelNotification() throws TimeoutException {
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT,
                 () -> mClient.cancelNotification(SCOPE, NOTIFICATION_TAG, NOTIFICATION_ID));
 
         mResponseHandler.mCancelNotification.waitForFirst();
@@ -231,8 +232,8 @@ public class TrustedWebActivityClientTest {
                     }
                 };
 
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
-                () -> mClient.checkNotificationPermission(scope, callback));
+        PostTask.runOrPostTask(
+                TaskTraits.UI_DEFAULT, () -> mClient.checkNotificationPermission(scope, callback));
 
         noTwaFound.waitForFirst();
     }
@@ -243,7 +244,7 @@ public class TrustedWebActivityClientTest {
     @Test
     @SmallTest
     public void createLaunchIntent() {
-        Context context = InstrumentationRegistry.getContext();
+        Context context = ApplicationProvider.getApplicationContext();
         String targetPackageName = mTargetContext.getPackageName();
 
         // This should return null because there are no ResolveInfos.

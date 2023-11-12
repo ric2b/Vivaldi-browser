@@ -15,6 +15,8 @@
 namespace {
 
 using testing::_;
+using testing::IsNull;
+using testing::NotNull;
 
 MATCHER_P(HasUrl, expected_url, "") {
   return arg.URL() == expected_url;
@@ -84,6 +86,27 @@ class ReadingListModelTest : public FakeReadingListModelStorage::Observer,
     return storage_ptr;
   }
 
+  bool ResetStorageAndMimicSignedOut(
+      std::vector<scoped_refptr<ReadingListEntry>> initial_entries = {}) {
+    return ResetStorage()->TriggerLoadCompletion(std::move(initial_entries));
+  }
+
+  bool ResetStorageAndMimicSyncEnabled(
+      std::vector<scoped_refptr<ReadingListEntry>> initial_syncable_entries =
+          {}) {
+    base::WeakPtr<FakeReadingListModelStorage> storage = ResetStorage();
+
+    auto metadata_batch = std::make_unique<syncer::MetadataBatch>();
+    sync_pb::ModelTypeState state;
+    state.set_initial_sync_state(
+        sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
+    state.set_authenticated_account_id(kTestAccountId);
+    metadata_batch->SetModelTypeState(state);
+
+    return storage->TriggerLoadCompletion(std::move(initial_syncable_entries),
+                                          std::move(metadata_batch));
+  }
+
   void ClearCounts() {
     testing::Mock::VerifyAndClearExpectations(&observer_);
     storage_saved_ = 0;
@@ -93,6 +116,18 @@ class ReadingListModelTest : public FakeReadingListModelStorage::Observer,
   // FakeReadingListModelStorage::Observer implementation.
   void FakeStorageDidSaveEntry() override { storage_saved_ += 1; }
   void FakeStorageDidRemoveEntry() override { storage_removed_ += 1; }
+
+  size_t UnseenSize() {
+    size_t size = 0;
+    for (const auto& url : model_->GetKeys()) {
+      scoped_refptr<const ReadingListEntry> entry = model_->GetEntryByURL(url);
+      if (!entry->HasBeenSeen()) {
+        size++;
+      }
+    }
+    DCHECK_EQ(size, model_->unseen_size());
+    return size;
+  }
 
   size_t UnreadSize() {
     size_t size = 0;
@@ -118,6 +153,8 @@ class ReadingListModelTest : public FakeReadingListModelStorage::Observer,
   }
 
  protected:
+  const std::string kTestAccountId = "TestAccountId";
+
   int storage_saved_ = 0;
   int storage_removed_ = 0;
 
@@ -188,6 +225,136 @@ TEST_F(ReadingListModelTest, Shutdown) {
   EXPECT_CALL(observer_, ReadingListModelBeingShutdown(_)).Times(0);
   EXPECT_CALL(observer_, ReadingListModelBeingDeleted(model_.get()));
   model_.reset();
+}
+
+TEST_F(ReadingListModelTest, MarkEntrySeenIfExists) {
+  const GURL example1("http://example1.com/");
+  ASSERT_TRUE(ResetStorage()->TriggerLoadCompletion(
+      /*entries=*/{base::MakeRefCounted<ReadingListEntry>(
+          example1, "example1_title", clock_.Now())}));
+
+  ASSERT_TRUE(model_->loaded());
+  ASSERT_FALSE(model_->GetEntryByURL(example1)->HasBeenSeen());
+  ASSERT_FALSE(model_->GetEntryByURL(example1)->IsRead());
+  ASSERT_EQ(1ul, UnseenSize());
+  ASSERT_EQ(1ul, UnreadSize());
+
+  testing::InSequence seq;
+  EXPECT_CALL(observer_, ReadingListWillUpdateEntry(model_.get(), example1));
+  EXPECT_CALL(observer_, ReadingListDidUpdateEntry(model_.get(), example1));
+  EXPECT_CALL(observer_, ReadingListDidApplyChanges(model_.get()));
+
+  model_->MarkEntrySeenIfExists(example1);
+
+  EXPECT_TRUE(model_->GetEntryByURL(example1)->HasBeenSeen());
+  EXPECT_FALSE(model_->GetEntryByURL(example1)->IsRead());
+  EXPECT_EQ(0ul, UnseenSize());
+  EXPECT_EQ(1ul, UnreadSize());
+}
+
+TEST_F(ReadingListModelTest, MarkAllSeen) {
+  const GURL example1("http://example1.com/");
+  const GURL example2("http://example2.com/");
+  ASSERT_TRUE(ResetStorage()->TriggerLoadCompletion(
+      /*entries=*/{base::MakeRefCounted<ReadingListEntry>(
+                       example1, "example1_title", clock_.Now()),
+                   base::MakeRefCounted<ReadingListEntry>(
+                       example2, "example2_title", clock_.Now())}));
+
+  ASSERT_TRUE(model_->loaded());
+  ASSERT_FALSE(model_->GetEntryByURL(example1)->HasBeenSeen());
+  ASSERT_FALSE(model_->GetEntryByURL(example2)->HasBeenSeen());
+  ASSERT_FALSE(model_->GetEntryByURL(example1)->IsRead());
+  ASSERT_FALSE(model_->GetEntryByURL(example2)->IsRead());
+  ASSERT_EQ(2ul, UnseenSize());
+  ASSERT_EQ(2ul, UnreadSize());
+
+  {
+    testing::InSequence seq1;
+    EXPECT_CALL(observer_, ReadingListWillUpdateEntry(model_.get(), example1));
+    EXPECT_CALL(observer_, ReadingListDidUpdateEntry(model_.get(), example1));
+    EXPECT_CALL(observer_, ReadingListDidApplyChanges(model_.get()))
+        .RetiresOnSaturation();
+  }
+
+  {
+    testing::InSequence seq2;
+    EXPECT_CALL(observer_, ReadingListWillUpdateEntry(model_.get(), example2));
+    EXPECT_CALL(observer_, ReadingListDidUpdateEntry(model_.get(), example2));
+    EXPECT_CALL(observer_, ReadingListDidApplyChanges(model_.get()))
+        .RetiresOnSaturation();
+  }
+
+  model_->MarkAllSeen();
+
+  EXPECT_TRUE(model_->GetEntryByURL(example1)->HasBeenSeen());
+  EXPECT_TRUE(model_->GetEntryByURL(example2)->HasBeenSeen());
+  EXPECT_FALSE(model_->GetEntryByURL(example1)->IsRead());
+  EXPECT_FALSE(model_->GetEntryByURL(example2)->IsRead());
+  EXPECT_EQ(0ul, UnseenSize());
+  EXPECT_EQ(2ul, UnreadSize());
+}
+
+TEST_F(ReadingListModelTest, DeleteAllEntries) {
+  const GURL example1("http://example1.com/");
+  const GURL example2("http://example2.com/");
+  ASSERT_TRUE(ResetStorage()->TriggerLoadCompletion(
+      /*entries=*/{base::MakeRefCounted<ReadingListEntry>(
+                       example1, "example1_title", clock_.Now()),
+                   base::MakeRefCounted<ReadingListEntry>(
+                       example2, "example2_title", clock_.Now())}));
+
+  ASSERT_TRUE(model_->loaded());
+  ASSERT_THAT(model_->GetEntryByURL(example1), NotNull());
+  ASSERT_THAT(model_->GetEntryByURL(example2), NotNull());
+
+  {
+    testing::InSequence seq1;
+    EXPECT_CALL(observer_, ReadingListWillRemoveEntry(model_.get(), example1));
+    EXPECT_CALL(observer_, ReadingListDidRemoveEntry(model_.get(), example1));
+    EXPECT_CALL(observer_, ReadingListDidApplyChanges(model_.get()))
+        .RetiresOnSaturation();
+  }
+
+  {
+    testing::InSequence seq2;
+    EXPECT_CALL(observer_, ReadingListWillRemoveEntry(model_.get(), example2));
+    EXPECT_CALL(observer_, ReadingListDidRemoveEntry(model_.get(), example2));
+    EXPECT_CALL(observer_, ReadingListDidApplyChanges(model_.get()))
+        .RetiresOnSaturation();
+  }
+
+  EXPECT_TRUE(model_->DeleteAllEntries());
+
+  EXPECT_THAT(model_->GetEntryByURL(example1), IsNull());
+  EXPECT_THAT(model_->GetEntryByURL(example2), IsNull());
+}
+
+TEST_F(ReadingListModelTest, GetAccountWhereEntryIsSavedToWhenSignedOut) {
+  const GURL example("http://example.com/");
+  ASSERT_TRUE(ResetStorageAndMimicSignedOut(
+      /*initial_entries=*/{base::MakeRefCounted<ReadingListEntry>(
+          example, "example_title", clock_.Now())}));
+
+  EXPECT_TRUE(model_->GetAccountWhereEntryIsSavedTo(example).empty());
+  EXPECT_TRUE(
+      model_
+          ->GetAccountWhereEntryIsSavedTo(GURL("http://non_existing_url.com/"))
+          .empty());
+}
+
+TEST_F(ReadingListModelTest, GetAccountWhereEntryIsSavedToWhenSyncEnabled) {
+  const GURL example("http://example.com/");
+  ASSERT_TRUE(ResetStorageAndMimicSyncEnabled(
+      /*initial_syncable_entries=*/{base::MakeRefCounted<ReadingListEntry>(
+          example, "example_title", clock_.Now())}));
+
+  EXPECT_EQ(model_->GetAccountWhereEntryIsSavedTo(example).ToString(),
+            kTestAccountId);
+  EXPECT_TRUE(
+      model_
+          ->GetAccountWhereEntryIsSavedTo(GURL("http://non_existing_url.com/"))
+          .empty());
 }
 
 // Tests adding entry.

@@ -20,7 +20,7 @@
     Ads
   </message>
   <message name="IDS_ANTI_ABUSE_PERMISSION_TITLE" desc="Title for the anti-abuse permission [CHAR_LIMIT=32]">
-    Spam &amp; fraud reduction
+    Auto-verify
   </message>
   <message name="IDS_AR_PERMISSION_TITLE" desc="Title of the permission to use Augmented Reality [CHAR_LIMIT=32]">
     Augmented reality
@@ -297,7 +297,7 @@
     This will clear <ph name="DATASIZE">%1$s<ex>1 GB</ex></ph> of data and cookies stored by sites or by apps on your Home screen.
   </message>
   <message name="IDS_WEBSTORAGE_CLEAR_DATA_DIALOG_SIGN_OUT_MESSAGE" desc="Text of the confirmation dialog, explaining that the user will be signed out of the site being cleared.">
-    You'll be signed out of this site
+    You may be signed out of this site
   </message>
   <message name="IDS_WEBSTORAGE_CLEAR_DATA_DIALOG_SIGN_OUT_GROUP_MESSAGE" desc="Text of the confirmation dialog, explaining that the user will be signed out of the group of sites being cleared.">
     You may be signed out of these sites
@@ -359,27 +359,31 @@
   <!-- Anti-abuse -->
 
   <message name="IDS_ANTI_ABUSE_DESCRIPTION" desc="A setting that, if turned on, will enable anti-abuse functionality.">
-    Sites you visit can validate that you're a real user and not a bot
+    Sites you visit can verify that you're a real person and not a bot
   </message>
 
   <message name="IDS_ANTI_ABUSE_WHEN_ON_HEADER" desc="Header text for the section which describes functionality when the 'anti-abuse' setting is enabled.">
     When on
   </message>
 
-  <message name="IDS_ANTI_ABUSE_WHEN_ON_SECTION_ONE" desc="Summary text explaining that browsing is smoother when the 'anti-abuse' setting is enabled.">
-    Browsing is smoother, as you're more likely trusted from one site to the next.
+  <message name="IDS_ANTI_ABUSE_WHEN_ON_SECTION_ONE" desc="Summary text explaining that Chrome saves a small amount of data when the anti-abuse features are enabled.">
+    A site you visit can save a small amount of info with Chrome, mainly to validate you're not a bot
   </message>
 
-  <message name="IDS_ANTI_ABUSE_WHEN_ON_SECTION_TWO" desc="Summary text explaining that the anti-abuse features do not reveal your browsing history.">
-    This setting works without identifying you or allowing sites to see your browsing history.
+  <message name="IDS_ANTI_ABUSE_WHEN_ON_SECTION_TWO" desc="Summary text explaining how the anti-abuse features work.">
+    As you keep browsing, sites can check with Chrome and verify with a previous site you've visited that you're likely a real person
+  </message>
+
+  <message name="IDS_ANTI_ABUSE_WHEN_ON_SECTION_THREE" desc="Summary text explaining that browsing could be helped by the anti-abuse features.">
+    Browsing is faster because a site is less likely to ask you to verify you're a real person
   </message>
 
   <message name="IDS_ANTI_ABUSE_THINGS_TO_CONSIDER_HEADER" desc="Header text for the section explaining additional things to consider when the 'anti-abuse' setting is enabled.">
     Things to consider
   </message>
 
-  <message name="IDS_ANTI_ABUSE_THINGS_TO_CONSIDER_SECTION_ONE" desc="Summary text explaining that sites can save info with Chrome when the 'anti-abuse' setting is enabled.">
-    A site you visit can save info with Chrome that validates that you're a real user. As you keep browsing, sites can check with Chrome and verify from the first site that you're likely a trusted user.
+  <message name="IDS_ANTI_ABUSE_THINGS_TO_CONSIDER_SECTION_ONE" desc="Summary text explaining that the anti-abuse features do not reveal a user's browsing history.">
+    This setting works without identifying you or allowing sites to see your browsing history, though sites can share a small amount of info as part of the verification
   </message>
 
   <!-- Augmented reality -->
@@ -586,8 +590,8 @@
   <message name="IDS_WEBSITE_SETTINGS_CATEGORY_DESKTOP_SITE_ALLOWED" desc="Summary text explaining that desktop view of sites will be requested by default.">
     Request desktop view
   </message>
-  <message name="IDS_WEBSITE_SETTINGS_CATEGORY_DESKTOP_SITE_BLOCKED" desc="Summary text explaining that mobile view of sites will be requested by default and that it is the recommended setting.">
-    Request mobile view (recommended)
+  <message name="IDS_WEBSITE_SETTINGS_CATEGORY_DESKTOP_SITE_BLOCKED" desc="Summary text explaining that mobile view of sites will be requested by default.">
+    Request mobile view
   </message>
   <message name="IDS_WEBSITE_SETTINGS_CATEGORY_DESKTOP_SITE_ALLOWED_LIST" desc="Summary text explaining that desktop view of sites will be requested by default. To be shown in the list of permission categories.">
     On

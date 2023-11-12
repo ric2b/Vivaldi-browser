@@ -22,33 +22,29 @@ namespace {
 
 constexpr char kAddFencedFrameScript[] = R"({
     const fenced_frame = document.createElement('fencedframe');
-    fenced_frame.mode = $1;
+    fenced_frame.id = 'fencedframe'+$1;
     document.body.appendChild(fenced_frame);
   })";
 
 constexpr char kAddAndNavigateFencedFrameScript[] = R"({
     const fenced_frame = document.createElement('fencedframe');
-    fenced_frame.src = $1;
+    fenced_frame.config = new FencedFrameConfig($1);
     document.body.appendChild(fenced_frame);
   })";
 
 constexpr char kNavigateFrameScript[] = R"({location.href = $1;})";
 
-std::string ModeToString(blink::mojom::FencedFrameMode mode) {
-  switch (mode) {
-    case blink::mojom::FencedFrameMode::kDefault:
-      return "default";
-    case blink::mojom::FencedFrameMode::kOpaqueAds:
-      return "opaque-ads";
-  }
-}
-
+constexpr char kEmbedderNavigateFencedFrameScript[] = R"({
+  document.getElementById('fencedframe'+$1).config =
+      new FencedFrameConfig($2);}
+)";
 }  // namespace
 
 FencedFrameTestHelper::FencedFrameTestHelper() {
   scoped_feature_list_.InitWithFeaturesAndParameters(
       {{blink::features::kFencedFrames, {}},
-       {features::kPrivacySandboxAdsAPIsOverride, {}}},
+       {features::kPrivacySandboxAdsAPIsOverride, {}},
+       {blink::features::kFencedFramesAPIChanges, {}}},
       {/* disabled_features */});
 }
 
@@ -58,7 +54,8 @@ RenderFrameHost* FencedFrameTestHelper::CreateFencedFrame(
     RenderFrameHost* fenced_frame_parent,
     const GURL& url,
     net::Error expected_error_code,
-    blink::mojom::FencedFrameMode mode) {
+    blink::FencedFrame::DeprecatedFencedFrameMode mode,
+    bool wait_for_load) {
   TRACE_EVENT("test", "FencedFrameTestHelper::CreateAndGetFencedFrame",
               "fenced_frame_parent", fenced_frame_parent, "url", url);
   RenderFrameHostImpl* fenced_frame_parent_rfh =
@@ -67,9 +64,11 @@ RenderFrameHost* FencedFrameTestHelper::CreateFencedFrame(
   size_t previous_fenced_frame_count =
       fenced_frame_parent_rfh->GetFencedFrames().size();
 
-  EXPECT_TRUE(ExecJs(fenced_frame_parent_rfh,
-                     JsReplace(kAddFencedFrameScript, ModeToString(mode)),
-                     EvalJsOptions::EXECUTE_SCRIPT_NO_USER_GESTURE));
+  EXPECT_TRUE(
+      ExecJs(fenced_frame_parent_rfh,
+             JsReplace(kAddFencedFrameScript,
+                       base::NumberToString(previous_fenced_frame_count)),
+             EvalJsOptions::EXECUTE_SCRIPT_NO_USER_GESTURE));
 
   std::vector<FencedFrame*> fenced_frames =
       fenced_frame_parent_rfh->GetFencedFrames();
@@ -85,8 +84,87 @@ RenderFrameHost* FencedFrameTestHelper::CreateFencedFrame(
   fenced_frame_rfh = fenced_frame->GetInnerRoot();
   if (url.is_empty())
     return fenced_frame_rfh;
-  return NavigateFrameInFencedFrameTree(fenced_frame_rfh, url,
-                                        expected_error_code);
+
+  // For default mode, perform a content-initiated navigation (for backwards
+  // compatibility with existing tests).
+  if (mode == blink::FencedFrame::DeprecatedFencedFrameMode::kDefault) {
+    return NavigateFrameInFencedFrameTree(fenced_frame_rfh, url,
+                                          expected_error_code, wait_for_load);
+  }
+
+  // For opaque-ads mode, perform an embedder-initiated navigation, because only
+  // embedder-initiation urn navigations make sense.
+  EXPECT_EQ(mode, blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds);
+  GURL potentially_urn_url = url;
+  absl::optional<GURL> urn_uuid = fenced_frame_parent_rfh->GetPage()
+                                      .fenced_frame_urls_map()
+                                      .AddFencedFrameURLForTesting(url);
+  EXPECT_TRUE(urn_uuid.has_value());
+  EXPECT_TRUE(urn_uuid->is_valid());
+  potentially_urn_url = *urn_uuid;
+
+  FrameTreeNode* target_node = fenced_frame_rfh->frame_tree_node();
+  TestFrameNavigationObserver fenced_frame_observer(fenced_frame_rfh);
+  EXPECT_TRUE(
+      ExecJs(fenced_frame_parent_rfh,
+             JsReplace(kEmbedderNavigateFencedFrameScript,
+                       base::NumberToString(previous_fenced_frame_count),
+                       potentially_urn_url)));
+
+  if (!wait_for_load) {
+    return nullptr;
+  }
+
+  fenced_frame_observer.Wait();
+
+  EXPECT_EQ(target_node->current_frame_host()->IsErrorDocument(),
+            expected_error_code != net::OK);
+
+  return target_node->current_frame_host();
+}
+
+void FencedFrameTestHelper::NavigateFencedFrameUsingFledge(
+    RenderFrameHost* fenced_frame_parent,
+    const GURL& url,
+    const std::string fenced_frame_id) {
+  // Run an ad auction using FLEDGE and load the result into the fenced frame
+  // with id `fenced_frame_id`.
+  EXPECT_TRUE(ExecJs(fenced_frame_parent, JsReplace(R"(
+    (async() => {
+      const FLEDGE_BIDDING_URL = "/interest_group/bidding_logic.js";
+      const FLEDGE_DECISION_URL = "/interest_group/decision_logic.js";
+
+      const page_origin = new URL($1).origin;
+      const bidding_url = new URL(FLEDGE_BIDDING_URL, page_origin)
+      const interest_group = {
+        name: 'testAd1',
+        owner: page_origin,
+        biddingLogicUrl: bidding_url,
+        ads: [{renderUrl: $1, bid: 1}],
+      };
+
+      // Pick an arbitrarily high duration to guarantee that we never leave the
+      // ad interest group while the test runs.
+      navigator.joinAdInterestGroup(
+          interest_group, /*durationSeconds=*/3000000);
+
+      const url_to_navigate = new URL(FLEDGE_DECISION_URL, page_origin);
+
+      const auction_config = {
+        seller: page_origin,
+        interestGroupBuyers: [page_origin],
+        decisionLogicUrl: new URL(FLEDGE_DECISION_URL, page_origin),
+      };
+      auction_config.resolveToConfig = true;
+
+      const fenced_frame_config = await navigator.runAdAuction(auction_config);
+      if (!(fenced_frame_config instanceof FencedFrameConfig)) {
+        throw new Error('runAdAuction() did not return a FencedFrameConfig');
+      }
+
+      document.getElementById($2).config = fenced_frame_config;
+    })())",
+                                                    url, fenced_frame_id)));
 }
 
 void FencedFrameTestHelper::CreateFencedFrameAsync(
@@ -100,7 +178,8 @@ void FencedFrameTestHelper::CreateFencedFrameAsync(
 RenderFrameHost* FencedFrameTestHelper::NavigateFrameInFencedFrameTree(
     RenderFrameHost* rfh,
     const GURL& url,
-    net::Error expected_error_code) {
+    net::Error expected_error_code,
+    bool wait_for_load) {
   TRACE_EVENT("test", "FencedFrameTestHelper::NavigateFrameInsideFencedFrame",
               "rfh", rfh, "url", url);
   // TODO(domfarolino): Consider adding |url| to the relevant
@@ -112,6 +191,11 @@ RenderFrameHost* FencedFrameTestHelper::NavigateFrameInFencedFrameTree(
 
   TestFrameNavigationObserver fenced_frame_observer(rfh);
   EXPECT_EQ(url.spec(), EvalJs(rfh, JsReplace(kNavigateFrameScript, url)));
+
+  if (!wait_for_load) {
+    return nullptr;
+  }
+
   fenced_frame_observer.Wait();
 
   EXPECT_EQ(target_node->current_frame_host()->IsErrorDocument(),

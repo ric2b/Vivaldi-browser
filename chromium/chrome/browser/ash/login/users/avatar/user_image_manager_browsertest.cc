@@ -18,6 +18,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
@@ -33,7 +34,6 @@
 #include "chrome/browser/ash/login/users/avatar/user_image_manager_test_util.h"
 #include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/default_user_image/default_user_images.h"
-#include "chrome/browser/ash/login/users/mock_user_manager.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
 #include "chrome/browser/ash/policy/core/device_policy_builder.h"
 #include "chrome/browser/ash/policy/core/user_cloud_policy_manager_ash.h"
@@ -156,9 +156,10 @@ class UserImageManagerTestBase : public LoginManagerTest,
     EXPECT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir));
     {
       base::ScopedAllowBlockingForTesting allow_io;
-      EXPECT_TRUE(ReadFileToString(
-          test_data_dir.Append("chromeos").Append("avatar1.jpg"),
-          &profile_image_data));
+      EXPECT_TRUE(ReadFileToString(test_data_dir.Append("chromeos")
+                                       .Append("avatars")
+                                       .Append("avatar1.jpg"),
+                                   &profile_image_data));
     }
     std::unique_ptr<net::test_server::BasicHttpResponse> response =
         std::make_unique<net::test_server::BasicHttpResponse>();
@@ -296,7 +297,7 @@ class UserImageManagerTestBase : public LoginManagerTest,
   base::FilePath test_data_dir_;
   base::FilePath user_data_dir_;
 
-  PrefService* local_state_;
+  raw_ptr<PrefService, ExperimentalAsh> local_state_;
 
   gfx::ImageSkia decoded_image_;
 
@@ -338,6 +339,7 @@ class UserImageManagerTest : public UserImageManagerTestBase {
 
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest, PRE_SaveAndLoadUserImage) {
   // Setup a user with JPEG image.
+  LoginUser(test_account_id1_);
   run_loop_ = std::make_unique<base::RunLoop>();
   const gfx::ImageSkia& image = default_user_image::GetStubDefaultImage();
   UserImageManager* user_image_manager =
@@ -386,6 +388,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserDefaultImageIndex) {
 // Verifies that SaveUserImage() correctly sets and persists the chosen user
 // image.
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImage) {
+  LoginUser(test_account_id1_);
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(test_account_id1_);
   ASSERT_TRUE(user);
@@ -423,6 +426,7 @@ IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImage) {
 // Verifies that SaveUserImageFromFile() correctly sets and persists the chosen
 // user image.
 IN_PROC_BROWSER_TEST_F(UserImageManagerTest, SaveUserImageFromFile) {
+  LoginUser(test_account_id1_);
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(test_account_id1_);
   ASSERT_TRUE(user);

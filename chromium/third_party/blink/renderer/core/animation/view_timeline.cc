@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_view_timeline.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_view_timeline_options.h"
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
+#include "third_party/blink/renderer/core/animation/view_timeline_attachment.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
@@ -35,7 +36,7 @@ double ComputeOffset(Element* source_element,
                      LayoutBox* subject_layout,
                      LayoutBox* source_layout,
                      ScrollOrientation physical_orientation) {
-  MapCoordinatesFlags flags = kIgnoreScrollOffset;
+  MapCoordinatesFlags flags = kIgnoreScrollOffset | kIgnoreTransforms;
   gfx::PointF point = gfx::PointF(subject_layout->LocalToAncestorPoint(
       PhysicalOffset(), source_layout, flags));
 
@@ -68,22 +69,22 @@ bool IsBlockDirection(ViewTimeline::ScrollAxis axis, WritingMode writing_mode) {
 // property).
 //
 // https://drafts.csswg.org/scroll-animations-1/#valdef-view-timeline-inset-auto
-ViewTimeline::Inset ResolveAuto(const ViewTimeline::Inset& inset,
-                                Element& source,
-                                ViewTimeline::ScrollAxis axis) {
+TimelineInset ResolveAuto(const TimelineInset& inset,
+                          Element& source,
+                          ViewTimeline::ScrollAxis axis) {
   const ComputedStyle* style = source.GetComputedStyle();
   if (!style)
     return inset;
 
-  const Length& start = inset.start_side;
-  const Length& end = inset.end_side;
+  const Length& start = inset.GetStart();
+  const Length& end = inset.GetEnd();
 
   if (IsBlockDirection(axis, style->GetWritingMode())) {
-    return ViewTimeline::Inset(
+    return TimelineInset(
         start.IsAuto() ? style->ScrollPaddingBlockStart() : start,
         end.IsAuto() ? style->ScrollPaddingBlockEnd() : end);
   }
-  return ViewTimeline::Inset(
+  return TimelineInset(
       start.IsAuto() ? style->ScrollPaddingInlineStart() : start,
       end.IsAuto() ? style->ScrollPaddingInlineEnd() : end);
 }
@@ -220,14 +221,15 @@ ViewTimeline* ViewTimeline::Create(Document& document,
     end_inset_value = &value_pair->Second();
   }
 
-  Inset inset;
-  inset.start_side = InsetValueToLength(start_inset_value.value_or(nullptr),
-                                        subject, Length(Length::Type::kFixed));
-  inset.end_side = InsetValueToLength(end_inset_value.value_or(nullptr),
-                                      subject, inset.start_side);
+  Length inset_start_side =
+      InsetValueToLength(start_inset_value.value_or(nullptr), subject,
+                         Length(Length::Type::kFixed));
+  Length inset_end_side = InsetValueToLength(end_inset_value.value_or(nullptr),
+                                             subject, inset_start_side);
 
-  ViewTimeline* view_timeline =
-      MakeGarbageCollected<ViewTimeline>(&document, subject, axis, inset);
+  ViewTimeline* view_timeline = MakeGarbageCollected<ViewTimeline>(
+      &document, TimelineAttachment::kLocal, subject, axis,
+      TimelineInset(inset_start_side, inset_end_side));
 
   if (start_inset_value && IsStyleDependent(start_inset_value.value()))
     view_timeline->style_dependant_start_inset_ = start_inset_value.value();
@@ -239,11 +241,18 @@ ViewTimeline* ViewTimeline::Create(Document& document,
 }
 
 ViewTimeline::ViewTimeline(Document* document,
+                           TimelineAttachment attachment,
                            Element* subject,
                            ScrollAxis axis,
-                           Inset inset)
-    : ScrollTimeline(document, ReferenceType::kNearestAncestor, subject, axis),
-      inset_(inset) {
+                           TimelineInset inset)
+    : ScrollTimeline(
+          document,
+          attachment,
+          attachment == TimelineAttachment::kDefer
+              ? nullptr
+              : MakeGarbageCollected<ViewTimelineAttachment>(subject,
+                                                             axis,
+                                                             inset)) {
   // Ensure that the timeline stays alive as long as the subject.
   if (subject)
     subject->RegisterScrollTimeline(this);
@@ -252,21 +261,27 @@ ViewTimeline::ViewTimeline(Document* document,
 AnimationTimeDelta ViewTimeline::CalculateIntrinsicIterationDuration(
     const Animation* animation,
     const Timing& timing) {
+  return CalculateIntrinsicIterationDuration(animation->GetRangeStartInternal(),
+                                             animation->GetRangeEndInternal(),
+                                             timing);
+}
+
+AnimationTimeDelta ViewTimeline::CalculateIntrinsicIterationDuration(
+    const absl::optional<TimelineOffset>& rangeStart,
+    const absl::optional<TimelineOffset>& rangeEnd,
+    const Timing& timing) {
   absl::optional<AnimationTimeDelta> duration = GetDuration();
 
   // Only run calculation for progress based scroll timelines
   if (duration && timing.iteration_count > 0) {
     double active_interval = 1;
 
-    double start = animation->GetRangeStart()
-                       ? ToFractionalOffset(animation->GetRangeStart().value())
-                       : 0;
-    double end = animation->GetRangeEnd()
-                     ? ToFractionalOffset(animation->GetRangeEnd().value())
-                     : 1;
+    double start = rangeStart ? ToFractionalOffset(rangeStart.value()) : 0;
+    double end = rangeEnd ? ToFractionalOffset(rangeEnd.value()) : 1;
 
     active_interval -= start;
     active_interval -= (1 - end);
+    active_interval = std::max(0., active_interval);
 
     // Start and end delays are proportional to the active interval.
     double start_delay = timing.start_delay.relative_delay.value_or(0);
@@ -286,14 +301,15 @@ AnimationTimeDelta ViewTimeline::CalculateIntrinsicIterationDuration(
 absl::optional<ScrollTimeline::ScrollOffsets> ViewTimeline::CalculateOffsets(
     PaintLayerScrollableArea* scrollable_area,
     ScrollOrientation physical_orientation) const {
-  // Do not call this method with an inactive timeline.
+  // Do not call this method with an unresolved timeline.
   // Called from ScrollTimeline::ComputeTimelineState, which has safeguard.
   // Any new call sites will require a similar safeguard.
-  DCHECK(ComputeIsActive());
+  DCHECK(IsResolved());
   DCHECK(subject());
   LayoutBox* layout_box = subject()->GetLayoutBox();
   DCHECK(layout_box);
-  Element* source = SourceInternal();
+  DCHECK(CurrentAttachment());
+  Element* source = CurrentAttachment()->ComputeSourceNoLayout();
   Node* resolved_source = ResolvedSource();
   DCHECK(source);
   DCHECK(resolved_source);
@@ -315,26 +331,31 @@ absl::optional<ScrollTimeline::ScrollOffsets> ViewTimeline::CalculateOffsets(
 
   viewport_size_ = viewport_size.ToDouble();
 
-  Inset inset = ResolveAuto(inset_, *source, GetAxis());
+  TimelineInset inset = ResolveAuto(GetInset(), *source, GetAxis());
 
   // Update inset lengths if style dependent.
-  if (style_dependant_start_inset_) {
-    inset.start_side = InsetValueToLength(style_dependant_start_inset_,
-                                          subject(), Length::Fixed());
-  }
-  if (style_dependant_end_inset_) {
-    inset.end_side = InsetValueToLength(style_dependant_end_inset_, subject(),
-                                        Length::Fixed());
+  if (style_dependant_start_inset_ || style_dependant_end_inset_) {
+    Length updated_start = inset.GetStart();
+    Length updated_end = inset.GetEnd();
+    if (style_dependant_start_inset_) {
+      updated_start = InsetValueToLength(style_dependant_start_inset_,
+                                         subject(), Length::Fixed());
+    }
+    if (style_dependant_end_inset_) {
+      updated_end = InsetValueToLength(style_dependant_end_inset_, subject(),
+                                       Length::Fixed());
+    }
+    inset = TimelineInset(updated_start, updated_end);
   }
 
   // Note that the end_side_inset is used to adjust the start offset,
   // and the start_side_inset is used to adjust the end offset.
-  // This is because "start side" refers to logical start side [1] of the
-  // source box, where as "start offset" refers to the start of the timeline,
+  // This is because "start side" refers to the logical start side [1] of the
+  // source box, whereas "start offset" refers to the start of the timeline,
   // and similarly for end side/offset.
   // [1] https://drafts.csswg.org/css-writing-modes-4/#css-start
-  end_side_inset_ = ComputeInset(inset.end_side, viewport_size);
-  start_side_inset_ = ComputeInset(inset.start_side, viewport_size);
+  end_side_inset_ = ComputeInset(inset.GetEnd(), viewport_size);
+  start_side_inset_ = ComputeInset(inset.GetStart(), viewport_size);
 
   double start_offset = target_offset_ - viewport_size_ + end_side_inset_;
   double end_offset = target_offset_ + target_size_ - start_side_inset_;
@@ -343,8 +364,9 @@ absl::optional<ScrollTimeline::ScrollOffsets> ViewTimeline::CalculateOffsets(
     start_offset_ = start_offset;
     end_offset_ = end_offset;
 
-    for (auto animation : GetAnimations())
+    for (auto animation : GetAnimations()) {
       animation->InvalidateNormalizedTiming();
+    }
   }
 
   return absl::make_optional<ScrollOffsets>(start_offset, end_offset);
@@ -402,6 +424,38 @@ CSSNumericValue* ViewTimeline::getCurrentTime(const String& rangeName) {
   return CSSUnitValues::percent(named_range_progress * 100);
 }
 
+Element* ViewTimeline::subject() const {
+  return CurrentAttachment() ? CurrentAttachment()->GetReferenceElement()
+                             : nullptr;
+}
+
+bool ViewTimeline::Matches(TimelineAttachment attachment_type,
+                           Element* subject,
+                           ScrollAxis axis,
+                           const TimelineInset& inset) const {
+  if (!ScrollTimeline::Matches(attachment_type, ReferenceType::kNearestAncestor,
+                               /* reference_element */ subject, axis)) {
+    return false;
+  }
+  if (GetTimelineAttachment() == TimelineAttachment::kDefer) {
+    return attachment_type == TimelineAttachment::kDefer;
+  }
+  const auto* attachment =
+      DynamicTo<ViewTimelineAttachment>(CurrentAttachment());
+  DCHECK(attachment);
+  return attachment->GetInset() == inset;
+}
+
+const TimelineInset& ViewTimeline::GetInset() const {
+  if (const auto* attachment =
+          DynamicTo<ViewTimelineAttachment>(CurrentAttachment())) {
+    return attachment->GetInset();
+  }
+
+  DEFINE_STATIC_LOCAL(TimelineInset, default_inset, ());
+  return default_inset;
+}
+
 double ViewTimeline::ToFractionalOffset(
     const TimelineOffset& timeline_offset) const {
   // https://drafts.csswg.org/scroll-animations-1/#view-timelines-ranges
@@ -415,8 +469,9 @@ double ViewTimeline::ToFractionalOffset(
       align_subject_start_view_end + target_size_;
   // Timeline is inactive if scroll range is zero.
   double range = align_subject_end_view_start - align_subject_start_view_end;
-  if (!range)
+  if (!range) {
     return 0;
+  }
 
   double range_start = 0;
   double range_end = 0;
@@ -500,36 +555,6 @@ double ViewTimeline::ToFractionalOffset(
   return (offset - align_subject_start_view_end) / range;
 }
 
-AnimationTimeline::TimeDelayPair ViewTimeline::ComputeEffectiveAnimationDelays(
-    const Animation* animation,
-    const Timing& timing) const {
-  absl::optional<AnimationTimeDelta> duration = GetDuration();
-  if (!duration)
-    return std::make_pair(AnimationTimeDelta(), AnimationTimeDelta());
-  double range_start =
-      animation->GetRangeStart()
-          ? ToFractionalOffset(animation->GetRangeStart().value())
-          : 0;
-  double range_end = animation->GetRangeEnd()
-                         ? ToFractionalOffset(animation->GetRangeEnd().value())
-                         : 1;
-
-  // Timeline range is relative to cover 0% to 100% range.
-  double timeline_range = range_end - range_start;
-
-  // Animation delays are effectively insets on the animation range.
-  // Delays must be expressed as percentages. Time-based delays are ignored.
-  double start_delay =
-      timing.start_delay.relative_delay.value_or(0) * timeline_range;
-  double end_delay =
-      timing.end_delay.relative_delay.value_or(0) * timeline_range;
-
-  // TODO(kevers): Check if additional safeguards are required for delays
-  // summing > 100%.
-  return std::make_pair((range_start + start_delay) * duration.value(),
-                        (1 - range_end + end_delay) * duration.value());
-}
-
 CSSNumericValue* ViewTimeline::startOffset() const {
   absl::optional<ScrollOffsets> scroll_offsets = GetResolvedScrollOffsets();
   if (!scroll_offsets)
@@ -544,6 +569,53 @@ CSSNumericValue* ViewTimeline::endOffset() const {
     return nullptr;
 
   return CSSUnitValues::px(scroll_offsets->end);
+}
+
+void ViewTimeline::UpdateSnapshot() {
+  ScrollTimeline::UpdateSnapshot();
+  ResolveTimelineOffsets(false);
+}
+
+bool ViewTimeline::ValidateSnapshot() {
+  bool valid_snapshot = ScrollTimeline::ValidateSnapshot();
+  bool has_keyframe_update = ResolveTimelineOffsets(true);
+  return valid_snapshot && !has_keyframe_update;
+}
+
+bool ViewTimeline::ResolveTimelineOffsets(bool invalidate_effect) const {
+  bool has_keyframe_update = false;
+  for (Animation* animation : GetAnimations()) {
+    if (auto* effect = DynamicTo<KeyframeEffect>(animation->effect())) {
+      double range_start =
+          animation->GetRangeStartInternal()
+              ? ToFractionalOffset(animation->GetRangeStartInternal().value())
+              : 0;
+      double range_end =
+          animation->GetRangeEndInternal()
+              ? ToFractionalOffset(animation->GetRangeEndInternal().value())
+              : 1;
+      if (effect->Model()->ResolveTimelineOffsets(range_start, range_end)) {
+        has_keyframe_update = true;
+        if (invalidate_effect) {
+          animation->InvalidateEffectTargetStyle();
+        }
+      }
+    }
+  }
+  return has_keyframe_update;
+}
+
+Animation* ViewTimeline::Play(AnimationEffect* effect,
+                              ExceptionState& exception_state) {
+  if (auto* keyframe_effect = DynamicTo<KeyframeEffect>(effect)) {
+    keyframe_effect->Model()->SetViewTimelineIfRequired(this);
+  }
+  return AnimationTimeline::Play(effect, exception_state);
+}
+
+void ViewTimeline::FlushStyleUpdate() {
+  ScrollTimeline::FlushStyleUpdate();
+  ResolveTimelineOffsets(/* invalidate_effect */ false);
 }
 
 void ViewTimeline::Trace(Visitor* visitor) const {

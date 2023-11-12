@@ -69,14 +69,22 @@ class Worker(MessageHandler):
     """State maintained between tasks.
 
     Note: This object must be pickleable because it is instantiated in the
-        parent process. All methods run in this worker's associated subprocess.
+        parent process.
     """
 
     def start(self) -> None:
-        """Initialize this object when the subprocess starts (optional)."""
+        """Initialize this object when the worker process starts (optional).
+
+        Runs in the worker process.
+        """
 
     def stop(self) -> None:
-        """Clean up this object when the subprocess exits (optional)."""
+        """Clean up this object when the worker process exits (optional).
+
+        Either the manager or worker process may call `stop()`, so resources
+        created in `start()` instead of the constructor may not be available.
+        You can use this to detect which process `stop()` is running in.
+        """
 
 
 def get(caller: MessageHandler,
@@ -156,7 +164,7 @@ class _MessagePool(object):
             worker.start()
 
     def _worker_log_level(self):
-        log_level = logging.NOTSET
+        log_level = logging.root.level
         for handler in logging.root.handlers:
             if handler.level != logging.NOTSET:
                 if log_level == logging.NOTSET:

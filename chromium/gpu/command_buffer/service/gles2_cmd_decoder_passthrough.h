@@ -35,7 +35,6 @@
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_fence.h"
-#include "ui/gl/gl_image.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gpu_switching_observer.h"
 
@@ -45,6 +44,7 @@
 
 namespace gl {
 class GLFence;
+class GLImage;
 class ProgressReporter;
 }
 
@@ -57,6 +57,7 @@ class ContextGroup;
 class GPUTracer;
 class PassthroughAbstractTextureImpl;
 class MultiDrawManager;
+class GLES2DecoderPassthroughImpl;
 class GLES2ExternalFramebuffer;
 
 struct MappedBuffer {
@@ -113,9 +114,8 @@ struct PassthroughResources {
    public:
     SharedImageData();
     explicit SharedImageData(
-        std::unique_ptr<GLTexturePassthroughImageRepresentation> representation,
-        gl::GLApi* api,
-        const FeatureInfo* feature_info);
+        const GLES2DecoderPassthroughImpl*,
+        std::unique_ptr<GLTexturePassthroughImageRepresentation>);
     SharedImageData(SharedImageData&& other);
 
     SharedImageData(const SharedImageData&) = delete;
@@ -132,7 +132,7 @@ struct PassthroughResources {
     // even if access is currently suspended.
     bool is_being_accessed() const { return access_mode_.has_value(); }
 
-    void EnsureClear(gl::GLApi* api, const FeatureInfo* feature_info);
+    void EnsureClear(const GLES2DecoderPassthroughImpl*);
 
     bool BeginAccess(GLenum mode, gl::GLApi* api);
     void EndAccess();
@@ -165,6 +165,10 @@ struct PassthroughResources {
   // back the mapping so that it can be flushed when the buffer is unmapped
   base::flat_map<GLuint, MappedBuffer> mapped_buffer_map;
 };
+
+// Impose an upper bound on the number ANGLE_shader_pixel_local_storage planes
+// so we can stack-allocate load/store ops.
+static constexpr GLsizei kPassthroughMaxPLSPlanes = 8;
 
 class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
     : public GLES2Decoder,
@@ -420,6 +424,19 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
                                   scoped_refptr<TexturePassthrough>);
 #endif
 
+  const FeatureInfo::FeatureFlags& features() const {
+    return feature_info_->feature_flags();
+  }
+
+  class ScopedPixelLocalStorageInterrupt {
+   public:
+    ScopedPixelLocalStorageInterrupt(const GLES2DecoderPassthroughImpl*);
+    ~ScopedPixelLocalStorageInterrupt();
+
+   private:
+    raw_ptr<const GLES2DecoderPassthroughImpl> impl_;
+  };
+
  private:
   // Allow unittests to inspect internal state tracking
   friend class GLES2DecoderPassthroughTestBase;
@@ -477,6 +494,12 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
                                      GLsizei* length,
                                      T* params);
 
+  error::Error PatchGetFramebufferPixelLocalStorageParameterivANGLE(
+      GLint plane,
+      GLenum pname,
+      GLsizei length,
+      GLint* params);
+
   void InsertError(GLenum error, const std::string& message);
   GLenum PopError();
   bool FlushErrors();
@@ -517,10 +540,6 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
   void VerifyServiceTextureObjectsExist();
 
   bool IsEmulatedFramebufferBound(GLenum target) const;
-
-  const FeatureInfo::FeatureFlags& features() const {
-    return feature_info_->feature_flags();
-  }
 
   void ExitCommandProcessingEarly() override;
 
@@ -860,38 +879,35 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
   };
 
   struct EmulatedColorBuffer {
-    explicit EmulatedColorBuffer(
-        gl::GLApi* api,
-        const EmulatedDefaultFramebufferFormat& format_in);
+    explicit EmulatedColorBuffer(const GLES2DecoderPassthroughImpl*);
 
     EmulatedColorBuffer(const EmulatedColorBuffer&) = delete;
     EmulatedColorBuffer& operator=(const EmulatedColorBuffer&) = delete;
 
     ~EmulatedColorBuffer();
 
+    gl::GLApi* api() const { return impl_->api(); }
+
     void Resize(const gfx::Size& new_size);
     void Destroy(bool have_context);
 
-    raw_ptr<gl::GLApi> api;
+    raw_ptr<const GLES2DecoderPassthroughImpl> impl_;
 
     scoped_refptr<TexturePassthrough> texture;
 
     gfx::Size size;
-    EmulatedDefaultFramebufferFormat format;
   };
 
   struct EmulatedDefaultFramebuffer {
-    EmulatedDefaultFramebuffer(
-        gl::GLApi* api,
-        const EmulatedDefaultFramebufferFormat& format_in,
-        const FeatureInfo* feature_info,
-        bool supports_separate_fbo_bindings);
+    EmulatedDefaultFramebuffer(const GLES2DecoderPassthroughImpl*);
 
     EmulatedDefaultFramebuffer(const EmulatedDefaultFramebuffer&) = delete;
     EmulatedDefaultFramebuffer& operator=(const EmulatedDefaultFramebuffer&) =
         delete;
 
     ~EmulatedDefaultFramebuffer();
+
+    gl::GLApi* api() const { return impl_->api(); }
 
     // Set a new color buffer, return the old one
     std::unique_ptr<EmulatedColorBuffer> SetColorBuffer(
@@ -900,11 +916,10 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
     // Blit this framebuffer into another same-sized color buffer
     void Blit(EmulatedColorBuffer* target);
 
-    bool Resize(const gfx::Size& new_size, const FeatureInfo* feature_info);
+    bool Resize(const gfx::Size& new_size);
     void Destroy(bool have_context);
 
-    raw_ptr<gl::GLApi> api;
-    bool supports_separate_fbo_bindings = false;
+    raw_ptr<const GLES2DecoderPassthroughImpl> impl_;
 
     // Service ID of the framebuffer
     GLuint framebuffer_service_id = 0;
@@ -925,7 +940,6 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
     GLuint stencil_buffer_service_id = 0;
 
     gfx::Size size;
-    EmulatedDefaultFramebufferFormat format;
   };
   EmulatedDefaultFramebufferFormat emulated_default_framebuffer_format_;
   std::unique_ptr<EmulatedDefaultFramebuffer> emulated_back_buffer_;
@@ -947,6 +961,10 @@ class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl
 
   // If this context supports both read and draw framebuffer bindings
   bool supports_separate_fbo_bindings_ = false;
+
+  // Tracks if the context has ever called glBeginPixelLocalStorageANGLE. If it
+  // has, we need to start using the pixel local storage interrupt mechanism.
+  bool has_activated_pixel_local_storage_ = false;
 
   // Tracing
   std::unique_ptr<GPUTracer> gpu_tracer_;

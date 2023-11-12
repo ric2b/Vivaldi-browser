@@ -7,13 +7,16 @@
 
 #include <string>
 
+class GURL;
+class PrefService;
+
 namespace supervised_user {
 
 // Reason for applying the website filtering parental control.
 enum class FilteringBehaviorReason {
   DEFAULT = 0,
   ASYNC_CHECKER = 1,
-  DENYLIST = 2,
+  // Deprecated, DENYLIST = 2,
   MANUAL = 3,
   ALLOWLIST = 4,
   NOT_SIGNED_IN = 5,
@@ -21,6 +24,12 @@ enum class FilteringBehaviorReason {
 
 // Converts FilteringBehaviorReason enum to string format.
 std::string FilteringBehaviorReasonToString(FilteringBehaviorReason reason);
+
+// Strips user-specific tokens in a URL to generalize it.
+GURL NormalizeUrl(const GURL& url);
+
+// Check if web filtering prefs are set to default values.
+bool AreWebFilterPrefsDefault(const PrefService& pref_service);
 
 }  // namespace supervised_user
 

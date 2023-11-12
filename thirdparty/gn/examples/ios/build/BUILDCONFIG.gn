@@ -15,6 +15,16 @@ if (current_os == "") {
   current_os = target_os
 }
 
+declare_args() {
+  # Control which platform the build is targeting. Valid values are
+  # "simulator" or "device".
+  target_environment = "simulator"
+}
+
+assert(
+    target_environment == "simulator" || target_environment == "device",
+    "Only supported values for target_environment are 'simulator' and 'device'")
+
 # All binary targets will get this list of configs by default.
 _shared_binary_target_configs = [ "//build:compiler" ]
 

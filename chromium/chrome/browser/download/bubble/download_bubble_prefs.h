@@ -23,9 +23,17 @@ bool IsDownloadConnectorEnabled(Profile* profile);
 // Whether to suppress the download bubble IPH. This will be true for users
 // who have interacted with the download bubble prior to the IPH being added.
 bool ShouldSuppressDownloadBubbleIph(Profile* profile);
-// TODO(crbug.com/1420750): This setter is temporary and should be removed when
-// the IPH is implemented.
-void SetShouldSuppressDownloadBubbleIph(Profile* profile, bool suppress);
+
+// Whether the partial view should be shown automatically when downloads are
+// finished.
+bool IsDownloadBubblePartialViewEnabled(Profile* profile);
+void SetDownloadBubblePartialViewEnabled(Profile* profile, bool enabled);
+// Whether the setting is default (not set by the user).
+bool IsDownloadBubblePartialViewEnabledDefaultValue(Profile* profile);
+
+// The number of partial view impressions.
+int DownloadBubblePartialViewImpressions(Profile* profile);
+void SetDownloadBubblePartialViewImpressions(Profile* profile, int count);
 
 }  // namespace download
 

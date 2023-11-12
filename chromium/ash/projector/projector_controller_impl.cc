@@ -71,8 +71,7 @@ bool SaveFile(scoped_refptr<base::RefCountedMemory> data,
   if (!size)
     return false;
 
-  if (size != base::WriteFile(
-                  path, reinterpret_cast<const char*>(data->front()), size)) {
+  if (!base::WriteFile(path, *data)) {
     LOG(ERROR) << "Failed to save file: " << path;
     return false;
   }
@@ -195,25 +194,6 @@ void ProjectorControllerImpl::StartProjectorSession(
       client_->MinimizeProjectorApp();
     }
   }
-}
-
-void ProjectorControllerImpl::CreateScreencastContainerFolder(
-    CreateScreencastContainerFolderCallback callback) {
-  base::FilePath mounted_path;
-  if (!client_->GetBaseStoragePath(&mounted_path)) {
-    LOG(ERROR) << "Failed to get DriveFs mounted point path.";
-    ProjectorUiController::ShowSaveFailureNotification();
-    std::move(callback).Run(base::FilePath());
-    return;
-  }
-
-  auto path = mounted_path.Append("root")
-                  .Append(projector_session_->storage_dir())
-                  .Append(projector_session_->screencast_name());
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()}, base::BindOnce(&CreateDirectory, path),
-      base::BindOnce(&ProjectorControllerImpl::OnContainerFolderCreated,
-                     weak_factory_.GetWeakPtr(), path, std::move(callback)));
 }
 
 void ProjectorControllerImpl::SetClient(ProjectorClient* client) {
@@ -364,6 +344,25 @@ bool ProjectorControllerImpl::GetAnnotatorAvailability() {
 
 void ProjectorControllerImpl::ToggleAnnotationTray() {
   return ui_controller_->ToggleAnnotationTray();
+}
+
+void ProjectorControllerImpl::CreateScreencastContainerFolder(
+    CreateScreencastContainerFolderCallback callback) {
+  base::FilePath mounted_path;
+  if (!client_->GetBaseStoragePath(&mounted_path)) {
+    LOG(ERROR) << "Failed to get DriveFs mounted point path.";
+    ProjectorUiController::ShowSaveFailureNotification();
+    std::move(callback).Run(base::FilePath());
+    return;
+  }
+
+  auto path = mounted_path.Append("root")
+                  .Append(projector_session_->storage_dir())
+                  .Append(projector_session_->screencast_name());
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()}, base::BindOnce(&CreateDirectory, path),
+      base::BindOnce(&ProjectorControllerImpl::OnContainerFolderCreated,
+                     weak_factory_.GetWeakPtr(), path, std::move(callback)));
 }
 
 void ProjectorControllerImpl::OnRecordingStarted(aura::Window* current_root,

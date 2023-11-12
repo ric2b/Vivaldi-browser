@@ -26,8 +26,10 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/common/extensions/extension_test_util.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extensions_client.h"
 #include "extensions/common/manifest_constants.h"
 #endif
 
@@ -133,6 +135,20 @@ scoped_refptr<const extensions::Extension> CreateHostedApp(
     bool is_from_webstore, const std::string& app_url) {
   return CreateTestExtension(ManifestLocation::kInternal, is_from_webstore,
                              kHostedApp, app_url);
+}
+
+TEST_F(ChromeContentRendererClientTest, ExtensionsClientInitialized) {
+  auto* extensions_client = extensions::ExtensionsClient::Get();
+  ASSERT_TRUE(extensions_client);
+
+  // Ensure that the availability map is initialized correctly.
+  const auto& map =
+      extensions_client->GetFeatureDelegatedAvailabilityCheckMap();
+  EXPECT_EQ(5u, map.size());
+  for (const auto* feature :
+       extension_test_util::GetExpectedDelegatedFeaturesForTest()) {
+    EXPECT_EQ(1u, map.count(feature));
+  }
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 

@@ -146,6 +146,11 @@ const EcheApiBindingImpl = new (class {
         Message.ENUM_HISTOGRAM_MESSAGE, {histogram, value, maxValue});
   }
 
+  sendAccessibilityEventData(event) {
+    console.log('echeapi receiver.js sendAccessibilityEventData');
+    parentMessagePipe.sendMessage(Message.ACCESSIBILITY_EVENT_DATA, event);
+  }
+
   onStreamAction(callback) {
     console.log('echeapi receiver.js onStreamAction');
     streamActionCallback = callback;
@@ -158,6 +163,14 @@ const EcheApiBindingImpl = new (class {
     parentMessagePipe.sendMessage(Message.CHANGE_ORIENTATION, {isLandscape});
   }
 
+  onConnectionStatusChanged(connectionStatus) {
+    console.log(
+        `echeapi receiver.js onConnectionStatusChanged, connectionStatus=` +
+        connectionStatus);
+    parentMessagePipe.sendMessage(
+        Message.CONNECTION_STATUS_CHANGED, {connectionStatus});
+  }
+
   onReceivedVirtualKeyboardChanged(callback) {
     console.log('echeapi receiver.js onReceivedVirtualKeyboardChanged');
     virtualKeyboardCallback = callback;
@@ -167,11 +180,13 @@ const EcheApiBindingImpl = new (class {
     console.log('echeapi receiver.js onAndroidDeviceNetworkInfoChanged');
     androidNetworkInfoCallback = callback;
   }
+
 })();
 
 // Declare module echeapi and bind the implementation to echeapi.d.ts
 console.log('echeapi receiver.js start bind the implementation of echeapi');
 const echeapi = {};
+// webrtc
 echeapi.webrtc = {};
 echeapi.webrtc.sendSignal =
     EcheApiBindingImpl.sendWebRtcSignal.bind(EcheApiBindingImpl);
@@ -181,6 +196,11 @@ echeapi.webrtc.registerSignalReceiver =
     EcheApiBindingImpl.onWebRtcSignalReceived.bind(EcheApiBindingImpl);
 echeapi.webrtc.closeWindow =
     EcheApiBindingImpl.closeWindow.bind(EcheApiBindingImpl);
+// accessibility
+echeapi.accessibility = {};
+echeapi.accessibility.sendAccessibilityEventData =
+    EcheApiBindingImpl.sendAccessibilityEventData.bind(EcheApiBindingImpl);
+// system
 echeapi.system = {};
 echeapi.system.getLocalUid =
     EcheApiBindingImpl.getLocalUid.bind(EcheApiBindingImpl);
@@ -212,5 +232,7 @@ echeapi.system.registerAndroidNetworkInfoChangedReceiver =
         EcheApiBindingImpl);
 echeapi.system.onStreamOrientationChanged =
     EcheApiBindingImpl.onStreamOrientationChanged.bind(EcheApiBindingImpl);
+echeapi.system.onConnectionStatusChanged =
+    EcheApiBindingImpl.onConnectionStatusChanged.bind(EcheApiBindingImpl);
 window['echeapi'] = echeapi;
 console.log('echeapi receiver.js finish bind the implementation of echeapi');

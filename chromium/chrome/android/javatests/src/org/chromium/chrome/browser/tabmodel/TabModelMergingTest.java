@@ -10,8 +10,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build.VERSION_CODES;
-import android.support.test.InstrumentationRegistry;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.LargeTest;
 
 import org.hamcrest.Matchers;
@@ -399,6 +399,7 @@ public class TabModelMergingTest {
     @Test
     @LargeTest
     @Feature({"TabPersistentStore", "MultiWindow"})
+    @DisabledTest(message = "https://crbug.com/1417018")
     public void testMergeOnColdStartIntoChromeTabbedActivity2() throws TimeoutException {
         String CTA2ClassName = mActivity2.getClass().getName();
         String CTA2PackageName = mActivity2.getPackageName();

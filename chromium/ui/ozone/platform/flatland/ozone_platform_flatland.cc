@@ -4,6 +4,8 @@
 
 #include "ui/ozone/platform/flatland/ozone_platform_flatland.h"
 
+#include <fidl/fuchsia.ui.views/cpp/hlcpp_conversion.h>
+
 #include <memory>
 #include <utility>
 #include <vector>
@@ -119,9 +121,8 @@ class OzonePlatformFlatland : public OzonePlatform,
     static base::NoDestructor<OzonePlatform::PlatformProperties> properties;
     static bool initialised = false;
     if (!initialised) {
-      properties->needs_view_token = false;
       properties->message_pump_type_for_gpu = base::MessagePumpType::IO;
-      properties->supports_vulkan_swap_chain = true;
+      properties->supports_vulkan_swap_chain = false;
 
       initialised = true;
     }
@@ -147,7 +148,8 @@ class OzonePlatformFlatland : public OzonePlatform,
     return std::make_unique<InputMethodFuchsia>(
         window_manager_->GetWindow(widget)->virtual_keyboard_enabled(),
         ime_key_event_dispatcher,
-        window_manager_->GetWindow(widget)->CloneViewRef());
+        fidl::HLCPPToNatural(
+            window_manager_->GetWindow(widget)->CloneViewRef()));
   }
 
   bool InitializeUI(const InitParams& params) override {
@@ -197,12 +199,8 @@ class OzonePlatformFlatland : public OzonePlatform,
 
   const PlatformRuntimeProperties& GetPlatformRuntimeProperties() override {
     static OzonePlatform::PlatformRuntimeProperties properties;
-
-    // This property is set when the GetPlatformRuntimeProperties is
-    // called on the gpu process side.
-    if (has_initialized_gpu())
-      properties.supports_native_pixmaps = true;
-
+    properties.supports_native_pixmaps = true;
+    properties.supports_overlays = true;
     return properties;
   }
 

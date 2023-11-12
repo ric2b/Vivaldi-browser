@@ -6,6 +6,7 @@
 
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
@@ -17,6 +18,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "remoting/host/mojom/remote_support.mojom.h"
+#include "remoting/protocol/errors.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -109,12 +111,12 @@ class RemotingServiceWrapper : public CrdHostDelegate::RemotingServiceProxy {
   void StartSession(SupportSessionParamsPtr params,
                     const remoting::ChromeOsEnterpriseParams& enterprise_params,
                     StartSessionCallback callback) override {
-    implementation_.StartSession(std::move(params), enterprise_params,
-                                 std::move(callback));
+    implementation_->StartSession(std::move(params), enterprise_params,
+                                  std::move(callback));
   }
 
  private:
-  RemotingServiceProxy& implementation_;
+  const raw_ref<RemotingServiceProxy, ExperimentalAsh> implementation_;
 };
 
 // Represents the response to the CRD host request, which is
@@ -503,6 +505,20 @@ TEST_F(CrdHostDelegateTest,
 
   base::TimeDelta session_duration = WaitForSessionFinishResult();
   EXPECT_EQ(duration, session_duration);
+}
+
+TEST_F(
+    CrdHostDelegateTest,
+    ShouldReportErrorWhenRemotingServiceReportsEnterpriseRemoteSupportDisabledError) {
+  SupportHostObserver& observer = StartCrdHostAndBindObserver();
+
+  observer.OnHostStateError(
+      remoting::protocol::ErrorCode::DISALLOWED_BY_POLICY);
+
+  Response response = WaitForResponse();
+  ASSERT_TRUE(response.HasError());
+  EXPECT_EQ("enterprise remote support disabled", response.error_message());
+  EXPECT_EQ(ResultCode::FAILURE_DISABLED_BY_POLICY, response.error_code());
 }
 
 }  // namespace policy

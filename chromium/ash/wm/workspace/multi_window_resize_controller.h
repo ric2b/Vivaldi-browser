@@ -9,10 +9,11 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/style/icon_button.h"
 #include "ash/wm/overview/overview_observer.h"
-#include "ash/wm/snap_group/snap_group_lock_button.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_observer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -23,13 +24,14 @@
 
 namespace gfx {
 class PointF;
-}
+}  // namespace gfx
 
 namespace views {
 class Widget;
-}
+}  // namespace views
 
 namespace ash {
+
 class MultiWindowResizeControllerTest;
 class WorkspaceWindowResizer;
 
@@ -78,7 +80,7 @@ class ASH_EXPORT MultiWindowResizeController
   void OnOverviewModeStarting() override;
   void OnOverviewModeEndingAnimationComplete(bool canceled) override;
 
-  SnapGroupLockButton* lock_button_for_testing() const { return lock_button_; }
+  IconButton* lock_button_for_testing() const { return lock_button_; }
 
  private:
   friend class MultiWindowResizeControllerTest;
@@ -106,10 +108,10 @@ class ASH_EXPORT MultiWindowResizeController
     bool is_valid() const { return window1 && window2; }
 
     // The left/top window to resize.
-    aura::Window* window1 = nullptr;
+    raw_ptr<aura::Window, ExperimentalAsh> window1 = nullptr;
 
     // Other window to resize.
-    aura::Window* window2 = nullptr;
+    raw_ptr<aura::Window, ExperimentalAsh> window2 = nullptr;
 
     // Direction
     Direction direction;
@@ -137,36 +139,36 @@ class ASH_EXPORT MultiWindowResizeController
                                  int x_in_parent,
                                  int y_in_parent) const;
 
-  // Returns the first window touching |window|.
+  // Returns the first window touching `window`.
   aura::Window* FindWindowTouching(aura::Window* window,
                                    Direction direction) const;
 
-  // Places any windows touching |start| into |others|.
+  // Places any windows touching `start` into `others`.
   void FindWindowsTouching(aura::Window* start,
                            Direction direction,
                            std::vector<aura::Window*>* others) const;
 
-  // Starts/Stops observing |window|.
+  // Starts/Stops observing `window`.
   void StartObserving(aura::Window* window);
   void StopObserving(aura::Window* window);
 
-  // Check if we're observing |window|.
+  // Check if we're observing `window`.
   bool IsObserving(aura::Window* window) const;
 
   // Shows the resizer if the mouse is still at a valid location. This is called
-  // from the |show_timer_|.
+  // from the `show_timer_`.
   void ShowIfValidMouseLocation();
 
-  // Shows the widget immediately.
+  // Shows the `resize_widget_` and `lock_widget_` immediately.
   void ShowNow();
 
-  // Returns true if the widget is showing.
+  // Returns true if the `resize_widget_` and `lock_widget_` are showing.
   bool IsShowing() const;
 
-  // Hides the resize widget and lock widget if it gets created.
+  // Hides the `resize_widget_` and `lock_widget_` if they get created.
   void Hide();
 
-  // Resets the window resizer and hides the resize widget.
+  // Resets the window resizer and hides the widgets.
   void ResetResizer();
 
   // Initiates a resize.
@@ -207,6 +209,13 @@ class ASH_EXPORT MultiWindowResizeController
                        const gfx::Point& location_in_screen,
                        int component) const;
 
+  // Called when the lock button is pressed to create a snap group.
+  void OnLockButtonPressed();
+
+  // Returns true if a lock wiget should be considered i.e. when two windows are
+  // both snapped and the feature flag `kSnapGroup` is enabled.
+  bool ShouldConsiderLockWidget() const;
+
   // Windows and direction to resize.
   ResizeWindows windows_;
 
@@ -220,7 +229,7 @@ class ASH_EXPORT MultiWindowResizeController
   std::unique_ptr<views::Widget> lock_widget_;
 
   // The contents view of the `lock_widget_`.
-  SnapGroupLockButton* lock_button_;
+  raw_ptr<IconButton, ExperimentalAsh> lock_button_;
 
   // If non-null we're in a resize loop.
   std::unique_ptr<WorkspaceWindowResizer> window_resizer_;

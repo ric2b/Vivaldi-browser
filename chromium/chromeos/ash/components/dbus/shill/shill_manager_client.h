@@ -88,7 +88,7 @@ class COMPONENT_EXPORT(SHILL_CLIENT) ShillManagerClient {
     virtual void ClearManagerServices() = 0;
 
     // Returns all enabled services in the given property.
-    virtual base::Value GetEnabledServiceList() const = 0;
+    virtual base::Value::List GetEnabledServiceList() const = 0;
 
     // Called by ShillServiceClient when a service's State property changes,
     // before notifying observers. Sets the DefaultService property to empty
@@ -142,6 +142,13 @@ class COMPONENT_EXPORT(SHILL_CLIENT) ShillManagerClient {
 
     // Set (or unset) stub client state to return nullopt on GetProperties().
     virtual void SetShouldReturnNullProperties(bool value) = 0;
+
+    // Sets whether WiFi services should be visible by default when created
+    // using ConfigureService.
+    // TODO(b/274453184): Make "Visible": false the default for all WiFi
+    // services created using ConfigureService.
+    virtual void SetWifiServicesVisibleByDefault(
+        bool wifi_services_visible_by_default) = 0;
 
    protected:
     virtual ~TestInterface() = default;

@@ -7,7 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/ui/list_model/list_model.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 
 // Accessibility identifier for the Data from Chrome Sync cell.
 extern NSString* const kDataFromChromeSyncAccessibilityIdentifier;
@@ -24,6 +24,9 @@ extern NSString* const kSyncOpenTabsIdentifier;
 extern NSString* const kSyncAutofillIdentifier;
 extern NSString* const kSyncPreferencesIdentifier;
 extern NSString* const kSyncReadingListIdentifier;
+
+// Accessibility identifier for Encryption item.
+extern NSString* const kEncryptionAccessibilityIdentifier;
 
 // Sections used in Sync Settings page.
 typedef NS_ENUM(NSInteger, SyncSettingsSectionIdentifier) {

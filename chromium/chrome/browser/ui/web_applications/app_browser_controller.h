@@ -149,6 +149,9 @@ class AppBrowserController
   // Gets the new tab URL for tabbed apps.
   virtual GURL GetAppNewTabUrl() const;
 
+  // Returns whether the url is within the scope of the tab strip home tab.
+  virtual bool IsUrlInHomeTabScope(const GURL& url) const;
+
   // Determines whether the specified url is 'inside' the app |this| controls.
   virtual bool IsUrlInAppScope(const GURL& url) const = 0;
 
@@ -185,6 +188,10 @@ class AppBrowserController
 
   virtual bool IsIsolatedWebApp() const;
 
+  // TODO(crbug.com/1316117): Remove this mock when `WebAppBrowserTest`s support
+  // creating Isolated Web Apps.
+  virtual void SetIsolatedWebAppTrueForTesting();
+
   // Returns true when the app's effective display mode is
   // window-controls-overlay and the user has toggled WCO on for the app.
   virtual bool IsWindowControlsOverlayEnabled() const;
@@ -197,6 +204,13 @@ class AppBrowserController
 
   // Whether the browser should show the reload button in the toolbar.
   virtual bool HasReloadButton() const;
+
+#if !BUILDFLAG(IS_CHROMEOS)
+  // Whether the browser should show the profile menu button in the toolbar.
+  // Not appliccable to ChromeOS, because apps can be installed only for
+  // one main profile there.
+  virtual bool HasProfileMenuButton() const;
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Returns the SystemWebAppDelegate if any for this controller.

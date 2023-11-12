@@ -85,12 +85,15 @@ struct MEDIA_EXPORT H265ScalingListData {
   // are actually used. Also change it in the accelerator delegate if that is
   // done.
   // Syntax elements.
-  int scaling_list_dc_coef_16x16[kNumScalingListMatrices];
-  int scaling_list_dc_coef_32x32[kNumScalingListMatrices];
-  int scaling_list_4x4[kNumScalingListMatrices][kScalingListSizeId0Count];
-  int scaling_list_8x8[kNumScalingListMatrices][kScalingListSizeId1To3Count];
-  int scaling_list_16x16[kNumScalingListMatrices][kScalingListSizeId1To3Count];
-  int scaling_list_32x32[kNumScalingListMatrices][kScalingListSizeId1To3Count];
+  uint8_t scaling_list_dc_coef_16x16[kNumScalingListMatrices];
+  uint8_t scaling_list_dc_coef_32x32[kNumScalingListMatrices];
+  uint8_t scaling_list_4x4[kNumScalingListMatrices][kScalingListSizeId0Count];
+  uint8_t scaling_list_8x8[kNumScalingListMatrices]
+                          [kScalingListSizeId1To3Count];
+  uint8_t scaling_list_16x16[kNumScalingListMatrices]
+                            [kScalingListSizeId1To3Count];
+  uint8_t scaling_list_32x32[kNumScalingListMatrices]
+                            [kScalingListSizeId1To3Count];
 };
 
 struct MEDIA_EXPORT H265StRefPicSet {
@@ -281,6 +284,7 @@ struct MEDIA_EXPORT H265PPS {
   int row_height_minus1[kMaxNumTileRowHeight];
   bool loop_filter_across_tiles_enabled_flag;
   bool pps_loop_filter_across_slices_enabled_flag;
+  bool deblocking_filter_control_present_flag;
   bool deblocking_filter_override_enabled_flag;
   bool pps_deblocking_filter_disabled_flag;
   int pps_beta_offset_div2;
@@ -407,6 +411,9 @@ struct MEDIA_EXPORT H265SliceHeader {
   // Number of bits st_ref_pic_set takes after removing emulation prevention
   // bytes.
   int st_rps_bits;
+  // Number of bits lt_ref_pic_set takes after removing emulation prevention
+  // bytes.
+  int lt_rps_bits;
 
   bool IsISlice() const;
   bool IsPSlice() const;

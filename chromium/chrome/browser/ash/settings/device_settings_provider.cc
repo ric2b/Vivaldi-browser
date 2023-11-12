@@ -178,6 +178,7 @@ const char* const kKnownSettings[] = {
     kVariationsRestrictParameter,
     kVirtualMachinesAllowed,
     kDeviceReportXDREvents,
+    kDeviceReportNetworkEvents,
 };
 
 constexpr char InvalidCombinationsOfAllowedUsersPoliciesHistogram[] =
@@ -434,6 +435,16 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
         entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyWebKioskIconUrl,
                        entry.web_kiosk_app().icon_url());
       }
+      if (entry.has_ephemeral_mode()) {
+        entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyEphemeralMode,
+                       static_cast<int>(entry.ephemeral_mode()));
+      } else {
+        entry_dict.Set(
+            kAccountsPrefDeviceLocalAccountsKeyEphemeralMode,
+            static_cast<int>(
+                em::DeviceLocalAccountInfoProto::EPHEMERAL_MODE_UNSET));
+      }
+
     } else if (entry.has_deprecated_public_session_id()) {
       // Deprecated public session specification.
       entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyId,
@@ -813,6 +824,10 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
       new_values_cache->SetInteger(
           kDeviceActivityHeartbeatCollectionRateMs,
           reporting_policy.device_activity_heartbeat_collection_rate_ms());
+    }
+    if (reporting_policy.has_report_network_events()) {
+      new_values_cache->SetBoolean(kDeviceReportNetworkEvents,
+                                   reporting_policy.report_network_events());
     }
   }
 }

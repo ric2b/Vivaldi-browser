@@ -15,7 +15,13 @@
 - (void)vivaldiSyncEncryptionPasswordViewControllerWasRemoved:
     (VivaldiSyncEncryptionPasswordViewController*)controller;
 
-- (void)decryptButtonPressed:(NSString*)encryptionPassword;
+- (void)decryptButtonPressed:(NSString*)encryptionPassword
+           completionHandler:(void (^)(BOOL success))completionHandler;
+
+- (void)importPasskey:(NSURL*)encryptionPassword
+    completionHandler:(void (^)(BOOL success))completionHandler;
+
+- (void)logOutButtonPressed;
 
 @end
 
@@ -32,8 +38,6 @@
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
-
-- (void)setCreatingPasscode:(BOOL)isCreating;
 
 @end
 

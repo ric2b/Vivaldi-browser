@@ -7,8 +7,8 @@
 
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/dictionary_base.h"
-#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
 
@@ -17,29 +17,34 @@ namespace blink {
 class MLGraphBuilder;
 class MLOperand;
 
-class MODULES_EXPORT MLOperator final : public ScriptWrappable {
-  DEFINE_WRAPPERTYPEINFO();
-
+class MODULES_EXPORT MLOperator : public GarbageCollected<MLOperator> {
  public:
   enum class OperatorKind {
     // Keep the order as the same as build methods of MLGraphBuilder.
     kClamp,
+    kConcat,
     kConv2d,
+    kConvTranspose2d,
     kAdd,
     kSub,
     kMul,
     kDiv,
+    kLeakyRelu,
     kMax,
     kMin,
+    kElu,
     kGemm,
     kHardSwish,
     kAveragePool2d,
     kMaxPool2d,
+    kPad,
+    kPRelu,
     kRelu,
     kReshape,
     kResample2d,
     kSoftmax,
-    kSigmoid
+    kSigmoid,
+    kTranspose
   };
 
   static String OperatorKindToString(MLOperator::OperatorKind kind);
@@ -63,9 +68,9 @@ class MODULES_EXPORT MLOperator final : public ScriptWrappable {
   MLOperator(const MLOperator&) = delete;
   MLOperator& operator=(const MLOperator&) = delete;
 
-  ~MLOperator() override;
+  ~MLOperator();
 
-  void Trace(Visitor* visitor) const override;
+  void Trace(Visitor* visitor) const;
 
   OperatorKind Kind() const;
   const bindings::DictionaryBase* Options() const;
@@ -89,14 +94,32 @@ class MODULES_EXPORT MLOperator final : public ScriptWrappable {
   // OperatorKind is kClamp, options_ could static_cast to MLClampOptions.
   Member<const bindings::DictionaryBase> options_;
   // is_conneted_ indicates whether the operator is connected with operands.
-  // According to WebNN spec https://www.w3.org/TR/webnn/#api-mloperator, an
-  // operator without operand connections could be used as an activation
-  // function that is fused into another operator.
+  // An operator without operand connections could be used by an MLActivation
+  // to represent an activation function that is fused into another operator.
   bool is_connected_{false};
   HeapVector<Member<const MLOperand>> inputs_;
   HeapVector<Member<const MLOperand>> outputs_;
 };
 
+class MODULES_EXPORT MLPadOperator : public MLOperator {
+ public:
+  MLPadOperator(MLGraphBuilder* builder,
+                const Vector<uint32_t>& beginning_padding,
+                const Vector<uint32_t>& ending_padding,
+                const bindings::DictionaryBase* options = nullptr);
+
+  MLPadOperator(const MLPadOperator&) = delete;
+  MLPadOperator& operator=(const MLPadOperator&) = delete;
+
+  ~MLPadOperator();
+
+  const Vector<uint32_t>& BeginningPadding() const;
+  const Vector<uint32_t>& EndingPadding() const;
+
+ private:
+  Vector<uint32_t> beginning_padding_;
+  Vector<uint32_t> ending_padding_;
+};
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_ML_WEBNN_ML_OPERATOR_H_

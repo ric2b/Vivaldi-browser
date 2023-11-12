@@ -67,6 +67,9 @@ struct VivaldiBrowserWindowParams {
   bool focused = false;
   std::string workspace;
 
+  // Singleton key used when set.
+  std::string window_key;
+
   gfx::Size minimum_size;
   gfx::Rect content_bounds{kUnspecifiedPosition, kUnspecifiedPosition, 0, 0};
 
@@ -77,7 +80,7 @@ struct VivaldiBrowserWindowParams {
   std::string resource_relative_url;
 
   // The frame that created this frame if any.
-  content::RenderFrameHost* creator_frame = nullptr;
+  raw_ptr<content::RenderFrameHost> creator_frame = nullptr;
 };
 
 // The class that binds BrowserWindow with native UI. Initially it started as a
@@ -213,6 +216,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   // Enable or disable fullscreen mode.
   void SetFullscreen(bool enable);
 
+  void ShowForReal();
+
   Profile* GetProfile() const;
 
   std::u16string GetTitle();
@@ -227,6 +232,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   views::View* GetBubbleDialogAnchor() const;
 
   void ResetDockingState(int tab_id);
+
+  void SetWindowKey(std::string key) { window_key_ = key; }
 
   // window for the callback is null on errors or if the user closed the
   // window before the initial content was loaded.
@@ -432,6 +439,11 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool IsLocationBarVisible() const override;
   bool IsBorderlessModeEnabled() const override;
 
+  void ShowSidePanel(
+    absl::optional<SidePanelEntryId> entry_id = absl::nullopt,
+    absl::optional<SidePanelOpenTrigger> open_trigger = absl::nullopt
+  ) override {}
+
   // BrowserWindow overrides end
 
   // BaseWindow overrides
@@ -439,6 +451,13 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void SetZOrderLevel(ui::ZOrderLevel order) override {}
 
   void BeforeUnloadFired(content::WebContents* source);
+
+  // Returns true if this window contains pinned or workspace tabs. To be used
+  // for Mac when last window closes.
+  bool HasPersistentTabs();
+
+  // Returns a list of pinned and workspace tabs in the window.
+  std::vector<int> GetPersistentTabIds();
 
   // Move pinned or workspace tabs to remaining window if we have 2 open
   // windows and close the one with pinned/workspace tabs.
@@ -463,6 +482,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool ShouldShowDialogOnQuit();
   // Determines if a window close confirmation dialog should be shown.
   bool ShouldShowDialogOnCloseWindow();
+  // Determines if a session of persistent tabs should be saved.
+  bool ShouldSavePersistentTabsOnCloseWindow();
 
   // Implementation of various interface-like Chromium classes is in this inner
   // class not to pollute with extra details the main class.
@@ -529,13 +550,10 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   std::unique_ptr<Browser> browser_;
 
   std::unique_ptr<content::WebContents> web_contents_;
-  views::Widget* widget_ = nullptr;
+  raw_ptr<views::Widget> widget_ = nullptr;
   std::unique_ptr<VivaldiWindowWidgetDelegate> widget_delegate_;
   VivaldiUIWebContentsDelegate web_contents_delegate_{this};
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
-
-  // Whether the window has been shown or not.
-  bool has_been_shown_ = false;
 
   // Whether the window is hidden or not. Hidden in this context means actively
   // by the chrome.app.window API, not in an operating system context. For
@@ -552,7 +570,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool close_dialog_shown_ = false;
   bool prompt_on_quit_ = true;
   // Only the owner can show a dialog.
-  VivaldiBrowserWindow* quit_dialog_owner_ = nullptr;
+  raw_ptr<VivaldiBrowserWindow> quit_dialog_owner_ = nullptr;
 
   // When true, use the system frame with OS-rendered titlebar and window
   // control buttons.
@@ -573,7 +591,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   WindowType window_type_ = NORMAL;
 
   // Reference to the Vivaldi extension.
-  extensions::Extension* extension_ = nullptr;
+  raw_ptr<extensions::Extension> extension_ = nullptr;
 
   // The InfoBarContainerWebProxy that contains InfoBars for the current tab.
   std::unique_ptr<vivaldi::InfoBarContainerWebProxy> infobar_container_;
@@ -583,7 +601,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   // Used when loading the url in the webcontents lazily.
   std::string resource_relative_url_;
   // |rootdochandler_| is BrowserContext bound and outlives this.
-  extensions::VivaldiRootDocumentHandler* root_doc_handler_ = nullptr;
+  raw_ptr<extensions::VivaldiRootDocumentHandler> root_doc_handler_ = nullptr;
 
   views::UnhandledKeyboardEventHandler unhandled_keyboard_event_handler_;
 
@@ -593,6 +611,8 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 #endif  // !BUILDFLAG(IS_MAC)
   bool last_motion_ = false;
   WindowStateData window_state_data_;
+
+  std::string window_key_;
 
   // Coordinates of the bounds of the maximize button as rendered by our UI.
   // This is used to implement the Snap Layout maximized button menu on Windows.

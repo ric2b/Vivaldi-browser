@@ -6,7 +6,10 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "base/containers/fixed_flat_set.h"
 #include "base/feature_list.h"
+#include "base/no_destructor.h"
+#include "base/strings/string_piece.h"
 #include "chrome/browser/ash/input_method/autocorrect_enums.h"
 #include "chrome/browser/ash/input_method/autocorrect_prefs.h"
 #include "chrome/common/pref_names.h"
@@ -152,6 +155,14 @@ bool IsZhuyinEngine(const std::string& engine_id) {
   return engine_id == "zh-hant-t-i0-und";
 }
 
+bool IsVietnameseTelexEngine(base::StringPiece engine_id) {
+  return engine_id == "vkd_vi_telex";
+}
+
+bool IsVietnameseVniEngine(base::StringPiece engine_id) {
+  return engine_id == "vkd_vi_vni";
+}
+
 mojom::LatinSettingsPtr CreateLatinSettings(
     const base::Value::Dict& input_method_specific_pref,
     const PrefService& prefs,
@@ -162,8 +173,7 @@ mojom::LatinSettingsPtr CreateLatinSettings(
       base::StartsWith(engine_id, "experimental_",
                        base::CompareCase::SENSITIVE) ||
       base::FeatureList::IsEnabled(features::kAutocorrectParamsTuning) ||
-      autocorrect_pref == AutocorrectPreference::kEnabled ||
-      autocorrect_pref == AutocorrectPreference::kEnabledByDefault;
+      autocorrect_pref == AutocorrectPreference::kEnabled;
   settings->predictive_writing =
       features::IsAssistiveMultiWordEnabled() &&
       prefs.GetBoolean(prefs::kAssistPredictiveWritingEnabled) &&
@@ -505,6 +515,14 @@ mojom::InputMethodSettingsPtr CreateSettingsFromPrefs(
     return mojom::InputMethodSettings::NewZhuyinSettings(
         CreateZhuyinSettings(input_method_specific_pref));
   }
+  if (IsVietnameseTelexEngine(engine_id)) {
+    return mojom::InputMethodSettings::NewVietnameseTelexSettings(
+        mojom::VietnameseTelexSettings::New());
+  }
+  if (IsVietnameseVniEngine(engine_id)) {
+    return mojom::InputMethodSettings::NewVietnameseVniSettings(
+        mojom::VietnameseVniSettings::New());
+  }
   // TODO(b/232341104): Add the code to send the Japanese settings to
   // the engine if the engine_id is nacl_mozc_jp or nacl_mozc_us.
   // This will do the inverse of ConvertConfigToJapaneseSettings.
@@ -576,6 +594,34 @@ void MigrateJapaneseSettingsToPrefs(PrefService& prefs,
 
   prefs.SetDict(::prefs::kLanguageInputMethodSpecificSettings,
                 std::move(all_input_method_prefs));
+}
+
+bool IsAutocorrectSupported(const std::string& engine_id) {
+  static const base::NoDestructor<base::flat_set<std::string>>
+      enabledInputMethods({
+          "xkb:be::fra",        "xkb:be::ger",
+          "xkb:be::nld",        "xkb:br::por",
+          "xkb:ca::fra",        "xkb:ca:eng:eng",
+          "xkb:ca:multix:fra",  "xkb:ch::ger",
+          "xkb:ch:fr:fra",      "xkb:de::ger",
+          "xkb:de:neo:ger",     "xkb:dk::dan",
+          "xkb:es::spa",        "xkb:fi::fin",
+          "xkb:fr::fra",        "xkb:fr:bepo:fra",
+          "xkb:gb:dvorak:eng",  "xkb:gb:extd:eng",
+          "xkb:it::ita",        "xkb:latam::spa",
+          "xkb:no::nob",        "xkb:pl::pol",
+          "xkb:pt::por",        "xkb:se::swe",
+          "xkb:tr::tur",        "xkb:tr:f:tur",
+          "xkb:us:intl:nld",    "xkb:us:intl:por",
+          "xkb:us:intl_pc:nld", "xkb:us:intl_pc:por",
+          "xkb:us::eng",        "xkb:us:altgr-intl:eng",
+          "xkb:us:colemak:eng", "xkb:us:dvorak:eng",
+          "xkb:us:dvp:eng",     "xkb:us:intl:eng",
+          "xkb:us:intl_pc:eng", "xkb:us:workman-intl:eng",
+          "xkb:us:workman:eng",
+      });
+
+  return enabledInputMethods->find(engine_id) != enabledInputMethods->end();
 }
 
 }  // namespace input_method

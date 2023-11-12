@@ -45,6 +45,7 @@ namespace {
 
 constexpr char kDmToken[] = "dm_token";
 constexpr char kUserActionId[] = "123";
+constexpr char kTabTitle[] = "tab_title";
 constexpr char kTestUrl[] = "http://example.com/";
 base::TimeDelta kResponseDelay = base::Seconds(0);
 
@@ -204,8 +205,8 @@ class FilesRequestHandlerTest : public BaseTest {
             weak_ptr_factory_.GetWeakPtr(),
             settings.cloud_or_local_settings.is_cloud_analysis()),
         /*upload_service=*/nullptr, profile_, settings, GURL(kTestUrl), "", "",
-        kUserActionId, safe_browsing::DeepScanAccessPoint::UPLOAD, paths,
-        future.GetCallback());
+        kUserActionId, kTabTitle, safe_browsing::DeepScanAccessPoint::UPLOAD,
+        paths, future.GetCallback());
 
     fake_files_request_handler_->UploadData();
 
@@ -296,6 +297,7 @@ class FilesRequestHandlerTest : public BaseTest {
       EXPECT_EQ(request->user_action_requests_count(),
                 expected_user_action_requests_count_);
       EXPECT_EQ(request->user_action_id(), kUserActionId);
+      EXPECT_EQ(request->tab_title(), kTabTitle);
     }
 
     // Simulate a response.
@@ -509,7 +511,7 @@ TEST_F(FilesRequestHandlerTest, FileIsLarge_LocalAnalysis) {
   base::FilePath file_path = temp_dir.GetPath().AppendASCII("large.doc");
   std::string contents(
       safe_browsing::BinaryUploadService::kMaxUploadSizeBytes + 1, 'a');
-  base::WriteFile(file_path, contents.data(), contents.size());
+  base::WriteFile(file_path, contents);
   paths.emplace_back(file_path);
   SetExpectedUserActionRequestsCount(1);
 

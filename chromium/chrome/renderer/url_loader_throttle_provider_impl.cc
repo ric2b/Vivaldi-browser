@@ -19,10 +19,12 @@
 #include "components/no_state_prefetch/renderer/no_state_prefetch_helper.h"
 #include "components/safe_browsing/content/renderer/renderer_url_loader_throttle.h"
 #include "components/safe_browsing/core/common/features.h"
+#include "components/signin/public/base/signin_buildflags.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/web_identity.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
+#include "extensions/renderer/extension_localization_throttle.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
@@ -37,7 +39,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/renderer/chromeos_merge_session_loader_throttle.h"
+#include "chrome/renderer/ash_merge_session_loader_throttle.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
@@ -170,6 +172,11 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
     if (throttle)
       throttles.emplace_back(std::move(throttle));
   }
+  std::unique_ptr<blink::URLLoaderThrottle> localization_throttle =
+      extensions::ExtensionLocalizationThrottle::MaybeCreate(request.Url());
+  if (localization_throttle) {
+    throttles.emplace_back(std::move(localization_throttle));
+  }
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -184,10 +191,14 @@ URLLoaderThrottleProviderImpl::CreateThrottles(
 #if BUILDFLAG(IS_ANDROID)
       client_data_header,
 #endif
-      ChromeRenderThreadObserver::GetDynamicParams()));
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+      /*bound_session_request_throttled_listener=*/nullptr,
+#endif
+      chrome_content_renderer_client_->GetChromeObserver()
+          ->GetDynamicParams()));
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  throttles.emplace_back(std::make_unique<MergeSessionLoaderThrottle>(
+  throttles.emplace_back(std::make_unique<AshMergeSessionLoaderThrottle>(
       chrome_content_renderer_client_->GetChromeObserver()
           ->chromeos_listener()));
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)

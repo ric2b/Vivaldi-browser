@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(օգտագործվում է 1 հատը)} other {(օգտագործվում է # հատը)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Ստուգել պրոքսի հասցեն<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 բիթ)</translation>
-<translation id="5287240709317226393">Ցույց տալ քուքիները</translation>
 <translation id="5355557959165512791">Դուք այս պահին չեք կարող այցելել <ph name="SITE" />, քանի որ դրա հավաստագիրը հետ է կանչվել։ Սովորաբար ցանցային սխալներն ու հարձակումները ժամանակավոր են, ուստի միառժամանակ հետո այս էջը հավանաբար կաշխատի։</translation>
 <translation id="5386426401304769735">Այս կայքի հավաստագրերի շյթայում առկա է SHA-1 ալգորիթմով ստորագրված հավաստագիր։</translation>
 <translation id="5452270690849572955">Այս՝ <ph name="HOST_NAME" /> էջը չի գտնվել</translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Գաղտնաբառ</translation>
 <translation id="6711464428925977395">Պրոքսի սերվերի հետ ինչ-որ խնդիր կա կամ հասցեն սխալ է նշված։</translation>
 <translation id="6757797048963528358">Ձեր սարքն անցավ քնի ռեժիմի։</translation>
+<translation id="6890956352250146925">Ընտրանքներ քուքիների և կայքերի տվյալների համար</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Արգելափակել</translation>
 <translation id="7079718277001814089">Այս կայքը վնասագրեր է պարունակում</translation>

@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/debug/dump_without_crashing.h"
 #include "base/memory/ref_counted.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
@@ -16,6 +15,8 @@
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/permissions/permission_controller_impl.h"
 #include "content/browser/preloading/prefetch/prefetch_service.h"
+#include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot_cache.h"
+#include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot_manager.h"
 #include "content/browser/speech/tts_controller_impl.h"
 #include "content/browser/storage_partition_impl_map.h"
 #include "content/public/browser/browser_context.h"
@@ -76,7 +77,6 @@ BrowserContextImpl::~BrowserContextImpl() {
 
   if (!will_be_destroyed_soon_) {
     NOTREACHED();
-    base::debug::DumpWithoutCrashing();
   }
 
   // Verify that there are no outstanding RenderProcessHosts that reference
@@ -96,11 +96,9 @@ BrowserContextImpl::~BrowserContextImpl() {
     }
   }
   if (!rph_crash_key_value.empty()) {
-    NOTREACHED() << "rph_with_bc_reference : " << rph_crash_key_value;
-
     SCOPED_CRASH_KEY_STRING256("BrowserContext", "dangling_rph",
                                rph_crash_key_value);
-    base::debug::DumpWithoutCrashing();
+    NOTREACHED() << "rph_with_bc_reference : " << rph_crash_key_value;
   }
 
   // Clean up any isolated origins and other security state associated with this
@@ -301,6 +299,20 @@ PrefetchService* BrowserContextImpl::GetPrefetchService() {
     prefetch_service_ = PrefetchService::CreateIfPossible(self_);
 
   return prefetch_service_.get();
+}
+
+void BrowserContextImpl::SetPrefetchServiceForTesting(
+    std::unique_ptr<PrefetchService> prefetch_service) {
+  prefetch_service_ = std::move(prefetch_service);
+}
+
+NavigationEntryScreenshotManager*
+BrowserContextImpl::GetNavigationEntryScreenshotManager() {
+  if (!nav_entry_screenshot_manager_ && AreBackForwardTransitionsEnabled()) {
+    nav_entry_screenshot_manager_ =
+        std::make_unique<NavigationEntryScreenshotManager>();
+  }
+  return nav_entry_screenshot_manager_.get();
 }
 
 void BrowserContextImpl::WriteIntoTrace(

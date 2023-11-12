@@ -30,29 +30,13 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/child_process_data.h"
+#include "content/public/browser/user_level_memory_pressure_signal_features.h"
 
 namespace memory_pressure {
 
 namespace {
 constexpr uint64_t k1MB = 1024ull * 1024;
-}
-
-#if !defined(ARCH_CPU_64_BITS)
-
-namespace features {
-
-BASE_FEATURE(kUserLevelMemoryPressureSignalOn4GbDevices,
-             "UserLevelMemoryPressureSignalOn4GbDevices",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kUserLevelMemoryPressureSignalOn6GbDevices,
-             "UserLevelMemoryPressureSignalOn6GbDevices",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-}  // namespace features
-
-namespace {
-
 constexpr base::TimeDelta kDefaultMeasurementInterval = base::Seconds(1);
-constexpr base::TimeDelta kDefaultMinimumInterval = base::Minutes(10);
 
 // Time interval between measuring total private memory footprint.
 base::TimeDelta MeasurementIntervalFor4GbDevices() {
@@ -67,21 +51,6 @@ base::TimeDelta MeasurementIntervalFor6GbDevices() {
       &features::kUserLevelMemoryPressureSignalOn6GbDevices,
       "measurement_interval", kDefaultMeasurementInterval};
   return kMeasurementInterval.Get();
-}
-
-// Minimum time interval between generated memory pressure signals.
-base::TimeDelta MinimumIntervalFor4GbDevices() {
-  static const base::FeatureParam<base::TimeDelta> kMinimumInterval{
-      &features::kUserLevelMemoryPressureSignalOn4GbDevices, "minimum_interval",
-      kDefaultMinimumInterval};
-  return kMinimumInterval.Get();
-}
-
-base::TimeDelta MinimumIntervalFor6GbDevices() {
-  static const base::FeatureParam<base::TimeDelta> kMinimumInterval{
-      &features::kUserLevelMemoryPressureSignalOn6GbDevices, "minimum_interval",
-      kDefaultMinimumInterval};
-  return kMinimumInterval.Get();
 }
 
 constexpr size_t kDefaultMemoryThresholdMB = 485;
@@ -101,42 +70,24 @@ uint64_t MemoryThresholdParamFor6GbDevices() {
 }
 
 }  // namespace
-#endif  // !defined(ARCH_CPU_64_BITS)
 
 // static
 void UserLevelMemoryPressureSignalGenerator::Initialize() {
-#if !defined(ARCH_CPU_64_BITS)
-  uint64_t physical_memory = base::SysInfo::AmountOfPhysicalMemory();
-  constexpr uint64_t k1GB = 1024ull * k1MB;
-
-  // Because of Android carveouts, AmountOfPhysicalMemory() returns smaller
-  // than the actual memory size, So we will use a small lowerbound than 4GB
-  // to discriminate real 4GB devices from lower memory ones.
-  if (physical_memory < 3 * k1GB + 200 * k1MB) {
-    // No experiment defined for low memory Android devices.
+  if (features::IsUserLevelMemoryPressureSignalEnabledOn4GbDevices()) {
+    UserLevelMemoryPressureSignalGenerator::Get().Start(
+        MemoryThresholdParamFor4GbDevices(), MeasurementIntervalFor4GbDevices(),
+        features::MinUserMemoryPressureIntervalOn4GbDevices());
     return;
   }
 
-  if (physical_memory <= 4 * k1GB) {
-    if (base::FeatureList::IsEnabled(
-            features::kUserLevelMemoryPressureSignalOn4GbDevices))
-      UserLevelMemoryPressureSignalGenerator::Get().Start(
-          MemoryThresholdParamFor4GbDevices(),
-          MeasurementIntervalFor4GbDevices(), MinimumIntervalFor4GbDevices());
-    return;
-  }
-
-  if (physical_memory <= 6 * k1GB) {
-    if (base::FeatureList::IsEnabled(
-            features::kUserLevelMemoryPressureSignalOn6GbDevices))
-      UserLevelMemoryPressureSignalGenerator::Get().Start(
-          MemoryThresholdParamFor6GbDevices(),
-          MeasurementIntervalFor6GbDevices(), MinimumIntervalFor6GbDevices());
+  if (features::IsUserLevelMemoryPressureSignalEnabledOn6GbDevices()) {
+    UserLevelMemoryPressureSignalGenerator::Get().Start(
+        MemoryThresholdParamFor6GbDevices(), MeasurementIntervalFor6GbDevices(),
+        features::MinUserMemoryPressureIntervalOn6GbDevices());
     return;
   }
 
   // No group defined for >6 GB devices.
-#endif  // !defined(ARCH_CPU_64_BITS)
 }
 
 // static

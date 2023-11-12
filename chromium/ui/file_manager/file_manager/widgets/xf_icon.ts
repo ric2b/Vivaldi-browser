@@ -50,6 +50,10 @@ export class XfIcon extends XfBase {
           svg`<use xlink:href="foreground/images/files/ui/cloud_sync.svg#cloud_sync"></use>`,
       [constants.ICON_TYPES.CLOUD]:
           svg`<use xlink:href="foreground/images/files/ui/cloud.svg#cloud"></use>`,
+      [constants.ICON_TYPES.ENCRYPTED]:
+          svg`<use xlink:href="foreground/images/files/ui/encrypted.svg#encrypted"></use>`,
+      [constants.ICON_TYPES.ERROR]:
+          svg`<use xlink:href="foreground/images/files/ui/error.svg#error"></use>`,
     };
   }
 
@@ -76,6 +80,7 @@ export class XfIcon extends XfBase {
     }
 
     const shouldKeepColor = [
+      constants.ICON_TYPES.DRIVE_LOGO,
       constants.ICON_TYPES.EXCEL,
       constants.ICON_TYPES.POWERPOINT,
       constants.ICON_TYPES.WORD,
@@ -201,12 +206,20 @@ function getCSS() {
       -webkit-mask-image: url(../foreground/images/volumes/downloads.svg);
     }
 
+    :host([type="drive"]) span {
+      -webkit-mask-image: url(../foreground/images/volumes/drive.svg);
+    }
+
     :host([type="drive_offline"]) span {
       -webkit-mask-image: url(../foreground/images/volumes/offline.svg);
     }
 
     :host([type="drive_shared_with_me"]) span {
       -webkit-mask-image: url(../foreground/images/volumes/shared.svg);
+    }
+
+    :host([type="drive_logo"]) span {
+      background-image: url(../foreground/images/files/ui/drive_logo.svg);
     }
 
     :host([type="excel"]) span {
@@ -299,7 +312,7 @@ function getCSS() {
       -webkit-mask-image: url(../foreground/images/volumes/sd.svg);
     }
 
-    :host([type="service_drive"]) span, :host([type="drive"]) span {
+    :host([type="service_drive"]) span {
       -webkit-mask-image: url(../foreground/images/volumes/service_drive.svg);
     }
 
@@ -335,10 +348,6 @@ function getCSS() {
       -webkit-mask-image: url(../foreground/images/files/ui/filetype_placeholder_generic.svg);
     }
 
-    :host([type="offline"]) span {
-      -webkit-mask-image: url(../foreground/images/files/ui/offline.svg);
-    }
-
     :host([type="tini"]) span {
       -webkit-mask-image: url(../foreground/images/filetype/filetype_tini.svg);
     }
@@ -353,6 +362,10 @@ function getCSS() {
 
     :host([type="word"]) span {
       background-image: url(../foreground/images/filetype/filetype_word.svg);
+    }
+
+    :host([type="check"]) span {
+      -webkit-mask-image: url(../foreground/images/files/ui/check.svg);
     }
   `;
 }

@@ -34,7 +34,7 @@
 <translation id="2612127540243995147">آماده‌ی نصب. ویوالدی بسته شده و مجدداً راه‌اندازی خواهد شد.</translation>
 <translation id="2613387515621326337">نمایش وب‌سایت به‌روزرسانی</translation>
 <translation id="2647368062414805334">متأسفانه، تنظیمات Edge در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های Edge را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
-<translation id="2721334646575696520">Microsoft Edge</translation>
+<translation id="2721334646575696520">مرورگر Microsoft Edge</translation>
 <translation id="2848085334714181751">حیوان ۳</translation>
 <translation id="2873951654529031587">زباله</translation>
 <translation id="292258461174562431">هیولا ۴</translation>
@@ -94,6 +94,7 @@
 <translation id="4636708767492582204">ارسال با ایمیل</translation>
 <translation id="4677434526832593569">حیوان ۸</translation>
 <translation id="474217410105706308">قطع صدای زبانه</translation>
+<translation id="4861715717329665002">نشست‌های ذخیره شده به‌صورت خودکار</translation>
 <translation id="4881695831933465202">باز کردن</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> از <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">تماس‌های سریع واردشده</translation>
@@ -113,7 +114,7 @@
 <translation id="5716238312826274098">غیرفعال کردن اعلان‌ها</translation>
 <translation id="5732584064771442623">ویوالدی <ph name="NEW_VERSION" /> اکنون در دسترس است (نسخه‌ی کنونی شما: <ph name="OLD_VERSION" />). مایل به دانلود نسخه‌ی جدیدتر هستید؟</translation>
 <translation id="5770433027661640693">چشم‌انداز ۱۰</translation>
-<translation id="5857090052475505287">پوشه جدید</translation>
+<translation id="5857090052475505287">پوشه‌ی جدید</translation>
 <translation id="588258955323874662">تمام صفحه</translation>
 <translation id="5916080360077521750">متأسفانه، تنظیمات کروم در هنگام اجرای مرورگر در دسترس نیست. برای وارد کردن این تنظیمات به ویوالدی، کارهای خود را ذخیره و تمام پنجره‌های کروم را ببندید. سپس بر روی ادامه کلیک کنید.</translation>
 <translation id="6040143037577758943">بستن</translation>
@@ -165,7 +166,7 @@
 <translation id="864444594187862076">Opera نسخه 15+ (Developer)</translation>
 <translation id="8651348004684669199">اضافه کردن زبانه فعال</translation>
 <translation id="8669345741879513971">هیولا ۱۰</translation>
-<translation id="867544375504146191">Yandex</translation>
+<translation id="867544375504146191">مرورگر Yandex</translation>
 <translation id="8689295374912158752">بررسی پورتال-سند</translation>
 <translation id="8768970203213061953">چشم‌انداز ۱۴</translation>
 <translation id="8773635261052182196">این اعلانات را دیگر مشاهده نخواهید کرد. مجدداً می‌توانید از طریق تنظیمات ویوالدی آن‌ها را فعال کنید.</translation>
@@ -182,6 +183,6 @@
 <translation id="912022491595344261">گشودن تصویر به عنوان <ph name="USER" /></translation>
 <translation id="9157539936604258187">گشودن پیوند</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
-<translation id="939305735877869636">Brave</translation>
+<translation id="939305735877869636">مرورگر Brave</translation>
 <translation id="970294721402795299">چشم‌انداز ۱۶</translation>
 </translationbundle>

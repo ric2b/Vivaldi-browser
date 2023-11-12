@@ -24,9 +24,9 @@ void CopyCopyOutputResultToLayer(
 
   const gpu::MailboxHolder& plane = copy_result->GetTextureResult()->planes[0];
   viz::TransferableResource transferable_resource =
-      viz::TransferableResource::MakeGpu(plane.mailbox, GL_LINEAR,
-                                         plane.texture_target, plane.sync_token,
-                                         copy_result->size(), viz::RGBA_8888,
+      viz::TransferableResource::MakeGpu(plane.mailbox, plane.texture_target,
+                                         plane.sync_token, copy_result->size(),
+                                         viz::SinglePlaneFormat::kRGBA_8888,
                                          /*is_overlay_candidate=*/false);
   viz::CopyOutputResult::ReleaseCallbacks release_callbacks =
       copy_result->TakeTextureOwnership();

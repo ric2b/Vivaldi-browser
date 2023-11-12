@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequence_bound.h"
+#include "chrome/browser/dips/dips_browser_signin_detector.h"
 #include "chrome/browser/dips/dips_redirect_info.h"
 #include "chrome/browser/dips/dips_storage.h"
 #include "chrome/browser/dips/dips_utils.h"
@@ -37,6 +38,8 @@ class DIPSService : public KeyedService {
  public:
   using RecordBounceCallback = base::RepeatingCallback<
       void(const GURL& url, base::Time time, bool stateful)>;
+  using DeletedSitesCallback =
+      base::OnceCallback<void(const std::vector<std::string>& sites)>;
 
   ~DIPSService() override;
 
@@ -55,6 +58,10 @@ class DIPSService : public KeyedService {
                     const base::Time& delete_end,
                     network::mojom::ClearDataFilterPtr filter,
                     const DIPSEventRemovalType type);
+
+  // This allows for deletion of state for sites deemed eligible when evaluated
+  // with no grace period.
+  void DeleteEligibleSitesImmediately(DeletedSitesCallback callback);
 
   void HandleRedirectChain(std::vector<DIPSRedirectInfoPtr> redirects,
                            DIPSRedirectChainInfoPtr chain);
@@ -106,9 +113,11 @@ class DIPSService : public KeyedService {
 
   void OnStorageInitialized();
   void OnTimerFired();
-  void DeleteDIPSEligibleState(base::Time deletion_start,
+  void DeleteDIPSEligibleState(DeletedSitesCallback callback,
+                               base::Time deletion_start,
                                std::vector<std::string> sites_to_clear);
-  void PostDeletionTaskToUIThread(base::Time deletion_start,
+  void PostDeletionTaskToUIThread(base::OnceClosure callback,
+                                  base::Time deletion_start,
                                   std::vector<std::string> sites_to_clear);
   void RunDeletionTaskOnUIThread(
       std::unique_ptr<content::BrowsingDataFilterBuilder> filter,
@@ -132,6 +141,7 @@ class DIPSService : public KeyedService {
   std::unique_ptr<signin::PersistentRepeatingTimer> repeating_timer_;
   base::SequenceBound<DIPSStorage> storage_;
   base::ObserverList<Observer> observers_;
+  absl::optional<DIPSBrowserSigninDetector> dips_browser_signin_detector_;
 
   base::WeakPtrFactory<DIPSService> weak_factory_{this};
 };

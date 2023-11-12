@@ -50,6 +50,7 @@
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -83,6 +84,8 @@
 #import "chrome/browser/ui/cocoa/tab_menu_bridge.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/profile_picker.h"
+#include "chrome/browser/ui/startup/first_run_service.h"
+#include "chrome/browser/ui/startup/launch_mode_recorder.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/startup/startup_tab.h"
@@ -106,6 +109,7 @@
 #include "components/handoff/handoff_utility.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "content/public/browser/download_manager.h"
@@ -197,9 +201,36 @@ Browser* ActivateBrowser(Profile* profile) {
   return browser;
 }
 
+// Launches a browser window associated with |profile|. Checks if we are in the
+// first run of Chrome to decide if we need to launch a browser or not.
+// The profile can be `nullptr` and in that case the last-used profile will be
+// used.
+void LaunchBrowserStartup(Profile* profile) {
+  if (StartupProfileModeFromReason(ProfilePicker::GetStartupModeReason()) ==
+      StartupProfileMode::kProfilePicker) {
+    ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
+        ProfilePicker::EntryPoint::kNewSessionOnExistingProcess));
+    return;
+  }
+  CHECK(profile);
+
+  base::AutoReset<bool> auto_reset_in_run(&g_is_opening_new_window, true);
+  StartupBrowserCreator browser_creator;
+  browser_creator.LaunchBrowser(*base::CommandLine::ForCurrentProcess(),
+                                profile, base::FilePath(),
+                                chrome::startup::IsProcessStartup::kNo,
+                                chrome::startup::IsFirstRun::kYes, nullptr);
+}
+
 // Creates an empty browser window with the given profile and returns a pointer
 // to the new |Browser|.
 Browser* CreateBrowser(Profile* profile) {
+  // Closes the first run if we open a new window.
+  if (auto* fre_service =
+          FirstRunServiceFactory::GetForBrowserContextIfExists(profile)) {
+    fre_service->FinishFirstRunWithoutResumeTask();
+  }
+
   {
     base::AutoReset<bool> auto_reset_in_run(&g_is_opening_new_window, true);
     chrome::NewEmptyWindow(profile);
@@ -232,14 +263,8 @@ void AttemptSessionRestore(Profile* profile) {
     // Session was restored.
     return;
   }
-
   // No session to restore, proceed with normal startup.
-  if (ProfilePicker::ShouldShowAtLaunch()) {
-    ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
-        ProfilePicker::EntryPoint::kNewSessionOnExistingProcess));
-  } else {
-    CreateBrowser(profile);
-  }
+  LaunchBrowserStartup(profile);
 }
 
 CFStringRef BaseBundleID_CFString() {
@@ -372,7 +397,8 @@ base::FilePath GetStartupProfilePathMac() {
   StartupProfilePathInfo profile_path_info = GetStartupProfilePath(
       /*cur_dir=*/base::FilePath(), *base::CommandLine::ForCurrentProcess(),
       /*ignore_profile_picker=*/true);
-  DCHECK_EQ(profile_path_info.mode, StartupProfileMode::kBrowserWindow);
+  DCHECK_EQ(StartupProfileModeFromReason(profile_path_info.reason),
+            StartupProfileMode::kBrowserWindow);
   return profile_path_info.path;
 }
 
@@ -646,6 +672,15 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   // Reset this now that we've received the call to terminate.
   BOOL isPoweringOff = _isPoweringOff;
   _isPoweringOff = NO;
+
+  // Stop the browser from re-opening when we close Chrome while
+  // in the first run experience.
+  if (auto* profile = [self lastProfileIfLoaded]) {
+    if (auto* fre_service =
+            FirstRunServiceFactory::GetForBrowserContextIfExists(profile)) {
+      fre_service->FinishFirstRunWithoutResumeTask();
+    }
+  }
 
   // Check for in-process downloads, and prompt the user if they really want
   // to quit (and thus cancel downloads). Only check if we're not already
@@ -1714,11 +1749,13 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   }
 
   // Open the profile picker (for multi-profile users) or a new window.
-  if (ProfilePicker::ShouldShowAtLaunch()) {
+  if (StartupProfileModeFromReason(ProfilePicker::GetStartupModeReason()) ==
+      StartupProfileMode::kProfilePicker) {
     ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
         ProfilePicker::EntryPoint::kNewSessionOnExistingProcess));
   } else {
     // Asynchronously load profile first if needed.
+    // TODO(crbug.com/1426857): Replace CreateBrowser by LaunchBrowserStartup
     app_controller_mac::RunInLastProfileSafely(
         base::BindOnce(base::IgnoreResult(&CreateBrowser)),
         app_controller_mac::kShowProfilePickerOnFailure);
@@ -2050,7 +2087,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
     return dockMenu;
 
   if (IncognitoModePrefs::GetAvailability(profile->GetPrefs()) !=
-      IncognitoModePrefs::Availability::kDisabled) {
+      policy::IncognitoModeAvailability::kDisabled) {
     titleStr = l10n_util::GetNSStringWithFixup(IDS_NEW_INCOGNITO_WINDOW_MAC);
     item.reset(
         [[NSMenuItem alloc] initWithTitle:titleStr
@@ -2180,7 +2217,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   _profilePrefRegistrar = std::make_unique<PrefChangeRegistrar>();
   _profilePrefRegistrar->Init(_lastProfile->GetPrefs());
   _profilePrefRegistrar->Add(
-      prefs::kIncognitoModeAvailability,
+      policy::policy_prefs::kIncognitoModeAvailability,
       base::BindRepeating(&chrome::BrowserCommandController::
                               UpdateSharedCommandsForIncognitoAvailability,
                           _menuState.get(), _lastProfile));

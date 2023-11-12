@@ -54,8 +54,8 @@ class ProfileMenuController {
                 ui::SimpleMenuModel* menu_model,
                 const gfx::Image& icon);
 
-  VivaldiRenderViewContextMenu* rv_context_menu_;
-  Profile* active_profile_;
+  const raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;
+  const raw_ptr<Profile> active_profile_;
   bool is_image_;
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
 };

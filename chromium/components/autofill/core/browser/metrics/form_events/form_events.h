@@ -5,7 +5,7 @@
 #ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_FORM_EVENTS_FORM_EVENTS_H_
 #define COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_FORM_EVENTS_FORM_EVENTS_H_
 
-namespace autofill {
+namespace autofill::autofill_metrics {
 
 // Form Events for autofill.
 // These events are triggered separately for address and credit card forms.
@@ -143,13 +143,41 @@ enum FormEvent {
   // after being autofilled. Recorded once per form.
   FORM_EVENT_AUTOFILLED_FIELD_CLEARED_BY_JAVASCRIPT_AFTER_FILL_ONCE = 57,
 
-  // Suggestions were shown, and they included a credit card that had metadata
-  // shown.
+  // Credit card suggestions were shown, and it included at least one suggestion
+  // with metadata.
   FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SHOWN = 58,
+  // Credit card suggestions were shown, and none had metadata.
+  FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_SHOWN = 59,
+  // The selected credit card suggestion had metadata.
+  FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SELECTED = 60,
+  // The selected credit card suggestion did not have metadata.
+  FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_SELECTED = 61,
+
+  // Reserved so that the serialized DenseSet<FormEvent> are representable as
+  // int64_t. Such conversions uint64_t -> int64_t happen when serializing a
+  // DenseSet<FormEvent> and passing it to a UKM builder.
+  FORM_EVENT_RESERVED_NOT_FOR_USE = 63,
+
+  // Credit card suggestions were shown, and they included at least one
+  // suggestion with metadata. Logged once per page load.
+  FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SHOWN_ONCE = 64,
+  // Credit card suggestions were shown, and none had metadata. Logged once per
+  // page load.
+  FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_SHOWN_ONCE = 65,
+  // The selected credit card suggestion had metadata. Logged once per page
+  // load.
+  FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SELECTED_ONCE = 66,
+  // The selected credit card suggestion did not have metadata. Logged once per
+  // page load.
+  FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_SELECTED_ONCE = 67,
+
+  // Next form event should use 62 if possible. One note is that if the newly
+  // added events are a group of related events, maybe it is easier to continue
+  // using 68 to make sure they are in the same UKM metric.
 
   NUM_FORM_EVENTS,
 };
 
-}  // namespace autofill
+}  // namespace autofill::autofill_metrics
 
 #endif  // COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_FORM_EVENTS_FORM_EVENTS_H_

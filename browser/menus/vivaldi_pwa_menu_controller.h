@@ -6,6 +6,8 @@
 
 #include <string>
 
+#include "base/memory/raw_ptr.h"
+
 class Browser;
 
 namespace ui {
@@ -28,7 +30,7 @@ class PWAMenuController {
   std::u16string GetLabelForCommandId(int command_id) const;
 
  private:
-  Browser* browser_;
+  const raw_ptr<Browser> browser_;
 };
 
 }  // namespace vivaldi

@@ -47,6 +47,9 @@ constexpr size_t kInputBufferMaxSizeFor4k = 4 * kInputBufferMaxSizeFor1080p;
 constexpr uint32_t kSupportedInputFourccs[] = {
     // V4L2 stateless formats
     V4L2_PIX_FMT_H264_SLICE,
+#if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+    V4L2_PIX_FMT_HEVC_SLICE,
+#endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
     V4L2_PIX_FMT_VP8_FRAME,
     V4L2_PIX_FMT_VP9_FRAME,
     V4L2_PIX_FMT_AV1_FRAME,
@@ -567,17 +570,7 @@ void V4L2VideoDecoder::Reset(base::OnceClosure closure) {
   backend_->ClearPendingRequests(DecoderStatus::Codes::kAborted);
 
   // Streamoff V4L2 queues to drop input and output buffers.
-  // If the queues are streaming before reset, then we need to start streaming
-  // them after stopping.
-  const bool is_input_streaming = input_queue_->IsStreaming();
-  const bool is_output_streaming = output_queue_->IsStreaming();
-  if (!StopStreamV4L2Queue(true))
-    return;
-
-  if (is_input_streaming) {
-    if (!StartStreamV4L2Queue(is_output_streaming))
-      return;
-  }
+  RestartStream();
 
   // If during flushing, Reset() will abort the following flush tasks.
   // Now we are ready to decode new buffer. Go back to decoding state.
@@ -698,14 +691,21 @@ void V4L2VideoDecoder::RestartStream() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
   DVLOGF(3);
 
+  // If the queues are streaming before reset, then we need to start streaming
+  // them after stopping.
+  const bool is_input_streaming = input_queue_->IsStreaming();
+  const bool is_output_streaming = output_queue_->IsStreaming();
+
   if (!StopStreamV4L2Queue(true)) {
     VLOGF(1) << "Failed to stop streaming.";
     return;
   }
 
-  if (!StartStreamV4L2Queue(true)) {
-    VLOGF(1) << "Failed to start streaming.";
-    return;
+  if (is_input_streaming) {
+    if (!StartStreamV4L2Queue(is_output_streaming)) {
+      VLOGF(1) << "Failed to start streaming.";
+      return;
+    }
   }
 
   if (state_ != State::kDecoding)

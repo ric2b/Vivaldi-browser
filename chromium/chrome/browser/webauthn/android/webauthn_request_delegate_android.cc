@@ -19,8 +19,10 @@
 #include "chrome/browser/webauthn/webauthn_metrics_util.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
 #include "components/password_manager/core/browser/passkey_credential.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "device/fido/discoverable_credential_metadata.h"
+#include "ui/base/l10n/l10n_util.h"
 
 using password_manager::PasskeyCredential;
 
@@ -56,26 +58,26 @@ void WebAuthnRequestDelegateAndroid::OnWebAuthnRequestPending(
     base::OnceCallback<void(const std::vector<uint8_t>& id)> callback) {
   webauthn_account_selection_callback_ = std::move(callback);
 
-  if (is_conditional_request) {
-    conditional_request_in_progress_ = true;
-    ReportConditionalUiPasskeyCount(credentials.size());
-
-    ChromeWebAuthnCredentialsDelegateFactory::GetFactory(
-        content::WebContents::FromRenderFrameHost(frame_host))
-        ->GetDelegateForFrame(frame_host)
-        ->OnCredentialsReceived(credentials);
-    return;
-  }
-
   std::vector<PasskeyCredential> display_credentials;
   base::ranges::transform(credentials, std::back_inserter(display_credentials),
                           [](const auto& credential) {
                             return PasskeyCredential(
-                                PasskeyCredential::Username(
-                                    base::UTF8ToUTF16(*credential.user.name)),
-                                PasskeyCredential::BackendId(
-                                    base::Base64Encode(credential.cred_id)));
+                                PasskeyCredential::Source::kAndroidPhone,
+                                credential.rp_id, credential.cred_id,
+                                credential.user.id,
+                                credential.user.name.value_or(""),
+                                credential.user.display_name.value_or(""));
                           });
+
+  if (is_conditional_request) {
+    conditional_request_in_progress_ = true;
+    ReportConditionalUiPasskeyCount(credentials.size());
+    ChromeWebAuthnCredentialsDelegateFactory::GetFactory(
+        content::WebContents::FromRenderFrameHost(frame_host))
+        ->GetDelegateForFrame(frame_host)
+        ->OnCredentialsReceived(std::move(display_credentials));
+    return;
+  }
 
   if (!touch_to_fill_controller_) {
     touch_to_fill_controller_ = std::make_unique<TouchToFillController>();
@@ -98,13 +100,17 @@ void WebAuthnRequestDelegateAndroid::CancelWebAuthnRequest(
   }
 
   conditional_request_in_progress_ = false;
-  std::move(webauthn_account_selection_callback_).Run(std::vector<uint8_t>());
+  if (webauthn_account_selection_callback_) {
+    std::move(webauthn_account_selection_callback_).Run(std::vector<uint8_t>());
+  }
 }
 
 void WebAuthnRequestDelegateAndroid::OnWebAuthnAccountSelected(
     const std::vector<uint8_t>& user_id) {
   conditional_request_in_progress_ = false;
-  std::move(webauthn_account_selection_callback_).Run(user_id);
+  if (webauthn_account_selection_callback_) {
+    std::move(webauthn_account_selection_callback_).Run(user_id);
+  }
 }
 
 content::WebContents* WebAuthnRequestDelegateAndroid::web_contents() {

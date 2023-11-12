@@ -24,6 +24,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "gpu/config/gpu_switches.h"
+#include "gpu/config/webgpu_blocklist.h"
 #include "skia/buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/angle/src/gpu_info_util/SystemInfo.h"  // nogncheck
@@ -268,10 +269,13 @@ void ForceDawnTogglesForWebGPU(
 }
 #endif
 #if BUILDFLAG(SKIA_USE_DAWN)
-void ForceDawnTogglesForSkia(std::vector<const char*>* force_enabled_toggles,
-                             std::vector<const char*>* force_disabled_toggles) {
+void ForceDawnTogglesForSkiaGraphite(
+    std::vector<const char*>* force_enabled_toggles,
+    std::vector<const char*>* force_disabled_toggles) {
 #if !DCHECK_IS_ON()
-  force_enabled_toggles->push_back("skip_validation");
+  force_enabled_toggles.push_back("disable_robustness");
+  force_enabled_toggles.push_back("skip_validation");
+  force_disabled_toggles.push_back("lazy_clear_resource_on_first_use");
 #endif
 }
 #endif
@@ -345,20 +349,13 @@ bool CollectBasicGraphicsInfo(const base::CommandLine* command_line,
       gl::GetRequestedGLImplementationFromCommandLine(command_line,
                                                       &fallback_to_software);
 
-  if (implementation.has_value()) {
-    gpu_info->gl_implementation = implementation->GLString();
-    gpu_info->angle_implementation = implementation->ANGLEString();
-
+  if (implementation == gl::kGLImplementationDisabled) {
     // If GL is disabled then we don't need GPUInfo.
-    if (implementation == gl::kGLImplementationDisabled) {
-      gpu_info->gl_vendor = "Disabled";
-      gpu_info->gl_renderer = "Disabled";
-      gpu_info->gl_version = "Disabled";
-      return true;
-    }
-  }
-
-  if (implementation == gl::GetSoftwareGLImplementation()) {
+    gpu_info->gl_vendor = "Disabled";
+    gpu_info->gl_renderer = "Disabled";
+    gpu_info->gl_version = "Disabled";
+    return true;
+  } else if (implementation == gl::GetSoftwareGLImplementation()) {
     // If using the software GL implementation, use fake vendor and
     // device ids to make sure it never gets blocklisted. It allows us
     // to proceed with loading the blocklist which may have non-device
@@ -387,8 +384,7 @@ bool CollectBasicGraphicsInfo(const base::CommandLine* command_line,
 
 bool CollectGraphicsInfoGL(GPUInfo* gpu_info, gl::GLDisplay* display) {
   TRACE_EVENT0("startup", "gpu_info_collector::CollectGraphicsInfoGL");
-  gl::GLImplementationParts implementation = gl::GetGLImplementationParts();
-  DCHECK_NE(implementation, gl::kGLImplementationNone);
+  DCHECK_NE(gl::GetGLImplementationParts(), gl::kGLImplementationNone);
   gl::GLDisplayEGL* egl_display = display->GetAs<gl::GLDisplayEGL>();
 
   // Now that we can check GL extensions, update passthrough support info.
@@ -408,8 +404,6 @@ bool CollectGraphicsInfoGL(GPUInfo* gpu_info, gl::GLDisplay* display) {
     return false;
   }
 
-  gpu_info->gl_implementation = implementation.GLString();
-  gpu_info->angle_implementation = implementation.ANGLEString();
   if (egl_display) {
     gpu_info->display_type =
         GetDisplayTypeString(egl_display->GetDisplayType());
@@ -575,9 +569,7 @@ void FillGPUInfoFromSystemInfo(GPUInfo* gpu_info,
 #if BUILDFLAG(IS_CHROMEOS)
   gpu_info->gpu.revision = active->revisionId;
 #endif  // BUILDFLAG(IS_CHROMEOS)
-#if BUILDFLAG(IS_MAC)
-  gpu_info->gpu.register_id = active->systemDeviceId;
-#endif  // BUILDFLAG(IS_MAC)
+  gpu_info->gpu.system_device_id = active->systemDeviceId;
   gpu_info->gpu.driver_vendor = std::move(active->driverVendor);
   gpu_info->gpu.driver_version = std::move(active->driverVersion);
   gpu_info->gpu.active = true;
@@ -593,9 +585,7 @@ void FillGPUInfoFromSystemInfo(GPUInfo* gpu_info,
 #if BUILDFLAG(IS_CHROMEOS)
     device.revision = system_info->gpus[i].revisionId;
 #endif  // BUILDFLAG(IS_CHROMEOS)
-#if BUILDFLAG(IS_MAC)
-    device.register_id = system_info->gpus[i].systemDeviceId;
-#endif  // BUILDFLAG(IS_MAC)
+    device.system_device_id = system_info->gpus[i].systemDeviceId;
     device.driver_vendor = std::move(system_info->gpus[i].driverVendor);
     device.driver_version = std::move(system_info->gpus[i].driverVersion);
 
@@ -707,6 +697,14 @@ void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
       gpu_str += " - " + adapter_name;
       dawn_info_list->push_back(gpu_str);
 
+      dawn_info_list->push_back("[WebGPU Status]");
+      if (IsWebGPUAdapterBlocklisted(
+              *reinterpret_cast<WGPUAdapterProperties*>(&properties))) {
+        dawn_info_list->push_back("Blocklisted");
+      } else {
+        dawn_info_list->push_back("Available");
+      }
+
       // Scope the lifetime of |device| to avoid accidental use after release.
       {
         auto* device = adapter.CreateDevice();
@@ -747,12 +745,15 @@ void CollectDawnInfo(const gpu::GpuPreferences& gpu_preferences,
 #endif
 
 #if BUILDFLAG(SKIA_USE_DAWN)
-      if (gpu_preferences.gr_context_type == gpu::GrContextType::kDawn) {
+      if (gpu_preferences.gr_context_type == GrContextType::kGraphiteDawn) {
         // Get the list of forced toggles for Skia.
+        // TODO(sunnyps): Ideally these should come from a single source of
+        // truth e.g. from DawnContextProvider or a common helper, instead of
+        // just assuming some values here.
         std::vector<const char*> force_enabled_toggles_skia;
         std::vector<const char*> force_disabled_toggles_skia;
-        ForceDawnTogglesForSkia(&force_enabled_toggles_skia,
-                                &force_disabled_toggles_skia);
+        ForceDawnTogglesForSkiaGraphite(&force_enabled_toggles_skia,
+                                        &force_disabled_toggles_skia);
 
         if (!force_enabled_toggles_skia.empty()) {
           dawn_info_list->push_back("[Skia Forced Toggles - enabled]");

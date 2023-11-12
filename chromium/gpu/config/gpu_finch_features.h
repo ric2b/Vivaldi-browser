@@ -44,10 +44,12 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kGpuProcessHighPriorityWin);
 GPU_EXPORT BASE_DECLARE_FEATURE(kDisableVideoOverlayIfMoving);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kNoUndamagedOverlayPromotion);
+
+GPU_EXPORT BASE_DECLARE_FEATURE(kDCompPresenter);
 #endif
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_IOS)
-GPU_EXPORT BASE_DECLARE_FEATURE(kMetal);
+GPU_EXPORT BASE_DECLARE_FEATURE(kAdjustGpuProcessPriority);
 #endif
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kSharedImageManager);
@@ -58,7 +60,7 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kVaapiWebPImageDecodeAcceleration);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kVulkan);
 
-GPU_EXPORT BASE_DECLARE_FEATURE(kSkiaDawn);
+GPU_EXPORT BASE_DECLARE_FEATURE(kSkiaGraphite);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kEnableGrShaderCacheForVulkan);
 
@@ -91,6 +93,8 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kIncreasedCmdBufferParseSlice);
 GPU_EXPORT BASE_DECLARE_FEATURE(kPassthroughYuvRgbConversion);
 
 GPU_EXPORT BASE_DECLARE_FEATURE(kCmdDecoderAlwaysGetSizeFromSourceTexture);
+
+GPU_EXPORT BASE_DECLARE_FEATURE(kGpuCleanupInBackground);
 
 GPU_EXPORT bool UseGles2ForOopR();
 GPU_EXPORT bool IsUsingVulkan();

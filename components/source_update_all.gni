@@ -40,7 +40,7 @@ update_target("//components/sessions:shared") {
 }
 
 if (is_mac || is_ios) {
-  update_target("//components/os_crypt:os_crypt") {
+  update_target("//components/os_crypt/sync:os_crypt") {
     sources += [
       "//vivaldi/components/os_crypt/viv_keychain_password_mac.mm",
     ]

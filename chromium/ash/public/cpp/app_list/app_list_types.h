@@ -325,12 +325,13 @@ enum class AppListGridAnimationStatus {
 // AppListLaunchedFrom enum listing in tools/metrics/histograms/enums.xml.
 enum class AppListLaunchedFrom {
   kLaunchedFromGrid = 1,
-  kLaunchedFromSuggestionChip = 2,
+  DEPRECATED_kLaunchedFromSuggestionChip = 2,
   kLaunchedFromShelf = 3,
   kLaunchedFromSearchBox = 4,
   kLaunchedFromRecentApps = 5,
   kLaunchedFromContinueTask = 6,
-  kMaxValue = kLaunchedFromContinueTask,
+  kLaunchedFromQuickAppAccess = 7,
+  kMaxValue = kLaunchedFromQuickAppAccess,
 };
 
 // The UI representation of the app that's being launched. Currently all search
@@ -371,8 +372,9 @@ enum class AppListSearchResultType {
   kZeroStateApp,           // App recommendations for zero-state / recent apps.
   kImageSearch,            // Local image search result.
   kSystemInfo,             // System Info search result.
+  kDesksAdminTemplate,     // Admin templates search results.
   // Add new values here.
-  kMaxValue = kSystemInfo,
+  kMaxValue = kDesksAdminTemplate,
 };
 
 ASH_PUBLIC_EXPORT bool IsAppListSearchResultAnApp(
@@ -417,6 +419,7 @@ enum class SearchResultDisplayType {
   // kChip = 5,        // No longer used, Displays in suggestion chips
   kContinue = 6,    // Displays in the Continue section
   kRecentApps = 7,  // Displays in recent apps row
+  kImage = 8,       // Displays in a list of image results
   // Add new values here
   kLast,  // Don't use over IPC
 };
@@ -434,6 +437,29 @@ enum class SearchResultIconShape {
   kRectangle,
   kRoundedRectangle,
   kCircle,
+};
+
+// The storage types that are available within the System Info Card storage type
+// answer card.
+enum class SearchResultSystemInfoStorageType {
+  kMyFiles,
+  kDriveOfflineFiles,
+  kBrowsingData,
+  kAppsExtensions,
+  kCrostini,
+  kOtherUsers,
+  kSystem,
+  kTotal
+};
+
+// The display type of the answer cards created by the System Info Provider. The
+// Text Card provides a similar UI to the omnibox answer cards while the bar
+// chart and multi element bar chart provide an additional bar chart with system
+// information.
+enum class SystemInfoAnswerCardDisplayType {
+  kBarChart,
+  kTextCard,
+  kMultiElementBarChart,
 };
 
 struct ASH_PUBLIC_EXPORT SearchResultIconInfo {
@@ -458,6 +484,32 @@ struct ASH_PUBLIC_EXPORT SearchResultIconInfo {
 
   // The shape to mask the icon with. Only used by the results list view.
   SearchResultIconShape shape = SearchResultIconShape::kDefault;
+};
+
+// Data required for System Info Answer Card result type.
+struct ASH_PUBLIC_EXPORT SystemInfoAnswerCardData {
+ public:
+  SystemInfoAnswerCardData();
+  explicit SystemInfoAnswerCardData(
+      SystemInfoAnswerCardDisplayType display_type);
+  explicit SystemInfoAnswerCardData(double bar_chart_percentage);
+  explicit SystemInfoAnswerCardData(std::map<SearchResultSystemInfoStorageType,
+                                             int64_t> storage_type_to_size);
+
+  SystemInfoAnswerCardData(const SystemInfoAnswerCardData&);
+
+  ~SystemInfoAnswerCardData();
+
+  SystemInfoAnswerCardDisplayType display_type;
+
+  // This stores the percentage of the bar chart to be filled for System Info
+  // Answer card results which are a bar chart type. This will be a value
+  // between 0 and 100.
+  absl::optional<double> bar_chart_percentage;
+
+  // This stores the amount of space occupied by each storage type if this
+  // answer card is showing storage. All sizes are in bytes.
+  std::map<SearchResultSystemInfoStorageType, int64_t> storage_type_to_size;
 };
 
 // A tagged range in search result text.
@@ -667,6 +719,10 @@ struct ASH_PUBLIC_EXPORT SearchResultMetadata {
   // The icon of this result.
   SearchResultIconInfo icon;
 
+  // The details for an answer card result with System Information. This field
+  // is only set for this specific result type.
+  absl::optional<SystemInfoAnswerCardData> system_info_answer_card_data;
+
   // The icon of this result in a smaller dimension to be rendered in suggestion
   // chip view.
   // TODO(crbug.com/1225161): Remove this and replace it with |icon| and an
@@ -693,6 +749,21 @@ struct SearchResultIdWithPositionIndex {
 
   // The position index of the result.
   int position_index;
+};
+
+// `ScopedIphSession` manages an IPH session. A UI must show an IPH once an
+// IPH session gets created. Also the UI must destroy
+// `ScopedIphSession` when it has stopped showing an IPH.
+class ASH_PUBLIC_EXPORT ScopedIphSession {
+ public:
+  ScopedIphSession() = default;
+  virtual ~ScopedIphSession() = default;
+
+  ScopedIphSession(const ScopedIphSession&) = delete;
+  ScopedIphSession& operator=(const ScopedIphSession&) = delete;
+
+  // Notify an IPH event with name of `event`.
+  virtual void NotifyEvent(const std::string& event) = 0;
 };
 
 using SearchResultIdWithPositionIndices =

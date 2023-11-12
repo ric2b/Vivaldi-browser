@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -32,24 +33,30 @@ test("services_unittests") {
 
   data_deps = [ "//testing/buildbot/filters:services_unittests_filters" ]
 
-  if (!is_ios) {
+  if (use_blink) {
     deps += [
       "//services/audio:tests",
-      "//services/data_decoder:tests",
-      "//services/device:tests",
       "//services/image_annotation:tests",
       "//services/image_annotation/public/cpp:tests",
       "//services/media_session:tests",
       "//services/media_session/public/cpp:tests",
       "//services/preferences/tracked:unit_tests",
-      "//services/proxy_resolver:tests",
       "//services/resource_coordinator:tests",
       "//services/shape_detection:tests",
-      "//services/tracing:tests",
       "//services/viz/privileged/mojom:unit_tests",
       "//services/viz/public/cpp/compositing:tests",
       "//services/viz/public/cpp/gpu:tests",
       "//services/viz/public/cpp/hit_test:tests",
+      "//services/webnn:tests",
+    ]
+  }
+
+  if (!is_ios) {
+    deps += [
+      "//services/data_decoder:tests",
+      "//services/device:tests",
+      "//services/proxy_resolver:tests",
+      "//services/tracing:tests",
     ]
     if (is_android && (current_cpu == "arm" || current_cpu == "arm64")) {
       deps += [ "//base:base_profiler_test_support_library" ]
@@ -163,8 +170,6 @@ if (is_android) {
       "//services/shape_detection/public/mojom:mojom_java",
       "//skia/public/mojom:mojom_java",
       "//third_party/android_deps:chromium_play_services_availability_java",
-      "//third_party/android_support_test_runner:runner_java",
-      "//third_party/androidx:androidx_test_monitor_java",
       "//third_party/androidx:androidx_test_runner_java",
       "//third_party/hamcrest:hamcrest_library_java",
       "//third_party/junit",

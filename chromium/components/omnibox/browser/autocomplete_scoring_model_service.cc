@@ -26,6 +26,7 @@ AutocompleteScoringModelService::AutocompleteScoringModelService(
     url_scoring_model_handler_ =
         std::make_unique<AutocompleteScoringModelHandler>(
             model_provider, model_executor_task_runner_.get(),
+            std::make_unique<AutocompleteScoringModelExecutor>(),
             optimization_guide::proto::OPTIMIZATION_TARGET_OMNIBOX_URL_SCORING,
             /*model_metadata=*/absl::nullopt);
   }
@@ -34,12 +35,60 @@ AutocompleteScoringModelService::AutocompleteScoringModelService(
 AutocompleteScoringModelService::~AutocompleteScoringModelService() = default;
 
 void AutocompleteScoringModelService::ScoreAutocompleteUrlMatch(
-    AutocompleteScoringModelExecutor::ModelInput input_signals,
-    base::OnceCallback<void(
-        const absl::optional<AutocompleteScoringModelExecutor::ModelOutput>&)>
-        scoring_callback) {
-  if (url_scoring_model_handler_ != nullptr) {
-    url_scoring_model_handler_->ExecuteModelWithInput(
-        std::move(scoring_callback), input_signals);
+    base::CancelableTaskTracker* tracker,
+    const ScoringSignals& scoring_signals,
+    size_t match_index,
+    GURL match_destination_url,
+    ResultCallback result_callback) {
+  TRACE_EVENT0("omnibox",
+               "AutocompleteScoringModelService::ScoreAutocompleteUrlMatch");
+
+  if (!UrlScoringModelAvailable()) {
+    std::move(result_callback)
+        .Run(
+            std::make_tuple(absl::nullopt, match_index, match_destination_url));
+    return;
   }
+
+  absl::optional<std::vector<float>> input_signals =
+      url_scoring_model_handler_->GetModelInput(scoring_signals);
+  if (!input_signals) {
+    std::move(result_callback)
+        .Run(
+            std::make_tuple(absl::nullopt, match_index, match_destination_url));
+    return;
+  }
+
+  url_scoring_model_handler_->ExecuteModelWithInput(
+      tracker,
+      base::BindOnce(&AutocompleteScoringModelService::ProcessModelOutput,
+                     base::Unretained(this), std::move(result_callback),
+                     match_index, match_destination_url),
+      *input_signals);
+}
+
+bool AutocompleteScoringModelService::UrlScoringModelAvailable() {
+  return url_scoring_model_handler_ &&
+         url_scoring_model_handler_->ModelAvailable();
+}
+
+void AutocompleteScoringModelService::ProcessModelOutput(
+    ResultCallback result_callback,
+    size_t match_index,
+    GURL match_destination_url,
+    const absl::optional<AutocompleteScoringModelExecutor::ModelOutput>&
+        model_output) {
+  TRACE_EVENT0("omnibox",
+               "AutocompleteScoringModelService::ProcessModelOutput");
+  if (model_output.has_value()) {
+    if (!model_output.value().empty()) {
+      std::move(result_callback)
+          .Run(std::make_tuple(model_output.value()[0], match_index,
+                               match_destination_url));
+      return;
+    }
+    NOTREACHED() << "The model generated an empty output vector.";
+  }
+  std::move(result_callback)
+      .Run(std::make_tuple(absl::nullopt, match_index, match_destination_url));
 }

@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/platform/fonts/win/font_fallback_win.h"
 #include "third_party/blink/renderer/platform/language.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkStream.h"
@@ -62,10 +63,6 @@
 namespace blink {
 
 WebFontPrewarmer* FontCache::prewarmer_ = nullptr;
-
-using SideloadedFontsMap =
-    HashMap<String, sk_sp<SkTypeface>, CaseFoldingHashTraits<String>>;
-SideloadedFontsMap* FontCache::sideloaded_fonts_ = nullptr;
 
 // Cached system font metrics.
 AtomicString* FontCache::menu_font_family_name_ = nullptr;
@@ -82,45 +79,6 @@ int32_t EnsureMinimumFontHeightIfNeeded(int32_t font_height) {
   // Chinese.  Please refer to LayoutThemeFontProviderWin.cpp for more
   // information.
   return ((font_height < 12.0f) && (GetACP() == 936)) ? 12.0f : font_height;
-}
-
-// Test-only code for matching sideloaded fonts by postscript name. This
-// implementation is incomplete, as it does not match the full font name and
-// only uses FT_Get_Postscript_Name, which returns an ASCII font name. This is
-// intended to pass tests on Windows, where for example src: local(Ahem) is used
-// in @font-face CSS declarations.  Skia does not expose getAdvancedMetrics, so
-// we use FreeType here to parse the font's postscript name.
-sk_sp<SkTypeface> FindUniqueFontNameFromSideloadedFonts(
-    const String& font_name,
-    SideloadedFontsMap* sideloaded_fonts) {
-  CHECK(sideloaded_fonts);
-  FT_Library library;
-  FT_Init_FreeType(&library);
-
-  sk_sp<SkTypeface> return_typeface(nullptr);
-  for (auto& sideloaded_font : sideloaded_fonts->Values()) {
-    // Open ttc index zero as we can assume that we do not sideload TrueType
-    // collections.
-    std::unique_ptr<SkStreamAsset> typeface_stream(
-        sideloaded_font->openStream(nullptr));
-    CHECK(typeface_stream->getMemoryBase());
-    std::string font_family_name;
-    FT_Face font_face;
-    FT_Open_Args open_args = {
-        FT_OPEN_MEMORY,
-        reinterpret_cast<const FT_Byte*>(typeface_stream->getMemoryBase()),
-        static_cast<FT_Long>(typeface_stream->getLength())};
-    CHECK_EQ(FT_Err_Ok, FT_Open_Face(library, &open_args, 0, &font_face));
-    font_family_name = FT_Get_Postscript_Name(font_face);
-    FT_Done_Face(font_face);
-
-    if (font_name.FoldCase() == String(font_family_name.c_str()).FoldCase()) {
-      return_typeface = sideloaded_font;
-      break;
-    }
-  }
-  FT_Done_FreeType(library);
-  return return_typeface;
 }
 
 static const char kChineseSimplified[] = "zh-Hant";
@@ -165,23 +123,12 @@ void FontCache::PrewarmFamily(const AtomicString& family_name) {
   if (!prewarmer_)
     return;
 
-  static HashSet<AtomicString> prewarmed_families;
+  DEFINE_STATIC_LOCAL(HashSet<AtomicString>, prewarmed_families, ());
   const auto result = prewarmed_families.insert(family_name);
   if (!result.is_new_entry)
     return;
 
   prewarmer_->PrewarmFamily(family_name);
-}
-
-// static
-void FontCache::AddSideloadedFontForTesting(sk_sp<SkTypeface> typeface) {
-  if (!sideloaded_fonts_) {
-    sideloaded_fonts_ = new SideloadedFontsMap();
-  }
-  SkString name;
-  typeface->getFamilyName(&name);
-  String name_wtf(name.c_str());
-  sideloaded_fonts_->Set(name_wtf, std::move(typeface));
 }
 
 //static
@@ -370,9 +317,9 @@ scoped_refptr<SimpleFontData> FontCache::GetDWriteFallbackFamily(
 
     Bcp47Vector locales;
     locales.push_back(fallback_locale->LocaleForSkFontMgr());
-    SkTypeface* typeface = font_manager_->matchFamilyStyleCharacter(
+    sk_sp<SkTypeface> typeface(font_manager_->matchFamilyStyleCharacter(
         family_name.c_str(), font_description.SkiaFontStyle(), locales.data(),
-        locales.size(), codepoint);
+        locales.size(), codepoint));
 
     if (!typeface)
       return nullptr;
@@ -552,11 +499,6 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
   if (alternate_font_name == AlternateFontName::kLocalUniqueFace &&
       RuntimeEnabledFeatures::FontSrcLocalMatchingEnabled()) {
     typeface = CreateTypefaceFromUniqueName(creation_params);
-
-    if (!typeface && sideloaded_fonts_) {
-      typeface = FindUniqueFontNameFromSideloadedFonts(creation_params.Family(),
-                                                       sideloaded_fonts_);
-    }
 
     // We do not need to try any heuristic around the font name, as below, for
     // family matching.

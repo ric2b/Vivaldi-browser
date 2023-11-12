@@ -28,6 +28,10 @@ namespace eche_app {
 class LaunchAppHelperTest;
 }
 
+namespace video_conference {
+class VideoConferenceIntegrationTest;
+}
+
 // Class managing toast requests.
 class ASH_EXPORT ToastManagerImpl : public ToastManager,
                                     public ToastOverlay::Delegate,
@@ -57,6 +61,8 @@ class ASH_EXPORT ToastManagerImpl : public ToastManager,
   // SessionObserver:
   void OnSessionStateChanged(session_manager::SessionState state) override;
 
+  const ToastData& GetCurrentToastDataForTesting() const;
+
  private:
   class PausableTimer;
   friend class AutoConnectNotifierTest;
@@ -65,6 +71,7 @@ class ASH_EXPORT ToastManagerImpl : public ToastManager,
   friend class ToastManagerImplTest;
   friend class ClipboardHistoryControllerRefreshTest;
   friend class eche_app::LaunchAppHelperTest;
+  friend class video_conference::VideoConferenceIntegrationTest;
 
   void ShowLatest();
 

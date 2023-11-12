@@ -24,6 +24,7 @@
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -34,21 +35,18 @@
 #include "components/exo/seat_observer.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/shell_surface_base.h"
+#include "components/exo/wayland/output_metrics.h"
 #include "components/exo/wayland/serial_tracker.h"
 #include "components/exo/wayland/server_util.h"
 #include "components/exo/wayland/wayland_display_observer.h"
-#include "components/exo/wayland/wayland_display_util.h"
 #include "components/exo/wayland/wl_output.h"
 #include "components/exo/wayland/xdg_shell.h"
-#include "components/exo/wm_helper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_occlusion_tracker.h"
 #include "ui/base/wayland/wayland_display_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display_observer.h"
-#include "ui/display/manager/display_manager.h"
-#include "ui/display/manager/display_manager_util.h"
 #include "ui/display/screen.h"
 #include "ui/views/corewm/tooltip_controller.h"
 #include "ui/views/widget/widget.h"
@@ -297,6 +295,12 @@ void aura_surface_hide_tooltip(wl_client* client, wl_resource* resource) {
   GetUserDataAs<AuraSurface>(resource)->HideTooltip();
 }
 
+void aura_surface_set_accessibility_id(wl_client* client,
+                                       wl_resource* resource,
+                                       int32_t id) {
+  GetUserDataAs<AuraSurface>(resource)->SetAccessibilityId(id);
+}
+
 const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_set_frame,
     aura_surface_set_parent,
@@ -328,6 +332,7 @@ const struct zaura_surface_interface aura_surface_implementation = {
     aura_surface_release,
     aura_surface_show_tooltip,
     aura_surface_hide_tooltip,
+    aura_surface_set_accessibility_id,
 };
 
 }  // namespace
@@ -369,7 +374,7 @@ void AuraSurface::SetFrameColors(SkColor active_frame_color,
 
 void AuraSurface::SetParent(AuraSurface* parent, const gfx::Point& position) {
   if (surface_)
-    surface_->SetParent(parent ? parent->surface_ : nullptr, position);
+    surface_->SetParent(parent ? parent->surface_.get() : nullptr, position);
 }
 
 void AuraSurface::SetStartupId(const char* startup_id) {
@@ -709,6 +714,10 @@ void AuraSurface::HideTooltip() {
   ash::Shell::Get()->tooltip_controller()->UpdateTooltip(window);
 }
 
+void AuraSurface::SetAccessibilityId(int id) {
+  surface_->SetClientAccessibilityId(id);
+}
+
 chromeos::OrientationType OrientationLock(uint32_t orientation_lock) {
   switch (orientation_lock) {
     case ZAURA_TOPLEVEL_ORIENTATION_LOCK_NONE:
@@ -1000,69 +1009,39 @@ bool AuraOutput::SendDisplayMetrics(const display::Display& display,
     return false;
   }
 
-  const WMHelper* wm_helper = WMHelper::GetInstance();
-  const display::ManagedDisplayInfo& display_info =
-      wm_helper->GetDisplayInfo(display.id());
+  const OutputMetrics output_metrics(display);
 
   if (wl_resource_get_version(resource_) >=
       ZAURA_OUTPUT_DISPLAY_ID_SINCE_VERSION) {
-    auto display_id = ui::wayland::ToWaylandDisplayIdPair(display.id());
-    zaura_output_send_display_id(resource_, display_id.high, display_id.low);
+    zaura_output_send_display_id(resource_, output_metrics.display_id.high,
+                                 output_metrics.display_id.low);
   }
 
   if (wl_resource_get_version(resource_) >= ZAURA_OUTPUT_SCALE_SINCE_VERSION) {
-    display::ManagedDisplayMode active_mode;
-    bool rv = wm_helper->GetActiveModeForDisplayId(display.id(), &active_mode);
-    DCHECK(rv);
-    const int32_t current_output_scale =
-        std::round(display_info.zoom_factor() * 1000.f);
-    std::vector<float> zoom_factors =
-        display::GetDisplayZoomFactors(active_mode);
-
-    // Ensure that the current zoom factor is a part of the list.
-    if (base::ranges::none_of(zoom_factors, [&display_info](float zoom_factor) {
-          return std::abs(display_info.zoom_factor() - zoom_factor) <=
-                 std::numeric_limits<float>::epsilon();
-        })) {
-      zoom_factors.push_back(display_info.zoom_factor());
-    }
-
-    for (float zoom_factor : zoom_factors) {
-      int32_t output_scale = std::round(zoom_factor * 1000.f);
-      uint32_t flags = 0;
-      if (output_scale == 1000)
-        flags |= ZAURA_OUTPUT_SCALE_PROPERTY_PREFERRED;
-      if (current_output_scale == output_scale)
-        flags |= ZAURA_OUTPUT_SCALE_PROPERTY_CURRENT;
-
-      // TODO(malaykeshav): This can be removed in the future when client
-      // has been updated.
-      if (wl_resource_get_version(resource_) < 6)
-        output_scale = std::round(1000.f / zoom_factor);
-
-      zaura_output_send_scale(resource_, flags, output_scale);
+    for (const auto& output_scale : output_metrics.output_scales) {
+      zaura_output_send_scale(resource_, output_scale.scale_property,
+                              output_scale.scale_factor);
     }
   }
 
   if (wl_resource_get_version(resource_) >=
       ZAURA_OUTPUT_CONNECTION_SINCE_VERSION) {
-    zaura_output_send_connection(
-        resource_, display.IsInternal() ? ZAURA_OUTPUT_CONNECTION_TYPE_INTERNAL
-                                        : ZAURA_OUTPUT_CONNECTION_TYPE_UNKNOWN);
+    zaura_output_send_connection(resource_, output_metrics.connection_type);
   }
 
   if (wl_resource_get_version(resource_) >=
       ZAURA_OUTPUT_DEVICE_SCALE_FACTOR_SINCE_VERSION) {
     zaura_output_send_device_scale_factor(
-        resource_, display_info.device_scale_factor() * 1000);
+        resource_, output_metrics.device_scale_factor_deprecated);
   }
 
-  if (wl_resource_get_version(resource_) >= ZAURA_OUTPUT_INSETS_SINCE_VERSION)
-    SendInsets(display.bounds().InsetsFrom(display.work_area()));
+  if (wl_resource_get_version(resource_) >= ZAURA_OUTPUT_INSETS_SINCE_VERSION) {
+    SendInsets(output_metrics.logical_insets);
+  }
 
   if (wl_resource_get_version(resource_) >=
       ZAURA_OUTPUT_LOGICAL_TRANSFORM_SINCE_VERSION) {
-    SendLogicalTransform(OutputTransform(display.rotation()));
+    SendLogicalTransform(output_metrics.logical_transform);
   }
 
   return true;
@@ -1265,8 +1244,8 @@ class WaylandAuraShell : public ash::DesksController::Observer,
   }
 
   // The aura shell resource associated with observer.
-  wl_resource* const aura_shell_resource_;
-  Seat* const seat_;
+  const raw_ptr<wl_resource, ExperimentalAsh> aura_shell_resource_;
+  const raw_ptr<Seat, ExperimentalAsh> seat_;
 
   bool last_has_focused_client_ = false;
 

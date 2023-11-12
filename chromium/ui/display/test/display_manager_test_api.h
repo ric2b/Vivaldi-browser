@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "ui/display/display.h"
 #include "ui/display/display_export.h"
 #include "ui/display/display_layout.h"
@@ -44,6 +45,8 @@ class DISPLAY_EXPORT DisplayManagerTestApi {
   // |display_spec| is a list of comma separated spec for each displays. Please
   // refer to the comment in |display::ManagedDisplayInfo::CreateFromSpec| for
   // the format of the display spec.
+  // Note: To add rounded-corners properly upon startup, set it via specifying
+  // the command line switch `ash-host-window-bounds`.
   void UpdateDisplay(const std::string& display_specs);
 
   // Set the 1st display as an internal display and returns the display Id for
@@ -73,7 +76,7 @@ class DISPLAY_EXPORT DisplayManagerTestApi {
   // Indicate the maximum number of displays that chrome device can support.
   static size_t maximum_support_display_;
 
-  DisplayManager* display_manager_;  // not owned
+  raw_ptr<DisplayManager, ExperimentalAsh> display_manager_;  // not owned
 };
 
 class DISPLAY_EXPORT ScopedSetInternalDisplayId {

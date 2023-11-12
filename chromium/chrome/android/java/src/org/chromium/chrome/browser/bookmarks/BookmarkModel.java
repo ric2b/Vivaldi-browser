@@ -26,6 +26,13 @@ import org.vivaldi.browser.speeddial.SpeedDialUtils;
  * the UI to acquire data from the backend.
  */
 public class BookmarkModel extends BookmarkBridge {
+    private static BookmarkModel sInstanceForTesting;
+
+    /** Set an instance for testing. */
+    public static void setInstanceForTesting(BookmarkModel bookmarkModel) {
+        sInstanceForTesting = bookmarkModel;
+    }
+
     /**
      * Observer that listens to delete event. This interface is used by undo controllers to know
      * which bookmarks were deleted. Note this observer only listens to events that go through
@@ -50,6 +57,10 @@ public class BookmarkModel extends BookmarkBridge {
      */
     public static final BookmarkModel getForProfile(@NonNull Profile profile) {
         assert profile != null;
+        if (sInstanceForTesting != null) {
+            return sInstanceForTesting;
+        }
+
         ThreadUtils.assertOnUiThread();
         return BookmarkBridge.getForProfile(profile);
     }
@@ -153,7 +164,7 @@ public class BookmarkModel extends BookmarkBridge {
      */
     public int getUnreadCount(@NonNull BookmarkId bookmarkId) {
         assert bookmarkId.getType() == BookmarkType.READING_LIST;
-        List<BookmarkId> children = getChildIDs(bookmarkId);
+        List<BookmarkId> children = getChildIds(bookmarkId);
         int unreadCount = 0;
         for (BookmarkId child : children) {
             BookmarkItem childItem = getBookmarkById(child);

@@ -16,16 +16,18 @@ export enum AmbientActionName {
   SET_ALBUM_SELECTED = 'set_album_selected',
   SET_AMBIENT_MODE_ENABLED = 'set_ambient_mode_enabled',
   SET_ANIMATION_THEME = 'set_animation_theme',
-  SET_GOOGLE_PHOTOS_ALBUMS_PREVIEWS = 'set_google_photos_albums_previews',
+  SET_PREVIEWS = 'set_previews',
+  SET_SCREEN_SAVER_DURATION = 'set_screen_saver_duration',
   SET_TEMPERATURE_UNIT = 'set_temperature_unit',
   SET_TOPIC_SOURCE = 'set_topic_source',
   SET_AMBIENT_UI_VISIBILITY = 'set_ambient_ui_visibility',
+  SET_SHOULD_SHOW_TIME_OF_DAY_BANNER = 'set_should_show_time_of_day_banner',
 }
 
-export type AmbientActions =
-    SetAlbumsAction|SetAlbumSelectedAction|SetAmbientModeEnabledAction|
-    SetAnimationThemeAction|SetGooglePhotosAlbumsPreviewsAction|
-    SetTopicSourceAction|SetTemperatureUnitAction|SetAmbientUiVisibilityAction;
+export type AmbientActions = SetAlbumsAction|SetAlbumSelectedAction|
+    SetAmbientModeEnabledAction|SetAnimationThemeAction|SetPreviewsAction|
+    SetScreenSaverDurationAction|SetTopicSourceAction|SetTemperatureUnitAction|
+    SetAmbientUiVisibilityAction|SetShouldShowTimeOfDayBannerAction;
 
 export type SetAlbumsAction = Action&{
   name: AmbientActionName.SET_ALBUMS,
@@ -46,9 +48,14 @@ export type SetAnimationThemeAction = Action&{
   animationTheme: AnimationTheme,
 };
 
-export type SetGooglePhotosAlbumsPreviewsAction = Action&{
-  name: AmbientActionName.SET_GOOGLE_PHOTOS_ALBUMS_PREVIEWS,
+export type SetPreviewsAction = Action&{
+  name: AmbientActionName.SET_PREVIEWS,
   previews: Url[],
+};
+
+export type SetScreenSaverDurationAction = Action&{
+  name: AmbientActionName.SET_SCREEN_SAVER_DURATION,
+  minutes: number,
 };
 
 export type SetTemperatureUnitAction = Action&{
@@ -64,6 +71,11 @@ export type SetTopicSourceAction = Action&{
 export type SetAmbientUiVisibilityAction = Action&{
   name: AmbientActionName.SET_AMBIENT_UI_VISIBILITY,
   ambientUiVisibility: AmbientUiVisibility,
+};
+
+export type SetShouldShowTimeOfDayBannerAction = Action&{
+  name: AmbientActionName.SET_SHOULD_SHOW_TIME_OF_DAY_BANNER,
+  shouldShowTimeOfDayBanner: boolean,
 };
 
 /**
@@ -94,11 +106,18 @@ export function setAnimationThemeAction(animationTheme: AnimationTheme):
 }
 
 /**
- * Sets the current value of Google Photos albums previews.
+ * Sets the current value of preview image URLs.
  */
-export function setGooglePhotosAlbumsPreviewsAction(previews: Url[]):
-    SetGooglePhotosAlbumsPreviewsAction {
-  return {name: AmbientActionName.SET_GOOGLE_PHOTOS_ALBUMS_PREVIEWS, previews};
+export function setPreviewsAction(previews: Url[]): SetPreviewsAction {
+  return {name: AmbientActionName.SET_PREVIEWS, previews};
+}
+
+/**
+ * Sets the current value of the screen saver duration.
+ */
+export function setScreenSaverDurationAction(minutes: number):
+    SetScreenSaverDurationAction {
+  return {name: AmbientActionName.SET_SCREEN_SAVER_DURATION, minutes};
 }
 
 /**
@@ -125,5 +144,16 @@ export function setAmbientUiVisibilityAction(
   return {
     name: AmbientActionName.SET_AMBIENT_UI_VISIBILITY,
     ambientUiVisibility,
+  };
+}
+
+/**
+ * Sets the boolean that determines whether to show the time of day banner.
+ */
+export function setShouldShowTimeOfDayBannerAction(
+    shouldShowTimeOfDayBanner: boolean): SetShouldShowTimeOfDayBannerAction {
+  return {
+    name: AmbientActionName.SET_SHOULD_SHOW_TIME_OF_DAY_BANNER,
+    shouldShowTimeOfDayBanner,
   };
 }

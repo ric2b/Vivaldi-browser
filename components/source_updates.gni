@@ -76,6 +76,17 @@ if (vivaldi_build_tests) {
   }
 }
 
+if (is_linux && is_debug) {
+  # On linux headless pulls in a lot of unused components libs in debug mode,
+  # some of which depends on vivaldi functions. In this case we can use the
+  # dummy functions used for the tests
+  update_target("//headless:headless_non_renderer") {
+    sources += [
+      "//vivaldi/components/guest_view/vivaldi_guest_view_test_helper.cc",
+    ]
+  }
+}
+
 update_target("//chrome/browser:browser") {
   sources += [
     "//vivaldi/components/capture/capture_page.cc",
@@ -222,6 +233,14 @@ update_target("//components/embedder_support:browser_util"){
     "//vivaldi/components/browser/vivaldi_brand_select.cc",
     "//vivaldi/components/browser/vivaldi_brand_select.h",
   ]
+  deps += [
+    "//components/version_info:generate_version_info",
+    "//vivaldi/base:edge_version"
+  ]
+}
+
+update_target("//third_party/blink/common:common") {
+  sources += [ "//vivaldi/components/blink/vivaldi_user_agent_metadata.cc" ]
 }
 
 if (is_win) {

@@ -240,6 +240,14 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
   self.validationType = type;
 }
 
+- (void)setFocus {
+  [self.textField becomeFirstResponder];
+}
+
+- (void)setAutoCorrectDisabled:(BOOL)disable {
+  self.textField.autocorrectionType = UITextAutocorrectionTypeNo;
+}
+
 #pragma mark - GETTERS
 - (BOOL)hasText {
   return [self.textField hasText];

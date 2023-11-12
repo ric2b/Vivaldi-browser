@@ -527,15 +527,15 @@ void Navigator::DidNavigate(
   // should never get here with a SiteInstance that doesn't have a site
   // assigned in that case.
   SiteInstanceImpl* site_instance = render_frame_host->GetSiteInstance();
+  const UrlInfo& url_info = navigation_request->GetUrlInfo();
   if (!site_instance->HasSite() &&
-      SiteInstanceImpl::ShouldAssignSiteForURL(params.url)) {
+      SiteInstanceImpl::ShouldAssignSiteForUrlInfo(url_info)) {
     NOTREACHED() << "SiteInstance should have already set a site: "
                  << params.url;
     // TODO(alexmos): convert this to a CHECK and remove the fallback call to
     // ConvertToDefaultOrSetSite() after verifying that this doesn't happen in
     // practice.
     base::debug::DumpWithoutCrashing();
-    const UrlInfo url_info(UrlInfoInit(params.url));
     site_instance->ConvertToDefaultOrSetSite(url_info);
   }
 
@@ -853,7 +853,7 @@ void Navigator::NavigateFromFrameProxy(
     const blink::LocalFrameToken* initiator_frame_token,
     int initiator_process_id,
     const url::Origin& initiator_origin,
-    const GURL& initiator_base_url,
+    const absl::optional<GURL>& initiator_base_url,
     SiteInstance* source_site_instance,
     const Referrer& referrer,
     ui::PageTransition page_transition,
@@ -872,7 +872,9 @@ void Navigator::NavigateFromFrameProxy(
     base::TimeTicks navigation_start_time,
     bool is_embedder_initiated_fenced_frame_navigation,
     bool is_unfenced_top_navigation,
-    bool force_new_browsing_instance) {
+    bool force_new_browsing_instance,
+    bool is_container_initiated,
+    absl::optional<std::u16string> embedder_shared_storage_context) {
   // |method != "POST"| should imply absence of |post_body|.
   if (method != "POST" && post_body) {
     NOTREACHED();
@@ -917,7 +919,8 @@ void Navigator::NavigateFromFrameProxy(
       std::move(blob_url_loader_factory), is_form_submission, impression,
       initiator_activation_and_ad_status, navigation_start_time,
       is_embedder_initiated_fenced_frame_navigation, is_unfenced_top_navigation,
-      force_new_browsing_instance);
+      force_new_browsing_instance, is_container_initiated,
+      embedder_shared_storage_context);
 }
 
 void Navigator::BeforeUnloadCompleted(FrameTreeNode* frame_tree_node,

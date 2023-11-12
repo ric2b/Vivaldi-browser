@@ -116,10 +116,11 @@ class LockScreenEventObserver
       EXPECT_EQ(context_, event.restrict_to_browser_context);
 
     std::unique_ptr<extensions::api::app_runtime::LaunchData> launch_data =
-        extensions::api::app_runtime::LaunchData::FromValue(arg_value);
+        extensions::api::app_runtime::LaunchData::FromValueDeprecated(
+            arg_value);
     ASSERT_TRUE(launch_data);
     ASSERT_TRUE(launch_data->action_data);
-    EXPECT_EQ(extensions::api::app_runtime::ACTION_TYPE_NEW_NOTE,
+    EXPECT_EQ(extensions::api::app_runtime::ActionType::kNewNote,
               launch_data->action_data->action_type);
 
     ASSERT_TRUE(launch_data->action_data->is_lock_screen_action);
@@ -144,7 +145,7 @@ class LockScreenEventObserver
 
  private:
   std::vector<std::string> launched_apps_;
-  content::BrowserContext* context_;
+  raw_ptr<content::BrowserContext, ExperimentalAsh> context_;
   bool expect_restore_action_state_ = true;
 };
 
@@ -492,7 +493,7 @@ class LockScreenAppManagerImplTest
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 
   TestingProfileManager profile_manager_;
-  TestingProfile* profile_ = nullptr;
+  raw_ptr<TestingProfile, ExperimentalAsh> profile_ = nullptr;
 
   std::unique_ptr<LockScreenEventObserver> event_observer_;
 

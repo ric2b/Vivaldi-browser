@@ -295,7 +295,7 @@ void BookmarkMenuBridge::AddNodeAsSubmenu(NSMenu* menu,
   if (!recurse)
     [submenu setDelegate:controller_];
   [items setTag:node->id()];
-  tag_to_guid_[node->id()] = node->guid();
+  tag_to_guid_[node->id()] = node->uuid();
 
   if (vivaldi::IsVivaldiRunning() && menu_index) {
     [menu insertItem:items atIndex:*menu_index];
@@ -358,7 +358,7 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node,
                  action:nil
           keyEquivalent:@""]);
       bookmark_nodes_[child.get()] = item;
-      tag_to_guid_[child->id()] = child->guid();
+      tag_to_guid_[child->id()] = child->uuid();
       ConfigureMenuItem(child.get(), item, false);
       [menu addItem:item];
     }
@@ -373,7 +373,7 @@ void BookmarkMenuBridge::ConfigureMenuItem(const BookmarkNode* node,
   [item setTarget:controller_];
   [item setAction:@selector(openBookmarkMenuItem:)];
   [item setTag:node->id()];
-  tag_to_guid_[node->id()] = node->guid();
+  tag_to_guid_[node->id()] = node->uuid();
   if (node->is_url())
     [item setToolTip:[BookmarkMenuCocoaController tooltipForNode:node]];
   // Check to see if we have a favicon.
@@ -410,7 +410,7 @@ void BookmarkMenuBridge::OnProfileWillBeDestroyed() {
   bookmark_nodes_.clear();
 }
 
-base::GUID BookmarkMenuBridge::TagToGUID(int64_t tag) const {
+base::Uuid BookmarkMenuBridge::TagToGUID(int64_t tag) const {
   const auto& it = tag_to_guid_.find(tag);
-  return it == tag_to_guid_.end() ? base::GUID() : it->second;
+  return it == tag_to_guid_.end() ? base::Uuid() : it->second;
 }

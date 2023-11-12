@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/animation/property_handle.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/color_scheme_flags.h"
+#include "third_party/blink/renderer/core/css/css_position_fallback_rule.h"
 #include "third_party/blink/renderer/core/css/element_rule_collector.h"
 #include "third_party/blink/renderer/core/css/resolver/matched_properties_cache.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder.h"
@@ -154,10 +155,9 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
     kUACSSRules = 1 << 1,
     kUserCSSRules = 1 << 2,
     kAuthorCSSRules = 1 << 3,
-    kCrossOriginCSSRules = 1 << 4,
     kUAAndUserCSSRules = kUACSSRules | kUserCSSRules,
-    kAllButUACSSRules = kUserCSSRules | kAuthorCSSRules | kCrossOriginCSSRules,
-    kAllCSSRules = kUAAndUserCSSRules | kAuthorCSSRules | kCrossOriginCSSRules,
+    kAllButUACSSRules = kUserCSSRules | kAuthorCSSRules,
+    kAllCSSRules = kUAAndUserCSSRules | kAuthorCSSRules,
   };
   RuleIndexList* CssRulesForElement(Element*,
                                     unsigned rules_to_include = kAllCSSRules);
@@ -166,12 +166,16 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       PseudoId,
       const AtomicString& view_transition_name,
       unsigned rules_to_include = kAllCSSRules);
+  // Note that StyleRulesForElement will behave as if all links are
+  // unvisited; the :visited pseudo class will never match.
   StyleRuleList* StyleRulesForElement(Element*, unsigned rules_to_include);
   HeapHashMap<CSSPropertyName, Member<const CSSValue>> CascadedValuesForElement(
       Element*,
       PseudoId);
 
-  Element* FindContainerForElement(Element*, const ContainerSelector&);
+  Element* FindContainerForElement(Element*,
+                                   const ContainerSelector&,
+                                   const TreeScope* selector_tree_scope);
 
   Font ComputeFont(Element&, const ComputedStyle&, const CSSPropertyValueSet&);
 
@@ -212,7 +216,9 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
       Element& element,
       const ComputedStyle& base_style,
       ActiveInterpolationsMap& transition_interpolations);
-
+  StyleRulePositionFallback* ResolvePositionFallbackRule(
+      const TreeScope* tree_scope,
+      AtomicString position_fallback_name);
   scoped_refptr<const ComputedStyle> ResolvePositionFallbackStyle(
       Element&,
       unsigned index);

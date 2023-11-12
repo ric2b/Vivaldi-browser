@@ -314,6 +314,10 @@ ScopedJavaLocalRef<jobject> WebContentsAndroid::GetFocusedFrame(
   return rfh->GetJavaRenderFrameHost();
 }
 
+bool WebContentsAndroid::IsFocusedElementEditable(JNIEnv* env) {
+  return web_contents_->IsFocusedElementEditable();
+}
+
 ScopedJavaLocalRef<jobject> WebContentsAndroid::GetRenderFrameHostFromId(
     JNIEnv* env,
     jint render_process_id,
@@ -426,6 +430,12 @@ ScopedJavaLocalRef<jobjectArray> WebContentsAndroid::GetInnerWebContents(
 
 jint WebContentsAndroid::GetVisibility(JNIEnv* env) {
   return static_cast<jint>(web_contents_->GetVisibility());
+}
+
+void WebContentsAndroid::UpdateWebContentsVisibility(JNIEnv* env,
+                                                     jint visibiity) {
+  web_contents_->UpdateWebContentsVisibility(
+      static_cast<Visibility>(visibiity));
 }
 
 RenderWidgetHostViewAndroid*
@@ -703,7 +713,6 @@ void WebContentsAndroid::RequestAccessibilitySnapshot(
               weak_factory_.GetWeakPtr(), std::move(j_view_structure_root),
               std::move(j_view_structure_builder), std::move(j_callback)),
           ui::AXMode(ui::kAXModeComplete.flags() | ui::AXMode::kHTMLMetadata),
-          /* exclude_offscreen= */ false,
           /* max_nodes= */ 5000,
           /* timeout= */ base::Seconds(2));
 }
@@ -873,6 +882,10 @@ void WebContentsAndroid::NotifyRendererPreferenceUpdate(JNIEnv* env) {
 
 void WebContentsAndroid::NotifyBrowserControlsHeightChanged(JNIEnv* env) {
   web_contents_->GetNativeView()->OnBrowserControlsHeightChanged();
+}
+
+bool WebContentsAndroid::NeedToFireBeforeUnloadOrUnloadEvents(JNIEnv* env) {
+  return web_contents_->NeedToFireBeforeUnloadOrUnloadEvents();
 }
 
 }  // namespace content

@@ -5,6 +5,8 @@
 #include "chrome/browser/ui/views/site_data/site_data_row_view.h"
 
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/url_identity.h"
 #include "chrome/browser/ui/views/accessibility/non_accessible_image_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/site_data/page_specific_site_data_dialog.h"
@@ -39,6 +41,11 @@ namespace {
 
 constexpr int kIconSize = 16;
 
+constexpr UrlIdentity::TypeSet kUrlIdentityAllowedTypes = {
+    UrlIdentity::Type::kDefault, UrlIdentity::Type::kIsolatedWebApp};
+constexpr UrlIdentity::FormatOptions kUrlIdentityFormatOptions = {
+    .default_options = {UrlIdentity::DefaultFormatOptions::kHostname}};
+
 std::u16string GetSettingStateString(ContentSetting setting,
                                      bool is_fully_partitioned) {
   // TODO(crbug.com/1344787): Return actual strings.
@@ -69,8 +76,7 @@ std::u16string GetSettingStateString(ContentSetting setting,
     case CONTENT_SETTING_DETECT_IMPORTANT_CONTENT:
     case CONTENT_SETTING_NUM_SETTINGS:
       // Not supported settings for cookies.
-      NOTREACHED();
-      break;
+      NOTREACHED_NORETURN();
   }
 
   return l10n_util::GetStringUTF16(message_id);
@@ -120,6 +126,7 @@ void NotifyMenuItemClicked(views::View* view) {
 }  // namespace
 
 SiteDataRowView::SiteDataRowView(
+    Profile* profile,
     const url::Origin& origin,
     ContentSetting setting,
     bool is_fully_partitioned,
@@ -149,10 +156,14 @@ SiteDataRowView::SiteDataRowView(
   if (!favicon.IsEmpty())
     SetFaviconImage(favicon);
 
-  // TODO(crbug.com/1344787): Use proper formatting of the host.
-  std::u16string host_name = base::UTF8ToUTF16(origin.host());
-  auto* label = AddChildView(std::make_unique<views::Label>(host_name));
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  std::u16string origin_display_name =
+      UrlIdentity::CreateFromUrl(profile, origin.GetURL(),
+                                 kUrlIdentityAllowedTypes,
+                                 kUrlIdentityFormatOptions)
+          .name;
+  hostname_label_ =
+      AddChildView(std::make_unique<views::Label>(origin_display_name));
+  hostname_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
 
   auto* delete_button_container = AddChildView(std::make_unique<views::View>());
   delete_button_container->SetUseDefaultFillLayout(true);
@@ -163,7 +174,8 @@ SiteDataRowView::SiteDataRowView(
           kTrashCanIcon, kIconSize));
   views::InstallCircleHighlightPathGenerator(delete_button_);
   delete_button_->SetTooltipText(l10n_util::GetStringFUTF16(
-      IDS_PAGE_SPECIFIC_SITE_DATA_DIALOG_DELETE_BUTTON_TOOLTIP, host_name));
+      IDS_PAGE_SPECIFIC_SITE_DATA_DIALOG_DELETE_BUTTON_TOOLTIP,
+      origin_display_name));
   delete_button_->SetVisible(setting_ != CONTENT_SETTING_BLOCK);
   delete_button_->SetProperty(views::kElementIdentifierKey, kDeleteButton);
 
@@ -173,7 +185,8 @@ SiteDataRowView::SiteDataRowView(
                           base::Unretained(this)),
       kBrowserToolsIcon, kIconSize));
   menu_button_->SetTooltipText(l10n_util::GetStringFUTF16(
-      IDS_PAGE_SPECIFIC_SITE_DATA_DIALOG_CONTEXT_MENU_TOOLTIP, host_name));
+      IDS_PAGE_SPECIFIC_SITE_DATA_DIALOG_CONTEXT_MENU_TOOLTIP,
+      origin_display_name));
   menu_button_->SetProperty(views::kElementIdentifierKey, kMenuButton);
   views::InstallCircleHighlightPathGenerator(menu_button_);
 

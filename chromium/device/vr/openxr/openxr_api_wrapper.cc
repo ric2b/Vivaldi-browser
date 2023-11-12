@@ -20,6 +20,7 @@
 #include "device/vr/openxr/openxr_input_helper.h"
 #include "device/vr/openxr/openxr_util.h"
 #include "device/vr/public/cpp/features.h"
+#include "device/vr/public/mojom/xr_session.mojom.h"
 #include "device/vr/test/test_hook.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
@@ -755,7 +756,8 @@ void OpenXrApiWrapper::CreateSharedMailboxes() {
         gpu_memory_buffer.get(), nullptr,
         gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT709,
                         gfx::ColorSpace::TransferID::LINEAR),
-        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, shared_image_usage);
+        kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, shared_image_usage,
+        "OpenXrSwapChain");
     mailbox_holder.sync_token = shared_image_interface->GenVerifiedSyncToken();
     mailbox_holder.texture_target = GL_TEXTURE_2D;
   }

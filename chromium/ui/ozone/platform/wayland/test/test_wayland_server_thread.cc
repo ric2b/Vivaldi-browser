@@ -20,6 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
 #include "ui/ozone/platform/wayland/test/test_gtk_primary_selection.h"
+#include "ui/ozone/platform/wayland/test/test_zcr_text_input_extension.h"
 #include "ui/ozone/platform/wayland/test/test_zwp_primary_selection.h"
 
 namespace wl {
@@ -42,10 +43,17 @@ void DisplayDeleter::operator()(wl_display* display) {
 }
 
 TestWaylandServerThread::TestWaylandServerThread()
+    : TestWaylandServerThread(ServerConfig{}) {}
+
+TestWaylandServerThread::TestWaylandServerThread(const ServerConfig& config)
     : Thread("test_wayland_server"),
       client_destroy_listener_(this),
-      compositor_v4_(4),
-      compositor_v3_(3),
+      config_(config),
+      compositor_(config.compositor_version),
+      output_(base::BindRepeating(
+          &TestWaylandServerThread::OnTestOutputMetricsFlush,
+          base::Unretained(this))),
+      zcr_text_input_extension_v1_(config.text_input_extension_version),
       controller_(FROM_HERE) {
   DETACH_FROM_THREAD(thread_checker_);
 }
@@ -77,7 +85,7 @@ TestWaylandServerThread::~TestWaylandServerThread() {
   client_ = nullptr;
 }
 
-bool TestWaylandServerThread::Start(const ServerConfig& config) {
+bool TestWaylandServerThread::Start() {
   display_.reset(wl_display_create());
   if (!display_)
     return false;
@@ -91,12 +99,8 @@ bool TestWaylandServerThread::Start(const ServerConfig& config) {
 
   if (wl_display_init_shm(display_.get()) < 0)
     return false;
-  if (config.compositor_version == CompositorVersion::kV3) {
-    if (!compositor_v3_.Initialize(display_.get()))
-      return false;
-  } else {
-    if (!compositor_v4_.Initialize(display_.get()))
-      return false;
+  if (!compositor_.Initialize(display_.get())) {
+    return false;
   }
   if (!sub_compositor_.Initialize(display_.get()))
     return false;
@@ -105,14 +109,33 @@ bool TestWaylandServerThread::Start(const ServerConfig& config) {
   if (!alpha_compositing_.Initialize(display_.get()))
     return false;
 
+  if (config_.enable_aura_shell == EnableAuraShellProtocol::kEnabled) {
+    if (config_.use_aura_output_manager) {
+      // zaura_output_manager should be initialized before any wl_output
+      // globals.
+      if (!zaura_output_manager_.Initialize(display_.get())) {
+        return false;
+      }
+    } else {
+      if (!zxdg_output_manager_.Initialize(display_.get())) {
+        return false;
+      }
+    }
+
+    output_.set_aura_shell_enabled();
+    if (!zaura_shell_.Initialize(display_.get())) {
+      return false;
+    }
+  }
+
   if (!output_.Initialize(display_.get()))
     return false;
-  SetupOutputs();
 
   if (!data_device_manager_.Initialize(display_.get()))
     return false;
-  if (!SetupPrimarySelectionManager(config.primary_selection_protocol))
+  if (!SetupPrimarySelectionManager(config_.primary_selection_protocol)) {
     return false;
+  }
 
   if (!seat_.Initialize(display_.get()))
     return false;
@@ -120,24 +143,19 @@ bool TestWaylandServerThread::Start(const ServerConfig& config) {
   if (!xdg_shell_.Initialize(display_.get()))
     return false;
 
-  if (config.enable_aura_shell == EnableAuraShellProtocol::kEnabled) {
-    if (!zxdg_output_manager_.Initialize(display_.get()))
-      return false;
-
-    output_.set_aura_shell_enabled();
-    if (!zaura_shell_.Initialize(display_.get()))
-      return false;
-  }
-
   if (!zcr_stylus_.Initialize(display_.get()))
     return false;
-  if (!zcr_text_input_extension_v1_.Initialize(display_.get()))
+
+  if (!zcr_text_input_extension_v1_.Initialize(display_.get())) {
     return false;
+  }
+
   if (!zwp_text_input_manager_v1_.Initialize(display_.get()))
     return false;
   if (!SetupExplicitSynchronizationProtocol(
-          config.use_explicit_synchronization))
+          config_.use_explicit_synchronization)) {
     return false;
+  }
   if (!zwp_linux_dmabuf_v1_.Initialize(display_.get()))
     return false;
   if (!overlay_prioritizer_.Initialize(display_.get()))
@@ -207,6 +225,14 @@ TestSurfaceAugmenter* TestWaylandServerThread::EnsureSurfaceAugmenter() {
   return nullptr;
 }
 
+void TestWaylandServerThread::OnTestOutputMetricsFlush(
+    wl_resource* output_resource,
+    const TestOutputMetrics& metrics) {
+  if (zaura_output_manager_.resource()) {
+    zaura_output_manager_.SendOutputMetrics(output_resource, metrics);
+  }
+}
+
 void TestWaylandServerThread::OnClientDestroyed(wl_client* client) {
   if (!client_)
     return;
@@ -226,28 +252,16 @@ uint32_t TestWaylandServerThread::GetNextTime() {
   return ++timestamp;
 }
 
-// By default, just make sure primary screen has bounds set. Otherwise delegates
-// it, making it possible to emulate different scenarios, such as, multi-screen,
-// lazy configuration, arbitrary ordering of the outputs metadata sending, etc.
-void TestWaylandServerThread::SetupOutputs() {
-  if (output_delegate_) {
-    output_delegate_->SetupOutputs(&output_);
-    return;
-  }
-  if (output_.GetRect().IsEmpty())
-    output_.SetRect(gfx::Rect{0, 0, 800, 600});
-}
-
 bool TestWaylandServerThread::SetupPrimarySelectionManager(
     PrimarySelectionProtocol protocol) {
   switch (protocol) {
     case PrimarySelectionProtocol::kNone:
       return true;
     case PrimarySelectionProtocol::kZwp:
-      primary_selection_device_manager_.reset(CreateTestSelectionManagerZwp());
+      primary_selection_device_manager_ = CreateTestSelectionManagerZwp();
       break;
     case PrimarySelectionProtocol::kGtk:
-      primary_selection_device_manager_.reset(CreateTestSelectionManagerGtk());
+      primary_selection_device_manager_ = CreateTestSelectionManagerGtk();
       break;
   }
   return primary_selection_device_manager_->Initialize(display_.get());

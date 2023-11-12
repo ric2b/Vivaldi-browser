@@ -8,11 +8,20 @@
 #import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #import "base/numerics/safe_conversions.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/tab_strip_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/tab_strip_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/tab_strip_view_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_item.h"
+#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -30,6 +39,9 @@ const CGFloat kNewTabButtonWidth = 44;
 // Default image insets for the new tab button.
 const CGFloat kNewTabButtonLeadingImageInset = -10.0;
 const CGFloat kNewTabButtonBottomImageInset = -2.0;
+
+const CGFloat kSymbolSize = 18;
+
 }  // namespace
 
 @interface TabStripViewController () <TabStripCellDelegate>
@@ -70,21 +82,37 @@ const CGFloat kNewTabButtonBottomImageInset = -2.0;
   self.buttonNewTab = [[UIButton alloc] init];
   self.buttonNewTab.translatesAutoresizingMaskIntoConstraints = NO;
   self.buttonNewTab.imageView.contentMode = UIViewContentModeCenter;
-  UIImage* buttonNewTabImage = [[UIImage imageNamed:@"tabstrip_new_tab"]
-      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  UIImage* buttonNewTabImage =
+      DefaultSymbolWithPointSize(kPlusSymbol, kSymbolSize);
+  if (IsVivaldiRunning()) {
+    buttonNewTabImage = [UIImage imageNamed:@"tabstrip_new_tab"];
+    buttonNewTabImage = [buttonNewTabImage
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    [_buttonNewTab.imageView setTintColor: UIColor.whiteColor];
+    _buttonNewTab.tintColor = UIColor.whiteColor;
+    [_buttonNewTab setImage:buttonNewTabImage
+                   forState:UIControlStateNormal];
+  } else {
   [self.buttonNewTab setImage:buttonNewTabImage forState:UIControlStateNormal];
   [self.buttonNewTab.imageView setTintColor:[UIColor colorNamed:kGrey500Color]];
 
-  // TODO(crbug.com/1418068): Remove after minimum version required is >=
+  // TODO(crbug.com/1418068): Simplify after minimum version required is >=
   // iOS 15.
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
-  self.buttonNewTab.configuration.contentInsets = NSDirectionalEdgeInsetsMake(
-      0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
-#else
-  UIEdgeInsets imageInsets = UIEdgeInsetsMake(0, kNewTabButtonLeadingImageInset,
-                                              kNewTabButtonBottomImageInset, 0);
-  self.buttonNewTab.imageEdgeInsets = imageInsets;
-#endif  // __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
+  if (base::ios::IsRunningOnIOS15OrLater() &&
+      IsUIButtonConfigurationEnabled()) {
+    if (@available(iOS 15, *)) {
+      UIButtonConfiguration* buttonConfiguration =
+          [UIButtonConfiguration plainButtonConfiguration];
+      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+          0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
+      self.buttonNewTab.configuration = buttonConfiguration;
+    }
+  } else {
+    UIEdgeInsets imageInsets = UIEdgeInsetsMake(
+        0, kNewTabButtonLeadingImageInset, kNewTabButtonBottomImageInset, 0);
+    SetImageEdgeInsets(self.buttonNewTab, imageInsets);
+  }
+  } // End Vivaldi
 
   [self.view addSubview:self.buttonNewTab];
   [NSLayoutConstraint activateConstraints:@[
@@ -226,15 +254,13 @@ const CGFloat kNewTabButtonBottomImageInset = -2.0;
     cell.delegate = self;
     cell.itemIdentifier = item.identifier;
     cell.titleLabel.text = item.title;
-    NSString* itemIdentifier = item.identifier;
-    [self.faviconDataSource
-        faviconForIdentifier:itemIdentifier
-                  completion:^(UIImage* icon) {
-                    // Only update the icon if the cell is not
-                    // already reused for another item.
-                    if ([cell hasIdentifier:itemIdentifier])
-                      cell.faviconView.image = icon;
-                  }];
+    [item fetchFavicon:^(TabSwitcherItem* innerItem, UIImage* icon) {
+      // Only update the icon if the cell is not
+      // already reused for another item.
+      if ([cell hasIdentifier:innerItem.identifier]) {
+        cell.faviconView.image = icon;
+      }
+    }];
     cell.selected = [cell hasIdentifier:self.selectedItemID];
   }
 }

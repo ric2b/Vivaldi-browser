@@ -34,6 +34,8 @@ class NetworkQualityTracker;
 
 namespace offline_pages {
 
+namespace {
+
 class ActiveTabInfo : public RequestCoordinator::ActiveTabInfo {
  public:
   explicit ActiveTabInfo(Profile* profile) : profile_(profile) {}
@@ -60,8 +62,17 @@ class ActiveTabInfo : public RequestCoordinator::ActiveTabInfo {
   raw_ptr<Profile> profile_;
 };
 
+}  // namespace
+
 RequestCoordinatorFactory::RequestCoordinatorFactory()
-    : ProfileKeyedServiceFactory("OfflineRequestCoordinator") {
+    : ProfileKeyedServiceFactory(
+          "OfflineRequestCoordinator",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOriginalOnly)
+              .Build()) {
   // Depends on OfflinePageModelFactory in SimpleDependencyManager.
 }
 

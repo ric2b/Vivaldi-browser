@@ -65,6 +65,9 @@ declare_overrides() {
     webview_includes_weblayer = false
     enable_vr = false
     ffmpeg_branding = "Chrome"
+    if (is_vivaldi_automotive) { # Potential fix for VAB-7448.
+      ffmpeg_branding = "Chromium"
+    }
     android_channel = "stable"
     chrome_public_manifest_package = android_vivaldi_manifest_package
     if (!is_debug) {
@@ -72,6 +75,11 @@ declare_overrides() {
         enable_resource_allowlist_generation = false
       }
       strip_debug_info = true
+    }
+    if (is_vivaldi_lynkco) {
+      # NOTE(jarle): For Lynkco we do not treat warnings as errors due to 3rd party
+      # library integration.
+      treat_warnings_as_errors = false
     }
   }
 

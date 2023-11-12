@@ -237,6 +237,14 @@ class MetricsService {
 
   variations::SyntheticTrialRegistry* GetSyntheticTrialRegistry();
 
+  // Returns the delay before the init tasks (to asynchronously initialize
+  // metrics providers) run.
+  base::TimeDelta GetInitializationDelay();
+
+  // Returns the delay before the task to update the "last alive timestamp" is
+  // run.
+  base::TimeDelta GetUpdateLastAliveTimestampDelay();
+
   MetricsLogStore* LogStoreForTest() {
     return reporting_service_.metrics_log_store();
   }
@@ -271,6 +279,12 @@ class MetricsService {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   bool IsInForegroundForTesting() const { return is_in_foreground_; }
 #endif
+
+  // Creates a new MetricsLog instance with the given |log_type|.
+  std::unique_ptr<MetricsLog> CreateLogForTesting(
+      MetricsLog::LogType log_type) {
+    return CreateLog(log_type);
+  }
 
  protected:
   // Sets the persistent system profile. Virtual for tests.
@@ -326,6 +340,12 @@ class MetricsService {
 
   // Writes snapshots of histograms owned by the StatisticsRecorder to a log.
   // Does not take ownership of the log.
+  // TODO(crbug/1423653): Although this class takes in |required_flags| in its
+  // constructor to filter the StatisticsRecorder histograms being put into
+  // the log, the |histogram_snapshot_manager_| is not aware of this. So if
+  // the |histogram_snapshot_manager_| is passed to some other caller, this
+  // caller will need to manually filter the histograms. Re-factor the code so
+  // that this is not needed.
   class MetricsLogHistogramWriter {
    public:
     explicit MetricsLogHistogramWriter(MetricsLog* log);
@@ -361,7 +381,8 @@ class MetricsService {
 
    private:
     // Used to select which histograms to record when calling
-    // SnapshotStatisticsRecorderHistograms().
+    // SnapshotStatisticsRecorderHistograms() or
+    // SnapshotStatisticsRecorderUnloggedSamples().
     const base::HistogramBase::Flags required_flags_;
 
     // Used to write histograms to the log passed in the constructor.

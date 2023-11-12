@@ -23,6 +23,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_dump_provider.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/base/media_log.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
@@ -33,10 +34,10 @@
 #include "media/video/h265_parser.h"
 #include "media/video/h265_poc.h"
 #endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+#include "media/gpu/mac/gl_image_io_surface.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/gl_bindings.h"
-#include "ui/gl/gl_image_io_surface.h"
 
 // This must be included after gl_bindings.h, or the various GL headers on the
 // system and in the source tree will conflict with each other.
@@ -175,7 +176,7 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
     const bool uses_shared_images;
 
     // Information about the currently bound image, for OnMemoryDump().
-    std::vector<scoped_refptr<gl::GLImageIOSurface>> gl_images;
+    std::vector<scoped_refptr<GLImageIOSurface>> gl_images;
     int32_t bitstream_id = 0;
 
     // Texture IDs for the image buffer.
@@ -275,8 +276,8 @@ class VTVideoDecodeAccelerator : public VideoDecodeAccelerator,
   // Format of the assigned picture buffers.
   VideoPixelFormat picture_format_ = PIXEL_FORMAT_UNKNOWN;
 
-  // Corresponding GpuMemoryBuffer format.
-  gfx::BufferFormat buffer_format_ = gfx::BufferFormat::YUV_420_BIPLANAR;
+  // Corresponding SharedImageFormat.
+  viz::SharedImageFormat si_format_ = viz::MultiPlaneFormat::kNV12;
 
   // Frames that have not yet been decoded, keyed by bitstream ID; maintains
   // ownership of Frame objects while they flow through VideoToolbox.

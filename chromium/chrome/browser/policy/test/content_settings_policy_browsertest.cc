@@ -19,7 +19,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/content_settings/core/browser/private_network_settings.h"
+#include "components/content_settings/core/browser/local_network_settings.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
 #include "content/public/browser/permission_controller.h"
@@ -204,15 +204,14 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothPolicyTest, MAYBE_Block) {
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD, base::Value(2), nullptr);
   UpdateProviderPolicy(policies);
 
-  std::string rejection;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "navigator.bluetooth.requestDevice({filters: [{name: 'Hello'}]})"
-      "  .then(() => { domAutomationController.send('Success'); },"
-      "        reason => {"
-      "      domAutomationController.send(reason.name + ': ' + reason.message);"
-      "  });",
-      &rejection));
+  std::string rejection =
+      content::EvalJs(
+          web_contents,
+          "navigator.bluetooth.requestDevice({filters: [{name: 'Hello'}]})"
+          "  .then(() => 'Success',"
+          "        reason => reason.name + ': ' + reason.message"
+          "  );")
+          .ExtractString();
   EXPECT_THAT(rejection, testing::MatchesRegex("NotFoundError: .*policy.*"));
 }
 
@@ -281,12 +280,12 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, WebUsbAllowDevicesForUrls) {
   EXPECT_FALSE(context->HasDevicePermission(kTestOrigin, device_info));
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyTest, ShouldAllowInsecurePrivateNetworkRequests) {
+IN_PROC_BROWSER_TEST_F(PolicyTest, ShouldAllowInsecureLocalNetworkRequests) {
   const auto* settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
 
   // By default, we should block requests.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
+  EXPECT_FALSE(content_settings::ShouldAllowInsecureLocalNetworkRequests(
       settings_map, url::Origin::Create(GURL("http://bleep.com"))));
 
   PolicyMap policies;
@@ -295,7 +294,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ShouldAllowInsecurePrivateNetworkRequests) {
   UpdateProviderPolicy(policies);
 
   // Explicitly-disallowing is the same as not setting the policy.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
+  EXPECT_FALSE(content_settings::ShouldAllowInsecureLocalNetworkRequests(
       settings_map, url::Origin::Create(GURL("http://bleep.com"))));
 
   base::Value::List allowlist;
@@ -306,28 +305,28 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ShouldAllowInsecurePrivateNetworkRequests) {
   UpdateProviderPolicy(policies);
 
   // Domain is not the in allowlist.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
+  EXPECT_FALSE(content_settings::ShouldAllowInsecureLocalNetworkRequests(
       settings_map, url::Origin::Create(GURL("http://default.com"))));
 
   // Path does not matter, only the origin.
-  EXPECT_TRUE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
+  EXPECT_TRUE(content_settings::ShouldAllowInsecureLocalNetworkRequests(
       settings_map, url::Origin::Create(GURL("http://bleep.com/heyo"))));
 
   // Scheme matters: https is not http.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
+  EXPECT_FALSE(content_settings::ShouldAllowInsecureLocalNetworkRequests(
       settings_map, url::Origin::Create(GURL("https://bleep.com"))));
 
   // Port is checked too.
-  EXPECT_TRUE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
+  EXPECT_TRUE(content_settings::ShouldAllowInsecureLocalNetworkRequests(
       settings_map,
       url::Origin::Create(GURL("http://woohoo.com:1234/index.html"))));
 
   // The wrong port does not match (default is 80).
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
+  EXPECT_FALSE(content_settings::ShouldAllowInsecureLocalNetworkRequests(
       settings_map, url::Origin::Create(GURL("http://woohoo.com/index.html"))));
 
   // Opaque origins never match the allowlist.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
+  EXPECT_FALSE(content_settings::ShouldAllowInsecureLocalNetworkRequests(
       settings_map,
       url::Origin::Create(GURL("http://bleep.com")).DeriveNewOpaqueOrigin()));
 }
@@ -452,17 +451,18 @@ IN_PROC_BROWSER_TEST_F(SensorsPolicyTest, BlockSensorApi) {
   // Set the policy to block Sensors.
   SetDefault(kBlockAll);
 
-  std::string rejection;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "const sensor = new AmbientLightSensor();"
-      "sensor.onreading = () => { domAutomationController.send('Success'); };"
-      "sensor.onerror = (event) => {"
-      "  domAutomationController.send(event.error.name + ': ' + "
-      "event.error.message);"
-      "};"
-      "sensor.start();",
-      &rejection));
+  std::string rejection =
+      content::EvalJs(
+          web_contents,
+          "const sensor = new AmbientLightSensor();"
+          "new Promise(resolve => {"
+          "  sensor.onreading = () => { resolve('Success'); };"
+          "  sensor.onerror = (event) => {"
+          "    resolve(event.error.name + ': ' +  event.error.message);"
+          "  };"
+          "  sensor.start();"
+          "});")
+          .ExtractString();
   EXPECT_THAT(rejection,
               testing::MatchesRegex("NotAllowedError: .*Permissions.*"));
 }

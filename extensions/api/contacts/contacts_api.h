@@ -15,6 +15,8 @@
 #include "contact/contact_service.h"
 #include "contact/contact_type.h"
 
+class Profile;
+
 using contact::ContactModelObserver;
 using contact::ContactService;
 
@@ -39,8 +41,8 @@ class ContactEventRouter : public ContactModelObserver {
   void DispatchEvent(const std::string& event_name,
                      base::Value::List event_args);
 
-  content::BrowserContext* browser_context_;
-  ContactService* model_;
+  const raw_ptr<content::BrowserContext> browser_context_;
+  const raw_ptr<ContactService> model_;
 
   // ContactModelObserver
   void OnContactCreated(ContactService* service,
@@ -75,7 +77,7 @@ class ContactsAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<ContactsAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "ContactsAPI"; }

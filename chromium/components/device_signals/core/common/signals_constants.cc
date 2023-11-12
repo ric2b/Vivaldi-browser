@@ -23,10 +23,6 @@ const char kBrowserVersion[] = "browserVersion";
 // dns is enabled on the device.
 const char kBuiltInDnsClientEnabled[] = "builtInDnsClientEnabled";
 
-// Name of the signal for getting information about whether chrome cleanup
-// is enabled on the device.
-const char kChromeCleanupEnabled[] = "chromeCleanupEnabled";
-
 // Name of the signal for getting information about whether users can
 // access other computers from Chrome using Chrome Remote Desktop.
 const char kChromeRemoteDesktopAppBlocked[] = "chromeRemoteDesktopAppBlocked";
@@ -131,6 +127,10 @@ const char kSystemDnsServers[] = "systemDnsServers";
 // Name of the signal for getting information about whether third party
 // blocking is enabled on the device.
 const char kThirdPartyBlockingEnabled[] = "thirdPartyBlockingEnabled";
+
+// Name of the signal for getting information about the managed user's
+// enrollment domain.
+const char kUserEnrollmentDomain[] = "userEnrollmentDomain";
 
 // Name of the signal for getting information about the windows domain
 // the device has joined.

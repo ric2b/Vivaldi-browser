@@ -194,18 +194,11 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
   const base::CommandLine& cmd = *base::CommandLine::ForCurrentProcess();
   cc::LayerTreeSettings settings;
 
-  settings.skip_commits_if_not_synchronizing_compositor_state =
-      base::FeatureList::IsEnabled(
-          ::features::kSkipCommitsIfNotSynchronizingCompositorState) &&
-      !RuntimeEnabledFeatures::ViewTransitionEnabled();
   settings.enable_synchronized_scrolling =
       base::FeatureList::IsEnabled(::features::kSynchronizedScrolling);
   Platform* platform = Platform::Current();
   settings.percent_based_scrolling =
       ::features::IsPercentBasedScrollingEnabled();
-  settings.compositor_threaded_scrollbar_scrolling =
-      base::FeatureList::IsEnabled(
-          ::features::kCompositorThreadedScrollbarScrolling);
 
   settings.resource_settings.use_r16_texture =
       base::FeatureList::IsEnabled(media::kUseR16Texture);

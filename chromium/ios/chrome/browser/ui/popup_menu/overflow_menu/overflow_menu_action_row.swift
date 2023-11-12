@@ -16,6 +16,9 @@ struct OverflowMenuActionRow: View {
   static let symbolImageFrameLength: CGFloat = 30
   static let symbolImagePadding: CGFloat = -4
 
+  /// The size of the "N" IPH icon.
+  static let newLabelIconWidth: CGFloat = 15
+
   weak var metricsHandler: PopupMenuMetricsHandler?
 
   var body: some View {
@@ -27,6 +30,10 @@ struct OverflowMenuActionRow: View {
       label: {
         HStack {
           Text(action.name).lineLimit(1)
+          if action.displayNewLabelIcon {
+            newLabelIconView()
+              .accessibilityIdentifier("overflowRowIPHBadgeIdentifier")
+          }
           Spacer()
           imageBuilder().frame(
             width: OverflowMenuActionRow.symbolImageFrameLength,
@@ -50,13 +57,9 @@ struct OverflowMenuActionRow: View {
   /// TODO(crbug.com/1315544): Remove this once only the symbols are present.
   @ViewBuilder
   func imageBuilder() -> some View {
-    if !action.symbolName.isEmpty {
-      actionSymbol().font(Font.system(size: OverflowMenuActionRow.symbolSize, weight: .medium))
-        .imageScale(
-          .medium)
-    } else {
-      action.image
-    }
+    actionSymbol().font(Font.system(size: OverflowMenuActionRow.symbolSize, weight: .medium))
+      .imageScale(
+        .medium)
   }
 
   func actionSymbol() -> Image {
@@ -66,5 +69,26 @@ struct OverflowMenuActionRow: View {
       return symbol.symbolRenderingMode(.monochrome)
     }
     return symbol
+  }
+
+  // Returns the "N" IPH icon view.
+  func newLabelIconView() -> some View {
+    return Image(systemName: "seal.fill")
+      .resizable()
+      .foregroundColor(.blue600)
+      .frame(
+        width: OverflowMenuActionRow.newLabelIconWidth,
+        height: OverflowMenuActionRow.newLabelIconWidth
+      )
+      .overlay {
+        if let newLabelString = L10nUtils.stringWithFixup(
+          messageId: IDS_IOS_NEW_LABEL_FEATURE_BADGE)
+        {
+          Text(newLabelString)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .scaledToFit()
+            .foregroundColor(.primaryBackground)
+        }
+      }
   }
 }

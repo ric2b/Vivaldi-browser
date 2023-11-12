@@ -89,7 +89,7 @@ void WriteString(base::DictionaryValue& dict,
                  const std::string& key,
                  const std::string& value) {
   dict.SetKey(key, base::Value(value));
-};
+}
 
 void WriteLabels(const Label& default_toolchain,
                  base::DictionaryValue& dict,
@@ -183,7 +183,7 @@ Err JSONToInputs(const Label& default_toolchain,
     }
   }
 
-  for (const auto& kv : dict->DictItems()) {
+  for (const auto kv : dict->DictItems()) {
     if (kv.first == kFilesKey || kv.first == kAdditonalCompileTargetsKey ||
         kv.first == kTestTargetsKey) {
       continue;
@@ -254,10 +254,11 @@ Analyzer::Analyzer(const Builder& builder,
 
       dep_map_.insert(std::make_pair(item->AsTarget()->toolchain(), item));
 
-      if (item->AsTarget()->output_type() == Target::ACTION ||
+      if (item->AsTarget()->IsBinary() ||
+          item->AsTarget()->output_type() == Target::ACTION ||
           item->AsTarget()->output_type() == Target::ACTION_FOREACH) {
         const LabelPtrPair<Pool>& pool =
-            item->AsTarget()->action_values().pool();
+            item->AsTarget()->pool();
         if (pool.ptr)
           dep_map_.insert(std::make_pair(pool.ptr, item));
       }

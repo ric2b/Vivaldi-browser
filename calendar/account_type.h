@@ -64,8 +64,8 @@ typedef std::vector<AccountRow> AccountRows;
 class CreateAccountResult {
  public:
   CreateAccountResult() = default;
-  CreateAccountResult(const CreateAccountResult&) = delete;
-  CreateAccountResult& operator=(const CreateAccountResult&) = delete;
+  CreateAccountResult(const CreateAccountResult&) = default;
+  CreateAccountResult& operator=(CreateAccountResult& account) = default;
 
   bool success;
   std::string message;
@@ -75,8 +75,8 @@ class CreateAccountResult {
 class UpdateAccountResult {
  public:
   UpdateAccountResult() = default;
-  UpdateAccountResult(const UpdateAccountResult&) = delete;
-  UpdateAccountResult& operator=(const UpdateAccountResult&) = delete;
+  UpdateAccountResult(const UpdateAccountResult&) = default;
+  UpdateAccountResult& operator=(UpdateAccountResult& account) = default;
 
   bool success;
   std::string message;
@@ -86,8 +86,8 @@ class UpdateAccountResult {
 class DeleteAccountResult {
  public:
   DeleteAccountResult() = default;
-  DeleteAccountResult(const DeleteAccountResult&) = delete;
-  DeleteAccountResult& operator=(const DeleteAccountResult&) = delete;
+  DeleteAccountResult(const DeleteAccountResult& account) = default;
+  DeleteAccountResult& operator=(DeleteAccountResult& account) = default;
 
   bool success;
   std::string message;

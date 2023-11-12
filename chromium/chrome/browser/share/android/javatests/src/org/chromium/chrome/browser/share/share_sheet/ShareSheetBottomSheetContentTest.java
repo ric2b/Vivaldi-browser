@@ -13,9 +13,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
-import android.content.Context;
-import android.content.ContextWrapper;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
@@ -37,18 +34,16 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.util.Batch;
-import org.chromium.base.test.util.PackageManagerWrapper;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ChromeShareExtras.DetailedContentType;
-import org.chromium.chrome.browser.share.share_sheet.ShareSheetPropertyModelBuilder.ContentType;
+import org.chromium.chrome.browser.share.ShareContentTypeHelper.ContentType;
+import org.chromium.chrome.test.AutomotiveContextWrapperTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.share.ShareParams;
@@ -76,6 +71,8 @@ public final class ShareSheetBottomSheetContentTest {
 
     @Rule
     public TestRule mFeaturesProcessor = new Features.JUnitProcessor();
+    @Rule
+    public AutomotiveContextWrapperTestRule mAutoTestRule = new AutomotiveContextWrapperTestRule();
 
     @Mock
     private Profile mProfile;
@@ -95,34 +92,6 @@ public final class ShareSheetBottomSheetContentTest {
     private ShareParams mShareParams;
     private ShareSheetBottomSheetContent mShareSheetBottomSheetContent;
 
-    private Context mContextToRestore;
-    private TestContext mTestContext;
-
-    private class TestContext extends ContextWrapper {
-        private boolean mIsAutomotive;
-
-        public TestContext(Context baseContext) {
-            super(baseContext);
-            mIsAutomotive = false;
-        }
-
-        public void setIsAutomotive(boolean isAutomotive) {
-            this.mIsAutomotive = isAutomotive;
-            TestThreadUtils.runOnUiThreadBlocking(BuildInfo::resetForTesting);
-        }
-
-        @Override
-        public PackageManager getPackageManager() {
-            return new PackageManagerWrapper(super.getPackageManager()) {
-                @Override
-                public boolean hasSystemFeature(String name) {
-                    if (PackageManager.FEATURE_AUTOMOTIVE.equals(name)) return mIsAutomotive;
-                    return super.hasSystemFeature(name);
-                }
-            };
-        }
-    }
-
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
@@ -130,14 +99,10 @@ public final class ShareSheetBottomSheetContentTest {
         mActivityTestRule.launchActivity(null);
         mActivity = mActivityTestRule.getActivity();
 
-        mContextToRestore = ContextUtils.getApplicationContext();
-        mTestContext = new TestContext(mContextToRestore);
-        ContextUtils.initApplicationContextForTests(mTestContext);
-
         mPreviewUrl = UrlFormatter.formatUrlForDisplayOmitSchemeOmitTrivialSubdomains(sUrl);
         mShareParams = new ShareParams.Builder(/*window=*/null, sTitle, sUrl)
                                .setText(sText)
-                               .setFileUris(new ArrayList<>(ImmutableList.of(sImageUri)))
+                               .setSingleImageUri(sImageUri)
                                .setLinkToTextSuccessful(true)
                                .build();
         // Pretend the feature engagement feature is already initialized. Otherwise
@@ -157,12 +122,6 @@ public final class ShareSheetBottomSheetContentTest {
 
     @After
     public void tearDown() {
-        // DisableAnimationTestRule requires an initialized context to do proper teardown.
-        // This resets to the original context rather than nulling out.
-        if (mContextToRestore != null) {
-            ContextUtils.initApplicationContextForTests(mContextToRestore);
-        }
-        TestThreadUtils.runOnUiThreadBlocking(BuildInfo::resetForTesting);
         TrackerFactory.setTrackerForTests(null);
     }
 
@@ -173,7 +132,7 @@ public final class ShareSheetBottomSheetContentTest {
         ShareSheetBottomSheetContent shareSheetBottomSheetContent =
                 new ShareSheetBottomSheetContent(mActivity, new MockLargeIconBridge(), null,
                         new ShareParams.Builder(/*window=*/null, /*title=*/"", /*url=*/"")
-                                .setFileUris(new ArrayList<>(ImmutableList.of(sImageUri)))
+                                .setSingleImageUri(sImageUri)
                                 .setFileContentType(fileContentType)
                                 .build(),
                         mFeatureEngagementTracker);
@@ -204,7 +163,7 @@ public final class ShareSheetBottomSheetContentTest {
                         mFeatureEngagementTracker);
 
         shareSheetBottomSheetContent.createRecyclerViews(ImmutableList.of(), ImmutableList.of(),
-                ImmutableSet.of(ContentType.IMAGE), fileContentType,
+                ImmutableSet.of(ContentType.OTHER_FILE_TYPE), fileContentType,
                 DetailedContentType.NOT_SPECIFIED, mShareSheetLinkToggleCoordinator);
 
         TextView titleView =
@@ -330,7 +289,7 @@ public final class ShareSheetBottomSheetContentTest {
         ShareSheetBottomSheetContent shareSheetBottomSheetContent =
                 new ShareSheetBottomSheetContent(mActivity, new MockLargeIconBridge(), null,
                         new ShareParams.Builder(/*window=*/null, /*title=*/"", /*url=*/"")
-                                .setFileUris(new ArrayList<>(ImmutableList.of(sImageUri)))
+                                .setSingleImageUri(sImageUri)
                                 .setFileContentType(fileContentType)
                                 .build(),
                         mFeatureEngagementTracker);
@@ -358,7 +317,7 @@ public final class ShareSheetBottomSheetContentTest {
         ShareSheetBottomSheetContent shareSheetBottomSheetContent =
                 new ShareSheetBottomSheetContent(mActivity, new MockLargeIconBridge(), null,
                         new ShareParams.Builder(/*window=*/null, /*title=*/"", /*url=*/"")
-                                .setFileUris(new ArrayList<>(ImmutableList.of(sImageUri)))
+                                .setSingleImageUri(sImageUri)
                                 .setFileContentType(fileContentType)
                                 .build(),
                         mFeatureEngagementTracker);
@@ -378,11 +337,14 @@ public final class ShareSheetBottomSheetContentTest {
     @Test
     @MediumTest
     public void createRecyclerViews_notAutomotive_thirdPartyOptionsVisible() {
+        // By default set the test to run in non-auto environment.
+        mAutoTestRule.setIsAutomotive(false);
+
         String fileContentType = "image/jpeg";
         ShareSheetBottomSheetContent shareSheetBottomSheetContent =
                 new ShareSheetBottomSheetContent(mActivity, new MockLargeIconBridge(), null,
                         new ShareParams.Builder(/*window=*/null, /*title=*/"", /*url=*/"")
-                                .setFileUris(new ArrayList<>(ImmutableList.of(sImageUri)))
+                                .setSingleImageUri(sImageUri)
                                 .setFileContentType(fileContentType)
                                 .build(),
                         mFeatureEngagementTracker);
@@ -408,13 +370,13 @@ public final class ShareSheetBottomSheetContentTest {
     @Test
     @MediumTest
     public void createRecyclerViews_isAutomotive_thirdPartyOptionsHidden() {
-        mTestContext.setIsAutomotive(true);
+        mAutoTestRule.setIsAutomotive(true);
 
         String fileContentType = "image/jpeg";
         ShareSheetBottomSheetContent shareSheetBottomSheetContent =
                 new ShareSheetBottomSheetContent(mActivity, new MockLargeIconBridge(), null,
                         new ShareParams.Builder(/*window=*/null, /*title=*/"", /*url=*/"")
-                                .setFileUris(new ArrayList<>(ImmutableList.of(sImageUri)))
+                                .setSingleImageUri(sImageUri)
                                 .setFileContentType(fileContentType)
                                 .build(),
                         mFeatureEngagementTracker);

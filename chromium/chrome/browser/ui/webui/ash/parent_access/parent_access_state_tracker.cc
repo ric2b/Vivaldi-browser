@@ -5,43 +5,28 @@
 #include "chrome/browser/ui/webui/ash/parent_access/parent_access_state_tracker.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/ui/webui/ash/parent_access/parent_access_metrics_utils.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+
+namespace {
+bool IsDisabledStateAllowed(
+    parent_access_ui::mojom::ParentAccessParams::FlowType flow_type) {
+  return flow_type == parent_access_ui::mojom::ParentAccessParams::FlowType::
+                          kExtensionAccess;
+}
+}  // namespace
 
 namespace ash {
 
-namespace {
-constexpr char kParentAccessFlowResultHistogramBase[] =
-    "ChromeOS.FamilyLinkUser.ParentAccess.FlowResult";
-
-// TODO(b/262555804) use shared constants for flow type variant suffixes.
-constexpr char kParentAccessFlowResultSuffixAll[] = "All";
-constexpr char kParentAccessFlowResultSuffixWebApprovals[] = "WebApprovals";
-}  // namespace
-
-// static
-std::string ParentAccessStateTracker::GetParentAccessResultHistogramForFlowType(
-    absl::optional<parent_access_ui::mojom::ParentAccessParams::FlowType>
-        flow_type) {
-  const std::string separator = ".";
-  if (!flow_type) {
-    return base::JoinString({kParentAccessFlowResultHistogramBase,
-                             kParentAccessFlowResultSuffixAll},
-                            separator);
-  }
-  switch (flow_type.value()) {
-    case parent_access_ui::mojom::ParentAccessParams::FlowType::kWebsiteAccess:
-      return base::JoinString({kParentAccessFlowResultHistogramBase,
-                               kParentAccessFlowResultSuffixWebApprovals},
-                              separator);
-    case parent_access_ui::mojom::ParentAccessParams::FlowType::
-        kExtensionAccess:
-      // TODO(b/262451256): Implement metrics for extension flow.
-      return std::string();
-  }
-}
-
 ParentAccessStateTracker::ParentAccessStateTracker(
-    parent_access_ui::mojom::ParentAccessParams::FlowType flow_type)
+    parent_access_ui::mojom::ParentAccessParams::FlowType flow_type,
+    bool is_disabled)
     : flow_type_(flow_type) {
+  if (is_disabled) {
+    CHECK(IsDisabledStateAllowed(flow_type_));
+    flow_result_ = FlowResult::kRequestsDisabled;
+    return;
+  }
   switch (flow_type_) {
     case parent_access_ui::mojom::ParentAccessParams::FlowType::kWebsiteAccess:
       // Initialize flow result to kParentAuthentication for flows without an
@@ -57,20 +42,13 @@ ParentAccessStateTracker::ParentAccessStateTracker(
 
 ParentAccessStateTracker::~ParentAccessStateTracker() {
   base::UmaHistogramEnumeration(
-      GetParentAccessResultHistogramForFlowType(absl::nullopt), flow_result_,
-      FlowResult::kNumStates);
-
-  switch (flow_type_) {
-    case parent_access_ui::mojom::ParentAccessParams::FlowType::kWebsiteAccess:
-      base::UmaHistogramEnumeration(
-          GetParentAccessResultHistogramForFlowType(flow_type_), flow_result_,
-          FlowResult::kNumStates);
-      break;
-    case parent_access_ui::mojom::ParentAccessParams::FlowType::
-        kExtensionAccess:
-      // TODO(b/262451256): Implement metrics for extension flow.
-      break;
-  }
+      parent_access::GetHistogramTitleForFlowType(
+          parent_access::kParentAccessFlowResultHistogramBase, absl::nullopt),
+      flow_result_, FlowResult::kNumStates);
+  base::UmaHistogramEnumeration(
+      parent_access::GetHistogramTitleForFlowType(
+          parent_access::kParentAccessFlowResultHistogramBase, flow_type_),
+      flow_result_, FlowResult::kNumStates);
 }
 
 void ParentAccessStateTracker::OnWebUiStateChanged(FlowResult result) {

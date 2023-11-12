@@ -17,37 +17,20 @@
 #include "base/types/pass_key.h"
 #include "content/browser/attribution_reporting/attribution_beacon_id.h"
 #include "content/common/content_export.h"
-#include "content/common/private_aggregation_host.mojom.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/fenced_frame/redacted_fenced_frame_config.h"
+#include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 namespace content {
 
-class AttributionDataHostManager;
+class AttributionManager;
 class PrivateAggregationManager;
 class RenderFrameHostImpl;
-
-struct CONTENT_EXPORT AutomaticBeaconInfo {
-  AutomaticBeaconInfo(
-      const std::string& data,
-      const std::vector<blink::FencedFrame::ReportingDestination>& destination);
-
-  AutomaticBeaconInfo(const AutomaticBeaconInfo&);
-  AutomaticBeaconInfo(AutomaticBeaconInfo&&);
-
-  AutomaticBeaconInfo& operator=(const AutomaticBeaconInfo&);
-  AutomaticBeaconInfo& operator=(AutomaticBeaconInfo&&);
-
-  ~AutomaticBeaconInfo();
-
-  std::string data;
-  std::vector<blink::FencedFrame::ReportingDestination> destination;
-};
 
 // Class that receives report events from fenced frames, and uses a
 // per-destination-type maps of events to URLs to send reports. The maps may be
@@ -65,11 +48,11 @@ class CONTENT_EXPORT FencedFrameReporter
   // destinations, using the passed in map.
   //
   // `url_loader_factory` is used to send all reports, and must not be null.
-  // `attribution_data_host_manager` is used to notify Attribution Reporting API
+  // `attribution_manager` is used to notify Attribution Reporting API
   // for the beacons.
   static scoped_refptr<FencedFrameReporter> CreateForSharedStorage(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      AttributionDataHostManager* attribution_data_host_manager,
+      AttributionManager* attribution_manager,
       ReportingUrlMap reporting_url_map);
 
   // Creates a FencedFrameReporter that maps FLEDGE ReportingDestination types
@@ -79,7 +62,7 @@ class CONTENT_EXPORT FencedFrameReporter
   //
   // `url_loader_factory` is used to send all reports, and must not be null.
   //
-  // `attribution_data_host_manager` is used to notify Attribution Reporting API
+  // `attribution_manager` is used to notify Attribution Reporting API
   // for the beacons.
   //
   // `private_aggregation_manager` is used to send private aggregation requests
@@ -94,7 +77,7 @@ class CONTENT_EXPORT FencedFrameReporter
   // test iff the test does not have for event private aggregation requests.
   static scoped_refptr<FencedFrameReporter> CreateForFledge(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      AttributionDataHostManager* attribution_data_host_manager,
+      AttributionManager* attribution_manager,
       bool direct_seller_is_seller,
       PrivateAggregationManager* private_aggregation_manager,
       const url::Origin& main_frame_origin,
@@ -105,7 +88,7 @@ class CONTENT_EXPORT FencedFrameReporter
   FencedFrameReporter(
       base::PassKey<FencedFrameReporter> pass_key,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      AttributionDataHostManager* attribution_data_host_manager,
+      AttributionManager* attribution_manager,
       PrivateAggregationManager* private_aggregation_manager = nullptr,
       const absl::optional<url::Origin>& main_frame_origin = absl::nullopt,
       const absl::optional<url::Origin>& winner_origin = absl::nullopt);
@@ -187,12 +170,6 @@ class CONTENT_EXPORT FencedFrameReporter
   // need to be sent after this is called.
   void SendPrivateAggregationRequestsForEvent(const std::string& pa_event_type);
 
-  // Stores the payload that will be sent as part of the
-  // `reserved.top_navigation` automatic beacon.
-  void UpdateAutomaticBeaconData(
-      const std::string& event_data,
-      const std::vector<blink::FencedFrame::ReportingDestination>& destination);
-
   // Returns a copy of the internal reporting metadata, so it can be validated
   // in tests. Only includes maps for which maps have been received - i.e., if
   // wait for OnUrlMappingReady() to be invoked for a reporting destination, it
@@ -209,19 +186,21 @@ class CONTENT_EXPORT FencedFrameReporter
   std::map<std::string, PrivateAggregationRequests>
   GetPrivateAggregationEventMapForTesting();
 
-  const absl::optional<AutomaticBeaconInfo>& automatic_beacon_info() {
-    return automatic_beacon_info_;
-  }
-
  private:
   friend class base::RefCounted<FencedFrameReporter>;
   friend class FencedFrameURLMappingTestPeer;
 
+  struct AttributionReportingData {
+    BeaconId beacon_id;
+    bool is_automatic_beacon;
+  };
+
   struct PendingEvent {
-    PendingEvent(const std::string& type,
-                 const std::string& data,
-                 const url::Origin& request_initiator,
-                 BeaconId beacon_id);
+    PendingEvent(
+        const std::string& type,
+        const std::string& data,
+        const url::Origin& request_initiator,
+        absl::optional<AttributionReportingData> attribution_reporting_data);
 
     PendingEvent(const PendingEvent&);
     PendingEvent(PendingEvent&&);
@@ -234,7 +213,9 @@ class CONTENT_EXPORT FencedFrameReporter
     std::string type;
     std::string data;
     url::Origin request_initiator;
-    BeaconId beacon_id;
+    // The data necessary for attribution reporting. Will be `absl::nullopt` if
+    // attribution reporting is disallowed in the initiator frame.
+    absl::optional<AttributionReportingData> attribution_reporting_data;
   };
 
   // The per-blink::FencedFrame::ReportingDestination reporting information.
@@ -266,7 +247,8 @@ class CONTENT_EXPORT FencedFrameReporter
       const std::string& event_data,
       blink::FencedFrame::ReportingDestination reporting_destination,
       const url::Origin& request_initiator,
-      BeaconId beacon_id,
+      const absl::optional<AttributionReportingData>&
+          attribution_reporting_data,
       std::string& error_message);
 
   // Helper to send private aggregation requests in
@@ -286,11 +268,17 @@ class CONTENT_EXPORT FencedFrameReporter
     return reporting_metadata_;
   }
 
+  // Helper to notify `AttributionDataHostManager` if the report failed to be
+  // sent.
+  void NotifyFencedFrameReportingBeaconFailed(
+      const absl::optional<AttributionReportingData>&
+          attribution_reporting_data);
+
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   // Bound to the lifetime of the browser context. Could be null in Incognito
   // mode or in test.
-  const raw_ptr<AttributionDataHostManager> attribution_data_host_manager_;
+  const raw_ptr<AttributionManager> attribution_manager_;
 
   base::flat_map<blink::FencedFrame::ReportingDestination,
                  ReportingDestinationInfo>
@@ -325,16 +313,7 @@ class CONTENT_EXPORT FencedFrameReporter
   // be received and need to be sent later.
   std::set<std::string> received_pa_events_;
 
-  mojo::Remote<mojom::PrivateAggregationHost> private_aggregation_host_;
-
-  // Stores data registered by one of the documents in a FencedFrame using
-  // the `Fence.setReportEventDataForAutomaticBeacons` API.
-  //
-  // Currently, only the `reserved.top_navigation` event exists.
-  //
-  // The data will be sent directly to the network, without going back to any
-  // renderer process, so they are not made part of the redacted properties.
-  absl::optional<AutomaticBeaconInfo> automatic_beacon_info_;
+  mojo::Remote<blink::mojom::PrivateAggregationHost> private_aggregation_host_;
 };
 
 }  // namespace content

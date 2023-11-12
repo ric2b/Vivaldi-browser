@@ -520,7 +520,6 @@ class AutofillTable : public WebDatabaseTable,
   // WebDatabaseTable:
   WebDatabaseTable::TypeKey GetTypeKey() const override;
   bool CreateTablesIfNecessary() override;
-  bool IsSyncable() override;
   bool MigrateToVersion(int version, bool* update_compatible_version) override;
 
   // Records the form elements in |elements| in the database in the
@@ -606,7 +605,8 @@ class AutofillTable : public WebDatabaseTable,
       const std::string& guid,
       AutofillProfile::Source profile_source);
 
-  // Retrieves local/server profiles in the database.
+  // Retrieves local/server profiles in the database. They are returned in
+  // unspecified order.
   // The `profile_source` specifies if profiles from the legacy or the remote
   // backend should be retrieved.
   virtual bool GetAutofillProfiles(

@@ -120,6 +120,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;
+  void PaintAsActiveChanged() override;
   void Maximize() override;
   void Minimize() override;
   void Restore() override;
@@ -145,7 +146,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void SetFullscreen(bool fullscreen, int64_t target_display_id) override;
   bool IsFullscreen() const override;
   void SetOpacity(float opacity) override;
-  void SetAspectRatio(const gfx::SizeF& aspect_ratio) override;
+  void SetAspectRatio(const gfx::SizeF& aspect_ratio,
+                      const gfx::Size& excluded_margin) override;
   void SetWindowIcons(const gfx::ImageSkia& window_icon,
                       const gfx::ImageSkia& app_icon) override;
   void InitModalType(ui::ModalType modal_type) override;
@@ -258,6 +260,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void HandleWindowSizeChanging() override;
   void HandleWindowSizeUnchanged() override;
   void HandleWindowScaleFactorChanged(float window_scale_factor) override;
+  void HandleHeadlessWindowBoundsChanged(const gfx::Rect& bounds) override;
 
   Widget* GetWidget();
   const Widget* GetWidget() const;

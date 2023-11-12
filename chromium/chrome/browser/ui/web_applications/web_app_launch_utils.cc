@@ -12,9 +12,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
-#include "base/metrics/histogram_base.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/histogram_macros_internal.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/one_shot_event.h"
 #include "base/time/time.h"
 #include "build/buildflag.h"
@@ -57,7 +55,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/buildflags/buildflags.h"
-#include "extensions/common/constants.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "ui/base/page_transition_types.h"
@@ -77,6 +74,10 @@
 #include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/constants/chromeos_features.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #include "app/vivaldi_apptools.h"
 
@@ -312,8 +313,8 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
   auto launch_url = contents->GetLastCommittedURL();
   UpdateLaunchStats(contents, app_id, launch_url);
   RecordLaunchMetrics(app_id, apps::LaunchContainer::kLaunchContainerWindow,
-                      extensions::AppLaunchSource::kSourceReparenting,
-                      launch_url, contents);
+                      apps::LaunchSource::kFromReparenting, launch_url,
+                      contents);
 
   if (web_app->launch_handler()
           .value_or(LaunchHandler{})
@@ -335,27 +336,28 @@ Browser* ReparentWebContentsIntoAppBrowser(content::WebContents* contents,
     }
   }
 
-  bool as_pinned_home_tab = IsPinnedHomeTabUrl(registrar, app_id, launch_url);
+  Browser* browser = nullptr;
 
   if (registrar.IsTabbedWindowModeEnabled(app_id)) {
-    if (Browser* browser =
-            AppBrowserController::FindForWebApp(*profile, app_id)) {
-      return ReparentWebContentsIntoAppBrowser(contents, browser, app_id,
-                                               as_pinned_home_tab);
-    }
+    browser = AppBrowserController::FindForWebApp(*profile, app_id);
   }
 
-  Browser::CreateParams browser_params(Browser::CreateParams::CreateForApp(
-          GenerateApplicationNameFromAppId(app_id), true /* trusted_source */,
-          gfx::Rect(), profile, true /* user_gesture */));
+  if (!browser) {
+    Browser::CreateParams browser_params(Browser::CreateParams::CreateForApp(
+        GenerateApplicationNameFromAppId(app_id), true /* trusted_source */,
+        gfx::Rect(), profile, true /* user_gesture */));
 
-  // We're not using a Vivaldi popup for PWAs as we need full functionality.
-  browser_params.is_vivaldi = false;
+    // We're not using a Vivaldi popup for PWAs as we need full functionality.
+    browser_params.is_vivaldi = false;
 
-  return ReparentWebContentsIntoAppBrowser(
-      contents,
-      Browser::Create(browser_params),
-      app_id, as_pinned_home_tab);
+    browser = Browser::Create(browser_params);
+  }
+
+  bool as_pinned_home_tab =
+      browser->app_controller()->IsUrlInHomeTabScope(launch_url);
+
+  return ReparentWebContentsIntoAppBrowser(contents, browser, app_id,
+                                           as_pinned_home_tab);
 }
 
 void SetWebContentsActingAsApp(content::WebContents* contents,
@@ -458,7 +460,6 @@ Browser* CreateWebApplicationWindow(Profile* profile,
   browser_params.omit_from_session_restore = omit_from_session_restore;
   browser_params.can_resize = can_resize;
   browser_params.can_maximize = can_maximize;
-  browser_params.are_tab_groups_enabled = false;
   Browser* browser = Browser::Create(browser_params);
   MaybeAddPinnedHomeTab(browser, app_id);
   return browser;
@@ -476,11 +477,9 @@ content::WebContents* NavigateWebApplicationWindow(
 
 content::WebContents* NavigateWebAppUsingParams(const std::string& app_id,
                                                 NavigateParams& nav_params) {
-  WebAppRegistrar& registrar =
-      WebAppProvider::GetForLocalAppsUnchecked(nav_params.browser->profile())
-          ->registrar_unsafe();
-
-  if (IsPinnedHomeTabUrl(registrar, app_id, nav_params.url)) {
+  if (nav_params.browser->app_controller() &&
+      nav_params.browser->app_controller()->IsUrlInHomeTabScope(
+          nav_params.url)) {
     // Navigations to the home tab URL in tabbed apps should happen in the home
     // tab.
     nav_params.browser->tab_strip_model()->ActivateTabAt(0);
@@ -517,6 +516,33 @@ content::WebContents* NavigateWebAppUsingParams(const std::string& app_id,
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Highly experimental feature to isolate web app application with a different
+  // storage partition.
+  if (base::FeatureList::IsEnabled(
+          chromeos::features::kExperimentalWebAppStoragePartitionIsolation)) {
+    // TODO(crbug.com/1425284): Cover other app launch paths (e.g. restore
+    // apps).
+    auto partition_config = content::StoragePartitionConfig::Create(
+        nav_params.browser->profile(), /*partition_domain=*/"goldfish",
+        /*partition_name=*/app_id, /*in_memory=*/false);
+
+    auto guest_site_instance = content::SiteInstance::CreateForGuest(
+        nav_params.browser->profile(), partition_config);
+
+    content::WebContents::CreateParams params(nav_params.browser->profile(),
+                                              std::move(guest_site_instance));
+    std::unique_ptr<content::WebContents> new_contents =
+        content::WebContents::Create(params);
+    content::NavigationController::LoadURLParams load_url_params(
+        nav_params.url);
+
+    new_contents->GetController().LoadURLWithParams(load_url_params);
+
+    nav_params.contents_to_insert = std::move(new_contents);
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
   Navigate(&nav_params);
 
   content::WebContents* const web_contents =
@@ -532,7 +558,7 @@ content::WebContents* NavigateWebAppUsingParams(const std::string& app_id,
 
 void RecordAppWindowLaunchMetric(Profile* profile,
                                  const std::string& app_id,
-                                 extensions::AppLaunchSource launch_source) {
+                                 apps::LaunchSource launch_source) {
   WebAppProvider* provider = WebAppProvider::GetForLocalAppsUnchecked(profile);
   if (!provider)
     return;
@@ -546,22 +572,62 @@ void RecordAppWindowLaunchMetric(Profile* profile,
   if (display != DisplayMode::kUndefined) {
     DCHECK_LT(DisplayMode::kUndefined, display);
     DCHECK_LE(display, DisplayMode::kMaxValue);
-    UMA_HISTOGRAM_ENUMERATION("Launch.WebAppDisplayMode", display);
+    base::UmaHistogramEnumeration("Launch.WebAppDisplayMode", display);
+    if (provider->registrar_unsafe().IsShortcutApp(app_id)) {
+      base::UmaHistogramEnumeration(
+          "Launch.Window.CreateShortcutApp.WebAppDisplayMode", display);
+    }
   }
 
   // Reparenting launches don't respect the launch_handler setting.
-  if (launch_source != extensions::AppLaunchSource::kSourceReparenting &&
+  if (launch_source != apps::LaunchSource::kFromReparenting &&
       base::FeatureList::IsEnabled(
           blink::features::kWebAppEnableLaunchHandler)) {
-    UMA_HISTOGRAM_ENUMERATION(
+    base::UmaHistogramEnumeration(
         "Launch.WebAppLaunchHandlerClientMode",
+        web_app->launch_handler().value_or(LaunchHandler()).client_mode);
+  }
+}
+
+void RecordAppTabLaunchMetric(Profile* profile,
+                              const std::string& app_id,
+                              apps::LaunchSource launch_source) {
+  WebAppProvider* provider = WebAppProvider::GetForLocalAppsUnchecked(profile);
+  if (!provider) {
+    return;
+  }
+
+  const WebApp* web_app = provider->registrar_unsafe().GetAppById(app_id);
+  if (!web_app) {
+    return;
+  }
+
+  DisplayMode display =
+      provider->registrar_unsafe().GetEffectiveDisplayModeFromManifest(app_id);
+  if (display != DisplayMode::kUndefined) {
+    DCHECK_LT(DisplayMode::kUndefined, display);
+    DCHECK_LE(display, DisplayMode::kMaxValue);
+    base::UmaHistogramEnumeration("Launch.BrowserTab.WebAppDisplayMode",
+                                  display);
+    if (provider->registrar_unsafe().IsShortcutApp(app_id)) {
+      base::UmaHistogramEnumeration(
+          "Launch.BrowserTab.CreateShortcutApp.WebAppDisplayMode", display);
+    }
+  }
+
+  // Reparenting launches don't respect the launch_handler setting.
+  if (launch_source != apps::LaunchSource::kFromReparenting &&
+      base::FeatureList::IsEnabled(
+          blink::features::kWebAppEnableLaunchHandler)) {
+    base::UmaHistogramEnumeration(
+        "Launch.BrowserTab.WebAppLaunchHandlerClientMode",
         web_app->launch_handler().value_or(LaunchHandler()).client_mode);
   }
 }
 
 void RecordLaunchMetrics(const AppId& app_id,
                          apps::LaunchContainer container,
-                         extensions::AppLaunchSource launch_source,
+                         apps::LaunchSource launch_source,
                          const GURL& launch_url,
                          content::WebContents* web_contents) {
   Profile* profile =
@@ -575,18 +641,21 @@ void RecordLaunchMetrics(const AppId& app_id,
       << "System web apps shouldn't be included in web app launch metrics";
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-  if (container == apps::LaunchContainer::kLaunchContainerWindow)
+  if (container == apps::LaunchContainer::kLaunchContainerWindow) {
     RecordAppWindowLaunchMetric(profile, app_id, launch_source);
+  }
+  if (container == apps::LaunchContainer::kLaunchContainerTab) {
+    RecordAppTabLaunchMetric(profile, app_id, launch_source);
+  }
 
-  // TODO(crbug.com/1014328): Populate WebApp metrics instead of Extensions.
-  UMA_HISTOGRAM_ENUMERATION("Extensions.BookmarkAppLaunchSource",
-                            launch_source);
-  UMA_HISTOGRAM_ENUMERATION("Extensions.BookmarkAppLaunchContainer", container);
+  base::UmaHistogramEnumeration("WebApp.LaunchSource", launch_source);
+  base::UmaHistogramEnumeration("WebApp.LaunchContainer", container);
 }
 
 void UpdateLaunchStats(content::WebContents* web_contents,
                        const AppId& app_id,
                        const GURL& launch_url) {
+  CHECK(web_contents != nullptr);
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
 

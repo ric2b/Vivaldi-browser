@@ -43,6 +43,15 @@ BASE_EXPORT void InstallUnretainedDanglingRawPtrChecks();
 // Allows to re-configure PartitionAlloc at run-time.
 class BASE_EXPORT PartitionAllocSupport {
  public:
+  struct BrpConfiguration {
+    bool enable_brp = false;
+    bool enable_brp_zapping = false;
+    bool enable_brp_partition_memory_reclaimer = false;
+    bool split_main_partition = false;
+    bool use_dedicated_aligned_partition = false;
+    bool add_dummy_ref_count = false;
+    bool process_affected_by_brp_flag = false;
+  };
   // Reconfigure* functions re-configure PartitionAlloc. It is impossible to
   // configure PartitionAlloc before/at its initialization using information not
   // known at compile-time (e.g. process type, Finch), because by the time this
@@ -66,9 +75,12 @@ class BASE_EXPORT PartitionAllocSupport {
   // re-configuration steps exactly once.
   //
   // *AfterTaskRunnerInit() may be called more than once.
+  void ReconfigureForTests();
   void ReconfigureEarlyish(const std::string& process_type);
   void ReconfigureAfterZygoteFork(const std::string& process_type);
-  void ReconfigureAfterFeatureListInit(const std::string& process_type);
+  void ReconfigureAfterFeatureListInit(
+      const std::string& process_type,
+      bool configure_dangling_pointer_detector = true);
   void ReconfigureAfterTaskRunnerInit(const std::string& process_type);
 
   // |has_main_frame| tells us if the renderer contains a main frame.
@@ -80,15 +92,15 @@ class BASE_EXPORT PartitionAllocSupport {
       std::string stacktrace);
 #endif
 
-  static PartitionAllocSupport* Get() {
-    static auto* singleton = new PartitionAllocSupport();
-    return singleton;
-  }
+  static PartitionAllocSupport* Get();
+
+  static BrpConfiguration GetBrpConfiguration(const std::string& process_type);
 
  private:
   PartitionAllocSupport();
 
   base::Lock lock_;
+  bool called_for_tests_ GUARDED_BY(lock_) = false;
   bool called_earlyish_ GUARDED_BY(lock_) = false;
   bool called_after_zygote_fork_ GUARDED_BY(lock_) = false;
   bool called_after_feature_list_init_ GUARDED_BY(lock_) = false;

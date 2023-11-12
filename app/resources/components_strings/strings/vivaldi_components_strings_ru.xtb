@@ -101,7 +101,7 @@
 <translation id="4708268264240856090">Соединение прервано</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Запустить средства диагностики сети Windows<ph name="END_LINK" /></translation>
 <translation id="4736016046474602958">Блокировщик слежки</translation>
-<translation id="4744603770635761495">Путь к исполняемому файлу</translation>
+<translation id="4744603770635761495">Путь исполняемого файла</translation>
 <translation id="4750917950439032686">Информация, которую вы сообщаете этому сайту (например, пароли и номера банковских карт), защищена.</translation>
 <translation id="4764776831041365478">Веб-страница по адресу <ph name="URL" />, возможно, временно недоступна или перемещена по новому адресу.</translation>
 <translation id="483241715238664915">Включить предупреждения</translation>
@@ -111,7 +111,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(используется 1 файл cookie)}one{(используется # файл cookie)}few{(используется # файла cookie)}many{(используется # файлов cookie)}other{(используется # файла cookie)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Проверьте адрес прокси-сервера<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 бита)</translation>
-<translation id="5287240709317226393">Показать файлы сookie</translation>
 <translation id="5355557959165512791">Сертификат веб-сайта <ph name="SITE" /> отозван. Открыть сайт в настоящее время нельзя. Сбой мог быть вызван сетевой ошибкой или действиями злоумышленников. Скорее всего, сайт заработает через некоторое время.</translation>
 <translation id="5386426401304769735">В цепочке сертификатов этого сайта есть сертификат, подписанный с помощью алгоритма SHA-1.</translation>
 <translation id="5452270690849572955">Страница <ph name="HOST_NAME" /> не найдена</translation>
@@ -153,6 +152,7 @@
 <translation id="6657585470893396449">Пароль</translation>
 <translation id="6711464428925977395">На прокси-сервере возникла проблема или адрес указан неверно.</translation>
 <translation id="6757797048963528358">Ваш компьютер перешёл в спящий режим.</translation>
+<translation id="6890956352250146925">Параметры для файлов cookie и данных сайтов</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Блокировать</translation>
 <translation id="7079718277001814089">Этот сайт содержит вредоносное ПО</translation>

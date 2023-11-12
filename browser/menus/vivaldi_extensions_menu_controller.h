@@ -37,7 +37,7 @@ class ExtensionsMenuController {
   }
 
  private:
-  VivaldiRenderViewContextMenu* rv_context_menu_;
+  const raw_ptr<VivaldiRenderViewContextMenu> rv_context_menu_;
   std::unique_ptr<extensions::ContextMenuMatcher> extension_items_;
 
   void AppendAllExtensionItems(std::u16string printable_selection_text);

@@ -3,13 +3,15 @@
 #ifndef IOS_AD_BLOCKER_ADBLOCK_CONTENT_RULE_LIST_PROVIDER_H_
 #define IOS_AD_BLOCKER_ADBLOCK_CONTENT_RULE_LIST_PROVIDER_H_
 
-#include <map>
+#include <memory>
 
 #include "base/functional/callback.h"
-#include "base/memory/weak_ptr.h"
+#include "base/values.h"
+#include "components/ad_blocker/adblock_metadata.h"
 
-@class WKContentRuleList;
-@class WKUserContentController;
+namespace web {
+class BrowserState;
+}
 
 namespace adblock_filter {
 
@@ -17,33 +19,13 @@ namespace adblock_filter {
 // rules.
 class AdBlockerContentRuleListProvider {
  public:
-  explicit AdBlockerContentRuleListProvider();
-  ~AdBlockerContentRuleListProvider();
+  static std::unique_ptr<AdBlockerContentRuleListProvider> Create(
+      web::BrowserState* browser_state,
+      RuleGroup group,
+      base::RepeatingClosure on_rules_applied);
+  virtual ~AdBlockerContentRuleListProvider();
 
-  // Sets the WKUserContentController that this provider will install its rules
-  // on.
-  void SetUserContentController(
-      WKUserContentController* user_content_controller);
-
- private:
-  AdBlockerContentRuleListProvider(const AdBlockerContentRuleListProvider&) =
-      delete;
-  AdBlockerContentRuleListProvider& operator=(
-      const AdBlockerContentRuleListProvider&) = delete;
-
-  // Installs the content rule list that should be installed given the current
-  // ad blocker setting.
-  void InstallContentRuleLists();
-
-  // Uninstalls all content rule lists installed by this provider.
-  void UninstallContentRuleLists();
-
-  __weak WKUserContentController* user_content_controller_;
-  std::map<uint32_t, WKContentRuleList*> rule_lists_;
-
-  base::OnceCallback<void(bool)> update_callback_;
-
-  base::WeakPtrFactory<AdBlockerContentRuleListProvider> weak_ptr_factory_;
+  virtual void InstallContentRuleLists(const base::Value::List& lists) = 0;
 };
 
 }  // namespace adblock_filter

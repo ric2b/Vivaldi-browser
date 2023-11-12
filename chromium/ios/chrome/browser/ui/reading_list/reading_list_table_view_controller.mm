@@ -16,10 +16,19 @@
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_item+Controller.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
+#import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_delegate.h"
+#import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
-#import "ios/chrome/browser/ui/list_model/list_item+Controller.h"
-#import "ios/chrome/browser/ui/list_model/list_item.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_constants.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_data_sink.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_data_source.h"
@@ -31,12 +40,6 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_toolbar_button_commands.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_toolbar_button_manager.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_switch_cell.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
@@ -54,16 +57,21 @@ using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
 namespace {
+
+// Height for the header on top of the sign-in promo cell.
+constexpr CGFloat kSignInPromoSectionHeaderHeight = 10;
 // Types of ListItems used by the reading list UI.
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeHeader = kItemTypeEnumZero,
   ItemTypeItem,
   SwitchItemType,
   SwitchItemFooterType,
+  ItemTypeSignInPromo,
 };
 // Identifiers for sections in the reading list.
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
-  SectionIdentifierUnread = kSectionIdentifierEnumZero,
+  SectionIdentifierSignInPromo = kSectionIdentifierEnumZero,
+  SectionIdentifierUnread,
   SectionIdentifierRead,
 };
 
@@ -80,6 +88,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     return ReadingListSelectionState::ONLY_UNREAD_ITEMS;
   return ReadingListSelectionState::NONE;
 }
+
 }  // namespace
 
 @interface ReadingListTableViewController () <ReadingListDataSink,
@@ -87,8 +96,7 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
                                               TableViewURLDragDataSource>
 
 // Redefine the model to return ReadingListListItems
-@property(nonatomic, readonly)
-    TableViewModel<TableViewItem<ReadingListListItem>*>* tableViewModel;
+@property(nonatomic, readonly) TableViewModel<TableViewItem*>* tableViewModel;
 
 // The number of batch operation triggered by UI.
 // One UI operation can trigger multiple batch operation, so this can be greater
@@ -224,7 +232,6 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
       [[self class] accessibilityIdentifier];
   self.tableView.estimatedRowHeight = 56;
   self.tableView.rowHeight = UITableViewAutomaticDimension;
-  self.tableView.estimatedSectionHeaderHeight = 56;
   self.tableView.allowsMultipleSelectionDuringEditing = YES;
   self.tableView.allowsMultipleSelection = YES;
   self.dragDropHandler = [[TableViewURLDragDropHandler alloc] init];
@@ -232,6 +239,13 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   self.dragDropHandler.dragDataSource = self;
   self.tableView.dragDelegate = self.dragDropHandler;
   self.tableView.dragInteractionEnabled = true;
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+  // In case the sign-in promo visibility is changed before the first layout,
+  // we need to refresh the empty view margin after the layout is done, to apply
+  // the correct top margin value according to the promo view's height.
+  [self updateEmptyViewTopMargin];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -269,17 +283,29 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
   if (self.editing) {
     // Update the selected item counts and the toolbar buttons.
-    NSInteger sectionID = [self.tableViewModel
-        sectionIdentifierForSectionIndex:indexPath.section];
-    if (sectionID == SectionIdentifierUnread)
-      self.selectedUnreadItemCount++;
-    if (sectionID == SectionIdentifierRead)
-      self.selectedReadItemCount++;
+    SectionIdentifier sectionID =
+        static_cast<SectionIdentifier>([self.tableViewModel
+            sectionIdentifierForSectionIndex:indexPath.section]);
+    switch (sectionID) {
+      case SectionIdentifierUnread:
+        self.selectedUnreadItemCount++;
+        break;
+      case SectionIdentifierRead:
+        self.selectedReadItemCount++;
+        break;
+      case SectionIdentifierSignInPromo:
+        NOTREACHED_NORETURN();
+    }
   } else {
     // Open the URL.
-    id<ReadingListListItem> item =
-        [self.tableViewModel itemAtIndexPath:indexPath];
-    [self.delegate readingListListViewController:self openItem:item];
+    TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+    // TODO(crbug.com/1430839): the runtime check will be replaced using new
+    // methods implementations in TableViewItem and ReadingListTableViewItem.
+    if ([item conformsToProtocol:@protocol(ReadingListListItem)]) {
+      [self.delegate
+          readingListListViewController:self
+                               openItem:(id<ReadingListListItem>)item];
+    }
   }
 }
 
@@ -287,12 +313,19 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     didDeselectRowAtIndexPath:(NSIndexPath*)indexPath {
   if (self.editing) {
     // Update the selected item counts and the toolbar buttons.
-    NSInteger sectionID = [self.tableViewModel
-        sectionIdentifierForSectionIndex:indexPath.section];
-    if (sectionID == SectionIdentifierUnread)
-      self.selectedUnreadItemCount--;
-    if (sectionID == SectionIdentifierRead)
-      self.selectedReadItemCount--;
+    SectionIdentifier sectionID =
+        static_cast<SectionIdentifier>([self.tableViewModel
+            sectionIdentifierForSectionIndex:indexPath.section]);
+    switch (sectionID) {
+      case SectionIdentifierUnread:
+        self.selectedUnreadItemCount--;
+        break;
+      case SectionIdentifierRead:
+        self.selectedReadItemCount--;
+        break;
+      case SectionIdentifierSignInPromo:
+        NOTREACHED_NORETURN();
+    }
   }
 }
 
@@ -308,16 +341,26 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     // Don't show the context menu when currently in editing mode.
     return nil;
   }
-  TableViewItem<ReadingListListItem>* item =
-      [self.tableViewModel itemAtIndexPath:indexPath];
-  if (item.type != ItemTypeItem) {
+  TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+  // TODO(crbug.com/1430839): the runtime check will be replaced using new
+  // methods implementations in TableViewItem and ReadingListTableViewItem.
+  if ([item conformsToProtocol:@protocol(ReadingListListItem)]) {
+    return [self.menuProvider
+        contextMenuConfigurationForItem:(id<ReadingListListItem>)item
+                               withView:[self.tableView
+                                            cellForRowAtIndexPath:indexPath]];
+  } else {
     return nil;
   }
+}
 
-  return [self.menuProvider
-      contextMenuConfigurationForItem:item
-                             withView:[self.tableView
-                                          cellForRowAtIndexPath:indexPath]];
+- (CGFloat)tableView:(UITableView*)tableView
+    heightForHeaderInSection:(NSInteger)section {
+  if ([self.tableViewModel sectionIdentifierForSectionIndex:section] ==
+      SectionIdentifierSignInPromo) {
+    return kSignInPromoSectionHeaderHeight;
+  }
+  return UITableViewAutomaticDimension;
 }
 
 #pragma mark - TableViewURLDragDataSource
@@ -326,12 +369,16 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     URLInfoAtIndexPath:(NSIndexPath*)indexPath {
   if (self.tableView.editing)
     return nil;
-  TableViewItem<ReadingListListItem>* item =
-      [self.tableViewModel itemAtIndexPath:indexPath];
-  if (item.type != ItemTypeItem) {
+  TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+  // TODO(crbug.com/1430839): the runtime check will be replaced using new
+  // methods implementations in TableViewItem and ReadingListTableViewItem.
+  if ([item conformsToProtocol:@protocol(ReadingListListItem)]) {
+    id<ReadingListListItem> readingListItem = (id<ReadingListListItem>)item;
+    return [[URLInfo alloc] initWithURL:readingListItem.entryURL
+                                  title:readingListItem.title];
+  } else {
     return nil;
   }
-  return [[URLInfo alloc] initWithURL:item.entryURL title:item.title];
 }
 
 #pragma mark - UIAdaptivePresentationControllerDelegate
@@ -638,6 +685,63 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
                  style:UIAlertActionStyleCancel];
 }
 
+#pragma mark - Sign-in Promo
+
+- (void)promoStateChanged:(BOOL)promoEnabled
+        promoConfigurator:(SigninPromoViewConfigurator*)promoConfigurator
+            promoDelegate:(id<SigninPromoViewDelegate>)promoDelegate {
+  if (promoEnabled) {
+    CHECK(![self.tableViewModel
+        hasSectionForSectionIdentifier:SectionIdentifierSignInPromo]);
+    [self.tableViewModel
+        insertSectionWithIdentifier:SectionIdentifierSignInPromo
+                            atIndex:0];
+    TableViewSigninPromoItem* signInPromoItem =
+        [[TableViewSigninPromoItem alloc] initWithType:ItemTypeSignInPromo];
+    signInPromoItem.configurator = promoConfigurator;
+    signInPromoItem.text =
+        l10n_util::GetNSString(IDS_IOS_SIGNIN_PROMO_READING_LIST);
+    signInPromoItem.delegate = promoDelegate;
+    [self.tableViewModel addItem:signInPromoItem
+         toSectionWithIdentifier:SectionIdentifierSignInPromo];
+  } else {
+    CHECK([self.tableViewModel
+        hasSectionForSectionIdentifier:SectionIdentifierSignInPromo]);
+    [self.tableViewModel
+        removeSectionWithIdentifier:SectionIdentifierSignInPromo];
+  }
+  [self.tableView reloadData];
+  [self updateEmptyViewTopMargin];
+}
+
+- (void)configureSigninPromoWithConfigurator:
+            (SigninPromoViewConfigurator*)promoConfigurator
+                             identityChanged:(BOOL)identityChanged {
+  if (![self.tableViewModel
+          hasSectionForSectionIdentifier:SectionIdentifierSignInPromo] ||
+      !identityChanged) {
+    return;
+  }
+
+  NSIndexPath* indexPath =
+      [self.tableViewModel indexPathForItemType:ItemTypeSignInPromo
+                              sectionIdentifier:SectionIdentifierSignInPromo];
+  TableViewSigninPromoItem* signInPromoItem =
+      base::mac::ObjCCast<TableViewSigninPromoItem>(
+          [self.tableViewModel itemAtIndexPath:indexPath]);
+  if (!signInPromoItem) {
+    return;
+  }
+
+  signInPromoItem.configurator = promoConfigurator;
+  [self reloadCellsForItems:@[ signInPromoItem ]
+           withRowAnimation:UITableViewRowAnimationNone];
+
+  // The sign-in promo view height may have been changed after the configurator
+  // change, we need to update the empty view top margin according to it.
+  [self updateEmptyViewTopMargin];
+}
+
 #pragma mark - Item Loading Helpers
 
 // Uses self.dataSource to load the TableViewItems into self.tableViewModel.
@@ -698,6 +802,9 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
     case SectionIdentifierUnread:
       header.text = l10n_util::GetNSString(IDS_IOS_READING_LIST_UNREAD_HEADER);
       break;
+    case SectionIdentifierSignInPromo:
+      header = nil;
+      break;
   }
   return header;
 }
@@ -733,8 +840,12 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   [self.dataSource beginBatchUpdates];
   NSArray* items = [self.tableViewModel itemsInSectionWithIdentifier:section];
   // Read the objects in reverse order to keep the order (last modified first).
-  for (id<ReadingListListItem> item in [items reverseObjectEnumerator]) {
-    updater(item);
+  for (TableViewItem* item in [items reverseObjectEnumerator]) {
+    // TODO(crbug.com/1430839): the runtime check will be replaced using new
+    // methods implementations in TableViewItem and ReadingListTableViewItem.
+    if ([item conformsToProtocol:@protocol(ReadingListListItem)]) {
+      updater((id<ReadingListListItem>)item);
+    }
   }
   [self.dataSource endBatchUpdates];
 }
@@ -748,7 +859,12 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   [self.dataSource beginBatchUpdates];
   // Read the objects in reverse order to keep the order (last modified first).
   for (NSIndexPath* indexPath in [indexPaths reverseObjectEnumerator]) {
-    updater([self.tableViewModel itemAtIndexPath:indexPath]);
+    TableViewItem* item = [self.tableViewModel itemAtIndexPath:indexPath];
+    // TODO(crbug.com/1430839): the runtime check will be replaced by new
+    // methods implementations in TableViewItem and ReadingListTableViewItem.
+    if ([item conformsToProtocol:@protocol(ReadingListListItem)]) {
+      updater((id<ReadingListListItem>)item);
+    }
   }
   [self.dataSource endBatchUpdates];
 }
@@ -1039,6 +1155,11 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   // generate access non-existing items.
   [self.tableView reloadData];
   UIImage* emptyImage = [UIImage imageNamed:@"reading_list_empty"];
+
+  if (vivaldi::IsVivaldiRunning())
+    emptyImage =
+        [UIImage imageNamed:@"vivaldi_reading_list_empty"]; // End Vivaldi
+
   NSString* title =
       l10n_util::GetNSString(IDS_IOS_READING_LIST_NO_ENTRIES_TITLE);
   NSString* subtitle =
@@ -1049,11 +1170,14 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   self.tableView.alwaysBounceVertical = NO;
   self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
   [self.audience readingListHasItems:NO];
+  [self updateEmptyViewTopMargin];
 }
 
 #pragma mark - Accessibility
 
 - (BOOL)accessibilityPerformEscape {
+  base::RecordAction(
+      base::UserMetricsAction("MobileReadingListAccessibilityClose"));
   [self.delegate dismissReadingListListViewController:self];
   return YES;
 }
@@ -1066,6 +1190,25 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   if (self.dataSourceModifiedWhileEditing &&
       self.numberOfBatchOperationInProgress == 0 && !self.editing) {
     [self reloadData];
+  }
+}
+
+// The empty view has different top margin according to the sign-in promo view
+// presence. This method needs to be called after the promo view changes.
+- (void)updateEmptyViewTopMargin {
+  BOOL promoViewVisible =
+      [self.tableViewModel hasItemForItemType:ItemTypeSignInPromo
+                            sectionIdentifier:SectionIdentifierSignInPromo];
+  if (promoViewVisible && !self.dataSource.hasElements) {
+    NSIndexPath* promoIndexPath =
+        [self.tableViewModel indexPathForItemType:ItemTypeSignInPromo
+                                sectionIdentifier:SectionIdentifierSignInPromo];
+    UITableViewCell* promoCell =
+        [self.tableView cellForRowAtIndexPath:promoIndexPath];
+    CGFloat promoHeight = promoCell.bounds.size.height;
+    [self setEmptyViewTopOffset:promoHeight];
+  } else {
+    [self setEmptyViewTopOffset:0.0];
   }
 }
 

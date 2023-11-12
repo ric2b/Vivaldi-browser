@@ -27,17 +27,18 @@ ViewTransitionContentElement::ViewTransitionContentElement(
 ViewTransitionContentElement::~ViewTransitionContentElement() = default;
 
 void ViewTransitionContentElement::SetIntrinsicSize(
-    const LayoutSize& intrinsic_size) {
-  intrinsic_size_ = intrinsic_size;
+    const gfx::RectF& captured_rect,
+    const gfx::RectF& border_box_rect) {
+  captured_rect_ = captured_rect;
+  border_box_rect_ = border_box_rect;
   if (auto* layout_object = GetLayoutObject()) {
     static_cast<LayoutViewTransitionContent*>(layout_object)
-        ->OnIntrinsicSizeUpdated(intrinsic_size_);
+        ->OnIntrinsicSizeUpdated(captured_rect_, border_box_rect_);
   }
 }
 
 LayoutObject* ViewTransitionContentElement::CreateLayoutObject(
-    const ComputedStyle&,
-    LegacyLayout) {
+    const ComputedStyle&) {
   return MakeGarbageCollected<LayoutViewTransitionContent>(this);
 }
 

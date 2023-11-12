@@ -93,16 +93,6 @@
         }
       },
       {
-        "id": "CalendarBroadcastMessage",
-        "type": "string",
-        "enum": [
-          "startListeners",
-          "stopListeners",
-          "loadData"
-        ],
-        "description": "Calendar broadcast message between windows"
-      },
-      {
         "id": "WindowState",
         "type": "string",
         "description": "The state of this browser window.",
@@ -244,28 +234,6 @@
         "type": "object",
         "description": "Identifies broadcast type. Only one property should be used.",
         "properties": {
-          "open": {
-            "description": "Open urls in other window.",
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "winId": {
-                "type": "number",
-                "description": "Id of the window where urls are opened."
-              },
-              "prompt": {
-                "type": "boolean",
-                "description": "Show confirm open bookmark dialog."
-              },
-              "urls": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Urls to open."
-              }
-            }
-          },
           "showSettingsWindow": {
             "description": "Show the settingswindow.",
             "type": "object",
@@ -275,39 +243,6 @@
                 "type": "string",
                 "description": "String with settings to show on the form: category&query. ie. all&languages",
                 "optional": true
-              }
-            }
-          },
-          "popupStoreChanged": {
-            "description": "A popupStore has changed state.",
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "windowId": {
-                "type": "number",
-                "description": ""
-              },
-              "popupWindows": {
-                "type": "array",
-                "description": "Popupwindows owned by |windowId|.",
-                "items": {
-                  "$ref": "PopupWindow"
-                }
-              }
-            }
-          },
-          "handlePopupWindow": {
-            "description": "Accept or reject a popup window event.",
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "windowId": {
-                "type": "number",
-                "description": "The windowId of the window that accepts a popup. The tab will be accepted into the tabstrip."
-              },
-              "popupId": {
-                "type": "string",
-                "description": "Unique ID for a popupwindow."
               }
             }
           },
@@ -347,28 +282,6 @@
                 "description": "One arg must be present",
                 "optional": true,
                 "type": "string"
-              }
-            }
-          },
-          "calendar": {
-            "description": "Control data handling and turning on/off change listeners.",
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "message": {
-                "$ref": "CalendarBroadcastMessage",
-                "type": "string",
-                "description": "The control message to pass."
-              }
-            }
-          },
-          "updateMacMenu": {
-            "type": "object",
-            "optional": true,
-            "properties": {
-              "winId": {
-                "type": "number",
-                "description": "The window that needs update."
               }
             }
           },

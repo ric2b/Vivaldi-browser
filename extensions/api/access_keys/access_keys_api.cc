@@ -15,8 +15,8 @@ ExtensionFunction::ResponseAction
 AccessKeysGetAccessKeysForPageFunction::Run() {
   using vivaldi::access_keys::GetAccessKeysForPage::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
   VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
@@ -57,8 +57,8 @@ void AccessKeysGetAccessKeysForPageFunction::AccessKeysReceived(
 ExtensionFunction::ResponseAction AccessKeysActionFunction::Run() {
   using vivaldi::access_keys::Action::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string id = params->id;
 

@@ -5,10 +5,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_NAVIGATION_API_NAVIGATE_EVENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_NAVIGATION_API_NAVIGATE_EVENT_H_
 
+#include "base/time/time.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_navigation_commit_behavior.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_navigation_focus_reset.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_navigation_scroll_behavior.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
@@ -17,6 +19,7 @@
 #include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
@@ -47,7 +50,9 @@ class NavigateEvent final : public Event,
                 const AtomicString& type,
                 NavigateEventInit* init);
 
-  void SetUrl(const KURL& url) { url_ = url; }
+  void SetDispatchParams(NavigateEventDispatchParams* dispatch_params) {
+    dispatch_params_ = dispatch_params;
+  }
 
   String navigationType() { return navigation_type_; }
   NavigationDestination* destination() { return destination_; }
@@ -58,22 +63,23 @@ class NavigateEvent final : public Event,
   FormData* formData() const { return form_data_; }
   String downloadRequest() const { return download_request_; }
   ScriptValue info() const { return info_; }
-
   void intercept(NavigationInterceptOptions*, ExceptionState&);
+  void commit(ExceptionState&);
+
+  // If intercept() was called, this is called after dispatch to either commit
+  // the navigation or set the appropritate state for a deferred commit.
+  void MaybeCommitImmediately(ScriptState*);
+
+  void React(ScriptState* script_state);
 
   void scroll(ExceptionState&);
-  void PotentiallyProcessScrollBehavior();
 
-  const HeapVector<ScriptPromise>& GetNavigationActionPromisesList() {
-    return navigation_action_promises_list_;
+  bool HasNavigationActions() const {
+    return intercept_state_ != InterceptState::kNone;
   }
-  bool HasNavigationActions() const { return has_navigation_actions_; }
   void FinalizeNavigationActionPromisesList();
 
-  void ResetFocusIfNeeded();
-  bool ShouldSendAxEvents() const;
-
-  void SaveStateFromDestinationItem(HistoryItem*);
+  void Abort(ScriptState* script_state, ScriptValue error);
 
   // FocusedElementChangeObserver implementation:
   void DidChangeFocus() final;
@@ -82,7 +88,19 @@ class NavigateEvent final : public Event,
   void Trace(Visitor*) const final;
 
  private:
-  void DefinitelyProcessScrollBehavior();
+  bool PerformSharedChecks(const String& function_name, ExceptionState&);
+
+  bool ShouldCommitImmediately();
+  void CommitNow();
+
+  void PotentiallyResetTheFocus();
+  void PotentiallyProcessScrollBehavior();
+  void ProcessScrollBehavior();
+
+  class Reaction;
+  void ReactDone(ScriptValue, bool did_fulfill);
+
+  void DelayedLoadStartTimerFired();
 
   String navigation_type_;
   Member<NavigationDestination> destination_;
@@ -95,17 +113,28 @@ class NavigateEvent final : public Event,
   ScriptValue info_;
   absl::optional<V8NavigationFocusReset> focus_reset_behavior_ = absl::nullopt;
   absl::optional<V8NavigationScrollBehavior> scroll_behavior_ = absl::nullopt;
-  absl::optional<HistoryItem::ViewState> history_item_view_state_;
+  absl::optional<V8NavigationCommitBehavior> commit_behavior_ = absl::nullopt;
 
-  KURL url_;
-  bool has_navigation_actions_ = false;
+  Member<NavigateEventDispatchParams> dispatch_params_;
+
+  enum class InterceptState {
+    kNone,
+    kIntercepted,
+    kCommitted,
+    kScrolled,
+    kFinished
+  };
+  InterceptState intercept_state_ = InterceptState::kNone;
+
   HeapVector<ScriptPromise> navigation_action_promises_list_;
   HeapVector<Member<V8NavigationInterceptHandler>>
       navigation_action_handlers_list_;
-
-  bool did_process_scroll_behavior_ = false;
-  bool did_finish_ = false;
   bool did_change_focus_during_intercept_ = false;
+
+  // Used to delay the start of the loading UI when the navigation is
+  // intercepted, in order to minimize jittering if any handlers are short.
+  static constexpr base::TimeDelta kDelayLoadStart = base::Milliseconds(50);
+  TaskHandle delayed_load_start_task_handle_;
 };
 
 }  // namespace blink

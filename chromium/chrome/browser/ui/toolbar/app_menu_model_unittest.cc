@@ -18,11 +18,13 @@
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/menu_model_test.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/performance_manager/public/features.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -35,8 +37,10 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_features.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chromeos/ash/components/standalone_browser/browser_support.h"
 #include "components/user_manager/fake_user_manager.h"
+
+using ash::standalone_browser::BrowserSupport;
 #endif
 
 namespace {
@@ -104,7 +108,6 @@ class AppMenuModelTest : public BrowserWithTestWindowTest,
     user_manager->UserLoggedIn(account_id, user->username_hash(),
                                /*browser_restart=*/false,
                                /*is_child=*/false);
-    user_manager->set_local_state(g_browser_process->local_state());
 #endif
   }
 
@@ -113,7 +116,29 @@ class AppMenuModelTest : public BrowserWithTestWindowTest,
                                   ui::Accelerator* accelerator) const override {
     return false;
   }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
 };
+
+class ExtensionsMenuModelTest : public AppMenuModelTest,
+                                public testing::WithParamInterface<bool> {
+ public:
+  ExtensionsMenuModelTest() {
+    feature_list_.InitWithFeatureState(features::kExtensionsMenuInAppMenu,
+                                       GetParam());
+  }
+
+  ExtensionsMenuModelTest(const ExtensionsMenuModelTest&) = delete;
+  ExtensionsMenuModelTest& operator=(const ExtensionsMenuModelTest&) = delete;
+
+  ~ExtensionsMenuModelTest() override = default;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ExtensionsMenuModelTest,
+    /* features::kNewExtensionsTopLevelMenu enabled */ testing::Bool());
 
 // Copies parts of MenuModelTest::Delegate and combines them with the
 // AppMenuModel since AppMenuModel is now a SimpleMenuModel::Delegate and
@@ -160,8 +185,15 @@ TEST_F(AppMenuModelTest, Basics) {
   EXPECT_TRUE(detector->notify_upgrade());
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  auto set_lacros_enabled =
-      crosapi::browser_util::SetLacrosEnabledForTest(true);
+  // Forcibly enable Lacros Profile migration, so that IDC_LACROS_DATA_MIGRATION
+  // becomes visible. Note that profile migration is only enabled if Lacros is
+  // the only browser.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {ash::features::kLacrosSupport, ash::features::kLacrosPrimary,
+       ash::features::kLacrosOnly},
+      {});
+  auto set_lacros_enabled = BrowserSupport::SetLacrosEnabledForTest(true);
 #endif
 
   FakeIconDelegate fake_delegate;
@@ -257,23 +289,34 @@ TEST_F(AppMenuModelTest, GlobalError) {
   EXPECT_EQ(1, error1->execute_count());
 }
 
-TEST_F(AppMenuModelTest, EnabledPerformanceItem) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      performance_manager::features::kHighEfficiencyModeAvailable);
+// Tests that extensions sub menu (when enabled) generates the correct elements
+// or does not generate its elements when disabled.
+TEST_P(ExtensionsMenuModelTest, ExtensionsMenu) {
+  AppMenuModel model(this, browser());
+  model.Init();
+
+  if (GetParam()) {  // Menu enabled
+    ASSERT_TRUE(model.GetIndexOfCommandId(IDC_EXTENSIONS_SUBMENU));
+    ui::MenuModel* extensions_submenu = model.GetSubmenuModelAt(
+        model.GetIndexOfCommandId(IDC_EXTENSIONS_SUBMENU).value());
+    ASSERT_NE(extensions_submenu, nullptr);
+    ASSERT_EQ(2ul, extensions_submenu->GetItemCount());
+    EXPECT_EQ(IDC_EXTENSIONS_SUBMENU_MANAGE_EXTENSIONS,
+              extensions_submenu->GetCommandIdAt(0));
+    EXPECT_EQ(IDC_EXTENSIONS_SUBMENU_VISIT_CHROME_WEB_STORE,
+              extensions_submenu->GetCommandIdAt(1));
+  } else {
+    EXPECT_FALSE(model.GetIndexOfCommandId(IDC_EXTENSIONS_SUBMENU));
+  }
+}
+
+TEST_F(AppMenuModelTest, PerformanceItem) {
   AppMenuModel model(this, browser());
   model.Init();
   ToolsMenuModel toolModel(&model, browser());
   size_t performance_index =
       toolModel.GetIndexOfCommandId(IDC_PERFORMANCE).value();
   EXPECT_TRUE(toolModel.IsEnabledAt(performance_index));
-}
-
-TEST_F(AppMenuModelTest, DisabledPerformanceItem) {
-  AppMenuModel model(this, browser());
-  model.Init();
-  ToolsMenuModel toolModel(&model, browser());
-  EXPECT_FALSE(toolModel.GetIndexOfCommandId(IDC_PERFORMANCE).has_value());
 }
 
 #if BUILDFLAG(IS_CHROMEOS)

@@ -32,6 +32,10 @@ class StyleIntrinsicLength;
 class StylePropertyShorthand;
 class StyleTimeline;
 
+namespace cssvalue {
+class CSSContentDistributionValue;
+}
+
 enum class CSSValuePhase { kComputedValue, kUsedValue };
 
 class CORE_EXPORT ComputedStyleUtils {
@@ -106,9 +110,9 @@ class CORE_EXPORT ComputedStyleUtils {
   static CSSValue* ValueForPositionOffset(const ComputedStyle&,
                                           const CSSProperty&,
                                           const LayoutObject*);
-  static CSSValueList* ValueForItemPositionWithOverflowAlignment(
+  static CSSValue* ValueForItemPositionWithOverflowAlignment(
       const StyleSelfAlignmentData&);
-  static CSSValueList*
+  static cssvalue::CSSContentDistributionValue*
   ValueForContentPositionAndDistributionWithOverflowAlignment(
       const StyleContentAlignmentData&);
   static CSSValue* ValueForLineHeight(const ComputedStyle&);
@@ -180,7 +184,8 @@ class CORE_EXPORT ComputedStyleUtils {
   static CSSValue* ValueForAnimationTimelineList(const CSSAnimationData*);
 
   static CSSValue* SingleValueForTimelineShorthand(const ScopedCSSName* name,
-                                                   TimelineAxis);
+                                                   TimelineAxis,
+                                                   TimelineAttachment);
   static CSSValueList* ValuesForBorderRadiusCorner(const LengthSize&,
                                                    const ComputedStyle&);
   static CSSValue* ValueForBorderRadiusCorner(const LengthSize&,

@@ -60,9 +60,9 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
-#include "third_party/blink/renderer/core/layout/layout_block_flow.h"
-#include "third_party/blink/renderer/core/layout/layout_object_factory.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
+#include "third_party/blink/renderer/core/layout/ng/flex/layout_ng_flexible_box.h"
+#include "third_party/blink/renderer/core/layout/ng/layout_ng_block_flow.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/spatial_navigation.h"
@@ -396,11 +396,11 @@ bool HTMLSelectElement::CanSelectAll() const {
 }
 
 LayoutObject* HTMLSelectElement::CreateLayoutObject(
-    const ComputedStyle& style,
-    LegacyLayout legacy_layout) {
-  if (UsesMenuList())
-    return LayoutObjectFactory::CreateFlexibleBox(*this, style, legacy_layout);
-  return LayoutObjectFactory::CreateBlockFlow(*this, style, legacy_layout);
+    const ComputedStyle& style) {
+  if (UsesMenuList()) {
+    return MakeGarbageCollected<LayoutNGFlexibleBox>(this);
+  }
+  return MakeGarbageCollected<LayoutNGBlockFlow>(this);
 }
 
 HTMLCollection* HTMLSelectElement::selectedOptions() {
@@ -1148,7 +1148,8 @@ String HTMLSelectElement::OptionAtIndex(int index) const {
 
 void HTMLSelectElement::TypeAheadFind(const KeyboardEvent& event) {
   int index = type_ahead_.HandleEvent(
-      event, TypeAhead::kMatchPrefix | TypeAhead::kCycleFirstChar);
+      event, event.charCode(),
+      TypeAhead::kMatchPrefix | TypeAhead::kCycleFirstChar);
   if (index < 0)
     return;
   SelectOption(OptionAtListIndex(index), kDeselectOtherOptionsFlag |

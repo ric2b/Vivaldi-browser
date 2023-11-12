@@ -12,10 +12,11 @@ import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static org.hamcrest.core.IsEqual.equalTo;
 
 import android.content.pm.ActivityInfo;
-import android.support.test.InstrumentationRegistry;
 import android.util.Base64;
 import android.view.KeyEvent;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 
 import org.hamcrest.Matchers;
@@ -34,10 +35,9 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -53,6 +53,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.Features;
@@ -98,7 +99,7 @@ public class NavigateTest {
     public void setUp() {
         mActivityTestRule.startMainActivityWithURL(UrlConstants.NTP_URL);
         mTestServer = EmbeddedTestServer.createAndStartHTTPSServer(
-                InstrumentationRegistry.getContext(), ServerCertificate.CERT_OK);
+                ApplicationProvider.getApplicationContext(), ServerCertificate.CERT_OK);
         mOmnibox = new OmniboxTestUtils(mActivityTestRule.getActivity());
     }
 
@@ -590,11 +591,9 @@ public class NavigateTest {
 
         String histogram = BackPressManager.getHistogramForTesting();
 
-        HistogramDelta tabHistoryDelta = new HistogramDelta(histogram,
-                BackPressManager.getHistogramValueForTesting(BackPressHandler.Type.TAB_HISTORY));
-        HistogramDelta startSurfaceDelta = new HistogramDelta(histogram,
+        HistogramWatcher startSurfaceHistogram = HistogramWatcher.newSingleRecordWatcher(histogram,
                 BackPressManager.getHistogramValueForTesting(BackPressHandler.Type.START_SURFACE));
-        HistogramDelta tabSwitcherDelta = new HistogramDelta(histogram,
+        HistogramWatcher tabSwitcherHistogram = HistogramWatcher.newSingleRecordWatcher(histogram,
                 BackPressManager.getHistogramValueForTesting(BackPressHandler.Type.TAB_SWITCHER));
 
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -607,10 +606,13 @@ public class NavigateTest {
             int type = mActivityTestRule.getActivity().getLayoutManager().getActiveLayoutType();
             Assert.assertEquals(LayoutType.BROWSING, type);
         });
-        Assert.assertEquals(
-                "No page navigation when exiting tab switcher.", 0, tabHistoryDelta.getDelta());
-        Assert.assertEquals("Either start surface or tab switcher handles back press.", 1,
-                startSurfaceDelta.getDelta() + tabSwitcherDelta.getDelta());
+
+        try {
+            startSurfaceHistogram.assertExpected();
+        } catch (AssertionError e) {
+            tabSwitcherHistogram.assertExpected(
+                    "Either start surface or tab switcher handles back press.");
+        }
     }
 
     /**

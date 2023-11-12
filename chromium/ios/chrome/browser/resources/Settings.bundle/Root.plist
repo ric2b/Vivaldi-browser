@@ -24,6 +24,7 @@
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>
+    <!-- Remove for Vivaldi VIB-9
 		<dict>
 			<key>Type</key>
 			<string>PSChildPaneSpecifier</string>
@@ -32,6 +33,7 @@
 			<key>File</key>
 			<string>Experimental</string>
 		</dict>
+    End Vivaldi -->
 	</array>
 </dict>
 </plist>

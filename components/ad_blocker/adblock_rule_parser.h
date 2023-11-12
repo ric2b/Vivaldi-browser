@@ -49,7 +49,7 @@ class RuleParser {
   Result ParseRequestFilterRuleOptions(base::StringPiece options,
                                        RequestFilterRule* rule);
 
-  ParseResult* parse_result_;
+  const raw_ptr<ParseResult> parse_result_;
   bool allow_abp_snippets_;
 };
 

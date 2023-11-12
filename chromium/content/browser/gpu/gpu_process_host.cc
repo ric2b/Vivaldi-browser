@@ -14,7 +14,6 @@
 #include "base/base64.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
-#include "base/cxx17_backports.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -86,9 +85,12 @@
 #include "ui/gfx/font_render_params.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/latency/janky_duration_tracker.h"
 #include "ui/latency/latency_info.h"
 
-#if !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/application_status_listener.h"
+#else
 #include "components/metrics/stability_metrics_helper.h"
 #endif
 
@@ -112,6 +114,7 @@
 #endif
 
 #if BUILDFLAG(IS_MAC)
+#include "content/browser/gpu/browser_child_process_backgrounded_bridge.h"
 #include "content/browser/gpu/ca_transaction_gpu_coordinator.h"
 #endif
 
@@ -144,7 +147,6 @@ const char* GetProcessLifetimeUmaName(gpu::GpuMode gpu_mode) {
       NOTREACHED();
       return nullptr;
     case gpu::GpuMode::HARDWARE_GL:
-    case gpu::GpuMode::HARDWARE_METAL:
     case gpu::GpuMode::HARDWARE_VULKAN:
       return kProcessLifetimeEventsHardwareAccelerated;
     case gpu::GpuMode::SWIFTSHADER:
@@ -263,13 +265,15 @@ static const char* const kSwitchNames[] = {
     switches::kRunAllCompositorStagesBeforeDraw,
     switches::kSkiaFontCacheLimitMb,
     switches::kSkiaResourceCacheLimitMb,
+    switches::kForceSkiaAnalyticAntialiasing,
     switches::kTestGLLib,
     switches::kTraceToConsole,
+    switches::kUseAdapterLuid,
     switches::kUseFakeMjpegDecodeAccelerator,
     switches::kUseGpuInTests,
     switches::kV,
     switches::kVModule,
-    switches::kUseAdapterLuid,
+    switches::kWatchDirForScrollJankReport,
     switches::kWebViewDrawFunctorUsesVulkan,
 #if BUILDFLAG(IS_MAC)
     sandbox::policy::switches::kEnableSandboxLogging,
@@ -295,6 +299,7 @@ static const char* const kSwitchNames[] = {
 #if BUILDFLAG(IS_ANDROID)
     switches::kEnableReachedCodeProfiler,
     switches::kReachedCodeSamplingIntervalUs,
+    switches::kDisableAdpf,
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
     switches::kPlatformDisallowsChromeOSDirectVideoDecoder,
@@ -391,10 +396,8 @@ class GpuSandboxedProcessLauncherDelegate
   // which is USER_RESTRICTED breaks both the DirectX backend and the OpenGL
   // backend. Note that the GPU process is connected to the interactive
   // desktop.
-  bool PreSpawnTarget(sandbox::TargetPolicy* policy) override {
-    sandbox::TargetConfig* config = policy->GetConfig();
-    if (config->IsConfigured())
-      return true;
+  bool InitializeConfig(sandbox::TargetConfig* config) override {
+    DCHECK(!config->IsConfigured());
 
     if (UseOpenGLRenderer()) {
       // Open GL path.
@@ -758,7 +761,7 @@ GpuProcessHost::~GpuProcessHost() {
       UMA_HISTOGRAM_ENUMERATION("GPU.GPUProcessTerminationStatus2",
                                 ConvertToGpuTerminationStatus(info.status),
                                 GpuTerminationStatus::MAX_ENUM);
-      int exit_code = base::clamp(info.exit_code, 0, 100);
+      int exit_code = std::clamp(info.exit_code, 0, 100);
 #if !BUILDFLAG(IS_ANDROID)
       if (info.status != base::TERMINATION_STATUS_NORMAL_TERMINATION &&
           info.status != base::TERMINATION_STATUS_STILL_RUNNING &&
@@ -931,6 +934,14 @@ void GpuProcessHost::OnProcessLaunched() {
     process_id_ = process_->GetProcess().Pid();
     DCHECK_NE(base::kNullProcessId, process_id_);
     gpu_host_->SetProcessId(process_id_);
+
+#if BUILDFLAG(IS_MAC)
+    if (base::FeatureList::IsEnabled(features::kAdjustGpuProcessPriority)) {
+      browser_child_process_backgrounded_bridge_ =
+          std::make_unique<BrowserChildProcessBackgroundedBridge>(
+              process_.get());
+    }
+#endif
   }
 }
 
@@ -1273,18 +1284,33 @@ void GpuProcessHost::SendOutstandingReplies() {
     gpu_host_->SendOutstandingReplies();
 }
 
-void GpuProcessHost::RecordProcessCrash() {
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+int GpuProcessHost::GetFallbackCrashLimit() const {
+#if BUILDFLAG(IS_ANDROID)
+  // If there is fallback (so it doesn't crash the browser) and app is
+  // foreground (meaning crash is less liekly to be due to android OS
+  // killing the GPU process arbitrarily to free memory), then use the normal
+  // limit.
+  if (GpuDataManagerImpl::GetInstance()->CanFallback() &&
+      base::android::ApplicationStatusListener::HasVisibleActivities()) {
+    return 3;
+  } else {
+    // Otherwise use a larger maximum crash count limit here to account for
+    // Android OS killing the GPU process arbitrarily and fallback may crash the
+    // browser process.
+    return 6;
+  }
+#elif BUILDFLAG(IS_CHROMEOS)
+  // Chrome OS does not use software compositing and fallback crashes the
+  // browser process. So use larger maximum crash count limit.
+  return 6;
+#else
   // Maximum number of times the GPU process can crash before we try something
   // different, like disabling hardware acceleration or all GL.
-  constexpr int kGpuFallbackCrashCount = 3;
-#else
-  // Android and Chrome OS switch to software compositing and fallback crashes
-  // the browser process. For Android the OS can also kill the GPU process
-  // arbitrarily. Use a larger maximum crash count here.
-  constexpr int kGpuFallbackCrashCount = 6;
+  return 3;
 #endif
+}
 
+void GpuProcessHost::RecordProcessCrash() {
   // Ending only acts as a failure if the GPU process was actually started and
   // was intended for actual rendering (and not just checking caps or other
   // options).
@@ -1314,8 +1340,9 @@ void GpuProcessHost::RecordProcessCrash() {
 
   // GPU process crashed too many times, fallback on a different GPU process
   // mode.
-  if (recent_crash_count_ >= kGpuFallbackCrashCount && !disable_crash_limit)
+  if (recent_crash_count_ >= GetFallbackCrashLimit() && !disable_crash_limit) {
     GpuDataManagerImpl::GetInstance()->FallBackToNextGpuMode();
+  }
 }
 
 viz::mojom::GpuService* GpuProcessHost::gpu_service() {

@@ -21,12 +21,12 @@ extern NSString* const kFieldTrialVersionKey;
 // feature.
 extern const int kPasswordCreationFeatureVersion;
 
-// The current version of the credential provider extension's password manager
-// branding update feature.
-extern const int kPasswordManagerBrandingUpdateFeatureVersion;
-
 // The current version of the credential provider extension's favicon display
 // feature.
 extern const int kCredentialProviderExtensionFaviconsFeatureVersion;
+
+// The current version of the credential provider extension's password notes
+// feature.
+extern const int kCredentialProviderExtensionPasswordNotesVersion;
 
 #endif  // IOS_CHROME_COMMON_APP_GROUP_APP_GROUP_FIELD_TRIAL_VERSION_H_

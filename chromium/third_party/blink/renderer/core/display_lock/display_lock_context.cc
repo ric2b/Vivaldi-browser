@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
+#include "third_party/blink/renderer/core/speculation_rules/document_speculation_rules.h"
 #include "third_party/blink/renderer/core/style/toggle_trigger.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.h"
@@ -276,8 +277,14 @@ void DisplayLockContext::Lock() {
   // If we're not connected, then we don't have to do anything else. Otherwise,
   // we need to ensure that we update our style to check for containment later,
   // layout size based on the options, and also clear the painted output.
-  if (!ConnectedToView())
+  if (!ConnectedToView()) {
     return;
+  }
+
+  // If there are any pending updates, we cancel them, as the fast updates
+  // can't detect a locked display.
+  // See: ../paint/README.md#Transform-update-optimization for more information
+  document_->View()->RemoveAllPendingUpdates();
 
   // There are two ways we can get locked:
   // 1. A new content-visibility property needs us to be locked.
@@ -592,6 +599,14 @@ void DisplayLockContext::DispatchStateChangeEventIfNeeded() {
 }
 
 void DisplayLockContext::NotifyForcedUpdateScopeEnded(ForcedPhase phase) {
+  // Since we do perform updates in a locked display if we're in a forced
+  // update scope, when ending a forced update scope in a locked display, we
+  // remove all pending updates, to prevent them from being executed in a
+  // locked display.
+  // See: ../paint/README.md#Transform-update-optimization for more information
+  if (is_locked_) {
+    document_->View()->RemoveAllPendingUpdates();
+  }
   forced_info_.end(phase);
 }
 
@@ -964,6 +979,11 @@ void DisplayLockContext::ElementDisconnected() {
   DCHECK(!element_->GetComputedStyle());
   SetRequestedState(EContentVisibility::kVisible, g_null_atom);
 
+  if (auto* document_rules =
+          DocumentSpeculationRules::FromIfExists(*document_)) {
+    document_rules->DisplayLockedElementDisconnected(element_);
+  }
+
   // blocked_child_recalc_change_ must be cleared because things can be in an
   // inconsistent state when we add the element back (e.g. crbug.com/1262742).
   blocked_child_recalc_change_ = StyleRecalcChange();
@@ -1038,6 +1058,7 @@ const char* DisplayLockContext::ShouldForceUnlock() const {
     if (!object_element->UseFallbackContent())
       return nullptr;
   } else if (IsA<HTMLImageElement>(*element_) ||
+             IsA<HTMLCanvasElement>(*element_) ||
              (element_->IsFormControlElement() &&
               !element_->IsOutputElement()) ||
              element_->IsMediaElement() || element_->IsFrameOwnerElement() ||
@@ -1075,36 +1096,12 @@ bool DisplayLockContext::ForceUnlockIfNeeded() {
   if (ShouldForceUnlock()) {
     if (IsLocked()) {
       Unlock();
-      // If we forced unlocked, then there is a chance that layout containment
-      // doesn't actually apply to our element. This means that we may have
-      // continuations, for which the dirty bits also need to be propagated.
-      // This should be a rare case, so we just ensure that each of the
-      // continuations needs a layout. Note that it is insufficient to set that
-      // child needs layout, since that bit may have already been present and
-      // not have been propagated up the (continuation's) ancestor chain.
-      if (auto* object = element_->GetLayoutObject()) {
-        // Only LayoutInlines should have continuations.
-        DCHECK(!object->VirtualContinuation() || object->IsLayoutInline());
-        for (auto* continuation = object->VirtualContinuation(); continuation;
-             continuation = continuation->VirtualContinuation()) {
-          continuation->SetNeedsLayout(
-              layout_invalidation_reason::kDisplayLock);
-        }
-      }
       // If we forced unlock, then we need to prevent subsequent calls to
       // Lock() until the next frame.
       SetRequestedState(EContentVisibility::kVisible, g_null_atom);
     }
     return true;
   }
-  // Check that if we have containment and we don't need to force unlock above,
-  // then we don't have continuations. Note that if we need to rebuild a layout
-  // tree here, then the check may fail due to the fact that we currently have a
-  // continuation which will be removed. So we only run the test if we don't
-  // need to rebuild the layout tree.
-  DCHECK(element_->NeedsRebuildLayoutTree(WhitespaceAttacher()) ||
-         !element_->GetLayoutObject() ||
-         !element_->GetLayoutObject()->VirtualContinuation());
   return false;
 }
 

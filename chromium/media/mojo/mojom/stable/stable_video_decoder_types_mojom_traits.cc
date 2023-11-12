@@ -5,10 +5,7 @@
 #include "media/mojo/mojom/stable/stable_video_decoder_types_mojom_traits.h"
 
 #include "base/time/time.h"
-#include "gpu/ipc/common/gpu_memory_buffer_support.h"
-#include "media/base/format_utils.h"
 #include "media/base/timestamp_constants.h"
-#include "media/gpu/buffer_validation.h"
 #include "mojo/public/cpp/bindings/optional_as_pointer.h"
 
 #if BUILDFLAG(USE_V4L2_CODEC)
@@ -28,30 +25,6 @@
 // chromeos-gfx-video@google.com first.
 
 namespace mojo {
-
-namespace {
-
-gfx::GpuMemoryBufferHandle GetVideoFrameGpuMemoryBufferHandle(
-    const media::VideoFrame* input) {
-  CHECK(!input->metadata().end_of_stream);
-  CHECK_EQ(input->storage_type(), media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER);
-  CHECK(input->HasGpuMemoryBuffer());
-  gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle =
-      input->GetGpuMemoryBuffer()->CloneHandle();
-
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-  CHECK_EQ(gpu_memory_buffer_handle.type, gfx::NATIVE_PIXMAP);
-  CHECK(!gpu_memory_buffer_handle.native_pixmap_handle.planes.empty());
-#else
-  // We should not be trying to serialize a media::VideoFrame for the purposes
-  // of this interface outside of Linux and Chrome OS.
-  CHECK(false);
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-
-  return gpu_memory_buffer_handle;
-}
-
-}  // namespace
 
 // static
 gfx::ColorSpace::PrimaryID
@@ -803,11 +776,16 @@ media::stable::mojom::StatusCode StructTraits<
       "Unexpected underlying type for media::DecoderStatusTraits::Codes. If "
       "you need to change this assertion, please contact "
       "chromeos-gfx-video@google.com.");
+
+  // When creating an "ok" status, callers are expected to not supply anything
+  // (except possibly the kOk code) which should result in a media::TypedStatus
+  // with no StatusData. That means that we should never get a StatusData with a
+  // kOk code when serializing a DecoderStatus.
+  CHECK_NE(input.code,
+           static_cast<uint16_t>(media::DecoderStatusTraits::Codes::kOk));
+
   if (input.code ==
-      static_cast<uint16_t>(media::DecoderStatusTraits::Codes::kOk)) {
-    return media::stable::mojom::StatusCode::kOk;
-  } else if (input.code == static_cast<uint16_t>(
-                               media::DecoderStatusTraits::Codes::kAborted)) {
+      static_cast<uint16_t>(media::DecoderStatusTraits::Codes::kAborted)) {
     return media::stable::mojom::StatusCode::kAborted;
   }
   return media::stable::mojom::StatusCode::kError;
@@ -914,22 +892,33 @@ absl::optional<media::internal::StatusData> StructTraits<
         "Unexpected type for output_cause.code. If you need to "
         "change this assertion, please contact chromeos-gfx-video@google.com.");
 
-    // TODO(b/215438024): enforce that these checks imply that the
+    // When creating an "ok" status, callers are expected to not supply anything
+    // (except possibly the kOk code) which should result in a
+    // media::TypedStatus<T> with no StatusData. That means that we should never
+    // get a cause with a kOk code when serializing a VaapiStatus or V4L2Status.
+    //
+    // TODO(b/215438024): enforce that the checks on Group() imply that the
     // output_cause.code really corresponds to media::VaapiStatusTraits::Codes
     // or media::V4L2StatusTraits::Codes.
 #if BUILDFLAG(USE_VAAPI)
     CHECK(output_cause.group == media::VaapiStatusTraits::Group());
+    CHECK_NE(output_cause.code, static_cast<media::StatusCodeType>(
+                                    media::VaapiStatusTraits::Codes::kOk));
 #elif BUILDFLAG(USE_V4L2_CODEC)
     CHECK(output_cause.group == media::V4L2StatusTraits::Group());
+    CHECK_NE(output_cause.code, static_cast<media::StatusCodeType>(
+                                    media::V4L2StatusTraits::Codes::kOk));
 #else
     // TODO(b/217970098): allow building the VaapiStatusTraits and
     // V4L2StatusTraits without USE_VAAPI/USE_V4L2_CODEC so these guards could
     // be removed.
     CHECK(false);
 #endif
+    // Let's translate anything other than a VA-API or V4L2 "ok" cause (i.e.,
+    // all of them per the CHECK()s above) to
+    // DecoderStatusTraits::Codes::kFailed.
     output_cause.code = static_cast<media::StatusCodeType>(
-        output_cause.code ? media::DecoderStatusTraits::Codes::kFailed
-                          : media::DecoderStatusTraits::Codes::kOk);
+        media::DecoderStatusTraits::Codes::kFailed);
     output_cause.group = std::string(media::DecoderStatusTraits::Group());
     return output_cause;
   }
@@ -967,11 +956,14 @@ bool StructTraits<media::stable::mojom::StatusDataDataView,
       "you need to change this assertion, please contact "
       "chromeos-gfx-video@google.com.");
 
+  // Note that we don't handle kOk_DEPRECATED here. That's because when creating
+  // an "ok" status, callers are expected to not supply anything (except
+  // possibly the kOk code) which should result in a media::TypedStatus<T> with
+  // no StatusData. That means that we should never get a StatusData with an
+  // "ok" code from the remote end. kOk_DEPRECATED was fine back when
+  // TypedStatus<T>::is_ok() relied on the status code and not on the
+  // presence/absence of a StatusData.
   switch (data.code()) {
-    case media::stable::mojom::StatusCode::kOk:
-      output->code = static_cast<media::StatusCodeType>(
-          media::DecoderStatusTraits::Codes::kOk);
-      break;
     case media::stable::mojom::StatusCode::kAborted:
       output->code = static_cast<media::StatusCodeType>(
           media::DecoderStatusTraits::Codes::kAborted);
@@ -996,6 +988,27 @@ bool StructTraits<media::stable::mojom::StatusDataDataView,
   if (!data.ReadFrames(&output->frames))
     return false;
 
+  // Ensure that |output|->frames looks like a list of serialized
+  // base::Locations. See media::MediaSerializer<base::Location>.
+  for (const auto& frame : output->frames) {
+    if (!frame.is_dict()) {
+      return false;
+    }
+    const base::Value::Dict& dict = frame.GetDict();
+    if (dict.size() != 2u) {
+      return false;
+    }
+    const std::string* file = dict.FindString(media::StatusConstants::kFileKey);
+    if (!file) {
+      return false;
+    }
+    const absl::optional<int> line =
+        dict.FindInt(media::StatusConstants::kLineKey);
+    if (!line) {
+      return false;
+    }
+  }
+
   if (!data.ReadData(&output->data))
     return false;
 
@@ -1004,6 +1017,13 @@ bool StructTraits<media::stable::mojom::StatusDataDataView,
     return false;
 
   if (cause.has_value()) {
+    // The deserialization of a cause (a StatusData) translates
+    // media::stable::mojom::StatusCodes to media::DecoderStatusTraits::Codes.
+    CHECK(cause->group == media::DecoderStatusTraits::Group());
+    if (cause->code != static_cast<media::StatusCodeType>(
+                           media::DecoderStatusTraits::Codes::kFailed)) {
+      return false;
+    }
     output->cause =
         std::make_unique<media::internal::StatusData>(std::move(*cause));
   }
@@ -1146,17 +1166,35 @@ bool StructTraits<media::stable::mojom::SupportedVideoDecoderConfigDataView,
                   media::SupportedVideoDecoderConfig>::
     Read(media::stable::mojom::SupportedVideoDecoderConfigDataView input,
          media::SupportedVideoDecoderConfig* output) {
-  if (!input.ReadProfileMin(&output->profile_min))
+  if (!input.ReadProfileMin(&output->profile_min) ||
+      output->profile_min == media::VIDEO_CODEC_PROFILE_UNKNOWN) {
     return false;
+  }
 
-  if (!input.ReadProfileMax(&output->profile_max))
+  if (!input.ReadProfileMax(&output->profile_max) ||
+      output->profile_max == media::VIDEO_CODEC_PROFILE_UNKNOWN) {
     return false;
+  }
+
+  if (output->profile_max < output->profile_min) {
+    return false;
+  }
 
   if (!input.ReadCodedSizeMin(&output->coded_size_min))
     return false;
 
   if (!input.ReadCodedSizeMax(&output->coded_size_max))
     return false;
+
+  if (output->coded_size_max.width() <= output->coded_size_min.width() ||
+      output->coded_size_max.height() <= output->coded_size_min.height()) {
+    return false;
+  }
+
+  if (input.require_encrypted() && !input.allow_encrypted()) {
+    // Inconsistent information.
+    return false;
+  }
 
   output->allow_encrypted = input.allow_encrypted();
   output->require_encrypted = input.require_encrypted();
@@ -1445,222 +1483,6 @@ bool StructTraits<media::stable::mojom::VideoDecoderConfigDataView,
 }
 
 // static
-media::VideoPixelFormat StructTraits<media::stable::mojom::VideoFrameDataView,
-                                     scoped_refptr<media::VideoFrame>>::
-    format(const scoped_refptr<media::VideoFrame>& input) {
-  static_assert(
-      std::is_same<decltype(input->format()),
-                   decltype(media::stable::mojom::VideoFrame::format)>::value,
-      "Unexpected type for media::VideoFrame::format(). If you "
-      "need to change this assertion, please contact "
-      "chromeos-gfx-video@google.com.");
-
-  return input->format();
-}
-
-// static
-const gfx::Size& StructTraits<media::stable::mojom::VideoFrameDataView,
-                              scoped_refptr<media::VideoFrame>>::
-    coded_size(const scoped_refptr<media::VideoFrame>& input) {
-  static_assert(
-      std::is_same<decltype(input->coded_size()),
-                   std::add_lvalue_reference<std::add_const<decltype(
-                       media::stable::mojom::VideoFrame::coded_size)>::type>::
-                       type>::value,
-      "Unexpected type for media::VideoFrame::coded_size(). If you "
-      "need to change this assertion, please contact "
-      "chromeos-gfx-video@google.com.");
-
-  return input->coded_size();
-}
-
-// static
-const gfx::Rect& StructTraits<media::stable::mojom::VideoFrameDataView,
-                              scoped_refptr<media::VideoFrame>>::
-    visible_rect(const scoped_refptr<media::VideoFrame>& input) {
-  static_assert(
-      std::is_same<decltype(input->visible_rect()),
-                   std::add_lvalue_reference<std::add_const<decltype(
-                       media::stable::mojom::VideoFrame::visible_rect)>::type>::
-                       type>::value,
-      "Unexpected type for media::VideoFrame::visible_rect(). If you "
-      "need to change this assertion, please contact "
-      "chromeos-gfx-video@google.com.");
-
-  return input->visible_rect();
-}
-
-// static
-const gfx::Size& StructTraits<media::stable::mojom::VideoFrameDataView,
-                              scoped_refptr<media::VideoFrame>>::
-    natural_size(const scoped_refptr<media::VideoFrame>& input) {
-  static_assert(
-      std::is_same<decltype(input->natural_size()),
-                   std::add_lvalue_reference<std::add_const<decltype(
-                       media::stable::mojom::VideoFrame::natural_size)>::type>::
-                       type>::value,
-      "Unexpected type for media::VideoFrame::natural_size(). If you "
-      "need to change this assertion, please contact "
-      "chromeos-gfx-video@google.com.");
-
-  return input->natural_size();
-}
-
-// static
-base::TimeDelta StructTraits<media::stable::mojom::VideoFrameDataView,
-                             scoped_refptr<media::VideoFrame>>::
-    timestamp(const scoped_refptr<media::VideoFrame>& input) {
-  static_assert(
-      std::is_same<decltype(input->timestamp()),
-                   decltype(
-                       media::stable::mojom::VideoFrame::timestamp)>::value,
-      "Unexpected type for media::VideoFrame::timestamp(). If you "
-      "need to change this assertion, please contact "
-      "chromeos-gfx-video@google.com.");
-
-  return input->timestamp();
-}
-
-// static
-gfx::ColorSpace StructTraits<media::stable::mojom::VideoFrameDataView,
-                             scoped_refptr<media::VideoFrame>>::
-    color_space(const scoped_refptr<media::VideoFrame>& input) {
-  static_assert(
-      std::is_same<decltype(input->ColorSpace()),
-                   decltype(
-                       media::stable::mojom::VideoFrame::color_space)>::value,
-      "Unexpected type for media::VideoFrame::ColorSpace(). If you "
-      "need to change this assertion, please contact "
-      "chromeos-gfx-video@google.com.");
-
-  return input->ColorSpace();
-}
-
-// static
-const absl::optional<gfx::HDRMetadata>&
-StructTraits<media::stable::mojom::VideoFrameDataView,
-             scoped_refptr<media::VideoFrame>>::
-    hdr_metadata(const scoped_refptr<media::VideoFrame>& input) {
-  static_assert(
-      std::is_same<decltype(input->hdr_metadata()),
-                   std::add_lvalue_reference<std::add_const<decltype(
-                       media::stable::mojom::VideoFrame::hdr_metadata)>::type>::
-                       type>::value,
-      "Unexpected type for media::VideoFrame::hdr_metadata(). If you "
-      "need to change this assertion, please contact "
-      "chromeos-gfx-video@google.com.");
-
-  return input->hdr_metadata();
-}
-
-// static
-gfx::GpuMemoryBufferHandle
-StructTraits<media::stable::mojom::VideoFrameDataView,
-             scoped_refptr<media::VideoFrame>>::
-    gpu_memory_buffer_handle(const scoped_refptr<media::VideoFrame>& input) {
-  return GetVideoFrameGpuMemoryBufferHandle(input.get());
-}
-
-// static
-const media::VideoFrameMetadata&
-StructTraits<media::stable::mojom::VideoFrameDataView,
-             scoped_refptr<media::VideoFrame>>::
-    metadata(const scoped_refptr<media::VideoFrame>& input) {
-  static_assert(
-      std::is_same<
-          decltype(input->metadata()),
-          std::add_lvalue_reference<decltype(
-              media::stable::mojom::VideoFrame::metadata)>::type>::value,
-      "Unexpected type for media::VideoFrame::metadata(). If you "
-      "need to change this assertion, please contact "
-      "chromeos-gfx-video@google.com.");
-
-  return input->metadata();
-}
-
-// static
-bool StructTraits<media::stable::mojom::VideoFrameDataView,
-                  scoped_refptr<media::VideoFrame>>::
-    Read(media::stable::mojom::VideoFrameDataView input,
-         scoped_refptr<media::VideoFrame>* output) {
-  media::VideoPixelFormat format;
-  if (!input.ReadFormat(&format))
-    return false;
-
-  gfx::Size coded_size;
-  if (!input.ReadCodedSize(&coded_size))
-    return false;
-
-  gfx::Rect visible_rect;
-  if (!input.ReadVisibleRect(&visible_rect))
-    return false;
-
-  if (!gfx::Rect(coded_size).Contains(visible_rect))
-    return false;
-
-  gfx::Size natural_size;
-  if (!input.ReadNaturalSize(&natural_size))
-    return false;
-
-  base::TimeDelta timestamp;
-  if (!input.ReadTimestamp(&timestamp))
-    return false;
-
-  gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle;
-  if (!input.ReadGpuMemoryBufferHandle(&gpu_memory_buffer_handle)) {
-    return false;
-  }
-
-  if (!media::VerifyGpuMemoryBufferHandle(format, coded_size,
-                                          gpu_memory_buffer_handle)) {
-    return false;
-  }
-
-  absl::optional<gfx::BufferFormat> buffer_format =
-      VideoPixelFormatToGfxBufferFormat(format);
-  if (!buffer_format) {
-    return false;
-  }
-
-  gpu::GpuMemoryBufferSupport support;
-  std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer =
-      support.CreateGpuMemoryBufferImplFromHandle(
-          std::move(gpu_memory_buffer_handle), coded_size, *buffer_format,
-          gfx::BufferUsage::SCANOUT_VDA_WRITE, base::NullCallback());
-  if (!gpu_memory_buffer) {
-    return false;
-  }
-
-  gpu::MailboxHolder dummy_mailbox[media::VideoFrame::kMaxPlanes];
-  scoped_refptr<media::VideoFrame> frame =
-      media::VideoFrame::WrapExternalGpuMemoryBuffer(
-          visible_rect, natural_size, std::move(gpu_memory_buffer),
-          dummy_mailbox, base::NullCallback(), timestamp);
-
-  if (!frame)
-    return false;
-
-  media::VideoFrameMetadata metadata;
-  if (!input.ReadMetadata(&metadata))
-    return false;
-
-  frame->set_metadata(metadata);
-
-  gfx::ColorSpace color_space;
-  if (!input.ReadColorSpace(&color_space))
-    return false;
-  frame->set_color_space(color_space);
-
-  absl::optional<gfx::HDRMetadata> hdr_metadata;
-  if (!input.ReadHdrMetadata(&hdr_metadata))
-    return false;
-  frame->set_hdr_metadata(std::move(hdr_metadata));
-
-  *output = std::move(frame);
-  return true;
-}
-
-// static
 bool StructTraits<media::stable::mojom::VideoFrameMetadataDataView,
                   media::VideoFrameMetadata>::
     protected_video(const media::VideoFrameMetadata& input) {
@@ -1702,6 +1524,12 @@ bool StructTraits<media::stable::mojom::VideoFrameMetadataDataView,
   output->protected_video = input.protected_video();
   output->hw_protected = input.hw_protected();
   output->power_efficient = true;
+
+  if (output->hw_protected && !output->protected_video) {
+    // According to the VideoFrameMetadata documentation, |hw_protected| is only
+    // valid if |protected_video| is set to true.
+    return false;
+  }
 
   return true;
 }

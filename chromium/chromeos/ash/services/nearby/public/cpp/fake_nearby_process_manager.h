@@ -11,13 +11,19 @@
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/unguessable_token.h"
+#include "chromeos/ash/services/nearby/public/cpp/mock_quick_start_decoder.h"
 #include "chromeos/ash/services/nearby/public/cpp/nearby_process_manager.h"
+#include "chromeos/ash/services/nearby/public/mojom/quick_start_decoder.mojom.h"
 
 namespace ash {
 namespace nearby {
 
 class MockNearbyConnections;
 class MockNearbySharingDecoder;
+
+namespace presence {
+class FakeNearbyPresence;
+}  // namespace presence
 
 class FakeNearbyProcessManager : public NearbyProcessManager {
  public:
@@ -44,9 +50,13 @@ class FakeNearbyProcessManager : public NearbyProcessManager {
       : public NearbyProcessManager::NearbyProcessReference {
    public:
     FakeNearbyProcessReference(
-        const mojo::SharedRemote<::nearby::connections::mojom::NearbyConnections>&
-            connections,
+        const mojo::SharedRemote<
+            ::nearby::connections::mojom::NearbyConnections>& connections,
+        const mojo::SharedRemote<
+            ::ash::nearby::presence::mojom::NearbyPresence>& presence,
         const mojo::SharedRemote<sharing::mojom::NearbySharingDecoder>& decoder,
+        const mojo::SharedRemote<quick_start::mojom::QuickStartDecoder>&
+            quick_start_decoder,
         base::OnceClosure destructor_callback);
     ~FakeNearbyProcessReference() override;
 
@@ -54,12 +64,20 @@ class FakeNearbyProcessManager : public NearbyProcessManager {
     // NearbyProcessManager::NearbyProcessReference:
     const mojo::SharedRemote<::nearby::connections::mojom::NearbyConnections>&
     GetNearbyConnections() const override;
+    const mojo::SharedRemote<::ash::nearby::presence::mojom::NearbyPresence>&
+    GetNearbyPresence() const override;
     const mojo::SharedRemote<sharing::mojom::NearbySharingDecoder>&
     GetNearbySharingDecoder() const override;
+    const mojo::SharedRemote<ash::quick_start::mojom::QuickStartDecoder>&
+    GetQuickStartDecoder() const override;
 
     mojo::SharedRemote<::nearby::connections::mojom::NearbyConnections>
         connections_;
+    mojo::SharedRemote<::ash::nearby::presence::mojom::NearbyPresence>
+        presence_;
     mojo::SharedRemote<sharing::mojom::NearbySharingDecoder> decoder_;
+    mojo::SharedRemote<quick_start::mojom::QuickStartDecoder>
+        quick_start_decoder_;
     base::OnceClosure destructor_callback_;
   };
 
@@ -75,12 +93,18 @@ class FakeNearbyProcessManager : public NearbyProcessManager {
 
   // Null if no outstanding references exist.
   std::unique_ptr<MockNearbyConnections> active_connections_;
+  std::unique_ptr<presence::FakeNearbyPresence> active_presence_;
   std::unique_ptr<MockNearbySharingDecoder> active_decoder_;
+  std::unique_ptr<MockQuickStartDecoder> active_quick_start_decoder_;
 
   // Unbound if no outstanding references exist.
   mojo::SharedRemote<::nearby::connections::mojom::NearbyConnections>
       connections_remote_;
+  mojo::SharedRemote<::ash::nearby::presence::mojom::NearbyPresence>
+      presence_remote_;
   mojo::SharedRemote<sharing::mojom::NearbySharingDecoder> decoder_remote_;
+  mojo::SharedRemote<quick_start::mojom::QuickStartDecoder>
+      quick_start_decoder_remote_;
 
   base::WeakPtrFactory<FakeNearbyProcessManager> weak_ptr_factory_{this};
 };

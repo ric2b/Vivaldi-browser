@@ -172,6 +172,11 @@ corb::PerFactoryState& URLLoaderFactory::GetMutableCorbState() {
   return corb_state_;
 }
 
+bool URLLoaderFactory::DataUseUpdatesEnabled() {
+  return context_->network_service() &&
+         context_->network_service()->data_use_updates_enabled();
+}
+
 void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
     mojo::PendingReceiver<mojom::URLLoader> receiver,
     int32_t request_id,
@@ -353,7 +358,7 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
   std::unique_ptr<AttributionRequestHelper> attribution_request_helper;
   if (context_->network_service()) {
     attribution_request_helper = AttributionRequestHelper::CreateIfNeeded(
-        resource_request.headers,
+        resource_request.attribution_reporting_eligibility,
         context_->network_service()->trust_token_key_commitments());
   }
 

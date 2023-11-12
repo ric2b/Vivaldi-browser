@@ -58,6 +58,14 @@
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/skia/include/core/SkColor.h"
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chromeos/ash/components/login/login_state/login_state.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/startup/browser_init_params.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
 using content::NavigationEntry;
 using sessions::ContentTestHelper;
 using sessions::SerializedNavigationEntry;
@@ -103,8 +111,8 @@ class SessionServiceTest : public BrowserWithTestWindowTest {
     helper_.SetService(nullptr);
   }
 
-  void UpdateNavigation(const SessionID& window_session_id,
-                        const SessionID& tab_id,
+  void UpdateNavigation(SessionID window_session_id,
+                        SessionID tab_id,
                         const SerializedNavigationEntry& navigation,
                         bool select) {
     service()->UpdateTabNavigation(window_session_id, tab_id, navigation);
@@ -170,12 +178,11 @@ class SessionServiceTest : public BrowserWithTestWindowTest {
     return tab->pinned;
   }
 
-  void CreateAndWriteSessionWithTwoWindows(
-      const SessionID& window2_id,
-      const SessionID& tab1_id,
-      const SessionID& tab2_id,
-      SerializedNavigationEntry* nav1,
-      SerializedNavigationEntry* nav2) {
+  void CreateAndWriteSessionWithTwoWindows(SessionID window2_id,
+                                           SessionID tab1_id,
+                                           SessionID tab2_id,
+                                           SerializedNavigationEntry* nav1,
+                                           SerializedNavigationEntry* nav2) {
     *nav1 = ContentTestHelper::CreateNavigation("http://google.com", "abc");
     *nav2 = ContentTestHelper::CreateNavigation("http://google2.com", "abcd");
 
@@ -190,6 +197,22 @@ class SessionServiceTest : public BrowserWithTestWindowTest {
     helper_.PrepareTabInWindow(window2_id, tab2_id, 0, true);
     UpdateNavigation(window2_id, tab2_id, *nav2, true);
   }
+
+#if BUILDFLAG(IS_CHROMEOS)
+  void FakeKioskSession() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    ASSERT_TRUE(ash::LoginState::IsInitialized());
+    ash::LoginState::Get()->SetLoggedInState(
+        ash::LoginState::LoggedInState::LOGGED_IN_ACTIVE,
+        ash::LoginState::LoggedInUserType::LOGGED_IN_USER_KIOSK);
+#else   // BUILDFLAG(IS_CHROMEOS_LACROS)
+    crosapi::mojom::BrowserInitParamsPtr init_params =
+        chromeos::BrowserInitParams::GetForTests()->Clone();
+    init_params->session_type = crosapi::mojom::SessionType::kWebKioskSession;
+    chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params));
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   SessionService* service() { return helper_.service(); }
 
@@ -1177,6 +1200,8 @@ TEST_F(SessionServiceTest, TabGroupMetadataSaved) {
                                      tab_groups::TabGroupColorId::kBlue),
       tab_groups::TabGroupVisualData(u"Bar",
                                      tab_groups::TabGroupColorId::kGreen)};
+  const std::array<absl::optional<std::string>, kNumGroups> saved_guids = {
+      base::Uuid::GenerateRandomV4().AsLowercaseString(), absl::nullopt};
 
   // Create |kNumGroups| tab groups, each with one tab.
   for (int group_ndx = 0; group_ndx < kNumGroups; ++group_ndx) {
@@ -1184,7 +1209,8 @@ TEST_F(SessionServiceTest, TabGroupMetadataSaved) {
         CreateTabWithTestNavigationData(window_id, group_ndx);
     service()->SetTabGroup(window_id, tab_id, group_ids[group_ndx]);
     service()->SetTabGroupMetadata(window_id, group_ids[group_ndx],
-                                   &visual_data[group_ndx]);
+                                   &visual_data[group_ndx],
+                                   saved_guids[group_ndx]);
   }
 
   std::vector<std::unique_ptr<sessions::SessionWindow>> windows;
@@ -1205,6 +1231,12 @@ TEST_F(SessionServiceTest, TabGroupMetadataSaved) {
     const tab_groups::TabGroupId group_id = group_ids[group_ndx];
     ASSERT_TRUE(base::Contains(tab_groups, group_id));
     EXPECT_EQ(visual_data[group_ndx], tab_groups[group_id]->visual_data);
+    if (tab_groups[group_id]->saved_guid.has_value()) {
+      EXPECT_EQ(saved_guids[group_ndx],
+                tab_groups[group_id]->saved_guid.value());
+    } else {
+      EXPECT_EQ(absl::nullopt, tab_groups[group_id]->saved_guid);
+    }
   }
 }
 
@@ -1445,3 +1477,18 @@ TEST_F(SessionServiceTest, DisableSaving) {
   EXPECT_TRUE(helper_.command_storage_manager()->HasPendingSave());
   EXPECT_TRUE(helper_.command_storage_manager()->pending_reset());
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+TEST_F(SessionServiceTest, OpenedWindowNotRestoredInKiosk) {
+  // These preparation is necessary for `ShouldRestore` function to return true
+  // in the regular user session.
+  helper_.SetHasOpenTrackableBrowsers(false);
+  service()->WindowClosing(window_id);
+  service()->WindowClosed(window_id);
+  // Make sure `ShouldRestore` returns true for the regular user session.
+  EXPECT_TRUE(session_service_->ShouldRestore(browser()));
+
+  FakeKioskSession();
+  EXPECT_FALSE(session_service_->ShouldRestore(browser()));
+}
+#endif  //  BUILDFLAG(IS_CHROMEOS)

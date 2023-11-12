@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "components/file_access/scoped_file_access.h"
@@ -29,7 +30,7 @@ namespace file_access {
 // to packages without direct access to the UI thread.
 class COMPONENT_EXPORT(FILE_ACCESS) ScopedFileAccessDelegate {
  public:
-  using RequestFilesAccessForSystemIOCallback =
+  using RequestFilesAccessIOCallback =
       base::RepeatingCallback<void(const std::vector<base::FilePath>&,
                                    base::OnceCallback<void(ScopedFileAccess)>)>;
 
@@ -61,6 +62,12 @@ class COMPONENT_EXPORT(FILE_ACCESS) ScopedFileAccessDelegate {
   virtual void RequestFilesAccessForSystem(
       const std::vector<base::FilePath>& files,
       base::OnceCallback<void(file_access::ScopedFileAccess)> callback) = 0;
+
+  // Creates a callback to gain file access for the given `destination`. The
+  // callback should be called on the IO thread. The method itself from the UI
+  // thread.
+  virtual RequestFilesAccessIOCallback CreateFileAccessCallback(
+      const GURL& destination) const = 0;
 
   // Called from the IO thread. Switches to the UI thread and calls
   // RequestFilesAccessForSystem there. The `callback` is run on the IO thread
@@ -105,7 +112,7 @@ class COMPONENT_EXPORT(FILE_ACCESS) ScopedFileAccessDelegate {
     // Otherwise, it destroys the original callback when this class is
     // destroyed.
     explicit ScopedRequestFilesAccessCallbackForTesting(
-        RequestFilesAccessForSystemIOCallback callback,
+        RequestFilesAccessIOCallback callback,
         bool restore_original_callback = true);
 
     virtual ~ScopedRequestFilesAccessCallbackForTesting();
@@ -121,8 +128,12 @@ class COMPONENT_EXPORT(FILE_ACCESS) ScopedFileAccessDelegate {
 
    private:
     bool restore_original_callback_;
-    RequestFilesAccessForSystemIOCallback* original_callback_ = nullptr;
+    raw_ptr<RequestFilesAccessIOCallback> original_callback_ = nullptr;
   };
+  // Get a callback to get file access to files for system component
+  // destination. Can be called from IO or UI thread. The callback should be
+  // called on IO thread only.
+  static RequestFilesAccessIOCallback GetCallbackForSystem();
 
  protected:
   ScopedFileAccessDelegate();
@@ -136,7 +147,7 @@ class COMPONENT_EXPORT(FILE_ACCESS) ScopedFileAccessDelegate {
   // A single instance for a callback living on the IO thread which switches to
   // the UI thread to call RequestFilesAccessForSystem from there and switch
   // back to IO thread handing the ScopedFileAccess to another (given) callback.
-  static RequestFilesAccessForSystemIOCallback*
+  static RequestFilesAccessIOCallback*
       request_files_access_for_system_io_callback_;
 };
 

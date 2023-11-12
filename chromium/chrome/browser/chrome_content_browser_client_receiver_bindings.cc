@@ -34,6 +34,7 @@
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/mojo_safe_browsing_impl.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
@@ -161,18 +162,31 @@ void MaybeCreateSafeBrowsingForRenderer(
 
   bool safe_browsing_enabled =
       safe_browsing::IsSafeBrowsingEnabled(*pref_service);
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &safe_browsing::MojoSafeBrowsingImpl::MaybeCreate, process_id,
-          std::move(resource_context),
-          base::BindRepeating(get_checker_delegate, safe_browsing_enabled,
-                              // Navigation initiated from renderer should never
-                              // check when safe browsing is disabled, because
-                              // enterprise check only supports mainframe URL.
-                              /*should_check_on_sb_disabled=*/false,
-                              allowlist_domains),
-          std::move(receiver)));
+
+  if (base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)) {
+    safe_browsing::MojoSafeBrowsingImpl::MaybeCreate(
+        process_id, std::move(resource_context),
+        base::BindRepeating(get_checker_delegate, safe_browsing_enabled,
+                            // Navigation initiated from renderer should never
+                            // check when safe browsing is disabled, because
+                            // enterprise check only supports mainframe URL.
+                            /*should_check_on_sb_disabled=*/false,
+                            allowlist_domains),
+        std::move(receiver));
+  } else {
+    content::GetIOThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &safe_browsing::MojoSafeBrowsingImpl::MaybeCreate, process_id,
+            std::move(resource_context),
+            base::BindRepeating(
+                get_checker_delegate, safe_browsing_enabled,
+                // Navigation initiated from renderer should never
+                // check when safe browsing is disabled, because
+                // enterprise check only supports mainframe URL.
+                /*should_check_on_sb_disabled=*/false, allowlist_domains),
+            std::move(receiver)));
+  }
 }
 #endif
 
@@ -351,7 +365,7 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
 #endif  // defined(ARCH_CPU_X86_64)
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-  for (auto* ep : extra_parts_) {
+  for (auto& ep : extra_parts_) {
     ep->ExposeInterfacesToRenderer(registry, associated_registry,
                                    render_process_host);
   }

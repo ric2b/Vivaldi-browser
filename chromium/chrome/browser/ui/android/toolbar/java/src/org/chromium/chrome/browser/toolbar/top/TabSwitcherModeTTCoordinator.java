@@ -19,6 +19,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
+import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.function.BooleanSupplier;
 
@@ -43,8 +44,6 @@ class TabSwitcherModeTTCoordinator {
     private boolean mAccessibilityEnabled;
 
     private TabSwitcherModeTopToolbar mActiveTabSwitcherToolbar;
-    private TabSwitcherModeTopToolbar mTabSwitcherToolbar;
-    private TabSwitcherModeTopToolbar mTabSwitcherFullscreenToolbar;
 
     private ToolbarColorObserverManager mToolbarColorObserverManager;
 
@@ -52,21 +51,19 @@ class TabSwitcherModeTTCoordinator {
     private IncognitoTabModelObserver mIncognitoTabModelObserver;
 
     private final boolean mIsGridTabSwitcherEnabled;
-    private final boolean mIsTabletGtsPolishEnabled;
     private final boolean mIsTabToGtsAnimationEnabled;
     private final BooleanSupplier mIsIncognitoModeEnabledSupplier;
     private final TopToolbarInteractabilityManager mTopToolbarInteractabilityManager;
 
     TabSwitcherModeTTCoordinator(ViewStub tabSwitcherToolbarStub,
             ViewStub tabSwitcherFullscreenToolbarStub, MenuButtonCoordinator menuButtonCoordinator,
-            boolean isGridTabSwitcherEnabled, boolean isTabletGtsPolishEnabled,
-            boolean isTabToGtsAnimationEnabled, BooleanSupplier isIncognitoModeEnabledSupplier,
+            boolean isGridTabSwitcherEnabled, boolean isTabToGtsAnimationEnabled,
+            BooleanSupplier isIncognitoModeEnabledSupplier,
             ToolbarColorObserverManager toolbarColorObserverManager) {
         mTabSwitcherToolbarStub = tabSwitcherToolbarStub;
         mTabSwitcherFullscreenToolbarStub = tabSwitcherFullscreenToolbarStub;
         mMenuButtonCoordinator = menuButtonCoordinator;
         mIsGridTabSwitcherEnabled = isGridTabSwitcherEnabled;
-        mIsTabletGtsPolishEnabled = isTabletGtsPolishEnabled;
         mIsTabToGtsAnimationEnabled = isTabToGtsAnimationEnabled;
         mIsIncognitoModeEnabledSupplier = isIncognitoModeEnabledSupplier;
         mTopToolbarInteractabilityManager =
@@ -104,23 +101,11 @@ class TabSwitcherModeTTCoordinator {
      * @param inTabSwitcherMode Whether or not tab switcher mode should be shown or hidden.
      */
     void setTabSwitcherMode(boolean inTabSwitcherMode) {
-        if (inTabSwitcherMode) {
-            maybeInflateAndSetToolbar();
-
-            mActiveTabSwitcherToolbar.setTabSwitcherMode(inTabSwitcherMode);
-        } else if (mActiveTabSwitcherToolbar != null) {
-            mActiveTabSwitcherToolbar.setTabSwitcherMode(inTabSwitcherMode);
+        if (inTabSwitcherMode && mActiveTabSwitcherToolbar == null) {
+            inflateToolbar();
         }
-    }
-
-    /**
-     * Sets the OnClickListener that will be notified when the TabSwitcher button is pressed.
-     * @param listener The callback that will be notified when the TabSwitcher button is pressed.
-     */
-    void setOnTabSwitcherClickHandler(View.OnClickListener listener) {
-        mTabSwitcherListener = listener;
         if (mActiveTabSwitcherToolbar != null) {
-            mActiveTabSwitcherToolbar.setOnTabSwitcherClickHandler(listener);
+            mActiveTabSwitcherToolbar.setTabSwitcherMode(inTabSwitcherMode);
         }
     }
 
@@ -179,56 +164,25 @@ class TabSwitcherModeTTCoordinator {
     }
 
     /**
-     * Inflates the toolbar if necessary. Swaps between the fullscreen and non-fullscreen toolbars
-     * if necessary.
+     * Inflates the toolbar.
      */
-    private void maybeInflateAndSetToolbar() {
-        if (!mIsTabletGtsPolishEnabled) {
-            if (mActiveTabSwitcherToolbar == null) {
-                mActiveTabSwitcherToolbar =
-                        (TabSwitcherModeTopToolbar) mTabSwitcherToolbarStub.inflate();
-                initializeToolbar(mActiveTabSwitcherToolbar, false);
-
-                maybeInitializeIncognitoTabModelObserver();
-                maybeNotifyOnIncognitoTabsExistenceChanged();
-            }
+    private void inflateToolbar() {
+        ViewStub toolbarStub;
+        boolean isFullScreenToolbar;
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(
+                    mTabSwitcherToolbarStub.getContext())) {
+            toolbarStub = mTabSwitcherFullscreenToolbarStub;
+            isFullScreenToolbar = true;
         } else {
-            boolean useFullscreenToolbar = !DeviceClassManager.enableAccessibilityLayout(
-                    mTabSwitcherToolbarStub.getContext());
-            TabSwitcherModeTopToolbar activeToolbar =
-                    maybeInflateActiveToolbar(useFullscreenToolbar);
-
-            if (mActiveTabSwitcherToolbar != activeToolbar) {
-                mActiveTabSwitcherToolbar = activeToolbar;
-
-                maybeInitializeIncognitoTabModelObserver();
-                maybeNotifyOnIncognitoTabsExistenceChanged();
-            }
+            toolbarStub = mTabSwitcherToolbarStub;
+            isFullScreenToolbar = false;
         }
-    }
 
-    /**
-     * Inflates the toolbar (fullscreen vs. non-fullscreen) that will be shown.
-     *
-     * @param useFullscreenToolbar Whether or not to use the fullscreen toolbar.
-     * @return The active toolbar.
-     */
-    private TabSwitcherModeTopToolbar maybeInflateActiveToolbar(boolean useFullscreenToolbar) {
-        if (useFullscreenToolbar) {
-            if (mTabSwitcherFullscreenToolbar == null) {
-                assert mTabSwitcherFullscreenToolbarStub != null;
-                mTabSwitcherFullscreenToolbar =
-                        (TabSwitcherModeTopToolbar) mTabSwitcherFullscreenToolbarStub.inflate();
-                initializeToolbar(mTabSwitcherFullscreenToolbar, true);
-            }
-            return mTabSwitcherFullscreenToolbar;
-        } else {
-            if (mTabSwitcherToolbar == null) {
-                mTabSwitcherToolbar = (TabSwitcherModeTopToolbar) mTabSwitcherToolbarStub.inflate();
-                initializeToolbar(mTabSwitcherToolbar, false);
-            }
-            return mTabSwitcherToolbar;
-        }
+        mActiveTabSwitcherToolbar = (TabSwitcherModeTopToolbar) toolbarStub.inflate();
+        initializeToolbar(mActiveTabSwitcherToolbar, isFullScreenToolbar);
+
+        maybeInitializeIncognitoTabModelObserver();
+        maybeNotifyOnIncognitoTabsExistenceChanged();
     }
 
     /**
@@ -244,9 +198,6 @@ class TabSwitcherModeTTCoordinator {
         mMenuButtonCoordinator.setMenuButton(toolbar.findViewById(R.id.menu_button_wrapper));
 
         // It's expected that these properties are set by the time the tab switcher is entered.
-        assert mTabSwitcherListener != null;
-        toolbar.setOnTabSwitcherClickHandler(mTabSwitcherListener);
-
         assert mNewTabListener != null;
         toolbar.setOnNewTabClickHandler(mNewTabListener);
 
@@ -265,7 +216,10 @@ class TabSwitcherModeTTCoordinator {
     }
 
     private boolean isNewTabVariationEnabled() {
-        return mIsGridTabSwitcherEnabled && FeatureList.isInitialized()
+        boolean accessibilityEnabled =
+                DeviceClassManager.enableAccessibilityLayout(mTabSwitcherToolbarStub.getContext());
+
+        return (mIsGridTabSwitcherEnabled || accessibilityEnabled) && FeatureList.isInitialized()
                 && mIsIncognitoModeEnabledSupplier.getAsBoolean()
                 && !ChromeFeatureList
                             .getFieldTrialParamByFeature(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,

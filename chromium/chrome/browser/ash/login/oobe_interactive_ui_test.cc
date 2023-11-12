@@ -15,6 +15,7 @@
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
@@ -64,6 +65,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/fake_gaia_mixin.h"
 #include "chromeos/ash/components/assistant/buildflags.h"
+#include "chromeos/ash/components/attestation/stub_attestation_features.h"
 #include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
 #include "chromeos/ash/components/system/fake_statistics_provider.h"
@@ -359,7 +361,7 @@ class FakeRecommendAppsFetcher : public RecommendAppsFetcher {
   void Retry() override { NOTREACHED(); }
 
  private:
-  RecommendAppsFetcherDelegate* const delegate_;
+  const raw_ptr<RecommendAppsFetcherDelegate, ExperimentalAsh> delegate_;
 };
 
 std::unique_ptr<RecommendAppsFetcher> CreateRecommendAppsFetcher(
@@ -397,7 +399,7 @@ class NativeWindowVisibilityObserver : public aura::WindowObserver {
   // The window was visible at some point in time.
   bool was_visible_ = false;
 
-  aura::Window* window_;
+  raw_ptr<aura::Window, ExperimentalAsh> window_;
 };
 
 // Sets the `NativeWindowVisibilityObserver` to observe the
@@ -431,7 +433,7 @@ class NativeWindowVisibilityBrowserMainExtraParts
   }
 
  private:
-  NativeWindowVisibilityObserver* observer_;
+  raw_ptr<NativeWindowVisibilityObserver, ExperimentalAsh> observer_;
 };
 
 class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
@@ -658,10 +660,7 @@ void OobeInteractiveUITest::PerformSessionSignInSteps() {
     HandleGestureNavigationScreen();
   }
 
-  if (features::IsDarkLightModeEnabled()) {
-    HandleThemeSelectionScreen();
-  }
-
+  HandleThemeSelectionScreen();
   HandleMarketingOptInScreen();
 }
 
@@ -735,6 +734,7 @@ class OobeZeroTouchInteractiveUITest : public OobeInteractiveUITest {
   EmbeddedPolicyTestServerMixin policy_test_server_mixin_{&mixin_host_};
   test::EnrollmentUIMixin enrollment_ui_{&mixin_host_};
   system::ScopedFakeStatisticsProvider fake_statistics_provider_;
+  attestation::ScopedStubAttestationFeatures attestation_features_;
 };
 
 void OobeZeroTouchInteractiveUITest::ZeroTouchEndToEnd() {
@@ -972,10 +972,7 @@ IN_PROC_BROWSER_TEST_P(EphemeralUserOobeTest, RegularEphemeralUser) {
     HandleAppDownloadingScreen();
   }
 
-  if (features::IsDarkLightModeEnabled()) {
-    HandleThemeSelectionScreen();
-  }
-
+  HandleThemeSelectionScreen();
   WaitForActiveSession();
 }
 

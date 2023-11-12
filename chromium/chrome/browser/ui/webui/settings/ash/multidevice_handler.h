@@ -6,12 +6,15 @@
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_MULTIDEVICE_HANDLER_H_
 
 #include "ash/webui/eche_app_ui/apps_access_manager.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/android_sms/android_sms_app_manager.h"
 #include "chrome/browser/ash/android_sms/android_sms_service_factory.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chromeos/ash/components/multidevice/remote_device_ref.h"
+#include "chromeos/ash/components/phonehub/browser_tabs_model.h"
+#include "chromeos/ash/components/phonehub/browser_tabs_model_provider.h"
 #include "chromeos/ash/components/phonehub/camera_roll_manager.h"
 #include "chromeos/ash/components/phonehub/combined_access_setup_operation.h"
 #include "chromeos/ash/components/phonehub/feature_setup_connection_operation.h"
@@ -38,7 +41,8 @@ class MultideviceHandler
       public eche_app::AppsAccessSetupOperation::Delegate,
       public phonehub::CameraRollManager::Observer,
       public phonehub::CombinedAccessSetupOperation::Delegate,
-      public phonehub::FeatureSetupConnectionOperation::Delegate {
+      public phonehub::FeatureSetupConnectionOperation::Delegate,
+      public phonehub::BrowserTabsModelProvider::Observer {
  public:
   MultideviceHandler(
       PrefService* prefs,
@@ -49,7 +53,8 @@ class MultideviceHandler
           android_sms_pairing_state_tracker,
       android_sms::AndroidSmsAppManager* android_sms_app_manager,
       eche_app::AppsAccessManager* apps_access_manager,
-      phonehub::CameraRollManager* camera_roll_manager);
+      phonehub::CameraRollManager* camera_roll_manager,
+      phonehub::BrowserTabsModelProvider* browser_tabs_model_provider);
 
   MultideviceHandler(const MultideviceHandler&) = delete;
   MultideviceHandler& operator=(const MultideviceHandler&) = delete;
@@ -112,6 +117,12 @@ class MultideviceHandler
   // phonehub::CameraRollManager::Observer:
   void OnCameraRollViewUiStateUpdated() override;
 
+  // phonehub::BrowserTabsModelProvider::Observer:
+  void OnBrowserTabsUpdated(
+      bool is_sync_enabled,
+      const std::vector<phonehub::BrowserTabsModel::BrowserTabMetadata>&
+          browser_tabs_metadata) override;
+
   // Called when the Nearby Share enabled pref changes.
   void OnNearbySharingEnabledChanged();
 
@@ -131,8 +142,8 @@ class MultideviceHandler
   void HandleRemoveHostDevice(const base::Value::List& args);
   void HandleRetryPendingHostSetup(const base::Value::List& args);
   void HandleSetUpAndroidSms(const base::Value::List& args);
-  void HandleGetSmartLockSignInEnabled(const base::Value::List& args);
-  void HandleSetSmartLockSignInEnabled(const base::Value::List& args);
+  // TODO(b/227674947):Now that Sign in with Smart Lock is deprecated, delete
+  // this method.
   void HandleGetSmartLockSignInAllowed(const base::Value::List& args);
   void HandleGetAndroidSmsInfo(const base::Value::List& args);
   void HandleAttemptNotificationSetup(const base::Value::List& args);
@@ -144,12 +155,15 @@ class MultideviceHandler
   void HandleAttemptFeatureSetupConnection(const base::Value::List& args);
   void HandleCancelFeatureSetupConnection(const base::Value::List& args);
   void HandleFinishFeatureSetupConnection(const base::Value::List& args);
+  void HandleShowBrowserSyncSettings(const base::Value::List& args);
 
   void OnSetFeatureStateEnabledResult(const std::string& js_callback_id,
                                       bool success);
 
-  void NotifySmartLockSignInEnabledChanged();
+  // TODO(b/227674947):Now that Sign in with Smart Lock is deprecated, delete
+  // this methods.
   void NotifySmartLockSignInAllowedChanged();
+
   // Generate android sms info dictionary containing the messages for web
   // content settings origin url and messages feature state.
   base::Value::Dict GenerateAndroidSmsInfo();
@@ -160,7 +174,7 @@ class MultideviceHandler
   bool IsAuthTokenValid(const std::string& auth_token);
 
   // Unowned pointer to the preferences service.
-  PrefService* prefs_;
+  raw_ptr<PrefService, ExperimentalAsh> prefs_;
 
   // Registers preference value change listeners.
   PrefChangeRegistrar pref_change_registrar_;
@@ -175,9 +189,10 @@ class MultideviceHandler
   multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap
   GetFeatureStatesMap();
 
-  multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client_;
+  raw_ptr<multidevice_setup::MultiDeviceSetupClient, ExperimentalAsh>
+      multidevice_setup_client_;
 
-  phonehub::MultideviceFeatureAccessManager*
+  raw_ptr<phonehub::MultideviceFeatureAccessManager, ExperimentalAsh>
       multidevice_feature_access_manager_;
   std::unique_ptr<phonehub::NotificationAccessSetupOperation>
       notification_access_operation_;
@@ -186,14 +201,17 @@ class MultideviceHandler
   std::unique_ptr<phonehub::FeatureSetupConnectionOperation>
       feature_setup_connection_operation_;
 
-  multidevice_setup::AndroidSmsPairingStateTracker*
+  raw_ptr<multidevice_setup::AndroidSmsPairingStateTracker, ExperimentalAsh>
       android_sms_pairing_state_tracker_;
-  android_sms::AndroidSmsAppManager* android_sms_app_manager_;
+  raw_ptr<android_sms::AndroidSmsAppManager, ExperimentalAsh>
+      android_sms_app_manager_;
 
-  eche_app::AppsAccessManager* apps_access_manager_;
+  raw_ptr<eche_app::AppsAccessManager, ExperimentalAsh> apps_access_manager_;
   std::unique_ptr<eche_app::AppsAccessSetupOperation> apps_access_operation_;
 
-  phonehub::CameraRollManager* camera_roll_manager_;
+  raw_ptr<phonehub::CameraRollManager, ExperimentalAsh> camera_roll_manager_;
+  raw_ptr<phonehub::BrowserTabsModelProvider, ExperimentalAsh>
+      browser_tabs_model_provider_;
 
   base::ScopedObservation<multidevice_setup::MultiDeviceSetupClient,
                           multidevice_setup::MultiDeviceSetupClient::Observer>
@@ -214,6 +232,9 @@ class MultideviceHandler
   base::ScopedObservation<phonehub::CameraRollManager,
                           phonehub::CameraRollManager::Observer>
       camera_roll_manager_observation_{this};
+  base::ScopedObservation<phonehub::BrowserTabsModelProvider,
+                          phonehub::BrowserTabsModelProvider::Observer>
+      browser_tabs_model_provider_observation_{this};
 
   // Used to cancel callbacks when JavaScript becomes disallowed.
   base::WeakPtrFactory<MultideviceHandler> callback_weak_ptr_factory_{this};

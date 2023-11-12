@@ -198,10 +198,10 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     return true;
   }
 
-  const flat::ResourceType reource_type = ResourceTypeFromRequest(*request);
+  const flat::ResourceType resource_type = ResourceTypeFromRequest(*request);
   const flat::RequestFilterRule* rule =
       rules_index_manager_->rules_index()->FindMatchingBeforeRequestRule(
-          request->request.url, document_origin, reource_type, is_third_party,
+          request->request.url, document_origin, resource_type, is_third_party,
           (activations.in_allow_rules & flat::ActivationType_GENERIC_BLOCK));
 
   if (!rule || rule->options() & flat::OptionFlag_IS_ALLOW_RULE) {
@@ -216,7 +216,7 @@ bool AdBlockRequestFilter::OnBeforeRequest(
 
   if (rule->redirect() && rule->redirect()->size() && resources_) {
     absl::optional<std::string> resource(
-        resources_->GetRedirect(rule->redirect()->c_str(), reource_type));
+        resources_->GetRedirect(rule->redirect()->c_str(), resource_type));
     if (resource) {
       std::move(callback).Run(false, false, GURL(resource.value()));
       return true;

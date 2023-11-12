@@ -32,9 +32,9 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/posix/safe_strerror.h"
 #include "base/process/process_metrics.h"
 #include "base/ranges/algorithm.h"
@@ -48,12 +48,15 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/ash/components/dbus/debug_daemon/fake_debug_daemon_client.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/dbus/upstart/fake_upstart_client.h"
+#include "components/user_manager/fake_user_manager.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -109,7 +112,7 @@ std::string GenerateAbstractAddress() {
   std::string address(kArcVmBootNotificationServerAddressPrefix,
                       sizeof(kArcVmBootNotificationServerAddressPrefix) - 1);
   return address.append("-" +
-                        base::GUID::GenerateRandomV4().AsLowercaseString());
+                        base::Uuid::GenerateRandomV4().AsLowercaseString());
 }
 
 bool HasDiskImage(const vm_tools::concierge::StartArcVmRequest& request,
@@ -381,9 +384,14 @@ class ArcVmClientAdapterTest : public testing::Test,
     app_host_ = std::make_unique<FakeAppHost>(arc_bridge_service()->app());
     app_instance_ = std::make_unique<FakeAppInstance>(app_host_.get());
     arc_dlc_installer_ = std::make_unique<ArcDlcInstaller>();
+
+    auto fake_user_manager = std::make_unique<user_manager::FakeUserManager>();
+    scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
+        std::move(fake_user_manager));
   }
 
   void TearDown() override {
+    scoped_user_manager_.reset();
     arc_dlc_installer_.reset();
     ash::SessionManagerClient::Shutdown();
     adapter_->RemoveObserver(this);
@@ -420,6 +428,10 @@ class ArcVmClientAdapterTest : public testing::Test,
     UpstartOperationType type;
   };
   using UpstartOperations = std::vector<UpstartOperation>;
+
+  void SetAccountId(const AccountId& account_id) {
+    arc_service_manager_.set_account_id(account_id);
+  }
 
   void SetValidUserInfo() { SetUserInfo(kUserIdHash, kSerialNumber); }
 
@@ -676,6 +688,7 @@ class ArcVmClientAdapterTest : public testing::Test,
   std::unique_ptr<FakeAppInstance> app_instance_;
   std::unique_ptr<ArcDlcInstaller> arc_dlc_installer_;
   std::unique_ptr<TestDebugDaemonClient> test_debug_daemon_client_;
+  std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 };
 
 // Tests that SetUserInfo() doesn't crash.
@@ -894,7 +907,7 @@ TEST_F(ArcVmClientAdapterTest, DoesNotGetArcInstanceStoppedOnNestedInstance) {
     }
 
     base::RepeatingCallback<base::RunLoop*()> const run_loop_factory_;
-    Observer* const child_observer_;
+    const raw_ptr<Observer, ExperimentalAsh> child_observer_;
     std::unique_ptr<ArcClientAdapter> nested_adapter_;
     FakeDemoModeDelegate demo_mode_delegate_;
     bool stopped_called_ = false;
@@ -1658,6 +1671,30 @@ TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_OverrideUseLvm) {
   EXPECT_TRUE(req.enable_virtio_blk_data());
 }
 
+TEST_F(ArcVmClientAdapterTest, VirtioBlkForData_NoLvmForEphemeralCryptohome) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(arc::kLvmApplicationContainers);
+
+  // Set the guest account, whose cryptohome data is ephemeral.
+  SetAccountId(user_manager::GuestAccountId());
+
+  GetTestConciergeClient()->set_create_disk_image_response(
+      CreateDiskImageResponse(vm_tools::concierge::DISK_STATUS_CREATED));
+
+  StartParams start_params(GetPopulatedStartParams());
+  start_params.use_virtio_blk_data = true;
+  StartMiniArcWithParams(true, std::move(start_params));
+  EXPECT_GE(GetTestConciergeClient()->start_arc_vm_call_count(), 1);
+
+  EXPECT_EQ(GetTestConciergeClient()->create_disk_image_call_count(), 1);
+
+  // LVM shouldn't be used for ephemeral user even if LvmApplicationContainers
+  // feature is enabled.
+  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
+  EXPECT_TRUE(HasDiskImage(req, kCreatedDiskImagePath));
+  EXPECT_TRUE(req.enable_virtio_blk_data());
+}
+
 // Tests that the binary translation type is set to None when no library is
 // enabled by USE flags.
 TEST_F(ArcVmClientAdapterTest, BintaryTranslationTypeNone) {
@@ -1845,30 +1882,6 @@ TEST_F(ArcVmClientAdapterTest, DisableDownloadProviderEnforced) {
   StartMiniArcWithParams(true, std::move(start_params));
   const auto& request = GetTestConciergeClient()->start_arc_vm_request();
   EXPECT_TRUE(request.mini_instance_request().disable_download_provider());
-}
-
-TEST_F(ArcVmClientAdapterTest, GmsCoreLowMemoryKillerProtection_FlagDisabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(arc::kVmGmsCoreLowMemoryKillerProtection,
-                                    false);
-  StartMiniArc();
-  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_FALSE(req.enable_gmscore_lmk_protection());
-}
-
-TEST_F(ArcVmClientAdapterTest, GmsCoreLowMemoryKillerProtection_FlagEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatureState(arc::kVmGmsCoreLowMemoryKillerProtection,
-                                    true);
-  StartMiniArc();
-  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(req.enable_gmscore_lmk_protection());
-}
-
-TEST_F(ArcVmClientAdapterTest, GmsCoreLowMemoryKillerProtection_Default) {
-  StartMiniArc();
-  const auto& req = GetTestConciergeClient()->start_arc_vm_request();
-  EXPECT_TRUE(req.enable_gmscore_lmk_protection());
 }
 
 TEST_F(ArcVmClientAdapterTest, BroadcastPreANRDefault) {
@@ -2672,6 +2685,53 @@ TEST_F(ArcVmClientAdapterTest, ArcEnableNotificationRefreshTrue) {
   StartMiniArcWithParams(true, std::move(start_params));
   const auto& request = GetTestConciergeClient()->start_arc_vm_request();
   EXPECT_TRUE(request.mini_instance_request().enable_notifications_refresh());
+}
+
+TEST_F(ArcVmClientAdapterTest, ArcPriorityAppLmkDelayDisabled) {
+  StartMiniArc();
+  UpgradeParams upgrade_params = GetPopulatedUpgradeParams();
+  upgrade_params.enable_priority_app_lmk_delay = false;
+  UpgradeArcWithParams(true, std::move(upgrade_params));
+  EXPECT_FALSE(base::Contains(boot_notification_server()->received_data(),
+                              "ro.boot.arc.lmk.enable_priority_app_delay"));
+  EXPECT_FALSE(
+      base::Contains(boot_notification_server()->received_data(),
+                     "ro.boot.arc.lmk.priority_app_delay_duration_sec"));
+  EXPECT_FALSE(base::Contains(boot_notification_server()->received_data(),
+                              "ro.boot.arc.lmk.priority_apps"));
+}
+
+TEST_F(ArcVmClientAdapterTest, ArcPriorityAppLmkDelayEnabled_NoApp) {
+  StartMiniArc();
+  UpgradeParams upgrade_params = GetPopulatedUpgradeParams();
+  upgrade_params.enable_priority_app_lmk_delay = true;
+  upgrade_params.priority_app_lmk_delay_list = "";
+  UpgradeArcWithParams(true, std::move(upgrade_params));
+  EXPECT_FALSE(base::Contains(boot_notification_server()->received_data(),
+                              "ro.boot.arc.lmk.enable_priority_app_delay"));
+  EXPECT_FALSE(
+      base::Contains(boot_notification_server()->received_data(),
+                     "ro.boot.arc.lmk.priority_app_delay_duration_sec"));
+  EXPECT_FALSE(base::Contains(boot_notification_server()->received_data(),
+                              "ro.boot.arc.lmk.priority_apps"));
+}
+
+TEST_F(ArcVmClientAdapterTest, ArcPriorityAppLmkDelayEnabled_SomeApp) {
+  StartMiniArc();
+  UpgradeParams upgrade_params = GetPopulatedUpgradeParams();
+  upgrade_params.enable_priority_app_lmk_delay = true;
+  upgrade_params.priority_app_lmk_delay_list =
+      "com.example.app1,com.example.app2";
+  upgrade_params.priority_app_lmk_delay_second = 60;
+  UpgradeArcWithParams(true, std::move(upgrade_params));
+  EXPECT_TRUE(base::Contains(boot_notification_server()->received_data(),
+                             "ro.boot.arc.lmk.enable_priority_app_delay=1"));
+  EXPECT_TRUE(base::Contains(
+      boot_notification_server()->received_data(),
+      "ro.boot.arc.lmk.priority_apps=com.example.app1,com.example.app2"));
+  EXPECT_TRUE(
+      base::Contains(boot_notification_server()->received_data(),
+                     "ro.boot.arc.lmk.priority_app_delay_duration_sec=60"));
 }
 
 }  // namespace

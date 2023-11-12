@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/escape.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -18,6 +19,8 @@
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ash/crostini/crostini_test_helper.h"
+#include "chrome/browser/ash/crostini/fake_crostini_features.h"
+#include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/file_manager_test_util.h"
 #include "chrome/browser/ash/file_manager/file_tasks.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
@@ -354,31 +357,28 @@ class AppServiceFileTasksTest : public testing::Test {
   base::test::ScopedFeatureList feature_list_;
   content::BrowserTaskEnvironment task_environment_;
   std::unique_ptr<TestingProfile> profile_;
-  apps::AppServiceProxy* app_service_proxy_ = nullptr;
+  raw_ptr<apps::AppServiceProxy, ExperimentalAsh> app_service_proxy_ = nullptr;
   apps::AppServiceTest app_service_test_;
 };
 
 class AppServiceFileTasksTestEnabled : public AppServiceFileTasksTest {
  public:
   AppServiceFileTasksTestEnabled() {
-    feature_list_.InitWithFeatures(
-        {blink::features::kFileHandlingAPI,
-         ash::features::kArcFileTasksUseAppService,
-         ash::features::kGuestOsFileTasksUseAppService},
-        {});
+    feature_list_.InitWithFeatures({blink::features::kFileHandlingAPI,
+                                    ash::features::kArcFileTasksUseAppService},
+                                   {});
   }
 };
 
 class AppServiceFileTasksTestDisabled : public AppServiceFileTasksTest {
  public:
   AppServiceFileTasksTestDisabled() {
-    feature_list_.InitWithFeatures(
-        {}, {ash::features::kArcFileTasksUseAppService,
-             ash::features::kGuestOsFileTasksUseAppService});
+    feature_list_.InitWithFeatures({},
+                                   {ash::features::kArcFileTasksUseAppService});
   }
 };
 
-// ARC apps should not be found when kArcAndGuestOsFileTasksUseAppService is
+// ARC apps should not be found when kArcFileTasksUseAppService is
 // disabled.
 TEST_F(AppServiceFileTasksTestDisabled, FindAppServiceArcApp) {
   std::string text_mime_type = "text/plain";
@@ -393,36 +393,6 @@ TEST_F(AppServiceFileTasksTestDisabled, FindAppServiceArcApp) {
 
   std::vector<FullTaskDescriptor> tasks =
       FindAppServiceTasks({{"foo.txt", text_mime_type}});
-  ASSERT_EQ(0U, tasks.size());
-}
-
-// Crostini apps should not be found when kGuestOsFileTasksUseAppService
-// is disabled.
-TEST_F(AppServiceFileTasksTestDisabled, FindAppServiceCrostiniApp) {
-  std::string text_mime_type = "text/plain";
-  std::string file_name = "foo.txt";
-  std::string text_app_id = "Text app";
-  AddGuestOsAppWithIntentFilter(
-      text_app_id, apps::AppType::kCrostini,
-      CreateMimeTypeFileIntentFilter(apps_util::kIntentActionView,
-                                     text_mime_type));
-
-  std::vector<FullTaskDescriptor> tasks =
-      FindAppServiceTasks({{file_name, text_mime_type}});
-  ASSERT_EQ(0U, tasks.size());
-}
-
-// PluginVm apps should not be found when kGuestOsFileTasksUseAppService
-// is disabled.
-TEST_F(AppServiceFileTasksTestDisabled, FindAppServicePluginVmApp) {
-  std::string file_name = "foo.txt";
-  std::string app_id = "Text app";
-  AddGuestOsAppWithIntentFilter(
-      app_id, apps::AppType::kCrostini,
-      CreateExtensionTypeFileIntentFilter(apps_util::kIntentActionView, "txt"));
-
-  std::vector<FullTaskDescriptor> tasks =
-      FindAppServiceTasks({{file_name, kMimeTypeText}});
   ASSERT_EQ(0U, tasks.size());
 }
 
@@ -690,7 +660,8 @@ TEST_F(AppServiceFileTasksTestEnabled, FindAppServiceExtension) {
 class AppServiceFileHandlersTest : public AppServiceFileTasksTestEnabled {
  public:
   AppServiceFileHandlersTest() {
-    feature_list_.InitAndEnableFeature(extensions_features::kWebFileHandlers);
+    feature_list_.InitAndEnableFeature(
+        extensions_features::kExtensionWebFileHandlers);
   }
 
  private:
@@ -921,6 +892,52 @@ TEST_F(AppServiceFileTasksTestEnabled, NoPluginVmAppsForFileSelection) {
   ASSERT_EQ(0U, tasks.size());
 }
 
+TEST_F(AppServiceFileTasksTestEnabled, CrositiniTasksControlledByPolicy) {
+  std::string tini_task_name = "chrome://file-manager/?import-crostini-image";
+  std::string deb_task_name = "chrome://file-manager/?install-linux-package";
+  std::vector<apps::IntentFilterPtr> filters;
+  filters.push_back(
+      apps_util::MakeFileFilterForView("tini", "tini", "import-tini"));
+  filters[0]->activity_name = tini_task_name;
+  filters.push_back(
+      apps_util::MakeFileFilterForView("deb", "deb", "import-deb"));
+  filters[1]->activity_name = deb_task_name;
+  AddFakeAppWithIntentFilters(file_manager::kFileManagerSwaAppId,
+                              std::move(filters), apps::AppType::kWeb, true,
+                              app_service_proxy_);
+
+  std::string file_name = "test.tini";
+
+  crostini::FakeCrostiniFeatures crostini_features;
+  crostini_features.set_export_import_ui_allowed(true);
+  std::vector<FullTaskDescriptor> tasks = FindAppServiceTasks({{file_name}});
+
+  ASSERT_EQ(1U, tasks.size());
+  EXPECT_EQ(file_manager::kFileManagerSwaAppId,
+            tasks[0].task_descriptor.app_id);
+  EXPECT_EQ(tini_task_name, tasks[0].task_descriptor.action_id);
+
+  crostini_features.set_export_import_ui_allowed(false);
+  tasks = FindAppServiceTasks({{file_name}});
+
+  ASSERT_EQ(0U, tasks.size());
+
+  file_name = "test.deb";
+
+  crostini_features.set_root_access_allowed(true);
+  tasks = FindAppServiceTasks({{file_name}});
+
+  ASSERT_EQ(1U, tasks.size());
+  EXPECT_EQ(file_manager::kFileManagerSwaAppId,
+            tasks[0].task_descriptor.app_id);
+  EXPECT_EQ(deb_task_name, tasks[0].task_descriptor.action_id);
+
+  crostini_features.set_root_access_allowed(false);
+  tasks = FindAppServiceTasks({{file_name}});
+
+  ASSERT_EQ(0U, tasks.size());
+}
+
 // Tests applying policies when listing tasks.
 class AppServiceFileTasksPolicyTest : public AppServiceFileTasksTestEnabled {
  protected:
@@ -939,7 +956,7 @@ class AppServiceFileTasksPolicyTest : public AppServiceFileTasksTestEnabled {
   AppServiceFileTasksPolicyTest()
       : user_manager_(new ash::FakeChromeUserManager()),
         scoped_user_manager_(std::make_unique<user_manager::ScopedUserManager>(
-            base::WrapUnique(user_manager_))) {}
+            base::WrapUnique(user_manager_.get()))) {}
 
   std::unique_ptr<KeyedService> SetDlpRulesManager(
       content::BrowserContext* context) {
@@ -980,9 +997,10 @@ class AppServiceFileTasksPolicyTest : public AppServiceFileTasksTestEnabled {
 
   void TearDown() override { scoped_user_manager_.reset(); }
 
-  policy::MockDlpRulesManager* rules_manager_ = nullptr;
+  raw_ptr<policy::MockDlpRulesManager, ExperimentalAsh> rules_manager_ =
+      nullptr;
   std::unique_ptr<MockFilesController> mock_files_controller_ = nullptr;
-  ash::FakeChromeUserManager* user_manager_;
+  raw_ptr<ash::FakeChromeUserManager, ExperimentalAsh> user_manager_;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 };
 

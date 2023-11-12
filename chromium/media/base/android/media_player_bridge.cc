@@ -11,7 +11,6 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/check_op.h"
-#include "base/cxx17_backports.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
@@ -69,6 +68,7 @@ MediaPlayerBridge::MediaPlayerBridge(
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
     const url::Origin& top_frame_origin,
+    bool has_storage_access,
     const std::string& user_agent,
     bool hide_url_log,
     Client* client,
@@ -81,6 +81,7 @@ MediaPlayerBridge::MediaPlayerBridge(
       url_(url),
       site_for_cookies_(site_for_cookies),
       top_frame_origin_(top_frame_origin),
+      has_storage_access_(has_storage_access),
       pending_retrieve_cookies_(false),
       should_prepare_on_retrieved_cookies_(false),
       user_agent_(user_agent),
@@ -133,7 +134,7 @@ void MediaPlayerBridge::Initialize() {
 
     pending_retrieve_cookies_ = true;
     resource_getter->GetCookies(
-        url_, site_for_cookies_, top_frame_origin_,
+        url_, site_for_cookies_, top_frame_origin_, has_storage_access_,
         base::BindOnce(&MediaPlayerBridge::OnCookiesRetrieved,
                        weak_factory_.GetWeakPtr()));
   }
@@ -419,7 +420,7 @@ void MediaPlayerBridge::Release() {
 }
 
 void MediaPlayerBridge::SetVolume(double volume) {
-  volume_ = base::clamp(volume, 0.0, 1.0);
+  volume_ = std::clamp(volume, 0.0, 1.0);
   UpdateVolumeInternal();
 }
 

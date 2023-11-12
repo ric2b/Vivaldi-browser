@@ -58,6 +58,7 @@
 #include "cc/base/switches.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/browser_context_impl.h"
 #include "content/browser/browser_url_handler_impl.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
@@ -68,6 +69,8 @@
 #include "content/browser/renderer_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/navigation_entry_restore_context_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
+#include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot_cache.h"
+#include "content/browser/renderer_host/navigation_transitions/navigation_entry_screenshot_manager.h"
 #include "content/browser/renderer_host/navigator.h"
 #include "content/browser/renderer_host/render_frame_host_delegate.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -1041,20 +1044,30 @@ int NavigationControllerImpl::GetIndexForOffset(int offset) {
   return GetCurrentEntryIndex() + offset;
 }
 
-bool NavigationControllerImpl::CanGoBack() {
+absl::optional<int> NavigationControllerImpl::GetIndexForGoBack() {
   for (int index = GetIndexForOffset(-1); index >= 0; index--) {
-    if (!GetEntryAtIndex(index)->should_skip_on_back_forward_ui())
-      return true;
+    if (!GetEntryAtIndex(index)->should_skip_on_back_forward_ui()) {
+      return index;
+    }
   }
-  return false;
+  return absl::nullopt;
+}
+
+bool NavigationControllerImpl::CanGoBack() {
+  return GetIndexForGoBack().has_value();
+}
+
+absl::optional<int> NavigationControllerImpl::GetIndexForGoForward() {
+  for (int index = GetIndexForOffset(1); index < GetEntryCount(); index++) {
+    if (!GetEntryAtIndex(index)->should_skip_on_back_forward_ui()) {
+      return index;
+    }
+  }
+  return absl::nullopt;
 }
 
 bool NavigationControllerImpl::CanGoForward() {
-  for (int index = GetIndexForOffset(1); index < GetEntryCount(); index++) {
-    if (!GetEntryAtIndex(index)->should_skip_on_back_forward_ui())
-      return true;
-  }
-  return false;
+  return GetIndexForGoForward().has_value();
 }
 
 bool NavigationControllerImpl::CanGoToOffset(int offset) {
@@ -1081,39 +1094,34 @@ bool NavigationControllerImpl::CanGoToOffsetWithSkipping(int offset) {
 #endif
 
 void NavigationControllerImpl::GoBack() {
-  int target_index = GetIndexForOffset(-1);
+  const absl::optional<int> target_index = GetIndexForGoBack();
 
-  // Move the target index past the skippable entries.
-  bool all_skippable_entries = true;
-  while (target_index >= 0) {
-    if (!GetEntryAtIndex(target_index)->should_skip_on_back_forward_ui()) {
-      all_skippable_entries = false;
-      break;
-    }
-    target_index--;
+  // TODO(mcnee): `GoBack` has been permissive about being called when it's not
+  // possible to go back. Fix any callers that do this. If there are no issues,
+  // change this to `DCHECK(CanGoBack())`.
+  if (!target_index.has_value()) {
+    base::debug::DumpWithoutCrashing();
+    return;
   }
 
-  // Do nothing if all entries are skippable. Normally this path would not
-  // happen as consumers would have already checked it in CanGoBack but a lot of
-  // tests do not do that.
-  if (all_skippable_entries)
-    return;
-
-  GoToIndex(target_index);
+  GoToIndex(*target_index);
 }
 
 void NavigationControllerImpl::GoForward() {
-  int target_index = GetIndexForOffset(1);
-
   // Note that at least one entry (the last one) will be non-skippable since
   // entries are marked skippable only when they add another entry because of
   // redirect or pushState.
-  while (target_index < static_cast<int>(entries_.size())) {
-    if (!GetEntryAtIndex(target_index)->should_skip_on_back_forward_ui())
-      break;
-    target_index++;
+  const absl::optional<int> target_index = GetIndexForGoForward();
+
+  // TODO(mcnee): `GoForward` has been permissive about being called when it's
+  // not possible to go forward. Fix any callers that do this. If there are no
+  // issues, change this to `DCHECK(CanGoForward())`.
+  if (!target_index.has_value()) {
+    base::debug::DumpWithoutCrashing();
+    return;
   }
-  GoToIndex(target_index);
+
+  GoToIndex(*target_index);
 }
 
 void NavigationControllerImpl::GoToIndex(int index) {
@@ -1879,7 +1887,6 @@ void NavigationControllerImpl::CreateInitialEntry() {
                            : ui::PAGE_TRANSITION_LINK;
   params->referrer = blink::mojom::Referrer::New();
 
-  // Create and insert the initial NavigationEntry.
   auto new_entry = std::make_unique<NavigationEntryImpl>(
       rfh->GetSiteInstance(), params->url, Referrer(*params->referrer),
       rfh->GetLastCommittedOrigin(), rfh->GetInheritedBaseUrl(),
@@ -1907,8 +1914,10 @@ void NavigationControllerImpl::RendererDidNavigateToNewEntry(
   std::unique_ptr<NavigationEntryImpl> new_entry;
   const absl::optional<url::Origin>& initiator_origin =
       request->common_params().initiator_origin;
-  const absl::optional<GURL>& initiator_base_url =
-      request->common_params().initiator_base_url;
+  absl::optional<GURL> initiator_base_url;
+  if (params.url.IsAboutBlank() || params.url.IsAboutSrcdoc()) {
+    initiator_base_url = request->common_params().initiator_base_url;
+  }
 
   // First check if this is an in-page navigation.  If so, clone the current
   // entry instead of looking at the pending entry, because the pending entry
@@ -2230,8 +2239,10 @@ void NavigationControllerImpl::RendererDidNavigateNewSubframe(
   // CloneAndReplace() call below, if a spot can't be found for it in the tree.
   const absl::optional<url::Origin>& initiator_origin =
       request->common_params().initiator_origin;
-  const absl::optional<GURL>& initiator_base_url =
-      request->common_params().initiator_base_url;
+  absl::optional<GURL> initiator_base_url;
+  if (params.url.IsAboutBlank() || params.url.IsAboutSrcdoc()) {
+    initiator_base_url = request->common_params().initiator_base_url;
+  }
   std::unique_ptr<PolicyContainerPolicies> policy_container_policies =
       ComputePolicyContainerPoliciesForFrameEntry(rfh, is_same_document,
                                                   request->GetURL());
@@ -2523,6 +2534,20 @@ BackForwardCacheImpl& NavigationControllerImpl::GetBackForwardCache() {
   return back_forward_cache_;
 }
 
+NavigationEntryScreenshotCache*
+NavigationControllerImpl::GetNavigationEntryScreenshotCache() {
+  CHECK_EQ(frame_tree_->type(), FrameTree::Type::kPrimary);
+  if (!nav_entry_screenshot_cache_ && AreBackForwardTransitionsEnabled()) {
+    nav_entry_screenshot_cache_ =
+        std::make_unique<NavigationEntryScreenshotCache>(
+            BrowserContextImpl::From(browser_context_)
+                ->GetNavigationEntryScreenshotManager()
+                ->GetSafeRef(),
+            this);
+  }
+  return nav_entry_screenshot_cache_.get();
+}
+
 void NavigationControllerImpl::DiscardPendingEntry(bool was_failure) {
   // It is not safe to call DiscardPendingEntry while NavigateToEntry is in
   // progress, since this will cause a use-after-free.  (We only allow this
@@ -2696,7 +2721,9 @@ void NavigationControllerImpl::NavigateFromFrameProxy(
     base::TimeTicks navigation_start_time,
     bool is_embedder_initiated_fenced_frame_navigation,
     bool is_unfenced_top_navigation,
-    bool force_new_browsing_instance) {
+    bool force_new_browsing_instance,
+    bool is_container_initiated,
+    absl::optional<std::u16string> embedder_shared_storage_context) {
   if (is_renderer_initiated)
     DCHECK(initiator_origin.has_value());
 
@@ -2821,7 +2848,8 @@ void NavigationControllerImpl::NavigateFromFrameProxy(
           false /* has_user_gesture */, std::move(source_location),
           ReloadType::NONE, entry.get(), frame_entry.get(),
           navigation_start_time, is_embedder_initiated_fenced_frame_navigation,
-          is_unfenced_top_navigation);
+          is_unfenced_top_navigation, is_container_initiated,
+          embedder_shared_storage_context);
 
   if (!request)
     return;
@@ -3181,7 +3209,7 @@ void NavigationControllerImpl::NavigateToExistingPendingEntry(
 
   // BackForwardCache:
   // Navigate immediately if the document is in the BackForwardCache.
-  if (back_forward_cache_.GetEntry(nav_entry_id)) {
+  if (back_forward_cache_.GetOrEvictEntry(nav_entry_id).has_value()) {
     TRACE_EVENT0("navigation", "BackForwardCache_CreateNavigationRequest");
     DCHECK_EQ(reload_type, ReloadType::NONE);
     auto navigation_request = CreateNavigationRequestFromEntry(
@@ -3652,12 +3680,7 @@ void NavigationControllerImpl::HandleRendererDebugURL(
   // the renderer process is done handling the URL.
   // TODO(crbug.com/1254130): Remove the test dependency on this behavior.
   if (!url.SchemeIs(url::kJavaScriptScheme)) {
-    bool was_loading = frame_tree_node->frame_tree()
-                           .LoadingTree()
-                           ->IsLoadingIncludingInnerFrameTrees();
     frame_tree_node->current_frame_host()->SetIsLoadingForRendererDebugURL();
-    frame_tree_node->DidStartLoading(true /* should_show_loading_ui */,
-                                     was_loading);
   }
   frame_tree_node->current_frame_host()->HandleRendererDebugURL(url);
 }
@@ -3764,7 +3787,9 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
     FrameNavigationEntry* frame_entry,
     base::TimeTicks navigation_start_time,
     bool is_embedder_initiated_fenced_frame_navigation,
-    bool is_unfenced_top_navigation) {
+    bool is_unfenced_top_navigation,
+    bool is_container_initiated,
+    absl::optional<std::u16string> embedder_shared_storage_context) {
   DCHECK_EQ(-1, GetIndexOfEntry(entry));
   DCHECK(frame_entry);
   // All renderer-initiated navigations must have an initiator_origin.
@@ -3859,8 +3884,7 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
           network::mojom::CSPDisposition::CHECK, std::vector<int>(),
           params.href_translate,
           false /* is_history_navigation_in_new_child_frame */,
-          params.input_start, network::mojom::RequestDestination::kEmpty,
-          /*has_storage_access=*/false);
+          params.input_start, network::mojom::RequestDestination::kEmpty);
 
   blink::mojom::CommitNavigationParamsPtr commit_params =
       blink::mojom::CommitNavigationParams::New(
@@ -3912,7 +3936,8 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
           /*modified_runtime_features=*/
           base::flat_map<::blink::mojom::RuntimeFeatureState, bool>(),
           /*fenced_frame_properties=*/absl::nullopt,
-          /*not_restored_reasons=*/nullptr);
+          /*not_restored_reasons=*/nullptr,
+          /*load_with_storage_access=*/false);
 #if BUILDFLAG(IS_ANDROID)
   if (ValidateDataURLAsString(params.data_url_as_string)) {
     commit_params->data_url_as_string = params.data_url_as_string->data();
@@ -3935,7 +3960,8 @@ NavigationControllerImpl::CreateNavigationRequestFromLoadParams(
       params.is_form_submission,
       params.navigation_ui_data ? params.navigation_ui_data->Clone() : nullptr,
       params.impression, params.initiator_activation_and_ad_status,
-      params.is_pdf, is_embedder_initiated_fenced_frame_navigation);
+      params.is_pdf, is_embedder_initiated_fenced_frame_navigation,
+      is_container_initiated, embedder_shared_storage_context);
   navigation_request->set_from_download_cross_origin_redirect(
       params.from_download_cross_origin_redirect);
   navigation_request->set_force_new_browsing_instance(
@@ -4619,8 +4645,6 @@ NavigationControllerImpl::ShouldNavigateToEntryForNavigationApiKey(
     FrameNavigationEntry* target_entry,
     const std::string& navigation_api_key) {
   if (!target_entry || !target_entry->committed_origin())
-    return HistoryNavigationAction::kStopLooking;
-  if (current_entry->site_instance() != target_entry->site_instance())
     return HistoryNavigationAction::kStopLooking;
   if (!current_entry->committed_origin()->IsSameOriginWith(
           *target_entry->committed_origin())) {

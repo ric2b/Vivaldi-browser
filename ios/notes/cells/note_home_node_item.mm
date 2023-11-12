@@ -4,10 +4,10 @@
 
 #import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
-#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
 #import "ios/notes/cells/note_folder_item.h"
 #import "ios/notes/cells/table_view_note_cell.h"
+#import "ios/notes/note_ui_constants.h"
 #import "ios/notes/note_utils_ios.h"
 #import "notes/note_node.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -44,7 +44,7 @@ using l10n_util::GetNSString;
     noteCell.folderTitleTextField.text =
         note_utils_ios::TitleForNoteNode(_noteNode);
     noteCell.folderImageView.image =
-        [UIImage imageNamed:vBookmarksFolderIcon];
+        [UIImage imageNamed:vNotesFolderIcon];
     noteCell.noteAccessoryType =
         TableViewNoteFolderAccessoryTypeDisclosureIndicator;
     noteCell.accessibilityIdentifier =

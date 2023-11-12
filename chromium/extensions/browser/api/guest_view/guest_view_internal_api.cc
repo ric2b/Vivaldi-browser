@@ -41,7 +41,7 @@ ExtensionFunction::ResponseAction GuestViewInternalCreateGuestFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(args()[1].is_dict());
 
   const std::string& view_type = args()[0].GetString();
-  base::Value& create_params = mutable_args()[1];
+  base::Value::Dict& create_params = mutable_args()[1].GetDict();
 
   // Since we are creating a new guest, we will create a GuestViewManager
   // if we don't already have one.
@@ -63,14 +63,14 @@ ExtensionFunction::ResponseAction GuestViewInternalCreateGuestFunction::Run() {
 
   // Add flag to |create_params| to indicate that the element size is specified
   // in logical units.
-  create_params.SetBoolKey(guest_view::kElementSizeIsLogical, true);
+  create_params.Set(guest_view::kElementSizeIsLogical, true);
 
   if (GetExternalWebContents(create_params)) {
     return AlreadyResponded();
   }
 
-  guest_view_manager->CreateGuest(view_type, sender_web_contents,
-                                  create_params.GetDict(), std::move(callback));
+  guest_view_manager->CreateGuest(view_type, sender_web_contents, create_params,
+                                  std::move(callback));
   return did_respond() ? AlreadyResponded() : RespondLater();
 }
 
@@ -89,9 +89,9 @@ GuestViewInternalSetSizeFunction::GuestViewInternalSetSizeFunction() = default;
 GuestViewInternalSetSizeFunction::~GuestViewInternalSetSizeFunction() = default;
 
 ExtensionFunction::ResponseAction GuestViewInternalSetSizeFunction::Run() {
-  std::unique_ptr<guest_view_internal::SetSize::Params> params(
-      guest_view_internal::SetSize::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<guest_view_internal::SetSize::Params> params =
+      guest_view_internal::SetSize::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
   GuestViewBase* guest =
       GuestViewBase::FromInstanceID(source_process_id(), params->instance_id);
   if (!guest)

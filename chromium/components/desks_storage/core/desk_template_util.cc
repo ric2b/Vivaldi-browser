@@ -12,18 +12,21 @@ namespace desk_template_util {
 
 ash::DeskTemplate* FindOtherEntryWithName(
     const std::u16string& name,
-    const base::GUID& uuid,
-    const base::flat_map<base::GUID, std::unique_ptr<ash::DeskTemplate>>&
+    const base::Uuid& uuid,
+    const base::flat_map<base::Uuid, std::unique_ptr<ash::DeskTemplate>>&
         entries) {
   auto iter = base::ranges::find_if(
       entries,
-      [name, uuid](const std::pair<base::GUID,
+      [name, uuid](const std::pair<base::Uuid,
                                    std::unique_ptr<ash::DeskTemplate>>& entry) {
         // Name duplication is allowed if one of the templates is an admin
-        // template.
-        return (entry.second->uuid() != uuid &&
-                entry.second->template_name() == name &&
-                entry.second->source() != ash::DeskTemplateSource::kPolicy);
+        // template or if it's a floating workspace template.
+        return (
+            entry.second->uuid() != uuid &&
+            entry.second->template_name() == name &&
+            entry.second->source() != ash::DeskTemplateSource::kPolicy &&
+            (entry.second->type() == ash::DeskTemplateType::kTemplate ||
+             entry.second->type() == ash::DeskTemplateType::kSaveAndRecall));
       });
   if (iter == entries.end()) {
     return nullptr;

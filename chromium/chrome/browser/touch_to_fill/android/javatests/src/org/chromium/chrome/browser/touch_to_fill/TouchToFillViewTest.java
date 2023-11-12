@@ -4,11 +4,14 @@
 
 package org.chromium.chrome.browser.touch_to_fill;
 
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
+
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -84,7 +87,8 @@ public class TouchToFillViewTest {
             new Credential("", "***", "No Username", "m.example.xyz", true, false, 0);
     private static final Credential BOB =
             new Credential("Bob", "***", "Bob", "mobile.example.xyz", true, false, 0);
-    private static final WebAuthnCredential CAM = new WebAuthnCredential("Cam", "12345");
+    private static final WebAuthnCredential CAM =
+            new WebAuthnCredential("example.net", new byte[] {1}, new byte[] {2}, "Cam");
     private static final Credential NIK =
             new Credential("Nik", "***", "Nik", "group.xyz", false, true, 0);
     private final AtomicBoolean mManageButtonClicked = new AtomicBoolean(false);
@@ -97,6 +101,7 @@ public class TouchToFillViewTest {
     private PropertyModel mModel;
     private TouchToFillView mTouchToFillView;
     private BottomSheetController mBottomSheetController;
+    private BottomSheetTestSupport mSheetTestSupport;
     TouchToFillResourceProvider mResourceProvider;
 
     @Rule
@@ -110,6 +115,7 @@ public class TouchToFillViewTest {
                                          .getRootUiCoordinatorForTesting()
                                          .getBottomSheetController();
         mResourceProvider = new TouchToFillResourceProviderImpl();
+        mSheetTestSupport = new BottomSheetTestSupport(mBottomSheetController);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mModel = TouchToFillProperties.createDefaultModel(mDismissHandler);
             mTouchToFillView = new TouchToFillView(getActivity(), mBottomSheetController);
@@ -404,12 +410,10 @@ public class TouchToFillViewTest {
             mModel.set(VISIBLE, true);
         });
         BottomSheetTestSupport.waitForOpen(mBottomSheetController);
-        BottomSheetTestSupport sheetSupport = new BottomSheetTestSupport(
-                getActivity().getRootUiCoordinatorForTesting().getBottomSheetController());
 
         // Swipe the sheet up to it's full state.
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> { sheetSupport.setSheetState(SheetState.FULL, false); });
+                () -> mSheetTestSupport.setSheetState(SheetState.FULL, false));
 
         TextView manageButton = mTouchToFillView.getContentView().findViewById(
                 R.id.touch_to_fill_sheet_manage_passwords);
@@ -507,6 +511,30 @@ public class TouchToFillViewTest {
         pollUiThread(() -> getBottomSheetState() == BottomSheetController.SheetState.HALF);
     }
 
+    @Test
+    @MediumTest
+    public void testSheetScrollabilityDependsOnState() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mModel.get(SHEET_ITEMS).add(buildCredentialItem(ANA));
+            mModel.set(VISIBLE, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        // The sheet should be expanded to half height and suppress scrolling.
+        RecyclerView recyclerView = mTouchToFillView.getSheetItemListView();
+        assertTrue(recyclerView.isLayoutSuppressed());
+
+        // Expand the sheet to the full height and scrolling .
+        TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> mSheetTestSupport.setSheetState(
+                                BottomSheetController.SheetState.FULL, false));
+        BottomSheetTestSupport.waitForState(
+                mBottomSheetController, BottomSheetController.SheetState.FULL);
+
+        assertFalse(recyclerView.isLayoutSuppressed());
+    }
+
     private ChromeActivity getActivity() {
         return mActivityTestRule.getActivity();
     }
@@ -516,8 +544,7 @@ public class TouchToFillViewTest {
     }
 
     private RecyclerView getCredentials() {
-        return mTouchToFillView.getContentView().findViewById(
-                org.chromium.chrome.browser.touch_to_fill.common.R.id.sheet_item_list);
+        return mTouchToFillView.getContentView().findViewById(R.id.sheet_item_list);
     }
 
     private TextView getCredentialNameAt(int index) {
@@ -573,8 +600,7 @@ public class TouchToFillViewTest {
                 new PropertyModel.Builder(FooterProperties.ALL_KEYS)
                         .with(MANAGE_BUTTON_TEXT,
                                 mActivityTestRule.getActivity().getString(
-                                        org.chromium.chrome.browser.touch_to_fill.R.string
-                                                .manage_passwords_and_passkeys))
+                                        R.string.manage_passwords_and_passkeys))
                         .with(ON_CLICK_MANAGE, () -> mManageButtonClicked.set(true))
                         .build());
     }

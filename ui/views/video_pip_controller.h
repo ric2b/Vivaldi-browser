@@ -67,7 +67,7 @@ class VideoPIPController
   absl::optional<media_session::MediaPosition> position_;
   mojo::Receiver<media_session::mojom::MediaControllerObserver>
       media_controller_observer_receiver_{this};
-  Delegate* delegate_ = nullptr;
+  raw_ptr<Delegate> delegate_ = nullptr;
 
   // Used to check which actions are currently supported.
   base::flat_set<media_session::mojom::MediaSessionAction> actions_;

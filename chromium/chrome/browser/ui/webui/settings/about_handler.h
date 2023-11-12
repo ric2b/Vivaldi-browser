@@ -185,6 +185,9 @@ class AboutHandler : public settings::SettingsPageUIHandler,
   void OnGetEndOfLifeInfo(std::string callback_id,
                           ash::UpdateEngineClient::EolInfo eol_info);
 
+  // Opens the end of life incentive URL.
+  void HandleOpenEndOfLifeIncentive(const base::Value::List& args);
+
   // Get the managed auto update cros setting.
   void HandleIsManagedAutoUpdateEnabled(const base::Value::List& args);
 
@@ -197,6 +200,10 @@ class AboutHandler : public settings::SettingsPageUIHandler,
                                      absl::optional<bool> enabled);
 
   void HandleSetConsumerAutoUpdate(const base::Value::List& args);
+  void HandleOpenProductLicenseOther(const base::Value::List& args);
+
+  // Whether the end of life incentive includes an offer.
+  bool eol_incentive_shows_offer_ = false;
 #endif
 
   const raw_ptr<Profile> profile_;

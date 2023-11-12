@@ -162,8 +162,8 @@ class VivaldiAccountManager : public KeyedService,
   void ClearTokens();
   void Reset();
 
-  PrefService* prefs_;
-  PrefService* local_state_;
+  const raw_ptr<PrefService> prefs_;
+  const raw_ptr<PrefService> local_state_;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 
   base::ObserverList<Observer> observers_;

@@ -9,7 +9,7 @@
 #include "base/functional/bind.h"
 #include "base/observer_list.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/browser/api/declarative/rules_registry.h"
@@ -252,9 +252,8 @@ void RulesCacheDelegate::SetDeclarativeRulesStored(
   DCHECK_EQ(Type::kPersistent, type_);
 
   ExtensionPrefs* extension_prefs = ExtensionPrefs::Get(browser_context_);
-  extension_prefs->UpdateExtensionPref(
-      extension_id, rules_stored_key_,
-      std::make_unique<base::Value>(rules_stored));
+  extension_prefs->UpdateExtensionPref(extension_id, rules_stored_key_,
+                                       base::Value(rules_stored));
 }
 
 }  // namespace extensions

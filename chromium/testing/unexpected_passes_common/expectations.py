@@ -309,6 +309,7 @@ class Expectations(object):
     output_contents = ''
     removed_urls = set()
     removed_lines = set()
+    num_removed_lines = 0
     for line_number, line in enumerate(input_contents.splitlines(True)):
       # Auto-add any comments or empty lines
       stripped_line = line.strip()
@@ -354,7 +355,8 @@ class Expectations(object):
           # the content we're outputting rather than relative to the input
           # content. This also has the effect of automatically compressing
           # contiguous blocks of removal into a single line number.
-          removed_lines.add(line_number - len(removed_lines))
+          removed_lines.add(line_number - num_removed_lines)
+          num_removed_lines += 1
       else:
         output_contents += line
 
@@ -992,6 +994,16 @@ def _RemoveStaleComments(content: str, removed_lines: Set[int],
           break
         if any(annotation in stripped_line
                for annotation in ALL_FINDER_START_ANNOTATION_BASES):
+          # If we've already found a starting annotation, skip past this line.
+          # This is to handle the case of nested annotations, e.g. a
+          # disable-narrowing block inside of a group block. We'll find the
+          # inner-most block here and remove it. Any outer blocks will be
+          # removed as part of the lingering stale annotation removal later on.
+          # If we don't skip past these outer annotations, then we get left with
+          # orphaned trailing annotations.
+          if found_starting_annotation:
+            comment_line_number -= 1
+            continue
           found_starting_annotation = True
           # If we found a starting annotation but not a trailing annotation, we
           # shouldn't remove the starting one, as that would cause the trailing

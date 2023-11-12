@@ -130,11 +130,10 @@ bool CSSPrimitiveValue::IsCalculatedPercentageWithLength() const {
 }
 
 bool CSSPrimitiveValue::IsResolution() const {
-  // TODO(crbug.com/983613): Either support math functions on resolutions; or
-  // provide a justification for not supporting it, and move this function to
-  // |CSSNumericLiteralValue|.
-  return IsNumericLiteralValue() &&
-         To<CSSNumericLiteralValue>(this)->IsResolution();
+  return (IsNumericLiteralValue() &&
+          To<CSSNumericLiteralValue>(this)->IsResolution()) ||
+         (IsMathFunctionValue() &&
+          To<CSSMathFunctionValue>(this)->IsResolution());
 }
 
 bool CSSPrimitiveValue::IsFlex() const {
@@ -232,21 +231,14 @@ CSSPrimitiveValue* CSSPrimitiveValue::CreateFromLength(const Length& length,
                                             UnitType::kPixels);
     case Length::kCalculated: {
       const CalculationValue& calc = length.GetCalculationValue();
-      if (calc.IsExpression() || (calc.Pixels() && calc.Percent())) {
+      if (calc.IsExpression() || calc.Pixels()) {
         return CSSMathFunctionValue::Create(length, zoom);
       }
-      if (!calc.Pixels()) {
-        double num = calc.Percent();
-        if (num < 0 && calc.IsNonNegative()) {
-          num = 0;
-        }
-        return CSSNumericLiteralValue::Create(num, UnitType::kPercentage);
-      }
-      double num = calc.Pixels() / zoom;
+      double num = calc.Percent();
       if (num < 0 && calc.IsNonNegative()) {
         num = 0;
       }
-      return CSSNumericLiteralValue::Create(num, UnitType::kPixels);
+      return CSSNumericLiteralValue::Create(num, UnitType::kPercentage);
     }
     default:
       break;
@@ -272,9 +264,12 @@ double CSSPrimitiveValue::ComputeDegrees() const {
 }
 
 double CSSPrimitiveValue::ComputeDotsPerPixel() const {
-  // TODO(crbug.com/983613): Either support math functions on resolutions; or
-  // provide a justification for not supporting it.
-  DCHECK(IsNumericLiteralValue());
+  DCHECK(IsResolution());
+
+  if (IsCalculated()) {
+    return To<CSSMathFunctionValue>(this)->ComputeDotsPerPixel();
+  }
+
   return To<CSSNumericLiteralValue>(this)->ComputeDotsPerPixel();
 }
 
@@ -518,6 +513,12 @@ CSSPrimitiveValue::UnitType CSSPrimitiveValue::CanonicalUnitTypeForCategory(
     default:
       return UnitType::kUnknown;
   }
+}
+
+// static
+CSSPrimitiveValue::UnitType CSSPrimitiveValue::CanonicalUnit(
+    CSSPrimitiveValue::UnitType unit_type) {
+  return CanonicalUnitTypeForCategory(UnitTypeToUnitCategory(unit_type));
 }
 
 bool CSSPrimitiveValue::UnitTypeToLengthUnitType(UnitType unit_type,

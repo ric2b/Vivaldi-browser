@@ -79,7 +79,7 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
  private:
   friend class BrowserContextKeyedAPIFactory<ImportDataAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "ImportDataAPI"; }
@@ -88,7 +88,7 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
 
   // If non-null it means importing is in progress. ImporterHost takes care
   // of deleting itself when import is complete.
-  ExternalProcessImporterHost* importer_host_;
+  raw_ptr<ExternalProcessImporterHost> importer_host_ = nullptr;
 
   // Keeps count of successful imported items. If not 0 when import ends, one
   // import failed.  Lousy error checking in Chromium forces this.
@@ -110,7 +110,7 @@ class ImportDataGetProfilesFunction : public ExtensionFunction {
 
   void Finished();
 
-  ImporterList* api_importer_list_ = nullptr;
+  raw_ptr<ImporterList> api_importer_list_ = nullptr;
 };
 
 class ImportDataStartImportFunction : public ExtensionFunction {

@@ -13,7 +13,9 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/test_autofill_manager_injector.h"
 #include "components/autofill/core/common/autofill_clock.h"
@@ -67,6 +69,14 @@ void OfferNotificationBubbleViewsTestBase::SetUpOnMainThread() {
   // Wait for Personal Data Manager to be fully loaded to prevent that
   // spurious notifications deceive the tests.
   WaitForPersonalDataManagerToBeLoaded(browser()->profile());
+}
+
+void OfferNotificationBubbleViewsTestBase::TearDownOnMainThread() {
+  // Null explicitly to avoid dangling pointers.
+  coupon_service_ = nullptr;
+  personal_data_ = nullptr;
+
+  InProcessBrowserTest::TearDownOnMainThread();
 }
 
 void OfferNotificationBubbleViewsTestBase::OnBubbleShown() {
@@ -156,8 +166,7 @@ void OfferNotificationBubbleViewsTestBase::SetUpOfferDataWithDomains(
       SetUpGPayPromoCodeOfferDataWithDomains(domains);
       break;
     case AutofillOfferData::OfferType::UNKNOWN:
-      NOTREACHED();
-      break;
+      NOTREACHED_NORETURN();
   }
 }
 
@@ -293,10 +302,8 @@ OfferNotificationBubbleViewsTestBase::GetDefaultTestDetailsUrlString() const {
 }
 
 AutofillOfferManager* OfferNotificationBubbleViewsTestBase::GetOfferManager() {
-  return ContentAutofillDriver::GetForRenderFrameHost(
-             GetActiveWebContents()->GetPrimaryMainFrame())
-      ->autofill_manager()
-      ->GetOfferManager();
+  return ContentAutofillClient::FromWebContents(GetActiveWebContents())
+      ->GetAutofillOfferManager();
 }
 
 }  // namespace autofill

@@ -88,10 +88,10 @@ class VIEWS_EXPORT FocusRing : public View, public ViewObserver {
   void SetHaloThickness(float halo_thickness);
   void SetHaloInset(float halo_inset);
 
-  // If set we do not draw an inner stroke using the color of the
-  // host's parent's background color. This may result in insufficient contrast
-  // between the focus ring and the host view.
-  void SetInnerStrokeDisabled() { inner_stroke_enabled_ = false; }
+  // Explicitly disable using style of focus ring that is drawn with a 2dp gap
+  // between the focus ring and component.
+  void SetOutsetFocusRingDisabled(bool disable);
+  bool GetOutsetFocusRingDisabled() const;
 
   bool ShouldPaintForTesting();
 
@@ -100,7 +100,6 @@ class VIEWS_EXPORT FocusRing : public View, public ViewObserver {
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
   void OnPaint(gfx::Canvas* canvas) override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void OnThemeChanged() override;
 
   // ViewObserver:
@@ -110,15 +109,18 @@ class VIEWS_EXPORT FocusRing : public View, public ViewObserver {
  private:
   FocusRing();
 
+  // Outset the input bounds if conditions are met.
+  void AdjustBounds(SkRect& rect) const;
+  void AdjustBounds(SkRRect& rect) const;
+
   SkPath GetPath() const;
   SkRRect GetRingRoundRect() const;
 
   void RefreshLayer();
 
-  // Returns whether we should draw the focus ring as two strokes. An outer
-  // stroke of the focus ring color and an inner stroke with the host's
-  // background color.
-  bool ShouldDrawInnerStroke() const;
+  // Returns whether we should outset by `kFocusRingOutset` dp before drawing
+  // the focus ring.
+  bool ShouldSetOutsetFocusRing() const;
 
   bool ShouldPaint();
 
@@ -133,7 +135,7 @@ class VIEWS_EXPORT FocusRing : public View, public ViewObserver {
   // The path generator used to draw this focus ring.
   std::unique_ptr<HighlightPathGenerator> path_generator_;
 
-  bool inner_stroke_enabled_ = true;
+  bool outset_focus_ring_disabled_ = false;
 
   // Whether the enclosed View is in an invalid state, which controls whether
   // the focus ring shows an invalid appearance (usually a different color).

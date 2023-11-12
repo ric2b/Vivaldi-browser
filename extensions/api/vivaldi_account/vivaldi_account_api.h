@@ -46,7 +46,7 @@ class VivaldiAccountEventRouter
   void OnAccountPasswordStateChanged() override;
 
  private:
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 };
 
 class VivaldiAccountAPI : public BrowserContextKeyedAPI,
@@ -67,7 +67,7 @@ class VivaldiAccountAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiAccountAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "VivaldiAccountAPI"; }
@@ -139,7 +139,7 @@ class VivaldiAccountGetPendingRegistrationFunction : public ExtensionFunction {
  private:
   ~VivaldiAccountGetPendingRegistrationFunction() override = default;
   void OnDecryptDone(
-      std::unique_ptr<vivaldi::vivaldi_account::PendingRegistration>
+      absl::optional<vivaldi::vivaldi_account::PendingRegistration>
           pending_registration,
       bool result);
   // ExtensionFunction:

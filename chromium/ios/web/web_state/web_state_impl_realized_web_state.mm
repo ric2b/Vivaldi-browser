@@ -15,6 +15,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/time/time.h"
 #import "ios/web/common/features.h"
+#import "ios/web/js_messaging/java_script_feature_manager.h"
 #import "ios/web/js_messaging/web_frames_manager_impl.h"
 #import "ios/web/js_messaging/web_view_js_utils.h"
 #import "ios/web/navigation/crw_error_page_helper.h"
@@ -25,7 +26,6 @@
 #import "ios/web/navigation/wk_navigation_util.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/favicon/favicon_url.h"
-#import "ios/web/public/js_messaging/content_world.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/web_state_policy_decider.h"
@@ -54,11 +54,17 @@ namespace web {
 
 #pragma mark - WebStateImpl::RealizedWebState public methods
 
-WebStateImpl::RealizedWebState::RealizedWebState(WebStateImpl* owner)
+WebStateImpl::RealizedWebState::RealizedWebState(WebStateImpl* owner,
+                                                 NSString* stable_identifier,
+                                                 SessionID unique_identifier)
     : owner_(owner),
       interface_binder_(owner),
-      user_agent_type_(UserAgentType::AUTOMATIC) {
+      user_agent_type_(UserAgentType::AUTOMATIC),
+      stable_identifier_([stable_identifier copy]),
+      unique_identifier_(unique_identifier) {
   DCHECK(owner_);
+  DCHECK(stable_identifier_.length);
+  DCHECK(unique_identifier_.is_valid());
 }
 
 WebStateImpl::RealizedWebState::~RealizedWebState() = default;
@@ -73,6 +79,8 @@ void WebStateImpl::RealizedWebState::Init(const CreateParams& params,
   navigation_manager_->SetDelegate(this);
   navigation_manager_->SetBrowserState(params.browser_state);
   web_controller_ = [[CRWWebController alloc] initWithWebState:owner_];
+
+  owner_->GetPageWorldWebFramesManager()->AddObserver(this);
 
   // Restore session history last because NavigationManagerImpl relies on
   // CRWWebController to restore history into the web view.
@@ -94,10 +102,6 @@ void WebStateImpl::RealizedWebState::Init(const CreateParams& params,
     certificate_policy_cache_->UpdateCertificatePolicyCache(
         web::BrowserState::GetCertificatePolicyCache(params.browser_state));
 
-    // Load the stable identifier. Must not be empty or nil.
-    DCHECK(session_storage.stableIdentifier.length);
-    stable_identifier_ = [session_storage.stableIdentifier copy];
-
     // Restore the last active time, even if it is null, as that would mean
     // the session predates M-99 (when the last active time started to be
     // saved in CRWSessionStorage) and thus the WebState can be considered
@@ -114,9 +118,6 @@ void WebStateImpl::RealizedWebState::Init(const CreateParams& params,
         std::make_unique<SessionCertificatePolicyCacheImpl>(
             params.browser_state);
 
-    // Generate a random stable identifier. Ensure it is immutable.
-    stable_identifier_ = [[[NSUUID UUID] UUIDString] copy];
-
     creation_time_ = base::Time::Now();
   }
 
@@ -127,6 +128,7 @@ void WebStateImpl::RealizedWebState::Init(const CreateParams& params,
 
 void WebStateImpl::RealizedWebState::TearDown() {
   [web_controller_ close];
+  owner_->GetPageWorldWebFramesManager()->RemoveObserver(this);
 
   // WebUI depends on web state so it must be destroyed first in case any WebUI
   // implementations depends on accessing web state during destruction.
@@ -148,18 +150,6 @@ WebStateImpl::RealizedWebState::GetNavigationManager() const {
 
 NavigationManagerImpl& WebStateImpl::RealizedWebState::GetNavigationManager() {
   return *navigation_manager_;
-}
-
-const WebFramesManagerImpl&
-WebStateImpl::RealizedWebState::GetPageWorldWebFramesManager() const {
-  return WebFramesManagerImpl::FromWebState(owner_,
-                                            ContentWorld::kPageContentWorld);
-}
-
-WebFramesManagerImpl&
-WebStateImpl::RealizedWebState::GetPageWorldWebFramesManager() {
-  return WebFramesManagerImpl::FromWebState(owner_,
-                                            ContentWorld::kPageContentWorld);
 }
 
 const SessionCertificatePolicyCacheImpl&
@@ -492,40 +482,12 @@ void WebStateImpl::RealizedWebState::OnAuthRequired(
   }
 }
 
-void WebStateImpl::RealizedWebState::WebFrameBecameAvailable(
-    std::unique_ptr<WebFrame> frame) {
-  WebFrame* frame_ptr = frame.get();
-  bool success = GetPageWorldWebFramesManager().AddFrame(std::move(frame));
-  if (!success) {
-    // Frame was not added, do not notify observers.
-    return;
-  }
-
-  for (auto& observer : observers())
-    observer.WebFrameDidBecomeAvailable(owner_, frame_ptr);
-}
-
-void WebStateImpl::RealizedWebState::WebFrameBecameUnavailable(
-    const std::string& frame_id) {
-  WebFrame* frame = GetPageWorldWebFramesManager().GetFrameWithId(frame_id);
-  if (!frame) {
-    return;
-  }
-
-  NotifyObserversAndRemoveWebFrame(frame);
-}
-
 void WebStateImpl::RealizedWebState::RetrieveExistingFrames() {
-  // This call must be sent to the webstate directly, because the result of this
-  // call will create the WebFrames. (Thus, the WebFrames do not yet exist and
-  // can not be used to call JavaScript.)
-  [web_controller_ executeJavaScript:@"__gCrWeb.message.getExistingFrames();"
-                   completionHandler:nil];
-}
-
-void WebStateImpl::RealizedWebState::RemoveAllWebFrames() {
-  for (WebFrame* frame : GetPageWorldWebFramesManager().GetAllWebFrames()) {
-    NotifyObserversAndRemoveWebFrame(frame);
+  JavaScriptFeatureManager* feature_manager =
+      JavaScriptFeatureManager::FromBrowserState(owner_->GetBrowserState());
+  for (JavaScriptContentWorld* world : feature_manager->GetAllContentWorlds()) {
+    [web_controller_
+        retrieveExistingFramesInContentWorld:world->GetWKContentWorld()];
   }
 }
 
@@ -606,6 +568,10 @@ BrowserState* WebStateImpl::RealizedWebState::GetBrowserState() const {
 
 NSString* WebStateImpl::RealizedWebState::GetStableIdentifier() const {
   return [stable_identifier_ copy];
+}
+
+SessionID WebStateImpl::RealizedWebState::GetUniqueIdentifier() const {
+  return unique_identifier_;
 }
 
 void WebStateImpl::RealizedWebState::OpenURL(
@@ -885,17 +851,24 @@ void WebStateImpl::RealizedWebState::OnStateChangedForPermission(
 void WebStateImpl::RealizedWebState::RequestPermissionsWithDecisionHandler(
     NSArray<NSNumber*>* permissions,
     PermissionDecisionHandler web_view_decision_handler) {
-  bool delegate_can_handle_decision = false;
   if (delegate_) {
     WebStatePermissionDecisionHandler web_state_decision_handler =
-        ^(BOOL allowed) {
-          allowed ? web_view_decision_handler(WKPermissionDecisionGrant)
-                  : web_view_decision_handler(WKPermissionDecisionDeny);
+        ^(PermissionDecision decision) {
+          switch (decision) {
+            case PermissionDecisionShowDefaultPrompt:
+              web_view_decision_handler(WKPermissionDecisionPrompt);
+              break;
+            case PermissionDecisionGrant:
+              web_view_decision_handler(WKPermissionDecisionGrant);
+              break;
+            case PermissionDecisionDeny:
+              web_view_decision_handler(WKPermissionDecisionDeny);
+              break;
+          }
         };
-    delegate_can_handle_decision = delegate_->HandlePermissionsDecisionRequest(
-        owner_, permissions, web_state_decision_handler);
-  }
-  if (!delegate_can_handle_decision) {
+    delegate_->HandlePermissionsDecisionRequest(owner_, permissions,
+                                                web_state_decision_handler);
+  } else {
     web_view_decision_handler(WKPermissionDecisionPrompt);
   }
 }
@@ -977,15 +950,29 @@ NavigationItemImpl* WebStateImpl::RealizedWebState::GetPendingItem() {
   return [web_controller_ lastPendingItemForNewNavigation];
 }
 
-#pragma mark - WebStateImpl::RealizedWebState private methods
+#pragma mark - WebFramesManager::Observer methods
 
-void WebStateImpl::RealizedWebState::NotifyObserversAndRemoveWebFrame(
-    WebFrame* frame) {
+void WebStateImpl::RealizedWebState::WebFrameBecameAvailable(
+    WebFramesManager* web_frames_manager,
+    WebFrame* web_frame) {
   for (auto& observer : observers())
-    observer.WebFrameWillBecomeUnavailable(owner_, frame);
-
-  GetPageWorldWebFramesManager().RemoveFrameWithId(frame->GetFrameId());
+    observer.WebFrameDidBecomeAvailable(owner_, web_frame);
 }
+
+void WebStateImpl::RealizedWebState::WebFrameBecameUnavailable(
+    WebFramesManager* web_frames_manager,
+    const std::string& frame_id) {
+  WebFrame* frame = web_frames_manager->GetFrameWithId(frame_id);
+  if (!frame) {
+    return;
+  }
+
+  for (auto& observer : observers()) {
+    observer.WebFrameWillBecomeUnavailable(owner_, frame);
+  }
+}
+
+#pragma mark - WebStateImpl::RealizedWebState private methods
 
 std::unique_ptr<WebUIIOS> WebStateImpl::RealizedWebState::CreateWebUIIOS(
     const GURL& url) {

@@ -118,12 +118,8 @@ class ScrollButton : public views::ImageButton {
             : ui::ImageModel::FromVectorIcon(kTrailingScrollIcon,
                                              ui::kColorIcon));
 
-    views::InkDrop::Get(this)->SetBaseColorCallback(base::BindRepeating(
-        [](views::View* host) {
-          return views::style::GetColor(*host, views::style::CONTEXT_BUTTON,
-                                        views::style::STYLE_SECONDARY);
-        },
-        this));
+    views::InkDrop::Get(this)->SetBaseColorId(views::style::GetColorId(
+        views::style::CONTEXT_BUTTON, views::style::STYLE_SECONDARY));
 
     ink_drop_container_ =
         AddChildView(std::make_unique<views::InkDropContainerView>());
@@ -370,6 +366,7 @@ void ShowWebAppDetailedInstallDialog(
                 delegate->OnCancel();
               },
               base::Unretained(delegate_ptr)))
+          .OverrideDefaultButton(ui::DialogButton::DIALOG_BUTTON_CANCEL)
           .Build();
 
   auto dialog = views::BubbleDialogModelHost::CreateModal(

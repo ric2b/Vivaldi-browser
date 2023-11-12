@@ -37,7 +37,7 @@ PbufferImageBacking::PbufferImageBacking(
                                       alpha_type,
                                       usage,
                                       format.EstimatedSizeInBytes(size),
-                                      false /* is_thread_safe */),
+                                      /*is_thread_safe=*/false),
       on_destruction_closure_runner_(std::move(on_destruction_closure)),
       passthrough_texture_(std::move(passthrough_texture)) {
   DCHECK(!!passthrough_texture_);
@@ -108,7 +108,8 @@ std::unique_ptr<DawnImageRepresentation> PbufferImageBacking::ProduceDawn(
       std::move(view_formats), this, true);
 }
 
-std::unique_ptr<SkiaImageRepresentation> PbufferImageBacking::ProduceSkia(
+std::unique_ptr<SkiaGaneshImageRepresentation>
+PbufferImageBacking::ProduceSkiaGanesh(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {

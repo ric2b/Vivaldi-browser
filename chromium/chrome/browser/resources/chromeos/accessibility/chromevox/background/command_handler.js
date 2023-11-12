@@ -7,6 +7,7 @@
  */
 import {AutomationPredicate} from '../../common/automation_predicate.js';
 import {AutomationUtil} from '../../common/automation_util.js';
+import {BrowserUtil} from '../../common/browser_util.js';
 import {constants} from '../../common/constants.js';
 import {Cursor, CursorUnit} from '../../common/cursors/cursor.js';
 import {CursorRange} from '../../common/cursors/range.js';
@@ -39,8 +40,8 @@ import {ChromeVoxBackground} from './classic_background.js';
 import {ClipboardHandler} from './clipboard_handler.js';
 import {Color} from './color.js';
 import {CommandHandlerInterface} from './command_handler_interface.js';
-import {DesktopAutomationInterface} from './desktop_automation_interface.js';
 import {TypingEcho} from './editing/editable_text_base.js';
+import {DesktopAutomationInterface} from './event/desktop_automation_interface.js';
 import {EventSource} from './event_source.js';
 import {GestureInterface} from './gesture_interface.js';
 import {BackgroundKeyboardHandler} from './keyboard_handler.js';
@@ -56,6 +57,8 @@ const AutomationNode = chrome.automation.AutomationNode;
 const Dir = constants.Dir;
 const EventType = chrome.automation.EventType;
 const RoleType = chrome.automation.RoleType;
+const SetNativeChromeVoxResponse =
+    chrome.accessibilityPrivate.SetNativeChromeVoxResponse;
 
 /**
  * @typedef {{
@@ -74,6 +77,13 @@ export class CommandHandler extends CommandHandlerInterface {
      * @private {?AutomationNode}
      */
     this.imageNode_;
+
+    /**
+     * To support Command.SHOW_OPTIONS_PAGE, the state of the ChromeVox Page
+     * Migration Flag. (If enabled, should open in Chrome OS Settings App)
+     * @private {boolean|undefined}
+     */
+    this.isChromeVoxSettingsMigrationEnabled_;
   }
 
   /** @override */
@@ -91,7 +101,7 @@ export class CommandHandler extends CommandHandlerInterface {
         this.speakTimeAndDate_();
         return false;
       case Command.SHOW_OPTIONS_PAGE:
-        chrome.runtime.openOptionsPage();
+        this.showOptionsPage_();
         break;
       case Command.TOGGLE_STICKY_MODE:
         SmartStickyMode.instance.toggle();
@@ -155,7 +165,7 @@ export class CommandHandler extends CommandHandlerInterface {
             !BrailleCaptionsBackground.isEnabled());
         return false;
       case Command.TOGGLE_BRAILLE_TABLE:
-        this.toggleBrailleTable_();
+        BrailleTranslatorManager.instance.toggleBrailleTable();
         return false;
       case Command.HELP:
         (new PanelCommand(PanelCommandType.TUTORIAL)).send();
@@ -164,8 +174,7 @@ export class CommandHandler extends CommandHandlerInterface {
         this.toggleScreen_();
         return false;
       case Command.TOGGLE_SPEECH_ON_OR_OFF:
-        const state = ChromeVox.tts.toggleSpeechOnOrOff();
-        new Output().format(state ? '@speech_on' : '@speech_off').go();
+        TtsBackground.toggleSpeechWithAnnouncement();
         return false;
       case Command.ENABLE_CHROMEVOX_ARC_SUPPORT_FOR_CURRENT_APP:
         this.enableChromeVoxArcSupportForCurrentApp_();
@@ -743,7 +752,7 @@ export class CommandHandler extends CommandHandlerInterface {
           } else {
             bound = AutomationUtil.findNodePost(
                         /** @type {!AutomationNode} */ (root), dir,
-                        AutomationPredicate.leaf) ||
+                        AutomationPredicate.leaf) ??
                 bound;
           }
           node = AutomationUtil.findNextNode(
@@ -752,7 +761,7 @@ export class CommandHandler extends CommandHandlerInterface {
 
           if (node && !skipSync) {
             node = AutomationUtil.findNodePre(
-                       node, Dir.FORWARD, AutomationPredicate.object) ||
+                       node, Dir.FORWARD, AutomationPredicate.object) ??
                 node;
           }
 
@@ -833,11 +842,9 @@ export class CommandHandler extends CommandHandlerInterface {
    * @private
    */
   viewGraphicAsBraille_(currentRange) {
-    if (this.imageNode_) {
-      this.imageNode_.removeEventListener(
-          EventType.IMAGE_FRAME_UPDATED, this.onImageFrameUpdated_, false);
-      this.imageNode_ = null;
-    }
+    this.imageNode_?.removeEventListener(
+        EventType.IMAGE_FRAME_UPDATED, this.onImageFrameUpdated_, false);
+    this.imageNode_ = null;
 
     // Find the first node within the current range that supports image data.
     const imageNode = AutomationUtil.findNodePost(
@@ -967,13 +974,12 @@ export class CommandHandler extends CommandHandlerInterface {
     }
 
     // Keep moving past all nodes acting as labels or descriptions.
-    while (currentRange && currentRange.start && currentRange.start.node &&
-           currentRange.start.node.role === RoleType.STATIC_TEXT) {
+    while (currentRange?.start?.node?.role === RoleType.STATIC_TEXT) {
       // We must scan upwards as any ancestor might have a label or description.
       let ancestor = currentRange.start.node;
       while (ancestor) {
-        if ((ancestor.labelFor && ancestor.labelFor.length > 0) ||
-            (ancestor.descriptionFor && ancestor.descriptionFor.length > 0)) {
+        if (ancestor.labelFor?.length > 0 ||
+            ancestor.descriptionFor?.length > 0) {
           break;
         }
         ancestor = ancestor.parent;
@@ -1060,17 +1066,14 @@ export class CommandHandler extends CommandHandlerInterface {
   disableChromeVoxArcSupportForCurrentApp_() {
     chrome.accessibilityPrivate.setNativeChromeVoxArcSupportForCurrentApp(
         false, response => {
-          if (response ===
-              chrome.accessibilityPrivate.SetNativeChromeVoxResponse
-                  .TALKBACK_NOT_INSTALLED) {
+          if (response === SetNativeChromeVoxResponse.TALKBACK_NOT_INSTALLED) {
             ChromeVox.braille.write(
                 NavBraille.fromText(Msgs.getMsg('announce_install_talkback')));
             ChromeVox.tts.speak(
                 Msgs.getMsg('announce_install_talkback'), QueueMode.FLUSH);
           } else if (
               response ===
-              chrome.accessibilityPrivate.SetNativeChromeVoxResponse
-                  .NEED_DEPRECATION_CONFIRMATION) {
+              SetNativeChromeVoxResponse.NEED_DEPRECATION_CONFIRMATION) {
             ChromeVox.braille.write(NavBraille.fromText(
                 Msgs.getMsg('announce_talkback_deprecation')));
             ChromeVox.tts.speak(
@@ -1093,12 +1096,11 @@ export class CommandHandler extends CommandHandlerInterface {
     let actionNode = ChromeVoxRange.current.start.node;
     // Scan for a clickable, which overrides the |actionNode|.
     let clickable = actionNode;
-    while (clickable && !clickable.clickable &&
-           actionNode.root === clickable.root) {
+    while (!clickable?.clickable && actionNode.root === clickable?.root) {
       clickable = clickable.parent;
     }
-    if (clickable && actionNode.root === clickable.root) {
-      clickable.doDefault();
+    if (actionNode.root === clickable?.root) {
+      clickable?.doDefault();
       return;
     }
 
@@ -1177,11 +1179,12 @@ export class CommandHandler extends CommandHandlerInterface {
    * @private
    */
   getNewRangeForJumpToTop_(node, currentRange) {
-    if (!currentRange.start.node || !currentRange.start.node.root) {
+    const root = currentRange.start.node?.root;
+    if (!root) {
       return {node, range: currentRange};
     }
     const newNode = AutomationUtil.findNodePost(
-        currentRange.start.node.root, Dir.FORWARD, AutomationPredicate.object);
+        root, Dir.FORWARD, AutomationPredicate.object);
     if (newNode) {
       return {node: newNode, range: CursorRange.fromNode(newNode)};
     }
@@ -1224,7 +1227,7 @@ export class CommandHandler extends CommandHandlerInterface {
     while (current && !current.details) {
       current = current.parent;
     }
-    if (current && current.details.length) {
+    if (current?.details.length) {
       // TODO currently can only jump to first detail.
       currentRange = CursorRange.fromNode(current.details[0]);
     }
@@ -1281,7 +1284,7 @@ export class CommandHandler extends CommandHandlerInterface {
       current = current.parent;
     }
 
-    const useNode = current || originalNode;
+    const useNode = current ?? originalNode;
     return AutomationPredicate.roles([current.role]);
   }
 
@@ -1362,7 +1365,7 @@ export class CommandHandler extends CommandHandlerInterface {
    */
   nextOrPreviousPage_(command, currentRange) {
     const root = AutomationUtil.getTopLevelRoot(currentRange.start.node);
-    if (root && root.scrollY !== undefined) {
+    if (root?.scrollY !== undefined) {
       let page = Math.ceil(root.scrollY / root.location.height) || 1;
       page = command === Command.NEXT_PAGE ? page + 1 : page - 1;
       ChromeVox.tts.stop();
@@ -1381,7 +1384,7 @@ export class CommandHandler extends CommandHandlerInterface {
 
     let firstWindow;
     let rootViewWindow;
-    if (target.root && target.root.role === RoleType.DESKTOP) {
+    if (target.root?.role === RoleType.DESKTOP) {
       // Search for the first container with a name.
       while (target && (!target.name || !AutomationPredicate.root(target))) {
         target = target.parent;
@@ -1405,7 +1408,7 @@ export class CommandHandler extends CommandHandlerInterface {
     }
 
     // Re-target with preference for the root.
-    target = rootViewWindow || firstWindow || target;
+    target = rootViewWindow ?? firstWindow ?? target;
 
     if (!target) {
       output.format('@no_title');
@@ -1560,15 +1563,7 @@ export class CommandHandler extends CommandHandlerInterface {
     for (const key in description) {
       url += key + ':%20' + description[key] + '%0a';
     }
-    chrome.windows.getAll((windows) => {
-      if (windows.length > 0) {
-        // Open in existing window.
-        chrome.tabs.create({url});
-      } else {
-        // No window open, cannot use chrome.tabs API.
-        chrome.windows.create({url});
-      }
-    });
+    BrowserUtil.openBrowserUrl(url);
   }
 
   /** @private */
@@ -1577,14 +1572,14 @@ export class CommandHandler extends CommandHandlerInterface {
       url: 'chromevox/learn_mode/learn_mode.html',
       type: 'panel',
     };
+    // Use chrome.windows API to ensure page is opened in Ash-chrome.
     chrome.windows.create(explorerPage);
   }
 
   /** @private */
   showTalkBackKeyboardShortcuts_() {
-    chrome.tabs.create({
-      url: 'https://support.google.com/accessibility/android/answer/6110948',
-    });
+    BrowserUtil.openBrowserUrl(
+        'https://support.google.com/accessibility/android/answer/6110948');
   }
 
   /** @private */
@@ -1614,6 +1609,30 @@ export class CommandHandler extends CommandHandlerInterface {
             .go();
       }
     });
+  }
+
+  /**
+   * Launch ChromeVox options page. If migration enabled, launch settings app.
+   * TODO(268196299): Add test for showing options page.
+   * @private
+   */
+  async showOptionsPage_() {
+    if (this.isChromeVoxSettingsMigrationEnabled_ === undefined) {
+      this.isChromeVoxSettingsMigrationEnabled_ = await new Promise(resolve => {
+        chrome.accessibilityPrivate.isFeatureEnabled(
+            chrome.accessibilityPrivate.AccessibilityFeature
+                .CHROMEVOX_SETTINGS_MIGRATION,
+            resolve);
+      });
+    }
+
+    if (!this.isChromeVoxSettingsMigrationEnabled_) {
+      chrome.runtime.openOptionsPage();
+      return;
+    }
+
+    // Launch new ChromeVox settings (inside ChromeOS Settings App).
+    chrome.accessibilityPrivate.openSettingsSubpage('textToSpeech/chromeVox');
   }
 
   /**
@@ -1653,29 +1672,6 @@ export class CommandHandler extends CommandHandlerInterface {
   }
 
   /** @private */
-  toggleBrailleTable_() {
-    let brailleTableType = SettingsManager.getString('brailleTableType');
-    let output = '';
-    if (brailleTableType === 'brailleTable6') {
-      brailleTableType = 'brailleTable8';
-
-      // This label reads "switch to 8 dot braille".
-      output = '@OPTIONS_BRAILLE_TABLE_TYPE_6';
-    } else {
-      brailleTableType = 'brailleTable6';
-
-      // This label reads "switch to 6 dot braille".
-      output = '@OPTIONS_BRAILLE_TABLE_TYPE_8';
-    }
-
-    SettingsManager.set('brailleTable', SettingsManager.get(brailleTableType));
-    SettingsManager.set('brailleTableType', brailleTableType);
-    BrailleTranslatorManager.instance.refresh(
-        SettingsManager.getString(brailleTableType));
-    new Output().format(output).go();
-  }
-
-  /** @private */
   toggleScreen_() {
     const newState = !ChromeVoxPrefs.darkScreen;
     if (newState && !LocalStorage.get('acceptToggleScreen')) {
@@ -1705,6 +1701,7 @@ export class CommandHandler extends CommandHandlerInterface {
    */
   toggleSelection_() {
     if (!ChromeVoxState.instance.pageSel) {
+      ChromeVox.earcons.playEarcon(EarconId.SELECTION);
       ChromeVoxState.instance.pageSel = ChromeVoxRange.current;
       DesktopAutomationInterface.instance.ignoreDocumentSelectionFromAction(
           true);
@@ -1713,6 +1710,7 @@ export class CommandHandler extends CommandHandlerInterface {
       if (root && root.selectionStartObject && root.selectionEndObject &&
           !isNaN(Number(root.selectionStartOffset)) &&
           !isNaN(Number(root.selectionEndOffset))) {
+        ChromeVox.earcons.playEarcon(EarconId.SELECTION_REVERSE);
         const sel = new CursorRange(
             new Cursor(
                 root.selectionStartObject,

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_ASH_FINGERPRINT_HANDLER_H_
 
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "components/session_manager/core/session_manager.h"
@@ -59,9 +60,10 @@ class FingerprintHandler : public ::settings::SettingsPageUIHandler,
   void HandleRemoveEnrollment(const base::Value::List& args);
   void HandleChangeEnrollmentLabel(const base::Value::List& args);
 
-  void OnGetFingerprintsList(const std::string& callback_id,
-                             const base::flat_map<std::string, std::string>&
-                                 fingerprints_list_mapping);
+  void OnGetFingerprintsList(
+      const std::string& callback_id,
+      const base::flat_map<std::string, std::string>& fingerprints_list_mapping,
+      bool success);
   void OnRequestRecordLabel(const std::string& callback_id,
                             const std::string& label);
   void OnCancelCurrentEnrollSession(bool success);
@@ -70,7 +72,7 @@ class FingerprintHandler : public ::settings::SettingsPageUIHandler,
   void OnEndCurrentAuthSession(bool success);
   bool CheckAuthTokenValidity(const std::string& auth_token);
 
-  Profile* profile_;  // unowned
+  raw_ptr<Profile, ExperimentalAsh> profile_;  // unowned
 
   std::vector<std::string> fingerprints_labels_;
   std::vector<std::string> fingerprints_paths_;

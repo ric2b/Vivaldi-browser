@@ -262,12 +262,26 @@ def _RemoveSparkleKeys(plist):
     'SUFeedURL')
 
 # Vivaldi
-def _RemoveIOSVoiceSearchShortcutKeys(plist):
+def _UpdateUIApplicationShortcutItems(plist):
   """Removes voice search related shortcut keys"""
   for idx, dict_item in enumerate(plist['UIApplicationShortcutItems']):
-      if dict_item['UIApplicationShortcutItemIconFile'] == 'quick_action_voice_search':
+      if dict_item.get('UIApplicationShortcutItemIconSymbolName') == 'mic':
         try:
           del plist['UIApplicationShortcutItems'][idx]
+        except:
+          pass
+  """Swap chrome icons names for vivaldi icons names"""
+  for idx, dict_item in enumerate(plist['UIApplicationShortcutItems']):
+      if dict_item.get('UIApplicationShortcutItemIconFile') == 'quick_action_incognito':
+        try:
+          plist['UIApplicationShortcutItems'][idx]['UIApplicationShortcutItemIconFile'] = 'vivaldi_private_tab'
+        except:
+          pass
+  for idx, dict_item in enumerate(plist['UIApplicationShortcutItems']):
+      if dict_item.get('UIApplicationShortcutItemIconSymbolName') == 'qrcode':
+        try:
+          del plist['UIApplicationShortcutItems'][idx]['UIApplicationShortcutItemIconSymbolName']
+          plist['UIApplicationShortcutItems'][idx]['UIApplicationShortcutItemIconFile'] = 'vivaldi_qr_code'
         except:
           pass
 # End Vivaldi
@@ -454,7 +468,7 @@ def Main(argv):
 
   # Remove Voice Search shortcut item from Vivaldi iOS
   if (options.vivaldi_plist and options.platform == 'ios'):
-    _RemoveIOSVoiceSearchShortcutKeys(plist)
+    _UpdateUIApplicationShortcutItems(plist)
 
   # Add Keystone if configured to do so.
   if options.use_keystone:

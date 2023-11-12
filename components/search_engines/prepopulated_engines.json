@@ -1,16 +1,23 @@
 // Copyright 2021 Vivaldi Technologies AS. All rights reserved.
 
 {
-  "int_variables": {
+// NOTES:
+//   - CHANGE THE BELOW NUMBERS IF YOU ADD A NEW ENGINE; ID conflicts = bad!
+//     - Make sure you update the int_variables below as described in comments.
+//     - IDs > 1000 are reserved for distribution custom engines.
+//   - Use HTTPS URLs when adding new search engines or adding URLs to existing
+//     ones.
+
+"int_variables": {
     // When adding new engines, increment this number and use it as the new
-    // max ID. This is used by UMA stats and must be updated to include the full
-    // range or else not all engines will be counted in stats.
-    "kMaxPrepopulatedEngineID": 101,
+    // max ID. Chromium uses this for UMA, which we don't care about, but it is
+    // valuable to keep it up to date to avoid reusing ids (see above).
+    "kMaxPrepopulatedEngineID": 17,
 
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 10000138
+    "kCurrentDataVersion": 10000140
   },
 
   // The following engines are included in country lists and are added to the
@@ -281,9 +288,9 @@
       "name": "Bing",
       "keyword": "b",
       "favicon_url": "https://www.bing.com/sa/simg/bing_p_rr_teal_min.ico",
-      "search_url": "https://www.bing.com/search?q={searchTerms}&FORM=INCOH2{bing:Referral}",
+      "search_url": "https://www.bing.com/search?q={searchTerms}&FORM=ATVB{bing:Referral}",
       "suggest_url": "https://www.bing.com/osjson.aspx?query={searchTerms}&language={language}",
-      "image_url": "https://www.bing.com/images/detail/search?iss=sbiupload&FORM=INCOH2{bing:Referral}#enterInsights",
+      "image_url": "https://www.bing.com/images/detail/search?iss=sbiupload&FORM=ATVB{bing:Referral}#enterInsights",
       "image_url_post_params": "imageBin={google:imageThumbnailBase64}",
       "type": "SEARCH_ENGINE_BING",
       "id": 3
@@ -692,16 +699,6 @@
       "image_url_post_params": "upfile={google:imageThumbnail},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight},prg=1",
       "type": "SEARCH_ENGINE_YANDEX",
       "id": 8
-    },
-
-    "neeva": {
-      "name": "Neeva",
-      "keyword": "n",
-      "favicon_url": "https://www.neeva.com/favicon.ico",
-      "search_url": "https://neeva.com/search?q={searchTerms}&src=opensearch&pk_source=vivaldi&pk_medium=external_product&pk_campaign=neeva_vivaldi_o",
-      "suggest_url": "https://neeva.com/suggest?q={searchTerms}&src=opensearch&pk_source=vivaldi&pk_medium=external_product&pk_campaign=neeva_vivaldi_o",
-      "type": "VIVALDI_SEARCH_ENGINE_NEEVA",
-      "id": 9
     },
 
     "wolfram": {

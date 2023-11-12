@@ -6,16 +6,15 @@
 
 #include <stddef.h>
 
-#include <memory>
 #include <utility>
 
 #include "base/functional/callback.h"
-#include "base/guid.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -221,7 +220,7 @@ bool NotificationsApiFunction::CreateNotification(
   NotificationBitmapSizes bitmap_sizes = GetNotificationBitmapSizes();
 
   float image_scale = ui::GetScaleForResourceScaleFactor(
-      ui::GetSupportedResourceScaleFactors().back());
+      ui::GetMaxSupportedResourceScaleFactor());
 
   // Extract required fields: type, title, message, and icon.
   message_center::NotificationType type =
@@ -347,6 +346,13 @@ bool NotificationsApiFunction::CreateNotification(
   notification.set_never_timeout(options->require_interaction &&
                                  *options->require_interaction);
 
+  // For a progress notification the message parameter won't be displayed in the
+  // notification. Therefore, its value is passed to progress_status which will
+  // be displayed.
+  if (type == message_center::NOTIFICATION_TYPE_PROGRESS) {
+    notification.set_progress_status(message);
+  }
+
   if (ShouldShowOverCurrentFullscreenWindow(GetProfile(),
                                             notification.origin_url())) {
     notification.set_fullscreen_visibility(
@@ -372,7 +378,7 @@ bool NotificationsApiFunction::UpdateNotification(
 
   NotificationBitmapSizes bitmap_sizes = GetNotificationBitmapSizes();
   float image_scale = ui::GetScaleForResourceScaleFactor(
-      ui::GetSupportedResourceScaleFactors().back());
+      ui::GetMaxSupportedResourceScaleFactor());
 
   // Update optional fields if provided.
   if (options->type != api::notifications::TEMPLATE_TYPE_NONE)
@@ -468,6 +474,14 @@ bool NotificationsApiFunction::UpdateNotification(
     notification->set_progress(progress);
   }
 
+  // For a progress notification the message parameter won't be displayed in the
+  // notification. Therefore, its value is passed to progress_status which will
+  // be displayed.
+  if (options->message &&
+      notification->type() == message_center::NOTIFICATION_TYPE_PROGRESS) {
+    notification->set_progress_status(base::UTF8ToUTF16(*options->message));
+  }
+
   if (options->items && !options->items->empty()) {
     // We should have list items if and only if the type is a multiple type.
     if (notification->type() != message_center::NOTIFICATION_TYPE_MULTIPLE) {
@@ -553,7 +567,7 @@ NotificationsCreateFunction::~NotificationsCreateFunction() {
 ExtensionFunction::ResponseAction
 NotificationsCreateFunction::RunNotificationsApi() {
   params_ = api::notifications::Create::Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params_.get());
+  EXTENSION_FUNCTION_VALIDATE(params_);
 
   const std::string extension_id(extension_->id());
   std::string notification_id;
@@ -561,9 +575,10 @@ NotificationsCreateFunction::RunNotificationsApi() {
     // If the caller provided a notificationId, use that.
     notification_id = *params_->notification_id;
   } else {
-    // Otherwise, use a randomly created GUID. In case that GenerateGUID returns
-    // the empty string, simply generate a random string.
-    notification_id = base::GenerateGUID();
+    // Otherwise, use a randomly created GUID. In case that
+    // Uuid::GenerateRandomV4().AsLowercaseString returns the empty string,
+    // simply generate a random string.
+    notification_id = base::Uuid::GenerateRandomV4().AsLowercaseString();
     if (notification_id.empty())
       notification_id = base::RandBytesAsString(16);
   }
@@ -575,7 +590,7 @@ NotificationsCreateFunction::RunNotificationsApi() {
         api::notifications::Create::Results::Create(notification_id), error));
   }
 
-  return RespondNow(OneArgument(base::Value(notification_id)));
+  return RespondNow(WithArguments(notification_id));
 }
 
 NotificationsUpdateFunction::NotificationsUpdateFunction() {
@@ -587,7 +602,7 @@ NotificationsUpdateFunction::~NotificationsUpdateFunction() {
 ExtensionFunction::ResponseAction
 NotificationsUpdateFunction::RunNotificationsApi() {
   params_ = api::notifications::Update::Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params_.get());
+  EXTENSION_FUNCTION_VALIDATE(params_);
 
   // We are in update.  If the ID doesn't exist, succeed but call the callback
   // with "false".
@@ -596,7 +611,7 @@ NotificationsUpdateFunction::RunNotificationsApi() {
           CreateScopedIdentifier(extension_->id(), params_->notification_id));
 
   if (!matched_notification) {
-    return RespondNow(OneArgument(base::Value(false)));
+    return RespondNow(WithArguments(false));
   }
 
   // Copy the existing notification to get a writable version of it.
@@ -616,7 +631,7 @@ NotificationsUpdateFunction::RunNotificationsApi() {
 
   // No trouble, created the notification, send true to the callback and
   // succeed.
-  return RespondNow(OneArgument(base::Value(true)));
+  return RespondNow(WithArguments(true));
 }
 
 NotificationsClearFunction::NotificationsClearFunction() {
@@ -628,12 +643,12 @@ NotificationsClearFunction::~NotificationsClearFunction() {
 ExtensionFunction::ResponseAction
 NotificationsClearFunction::RunNotificationsApi() {
   params_ = api::notifications::Clear::Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params_.get());
+  EXTENSION_FUNCTION_VALIDATE(params_);
 
   bool cancel_result = GetDisplayHelper()->Close(
       CreateScopedIdentifier(extension_->id(), params_->notification_id));
 
-  return RespondNow(OneArgument(base::Value(cancel_result)));
+  return RespondNow(WithArguments(cancel_result));
 }
 
 NotificationsGetAllFunction::NotificationsGetAllFunction() {}
@@ -651,7 +666,7 @@ NotificationsGetAllFunction::RunNotificationsApi() {
     result.Set(StripScopeFromIdentifier(extension_->id(), entry), true);
   }
 
-  return RespondNow(OneArgument(base::Value(std::move(result))));
+  return RespondNow(WithArguments(std::move(result)));
 }
 
 NotificationsGetPermissionLevelFunction::
@@ -671,8 +686,7 @@ NotificationsGetPermissionLevelFunction::RunNotificationsApi() {
           ? api::notifications::PERMISSION_LEVEL_GRANTED
           : api::notifications::PERMISSION_LEVEL_DENIED;
 
-  return RespondNow(
-      OneArgument(base::Value(api::notifications::ToString(result))));
+  return RespondNow(WithArguments(api::notifications::ToString(result)));
 }
 
 }  // namespace extensions

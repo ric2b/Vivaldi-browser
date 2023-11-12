@@ -63,7 +63,7 @@ public class PostMessageTest {
         CountDownLatch titleUpdateLatch = new CountDownLatch(2);
         TabObserver observer = new TabObserver() {
             @Override
-            public void onTitleUpdated(String title) {
+            public void onTitleUpdated(Tab tab, String title) {
                 titleUpdateLatch.countDown();
             }
         };
@@ -84,7 +84,7 @@ public class PostMessageTest {
         CountDownLatch postMessageLatch = new CountDownLatch(1);
         TabObserver observer = new TabObserver() {
             @Override
-            public void onTitleUpdated(String title) {
+            public void onTitleUpdated(Tab tab, String title) {
                 holder.mResult = title;
                 postMessageLatch.countDown();
             }
@@ -139,8 +139,9 @@ public class PostMessageTest {
     @SmallTest
     public void pageCanPostMessageBack() throws Exception {
         runOnUiThreadBlocking(() -> mTab.postMessage("hello", "*"));
-        Assert.assertEquals(
-                "message: hello, source: app://org.chromium.webengine.shell", waitForPostMessage());
+        Assert.assertEquals("message: hello, "
+                        + "source: app://org.chromium.webengine.test.instrumentation_test_apk",
+                waitForPostMessage());
     }
 
     @Test
@@ -161,11 +162,13 @@ public class PostMessageTest {
     @SmallTest
     public void canPostToPageMultipleTimes() throws Exception {
         runOnUiThreadBlocking(() -> mTab.postMessage("hello", "*"));
-        Assert.assertEquals(
-                "message: hello, source: app://org.chromium.webengine.shell", waitForPostMessage());
+        Assert.assertEquals("message: hello, "
+                        + "source: app://org.chromium.webengine.test.instrumentation_test_apk",
+                waitForPostMessage());
         runOnUiThreadBlocking(() -> mTab.postMessage("hello", "*"));
-        Assert.assertEquals(
-                "message: hello, source: app://org.chromium.webengine.shell", waitForPostMessage());
+        Assert.assertEquals("message: hello, "
+                        + "source: app://org.chromium.webengine.test.instrumentation_test_apk",
+                waitForPostMessage());
         runOnUiThreadBlocking(() -> mTab.postMessage("hello", "*"));
         Assert.assertEquals("postMessage: 3", waitForTitleChange());
     }
@@ -179,7 +182,7 @@ public class PostMessageTest {
         Tab tab2 = runOnUiThreadBlocking(() -> webEngine.getTabManager().createTab()).get();
         mActivityTestRule.navigateAndWait(tab2, getTestDataURL("postmessage.html"));
 
-        tab2.postMessage("hello", "*");
+        runOnUiThreadBlocking(() -> tab2.postMessage("hello", "*"));
         try {
             waitForPostMessage();
             Assert.fail("postMessage was delivered to the wrong origin");
@@ -191,8 +194,9 @@ public class PostMessageTest {
     @MediumTest
     public void postMessageFromTabRespectsAllowedOrigin() throws Exception {
         runOnUiThreadBlocking(() -> mTab.postMessage("hello", "*"));
-        Assert.assertEquals(
-                "message: hello, source: app://org.chromium.webengine.shell", waitForPostMessage());
+        Assert.assertEquals("message: hello, "
+                        + "source: app://org.chromium.webengine.test.instrumentation_test_apk",
+                waitForPostMessage());
 
         runOnUiThreadBlocking(() -> mTab.postMessage("hello", "*"));
         try {
@@ -200,5 +204,25 @@ public class PostMessageTest {
             Assert.fail("postMessage was received from the wrong origin");
         } catch (Exception e) {
         }
+    }
+
+    @Test
+    @MediumTest
+    public void receivePostMessageFromSavedPort() throws Exception {
+        runOnUiThreadBlocking(() -> mTab.postMessage("hello - delayed", "*"));
+        Assert.assertEquals("message: hello - delayed, "
+                        + "source: app://org.chromium.webengine.test.instrumentation_test_apk",
+                waitForPostMessage());
+        Assert.assertEquals("message: hello - delayed2, "
+                        + "source: app://org.chromium.webengine.test.instrumentation_test_apk",
+                waitForPostMessage());
+        Assert.assertEquals("message: hello - delayed3, "
+                        + "source: app://org.chromium.webengine.test.instrumentation_test_apk",
+                waitForPostMessage());
+
+        runOnUiThreadBlocking(() -> mTab.postMessage("hello", "*"));
+        Assert.assertEquals("message: hello, "
+                        + "source: app://org.chromium.webengine.test.instrumentation_test_apk",
+                waitForPostMessage());
     }
 }

@@ -24,6 +24,7 @@
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/site_for_cookies.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if BUILDFLAG(IS_IOS)
 #include "components/content_settings/core/common/features.h"
@@ -83,6 +84,36 @@ void CookieSettings::SetCookieSetting(const GURL& primary_url,
   DCHECK(IsValidSetting(setting));
   host_content_settings_map_->SetContentSettingDefaultScope(
       primary_url, GURL(), ContentSettingsType::COOKIES, setting);
+}
+
+void CookieSettings::SetCookieSettingForUserBypass(
+    const GURL& first_party_url) {
+  base::Time expiry_time = GetConstraintExpiration(kUserBypassEntriesTTL);
+  ContentSettingConstraints constraints = {expiry_time, SessionModel::Durable};
+
+  host_content_settings_map_->SetContentSettingCustomScope(
+      ContentSettingsPattern::Wildcard(),
+      // TODO(njeunje): Follow up on this after decision on which scope to use
+      // is finalized. For now we will make use of an origin-scope.
+      // Ref:
+      // https://docs.google.com/document/d/12_SA875i8fPPPBdno9xlwlRsK83s67THqSQwngOfLBg/edit?disco=AAAAmN3m40k
+      ContentSettingsPattern::FromURL(first_party_url),
+      ContentSettingsType::COOKIES, ContentSetting::CONTENT_SETTING_ALLOW,
+      constraints);
+}
+
+bool CookieSettings::IsStoragePartitioningBypassEnabled(
+    const GURL& first_party_url) {
+  SettingInfo info;
+  const base::Value value = host_content_settings_map_->GetWebsiteSetting(
+      GURL(), first_party_url, ContentSettingsType::COOKIES, &info);
+
+  bool is_default = info.primary_pattern.MatchesAllHosts() &&
+                    info.secondary_pattern.MatchesAllHosts();
+
+  DCHECK(value.is_int());
+
+  return is_default ? false : IsAllowed(ValueToContentSetting(value));
 }
 
 void CookieSettings::ResetCookieSetting(const GURL& primary_url) {
@@ -182,8 +213,9 @@ ContentSetting CookieSettings::GetCookieSettingInternal(
   SettingInfo info;
   const base::Value value = host_content_settings_map_->GetWebsiteSetting(
       url, first_party_url, ContentSettingsType::COOKIES, &info);
-  if (source)
+  if (source) {
     *source = info.source;
+  }
 
   // If no explicit exception has been made and third-party cookies are blocked
   // by default, apply CONTENT_SETTING_BLOCKED.
@@ -217,10 +249,15 @@ ContentSetting CookieSettings::GetCookieSettingInternal(
       base::FeatureList::IsEnabled(blink::features::kStorageAccessAPI);
   if (block && storage_access_api_enabled &&
       ShouldConsiderStorageAccessGrants(overrides)) {
-    ContentSetting host_setting = host_content_settings_map_->GetContentSetting(
-        url, first_party_url, ContentSettingsType::STORAGE_ACCESS);
-
-    if (host_setting == CONTENT_SETTING_ALLOW) {
+    // The Storage Access API allows access in A(B(A)) case (or similar). Do the
+    // same-origin check first for performance reasons.
+    const url::Origin origin = url::Origin::Create(url);
+    const url::Origin first_party_origin = url::Origin::Create(first_party_url);
+    if (origin.IsSameOriginWith(first_party_origin) ||
+        net::SchemefulSite(origin) == net::SchemefulSite(first_party_origin) ||
+        host_content_settings_map_->GetContentSetting(
+            url, first_party_url, ContentSettingsType::STORAGE_ACCESS) ==
+            CONTENT_SETTING_ALLOW) {
       block = false;
       FireStorageAccessHistogram(net::cookie_util::StorageAccessResult::
                                      ACCESS_ALLOWED_STORAGE_ACCESS_GRANT);
@@ -262,8 +299,9 @@ bool CookieSettings::ShouldBlockThirdPartyCookiesInternal() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
 #if BUILDFLAG(IS_IOS)
-  if (!base::FeatureList::IsEnabled(kImprovedCookieControls))
+  if (!base::FeatureList::IsEnabled(kImprovedCookieControls)) {
     return false;
+  }
 #endif
 
   CookieControlsMode mode = static_cast<CookieControlsMode>(
@@ -285,8 +323,9 @@ void CookieSettings::OnContentSettingChanged(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsTypeSet content_type_set) {
   if (content_type_set.Contains(ContentSettingsType::COOKIES)) {
-    for (auto& observer : observers_)
+    for (auto& observer : observers_) {
       observer.OnCookieSettingChanged();
+    }
   }
 }
 
@@ -297,12 +336,14 @@ void CookieSettings::OnCookiePreferencesChanged() {
 
   {
     base::AutoLock auto_lock(lock_);
-    if (block_third_party_cookies_ == new_block_third_party_cookies)
+    if (block_third_party_cookies_ == new_block_third_party_cookies) {
       return;
+    }
     block_third_party_cookies_ = new_block_third_party_cookies;
   }
-  for (Observer& obs : observers_)
+  for (Observer& obs : observers_) {
     obs.OnThirdPartyCookieBlockingChanged(new_block_third_party_cookies);
+  }
 }
 
 bool CookieSettings::ShouldBlockThirdPartyCookies() const {

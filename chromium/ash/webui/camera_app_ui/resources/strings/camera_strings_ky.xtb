@@ -8,14 +8,11 @@
 <translation id="1175958423215084756">Шилтеме аныкталды. <ph name="HOSTNAME" /></translation>
 <translation id="1197694886744716213"><ph name="PAGE_NUMBER" /> барак жок кылынды</translation>
 <translation id="1258009455399840361">Сааттын жебеси боюнча 90 градуска буруу</translation>
-<translation id="1300209025925956156">Документиңизди скандоо</translation>
-<translation id="1309250603447638106">Документти скандоо функциясы үчүн жаңыртуулар жүктөлүп алынууда</translation>
-<translation id="137991641490787891"><ph name="ASPECT_RATIO_WIDTH" />. Кирүү үчүн Search + солго жебени басыңыз.</translation>
 <translation id="1417314334557041815"><ph name="INDEX" />-бетти түзөтүү</translation>
 <translation id="1467231725790366244"><ph name="CAMERA" /> ажыратылды.</translation>
 <translation id="1473110567575736769">3 секунддук таймер</translation>
 <translation id="148783771699678004">Жогорку оң жакка жылууда</translation>
-<translation id="1545749641540134597">QR кодун скандоо</translation>
+<translation id="1545749641540134597">QR кодду скандоо</translation>
 <translation id="1560052704389894104">GIF</translation>
 <translation id="1588438908519853928">Кадыресе</translation>
 <translation id="1620510694547887537">Камера</translation>
@@ -24,14 +21,12 @@
 <translation id="1664224225747386870">Эч нерсе жаздырылган жок</translation>
 <translation id="1838104802459806957">Өйдө кыйшайтуу</translation>
 <translation id="1843105061469674856">Кошумча бетти скандоо</translation>
-<translation id="1851169887664797861">Камераны көзөмөлдөй турган кошумча каражаттар бар</translation>
 <translation id="1851616744363735765">ТЫНДЫРЫЛДЫ</translation>
 <translation id="1899697626337024495">Сүрөттүн дааналыгы</translation>
 <translation id="1925845977604399247">Галереяга өтүү</translation>
 <translation id="199526504800285197">Видео тартуу токтотулду</translation>
 <translation id="1995951722691075581">Түзмөктүн сактагычында орун аз болгондуктан, видео тартуу токтоп калды. Көбүрөөк видео тартуу үчүн түзмөгүңүздөн орун бошотуңуз.</translation>
 <translation id="2036868001356139588">Таймердин узактыгы</translation>
-<translation id="2050339315714019657">Тигинен</translation>
 <translation id="2064538373111010176"><ph name="CAMERA" /> жигердүү</translation>
 <translation id="2134029355740465625">Видеонун параметрлери</translation>
 <translation id="2144806332417375165">Жеке видеонун параметрлери</translation>
@@ -49,7 +44,6 @@
 <translation id="2761536921376153655">Скандоо түрү</translation>
 <translation id="28682968802727151">Чагылдырууну алдын ала көрүү</translation>
 <translation id="2879583609344924966"><ph name="CAMERA" /> сайылып турат.</translation>
-<translation id="2904654629665923749">Документти скандоо функциясы жеткиликтүү</translation>
 <translation id="3067436040345934772">Оңго жылдырып кароо</translation>
 <translation id="3081586908890909590">Видео режимине которулуу</translation>
 <translation id="313467653172006084">30 кадр/сек</translation>
@@ -74,7 +68,6 @@
 <translation id="4269820728363426813">Шилтеме дарегин көчүрүү</translation>
 <translation id="4281620174117014503">Орточо резолюция</translation>
 <translation id="428234092390943511">Беттин эскизи</translation>
-<translation id="4340659173795395806">Эми бир нече беттен турган PDF файлын түзө аласыз</translation>
 <translation id="4383571725254449280">Басып чыгаруу майнаптуулугунун таржымалы</translation>
 <translation id="4445542136948522167">Сүрөткө тартууну токтотуу</translation>
 <translation id="4570032796877367747">Маңдайкы камера</translation>
@@ -87,6 +80,7 @@
 <translation id="4864143361253542638">Скандалган барактардын тизмеси</translation>
 <translation id="4890010094662541459">3 x 3</translation>
 <translation id="491895758387112773">Бир нече агымдагы видеону жаздыруу</translation>
+<translation id="495170559598752135">Аракеттер</translation>
 <translation id="4984613436295737187">Quad HD (1440p)</translation>
 <translation id="5034763830503483128">Сүрөттүн тараптарынын катнашы</translation>
 <translation id="5057360777601936059">Камераңыз учурда жеткиликсиз.
@@ -97,7 +91,6 @@
 <translation id="5317780077021120954">Сактоо</translation>
 <translation id="5320594929574852403">Сол жакка жылууда</translation>
 <translation id="5374917190292010970">4K (2160p)</translation>
-<translation id="5444515100983837161">Документтин бардык бурчтары алкактын ичинде болгондой кылып түздөңүз. Документ жана фон ар кандай түстө болсо, скан жакшыраак иштейт.</translation>
 <translation id="5662366948659129155"><ph name="COUNT" /> бет скандалууда</translation>
 <translation id="5671277269877808209">Чарчы</translation>
 <translation id="5746169159649715125">PDF катары сактоо</translation>
@@ -127,11 +120,12 @@
 <translation id="6888362557094394345">Төмөн жакка жылууда</translation>
 <translation id="695140971690006676">Баарын баштапкы абалга келтирүү</translation>
 <translation id="6965382102122355670">OK</translation>
+<translation id="6965830616442491568">Портрет</translation>
 <translation id="698156982839284926">3 секунд</translation>
 <translation id="7134221860976209830">10 секунддук таймер</translation>
 <translation id="7191890674911603392">Жаздыруу түрү</translation>
 <translation id="7243947652761655814">Видеонун дааналыгы</translation>
-<translation id="7337660886763914220">Файл тутумунда ката кетти.</translation>
+<translation id="7337660886763914220">Файл системасында ката кетти.</translation>
 <translation id="7450541714075000668">Текст көчүрүлдү</translation>
 <translation id="7488619942230388918">GIF видеосун жаздыруу</translation>
 <translation id="7557677699350329807">Кийинки камераны иштетүү</translation>
@@ -142,6 +136,7 @@
 <translation id="7658239707568436148">Жокко чыгаруу</translation>
 <translation id="7670511624014457267">60 кадр/сек</translation>
 <translation id="7671804233658741790">Документтин төмөнкү оң бурчу</translation>
+<translation id="7684446460490665873">Time Lapse режиминде видео тартуу</translation>
 <translation id="7692090236657809299">Жылдырып кароо, кыйшайтуу, чоңойтуп/кичирейтүүнү иштетүү</translation>
 <translation id="7726641833034062494">Кадимки видео жаздыруу</translation>
 <translation id="7748344063862150053">Документтин жогорку оң бурчу</translation>
@@ -157,10 +152,9 @@
 <translation id="8428213095426709021">Параметрлер</translation>
 <translation id="8629662593426079630">360p</translation>
 <translation id="8711011893539266636">Микрофондун үнүн өчүрүү/күйгүзүү. Үнсүз режим күйүк</translation>
-<translation id="8712637175834984815">Түшүндүм</translation>
 <translation id="8730621377337864115">Бүттү</translation>
 <translation id="8732462232047530626">Метадайындарды алдын ала көрүү</translation>
-<translation id="8815966864175525708">Тигинен сүрөт тартуу режимине которулуу</translation>
+<translation id="8815966864175525708">Портрет тартууга өтүү</translation>
 <translation id="8828441885228359828">Видео тартууну улантуу</translation>
 <translation id="8870695351537079478">Видео тартылбай жатат</translation>
 <translation id="8880167521484863515">4–3</translation>
@@ -168,6 +162,7 @@
 <translation id="9045010116236796332">Документтин бардык бурчтары алкактын ичинде болгондой кылып түздөңүз</translation>
 <translation id="9045155556724273246">10 секунд</translation>
 <translation id="906331135292332864">Сүрөт иштетилүүдө...</translation>
+<translation id="9161584225258678723">Time Lapse</translation>
 <translation id="922762992951083513">Чыгылдыруу күйүк</translation>
 <translation id="945522503751344254">Пикириңизди билдириңиз</translation>
 </translationbundle>

@@ -78,11 +78,13 @@ import "chromeos/crosapi/mojom/resource_manager.mojom";
 import "chromeos/crosapi/mojom/screen_manager.mojom";
 import "chromeos/crosapi/mojom/select_file.mojom";
 import "chromeos/crosapi/mojom/sharesheet.mojom";
+import "chromeos/crosapi/mojom/smart_reader.mojom";
 import "chromeos/crosapi/mojom/speech_recognition.mojom";
 import "chromeos/crosapi/mojom/structured_metrics_service.mojom";
 import "chromeos/crosapi/mojom/sync.mojom";
 import "chromeos/crosapi/mojom/system_display.mojom";
 import "chromeos/crosapi/mojom/task_manager.mojom";
+import "chromeos/crosapi/mojom/telemetry_event_service.mojom";
 import "chromeos/crosapi/mojom/test_controller.mojom";
 import "chromeos/crosapi/mojom/timezone.mojom";
 import "chromeos/crosapi/mojom/tts.mojom";
@@ -98,6 +100,7 @@ import "chromeos/crosapi/mojom/vpn_extension_observer.mojom";
 import "chromeos/crosapi/mojom/wallpaper.mojom";
 import "chromeos/crosapi/mojom/web_app_service.mojom";
 import "chromeos/crosapi/mojom/web_page_info.mojom";
+import "chromeos/crosapi/mojom/media_ui.mojom";
 import "mojo/public/mojom/base/big_string.mojom";
 import "mojo/public/mojom/base/file_path.mojom";
 import "mojo/public/mojom/base/generic_pending_receiver.mojom";
@@ -134,8 +137,8 @@ struct BrowserInfo {
 // please note the milestone when you added it, to help us reason about
 // compatibility between the client applications and older ash-chrome binaries.
 //
-// Next version: 104
-// Next method id: 107
+// Next version: 107
+// Next method id: 110
 [Stable, Uuid="8b79c34f-2bf8-4499-979a-b17cac522c1e",
  RenamedFrom="crosapi.mojom.AshChromeService"]
 interface Crosapi {
@@ -318,10 +321,9 @@ interface Crosapi {
   [MinVersion=72] BindExtensionInfoPrivate@75(
       pending_receiver<ExtensionInfoPrivate> receiver);
 
-  // FirewallHoleService is a service that allows users to open ports in the
-  // ChromeOS system firewall from Lacros. Implemented in Ash.
-  [MinVersion=101] BindFirewallHoleService@105(
-      pending_receiver<FirewallHoleService> receiver);
+  // Deprecated in M114; use chromeos::FirewallHole directly.
+  [MinVersion=101] REMOVED_105@105(
+      pending_receiver<FirewallHoleServiceDeprecated> receiver);
 
   // NetworkingPrivate is a service that allows users to modify
   // network settings in Lacros. Implemented in Ash.
@@ -420,6 +422,10 @@ interface Crosapi {
   [MinVersion=17] BindMachineLearningService@22(
       pending_receiver<chromeos.machine_learning.mojom.MachineLearningService> receiver);
 
+  // Binds the MediaUI interface for the Global Media Controls UI.
+  // Added in M113.
+  [MinVersion=105] BindMediaUI@108(pending_receiver<MediaUI> receiver);
+
   // Binds the MessageCenter interface for showing notification messages.
   // Added in M86.
   BindMessageCenter@3(pending_receiver<MessageCenter> receiver);
@@ -499,6 +505,11 @@ interface Crosapi {
   [MinVersion=66]
   BindSharesheet@70(
       pending_receiver<Sharesheet> receiver);
+
+  // Binds the Smart Reader manager to the Smart Reader client.
+  [MinVersion=103]
+  BindSmartReaderClient@107(
+      pending_remote<crosapi.mojom.SmartReaderClient> remote);
 
   // Binds the SpeechRecognition interface to access on-device speech
   // recognition.
@@ -587,6 +598,12 @@ interface Crosapi {
   // task manager.
   // Added in M91.
   [MinVersion=19] BindTaskManager@24(pending_receiver<TaskManager> receiver);
+
+  // Binds the TelemetryEventService interface for registering telemetry events
+  // in Lacros-Chrome.
+  // Added in M114.
+  [MinVersion=106] BindTelemetryEventService@109(
+    pending_receiver<TelemetryEventService> receiver);
 
   // Binds the telemetry probe service to allow Lacros request telemetry data
   // from Ash.
@@ -934,8 +951,8 @@ enum OpenUrlFrom {
 // parameters here. If a new parameter is added and its value is only known
 // after the user has logged in, please update BrowserPostLoginParams as well.
 //
-// Next version: 57
-// Next id: 57
+// Next version: 61
+// Next id: 61
 [Stable, RenamedFrom="crosapi.mojom.LacrosInitParams"]
 struct BrowserInitParams {
   // This is ash-chrome's version of the Crosapi interface. This is used by
@@ -977,14 +994,8 @@ struct BrowserInitParams {
   [MinVersion=6]
   DefaultPaths? default_paths@6;
 
-  // Device Account's obfuscated Gaia id, if present.
-  // This is null for older versions of ash, for Active Directory sessions,
-  // Guest sessions, Managed Guest sessions, Demo mode, and Kiosks.
-  // Added in M89.
-  // Deprecated in M91. Use `device_account` (field id 16)  instead.
-  // TODO(crbug.com/1195865): Remove this in M93.
   [MinVersion=7]
-  string? device_account_gaia_id@7;
+  string? REMOVED_7@7;
 
   // Whether or not metrics reporting in ash is managed by policy. This is
   // passed independently because the metrics reporting state is controlled by
@@ -1303,6 +1314,25 @@ struct BrowserInitParams {
   [MinVersion=57]
   StandaloneBrowserAppServiceBlockList?
       standalone_browser_app_service_blocklist@57;
+
+  // When this flag is set to true, CPU-mappable native GpuMemoryBuffers are
+  // enabled.
+  //
+  // TODO(b/278097642): improve this documentation. I think this only refers to
+  // the ability of renderer processes to obtain such buffers because as far as
+  // I know, the GPU process can allocate CPU-mappable native GpuMemoryBuffers
+  // regardless of this flag.
+  [MinVersion=58]
+  bool enable_cpu_mappable_native_gpu_memory_buffers@58;
+
+  // When this flag is set to true, OOP video decoding is available.
+  [MinVersion=59]
+  bool oop_video_decoding_enabled@59;
+
+  // Set to true when the `chromeos::features::kUploadOfficeToCloud` flag is
+  // enabled in Ash.
+  [MinVersion=60]
+  bool is_upload_office_to_cloud_enabled@60;
 };
 
 // BrowserPostLoginParams is the subset of parameters in BrowserInitParams
@@ -1323,13 +1353,7 @@ struct BrowserPostLoginParams {
   // Added in M89.
   DefaultPaths? default_paths@1;
 
-  // Device Account's obfuscated Gaia id, if present.
-  // This is null for older versions of ash, for Active Directory sessions,
-  // Guest sessions, Managed Guest sessions, Demo mode, and Kiosks.
-  // Added in M89.
-  // Deprecated in M91. Use `device_account` (field id 16)  instead.
-  // TODO(crbug.com/1195865): Remove this in M93.
-  string? device_account_gaia_id@2;
+  string? REMOVED_2@2;
 
   // Primary user ID hash. Used to set CROS_USER_ID_HASH env var in crosh.
   // Do not use this to construct paths, use DefaultPaths for that purpose.

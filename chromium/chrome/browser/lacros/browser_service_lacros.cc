@@ -42,6 +42,7 @@
 #include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/startup/first_run_service.h"
+#include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/views/tabs/tab_scrubber_chromeos.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui_util.h"
@@ -58,6 +59,7 @@
 #include "components/feedback/system_logs/system_logs_fetcher.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
@@ -165,7 +167,8 @@ Browser* FindBrowserWithTabId(const std::string& tab_id_str) {
 }
 
 bool ShowProfilePickerIfNeeded(bool incognito) {
-  if (ProfilePicker::ShouldShowAtLaunch() &&
+  if (StartupProfileModeFromReason(ProfilePicker::GetStartupModeReason()) ==
+          StartupProfileMode::kProfilePicker &&
       chrome::GetTotalBrowserCount() == 0 && !incognito) {
     // Profile picker does not support passing through the incognito param. It
     // also does not support passing through the
@@ -549,21 +552,30 @@ void BrowserServiceLacros::NewWindowWithProfile(
   }
 
   switch (IncognitoModePrefs::GetAvailability(profile->GetPrefs())) {
-    case IncognitoModePrefs::Availability::kEnabled:
+    case policy::IncognitoModeAvailability::kEnabled:
       // Default behavior: both incognito and regular mode are allowed.
       break;
-    case IncognitoModePrefs::Availability::kDisabled:
+    case policy::IncognitoModeAvailability::kDisabled:
       incognito = false;
       break;
-    case IncognitoModePrefs::Availability::kForced:
+    case policy::IncognitoModeAvailability::kForced:
       incognito = true;
       break;
-    case IncognitoModePrefs::Availability::kNumTypes:
+    case policy::IncognitoModeAvailability::kNumTypes:
       NOTREACHED();
       break;
   }
 
   display::ScopedDisplayForNewWindows scoped(target_display_id);
+
+  if (HasPendingUncleanExit(profile)) {
+    // Restore all previously open profiles when recovering from a crash with
+    // the profile picker disabled, which is equivalent to performing a
+    // FullRestore.
+    OpenForFullRestoreWithProfile(/*skip_crash_restore=*/false, profile);
+    std::move(callback).Run();
+    return;
+  }
 
   chrome::NewEmptyWindow(
       incognito ? profile->GetPrimaryOTRProfile(/*create_if_needed=*/true)
@@ -673,6 +685,15 @@ void BrowserServiceLacros::LaunchOrNewTabWithProfile(
   }
 
   display::ScopedDisplayForNewWindows scoped(target_display_id);
+
+  if (HasPendingUncleanExit(profile)) {
+    // Restore all previously open profiles when recovering from a crash with
+    // the profile picker disabled, which is equivalent to performing a
+    // FullRestore.
+    OpenForFullRestoreWithProfile(/*skip_crash_restore=*/false, profile);
+    std::move(callback).Run();
+    return;
+  }
 
   Browser* browser =
       chrome::FindTabbedBrowser(profile, /*match_original_profiles=*/false);

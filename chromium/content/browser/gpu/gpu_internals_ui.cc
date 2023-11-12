@@ -17,6 +17,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
+#include "base/memory/raw_ref.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
@@ -27,8 +28,8 @@
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host.h"
-#include "content/grit/content_resources.h"
-#include "content/grit/dev_ui_content_resources.h"
+#include "content/grit/gpu_resources.h"
+#include "content/grit/gpu_resources_map.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
@@ -69,8 +70,9 @@
 namespace content {
 namespace {
 
-WebUIDataSource* CreateGpuHTMLSource() {
-  WebUIDataSource* source = WebUIDataSource::Create(kChromeUIGpuHost);
+void CreateAndAddGpuHTMLSource(BrowserContext* browser_context) {
+  WebUIDataSource* source =
+      WebUIDataSource::CreateAndAdd(browser_context, kChromeUIGpuHost);
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources 'self';");
@@ -79,26 +81,8 @@ WebUIDataSource* CreateGpuHTMLSource() {
       "trusted-types static-types;");
 
   source->UseStringsJs();
-  source->AddResourcePath("browser_bridge.js", IDR_GPU_BROWSER_BRIDGE_JS);
-  source->AddResourcePath("gpu_internals.js", IDR_GPU_INTERNALS_JS);
-  source->AddResourcePath("info_view.html.js",
-                          IDR_GPU_INTERNALS_INFO_VIEW_HTML_JS);
-  source->AddResourcePath("info_view.js", IDR_GPU_INTERNALS_INFO_VIEW_JS);
-  source->AddResourcePath("info_view_table.html.js",
-                          IDR_GPU_INTERNALS_INFO_VIEW_TABLE_HTML_JS);
-  source->AddResourcePath("info_view_table.js",
-                          IDR_GPU_INTERNALS_INFO_VIEW_TABLE_JS);
-  source->AddResourcePath("info_view_table_row.html.js",
-                          IDR_GPU_INTERNALS_INFO_VIEW_TABLE_ROW_HTML_JS);
-  source->AddResourcePath("info_view_table_row.js",
-                          IDR_GPU_INTERNALS_INFO_VIEW_TABLE_ROW_JS);
-  source->AddResourcePath("vulkan_info.js", IDR_GPU_VULKAN_INFO_JS);
-  source->AddResourcePath("vulkan_info.mojom-webui.js",
-                          IDR_VULKAN_INFO_MOJO_JS);
-  source->AddResourcePath("vulkan_types.mojom-webui.js",
-                          IDR_VULKAN_TYPES_MOJO_JS);
-  source->SetDefaultResource(IDR_GPU_INTERNALS_HTML);
-  return source;
+  source->AddResourcePaths(base::make_span(kGpuResources, kGpuResourcesSize));
+  source->AddResourcePath("", IDR_GPU_GPU_INTERNALS_HTML);
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -241,10 +225,8 @@ base::Value::List GetBasicGpuInfo(const gpu::GPUInfo& gpu_info,
                                                gpu_info.machine_model_name));
   basic_info.Append(display::BuildGpuInfoEntry("Machine model version",
                                                gpu_info.machine_model_version));
-  basic_info.Append(display::BuildGpuInfoEntry("GL implementation",
-                                               gpu_info.gl_implementation));
-  basic_info.Append(display::BuildGpuInfoEntry("ANGLE implementation",
-                                               gpu_info.angle_implementation));
+  basic_info.Append(display::BuildGpuInfoEntry(
+      "GL implementation parts", gpu_info.gl_implementation_parts.ToString()));
   basic_info.Append(
       display::BuildGpuInfoEntry("Display type", gpu_info.display_type));
   basic_info.Append(
@@ -632,10 +614,13 @@ base::Value::List GetVideoAcceleratorsInfo() {
   base::Value::List info;
 
   struct {
-    const gpu::VideoDecodeAcceleratorSupportedProfiles& capabilities;
+    const raw_ref<const gpu::VideoDecodeAcceleratorSupportedProfiles,
+                  ExperimentalAsh>
+        capabilities;
     std::string name;
   } kVideoDecoderImplementations[] = {
-      {gpu_info.video_decode_accelerator_supported_profiles, "Decoding"},
+      {raw_ref(gpu_info.video_decode_accelerator_supported_profiles),
+       "Decoding"},
   };
 
   info.Append(display::BuildGpuInfoEntry("Decoding", ""));
@@ -912,9 +897,7 @@ GpuInternalsUI::GpuInternalsUI(WebUI* web_ui)
   web_ui->AddMessageHandler(std::make_unique<GpuMessageHandler>());
 
   // Set up the chrome://gpu/ source.
-  BrowserContext* browser_context =
-      web_ui->GetWebContents()->GetBrowserContext();
-  WebUIDataSource::Add(browser_context, CreateGpuHTMLSource());
+  CreateAndAddGpuHTMLSource(web_ui->GetWebContents()->GetBrowserContext());
 }
 
 }  // namespace content

@@ -16,7 +16,7 @@
 <translation id="3291688615589870984">{DAYS,plural, =1 {1 päivä} other {# päivää}}</translation>
 <translation id="335581015389089642">Puhe</translation>
 <translation id="3600566671520689681">{DAYS,plural, =1 {1 päivä jäljellä} other {# päivää jäljellä}}</translation>
-<translation id="3618849550573277856">Etsi ”<ph name="LOOKUP_STRING" /></translation>
+<translation id="3618849550573277856">Etsi "<ph name="LOOKUP_STRING" />"</translation>
 <translation id="3740362395218339114"><ph name="QUANTITY" /> Gt/s</translation>
 <translation id="3757388668994797779"><ph name="QUANTITY" /> Gt</translation>
 <translation id="3889424535448813030">Nuoli oikealle</translation>

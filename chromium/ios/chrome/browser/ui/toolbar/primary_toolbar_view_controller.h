@@ -12,6 +12,10 @@
 #import "ios/chrome/browser/ui/sharing/sharing_positioner.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view_controller.h"
 
+// Vivaldi
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
+// End Vivaldi
+
 @protocol PrimaryToolbarViewControllerDelegate;
 @class ViewRevealingVerticalPanHandler;
 
@@ -42,6 +46,10 @@
 
 // Shows the animation when transitioning to a prerendered page.
 - (void)showPrerenderingAnimation;
+
+// Vivaldi
+- (void)updateVivaldiShieldState:(ATBSettingType)setting;
+// End Vivaldi
 
 @end
 

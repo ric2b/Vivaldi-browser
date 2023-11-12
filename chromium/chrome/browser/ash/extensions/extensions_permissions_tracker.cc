@@ -179,7 +179,7 @@ ExtensionsPermissionsTracker::ExtensionsPermissionsTracker(
     content::BrowserContext* browser_context)
     : registry_(registry),
       pref_service_(Profile::FromBrowserContext(browser_context)->GetPrefs()) {
-  observation_.Observe(registry_);
+  observation_.Observe(registry_.get());
   pref_change_registrar_.Init(pref_service_);
   pref_change_registrar_.Add(
       pref_names::kInstallForceList,
@@ -199,14 +199,14 @@ void ExtensionsPermissionsTracker::OnForcedExtensionsPrefChanged() {
   // installation_mode: forced.
   const base::Value& value =
       pref_service_->GetValue(pref_names::kInstallForceList);
-  if (value.type() != base::Value::Type::DICT) {
+  if (!value.is_dict()) {
     return;
   }
 
   extension_safety_ratings_.clear();
   pending_forced_extensions_.clear();
 
-  for (const auto entry : value.DictItems()) {
+  for (const auto entry : value.GetDict()) {
     const ExtensionId& extension_id = entry.first;
     // By default the extension permissions are assumed to trigger full warning
     // (false). When the extension is loaded, if all of its permissions is safe,

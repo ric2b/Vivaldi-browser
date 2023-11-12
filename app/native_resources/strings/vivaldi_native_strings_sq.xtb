@@ -39,7 +39,7 @@
 <translation id="2873951654529031587">Koshi</translation>
 <translation id="292258461174562431">Monstra 4</translation>
 <translation id="2923448633003185837">Ngjit dhe shfletoj</translation>
-<translation id="2953943267837858202">Nuk autorizoj që të luajë automatikisht videot</translation>
+<translation id="2953943267837858202">Nuk lejoj të luajë automatikisht videot</translation>
 <translation id="2977472760057091832">Hap lidhjen në dritare private</translation>
 <translation id="2989805286512600854">Hap në skedë të re</translation>
 <translation id="3027988479108856431">Fatkeqësisht, parametrat e Yandex nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Yandex. Pastaj klikoni Vazhdoj.</translation>
@@ -76,11 +76,12 @@
 <translation id="3914946330804881301">Të importuara nga Opera</translation>
 <translation id="3921292902397893431">Monstra 8</translation>
 <translation id="3943857333388298514">Ngjit</translation>
-<translation id="4005270918754737597">Kaloj këtë versionin</translation>
+<translation id="4005270918754737597">Kaloj këtë version</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Mos trego më</translation>
 <translation id="4074744496918018786">Hap imazhin në dritare private</translation>
 <translation id="410351446219883937">Luajtje automatike</translation>
+<translation id="4281844954008187215">Kushtet e shërbimit</translation>
 <translation id="4324492550286218827">Peizazhi 2</translation>
 <translation id="4406101500523955324">Hap në dritare private të re</translation>
 <translation id="4420816922321010053">Vërtet doni të dilni nga Vivaldi?</translation>
@@ -94,10 +95,11 @@
 <translation id="4636708767492582204">Dërgoj me imejl</translation>
 <translation id="4677434526832593569">Kafsha 8</translation>
 <translation id="474217410105706308">Heq zërin e skedës</translation>
+<translation id="4861715717329665002">Seancat e vetëregjistruara</translation>
 <translation id="4881695831933465202">Hap</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> nga <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Taste të shpejta të importuara</translation>
-<translation id="5092656712000637858">Shtoj faqen te panelet</translation>
+<translation id="5092656712000637858">Shtoj faqen te paneli</translation>
 <translation id="5177818338935286353">Monstra 7</translation>
 <translation id="5213743983876949565">Kafsha 1</translation>
 <translation id="5238244642230426581">Faqet interesante të importuara</translation>
@@ -147,7 +149,7 @@
 <translation id="7865983598101744945">Konfirmoni daljen</translation>
 <translation id="7957213167373139414">Kalendari im</translation>
 <translation id="8027581147000338959">Hap në dritare të re</translation>
-<translation id="8044382196220116469">Nuk autorizoj uebsajtet që të luajnë automatikisht videot</translation>
+<translation id="8044382196220116469">Nuk lejoj uebsajtet të luajnë automatikisht videot</translation>
 <translation id="8099620695029051217">Kopjoj adresën e faqes</translation>
 <translation id="8197810018650377191">Shtoj te faqet interesante</translation>
 <translation id="8261506727792406068">Fshij</translation>
@@ -159,7 +161,7 @@
 <translation id="8439034818057146672">Versioni i ri i Vivaldit është gati për instalim.</translation>
 <translation id="8446668873108041390">Është çaktivizuar ekzekutimi i JavaScript-it nëpërmjet AppleScript-it. Parametri për ta riaktivizuar ndodhet te Parametrat &gt; Sfera private &gt; Aktivitetet e Apple.</translation>
 <translation id="8539196077526389150">Peizazhi 13</translation>
-<translation id="8562339533180097902">Mbyll dhe instaloj tani Vivaldin</translation>
+<translation id="8562339533180097902">Mbyll dhe instaloj Vivaldin</translation>
 <translation id="8567452685425968223">Shpaketon përditësimin...</translation>
 <translation id="8624587806981488221">&amp;Freskoj imazhin</translation>
 <translation id="864444594187862076">Opera versioni 15+ (Developer)</translation>
@@ -170,13 +172,13 @@
 <translation id="8768970203213061953">Peizazhi 14</translation>
 <translation id="8773635261052182196">Nuk do të shfaqen më njoftimet. Mund të aktivizohen sërish te parametrat e Vivaldit.</translation>
 <translation id="8774017153185436870">Uebsajtet mund të luajnë automatikisht videot</translation>
-<translation id="8813277370772331957">Më kujto pastaj</translation>
-<translation id="8894900864683381599">Shtoj lidhjen te panelet</translation>
+<translation id="8813277370772331957">Kujtoj pastaj</translation>
+<translation id="8894900864683381599">Shtoj lidhjen te paneli</translation>
 <translation id="8912720443398351457">Vërtet doni të dilni nga Vivaldi?</translation>
 <translation id="8947109330183116400">Përzgjidhni skedarin HTML me faqet interesante</translation>
 <translation id="9017566390391482291">Përzgjidhni dosjen e profilit të Vivaldit për importim</translation>
 <translation id="9048058608784130603">Pret përditësimin <ph name="VERSION" /></translation>
-<translation id="9048224371732578627">Autorizohen të luajnë automatikisht videot</translation>
+<translation id="9048224371732578627">Lejohet të hapin automatikisht videot</translation>
 <translation id="9065203028668620118">Përpunoj</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Hap imazhin si <ph name="USER" /></translation>

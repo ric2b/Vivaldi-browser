@@ -9,6 +9,7 @@
 
 #include "chrome/browser/cart/cart_handler.h"
 #include "chrome/browser/new_tab_page/modules/new_tab_page_modules.h"
+#include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -21,12 +22,15 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/side_panel_customize_chrome_resources.h"
 #include "chrome/grit/side_panel_customize_chrome_resources_map.h"
+#include "components/search/ntp_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/webui/web_ui_util.h"
+#include "ui/webui/color_change_listener/color_change_handler.h"
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(CustomizeChromeUI,
                                       kChangeChromeThemeButtonElementId);
@@ -84,6 +88,7 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       {"showCardsToggleTitle", IDS_NTP_CUSTOMIZE_SHOW_CARDS_LABEL},
       {"modulesCartDiscountConsentAccept",
        IDS_NTP_MODULES_CART_DISCOUNT_CONSENT_ACCEPT},
+      {"modulesCartSentence", IDS_NTP_MODULES_CART_SENTENCE},
       // Required by <managed-dialog>.
       {"controlledSettingPolicy", IDS_CONTROLLED_SETTING_POLICY},
       {"close", IDS_NEW_TAB_VOICE_CLOSE_TOOLTIP},
@@ -95,6 +100,12 @@ CustomizeChromeUI::CustomizeChromeUI(content::WebUI* web_ui)
       "modulesEnabled",
       ntp::HasModulesEnabled(module_id_names_,
                              IdentityManagerFactory::GetForProfile(profile_)));
+  source->AddBoolean(
+      "showCartInQuestModuleSetting",
+      IsCartModuleEnabled() &&
+          base::FeatureList::IsEnabled(
+              ntp_features::kNtpChromeCartInHistoryClusterModule));
+  webui::SetupChromeRefresh2023(source);
 
   webui::SetupWebUIDataSource(
       source,
@@ -145,6 +156,13 @@ void CustomizeChromeUI::BindInterface(
     help_bubble_handler_factory_receiver_.reset();
   }
   help_bubble_handler_factory_receiver_.Bind(std::move(pending_receiver));
+}
+
+void CustomizeChromeUI::BindInterface(
+    mojo::PendingReceiver<color_change_listener::mojom::PageHandler>
+        pending_receiver) {
+  color_provider_handler_ = std::make_unique<ui::ColorChangeHandler>(
+      web_ui()->GetWebContents(), std::move(pending_receiver));
 }
 
 void CustomizeChromeUI::CreatePageHandler(

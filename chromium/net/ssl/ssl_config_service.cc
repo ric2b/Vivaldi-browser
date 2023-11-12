@@ -6,8 +6,9 @@
 
 #include <tuple>
 
+#include "base/feature_list.h"
 #include "base/observer_list.h"
-#include "net/ssl/ssl_config_service_defaults.h"
+#include "net/base/features.h"
 
 namespace net {
 
@@ -18,11 +19,11 @@ namespace {
 bool SSLContextConfigsAreEqual(const net::SSLContextConfig& config1,
                                const net::SSLContextConfig& config2) {
   return std::tie(config1.version_min, config1.version_max,
-                  config1.disabled_cipher_suites, config1.cecpq2_enabled,
-                  config1.ech_enabled) ==
+                  config1.disabled_cipher_suites, config1.post_quantum_enabled,
+                  config1.ech_enabled, config1.insecure_hash_override) ==
          std::tie(config2.version_min, config2.version_max,
-                  config2.disabled_cipher_suites, config2.cecpq2_enabled,
-                  config2.ech_enabled);
+                  config2.disabled_cipher_suites, config2.post_quantum_enabled,
+                  config2.ech_enabled, config2.insecure_hash_override);
 }
 
 }  // namespace
@@ -34,6 +35,16 @@ SSLContextConfig::~SSLContextConfig() = default;
 SSLContextConfig& SSLContextConfig::operator=(const SSLContextConfig&) =
     default;
 SSLContextConfig& SSLContextConfig::operator=(SSLContextConfig&&) = default;
+
+bool SSLContextConfig::EncryptedClientHelloEnabled() const {
+  return ech_enabled &&
+         base::FeatureList::IsEnabled(features::kEncryptedClientHello);
+}
+
+bool SSLContextConfig::InsecureHashesInTLSHandshakesEnabled() const {
+  return insecure_hash_override.value_or(
+      base::FeatureList::IsEnabled(features::kSHA1ServerSignature));
+}
 
 SSLConfigService::SSLConfigService()
     : observer_list_(base::ObserverListPolicy::EXISTING_ONLY) {}

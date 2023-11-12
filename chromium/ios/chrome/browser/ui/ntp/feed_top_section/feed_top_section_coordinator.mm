@@ -7,6 +7,8 @@
 #import "components/signin/public/base/signin_metrics.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
@@ -14,8 +16,6 @@
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_mediator.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_view_controller.h"
 
@@ -50,14 +50,16 @@
       initWithConsumer:self.feedTopSectionViewController
           browserState:browserState];
   self.signinPromoMediator = [[SigninPromoViewMediator alloc]
-      initWithAccountManagerService:ChromeAccountManagerServiceFactory::
-                                        GetForBrowserState(browserState)
-                        authService:AuthenticationServiceFactory::
-                                        GetForBrowserState(browserState)
-                        prefService:browserState->GetPrefs()
-                        accessPoint:signin_metrics::AccessPoint::
-                                        ACCESS_POINT_NTP_FEED_TOP_PROMO
-                          presenter:self];
+            initWithBrowser:self.browser
+      accountManagerService:ChromeAccountManagerServiceFactory::
+                                GetForBrowserState(browserState)
+                authService:AuthenticationServiceFactory::GetForBrowserState(
+                                browserState)
+                prefService:browserState->GetPrefs()
+                accessPoint:signin_metrics::AccessPoint::
+                                ACCESS_POINT_NTP_FEED_TOP_PROMO
+                  presenter:self
+         baseViewController:self.feedTopSectionViewController];
   self.signinPromoMediator.consumer = self.feedTopSectionMediator;
   self.feedTopSectionMediator.signinPromoMediator = self.signinPromoMediator;
   self.feedTopSectionMediator.ntpDelegate = self.ntpDelegate;

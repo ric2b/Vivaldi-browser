@@ -36,6 +36,8 @@ const char kAccountsPrefDeviceLocalAccountsKeyWebKioskTitle[] =
     "web_kiosk_title";
 const char kAccountsPrefDeviceLocalAccountsKeyWebKioskIconUrl[] =
     "web_kiosk_icon_url";
+const char kAccountsPrefDeviceLocalAccountsKeyEphemeralMode[] =
+    "ephemeral_mode";
 const char kAccountsPrefDeviceLocalAccountAutoLoginId[] =
     "cros.accounts.deviceLocalAccountAutoLoginId";
 const char kAccountsPrefDeviceLocalAccountAutoLoginDelay[] =
@@ -272,6 +274,10 @@ const char kReportDeviceAudioStatusCheckingRateMs[] =
 // How frequently the audio data are checked for events.
 const char kReportDeviceSignalStrengthEventDrivenTelemetry[] =
     "cros.telemetry_reporting.report_signal_strength_event_driven_telemetry";
+
+// Determines whether the network events are reported.
+const char kDeviceReportNetworkEvents[] =
+    "cros.reporting.report_network_events";
 
 // This policy should not appear in the protobuf ever but is used internally to
 // signal that we are running in a "safe-mode" for policy recovery.

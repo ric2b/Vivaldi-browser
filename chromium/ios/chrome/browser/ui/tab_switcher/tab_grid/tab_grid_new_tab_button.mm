@@ -5,13 +5,21 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_new_tab_button.h"
 
 #import "base/check.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "base/notreached.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -41,9 +49,13 @@ const CGFloat kLargeSymbolSize = 37;
 - (instancetype)initWithLargeSize:(BOOL)largeSize {
   self = [super initWithFrame:CGRectZero];
   if (self) {
-    DCHECK(UseSymbols());
     CGFloat symbolSize = largeSize ? kLargeSymbolSize : kSmallSymbolSize;
-    _symbol = CustomSymbolWithPointSize(kPlusCircleFillSymbol, symbolSize);
+    if (base::FeatureList::IsEnabled(kSFSymbolsFollowUp)) {
+      _symbol = CustomSymbolWithPointSize(kPlusCircleFillSymbol, symbolSize);
+    } else {
+      _symbol =
+          CustomSymbolWithPointSize(kLegacyPlusCircleFillSymbol, symbolSize);
+    }
     [self setImage:_symbol forState:UIControlStateNormal];
     self.pointerInteractionEnabled = YES;
     self.pointerStyleProvider = CreateLiftEffectCirclePointerStyleProvider();
@@ -55,6 +67,13 @@ const CGFloat kLargeSymbolSize = 37;
                       incognitoImage:(UIImage*)incognitoImage {
   self = [super initWithFrame:CGRectZero];
   if (self) {
+
+    if (!IsVivaldiRunning()) {
+    if (@available(iOS 15, *)) {
+      NOTREACHED();
+    }
+    } // End Vivaldi
+
     _regularImage = regularImage;
     _incognitoImage = incognitoImage;
 
@@ -67,21 +86,30 @@ const CGFloat kLargeSymbolSize = 37;
 #pragma mark - Public
 
 - (void)setPage:(TabGridPage)page {
+
+  if (IsVivaldiRunning()) {
+    [self setIconPage:page];
+  } else {
   if (@available(iOS 15, *)) {
-    if (UseSymbols()) {
-      [self setSymbolPage:page];
-    } else {
-      [self setIconPage:page];
-    }
+    [self setSymbolPage:page];
   } else {
     [self setIconPage:page];
   }
+  } // End Vivaldi
+
 }
 
 #pragma mark - Private
 
 // Sets page using icon images.
 - (void)setIconPage:(TabGridPage)page {
+
+  if (!IsVivaldiRunning()) {
+  if (@available(iOS 15, *)) {
+    NOTREACHED();
+  }
+  } // End Vivaldi
+
   // self.page is inited to 0 (i.e. TabGridPageIncognito) so do not early return
   // here, otherwise when app is launched in incognito mode the image will be
   // missing.
@@ -108,6 +136,12 @@ const CGFloat kLargeSymbolSize = 37;
       break;
   }
   _page = page;
+
+  if (IsVivaldiRunning()) {
+    renderedImage = [renderedImage
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } // End Vivaldi
+
   [self setImage:renderedImage forState:UIControlStateNormal];
 }
 

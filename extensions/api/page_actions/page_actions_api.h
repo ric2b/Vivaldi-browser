@@ -31,7 +31,7 @@ class PageActionsEventRouter : page_actions::Service::Observer {
       page_actions::Service::ScriptOverride script_override) override;
 
  private:
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 };
 
 class PageActionsAPI : public BrowserContextKeyedAPI,
@@ -54,7 +54,7 @@ class PageActionsAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<PageActionsAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "pageActionsAPI"; }

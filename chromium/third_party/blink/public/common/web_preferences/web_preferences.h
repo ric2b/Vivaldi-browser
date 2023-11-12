@@ -124,6 +124,7 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   blink::mojom::PointerType primary_pointer_type;
   int available_hover_types;
   blink::mojom::HoverType primary_hover_type;
+  blink::mojom::OutputDeviceUpdateAbilityType output_device_update_ability_type;
   bool dont_send_key_events_to_javascript;
   bool barrel_button_for_drag_enabled = false;
   bool sync_xhr_in_documents_enabled;
@@ -291,6 +292,15 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // Defines the current autoplay policy.
   blink::mojom::AutoplayPolicy autoplay_policy =
       blink::mojom::AutoplayPolicy::kNoUserGestureRequired;
+
+  // `getDisplayMedia()`'s transient activation requirement can be bypassed via
+  // `ScreenCaptureWithoutGestureAllowedForOrigins` policy.
+  bool require_transient_activation_for_get_display_media;
+
+  // `show{OpenFile|SaveFile|Directory}Picker()`'s transient activation
+  // requirement can be bypassed via
+  // `FileOrDirectoryPickerWithoutGestureAllowedForOrigins` policy.
+  bool require_transient_activation_for_show_file_or_directory_picker;
 
   // The preferred color scheme for the web content. The scheme is used to
   // evaluate the prefers-color-scheme media query and resolve UA color scheme

@@ -25,6 +25,7 @@
 #include "headless/lib/browser/headless_browser_context_options.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
+#include "headless/lib/browser/headless_client_hints_controller_delegate.h"
 #include "headless/lib/browser/headless_permission_manager.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
@@ -64,7 +65,9 @@ HeadlessBrowserContextImpl::HeadlessBrowserContextImpl(
     : browser_(browser),
       context_options_(std::move(context_options)),
       permission_controller_delegate_(
-          std::make_unique<HeadlessPermissionManager>(this)) {
+          std::make_unique<HeadlessPermissionManager>(this)),
+      hints_delegate_(
+          std::make_unique<HeadlessClientHintsControllerDelegate>()) {
   BrowserContextDependencyManager::GetInstance()->MarkBrowserContextLive(this);
   InitWhileIOAllowed();
   simple_factory_key_ =
@@ -153,50 +156,6 @@ HeadlessBrowserContextImpl::GetAllWebContents() {
   return result;
 }
 
-void HeadlessBrowserContextImpl::SetDevToolsFrameToken(
-    int render_process_id,
-    int render_frame_routing_id,
-    const base::UnguessableToken& devtools_frame_token,
-    int frame_tree_node_id) {
-  base::AutoLock lock(devtools_frame_token_map_lock_);
-  devtools_frame_token_map_[content::GlobalRenderFrameHostId(
-      render_process_id, render_frame_routing_id)] = devtools_frame_token;
-  frame_tree_node_id_to_devtools_frame_token_map_[frame_tree_node_id] =
-      devtools_frame_token;
-}
-
-void HeadlessBrowserContextImpl::RemoveDevToolsFrameToken(
-    int render_process_id,
-    int render_frame_routing_id,
-    int frame_tree_node_id) {
-  base::AutoLock lock(devtools_frame_token_map_lock_);
-  devtools_frame_token_map_.erase(content::GlobalRenderFrameHostId(
-      render_process_id, render_frame_routing_id));
-  frame_tree_node_id_to_devtools_frame_token_map_.erase(frame_tree_node_id);
-}
-
-const base::UnguessableToken* HeadlessBrowserContextImpl::GetDevToolsFrameToken(
-    int render_process_id,
-    int render_frame_id) const {
-  base::AutoLock lock(devtools_frame_token_map_lock_);
-  const auto& find_it = devtools_frame_token_map_.find(
-      content::GlobalRenderFrameHostId(render_process_id, render_frame_id));
-  if (find_it == devtools_frame_token_map_.end())
-    return nullptr;
-  return &find_it->second;
-}
-
-const base::UnguessableToken*
-HeadlessBrowserContextImpl::GetDevToolsFrameTokenForFrameTreeNodeId(
-    int frame_tree_node_id) const {
-  base::AutoLock lock(devtools_frame_token_map_lock_);
-  const auto& find_it =
-      frame_tree_node_id_to_devtools_frame_token_map_.find(frame_tree_node_id);
-  if (find_it == frame_tree_node_id_to_devtools_frame_token_map_.end())
-    return nullptr;
-  return &find_it->second;
-}
-
 void HeadlessBrowserContextImpl::Close() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   browser_->DestroyBrowserContext(this);
@@ -276,7 +235,7 @@ HeadlessBrowserContextImpl::GetPermissionControllerDelegate() {
 
 content::ClientHintsControllerDelegate*
 HeadlessBrowserContextImpl::GetClientHintsControllerDelegate() {
-  return nullptr;
+  return hints_delegate_.get();
 }
 
 content::BackgroundFetchDelegate*

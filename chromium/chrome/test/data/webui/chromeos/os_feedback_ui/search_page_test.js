@@ -505,6 +505,99 @@ export function searchPageTestSuite() {
     });
   });
 
+  test('typingDisplayWithInternalAccountShowsQuestionnaire', async () => {
+    let textAreaElement = null;
+    await initializePage();
+    // The questionnaire will be only shown if the account belongs to an
+    // internal user.
+    page.feedbackContext = fakeInternalUserFeedbackContext;
+
+    textAreaElement = getElement('#descriptionText');
+    textAreaElement.value = 'My display is working great!';
+    // Setting the value of the textarea in code does not trigger the
+    // input event. So we trigger it here.
+    textAreaElement.dispatchEvent(new Event('input'));
+    await flushTasks();
+
+    // Check that the questionnaire and all relevant domain questions are
+    // present.
+    assertTrue(textAreaElement.value.indexOf(questionnaireBegin) >= 0);
+    domainQuestions['display'].forEach((question) => {
+      assertTrue(textAreaElement.value.indexOf(question) >= 0);
+    });
+  });
+
+  test('typingScreenWithInternalAccountShowsQuestionnaire', async () => {
+    let textAreaElement = null;
+    await initializePage();
+    // The questionnaire will be only shown if the account belongs to an
+    // internal user.
+    page.feedbackContext = fakeInternalUserFeedbackContext;
+
+    textAreaElement = getElement('#descriptionText');
+    textAreaElement.value = 'My screen is too awesome!';
+    // Setting the value of the textarea in code does not trigger the
+    // input event. So we trigger it here.
+    textAreaElement.dispatchEvent(new Event('input'));
+    await flushTasks();
+
+    // Check that the questionnaire and all relevant domain questions are
+    // present.
+    assertTrue(textAreaElement.value.indexOf(questionnaireBegin) >= 0);
+    domainQuestions['display'].forEach((question) => {
+      assertTrue(textAreaElement.value.indexOf(question) >= 0);
+    });
+  });
+
+  test('typingWifiDisplayWithInternalAccountShowsQuestionnaire', async () => {
+    let textAreaElement = null;
+    await initializePage();
+    // The questionnaire will be only shown if the account belongs to an
+    // internal user.
+    page.feedbackContext = fakeInternalUserFeedbackContext;
+
+    textAreaElement = getElement('#descriptionText');
+    textAreaElement.value = 'My wifi and display is working great!';
+    // Setting the value of the textarea in code does not trigger the
+    // input event. So we trigger it here.
+    textAreaElement.dispatchEvent(new Event('input'));
+    await flushTasks();
+
+    // Check that both questionnaires and all relevant domain questions are
+    // present.
+    assertTrue(textAreaElement.value.indexOf(questionnaireBegin) >= 0);
+    domainQuestions['display'].forEach((question) => {
+      assertTrue(textAreaElement.value.indexOf(question) >= 0);
+    });
+    domainQuestions['wifi'].forEach((question) => {
+      assertTrue(textAreaElement.value.indexOf(question) >= 0);
+    });
+  });
+
+  test('typingMultiDisplayWithInternalAccountShowsQuestionnaire', async () => {
+    let textAreaElement = null;
+    await initializePage();
+    // The questionnaire will be only shown if the account belongs to an
+    // internal user.
+    page.feedbackContext = fakeInternalUserFeedbackContext;
+
+    textAreaElement = getElement('#descriptionText');
+    textAreaElement.value = 'My screen and display is working great over HDMI!';
+    // Setting the value of the textarea in code does not trigger the
+    // input event. So we trigger it here.
+    textAreaElement.dispatchEvent(new Event('input'));
+    await flushTasks();
+
+    // Check that the questionnaire and all relevant domain questions are
+    // present only once.
+    assertTrue(textAreaElement.value.indexOf(questionnaireBegin) >= 0);
+    domainQuestions['display'].forEach((question) => {
+      const idx = textAreaElement.value.indexOf(question);
+      assertTrue(
+          idx >= 0 && textAreaElement.value.indexOf(question, idx + 1) < 0);
+    });
+  });
+
   test(
       'typingSomethingElseWithInternalAccountDoesNotShowQuestionnaire',
       async () => {
@@ -563,5 +656,76 @@ export function searchPageTestSuite() {
     // Check that there is only one instance of the first question.
     assertEquals(
         2, textAreaElement.value.split(domainQuestions['bluetooth'][0]).length);
+  });
+
+  test('typingUsbWithInternalAccountShowsQuestionnaire', async () => {
+    let textAreaElement = null;
+    await initializePage();
+    // The questionnaire will be only shown if the account belongs to an
+    // internal user.
+    page.feedbackContext = fakeInternalUserFeedbackContext;
+
+    textAreaElement = getElement('#descriptionText');
+    textAreaElement.value = 'My USB port stopped working!';
+    // Setting the value of the textarea in code does not trigger the
+    // input event. So we trigger it here.
+    textAreaElement.dispatchEvent(new Event('input'));
+    await flushTasks();
+
+    // Check that the questionnaire with USB questions is shown.
+    assertTrue(textAreaElement.value.indexOf(questionnaireBegin) >= 0);
+    domainQuestions['usb'].forEach((question) => {
+      assertTrue(textAreaElement.value.indexOf(question) >= 0);
+    });
+  });
+
+  test('typingThunderboltWithInternalAccountShowsQuestionnaire', async () => {
+    let textAreaElement = null;
+    await initializePage();
+    // The questionnaire will be only shown if the account belongs to an
+    // internal user.
+    page.feedbackContext = fakeInternalUserFeedbackContext;
+
+    textAreaElement = getElement('#descriptionText');
+    textAreaElement.value = 'There is an issue with my Thunderbolt 3 device.';
+    // Setting the value of the textarea in code does not trigger the
+    // input event. So we trigger it here.
+    textAreaElement.dispatchEvent(new Event('input'));
+    await flushTasks();
+
+    // Check that the questionnaire with Thunderbolt questions is shown.
+    assertTrue(textAreaElement.value.indexOf(questionnaireBegin) >= 0);
+    domainQuestions['thunderbolt'].forEach((question) => {
+      assertTrue(textAreaElement.value.indexOf(question) >= 0);
+    });
+  });
+
+  test('thunderboltQuestionnaireIsPrioritizedOverUsb', async () => {
+    let textAreaElement = null;
+    await initializePage();
+    // The questionnaire will be only shown if the account belongs to an
+    // internal user.
+    page.feedbackContext = fakeInternalUserFeedbackContext;
+
+    textAreaElement = getElement('#descriptionText');
+    textAreaElement.value = 'The USB-C connector on my TBT4 dock is broken';
+    // Setting the value of the textarea in code does not trigger the
+    // input event. So we trigger it here.
+    textAreaElement.dispatchEvent(new Event('input'));
+    await flushTasks();
+
+    // Check that Thunderbolt questions are shown in the questionnaire.
+    assertTrue(textAreaElement.value.indexOf(questionnaireBegin) >= 0);
+    domainQuestions['thunderbolt'].forEach((question) => {
+      assertTrue(textAreaElement.value.indexOf(question) >= 0);
+    });
+
+    // Check that USB-specific questions are not shown. Questions shared
+    // between USB and Thunderbolt will be included.
+    domainQuestions['usb'].forEach((question) => {
+      if (domainQuestions['thunderbolt'].indexOf(question) < 0) {
+        assertTrue(textAreaElement.value.indexOf(question) < 0);
+      }
+    });
   });
 }

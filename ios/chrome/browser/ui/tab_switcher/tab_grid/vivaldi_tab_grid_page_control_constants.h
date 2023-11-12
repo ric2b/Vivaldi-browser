@@ -46,6 +46,17 @@ extern NSString* const kImagePageControlClosedSelected;
 // Icon for recently closed tab not selected state
 extern NSString* const kImagePageControlClosedNotSelected;
 
+// Image names for the different icon state.
+extern NSString* const kImagePageControlRegularSelected;
+extern NSString* const kImagePageControlRegularNotSelected;
+extern NSString* const kImagePageControlIncognitoSelected;
+extern NSString* const kImagePageControlIncognitoNotSelected;
+extern NSString* const kImagePageControlRemoteSelected;
+extern NSString* const kImagePageControlRemoteNotSelected;
+
+// Color for the regular tab count label and icons.
+extern const CGFloat kLegacySelectedColor;
+
 // Slider shadow offset
 extern const CGSize vSliderShadowOffset;
 // Slider shadow radius

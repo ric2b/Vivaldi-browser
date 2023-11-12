@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
@@ -16,6 +17,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/version.h"
@@ -67,6 +69,12 @@ void AppRecover::Uninitialize() {
 }
 
 void AppRecover::FirstTaskRun() {
+  if (!global_prefs_) {
+    VLOG(0) << "Recovery task could not acquire global prefs.";
+    Shutdown(kErrorFailedToLockPrefsMutex);
+    return;
+  }
+
   const std::vector<RegistrationRequest> registrations = RecordRegisteredApps();
 
   // Release global prefs lock so that the updater may run concurrently.
@@ -79,12 +87,13 @@ void AppRecover::FirstTaskRun() {
 }
 
 std::vector<RegistrationRequest> AppRecover::RecordRegisteredApps() const {
+  CHECK(global_prefs_);
   scoped_refptr<PersistedData> data = base::MakeRefCounted<PersistedData>(
       updater_scope(), global_prefs_->GetPrefService());
   std::vector<RegistrationRequest> apps;
   bool found_browser_registration = false;
   for (const std::string& app : data->GetAppIds()) {
-    if (app == kUpdaterAppId) {
+    if (base::EqualsCaseInsensitiveASCII(app, kUpdaterAppId)) {
       continue;
     }
     RegistrationRequest registration;

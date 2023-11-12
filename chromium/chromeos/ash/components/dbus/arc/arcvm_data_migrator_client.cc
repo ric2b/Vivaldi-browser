@@ -7,6 +7,7 @@
 #include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chromeos/ash/components/dbus/arc/fake_arcvm_data_migrator_client.h"
@@ -62,6 +63,20 @@ class ArcVmDataMigratorClientImpl : public ArcVmDataMigratorClient {
     proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&ArcVmDataMigratorClientImpl::OnBoolMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
+  void GetAndroidDataSize(
+      const arc::data_migrator::GetAndroidDataSizeRequest& request,
+      chromeos::DBusMethodCallback<int64_t> callback) override {
+    dbus::MethodCall method_call(
+        arc::data_migrator::kArcVmDataMigratorInterface,
+        arc::data_migrator::kGetAndroidDataSizeMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendProtoAsArrayOfBytes(request);
+    proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&ArcVmDataMigratorClientImpl::OnInt64Method,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
@@ -121,8 +136,24 @@ class ArcVmDataMigratorClientImpl : public ArcVmDataMigratorClient {
     std::move(callback).Run(result);
   }
 
+  void OnInt64Method(chromeos::DBusMethodCallback<int64_t> callback,
+                     dbus::Response* response) {
+    if (!response) {
+      std::move(callback).Run(absl::nullopt);
+      return;
+    }
+    dbus::MessageReader reader(response);
+    int64_t result = 0;
+    if (!reader.PopInt64(&result)) {
+      LOG(ERROR) << "Invalid response: " << response->ToString();
+      std::move(callback).Run(absl::nullopt);
+      return;
+    }
+    std::move(callback).Run(result);
+  }
+
   base::ObserverList<Observer> observers_;
-  dbus::ObjectProxy* proxy_;
+  raw_ptr<dbus::ObjectProxy, ExperimentalAsh> proxy_;
   base::WeakPtrFactory<ArcVmDataMigratorClientImpl> weak_ptr_factory_{this};
 };
 

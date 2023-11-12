@@ -21,6 +21,7 @@ import androidx.core.app.ActivityOptionsCompat;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.back_press.BackPressManager;
@@ -42,7 +43,6 @@ import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.RenderFrameHost;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.url.GURL;
@@ -60,13 +60,16 @@ import dagger.Lazy;
  */
 @ActivityScope
 public class CustomTabActivityNavigationController implements StartStopWithNativeObserver {
-
-    @IntDef({USER_NAVIGATION, REPARENTING, OTHER})
+    @IntDef({FinishReason.USER_NAVIGATION, FinishReason.REPARENTING, FinishReason.OTHER,
+            FinishReason.OPEN_IN_BROWSER})
     @Retention(RetentionPolicy.SOURCE)
     public @interface FinishReason {
         int USER_NAVIGATION = 0;
+        // The web page is opened in the same browser by reparenting the tab into the browser.
         int REPARENTING = 1;
         int OTHER = 2;
+        // The web page is opened in the default browser by starting a new activity.
+        int OPEN_IN_BROWSER = 3;
     }
 
     /** A handler of back presses. */
@@ -239,10 +242,16 @@ public class CustomTabActivityNavigationController implements StartStopWithNativ
         }
 
         BackPressManager.record(BackPressHandler.Type.MINIMIZE_APP_AND_CLOSE_TAB);
+        if (mTabController.dispatchBeforeUnloadIfNeeded()) {
+            MinimizeAppAndCloseTabBackPressHandler.record(MinimizeAppAndCloseTabType.CLOSE_TAB);
+            return true;
+        }
+
         if (mTabController.onlyOneTabRemaining()) {
-            // If we're closing the last tab, just finish the Activity manually. If we had called
-            // mTabController.closeTab() and waited for the Activity to close as a result we would
-            // have a visual glitch: https://crbug.com/1087108.
+            // If we're closing the last tab and it it doesn't have beforeunload, just finish
+            // the Activity manually. If we had called mTabController.closeTab() and waited for
+            // the Activity to close as a result we would have a visual glitch:
+            // https://crbug.com/1087108.
             MinimizeAppAndCloseTabBackPressHandler.record(MinimizeAppAndCloseTabType.MINIMIZE_APP);
             finish(USER_NAVIGATION);
         } else {
@@ -307,13 +316,14 @@ public class CustomTabActivityNavigationController implements StartStopWithNativ
             // Remove observer to not trigger finishing in onAllTabsClosed() callback - we'll use
             // reparenting finish callback instead.
             mTabProvider.removeObserver(mTabObserver);
-            mTabController.detachAndStartReparenting(intent, startActivityOptions,
-                    () -> finish(REPARENTING));
+            mTabController.detachAndStartReparenting(
+                    intent, startActivityOptions, () -> finish(FinishReason.REPARENTING));
         } else {
             if (mIntentDataProvider.isInfoPage()) {
                 IntentHandler.startChromeLauncherActivityForTrustedIntent(intent);
             } else {
                 mActivity.startActivity(intent, startActivityOptions);
+                finish(FinishReason.OPEN_IN_BROWSER);
             }
         }
         return true;
@@ -335,8 +345,8 @@ public class CustomTabActivityNavigationController implements StartStopWithNativ
             // memory consumption, as the current renderer goes away. We create a renderer as a lot
             // of users open several Custom Tabs in a row. The delay is there to avoid jank in the
             // transition animation when closing the tab.
-            PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT,
-                    CustomTabsConnection::createSpareWebContents, 500);
+            PostTask.postDelayedTask(
+                    TaskTraits.UI_DEFAULT, CustomTabsConnection::createSpareWebContents, 500);
         }
 
         if (mFinishHandler != null) {

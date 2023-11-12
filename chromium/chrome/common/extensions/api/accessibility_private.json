@@ -234,7 +234,7 @@
       {
         "id": "AccessibilityFeature",
         "type": "string",
-        "enum": [ "googleTtsLanguagePacks", "dictationPumpkinParsing", "selectToSpeakVoiceSwitching", "dictationMoreCommands","selectToSpeakContextMenuOption", "dictationContextChecking"],
+        "enum": [ "googleTtsLanguagePacks", "dictationContextChecking", "chromevoxTabsDeprecation", "chromevoxSettingsMigration"],
         "description": "Subset of accessibility features."
       },
       {
@@ -860,6 +860,23 @@
             }
           ]
         }
+      },
+      {
+        "name": "isLacrosPrimary",
+        "type": "function",
+        "description": "Gets whether new browser windows and tabs should be in Lacros browser.",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "description": "A callback that is run when the result is returned.",
+          "parameters": [
+            {
+              "type": "boolean",
+              "name": "useLacros",
+              "description": "True if new browser windows and tabs should be in Lacros."
+            }
+          ]
+        }
       }
     ],
     "events": [
@@ -904,6 +921,41 @@
         "type": "function",
         "description": "Fired when Chrome OS wants to change the Select-to-Speak state, between selecting with the mouse, speaking, and inactive.",
         "parameters": []
+      },
+      {
+        "name": "onSelectToSpeakKeysPressedChanged",
+        "type": "function",
+        "description": "Fired when Chrome OS wants to send an updated list of keys currently pressed to Select to Speak.",
+        "parameters": [
+          {
+            "name": "keyCodes",
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "List of key codes that are currently pressed"
+          }
+        ]
+      },
+      {
+        "name": "onSelectToSpeakMouseChanged",
+        "type": "function",
+        "description": "Fired when Chrome OS wants to send a mouse event Select to Speak.",
+        "parameters": [
+          {
+            "name": "type",
+            "$ref": "SyntheticMouseEventType",
+            "description": "The type of the mouse event."
+          },
+          {
+            "name": "x",
+            "type": "integer",
+            "description": "The mouse x position in global coordinates."
+          },
+          {
+            "name": "y",
+            "type": "integer",
+            "description": "The mouse y position in global coordinates."
+          }
+        ]
       },
       {
         "name": "onSelectToSpeakPanelAction",

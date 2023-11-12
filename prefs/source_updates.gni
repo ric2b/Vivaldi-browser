@@ -8,3 +8,12 @@ if (vivaldi_build_tests) {
     sources += [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
   }
 }
+
+if (is_linux && is_debug) {
+  # On linux headless pulls in a lot of unused components libs in debug mode,
+  # some of which depends on vivaldi functions. In this case we can use the
+  # dummy functions used for the tests
+  update_target("//headless:headless_non_renderer") {
+    sources += [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
+  }
+}

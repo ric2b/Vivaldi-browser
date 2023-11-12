@@ -29,7 +29,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
-#include "base/trace_event/trace_event.h"
 #include "base/types/optional_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -44,6 +43,7 @@
 #include "net/base/privacy_mode.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/trace_constants.h"
+#include "net/base/tracing.h"
 #include "net/base/url_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/ct_policy_status.h"
@@ -101,7 +101,7 @@
 
 namespace {
 
-base::Value CookieInclusionStatusNetLogParams(
+base::Value::Dict CookieInclusionStatusNetLogParams(
     const std::string& operation,
     const std::string& cookie_name,
     const std::string& cookie_domain,
@@ -119,7 +119,7 @@ base::Value CookieInclusionStatusNetLogParams(
     if (!cookie_path.empty())
       dict.Set("path", cookie_path);
   }
-  return base::Value(std::move(dict));
+  return dict;
 }
 
 // Records details about the most-specific trust anchor in |spki_hashes|,
@@ -1655,14 +1655,9 @@ void URLRequestHttpJob::RecordCompletionHistograms(CompletionCause reason) {
         UMA_HISTOGRAM_COUNTS_1M("Net.Prefetch.PrefilterBytesReadFromNetwork",
                                 prefilter_bytes_read());
       }
-      if (is_https_google) {
-        if (used_quic) {
-          UMA_HISTOGRAM_MEDIUM_TIMES(
-              "Net.HttpJob.TotalTimeNotCached.Secure.Quic", total_time);
-        } else {
-          UMA_HISTOGRAM_MEDIUM_TIMES(
-              "Net.HttpJob.TotalTimeNotCached.Secure.NotQuic", total_time);
-        }
+      if (is_https_google && used_quic) {
+        UMA_HISTOGRAM_MEDIUM_TIMES("Net.HttpJob.TotalTimeNotCached.Secure.Quic",
+                                   total_time);
       }
     }
   }

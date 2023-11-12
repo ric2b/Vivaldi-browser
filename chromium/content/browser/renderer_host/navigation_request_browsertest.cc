@@ -14,6 +14,7 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
+#include "content/browser/process_lock.h"
 #include "content/browser/renderer_host/debug_urls.h"
 #include "content/browser/renderer_host/navigation_controller_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
@@ -45,6 +46,7 @@
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "content/public/test/test_service.mojom.h"
 #include "content/public/test/test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "content/shell/browser/shell.h"
@@ -737,7 +739,7 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
           shell()->web_contents()->GetPrimaryMainFrame());
   EXPECT_TRUE(document_data);
   blink::RuntimeFeatureStateReadContext read_context =
-      document_data->runtime_feature_read_context();
+      document_data->runtime_feature_state_read_context();
   EXPECT_EQ(expected_feature_overrides, read_context.GetFeatureOverrides());
 }
 
@@ -783,7 +785,7 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
           shell()->web_contents()->GetPrimaryMainFrame());
   EXPECT_TRUE(document_data);
   blink::RuntimeFeatureStateReadContext read_context =
-      document_data->runtime_feature_read_context();
+      document_data->runtime_feature_state_read_context();
   EXPECT_EQ(expected_feature_overrides, read_context.GetFeatureOverrides());
 }
 
@@ -828,7 +830,7 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
           shell()->web_contents()->GetPrimaryMainFrame());
   EXPECT_TRUE(document_data);
   blink::RuntimeFeatureStateReadContext read_context =
-      document_data->runtime_feature_read_context();
+      document_data->runtime_feature_state_read_context();
   EXPECT_TRUE(read_context.GetFeatureOverrides().empty());
 }
 
@@ -3757,6 +3759,12 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
   // The process should also be considered used at this point.
   EXPECT_FALSE(
       shell()->web_contents()->GetPrimaryMainFrame()->GetProcess()->IsUnused());
+
+  // Ensure the navigation finishes before we restore the ContentBrowserClient
+  // which would turn strict site isolation back on.  Otherwise, the navigation
+  // commit may fail citadel protection checks at test teardown.
+  EXPECT_TRUE(manager.WaitForNavigationFinished());
+  EXPECT_TRUE(manager.was_successful());
 }
 
 // Check that a subframe can load an error page with an about:srcdoc URL, and
@@ -3870,6 +3878,74 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
   // Ensure that bar.com didn't reuse the foo.com error page process.
   EXPECT_NE(shell()->web_contents()->GetPrimaryMainFrame()->GetProcess(),
             new_shell->web_contents()->GetPrimaryMainFrame()->GetProcess());
+}
+
+// Check that a renderer-initiated navigation from an error page to about:blank
+// honors the initiator origin when selecting the SiteInstance and process for
+// about:blank.
+IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
+                       NavigateToAboutBlankFromErrorPage) {
+  GURL url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  std::unique_ptr<URLLoaderInterceptor> url_interceptor =
+      URLLoaderInterceptor::SetupRequestFailForURL(url, net::ERR_DNS_TIMED_OUT);
+
+  // Start off with navigation to a.com, which results in an error page.
+  WebContents* web_contents = shell()->web_contents();
+  {
+    TestNavigationObserver observer(web_contents);
+    ASSERT_FALSE(NavigateToURL(shell(), url));
+    EXPECT_FALSE(observer.last_navigation_succeeded());
+    if (SiteIsolationPolicy::IsErrorPageIsolationEnabled(true)) {
+      EXPECT_EQ(
+          GURL(kUnreachableWebDataURL),
+          web_contents->GetPrimaryMainFrame()->GetSiteInstance()->GetSiteURL());
+    }
+  }
+
+  // Now, do a renderer-initiated navigation to about:blank out of the error
+  // page. We don't expect error pages to normally do this, but this might
+  // still be possible via DevTools or automation.
+  GURL about_blank(url::kAboutBlankURL);
+  {
+    TestNavigationObserver observer(web_contents);
+    EXPECT_TRUE(ExecuteScript(web_contents, "location = 'about:blank';"));
+    observer.Wait();
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+    EXPECT_EQ(about_blank, observer.last_navigation_url());
+  }
+  RenderFrameHostImpl* rfh =
+      static_cast<RenderFrameHostImpl*>(web_contents->GetPrimaryMainFrame());
+  EXPECT_NE(GURL(kUnreachableWebDataURL), rfh->GetSiteInstance()->GetSiteURL());
+
+  // Note that the error page's origin was opaque with a.com as the precursor.
+  // This becomes the initiator origin for the about:blank navigation, and it
+  // should end up as the final origin for the blank document.  See
+  // https://crbug.com/585649.
+  EXPECT_TRUE(rfh->GetLastCommittedOrigin().opaque());
+  EXPECT_EQ(
+      "a.com",
+      rfh->GetLastCommittedOrigin().GetTupleOrPrecursorTupleIfOpaque().host());
+
+  // Because about:blank's origin is opaque with a.com as the precursor, its
+  // SiteInstance and process should also correspond to a.com, rather than be
+  // left unassigned/unused.
+  //
+  // This covers an interesting and rare corner case, where an about:blank
+  // navigation can't use the source SiteInstance, which would normally keep it
+  // in the initiator's process and SiteInstance.  This is because the
+  // navigation originates from an error page process, which is incompatible
+  // with a non-error navigation to about:blank.  In this case, a new
+  // SiteInstance and process will be created, and they should still reflect
+  // about:blank's committed origin, rather than end up in an unlocked process
+  // and an unassigned SiteInstance. See https://crbug.com/1426928.
+  EXPECT_FALSE(rfh->GetProcess()->IsUnused());
+  if (AreAllSitesIsolatedForTesting()) {
+    EXPECT_EQ("http://a.com/", rfh->GetSiteInstance()->GetSiteURL());
+    EXPECT_TRUE(rfh->GetProcess()->GetProcessLock().is_locked_to_site());
+    EXPECT_EQ("http://a.com/", rfh->GetProcess()->GetProcessLock().site_url());
+  } else {
+    EXPECT_TRUE(rfh->GetProcess()->GetProcessLock().allows_any_site());
+  }
 }
 
 using CSPEmbeddedEnforcementBrowserTest = NavigationRequestBrowserTest;
@@ -4307,6 +4383,86 @@ IN_PROC_BROWSER_TEST_P(NavigationRequestMPArchBrowserTest,
       }
     }
   }
+}
+
+// Tests that when trying to commit an error page for a failed navigation, but
+// the renderer process of the, the navigation won't commit and won't crash.
+// Regression test for https://crbug.com/1444360.
+IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
+                       RendererCrashedBeforeCommitErrorPage) {
+  // Navigate to `url_a` first.
+  GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), url_a));
+
+  // Set up an URLLoaderInterceptor which will cause future navigations to fail.
+  auto url_loader_interceptor = std::make_unique<URLLoaderInterceptor>(
+      base::BindRepeating([](URLLoaderInterceptor::RequestParams* params) {
+        network::URLLoaderCompletionStatus status;
+        status.error_code = net::ERR_NOT_IMPLEMENTED;
+        params->client->OnComplete(status);
+        return true;
+      }));
+
+  // Do a navigation to `url_b1` that will fail and commit an error page. This
+  // is important so that the next error page navigation won't need to create a
+  // speculative RenderFrameHost (unless RenderDocument is enabled) and won't
+  // get cancelled earlier than commit time due to speculative RFH deletion.
+  GURL url_b1(embedded_test_server()->GetURL("b.com", "/title1.html"));
+  EXPECT_FALSE(NavigateToURL(shell(), url_b1));
+  EXPECT_EQ(shell()->web_contents()->GetLastCommittedURL(), url_b1);
+  EXPECT_TRUE(
+      shell()->web_contents()->GetPrimaryMainFrame()->IsErrorDocument());
+
+  // For the next navigation, set up a throttle that will be used to wait for
+  // WillFailRequest() and then defer the navigation, so that we can crash the
+  // error page process first.
+  TestNavigationThrottleInstaller installer(
+      shell()->web_contents(),
+      NavigationThrottle::PROCEED /* will_start_result */,
+      NavigationThrottle::PROCEED /* will_redirect_result */,
+      NavigationThrottle::DEFER /* will_fail_result */,
+      NavigationThrottle::PROCEED /* will_process_result */,
+      NavigationThrottle::PROCEED /* will_commit_without_url_loader_result */);
+
+  // Start a navigation to `url_b2` that will also fail, but before it commits
+  // an error page, cause the error page process to crash.
+  GURL url_b2(embedded_test_server()->GetURL("b.com", "/title2.html"));
+  TestNavigationManager manager(shell()->web_contents(), url_b2);
+  shell()->LoadURL(url_b2);
+  EXPECT_TRUE(manager.WaitForRequestStart());
+
+  // Resume the navigation and wait for WillFailRequest(). After this point, we
+  // will have picked the final RenderFrameHost & RenderProcessHost for the
+  // failed navigation.
+  manager.ResumeNavigation();
+  installer.WaitForThrottleWillFail();
+
+  // Kill the error page process. This will cause for the navigation to `url_b2`
+  // to return early in `NavigationRequest::ReadyToCommitNavigation()` and not
+  // commit a new error page.
+  RenderProcessHost* process_to_kill =
+      manager.GetNavigationHandle()->GetRenderFrameHost()->GetProcess();
+  ASSERT_TRUE(process_to_kill->IsInitializedAndNotDead());
+  {
+    // Trigger a renderer kill by calling DoSomething() which will cause a bad
+    // message to be reported.
+    RenderProcessHostBadIpcMessageWaiter kill_waiter(process_to_kill);
+    mojo::Remote<mojom::TestService> service;
+    process_to_kill->BindReceiver(service.BindNewPipeAndPassReceiver());
+    service->DoSomething(base::DoNothing());
+    EXPECT_EQ(bad_message::RPH_MOJO_PROCESS_ERROR, kill_waiter.Wait());
+  }
+  ASSERT_FALSE(process_to_kill->IsInitializedAndNotDead());
+
+  // Resume the navigation, which won't commit.
+  if (!ShouldCreateNewHostForAllFrames()) {
+    installer.navigation_throttle()->ResumeNavigation();
+  }
+  EXPECT_TRUE(manager.WaitForNavigationFinished());
+  EXPECT_FALSE(WaitForLoadStop(shell()->web_contents()));
+
+  // The tab stayed at `url_b1` as the `url_b2` navigation didn't commit.
+  EXPECT_EQ(shell()->web_contents()->GetLastCommittedURL(), url_b1);
 }
 
 }  // namespace content

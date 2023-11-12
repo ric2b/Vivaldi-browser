@@ -34,6 +34,10 @@
 #include "media/base/android/media_codec_util.h"  // nogncheck
 #endif
 
+#if BUILDFLAG(IS_WIN)
+#include "base/win/windows_version.h"
+#endif
+
 namespace media {
 
 namespace {
@@ -220,6 +224,11 @@ bool IsHevcProfileSupported(const VideoType& type) {
     return true;
   }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (!base::FeatureList::IsEnabled(kPlatformHEVCDecoderSupport)) {
+    return false;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   return GetSupplementalProfileCache()->IsProfileSupported(type.profile);
 #else
   return true;
@@ -294,6 +303,8 @@ bool IsAACSupported(const AudioType& type) {
   if (__builtin_available(macOS 10.15, *))
     return true;
   return false;
+#elif BUILDFLAG(IS_WIN)
+  return base::win::GetVersion() >= base::win::Version::WIN11_22H2;
 #else
   return false;
 #endif
@@ -370,9 +381,7 @@ bool IsDefaultSupportedAudioType(const AudioType& type) {
     case AudioCodec::kAMR_NB:
     case AudioCodec::kAMR_WB:
     case AudioCodec::kGSM_MS:
-    case AudioCodec::kEAC3:
     case AudioCodec::kALAC:
-    case AudioCodec::kAC3:
     case AudioCodec::kMpegHAudio:
     case AudioCodec::kUnknown:
       return false;
@@ -380,6 +389,13 @@ bool IsDefaultSupportedAudioType(const AudioType& type) {
     case AudioCodec::kDTSXP2:
     case AudioCodec::kDTSE:
 #if BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
+      return true;
+#else
+      return false;
+#endif
+    case AudioCodec::kAC3:
+    case AudioCodec::kEAC3:
+#if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
       return true;
 #else
       return false;

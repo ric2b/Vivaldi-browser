@@ -421,15 +421,15 @@ AppPlatformMetrics::UsageTime::UsageTime(const base::Value& value) {
   window_is_closed = true;
 }
 
-base::Value AppPlatformMetrics::UsageTime::ConvertToValue() const {
-  base::Value usage_time_dict(base::Value::Type::DICT);
-  usage_time_dict.SetStringKey(kUsageTimeAppIdKey, app_id);
-  usage_time_dict.SetStringKey(kUsageTimeAppTypeKey,
-                               GetAppTypeHistogramName(app_type_name));
-  usage_time_dict.SetPath(kUsageTimeDurationKey,
-                          base::TimeDeltaToValue(running_time));
-  usage_time_dict.SetPath(kReportingUsageTimeDurationKey,
-                          base::TimeDeltaToValue(reporting_usage_time));
+base::Value::Dict AppPlatformMetrics::UsageTime::ConvertToDict() const {
+  base::Value::Dict usage_time_dict;
+  usage_time_dict.Set(kUsageTimeAppIdKey, app_id);
+  usage_time_dict.Set(kUsageTimeAppTypeKey,
+                      GetAppTypeHistogramName(app_type_name));
+  usage_time_dict.Set(kUsageTimeDurationKey,
+                      base::TimeDeltaToValue(running_time));
+  usage_time_dict.Set(kReportingUsageTimeDurationKey,
+                      base::TimeDeltaToValue(reporting_usage_time));
   return usage_time_dict;
 }
 
@@ -774,7 +774,7 @@ void AppPlatformMetrics::OnAppUpdate(const apps::AppUpdate& update) {
   }
 
   InstallTime install_time =
-      app_registry_cache_.IsAppTypeInitialized(update.AppType())
+      app_registry_cache_->IsAppTypeInitialized(update.AppType())
           ? InstallTime::kRunning
           : InstallTime::kInit;
 
@@ -1028,7 +1028,7 @@ void AppPlatformMetrics::ClearRunningDuration() {
 }
 
 void AppPlatformMetrics::ReadInstalledApps() {
-  app_registry_cache_.ForEachApp([this](const apps::AppUpdate& update) {
+  app_registry_cache_->ForEachApp([this](const apps::AppUpdate& update) {
     RecordAppsInstallUkm(update, InstallTime::kInit);
   });
 }
@@ -1038,7 +1038,7 @@ void AppPlatformMetrics::RecordAppsCount(AppType app_type) {
   std::map<AppTypeName, std::map<apps::InstallReason, int>>
       app_count_per_install_reason;
 
-  app_registry_cache_.ForEachApp(
+  app_registry_cache_->ForEachApp(
       [app_type, this, &app_count,
        &app_count_per_install_reason](const apps::AppUpdate& update) {
         if (app_type != apps::AppType::kUnknown &&
@@ -1142,6 +1142,10 @@ void AppPlatformMetrics::RecordAppsUsageTime() {
 
 void AppPlatformMetrics::RecordAppsUsageTimeUkm() {
   if (!ShouldRecordUkm(profile_)) {
+    // Attempt to clean up pre-existing data in the pref store. This is useful
+    // (and harmless) because we routinely clean up usage data that has already
+    // been reported.
+    CleanUpAppsUsageInfoInPrefStore();
     return;
   }
 
@@ -1215,6 +1219,17 @@ void AppPlatformMetrics::UpdateUsageTime(
     const std::string& app_id,
     AppTypeName app_type_name,
     const base::TimeDelta& running_time) {
+  // Notify registered observers.
+  for (auto& observer : observers_) {
+    observer.OnAppUsage(app_id, GetAppType(profile_, app_id), instance_id,
+                        running_time);
+  }
+  if (!ShouldRecordUkm(profile_)) {
+    // Avoid incrementing app usage counters if it cannot be reported. This
+    // ensures we only track usage for the period the user has sync enabled.
+    return;
+  }
+
   auto usage_time_it = usage_time_per_two_hours_.find(instance_id);
   if (usage_time_it == usage_time_per_two_hours_.end()) {
     auto source_id = GetSourceId(profile_, app_id);
@@ -1228,32 +1243,32 @@ void AppPlatformMetrics::UpdateUsageTime(
     usage_time_it->second.app_type_name = app_type_name;
     usage_time_it->second.running_time += running_time;
   }
-
-  // Also notify registered observers.
-  for (auto& observer : observers_) {
-    observer.OnAppUsage(app_id, GetAppType(profile_, app_id), instance_id,
-                        running_time);
-  }
 }
 
 void AppPlatformMetrics::SaveUsageTime() {
+  if (!ShouldRecordUkm(profile_)) {
+    // Do not persist usage data to the pref store if it cannot be reported.
+    // This will prevent unnecessary disk space usage.
+    return;
+  }
+
   ScopedDictPrefUpdate usage_dict_pref(profile_->GetPrefs(), kAppUsageTime);
   for (auto it : usage_time_per_two_hours_) {
     const std::string& instance_id = it.first.ToString();
-    auto* const usage_info = usage_dict_pref->FindByDottedPath(instance_id);
+    auto* const usage_info = usage_dict_pref->FindDictByDottedPath(instance_id);
     if (!usage_info) {
       // No entry in the pref store for this instance, so we create a new one.
-      usage_dict_pref->SetByDottedPath(instance_id, it.second.ConvertToValue());
+      usage_dict_pref->SetByDottedPath(instance_id, it.second.ConvertToDict());
       continue;
     }
 
     // Only override the fields tracked by this component so we do not override
     // the reporting usage time.
-    usage_info->SetStringPath(kUsageTimeAppIdKey, it.second.app_id);
-    usage_info->SetStringPath(kUsageTimeAppTypeKey,
-                              GetAppTypeHistogramName(it.second.app_type_name));
-    usage_info->SetPath(kUsageTimeDurationKey,
-                        base::TimeDeltaToValue(it.second.running_time));
+    usage_info->Set(kUsageTimeAppIdKey, it.second.app_id);
+    usage_info->Set(kUsageTimeAppTypeKey,
+                    GetAppTypeHistogramName(it.second.app_type_name));
+    usage_info->Set(kUsageTimeDurationKey,
+                    base::TimeDeltaToValue(it.second.running_time));
   }
 }
 
@@ -1331,9 +1346,10 @@ void AppPlatformMetrics::ClearAppsUsageTimeForInstance(
     const base::StringPiece& instance_id) {
   ScopedDictPrefUpdate usage_time_pref_update(profile_->GetPrefs(),
                                               kAppUsageTime);
-  if (usage_time_pref_update->FindByDottedPath(instance_id)) {
-    usage_time_pref_update->FindByDottedPath(instance_id)
-        ->SetPath(kUsageTimeDurationKey, base::Int64ToValue(0));
+  auto* instance_dict =
+      usage_time_pref_update->FindDictByDottedPath(instance_id);
+  if (instance_dict) {
+    instance_dict->Set(kUsageTimeDurationKey, base::Int64ToValue(0));
   }
 }
 

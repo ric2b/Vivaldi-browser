@@ -25,11 +25,6 @@ import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.url.GURL;
 
-// Vivaldi
-import org.vivaldi.browser.common.VivaldiUrlConstants;
-
-import org.chromium.chrome.browser.ChromeApplicationImpl;
-
 /**
  * Provides information regarding homepage enabled states and URI.
  *
@@ -173,7 +168,7 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
         }
         if (!homepagePartnerDefaultUri.equals("")) return homepagePartnerDefaultUri;
 
-        return UrlConstants.NTP_URL; // Vivaldi
+        return UrlConstants.NTP_URL;
     }
 
     /**
@@ -210,7 +205,7 @@ public class HomepageManager implements HomepagePolicyManager.HomepagePolicyStat
             return HomepagePolicyManager.getHomepageUrl().getSpec();
         }
         if (getPrefHomepageUseChromeNTP()) {
-            return UrlConstants.NTP_URL; // Vivaldi
+            return UrlConstants.NTP_URL;
         }
         if (getPrefHomepageUseDefaultUri()) {
             return getDefaultHomepageUri();

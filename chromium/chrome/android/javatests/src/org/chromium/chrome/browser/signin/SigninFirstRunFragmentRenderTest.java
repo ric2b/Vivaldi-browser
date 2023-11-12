@@ -12,10 +12,10 @@ import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.when;
 
 import android.content.res.Configuration;
-import android.support.test.runner.lifecycle.Stage;
 
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.test.filters.MediumTest;
+import androidx.test.runner.lifecycle.Stage;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -36,7 +36,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.FirstRunPageDelegate;
 import org.chromium.chrome.browser.firstrun.PolicyLoadListener;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -49,6 +48,7 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninChecker;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.components.externalauth.ExternalAuthUtils;
@@ -243,6 +243,26 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @MediumTest
     @Feature("RenderTest")
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void testFragmentWithAccountOnManagedDevice_doesNotApplyFREStringVariations(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        FREMobileIdentityConsistencyFieldTrial.setFirstRunVariationsTrialGroupForTesting(
+                VariationsGroup.MAKE_CHROME_YOUR_OWN);
+        when(mPolicyLoadListenerMock.get()).thenReturn(true);
+        mAccountManagerTestRule.addAccount(TEST_EMAIL1);
+
+        launchActivityWithFragment(orientation);
+
+        CriteriaHelper.pollUiThread(() -> {
+            return mFragment.getView().findViewById(R.id.account_text_secondary).isShown();
+        });
+        mRenderTestRule.render(mFragment.getView(),
+                "signin_first_run_fragment_with_account_managed_and_string_variation");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
     public void testFragmentWithAccountWhenSigninIsDisabledByPolicy(
             boolean nightModeEnabled, int orientation) throws IOException {
         when(mSigninManagerMock.isSigninDisabledByPolicy()).thenReturn(true);
@@ -253,6 +273,24 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
 
         mRenderTestRule.render(
                 mFragment.getView(), "signin_first_run_fragment_when_signin_disabled_by_policy");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void testFragmentWithAccountWhenSigninIsDisabledByPolicy_doesNotApplyFREStringVariation(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        FREMobileIdentityConsistencyFieldTrial.setFirstRunVariationsTrialGroupForTesting(
+                VariationsGroup.MAKE_CHROME_YOUR_OWN);
+        when(mSigninManagerMock.isSigninDisabledByPolicy()).thenReturn(true);
+        when(mPolicyLoadListenerMock.get()).thenReturn(true);
+        mAccountManagerTestRule.addAccount(TEST_EMAIL1);
+
+        launchActivityWithFragment(orientation);
+
+        mRenderTestRule.render(mFragment.getView(),
+                "signin_first_run_fragment_when_signin_disabled_by_policy_and_string_variation");
     }
 
     @Test
@@ -293,6 +331,25 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
             return mFragment.getView().findViewById(R.id.account_text_secondary).isShown();
         });
         mRenderTestRule.render(mFragment.getView(), "signin_first_run_fragment_with_child_account");
+    }
+
+    @Test
+    @MediumTest
+    @Feature("RenderTest")
+    @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
+    public void testFragmentWithChildAccount_doesNotApplyFREStringVariation(
+            boolean nightModeEnabled, int orientation) throws IOException {
+        FREMobileIdentityConsistencyFieldTrial.setFirstRunVariationsTrialGroupForTesting(
+                VariationsGroup.MAKE_CHROME_YOUR_OWN);
+        mAccountManagerTestRule.addAccount(CHILD_ACCOUNT_NAME);
+
+        launchActivityWithFragment(orientation);
+
+        CriteriaHelper.pollUiThread(() -> {
+            return mFragment.getView().findViewById(R.id.account_text_secondary).isShown();
+        });
+        mRenderTestRule.render(mFragment.getView(),
+                "signin_first_run_fragment_with_child_account_and_string_variation");
     }
 
     @Test
@@ -404,14 +461,14 @@ public class SigninFirstRunFragmentRenderTest extends BlankUiTestActivityTestCas
     @MediumTest
     @Feature("RenderTest")
     @ParameterAnnotations.UseMethodParameter(NightModeAndOrientationParameterProvider.class)
-    public void testFragment_WelcomeToChrome_StrongestSecurity(
+    public void testFragment_WelcomeToChrome_AdditionalFeatures(
             boolean nightModeEnabled, int orientation) throws IOException {
         FREMobileIdentityConsistencyFieldTrial.setFirstRunVariationsTrialGroupForTesting(
-                VariationsGroup.WELCOME_TO_CHROME_STRONGEST_SECURITY);
+                VariationsGroup.WELCOME_TO_CHROME_ADDITIONAL_FEATURES);
         launchActivityWithFragment(orientation);
 
         mRenderTestRule.render(mFragment.getView(),
-                "signin_first_run_fragment_welcome_to_chrome_strongest_security");
+                "signin_first_run_fragment_welcome_to_chrome_additional_features");
     }
 
     @Test

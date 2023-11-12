@@ -13,7 +13,6 @@
 #include <string>
 
 #include "base/check_op.h"
-#include "base/guid.h"
 #include "base/i18n/rtl.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_macros.h"
@@ -23,6 +22,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_field.h"
@@ -185,7 +185,9 @@ CreditCard::CreditCard(RecordType type, int64_t instrument_id) : CreditCard() {
   instrument_id_ = instrument_id;
 }
 
-CreditCard::CreditCard() : CreditCard(base::GenerateGUID(), std::string()) {}
+CreditCard::CreditCard()
+    : CreditCard(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                 std::string()) {}
 
 CreditCard::CreditCard(const CreditCard& credit_card) = default;
 CreditCard::CreditCard(CreditCard&& credit_card) = default;
@@ -213,31 +215,48 @@ std::u16string CreditCard::NetworkForDisplay(const std::string& network) {
 
 // static
 int CreditCard::IconResourceId(const std::string& network) {
+  bool should_show_metadata_icon = base::FeatureList::IsEnabled(
+      features::kAutofillEnableNewCardArtAndNetworkImages);
+
   if (network == kAmericanExpressCard)
-    return IDR_AUTOFILL_CC_AMEX;
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_AMEX
+                                     : IDR_AUTOFILL_CC_AMEX;
   if (network == kDinersCard)
-    return IDR_AUTOFILL_CC_DINERS;
-  if (network == kDiscoverCard)
-    return IDR_AUTOFILL_CC_DISCOVER;
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_DINERS
+                                     : IDR_AUTOFILL_CC_DINERS;
+  if (network == kDiscoverCard) {
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_DISCOVER
+                                     : IDR_AUTOFILL_CC_DISCOVER;
+  }
   if (network == kEloCard)
-    return IDR_AUTOFILL_CC_ELO;
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_ELO
+                                     : IDR_AUTOFILL_CC_ELO;
   if (network == kJCBCard)
-    return IDR_AUTOFILL_CC_JCB;
-  if (network == kMasterCard)
-    return IDR_AUTOFILL_CC_MASTERCARD;
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_JCB
+                                     : IDR_AUTOFILL_CC_JCB;
+  if (network == kMasterCard) {
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_MASTERCARD
+                                     : IDR_AUTOFILL_CC_MASTERCARD;
+  }
   if (network == kMirCard)
-    return IDR_AUTOFILL_CC_MIR;
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_MIR
+                                     : IDR_AUTOFILL_CC_MIR;
   if (network == kTroyCard)
-    return IDR_AUTOFILL_CC_TROY;
-  if (network == kUnionPay)
-    return IDR_AUTOFILL_CC_UNIONPAY;
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_TROY
+                                     : IDR_AUTOFILL_CC_TROY;
+  if (network == kUnionPay) {
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_UNIONPAY
+                                     : IDR_AUTOFILL_CC_UNIONPAY;
+  }
   if (network == kVisaCard)
-    return IDR_AUTOFILL_CC_VISA;
+    return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_VISA
+                                     : IDR_AUTOFILL_CC_VISA;
 
   // If you hit this DCHECK, the above list of cases needs to be updated to
   // include a new card.
   DCHECK_EQ(kGenericCard, network);
-  return IDR_AUTOFILL_CC_GENERIC;
+  return should_show_metadata_icon ? IDR_AUTOFILL_METADATA_CC_GENERIC
+                                   : IDR_AUTOFILL_CC_GENERIC;
 }
 
 // static
@@ -757,7 +776,7 @@ int CreditCard::Compare(const CreditCard& credit_card) const {
       return comparison;
   }
 
-  if (!HasSameNumberAs(credit_card)) {
+  if (!MatchingCardDetails(credit_card)) {
     return number().compare(credit_card.number());
   }
 
@@ -840,10 +859,10 @@ bool CreditCard::IsLocalDuplicateOfServerCard(const CreditCard& other) const {
   if (number_.empty())
     return true;
 
-  return HasSameNumberAs(other);
+  return MatchingCardDetails(other);
 }
 
-bool CreditCard::HasSameNumberAs(const CreditCard& other) const {
+bool CreditCard::MatchingCardDetails(const CreditCard& other) const {
   // Masked cards are considered to have the same number if their last four
   // digits match and if any expiration date information available for both
   // cards matches.

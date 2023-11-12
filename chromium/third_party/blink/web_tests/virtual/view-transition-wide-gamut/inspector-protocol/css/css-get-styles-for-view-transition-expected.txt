@@ -4,6 +4,8 @@ The test verifies functionality of querying style information for view-transitio
     result : {
         cssKeyframesRules : [
         ]
+        cssPositionFallbackRules : [
+        ]
         inherited : [
         ]
         inheritedPseudoElements : [
@@ -144,15 +146,6 @@ The test verifies functionality of querying style information for view-transitio
                                         name : left
                                         value : 0px
                                     }
-                                    [5] : {
-                                        name : pointer-events
-                                        value : none
-                                    }
-                                    [6] : {
-                                        important : true
-                                        name : top-layer
-                                        value : browser !important
-                                    }
                                 ]
                                 shorthandEntries : [
                                     [0] : {
@@ -205,10 +198,6 @@ The test verifies functionality of querying style information for view-transitio
                                     [2] : {
                                         name : left
                                         value : 0px
-                                    }
-                                    [3] : {
-                                        name : pointer-events
-                                        value : auto
                                     }
                                 ]
                                 shorthandEntries : [
@@ -339,10 +328,6 @@ The test verifies functionality of querying style information for view-transitio
                                     [2] : {
                                         name : left
                                         value : 0px
-                                    }
-                                    [3] : {
-                                        name : pointer-events
-                                        value : auto
                                     }
                                 ]
                                 shorthandEntries : [
@@ -1738,15 +1723,6 @@ Dumping styles for : ::view-transition with id undefined{
                                 name : left
                                 value : 0px
                             }
-                            [5] : {
-                                name : pointer-events
-                                value : none
-                            }
-                            [6] : {
-                                important : true
-                                name : top-layer
-                                value : browser !important
-                            }
                         ]
                         shorthandEntries : [
                             [0] : {
@@ -1804,10 +1780,6 @@ Dumping styles for : ::view-transition-group with id root{
                             [2] : {
                                 name : left
                                 value : 0px
-                            }
-                            [3] : {
-                                name : pointer-events
-                                value : auto
                             }
                         ]
                         shorthandEntries : [
@@ -2512,10 +2484,6 @@ Dumping styles for : ::view-transition-group with id shared{
                             [2] : {
                                 name : left
                                 value : 0px
-                            }
-                            [3] : {
-                                name : pointer-events
-                                value : auto
                             }
                         ]
                         shorthandEntries : [

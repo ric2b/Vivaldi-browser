@@ -15,6 +15,7 @@
 #include "ash/public/cpp/app_list/app_list_config_provider.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ref.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point.h"
@@ -52,14 +53,14 @@ class FolderImageSource : public gfx::CanvasImageSource {
  private:
   void DrawIcon(gfx::Canvas* canvas,
                 const gfx::ImageSkia& icon,
-                const gfx::Size icon_size,
+                const gfx::Size& icon_size,
                 int x,
                 int y);
 
   // gfx::CanvasImageSource overrides:
   void Draw(gfx::Canvas* canvas) override;
 
-  const AppListConfig& app_list_config_;
+  const raw_ref<const AppListConfig, ExperimentalAsh> app_list_config_;
   Icons icons_;
   gfx::Size size_;
 };
@@ -78,7 +79,7 @@ FolderImageSource::~FolderImageSource() = default;
 
 void FolderImageSource::DrawIcon(gfx::Canvas* canvas,
                                  const gfx::ImageSkia& icon,
-                                 const gfx::Size icon_size,
+                                 const gfx::Size& icon_size,
                                  int x,
                                  int y) {
   if (icon.isNull())
@@ -119,11 +120,11 @@ void FolderImageSource::Draw(gfx::Canvas* canvas) {
   const size_t num_items =
       std::min(FolderImage::kNumFolderTopItems, icons_.size());
   std::vector<gfx::Rect> top_icon_bounds = FolderImage::GetTopIconsBounds(
-      app_list_config_, gfx::Rect(size()), num_items);
+      *app_list_config_, gfx::Rect(size()), num_items);
 
   for (size_t i = 0; i < num_items; ++i) {
     DrawIcon(canvas, icons_[i],
-             app_list_config_.item_icon_in_folder_icon_size(),
+             app_list_config_->item_icon_in_folder_icon_size(),
              top_icon_bounds[i].x(), top_icon_bounds[i].y());
   }
 }

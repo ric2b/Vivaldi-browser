@@ -592,6 +592,11 @@ class BottomSheetControllerImpl implements ManagedBottomSheetController {
         mSheetStateBeforeSuppress = SheetState.NONE;
     }
 
+    /** Vivaldi **/
+    @Override
+    public void swipeWithToolbar() { mBottomSheet.swipeWithToolbar(); }
+    // End Vivaldi
+
     /**
      * Remove all contents from {@code iterator} that don't have a custom lifecycle.
      * @param iterator The iterator whose items must be removed.

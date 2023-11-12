@@ -78,7 +78,9 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerProxy
   base::FilePath GetBucketPath(const BucketLocator& bucket);
 
   // Constructs path where `bucket` and `client_type` data is persisted to disk
-  // for partitioned storage.
+  // for partitioned storage. NOTE: this will happily construct a path even for
+  // incognito profiles. It is up to the caller to handle incognito cases
+  // appropriately, i.e. not saving anything to disk at that path.
   base::FilePath GetClientBucketPath(const BucketLocator& bucket,
                                      QuotaClientType client_type);
 
@@ -137,9 +139,10 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerProxy
 
   // Retrieves the BucketInfo of the bucket with `bucket_name` for
   // `storage_key` and returns it to the callback. Will return a QuotaError if a
-  // bucket does not exist or on operation failure. Real code should use the ID
-  // to identify buckets, hence this is only used for testing.
-  virtual void GetBucketForTesting(
+  // bucket does not exist or on operation failure.
+  // This SHOULD NOT be used once you have the ID for a bucket. Prefer
+  // GetBucketById.
+  virtual void GetBucketByNameUnsafe(
       const blink::StorageKey& storage_key,
       const std::string& bucket_name,
       blink::mojom::StorageType type,
@@ -199,7 +202,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerProxy
       scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
       base::OnceClosure callback);
 
-  virtual void NotifyWriteFailed(const blink::StorageKey& storage_key);
+  virtual void OnClientWriteFailed(const blink::StorageKey& storage_key);
 
   virtual void SetUsageCacheEnabled(QuotaClientType client_id,
                                     const blink::StorageKey& storage_key,
@@ -240,6 +243,10 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerProxy
   // Called right before the QuotaManagerImpl is destroyed.
   // This method may only be called on the QuotaManagerImpl sequence.
   void InvalidateQuotaManagerImpl(base::PassKey<QuotaManagerImpl>);
+
+  // Adds an observer which is notified of changes to the QuotaManager.
+  void AddObserver(
+      mojo::PendingRemote<storage::mojom::QuotaManagerObserver> observer);
 
  protected:
   friend class base::RefCountedThreadSafe<QuotaManagerProxy>;

@@ -24,11 +24,14 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/liburlpattern/options.h"
+#include "third_party/liburlpattern/pattern.h"
+#include "third_party/re2/src/re2/set.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/models/image_model.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "components/digital_asset_links/digital_asset_links_handler.h"  // nogncheck
+#include "components/content_relationship_verification/digital_asset_links_handler.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -44,7 +47,7 @@ class SystemWebAppDelegate;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-namespace digital_asset_links {
+namespace content_relationship_verification {
 class DigitalAssetLinksHandler;
 }
 
@@ -87,6 +90,7 @@ class WebAppBrowserController : public AppBrowserController,
   std::u16string GetFormattedUrlOrigin() const override;
   GURL GetAppStartUrl() const override;
   GURL GetAppNewTabUrl() const override;
+  bool IsUrlInHomeTabScope(const GURL& url) const override;
   bool IsUrlInAppScope(const GURL& url) const override;
   WebAppBrowserController* AsWebAppBrowserController() override;
   bool CanUserUninstall() const override;
@@ -102,8 +106,12 @@ class WebAppBrowserController : public AppBrowserController,
       base::OnceClosure on_complete) override;
   bool AppUsesBorderlessMode() const override;
   bool IsIsolatedWebApp() const override;
+  void SetIsolatedWebAppTrueForTesting() override;
   gfx::Rect GetDefaultBounds() const override;
   bool HasReloadButton() const override;
+#if !BUILDFLAG(IS_CHROMEOS)
+  bool HasProfileMenuButton() const override;
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   const ash::SystemWebAppDelegate* system_app() const override;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
@@ -118,7 +126,9 @@ class WebAppBrowserController : public AppBrowserController,
 #endif
 
   // WebAppInstallManagerObserver:
-  void OnWebAppUninstalled(const AppId& app_id) override;
+  void OnWebAppUninstalled(
+      const AppId& app_id,
+      webapps::WebappUninstallSource uninstall_source) override;
   void OnWebAppManifestUpdated(const AppId& app_id,
                                base::StringPiece old_name) override;
   void OnWebAppInstallManagerDestroyed() override;
@@ -154,7 +164,7 @@ class WebAppBrowserController : public AppBrowserController,
       const std::string& package_name,
       const std::string& fingerprint);
   void OnRelationshipCheckComplete(
-      digital_asset_links::RelationshipCheckResult result);
+      content_relationship_verification::RelationshipCheckResult result);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -165,6 +175,10 @@ class WebAppBrowserController : public AppBrowserController,
   // given the current state of dark/light mode.
   absl::optional<SkColor> GetResolvedManifestBackgroundColor() const;
 
+  // Returns the set of scope patterns for the home tab scope of tabbed web
+  // apps.
+  absl::optional<RE2::Set> GetTabbedHomeTabScope() const;
+
   const raw_ref<WebAppProvider> provider_;
 
   // Save the display mode at time of launch. The web app display mode may
@@ -172,6 +186,7 @@ class WebAppBrowserController : public AppBrowserController,
   // whatever it was launched with.
   DisplayMode manifest_display_mode_ = DisplayMode::kUndefined;
   DisplayMode effective_display_mode_ = DisplayMode::kUndefined;
+  bool is_isolated_web_app_for_testing_ = false;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   raw_ptr<const ash::SystemWebAppDelegate> system_app_;
@@ -179,12 +194,14 @@ class WebAppBrowserController : public AppBrowserController,
   mutable absl::optional<ui::ImageModel> app_icon_;
   mutable absl::optional<gfx::ImageSkia> home_tab_icon_;
 
+  mutable absl::optional<RE2::Set> home_tab_scope_;
+
 #if BUILDFLAG(IS_CHROMEOS)
   // The result of digital asset link verification of the web app.
   // Only used for web-only TWAs installed through the Play Store.
   absl::optional<bool> is_verified_;
 
-  std::unique_ptr<digital_asset_links::DigitalAssetLinksHandler>
+  std::unique_ptr<content_relationship_verification::DigitalAssetLinksHandler>
       asset_link_handler_;
 #endif  // BUILDFLAG(IS_CHROMEOS)
 

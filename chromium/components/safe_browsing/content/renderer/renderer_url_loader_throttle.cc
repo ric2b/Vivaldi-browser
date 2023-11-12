@@ -9,6 +9,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/trace_event/trace_event.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safebrowsing_constants.h"
 #include "components/safe_browsing/core/common/utils.h"
 #include "content/public/common/url_constants.h"
@@ -30,6 +31,11 @@ constexpr char kFromNetworkUmaSuffix[] = ".FromNetwork";
 // also skipped if this function returns true.
 bool KnownSafeUrl(const GURL& url) {
   return url.SchemeIs(content::kChromeUIScheme);
+}
+
+void LogTotalDelay3Metrics(base::TimeDelta total_delay) {
+  base::UmaHistogramTimes("SafeBrowsing.RendererThrottle.TotalDelay3",
+                          total_delay);
 }
 
 void LogTotalDelay2MetricsWithResponseType(bool is_response_from_cache,
@@ -69,8 +75,24 @@ void RendererURLLoaderThrottle::WillStartRequest(
   DCHECK(!blocked_);
   DCHECK(!url_checker_);
 
-  if (KnownSafeUrl(request->url))
+  base::UmaHistogramEnumeration(
+      "SafeBrowsing.RendererThrottle.RequestDestination", request->destination);
+
+  if (KnownSafeUrl(request->url)) {
+    LogTotalDelay3Metrics(base::TimeDelta());
     return;
+  }
+
+  static const base::NoDestructor<
+      std::unordered_set<network::mojom::RequestDestination>>
+      request_destinations_to_skip{{network::mojom::RequestDestination::kStyle,
+                                    network::mojom::RequestDestination::kImage,
+                                    network::mojom::RequestDestination::kFont}};
+  if (base::Contains(*request_destinations_to_skip, request->destination) &&
+      base::FeatureList::IsEnabled(kSafeBrowsingSkipImageCssFont)) {
+    LogTotalDelay3Metrics(base::TimeDelta());
+    return;
+  }
 
   if (safe_browsing_pending_remote_.is_valid()) {
     // Bind the pipe created in DetachFromCurrentSequence to the current
@@ -237,8 +259,7 @@ void RendererURLLoaderThrottle::OnCompleteCheckInternal(
       LogTotalDelay2MetricsWithResponseType(is_response_from_cache_,
                                             total_delay_);
     }
-    base::UmaHistogramTimes("SafeBrowsing.RendererThrottle.TotalDelay2",
-                            total_delay_);
+    LogTotalDelay3Metrics(total_delay_);
   }
 
   if (proceed) {

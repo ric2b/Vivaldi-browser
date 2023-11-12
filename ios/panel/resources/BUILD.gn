@@ -78,3 +78,35 @@ imageset("readinglist_panel_active") {
     "readinglist_panel_active.imageset/readinglist_panel_active.pdf"
   ]
 }
+
+imageset("vivaldi_bookmark_panel") {
+  sources = [
+    "vivaldi_bookmark_panel.imageset/Contents.json",
+    "vivaldi_bookmark_panel.imageset/vivaldi_bookmark_panel.pdf",
+    "vivaldi_bookmark_panel.imageset/vivaldi_bookmark_panel_dark.pdf"
+  ]
+}
+
+imageset("vivaldi_history_panel") {
+  sources = [
+    "vivaldi_history_panel.imageset/Contents.json",
+    "vivaldi_history_panel.imageset/vivaldi_history_panel.pdf",
+    "vivaldi_history_panel.imageset/vivaldi_history_panel_dark.pdf"
+  ]
+}
+
+imageset("vivaldi_notes_panel") {
+  sources = [
+    "vivaldi_notes_panel.imageset/Contents.json",
+    "vivaldi_notes_panel.imageset/vivaldi_notes_panel.pdf",
+    "vivaldi_notes_panel.imageset/vivaldi_notes_panel_dark.pdf"
+  ]
+}
+
+imageset("vivaldi_readinglist_panel") {
+  sources = [
+    "vivaldi_readinglist_panel.imageset/Contents.json",
+    "vivaldi_readinglist_panel.imageset/vivaldi_readinglist_panel.pdf",
+    "vivaldi_readinglist_panel.imageset/vivaldi_readinglist_panel_dark.pdf"
+  ]
+}

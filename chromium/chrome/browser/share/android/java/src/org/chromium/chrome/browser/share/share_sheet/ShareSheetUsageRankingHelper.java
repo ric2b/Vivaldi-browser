@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.share.share_sheet;
 
 import android.app.Activity;
-import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 
 import androidx.annotation.VisibleForTesting;
@@ -14,15 +13,16 @@ import androidx.appcompat.content.res.AppCompatResources;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.share.ShareContentTypeHelper;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareRankingBridge;
 import org.chromium.chrome.browser.share.link_to_text.LinkToTextCoordinator.LinkGeneration;
 import org.chromium.chrome.browser.share.share_sheet.ShareSheetLinkToggleMetricsHelper.LinkToggleMetricsDetails;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.share.ShareParams;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.ArrayList;
@@ -115,11 +115,9 @@ public class ShareSheetUsageRankingHelper {
             Callback<List<PropertyModel>> callback) {
         String type = contentTypesToTypeForRanking(contentTypes);
 
-        PackageManager pm = ContextUtils.getApplicationContext().getPackageManager();
-        List<ResolveInfo> availableResolveInfos =
-                pm.queryIntentActivities(ShareHelper.getShareTextAppCompatibilityIntent(), 0);
-        availableResolveInfos.addAll(pm.queryIntentActivities(
-                ShareHelper.getShareFileAppCompatibilityIntent(params.getFileContentType()), 0));
+        List<ResolveInfo> availableResolveInfos = ShareHelper.getCompatibleAppsForSharingText();
+        availableResolveInfos.addAll(
+                ShareHelper.getCompatibleAppsForSharingFiles(params.getFileContentType()));
 
         List<String> availableActivities = new ArrayList<String>();
         Map<String, ResolveInfo> resolveInfos = new HashMap<String, ResolveInfo>();
@@ -172,7 +170,7 @@ public class ShareSheetUsageRankingHelper {
     private String contentTypesToTypeForRanking(Set<Integer> contentTypes) {
         // TODO(ellyjones): Once we have field data, check whether the split into image vs not image
         // is sufficient (i.e. is share ranking is performing well with a split this coarse).
-        if (contentTypes.contains(ShareSheetPropertyModelBuilder.ContentType.IMAGE)) {
+        if (contentTypes.contains(ShareContentTypeHelper.ContentType.IMAGE)) {
             return "image";
         } else {
             return "other";
@@ -242,7 +240,7 @@ public class ShareSheetUsageRankingHelper {
                         mLinkGenerationStatusForMetrics, mLinkToggleMetricsDetails));
             }
         }
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, callback.bind(models));
+        PostTask.postTask(TaskTraits.UI_DEFAULT, callback.bind(models));
     }
 
     PropertyModel createMorePropertyModel(

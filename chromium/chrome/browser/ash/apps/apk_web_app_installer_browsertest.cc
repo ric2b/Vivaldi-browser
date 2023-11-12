@@ -12,9 +12,11 @@
 #include "ash/public/cpp/shelf_model.h"
 #include "base/containers/contains.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/ash/apps/apk_web_app_installer.h"
@@ -257,7 +259,9 @@ class ApkWebAppInstallerBrowserTest
     uninstalled_web_app_ids_.push_back(web_app_id);
   }
 
-  void OnWebAppUninstalled(const web_app::AppId& app_id) override {
+  void OnWebAppUninstalled(
+      const web_app::AppId& app_id,
+      webapps::WebappUninstallSource uninstall_source) override {
     if (app_uninstalled_callback_) {
       app_uninstalled_callback_.Run(app_id);
     }
@@ -281,8 +285,8 @@ class ApkWebAppInstallerBrowserTest
   base::ScopedObservation<web_app::WebAppInstallManager,
                           web_app::WebAppInstallManagerObserver>
       observation_{this};
-  ArcAppListPrefs* arc_app_list_prefs_ = nullptr;
-  web_app::WebAppProvider* provider_ = nullptr;
+  raw_ptr<ArcAppListPrefs, ExperimentalAsh> arc_app_list_prefs_ = nullptr;
+  raw_ptr<web_app::WebAppProvider, ExperimentalAsh> provider_ = nullptr;
   std::unique_ptr<arc::FakeAppInstance> app_instance_;
   base::RepeatingCallback<void(const web_app::AppId&)>
       app_uninstalled_callback_;
@@ -313,7 +317,7 @@ class ApkWebAppInstallerWithShelfControllerBrowserTest
   }
 
  protected:
-  ChromeShelfController* shelf_controller_;
+  raw_ptr<ChromeShelfController, ExperimentalAsh> shelf_controller_;
 };
 
 // Test the full installation and uninstallation flow.
@@ -780,6 +784,36 @@ IN_PROC_BROWSER_TEST_F(ApkWebAppInstallerBrowserTest,
     ExpectInitialManifestFieldsFromWebAppInstallInfo(icon_manager(), web_app,
                                                      GURL(kAppUrl));
   }
+}
+
+IN_PROC_BROWSER_TEST_F(ApkWebAppInstallerDelayedArcStartBrowserTest,
+                       RemoveWebAppWhenArcDisabled) {
+  EnableArc();
+  app_instance_->SendRefreshPackageList({});
+
+  ApkWebAppService* service = apk_web_app_service();
+  service->SetArcAppListPrefsForTesting(arc_app_list_prefs_);
+
+  // Install the Web App from ARC.
+  base::test::TestFuture<const std::string&, const web_app::AppId&>
+      installed_future;
+  service->SetWebAppInstalledCallbackForTesting(installed_future.GetCallback());
+  app_instance_->SendPackageAdded(GetWebAppPackage(kPackageName, kAppTitle));
+
+  web_app::AppId installed_app_id = installed_future.Get<1>();
+  ASSERT_TRUE(service->IsWebAppInstalledFromArc(installed_app_id));
+
+  // Disable ARC through settings and check that the app was uninstalled.
+  base::test::TestFuture<const std::string&, const web_app::AppId&>
+      uninstalled_future;
+  service->SetWebAppUninstalledCallbackForTesting(
+      uninstalled_future.GetCallback());
+
+  arc::SetArcPlayStoreEnabledForProfile(browser()->profile(), false);
+  DisableArc();
+
+  ASSERT_TRUE(installed_future.Wait());
+  ASSERT_EQ(uninstalled_future.Get<1>(), installed_app_id);
 }
 
 }  // namespace ash

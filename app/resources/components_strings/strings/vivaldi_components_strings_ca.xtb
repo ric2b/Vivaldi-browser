@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1 {(1 en ús)} other {(# en ús)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Comprova l'adreça del servidor intermediari<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
-<translation id="5287240709317226393">Mostra les galetes</translation>
 <translation id="5355557959165512791">En aquest moment no pots visitar <ph name="SITE" /> perquè se li ha revocat el certificat. Els atacs i els errors de xarxa acostumen a ser temporals, o sigui que probablement la pàgina funcionarà més endavant.</translation>
 <translation id="5386426401304769735">La cadena de certificats d'aquest lloc conté un certificat que s'ha signat amb SHA-1.</translation>
 <translation id="5452270690849572955">No s'ha trobat aquesta pàgina de <ph name="HOST_NAME" /></translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Contrasenya</translation>
 <translation id="6711464428925977395">Hi ha hagut algun problema amb el servidor intermediari o l'adreça no és correcta.</translation>
 <translation id="6757797048963528358">El teu dispositiu ha entrat en mode de repòs.</translation>
+<translation id="6890956352250146925">Opcions per a galetes i dades dels llocs web</translation>
 <translation id="6897140037006041989">Agent d'usuari</translation>
 <translation id="7053983685419859001">Bloqueja</translation>
 <translation id="7079718277001814089">Aquest lloc conté programari maliciós</translation>

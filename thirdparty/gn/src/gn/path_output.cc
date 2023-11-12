@@ -148,7 +148,7 @@ void PathOutput::WriteSourceRelativeString(std::ostream& out,
   } else {
     // Ninja (and none) escaping can avoid the intermediate string and
     // reprocessing of the inverse_current_dir_.
-    out << inverse_current_dir_;
+    EscapeStringToStream(out, inverse_current_dir_, options_);
     EscapeStringToStream(out, str, options_);
   }
 }

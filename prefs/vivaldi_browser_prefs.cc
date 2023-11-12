@@ -218,7 +218,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
                              base::Value(std::move(args)));
 
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiClientHintsBrand,
-                                int(BrandSelection::kNoBrand));
+                                int(BrandSelection::kChromeBrand));
   registry->RegisterBooleanPref(
       vivaldiprefs::kVivaldiClientHintsBrandAppendVivaldi, false);
   registry->RegisterStringPref(
@@ -548,7 +548,7 @@ void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
   constexpr size_t kNightIndex = 1;
 
   PrefOverrideValues values;
-  for (auto name_value : overrides.DictItems()) {
+  for (auto name_value : overrides.GetDict()) {
     base::StringPiece name = name_value.first;
     base::Value& value = name_value.second;
     std::string* values_string = nullptr;
@@ -630,7 +630,8 @@ void PatchPrefsJson(base::Value::Dict& prefs, base::Value& overrides) {
     prefs
         .FindByDottedPath(append_default(vivaldiprefs::kThemeScheduleTimeline))
         ->GetList()[i]
-        .FindKey("themeId")
+        .GetDict()
+        .Find("themeId")
         ->GetString() = value;
     std::string schedule_path = append_default(vivaldiprefs::kThemeScheduleOS);
     schedule_path.append(i == kDayIndex ? ".light" : ".dark");
@@ -730,8 +731,13 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   RegisterOldPrefs(registry);
 #else
-  registry->RegisterBooleanPref(
-      vivaldiprefs::kBackgroundMediaPlaybackAllowed, false);
+#if defined(OEM_MERCEDES_BUILD)
+  registry->RegisterBooleanPref(vivaldiprefs::kBackgroundMediaPlaybackAllowed,
+                                true);
+#else
+  registry->RegisterBooleanPref(vivaldiprefs::kBackgroundMediaPlaybackAllowed,
+                                false);
+#endif
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
 

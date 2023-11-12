@@ -234,7 +234,6 @@ void ProgressTracker::MaybeSendProgress() {
     vivaldi_reset_deltas();
 
     frame_->GetLocalFrameHostRemote().DidChangeLoadProgress(progress_value_);
-
     last_notified_progress_value_ = progress_value_;
     last_notified_progress_time_ = now;
   }

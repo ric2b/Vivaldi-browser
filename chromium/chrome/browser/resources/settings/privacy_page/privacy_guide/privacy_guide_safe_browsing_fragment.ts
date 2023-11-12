@@ -7,16 +7,16 @@
  * 'privacy-guide-safe-browsing-fragment' is the fragment in a privacy
  * guide card that contains the safe browsing settings and their descriptions.
  */
-import '../../prefs/prefs.js';
+import 'chrome://resources/cr_components/settings_prefs/prefs.js';
 import './privacy_guide_description_item.js';
 import './privacy_guide_fragment_shared.css.js';
 import '../../controls/settings_radio_group.js';
 import '../../privacy_page/collapse_radio_button.js';
 
+import {PrefsMixin} from 'chrome://resources/cr_components/settings_prefs/prefs_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideSettingsStates} from '../../metrics_browser_proxy.js';
-import {PrefsMixin} from '../../prefs/prefs_mixin.js';
+import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideSettingsStates, PrivacyGuideStepsEligibleAndReached} from '../../metrics_browser_proxy.js';
 import {SafeBrowsingSetting} from '../../privacy_page/security_page.js';
 
 import {getTemplate} from './privacy_guide_safe_browsing_fragment.html.js';
@@ -70,6 +70,9 @@ export class PrivacyGuideSafeBrowsingFragmentElement extends
   private onViewEnterStart_() {
     this.startStateEnhanced_ = this.getPref('generated.safe_browsing').value ===
         SafeBrowsingSetting.ENHANCED;
+    this.metricsBrowserProxy_
+        .recordPrivacyGuideStepsEligibleAndReachedHistogram(
+            PrivacyGuideStepsEligibleAndReached.SAFE_BROWSING_REACHED);
   }
 
   private onViewExitFinish_() {

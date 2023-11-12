@@ -11,7 +11,7 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 
-import org.chromium.base.jank_tracker.JankTracker;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
@@ -26,8 +26,8 @@ import org.chromium.chrome.browser.init.ChromeActivityNativeDelegate;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.omnibox.OmniboxStub;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
-import org.chromium.chrome.browser.share.crow.CrowButtonDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -68,10 +68,9 @@ public class StartSurfaceDelegate {
      */
     public static Layout createTabSwitcherAndStartSurfaceLayout(Context context,
             LayoutUpdateHost updateHost, LayoutRenderHost renderHost, StartSurface startSurface,
-            JankTracker jankTracker, ViewGroup tabSwitcherScrimAnchor,
-            ScrimCoordinator scrimCoordinator) {
+            ViewGroup tabSwitcherScrimAnchor, ScrimCoordinator scrimCoordinator) {
         return new TabSwitcherAndStartSurfaceLayout(context, updateHost, renderHost, startSurface,
-                jankTracker, tabSwitcherScrimAnchor, scrimCoordinator);
+                tabSwitcherScrimAnchor, scrimCoordinator);
     }
 
     /**
@@ -101,13 +100,12 @@ public class StartSurfaceDelegate {
      * @param tabCreatorManager Manages creation of tabs.
      * @param menuOrKeyboardActionController allows access to menu or keyboard actions.
      * @param multiWindowModeStateDispatcher Gives access to the multi window mode state.
-     * @param jankTracker Measures jank while tab switcher is visible.
      * @param toolbarSupplier Supplies the {@link Toolbar}.
-     * @param crowButtonDelegate The {@link CrowButtonDelegate} to handle Crow click events.
      * @param backPressManager {@link BackPressManager} to handle back press gesture.
      * @param incognitoReauthControllerSupplier {@link OneshotSupplier<IncognitoReauthController>}
      *         to detect pending re-auth when tab switcher is shown.
      * @param tabSwitcherClickHandler The {@link OnClickListener} for the tab switcher button.
+     * @param profileSupplier Supplies the {@link Profile}.
      * @return the {@link StartSurface}
      */
     public static StartSurface createStartSurface(@NonNull Activity activity,
@@ -129,17 +127,17 @@ public class StartSurfaceDelegate {
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull MenuOrKeyboardActionController menuOrKeyboardActionController,
             @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
-            @NonNull JankTracker jankTracker, @NonNull Supplier<Toolbar> toolbarSupplier,
-            @NonNull CrowButtonDelegate crowButtonDelegate, BackPressManager backPressManager,
+            @NonNull Supplier<Toolbar> toolbarSupplier, BackPressManager backPressManager,
             @NonNull OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
-            @NonNull OnClickListener tabSwitcherClickHandler) {
+            @NonNull OnClickListener tabSwitcherClickHandler,
+            @NonNull ObservableSupplier<Profile> profileSupplier) {
         return new StartSurfaceCoordinator(activity, scrimCoordinator, sheetController,
                 startSurfaceOneshotSupplier, parentTabSupplier, hadWarmStart, windowAndroid,
                 containerView, dynamicResourceLoaderSupplier, tabModelSelector,
                 browserControlsManager, snackbarManager, shareDelegateSupplier, omniboxStubSupplier,
                 tabContentManager, modalDialogManager, chromeActivityNativeDelegate,
                 activityLifecycleDispatcher, tabCreatorManager, menuOrKeyboardActionController,
-                multiWindowModeStateDispatcher, jankTracker, toolbarSupplier, crowButtonDelegate,
-                backPressManager, incognitoReauthControllerSupplier, tabSwitcherClickHandler);
+                multiWindowModeStateDispatcher, toolbarSupplier, backPressManager,
+                incognitoReauthControllerSupplier, tabSwitcherClickHandler, profileSupplier);
     }
 }

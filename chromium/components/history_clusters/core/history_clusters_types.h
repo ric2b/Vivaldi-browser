@@ -32,18 +32,27 @@ struct QueryClustersFilterParams {
   QueryClustersFilterParams(const QueryClustersFilterParams&);
   ~QueryClustersFilterParams();
 
-  // The maximum number of clusters to return. If less than 0, no max will be
-  // applied.
-  int max_clusters = -1;
+  // Parameters related to the minimum requirements for returned clusters.
+
+  // The minimum number of non-hidden visits that are required for returned
+  // clusters. Note that this also implicitly works as a visit filter such that
+  // if fewer than `min_total_visits` are in a cluster, it will be filtered out.
+  int min_visits = 0;
 
   // The minimum number of visits within a cluster that have associated images.
   // Note that this also implicitly works as a visit filter such that if fewer
   // than `min_visits_with_images` are in a cluster, it will be filtered out.
   int min_visits_with_images = 0;
 
-  // The categories that a cluster must be a part of for it to included.
-  // If empty, the returned clusters will not be filtered.
-  base::flat_set<std::string> categories;
+  // The category IDs that a cluster must be a part of for it to be included.
+  // If both `categories_allowlist` and `categories_blocklist` are empty, the
+  // returned clusters will not be filtered.
+  base::flat_set<std::string> categories_allowlist;
+
+  // The category IDs that a cluster must not contain for it to be included.
+  // If both `categories_allowlist` and `categories_blocklist` are empty, the
+  // returned clusters will not be filtered.
+  base::flat_set<std::string> categories_blocklist;
 
   // Whether all clusters returned are search-initiated.
   bool is_search_initiated = false;

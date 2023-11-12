@@ -7,20 +7,24 @@ package org.chromium.chrome.browser.bookmarks;
 import static org.chromium.components.browser_ui.widget.listmenu.BasicListMenu.buildMenuListItem;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.appcompat.content.res.AppCompatResources;
-import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkAddEditFolderActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkFolderSelectActivity;
+import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -30,7 +34,7 @@ import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButton.PopupMenuShownListener;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuButtonDelegate;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
-import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
+import org.chromium.components.browser_ui.widget.selectable_list.CheckableSelectableItemView;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListUtils;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 
@@ -44,15 +48,27 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
  * Common logic for bookmark and folder rows.
  */
 public abstract class BookmarkRow
-        extends SelectableItemView<BookmarkId> implements BookmarkUIObserver {
-    protected ListMenuButton mMoreIcon;
+        extends CheckableSelectableItemView<BookmarkId> implements BookmarkUiObserver {
+    // The start icon view which is shows the favicon and the checkmark.
+    protected ImageView mStartIconView;
+    // 3-dot menu which displays contextual actions.
+    protected ListMenuButton mMoreButton;
+    // Image shown in selection mode which starts drag/drop.
     protected ImageView mDragHandle;
+    // Displays the title of the bookmark.
+    protected TextView mTitleView;
+    // Displays the url of the bookmark.
+    protected TextView mDescriptionView;
+
     protected BookmarkDelegate mDelegate;
     protected BookmarkId mBookmarkId;
+
+    /** Levels for the background. */
+    private final int mDefaultLevel;
+    private final int mSelectedLevel;
     private boolean mIsAttachedToWindow;
     private PopupMenuShownListener mPopupListener;
-    @Location
-    private int mLocation;
+    private @Location int mLocation;
     private boolean mFromFilterView;
 
     @IntDef({Location.TOP, Location.MIDDLE, Location.BOTTOM, Location.SOLO})
@@ -65,13 +81,46 @@ public abstract class BookmarkRow
     }
 
     /**
-     * Constructor for inflating from XML.
+     * Factory constructor for building the view programmatically.
+     * @param row The BookmarkRow to build.
+     * @param context The calling context, usually the parent view.
+     * @param isVisualRefreshEnabled Whether to show the visual or compact bookmark row.
      */
+    protected static void buildView(
+            BookmarkRow row, Context context, boolean isVisualRefreshEnabled) {
+        row.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LayoutInflater.from(context).inflate(isVisualRefreshEnabled
+                        ? org.chromium.chrome.R.layout.bookmark_row_layout_visual
+                        : org.chromium.chrome.R.layout.bookmark_row_layout,
+                row);
+        row.onFinishInflate();
+    }
+
+    /** Constructor for inflating from XML. */
     public BookmarkRow(Context context, AttributeSet attrs) {
         super(context, attrs);
-        if (BookmarkFeatures.isBookmarksVisualRefreshEnabled()) {
-            enableVisualRefresh();
-        }
+
+        mDefaultLevel = getResources().getInteger(R.integer.list_item_level_default);
+        mSelectedLevel = getResources().getInteger(R.integer.list_item_level_selected);
+    }
+
+    // FrameLayout implementation.
+
+    @Override
+    protected void onFinishInflate() {
+        super.onFinishInflate();
+
+        mStartIconView = findViewById(R.id.start_icon);
+
+        mDragHandle = findViewById(R.id.drag_handle);
+
+        mMoreButton = findViewById(R.id.more);
+        mMoreButton.setDelegate(getListMenuButtonDelegate());
+        mMoreButton.setVisibility(View.GONE);
+
+        mTitleView = findViewById(R.id.title);
+        mDescriptionView = findViewById(R.id.description);
     }
 
     /**
@@ -90,8 +139,8 @@ public abstract class BookmarkRow
         mBookmarkId = bookmarkId;
         mFromFilterView = fromFilterView;
         BookmarkItem bookmarkItem = mDelegate.getModel().getBookmarkById(bookmarkId);
-        mMoreIcon.dismiss();
-        SelectableListUtils.setContentDescriptionContext(getContext(), mMoreIcon,
+        mMoreButton.dismiss();
+        SelectableListUtils.setContentDescriptionContext(getContext(), mMoreButton,
                 bookmarkItem.getTitle(), SelectableListUtils.ContentDescriptionSource.MENU_BUTTON);
 
         setChecked(isItemSelected());
@@ -120,24 +169,24 @@ public abstract class BookmarkRow
 
         // If the visibility of the drag handle or more icon is not set later, it will be gone.
         mDragHandle.setVisibility(GONE);
-        mMoreIcon.setVisibility(GONE);
+        mMoreButton.setVisibility(GONE);
 
         if (mDelegate.getDragStateDelegate().getDragActive()) {
             mDragHandle.setVisibility(
                     bookmarkItem.isReorderable() && !mFromFilterView ? VISIBLE : GONE);
             mDragHandle.setEnabled(isItemSelected());
         } else {
-            mMoreIcon.setVisibility(bookmarkItem.isEditable() ? VISIBLE : GONE);
-            mMoreIcon.setClickable(!isSelectionModeActive());
-            mMoreIcon.setEnabled(mMoreIcon.isClickable());
-            mMoreIcon.setImportantForAccessibility(mMoreIcon.isClickable()
+            mMoreButton.setVisibility(bookmarkItem.isEditable() ? VISIBLE : GONE);
+            mMoreButton.setClickable(!isSelectionModeActive());
+            mMoreButton.setEnabled(mMoreButton.isClickable());
+            mMoreButton.setImportantForAccessibility(mMoreButton.isClickable()
                             ? IMPORTANT_FOR_ACCESSIBILITY_YES
                             : IMPORTANT_FOR_ACCESSIBILITY_NO);
 
             // Vivaldi - Display more icon for Reading list items
             if (ChromeApplicationImpl.isVivaldi()
                     && bookmarkItem.getId().getType() != BookmarkType.READING_LIST)
-                mMoreIcon.setVisibility(View.GONE);
+                mMoreButton.setVisibility(View.GONE);
         }
     }
 
@@ -153,15 +202,15 @@ public abstract class BookmarkRow
     }
 
     private void initialize() {
-        mDelegate.addUIObserver(this);
+        mDelegate.addUiObserver(this);
         mPopupListener = () -> mDelegate.onBookmarkItemMenuOpened();
-        mMoreIcon.addPopupListener(mPopupListener);
+        mMoreButton.addPopupListener(mPopupListener);
     }
 
     private void cleanup() {
-        mMoreIcon.dismiss();
-        mMoreIcon.removePopupListener(mPopupListener);
-        if (mDelegate != null) mDelegate.removeUIObserver(this);
+        mMoreButton.dismiss();
+        mMoreButton.removePopupListener(mPopupListener);
+        if (mDelegate != null) mDelegate.removeUiObserver(this);
     }
 
     private ModelList getItems() {
@@ -199,9 +248,9 @@ public abstract class BookmarkRow
             listItems.add(buildMenuListItem(R.string.bookmark_item_delete, 0, 0));
         }
 
-        if (mDelegate.getCurrentState() == BookmarkUIState.STATE_SEARCHING) {
+        if (mDelegate.getCurrentUiMode() == BookmarkUiMode.SEARCHING) {
             listItems.add(buildMenuListItem(R.string.bookmark_show_in_folder, 0, 0));
-        } else if (mDelegate.getCurrentState() == BookmarkUIState.STATE_FOLDER
+        } else if (mDelegate.getCurrentUiMode() == BookmarkUiMode.FOLDER
                 && mLocation != Location.SOLO && canReorder) {
             // Only add move up / move down buttons if there is more than 1 item
             if (mLocation != Location.TOP) {
@@ -271,20 +320,6 @@ public abstract class BookmarkRow
     }
 
     // FrameLayout implementation.
-    @Override
-    protected void onFinishInflate() {
-        super.onFinishInflate();
-
-        LayoutInflater.from(getContext()).inflate(R.layout.list_menu_button, mContentView);
-        mMoreIcon = findViewById(R.id.more);
-        mMoreIcon.setDelegate(getListMenuButtonDelegate());
-
-        mDragHandle = mEndButtonView;
-        mDragHandle.setImageResource(R.drawable.ic_drag_handle_grey600_24dp);
-        ImageViewCompat.setImageTintList(mDragHandle,
-                AppCompatResources.getColorStateList(
-                        getContext(), R.color.default_icon_color_tint_list));
-    }
 
     private ListMenuButtonDelegate getListMenuButtonDelegate() {
         return this::getListMenu;
@@ -306,14 +341,36 @@ public abstract class BookmarkRow
         cleanup();
     }
 
-    // SelectableItem implementation.
+    // CheckableSelectableItemView implementation.
+
+    @Override
+    protected ImageView getIconView() {
+        return mStartIconView;
+    }
+
+    @Override
+    protected @Nullable ColorStateList getDefaultIconTint() {
+        return null;
+    }
+
+    @Override
+    protected int getSelectedLevel() {
+        return mSelectedLevel;
+    }
+
+    @Override
+    protected int getDefaultLevel() {
+        return mDefaultLevel;
+    }
+
+    // BookmarkUiObserver implementation.
+
     @Override
     public void onSelectionStateChange(List<BookmarkId> selectedBookmarks) {
         super.onSelectionStateChange(selectedBookmarks);
         updateVisualState();
     }
 
-    // BookmarkUIObserver implementation.
     @Override
     public void onDestroy() {
         cleanup();
@@ -325,12 +382,11 @@ public abstract class BookmarkRow
     @Override
     public void onSearchStateSet() {}
 
-    @VisibleForTesting
     public boolean isItemSelected() {
         return mDelegate.getSelectionDelegate().isItemSelected(mBookmarkId);
     }
 
-    void setDragHandleOnTouchListener(OnTouchListener l) {
+    void setDragHandleOnTouchListener(View.OnTouchListener l) {
         mDragHandle.setOnTouchListener(l);
     }
 
@@ -363,7 +419,7 @@ public abstract class BookmarkRow
     }
 
     @VisibleForTesting
-    public View getDragHandleViewForTests() {
+    public View getDragHandleViewForTesting() {
         return mDragHandle;
     }
 

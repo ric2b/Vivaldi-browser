@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_ASH_BRUSCHETTA_BRUSCHETTA_INSTALLER_H_
 #define CHROME_BROWSER_ASH_BRUSCHETTA_BRUSCHETTA_INSTALLER_H_
 
-#include "base/guid.h"
-#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
+#include "base/uuid.h"
+#include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "components/download/public/background_service/download_metadata.h"
 
 namespace bruschetta {
@@ -25,7 +25,8 @@ enum class BruschettaInstallResult {
   kUnableToOpenImages = 8,
   kCreateDiskError = 9,
   kStartVmFailed = 10,
-  kMaxValue = kStartVmFailed,
+  kInstallPflashError = 11,
+  kMaxValue = kInstallPflashError,
 };
 
 // Returns the string name of the BruschettaResult.
@@ -42,6 +43,7 @@ class BruschettaInstaller {
     kPflashDownload,
     kOpenFiles,
     kCreateVmDisk,
+    kInstallPflash,
     kStartVm,
     kLaunchTerminal,
   };
@@ -57,7 +59,7 @@ class BruschettaInstaller {
   virtual void Cancel() = 0;
   virtual void Install(std::string vm_name, std::string config_id) = 0;
 
-  virtual const base::GUID& GetDownloadGuid() const = 0;
+  virtual const base::Uuid& GetDownloadGuid() const = 0;
 
   virtual void DownloadStarted(
       const std::string& guid,

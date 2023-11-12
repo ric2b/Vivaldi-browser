@@ -8,6 +8,8 @@ source_set("custom_views") {
     "vivaldi_text_field_view.mm",
     "vivaldi_search_bar_view.h",
     "vivaldi_search_bar_view.mm",
+    "vivaldi_text_view.h",
+    "vivaldi_text_view.mm"
   ]
 
   deps = []

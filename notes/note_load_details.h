@@ -77,9 +77,9 @@ class NoteLoadDetails {
 
  private:
   std::unique_ptr<NoteNode> root_node_;
-  PermanentNoteNode* main_notes_node_ = nullptr;
-  PermanentNoteNode* other_notes_node_ = nullptr;
-  PermanentNoteNode* trash_notes_node_ = nullptr;
+  raw_ptr<PermanentNoteNode> main_notes_node_ = nullptr;
+  raw_ptr<PermanentNoteNode> other_notes_node_ = nullptr;
+  raw_ptr<PermanentNoteNode> trash_notes_node_ = nullptr;
   std::string computed_checksum_;
   std::string stored_checksum_;
   int64_t max_id_ = 1;

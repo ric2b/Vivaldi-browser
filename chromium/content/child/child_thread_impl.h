@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 
+#include "base/auto_reset.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -160,6 +161,12 @@ class ChildThreadImpl : public IPC::Listener, virtual public ChildThread {
 
   bool IsInBrowserProcess() const;
 
+#if BUILDFLAG(IS_ANDROID)
+  // Received memory pressure signal sent by the browser process.
+  virtual void OnMemoryPressureFromBrowserReceived(
+      base::MemoryPressureListener::MemoryPressureLevel level);
+#endif
+
  private:
   // TODO(crbug.com/1111231): This class is a friend so that it can call our
   // private mojo implementation methods, acting as a pass-through. This is only
@@ -192,6 +199,8 @@ class ChildThreadImpl : public IPC::Listener, virtual public ChildThread {
 #if BUILDFLAG(IS_WIN)
   const mojo::Remote<mojom::FontCacheWin>& GetFontCacheWin();
 #endif
+
+  const base::AutoReset<ChildThreadImpl*> resetter_;
 
   base::Thread mojo_ipc_thread_{"Mojo IPC"};
   std::unique_ptr<mojo::core::ScopedIPCSupport> mojo_ipc_support_;

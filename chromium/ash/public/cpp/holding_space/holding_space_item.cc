@@ -109,12 +109,44 @@ std::unique_ptr<HoldingSpaceItem> HoldingSpaceItem::CreateFileBackedItem(
 }
 
 // static
-bool HoldingSpaceItem::IsDownload(HoldingSpaceItem::Type type) {
+bool HoldingSpaceItem::IsCameraAppType(HoldingSpaceItem::Type type) {
+  switch (type) {
+    case Type::kCameraAppPhoto:
+    case Type::kCameraAppScanJpg:
+    case Type::kCameraAppScanPdf:
+    case Type::kCameraAppVideoGif:
+    case Type::kCameraAppVideoMp4:
+      return true;
+    case Type::kArcDownload:
+    case Type::kDownload:
+    case Type::kDiagnosticsLog:
+    case Type::kDriveSuggestion:
+    case Type::kLacrosDownload:
+    case Type::kLocalSuggestion:
+    case Type::kNearbyShare:
+    case Type::kPhoneHubCameraRoll:
+    case Type::kPinnedFile:
+    case Type::kPrintedPdf:
+    case Type::kScan:
+    case Type::kScreenRecording:
+    case Type::kScreenRecordingGif:
+    case Type::kScreenshot:
+      return false;
+  }
+}
+
+// static
+bool HoldingSpaceItem::IsDownloadType(HoldingSpaceItem::Type type) {
   switch (type) {
     case Type::kArcDownload:
     case Type::kDownload:
     case Type::kLacrosDownload:
       return true;
+    case Type::kCameraAppPhoto:
+    case Type::kCameraAppScanJpg:
+    case Type::kCameraAppScanPdf:
+    case Type::kCameraAppVideoGif:
+    case Type::kCameraAppVideoMp4:
     case Type::kDiagnosticsLog:
     case Type::kDriveSuggestion:
     case Type::kLocalSuggestion:
@@ -131,13 +163,18 @@ bool HoldingSpaceItem::IsDownload(HoldingSpaceItem::Type type) {
 }
 
 // static
-bool HoldingSpaceItem::IsScreenCapture(HoldingSpaceItem::Type type) {
+bool HoldingSpaceItem::IsScreenCaptureType(HoldingSpaceItem::Type type) {
   switch (type) {
     case Type::kScreenRecording:
     case Type::kScreenRecordingGif:
     case Type::kScreenshot:
       return true;
     case Type::kArcDownload:
+    case Type::kCameraAppPhoto:
+    case Type::kCameraAppScanJpg:
+    case Type::kCameraAppScanPdf:
+    case Type::kCameraAppVideoGif:
+    case Type::kCameraAppVideoMp4:
     case Type::kDiagnosticsLog:
     case Type::kDownload:
     case Type::kDriveSuggestion:
@@ -153,12 +190,17 @@ bool HoldingSpaceItem::IsScreenCapture(HoldingSpaceItem::Type type) {
 }
 
 // static
-bool HoldingSpaceItem::IsSuggestion(HoldingSpaceItem::Type type) {
+bool HoldingSpaceItem::IsSuggestionType(HoldingSpaceItem::Type type) {
   switch (type) {
     case Type::kDriveSuggestion:
     case Type::kLocalSuggestion:
       return true;
     case Type::kArcDownload:
+    case Type::kCameraAppPhoto:
+    case Type::kCameraAppScanJpg:
+    case Type::kCameraAppScanPdf:
+    case Type::kCameraAppVideoGif:
+    case Type::kCameraAppVideoMp4:
     case Type::kDiagnosticsLog:
     case Type::kDownload:
     case Type::kLacrosDownload:

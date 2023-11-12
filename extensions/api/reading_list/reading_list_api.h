@@ -21,7 +21,7 @@ namespace extensions {
 class ReadingListPrivateAPI : public BrowserContextKeyedAPI,
                               public ReadingListModelObserver {
   friend class BrowserContextKeyedAPIFactory<ReadingListPrivateAPI>;
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "ReadingListPrivateAPI"; }

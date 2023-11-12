@@ -15,6 +15,7 @@
 #import "base/test/ios/google_test_runner_delegate.h"
 #include "base/test/test_suite.h"
 #include "base/test/test_switches.h"
+#include "build/blink_buildflags.h"
 #include "testing/coverage_util_ios.h"
 
 // Springboard will kill any iOS app that fails to check in after launch within
@@ -31,7 +32,7 @@
 // window displaying the app name. If a bunch of apps using MainHook are being
 // run in a row, this provides an indication of which one is currently running.
 
-static base::TestSuite* g_test_suite = NULL;
+static base::RunTestSuiteCallback g_test_suite_callback;
 static int g_argc;
 static char** g_argv;
 
@@ -102,19 +103,6 @@ bool IsSceneStartupEnabled() {
 
 - (void)sceneDidDisconnect:(UIScene*)scene API_AVAILABLE(ios(13)) {
   _window.reset();
-}
-
-- (UIWindow*)window {
-  // Required for backwards compatibility with ScopedKeyWindow.
-  // Note that from iOS 15 the concept of key window is deprecated.
-  NSArray<UIWindow*>* windows = [UIApplication sharedApplication].windows;
-  for (UIWindow* window in windows) {
-    if (window.isKeyWindow)
-      return window;
-  }
-  // Returns a weak pointer to _window, ChromeUnitTestSceneDelegate retains
-  // ownership of the object.
-  return _window.get();
 }
 
 @end
@@ -226,7 +214,7 @@ bool IsSceneStartupEnabled() {
 - (int)runGoogleTests {
   coverage_util::ConfigureCoverageReportPath();
 
-  int exitStatus = g_test_suite->Run();
+  int exitStatus = std::move(g_test_suite_callback).Run();
 
   if ([self shouldRedirectOutputToFile])
     [self writeOutputToNSLog];
@@ -239,9 +227,13 @@ bool IsSceneStartupEnabled() {
 
   int exitStatus = [self runGoogleTests];
 
+  // The blink code path uses a spawning test launcher and this wait isn't
+  // really necessary for that code path.
+#if !BUILDFLAG(USE_BLINK)
   // If a test app is too fast, it will exit before Instruments has has a
   // a chance to initialize and no test results will be seen.
   [NSThread sleepUntilDate:[NSDate dateWithTimeIntervalSinceNow:2.0]];
+#endif
   _window.reset();
 
   // Use the hidden selector to try and cleanly take down the app (otherwise
@@ -269,29 +261,22 @@ void InitIOSTestMessageLoop() {
   MessagePump::OverrideMessagePumpForUIFactory(&CreateMessagePumpForUIForTests);
 }
 
-void InitIOSRunHook(TestSuite* suite, int argc, char* argv[]) {
-  g_test_suite = suite;
+void InitIOSRunHook(RunTestSuiteCallback callback) {
+  g_test_suite_callback = std::move(callback);
+}
+
+void InitIOSArgs(int argc, char* argv[]) {
   g_argc = argc;
   g_argv = argv;
 }
 
-void RunTestsFromIOSApp() {
-  // When TestSuite::Run is invoked it calls RunTestsFromIOSApp(). On the first
-  // invocation, this method fires up an iOS app via UIApplicationMain. Since
-  // UIApplicationMain does not return until the app exits, control does not
-  // return to the initial TestSuite::Run invocation, so the app invokes
-  // TestSuite::Run a second time and since |ran_hook| is true at this point,
-  // this method is a no-op and control returns to TestSuite:Run so that test
-  // are executed. Once the app exits, RunTestsFromIOSApp calls exit() so that
-  // control is not returned to the initial invocation of TestSuite::Run.
-  static bool ran_hook = false;
-  if (!ran_hook) {
-    ran_hook = true;
-    @autoreleasepool {
-      int exit_status =
-          UIApplicationMain(g_argc, g_argv, nil, @"ChromeUnitTestDelegate");
-      exit(exit_status);
-    }
+int RunTestsFromIOSApp() {
+  // When LaunchUnitTests is invoked it calls RunTestsFromIOSApp(). On its
+  // invocation, this method fires up an iOS app via UIApplicationMain. The
+  // TestSuite::Run will have be passed via InitIOSRunHook which will execute
+  // the TestSuite once the UIApplication is ready.
+  @autoreleasepool {
+    return UIApplicationMain(g_argc, g_argv, nil, @"ChromeUnitTestDelegate");
   }
 }
 

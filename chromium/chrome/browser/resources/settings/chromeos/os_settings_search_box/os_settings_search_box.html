@@ -20,7 +20,7 @@
   }
 
   :host-context(body.jelly-enabled):host {
-    --cr-toolbar-search-field-background: var(--cros-sys-input_field_dark);
+    --cr-toolbar-search-field-background: var(--cros-sys-input_field_on_shaded);
   }
 
   @media (prefers-color-scheme: dark) {
@@ -117,14 +117,6 @@
     --text-color: var(--cros-text-color-prominent);
   }
 
-  .pill-button-with-icon iron-icon {
-    fill: var(--cros-text-color-secondary);
-  }
-
-  .pill-button-with-icon:hover iron-icon {
-    fill: var(--cros-text-color-prominent);
-  }
-
   #noSearchResultsContainer {
     height: 32px;
     line-height: 32px;
@@ -187,26 +179,32 @@
         </os-search-result-row>
       </template>
     </iron-list>
-    <div id="noSearchResultsContainer" hidden="[[searchResultsExist_]]">
-      $i18n{searchNoResults}
+  <!-- noSearchResultsContainer is aria-hidden because the aria-label of this
+    specific container gets announced as soon as search results have changed
+    (onSearchResultsChanged_) and no search results exist.-->
+    <div
+      id="noSearchResultsContainer"
+      aria-hidden="true"
+      hidden="[[searchResultsExist_]]">
+        $i18n{searchNoResults}
     </div>
-<if expr="_google_chrome">
-    <template is="dom-if" if="[[showFeedbackButton_]]">
-      <div id="reportSearchResult">
-        <cr-button
-            id="reportSearchResultButton"
-            class="pill-button-with-icon"
-            hidden="[[searchResultsExist_]]"
-            on-click="onSendFeedbackClick_">
-            <iron-icon
-                class="search-feedback-icon"
-                icon="os-settings:feedback"
-                slot="prefix-icon">
-            </iron-icon>
-            <span>$i18n{searchFeedbackButton}</span>
-        </cr-button>
-      </div>
-    </template>
-</if>
+    <if expr="_google_chrome">
+        <template is="dom-if" if="[[showFeedbackButton_]]">
+          <div id="reportSearchResult">
+            <cr-button
+                id="reportSearchResultButton"
+                class="pill-button-with-icon"
+                hidden="[[shouldHideFeedbackButton_]]"
+                on-click="onSendFeedbackClick_">
+                <iron-icon
+                    class="search-feedback-icon"
+                    icon="os-settings:feedback"
+                    slot="prefix-icon">
+                </iron-icon>
+                <span>$i18n{searchFeedbackButton}</span>
+            </cr-button>
+          </div>
+        </template>
+    </if>
   </div>
 </iron-dropdown>

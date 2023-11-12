@@ -14,12 +14,19 @@
   box-shadow: var(--cr-card-shadow);
 }
 
+/* This selector relies on the fact that pseudo-classes :hover and :active have
+ * lower priority than attribute selector. */
+cr-link-row[non-clickable] {
+  background-color: var(--cr-card-background-color);
+  cursor: default;
+}
+
 .page-title {
   font-weight: 400;
 }
 
 .label {
-  line-height: 20px;
+  min-height: 20px;
 }
 
 .single-line-label {
@@ -62,15 +69,17 @@
   --cr-icon-button-margin-start: 0px;
 }
 
-/* Hide the default icon element.*/
-cr-link-row[hide-icon]::part(icon) {
-  display: none;
-}
-
 .site-link {
   color: var(--cr-primary-text-color);
   display: block;
-  height: 20px;
+  height: auto;
+  line-height: 154%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-elide {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

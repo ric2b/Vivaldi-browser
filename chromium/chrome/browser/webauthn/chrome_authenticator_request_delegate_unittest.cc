@@ -18,6 +18,7 @@
 #include "chrome/browser/webauthn/webauthn_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/network_session_configurator/common/network_switches.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_context.h"
@@ -157,7 +158,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
   class DiscoveryFactory : public device::FidoDiscoveryFactory {
    public:
     void set_cable_data(
-        device::CableRequestType request_type,
+        device::FidoRequestType request_type,
         std::vector<device::CableDiscoveryData> data,
         const absl::optional<std::array<uint8_t, device::cablev2::kQRKeySize>>&
             qr_generator_key,
@@ -208,14 +209,14 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
   const struct {
     const char* origin;
     std::vector<device::CableDiscoveryData> extensions;
-    device::CableRequestType request_type;
+    device::FidoRequestType request_type;
     absl::optional<device::ResidentKeyRequirement> resident_key_requirement;
     Result expected_result;
   } kTests[] = {
       {
           "https://example.com",
           {},
-          device::CableRequestType::kGetAssertion,
+          device::FidoRequestType::kGetAssertion,
           absl::nullopt,
           Result::k3rdParty,
       },
@@ -223,7 +224,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
           // Extensions should be ignored on a 3rd-party site.
           "https://example.com",
           {v1_extension},
-          device::CableRequestType::kGetAssertion,
+          device::FidoRequestType::kGetAssertion,
           absl::nullopt,
           Result::k3rdParty,
       },
@@ -231,7 +232,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
           // Extensions should be ignored on a 3rd-party site.
           "https://example.com",
           {v2_extension},
-          device::CableRequestType::kGetAssertion,
+          device::FidoRequestType::kGetAssertion,
           absl::nullopt,
           Result::k3rdParty,
       },
@@ -240,7 +241,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
           // if it doesn't send an extension in an assertion request.
           "https://accounts.google.com",
           {},
-          device::CableRequestType::kGetAssertion,
+          device::FidoRequestType::kGetAssertion,
           absl::nullopt,
           Result::k3rdParty,
       },
@@ -248,7 +249,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
           // ... but not for non-discoverable registration.
           "https://accounts.google.com",
           {},
-          device::CableRequestType::kMakeCredential,
+          device::FidoRequestType::kMakeCredential,
           device::ResidentKeyRequirement::kDiscouraged,
           Result::kNone,
       },
@@ -256,7 +257,7 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
           // ... but yes for rk=preferred
           "https://accounts.google.com",
           {},
-          device::CableRequestType::kMakeCredential,
+          device::FidoRequestType::kMakeCredential,
           device::ResidentKeyRequirement::kPreferred,
           Result::k3rdParty,
       },
@@ -264,21 +265,21 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, CableConfiguration) {
           // ... or rk=required.
           "https://accounts.google.com",
           {},
-          device::CableRequestType::kDiscoverableMakeCredential,
+          device::FidoRequestType::kMakeCredential,
           device::ResidentKeyRequirement::kRequired,
           Result::k3rdParty,
       },
       {
           "https://accounts.google.com",
           {v1_extension},
-          device::CableRequestType::kGetAssertion,
+          device::FidoRequestType::kGetAssertion,
           absl::nullopt,
           NONE_ON_LINUX(Result::kV1),
       },
       {
           "https://accounts.google.com",
           {v2_extension},
-          device::CableRequestType::kGetAssertion,
+          device::FidoRequestType::kGetAssertion,
           absl::nullopt,
           Result::kServerLink,
       },
@@ -580,11 +581,7 @@ TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
 }
 
 class DisableWebAuthnWithBrokenCertsTest
-    : public ChromeAuthenticatorRequestDelegateTest {
- protected:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      device::kDisableWebAuthnWithBrokenCerts};
-};
+    : public ChromeAuthenticatorRequestDelegateTest {};
 
 TEST_F(DisableWebAuthnWithBrokenCertsTest, SecurityLevelNotAcceptable) {
   GURL url("https://doofenshmirtz.evil");
@@ -650,6 +647,25 @@ TEST_F(DisableWebAuthnWithBrokenCertsTest, SecurityLevelAcceptable) {
       content::NavigationSimulator::CreateBrowserInitiated(url, web_contents());
   net::SSLInfo ssl_info;
   ssl_info.cert_status = 0;  // ok.
+  ssl_info.cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+  simulator->SetSSLInfo(std::move(ssl_info));
+  simulator->Commit();
+  EXPECT_TRUE(delegate.IsSecurityLevelAcceptableForWebAuthn(
+      main_rfh(), url::Origin::Create(url)));
+}
+
+// Regression test for crbug.com/1421174.
+TEST_F(DisableWebAuthnWithBrokenCertsTest, IgnoreCertificateErrorsFlag) {
+  base::test::ScopedCommandLine scoped_command_line;
+  scoped_command_line.GetProcessCommandLine()->AppendSwitch(
+      switches::kIgnoreCertificateErrors);
+  GURL url("https://doofenshmirtz.evil");
+  ChromeWebAuthenticationDelegate delegate;
+  auto simulator =
+      content::NavigationSimulator::CreateBrowserInitiated(url, web_contents());
+  net::SSLInfo ssl_info;
+  ssl_info.cert_status = net::CERT_STATUS_DATE_INVALID;
   ssl_info.cert =
       net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
   simulator->SetSSLInfo(std::move(ssl_info));

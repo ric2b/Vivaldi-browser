@@ -167,6 +167,7 @@ UserAgentOverride UserAgentOverride::UserAgentOnly(const std::string& ua) {
 
 bool operator==(const UserAgentOverride& a, const UserAgentOverride& b) {
   return a.ua_string_override == b.ua_string_override &&
+         a.domain_ua_metadata_override == b.domain_ua_metadata_override &&
          a.ua_metadata_override == b.ua_metadata_override;
 }
 

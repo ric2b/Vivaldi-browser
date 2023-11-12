@@ -69,7 +69,7 @@ std::string VivaldiTranslateServerRequest::GenerateJSON(
   for (auto& item : data) {
     string_collection.GetList().Append(item);
   }
-  request.SetPath(kStringsLanguageKey, std::move(string_collection));
+  request.GetDict().Set(kStringsLanguageKey, std::move(string_collection));
 
   std::string output;
 

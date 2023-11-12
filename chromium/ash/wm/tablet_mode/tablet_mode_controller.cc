@@ -29,10 +29,10 @@
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/cxx17_backports.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -330,7 +330,7 @@ class TabletModeController::DestroyObserver : public aura::WindowObserver {
   aura::Window* window() { return window_; }
 
  private:
-  aura::Window* window_;
+  raw_ptr<aura::Window, ExperimentalAsh> window_;
   base::OnceCallback<void(void)> callback_;
 };
 
@@ -373,7 +373,7 @@ class TabletModeController::ScopedContainerHider {
   }
 
  private:
-  aura::Window* const root_window_;
+  const raw_ptr<aura::Window, ExperimentalAsh> root_window_;
 
   // The layer that holds the clone of shelf and float layers while the
   // originals are hidden.
@@ -744,12 +744,17 @@ void TabletModeController::SuspendDone(base::TimeDelta sleep_duration) {
     tablet_mode_usage_interval_start_time_ = base::Time::Now();
 
   // Start listening to the input device changes again.
-  if (IsBoardTypeMarkedAsTabletCapable()) {
+  // It might be possible that the suspend request has been cancelled so
+  // `this` was not removed as an observer of the input device changes. See
+  // b/271634754 for details.
+  auto* device_data_manager = ui::DeviceDataManager::GetInstance();
+  if (IsBoardTypeMarkedAsTabletCapable() &&
+      !device_data_manager->HasObserver(this)) {
     bluetooth_devices_observer_ =
         std::make_unique<BluetoothDevicesObserver>(base::BindRepeating(
             &TabletModeController::OnBluetoothAdapterOrDeviceChanged,
             base::Unretained(this)));
-    ui::DeviceDataManager::GetInstance()->AddObserver(this);
+    device_data_manager->AddObserver(this);
     // Call HandlePointingDeviceAddedOrRemoved() to iterate all available input
     // devices just in case we have missed all the notifications from
     // DeviceDataManager and  BluetoothDevicesObserver when SuspendDone() is
@@ -945,7 +950,7 @@ void TabletModeController::HandleHingeRotation(
   // accuracy.
   float largest_hinge_acceleration =
       std::max(std::abs(base_reading.x()), std::abs(lid_reading.x()));
-  float smoothing_ratio = base::clamp(
+  float smoothing_ratio = std::clamp(
       (largest_hinge_acceleration - kHingeVerticalSmoothingStart) /
           (kHingeVerticalSmoothingMaximum - kHingeVerticalSmoothingStart),
       0.0f, 1.0f);

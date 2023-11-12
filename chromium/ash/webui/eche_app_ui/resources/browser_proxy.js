@@ -41,6 +41,8 @@ const systemInfoObserverRouter =
 // Set up a message pipe to the browser process to monitor screen state.
 systemInfo.setSystemInfoObserver(
     systemInfoObserverRouter.$.bindNewPipeAndPassRemote());
+// Returns the remote for AccessibilityProvider.
+const accessibility = ash.echeApp.mojom.AccessibilityProvider.getRemote();
 
 const notificationGenerator =
     ash.echeApp.mojom.NotificationGenerator.getRemote();
@@ -49,6 +51,9 @@ const displayStreamHandler = ash.echeApp.mojom.DisplayStreamHandler.getRemote();
 
 const streamOrientationObserver =
     ash.echeApp.mojom.StreamOrientationObserver.getRemote();
+
+const connectionStatusObserver =
+    ash.echeApp.mojom.ConnectionStatusObserver.getRemote();
 
 const streamActionObserverRouter =
     new ash.echeApp.mojom.StreamActionObserverCallbackRouter();
@@ -74,6 +79,12 @@ guestMessagePipe.registerHandler(Message.SEND_SIGNAL, async (signal) => {
   console.log('echeapi browser_proxy.js sendSignalingMessage');
   signalMessageExchanger.sendSignalingMessage(signal);
 });
+
+guestMessagePipe.registerHandler(
+    Message.ACCESSIBILITY_EVENT_DATA, async (event_data) => {
+      console.log('echeapi browser_proxy.js handleAccessibilityEventReceived');
+      accessibility.handleAccessibilityEventReceived(event_data);
+    });
 
 signalingMessageObserverRouter.onReceivedSignalingMessage.addListener(
     (signal) => {
@@ -199,6 +210,16 @@ guestMessagePipe.registerHandler(
           `echeapi browser_proxy.js ` +
           `onStreamOrientationChanged ${message.isLandscape}`);
       streamOrientationObserver.onStreamOrientationChanged(message.isLandscape);
+    });
+
+// Register CONNECTION_STATUS_CHANGED.
+guestMessagePipe.registerHandler(
+    Message.CONNECTION_STATUS_CHANGED, async (message) => {
+      console.log(
+          `echeapi browser_proxy.js ` +
+          `onConnectionStatusChanged ${message.connectionStatus}`);
+      connectionStatusObserver.onConnectionStatusChanged(
+          message.connectionStatus);
     });
 
 // We can't access hash change event inside iframe so parse the notification

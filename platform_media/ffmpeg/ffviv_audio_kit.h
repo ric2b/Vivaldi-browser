@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 
+#include "base/memory/raw_ptr_exclusion.h"
 #include "third_party/ffmpeg/libavcodec/adts_header.h"
 #include "third_party/ffmpeg/libavcodec/avcodec.h"
 
@@ -33,7 +34,8 @@ typedef struct FFVIV_AdtsConverter {
   int channel_pce_size;
 
   // The custom channel config if any.
-  uint8_t* channel_pce_data;
+  // Not raw_ptr because it is allocated using a cusotm allocator.
+  RAW_PTR_EXCLUSION uint8_t* channel_pce_data;
 
 } FFVIV_AdtsConverter;
 

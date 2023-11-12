@@ -4,11 +4,12 @@
 
 #import "base/base64.h"
 #import "base/containers/flat_map.h"
+#import "base/files/file_util.h"
 #import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/values.h"
 #import "components/language/core/browser/pref_names.h"
-#import "components/os_crypt/os_crypt.h"
+#import "components/os_crypt/sync/os_crypt.h"
 #import "components/prefs/pref_service.h"
 #import "components/sync/base/command_line_switches.h"
 #import "components/sync/base/user_selectable_type.h"
@@ -16,12 +17,13 @@
 #import "components/sync/driver/sync_service.h"
 #import "components/sync/driver/sync_user_settings.h"
 #import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_switch_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/common/vivaldi_url_constants.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h"
 #import "ios/ui/settings/sync/vivaldi_create_account_ui_helper.h"
@@ -343,14 +345,23 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   pendingRegistration.recoveryEmailAddress = SysNSStringToUTF8(
       l10n_util::GetNSString(IDS_SYNC_DEFAULT_RECOVERY_EMAIL_ADDRESS));
   _vivaldiAccountManager->Login(username, password, save_password);
-  _syncService->GetUserSettings()->SetSyncRequested(true);
+  _syncService->SetSyncFeatureRequested();
 }
 
-- (void)setEncryptionPassword:(std::string)password {
-  bool success = _syncService->ui_helper()->SetEncryptionPassword(password);
-  if (!success) {
-    // TODO(tomas@vivaldi.com) implement the failure path
+- (BOOL)setEncryptionPassword:(std::string)password {
+  return _syncService->ui_helper()->SetEncryptionPassword(password);
+}
+
+- (BOOL)importEncryptionPassword:(NSURL*)file {
+  NSError* error = nil;
+  NSString* key = [NSString stringWithContentsOfFile:[file path]
+                                            encoding:NSUTF8StringEncoding
+                                               error:&error];
+  if (!error && [key length]) {
+    return _syncService->ui_helper()->RestoreEncryptionToken(
+      base::SysNSStringToUTF8(key));
   }
+  return NO;
 }
 
 - (void)storeUsername:(NSString*)username
@@ -422,12 +433,12 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     case EngineState::CONFIGURATION_PENDING:
     case EngineState::STARTED:
       if (engineData.needs_decryption_password) {
-        [self.commandHandler showSyncEncryptionPasswordView:NO];
+        [self.commandHandler showSyncEncryptionPasswordView];
       } else if (!engineData.uses_encryption_password) {
         // There is a different message displayed when creating the
         // encryption key for the first time.
         // We land here when the server has no encryption password set
-        [self.commandHandler showSyncEncryptionPasswordView:YES];
+        [self.commandHandler showSyncCreateEncryptionPasswordView];
       } else {
         [self.commandHandler showSyncSettingsView];
         [self reloadSyncStatusItem:engineData];
@@ -474,10 +485,12 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   // pick where to save the file and show a warning, similar to
   // export passwords.
 
+  NSString* file_path = [GetBackupEncryptionKeyPath()
+      stringByAppendingPathComponent:@"BackupEncryptionKey.txt"];
+
   NSString* key = SysUTF8ToNSString(
     _syncService->ui_helper()->GetBackupEncryptionToken());
-
-  [key writeToFile:GetBackupEncryptionKeyPath()
+  [key writeToFile:file_path
         atomically:YES
           encoding:NSUTF8StringEncoding
              error:nil];
@@ -494,8 +507,6 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 
 - (void)logOutButtonPressed {
   loggingOut = true;
-  _syncService->GetUserSettings()->SetSyncRequested(false);
-  _syncService->StopAndClear();
   _vivaldiAccountManager->Logout();
   [self clearPendingRegistration];
   [self.commandHandler showSyncLoginView];
@@ -759,11 +770,28 @@ NSString* FormattedString(int message_id) {
   __weak VivaldiSyncMediator* weakSelf = self;
   NSURL* profileImageURL =
       [NSURL URLWithString:SysUTF8ToNSString(account_info.picture_url)];
-  dispatch_async(dispatch_get_main_queue(), ^{
-    NSData * imageData = [[NSData alloc] initWithContentsOfURL:profileImageURL];
-    weakSelf.userInfoItem.userAvatar = [UIImage imageWithData:imageData];
-    [weakSelf.settingsConsumer reloadSection:SectionIdentifierSyncUserInfo];
-  });
+  [self fetchProfilePicture:profileImageURL
+    completionHandler:^(NSData* data, NSURLResponse* response, NSError* error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      weakSelf.userInfoItem.userAvatar = [UIImage imageWithData:data];
+      [weakSelf.settingsConsumer reloadSection:SectionIdentifierSyncUserInfo];
+    });
+  }];
+}
+
+-(void) fetchProfilePicture:(NSURL*)url
+          completionHandler:(ServerRequestCompletionHandler)handler {
+  NSMutableURLRequest* request = [NSMutableURLRequest requestWithURL:url
+                          cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                                      timeoutInterval:vConnectionTimeout];
+  [request setHTTPMethod:@"GET"];
+  [request setHTTPBody:nil];
+
+  NSURLSession* session = [NSURLSession sharedSession];
+  _task =
+      [session dataTaskWithRequest:request
+                completionHandler:handler];
+  [_task resume];
 }
 
 - (void) addSyncStatusSection {
@@ -1016,17 +1044,6 @@ NSString* FormattedString(int message_id) {
   _syncSetupInProgressHandle.reset();
 }
 
-NSString* GetBackupEncryptionKeyPath() {
-  NSArray* paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,
-                                                       NSUserDomainMask, YES);
-  if ([paths count] < 1)
-    return nil;
-
-  NSString* documents_directory_path = [paths objectAtIndex:0];
-  return [documents_directory_path
-      stringByAppendingPathComponent:@"BackupEncryptionKey.txt"];
-}
-
 #pragma mark Private - Create Account Server Request Handling
 
 - (void)sendCreateAccountRequestToServer:(BOOL)wantsNewsletter
@@ -1070,7 +1087,7 @@ NSString* GetBackupEncryptionKeyPath() {
     // and be handled accordingly
     _vivaldiAccountManager->Login(
         pendingRegistration.username, pendingRegistration.password, false);
-    _syncService->GetUserSettings()->SetSyncRequested(true);
+    _syncService->SetSyncFeatureRequested();
   } else {
     const std::string* err = dict.FindString(vErrorKey);
     [self.commandHandler createAccountFailed:SysUTF8ToNSString(*err)];

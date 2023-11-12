@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 import './app_item.js';
+import './app_home_empty_page.js';
 import '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import '//resources/cr_elements/cr_checkbox/cr_checkbox.js';
 
-import {CrActionMenuElement} from '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 
@@ -21,13 +21,6 @@ export interface ActionMenuModel {
 }
 
 type MenuHandleEvent = CustomEvent<ActionMenuModel>;
-
-export interface AppListElement {
-  $: {
-    menu: CrActionMenuElement,
-    container: HTMLElement,
-  };
-}
 
 export class AppListElement extends PolymerElement {
   static get is() {
@@ -106,6 +99,10 @@ export class AppListElement extends PolymerElement {
     } else if (['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown'].includes(
                    e.key)) {
       this.handleNavigateWithArrows(e);
+    } else if (e.key === 'F10' && e.shiftKey) {
+      this.launchContextMenuForFocusedApp();
+      e.preventDefault();
+      e.stopPropagation();
     }
   }
 
@@ -117,15 +114,35 @@ export class AppListElement extends PolymerElement {
     }
   }
 
+  private launchContextMenuForFocusedApp() {
+    const activeElementId = this.shadowRoot!.activeElement?.id;
+    if (!activeElementId) {
+      return;
+    }
+
+    const currIndex = this.apps_.findIndex(app => activeElementId === app.id);
+    if (currIndex < 0) {
+      return;
+    }
+
+    const appElement =
+        (this.shadowRoot!.getElementById('container')
+             ?.querySelector('#' + this.apps_[currIndex].id) as HTMLElement);
+    if (!appElement) {
+      return;
+    }
+
+    // Dispatch the contextmenu event on the focused element.
+    appElement.dispatchEvent(new CustomEvent('contextmenu'));
+  }
+
   // Capture arrow key events to focus on apps and navigate the apps as a grid.
   private handleNavigateWithArrows(e: KeyboardEvent) {
     const numApps = this.apps_.length;
+    const cssProps =
+        window.getComputedStyle(this.shadowRoot!.getElementById('container')!);
     const numColumns: number =
-        window
-            .getComputedStyle(
-                this.$.container,
-                )!.getPropertyValue('grid-template-columns')!.split(' ')
-            .length;
+        cssProps!.getPropertyValue('grid-template-columns')!.split(' ').length;
     const keyActions = {
       ArrowRight: 1,
       ArrowLeft: -1,
@@ -139,8 +156,8 @@ export class AppListElement extends PolymerElement {
 
     const activeElementId = this.shadowRoot!.activeElement?.id;
     if (!activeElementId) {
-      (this.$.container.querySelector('#' + this.apps_[0].id) as
-       HTMLElement)!.focus();
+      (this.shadowRoot!.getElementById('container')
+           ?.querySelector('#' + this.apps_[0].id) as HTMLElement)!.focus();
       return;
     }
 
@@ -157,16 +174,22 @@ export class AppListElement extends PolymerElement {
       nextIndex = currIndex;
     }
 
-    (this.$.container.querySelector('#' + this.apps_[nextIndex].id) as
+    (this.shadowRoot!.getElementById('container')
+         ?.querySelector('#' + this.apps_[nextIndex].id) as
      HTMLElement)!.focus();
   }
 
   private addApp_(appInfo: AppInfo) {
-    const index = this.apps_.findIndex(app => app.id === appInfo.id);
-    if (index !== -1) {
-      this.set(`apps_.${index}`, appInfo);
+    const currIndex = this.apps_.findIndex(app => app.id === appInfo.id);
+    if (currIndex !== -1) {
+      this.set(`apps_.${currIndex}`, appInfo);
     } else {
-      this.push('apps_', appInfo);
+      const newIndex = this.apps_.findIndex(app => app.name > appInfo.name);
+      if (newIndex === -1) {
+        this.push('apps_', appInfo);
+        return;
+      }
+      this.splice('apps_', newIndex, 0, appInfo);
     }
   }
 
@@ -199,6 +222,13 @@ export class AppListElement extends PolymerElement {
   private switchActiveMenu_(event: MenuHandleEvent) {
     this.closeCurrentAppMenu();
     this.selectedAppItem_ = event.detail.appItem;
+  }
+
+  private notLocallyInstalledString_(installed: boolean, i18nString: string) {
+    if (!installed) {
+      return ' (' + i18nString + ')';
+    }
+    return '';
   }
 }
 

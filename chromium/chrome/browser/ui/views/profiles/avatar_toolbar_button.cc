@@ -31,14 +31,18 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button_delegate.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/password_manager/content/common/web_ui_constants.h"
 #include "components/user_education/common/user_education_class_properties.h"
+#include "content/public/common/url_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/base/theme_provider.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -64,8 +68,7 @@ AvatarToolbarButton::AvatarToolbarButton(BrowserView* browser_view)
                                         base::Unretained(this))),
       browser_(browser_view->browser()),
       creation_time_(base::TimeTicks::Now()) {
-  delegate_ =
-      std::make_unique<AvatarToolbarButtonDelegate>(this, browser_->profile());
+  delegate_ = std::make_unique<AvatarToolbarButtonDelegate>(this, browser_);
 
   // Activate on press for left-mouse-button only to mimic other MenuButtons
   // without drag-drop actions (specifically the adjacent browser menu).
@@ -222,8 +225,18 @@ void AvatarToolbarButton::MaybeShowProfileSwitchIPH() {
   }
 
   // This will show the promo only after the IPH system is properly initialized.
-  browser_->window()->MaybeShowStartupFeaturePromo(
-      feature_engagement::kIPHProfileSwitchFeature);
+  if (!web_app::AppBrowserController::IsWebApp(browser_)) {
+    browser_->window()->MaybeShowStartupFeaturePromo(
+        feature_engagement::kIPHProfileSwitchFeature);
+  } else {
+    // Installable PasswordManager WebUI is the only web app that has an avatar
+    // toolbar button.
+    auto app_url = browser_->app_controller()->GetAppStartUrl();
+    CHECK(content::HasWebUIScheme(app_url) &&
+          (app_url.host() == password_manager::kChromeUIPasswordManagerHost));
+    browser_->window()->MaybeShowStartupFeaturePromo(
+        feature_engagement::kIPHPasswordsWebAppProfileSwitchFeature);
+  }
 }
 
 void AvatarToolbarButton::OnMouseExited(const ui::MouseEvent& event) {
@@ -284,16 +297,13 @@ std::u16string AvatarToolbarButton::GetAvatarTooltipText() const {
     case State::kNormal:
       return delegate_->GetProfileName();
   }
-  NOTREACHED();
-  return std::u16string();
+  NOTREACHED_NORETURN();
 }
 
 ui::ImageModel AvatarToolbarButton::GetAvatarIcon(
     ButtonState state,
     const gfx::Image& gaia_account_image) const {
-  const int icon_size = ui::TouchUiController::Get()->touch_ui()
-                            ? kDefaultTouchableIconSize
-                            : kIconSizeForNonTouchUi;
+  const int icon_size = GetIconSize();
   SkColor icon_color = GetForegroundColor(state);
 
   switch (delegate_->GetState()) {
@@ -312,17 +322,27 @@ ui::ImageModel AvatarToolbarButton::GetAvatarIcon(
           delegate_->GetProfileAvatarImage(gaia_account_image, icon_size),
           icon_size, icon_size, profiles::SHAPE_CIRCLE));
   }
-  NOTREACHED();
-  return ui::ImageModel();
+  NOTREACHED_NORETURN();
 }
 
 void AvatarToolbarButton::SetInsets() {
   // In non-touch mode we use a larger-than-normal icon size for avatars so we
   // need to compensate it by smaller insets.
   const bool touch_ui = ui::TouchUiController::Get()->touch_ui();
-  gfx::Insets layout_insets(
-      touch_ui ? 0 : (kDefaultIconSize - kIconSizeForNonTouchUi) / 2);
+  gfx::Insets layout_insets((touch_ui || features::IsChromeRefresh2023())
+                                ? 0
+                                : (kDefaultIconSize - kIconSizeForNonTouchUi) /
+                                      2);
   SetLayoutInsetDelta(layout_insets);
+}
+
+int AvatarToolbarButton::GetIconSize() const {
+  if (ui::TouchUiController::Get()->touch_ui()) {
+    return kDefaultTouchableIconSize;
+  }
+
+  return features::IsChromeRefresh2023() ? kDefaultIconSizeChromeRefresh
+                                         : kIconSizeForNonTouchUi;
 }
 
 BEGIN_METADATA(AvatarToolbarButton, ToolbarButton)

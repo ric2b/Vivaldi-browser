@@ -71,6 +71,7 @@ bool StructTraits<blink::mojom::UserAgentOverrideDataView,
     Read(blink::mojom::UserAgentOverrideDataView data,
          ::blink::UserAgentOverride* out) {
   if (!data.ReadUaStringOverride(&out->ua_string_override) ||
+      !data.ReadDomainUaMetadataOverride(&out->domain_ua_metadata_override) ||
       !data.ReadUaMetadataOverride(&out->ua_metadata_override)) {
     return false;
   }

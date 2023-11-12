@@ -46,7 +46,7 @@ class ZoomAPI : public BrowserContextKeyedAPI,
   static const char* service_name() { return "ZoomAPI"; }
   static const bool kServiceRedirectedInIncognito = true;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // Listener for default zoom level. We create it lazily upon OnListenerAdded.
   // We cannot initialize it in the constructor as the profile is not fully

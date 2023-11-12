@@ -12,7 +12,6 @@
 #include "base/files/file_path.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
-#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/updater/tag.h"
@@ -79,6 +78,10 @@ absl::optional<base::FilePath> GetUpdaterExecutablePath(UpdaterScope scope);
 // "GoogleUpdater.app/Contents/MacOS/GoogleUpdater" on macOS.
 // "updater.exe" on Win.
 base::FilePath GetExecutableRelativePath();
+
+// Returns the path to the crashpad database directory. The directory is not
+// created if it does not exist.
+absl::optional<base::FilePath> GetCrashDatabasePath(UpdaterScope scope);
 
 // Returns the path to the crashpad database, creating it if it does not exist.
 absl::optional<base::FilePath> EnsureCrashDatabasePath(UpdaterScope scope);
@@ -204,11 +207,11 @@ absl::optional<base::FilePath> WriteInstallerDataToTempFile(
 // Creates and starts a thread pool for this process.
 void InitializeThreadPool(const char* name);
 
-// Adapts `callback` so that the callback is posted on the current sequence.
-template <typename CallbackT>
-CallbackT OnCurrentSequence(CallbackT callback) {
-  return base::BindPostTaskToCurrentDefault(std::move(callback));
-}
+// Returns whether the user currently running the program is the right user for
+// the scope. This can be useful to avoid installing system updaters that are
+// owned by non-root accounts, or avoiding the installation of a user level
+// updater as root.
+bool WrongUser(UpdaterScope scope);
 
 }  // namespace updater
 

@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
+import '//read-anything-side-panel.top-chrome/shared/sp_empty_state.js';
+import '//resources/cr_elements/cr_hidden_style.css.js';
 import '../strings.m.js';
 
-import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
-import {rgbToSkColor, skColorToRgba} from 'chrome://resources/js/color_utils.js';
-import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {WebUiListenerMixin} from '//resources/cr_elements/web_ui_listener_mixin.js';
+import {assert} from '//resources/js/assert_ts.js';
+import {rgbToSkColor, skColorToRgba} from '//resources/js/color_utils.js';
+import {loadTimeData} from '//resources/js/load_time_data.js';
+import {SkColor} from '//resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
+import {PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './app.html.js';
 
@@ -19,16 +21,30 @@ interface LinkColor {
   default: string;
   visited: string;
 }
-const darkThemeBackgroundSkColor = rgbToSkColor(
-    getComputedStyle(document.body).getPropertyValue('--google-grey-900-rgb'));
+const style = getComputedStyle(document.body);
+const darkThemeBackgroundSkColor =
+    rgbToSkColor(style.getPropertyValue('--google-grey-900-rgb'));
+const lightThemeBackgroundSkColor =
+    rgbToSkColor(style.getPropertyValue('--google-grey-50-rgb'));
+const yellowThemeBackgroundSkColor =
+    rgbToSkColor(style.getPropertyValue('--google-yellow-200-rgb'));
+const darkThemeEmptyStateBodyColor = 'var(--google-grey-500)';
+const defaultThemeEmptyStateBodyColor = 'var(--google-grey-700)';
+const darkThemeLinkColors: LinkColor = {
+  default: 'var(--google-blue-300)',
+  visited: 'var(--google-purple-200)',
+};
 const defaultLinkColors: LinkColor = {
+  default: 'var(--google-blue-900)',
+  visited: 'var(--google-purple-900)',
+};
+const lightThemeLinkColors: LinkColor = {
   default: 'var(--google-blue-800)',
   visited: 'var(--google-purple-900)',
 };
-const darkThemeLinkColors: LinkColor = {
-  default: 'var(--google-blue-300)',
-  visited: 'var(--google-purple-100)',
-};
+const darkThemeSelectionColor = 'var(--google-blue-200)';
+const defaultSelectionColor = 'var(--google-yellow-100)';
+const yellowThemeSelectionColor = 'var(--google-blue-100)';
 
 // A two-way map where each key is unique and each value is unique. The keys are
 // DOM nodes and the values are numbers, representing AXNodeIDs.
@@ -67,10 +83,22 @@ if (chrome.readAnything) {
     readAnythingApp.updateContent();
   };
 
+  chrome.readAnything.updateSelection = () => {
+    const readAnythingApp = document.querySelector('read-anything-app');
+    assert(readAnythingApp);
+    readAnythingApp.updateSelection();
+  };
+
   chrome.readAnything.updateTheme = () => {
     const readAnythingApp = document.querySelector('read-anything-app');
     assert(readAnythingApp);
     readAnythingApp.updateTheme();
+  };
+
+  chrome.readAnything.showLoading = () => {
+    const readAnythingApp = document.querySelector('read-anything-app');
+    assert(readAnythingApp);
+    readAnythingApp.showLoading();
   };
 }
 
@@ -103,11 +131,19 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   // AXNodeID can be used to access the other.
   private domNodeToAxNodeIdMap_: TwoWayMap = new TwoWayMap();
 
+  private hasContent_: boolean;
+  private emptyStateImagePath_: string;
+  private emptyStateDarkImagePath_: string;
+  private emptyStateHeading_: string;
+  private emptyStateSubheading_: string;
+
   override connectedCallback() {
     super.connectedCallback();
     if (chrome.readAnything) {
       chrome.readAnything.onConnected();
     }
+
+    this.showLoading();
 
     document.onselectionchange = () => {
       const shadowRoot = this.shadowRoot;
@@ -189,6 +225,16 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     return parentElement;
   }
 
+  showLoading() {
+    this.emptyStateImagePath_ = '//resources/images/throbber_small.svg';
+    this.emptyStateDarkImagePath_ =
+        '//resources/images/throbber_small_dark.svg';
+    this.emptyStateHeading_ =
+        loadTimeData.getString('readAnythingLoadingMessage');
+    this.emptyStateSubheading_ = '';
+    this.hasContent_ = false;
+  }
+
   updateContent() {
     const shadowRoot = this.shadowRoot;
     assert(shadowRoot);
@@ -211,13 +257,24 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
     if (!rootId) {
       return;
     }
-    const node = this.buildSubtree_(rootId);
-    container.appendChild(node);
 
-    this.updateSelection_();
+    // If there is no content to show, the empty state container will be shown.
+    const node = this.buildSubtree_(rootId);
+    if (!node.textContent) {
+      this.emptyStateImagePath_ = './images/empty_state.svg';
+      this.emptyStateDarkImagePath_ = './images/empty_state.svg';
+      this.emptyStateHeading_ = loadTimeData.getString('emptyStateHeader');
+      this.emptyStateSubheading_ =
+          loadTimeData.getString('emptyStateSubheader');
+      this.hasContent_ = false;
+      return;
+    }
+
+    this.hasContent_ = true;
+    container.appendChild(node);
   }
 
-  private updateSelection_() {
+  updateSelection() {
     const shadowRoot = this.shadowRoot;
     assert(shadowRoot);
     const selection = shadowRoot.getSelection();
@@ -257,8 +314,31 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
   }
 
   private getLinkColor_(backgroundSkColor: SkColor): LinkColor {
+    switch (backgroundSkColor.value) {
+      case darkThemeBackgroundSkColor.value:
+        return darkThemeLinkColors;
+      case lightThemeBackgroundSkColor.value:
+        return lightThemeLinkColors;
+      default:
+        return defaultLinkColors;
+    }
+  }
+
+  private getEmptyStateBodyColor_(backgroundSkColor: SkColor): string {
     const isDark = backgroundSkColor.value === darkThemeBackgroundSkColor.value;
-    return isDark ? darkThemeLinkColors : defaultLinkColors;
+    return isDark ? darkThemeEmptyStateBodyColor :
+                    defaultThemeEmptyStateBodyColor;
+  }
+
+  private getSelectionColor_(backgroundSkColor: SkColor): string {
+    switch (backgroundSkColor.value) {
+      case darkThemeBackgroundSkColor.value:
+        return darkThemeSelectionColor;
+      case yellowThemeBackgroundSkColor.value:
+        return yellowThemeSelectionColor;
+      default:
+        return defaultSelectionColor;
+    }
   }
 
   updateTheme() {
@@ -275,6 +355,10 @@ export class ReadAnythingElement extends ReadAnythingElementBase {
       '--letter-spacing': chrome.readAnything.letterSpacing + 'em',
       '--line-height': chrome.readAnything.lineSpacing,
       '--link-color': linkColor.default,
+      '--selection-color': this.getSelectionColor_(backgroundColor),
+      '--sp-empty-state-heading-color': skColorToRgba(foregroundColor),
+      '--sp-empty-state-body-color':
+          this.getEmptyStateBodyColor_(backgroundColor),
       '--visited-link-color': linkColor.visited,
     });
     document.body.style.background = skColorToRgba(backgroundColor);

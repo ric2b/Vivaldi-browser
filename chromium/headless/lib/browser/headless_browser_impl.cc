@@ -10,16 +10,18 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "components/embedder_support/user_agent_utils.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/common/user_agent.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
-#include "headless/lib/browser/headless_devtools_agent_host_client.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
-#include "headless/public/version.h"
+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 
 namespace headless {
 
@@ -125,6 +127,34 @@ std::string HeadlessBrowser::GetProductNameAndVersion() {
   return std::string(kHeadlessProductName) + "/" + PRODUCT_VERSION;
 }
 
+/// static
+blink::UserAgentMetadata HeadlessBrowser::GetUserAgentMetadata() {
+  auto metadata = embedder_support::GetUserAgentMetadata(nullptr);
+  // Skip override brand version information if components' API returns a blank
+  // UserAgentMetadata.
+  if (metadata == blink::UserAgentMetadata()) {
+    return metadata;
+  }
+  std::string significant_version = version_info::GetMajorVersionNumber();
+  constexpr bool kEnableUpdatedGreaseByPolicy = true;
+
+  // Use the major version number as a greasing seed
+  int seed = 1;
+  bool got_seed = base::StringToInt(significant_version, &seed);
+  DCHECK(got_seed);
+
+  // Rengenerate the brand version lists with kHeadlessProductName.
+  metadata.brand_version_list = embedder_support::GenerateBrandVersionList(
+      seed, kHeadlessProductName, significant_version, absl::nullopt,
+      absl::nullopt, kEnableUpdatedGreaseByPolicy,
+      blink::UserAgentBrandVersionType::kMajorVersion);
+  metadata.brand_full_version_list = embedder_support::GenerateBrandVersionList(
+      seed, kHeadlessProductName, metadata.full_version, absl::nullopt,
+      absl::nullopt, kEnableUpdatedGreaseByPolicy,
+      blink::UserAgentBrandVersionType::kFullVersion);
+  return metadata;
+}
+
 HeadlessBrowserImpl::HeadlessBrowserImpl(
     base::OnceCallback<void(HeadlessBrowser*)> on_start_callback)
     : on_start_callback_(std::move(on_start_callback)) {}
@@ -158,6 +188,11 @@ void HeadlessBrowserImpl::Shutdown() {
         FROM_HERE, system_request_context_manager_.release());
   }
   browser_main_parts_->QuitMainMessageLoop();
+}
+
+void HeadlessBrowserImpl::ShutdownWithExitCode(int exit_code) {
+  exit_code_ = exit_code;
+  Shutdown();
 }
 
 std::vector<HeadlessBrowserContext*>
@@ -270,16 +305,6 @@ HeadlessBrowserContext* HeadlessBrowserImpl::GetBrowserContextForId(
   return find_it->second.get();
 }
 
-HeadlessDevToolsTarget* HeadlessBrowserImpl::GetDevToolsTarget() {
-  return agent_host_ ? this : nullptr;
-}
-
-std::unique_ptr<HeadlessDevToolsChannel>
-HeadlessBrowserImpl::CreateDevToolsChannel() {
-  DCHECK(agent_host_);
-  return std::make_unique<HeadlessDevToolsAgentHostClient>(agent_host_);
-}
-
 #if defined(HEADLESS_USE_PREFS)
 PrefService* HeadlessBrowserImpl::GetPrefs() {
   return browser_main_parts_ ? browser_main_parts_->GetPrefs() : nullptr;
@@ -292,18 +317,5 @@ policy::PolicyService* HeadlessBrowserImpl::GetPolicyService() {
                              : nullptr;
 }
 #endif
-
-void HeadlessBrowserImpl::AttachClient(HeadlessDevToolsClient* client) {
-  client->AttachToChannel(CreateDevToolsChannel());
-}
-
-void HeadlessBrowserImpl::DetachClient(HeadlessDevToolsClient* client) {
-  client->DetachFromChannel();
-}
-
-bool HeadlessBrowserImpl::IsAttached() {
-  DCHECK(agent_host_);
-  return agent_host_->IsAttached();
-}
 
 }  // namespace headless

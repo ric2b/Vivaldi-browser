@@ -345,8 +345,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   bool has_registered_frame_sink_hierarchy_ = false;
 
 // Vivaldi
-  vivaldi::VideoProgress* progress_view_ = nullptr;
-  vivaldi::MuteButton* mute_button_ = nullptr;
+  raw_ptr<vivaldi::VideoProgress> progress_view_ = nullptr;
+  raw_ptr<vivaldi::MuteButton> mute_button_ = nullptr;
   bool show_progress_view_ = false;
 
   void CreateVivaldiVideoControls();

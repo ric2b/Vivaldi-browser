@@ -65,7 +65,7 @@ class ClientSideDetectionHost : public content::WebContentsObserver {
                                   GURL current_url,
                                   const content::GlobalRenderFrameHostId&
                                       current_outermost_main_frame_id) = 0;
-    virtual raw_ptr<VerdictCacheManager> GetCacheManager() = 0;
+    virtual VerdictCacheManager* GetCacheManager() = 0;
     // Returns the management status for current profile.
     virtual ChromeUserPopulation GetUserPopulation() = 0;
   };
@@ -112,12 +112,12 @@ class ClientSideDetectionHost : public content::WebContentsObserver {
   friend class ClientSideDetectionHostTestBase;
   class ShouldClassifyUrlRequest;
   friend class ShouldClassifyUrlRequest;
-  FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostBrowserTest,
-                           VerifyVisualFeatureCollection);
   FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostPrerenderBrowserTest,
                            PrerenderShouldNotAffectClientSideDetection);
   FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostPrerenderBrowserTest,
                            ClassifyPrerenderedPageAfterActivation);
+  FRIEND_TEST_ALL_PREFIXES(ClientSideDetectionHostPolicyBrowserTest,
+                           PolicyEnabled);
 
   // Called when pre-classification checks are done for the phishing
   // classifiers.

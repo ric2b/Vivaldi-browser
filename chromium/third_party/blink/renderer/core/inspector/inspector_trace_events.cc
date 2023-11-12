@@ -250,7 +250,8 @@ void InspectorTraceEvents::PaintTiming(Document* document,
                                        double timestamp) {
   TRACE_EVENT_MARK_WITH_TIMESTAMP2("loading,rail,devtools.timeline", name,
                                    trace_event::ToTraceTimestamp(timestamp),
-                                   "frame", ToTraceValue(document->GetFrame()),
+                                   "frame",
+                                   GetFrameIdForTracing(document->GetFrame()),
                                    "data", [&](perfetto::TracedValue context) {
                                      GetNavigationTracingData(
                                          std::move(context), document);
@@ -259,7 +260,8 @@ void InspectorTraceEvents::PaintTiming(Document* document,
 
 void InspectorTraceEvents::FrameStartedLoading(LocalFrame* frame) {
   TRACE_EVENT_INSTANT1("devtools.timeline", "FrameStartedLoading",
-                       TRACE_EVENT_SCOPE_THREAD, "frame", ToTraceValue(frame));
+                       TRACE_EVENT_SCOPE_THREAD, "frame",
+                       GetFrameIdForTracing(frame));
 }
 
 namespace {
@@ -367,6 +369,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoInRange)
     DEFINE_STRING_MAPPING(PseudoOutOfRange)
     DEFINE_STRING_MAPPING(PseudoToggle)
+    DEFINE_STRING_MAPPING(PseudoTrue)
     DEFINE_STRING_MAPPING(PseudoWebKitCustomElement)
     DEFINE_STRING_MAPPING(PseudoBlinkInternalElement)
     DEFINE_STRING_MAPPING(PseudoCue)
@@ -384,6 +387,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoMultiSelectFocus)
     DEFINE_STRING_MAPPING(PseudoOpen)
     DEFINE_STRING_MAPPING(PseudoClosed)
+    DEFINE_STRING_MAPPING(PseudoPopoverOpen)
     DEFINE_STRING_MAPPING(PseudoHostHasAppearance)
     DEFINE_STRING_MAPPING(PseudoVideoPersistent)
     DEFINE_STRING_MAPPING(PseudoVideoPersistentAncestor)
@@ -402,8 +406,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoViewTransitionNew);
     DEFINE_STRING_MAPPING(PseudoViewTransitionOld);
     DEFINE_STRING_MAPPING(PseudoParent);
-    DEFINE_STRING_MAPPING(PseudoParentUnparsed)
-    DEFINE_STRING_MAPPING(PseudoInitial)
+    DEFINE_STRING_MAPPING(PseudoUnparsed)
 #undef DEFINE_STRING_MAPPING
   }
 
@@ -735,6 +738,7 @@ const char kStyleChange[] = "Style changed";
 const char kDomChanged[] = "DOM changed";
 const char kTextChanged[] = "Text changed";
 const char kPrintingChanged[] = "Printing changed";
+const char kPaintPreview[] = "Enter/exit paint preview";
 const char kAttributeChanged[] = "Attribute changed";
 const char kColumnsChanged[] = "Attribute changed";
 const char kChildAnonymousBlockChanged[] = "Child anonymous block changed";
@@ -746,7 +750,6 @@ const char kListValueChange[] = "List value change";
 const char kListStyleTypeChange[] = "List style type change";
 const char kCounterStyleChange[] = "Counter style change";
 const char kImageChanged[] = "Image changed";
-const char kLineBoxesChanged[] = "Line boxes changed";
 const char kSliderValueChanged[] = "Slider value changed";
 const char kAncestorMarginCollapsing[] = "Ancestor margin collapsing";
 const char kFieldsetChanged[] = "Fieldset changed";

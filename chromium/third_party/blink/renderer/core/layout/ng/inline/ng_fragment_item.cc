@@ -45,7 +45,7 @@ ASSERT_SIZE(NGFragmentItem, SameSizeAsNGFragmentItem);
 NGFragmentItem::NGFragmentItem(
     const NGInlineItem& inline_item,
     scoped_refptr<const ShapeResultView> shape_result,
-    const NGTextOffset& text_offset,
+    const NGTextOffsetRange& text_offset,
     const PhysicalSize& size,
     bool is_hidden_for_paint)
     : text_({std::move(shape_result), text_offset}),
@@ -533,7 +533,7 @@ const ShapeResultView* NGFragmentItem::TextShapeResult() const {
   return nullptr;
 }
 
-NGTextOffset NGFragmentItem::TextOffset() const {
+NGTextOffsetRange NGFragmentItem::TextOffset() const {
   if (Type() == kText)
     return text_.text_offset;
   if (Type() == kSvgText)
@@ -752,13 +752,13 @@ String NGFragmentItem::ToString() const {
   // For ease of rebasing, we use same |DebugName()| as |NGPaintFrgment|.
   if (Type() == NGFragmentItem::kBox) {
     StringBuilder name;
-    name.Append("NGPhysicalBoxFragment ");
+    name.Append("NGFragmentItem Box ");
     name.Append(layout_object_->DebugName());
     return name.ToString();
   }
   if (Type() == NGFragmentItem::kText) {
     StringBuilder name;
-    name.Append("NGPhysicalTextFragment '");
+    name.Append("NGFragmentItem Text ");
     const NGFragmentItems* fragment_items = nullptr;
     if (const LayoutBlockFlow* block_flow =
             layout_object_->FragmentItemsContainer()) {
@@ -771,14 +771,13 @@ String NGFragmentItem::ToString() const {
       }
     }
     if (fragment_items)
-      name.Append(Text(*fragment_items));
+      name.Append(Text(*fragment_items).ToString().EncodeForDebugging());
     else
-      name.Append("(container not found)");
-    name.Append('\'');
+      name.Append("\"(container not found)\"");
     return name.ToString();
   }
   if (Type() == NGFragmentItem::kLine)
-    return "NGPhysicalLineBoxFragment";
+    return "NGFragmentItem Line";
   return "NGFragmentItem";
 }
 
@@ -818,7 +817,6 @@ PhysicalRect NGFragmentItem::RecalcInkOverflowForCursor(
     if (UNLIKELY(item->IsLayoutObjectDestroyedOrMoved())) {
       // TODO(crbug.com/1099613): This should not happen, as long as it is
       // layout-clean. It looks like there are cases where the layout is dirty.
-      base::debug::DumpWithoutCrashing();
       continue;
     }
     if (UNLIKELY(item->HasSelfPaintingLayer()))

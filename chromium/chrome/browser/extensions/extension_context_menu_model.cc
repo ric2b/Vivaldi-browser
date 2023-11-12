@@ -116,9 +116,8 @@ bool IsExtensionRequiredByPolicy(const Extension* extension, Profile* profile) {
          policy->MustRemainInstalled(extension, nullptr);
 }
 
-std::u16string GetCurrentSite(content::WebContents* web_contents) {
-  return url_formatter::IDNToUnicode(
-      url_formatter::StripWWW(web_contents->GetLastCommittedURL().host()));
+std::u16string GetCurrentSite(const GURL& url) {
+  return url_formatter::IDNToUnicode(url_formatter::StripWWW(url.host()));
 }
 
 ExtensionContextMenuModel::ContextMenuAction CommandIdToContextMenuAction(
@@ -163,17 +162,17 @@ ExtensionContextMenuModel::ContextMenuAction CommandIdToContextMenuAction(
   return ContextMenuAction::kNoAction;
 }
 
-SitePermissionsHelper::SiteAccess CommandIdToSiteAccess(int command_id) {
+PermissionsManager::UserSiteAccess CommandIdToSiteAccess(int command_id) {
   switch (command_id) {
     case ExtensionContextMenuModel::PAGE_ACCESS_RUN_ON_CLICK:
-      return SitePermissionsHelper::SiteAccess::kOnClick;
+      return PermissionsManager::UserSiteAccess::kOnClick;
     case ExtensionContextMenuModel::PAGE_ACCESS_RUN_ON_SITE:
-      return SitePermissionsHelper::SiteAccess::kOnSite;
+      return PermissionsManager::UserSiteAccess::kOnSite;
     case ExtensionContextMenuModel::PAGE_ACCESS_RUN_ON_ALL_SITES:
-      return SitePermissionsHelper::SiteAccess::kOnAllSites;
+      return PermissionsManager::UserSiteAccess::kOnAllSites;
   }
   NOTREACHED();
-  return SitePermissionsHelper::SiteAccess::kOnClick;
+  return PermissionsManager::UserSiteAccess::kOnClick;
 }
 
 // Logs a user action when an option is selected in the page access section of
@@ -285,10 +284,10 @@ bool ExtensionContextMenuModel::IsCommandIdChecked(int command_id) const {
     if (!web_contents)
       return false;
 
-    SitePermissionsHelper permissions(profile_);
-    SitePermissionsHelper::SiteAccess current_access =
-        permissions.GetSiteAccess(*extension,
-                                  web_contents->GetLastCommittedURL());
+    auto* permissions = PermissionsManager::Get(profile_);
+    PermissionsManager::UserSiteAccess current_access =
+        permissions->GetUserSiteAccess(*extension,
+                                       web_contents->GetLastCommittedURL());
     return current_access == CommandIdToSiteAccess(command_id);
   }
 
@@ -460,10 +459,10 @@ void ExtensionContextMenuModel::InitMenu(const Extension* extension,
   // Add page access items if active web contents exist and the extension
   // wants site access (either by requesting host permissions or active tab).
   auto* web_contents = GetActiveWebContents();
-  if (web_contents &&
-      (PermissionsManager::Get(profile_)->CanAffectExtension(*extension) ||
-       SitePermissionsHelper(profile_).HasActiveTabAndCanAccess(
-           *extension, web_contents->GetLastCommittedURL()))) {
+  auto* permissions_manager = PermissionsManager::Get(profile_);
+  if (web_contents && (permissions_manager->CanAffectExtension(*extension) ||
+                       permissions_manager->HasActiveTabAndCanAccess(
+                           *extension, web_contents->GetLastCommittedURL()))) {
     CreatePageAccessItems(extension, web_contents);
     AddSeparator(ui::NORMAL_SEPARATOR);
   }
@@ -486,8 +485,15 @@ void ExtensionContextMenuModel::InitMenu(const Extension* extension,
     }
   }
 
-  if ((source_ == ContextMenuSource::kToolbarAction) &&
-      can_show_icon_in_toolbar) {
+  // Extensions menu using kExtensionsMenuAccessControl doesn't have pin button
+  // in the menu items and thus context menu should display it (whereas
+  // extensions menu without the feature could have pin buttons).
+  bool show_toggle_visibility_button =
+      can_show_icon_in_toolbar &&
+      (base::FeatureList::IsEnabled(
+           extensions_features::kExtensionsMenuAccessControl) ||
+       source_ == ContextMenuSource::kToolbarAction);
+  if (show_toggle_visibility_button) {
     int visibility_string_id =
         GetVisibilityStringId(profile_, extension, button_visibility_);
     DCHECK_NE(-1, visibility_string_id);
@@ -560,20 +566,20 @@ bool ExtensionContextMenuModel::IsPageAccessCommandEnabled(
       // Verify the extension wants access to the page - that's the only time
       // these commands should be shown.
       const GURL& url = web_contents->GetLastCommittedURL();
-      SitePermissionsHelper permissions(profile_);
-      DCHECK(
-          permissions.HasActiveTabAndCanAccess(extension, url) ||
-          (PermissionsManager::Get(profile_)->CanAffectExtension(extension) &&
-           permissions.CanSelectSiteAccess(
-               extension, url, SitePermissionsHelper::SiteAccess::kOnClick)));
+      auto* permissions_manager = PermissionsManager::Get(profile_);
+      DCHECK(permissions_manager->HasActiveTabAndCanAccess(extension, url) ||
+             permissions_manager->CanAffectExtension(extension) &&
+                 permissions_manager->CanUserSelectSiteAccess(
+                     extension, url,
+                     PermissionsManager::UserSiteAccess::kOnClick));
 
       // TODO(devlin): This can lead to some fun race-like conditions, where the
       // menu is constructed during navigation. Since we get the URL both here
       // and in execution of the command, there's a chance we'll find two
       // different URLs. This would be solved if we maintained the URL that the
       // menu was showing for.
-      return permissions.CanSelectSiteAccess(extension, url,
-                                             CommandIdToSiteAccess(command_id));
+      return permissions_manager->CanUserSelectSiteAccess(
+          extension, url, CommandIdToSiteAccess(command_id));
   }
 
   NOTREACHED() << "Unexpected command id: " << command_id;
@@ -583,7 +589,12 @@ bool ExtensionContextMenuModel::IsPageAccessCommandEnabled(
 void ExtensionContextMenuModel::CreatePageAccessItems(
     const Extension* extension,
     content::WebContents* web_contents) {
-  auto url = web_contents->GetLastCommittedURL();
+  const GURL& url = web_contents->GetLastCommittedURL();
+  // We store the origin to make sure it's the same when executing page access
+  // commands.
+  origin_ = url::Origin::Create(url);
+
+  auto* permissions_manager = PermissionsManager::Get(profile_);
 
   if (base::FeatureList::IsEnabled(
           extensions_features::kExtensionsMenuAccessControl)) {
@@ -601,15 +612,14 @@ void ExtensionContextMenuModel::CreatePageAccessItems(
     // only show the page access submenu with change extension settings options
     // if the site settings is set to "customize by extension". Otherwise, shows
     // a message that informs the user about the site setting.
-    auto site_setting = PermissionsManager::Get(profile_)->GetUserSiteSetting(
-        url::Origin::Create(url));
+    auto site_setting = permissions_manager->GetUserSiteSetting(origin_);
     switch (site_setting) {
       case PermissionsManager::UserSiteSetting::kGrantAllExtensions:
         AddItem(
             PAGE_ACCESS_ALL_EXTENSIONS_GRANTED,
             l10n_util::GetStringFUTF16(
                 IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_ALL_EXTENSIONS_GRANTED,
-                GetCurrentSite(web_contents)));
+                GetCurrentSite(url)));
         add_page_access_secondary_buttons(this);
         return;
 
@@ -618,15 +628,16 @@ void ExtensionContextMenuModel::CreatePageAccessItems(
             PAGE_ACCESS_ALL_EXTENSIONS_BLOCKED,
             l10n_util::GetStringFUTF16(
                 IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_ALL_EXTENSIONS_BLOCKED,
-                GetCurrentSite(web_contents)));
+                GetCurrentSite(url)));
         add_page_access_secondary_buttons(this);
         return;
 
       case PermissionsManager::UserSiteSetting::kCustomizeByExtension:
         // The extension wants site access but cant't run on the page if it does
         // not have at least "on click" access.
-        if (!SitePermissionsHelper(profile_).CanSelectSiteAccess(
-                *extension, url, SitePermissionsHelper::SiteAccess::kOnClick)) {
+        if (!permissions_manager->CanUserSelectSiteAccess(
+                *extension, url,
+                PermissionsManager::UserSiteAccess::kOnClick)) {
           AddItemWithStringId(PAGE_ACCESS_CANT_ACCESS,
                               IDS_EXTENSIONS_CONTEXT_MENU_CANT_ACCESS_PAGE);
           return;
@@ -645,7 +656,7 @@ void ExtensionContextMenuModel::CreatePageAccessItems(
             PAGE_ACCESS_RUN_ON_SITE,
             l10n_util::GetStringFUTF16(
                 IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE_V2,
-                GetCurrentSite(web_contents)),
+                GetCurrentSite(url)),
             kRadioGroup);
         page_access_submenu_->AddRadioItemWithStringId(
             PAGE_ACCESS_RUN_ON_ALL_SITES,
@@ -660,8 +671,8 @@ void ExtensionContextMenuModel::CreatePageAccessItems(
   } else {
     // The extension wants site access but cant't run on the page if it does
     // not have at least "on click" access.
-    if (!SitePermissionsHelper(profile_).CanSelectSiteAccess(
-            *extension, url, SitePermissionsHelper::SiteAccess::kOnClick)) {
+    if (!permissions_manager->CanUserSelectSiteAccess(
+            *extension, url, PermissionsManager::UserSiteAccess::kOnClick)) {
       AddItemWithStringId(PAGE_ACCESS_CANT_ACCESS,
                           IDS_EXTENSIONS_CONTEXT_MENU_CANT_ACCESS_PAGE);
       return;
@@ -680,7 +691,7 @@ void ExtensionContextMenuModel::CreatePageAccessItems(
         PAGE_ACCESS_RUN_ON_SITE,
         l10n_util::GetStringFUTF16(
             IDS_EXTENSIONS_CONTEXT_MENU_PAGE_ACCESS_RUN_ON_SITE,
-            GetCurrentSite(web_contents)),
+            GetCurrentSite(url)),
         kRadioGroup);
     page_access_submenu_->AddRadioItemWithStringId(
         PAGE_ACCESS_RUN_ON_ALL_SITES,
@@ -701,8 +712,9 @@ void ExtensionContextMenuModel::HandlePageAccessCommand(
     int command_id,
     const Extension* extension) const {
   content::WebContents* web_contents = GetActiveWebContents();
-  if (!web_contents)
+  if (!web_contents) {
     return;
+  }
 
   LogPageAccessAction(command_id);
 
@@ -714,6 +726,11 @@ void ExtensionContextMenuModel::HandlePageAccessCommand(
   if (command_id == PAGE_ACCESS_LEARN_MORE) {
     OpenUrl(*browser_,
             GURL(chrome_extension_constants::kRuntimeHostPermissionsHelpURL));
+    return;
+  }
+
+  // If the web contents have navigated to a different origin, do nothing.
+  if (!origin_.IsSameOriginWith(web_contents->GetLastCommittedURL())) {
     return;
   }
 

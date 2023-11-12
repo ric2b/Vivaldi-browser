@@ -12,13 +12,16 @@
 
 #include "ash/ash_export.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/login/ui/auth_error_bubble.h"
 #include "ash/login/ui/bottom_status_indicator.h"
 #include "ash/login/ui/lock_screen.h"
 #include "ash/login/ui/login_data_dispatcher.h"
 #include "ash/login/ui/login_display_style.h"
 #include "ash/login/ui/login_error_bubble.h"
 #include "ash/login/ui/login_tooltip_view.h"
+#include "ash/login/ui/management_bubble.h"
 #include "ash/login/ui/non_accessible_view.h"
+#include "ash/login/ui/user_state.h"
 #include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/public/cpp/login_accelerators.h"
 #include "ash/public/cpp/login_types.h"
@@ -66,6 +69,12 @@ namespace mojom {
 enum class TrayActionState;
 }
 
+enum class BottomIndicatorState {
+  kNone,
+  kManagedDevice,
+  kAdbSideLoadingEnabled,
+};
+
 // LockContentsView hosts the root view for the lock screen. All other lock
 // screen views are embedded within this one. LockContentsView is per-display,
 // but it is always shown on the primary display. There is only one instance
@@ -80,54 +89,7 @@ class ASH_EXPORT LockContentsView
       public EnterpriseDomainObserver {
  public:
   METADATA_HEADER(LockContentsView);
-  class AuthErrorBubble;
-  class ManagementBubble;
-  class UserState;
-
-  enum class BottomIndicatorState {
-    kNone,
-    kManagedDevice,
-    kAdbSideLoadingEnabled,
-  };
-
-  // TestApi is used for tests to get internal implementation details.
-  class ASH_EXPORT TestApi {
-   public:
-    explicit TestApi(LockContentsView* view);
-    ~TestApi();
-
-    KioskAppDefaultMessage* kiosk_default_message() const;
-    LoginBigUserView* primary_big_view() const;
-    LoginBigUserView* opt_secondary_big_view() const;
-    AccountId focused_user() const;
-    ScrollableUsersListView* users_list() const;
-    LockScreenMediaControlsView* media_controls_view() const;
-    views::View* note_action() const;
-    views::View* tooltip_bubble() const;
-    views::View* management_bubble() const;
-    LoginErrorBubble* auth_error_bubble() const;
-    LoginErrorBubble* detachable_base_error_bubble() const;
-    LoginErrorBubble* warning_banner_bubble() const;
-    views::View* user_adding_screen_indicator() const;
-    views::View* system_info() const;
-    views::View* bottom_status_indicator() const;
-    BottomIndicatorState bottom_status_indicator_status() const;
-    LoginExpandedPublicAccountView* expanded_view() const;
-    views::View* main_view() const;
-    const std::vector<LockContentsView::UserState>& users() const;
-    LoginCameraTimeoutView* login_camera_timeout_view() const;
-
-    // Finds and focuses (if needed) Big User View view specified by
-    // |account_id|. Returns nullptr if the user not found.
-    LoginBigUserView* FindBigUser(const AccountId& account_id);
-    LoginUserView* FindUserView(const AccountId& account_id);
-    bool RemoveUser(const AccountId& account_id);
-    bool IsOobeDialogVisible() const;
-    FingerprintState GetFingerPrintState(const AccountId& account_id) const;
-
-   private:
-    LockContentsView* const view_;
-  };
+  friend class LockContentsViewTestApi;
 
   enum class DisplayStyle {
     // Display all the user views, top header view in LockContentsView.
@@ -171,9 +133,6 @@ class ASH_EXPORT LockContentsView
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
-
-  // NonAccessibleView:
-  void OnThemeChanged() override;
 
   // LoginDataDispatcher::Observer:
   void OnUsersChanged(const std::vector<LoginUserInfo>& users) override;
@@ -276,35 +235,7 @@ class ASH_EXPORT LockContentsView
   void HideMediaControlsLayout();
   bool AreMediaControlsEnabled() const;
 
-  class UserState {
-   public:
-    explicit UserState(const LoginUserInfo& user_info);
-    UserState(UserState&&);
-
-    UserState(const UserState&) = delete;
-    UserState& operator=(const UserState&) = delete;
-
-    ~UserState();
-
-    AccountId account_id;
-    bool show_pin = false;
-    bool show_challenge_response_auth = false;
-    bool enable_tap_auth = false;
-    bool force_online_sign_in = false;
-    bool disable_auth = false;
-    bool show_pin_pad_for_password = false;
-    size_t autosubmit_pin_length = 0;
-    absl::optional<EasyUnlockIconInfo> easy_unlock_icon_info = absl::nullopt;
-    FingerprintState fingerprint_state = FingerprintState::UNAVAILABLE;
-    SmartLockState smart_lock_state = SmartLockState::kDisabled;
-    bool auth_factor_is_hiding_password = false;
-    // When present, indicates that the TPM is locked.
-    absl::optional<base::TimeDelta> time_until_tpm_unlock = absl::nullopt;
-  };
-
  private:
-  class AutoLoginUserActivityHandler;
-
   using DisplayLayoutAction = base::RepeatingCallback<void(bool landscape)>;
 
   // Focus the next/previous widget.
@@ -410,8 +341,6 @@ class ASH_EXPORT LockContentsView
 
   // Called when the easy unlock icon is hovered.
   void OnEasyUnlockIconHovered();
-  // Called when the easy unlock icon is tapped.
-  void OnEasyUnlockIconTapped();
 
   // Called when LoginAuthFactorsView enters/exits a state where an auth
   // factor wants to hide the password and pin fields.
@@ -494,30 +423,32 @@ class ASH_EXPORT LockContentsView
 
   std::vector<UserState> users_;
 
-  LoginDataDispatcher* const data_dispatcher_;  // Unowned.
+  const raw_ptr<LoginDataDispatcher, ExperimentalAsh>
+      data_dispatcher_;  // Unowned.
   std::unique_ptr<LoginDetachableBaseModel> detachable_base_model_;
 
-  LoginBigUserView* primary_big_view_ = nullptr;
-  LoginBigUserView* opt_secondary_big_view_ = nullptr;
-  ScrollableUsersListView* users_list_ = nullptr;
+  raw_ptr<LoginBigUserView, ExperimentalAsh> primary_big_view_ = nullptr;
+  raw_ptr<LoginBigUserView, ExperimentalAsh> opt_secondary_big_view_ = nullptr;
+  raw_ptr<ScrollableUsersListView, ExperimentalAsh> users_list_ = nullptr;
 
   // View for media controls that appear on the lock screen if user enabled.
-  LockScreenMediaControlsView* media_controls_view_ = nullptr;
-  views::View* middle_spacing_view_ = nullptr;
+  raw_ptr<LockScreenMediaControlsView, ExperimentalAsh> media_controls_view_ =
+      nullptr;
+  raw_ptr<views::View, ExperimentalAsh> middle_spacing_view_ = nullptr;
 
   // View that contains the note action button and the system info labels,
   // placed on the top right corner of the screen without affecting layout of
   // other views.
-  views::View* top_header_ = nullptr;
+  raw_ptr<views::View, ExperimentalAsh> top_header_ = nullptr;
 
   // View for launching a note taking action handler from the lock screen.
-  NoteActionLaunchButton* note_action_ = nullptr;
+  raw_ptr<NoteActionLaunchButton, ExperimentalAsh> note_action_ = nullptr;
 
   // View for showing the version, enterprise and bluetooth info.
-  views::View* system_info_ = nullptr;
+  raw_ptr<views::View, ExperimentalAsh> system_info_ = nullptr;
 
   // Contains authentication user and the additional user views.
-  NonAccessibleView* main_view_ = nullptr;
+  raw_ptr<NonAccessibleView, ExperimentalAsh> main_view_ = nullptr;
 
   // If the kiosk app button is not visible, the kiosk app default message would
   // be shown.
@@ -537,25 +468,25 @@ class ASH_EXPORT LockContentsView
   // All error bubbles and the tooltip view are child views of LockContentsView,
   // and will be torn down when LockContentsView is torn down.
   // Bubble for displaying authentication error.
-  AuthErrorBubble* auth_error_bubble_;
+  raw_ptr<AuthErrorBubble, ExperimentalAsh> auth_error_bubble_;
   // Bubble for displaying detachable base errors.
-  LoginErrorBubble* detachable_base_error_bubble_;
+  raw_ptr<LoginErrorBubble, ExperimentalAsh> detachable_base_error_bubble_;
   // Bubble for displaying easy-unlock tooltips.
-  LoginTooltipView* tooltip_bubble_;
+  raw_ptr<LoginTooltipView, ExperimentalAsh> tooltip_bubble_;
   // Bubble for displaying management details.
-  ManagementBubble* management_bubble_;
+  raw_ptr<ManagementBubble, ExperimentalAsh> management_bubble_;
   // Indicator at top of screen for displaying a warning message when a
   // secondary user is being added.
-  views::View* user_adding_screen_indicator_ = nullptr;
+  raw_ptr<views::View, ExperimentalAsh> user_adding_screen_indicator_ = nullptr;
   // Bubble for displaying warning banner message.
-  LoginErrorBubble* warning_banner_bubble_;
+  raw_ptr<LoginErrorBubble, ExperimentalAsh> warning_banner_bubble_;
 
   // View that is shown on login timeout with camera usage.
   base::raw_ptr<LoginCameraTimeoutView, DanglingUntriaged>
       login_camera_timeout_view_ = nullptr;
 
   // Bottom status indicator displaying entreprise domain or ADB enabled alert
-  BottomStatusIndicator* bottom_status_indicator_;
+  raw_ptr<BottomStatusIndicator, ExperimentalAsh> bottom_status_indicator_;
 
   // Tracks the visibility of the extension Ui window.
   bool extension_ui_visible_ = false;
@@ -589,7 +520,8 @@ class ASH_EXPORT LockContentsView
   bool enable_system_info_if_possible_ = false;
 
   // Expanded view for public account user to select language and keyboard.
-  LoginExpandedPublicAccountView* expanded_view_ = nullptr;
+  raw_ptr<LoginExpandedPublicAccountView, ExperimentalAsh> expanded_view_ =
+      nullptr;
 
   // Whether the virtual keyboard is currently shown. Used to determine whether
   // to show the PIN keyboard or not.
@@ -604,11 +536,6 @@ class ASH_EXPORT LockContentsView
 
   // Accelerators handled by login screen.
   std::map<ui::Accelerator, LoginAcceleratorAction> accel_map_;
-
-  // Notifies Chrome when user activity is detected on the login screen so that
-  // the auto-login timer can be reset.
-  std::unique_ptr<AutoLoginUserActivityHandler>
-      auto_login_user_activity_handler_;
 
   BottomIndicatorState bottom_status_indicator_state_ =
       BottomIndicatorState::kNone;

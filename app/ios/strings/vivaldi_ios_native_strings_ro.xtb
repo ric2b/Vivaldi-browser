@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
+<translation id="2386793615875593361">1 selectat</translation>
+<translation id="4032606071208172574">(Implicit)</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Retrimite codul<ph name="END_LINK" /></translation>
+<translation id="5871497086027727873">1 element mutat</translation>
+<translation id="750493650310597496">0 selectate</translation>
+<translation id="8458397775385147834">1 element șters</translation>
+<translation id="9083392325882095631">1 element</translation>
 </translationbundle>

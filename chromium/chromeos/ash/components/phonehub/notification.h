@@ -20,8 +20,7 @@
 // Serves the same purpose as a forward declare to avoid an extra include.
 typedef uint32_t SkColor;
 
-namespace ash {
-namespace phonehub {
+namespace ash::phonehub {
 
 // A notification generated on the phone, whose contents are transferred to
 // Chrome OS via a Phone Hub connection. Notifications in Phone Hub support
@@ -32,24 +31,29 @@ class Notification {
   struct AppMetadata {
     AppMetadata(const std::u16string& visible_app_name,
                 const std::string& package_name,
-                const gfx::Image& icon,
+                const gfx::Image& color_icon,
+                const absl::optional<gfx::Image>& monochrome_icon_mask,
                 const absl::optional<SkColor> icon_color,
                 bool icon_is_monochrome,
                 int64_t user_id,
                 proto::AppStreamabilityStatus app_streamability_status =
                     proto::AppStreamabilityStatus::STREAMABLE);
+    ~AppMetadata();
     AppMetadata(const AppMetadata& other);
     AppMetadata& operator=(const AppMetadata& other);
 
     bool operator==(const AppMetadata& other) const;
     bool operator!=(const AppMetadata& other) const;
 
-    static AppMetadata FromValue(const base::Value& value);
-    base::Value ToValue() const;
+    static AppMetadata FromValue(const base::Value::Dict& value);
+    base::Value::Dict ToValue() const;
 
     std::u16string visible_app_name;
     std::string package_name;
-    gfx::Image icon;
+    // The |color_icon| is the icon with it's original color whereas the
+    // |monochrome_icon| is the icon with a monochrome or system theme mask.
+    gfx::Image color_icon;
+    absl::optional<gfx::Image> monochrome_icon_mask;
     // Color for a monochrome icon. Leave empty to use the system theme default.
     absl::optional<SkColor> icon_color;
     // Whether the icon image is just a mask used to generate a monochrome icon.
@@ -199,7 +203,6 @@ std::ostream& operator<<(std::ostream& stream,
 std::ostream& operator<<(std::ostream& stream,
                          const Notification::Category category);
 
-}  // namespace phonehub
-}  // namespace ash
+}  // namespace ash::phonehub
 
 #endif  // CHROMEOS_ASH_COMPONENTS_PHONEHUB_NOTIFICATION_H_

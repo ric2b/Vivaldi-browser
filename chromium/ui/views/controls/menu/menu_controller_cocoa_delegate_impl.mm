@@ -5,6 +5,7 @@
 #import "ui/views/controls/menu/menu_controller_cocoa_delegate_impl.h"
 
 #include "base/logging.h"
+#include "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
 #import "base/message_loop/message_pump_mac.h"
 #import "skia/ext/skia_utils_mac.h"
@@ -18,6 +19,7 @@
 #include "ui/gfx/platform_font_mac.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/badge_painter.h"
+#include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/layout/layout_provider.h"
 
 namespace {
@@ -36,17 +38,16 @@ NSImage* NewTagImage(const ui::ColorProvider* color_provider) {
   // badge; we add a small degree of bold to prevent color smearing/blurring
   // due to font smoothing. This ensures readability on all platforms and in
   // both light and dark modes.
-  gfx::Font badge_font = gfx::Font(
-      new gfx::PlatformFontMac(gfx::PlatformFontMac::SystemFontType::kMenu));
-  badge_font = badge_font.Derive(views::BadgePainter::kBadgeFontSizeAdjustment,
-                                 gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM);
+  gfx::Font badge_font =
+      views::BadgePainter::GetBadgeFont(views::MenuConfig::instance().font_list)
+          .GetPrimaryFont();
 
   DCHECK(color_provider);
   NSColor* badge_text_color = skia::SkColorToSRGBNSColor(
-      color_provider->GetColor(ui::kColorButtonBackgroundProminent));
+      color_provider->GetColor(ui::kColorBadgeInCocoaMenuForeground));
 
   NSDictionary* badge_attrs = @{
-    NSFontAttributeName : badge_font.GetNativeFont(),
+    NSFontAttributeName : base::mac::CFToNSCast(badge_font.GetCTFont()),
     NSForegroundColorAttributeName : badge_text_color,
   };
 
@@ -81,7 +82,8 @@ NSImage* NewTagImage(const ui::ColorProvider* color_provider) {
                                             yRadius:badge_radius];
         DCHECK(color_provider);
         NSColor* badge_color = skia::SkColorToSRGBNSColor(
-            color_provider->GetColor(ui::kColorButtonBackgroundProminent));
+            color_provider->GetColor(ui::kColorBadgeInCocoaMenuBackground));
+
         [badge_color set];
         [rounded_badge_rect fill];
 
@@ -118,12 +120,20 @@ NSImage* IPHDotImage(const ui::ColorProvider* color_provider) {
 
 // --- Private API begin ---
 
-@interface NSCarbonMenuImpl : NSObject
+// Historically, all menu handling in macOS was handled by HI Toolbox, and the
+// bridge from Cocoa to Carbon to use Carbon's menus was the class
+// NSCarbonMenuImpl. However, starting in macOS 13, it looks like this is
+// changing, as now a NSCocoaMenuImpl class exists, which is optionally created
+// in -[NSMenu _createMenuImpl] and may possibly in the future be returned from
+// -[NSMenu _menuImpl]. Therefore, abstract away into a protocol the (one)
+// common method that this code uses that is present on both Impl classes.
+@protocol CrNSMenuImpl <NSObject>
+@optional
 - (void)highlightItemAtIndex:(NSInteger)index;
 @end
 
-@interface NSMenu ()
-- (NSCarbonMenuImpl*)_menuImpl;
+@interface NSMenu (Impl)
+- (id<CrNSMenuImpl>)_menuImpl;
 - (CGRect)_boundsIfOpen;
 @end
 
@@ -153,7 +163,9 @@ NSImage* IPHDotImage(const ui::ColorProvider* color_provider) {
 }
 
 - (NSPoint)cellBaselineOffset {
-  return NSMakePoint(0, views::BadgePainter::kBadgeBaselineOffsetMac);
+  // The baseline offset of the badge image to the menu text baseline.
+  const int kBadgeBaselineOffset = features::IsChromeRefresh2023() ? -2 : -4;
+  return NSMakePoint(0, kBadgeBaselineOffset);
 }
 
 - (NSSize)cellSize {
@@ -245,7 +257,7 @@ NSImage* IPHDotImage(const ui::ColorProvider* color_provider) {
       NSMenu* const menu_obj = note.object;
       if (alerted_index.has_value()) {
         if ([menu respondsToSelector:@selector(_menuImpl)]) {
-          NSCarbonMenuImpl* menuImpl = [menu_obj _menuImpl];
+          id<CrNSMenuImpl> menuImpl = [menu_obj _menuImpl];
           if ([menuImpl respondsToSelector:@selector(highlightItemAtIndex:)]) {
             const auto index =
                 base::checked_cast<NSInteger>(alerted_index.value());

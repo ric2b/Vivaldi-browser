@@ -17,6 +17,7 @@
 namespace blink {
 
 class ComputedStyle;
+class NGInlineBreakToken;
 class NGInlineNode;
 struct NGInlineItemsData;
 
@@ -29,6 +30,8 @@ class CORE_EXPORT NGLineInfo {
   STACK_ALLOCATED();
 
  public:
+  void Reset();
+
   const NGInlineItemsData& ItemsData() const {
     DCHECK(items_data_);
     return *items_data_;
@@ -86,6 +89,17 @@ class CORE_EXPORT NGLineInfo {
   NGInlineItemResults* MutableResults() { return &results_; }
   const NGInlineItemResults& Results() const { return results_; }
 
+  const NGInlineBreakToken* BreakToken() const { return break_token_; }
+  void SetBreakToken(const NGInlineBreakToken* break_token) {
+    break_token_ = break_token;
+  }
+  HeapVector<Member<const NGBlockBreakToken>>& PropagatedBreakTokens() {
+    return propagated_break_tokens_;
+  }
+  void PropagateBreakToken(const NGBlockBreakToken* token) {
+    propagated_break_tokens_.push_back(token);
+  }
+
   void SetTextIndent(LayoutUnit indent) { text_indent_ = indent; }
   LayoutUnit TextIndent() const { return text_indent_; }
 
@@ -132,6 +146,9 @@ class CORE_EXPORT NGLineInfo {
   void SetHasOverflow(bool value = true) { has_overflow_ = value; }
 
   void SetBfcOffset(const NGBfcOffset& bfc_offset) { bfc_offset_ = bfc_offset; }
+  void SetAvailableWidth(LayoutUnit available_width) {
+    available_width_ = available_width;
+  }
   void SetWidth(LayoutUnit available_width, LayoutUnit width) {
     available_width_ = available_width;
     width_ = width;
@@ -225,6 +242,9 @@ class CORE_EXPORT NGLineInfo {
 
   NGBfcOffset bfc_offset_;
 
+  const NGInlineBreakToken* break_token_ = nullptr;
+  HeapVector<Member<const NGBlockBreakToken>> propagated_break_tokens_;
+
   const NGLayoutResult* block_in_inline_layout_result_ = nullptr;
 
   LayoutUnit available_width_;
@@ -261,6 +281,8 @@ class CORE_EXPORT NGLineInfo {
   // when |NGInlineItemResult| to |results_|.
   bool may_have_text_combine_item_ = false;
   bool allow_hang_for_alignment_ = false;
+
+  // When adding fields, pelase ensure `Reset()` is in sync.
 };
 
 std::ostream& operator<<(std::ostream& ostream, const NGLineInfo& line_info);

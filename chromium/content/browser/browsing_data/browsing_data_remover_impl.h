@@ -49,9 +49,6 @@ class CONTENT_EXPORT BrowsingDataRemoverImpl
       const std::set<std::string>& storage_buckets,
       base::OnceClosure callback);
 
-  void RemoveAllStorageBucketsAndReply(const blink::StorageKey& storage_key,
-                                       base::OnceClosure callback);
-
   // BrowsingDataRemover implementation:
   void SetEmbedderDelegate(
       BrowsingDataRemoverDelegate* embedder_delegate) override;
@@ -131,7 +128,8 @@ class CONTENT_EXPORT BrowsingDataRemoverImpl
     kTrustTokens = 12,
     kConversions = 13,
     kDeferredCookies = 14,
-    kMaxValue = kDeferredCookies,
+    kSharedStorage = 15,
+    kMaxValue = kSharedStorage,
   };
 
   // Returns the suffix for the History.ClearBrowsingData.Duration.Task.{Task}

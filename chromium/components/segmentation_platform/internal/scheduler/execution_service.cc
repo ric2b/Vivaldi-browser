@@ -57,8 +57,9 @@ void ExecutionService::Initialize(
 
   training_data_collector_ = TrainingDataCollector::Create(
       feature_list_query_processor_.get(),
-      signal_handler->deprecated_histogram_signal_handler(), storage_service,
-      configs, profile_prefs, clock);
+      signal_handler->deprecated_histogram_signal_handler(),
+      signal_handler->user_action_signal_handler(), storage_service, configs,
+      profile_prefs, clock);
 
   model_executor_ = std::make_unique<ModelExecutorImpl>(
       clock, feature_list_query_processor_.get());
@@ -75,6 +76,9 @@ void ExecutionService::Initialize(
 
 void ExecutionService::OnNewModelInfoReady(
     const proto::SegmentInfo& segment_info) {
+  // TODO(crbug.com/1420015): Change path flow as
+  // SPSI->RRM->EE::RequestModelExecution and migrate
+  // MES::CancelOutstandingExecutionRequests() to EE.
   model_execution_scheduler_->OnNewModelInfoReady(segment_info);
 }
 
@@ -85,21 +89,6 @@ ModelProvider* ExecutionService::GetModelProvider(SegmentId segment_id) {
 void ExecutionService::RequestModelExecution(
     std::unique_ptr<ExecutionRequest> request) {
   DCHECK(request->segment_info);
-  if (request->save_result_to_db) {
-    DCHECK(!request->record_metrics_for_default)
-        << "cannot record metics for default model from scheduler";
-    // TODO(ssid): Scheduler should use the `request` instead of fetching the
-    // model provider.
-    DCHECK(!request->model_provider)
-        << "using custom model provider to save result is not supported";
-    DCHECK(request->callback.is_null())
-        << "save_result_to_db + callback cannot be set together";
-    DCHECK(!request->input_context)
-        << "saving results keyed on input context is not supported";
-    model_execution_scheduler_->RequestModelExecution(*request->segment_info);
-    return;
-  }
-
   DCHECK(!request->callback.is_null());
   model_executor_->ExecuteModel(std::move(request));
 }
@@ -110,8 +99,10 @@ void ExecutionService::OverwriteModelExecutionResult(
   // TODO(ritikagup): Change the use of this according to MultiOutputModel.
   auto execution_result = std::make_unique<ModelExecutionResult>(
       ModelProvider::Request(), ModelProvider::Response(1, result.first));
+  proto::SegmentInfo segment_info;
+  segment_info.set_segment_id(segment_id);
   model_execution_scheduler_->OnModelExecutionCompleted(
-      segment_id, std::move(execution_result));
+      segment_info, std::move(execution_result));
 }
 
 void ExecutionService::RefreshModelResults() {

@@ -12,16 +12,15 @@
 #import "components/feature_engagement/public/feature_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/commerce/push_notification/push_notification_feature.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
+#import "ios/chrome/browser/shared/ui/util/named_guide.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/bubble/bubble_presenter_delegate.h"
 #import "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
-#import "ios/chrome/browser/ui/commands/toolbar_commands.h"
-#import "ios/chrome/browser/ui/util/named_guide.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url/url_util.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
@@ -72,6 +71,8 @@ const CGFloat kBubblePresentationDelay = 1;
     BubbleViewControllerPresenter* whatsNewBubblePresenter;
 @property(nonatomic, strong) BubbleViewControllerPresenter*
     priceNotificationsWhileBrowsingBubbleTipPresenter;
+@property(nonatomic, strong)
+    BubbleViewControllerPresenter* tabPinnedBubbleTipPresenter;
 
 @property(nonatomic, assign) ChromeBrowserState* browserState;
 
@@ -94,7 +95,9 @@ const CGFloat kBubblePresentationDelay = 1;
 }
 
 - (void)showHelpBubbleIfEligible {
-  DCHECK(self.browserState);
+  if (!self.browserState) {
+    return;
+  }
   // Waits to present the bubbles until the feature engagement tracker database
   // is fully initialized. This method requires that `self.browserState` is not
   // NULL.
@@ -119,7 +122,9 @@ const CGFloat kBubblePresentationDelay = 1;
 }
 
 - (void)showLongPressHelpBubbleIfEligible {
-  DCHECK(self.browserState);
+  if (!self.browserState) {
+    return;
+  }
   // Waits to present the bubble until the feature engagement tracker database
   // is fully initialized. This method requires that `self.browserState` is not
   // NULL.
@@ -146,6 +151,9 @@ const CGFloat kBubblePresentationDelay = 1;
   [self.discoverFeedHeaderMenuTipBubblePresenter dismissAnimated:NO];
   [self.readingListTipBubblePresenter dismissAnimated:NO];
   [self.followWhileBrowsingBubbleTipPresenter dismissAnimated:NO];
+  [self.priceNotificationsWhileBrowsingBubbleTipPresenter dismissAnimated:NO];
+  [self.tabPinnedBubbleTipPresenter dismissAnimated:NO];
+  [self.whatsNewBubblePresenter dismissAnimated:NO];
   [self.defaultPageModeTipBubblePresenter dismissAnimated:NO];
 }
 
@@ -314,6 +322,38 @@ const CGFloat kBubblePresentationDelay = 1;
     return;
 
   self.priceNotificationsWhileBrowsingBubbleTipPresenter = presenter;
+}
+
+- (void)presentTabPinnedBubble {
+  if (!IsSplitToolbarMode(self.rootViewController)) {
+    // Don't show the tip if the user sees the tap strip.
+    return;
+  }
+  if (![self canPresentBubble]) {
+    return;
+  }
+
+  BubbleArrowDirection arrowDirection = BubbleArrowDirectionDown;
+  NSString* text =
+      l10n_util::GetNSString(IDS_IOS_PINNED_TAB_OVERFLOW_ACTION_IPH_TEXT);
+  CGPoint tabGridAnchor = [self anchorPointToGuide:kTabSwitcherGuide
+                                         direction:arrowDirection];
+
+  // If the feature engagement tracker does not consider it valid to display
+  // the tip, then end early to prevent the potential reassignment of the
+  // existing `tabPinnedBubbleTipPresenter` to nil.
+  BubbleViewControllerPresenter* presenter =
+      [self presentBubbleForFeature:feature_engagement::kIPHTabPinnedFeature
+                          direction:arrowDirection
+                          alignment:BubbleAlignmentTrailing
+                               text:text
+              voiceOverAnnouncement:text
+                        anchorPoint:tabGridAnchor];
+  if (!presenter) {
+    return;
+  }
+
+  self.tabPinnedBubbleTipPresenter = presenter;
 }
 
 #pragma mark - Private
@@ -500,8 +540,6 @@ presentBubbleForFeature:(const base::Feature&)feature
     return;
 
   self.incognitoTabTipBubblePresenter = presenter;
-
-  [self.toolbarHandler triggerToolsMenuButtonAnimation];
 }
 
 #pragma mark - Private Utils
@@ -516,8 +554,11 @@ presentBubbleForFeature:(const base::Feature&)feature
   [self.rootViewController.view addLayoutGuide:guide];
   CGPoint anchorPoint =
       bubble_util::AnchorPoint(guide.layoutFrame, arrowDirection);
-  return [guide.owningView convertPoint:anchorPoint
-                                 toView:guide.owningView.window];
+  CGPoint anchorPointInWindow =
+      [guide.owningView convertPoint:anchorPoint
+                              toView:guide.owningView.window];
+  [self.rootViewController.view removeLayoutGuide:guide];
+  return anchorPointInWindow;
 }
 
 // Returns whether the tab can present a bubble tip.

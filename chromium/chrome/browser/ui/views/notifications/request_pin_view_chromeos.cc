@@ -104,8 +104,7 @@ bool RequestPinView::IsDialogButtonEnabled(ui::DialogButton button) const {
       return true;
   }
 
-  NOTREACHED();
-  return true;
+  NOTREACHED_NORETURN();
 }
 
 views::View* RequestPinView::GetInitiallyFocusedView() {
@@ -179,7 +178,7 @@ void RequestPinView::Init() {
   textfield_ = AddChildView(std::make_unique<chromeos::PassphraseTextfield>());
   textfield_->set_controller(this);
   textfield_->SetEnabled(true);
-  textfield_->SetAssociatedLabel(header_label_);
+  textfield_->SetAccessibleName(header_label_);
   textfield_->SetDefaultWidthInChars(kDefaultTextWidthChars);
 
   // Error label.

@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "base/functional/callback_forward.h"
+#include "base/i18n/base_i18n_switches.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "build/build_config.h"
@@ -15,6 +16,7 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/side_search/side_search_config.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/side_panel/side_panel.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -23,6 +25,7 @@
 #include "chrome/test/interaction/interaction_test_util_browser.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chrome/test/interaction/widget_focus_waiter.h"
+#include "components/user_education/common/help_bubble.h"
 #include "components/user_education/common/help_bubble_factory_registry.h"
 #include "components/user_education/common/help_bubble_params.h"
 #include "components/user_education/views/help_bubble_view.h"
@@ -109,11 +112,9 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleFactoryWebUIInteractiveUiTest,
                       true),
 
       // Expect the help bubble to display with the correct parameters.
-      CheckView(user_education::HelpBubbleView::kHelpBubbleElementIdForTesting,
-                base::BindOnce([](user_education::HelpBubbleView* bubble) {
-                  return bubble->GetDefaultButtonForTesting()->GetText() ==
-                         kBubbleButtonText;
-                })),
+      CheckViewProperty(
+          user_education::HelpBubbleView::kDefaultButtonIdForTesting,
+          &views::LabelButton::GetText, kBubbleButtonText),
 
       // Expect the bubble to overlap the side panel slightly, as the anchor
       // element is not flush with the edge of the side panel.
@@ -142,6 +143,7 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleFactoryWebUIInteractiveUiTest,
                        ShowEmbeddedHelpBubble) {
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kBrowserTabId);
   static const DeepQuery kPathToHelpBubbleBody = {"user-education-internals",
+                                                  "#IPH_WebUiHelpBubbleTest",
                                                   "help-bubble", "#topBody"};
   RunTestSequence(InstrumentTab(kBrowserTabId),
                   NavigateWebContents(
@@ -150,4 +152,65 @@ IN_PROC_BROWSER_TEST_F(HelpBubbleFactoryWebUIInteractiveUiTest,
                   CheckJsResultAt(kBrowserTabId, kPathToHelpBubbleBody,
                                   "(el) => el.innerText",
                                   base::UTF16ToUTF8(kBubbleBodyText)));
+}
+
+// Regression test for item (1) in crbug.com/1422875.
+IN_PROC_BROWSER_TEST_F(HelpBubbleFactoryWebUIInteractiveUiTest,
+                       FloatingHelpBubbleHiddenOnWebUiHidden) {
+  RunTestSequence(
+      PressButton(kSidePanelButtonElementId), WaitForShow(kSidePanelElementId),
+      FlushEvents(),
+      SelectDropdownItem(kSidePanelComboboxElementId,
+                         static_cast<int>(SidePanelEntry::Id::kReadingList)),
+      ShowHelpBubble(kAddCurrentTabToReadingListElementId),
+      WaitForShow(
+          user_education::HelpBubbleView::kHelpBubbleElementIdForTesting),
+      // Switch to a different side panel; this removes the Reading List WebView
+      // from its widget and effectively hides the WebContents.
+      SelectDropdownItem(kSidePanelComboboxElementId,
+                         static_cast<int>(SidePanelEntry::Id::kBookmarks)),
+      WaitForHide(
+          user_education::HelpBubbleView::kHelpBubbleElementIdForTesting));
+}
+
+namespace {
+constexpr char kSidePanelElementName[] = "Side Panel Element";
+}
+
+class HelpBubbleFactoryRtlWebUIInteractiveUiTest
+    : public HelpBubbleFactoryWebUIInteractiveUiTest {
+ public:
+  HelpBubbleFactoryRtlWebUIInteractiveUiTest() = default;
+  ~HelpBubbleFactoryRtlWebUIInteractiveUiTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitchASCII(switches::kForceUIDirection,
+                                    switches::kForceDirectionRTL);
+  }
+};
+
+// This verifies that the "element bounds updated" event gets sent when the side
+// panel is resized, even if none of the elements in the side panel are resized.
+// This is a regression test for crbug.com/1425487.
+IN_PROC_BROWSER_TEST_F(HelpBubbleFactoryRtlWebUIInteractiveUiTest,
+                       ResizeSidePanelSendsUpdate) {
+  RunTestSequence(
+      PressButton(kSidePanelButtonElementId), WaitForShow(kSidePanelElementId),
+      FlushEvents(),
+      SelectDropdownItem(kSidePanelComboboxElementId,
+                         static_cast<int>(SidePanelEntry::Id::kReadingList)),
+      FlushEvents(),
+      InAnyContext(
+          AfterShow(kAddCurrentTabToReadingListElementId,
+                    [](ui::InteractionSequence* seq, ui::TrackedElement* el) {
+                      seq->NameElement(el, kSidePanelElementName);
+                    })),
+      ShowHelpBubble(kAddCurrentTabToReadingListElementId), FlushEvents(),
+      WithView(kSidePanelElementId,
+               [](SidePanel* side_panel) {
+                 side_panel->OnResize(-50, true);
+                 side_panel->GetWidget()->LayoutRootViewIfNecessary();
+               }),
+      WaitForEvent(kSidePanelElementName,
+                   user_education::kHelpBubbleAnchorBoundsChangedEvent));
 }

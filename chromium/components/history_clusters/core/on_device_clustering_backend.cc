@@ -536,18 +536,14 @@ OnDeviceClusteringBackend::GetClustersForUIOnBackgroundThread(
         std::make_unique<ContentAnnotationsClusterProcessor>(
             &entity_id_to_entity_metadata_map));
   }
-  cluster_processors.push_back(std::make_unique<FilterClusterProcessor>(
-      clustering_request_source, filter_params,
-      engagement_score_provider_is_valid));
-  // TODO(b/265301309): Figure out if we should dedupe in the clustering
-  // processing step instead so that the filter is applied correctly.
 
   // The cluster finalizers to run that affect the appearance of a cluster on a
   // UI surface.
   std::vector<std::unique_ptr<ClusterFinalizer>> cluster_finalizers;
   cluster_finalizers.push_back(
       std::make_unique<SimilarVisitDeduperClusterFinalizer>());
-  cluster_finalizers.push_back(std::make_unique<RankingClusterFinalizer>());
+  cluster_finalizers.push_back(
+      std::make_unique<RankingClusterFinalizer>(clustering_request_source));
   cluster_finalizers.push_back(std::make_unique<LabelClusterFinalizer>(
       &entity_id_to_entity_metadata_map));
 
@@ -564,8 +560,12 @@ OnDeviceClusteringBackend::GetClustersForUIOnBackgroundThread(
     }
   }
 
-  // TODO(b/265301309): Rank clusters if `filter_params` has specified a
-  // `max_clusters` param.
+  // Apply any filtering after we've decided how to score clusters.
+  std::unique_ptr<FilterClusterProcessor> filterer =
+      std::make_unique<FilterClusterProcessor>(
+          clustering_request_source, filter_params,
+          engagement_score_provider_is_valid);
+  filterer->ProcessClusters(&clusters);
 
   return calculate_triggerability
              ? GetClusterTriggerabilityOnBackgroundThread(
@@ -593,7 +593,8 @@ OnDeviceClusteringBackend::GetClusterTriggerabilityOnBackgroundThread(
     // TODO(b/259466296): Remove this block once that path is fully launched.
     cluster_finalizers.push_back(
         std::make_unique<SimilarVisitDeduperClusterFinalizer>());
-    cluster_finalizers.push_back(std::make_unique<RankingClusterFinalizer>());
+    cluster_finalizers.push_back(std::make_unique<RankingClusterFinalizer>(
+        ClusteringRequestSource::kJourneysPage));
     cluster_finalizers.push_back(std::make_unique<LabelClusterFinalizer>(
         &entity_id_to_entity_metadata_map));
   }

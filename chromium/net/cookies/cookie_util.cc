@@ -320,6 +320,15 @@ bool GetCookieDomainWithString(const GURL& url,
   }
 
   const std::string url_host(url.host());
+
+  // Disallow invalid hostnames containing multiple `.` at the end.
+  // Httpbis-rfc6265bis draft-11, §5.1.2 says to convert the request host "into
+  // a sequence of individual domain name labels"; a label can only be empty if
+  // it is the last label in the name, but a name ending in `..` would have an
+  // empty label in the penultimate position and is thus invalid.
+  if (url_host.ends_with("..")) {
+    return false;
+  }
   // If no domain was specified in the domain string, default to a host cookie.
   // We match IE/Firefox in allowing a domain=IPADDR if it matches (case
   // in-sensitive) the url ip address hostname and ignoring a leading dot if one
@@ -352,9 +361,12 @@ bool GetCookieDomainWithString(const GURL& url,
   const std::string url_domain_and_registry(
       GetEffectiveDomain(url_scheme, url_host));
   if (url_domain_and_registry.empty()) {
-    // We match IE/Firefox by treating an exact match between the domain
-    // attribute and the request host to be treated as a host cookie.
-    if (url_host == domain_string) {
+    // We match IE/Firefox by treating an exact match between the normalized
+    // domain attribute and the request host to be treated as a host cookie.
+    std::string normalized_domain_string = base::ToLowerASCII(
+        domain_string[0] == '.' ? domain_string.substr(1) : domain_string);
+
+    if (url_host == normalized_domain_string) {
       *result = url_host;
       DCHECK(DomainIsHostOnly(*result));
       return true;
@@ -574,6 +586,42 @@ bool IsDomainMatch(const std::string& domain, const std::string& host) {
   return (host.length() > domain.length() &&
           host.compare(host.length() - domain.length(), domain.length(),
                        domain) == 0);
+}
+
+bool IsOnPath(const std::string& cookie_path, const std::string& url_path) {
+  // A zero length would be unsafe for our trailing '/' checks, and
+  // would also make no sense for our prefix match.  The code that
+  // creates a CanonicalCookie should make sure the path is never zero length,
+  // but we double check anyway.
+  if (cookie_path.empty()) {
+    return false;
+  }
+
+  // The Mozilla code broke this into three cases, based on if the cookie path
+  // was longer, the same length, or shorter than the length of the url path.
+  // I think the approach below is simpler.
+
+  // Make sure the cookie path is a prefix of the url path.  If the url path is
+  // shorter than the cookie path, then the cookie path can't be a prefix.
+  if (!base::StartsWith(url_path, cookie_path, base::CompareCase::SENSITIVE)) {
+    return false;
+  }
+
+  // |url_path| is >= |cookie_path|, and |cookie_path| is a prefix of
+  // |url_path|.  If they are the are the same length then they are identical,
+  // otherwise need an additional check:
+
+  // In order to avoid in correctly matching a cookie path of /blah
+  // with a request path of '/blahblah/', we need to make sure that either
+  // the cookie path ends in a trailing '/', or that we prefix up to a '/'
+  // in the url path.  Since we know that the url path length is greater
+  // than the cookie path length, it's safe to index one byte past.
+  if (cookie_path.length() != url_path.length() && cookie_path.back() != '/' &&
+      url_path[cookie_path.length()] != '/') {
+    return false;
+  }
+
+  return true;
 }
 
 void ParseRequestCookieLine(const std::string& header_value,

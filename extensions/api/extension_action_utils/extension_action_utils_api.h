@@ -104,7 +104,7 @@ class ExtensionActionUtil : public KeyedService,
 
   std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
 
-  Profile* profile_ = nullptr;
+  const raw_ptr<Profile> profile_;
 
   SessionID last_active_tab_window_ = SessionID::InvalidValue();
 };

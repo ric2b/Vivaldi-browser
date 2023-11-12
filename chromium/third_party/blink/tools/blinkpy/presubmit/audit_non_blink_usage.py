@@ -126,6 +126,7 @@ _CONFIG = [
             'base::UnguessableToken',
             'base::UnguessableTokenHash',
             'base::UnsafeSharedMemoryRegion',
+            'base::Uuid',
             'base::WeakPtr',
             'base::WeakPtrFactory',
             'base::WrapRefCounted',
@@ -134,6 +135,7 @@ _CONFIG = [
             'base::bit_cast',
             'base::expected',
             'base::make_span',
+            'base::to_underlying',
             'base::unexpected',
             'base::ranges::.+',
             'base::sequence_manager::TaskTimeObserver',
@@ -257,9 +259,6 @@ _CONFIG = [
             'base::ClampSub',
             'base::MakeClampedNum',
 
-            # //base/cxx17_backports.h.
-            "base::clamp",
-
             # //base/strings/strcat.h.
             'base::StrCat',
 
@@ -320,7 +319,8 @@ _CONFIG = [
             'base::TestMockTimeTaskRunner',
             'base::TickClock',
 
-            # cc painting types.
+            # cc painting and raster types.
+            'cc::CategorizedWorkerPool',
             'cc::InspectablePaintRecorder',
             'cc::InspectableRecordPaintCanvas',
             'cc::PaintCanvas',
@@ -543,6 +543,7 @@ _CONFIG = [
             'compositor_target_property::.+',
             'cors::.+',
             'css_parsing_utils::.+',
+            'css_toggle_key_handling::.+',
             'cssvalue::.+',
             'encoding::.+',
             'encoding_enum::.+',
@@ -557,6 +558,7 @@ _CONFIG = [
             'keywords::.+',
             'layered_api::.+',
             'layout_invalidation_reason::.+',
+            'layout_text_control::.+',
             'media_constraints_impl::.+',
             'media_element_parser_helpers::.+',
             'file_system_access_error::.+',
@@ -624,6 +626,7 @@ _CONFIG = [
             'network::.+',
 
             # Used in network service types.
+            'net::SchemefulSite',
             'net::SiteForCookies',
 
             # PartitionAlloc
@@ -703,6 +706,7 @@ _CONFIG = [
             'ui::IsContainerWithSelectableChildren',
             'ui::IsDialog',
             'ui::IsHeading',
+            'ui::IsPlainContentElement',
             'ui::IsLandmark',
             'ui::IsPlatformDocument',
             'ui::IsPresentational',
@@ -788,6 +792,7 @@ _CONFIG = [
         'paths': ['third_party/blink/renderer/core/animation'],
         'allowed': [
             '[a-z_]+_functions::.+',
+            'cc::ScrollTimeline',
         ],
     },
     {
@@ -1167,8 +1172,7 @@ _CONFIG = [
             'media::VideoFrame',
             'viz::RasterContextProvider',
             'viz::ReleaseCallback',
-            'viz::ResourceFormat',
-            'viz::ResourceFormatToClosestSkColorType',
+            'viz::SinglePlaneFormat',
             'viz::ToClosestSkColorType',
             'viz::TransferableResource',
         ],
@@ -1302,6 +1306,8 @@ _CONFIG = [
             'std::data',
             # TODO(crbug.com/960665): Remove base::queue once it is replaced with a WTF equivalent.
             'base::queue',
+            'base::ClampMul',
+            'base::MakeFixedFlatMap',
             'base::SharedMemory',
             'base::StringPiece',
             'base::ThreadTaskRunnerHandle',
@@ -1398,7 +1404,6 @@ _CONFIG = [
             'gpu::SyncToken',
             'viz::RasterContextProvider',
             'viz::ReleaseCallback',
-            'viz::ResourceFormat',
             'media::.+',
             'libyuv::.+',
         ]
@@ -1490,6 +1495,14 @@ _CONFIG = [
         ],
         'allowed': [
             'ui::LatencyInfo',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/accessibility/',
+        ],
+        'allowed': [
+            'base::MakeFixedFlatSet',
         ],
     },
     {
@@ -1652,6 +1665,11 @@ _CONFIG = [
             'net::IsValidTopLevelMimeType',
             'net::ParseMimeTypeWithoutParameter',
             'net::registry_controlled_domains::.+',
+
+            # Needed to use the liburlpattern API.
+            "absl::StatusOr",
+            "absl::string_view",
+            'liburlpattern::.+',
         ],
     },
     {
@@ -1821,7 +1839,7 @@ _CONFIG = [
             'third_party/blink/renderer/modules/browsing_topics/browsing_topics_document_supplement.cc',
         ],
         'allowed': [
-            'browsing_topics::ApiAccessFailureReason',
+            'browsing_topics::ApiAccessResult',
         ]
     },
     {

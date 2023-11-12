@@ -8,6 +8,7 @@ import android.content.Context;
 import android.os.Build;
 
 import androidx.annotation.ColorInt;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -16,7 +17,6 @@ import org.chromium.chrome.browser.compositor.layouts.components.CompositorButto
 import org.chromium.chrome.browser.compositor.layouts.components.TintedCompositorButton;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperManager;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutTab;
-import org.chromium.chrome.browser.compositor.overlays.strip.StripScrim;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
@@ -112,22 +112,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         TabStripSceneLayerJni.get().finishBuildingFrame(mNativePtr, TabStripSceneLayer.this);
     }
 
-    /**
-     * Updates tab strip scrim.
-     * @param scrim - Scrim applied to tab strip.
-     */
-    public void updateStripScrim(StripScrim scrim) {
-        if (mNativePtr == 0) return;
-
-        final int width = Math.round(scrim.getWidth() * mDpToPx);
-        final int height = Math.round(scrim.getHeight() * mDpToPx);
-        TabStripSceneLayerJni.get().updateStripScrim(mNativePtr, TabStripSceneLayer.this,
-                scrim.getX(), scrim.getY(), width, height, scrim.getColor(), scrim.getAlpha());
-    }
-
-    private boolean shouldReaddBackground(int orientation) {
+    private boolean shouldReadBackground(int orientation) {
         // Sometimes layer trees do not get updated on rotation on Nexus 10.
-        // This is a workaround that readds the background to prevent it.
+        // This is a workaround that reads the background to prevent it.
         // See https://crbug.com/503930 for more.
         if (Build.MODEL == null || !Build.MODEL.contains("Nexus 10")) return false;
         if (mOrientation != orientation) {
@@ -148,10 +135,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         // that happens but by adding the offset it fixes it. See ref. VAB-4399.
         height += VivaldiUtils.isTopToolbarOn() ? 0 : 1;
         TabStripSceneLayerJni.get().updateTabStripLayer(mNativePtr, TabStripSceneLayer.this, width,
-                height, yOffset * mDpToPx, shouldReaddBackground(layoutHelper.getOrientation()),
+                height, yOffset * mDpToPx, shouldReadBackground(layoutHelper.getOrientation()),
                 layoutHelper.getBackgroundColor());
-
-        updateStripScrim(layoutHelper.getStripScrim());
 
         TintedCompositorButton newTabButton = layoutHelper.getNewTabButton();
         CompositorButton modelSelectorButton = layoutHelper.getModelSelectorButton();
@@ -279,8 +264,6 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         void updateTabStripLayer(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
                 int width, int height, float yOffset, boolean shouldReadBackground,
                 @ColorInt int backgroundColor);
-        void updateStripScrim(long nativeTabStripSceneLayer, TabStripSceneLayer caller, float x,
-                float y, int width, int height, int color, float alpha);
         void updateNewTabButton(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
                 int resourceId, int backgroundResourceId, float x, float y, float touchTargetOffset,
                 boolean visible, int tint, int backgroundTint, float buttonAlpha,
@@ -320,5 +303,10 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         // Vivaldi
         void updateLoadingState(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
                 int resourceId, ResourceManager resourceManager, boolean shouldShowLoading);
+    }
+
+    @VisibleForTesting
+    public void initializeNativeForTesting() {
+        this.initializeNative();
     }
 }

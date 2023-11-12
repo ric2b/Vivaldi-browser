@@ -3,10 +3,10 @@
 #import "ios/ui/settings/sync/vivaldi_sync_login_view_controller.h"
 
 #import "base/mac/foundation_util.h"
-#import "ios/ui/table_view/cells/vivaldi_input_error_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
 #import "ios/chrome/common/string_util.h"
+#import "ios/ui/table_view/cells/vivaldi_input_error_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_text_edit_item.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"

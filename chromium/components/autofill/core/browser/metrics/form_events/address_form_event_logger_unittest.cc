@@ -16,7 +16,7 @@
 
 namespace autofill::autofill_metrics {
 
-class AddressFormEventLoggerTest : public metrics::AutofillMetricsBaseTest,
+class AddressFormEventLoggerTest : public AutofillMetricsBaseTest,
                                    public testing::Test {
  public:
   void SetUp() override { SetUpHelper(); }
@@ -57,8 +57,9 @@ TEST_F(AddressFormEventLoggerTest, SyncState) {
   }
 }
 
-class CategoryResolvedKeyMetricsTest : public metrics::AutofillMetricsBaseTest,
-                                       public testing::Test {
+class CategoryResolvedKeyMetricsTest
+    : public autofill_metrics::AutofillMetricsBaseTest,
+      public testing::Test {
  public:
   CategoryResolvedKeyMetricsTest() {
     // Category-resolved metrics are only emitted when the union view is
@@ -97,7 +98,8 @@ class CategoryResolvedKeyMetricsTest : public metrics::AutofillMetricsBaseTest,
     autofill_manager().OnAskForValuesToFillTest(form, form.fields.front());
     autofill_manager().FillOrPreviewForm(
         mojom::RendererFormDataAction::kFill, form, form.fields.front(),
-        MakeFrontendId({.profile_id = profile.guid()}));
+        MakeFrontendId({.profile_id = profile.guid()}),
+        AutofillTriggerSource::kPopup);
   }
 
  protected:

@@ -6,10 +6,10 @@
 #import <UIKit/UIKit.h>
 
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/ad_tracker_blocker/cells/vivaldi_atb_setting_item.h"
+#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/custom_views/vivaldi_text_field_view.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
@@ -156,6 +156,8 @@ UIButton* ActionButton() {
   [textFieldView setURLMode];
   [textViewContainer addSubview:textFieldView];
   [textFieldView fillSuperviewWithPadding:textViewPadding];
+  [textFieldView setAutoCorrectDisabled:true];
+  [textFieldView setFocus];
 
   switch (self.editingMode) {
 

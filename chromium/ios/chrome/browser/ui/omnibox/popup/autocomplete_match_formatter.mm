@@ -13,11 +13,11 @@
 #import "components/omnibox/browser/autocomplete_provider.h"
 #import "components/omnibox/browser/suggestion_answer.h"
 #import "ios/chrome/browser/net/crurl.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_icon_formatter.h"
 #import "ios/chrome/browser/ui/omnibox/popup/popup_swift.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -198,11 +198,29 @@ UIColor* DimColorIncognito() {
     UIColor* suggestionTextColor = SuggestionTextColor();
     UIColor* dimColor = self.incognito ? DimColorIncognito() : DimColor();
 
-    return [self attributedStringWithString:text
-                            classifications:textClassifications
-                                  smallFont:NO
-                                      color:suggestionTextColor
-                                   dimColor:dimColor];
+    NSAttributedString* attributedText =
+        [self attributedStringWithString:text
+                         classifications:textClassifications
+                               smallFont:NO
+                                   color:suggestionTextColor
+                                dimColor:dimColor];
+
+    if (self.isTailSuggestion &&
+        base::FeatureList::IsEnabled(kOmniboxTailSuggest)) {
+      NSMutableAttributedString* mutableString =
+          [[NSMutableAttributedString alloc] init];
+      NSAttributedString* tailSuggestPrefix =
+          // TODO(crbug.com/1432987): Do we want to localize the ellipsis ?
+          [self attributedStringWithString:@"... "
+                           classifications:NULL
+                                 smallFont:NO
+                                     color:suggestionTextColor
+                                  dimColor:dimColor];
+      [mutableString appendAttributedString:tailSuggestPrefix];
+      [mutableString appendAttributedString:attributedText];
+      attributedText = mutableString;
+    }
+    return attributedText;
   }
 }
 

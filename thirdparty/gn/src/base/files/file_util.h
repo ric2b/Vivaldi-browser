@@ -124,6 +124,15 @@ bool ReadFileToStringWithMaxSize(const FilePath& path,
                                  std::string* contents,
                                  size_t max_size);
 
+#if defined(OS_POSIX) || defined(OS_FUCHSIA)
+
+// Performs the same function as CreateAndOpenTemporaryFileInDir(), but
+// returns the file-descriptor wrapped in a ScopedFD rather than a File.
+ScopedFD CreateAndOpenFdForTemporaryFileInDir(const FilePath& dir,
+                                              FilePath* path);
+
+#endif
+
 #if defined(OS_POSIX)
 
 // Creates a symbolic link at |symlink| pointing to |target|.  Returns
@@ -172,6 +181,10 @@ bool IsDirectoryEmpty(const FilePath& dir_path);
 
 // Get the temporary directory provided by the system.
 bool GetTempDir(FilePath* path);
+
+// Returns a new temporary file in |dir| with a unique name. On success,
+// |temp_file| is populated with the full path to the created file.
+File CreateAndOpenTemporaryFileInDir(const FilePath& dir, FilePath* temp_file);
 
 // Create a new directory. If prefix is provided, the new directory name is in
 // the format of prefixyyyy.

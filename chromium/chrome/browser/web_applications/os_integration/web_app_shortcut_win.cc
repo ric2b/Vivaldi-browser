@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check_is_test.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
@@ -99,8 +100,10 @@ bool SaveIconWithCheckSum(const base::FilePath& icon_file,
   GetImageCheckSum(image, &digest);
 
   base::FilePath cheksum_file(icon_file.ReplaceExtension(kIconChecksumFileExt));
-  return base::WriteFile(cheksum_file, reinterpret_cast<const char*>(&digest),
-                         sizeof(digest)) == sizeof(digest);
+  // Passing digest as one element in a span of digest fields, therefore the 1u,
+  // and then having as_bytes converting it to a new span of uint8_t's.
+  return base::WriteFile(cheksum_file,
+                         base::as_bytes(base::make_span(&digest, 1u)));
 }
 
 // Returns true if |icon_file| is missing or different from |image|.
@@ -172,7 +175,7 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
 
   base::CommandLine cmd_line(base::CommandLine::NO_PROGRAM);
   cmd_line = shell_integration::CommandLineArgsForLauncher(
-      shortcut_info.url, shortcut_info.extension_id, shortcut_info.profile_path,
+      shortcut_info.url, shortcut_info.app_id, shortcut_info.profile_path,
       run_on_os_login_mode);
 
   // TODO(evan): we rely on the fact that command_line_string() is
@@ -186,10 +189,10 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
   if (description.length() >= MAX_PATH)
     description.resize(MAX_PATH - 1);
 
-  // Generates app id from the browser's appid, and the app's extension_id or
+  // Generates app id from the browser's appid, and the app's app_id or
   // web app url, and the profile path.
   std::string app_name(GenerateApplicationNameFromInfo(shortcut_info));
-  std::wstring app_id(shell_integration::win::GetAppUserModelIdForApp(
+  std::wstring win_app_id(shell_integration::win::GetAppUserModelIdForApp(
       base::UTF8ToWide(app_name), shortcut_info.profile_path));
 
   bool success = true;
@@ -220,7 +223,7 @@ bool CreateShortcutsInPaths(const base::FilePath& web_app_path,
     shortcut_properties.set_arguments(wide_switches);
     shortcut_properties.set_description(base::AsWString(description));
     shortcut_properties.set_icon(icon_file, 0);
-    shortcut_properties.set_app_id(app_id);
+    shortcut_properties.set_app_id(win_app_id);
     shortcut_properties.set_dual_mode(false);
     if (!base::PathExists(shortcut_file.DirName()) &&
         !base::CreateDirectory(shortcut_file.DirName())) {
@@ -429,7 +432,8 @@ void GetShortcutLocationsAndDeleteShortcuts(
 
   // Calling UnpinShortcuts in unit-tests currently crashes the test, so skip it
   // for now using the shortcut override mechanism.
-  if (web_app::GetOsIntegrationTestOverride()) {
+  if (OsIntegrationTestOverride::Get()) {
+    CHECK_IS_TEST();
     DeleteShortcuts(all_shortcuts, std::move(result_callback));
     return;
   }
@@ -447,8 +451,8 @@ void CreateIconAndSetRelaunchDetails(const base::FilePath& web_app_path,
                                      const ShortcutInfo& shortcut_info) {
   base::CommandLine command_line =
       shell_integration::CommandLineArgsForLauncher(
-          shortcut_info.url, shortcut_info.extension_id,
-          shortcut_info.profile_path, "");
+          shortcut_info.url, shortcut_info.app_id, shortcut_info.profile_path,
+          "");
 
   command_line.SetProgram(GetChromeProxyPath());
   ui::win::SetRelaunchDetailsForWindow(command_line.GetCommandLineString(),
@@ -530,8 +534,7 @@ void OnShortcutInfoLoadedForSetRelaunchDetails(
   // Set window's icon to the one we're about to create/update in the web app
   // path. The icon cache will refresh on icon creation.
   base::FilePath web_app_path = GetOsIntegrationResourcesDirectoryForApp(
-      shortcut_info->profile_path, shortcut_info->extension_id,
-      shortcut_info->url);
+      shortcut_info->profile_path, shortcut_info->app_id, shortcut_info->url);
   base::FilePath icon_file =
       GetIconFilePath(web_app_path, shortcut_info->title);
 
@@ -573,7 +576,7 @@ bool CreatePlatformShortcuts(const base::FilePath& web_app_path,
   // If this is set, then keeping this as a local variable ensures it is not
   // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
   scoped_refptr<OsIntegrationTestOverride> test_override =
-      web_app::GetOsIntegrationTestOverride();
+      OsIntegrationTestOverride::Get();
 
   // Shortcut paths under which to create shortcuts.
   std::vector<base::FilePath> shortcut_paths =
@@ -615,6 +618,10 @@ bool CreatePlatformShortcuts(const base::FilePath& web_app_path,
         web_app_path.Append(file_name).AddExtension(installer::kLnkExt);
     if (!PinShortcutToTaskbar(shortcut_to_pin))
       return false;
+
+    // This invalidates the Windows icon cache and causes the icon changes to
+    // register with the taskbar and desktop.
+    ::SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
   }
 
   return true;
@@ -628,7 +635,7 @@ Result UpdatePlatformShortcuts(const base::FilePath& web_app_path,
   // If this is set, then keeping this as a local variable ensures it is not
   // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
   scoped_refptr<OsIntegrationTestOverride> test_override =
-      web_app::GetOsIntegrationTestOverride();
+      OsIntegrationTestOverride::Get();
 
   // Update the icon if necessary.
   const base::FilePath icon_file =
@@ -662,7 +669,7 @@ ShortcutLocations GetAppExistingShortCutLocationImpl(
   // If this is set, then keeping this as a local variable ensures it is not
   // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
   scoped_refptr<OsIntegrationTestOverride> test_override =
-      web_app::GetOsIntegrationTestOverride();
+      OsIntegrationTestOverride::Get();
   ShortcutLocations result;
   ShortcutLocations desktop;
   desktop.on_desktop = true;
@@ -738,7 +745,7 @@ void DeletePlatformShortcuts(const base::FilePath& web_app_path,
   // If this is set, then keeping this as a local variable ensures it is not
   // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
   scoped_refptr<OsIntegrationTestOverride> test_override =
-      web_app::GetOsIntegrationTestOverride();
+      OsIntegrationTestOverride::Get();
   GetShortcutLocationsAndDeleteShortcuts(
       web_app_path, shortcut_info.profile_path, shortcut_info.title,
       base::BindOnce(&FinishDeletingPlatformShortcuts, web_app_path,
@@ -762,7 +769,7 @@ void DeleteAllShortcutsForProfile(const base::FilePath& profile_path) {
   // If this is set, then keeping this as a local variable ensures it is not
   // destroyed while we use state from it (retrieved in `GetShortcutPaths()`).
   scoped_refptr<OsIntegrationTestOverride> test_override =
-      web_app::GetOsIntegrationTestOverride();
+      OsIntegrationTestOverride::Get();
   GetShortcutLocationsAndDeleteShortcuts(
       base::FilePath(), profile_path, std::u16string(),
       base::BindOnce(&FinishDeletingAllShortcutsForProfile));
@@ -774,7 +781,7 @@ std::vector<base::FilePath> GetShortcutPaths(
   std::vector<base::FilePath> shortcut_paths;
   // if there is no ShortcutOverrirdeForTesting, set it to empty.
   scoped_refptr<OsIntegrationTestOverride> testing_shortcuts =
-      GetOsIntegrationTestOverride();
+      OsIntegrationTestOverride::Get();
   // Locations to add to shortcut_paths.
   struct {
     bool use_this_location;

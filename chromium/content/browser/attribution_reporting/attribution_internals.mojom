@@ -7,28 +7,16 @@ module attribution_internals.mojom;
 import "components/attribution_reporting/registration.mojom";
 import "components/attribution_reporting/source_registration_error.mojom";
 import "components/attribution_reporting/source_type.mojom";
-import "content/browser/attribution_reporting/attribution_reporting.mojom";
 import "content/browser/attribution_reporting/store_source_result.mojom";
+import "content/browser/attribution_reporting/attribution_reporting.mojom";
 import "services/network/public/mojom/attribution.mojom";
-import "services/network/public/mojom/schemeful_site.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
 
-// Represents `AttributionReport::EventLevelData::Id`.
+// Represents `AttributionReport::Id`.
 // Will be used to issue commands for individual reports.
-struct EventLevelReportID {
+struct ReportID {
   int64 value;
-};
-
-// Represents `AttributionReport::AggregatableAttributionData::Id`.
-// Will be used to issue commands for individual reports.
-struct AggregatableAttributionReportID {
-  int64 value;
-};
-
-union ReportID {
-  EventLevelReportID event_level_id;
-  AggregatableAttributionReportID aggregatable_attribution_id;
 };
 
 // Contains event-level data to be displayed.
@@ -44,14 +32,10 @@ struct AggregatableHistogramContribution {
   uint32 value;
 };
 
-struct AttestationToken {
-  string value;
-};
-
 // Contains aggregatable attribution data to be displayed.
 struct WebUIReportAggregatableAttributionData {
   array<AggregatableHistogramContribution> contributions;
-  AttestationToken? attestation_token;
+  string? attestation_token;
   string aggregation_coordinator;
 };
 
@@ -104,7 +88,7 @@ struct WebUIDebugReport {
 struct WebUISource {
   uint64 source_event_id;
   url.mojom.Origin source_origin;
-  array<network.mojom.SchemefulSite> destinations;
+  attribution_reporting.mojom.DestinationSet destinations;
   url.mojom.Origin reporting_origin;
   double source_time;
   double expiry_time;
@@ -185,6 +169,19 @@ struct WebUISourceRegistration {
   SourceStatus status;
 };
 
+// Struct containing info of successfully passed OS registrations to be
+// displayed as a log by WebUI.
+struct WebUIOsRegistration {
+  // Contains msec since the Unix epoch, as returned by
+  // base::Time::ToJsTimeIgnoringNull().
+  double time;
+  url.mojom.Url registration_url;
+  url.mojom.Origin top_level_origin;
+  bool is_debug_key_allowed;
+  attribution_reporting.mojom.OsRegistrationType type;
+  attribution_reporting.mojom.OsRegistrationResult result;
+};
+
 // Observer for events relevant to the attribution internals WebUI.
 interface Observer {
   // Called when the sources in storage changed, indicating that the observer
@@ -193,7 +190,7 @@ interface Observer {
 
   // Called when the reports in storage changed, indicating that the observer
   // should call `Handler::GetReports()`.
-  OnReportsChanged(attribution_reporting.mojom.ReportType report_type);
+  OnReportsChanged();
 
   // Called when a source is registered, regardless of success or failure.
   OnSourceHandled(WebUISourceRegistration source);
@@ -210,23 +207,28 @@ interface Observer {
 
   // Called when a trigger is registered, regardless of success or failure.
   OnTriggerHandled(WebUITrigger trigger);
+
+  // Called when an OS source or trigger is registered, regardless of success
+  // or failure.
+  OnOsRegistration(WebUIOsRegistration registration);
 };
 
 // Mojo interface for the attribution internals WebUI to communicate with the
 // storage layer.
 interface Handler {
-  // Returns whether attribution reporting and the debug mode are enabled in
-  // the browsing context the WebUI is in.
-  IsAttributionReportingEnabled() => (bool enabled, bool debug_mode);
+  // Returns the state of the Attribution Reporting API in the WebUI's browsing context.
+  // `attribution_support` is the `Attribution-Reporting-Support` request header value.
+  IsAttributionReportingEnabled() => (bool enabled, bool debug_mode,
+                                      string attribution_support);
 
   // Returns all active sources that are persisted in storage. This does
   // not include expired sources, or sources that can no longer be attributed
   // due to reaching policy limits.
   GetActiveSources() => (array<WebUISource> sources);
 
-  // Returns all reports of the specified type contained in storage, including
-  // those that are actively being sent.
-  GetReports(attribution_reporting.mojom.ReportType report_type) => (array<WebUIReport> reports);
+  // Returns all reports contained in storage, including those that are actively
+  // being sent.
+  GetReports() => (array<WebUIReport> reports);
 
   // Sends the given reports, ignoring delay, returning when the operation has
   // been completed and the reports have been cleared from storage.

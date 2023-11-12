@@ -44,15 +44,15 @@ MdTextButton::MdTextButton(PressedCallback callback,
   SetHasInkDropActionOnClick(true);
   SetShowInkDropWhenHotTracked(true);
   InkDrop::Get(this)->SetBaseColorCallback(base::BindRepeating(
-      [](MdTextButton* host) {
-        return color_utils::DeriveDefaultIconColor(
-            host->label()->GetEnabledColor());
-      },
+      [](MdTextButton* host) { return host->GetHoverColor(host->GetStyle()); },
       this));
 
   if (features::IsChromeRefresh2023()) {
     constexpr int kImageSpacing = 8;
     SetImageLabelSpacing(kImageSpacing);
+    // Highlight button colors already have opacity applied.
+    // Set the opacity to 1 so the two values do not compound.
+    InkDrop::Get(this)->SetHighlightOpacity(1);
   } else {
     SetCornerRadius(LayoutProvider::Get()->GetCornerRadiusMetric(
         ShapeContextTokens::kButtonRadius));
@@ -101,6 +101,22 @@ void MdTextButton::SetStyle(views::MdTextButton::Style button_style) {
 
 views::MdTextButton::Style MdTextButton::GetStyle() const {
   return style_;
+}
+
+SkColor MdTextButton::GetHoverColor(Style button_style) {
+  if (!features::IsChromeRefresh2023()) {
+    return color_utils::DeriveDefaultIconColor(label()->GetEnabledColor());
+  }
+
+  switch (button_style) {
+    case Style::kProminent:
+      return GetColorProvider()->GetColor(ui::kColorSysStateHoverOnProminent);
+    case Style::kDefault:
+    case Style::kText:
+    case Style::kTonal:
+    default:
+      return GetColorProvider()->GetColor(ui::kColorSysStateHoverOnSubtle);
+  }
 }
 
 void MdTextButton::SetBgColorOverride(const absl::optional<SkColor>& color) {
@@ -241,8 +257,9 @@ void MdTextButton::UpdateTextColor() {
     text_style = style::STYLE_DIALOG_BUTTON_TONAL;
   }
 
-  SkColor enabled_text_color =
-      style::GetColor(*this, label()->GetTextContext(), text_style);
+  const ui::ColorProvider* color_provider = GetColorProvider();
+  SkColor enabled_text_color = color_provider->GetColor(
+      style::GetColorId(label()->GetTextContext(), text_style));
   const auto colors = explicitly_set_colors();
   LabelButton::SetEnabledTextColors(enabled_text_color);
   // Disabled buttons need the disabled color explicitly set.
@@ -250,9 +267,9 @@ void MdTextButton::UpdateTextColor() {
   // the basis for calculating the stroke color. enabled_text_color isn't used
   // since a descendant could have overridden the label enabled color.
   if (GetState() == STATE_DISABLED) {
-    LabelButton::SetTextColor(STATE_DISABLED,
-                              style::GetColor(*this, label()->GetTextContext(),
-                                              style::STYLE_DISABLED));
+    LabelButton::SetTextColor(
+        STATE_DISABLED, color_provider->GetColor(style::GetColorId(
+                            label()->GetTextContext(), style::STYLE_DISABLED)));
   }
   set_explicitly_set_colors(colors);
 }
@@ -288,7 +305,8 @@ void MdTextButton::UpdateBackgroundColor() {
 
   SkColor stroke_color = color_provider->GetColor(
       is_disabled ? ui::kColorButtonBorderDisabled : ui::kColorButtonBorder);
-  if (style_ == Style::kProminent) {
+  if (style_ == Style::kProminent || style_ == Style::kText ||
+      style_ == Style::kTonal) {
     stroke_color = SK_ColorTRANSPARENT;
   }
 

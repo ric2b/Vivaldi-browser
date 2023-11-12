@@ -99,11 +99,6 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "net/base/features.h"
-#include "services/network/radio_monitor_android.h"
-#endif
-
 namespace network {
 
 namespace {
@@ -527,7 +522,7 @@ URLLoader::URLLoader(
       custom_proxy_pre_cache_headers_(request.custom_proxy_pre_cache_headers),
       custom_proxy_post_cache_headers_(request.custom_proxy_post_cache_headers),
       fetch_window_id_(request.fetch_window_id),
-      private_network_access_checker_(
+      local_network_access_checker_(
           request,
           factory_params_->client_security_state.get(),
           options_),
@@ -554,7 +549,8 @@ URLLoader::URLLoader(
       allow_http1_for_streaming_upload_(
           request.request_body &&
           request.request_body->AllowHTTP1ForStreamingUpload()),
-      accept_ch_frame_observer_(std::move(accept_ch_frame_observer)) {
+      accept_ch_frame_observer_(std::move(accept_ch_frame_observer)),
+      provide_data_use_updates_(context.DataUseUpdatesEnabled()) {
   TRACE_EVENT("loading", "URLLoader::URLLoader",
               perfetto::Flow::FromPointer(this));
   DCHECK(delete_callback_);
@@ -648,6 +644,13 @@ URLLoader::URLLoader(
         request.trusted_params->allow_cookies_from_browser;
   }
 
+  // Store any cookies passed from the browser process to later attach them to
+  // the request.
+  if (allow_cookies_from_browser_) {
+    cookies_from_browser_ =
+        GetCookiesFromHeaders(request.headers, request.cors_exempt_headers);
+  }
+
   throttling_token_ = network::ScopedThrottlingToken::MaybeCreate(
       url_request_->net_log().source().id, request.throttling_profile_id);
 
@@ -656,6 +659,8 @@ URLLoader::URLLoader(
   SetFetchMetadataHeaders(url_request_.get(), request_mode_,
                           has_user_activation_, request_destination_, nullptr,
                           *factory_params_, *origin_access_list_);
+
+  SetAttributionReportingHeaders(*url_request_, request);
 
   if (request.update_first_party_url_on_redirect) {
     url_request_->set_first_party_url_policy(
@@ -741,23 +746,16 @@ URLLoader::URLLoader(
         net::CookieSettingOverride::kTopLevelStorageAccessGrantEligible);
   }
 
-#if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(net::features::kRecordRadioWakeupTrigger)) {
-    MaybeRecordURLLoaderCreationForWakeupTrigger(request, traffic_annotation);
-  }
-#endif
+  // The `kStorageAccessGrantEligible` override will be applied (in-place) by
+  // individual request jobs as appropriate, but should not be present
+  // initially.
+  DCHECK(!url_request_->cookie_setting_overrides().Has(
+      net::CookieSettingOverride::kStorageAccessGrantEligible));
 
   // Resolve elements from request_body and prepare upload data.
   if (request.request_body.get()) {
     OpenFilesForUpload(request);
     return;
-  }
-
-  // Store any cookies passed from the browser process to later attach them to
-  // the request.
-  if (allow_cookies_from_browser_) {
-    cookies_from_browser_ =
-        GetCookiesFromHeaders(request.headers, request.cors_exempt_headers);
   }
 
   BeginTrustTokenOperationIfNecessaryAndThenScheduleStart(request);
@@ -980,9 +978,28 @@ void URLLoader::OnDoneConstructingTrustTokenHelper(
     bool token_operation_unauthorized =
         status_or_helper.status() ==
         mojom::TrustTokenOperationStatus::kUnauthorized;
-    trust_token_observer_->OnTrustTokensAccessed(
-        mojom::TrustTokenAccessDetails::New(top_frame_origin,
-                                            token_operation_unauthorized));
+    switch (operation) {
+      case mojom::TrustTokenOperationType::kIssuance:
+        trust_token_observer_->OnTrustTokensAccessed(
+            mojom::TrustTokenAccessDetails::NewIssuance(
+                mojom::TrustTokenIssuanceDetails::New(
+                    top_frame_origin, url::Origin::Create(url_request_->url()),
+                    token_operation_unauthorized)));
+        break;
+      case mojom::TrustTokenOperationType::kRedemption:
+        trust_token_observer_->OnTrustTokensAccessed(
+            mojom::TrustTokenAccessDetails::NewRedemption(
+                mojom::TrustTokenRedemptionDetails::New(
+                    top_frame_origin, url::Origin::Create(url_request_->url()),
+                    token_operation_unauthorized)));
+        break;
+      case mojom::TrustTokenOperationType::kSigning:
+        trust_token_observer_->OnTrustTokensAccessed(
+            mojom::TrustTokenAccessDetails::NewSigning(
+                mojom::TrustTokenSigningDetails::New(
+                    top_frame_origin, token_operation_unauthorized)));
+        break;
+    }
   }
 
   if (!status_or_helper.ok()) {
@@ -1079,6 +1096,14 @@ URLLoader::~URLLoader() {
     keepalive_statistics_recorder_->OnLoadFinished(
         *factory_params_->top_frame_id, keepalive_request_size_);
   }
+
+  if (base::FeatureList::IsEnabled(features::kLessChattyNetworkService) &&
+      !cookie_access_details_.empty()) {
+    // In case the response wasn't received successfully sent the call now.
+    // Note `cookie_observer_` is guaranteed non-null since
+    // `cookie_access_details_` is only appended to when it is valid.
+    cookie_observer_->OnCookiesAccessed(std::move(cookie_access_details_));
+  }
 }
 
 // static
@@ -1119,9 +1144,9 @@ void URLLoader::FollowRedirect(
   // Reset the state of the PNA checker - redirects should be treated like new
   // requests by the same client.
   if (new_url.has_value()) {
-    private_network_access_checker_.ResetForRedirect(*new_url);
+    local_network_access_checker_.ResetForRedirect(*new_url);
   } else {
-    private_network_access_checker_.ResetForRedirect(*deferred_redirect_url_);
+    local_network_access_checker_.ResetForRedirect(*deferred_redirect_url_);
   }
 
   deferred_redirect_url_.reset();
@@ -1167,34 +1192,32 @@ void URLLoader::ResumeReadingBodyFromNet() {
   }
 }
 
-PrivateNetworkAccessCheckResult URLLoader::PrivateNetworkAccessCheck(
+LocalNetworkAccessCheckResult URLLoader::LocalNetworkAccessCheck(
     const net::TransportInfo& transport_info) {
-  PrivateNetworkAccessCheckResult result =
-      private_network_access_checker_.Check(transport_info);
+  LocalNetworkAccessCheckResult result =
+      local_network_access_checker_.Check(transport_info);
 
   mojom::IPAddressSpace response_address_space =
-      *private_network_access_checker_.ResponseAddressSpace();
+      *local_network_access_checker_.ResponseAddressSpace();
 
   url_request_->net_log().AddEvent(
-      net::NetLogEventType::PRIVATE_NETWORK_ACCESS_CHECK, [&] {
-        base::Value dict(base::Value::Type::DICT);
-        dict.SetStringKey(
-            "client_address_space",
-            IPAddressSpaceToStringPiece(
-                private_network_access_checker_.ClientAddressSpace()));
-        dict.SetStringKey("resource_address_space",
-                          IPAddressSpaceToStringPiece(response_address_space));
-        dict.SetStringKey("result",
-                          PrivateNetworkAccessCheckResultToStringPiece(result));
+      net::NetLogEventType::LOCAL_NETWORK_ACCESS_CHECK, [&] {
+        base::Value::Dict dict;
+        dict.Set("client_address_space",
+                 IPAddressSpaceToStringPiece(
+                     local_network_access_checker_.ClientAddressSpace()));
+        dict.Set("resource_address_space",
+                 IPAddressSpaceToStringPiece(response_address_space));
+        dict.Set("result", LocalNetworkAccessCheckResultToStringPiece(result));
         return dict;
       });
 
   bool is_warning = false;
   switch (result) {
-    case PrivateNetworkAccessCheckResult::kAllowedByPolicyWarn:
+    case LocalNetworkAccessCheckResult::kAllowedByPolicyWarn:
       is_warning = true;
       break;
-    case PrivateNetworkAccessCheckResult::kBlockedByPolicyBlock:
+    case LocalNetworkAccessCheckResult::kBlockedByPolicyBlock:
       is_warning = false;
       break;
     default:
@@ -1203,13 +1226,13 @@ PrivateNetworkAccessCheckResult URLLoader::PrivateNetworkAccessCheck(
   }
 
   // If `security_state` was nullptr, then `result` should not have mentioned
-  // the policy set in `security_state->private_network_request_policy`.
+  // the policy set in `security_state->local_network_request_policy`.
   const mojom::ClientSecurityState* security_state =
-      private_network_access_checker_.client_security_state();
+      local_network_access_checker_.client_security_state();
   DCHECK(security_state);
 
   if (devtools_observer_) {
-    devtools_observer_->OnPrivateNetworkRequest(
+    devtools_observer_->OnLocalNetworkRequest(
         devtools_request_id(), url_request_->url(), is_warning,
         response_address_space, security_state->Clone());
   }
@@ -1224,31 +1247,31 @@ int URLLoader::OnConnected(net::URLRequest* url_request,
   transport_info_ = info;
 
   // Now that the request endpoint's address has been resolved, check if
-  // this request should be blocked per Private Network Access.
-  PrivateNetworkAccessCheckResult result = PrivateNetworkAccessCheck(info);
+  // this request should be blocked per Local Network Access.
+  LocalNetworkAccessCheckResult result = LocalNetworkAccessCheck(info);
   absl::optional<mojom::CorsError> cors_error =
-      PrivateNetworkAccessCheckResultToCorsError(result);
+      LocalNetworkAccessCheckResultToCorsError(result);
   if (cors_error.has_value()) {
-    if (result == PrivateNetworkAccessCheckResult::kBlockedByPolicyBlock &&
+    if (result == LocalNetworkAccessCheckResult::kBlockedByPolicyBlock &&
         (info.type == net::TransportType::kCached ||
          info.type == net::TransportType::kCachedFromProxy)) {
-      // If the cached entry was blocked by the private network access check
+      // If the cached entry was blocked by the local network access check
       // without a preflight, we'll start over and attempt to request from the
       // network, so resetting the checker.
-      private_network_access_checker_.ResetForRetry();
+      local_network_access_checker_.ResetForRetry();
       return net::
-          ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_POLICY;
+          ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_LOCAL_NETWORK_ACCESS_POLICY;
     }
     // Remember the CORS error so we can annotate the URLLoaderCompletionStatus
     // with it later, then fail the request with the same net error code as
     // other CORS errors.
     cors_error_status_ = CorsErrorStatus(
-        *cors_error, private_network_access_checker_.TargetAddressSpace(),
-        *private_network_access_checker_.ResponseAddressSpace());
-    if (result == PrivateNetworkAccessCheckResult::
+        *cors_error, local_network_access_checker_.TargetAddressSpace(),
+        *local_network_access_checker_.ResponseAddressSpace());
+    if (result == LocalNetworkAccessCheckResult::
                       kBlockedByInconsistentIpAddressSpace ||
         result ==
-            PrivateNetworkAccessCheckResult::kBlockedByTargetIpAddressSpace) {
+            LocalNetworkAccessCheckResult::kBlockedByTargetIpAddressSpace) {
       return net::ERR_INCONSISTENT_IP_ADDRESS_SPACE;
     }
     return net::ERR_FAILED;
@@ -1346,10 +1369,10 @@ mojom::URLResponseHeadPtr URLLoader::BuildResponseHead() const {
   response->request_include_credentials = url_request_->allow_credentials();
 
   response->response_address_space =
-      private_network_access_checker_.ResponseAddressSpace().value_or(
+      local_network_access_checker_.ResponseAddressSpace().value_or(
           mojom::IPAddressSpace::kUnknown);
   response->client_address_space =
-      private_network_access_checker_.ClientAddressSpace();
+      local_network_access_checker_.ClientAddressSpace();
 
   return response;
 }
@@ -1368,7 +1391,7 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
 
   mojom::URLResponseHeadPtr response = BuildResponseHead();
   DispatchOnRawResponse();
-  ReportFlaggedResponseCookies();
+  ReportFlaggedResponseCookies(false);
 
   if (memory_cache_)
     memory_cache_->OnRedirect(url_request_.get(), request_destination_);
@@ -1577,7 +1600,10 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
   DCHECK(url_request == url_request_.get());
   has_received_response_ = true;
 
-  ReportFlaggedResponseCookies();
+  // Use `true` to force sending the cookie accessed update now. This is because
+  // for navigations the CookieObserver might get torn down by the time the
+  // request completes.
+  ReportFlaggedResponseCookies(true);
 
   if (net_error != net::OK) {
     NotifyCompleted(net_error);
@@ -2017,7 +2043,7 @@ void URLLoader::OnAuthCredentials(
   } else {
     // CancelAuth will proceed to the body, so cookies only need to be reported
     // here.
-    ReportFlaggedResponseCookies();
+    ReportFlaggedResponseCookies(false);
     url_request_->SetAuth(credentials.value());
   }
 }
@@ -2053,13 +2079,26 @@ void URLLoader::NotifyCompleted(int error_code) {
     upload_progress_tracker_ = nullptr;
   }
 
-  if (url_loader_network_observer_ &&
-      (url_request_->GetTotalReceivedBytes() > 0 ||
-       url_request_->GetTotalSentBytes() > 0)) {
-    url_loader_network_observer_->OnDataUseUpdate(
-        url_request_->traffic_annotation().unique_id_hash_code,
-        url_request_->GetTotalReceivedBytes(),
-        url_request_->GetTotalSentBytes());
+  auto total_received = url_request_->GetTotalReceivedBytes();
+  auto total_sent = url_request_->GetTotalSentBytes();
+  if (base::FeatureList::IsEnabled(features::kLessChattyNetworkService)) {
+    if (total_received > 0) {
+      base::UmaHistogramCustomCounts("DataUse.BytesReceived3.Delegate",
+                                     total_received, 50, 10 * 1000 * 1000, 50);
+    }
+
+    if (total_sent > 0) {
+      UMA_HISTOGRAM_COUNTS_1M("DataUse.BytesSent3.Delegate", total_sent);
+    }
+  }
+  if ((total_received > 0 || total_sent > 0)) {
+    if (url_loader_network_observer_ &&
+        (!base::FeatureList::IsEnabled(features::kLessChattyNetworkService) ||
+         provide_data_use_updates_)) {
+      url_loader_network_observer_->OnDataUseUpdate(
+          url_request_->traffic_annotation().unique_id_hash_code,
+          total_received, total_sent);
+    }
   }
 
   if (url_loader_client_.Get()) {
@@ -2216,10 +2255,13 @@ void URLLoader::SetRawRequestHeadersAndNotify(
     }
 
     if (!reported_cookies.empty()) {
-      cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
+      cookie_access_details_.emplace_back(mojom::CookieAccessDetails::New(
           mojom::CookieAccessDetails::Type::kRead, url_request_->url(),
           url_request_->site_for_cookies(), std::move(reported_cookies),
           devtools_request_id()));
+      if (!base::FeatureList::IsEnabled(features::kLessChattyNetworkService)) {
+        cookie_observer_->OnCookiesAccessed(std::move(cookie_access_details_));
+      }
     }
   }
 }
@@ -2250,13 +2292,24 @@ void URLLoader::DispatchOnRawRequest(
   devtools_observer_->OnRawRequest(
       devtools_request_id().value(), url_request_->maybe_sent_cookies(),
       std::move(headers), load_timing_info.request_start,
-      private_network_access_checker_.CloneClientSecurityState(),
+      local_network_access_checker_.CloneClientSecurityState(),
       std::move(other_partition_info));
 }
 
 bool URLLoader::DispatchOnRawResponse() {
   if (!devtools_observer_ || !devtools_request_id() ||
       !url_request_->response_headers()) {
+    return false;
+  }
+
+  if (url_request_->was_cached() && !seen_raw_request_headers_) {
+    // If a response in a redirect chain has been cached,
+    // we need to clear the emitted_devtools_raw_request_ and
+    // emitted_devtools_raw_response_ flags to prevent misreporting
+    // that extra info was available on the response. We also suppress
+    // reporting the extra info events here.
+    emitted_devtools_raw_request_ = false;
+    emitted_devtools_raw_response_ = false;
     return false;
   }
 
@@ -2308,7 +2361,7 @@ bool URLLoader::DispatchOnRawResponse() {
   devtools_observer_->OnRawResponse(
       devtools_request_id().value(), url_request_->maybe_stored_cookies(),
       std::move(header_array), raw_response_headers,
-      private_network_access_checker_.ResponseAddressSpace().value_or(
+      local_network_access_checker_.ResponseAddressSpace().value_or(
           mojom::IPAddressSpace::kUnknown),
       response_headers->response_code(), url_request_->cookie_partition_key());
 
@@ -2524,33 +2577,39 @@ bool URLLoader::MaybeBlockResponseForCorb(
   return will_cancel;
 }
 
-void URLLoader::ReportFlaggedResponseCookies() {
-  if (cookie_observer_) {
-    std::vector<mojom::CookieOrLineWithAccessResultPtr> reported_cookies;
-    for (const auto& cookie_line_and_access_result :
-         url_request_->maybe_stored_cookies()) {
-      if (ShouldNotifyAboutCookie(
-              cookie_line_and_access_result.access_result.status)) {
-        mojom::CookieOrLinePtr cookie_or_line;
-        if (cookie_line_and_access_result.cookie.has_value()) {
-          cookie_or_line = mojom::CookieOrLine::NewCookie(
-              cookie_line_and_access_result.cookie.value());
-        } else {
-          cookie_or_line = mojom::CookieOrLine::NewCookieString(
-              cookie_line_and_access_result.cookie_string);
-        }
+void URLLoader::ReportFlaggedResponseCookies(bool call_cookie_observer) {
+  if (!cookie_observer_) {
+    return;
+  }
 
-        reported_cookies.push_back(mojom::CookieOrLineWithAccessResult::New(
-            std::move(cookie_or_line),
-            cookie_line_and_access_result.access_result));
+  std::vector<mojom::CookieOrLineWithAccessResultPtr> reported_cookies;
+  for (const auto& cookie_line_and_access_result :
+       url_request_->maybe_stored_cookies()) {
+    if (ShouldNotifyAboutCookie(
+            cookie_line_and_access_result.access_result.status)) {
+      mojom::CookieOrLinePtr cookie_or_line;
+      if (cookie_line_and_access_result.cookie.has_value()) {
+        cookie_or_line = mojom::CookieOrLine::NewCookie(
+            cookie_line_and_access_result.cookie.value());
+      } else {
+        cookie_or_line = mojom::CookieOrLine::NewCookieString(
+            cookie_line_and_access_result.cookie_string);
       }
-    }
 
-    if (!reported_cookies.empty()) {
-      cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
-          mojom::CookieAccessDetails::Type::kChange, url_request_->url(),
-          url_request_->site_for_cookies(), std::move(reported_cookies),
-          devtools_request_id()));
+      reported_cookies.push_back(mojom::CookieOrLineWithAccessResult::New(
+          std::move(cookie_or_line),
+          cookie_line_and_access_result.access_result));
+    }
+  }
+
+  if (!reported_cookies.empty()) {
+    cookie_access_details_.emplace_back(mojom::CookieAccessDetails::New(
+        mojom::CookieAccessDetails::Type::kChange, url_request_->url(),
+        url_request_->site_for_cookies(), std::move(reported_cookies),
+        devtools_request_id()));
+    if (!base::FeatureList::IsEnabled(features::kLessChattyNetworkService) ||
+        call_cookie_observer) {
+      cookie_observer_->OnCookiesAccessed(std::move(cookie_access_details_));
     }
   }
 }

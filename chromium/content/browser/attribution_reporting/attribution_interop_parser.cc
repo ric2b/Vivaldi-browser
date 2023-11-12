@@ -140,17 +140,6 @@ class AttributionInteropParser {
              config.max_destinations_per_source_site_reporting_origin,
              required);
 
-    uint64_t source_event_id_cardinality;
-    if (ParseUint64(dict, "source_event_id_cardinality",
-                    source_event_id_cardinality, required,
-                    /*allow_zero=*/true)) {
-      if (source_event_id_cardinality == 0u) {
-        config.source_event_id_cardinality = absl::nullopt;
-      } else {
-        config.source_event_id_cardinality = source_event_id_cardinality;
-      }
-    }
-
     int rate_limit_time_window;
     if (ParseInt(dict, "rate_limit_time_window", rate_limit_time_window,
                  required)) {
@@ -180,15 +169,9 @@ class AttributionInteropParser {
     ParseUint64(dict, "event_source_trigger_data_cardinality",
                 config.event_level_limit.event_source_trigger_data_cardinality,
                 required);
-    ParseRandomizedResponseRate(
-        dict, "navigation_source_randomized_response_rate",
-        config.event_level_limit.navigation_source_randomized_response_rate,
-        required);
-    ParseRandomizedResponseRate(
-        dict, "event_source_randomized_response_rate",
-        config.event_level_limit.event_source_randomized_response_rate,
-        required);
-
+    ParseRandomizedResponseEpsilon(
+        dict, "randomized_response_epsilon",
+        config.event_level_limit.randomized_response_epsilon, required);
     ParseInt(dict, "max_aggregatable_reports_per_destination",
              config.aggregate_limit.max_reports_per_destination, required);
     ParseInt64(dict, "aggregatable_budget_per_source",
@@ -567,25 +550,30 @@ class AttributionInteropParser {
                         allow_zero);
   }
 
-  void ParseRandomizedResponseRate(const base::Value::Dict& dict,
-                                   base::StringPiece key,
-                                   double& result,
-                                   bool required) {
+  void ParseRandomizedResponseEpsilon(const base::Value::Dict& dict,
+                                      base::StringPiece key,
+                                      double& result,
+                                      bool required) {
     auto context = PushContext(key);
-
     const base::Value* value = dict.Find(key);
 
     if (value) {
-      absl::optional<double> d = value->GetIfDouble();
-      if (d && *d >= 0 && *d <= 1) {
-        result = *d;
-        return;
+      const std::string* s = value->GetIfString();
+      if (s) {
+        if (*s == "inf") {
+          result = std::numeric_limits<double>::infinity();
+          return;
+        }
+        if (base::StringToDouble(*s, &result) && result >= 0) {
+          return;
+        }
       }
     } else if (!required) {
       return;
     }
 
-    *Error() << "must be a double between 0 and 1 formatted as string";
+    *Error() << "must be \"inf\" or a non-negative double formated as a "
+                "base-10 string";
   }
 };
 

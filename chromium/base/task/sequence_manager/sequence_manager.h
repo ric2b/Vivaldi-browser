@@ -28,6 +28,9 @@ class MessagePump;
 class TaskObserver;
 
 namespace sequence_manager {
+namespace internal {
+class TestTaskQueue;
+}  // namespace internal
 
 class TimeDomain;
 
@@ -169,8 +172,11 @@ class BASE_EXPORT SequenceManager {
     raw_ptr<const TickClock, DanglingUntriaged> clock =
         DefaultTickClock::GetInstance();
 
-    // If true, add the timestamp the task got queued to the task.
+    // Whether or not queueing timestamp will be added to tasks.
     bool add_queue_time_to_tasks = false;
+
+    // Whether many tasks may run between each check for native work.
+    bool can_run_tasks_by_batches = false;
 
     PrioritySettings priority_settings = PrioritySettings::CreateDefault();
 
@@ -280,17 +286,6 @@ class BASE_EXPORT SequenceManager {
 
   virtual TaskQueue::QueuePriority GetPriorityCount() const = 0;
 
-  // Creates a task queue with the given type, `spec` and args.
-  // Must be called on the main thread.
-  // TODO(scheduler-dev): SequenceManager should not create TaskQueues.
-  template <typename TaskQueueType, typename... Args>
-  scoped_refptr<TaskQueueType> CreateTaskQueueWithType(
-      const TaskQueue::Spec& spec,
-      Args&&... args) {
-    return WrapRefCounted(new TaskQueueType(CreateTaskQueueImpl(spec), spec,
-                                            std::forward<Args>(args)...));
-  }
-
   // Creates a vanilla TaskQueue rather than a user type derived from it. This
   // should be used if you don't wish to sub class TaskQueue.
   // Must be called on the main thread.
@@ -316,12 +311,6 @@ class BASE_EXPORT SequenceManager {
   // message pump).
   virtual void PrioritizeYieldingToNative(base::TimeTicks prioritize_until) = 0;
 
-  // Enable periodically yielding to the system message loop every |interval|.
-  // If |interval.is_inf()|, then SequenceManager won't yield to the system
-  // message pump unless it is out of immediate work.
-  // Currently only takes effect on Android.
-  virtual void EnablePeriodicYieldingToNative(base::TimeDelta interval) = 0;
-
   // Adds an observer which reports task execution. Can only be called on the
   // same thread that `this` is running on.
   virtual void AddTaskObserver(TaskObserver* task_observer) = 0;
@@ -331,6 +320,8 @@ class BASE_EXPORT SequenceManager {
   virtual void RemoveTaskObserver(TaskObserver* task_observer) = 0;
 
  protected:
+  friend class internal::TestTaskQueue;  // For CreateTaskQueueImpl().
+
   virtual std::unique_ptr<internal::TaskQueueImpl> CreateTaskQueueImpl(
       const TaskQueue::Spec& spec) = 0;
 };
@@ -350,6 +341,9 @@ class BASE_EXPORT SequenceManager::Settings::Builder {
 
   // Whether or not queueing timestamp will be added to tasks.
   Builder& SetAddQueueTimeToTasks(bool add_queue_time_to_tasks);
+
+  // Whether many tasks may run between each check for native work.
+  Builder& SetCanRunTasksByBatches(bool can_run_tasks_by_batches);
 
   Builder& SetPrioritySettings(PrioritySettings settings);
 

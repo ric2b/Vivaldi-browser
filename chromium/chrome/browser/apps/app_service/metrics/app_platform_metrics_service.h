@@ -7,6 +7,9 @@
 
 #include <utility>
 
+#include "base/memory/raw_ptr.h"
+#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/apps/app_service/metrics/app_discovery_metrics.h"
 #include "chrome/browser/apps/app_service/metrics/app_platform_input_metrics.h"
@@ -27,6 +30,27 @@ extern const char kAppPlatformMetricsDayId[];
 // Chrome OS.
 class AppPlatformMetricsService {
  public:
+  // Observer that can be used to monitor certain app platform metrics component
+  // lifecycle.
+  class Observer : public base::CheckedObserver {
+   public:
+    Observer() = default;
+    Observer(const Observer&) = delete;
+    Observer& operator=(const Observer&) = delete;
+    ~Observer() override = default;
+
+    // Triggered once the `AppPlatformMetrics` component is initialized.
+    // This enables external components to delay interactions with the
+    // component until it is ready.
+    virtual void OnAppPlatformMetricsInit(
+        AppPlatformMetrics* app_platform_metrics) {}
+
+    // Triggered when the `AppPlatformMetricsService` will be destroyed. This
+    // can be used by observer to unregister itself as an observer as well as
+    // prevent use-after-free errors.
+    virtual void OnAppPlatformMetricsServiceWillBeDestroyed() = 0;
+  };
+
   explicit AppPlatformMetricsService(Profile* profile);
   AppPlatformMetricsService(const AppPlatformMetricsService&) = delete;
   AppPlatformMetricsService& operator=(const AppPlatformMetricsService&) =
@@ -46,6 +70,12 @@ class AppPlatformMetricsService {
     return app_platform_app_metrics_.get();
   }
 
+  // Add observer to the observer list.
+  void AddObserver(Observer* observer);
+
+  // Remove observer from the observer list.
+  void RemoveObserver(Observer* observer);
+
   void SetWebsiteMetricsForTesting(
       std::unique_ptr<apps::WebsiteMetrics> website_metrics);
 
@@ -63,7 +93,7 @@ class AppPlatformMetricsService {
   // arrived to report noisy AppKMs events.
   void CheckForNoisyAppKMReportingInterval();
 
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
 
   int day_id_;
 
@@ -81,6 +111,10 @@ class AppPlatformMetricsService {
   std::unique_ptr<apps::AppPlatformInputMetrics> app_platform_input_metrics_;
   std::unique_ptr<apps::WebsiteMetrics> website_metrics_;
   std::unique_ptr<apps::AppDiscoveryMetrics> app_discovery_metrics_;
+
+  // List of observers that will be notified of certain app platform metrics
+  // component lifecycle changes.
+  base::ObserverList<Observer> observers_;
 };
 
 }  // namespace apps

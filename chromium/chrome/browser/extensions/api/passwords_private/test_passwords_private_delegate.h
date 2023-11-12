@@ -62,6 +62,10 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   void ImportPasswords(api::passwords_private::PasswordStoreSet to_store,
                        ImportResultsCallback results_callback,
                        content::WebContents* web_contents) override;
+  void ContinueImport(const std::vector<int>& selected_ids,
+                      ImportResultsCallback results_callback,
+                      content::WebContents* web_contents) override;
+  void ResetImporter(bool delete_file) override;
   void ExportPasswords(base::OnceCallback<void(const std::string&)> callback,
                        content::WebContents* web_contents) override;
   void CancelExportPasswords() override;
@@ -106,6 +110,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   void ClearSavedPasswordsList() { current_entries_.clear(); }
   void ResetPlaintextPassword() { plaintext_password_.reset(); }
   bool ImportPasswordsTriggered() const { return import_passwords_triggered_; }
+  bool ContinueImportTriggered() const { return continue_import_triggered_; }
+  bool ResetImporterTriggered() const { return reset_importer_triggered_; }
   bool ExportPasswordsTriggered() const { return export_passwords_triggered_; }
   bool CancelExportPasswordsTriggered() const {
     return cancel_export_passwords_triggered_;
@@ -166,13 +172,15 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
 
   // List of insecure credentials.
   std::vector<api::passwords_private::PasswordUiEntry> insecure_credentials_;
-  raw_ptr<Profile> profile_ = nullptr;
+  raw_ptr<Profile, DanglingUntriaged> profile_ = nullptr;
 
   bool is_opted_in_for_account_storage_ = false;
   bool is_account_store_default_ = false;
 
   // Flags for detecting whether import/export operations have been invoked.
   bool import_passwords_triggered_ = false;
+  bool continue_import_triggered_ = false;
+  bool reset_importer_triggered_ = false;
   bool export_passwords_triggered_ = false;
   bool cancel_export_passwords_triggered_ = false;
 

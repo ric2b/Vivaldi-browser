@@ -11,13 +11,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/extensions/extension_enable_flow_delegate.h"
-#include "chrome/browser/ui/webui/app_home/app_home.mojom-shared.h"
 #include "chrome/browser/ui/webui/app_home/app_home.mojom.h"
 #include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_manager_observer.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/constants.h"
@@ -110,8 +110,14 @@ class AppHomePageHandler
       const std::string& app_id,
       web_app::mojom::UserDisplayMode display_mode) override;
 
+  app_home::mojom::AppInfoPtr GetApp(const web_app::AppId& app_id);
+
  private:
   Browser* GetCurrentBrowser();
+
+  // Used to load the deprecated apps dialog if a chrome app is launched from
+  // the command line.
+  void LoadDeprecatedAppsDialogIfRequired();
 
   // Returns the ExtensionUninstallDialog object for this class, creating it if
   // needed.
@@ -185,6 +191,11 @@ class AppHomePageHandler
   std::unique_ptr<ExtensionEnableFlow> extension_enable_flow_;
   // Set of deprecated app ids for showing on dialog.
   std::set<extensions::ExtensionId> deprecated_app_ids_;
+
+  // Do not spam showing the dialog on every app install or any changes on the
+  // page. Only show the dialog once the page loads when this class gets
+  // constructed.
+  bool has_maybe_loaded_deprecated_apps_dialog_ = false;
 
   // Used for passing callbacks.
   base::WeakPtrFactory<AppHomePageHandler> weak_ptr_factory_{this};

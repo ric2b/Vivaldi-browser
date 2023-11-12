@@ -6,16 +6,15 @@
 
 #import "base/ios/ns_range.h"
 #import "components/content_settings/core/common/features.h"
-#import "components/google/core/common/google_util.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/ntp/incognito/incognito_view_util.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_url_loader_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -42,16 +41,6 @@ const CGFloat kLayoutGuideMinHeight = 12.0;
 
 // The size of the incognito symbol image.
 NSInteger kIncognitoSymbolImagePointSize = 72;
-
-// The URL for the the Learn More page shown on incognito new tab.
-// Taken from ntp_resource_cache.cc.
-const char kLearnMoreIncognitoUrl[] =
-    "https://support.google.com/chrome/?p=incognito";
-
-GURL GetUrlWithLang(const GURL& url) {
-  std::string locale = GetApplicationContext()->GetApplicationLocale();
-  return google_util::AppendGoogleLocaleParam(url, locale);
-}
 
 // Returns a font, scaled to the current dynamic type settings, that is suitable
 // for the title of the incognito page.
@@ -94,7 +83,7 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
   // Use a regular expression to find and remove all leading whitespace from the
   // lines which contain the "<li>" tag.  This un-indents the bulleted lines.
   listString = [listString
-      stringByReplacingOccurrencesOfString:@"\n +<li>"
+      stringByReplacingOccurrencesOfString:@"\n *<li>"
                                 withString:@"\n\u2022  "
                                    options:NSRegularExpressionSearch
                                      range:NSMakeRange(0, [listString length])];
@@ -187,24 +176,18 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
     if (showTopIncognitoImageAndTitle) {
       // Incognito image.
       UIImage* incognitoImage;
-      if (UseSymbols()) {
-        UIImageSymbolConfiguration* configuration = [UIImageSymbolConfiguration
-            configurationWithPointSize:kIncognitoSymbolImagePointSize
-                                weight:UIImageSymbolWeightLight
-                                 scale:UIImageSymbolScaleMedium];
-        if (@available(iOS 15, *)) {
-          incognitoImage =
-              SymbolWithPalette(CustomSymbolWithConfiguration(
-                                    kIncognitoCircleFillSymbol, configuration),
-                                LargeIncognitoPalette());
-        } else {
-          incognitoImage = [CustomSymbolWithConfiguration(
-              kIncognitoCircleFilliOS14Symbol, configuration)
-              imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-        }
+      UIImageSymbolConfiguration* configuration = [UIImageSymbolConfiguration
+          configurationWithPointSize:kIncognitoSymbolImagePointSize
+                              weight:UIImageSymbolWeightLight
+                               scale:UIImageSymbolScaleMedium];
+      if (@available(iOS 15, *)) {
+        incognitoImage =
+            SymbolWithPalette(CustomSymbolWithConfiguration(
+                                  kIncognitoCircleFillSymbol, configuration),
+                              LargeIncognitoPalette());
       } else {
-        incognitoImage = [[UIImage imageNamed:@"incognito_icon"]
-            imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        incognitoImage = CustomSymbolWithConfiguration(
+            kIncognitoCircleFilliOS14Symbol, configuration);
       }
 
       UIImageView* incognitoImageView =
@@ -388,8 +371,7 @@ NSAttributedString* FormatHTMLListForUILabel(NSString* listString) {
 
 // Triggers a navigation to the help page.
 - (void)learnMoreButtonPressed {
-  [self.URLLoaderDelegate
-      loadURLInTab:GetUrlWithLang(GURL(kLearnMoreIncognitoUrl))];
+  [self.URLLoaderDelegate loadURLInTab:GetLearnMoreIncognitoUrl()];
 }
 
 // Adds views containing the text of the incognito page to `_stackView`.

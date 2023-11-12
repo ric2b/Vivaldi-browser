@@ -1197,6 +1197,11 @@ TEST_F(PrivacySandboxServiceTest, PromptActionsUMAActions) {
                    "Settings.PrivacySandbox.Notice.OpenedSettings"));
 
   privacy_sandbox_service()->PromptActionOccurred(
+      PrivacySandboxService::PromptAction::kRestrictedNoticeOpenSettings);
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "Settings.PrivacySandbox.RestrictedNotice.OpenedSettings"));
+
+  privacy_sandbox_service()->PromptActionOccurred(
       PrivacySandboxService::PromptAction::kNoticeAcknowledge);
   EXPECT_EQ(1, user_action_tester.GetActionCount(
                    "Settings.PrivacySandbox.Notice.Acknowledged"));
@@ -2375,6 +2380,9 @@ TEST_F(PrivacySandboxServiceTest, SampleFpsData) {
   EXPECT_EQ(u"google.com",
             privacy_sandbox_service()->GetFirstPartySetOwnerForDisplay(
                 GURL("https://youtube.com")));
+  EXPECT_EQ(u"münchen.de",
+            privacy_sandbox_service()->GetFirstPartySetOwnerForDisplay(
+                GURL("https://muenchen.de")));
   EXPECT_EQ(absl::nullopt,
             privacy_sandbox_service()->GetFirstPartySetOwnerForDisplay(
                 GURL("https://example.com")));
@@ -3633,6 +3641,42 @@ TEST_F(PrivacySandboxServiceM1DelayCreation,
                        prefs::kPrivacySandboxTopicsConsentTextAtLastUpdate));
 }
 
+TEST_F(PrivacySandboxServiceM1DelayCreation,
+       PromptSuppressReasonClearedWhenRestrictedNoticeEnabled) {
+  feature_list()->InitAndEnableFeatureWithParameters(
+      privacy_sandbox::kPrivacySandboxSettings4,
+      {{"restricted-notice", "true"}});
+
+  prefs()->SetInteger(
+      prefs::kPrivacySandboxM1PromptSuppressed,
+      static_cast<int>(
+          PrivacySandboxService::PromptSuppressedReason::kRestricted));
+
+  CreateService();
+
+  EXPECT_EQ(
+      static_cast<int>(PrivacySandboxService::PromptSuppressedReason::kNone),
+      prefs()->GetValue(prefs::kPrivacySandboxM1PromptSuppressed));
+}
+
+TEST_F(PrivacySandboxServiceM1DelayCreation,
+       PromptSuppressReasonNotClearedWhenRestrictedNoticeDisabled) {
+  feature_list()->InitAndEnableFeatureWithParameters(
+      privacy_sandbox::kPrivacySandboxSettings4,
+      {{"restricted-notice", "false"}});
+
+  prefs()->SetInteger(
+      prefs::kPrivacySandboxM1PromptSuppressed,
+      static_cast<int>(
+          PrivacySandboxService::PromptSuppressedReason::kRestricted));
+
+  CreateService();
+
+  EXPECT_EQ(static_cast<int>(
+                PrivacySandboxService::PromptSuppressedReason::kRestricted),
+            prefs()->GetValue(prefs::kPrivacySandboxM1PromptSuppressed));
+}
+
 class PrivacySandboxServiceM1DelayCreationRestricted
     : public PrivacySandboxServiceM1DelayCreation {
  public:
@@ -3677,6 +3721,24 @@ TEST_F(PrivacySandboxServiceM1DelayCreationRestricted,
                     prefs::kPrivacySandboxTopicsConsentLastUpdateReason)));
   EXPECT_EQ("", prefs()->GetString(
                     prefs::kPrivacySandboxTopicsConsentTextAtLastUpdate));
+}
+
+TEST_F(PrivacySandboxServiceM1DelayCreationRestricted,
+       RestrictedEnabledDoesntClearAdMeasurementPref) {
+  feature_list()->InitAndEnableFeatureWithParameters(
+      privacy_sandbox::kPrivacySandboxSettings4,
+      {{"restricted-notice", "true"}});
+
+  prefs()->SetBoolean(prefs::kPrivacySandboxM1TopicsEnabled, true);
+  prefs()->SetBoolean(prefs::kPrivacySandboxM1FledgeEnabled, true);
+  prefs()->SetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled, true);
+
+  CreateService();
+
+  EXPECT_FALSE(prefs()->GetBoolean(prefs::kPrivacySandboxM1TopicsEnabled));
+  EXPECT_FALSE(prefs()->GetBoolean(prefs::kPrivacySandboxM1FledgeEnabled));
+  EXPECT_TRUE(
+      prefs()->GetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled));
 }
 
 class PrivacySandboxServiceM1PromptTest : public PrivacySandboxServiceM1Test {
@@ -3894,6 +3956,23 @@ TEST_F(PrivacySandboxServiceM1ConsentPromptTest,
                   static_cast<int>(PromptSuppressedReason::kNone)}});
 }
 
+TEST_F(PrivacySandboxServiceM1ConsentPromptTest, ROWNoticeAckTopicsDisabled) {
+  // If the user saw the ROW notice, and then disable Topics from settings, and
+  // is now in EEA, they should not see a prompt.
+  RunTestCase(
+      TestState{{StateKey::kM1PromptSuppressedReason,
+                 static_cast<int>(PromptSuppressedReason::kNone)},
+                {StateKey::kM1RowNoticeAcknowledged, true},
+                {StateKey::kM1TopicsEnabledUserPrefValue, false}},
+      TestInput{{InputKey::kForceChromeBuild, true}},
+      TestOutput{
+          {OutputKey::kPromptType, static_cast<int>(PromptType::kNone)},
+          {OutputKey::kM1PromptSuppressedReason,
+           static_cast<int>(
+               PromptSuppressedReason::
+                   kROWFlowCompletedAndTopicsDisabledBeforeEEAMigration)}});
+}
+
 TEST_F(PrivacySandboxServiceM1ConsentPromptTest, PromptAction_ConsentAccepted) {
   // Confirm that when the service is informed that the consent prompt was
   // accepted, it correctly adjusts the Privacy Sandbox prefs.
@@ -3954,6 +4033,21 @@ TEST_F(PrivacySandboxServiceM1ConsentPromptTest,
                  {OutputKey::kTopicsConsentGiven, false},
                  {OutputKey::kTopicsConsentLastUpdateReason,
                   privacy_sandbox::TopicsConsentUpdateSource::kDefaultValue}});
+}
+
+TEST_F(PrivacySandboxServiceM1ConsentPromptTest,
+       PromptAction_EEANoticeAcknowledged_ROWNoticeAcknowledged) {
+  // Confirm that if the user has already acknowledged an ROW notice, that the
+  // EEA notice does not attempt to re-enable APIs. This is important for the
+  // ROW -> EEA upgrade flow, where the user may have already visited settings.
+  RunTestCase(TestState{{StateKey::kM1ConsentDecisionMade, true},
+                        {StateKey::kM1EEANoticeAcknowledged, false},
+                        {StateKey::kM1RowNoticeAcknowledged, true}},
+              TestInput{{InputKey::kPromptAction,
+                         static_cast<int>(PromptAction::kNoticeAcknowledge)}},
+              TestOutput{{OutputKey::kM1EEANoticeAcknowledged, true},
+                         {OutputKey::kM1FledgeEnabled, false},
+                         {OutputKey::kM1AdMeasurementEnabled, false}});
 }
 
 class PrivacySandboxServiceM1NoticePromptTest

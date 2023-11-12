@@ -4,24 +4,7 @@
 
 module blink.mojom;
 
-// Maps to the namesake enum in
-// https://github.com/WICG/web-smart-card/blob/main/README.md#web-idl
-enum SmartCardResponseCode {
-  kNoService,
-  kNoSmartCard,
-  kNotReady,
-  kNotTransacted,
-  kProtoMismatch,
-  kReaderUnavailable,
-  kRemovedCard,
-  kResetCard,
-  kSharingViolation,
-  kSystemCancelled,
-  kUnpoweredCard,
-  kUnresponsiveCard,
-  kUnsupportedCard,
-  kUnsupportedFeature
-};
+import "services/device/public/mojom/smart_card.mojom";
 
 // Information about a smart card reader.
 // Usually corresponds to a physical USB smart card reader device or some
@@ -40,7 +23,7 @@ struct SmartCardReaderInfo {
 };
 
 union SmartCardGetReadersResult {
-  SmartCardResponseCode response_code;
+  device.mojom.SmartCardError error;
   array<SmartCardReaderInfo> readers;
 };
 
@@ -67,6 +50,11 @@ interface SmartCardServiceClient {
   // Notifies that the smart card reader info has changed.
   // The name is the only attribute that never changes.
   ReaderChanged(SmartCardReaderInfo reader_info);
+
+  // Notifies that a runtime error prevents monitoring of smart card reader
+  // changes/additions/removals from continuing. Can be retried by calling:
+  // SmartCardService::GetReadersAndStartTracking again.
+  Error(device.mojom.SmartCardError error);
 };
 
 // Interface for accessing smart card readers from the render process.
@@ -79,11 +67,21 @@ interface SmartCardService {
   RegisterClient(pending_associated_remote<SmartCardServiceClient> client)
       => (bool can_notify_added_removed);
 
-  // Enumerates all smart card readers in the system.
+  // Enumerates all smart card readers in the system and requests the service to
+  // start monitoring for additions, removals or changes.
+  //
   // If the client is denied access to smart cards, the call succeeds but the
   // `result.readers` array will be empty.
-  // If the call fails a `result.response_code` will be returned instead.
-  GetReaders() => (SmartCardGetReadersResult result);
+  //
+  // If it fails to enumerate all smart card readers, a `result.response_code`
+  // will be returned instead.
+  //
+  // Failing to subsequently start tracking changes will be reported via
+  // SmartCardServiceClient::Error.
+  GetReadersAndStartTracking() => (SmartCardGetReadersResult result);
 
-  // TODO(crbug.com/1386175): Expose SmartCardConnection
+  // Establishes a connection to the specified reader.
+  Connect(string reader, device.mojom.SmartCardShareMode share_mode,
+          device.mojom.SmartCardProtocols preferred_protocols) =>
+    (device.mojom.SmartCardConnectResult result);
 };

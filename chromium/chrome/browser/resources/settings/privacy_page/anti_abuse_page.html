@@ -10,8 +10,10 @@
   }
 
   .info-header {
-    color: var(--google-blue-500);
+    color: var(--google-blue-600);
     font-weight: 500;
+    padding-block-end: 0;
+    padding-block-start: 0;
     padding-inline-start: 10px;
   }
 
@@ -28,28 +30,37 @@
   }
 </style>
 <settings-toggle-button
+    id="toggleButton"
     pref="{{pref_}}"
     no-set-pref
     label="$i18n{siteSettingsAntiAbuse}"
     sub-label="$i18n{siteSettingsAntiAbuseDescription}"
+    disabled="[[toggleDisabled_]]"
     on-settings-boolean-control-change="onToggleChange_">
 </settings-toggle-button>
 <div class="info-container">
   <div class="info-section">
-    <div class="info-header">$i18n{antiAbuseWhenOnHeader}</div>
+    <h2 class="info-header">$i18n{antiAbuseWhenOnHeader}</h2>
     <div class="info-text-container">
-      <iron-icon icon="settings20:dashboard"></iron-icon>
+      <iron-icon icon="settings20:archive" aria-hidden="true"></iron-icon>
       <div>$i18n{antiAbuseWhenOnSectionOne}</div>
     </div>
     <div class="info-text-container">
-      <iron-icon icon="settings20:background-replace"></iron-icon>
+      <iron-icon icon="settings20:dashboard" aria-hidden="true">
+      </iron-icon>
       <div>$i18n{antiAbuseWhenOnSectionTwo}</div>
+    </div>
+    <div class="info-text-container">
+      <iron-icon icon="settings20:timer" aria-hidden="true">
+      </iron-icon>
+      <div>$i18n{antiAbuseWhenOnSectionThree}</div>
     </div>
   </div>
   <div class="info-section">
-    <div class="info-header">$i18n{antiAbuseThingsToConsiderHeader}</div>
+    <h2 class="info-header">$i18n{antiAbuseThingsToConsiderHeader}</h2>
     <div class="info-text-container">
-      <iron-icon icon="settings20:account-attention"></iron-icon>
+      <iron-icon icon="settings20:background-replace" aria-hidden="true">
+      </iron-icon>
       <div>$i18n{antiAbuseThingsToConsiderSectionOne}</div>
     </div>
   </div>

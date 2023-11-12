@@ -29,10 +29,6 @@
 (define filter-syscalls "FILTER_SYSCALLS")
 (define filter-syscalls-debug "FILTER_SYSCALLS_DEBUG")
 
-; Backwards compatibility for 10.11.
-(if (not (defined? 'iokit-registry-entry-class))
-  (define iokit-registry-entry-class iokit-user-client-class))
-
 ; --enable-sandbox-logging causes the sandbox to log failures to the syslog.
 (if (param-true? disable-sandbox-denial-logging)
   (deny default (with no-log))
@@ -207,13 +203,15 @@
 ; Reads from /usr.
 (allow file-read-data
   (subpath "/usr/share/icu")
+  (subpath "/usr/share/locale")
 )
 
 ; Access to the home directory.
 (allow file-read-data
   (path (string-append (user-homedir-path "/Library/Preferences/") (param bundle-id) ".plist"))
   (path (user-homedir-path "/Library/Preferences/.GlobalPreferences.plist"))
-  (regex (user-homedir-path #"/Library/Preferences/ByHost/.GlobalPreferences.*"))
+  (path (user-homedir-path "/Library/Preferences/.GlobalPreferences_m.plist"))
+  (prefix (user-homedir-path "/Library/Preferences/ByHost/.GlobalPreferences"))
   (path (user-homedir-path "/Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist"))
 )
 
@@ -235,6 +233,9 @@
   (sysctl-name "hw.logicalcpu_max")
   (sysctl-name "hw.machine")
   (sysctl-name "hw.ncpu")
+  (sysctl-name "hw.nperflevels")
+  (sysctl-name "hw.optional.arm.FEAT_SHA512")
+  (sysctl-name "hw.optional.armv8_2_sha512")
   (sysctl-name "hw.pagesize_compat")
   (sysctl-name "hw.physicalcpu_max")
   (sysctl-name "hw.tbfrequency_compat")
@@ -250,6 +251,7 @@
   (sysctl-name "kern.usrstack64")
   (sysctl-name "kern.version")
   (sysctl-name "sysctl.proc_cputype")
+  (sysctl-name-prefix "hw.perflevel")
 )
 
 (allow network-outbound

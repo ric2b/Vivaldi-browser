@@ -4,15 +4,16 @@
 
 #import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
 
+#import <algorithm>
+
 #import "base/check_op.h"
-#import "base/cxx17_backports.h"
 #import "base/ios/block_types.h"
 #import "base/logging.h"
 #import "base/mac/foundation_util.h"
 #import "base/notreached.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/gestures/layout_switcher.h"
 #import "ios/chrome/browser/ui/gestures/pan_handler_scroll_view.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -521,7 +522,7 @@ enum class ScrollViewTracking {
   }
 
   progress += self.progressWhenInterrupted;
-  progress = base::clamp<CGFloat>(progress, 0, 1);
+  progress = std::clamp<CGFloat>(progress, 0, 1);
   self.animator.fractionComplete = progress;
   if (self.layoutTransitionState == LayoutTransitionState::Active) {
     [self.layoutSwitcherProvider.layoutSwitcher

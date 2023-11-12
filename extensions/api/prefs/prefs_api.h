@@ -67,7 +67,7 @@ class VivaldiPrefsApiNotification : public KeyedService {
  private:
   void OnChanged(const std::string& path);
 
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
   PrefChangeRegistrar prefs_registrar_;
   PrefChangeRegistrar local_prefs_registrar_;
   ::vivaldi::PrefPropertiesMap pref_properties_map_;

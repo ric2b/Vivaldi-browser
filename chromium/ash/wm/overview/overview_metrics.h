@@ -16,12 +16,13 @@ enum class OverviewStartAction {
   kExitHomeLauncher,
   kOverviewButton,
   kOverviewButtonLongPress,
-  kBentoBar,
+  kBentoBar_DEPRECATED,
   k3FingerVerticalScroll,
   kDevTools,
   kTests,
   kOverviewDeskSwitch,
-  kMaxValue = kOverviewDeskSwitch,
+  kDeskButton,
+  kMaxValue = kDeskButton,
 };
 void RecordOverviewStartAction(OverviewStartAction type);
 
@@ -49,8 +50,8 @@ enum class OverviewEndAction {
   kShelfAlignmentChanged,
   kDevTools,
   kTests,
-  kShowGlanceables,
-  kMaxValue = kShowGlanceables,
+  kShowGlanceables_DEPRECATED,
+  kMaxValue = kShowGlanceables_DEPRECATED,
 };
 void RecordOverviewEndAction(OverviewEndAction type);
 

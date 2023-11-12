@@ -4,9 +4,8 @@
 
 import 'chrome://password-manager/password_manager.js';
 
-import {CheckupSubpage, CrExpandButtonElement, OpenWindowProxyImpl, Page, PasswordCheckInteraction, PasswordManagerImpl, PrefsBrowserProxyImpl, Router} from 'chrome://password-manager/password_manager.js';
+import {CheckupSubpage, CrExpandButtonElement, OpenWindowProxyImpl, Page, PasswordCheckInteraction, PasswordManagerImpl, PluralStringProxyImpl, Router} from 'chrome://password-manager/password_manager.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {TestOpenWindowProxy} from 'chrome://webui-test/test_open_window_proxy.js';
@@ -14,8 +13,7 @@ import {TestPluralStringProxy} from 'chrome://webui-test/test_plural_string_prox
 import {isVisible} from 'chrome://webui-test/test_util.js';
 
 import {TestPasswordManagerProxy} from './test_password_manager_proxy.js';
-import {TestPrefsBrowserProxy} from './test_prefs_browser_proxy.js';
-import {createCredentialGroup, makeInsecureCredential, makePasswordManagerPrefs} from './test_util.js';
+import {createAffiliatedDomain, createCredentialGroup, makeInsecureCredential, makePasswordManagerPrefs} from './test_util.js';
 
 suite('CheckupDetailsSectionTest', function() {
   const CompromiseType = chrome.passwordsPrivate.CompromiseType;
@@ -23,7 +21,6 @@ suite('CheckupDetailsSectionTest', function() {
   let openWindowProxy: TestOpenWindowProxy;
   let passwordManager: TestPasswordManagerProxy;
   let pluralString: TestPluralStringProxy;
-  let prefsProxy: TestPrefsBrowserProxy;
 
   setup(function() {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
@@ -33,9 +30,6 @@ suite('CheckupDetailsSectionTest', function() {
     PasswordManagerImpl.setInstance(passwordManager);
     pluralString = new TestPluralStringProxy();
     PluralStringProxyImpl.setInstance(pluralString);
-    prefsProxy = new TestPrefsBrowserProxy();
-    prefsProxy.prefs = makePasswordManagerPrefs();
-    PrefsBrowserProxyImpl.setInstance(prefsProxy);
     Router.getInstance().navigateTo(Page.CHECKUP);
     return flushTasks();
   });
@@ -396,6 +390,7 @@ suite('CheckupDetailsSectionTest', function() {
     ];
 
     const section = document.createElement('checkup-details-section');
+    section.prefs = makePasswordManagerPrefs();
     document.body.appendChild(section);
     await passwordManager.whenCalled('getInsecureCredentials');
     await flushTasks();
@@ -480,15 +475,9 @@ suite('CheckupDetailsSectionTest', function() {
       }),
     ];
 
-    prefsProxy.prefs = [
-      {
-        key: 'profile.password_dismiss_compromised_alert',
-        type: chrome.settingsPrivate.PrefType.BOOLEAN,
-        value: false,
-      },
-    ];
-
     const section = document.createElement('checkup-details-section');
+    section.prefs = makePasswordManagerPrefs();
+    section.prefs.profile.password_dismiss_compromised_alert.value = false;
     document.body.appendChild(section);
     await passwordManager.whenCalled('getInsecureCredentials');
     await flushTasks();
@@ -623,12 +612,12 @@ suite('CheckupDetailsSectionTest', function() {
       id: 0,
       url: 'test.com',
       username: 'viking',
+      password: 'pass',
       types: [
         CompromiseType.LEAKED,
       ],
     });
-    credential.affiliatedDomains =
-        [{name: 'test.com', url: 'https://test.com/'}];
+    credential.affiliatedDomains = [createAffiliatedDomain('test.com')];
     passwordManager.data.insecureCredentials = [credential];
 
     const section = document.createElement('checkup-details-section');
@@ -662,12 +651,12 @@ suite('CheckupDetailsSectionTest', function() {
       id: 0,
       url: 'test.com',
       username: 'viking',
+      password: 'pass',
       types: [
         CompromiseType.LEAKED,
       ],
     });
-    credential.affiliatedDomains =
-        [{name: 'test.com', url: 'https://test.com/'}];
+    credential.affiliatedDomains = [createAffiliatedDomain('test.com')];
     passwordManager.data.insecureCredentials = [credential];
 
     const section = document.createElement('checkup-details-section');
@@ -697,12 +686,12 @@ suite('CheckupDetailsSectionTest', function() {
       id: 0,
       url: 'test.com',
       username: 'viking',
+      password: 'pass',
       types: [
         CompromiseType.LEAKED,
       ],
     });
-    credential.affiliatedDomains =
-        [{name: 'test.com', url: 'https://test.com/'}];
+    credential.affiliatedDomains = [createAffiliatedDomain('test.com')];
     passwordManager.data.insecureCredentials = [credential];
 
     const section = document.createElement('checkup-details-section');
@@ -757,8 +746,7 @@ suite('CheckupDetailsSectionTest', function() {
         CompromiseType.LEAKED,
       ],
     });
-    credential.affiliatedDomains =
-        [{name: 'test.com', url: 'https://test.com/'}];
+    credential.affiliatedDomains = [createAffiliatedDomain('test.com')];
     passwordManager.data.insecureCredentials = [credential];
 
     const section = document.createElement('checkup-details-section');

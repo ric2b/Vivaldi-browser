@@ -647,19 +647,16 @@ ScopedPauseRendering::~ScopedPauseRendering() {
   LayerTreeHost* host = host_.get();
   if (host) {
     DCHECK_GT(host->pause_rendering_count_, 0u);
-    if (--host->pause_rendering_count_ == 0)
+    if (--host->pause_rendering_count_ == 0) {
+      host->SetNeedsCommit();
       host->proxy_->SetPauseRendering(false);
+    }
   }
 }
 
 std::unique_ptr<ScopedPauseRendering> LayerTreeHost::PauseRendering() {
   DCHECK(IsMainThread());
   return std::make_unique<ScopedPauseRendering>(this);
-}
-
-void LayerTreeHost::OnPauseRenderingChanged(bool paused) {
-  DCHECK(IsMainThread());
-  client_->OnPauseRenderingChanged(paused);
 }
 
 void LayerTreeHost::OnDeferMainFrameUpdatesChanged(bool defer_status) {
@@ -1011,7 +1008,7 @@ void LayerTreeHost::ApplyViewportChanges(
       commit_data.elastic_overscroll_delta.IsZero() &&
       !commit_data.top_controls_delta && !commit_data.bottom_controls_delta &&
       !commit_data.browser_controls_constraint_changed &&
-      !commit_data.scroll_gesture_did_end &&
+      !commit_data.scroll_end_data.scroll_gesture_did_end &&
       commit_data.is_pinch_gesture_active ==
           is_pinch_gesture_active_from_impl_) {
     return;
@@ -1038,7 +1035,7 @@ void LayerTreeHost::ApplyViewportChanges(
        commit_data.page_scale_delta, commit_data.is_pinch_gesture_active,
        commit_data.top_controls_delta, commit_data.bottom_controls_delta,
        commit_data.browser_controls_constraint,
-       commit_data.scroll_gesture_did_end});
+       commit_data.scroll_end_data.scroll_gesture_did_end});
   SetNeedsUpdateLayers();
 }
 
@@ -1063,11 +1060,10 @@ void LayerTreeHost::UpdateScrollOffsetFromImpl(
       // animations, but that is not needed for an impl-side scroll.
 
       // Update the offset in the transform node.
-      DCHECK(scroll_node->transform_id != kInvalidPropertyNodeId);
       TransformTree& transform_tree =
           property_trees()->transform_tree_mutable();
       auto* transform_node = transform_tree.Node(scroll_node->transform_id);
-      if (transform_node->scroll_offset != new_offset) {
+      if (transform_node && transform_node->scroll_offset != new_offset) {
         transform_node->scroll_offset = new_offset;
         transform_node->needs_local_transform_update = true;
         transform_node->transform_changed = true;
@@ -1206,14 +1202,15 @@ void LayerTreeHost::AnimateLayers(base::TimeTicks monotonic_time) {
 
 int LayerTreeHost::ScheduleMicroBenchmark(
     const std::string& benchmark_name,
-    base::Value settings,
+    base::Value::Dict settings,
     MicroBenchmark::DoneCallback callback) {
   DCHECK(IsMainThread());
   return micro_benchmark_controller_.ScheduleRun(
       benchmark_name, std::move(settings), std::move(callback));
 }
 
-bool LayerTreeHost::SendMessageToMicroBenchmark(int id, base::Value message) {
+bool LayerTreeHost::SendMessageToMicroBenchmark(int id,
+                                                base::Value::Dict message) {
   DCHECK(IsMainThread());
   return micro_benchmark_controller_.SendMessage(id, std::move(message));
 }

@@ -70,8 +70,8 @@ std::string GetStorageKeyFromVisitRow(const VisitRow& row) {
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 enum class SyncHistoryDatabaseError {
-  kApplySyncChangesAddSyncedVisit = 0,
-  kApplySyncChangesWriteMetadata = 1,
+  kApplyIncrementalSyncChangesAddSyncedVisit = 0,
+  kApplyIncrementalSyncChangesWriteMetadata = 1,
   kOnDatabaseError = 2,
   kLoadMetadata = 3,
   // Deprecated (call sites were removed):
@@ -511,16 +511,17 @@ HistorySyncBridge::CreateMetadataChangeList() {
                           change_processor()->GetWeakPtr()));
 }
 
-absl::optional<syncer::ModelError> HistorySyncBridge::MergeSyncData(
+absl::optional<syncer::ModelError> HistorySyncBridge::MergeFullSyncData(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_data) {
-  // Since HISTORY is in ApplyUpdatesImmediatelyTypes(), MergeSyncData() should
-  // never be called.
+  // Since HISTORY is in ApplyUpdatesImmediatelyTypes(), MergeFullSyncData()
+  // should never be called.
   NOTREACHED();
   return {};
 }
 
-absl::optional<syncer::ModelError> HistorySyncBridge::ApplySyncChanges(
+absl::optional<syncer::ModelError>
+HistorySyncBridge::ApplyIncrementalSyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_changes) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -575,8 +576,8 @@ absl::optional<syncer::ModelError> HistorySyncBridge::ApplySyncChanges(
           // Updating didn't work, so actually add the data instead.
           if (!AddEntityInBackend(&id_remapper, specifics)) {
             // Something went wrong.
-            RecordDatabaseError(
-                SyncHistoryDatabaseError::kApplySyncChangesAddSyncedVisit);
+            RecordDatabaseError(SyncHistoryDatabaseError::
+                                    kApplyIncrementalSyncChangesAddSyncedVisit);
             break;
           }
         }
@@ -601,27 +602,26 @@ absl::optional<syncer::ModelError> HistorySyncBridge::ApplySyncChanges(
       change_processor()->GetError();
   if (metadata_error) {
     RecordDatabaseError(
-        SyncHistoryDatabaseError::kApplySyncChangesWriteMetadata);
+        SyncHistoryDatabaseError::kApplyIncrementalSyncChangesWriteMetadata);
   }
 
-  // ApplySyncChanges() gets called both for incoming remote changes (i.e. for
-  // GetUpdates) and after a successful Commit. In either case, there's now
-  // likely some local metadata that's not needed anymore, so go and clean that
-  // up.
+  // ApplyIncrementalSyncChanges() gets called both for incoming remote changes
+  // (i.e. for GetUpdates) and after a successful Commit. In either case,
+  // there's now likely some local metadata that's not needed anymore, so go and
+  // clean that up.
   UntrackAndClearMetadataForSyncedEntities();
 
   return metadata_error;
 }
 
-void HistorySyncBridge::ApplyStopSyncChanges(
+void HistorySyncBridge::ApplyDisableSyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> delete_metadata_change_list) {
-  if (delete_metadata_change_list) {
-    // A non-null `delete_metadata_change_list` indicates that Sync is being
-    // turned off only permanently. Delete all foreign visits from the DB.
-    history_backend_->DeleteAllForeignVisitsAndResetIsKnownToSync();
-  }
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  ModelTypeSyncBridge::ApplyStopSyncChanges(
+  // Delete all foreign visits from the DB.
+  history_backend_->DeleteAllForeignVisitsAndResetIsKnownToSync();
+
+  ModelTypeSyncBridge::ApplyDisableSyncChanges(
       std::move(delete_metadata_change_list));
 }
 
@@ -819,10 +819,9 @@ void HistorySyncBridge::SetSyncTransportState(
     syncer::SyncService::TransportState state) {
   sync_transport_state_ = state;
 
-  // TODO(crbug.com/897628): Currently ApplyStopSyncChanges() doesn't always
-  // get called with a non-null MetadataChangeList when Sync is turned off. This
-  // is a workaround to still clear foreign history in that case. Remove once
-  // that bug is fixed.
+  // TODO(crbug.com/897628): Currently ApplyDisableSyncChanges() doesn't always
+  // get called when Sync is turned off. This is a workaround to still clear
+  // foreign history in that case. Remove once that bug is fixed.
   if (sync_transport_state_ == syncer::SyncService::TransportState::DISABLED) {
     // This is cheap if there is no foreign history in the DB, so it's okay to
     // call this somewhat too often.
@@ -913,6 +912,16 @@ void HistorySyncBridge::MaybeCommit(const VisitRow& visit_row) {
   std::vector<VisitID> included_visit_ids;
   std::vector<std::unique_ptr<syncer::EntityData>> entity_data_list =
       QueryRedirectChainAndMakeEntityData(visit_row, &included_visit_ids);
+
+  // Special case: If there are more than 2 entities (i.e. sub-chains), there's
+  // no need to commit more than the last 2. In that case, the last entity is
+  // the only new one, and the one before that was likely updated (e.g. by
+  // removing the chain-end marker, and setting a visit duration). All previous
+  // entities must have been previously committed and must be unchanged.
+  if (entity_data_list.size() > 2) {
+    entity_data_list.erase(entity_data_list.begin(),
+                           entity_data_list.end() - 2);
+  }
 
   std::unique_ptr<syncer::MetadataChangeList> metadata_change_list =
       CreateMetadataChangeList();
@@ -1011,6 +1020,7 @@ HistorySyncBridge::QueryRedirectChainAndMakeEntityData(
         GetLocalCacheGuid(), annotated_visits, chain_middle_trimmed,
         referrer_url, favicon_urls, local_cluster_id, included_visit_ids));
   }
+
   return entities;
 }
 

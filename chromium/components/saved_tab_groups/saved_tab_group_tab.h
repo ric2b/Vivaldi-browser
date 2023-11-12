@@ -8,9 +8,9 @@
 #include <memory>
 #include <string>
 
-#include "base/guid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -28,9 +28,9 @@ class SavedTabGroupTab {
 
   SavedTabGroupTab(const GURL& url,
                    const std::u16string& title,
-                   const base::GUID& group_guid,
+                   const base::Uuid& group_guid,
                    SavedTabGroup* group = nullptr,
-                   absl::optional<base::GUID> saved_tab_guid = absl::nullopt,
+                   absl::optional<base::Uuid> saved_tab_guid = absl::nullopt,
                    absl::optional<base::Token> local_tab_id = absl::nullopt,
                    absl::optional<int> position = absl::nullopt,
                    absl::optional<base::Time>
@@ -42,13 +42,13 @@ class SavedTabGroupTab {
   ~SavedTabGroupTab();
 
   // Accessors.
-  const base::GUID& saved_tab_guid() const { return saved_tab_guid_; }
-  const base::GUID& saved_group_guid() const { return saved_group_guid_; }
+  const base::Uuid& saved_tab_guid() const { return saved_tab_guid_; }
+  const base::Uuid& saved_group_guid() const { return saved_group_guid_; }
   const absl::optional<base::Token> local_tab_id() const {
     return local_tab_id_;
   }
   int position() const { return position_; }
-  SavedTabGroup* saved_tab_group() const { return saved_tab_group_; }
+  const SavedTabGroup* saved_tab_group() const { return saved_tab_group_; }
   const GURL& url() const { return url_; }
   const std::u16string& title() const { return title_; }
   const absl::optional<gfx::Image>& favicon() const { return favicon_; }
@@ -104,7 +104,8 @@ class SavedTabGroupTab {
   // We should merge a tab if one of the following is true:
   // 1. The data from `sync_specific` has the most recent (larger) update time.
   // 2. The `sync_specific` has the oldest (smallest) creation time.
-  bool ShouldMergeTab(const sync_pb::SavedTabGroupSpecifics& sync_specific);
+  bool ShouldMergeTab(
+      const sync_pb::SavedTabGroupSpecifics& sync_specific) const;
 
   // Converts a `SavedTabGroupSpecifics` retrieved from sync into a
   // `SavedTabGroupTab`.
@@ -116,10 +117,10 @@ class SavedTabGroupTab {
 
  private:
   // The ID used to represent the tab in sync.
-  base::GUID saved_tab_guid_;
+  base::Uuid saved_tab_guid_;
 
   // The ID used to represent the tab's group in sync. This must not be null.
-  base::GUID saved_group_guid_;
+  base::Uuid saved_group_guid_;
 
   // The ID used to represent the tab in reference to the web_contents locally.
   absl::optional<base::Token> local_tab_id_;

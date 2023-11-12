@@ -239,6 +239,17 @@ class CommandSwitches {
 
 // Helper functions for some commands ------------------------------------------
 
+// Modifies the existing build.ninja to only contain the commands necessary to
+// run GN and regenerate and build.ninja.d such that build.ninja will be
+// treated as dirty and regenerated.
+//
+// This is used by commands like gen and clean before they modify or delete
+// other ninja files, and ensures that ninja can still call GN if the commands
+// are interrupted before completion.
+//
+// On error, returns false.
+bool PrepareForRegeneration(const BuildSettings* settings);
+
 // Given a setup that has already been run and some command-line input,
 // resolves that input as a target label and returns the corresponding target.
 // On failure, returns null and prints the error to the standard output.

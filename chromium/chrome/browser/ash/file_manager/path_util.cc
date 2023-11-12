@@ -36,6 +36,7 @@
 #include "chrome/browser/ash/fileapi/file_system_backend.h"
 #include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_mount_provider.h"
+#include "chrome/browser/ash/guest_os/public/guest_os_service.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/smb_client/smb_service.h"
 #include "chrome/browser/ash/smb_client/smb_service_factory.h"
@@ -153,19 +154,24 @@ bool ShouldMountPrimaryUserDownloads(Profile* profile) {
 //   "drive/foo.txt"
 base::FilePath ExtractLegacyDrivePath(const base::FilePath& path) {
   std::vector<base::FilePath::StringType> components = path.GetComponents();
-  if (components.size() < 3)
+  if (components.size() < 3) {
     return base::FilePath();
-  if (components[0] != FILE_PATH_LITERAL("/"))
+  }
+  if (components[0] != FILE_PATH_LITERAL("/")) {
     return base::FilePath();
-  if (components[1] != FILE_PATH_LITERAL("special"))
+  }
+  if (components[1] != FILE_PATH_LITERAL("special")) {
     return base::FilePath();
+  }
   static const base::FilePath::CharType kPrefix[] = FILE_PATH_LITERAL("drive");
-  if (components[2].compare(0, std::size(kPrefix) - 1, kPrefix) != 0)
+  if (components[2].compare(0, std::size(kPrefix) - 1, kPrefix) != 0) {
     return base::FilePath();
+  }
 
   base::FilePath drive_path = drive::util::GetDriveGrandRootPath();
-  for (size_t i = 3; i < components.size(); ++i)
+  for (size_t i = 3; i < components.size(); ++i) {
     drive_path = drive_path.Append(components[i]);
+  }
   return drive_path;
 }
 
@@ -208,8 +214,9 @@ std::string GetFsUuidForRemovableMedia(const std::string& volume_name) {
       ash::disks::DiskMountManager::GetInstance()->FindDiskBySourcePath(
           source_path);
   std::string fs_uuid = disk == nullptr ? std::string() : disk->fs_uuid();
-  if (fs_uuid.empty())
+  if (fs_uuid.empty()) {
     LOG(WARNING) << "No UUID is found for volume name: " << volume_name;
+  }
   return fs_uuid;
 }
 
@@ -314,12 +321,14 @@ base::FilePath GetDownloadsFolderForProfile(Profile* profile) {
   storage::ExternalMountPoints* const mount_points =
       storage::ExternalMountPoints::GetSystemInstance();
   base::FilePath path;
-  if (mount_points->GetRegisteredPath(mount_point_name, &path))
+  if (mount_points->GetRegisteredPath(mount_point_name, &path)) {
     return path.AppendASCII(kFolderNameDownloads);
+  }
 
   // Return $HOME/Downloads as Download folder.
-  if (ShouldMountPrimaryUserDownloads(profile))
+  if (ShouldMountPrimaryUserDownloads(profile)) {
     return DownloadPrefs::GetDefaultDownloadDirectory();
+  }
 
   // Return <cryptohome>/MyFiles/Downloads if it feature is enabled.
   return profile->GetPath()
@@ -334,12 +343,14 @@ base::FilePath GetMyFilesFolderForProfile(Profile* profile) {
   storage::ExternalMountPoints* const mount_points =
       storage::ExternalMountPoints::GetSystemInstance();
   base::FilePath path;
-  if (mount_points->GetRegisteredPath(mount_point_name, &path))
+  if (mount_points->GetRegisteredPath(mount_point_name, &path)) {
     return path;
+  }
 
   // Return $HOME/Downloads as MyFiles folder.
-  if (ShouldMountPrimaryUserDownloads(profile))
+  if (ShouldMountPrimaryUserDownloads(profile)) {
     return DownloadPrefs::GetDefaultDownloadDirectory();
+  }
 
   // Return <cryptohome>/MyFiles.
   return profile->GetPath().AppendASCII(kFolderNameMyFiles);
@@ -425,6 +436,29 @@ std::string GetAndroidFilesMountPointName() {
   return kAndroidFilesMountPointName;
 }
 
+// Returns true if |name| is a known Bruschetta mount point name (e.g. as
+// produced by GetGuestOsMountPointName), and populates |guest_id|.
+bool IsBruschettaMountPointName(const std::string& name,
+                                Profile* profile,
+                                guest_os::GuestId* guest_id) {
+  auto* service = guest_os::GuestOsService::GetForProfile(profile);
+  if (!service) {
+    return false;
+  }
+  auto* registry = service->MountProviderRegistry();
+  for (const auto id : registry->List()) {
+    auto* provider = registry->Get(id);
+    if (provider->vm_type() != vm_tools::apps::VmType::BRUSCHETTA) {
+      continue;
+    }
+    if (name == util::GetGuestOsMountPointName(profile, provider->GuestId())) {
+      *guest_id = provider->GuestId();
+      return true;
+    }
+  }
+  return false;
+}
+
 std::string GetCrostiniMountPointName(Profile* profile) {
   // crostini_<hash>_termina_penguin
   return base::JoinString(
@@ -454,25 +488,6 @@ base::FilePath GetGuestOsMountDirectory(std::string mountPointName) {
   return base::FilePath("/media/fuse/" + mountPointName);
 }
 
-std::vector<std::string> GetCrostiniMountOptions(
-    const std::string& hostname,
-    const std::string& host_private_key,
-    const std::string& container_public_key) {
-  const std::string port = "2222";
-  std::vector<std::string> options;
-  std::string base64_known_hosts;
-  std::string base64_identity;
-  base::Base64Encode(host_private_key, &base64_identity);
-  base::Base64Encode(
-      base::StringPrintf("[%s]:%s %s", hostname.c_str(), port.c_str(),
-                         container_public_key.c_str()),
-      &base64_known_hosts);
-  options.push_back("UserKnownHostsBase64=" + base64_known_hosts);
-  options.push_back("IdentityBase64=" + base64_identity);
-  options.push_back("Port=" + port);
-  return options;
-}
-
 bool ConvertFileSystemURLToPathInsideVM(
     Profile* profile,
     const storage::FileSystemURL& file_system_url,
@@ -499,6 +514,7 @@ bool ConvertFileSystemURLToPathInsideVM(
   // If |map_crostini_home| is set, paths in crostini mount map to:
   //   /<home-directory>/path/to/file
   base::FilePath base_to_exclude(id);
+  guest_os::GuestId guest_id("", "");
   if (id == GetDownloadsMountPointName(profile)) {
     // MyFiles.
     *inside = vm_mount.Append(kFolderNameMyFiles);
@@ -550,6 +566,16 @@ bool ConvertFileSystemURLToPathInsideVM(
     } else {
       *inside = vm_mount.Append(kCrostiniMapLinuxFiles);
     }
+  } else if (IsBruschettaMountPointName(id, profile, &guest_id)) {
+    // Bruschetta: use path to homedir, which is currently the empty string
+    // because sftp-server inside the VM runs in the homedir.
+    auto container_info =
+        guest_os::GuestOsSessionTracker::GetForProfile(profile)->GetInfo(
+            guest_id);
+    if (!container_info) {
+      return false;
+    }
+    *inside = container_info->homedir;
   } else if (file_system_url.type() == storage::kFileSystemTypeSmbFs) {
     // SMB. Do not assume the share is currently accessible via SmbService
     // as this function is called during unmount when SmbFsShare is
@@ -694,8 +720,9 @@ bool ConvertPathToArcUrl(const base::FilePath& path,
   // Obtain the primary profile. This information is required because currently
   // only the file systems for the primary profile is exposed to ARC.
   Profile* primary_profile = ProfileManager::GetPrimaryUserProfile();
-  if (!primary_profile)
+  if (!primary_profile) {
     return false;
+  }
 
   // Convert paths under primary profile's Downloads directory.
   base::FilePath primary_downloads =
@@ -722,8 +749,9 @@ bool ConvertPathToArcUrl(const base::FilePath& path,
           .AppendRelativePath(path, &relative_path)) {
     const std::string volume_name =
         ExtractVolumeNameFromRelativePathForRemovableMedia(relative_path);
-    if (volume_name.empty())
+    if (volume_name.empty()) {
       return false;
+    }
     const std::string fs_uuid = GetFsUuidForRemovableMedia(volume_name);
     // Replace the volume name in the relative path with the UUID.
     // When no UUID is found for the volume, use the predefined one for testing.
@@ -1017,8 +1045,9 @@ bool ExtractMountNameFileSystemNameFullPath(const base::FilePath& absolute_path,
   storage::ExternalMountPoints* mount_points =
       storage::ExternalMountPoints::GetSystemInstance();
   base::FilePath virtual_path;
-  if (!mount_points->GetVirtualPath(absolute_path, &virtual_path))
+  if (!mount_points->GetVirtualPath(absolute_path, &virtual_path)) {
     return false;
+  }
   // |virtual_path| format is: <mount_name>/<full_path>, and
   // |file_system_name| == |mount_name|, except for 'removable' and 'archive',
   // |mount_name| is the first two segments, |file_system_name| is the second.

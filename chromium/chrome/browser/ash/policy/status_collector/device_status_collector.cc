@@ -43,6 +43,7 @@
 #include "base/version.h"
 #include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_reporting_util.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
@@ -585,23 +586,23 @@ em::CrashReportInfo::CrashReportUploadStatus GetCrashReportUploadStatus(
 void CrashReportsLoaded(
     scoped_refptr<UploadList> upload_list,
     DeviceStatusCollector::CrashReportInfoReceiver callback) {
-  std::vector<UploadList::UploadInfo> uploads;
-  upload_list->GetUploads(kCrashReportEntryMaxSize, &uploads);
+  const std::vector<const UploadList::UploadInfo*> uploads =
+      upload_list->GetUploads(kCrashReportEntryMaxSize);
 
   const auto end_time = base::Time::Now();
   const auto start_time = end_time - kCrashReportInfoDuration;
 
   std::vector<em::CrashReportInfo> contents;
-  for (const UploadList::UploadInfo& crash_report : uploads) {
-    if (crash_report.upload_time >= start_time &&
-        crash_report.upload_time < end_time &&
-        (crash_report.source == kCrashReportSourceKernel ||
-         crash_report.source == kCrashReportSourceEC)) {
+  for (const UploadList::UploadInfo* crash_report : uploads) {
+    if (crash_report->upload_time >= start_time &&
+        crash_report->upload_time < end_time &&
+        (crash_report->source == kCrashReportSourceKernel ||
+         crash_report->source == kCrashReportSourceEC)) {
       em::CrashReportInfo info;
-      info.set_remote_id(crash_report.upload_id);
-      info.set_capture_timestamp(crash_report.capture_time.ToJavaTime());
-      info.set_cause(crash_report.source);
-      info.set_upload_status(GetCrashReportUploadStatus(crash_report.state));
+      info.set_remote_id(crash_report->upload_id);
+      info.set_capture_timestamp(crash_report->capture_time.ToJavaTime());
+      info.set_cause(crash_report->source);
+      info.set_upload_status(GetCrashReportUploadStatus(crash_report->state));
       contents.push_back(info);
     }
   }
@@ -1686,7 +1687,7 @@ DeviceStatusCollector::DeviceStatusCollector(
   stats_reporting_pref_subscription_ =
       cros_settings_->AddSettingsObserver(ash::kStatsReportingPref, callback);
 
-  power_manager_observation_.Observe(power_manager_);
+  power_manager_observation_.Observe(power_manager_.get());
 
   // Fetch the current values of the policies.
   UpdateReportingSettings();
@@ -2261,6 +2262,8 @@ bool DeviceStatusCollector::GetVersionInfo(
     em::DeviceStatusReportRequest* status) {
   status->set_os_version(os_version_);
   status->set_browser_version(version_info::GetVersionNumber());
+  status->set_is_lacros_primary_browser(
+      crosapi::browser_util::IsLacrosPrimaryBrowser());
   status->set_channel(ConvertToProtoChannel(chrome::GetChannel()));
 
   // TODO(b/144081278): Remove when resolved.

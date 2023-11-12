@@ -3,7 +3,7 @@
 #ifndef IOS_NOTES_NOTE_HOME_CONSUMER_H_
 #define IOS_NOTES_NOTE_HOME_CONSUMER_H_
 
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_consumer.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_consumer.h"
 
 @class NSIndexPath;
 @class ShowSigninCommand;

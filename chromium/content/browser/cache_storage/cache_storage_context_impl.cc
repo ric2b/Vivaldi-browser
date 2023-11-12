@@ -37,9 +37,10 @@ CacheStorageContextImpl::CacheStorageContextImpl(
 CacheStorageContextImpl::~CacheStorageContextImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  for (const auto& storage_key : storage_keys_to_purge_on_shutdown_) {
-    cache_manager_->DeleteStorageKeyData(
-        storage_key, storage::mojom::CacheStorageOwner::kCacheAPI,
+  if (!origins_to_purge_on_shutdown_.empty()) {
+    cache_manager_->DeleteOriginData(
+        origins_to_purge_on_shutdown_,
+        storage::mojom::CacheStorageOwner::kCacheAPI,
 
         // Retain a reference to the manager until the deletion is
         // complete, since it internally uses weak pointers for
@@ -125,7 +126,8 @@ void CacheStorageContextImpl::AddReceiver(
         bucket_locator.id, base::SequencedTaskRunner::GetCurrentDefault(),
         std::move(add_receiver));
   } else {
-    std::move(add_receiver).Run(storage::QuotaError::kNotFound);
+    std::move(add_receiver)
+        .Run(base::unexpected(storage::QuotaError::kNotFound));
   }
 }
 
@@ -155,11 +157,9 @@ void CacheStorageContextImpl::ApplyPolicyUpdates(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (const auto& update : policy_updates) {
     if (!update->purge_on_shutdown)
-      storage_keys_to_purge_on_shutdown_.erase(
-          blink::StorageKey::CreateFirstParty(update->origin));
+      origins_to_purge_on_shutdown_.erase(update->origin);
     else
-      storage_keys_to_purge_on_shutdown_.insert(
-          blink::StorageKey::CreateFirstParty(std::move(update->origin)));
+      origins_to_purge_on_shutdown_.insert(std::move(update->origin));
   }
 }
 
@@ -174,8 +174,8 @@ void CacheStorageContextImpl::AddReceiverWithBucketInfo(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const absl::optional<storage::BucketLocator> bucket =
-      result.ok() ? absl::make_optional(result->ToBucketLocator())
-                  : absl::nullopt;
+      result.has_value() ? absl::make_optional(result->ToBucketLocator())
+                         : absl::nullopt;
 
   dispatcher_host_->AddReceiver(cross_origin_embedder_policy,
                                 std::move(coep_reporter), storage_key, bucket,

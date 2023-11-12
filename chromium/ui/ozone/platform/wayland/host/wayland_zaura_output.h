@@ -11,6 +11,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/ozone/platform/wayland/common/wayland_object.h"
+#include "ui/ozone/platform/wayland/host/wayland_output.h"
 
 namespace ui {
 
@@ -24,15 +25,16 @@ class WaylandZAuraOutput {
 
   zaura_output* wl_object() { return obj_.get(); }
 
-  const gfx::Insets& insets() const { return insets_; }
-  absl::optional<int32_t> logical_transform() const {
-    return logical_transform_;
-  }
-  absl::optional<int64_t> display_id() const { return display_id_; }
-
-  // Tells If the zuara output receives its display id information when
-  // supported.
+  // Returns true if all state defined by this extension necessary to correctly
+  // represent the Display has successfully arrived from the server.
   bool IsReady() const;
+
+  // Called after wl_output.done event has been received for this output.
+  void OnDone();
+
+  // Called after processing the wl_output.done event. Translates the received
+  // state into the metrics object as part of a chained atomic update.
+  void UpdateMetrics(WaylandOutput::Metrics& metrics);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(WaylandZAuraOutputTest, DisplayIdConversions);
@@ -64,6 +66,11 @@ class WaylandZAuraOutput {
                           uint32_t display_id_hi,
                           uint32_t display_id_lo);
   static void OnActivated(void* data, struct zaura_output* zaura_output);
+
+  // Tracks whether this zaura_output is considered "ready". I.e. it has
+  // received all of its relevant Display state from the server followed by a
+  // wl_output.done event.
+  bool is_ready_ = false;
 
   wl::Object<zaura_output> obj_;
   gfx::Insets insets_;

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/time/clock.h"
 #include "base/timer/timer.h"
@@ -19,6 +20,7 @@ class PrefRegistrySimple;
 
 namespace ash {
 class MultitaskMenuNudgeControllerTest;
+class MultitaskMenuNudgeTest;
 }
 
 namespace ui {
@@ -51,24 +53,13 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) MultitaskMenuNudgeController
     virtual void SetNudgePreferences(bool tablet_mode,
                                      int count,
                                      base::Time time) = 0;
+    // Returns true if the user has logged in for the first time. We don't want
+    // to show the nudge in this case.
+    virtual bool IsUserNew() const;
 
    protected:
     Delegate();
   };
-
-  // The name of an integer pref that counts the number of times we have shown
-  // the multitask menu education nudge.
-  static constexpr char kClamshellShownCountPrefName[] =
-      "ash.wm_nudge.multitask_menu_nudge_count";
-  static constexpr char kTabletShownCountPrefName[] =
-      "cros.wm_nudge.tablet_multitask_nudge_count";
-
-  // The name of a time pref that stores the time we last showed the multitask
-  // menu education nudge.
-  static constexpr char kClamshellLastShownPrefName[] =
-      "ash.wm_nudge.multitask_menu_nudge_last_shown";
-  static constexpr char kTabletLastShownPrefName[] =
-      "cros.wm_nudge.tablet_multitask_nudge_last_shown";
 
   MultitaskMenuNudgeController();
   MultitaskMenuNudgeController(const MultitaskMenuNudgeController&) = delete;
@@ -76,7 +67,9 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) MultitaskMenuNudgeController
       delete;
   ~MultitaskMenuNudgeController() override;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+#endif
 
   // Attempts to show the nudge. Reads preferences and then calls
   // `OnGetPreferences()`.
@@ -93,6 +86,7 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) MultitaskMenuNudgeController
   // aura::WindowObserver:
   void OnWindowParentChanged(aura::Window* window,
                              aura::Window* parent) override;
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
   void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds,
@@ -110,6 +104,7 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) MultitaskMenuNudgeController
 
  private:
   friend class ::ash::MultitaskMenuNudgeControllerTest;
+  friend class ::ash::MultitaskMenuNudgeTest;
 
   // Used to control the clock in a test setting.
   static void SetOverrideClockForTesting(base::Clock* test_clock);
@@ -147,11 +142,11 @@ class COMPONENT_EXPORT(CHROMEOS_UI_FRAME) MultitaskMenuNudgeController
   std::unique_ptr<ui::Layer> pulse_layer_;
 
   // The app window that the nudge is associated with.
-  aura::Window* window_ = nullptr;
+  raw_ptr<aura::Window, ExperimentalAsh> window_ = nullptr;
 
   // The view that the nudge will be anchored to. It is the maximize or resize
   // button on `window_`'s frame. Null in tablet mode.
-  views::View* anchor_view_ = nullptr;
+  raw_ptr<views::View, ExperimentalAsh> anchor_view_ = nullptr;
 
   base::ScopedObservation<aura::Window, aura::WindowObserver>
       window_observation_{this};

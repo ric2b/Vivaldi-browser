@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -16,12 +15,15 @@
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/trace_event_analyzer.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -71,10 +73,10 @@
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/browser/tracing_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
@@ -114,6 +116,9 @@ using testing::UnorderedElementsAre;
 using NoStatePrefetch = ukm::builders::NoStatePrefetch;
 using PageLoad = ukm::builders::PageLoad;
 using HistoryNavigation = ukm::builders::HistoryNavigation;
+using trace_analyzer::Query;
+using trace_analyzer::TraceAnalyzer;
+using trace_analyzer::TraceEventVector;
 
 namespace {
 
@@ -185,7 +190,9 @@ class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
     scoped_feature_list_.InitWithFeatures(
         {ukm::kUkmFeature, blink::features::kPortals,
          blink::features::kPortalsCrossOrigin},
-        {});
+        // TODO(crbug.com/1394910): Use HTTPS URLs in tests to avoid having to
+        // disable this feature.
+        {features::kHttpsUpgrades});
   }
 
   PageLoadMetricsBrowserTest(const PageLoadMetricsBrowserTest&) = delete;
@@ -239,11 +246,9 @@ class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
   std::string GetRecordedPageLoadMetricNames() {
     auto entries = histogram_tester_->GetTotalCountsForPrefix("PageLoad.");
     std::vector<std::string> names;
-    std::transform(
-        entries.begin(), entries.end(), std::back_inserter(names),
-        [](const std::pair<std::string, base::HistogramBase::Count>& entry) {
-          return entry.first;
-        });
+    base::ranges::transform(
+        entries, std::back_inserter(names),
+        &base::HistogramTester::CountsMap::value_type::first);
     return base::JoinString(names, ",");
   }
 
@@ -963,8 +968,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NewPage) {
   // Force navigation to another page, which should force logging of histograms
   // persisted at the end of the page load lifetime.
   NavigateToUntrackedUrl();
-  histogram_tester_->ExpectTotalCount(internal::kHistogramPageLoadTotalBytes,
-                                      1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramPageTimingForegroundDuration, 1);
 
@@ -1000,8 +1003,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, Redirect) {
   // Force navigation to another page, which should force logging of histograms
   // persisted at the end of the page load lifetime.
   NavigateToUntrackedUrl();
-  histogram_tester_->ExpectTotalCount(internal::kHistogramPageLoadTotalBytes,
-                                      1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramPageTimingForegroundDuration, 1);
 
@@ -1031,8 +1032,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoStatePrefetchMetrics) {
   // Force navigation to another page, which should force logging of histograms
   // persisted at the end of the page load lifetime.
   NavigateToUntrackedUrl();
-  histogram_tester_->ExpectTotalCount(internal::kHistogramPageLoadTotalBytes,
-                                      1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramPageTimingForegroundDuration, 1);
 
@@ -1612,14 +1611,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PayloadSize) {
   // Payload histograms are only logged when a page load terminates, so force
   // navigation to another page.
   NavigateToUntrackedUrl();
-
-  histogram_tester_->ExpectTotalCount(internal::kHistogramPageLoadTotalBytes,
-                                      1);
-
-  // Verify that there is a single sample recorded in the 10kB bucket (the size
-  // of the main HTML response).
-  histogram_tester_->ExpectBucketCount(internal::kHistogramPageLoadTotalBytes,
-                                       10, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PayloadSizeChildFrame) {
@@ -1635,14 +1626,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, PayloadSizeChildFrame) {
   // Payload histograms are only logged when a page load terminates, so force
   // navigation to another page.
   NavigateToUntrackedUrl();
-
-  histogram_tester_->ExpectTotalCount(internal::kHistogramPageLoadTotalBytes,
-                                      1);
-
-  // Verify that there is a single sample recorded in the 10kB bucket (the size
-  // of the iframe response).
-  histogram_tester_->ExpectBucketCount(internal::kHistogramPageLoadTotalBytes,
-                                       10, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
@@ -1660,9 +1643,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   downloads_observer.WaitForFinished();
 
   NavigateToUntrackedUrl();
-
-  histogram_tester_->ExpectUniqueSample(internal::kHistogramPageLoadTotalBytes,
-                                        0, 1);
 }
 
 // Test UseCounter Features observed in the main frame are recorded, exactly
@@ -2532,62 +2512,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, ReceivedCompleteResources) {
   waiter->Wait();
 }
 
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
-                       MemoryCacheResource_Recorded) {
-  const char kHttpResponseHeader[] =
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: text/html; charset=utf-8\r\n"
-      "Cache-Control: max-age=60\r\n"
-      "\r\n";
-  embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
-  content::SetupCrossSiteRedirector(embedded_test_server());
-  auto cached_response =
-      std::make_unique<net::test_server::ControllableHttpResponse>(
-          embedded_test_server(), "/cachetime",
-          true /*relative_url_is_prefix*/);
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
-  browser()->OpenURL(content::OpenURLParams(
-      embedded_test_server()->GetURL("/page_with_cached_subresource.html"),
-      content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
-      ui::PAGE_TRANSITION_TYPED, false));
-
-  // Load a resource large enough to record a nonzero number of kilobytes.
-  cached_response->WaitForRequest();
-  cached_response->Send(kHttpResponseHeader);
-  cached_response->Send(std::string(10 * 1024, ' '));
-  cached_response->Done();
-
-  waiter->AddMinimumCompleteResourcesExpectation(3);
-  waiter->Wait();
-
-  // Re-navigate the page to the same url with a different query string so the
-  // main resource is not loaded from the disk cache. The subresource will be
-  // loaded from the memory cache.
-  waiter = CreatePageLoadMetricsTestWaiter("waiter");
-  browser()->OpenURL(content::OpenURLParams(
-      embedded_test_server()->GetURL("/page_with_cached_subresource.html?xyz"),
-      content::Referrer(), WindowOpenDisposition::CURRENT_TAB,
-      ui::PAGE_TRANSITION_TYPED, false));
-
-  // Favicon is not fetched this time.
-  waiter->AddMinimumCompleteResourcesExpectation(2);
-  waiter->Wait();
-
-  // Verify no resources were cached for the first load.
-  histogram_tester_->ExpectBucketCount(internal::kHistogramPageLoadCacheBytes,
-                                       0, 1);
-
-  // Force histograms to record.
-  NavigateToUntrackedUrl();
-
-  // Verify that the cached resource from the memory cache is recorded
-  // correctly.
-  histogram_tester_->ExpectBucketCount(internal::kHistogramPageLoadCacheBytes,
-                                       10, 1);
-}
-
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, InputEventsForClick) {
   embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
   content::SetupCrossSiteRedirector(embedded_test_server());
@@ -2610,7 +2534,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, InputEventsForClick) {
   histogram_tester_->ExpectTotalCount(internal::kHistogramInputToNavigation, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramInputToNavigationLinkClick, 1);
-  histogram_tester_->ExpectTotalCount(internal::kHistogramInputToFirstPaint, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramInputToFirstContentfulPaint, 1);
 
@@ -2627,6 +2550,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, InputEventsForClick) {
 class SoftNavigationBrowserTest : public PageLoadMetricsBrowserTest {
  public:
   void TestSoftNavigation(bool wait_for_second_lcp) {
+    StartTracing();
     embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
     content::SetupCrossSiteRedirector(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -2708,6 +2632,64 @@ class SoftNavigationBrowserTest : public PageLoadMetricsBrowserTest {
     // The histogram value represents the low end of the bucket, not the actual
     // value. Therefore it is lower or equal to the web exposed value.
     ASSERT_LE(lcp_value_bucket_start, lcp_start_before);
+
+    VerifyTraceEvents(StopTracing(), wait_for_second_lcp ? 3UL : 1UL);
+  }
+
+ private:
+  void StartTracing() {
+    base::RunLoop wait_for_tracing;
+    content::TracingController::GetInstance()->StartTracing(
+        base::trace_event::TraceConfig(
+            "{\"included_categories\": [\"devtools.timeline\"]}"),
+        wait_for_tracing.QuitClosure());
+    wait_for_tracing.Run();
+  }
+
+  std::string StopTracing() {
+    base::RunLoop wait_for_tracing;
+    std::string trace_output;
+    content::TracingController::GetInstance()->StopTracing(
+        content::TracingController::CreateStringEndpoint(
+            base::BindLambdaForTesting(
+                [&](std::unique_ptr<std::string> trace_str) {
+                  trace_output = std::move(*trace_str);
+                  wait_for_tracing.Quit();
+                })));
+    wait_for_tracing.Run();
+    return trace_output;
+  }
+
+  void VerifyTraceEvents(const std::string& trace_str,
+                         size_t expected_event_number) {
+    std::unique_ptr<TraceAnalyzer> analyzer(TraceAnalyzer::Create(trace_str));
+    TraceEventVector events;
+    auto query =
+        Query::EventNameIs("SoftNavigationHeuristics_SoftNavigationDetected") ||
+        Query::EventNameIs("largestContentfulPaint::Candidate");
+    size_t num_events = analyzer->FindEvents(query, &events);
+    EXPECT_EQ(expected_event_number, num_events);
+
+    std::string previous_frame;
+    double soft_navigation_timestamp = 0.0;
+    for (auto* event : events) {
+      EXPECT_TRUE(event->HasStringArg("frame"));
+      std::string frame = event->GetKnownArgAsString("frame");
+      if (!previous_frame.empty()) {
+        EXPECT_EQ(frame, previous_frame);
+      }
+      previous_frame = frame;
+      if (event->name == "SoftNavigationHeuristics_SoftNavigationDetected") {
+        soft_navigation_timestamp = event->timestamp;
+      } else if (soft_navigation_timestamp > 0.0) {
+        EXPECT_LE(soft_navigation_timestamp, event->timestamp);
+      }
+    }
+    // If we have more than one event, one of them needs to be a soft
+    // navigation.
+    if (expected_event_number > 1) {
+      EXPECT_TRUE(soft_navigation_timestamp > 0);
+    }
   }
 };
 
@@ -2748,7 +2730,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, InputEventsForOmniboxMatch) {
   waiter->Wait();
 
   histogram_tester_->ExpectTotalCount(internal::kHistogramInputToNavigation, 1);
-  histogram_tester_->ExpectTotalCount(internal::kHistogramInputToFirstPaint, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramInputToFirstContentfulPaint, 1);
 
@@ -2783,7 +2764,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   histogram_tester_->ExpectTotalCount(internal::kHistogramInputToNavigation, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramInputToNavigationLinkClick, 1);
-  histogram_tester_->ExpectTotalCount(internal::kHistogramInputToFirstPaint, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramInputToFirstContentfulPaint, 1);
 
@@ -2824,7 +2804,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   histogram_tester_->ExpectTotalCount(internal::kHistogramInputToNavigation, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramInputToNavigationLinkClick, 1);
-  histogram_tester_->ExpectTotalCount(internal::kHistogramInputToFirstPaint, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramInputToFirstContentfulPaint, 1);
 
@@ -3291,20 +3270,15 @@ class PageLoadMetricsBrowserTestTerminatedPage
                                 WindowOpenDisposition::NEW_FOREGROUND_TAB,
                                 ui::PAGE_TRANSITION_TYPED, false);
 
-    content::WindowedNotificationObserver load(
-        content::NOTIFICATION_NAV_ENTRY_COMMITTED,
-        content::NotificationService::AllSources());
-
     content::WebContents* contents = browser()->OpenURL(page);
-
     std::unique_ptr<PageLoadMetricsTestWaiter> waiter =
         CreatePageLoadMetricsTestWaiter("lcp_waiter", contents);
-
     waiter->AddPageExpectation(page_load_metrics::PageLoadMetricsTestWaiter::
                                    TimingField::kLargestContentfulPaint);
 
-    // This is to wait for the navigation entry to be committed.
-    load.Wait();
+    content::TestNavigationObserver observer(contents);
+    observer.set_expected_initial_url(page.url);
+    observer.Wait();
 
     // This is to wait for LCP to be observed on browser side.
     waiter->Wait();
@@ -3629,11 +3603,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DISABLED_PortalActivation) {
   EXPECT_TRUE(
       ExecJs(outer_contents, "document.querySelector('portal').activate()"));
 
-  EXPECT_EQ(true, content::EvalJs(portal_contents,
-                                  "activatePromise.then(r => { "
-                                  "  window.domAutomationController.send(r);"
-                                  "});",
-                                  content::EXECUTE_SCRIPT_USE_MANUAL_REPLY));
+  EXPECT_EQ(true, content::EvalJs(portal_contents, "activatePromise"));
 
   // The activated portal contents should be the currently active contents.
   EXPECT_EQ(portal_contents,
@@ -3661,6 +3631,66 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, DISABLED_PortalActivation) {
   }
 }
 
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, SameOriginNavigation) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL kUrl1 = embedded_test_server()->GetURL("a.com", "/title1.html");
+  GURL kUrl2 = embedded_test_server()->GetURL("a.com", "/title2.html");
+
+  auto waiter1 = CreatePageLoadMetricsTestWaiter("waiter1");
+  waiter1->AddPageExpectation(TimingField::kLargestContentfulPaint);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kUrl1));
+  waiter1->Wait();
+
+  auto waiter2 = CreatePageLoadMetricsTestWaiter("waiter2");
+  waiter2->AddPageExpectation(TimingField::kLargestContentfulPaint);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kUrl2));
+  waiter2->Wait();
+
+  NavigateToUntrackedUrl();
+  VerifyNavigationMetrics({kUrl1, kUrl2});
+
+  // Navigation from about:blank to kUrl1 is a cross origin navigation.
+  histogram_tester_->ExpectTotalCount(
+      "PageLoad.Clients.CrossOrigin.FirstContentfulPaint", 1);
+  histogram_tester_->ExpectTotalCount(
+      "PageLoad.Clients.CrossOrigin.LargestContentfulPaint", 1);
+  // Navigation from kUrl1 to kUrl2 is a same origin navigation.
+  histogram_tester_->ExpectTotalCount(
+      "PageLoad.Clients.SameOrigin.FirstContentfulPaint", 1);
+  histogram_tester_->ExpectTotalCount(
+      "PageLoad.Clients.SameOrigin.LargestContentfulPaint", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, CrossOriginNavigation) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL kUrl1 = embedded_test_server()->GetURL("a.com", "/title1.html");
+  GURL kUrl2 = embedded_test_server()->GetURL("b.com", "/title1.html");
+
+  auto waiter1 = CreatePageLoadMetricsTestWaiter("waiter1");
+  waiter1->AddPageExpectation(TimingField::kFirstContentfulPaint);
+  waiter1->AddPageExpectation(TimingField::kLargestContentfulPaint);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kUrl1));
+  waiter1->Wait();
+
+  auto waiter2 = CreatePageLoadMetricsTestWaiter("waiter2");
+  waiter2->AddPageExpectation(TimingField::kFirstContentfulPaint);
+  waiter1->AddPageExpectation(TimingField::kLargestContentfulPaint);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), kUrl2));
+  waiter2->Wait();
+
+  NavigateToUntrackedUrl();
+  VerifyNavigationMetrics({kUrl1, kUrl2});
+
+  // Navigation from about:blank to kUrl1 and navigation from kUrl1 to kUrl2 are
+  // cross origin navigations.
+  histogram_tester_->ExpectTotalCount(
+      "PageLoad.Clients.CrossOrigin.FirstContentfulPaint", 2);
+  histogram_tester_->ExpectTotalCount(
+      "PageLoad.Clients.CrossOrigin.LargestContentfulPaint", 2);
+}
+
 class PageLoadMetricsBrowserTestWithFencedFrames
     : public PageLoadMetricsBrowserTest {
  public:
@@ -3679,20 +3709,35 @@ class PageLoadMetricsBrowserTestWithFencedFrames
   content::test::FencedFrameTestHelper helper_;
 };
 
-// Checks if updating fencedframe's src attribute works. This is a regression
-// test to ensure PageLoadMetrics doesn't crash on such navigations.
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTestWithFencedFrames,
-                       FencedFrameSrcAttributeNavigation) {
+                       PageLoadPrivacySandboxAdsFencedFramesMetrics) {
   ASSERT_TRUE(https_server().Start());
-  EXPECT_TRUE(ui_test_utils::NavigateToURL(
+
+  static constexpr char
+      kHistogramPrivacySandboxAdsNavigationToFirstContentfulPaint[] =
+          "PageLoad.Clients.PrivacySandboxAds.PaintTiming."
+          "NavigationToFirstContentfulPaint.FencedFrames";
+
+  // Not recorded as fenced frame is not created.
+  auto waiter1 = CreatePageLoadMetricsTestWaiter("waiter1");
+  waiter1->AddPageExpectation(TimingField::kFirstContentfulPaint);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server().GetURL("a.test", "/title1.html")));
+  waiter1->Wait();
+
+  histogram_tester_->ExpectTotalCount(
+      kHistogramPrivacySandboxAdsNavigationToFirstContentfulPaint, 0);
+
+  // Recorded as fenced frame is created.
+  auto waiter2 = CreatePageLoadMetricsTestWaiter("waiter2");
+  waiter2->AddPageExpectation(TimingField::kFirstContentfulPaint);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
       https_server().GetURL("c.test", "/fenced_frames/basic_title.html")));
+  waiter2->Wait();
 
-  content::TestNavigationObserver observer(web_contents());
-  EXPECT_TRUE(content::ExecuteScript(
-      web_contents(),
-      "document.querySelector('fencedframe').src = './title2.html';"));
-  observer.WaitForNavigationFinished();
+  histogram_tester_->ExpectTotalCount(
+      kHistogramPrivacySandboxAdsNavigationToFirstContentfulPaint, 1);
 }
 
 class PageLoadMetricsBrowserTestWithBackForwardCache
@@ -3701,8 +3746,8 @@ class PageLoadMetricsBrowserTestWithBackForwardCache
   void SetUpCommandLine(base::CommandLine* command_line) override {
     PageLoadMetricsBrowserTest::SetUpCommandLine(command_line);
     feature_list.InitWithFeaturesAndParameters(
-        content::DefaultEnabledBackForwardCacheParametersForTests(),
-        content::DefaultDisabledBackForwardCacheParametersForTests());
+        content::GetDefaultEnabledBackForwardCacheFeaturesForTesting(),
+        content::GetDefaultDisabledBackForwardCacheFeaturesForTesting());
   }
 
  private:
@@ -4009,9 +4054,8 @@ class PageLoadMetricsBackForwardCacheBrowserTest
     if (GetParam() == BackForwardCacheStatus::kEnabled) {
       // Enable BackForwardCache.
       feature_list_.InitWithFeaturesAndParameters(
-          {{features::kBackForwardCache, {}}},
-          // Allow BackForwardCache for all devices regardless of their memory.
-          {features::kBackForwardCacheMemoryControls});
+          content::GetBasicBackForwardCacheFeatureForTesting(),
+          content::GetDefaultDisabledBackForwardCacheFeaturesForTesting());
     } else {
       feature_list_.InitAndDisableFeature(features::kBackForwardCache);
       DCHECK(!content::BackForwardCache::IsBackForwardCacheFeatureEnabled());

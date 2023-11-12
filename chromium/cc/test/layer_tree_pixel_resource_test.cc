@@ -28,8 +28,9 @@ const char* LayerTreeHostPixelResourceTest::GetRendererSuffix() const {
     case viz::RendererType::kSkiaGL:
       return "skia_gl";
     case viz::RendererType::kSkiaVk:
-    case viz::RendererType::kSkiaDawn:
       return "skia_vk";
+    case viz::RendererType::kSkiaGraphite:
+      return "skia_graphite";
     case viz::RendererType::kSoftware:
       return "sw";
   }
@@ -55,16 +56,15 @@ LayerTreeHostPixelResourceTest::CreateRasterBufferProvider(
   int max_bytes_per_copy_operation = 1024 * 1024;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
 
-  viz::ResourceFormat gpu_raster_format;
-  viz::ResourceFormat sw_raster_format;
+  viz::SharedImageFormat gpu_raster_format;
+  viz::SharedImageFormat sw_raster_format;
   if (compositor_context_provider) {
     if (host_impl->settings().use_rgba_4444) {
-      gpu_raster_format = sw_raster_format = viz::RGBA_4444;
+      gpu_raster_format = sw_raster_format = viz::SinglePlaneFormat::kRGBA_4444;
     } else {
-      gpu_raster_format =
-          viz::PlatformColor::BestSupportedRenderBufferResourceFormat(
-              compositor_context_provider->ContextCapabilities());
-      sw_raster_format = viz::PlatformColor::BestSupportedTextureResourceFormat(
+      gpu_raster_format = viz::PlatformColor::BestSupportedRenderBufferFormat(
+          compositor_context_provider->ContextCapabilities());
+      sw_raster_format = viz::PlatformColor::BestSupportedTextureFormat(
           compositor_context_provider->ContextCapabilities());
     }
   }

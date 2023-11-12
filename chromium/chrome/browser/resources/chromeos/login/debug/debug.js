@@ -970,23 +970,61 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     {
       id: 'sync-consent',
       kind: ScreenKind.NORMAL,
-      defaultState: 'step-loaded',
+      handledSteps: 'ash-sync,lacros-overview',
       states: [
         {
-          id: 'minor-mode',
+          id: 'ash-sync',
+          data: {
+            isChildAccount: false,
+            isArcRestricted: false,
+          },
+          trigger: (screen) => {
+            screen.setIsMinorMode(false);
+            screen.showLoadedStep(/*os_sync_lacros=*/ false);
+          },
+        },
+        {
+          id: 'ash-sync-minor-mode',
           data: {
             isChildAccount: true,
             isArcRestricted: false,
           },
           trigger: (screen) => {
             screen.setIsMinorMode(true);
+            screen.showLoadedStep(/*os_sync_lacros=*/ false);
           },
         },
         {
-          id: 'arc-restricted',
+          id: 'ash-sync-arc-restricted',
           data: {
             isChildAccount: false,
             isArcRestricted: true,
+          },
+          trigger: (screen) => {
+            screen.setIsMinorMode(false);
+            screen.showLoadedStep(/*os_sync_lacros=*/ false);
+          },
+        },
+        {
+          id: 'lacros-overview',
+          data: {
+            isChildAccount: false,
+            isArcRestricted: false,
+          },
+          trigger: (screen) => {
+            screen.setIsMinorMode(false);
+            screen.showLoadedStep(/*os_sync_lacros=*/ true);
+          },
+        },
+        {
+          id: 'lacros-overview-minor',
+          data: {
+            isChildAccount: true,
+            isArcRestricted: false,
+          },
+          trigger: (screen) => {
+            screen.setIsMinorMode(true);
+            screen.showLoadedStep(/*os_sync_lacros=*/ true);
           },
         },
       ],
@@ -1304,26 +1342,6 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       ],
     },
     {
-      id: 'arc-tos',
-      kind: ScreenKind.NORMAL,
-      states: [
-        {
-          id: 'us-terms-loaded',
-          trigger: (screen) => {
-            screen.clearDemoMode();
-            screen.reloadPlayStoreToS();
-          },
-        },
-        {
-          id: 'demo-mode',
-          trigger: (screen) => {
-            screen.setupForDemoMode();
-            screen.reloadPlayStoreToS();
-          },
-        },
-      ],
-    },
-    {
       id: 'arc-vm-data-migration',
       kind: ScreenKind.NORMAL,
     },
@@ -1557,6 +1575,10 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
     },
     {
       id: 'touchpad-scroll',
+      kind: ScreenKind.NORMAL,
+    },
+    {
+      id: 'drive-pinning',
       kind: ScreenKind.NORMAL,
     },
     {
@@ -1947,6 +1969,25 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       button.element.classList.add('gametoggle-button');
     }
 
+    createWallpaperPanel(parent) {
+      const wallpaperPanel = new ToolPanel(
+          this.debuggerOverlay_, 'Wallpaper', 'DebuggerPanelWallpaper');
+      const WALLPAPERS = [
+        ['Default', 'def'],
+        ['White', 'wh'],
+        ['Black', 'bk'],
+        ['Red', 'r'],
+        ['Blue', 'bl'],
+        ['Green', 'gn'],
+        ['Yellow', 'ye'],
+      ];
+      WALLPAPERS.forEach(function(pair) {
+        new DebugButton(wallpaperPanel.content, pair[0], function(color) {
+          chrome.send('debug.switchWallpaper', [color]);
+        }.bind(null, pair[1]));
+      });
+    }
+
     createScreensPanel(parent) {
       const panel = new ToolPanel(
           this.debuggerOverlay_, 'Screens', 'DebuggerPanelScreens');
@@ -2152,6 +2193,7 @@ const createAssistantZippy = (type, isMinor, isNativeIcons) => {
       this.createScreensPanel(this.debuggerOverlay_);
       this.createStatesPanel(this.debuggerOverlay_);
       this.createToolsPanel(this.debuggerOverlay_);
+      this.createWallpaperPanel(this.debuggerOverlay_);
 
       element.appendChild(this.debuggerButton_);
       element.appendChild(this.debuggerOverlay_);

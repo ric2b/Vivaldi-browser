@@ -20,21 +20,20 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "ui/accelerated_widget_mac/ca_layer_frame_sink_provider.h"
 #include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
-#include "ui/base/cocoa/animation_utils.h"
+#include "ui/base/ime/text_input_mode.h"
+#include "ui/base/ime/text_input_type.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
-#include "ui/gfx/geometry/dip_util.h"
-
-@interface CALayer (PrivateAPI)
-- (void)setContentsChanged;
-@end
 
 // TODO(dtapuska): Change this to be UITextInput and handle the other
 // events to implement the composition and selection ranges.
 @interface RenderWidgetUIViewTextInput : UIView <UIKeyInput> {
   raw_ptr<content::RenderWidgetHostViewIOS> _view;
 }
-- (void)onUpdateTextInputState:(const ui::mojom::TextInputState*)state
+- (void)onUpdateTextInputState:(const ui::mojom::TextInputState&)state
                     withBounds:(CGRect)bounds;
+- (void)showKeyboard:(bool)has_text withBounds:(CGRect)bounds;
+- (void)hideKeyboard;
+
 @end
 
 @interface RenderWidgetUIView : CALayerFrameSinkProvider {
@@ -67,16 +66,39 @@
   return [self init];
 }
 
-- (void)onUpdateTextInputState:(const ui::mojom::TextInputState*)state
+- (void)onUpdateTextInputState:(const ui::mojom::TextInputState&)state
                     withBounds:(CGRect)bounds {
-  if (state) {
-    self.frame = bounds;
-    [self becomeFirstResponder];
-    _hasText = !state->value->empty();
+  // Check for the visibility request and policy if VK APIs are enabled.
+  if (state.vk_policy == ui::mojom::VirtualKeyboardPolicy::MANUAL) {
+    // policy is manual.
+    if (state.last_vk_visibility_request ==
+        ui::mojom::VirtualKeyboardVisibilityRequest::SHOW) {
+      [self showKeyboard:!state.value->empty() withBounds:bounds];
+    } else if (state.last_vk_visibility_request ==
+               ui::mojom::VirtualKeyboardVisibilityRequest::HIDE) {
+      [self hideKeyboard];
+    }
   } else {
-    [self resignFirstResponder];
-    _hasText = NO;
+    bool hide = state.always_hide_ime ||
+                state.mode == ui::TextInputMode::TEXT_INPUT_MODE_NONE ||
+                state.type == ui::TextInputType::TEXT_INPUT_TYPE_NONE;
+    if (hide) {
+      [self hideKeyboard];
+    } else if (state.show_ime_if_needed) {
+      [self showKeyboard:!state.value->empty() withBounds:bounds];
+    }
   }
+}
+
+- (void)showKeyboard:(bool)has_text withBounds:(CGRect)bounds {
+  self.frame = bounds;
+  [self becomeFirstResponder];
+  _hasText = has_text;
+}
+
+- (void)hideKeyboard {
+  [self resignFirstResponder];
+  _hasText = NO;
 }
 
 - (BOOL)canBecomeFirstResponder {
@@ -166,14 +188,14 @@
 }
 
 - (void)touchesBegan:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event {
-  for (UITouch* touch in touches) {
-    _view->OnTouchEvent(content::WebTouchEventBuilder::Build(
-        blink::WebInputEvent::Type::kTouchStart, touch, event, self));
-  }
   if (!_view->HasFocus()) {
     if ([self becomeFirstResponder]) {
       _view->OnFirstResponderChanged();
     }
+  }
+  for (UITouch* touch in touches) {
+    _view->OnTouchEvent(content::WebTouchEventBuilder::Build(
+        blink::WebInputEvent::Type::kTouchStart, touch, event, self));
   }
 }
 
@@ -207,7 +229,6 @@ namespace content {
 class UIViewHolder {
  public:
   base::scoped_nsobject<RenderWidgetUIView> view_;
-  base::scoped_nsobject<CALayer> io_surface_layer_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -223,6 +244,9 @@ RenderWidgetHostViewIOS::RenderWidgetHostViewIOS(RenderWidgetHost* widget)
   ui_view_ = std::make_unique<UIViewHolder>();
   ui_view_->view_ = base::scoped_nsobject<RenderWidgetUIView>(
       [[RenderWidgetUIView alloc] initWithWidget:this]);
+
+  display_tree_ =
+      std::make_unique<ui::DisplayCALayerTree>([ui_view_->view_ layer]);
 
   browser_compositor_ = std::make_unique<BrowserCompositorIOS>(
       ui_view_->view_.get(), this, host()->is_hidden(),
@@ -424,37 +448,8 @@ void RenderWidgetHostViewIOS::UpdateScreenInfo() {
 
 void RenderWidgetHostViewIOS::UpdateCALayerTree(
     const gfx::CALayerParams& ca_layer_params) {
-  ScopedCAActionDisabler disabler;
-  base::ScopedCFTypeRef<IOSurfaceRef> io_surface(
-      IOSurfaceLookupFromMachPort(ca_layer_params.io_surface_mach_port));
-  if (!io_surface) {
-    return;
-  }
-
-  if (!ui_view_->io_surface_layer_) {
-    ui_view_->io_surface_layer_ =
-        base::scoped_nsobject<CALayer>([[CALayer alloc] init]);
-    [[ui_view_->view_ layer] addSublayer:ui_view_->io_surface_layer_];
-    [[ui_view_->view_ layer] setDrawsAsynchronously:YES];
-  }
-
-  id new_contents = static_cast<id>(io_surface.get());
-  if (new_contents && new_contents == [ui_view_->io_surface_layer_ contents]) {
-    [ui_view_->io_surface_layer_ setContentsChanged];
-  } else {
-    [ui_view_->io_surface_layer_ setContents:new_contents];
-  }
-
-  // TODO(danakj): We should avoid lossy conversions to integer DIPs. The OS
-  // wants a floating point value.
-  gfx::Size bounds_dip = gfx::ToFlooredSize(gfx::ConvertSizeToDips(
-      ca_layer_params.pixel_size, ca_layer_params.scale_factor));
-  [ui_view_->io_surface_layer_
-      setFrame:CGRectMake(0, 0, bounds_dip.width(), bounds_dip.height())];
-  if ([ui_view_->io_surface_layer_ contentsScale] !=
-      ca_layer_params.scale_factor) {
-    [ui_view_->io_surface_layer_ setContentsScale:ca_layer_params.scale_factor];
-  }
+  DCHECK(display_tree_);
+  display_tree_->UpdateCALayerTree(ca_layer_params);
 }
 
 void RenderWidgetHostViewIOS::DidNavigate() {
@@ -672,13 +667,17 @@ void RenderWidgetHostViewIOS::OnUpdateTextInputStateCalled(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view,
     bool did_update_state) {
-  if (!did_update_state) {
-    return;
+  if (text_input_manager->GetActiveWidget()) {
+    [[ui_view_->view_ textInput]
+        onUpdateTextInputState:*text_input_manager->GetTextInputState()
+                    withBounds:[ui_view_->view_ bounds]];
+  } else {
+    // If there are no active widgets, the TextInputState.type should be
+    // reported as none.
+    [[ui_view_->view_ textInput]
+        onUpdateTextInputState:ui::mojom::TextInputState()
+                    withBounds:[ui_view_->view_ bounds]];
   }
-  const ui::mojom::TextInputState* state =
-      text_input_manager->GetTextInputState();
-  [[ui_view_->view_ textInput] onUpdateTextInputState:state
-                                           withBounds:[ui_view_->view_ bounds]];
 }
 
 ui::Compositor* RenderWidgetHostViewIOS::GetCompositor() {

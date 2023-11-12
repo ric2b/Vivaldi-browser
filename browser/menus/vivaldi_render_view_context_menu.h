@@ -140,14 +140,14 @@ protected:
 
   int id_;
   gfx::NativeView parent_view_;
-  content::WebContents* const embedder_web_contents_;
+  const raw_ptr<content::WebContents> embedder_web_contents_;
   IdToIntMap command_id_map_;
   IdToSimpleMenuModelMap menu_model_map_;
   // Delegate that handles commands with dynamic id.
-  ui::SimpleMenuModel::Delegate* model_delegate_ = nullptr;
-  Delegate* menu_delegate_ = nullptr;
+  raw_ptr<ui::SimpleMenuModel::Delegate> model_delegate_ = nullptr;
+  raw_ptr<Delegate> menu_delegate_ = nullptr;
   bool is_executing_command_ = false;
-  ui::SimpleMenuModel* populating_menu_model_ = nullptr;
+  raw_ptr<ui::SimpleMenuModel> populating_menu_model_ = nullptr;
 
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
   std::unique_ptr<ProfileMenuController> link_profile_controller_;

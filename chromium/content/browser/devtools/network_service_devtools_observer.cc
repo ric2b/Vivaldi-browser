@@ -94,7 +94,7 @@ void NetworkServiceDevToolsObserver::OnTrustTokenOperationDone(
                    devtools_request_id, *result);
 }
 
-void NetworkServiceDevToolsObserver::OnPrivateNetworkRequest(
+void NetworkServiceDevToolsObserver::OnLocalNetworkRequest(
     const absl::optional<std::string>& devtools_request_id,
     const GURL& url,
     bool is_warning,
@@ -206,21 +206,15 @@ void NetworkServiceDevToolsObserver::OnCorsError(
 
   // TODO(https://crbug.com/1268378): Remove this once enforcement is always
   // enabled and warnings are no more.
-  if (is_warning) {
-    GetContentClient()->browser()->LogWebFeatureForCurrentPage(
-        rfhi,
-        blink::mojom::WebFeature::kPrivateNetworkAccessIgnoredPreflightError);
-
-    if (!initiator_origin.has_value() ||
-        !initiator_origin->IsSameOriginWith(url)) {
+  if (is_warning && initiator_origin.has_value()) {
+    if (!initiator_origin->IsSameOriginWith(url)) {
       GetContentClient()->browser()->LogWebFeatureForCurrentPage(
           rfhi, blink::mojom::WebFeature::
                     kPrivateNetworkAccessIgnoredCrossOriginPreflightError);
     }
 
-    if (!initiator_origin.has_value() ||
-        net::SchemefulSite(initiator_origin.value()) !=
-            net::SchemefulSite(url)) {
+    if (net::SchemefulSite(initiator_origin.value()) !=
+        net::SchemefulSite(url)) {
       GetContentClient()->browser()->LogWebFeatureForCurrentPage(
           rfhi, blink::mojom::WebFeature::
                     kPrivateNetworkAccessIgnoredCrossSitePreflightError);

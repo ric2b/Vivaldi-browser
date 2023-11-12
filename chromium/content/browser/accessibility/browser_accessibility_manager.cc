@@ -219,13 +219,6 @@ bool BrowserAccessibilityManager::CanFireEvents() const {
   if (!root_manager)
     return false;
 
-  // Do not fire events if a page is obscured by an interstitial page -- see
-  // crbug.com/730910.
-  // TODO(accessibility) Look into what happens if an interstitial page is only
-  // hiding an iframe.
-  if (root_manager->hidden_by_interstitial_page())
-    return false;
-
   // Do not fire events when the page is frozen inside the back/forward cache.
   // Rationale for the back/forward cache behavior:
   // https://docs.google.com/document/d/1_jaEAXurfcvriwcNU-5u0h8GGioh0LelagUIIGFfiuU/
@@ -585,6 +578,10 @@ bool BrowserAccessibilityManager::OnAccessibilityEvents(
   }
 
   if (received_load_complete_event) {
+    // Clearing the focused node first ensures that the focus event isn't
+    // suppressed in the case where focus was on the same node as in a previous
+    // update.
+    SetLastFocusedNode(nullptr);
     // Fire a focus event after the document has finished loading, but after all
     // the platform independent events have already fired, e.g. kLayoutComplete.
     // Some screen readers need a focus event in order to work properly.
@@ -805,6 +802,18 @@ BrowserAccessibilityManager::GetFocusFromThisOrDescendantFrame() const {
   return GetActiveDescendant(obj);
 }
 
+void BrowserAccessibilityManager::Blur(const BrowserAccessibility& node) {
+  if (!delegate_) {
+    return;
+  }
+
+  ui::AXActionData action_data;
+  action_data.action = ax::mojom::Action::kBlur;
+  action_data.target_node_id = node.GetId();
+  delegate_->AccessibilityPerformAction(action_data);
+  BrowserAccessibilityStateImpl::GetInstance()->OnAccessibilityApiUsage();
+}
+
 void BrowserAccessibilityManager::SetFocus(const BrowserAccessibility& node) {
   if (!delegate_)
     return;
@@ -897,6 +906,30 @@ void BrowserAccessibilityManager::Increment(const BrowserAccessibility& node) {
 
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kIncrement;
+  action_data.target_node_id = node.GetId();
+  delegate_->AccessibilityPerformAction(action_data);
+  BrowserAccessibilityStateImpl::GetInstance()->OnAccessibilityApiUsage();
+}
+
+void BrowserAccessibilityManager::Expand(const BrowserAccessibility& node) {
+  if (!delegate_) {
+    return;
+  }
+
+  ui::AXActionData action_data;
+  action_data.action = ax::mojom::Action::kExpand;
+  action_data.target_node_id = node.GetId();
+  delegate_->AccessibilityPerformAction(action_data);
+  BrowserAccessibilityStateImpl::GetInstance()->OnAccessibilityApiUsage();
+}
+
+void BrowserAccessibilityManager::Collapse(const BrowserAccessibility& node) {
+  if (!delegate_) {
+    return;
+  }
+
+  ui::AXActionData action_data;
+  action_data.action = ax::mojom::Action::kCollapse;
   action_data.target_node_id = node.GetId();
   delegate_->AccessibilityPerformAction(action_data);
   BrowserAccessibilityStateImpl::GetInstance()->OnAccessibilityApiUsage();

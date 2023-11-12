@@ -30,6 +30,7 @@ extern const char kAutofillCreditCardFidoAuthOfferCheckboxState[];
 // Please use kAutofillCreditCardEnabled, kAutofillIBANEnabled and
 // kAutofillProfileEnabled instead.
 extern const char kAutofillEnabledDeprecated[];
+extern const char kAutofillHasSeenIban[];
 extern const char kAutofillIBANEnabled[];
 extern const char kAutofillLastVersionDeduped[];
 extern const char kAutofillLastVersionDisusedAddressesDeleted[];
@@ -44,6 +45,15 @@ extern const char kAutofillUploadEvents[];
 extern const char kAutofillUploadEventsLastResetTimestamp[];
 extern const char kAutofillWalletImportEnabled[];
 extern const char kAutocompleteLastVersionRetentionPolicy[];
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+extern const char kAutofillPaymentMethodsMandatoryReauth[];
+extern const char kAutofillPaymentMethodsMandatoryReauthPromoShownCounter[];
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+
+// The maximum value for the
+// `kAutofillPaymentMethodsMandatoryReauthPromoShownCounter` pref. If this
+// value is reached, we should not show a mandatory re-auth promo.
+const int kMaxValueForMandatoryReauthPromoShownCounter = 3;
 
 namespace sync_transport_opt_in {
 enum Flags {
@@ -67,6 +77,10 @@ bool IsAutofillCreditCardEnabled(const PrefService* prefs);
 
 void SetAutofillCreditCardEnabled(PrefService* prefs, bool enabled);
 
+bool HasSeenIban(const PrefService* prefs);
+
+void SetAutofillHasSeenIban(PrefService* prefs);
+
 bool IsAutofillIBANEnabled(const PrefService* prefs);
 
 void SetAutofillIBANEnabled(PrefService* prefs, bool enabled);
@@ -84,6 +98,17 @@ void SetAutofillProfileEnabled(PrefService* prefs, bool enabled);
 bool IsPaymentsIntegrationEnabled(const PrefService* prefs);
 
 void SetPaymentsIntegrationEnabled(PrefService* prefs, bool enabled);
+
+bool IsAutofillPaymentMethodsMandatoryReauthEnabled(const PrefService* prefs);
+
+void SetAutofillPaymentMethodsMandatoryReauth(PrefService* prefs, bool enabled);
+
+bool ShouldShowAutofillPaymentMethodsMandatoryReauthPromo(
+    const PrefService* prefs);
+
+void SetAutofillPaymentMethodsMandatoryReauthPromoShownCounter(
+    PrefService* prefs,
+    int count);
 
 void SetUserOptedInWalletSyncTransport(PrefService* prefs,
                                        const CoreAccountId& account_id,

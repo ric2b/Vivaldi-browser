@@ -4,9 +4,12 @@
 
 #include "ash/webui/eche_app_ui/eche_recent_app_click_handler.h"
 
+#include <memory>
 #include <string>
 
 #include "ash/constants/ash_features.h"
+#include "ash/webui/eche_app_ui/apps_launch_info_provider.h"
+#include "ash/webui/eche_app_ui/eche_connection_status_handler.h"
 #include "ash/webui/eche_app_ui/eche_stream_status_change_handler.h"
 #include "ash/webui/eche_app_ui/fake_feature_status_provider.h"
 #include "ash/webui/eche_app_ui/fake_launch_app_helper.h"
@@ -50,25 +53,35 @@ class EcheRecentAppClickHandlerTest : public testing::Test {
         base::BindRepeating(
             &EcheRecentAppClickHandlerTest::FakeCloseNotificationFunction,
             base::Unretained(this)));
+    connection_status_handler_ =
+        std::make_unique<eche_app::EcheConnectionStatusHandler>();
+    apps_launch_info_provider_ = std::make_unique<AppsLaunchInfoProvider>(
+        connection_status_handler_.get());
     stream_status_change_handler_ =
-        std::make_unique<EcheStreamStatusChangeHandler>();
+        std::make_unique<EcheStreamStatusChangeHandler>(
+            apps_launch_info_provider_.get(), connection_status_handler_.get());
     handler_ = std::make_unique<EcheRecentAppClickHandler>(
         &fake_phone_hub_manager_, &fake_feature_status_provider_,
-        launch_app_helper_.get(), stream_status_change_handler_.get());
+        launch_app_helper_.get(), stream_status_change_handler_.get(),
+        apps_launch_info_provider_.get());
   }
 
   void TearDown() override {
+    apps_launch_info_provider_.reset();
     launch_app_helper_.reset();
     handler_.reset();
     stream_status_change_handler_.reset();
+    connection_status_handler_.reset();
   }
 
-  void FakeLaunchEcheAppFunction(const absl::optional<int64_t>& notification_id,
-                                 const std::string& package_name,
-                                 const std::u16string& visible_name,
-                                 const absl::optional<int64_t>& user_id,
-                                 const gfx::Image& icon,
-                                 const std::u16string& phone_name) {
+  void FakeLaunchEcheAppFunction(
+      const absl::optional<int64_t>& notification_id,
+      const std::string& package_name,
+      const std::u16string& visible_name,
+      const absl::optional<int64_t>& user_id,
+      const gfx::Image& icon,
+      const std::u16string& phone_name,
+      AppsLaunchInfoProvider* apps_launch_info_provider) {
     package_name_ = package_name;
     visible_name_ = visible_name;
     user_id_ = user_id.value();
@@ -137,6 +150,9 @@ class EcheRecentAppClickHandlerTest : public testing::Test {
   std::unique_ptr<FakeLaunchAppHelper> launch_app_helper_;
   std::unique_ptr<EcheStreamStatusChangeHandler> stream_status_change_handler_;
   std::unique_ptr<EcheRecentAppClickHandler> handler_;
+  std::unique_ptr<eche_app::EcheConnectionStatusHandler>
+      connection_status_handler_;
+  std::unique_ptr<AppsLaunchInfoProvider> apps_launch_info_provider_;
   std::string package_name_;
   std::u16string visible_name_;
   int64_t user_id_;
@@ -175,7 +191,8 @@ TEST_F(EcheRecentAppClickHandlerTest, LaunchEcheAppFunction) {
   const char package_name[] = "com.fakeapp";
   base::HistogramTester histogram_tester;
   auto fake_app_metadata = phonehub::Notification::AppMetadata(
-      app_visible_name, package_name, gfx::Image(),
+      app_visible_name, package_name, /*color_icon=*/gfx::Image(),
+      /*monochrome_icon_mask=*/gfx::Image(),
       /*icon_color=*/absl::nullopt, /*icon_is_monochrome=*/true, user_id);
 
   std::vector<phonehub::Notification::AppMetadata> app_metadata =
@@ -223,7 +240,8 @@ TEST_F(EcheRecentAppClickHandlerTest, HandleNotificationClick) {
   const char16_t app_visible_name[] = u"Fake App";
   const char package_name[] = "com.fakeapp";
   auto fake_app_metadata = phonehub::Notification::AppMetadata(
-      app_visible_name, package_name, gfx::Image(),
+      app_visible_name, package_name, /*color_icon=*/gfx::Image(),
+      /*monochrome_icon_mask=*/gfx::Image(),
       /*icon_color=*/absl::nullopt, /*icon_is_monochrome=*/true, user_id);
 
   // Keep notification's metadata in handler if the stream has not started yet.
@@ -250,7 +268,8 @@ TEST_F(EcheRecentAppClickHandlerTest,
   const char16_t app_visible_name[] = u"Fake App";
   const char package_name[] = "com.fakeapp";
   auto fake_app_metadata = phonehub::Notification::AppMetadata(
-      app_visible_name, package_name, gfx::Image(),
+      app_visible_name, package_name, /*color_icon=*/gfx::Image(),
+      /*monochrome_icon_mask=*/gfx::Image(),
       /*icon_color=*/absl::nullopt, /*icon_is_monochrome=*/true, user_id);
 
   // Update notification's metadata to recents list directly when the stream is
@@ -273,7 +292,8 @@ TEST_F(EcheRecentAppClickHandlerTest,
   const char package_name[] = "com.fakeapp";
   base::HistogramTester histogram_tester;
   auto fake_app_metadata = phonehub::Notification::AppMetadata(
-      app_visible_name, package_name, gfx::Image(),
+      app_visible_name, package_name, /*color_icon=*/gfx::Image(),
+      /*monochrome_icon_mask=*/gfx::Image(),
       /*icon_color=*/absl::nullopt, /*icon_is_monochrome=*/true, user_id);
 
   SetAppLaunchProhibitedReason(

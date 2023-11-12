@@ -43,8 +43,9 @@ FeaturePodButton* AccessibilityFeaturePodController::CreateButton() {
                        login_status == LoginStatus::LOCKED ||
                        delegate->ShouldShowAccessibilityMenu();
   button->SetVisible(visible);
-  if (visible)
+  if (visible) {
     TrackVisibilityUMA();
+  }
 
   return button;
 }
@@ -56,6 +57,7 @@ std::unique_ptr<FeatureTile> AccessibilityFeaturePodController::CreateTile(
       base::BindRepeating(&FeaturePodControllerBase::OnIconPressed,
                           weak_ptr_factory_.GetWeakPtr()),
       /*is_togglable=*/false);
+  feature_tile->SetID(VIEW_ID_ACCESSIBILITY_FEATURE_TILE);
   feature_tile->SetVectorIcon(kUnifiedMenuAccessibilityIcon);
   feature_tile->SetLabel(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ACCESSIBILITY));
@@ -63,10 +65,18 @@ std::unique_ptr<FeatureTile> AccessibilityFeaturePodController::CreateTile(
   const std::u16string tooltip_text =
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_ACCESSIBILITY_TOOLTIP);
   feature_tile->SetTooltipText(tooltip_text);
-  feature_tile->CreateDrillInButton(
-      base::BindRepeating(&FeaturePodControllerBase::OnLabelPressed,
-                          weak_ptr_factory_.GetWeakPtr()),
-      tooltip_text);
+  feature_tile->CreateDecorativeDrillInButton(tooltip_text);
+
+  AccessibilityDelegate* delegate = Shell::Get()->accessibility_delegate();
+  LoginStatus login_status = Shell::Get()->session_controller()->login_status();
+  const bool visible = login_status == LoginStatus::NOT_LOGGED_IN ||
+                       login_status == LoginStatus::LOCKED ||
+                       delegate->ShouldShowAccessibilityMenu();
+  feature_tile->SetVisible(visible);
+  if (visible) {
+    TrackVisibilityUMA();
+  }
+
   return feature_tile;
 }
 

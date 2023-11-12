@@ -16,6 +16,7 @@
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/lock_state_controller_test_api.h"
 #include "ash/wm/test_session_state_animator.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/feature_usage/feature_usage_metrics.h"
@@ -64,7 +65,7 @@ class PowerEventObserverTest : public AshTestBase {
     return Shell::Get()->session_controller()->IsScreenLocked();
   }
 
-  PowerEventObserver* observer_ = nullptr;
+  raw_ptr<PowerEventObserver, ExperimentalAsh> observer_ = nullptr;
 };
 
 TEST_F(PowerEventObserverTest, LockBeforeSuspend) {
@@ -277,7 +278,7 @@ TEST_F(PowerEventObserverTest, DelaySuspendForCompositing_MultiDisplay) {
 }
 
 TEST_F(PowerEventObserverTest,
-       DelaySuspendForCompositing_PendingDisplayRemoved) {
+       DISABLED_DelaySuspendForCompositing_PendingDisplayRemoved) {
   SetCanLockScreen(true);
   SetShouldLockScreenAutomatically(true);
 
@@ -758,7 +759,14 @@ TEST_F(LockOnSuspendUsageTest, LockOnSuspendUsage) {
               1)));
 }
 
-TEST_F(LockOnSuspendUsageTest, No_ShouldLockScreenAutomatically) {
+// TODO(crbug.com/1425006): Test is failing on "Linux ChromiumOS MSan Tests".
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_No_ShouldLockScreenAutomatically \
+  DISABLED_No_ShouldLockScreenAutomatically
+#else
+#define MAYBE_No_ShouldLockScreenAutomatically No_ShouldLockScreenAutomatically
+#endif
+TEST_F(LockOnSuspendUsageTest, MAYBE_No_ShouldLockScreenAutomatically) {
   SetCanLockScreen(true);
   SetShouldLockScreenAutomatically(false);
 

@@ -20,16 +20,16 @@
 #import "base/task/thread_pool.h"
 #import "base/threading/scoped_blocking_call.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
-#import "ios/chrome/browser/ui/main/layout_guide_util.h"
+#import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
+#import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/ui/open_in/features.h"
 #import "ios/chrome/browser/ui/open_in/open_in_activity_delegate.h"
 #import "ios/chrome/browser/ui/open_in/open_in_activity_view_controller.h"
 #import "ios/chrome/browser/ui/open_in/open_in_controller_testing.h"
 #import "ios/chrome/browser/ui/open_in/open_in_histograms.h"
-#import "ios/chrome/browser/ui/util/layout_guide_names.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/download/crw_web_view_download.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
@@ -513,14 +513,16 @@ BOOL CreateDestinationDirectoryAndRemoveObsoleteFiles() {
 
   if (@available(iOS 14.5, *)) {
     if (IsOpenInDownloadWithWKDownload()) {
-      [self.download cancelDownload];
+      __weak __typeof(self) weakSelf = self;
+      [self.download cancelDownload:^() {
+        [weakSelf removeOverlayedView];
+        if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+          [weakSelf hideOpenInToolbar];
+        }
+      }];
+      _downloadCanceled = YES;
     }
   }
-
-  [self removeOverlayedView];
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET)
-    [self hideOpenInToolbar];
-  _downloadCanceled = YES;
 }
 
 - (void)removeOverlayedView {

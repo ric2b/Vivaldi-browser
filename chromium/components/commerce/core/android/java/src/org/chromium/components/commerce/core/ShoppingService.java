@@ -13,8 +13,6 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.url.GURL;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 
 /** A central hub for accessing shopping and product information. */
@@ -176,6 +174,31 @@ public class ShoppingService {
                 sub.idType, sub.managementType, sub.id, callback);
     }
 
+    /**
+     * Check if a subscription exists.
+     * @param sub The subscription details to check.
+     * @param callback A callback executed when the state of the subscription is known.
+     */
+    public void isSubscribed(CommerceSubscription sub, Callback<Boolean> callback) {
+        if (mNativeShoppingServiceAndroid == 0) return;
+
+        ShoppingServiceJni.get().isSubscribed(mNativeShoppingServiceAndroid, this, sub.type,
+                sub.idType, sub.managementType, sub.id, callback);
+    }
+
+    /**
+     * Check if a subscription exists from cached information. Use of the the callback-based version
+     * {@link #isSubscribed(CommerceSubscription, Callback)} is preferred.
+     * @param sub The subscription details to check.
+     * @return Whether the provided subscription is tracked by the user.
+     */
+    public boolean isSubscribedFromCache(CommerceSubscription sub) {
+        if (mNativeShoppingServiceAndroid == 0) return false;
+
+        return ShoppingServiceJni.get().isSubscribedFromCache(mNativeShoppingServiceAndroid, this,
+                sub.type, sub.idType, sub.managementType, sub.id);
+    }
+
     public void addSubscriptionsObserver(SubscriptionsObserver observer) {
         mSubscriptionsObservers.addObserver(observer);
     }
@@ -205,6 +228,15 @@ public class ShoppingService {
         if (mNativeShoppingServiceAndroid == 0) return false;
 
         return ShoppingServiceJni.get().isMerchantViewerEnabled(
+                mNativeShoppingServiceAndroid, this);
+    }
+
+    // This is a feature check for the "price tracking", which will return true if the user has the
+    // feature flag enabled or (if applicable) is in an eligible country and locale.
+    public boolean isCommercePriceTrackingEnabled() {
+        if (mNativeShoppingServiceAndroid == 0) return false;
+
+        return ShoppingServiceJni.get().isCommercePriceTrackingEnabled(
                 mNativeShoppingServiceAndroid, this);
     }
 
@@ -254,27 +286,22 @@ public class ShoppingService {
     }
 
     @CalledByNative
-    private List<CommerceSubscription> createSubscriptionAndAddToList(
-            List<CommerceSubscription> subs, int type, int idType, int managementType, String id) {
-        if (subs == null) {
-            subs = new ArrayList<>();
-        }
-        CommerceSubscription sub = new CommerceSubscription(type, idType, id, managementType, null);
-        subs.add(sub);
-        return subs;
+    private static CommerceSubscription createSubscription(
+            int type, int idType, int managementType, String id) {
+        return new CommerceSubscription(type, idType, id, managementType, null);
     }
 
     @CalledByNative
-    private void onSubscribe(List<CommerceSubscription> subs, boolean succeeded) {
+    private void onSubscribe(CommerceSubscription sub, boolean succeeded) {
         for (SubscriptionsObserver o : mSubscriptionsObservers) {
-            o.onSubscribe(subs, succeeded);
+            o.onSubscribe(sub, succeeded);
         }
     }
 
     @CalledByNative
-    private void onUnsubscribe(List<CommerceSubscription> subs, boolean succeeded) {
+    private void onUnsubscribe(CommerceSubscription sub, boolean succeeded) {
         for (SubscriptionsObserver o : mSubscriptionsObservers) {
-            o.onUnsubscribe(subs, succeeded);
+            o.onUnsubscribe(sub, succeeded);
         }
     }
 
@@ -293,7 +320,13 @@ public class ShoppingService {
                 String seenCountry, Callback<Boolean> callback);
         void unsubscribe(long nativeShoppingServiceAndroid, ShoppingService caller, int type,
                 int idType, int managementType, String id, Callback<Boolean> callback);
+        void isSubscribed(long nativeShoppingServiceAndroid, ShoppingService caller, int type,
+                int idType, int managementType, String id, Callback<Boolean> callback);
+        boolean isSubscribedFromCache(long nativeShoppingServiceAndroid, ShoppingService caller,
+                int type, int idType, int managementType, String id);
         boolean isShoppingListEligible(long nativeShoppingServiceAndroid, ShoppingService caller);
         boolean isMerchantViewerEnabled(long nativeShoppingServiceAndroid, ShoppingService caller);
+        boolean isCommercePriceTrackingEnabled(
+                long nativeShoppingServiceAndroid, ShoppingService caller);
     }
 }

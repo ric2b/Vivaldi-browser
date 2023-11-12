@@ -77,6 +77,8 @@ if (current_os == "ios" || current_os == "mac") {
                           [
                             "--target-cpu",
                             current_cpu,
+                            "--target-environment",
+                            target_environment,
                             "--deployment-target",
                             ios_deployment_target,
                           ],

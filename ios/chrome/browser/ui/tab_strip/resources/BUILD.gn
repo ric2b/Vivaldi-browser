@@ -28,3 +28,10 @@ imageset("tabstrip_new_tab") {
     "tabstrip_new_tab.imageset/tabstrip_new_tab@2x.png",
   ]
 }
+
+imageset("tabstrip_close_tab") {
+  sources = [
+    "tabstrip_close_tab.imageset/Contents.json",
+    "tabstrip_close_tab.imageset/tabstrip_close_tab.pdf",
+  ]
+}

@@ -35,12 +35,19 @@ int64_t vp9_block_error_c(const tran_low_t* coeff,
                           const tran_low_t* dqcoeff,
                           intptr_t block_size,
                           int64_t* ssz);
-#define vp9_block_error vp9_block_error_c
+int64_t vp9_block_error_neon(const tran_low_t* coeff,
+                             const tran_low_t* dqcoeff,
+                             intptr_t block_size,
+                             int64_t* ssz);
+#define vp9_block_error vp9_block_error_neon
 
 int64_t vp9_block_error_fp_c(const tran_low_t* coeff,
                              const tran_low_t* dqcoeff,
                              int block_size);
-#define vp9_block_error_fp vp9_block_error_fp_c
+int64_t vp9_block_error_fp_neon(const tran_low_t* coeff,
+                                const tran_low_t* dqcoeff,
+                                int block_size);
+#define vp9_block_error_fp vp9_block_error_fp_neon
 
 int vp9_denoiser_filter_c(const uint8_t* sig,
                           int sig_stride,
@@ -65,6 +72,7 @@ int vp9_denoiser_filter_neon(const uint8_t* sig,
 int vp9_diamond_search_sad_c(const struct macroblock* x,
                              const struct search_site_config* cfg,
                              struct mv* ref_mv,
+                             uint32_t start_mv_sad,
                              struct mv* best_mv,
                              int search_param,
                              int sad_per_bit,
@@ -74,6 +82,7 @@ int vp9_diamond_search_sad_c(const struct macroblock* x,
 int vp9_diamond_search_sad_neon(const struct macroblock* x,
                                 const struct search_site_config* cfg,
                                 struct mv* ref_mv,
+                                uint32_t start_mv_sad,
                                 struct mv* best_mv,
                                 int search_param,
                                 int sad_per_bit,
@@ -134,13 +143,22 @@ int64_t vp9_highbd_block_error_c(const tran_low_t* coeff,
                                  intptr_t block_size,
                                  int64_t* ssz,
                                  int bd);
-#define vp9_highbd_block_error vp9_highbd_block_error_c
+int64_t vp9_highbd_block_error_neon(const tran_low_t* coeff,
+                                    const tran_low_t* dqcoeff,
+                                    intptr_t block_size,
+                                    int64_t* ssz,
+                                    int bd);
+#define vp9_highbd_block_error vp9_highbd_block_error_neon
 
 void vp9_highbd_fht16x16_c(const int16_t* input,
                            tran_low_t* output,
                            int stride,
                            int tx_type);
-#define vp9_highbd_fht16x16 vp9_highbd_fht16x16_c
+void vp9_highbd_fht16x16_neon(const int16_t* input,
+                              tran_low_t* output,
+                              int stride,
+                              int tx_type);
+#define vp9_highbd_fht16x16 vp9_highbd_fht16x16_neon
 
 void vp9_highbd_fht4x4_c(const int16_t* input,
                          tran_low_t* output,
@@ -156,7 +174,11 @@ void vp9_highbd_fht8x8_c(const int16_t* input,
                          tran_low_t* output,
                          int stride,
                          int tx_type);
-#define vp9_highbd_fht8x8 vp9_highbd_fht8x8_c
+void vp9_highbd_fht8x8_neon(const int16_t* input,
+                            tran_low_t* output,
+                            int stride,
+                            int tx_type);
+#define vp9_highbd_fht8x8 vp9_highbd_fht8x8_neon
 
 void vp9_highbd_fwht4x4_c(const int16_t* input, tran_low_t* output, int stride);
 #define vp9_highbd_fwht4x4 vp9_highbd_fwht4x4_c

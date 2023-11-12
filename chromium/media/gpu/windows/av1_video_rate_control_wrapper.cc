@@ -14,6 +14,13 @@ int AV1RateControl::GetLoopfilterLevel() const {
 }
 
 template <>
+void AV1RateControl::PostEncodeUpdate(uint64_t encoded_frame_size,
+                                      const FrameParams& frame_params) {
+  DCHECK(impl_);
+  return impl_->PostEncodeUpdate(encoded_frame_size);
+}
+
+template <>
 aom::AV1RateControlRtcConfig AV1RateControl::ConvertControlConfig(
     const RateControlConfig& config) {
   aom::AV1RateControlRtcConfig rc_config;
@@ -35,11 +42,13 @@ aom::AV1RateControlRtcConfig AV1RateControl::ConvertControlConfig(
   rc_config.max_inter_bitrate_pct = 0;
   rc_config.ss_number_layers = config.ss_number_layers;
   rc_config.ts_number_layers = config.ts_number_layers;
+  for (int tid = 0; tid < config.ts_number_layers; ++tid) {
+    rc_config.ts_rate_decimator[tid] = config.ts_rate_decimator[tid];
+  }
   for (int sid = 0; sid < config.ss_number_layers; ++sid) {
     rc_config.scaling_factor_num[sid] = config.scaling_factor_num[sid];
     rc_config.scaling_factor_den[sid] = config.scaling_factor_den[sid];
     for (int tid = 0; tid < config.ts_number_layers; ++tid) {
-      rc_config.ts_rate_decimator[tid] = config.ts_rate_decimator[tid];
       const int i = sid * config.ts_number_layers + tid;
       rc_config.max_quantizers[i] = config.max_quantizers[i];
       rc_config.min_quantizers[i] = config.min_quantizers[i];

@@ -116,7 +116,7 @@ bool EventReaderLibevdevCros::HasHapticTouchpad() const {
   return haptic_touchpad_handler_ != nullptr;
 }
 
-bool EventReaderLibevdevCros::CanHandleHapticFeedback() {
+bool EventReaderLibevdevCros::CanHandleHapticFeedback() const {
   return haptic_touchpad_handler_ && haptic_feedback_enabled_ &&
          touch_count_ > 0;
 }
@@ -137,12 +137,13 @@ void EventReaderLibevdevCros::SetHapticTouchpadEffectForNextButtonRelease(
 
 void EventReaderLibevdevCros::ApplyDeviceSettings(
     const InputDeviceSettingsEvdev& settings) {
+  const auto& touchpad_settings = settings.GetTouchpadSettings(id());
   if (haptic_touchpad_handler_) {
     haptic_touchpad_handler_->SetClickStrength(
         static_cast<HapticTouchpadEffectStrength>(
-            settings.touchpad_haptic_click_sensitivity));
+            touchpad_settings.haptic_click_sensitivity));
   }
-  haptic_feedback_enabled_ = settings.touchpad_haptic_feedback_enabled;
+  haptic_feedback_enabled_ = touchpad_settings.haptic_feedback_enabled;
 }
 
 bool EventReaderLibevdevCros::HasCapsLockLed() const {

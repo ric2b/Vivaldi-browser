@@ -2,18 +2,21 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="es">
 <translation id="1397811292916898096">Buscar en <ph name="PRODUCT_NAME" /></translation>
-<translation id="1456207338570705181">La función Tocar para buscar solo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi. Esta envía la palabra seleccionada y la página actual como contexto al buscador de Google. Puedes desactivarla en los <ph name="BEGIN_LINK" />ajustes<ph name="END_LINK" />.</translation>
+<translation id="1456207338570705181">La función Tocar para buscar sólo está disponible cuando Google es el buscador por defecto en Vivaldi. Esta envía la palabra seleccionada y la página actual como contexto al buscador de Google. Puedes desactivarla en los <ph name="BEGIN_LINK" />ajustes<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Alternar entre pestañas normales o privadas</translation>
 <translation id="1644574205037202324">Historial</translation>
 <translation id="17513872634828108">Pestañas abiertas</translation>
 <translation id="1829244130665387512">Buscar en la página</translation>
 <translation id="1910514478706885609">Abrir en pila de pestañas</translation>
+<translation id="1925021887439448749">Introduce una dirección personalizada</translation>
 <translation id="2038563949887743358">Activar la petición para el modo escritorio</translation>
 <translation id="2139186145475833000">Añadir a la pantalla de inicio</translation>
+<translation id="2149973817440762519">Editar marcador</translation>
 <translation id="2306442503286132111">Marcador guardado en la carpeta <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Apariencia</translation>
-<translation id="2501278716633472235">Regresar</translation>
+<translation id="2501278716633472235">Atrás</translation>
 <translation id="2633278372998075009">Pestañas privadas</translation>
+<translation id="2951071800649516099">Añade páginas a tu lista de lectura para leer más tarde</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> marcador}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> marcadores}}</translation>
@@ -25,17 +28,20 @@
 <translation id="3571177741182643350">Páginas no leídas - disponibles sin conexión:</translation>
 <translation id="3700829948786686853">Bienvenido a Vivaldi</translation>
 <translation id="3719826155360621982">Página principal</translation>
-<translation id="385051799172605136">Regresar</translation>
+<translation id="385051799172605136">Atrás</translation>
 <translation id="399014816462153200">Páginas leídas:</translation>
 <translation id="4121750346708795461">Al usar esta aplicación aceptas las <ph name="BEGIN_LINK1" />condiciones de servicio<ph name="END_LINK1" /> y la <ph name="BEGIN_LINK2" />política de privacidad<ph name="END_LINK2" /> de Vivaldi.</translation>
 <translation id="4137746084635924146">Idioma actual del dispositivo</translation>
 <translation id="4167670741834902166">Pestaña privada nueva</translation>
+<translation id="4195643157523330669">Abrir en pestaña nueva</translation>
 <translation id="4243710787042215766">Abrir en pestaña privada</translation>
+<translation id="451872707440238414">Buscar en tus marcadores</translation>
 <translation id="4526803704855831732">Pestañas privadas</translation>
 <translation id="4719086422742491124">Obtén información sobre los temas tratados en los sitios web sin salir de la página. Selecciona una o más palabras para buscarlas.
 
-La función Tocar para buscar solo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi.</translation>
+La función tocar para buscar sólo está disponible cuando Google es el buscador por defecto en Vivaldi.</translation>
 <translation id="4759238208242260848">Descargas</translation>
+<translation id="4850886885716139402">Ver</translation>
 <translation id="4883379392681899581">Salir del modo privado</translation>
 <translation id="4943872375798546930">Sin resultados</translation>
 <translation id="49576331685473090">Bloqueador de contenidos</translation>
@@ -43,12 +49,14 @@ La función Tocar para buscar solo está disponible cuando Google ha sido establ
 <translation id="5118676864324397542">Almacenamiento de <ph name="APP_NAME" /></translation>
 <translation id="5186185447130319458">Privado</translation>
 <translation id="5233638681132016545">Pestaña nueva</translation>
-<translation id="5375131951310889874">La función Tocar para buscar solo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi. Esta envía una palabra y su contexto al buscador de Google para mostrarte definiciones, imágenes, resultados de búsqueda y otros detalles.
+<translation id="5375131951310889874">La función «Tocar para buscar» sólo está disponible cuando Google ha sido establecido como buscador por defecto en Vivaldi. Ésta envía una palabra y su contexto al buscador de Google para mostrarte definiciones, imágenes, resultados de búsqueda y otros detalles.
 
-Para modificar el término de búsqueda, mantén presionado cualquier texto para seleccionarlo. Para afinar la búsqueda, desliza el panel hacia arriba y luego toca el cuadro de búsqueda.</translation>
+Para modificar el término de la búsqueda, mantén pulsado cualquier texto para seleccionarlo. Para afinar la búsqueda, desliza el panel hacia arriba y después toca el cuadro de búsqueda.</translation>
 <translation id="572328651809341494">Pestañas recientes</translation>
 <translation id="6150320133806434356">Marcador guardado</translation>
+<translation id="6301525844455696527">Ponte al día con tu lista de lectura</translation>
 <translation id="6336451774241870485">Pestaña privada nueva</translation>
+<translation id="6404511346730675251">Editar marcador</translation>
 <translation id="6585139692466700358">Ofrecer traducir páginas con el servicio de traducción de Vivaldi</translation>
 <translation id="6593061639179217415">Modo escritorio</translation>
 <translation id="6610147964972079463">Cerrar todas</translation>
@@ -57,9 +65,15 @@ Para modificar el término de búsqueda, mantén presionado cualquier texto para
 <translation id="732145680195464316">Marcador guardado en <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Acerca de Vivaldi</translation>
 <translation id="7465104139234185284">Cerrar todas las pestañas privadas</translation>
+<translation id="7481312909269577407">Avanzar</translation>
+<translation id="7583262514280211622">Aquí encontrarás tu lista de lectura</translation>
+<translation id="7968014550143838305">Añadido a la lista de lectura</translation>
 <translation id="804786196054284061">Condiciones de servicio</translation>
+<translation id="8127542551745560481">Editar página principal</translation>
+<translation id="8560602726703398413">Encuentra tu lista de lectura en marcadores</translation>
 <translation id="85991616550051997">Ir a la página principal</translation>
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="9063523880881406963">Desactivar la petición para el modo escritorio</translation>
 <translation id="9080642952018487277">Entrar al modo privado</translation>
+<translation id="96681097142096641">¿Ver página simplificada?</translation>
 </translationbundle>

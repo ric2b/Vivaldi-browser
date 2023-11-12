@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "ash/components/arc/arc_util.h"
-#include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -18,6 +17,7 @@
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "base/barrier_closure.h"
+#include "base/check_is_test.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/functional/bind.h"
@@ -63,7 +63,6 @@
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
 #include "chrome/browser/ash/policy/handlers/minimum_version_policy_handler.h"
-#include "chrome/browser/ash/policy/handlers/powerwash_requirements_checker.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/system/device_disabling_manager.h"
@@ -93,9 +92,9 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_util.h"
+#include "chromeos/ash/components/dbus/hiberman/hiberman_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
-#include "chromeos/ash/components/hibernate/buildflags.h"
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/ash/components/login/auth/public/auth_failure.h"
 #include "chromeos/ash/components/login/auth/public/key.h"
@@ -129,13 +128,11 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/user_activity/user_activity_detector.h"
+#include "ui/base/user_activity/user_activity_observer.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/views/widget/widget.h"
-
-#if BUILDFLAG(ENABLE_HIBERNATE)
-#include "chromeos/ash/components/dbus/hiberman/hiberman_client.h"  // nogncheck
-#endif
 
 // Enable VLOG level 1.
 #undef ENABLED_VLOG_LEVEL
@@ -279,26 +276,6 @@ absl::optional<EncryptionMigrationMode> GetEncryptionMigrationMode(
                             : EncryptionMigrationMode::ASK_USER;
 }
 
-// Returns account ID of a public session account if it is unique, otherwise
-// returns invalid account ID.
-AccountId GetArcDataSnapshotAutoLoginAccountId(
-    const std::vector<policy::DeviceLocalAccount>& device_local_accounts) {
-  AccountId auto_login_account_id = EmptyAccountId();
-  for (std::vector<policy::DeviceLocalAccount>::const_iterator it =
-           device_local_accounts.begin();
-       it != device_local_accounts.end(); ++it) {
-    if (it->type == policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION) {
-      // Do not perform ARC data snapshot auto-login if more than one public
-      // session account is configured.
-      if (auto_login_account_id.is_valid())
-        return EmptyAccountId();
-      auto_login_account_id = AccountId::FromUserEmail(it->user_id);
-      VLOG(2) << "PublicSession autologin found: " << it->user_id;
-    }
-  }
-  return auto_login_account_id;
-}
-
 // Returns account ID if a corresponding to `auto_login_account_id` device local
 // account exists, otherwise returns invalid account ID.
 AccountId GetPublicSessionAutoLoginAccountId(
@@ -405,6 +382,12 @@ ExistingUserController::ExistingUserController()
                           base::Unretained(this)));
 
   observed_user_manager_.Observe(user_manager::UserManager::Get());
+
+  if (ui::UserActivityDetector::Get()) {
+    ui::UserActivityDetector::Get()->AddObserver(this);
+  } else {
+    CHECK_IS_TEST();
+  }
 }
 
 void ExistingUserController::Init(const user_manager::UserList& users) {
@@ -423,9 +406,6 @@ void ExistingUserController::UpdateLoginDisplay(
           RebootOnSignOutPolicy::REBOOT_ON_SIGNOUT_MODE_UNSPECIFIED &&
       reboot_on_signout_policy != RebootOnSignOutPolicy::NEVER) {
     SessionTerminationManager::Get()->RebootIfNecessary();
-    // Initialize PowerwashRequirementsChecker so its instances will be able to
-    // use stored cryptohome powerwash state later
-    policy::PowerwashRequirementsChecker::Initialize();
   }
   bool show_users_on_signin = true;
   user_manager::UserList saml_users_for_password_sync;
@@ -482,8 +462,11 @@ void ExistingUserController::UpdateLoginDisplay(
   } else {
     sync_token_checkers_.reset();
   }
-  bool show_guest = user_manager->IsGuestSessionAllowed();
-  GetLoginDisplay()->Init(login_users, show_guest);
+  if (LoginScreen::Get()) {
+    LoginScreen::Get()->SetAllowLoginAsGuest(
+        user_manager->IsGuestSessionAllowed());
+  }
+  GetLoginDisplay()->Init(login_users);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -520,7 +503,12 @@ void ExistingUserController::Observe(
 ////////////////////////////////////////////////////////////////////////////////
 // ExistingUserController, private:
 
-ExistingUserController::~ExistingUserController() = default;
+ExistingUserController::~ExistingUserController() {
+  ui::UserActivityDetector* activity_detector = ui::UserActivityDetector::Get();
+  if (activity_detector) {
+    activity_detector->RemoveObserver(this);
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ExistingUserController, LoginDisplay::Delegate implementation:
@@ -651,6 +639,7 @@ void ExistingUserController::PerformLogin(
 void ExistingUserController::ContinuePerformLogin(
     LoginPerformer::AuthorizationMode auth_mode,
     std::unique_ptr<UserContext> user_context) {
+  CHECK(login_performer_);
   login_performer_->LoginAuthenticated(std::move(user_context));
 }
 
@@ -721,6 +710,7 @@ void ExistingUserController::ShowKioskEnableScreen() {
 void ExistingUserController::ShowEncryptionMigrationScreen(
     std::unique_ptr<UserContext> user_context,
     EncryptionMigrationMode migration_mode) {
+  CHECK(login_performer_);
   GetLoginDisplayHost()->GetSigninUI()->StartEncryptionMigration(
       std::move(user_context), migration_mode,
       base::BindOnce(&ExistingUserController::ContinuePerformLogin,
@@ -735,6 +725,7 @@ void ExistingUserController::ShowTPMError() {
 
 void ExistingUserController::ShowPasswordChangedDialogLegacy(
     const UserContext& user_context) {
+  CHECK(login_performer_);
   VLOG(1) << "Show password changed dialog"
           << ", count=" << login_performer_->password_changed_callback_count();
 
@@ -829,6 +820,7 @@ void ExistingUserController::OnAuthSuccess(const UserContext& user_context) {
 
   // Login performer will be gone so cache this value to use
   // once profile is loaded.
+  CHECK(login_performer_);
   password_changed_ = login_performer_->password_changed();
   auth_mode_ = login_performer_->auth_mode();
 
@@ -868,6 +860,7 @@ void ExistingUserController::ContinueAuthSuccessAfterResumeAttempt(
   //                          Regular        SAML
   //  /ServiceLogin              T            T
   //  /ChromeOsEmbeddedSetup     F            T
+  CHECK(login_performer_);
   const bool has_auth_cookies =
       login_performer_->auth_mode() ==
           LoginPerformer::AuthorizationMode::kExternal &&
@@ -884,9 +877,9 @@ void ExistingUserController::ContinueAuthSuccessAfterResumeAttempt(
 
   // Mark device will be consumer owned if the device is not managed and this is
   // the first user on the device.
-  if (!is_enterprise_managed && InstallAttributes::Get()->IsFirstSignIn()) {
+  if (!is_enterprise_managed &&
+      user_manager::UserManager::Get()->GetUsers().empty()) {
     DeviceSettingsService::Get()->MarkWillEstablishConsumerOwnership();
-    user_manager::UserManager::Get()->RecordOwner(user_context.GetAccountId());
   }
 
   if (user_context.CanLockManagedGuestSession()) {
@@ -1091,6 +1084,7 @@ void ExistingUserController::OnOldEncryptionDetected(
     bool has_incomplete_migration) {
   absl::optional<EncryptionMigrationMode> encryption_migration_mode =
       GetEncryptionMigrationMode(*user_context, has_incomplete_migration);
+  CHECK(login_performer_);
   if (!encryption_migration_mode.has_value()) {
     ContinuePerformLoginWithoutMigration(login_performer_->auth_mode(),
                                          std::move(user_context));
@@ -1208,6 +1202,7 @@ user_manager::UserList ExistingUserController::ExtractLoginUsers(
 
 void ExistingUserController::LoginAuthenticated(
     std::unique_ptr<UserContext> user_context) {
+  CHECK(login_performer_);
   login_performer_->LoginAuthenticated(std::move(user_context));
 }
 
@@ -1348,18 +1343,8 @@ void ExistingUserController::ConfigureAutoLogin() {
       policy::GetDeviceLocalAccounts(cros_settings_);
   const bool show_update_required_screen = IsUpdateRequiredDeadlineReached();
 
-  auto* data_snapshotd_manager =
-      arc::data_snapshotd::ArcDataSnapshotdManager::Get();
-  bool is_arc_data_snapshot_autologin =
-      (data_snapshotd_manager &&
-       data_snapshotd_manager->IsAutoLoginConfigured());
-  if (is_arc_data_snapshot_autologin) {
-    public_session_auto_login_account_id_ =
-        GetArcDataSnapshotAutoLoginAccountId(device_local_accounts);
-  } else {
-    public_session_auto_login_account_id_ = GetPublicSessionAutoLoginAccountId(
-        device_local_accounts, auto_login_account_id);
-  }
+  public_session_auto_login_account_id_ = GetPublicSessionAutoLoginAccountId(
+      device_local_accounts, auto_login_account_id);
 
   const user_manager::User* public_session_user =
       user_manager::UserManager::Get()->FindUser(
@@ -1370,8 +1355,7 @@ void ExistingUserController::ConfigureAutoLogin() {
     public_session_auto_login_account_id_ = EmptyAccountId();
   }
 
-  if (is_arc_data_snapshot_autologin ||
-      !cros_settings_->GetInteger(kAccountsPrefDeviceLocalAccountAutoLoginDelay,
+  if (!cros_settings_->GetInteger(kAccountsPrefDeviceLocalAccountAutoLoginDelay,
                                   &auto_login_delay_)) {
     auto_login_delay_ = 0;
   }
@@ -1388,7 +1372,7 @@ void ExistingUserController::ConfigureAutoLogin() {
   }
 }
 
-void ExistingUserController::ResetAutoLoginTimer() {
+void ExistingUserController::OnUserActivity(const ui::Event* event) {
   // Only restart the auto-login timer if it's already running.
   if (auto_login_timer_ && auto_login_timer_->IsRunning()) {
     StopAutoLoginTimer();
@@ -1456,20 +1440,6 @@ void ExistingUserController::StartAutoLoginTimer() {
     StopAutoLoginTimer();
   }
 
-  // Block auto-login flow until ArcDataSnapshotdManager is ready to enter an
-  // auto-login session.
-  // ArcDataSnapshotdManager stores a reset auto-login callback to fire it once
-  // it is ready.
-  auto* data_snapshotd_manager =
-      arc::data_snapshotd::ArcDataSnapshotdManager::Get();
-  if (data_snapshotd_manager && !data_snapshotd_manager->IsAutoLoginAllowed() &&
-      data_snapshotd_manager->IsAutoLoginConfigured()) {
-    data_snapshotd_manager->set_reset_autologin_callback(
-        base::BindOnce(&ExistingUserController::StartAutoLoginTimer,
-                       weak_factory_.GetWeakPtr()));
-    return;
-  }
-
   // Start the auto-login timer.
   if (!auto_login_timer_)
     auto_login_timer_ = std::make_unique<base::OneShotTimer>();
@@ -1506,8 +1476,9 @@ void ExistingUserController::SetPublicSessionKeyboardLayoutAndLogin(
   UserContext new_user_context = user_context;
   std::string keyboard_layout;
   for (auto& entry : keyboard_layouts) {
-    if (entry.FindBoolKey("selected").value_or(false)) {
-      const std::string* keyboard_layout_ptr = entry.FindStringKey("value");
+    base::Value::Dict& entry_dict = entry.GetDict();
+    if (entry_dict.FindBool("selected").value_or(false)) {
+      const std::string* keyboard_layout_ptr = entry_dict.FindString("value");
       if (keyboard_layout_ptr)
         keyboard_layout = *keyboard_layout_ptr;
       break;
@@ -1622,9 +1593,10 @@ void ExistingUserController::DoCompleteLogin(
   user_manager::KnownUser known_user(g_browser_process->local_state());
   std::string device_id = known_user.GetDeviceId(user_context.GetAccountId());
   if (device_id.empty()) {
-    bool is_ephemeral = ChromeUserManager::Get()->AreEphemeralUsersEnabled() &&
-                        user_context.GetAccountId() !=
-                            ChromeUserManager::Get()->GetOwnerAccountId();
+    const bool is_ephemeral = ChromeUserManager::Get()->IsEphemeralAccountId(
+                                  user_context.GetAccountId()) &&
+                              user_context.GetAccountId() !=
+                                  ChromeUserManager::Get()->GetOwnerAccountId();
     device_id = GenerateSigninScopedDeviceId(is_ephemeral);
   }
   user_context.SetDeviceId(device_id);

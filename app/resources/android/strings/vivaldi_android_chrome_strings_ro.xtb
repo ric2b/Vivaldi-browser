@@ -7,12 +7,15 @@
 <translation id="17513872634828108">File deschise</translation>
 <translation id="1829244130665387512">Caută în pagină</translation>
 <translation id="1910514478706885609">Deschide într-o grupă nouă de file</translation>
+<translation id="1925021887439448749">Introduceți adresa web personalizată</translation>
 <translation id="2038563949887743358">Activează cererea pentru versiunea desktop</translation>
 <translation id="2139186145475833000">Adaugă la ecranul de pornire</translation>
+<translation id="2149973817440762519">Editare semn de carte</translation>
 <translation id="2306442503286132111">Semnul de carte a fost salvat în dosarul <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aspect</translation>
 <translation id="2501278716633472235">La pagina precedentă</translation>
 <translation id="2633278372998075009">File private</translation>
+<translation id="2951071800649516099">Adaugă pagini la lista de lectură pentru mai târziu</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> semn de carte}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> semne de carte}}</translation>
@@ -35,6 +38,7 @@
 
 Atingeți pentru a căuta este o funcție care este disponibilă numai atunci când Google este stabilit ca motor de căutare implicit în Vivaldi.</translation>
 <translation id="4759238208242260848">Descărcări</translation>
+<translation id="4850886885716139402">Vizualizează</translation>
 <translation id="4883379392681899581">Părăsește modul privat</translation>
 <translation id="4943872375798546930">Niciun rezultat</translation>
 <translation id="49576331685473090">Blocare de conținut</translation>
@@ -47,7 +51,9 @@ Atingeți pentru a căuta este o funcție care este disponibilă numai atunci c�
 Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru a rafina căutarea, glisați panoul până la capăt și atingeți caseta de căutare.</translation>
 <translation id="572328651809341494">File recente</translation>
 <translation id="6150320133806434356">Semnul de carte a fost salvat</translation>
+<translation id="6301525844455696527">Aducere la zi a listei de lectură</translation>
 <translation id="6336451774241870485">Filă privată nouă</translation>
+<translation id="6404511346730675251">Editare semn de carte</translation>
 <translation id="6585139692466700358">Oferă traducerea paginilor în alte limbi folosind seviciul de traducere Vivaldi</translation>
 <translation id="6593061639179217415">Versiune pentru desktop</translation>
 <translation id="6610147964972079463">Închide filele private</translation>
@@ -56,9 +62,14 @@ Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru 
 <translation id="732145680195464316">Semnul de carte a fost salvat în <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Despre Vivaldi</translation>
 <translation id="7465104139234185284">Închide toate filele private</translation>
+<translation id="7583262514280211622">Veți găsi aici lista de lectură</translation>
+<translation id="7968014550143838305">Adăugat în lista de lectură</translation>
 <translation id="804786196054284061">Acordul de licență pentru utilizator</translation>
+<translation id="8127542551745560481">Editare pagina de pornire</translation>
+<translation id="8560602726703398413">Caută lista de lectură în semnele de carte</translation>
 <translation id="85991616550051997">La pagina de pornire</translation>
 <translation id="8820817407110198400">Semne de carte</translation>
 <translation id="9063523880881406963">Dezactivează cererea pentru versiunea desktop</translation>
 <translation id="9080642952018487277">Intră în modul privat</translation>
+<translation id="96681097142096641">Vizualizați pagina simplificată?</translation>
 </translationbundle>

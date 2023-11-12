@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_TOOLBAR_APP_MENU_MODEL_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/timer/elapsed_timer.h"
@@ -24,10 +25,6 @@
 class AppMenuIconController;
 class BookmarkSubMenuModel;
 class Browser;
-
-namespace {
-class MockAppMenuModel;
-}  // namespace
 
 // Values should correspond to 'WrenchMenuAction' enum in enums.xml.
 enum AppMenuAction {
@@ -84,6 +81,10 @@ enum AppMenuAction {
   MENU_ACTION_CHROME_WHATS_NEW = 54,
   MENU_ACTION_LACROS_DATA_MIGRATION = 55,
   MENU_ACTION_MENU_OPENED = 56,
+  // Only used by ExtensionsMenuModel sub menu.
+  MENU_ACTION_VISIT_CHROME_WEB_STORE = 57,
+  MENU_ACTION_PASSWORD_MANAGER = 58,
+  MENU_ACTION_TRANSLATE_PAGE = 59,
   LIMIT_MENU_ACTION
 };
 
@@ -121,6 +122,48 @@ class ToolsMenuModel : public ui::SimpleMenuModel {
   void Build(Browser* browser);
 };
 
+class ExtensionsMenuModel : public ui::SimpleMenuModel {
+ public:
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kManageExtensionsMenuItem);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kVisitChromeWebStoreMenuItem);
+
+  ExtensionsMenuModel(ui::SimpleMenuModel::Delegate* delegate,
+                      Browser* browser);
+
+  ExtensionsMenuModel(const ExtensionsMenuModel&) = delete;
+  ExtensionsMenuModel& operator=(const ExtensionsMenuModel&) = delete;
+
+  ~ExtensionsMenuModel() override;
+
+ private:
+  void Build(Browser* browser);
+};
+
+class AutofillSubMenuModel : public ui::SimpleMenuModel {
+ public:
+  AutofillSubMenuModel(ui::SimpleMenuModel::Delegate* delegate,
+                       AppMenuIconController* app_menu_icon_controller);
+
+  AutofillSubMenuModel(const AutofillSubMenuModel&) = delete;
+  AutofillSubMenuModel& operator=(const AutofillSubMenuModel&) = delete;
+
+  ~AutofillSubMenuModel() override;
+};
+
+class FindAndEditSubMenuModel : public ui::SimpleMenuModel {
+ public:
+  FindAndEditSubMenuModel(ui::SimpleMenuModel::Delegate* delegate,
+                          Browser* browser);
+
+  FindAndEditSubMenuModel(const FindAndEditSubMenuModel&) = delete;
+  FindAndEditSubMenuModel& operator=(const FindAndEditSubMenuModel&) = delete;
+
+  ~FindAndEditSubMenuModel() override;
+
+ private:
+  void Build(Browser* browser);
+};
+
 // A menu model that builds the contents of the app menu.
 class AppMenuModel : public ui::SimpleMenuModel,
                      public ui::SimpleMenuModel::Delegate,
@@ -128,10 +171,13 @@ class AppMenuModel : public ui::SimpleMenuModel,
                      public TabStripModelObserver,
                      public content::WebContentsObserver {
  public:
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kBookmarksMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kDownloadsMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kHistoryMenuItem);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kExtensionsMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kMoreToolsMenuItem);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kIncognitoMenuItem);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPasswordManagerMenuItem);
 
   // First command ID to use for the recent tabs menu. This is one higher than
   // the first command id used for the bookmarks menus, as the command ids for
@@ -209,8 +255,6 @@ class AppMenuModel : public ui::SimpleMenuModel,
   void CreateZoomMenu();
 
  private:
-  friend class ::MockAppMenuModel;
-
   // Adds actionable global error menu items to the menu.
   // Examples: Extension permissions and sign in errors.
   // Returns a boolean indicating whether any menu items were added.

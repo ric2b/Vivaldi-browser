@@ -9,16 +9,8 @@
 #endif
 
 NSString* const kPasswordsTableViewId = @"PasswordsTableViewId";
-NSString* const kPasswordsExportConfirmViewId = @"PasswordsExportConfirmViewId";
 NSString* const kPasswordsSearchBarId = @"PasswordsSearchBar";
 NSString* const kPasswordsScrimViewId = @"PasswordsScrimViewId";
-
-NSString* const kOnDeviceEncryptionOptInId = @"OnDeviceEncryptionSuggestion";
-NSString* const kOnDeviceEncryptionLearnMoreId =
-    @"OnDeviceEncryptionLearnMoreId";
-NSString* const kOnDeviceEncryptionSetUpId = @"OnDeviceEncryptionSetUpId";
-NSString* const kOnDeviceEncryptionOptedInTextId =
-    @"OnDeviceEncryptionOptedInTextId";
 
 NSString* const kPasswordDetailsTableViewId = @"PasswordDetailsTableViewId";
 NSString* const kPasswordDetailsDeletionAlertViewId =
@@ -28,17 +20,11 @@ NSString* const kPasswordsAddPasswordSaveButtonId =
 NSString* const kPasswordsAddPasswordCancelButtonId =
     @"PasswordsAddPasswordCancelButtonId";
 
-NSString* const kSavePasswordSwitchTableViewId =
-    @"kSavePasswordSwitchTableViewId";
-NSString* const kSavePasswordManagedTableViewId =
-    @"kSavePasswordSwitchTableViewId";
-
-NSString* const kSettingsPasswordsInOtherAppsCellId =
-    @"kSettingsPasswordsInOtherAppsCellId";
-
 NSString* const kAddPasswordButtonId = @"addPasswordItem";
 
 NSString* const kPasswordIssuesTableViewId = @"kPasswordIssuesTableViewId";
 
 NSString* const kDeleteButtonForPasswordDetailsId =
     @"kDeleteButtonForPasswordDetailsId";
+
+NSString* const kLocalOnlyPasswordIconId = @"kLocalOnlyPasswordIconId";

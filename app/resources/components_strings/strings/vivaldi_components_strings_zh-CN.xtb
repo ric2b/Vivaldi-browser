@@ -9,7 +9,7 @@
 <translation id="1175364870820465910">打印(&amp;P)...</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />尝试清理 Cookies<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">关于版本</translation>
-<translation id="139305205187523129"><ph name="HOST_NAME" /> 未发送任何数据。</translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> 未发送数据。</translation>
 <translation id="1559528461873125649">该文件或目录不存在</translation>
 <translation id="1640244768702815859">请尝试<ph name="BEGIN_LINK" />访问该网站的首页<ph name="END_LINK" />。</translation>
 <translation id="1645368109819982629">协议不受支持</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{（使用了 1 个）}other{（使用了 # 个）}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />检查代理服务器地址<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">（64 位）</translation>
-<translation id="5287240709317226393">显示 Cookie</translation>
 <translation id="5355557959165512791">您目前无法访问 <ph name="SITE" />，因为此证书已被撤消。网络错误和攻击行为通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
 <translation id="5386426401304769735">此网站的证书链包含使用 SHA-1 签署的证书。</translation>
 <translation id="5452270690849572955">找不到 <ph name="HOST_NAME" /> 的网页</translation>
@@ -128,12 +127,12 @@
 <translation id="5785756445106461925">而且，此页中包含其他不安全的资源。这些资源在传输过程中能被他人查看，攻击者也可以修改这些资源，从而改变此页的外观。</translation>
 <translation id="5799902971440853357">您目前无法访问 <ph name="SITE" />，因为此网站发送了 Vivaldi 无法处理的杂乱凭据。网络错误和攻击通常是暂时的，该网页稍后可能会恢复正常。</translation>
 <translation id="5810442152076338065">您与 <ph name="DOMAIN" /> 之间的连接采用过时的加密套件进行了加密。</translation>
-<translation id="5838278095973806738">请勿在此网站上输入任何敏感信息（例如密码或信用卡信息），因为攻击者可能会盗取这些信息。</translation>
+<translation id="5838278095973806738">请勿在此网站上输入敏感信息（例如密码或信用卡信息），因为攻击者可能会盗取这些信息。</translation>
 <translation id="5869405914158311789">无法访问此网站</translation>
 <translation id="5920262536204764679">{NUM_COOKIES,plural, =1{正在使用 1 个} other {正在使用 # 个}}</translation>
 <translation id="5932224571077948991">网站展示过侵扰性或误导性广告</translation>
 <translation id="6051221802930200923">您目前无法访问 <ph name="SITE" />，因为此网站使用了证书锁定。网络错误和攻击通常是暂时的，因此，此网页稍后可能会恢复正常。</translation>
-<translation id="6146055958333702838">请检查所有网线连接状况，然后重启所有您可能正在使用的任何路由器、调制解调器
+<translation id="6146055958333702838">请检查所有网线连接状况，然后重启所有您可能正在使用的路由器、调制解调器
 或其他网络设备。</translation>
 <translation id="614940544461990577">请试试以下办法：</translation>
 <translation id="6165508094623778733">了解详情</translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">密码</translation>
 <translation id="6711464428925977395">代理服务器出现问题，或者地址有误。</translation>
 <translation id="6757797048963528358">您的设备已进入休眠模式。</translation>
+<translation id="6890956352250146925">Cookie 和网站数据的相关选项</translation>
 <translation id="6897140037006041989">用户代理</translation>
 <translation id="7053983685419859001">禁止</translation>
 <translation id="7079718277001814089">此网站包含恶意软件</translation>
@@ -181,7 +181,7 @@
 <translation id="7716424297397655342">无法从缓存中加载此网站</translation>
 <translation id="7758069387465995638">防火墙或防病毒软件可能已阻止您连接到网络。</translation>
 <translation id="7800304661137206267">该连接是使用 <ph name="CIPHER" /> 进行加密的，同时使用 <ph name="MAC" /> 进行讯息身份验证并使用 <ph name="KX" /> 作为密钥交换机制。</translation>
-<translation id="7834399512844817676"><ph name="SITE" /> 您的信息默认被加密保护。但 Vivaldi 在本次尝试连接到 <ph name="SITE" /> 时，对方回传了异常且错误的凭证。这可能是由于有攻击者伪装成 <ph name="SITE" /> 或是无线网络登录屏幕中断了连接。由于 Vivaldi 在数据交换之前已及时中断了连接，所以您的信息仍是安全的。</translation>
+<translation id="7834399512844817676"><ph name="SITE" /> 通常会使用加密技术来保护您的信息。Vivaldi 此次尝试连接到 <ph name="SITE" /> 时，该网站发回了异常的错误凭据。这可能是因为有攻击者在试图冒充 <ph name="SITE" />，或者 Wi-Fi 登录屏幕中断了此次连接。请放心，您的信息仍然是安全的，因为 Vivaldi 尚未进行任何数据交换便停止了连接。</translation>
 <translation id="7878562273885520351">您的密码可能已泄露</translation>
 <translation id="7951415247503192394">（32 位）</translation>
 <translation id="8025119109950072390">此网站上的攻击者可能会诱骗您做出一些诸如安装软件或泄露个人信息（例如：密码、电话号码或信用卡信息）之类的危险事情。</translation>
@@ -218,7 +218,7 @@
 <translation id="9169664750068251925">在此网站上始终阻止</translation>
 <translation id="9180553614777056266">广告拦截器</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> 使用了不受支持的协议。</translation>
-<translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。Chromium 建议您立即更改密码。系统会要求您登录。</translation>
+<translation id="936602727769022409">您可能会无法再访问自己的 Google 帐号。建议您立即更改密码。系统会要求您登录。</translation>
 <translation id="969892804517981540">官方版</translation>
 <translation id="988159990683914416">开发者内部版本</translation>
 </translationbundle>

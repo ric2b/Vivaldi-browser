@@ -172,8 +172,7 @@ OriginTrialTokenResult::OriginTrialTokenResult(
 
 OriginTrialContext::OriginTrialContext(ExecutionContext* context)
     : trial_token_validator_(std::make_unique<TrialTokenValidator>()),
-      context_(context),
-      runtime_feature_state_controller_remote_(context_) {}
+      context_(context) {}
 
 void OriginTrialContext::SetTrialTokenValidatorForTesting(
     std::unique_ptr<TrialTokenValidator> validator) {
@@ -507,7 +506,7 @@ bool OriginTrialContext::CanEnableTrialFromName(const StringView& trial_name) {
     return base::FeatureList::IsEnabled(features::kInterestGroupStorage);
 
   if (trial_name == "TrustTokens")
-    return base::FeatureList::IsEnabled(network::features::kPrivateStateTokens);
+    return base::FeatureList::IsEnabled(network::features::kFledgePst);
 
   if (trial_name == "SpeculationRulesPrefetch") {
     return base::FeatureList::IsEnabled(
@@ -526,6 +525,17 @@ bool OriginTrialContext::CanEnableTrialFromName(const StringView& trial_name) {
   if (trial_name == "BackForwardCacheSendNotRestoredReasons") {
     return base::FeatureList::IsEnabled(
         features::kBackForwardCacheSendNotRestoredReasons);
+  }
+
+  if (trial_name == "CompressionDictionaryTransport") {
+    return base::FeatureList::IsEnabled(
+        features::kCompressionDictionaryTransport);
+  }
+
+  if (trial_name == "AttributionReportingCrossAppWeb") {
+    return base::FeatureList::IsEnabled(features::kConversionMeasurement) &&
+           base::FeatureList::IsEnabled(
+               network::features::kAttributionReportingCrossAppWeb);
   }
 
   return true;
@@ -551,11 +561,6 @@ Vector<OriginTrialFeature> OriginTrialContext::RestrictedFeaturesForTrial(
       restricted.push_back(OriginTrialFeature::kSharedStorageAPI);
     if (!base::FeatureList::IsEnabled(features::kFencedFramesAPIChanges))
       restricted.push_back(OriginTrialFeature::kFencedFramesAPIChanges);
-    if (!base::FeatureList::IsEnabled(
-            features::kPrivateAggregationApiFledgeExtensions)) {
-      restricted.push_back(
-          OriginTrialFeature::kPrivateAggregationApiFledgeExtensions);
-    }
     return restricted;
   }
 
@@ -718,7 +723,6 @@ void OriginTrialContext::CacheToken(const String& raw_token,
 
 void OriginTrialContext::Trace(Visitor* visitor) const {
   visitor->Trace(context_);
-  visitor->Trace(runtime_feature_state_controller_remote_);
 }
 
 const SecurityOrigin* OriginTrialContext::GetSecurityOrigin() {
@@ -778,15 +782,7 @@ void OriginTrialContext::SendTokenToBrowser(
       script_origins.push_back(script_origin.origin);
     }
   }
-  if (!runtime_feature_state_controller_remote_.is_bound()) {
-    // TODO(crbug.com/1418341): Reuse binding owned by
-    // RuntimeFeatureStateOverrideContext once that class correctly connects to
-    // the frame and not the process.
-    context_->GetBrowserInterfaceBroker().GetInterface(
-        runtime_feature_state_controller_remote_.BindNewPipeAndPassReceiver(
-            context_->GetTaskRunner(TaskType::kInternalDefault)));
-  }
-  runtime_feature_state_controller_remote_->EnablePersistentTrial(
+  context_->GetRuntimeFeatureStateOverrideContext()->EnablePersistentTrial(
       raw_token, std::move(script_origins));
 }
 

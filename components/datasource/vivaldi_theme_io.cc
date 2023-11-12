@@ -166,15 +166,15 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
       ExportImage(theme_object_, kBackgroundImageKey, image_url, "background");
     }
 
-    base::Value* buttons = theme_object_.FindDictKey(kButtonsKey);
+    base::Value* buttons = theme_object_.GetDict().Find(kButtonsKey);
     if (buttons) {
-      for (auto iter : buttons->DictItems()) {
+      for (auto iter : buttons->GetDict()) {
         const std::string& button = iter.first;
         image_url = buttons->FindStringKey(button);
         if (image_url) {
           ExportImage(*buttons, button, image_url, button);
         } else {
-          base::Value* dict = buttons->FindDictKey(button);
+          base::Value* dict = buttons->GetDict().Find(button);
           if (!dict) {
             continue;
           }
@@ -479,15 +479,15 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
       ImportImage(theme_object_, kBackgroundImageKey, image_url);
     }
 
-    base::Value* buttons = theme_object_.FindDictKey(kButtonsKey);
+    base::Value* buttons = theme_object_.GetDict().Find(kButtonsKey);
     if (buttons) {
-      for (auto iter : buttons->DictItems()) {
+      for (auto iter : buttons->GetDict()) {
         const std::string& button = iter.first;
         image_url = buttons->FindStringKey(button);
         if (image_url) {
           ImportImage(*buttons, button, image_url);
         } else {
-          base::Value* dict = buttons->FindDictKey(button);
+          base::Value* dict = buttons->GetDict().Find(button);
           if (!dict) {
             continue;
           }
@@ -880,7 +880,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     }
 
     base::Value* FindValue() {
-      base::Value* value = object_.FindKey(key_);
+      base::Value* value = object_.GetDict().Find(key_);
       if (value) {
         return value;
       }
@@ -934,14 +934,14 @@ void EnumerateUserThemeUrls(
         callback.Run(*image_url);
       }
 
-      if (const base::Value* buttons = value.FindDictKey(kButtonsKey)) {
-        for (auto iter : buttons->DictItems()) {
+      if (const base::Value* buttons = value.GetDict().Find(kButtonsKey)) {
+        for (auto iter : buttons->GetDict()) {
           const std::string& button = iter.first;
           image_url = buttons->FindStringKey(button);
           if (image_url) {
             callback.Run(*image_url);
           } else {
-            const base::Value* dict = buttons->FindDictKey(button);
+            const base::Value* dict = buttons->GetDict().Find(button);
             if (!dict) {
               continue;
             }
@@ -996,7 +996,7 @@ double FindVersionByThemeId(PrefService* prefs, const std::string& theme_id) {
 
   // If the key does not exist, assume 0. With properly formatted themes this
   // should not happen, but be defensive.
-  return theme_object->FindDoubleKey(kVersionKey).value_or(0.0);
+  return theme_object->GetDict().FindDouble(kVersionKey).value_or(0.0);
 }
 
 }  // namespace vivaldi_theme_io

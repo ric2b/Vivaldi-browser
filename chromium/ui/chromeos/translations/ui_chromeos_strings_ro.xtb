@@ -84,6 +84,7 @@
 <translation id="1722487484194605434">Se arhivează <ph name="NUMBER_OF_ITEMS" /> elemente...</translation>
 <translation id="1722687688096767818">Se adaugă profilul...</translation>
 <translation id="1726100011689679555">Servere de nume</translation>
+<translation id="1727562178154619254">Gata de sincronizare</translation>
 <translation id="1729953886957086472">Germană (Germania)</translation>
 <translation id="1730235522912993863">Chineză Cangjie</translation>
 <translation id="1731889557567069540">Elemente copiate: <ph name="NUMBER_OF_ITEMS" />.</translation>
@@ -106,7 +107,6 @@
 <translation id="1834290891154666894">intrare nevalidă a potrivirii numelui alternativ al subiectului</translation>
 <translation id="1838709767668011582">Site Google</translation>
 <translation id="1853795129690976061">Linux are acces la acest dosar</translation>
-<translation id="1859422890169495746">Acest Chromebook</translation>
 <translation id="1864756863218646478">Fișierul nu a putut fi găsit.</translation>
 <translation id="1884013283844450420">Rețeaua <ph name="NETWORK_INDEX" /> din <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, conectează-te</translation>
 <translation id="1920670151694390848">Malayalam, transliterație</translation>
@@ -118,7 +118,6 @@
 <translation id="1942765061641586207">Rezoluția imaginii</translation>
 <translation id="1972984168337863910">Extinde panourile cu feedback privind fișierele</translation>
 <translation id="1995337122023280937">Accesează locația fișierului</translation>
-<translation id="1999709132469742660">accesul la fișiere prin intermediul tuturor adreselor URL,</translation>
 <translation id="2001796770603320721">Gestionează în Drive</translation>
 <translation id="2009067268969781306">Formatarea unității va șterge toate datele stocate pe unitate. Această acțiune nu poate fi anulată.</translation>
 <translation id="2025955442973426285">Tigrinya</translation>
@@ -130,6 +129,7 @@
 <translation id="2084108471225856927">Setările dispozitivului</translation>
 <translation id="2084809735218147718">Gesticulează „Mulțumesc” în limbajul semnelor</translation>
 <translation id="2088690981887365033">Rețea VPN</translation>
+<translation id="2111134541987263231">activează <ph name="BEGIN_BOLD" />Permite în modul incognito<ph name="END_BOLD" />.</translation>
 <translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> articole vor fi șterse și nu vei putea să le restabilești.</translation>
 <translation id="2122305276694332719">Conectarea automată la o rețea ascunsă permite altora să îți vadă dispozitivul și unele setări pentru rețea, așadar nu este recomandată.</translation>
 <translation id="2125607626296734455">Khmeră</translation>
@@ -150,6 +150,7 @@
 <translation id="2236732657580416950">Memoria cache Google Drive a fost ștearsă.</translation>
 <translation id="2239068707900391003">Persoană cu o ceașcă de cafea</translation>
 <translation id="2251368349685848079">Restabilește din coșul de gunoi</translation>
+<translation id="2278133026967558505">Acces la fișiere pentru toate site-urile și adresele URL</translation>
 <translation id="2282155092769082568">Adresa URL de autoconfigurare:</translation>
 <translation id="2284767815536050991">stocarea amovibilă</translation>
 <translation id="2288278176040912387">Picup</translation>
@@ -158,6 +159,7 @@
 <translation id="2304820083631266885">Planetă</translation>
 <translation id="2305020378527873881"><ph name="VOLUME_NAME" /> a fost scos.</translation>
 <translation id="2307462900900812319">Configurați rețeaua</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{Nu se poate găsi o extensie cu ID-ul <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Contactează administratorul.}few{Nu se pot găsi extensiile cu ID-urile <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Contactează administratorul.}other{Nu se pot găsi extensiile cu ID-urile <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Contactează administratorul.}}</translation>
 <translation id="2325650632570794183">Acest tip de fișier nu este acceptat. Vă rugăm să accesați Magazinul web Chrome pentru a găsi o aplicație care poate deschide acest tip de fișier.</translation>
 <translation id="2326539130272988168">Bulgară</translation>
 <translation id="2337715497728194187">Permite accesul pentru Bruschetta</translation>
@@ -227,6 +229,7 @@
 <translation id="290843123675549676">Marathi</translation>
 <translation id="2923240520113693977">Estonă</translation>
 <translation id="2938685643439809023">Mongolă</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{Extensia nu a fost găsită}few{Extensiile nu au fost găsite}other{Extensiile nu au fost găsite}}</translation>
 <translation id="2943503720238418293">Folosește un nume mai scurt</translation>
 <translation id="2949781154072577687">Se formatează <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">Meduză</translation>
@@ -272,6 +275,7 @@
 <translation id="3290356915286466215">Nesecurizată</translation>
 <translation id="3291218047831493686">Conectează-te la această rețea ca să modifici setarea pentru codarea cardului SIM</translation>
 <translation id="3293023191599135697">Rețelele WEP nu sunt acceptate</translation>
+<translation id="3295006446256079333">Acest volum</translation>
 <translation id="3295357220137379386">Dispozitivul este ocupat</translation>
 <translation id="3296763833017966289">Georgiană</translation>
 <translation id="3307875152560779385">Ucraineană</translation>
@@ -281,6 +285,7 @@
 <translation id="3356580349448036450">Finalizat</translation>
 <translation id="3358452157379365236">Chitară</translation>
 <translation id="3368922792935385530">Conectat</translation>
+<translation id="3372635229069101468">dă clic pe <ph name="BEGIN_BOLD" />Detalii<ph name="END_BOLD" />;</translation>
 <translation id="3382143449143186018">Nepaleză cu tastatură InScript</translation>
 <translation id="338691029516748599">Rețeaua <ph name="NETWORK_INDEX" /> din <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, puterea semnalului: <ph name="SIGNAL_STRENGTH" /> %, gestionată de administratorul tău, conectează-te</translation>
 <translation id="3408072735282270043">Activează, <ph name="NETWORK_NAME" /></translation>
@@ -365,6 +370,7 @@
 <translation id="4124935795427217608">Unicorn</translation>
 <translation id="4131235941541910880">Mută elementele de care nu ai nevoie în coșul de gunoi</translation>
 <translation id="4134804435730168042">Rețeaua <ph name="NETWORK_INDEX" /> din <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Activează după configurarea dispozitivului</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{Activează următoarea extensie în modul incognito:}few{Activează următoarele extensii în modul incognito:}other{Activează următoarele extensii în modul incognito:}}</translation>
 <translation id="4153015322587141338">Dă clic dreapta pe un fișier și selectează <ph name="PIN_COMMAND" /> pentru acces rapid la fișierele din raft.</translation>
 <translation id="4157569377477607576">Politica implementată de administrator nu recomandă:</translation>
 <translation id="4159731583141908892">Mutate: <ph name="FILE_NAME" />.</translation>
@@ -461,12 +467,15 @@
 <translation id="4801956050125744859">Păstrați-le pe amândouă</translation>
 <translation id="4804827417948292437">Avocado</translation>
 <translation id="4805966553127040832">Se restabilesc <ph name="COUNT" /> articole</translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{Pentru a folosi modul incognito, organizația ta are nevoie de o extensie}few{Pentru a folosi modul incognito, organizația ta are nevoie de câteva extensii}other{Pentru a folosi modul incognito, organizația ta are nevoie de câteva extensii}}</translation>
 <translation id="4823651846660089135">Dispozitivul este numai în citire</translation>
 <translation id="4826849268470072925">Tamilă ITRANS</translation>
+<translation id="482932175346970750">introdu <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" /> în browser;</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> elemente selectate</translation>
 <translation id="4843566743023903107">Dispozitivele Chromebase</translation>
 <translation id="4850886885716139402">Afișează</translation>
 <translation id="485316830061041779">Germană</translation>
+<translation id="4862885579661885411">Setări pentru Fișiere</translation>
 <translation id="4867079195717347957">Dă clic pentru a sorta coloana în ordine descrescătoare.</translation>
 <translation id="4867297348137739678">Ultima săptămână</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> byți</translation>
@@ -532,6 +541,7 @@
     cu alte persoane la realizarea fișierelor. Totul într-un singur loc.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">Fișiere recuperate din Google Drive</translation>
 <translation id="5278111733643988471">Pentru a restabili elementul, trage-l într-un dosar nou în afara coșului de gunoi. Dosarul inițial <ph name="PARENT_FOLDER_NAME" /> pentru acest element a fost șters.</translation>
+<translation id="5283101102242354279">Activează o extensie în modul incognito:</translation>
 <translation id="5286194356314741248">Scanare</translation>
 <translation id="5288441970121584418">Burger</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -542,7 +552,6 @@
 <translation id="5323213332664049067">America Latină</translation>
 <translation id="5330145655348521461">Aceste fișiere au fost deschise pe alt desktop. Pentru a le vedea, treceți la <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />).</translation>
 <translation id="5330512191124428349">Obține informații</translation>
-<translation id="5337538975554986899">accesul la fișiere prin intermediul tuturor adreselor URL, cu excepția <ph name="NON_RESTRICTED_DESTINATIONS" />,</translation>
 <translation id="5344246330454251646">Gestionează permiterea accesului pentru Bruschetta</translation>
 <translation id="535792325654997756">Persoană cu pisici</translation>
 <translation id="5358764674931277">Rata de cadre</translation>
@@ -615,6 +624,7 @@
 <translation id="5911887972742538906">A apărut o eroare în timpul instalării aplicației Linux.</translation>
 <translation id="5912396950572065471">Format</translation>
 <translation id="5913638992615760742">Nu s-a putut copia, eroare neprevăzută: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">Sunt disponibile funcții de căutare noi</translation>
 <translation id="5926082595146149752">Neerlandeză (Țările de Jos) cu tastatură S.U.A. internațională pentru PC</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063">Rețeaua <ph name="NETWORK_INDEX" /> din <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Activează după configurarea dispozitivului</translation>
@@ -627,6 +637,7 @@
 <translation id="603895874132768835">Nu vei putea să folosești rețeaua dacă nu configurezi un PIN nou.</translation>
 <translation id="6040143037577758943">Închide</translation>
 <translation id="6055907707645252013"><ph name="NETWORK_TYPE" /> rețea, nu este conectată</translation>
+<translation id="6073060579181816027">Mai multe locații ale fișierelor</translation>
 <translation id="6074825444536523002">Formular Google</translation>
 <translation id="6079871810119356840">Maghiară cu tastatură QWERTY</translation>
 <translation id="6096979789310008754">Textul căutării a fost șters; se afișează toate fișierele și dosarele.</translation>
@@ -704,6 +715,7 @@
 <translation id="6732801395666424405">Certificatele nu s-au încărcat</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6740270213273127264">Permite accesul Bruschetta la dosar</translation>
+<translation id="6750737795876287924">Directorul curent</translation>
 <translation id="6751256176799620176">Un dosar selectat</translation>
 <translation id="6755827872271341378">Dispozitiv cu sistemul de operare Chrome Flex</translation>
 <translation id="6790428901817661496">Redă</translation>
@@ -741,7 +753,6 @@
 <translation id="6973630695168034713">Dosare</translation>
 <translation id="6976795442547527108">Leu</translation>
 <translation id="6979158407327259162">Google Drive</translation>
-<translation id="6979737339423435258">Dintotdeauna</translation>
 <translation id="6989942356279143254">Suedeză</translation>
 <translation id="6990081529015358884">Nu aveți spațiu suficient</translation>
 <translation id="6993826899923627728">Articolele sunt în coșul de gunoi</translation>
@@ -767,6 +778,7 @@
 <translation id="7162080671816799010">Lipsește Potrivirea numelui alternativ al subiectului sau Potrivirea sufixului de domeniu pentru validarea identității serverului de autentificare</translation>
 <translation id="7165320105431587207">Rețeaua nu a putut fi configurată</translation>
 <translation id="7170041865419449892">Fără acoperire</translation>
+<translation id="7179579940054351344">Acces la fișiere pentru toate site-urile și adresele URL, cu excepția <ph name="NON_RESTRICTED_DESTINATIONS" />;</translation>
 <translation id="7180611975245234373">Actualizați</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> GB</translation>
 <translation id="7191454237977785534">Salvează fișierul ca</translation>
@@ -776,6 +788,7 @@
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />, detalii</translation>
 <translation id="7246947237293279874">Proxy FTP</translation>
 <translation id="7248671827512403053">Aplicație</translation>
+<translation id="7252604552361840748">găsește extensia de mai sus;</translation>
 <translation id="7256405249507348194">Eroare nerecunoscută: <ph name="DESC" /></translation>
 <translation id="7268659760406822741">Servicii disponibile</translation>
 <translation id="7292816689782057017">Politica implementată de administrator restricționează salvarea la anumite locații.</translation>
@@ -797,7 +810,6 @@
 <translation id="7458955835361612701">Nicio imagine recentă</translation>
 <translation id="7460898608667578234">Ucraineană</translation>
 <translation id="7469894403370665791">Conectează-te automat la această rețea</translation>
-<translation id="7481358317100446445">Gata</translation>
 <translation id="7486315294984620427">Pentru a plasa fișiere în Parallels Desktop, trebuie să le copiezi în dosarul cu fișiere Windows.</translation>
 <translation id="749452993132003881">Hiragana</translation>
 <translation id="7495372004724182530">Malayalam fonetică</translation>
@@ -941,6 +953,7 @@
 <translation id="8492972329130824181">Rețeaua de domiciliu nu este disponibilă. Trebuie să activezi roamingul de date mobile pentru a te conecta.</translation>
 <translation id="8499098729323186194">Se extrag <ph name="NUMBER_OF_ITEMS" /> elemente...</translation>
 <translation id="8502913769543567768">Rețeaua <ph name="NETWORK_INDEX" /> din <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Activează după configurarea dispozitivului, Gestionată de administratorul tău</translation>
+<translation id="8512483403832814140">Oricând</translation>
 <translation id="8521441079177373948">UK</translation>
 <translation id="853494022971700746">Franceză (Franța)</translation>
 <translation id="8540608333167683902">Rețeaua <ph name="NETWORK_INDEX" /> din <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, puterea semnalului: <ph name="SIGNAL_STRENGTH" /> %, detalii</translation>

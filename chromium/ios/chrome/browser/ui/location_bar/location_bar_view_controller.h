@@ -7,13 +7,14 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/badges/badge_consumer.h"
-#import "ios/chrome/browser/ui/commands/omnibox_commands.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
 #import "ios/chrome/browser/ui/orchestrator/location_bar_animatee.h"
 
 // Vivaldi
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 // End Vivaldi
 
 @class InfobarMetricsRecorder;
@@ -125,6 +126,7 @@
 
 // Vivaldi
 - (LocationBarSteadyView*)steadyView;
+- (void)updateVivaldiShieldState:(ATBSettingType)setting;
 // End Vivaldi
 
 @end

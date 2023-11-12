@@ -52,6 +52,7 @@
 #include "chrome/updater/prefs.h"
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/service_proxy_factory.h"
+#include "chrome/updater/test/request_matcher.h"
 #include "chrome/updater/test/server.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_branding.h"
@@ -66,7 +67,10 @@
 #include "third_party/re2/src/re2/re2.h"
 
 #if BUILDFLAG(IS_WIN)
+#include "base/win/registry.h"
+#include "chrome/updater/util/win_util.h"
 #include "chrome/updater/win/test/test_executables.h"
+#include "chrome/updater/win/win_constants.h"
 #endif
 
 namespace updater::test {
@@ -82,7 +86,7 @@ constexpr char kSelfUpdateCRXRun[] = "UpdaterSetup_test.exe";
 constexpr char kDoNothingCRXName[] = "updater_qualification_app_exe.crx";
 constexpr char kDoNothingCRXRun[] = "qualification_app.exe";
 #elif BUILDFLAG(IS_LINUX)
-constexpr char kSelfUpdateCRXRun[] = "UpdaterSetup_test";
+constexpr char kSelfUpdateCRXRun[] = "updater_test";
 constexpr char kDoNothingCRXName[] = "updater_qualification_app.crx";
 constexpr char kDoNothingCRXRun[] = "qualification_app";
 #endif
@@ -131,7 +135,7 @@ std::string GetUpdateResponse(const std::string& app_id,
       R"(    })"
       R"(  ])"
       R"(}})",
-      app_id.c_str(),
+      base::ToLowerASCII(app_id).c_str(),
       !install_data_index.empty()
           ? base::StringPrintf(
                 R"(     "data":[{ "status":"ok", "name":"install", )"
@@ -144,43 +148,10 @@ std::string GetUpdateResponse(const std::string& app_id,
       GetHashHex(update_file).c_str());
 }
 
-base::RepeatingCallback<bool(const std::string&)> GetScopePredicate(
-    UpdaterScope scope) {
-  return base::BindLambdaForTesting([scope](const std::string& request_body) {
-    const bool is_match = [&scope, &request_body]() {
-      const absl::optional<base::Value> doc =
-          base::JSONReader::Read(request_body);
-      if (!doc || !doc->is_dict()) {
-        return false;
-      }
-      const base::Value::Dict* object_request =
-          doc->GetDict().FindDict("request");
-      if (!object_request) {
-        return false;
-      }
-      absl::optional<bool> ismachine = object_request->FindBool("ismachine");
-      if (!ismachine.has_value()) {
-        return false;
-      }
-      switch (scope) {
-        case UpdaterScope::kSystem:
-          return *ismachine;
-        case UpdaterScope::kUser:
-          return !*ismachine;
-      }
-    }();
-    if (!is_match) {
-      ADD_FAILURE() << R"(Request does not match "ismachine": )"
-                    << request_body;
-    }
-    return is_match;
-  });
-}
-
 void RunUpdaterWithSwitch(const base::Version& version,
                           UpdaterScope scope,
                           const std::string& command,
-                          int expected_exit_code) {
+                          absl::optional<int> expected_exit_code) {
   const absl::optional<base::FilePath> installed_executable_path =
       GetVersionedInstallDirectory(scope, version)
           ->Append(GetExecutableRelativePath());
@@ -190,17 +161,18 @@ void RunUpdaterWithSwitch(const base::Version& version,
   command_line.AppendSwitch(command);
   int exit_code = -1;
   Run(scope, command_line, &exit_code);
-  ASSERT_EQ(exit_code, expected_exit_code);
+  if (expected_exit_code) {
+    ASSERT_EQ(exit_code, expected_exit_code.value());
+  }
 }
 
-void ExpectSequence(UpdaterScope scope,
-                    ScopedServer* test_server,
-                    const std::string& app_id,
-                    const std::string& install_data_index,
-                    int event_type,
-                    const base::Version& from_version,
-                    const base::Version& to_version,
-                    bool is_update_check_only) {
+void ExpectUpdateCheckSequence(UpdaterScope scope,
+                               ScopedServer* test_server,
+                               const std::string& app_id,
+                               UpdateService::Priority priority,
+                               int event_type,
+                               const base::Version& from_version,
+                               const base::Version& to_version) {
   base::FilePath test_data_path;
   ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_path));
   base::FilePath crx_path = test_data_path.Append(FILE_PATH_LITERAL("updater"))
@@ -209,43 +181,73 @@ void ExpectSequence(UpdaterScope scope,
 
   // First request: update check.
   test_server->ExpectOnce(
-      {base::BindRepeating(
-           RequestMatcherRegex,
-           base::StringPrintf(R"(.*"appid":"%s".*)", app_id.c_str())),
-       base::BindRepeating(
-           RequestMatcherRegex,
-           base::StringPrintf(
-               R"(.*%s)",
-               !install_data_index.empty()
-                   ? base::StringPrintf(
-                         R"("data":\[{"index":"%s","name":"install"}],.*)",
-                         install_data_index.c_str())
-                         .c_str()
-                   : "")),
-       GetScopePredicate(scope)},
+      {request::GetPathMatcher(test_server->update_path()),
+       request::GetContentMatcher(
+           {base::StringPrintf(R"(.*"appid":"%s".*)", app_id.c_str())}),
+       request::GetScopeMatcher(scope),
+       request::GetAppPriorityMatcher(app_id, priority)},
+      GetUpdateResponse(app_id, "", test_server->update_url().spec(),
+                        to_version, crx_path, kDoNothingCRXRun, {}));
+
+  // Second request: event ping with an error because the update check response
+  // is ignored by the client:
+  // {errorCategory::kService, ServiceError::CHECK_FOR_UPDATE_ONLY}
+  test_server->ExpectOnce({request::GetPathMatcher(test_server->update_path()),
+                           request::GetContentMatcher({base::StringPrintf(
+                               R"(.*"errorcat":4,"errorcode":4,)"
+                               R"("eventresult":0,"eventtype":%d,)"
+                               R"("nextversion":"%s","previousversion":"%s".*)",
+                               event_type, to_version.GetString().c_str(),
+                               from_version.GetString().c_str())}),
+                           request::GetScopeMatcher(scope)},
+                          ")]}'\n");
+}
+
+void ExpectUpdateSequence(UpdaterScope scope,
+                          ScopedServer* test_server,
+                          const std::string& app_id,
+                          const std::string& install_data_index,
+                          UpdateService::Priority priority,
+                          int event_type,
+                          const base::Version& from_version,
+                          const base::Version& to_version) {
+  base::FilePath test_data_path;
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_path));
+  base::FilePath crx_path = test_data_path.Append(FILE_PATH_LITERAL("updater"))
+                                .AppendASCII(kDoNothingCRXName);
+  ASSERT_TRUE(base::PathExists(crx_path));
+
+  // First request: update check.
+  test_server->ExpectOnce(
+      {request::GetPathMatcher(test_server->update_path()),
+       request::GetContentMatcher(
+           {base::StringPrintf(R"("appid":"%s")", app_id.c_str()),
+            install_data_index.empty()
+                ? ""
+                : base::StringPrintf(
+                      R"("data":\[{"index":"%s","name":"install"}],.*)",
+                      install_data_index.c_str())
+                      .c_str()}),
+       request::GetScopeMatcher(scope),
+       request::GetAppPriorityMatcher(app_id, priority)},
       GetUpdateResponse(app_id, install_data_index,
-                        test_server->base_url().spec(), to_version, crx_path,
+                        test_server->update_url().spec(), to_version, crx_path,
                         kDoNothingCRXRun, {}));
 
-  if (!is_update_check_only) {
-    // Second request: update download.
-    std::string crx_bytes;
-    base::ReadFileToString(crx_path, &crx_bytes);
-    test_server->ExpectOnce({base::BindRepeating(RequestMatcherRegex, "")},
-                            crx_bytes);
-  }
+  // Second request: update download.
+  std::string crx_bytes;
+  base::ReadFileToString(crx_path, &crx_bytes);
+  test_server->ExpectOnce({request::GetContentMatcher({""})}, crx_bytes);
 
   // Third request: event ping.
-  test_server->ExpectOnce(
-      {base::BindRepeating(
-           RequestMatcherRegex,
-           base::StringPrintf(R"(.*"eventresult":%d,"eventtype":%d,)"
-                              R"("nextversion":"%s","previousversion":"%s".*)",
-                              !is_update_check_only, event_type,
-                              to_version.GetString().c_str(),
-                              from_version.GetString().c_str())),
-       GetScopePredicate(scope)},
-      ")]}'\n");
+  test_server->ExpectOnce({request::GetPathMatcher(test_server->update_path()),
+                           request::GetContentMatcher({base::StringPrintf(
+                               R"(.*"eventresult":1,"eventtype":%d,)"
+                               R"("nextversion":"%s","previousversion":"%s".*)",
+                               event_type, to_version.GetString().c_str(),
+                               from_version.GetString().c_str())}),
+                           request::GetScopeMatcher(scope)},
+                          ")]}'\n");
 }
 
 }  // namespace
@@ -285,6 +287,16 @@ void ExpectVersionActive(UpdaterScope scope, const std::string& version) {
   scoped_refptr<GlobalPrefs> prefs = CreateGlobalPrefs(scope);
   ASSERT_NE(prefs, nullptr) << "Failed to acquire GlobalPrefs.";
   EXPECT_EQ(prefs->GetActiveVersion(), version);
+#if BUILDFLAG(IS_WIN)
+  EXPECT_EQ(version, [scope]() {
+    std::wstring version;
+    EXPECT_EQ(base::win::RegKey(UpdaterScopeToHKeyRoot(scope), UPDATER_KEY,
+                                Wow6432(KEY_READ))
+                  .ReadValue(kRegValueVersion, &version),
+              ERROR_SUCCESS);
+    return base::WideToASCII(version);
+  }());
+#endif  // IS_WIN
 }
 
 void ExpectVersionNotActive(UpdaterScope scope, const std::string& version) {
@@ -299,6 +311,20 @@ void Install(UpdaterScope scope) {
   base::CommandLine command_line(path);
   command_line.AppendSwitch(kInstallSwitch);
   command_line.AppendSwitchASCII(kTagSwitch, "usagestats=1");
+  int exit_code = -1;
+  Run(scope, command_line, &exit_code);
+  ASSERT_EQ(exit_code, 0);
+}
+
+void InstallUpdaterAndApp(UpdaterScope scope, const std::string& app_id) {
+  const base::FilePath path = GetSetupExecutablePath();
+  ASSERT_FALSE(path.empty());
+  base::CommandLine command_line(path);
+  command_line.AppendSwitch(kInstallSwitch);
+  command_line.AppendSwitchASCII(kTagSwitch, "usagestats=1");
+  command_line.AppendSwitchASCII(kAppIdSwitch, app_id);
+  command_line.AppendSwitch(kSilentSwitch);
+
   int exit_code = -1;
   Run(scope, command_line, &exit_code);
   ASSERT_EQ(exit_code, 0);
@@ -348,6 +374,34 @@ void CopyLog(const base::FilePath& src_dir) {
   }
 }
 
+void ExpectNoCrashes(UpdaterScope scope) {
+  absl::optional<base::FilePath> database_path(GetCrashDatabasePath(scope));
+  if (!database_path || !base::PathExists(*database_path)) {
+    return;
+  }
+
+  base::FilePath dest_dir = GetLogDestinationDir();
+  if (dest_dir.empty()) {
+    VLOG(2) << "No log destination folder, skip copying possible crash dumps.";
+    return;
+  }
+  dest_dir = dest_dir.AppendASCII(GetTestName());
+  EXPECT_TRUE(base::CreateDirectory(dest_dir));
+
+  base::FileEnumerator it(*database_path, true, base::FileEnumerator::FILES,
+                          FILE_PATH_LITERAL("*.dmp"),
+                          base::FileEnumerator::FolderSearchPolicy::ALL);
+  int count = 0;
+  for (base::FilePath name = it.Next(); !name.empty(); name = it.Next()) {
+    VLOG(0) << __func__ << "Copying " << name << " to: " << dest_dir;
+    EXPECT_TRUE(base::CopyFile(name, dest_dir.Append(name.BaseName())));
+
+    ++count;
+  }
+
+  EXPECT_EQ(count, 0) << ": " << count << " crashes found";
+}
+
 void RunWake(UpdaterScope scope, int expected_exit_code) {
   RunUpdaterWithSwitch(base::Version(kUpdaterVersion), scope, kWakeSwitch,
                        expected_exit_code);
@@ -372,16 +426,30 @@ void RunWakeActive(UpdaterScope scope, int expected_exit_code) {
   RunUpdaterWithSwitch(active_version, scope, kWakeSwitch, expected_exit_code);
 }
 
+void RunCrashMe(UpdaterScope scope) {
+  RunUpdaterWithSwitch(base::Version(kUpdaterVersion), scope, kCrashMeSwitch,
+                       absl::nullopt);
+}
+
+void CheckForUpdate(UpdaterScope scope, const std::string& app_id) {
+  scoped_refptr<UpdateService> update_service = CreateUpdateServiceProxy(scope);
+  base::RunLoop loop;
+  update_service->CheckForUpdate(
+      app_id, UpdateService::Priority::kForeground,
+      UpdateService::PolicySameVersionUpdate::kNotAllowed, base::DoNothing(),
+      base::BindLambdaForTesting(
+          [&loop](UpdateService::Result result_unused) { loop.Quit(); }));
+  loop.Run();
+}
+
 void Update(UpdaterScope scope,
             const std::string& app_id,
-            const std::string& install_data_index,
-            bool do_update_check_only) {
+            const std::string& install_data_index) {
   scoped_refptr<UpdateService> update_service = CreateUpdateServiceProxy(scope);
   base::RunLoop loop;
   update_service->Update(
       app_id, install_data_index, UpdateService::Priority::kForeground,
-      UpdateService::PolicySameVersionUpdate::kNotAllowed, do_update_check_only,
-      base::DoNothing(),
+      UpdateService::PolicySameVersionUpdate::kNotAllowed, base::DoNothing(),
       base::BindLambdaForTesting(
           [&loop](UpdateService::Result result_unused) { loop.Quit(); }));
   loop.Run();
@@ -528,15 +596,11 @@ void Run(UpdaterScope scope, base::CommandLine command_line, int* exit_code) {
   ASSERT_TRUE(succeeded);
 }
 
-bool RequestMatcherRegex(const std::string& request_body_regex,
-                         const std::string& request_body) {
-  if (!re2::RE2::PartialMatch(request_body, request_body_regex)) {
-    VLOG(0) << "Request match failed.";
-    ADD_FAILURE() << "Request with body: " << request_body
-                  << " did not match expected regex " << request_body_regex;
-    return false;
-  }
-  return true;
+void ExpectUninstallPing(UpdaterScope scope, ScopedServer* test_server) {
+  test_server->ExpectOnce({request::GetPathMatcher(test_server->update_path()),
+                           request::GetContentMatcher({R"(.*"eventtype":4.*)"}),
+                           request::GetScopeMatcher(scope)},
+                          ")]}'\n");
 }
 
 void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer* test_server) {
@@ -547,12 +611,12 @@ void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer* test_server) {
 
   // First request: update check.
   test_server->ExpectOnce(
-      {base::BindRepeating(
-           RequestMatcherRegex,
-           base::StringPrintf(R"(.*"appid":"%s".*)", kUpdaterAppId)),
-       GetScopePredicate(scope)},
+      {request::GetPathMatcher(test_server->update_path()),
+       request::GetContentMatcher(
+           {base::StringPrintf(R"(.*"appid":"%s".*)", kUpdaterAppId)}),
+       request::GetScopeMatcher(scope)},
       GetUpdateResponse(
-          kUpdaterAppId, "", test_server->base_url().spec(),
+          kUpdaterAppId, "", test_server->update_url().spec(),
           base::Version(kUpdaterVersion), crx_path, kSelfUpdateCRXRun,
           base::StrCat({"--update", IsSystemInstall(scope) ? " --system" : "",
                         " --", kEnableLoggingSwitch, " --",
@@ -562,48 +626,48 @@ void ExpectSelfUpdateSequence(UpdaterScope scope, ScopedServer* test_server) {
   // Second request: update download.
   std::string crx_bytes;
   base::ReadFileToString(crx_path, &crx_bytes);
-  test_server->ExpectOnce({base::BindRepeating(RequestMatcherRegex, "")},
-                          crx_bytes);
+  test_server->ExpectOnce({request::GetContentMatcher({""})}, crx_bytes);
 
   // Third request: event ping.
-  test_server->ExpectOnce(
-      {base::BindRepeating(
-           RequestMatcherRegex,
-           base::StringPrintf(R"(.*"eventresult":1,"eventtype":3,)"
-                              R"("nextversion":"%s",.*)",
-                              kUpdaterVersion)),
-       GetScopePredicate(scope)},
-      ")]}'\n");
+  test_server->ExpectOnce({request::GetPathMatcher(test_server->update_path()),
+                           request::GetContentMatcher({base::StringPrintf(
+                               R"(.*"eventresult":1,"eventtype":3,)"
+                               R"("nextversion":"%s",.*)",
+                               kUpdaterVersion)}),
+                           request::GetScopeMatcher(scope)},
+                          ")]}'\n");
 }
 
 void ExpectUpdateCheckSequence(UpdaterScope scope,
                                ScopedServer* test_server,
                                const std::string& app_id,
-                               const std::string& install_data_index,
+                               UpdateService::Priority priority,
                                const base::Version& from_version,
                                const base::Version& to_version) {
-  ExpectSequence(scope, test_server, app_id, install_data_index, 3,
-                 from_version, to_version, /*is_update_check_only*/ true);
+  ExpectUpdateCheckSequence(scope, test_server, app_id, priority,
+                            /*event_type=*/3, from_version, to_version);
 }
 
 void ExpectUpdateSequence(UpdaterScope scope,
                           ScopedServer* test_server,
                           const std::string& app_id,
                           const std::string& install_data_index,
+                          UpdateService::Priority priority,
                           const base::Version& from_version,
                           const base::Version& to_version) {
-  ExpectSequence(scope, test_server, app_id, install_data_index, 3,
-                 from_version, to_version, /*is_update_check_only*/ false);
+  ExpectUpdateSequence(scope, test_server, app_id, install_data_index, priority,
+                       /*event_type=*/3, from_version, to_version);
 }
 
 void ExpectInstallSequence(UpdaterScope scope,
                            ScopedServer* test_server,
                            const std::string& app_id,
                            const std::string& install_data_index,
+                           UpdateService::Priority priority,
                            const base::Version& from_version,
                            const base::Version& to_version) {
-  ExpectSequence(scope, test_server, app_id, install_data_index, 2,
-                 from_version, to_version, /*is_update_check_only*/ false);
+  ExpectUpdateSequence(scope, test_server, app_id, install_data_index, priority,
+                       /*event_type=*/2, from_version, to_version);
 }
 
 // Runs multiple cycles of instantiating the update service, calling
@@ -694,7 +758,6 @@ void CallServiceUpdate(UpdaterScope updater_scope,
   service_proxy->Update(
       app_id, install_data_index, UpdateService::Priority::kForeground,
       policy_same_version_update,
-      /*do_update_check_only=*/false,
       base::BindLambdaForTesting([](const UpdateService::UpdateState&) {}),
       base::BindLambdaForTesting([&](UpdateService::Result result) {
         EXPECT_EQ(result, UpdateService::Result::kSuccess);

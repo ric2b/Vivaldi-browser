@@ -171,7 +171,7 @@ struct less<StringAtom> {
   template <typename U>
   bool operator()(const U& a, const StringAtom& b) const noexcept {
     return a < b.str();
-  };
+  }
 };
 
 template <>

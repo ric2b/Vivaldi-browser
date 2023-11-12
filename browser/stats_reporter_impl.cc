@@ -33,11 +33,11 @@ enum class InstallationStatus {
 };
 
 #ifdef NDEBUG
-constexpr base::TimeDelta kLockDelay = base::Minutes(2);  // minutes
+constexpr base::TimeDelta kLockDelay = base::Minutes(2);
 constexpr int kMatomoId = 36;        // Browser Usage - New implementation.
 constexpr int kScheduleJitter = 15;  // minutes
 #else
-constexpr base::TimeDelta kLockDelay = base::Seconds(1);  // minutes
+constexpr base::TimeDelta kLockDelay = base::Seconds(1);
 constexpr int kMatomoId = 13;                             // Blackhole
 constexpr int kScheduleJitter = 1;                        // minutes
 #endif
@@ -361,36 +361,36 @@ bool StatsReporterImpl::GeneratePingRequest(
 
     os_profile_reporting_data.next_pings.daily = ValidateTime(
         base::ValueToTime(
-            os_profile_reporting_data_json->FindKey(kNextDailyPingKey)),
+            os_profile_reporting_data_json->GetDict().Find(kNextDailyPingKey)),
         now, kMaxDailyPingDelay);
 
     os_profile_reporting_data.next_pings.weekly = ValidateTime(
         base::ValueToTime(
-            os_profile_reporting_data_json->FindKey(kNextWeeklyPingKey)),
+            os_profile_reporting_data_json->GetDict().Find(kNextWeeklyPingKey)),
         now, kMaxWeeklyPingDelay);
 
     os_profile_reporting_data.next_pings.monthly = ValidateTime(
         base::ValueToTime(
-            os_profile_reporting_data_json->FindKey(kNextMonthlyPingKey)),
+            os_profile_reporting_data_json->GetDict().Find(kNextMonthlyPingKey)),
         now, kMaxMonthlyPingDelay);
 
     os_profile_reporting_data.next_pings.trimestrial = ValidateTime(
         base::ValueToTime(
-            os_profile_reporting_data_json->FindKey(kNextTrimestrialPingKey)),
+            os_profile_reporting_data_json->GetDict().Find(kNextTrimestrialPingKey)),
         now, kMaxTrimestrialPingDelay);
 
     os_profile_reporting_data.next_pings.semestrial = ValidateTime(
         base::ValueToTime(
-            os_profile_reporting_data_json->FindKey(kNextSemestrialPingKey)),
+            os_profile_reporting_data_json->GetDict().Find(kNextSemestrialPingKey)),
         now, kMaxSemestrialPingDelay);
 
     os_profile_reporting_data.next_pings.yearly = ValidateTime(
         base::ValueToTime(
-            os_profile_reporting_data_json->FindKey(kNextYearlyPingKey)),
+            os_profile_reporting_data_json->GetDict().Find(kNextYearlyPingKey)),
         now, kMaxYearlyPingDelay);
 
     absl::optional<base::Time> installation_time = base::ValueToTime(
-        os_profile_reporting_data_json->FindKey(kInstallationTimeKey));
+        os_profile_reporting_data_json->GetDict().Find(kInstallationTimeKey));
     if (installation_time)
       os_profile_reporting_data.installation_time = *installation_time;
 

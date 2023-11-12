@@ -16,12 +16,12 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/sync_util.h"
-#include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_service_impl.h"
+#include "components/sync/driver/sync_service.h"
 #include "ios/chrome/browser/application_context/application_context.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
-#include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "ios/chrome/browser/bookmarks/bookmark_sync_service_factory.h"
+#include "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_sync_service_factory.h"
+#include "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "ios/chrome/browser/favicon/favicon_service_factory.h"
@@ -40,10 +40,10 @@
 #include "ios/chrome/browser/webdata_services/web_data_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
 #include "ios/notes/notes_factory.h"
+#include "ios/sync/vivaldi_sync_client.h"
 #include "ios/vivaldi_account/vivaldi_account_manager_factory.h"
 #include "ios/web/public/thread/web_task_traits.h"
 #include "ios/web/public/thread/web_thread.h"
-#include "ios/sync/vivaldi_sync_client.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "sync/vivaldi_sync_service_impl.h"
@@ -64,11 +64,10 @@ VivaldiSyncServiceFactory::VivaldiSyncServiceFactory() {
   // The SyncService depends on various SyncableServices being around
   // when it is shut down.  Specify those dependencies here to build the proper
   // destruction order.
-  DependsOn(autofill::PersonalDataManagerFactory::GetInstance());
   DependsOn(ConsentAuditorFactory::GetInstance());
   DependsOn(DeviceInfoSyncServiceFactory::GetInstance());
-  DependsOn(ios::BookmarkModelFactory::GetInstance());
-  DependsOn(ios::BookmarkSyncServiceFactory::GetInstance());
+  DependsOn(ios::LocalOrSyncableBookmarkModelFactory::GetInstance());
+  DependsOn(ios::LocalOrSyncableBookmarkSyncServiceFactory::GetInstance());
   DependsOn(ios::BookmarkUndoServiceFactory::GetInstance());
   DependsOn(ios::FaviconServiceFactory::GetInstance());
   DependsOn(ios::HistoryServiceFactory::GetInstance());
@@ -117,11 +116,6 @@ VivaldiSyncServiceFactory::BuildServiceInstanceFor(
       std::move(init_params), browser_state->GetPrefs(),
       vivaldi_account_manager);
   sync_service->Initialize();
-
-  // Hook |sync_service| into PersonalDataManager (a circular dependency).
-  autofill::PersonalDataManager* pdm =
-      autofill::PersonalDataManagerFactory::GetForBrowserState(browser_state);
-  pdm->OnSyncServiceInitialized(sync_service.get());
 
   return sync_service;
 }

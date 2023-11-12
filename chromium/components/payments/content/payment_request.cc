@@ -30,7 +30,6 @@
 #include "components/payments/core/payment_details_validation.h"
 #include "components/payments/core/payment_prefs.h"
 #include "components/payments/core/payment_request_delegate.h"
-#include "components/payments/core/payments_experimental_features.h"
 #include "components/payments/core/payments_validators.h"
 #include "components/payments/core/url_util.h"
 #include "components/prefs/pref_service.h"
@@ -55,10 +54,6 @@ using ::payments::mojom::HasEnrolledInstrumentQueryResult;
 mojom::PaymentAddressPtr RedactShippingAddress(
     mojom::PaymentAddressPtr address) {
   DCHECK(address);
-  if (!PaymentsExperimentalFeatures::IsEnabled(
-          features::kWebPaymentsRedactShippingAddress)) {
-    return address;
-  }
   address->organization.clear();
   address->phone.clear();
   address->recipient.clear();
@@ -211,6 +206,7 @@ void PaymentRequest::Init(
 
   // Log metrics around which payment methods are requested by the merchant.
   GURL google_pay_url(methods::kGooglePay);
+  GURL google_pay_authentication_url(methods::kGooglePayAuthentication);
   GURL android_pay_url(methods::kAndroidPay);
   GURL google_play_billing_url(methods::kGooglePlayBilling);
   std::vector<JourneyLogger::PaymentMethodCategory> method_categories;
@@ -218,6 +214,11 @@ void PaymentRequest::Init(
       base::Contains(spec_->url_payment_method_identifiers(),
                      android_pay_url)) {
     method_categories.push_back(JourneyLogger::PaymentMethodCategory::kGoogle);
+  }
+  if (base::Contains(spec_->url_payment_method_identifiers(),
+                     google_pay_authentication_url)) {
+    method_categories.push_back(
+        JourneyLogger::PaymentMethodCategory::kGooglePayAuthentication);
   }
   if (base::Contains(spec_->url_payment_method_identifiers(),
                      google_play_billing_url)) {
@@ -938,6 +939,8 @@ JourneyLogger::PaymentMethodCategory PaymentRequest::GetSelectedMethodCategory()
       for (const std::string& method : selected_app->GetAppMethodNames()) {
         if (method == methods::kGooglePay || method == methods::kAndroidPay) {
           return JourneyLogger::PaymentMethodCategory::kGoogle;
+        } else if (method == methods::kGooglePayAuthentication) {
+          return JourneyLogger::PaymentMethodCategory::kGooglePayAuthentication;
         } else if (method == methods::kGooglePlayBilling) {
           return JourneyLogger::PaymentMethodCategory::kPlayBilling;
         }

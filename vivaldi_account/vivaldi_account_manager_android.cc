@@ -7,7 +7,7 @@
 #include "base/base64.h"
 #include "chrome/android/chrome_jni_headers/VivaldiAccountManager_jni.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "components/os_crypt/os_crypt.h"
+#include "components/os_crypt/sync/os_crypt.h"
 #include "components/prefs/pref_service.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -27,8 +27,8 @@ static jlong JNI_VivaldiAccountManager_Init(
 
 VivaldiAccountManagerAndroid::VivaldiAccountManagerAndroid(JNIEnv* env,
                                                            jobject obj)
-    : weak_java_ref_(env, obj) {
-  profile_ = ProfileManager::GetActiveUserProfile();
+    : profile_(ProfileManager::GetActiveUserProfile()),
+      weak_java_ref_(env, obj) {
   DCHECK(profile_);
   account_manager_ =
       vivaldi::VivaldiAccountManagerFactory::GetForProfile(profile_);

@@ -117,7 +117,7 @@ class VivaldiProfileObserver : public ProfileObserver {
   VivaldiProfileObserver& operator=(const VivaldiProfileObserver&) = delete;
 
   std::unique_ptr<PrefChangeRegistrar> prefs_registrar_;
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 };
 
 }  // namespace
@@ -183,9 +183,12 @@ void VivaldiInitProfile(Profile* profile) {
   // Index is loaded on demand.
   sessions::IndexServiceFactory::GetForBrowserContext(profile);
 
-  extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
-      ->Get(profile)
-      ->PostProfileSetup();
+  extensions::VivaldiUtilitiesAPI* utility_api =
+      extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
+        ->Get(profile);
+  if (utility_api) {
+    utility_api->PostProfileSetup();
+  }
 
   if (!vivaldi::IsVivaldiRunning())
     return;

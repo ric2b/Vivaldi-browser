@@ -9,6 +9,10 @@
 #import "components/safe_browsing/core/common/features.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/autofill/form_suggestion_constants.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_constants.h"
 #import "ios/chrome/browser/ui/authentication/signin/advanced_settings_signin/advanced_settings_signin_constants.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/address_view_controller.h"
@@ -29,6 +33,7 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_steady_view.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_constants.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_views_utils.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_constants.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_accessibility_identifier_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
@@ -42,10 +47,10 @@
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/import_data_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/notifications/notifications_constants.h"
+#import "ios/chrome/browser/ui/settings/notifications/tracking_price/tracking_price_constants.h"
 #import "ios/chrome/browser/ui/settings/password/password_settings/password_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_table_view_constants.h"
-#import "ios/chrome/browser/ui/settings/price_notifications/price_notifications_constants.h"
-#import "ios/chrome/browser/ui/settings/price_notifications/tracking_price/tracking_price_constants.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_constants.h"
 #import "ios/chrome/browser/ui/settings/privacy/privacy_table_view_controller.h"
 #import "ios/chrome/browser/ui/settings/safety_check/safety_check_ui_swift.h"
@@ -55,12 +60,8 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/plus_sign_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_switch_cell.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_switch_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/promo_style/constants.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/tab_test_util.h"
@@ -134,10 +135,16 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 }
 
 UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
-  for (UIWindow* window in UIApplication.sharedApplication.windows) {
-    if ([window.accessibilityIdentifier isEqualToString:accessibility_id])
-      return window;
+  for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
+    UIWindowScene* windowScene =
+        base::mac::ObjCCastStrict<UIWindowScene>(scene);
+    for (UIWindow* window in windowScene.windows) {
+      if ([window.accessibilityIdentifier isEqualToString:accessibility_id]) {
+        return window;
+      }
+    }
   }
+
   return nil;
 }
 
@@ -356,6 +363,12 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
                                                   text]];
       }];
   return matcher;
+}
+
++ (id<GREYMatcher>)omniboxAutocompleteLabel {
+  return grey_allOf(
+      grey_accessibilityID(kOmniboxAutocompleteLabelAccessibilityIdentifier),
+      grey_sufficientlyVisible(), nil);
 }
 
 + (id<GREYMatcher>)locationViewContainingText:(NSString*)text {
@@ -605,8 +618,8 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_accessibilityID(kPrivacySafeBrowsingTableViewId);
 }
 
-+ (id<GREYMatcher>)settingsPriceNotificationsTableView {
-  return grey_accessibilityID(kPriceNotificationsTableViewId);
++ (id<GREYMatcher>)settingsNotificationsTableView {
+  return grey_accessibilityID(kNotificationsTableViewId);
 }
 
 + (id<GREYMatcher>)settingsTrackingPriceTableView {
@@ -665,9 +678,9 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
       buttonWithAccessibilityLabelID:(IDS_IOS_SETTINGS_PRIVACY_TITLE)];
 }
 
-+ (id<GREYMatcher>)settingsMenuPriceNotificationsButton {
++ (id<GREYMatcher>)settingsMenuNotificationsButton {
   return [ChromeMatchersAppInterface
-      buttonWithAccessibilityLabelID:(IDS_IOS_PRICE_NOTIFICATIONS_TITLE)];
+      buttonWithAccessibilityLabelID:(IDS_IOS_NOTIFICATIONS_TITLE)];
 }
 
 + (id<GREYMatcher>)settingsMenuPasswordsButton {
@@ -781,35 +794,6 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 
 + (id<GREYMatcher>)openNewWindowMenuButton {
   return grey_accessibilityID(kToolsMenuNewWindowId);
-}
-
-+ (id<GREYMatcher>)systemSelectionCallout {
-  if (@available(iOS 16.0, *)) {
-    return grey_kindOfClass(NSClassFromString(@"_UIEditMenuListViewCell"));
-  } else {
-    return grey_kindOfClass(NSClassFromString(@"UICalloutBarButton"));
-  }
-}
-
-+ (id<GREYMatcher>)systemSelectionCalloutLinkToTextButton {
-  return grey_allOf(grey_accessibilityLabel(
-                        l10n_util::GetNSString(IDS_IOS_SHARE_LINK_TO_TEXT)),
-                    [self systemSelectionCallout], nil);
-}
-
-+ (id<GREYMatcher>)systemSelectionCalloutCopyButton {
-  return grey_allOf(grey_accessibilityLabel(@"Copy"),
-                    [self systemSelectionCallout], nil);
-}
-
-+ (id<GREYMatcher>)systemSelectionCalloutOverflowButton {
-  if (@available(iOS 16.0, *)) {
-    return grey_allOf(
-        grey_accessibilityLabel(@"Forward"),
-        grey_kindOfClass(NSClassFromString(@"_UIEditMenuPageButton")), nil);
-  } else {
-    return grey_accessibilityID(@"show.next.items.menu.button");
-  }
 }
 
 + (id<GREYMatcher>)copyActivityButton {
@@ -1102,6 +1086,14 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
   return grey_accessibilityID(kToolsMenuPasswordsId);
 }
 
++ (id<GREYMatcher>)priceNotificationsDestinationButton {
+  return grey_anyOf(
+      grey_accessibilityID(kToolsMenuPriceNotifications),
+      grey_accessibilityID([NSString
+          stringWithFormat:@"%@-newBadge", kToolsMenuPriceNotifications]),
+      nullptr);
+}
+
 + (id<GREYMatcher>)readingListDestinationButton {
   return grey_accessibilityID(kToolsMenuReadingListId);
 }
@@ -1111,11 +1103,26 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 }
 
 + (id<GREYMatcher>)settingsDestinationButton {
-  return grey_accessibilityID(kToolsMenuSettingsId);
+  // The settings button could have a dot or something on it, changing its ID to
+  // "kToolsMenuSettingsId - Dot" or something else. The matcher needs to be
+  // adapted to match both.
+  GREYMatchesBlock matches = ^BOOL(id element) {
+    return [[element accessibilityIdentifier] hasPrefix:kToolsMenuSettingsId];
+  };
+  GREYDescribeToBlock describe = ^void(id<GREYDescription> description) {
+    [description appendText:[NSString stringWithFormat:@"starts with('%@')",
+                                                       kToolsMenuSettingsId]];
+  };
+  return [[GREYElementMatcherBlock alloc] initWithMatchesBlock:matches
+                                              descriptionBlock:describe];
 }
 
 + (id<GREYMatcher>)siteInfoDestinationButton {
   return grey_accessibilityID(kToolsMenuSiteInformation);
+}
+
++ (id<GREYMatcher>)whatsNewDestinationButton {
+  return grey_accessibilityID(kToolsMenuWhatsNewId);
 }
 
 #pragma mark - Overflow Menu Actions
@@ -1199,6 +1206,11 @@ UIWindow* WindowWithAccessibilityIdentifier(NSString* accessibility_id) {
 + (id<GREYMatcher>)manualFallbackManagePasswordsMatcher {
   return grey_accessibilityID(
       manual_fill::ManagePasswordsAccessibilityIdentifier);
+}
+
++ (id<GREYMatcher>)manualFallbackManageSettingsMatcher {
+  return grey_accessibilityID(
+      manual_fill::ManageSettingsAccessibilityIdentifier);
 }
 
 + (id<GREYMatcher>)manualFallbackOtherPasswordsMatcher {

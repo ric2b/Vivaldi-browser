@@ -6,12 +6,12 @@ package org.chromium.chrome.browser.subscriptions;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.lifetime.Destroyable;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager;
-import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.components.commerce.core.ShoppingService;
 
@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
  * subscriptions and notifications. Some logic here like observing Android activity lifecycle can be
  * moved to ShoppingServiceFactory.
  */
-public class CommerceSubscriptionsService {
+public class CommerceSubscriptionsService implements Destroyable {
     @VisibleForTesting
     public static final String CHROME_MANAGED_SUBSCRIPTIONS_TIMESTAMP =
             ChromePreferenceKeys.COMMERCE_SUBSCRIPTIONS_CHROME_MANAGED_TIMESTAMP;
@@ -70,6 +70,7 @@ public class CommerceSubscriptionsService {
     /**
      * Cleans up internal resources. Currently this method calls SubscriptionsManagerImpl#destroy.
      */
+    @Override
     public void destroy() {
         if (mActivityLifecycleDispatcher != null) {
             mActivityLifecycleDispatcher.unregister(mPauseResumeWithNativeObserver);
@@ -90,7 +91,7 @@ public class CommerceSubscriptionsService {
         }
         mSharedPreferencesManager.writeLong(
                 CHROME_MANAGED_SUBSCRIPTIONS_TIMESTAMP, System.currentTimeMillis());
-        if (!PriceTrackingFeatures.isPriceDropNotificationEligible()) return;
+        if (!mShoppingService.isShoppingListEligible()) return;
         recordMetricsForEligibleAccount();
         if (mImplicitPriceDropSubscriptionsManager != null) {
             mImplicitPriceDropSubscriptionsManager.initializeSubscriptions();

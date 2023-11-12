@@ -21,6 +21,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "ui/gfx/buffer_format_util.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/mac/io_surface.h"
 #include "ui/gl/buffer_format_utils.h"
 #include "ui/gl/buildflags.h"
@@ -36,21 +37,16 @@
 namespace gpu {
 
 namespace {
-bool IsFormatSupported(viz::ResourceFormat resource_format) {
-  switch (resource_format) {
-    case viz::ResourceFormat::RGBA_8888:
-    case viz::ResourceFormat::RGBX_8888:
-    case viz::ResourceFormat::BGRA_8888:
-    case viz::ResourceFormat::BGRX_8888:
-    case viz::ResourceFormat::RGBA_F16:
-    case viz::ResourceFormat::RED_8:
-    case viz::ResourceFormat::RG_88:
-    case viz::ResourceFormat::BGRA_1010102:
-    case viz::ResourceFormat::RGBA_1010102:
-      return true;
-    default:
-      return false;
-  }
+bool IsFormatSupported(viz::SharedImageFormat format) {
+  return (format == viz::SinglePlaneFormat::kRGBA_8888) ||
+         (format == viz::SinglePlaneFormat::kRGBX_8888) ||
+         (format == viz::SinglePlaneFormat::kBGRA_8888) ||
+         (format == viz::SinglePlaneFormat::kBGRX_8888) ||
+         (format == viz::SinglePlaneFormat::kRGBA_F16) ||
+         (format == viz::SinglePlaneFormat::kR_8) ||
+         (format == viz::SinglePlaneFormat::kRG_88) ||
+         (format == viz::SinglePlaneFormat::kBGRA_1010102) ||
+         (format == viz::SinglePlaneFormat::kRGBA_1010102);
 }
 
 void SetIOSurfaceColorSpace(IOSurfaceRef io_surface,
@@ -111,7 +107,8 @@ constexpr uint32_t kSupportedUsage =
     SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
     SHARED_IMAGE_USAGE_MACOS_VIDEO_TOOLBOX |
     SHARED_IMAGE_USAGE_RASTER_DELEGATED_COMPOSITING |
-    SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_WRITE;
+    SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_WRITE |
+    SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE;
 
 }  // anonymous namespace
 
@@ -136,9 +133,10 @@ IOSurfaceImageBackingFactory::IOSurfaceImageBackingFactory(
   max_texture_size_ = std::min(max_texture_size_, INT_MAX - 1);
 
   for (gfx::BufferFormat buffer_format : gpu_memory_buffer_formats_) {
-    viz::ResourceFormat resource_format = viz::GetResourceFormat(buffer_format);
-    if (IsFormatSupported(resource_format)) {
-      supported_formats_.insert(resource_format);
+    viz::SharedImageFormat format = viz::SharedImageFormat::SinglePlane(
+        viz::GetResourceFormat(buffer_format));
+    if (IsFormatSupported(format)) {
+      supported_formats_.insert(format);
     }
   }
 }
@@ -155,6 +153,7 @@ IOSurfaceImageBackingFactory::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     bool is_thread_safe) {
   DCHECK(!is_thread_safe);
   return CreateSharedImageInternal(mailbox, format, surface_handle, size,
@@ -171,6 +170,7 @@ IOSurfaceImageBackingFactory::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     base::span<const uint8_t> pixel_data) {
   return CreateSharedImageInternal(mailbox, format, kNullSurfaceHandle, size,
                                    color_space, surface_origin, alpha_type,
@@ -186,6 +186,7 @@ IOSurfaceImageBackingFactory::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     gfx::GpuMemoryBufferHandle handle) {
   return CreateSharedImageGMBs(
       mailbox, format, size, color_space, surface_origin, alpha_type, usage,
@@ -203,7 +204,8 @@ IOSurfaceImageBackingFactory::CreateSharedImage(
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
-    uint32_t usage) {
+    uint32_t usage,
+    std::string debug_label) {
   if (!gpu::IsPlaneValidForGpuMemoryBufferFormat(plane, buffer_format)) {
     LOG(ERROR) << "Invalid plane " << gfx::BufferPlaneToString(plane) << " for "
                << gfx::BufferFormatToString(buffer_format);
@@ -232,13 +234,18 @@ bool IOSurfaceImageBackingFactory::IsSupported(
   if (thread_safe) {
     return false;
   }
+
   // Never used with shared memory GMBs.
-  if (gmb_type == gfx::SHARED_MEMORY_BUFFER) {
+  if (gmb_type != gfx::EMPTY_BUFFER && gmb_type != gfx::IO_SURFACE_BUFFER) {
     return false;
   }
-  if (usage & SHARED_IMAGE_USAGE_CPU_UPLOAD) {
+
+  if (usage & SHARED_IMAGE_USAGE_CPU_WRITE &&
+      gmb_type != gfx::IO_SURFACE_BUFFER) {
+    // Only CPU writable when the client provides a IOSurface.
     return false;
   }
+
   // On macOS, there is no separate interop factory. Any GpuMemoryBuffer-backed
   // image can be used with both OpenGL and Metal
 
@@ -272,7 +279,7 @@ IOSurfaceImageBackingFactory::CreateSharedImageInternal(
     SkAlphaType alpha_type,
     uint32_t usage,
     base::span<const uint8_t> pixel_data) {
-  if (!base::Contains(supported_formats_, format.resource_format())) {
+  if (!base::Contains(supported_formats_, format)) {
     LOG(ERROR) << "CreateSharedImage: SCANOUT shared images unavailable. "
                   "Format= "
                << format.ToString();

@@ -23,7 +23,6 @@
 #import "components/autofill/ios/form_util/form_handlers_java_script_feature.h"
 #include "components/autofill/ios/form_util/unique_id_data_tab_helper.h"
 #include "components/prefs/pref_service.h"
-#include "ios/web/public/js_messaging/web_frame_util.h"
 #include "ios/web/public/test/fakes/fake_browser_state.h"
 #include "ios/web/public/test/fakes/fake_web_frame.h"
 #import "ios/web/public/test/fakes/fake_web_frames_manager.h"
@@ -39,6 +38,7 @@
 #error "This file requires ARC support."
 #endif
 
+using autofill::AutofillJavaScriptFeature;
 using autofill::FieldDataManager;
 using autofill::FieldRendererId;
 using autofill::FormRendererId;
@@ -60,15 +60,10 @@ class AutofillAgentTests : public web::WebTest {
   AutofillAgentTests& operator=(const AutofillAgentTests&) = delete;
 
   void AddWebFrame(std::unique_ptr<web::WebFrame> frame) {
-    web::WebFrame* frame_ptr = frame.get();
     fake_web_frames_manager_->AddWebFrame(std::move(frame));
-    fake_web_state_.OnWebFrameDidBecomeAvailable(frame_ptr);
   }
 
   void RemoveWebFrame(const std::string& frame_id) {
-    web::WebFrame* frame_ptr =
-        fake_web_frames_manager_->GetFrameWithId(frame_id);
-    fake_web_state_.OnWebFrameWillBecomeUnavailable(frame_ptr);
     fake_web_frames_manager_->RemoveWebFrame(frame_id);
   }
 
@@ -83,7 +78,10 @@ class AutofillAgentTests : public web::WebTest {
     fake_web_state_.SetContentIsHTML(true);
     auto frames_manager = std::make_unique<web::FakeWebFramesManager>();
     fake_web_frames_manager_ = frames_manager.get();
-    fake_web_state_.SetWebFramesManager(std::move(frames_manager));
+    web::ContentWorld content_world =
+        AutofillJavaScriptFeature::GetInstance()->GetSupportedContentWorld();
+    fake_web_state_.SetWebFramesManager(content_world,
+                                        std::move(frames_manager));
 
     GURL url("https://example.com");
     fake_web_state_.SetCurrentURL(url);
@@ -175,8 +173,7 @@ TEST_F(AutofillAgentTests,
   field.unique_renderer_id = FieldRendererId(5);
   form.fields.push_back(field);
   [autofill_agent_ fillFormData:form
-                        inFrame:fake_web_state_.GetPageWorldWebFramesManager()
-                                    ->GetMainWebFrame()];
+                        inFrame:fake_web_frames_manager_->GetMainWebFrame()];
   fake_web_state_.WasShown();
   EXPECT_EQ(u"__gCrWeb.autofill.fillForm({\"fields\":{\"2\":{\"section\":\"-"
             u"default\",\"value\":\"number_value\"},\"3\":{\"section\":\"-"

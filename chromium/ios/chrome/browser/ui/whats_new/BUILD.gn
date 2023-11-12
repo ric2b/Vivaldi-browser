@@ -24,18 +24,21 @@ source_set("whats_new") {
   deps = [
     ":feature_flags",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/default_browser:utils",
     "//ios/chrome/browser/main:public",
-    "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
-    "//ios/chrome/browser/ui/default_promo:utils",
-    "//ios/chrome/browser/ui/elements",
-    "//ios/chrome/browser/ui/table_view",
-    "//ios/chrome/browser/ui/table_view:utils",
-    "//ios/chrome/browser/ui/util",
+    "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
+    "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/public/features",
+    "//ios/chrome/browser/shared/ui/elements",
+    "//ios/chrome/browser/shared/ui/table_view",
+    "//ios/chrome/browser/shared/ui/table_view:utils",
+    "//ios/chrome/browser/shared/ui/util",
+    "//ios/chrome/browser/ui/promos_manager:promos",
     "//ios/chrome/browser/ui/whats_new/cells",
     "//ios/chrome/browser/ui/whats_new/data_source",
     "//ios/chrome/browser/url_loading",
     "//ios/chrome/browser/url_loading:url_loading",
+    "//ios/chrome/common:button_config",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/elements",
     "//ios/chrome/common/ui/table_view:cells_constants",
@@ -64,12 +67,23 @@ source_set("util") {
     "whats_new_util.mm",
   ]
   deps = [
+    ":constants",
     ":feature_flags",
     "//base",
     "//ios/chrome/browser/application_context",
     "//ios/chrome/browser/promos_manager",
     "//ios/chrome/browser/promos_manager:constants",
     "//ios/chrome/browser/promos_manager:features",
-    "//ios/chrome/browser/ui:feature_flags",
+    "//ios/chrome/browser/shared/public/features",
   ]
+}
+
+source_set("constants") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "constants.h",
+    "constants.mm",
+  ]
+
+  frameworks = [ "Foundation.framework" ]
 }

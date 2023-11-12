@@ -18,6 +18,7 @@
 #include "ash/system/model/clock_model.h"
 #include "ash/system/model/clock_observer.h"
 #include "ash/system/model/system_tray_model.h"
+#include "ash/system/model/update_model.h"
 #include "ash/system/power/adaptive_charging_controller.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/time/calendar_metrics.h"
@@ -25,16 +26,21 @@
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/unified/buttons.h"
 #include "ash/system/unified/quick_settings_metrics_util.h"
+#include "ash/system/update/eol_notice_quick_settings_view.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
+#include "ui/compositor/layer.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/label.h"
@@ -47,6 +53,203 @@ namespace ash {
 using ContentLayerType = AshColorProvider::ContentLayerType;
 
 namespace {
+
+constexpr auto kBatteryLabelViewInsets = gfx::Insets(2);
+
+// Helper function for getting the content layer color.
+inline SkColor GetContentLayerColor(ContentLayerType type) {
+  return AshColorProvider::Get()->GetContentLayerColor(type);
+}
+
+// Helper function for configuring label in `BatteryLabelView` and
+// `BatteryIconView`.
+void ConfigureLabel(views::Label* label, SkColor color) {
+  label->SetAutoColorReadabilityEnabled(false);
+  label->SetSubpixelRenderingEnabled(false);
+  label->SetEnabledColor(color);
+  label->GetViewAccessibility().OverrideIsIgnored(true);
+}
+
+// A base class for both `BatteryLabelView` and `BatteryIconView`. It updates by
+// observing `PowerStatus`.
+class BatteryInfoViewBase : public views::Button, public PowerStatus::Observer {
+ public:
+  explicit BatteryInfoViewBase(UnifiedSystemTrayController* controller)
+      : Button(base::BindRepeating(
+            [](UnifiedSystemTrayController* controller) {
+              quick_settings_metrics_util::RecordQsButtonActivated(
+                  QsButtonCatalogName::kBatteryButton);
+              controller->HandleOpenPowerSettingsAction();
+            },
+            controller)) {
+    PowerStatus::Get()->AddObserver(this);
+  }
+  BatteryInfoViewBase(const BatteryInfoViewBase&) = delete;
+  BatteryInfoViewBase& operator=(const BatteryInfoViewBase&) = delete;
+  ~BatteryInfoViewBase() override { PowerStatus::Get()->RemoveObserver(this); }
+
+  // Updates the subclass view's ui when `OnPowerStatusChanged`.
+  virtual void Update() = 0;
+
+ private:
+  // views::View:
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ax::mojom::Role::kLabelText;
+    node_data->SetName(
+        PowerStatus::Get()->GetAccessibleNameString(/*full_description=*/true));
+  }
+
+  void ChildPreferredSizeChanged(views::View* child) override {
+    PreferredSizeChanged();
+  }
+
+  void ChildVisibilityChanged(views::View* child) override {
+    PreferredSizeChanged();
+  }
+
+  // PowerStatus::Observer:
+  void OnPowerStatusChanged() override { Update(); }
+};
+
+// A view that shows battery status.
+class BatteryLabelView : public BatteryInfoViewBase {
+ public:
+  BatteryLabelView(UnifiedSystemTrayController* controller,
+                   bool use_smart_charging_ui)
+      : BatteryInfoViewBase(controller),
+        use_smart_charging_ui_(use_smart_charging_ui) {
+    SetID(VIEW_ID_QS_BATTERY_BUTTON);
+    SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, kBatteryLabelViewInsets));
+    views::FocusRing::Get(this)->SetColorId(
+        static_cast<ui::ColorId>(ui::kColorAshFocusRing));
+
+    percentage_ = AddChildView(std::make_unique<views::Label>());
+    auto separator = std::make_unique<views::Label>();
+    separator->SetText(l10n_util::GetStringUTF16(
+        IDS_ASH_STATUS_TRAY_BATTERY_STATUS_SEPARATOR));
+    separator_view_ = AddChildView(std::move(separator));
+    status_ = AddChildView(std::make_unique<views::Label>());
+    Update();
+  }
+  BatteryLabelView(const BatteryLabelView&) = delete;
+  BatteryLabelView& operator=(const BatteryLabelView&) = delete;
+  ~BatteryLabelView() override = default;
+
+ private:
+  // views::View:
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    const auto color =
+        GetContentLayerColor(ContentLayerType::kTextColorSecondary);
+    ConfigureLabel(percentage_, color);
+    ConfigureLabel(separator_view_, color);
+    ConfigureLabel(status_, color);
+  }
+
+  // BatteryInfoViewBase:
+  void Update() override {
+    std::u16string percentage_text;
+    std::u16string status_text;
+    std::tie(percentage_text, status_text) =
+        PowerStatus::Get()->GetStatusStrings();
+
+    percentage_->SetText(percentage_text);
+    status_->SetText(status_text);
+
+    percentage_->SetVisible(!percentage_text.empty() &&
+                            !use_smart_charging_ui_);
+    separator_view_->SetVisible(!percentage_text.empty() &&
+                                !use_smart_charging_ui_ &&
+                                !status_text.empty());
+    status_->SetVisible(!status_text.empty());
+  }
+
+  // Owned by this view, which is owned by views hierarchy.
+  raw_ptr<views::Label, ExperimentalAsh> percentage_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> separator_view_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> status_ = nullptr;
+
+  //  If true, this view will only show the status and let the `BatteryIconView`
+  //  show the rest. If false, the `percentage_` and separator will be visible.
+  //  Smart charging means `ash::features::IsAdaptiveChargingEnabled()` and it
+  //  is adaptive delaying charge.
+  const bool use_smart_charging_ui_;
+};
+
+// A view that shows battery icon and charging state when smart charging is
+// enabled.
+class BatteryIconView : public BatteryInfoViewBase {
+ public:
+  explicit BatteryIconView(UnifiedSystemTrayController* controller)
+      : BatteryInfoViewBase(controller) {
+    SetID(VIEW_ID_QS_BATTERY_BUTTON);
+    auto layout = std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal);
+    layout->set_inside_border_insets(kUnifiedSystemInfoBatteryIconPadding);
+    SetLayoutManager(std::move(layout));
+
+    battery_image_ = AddChildView(std::make_unique<views::ImageView>());
+    // The battery icon requires its own layer to properly render the masked
+    // outline of the badge within the battery icon.
+    battery_image_->SetPaintToLayer();
+    battery_image_->layer()->SetFillsBoundsOpaquely(false);
+
+    ConfigureIcon();
+
+    percentage_ = AddChildView(std::make_unique<views::Label>());
+
+    SetBackground(views::CreateRoundedRectBackground(
+        GetContentLayerColor(
+            ContentLayerType::kBatterySystemInfoBackgroundColor),
+        GetPreferredSize().height() / 2));
+
+    Update();
+  }
+  BatteryIconView(const BatteryIconView&) = delete;
+  BatteryIconView& operator=(const BatteryIconView&) = delete;
+  ~BatteryIconView() override = default;
+
+ private:
+  // views::View:
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    const auto color =
+        GetContentLayerColor(ContentLayerType::kButtonLabelColorPrimary);
+    ConfigureLabel(percentage_, color);
+    ConfigureIcon();
+  }
+
+  // BatteryInfoViewBase:
+  void Update() override {
+    const std::u16string percentage_text =
+        PowerStatus::Get()->GetStatusStrings().first;
+
+    percentage_->SetText(percentage_text);
+    percentage_->SetVisible(!percentage_text.empty());
+
+    ConfigureIcon();
+  }
+
+  // Builds the battery icon image.
+  void ConfigureIcon() {
+    const SkColor battery_icon_color =
+        GetContentLayerColor(ContentLayerType::kBatterySystemInfoIconColor);
+
+    const SkColor badge_color = GetContentLayerColor(
+        ContentLayerType::kBatterySystemInfoBackgroundColor);
+
+    PowerStatus::BatteryImageInfo info =
+        PowerStatus::Get()->GetBatteryImageInfo();
+    info.alert_if_low = false;
+    battery_image_->SetImage(PowerStatus::GetBatteryImage(
+        info, kUnifiedTrayBatteryIconSize, battery_icon_color, badge_color));
+  }
+
+  // Owned by this view, which is owned by views hierarchy.
+  raw_ptr<views::Label, ExperimentalAsh> percentage_ = nullptr;
+  raw_ptr<views::ImageView, ExperimentalAsh> battery_image_ = nullptr;
+};
 
 std::u16string FormatDate(const base::Time& time) {
   // Use 'short' month format (e.g., "Oct") followed by non-padded day of
@@ -68,7 +271,7 @@ bool UseSmartChargingUI() {
 }
 
 // A view that shows current date in short format e.g. "Mon, Mar 12". It updates
-// by observing ClockObserver.
+// by observing `ClockObserver`.
 class DateView : public views::Button, public ClockObserver {
  public:
   explicit DateView(UnifiedSystemTrayController* controller);
@@ -100,10 +303,10 @@ class DateView : public views::Button, public ClockObserver {
   void Refresh() override;
 
   // Owned by the views hierarchy.
-  views::Label* label_;
+  raw_ptr<views::Label, ExperimentalAsh> label_;
 
   // Unowned.
-  UnifiedSystemTrayController* const controller_;
+  const raw_ptr<UnifiedSystemTrayController, ExperimentalAsh> controller_;
 };
 
 DateView::DateView(UnifiedSystemTrayController* controller)
@@ -118,9 +321,6 @@ DateView::DateView(UnifiedSystemTrayController* controller)
   Update();
 
   Shell::Get()->system_tray_model()->clock()->AddObserver(this);
-  if (!features::IsCalendarViewEnabled())
-    SetEnabled(
-        Shell::Get()->system_tray_model()->clock()->IsSettingsAvailable());
   SetInstallFocusRingOnFocus(true);
   views::FocusRing::Get(this)->SetColorId(ui::kColorAshFocusRing);
   views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::OFF);
@@ -141,7 +341,7 @@ void DateView::OnButtonPressed(const ui::Event& event) {
   quick_settings_metrics_util::RecordQsButtonActivated(
       QsButtonCatalogName::kDateViewButton);
 
-  if (features::IsCalendarViewEnabled() && controller_->IsExpanded()) {
+  if (controller_->IsExpanded()) {
     controller_->ShowCalendarView(
         calendar_metrics::CalendarViewShowSource::kDateView,
         calendar_metrics::GetEventType(event));
@@ -155,13 +355,10 @@ void DateView::Update() {
   base::Time now = base::Time::Now();
   label_->SetText(l10n_util::GetStringFUTF16(
       IDS_ASH_STATUS_TRAY_DATE, FormatDayOfWeek(now), FormatDate(now)));
-  if (features::IsCalendarViewEnabled()) {
-    SetAccessibleName(l10n_util::GetStringFUTF16(
-        IDS_ASH_CALENDAR_ENTRY_ACCESSIBLE_DESCRIPTION,
-        TimeFormatFriendlyDateAndTime(now)));
-  } else {
-    SetAccessibleName(TimeFormatFriendlyDateAndTime(now));
-  }
+
+  SetAccessibleName(
+      l10n_util::GetStringFUTF16(IDS_ASH_CALENDAR_ENTRY_ACCESSIBLE_DESCRIPTION,
+                                 TimeFormatFriendlyDateAndTime(now)));
 }
 
 gfx::Insets DateView::GetInsets() const {
@@ -202,8 +399,9 @@ class ManagementPowerDateComboView : public views::View {
       separator_view_->SetPreferredLength(kUnifiedSystemInfoHeight);
 
       const bool use_smart_charging_ui = UseSmartChargingUI();
-      if (use_smart_charging_ui)
+      if (use_smart_charging_ui) {
         AddChildView(std::make_unique<BatteryIconView>(controller));
+      }
       AddChildView(std::make_unique<BatteryLabelView>(controller,
                                                       use_smart_charging_ui));
     }
@@ -229,19 +427,20 @@ class ManagementPowerDateComboView : public views::View {
 
   // Pointer to the actual child view is maintained for unit testing, owned by
   // `ManagementPowerDateComboView`.
-  EnterpriseManagedView* enterprise_managed_view_ = nullptr;
+  raw_ptr<EnterpriseManagedView, ExperimentalAsh> enterprise_managed_view_ =
+      nullptr;
 
   // Pointer to the actual child view is maintained for unit testing, owned by
   // `ManagementPowerDateComboView`.
-  SupervisedUserView* supervised_view_ = nullptr;
+  raw_ptr<SupervisedUserView, ExperimentalAsh> supervised_view_ = nullptr;
 
   // Separator between date and battery views, owned by
   // `ManagementPowerDateComboView`.
-  views::Separator* separator_view_ = nullptr;
+  raw_ptr<views::Separator, ExperimentalAsh> separator_view_ = nullptr;
 
   // Pointer to the actual child view is maintained for unit testing, owned by
   // `ManagementPowerDateComboView`.
-  DateView* date_view_ = nullptr;
+  raw_ptr<DateView, ExperimentalAsh> date_view_ = nullptr;
 };
 
 UnifiedSystemInfoView::UnifiedSystemInfoView(
@@ -261,19 +460,35 @@ UnifiedSystemInfoView::UnifiedSystemInfoView(
       AddChildView(std::make_unique<ManagementPowerDateComboView>(controller));
   layout->SetFlexForView(combo_view_, 1);
 
-  // If the release track is not "stable" then channel indicator UI for quick
-  // settings is put up.
-  auto channel = Shell::Get()->shell_delegate()->GetChannel();
-  if (features::IsReleaseTrackUiEnabled() &&
-      channel_indicator_utils::IsDisplayableChannel(channel) &&
-      Shell::Get()->session_controller()->GetSessionState() ==
-          session_manager::SessionState::ACTIVE) {
-    channel_view_ =
-        AddChildView(std::make_unique<ChannelIndicatorQuickSettingsView>(
-            channel, Shell::Get()
-                         ->system_tray_model()
-                         ->client()
-                         ->IsUserFeedbackEnabled()));
+  if (Shell::Get()->session_controller()->GetSessionState() ==
+      session_manager::SessionState::ACTIVE) {
+    if (Shell::Get()->system_tray_model()->update_model()->show_eol_notice()) {
+      auto* eol_notice_wrapper = AddChildView(std::make_unique<views::View>());
+      auto* eol_notice_layout = eol_notice_wrapper->SetLayoutManager(
+          std::make_unique<views::BoxLayout>(
+              views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+              kUnifiedSystemInfoSpacing));
+      eol_notice_layout->set_main_axis_alignment(
+          views::BoxLayout::MainAxisAlignment::kCenter);
+      eol_notice_layout->set_cross_axis_alignment(
+          views::BoxLayout::CrossAxisAlignment::kCenter);
+
+      eol_notice_ = eol_notice_wrapper->AddChildView(
+          std::make_unique<EolNoticeQuickSettingsView>());
+    }
+
+    // If the release track is not "stable" then channel indicator UI for quick
+    // settings is put up.
+    auto channel = Shell::Get()->shell_delegate()->GetChannel();
+    if (!eol_notice_ &&
+        channel_indicator_utils::IsDisplayableChannel(channel)) {
+      channel_view_ =
+          AddChildView(std::make_unique<ChannelIndicatorQuickSettingsView>(
+              channel, Shell::Get()
+                           ->system_tray_model()
+                           ->client()
+                           ->IsUserFeedbackEnabled()));
+    }
   }
 }
 

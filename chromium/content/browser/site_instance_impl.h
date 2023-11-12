@@ -111,7 +111,14 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
       BrowserContext* browser_context,
       const GURL& url);
 
-  static bool ShouldAssignSiteForURL(const GURL& url);
+  // Determine if a URL should "use up" a site.  URLs such as about:blank or
+  // chrome-native:// leave the site unassigned.
+  //
+  // This is similar to SiteInstance::ShouldAssignSiteForURL() in the public
+  // API, except that it takes a UrlInfo rather than a URL.  This allows this
+  // function to consider additional information, such as the overridden origin
+  // for a URL being navigated to.
+  static bool ShouldAssignSiteForUrlInfo(const UrlInfo& url_info);
 
   // Returns the SiteInstanceGroup |this| belongs to.
   // Currently, each SiteInstanceGroup has exactly one SiteInstance, but that
@@ -124,6 +131,15 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // GetRelatedSiteInstance (overridden from SiteInstance).
   scoped_refptr<SiteInstanceImpl> GetRelatedSiteInstanceImpl(
       const UrlInfo& url_info);
+
+  // This function is used during navigation to get a SiteInstance in the same
+  // CoopRelatedGroup. If the provided `url_info` matches one of the existing
+  // BrowsingInstance of that group, a new or already existing SiteInstance in
+  // that BrowsingInstance, will be picked. Therefore returning the same
+  // SiteInstance is possible, if called with perfectly matching `url_info`.
+  scoped_refptr<SiteInstanceImpl> GetCoopRelatedSiteInstanceImpl(
+      const UrlInfo& url_info);
+
   bool IsSameSiteWithURLInfo(const UrlInfo& url_info);
 
   // Returns an AgentSchedulingGroupHost, or creates one if
@@ -180,6 +196,10 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
     // randomly.
     REUSE_PENDING_OR_COMMITTED_SITE,
 
+    // Similar to REUSE_PENDING_OR_COMMITTED_SITE, but limits the number of
+    // main frames a RenderProcessHost can host to a certain threshold.
+    REUSE_PENDING_OR_COMMITTED_SITE_WITH_MAIN_FRAME_THRESHOLD,
+
     // In this mode, SiteInstances don't proactively reuse processes. An
     // existing process with an unmatched service worker for the site is reused
     // only for navigations, not for service workers. When the process limit has
@@ -200,9 +220,9 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // process-per-site model should be used.
   bool ShouldUseProcessPerSite() const;
 
-  // Checks if |current_process| can be reused for this SiteInstance, and
-  // sets |process_| to |current_process| if so.
-  void ReuseCurrentProcessIfPossible(RenderProcessHost* current_process);
+  // Checks if |existing_process| can be reused for this SiteInstance, and
+  // sets |process_| to |existing_process| if so.
+  void ReuseExistingProcessIfPossible(RenderProcessHost* existing_process);
 
   // Whether the SiteInstance is created for a service worker. If this flag
   // is true, when a new process is created for this SiteInstance or a randomly
@@ -431,6 +451,19 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // WebExposedIsolationInfo of this BrowsingInstance.
   bool IsCrossOriginIsolated() const;
 
+  // Returns whether the two SiteInstances belong to the same CoopRelatedGroup.
+  // If so, a subset of JavaScript interactions that are permitted across
+  // origins (window.postMessage() and window.closed) should be supported. This
+  // is weaker than IsRelatedSiteInstance: if two SiteInstances belong to the
+  // same BrowsingInstance, they are related and COOP related.
+  bool IsCoopRelatedSiteInstance(const SiteInstanceImpl* instance) const;
+
+  // Returns the unique origin of all top-level documents in this
+  // BrowsingInstance. This is only guaranteed by the use of a unique COOP value
+  // across the BrowsingInstance. It is empty if the BrowsingInstance does not
+  // contain COOP: same-origin or COOP: restrict-properties documents.
+  const absl::optional<url::Origin>& GetCommonCoopOrigin() const;
+
   // Finds an existing SiteInstance in this SiteInstance's BrowsingInstance that
   // matches this `url_info` but with the `is_sandboxed_` flag true. It's
   // assumed that `url_info.url` is 'about:srcdoc' here, so the new SiteInstance
@@ -446,8 +479,12 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // BrowsingInstance.
   RenderProcessHost* GetDefaultProcessForBrowsingInstance();
 
+  // Sets the process for `this`, creating a SiteInstanceGroup if necessary.
+  void SetProcessForTesting(RenderProcessHost* process);
+
  private:
   friend class BrowsingInstance;
+  friend class SiteInstanceGroupManager;
   friend class SiteInstanceTestBrowserClient;
 
   // Friend tests that need direct access to IsSameSite().
@@ -536,6 +573,9 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
       const IsolationContext& isolation_context,
       const GURL& url,
       const SiteInfo& site_info);
+
+  // This getter is only used to construct SiteInstanceGroups.
+  BrowsingInstance* browsing_instance() { return browsing_instance_.get(); }
 
   // A unique ID for this SiteInstance.
   SiteInstanceId id_;

@@ -17,12 +17,17 @@ script_test("wpt_tests_ios") {
     "chrome_ios",
     "--target",
     "Release",
+    "--webdriver-arg=--os=16.0",
+    "--no-restart-on-unexpected",
+    "--retry-unexpected=0",
+
+    # TODO(crbug.com/1351820): Enable more tests to run.
+    "/css/css-transforms/",
   ]
   deps = [ ":all_tests" ]
   data = [
     "//third_party/blink/tools/run_wpt_tests.py",
     "//third_party/wpt_tools/",
-    "//third_party/blink/tools/wpt_process_results.py",
     "//third_party/blink/tools/blinkpy/",
     "//build/skia_gold_common/",
     "//third_party/blink/web_tests/external/",
@@ -34,9 +39,18 @@ script_test("wpt_tests_ios") {
     "//.vpython3",
   ]
   data_deps = [
+    ":tools",
     "//testing:test_scripts_shared",
     "//third_party/catapult/third_party/typ:typ",
     "//tools/imagediff",
+  ]
+}
+
+group("tools") {
+  data = [
+    "tools/",
+    "//ios/build/bots/scripts/",
+    "//ios/testing/plugin",
   ]
 }
 
@@ -89,6 +103,11 @@ ios_xcuitest_test("ios_cwt_chromedriver_tests_module") {
     "//ios/third_party/gtx:gtx+bundle",
     "//third_party/icu:icudata",
   ]
+
+  # Those frameworks are force-linked via //base/test:test_support, so
+  # ensure the framework bundles are packaged in the test runner and
+  # not the test module.
+  runner_only_bundle_deps = [ "//base/test:test_trace_processor+bundle" ]
 }
 
 source_set("shared_helper_headers") {

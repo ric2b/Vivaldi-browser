@@ -183,6 +183,11 @@ class TestDriveFsEventRouter : public DriveFsEventRouter {
 };
 
 class DriveFsEventRouterTest : public testing::Test {
+ public:
+  DriveFsEventRouterTest() {
+    feature_list_.InitWithFeatures({}, {ash::features::kFilesInlineSyncStatus});
+  }
+
  protected:
   void SetUp() override {
     event_router_ = std::make_unique<TestDriveFsEventRouter>();
@@ -212,6 +217,9 @@ class DriveFsEventRouterTestInlineSyncStatus : public DriveFsEventRouterTest {
   DriveFsEventRouterTestInlineSyncStatus() {
     feature_list_.InitWithFeatures({ash::features::kFilesInlineSyncStatus}, {});
   }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 inline void AddEvent(std::vector<drivefs::mojom::ItemEventPtr>& events,
@@ -424,7 +432,7 @@ TEST_F(DriveFsEventRouterTest, OnSyncingStatusUpdate_CompletedSync_WithQueued) {
   EXPECT_CALL(mock(),
               BroadcastEventImpl(
                   kTransferEventName,
-                  MatchFileTransferStatus("ext:b", QUEUED, 110, 200, 1, true)));
+                  MatchFileTransferStatus("ext:b", QUEUED, 100, 200, 1, true)));
   EXPECT_CALL(mock(), BroadcastEventImpl(kPinEventName,
                                          MatchFileTransferStatus(
                                              "", COMPLETED, 0, 0, 0, true)));
@@ -453,7 +461,7 @@ TEST_F(DriveFsEventRouterTest,
   EXPECT_CALL(mock(),
               BroadcastEventImpl(
                   kTransferEventName,
-                  MatchFileTransferStatus("ext:b", QUEUED, 110, 200, 1, true)));
+                  MatchFileTransferStatus("ext:b", QUEUED, 100, 200, 1, true)));
   EXPECT_CALL(mock(), BroadcastEventImpl(kPinEventName,
                                          MatchFileTransferStatus(
                                              "", COMPLETED, 0, 0, 0, true)));
@@ -483,7 +491,7 @@ TEST_F(DriveFsEventRouterTest, OnSyncingStatusUpdate_CompletedSync_ThenQueued) {
   EXPECT_CALL(mock(),
               BroadcastEventImpl(
                   kTransferEventName,
-                  MatchFileTransferStatus("ext:b", QUEUED, 10, 100, 1, true)));
+                  MatchFileTransferStatus("ext:b", QUEUED, 0, 100, 1, true)));
   EXPECT_CALL(mock(), BroadcastEventImpl(kPinEventName,
                                          MatchFileTransferStatus(
                                              "", COMPLETED, 0, 0, 0, true)));
@@ -537,7 +545,7 @@ TEST_F(DriveFsEventRouterTest, OnSyncingStatusUpdate_QueuedOnly) {
   EXPECT_CALL(mock(),
               BroadcastEventImpl(
                   kTransferEventName,
-                  MatchFileTransferStatus("ext:b", QUEUED, 10, 100, 1, true)));
+                  MatchFileTransferStatus("ext:b", QUEUED, 0, 100, 1, true)));
   EXPECT_CALL(mock(), BroadcastEventImpl(kPinEventName,
                                          MatchFileTransferStatus(
                                              "", COMPLETED, 0, 0, 0, true)));

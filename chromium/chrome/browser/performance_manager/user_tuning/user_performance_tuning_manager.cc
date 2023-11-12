@@ -7,9 +7,11 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/power_monitor/power_monitor.h"
+#include "base/run_loop.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/performance_manager/metrics/page_timeline_monitor.h"
+#include "chrome/browser/performance_manager/policies/heuristic_memory_saver_policy.h"
 #include "chrome/browser/performance_manager/policies/high_efficiency_mode_policy.h"
 #include "chrome/browser/performance_manager/policies/page_discarding_helper.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-shared.h"
@@ -68,12 +70,21 @@ class HighEfficiencyModeToggleDelegateImpl
  public:
   void ToggleHighEfficiencyMode(bool enabled) override {
     performance_manager::PerformanceManager::CallOnGraph(
-        FROM_HERE, base::BindOnce(
-                       [](bool enabled, performance_manager::Graph* graph) {
-                         policies::HighEfficiencyModePolicy::GetInstance()
-                             ->OnHighEfficiencyModeChanged(enabled);
-                       },
-                       enabled));
+        FROM_HERE,
+        base::BindOnce(
+            [](bool enabled, performance_manager::Graph* graph) {
+              if (base::FeatureList::IsEnabled(
+                      performance_manager::features::kHeuristicMemorySaver)) {
+                CHECK(policies::HeuristicMemorySaverPolicy::GetInstance());
+                policies::HeuristicMemorySaverPolicy::GetInstance()->SetActive(
+                    enabled);
+              } else {
+                CHECK(policies::HighEfficiencyModePolicy::GetInstance());
+                policies::HighEfficiencyModePolicy::GetInstance()
+                    ->OnHighEfficiencyModeChanged(enabled);
+              }
+            },
+            enabled));
   }
 
   ~HighEfficiencyModeToggleDelegateImpl() override = default;
@@ -95,10 +106,16 @@ UserPerformanceTuningManager::PreDiscardResourceUsage::PreDiscardResourceUsage(
     ::mojom::LifecycleUnitDiscardReason discard_reason)
     : content::WebContentsUserData<PreDiscardResourceUsage>(*contents),
       memory_footprint_estimate_(memory_footprint_estimate),
-      discard_reason_(discard_reason) {}
+      discard_reason_(discard_reason),
+      discard_timetick_(base::TimeTicks::Now()) {}
 
 UserPerformanceTuningManager::PreDiscardResourceUsage::
     ~PreDiscardResourceUsage() = default;
+
+// static
+bool UserPerformanceTuningManager::HasInstance() {
+  return g_user_performance_tuning_manager;
+}
 
 // static
 UserPerformanceTuningManager* UserPerformanceTuningManager::GetInstance() {
@@ -143,6 +160,24 @@ bool UserPerformanceTuningManager::IsBatterySaverModeDisabledForSession()
 bool UserPerformanceTuningManager::IsHighEfficiencyModeActive() const {
   return pref_change_registrar_.prefs()->GetBoolean(
       performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled);
+}
+
+bool UserPerformanceTuningManager::IsHighEfficiencyModeManaged() const {
+  auto* pref = pref_change_registrar_.prefs()->FindPreference(
+      performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled);
+  return pref->IsManaged();
+}
+
+bool UserPerformanceTuningManager::IsHighEfficiencyModeDefault() const {
+  auto* pref = pref_change_registrar_.prefs()->FindPreference(
+      performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled);
+  return pref->IsDefaultValue();
+}
+
+void UserPerformanceTuningManager::SetHighEfficiencyModeEnabled(bool enabled) {
+  pref_change_registrar_.prefs()->SetBoolean(
+      performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled,
+      enabled);
 }
 
 bool UserPerformanceTuningManager::IsBatterySaverActive() const {
@@ -220,22 +255,10 @@ UserPerformanceTuningManager::UserPerformanceTuningManager(
                                                          std::move(notifier));
   }
 
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable)) {
-    // If the HEM pref is still the default (it wasn't configured by the user),
-    // look up what that default value should be in Finch and set it here.
-    // This is called in PostCreateThreads, which ensures the pref is in the
-    // correct state when views are created.
-    const PrefService::Preference* pref = local_state->FindPreference(
-        performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled);
-    if (pref->IsDefaultValue()) {
-      local_state->SetDefaultPrefValue(
-          performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled,
-          base::Value(
-              performance_manager::features::kHighEfficiencyModeDefaultState
-                  .Get()));
-    }
-  }
+  // TODO(crbug.com/1430068): call
+  // performance_manager::user_tuning::prefs::MigrateHighEfficiencyModePref
+  // here in the same patch as the UI and enterprise policy are migrated to
+  // the enum pref.
 
   pref_change_registrar_.Init(local_state);
 }
@@ -243,50 +266,48 @@ UserPerformanceTuningManager::UserPerformanceTuningManager(
 void UserPerformanceTuningManager::Start() {
   was_started_ = true;
 
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable)) {
-    pref_change_registrar_.Add(
-        performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled,
-        base::BindRepeating(
-            &UserPerformanceTuningManager::OnHighEfficiencyModePrefChanged,
-            base::Unretained(this)));
-    // Make sure the initial state of the pref is passed on to the policy.
-    OnHighEfficiencyModePrefChanged();
+  pref_change_registrar_.Add(
+      performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled,
+      base::BindRepeating(
+          &UserPerformanceTuningManager::OnHighEfficiencyModePrefChanged,
+          base::Unretained(this)));
+  // Make sure the initial state of the pref is passed on to the policy.
+  OnHighEfficiencyModePrefChanged();
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(kForceDeviceHasBattery)) {
+    force_has_battery_ = true;
+    has_battery_ = true;
   }
 
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kBatterySaverModeAvailable)) {
-    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-    if (command_line->HasSwitch(kForceDeviceHasBattery)) {
-      force_has_battery_ = true;
-      has_battery_ = true;
-    }
+  pref_change_registrar_.Add(
+      performance_manager::user_tuning::prefs::kBatterySaverModeState,
+      base::BindRepeating(
+          &UserPerformanceTuningManager::OnBatterySaverModePrefChanged,
+          base::Unretained(this)));
 
-    pref_change_registrar_.Add(
-        performance_manager::user_tuning::prefs::kBatterySaverModeState,
-        base::BindRepeating(
-            &UserPerformanceTuningManager::OnBatterySaverModePrefChanged,
-            base::Unretained(this)));
+  on_battery_power_ =
+      base::PowerMonitor::AddPowerStateObserverAndReturnOnBatteryState(this);
 
-    on_battery_power_ =
-        base::PowerMonitor::AddPowerStateObserverAndReturnOnBatteryState(this);
-
-    base::BatteryStateSampler* battery_state_sampler =
-        base::BatteryStateSampler::Get();
-    // Some platforms don't have a battery sampler, treat them as if they had no
-    // battery at all.
-    if (battery_state_sampler) {
-      battery_state_sampler_obs_.Observe(battery_state_sampler);
-    }
-
-    OnBatterySaverModePrefChanged();
+  base::BatteryStateSampler* battery_state_sampler =
+      base::BatteryStateSampler::Get();
+  // Some platforms don't have a battery sampler, treat them as if they had no
+  // battery at all.
+  if (battery_state_sampler) {
+    battery_state_sampler_obs_.Observe(battery_state_sampler);
   }
+
+  OnBatterySaverModePrefChanged();
 }
 
 void UserPerformanceTuningManager::OnHighEfficiencyModePrefChanged() {
   bool enabled = pref_change_registrar_.prefs()->GetBoolean(
       performance_manager::user_tuning::prefs::kHighEfficiencyModeEnabled);
   high_efficiency_mode_toggle_delegate_->ToggleHighEfficiencyMode(enabled);
+
+  for (auto& obs : observers_) {
+    obs.OnHighEfficiencyModeChanged();
+  }
 }
 
 void UserPerformanceTuningManager::OnBatterySaverModePrefChanged() {
@@ -450,7 +471,9 @@ void UserPerformanceTuningManager::DiscardPageForTesting(
             if (page_node) {
               performance_manager::policies::PageDiscardingHelper::GetFromGraph(
                   graph)
-                  ->ImmediatelyDiscardSpecificPage(page_node.get());
+                  ->ImmediatelyDiscardSpecificPage(
+                      page_node.get(),
+                      ::mojom::LifecycleUnitDiscardReason::PROACTIVE);
               quit_closure.Run();
             }
           },

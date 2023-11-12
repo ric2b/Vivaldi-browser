@@ -210,6 +210,7 @@ void NinjaRustBinaryTargetWriter::Run() {
             std::back_inserter(extern_deps));
   WriteExternsAndDeps(extern_deps, transitive_crates, rustdeps, nonrustdeps);
   WriteSourcesAndInputs();
+  WritePool(out_);
 }
 
 void NinjaRustBinaryTargetWriter::WriteCompilerVars() {

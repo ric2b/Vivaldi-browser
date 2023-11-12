@@ -270,11 +270,14 @@ SyncedFileStoreStorage::GetSerializedDataProducerForBackgroundSequence() {
   root.Set(kFilesInfo, std::move(files_info));
 
   return base::BindOnce(
-      [](base::Value::Dict root, std::string* output) {
+      [](base::Value::Dict root) -> absl::optional<std::string> {
         // This runs on the background sequence.
-        JSONStringValueSerializer serializer(output);
+        std::string output;
+        JSONStringValueSerializer serializer(&output);
         serializer.set_pretty_print(true);
-        return serializer.Serialize(root);
+        if (serializer.Serialize(root))
+          return output;
+        return absl::nullopt;
       },
       std::move(root));
 }

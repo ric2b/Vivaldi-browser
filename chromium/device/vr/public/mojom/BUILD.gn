@@ -9,7 +9,10 @@ mojom_component("vr_service") {
   output_prefix = "device_vr_service_mojo_bindings"
   macro_prefix = "DEVICE_VR_SERVICE_MOJO_BINDINGS"
 
-  sources = [ "vr_service.mojom" ]
+  sources = [
+    "vr_service.mojom",
+    "xr_session.mojom",
+  ]
 
   public_deps = [
     ":test_mojom",
@@ -29,6 +32,14 @@ mojom_component("vr_service") {
 
   if (enable_cardboard) {
     enabled_features += [ "enable_cardboard" ]
+  }
+
+  if (enable_gvr_services) {
+    enabled_features += [ "enable_gvr_services" ]
+  }
+
+  if (enable_arcore) {
+    enabled_features += [ "enable_arcore" ]
   }
 
   shared_cpp_typemap = {

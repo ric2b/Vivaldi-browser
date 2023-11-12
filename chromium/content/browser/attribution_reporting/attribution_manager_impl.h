@@ -6,10 +6,13 @@
 #define CONTENT_BROWSER_ATTRIBUTION_REPORTING_ATTRIBUTION_MANAGER_IMPL_H_
 
 #include <stddef.h>
+#include <stdint.h>
+
 #include <memory>
 #include <vector>
 
 #include "base/containers/circular_deque.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
@@ -19,18 +22,19 @@
 #include "base/threading/sequence_bound.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "components/attribution_reporting/os_support.mojom-forward.h"
-#include "components/attribution_reporting/source_registration_error.mojom-forward.h"
 #include "content/browser/aggregation_service/aggregation_service.h"
 #include "content/browser/aggregation_service/report_scheduler_timer.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_report_sender.h"
-#include "content/browser/attribution_reporting/attribution_storage.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/storage_partition.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "content/browser/attribution_reporting/attribution_reporting.mojom-forward.h"
+#endif
 
 namespace attribution_reporting {
 class SuitableOrigin;
@@ -57,13 +61,14 @@ class AttributionStorage;
 class AttributionStorageDelegate;
 class CreateReportResult;
 class StoragePartitionImpl;
-class StoredSource;
 
 struct GlobalRenderFrameHostId;
 struct SendResult;
+struct StoreSourceResult;
 
 #if BUILDFLAG(IS_ANDROID)
 class AttributionOsLevelManager;
+struct OsRegistration;
 #endif
 
 // UI thread class that manages the lifetime of the underlying attribution
@@ -93,22 +98,6 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
     const bool previous_;
   };
 
-  class CONTENT_EXPORT ScopedOsSupportForTesting {
-   public:
-    explicit ScopedOsSupportForTesting(attribution_reporting::mojom::OsSupport);
-    ~ScopedOsSupportForTesting();
-
-    ScopedOsSupportForTesting(const ScopedOsSupportForTesting&) = delete;
-    ScopedOsSupportForTesting& operator=(const ScopedOsSupportForTesting&) =
-        delete;
-
-    ScopedOsSupportForTesting(ScopedOsSupportForTesting&&) = delete;
-    ScopedOsSupportForTesting& operator=(ScopedOsSupportForTesting&&) = delete;
-
-   private:
-    const attribution_reporting::mojom::OsSupport previous_;
-  };
-
   static std::unique_ptr<AttributionManagerImpl> CreateForTesting(
       const base::FilePath& user_data_directory,
       size_t max_pending_events,
@@ -124,9 +113,11 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
       const base::FilePath& user_data_directory,
       scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy);
 
-  // Returns whether OS-level attribution is enabled. `kDisabled` is returned
-  // before the result is returned from the underlying platform (e.g. Android).
-  static attribution_reporting::mojom::OsSupport GetOsSupport();
+  static network::mojom::AttributionSupport GetSupport();
+
+#if BUILDFLAG(IS_ANDROID)
+  static void UpdateSupportForRenderProcessHosts();
+#endif
 
   AttributionManagerImpl(
       StoragePartitionImpl* storage_partition,
@@ -149,7 +140,6 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
   void GetActiveSourcesForWebUI(
       base::OnceCallback<void(std::vector<StoredSource>)> callback) override;
   void GetPendingReportsForInternalUse(
-      AttributionReport::Types report_types,
       int limit,
       base::OnceCallback<void(std::vector<AttributionReport>)> callback)
       override;
@@ -174,13 +164,28 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
   void RemoveAttributionDataByDataKey(const DataKey& data_key,
                                       base::OnceClosure callback) override;
 
+#if BUILDFLAG(IS_ANDROID)
+
+  void HandleOsRegistration(OsRegistration,
+                            GlobalRenderFrameHostId render_frame_id) override;
+
+  AttributionOsLevelManager* GetOsLevelManager() {
+    return attribution_os_level_manager_.get();
+  }
+
+  void NotifyOsRegistration(const OsRegistration&,
+                            bool is_debug_key_allowed,
+                            attribution_reporting::mojom::OsRegistrationResult);
+
+#endif  // BUILDFLAG(IS_ANDROID)
+
  private:
   friend class AttributionManagerImplTest;
 
   using ReportSentCallback = AttributionReportSender::ReportSentCallback;
   using SourceOrTrigger = absl::variant<StorableSource, AttributionTrigger>;
 
-  struct SourceOrTriggerRFH;
+  struct PendingReportTimings;
 
   AttributionManagerImpl(
       StoragePartitionImpl* storage_partition,
@@ -190,18 +195,13 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
       std::unique_ptr<AttributionStorageDelegate> storage_delegate,
       std::unique_ptr<AttributionCookieChecker> cookie_checker,
       std::unique_ptr<AttributionReportSender> report_sender,
-      std::unique_ptr<AttributionDataHostManager> data_host_manager,
       scoped_refptr<base::UpdateableSequencedTaskRunner> storage_task_runner);
 
-  void MaybeEnqueueEvent(SourceOrTriggerRFH event);
+  void MaybeEnqueueEvent(SourceOrTrigger);
   void ProcessEvents();
   void ProcessNextEvent(bool is_debug_cookie_set);
-  void StoreSource(StorableSource source,
-                   absl::optional<uint64_t> cleared_debug_key,
-                   bool is_debug_cookie_set);
-  void StoreTrigger(AttributionTrigger trigger,
-                    absl::optional<uint64_t> cleared_debug_key,
-                    bool is_debug_cookie_set);
+  void StoreSource(StorableSource source, bool is_debug_cookie_set);
+  void StoreTrigger(AttributionTrigger trigger, bool is_debug_cookie_set);
 
   void GetReportsToSend();
 
@@ -231,7 +231,7 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
   void OnSourceStored(const StorableSource& source,
                       absl::optional<uint64_t> cleared_debug_key,
                       bool is_debug_cookie_set,
-                      AttributionStorage::StoreSourceResult result);
+                      StoreSourceResult result);
   void OnReportStored(const AttributionTrigger& trigger,
                       absl::optional<uint64_t> cleared_debug_key,
                       bool is_debug_cookie_set,
@@ -240,7 +240,7 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
   void MaybeSendDebugReport(AttributionReport&&);
 
   void NotifySourcesChanged();
-  void NotifyReportsChanged(AttributionReport::Type report_type);
+  void NotifyReportsChanged();
   void NotifyReportSent(bool is_debug_report,
                         const AttributionReport&,
                         SendResult);
@@ -248,33 +248,37 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
 
   bool IsReportAllowed(const AttributionReport&) const;
 
-  void MaybeSendVerboseDebugReport(
-      const StorableSource& source,
-      bool is_debug_cookie_set,
-      const AttributionStorage::StoreSourceResult& result);
+  void MaybeSendVerboseDebugReport(const StorableSource& source,
+                                   bool is_debug_cookie_set,
+                                   const StoreSourceResult& result);
 
   void MaybeSendVerboseDebugReport(const AttributionTrigger& trigger,
                                    bool is_debug_cookie_set,
                                    const CreateReportResult& result);
+
+  void AddPendingAggregatableReportTiming(const AttributionReport&);
+  void RecordPendingAggregatableReportsTimings();
 
   void OnClearDataComplete();
 
 #if BUILDFLAG(IS_ANDROID)
   void OverrideOsLevelManagerForTesting(
       std::unique_ptr<AttributionOsLevelManager>);
-#endif
+  void ProcessNextOsEvent();
+  void OnOsRegistration(const OsRegistration&,
+                        bool is_debug_key_allowed,
+                        bool success);
+#endif  // BUILDFLAG(IS_ANDROID)
 
   // Never null.
   const raw_ptr<StoragePartitionImpl> storage_partition_;
 
   // Holds pending sources and triggers in the order they were received by the
   // browser. For the time being, they must be processed in this order in order
-  // to ensure that behavioral requirements are met and to ensure that
-  // `AttributionObserver`s are notified in the correct order, which
-  // the simulator currently depends on. We may be able to loosen this
-  // requirement in the future so that there are conceptually separate queues
-  // per <source origin, destination origin, reporting origin>.
-  base::circular_deque<SourceOrTriggerRFH> pending_events_;
+  // to ensure that behavioral requirements are met. We may be able to loosen
+  // this requirement in the future so that there are conceptually separate
+  // queues per <source origin, destination origin, reporting origin>.
+  base::circular_deque<SourceOrTrigger> pending_events_;
 
   // Controls the maximum size of `pending_events_` to avoid unbounded memory
   // growth with adversarial input.
@@ -308,11 +312,19 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
   // is expected to be small, so a `flat_set` is used.
   base::flat_set<AttributionReport::Id> reports_being_sent_;
 
+  // We keep track of pending reports timings in memory to record metrics
+  // when the browser becomes unavailable to send reports due to becoming
+  // offline or being shutdown.
+  base::flat_map<AttributionReport::Id, PendingReportTimings>
+      pending_aggregatable_reports_;
+
   base::ObserverList<AttributionObserver> observers_;
 
 #if BUILDFLAG(IS_ANDROID)
   std::unique_ptr<AttributionOsLevelManager> attribution_os_level_manager_;
-#endif
+
+  base::circular_deque<OsRegistration> pending_os_events_;
+#endif  // BUILDFLAG(IS_ANDROID)
 
   base::WeakPtrFactory<AttributionManagerImpl> weak_factory_{this};
 };

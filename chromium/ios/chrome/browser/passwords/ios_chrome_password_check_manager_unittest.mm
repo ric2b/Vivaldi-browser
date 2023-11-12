@@ -109,7 +109,8 @@ void AddIssueToForm(PasswordForm* form,
   form->password_issues.insert_or_assign(
       type, password_manager::InsecurityMetadata(
                 base::Time::Now() - time_since_creation,
-                password_manager::IsMuted(is_muted)));
+                password_manager::IsMuted(is_muted),
+                password_manager::TriggerBackendNotification(false)));
 }
 
 class IOSChromePasswordCheckManagerTest : public PlatformTest {
@@ -220,7 +221,7 @@ TEST_F(IOSChromePasswordCheckManagerTest, GetPasswordCheckStatusIdle) {
 // treated as no completed run yet.
 TEST_F(IOSChromePasswordCheckManagerTest,
        LastTimePasswordCheckCompletedNotSet) {
-  EXPECT_EQ(base::Time(), manager().GetLastPasswordCheckTime());
+  EXPECT_FALSE(manager().GetLastPasswordCheckTime().has_value());
 }
 
 // Checks that a transition into the idle state after starting a check results

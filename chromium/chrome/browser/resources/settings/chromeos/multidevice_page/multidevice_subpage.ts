@@ -18,14 +18,15 @@ import './multidevice_combined_setup_item.js';
 import './multidevice_feature_item.js';
 import './multidevice_feature_toggle.js';
 import './multidevice_task_continuation_item.js';
+import './multidevice_task_continuation_item_lacros.js';
 import './multidevice_tether_item.js';
 import './multidevice_wifi_sync_item.js';
 
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {DeepLinkingMixin} from '../deep_linking_mixin.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route} from '../router.js';
@@ -251,6 +252,10 @@ class SettingsMultideviceSubpageElement extends
 
   private isPhoneHubDisabled_(): boolean {
     return !this.isSuiteOn() || !this.isPhoneHubOn();
+  }
+
+  private isSyncedSessionSharingEnabled_(): boolean {
+    return this.pageContentData.isChromeOSSyncedSessionSharingEnabled;
   }
 }
 

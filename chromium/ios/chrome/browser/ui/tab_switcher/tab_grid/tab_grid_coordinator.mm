@@ -14,49 +14,66 @@
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/search_engines/template_url_service.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/application_context/application_context.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
+#import "ios/chrome/browser/bring_android_tabs/bring_android_tabs_to_ios_service.h"
+#import "ios/chrome/browser/bring_android_tabs/bring_android_tabs_to_ios_service_factory.h"
+#import "ios/chrome/browser/bring_android_tabs/features.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/main/browser_util.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/reading_list/reading_list_browser_agent.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
+#import "ios/chrome/browser/shared/public/commands/bring_android_tabs_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/popup_menu_commands.h"
+#import "ios/chrome/browser/shared/public/commands/reading_list_add_command.h"
+#import "ios/chrome/browser/shared/public/commands/thumb_strip_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/util/named_guide.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/util_swift.h"
+#import "ios/chrome/browser/synced_sessions/distant_session.h"
+#import "ios/chrome/browser/synced_sessions/synced_sessions_util.h"
 #import "ios/chrome/browser/tabs/features.h"
 #import "ios/chrome/browser/tabs/inactive_tabs/features.h"
-#import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmarks_coordinator.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
-#import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
-#import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
-#import "ios/chrome/browser/ui/commands/thumb_strip_commands.h"
+#import "ios/chrome/browser/ui/bring_android_tabs/bring_android_tabs_prompt_coordinator.h"
+#import "ios/chrome/browser/ui/bring_android_tabs/tab_list_from_android_coordinator.h"
 #import "ios/chrome/browser/ui/commerce/price_card/price_card_mediator.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/gestures/view_controller_trait_collection_observer.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_vertical_pan_handler.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
+#import "ios/chrome/browser/ui/history/history_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/history/public/history_presentation_delegate.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_mediator.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/ui/main/bvc_container_view_controller.h"
 #import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
-#import "ios/chrome/browser/ui/main/layout_guide_util.h"
-#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/menu/tab_context_menu_delegate.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_mediator.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_menu_helper.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_presentation_delegate.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_table_view_controller.h"
-#import "ios/chrome/browser/ui/recent_tabs/synced_sessions.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
 #import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/ui/snackbar/snackbar_coordinator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_commands.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_button_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_coordinator.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/pinned_tabs/pinned_tabs_mediator.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_helper.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_item.h"
@@ -66,12 +83,9 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_view_controller.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/tab_grid_transition_handler.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_coordinator.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/named_guide.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
@@ -90,11 +104,13 @@ using vivaldi::IsVivaldiRunning;
 #error "This file requires ARC support."
 #endif
 
-@interface TabGridCoordinator () <RecentTabsPresentationDelegate,
+@interface TabGridCoordinator () <BringAndroidTabsCommands,
+                                  RecentTabsPresentationDelegate,
                                   HistoryPresentationDelegate,
                                   InactiveTabsCoordinatorDelegate,
                                   SceneStateObserver,
                                   SnackbarCoordinatorDelegate,
+                                  HistoryCoordinatorDelegate,
                                   TabContextMenuDelegate,
                                   TabGridMediatorDelegate,
                                   TabPresentationDelegate,
@@ -111,6 +127,13 @@ using vivaldi::IsVivaldiRunning;
   // The coordinator that shows the bookmarking UI after the user taps the Add
   // to Bookmarks button.
   BookmarksCoordinator* _bookmarksCoordinator;
+
+  // The coordinator that manages the "Bring Android Tabs" prompt for Android
+  // switchers.
+  BringAndroidTabsPromptCoordinator* _bringAndroidTabsPromptCoordinator;
+
+  // Coordinator for the "Tab List From Android Prompt" for Android switchers.
+  TabListFromAndroidCoordinator* _tabListFromAndroidCoordinator;
 
   // Vivaldi
   PanelInteractionController* _panelInteractionController;
@@ -233,6 +256,11 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - Public
 
+- (Browser*)browser {
+  NOTREACHED();
+  return nil;
+}
+
 - (Browser*)regularBrowser {
   // Ensure browser which is actually used by the mediator is returned, as it
   // may have been updated.
@@ -251,7 +279,12 @@ using vivaldi::IsVivaldiRunning;
   DCHECK(self.incognitoTabsMediator);
   self.incognitoTabsMediator.browser = incognitoBrowser;
   self.thumbStripCoordinator.incognitoBrowser = incognitoBrowser;
-  self.incognitoTabContextMenuHelper.browser = incognitoBrowser;
+  if (incognitoBrowser) {
+    self.incognitoTabContextMenuHelper.browserState =
+        incognitoBrowser->GetBrowserState();
+  } else {
+    self.incognitoTabContextMenuHelper.browserState = nullptr;
+  }
 
   if (self.incognitoSnackbarCoordinator) {
     [self.incognitoSnackbarCoordinator stop];
@@ -313,6 +346,8 @@ using vivaldi::IsVivaldiRunning;
 
   [self dismissPopovers];
 
+  [self.inactiveTabsCoordinator hide];
+
   if (_bookmarksCoordinator) {
     [_bookmarksCoordinator dismissBookmarkModalControllerAnimated:YES];
   }
@@ -320,7 +355,7 @@ using vivaldi::IsVivaldiRunning;
 
   // History may be presented on top of the tab grid.
   if (self.historyCoordinator) {
-    [self.historyCoordinator stopWithCompletion:completion];
+    [self closeHistoryWithCompletion:completion];
   } else if (completion) {
     completion();
   }
@@ -391,6 +426,30 @@ using vivaldi::IsVivaldiRunning;
       [DefaultBrowserSceneAgent agentFromScene:sceneState];
   [agent.nonModalScheduler logTabGridEntered];
 
+  // Store the currentActivePage at this point in code, to be potentially used
+  // during execution of the dispatched block to get the transition from Browser
+  // to Tab Grid. That is because in some instances the active page might change
+  // before the block gets executed, for example when closing the last tab in
+  // incognito (crbug.com/1136882).
+  TabGridPage currentActivePage = self.baseViewController.activePage;
+
+  // Show "Bring Android Tabs" prompt if the user is an Android switcher and has
+  // open tabs from their previous Android device.
+  // Note: if the coordinator is already created, the prompt should have already
+  // been displayed, therefore we should not need to display it again.
+  BOOL shouldDisplayBringAndroidTabsPrompt = NO;
+  if (currentActivePage == TabGridPageRegularTabs &&
+      !_bringAndroidTabsPromptCoordinator) {
+    BringAndroidTabsToIOSService* bringAndroidTabsService =
+        BringAndroidTabsToIOSServiceFactory::GetForBrowserState(
+            self.regularBrowser->GetBrowserState());
+    if (bringAndroidTabsService != nil) {
+      bringAndroidTabsService->LoadTabs();
+      shouldDisplayBringAndroidTabsPrompt =
+          bringAndroidTabsService->GetNumberOfAndroidTabs() > 0;
+    }
+  }
+
   // If a BVC is currently being presented, dismiss it.  This will trigger any
   // necessary animations.
   if (self.bvcContainer) {
@@ -398,12 +457,6 @@ using vivaldi::IsVivaldiRunning;
     // This is done with a dispatch to make sure that the view isn't added to
     // the view hierarchy right away, as it is not the expectations of the
     // API.
-    // Store the currentActivePage at this point in code, to be used during
-    // execution of the dispatched block to get the transition from Browser to
-    // Tab Grid. That is because in some instances the active page might change
-    // before the block gets executed, for example when closing the last tab in
-    // incognito (crbug.com/1136882).
-    TabGridPage currentActivePage = self.baseViewController.activePage;
     dispatch_async(dispatch_get_main_queue(), ^{
       self.transitionHandler = [[TabGridTransitionHandler alloc]
           initWithLayoutProvider:self.baseViewController];
@@ -415,6 +468,9 @@ using vivaldi::IsVivaldiRunning;
                  withCompletion:^{
                    self.bvcContainer = nil;
                    [self.baseViewController contentDidAppear];
+                   if (shouldDisplayBringAndroidTabsPrompt) {
+                     [self displayBringAndroidTabsPrompt];
+                   }
                  }];
 
       // On iOS 15+, snapshotting views with afterScreenUpdates:YES waits 0.5s
@@ -424,6 +480,8 @@ using vivaldi::IsVivaldiRunning;
       // updating the status bar style afterwards.
       self.baseViewController.childViewControllerForStatusBarStyle = nil;
     });
+  } else if (shouldDisplayBringAndroidTabsPrompt) {
+    [self displayBringAndroidTabsPrompt];
   }
 
   // Record when the tab switcher is presented.
@@ -559,6 +617,32 @@ using vivaldi::IsVivaldiRunning;
   return _bookmarksCoordinator;
 }
 
+- (void)displayBringAndroidTabsPrompt {
+  if (!_bringAndroidTabsPromptCoordinator) {
+    _bringAndroidTabsPromptCoordinator =
+        [[BringAndroidTabsPromptCoordinator alloc]
+            initWithBaseViewController:self.baseViewController
+                               browser:self.regularBrowser];
+    _bringAndroidTabsPromptCoordinator.commandHandler = self;
+  }
+  [_bringAndroidTabsPromptCoordinator start];
+  switch (GetBringYourOwnTabsPromptType()) {
+    case BringYourOwnTabsPromptType::kHalfSheet:
+      [self.baseViewController
+          presentViewController:_bringAndroidTabsPromptCoordinator
+                                    .viewController
+                       animated:YES
+                     completion:nil];
+      break;
+    case BringYourOwnTabsPromptType::kBottomMessage:
+      self.baseViewController.regularTabsBottomMessage =
+          _bringAndroidTabsPromptCoordinator.viewController;
+      break;
+    case BringYourOwnTabsPromptType::kDisabled:
+      NOTREACHED();
+      break;
+  }
+}
 
 #pragma mark - Private (Thumb Strip)
 
@@ -575,7 +659,7 @@ using vivaldi::IsVivaldiRunning;
                                      : ViewRevealState::Hidden;
   self.thumbStripCoordinator = [[ThumbStripCoordinator alloc]
       initWithBaseViewController:self.baseViewController
-                         browser:self.browser
+                         browser:nil
                     initialState:initialState];
   ThumbStripCoordinator* thumbStripCoordinator = self.thumbStripCoordinator;
   thumbStripCoordinator.regularBrowser = self.regularBrowser;
@@ -667,8 +751,7 @@ using vivaldi::IsVivaldiRunning;
       HandlerForProtocol(self.dispatcher, IncognitoReauthCommands);
   baseViewController.reauthAgent = reauthAgent;
   baseViewController.tabPresentationDelegate = self;
-  baseViewController.layoutGuideCenter =
-      LayoutGuideCenterForBrowser(self.browser);
+  baseViewController.layoutGuideCenter = LayoutGuideCenterForBrowser(nil);
   baseViewController.delegate = self;
   _baseViewController = baseViewController;
 
@@ -694,13 +777,13 @@ using vivaldi::IsVivaldiRunning;
         initWithConsumer:baseViewController.pinnedTabsConsumer];
     self.pinnedTabsMediator.browser = _regularBrowser;
     baseViewController.pinnedTabsDelegate = self.pinnedTabsMediator;
-    baseViewController.pinnedTabsImageDataSource = self.pinnedTabsMediator;
   }
 
-  if (IsInactiveTabsEnabled()) {
+  if (IsInactiveTabsAvailable()) {
     self.inactiveTabsButtonMediator = [[InactiveTabsButtonMediator alloc]
         initWithConsumer:baseViewController.regularTabsConsumer
-            webStateList:_inactiveBrowser->GetWebStateList()->AsWeakPtr()];
+            webStateList:_inactiveBrowser->GetWebStateList()
+             prefService:GetApplicationContext()->GetLocalState()];
   }
 
   self.incognitoTabsMediator = [[TabGridMediator alloc]
@@ -717,9 +800,7 @@ using vivaldi::IsVivaldiRunning;
     baseViewController.pinnedTabsDragDropHandler = self.pinnedTabsMediator;
   }
 
-  baseViewController.regularTabsImageDataSource = self.regularTabsMediator;
   baseViewController.priceCardDataSource = self.priceCardMediator;
-  baseViewController.incognitoTabsImageDataSource = self.incognitoTabsMediator;
 
   baseViewController.regularTabsShareableItemsProvider =
       self.regularTabsMediator;
@@ -743,16 +824,28 @@ using vivaldi::IsVivaldiRunning;
            regularWebStateList:regularWebStateList];
   // End Vivaldi
 
-  self.regularTabContextMenuHelper =
-      [[TabContextMenuHelper alloc] initWithBrowser:self.regularBrowser
-                             tabContextMenuDelegate:self];
+  self.regularTabContextMenuHelper = [[TabContextMenuHelper alloc]
+        initWithBrowserState:self.regularBrowser->GetBrowserState()
+      tabContextMenuDelegate:self];
   self.baseViewController.regularTabsContextMenuProvider =
       self.regularTabContextMenuHelper;
-  self.incognitoTabContextMenuHelper =
-      [[TabContextMenuHelper alloc] initWithBrowser:self.incognitoBrowser
-                             tabContextMenuDelegate:self];
+  self.incognitoTabContextMenuHelper = [[TabContextMenuHelper alloc]
+        initWithBrowserState:self.incognitoBrowser->GetBrowserState()
+      tabContextMenuDelegate:self];
   self.baseViewController.incognitoTabsContextMenuProvider =
       self.incognitoTabContextMenuHelper;
+
+  if (IsInactiveTabsAvailable()) {
+    self.inactiveTabsCoordinator = [[InactiveTabsCoordinator alloc]
+        initWithBaseViewController:self.baseViewController
+                           browser:_inactiveBrowser
+                          delegate:self
+                      menuProvider:self.regularTabContextMenuHelper];
+    [self.inactiveTabsCoordinator start];
+
+    baseViewController.inactiveTabsDelegate =
+        self.inactiveTabsCoordinator.gridCommandsHandler;
+  }
 
   // TODO(crbug.com/845192) : Remove RecentTabsTableViewController dependency on
   // ChromeBrowserState so that we don't need to expose the view controller.
@@ -772,6 +865,10 @@ using vivaldi::IsVivaldiRunning;
   baseViewController.remoteTabsViewController.restoredTabDisposition =
       WindowOpenDisposition::NEW_FOREGROUND_TAB;
   baseViewController.remoteTabsViewController.presentationDelegate = self;
+
+  // Vivaldi
+  baseViewController.remoteTabsViewController.page = TabGridPageRemoteTabs;
+  // End Vivaldi
 
   self.firstPresentation = YES;
 
@@ -859,6 +956,20 @@ using vivaldi::IsVivaldiRunning;
   self.snackbarCoordinator = nil;
   [self.incognitoSnackbarCoordinator stop];
   self.incognitoSnackbarCoordinator = nil;
+
+  self.baseViewController.regularTabsBottomMessage = nil;
+  [_bringAndroidTabsPromptCoordinator stop];
+  _bringAndroidTabsPromptCoordinator = nil;
+  [_tabListFromAndroidCoordinator stop];
+  _tabListFromAndroidCoordinator = nil;
+
+  [self.inactiveTabsButtonMediator disconnect];
+  self.inactiveTabsButtonMediator = nil;
+  [self.inactiveTabsCoordinator stop];
+  self.inactiveTabsCoordinator = nil;
+
+  [self.historyCoordinator stop];
+  self.historyCoordinator = nil;
 
   // Vivaldi
   [self.baseViewController.closedTabsViewController dismissModals];
@@ -949,17 +1060,24 @@ using vivaldi::IsVivaldiRunning;
   if (tabGridMediator == self.regularTabsMediator) {
     base::RecordAction(base::UserMetricsAction(
         "MobileTabGridSelectionCloseRegularTabsConfirmationPresented"));
+
+    self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
+        initWithBaseViewController:self.baseViewController
+                           browser:self.regularBrowser
+                             title:nil
+                           message:nil
+                     barButtonItem:buttonAnchor];
   } else {
     base::RecordAction(base::UserMetricsAction(
         "MobileTabGridSelectionCloseIncognitoTabsConfirmationPresented"));
-  }
 
-  self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
-      initWithBaseViewController:self.baseViewController
-                         browser:self.browser
-                           title:nil
-                         message:nil
-                   barButtonItem:buttonAnchor];
+    self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
+        initWithBaseViewController:self.baseViewController
+                           browser:self.incognitoBrowser
+                             title:nil
+                           message:nil
+                     barButtonItem:buttonAnchor];
+  }
 
   self.actionSheetCoordinator.alertStyle = UIAlertControllerStyleActionSheet;
 
@@ -980,51 +1098,6 @@ using vivaldi::IsVivaldiRunning;
                 action:^{
                   base::RecordAction(base::UserMetricsAction(
                       "MobileTabGridSelectionCloseTabsCanceled"));
-                }
-                 style:UIAlertActionStyleCancel];
-  [self.actionSheetCoordinator start];
-}
-
-- (void)
-    showCloseAllItemsConfirmationActionSheetWithTabGridMediator:
-        (TabGridMediator*)tabGridMediator
-                                                         anchor:
-                                                             (UIBarButtonItem*)
-                                                                 buttonAnchor {
-  DCHECK(tabGridMediator == self.regularTabsMediator);
-
-  NSString* title = l10n_util::GetNSString(
-      IDS_IOS_TAB_GRID_CLOSE_ALL_TABS_ACTION_SHEET_TITLE);
-  NSString* message = l10n_util::GetNSString(
-      IDS_IOS_TAB_GRID_CLOSE_ALL_TABS_ACTION_SHEET_MESSAGE);
-
-  self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
-      initWithBaseViewController:self.baseViewController
-                         browser:self.browser
-                           title:title
-                         message:message
-                   barButtonItem:buttonAnchor];
-
-  self.actionSheetCoordinator.alertStyle = UIAlertControllerStyleActionSheet;
-
-  __weak TabGridMediator* weakTabGridMediator = tabGridMediator;
-  [self.actionSheetCoordinator
-      addItemWithTitle:l10n_util::GetNSString(
-                           IDS_IOS_TAB_GRID_CLOSE_NON_PINNED_TABS_ONLY)
-                action:^{
-                  [weakTabGridMediator saveAndCloseNonPinnedItems];
-                }
-                 style:UIAlertActionStyleDefault];
-  [self.actionSheetCoordinator
-      addItemWithTitle:l10n_util::GetNSString(IDS_IOS_TAB_GRID_CLOSE_ALL_TABS)
-                action:^{
-                  [weakTabGridMediator saveAndCloseAllItems];
-                }
-                 style:UIAlertActionStyleDestructive];
-
-  [self.actionSheetCoordinator
-      addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
-                action:^{
                 }
                  style:UIAlertActionStyleCancel];
   [self.actionSheetCoordinator start];
@@ -1122,29 +1195,38 @@ using vivaldi::IsVivaldiRunning;
   self.historyCoordinator.loadStrategy =
       UrlLoadStrategy::ALWAYS_NEW_FOREGROUND_TAB;
   self.historyCoordinator.presentationDelegate = self;
+  self.historyCoordinator.delegate = self;
   [self.historyCoordinator start];
 }
 
 - (void)showInactiveTabs {
-  DCHECK(IsInactiveTabsEnabled());
-  if (self.inactiveTabsCoordinator) {
-    return;
-  }
-
-  self.inactiveTabsCoordinator = [[InactiveTabsCoordinator alloc]
-      initWithBaseViewController:self.baseViewController
-                         browser:_inactiveBrowser];
-  self.inactiveTabsCoordinator.delegate = self;
-  [self.inactiveTabsCoordinator start];
+  CHECK(IsInactiveTabsEnabled());
+  [self.inactiveTabsCoordinator show];
 }
 
 #pragma mark - InactiveTabsCoordinatorDelegate
 
+- (void)inactiveTabsCoordinator:
+            (InactiveTabsCoordinator*)inactiveTabsCoordinator
+            didSelectItemWithID:(NSString*)itemID {
+  WebStateList* regularWebStateList = self.regularBrowser->GetWebStateList();
+  int toInsertIndex = regularWebStateList->count();
+
+  MoveTabToBrowser(itemID, self.regularBrowser, toInsertIndex);
+
+  // TODO(crbug.com/1420938): Adapt the animation so the grid animation is
+  // coming from the inactive panel.
+  regularWebStateList->ActivateWebStateAt(toInsertIndex);
+  [self.delegate tabGrid:self
+      shouldActivateBrowser:self.regularBrowser
+             dismissTabGrid:YES
+               focusOmnibox:NO];
+}
+
 - (void)inactiveTabsCoordinatorDidFinish:
     (InactiveTabsCoordinator*)inactiveTabsCoordinator {
-  DCHECK(IsInactiveTabsEnabled());
-  [self.inactiveTabsCoordinator stop];
-  self.inactiveTabsCoordinator = nil;
+  CHECK(IsInactiveTabsAvailable());
+  [self.inactiveTabsCoordinator hide];
 }
 
 #pragma mark - RecentTabsPresentationDelegate
@@ -1188,18 +1270,26 @@ using vivaldi::IsVivaldiRunning;
       "Mobile.RecentTabsManager.TotalTabsFromOtherDevicesOpenAll",
       session->tabs.size());
 
-  for (auto const& tab : session->tabs) {
-    UrlLoadParams params = UrlLoadParams::InNewTab(tab->virtual_url);
-    params.SetInBackground(YES);
-    params.web_params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
-    params.load_strategy =
-        self.baseViewController.remoteTabsViewController.loadStrategy;
-    params.in_incognito =
-        self.regularBrowser->GetBrowserState()->IsOffTheRecord();
-    UrlLoadingBrowserAgent::FromBrowser(self.regularBrowser)->Load(params);
-  }
+  BOOL inIncognito = self.regularBrowser->GetBrowserState()->IsOffTheRecord();
+  OpenDistantSessionInBackground(
+      session, inIncognito,
+      UrlLoadingBrowserAgent::FromBrowser(self.regularBrowser),
+      self.baseViewController.remoteTabsViewController.loadStrategy);
 
   [self showActiveRegularTabFromRecentTabs];
+}
+
+#pragma mark - HistoryCoordinatorDelegate
+
+- (void)closeHistoryWithCompletion:(ProceduralBlock)completion {
+  __weak __typeof(self) weakSelf = self;
+  [self.historyCoordinator dismissWithCompletion:^{
+    if (completion) {
+      completion();
+    }
+    [weakSelf.historyCoordinator stop];
+    weakSelf.historyCoordinator = nil;
+  }];
 }
 
 #pragma mark - TabContextMenuDelegate
@@ -1222,16 +1312,14 @@ using vivaldi::IsVivaldiRunning;
 - (void)addToReadingListURL:(const GURL&)URL title:(NSString*)title {
   ReadingListAddCommand* command =
       [[ReadingListAddCommand alloc] initWithURL:URL title:title];
-  // TODO(crbug.com/1045047): Use HandlerForProtocol after commands
-  // protocol clean up.
-  id<BrowserCommands> readingListAdder = static_cast<id<BrowserCommands>>(
-      self.regularBrowser->GetCommandDispatcher());
-  [readingListAdder addToReadingList:command];
+  ReadingListBrowserAgent* readingListBrowserAgent =
+      ReadingListBrowserAgent::FromBrowser(self.regularBrowser);
+  readingListBrowserAgent->AddURLsToReadingList(command.URLs);
 }
 
 - (void)bookmarkURL:(const GURL&)URL title:(NSString*)title {
   bookmarks::BookmarkModel* bookmarkModel =
-      ios::BookmarkModelFactory::GetForBrowserState(
+      ios::LocalOrSyncableBookmarkModelFactory::GetForBrowserState(
           self.regularBrowser->GetBrowserState());
   bool currentlyBookmarked =
       bookmarkModel && bookmarkModel->GetMostRecentlyAddedUserNodeForURL(URL);
@@ -1317,6 +1405,11 @@ using vivaldi::IsVivaldiRunning;
       [self isThumbStripEnabled]) {
     [self updateThumbstripIfNeededOnViewController:self.baseViewController];
   }
+
+  if (level == SceneActivationLevelBackground) {
+    // When going in the background, hide the Inactive Tabs UI.
+    [self.inactiveTabsCoordinator hide];
+  }
 }
 
 #pragma mark - ViewControllerTraitCollectionObserver
@@ -1344,9 +1437,53 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
+#pragma mark - BringAndroidTabsCommands
+
+- (void)reviewAllBringAndroidTabs {
+  [self onUserInteractionWithBringAndroidTabsPrompt:YES];
+}
+
+- (void)dismissBringAndroidTabsPrompt {
+  [self onUserInteractionWithBringAndroidTabsPrompt:NO];
+}
+
+// Helper method to handle BringAndroidTabsCommands.
+- (void)onUserInteractionWithBringAndroidTabsPrompt:(BOOL)reviewTabs {
+  DCHECK(_bringAndroidTabsPromptCoordinator);
+  switch (GetBringYourOwnTabsPromptType()) {
+    case BringYourOwnTabsPromptType::kHalfSheet:
+      [self.baseViewController dismissViewControllerAnimated:YES
+                                                  completion:nil];
+      break;
+    case BringYourOwnTabsPromptType::kBottomMessage:
+      DCHECK_EQ(self.baseViewController.regularTabsBottomMessage,
+                _bringAndroidTabsPromptCoordinator.viewController);
+      self.baseViewController.regularTabsBottomMessage = nil;
+      break;
+    case BringYourOwnTabsPromptType::kDisabled:
+      NOTREACHED();
+      break;
+  }
+  if (reviewTabs) {
+    _tabListFromAndroidCoordinator = [[TabListFromAndroidCoordinator alloc]
+        initWithBaseViewController:self.baseViewController
+                           browser:self.regularBrowser];
+    [_tabListFromAndroidCoordinator start];
+  } else {
+    // The user journey to bring recent tabs on Android to iOS has finished.
+    // Reload the service to update/clear the tabs.
+    BringAndroidTabsToIOSServiceFactory::GetForBrowserStateIfExists(
+        self.regularBrowser->GetBrowserState())
+        ->LoadTabs();
+  }
+  [_bringAndroidTabsPromptCoordinator stop];
+  _bringAndroidTabsPromptCoordinator = nil;
+}
+
 #pragma mark - SnackbarCoordinatorDelegate
 
-- (CGFloat)bottomOffsetForCurrentlyPresentedView {
+- (CGFloat)snackbarCoordinatorBottomOffsetForCurrentlyPresentedView:
+    (SnackbarCoordinator*)snackbarCoordinator {
   NSString* bottomToolbarGuideName;
   if ([self.bvcContainer currentBVC]) {
     // Use the BVC bottom bar as the offset as it is currently presented.
@@ -1355,8 +1492,19 @@ using vivaldi::IsVivaldiRunning;
     // The tab grid is being show so use tab grid bottom bar.
     bottomToolbarGuideName = kTabGridBottomToolbarGuide;
   }
-  UIView* bottomToolbar = [LayoutGuideCenterForBrowser(self.browser)
+
+  Browser* browser = nil;
+  if (snackbarCoordinator == self.snackbarCoordinator) {
+    browser = self.regularBrowser;
+  } else if (snackbarCoordinator == self.incognitoSnackbarCoordinator) {
+    browser = self.incognitoBrowser;
+  }
+
+  DCHECK(browser);
+
+  UIView* bottomToolbar = [LayoutGuideCenterForBrowser(browser)
       referencedViewUnderName:bottomToolbarGuideName];
+
   return CGRectGetHeight(bottomToolbar.bounds);
 }
 
@@ -1392,6 +1540,8 @@ using vivaldi::IsVivaldiRunning;
   baseViewController.closedTabsViewController.restoredTabDisposition =
       WindowOpenDisposition::NEW_FOREGROUND_TAB;
   baseViewController.closedTabsViewController.presentationDelegate = self;
+
+  baseViewController.closedTabsViewController.page = TabGridPageClosedTabs;
 
   if (self.closedTabsMediator.browserState) {
     [self.closedTabsMediator initObservers];

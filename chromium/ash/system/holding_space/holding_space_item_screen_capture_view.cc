@@ -39,13 +39,18 @@ constexpr gfx::Size kPrimaryActionSize(24, 24);
 
 absl::optional<const gfx::VectorIcon*> GetOverlayIcon(
     const HoldingSpaceItem* item) {
-  DCHECK(HoldingSpaceItem::IsScreenCapture(item->type()));
+  DCHECK(HoldingSpaceItem::IsScreenCaptureType(item->type()));
   switch (item->type()) {
     case HoldingSpaceItem::Type::kScreenRecording:
       return &vector_icons::kPlayArrowIcon;
     case HoldingSpaceItem::Type::kScreenRecordingGif:
       return &kGifIcon;
     case HoldingSpaceItem::Type::kArcDownload:
+    case HoldingSpaceItem::Type::kCameraAppPhoto:
+    case HoldingSpaceItem::Type::kCameraAppScanJpg:
+    case HoldingSpaceItem::Type::kCameraAppScanPdf:
+    case HoldingSpaceItem::Type::kCameraAppVideoGif:
+    case HoldingSpaceItem::Type::kCameraAppVideoMp4:
     case HoldingSpaceItem::Type::kDiagnosticsLog:
     case HoldingSpaceItem::Type::kDriveSuggestion:
     case HoldingSpaceItem::Type::kDownload:

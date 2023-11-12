@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
 #include "chromeos/ash/components/dbus/cryptohome/UserDataAuth.pb.h"
@@ -132,7 +133,7 @@ class CryptohomeMiscClientTest : public testing::Test {
   scoped_refptr<dbus::MockObjectProxy> proxy_;
 
   // Convenience pointer to the global instance.
-  CryptohomeMiscClient* client_;
+  raw_ptr<CryptohomeMiscClient, ExperimentalAsh> client_;
 
   // The expected replies to the respective D-Bus calls.
   ::user_data_auth::GetSystemSaltReply expected_get_system_salt_reply_;
@@ -142,7 +143,6 @@ class CryptohomeMiscClientTest : public testing::Test {
   ::user_data_auth::LockToSingleUserMountUntilRebootReply
       expected_lock_to_single_user_mount_until_reboot_reply_;
   ::user_data_auth::GetRsuDeviceIdReply expected_get_rsu_device_id_reply_;
-  ::user_data_auth::CheckHealthReply expected_check_health_reply_;
 
   // The expected replies to the respective blocking D-Bus calls.
   ::user_data_auth::GetSanitizedUsernameReply
@@ -179,8 +179,6 @@ class CryptohomeMiscClientTest : public testing::Test {
           expected_lock_to_single_user_mount_until_reboot_reply_);
     } else if (method_call->GetMember() == ::user_data_auth::kGetRsuDeviceId) {
       writer.AppendProtoAsArrayOfBytes(expected_get_rsu_device_id_reply_);
-    } else if (method_call->GetMember() == ::user_data_auth::kCheckHealth) {
-      writer.AppendProtoAsArrayOfBytes(expected_check_health_reply_);
     } else {
       ASSERT_FALSE(true) << "Unrecognized member: " << method_call->GetMember();
     }
@@ -293,18 +291,6 @@ TEST_F(CryptohomeMiscClientTest, GetRsuDeviceId) {
   ASSERT_NE(result_reply, absl::nullopt);
   EXPECT_TRUE(
       ProtobufEquals(result_reply.value(), expected_get_rsu_device_id_reply_));
-}
-
-TEST_F(CryptohomeMiscClientTest, CheckHealth) {
-  expected_check_health_reply_.set_requires_powerwash(true);
-  absl::optional<::user_data_auth::CheckHealthReply> result_reply;
-
-  client_->CheckHealth(::user_data_auth::CheckHealthRequest(),
-                       CreateCopyCallback(&result_reply));
-  base::RunLoop().RunUntilIdle();
-  ASSERT_NE(result_reply, absl::nullopt);
-  EXPECT_TRUE(
-      ProtobufEquals(result_reply.value(), expected_check_health_reply_));
 }
 
 TEST_F(CryptohomeMiscClientTest, BlockingGetSanitizedUsername) {

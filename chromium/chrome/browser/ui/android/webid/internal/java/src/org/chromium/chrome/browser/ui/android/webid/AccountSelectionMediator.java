@@ -9,6 +9,8 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.view.View;
+import android.view.accessibility.AccessibilityEvent;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Px;
@@ -25,6 +27,7 @@ import org.chromium.chrome.browser.ui.android.webid.data.Account;
 import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderMetadata;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.image_fetcher.ImageFetcher;
@@ -33,7 +36,6 @@ import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.KeyboardVisibilityDelegate.KeyboardVisibilityListener;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
-import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.url.GURL;
 
@@ -83,11 +85,13 @@ class AccountSelectionMediator {
     public static final long POTENTIALLY_UNINTENDED_INPUT_THRESHOLD = 500;
 
     private HeaderType mHeaderType;
-    private String mRpForDisplay;
+    private String mTopFrameForDisplay;
+    private String mIframeForDisplay;
     private String mIdpForDisplay;
     private IdentityProviderMetadata mIdpMetadata;
     private Bitmap mBrandIcon;
     private ClientIdMetadata mClientMetadata;
+    private String mRpContext;
 
     // All of the user's accounts.
     private List<Account> mAccounts;
@@ -123,21 +127,47 @@ class AccountSelectionMediator {
         mBottomSheetContent = bottomSheetContent;
 
         mBottomSheetObserver = new EmptyBottomSheetObserver() {
-            // TODO(majidvp): We should override #onSheetStateChanged() and react to HIDDEN state
-            // since closed is a legacy fixture that can get out of sync with the state is some
-            // situations. https://crbug.com/1215174
+            // Sends focus events to the relevant views for accessibility.
+            // TODO(crbug.com/1429345): Add tests for TalkBack on FedCM.
+            private void focusForAccessibility() {
+                View contentView = mBottomSheetController.getCurrentSheetContent().getContentView();
+                assert contentView != null;
+                View continueButton = contentView.findViewById(R.id.account_selection_continue_btn);
+
+                // TODO(crbug.com/1430240): Update SheetType and focus views for accessibility
+                // according to SheetType instead of number of accounts.
+                boolean isSingleAccountChooser = mAccounts.size() == 1;
+                View focusView = continueButton.isShown() && !isSingleAccountChooser
+                        ? continueButton
+                        : contentView.findViewById(R.id.header);
+                focusView.requestFocus();
+                focusView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
+            }
+
             @Override
-            public void onSheetClosed(@BottomSheetController.StateChangeReason int reason) {
-                super.onSheetClosed(reason);
-                mBottomSheetController.removeObserver(mBottomSheetObserver);
+            public void onSheetStateChanged(@SheetState int state, int reason) {
+                if (state == SheetState.HIDDEN) {
+                    super.onSheetClosed(reason);
+                    mBottomSheetController.removeObserver(mBottomSheetObserver);
 
-                if (mWasDismissed) return;
+                    if (mWasDismissed) return;
 
-                @IdentityRequestDialogDismissReason
-                int dismissReason = (reason == BottomSheetController.StateChangeReason.SWIPE)
-                        ? IdentityRequestDialogDismissReason.SWIPE
-                        : IdentityRequestDialogDismissReason.OTHER;
-                onDismissed(dismissReason);
+                    @IdentityRequestDialogDismissReason
+                    int dismissReason = (reason == BottomSheetController.StateChangeReason.SWIPE)
+                            ? IdentityRequestDialogDismissReason.SWIPE
+                            : IdentityRequestDialogDismissReason.OTHER;
+                    onDismissed(dismissReason);
+                    return;
+                }
+
+                if (state != SheetState.FULL) return;
+
+                // The bottom sheet programmatically requests focuses for accessibility when its
+                // contents are changed. If we call focusForAccessibility prior to
+                // onSheetStateChanged, the bottom sheet announcement would override the title or
+                // continue button announcement. Hence, focusForAccessibility is called here after
+                // the bottom sheet's focus-taking actions.
+                focusForAccessibility();
             }
         };
     }
@@ -151,12 +181,12 @@ class AccountSelectionMediator {
 
     private void handleBackPress() {
         mSelectedAccount = null;
-        showAccountsInternal(mRpForDisplay, mIdpForDisplay, mAccounts, mIdpMetadata,
-                mClientMetadata, /*isAutoReauthn=*/false, /*focusItem=*/ItemProperties.HEADER);
+        showAccountsInternal(mTopFrameForDisplay, mIframeForDisplay, mIdpForDisplay, mAccounts,
+                mIdpMetadata, mClientMetadata, /*isAutoReauthn=*/false, mRpContext);
     }
 
-    private PropertyModel createHeaderItem(HeaderType headerType, String rpForDisplay,
-            String idpForDisplay, IdentityProviderMetadata idpMetadata) {
+    private PropertyModel createHeaderItem(HeaderType headerType, String topFrameForDisplay,
+            String iframeForDisplay, String idpForDisplay, String rpContext) {
         Runnable closeOnClickRunnable = () -> {
             onDismissed(IdentityRequestDialogDismissReason.CLOSE_BUTTON);
 
@@ -170,8 +200,10 @@ class AccountSelectionMediator {
                 .with(HeaderProperties.IDP_BRAND_ICON, mBrandIcon)
                 .with(HeaderProperties.CLOSE_ON_CLICK_LISTENER, closeOnClickRunnable)
                 .with(HeaderProperties.IDP_FOR_DISPLAY, idpForDisplay)
-                .with(HeaderProperties.RP_FOR_DISPLAY, rpForDisplay)
+                .with(HeaderProperties.TOP_FRAME_FOR_DISPLAY, topFrameForDisplay)
+                .with(HeaderProperties.IFRAME_FOR_DISPLAY, iframeForDisplay)
                 .with(HeaderProperties.TYPE, headerType)
+                .with(HeaderProperties.RP_CONTEXT, rpContext)
                 .build();
     }
 
@@ -212,8 +244,7 @@ class AccountSelectionMediator {
     void showVerifySheet(Account account) {
         if (mHeaderType == HeaderType.SIGN_IN) {
             mHeaderType = HeaderType.VERIFY;
-            updateSheet(Arrays.asList(account), /*areAccountsClickable=*/false,
-                    /* focusItem=*/ItemProperties.HEADER);
+            updateSheet(Arrays.asList(account), /*areAccountsClickable=*/false);
         } else {
             // We call showVerifySheet() from updateSheet()->onAccountSelected() in this case, so do
             // not invoked updateSheet() as that would cause a loop and isn't needed.
@@ -225,9 +256,9 @@ class AccountSelectionMediator {
         if (!mWasDismissed) hideContent();
     }
 
-    void showAccounts(String rpForDisplay, String idpForDisplay, List<Account> accounts,
-            IdentityProviderMetadata idpMetadata, ClientIdMetadata clientMetadata,
-            boolean isAutoReauthn) {
+    void showAccounts(String topFrameForDisplay, String iframeForDisplay, String idpForDisplay,
+            List<Account> accounts, IdentityProviderMetadata idpMetadata,
+            ClientIdMetadata clientMetadata, boolean isAutoReauthn, String rpContext) {
         if (!TextUtils.isEmpty(idpMetadata.getBrandIconUrl())) {
             // Use placeholder icon so that the header text wrapping does not change when the icon
             // is fetched.
@@ -237,8 +268,8 @@ class AccountSelectionMediator {
         }
 
         mSelectedAccount = accounts.size() == 1 ? accounts.get(0) : null;
-        showAccountsInternal(rpForDisplay, idpForDisplay, accounts, idpMetadata, clientMetadata,
-                isAutoReauthn, /*focusItem=*/ItemProperties.HEADER);
+        showAccountsInternal(topFrameForDisplay, iframeForDisplay, idpForDisplay, accounts,
+                idpMetadata, clientMetadata, isAutoReauthn, rpContext);
         setComponentShowTime(SystemClock.elapsedRealtime());
 
         if (!TextUtils.isEmpty(idpMetadata.getBrandIconUrl())) {
@@ -263,26 +294,27 @@ class AccountSelectionMediator {
         mComponentShowTime = componentShowTime;
     }
 
-    private void showAccountsInternal(String rpForDisplay, String idpForDisplay,
-            List<Account> accounts, IdentityProviderMetadata idpMetadata,
-            ClientIdMetadata clientMetadata, boolean isAutoReauthn, PropertyKey focusItem) {
-        mRpForDisplay = rpForDisplay;
+    private void showAccountsInternal(String topFrameForDisplay, String iframeForDisplay,
+            String idpForDisplay, List<Account> accounts, IdentityProviderMetadata idpMetadata,
+            ClientIdMetadata clientMetadata, boolean isAutoReauthn, String rpContext) {
+        mTopFrameForDisplay = topFrameForDisplay;
+        mIframeForDisplay = iframeForDisplay;
         mIdpForDisplay = idpForDisplay;
         mAccounts = accounts;
         mIdpMetadata = idpMetadata;
         mClientMetadata = clientMetadata;
+        mRpContext = rpContext;
 
         if (mSelectedAccount != null) {
             accounts = Arrays.asList(mSelectedAccount);
         }
 
         mHeaderType = isAutoReauthn ? HeaderType.VERIFY_AUTO_REAUTHN : HeaderType.SIGN_IN;
-        updateSheet(accounts, /*areAccountsClickable=*/mSelectedAccount == null, focusItem);
+        updateSheet(accounts, /*areAccountsClickable=*/mSelectedAccount == null);
         updateBackPressBehavior();
     }
 
-    private void updateSheet(
-            List<Account> accounts, boolean areAccountsClickable, PropertyKey focusItem) {
+    private void updateSheet(List<Account> accounts, boolean areAccountsClickable) {
         updateAccounts(mIdpForDisplay, accounts, areAccountsClickable);
         updateHeader();
 
@@ -311,12 +343,11 @@ class AccountSelectionMediator {
 
         mBottomSheetContent.computeAndUpdateAccountListHeight();
         showContent();
-        mBottomSheetContent.focusForAccessibility(focusItem);
     }
 
     private void updateHeader() {
-        PropertyModel headerModel =
-                createHeaderItem(mHeaderType, mRpForDisplay, mIdpForDisplay, mIdpMetadata);
+        PropertyModel headerModel = createHeaderItem(
+                mHeaderType, mTopFrameForDisplay, mIframeForDisplay, mIdpForDisplay, mRpContext);
         mModel.set(ItemProperties.HEADER, headerModel);
     }
 
@@ -384,9 +415,8 @@ class AccountSelectionMediator {
         Account oldSelectedAccount = mSelectedAccount;
         mSelectedAccount = selectedAccount;
         if (oldSelectedAccount == null && !mSelectedAccount.isSignIn()) {
-            showAccountsInternal(mRpForDisplay, mIdpForDisplay, mAccounts, mIdpMetadata,
-                    mClientMetadata, /*isAutoReauthn=*/false,
-                    /*focusItem=*/ItemProperties.CONTINUE_BUTTON);
+            showAccountsInternal(mTopFrameForDisplay, mIframeForDisplay, mIdpForDisplay, mAccounts,
+                    mIdpMetadata, mClientMetadata, /*isAutoReauthn=*/false, mRpContext);
             return;
         }
 

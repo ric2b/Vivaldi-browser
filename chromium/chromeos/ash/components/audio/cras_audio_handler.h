@@ -83,6 +83,30 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
     kOther,
   };
 
+  // This enum is used to record UMA histogram values and should not be
+  // reordered. Please keep in sync with `AudioSettingsChangeSource` in
+  // src/tools/metrics/histograms/enums.xml.
+  enum class AudioSettingsChangeSource {
+    kSystemTray = 0,
+    kOsSettings,
+    kAccelerator,
+    kVideoConferenceTray,
+    kMaxValue = kVideoConferenceTray,
+  };
+
+  static constexpr base::TimeDelta kMetricsDelayTimerInterval =
+      base::Seconds(2);
+  static constexpr char kInputGainChangedSourceHistogramName[] =
+      "Cras.InputGainChangedSource";
+  static constexpr char kInputGainMuteSourceHistogramName[] =
+      "Cras.InputGainMutedSource";
+  static constexpr char kOutputVolumeChangedSourceHistogramName[] =
+      "Cras.OutputVolumeChangedSource";
+  static constexpr char kOutputVolumeMuteSourceHistogramName[] =
+      "Cras.OutputVolumeMutedSource";
+  static constexpr char kNoiseCancellationEnabledSourceHistogramName[] =
+      "Cras.NoiseCancellationEnabledSource";
+
   class AudioObserver {
    public:
     AudioObserver(const AudioObserver&) = delete;
@@ -139,6 +163,12 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
 
     // Called when the last output stream is closed.
     virtual void OnOutputStopped();
+
+    // Called when an initial output stream, not in chrome, is opened.
+    virtual void OnNonChromeOutputStarted();
+
+    // Called when the last output stream is closed, not in chrome.
+    virtual void OnNonChromeOutputStopped();
 
     // Called when the audio survey like to trigger an audio survey.
     // CRAS owns the trigger to send out an audio survey as opposed to trigger
@@ -234,6 +264,9 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Returns true if audio output is muted for a device.
   bool IsOutputMutedForDevice(uint64_t device_id);
 
+  // Returns true if audio output is forced muted.
+  bool IsOutputForceMuted();
+
   // Returns true if audio output is muted for the system by policy.
   bool IsOutputMutedByPolicy();
 
@@ -250,7 +283,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   bool IsOutputVolumeBelowDefaultMuteLevel();
 
   // Returns volume level in 0-100% range at which the volume should be muted.
-  int GetOutputDefaultVolumeMuteThreshold();
+  int GetOutputDefaultVolumeMuteThreshold() const;
 
   // Gets volume level in 0-100% range (0 being pure silence) for the current
   // active node.
@@ -310,8 +343,10 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   void RefreshNoiseCancellationState();
 
   // Updates noise cancellation state in `CrasAudioClient` and
-  // `AudioDevicesPrefHandler` to the provided value.
-  void SetNoiseCancellationState(bool noise_cancellation_on);
+  // `AudioDevicesPrefHandler` to the provided value. `source` records to
+  // metrics who changed the noise cancellation state.
+  void SetNoiseCancellationState(bool noise_cancellation_on,
+                                 AudioSettingsChangeSource source);
 
   // Get if noise cancellation is supported by the board.
   void RequestNoiseCancellationSupported(
@@ -353,11 +388,22 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Mutes or unmutes audio output device.
   void SetOutputMute(bool mute_on);
 
+  // Mutes or unmutes audio output device including the `source` to record to
+  // metrics.
+  void SetOutputMute(bool mute_on,
+                     CrasAudioHandler::AudioSettingsChangeSource source);
+
   // Mutes or unmutes audio output device by security curtain
   void SetOutputMuteLockedBySecurityCurtain(bool mute_on);
 
   // Mutes or unmutes audio input device.
   void SetInputMute(bool mute_on, InputMuteChangeMethod method);
+
+  // Mutes or unmutes audio input device including the `source` to record to
+  // metrics.
+  void SetInputMute(bool mute_on,
+                    InputMuteChangeMethod method,
+                    CrasAudioHandler::AudioSettingsChangeSource source);
 
   // Switches active audio device to |device|. |activate_by| indicates why
   // the device is switched to active: by user's manual choice, by priority,
@@ -371,6 +417,11 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
 
   // Sets the mute for device.
   void SetMuteForDevice(uint64_t device_id, bool mute_on);
+
+  // Sets the mute for device including the `source` to record to metrics.
+  void SetMuteForDevice(uint64_t device_id,
+                        bool mute_on,
+                        CrasAudioHandler::AudioSettingsChangeSource source);
 
   // Activates or deactivates keyboard mic if there's one.
   void SetKeyboardMicActive(bool active);
@@ -502,6 +553,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   void SurveyTriggered(const base::flat_map<std::string, std::string>&
                            survey_specific_data) override;
   void SpeakOnMuteDetected() override;
+  void NumberOfNonChromeOutputStreamsChanged() override;
 
   // AudioPrefObserver overrides.
   void OnAudioPolicyPrefChanged() override;
@@ -580,6 +632,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
 
   // Calls CRAS over D-Bus to get the number of active output streams.
   void GetNumberOfOutputStreams();
+
+  void GetNumberOfNonChromeOutputStreams();
 
   // Updates the current audio nodes list and switches the active device
   // if needed.
@@ -715,6 +769,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   // Handle dbus callback for GetNumberOfInputStreamsWithPermission.
   void HandleGetNumberOfInputStreamsWithPermission(
       absl::optional<base::flat_map<std::string, uint32_t>> num_input_streams);
+  void HandleGetNumberOfNonChromeOutputStreams(
+      absl::optional<int32_t> num_output_streams);
 
   // Calling dbus to get system AEC supported flag.
   void GetSystemAecSupported();
@@ -830,6 +886,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_AUDIO) CrasAudioHandler
   bool system_agc_supported_ = false;
 
   int num_active_output_streams_ = 0;
+  int32_t num_active_nonchrome_output_streams_ = 0;
 
   bool fetch_media_session_duration_ = false;
 

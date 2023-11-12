@@ -70,6 +70,7 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
   bool SupportsDmabuf() const;
   bool SupportsAcquireFence() const;
   bool SupportsViewporter() const;
+  bool SupportsOverlays() const;
   bool SupportsNonBackedSolidColorBuffers() const;
   uint32_t GetSurfaceAugmentorVersion() const;
 
@@ -133,13 +134,15 @@ class WaylandBufferManagerHost : public ozone::mojom::WaylandBufferManagerHost {
 
   // Tells the |buffer_manager_gpu_ptr_| the result of a swap call and provides
   // it with the presentation feedback.
-  void OnSubmission(gfx::AcceleratedWidget widget,
-                    uint32_t frame_id,
-                    const gfx::SwapResult& swap_result,
-                    gfx::GpuFenceHandle release_fence);
-  void OnPresentation(gfx::AcceleratedWidget widget,
-                      uint32_t frame_id,
-                      const gfx::PresentationFeedback& feedback);
+  void OnSubmission(
+      gfx::AcceleratedWidget widget,
+      uint32_t frame_id,
+      const gfx::SwapResult& swap_result,
+      gfx::GpuFenceHandle release_fence,
+      const std::vector<wl::WaylandPresentationInfo>& presentation_infos);
+  void OnPresentation(
+      gfx::AcceleratedWidget widget,
+      const std::vector<wl::WaylandPresentationInfo>& presentation_infos);
 
  private:
   // Validates data sent from GPU. If invalid, returns false and sets an error

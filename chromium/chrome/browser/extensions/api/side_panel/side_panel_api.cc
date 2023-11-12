@@ -4,8 +4,6 @@
 
 #include "chrome/browser/extensions/api/side_panel/side_panel_api.h"
 
-#include <memory>
-
 #include "base/values.h"
 #include "chrome/browser/extensions/api/side_panel/side_panel_service.h"
 #include "chrome/common/extensions/api/side_panel.h"
@@ -35,24 +33,46 @@ ExtensionFunction::ResponseAction SidePanelApiFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction SidePanelGetOptionsFunction::RunFunction() {
-  std::unique_ptr<api::side_panel::GetOptions::Params> params(
-      api::side_panel::GetOptions::Params::Create(args()));
+  absl::optional<api::side_panel::GetOptions::Params> params =
+      api::side_panel::GetOptions::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   auto tab_id = params->options.tab_id
                     ? absl::optional<int>(*(params->options.tab_id))
                     : absl::nullopt;
   const api::side_panel::PanelOptions& options =
       GetService()->GetOptions(*extension(), tab_id);
-  return RespondNow(OneArgument(base::Value(options.ToValue())));
+  return RespondNow(WithArguments(options.ToValue()));
 }
 
 ExtensionFunction::ResponseAction SidePanelSetOptionsFunction::RunFunction() {
-  std::unique_ptr<api::side_panel::SetOptions::Params> params(
-      api::side_panel::SetOptions::Params::Create(args()));
+  absl::optional<api::side_panel::SetOptions::Params> params =
+      api::side_panel::SetOptions::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   // TODO(crbug.com/1328645): Validate the relative extension path exists.
   GetService()->SetOptions(*extension(), std::move(params->options));
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+SidePanelSetPanelBehaviorFunction::RunFunction() {
+  absl::optional<api::side_panel::SetPanelBehavior::Params> params =
+      api::side_panel::SetPanelBehavior::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+  if (params->behavior.open_panel_on_action_click.has_value()) {
+    GetService()->SetOpenSidePanelOnIconClick(
+        extension()->id(), *params->behavior.open_panel_on_action_click);
+  }
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+SidePanelGetPanelBehaviorFunction::RunFunction() {
+  api::side_panel::PanelBehavior behavior;
+  behavior.open_panel_on_action_click =
+      GetService()->OpenSidePanelOnIconClick(extension()->id());
+
+  return RespondNow(WithArguments(behavior.ToValue()));
 }
 
 }  // namespace extensions

@@ -24,14 +24,12 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/domain_reliability/service_factory.h"
 #include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
 #include "chrome/browser/first_party_sets/first_party_sets_policy_service_factory.h"
 #include "chrome/browser/net/system_network_context_manager.h"
-#include "chrome/browser/prefetch/pref_names.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/sct_reporting_service.h"
@@ -67,6 +65,7 @@
 #include "net/base/features.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/http/http_util.h"
+#include "net/net_buildflags.h"
 #include "net/ssl/client_cert_store.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
 #include "services/network/public/cpp/cors/origin_access_list.h"
@@ -112,7 +111,6 @@
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
-#include "chrome/browser/net/cert_verifier_configuration.h"
 #include "chrome/browser/net/trial_comparison_cert_verifier_controller.h"
 #endif
 
@@ -254,23 +252,30 @@ void UpdateStorageAccessSettings(Profile* profile) {
   }
 }
 
-void UpdateTopLevelStorageAccessSettings(Profile* profile) {
+void UpdateAllStorageAccessSettings(Profile* profile) {
   // TODO(crbug.com/1385156): Switch to an independent feature flag.
   if (base::FeatureList::IsEnabled(blink::features::kStorageAccessAPI) &&
       base::FeatureList::IsEnabled(
           blink::features::kStorageAccessAPIForOriginExtension)) {
-    ContentSettingsForOneType settings;
+    ContentSettingsForOneType top_level_settings;
     HostContentSettingsMapFactory::GetForProfile(profile)
         ->GetSettingsForOneType(ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS,
-                                &settings);
+                                &top_level_settings);
+    ContentSettingsForOneType storage_access_settings;
+    HostContentSettingsMapFactory::GetForProfile(profile)
+        ->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS,
+                                &storage_access_settings);
 
     profile->ForEachLoadedStoragePartition(base::BindRepeating(
-        [](ContentSettingsForOneType settings,
+        [](ContentSettingsForOneType storage_access_settings,
+           ContentSettingsForOneType top_level_settings,
            content::StoragePartition* storage_partition) {
           storage_partition->GetCookieManagerForBrowserProcess()
-              ->SetTopLevelStorageAccessSettings(settings, base::DoNothing());
+              ->SetAllStorageAccessSettings(storage_access_settings,
+                                            top_level_settings,
+                                            base::DoNothing());
         },
-        settings));
+        storage_access_settings, top_level_settings));
   }
 }
 
@@ -291,10 +296,6 @@ ProfileNetworkContextService::ProfileNetworkContextService(Profile* profile)
   enable_referrers_.Init(
       prefs::kEnableReferrers, profile_prefs,
       base::BindRepeating(&ProfileNetworkContextService::UpdateReferrersEnabled,
-                          base::Unretained(this)));
-  preload_allowed_.Init(
-      prefs::kNetworkPredictionOptions, profile_prefs,
-      base::BindRepeating(&ProfileNetworkContextService::UpdatePreconnect,
                           base::Unretained(this)));
   cookie_settings_ = CookieSettingsFactory::GetForProfile(profile);
   cookie_settings_observation_.Observe(cookie_settings_.get());
@@ -337,10 +338,6 @@ ProfileNetworkContextService::ProfileNetworkContextService(Profile* profile)
       base::BindRepeating(&ProfileNetworkContextService::
                               UpdateCorsNonWildcardRequestHeadersSupport,
                           base::Unretained(this)));
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  registry_observation_.Observe(extensions::ExtensionRegistry::Get(profile_));
-#endif
 }
 
 ProfileNetworkContextService::~ProfileNetworkContextService() = default;
@@ -444,15 +441,6 @@ void ProfileNetworkContextService::OnThirdPartyCookieBlockingChanged(
       block_third_party_cookies));
 }
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-void ProfileNetworkContextService::OnExtensionInstalled(
-    content::BrowserContext* browser_context,
-    const extensions::Extension* extension,
-    bool is_update) {
-  UpdatePreconnect();
-}
-#endif
-
 void ProfileNetworkContextService::OnFirstPartySetsEnabledChanged(
     bool enabled) {
   // Update all FPS Access Delegates on the FPS service to be `enabled`.
@@ -483,17 +471,6 @@ void ProfileNetworkContextService::UpdateReferrersEnabled() {
             enable_referrers);
       },
       enable_referrers_.GetValue()));
-}
-
-void ProfileNetworkContextService::UpdatePreconnect() {
-  bool enable_preconnect =
-      ChromeContentBrowserClient::ShouldPreconnect(profile_);
-  profile_->ForEachLoadedStoragePartition(base::BindRepeating(
-      [](bool enable_preconnect, content::StoragePartition* storage_partition) {
-        storage_partition->GetNetworkContext()->SetEnablePreconnect(
-            enable_preconnect);
-      },
-      enable_preconnect));
 }
 
 network::mojom::CTPolicyPtr ProfileNetworkContextService::GetCTPolicy() {
@@ -690,11 +667,6 @@ ProfileNetworkContextService::CreateClientCertStore() {
     }
   }
 
-  // `ClientCertStoreAsh` internally depends on NSS initialization that happens
-  // when the `ResourceContext` is created. Call `GetResourceContext()` so the
-  // dependency is explicit. See https://crbug.com/1018972.
-  profile_->GetResourceContext();
-
   return std::make_unique<ash::ClientCertStoreAsh>(
       std::move(certificate_provider), use_system_key_slot, username_hash,
       base::BindRepeating(&CreateCryptoModuleBlockingPasswordDelegate,
@@ -871,6 +843,14 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
         base::FilePath(chrome::kNetworkPersistentStateFilename);
     network_context_params->file_paths->cookie_database_name =
         base::FilePath(chrome::kCookieFilename);
+
+#if BUILDFLAG(IS_WIN)
+    // If this feature is enabled, then the cookie database used by this profile
+    // will be locked for exclusive access by sqlite3 implementation in the
+    // network service.
+    network_context_params->enable_locking_cookie_database =
+        base::FeatureList::IsEnabled(features::kLockProfileCookieDatabase);
+#endif  // BUILDFLAG(IS_WIN)
     network_context_params->file_paths->trust_token_database_name =
         base::FilePath(chrome::kTrustTokenFilename);
 
@@ -921,27 +901,8 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   network_context_params->ct_policy = GetCTPolicy();
 
 #if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
-  // In order for the TrialComparisonCertVerifier to be useful, it needs to
-  // provide comparisons between two well-defined verifier configurations; this
-  // means the currently launched cert verifier (and root store) and the
-  // prospective cert verifier (and root store).
-  //
-  // It's possible that, due to user configuration, such as enterprise policies,
-  // the user may be requesting a non-standard configuration from the current
-  // default. In these cases, the trial verifier is also disabled,
-  // because all users in the trial should be running in the same configuration.
   DCHECK(cert_verifier_creation_params);
-  bool is_trial_comparison_supported = !in_memory;
-
-  cert_verifier::mojom::CertVerifierServiceParamsPtr
-      cert_verifier_configuration =
-          GetChromeCertVerifierServiceParams(/*local_state=*/nullptr);
-  DCHECK(cert_verifier_configuration);
-#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-  is_trial_comparison_supported &=
-      !cert_verifier_configuration->use_chrome_root_store;
-#endif
-  if (is_trial_comparison_supported &&
+  if (!in_memory &&
       TrialComparisonCertVerifierController::MaybeAllowedForProfile(profile_)) {
     mojo::PendingRemote<
         cert_verifier::mojom::TrialComparisonCertVerifierConfigClient>
@@ -1000,8 +961,10 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   bool profile_supports_policy_certs = false;
-  if (ash::ProfileHelper::IsSigninProfile(profile_))
+  if (ash::ProfileHelper::IsSigninProfile(profile_) ||
+      ash::ProfileHelper::IsLockScreenProfile(profile_)) {
     profile_supports_policy_certs = true;
+  }
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   if (user_manager) {
     const user_manager::User* user =
@@ -1096,13 +1059,13 @@ void ProfileNetworkContextService::OnContentSettingChanged(
       UpdateStorageAccessSettings(profile_);
       break;
     case ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS:
-      UpdateTopLevelStorageAccessSettings(profile_);
+      UpdateAllStorageAccessSettings(profile_);
       break;
     case ContentSettingsType::DEFAULT:
+      UpdateAntiAbuseSettings(profile_);
       UpdateCookieSettings(profile_);
       UpdateLegacyCookieSettings(profile_);
-      UpdateStorageAccessSettings(profile_);
-      UpdateTopLevelStorageAccessSettings(profile_);
+      UpdateAllStorageAccessSettings(profile_);
       break;
     default:
       return;

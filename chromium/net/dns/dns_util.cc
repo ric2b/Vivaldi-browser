@@ -52,8 +52,13 @@ DohProviderEntry::List GetDohProviderEntriesFromNameservers(
   for (const auto& server : dns_servers) {
     for (const auto* entry : providers) {
       // DoH servers should only be added once.
-      if (base::FeatureList::IsEnabled(entry->feature) &&
-          base::Contains(entry->ip_addresses, server.address()) &&
+      // Note: Check whether the provider is enabled *after* we've determined
+      // that the IP addresses match so that if we are doing experimentation via
+      // Finch, the experiment only includes possible users of the
+      // corresponding DoH provider (since the client will be included in the
+      // experiment if the provider feature flag is checked).
+      if (base::Contains(entry->ip_addresses, server.address()) &&
+          base::FeatureList::IsEnabled(entry->feature) &&
           !base::Contains(entries, entry)) {
         entries.push_back(entry);
       }
@@ -156,8 +161,13 @@ std::vector<DnsOverHttpsServerConfig> GetDohUpgradeServersFromDotHostname(
     return doh_servers;
 
   for (const auto* entry : DohProviderEntry::GetList()) {
-    if (base::FeatureList::IsEnabled(entry->feature) &&
-        base::Contains(entry->dns_over_tls_hostnames, dot_server)) {
+    // Note: Check whether the provider is enabled *after* we've determined that
+    // the hostnames match so that if we are doing experimentation via Finch,
+    // the experiment only includes possible users of the corresponding DoH
+    // provider (since the client will be included in the experiment if the
+    // provider feature flag is checked).
+    if (base::Contains(entry->dns_over_tls_hostnames, dot_server) &&
+        base::FeatureList::IsEnabled(entry->feature)) {
       doh_servers.push_back(entry->doh_server_config);
     }
   }
@@ -169,9 +179,8 @@ std::vector<DnsOverHttpsServerConfig> GetDohUpgradeServersFromNameservers(
   const auto entries = GetDohProviderEntriesFromNameservers(dns_servers);
   std::vector<DnsOverHttpsServerConfig> doh_servers;
   doh_servers.reserve(entries.size());
-  std::transform(entries.begin(), entries.end(),
-                 std::back_inserter(doh_servers),
-                 [](const auto* entry) { return entry->doh_server_config; });
+  base::ranges::transform(entries, std::back_inserter(doh_servers),
+                          &DohProviderEntry::doh_server_config);
   return doh_servers;
 }
 

@@ -9,6 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -37,6 +38,7 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/file_system_chooser_test_helpers.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_host_test_helper.h"
@@ -89,55 +91,6 @@ constexpr char kTestFileContent[] = "This is some test content.";
 constexpr char kSecondProfileAccount[] = "profile2@test.com";
 constexpr char kSecondProfileGiaId[] = "9876543210";
 constexpr char kSecondProfileHash[] = "fileBrowserApiTestProfile2";
-
-class FakeSelectFileDialog : public ui::SelectFileDialog {
- public:
-  FakeSelectFileDialog(ui::SelectFileDialog::Listener* listener,
-                       std::unique_ptr<ui::SelectFilePolicy> policy,
-                       const base::FilePath& drivefs_root)
-      : ui::SelectFileDialog(listener, std::move(policy)),
-        drivefs_root_(drivefs_root) {}
-
-  void SelectFileImpl(Type type,
-                      const std::u16string& title,
-                      const base::FilePath& default_path,
-                      const FileTypeInfo* file_types,
-                      int file_type_index,
-                      const base::FilePath::StringType& default_extension,
-                      gfx::NativeWindow owning_window,
-                      void* params,
-                      const GURL* caller) override {
-    listener_->FileSelected(drivefs_root_.Append("root/test_dir"), 0, nullptr);
-  }
-
-  bool IsRunning(gfx::NativeWindow owning_window) const override {
-    return false;
-  }
-
-  void ListenerDestroyed() override {}
-
-  bool HasMultipleFileTypeChoicesImpl() override { return false; }
-
- private:
-  ~FakeSelectFileDialog() override = default;
-
-  const base::FilePath drivefs_root_;
-};
-
-class FakeSelectFileDialogFactory : public ui::SelectFileDialogFactory {
- public:
-  explicit FakeSelectFileDialogFactory(const base::FilePath& drivefs_root)
-      : drivefs_root_(drivefs_root) {}
-
- private:
-  ui::SelectFileDialog* Create(
-      ui::SelectFileDialog::Listener* listener,
-      std::unique_ptr<ui::SelectFilePolicy> policy) override {
-    return new FakeSelectFileDialog(listener, std::move(policy), drivefs_root_);
-  }
-
-  const base::FilePath drivefs_root_;
-};
 
 // Waits for a WebContents of the background page of the extension under test
 // to load, then injects some javascript into it to trigger a particular test.
@@ -227,36 +180,43 @@ bool InitializeLocalFileSystem(std::string mount_point_name,
                                base::ScopedTempDir* tmp_dir,
                                base::FilePath* mount_point_dir,
                                const std::vector<TestDirConfig>& dir_contents) {
-  if (!tmp_dir->CreateUniqueTempDir())
+  if (!tmp_dir->CreateUniqueTempDir()) {
     return false;
+  }
 
   *mount_point_dir = tmp_dir->GetPath().AppendASCII(mount_point_name);
   // Create the mount point.
-  if (!base::CreateDirectory(*mount_point_dir))
+  if (!base::CreateDirectory(*mount_point_dir)) {
     return false;
+  }
 
   constexpr TestDirConfig kTestDir = {"2012-01-02T00:00:00.000Z",
                                       "2012-01-02T00:00:01.000Z", "test_dir",
                                       nullptr};
 
   const base::FilePath test_dir = mount_point_dir->AppendASCII(kTestDir.name);
-  if (!base::CreateDirectory(test_dir))
+  if (!base::CreateDirectory(test_dir)) {
     return false;
+  }
 
   for (const auto& file : dir_contents) {
     const base::FilePath test_path = test_dir.AppendASCII(file.name);
     if (file.contents) {
-      if (!google_apis::test_util::WriteStringToFile(test_path, file.contents))
+      if (!google_apis::test_util::WriteStringToFile(test_path,
+                                                     file.contents)) {
         return false;
+      }
     } else {
-      if (!base::CreateDirectory(test_path))
+      if (!base::CreateDirectory(test_path)) {
         return false;
+      }
     }
   }
 
   for (const auto& file : dir_contents) {
-    if (!TouchFile(test_dir.Append(file.name), file.mtime, file.atime))
+    if (!TouchFile(test_dir.Append(file.name), file.mtime, file.atime)) {
       return false;
+    }
   }
 
   // Touch the directory holding all the contents last.
@@ -614,7 +574,7 @@ class MultiProfileDriveFileSystemExtensionApiTest
       create_drive_integration_service_;
   std::unique_ptr<DriveIntegrationServiceFactory::ScopedFactoryForTest>
       service_factory_for_test_;
-  Profile* second_profile_ = nullptr;
+  raw_ptr<Profile, ExperimentalAsh> second_profile_ = nullptr;
   std::unordered_map<Profile*, std::unique_ptr<drive::FakeDriveFsHelper>>
       fake_drivefs_helpers_;
 };
@@ -842,8 +802,8 @@ IN_PROC_BROWSER_TEST_F(DriveFileSystemExtensionApiTest, AppFileHandler) {
 }
 
 IN_PROC_BROWSER_TEST_F(DriveFileSystemExtensionApiTest, RetainEntry) {
-  ui::SelectFileDialog::SetFactory(new FakeSelectFileDialogFactory(
-      drivefs_root_.GetPath().Append("drive-user")));
+  ui::SelectFileDialog::SetFactory(new content::FakeSelectFileDialogFactory(
+      {drivefs_root_.GetPath().Append("drive-user/root/test_dir")}));
   EXPECT_TRUE(RunFileSystemExtensionApiTest("file_browser/retain_entry",
                                             FILE_PATH_LITERAL("manifest.json"),
                                             "", FLAGS_NONE))

@@ -283,6 +283,50 @@ bool GetTempDir(FilePath* path) {
   return true;
 }
 
+File CreateAndOpenTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
+  constexpr uint32_t kFlags =
+      File::FLAG_CREATE | File::FLAG_READ | File::FLAG_WRITE;
+
+  // Use GUID instead of ::GetTempFileName() to generate unique file names.
+  // "Due to the algorithm used to generate file names, GetTempFileName can
+  // perform poorly when creating a large number of files with the same prefix.
+  // In such cases, it is recommended that you construct unique file names based
+  // on GUIDs."
+  // https://msdn.microsoft.com/library/windows/desktop/aa364991.aspx
+
+  FilePath temp_name;
+  File file;
+
+  // Although it is nearly impossible to get a duplicate name with GUID, we
+  // still use a loop here in case it happens.
+  for (int i = 0; i < 100; ++i) {
+    temp_name = dir.Append(
+        FilePath(UTF8ToUTF16(GenerateGUID()) + FILE_PATH_LITERAL(".tmp")));
+    file.Initialize(temp_name, kFlags);
+    if (file.IsValid())
+      break;
+  }
+
+  if (!file.IsValid()) {
+    DPLOG(WARNING) << "Failed to get temporary file name in "
+                   << UTF16ToUTF8(dir.value());
+    return file;
+  }
+
+  char16_t long_temp_name[MAX_PATH + 1];
+  const DWORD long_name_len = GetLongPathName(
+      ToWCharT(temp_name.value().c_str()), ToWCharT(long_temp_name), MAX_PATH);
+  if (long_name_len != 0 && long_name_len <= MAX_PATH) {
+    *temp_file =
+        FilePath(FilePath::StringViewType(long_temp_name, long_name_len));
+  } else {
+    // GetLongPathName() failed, but we still have a temporary file.
+    *temp_file = std::move(temp_name);
+  }
+
+  return file;
+}
+
 bool CreateTemporaryDirInDir(const FilePath& base_dir,
                              const FilePath::StringType& prefix,
                              FilePath* new_dir) {

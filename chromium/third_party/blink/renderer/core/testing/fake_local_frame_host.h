@@ -47,7 +47,7 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
       ui::mojom::blink::VirtualKeyboardMode mode) override;
   void VisibilityChanged(mojom::blink::FrameVisibility visibility) override;
   void DidChangeThemeColor(absl::optional<::SkColor> theme_color) override;
-  void DidChangeBackgroundColor(SkColor background_color,
+  void DidChangeBackgroundColor(const SkColor4f& background_color,
                                 bool color_adjust) override;
   void DidFailLoadWithError(const ::blink::KURL& url,
                             int32_t error_code) override;
@@ -66,6 +66,7 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void BubbleLogicalScrollInParentFrame(
       blink::mojom::blink::ScrollDirection direction,
       ui::ScrollGranularity granularity) override;
+  void StartLoadingForAsyncNavigationApiCommit() override {}
   void DidBlockNavigation(const KURL& blocked_url,
                           const KURL& initiator_url,
                           mojom::NavigationBlockedReason reason) override;
@@ -110,6 +111,7 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
       WTF::Vector<blink::mojom::blink::FaviconURLPtr> favicon_urls) override;
   void DownloadURL(mojom::blink::DownloadURLParamsPtr params) override;
   void FocusedElementChanged(bool is_editable_element,
+                             bool is_richly_editable_element,
                              const gfx::Rect& bounds_in_frame_widget,
                              blink::mojom::FocusType focus_type) override;
   void TextSelectionChanged(const WTF::String& text,
@@ -173,10 +175,11 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void SendFencedFrameReportingBeacon(
       const WTF::String& event_data,
       const WTF::String& event_type,
-      blink::FencedFrame::ReportingDestination destination) override;
+      const WTF::Vector<blink::FencedFrame::ReportingDestination>& destinations)
+      override;
   void SetFencedFrameAutomaticBeaconReportEventData(
       const WTF::String& event_data,
-      const WTF::Vector<blink::FencedFrame::ReportingDestination>& destination)
+      const WTF::Vector<blink::FencedFrame::ReportingDestination>& destinations)
       override;
   void SendPrivateAggregationRequestsForFencedFrameEvent(
       const WTF::String& event_type) override;
@@ -192,7 +195,6 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
                    AdoptPortalCallback callback) override;
   void CreateFencedFrame(
       mojo::PendingAssociatedReceiver<mojom::blink::FencedFrameOwnerHost>,
-      mojom::blink::FencedFrameMode,
       mojom::blink::RemoteFrameInterfacesFromRendererPtr
           remote_frame_interfaces,
       const RemoteFrameToken& frame_token,

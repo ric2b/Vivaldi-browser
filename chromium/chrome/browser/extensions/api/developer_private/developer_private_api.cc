@@ -17,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
-#include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/ranges/algorithm.h"
@@ -26,6 +25,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
+#include "base/uuid.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/api/developer_private/developer_private_mangle.h"
@@ -61,6 +61,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
@@ -123,12 +124,20 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/supervised_user_service.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#endif
+
 namespace extensions {
 
 namespace developer = api::developer_private;
 
 namespace {
-
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+const char kCannotUpdateChildAccountProfileSettingsError[] =
+    "Cannot change settings for a child account profile.";
+#endif
 const char kNoSuchExtensionError[] = "No such extension.";
 const char kRequiresUserGestureError[] =
     "This action requires a user gesture.";
@@ -142,8 +151,6 @@ const char kManifestKeyIsRequiredError[] =
     "The 'manifestKey' argument is required for manifest files.";
 const char kCouldNotFindWebContentsError[] =
     "Could not find a valid web contents.";
-const char kCannotUpdateChildAccountProfileSettingsError[] =
-    "Cannot change settings for a child account profile.";
 const char kNoOptionsPageForExtensionError[] =
     "Extension does not have an options page.";
 const char kCannotRepairHealthyExtension[] =
@@ -215,13 +222,13 @@ void GetManifestError(const std::string& error,
 // Runs the install verifier for all extensions that are enabled, disabled, or
 // terminated.
 void PerformVerificationCheck(content::BrowserContext* context) {
-  std::unique_ptr<ExtensionSet> extensions =
+  const ExtensionSet extensions =
       ExtensionRegistry::Get(context)->GenerateInstalledExtensionsSet(
           ExtensionRegistry::ENABLED | ExtensionRegistry::DISABLED |
           ExtensionRegistry::TERMINATED);
   ExtensionPrefs* prefs = ExtensionPrefs::Get(context);
   bool should_do_verification_check = false;
-  for (const scoped_refptr<const Extension>& extension : *extensions) {
+  for (const scoped_refptr<const Extension>& extension : extensions) {
     if (ui_util::ShouldDisplayInExtensionSettings(*extension) &&
         prefs->HasDisableReason(extension->id(),
                                 disable_reason::DISABLE_NOT_VERIFIED)) {
@@ -500,12 +507,18 @@ DeveloperPrivateAPI::GetFactoryInstance() {
 std::unique_ptr<developer::ProfileInfo> DeveloperPrivateAPI::CreateProfileInfo(
     Profile* profile) {
   std::unique_ptr<developer::ProfileInfo> info(new developer::ProfileInfo());
-  info->is_child_account = profile->IsChild();
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  SupervisedUserService* service =
+      SupervisedUserServiceFactory::GetForProfile(profile);
+  info->is_child_account = service->AreExtensionsPermissionsEnabled();
+#else
+  info->is_child_account = false;
+#endif
   PrefService* prefs = profile->GetPrefs();
   const PrefService::Preference* pref =
       prefs->FindPreference(prefs::kExtensionsUIDeveloperMode);
   info->is_incognito_available = IncognitoModePrefs::GetAvailability(prefs) !=
-                                 IncognitoModePrefs::Availability::kDisabled;
+                                 policy::IncognitoModeAvailability::kDisabled;
   info->is_developer_mode_controlled_by_policy = pref->IsManaged();
   info->in_developer_mode =
       !info->is_child_account &&
@@ -810,7 +823,7 @@ DeveloperPrivateAPI::UnpackedRetryId DeveloperPrivateAPI::AddUnpackedPath(
   if (existing != paths.end())
     return existing->first;
 
-  UnpackedRetryId id = base::GenerateGUID();
+  UnpackedRetryId id = base::Uuid::GenerateRandomV4().AsLowercaseString();
   paths[id] = path;
   return id;
 }
@@ -941,8 +954,8 @@ DeveloperPrivateGetExtensionsInfoFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateGetExtensionsInfoFunction::Run() {
-  std::unique_ptr<developer::GetExtensionsInfo::Params> params(
-      developer::GetExtensionsInfo::Params::Create(args()));
+  absl::optional<developer::GetExtensionsInfo::Params> params =
+      developer::GetExtensionsInfo::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   bool include_disabled = true;
@@ -978,8 +991,8 @@ DeveloperPrivateGetExtensionInfoFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateGetExtensionInfoFunction::Run() {
-  std::unique_ptr<developer::GetExtensionInfo::Params> params(
-      developer::GetExtensionInfo::Params::Create(args()));
+  absl::optional<developer::GetExtensionInfo::Params> params =
+      developer::GetExtensionInfo::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   info_generator_ = std::make_unique<ExtensionInfoGenerator>(browser_context());
@@ -1006,8 +1019,8 @@ DeveloperPrivateGetExtensionSizeFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateGetExtensionSizeFunction::Run() {
-  std::unique_ptr<developer::GetExtensionSize::Params> params(
-      developer::GetExtensionSize::Params::Create(args()));
+  absl::optional<developer::GetExtensionSize::Params> params =
+      developer::GetExtensionSize::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension = GetExtensionById(params->id);
@@ -1031,8 +1044,8 @@ DeveloperPrivateGetItemsInfoFunction::DeveloperPrivateGetItemsInfoFunction() {}
 DeveloperPrivateGetItemsInfoFunction::~DeveloperPrivateGetItemsInfoFunction() {}
 
 ExtensionFunction::ResponseAction DeveloperPrivateGetItemsInfoFunction::Run() {
-  std::unique_ptr<developer::GetItemsInfo::Params> params(
-      developer::GetItemsInfo::Params::Create(args()));
+  absl::optional<developer::GetItemsInfo::Params> params =
+      developer::GetItemsInfo::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   info_generator_ = std::make_unique<ExtensionInfoGenerator>(browser_context());
@@ -1079,16 +1092,23 @@ DeveloperPrivateUpdateProfileConfigurationFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateUpdateProfileConfigurationFunction::Run() {
-  std::unique_ptr<developer::UpdateProfileConfiguration::Params> params(
-      developer::UpdateProfileConfiguration::Params::Create(args()));
+  absl::optional<developer::UpdateProfileConfiguration::Params> params =
+      developer::UpdateProfileConfiguration::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const developer::ProfileConfigurationUpdate& update = params->update;
   Profile* profile = Profile::FromBrowserContext(browser_context());
+
   PrefService* prefs = profile->GetPrefs();
   if (update.in_developer_mode) {
-    if (profile->IsChild())
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+    SupervisedUserService* service =
+        SupervisedUserServiceFactory::GetForProfile(profile);
+    if (service->AreExtensionsPermissionsEnabled()) {
       return RespondNow(Error(kCannotUpdateChildAccountProfileSettingsError));
+    }
+#endif
+
     prefs->SetBoolean(prefs::kExtensionsUIDeveloperMode,
                       *update.in_developer_mode);
     SetCurrentDeveloperMode(util::GetBrowserContextId(browser_context()),
@@ -1106,8 +1126,8 @@ DeveloperPrivateUpdateExtensionConfigurationFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateUpdateExtensionConfigurationFunction::Run() {
-  std::unique_ptr<developer::UpdateExtensionConfiguration::Params> params(
-      developer::UpdateExtensionConfiguration::Params::Create(args()));
+  absl::optional<developer::UpdateExtensionConfiguration::Params> params =
+      developer::UpdateExtensionConfiguration::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const developer::ExtensionConfigurationUpdate& update = params->update;
@@ -1173,8 +1193,8 @@ DeveloperPrivateReloadFunction::DeveloperPrivateReloadFunction() = default;
 DeveloperPrivateReloadFunction::~DeveloperPrivateReloadFunction() = default;
 
 ExtensionFunction::ResponseAction DeveloperPrivateReloadFunction::Run() {
-  std::unique_ptr<Reload::Params> params(Reload::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Reload::Params> params = Reload::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension = GetExtensionById(params->extension_id);
   if (!extension)
@@ -1276,8 +1296,8 @@ DeveloperPrivateShowPermissionsDialogFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateShowPermissionsDialogFunction::Run() {
-  std::unique_ptr<developer::ShowPermissionsDialog::Params> params(
-      developer::ShowPermissionsDialog::Params::Create(args()));
+  absl::optional<developer::ShowPermissionsDialog::Params> params =
+      developer::ShowPermissionsDialog::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* target_extension = GetExtensionById(params->extension_id);
@@ -1302,8 +1322,8 @@ void DeveloperPrivateShowPermissionsDialogFunction::Finish() {
 DeveloperPrivateLoadUnpackedFunction::DeveloperPrivateLoadUnpackedFunction() {}
 
 ExtensionFunction::ResponseAction DeveloperPrivateLoadUnpackedFunction::Run() {
-  std::unique_ptr<developer::LoadUnpacked::Params> params(
-      developer::LoadUnpacked::Params::Create(args()));
+  absl::optional<developer::LoadUnpacked::Params> params =
+      developer::LoadUnpacked::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   content::WebContents* web_contents = GetSenderWebContents();
@@ -1311,10 +1331,14 @@ ExtensionFunction::ResponseAction DeveloperPrivateLoadUnpackedFunction::Run() {
     return RespondNow(Error(kCouldNotFindWebContentsError));
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
-  if (profile->IsChild()) {
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  SupervisedUserService* service =
+      SupervisedUserServiceFactory::GetForProfile(profile);
+  if (service->AreExtensionsPermissionsEnabled()) {
     return RespondNow(
         Error("Child account users cannot load unpacked extensions."));
   }
+#endif
   PrefService* prefs = profile->GetPrefs();
   if (!prefs->GetBoolean(prefs::kExtensionsUIDeveloperMode)) {
     return RespondNow(
@@ -1552,8 +1576,8 @@ void DeveloperPrivatePackDirectoryFunction::OnPackFailure(
 }
 
 ExtensionFunction::ResponseAction DeveloperPrivatePackDirectoryFunction::Run() {
-  std::unique_ptr<PackDirectory::Params> params(
-      PackDirectory::Params::Create(args()));
+  absl::optional<PackDirectory::Params> params =
+      PackDirectory::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   int flags = params->flags ? *params->flags : 0;
@@ -1835,8 +1859,8 @@ DeveloperPrivateLoadDirectoryFunction::~DeveloperPrivateLoadDirectoryFunction()
     {}
 
 ExtensionFunction::ResponseAction DeveloperPrivateChoosePathFunction::Run() {
-  std::unique_ptr<developer::ChoosePath::Params> params(
-      developer::ChoosePath::Params::Create(args()));
+  absl::optional<developer::ChoosePath::Params> params =
+      developer::ChoosePath::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ui::SelectFileDialog::Type type = ui::SelectFileDialog::SELECT_FOLDER;
@@ -1892,8 +1916,14 @@ DeveloperPrivateChoosePathFunction::~DeveloperPrivateChoosePathFunction() {}
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateIsProfileManagedFunction::Run() {
-  return RespondNow(
-      WithArguments(Profile::FromBrowserContext(browser_context())->IsChild()));
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  SupervisedUserService* service =
+      SupervisedUserServiceFactory::GetForProfile(profile);
+  return RespondNow(WithArguments(service->AreExtensionsPermissionsEnabled()));
+#else
+  return RespondNow(WithArguments(false));
+#endif
 }
 
 DeveloperPrivateIsProfileManagedFunction::
@@ -1977,8 +2007,8 @@ DeveloperPrivateOpenDevToolsFunction::~DeveloperPrivateOpenDevToolsFunction() {}
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateOpenDevToolsFunction::Run() {
-  std::unique_ptr<developer::OpenDevTools::Params> params(
-      developer::OpenDevTools::Params::Create(args()));
+  absl::optional<developer::OpenDevTools::Params> params =
+      developer::OpenDevTools::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   const developer::OpenDevToolsProperties& properties = params->properties;
 
@@ -2066,8 +2096,8 @@ DeveloperPrivateDeleteExtensionErrorsFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateDeleteExtensionErrorsFunction::Run() {
-  std::unique_ptr<developer::DeleteExtensionErrors::Params> params(
-      developer::DeleteExtensionErrors::Params::Create(args()));
+  absl::optional<developer::DeleteExtensionErrors::Params> params =
+      developer::DeleteExtensionErrors::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   const developer::DeleteExtensionErrorsProperties& properties =
       params->properties;
@@ -2094,8 +2124,8 @@ DeveloperPrivateRepairExtensionFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateRepairExtensionFunction::Run() {
-  std::unique_ptr<developer::RepairExtension::Params> params(
-      developer::RepairExtension::Params::Create(args()));
+  absl::optional<developer::RepairExtension::Params> params =
+      developer::RepairExtension::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   const Extension* extension = GetExtensionById(params->extension_id);
   if (!extension)
@@ -2140,8 +2170,8 @@ void DeveloperPrivateRepairExtensionFunction::OnReinstallComplete(
 DeveloperPrivateShowOptionsFunction::~DeveloperPrivateShowOptionsFunction() {}
 
 ExtensionFunction::ResponseAction DeveloperPrivateShowOptionsFunction::Run() {
-  std::unique_ptr<developer::ShowOptions::Params> params(
-      developer::ShowOptions::Params::Create(args()));
+  absl::optional<developer::ShowOptions::Params> params =
+      developer::ShowOptions::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   const Extension* extension = GetEnabledExtensionById(params->extension_id);
   if (!extension)
@@ -2163,8 +2193,8 @@ ExtensionFunction::ResponseAction DeveloperPrivateShowOptionsFunction::Run() {
 DeveloperPrivateShowPathFunction::~DeveloperPrivateShowPathFunction() {}
 
 ExtensionFunction::ResponseAction DeveloperPrivateShowPathFunction::Run() {
-  std::unique_ptr<developer::ShowPath::Params> params(
-      developer::ShowPath::Params::Create(args()));
+  absl::optional<developer::ShowPath::Params> params =
+      developer::ShowPath::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   const Extension* extension = GetExtensionById(params->extension_id);
   if (!extension)
@@ -2183,8 +2213,8 @@ DeveloperPrivateSetShortcutHandlingSuspendedFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateSetShortcutHandlingSuspendedFunction::Run() {
-  std::unique_ptr<developer::SetShortcutHandlingSuspended::Params> params(
-      developer::SetShortcutHandlingSuspended::Params::Create(args()));
+  absl::optional<developer::SetShortcutHandlingSuspended::Params> params =
+      developer::SetShortcutHandlingSuspended::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   ExtensionCommandsGlobalRegistry::Get(browser_context())
       ->SetShortcutHandlingSuspended(params->is_suspended);
@@ -2196,8 +2226,8 @@ DeveloperPrivateUpdateExtensionCommandFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateUpdateExtensionCommandFunction::Run() {
-  std::unique_ptr<developer::UpdateExtensionCommand::Params> params(
-      developer::UpdateExtensionCommand::Params::Create(args()));
+  absl::optional<developer::UpdateExtensionCommand::Params> params =
+      developer::UpdateExtensionCommand::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   const developer::ExtensionCommandUpdate& update = params->update;
 
@@ -2223,8 +2253,8 @@ DeveloperPrivateAddHostPermissionFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateAddHostPermissionFunction::Run() {
-  std::unique_ptr<developer::AddHostPermission::Params> params(
-      developer::AddHostPermission::Params::Create(args()));
+  absl::optional<developer::AddHostPermission::Params> params =
+      developer::AddHostPermission::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   absl::optional<URLPattern> pattern =
@@ -2266,8 +2296,8 @@ DeveloperPrivateRemoveHostPermissionFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateRemoveHostPermissionFunction::Run() {
-  std::unique_ptr<developer::RemoveHostPermission::Params> params(
-      developer::RemoveHostPermission::Params::Create(args()));
+  absl::optional<developer::RemoveHostPermission::Params> params =
+      developer::RemoveHostPermission::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   absl::optional<URLPattern> pattern =
@@ -2329,8 +2359,8 @@ DeveloperPrivateAddUserSpecifiedSitesFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateAddUserSpecifiedSitesFunction::Run() {
-  std::unique_ptr<developer::AddUserSpecifiedSites::Params> params(
-      developer::AddUserSpecifiedSites::Params::Create(args()));
+  absl::optional<developer::AddUserSpecifiedSites::Params> params =
+      developer::AddUserSpecifiedSites::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::set<url::Origin> origins;
@@ -2368,8 +2398,8 @@ DeveloperPrivateRemoveUserSpecifiedSitesFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateRemoveUserSpecifiedSitesFunction::Run() {
-  std::unique_ptr<developer::RemoveUserSpecifiedSites::Params> params(
-      developer::RemoveUserSpecifiedSites::Params::Create(args()));
+  absl::optional<developer::RemoveUserSpecifiedSites::Params> params =
+      developer::RemoveUserSpecifiedSites::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::set<url::Origin> origins;
@@ -2498,8 +2528,8 @@ DeveloperPrivateGetMatchingExtensionsForSiteFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateGetMatchingExtensionsForSiteFunction::Run() {
-  std::unique_ptr<developer::GetMatchingExtensionsForSite::Params> params(
-      developer::GetMatchingExtensionsForSite::Params::Create(args()));
+  absl::optional<developer::GetMatchingExtensionsForSite::Params> params =
+      developer::GetMatchingExtensionsForSite::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   URLPattern parsed_site(Extension::kValidHostPermissionSchemes);
@@ -2508,12 +2538,12 @@ DeveloperPrivateGetMatchingExtensionsForSiteFunction::Run() {
 
   std::vector<developer::MatchingExtensionInfo> matching_extensions;
   URLPatternSet site_pattern({parsed_site});
-  std::unique_ptr<ExtensionSet> all_extensions =
+  const ExtensionSet all_extensions =
       ExtensionRegistry::Get(browser_context())
           ->GenerateInstalledExtensionsSet(
               ExtensionRegistry::ENABLED | ExtensionRegistry::DISABLED |
               ExtensionRegistry::TERMINATED | ExtensionRegistry::BLOCKLISTED);
-  for (const auto& extension : *all_extensions) {
+  for (const auto& extension : all_extensions) {
     const URLPatternSet& extension_withheld_sites =
         extension->permissions_data()->withheld_permissions().effective_hosts();
     const URLPatternSet granted_intersection =
@@ -2560,8 +2590,8 @@ DeveloperPrivateUpdateSiteAccessFunction::
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateUpdateSiteAccessFunction::Run() {
-  std::unique_ptr<developer::UpdateSiteAccess::Params> params(
-      developer::UpdateSiteAccess::Params::Create(args()));
+  absl::optional<developer::UpdateSiteAccess::Params> params =
+      developer::UpdateSiteAccess::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   URLPattern parsed_site(Extension::kValidHostPermissionSchemes);

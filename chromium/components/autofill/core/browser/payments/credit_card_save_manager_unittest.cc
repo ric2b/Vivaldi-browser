@@ -14,7 +14,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/guid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/strings/string_number_conversions.h"
@@ -30,6 +29,7 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/credit_card_save_metrics.h"
+#include "components/autofill/core/browser/payments/client_behavior_constants.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/payments/test_credit_card_save_manager.h"
@@ -129,9 +129,10 @@ class MockPersonalDataManager : public TestPersonalDataManager {
 class MockAutofillClient : public TestAutofillClient {
  public:
   explicit MockAutofillClient(
-      std::unique_ptr<TestPersonalDataManager> pdm = nullptr)
-      : TestAutofillClient(pdm ? std::move(pdm)
-                               : std::make_unique<TestPersonalDataManager>()) {}
+      std::unique_ptr<TestPersonalDataManager> pdm = nullptr) {
+    set_personal_data_manager(
+        pdm ? std::move(pdm) : std::make_unique<TestPersonalDataManager>());
+  }
   ~MockAutofillClient() override = default;
   MOCK_METHOD(VirtualCardEnrollmentManager*,
               GetVirtualCardEnrollmentManager,
@@ -157,7 +158,7 @@ class MockVirtualCardEnrollmentManager
        absl::optional<
            payments::PaymentsClient::GetDetailsForEnrollmentResponseDetails>
            get_details_for_enrollment_response_details,
-       const raw_ptr<PrefService> user_prefs,
+       PrefService* user_prefs,
        VirtualCardEnrollmentManager::RiskAssessmentFunction
            risk_assessment_function,
        VirtualCardEnrollmentManager::VirtualCardEnrollmentFieldsLoadedCallback
@@ -184,11 +185,10 @@ class CreditCardSaveManagerTest : public testing::Test {
                          /*pref_service=*/autofill_client_.GetPrefs(),
                          /*local_state=*/autofill_client_.GetPrefs(),
                          /*identity_manager=*/nullptr,
-                         /*history_service=*/nullptr,
+                         /*history_service=*/nullptr, &sync_service_,
                          /*strike_database=*/nullptr,
                          /*image_fetcher=*/nullptr,
                          /*is_off_the_record=*/false);
-    personal_data().OnSyncServiceInitialized(&sync_service_);
     autofill_driver_ = std::make_unique<TestAutofillDriver>();
     payments_client_ = new payments::TestPaymentsClient(
         autofill_client_.GetURLLoaderFactory(),
@@ -396,15 +396,15 @@ class CreditCardSaveManagerTest : public testing::Test {
   }
 
   base::test::TaskEnvironment task_environment_;
-  test::AutofillEnvironment autofill_environment_;
-  MockAutofillClient autofill_client_{
-      std::make_unique<MockPersonalDataManager>()};
+  test::AutofillUnitTestEnvironment autofill_test_environment_;
   std::unique_ptr<MockVirtualCardEnrollmentManager>
       virtual_card_enrollment_manager_;
   std::unique_ptr<TestAutofillDriver> autofill_driver_;
   std::unique_ptr<TestBrowserAutofillManager> browser_autofill_manager_;
   scoped_refptr<AutofillWebDataService> database_;
   syncer::TestSyncService sync_service_;
+  MockAutofillClient autofill_client_{
+      std::make_unique<MockPersonalDataManager>()};
   // TODO(crbug.com/1291003): Refactor to use the real CreditCardSaveManager.
   // Ends up getting owned (and destroyed) by TestFormDataImporter:
   raw_ptr<TestCreditCardSaveManager> credit_card_save_manager_;
@@ -502,7 +502,8 @@ TEST_F(CreditCardSaveManagerTest, InvalidCreditCardNumberIsNotSaved) {
 }
 
 TEST_F(CreditCardSaveManagerTest, CreditCardDisabledDoesNotSave) {
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
 
   // Create, fill and submit an address form in order to establish a recent
   // profile which can be selected for the upload request.
@@ -567,7 +568,7 @@ TEST_F(CreditCardSaveManagerTest, UploadCreditCard_OnlyCountryInAddresses) {
   FormSubmitted(credit_card_form);
   EXPECT_FALSE(autofill_client_.ConfirmSaveCardLocallyWasCalled());
   EXPECT_TRUE(credit_card_save_manager_->CreditCardWasUploaded());
-  EXPECT_TRUE(payments_client_->active_experiments_in_request().empty());
+  EXPECT_TRUE(payments_client_->client_behavior_signals_in_request().empty());
 
   // Verify that even though the full address profile was saved, only the
   // country was included in the upload details request to payments.
@@ -1687,6 +1688,70 @@ TEST_F(CreditCardSaveManagerTest, UploadCreditCard_NoNameAvailable) {
       autofill_metrics::USER_REQUESTED_TO_PROVIDE_CARDHOLDER_NAME);
 }
 #endif
+
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+TEST_F(CreditCardSaveManagerTest,
+       AttemptToOfferCardUploadSave_AutofillEnableNewSaveCardBubbleUiEnabled) {
+  // Setting the flag to enable the new bubble for Save Card UI.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kAutofillEnableNewSaveCardBubbleUi);
+
+  // Set up our credit card form data.
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, CreditCardFormOptions());
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  // Edit the data, and submit.
+  credit_card_form.fields[0].value = u"Jane Doe";
+  credit_card_form.fields[1].value = u"4111111111111111";
+  credit_card_form.fields[2].value = ASCIIToUTF16(test::NextMonth());
+  credit_card_form.fields[3].value = ASCIIToUTF16(test::NextYear());
+  credit_card_form.fields[4].value = u"123";
+  FormSubmitted(credit_card_form);
+
+  EXPECT_FALSE(autofill_client_.ConfirmSaveCardLocallyWasCalled());
+  EXPECT_TRUE(credit_card_save_manager_->CreditCardWasUploaded());
+
+  // Confirm that client_behavior_signals vector does contain the
+  // FasterAndProtected signal.
+  std::vector<ClientBehaviorConstants> client_behavior_signals_in_request =
+      payments_client_->client_behavior_signals_in_request();
+  EXPECT_THAT(
+      client_behavior_signals_in_request,
+      testing::Contains(ClientBehaviorConstants::kUsingFasterAndProtectedUi));
+}
+
+TEST_F(CreditCardSaveManagerTest,
+       AttemptToOfferCardUploadSave_AutofillEnableNewSaveCardBubbleUiDisabled) {
+  // Setting the flag to disable the new bubble for Save Card UI.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      features::kAutofillEnableNewSaveCardBubbleUi);
+
+  FormData credit_card_form;
+  CreateTestCreditCardFormData(&credit_card_form, CreditCardFormOptions());
+  FormsSeen(std::vector<FormData>(1, credit_card_form));
+
+  credit_card_form.fields[0].value = u"Jane Doe";
+  credit_card_form.fields[1].value = u"4111111111111111";
+  credit_card_form.fields[2].value = ASCIIToUTF16(test::NextMonth());
+  credit_card_form.fields[3].value = ASCIIToUTF16(test::NextYear());
+  credit_card_form.fields[4].value = u"123";
+  FormSubmitted(credit_card_form);
+
+  EXPECT_FALSE(autofill_client_.ConfirmSaveCardLocallyWasCalled());
+  EXPECT_TRUE(credit_card_save_manager_->CreditCardWasUploaded());
+
+  // Confirm that client_behavior_signals vector does not contain the
+  // FasterAndProtected signal.
+  std::vector<ClientBehaviorConstants> client_behavior_signals_in_request =
+      payments_client_->client_behavior_signals_in_request();
+  EXPECT_THAT(client_behavior_signals_in_request,
+              testing::Not(testing::Contains(
+                  ClientBehaviorConstants::kUsingFasterAndProtectedUi)));
+}
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 
 // TODO(crbug.com/1113034): Create an equivalent test for iOS, or skip
 // permanently if the test doesn't apply to iOS flow.
@@ -3106,7 +3171,7 @@ TEST_F(CreditCardSaveManagerTest, DuplicateMaskedCreditCard_NoUpload) {
   credit_card_form.fields[3].value = ASCIIToUTF16(test::NextYear());
   credit_card_form.fields[4].value = u"123";
 
-  // Local save prompt should not be shown as there is alredy masked
+  // Local save prompt should not be shown as there is already masked
   // card with same |TypeAndLastFourDigits|.
   FormSubmitted(credit_card_form);
   EXPECT_FALSE(autofill_client_.ConfirmSaveCardLocallyWasCalled());
@@ -4216,7 +4281,7 @@ TEST_F(CreditCardSaveManagerTest,
   FormSubmitted(credit_card_form);
   EXPECT_FALSE(autofill_client_.ConfirmSaveCardLocallyWasCalled());
   EXPECT_TRUE(credit_card_save_manager_->CreditCardWasUploaded());
-  EXPECT_TRUE(payments_client_->active_experiments_in_request().empty());
+  EXPECT_TRUE(payments_client_->client_behavior_signals_in_request().empty());
 }
 
 TEST_F(CreditCardSaveManagerTest,

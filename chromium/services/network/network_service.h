@@ -15,7 +15,6 @@
 #include "base/component_export.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/containers/span.h"
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
@@ -74,7 +73,6 @@ class URLRequestContext;
 
 namespace network {
 
-class CRLSetDistributor;
 class CtLogListDistributor;
 class DnsConfigChangeManager;
 class HttpAuthCacheCopier;
@@ -176,9 +174,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void GetNetworkList(
       uint32_t policy,
       mojom::NetworkService::GetNetworkListCallback callback) override;
-  void UpdateCRLSet(
-      base::span<const uint8_t> crl_set,
-      mojom::NetworkService::UpdateCRLSetCallback callback) override;
   void OnCertDBChanged() override;
   void SetEncryptionKey(const std::string& encryption_key) override;
   void OnMemoryPressure(base::MemoryPressureListener::MemoryPressureLevel
@@ -194,6 +189,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void ParseHeaders(const GURL& url,
                     const scoped_refptr<net::HttpResponseHeaders>& headers,
                     ParseHeadersCallback callback) override;
+  void EnableDataUseUpdates(bool enable) override;
 #if BUILDFLAG(IS_CT_SUPPORTED)
   void ClearSCTAuditingCache() override;
   void ConfigureSCTAuditing(
@@ -242,10 +238,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   }
   HttpAuthCacheCopier* http_auth_cache_copier() {
     return http_auth_cache_copier_.get();
-  }
-
-  CRLSetDistributor* crl_set_distributor() {
-    return crl_set_distributor_.get();
   }
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
@@ -301,6 +293,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   }
 
   base::Time pins_list_update_time() const { return pins_list_update_time_; }
+
+  bool data_use_updates_enabled() const { return data_use_updates_enabled_; }
 
   mojom::URLLoaderNetworkServiceObserver*
   GetDefaultURLLoaderNetworkServiceObserver();
@@ -407,8 +401,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
 
   bool quic_disabled_ = false;
 
-  std::unique_ptr<CRLSetDistributor> crl_set_distributor_;
-
   // Whether new NetworkContexts will be configured to partition their
   // HttpAuthCaches by NetworkIsolationKey.
   bool split_auth_cache_by_network_isolation_key_ = false;
@@ -439,6 +431,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   std::vector<net::TransportSecurityState::PinSetInfo> host_pins_;
 
   base::Time pins_list_update_time_;
+
+  bool data_use_updates_enabled_ = false;
 
   // This is used only in tests. It avoids leaky SystemDnsConfigChangeNotifiers
   // leaking stale listeners between tests.

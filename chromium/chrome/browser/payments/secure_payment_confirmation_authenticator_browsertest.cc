@@ -12,8 +12,7 @@
 #include "components/payments/content/secure_payment_confirmation_app.h"
 #include "components/payments/core/journey_logger.h"
 #include "components/payments/core/secure_payment_confirmation_metrics.h"
-#include "content/public/browser/authenticator_environment.h"
-#include "content/public/common/content_features.h"
+#include "content/public/browser/scoped_authenticator_environment_for_testing.h"
 #include "content/public/test/browser_test.h"
 #include "device/fido/virtual_fido_device_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -51,14 +50,10 @@ class SecurePaymentConfirmationAuthenticatorTestBase
   };
 
   // Installs a virtual FIDO authenticator device for the tests.
-  void ReplaceFidoDiscoveryFactory(bool should_succeed,
-                                   bool should_hang = false) {
-    auto owned_virtual_device_factory =
+  std::unique_ptr<content::ScopedAuthenticatorEnvironmentForTesting>
+  ReplaceFidoDiscoveryFactory(bool should_succeed, bool should_hang = false) {
+    auto virtual_device_factory =
         std::make_unique<device::test::VirtualFidoDeviceFactory>();
-    auto* virtual_device_factory = owned_virtual_device_factory.get();
-    content::AuthenticatorEnvironment::GetInstance()
-        ->ReplaceDefaultDiscoveryFactoryForTesting(
-            std::move(owned_virtual_device_factory));
     virtual_device_factory->SetTransport(
         device::FidoTransportProtocol::kInternal);
     virtual_device_factory->SetSupportedProtocol(
@@ -80,6 +75,9 @@ class SecurePaymentConfirmationAuthenticatorTestBase
     config.internal_uv_support = true;
     config.user_verification_succeeds = should_succeed;
     virtual_device_factory->SetCtap2Config(config);
+
+    return std::make_unique<content::ScopedAuthenticatorEnvironmentForTesting>(
+        std::move(virtual_device_factory));
   }
 
   // Creates an SPC-enabled WebAuthn credential, and places information about it
@@ -165,7 +163,7 @@ using SecurePaymentConfirmationAuthenticatorCreateTest =
 
 IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorCreateTest,
                        CreatePaymentCredential) {
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
   NavigateTo("a.com", "/secure_payment_confirmation.html");
 
   PaymentCredentialInfo info;
@@ -194,7 +192,7 @@ IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorCreateTest,
 // b.com cannot create a credential with RP = "a.com".
 IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorCreateTest,
                        RelyingPartyIsEnforced) {
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
   NavigateTo("b.com", "/secure_payment_confirmation.html");
   EXPECT_EQ(
       "SecurityError: The relying party ID is not a registrable domain suffix "
@@ -204,7 +202,8 @@ IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorCreateTest,
 
 IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorCreateTest,
                        WebContentsClosedDuringEnrollmentOSPrompt) {
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true, /*should_hang=*/true);
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true,
+                                                     /*should_hang=*/true);
   NavigateTo("a.com", "/secure_payment_confirmation.html");
 
   std::list<Event> expected_events_ =
@@ -212,13 +211,13 @@ IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorCreateTest,
   event_waiter_ =
       std::make_unique<autofill::EventWaiter<Event>>(expected_events_);
   ExecuteScriptAsync(GetActiveWebContents(), "createPaymentCredential()");
-  event_waiter_->Wait();
+  ASSERT_TRUE(event_waiter_->Wait());
 
   // Expect no crash when the web contents is destroyed during enrollment while
   // the OS enrollment prompt is showing.
   ObserveWebContentsDestroyed();
   GetActiveWebContents()->Close();
-  event_waiter_->Wait();
+  ASSERT_TRUE(event_waiter_->Wait());
 }
 
 class SecurePaymentConfirmationAuthenticatorCreateDisableDebugTest
@@ -238,7 +237,7 @@ IN_PROC_BROWSER_TEST_F(
     SecurePaymentConfirmationAuthenticatorCreateDisableDebugTest,
     RequireUserVerifyingPlatformAuthenticator) {
   test_controller()->SetHasAuthenticator(false);
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
   NavigateTo("a.com", "/secure_payment_confirmation.html");
   EXPECT_EQ(
       "NotSupportedError: A user verifying platform authenticator with "
@@ -250,300 +249,9 @@ using SecurePaymentConfirmationAuthenticatorGetTest =
     SecurePaymentConfirmationAuthenticatorTestBase;
 
 IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
-                       ConfirmPaymentInCrossOriginIframeWithPayeeName) {
+                       ConfirmPaymentInCrossOriginIframe) {
   NavigateTo("a.com", "/secure_payment_confirmation.html");
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
-
-  PaymentCredentialInfo credential_info;
-  CreatePaymentCredential(&credential_info);
-
-  // Load a cross-origin iframe that can initiate SPC.
-  content::WebContents* tab = GetActiveWebContents();
-  GURL iframe_url = https_server()->GetURL(
-      "b.com", "/secure_payment_confirmation_iframe.html");
-  EXPECT_TRUE(content::NavigateIframeToURL(tab, "test", iframe_url));
-
-  test_controller()->SetHasAuthenticator(true);
-  confirm_payment_ = true;
-
-  // Trigger SPC and capture the response.
-  // EvalJs waits for JavaScript promise to resolve.
-  content::RenderFrameHost* iframe = content::FrameMatchingPredicate(
-      tab->GetPrimaryPage(),
-      base::BindRepeating(&content::FrameHasSourceUrl, iframe_url));
-  std::string response =
-      content::EvalJs(iframe,
-                      content::JsReplace("requestPaymentWithPayeeName($1);",
-                                         credential_info.id))
-          .ExtractString();
-
-  ASSERT_EQ(std::string::npos, response.find("Error"));
-  absl::optional<base::Value> value = base::JSONReader::Read(response);
-  ASSERT_TRUE(value.has_value());
-  ASSERT_TRUE(value->is_dict());
-
-  std::string* payee_name = value->FindStringPath("payment.payeeName");
-  ASSERT_NE(nullptr, payee_name) << response;
-  EXPECT_EQ("Example Payee", *payee_name);
-
-  std::string* payee_origin = value->FindStringPath("payment.payeeOrigin");
-  ASSERT_EQ(nullptr, payee_origin) << response;
-
-  ExpectEnrollSystemPromptResult(
-      SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
-  ExpectAuthSystemPromptResult(
-      SecurePaymentConfirmationSystemPromptResult::kAccepted, 1);
-  ExpectEvent2Histogram({Event2::kInitiated, Event2::kShown, Event2::kCompleted,
-                         Event2::kPayClicked, Event2::kHadInitialFormOfPayment,
-                         Event2::kRequestMethodSecurePaymentConfirmation,
-                         Event2::kSelectedSecurePaymentConfirmation});
-}
-
-IN_PROC_BROWSER_TEST_F(
-    SecurePaymentConfirmationAuthenticatorGetTest,
-    ConfirmPaymentInCrossOriginIframeWithPayeeNameAndOrigin) {
-  NavigateTo("a.com", "/secure_payment_confirmation.html");
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
-
-  PaymentCredentialInfo credential_info;
-  CreatePaymentCredential(&credential_info);
-
-  // Load a cross-origin iframe that can initiate SPC.
-  content::WebContents* tab = GetActiveWebContents();
-  GURL iframe_url = https_server()->GetURL(
-      "b.com", "/secure_payment_confirmation_iframe.html");
-  EXPECT_TRUE(content::NavigateIframeToURL(tab, "test", iframe_url));
-
-  test_controller()->SetHasAuthenticator(true);
-  confirm_payment_ = true;
-
-  // Trigger SPC and capture the response.
-  // EvalJs waits for JavaScript promise to resolve.
-  content::RenderFrameHost* iframe = content::FrameMatchingPredicate(
-      tab->GetPrimaryPage(),
-      base::BindRepeating(&content::FrameHasSourceUrl, iframe_url));
-  std::string response =
-      content::EvalJs(iframe, content::JsReplace(
-                                  "requestPaymentWithPayeeNameAndOrigin($1);",
-                                  credential_info.id))
-          .ExtractString();
-
-  ASSERT_EQ(std::string::npos, response.find("Error"));
-  absl::optional<base::Value> value = base::JSONReader::Read(response);
-  ASSERT_TRUE(value.has_value());
-  ASSERT_TRUE(value->is_dict());
-
-  std::string* payee_name = value->FindStringPath("payment.payeeName");
-  ASSERT_NE(nullptr, payee_name) << response;
-  EXPECT_EQ("Example Payee", *payee_name);
-
-  std::string* payee_origin = value->FindStringPath("payment.payeeOrigin");
-  ASSERT_NE(nullptr, payee_origin) << response;
-  EXPECT_EQ(GURL("https://example-payee-origin.test"), GURL(*payee_origin));
-
-  ExpectEnrollSystemPromptResult(
-      SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
-  ExpectAuthSystemPromptResult(
-      SecurePaymentConfirmationSystemPromptResult::kAccepted, 1);
-  ExpectEvent2Histogram({Event2::kInitiated, Event2::kShown, Event2::kCompleted,
-                         Event2::kPayClicked, Event2::kHadInitialFormOfPayment,
-                         Event2::kRequestMethodSecurePaymentConfirmation,
-                         Event2::kSelectedSecurePaymentConfirmation});
-}
-
-// Test allowing a failed icon download with iconMustBeShown option
-IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
-                       IconMustBeShownFalse) {
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
-  test_controller()->SetHasAuthenticator(true);
-  confirm_payment_ = true;
-  NavigateTo("a.com", "/secure_payment_confirmation.html");
-
-  PaymentCredentialInfo credential_info;
-  CreatePaymentCredential(&credential_info);
-
-  // First ensure the icon URL is successfully parsed from clientData for a
-  // valid icon.
-  std::string icon_data =
-      "data:image/"
-      "png;base64,"
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAA1BMVEUAAACnej3aAAAAAXRS"
-      "TlMAQObYZgAAAApJREFUCNdjYAAAAAIAAeIhvDMAAAAASUVORK5CYII=";
-  EXPECT_EQ(icon_data,
-            content::EvalJs(
-                GetActiveWebContents(),
-                content::JsReplace(
-                    "getSecurePaymentConfirmationResponseIconWithInstrument({"
-                    "  displayName: 'display_name_for_instrument',"
-                    "  icon: $1,"
-                    "  iconMustBeShown: false,"
-                    "}, $2)",
-                    icon_data, credential_info.id)));
-
-  // Now verify that the icon string is cleared from clientData for an invalid
-  // icon.
-  EXPECT_EQ("",
-            content::EvalJs(
-                GetActiveWebContents(),
-                content::JsReplace(
-                    "getSecurePaymentConfirmationResponseIconWithInstrument({"
-                    "  displayName: 'display_name_for_instrument',"
-                    "  icon: 'https://example.test/invalid-icon.png',"
-                    "  iconMustBeShown: false,"
-                    "}, $1)",
-                    credential_info.id)));
-}
-
-IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
-                       MultipleRegisteredCredentials) {
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
-  NavigateTo("a.com", "/secure_payment_confirmation.html");
-
-  PaymentCredentialInfo first_info;
-  CreatePaymentCredential(&first_info, "user_123");
-  PaymentCredentialInfo second_info;
-  CreatePaymentCredential(&second_info, "user_456");
-
-  ASSERT_NE(first_info.id, second_info.id);
-
-  NavigateTo("b.com", "/get_challenge.html");
-  test_controller()->SetHasAuthenticator(true);
-  confirm_payment_ = true;
-  std::string expected_result = "0.01";
-
-  EXPECT_EQ(expected_result,
-            content::EvalJs(
-                GetActiveWebContents(),
-                content::JsReplace("getTotalAmountFromClientData($1, $2);",
-                                   first_info.id, "0.01")));
-  EXPECT_EQ(expected_result,
-            content::EvalJs(
-                GetActiveWebContents(),
-                content::JsReplace("getTotalAmountFromClientData($1, $2);",
-                                   second_info.id, "0.01")));
-}
-
-IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
-                       UserVerificationFails) {
-  NavigateTo("a.com", "/secure_payment_confirmation.html");
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
-
-  PaymentCredentialInfo credential_info;
-  CreatePaymentCredential(&credential_info);
-
-  NavigateTo("b.com", "/get_challenge.html");
-  test_controller()->SetHasAuthenticator(true);
-  // Make the authenticator fail to simulate the user cancelling out of the
-  // WebAuthn dialog.
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/false);
-  confirm_payment_ = true;
-
-  // EvalJs waits for JavaScript promise to resolve.
-  EXPECT_EQ(
-      "The operation either timed out or was not allowed. See: "
-      "https://www.w3.org/TR/webauthn-2/#sctn-privacy-considerations-client.",
-      content::EvalJs(
-          GetActiveWebContents(),
-          content::JsReplace("getTotalAmountFromClientData($1, $2);",
-                             credential_info.id, "0.01")));
-
-  ExpectEnrollSystemPromptResult(
-      SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
-  ExpectAuthSystemPromptResult(
-      SecurePaymentConfirmationSystemPromptResult::kCanceled, 1);
-  // WebAuthn dialog failure is recorded as kOtherAborted. Since we made it
-  // past the Transaction UX to the WebAuthn dialog, we should still log
-  // kPayClicked and kSelectedSecurePaymentConfirmation.
-  ExpectEvent2Histogram({Event2::kInitiated, Event2::kShown,
-                         Event2::kOtherAborted, Event2::kPayClicked,
-                         Event2::kHadInitialFormOfPayment,
-                         Event2::kRequestMethodSecurePaymentConfirmation,
-                         Event2::kSelectedSecurePaymentConfirmation});
-}
-
-IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
-                       HandlesShowPromisesAndModifiers) {
-  NavigateTo("a.com", "/secure_payment_confirmation.html");
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
-
-  PaymentCredentialInfo credential_info;
-  CreatePaymentCredential(&credential_info);
-
-  NavigateTo("b.com", "/get_challenge.html");
-  test_controller()->SetHasAuthenticator(true);
-  confirm_payment_ = true;
-
-  // EvalJs waits for JavaScript promise to resolve.
-  EXPECT_EQ("0.01", content::EvalJs(GetActiveWebContents(),
-                                    content::JsReplace(
-                                        "getTotalAmountFromClientData($1, $2);",
-                                        credential_info.id, "0.01")));
-
-  // Verify that passing a promise into PaymentRequest.show() that updates the
-  // `total` price will result in the client data price being set only after the
-  // promise resolves with the finalized price.
-  EXPECT_EQ("0.02",
-            content::EvalJs(
-                GetActiveWebContents(),
-                content::JsReplace(
-                    "getTotalAmountFromClientDataWithShowPromise($1, $2);",
-                    credential_info.id, "0.02")));
-
-  // Verify that the returned client data correctly reflects the modified
-  // amount.
-  EXPECT_EQ("0.03", content::EvalJs(
-                        GetActiveWebContents(),
-                        content::JsReplace(
-                            "getTotalAmountFromClientDataWithModifier($1, $2);",
-                            credential_info.id, "0.03")));
-
-  // Verify that the returned client data correctly reflects the modified amount
-  // that is set when the promised passed into PaymentRequest.show() resolves.
-  EXPECT_EQ(
-      "0.04",
-      content::EvalJs(
-          GetActiveWebContents(),
-          content::JsReplace(
-              "getTotalAmountFromClientDataWithModifierAndShowPromise($1, $2);",
-              credential_info.id, "0.04")));
-
-  ExpectEnrollSystemPromptResult(
-      SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
-  ExpectAuthSystemPromptResult(
-      SecurePaymentConfirmationSystemPromptResult::kAccepted, 4);
-}
-
-// TODO(crbug.com/1356224): Fold back into
-// SecurePaymentConfirmationAuthenticatorGetTest once 'rp' field is completely
-// removed.
-class SecurePaymentConfirmationParameterizedAuthenticatorGetTest
-    : public SecurePaymentConfirmationAuthenticatorGetTest,
-      public testing::WithParamInterface<bool> {
- public:
-  SecurePaymentConfirmationParameterizedAuthenticatorGetTest() {
-    if (IsRpFieldEnabled()) {
-      features_.InitAndDisableFeature(
-          ::features::kSecurePaymentConfirmationRemoveRpField);
-    } else {
-      features_.InitAndEnableFeature(
-          ::features::kSecurePaymentConfirmationRemoveRpField);
-    }
-  }
-
-  ~SecurePaymentConfirmationParameterizedAuthenticatorGetTest() override =
-      default;
-
-  bool IsRpFieldEnabled() { return GetParam(); }
-
- private:
-  base::test::ScopedFeatureList features_;
-};
-
-IN_PROC_BROWSER_TEST_P(
-    SecurePaymentConfirmationParameterizedAuthenticatorGetTest,
-    ConfirmPaymentInCrossOriginIframe) {
-  NavigateTo("a.com", "/secure_payment_confirmation.html");
-  ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
 
   PaymentCredentialInfo credential_info;
   CreatePaymentCredential(&credential_info);
@@ -601,12 +309,58 @@ IN_PROC_BROWSER_TEST_P(
   ASSERT_NE(nullptr, rpId) << response;
   EXPECT_EQ("a.com", *rpId);
 
-  // TODO(crbug.com/1356224): Remove legacy 'rp' parameter.
-  if (IsRpFieldEnabled()) {
-    const std::string* rp = value_dict.FindStringByDottedPath("payment.rp");
-    ASSERT_NE(nullptr, rp) << response;
-    EXPECT_EQ("a.com", *rp);
-  }
+  ExpectEnrollSystemPromptResult(
+      SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
+  ExpectAuthSystemPromptResult(
+      SecurePaymentConfirmationSystemPromptResult::kAccepted, 1);
+  ExpectEvent2Histogram({Event2::kInitiated, Event2::kShown, Event2::kCompleted,
+                         Event2::kPayClicked, Event2::kHadInitialFormOfPayment,
+                         Event2::kRequestMethodSecurePaymentConfirmation,
+                         Event2::kSelectedSecurePaymentConfirmation});
+}
+
+IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
+                       ConfirmPaymentInCrossOriginIframeWithPayeeName) {
+  NavigateTo("a.com", "/secure_payment_confirmation.html");
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+
+  PaymentCredentialInfo credential_info;
+  CreatePaymentCredential(&credential_info);
+
+  // Load a cross-origin iframe that can initiate SPC.
+  content::WebContents* tab = GetActiveWebContents();
+  GURL iframe_url = https_server()->GetURL(
+      "b.com", "/secure_payment_confirmation_iframe.html");
+  EXPECT_TRUE(content::NavigateIframeToURL(tab, "test", iframe_url));
+
+  test_controller()->SetHasAuthenticator(true);
+  confirm_payment_ = true;
+
+  // Trigger SPC and capture the response.
+  // EvalJs waits for JavaScript promise to resolve.
+  content::RenderFrameHost* iframe = content::FrameMatchingPredicate(
+      tab->GetPrimaryPage(),
+      base::BindRepeating(&content::FrameHasSourceUrl, iframe_url));
+  std::string response =
+      content::EvalJs(iframe,
+                      content::JsReplace("requestPaymentWithPayeeName($1);",
+                                         credential_info.id))
+          .ExtractString();
+
+  ASSERT_EQ(std::string::npos, response.find("Error"));
+  absl::optional<base::Value> value = base::JSONReader::Read(response);
+  ASSERT_TRUE(value.has_value());
+  ASSERT_TRUE(value->is_dict());
+
+  const base::Value::Dict& dict = value->GetDict();
+  const std::string* payee_name =
+      dict.FindStringByDottedPath("payment.payeeName");
+  ASSERT_NE(nullptr, payee_name) << response;
+  EXPECT_EQ("Example Payee", *payee_name);
+
+  const std::string* payee_origin =
+      dict.FindStringByDottedPath("payment.payeeOrigin");
+  ASSERT_EQ(nullptr, payee_origin) << response;
 
   ExpectEnrollSystemPromptResult(
       SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
@@ -618,13 +372,225 @@ IN_PROC_BROWSER_TEST_P(
                          Event2::kSelectedSecurePaymentConfirmation});
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
-    SecurePaymentConfirmationParameterizedAuthenticatorGetTest,
-    testing::Bool(),
-    [](const testing::TestParamInfo<bool>& info) {
-      return info.param ? "RpFieldIncluded" : "RpFieldRemoved";
-    });
+IN_PROC_BROWSER_TEST_F(
+    SecurePaymentConfirmationAuthenticatorGetTest,
+    ConfirmPaymentInCrossOriginIframeWithPayeeNameAndOrigin) {
+  NavigateTo("a.com", "/secure_payment_confirmation.html");
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+
+  PaymentCredentialInfo credential_info;
+  CreatePaymentCredential(&credential_info);
+
+  // Load a cross-origin iframe that can initiate SPC.
+  content::WebContents* tab = GetActiveWebContents();
+  GURL iframe_url = https_server()->GetURL(
+      "b.com", "/secure_payment_confirmation_iframe.html");
+  EXPECT_TRUE(content::NavigateIframeToURL(tab, "test", iframe_url));
+
+  test_controller()->SetHasAuthenticator(true);
+  confirm_payment_ = true;
+
+  // Trigger SPC and capture the response.
+  // EvalJs waits for JavaScript promise to resolve.
+  content::RenderFrameHost* iframe = content::FrameMatchingPredicate(
+      tab->GetPrimaryPage(),
+      base::BindRepeating(&content::FrameHasSourceUrl, iframe_url));
+  std::string response =
+      content::EvalJs(iframe, content::JsReplace(
+                                  "requestPaymentWithPayeeNameAndOrigin($1);",
+                                  credential_info.id))
+          .ExtractString();
+
+  ASSERT_EQ(std::string::npos, response.find("Error"));
+  absl::optional<base::Value> value = base::JSONReader::Read(response);
+  ASSERT_TRUE(value.has_value());
+  ASSERT_TRUE(value->is_dict());
+
+  const base::Value::Dict& dict = value->GetDict();
+  const std::string* payee_name =
+      dict.FindStringByDottedPath("payment.payeeName");
+  ASSERT_NE(nullptr, payee_name) << response;
+  EXPECT_EQ("Example Payee", *payee_name);
+
+  const std::string* payee_origin =
+      dict.FindStringByDottedPath("payment.payeeOrigin");
+  ASSERT_NE(nullptr, payee_origin) << response;
+  EXPECT_EQ(GURL("https://example-payee-origin.test"), GURL(*payee_origin));
+
+  ExpectEnrollSystemPromptResult(
+      SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
+  ExpectAuthSystemPromptResult(
+      SecurePaymentConfirmationSystemPromptResult::kAccepted, 1);
+  ExpectEvent2Histogram({Event2::kInitiated, Event2::kShown, Event2::kCompleted,
+                         Event2::kPayClicked, Event2::kHadInitialFormOfPayment,
+                         Event2::kRequestMethodSecurePaymentConfirmation,
+                         Event2::kSelectedSecurePaymentConfirmation});
+}
+
+// Test allowing a failed icon download with iconMustBeShown option
+IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
+                       IconMustBeShownFalse) {
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+  test_controller()->SetHasAuthenticator(true);
+  confirm_payment_ = true;
+  NavigateTo("a.com", "/secure_payment_confirmation.html");
+
+  PaymentCredentialInfo credential_info;
+  CreatePaymentCredential(&credential_info);
+
+  // First ensure the icon URL is successfully parsed from clientData for a
+  // valid icon.
+  std::string icon_data =
+      "data:image/"
+      "png;base64,"
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQMAAAAl21bKAAAAA1BMVEUAAACnej3aAAAAAXRS"
+      "TlMAQObYZgAAAApJREFUCNdjYAAAAAIAAeIhvDMAAAAASUVORK5CYII=";
+  EXPECT_EQ(icon_data,
+            content::EvalJs(
+                GetActiveWebContents(),
+                content::JsReplace(
+                    "getSecurePaymentConfirmationResponseIconWithInstrument({"
+                    "  displayName: 'display_name_for_instrument',"
+                    "  icon: $1,"
+                    "  iconMustBeShown: false,"
+                    "}, $2)",
+                    icon_data, credential_info.id)));
+
+  // Now verify that the icon string is cleared from clientData for an invalid
+  // icon.
+  EXPECT_EQ("",
+            content::EvalJs(
+                GetActiveWebContents(),
+                content::JsReplace(
+                    "getSecurePaymentConfirmationResponseIconWithInstrument({"
+                    "  displayName: 'display_name_for_instrument',"
+                    "  icon: 'https://example.test/invalid-icon.png',"
+                    "  iconMustBeShown: false,"
+                    "}, $1)",
+                    credential_info.id)));
+}
+
+IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
+                       MultipleRegisteredCredentials) {
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+  NavigateTo("a.com", "/secure_payment_confirmation.html");
+
+  PaymentCredentialInfo first_info;
+  CreatePaymentCredential(&first_info, "user_123");
+  PaymentCredentialInfo second_info;
+  CreatePaymentCredential(&second_info, "user_456");
+
+  ASSERT_NE(first_info.id, second_info.id);
+
+  NavigateTo("b.com", "/get_challenge.html");
+  test_controller()->SetHasAuthenticator(true);
+  confirm_payment_ = true;
+  std::string expected_result = "0.01";
+
+  EXPECT_EQ(expected_result,
+            content::EvalJs(
+                GetActiveWebContents(),
+                content::JsReplace("getTotalAmountFromClientData($1, $2);",
+                                   first_info.id, "0.01")));
+  EXPECT_EQ(expected_result,
+            content::EvalJs(
+                GetActiveWebContents(),
+                content::JsReplace("getTotalAmountFromClientData($1, $2);",
+                                   second_info.id, "0.01")));
+}
+
+IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
+                       UserVerificationFails) {
+  NavigateTo("a.com", "/secure_payment_confirmation.html");
+  PaymentCredentialInfo credential_info;
+
+  {
+    auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+    CreatePaymentCredential(&credential_info);
+  }
+
+  NavigateTo("b.com", "/get_challenge.html");
+  test_controller()->SetHasAuthenticator(true);
+
+  // Make the authenticator fail to simulate the user cancelling out of the
+  // WebAuthn dialog.
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/false);
+  confirm_payment_ = true;
+
+  // EvalJs waits for JavaScript promise to resolve.
+  EXPECT_EQ(
+      "The operation either timed out or was not allowed. See: "
+      "https://www.w3.org/TR/webauthn-2/#sctn-privacy-considerations-client.",
+      content::EvalJs(
+          GetActiveWebContents(),
+          content::JsReplace("getTotalAmountFromClientData($1, $2);",
+                             credential_info.id, "0.01")));
+
+  ExpectEnrollSystemPromptResult(
+      SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
+  ExpectAuthSystemPromptResult(
+      SecurePaymentConfirmationSystemPromptResult::kCanceled, 1);
+  // WebAuthn dialog failure is recorded as kOtherAborted. Since we made it
+  // past the Transaction UX to the WebAuthn dialog, we should still log
+  // kPayClicked and kSelectedSecurePaymentConfirmation.
+  ExpectEvent2Histogram({Event2::kInitiated, Event2::kShown,
+                         Event2::kOtherAborted, Event2::kPayClicked,
+                         Event2::kHadInitialFormOfPayment,
+                         Event2::kRequestMethodSecurePaymentConfirmation,
+                         Event2::kSelectedSecurePaymentConfirmation});
+}
+
+IN_PROC_BROWSER_TEST_F(SecurePaymentConfirmationAuthenticatorGetTest,
+                       HandlesShowPromisesAndModifiers) {
+  NavigateTo("a.com", "/secure_payment_confirmation.html");
+  auto scoped_auth_env = ReplaceFidoDiscoveryFactory(/*should_succeed=*/true);
+
+  PaymentCredentialInfo credential_info;
+  CreatePaymentCredential(&credential_info);
+
+  NavigateTo("b.com", "/get_challenge.html");
+  test_controller()->SetHasAuthenticator(true);
+  confirm_payment_ = true;
+
+  // EvalJs waits for JavaScript promise to resolve.
+  EXPECT_EQ("0.01", content::EvalJs(GetActiveWebContents(),
+                                    content::JsReplace(
+                                        "getTotalAmountFromClientData($1, $2);",
+                                        credential_info.id, "0.01")));
+
+  // Verify that passing a promise into PaymentRequest.show() that updates the
+  // `total` price will result in the client data price being set only after the
+  // promise resolves with the finalized price.
+  EXPECT_EQ("0.02",
+            content::EvalJs(
+                GetActiveWebContents(),
+                content::JsReplace(
+                    "getTotalAmountFromClientDataWithShowPromise($1, $2);",
+                    credential_info.id, "0.02")));
+
+  // Verify that the returned client data correctly reflects the modified
+  // amount.
+  EXPECT_EQ("0.03", content::EvalJs(
+                        GetActiveWebContents(),
+                        content::JsReplace(
+                            "getTotalAmountFromClientDataWithModifier($1, $2);",
+                            credential_info.id, "0.03")));
+
+  // Verify that the returned client data correctly reflects the modified amount
+  // that is set when the promised passed into PaymentRequest.show() resolves.
+  EXPECT_EQ(
+      "0.04",
+      content::EvalJs(
+          GetActiveWebContents(),
+          content::JsReplace(
+              "getTotalAmountFromClientDataWithModifierAndShowPromise($1, $2);",
+              credential_info.id, "0.04")));
+
+  ExpectEnrollSystemPromptResult(
+      SecurePaymentConfirmationEnrollSystemPromptResult::kAccepted, 1);
+  ExpectAuthSystemPromptResult(
+      SecurePaymentConfirmationSystemPromptResult::kAccepted, 4);
+}
 
 }  // namespace
 }  // namespace payments

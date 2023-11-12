@@ -21,7 +21,6 @@ class AuthenticationExtensionsPRFInputs;
 class AuthenticationExtensionsPRFValues;
 class AuthenticatorSelectionCriteria;
 class CableAuthenticationData;
-class CableRegistrationData;
 class Credential;
 class IdentityCredentialLogoutRPsRequest;
 class IdentityProviderConfig;
@@ -177,13 +176,6 @@ struct TypeConverter<blink::mojom::blink::CableAuthenticationPtr,
 };
 
 template <>
-struct TypeConverter<blink::mojom::blink::CableRegistrationPtr,
-                     blink::CableRegistrationData> {
-  static blink::mojom::blink::CableRegistrationPtr Convert(
-      const blink::CableRegistrationData&);
-};
-
-template <>
 struct TypeConverter<blink::mojom::blink::PublicKeyCredentialRequestOptionsPtr,
                      blink::PublicKeyCredentialRequestOptions> {
   static blink::mojom::blink::PublicKeyCredentialRequestOptionsPtr Convert(
@@ -201,6 +193,13 @@ template <>
 struct TypeConverter<blink::mojom::blink::IdentityProviderConfigPtr,
                      blink::IdentityProviderConfig> {
   static blink::mojom::blink::IdentityProviderConfigPtr Convert(
+      const blink::IdentityProviderConfig&);
+};
+
+template <>
+struct TypeConverter<blink::mojom::blink::IdentityProviderPtr,
+                     blink::IdentityProviderConfig> {
+  static blink::mojom::blink::IdentityProviderPtr Convert(
       const blink::IdentityProviderConfig&);
 };
 

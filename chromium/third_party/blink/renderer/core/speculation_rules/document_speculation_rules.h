@@ -8,16 +8,22 @@
 #include "third_party/blink/public/mojom/speculation_rules/speculation_rules.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/speculation_rules/speculation_rule_set.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
+namespace base {
+class UnguessableToken;
+}  // namespace base
+
 namespace blink {
 
-class SpeculationRuleLoader;
 class HTMLAnchorElement;
+class SpeculationCandidate;
+class SpeculationRuleLoader;
 
 // This corresponds to the document's list of speculation rule sets.
 //
@@ -53,11 +59,16 @@ class CORE_EXPORT DocumentSpeculationRules
                             const AtomicString& new_value);
   void ReferrerPolicyAttributeChanged(HTMLAnchorElement* link);
   void RelAttributeChanged(HTMLAnchorElement* link);
+  void TargetAttributeChanged(HTMLAnchorElement* link);
   void DocumentReferrerPolicyChanged();
   void DocumentBaseURLChanged();
+  void DocumentBaseTargetChanged();
   void LinkMatchedSelectorsUpdated(HTMLAnchorElement* link);
   void LinkGainedOrLostComputedStyle(HTMLAnchorElement* link);
   void DocumentStyleUpdated();
+  void ChildStyleRecalcBlocked(Element* root);
+  void DidStyleChildren(Element* root);
+  void DisplayLockedElementDisconnected(Element* root);
 
   const HeapVector<Member<StyleRule>>& selectors() { return selectors_; }
 
@@ -78,11 +89,16 @@ class CORE_EXPORT DocumentSpeculationRules
   // Appends all candidates populated from links in the document (based on
   // document rules in all the rule sets).
   void AddLinkBasedSpeculationCandidates(
-      Vector<mojom::blink::SpeculationCandidatePtr>& candidates);
+      HeapVector<Member<SpeculationCandidate>>& candidates);
 
   // Initializes |link_map_| with all links in the document by traversing
   // through the document in shadow-including tree order.
   void InitializeIfNecessary();
+
+  // Helper methods that are used to deal with link/document attribute changes
+  // that could invalidate the list of speculation candidates.
+  void LinkAttributeChanged(HTMLAnchorElement* link);
+  void DocumentPropertyChanged();
 
   // Helper methods to modify |link_map_|.
   void AddLink(HTMLAnchorElement* link);
@@ -129,10 +145,15 @@ class CORE_EXPORT DocumentSpeculationRules
   // re-traverse the document to find all links when a new ruleset is
   // added/removed.
   HeapHashMap<Member<HTMLAnchorElement>,
-              Vector<mojom::blink::SpeculationCandidatePtr>>
+              Member<HeapVector<Member<SpeculationCandidate>>>>
       matched_links_;
   HeapHashSet<Member<HTMLAnchorElement>> unmatched_links_;
   HeapHashSet<Member<HTMLAnchorElement>> pending_links_;
+
+  // Links with ComputedStyle that wasn't updated after the most recent style
+  // update (due to having a display-locked ancestor).
+  HeapHashSet<Member<HTMLAnchorElement>> stale_links_;
+  HeapHashSet<Member<Element>> elements_blocking_child_style_recalc_;
 
   // Collects every CSS selector from every CSS selector document rule predicate
   // in this document's speculation rules.
@@ -143,6 +164,16 @@ class CORE_EXPORT DocumentSpeculationRules
   bool was_selector_matches_enabled_ = false;
   PendingUpdateState pending_update_state_ =
       PendingUpdateState::kNoUpdatePending;
+
+  // devtools_navigation_token_ is usually non-null because a null token implies
+  // the document is detached and will be destroyed shortly
+  const absl::optional<base::UnguessableToken> devtools_navigation_token_;
+
+  // Set to true if the EventHandlerRegistry has recorded this object's need to
+  // observe pointer events.
+  // TODO(crbug.com/1425870): This can be deleted when/if these discrete events
+  // are no longer filtered by default.
+  bool wants_pointer_events_ = false;
 };
 
 }  // namespace blink

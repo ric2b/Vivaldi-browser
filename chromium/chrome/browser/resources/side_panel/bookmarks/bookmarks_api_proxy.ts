@@ -5,7 +5,7 @@
 import {ChromeEvent} from '/tools/typescript/definitions/chrome_event.js';
 import {ClickModifiers} from 'chrome://resources/mojo/ui/base/mojom/window_open_disposition.mojom-webui.js';
 
-import {ActionSource, BookmarksPageHandlerFactory, BookmarksPageHandlerRemote} from './bookmarks.mojom-webui.js';
+import {ActionSource, BookmarksPageHandlerFactory, BookmarksPageHandlerRemote, SortOrder, ViewType} from './bookmarks.mojom-webui.js';
 
 let instance: BookmarksApiProxy|null = null;
 
@@ -17,13 +17,17 @@ export interface BookmarksApiProxy {
   contextMenuOpenBookmarkInNewWindow(ids: string[], source: ActionSource): void;
   contextMenuOpenBookmarkInIncognitoWindow(ids: string[], source: ActionSource):
       void;
+  contextMenuOpenBookmarkInNewTabGroup(ids: string[], source: ActionSource):
+      void;
   contextMenuAddToBookmarksBar(id: string, source: ActionSource): void;
   contextMenuRemoveFromBookmarksBar(id: string, source: ActionSource): void;
-  contextMenuDelete(id: string, source: ActionSource): void;
+  contextMenuDelete(ids: string[], source: ActionSource): void;
   copyBookmark(id: string): Promise<void>;
   createFolder(parentId: string, title: string):
       Promise<chrome.bookmarks.BookmarkTreeNode>;
-  editBookmarks(ids: string[], newParentId: string|undefined): void;
+  editBookmarks(
+      ids: string[], newTitle: string|undefined, newUrl: string|undefined,
+      newParentId: string|undefined): void;
   deleteBookmarks(ids: string[]): Promise<void>;
   getActiveUrl(): Promise<string|undefined>;
   getFolders(): Promise<chrome.bookmarks.BookmarkTreeNode[]>;
@@ -32,6 +36,8 @@ export interface BookmarksApiProxy {
       source: ActionSource): void;
   pasteToBookmark(parentId: string, destinationId?: string): Promise<void>;
   renameBookmark(id: string, title: string): void;
+  setSortOrder(sortOrder: SortOrder): void;
+  setViewType(viewType: ViewType): void;
   showContextMenu(id: string, x: number, y: number, source: ActionSource): void;
   showUi(): void;
   undo(): void;
@@ -82,6 +88,11 @@ export class BookmarksApiProxyImpl implements BookmarksApiProxy {
         ids.map(id => BigInt(id)), source);
   }
 
+  contextMenuOpenBookmarkInNewTabGroup(ids: string[], source: ActionSource) {
+    this.handler.executeOpenInNewTabGroupCommand(
+        ids.map(id => BigInt(id)), source);
+  }
+
   contextMenuAddToBookmarksBar(id: string, source: ActionSource) {
     this.handler.executeAddToBookmarksBarCommand(BigInt(id), source);
   }
@@ -90,8 +101,8 @@ export class BookmarksApiProxyImpl implements BookmarksApiProxy {
     this.handler.executeRemoveFromBookmarksBarCommand(BigInt(id), source);
   }
 
-  contextMenuDelete(id: string, source: ActionSource) {
-    this.handler.executeDeleteCommand(BigInt(id), source);
+  contextMenuDelete(ids: string[], source: ActionSource) {
+    this.handler.executeDeleteCommand(ids.map(id => BigInt(id)), source);
   }
 
   copyBookmark(id: string) {
@@ -103,7 +114,16 @@ export class BookmarksApiProxyImpl implements BookmarksApiProxy {
         {parentId: parentId, title: title, index: 0});
   }
 
-  editBookmarks(ids: string[], newParentId: string|undefined) {
+  editBookmarks(
+      ids: string[], newTitle: string|undefined, newUrl: string|undefined,
+      newParentId: string|undefined) {
+    // Current use cases do not expect one of newTitle and newUrl to be
+    // provided without the other.
+    if (newTitle !== undefined && newUrl !== undefined) {
+      ids.forEach(id => {
+        chrome.bookmarks.update(id, {title: newTitle, url: newUrl});
+      });
+    }
     if (newParentId) {
       ids.forEach(id => {
         chrome.bookmarks.move(id, {parentId: newParentId});
@@ -146,6 +166,14 @@ export class BookmarksApiProxyImpl implements BookmarksApiProxy {
 
   renameBookmark(id: string, title: string) {
     chrome.bookmarks.update(id, {title: title});
+  }
+
+  setSortOrder(sortOrder: SortOrder) {
+    this.handler.setSortOrder(sortOrder);
+  }
+
+  setViewType(viewType: ViewType) {
+    this.handler.setViewType(viewType);
   }
 
   showContextMenu(id: string, x: number, y: number, source: ActionSource) {

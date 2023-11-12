@@ -9,7 +9,6 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_consumer.h"
 
-@protocol GridImageDataSource;
 @class GridTransitionLayout;
 @class PinnedTabsViewController;
 @protocol TabCollectionDragDropHandler;
@@ -45,14 +44,23 @@
 - (void)pinnedTabsViewControllerVisibilityDidChange:
     (PinnedTabsViewController*)pinnedTabsViewController;
 
+// Tells the delegate that a drop animation will begin.
+- (void)pinnedViewControllerDropAnimationWillBegin:
+    (PinnedTabsViewController*)pinnedTabsViewController;
+
+// Tells the delegate that a drop animation did end.
+- (void)pinnedViewControllerDropAnimationDidEnd:
+    (PinnedTabsViewController*)pinnedTabsViewController;
+
+// Tells the delegate that a drag session did end.
+- (void)pinnedViewControllerDragSessionDidEnd:
+    (PinnedTabsViewController*)pinnedTabsViewController;
+
 @end
 
 // UICollectionViewController used to display pinned tabs.
 @interface PinnedTabsViewController
     : UICollectionViewController <TabCollectionConsumer>
-
-// Data source for images.
-@property(nonatomic, weak) id<GridImageDataSource> imageDataSource;
 
 // Delegate used to to relay relevant user interactions.
 @property(nonatomic, weak) id<PinnedTabsViewControllerDelegate> delegate;
@@ -65,6 +73,9 @@
 
 // Tracks if a drop animation is in progress.
 @property(nonatomic, assign) BOOL dropAnimationInProgress;
+
+// Tracks the visibility of the view.
+@property(nonatomic, readonly) BOOL visible;
 
 // Returns YES if the collection has no items.
 @property(nonatomic, readonly, getter=isCollectionEmpty) BOOL collectionEmpty;

@@ -52,12 +52,20 @@ BASE_FEATURE(kUseXpsForPrintingFromPdf,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsXpsPrintCapabilityRequired() {
-  return base::FeatureList::IsEnabled(features::kUseXpsForPrinting) ||
-         base::FeatureList::IsEnabled(features::kUseXpsForPrintingFromPdf);
+  // Require XPS printing to be used out-of-process.
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
+  return features::kEnableOopPrintDriversJobPrint.Get() &&
+         (base::FeatureList::IsEnabled(features::kUseXpsForPrinting) ||
+          base::FeatureList::IsEnabled(features::kUseXpsForPrintingFromPdf));
+#else
+  return false;
+#endif
 }
 
 bool ShouldPrintUsingXps(bool source_is_pdf) {
-  return base::FeatureList::IsEnabled(source_is_pdf
+  // Require XPS to be used out-of-process.
+  return features::kEnableOopPrintDriversJobPrint.Get() &&
+         base::FeatureList::IsEnabled(source_is_pdf
                                           ? features::kUseXpsForPrintingFromPdf
                                           : features::kUseXpsForPrinting);
 }
@@ -83,6 +91,12 @@ const base::FeatureParam<bool> kEnableOopPrintDriversSandbox{
 BASE_FEATURE(kEnablePrintContentAnalysis,
              "EnablePrintContentAnalysis",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables print scanning after preview options have been selected instead of
+// when the user initiates the printing to bring up the preview
+BASE_FEATURE(kEnablePrintScanAfterPreview,
+             "EnablePrintScanAfterPreview",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(ENABLE_PRINT_CONTENT_ANALYSIS)
 
 }  // namespace features

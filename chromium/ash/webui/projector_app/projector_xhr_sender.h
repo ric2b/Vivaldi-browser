@@ -9,6 +9,7 @@
 #include <string>
 
 #include "ash/webui/projector_app/projector_oauth_token_fetcher.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -50,9 +51,17 @@ class ProjectorXhrSender {
   virtual ~ProjectorXhrSender();
 
   // Send XHR request and trigger the callback when complete.
-  // This will attempt to fetch OAuth token for the provided email address
-  // and fallback to primary account email if account_email is not provided
-  // or ProjectorViewerUseSecondaryAccount flag is disabled.
+  // There are a few credentials could be used for authorizing a request:
+  // 1. API Key: when `use_api_key` is true, it is a anonymous request. End
+  // user credentials will be ignored.
+  // 2. Account email: By default, primary account email is used to get OAuth
+  // token for authorizing the request. If `account_email` is specified, it
+  // will be used instead.
+  // 3. Credentials: when `use_credentials` is true, the request will be sent
+  // with cookie alongs with auth token. One use case is allowing
+  // get_video_info response to add streaming auth token in cookie. There is
+  // no use case for sending requests with credentials only (without oauth
+  // token).
   virtual void Send(const GURL& url,
                     const std::string& method,
                     const std::string& request_body,
@@ -68,6 +77,7 @@ class ProjectorXhrSender {
                                      const std::string& method,
                                      const std::string& request_body,
                                      const base::Value::Dict& headers,
+                                     bool use_credentials,
                                      SendRequestCallback callback,
                                      const std::string& email,
                                      GoogleServiceAuthError error,
@@ -78,6 +88,7 @@ class ProjectorXhrSender {
                    const std::string& request_body,
                    const std::string& token,
                    const base::Value::Dict& headers,
+                   bool allow_cookie,
                    SendRequestCallback callback);
 
   // Triggered when an XHR request completed.
@@ -89,7 +100,8 @@ class ProjectorXhrSender {
   bool IsValidEmail(const std::string& email);
 
   ProjectorOAuthTokenFetcher oauth_token_fetcher_;
-  network::mojom::URLLoaderFactory* url_loader_factory_ = nullptr;
+  raw_ptr<network::mojom::URLLoaderFactory, ExperimentalAsh>
+      url_loader_factory_ = nullptr;
 
   // Next request ID.
   int next_request_id_ = 0;

@@ -123,8 +123,6 @@ class MailClientService : public KeyedService {
 
   void Cleanup();
 
-  Profile* profile_;
-
   SEQUENCE_CHECKER(sequence_checker_);
 
   // The TaskRunner to which MailClientBackend tasks are posted. Nullptr once

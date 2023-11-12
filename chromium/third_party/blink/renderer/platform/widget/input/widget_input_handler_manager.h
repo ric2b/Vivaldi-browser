@@ -76,9 +76,6 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
     kDeferCommits = 1 << 1,
     // if set, we have not painted a main frame from the current navigation yet
     kHasNotPainted = 1 << 2,
-    // if set, suppress events because pipeline has paused rendering (both main
-    // and compositor thread driven updates).
-    kRenderingPaused = 1 << 3,
   };
 
  public:
@@ -168,9 +165,6 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
   // Called to inform us when the system starts or stops deferring commits.
   void OnDeferCommitsChanged(bool defer_status, cc::PaintHoldingReason reason);
 
-  // Called to inform us when the system pauses or resumes rendering.
-  void OnPauseRenderingChanged(bool);
-
   // Allow tests, headless etc. to have input events processed before the
   // compositor is ready to commit frames.
   // TODO(schenney): Fix this somehow, forcing all tests to wait for
@@ -180,7 +174,7 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
   // Called on the main thread. Finds the matching element under the given
   // point in visual viewport coordinates and runs the callback with the
   // found element id on input thread task runner.
-  using ElementAtPointCallback = base::OnceCallback<void(uint64_t)>;
+  using ElementAtPointCallback = base::OnceCallback<void(cc::ElementId)>;
   void FindScrollTargetOnMainThread(const gfx::PointF& point,
                                     ElementAtPointCallback callback);
   void SendDroppedPointerDownCounts();
@@ -234,7 +228,7 @@ class PLATFORM_EXPORT WidgetInputHandlerManager final
       std::unique_ptr<WebCoalescedInputEvent> event,
       std::unique_ptr<cc::EventMetrics> metrics,
       mojom::blink::WidgetInputHandler::DispatchEventCallback browser_callback,
-      uint64_t hit_test_result);
+      cc::ElementId hit_test_result);
 
   // This method is the callback used by the compositor input handler to
   // communicate back whether the event was successfully handled on the

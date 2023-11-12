@@ -303,12 +303,12 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PdfExtensionLoadedWhileOldPdfCloses) {
   // Close the first tab, destroying the first PDF while the second PDF is in
   // the middle of initialization. In https://crbug.com/1295431, the extension
   // process exited here and caused a crash when the second PDF resumed.
-  EXPECT_EQ(2U, GetGuestViewManager()->GetNumGuestsActive());
+  EXPECT_EQ(2U, GetGuestViewManager()->GetCurrentGuestCount());
   ASSERT_TRUE(browser()->tab_strip_model()->CloseWebContentsAt(
       0, TabCloseTypes::CLOSE_USER_GESTURE));
   // `TestGuestViewManager` manages the guests by the order of creation.
   GetGuestViewManager()->WaitForFirstGuestDeleted();
-  EXPECT_EQ(1U, GetGuestViewManager()->GetNumGuestsActive());
+  EXPECT_EQ(1U, GetGuestViewManager()->GetCurrentGuestCount());
   primary_main_frame = new_web_contents->GetPrimaryMainFrame();
 
   // Now resume the guest attachment and ensure the second PDF loads without
@@ -811,14 +811,13 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, EnsureInternalPluginDisabled) {
       "</body></html>";
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(data_url)));
   WebContents* web_contents = GetActiveWebContents();
-  bool plugin_loaded = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      web_contents,
-      "var plugin_loaded = "
-      "    document.getElementsByTagName('embed')[0].postMessage !== undefined;"
-      "window.domAutomationController.send(plugin_loaded);",
-      &plugin_loaded));
-  ASSERT_FALSE(plugin_loaded);
+  ASSERT_EQ(false,
+            content::EvalJs(
+                web_contents,
+                "var plugin_loaded = "
+                "    document.getElementsByTagName('embed')[0].postMessage !== "
+                "undefined;"
+                "plugin_loaded;"));
 }
 
 // Ensure cross-origin replies won't work for getSelectedText.
@@ -1065,32 +1064,20 @@ class PDFExtensionScrollTest : public PDFExtensionTest {
   static constexpr float kScrollPositionEpsilon = 2.0f;
 
   static int GetViewportHeight(content::ToRenderFrameHost guest_main_frame) {
-    int viewport_height = 0;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
-        guest_main_frame,
-        "window.domAutomationController.send(viewer.viewport.size.height);",
-        &viewport_height));
-    return viewport_height;
+    return content::EvalJs(guest_main_frame, "viewer.viewport.size.height;")
+        .ExtractInt();
   }
 
   static int GetViewportScrollPositionX(
       content::ToRenderFrameHost guest_main_frame) {
-    int position_x = 0;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
-        guest_main_frame,
-        "window.domAutomationController.send(viewer.viewport.position.x);",
-        &position_x));
-    return position_x;
+    return content::EvalJs(guest_main_frame, "viewer.viewport.position.x;")
+        .ExtractInt();
   }
 
   static int GetViewportScrollPositionY(
       content::ToRenderFrameHost guest_main_frame) {
-    int position_y = 0;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
-        guest_main_frame,
-        "window.domAutomationController.send(viewer.viewport.position.y);",
-        &position_y));
-    return position_y;
+    return content::EvalJs(guest_main_frame, "viewer.viewport.position.y;")
+        .ExtractInt();
   }
 };
 
@@ -2311,24 +2298,15 @@ void EnsureCustomPinchZoomInvoked(content::RenderFrameHost* guest_mainframe,
 
   std::move(send_events).Run();
 
-  bool got_update;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      guest_mainframe,
-      "updatePromise.then(function(update) { "
-      "  window.domAutomationController.send(!!update); "
-      "});",
-      &got_update));
-  EXPECT_TRUE(got_update);
+  EXPECT_EQ(true, content::EvalJs(guest_mainframe,
+                                  "updatePromise.then((update) => !!update);"));
 
   zoom_watcher.Wait();
 
   // Check that the browser's native pinch zoom was prevented.
-  double scale_factor;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractDouble(
-      contents,
-      "window.domAutomationController.send(window.visualViewport.scale);",
-      &scale_factor));
-  EXPECT_DOUBLE_EQ(1.0, scale_factor);
+  EXPECT_DOUBLE_EQ(
+      1.0,
+      content::EvalJs(contents, "window.visualViewport.scale").ExtractDouble());
 }
 
 // Ensure that touchpad pinch events are handled by the PDF viewer.
@@ -2463,15 +2441,9 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionHitTestTest, DISABLED_MouseLeave) {
   // Verify MouseEnter, MouseLeave received.
   int leave_count = 0;
   do {
-    ASSERT_TRUE(ExecuteScriptAndExtractInt(
-        guest_mainframe, "window.domAutomationController.send(leave_count);",
-        &leave_count));
+    leave_count = EvalJs(guest_mainframe, "leave_count;").ExtractInt();
   } while (!leave_count);
-  int enter_count = 0;
-  ASSERT_TRUE(ExecuteScriptAndExtractInt(
-      guest_mainframe, "window.domAutomationController.send(enter_count);",
-      &enter_count));
-  EXPECT_EQ(1, enter_count);
+  EXPECT_EQ(1, EvalJs(guest_mainframe, "enter_count;"));
 }
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionHitTestTest, ContextMenuCoordinates) {
@@ -2533,15 +2505,11 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, BackgroundColor) {
   ASSERT_TRUE(guest_mainframe);
 
   const std::string script =
-      "window.domAutomationController.send("
-      "    window.getComputedStyle(document.body, null)."
-      "    getPropertyValue('background-color'))";
-  std::string outer;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(GetActiveWebContents(),
-                                                     script, &outer));
-  std::string inner;
-  ASSERT_TRUE(
-      content::ExecuteScriptAndExtractString(guest_mainframe, script, &inner));
+      "window.getComputedStyle(document.body, null)."
+      "getPropertyValue('background-color')";
+  std::string outer =
+      content::EvalJs(GetActiveWebContents(), script).ExtractString();
+  std::string inner = content::EvalJs(guest_mainframe, script).ExtractString();
   EXPECT_EQ(inner, outer);
 }
 
@@ -2557,12 +2525,9 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DefaultFocusForEmbeddedPDF) {
   const std::string script =
       "const is_plugin_focused = document.activeElement === "
       "document.body;"
-      "window.domAutomationController.send(is_plugin_focused);";
+      "is_plugin_focused;";
 
-  bool result = false;
-  ASSERT_TRUE(
-      content::ExecuteScriptAndExtractBool(guest_mainframe, script, &result));
-  ASSERT_TRUE(result);
+  ASSERT_EQ(true, content::EvalJs(guest_mainframe, script));
 }
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DefaultFocusForNonEmbeddedPDF) {
@@ -2577,12 +2542,9 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DefaultFocusForNonEmbeddedPDF) {
   const std::string script =
       "const is_plugin_focused = document.activeElement === "
       "document.body;"
-      "window.domAutomationController.send(is_plugin_focused);";
+      "is_plugin_focused;";
 
-  bool result = false;
-  ASSERT_TRUE(
-      content::ExecuteScriptAndExtractBool(guest_mainframe, script, &result));
-  ASSERT_TRUE(result);
+  ASSERT_EQ(true, content::EvalJs(guest_mainframe, script));
 }
 
 // A helper for waiting for the first request for |url_to_intercept|.
@@ -3014,7 +2976,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionPrerenderAndFencedFrameTest,
   TestMimeHandlerViewGuest::WaitForGuestLoadStartThenStop(guest_view);
 
   // Ensure that the fenced frame's navigation should not abort the PDF stream.
-  EXPECT_EQ(1U, GetGuestViewManager()->GetNumGuestsActive());
+  EXPECT_EQ(1U, GetGuestViewManager()->GetCurrentGuestCount());
 }
 
 // Test that ensures we cannot navigate a fenced frame to a PDF because PDF

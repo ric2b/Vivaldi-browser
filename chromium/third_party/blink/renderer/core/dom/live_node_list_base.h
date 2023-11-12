@@ -83,10 +83,6 @@ class CORE_EXPORT LiveNodeListBase : public GarbageCollectedMixin {
  protected:
   Document& GetDocument() const { return owner_node_->GetDocument(); }
 
-  ALWAYS_INLINE NodeListSearchRoot SearchRoot() const {
-    return static_cast<NodeListSearchRoot>(search_root_);
-  }
-
   template <typename MatchFunc>
   static Element* TraverseMatchingElementsForwardToOffset(
       Element& current_element,
@@ -132,9 +128,8 @@ ALWAYS_INLINE bool LiveNodeListBase::ShouldInvalidateTypeOnAttributeChange(
       return attr_name == html_names::kHrefAttr;
     case kInvalidateOnPopoverInvokerAttrChange:
       return attr_name == html_names::kPopoverAttr ||
-             attr_name == html_names::kPopovertoggletargetAttr ||
-             attr_name == html_names::kPopoverhidetargetAttr ||
-             attr_name == html_names::kPopovershowtargetAttr;
+             attr_name == html_names::kPopovertargetAttr ||
+             attr_name == html_names::kPopovertargetactionAttr;
     case kDoNotInvalidateOnAttributeChanges:
       return false;
     case kInvalidateOnAnyAttrChange:

@@ -945,6 +945,7 @@ class IDLParser(object):
     """PrimitiveType : UnsignedIntegerType
                      | UnrestrictedFloatType
                      | StringType
+                     | BIGINT
                      | BOOLEAN
                      | BYTE
                      | OCTET
@@ -1315,7 +1316,7 @@ class IDLParser(object):
 
 def ParseFile(parser, filename):
   """Parse a file and return a File type of node."""
-  with open(filename) as fileobject:
+  with open(filename, encoding='utf-8') as fileobject:
     try:
       out = parser.ParseText(filename, fileobject.read())
       out.SetProperty('ERRORS', parser.GetErrors())

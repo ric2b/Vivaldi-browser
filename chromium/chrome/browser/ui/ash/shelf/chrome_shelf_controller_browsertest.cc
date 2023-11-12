@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/auto_reset.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 
 #include <stddef.h>
@@ -33,8 +32,10 @@
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -60,7 +61,6 @@
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/extensions/menu_manager.h"
@@ -202,7 +202,7 @@ void ExecuteScriptInChromeVox(Browser* browser, const std::string& script) {
       window.domAutomationController.send('done');
   })())JS";
 
-  extensions::browsertest_util::ExecuteScriptInBackgroundPage(
+  extensions::browsertest_util::ExecuteScriptInBackgroundPageDeprecated(
       browser->profile(), extension_misc::kChromeVoxExtensionId,
       execute_script);
 }
@@ -274,7 +274,7 @@ class ChildRemovalWaiter : public views::ViewObserver {
   }
 
  private:
-  views::View* const parent_view_;
+  const raw_ptr<views::View, ExperimentalAsh> parent_view_;
   base::RunLoop run_loop_;
 };
 
@@ -308,7 +308,7 @@ class ShelfPlatformAppBrowserTest : public extensions::PlatformAppBrowserTest {
 
   apps::AppServiceTest& app_service_test() { return app_service_test_; }
 
-  ChromeShelfController* controller_ = nullptr;
+  raw_ptr<ChromeShelfController, ExperimentalAsh> controller_ = nullptr;
 
  private:
   apps::AppServiceTest app_service_test_;
@@ -426,7 +426,7 @@ class ShelfAppBrowserTest : public extensions::ExtensionBrowserTest {
                            /*filter_predicate=*/base::NullCallback());
   }
 
-  ChromeShelfController* controller_ = nullptr;
+  raw_ptr<ChromeShelfController, ExperimentalAsh> controller_ = nullptr;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -642,9 +642,7 @@ class UnpinnedBrowserShortcutTest : public extensions::ExtensionBrowserTest {
   UnpinnedBrowserShortcutTest(const UnpinnedBrowserShortcutTest&) = delete;
   UnpinnedBrowserShortcutTest& operator=(const UnpinnedBrowserShortcutTest&) =
       delete;
-  ~UnpinnedBrowserShortcutTest() override {
-    crosapi::browser_util::SetLacrosPrimaryBrowserForTest(absl::nullopt);
-  }
+  ~UnpinnedBrowserShortcutTest() override = default;
 
   ash::ShelfModel* shelf_model() { return controller_->shelf_model(); }
 
@@ -659,10 +657,10 @@ class UnpinnedBrowserShortcutTest : public extensions::ExtensionBrowserTest {
     extensions::ExtensionBrowserTest::SetUpOnMainThread();
   }
 
-  ChromeShelfController* controller_ = nullptr;
+  raw_ptr<ChromeShelfController, ExperimentalAsh> controller_ = nullptr;
 
  private:
-  base::AutoReset<absl::optional<bool>> set_lacros_primary_ =
+  const base::AutoReset<absl::optional<bool>> set_lacros_primary_ =
       crosapi::browser_util::SetLacrosPrimaryBrowserForTest(true);
 };
 
@@ -2797,21 +2795,25 @@ IN_PROC_BROWSER_TEST_F(HotseatShelfAppBrowserTest, EnableChromeVox) {
         let module = await import('/chromevox/background/chromevox.js');
         module.ChromeVox.earcons.playEarcon = function() {};
         module = await import('/chromevox/background/chromevox_state.js');
-        await module.ChromeVoxState.ready();
+        let ChromeVoxState = module.ChromeVoxState;
+        module = await import('/chromevox/background/chromevox_range.js');
+        let ChromeVoxRange = module.ChromeVoxRange;
+
+        await ChromeVoxState.ready();
 
         // Wait for ChromeVox to have a current range before the test starts
         // traversal through shelf to ensure that the browser does not show
         // mid shelf traversal, and causes the a11y focus to unexpectedly
         // switch to the omnibox mid test.
-        if (!module.ChromeVoxState.instance.currentRange) {
+        if (!ChromeVoxRange.current) {
           await new Promise(resolve => {
               new (class {
                   constructor() {
-                    module.ChromeVoxState.addObserver(this);
+                    ChromeVoxState.addObserver(this);
                   }
                   onCurrentRangeChanged(newRange) {
                     if (newRange) {
-                        module.ChromeVoxState.removeObserver(this);
+                        ChromeVoxState.removeObserver(this);
                         resolve();
                     }
                   }
@@ -2992,7 +2994,7 @@ class PerDeskShelfAppBrowserTest : public ShelfAppBrowserTest,
       std::move(run_loop_)->Quit();
   }
 
-  ash::ShelfView* shelf_view_ = nullptr;
+  raw_ptr<ash::ShelfView, ExperimentalAsh> shelf_view_ = nullptr;
   std::unique_ptr<base::RunLoop> run_loop_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };

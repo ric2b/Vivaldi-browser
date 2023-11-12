@@ -9,6 +9,7 @@
 #include "base/containers/span.h"
 #include "base/memory/raw_ptr.h"
 #include "base/types/strong_alias.h"
+#include "chrome/browser/ui/user_education/scoped_new_badge_tracker.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "content/public/browser/context_menu_params.h"
@@ -115,10 +116,12 @@ class AutofillContextMenuManager {
   // Returns true if the given id is one generated for autofill context menu.
   static bool IsAutofillCustomCommandId(CommandId command_id);
 
-  AutofillContextMenuManager(PersonalDataManager* personal_data_manager,
-                             RenderViewContextMenuBase* delegate,
-                             ui::SimpleMenuModel* menu_model,
-                             Browser* browser);
+  AutofillContextMenuManager(
+      PersonalDataManager* personal_data_manager,
+      RenderViewContextMenuBase* delegate,
+      ui::SimpleMenuModel* menu_model,
+      Browser* browser,
+      std::unique_ptr<ScopedNewBadgeTracker> new_badge_tracker);
   ~AutofillContextMenuManager();
   AutofillContextMenuManager(const AutofillContextMenuManager&) = delete;
   AutofillContextMenuManager& operator=(const AutofillContextMenuManager&) =
@@ -230,10 +233,10 @@ class AutofillContextMenuManager {
   // menu for Autofill.
   absl::optional<CommandId> GetNextAvailableAutofillCommandId();
 
-  raw_ptr<PersonalDataManager, DanglingUntriaged> personal_data_manager_;
-  raw_ptr<ui::SimpleMenuModel> menu_model_;
-  raw_ptr<RenderViewContextMenuBase> delegate_;
-  raw_ptr<Browser, DanglingUntriaged> browser_;
+  const raw_ptr<PersonalDataManager, DanglingUntriaged> personal_data_manager_;
+  const raw_ptr<ui::SimpleMenuModel> menu_model_;
+  const raw_ptr<RenderViewContextMenuBase> delegate_;
+  const raw_ptr<Browser, DanglingUntriaged> browser_;
   content::ContextMenuParams params_;
 
   // Stores the count of items added to the context menu from Autofill.
@@ -247,6 +250,8 @@ class AutofillContextMenuManager {
   // Only items that contain the address or credit card details are stored.
   base::flat_map<CommandId, ContextMenuItem>
       command_id_to_menu_item_value_mapper_;
+
+  std::unique_ptr<ScopedNewBadgeTracker> new_badge_tracker_;
 };
 
 }  // namespace autofill

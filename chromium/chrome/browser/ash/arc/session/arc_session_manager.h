@@ -12,6 +12,7 @@
 
 #include "ash/components/arc/session/arc_session_runner.h"
 #include "ash/components/arc/session/arc_stop_reason.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -44,6 +45,12 @@ constexpr const char kGeneratedBuildPropertyFilePath[] =
 // The file exists only when ARCVM is in use.
 constexpr const char kGeneratedCombinedPropertyFilePathVm[] =
     "/run/arcvm/host_generated/combined.prop";
+
+// Maximum number of auto-resumes for ARCVM /data migration. When this number of
+// auto-resumes have been already attempted but the migration has not finished,
+// ARC is blocked and the user needs to manually trigger the resume by clicking
+// a notification.
+constexpr int kArcVmDataMigrationMaxAutoResumeCount = 3;
 
 class ArcDataRemover;
 class ArcDlcInstaller;
@@ -305,6 +312,8 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   ArcSessionRunner* GetArcSessionRunnerForTesting();
   void SetAttemptUserExitCallbackForTesting(
       const base::RepeatingClosure& callback);
+  void SetAttemptRestartCallbackForTesting(
+      const base::RepeatingClosure& callback);
   void SetAndroidManagementCheckerFactoryForTesting(
       ArcRequirementChecker::AndroidManagementCheckerFactory
           android_management_checker_factory) {
@@ -349,6 +358,11 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
 
   // Stops mini-ARC instance. This should only be called before login.
   void StopMiniArcIfNecessary();
+
+  // Returns whether ARC activation is delayed by ARC on Demand
+  bool IsActivationDelayed() const {
+    return activation_delay_elapsed_timer_ != nullptr;
+  }
 
  private:
   // Reports statuses of OptIn flow to UMA.
@@ -461,7 +475,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
       adb_sideloading_availability_delegate_;
 
   // Unowned pointer. Keeps current profile.
-  Profile* profile_ = nullptr;
+  raw_ptr<Profile, ExperimentalAsh> profile_ = nullptr;
 
   // Whether ArcSessionManager is requested to enable (starting to run ARC
   // instance) or not.
@@ -506,6 +520,8 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   std::unique_ptr<base::ElapsedTimer> activation_delay_elapsed_timer_;
 
   base::RepeatingClosure attempt_user_exit_callback_;
+
+  base::RepeatingClosure attempt_restart_callback_;
 
   ArcAppIdProviderImpl app_id_provider_;
 

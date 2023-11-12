@@ -132,7 +132,7 @@ class CORE_EXPORT CSSProperty : public CSSUnresolvedProperty {
   static void FilterWebExposedCSSPropertiesIntoVector(
       const ExecutionContext*,
       const CSSPropertyID*,
-      size_t length,
+      wtf_size_t length,
       Vector<const CSSProperty*>&);
 
   enum Flag : Flags {
@@ -211,6 +211,12 @@ class CORE_EXPORT CSSProperty : public CSSUnresolvedProperty {
       : property_id_(static_cast<uint16_t>(property_id)),
         repetition_separator_(repetition_separator),
         flags_(flags) {}
+
+  enum class ValueMode {
+    kNormal,
+    // https://drafts.csswg.org/css-variables/#animation-tainted
+    kAnimated,
+  };
 
  private:
   uint16_t property_id_;

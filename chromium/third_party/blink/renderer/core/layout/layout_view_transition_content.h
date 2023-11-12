@@ -23,7 +23,8 @@ class CORE_EXPORT LayoutViewTransitionContent : public LayoutReplaced {
     NOT_DESTROYED();
     return "LayoutViewTransitionContent";
   }
-  void OnIntrinsicSizeUpdated(const LayoutSize& intrinsic_size);
+  void OnIntrinsicSizeUpdated(const gfx::RectF& captured_rect,
+                              const gfx::RectF& border_box_rect);
 
   bool IsViewTransitionContent() const override {
     NOT_DESTROYED();
@@ -37,7 +38,11 @@ class CORE_EXPORT LayoutViewTransitionContent : public LayoutReplaced {
                      const PhysicalOffset& paint_offset) const override;
 
  private:
+  PhysicalRect ReplacedContentRectForCapturedContent() const;
+
   scoped_refptr<cc::ViewTransitionContentLayer> layer_;
+  gfx::RectF captured_rect_;
+  gfx::RectF border_box_rect_;
 };
 
 template <>

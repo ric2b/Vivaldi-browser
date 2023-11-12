@@ -13,7 +13,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
@@ -204,7 +203,7 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
             webrtc::ColorSpace::MatrixID::kUnspecified)) {
     video_frame->set_color_space(
         WebRtcToMediaVideoColorSpace(*incoming_frame.color_space())
-            .ToGfxColorSpace());
+            .GuessGfxColorSpace());
   }
 
   // Run render smoothness algorithm only when we don't have to render

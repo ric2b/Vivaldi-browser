@@ -14,6 +14,7 @@ declare global {
       export interface AccountInfo {
         email: string;
         isSyncEnabledForAutofillProfiles: boolean;
+        isEligibleForAddressAccountStorage: boolean;
       }
 
       export enum AddressField {
@@ -123,6 +124,7 @@ declare global {
           params: ValidatePhoneParams): Promise<string[]>;
       export function getCreditCardList(): Promise<CreditCardEntry[]>;
       export function getIbanList(): Promise<IbanEntry[]>;
+      export function isValidIban(ibanValue: string): Promise<boolean>;
       export function maskCreditCard(guid: string): void;
       export function migrateCreditCards(): void;
       export function logServerCardLinkClicked(): void;

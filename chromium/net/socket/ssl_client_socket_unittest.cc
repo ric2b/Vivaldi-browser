@@ -1368,6 +1368,8 @@ class HangingCertVerifier : public CertVerifier {
   }
 
   void SetConfig(const Config& config) override {}
+  void AddObserver(Observer* observer) override {}
+  void RemoveObserver(Observer* observer) override {}
 
  private:
   class HangingRequest : public Request {
@@ -2731,8 +2733,8 @@ TEST_P(SSLClientSocketCertRequestInfoTest, CertKeyTypes) {
   } else {
     // BoringSSL always sends rsa_sign and ecdsa_sign.
     ASSERT_EQ(2u, request_info->cert_key_types.size());
-    EXPECT_EQ(CLIENT_CERT_RSA_SIGN, request_info->cert_key_types[0]);
-    EXPECT_EQ(CLIENT_CERT_ECDSA_SIGN, request_info->cert_key_types[1]);
+    EXPECT_EQ(SSLClientCertType::kRsaSign, request_info->cert_key_types[0]);
+    EXPECT_EQ(SSLClientCertType::kEcdsaSign, request_info->cert_key_types[1]);
   }
 }
 #endif  // !IS_IOS
@@ -3149,7 +3151,7 @@ TEST_P(SSLClientSocketVersionTest,
   // sharding is disabled.
   const SchemefulSite kSiteA(GURL("https://a.test"));
   ssl_config.network_anonymization_key =
-      NetworkAnonymizationKey(kSiteA, kSiteA, /*is_cross_site=*/false);
+      NetworkAnonymizationKey::CreateSameSite(kSiteA);
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   ASSERT_THAT(rv, IsOk());
   ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
@@ -3159,7 +3161,7 @@ TEST_P(SSLClientSocketVersionTest,
 
   const SchemefulSite kSiteB(GURL("https://a.test"));
   ssl_config.network_anonymization_key =
-      NetworkAnonymizationKey(kSiteB, kSiteB, /*is_cross_site=*/false);
+      NetworkAnonymizationKey::CreateSameSite(kSiteB);
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   ASSERT_THAT(rv, IsOk());
   ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
@@ -3178,10 +3180,10 @@ TEST_P(SSLClientSocketVersionTest,
 
   const SchemefulSite kSiteA(GURL("https://a.test"));
   const SchemefulSite kSiteB(GURL("https://b.test"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKeyA(
-      kSiteA, kSiteA, /*is_cross_site=*/false);
-  const NetworkAnonymizationKey kNetworkAnonymizationKeyB(
-      kSiteB, kSiteB, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKeyA =
+      NetworkAnonymizationKey::CreateSameSite(kSiteA);
+  const auto kNetworkAnonymizationKeyB =
+      NetworkAnonymizationKey::CreateSameSite(kSiteB);
 
   ASSERT_TRUE(
       StartEmbeddedTestServer(EmbeddedTestServer::CERT_OK, GetServerConfig()));
@@ -4793,9 +4795,9 @@ TEST_F(SSLClientSocketZeroRTTTest, ZeroRTTParallelReadConfirm) {
 TEST_P(SSLClientSocketReadTest, IdleAfterRead) {
   // Set up a TCP server.
   TCPServerSocket server_listener(nullptr, NetLogSource());
-  ASSERT_THAT(
-      server_listener.Listen(IPEndPoint(IPAddress::IPv4Localhost(), 0), 1),
-      IsOk());
+  ASSERT_THAT(server_listener.Listen(IPEndPoint(IPAddress::IPv4Localhost(), 0),
+                                     1, /*ipv6_only=*/absl::nullopt),
+              IsOk());
   IPEndPoint server_address;
   ASSERT_THAT(server_listener.GetLocalAddress(&server_address), IsOk());
 
@@ -4887,9 +4889,9 @@ TEST_F(SSLClientSocketTest, SSLOverSSLBadCertificate) {
 
   // Set up a TCP server.
   TCPServerSocket server_listener(nullptr, NetLogSource());
-  ASSERT_THAT(
-      server_listener.Listen(IPEndPoint(IPAddress::IPv4Localhost(), 0), 1),
-      IsOk());
+  ASSERT_THAT(server_listener.Listen(IPEndPoint(IPAddress::IPv4Localhost(), 0),
+                                     1, /*ipv6_only=*/absl::nullopt),
+              IsOk());
   IPEndPoint server_address;
   ASSERT_THAT(server_listener.GetLocalAddress(&server_address), IsOk());
 

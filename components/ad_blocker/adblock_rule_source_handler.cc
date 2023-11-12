@@ -274,6 +274,7 @@ void RuleSourceHandler::OnRulesDownloaded(base::FilePath file) {
     LOG(WARNING) << "Downloading rule source:" << rule_source_.source_url
                  << " failed with error " << url_loader->NetError();
 
+    rule_source_.is_fetching = false;
     rule_source_.last_fetch_result = FetchResult::kDownloadFailed;
     rule_source_.next_fetch =
         GetNextUpdateTimeAfterFailUpdate(base::Time::Now());

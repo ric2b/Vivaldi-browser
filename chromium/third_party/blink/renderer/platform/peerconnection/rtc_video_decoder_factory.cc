@@ -23,6 +23,7 @@
 #include "third_party/blink/renderer/platform/webrtc/webrtc_video_utils.h"
 #include "third_party/webrtc/api/video_codecs/h264_profile_level_id.h"
 #include "third_party/webrtc/api/video_codecs/vp9_profile.h"
+#include "third_party/webrtc/media/base/codec.h"
 #include "third_party/webrtc/media/base/media_constants.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
@@ -117,35 +118,11 @@ absl::optional<webrtc::SdpVideoFormat> VdcToWebRtcFormat(
       format.parameters = {
           {cricket::kH264FmtpProfileLevelId,
            *webrtc::H264ProfileLevelIdToString(profile_level_id)},
-          {cricket::kH264FmtpLevelAsymmetryAllowed, "1"},
-          {cricket::kH264FmtpPacketizationMode, "1"}};
+          {cricket::kH264FmtpLevelAsymmetryAllowed, "1"}};
       return format;
     }
     default:
       return absl::nullopt;
-  }
-}
-
-// Due to https://crbug.com/345569, HW decoders do not distinguish between
-// Constrained Baseline(CBP) and Baseline(BP) profiles. Since CBP is a subset of
-// BP, we can report support for both. It is safe to do so when SW fallback is
-// available.
-// TODO(emircan): Remove this when the bug referred above is fixed.
-void MapBaselineProfile(
-    std::vector<webrtc::SdpVideoFormat>* supported_formats) {
-  for (const auto& format : *supported_formats) {
-    const absl::optional<webrtc::H264ProfileLevelId> profile_level_id =
-        webrtc::ParseSdpForH264ProfileLevelId(format.parameters);
-    if (profile_level_id &&
-        profile_level_id->profile == webrtc::H264Profile::kProfileBaseline) {
-      webrtc::SdpVideoFormat cbp_format = format;
-      webrtc::H264ProfileLevelId cbp_profile = *profile_level_id;
-      cbp_profile.profile = webrtc::H264Profile::kProfileConstrainedBaseline;
-      cbp_format.parameters[cricket::kH264FmtpProfileLevelId] =
-          *webrtc::H264ProfileLevelIdToString(cbp_profile);
-      supported_formats->push_back(cbp_format);
-      return;
-    }
   }
 }
 
@@ -233,6 +210,7 @@ RTCVideoDecoderFactory::GetSupportedFormats() const {
         media::VideoColorSpace(), media::kNoTransformation, kDefaultSize,
         gfx::Rect(kDefaultSize), kDefaultSize, media::EmptyExtraData(),
         media::EncryptionScheme::kUnencrypted);
+    config.set_is_rtc(true);
     absl::optional<webrtc::SdpVideoFormat> format;
 
     // The RTCVideoDecoderAdapter is for HW decoders only, so ignore it if there
@@ -249,17 +227,38 @@ RTCVideoDecoderFactory::GetSupportedFormats() const {
     // https://chromium-review.googlesource.com/c/chromium/src/+/3305493
     // For the exact diff.
 
-    if (format)
-      supported_formats.push_back(*format);
+    if (format) {
+      // For H.264 decoder, packetization-mode 0/1 should be both supported.
+      media::VideoCodec codec = WebRtcToMediaVideoCodec(
+          webrtc::PayloadStringToCodecType(format->name));
+      if (codec == media::VideoCodec::kH264) {
+        const std::array<std::string, 2> kH264PacketizationModes = {{"1", "0"}};
+        for (const auto& mode : kH264PacketizationModes) {
+          webrtc::SdpVideoFormat h264_format = *format;
+          h264_format.parameters[cricket::kH264FmtpPacketizationMode] = mode;
+          supported_formats.push_back(h264_format);
+        }
+      } else {
+        supported_formats.push_back(*format);
+      }
+    }
   }
 
-  MapBaselineProfile(&supported_formats);
+  // Due to https://crbug.com/345569, HW decoders do not distinguish between
+  // Constrained Baseline(CBP) and Baseline(BP) profiles. Since CBP is a subset
+  // of BP, we can report support for both. It is safe to do so when SW fallback
+  // is available.
+  // TODO(emircan): Remove this when the bug referred above is fixed.
+  cricket::AddH264ConstrainedBaselineProfileToSupportedFormats(
+      &supported_formats);
   return supported_formats;
 }
 
 webrtc::VideoDecoderFactory::CodecSupport
 RTCVideoDecoderFactory::QueryCodecSupport(const webrtc::SdpVideoFormat& format,
                                           bool reference_scaling) const {
+  CheckAndWaitDecoderSupportStatusIfNeeded();
+
   media::VideoCodec codec =
       WebRtcToMediaVideoCodec(webrtc::PayloadStringToCodecType(format.name));
   if (reference_scaling) {
@@ -272,16 +271,13 @@ RTCVideoDecoderFactory::QueryCodecSupport(const webrtc::SdpVideoFormat& format,
     // Most HW decoders cannot handle reference scaling/spatial layers, so
     // return false if the configuration requires reference scaling unless we
     // explicitly know that the HW decoder can handle this.
-    // D3D11 supports VP9 kSVC HW Decoding. But currently the MFT doesn't
-    // support DXVA decode the VP9 kSVC stream. Keep returning the false until
-    // MFT support it.
     if (codec == media::VideoCodec::kVP9 &&
-        !RTCVideoDecoderAdapter::Vp9HwSupportForSpatialLayers()) {
+        (!gpu_factories_ ||
+         !RTCVideoDecoderAdapter::Vp9HwSupportForSpatialLayers(
+             gpu_factories_->GetDecoderType()))) {
       return {false, false};
     }
   }
-
-  CheckAndWaitDecoderSupportStatusIfNeeded();
 
   media::VideoCodecProfile codec_profile =
       WebRtcVideoFormatToMediaVideoCodecProfile(format);

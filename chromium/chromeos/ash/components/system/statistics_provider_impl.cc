@@ -60,6 +60,9 @@ const char kHardwareClassValueUnknown[] = "unknown";
 
 const char kIsVmCrosSystemKey[] = "inside_vm";
 
+// ChromeOS should allow debug features.
+const char kIsCrosDebugCrosSystemKey[] = "cros_debug";
+
 // Items in region dictionary.
 const char kKeyboardsPath[] = "keyboards";
 const char kLocalesPath[] = "locales";
@@ -361,6 +364,13 @@ bool StatisticsProviderImpl::IsRunningOnVm() {
   return GetMachineStatistic(kIsVmKey) == kIsVmValueTrue;
 }
 
+bool StatisticsProviderImpl::IsCrosDebugMode() {
+  if (!base::SysInfo::IsRunningOnChromeOS()) {
+    return false;
+  }
+  return GetMachineStatistic(kIsCrosDebugKey) == kIsCrosDebugValueTrue;
+}
+
 StatisticsProvider::VpdStatus StatisticsProviderImpl::GetVpdStatus() const {
   return vpd_status_;
 }
@@ -449,6 +459,15 @@ void StatisticsProviderImpl::LoadMachineStatistics(bool load_oem_manifest) {
       machine_info_[kIsVmKey] = kIsVmValueTrue;
     }
 
+    // By default, assume that this is *not* in debug mode. If crossystem is not
+    // present, report that we are not in debug mode.
+    machine_info_[kIsCrosDebugKey] = kIsCrosDebugValueFalse;
+    const auto is_debug_iter = machine_info_.find(kIsCrosDebugCrosSystemKey);
+    if (is_debug_iter != machine_info_.end() &&
+        is_debug_iter->second == kIsCrosDebugValueTrue) {
+      machine_info_[kIsCrosDebugKey] = kIsCrosDebugValueTrue;
+    }
+
     // Use the write-protect value from crossystem only if it hasn't been loaded
     // from any other source, since the result of crossystem is less reliable
     // for this key.
@@ -523,10 +542,7 @@ void StatisticsProviderImpl::LoadMachineInfoFile() {
     std::string stub_contents =
         "\"serial_number\"=\"stub_" +
         base::NumberToString(base::Time::Now().ToJavaTime()) + "\"\n";
-    int bytes_written =
-        base::WriteFile(sources_.machine_info_filepath, stub_contents.c_str(),
-                        stub_contents.size());
-    if (bytes_written < static_cast<int>(stub_contents.size())) {
+    if (!base::WriteFile(sources_.machine_info_filepath, stub_contents)) {
       PLOG(ERROR) << "Error writing machine info stub "
                   << sources_.machine_info_filepath;
     }
@@ -555,9 +571,7 @@ void StatisticsProviderImpl::LoadVpdFiles() {
       return;
     } else {
       std::string stub_contents = "\"ActivateDate\"=\"2000-01\"\n";
-      int bytes_written = base::WriteFile(
-          sources_.vpd_filepath, stub_contents.c_str(), stub_contents.size());
-      if (bytes_written < static_cast<int>(stub_contents.size())) {
+      if (!base::WriteFile(sources_.vpd_filepath, stub_contents)) {
         PLOG(ERROR) << "Error writing VPD stub " << sources_.vpd_filepath;
       }
     }

@@ -131,9 +131,15 @@ locale.  The strings in this file are specific to iOS.
   </translations>
   <release seq="1">
     <messages fallback_to_english="true">
-       <message name="IDS_VIVALDI_IOS_BOOKMARK_DESCRIPTION_HEADER" desc="Title shown above URL field on Edit Bookmark screen. [Length: 20em]">
-         Description
-       </message>
+      <message name="IDS_IOS_APPLICATION_SHORTCUT_INCOGNITOSEARCH_TITLE" desc="Message when opening a New Incognito Search from springboard force touch static shortcuts. [Length: unlimited] [iOS only]." meaning="3D Touch entry to create a new Incognito tab.">
+        Private Search
+      </message>
+      <message name="IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_SEARCH" desc="The iOS menu item for opening a new Incognito tab and doing a new search in that tab." meaning="Do a new search in a new Incognito tab">
+        Private Search
+      </message>
+      <message name="IDS_IOS_TOOLS_MENU_NEW_INCOGNITO_TAB" desc="The iOS menu item for opening a new Incognito tab [iOS only]" meaning="Tools menu entry to create a new Incognito tab. [Length: Unlimited]">
+        New Private Tab
+      </message>
     </messages>
   </release>
 </grit>

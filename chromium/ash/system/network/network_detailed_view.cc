@@ -12,7 +12,6 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/machine_learning/user_settings_event_logger.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/network/network_list_item_view.h"
 #include "ash/system/network/tray_network_state_model.h"
@@ -23,6 +22,7 @@
 #include "base/metrics/user_metrics.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "components/onc/onc_constants.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/button.h"
 
@@ -40,7 +40,6 @@ NetworkDetailedView::NetworkDetailedView(
   CreateTitleRow(list_type_ == ListType::LIST_TYPE_NETWORK
                      ? IDS_ASH_STATUS_TRAY_NETWORK
                      : IDS_ASH_STATUS_TRAY_VPN);
-  CreateTitleRowButtons();
   CreateScrollableList();
   // TODO(b/207089013): add metrics for UI surface displayed.
 }
@@ -63,7 +62,7 @@ void NetworkDetailedView::HandleViewClicked(views::View* view) {
       static_cast<NetworkListItemView*>(view)->network_properties());
 }
 
-void NetworkDetailedView::CreateTitleRowButtons() {
+void NetworkDetailedView::CreateExtraTitleRowButtons() {
   DCHECK(!info_button_);
   tri_view()->SetContainerVisible(TriView::Container::END, true);
 
@@ -140,5 +139,8 @@ void NetworkDetailedView::OnSettingsClicked() {
     system_tray_client->ShowNetworkSettings(guid);
   }
 }
+
+BEGIN_METADATA(NetworkDetailedView, TrayDetailedView)
+END_METADATA
 
 }  // namespace ash

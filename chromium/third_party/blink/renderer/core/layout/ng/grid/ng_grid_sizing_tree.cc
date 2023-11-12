@@ -6,54 +6,62 @@
 
 namespace blink {
 
-NGGridItemSizingData::NGGridItemSizingData(
-    const GridItemData& item_data_in_parent,
-    const NGGridLayoutData& parent_layout_data)
-    : item_data_in_parent(&item_data_in_parent),
-      parent_layout_data(&parent_layout_data) {
-  DCHECK_LE(item_data_in_parent.column_set_indices.end,
-            parent_layout_data.Columns().GetSetCount());
-  DCHECK_LE(item_data_in_parent.row_set_indices.end,
-            parent_layout_data.Rows().GetSetCount());
-}
-
-std::unique_ptr<NGGridLayoutTrackCollection>
-NGGridItemSizingData::CreateSubgridCollection(
-    GridTrackSizingDirection track_direction) const {
-  DCHECK(item_data_in_parent->IsSubgrid());
-
-  const bool is_for_columns_in_parent =
-      item_data_in_parent->is_parallel_with_root_grid
-          ? track_direction == kForColumns
-          : track_direction == kForRows;
-
-  const auto& parent_track_collection = is_for_columns_in_parent
-                                            ? parent_layout_data->Columns()
-                                            : parent_layout_data->Rows();
-  const auto& range_indices = is_for_columns_in_parent
-                                  ? item_data_in_parent->column_range_indices
-                                  : item_data_in_parent->row_range_indices;
-
-  return std::make_unique<NGGridLayoutTrackCollection>(
-      parent_track_collection.CreateSubgridCollection(
-          range_indices.begin, range_indices.end, track_direction));
-}
-
-NGGridSizingTree NGGridSizingTree::CopySubtree(wtf_size_t subtree_root) const {
-  DCHECK_LT(subtree_root, sizing_data_.size());
-
-  const wtf_size_t subtree_size = sizing_data_[subtree_root]->subtree_size;
-  DCHECK_LE(subtree_root + subtree_size, sizing_data_.size());
-
-  NGGridSizingTree subtree_copy(subtree_size);
-  for (wtf_size_t i = 0; i < subtree_size; ++i) {
-    auto& copy_data = subtree_copy.CreateSizingData();
-    const auto& original_data = *sizing_data_[subtree_root + i];
-
-    copy_data.subtree_size = original_data.subtree_size;
-    copy_data.layout_data = original_data.layout_data;
+scoped_refptr<const NGGridLayoutTree> NGGridSizingTree::FinalizeTree() const {
+  auto layout_tree = base::MakeRefCounted<NGGridLayoutTree>(tree_data_.size());
+  for (const auto& grid_tree_node : tree_data_) {
+    layout_tree->Append(grid_tree_node->layout_data,
+                        grid_tree_node->subtree_size);
   }
-  return subtree_copy;
+  return layout_tree;
+}
+
+NGGridSizingTree::GridTreeNode& NGGridSizingTree::CreateSizingData(
+    const NGSubgriddedItemData& subgrid_data) {
+  // Don't add this subgrid's index to the lookup map if it doesn't have a
+  // standalone axis, as we are not going to compute its contribution size.
+  if (subgrid_data && subgrid_data->HasStandaloneAndSubgriddedAxis()) {
+    const auto* subgrid_layout_box = subgrid_data->node.GetLayoutBox();
+
+    if (!subgrid_index_lookup_map_) {
+      subgrid_index_lookup_map_ = MakeGarbageCollected<SubgridIndexLookupMap>();
+    }
+
+    DCHECK(!subgrid_index_lookup_map_->Contains(subgrid_layout_box));
+    subgrid_index_lookup_map_->insert(subgrid_layout_box, tree_data_.size());
+  }
+  return *tree_data_.emplace_back(std::make_unique<GridTreeNode>());
+}
+
+void NGGridSizingTree::AddSubgriddedItemLookupData(
+    NGSubgriddedItemData&& subgridded_item_data) {
+  const auto* item_layout_box = subgridded_item_data->node.GetLayoutBox();
+
+  if (!subgridded_item_data_lookup_map_) {
+    subgridded_item_data_lookup_map_ =
+        MakeGarbageCollected<SubgriddedItemDataLookupMap>();
+  }
+
+  DCHECK(!subgridded_item_data_lookup_map_->Contains(item_layout_box));
+  subgridded_item_data_lookup_map_->insert(item_layout_box,
+                                           std::move(subgridded_item_data));
+}
+
+NGSubgriddedItemData NGGridSizingTree::LookupSubgriddedItemData(
+    const GridItemData& grid_item) const {
+  const auto* item_layout_box = grid_item.node.GetLayoutBox();
+
+  DCHECK(subgridded_item_data_lookup_map_ &&
+         subgridded_item_data_lookup_map_->Contains(item_layout_box));
+  return subgridded_item_data_lookup_map_->at(item_layout_box);
+}
+
+wtf_size_t NGGridSizingTree::LookupSubgridIndex(
+    const GridItemData& subgrid_data) const {
+  const auto* subgrid_layout_box = subgrid_data.node.GetLayoutBox();
+
+  DCHECK(subgrid_index_lookup_map_ &&
+         subgrid_index_lookup_map_->Contains(subgrid_layout_box));
+  return subgrid_index_lookup_map_->at(subgrid_layout_box);
 }
 
 }  // namespace blink

@@ -208,6 +208,8 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
     public static final String ANTI_ABUSE_WHEN_ON_HEADER = "anti_abuse_when_on_header";
     public static final String ANTI_ABUSE_WHEN_ON_SECTION_ONE = "anti_abuse_when_on_section_one";
     public static final String ANTI_ABUSE_WHEN_ON_SECTION_TWO = "anti_abuse_when_on_section_two";
+    public static final String ANTI_ABUSE_WHEN_ON_SECTION_THREE =
+            "anti_abuse_when_on_section_three";
     public static final String ANTI_ABUSE_THINGS_TO_CONSIDER_HEADER =
             "anti_abuse_things_to_consider_header";
     public static final String ANTI_ABUSE_THINGS_TO_CONSIDER_SECTION_ONE =
@@ -1180,6 +1182,8 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
                     screen.findPreference(ANTI_ABUSE_WHEN_ON_SECTION_ONE);
             Preference antiAbuseWhenOnSectionTwo =
                     screen.findPreference(ANTI_ABUSE_WHEN_ON_SECTION_TWO);
+            Preference antiAbuseWhenOnSectionThree =
+                    screen.findPreference(ANTI_ABUSE_WHEN_ON_SECTION_THREE);
             Preference antiAbuseThingsToConsiderHeader =
                     screen.findPreference(ANTI_ABUSE_THINGS_TO_CONSIDER_HEADER);
             Preference antiAbuseThingsToConsiderSectionOne =
@@ -1188,6 +1192,7 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
             screen.removePreference(antiAbuseWhenOnHeader);
             screen.removePreference(antiAbuseWhenOnSectionOne);
             screen.removePreference(antiAbuseWhenOnSectionTwo);
+            screen.removePreference(antiAbuseWhenOnSectionThree);
             screen.removePreference(antiAbuseThingsToConsiderHeader);
             screen.removePreference(antiAbuseThingsToConsiderSectionOne);
         }
@@ -1571,7 +1576,7 @@ public class SingleCategorySettings extends SiteSettingsPreferenceFragment
              * Click is always enabled as a toast will be shown if a managed preference is clicked.
              */
             @Override
-            public boolean isPreferenceClickDisabledByPolicy(Preference preference) {
+            public boolean isPreferenceClickDisabled(Preference preference) {
                 return false;
             }
         };

@@ -55,6 +55,26 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHPasswordsManagementBubbleAfterSaveFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->trigger =
+        EventConfig("password_saved", Comparator(LESS_THAN, 1), 180, 180);
+    config->session_rate = Comparator(ANY, 0);
+    config->availability = Comparator(ANY, 0);
+    return config;
+  }
+
+  if (kIPHPasswordsManagementBubbleDuringSigninFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->trigger =
+        EventConfig("signin_flow_detected", Comparator(LESS_THAN, 1), 180, 180);
+    config->session_rate = Comparator(ANY, 0);
+    config->availability = Comparator(ANY, 0);
+    return config;
+  }
+
   if (kIPHProfileSwitchFeature.name == feature->name) {
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
@@ -114,45 +134,16 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
-  if (kIPHIntentChipFeature.name == feature->name) {
-    absl::optional<FeatureConfig> config = FeatureConfig();
-    config->valid = true;
-    config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(ANY, 0);
-
-    // Show the IPH once a month if the intent chip hasn't opened any app in
-    // a year.
-    config->trigger =
-        EventConfig("intent_chip_trigger", Comparator(EQUAL, 0), 30, 360);
-    config->used =
-        EventConfig("intent_chip_opened_app", Comparator(EQUAL, 0), 360, 360);
-    return config;
-  }
-
   if (kIPHBatterySaverModeFeature.name == feature->name) {
     // Show promo once a year when the battery saver toolbar icon is visible.
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
     config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 0);
     config->trigger = EventConfig("battery_saver_info_triggered",
-                                  Comparator(EQUAL, 0), 360, 360);
+                                  Comparator(LESS_THAN, 3), 360, 360);
     config->used =
         EventConfig("battery_saver_info_shown", Comparator(EQUAL, 0), 7, 360);
-    return config;
-  }
-
-  if (kIPHHighEfficiencyInfoModeFeature.name == feature->name) {
-    absl::optional<FeatureConfig> config = FeatureConfig();
-    config->valid = true;
-    config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(ANY, 0);
-    // Show the promo once a year if the page action chip was not opened
-    // within the last week
-    config->trigger = EventConfig("high_efficiency_info_trigger",
-                                  Comparator(EQUAL, 0), 360, 360);
-    config->used =
-        EventConfig("high_efficiency_info_shown", Comparator(EQUAL, 0), 7, 360);
     return config;
   }
 
@@ -160,10 +151,10 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
     config->availability = Comparator(ANY, 0);
-    config->session_rate = Comparator(ANY, 0);
-    // Show the promo max 3 times, once per day.
+    config->session_rate = Comparator(EQUAL, 0);
+    // Show the promo max 3 times, once per week.
     config->trigger = EventConfig("high_efficiency_prompt_in_trigger",
-                                  Comparator(LESS_THAN, 1), 1, 360);
+                                  Comparator(LESS_THAN, 1), 7, 360);
     // This event is never logged but is included for consistency.
     config->used = EventConfig("high_efficiency_prompt_in_used",
                                Comparator(EQUAL, 0), 360, 360);
@@ -189,6 +180,38 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHPowerBookmarksSidePanelFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    // Show the promo once a year if the price tracking IPH was not triggered.
+    config->trigger = EventConfig("iph_power_bookmarks_side_panel_trigger",
+                                  Comparator(EQUAL, 0), 360, 360);
+    config->used = EventConfig("power_bookmarks_side_panel_shown",
+                               Comparator(EQUAL, 0), 360, 360);
+    return config;
+  }
+
+  if (kIPHPriceTrackingChipFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    // Show the promo only once.
+    config->trigger =
+        EventConfig("price_tracking_chip_iph_trigger", Comparator(EQUAL, 0),
+                    feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+    // Set a dummy config for the used event to be consistent with the other
+    // IPH configurations. The used event is never recorded by the feature code
+    // because the trigger event is already reported the first time the chip is
+    // being used, which corresponds to a used event.
+    config->used =
+        EventConfig("price_tracking_chip_shown", Comparator(ANY, 0), 0, 360);
+    return config;
+  }
+
   if (kIPHPriceTrackingInSidePanelFeature.name == feature->name) {
     absl::optional<FeatureConfig> config = FeatureConfig();
     config->valid = true;
@@ -211,6 +234,53 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
     config->trigger =
         EventConfig("price_tracking_page_action_icon_label_in_trigger",
                     Comparator(LESS_THAN, 1), 1, 360);
+    return config;
+  }
+
+  if (kIPHDesktopCustomizeChromeFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    // Used to increase the usage of Customize Chrome for users who have opened
+    // it 0 times in the last 360 days.
+    config->used =
+        EventConfig("customize_chrome_opened", Comparator(EQUAL, 0), 360, 360);
+    // Triggered when IPH hasn't been shown in the past day.
+    config->trigger = EventConfig("iph_customize_chrome_triggered",
+                                  Comparator(EQUAL, 0), 1, 360);
+    config->snooze_params.max_limit = 4;
+    return config;
+  }
+
+  if (kIPHPasswordsWebAppProfileSwitchFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(ANY, 0);
+    config->trigger =
+        EventConfig("iph_passwords_web_app_profile_switch_triggered",
+                    Comparator(EQUAL, 0), 360, 360);
+    config->used = EventConfig("web_app_profile_menu_shown",
+                               Comparator(EQUAL, 0), 360, 360);
+    return config;
+  }
+
+  if (kIPHDownloadToolbarButtonFeature.name == feature->name) {
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    // Don't show if user has already seen an IPH this session.
+    config->session_rate = Comparator(EQUAL, 0);
+    // Show the promo max once a year if the user hasn't interacted with the
+    // download bubble within the last 21 days.
+    config->trigger = EventConfig("download_bubble_iph_trigger",
+                                  Comparator(EQUAL, 0), 360, 360);
+    config->used = EventConfig("download_bubble_interaction",
+                               Comparator(EQUAL, 0), 21, 360);
+    // Allow snoozing for 7 days, up to 3 times.
+    config->snooze_params.snooze_interval = 7;
+    config->snooze_params.max_limit = 3;
     return config;
   }
 
@@ -1071,6 +1141,35 @@ absl::optional<FeatureConfig> GetClientSideFeatureConfig(
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+
+  if (kIPHAutofillExternalAccountProfileSuggestionFeature.name ==
+      feature->name) {
+    // Externally created account profile suggestion IPH is shown:
+    // * once for an installation, 10-year window is used as the maximum
+    // * if there was no address keyboard accessory IPH in the last 2 weeks
+    // * if such a suggestion was not already accepted
+    absl::optional<FeatureConfig> config = FeatureConfig();
+    config->valid = true;
+    config->availability = Comparator(ANY, 0);
+    config->session_rate = Comparator(EQUAL, 0);
+    config->trigger =
+        EventConfig("autofill_external_account_profile_suggestion_iph_trigger",
+                    Comparator(EQUAL, 0), feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+    config->used =
+        EventConfig("autofill_external_account_profile_suggestion_accepted",
+                    Comparator(EQUAL, 0), feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+
+#if BUILDFLAG(IS_ANDROID)
+    config->event_configs.insert(
+        EventConfig("keyboard_accessory_address_filling_iph_trigger",
+                    Comparator(EQUAL, 0), 14, k10YearsInDays));
+#endif  // BUILDFLAG(IS_ANDROID)
+
+    return config;
+  }
+
   if (kIPHAutofillVirtualCardSuggestionFeature.name == feature->name) {
     // A config that allows the virtual card credit card suggestion IPH to be
     // shown when:

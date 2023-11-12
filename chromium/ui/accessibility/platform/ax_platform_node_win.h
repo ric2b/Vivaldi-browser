@@ -345,7 +345,8 @@ class COMPONENT_EXPORT(AX_PLATFORM) WinAccessibilityAPIUsageObserver {
   WinAccessibilityAPIUsageObserver();
   virtual ~WinAccessibilityAPIUsageObserver();
   virtual void OnMSAAUsed() = 0;
-  virtual void OnIAccessible2Used() = 0;
+  virtual void OnBasicIAccessible2Used() = 0;
+  virtual void OnAdvancedIAccessible2Used() = 0;
   virtual void OnScreenReaderHoneyPotQueried() = 0;
   virtual void OnAccNameCalled() = 0;
   virtual void OnBasicUIAutomationUsed() = 0;
@@ -1362,14 +1363,14 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(
   // argument. The function will skip over any ids that cannot be resolved as
   // valid relation target.
   std::vector<AXPlatformNodeWin*> CreatePlatformNodeVectorFromRelationIdVector(
-      std::vector<int32_t>& relation_id_list);
+      const std::vector<int32_t>& relation_id_list);
 
   // Create a safearray of automation elements from a vector of
   // AXPlatformNodeWin.
   // The caller should validate that all of the given ax platform nodes are
   // valid relation targets.
   SAFEARRAY* CreateUIAElementsSafeArray(
-      std::vector<AXPlatformNodeWin*>& platform_node_list);
+      const std::vector<AXPlatformNodeWin*>& platform_node_list);
 
   // Return an array that contains the center x, y coordinates of the
   // clickable point.
@@ -1425,6 +1426,9 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(
 
   // Helper method getting the selected status.
   bool ISelectionItemProviderIsSelected() const;
+
+  // Helper method for getting the toggle state.
+  ToggleState GetToggleStateImpl();
 
   // Helper method for IsInaccessibleForUIA.
   bool IsNodeInaccessibleForUIA() const;
@@ -1523,6 +1527,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(
   // only use MSAA/IAccessible have a way to turn on accessibility.
   void NotifyObserverForMSAAUsage() const;
 
+  void NotifyAddAXModeFlagsForIA2(const uint32_t ax_modes) const;
   void NotifyAPIObserverForPatternRequest(PATTERNID pattern_id) const;
   void NotifyAPIObserverForPropertyRequest(PROPERTYID property_id) const;
 

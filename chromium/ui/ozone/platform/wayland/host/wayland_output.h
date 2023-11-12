@@ -74,6 +74,7 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
     float scale_factor = 0.0;
     int32_t panel_transform = 0;
     int32_t logical_transform = 0;
+    std::string name;
     std::string description;
   };
 
@@ -98,25 +99,20 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
   void InitializeColorManagementOutput(WaylandZcrColorManager* manager);
   float GetUIScaleFactor() const;
 
-  Metrics GetMetrics() const;
+  const Metrics& GetMetrics() const;
+  void SetMetrics(const Metrics& metrics);
+
+  // TODO(tuluk): Metrics getters below are rendundant and should be replaced
+  // with calls to GetMetrics().
   Id output_id() const { return output_id_; }
-  bool has_output(wl_output* output) const { return output_.get() == output; }
-  float scale_factor() const { return scale_factor_; }
-  int32_t panel_transform() const { return panel_transform_; }
-  int32_t logical_transform() const;
-  gfx::Point origin() const;
-  gfx::Size logical_size() const;
-  gfx::Size physical_size() const { return physical_size_; }
-  gfx::Insets insets() const;
-  int64_t display_id() const;
-  const std::string& name() const;
-  const std::string& description() const;
+  float scale_factor() const;
   WaylandZcrColorManagementOutput* color_management_output() const {
     return color_management_output_.get();
   }
 
-  // Tells if the output has already received necessary screen information such
-  // as physical screen dimensions in the global compositor space.
+  // Returns true if the output has all the state information available
+  // necessary to represent its associated display. This information arrives
+  // asynchronously via events across potentially multiple wayland objects.
   bool IsReady() const;
 
   wl_output* get_output() { return output_.get(); }
@@ -126,10 +122,24 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
 
   void TriggerDelegateNotifications();
 
+  void set_delegate_for_testing(Delegate* delegate) { delegate_ = delegate; }
+  XDGOutput* xdg_output_for_testing() { return xdg_output_.get(); }
+  WaylandZAuraOutput* aura_output_for_testing() { return aura_output_.get(); }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(WaylandOutputTest, NameAndDescriptionFallback);
+  FRIEND_TEST_ALL_PREFIXES(WaylandOutputTest, ScaleFactorFallback);
 
   static constexpr int32_t kDefaultScaleFactor = 1;
+
+  // Called when the wl_output.done event is received and atomically updates
+  // `metrics_` based on the previously received output state events.
+  void UpdateMetrics();
+
+  // True if the client has bound the zaura_output_manager. If present
+  // zaura_output_manager handles the responsibilities of keeping `metrics_` up
+  // to date and triggering delegate notifications.
+  bool IsUsingZAuraOutputManager() const;
 
   // Callback functions used for setting geometric properties of the output
   // and available modes.
@@ -161,18 +171,28 @@ class WaylandOutput : public wl::GlobalObjectRegistrar<WaylandOutput> {
                                       struct wl_output* wl_output,
                                       const char* description);
 
+  // Tracks whether this wl_output is considered "ready". I.e. it has received
+  // all of its relevant state from the server followed by a wl_output.done
+  // event.
+  bool is_ready_ = false;
+
+  // Metrics represents the current state of the display represented by this
+  // output object. This state is updated atomically after the client has
+  // received the wl_output.done event.
+  Metrics metrics_;
+
   const Id output_id_ = 0;
   wl::Object<wl_output> output_;
   std::unique_ptr<XDGOutput> xdg_output_;
   std::unique_ptr<WaylandZAuraOutput> aura_output_;
   std::unique_ptr<WaylandZcrColorManagementOutput> color_management_output_;
+
   float scale_factor_ = kDefaultScaleFactor;
   int32_t panel_transform_ = WL_OUTPUT_TRANSFORM_NORMAL;
   // Origin of the output in DIP screen coordinate.
   gfx::Point origin_;
   // Size of the output in physical pixels.
   gfx::Size physical_size_;
-
   // Fallback name and description.
   // The XDG output specification suggests using it as the primary source of
   // the information about the output.  Two attributes below are used if

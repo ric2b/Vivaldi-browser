@@ -41,9 +41,10 @@ ExtensionFunction::ResponseAction ContextMenusCreateFunction::Run() {
   // removed at the same time. VB-34390
   if (id.incognito && vivaldi::IsVivaldiApp(extension_id()))
     id.incognito = false;
-  std::unique_ptr<api::context_menus::Create::Params> params(
-      api::context_menus::Create::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  absl::optional<api::context_menus::Create::Params> params =
+      api::context_menus::Create::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   if (params->create_properties.id) {
     id.string_uid = *params->create_properties.id;
@@ -76,10 +77,11 @@ ExtensionFunction::ResponseAction ContextMenusUpdateFunction::Run() {
                        MenuItem::ExtensionKey(extension_id()));
   if (item_id.incognito && vivaldi::IsVivaldiApp(extension_id()))
     item_id.incognito = false;
-  std::unique_ptr<api::context_menus::Update::Params> params(
-      api::context_menus::Update::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<api::context_menus::Update::Params> params =
+      api::context_menus::Update::Params::Create(args());
+
+  EXTENSION_FUNCTION_VALIDATE(params);
   if (params->id.as_string)
     item_id.string_uid = *params->id.as_string;
   else if (params->id.as_integer)
@@ -97,9 +99,9 @@ ExtensionFunction::ResponseAction ContextMenusUpdateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction ContextMenusRemoveFunction::Run() {
-  std::unique_ptr<api::context_menus::Remove::Params> params(
-      api::context_menus::Remove::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<api::context_menus::Remove::Params> params =
+      api::context_menus::Remove::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   MenuManager* manager = MenuManager::Get(browser_context());
 

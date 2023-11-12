@@ -24,7 +24,8 @@ class PermissionFeature : public SimpleFeature {
       const GURL& url,
       Feature::Platform platform,
       int context_id,
-      bool check_developer_mode) const override;
+      bool check_developer_mode,
+      const ContextData& context_data) const override;
 };
 
 }  // namespace extensions

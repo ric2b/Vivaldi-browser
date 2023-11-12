@@ -18,4 +18,7 @@ GetAllNotificationResult::GetAllNotificationResult() = default;
 
 GetAllNotificationResult::~GetAllNotificationResult() = default;
 
+GetAllNotificationResult::GetAllNotificationResult(
+    const GetAllNotificationResult& notifications) = default;
+
 }  // namespace calendar

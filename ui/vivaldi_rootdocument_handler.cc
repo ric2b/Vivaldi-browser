@@ -51,7 +51,9 @@ content::BrowserContext*
 VivaldiRootDocumentHandlerFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
   // Redirected in incognito.
-  return ExtensionsBrowserClient::Get()->GetOriginalContext(context);
+  return ExtensionsBrowserClient::Get()->GetRedirectedContextInIncognito(
+      context, /*force_guest_profile=*/true, /*force_system_profile=*/false);
+
 }
 
 VivaldiRootDocumentHandler::VivaldiRootDocumentHandler(

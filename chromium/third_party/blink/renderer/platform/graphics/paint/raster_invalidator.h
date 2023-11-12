@@ -38,13 +38,11 @@ class PLATFORM_EXPORT RasterInvalidator {
 
   // Generate raster invalidations for a subset of the paint chunks in the
   // paint artifact.
-  void Generate(
-      RasterInvalidationFunction,
-      const PaintChunkSubset&,
-      const gfx::Vector2dF& layer_offset,
-      const gfx::Size& layer_bounds,
-      const PropertyTreeState& layer_state,
-      DisplayItemClientId layer_client_id = kInvalidDisplayItemClientId);
+  void Generate(RasterInvalidationFunction,
+                const PaintChunkSubset&,
+                const gfx::Vector2dF& layer_offset,
+                const gfx::Size& layer_bounds,
+                const PropertyTreeState& layer_state);
 
   // Called when we repainted PaintArtifact but a ContentLayerClientImpl doesn't
   // have anything changed. We just need to let |old_paint_artifact_| point to
@@ -148,7 +146,9 @@ class PLATFORM_EXPORT RasterInvalidator {
                          const PaintChunk& old_chunk,
                          const PaintChunkInfo& new_chunk_info,
                          const PaintChunkInfo& old_chunk_info,
-                         const PropertyTreeState& layer_state) const;
+                         const PropertyTreeState& layer_state,
+                         const float absolute_translation_tolerance,
+                         const float other_transform_tolerance) const;
 
   // Clip a rect in the layer space by the layer bounds.
   template <typename Rect>

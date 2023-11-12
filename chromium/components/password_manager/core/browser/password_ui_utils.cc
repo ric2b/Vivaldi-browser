@@ -20,6 +20,8 @@
 #include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace password_manager {
 
@@ -161,16 +163,15 @@ std::vector<std::u16string> GetUsernamesForRealm(
   return usernames;
 }
 
-int GetPlatformAuthenticatorLabel() {
-#if BUILDFLAG(IS_WIN)
-  return IDS_PASSWORD_MANAGER_USE_WINDOWS_HELLO;
-#elif BUILDFLAG(IS_MAC)
-  return IDS_PASSWORD_MANAGER_USE_TOUCH_ID;
-#elif BUILDFLAG(IS_ANDROID)
-  return IDS_PASSWORD_MANAGER_USE_SCREEN_LOCK;
-#else
-  return IDS_PASSWORD_MANAGER_USE_GENERIC_DEVICE;
-#endif
+std::u16string ToUsernameString(const std::u16string& username) {
+  if (!username.empty()) {
+    return username;
+  }
+  return l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_EMPTY_LOGIN);
+}
+
+std::u16string ToUsernameString(const std::string& username) {
+  return ToUsernameString(base::UTF8ToUTF16(username));
 }
 
 }  // namespace password_manager

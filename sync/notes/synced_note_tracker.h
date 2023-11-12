@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/guid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "components/sync/base/client_tag_hash.h"
@@ -21,10 +22,6 @@ namespace sync_pb {
 class NotesModelMetadata;
 class EntitySpecifics;
 }  // namespace sync_pb
-
-namespace base {
-class GUID;
-}  // namespace base
 
 namespace vivaldi {
 class NotesModel;
@@ -242,7 +239,7 @@ class SyncedNoteTracker {
       const vivaldi::NoteNode* node,
       std::vector<const SyncedNoteTrackerEntity*>* ordered_entities) const;
 
-  file_sync::SyncedFileStore* synced_file_store_;
+  const raw_ptr<file_sync::SyncedFileStore> synced_file_store_;
 
   // A map of sync server ids to sync entities. This should contain entries and
   // metadata for almost everything.

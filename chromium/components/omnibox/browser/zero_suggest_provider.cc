@@ -24,10 +24,10 @@
 #include "components/omnibox/browser/autocomplete_match_classification.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
-#include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
+#include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/remote_suggestions_service.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
 #include "components/omnibox/browser/zero_suggest_cache_service.h"
@@ -39,6 +39,7 @@
 #include "components/url_formatter/url_formatter.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
@@ -196,7 +197,7 @@ bool ShouldCacheResultTypeInContext(const ResultType result_type,
     case ResultType::kRemoteNoURL:
       return true;
     case ResultType::kRemoteSendURL:
-      return BaseSearchProvider::IsSearchResultsPage(page_class)
+      return omnibox::IsSearchResultsPage(page_class)
                  ? base::FeatureList::IsEnabled(
                        omnibox::kZeroSuggestPrefetchingOnSRP)
                  : base::FeatureList::IsEnabled(
@@ -304,7 +305,7 @@ bool ReadStoredResponse(const AutocompleteProviderClient* client,
     return false;
   }
 
-  std::unique_ptr<base::Value> response_data =
+  absl::optional<base::Value::List> response_data =
       SearchSuggestionParser::DeserializeJsonData(response_json);
   if (!response_data) {
     return false;
@@ -338,7 +339,7 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::ResultTypeToRun(
   }
 
   // New Tab Page.
-  if (BaseSearchProvider::IsNTPPage(page_class)) {
+  if (omnibox::IsNTPPage(page_class)) {
     if (focus_type_input_type ==
         std::make_pair(OFT::INTERACTION_FOCUS, OIT::EMPTY)) {
       return ResultType::kRemoteNoURL;
@@ -347,13 +348,13 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::ResultTypeToRun(
 
   // The following cases require sending the current page URL in the request.
   // Ensure the URL is valid with an HTTP(S) scheme and is not the NTP page URL.
-  if (BaseSearchProvider::IsNTPPage(page_class) ||
+  if (omnibox::IsNTPPage(page_class) ||
       !BaseSearchProvider::CanSendPageURLInRequest(input.current_url())) {
     return ResultType::kNone;
   }
 
   // Open Web - does NOT include Search Results Page.
-  if (BaseSearchProvider::IsOtherWebPage(page_class)) {
+  if (omnibox::IsOtherWebPage(page_class)) {
     if (focus_type_input_type ==
             std::make_pair(OFT::INTERACTION_FOCUS, OIT::URL) &&
         base::FeatureList::IsEnabled(
@@ -369,7 +370,7 @@ ZeroSuggestProvider::ResultType ZeroSuggestProvider::ResultTypeToRun(
   }
 
   // Search Results Page.
-  if (BaseSearchProvider::IsSearchResultsPage(page_class)) {
+  if (omnibox::IsSearchResultsPage(page_class)) {
     if (focus_type_input_type ==
             std::make_pair(OFT::INTERACTION_FOCUS, OIT::URL) &&
         base::FeatureList::IsEnabled(omnibox::kFocusTriggersSRPZeroSuggest)) {
@@ -710,7 +711,7 @@ void ZeroSuggestProvider::ConvertSuggestResultsToAutocompleteMatches(
 
   if (results.field_trial_triggered) {
     client()->GetOmniboxTriggeredFeatureService()->FeatureTriggered(
-        OmniboxTriggeredFeatureService::Feature::kRemoteZeroSuggestFeature);
+        metrics::OmniboxEventProto_Feature_REMOTE_ZERO_SUGGEST_FEATURE);
   }
 
   // Add all the SuggestResults to the map. We display all ZeroSuggest search

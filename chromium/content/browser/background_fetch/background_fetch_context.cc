@@ -23,7 +23,7 @@
 #include "content/common/background_fetch/background_fetch_types.h"
 #include "content/public/browser/background_fetch_delegate.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
@@ -81,8 +81,6 @@ void BackgroundFetchContext::DidGetInitializationData(
 
   if (error != blink::mojom::BackgroundFetchError::NONE)
     return;
-
-  background_fetch::RecordRegistrationsOnStartup(initialization_data.size());
 
   for (auto& data : initialization_data) {
     for (auto& observer : data_manager_->observers()) {

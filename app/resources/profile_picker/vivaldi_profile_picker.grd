@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grit latest_public_release="0" current_release="1">
+  <release seq="1" allow_pseudo="false">
+    <includes>
+      <include name="IDR_PROFILE_PICKER_IMAGES_LEFT_BANNER_IMAGE_SVG" file="images/left_banner_image.svg" resource_path="images/left_banner_image.svg" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_PROFILE_PICKER_IMAGES_RIGHT_BANNER_IMAGE_SVG" file="images/right_banner_image.svg" resource_path="images/right_banner_image.svg" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_PROFILE_PICKER_IMAGES_DARK_MODE_LEFT_BANNER_IMAGE_SVG" file="images/dark_mode_left_banner_image.svg" resource_path="images/dark_mode_left_banner_image.svg" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_PROFILE_PICKER_IMAGES_DARK_MODE_RIGHT_BANNER_IMAGE_SVG" file="images/dark_mode_right_banner_image.svg" resource_path="images/dark_mode_right_banner_image.svg" use_base_dir="false" type="BINDATA" />
+    </includes>
+  </release>
+</grit>

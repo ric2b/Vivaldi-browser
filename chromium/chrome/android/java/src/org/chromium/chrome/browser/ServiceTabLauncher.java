@@ -13,11 +13,10 @@ import androidx.annotation.Nullable;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.base.metrics.TimingMetric;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityClient;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
-import org.chromium.chrome.browser.browserservices.metrics.BrowserServicesTimingMetrics;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.AsyncTabCreationParams;
@@ -29,7 +28,6 @@ import org.chromium.components.payments.PaymentRequestService;
 import org.chromium.components.webapk.lib.client.WebApkValidator;
 import org.chromium.components.webapps.ShortcutSource;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.content_public.common.ResourceRequestBody;
@@ -78,7 +76,7 @@ public class ServiceTabLauncher {
             if (paymentHandlerWebContent != null) {
                 onWebContentsForRequestAvailable(requestId, paymentHandlerWebContent);
             } else {
-                PostTask.postTask(UiThreadTaskTraits.DEFAULT,
+                PostTask.postTask(TaskTraits.UI_DEFAULT,
                         () -> onWebContentsForRequestAvailable(requestId, null));
             }
             return;
@@ -94,11 +92,7 @@ public class ServiceTabLauncher {
             final String extraHeaders, final ResourceRequestBody postData) {
         Context context = ContextUtils.getApplicationContext();
 
-        List<ResolveInfo> resolveInfos;
-        try (TimingMetric t = TimingMetric.mediumUptime(
-                     BrowserServicesTimingMetrics.SERVICE_TAB_RESOLVE_TIME)) {
-            resolveInfos = WebApkValidator.resolveInfosForUrl(context, url);
-        }
+        List<ResolveInfo> resolveInfos = WebApkValidator.resolveInfosForUrl(context, url);
         String webApkPackageName = WebApkValidator.findFirstWebApkPackage(context, resolveInfos);
 
         if (webApkPackageName != null) {

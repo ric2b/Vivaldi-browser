@@ -5,11 +5,11 @@
 #include "base/memory/raw_ptr.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "base/bits.h"
 #include "base/containers/cxx20_erase.h"
-#include "base/cxx17_backports.h"
 #include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -2492,6 +2492,168 @@ error::Error GLES2DecoderPassthroughImpl::DoReadBuffer(GLenum src) {
   return error::kNoError;
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoWritePixelsINTERNAL(
+    GLint x_offset,
+    GLint y_offset,
+    GLint plane_index,
+    GLuint src_width,
+    GLuint src_height,
+    GLuint src_row_bytes,
+    GLuint src_sk_color_type,
+    GLuint src_sk_alpha_type,
+    GLint shm_id,
+    GLuint shm_offset,
+    GLuint pixels_offset,
+    GLuint mailbox_offset) {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoReadbackARGBImagePixelsINTERNAL(
+    GLint src_x,
+    GLint src_y,
+    GLint plane_index,
+    GLuint dst_width,
+    GLuint dst_height,
+    GLuint row_bytes,
+    GLuint dst_sk_color_type,
+    GLuint dst_sk_alpha_type,
+    GLint shm_id,
+    GLuint shm_offset,
+    GLuint color_space_offset,
+    GLuint pixels_offset,
+    GLuint mailbox_offset) {
+  if (!lazy_context_) {
+    lazy_context_ = LazySharedContextState::Create(this);
+    if (!lazy_context_) {
+      return error::kNoError;
+    }
+  }
+  ScopedPixelLocalStorageInterrupt scoped_pls_interrupt(this);
+  ui::ScopedMakeCurrent smc(lazy_context_->shared_context_state()->context(),
+                            lazy_context_->shared_context_state()->surface());
+
+  if (dst_sk_color_type > kLastEnum_SkColorType || dst_sk_color_type < 0) {
+    InsertError(GL_INVALID_ENUM,
+                "dst_sk_color_type must be a valid SkColorType");
+    return error::kNoError;
+  }
+  if (dst_sk_alpha_type > kLastEnum_SkAlphaType || dst_sk_alpha_type < 0) {
+    InsertError(GL_INVALID_ENUM,
+                "dst_sk_alpha_type must be a valid SkAlphaType");
+    return error::kNoError;
+  }
+
+  auto* mailbox_memory = GetSharedMemoryAs<Mailbox*>(
+      shm_id, shm_offset + mailbox_offset, sizeof(Mailbox));
+  if (!mailbox_memory) {
+    InsertError(GL_INVALID_OPERATION,
+                "Failed to retrieve memory for readPixels mailbox");
+    return error::kOutOfBounds;
+  }
+  Mailbox source_mailbox = Mailbox::FromVolatile(
+      *reinterpret_cast<const volatile Mailbox*>(mailbox_memory));
+  DLOG_IF(ERROR, !source_mailbox.Verify())
+      << "ReadbackImagePixels was passed an invalid mailbox";
+  auto source_shared_image =
+      group_->shared_image_representation_factory()->ProduceSkia(
+          source_mailbox, scoped_refptr<gpu::SharedContextState>(
+                              lazy_context_->shared_context_state()));
+  if (!source_shared_image) {
+    InsertError(GL_INVALID_VALUE, "Unknown mailbox");
+    return error::kNoError;
+  }
+
+  viz::SharedImageFormat source_format = source_shared_image->format();
+
+  // If present, the color space is serialized into shared memory after the
+  // Result and before the mailbox.
+  if (color_space_offset > mailbox_offset) {
+    InsertError(GL_INVALID_VALUE,
+                "|mailbox_offset| must be >= |color_space_offset|");
+    return error::kOutOfBounds;
+  }
+  unsigned int color_space_size = mailbox_offset - color_space_offset;
+
+  sk_sp<SkColorSpace> dst_color_space;
+  if (color_space_size) {
+    // For multiplanar formats readback is per plane, and destination color
+    // space must be nullptr to avoid unexpected color conversions.
+    if (source_format.is_multi_plane()) {
+      InsertError(GL_INVALID_OPERATION,
+                  "Unexpected color space for multiplanar shared image");
+      return error::kNoError;
+    }
+    void* color_space_bytes = GetSharedMemoryAs<void*>(
+        shm_id, shm_offset + color_space_offset, color_space_size);
+    if (!color_space_bytes) {
+      InsertError(GL_INVALID_OPERATION,
+                  "Failed to retrieve serialized SkColorSpace.");
+      return error::kOutOfBounds;
+    }
+    dst_color_space =
+        SkColorSpace::Deserialize(color_space_bytes, color_space_size);
+    if (!dst_color_space) {
+      InsertError(GL_INVALID_OPERATION,
+                  "Failed to deserialize expected SkColorSpace");
+      return error::kNoError;
+    }
+  }
+
+  SkImageInfo dst_info = SkImageInfo::Make(
+      dst_width, dst_height, static_cast<SkColorType>(dst_sk_color_type),
+      static_cast<SkAlphaType>(dst_sk_alpha_type), std::move(dst_color_space));
+
+  if (row_bytes < dst_info.minRowBytes()) {
+    InsertError(GL_INVALID_VALUE,
+                "row_bytes be >= "
+                "SkImageInfo::minRowBytes() for dest image.");
+    return error::kNoError;
+  }
+
+  size_t byte_size = dst_info.computeByteSize(row_bytes);
+  if (byte_size > UINT32_MAX) {
+    InsertError(GL_INVALID_VALUE,
+                "Cannot request a memory chunk larger than UINT32_MAX bytes");
+    return error::kNoError;
+  }
+
+  void* pixel_address =
+      GetSharedMemoryAs<void*>(shm_id, shm_offset + pixels_offset, byte_size);
+  if (!pixel_address) {
+    InsertError(GL_INVALID_OPERATION,
+                "Failed to retrieve memory for readPixels output");
+    return error::kOutOfBounds;
+  }
+
+  typedef cmds::ReadbackARGBImagePixelsINTERNAL::Result Result;
+  Result* result =
+      GetSharedMemoryAs<Result*>(shm_id, shm_offset, sizeof(Result));
+  if (!result) {
+    InsertError(GL_INVALID_OPERATION,
+                "Failed to retrieve memory for readPixels result");
+    return error::kOutOfBounds;
+  }
+  if (!source_format.IsValidPlaneIndex(plane_index)) {
+    InsertError(GL_INVALID_OPERATION, "Invalid plane_index");
+    return error::kNoError;
+  }
+
+  CopySharedImageHelper helper(group_->shared_image_representation_factory(),
+                               lazy_context_->shared_context_state());
+  auto helper_result =
+      helper.ReadPixels(src_x, src_y, plane_index, row_bytes, dst_info,
+                        pixel_address, std::move(source_shared_image));
+
+  if (!helper_result.has_value()) {
+    InsertError(helper_result.error().gl_error, helper_result.error().msg);
+  } else {
+    *result = 1;
+  }
+
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoReadPixels(GLint x,
                                                        GLint y,
                                                        GLsizei width,
@@ -3838,8 +4000,7 @@ error::Error GLES2DecoderPassthroughImpl::DoSwapBuffers(uint64_t swap_id,
         emulated_front_buffer_ = std::move(available_color_textures_.back());
         available_color_textures_.pop_back();
       } else {
-        emulated_front_buffer_ = std::make_unique<EmulatedColorBuffer>(
-            api(), emulated_default_framebuffer_format_);
+        emulated_front_buffer_ = std::make_unique<EmulatedColorBuffer>(this);
         emulated_front_buffer_->Resize(emulated_back_buffer_->size);
       }
     }
@@ -4021,8 +4182,8 @@ error::Error GLES2DecoderPassthroughImpl::DoResizeCHROMIUM(
   static_assert(sizeof(GLuint) >= sizeof(int), "Unexpected GLuint size.");
   static const GLuint kMaxDimension =
       static_cast<GLuint>(std::numeric_limits<int>::max());
-  gfx::Size safe_size(base::clamp(width, 1U, kMaxDimension),
-                      base::clamp(height, 1U, kMaxDimension));
+  gfx::Size safe_size(std::clamp(width, 1U, kMaxDimension),
+                      std::clamp(height, 1U, kMaxDimension));
   if (offscreen_) {
     if (!ResizeOffscreenFramebuffer(safe_size)) {
       LOG(ERROR) << "GLES2DecoderPassthroughImpl: Context lost because "
@@ -4915,8 +5076,7 @@ GLES2DecoderPassthroughImpl::DoCreateAndTexStorage2DSharedImageINTERNAL(
   resources_->texture_object_map.RemoveClientID(texture_client_id);
   resources_->texture_object_map.SetIDMapping(texture_client_id, texture);
   resources_->texture_shared_image_map[texture_client_id] =
-      PassthroughResources::SharedImageData(std::move(shared_image), api(),
-                                            feature_info_.get());
+      PassthroughResources::SharedImageData(this, std::move(shared_image));
 
   return error::kNoError;
 }
@@ -4976,6 +5136,7 @@ error::Error GLES2DecoderPassthroughImpl::DoConvertRGBAToYUVAMailboxesINTERNAL(
       return error::kNoError;
     }
   }
+  ScopedPixelLocalStorageInterrupt scoped_pls_interrupt(this);
   ui::ScopedMakeCurrent smc(lazy_context_->shared_context_state()->context(),
                             lazy_context_->shared_context_state()->surface());
   CopySharedImageHelper helper(group_->shared_image_representation_factory(),
@@ -4999,6 +5160,7 @@ error::Error GLES2DecoderPassthroughImpl::DoConvertYUVAMailboxesToRGBINTERNAL(
       return error::kNoError;
     }
   }
+  ScopedPixelLocalStorageInterrupt scoped_pls_interrupt(this);
   ui::ScopedMakeCurrent smc(lazy_context_->shared_context_state()->context(),
                             lazy_context_->shared_context_state()->surface());
   CopySharedImageHelper helper(group_->shared_image_representation_factory(),
@@ -5026,12 +5188,57 @@ error::Error GLES2DecoderPassthroughImpl::DoCopySharedImageINTERNAL(
       return error::kNoError;
     }
   }
+  ScopedPixelLocalStorageInterrupt scoped_pls_interrupt(this);
   ui::ScopedMakeCurrent smc(lazy_context_->shared_context_state()->context(),
                             lazy_context_->shared_context_state()->surface());
   CopySharedImageHelper helper(group_->shared_image_representation_factory(),
                                lazy_context_->shared_context_state());
   auto result = helper.CopySharedImage(xoffset, yoffset, x, y, width, height,
                                        unpack_flip_y, mailboxes);
+  if (!result.has_value()) {
+    InsertError(result.error().gl_error, result.error().msg);
+  }
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoCopySharedImageToTextureINTERNAL(
+    GLuint texture,
+    GLenum target,
+    GLuint internal_format,
+    GLenum type,
+    GLint src_x,
+    GLint src_y,
+    GLsizei width,
+    GLsizei height,
+    GLboolean flip_y,
+    const volatile GLbyte* src_mailbox) {
+  if (!lazy_context_) {
+    lazy_context_ = LazySharedContextState::Create(this);
+    if (!lazy_context_) {
+      return error::kNoError;
+    }
+  }
+  ScopedPixelLocalStorageInterrupt scoped_pls_interrupt(this);
+  ui::ScopedMakeCurrent smc(lazy_context_->shared_context_state()->context(),
+                            lazy_context_->shared_context_state()->surface());
+
+  if (GLenumToTextureTarget(target) == TextureTarget::kUnkown) {
+    InsertError(GL_INVALID_VALUE, "Invalid texture target");
+    return error::kNoError;
+  }
+
+  GLuint gl_texture_service_id = GetTextureServiceID(
+      api(), texture, resources_, /*create_if_missing=*/false);
+  if (gl_texture_service_id == 0) {
+    InsertError(GL_INVALID_OPERATION, "Cannot get texture service id");
+    return error::kNoError;
+  }
+
+  CopySharedImageHelper helper(group_->shared_image_representation_factory(),
+                               lazy_context_->shared_context_state());
+  auto result = helper.CopySharedImageToGLTexture(
+      gl_texture_service_id, target, internal_format, type, src_x, src_y, width,
+      height, flip_y, src_mailbox);
   if (!result.has_value()) {
     InsertError(result.error().gl_error, result.error().msg);
   }
@@ -5047,6 +5254,211 @@ error::Error GLES2DecoderPassthroughImpl::DoEnableiOES(GLenum target,
 error::Error GLES2DecoderPassthroughImpl::DoDisableiOES(GLenum target,
                                                         GLuint index) {
   api()->glDisableiOESFn(target, index);
+  return error::kNoError;
+}
+
+constexpr static char kPLSDefaultFramebufferBound[] =
+    "Default framebuffer object name 0 does not support pixel local storage.";
+
+error::Error
+GLES2DecoderPassthroughImpl::DoFramebufferMemorylessPixelLocalStorageANGLE(
+    GLint plane,
+    GLenum internalformat) {
+  // Memoryless pixel local storage planes cannot be saved and restored for a
+  // context switch, so we do not support them in the command buffer.
+  InsertError(GL_INVALID_OPERATION,
+              "glFramebufferMemorylessPixelLocalStorageANGLE is not supported");
+  NOTIMPLEMENTED();
+  return error::kUnknownCommand;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoFramebufferTexturePixelLocalStorageANGLE(
+    GLint plane,
+    GLuint backingtexture,
+    GLint level,
+    GLint layer) {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    return error::kNoError;
+  }
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
+  BindPendingImageForClientIDIfNeeded(backingtexture);
+#endif
+  api()->glFramebufferTexturePixelLocalStorageANGLEFn(
+      plane, GetTextureServiceID(api(), backingtexture, resources_, false),
+      level, layer);
+  return error::kNoError;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoFramebufferPixelLocalClearValuefvANGLE(
+    GLint plane,
+    const volatile GLfloat* value) {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    return error::kNoError;
+  }
+  api()->glFramebufferPixelLocalClearValuefvANGLEFn(
+      plane, const_cast<const GLfloat*>(value));
+  return error::kNoError;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoFramebufferPixelLocalClearValueivANGLE(
+    GLint plane,
+    const volatile GLint* value) {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    return error::kNoError;
+  }
+  api()->glFramebufferPixelLocalClearValueivANGLEFn(
+      plane, const_cast<const GLint*>(value));
+  return error::kNoError;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoFramebufferPixelLocalClearValueuivANGLE(
+    GLint plane,
+    const volatile GLuint* value) {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    return error::kNoError;
+  }
+  api()->glFramebufferPixelLocalClearValueuivANGLEFn(
+      plane, const_cast<const GLuint*>(value));
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoBeginPixelLocalStorageANGLE(
+    GLsizei n,
+    const volatile GLenum* loadops) {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    return error::kNoError;
+  }
+  // Copy the loadops to avoid a TOCTOU race condition.
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "<n> cannot be negative.");
+    return error::kNoError;
+  }
+  if (n > kPassthroughMaxPLSPlanes) {
+    InsertError(GL_INVALID_VALUE,
+                "<n> must be <= GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE.");
+    return error::kNoError;
+  }
+  GLenum loadops_copy[kPassthroughMaxPLSPlanes];
+  std::copy(loadops, loadops + n, loadops_copy);
+  api()->glBeginPixelLocalStorageANGLEFn(n, loadops_copy);
+  has_activated_pixel_local_storage_ = true;
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoEndPixelLocalStorageANGLE(
+    GLsizei n,
+    const volatile GLenum* storeops) {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    return error::kNoError;
+  }
+  // Copy the storeops to avoid a TOCTOU race condition.
+  if (n < 0) {
+    InsertError(GL_INVALID_VALUE, "<n> cannot be negative.");
+    return error::kNoError;
+  }
+  if (n > kPassthroughMaxPLSPlanes) {
+    InsertError(GL_INVALID_VALUE,
+                "<n> must be <= GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE.");
+    return error::kNoError;
+  }
+  GLenum storeops_copy[kPassthroughMaxPLSPlanes];
+  std::copy(storeops, storeops + n, storeops_copy);
+  api()->glEndPixelLocalStorageANGLEFn(n, storeops_copy);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoPixelLocalStorageBarrierANGLE() {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    return error::kNoError;
+  }
+  api()->glPixelLocalStorageBarrierANGLEFn();
+  return error::kNoError;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoFramebufferPixelLocalStorageInterruptANGLE() {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    return error::kNoError;
+  }
+  api()->glFramebufferPixelLocalStorageInterruptANGLEFn();
+  return error::kNoError;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoFramebufferPixelLocalStorageRestoreANGLE() {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    return error::kNoError;
+  }
+  api()->glFramebufferPixelLocalStorageRestoreANGLEFn();
+  return error::kNoError;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoGetFramebufferPixelLocalStorageParameterfvANGLE(
+    GLint plane,
+    GLenum pname,
+    GLsizei bufsize,
+    GLsizei* length,
+    GLfloat* params) {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    *length = 0;
+    return error::kNoError;
+  }
+
+  CheckErrorCallbackState();
+
+  api()->glGetFramebufferPixelLocalStorageParameterfvRobustANGLEFn(
+      plane, pname, bufsize, length, params);
+
+  if (CheckErrorCallbackState()) {
+    *length = 0;
+    return error::kNoError;
+  }
+
+  return error::kNoError;
+}
+
+error::Error
+GLES2DecoderPassthroughImpl::DoGetFramebufferPixelLocalStorageParameterivANGLE(
+    GLint plane,
+    GLenum pname,
+    GLsizei bufsize,
+    GLsizei* length,
+    GLint* params) {
+  if (IsEmulatedFramebufferBound(GL_DRAW_FRAMEBUFFER)) {
+    InsertError(GL_INVALID_OPERATION, kPLSDefaultFramebufferBound);
+    *length = 0;
+    return error::kNoError;
+  }
+
+  CheckErrorCallbackState();
+
+  api()->glGetFramebufferPixelLocalStorageParameterivRobustANGLEFn(
+      plane, pname, bufsize, length, params);
+
+  if (CheckErrorCallbackState()) {
+    *length = 0;
+    return error::kNoError;
+  }
+
+  if (PatchGetFramebufferPixelLocalStorageParameterivANGLE(
+          plane, pname, *length, params) != error::kNoError) {
+    *length = 0;
+    return error::kInvalidArguments;
+  }
+
   return error::kNoError;
 }
 

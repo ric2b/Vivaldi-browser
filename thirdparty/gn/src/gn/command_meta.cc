@@ -87,9 +87,9 @@ int RunMeta(const std::vector<std::string>& args) {
     return 1;
 
   const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
-  std::string rebase_dir = cmdline->GetSwitchValueASCII("rebase");
-  std::string data_keys_str = cmdline->GetSwitchValueASCII("data");
-  std::string walk_keys_str = cmdline->GetSwitchValueASCII("walk");
+  std::string rebase_dir = cmdline->GetSwitchValueString("rebase");
+  std::string data_keys_str = cmdline->GetSwitchValueString("data");
+  std::string walk_keys_str = cmdline->GetSwitchValueString("walk");
 
   std::vector<std::string> inputs(args.begin() + 1, args.end());
 
@@ -119,9 +119,8 @@ int RunMeta(const std::vector<std::string>& args) {
   if (rebase_dir.empty()) {
     rebase_source_dir = SourceDir();
   }
-  std::vector<Value> result =
-      WalkMetadata(targets, data_keys, walk_keys, rebase_source_dir,
-                   &targets_walked, &err);
+  std::vector<Value> result = WalkMetadata(
+      targets, data_keys, walk_keys, rebase_source_dir, &targets_walked, &err);
   if (err.has_error()) {
     err.PrintToStdout();
     return 1;

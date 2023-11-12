@@ -69,7 +69,7 @@ class RazerChromaHandler {
   PrefChangeRegistrar prefs_registrar_;
   bool initialized_ = false;
   std::unique_ptr<RazerChromaPlatformDriver> platform_driver_;
-  Profile* profile_ = nullptr;
+  const raw_ptr<Profile> profile_ = nullptr;
 };
 
 #endif  // COMPONENTS_LIGHTS_RAZER_CHROMA_HANDLER_H_

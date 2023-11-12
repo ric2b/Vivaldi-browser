@@ -30,6 +30,7 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/tab_slider_button.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test_shell_delegate.h"
@@ -50,6 +51,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/containers/contains.h"
+#include "base/memory/raw_ptr.h"
 #include "base/numerics/ranges.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -114,19 +116,8 @@ class EventCounter : public ui::EventHandler {
   int mouse_events_;
 };
 
-bool IsWindowMinimized(aura::Window* window) {
-  return WindowState::Get(window)->IsMinimized();
-}
-
 bool InOverviewSession() {
   return Shell::Get()->overview_controller()->InOverviewSession();
-}
-
-bool IsNaturalScrollOn() {
-  PrefService* pref =
-      Shell::Get()->session_controller()->GetActivePrefService();
-  return pref->GetBoolean(prefs::kTouchpadEnabled) &&
-         pref->GetBoolean(prefs::kNaturalScroll);
 }
 
 int GetOffsetX(int offset) {
@@ -140,8 +131,10 @@ int GetOffsetY(int offset) {
   // The handler code uses the new directions which is the reverse of the old
   // handler code. Reverse the offset if the ReverseScrollGestures feature is
   // disabled so that the unit tests test the old behavior.
-  if (!features::IsReverseScrollGesturesEnabled() || IsNaturalScrollOn())
+  if (!features::IsReverseScrollGesturesEnabled() ||
+      window_util::IsNaturalScrollOn()) {
     return -offset;
+  }
   return offset;
 }
 
@@ -180,19 +173,16 @@ class WindowCycleListTestApi {
     return cycle_view()->mirror_container_->children();
   }
 
-  const views::View* GetTabSliderActiveButtonSelector() const {
-    if (auto* tab_slider_container = cycle_view()->tab_slider_container_)
-      return tab_slider_container->active_button_selector_;
-    return nullptr;
-  }
-
-  const views::View::Views& GetTabSliderButtons() const {
-    auto* tab_slider_container = cycle_view()->tab_slider_container_;
-    if (!tab_slider_container) {
-      static const views::View::Views empty;
+  const std::vector<TabSliderButton*> GetTabSliderButtons() const {
+    auto* tab_slider = cycle_view()->tab_slider_.get();
+    if (!tab_slider) {
+      static const std::vector<TabSliderButton*> empty;
       return empty;
     }
-    return tab_slider_container->buttons_container_->children();
+    std::vector<TabSliderButton*> buttons;
+    buttons.push_back(cycle_view()->all_desks_tab_slider_button_);
+    buttons.push_back(cycle_view()->current_desk_tab_slider_button_);
+    return buttons;
   }
 
   bool IsCycleViewAnimating() const {
@@ -200,7 +190,7 @@ class WindowCycleListTestApi {
   }
 
  private:
-  const WindowCycleList* const cycle_list_;
+  const raw_ptr<const WindowCycleList, ExperimentalAsh> cycle_list_;
 };
 
 using aura::Window;
@@ -239,13 +229,8 @@ class WindowCycleControllerTest : public AshTestBase {
     return WindowCycleListTestApi(GetCycleList()).GetWindowCycleItemViews();
   }
 
-  const views::View::Views& GetWindowCycleTabSliderButtons() const {
+  const std::vector<TabSliderButton*> GetWindowCycleTabSliderButtons() const {
     return WindowCycleListTestApi(GetCycleList()).GetTabSliderButtons();
-  }
-
-  const views::View* GetWindowCycleTabSliderActiveButtonSelector() const {
-    return WindowCycleListTestApi(GetCycleList())
-        .GetTabSliderActiveButtonSelector();
   }
 
   const views::Label* GetWindowCycleNoRecentItemsLabel() const {
@@ -740,21 +725,21 @@ TEST_F(WindowCycleControllerTest, CyclePreservesMinimization) {
   wm::ActivateWindow(window1.get());
   WindowState::Get(window1.get())->Minimize();
   wm::ActivateWindow(window0.get());
-  EXPECT_TRUE(IsWindowMinimized(window1.get()));
+  EXPECT_TRUE(WindowState::Get(window1.get())->IsMinimized());
 
   // On window 2.
   controller->HandleCycleWindow(
       WindowCycleController::WindowCyclingDirection::kForward);
-  EXPECT_TRUE(IsWindowMinimized(window1.get()));
+  EXPECT_TRUE(WindowState::Get(window1.get())->IsMinimized());
 
   // Back on window 1.
   controller->HandleCycleWindow(
       WindowCycleController::WindowCyclingDirection::kForward);
-  EXPECT_TRUE(IsWindowMinimized(window1.get()));
+  EXPECT_TRUE(WindowState::Get(window1.get())->IsMinimized());
 
   CompleteCycling(controller);
 
-  EXPECT_TRUE(IsWindowMinimized(window1.get()));
+  EXPECT_TRUE(WindowState::Get(window1.get())->IsMinimized());
 }
 
 // Tests that the tab key events are not sent to the window.
@@ -2020,7 +2005,7 @@ class ModeSelectionWindowCycleControllerTest
   }
 
  private:
-  ui::test::EventGenerator* generator_;
+  raw_ptr<ui::test::EventGenerator, ExperimentalAsh> generator_;
 };
 
 // Tests that when user taps tab slider buttons, the active mode should
@@ -2627,7 +2612,8 @@ TEST_F(ModeSelectionWindowCycleControllerTest, KeyboardNavigation) {
   cycle_controller->HandleCycleWindow(
       WindowCycleController::WindowCyclingDirection::kForward);
   EXPECT_EQ(win1.get(), GetTargetWindow());
-  views::View::Views tab_slider_buttons = GetWindowCycleTabSliderButtons();
+  std::vector<TabSliderButton*> tab_slider_buttons =
+      GetWindowCycleTabSliderButtons();
   EXPECT_FALSE(cycle_controller->IsTabSliderFocused());
   EXPECT_FALSE(cycle_controller->IsAltTabPerActiveDesk());
 
@@ -2733,7 +2719,8 @@ TEST_F(ModeSelectionWindowCycleControllerTest, KeyboardNavigationAfterClick) {
   cycle_controller->HandleCycleWindow(
       WindowCycleController::WindowCyclingDirection::kForward);
   EXPECT_EQ(win1.get(), GetTargetWindow());
-  views::View::Views tab_slider_buttons = GetWindowCycleTabSliderButtons();
+  std::vector<TabSliderButton*> tab_slider_buttons =
+      GetWindowCycleTabSliderButtons();
   EXPECT_FALSE(cycle_controller->IsTabSliderFocused());
   EXPECT_FALSE(cycle_controller->IsAltTabPerActiveDesk());
 
@@ -3143,16 +3130,9 @@ TEST_F(ModeSelectionWindowCycleControllerTest,
   auto tab_slider_buttons = GetWindowCycleTabSliderButtons();
   EXPECT_EQ(2u, tab_slider_buttons.size());
 
-  // Run the accessibility paint checks on the active button selector.
-  // There should be no DCHECK failures. Failures in the past occurred due to
-  // the active button selector having `FocusBehavior::ALWAYS`. That change,
-  // done to improve ChromeVox's presentation, appears to no longer be needed.
-  // Therefore the default focus behavior (`FocusBehavior::NEVER`) is once again
-  // in place.
-  auto* active_button_selector = GetWindowCycleTabSliderActiveButtonSelector();
-  EXPECT_EQ(active_button_selector->GetFocusBehavior(),
-            views::View::FocusBehavior::NEVER);
-  RunAccessibilityPaintChecks(const_cast<views::View*>(active_button_selector));
+  EXPECT_FALSE(cycle_controller->window_cycle_list()
+                   ->cycle_view()
+                   ->IsTabSliderFocused());
 
   CompleteCycling(cycle_controller);
 }
@@ -3291,17 +3271,8 @@ class MultiUserWindowCycleControllerTest
     return WindowCycleListTestApi(GetCycleList()).GetWindowCycleItemViews();
   }
 
-  const views::View* GetWindowCycleTabSliderActiveButtonSelector() const {
-    return WindowCycleListTestApi(GetCycleList())
-        .GetTabSliderActiveButtonSelector();
-  }
-
-  const views::View::Views& GetWindowCycleTabSliderButtons() const {
+  const std::vector<TabSliderButton*> GetWindowCycleTabSliderButtons() const {
     return WindowCycleListTestApi(GetCycleList()).GetTabSliderButtons();
-  }
-
-  const aura::Window* GetTargetWindow() const {
-    return WindowCycleListTestApi(GetCycleList()).target_window();
   }
 
   void CompleteCycling(WindowCycleController* controller) {
@@ -3319,14 +3290,14 @@ class MultiUserWindowCycleControllerTest
   }
 
  private:
-  ui::test::EventGenerator* generator_;
+  raw_ptr<ui::test::EventGenerator, ExperimentalAsh> generator_;
 
   std::unique_ptr<ShelfViewTestAPI> shelf_view_test_;
 
   std::unique_ptr<MultiUserWindowManager> multi_user_window_manager_;
 
-  TestingPrefServiceSimple* user_1_prefs_ = nullptr;
-  TestingPrefServiceSimple* user_2_prefs_ = nullptr;
+  raw_ptr<TestingPrefServiceSimple, ExperimentalAsh> user_1_prefs_ = nullptr;
+  raw_ptr<TestingPrefServiceSimple, ExperimentalAsh> user_2_prefs_ = nullptr;
 };
 
 // Tests that when the active user prefs' |prefs::kAltTabPerDesk| is updated,

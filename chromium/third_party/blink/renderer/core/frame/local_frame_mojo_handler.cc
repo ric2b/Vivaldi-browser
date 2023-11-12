@@ -10,6 +10,8 @@
 #include "build/build_config.h"
 #include "components/power_scheduler/power_mode.h"
 #include "components/power_scheduler/power_mode_arbiter.h"
+#include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
@@ -28,6 +30,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_evaluation_result.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
+#include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/ignore_opens_during_unload_count_incrementer.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -46,6 +49,7 @@
 #include "third_party/blink/renderer/core/frame/savable_resources.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
+#include "third_party/blink/renderer/core/fullscreen/scoped_allow_fullscreen.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
@@ -67,9 +71,11 @@
 #include "third_party/blink/renderer/core/script/classic_script.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_supplement.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_timing_utils.h"
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
 
 #if BUILDFLAG(IS_MAC)
+#include "base/mac/foundation_util.h"
 #include "third_party/blink/renderer/core/editing/substring_util.h"
 #include "third_party/blink/renderer/platform/fonts/mac/attributed_string_type_converter.h"
 #include "ui/base/mojom/attributed_string.mojom-blink.h"
@@ -667,20 +673,6 @@ void LocalFrameMojoHandler::RenderFallbackContent() {
   frame_->RenderFallbackContent();
 }
 
-void LocalFrameMojoHandler::RenderFallbackContentWithResourceTiming(
-    mojom::blink::ResourceTimingInfoPtr timing,
-    const String& server_timing_value) {
-  frame_->RenderFallbackContentWithResourceTiming(std::move(timing),
-                                                  server_timing_value);
-}
-
-void LocalFrameMojoHandler::AddResourceTimingEntryFromNonNavigatedFrame(
-    mojom::blink::ResourceTimingInfoPtr timing,
-    blink::FrameOwnerElementType parent_frame_owner_element_type) {
-  frame_->AddResourceTimingEntryFromNonNavigatedFrame(
-      std::move(timing), parent_frame_owner_element_type);
-}
-
 void LocalFrameMojoHandler::BeforeUnload(bool is_reload,
                                          BeforeUnloadCallback callback) {
   base::TimeTicks before_unload_start_time = base::TimeTicks::Now();
@@ -1013,11 +1005,12 @@ void LocalFrameMojoHandler::GetStringForRange(
     GetStringForRangeCallback callback) {
   gfx::Point baseline_point;
   ui::mojom::blink::AttributedStringPtr attributed_string = nullptr;
-  NSAttributedString* string = SubstringUtil::AttributedSubstringInRange(
+  CFAttributedStringRef string = SubstringUtil::AttributedSubstringInRange(
       frame_, base::checked_cast<WTF::wtf_size_t>(range.start()),
       base::checked_cast<WTF::wtf_size_t>(range.length()), baseline_point);
-  if (string)
+  if (string) {
     attributed_string = ui::mojom::blink::AttributedString::From(string);
+  }
 
   std::move(callback).Run(std::move(attributed_string), baseline_point);
 }
@@ -1354,6 +1347,61 @@ void LocalFrameMojoHandler::DispatchBeforeUnload(
     bool is_reload,
     mojom::blink::LocalFrame::BeforeUnloadCallback callback) {
   BeforeUnload(is_reload, std::move(callback));
+}
+
+void LocalFrameMojoHandler::AddResourceTimingEntryForFailedSubframeNavigation(
+    const FrameToken& subframe_token,
+    const KURL& initial_url,
+    base::TimeTicks start_time,
+    base::TimeTicks redirect_time,
+    base::TimeTicks request_start,
+    base::TimeTicks response_start,
+    uint32_t response_code,
+    const WTF::String& mime_type,
+    network::mojom::blink::LoadTimingInfoPtr load_timing_info,
+    net::HttpResponseInfo::ConnectionInfo connection_info,
+    const WTF::String& alpn_negotiated_protocol,
+    bool is_secure_transport,
+    bool is_validated,
+    const WTF::String& normalized_server_timing,
+    const network::URLLoaderCompletionStatus& completion_status) {
+  Frame* subframe = Frame::ResolveFrame(subframe_token);
+  if (!subframe || !subframe->Owner()) {
+    return;
+  }
+
+  ResourceResponse response;
+  response.SetAlpnNegotiatedProtocol(AtomicString(alpn_negotiated_protocol));
+  response.SetConnectionInfo(connection_info);
+  response.SetConnectionReused(load_timing_info->socket_reused);
+  response.SetTimingAllowPassed(true);
+  response.SetIsValidated(is_validated);
+  response.SetDecodedBodyLength(completion_status.decoded_body_length);
+  response.SetEncodedBodyLength(completion_status.encoded_body_length);
+  response.SetEncodedDataLength(completion_status.encoded_data_length);
+  response.SetHttpStatusCode(response_code);
+  if (!normalized_server_timing.empty()) {
+    response.SetHttpHeaderField("Server-Timing",
+                                AtomicString(normalized_server_timing));
+  }
+
+  mojom::blink::ResourceTimingInfoPtr info =
+      CreateResourceTimingInfo(start_time, initial_url, &response);
+  info->response_end = completion_status.completion_time;
+  info->last_redirect_end_time = redirect_time;
+  info->is_secure_transport = is_secure_transport;
+  info->timing = std::move(load_timing_info);
+  subframe->Owner()->AddResourceTiming(std::move(info));
+}
+
+void LocalFrameMojoHandler::RequestFullscreenDocumentElement() {
+  if (auto* document_element = frame_->GetDocument()->documentElement()) {
+    // `kWindowOpen` assumes this function is only invoked for newly created
+    // windows (e.g. fullscreen popups). Update this if additional callers are
+    // added. See: https://chromestatus.com/feature/6002307972464640
+    ScopedAllowFullscreen allow_fullscreen(ScopedAllowFullscreen::kWindowOpen);
+    Fullscreen::RequestFullscreen(*document_element);
+  }
 }
 
 void LocalFrameMojoHandler::RequestFullscreenVideoElement() {

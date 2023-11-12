@@ -7,12 +7,13 @@
 
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/arc/input_overlay/constants.h"
-#include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
 #include "ui/views/view.h"
 
 namespace arc::input_overlay {
 
+class Action;
 class DisplayOverlayController;
+
 // InputMappingView shows all the input mappings.
 class InputMappingView : public views::View {
  public:
@@ -31,6 +32,14 @@ class InputMappingView : public views::View {
 
  private:
   void ProcessPressedEvent(const ui::LocatedEvent& event);
+
+  // Reorder the child views to have focus order as:
+  // If the window aspect-ratio > 1
+  // - First, focus the views on the left half of the window from top to bottom.
+  // - Then focus the views on the right half of the window from top to bottom.
+  // If the window aspect-ratio <= 1
+  // - Focus from top to bottom.
+  void SortChildren();
 
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;

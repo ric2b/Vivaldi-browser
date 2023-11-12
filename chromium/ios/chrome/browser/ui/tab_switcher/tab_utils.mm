@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_utils.h"
 
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/main/browser_list.h"
@@ -20,24 +22,51 @@
 #error "This file requires ARC support."
 #endif
 
-int GetTabIndex(WebStateList* web_state_list,
-                NSString* identifier,
-                BOOL pinned) {
-  int start, end;
-  if (pinned) {
-    DCHECK(IsPinnedTabsEnabled());
-    start = 0;
-    end = web_state_list->GetIndexOfFirstNonPinnedWebState();
-  } else {
-    start = web_state_list->GetIndexOfFirstNonPinnedWebState();
-    end = web_state_list->count();
+using base::RecordAction;
+using base::UserMetricsAction;
+using PinnedState = WebStateSearchCriteria::PinnedState;
+
+int GetWebStateIndex(WebStateList* web_state_list,
+                     WebStateSearchCriteria criteria) {
+  for (int i = 0; i < web_state_list->count(); i++) {
+    web::WebState* web_state = web_state_list->GetWebStateAt(i);
+    if ([criteria.identifier
+            isEqualToString:web_state->GetStableIdentifier()]) {
+      return i;
+    }
+  }
+  return WebStateList::kInvalidIndex;
+}
+
+int GetTabIndex(WebStateList* web_state_list, WebStateSearchCriteria criteria) {
+  int start = 0;
+  int end = web_state_list->count();
+  switch (criteria.pinned_state) {
+    case PinnedState::kNonPinned:
+      start = web_state_list->GetIndexOfFirstNonPinnedWebState();
+      break;
+    case PinnedState::kPinned:
+      CHECK(IsPinnedTabsEnabled());
+      end = web_state_list->GetIndexOfFirstNonPinnedWebState();
+      break;
+    case PinnedState::kAny:
+      break;
   }
 
   for (int i = start; i < end; i++) {
     web::WebState* web_state = web_state_list->GetWebStateAt(i);
-    if ([identifier isEqualToString:web_state->GetStableIdentifier()]) {
-      if (pinned) {
-        DCHECK(web_state_list->IsWebStatePinnedAt(i));
+    if ([criteria.identifier
+            isEqualToString:web_state->GetStableIdentifier()]) {
+      const bool pinned = web_state_list->IsWebStatePinnedAt(i);
+      switch (criteria.pinned_state) {
+        case PinnedState::kNonPinned:
+          CHECK(!pinned);
+          break;
+        case PinnedState::kPinned:
+          CHECK(pinned);
+          break;
+        case PinnedState::kAny:
+          break;
       }
       return i;
     }
@@ -46,7 +75,7 @@ int GetTabIndex(WebStateList* web_state_list,
 }
 
 NSString* GetActiveWebStateIdentifier(WebStateList* web_state_list,
-                                      BOOL pinned) {
+                                      WebStateSearchCriteria criteria) {
   if (!web_state_list) {
     return nil;
   }
@@ -57,7 +86,8 @@ NSString* GetActiveWebStateIdentifier(WebStateList* web_state_list,
   }
 
   if (IsPinnedTabsEnabled() &&
-      web_state_list->IsWebStatePinnedAt(web_state_index) && !pinned) {
+      web_state_list->IsWebStatePinnedAt(web_state_index) &&
+      criteria.pinned_state != PinnedState::kPinned) {
     return nil;
   }
 
@@ -67,32 +97,17 @@ NSString* GetActiveWebStateIdentifier(WebStateList* web_state_list,
 }
 
 web::WebState* GetWebState(WebStateList* web_state_list,
-                           NSString* identifier,
-                           BOOL pinned) {
-  int index = GetTabIndex(web_state_list, identifier, /*pinned=*/pinned);
-  if (index != WebStateList::kInvalidIndex) {
-    return web_state_list->GetWebStateAt(index);
+                           WebStateSearchCriteria criteria) {
+  int index = GetTabIndex(web_state_list, criteria);
+  if (index == WebStateList::kInvalidIndex) {
+    return nullptr;
   }
-  return nullptr;
-}
-
-TabSwitcherItem* GetTabSwitcherItem(web::WebState* web_state) {
-  TabSwitcherItem* item = [[TabSwitcherItem alloc]
-      initWithIdentifier:web_state->GetStableIdentifier()];
-  // chrome://newtab (NTP) tabs have no title.
-  if (IsURLNtp(web_state->GetVisibleURL())) {
-    item.hidesTitle = YES;
-  }
-  item.title = tab_util::GetTabTitle(web_state);
-  item.showsActivity = web_state->IsLoading();
-  return item;
+  return web_state_list->GetWebStateAt(index);
 }
 
 TabItem* GetTabItem(WebStateList* web_state_list,
-                    NSString* identifier,
-                    BOOL pinned) {
-  web::WebState* web_state =
-      GetWebState(web_state_list, identifier, /*pinned=*/pinned);
+                    WebStateSearchCriteria criteria) {
+  web::WebState* web_state = GetWebState(web_state_list, criteria);
   if (!web_state) {
     return nil;
   }
@@ -106,8 +121,17 @@ TabItem* GetTabItem(WebStateList* web_state_list,
 int SetWebStatePinnedState(WebStateList* web_state_list,
                            NSString* identifier,
                            BOOL pin_state) {
-  int index = GetTabIndex(web_state_list, identifier,
-                          /*pinned=*/!pin_state);
+  if (pin_state) {
+    RecordAction(UserMetricsAction("MobileTabPinned"));
+  } else {
+    RecordAction(UserMetricsAction("MobileTabUnpinned"));
+  }
+
+  const PinnedState pinned_state =
+      pin_state ? PinnedState::kNonPinned : PinnedState::kPinned;
+  int index = GetTabIndex(web_state_list,
+                          WebStateSearchCriteria{.identifier = identifier,
+                                                 .pinned_state = pinned_state});
   if (index == WebStateList::kInvalidIndex) {
     return WebStateList::kInvalidIndex;
   }

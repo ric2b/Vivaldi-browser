@@ -163,7 +163,7 @@ class CORE_EXPORT HTMLPlugInElement
   void FinishParsingChildren() final;
 
   // Element overrides:
-  LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout) override;
+  LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   bool SupportsFocus() const final { return true; }
   bool IsFocusableStyle() const final;
   bool IsKeyboardFocusable() const final;
@@ -189,8 +189,8 @@ class CORE_EXPORT HTMLPlugInElement
                   const PluginParameters& plugin_params,
                   bool use_fallback);
   // Perform checks after we have determined that a plugin will be used to
-  // show the object (i.e after allowedToLoadObject).
-  bool AllowedToLoadPlugin(const KURL&, const String& mime_type);
+  // show the object (i.e after `AllowedToLoadObject()`).
+  bool AllowedToLoadPlugin(const KURL&);
   // Perform checks based on the URL and MIME-type of the object to load.
   bool AllowedToLoadObject(const KURL&, const String& mime_type);
   void RemovePluginFromFrameView(WebPluginContainerImpl* plugin);

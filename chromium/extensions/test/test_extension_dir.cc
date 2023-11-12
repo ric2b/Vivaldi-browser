@@ -27,6 +27,10 @@ TestExtensionDir::~TestExtensionDir() {
   std::ignore = crx_dir_.Delete();
 }
 
+TestExtensionDir::TestExtensionDir(TestExtensionDir&&) noexcept = default;
+
+TestExtensionDir& TestExtensionDir::operator=(TestExtensionDir&&) = default;
+
 void TestExtensionDir::WriteManifest(base::StringPiece manifest) {
   WriteFile(FILE_PATH_LITERAL("manifest.json"), manifest);
 }
@@ -34,9 +38,7 @@ void TestExtensionDir::WriteManifest(base::StringPiece manifest) {
 void TestExtensionDir::WriteFile(const base::FilePath::StringType& filename,
                                  base::StringPiece contents) {
   base::ScopedAllowBlockingForTesting allow_blocking;
-  EXPECT_EQ(base::checked_cast<int>(contents.size()),
-            base::WriteFile(dir_.GetPath().Append(filename), contents.data(),
-                            contents.size()));
+  EXPECT_TRUE(base::WriteFile(dir_.GetPath().Append(filename), contents));
 }
 
 void TestExtensionDir::CopyFileTo(

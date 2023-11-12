@@ -8,16 +8,19 @@
 <translation id="1049795001945932310">&amp;Configurações de idioma</translation>
 <translation id="1054153489933238809">Abrir &amp;Imagem Original em uma Nova Aba</translation>
 <translation id="1056898198331236512">Aviso</translation>
+<translation id="1067048845568873861">Criado</translation>
 <translation id="1084824384139382525">Copiar end&amp;ereço do link</translation>
 <translation id="1163931534039071049">Exibir Código Fonte do Frame</translation>
 <translation id="1165039591588034296">Erro</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
 <translation id="1181037720776840403">Remover</translation>
 <translation id="1187722533808055681">Ativações do estado ocioso</translation>
+<translation id="122082903575839559">Algoritmo de assinatura do certificado</translation>
 <translation id="1221825588892235038">Apenas seleção</translation>
 <translation id="1234736487471201993">Criar QR Code para esta imagem</translation>
 <translation id="1244303850296295656">Erro na extensão</translation>
 <translation id="125220115284141797">Padrões</translation>
+<translation id="1257336506558170607">Exportar certificado selecionado</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Arquivo HTML com Favoritos</translation>
 <translation id="1430915738399379752">Imprimir</translation>
@@ -34,6 +37,7 @@
 <translation id="1601560923496285236">Aplicar</translation>
 <translation id="1603914832182249871">(privada)</translation>
 <translation id="1627276047960621195">Descritores de arquivo</translation>
+<translation id="166278006618318542">Algoritmo de Chave Pública do Assunto</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
 <translation id="1708338024780164500">(inativa)</translation>
 <translation id="1723824996674794290">Nova &amp;janela</translation>
@@ -49,6 +53,8 @@
 <translation id="1886996562706621347">Permitir que os sites peçam para se tornar manipuladores padrão de protocolos (recomendado)</translation>
 <translation id="1901303067676059328">Selecionar &amp;tudo</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1925021887439448749">Digite o endereço da Web personalizado</translation>
+<translation id="1932098463447129402">Não antes</translation>
 <translation id="1936931585862840749">Use um número para indicar quantas cópias serão impressas (1 a <ph name="MAX_COPIES" />).</translation>
 <translation id="1994173015038366702">URL do site</translation>
 <translation id="2019718679933488176">&amp;Abrir áudio em uma nova aba</translation>
@@ -57,6 +63,7 @@
 <translation id="2087822576218954668">Impressão: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Atualizar &amp;Frame</translation>
 <translation id="2142328300403846845">Abrir Link como</translation>
+<translation id="2144536955299248197">Visualizador do certificado: <ph name="CERTIFICATE_NAME" /></translation>
 <translation id="2148892889047469596">Transmitir aba</translation>
 <translation id="2150139952286079145">Pesquisar destinos</translation>
 <translation id="215753907730220065">Sair do modo tela-cheia</translation>
@@ -89,21 +96,27 @@
 <translation id="253557089021624350">Contagem de manutenção de atividade</translation>
 <translation id="2550212893339833758">Memória swapped</translation>
 <translation id="2553440850688409052">Ocultar este Plug-in</translation>
+<translation id="2607101320794533334">Informações da chave pública do assunto</translation>
 <translation id="26224892172169984">Não permitir que qualquer site manipule protocolos</translation>
 <translation id="2653275834716714682">Substituição de texto</translation>
+<translation id="265390580714150011">Valor do campo</translation>
 <translation id="2662876636500006917">Web Store do Chrome</translation>
 <translation id="2678063897982469759">Reativar</translation>
 <translation id="2678100101831051676">Falha na transmissão.</translation>
+<translation id="2719936478972253983">Os seguintes cookies foram bloqueados</translation>
 <translation id="2721037002783622288">&amp;Pesquisar imagem no <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2738771556149464852">Não após</translation>
 <translation id="2783321960289401138">Criar atalho...</translation>
 <translation id="2785873697295365461">Descritores de arquivo</translation>
 <translation id="2809586584051668049">e mais <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
+<translation id="2825758591930162672">Chave pública do assunto</translation>
 <translation id="2850541429955027218">Adicionar tema</translation>
 <translation id="2861941300086904918">Gerenciador de segurança do Cliente Nativo</translation>
 <translation id="2881076733170862447">Quando você clicar na extensão</translation>
 <translation id="2889064240420137087">Abrir link com...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> não conseguiu se comunicar com esta impressora. Verifique se a impressora está conectada e tente novamente.</translation>
 <translation id="2913331724188855103">Permitir que os sites salvem e leiam cookies (recomendado)</translation>
+<translation id="2916745397441987255">Pesquisar extensões</translation>
 <translation id="2931157624143513983">Ajustar à área de impressão</translation>
 <translation id="2932085390869194046">Sugerir senha…</translation>
 <translation id="2932883381142163287">Denunciar abuso</translation>
@@ -123,6 +136,7 @@
 <translation id="3124111068741548686">Identificadores de USUÁRIO</translation>
 <translation id="3129173833825111527">Margem esquerda</translation>
 <translation id="3144647712221361880">Abrir link como</translation>
+<translation id="3202131003361292969">Caminho</translation>
 <translation id="3222066309010235055">Pré-renderizador: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Selecione o diretório raiz da extensão a ser empacotada. Para atualizar uma extensão, selecione também a chave privada a ser reutilizada.</translation>
 <translation id="3275778913554317645">Abrir como janela</translation>
@@ -134,6 +148,7 @@
 <translation id="3303818374450886607">Cópias</translation>
 <translation id="3305661444342691068">Abrir PDF na Pré-Visualização</translation>
 <translation id="3308134619352333507">Ocultar Botão</translation>
+<translation id="3313622045786997898">Valor da assinatura do certificado</translation>
 <translation id="3317459757438853210">Frente e verso</translation>
 <translation id="3331974543021145906">Informações do aplicativo</translation>
 <translation id="3341703758641437857">Permitir execução em arquivos locais</translation>
@@ -144,6 +159,7 @@
 <translation id="3390013585654699824">Detalhes do app</translation>
 <translation id="3393582007140394275">Não foi possível transmitir a tela.</translation>
 <translation id="345693547134384690">Abrir &amp;imagem em uma nova aba</translation>
+<translation id="3493881266323043047">Validade</translation>
 <translation id="3494769164076977169">Perguntar quando um site tentar fazer download de arquivos automaticamente após o primeiro arquivo (recomendado)</translation>
 <translation id="3505030558724226696">Revogar acesso ao dispositivo</translation>
 <translation id="3511307672085573050">Copiar end&amp;ereço do link</translation>
@@ -159,11 +175,14 @@
 <translation id="3727187387656390258">Inspecionar pop-up</translation>
 <translation id="3760460896538743390">Inspecionar Página de &amp;Fundo</translation>
 <translation id="3797900183766075808">&amp;Pesquisar por “<ph name="SEARCH_TERMS" />” no <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3798449238516105146">Versão</translation>
 <translation id="3800806661949714323">Exibir imagens (recomendado)</translation>
 <translation id="3810973564298564668">Gerenciar</translation>
 <translation id="3838085852053358637">Falha ao carregar extensão</translation>
 <translation id="383891835335927981">Nenhum site teve o zoom modificado</translation>
 <translation id="385051799172605136">Voltar</translation>
+<translation id="3858860766373142691">Nome</translation>
+<translation id="3867944738977021751">Campos do certificado</translation>
 <translation id="3905761538810670789">Reparar app</translation>
 <translation id="3908501907586732282">Ativar extensão</translation>
 <translation id="3909701002594999354">Mostrar Todos os &amp;Controles</translation>
@@ -184,15 +203,20 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">Desativar extensões no modo de desenvolvedor</translation>
 <translation id="4100839878934973028">Outro programa em seu computador adicionou um aplicativo que pode modificar a forma como o Vivaldi funciona.</translation>
+<translation id="4104163789986725820">E&amp;xportar...</translation>
 <translation id="4109898769411476438">Fechar o Navegador Antes de Importar</translation>
 <translation id="4130207949184424187">Esta extensão alterou a página que é exibida quando você pesquisa no campo de endereço.</translation>
 <translation id="4131410914670010031">Preto e branco</translation>
 <translation id="4165986682804962316">Configurações do site</translation>
+<translation id="4170314459383239649">Limpar ao sair</translation>
 <translation id="4176463684765177261">Desativada</translation>
 <translation id="4200983522494130825">Nova &amp;aba</translation>
 <translation id="4225397296022057997">Em todos os sites</translation>
 <translation id="4256316378292851214">Sal&amp;var Vídeo Como...</translation>
+<translation id="4270393598798225102">Versão <ph name="NUMBER" /></translation>
+<translation id="4278390842282768270">Permitido</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB ativos)</translation>
+<translation id="431076611119798497">&amp;Detalhes</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Coletar e exibir erros</translation>
 <translation id="4363771538994847871">Nenhum destino para transmissão foi encontrado. Precisa de ajuda?</translation>
@@ -201,6 +225,7 @@
 <translation id="4409697491990005945">Margens</translation>
 <translation id="4423376891418188461">Restaurar Configurações</translation>
 <translation id="4478664379124702289">Salvar Lin&amp;k Como...</translation>
+<translation id="4520385623207007473">Cookies em uso</translation>
 <translation id="4593021220803146968">&amp;Acessar <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicativos e extensões só podem ser modificados pelo administrador (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Uma extensão alterou a página exibida quando uma nova aba é aberta.</translation>
@@ -210,6 +235,7 @@
 <translation id="4681930562518940301">Abrir &amp;imagem original em uma nova aba</translation>
 <translation id="4711638718396952945">Restaurar configurações</translation>
 <translation id="4726710629007580002">Avisos ao instalar esta extensão:</translation>
+<translation id="4763408175235639573">Os seguintes cookies foram definidos quando você visualizou esta página</translation>
 <translation id="479536056609751218">Página da web, somente HTML</translation>
 <translation id="4827904420700932487">Criar QR Code para esta Imagem</translation>
 <translation id="4839303808932127586">Sal&amp;var vídeo como...</translation>
@@ -233,6 +259,7 @@
 <translation id="5116628073786783676">Sal&amp;var Áudio Como...</translation>
 <translation id="5143374789336132547">A extensão "<ph name="EXTENSION_NAME" />" alterou a página que é exibida quando você clica no botão "Página inicial".</translation>
 <translation id="5154108062446123722">Configurações avançadas para <ph name="PRINTING_DESTINATION" /></translation>
+<translation id="5154702632169343078">Assunto</translation>
 <translation id="5171343362375269016">Memória trocada</translation>
 <translation id="5233019165164992427">Porta de depuração de cliente nativo</translation>
 <translation id="5233231016133573565">ID do processo</translation>
@@ -251,6 +278,7 @@
 <translation id="5362741141255528695">Selecionar arquivo de chave privada.</translation>
 <translation id="536638840841140142">Nenhuma</translation>
 <translation id="5370819323174483825">Atualiza&amp;r</translation>
+<translation id="5390743329570580756">Enviar para</translation>
 <translation id="5398572795982417028">Referência de página fora do limite, que é <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Continuar a transferência</translation>
 <translation id="5427459444770871191">Girar no &amp;Sentido Horário</translation>
@@ -264,31 +292,41 @@
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Recarregar</translation>
 <translation id="5575473780076478375">Extensão Privada: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5582839680698949063">Menu principal</translation>
 <translation id="5614553682702429503">Salvar senha?</translation>
 <translation id="5623842676595125836">Log</translation>
 <translation id="5627086634964711283">Controla também qual página deve ser exibida quando você clica no botão "Página inicial".</translation>
 <translation id="563535393368633106">Perguntar antes de acessar (recomendado)</translation>
+<translation id="5638309510554459422">Encontre extensões e temas na <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5707185214361380026">Erro ao carregar a extensão de:</translation>
 <translation id="5713171467967533494">Abrir no navegador Vivaldi</translation>
 <translation id="5715711091495208045">Agente de Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Salvar como PDF</translation>
+<translation id="5747552184818312860">Expira</translation>
 <translation id="5747809636523347288">Co&amp;lar e acessar <ph name="URL" /></translation>
 <translation id="5759728514498647443">Os documentos enviados para impressão pelo <ph name="APP_NAME" /> podem ser lidos pelo <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Sal&amp;var áudio como...</translation>
 <translation id="5780973441651030252">Prioridade de processo</translation>
 <translation id="5804241973901381774">Permissões</translation>
 <translation id="5828633471261496623">Imprimindo...</translation>
-<translation id="583281660410589416">Desconhecida</translation>
+<translation id="583281660410589416">Desconhecido</translation>
+<translation id="5851868085455377790">Emissor</translation>
 <translation id="5860491529813859533">Ativar</translation>
 <translation id="5867841422488265304">Pesquisar ou digitar endereço da web</translation>
 <translation id="5910363049092958439">Sal&amp;var Imagem Como...</translation>
+<translation id="5914724413750400082">Módulo (<ph name="MODULUS_NUM_BITS" /> bits):
+  <ph name="MODULUS_HEX_DUMP" />
+
+  Expoente público (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bits):
+  <ph name="EXPONENT_HEX_DUMP" /></translation>
 <translation id="5956585768868398362">Esta é a página de pesquisa que você esperava?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (pico de <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Controla também qual página deve ser exibida quando você clica no botão "Página inicial" ou quando faz uma pesquisa na Omnibox.</translation>
 <translation id="5978277834170881274">&amp;Usar a verificação ortográfica básica</translation>
 <translation id="5979421442488174909">&amp;Traduzir para o <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Mais</translation>
+<translation id="6059652578941944813">Hierarquia de certificados</translation>
 <translation id="6086846494333236931">Instalada pelo administrador</translation>
 <translation id="6101226222197207147">Novo aplicativo adicionado (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Sua conexão com a Internet está sendo controlada</translation>
@@ -322,9 +360,12 @@
 <translation id="6550675742724504774">Opções</translation>
 <translation id="6579369886355986318">Mostrar todos os &amp;controles</translation>
 <translation id="6639554308659482635">Memória SQLite</translation>
+<translation id="6655190889273724601">Modo desenvolvedor</translation>
 <translation id="666731172850799929">Abrir no <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Salvar sua senha</translation>
 <translation id="6691936601825168937">&amp;Avançar</translation>
+<translation id="6786747875388722282">Extensões</translation>
+<translation id="6787839852456839824">Atalhos do teclado</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Manter alterações</translation>
 <translation id="6817174620439930047">Perguntar quando um site desejar usar mensagens exclusivas do sistema para acessar dispositivos MIDI (recomendado)</translation>
@@ -348,6 +389,7 @@
 <translation id="7186088072322679094">Manter na Barra de Ferramentas</translation>
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
+<translation id="73786666777299047">Abrir a Chrome Web Store</translation>
 <translation id="7385854874724088939">Ocorreu um erro durante a impressão.  Verifique a sua impressora e tente novamente.</translation>
 <translation id="7412226954991670867">Memória da GPU</translation>
 <translation id="7421925624202799674">Exibir Código Fonte da Página</translation>
@@ -365,8 +407,10 @@
 <translation id="7684212569183643648">Instalada pelo Administrador</translation>
 <translation id="7685049629764448582">Memória JavaScript</translation>
 <translation id="7701869757853594372">Identificadores de USUÁRIO</translation>
+<translation id="7702907602086592255">Domínio</translation>
 <translation id="7704305437604973648">Tarefa</translation>
 <translation id="7710568461918838723">&amp;Transmitir...</translation>
+<translation id="7714464543167945231">Certificado</translation>
 <translation id="7750228210027921155">Picture in picture</translation>
 <translation id="7760004034676677601">Esta é a página de inicialização que você esperava?</translation>
 <translation id="7771452384635174008">Layout</translation>
@@ -398,6 +442,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8032244173881942855">Não foi possível transmitir a aba.</translation>
 <translation id="8071432093239591881">Imprimir como imagem</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
+<translation id="8168435359814927499">Conteúdo</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1{Download está em andamento} other {Downloads estão em andamento}}</translation>
 <translation id="8230134520748321204">Salvar senha para <ph name="ORIGIN" />?</translation>
@@ -407,6 +452,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8413385045638830869">Perguntar antes (recomendado)</translation>
 <translation id="8434480141477525001">Porta de Depuração de Cliente Nativo</translation>
 <translation id="8449008133205184768">Colar com o Mesmo Estilo</translation>
+<translation id="8477384620836102176">&amp;Geral</translation>
 <translation id="8496717697661868878">Executar Este Plug-in</translation>
 <translation id="8512476990829870887">Encerrar processo</translation>
 <translation id="8523493869875972733">Manter Alterações</translation>
@@ -419,7 +465,8 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="862750493060684461">Cache de CSS</translation>
 <translation id="8661290697478713397">Abrir Link na Janela &amp;Anônima</translation>
 <translation id="8664389313780386848">Exibir Código Fonte da Página</translation>
-<translation id="8708000541097332489">Excluir ao sair</translation>
+<translation id="8705331520020532516">Número de série</translation>
+<translation id="8708000541097332489">Limpar ao sair</translation>
 <translation id="8714838604780058252">Gráficos de segundo plano</translation>
 <translation id="8725066075913043281">Tentar novamente</translation>
 <translation id="8774934320277480003">Margem superior</translation>

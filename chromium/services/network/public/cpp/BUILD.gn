@@ -30,6 +30,8 @@ component("cpp") {
   output_name = "network_cpp"
 
   sources = [
+    "attribution_utils.cc",
+    "attribution_utils.h",
     "client_hints.cc",
     "client_hints.h",
     "constants.cc",
@@ -84,6 +86,8 @@ component("cpp") {
     "link_header_parser.h",
     "load_info_util.cc",
     "load_info_util.h",
+    "local_network_access_check_result.cc",
+    "local_network_access_check_result.h",
     "net_adapters.cc",
     "net_adapters.h",
     "network_connection_tracker.cc",
@@ -100,8 +104,6 @@ component("cpp") {
     "origin_agent_cluster_parser.h",
     "parsed_headers.cc",
     "parsed_headers.h",
-    "private_network_access_check_result.cc",
-    "private_network_access_check_result.h",
     "record_ontransfersizeupdate_utils.h",
     "request_destination.cc",
     "request_destination.h",
@@ -133,7 +135,6 @@ component("cpp") {
     "timing_allow_origin_parser.h",
     "trust_token_http_headers.cc",
     "trust_token_http_headers.h",
-    "trust_token_operation_authorization.h",
     "url_util.cc",
     "url_util.h",
     "variants_header_parser.cc",
@@ -468,6 +469,13 @@ component("cpp_base") {
     sources += [ "transferable_directory_fuchsia.cc" ]
   }
 
+  if (is_linux) {
+    sources += [
+      "network_interface_change_listener_mojom_traits.cc",
+      "network_interface_change_listener_mojom_traits.h",
+    ]
+  }
+
   # Since URLLoader is typedmapped in mojo and the class also uses the mojo
   # interfaces a circular dependency exists. Allow this and ignore windows
   # errors from it.
@@ -507,6 +515,7 @@ source_set("tests") {
   testonly = true
 
   sources = [
+    "attribution_utils_unittest.cc",
     "client_hints_unittest.cc",
     "content_language_parser_unittest.cc",
     "content_security_policy/content_security_policy_unittest.cc",
@@ -574,6 +583,10 @@ source_set("tests") {
       "server/http_server_unittest.cc",
       "server/web_socket_encoder_unittest.cc",
     ]
+  }
+
+  if (is_linux) {
+    sources += [ "network_interface_change_listener_mojom_traits_unittest.cc" ]
   }
 
   deps = [

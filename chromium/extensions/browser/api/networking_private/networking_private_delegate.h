@@ -39,7 +39,7 @@ class NetworkingPrivateDelegate : public KeyedService {
   using GetGlobalPolicyCallback =
       base::OnceCallback<void(absl::optional<base::Value::Dict>)>;
   using GetCertificateListsCallback =
-      base::OnceCallback<void(absl::optional<base::Value::Dict>)>;
+      base::OnceCallback<void(base::Value::Dict)>;
 
   // Returns |result| on success, or |result|=nullopt and |error| on failure.
   using PropertiesCallback =
@@ -89,7 +89,7 @@ class NetworkingPrivateDelegate : public KeyedService {
                              VoidCallback success_callback,
                              FailureCallback failure_callback) = 0;
   virtual void CreateNetwork(bool shared,
-                             base::Value properties,
+                             base::Value::Dict properties,
                              StringCallback success_callback,
                              FailureCallback failure_callback) = 0;
   virtual void ForgetNetwork(const std::string& guid,

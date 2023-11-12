@@ -18,6 +18,7 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
@@ -634,7 +635,11 @@ class BASE_EXPORT PersistentMemoryAllocator {
   // Implementation of Flush that accepts how much to flush.
   virtual void FlushPartial(size_t length, bool sync);
 
-  volatile char* const mem_base_;  // Memory base. (char so sizeof guaranteed 1)
+  // This field is not a raw_ptr<> because a pointer to stale non-PA allocation
+  // could be confused as a pointer to PA memory when that address space is
+  // reused. crbug.com/1173851 crbug.com/1169582
+  RAW_PTR_EXCLUSION volatile char* const
+      mem_base_;                   // Memory base. (char so sizeof guaranteed 1)
   const MemoryType mem_type_;      // Type of memory allocation.
   const uint32_t mem_size_;        // Size of entire memory segment.
   const uint32_t mem_page_;        // Page size allocations shouldn't cross.
@@ -732,7 +737,7 @@ class BASE_EXPORT LocalPersistentMemoryAllocator
   // Allocates a block of local memory of the specified |size|, ensuring that
   // the memory will not be physically allocated until accessed and will read
   // as zero when that happens.
-  static Memory AllocateLocalMemory(size_t size);
+  static Memory AllocateLocalMemory(size_t size, base::StringPiece name);
 
   // Deallocates a block of local |memory| of the specified |size|.
   static void DeallocateLocalMemory(void* memory, size_t size, MemoryType type);
@@ -859,9 +864,7 @@ class BASE_EXPORT DelayedPersistentAllocation {
   // offset into the segment; this allows combining allocations into a
   // single persistent segment to reduce overhead and means an "all or
   // nothing" request. Note that |size| is always the total memory size
-  // and |offset| is just indicating the start of a block within it.  If
-  // |make_iterable| was true, the allocation will made iterable when it
-  // is created; already existing allocations are not changed.
+  // and |offset| is just indicating the start of a block within it.
   //
   // Once allocated, a reference to the segment will be stored at |ref|.
   // This shared location must be initialized to zero (0); it is checked
@@ -872,13 +875,7 @@ class BASE_EXPORT DelayedPersistentAllocation {
                               std::atomic<Reference>* ref,
                               uint32_t type,
                               size_t size,
-                              bool make_iterable);
-  DelayedPersistentAllocation(PersistentMemoryAllocator* allocator,
-                              std::atomic<Reference>* ref,
-                              uint32_t type,
-                              size_t size,
-                              size_t offset,
-                              bool make_iterable);
+                              size_t offset = 0);
   ~DelayedPersistentAllocation();
 
   // Gets a pointer to the defined allocation. This will realize the request
@@ -910,9 +907,6 @@ class BASE_EXPORT DelayedPersistentAllocation {
   const uint32_t type_;
   const uint32_t size_;
   const uint32_t offset_;
-
-  // Flag indicating if allocation should be made iterable when done.
-  const bool make_iterable_;
 
   // The location at which a reference to the allocated segment is to be
   // stored once the allocation is complete. If multiple delayed allocations

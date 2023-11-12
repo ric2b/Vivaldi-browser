@@ -8,8 +8,8 @@ import android.app.Activity;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
-import android.support.test.InstrumentationRegistry;
 
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
@@ -24,13 +24,12 @@ import org.junit.runner.RunWith;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
-import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.blink.mojom.MhtmlLoadResult;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SavePageCallback;
@@ -42,7 +41,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.offlinepages.SavePageResult;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.ConnectionType;
 import org.chromium.net.NetworkChangeNotifier;
@@ -92,10 +90,6 @@ public class OfflinePageUtilsTest {
     private static final long FILE_SIZE = 65535;
     private static final String REQUEST_ORIGIN = "";
 
-    private static final String MHTML_LOAD_RESULT_UMA_BASE_NAME = "OfflinePages.MhtmlLoadResult";
-    private static final String MHTML_LOAD_RESULT_UMA_NAME_UNTRUSTED =
-            "OfflinePages.MhtmlLoadResultUntrusted";
-
     private OfflinePageBridge mOfflinePageBridge;
     private EmbeddedTestServer mTestServer;
     private String mTestPage;
@@ -127,7 +121,8 @@ public class OfflinePageUtilsTest {
         });
         Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         mServerTurnedOn = true;
     }
 
@@ -238,7 +233,7 @@ public class OfflinePageUtilsTest {
         int tabId = sActivityTestRule.getActivity().getActivityTab().getId();
 
         // Act.  This needs to be called from the UI thread.
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> {
             OfflinePageTabObserver offlineObserver = new OfflinePageTabObserver(
                     sActivityTestRule.getActivity().getTabModelSelector(),
                     sActivityTestRule.getActivity().getSnackbarManager(), mockSnackbarController);
@@ -385,23 +380,6 @@ public class OfflinePageUtilsTest {
     }
 
     /**
-     * This test saves an offline page and causes it to be loaded, checking
-     * that the correct MHTML load result histogram was updated.
-     */
-    @Test
-    @SmallTest
-    public void testMhtmlLoadResultFromRendererWithNamespace() throws Exception {
-        var histogramWatcher = HistogramWatcher.newSingleRecordWatcher(
-                MHTML_LOAD_RESULT_UMA_BASE_NAME + "." + OfflinePageBridge.ASYNC_NAMESPACE,
-                MhtmlLoadResult.SUCCESS);
-
-        loadOfflinePage(ASYNC_ID);
-
-        histogramWatcher.assertExpected(
-                "Count of MhtmlLoadResult.SUCCESS should have increased by one.");
-    }
-
-    /**
      * This gets a file:// URL for an MHTML file without a valid main resource
      * (i.e. no resource in the archive may be used as a main resource because
      * no resource's MIME type is suitable). The MHTML should not render in the
@@ -410,8 +388,6 @@ public class OfflinePageUtilsTest {
     @Test
     @SmallTest
     public void testInvalidMhtmlMainResourceMimeType() {
-        var histogramWatcher = HistogramWatcher.newSingleRecordWatcher(
-                MHTML_LOAD_RESULT_UMA_NAME_UNTRUSTED, MhtmlLoadResult.MISSING_MAIN_RESOURCE);
         String testUrl = UrlUtils.getTestFileUrl("offline_pages/invalid_main_resource.mhtml");
         sActivityTestRule.loadUrl(testUrl);
 
@@ -424,7 +400,6 @@ public class OfflinePageUtilsTest {
         // The Offline Page Item will be empty because no data can be extracted from the renderer.
         // Also should not crash.
         Assert.assertEquals(testUrl, offlinePageItem.get().getUrl());
-        histogramWatcher.assertExpected();
     }
 
     /**
@@ -434,8 +409,6 @@ public class OfflinePageUtilsTest {
     @Test
     @SmallTest
     public void testEmptyMhtml() {
-        var histogramWatcher = HistogramWatcher.newSingleRecordWatcher(
-                MHTML_LOAD_RESULT_UMA_NAME_UNTRUSTED, MhtmlLoadResult.EMPTY_FILE);
         String testUrl = UrlUtils.getTestFileUrl("offline_pages/empty.mhtml");
         sActivityTestRule.loadUrl(testUrl);
 
@@ -446,7 +419,6 @@ public class OfflinePageUtilsTest {
         });
 
         Assert.assertEquals(testUrl, offlinePageItem.get().getUrl());
-        histogramWatcher.assertExpected();
     }
 
     /**
@@ -456,8 +428,6 @@ public class OfflinePageUtilsTest {
     @Test
     @SmallTest
     public void testMhtmlWithNoResources() {
-        var histogramWatcher = HistogramWatcher.newSingleRecordWatcher(
-                MHTML_LOAD_RESULT_UMA_NAME_UNTRUSTED, MhtmlLoadResult.INVALID_ARCHIVE);
         String testUrl = UrlUtils.getTestFileUrl("offline_pages/no_resources.mhtml");
         sActivityTestRule.loadUrl(testUrl);
 
@@ -468,7 +438,6 @@ public class OfflinePageUtilsTest {
         });
 
         Assert.assertEquals(testUrl, offlinePageItem.get().getUrl());
-        histogramWatcher.assertExpected();
     }
 
     private void loadPageAndSave(ClientId clientId) throws Exception {

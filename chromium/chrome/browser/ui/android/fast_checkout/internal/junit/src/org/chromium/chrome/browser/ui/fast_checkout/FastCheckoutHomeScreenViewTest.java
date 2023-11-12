@@ -4,9 +4,10 @@
 
 package org.chromium.chrome.browser.ui.fast_checkout;
 
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
+
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.robolectric.Shadows.shadowOf;
@@ -29,12 +30,15 @@ import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
+import org.chromium.base.FeatureList;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ui.fast_checkout.data.FastCheckoutAutofillProfile;
 import org.chromium.chrome.browser.ui.fast_checkout.data.FastCheckoutCreditCard;
 import org.chromium.chrome.browser.ui.fast_checkout.home_screen.HomeScreenCoordinator;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -43,6 +47,7 @@ import org.chromium.ui.modelutil.PropertyModel;
  */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@DisableFeatures({ChromeFeatureList.AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES})
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, ChromeSwitches.DISABLE_NATIVE_INITIALIZATION})
 public class FastCheckoutHomeScreenViewTest {
@@ -63,13 +68,18 @@ public class FastCheckoutHomeScreenViewTest {
                     /*city=*/"New York", /*postalCode=*/"12345", /*email=*/"john.moe@gmail.com",
                     /*phoneNumber=*/"+1-345-543-645");
     private static final FastCheckoutCreditCard sSelectedCreditCard =
-            FastCheckoutTestUtils.createDetailedCreditCard(/*guid=*/"123",
+            FastCheckoutTestUtils.createDetailedLocalCreditCard(/*guid=*/"123",
                     /*origin=*/"https://example.com", /*name=*/"John Moe", /*number=*/"75675675656",
                     /*obfuscatedNumber=*/"5656", /*month=*/"05", /*year=*/"2031",
                     /*issuerIconString=*/"visaCC");
 
     @Before
     public void setUp() {
+        FeatureList.TestValues featureTestValues = new FeatureList.TestValues();
+        featureTestValues.addFeatureFlagOverride(
+                ChromeFeatureList.AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES, false);
+        FeatureList.setTestValues(featureTestValues);
+
         mActivityScenarioRule.getScenario().onActivity(activity -> {
             mModel = FastCheckoutProperties.createDefaultModel();
             mModel.set(FastCheckoutProperties.VISIBLE, true);

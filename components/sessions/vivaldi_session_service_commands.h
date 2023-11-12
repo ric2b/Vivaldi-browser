@@ -100,7 +100,7 @@ SESSIONS_EXPORT void VivaldiCreateTabsAndWindows(
     SessionID* active_window_id);
 
 SESSIONS_EXPORT std::unique_ptr<SessionCommand>
-CreateSetSelectedTabInWindowCommand(const SessionID& window_id, int index);
+CreateSetSelectedTabInWindowCommand(SessionID window_id, int index);
 
 SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowVivExtDataCommand(
     const SessionID& window_id,

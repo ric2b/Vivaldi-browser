@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/ash/assistant/assistant_test_mixin.h"
+#include "base/memory/raw_ptr.h"
 
-#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -15,6 +15,7 @@
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/test/assistant_test_api.h"
 #include "base/auto_reset.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/scoped_run_loop_timeout.h"
@@ -77,7 +78,7 @@ class AssistantStatusWaiter : private AssistantStateObserver {
       std::move(quit_loop_).Run();
   }
 
-  AssistantState* const state_;
+  const raw_ptr<AssistantState, ExperimentalAsh> state_;
   AssistantStatus const expected_status_;
 
   base::OnceClosure quit_loop_;
@@ -162,7 +163,7 @@ class ResponseWaiter : private views::ViewObserver {
   virtual absl::optional<std::string> GetResponseTextOfView(
       views::View* view) const = 0;
 
-  views::View* parent_view_;
+  raw_ptr<views::View, ExperimentalAsh> parent_view_;
   base::OnceClosure quit_loop_;
 };
 
@@ -289,7 +290,7 @@ class CallbackViewHierarchyChangedObserver : views::ViewObserver {
  private:
   base::RepeatingCallback<void(const views::ViewHierarchyChangedDetails&)>
       callback_;
-  views::View* parent_view_;
+  raw_ptr<views::View, ExperimentalAsh> parent_view_;
 };
 
 }  // namespace
@@ -359,7 +360,7 @@ class LoggedInUserMixin : public InProcessBrowserTestMixin {
   FakeGaiaMixin fake_gaia_;
 
   LoginManagerMixin::TestUserInfo user_;
-  InProcessBrowserTest* const test_base_;
+  const raw_ptr<InProcessBrowserTest, ExperimentalAsh> test_base_;
   UserContext user_context_;
   std::string access_token_{FakeGaiaMixin::kFakeAllScopeAccessToken};
 };
@@ -528,13 +529,13 @@ std::vector<base::TimeDelta> AssistantTestMixin::ExpectAndReturnTimersResponse(
 
   // Transform the textual representation of our timers into TimeDelta objects.
   std::vector<base::TimeDelta> timers;
-  std::transform(timers_as_strings.begin(), timers_as_strings.end(),
-                 std::back_inserter(timers),
-                 [](const std::string& timer_as_string) {
-                   int seconds_remaining = 0;
-                   base::StringToInt(timer_as_string, &seconds_remaining);
-                   return base::Seconds(seconds_remaining);
-                 });
+  base::ranges::transform(timers_as_strings, std::back_inserter(timers),
+                          [](const std::string& timer_as_string) {
+                            int seconds_remaining = 0;
+                            base::StringToInt(timer_as_string,
+                                              &seconds_remaining);
+                            return base::Seconds(seconds_remaining);
+                          });
 
   return timers;
 }

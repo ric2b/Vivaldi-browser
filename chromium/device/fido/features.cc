@@ -36,30 +36,33 @@ BASE_FEATURE(kWebAuthPasskeysUI,
              "WebAuthenticationPasskeysUI",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kWebAuthnNoEmptyDisplayNameCBOR,
-             "WebAuthenticationNoEmptyDisplayNameCBOR",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kWebAuthnNonDiscoverableMakeCredentialQRFlag,
-             "WebAuthenticationNonDiscoverableMakeCredentialQRFlag",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kDisableWebAuthnWithBrokenCerts,
-             "DisableWebAuthnWithBrokenCerts",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kWebAuthnNoPasskeysError,
-             "WebAuthenticationNoPasskeysError",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Added in M112. Remove in or after M115.
 BASE_FEATURE(kWebAuthnCredProtectThree,
              "WebAuthenticationCredProtectThree",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Added in M112. Disabled while we wait for Play Services support.
+// Added in M112. Enabled in M113. Remove in or after M116.
 BASE_FEATURE(kWebAuthnPRFAsAuthenticator,
              "WebAuthenticationPRFAsAuthenticator",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Added in M113. Remove in or after M116.
+BASE_FEATURE(kWebAuthnMacPlatformAuthenticatorOptionalUv,
+             "WebAuthenticationMacPlatformAuthenticatorOptionalUv",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kWebAuthnPhoneConfirmationSheet,
+             "WebAuthenticationPhoneConfirmationSheet",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Add in M113. Remove in or after M116.
+BASE_FEATURE(kWebAuthnNewPrioritiesImpl,
+             "WebAuthenticationNewPrioritiesImpl",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Added in M114. Not yet enabled by default.
+BASE_FEATURE(kWebAuthnAndroidCredMan,
+             "WebAuthenticationAndroidCredMan",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace device

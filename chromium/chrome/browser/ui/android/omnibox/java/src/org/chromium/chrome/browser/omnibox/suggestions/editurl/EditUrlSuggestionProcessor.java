@@ -9,8 +9,8 @@ import android.content.Context;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.history_clusters.HistoryClustersTabHelper;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.R;
+import org.chromium.chrome.browser.omnibox.styles.OmniboxResourceProvider;
 import org.chromium.chrome.browser.omnibox.suggestions.FaviconFetcher;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.chrome.browser.omnibox.suggestions.SuggestionHost;
@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.tab.SadTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.omnibox.AutocompleteMatch;
+import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.ukm.UkmRecorder;
 import org.chromium.ui.base.Clipboard;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -60,7 +61,7 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
     public EditUrlSuggestionProcessor(Context context, SuggestionHost suggestionHost,
             UrlBarDelegate locationBarDelegate, FaviconFetcher faviconFetcher,
             Supplier<Tab> tabSupplier, Supplier<ShareDelegate> shareDelegateSupplier) {
-        super(context, suggestionHost, faviconFetcher);
+        super(context, suggestionHost, null, faviconFetcher);
 
         mContext = context;
         mUrlBarDelegate = locationBarDelegate;
@@ -85,7 +86,7 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
             return false;
         }
 
-        if (!mHasClearedOmniboxForFocus) {
+        if (!mHasClearedOmniboxForFocus && mUrlBarDelegate.shouldClearOmniboxOnFocus()) {
             mHasClearedOmniboxForFocus = true;
             if (BuildConfig.IS_VIVALDI)
                 mUrlBarDelegate.setOmniboxEditingText(suggestion.getUrl().getSpec(), false);
@@ -120,7 +121,7 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
                         .setAllowTint(true)
                         .build());
 
-        setCustomActions(model,
+        setActionButtons(model,
                 // Vivaldi
                 BuildConfig.IS_OEM_AUTOMOTIVE_BUILD ?
                 Arrays.asList(new Action(mContext,
@@ -142,37 +143,40 @@ public class EditUrlSuggestionProcessor extends BaseSuggestionViewProcessor {
                                 R.string.bookmark_item_edit, () -> onEditLink(suggestion)))
 
                 :
-                Arrays.asList(new Action(mContext,
-                                      SuggestionDrawableState.Builder
-                                              .forDrawableRes(
-                                                      getContext(), R.drawable.ic_share_white_24dp)
-                                              .setLarge(true)
-                                              .setAllowTint(true)
-                                              .build(),
-                                      R.string.menu_share_page, this::onShareLink),
-                        new Action(mContext,
-                                SuggestionDrawableState.Builder
-                                        .forDrawableRes(
-                                                getContext(), R.drawable.ic_content_copy_black)
-                                        .setLarge(true)
-                                        .setAllowTint(true)
-                                        .build(),
-                                R.string.copy_link, () -> onCopyLink(suggestion)),
+                Arrays.asList(new Action(SuggestionDrawableState.Builder
+                                                 .forDrawableRes(getContext(),
+                                                         R.drawable.ic_share_white_24dp)
+                                                 .setLarge(true)
+                                                 .setAllowTint(true)
+                                                 .build(),
+                                      OmniboxResourceProvider.getString(
+                                              mContext, R.string.menu_share_page),
+                                      null, this::onShareLink),
+                        new Action(SuggestionDrawableState.Builder
+                                           .forDrawableRes(
+                                                   getContext(), R.drawable.ic_content_copy_black)
+                                           .setLarge(true)
+                                           .setAllowTint(true)
+                                           .build(),
+                                OmniboxResourceProvider.getString(mContext, R.string.copy_link),
+                                () -> onCopyLink(suggestion)),
                         // TODO(https://crbug.com/1090187): do not re-use bookmark_item_edit here.
-                        new Action(mContext,
-                                SuggestionDrawableState.Builder
-                                        .forDrawableRes(
-                                                getContext(), R.drawable.bookmark_edit_active)
-                                        .setLarge(true)
-                                        .setAllowTint(true)
-                                        .build(),
-                                R.string.bookmark_item_edit, () -> onEditLink(suggestion))));
+                        new Action(SuggestionDrawableState.Builder
+                                           .forDrawableRes(
+                                                   getContext(), R.drawable.bookmark_edit_active)
+                                           .setLarge(true)
+                                           .setAllowTint(true)
+                                           .build(),
+                                OmniboxResourceProvider.getString(
+                                        mContext, R.string.bookmark_item_edit),
+                                () -> onEditLink(suggestion))));
 
         fetchSuggestionFavicon(model, suggestion.getUrl());
     }
 
     @Override
     public void onUrlFocusChange(boolean hasFocus) {
+        super.onUrlFocusChange(hasFocus);
         if (hasFocus) return;
         mHasClearedOmniboxForFocus = false;
     }

@@ -34,11 +34,13 @@ import java.util.List;
  */
 public class BackPressManager implements Destroyable {
     private static final SparseIntArray sMetricsMap;
+    private static final int sMetricsMaxValue;
     static {
-        SparseIntArray map = new SparseIntArray(17);
+        // Max value is 18 - 1 obsolete value +1 for 0 indexing = 18 elements.
+        SparseIntArray map = new SparseIntArray(18);
         map.put(Type.TEXT_BUBBLE, 0);
         map.put(Type.VR_DELEGATE, 1);
-        map.put(Type.AR_DELEGATE, 2);
+        // map.put(Type.AR_DELEGATE, 2);
         map.put(Type.SCENE_OVERLAY, 3);
         map.put(Type.START_SURFACE, 4);
         map.put(Type.SELECTION_POPUP, 5);
@@ -54,6 +56,8 @@ public class BackPressManager implements Destroyable {
         map.put(Type.MINIMIZE_APP_AND_CLOSE_TAB, 15);
         map.put(Type.FIND_TOOLBAR, 16);
         map.put(Type.LOCATION_BAR, 17);
+        map.put(Type.XR_DELEGATE, 18);
+        sMetricsMaxValue = 19;
         // Add new one here and update array size.
         sMetricsMap = map;
     }
@@ -69,11 +73,10 @@ public class BackPressManager implements Destroyable {
     static final String FAILURE_HISTOGRAM = "Android.BackPress.Failure";
 
     private final BackPressHandler[] mHandlers = new BackPressHandler[Type.NUM_TYPES];
+    private final boolean mUseSystemBack;
 
     private final Callback<Boolean>[] mObserverCallbacks = new Callback[Type.NUM_TYPES];
-    private final boolean[] mStates = new boolean[Type.NUM_TYPES];
-    private final Runnable mFallbackOnBackPressed;
-    private int mEnabledCount;
+    private Runnable mFallbackOnBackPressed;
     private int mLastCalledHandlerForTesting = -1;
 
     /**
@@ -91,28 +94,30 @@ public class BackPressManager implements Destroyable {
     }
 
     /**
+     * @return True if ActivityTabProvider should replace ChromeTabActivity#getActivityTab
+     */
+    public static boolean shouldUseActivityTabProvider() {
+        return ChromeFeatureList.sBackGestureActivityTabProvider.isEnabled();
+    }
+
+    /**
      * Record when the back press is consumed by a certain feature.
      * @param type The {@link Type} which consumes the back press event.
      */
     public static void record(@Type int type) {
-        RecordHistogram.recordEnumeratedHistogram(HISTOGRAM, sMetricsMap.get(type), Type.NUM_TYPES);
+        RecordHistogram.recordEnumeratedHistogram(
+                HISTOGRAM, sMetricsMap.get(type), sMetricsMaxValue);
     }
 
     private static void recordFailure(@Type int type) {
         RecordHistogram.recordEnumeratedHistogram(
-                FAILURE_HISTOGRAM, sMetricsMap.get(type), Type.NUM_TYPES);
+                FAILURE_HISTOGRAM, sMetricsMap.get(type), sMetricsMaxValue);
     }
 
     public BackPressManager() {
         mFallbackOnBackPressed = () -> {};
-    }
-
-    /**
-     * @param fallbackOnBackPressed Callback executed when a handler claims to intercept back press
-     *         but no handler succeeds.
-     */
-    public BackPressManager(Runnable fallbackOnBackPressed) {
-        mFallbackOnBackPressed = fallbackOnBackPressed;
+        mUseSystemBack = MinimizeAppAndCloseTabBackPressHandler.shouldUseSystemBack();
+        backPressStateChanged();
     }
 
     /**
@@ -123,8 +128,9 @@ public class BackPressManager implements Destroyable {
     public void addHandler(BackPressHandler handler, @Type int type) {
         assert mHandlers[type] == null : "Each type can have at most one handler";
         mHandlers[type] = handler;
-        mObserverCallbacks[type] = (t) -> backPressStateChanged(type);
+        mObserverCallbacks[type] = (t) -> backPressStateChanged();
         handler.getHandleBackPressChangedSupplier().addObserver(mObserverCallbacks[type]);
+        backPressStateChanged();
     }
 
     /**
@@ -146,15 +152,10 @@ public class BackPressManager implements Destroyable {
      */
     public void removeHandler(@Type int type) {
         BackPressHandler handler = mHandlers[type];
-        Boolean enabled = mHandlers[type].getHandleBackPressChangedSupplier().get();
-        if (enabled != null && enabled) {
-            mEnabledCount--;
-            mStates[type] = false;
-            mCallback.setEnabled(mEnabledCount != 0);
-        }
         handler.getHandleBackPressChangedSupplier().removeObserver(mObserverCallbacks[type]);
         mObserverCallbacks[type] = null;
         mHandlers[type] = null;
+        backPressStateChanged();
     }
 
     /**
@@ -172,17 +173,16 @@ public class BackPressManager implements Destroyable {
     public OnBackPressedCallback getCallback() {
         return mCallback;
     }
+    /*
+     * @param fallbackOnBackPressed Callback executed when a handler claims to intercept back press
+     *         but no handler succeeds.
+     */
+    public void setFallbackOnBackPressed(Runnable runnable) {
+        mFallbackOnBackPressed = runnable;
+    }
 
-    private void backPressStateChanged(@Type int type) {
-        Boolean enabled = mHandlers[type].getHandleBackPressChangedSupplier().get();
-        if (enabled == null || enabled == mStates[type]) return;
-        if (enabled) {
-            mEnabledCount++;
-        } else {
-            mEnabledCount--;
-        }
-        mStates[type] = enabled;
-        mCallback.setEnabled(mEnabledCount != 0);
+    private void backPressStateChanged() {
+        mCallback.setEnabled(shouldInterceptBackPress());
     }
 
     private void handleBackPress() {
@@ -204,7 +204,7 @@ public class BackPressManager implements Destroyable {
                 }
             }
         }
-        mFallbackOnBackPressed.run();
+        if (mFallbackOnBackPressed != null) mFallbackOnBackPressed.run();
         assertListOfFailedHandlers(failed, -1);
         assert false : "Callback is enabled but no handler consumed back gesture.";
     }
@@ -216,6 +216,16 @@ public class BackPressManager implements Destroyable {
                 removeHandler(i);
             }
         }
+    }
+
+    @VisibleForTesting
+    boolean shouldInterceptBackPress() {
+        for (BackPressHandler handler : mHandlers) {
+            if (handler == null) continue;
+            if (!Boolean.TRUE.equals(handler.getHandleBackPressChangedSupplier().get())) continue;
+            return true;
+        }
+        return false;
     }
 
     private void assertListOfFailedHandlers(List<String> failed, int succeed) {

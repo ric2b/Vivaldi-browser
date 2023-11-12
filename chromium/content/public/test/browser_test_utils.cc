@@ -17,7 +17,6 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/no_destructor.h"
 #include "base/process/kill.h"
@@ -35,6 +34,7 @@
 #include "base/test/test_switches.h"
 #include "base/test/test_timeouts.h"
 #include "base/trace_event/typed_macros.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "cc/test/pixel_test_utils.h"
@@ -135,7 +135,10 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/latency/latency_info.h"
-#include "ui/resources/grit/webui_resources.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/webui/grit/ash_webui_common_resources.h"
+#endif
 
 #if BUILDFLAG(IS_WIN)
 #include <combaseapi.h>
@@ -218,7 +221,8 @@ bool ExecuteScriptWithUserGestureControl(RenderFrameHost* frame,
 
   // TODO(nick): This function can't be replaced with a call to ExecJs(), since
   // ExecJs calls eval() which might be blocked by the page's CSP.
-  std::string expected_response = "ExecuteScript-" + base::GenerateGUID();
+  std::string expected_response =
+      "ExecuteScript-" + base::Uuid::GenerateRandomV4().AsLowercaseString();
   std::string new_script = base::StringPrintf(
       R"( %s;  // Original script.
           window.domAutomationController.send('%s'); )",
@@ -1467,42 +1471,6 @@ void ExecuteScriptAsyncWithoutUserGesture(const ToRenderFrameHost& adapter,
       base::UTF8ToUTF16(script), base::NullCallback());
 }
 
-bool ExecuteScriptAndExtractDouble(const ToRenderFrameHost& adapter,
-                                   const std::string& script, double* result) {
-  DCHECK(result);
-  std::unique_ptr<base::Value> value;
-  // Prerendering pages will never have user gesture.
-  bool user_gesture = adapter.render_frame_host()->GetLifecycleState() !=
-                      RenderFrameHost::LifecycleState::kPrerendering;
-  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, user_gesture,
-                           ISOLATED_WORLD_ID_GLOBAL, &value))
-    return false;
-  if (!value)
-    return false;
-  absl::optional<double> maybe_value = value->GetIfDouble();
-  if (!maybe_value.has_value())
-    return false;
-
-  *result = maybe_value.value();
-  return true;
-}
-
-bool ExecuteScriptAndExtractInt(const ToRenderFrameHost& adapter,
-                                const std::string& script, int* result) {
-  DCHECK(result);
-  std::unique_ptr<base::Value> value;
-  // Prerendering pages will never have user gesture.
-  bool user_gesture = adapter.render_frame_host()->GetLifecycleState() !=
-                      RenderFrameHost::LifecycleState::kPrerendering;
-  if (ExecuteScriptHelper(adapter.render_frame_host(), script, user_gesture,
-                          ISOLATED_WORLD_ID_GLOBAL, &value) &&
-      value && value->is_int() && result) {
-    *result = value->GetInt();
-    return true;
-  }
-  return false;
-}
-
 bool ExecuteScriptAndExtractBool(const ToRenderFrameHost& adapter,
                                  const std::string& script, bool* result) {
   DCHECK(result);
@@ -1531,39 +1499,6 @@ bool ExecuteScriptAndExtractString(const ToRenderFrameHost& adapter,
                            ISOLATED_WORLD_ID_GLOBAL, &value)) {
     return false;
   }
-  if (value && value->is_string()) {
-    *result = value->GetString();
-    return true;
-  }
-  return false;
-}
-
-bool ExecuteScriptWithoutUserGestureAndExtractBool(
-    const ToRenderFrameHost& adapter,
-    const std::string& script,
-    bool* result) {
-  DCHECK(result);
-  std::unique_ptr<base::Value> value;
-  if (ExecuteScriptHelper(adapter.render_frame_host(), script, false,
-                          ISOLATED_WORLD_ID_GLOBAL, &value) &&
-      value && value->is_bool()) {
-    *result = value->GetBool();
-    return true;
-  }
-  return false;
-}
-
-bool ExecuteScriptWithoutUserGestureAndExtractString(
-    const ToRenderFrameHost& adapter,
-    const std::string& script,
-    std::string* result) {
-  DCHECK(result);
-  std::unique_ptr<base::Value> value;
-  if (!ExecuteScriptHelper(adapter.render_frame_host(), script, false,
-                           ISOLATED_WORLD_ID_GLOBAL, &value)) {
-    return false;
-  }
-
   if (value && value->is_string()) {
     *result = value->GetString();
     return true;
@@ -2042,7 +1977,7 @@ bool ExecuteWebUIResourceTest(WebContents* web_contents) {
   std::string script;
   scoped_refptr<base::RefCountedMemory> bytes =
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceBytes(
-          IDR_ASH_COMMON_WEBUI_RESOURCE_TEST_JS);
+          IDR_ASH_WEBUI_COMMON_WEBUI_RESOURCE_TEST_JS);
 
   if (HasGzipHeader(*bytes))
     AppendGzippedResource(*bytes, &script);
@@ -2220,24 +2155,20 @@ void SetFileSystemAccessPermissionContext(
 bool WaitForRenderFrameReady(RenderFrameHost* rfh) {
   if (!rfh)
     return false;
-  // TODO(nick): This can't switch to EvalJs yet, because of hardcoded
-  // dependencies on 'pageLoadComplete' in some interstitial implementations.
-  std::string result;
-  EXPECT_TRUE(ExecuteScriptWithoutUserGestureAndExtractString(
-      rfh,
-      "(async function() {"
-      "  if (document.readyState != 'complete') {"
-      "    await new Promise((resolve) =>"
-      "      document.addEventListener('readystatechange', event => {"
-      "        if (document.readyState == 'complete') {"
-      "          resolve();"
-      "        }"
-      "      }));"
-      "  }"
-      "})().then(() => {"
-      "  window.domAutomationController.send('pageLoadComplete');"
-      "});",
-      &result));
+  std::string result =
+      EvalJs(rfh,
+             "(async function() {"
+             "  if (document.readyState != 'complete') {"
+             "    await new Promise((resolve) =>"
+             "      document.addEventListener('readystatechange', event => {"
+             "        if (document.readyState == 'complete') {"
+             "          resolve();"
+             "        }"
+             "      }));"
+             "  }"
+             "})().then(() => 'pageLoadComplete');",
+             EXECUTE_SCRIPT_NO_USER_GESTURE)
+          .ExtractString();
   EXPECT_EQ("pageLoadComplete", result);
   return "pageLoadComplete" == result;
 }
@@ -3687,6 +3618,75 @@ void WebContentsConsoleObserver::OnDidAddMessageToConsole(
 }
 
 namespace {
+static constexpr int kEnableLogMessageId = 0;
+static constexpr char kEnableLogMessage[] = R"({"id":0,"method":"Log.enable"})";
+static constexpr int kDisableLogMessageId = 1;
+static constexpr char kDisableLogMessage[] =
+    R"({"id":1,"method":"Log.disable"})";
+}  // namespace
+
+DevToolsInspectorLogWatcher::DevToolsInspectorLogWatcher(
+    WebContents* web_contents) {
+  host_ = DevToolsAgentHost::GetOrCreateFor(web_contents);
+  host_->AttachClient(this);
+
+  host_->DispatchProtocolMessage(
+      this, base::as_bytes(
+                base::make_span(kEnableLogMessage, strlen(kEnableLogMessage))));
+
+  run_loop_enable_log_.Run();
+}
+
+DevToolsInspectorLogWatcher::~DevToolsInspectorLogWatcher() {
+  host_->DetachClient(this);
+}
+
+void DevToolsInspectorLogWatcher::DispatchProtocolMessage(
+    DevToolsAgentHost* host,
+    base::span<const uint8_t> message) {
+  base::StringPiece message_str(reinterpret_cast<const char*>(message.data()),
+                                message.size());
+  auto parsed_message =
+      std::move(base::JSONReader::Read(message_str)->GetDict());
+  absl::optional<int> command_id = parsed_message.FindInt("id");
+  if (command_id.has_value()) {
+    switch (command_id.value()) {
+      case kEnableLogMessageId:
+        run_loop_enable_log_.Quit();
+        break;
+      case kDisableLogMessageId:
+        run_loop_disable_log_.Quit();
+        break;
+      default:
+        NOTREACHED();
+    }
+    return;
+  }
+
+  std::string* notification = parsed_message.FindString("method");
+  if (notification && *notification == "Log.entryAdded") {
+    std::string* text =
+        parsed_message.FindStringByDottedPath("params.entry.text");
+    DCHECK(text);
+    last_message_ = *text;
+    std::string* url =
+        parsed_message.FindStringByDottedPath("params.entry.url");
+    if (url) {
+      last_url_ = GURL(*url);
+    }
+  }
+}
+
+void DevToolsInspectorLogWatcher::AgentHostClosed(DevToolsAgentHost* host) {}
+
+void DevToolsInspectorLogWatcher::FlushAndStopWatching() {
+  host_->DispatchProtocolMessage(
+      this, base::as_bytes(base::make_span(kDisableLogMessage,
+                                           strlen(kDisableLogMessage))));
+  run_loop_disable_log_.Run();
+}
+
+namespace {
 mojo::Remote<blink::mojom::FileSystemManager> GetFileSystemManager(
     RenderProcessHost* rph,
     const blink::StorageKey& storage_key) {
@@ -4398,6 +4398,36 @@ WebContents* CreateAndLoadWebContentsObserver::Wait() {
   creation_subscription_ = base::CallbackListSubscription();
 
   return web_contents_;
+}
+
+CookieChangeObserver::CookieChangeObserver(content::WebContents* web_contents,
+                                           int num_expected_calls)
+    : content::WebContentsObserver(web_contents),
+      run_loop_(base::RunLoop::Type::kNestableTasksAllowed),
+      num_expected_calls_(num_expected_calls) {}
+
+CookieChangeObserver::~CookieChangeObserver() = default;
+
+void CookieChangeObserver::Wait() {
+  run_loop_.Run();
+}
+
+void CookieChangeObserver::OnCookiesAccessed(
+    content::RenderFrameHost* render_frame_host,
+    const content::CookieAccessDetails& details) {
+  OnCookieAccessed();
+}
+
+void CookieChangeObserver::OnCookiesAccessed(
+    content::NavigationHandle* navigation,
+    const content::CookieAccessDetails& details) {
+  OnCookieAccessed();
+}
+
+void CookieChangeObserver::OnCookieAccessed() {
+  if (++num_seen_ == num_expected_calls_) {
+    run_loop_.Quit();
+  }
 }
 
 base::CallbackListSubscription RegisterWebContentsCreationCallback(

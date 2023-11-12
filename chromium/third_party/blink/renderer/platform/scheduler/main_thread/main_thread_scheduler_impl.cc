@@ -45,6 +45,7 @@
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/auto_advancing_virtual_time_domain.h"
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/process_state.h"
@@ -354,18 +355,19 @@ MainThreadSchedulerImpl::~MainThreadSchedulerImpl() {
 }
 
 // static
-WebThreadScheduler* WebThreadScheduler::MainThreadScheduler() {
+WebThreadScheduler& WebThreadScheduler::MainThreadScheduler() {
   auto* main_thread = Thread::MainThread();
   // Enforce that this is not called before the main thread is initialized.
-  DCHECK(main_thread);
-  DCHECK(main_thread->Scheduler());
-  DCHECK(main_thread->Scheduler()->ToMainThreadScheduler());
-
-  // This can return nullptr if the main thread scheduler is not a
-  // MainThreadSchedulerImpl, which can happen in tests.
-  return main_thread->Scheduler()
-      ->ToMainThreadScheduler()
-      ->ToWebMainThreadScheduler();
+  CHECK(main_thread && main_thread->Scheduler() &&
+        main_thread->Scheduler()->ToMainThreadScheduler());
+  auto* scheduler = main_thread->Scheduler()
+                        ->ToMainThreadScheduler()
+                        ->ToWebMainThreadScheduler();
+  // `scheduler` can be null if it isn't a MainThreadSchedulerImpl, which can
+  // happen in tests. Tests should use a real main thread scheduler if a
+  // `WebThreadScheduler` is needed.
+  CHECK(scheduler);
+  return *scheduler;
 }
 
 MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
@@ -476,7 +478,10 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
       have_seen_a_frame(false),
       audible_power_mode_voter(
           power_scheduler::PowerModeArbiter::GetInstance()->NewVoter(
-              "PowerModeVoter.Audible")) {}
+              "PowerModeVoter.Audible")),
+      agent_group_schedulers(
+          MakeGarbageCollected<
+              HeapHashSet<WeakMember<AgentGroupSchedulerImpl>>>()) {}
 
 MainThreadSchedulerImpl::MainThreadOnly::~MainThreadOnly() = default;
 
@@ -528,33 +533,6 @@ MainThreadSchedulerImpl::AnyThread::AnyThread(
           YesNoStateToString) {}
 
 MainThreadSchedulerImpl::SchedulingSettings::SchedulingSettings() {
-  low_priority_background_page =
-      base::FeatureList::IsEnabled(kLowPriorityForBackgroundPages);
-  best_effort_background_page =
-      base::FeatureList::IsEnabled(kBestEffortPriorityForBackgroundPages);
-
-  low_priority_hidden_frame =
-      base::FeatureList::IsEnabled(kLowPriorityForHiddenFrame);
-  low_priority_subframe = base::FeatureList::IsEnabled(kLowPriorityForSubFrame);
-  low_priority_throttleable =
-      base::FeatureList::IsEnabled(kLowPriorityForThrottleableTask);
-  low_priority_subframe_throttleable =
-      base::FeatureList::IsEnabled(kLowPriorityForSubFrameThrottleableTask);
-
-  low_priority_ad_frame = base::FeatureList::IsEnabled(kLowPriorityForAdFrame);
-  best_effort_ad_frame =
-      base::FeatureList::IsEnabled(kBestEffortPriorityForAdFrame);
-
-  low_priority_cross_origin =
-      base::FeatureList::IsEnabled(kLowPriorityForCrossOrigin);
-
-  prioritize_compositing_and_loading_during_early_loading =
-      base::FeatureList::IsEnabled(
-          kPrioritizeCompositingAndLoadingDuringEarlyLoading);
-
-  prioritize_compositing_after_input =
-      base::FeatureList::IsEnabled(kPrioritizeCompositingAfterInput);
-
   mbi_override_task_runner_handle =
       base::FeatureList::IsEnabled(kMbiOverrideTaskRunnerHandle);
 
@@ -1104,11 +1082,9 @@ void MainThreadSchedulerImpl::EndIdlePeriod() {
 }
 
 void MainThreadSchedulerImpl::EndIdlePeriodForTesting(
-    base::OnceClosure callback,
     base::TimeTicks time_remaining) {
   main_thread_only().in_idle_period_for_testing = false;
   EndIdlePeriod();
-  std::move(callback).Run();
 }
 
 bool MainThreadSchedulerImpl::PolicyNeedsUpdateForTesting() {
@@ -1126,9 +1102,6 @@ void MainThreadSchedulerImpl::PerformMicrotaskCheckpoint() {
   // default EventLoop for the isolate.
   if (isolate())
     EventLoop::PerformIsolateGlobalMicrotasksCheckpoint(isolate());
-
-  if (!main_thread_only().agent_group_schedulers)
-    return;
 
   // Perform a microtask checkpoint for each AgentSchedulingGroup. This
   // really should only be the ones that are not frozen but AgentSchedulingGroup
@@ -1426,13 +1399,12 @@ base::TimeTicks MainThreadSchedulerImpl::CurrentIdleTaskDeadlineForTesting()
   return idle_helper_.CurrentIdleTaskDeadline();
 }
 
-void MainThreadSchedulerImpl::RunIdleTasksForTesting(
-    base::OnceClosure callback) {
+void MainThreadSchedulerImpl::StartIdlePeriodForTesting() {
   main_thread_only().in_idle_period_for_testing = true;
   IdleTaskRunner()->PostIdleTask(
       FROM_HERE,
       base::BindOnce(&MainThreadSchedulerImpl::EndIdlePeriodForTesting,
-                     weak_factory_.GetWeakPtr(), std::move(callback)));
+                     weak_factory_.GetWeakPtr()));
   idle_helper_.EnableLongIdlePeriod();
 }
 
@@ -1579,12 +1551,6 @@ void MainThreadSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
 
   if (main_thread_only().pause_timers_for_webview) {
     new_policy.should_pause_task_queues_for_android_webview() = true;
-  }
-
-  if (scheduling_settings_
-          .prioritize_compositing_and_loading_during_early_loading &&
-      current_use_case() == UseCase::kEarlyLoading) {
-    new_policy.should_prioritize_loading_with_compositing() = true;
   }
 
   new_policy.find_in_page_priority() =
@@ -2268,11 +2234,6 @@ base::TimeTicks MainThreadSchedulerImpl::NowTicks() const {
 
 void MainThreadSchedulerImpl::AddAgentGroupScheduler(
     AgentGroupSchedulerImpl* agent_group_scheduler) {
-  if (!main_thread_only().agent_group_schedulers) {
-    main_thread_only().agent_group_schedulers = MakeGarbageCollected<
-        HeapHashSet<WeakMember<AgentGroupSchedulerImpl>>>();
-  }
-
   bool is_new_entry = main_thread_only()
                           .agent_group_schedulers->insert(agent_group_scheduler)
                           .is_new_entry;
@@ -2391,8 +2352,16 @@ void MainThreadSchedulerImpl::OnTaskCompleted(
 
   DispatchOnTaskCompletionCallbacks();
 
-  if (queue)
+  if (queue) {
     queue->OnTaskRunTimeReported(task_timing);
+
+    if (RuntimeEnabledFeatures::LongAnimationFrameMonitoringEnabled()) {
+      if (FrameSchedulerImpl* frame_scheduler = queue->GetFrameScheduler()) {
+        frame_scheduler->OnTaskCompleted(task_timing,
+                                         task.GetDesiredExecutionTime());
+      }
+    }
+  }
 
   // TODO(altimin): Per-page metrics should also be considered.
   main_thread_only().metrics_helper.RecordTaskMetrics(queue.get(), task,
@@ -2417,15 +2386,6 @@ void MainThreadSchedulerImpl::RecordTaskUkm(
     const TaskQueue::TaskTiming& task_timing) {
   if (!helper_.ShouldRecordTaskUkm(task_timing.has_thread_time()))
     return;
-
-  if (queue && queue->GetFrameScheduler()) {
-    auto status = RecordTaskUkmImpl(queue, task, task_timing,
-                                    queue->GetFrameScheduler(), true);
-    UMA_HISTOGRAM_ENUMERATION(
-        "Scheduler.Experimental.Renderer.UkmRecordingStatus", status,
-        UkmRecordingStatus::kCount);
-    return;
-  }
 
   for (PageSchedulerImpl* page_scheduler : main_thread_only().page_schedulers) {
     auto status = RecordTaskUkmImpl(
@@ -2584,10 +2544,6 @@ TaskPriority MainThreadSchedulerImpl::ComputeCompositorPriority() const {
     // Return the highest priority here otherwise consecutive heavy inputs (e.g.
     // typing) will starve rendering.
     return TaskPriority::kHighestPriority;
-  } else if (scheduling_settings_
-                 .prioritize_compositing_and_loading_during_early_loading &&
-             current_use_case() == UseCase::kEarlyLoading) {
-    return TaskPriority::kHighPriority;
   } else {
     absl::optional<TaskPriority> computed_compositor_priority =
         ComputeCompositorPriorityFromUseCase();
@@ -2651,8 +2607,7 @@ void MainThreadSchedulerImpl::
     main_thread_only().should_prioritize_compositor_task_queue_after_delay =
         false;
     main_thread_only().prioritize_compositing_after_input = false;
-  } else if (scheduling_settings().prioritize_compositing_after_input &&
-             queue &&
+  } else if (queue &&
              queue->queue_type() == MainThreadTaskQueue::QueueType::kInput &&
              main_thread_only().did_handle_discrete_input_event) {
     // Assume this input will result in a frame, which we want to show ASAP.
@@ -2749,6 +2704,16 @@ bool MainThreadSchedulerImpl::AllPagesFrozen() const {
       return false;
   }
   return true;
+}
+
+TaskAttributionTracker* MainThreadSchedulerImpl::GetTaskAttributionTracker() {
+  return main_thread_only().task_attribution_tracker.get();
+}
+
+void MainThreadSchedulerImpl::InitializeTaskAttributionTracker(
+    std::unique_ptr<TaskAttributionTracker> tracker) {
+  DCHECK(!main_thread_only().task_attribution_tracker);
+  main_thread_only().task_attribution_tracker = std::move(tracker);
 }
 
 // static

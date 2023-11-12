@@ -8,6 +8,7 @@
 #include <ostream>
 
 #include "base/callback_list.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/sync/synced_session_client_ash.h"
 #include "chromeos/ash/components/phonehub/browser_tabs_metadata_fetcher.h"
@@ -41,6 +42,8 @@ class BrowserTabsModelProviderImpl
       public multidevice_setup::MultiDeviceSetupClient::Observer,
       public SyncedSessionClientAsh::Observer {
  public:
+  static bool IsLacrosSessionSyncFeatureEnabled();
+
   // |synced_session_client_ash| is null if kChromeOSSyncedSessionClient or
   // Lacros Only are disabled.
   BrowserTabsModelProviderImpl(
@@ -54,6 +57,7 @@ class BrowserTabsModelProviderImpl
 
   // BrowserTabsModelProvider:
   void TriggerRefresh() override;
+  bool IsBrowserTabSyncEnabled() override;
 
  private:
   friend class BrowserTabsModelProviderImplTest;
@@ -77,14 +81,16 @@ class BrowserTabsModelProviderImpl
           metadata);
   absl::optional<std::string> GetHostDeviceName() const;
 
-  multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client_;
+  raw_ptr<multidevice_setup::MultiDeviceSetupClient, ExperimentalAsh>
+      multidevice_setup_client_;
 
   // |synced_session_client_ash_| is null if kChromeOSSyncedSessionClient or
   // Lacros Only are disabled.
-  SyncedSessionClientAsh* synced_session_client_ash_;
+  raw_ptr<SyncedSessionClientAsh, ExperimentalAsh> synced_session_client_ash_;
 
-  syncer::SyncService* sync_service_;
-  sync_sessions::SessionSyncService* session_sync_service_;
+  raw_ptr<syncer::SyncService, ExperimentalAsh> sync_service_;
+  raw_ptr<sync_sessions::SessionSyncService, ExperimentalAsh>
+      session_sync_service_;
   std::unique_ptr<BrowserTabsMetadataFetcher> browser_tabs_metadata_fetcher_;
   base::CallbackListSubscription session_updated_subscription_;
 

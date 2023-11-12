@@ -84,13 +84,13 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
     return;
   }
 
-  const base::Value* trackers = root.FindDictKey(kTrackersKey);
+  const base::Value* trackers = root.GetDict().Find(kTrackersKey);
   if (!trackers) {
     parse_result_->fetch_result = FetchResult::kFileUnsupported;
     return;
   }
 
-  const base::Value* entities = root.FindDictKey(kEntitiesKey);
+  const base::Value* entities = root.GetDict().Find(kEntitiesKey);
   if (!entities) {
     parse_result_->fetch_result = FetchResult::kFileUnsupported;
     return;
@@ -98,7 +98,7 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
 
   parse_result_->tracker_infos = base::Value::Dict();
 
-  for (const auto item : trackers->DictItems()) {
+  for (const auto item : trackers->GetDict()) {
     const std::string& domain = item.first;
     if (!item.second.is_dict()) {
       parse_result_->rules_info.invalid_rules++;
@@ -116,16 +116,16 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
     const base::Value* excluded_origins = nullptr;
     const std::string* owner = item.second.FindStringPath(kOwnerNamePath);
     if (owner) {
-      const base::Value* entity = entities->FindDictKey(*owner);
+      const base::Value* entity = entities->GetDict().Find(*owner);
       if (entity)
         excluded_origins = entity->FindListKey(kDomainsKey);
     }
 
     base::Value::Dict tracker_info;
-    const base::Value* owner_dict = item.second.FindKey(kOwnerKey);
+    const base::Value* owner_dict = item.second.GetDict().Find(kOwnerKey);
     if (owner_dict)
       tracker_info.Set(kOwnerKey, owner_dict->Clone());
-    const base::Value* categories = item.second.FindKey(kCategoriesKey);
+    const base::Value* categories = item.second.GetDict().Find(kCategoriesKey);
     if (categories)
       tracker_info.Set(kCategoriesKey, categories->Clone());
 
@@ -211,8 +211,8 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
   }
 
   const std::string* surrogate = rule.FindStringKey(kSurrogateKey);
-  const base::Value* exceptions = rule.FindDictKey(kExceptionsKey);
-  const base::Value* options = rule.FindDictKey(kOptionssKey);
+  const base::Value* exceptions = rule.GetDict().Find(kExceptionsKey);
+  const base::Value* options = rule.GetDict().Find(kOptionssKey);
 
   bool make_request_filter_rule = false;
   bool make_redirect_rule = false;

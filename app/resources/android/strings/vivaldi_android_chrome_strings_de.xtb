@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Geöffnete Tabs</translation>
 <translation id="1829244130665387512">Auf Seite suchen</translation>
 <translation id="1910514478706885609">In neuer Tabgruppe öffnen</translation>
+<translation id="1925021887439448749">Benutzerdefinierte Webadresse eingeben</translation>
 <translation id="2038563949887743358">“Desktopversion ansehen” aktivieren</translation>
 <translation id="2139186145475833000">Zum Startbildschirm hinzufügen</translation>
+<translation id="2149973817440762519">Lesezeichen bearbeiten</translation>
 <translation id="2306442503286132111">Lesezeichen wurde im Ordner <ph name="FOLDER_NAME" /> gespeichert</translation>
 <translation id="2433507940547922241">Darstellung</translation>
 <translation id="2501278716633472235">Zurück</translation>
 <translation id="2633278372998075009">Private Tabs</translation>
+<translation id="2951071800649516099">Ihrer Leseliste für später Seiten hinzufügen</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> Lesezeichen}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> Lesezeichen}}</translation>
@@ -30,12 +33,15 @@
 <translation id="4121750346708795461">Durch die Verwendung dieser App stimmen Sie den <ph name="BEGIN_LINK1" />Nutzungsbedingungen<ph name="END_LINK1" /> und der <ph name="BEGIN_LINK2" />Datenschutzerklärung<ph name="END_LINK2" /> von Vivaldi zu.</translation>
 <translation id="4137746084635924146">Aktuelle Gerätesprache</translation>
 <translation id="4167670741834902166">Neuer privater Tab</translation>
+<translation id="4195643157523330669">In neuem Tab öffnen</translation>
 <translation id="4243710787042215766">Im privaten Tab öffnen</translation>
+<translation id="451872707440238414">Lesezeichen durchsuchen</translation>
 <translation id="4526803704855831732">Private Tabs</translation>
 <translation id="4719086422742491124">Erfahren Sie mehr über Themen auf Webseiten ohne sie zu verlassen. Wählen Sie eines oder mehrere Wörter auf der Seite, um nach ihnen zu suchen.
 
 "Zum Suchen berühren" kann nur ausgeführt werden, wenn Google als Standardsuchmaschine in Vivaldi definiert ist.</translation>
 <translation id="4759238208242260848">Downloads</translation>
+<translation id="4850886885716139402">Anzeigen</translation>
 <translation id="4883379392681899581">Privatmodus verlassen</translation>
 <translation id="4943872375798546930">Keine Ergebnisse</translation>
 <translation id="49576331685473090">Inhalte blockieren</translation>
@@ -48,7 +54,9 @@
 Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern, schieben Sie das Bedienfeld ganz nach oben und tippen Sie auf das Suchfeld.</translation>
 <translation id="572328651809341494">Zuletzt geöffnete Tabs</translation>
 <translation id="6150320133806434356">Lesezeichen gespeichert</translation>
+<translation id="6301525844455696527">Leseliste abarbeiten</translation>
 <translation id="6336451774241870485">Neuer privater Tab</translation>
+<translation id="6404511346730675251">Lesezeichen bearbeiten</translation>
 <translation id="6585139692466700358">Übersetzung von Seiten in andere Sprachen mit Hilfe des Vivaldi-Übersetzungsdienstes anbieten</translation>
 <translation id="6593061639179217415">Desktopwebsite</translation>
 <translation id="6610147964972079463">Private Tabs schließen</translation>
@@ -57,9 +65,15 @@ Drücken Sie lange, um Ihren Suchbegriff anzupassen. Um Ihre Suche zu verfeinern
 <translation id="732145680195464316">Lesezeichen in <ph name="PRODUCT_NAME" /> gespeichert</translation>
 <translation id="7427132068601343474">Über Vivaldi</translation>
 <translation id="7465104139234185284">Alle privaten Tabs schließen</translation>
+<translation id="7481312909269577407">Vorwärts</translation>
+<translation id="7583262514280211622">Hier finden Sie Ihre Leseliste</translation>
+<translation id="7968014550143838305">Zur Leseliste hinzugefügt</translation>
 <translation id="804786196054284061">Endbenutzer-Lizenzvereinbarung</translation>
+<translation id="8127542551745560481">Startseite bearbeiten</translation>
+<translation id="8560602726703398413">Finden Sie Ihre Leseliste in den Lesezeichen</translation>
 <translation id="85991616550051997">Startseite</translation>
 <translation id="8820817407110198400">Lesezeichen</translation>
 <translation id="9063523880881406963">“Desktopversion ansehen” deaktivieren</translation>
 <translation id="9080642952018487277">In den Privatmodus wechseln</translation>
+<translation id="96681097142096641">Vereinfachte Seite ansehen?</translation>
 </translationbundle>

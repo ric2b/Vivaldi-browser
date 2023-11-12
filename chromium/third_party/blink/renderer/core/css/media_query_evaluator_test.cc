@@ -69,6 +69,20 @@ MediaQueryEvaluatorTestCase g_screen_test_cases[] = {
     {"all and (grid: 0)", true},
     {"(resolution: 2dppx)", true},
     {"(resolution: 1dppx)", false},
+    {"(resolution: calc(2x))", true},
+    {"(resolution: calc(1x))", false},
+    {"(resolution: calc(1x + 1x))", true},
+    {"(resolution: calc(1x + 0x))", false},
+    {"(resolution: calc(1x + 96dpi))", true},
+    {"(resolution: calc(0x + 37.79532dpcm))", false},
+    {"(resolution: calc(3x - 1x))", true},
+    {"(resolution: calc(3x - 2x))", false},
+    {"(resolution: calc(3x - 96dpi))", true},
+    {"(resolution: calc(2x - 37.79532dpcm))", false},
+    {"(resolution: calc(1x * 2))", true},
+    {"(resolution: calc(0.5x * 2))", false},
+    {"(resolution: calc(4x / 2))", true},
+    {"(resolution: calc(2x / 2))", false},
     {"(orientation: portrait)", true},
     {"(orientation: landscape)", false},
     {"(orientation: url(portrait))", false},
@@ -183,8 +197,33 @@ MediaQueryEvaluatorTestCase g_float_non_friendly_viewport_test_cases[] = {
 
 MediaQueryEvaluatorTestCase g_print_test_cases[] = {
     {"print and (min-resolution: 1dppx)", true},
+    {"print and (min-resolution: calc(100dpi - 4dpi))", true},
     {"print and (min-resolution: 118dpcm)", true},
     {"print and (min-resolution: 119dpcm)", false},
+    {nullptr, false}  // Do not remove the terminator line.
+};
+
+// Tests when the output device is print.
+MediaQueryEvaluatorTestCase g_update_with_print_device_test_cases[] = {
+    {"(update)", false},       {"(update: none)", true},
+    {"(update: slow)", false}, {"(update: fast)", false},
+    {"update: fast", false},   {"(update: ?)", false},
+    {nullptr, false}  // Do not remove the terminator line.
+};
+
+// Tests when the output device is slow.
+MediaQueryEvaluatorTestCase g_update_with_slow_device_test_cases[] = {
+    {"(update)", true},       {"(update: none)", false},
+    {"(update: slow)", true}, {"(update: fast)", false},
+    {"update: fast", false},  {"(update: ?)", false},
+    {nullptr, false}  // Do not remove the terminator line.
+};
+
+// Tests when the output device is slow.
+MediaQueryEvaluatorTestCase g_update_with_fast_device_test_cases[] = {
+    {"(update)", true},        {"(update: none)", false},
+    {"(update: slow)", false}, {"(update: fast)", true},
+    {"update: fast", false},   {"(update: ?)", false},
     {nullptr, false}  // Do not remove the terminator line.
 };
 
@@ -383,10 +422,13 @@ void TestMQEvaluator(MediaQueryEvaluatorTestCase* test_cases,
     if (String(test_cases[i].input).empty()) {
       query_set = MediaQuerySet::Create();
     } else {
+      StringView str(test_cases[i].input);
+      CSSTokenizer tokenizer(StringView(test_cases[i].input));
+      auto [tokens, offsets] = tokenizer.TokenizeToEOFWithOffsets();
       query_set = MediaQueryParser::ParseMediaQuerySetInMode(
-          CSSParserTokenRange(
-              CSSTokenizer(test_cases[i].input).TokenizeToEOF()),
-          mode, nullptr);
+          CSSParserTokenRange(tokens),
+          CSSParserTokenOffsets(tokens, std::move(offsets), str), mode,
+          nullptr);
     }
     EXPECT_EQ(test_cases[i].output, media_query_evaluator.Eval(*query_set))
         << "Query: " << test_cases[i].input;
@@ -409,6 +451,8 @@ TEST(MediaQueryEvaluatorTest, Cached) {
   data.monochrome_bits_per_component = 0;
   data.primary_pointer_type = mojom::blink::PointerType::kPointerFineType;
   data.primary_hover_type = mojom::blink::HoverType::kHoverHoverType;
+  data.output_device_update_ability_type =
+      mojom::blink::OutputDeviceUpdateAbilityType::kFastType;
   data.three_d_enabled = true;
   data.media_type = media_type_names::kScreen;
   data.strict_mode = true;
@@ -429,6 +473,36 @@ TEST(MediaQueryEvaluatorTest, Cached) {
     MediaQueryEvaluator media_query_evaluator(media_values);
     TestMQEvaluator(g_print_test_cases, media_query_evaluator);
     data.media_type = media_type_names::kScreen;
+  }
+
+  // Update values with print device.
+  {
+    data.media_type = media_type_names::kPrint;
+    auto* media_values = MakeGarbageCollected<MediaValuesCached>(data);
+    MediaQueryEvaluator media_query_evaluator(media_values);
+    TestMQEvaluator(g_update_with_print_device_test_cases,
+                    media_query_evaluator);
+    data.media_type = media_type_names::kScreen;
+  }
+
+  // Update values with slow device.
+  {
+    data.output_device_update_ability_type =
+        mojom::blink::OutputDeviceUpdateAbilityType::kSlowType;
+    auto* media_values = MakeGarbageCollected<MediaValuesCached>(data);
+    MediaQueryEvaluator media_query_evaluator(media_values);
+    TestMQEvaluator(g_update_with_slow_device_test_cases,
+                    media_query_evaluator);
+  }
+
+  // Update values with fast device.
+  {
+    data.output_device_update_ability_type =
+        mojom::blink::OutputDeviceUpdateAbilityType::kFastType;
+    auto* media_values = MakeGarbageCollected<MediaValuesCached>(data);
+    MediaQueryEvaluator media_query_evaluator(media_values);
+    TestMQEvaluator(g_update_with_fast_device_test_cases,
+                    media_query_evaluator);
   }
 
   // Monochrome values.
@@ -469,10 +543,15 @@ TEST(MediaQueryEvaluatorTest, Dynamic) {
   TestMQEvaluator(g_viewport_test_cases, media_query_evaluator);
   TestMQEvaluator(g_overflow_with_scrollable_device_test_cases,
                   media_query_evaluator);
+  TestMQEvaluator(g_update_with_fast_device_test_cases, media_query_evaluator);
+  page_holder->GetFrame().GetSettings()->SetOutputDeviceUpdateAbilityType(
+      mojom::blink::OutputDeviceUpdateAbilityType::kSlowType);
+  TestMQEvaluator(g_update_with_slow_device_test_cases, media_query_evaluator);
   page_holder->GetFrameView().SetMediaType(media_type_names::kPrint);
   TestMQEvaluator(g_print_test_cases, media_query_evaluator);
   TestMQEvaluator(g_overflow_with_print_device_test_cases,
                   media_query_evaluator);
+  TestMQEvaluator(g_update_with_print_device_test_cases, media_query_evaluator);
 }
 
 TEST(MediaQueryEvaluatorTest, DynamicNoView) {

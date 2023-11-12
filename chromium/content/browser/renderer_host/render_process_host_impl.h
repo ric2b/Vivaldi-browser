@@ -18,6 +18,7 @@
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/safe_ref.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation_traits.h"
@@ -146,7 +147,7 @@ class PushMessagingManager;
 class RenderProcessHostCreationObserver;
 class RenderProcessHostFactory;
 class RenderProcessHostPriorityClients;
-class RenderProcessHostTest;
+class RenderProcessHostTestBase;
 class RenderWidgetHelper;
 class SiteInfo;
 class SiteInstance;
@@ -283,6 +284,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
                                   on_render_frame_host) override;
   void IncrementWorkerRefCount() override;
   void DecrementWorkerRefCount() override;
+  void IncrementPendingReuseRefCount() override;
+  void DecrementPendingReuseRefCount() override;
   void DisableRefCounts() override;
   bool AreRefCountsDisabled() override;
   mojom::Renderer* GetRendererInterface() override;
@@ -324,8 +327,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void ResumeSocketManagerForRenderFrameHost(
       const GlobalRenderFrameHostId& render_frame_host_id) override;
 
-  void SetOsSupportForAttributionReporting(
-      attribution_reporting::mojom::OsSupport os_support) override;
+#if BUILDFLAG(IS_ANDROID)
+  void SetAttributionReportingSupport(
+      network::mojom::AttributionSupport) override;
+#endif
 
   // IPC::Sender via RenderProcessHost.
   bool Send(IPC::Message* msg) override;
@@ -374,6 +379,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // Implementation of FilterURL below that can be shared with the mock class.
   static void FilterURL(RenderProcessHost* rph, bool empty_allowed, GURL* url);
+
+  // Returns the current count of renderer processes. For the count used when
+  // comparing against the process limit, see `GetProcessCountForLimit`.
+  static size_t GetProcessCount();
 
   // Returns the current process count for comparisons against
   // GetMaxRendererProcessCount, taking into account any processes the embedder
@@ -778,7 +787,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   friend class RenderFrameHostImplSubframeReuseBrowserTest_MultipleDelays_Test;
   friend class VisitRelayingRenderProcessHost;
   friend class StoragePartitonInterceptor;
-  friend class RenderProcessHostTest;
+  friend class RenderProcessHostTestBase;
   // TODO(crbug.com/1111231): This class is a friend so that it can call our
   // private mojo implementation methods, acting as a pass-through. This is only
   // necessary during the associated interface migration, after which,
@@ -943,9 +952,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // Returns a RenderProcessHost that is rendering a URL corresponding to
   // |site_instance| in one of its frames, or that is expecting a navigation to
-  // that SiteInstance.
+  // that SiteInstance. `main_frame_threshold` is an optional parameter to
+  // limit the maximum number of main frames a RenderProcessHost can host.
   static RenderProcessHost* FindReusableProcessHostForSiteInstance(
-      SiteInstanceImpl* site_instance);
+      SiteInstanceImpl* site_instance,
+      absl::optional<size_t> main_frame_threshold = absl::nullopt);
 
   void NotifyRendererOfLockedStateUpdate();
 
@@ -1017,24 +1028,27 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // swapping. See blink::DiskDataAllocator for uses.
   void ProvideSwapFileForRenderer();
 
-  // True when |keep_alive_ref_count_|, |worker_ref_count_| and
-  // |shutdown_delay_ref_count_| are all zero.
+  // True when |keep_alive_ref_count_|, |worker_ref_count_|,
+  // |shutdown_delay_ref_count_|, and |pending_reuse_ref_count_| are all zero.
   bool AreAllRefCountsZero();
 
   mojo::OutgoingInvitation mojo_invitation_;
 
   // These cover mutually-exclusive cases. While keep-alive is time-based,
   // workers are not. Shutdown-delay is also time-based, but uses a different
-  // delay time. Attached documents are tracked via |listeners_| below.
+  // delay time. |pending_reuse_ref_count_| is not time-based and is used when
+  // the process needs to be kept alive because it will be reused soon.
+  // Attached documents are tracked via |listeners_| below.
   int keep_alive_ref_count_ = 0;
   int worker_ref_count_ = 0;
   int shutdown_delay_ref_count_ = 0;
+  int pending_reuse_ref_count_ = 0;
   // We track the start-time for each |handle_id|, for crashkey reporting.
   base::flat_map<uint64_t, base::Time> keep_alive_start_times_;
 
   // Set in DisableRefCounts(). When true, |keep_alive_ref_count_| and
-  // |worker_ref_count_|, and |shutdown_delay_ref_count_| must no longer be
-  // modified.
+  // |worker_ref_count_|, |shutdown_delay_ref_count_|, and
+  // |pending_reuse_ref_count_| must no longer be modified.
   bool are_ref_counts_disabled_ = false;
 
   // The registered IPC listener objects. When this list is empty, we should
@@ -1098,7 +1112,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // The globally-unique identifier for this RenderProcessHost.
   const int id_;
 
-  BrowserContext* browser_context_ = nullptr;
+  // This field is not a raw_ptr<> because problems related to passing to a
+  // templated && parameter, which is later forwarded to something that doesn't
+  // vibe with raw_ptr<T>.
+  RAW_PTR_EXCLUSION BrowserContext* browser_context_ = nullptr;
 
   // Owned by |browser_context_|.
   //
@@ -1217,9 +1234,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   std::unique_ptr<mojo::Receiver<viz::mojom::CompositingModeReporter>>
       compositing_mode_reporter_;
-
-  // Fields for recording MediaStream UMA.
-  bool has_recorded_media_stream_frame_depth_metric_ = false;
 
   // Stores the amount of time that this RenderProcessHost's shutdown has been
   // delayed to run unload handlers, or zero if the process shutdown was not

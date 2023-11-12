@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 in use)} other {(# in use)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Checking the proxy address<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5287240709317226393">Show cookies</translation>
 <translation id="5355557959165512791">You cannot visit <ph name="SITE" /> right now because its certificate has been revoked. Network errors and attacks are usually temporary, so this page will probably work later.</translation>
 <translation id="5386426401304769735">The certificate chain for this site contains a certificate signed using SHA-1.</translation>
 <translation id="5452270690849572955">This <ph name="HOST_NAME" /> page can’t be found</translation>
@@ -145,6 +144,7 @@
 <translation id="6321917430147971392">Check your DNS settings</translation>
 <translation id="6328639280570009161">Try disabling network prediction</translation>
 <translation id="6328786501058569169">This site is deceptive</translation>
+<translation id="6348220984832452017">Active Variations</translation>
 <translation id="6358450015545214790">What do these mean?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> refused to connect.</translation>
 <translation id="6447842834002726250">Cookies</translation>
@@ -153,6 +153,7 @@
 <translation id="6657585470893396449">Password</translation>
 <translation id="6711464428925977395">There is something wrong with the proxy server or the address is incorrect.</translation>
 <translation id="6757797048963528358">Your device went to sleep.</translation>
+<translation id="6890956352250146925">Options for cookies and site data</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Block</translation>
 <translation id="7079718277001814089">This site contains malware</translation>
@@ -162,6 +163,7 @@
 <translation id="7113310725918019676">Allow <ph name="BLOCKED_TYPE" /> from <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> doesn't adhere to security standards.</translation>
 <translation id="7219179957768738017">The connection uses <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Show notifications</translation>
 <translation id="7260504762447901703">Revoke access</translation>
 <translation id="7353601530677266744">Command Line</translation>
 <translation id="7364115444476960850">The page you were trying to access was blocked by Vivaldi's <ph name="BLOCKER_NAME" /></translation>

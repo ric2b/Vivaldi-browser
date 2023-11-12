@@ -20,6 +20,7 @@
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/proto/photo_cache_entry.pb.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -34,9 +35,6 @@ class ImageSkia;
 }  // namespace gfx
 
 namespace ash {
-
-class AmbientClient;
-class AmbientAccessTokenController;
 
 // Class to handle photos in ambient mode.
 //
@@ -109,8 +107,8 @@ class AmbientAccessTokenController;
 // set.
 class ASH_EXPORT AmbientPhotoController : public AmbientViewDelegateObserver {
  public:
-  AmbientPhotoController(AmbientClient& ambient_client,
-                         AmbientAccessTokenController& access_token_controller,
+  AmbientPhotoController(AmbientPhotoCache& photo_cache,
+                         AmbientPhotoCache& backup_photo_cache,
                          AmbientViewDelegate& view_delegate,
                          AmbientPhotoConfig photo_config);
 
@@ -120,8 +118,6 @@ class ASH_EXPORT AmbientPhotoController : public AmbientViewDelegateObserver {
   ~AmbientPhotoController() override;
 
   // Start/stop updating the screen contents.
-  // We need different logics to update photos and weather info because they
-  // have different refreshing intervals.
   void StartScreenUpdate(
       std::unique_ptr<AmbientTopicQueue::Delegate> topic_queue_delegate);
   void StopScreenUpdate();
@@ -138,11 +134,6 @@ class ASH_EXPORT AmbientPhotoController : public AmbientViewDelegateObserver {
   // AmbientViewDelegateObserver:
   void OnMarkerHit(AmbientPhotoConfig::Marker marker) override;
 
-  // Clear cache when Settings changes. Only the primary photo cache is cleared.
-  // The backup cache is left untouched because those photos are currently not
-  // settings-specific and only meant to be used as a fail-safe.
-  void ClearCache();
-
  private:
   enum class State { kInactive, kWaitingForNextMarker, kPreparingNextTopicSet };
 
@@ -152,9 +143,6 @@ class ASH_EXPORT AmbientPhotoController : public AmbientViewDelegateObserver {
 
   // Initialize variables.
   void Init(std::unique_ptr<AmbientTopicQueue::Delegate> topic_queue_delegate);
-
-  // Requests that the weather controller fetch updated weather info.
-  void FetchWeather();
 
   void ScheduleFetchBackupImages();
 
@@ -197,24 +185,6 @@ class ASH_EXPORT AmbientPhotoController : public AmbientViewDelegateObserver {
   void OnAllPhotoDecoded(bool from_downloading,
                          const std::string& hash);
 
-  void set_photo_cache_for_testing(
-      std::unique_ptr<AmbientPhotoCache> photo_cache) {
-    photo_cache_ = std::move(photo_cache);
-  }
-
-  AmbientPhotoCache* get_photo_cache_for_testing() {
-    return photo_cache_.get();
-  }
-
-  void set_backup_photo_cache_for_testing(
-      std::unique_ptr<AmbientPhotoCache> photo_cache) {
-    backup_photo_cache_ = std::move(photo_cache);
-  }
-
-  AmbientPhotoCache* get_backup_photo_cache_for_testing() {
-    return backup_photo_cache_.get();
-  }
-
   void FetchTopicsForTesting();
 
   void FetchImageForTesting();
@@ -229,9 +199,6 @@ class ASH_EXPORT AmbientPhotoController : public AmbientViewDelegateObserver {
 
   // The timer to refresh backup cache photos.
   base::OneShotTimer backup_photo_refresh_timer_;
-
-  // The timer to refresh weather information.
-  base::RepeatingTimer weather_refresh_timer_;
 
   State state_ = State::kInactive;
 
@@ -262,8 +229,8 @@ class ASH_EXPORT AmbientPhotoController : public AmbientViewDelegateObserver {
   // Backoff to resume fetch images.
   net::BackoffEntry resume_fetch_image_backoff_;
 
-  std::unique_ptr<AmbientPhotoCache> photo_cache_;
-  std::unique_ptr<AmbientPhotoCache> backup_photo_cache_;
+  const base::raw_ptr<AmbientPhotoCache> photo_cache_;
+  const base::raw_ptr<AmbientPhotoCache> backup_photo_cache_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

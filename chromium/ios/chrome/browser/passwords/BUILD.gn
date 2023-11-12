@@ -13,6 +13,8 @@ source_set("passwords") {
     "ios_chrome_password_check_manager_factory.mm",
     "ios_chrome_password_manager_client.h",
     "ios_chrome_password_manager_client.mm",
+    "ios_chrome_password_reuse_detection_manager_client.h",
+    "ios_chrome_password_reuse_detection_manager_client.mm",
     "ios_password_requirements_service_factory.cc",
     "ios_password_requirements_service_factory.h",
     "notify_auto_signin_view_controller.h",
@@ -56,6 +58,8 @@ source_set("passwords") {
     "//components/password_manager/ios",
     "//components/password_manager/ios:account_select_fill_data",
     "//components/prefs",
+    "//components/safe_browsing/core/browser/password_protection",
+    "//components/safe_browsing/core/browser/password_protection:password_reuse_detection_manager_client",
     "//components/security_state/core",
     "//components/strings",
     "//components/sync",
@@ -66,6 +70,7 @@ source_set("passwords") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/application_context",
     "//ios/chrome/browser/autofill:autofill_shared",
+    "//ios/chrome/browser/autofill/bottom_sheet",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/credential_provider_promo:features",
     "//ios/chrome/browser/flags:system_flags",
@@ -74,17 +79,17 @@ source_set("passwords") {
     "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/safe_browsing",
     "//ios/chrome/browser/safe_browsing:features",
+    "//ios/chrome/browser/shared/public/commands",
+    "//ios/chrome/browser/shared/public/features",
+    "//ios/chrome/browser/shared/ui/elements",
+    "//ios/chrome/browser/shared/ui/util",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ssl",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/sync/glue",
     "//ios/chrome/browser/translate:translate",
-    "//ios/chrome/browser/ui:feature_flags",
-    "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/elements",
     "//ios/chrome/browser/ui/infobars/coordinators",
     "//ios/chrome/browser/ui/ntp:logo",
-    "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/web",
     "//ios/chrome/browser/webdata_services",
     "//ios/chrome/common/ui/util",
@@ -98,11 +103,8 @@ source_set("passwords") {
   ]
   public_deps = [
     ":password_controller_delegate",
-    ":passwords_generation_utils",
     ":store_factory",
   ]
-
-  allow_circular_includes_from = [ ":passwords_generation_utils" ]
 }
 
 source_set("password_controller_delegate") {
@@ -186,14 +188,19 @@ source_set("public") {
   deps = [ "//base" ]
 }
 
-source_set("passwords_generation_utils") {
+source_set("password_checkup_utils") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "password_generation_utils.h",
-    "password_generation_utils.mm",
+    "password_checkup_utils.h",
+    "password_checkup_utils.mm",
   ]
-  deps = [ "//base:i18n" ]
-  frameworks = [ "CoreGraphics.framework" ]
+  deps = [
+    "//base",
+    "//components/password_manager/core/browser",
+    "//components/password_manager/core/common:features",
+    "//ios/chrome/app/strings",
+    "//ui/base",
+  ]
 }
 
 source_set("unit_tests") {
@@ -202,12 +209,14 @@ source_set("unit_tests") {
   sources = [
     "ios_chrome_password_check_manager_unittest.mm",
     "ios_chrome_password_manager_client_unittest.mm",
+    "password_checkup_utils_unittest.mm",
     "password_controller_js_unittest.mm",
     "password_controller_unittest.mm",
     "password_tab_helper_unittest.mm",
     "well_known_change_password_tab_helper_unittest.mm",
   ]
   deps = [
+    ":password_checkup_utils",
     ":passwords",
     "//base",
     "//base/test:test_support",
@@ -225,13 +234,18 @@ source_set("unit_tests") {
     "//components/password_manager/ios:test_support",
     "//components/prefs",
     "//components/prefs:test_support",
+    "//components/safe_browsing/core/browser/password_protection:test_support",
     "//components/safe_browsing/core/common:safe_browsing_prefs",
+    "//components/sync_preferences:test_support",
     "//components/ukm:test_support",
     "//ios/chrome/browser/autofill",
+    "//ios/chrome/browser/autofill/bottom_sheet",
     "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/credential_provider_promo:features",
+    "//ios/chrome/browser/main:test_support",
     "//ios/chrome/browser/passwords/test",
+    "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/ui/autofill/form_input_accessory",
-    "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/web:web_internal",
     "//ios/testing:ocmock_support",
     "//ios/web",
@@ -267,7 +281,6 @@ source_set("eg2_tests") {
     "//ios/chrome/test:eg_test_support+eg2",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",
     "//ios/testing/earl_grey:eg_test_support+eg2",
-    "//ios/third_party/earl_grey2:test_lib",
     "//ios/web/public/test/http_server",
     "//net:test_support",
     "//ui/base:base",
@@ -292,6 +305,9 @@ source_set("eg_app_support+eg2") {
     "//components/autofill/core/common",
     "//components/keyed_service/core",
     "//components/password_manager/core/browser",
+    "//components/password_manager/core/common",
+    "//components/prefs",
+    "//ios/chrome/browser/browser_state",
     "//ios/chrome/test/app:test_support",
     "//ios/testing:nserror_support",
     "//ios/web/public",
@@ -309,5 +325,5 @@ source_set("eg_test_support+eg2") {
     "password_manager_app_interface.h",
     "password_manager_app_interface_stub.mm",
   ]
-  deps = [ "//ios/third_party/earl_grey2:test_lib" ]
+  deps = [ "//ios/testing/earl_grey:eg_test_support+eg2" ]
 }

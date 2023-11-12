@@ -26,10 +26,10 @@ const char kUploadCardRequestFormatWithoutCvc[] =
     "&s7e_1_pan=%s";
 const char kUploadCardRequestFormatUsingAlternateType[] =
     "requestContentType=application/json; charset=utf-8&request=%s"
-    "&s7e_38_pan=%s&s7e_13_cvc=%s";
+    "&s7e_21_pan=%s&s7e_13_cvc=%s";
 const char kUploadCardRequestFormatWithoutCvcUsingAlternateType[] =
     "requestContentType=application/json; charset=utf-8&request=%s"
-    "&s7e_38_pan=%s";
+    "&s7e_21_pan=%s";
 }  // namespace
 
 UploadCardRequest::UploadCardRequest(
@@ -56,7 +56,7 @@ std::string UploadCardRequest::GetRequestContent() {
   base::Value::Dict request_dict;
   if (base::FeatureList::IsEnabled(
           features::kAutofillUpstreamUseAlternateSecureDataType)) {
-    request_dict.Set("encrypted_pan", "__param:s7e_38_pan");
+    request_dict.Set("pan", "__param:s7e_21_pan");
   } else {
     request_dict.Set("encrypted_pan", "__param:s7e_1_pan");
   }
@@ -76,10 +76,10 @@ std::string UploadCardRequest::GetRequestContent() {
   }
   request_dict.Set("context", std::move(context));
 
-  base::Value::Dict chrome_user_context;
-  chrome_user_context.Set("full_sync_enabled", full_sync_enabled_);
-  request_dict.Set("chrome_user_context", std::move(chrome_user_context));
-
+  request_dict.Set(
+      "chrome_user_context",
+      BuildChromeUserContext(request_details_.client_behavior_signals,
+                             full_sync_enabled_));
   SetStringIfNotEmpty(request_details_.card, CREDIT_CARD_NAME_FULL, app_locale,
                       "cardholder_name", request_dict);
 
@@ -104,8 +104,6 @@ std::string UploadCardRequest::GetRequestContent() {
   if (request_details_.card.HasNonEmptyValidNickname()) {
     request_dict.Set("nickname", request_details_.card.nickname());
   }
-
-  SetActiveExperiments(request_details_.active_experiments, request_dict);
 
   const std::u16string pan = request_details_.card.GetInfo(
       AutofillType(CREDIT_CARD_NUMBER), app_locale);

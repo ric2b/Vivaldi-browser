@@ -5,6 +5,8 @@
 #ifndef NET_BASE_PARSE_NUMBER_H_
 #define NET_BASE_PARSE_NUMBER_H_
 
+#include <cstdint>
+
 #include "base/strings/string_piece.h"
 #include "net/base/net_export.h"
 
@@ -52,8 +54,16 @@ enum class ParseIntFormat {
   // In other words, this accepts the same things as NON_NEGATIVE, and
   // additionally recognizes those numbers prefixed with a '-'.
   //
-  // Note that by this defintion "-0" IS a valid input.
-  OPTIONALLY_NEGATIVE
+  // Note that by this definition "-0" IS a valid input.
+  OPTIONALLY_NEGATIVE,
+
+  // Like NON_NEGATIVE, but rejects anything not in minimal encoding - that is,
+  // it rejects anything with leading 0's, except "0".
+  STRICT_NON_NEGATIVE,
+
+  // Like OPTIONALLY_NEGATIVE, but rejects anything not in minimal encoding -
+  // that is, it rejects "-0" and anything with leading 0's, except "0".
+  STRICT_OPTIONALLY_NEGATIVE,
 };
 
 // The specific reason why a ParseInt*() function failed.
@@ -95,15 +105,17 @@ enum class ParseIntError {
 
 // The ParseUint*() functions parse a string representing a number.
 //
-// These are equivalent to calling ParseInt*() with a format string of
-// ParseIntFormat::NON_NEGATIVE and unsigned output types.
+// These are equivalent to calling ParseInt*(), except with unsigned output
+// types. ParseIntFormat may only be one of {NON_NEGATIVE, STRICT_NON_NEGATIVE}.
 [[nodiscard]] NET_EXPORT bool ParseUint32(
     base::StringPiece input,
+    ParseIntFormat format,
     uint32_t* output,
     ParseIntError* optional_error = nullptr);
 
 [[nodiscard]] NET_EXPORT bool ParseUint64(
     base::StringPiece input,
+    ParseIntFormat format,
     uint64_t* output,
     ParseIntError* optional_error = nullptr);
 

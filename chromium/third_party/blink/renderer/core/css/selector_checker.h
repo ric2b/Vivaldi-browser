@@ -140,11 +140,11 @@ class CORE_EXPORT SelectorChecker {
     bool has_selection_pseudo = false;
     bool treat_shadow_host_as_normal_scope = false;
     bool in_nested_complex_selector = false;
-    bool is_inside_visited_link = false;
+    // If true, elements that are links will match :visited. Otherwise,
+    // they will match :link.
+    bool match_visited = false;
     bool pseudo_has_in_rightmost_compound = true;
     bool is_inside_has_pseudo_class = false;
-    // Set to true if :initial pseudo class should match.
-    bool is_initial = false;
   };
 
   struct MatchResult {
@@ -214,14 +214,34 @@ class CORE_EXPORT SelectorChecker {
   };
 
   // Used for situations where we have "inner" selector matching, such as
-  // :is(...). Ensures that MatchFlags found for the inner selector are
-  //  propagated to the outer MatchResult.
+  // :is(...). Ensures that we propagate the necessary sub-result data
+  // to the outer MatchResult.
   class SubResult : public MatchResult {
     STACK_ALLOCATED();
 
    public:
     explicit SubResult(MatchResult& parent) : parent_(parent) {}
-    ~SubResult() { parent_.flags |= flags; }
+    ~SubResult() {
+      parent_.flags |= flags;
+      // Propagate proximity from nested selectors which refer to a parent
+      // rule with a kScopeActivation, e.g.:
+      //
+      //   @scope (div) {
+      //     :scope {
+      //       & { ... }
+      //     }
+      //   }
+      //
+      // The inner rule (&) has no kScopeActivation relation anywhere in the
+      // selector, because it's nested using CSSNestingType::kNesting,
+      // yet it refers to a selector which does contain a kScopeActivation.
+      // The resulting proximity value must be propagated.
+      //
+      // Note that regular :is() and similar pseudo-classes with inner selectors
+      // lists do not produce any (non-max) proximity values; it can only happen
+      // with the nesting selector (&).
+      parent_.proximity = std::min(parent_.proximity, proximity);
+    }
 
    private:
     MatchResult& parent_;
@@ -238,7 +258,6 @@ class CORE_EXPORT SelectorChecker {
   static bool MatchesFocusVisiblePseudoClass(const Element&);
   static bool MatchesSpatialNavigationInterestPseudoClass(const Element&);
   static bool MatchesSelectorFragmentAnchorPseudoClass(const Element&);
-  bool CheckInStyleScope(const SelectorCheckingContext&, MatchResult&) const;
 
  private:
   // Does the work of checking whether the simple selector and element pointed
@@ -356,7 +375,7 @@ class CORE_EXPORT EasySelectorChecker {
   //
   // If IsEasy() is true, this selector can never return any match flags,
   // or match (dynamic) pseudos.
-  static ALWAYS_INLINE bool IsEasy(const CSSSelector* selector);
+  ALWAYS_INLINE static bool IsEasy(const CSSSelector* selector);
 
   // Returns whether the given selector matches the given element.
   // The following preconditions apply:
@@ -368,17 +387,21 @@ class CORE_EXPORT EasySelectorChecker {
   //
   // Unlike SelectorChecker, does not check style_scope; the caller
   // will need to do that if desired.
-  static ALWAYS_INLINE bool Match(const CSSSelector* selector,
+  ALWAYS_INLINE static bool Match(const CSSSelector* selector,
                                   const Element* element);
 
  private:
-  static ALWAYS_INLINE bool MatchOne(const CSSSelector* selector,
+  ALWAYS_INLINE static bool MatchOne(const CSSSelector* selector,
                                      const Element* element);
-  static ALWAYS_INLINE bool AttributeIsSet(const Element& element,
+  ALWAYS_INLINE static bool AttributeIsSet(const Element& element,
                                            const QualifiedName& attr);
-  static ALWAYS_INLINE bool AttributeMatches(const Element& element,
+  ALWAYS_INLINE static bool AttributeMatches(const Element& element,
                                              const QualifiedName& attr,
                                              const AtomicString& value);
+  ALWAYS_INLINE static bool AttributeItemHasName(
+      const Attribute& attribute_item,
+      const Element& element,
+      const QualifiedName& name);
 };
 
 }  // namespace blink

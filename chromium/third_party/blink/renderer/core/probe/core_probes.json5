@@ -25,6 +25,20 @@
         "ExecuteScript",
       ]
     },
+    AnimationFrameTimingMonitor: {
+      include_path: "third_party/blink/renderer/core/frame",
+      probes: [
+        "DidFinishSyncXHR",
+        "DidRunJavaScriptDialog",
+        "ExecuteScript",
+        "InvokeCallback",
+        "InvokeEventHandler",
+        "RecalculateStyle",
+        "UpdateLayout",
+        "CompileAndRunScript",
+        "WillHandlePromise",
+      ]
+    },
     InspectorIssueReporter: {
       probes: [
         "DidFailLoading",
@@ -188,7 +202,7 @@
       probes: [
         "ApplyCompilationModeOverride",
         "DidChangeViewport",
-        "DidClearDocumentOfWindowObject",
+        "DidCreateMainWorldContext",
         "DidNavigateWithinDocument",
         "WillCommitLoad",
         "DidRestoreFromBackForwardCache",
@@ -247,6 +261,7 @@
       probes: [
         "DidAddSpeculationRuleSet",
         "DidRemoveSpeculationRuleSet",
+        "SpeculationCandidatesUpdated",
       ]
     },
     InspectorTraceEvents: {

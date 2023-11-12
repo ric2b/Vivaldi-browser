@@ -55,10 +55,11 @@ VivaldiQuitConfirmationDialog::VivaldiQuitConfirmationDialog(
       views::LayoutProvider::Get()->GetDialogInsetsForContentType(
           views::DialogContentType::kText, views::DialogContentType::kText)));
 
-  label_ = new views::Label;
+  auto label = std::make_unique<views::Label>();
+  label_ = label.get();
   label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label_->SetMultiLine(true);
-  AddChildView(label_);
+  AddChildView(std::move(label));
 
   label_->SetText(delegate_->GetBodyText());
 

@@ -2,8 +2,12 @@ source_set("ad_blocker") {
   sources = [
     "adblock_content_rule_list_provider.h",
     "adblock_content_rule_list_provider.mm",
+    "adblock_organized_rules_manager.cc",
+    "adblock_organized_rules_manager.h",
+    "adblock_rules_organizer.cc",
+    "adblock_rules_organizer.h",
     "adblock_rule_service_impl.h",
-    "adblock_rule_service_impl.mm",
+    "adblock_rule_service_impl.cc",
   ]
 
   deps = [

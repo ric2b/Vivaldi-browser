@@ -78,7 +78,7 @@ class Crate {
   std::optional<OutputFile>& gen_dir() { return gen_dir_; }
 
   // Returns the crate index.
-  CrateIndex index() { return index_; };
+  CrateIndex index() { return index_; }
 
   // Returns the displayable crate label.
   const std::string& label() { return label_; }
@@ -125,25 +125,11 @@ class Crate {
 
 using CrateList = std::vector<Crate>;
 
-// Mapping of a sysroot crate (path) to it's index in the crates list.
-using SysrootCrateIndexMap = std::unordered_map<std::string_view, CrateIndex>;
-
-// Mapping of a sysroot (path) to the mapping of each of the sysroot crates to
-// their index in the crates list.
-using SysrootIndexMap =
-    std::unordered_map<std::string_view, SysrootCrateIndexMap>;
-
-// Add all of the crates for a sysroot (path) to the rust_project ostream.
-// Add the given sysroot to the project, if it hasn't already been added.
-void AddSysroot(const BuildSettings* build_settings,
-                std::string_view sysroot,
-                SysrootIndexMap& sysroot_lookup,
-                CrateList& crate_list);
-
 // Write the entire rust-project.json file contents into the given stream, based
 // on the the given crates list.
 void WriteCrates(const BuildSettings* build_settings,
                  CrateList& crate_list,
+                 std::optional<std::string>& sysroot,
                  std::ostream& rust_project);
 
 // Assemble the compiler arguments for the given GN Target.

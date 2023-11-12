@@ -12,6 +12,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -872,6 +873,9 @@ void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
     // for iOS unless overrided via experiemental options.
     quic_context->params()->goaway_sessions_on_ip_change =
         kDefaultQuicGoAwaySessionsOnIpChange;
+    // Explicitly disable network-change migration on Cronet. This is tracked
+    // at crbug.com/1430096.
+    quic_context->params()->migrate_sessions_on_network_change_v2 = false;
   }
 
   SetContextBuilderExperimentalOptions(context_builder, &session_params,

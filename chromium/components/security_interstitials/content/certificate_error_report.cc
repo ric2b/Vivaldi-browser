@@ -12,6 +12,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/network_time/network_time_tracker.h"
+#include "crypto/crypto_buildflags.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_info.h"
@@ -22,6 +23,10 @@
 
 #if BUILDFLAG(IS_APPLE)
 #include "net/cert/internal/trust_store_mac.h"
+#endif
+
+#if BUILDFLAG(IS_LINUX)
+#include "base/linux_util.h"
 #endif
 
 #include "net/cert/cert_verify_result.h"
@@ -129,25 +134,6 @@ void AddMacTrustFlagsToReport(
 #undef COPY_TRUST_FLAGS
 }
 
-void AddMacPlatformDebugInfoToReport(
-    const cert_verifier::mojom::MacPlatformVerifierDebugInfoPtr&
-        mac_platform_debug_info,
-    chrome_browser_ssl::TrialVerificationInfo* trial_report) {
-  if (!mac_platform_debug_info)
-    return;
-  chrome_browser_ssl::MacPlatformDebugInfo* report_info =
-      trial_report->mutable_mac_platform_debug_info();
-  report_info->set_trust_result(mac_platform_debug_info->trust_result);
-  report_info->set_result_code(mac_platform_debug_info->result_code);
-  for (const auto& cert_info : mac_platform_debug_info->status_chain) {
-    chrome_browser_ssl::MacCertEvidenceInfo* report_cert_info =
-        report_info->add_status_chain();
-    report_cert_info->set_status_bits(cert_info->status_bits);
-    for (auto code : cert_info->status_codes)
-      report_cert_info->add_status_codes(code);
-  }
-}
-
 chrome_browser_ssl::TrialVerificationInfo::MacTrustImplType
 TrustImplTypeFromMojom(
     cert_verifier::mojom::CertVerifierDebugInfo::MacTrustImplType input) {
@@ -167,23 +153,36 @@ TrustImplTypeFromMojom(
 }
 #endif  // BUILDFLAG(IS_APPLE)
 
-#if BUILDFLAG(IS_WIN)
-void AddWinPlatformDebugInfoToReport(
-    const cert_verifier::mojom::WinPlatformVerifierDebugInfoPtr&
-        win_platform_debug_info,
-    chrome_browser_ssl::TrialVerificationInfo* trial_report) {
-  if (!win_platform_debug_info)
-    return;
-  chrome_browser_ssl::WinPlatformDebugInfo* report_info =
-      trial_report->mutable_win_platform_debug_info();
-  report_info->set_authroot_this_update_time_usec(
-      win_platform_debug_info->authroot_this_update.ToDeltaSinceWindowsEpoch()
-          .InMicroseconds());
-  report_info->mutable_authroot_sequence_number()->assign(
-      std::begin(win_platform_debug_info->authroot_sequence_number),
-      std::end(win_platform_debug_info->authroot_sequence_number));
+#if BUILDFLAG(USE_NSS_CERTS)
+chrome_browser_ssl::TrustStoreNSSDebugInfo::SlotFilterType
+SlotFilterTypeFromMojom(
+    cert_verifier::mojom::TrustStoreNSSDebugInfo::SlotFilterType input) {
+  switch (input) {
+    case cert_verifier::mojom::TrustStoreNSSDebugInfo::SlotFilterType::
+        kDontFilter:
+      return chrome_browser_ssl::TrustStoreNSSDebugInfo::DONT_FILTER;
+    case cert_verifier::mojom::TrustStoreNSSDebugInfo::SlotFilterType::
+        kDoNotAllowUserSlots:
+      return chrome_browser_ssl::TrustStoreNSSDebugInfo::
+          DO_NOT_ALLOW_USER_SLOTS;
+    case cert_verifier::mojom::TrustStoreNSSDebugInfo::SlotFilterType::
+        kAllowSpecifiedUserSlot:
+      return chrome_browser_ssl::TrustStoreNSSDebugInfo::
+          ALLOW_SPECIFIED_USER_SLOT;
+  }
 }
-#endif  // BUILDFLAG(IS_WIN)
+void AddNSSDebugInfoToReport(
+    const cert_verifier::mojom::TrustStoreNSSDebugInfoPtr& nss_debug_info,
+    chrome_browser_ssl::TrustStoreNSSDebugInfo* report_info) {
+  if (!nss_debug_info) {
+    return;
+  }
+  report_info->set_ignore_system_trust_settings(
+      nss_debug_info->ignore_system_trust_settings);
+  report_info->set_slot_filter_type(
+      SlotFilterTypeFromMojom(nss_debug_info->slot_filter_type));
+}
+#endif  // BUILDFLAG(USE_NSS_CERTS)
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 void AddChromeRootStoreDebugInfoToReport(
@@ -270,17 +269,21 @@ CertificateErrorReport::CertificateErrorReport(
     trial_report->set_sct_list(sct_list);
 
 #if BUILDFLAG(IS_APPLE)
-  AddMacPlatformDebugInfoToReport(debug_info->mac_platform_debug_info,
-                                  trial_report);
   AddMacTrustFlagsToReport(
       debug_info->mac_combined_trust_debug_info,
       trial_report->mutable_mac_combined_trust_debug_info());
   trial_report->set_mac_trust_impl(
       TrustImplTypeFromMojom(debug_info->mac_trust_impl));
 #endif
-#if BUILDFLAG(IS_WIN)
-  AddWinPlatformDebugInfoToReport(debug_info->win_platform_debug_info,
-                                  trial_report);
+#if BUILDFLAG(IS_LINUX)
+  trial_report->set_linux_distro(base::GetLinuxDistro());
+#endif
+#if BUILDFLAG(USE_NSS_CERTS)
+  trial_report->set_nss_version(debug_info->nss_version);
+  AddNSSDebugInfoToReport(debug_info->primary_nss_debug_info,
+                          trial_report->mutable_primary_nss_debug_info());
+  AddNSSDebugInfoToReport(debug_info->trial_nss_debug_info,
+                          trial_report->mutable_trial_nss_debug_info());
 #endif
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
   AddChromeRootStoreDebugInfoToReport(debug_info->chrome_root_store_debug_info,

@@ -35,6 +35,7 @@ class AccessibilityDelegate;
 class BackGestureContextualNudgeController;
 class BackGestureContextualNudgeDelegate;
 class CaptureModeDelegate;
+class GameDashboardDelegate;
 class GlanceablesController;
 class GlanceablesDelegate;
 class MediaNotificationProvider;
@@ -42,12 +43,12 @@ class NearbyShareController;
 class NearbyShareDelegate;
 class SavedDeskDelegate;
 class SystemSoundsDelegate;
+class UserEducationDelegate;
 
 // Delegate of the Shell.
 class ASH_EXPORT ShellDelegate {
  public:
   enum class FeedbackSource {
-    kBentoBar,
     kWindowLayoutMenu,
   };
 
@@ -60,6 +61,10 @@ class ASH_EXPORT ShellDelegate {
 
   // Creates and returns the delegate of the Capture Mode feature.
   virtual std::unique_ptr<CaptureModeDelegate> CreateCaptureModeDelegate()
+      const = 0;
+
+  // Creates and returns the delegate of the Game Dashboard feature.
+  virtual std::unique_ptr<GameDashboardDelegate> CreateGameDashboardDelegate()
       const = 0;
 
   // Creates the delegate for the Glanceables feature.
@@ -85,6 +90,10 @@ class ASH_EXPORT ShellDelegate {
 
   // Creates and returns the delegate of the System Sounds feature.
   virtual std::unique_ptr<SystemSoundsDelegate> CreateSystemSoundsDelegate()
+      const = 0;
+
+  // Creates and returns the delegate for user education features.
+  virtual std::unique_ptr<UserEducationDelegate> CreateUserEducationDelegate()
       const = 0;
 
   // Returns the geolocation loader factory used to initialize geolocation

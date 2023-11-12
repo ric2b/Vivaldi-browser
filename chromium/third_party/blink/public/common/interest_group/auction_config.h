@@ -18,6 +18,9 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/common_export.h"
+#include "third_party/blink/public/common/interest_group/ad_auction_currencies.h"
+#include "third_party/blink/public/common/interest_group/ad_display_size.h"
+#include "third_party/blink/public/common/interest_group/seller_capabilities.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom-shared.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -135,6 +138,21 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
   // Typemapped to blink::mojom::AuctionAdConfigMaybePromiseBuyerTimeouts
   using MaybePromiseBuyerTimeouts = MaybePromise<BuyerTimeouts>;
 
+  // Represents auction's expectations on which currency which buyer uses.
+  //
+  // Typemapped to blink::mojom::AuctionAdConfigBuyerCurrencies
+  struct BuyerCurrencies {
+    // Fallback value used for buyers not in `per_buyer_currencies`.
+    absl::optional<AdCurrency> all_buyers_currency;
+
+    // Currency expectations for buyer per their origin.
+    absl::optional<base::flat_map<url::Origin, AdCurrency>>
+        per_buyer_currencies;
+  };
+
+  // Typemapped to blink::mojom::AuctionAdConfigMaybePromiseBuyerCurrencies
+  using MaybePromiseBuyerCurrencies = MaybePromise<BuyerCurrencies>;
+
   // Subset of AuctionConfig that is not shared by all auctions that are
   // using the same SellerWorklet object (so it's "not shared" between
   // AuctionConfigs that share the same SellerWorklet). Other AuctionConfig
@@ -198,6 +216,13 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
     // the buyer's generateBid() functions.
     MaybePromiseBuyerTimeouts buyer_cumulative_timeouts;
 
+    // Expectation of currency seller worklet in this auction will provide when
+    // modified bids or converting them for reporting.
+    absl::optional<AdCurrency> seller_currency;
+
+    // Expectation of currency for bids made by various participating buyers.
+    MaybePromiseBuyerCurrencies buyer_currencies;
+
     // Values restrict the number of bidding interest groups for a particular
     // buyer that can participate in an auction. Values must be greater than 0.
     base::flat_map<url::Origin, std::uint16_t> per_buyer_group_limits;
@@ -232,6 +257,17 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
     // provides the bucket offset and scalar multiplier for that event.
     absl::optional<base::flat_map<BuyerReportType, AuctionReportBuyersConfig>>
         auction_report_buyers;
+
+    // The set of seller capabilities that each interest group must declare in
+    // order to participate in the auction. Interest groups that don't declare
+    // all required seller capabilities will not participate in the auction.
+    SellerCapabilitiesType required_seller_capabilities;
+
+    // The requested ad creative size for the auction (strictly optional).
+    // If specified by the caller, it is surfaced during the auction through
+    // browser signals and stored after the auction in the winning fenced frame
+    // config as its container size.
+    absl::optional<blink::AdSize> requested_size;
 
     // Nested auctions whose results will also be fed to `seller`. Only the top
     // level auction config can have component auctions.

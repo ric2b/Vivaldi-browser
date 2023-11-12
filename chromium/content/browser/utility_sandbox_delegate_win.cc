@@ -32,7 +32,7 @@ namespace {
 //
 //  integrity_level_(sandbox::INTEGRITY_LEVEL_LOW),
 //  delayed_integrity_level_(sandbox::INTEGRITY_LEVEL_UNTRUSTED),
-bool AudioPreSpawnTarget(sandbox::TargetConfig* config) {
+bool AudioInitializeConfig(sandbox::TargetConfig* config) {
   // Audio process privilege requirements:
   //  - Lockdown level of USER_NON_ADMIN
   //  - Delayed integrity level of INTEGRITY_LEVEL_LOW
@@ -79,7 +79,7 @@ bool AudioPreSpawnTarget(sandbox::TargetConfig* config) {
 }
 
 // Sets the sandbox policy for the network service process.
-bool NetworkPreSpawnTarget(sandbox::TargetConfig* config) {
+bool NetworkInitializeConfig(sandbox::TargetConfig* config) {
   DCHECK(!config->IsConfigured());
   // LPAC sandbox is enabled, so do not use a restricted token.
   auto result = config->SetTokenLevel(sandbox::USER_UNPROTECTED,
@@ -113,7 +113,7 @@ bool NetworkPreSpawnTarget(sandbox::TargetConfig* config) {
 
 #if BUILDFLAG(ENABLE_OOP_PRINTING)
 // Sets the sandbox policy for the print backend service process.
-bool PrintBackendPreSpawnTarget(sandbox::TargetConfig* config) {
+bool PrintBackendInitializeConfig(sandbox::TargetConfig* config) {
   DCHECK(!config->IsConfigured());
   // Print Backend policy lockdown level must be at least USER_LIMITED and
   // delayed integrity level INTEGRITY_LEVEL_LOW, otherwise ::OpenPrinter()
@@ -131,7 +131,7 @@ std::string UtilityAppContainerId(base::CommandLine& cmd_line) {
   return base::WideToUTF8(cmd_line.GetProgram().value());
 }
 
-bool IconReaderPreSpawnTarget(sandbox::TargetConfig* config) {
+bool IconReaderInitializeConfig(sandbox::TargetConfig* config) {
   DCHECK(!config->IsConfigured());
 
   auto result = config->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
@@ -170,9 +170,9 @@ bool IconReaderPreSpawnTarget(sandbox::TargetConfig* config) {
   return true;
 }
 
-bool XrCompositingPreSpawnTarget(sandbox::TargetConfig* config,
-                                 base::CommandLine& cmd_line,
-                                 sandbox::mojom::Sandbox sandbox_type) {
+bool XrCompositingInitializeConfig(sandbox::TargetConfig* config,
+                                   base::CommandLine& cmd_line,
+                                   sandbox::mojom::Sandbox sandbox_type) {
   DCHECK(!config->IsConfigured());
   // TODO(https://crbug.com/881919): Try to harden the XR Compositor
   // sandbox to use mitigations and restrict the token.
@@ -208,8 +208,8 @@ bool XrCompositingPreSpawnTarget(sandbox::TargetConfig* config,
 }
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-bool ScreenAIPreSpawnTarget(sandbox::TargetConfig* config,
-                            sandbox::mojom::Sandbox sandbox_type) {
+bool ScreenAIInitializeConfig(sandbox::TargetConfig* config,
+                              sandbox::mojom::Sandbox sandbox_type) {
   DCHECK(!config->IsConfigured());
 
   auto result = config->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
@@ -287,81 +287,89 @@ bool UtilitySandboxedProcessLauncherDelegate::ShouldLaunchElevated() {
          sandbox::mojom::Sandbox::kNoSandboxAndElevatedPrivileges;
 }
 
-bool UtilitySandboxedProcessLauncherDelegate::PreSpawnTarget(
-    sandbox::TargetPolicy* policy) {
-  sandbox::TargetConfig* config = policy->GetConfig();
-  if (!config->IsConfigured()) {
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kAudio) {
-      if (!AudioPreSpawnTarget(config))
-        return false;
+bool UtilitySandboxedProcessLauncherDelegate::InitializeConfig(
+    sandbox::TargetConfig* config) {
+  DCHECK(!config->IsConfigured());
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kAudio) {
+    if (!AudioInitializeConfig(config)) {
+      return false;
     }
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kNetwork) {
-      if (!NetworkPreSpawnTarget(config))
-        return false;
+  }
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kNetwork) {
+    if (!NetworkInitializeConfig(config)) {
+      return false;
     }
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kIconReader) {
-      if (!IconReaderPreSpawnTarget(config))
-        return false;
+  }
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kIconReader) {
+    if (!IconReaderInitializeConfig(config)) {
+      return false;
     }
-
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kXrCompositing) {
-      if (!XrCompositingPreSpawnTarget(config, cmd_line_, sandbox_type_))
-        return false;
-    }
-
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kScreenAI) {
-      if (!ScreenAIPreSpawnTarget(config, sandbox_type_))
-        return false;
-    }
-#endif
-
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kSpeechRecognition) {
-      auto result = config->SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
-      if (result != sandbox::SBOX_ALL_OK)
-        return false;
-      config->SetDelayedIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
-      result = config->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
-                                     sandbox::USER_LIMITED);
-      if (result != sandbox::SBOX_ALL_OK)
-        return false;
-    }
-
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kMediaFoundationCdm ||
-        sandbox_type_ == sandbox::mojom::Sandbox::kWindowsSystemProxyResolver) {
-      auto result = config->SetTokenLevel(sandbox::USER_UNPROTECTED,
-                                          sandbox::USER_UNPROTECTED);
-      if (result != sandbox::SBOX_ALL_OK)
-        return false;
-    }
-
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kService ||
-        sandbox_type_ == sandbox::mojom::Sandbox::kServiceWithJit ||
-        sandbox_type_ == sandbox::mojom::Sandbox::kFileUtil) {
-      auto result =
-          sandbox::policy::SandboxWin::AddWin32kLockdownPolicy(config);
-      if (result != sandbox::SBOX_ALL_OK)
-        return false;
-    }
-
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kService ||
-        sandbox_type_ == sandbox::mojom::Sandbox::kFileUtil) {
-      auto delayed_flags = config->GetDelayedProcessMitigations();
-      delayed_flags |= sandbox::MITIGATION_DYNAMIC_CODE_DISABLE;
-      auto result = config->SetDelayedProcessMitigations(delayed_flags);
-      if (result != sandbox::SBOX_ALL_OK)
-        return false;
-    }
-#if BUILDFLAG(ENABLE_OOP_PRINTING)
-    if (sandbox_type_ == sandbox::mojom::Sandbox::kPrintBackend) {
-      if (!PrintBackendPreSpawnTarget(config))
-        return false;
-    }
-#endif
   }
 
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kXrCompositing) {
+    if (!XrCompositingInitializeConfig(config, cmd_line_, sandbox_type_)) {
+      return false;
+    }
+  }
+
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kScreenAI) {
+    if (!ScreenAIInitializeConfig(config, sandbox_type_)) {
+      return false;
+    }
+  }
+#endif
+
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kSpeechRecognition) {
+    auto result = config->SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
+    if (result != sandbox::SBOX_ALL_OK) {
+      return false;
+    }
+    config->SetDelayedIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
+    result = config->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
+                                   sandbox::USER_LIMITED);
+    if (result != sandbox::SBOX_ALL_OK) {
+      return false;
+    }
+  }
+
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kMediaFoundationCdm ||
+      sandbox_type_ == sandbox::mojom::Sandbox::kWindowsSystemProxyResolver) {
+    auto result = config->SetTokenLevel(sandbox::USER_UNPROTECTED,
+                                        sandbox::USER_UNPROTECTED);
+    if (result != sandbox::SBOX_ALL_OK) {
+      return false;
+    }
+  }
+
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kService ||
+      sandbox_type_ == sandbox::mojom::Sandbox::kServiceWithJit ||
+      sandbox_type_ == sandbox::mojom::Sandbox::kFileUtil) {
+    auto result = sandbox::policy::SandboxWin::AddWin32kLockdownPolicy(config);
+    if (result != sandbox::SBOX_ALL_OK) {
+      return false;
+    }
+  }
+
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kService ||
+      sandbox_type_ == sandbox::mojom::Sandbox::kFileUtil) {
+    auto delayed_flags = config->GetDelayedProcessMitigations();
+    delayed_flags |= sandbox::MITIGATION_DYNAMIC_CODE_DISABLE;
+    auto result = config->SetDelayedProcessMitigations(delayed_flags);
+    if (result != sandbox::SBOX_ALL_OK) {
+      return false;
+    }
+  }
+#if BUILDFLAG(ENABLE_OOP_PRINTING)
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kPrintBackend) {
+    if (!PrintBackendInitializeConfig(config)) {
+      return false;
+    }
+  }
+#endif
+
   return GetContentClient()->browser()->PreSpawnChild(
-      policy, sandbox_type_,
+      config, sandbox_type_,
       ContentBrowserClient::ChildSpawnFlags::kChildSpawnFlagNone);
 }
 
@@ -381,5 +389,13 @@ bool UtilitySandboxedProcessLauncherDelegate::CetCompatible() {
       cmd_line_.GetSwitchValueASCII(switches::kUtilitySubType);
   return GetContentClient()->browser()->IsUtilityCetCompatible(
       utility_sub_type);
+}
+
+bool UtilitySandboxedProcessLauncherDelegate::AllowWindowsFontsDir() {
+  // New utilities should use a font proxy rather than allowing direct access.
+  if (sandbox_type_ == sandbox::mojom::Sandbox::kPrintCompositor) {
+    return true;
+  }
+  return false;
 }
 }  // namespace content

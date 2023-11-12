@@ -74,7 +74,6 @@ typedef NS_ENUM(NSUInteger, IPadLayoutState) {
 /// Returns alphabetically  sorted result from two provided NSString keys.
 + (NSComparisonResult)compare:(NSString* _Nonnull)first
                        second:(NSString* _Nonnull)second;
-
 @end
 
 #endif  // IOS_UI_HELPERS_VIVALDI_GLOBAL_HELPERS_H_

@@ -11,6 +11,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "chromeos/ash/components/network/client_cert_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -72,7 +73,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ProfilePolicies {
     // Applies the runtime values.
     ChangeEffect ReapplyRuntimeValues();
 
-    const ProfilePolicies* parent_;
+    raw_ptr<const ProfilePolicies, ExperimentalAsh> parent_;
 
     client_cert::ResolvedCert resolved_cert_ =
         client_cert::ResolvedCert::NotKnownYet();
@@ -145,9 +146,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) ProfilePolicies {
 
   // Returns the GlobalNetworkConfiguration ONC Dictionary.
   // This will never return nullptr (if no GlobalNetworkConfiguration has been
-  // set, it will return a pointer to an empty DICT base::Value). It returns a
-  // pointer for convenience at the call sites, which work with base::Value* to
-  // be consistent with GetPolicyByGuid return values.
+  // set, it will return a pointer to an empty dictionary).
   // The returned pointer remains valid as long as this instance is valid and is
   // not modified (e.g. by calls to SetGlobalNetworkConfig).
   const base::Value::Dict* GetGlobalNetworkConfig() const {

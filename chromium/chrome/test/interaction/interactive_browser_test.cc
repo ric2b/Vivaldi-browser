@@ -9,14 +9,12 @@
 #include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/rectify_callback.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/interaction/interaction_test_util_browser.h"
 #include "chrome/test/interaction/interactive_browser_test_internal.h"
@@ -61,6 +59,10 @@ InteractiveBrowserTestApi::AsInstrumentedWebContents(ui::TrackedElement* el) {
   auto* const web_el = el->AsA<TrackedElementWebContents>();
   CHECK(web_el);
   return web_el->owner();
+}
+
+void InteractiveBrowserTestApi::EnableWebUICodeCoverage() {
+  test_impl().MaybeStartWebUICodeCoverage();
 }
 
 ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::Screenshot(
@@ -291,7 +293,7 @@ InteractiveBrowserTestApi::NavigateWebContents(
 InteractiveBrowserTestApi::MultiStep
 InteractiveBrowserTestApi::WaitForStateChange(
     ui::ElementIdentifier webcontents_id,
-    StateChange state_change,
+    const StateChange& state_change,
     bool expect_timeout) {
   ui::CustomElementEventType event_type =
       expect_timeout ? state_change.timeout_event : state_change.event;
@@ -309,7 +311,7 @@ InteractiveBrowserTestApi::WaitForStateChange(
                               ->owner()
                               ->SendEventOnStateChange(state_change);
                         },
-                        std::move(state_change)))),
+                        state_change))),
       std::move(StepBuilder()
                     .SetDescription(base::StrCat({desc, ": Wait For Event"}))
                     .SetElementID(webcontents_id)
@@ -322,7 +324,7 @@ InteractiveBrowserTestApi::WaitForStateChange(
 // static
 ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::EnsurePresent(
     ui::ElementIdentifier webcontents_id,
-    DeepQuery where) {
+    const DeepQuery& where) {
   StepBuilder builder;
   builder.SetDescription(base::StringPrintf(
       "EnsurePresent( %s, %s )", webcontents_id.GetName().c_str(),
@@ -334,8 +336,7 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::EnsurePresent(
       [](DeepQuery where, ui::InteractionSequence* seq,
          ui::TrackedElement* el) {
         if (!AsInstrumentedWebContents(el)->Exists(where)) {
-          LOG(ERROR) << "Expected DOM element to be present: \""
-                     << base::JoinString(where, "\", \"") << "\"";
+          LOG(ERROR) << "Expected DOM element to be present: " << where;
           seq->FailForTesting();
         }
       },
@@ -347,7 +348,7 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::EnsurePresent(
 ui::InteractionSequence::StepBuilder
 InteractiveBrowserTestApi::EnsureNotPresent(
     ui::ElementIdentifier webcontents_id,
-    DeepQuery where) {
+    const DeepQuery& where) {
   StepBuilder builder;
   builder.SetDescription(base::StringPrintf(
       "EnsureNotPresent( %s, %s )", webcontents_id.GetName().c_str(),
@@ -359,8 +360,7 @@ InteractiveBrowserTestApi::EnsureNotPresent(
       [](DeepQuery where, ui::InteractionSequence* seq,
          ui::TrackedElement* el) {
         if (AsInstrumentedWebContents(el)->Exists(where)) {
-          LOG(ERROR) << "Expected DOM element not to be present: \""
-                     << base::JoinString(where, "\", \"") << "\"";
+          LOG(ERROR) << "Expected DOM element not to be present: " << where;
           seq->FailForTesting();
         }
       },
@@ -388,7 +388,7 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::ExecuteJs(
 // static
 ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::ExecuteJsAt(
     ui::ElementIdentifier webcontents_id,
-    DeepQuery where,
+    const DeepQuery& where,
     const std::string& function) {
   StepBuilder builder;
   builder.SetDescription(base::StringPrintf(
@@ -401,7 +401,7 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::ExecuteJsAt(
       [](DeepQuery where, std::string function, ui::TrackedElement* el) {
         AsInstrumentedWebContents(el)->ExecuteAt(where, function);
       },
-      std::move(where), function));
+      where, function));
   return builder;
 }
 
@@ -431,7 +431,7 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::CheckJsResult(
 // static
 ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::CheckJsResultAt(
     ui::ElementIdentifier webcontents_id,
-    DeepQuery where,
+    const DeepQuery& where,
     const std::string& function) {
   StepBuilder builder;
   builder.SetDescription(base::StringPrintf(
@@ -457,30 +457,51 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::CheckJsResultAt(
 
 InteractiveBrowserTestApi::StepBuilder InteractiveBrowserTestApi::MoveMouseTo(
     ElementSpecifier web_contents,
-    DeepQuery where) {
-  return MoveMouseTo(web_contents,
-                     DeepQueryToRelativePosition(std::move(where)));
+    const DeepQuery& where) {
+  return MoveMouseTo(web_contents, DeepQueryToRelativePosition(where));
 }
 
 InteractiveBrowserTestApi::StepBuilder InteractiveBrowserTestApi::DragMouseTo(
     ElementSpecifier web_contents,
-    DeepQuery where,
+    const DeepQuery& where,
     bool release) {
-  return DragMouseTo(web_contents,
-                     DeepQueryToRelativePosition(std::move(where)), release);
+  return DragMouseTo(web_contents, DeepQueryToRelativePosition(where), release);
+}
+
+InteractiveBrowserTestApi::StepBuilder
+InteractiveBrowserTestApi::ScrollIntoView(ui::ElementIdentifier web_contents,
+                                          const DeepQuery& where) {
+  return std::move(
+      ExecuteJsAt(web_contents, where,
+                  "(el) => { el.scrollIntoView({ behavior: 'instant' }); }")
+          .SetDescription("ScrollIntoView()"));
 }
 
 // static
 InteractiveBrowserTestApi::RelativePositionCallback
-InteractiveBrowserTestApi::DeepQueryToRelativePosition(DeepQuery query) {
+InteractiveBrowserTestApi::DeepQueryToRelativePosition(const DeepQuery& query) {
   return base::BindOnce(
       [](DeepQuery q, ui::TrackedElement* el) {
-        return el->AsA<TrackedElementWebContents>()
-            ->owner()
-            ->GetElementBoundsInScreen(q)
-            .CenterPoint();
+        auto* const contents = el->AsA<TrackedElementWebContents>();
+        const gfx::Rect container_bounds = contents->GetScreenBounds();
+        const gfx::Rect element_bounds =
+            contents->owner()->GetElementBoundsInScreen(q);
+        CHECK(!element_bounds.IsEmpty())
+            << "Cannot target DOM element at " << q << " in "
+            << el->identifier() << " because its screen bounds are emtpy.";
+        gfx::Rect intersect_bounds = element_bounds;
+        intersect_bounds.Intersect(container_bounds);
+        CHECK(!intersect_bounds.IsEmpty())
+            << "Cannot target DOM element at " << q << " in "
+            << el->identifier() << " because its screen bounds "
+            << element_bounds.ToString()
+            << " are outside the screen bounds of the containing WebView, "
+            << container_bounds.ToString()
+            << ". Did you forget to scroll the element into view? See "
+               "ScrollToVisible().";
+        return intersect_bounds.CenterPoint();
       },
-      std::move(query));
+      query);
 }
 
 Browser* InteractiveBrowserTestApi::GetBrowserFor(
@@ -498,29 +519,8 @@ Browser* InteractiveBrowserTestApi::GetBrowserFor(
     CHECK(*browser) << "BrowserSpecifier: Browser* is null.";
     return *browser;
   }
-  Browser** const browser_ptr = absl::get<Browser**>(spec);
-  CHECK(browser_ptr) << "BrowserSpecifier: Browser** is null.";
-  CHECK(*browser_ptr) << "BrowserSpecifier: Browser** points to null browser.";
-  return *browser_ptr;
-}
-
-InteractiveBrowserTest::InteractiveBrowserTest() = default;
-
-InteractiveBrowserTest::InteractiveBrowserTest(
-    std::unique_ptr<views::ViewsDelegate> views_delegate)
-    : InProcessBrowserTest(std::move(views_delegate)) {}
-
-InteractiveBrowserTest::~InteractiveBrowserTest() = default;
-
-void InteractiveBrowserTest::SetUpOnMainThread() {
-  InProcessBrowserTest::SetUpOnMainThread();
-  private_test_impl().DoTestSetUp();
-  SetContextWidget(
-      BrowserView::GetBrowserViewForBrowser(browser())->GetWidget());
-}
-
-void InteractiveBrowserTest::TearDownOnMainThread() {
-  SetContextWidget(nullptr);
-  private_test_impl().DoTestTearDown();
-  InProcessBrowserTest::TearDownOnMainThread();
+  Browser* const browser_ptr =
+      absl::get<std::reference_wrapper<Browser*>>(spec).get();
+  CHECK(browser_ptr) << "BrowserSpecifier: Browser* is null.";
+  return browser_ptr;
 }

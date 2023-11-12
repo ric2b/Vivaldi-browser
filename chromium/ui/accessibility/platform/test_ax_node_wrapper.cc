@@ -4,11 +4,11 @@
 
 #include "ui/accessibility/platform/test_ax_node_wrapper.h"
 
+#include <algorithm>
 #include <map>
 #include <utility>
 
 #include "base/containers/cxx20_erase.h"
-#include "base/cxx17_backports.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -181,7 +181,7 @@ size_t TestAXNodeWrapper::GetChildCount() const {
   return InternalChildCount();
 }
 
-gfx::NativeViewAccessible TestAXNodeWrapper::ChildAtIndex(size_t index) {
+gfx::NativeViewAccessible TestAXNodeWrapper::ChildAtIndex(size_t index) const {
   TestAXNodeWrapper* child_wrapper = InternalGetChild(index);
   return child_wrapper ?
       child_wrapper->ax_platform_node()->GetNativeViewAccessible() :
@@ -352,6 +352,7 @@ bool TestAXNodeWrapper::IsReadOnlyOrDisabled() const {
 
 // Walk the AXTree and ensure that all wrappers are created
 void TestAXNodeWrapper::BuildAllWrappers(AXTree* tree, AXNode* node) {
+  TestAXNodeWrapper::GetOrCreate(tree, node);
   for (auto* child : node->children()) {
     TestAXNodeWrapper::GetOrCreate(tree, child);
     BuildAllWrappers(tree, child);
@@ -364,7 +365,7 @@ void TestAXNodeWrapper::ResetNativeEventTarget() {
 
 AXPlatformNode* TestAXNodeWrapper::GetFromNodeID(int32_t id) {
   // Force creating all of the wrappers for this tree.
-  BuildAllWrappers(tree_, node_);
+  BuildAllWrappers(tree_, tree_->root());
 
   const auto iter = g_node_id_to_wrapper_map.find(id);
   if (iter != g_node_id_to_wrapper_map.end())
@@ -382,7 +383,7 @@ AXPlatformNode* TestAXNodeWrapper::GetFromTreeIDAndNodeID(
   return GetFromNodeID(id);
 }
 
-absl::optional<size_t> TestAXNodeWrapper::GetIndexInParent() {
+absl::optional<size_t> TestAXNodeWrapper::GetIndexInParent() const {
   return node_ ? absl::make_optional(node_->GetUnignoredIndexInParent())
                : absl::nullopt;
 }
@@ -580,9 +581,9 @@ bool TestAXNodeWrapper::AccessibilityPerformAction(
       int scroll_y_min = GetIntAttribute(ax::mojom::IntAttribute::kScrollYMin);
       int scroll_y_max = GetIntAttribute(ax::mojom::IntAttribute::kScrollYMax);
       int scroll_x =
-          base::clamp(data.target_point.x(), scroll_x_min, scroll_x_max);
+          std::clamp(data.target_point.x(), scroll_x_min, scroll_x_max);
       int scroll_y =
-          base::clamp(data.target_point.y(), scroll_y_min, scroll_y_max);
+          std::clamp(data.target_point.y(), scroll_y_min, scroll_y_max);
 
       ReplaceIntAttribute(node_->id(), ax::mojom::IntAttribute::kScrollX,
                           scroll_x);

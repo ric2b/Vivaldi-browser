@@ -159,8 +159,7 @@ TEST_F(ExtensionCookiesTest, GetURLFromCanonicalCookie) {
 TEST_F(ExtensionCookiesTest, EmptyDictionary) {
   base::Value::Dict dict;
   GetAll::Params::Details details;
-  bool rv =
-      GetAll::Params::Details::Populate(base::Value(std::move(dict)), &details);
+  bool rv = GetAll::Params::Details::Populate(dict, details);
   ASSERT_TRUE(rv);
   cookies_helpers::MatchFilter filter(&details);
   net::CanonicalCookie cookie;
@@ -180,7 +179,7 @@ TEST_F(ExtensionCookiesTest, DomainMatching) {
     base::Value::Dict dict;
     dict.Set(keys::kDomainKey, tests[i].filter);
     args.Append(std::move(dict));
-    std::unique_ptr<GetAll::Params> params(GetAll::Params::Create(args));
+    absl::optional<GetAll::Params> params = GetAll::Params::Create(args);
 
     cookies_helpers::MatchFilter filter(&params->details);
     std::unique_ptr<net::CanonicalCookie> cookie =

@@ -45,8 +45,10 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kWebViewNewInvalidateHeuristic);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDynamicSchedulerForDraw);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDynamicSchedulerForClients);
 #if BUILDFLAG(IS_APPLE)
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kMacCAOverlayQuad);
-VIZ_COMMON_EXPORT extern const base::FeatureParam<int> kMacCAOverlayQuadMaxNum;
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kCALayerNewLimit);
+VIZ_COMMON_EXPORT extern const base::FeatureParam<int> kCALayerNewLimitDefault;
+VIZ_COMMON_EXPORT extern const base::FeatureParam<int>
+    kCALayerNewLimitManyVideos;
 #endif
 
 #if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_OZONE)
@@ -54,6 +56,7 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kCanSkipRenderPassOverlay);
 #endif
 
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kDrawPredictedInkPoint);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAllowBypassRenderPassQuads);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAggressiveFrameCulling);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEagerSurfaceGarbageCollection);
@@ -62,6 +65,7 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kRendererAllocatesImages);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kBufferQueueImageSetPurgeable);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEvictSubtree);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOnBeginFrameAcks);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOnBeginFrameAllowLateAcks);
 
 VIZ_COMMON_EXPORT extern const char kDraw1Point12Ms[];
 VIZ_COMMON_EXPORT extern const char kDraw2Points6Ms[];

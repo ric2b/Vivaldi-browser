@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {String16} from 'chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-webui.js';
 import * as AcceleratorTypes from 'chrome://resources/mojo/ui/base/accelerators/mojom/accelerator.mojom-webui.js';
 
+import * as AcceleratorConfigurationTypes from '../mojom-webui/ash/public/mojom/accelerator_configuration.mojom-webui.js';
 import * as AcceleratorInfoTypes from '../mojom-webui/ash/public/mojom/accelerator_info.mojom-webui.js';
-import {SearchHandlerInterface, SearchResult} from '../mojom-webui/ash/webui/shortcut_customization_ui/backend/search/search.mojom-webui.js';
-import {AcceleratorConfigurationProviderInterface, AcceleratorsUpdatedObserverRemote} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
+import {SearchHandler, SearchHandlerInterface, SearchResult, SearchResultsAvailabilityObserverRemote} from '../mojom-webui/ash/webui/shortcut_customization_ui/backend/search/search.mojom-webui.js';
+import {AcceleratorConfigurationProviderInterface, AcceleratorResultData, AcceleratorsUpdatedObserverRemote} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
 
 
 /**
@@ -22,6 +24,7 @@ import {AcceleratorConfigurationProviderInterface, AcceleratorsUpdatedObserverRe
  * ui::Accelerator and ui::KeyEvent.
  */
 export enum Modifier {
+  NONE = 0,
   SHIFT = 1 << 1,
   CONTROL = 1 << 2,
   ALT = 1 << 3,
@@ -60,14 +63,10 @@ export const AcceleratorState = AcceleratorInfoTypes.AcceleratorState;
  * Enumeration of accelerator config results from adding/replacing/removing an
  * accelerator.
  */
-export enum AcceleratorConfigResult {
-  SUCCESS,
-  ACTION_LOCKED,
-  ACCELERATOR_LOCKED,
-  CONFLICT,
-  NOT_FOUND,
-  DUPLICATE,
-}
+export type AcceleratorConfigResult =
+    AcceleratorConfigurationTypes.AcceleratorConfigResult;
+export const AcceleratorConfigResult =
+    AcceleratorConfigurationTypes.AcceleratorConfigResult;
 
 /**
  * Type alias for Accelerator.
@@ -144,6 +143,9 @@ export const AcceleratorCategory = AcceleratorInfoTypes.AcceleratorCategory;
 export type LayoutStyle = AcceleratorInfoTypes.AcceleratorLayoutStyle;
 export const LayoutStyle = AcceleratorInfoTypes.AcceleratorLayoutStyle;
 
+export type ShortcutSearchHandler = SearchHandler;
+export const ShortcutSearchHandler = SearchHandler;
+
 /**
  * Type alias for LayoutInfo. This describes one row (corresponding to an
  * AcceleratorRow) within the layout hierarchy. The `category`, `subCategory`,
@@ -180,10 +182,12 @@ export type MojoSearchResult = SearchResult;
 
 /**
  * Type alias for the ShortcutSearchHandlerInterface.
- * TODO(longbowei): Add parameters to search() function.
  */
 export interface ShortcutSearchHandlerInterface extends SearchHandlerInterface {
-  search(): Promise<{results: MojoSearchResult[]}>;
+  search(query: String16, maxNumResults: number):
+      Promise<{results: MojoSearchResult[]}>;
+  addSearchResultsAvailabilityObserver(
+      observer: SearchResultsAvailabilityObserverRemote): void;
 }
 
 /**
@@ -195,14 +199,20 @@ export interface ShortcutProviderInterface extends
   getAccelerators(): Promise<{config: MojoAcceleratorConfig}>;
   getAcceleratorLayoutInfos(): Promise<{layoutInfos: MojoLayoutInfo[]}>;
   isMutable(source: AcceleratorSource): Promise<{isMutable: boolean}>;
+  hasLauncherButton(): Promise<{hasLauncherButton: boolean}>;
+  addAccelerator(
+      source: AcceleratorSource, action: number,
+      accelerator: Accelerator): Promise<{result: AcceleratorResultData}>;
   removeAccelerator(
       source: AcceleratorSource, action: number,
-      accelerator: Accelerator): Promise<AcceleratorConfigResult>;
+      accelerator: Accelerator): Promise<{result: AcceleratorResultData}>;
   replaceAccelerator(
       source: AcceleratorSource, action: number, oldAccelerator: Accelerator,
-      newAccelerator: Accelerator): Promise<AcceleratorConfigResult>;
-  addUserAccelerator(
-      source: AcceleratorSource, action: number,
-      accelerator: Accelerator): Promise<AcceleratorConfigResult>;
+      newAccelerator: Accelerator): Promise<{result: AcceleratorResultData}>;
   addObserver(observer: AcceleratorsUpdatedObserverRemote): void;
+  restoreDefault(source: AcceleratorSource, actionId: number):
+      Promise<{result: AcceleratorResultData}>;
+  restoreAllDefaults(): Promise<{result: AcceleratorResultData}>;
+  preventProcessingAccelerators(preventProcessingAccelerators: boolean):
+      Promise<void>;
 }

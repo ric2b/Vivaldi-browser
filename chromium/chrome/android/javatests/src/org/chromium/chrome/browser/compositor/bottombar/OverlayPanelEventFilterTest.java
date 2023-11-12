@@ -6,11 +6,12 @@ package org.chromium.chrome.browser.compositor.bottombar;
 
 import android.app.Activity;
 import android.content.Context;
-import android.support.test.InstrumentationRegistry;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 
 import org.junit.After;
@@ -177,7 +178,7 @@ public class OverlayPanelEventFilterTest {
 
         @Override
         public ViewGroup getContainerView() {
-            return new ViewGroup(InstrumentationRegistry.getContext()) {
+            return new ViewGroup(ApplicationProvider.getApplicationContext()) {
                 @Override
                 public boolean dispatchTouchEvent(MotionEvent e) {
                     if (e.getActionMasked() != MotionEvent.ACTION_CANCEL) {

@@ -30,7 +30,7 @@ class DuckDuckGoRulesParser {
       const base::Value* rule_properties);
   absl::optional<std::vector<std::string>> GetDomains(
       const base::Value* rule_properties);
-  ParseResult* parse_result_;
+  const raw_ptr<ParseResult> parse_result_;
 };
 }  // namespace adblock_filter
 

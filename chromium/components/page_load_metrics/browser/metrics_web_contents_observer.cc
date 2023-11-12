@@ -374,6 +374,10 @@ PageLoadTracker* MetricsWebContentsObserver::GetTrackerOrNullForRequest(
         primary_page_->HasMatchingNavigationRequestID(request_id)) {
       return primary_page_.get();
     }
+    if (auto page_pair = inactive_pages_.find(render_frame_host_or_null);
+        page_pair != inactive_pages_.end()) {
+      return page_pair->second.get();
+    }
   } else {
     // Non main resources are always associated with the currently committed
     // load, `primary_page_` or `active_pages_`. If the resource
@@ -1060,7 +1064,8 @@ void MetricsWebContentsObserver::OnTimingUpdated(
     mojom::FrameRenderDataUpdatePtr render_data,
     mojom::CpuTimingPtr cpu_timing,
     mojom::InputTimingPtr input_timing_delta,
-    mojom::SubresourceLoadMetricsPtr subresource_load_metrics,
+    const absl::optional<blink::SubresourceLoadMetrics>&
+        subresource_load_metrics,
     uint32_t soft_navigation_count) {
   // Replacing this call by GetPageLoadTracker breaks some tests.
   //
@@ -1087,11 +1092,11 @@ void MetricsWebContentsObserver::OnTimingUpdated(
   }
 
   if (tracker) {
-    tracker->UpdateMetrics(
-        render_frame_host, std::move(timing), std::move(metadata),
-        std::move(new_features), resources, std::move(render_data),
-        std::move(cpu_timing), std::move(input_timing_delta),
-        std::move(subresource_load_metrics), soft_navigation_count);
+    tracker->UpdateMetrics(render_frame_host, std::move(timing),
+                           std::move(metadata), std::move(new_features),
+                           resources, std::move(render_data),
+                           std::move(cpu_timing), std::move(input_timing_delta),
+                           subresource_load_metrics, soft_navigation_count);
   }
 }
 
@@ -1120,14 +1125,15 @@ void MetricsWebContentsObserver::UpdateTiming(
     mojom::FrameRenderDataUpdatePtr render_data,
     mojom::CpuTimingPtr cpu_timing,
     mojom::InputTimingPtr input_timing_delta,
-    mojom::SubresourceLoadMetricsPtr subresource_load_metrics,
+    const absl::optional<blink::SubresourceLoadMetrics>&
+        subresource_load_metrics,
     uint32_t soft_navigation_count) {
   content::RenderFrameHost* render_frame_host =
       page_load_metrics_receivers_.GetCurrentTargetFrame();
   OnTimingUpdated(render_frame_host, std::move(timing), std::move(metadata),
                   new_features, resources, std::move(render_data),
                   std::move(cpu_timing), std::move(input_timing_delta),
-                  std::move(subresource_load_metrics), soft_navigation_count);
+                  subresource_load_metrics, soft_navigation_count);
 }
 
 void MetricsWebContentsObserver::SetUpSharedMemoryForSmoothness(

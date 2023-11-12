@@ -20,6 +20,17 @@
 #import "ios/chrome/browser/ui/screen/screen_provider.h"
 #import "ios/chrome/browser/ui/screen/screen_type.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
+#import "ios/ui/modal_page/modal_page_commands.h"
+#import "ios/ui/modal_page/modal_page_coordinator.h"
+#import "ios/ui/onboarding/vivaldi_onboarding_swift.h"
+#import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -33,6 +44,14 @@
 
 // YES if First Run was completed.
 @property(nonatomic, assign) BOOL completed;
+
+// Vivaldi
+@property(strong,nonatomic)
+    VivaldiOnboardingActionsBridge *onboardingActionsBridge;
+@property(nonatomic, weak) id<ModalPageCommands> modalPageHandler;
+@property(nonatomic, strong) ModalPageCoordinator* modalPageCoordinator;
+@property(nonatomic, strong) UIViewController* onboardingVC;
+// End Vivaldi
 
 @end
 
@@ -49,6 +68,16 @@
         [[UINavigationController alloc] initWithNavigationBarClass:nil
                                                       toolbarClass:nil];
     _navigationController.modalPresentationStyle = UIModalPresentationFormSheet;
+
+    // Vivaldi
+    [browser->GetCommandDispatcher()
+      startDispatchingToTarget:self
+                   forProtocol:@protocol(ModalPageCommands)];
+    id<ModalPageCommands> modalPageHandler = HandlerForProtocol(
+        browser->GetCommandDispatcher(), ModalPageCommands);
+    _modalPageHandler = modalPageHandler;
+    // End Vivaldi
+
   }
   return self;
 }
@@ -60,10 +89,16 @@
     base::UmaHistogramEnumeration("FirstRun.Stage", first_run::kStart);
     weakSelf.firstScreenStartTime = [NSDate now];
   };
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [self presentOnboarding];
+  } else {
   [self.navigationController setNavigationBarHidden:YES animated:NO];
   [self.baseViewController presentViewController:self.navigationController
                                         animated:NO
                                       completion:completion];
+  } // End Vivaldi
+
 }
 
 - (void)stop {
@@ -90,6 +125,11 @@
 - (void)screenWillFinishPresenting {
   [self.childCoordinator stop];
   self.childCoordinator = nil;
+
+  // Vivaldi
+  _onboardingVC = nil;
+  // End Vivaldi
+
   // Usually, finishing presenting the first FRE screen signifies that the user
   // has accepted Terms of Services. Therefore, we can use the time it takes the
   // first screen to be visible as the time it takes a user to accept Terms of
@@ -152,6 +192,71 @@
 - (void)willFinishPresentingScreens {
   self.completed = YES;
   [self.delegate willFinishPresentingScreens];
+}
+
+#pragma mark: - VIVALDI
+- (void)presentOnboarding {
+  self.onboardingActionsBridge = [[VivaldiOnboardingActionsBridge alloc] init];
+  UIViewController *onboardingVC =
+      [self.onboardingActionsBridge makeViewController];
+  _onboardingVC = onboardingVC;
+  onboardingVC.modalPresentationStyle = UIModalPresentationFullScreen;
+  onboardingVC.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+  [self.baseViewController presentViewController:onboardingVC
+                                        animated:NO
+                                      completion:nil];
+
+  [self.onboardingActionsBridge observeTOSURLTapEvent:^(NSURL *url,
+                                                        NSString *title) {
+    [self.modalPageHandler showModalPage:url
+                                   title:title];
+  }];
+
+  [self.onboardingActionsBridge observePrivacyURLTapEvent:^(NSURL *url,
+                                                            NSString *title) {
+    [self.modalPageHandler showModalPage:url
+                                   title:title];
+  }];
+
+  [self.onboardingActionsBridge
+    observeAdblockerSettingChange:^(ATBSettingType setting) {
+    // Create a weak reference and store the settings to pref.
+    VivaldiATBManager* adblockManager =
+        [[VivaldiATBManager alloc] initWithBrowser:self.browser];
+    if (!adblockManager)
+      return;
+    [adblockManager setExceptionFromBlockingType:setting];
+  }];
+
+  [self.onboardingActionsBridge
+    observeTabStyleChange:^(BOOL isTabsOn) {
+    [VivaldiTabSettingPrefs
+      setDesktopTabsMode:isTabsOn
+          inPrefServices:self.browser->GetBrowserState()->GetPrefs()];
+  }];
+
+  [self.onboardingActionsBridge observeOnboardingFinishedState:^{
+    [self willFinishPresentingScreens];
+  }];
+}
+
+#pragma mark - ModalPageCommands
+- (void)showModalPage:(NSURL*)url
+                title:(NSString*)title {
+  if (!self.onboardingVC || !self.browser)
+    return;
+
+  self.modalPageCoordinator = [[ModalPageCoordinator alloc]
+      initWithBaseViewController:self.onboardingVC
+                         browser:self.browser
+                         pageURL:url
+                           title:title];
+  [self.modalPageCoordinator start];
+}
+
+- (void)closeModalPage {
+  [self.modalPageCoordinator stop];
+  self.modalPageCoordinator = nil;
 }
 
 @end

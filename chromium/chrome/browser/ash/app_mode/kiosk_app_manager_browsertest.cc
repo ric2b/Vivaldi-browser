@@ -14,6 +14,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/gtest_tags.h"
@@ -185,7 +186,7 @@ class AppDataLoadWaiter : public KioskAppManagerObserver {
   }
 
   std::unique_ptr<base::RunLoop> run_loop_;
-  KioskAppManager* manager_;
+  raw_ptr<KioskAppManager, ExperimentalAsh> manager_;
   bool loaded_ = false;
   bool quit_ = false;
   int data_change_count_ = 0;
@@ -343,6 +344,9 @@ class KioskAppManagerTest : public InProcessBrowserTest {
     entry.Set(kAccountsPrefDeviceLocalAccountsKeyId, app_id + "@kiosk-apps");
     entry.Set(kAccountsPrefDeviceLocalAccountsKeyType,
               policy::DeviceLocalAccount::TYPE_KIOSK_APP);
+    entry.Set(
+        kAccountsPrefDeviceLocalAccountsKeyEphemeralMode,
+        static_cast<int>(policy::DeviceLocalAccount::EphemeralMode::kUnset));
     entry.Set(kAccountsPrefDeviceLocalAccountsKeyKioskAppId, app_id);
     device_local_accounts.Append(std::move(entry));
     owner_settings_service_->Set(kAccountsPrefDeviceLocalAccounts,

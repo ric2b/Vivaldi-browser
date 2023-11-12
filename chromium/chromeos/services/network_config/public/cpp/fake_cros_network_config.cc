@@ -59,6 +59,11 @@ void FakeCrosNetworkConfig::GetVpnProviders(GetVpnProvidersCallback callback) {
   std::move(callback).Run(std::move(providers));
 }
 
+void FakeCrosNetworkConfig::CreateCustomApn(const std::string& network_guid,
+                                            mojom::ApnPropertiesPtr apn) {
+  custom_apns_.push_back(std::move(apn));
+}
+
 void FakeCrosNetworkConfig::SetDeviceProperties(
     mojom::DeviceStatePropertiesPtr device_properties) {
   AddOrReplaceDevice(std::move(device_properties));
@@ -106,6 +111,28 @@ void FakeCrosNetworkConfig::AddNetworkAndDevice(
 
   for (auto& observer : observers_) {
     observer->OnDeviceStateListChanged();
+    observer->OnActiveNetworksChanged(GetFilteredNetworkList(
+        mojom::NetworkType::kAll, mojom::FilterType::kActive));
+  }
+  base::RunLoop().RunUntilIdle();
+}
+
+void FakeCrosNetworkConfig::UpdateNetworkProperties(
+    mojom::NetworkStatePropertiesPtr network) {
+  bool is_found = false;
+  for (unsigned int i = 0; i < visible_networks_.size(); i++) {
+    if (visible_networks_[i]->guid == network->guid) {
+      visible_networks_[i] = mojo::Clone(network);
+      is_found = true;
+      break;
+    }
+  }
+
+  if (!is_found) {
+    return;
+  }
+
+  for (auto& observer : observers_) {
     observer->OnActiveNetworksChanged(GetFilteredNetworkList(
         mojom::NetworkType::kAll, mojom::FilterType::kActive));
   }

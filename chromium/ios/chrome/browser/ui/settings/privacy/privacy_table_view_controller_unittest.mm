@@ -13,6 +13,7 @@
 #import "base/test/scoped_feature_list.h"
 #import "components/content_settings/core/common/features.h"
 #import "components/handoff/pref_names_ios.h"
+#import "components/policy/core/common/policy_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "components/safe_browsing/core/common/features.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -28,10 +29,10 @@
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/prefs/browser_prefs.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_controller_test.h"
 #import "ios/chrome/browser/sync/mock_sync_service_utils.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_controller_test.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
@@ -58,50 +59,15 @@ BOOL DeviceSupportsAuthentication() {
 }
 
 struct PrivacyTableViewControllerTestConfig {
-  // Tests should run with Third-party intents in Incognito flag enabled.
-  bool thirdPartyIntentsInIncognitoEnabled;
   // Available of Incognito mode tests should run with.
   IncognitoModePrefs incognitoModeAvailability;
 };
 
-// `ScopedFeatureList` wrapper so `PrivacyTableViewControllerTest` can ensure
-// proper initialization of the feature list before all of its own attributes.
-class WithScopedFeatureList {
- protected:
-  WithScopedFeatureList(std::pair<std::vector<base::test::FeatureRef>,
-                                  std::vector<base::test::FeatureRef>> const&
-                            enabled_disabled_features) {
-    feature_list_.InitWithFeatures(enabled_disabled_features.first,
-                                   enabled_disabled_features.second);
-  }
-
-  base::test::ScopedFeatureList feature_list_;
-};
-
 class PrivacyTableViewControllerTest
     : public ChromeTableViewControllerTest,
-      public testing::WithParamInterface<PrivacyTableViewControllerTestConfig>,
-      public WithScopedFeatureList {
+      public testing::WithParamInterface<PrivacyTableViewControllerTestConfig> {
  protected:
-  PrivacyTableViewControllerTest()
-      : WithScopedFeatureList(EnabledDisabledFeatures()) {}
-
-  std::pair<std::vector<base::test::FeatureRef>,
-            std::vector<base::test::FeatureRef>>
-  EnabledDisabledFeatures() const {
-    std::pair<std::vector<base::test::FeatureRef>,
-              std::vector<base::test::FeatureRef>>
-        enabledDisabledFeatures;
-
-    // Explicitly enable/disable Third-party intents in Incognito flag.
-    if (GetParam().thirdPartyIntentsInIncognitoEnabled) {
-      enabledDisabledFeatures.first.push_back(kIOS3PIntentsInIncognito);
-    } else {
-      enabledDisabledFeatures.second.push_back(kIOS3PIntentsInIncognito);
-    }
-
-    return enabledDisabledFeatures;
-  }
+  PrivacyTableViewControllerTest() {}
 
   void SetUp() override {
     ChromeTableViewControllerTest::SetUp();
@@ -121,7 +87,7 @@ class PrivacyTableViewControllerTest
 
     // Set Incognito Mode availability depending on test config.
     chrome_browser_state_->GetTestingPrefService()->SetManagedPref(
-        prefs::kIncognitoModeAvailability,
+        policy::policy_prefs::kIncognitoModeAvailability,
         std::make_unique<base::Value>(
             static_cast<int>(GetParam().incognitoModeAvailability)));
   }
@@ -184,9 +150,8 @@ TEST_P(PrivacyTableViewControllerTest, TestModel) {
           security_interstitials::features::kHttpsOnlyMode)) {
     expectedNumberOfSections++;
   }
-  if (base::FeatureList::IsEnabled(kIOS3PIntentsInIncognito)) {
-    expectedNumberOfSections++;
-  }
+  // IncognitoInterstitial section.
+  expectedNumberOfSections++;
   EXPECT_EQ(expectedNumberOfSections, NumberOfSections());
 
   int currentSection = 0;
@@ -238,20 +203,18 @@ TEST_P(PrivacyTableViewControllerTest, TestModel) {
   }
 
   // IncognitoInterstitial section.
-  if (base::FeatureList::IsEnabled(kIOS3PIntentsInIncognito)) {
-    currentSection++;
-    EXPECT_EQ(1, NumberOfItemsInSection(currentSection));
-    if ((IsIncognitoModeDisabled(prefService) ||
-         IsIncognitoModeForced(prefService))) {
-      // Disabled version of Incognito interstitial item is expected in this
-      // case.
-      CheckInfoButtonCellStatusWithIdAndTextWithId(
-          IDS_IOS_SETTING_OFF, IDS_IOS_OPTIONS_ENABLE_INCOGNITO_INTERSTITIAL,
-          currentSection, 0);
-    } else {
-      CheckSwitchCellStateAndTextWithId(
-          NO, IDS_IOS_OPTIONS_ENABLE_INCOGNITO_INTERSTITIAL, currentSection, 0);
-    }
+  currentSection++;
+  EXPECT_EQ(1, NumberOfItemsInSection(currentSection));
+  if ((IsIncognitoModeDisabled(prefService) ||
+       IsIncognitoModeForced(prefService))) {
+    // Disabled version of Incognito interstitial item is expected in this
+    // case.
+    CheckInfoButtonCellStatusWithIdAndTextWithId(
+        IDS_IOS_SETTING_OFF, IDS_IOS_OPTIONS_ENABLE_INCOGNITO_INTERSTITIAL,
+        currentSection, 0);
+  } else {
+    CheckSwitchCellStateAndTextWithId(
+        NO, IDS_IOS_OPTIONS_ENABLE_INCOGNITO_INTERSTITIAL, currentSection, 0);
   }
 
   // Testing section index and text of the privacy footer.
@@ -274,9 +237,8 @@ TEST_P(PrivacyTableViewControllerTest, TestModelFooterWithSyncDisabled) {
           security_interstitials::features::kHttpsOnlyMode)) {
     expectedNumberOfSections++;
   }
-  if (base::FeatureList::IsEnabled(kIOS3PIntentsInIncognito)) {
-    expectedNumberOfSections++;
-  }
+  // IncognitoInterstitial section.
+  expectedNumberOfSections++;
   EXPECT_EQ(expectedNumberOfSections, NumberOfSections());
 
   // Testing section index and text of the privacy footer.
@@ -300,9 +262,8 @@ TEST_P(PrivacyTableViewControllerTest, TestModelFooterWithSyncEnabled) {
           security_interstitials::features::kHttpsOnlyMode)) {
     expectedNumberOfSections++;
   }
-  if (base::FeatureList::IsEnabled(kIOS3PIntentsInIncognito)) {
-    expectedNumberOfSections++;
-  }
+  // IncognitoInterstitial section.
+  expectedNumberOfSections++;
   EXPECT_EQ(expectedNumberOfSections, NumberOfSections());
 
   // Testing section index and text of the privacy footer.
@@ -316,22 +277,10 @@ INSTANTIATE_TEST_SUITE_P(
     PrivacyTableViewControllerTest,
     testing::Values(
         PrivacyTableViewControllerTestConfig{
-            /* thirdPartyIntentsInIncognitoEnabled= */ false,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kEnabled},
         PrivacyTableViewControllerTestConfig{
-            /* thirdPartyIntentsInIncognitoEnabled= */ false,
-            /* incognitoModeAvailability= */ IncognitoModePrefs::kEnabled},
-        PrivacyTableViewControllerTestConfig{
-            /* thirdPartyIntentsInIncognitoEnabled= */ true,
-            /* incognitoModeAvailability= */ IncognitoModePrefs::kEnabled},
-        PrivacyTableViewControllerTestConfig{
-            /* thirdPartyIntentsInIncognitoEnabled= */ true,
-            /* incognitoModeAvailability= */ IncognitoModePrefs::kEnabled},
-        PrivacyTableViewControllerTestConfig{
-            /* thirdPartyIntentsInIncognitoEnabled= */ true,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kDisabled},
         PrivacyTableViewControllerTestConfig{
-            /* thirdPartyIntentsInIncognitoEnabled= */ true,
             /* incognitoModeAvailability= */ IncognitoModePrefs::kForced}));
 
 }  // namespace

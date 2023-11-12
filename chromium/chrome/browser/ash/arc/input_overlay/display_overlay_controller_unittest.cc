@@ -12,6 +12,9 @@
 #include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
 #include "components/exo/test/exo_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/base_event_utils.h"
+#include "ui/events/event.h"
+#include "ui/lottie/resource.h"
 
 namespace arc::input_overlay {
 
@@ -27,6 +30,8 @@ class DisplayOverlayControllerTest : public exo::test::ExoTestBase {
     controller_->DismissEducationalViewForTesting();
   }
 
+  bool ShowingNudge() { return controller_->ShowingNudge(); }
+
  protected:
   std::unique_ptr<test::ArcTestWindow> arc_test_window_;
   std::unique_ptr<DisplayOverlayController> controller_;
@@ -34,6 +39,10 @@ class DisplayOverlayControllerTest : public exo::test::ExoTestBase {
 
  private:
   void SetUp() override {
+    ui::ResourceBundle::SetLottieParsingFunctions(
+        &lottie::ParseLottieAsStillImage,
+        &lottie::ParseLottieAsThemedStillImage);
+
     exo::test::ExoTestBase::SetUp();
     arc_test_window_ = std::make_unique<test::ArcTestWindow>(
         exo_test_helper(), ash::Shell::GetPrimaryRootWindow(),
@@ -43,8 +52,8 @@ class DisplayOverlayControllerTest : public exo::test::ExoTestBase {
         *arc_test_window_->GetWindow()->GetProperty(ash::kArcPackageNameKey),
         base::BindLambdaForTesting(
             [&](std::unique_ptr<AppDataProto>, std::string) {}));
-    controller_ =
-        std::make_unique<DisplayOverlayController>(injector_.get(), false);
+    controller_ = std::make_unique<DisplayOverlayController>(
+        injector_.get(), /*first_launch=*/true);
   }
 
   void TearDown() override {
@@ -68,6 +77,18 @@ TEST_F(DisplayOverlayControllerTest, TestWindowBoundsChange) {
   auto updated_bounds = GetInputMappingViewBounds();
   EXPECT_NE(original_bounds, updated_bounds);
   EXPECT_EQ(updated_bounds, new_bounds);
+}
+
+TEST_F(DisplayOverlayControllerTest, TestEducationNudgeDismissesOnClick) {
+  injector_->NotifyFirstTimeLaunch();
+  DismissEducationalDialog();
+  EXPECT_TRUE(ShowingNudge());
+  auto center = injector_->window()->bounds().CenterPoint();
+  auto mouse_pressed = ui::MouseEvent(
+      ui::ET_MOUSE_PRESSED, center, center, ui::EventTimeForNow(),
+      ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
+  controller_->OnMouseEvent(&mouse_pressed);
+  EXPECT_FALSE(ShowingNudge());
 }
 
 }  // namespace arc::input_overlay

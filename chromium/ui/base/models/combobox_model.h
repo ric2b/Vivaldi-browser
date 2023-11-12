@@ -10,6 +10,7 @@
 #include "base/component_export.h"
 #include "base/observer_list.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/color/color_id.h"
 
 namespace ui {
 
@@ -58,6 +59,30 @@ class COMPONENT_EXPORT(UI_BASE) ComboboxModel {
   // Adds/removes an observer.
   void AddObserver(ComboboxModelObserver* observer);
   void RemoveObserver(ComboboxModelObserver* observer);
+
+  // The foreground color of the dropdown. If not overridden, this returns
+  // absl::nullopt and the default color will be used.
+  virtual absl::optional<ui::ColorId> GetDropdownForegroundColorIdAt(
+      size_t index) const;
+
+  // The background color of the dropdown. If not overridden, this returns
+  // absl::nullopt and the default color will be used.
+  virtual absl::optional<ui::ColorId> GetDropdownBackgroundColorIdAt(
+      size_t index) const;
+
+  // The hover / selected color for the dropdown. If not overridden, this
+  // returns absl::nullopt and the default color will be used.
+  virtual absl::optional<ui::ColorId> GetDropdownSelectedBackgroundColorIdAt(
+      size_t index) const;
+
+  // The string representation of the font list at the given index. The default
+  // font set by combobox.cc will be used if GetLabelFontNameAt returns
+  // an empty vector.
+  virtual std::vector<std::string> GetLabelFontNameAt(size_t index);
+
+  // The font size that should be used for the label. If not given, this returns
+  // a nullopt and the default font size will be used.
+  virtual absl::optional<int> GetLabelFontSize();
 
  protected:
   base::ObserverList<ui::ComboboxModelObserver>& observers() {

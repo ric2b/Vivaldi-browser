@@ -53,6 +53,7 @@ class PaintFlags;
 
 namespace blink {
 
+class NGShapeCache;
 struct CharacterRange;
 class FontSelector;
 class ShapeCache;
@@ -144,9 +145,7 @@ class PLATFORM_EXPORT Font {
   // Glyph bounds will be the minimum rect containing all glyph strokes, in
   // coordinates using (<text run x position>, <baseline position>) as the
   // origin.
-  float Width(const TextRun&,
-              HashSet<const SimpleFontData*>* fallback_fonts = nullptr,
-              gfx::RectF* glyph_bounds = nullptr) const;
+  float Width(const TextRun&, gfx::RectF* glyph_bounds = nullptr) const;
 
   int OffsetForPosition(const TextRun&,
                         float position,
@@ -196,6 +195,10 @@ class PLATFORM_EXPORT Font {
   // when, for whatever reason, the last resort font cannot be loaded.
   const SimpleFontData* PrimaryFont() const;
 
+  // Access the NG shape cache associated with this particular font object.
+  // Should *not* be retained across layout calls as it may become invalid.
+  NGShapeCache* GetNGShapeCache() const;
+
   // Access the shape cache associated with this particular font object.
   // Should *not* be retained across layout calls as it may become invalid.
   ShapeCache* GetShapeCache() const;
@@ -207,6 +210,12 @@ class PLATFORM_EXPORT Font {
 
   void SetCanShapeWordByWordForTesting(bool b) {
     EnsureFontFallbackList()->SetCanShapeWordByWordForTesting(b);
+  }
+
+  // Causes PrimaryFont to return nullptr, which is useful for simulating
+  // a situation where the "last resort font" did not load.
+  void NullifyPrimaryFontForTesting() {
+    EnsureFontFallbackList()->NullifyPrimarySimpleFontDataForTesting();
   }
 
   void ReportNotDefGlyph() const;

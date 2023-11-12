@@ -182,7 +182,7 @@ class CORE_EXPORT HTMLCanvasElement final
   void DoDeferredPaintInvalidation();
 
   void PreFinalizeFrame() override;
-  void PostFinalizeFrame() override;
+  void PostFinalizeFrame(CanvasResourceProvider::FlushReason) override;
 
   CanvasResourceDispatcher* GetOrCreateResourceDispatcher() override;
 
@@ -197,6 +197,7 @@ class CORE_EXPORT HTMLCanvasElement final
 
   // CanvasImageSource implementation
   scoped_refptr<Image> GetSourceImageForCanvas(
+      CanvasResourceProvider::FlushReason,
       SourceImageStatus*,
       const gfx::SizeF&,
       const AlphaDisposition alpha_disposition = kPremultiplyAlpha) override;
@@ -296,7 +297,8 @@ class CORE_EXPORT HTMLCanvasElement final
     needs_unbuffered_input_ = value;
   }
 
-  scoped_refptr<StaticBitmapImage> Snapshot(SourceDrawingBuffer) const;
+  scoped_refptr<StaticBitmapImage> Snapshot(CanvasResourceProvider::FlushReason,
+                                            SourceDrawingBuffer) const;
 
   // Returns the cc layer containing the contents. It's the cc layer of
   // SurfaceLayerBridge() or RenderingContext(), or nullptr if the canvas is not
@@ -342,7 +344,7 @@ class CORE_EXPORT HTMLCanvasElement final
   bool ShouldAccelerate() const;
 
   void ParseAttribute(const AttributeModificationParams&) override;
-  LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout) override;
+  LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
   bool AreAuthorShadowsAllowed() const override { return false; }
 
   void Reset();
@@ -371,6 +373,7 @@ class CORE_EXPORT HTMLCanvasElement final
       const CanvasContextCreationAttributesCore&);
 
   scoped_refptr<StaticBitmapImage> GetSourceImageForCanvasInternal(
+      CanvasResourceProvider::FlushReason,
       SourceImageStatus*,
       const AlphaDisposition alpha_disposition = kPremultiplyAlpha);
 

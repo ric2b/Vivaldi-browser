@@ -9,10 +9,14 @@
 #include "base/debug/stack_trace.h"
 #include "cc/paint/paint_flags.h"
 #include "chrome/browser/ash/arc/input_overlay/ui/action_view.h"
+#include "chromeos/strings/grit/chromeos_strings.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/base/cursor/cursor.h"
+#include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
-#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/focus_ring.h"
 
@@ -453,6 +457,11 @@ class CrossTouchPoint : public TouchPoint {
     // Put the inside stroke on top purposely because the thickness is only 1
     // and it doesn't show up obviously probably due to the round issue.
     touch_inside_stroke_ = AddChildView(std::make_unique<CrossInsideStroke>());
+    SetAccessibilityProperties(
+        ax::mojom::Role::kGroup,
+        l10n_util::GetStringUTF16(
+            IDS_INPUT_OVERLAY_KEYMAPPING_TOUCH_POINT_CROSS));
+
     TouchPoint::Init();
   }
 
@@ -477,6 +486,11 @@ class DotTouchPoint : public TouchPoint {
     // Put the inside stroke on top purposely because the thickness is only 1
     // and it doesn't show up obviously probably due to the round issue.
     touch_inside_stroke_ = AddChildView(std::make_unique<DotInsideStroke>());
+    SetAccessibilityProperties(
+        ax::mojom::Role::kGroup,
+        l10n_util::GetStringUTF16(
+            IDS_INPUT_OVERLAY_KEYMAPPING_TOUCH_POINT_DOT));
+
     TouchPoint::Init();
   }
 
@@ -492,6 +506,10 @@ class DotTouchPoint : public TouchPoint {
 
 TouchPointElement::TouchPointElement() = default;
 TouchPointElement::~TouchPointElement() = default;
+
+ui::Cursor TouchPointElement::GetCursor(const ui::MouseEvent& event) {
+  return ui::mojom::CursorType::kHand;
+}
 
 // static
 TouchPoint* TouchPoint::Show(views::View* parent,
@@ -541,9 +559,6 @@ void TouchPoint::Init() {
   SizeToPreferredSize();
   SetPosition(gfx::Point(std::max(0, center_pos_.x() - size().width() / 2),
                          std::max(0, center_pos_.y() - size().height() / 2)));
-  GetViewAccessibility().OverrideRole(ax::mojom::Role::kGroup);
-  // TODO(b/260868602): Update the name.
-  GetViewAccessibility().OverrideName(u"touch point");
 
   SetFocusBehavior(FocusBehavior::ALWAYS);
   views::FocusRing::Install(this);
@@ -592,8 +607,9 @@ bool TouchPoint::ApplyMousePressed(const ui::MouseEvent& event) {
 bool TouchPoint::ApplyMouseDragged(const ui::MouseEvent& event) {
   auto* widget = GetWidget();
   // widget is null for test.
-  if (widget)
+  if (widget) {
     widget->SetCursor(ui::mojom::CursorType::kGrabbing);
+  }
   SetToDrag();
   return static_cast<ActionView*>(parent())->ApplyMouseDragged(event);
 }
@@ -601,8 +617,9 @@ bool TouchPoint::ApplyMouseDragged(const ui::MouseEvent& event) {
 void TouchPoint::ApplyMouseReleased(const ui::MouseEvent& event) {
   auto* widget = GetWidget();
   // widget is null for test.
-  if (widget)
+  if (widget) {
     widget->SetCursor(ui::mojom::CursorType::kGrab);
+  }
   SetToHover();
   static_cast<ActionView*>(parent())->ApplyMouseReleased(event);
 }
@@ -632,5 +649,18 @@ bool TouchPoint::OnKeyPressed(const ui::KeyEvent& event) {
 bool TouchPoint::OnKeyReleased(const ui::KeyEvent& event) {
   return static_cast<ActionView*>(parent())->ApplyKeyReleased(event);
 }
+
+void TouchPoint::OnFocus() {
+  static_cast<ActionView*>(parent())->ShowFocusInfoMsg(
+      l10n_util::GetStringUTF8(
+          IDS_INPUT_OVERLAY_EDIT_INSTRUCTIONS_TOUCH_POINT_FOCUS),
+      this);
+}
+
+void TouchPoint::OnBlur() {
+  static_cast<ActionView*>(parent())->RemoveMessage();
+}
+BEGIN_METADATA(TouchPoint, views::View)
+END_METADATA
 
 }  // namespace arc::input_overlay

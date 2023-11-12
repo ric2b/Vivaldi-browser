@@ -15,17 +15,21 @@ import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import static org.chromium.ui.test.util.ViewUtils.waitForView;
 
-import android.support.test.InstrumentationRegistry;
 import android.view.View;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.espresso.matcher.ViewMatchers;
 import androidx.test.filters.MediumTest;
+import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -36,10 +40,13 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.quality.Strictness;
 
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.R;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.signin.SyncConsentActivity;
@@ -47,8 +54,10 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
@@ -57,8 +66,11 @@ import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.signin.identitymanager.PrimaryAccountChangeEvent;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 
@@ -71,6 +83,30 @@ public class IdentityDiscControllerTest {
     private static final String EMAIL = "email@gmail.com";
     private static final String NAME = "Email Emailson";
     private static final String FULL_NAME = NAME + ".full";
+    private static final ActivityLifecycleDispatcher EMPTY_DISPATCHER =
+            new ActivityLifecycleDispatcher() {
+                @Override
+                public void register(LifecycleObserver observer) {}
+
+                @Override
+                public void unregister(LifecycleObserver observer) {}
+
+                @Override
+                public int getCurrentActivityState() {
+                    return 0;
+                }
+
+                @Override
+                public boolean isNativeInitializationFinished() {
+                    return false;
+                }
+
+                @Override
+                public boolean isActivityFinishingOrDestroyed() {
+                    return false;
+                }
+            };
+
     private final ChromeTabbedActivityTestRule mActivityTestRule =
             new ChromeTabbedActivityTestRule();
 
@@ -92,6 +128,12 @@ public class IdentityDiscControllerTest {
     private SigninManager mSigninManagerMock;
     @Mock
     private IdentityManager mIdentityManagerMock;
+    @Mock
+    private ObservableSupplier<Profile> mProfileSupplier;
+    @Mock
+    private ButtonDataProvider.ButtonDataObserver mButtonDataObserver;
+    @Mock
+    private Tracker mTracker;
 
     @Before
     public void setUp() {
@@ -299,6 +341,45 @@ public class IdentityDiscControllerTest {
                 withEffectiveVisibility(ViewMatchers.Visibility.GONE)));
     }
 
+    @Test
+    @SmallTest
+    public void onPrimaryAccountChanged_accountSet() {
+        IdentityDiscController identityDiscController =
+                buildControllerWithObserver(mButtonDataObserver);
+        PrimaryAccountChangeEvent accountSetEvent =
+                newSigninEvent(PrimaryAccountChangeEvent.Type.SET);
+
+        identityDiscController.onPrimaryAccountChanged(accountSetEvent);
+
+        verify(mButtonDataObserver).buttonDataChanged(true);
+    }
+
+    @Test
+    @SmallTest
+    public void onPrimaryAccountChanged_accountCleared() {
+        IdentityDiscController identityDiscController =
+                buildControllerWithObserver(mButtonDataObserver);
+        PrimaryAccountChangeEvent accountClearedEvent =
+                newSigninEvent(PrimaryAccountChangeEvent.Type.CLEARED);
+
+        identityDiscController.onPrimaryAccountChanged(accountClearedEvent);
+
+        verify(mButtonDataObserver).buttonDataChanged(false);
+        Assert.assertTrue(identityDiscController.isProfileDataCacheEmpty());
+    }
+
+    @Test
+    @MediumTest
+    public void onClick_nativeNotYetInitialized_doesNothing() {
+        TrackerFactory.setTrackerForTests(mTracker);
+        IdentityDiscController identityDiscController = new IdentityDiscController(
+                mActivityTestRule.getActivity(), EMPTY_DISPATCHER, mProfileSupplier);
+
+        // If the button is tapped before native is initialized, the click shouldn't be recorded.
+        identityDiscController.onClick();
+        verifyNoMoreInteractions(mTracker);
+    }
+
     private void leaveNTP() {
         mActivityTestRule.loadUrl(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
         ChromeTabUtils.waitForTabPageLoaded(mTab, ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
@@ -309,5 +390,18 @@ public class IdentityDiscControllerTest {
                 EMAIL, name, SigninTestRule.NON_DISPLAYABLE_EMAIL_ACCOUNT_CAPABILITIES);
         mSigninTestRule.waitForSeeding();
         return coreAccountInfo;
+    }
+
+    private IdentityDiscController buildControllerWithObserver(
+            ButtonDataProvider.ButtonDataObserver observer) {
+        IdentityDiscController controller = new IdentityDiscController(
+                mActivityTestRule.getActivity(), EMPTY_DISPATCHER, mProfileSupplier);
+        controller.addObserver(observer);
+
+        return controller;
+    }
+
+    private PrimaryAccountChangeEvent newSigninEvent(int eventType) {
+        return new PrimaryAccountChangeEvent(eventType, ConsentLevel.SIGNIN);
     }
 }

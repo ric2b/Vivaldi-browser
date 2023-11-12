@@ -29,6 +29,7 @@
 #include "gn/switches.h"
 #include "gn/target.h"
 #include "gn/trace.h"
+#include "util/atomic_write.h"
 #include "util/build_config.h"
 #include "util/exe_path.h"
 
@@ -110,7 +111,7 @@ base::CommandLine GetSelfInvocationCommandLine(
         i->first != switches::kDotfile && i->first != switches::kArgs) {
       std::string escaped_value =
           EscapeString(FilePathToUTF8(i->second), escape_shell, nullptr);
-      cmdline.AppendSwitchASCII(i->first, escaped_value);
+      cmdline.AppendSwitch(i->first, escaped_value);
     }
   }
 
@@ -261,16 +262,16 @@ bool NinjaBuildWriter::RunAndWriteFile(const BuildSettings* build_settings,
   if (!gen.Run(err))
     return false;
 
-  // Unconditionally write the build.ninja. Ninja's build-out-of-date checking
-  // will re-run GN when any build input is newer than build.ninja, so any time
-  // the build is updated, build.ninja's timestamp needs to updated also, even
-  // if the contents haven't been changed.
+  // Unconditionally write the build.ninja. Ninja's build-out-of-date
+  // checking will re-run GN when any build input is newer than build.ninja, so
+  // any time the build is updated, build.ninja's timestamp needs to updated
+  // also, even if the contents haven't been changed.
   base::FilePath ninja_file_name(build_settings->GetFullPath(
       SourceFile(build_settings->build_dir().value() + "build.ninja")));
   base::CreateDirectory(ninja_file_name.DirName());
   std::string ninja_contents = file.str();
-  if (base::WriteFile(ninja_file_name, ninja_contents.data(),
-                      static_cast<int>(ninja_contents.size())) !=
+  if (util::WriteFileAtomically(ninja_file_name, ninja_contents.data(),
+                                static_cast<int>(ninja_contents.size())) !=
       static_cast<int>(ninja_contents.size()))
     return false;
 
@@ -278,12 +279,41 @@ bool NinjaBuildWriter::RunAndWriteFile(const BuildSettings* build_settings,
   base::FilePath dep_file_name(build_settings->GetFullPath(
       SourceFile(build_settings->build_dir().value() + "build.ninja.d")));
   std::string dep_contents = depfile.str();
-  if (base::WriteFile(dep_file_name, dep_contents.data(),
-                      static_cast<int>(dep_contents.size())) !=
+  if (util::WriteFileAtomically(dep_file_name, dep_contents.data(),
+                                static_cast<int>(dep_contents.size())) !=
       static_cast<int>(dep_contents.size()))
     return false;
 
+  // Finally, write the empty build.ninja.stamp file. This is the output
+  // expected by the first of the two ninja rules used to accomplish
+  // regeneration.
+
+  base::FilePath stamp_file_name(build_settings->GetFullPath(
+      SourceFile(build_settings->build_dir().value() + "build.ninja.stamp")));
+  std::string stamp_contents;
+  if (util::WriteFileAtomically(stamp_file_name, stamp_contents.data(),
+                                static_cast<int>(stamp_contents.size())) !=
+      static_cast<int>(stamp_contents.size()))
+    return false;
+
   return true;
+}
+
+// static
+std::string NinjaBuildWriter::ExtractRegenerationCommands(
+    std::istream& build_ninja_in) {
+  std::ostringstream out;
+  int num_blank_lines = 0;
+  for (std::string line; std::getline(build_ninja_in, line);) {
+    out << line << '\n';
+    if (line.empty())
+      ++num_blank_lines;
+    // Warning: Significant magic number. Represents the number of blank lines
+    // in the ninja rules written by NinjaBuildWriter::WriteNinjaRules below.
+    if (num_blank_lines == 4)
+      return out.str();
+  }
+  return std::string{};
 }
 
 void NinjaBuildWriter::WriteNinjaRules() {
@@ -295,16 +325,25 @@ void NinjaBuildWriter::WriteNinjaRules() {
   out_ << "  pool = console\n";
   out_ << "  description = Regenerating ninja files\n\n";
 
-  // This rule will regenerate the ninja files when any input file has changed.
-  out_ << "build build.ninja: gn\n"
+  // A comment is left in the build.ninja explaining the two statement setup to
+  // avoid confusion, since build.ninja is written earlier than the ninja rules
+  // might make someone think.
+  out_ << "# The 'gn' rule also writes build.ninja, unbeknownst to ninja. The\n"
+       << "# build.ninja edge is separate to prevent ninja from deleting it\n"
+       << "# (due to depfile usage) if interrupted. gn uses atomic writes to\n"
+       << "# ensure that build.ninja is always valid even if interrupted.\n"
+       << "build build.ninja.stamp: gn\n"
        << "  generator = 1\n"
-       << "  depfile = build.ninja.d\n";
+       << "  depfile = build.ninja.d\n"
+       << "\n"
+       << "build build.ninja: phony build.ninja.stamp\n"
+       << "  generator = 1\n";
 
-  // Input build files. These go in the ".d" file. If we write them as
-  // dependencies in the .ninja file itself, ninja will expect the files to
-  // exist and will error if they don't. When files are listed in a depfile,
-  // missing files are ignored.
-  dep_out_ << "build.ninja:";
+  // Input build files. These go in the ".d" file. If we write them
+  // as dependencies in the .ninja file itself, ninja will expect
+  // the files to exist and will error if they don't. When files are
+  // listed in a depfile, missing files are ignored.
+  dep_out_ << "build.ninja.stamp:";
 
   // Other files read by the build.
   std::vector<base::FilePath> other_files = g_scheduler->GetGenDependencies();
@@ -349,8 +388,10 @@ void NinjaBuildWriter::WriteAllPools() {
   }
 
   for (const Target* target : all_targets_) {
-    if (target->output_type() == Target::ACTION) {
-      const LabelPtrPair<Pool>& pool = target->action_values().pool();
+    if (target->IsBinary() ||
+        target->output_type() == Target::ACTION ||
+        target->output_type() == Target::ACTION_FOREACH) {
+      const LabelPtrPair<Pool>& pool = target->pool();
       if (pool.ptr)
         used_pools.insert(pool.ptr);
     }
@@ -446,6 +487,10 @@ Phony rules
        short name. Use "ninja doom_melon" to compile the
        "//tools/fruit:doom_melon" executable.
 
+       Note that for Apple platforms, create_bundle targets with a product_type
+       of "com.apple.product-type.application" are considered as executable
+       for this rule (as they define application bundles).
+
     5. The short names of all targets if there is only one target with that
        short name.
 
@@ -504,6 +549,13 @@ bool NinjaBuildWriter::WritePhonyAndAllRules(Err* err) {
 
     // Count executables with the given short name.
     if (target->output_type() == Target::EXECUTABLE) {
+      Counts& exes_counts = exes[short_name];
+      exes_counts.count++;
+      exes_counts.last_seen = target;
+    }
+
+    if (target->output_type() == Target::CREATE_BUNDLE &&
+        target->bundle_data().is_application()) {
       Counts& exes_counts = exes[short_name];
       exes_counts.count++;
       exes_counts.last_seen = target;

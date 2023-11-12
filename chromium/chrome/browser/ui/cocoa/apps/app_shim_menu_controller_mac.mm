@@ -503,6 +503,7 @@ extensions::AppWindowRegistry::AppWindowList GetAppWindowsForNSWindow(
 
   [mainMenu addItem:_appMenuItem];
   [mainMenu addItem:_fileMenuItem];
+
   if (!vivaldi::IsVivaldiRunning()) {
   SetItemWithTagVisible(_editMenuItem,
                         IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE,

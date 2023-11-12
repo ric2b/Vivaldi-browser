@@ -7,12 +7,15 @@
 <translation id="17513872634828108">Otvorené listy</translation>
 <translation id="1829244130665387512">Nájsť na stránke</translation>
 <translation id="1910514478706885609">Otvoriť v novom zoskupení listov</translation>
+<translation id="1925021887439448749">Zadajte vlastnú webovú adresu</translation>
 <translation id="2038563949887743358">Zapnúť žiadosti o verziu stránok pre počítače</translation>
 <translation id="2139186145475833000">Pridať na domovskú obrazovku</translation>
+<translation id="2149973817440762519">Upraviť záložku</translation>
 <translation id="2306442503286132111">Záložka uložená v priečinku <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Vzhľad</translation>
 <translation id="2501278716633472235">Prejsť späť</translation>
 <translation id="2633278372998075009">Súkromné listy</translation>
+<translation id="2951071800649516099">Pridanie stránok do zoznamu na čítanie na neskôr</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> záložka}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> záložiek}}</translation>
@@ -47,7 +50,9 @@ Touch to Search je funkcia, ktorá je dostupná len vtedy, keď je Google nastav
 Ak chcete upraviť hľadaný výraz, vyberte ho dlhým stlačením. Ak chcete spresniť vyhľadávanie, posuňte panel úplne nahor a klepnite na pole vyhľadávania.</translation>
 <translation id="572328651809341494">Nedávne listy</translation>
 <translation id="6150320133806434356">Záložka uložená</translation>
+<translation id="6301525844455696527">Sledujte svoj zoznam čítania</translation>
 <translation id="6336451774241870485">Nový súkromný list</translation>
+<translation id="6404511346730675251">Upraviť záložku</translation>
 <translation id="6585139692466700358">Ponúka možnosť prekladu stránok do iných jazykov s použitím prekladateľskej služby Vivaldi</translation>
 <translation id="6593061639179217415">Stránka pre počítače</translation>
 <translation id="6610147964972079463">Zatvoriť súkromné listy</translation>
@@ -56,7 +61,9 @@ Ak chcete upraviť hľadaný výraz, vyberte ho dlhým stlačením. Ak chcete sp
 <translation id="732145680195464316">Záložka uložená v <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">O aplikácií Vivaldi</translation>
 <translation id="7465104139234185284">Zatvoriť všetky súkromné listy</translation>
+<translation id="7968014550143838305">Pridané do zoznamu na čítanie</translation>
 <translation id="804786196054284061">Zmluvné podmienky prehliadača Vivaldi</translation>
+<translation id="8127542551745560481">Úprava domovskej stránky</translation>
 <translation id="85991616550051997">Prejsť na domovskú stránku</translation>
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="9063523880881406963">Vypnúť žiadosti o verziu stránok pre počítače</translation>

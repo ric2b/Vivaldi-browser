@@ -7,6 +7,7 @@
 
 #include "android_webview/browser/gfx/display_scheduler_webview.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_checker.h"
@@ -37,7 +38,9 @@ class OverlayProcessorWebView : public viz::OverlayProcessorSurfaceControl,
     ~ScopedSurfaceControlAvailable();
 
    private:
-    OverlayProcessorWebView* processor_;
+    // This field is not a raw_ptr<> because it was filtered by the rewriter
+    // for: #union
+    RAW_PTR_EXCLUSION OverlayProcessorWebView* processor_;
   };
 
   OverlayProcessorWebView(
@@ -45,7 +48,8 @@ class OverlayProcessorWebView : public viz::OverlayProcessorSurfaceControl,
       viz::FrameSinkManagerImpl* frame_sink_manager);
   ~OverlayProcessorWebView() override;
 
-  void ProcessForFrameSinkId(const viz::FrameSinkId& frame_sink_id,
+  // returns false if it failed to update overlays.
+  bool ProcessForFrameSinkId(const viz::FrameSinkId& frame_sink_id,
                              const viz::ResolvedFrameData* frame_data);
   void SetOverlaysEnabledByHWUI(bool enabled);
   void RemoveOverlays();

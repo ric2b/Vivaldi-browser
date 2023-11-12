@@ -7,6 +7,7 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/task/sequence_manager/sequence_manager.h"
 #include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/blink_scheduler_single_thread_task_runner.h"
@@ -20,13 +21,15 @@ namespace scheduler {
 using base::sequence_manager::TaskQueue;
 
 NonMainThreadTaskQueue::NonMainThreadTaskQueue(
-    std::unique_ptr<base::sequence_manager::internal::TaskQueueImpl> impl,
+    base::sequence_manager::SequenceManager& sequence_manager,
     const TaskQueue::Spec& spec,
     NonMainThreadSchedulerBase* non_main_thread_scheduler,
-    bool can_be_throttled,
+    QueueCreationParams params,
     scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner)
-    : task_queue_(base::MakeRefCounted<TaskQueue>(std::move(impl), spec)),
+    : task_queue_(sequence_manager.CreateTaskQueue(spec)),
       non_main_thread_scheduler_(non_main_thread_scheduler),
+      web_scheduling_queue_type_(params.web_scheduling_queue_type),
+      web_scheduling_priority_(params.web_scheduling_priority),
       thread_task_runner_(std::move(thread_task_runner)),
       task_runner_with_default_task_type_(
           base::FeatureList::IsEnabled(
@@ -34,16 +37,21 @@ NonMainThreadTaskQueue::NonMainThreadTaskQueue(
               ? WrapTaskRunner(task_queue_->task_runner())
               : task_queue_->task_runner()) {
   // Throttling needs |should_notify_observers| to get task timing.
-  DCHECK(!can_be_throttled || spec.should_notify_observers)
+  DCHECK(!params.can_be_throttled || spec.should_notify_observers)
       << "Throttled queue is not supported with |!should_notify_observers|";
   if (task_queue_->HasImpl() && spec.should_notify_observers) {
-    if (can_be_throttled) {
+    if (params.can_be_throttled) {
       throttler_.emplace(task_queue_.get(),
                          non_main_thread_scheduler->GetTickClock());
     }
     // TaskQueueImpl may be null for tests.
     task_queue_->SetOnTaskCompletedHandler(base::BindRepeating(
         &NonMainThreadTaskQueue::OnTaskCompleted, base::Unretained(this)));
+  }
+  DCHECK_EQ(web_scheduling_queue_type_.has_value(),
+            web_scheduling_priority_.has_value());
+  if (web_scheduling_priority_) {
+    OnWebSchedulingPriorityChanged();
   }
 }
 
@@ -102,17 +110,27 @@ void NonMainThreadTaskQueue::SetWebSchedulingPriority(
 
 void NonMainThreadTaskQueue::OnWebSchedulingPriorityChanged() {
   DCHECK(web_scheduling_priority_);
+  DCHECK(web_scheduling_queue_type_);
+
+  bool is_continuation =
+      *web_scheduling_queue_type_ == WebSchedulingQueueType::kContinuationQueue;
+  absl::optional<TaskPriority> priority;
   switch (web_scheduling_priority_.value()) {
     case WebSchedulingPriority::kUserBlockingPriority:
-      task_queue_->SetQueuePriority(TaskPriority::kHighPriority);
-      return;
+      priority = is_continuation ? TaskPriority::kHighPriorityContinuation
+                                 : TaskPriority::kHighPriority;
+      break;
     case WebSchedulingPriority::kUserVisiblePriority:
-      task_queue_->SetQueuePriority(TaskPriority::kNormalPriority);
-      return;
+      priority = is_continuation ? TaskPriority::kNormalPriorityContinuation
+                                 : TaskPriority::kNormalPriority;
+      break;
     case WebSchedulingPriority::kBackgroundPriority:
-      task_queue_->SetQueuePriority(TaskPriority::kLowPriority);
-      return;
+      priority = is_continuation ? TaskPriority::kLowPriorityContinuation
+                                 : TaskPriority::kLowPriority;
+      break;
   }
+  DCHECK(priority);
+  task_queue_->SetQueuePriority(*priority);
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

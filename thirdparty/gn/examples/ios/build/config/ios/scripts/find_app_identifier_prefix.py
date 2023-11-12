@@ -21,7 +21,7 @@ class ProvisioningProfile(object):
 
   def __init__(self, mobileprovision_path):
     self._path = mobileprovision_path
-    self._data = plistlib.readPlistFromString(
+    self._data = plistlib.loads(
         subprocess.check_output(
             ['security', 'cms', '-D', '-i', mobileprovision_path]))
 

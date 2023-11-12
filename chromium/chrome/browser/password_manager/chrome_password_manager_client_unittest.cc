@@ -223,9 +223,6 @@ class FakePasswordAutofillAgent
   void SetPasswordFillData(
       const autofill::PasswordFormFillData& form_data) override {}
 
-  void PasswordFieldHasNoAssociatedUsername(
-      ::autofill::FieldRendererId password_element_renderer_id) override {}
-
   void InformNoSavedCredentials(
       bool should_show_popup_without_passwords) override {}
 
@@ -420,13 +417,8 @@ TEST_F(ChromePasswordManagerClientTest, GetPasswordSyncState) {
   EXPECT_EQ(password_manager::SyncState::kSyncingNormalEncryption,
             client->GetPasswordSyncState());
 
-  // Sync paused due to a persistent auth error other than web signout.
-  sync_service_->SetPersistentAuthErrorOtherThanWebSignout();
-  EXPECT_EQ(password_manager::SyncState::kNotSyncing,
-            client->GetPasswordSyncState());
-
-  // Sync paused due to web signout.
-  sync_service_->SetPersistentAuthErrorWithWebSignout();
+  // Sync paused due to a persistent auth error.
+  sync_service_->SetPersistentAuthError();
   EXPECT_EQ(password_manager::SyncState::kNotSyncing,
             client->GetPasswordSyncState());
 
@@ -496,7 +488,6 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
   const GURL kUrlOn("https://accounts.google.com");
   EXPECT_FALSE(client->IsSavingAndFillingEnabled(kUrlOn));
   EXPECT_FALSE(client->IsFillingEnabled(kUrlOn));
-  EXPECT_FALSE(client->IsFillingFallbackEnabled(kUrlOn));
 
   // Disable password saving.
   ON_CALL(*settings_service,
@@ -507,14 +498,12 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
   // disabled.
   EXPECT_FALSE(client->IsSavingAndFillingEnabled(kUrlOn));
   EXPECT_FALSE(client->IsFillingEnabled(kUrlOn));
-  EXPECT_FALSE(client->IsFillingFallbackEnabled(kUrlOn));
 
   // Saving disabled if there are no SSL errors, but the manager itself is
   // disabled.
   EXPECT_CALL(*client, GetMainFrameCertStatus()).WillRepeatedly(Return(0));
   EXPECT_FALSE(client->IsSavingAndFillingEnabled(kUrlOn));
   EXPECT_TRUE(client->IsFillingEnabled(kUrlOn));
-  EXPECT_TRUE(client->IsFillingFallbackEnabled(kUrlOn));
 
   // Enable password saving.
   ON_CALL(*settings_service,
@@ -526,7 +515,6 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingEnabledConditionsTest) {
   EXPECT_CALL(*client, GetMainFrameCertStatus()).WillRepeatedly(Return(0));
   EXPECT_TRUE(client->IsSavingAndFillingEnabled(kUrlOn));
   EXPECT_TRUE(client->IsFillingEnabled(kUrlOn));
-  EXPECT_TRUE(client->IsFillingFallbackEnabled(kUrlOn));
 }
 
 TEST_F(ChromePasswordManagerClientTest,
@@ -548,7 +536,6 @@ TEST_F(ChromePasswordManagerClientTest,
   const GURL kUrlOn("https://accounts.google.com");
   EXPECT_FALSE(client->IsSavingAndFillingEnabled(kUrlOn));
   EXPECT_TRUE(client->IsFillingEnabled(kUrlOn));
-  EXPECT_TRUE(client->IsFillingFallbackEnabled(kUrlOn));
 
   // In guest mode saving, filling and manual filling are disabled.
   profile()->SetGuestSession(true);
@@ -558,7 +545,6 @@ TEST_F(ChromePasswordManagerClientTest,
       ->SetGuestSession(true);
   EXPECT_FALSE(client->IsSavingAndFillingEnabled(kUrlOn));
   EXPECT_FALSE(client->IsFillingEnabled(kUrlOn));
-  EXPECT_FALSE(client->IsFillingFallbackEnabled(kUrlOn));
 }
 
 TEST_F(ChromePasswordManagerClientTest, AutoSignInEnabledDeterminedByService) {
@@ -628,7 +614,6 @@ TEST_F(ChromePasswordManagerClientTest, SavingAndFillingDisabledForAboutBlank) {
   EXPECT_TRUE(GetClient()->GetLastCommittedOrigin().opaque());
   EXPECT_FALSE(GetClient()->IsSavingAndFillingEnabled(kUrl));
   EXPECT_FALSE(GetClient()->IsFillingEnabled(kUrl));
-  EXPECT_FALSE(GetClient()->IsFillingFallbackEnabled(kUrl));
 }
 
 TEST_F(ChromePasswordManagerClientTest,
@@ -695,8 +680,6 @@ TEST_P(ChromePasswordManagerClientSchemeTest,
   EXPECT_EQ(it->password_manager_works,
             GetClient()->IsSavingAndFillingEnabled(url));
   EXPECT_EQ(it->password_manager_works, GetClient()->IsFillingEnabled(url));
-  EXPECT_EQ(it->password_manager_works,
-            GetClient()->IsFillingFallbackEnabled(url));
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -920,48 +903,6 @@ TEST_F(ChromePasswordManagerClientTest,
   const GURL kUrlOn("https://accounts.google.com");
   EXPECT_FALSE(client->IsSavingAndFillingEnabled(kUrlOn));
   EXPECT_FALSE(client->IsFillingEnabled(kUrlOn));
-  EXPECT_FALSE(client->IsFillingFallbackEnabled(kUrlOn));
-}
-
-TEST_F(ChromePasswordManagerClientTest,
-       VerifyMaybeProtectedPasswordEntryRequestCalled) {
-  std::unique_ptr<WebContents> test_web_contents(
-      content::WebContentsTester::CreateTestWebContents(
-          web_contents()->GetBrowserContext(), nullptr));
-  std::unique_ptr<MockChromePasswordManagerClient> client(
-      new MockChromePasswordManagerClient(test_web_contents.get()));
-
-  EXPECT_CALL(
-      *client->password_protection_service(),
-      MaybeStartProtectedPasswordEntryRequest(_, _, "username", _, _, true))
-      .Times(4);
-  std::vector<password_manager::MatchingReusedCredential> credentials = {
-      {"saved_domain.com", u"username"}};
-
-  client->CheckProtectedPasswordEntry(
-      password_manager::metrics_util::PasswordType::SAVED_PASSWORD, "username",
-      credentials, true, 0, std::string());
-  client->CheckProtectedPasswordEntry(
-      password_manager::metrics_util::PasswordType::PRIMARY_ACCOUNT_PASSWORD,
-      "username", credentials, true, 0, std::string());
-  client->CheckProtectedPasswordEntry(
-      password_manager::metrics_util::PasswordType::OTHER_GAIA_PASSWORD,
-      "username", credentials, true, 0, std::string());
-  client->CheckProtectedPasswordEntry(
-      password_manager::metrics_util::PasswordType::ENTERPRISE_PASSWORD,
-      "username", credentials, true, 0, std::string());
-}
-
-TEST_F(ChromePasswordManagerClientTest, VerifyLogPasswordReuseDetectedEvent) {
-  std::unique_ptr<WebContents> test_web_contents(
-      content::WebContentsTester::CreateTestWebContents(
-          web_contents()->GetBrowserContext(), nullptr));
-  std::unique_ptr<MockChromePasswordManagerClient> client(
-      new MockChromePasswordManagerClient(test_web_contents.get()));
-  EXPECT_CALL(*client->password_protection_service(),
-              MaybeLogPasswordReuseDetectedEvent(test_web_contents.get()))
-      .Times(1);
-  client->LogPasswordReuseDetectedEvent();
 }
 #endif
 

@@ -51,7 +51,7 @@ some disadvanages:
     path. This isn't necessarily the correct trade-off for smaller projects.
 
   * The minimal build configuration is relatively heavyweight. There are several
-    files required and the exact way all compilers are linkers are run must be
+    files required and the exact way all compilers and linkers are run must be
     specified in the configuration (see "Examples" below). There is no default
     compiler configuration.
 
@@ -94,7 +94,7 @@ Alternatively, you can build GN from source with a C++17 compiler:
 
     git clone https://gn.googlesource.com/gn
     cd gn
-    python build/gen.py
+    python build/gen.py # --allow-warning if you want to build with warnings.
     ninja -C out
     # To run tests:
     out/gn_unittests
@@ -104,8 +104,8 @@ in `PATH`, so you'll want to run from a Visual Studio command prompt, or
 similar.
 
 On Linux, Mac and z/OS, the default compiler is `clang++`, a recent version is
-expected to be found in `PATH`. This can be overridden by setting `CC`, `CXX`,
-and `AR`.
+expected to be found in `PATH`. This can be overridden by setting the `CC`, `CXX`,
+and `AR` environment variables.
 
 On z/OS, building GN requires [ZOSLIB](https://github.com/ibmruntimes/zoslib) to be
 installed, as described at that URL. When building with `build/gen.py`, use the option

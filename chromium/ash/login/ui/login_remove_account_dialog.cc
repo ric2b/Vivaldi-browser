@@ -4,13 +4,14 @@
 
 #include "ash/login/ui/login_remove_account_dialog.h"
 #include "ash/login/ui/non_accessible_view.h"
-#include "ash/login/ui/system_label_button.h"
 #include "ash/login/ui/views_utils.h"
 #include "ash/public/cpp/login_types.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_id.h"
+#include "ash/style/pill_button.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
@@ -65,24 +66,28 @@ class TrappedFocusSearch : public views::FocusSearch {
   }
 
  private:
-  views::View* const trapped_focus_;
+  const raw_ptr<views::View, ExperimentalAsh> trapped_focus_;
 };
 
 }  // namespace
 
 // A system label button that dismisses its bubble dialog parent on key event.
-class RemoveUserButton : public SystemLabelButton {
+class RemoveUserButton : public PillButton {
  public:
   RemoveUserButton(PressedCallback callback, LoginRemoveAccountDialog* bubble)
-      : SystemLabelButton(std::move(callback),
-                          l10n_util::GetStringUTF16(
-                              IDS_ASH_LOGIN_POD_REMOVE_ACCOUNT_ACCESSIBLE_NAME),
-                          /*multiline=*/true),
+      : PillButton(std::move(callback),
+                   l10n_util::GetStringUTF16(
+                       IDS_ASH_LOGIN_POD_REMOVE_ACCOUNT_ACCESSIBLE_NAME)),
         bubble_(bubble) {}
 
   RemoveUserButton(const RemoveUserButton&) = delete;
   RemoveUserButton& operator=(const RemoveUserButton&) = delete;
   ~RemoveUserButton() override = default;
+
+  void SetAlert(bool alert) {
+    SetPillButtonType(alert ? PillButton::Type::kAlertWithoutIcon
+                            : PillButton::Type::kDefaultWithoutIcon);
+  }
 
  private:
   void OnKeyEvent(ui::KeyEvent* event) override {
@@ -103,7 +108,7 @@ class RemoveUserButton : public SystemLabelButton {
     }
   }
 
-  LoginRemoveAccountDialog* bubble_;
+  raw_ptr<LoginRemoveAccountDialog, ExperimentalAsh> bubble_;
 };
 
 LoginRemoveAccountDialog::TestApi::TestApi(LoginRemoveAccountDialog* bubble)
@@ -214,7 +219,7 @@ LoginRemoveAccountDialog::LoginRemoveAccountDialog(
                             base::Unretained(this)),
         this);
     remove_user_button_->SetID(kRemoveUserButtonIdForTest);
-    AddChildView(remove_user_button_);
+    AddChildView(remove_user_button_.get());
 
     // Traps the focus on the remove user button.
     focus_search_ = std::make_unique<TrappedFocusSearch>(remove_user_button_);
@@ -233,7 +238,7 @@ void LoginRemoveAccountDialog::ResetState() {
   }
   if (remove_user_confirm_data_) {
     remove_user_confirm_data_->SetVisible(false);
-    remove_user_button_->SetBackgroundAndFont(/*alert_mode=*/false);
+    remove_user_button_->SetAlert(false);
     // Reset button's description to none.
     remove_user_button_->GetViewAccessibility().OverrideDescription(
         std::u16string(),
@@ -306,7 +311,7 @@ void LoginRemoveAccountDialog::RemoveUserButtonPressed() {
     if (management_disclosure_label_) {
       management_disclosure_label_->SetVisible(false);
     }
-    remove_user_button_->SetBackgroundAndFont(/*alert_mode=*/true);
+    remove_user_button_->SetAlert(true);
 
     Layout();
 

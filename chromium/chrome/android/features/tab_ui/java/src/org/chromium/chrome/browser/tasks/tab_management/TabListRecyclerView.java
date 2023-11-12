@@ -13,6 +13,7 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
@@ -29,6 +30,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -171,6 +173,7 @@ class TabListRecyclerView
      * completion of {@link DynamicResource#triggerBitmapCapture()}.
      */
     private boolean mSuppressCapture = true;
+    private int mToolbarHairlineColor;
 
     // Vivaldi
     private int mCurrentTabViewInstance;
@@ -277,7 +280,7 @@ class TabListRecyclerView
         assert mFadeOutAnimator == null;
         mListener.startedShowing(animate);
 
-        long duration = TabUiFeatureUtilities.isTabToGtsAnimationEnabled()
+        long duration = TabUiFeatureUtilities.isTabToGtsAnimationEnabled(getContext())
                 ? FINAL_FADE_IN_DURATION_MS
                 : BASE_ANIMATION_DURATION_MS;
 
@@ -306,13 +309,27 @@ class TabListRecyclerView
                     mDynamicView.dropCachedBitmap();
                 }
                 // TODO(crbug.com/972157): remove this band-aid after we know why GTS is invisible.
-                if (TabUiFeatureUtilities.isTabToGtsAnimationEnabled()) {
+                if (TabUiFeatureUtilities.isTabToGtsAnimationEnabled(getContext())) {
                     ViewUtils.requestLayout(TabListRecyclerView.this,
                             "TabListRecyclerView.startShowing.AnimatorListenerAdapter.onAnimationEnd");
                 }
             }
         });
         if (!animate) mFadeInAnimator.end();
+    }
+
+    /**
+     * Updates the toolbar hairline drawable color appropriately for the regular and incognito tab
+     * models.
+     * @param color The toolbar hairline color.
+     */
+    void setToolbarHairlineColor(@ColorInt int color) {
+        mToolbarHairlineColor = color;
+        // If the drawable is already initialized, update its color when switching between regular
+        // and incognito tab models.
+        if (mShadowImageView != null) {
+            mShadowImageView.setImageTintList(ColorStateList.valueOf(color));
+        }
     }
 
     void setShadowVisibility(boolean shouldShowShadow) {
@@ -346,6 +363,7 @@ class TabListRecyclerView
             }
         }
 
+        mShadowImageView.setImageTintList(ColorStateList.valueOf(mToolbarHairlineColor));
         if (shouldShowShadow && mShadowImageView.getVisibility() != VISIBLE) {
             mShadowImageView.setVisibility(VISIBLE);
         } else if (!shouldShowShadow && mShadowImageView.getVisibility() != GONE) {
@@ -780,6 +798,11 @@ class TabListRecyclerView
     @VisibleForTesting
     ImageView getShadowImageViewForTesting() {
         return mShadowImageView;
+    }
+
+    @VisibleForTesting
+    int getToolbarHairlineColorForTesting() {
+        return mToolbarHairlineColor;
     }
 
     /** Vivaldi */

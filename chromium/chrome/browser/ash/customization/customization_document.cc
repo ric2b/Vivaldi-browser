@@ -15,6 +15,7 @@
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
@@ -126,7 +127,8 @@ constexpr net::NetworkTrafficAnnotationTag kCustomizationDocumentNetworkTag =
         })");
 
 struct CustomizationDocumentTestOverride {
-  ServicesCustomizationDocument* customization_document = nullptr;
+  raw_ptr<ServicesCustomizationDocument, ExperimentalAsh>
+      customization_document = nullptr;
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory;
 };
 
@@ -250,7 +252,7 @@ class ServicesCustomizationExternalLoader
  private:
   bool is_apps_set_ = false;
   base::Value::Dict apps_;
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
 };
 
 // CustomizationDocument implementation. ---------------------------------------
@@ -432,7 +434,7 @@ StartupCustomizationDocument::configured_locales() const {
 
 const std::string& StartupCustomizationDocument::initial_locale_default()
     const {
-  DCHECK(configured_locales_.size() > 0);
+  DCHECK_GT(configured_locales_.size(), 0UL);
   return configured_locales_.front();
 }
 
@@ -455,7 +457,7 @@ class ServicesCustomizationDocument::ApplyingTask {
   void Finished(bool success);
 
  private:
-  ServicesCustomizationDocument* document_;
+  raw_ptr<ServicesCustomizationDocument, ExperimentalAsh> document_;
 
   // This is error-checking flag to prevent destroying unfinished task
   // or double finish.
@@ -484,7 +486,6 @@ ServicesCustomizationDocument::ServicesCustomizationDocument()
     : CustomizationDocument(kAcceptedManifestVersion),
       num_retries_(0),
       load_started_(false),
-      network_delay_(base::Milliseconds(kDefaultNetworkRetryDelayMS)),
       apply_tasks_started_(0),
       apply_tasks_finished_(0),
       apply_tasks_success_(0) {}
@@ -492,14 +493,13 @@ ServicesCustomizationDocument::ServicesCustomizationDocument()
 ServicesCustomizationDocument::ServicesCustomizationDocument(
     const std::string& manifest)
     : CustomizationDocument(kAcceptedManifestVersion),
-      network_delay_(base::Milliseconds(kDefaultNetworkRetryDelayMS)),
       apply_tasks_started_(0),
       apply_tasks_finished_(0),
       apply_tasks_success_(0) {
   LoadManifestFromString(manifest);
 }
 
-ServicesCustomizationDocument::~ServicesCustomizationDocument() {}
+ServicesCustomizationDocument::~ServicesCustomizationDocument() = default;
 
 // static
 ServicesCustomizationDocument* ServicesCustomizationDocument::GetInstance() {
@@ -625,10 +625,16 @@ void ServicesCustomizationDocument::OnManifestRead(
 }
 
 void ServicesCustomizationDocument::StartFileFetch() {
-  DelayNetworkCall(
-      network_delay_,
-      base::BindOnce(&ServicesCustomizationDocument::DoStartFileFetch,
-                     weak_ptr_factory_.GetWeakPtr()));
+  if (custom_network_delay_) {
+    DelayNetworkCallWithCustomDelay(
+        base::BindOnce(&ServicesCustomizationDocument::DoStartFileFetch,
+                       weak_ptr_factory_.GetWeakPtr()),
+        custom_network_delay_.value());
+  } else {
+    DelayNetworkCall(
+        base::BindOnce(&ServicesCustomizationDocument::DoStartFileFetch,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void ServicesCustomizationDocument::DoStartFileFetch() {
@@ -850,7 +856,10 @@ void ServicesCustomizationDocument::InitializeForTesting(
     scoped_refptr<network::SharedURLLoaderFactory> factory) {
   g_test_overrides = new CustomizationDocumentTestOverride;
   g_test_overrides->customization_document = new ServicesCustomizationDocument;
-  g_test_overrides->customization_document->network_delay_ = base::TimeDelta();
+  // `base::TimeDelta()` means zero time delta - i.e. the request will be
+  // started immediately.
+  g_test_overrides->customization_document->custom_network_delay_ =
+      absl::make_optional(base::TimeDelta());
   g_test_overrides->url_loader_factory = std::move(factory);
 }
 

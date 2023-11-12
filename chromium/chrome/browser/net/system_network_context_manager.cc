@@ -42,7 +42,7 @@
 #include "components/net_log/net_export_file_writer.h"
 #include "components/net_log/net_log_proxy_source.h"
 #include "components/network_session_configurator/common/network_features.h"
-#include "components/os_crypt/os_crypt.h"
+#include "components/os_crypt/sync/os_crypt.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/policy_constants.h"
@@ -488,6 +488,20 @@ SystemNetworkContextManager::SystemNetworkContextManager(
           &SystemNetworkContextManager::UpdateExplicitlyAllowedNetworkPorts,
           base::Unretained(this)));
 
+#if BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
+  pref_change_registrar_.Add(
+      prefs::kChromeRootStoreEnabled,
+      base::BindRepeating(
+          &SystemNetworkContextManager::UpdateChromeRootStoreEnabled,
+          base::Unretained(this)));
+  // Call the update function immediately to set the initial value, if any.
+  // TODO(https://crbug.com/1085233): If CertVerifierServiceFactory is moved to
+  // a separate process, will need to handle restarts so that the current value
+  // can be re-initialized into the cert verifier service process when it is
+  // re-created.
+  UpdateChromeRootStoreEnabled();
+#endif  // BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
+
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)
   pref_change_registrar_.Add(
@@ -694,9 +708,6 @@ void SystemNetworkContextManager::OnNetworkServiceCreated(
     network_service->SetEncryptionKey(OSCrypt::GetRawEncryptionKey());
   }
 
-  // Asynchronously reapply the most recently received CRLSet (if any).
-  component_updater::CRLSetPolicy::ReconfigureAfterNetworkRestart();
-
   // Configure SCT Auditing in the NetworkService.
   SCTReportingService::ReconfigureAfterNetworkRestart();
 
@@ -794,19 +805,34 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
     network_context_params->enforce_chrome_ct_policy = true;
   }
 
-  // If a custom proxy is specified, set the proxy rules
-  if (command_line.HasSwitch(::switches::kIPAnonymizationProxyServer)) {
+  // If a custom proxy for IP protection is specified by either command line
+  // switch or Finch experiment flag, set the proxy rules
+  if (command_line.HasSwitch(::switches::kIPAnonymizationProxyServer) ||
+      base::FeatureList::IsEnabled(net::features::kEnableIpProtectionProxy)) {
     auto proxy_config = network::mojom::CustomProxyConfig::New();
     proxy_config->rules.type =
         net::ProxyConfig::ProxyRules::Type::PROXY_LIST_PER_SCHEME;
-    proxy_config->rules.ParseFromString(command_line.GetSwitchValueASCII(
-        ::switches::kIPAnonymizationProxyServer));
 
-    // Get allowlist hosts
-    std::string proxy_allow_list = command_line.GetSwitchValueASCII(
-        ::switches::kIPAnonymizationProxyAllowList);
+    // Command line input takes precedence over flag configuration
+    std::string ip_protection_proxy_server =
+        command_line.HasSwitch(::switches::kIPAnonymizationProxyServer)
+            ? command_line.GetSwitchValueASCII(
+                  ::switches::kIPAnonymizationProxyServer)
+            : net::features::kIpPrivacyProxyServer.Get();
+
+    proxy_config->rules.ParseFromString(ip_protection_proxy_server);
+
+    // Get allowlist hosts, command line input takes precedence over flag
+    // configuration
+    std::string ip_protection_proxy_allow_list =
+        command_line.HasSwitch(::switches::kIPAnonymizationProxyServer)
+            ? command_line.GetSwitchValueASCII(
+                  ::switches::kIPAnonymizationProxyAllowList)
+            : net::features::kIpPrivacyProxyAllowlist.Get();
+
     proxy_config->rules.reverse_bypass = true;
-    proxy_config->rules.bypass_rules.ParseFromString(proxy_allow_list);
+    proxy_config->rules.bypass_rules.ParseFromString(
+        ip_protection_proxy_allow_list);
 
     proxy_config->should_replace_direct = true;
     proxy_config->should_override_existing_config = false;
@@ -920,6 +946,33 @@ bool SystemNetworkContextManager::IsCertificateTransparencyEnabled() {
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OFFICIAL_BUILD)
 }
 
+#if BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
+// static
+bool SystemNetworkContextManager::IsUsingChromeRootStore() {
+  // SystemNetworkContextManager::GetInstance() may be null in unit_tests. In
+  // that case just fall back to only using the feature flag.
+  return IsUsingChromeRootStoreImpl(
+      SystemNetworkContextManager::GetInstance()
+          ? SystemNetworkContextManager::GetInstance()->local_state_
+          : nullptr);
+}
+
+// static
+bool SystemNetworkContextManager::IsUsingChromeRootStoreImpl(
+    PrefService* local_state) {
+#if BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
+  if (local_state) {
+    const PrefService::Preference* chrome_root_store_enabled_pref =
+        local_state->FindPreference(prefs::kChromeRootStoreEnabled);
+    if (chrome_root_store_enabled_pref->IsManaged()) {
+      return chrome_root_store_enabled_pref->GetValue()->GetBool();
+    }
+  }
+#endif  // BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
+  return base::FeatureList::IsEnabled(net::features::kChromeRootStoreUsed);
+}
+#endif  // BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
+
 network::mojom::NetworkContextParamsPtr
 SystemNetworkContextManager::CreateNetworkContextParams() {
   // TODO(mmenke): Set up parameters here (in memory cookie store, etc).
@@ -942,6 +995,13 @@ void SystemNetworkContextManager::UpdateExplicitlyAllowedNetworkPorts() {
   content::GetNetworkService()->SetExplicitlyAllowedPorts(
       ConvertExplicitlyAllowedNetworkPortsPref(local_state_));
 }
+
+#if BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
+void SystemNetworkContextManager::UpdateChromeRootStoreEnabled() {
+  content::GetCertVerifierServiceFactory()->SetUseChromeRootStore(
+      IsUsingChromeRootStoreImpl(local_state_), base::DoNothing());
+}
+#endif  // BUILDFLAG(CHROME_ROOT_STORE_POLICY_SUPPORTED)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID)

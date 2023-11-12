@@ -37,6 +37,7 @@
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_with_source.h"
+#include "net/log/test_net_log.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/connect_job.h"
@@ -1125,23 +1126,68 @@ TEST_F(TransportClientSocketPoolTest, SSLCertError) {
   EXPECT_TRUE(handle.socket());
 }
 
-TEST_F(TransportClientSocketPoolTest, CloseIdleSocketsOnSSLConfigChange) {
-  TestCompletionCallback callback;
-  ClientSocketHandle handle;
-  int rv =
-      handle.Init(group_id_, params_, absl::nullopt /* proxy_annotation_tag */,
-                  LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
-                  callback.callback(), ClientSocketPool::ProxyAuthCallback(),
-                  pool_.get(), NetLogWithSource());
-  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
-  EXPECT_FALSE(handle.is_initialized());
-  EXPECT_FALSE(handle.socket());
+namespace {
+class TransportClientSocketPoolSSLConfigChangeTest
+    : public TransportClientSocketPoolTest,
+      public ::testing::WithParamInterface<
+          SSLClientContext::SSLConfigChangeType> {
+ public:
+  void SimulateChange() {
+    switch (GetParam()) {
+      case SSLClientContext::SSLConfigChangeType::kSSLConfigChanged:
+        session_deps_.ssl_config_service->NotifySSLContextConfigChange();
+        break;
+      case SSLClientContext::SSLConfigChangeType::kCertDatabaseChanged:
+        // TODO(mattm): For more realistic testing this should call
+        // `CertDatabase::GetInstance()->NotifyObserversCertDBChanged()`,
+        // however that delivers notifications asynchronously, and running
+        // the message loop to allow the notification to be delivered allows
+        // other parts of the tested code to advance, breaking the test
+        // expectations.
+        pool_->OnSSLConfigChanged(GetParam());
+        break;
+      case SSLClientContext::SSLConfigChangeType::kCertVerifierChanged:
+        session_deps_.cert_verifier->SimulateOnCertVerifierChanged();
+        break;
+    }
+  }
 
-  EXPECT_THAT(callback.WaitForResult(), IsOk());
-  EXPECT_TRUE(handle.is_initialized());
-  EXPECT_TRUE(handle.socket());
+  const char* ExpectedMessage() {
+    switch (GetParam()) {
+      case SSLClientContext::SSLConfigChangeType::kSSLConfigChanged:
+        return TransportClientSocketPool::kNetworkChanged;
+      case SSLClientContext::SSLConfigChangeType::kCertDatabaseChanged:
+        return TransportClientSocketPool::kCertDatabaseChanged;
+      case SSLClientContext::SSLConfigChangeType::kCertVerifierChanged:
+        return TransportClientSocketPool::kCertVerifierChanged;
+    }
+  }
+};
+}  // namespace
 
-  handle.Reset();
+TEST_P(TransportClientSocketPoolSSLConfigChangeTest, GracefulConfigChange) {
+  // Create a request and finish connection of the socket, and release the
+  // handle.
+  {
+    TestCompletionCallback callback;
+    ClientSocketHandle handle1;
+    int rv =
+        handle1.Init(group_id_, params_, /*proxy_annotation_tag=*/absl::nullopt,
+                     LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+                     callback.callback(), ClientSocketPool::ProxyAuthCallback(),
+                     pool_.get(), NetLogWithSource());
+    EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+    EXPECT_FALSE(handle1.is_initialized());
+    EXPECT_FALSE(handle1.socket());
+
+    EXPECT_THAT(callback.WaitForResult(), IsOk());
+    EXPECT_TRUE(handle1.is_initialized());
+    EXPECT_TRUE(handle1.socket());
+    EXPECT_EQ(0, handle1.group_generation());
+    EXPECT_EQ(0, pool_->IdleSocketCount());
+
+    handle1.Reset();
+  }
 
   // Need to run all pending to release the socket back to the pool.
   base::RunLoop().RunUntilIdle();
@@ -1149,12 +1195,97 @@ TEST_F(TransportClientSocketPoolTest, CloseIdleSocketsOnSSLConfigChange) {
   // Now we should have 1 idle socket.
   EXPECT_EQ(1, pool_->IdleSocketCount());
 
-  // After an SSL configuration change, we should have 0 idle sockets.
-  session_deps_.ssl_config_service->NotifySSLContextConfigChange();
-  base::RunLoop().RunUntilIdle();  // Notification happens async.
+  // Create another request and finish connection of the socket, but hold on to
+  // the handle until later in the test.
+  ClientSocketHandle handle2;
+  {
+    ClientSocketPool::GroupId group_id2(
+        url::SchemeHostPort(url::kHttpScheme, "bar.example.com", 80),
+        PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
+        SecureDnsPolicy::kAllow);
+    TestCompletionCallback callback;
+    int rv =
+        handle2.Init(group_id2, params_, /*proxy_annotation_tag=*/absl::nullopt,
+                     LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+                     callback.callback(), ClientSocketPool::ProxyAuthCallback(),
+                     pool_.get(), NetLogWithSource());
+    EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+    EXPECT_FALSE(handle2.is_initialized());
+    EXPECT_FALSE(handle2.socket());
 
+    EXPECT_THAT(callback.WaitForResult(), IsOk());
+    EXPECT_TRUE(handle2.is_initialized());
+    EXPECT_TRUE(handle2.socket());
+    EXPECT_EQ(0, handle2.group_generation());
+  }
+
+  // Still only have 1 idle socket since handle2 is still alive.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1, pool_->IdleSocketCount());
+
+  // Create a pending request but don't finish connection.
+  ClientSocketPool::GroupId group_id3(
+      url::SchemeHostPort(url::kHttpScheme, "foo.example.com", 80),
+      PrivacyMode::PRIVACY_MODE_DISABLED, NetworkAnonymizationKey(),
+      SecureDnsPolicy::kAllow);
+  TestCompletionCallback callback3;
+  ClientSocketHandle handle3;
+  int rv =
+      handle3.Init(group_id3, params_, /*proxy_annotation_tag=*/absl::nullopt,
+                   LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+                   callback3.callback(), ClientSocketPool::ProxyAuthCallback(),
+                   pool_.get(), NetLogWithSource());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  EXPECT_FALSE(handle3.is_initialized());
+  EXPECT_FALSE(handle3.socket());
+
+  // Do a configuration change.
+  RecordingNetLogObserver net_log_observer;
+  SimulateChange();
+
+  // Allow handle3 to advance.
+  base::RunLoop().RunUntilIdle();
+  // After a configuration change, we should have 0 idle sockets. The first
+  // idle socket should have been closed, and handle2 and handle3 are still
+  // alive.
   EXPECT_EQ(0, pool_->IdleSocketCount());
+
+  // Verify the netlog messages recorded the correct reason for closing the
+  // idle sockets.
+  auto events = net_log_observer.GetEntriesWithType(
+      NetLogEventType::SOCKET_POOL_CLOSING_SOCKET);
+  ASSERT_EQ(events.size(), 1u);
+  std::string* reason = events[0].params.FindString("reason");
+  ASSERT_TRUE(reason);
+  EXPECT_EQ(*reason, ExpectedMessage());
+
+  // The pending request for handle3 should have succeeded under the new
+  // generation since it didn't start until after the change.
+  EXPECT_THAT(callback3.WaitForResult(), IsOk());
+  EXPECT_TRUE(handle3.is_initialized());
+  EXPECT_TRUE(handle3.socket());
+  EXPECT_EQ(1, handle3.group_generation());
+
+  // After releasing handle2, it does not become an idle socket since it was
+  // part of the first generation.
+  handle2.Reset();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(0, pool_->IdleSocketCount());
+
+  // After releasing handle3, there is now one idle socket, since that socket
+  // was connected during the new generation.
+  handle3.Reset();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1, pool_->IdleSocketCount());
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    TransportClientSocketPoolSSLConfigChangeTest,
+    testing::Values(
+        SSLClientContext::SSLConfigChangeType::kSSLConfigChanged,
+        SSLClientContext::SSLConfigChangeType::kCertDatabaseChanged,
+        SSLClientContext::SSLConfigChangeType::kCertVerifierChanged));
 
 TEST_F(TransportClientSocketPoolTest, BackupSocketConnect) {
   // Case 1 tests the first socket stalling, and the backup connecting.
@@ -1680,8 +1811,8 @@ TEST_F(TransportClientSocketPoolTest, HttpTunnelSetupRedirect) {
 
 TEST_F(TransportClientSocketPoolTest, NetworkAnonymizationKey) {
   const SchemefulSite kSite(GURL("https://foo.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey(
-      kSite, kSite, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey =
+      NetworkAnonymizationKey::CreateSameSite(kSite);
   const char kHost[] = "bar.test";
 
   base::test::ScopedFeatureList scoped_feature_list;
@@ -1719,8 +1850,8 @@ TEST_F(TransportClientSocketPoolTest, NetworkAnonymizationKey) {
 
 TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeySsl) {
   const SchemefulSite kSite(GURL("https://foo.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey(
-      kSite, kSite, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey =
+      NetworkAnonymizationKey::CreateSameSite(kSite);
   const char kHost[] = "bar.test";
 
   base::test::ScopedFeatureList scoped_feature_list;
@@ -1763,11 +1894,11 @@ TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeySsl) {
 // of input NIK.
 TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeyHttpProxy) {
   const SchemefulSite kSite1(GURL("https://foo.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey1(
-      kSite1, kSite1, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey1 =
+      NetworkAnonymizationKey::CreateSameSite(kSite1);
   const SchemefulSite kSite2(GURL("https://bar.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey2(
-      kSite2, kSite2, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey2 =
+      NetworkAnonymizationKey::CreateSameSite(kSite2);
   const char kHost[] = "bar.test";
   const ProxyServer kProxyServer = ProxyUriToProxyServer(
       "http://proxy.test", ProxyServer::SCHEME_HTTP /* default_scheme */);
@@ -1836,11 +1967,11 @@ TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeyHttpProxy) {
 // of input NIK.
 TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeyHttpsProxy) {
   const SchemefulSite kSite1(GURL("https://foo.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey1(
-      kSite1, kSite1, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey1 =
+      NetworkAnonymizationKey::CreateSameSite(kSite1);
   const SchemefulSite kSite2(GURL("https://bar.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey2(
-      kSite2, kSite2, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey2 =
+      NetworkAnonymizationKey::CreateSameSite(kSite2);
   const char kHost[] = "bar.test";
   const ProxyServer kProxyServer = ProxyUriToProxyServer(
       "https://proxy.test", ProxyServer::SCHEME_HTTP /* default_scheme */);
@@ -1910,11 +2041,11 @@ TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeyHttpsProxy) {
 // regardless of input NIK.
 TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeySocks4Proxy) {
   const SchemefulSite kSite1(GURL("https://foo.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey1(
-      kSite1, kSite1, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey1 =
+      NetworkAnonymizationKey::CreateSameSite(kSite1);
   const SchemefulSite kSite2(GURL("https://bar.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey2(
-      kSite2, kSite2, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey2 =
+      NetworkAnonymizationKey::CreateSameSite(kSite2);
   const char kHost[] = "bar.test";
   const ProxyServer kProxyServer = ProxyUriToProxyServer(
       "socks4://proxy.test", ProxyServer::SCHEME_HTTP /* default_scheme */);
@@ -2006,11 +2137,11 @@ TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeySocks4Proxy) {
 // of input NIK.
 TEST_F(TransportClientSocketPoolTest, NetworkIsolationKeySocks5Proxy) {
   const SchemefulSite kSite1(GURL("https://foo.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey1(
-      kSite1, kSite1, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey1 =
+      NetworkAnonymizationKey::CreateSameSite(kSite1);
   const SchemefulSite kSite2(GURL("https://bar.test/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey2(
-      kSite2, kSite2, /*is_cross_site=*/false);
+  const auto kNetworkAnonymizationKey2 =
+      NetworkAnonymizationKey::CreateSameSite(kSite2);
   const char kHost[] = "bar.test";
   const ProxyServer kProxyServer = ProxyUriToProxyServer(
       "socks5://proxy.test", ProxyServer::SCHEME_HTTP /* default_scheme */);

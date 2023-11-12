@@ -9,6 +9,29 @@
     },
     "types": [
       {
+        "id": "WindowState",
+        "type": "string",
+        "description": "The state of this browser window.",
+        "enum": [
+          {
+            "name": "normal",
+            "description": "Normal window state (i.e. not minimized, maximized, or fullscreen)."
+          },
+          {
+            "name": "minimized",
+            "description": "Minimized window state."
+          },
+          {
+            "name": "maximized",
+            "description": "Maximized window state."
+          },
+          {
+            "name": "fullscreen",
+            "description": "Fullscreen window state."
+          }
+        ]
+      },
+      {
         "id": "CreateWindowOptions",
         "type": "object",
         "description": "Object passed to the |create| function.",
@@ -56,6 +79,12 @@
             "optional": true,
             "description": "If true, opens a active window. Default is true."
           },
+          "state": {
+            "name": "state",
+            "optional": true,
+            "$ref": "WindowState",
+            "description": "The state to set the window to. Default is normal window state (i.e. not minimized, maximized, or fullscreen)."
+          },
           "tabUrl": {
             "type": "string",
             "optional": true,
@@ -65,31 +94,13 @@
             "type": "string",
             "optional": true,
             "description": "Extra data to attach to the window."
+          },
+          "windowKey": {
+            "type": "string",
+            "optional": true,
+            "description": "Id to identify the window. If a window with a given id is created while another window with the same id already exists, the currently opened window will be focused instead of creating a new window."
           }
         }
-      },
-      {
-        "id": "WindowState",
-        "type": "string",
-        "description": "The state of this browser window.",
-        "enum": [
-          {
-            "name": "normal",
-            "description": "Normal window state (i.e. not minimized, maximized, or fullscreen)."
-          },
-          {
-            "name": "minimized",
-            "description": "Minimized window state."
-          },
-          {
-            "name": "maximized",
-            "description": "Maximized window state."
-          },
-          {
-            "name": "fullscreen",
-            "description": "Fullscreen window state."
-          }
-        ]
       },
       {
         "id": "WindowType",
@@ -107,6 +118,10 @@
           {
             "name": "popup",
             "description": "This is a popup window."
+          },
+          {
+            "name": "devtools",
+            "description": "This is a devtools window."
           }
         ]
       },
@@ -153,20 +168,18 @@
             "name": "type",
             "optional": true,
             "$ref": "WindowType"
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "windowId",
-                "type": "integer",
-                "description": "The window id of the created window if successful or -1 on an error or if the user immediately closed the window."
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+              {
+              "name": "windowId",
+              "type": "integer",
+              "description": "The window id of the created window if successful or -1 on an error or if the user immediately closed the window."
+            }
+          ]
+        }
       },
       {
         "name": "getCurrentId",

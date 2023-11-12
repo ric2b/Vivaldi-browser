@@ -22,18 +22,15 @@ TEST(JsonSchemaCompilerAdditionalPropertiesTest,
     type_value.Set("string", "value");
     type_value.Set("other", 9);
     type_value.Set("another", std::move(list_value));
-    auto type = std::make_unique<ap::AdditionalPropertiesType>();
-    ASSERT_TRUE(ap::AdditionalPropertiesType::Populate(
-        base::Value(type_value.Clone()), type.get()));
-    EXPECT_EQ(type->additional_properties, type_value);
+    ap::AdditionalPropertiesType type;
+    ASSERT_TRUE(ap::AdditionalPropertiesType::Populate(type_value, type));
+    EXPECT_EQ(type.additional_properties, type_value);
   }
   {
     base::Value::Dict type_dict;
     type_dict.Set("string", 3);
-    base::Value type_value(std::move(type_dict));
-    auto type = std::make_unique<ap::AdditionalPropertiesType>();
-    EXPECT_FALSE(ap::AdditionalPropertiesType::Populate(
-        base::Value(type_value.Clone()), type.get()));
+    ap::AdditionalPropertiesType type;
+    EXPECT_FALSE(ap::AdditionalPropertiesType::Populate(type_dict, type));
   }
 }
 
@@ -45,9 +42,9 @@ TEST(JsonSchemaCompilerAdditionalPropertiesTest,
   base::Value param_object_value(std::move(param_object_dict));
   base::Value::List params_value;
   params_value.Append(param_object_value.Clone());
-  std::unique_ptr<ap::AdditionalProperties::Params> params(
+  absl::optional<ap::AdditionalProperties::Params> params(
       ap::AdditionalProperties::Params::Create(params_value));
-  EXPECT_TRUE(params.get());
+  EXPECT_TRUE(params.has_value());
   EXPECT_EQ(params->param_object.additional_properties, param_object_value);
 }
 

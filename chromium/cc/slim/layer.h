@@ -11,7 +11,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
+#include "cc/paint/filter_operations.h"
 #include "cc/slim/filter.h"
+#include "cc/slim/frame_data.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -114,6 +117,10 @@ class COMPONENT_EXPORT(CC_SLIM) Layer : public base::RefCounted<Layer> {
 
   // Set or get the transform to be used when compositing this layer into its
   // target. The transform is inherited by this layers children.
+  // Slim compositor implementation only supports transforms where
+  // `Is2dTransform` is true and has CHECK for it. This includes scale,
+  // translate, and shear in the x-y plane, as well as rotation about the z
+  // axis.
   void SetTransform(const gfx::Transform& transform);
   const gfx::Transform& transform() const;
 
@@ -161,7 +168,10 @@ class COMPONENT_EXPORT(CC_SLIM) Layer : public base::RefCounted<Layer> {
   // the layer itself has no content to contribute, even though the layer was
   // given SetIsDrawable(true).
   bool draws_content() const;
-  void SetDrawsContent(bool value);
+
+  // Returns the number of layers in this layers subtree (excluding itself) for
+  // which DrawsContent() is true.
+  int NumDescendantsThatDrawContent() const;
 
   // Set or get if this layer and its subtree should be part of the compositor's
   // output to the screen. When set to true, the layer's subtree does not appear
@@ -190,18 +200,50 @@ class COMPONENT_EXPORT(CC_SLIM) Layer : public base::RefCounted<Layer> {
   virtual ~Layer();
 
   // Called by LayerTree.
-  gfx::Transform ComputeTransformToParent();
-  virtual bool HasDrawableContent() const;
-  virtual void AppendQuads(viz::CompositorRenderPass& render_pass,
-                           const gfx::Transform& transform,
-                           const gfx::Rect* clip);
+  gfx::Transform ComputeTransformToParent() const;
+  absl::optional<gfx::Transform> ComputeTransformFromParent() const;
+  bool HasFilters() const;
+  cc::FilterOperations GetFilters() const;
+  // This method counts this layer, This is different from
+  // `NumDescendantsThatDrawContent` which counts descendent layers only.
+  int GetNumDrawingLayersInSubtree() const;
+  // Note these `GetAndReset` methods may be skipped by LayerTree if LayerTree
+  // skips processing an entire subtree that includes this layer. If this layer
+  // is processed for a subsequent frame, an ancestor layer must have
+  // `subtree_property_changed_` that applies to this layer.
+  bool GetAndResetPropertyChanged();
+  bool GetAndResetSubtreePropertyChanged();
 
-  void NotifyTreeChanged();
-  void NotifyPropertyChanged();
+  void UpdateDrawsContent();
+  virtual bool HasDrawableContent() const;
+
+  // `transform_to_target` is the transform from this layer's space to the
+  // space of target render pass this is layer is drawn to.
+  // `transform_to_root` is similar and transform to the root render pass.
+  // They are the same if this layer draws to the root render pass.
+  // `opacity` parameter cumulative opacity when drawing this layer.
+  // `SetOpacity` applies to the entire subtree, `opacity` parameter contains
+  // opacity from parents and may be different from `opacity()` method.
+  virtual void AppendQuads(viz::CompositorRenderPass& render_pass,
+                           FrameData& data,
+                           const gfx::Transform& transform_to_root,
+                           const gfx::Transform& transform_to_target,
+                           const gfx::Rect* clip_in_target,
+                           const gfx::Rect& visible_rect,
+                           float opacity);
   virtual viz::SharedQuadState* CreateAndAppendSharedQuadState(
       viz::CompositorRenderPass& render_pass,
-      const gfx::Transform& transform,
-      const gfx::Rect* clip);
+      const gfx::Transform& transform_to_target,
+      const gfx::Rect* clip_in_target,
+      const gfx::Rect& visible_rect,
+      float opacity);
+
+  // Use `NotifyPropertyChanged` for a change that can only affect the contents
+  // of this layer, but not the contents of any layer in the parent or subtree.
+  // Otherwise use `NotifySubtreeChanged` which is applied recursively to the
+  // whole subtree at draw time.
+  void NotifySubtreeChanged();
+  void NotifyPropertyChanged();
 
   const scoped_refptr<cc::Layer> cc_layer_;
 
@@ -213,12 +255,16 @@ class COMPONENT_EXPORT(CC_SLIM) Layer : public base::RefCounted<Layer> {
   void WillAddChildSlim(Layer* child);
   void InsertChildSlim(scoped_refptr<Layer> child, size_t position);
   void RemoveFromParentSlim();
+  void SetParentSlim(Layer* parent);
+  void ChangeDrawableDescendantsBySlim(int num);
 
   const int id_;
   raw_ptr<Layer> parent_ = nullptr;
   std::vector<scoped_refptr<Layer>> children_;
 
-  raw_ptr<LayerTree> layer_tree_ = nullptr;
+  raw_ptr<LayerTree, DanglingUntriaged> layer_tree_ = nullptr;
+
+  int num_descendants_that_draw_content_ = 0;
 
   gfx::PointF position_;
   gfx::Size bounds_;
@@ -234,6 +280,13 @@ class COMPONENT_EXPORT(CC_SLIM) Layer : public base::RefCounted<Layer> {
   bool draws_content_ : 1;
   bool hide_layer_and_subtree_ : 1;
   bool masks_to_bounds_ : 1;
+
+  // Indicates there is damage for this layer.
+  bool property_changed_ : 1;
+  // Indicates there is damage for the entire subtree. This is tracked
+  // only at the root of the subtree, and is applied recursively to the entire
+  // subtree at draw time.
+  bool subtree_property_changed_ : 1;
 };
 
 }  // namespace cc::slim

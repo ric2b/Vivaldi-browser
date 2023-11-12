@@ -31,12 +31,9 @@ FormStructureTestApi test_api(FormStructure* form_structure) {
 
 }  // namespace
 
-TestBrowserAutofillManager::TestBrowserAutofillManager(
-    TestAutofillDriver* driver,
-    TestAutofillClient* client)
-    : BrowserAutofillManager(driver, client, "en-US"),
-      client_(client),
-      driver_(driver) {}
+TestBrowserAutofillManager::TestBrowserAutofillManager(AutofillDriver* driver,
+                                                       AutofillClient* client)
+    : BrowserAutofillManager(driver, client, "en-US") {}
 
 TestBrowserAutofillManager::~TestBrowserAutofillManager() = default;
 
@@ -176,12 +173,14 @@ void TestBrowserAutofillManager::StoreUploadVotesAndLogQualityCallback(
 }
 
 const gfx::Image& TestBrowserAutofillManager::GetCardImage(
-    const CreditCard& credit_card) const {
+    const CreditCard& credit_card) {
   return card_image_;
 }
 
-void TestBrowserAutofillManager::ScheduleRefill(const FormData& form) {
-  TriggerRefillForTest(form);
+void TestBrowserAutofillManager::ScheduleRefill(
+    const FormData& form,
+    const AutofillTriggerSource trigger_source) {
+  TriggerRefillForTest(form, trigger_source);
 }
 
 bool TestBrowserAutofillManager::MaybeStartVoteUploadProcess(
@@ -204,8 +203,8 @@ int TestBrowserAutofillManager::GetPackedCreditCardID(int credit_card_id) {
   std::string credit_card_guid =
       base::StringPrintf("00000000-0000-0000-0000-%012d", credit_card_id);
 
-  return suggestion_generator_for_test()->MakeFrontendId(
-      Suggestion::BackendId(credit_card_guid), Suggestion::BackendId());
+  return suggestion_generator_for_test()->MakeFrontendIdFromBackendId(
+      Suggestion::BackendId(credit_card_guid));
 }
 
 void TestBrowserAutofillManager::AddSeenForm(
@@ -265,20 +264,22 @@ void TestBrowserAutofillManager::OnAskForValuesToFillTest(
 }
 
 void TestBrowserAutofillManager::SetAutofillProfileEnabled(
+    TestAutofillClient& client,
     bool autofill_profile_enabled) {
   autofill_profile_enabled_ = autofill_profile_enabled;
   if (!autofill_profile_enabled_) {
     // Profile data is refreshed when this pref is changed.
-    client()->GetPersonalDataManager()->ClearProfiles();
+    client.GetPersonalDataManager()->ClearProfiles();
   }
 }
 
 void TestBrowserAutofillManager::SetAutofillCreditCardEnabled(
+    TestAutofillClient& client,
     bool autofill_credit_card_enabled) {
   autofill_credit_card_enabled_ = autofill_credit_card_enabled;
   if (!autofill_credit_card_enabled_) {
     // Credit card data is refreshed when this pref is changed.
-    client()->GetPersonalDataManager()->ClearCreditCards();
+    client.GetPersonalDataManager()->ClearCreditCards();
   }
 }
 
@@ -293,9 +294,10 @@ void TestBrowserAutofillManager::SetExpectedObservedSubmission(bool expected) {
 
 int TestBrowserAutofillManager::MakeFrontendId(
     const MakeFrontendIdParams& params) {
-  return suggestion_generator_for_test()->MakeFrontendId(
-      Suggestion::BackendId(params.credit_card_id),
-      Suggestion::BackendId(params.profile_id));
+  return suggestion_generator_for_test()->MakeFrontendIdFromBackendId(
+      Suggestion::BackendId(params.credit_card_id.empty()
+                                ? params.profile_id
+                                : params.credit_card_id));
 }
 
 }  // namespace autofill

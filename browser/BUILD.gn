@@ -35,7 +35,7 @@ static_library("browser") {
     "//chrome/common:non_code_constants",
 
     "//components/keyed_service/content",
-    "//components/os_crypt:os_crypt",
+    "//components/os_crypt/sync:os_crypt",
     "//components/renderer_context_menu",
     "//components/search_engines",
     "//components/strings:components_chromium_strings",

@@ -6,18 +6,21 @@
 <translation id="1598449788754183301">Växla vanliga/privata flikar</translation>
 <translation id="1644574205037202324">Historik</translation>
 <translation id="17513872634828108">Öppna flikar</translation>
-<translation id="1829244130665387512">Hitta på sida</translation>
+<translation id="1829244130665387512">Sök på sida</translation>
 <translation id="1910514478706885609">Öppna i ny flikstack</translation>
+<translation id="1925021887439448749">Ange anpassad webbadress</translation>
 <translation id="2038563949887743358">Aktivera begäran av datoranpassad webbsida</translation>
-<translation id="2139186145475833000">Lägg till på hemskärmen</translation>
+<translation id="2139186145475833000">Lägg till på startskärmen</translation>
+<translation id="2149973817440762519">Redigera bokmärke</translation>
 <translation id="2306442503286132111">Bokmarke sparat i <ph name="FOLDER_NAME" />-mappen</translation>
 <translation id="2433507940547922241">Utseende</translation>
 <translation id="2501278716633472235">Gå tillbaka</translation>
 <translation id="2633278372998075009">Privata flikar</translation>
+<translation id="2951071800649516099">Lägg till sidor till din läslista för senare</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> bokmärke}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> bokmärken}}</translation>
-<translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Med ensamrätt.</translation>
+<translation id="3076631378407175873">Upphovsrättskyddat <ph name="YEAR" /> Vivaldi Technologies As. Med ensamrätt.</translation>
 <translation id="3234355010754616171">Ny privat flik</translation>
 <translation id="3377025655491224618">Privat flik</translation>
 <translation id="3504699618187058974">Stapla flikar</translation>
@@ -30,12 +33,15 @@
 <translation id="4121750346708795461">Genom att använda det här programmet godkänner du Vivaldis <ph name="BEGIN_LINK1" />användarvillkor<ph name="END_LINK1" /> och <ph name="BEGIN_LINK2" />sekretesspolicy<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Aktuellt enhetsspråk</translation>
 <translation id="4167670741834902166">Ny privat flik</translation>
+<translation id="4195643157523330669">Öppna i ny flik</translation>
 <translation id="4243710787042215766">Öppna i privat flik</translation>
+<translation id="451872707440238414">Sök bland dina bokmärken</translation>
 <translation id="4526803704855831732">Privata flikar</translation>
 <translation id="4719086422742491124">Lär dig om ämnen på webbsidor utan att lämna sidan. Markera ett eller fler ord på en sida för att söka efter dem.
 
 Tryck för Sök är en funktion som enbart är tillgänglig när Google är vald som standardsökmotorn i Vivaldi.</translation>
 <translation id="4759238208242260848">Nedladdningar</translation>
+<translation id="4850886885716139402">Visa</translation>
 <translation id="4883379392681899581">Lämna privat läge</translation>
 <translation id="4943872375798546930">Inga resultat</translation>
 <translation id="49576331685473090">Innehållsblockerare</translation>
@@ -48,7 +54,9 @@ Tryck för Sök är en funktion som enbart är tillgänglig när Google är vald
 Gör ett långt tryck för att justera din sökterm. För att förfina sökningen kan du dra panelen hela vägen till toppen och trycka på sökrutan.</translation>
 <translation id="572328651809341494">Senaste flikar</translation>
 <translation id="6150320133806434356">Bokmärke sparat</translation>
+<translation id="6301525844455696527">Kom ikapp din läslista</translation>
 <translation id="6336451774241870485">Ny privat flik</translation>
+<translation id="6404511346730675251">Redigera bokmärke</translation>
 <translation id="6585139692466700358">Erbjud översättning av sidor på andra språk med Vivaldis översättningstjänst</translation>
 <translation id="6593061639179217415">Datoranpassad webbsida</translation>
 <translation id="6610147964972079463">Stäng privata flikar</translation>
@@ -57,9 +65,15 @@ Gör ett långt tryck för att justera din sökterm. För att förfina sökninge
 <translation id="732145680195464316">Bokmärke sparat i <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Om Vivaldi</translation>
 <translation id="7465104139234185284">Stäng alla privata flikar</translation>
+<translation id="7481312909269577407">Framåt</translation>
+<translation id="7583262514280211622">Du hittar din läslista här</translation>
+<translation id="7968014550143838305">Lades till läslistan</translation>
 <translation id="804786196054284061">Användarvillkor</translation>
+<translation id="8127542551745560481">Redigera startsida</translation>
+<translation id="8560602726703398413">Hitta din läslista i Bokmärken</translation>
 <translation id="85991616550051997">Gå till hemsida</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
 <translation id="9063523880881406963">Inaktivera webbplats förfrågan</translation>
 <translation id="9080642952018487277">Gå in i privat läge</translation>
+<translation id="96681097142096641">Visa förenklad sida?</translation>
 </translationbundle>

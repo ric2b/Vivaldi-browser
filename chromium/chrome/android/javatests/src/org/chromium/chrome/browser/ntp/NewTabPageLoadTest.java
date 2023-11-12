@@ -10,8 +10,8 @@ import static org.junit.Assert.assertNotEquals;
 
 import android.graphics.Bitmap;
 import android.os.Handler;
-import android.support.test.InstrumentationRegistry;
 
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
 
 import org.junit.After;
@@ -63,7 +63,8 @@ public class NewTabPageLoadTest {
 
     @Before
     public void setUp() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
 
         mMostVisitedSites = new AutoVerifyingMostVisitedSites();
         mMostVisitedSites.setTileSuggestions(mTestServer.getURLs("/site1", "/site2"));

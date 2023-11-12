@@ -13,7 +13,6 @@
 #import "components/breadcrumbs/core/breadcrumb_manager.h"
 #import "components/infobars/core/infobar_delegate.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#import "ios/chrome/browser/crash_report/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
 #import "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/infobars/test/fake_infobar_delegate.h"
@@ -59,9 +58,6 @@ class BreadcrumbManagerTabHelperTest : public PlatformTest {
 
     first_web_state_.SetBrowserState(chrome_browser_state_.get());
     second_web_state_.SetBrowserState(chrome_browser_state_.get());
-
-    BreadcrumbManagerKeyedServiceFactory::GetForBrowserState(
-        chrome_browser_state_.get());
 
     // Navigation manager is needed for InfobarManager.
     first_web_state_.SetNavigationManager(
@@ -198,28 +194,8 @@ TEST_F(BreadcrumbManagerTabHelperTest, ChromeNewTabNavigationStart) {
       << events.front();
 }
 
-// Tests metadata for about://newtab NTP navigation.
-TEST_F(BreadcrumbManagerTabHelperTest, AboutNewTabNavigationStart) {
-  ASSERT_TRUE(EventsEmpty());
-
-  web::FakeNavigationContext context;
-  context.SetUrl(GURL("about://newtab"));
-  first_web_state_.OnNavigationStarted(&context);
-  const auto& events = GetEvents();
-  ASSERT_EQ(1u, events.size());
-
-  EXPECT_NE(std::string::npos,
-            events.front().find(base::StringPrintf(
-                "%s%lld", breadcrumbs::kBreadcrumbDidStartNavigation,
-                context.GetNavigationId())))
-      << events.front();
-  EXPECT_NE(std::string::npos,
-            events.front().find(breadcrumbs::kBreadcrumbNtpNavigation))
-      << events.front();
-}
-
 // Tests metadata for about://newtab/ NTP navigation.
-TEST_F(BreadcrumbManagerTabHelperTest, AboutNewTabNavigationStart2) {
+TEST_F(BreadcrumbManagerTabHelperTest, AboutNewTabNavigationStart) {
   ASSERT_TRUE(EventsEmpty());
 
   web::FakeNavigationContext context;

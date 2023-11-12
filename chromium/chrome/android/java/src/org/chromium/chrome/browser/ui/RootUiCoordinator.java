@@ -10,6 +10,8 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
+import android.os.Handler;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
@@ -25,7 +27,6 @@ import androidx.appcompat.content.res.AppCompatResources;
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
@@ -38,9 +39,10 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeActionModeHandler;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.app.omnibox.OmniboxPedalDelegateImpl;
+import org.chromium.chrome.browser.app.omnibox.ActionChipsDelegateImpl;
 import org.chromium.chrome.browser.app.tab_activity_glue.TabReparentingController;
 import org.chromium.chrome.browser.back_press.BackPressManager;
+import org.chromium.chrome.browser.bookmarks.AddToBookmarksToolbarButtonController;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
@@ -87,7 +89,8 @@ import org.chromium.chrome.browser.messages.MessageContainerObserver;
 import org.chromium.chrome.browser.messages.MessagesResourceMapperInitializer;
 import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxPedalDelegate;
+import org.chromium.chrome.browser.omnibox.suggestions.ActionChipsDelegate;
+import org.chromium.chrome.browser.omnibox.suggestions.base.HistoryClustersProcessor.OpenHistoryClustersDelegate;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler.VoiceInteractionSource;
 import org.chromium.chrome.browser.paint_preview.DemoPaintPreview;
@@ -124,6 +127,7 @@ import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveButtonActionMenuCoor
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonController;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.OptionalNewTabButtonController;
+import org.chromium.chrome.browser.toolbar.adaptive.TranslateToolbarButtonController;
 import org.chromium.chrome.browser.toolbar.top.ToolbarActionModeCallback;
 import org.chromium.chrome.browser.toolbar.top.ToolbarControlContainer;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuBlocker;
@@ -131,12 +135,15 @@ import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinatorFactory;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuObserver;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerFactory;
+import org.chromium.chrome.browser.ui.fold_transitions.FoldTransitionController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.chrome.browser.ui.system.StatusBarColorController.StatusBarColorProvider;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.features.start_surface.StartSurface;
 import org.chromium.components.browser_ui.accessibility.PageZoomCoordinator;
+import org.chromium.components.browser_ui.accessibility.PageZoomCoordinatorDelegate;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFactory;
@@ -155,6 +162,7 @@ import org.chromium.components.messages.MessageDispatcherProvider;
 import org.chromium.components.messages.MessagesFactory;
 import org.chromium.components.ukm.UkmRecorder;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
+import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -187,7 +195,6 @@ public class RootUiCoordinator
                    MenuOrKeyboardActionController.MenuOrKeyboardActionHandler, AppMenuBlocker {
     protected final UnownedUserDataSupplier<TabObscuringHandler> mTabObscuringHandlerSupplier =
             new TabObscuringHandlerSupplier();
-    private final JankTracker mJankTracker;
 
     protected AppCompatActivity mActivity;
     protected @Nullable AppMenuCoordinator mAppMenuCoordinator;
@@ -295,7 +302,7 @@ public class RootUiCoordinator
     private final Supplier<TabContentManager> mTabContentManagerSupplier;
     private final IntentRequestTracker mIntentRequestTracker;
     private final OneshotSupplier<TabReparentingController> mTabReparentingControllerSupplier;
-    private final OmniboxPedalDelegate mOmniboxPedalDelegate;
+    private final ActionChipsDelegate mActionChipsDelegate;
     private final boolean mInitializeUiWithIncognitoColors;
     private HistoryClustersCoordinator mHistoryClustersCoordinator;
     private final OneshotSupplierImpl<HistoryClustersCoordinator>
@@ -306,6 +313,8 @@ public class RootUiCoordinator
     @Nullable
     private PageZoomCoordinator mPageZoomCoordinator;
     private AppMenuObserver mAppMenuObserver;
+    private boolean mKeyboardVisibleDuringFoldTransition;
+    private Long mKeyboardVisibilityTimestamp;
 
     /**
      * Create a new {@link RootUiCoordinator} for the given activity.
@@ -326,7 +335,6 @@ public class RootUiCoordinator
      * @param startSurfaceParentTabSupplier Supplies the parent tab for the StartSurface.
      * @param browserControlsManager Manages the browser controls.
      * @param windowAndroid The current {@link WindowAndroid}.
-     * @param jankTracker Tracks the jank in the app.
      * @param activityLifecycleDispatcher Allows observation of the activity lifecycle.
      * @param layoutManagerSupplier Supplies the {@link LayoutManager}.
      * @param menuOrKeyboardActionController Controls the menu or keyboard action controller.
@@ -366,7 +374,7 @@ public class RootUiCoordinator
             @NonNull OneshotSupplier<LayoutStateProvider> layoutStateProviderOneshotSupplier,
             @NonNull Supplier<Tab> startSurfaceParentTabSupplier,
             @NonNull BrowserControlsManager browserControlsManager,
-            @NonNull ActivityWindowAndroid windowAndroid, @NonNull JankTracker jankTracker,
+            @NonNull ActivityWindowAndroid windowAndroid,
             @NonNull ActivityLifecycleDispatcher activityLifecycleDispatcher,
             @NonNull ObservableSupplier<LayoutManagerImpl> layoutManagerSupplier,
             @NonNull MenuOrKeyboardActionController menuOrKeyboardActionController,
@@ -388,7 +396,6 @@ public class RootUiCoordinator
             @NonNull OneshotSupplier<TabReparentingController> tabReparentingControllerSupplier,
             @NonNull Supplier<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier,
             boolean initializeUiWithIncognitoColors, @Nullable BackPressManager backPressManager) {
-        mJankTracker = jankTracker;
         mCallbackController = new CallbackController();
         mActivity = activity;
         mWindowAndroid = windowAndroid;
@@ -420,8 +427,9 @@ public class RootUiCoordinator
         mMenuOrKeyboardActionController.registerMenuOrKeyboardActionHandler(this);
         mActivityTabProvider = tabProvider;
 
-        mOmniboxPedalDelegate = new OmniboxPedalDelegateImpl(
-                mActivity, mHistoryClustersCoordinatorSupplier, mModalDialogManagerSupplier);
+        mActionChipsDelegate =
+                new ActionChipsDelegateImpl(mActivity, mHistoryClustersCoordinatorSupplier,
+                        mModalDialogManagerSupplier, mActivityTabProvider);
 
         // This little bit of arithmetic is necessary because of Java doesn't like accepting
         // Supplier<BaseImpl> where Supplier<Base> is expected. We should remove the need for
@@ -479,9 +487,17 @@ public class RootUiCoordinator
                 mActivityLifecycleDispatcher, mActivityTabProvider, mTopUiThemeColorProvider);
         mEphemeralTabCoordinatorSupplier = ephemeralTabCoordinatorSupplier;
 
-        mPageZoomCoordinator = new PageZoomCoordinator(() -> {
-            ViewStub viewStub = (ViewStub) mActivity.findViewById(R.id.page_zoom_container);
-            return viewStub.inflate();
+        mPageZoomCoordinator = new PageZoomCoordinator(new PageZoomCoordinatorDelegate() {
+            @Override
+            public View getZoomControlView() {
+                ViewStub viewStub = (ViewStub) mActivity.findViewById(R.id.page_zoom_container);
+                return viewStub.inflate();
+            }
+
+            @Override
+            public BrowserContextHandle getBrowserContextHandle() {
+                return Profile.getLastUsedRegularProfile();
+            }
         });
     }
 
@@ -759,6 +775,7 @@ public class RootUiCoordinator
 
         initMerchantTrustSignals();
         initScrollCapture();
+        initializeEdgeToEdgeController();
 
         new OneShotCallback<>(mProfileSupplier, this::initHistoryClustersCoordinator);
 
@@ -1113,6 +1130,10 @@ public class RootUiCoordinator
                                     VoiceInteractionSource.TOOLBAR);
                         }
                     };
+            TranslateToolbarButtonController translateToolbarButtonController =
+                    new TranslateToolbarButtonController(mActivityTabProvider,
+                            AppCompatResources.getDrawable(mActivity, R.drawable.ic_translate),
+                            mActivity.getString(R.string.menu_translate), trackerSupplier);
             VoiceToolbarButtonController voiceToolbarButtonController =
                     new VoiceToolbarButtonController(mActivity,
                             AppCompatResources.getDrawable(mActivity, R.drawable.btn_mic),
@@ -1123,6 +1144,9 @@ public class RootUiCoordinator
                             AppCompatResources.getDrawable(mActivity, R.drawable.new_tab_icon),
                             mActivityLifecycleDispatcher, mTabCreatorManagerSupplier,
                             mActivityTabProvider, trackerSupplier);
+            AddToBookmarksToolbarButtonController addToBookmarksToolbarButtonController =
+                    new AddToBookmarksToolbarButtonController(mActivityTabProvider, mActivity,
+                            mTabBookmarkerSupplier, trackerSupplier, mBookmarkModelSupplier);
             AdaptiveToolbarButtonController adaptiveToolbarButtonController =
                     new AdaptiveToolbarButtonController(mActivity, new SettingsLauncherImpl(),
                             mActivityLifecycleDispatcher, new AdaptiveButtonActionMenuCoordinator(),
@@ -1134,6 +1158,11 @@ public class RootUiCoordinator
             adaptiveToolbarButtonController.addButtonVariant(
                     AdaptiveToolbarButtonVariant.VOICE, voiceToolbarButtonController);
             adaptiveToolbarButtonController.addButtonVariant(
+                    AdaptiveToolbarButtonVariant.ADD_TO_BOOKMARKS,
+                    addToBookmarksToolbarButtonController);
+            adaptiveToolbarButtonController.addButtonVariant(
+                    AdaptiveToolbarButtonVariant.TRANSLATE, translateToolbarButtonController);
+            adaptiveToolbarButtonController.addButtonVariant(
                     AdaptiveToolbarButtonVariant.PRICE_TRACKING, priceTrackingButtonController);
             adaptiveToolbarButtonController.addButtonVariant(
                     AdaptiveToolbarButtonVariant.READER_MODE, readerModeToolbarButtonController);
@@ -1144,6 +1173,11 @@ public class RootUiCoordinator
                     mBookmarkModelSupplier);
             mButtonDataProviders =
                     Arrays.asList(mIdentityDiscController, adaptiveToolbarButtonController);
+
+            OpenHistoryClustersDelegate openHistoryClustersDelegate = query -> {
+                if (mHistoryClustersCoordinator == null) return;
+                mHistoryClustersCoordinator.openHistoryClustersUi(query);
+            };
 
             mToolbarManager = new ToolbarManager(mActivity, mBrowserControlsManager,
                     mFullscreenManager, toolbarContainer, mCompositorViewHolderSupplier.get(),
@@ -1159,10 +1193,10 @@ public class RootUiCoordinator
                     mStatusBarColorController, mAppMenuDelegate, mActivityLifecycleDispatcher,
                     mStartSurfaceParentTabSupplier, mBottomSheetController, mIsWarmOnResumeSupplier,
                     mTabContentManagerSupplier.get(), mTabCreatorManagerSupplier.get(),
-                    mSnackbarManagerSupplier.get(), mJankTracker,
-                    getMerchantTrustSignalsCoordinatorSupplier(), mTabReparentingControllerSupplier,
-                    mOmniboxPedalDelegate, mEphemeralTabCoordinatorSupplier,
-                    mInitializeUiWithIncognitoColors, mBackPressManager);
+                    mSnackbarManagerSupplier.get(), getMerchantTrustSignalsCoordinatorSupplier(),
+                    mTabReparentingControllerSupplier, mActionChipsDelegate,
+                    mEphemeralTabCoordinatorSupplier, mInitializeUiWithIncognitoColors,
+                    mBackPressManager, openHistoryClustersDelegate);
             if (!mSupportsAppMenuSupplier.getAsBoolean()) {
                 mToolbarManager.getToolbar().disableMenuButton();
             }
@@ -1385,9 +1419,7 @@ public class RootUiCoordinator
         // TODO(1093999): Componentize SnackbarManager so BottomSheetController can own this.
         Callback<View> sheetInitializedCallback = (view) -> {
             mBottomSheetSnackbarManager = new SnackbarManager(mActivity,
-                    view.findViewById(org.chromium.components.browser_ui.bottomsheet.R.id
-                                              .bottom_sheet_snackbar_container),
-                    mWindowAndroid);
+                    view.findViewById(R.id.bottom_sheet_snackbar_container), mWindowAndroid);
         };
 
         Supplier<OverlayPanelManager> panelManagerSupplier = ()
@@ -1423,6 +1455,13 @@ public class RootUiCoordinator
                 mBackPressManager.addHandler(
                         mBottomSheetBackPressHandler, BackPressHandler.Type.BOTTOM_SHEET);
             }
+        }
+    }
+
+    /** Setup drawing using Android Edge-to-Edge. */
+    private void initializeEdgeToEdgeController() {
+        if (EdgeToEdgeControllerFactory.isEnabled()) {
+            EdgeToEdgeControllerFactory.create(mActivity).drawUnderSystemBars();
         }
     }
 
@@ -1550,6 +1589,58 @@ public class RootUiCoordinator
 
     public OneshotSupplier<IncognitoReauthController> getIncognitoReauthControllerSupplier() {
         return mIncognitoReauthControllerOneshotSupplier;
+    }
+
+    /**
+     * Saves relevant information that will be used to restore the UI state after the activity is
+     * recreated. This is expected to be invoked in {@code Activity#onSaveInstanceState(Bundle)}.
+     *
+     * @param outState The {@link Bundle} that is used to save state information.
+     * @param isRecreatingForTabletModeChange Whether the activity is recreated due to a fold
+     *         configuration change. {@code true} if the fold configuration changed, {@code false}
+     *         otherwise.
+     */
+    public void onSaveInstanceState(Bundle outState, boolean isRecreatingForTabletModeChange) {
+        boolean actualKeyboardVisibilityState = false;
+        // TODO (crbug.com/1440558): Move this logic to FoldTransitionController once it is made
+        // non-static.
+        if (FoldTransitionController.shouldSaveKeyboardState(mActivityTabProvider)) {
+            var keyboardVisible = FoldTransitionController.isKeyboardVisible(mActivityTabProvider);
+            if (keyboardVisible) {
+                // The keyboard is currently visible.
+                actualKeyboardVisibilityState = true;
+                mKeyboardVisibleDuringFoldTransition = true;
+                mKeyboardVisibilityTimestamp = SystemClock.elapsedRealtime();
+            } else if (mKeyboardVisibleDuringFoldTransition) {
+                // This is to handle the case when folding a device invokes Activity#onStop twice
+                // (see crbug.com/1426678 for details), thereby invoking #onSaveInstanceState twice.
+                // In this flow, Activity#onPause is also invoked twice, and the first call to
+                // #onPause hides the keyboard if it is visible, while also clearing the previous
+                // instance state. The actual keyboard visibility state during the second invocation
+                // is determined by |mKeyboardVisibleDuringFoldTransition| that will be used only if
+                // it is valid in terms of a timeout within which the fold transition occurs, to
+                // avoid erroneously setting the keyboard state under other circumstances if
+                // |mKeyboardVisibleDuringFoldTransition| is not reset.
+                if (FoldTransitionController.isKeyboardStateValid(mKeyboardVisibilityTimestamp)) {
+                    actualKeyboardVisibilityState = true;
+                }
+                mKeyboardVisibleDuringFoldTransition = false;
+                mKeyboardVisibilityTimestamp = null;
+            }
+        }
+
+        FoldTransitionController.saveUiState(outState, getToolbarManager(),
+                isRecreatingForTabletModeChange, actualKeyboardVisibilityState);
+    }
+
+    /**
+     * Restores the relevant UI state when the activity is recreated on a device fold transition.
+     *
+     * @param savedInstanceState The {@link Bundle} that is used to restore the UI state.
+     */
+    public void restoreUiState(Bundle savedInstanceState) {
+        FoldTransitionController.restoreUiState(savedInstanceState, getToolbarManager(),
+                mLayoutManager, new Handler(), mActivityTabProvider);
     }
 
     // Testing methods

@@ -1,0 +1,5 @@
+// Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+// edge_version.h is generated from edge_version.h.in.  Edit the source!
+
+#define EDGE_FULL_VERSION @EDGE_VERSION@

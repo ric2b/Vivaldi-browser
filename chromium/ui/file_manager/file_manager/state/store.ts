@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {FilesAppEntry} from '../externs/files_app_entry_interfaces.js';
-import {FileData, FileKey, SearchFileType, SearchLocation, SearchOptions, SearchRecency, State} from '../externs/ts/state.js';
+import {FileData, FileKey, SearchLocation, SearchOptions, SearchRecency, State} from '../externs/ts/state.js';
 import {BaseStore} from '../lib/base_store.js';
 
 import {Action} from './actions.js';
@@ -19,8 +19,10 @@ export type Store = BaseStore<State, Action>;
 /**
  * Store singleton instance.
  * It's only exposed via `getStore()` to guarantee it's a single instance.
+ * TODO(b/272120634): Use window.store temporarily, uncomment below code after
+ * the duplicate store issue is resolved.
  */
-let store: null|Store = null;
+// let store: null|Store = null;
 
 /**
  * Returns the singleton instance for the Files app's Store.
@@ -29,12 +31,14 @@ let store: null|Store = null;
  * at the app's main entry point.
  */
 export function getStore(): Store {
-  if (!store) {
-    store =
+  // TODO(b/272120634): Put the store on window to prevent Store being created
+  // twice.
+  if (!window.store) {
+    window.store =
         new BaseStore<State, Action>({allEntries: {}} as State, rootReducer);
   }
 
-  return store;
+  return window.store;
 }
 
 export function getEmptyState(): State {
@@ -54,6 +58,8 @@ export function getEmptyState(): State {
     uiEntries: [],
     folderShortcuts: [],
     androidApps: [],
+    bulkPinning: undefined,
+    preferences: undefined,
   };
 }
 
@@ -64,7 +70,7 @@ export function getDefaultSearchOptions(): SearchOptions {
   return {
     location: SearchLocation.THIS_FOLDER,
     recency: SearchRecency.ANYTIME,
-    type: SearchFileType.ALL_TYPES,
+    fileCategory: chrome.fileManagerPrivate.FileCategory.ALL,
   } as SearchOptions;
 }
 

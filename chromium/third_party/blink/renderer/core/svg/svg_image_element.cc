@@ -39,6 +39,7 @@ namespace blink {
 SVGImageElement::SVGImageElement(Document& document)
     : SVGGraphicsElement(svg_names::kImageTag, document),
       SVGURIReference(this),
+      ActiveScriptWrappable<SVGImageElement>({}),
       is_default_overridden_intrinsic_size_(
           GetExecutionContext() &&
           !GetExecutionContext()->IsFeatureEnabled(
@@ -186,8 +187,7 @@ bool SVGImageElement::SelfHasRelativeLengths() const {
          height_->CurrentValue()->IsRelative();
 }
 
-LayoutObject* SVGImageElement::CreateLayoutObject(const ComputedStyle&,
-                                                  LegacyLayout) {
+LayoutObject* SVGImageElement::CreateLayoutObject(const ComputedStyle&) {
   return MakeGarbageCollected<LayoutSVGImage>(this);
 }
 
@@ -204,17 +204,6 @@ void SVGImageElement::AttachLayoutTree(AttachContext& context) {
       return;
     layout_image_resource->SetImageResource(GetImageLoader().GetContent());
   }
-}
-
-Node::InsertionNotificationRequest SVGImageElement::InsertedInto(
-    ContainerNode& root_parent) {
-  // A previous loader update may have failed to actually fetch the image if
-  // the document was inactive. In that case, force a re-update (but don't
-  // clear previous errors).
-  if (GetImageLoader().ShouldUpdateOnInsertedInto(root_parent))
-    GetImageLoader().UpdateFromElement(ImageLoader::kUpdateNormal);
-
-  return SVGGraphicsElement::InsertedInto(root_parent);
 }
 
 const AtomicString SVGImageElement::ImageSourceURL() const {

@@ -69,8 +69,8 @@
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image_skia_rep.h"
-#include "ui/views/drag_utils.h"
 #include "ui/strings/grit/ui_strings.h"
+#include "ui/views/drag_utils.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -98,6 +98,8 @@ namespace extensions {
 
 const char kVivaldiTabZoom[] = "vivaldi_tab_zoom";
 const char kVivaldiTabMuted[] = "vivaldi_tab_muted";
+// Note. This flag is used in vivaldi_session_util.cc
+// TODO: Get rid of this duplication.
 const char kVivaldiWorkspace[] = "workspaceId";
 
 const int& VivaldiPrivateTabObserver::kUserDataKey =
@@ -128,10 +130,10 @@ bool IsTabInAWorkspace(const std::string& viv_extdata) {
 absl::optional<double> GetTabWorkspaceId(const std::string& viv_extdata) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   absl::optional<base::Value> json =
-     base::JSONReader::Read(viv_extdata, options);
-  absl::optional<double>value;
+      base::JSONReader::Read(viv_extdata, options);
+  absl::optional<double> value;
   if (json && json->is_dict()) {
-    value = json->FindDoubleKey(kVivaldiWorkspace);
+    value = json->GetDict().FindDouble(kVivaldiWorkspace);
   }
   return value;
 }
@@ -226,9 +228,9 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
 class TabMutingHandler : public content_settings::Observer {
   using TabsAutoMutingValues = vivaldiprefs::TabsAutoMutingValues;
 
-  HostContentSettingsMap* host_content_settings_map_;
+  const raw_ptr<Profile> profile_;
+  const raw_ptr<HostContentSettingsMap> host_content_settings_map_;
   PrefChangeRegistrar prefs_registrar_;
-  Profile* profile_;
   TabsAutoMutingValues muteRule_ = TabsAutoMutingValues::kOff;
   // NOTE(andre@vivaldi.com) : This is per profile so make sure the handler
   // takes this into account.
@@ -279,9 +281,10 @@ class TabMutingHandler : public content_settings::Observer {
   }
 
  public:
-  TabMutingHandler(Profile* profile) : profile_(profile) {
-    host_content_settings_map_ =
-        HostContentSettingsMapFactory::GetForProfile(profile_);
+  TabMutingHandler(Profile* profile)
+      : profile_(profile),
+        host_content_settings_map_(
+            HostContentSettingsMapFactory::GetForProfile(profile_)) {
     observer_.Observe(host_content_settings_map_);
 
     prefs_registrar_.Init(profile_->GetPrefs());
@@ -504,7 +507,7 @@ void VivaldiPrivateTabObserver::RenderFrameCreated(
   absl::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
   if (::vivaldi::IsTabZoomEnabled(web_contents())) {
     absl::optional<double> zoom =
-        json ? json->FindDoubleKey(kVivaldiTabZoom) : absl::nullopt;
+        json ? json->GetDict().FindDouble(kVivaldiTabZoom) : absl::nullopt;
     if (zoom) {
       tab_zoom_level_ = *zoom;
     } else {
@@ -678,8 +681,7 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double new_level,
         content::HostZoomMap::GetForWebContents(web_contents());
 
     host_zoom_map_->SetTemporaryZoomLevel(
-      web_contents()->GetPrimaryMainFrame()->GetGlobalId(),
-      tab_zoom_level_);
+        web_contents()->GetPrimaryMainFrame()->GetGlobalId(), tab_zoom_level_);
   }
 }
 
@@ -732,7 +734,8 @@ void VivaldiPrivateTabObserver::MoveSpatnavRect(
     JSSpatnavRectCallback callback) {
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
       web_contents()->GetPrimaryMainFrame());
-  rfhi->GetVivaldiFrameService()->MoveSpatnavRect(direction,
+  rfhi->GetVivaldiFrameService()->MoveSpatnavRect(
+      direction,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&VivaldiPrivateTabObserver::SpatnavRectReceived,
                          weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
@@ -973,8 +976,8 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
   using tabs_private::Update::Params;
   namespace Results = tabs_private::Update::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   tabs_private::UpdateTabInfo* info = &params->tab_info;
   std::string error;
@@ -1002,8 +1005,8 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
   using tabs_private::Get::Params;
   namespace Results = tabs_private::Get::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
   VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
@@ -1020,8 +1023,8 @@ ExtensionFunction::ResponseAction TabsPrivateGetFunction::Run() {
 ExtensionFunction::ResponseAction TabsPrivateInsertTextFunction::Run() {
   using tabs_private::InsertText::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
   ::vivaldi::mojom::VivaldiFrameService* frame_service =
@@ -1040,7 +1043,7 @@ TabsPrivateStartDragFunction::~TabsPrivateStartDragFunction() = default;
 ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   using tabs_private::StartDrag::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
+  absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   SessionID::id_type window_id = params->drag_data.window_id;
@@ -1107,8 +1110,8 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
       CHECK(addr == image_data->data());
     };
     bool success = bitmap->installPixels(image_info, raw_image.data(),
-                                        image_info.minRowBytes(),
-                                        release_pixels, &raw_image);
+                                         image_info.minRowBytes(),
+                                         release_pixels, &raw_image);
     OnCaptureDone(window_id, success, 1.0, *bitmap);
     return AlreadyResponded();
   }
@@ -1168,8 +1171,8 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
   using tabs_private::ScrollPage::Params;
   namespace Results = tabs_private::ScrollPage::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   absl::optional<::vivaldi::mojom::ScrollType> scroll_type;
   static const std::pair<base::StringPiece, ::vivaldi::mojom::ScrollType>
@@ -1224,8 +1227,8 @@ ExtensionFunction::ResponseAction
 TabsPrivateGetCurrentSpatnavRectFunction::Run() {
   using tabs_private::GetCurrentSpatnavRect::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
   VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
@@ -1233,8 +1236,7 @@ TabsPrivateGetCurrentSpatnavRectFunction::Run() {
   if (!tab_api)
     return RespondNow(Error(error));
   tab_api->GetCurrentSpatnavRect(base::BindOnce(
-      &TabsPrivateGetCurrentSpatnavRectFunction::SpatnavRectReceived,
-      this));
+      &TabsPrivateGetCurrentSpatnavRectFunction::SpatnavRectReceived, this));
   return RespondLater();
 }
 
@@ -1253,12 +1255,11 @@ void TabsPrivateMoveSpatnavRectFunction::SpatnavRectReceived(
   Respond(ArgumentList(Results::Create(results)));
 }
 
-ExtensionFunction::ResponseAction
-TabsPrivateMoveSpatnavRectFunction::Run() {
+ExtensionFunction::ResponseAction TabsPrivateMoveSpatnavRectFunction::Run() {
   using tabs_private::MoveSpatnavRect::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   ::vivaldi::mojom::SpatnavDirection dir;
   switch (params->direction) {
@@ -1293,8 +1294,8 @@ ExtensionFunction::ResponseAction
 TabsPrivateActivateSpatnavElementFunction::Run() {
   using tabs_private::ActivateSpatnavElement::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   int modifiers = params->modifiers;
 
@@ -1312,8 +1313,8 @@ ExtensionFunction::ResponseAction
 TabsPrivateCloseSpatnavOrCurrentOpenMenuFunction::Run() {
   using tabs_private::CloseSpatnavOrCurrentOpenMenu::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
   ::vivaldi::mojom::VivaldiFrameService* frame_service =
@@ -1343,8 +1344,8 @@ TabsPrivateHasBeforeUnloadOrUnloadFunction::Run() {
   using tabs_private::HasBeforeUnloadOrUnload::Params;
   namespace Results = tabs_private::HasBeforeUnloadOrUnload::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   content::WebContents* contents =
       ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
@@ -1357,8 +1358,8 @@ ExtensionFunction::ResponseAction TabsPrivateTranslatePageFunction::Run() {
   using tabs_private::TranslatePage::Params;
   namespace Results = tabs_private::TranslatePage::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string source = params->src_lang;
   std::string dest = params->dest_lang;
@@ -1385,8 +1386,8 @@ TabsPrivateRevertTranslatePageFunction::Run() {
   using tabs_private::RevertTranslatePage::Params;
   namespace Results = tabs_private::RevertTranslatePage::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   content::WebContents* contents =
       ::vivaldi::ui_tools::GetWebContentsFromTabStrip(
@@ -1404,8 +1405,8 @@ ExtensionFunction::ResponseAction
 TabsPrivateDetermineTextLanguageFunction::Run() {
   using tabs_private::DetermineTextLanguage::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::string error;
   VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(

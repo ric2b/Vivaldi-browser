@@ -36,9 +36,17 @@
 
 namespace media_router {
 
+BASE_FEATURE(kMediaRouterOTRInstance,
+             "MediaRouterOTRInstance",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kCafMRPDeferredDiscovery,
              "CafMRPDeferredDiscovery",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kCastAnotherContentWhileCasting,
+             "CastAnotherContentWhileCasting",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #else
 BASE_FEATURE(kMediaRouter, "MediaRouter", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -54,7 +62,12 @@ BASE_FEATURE(kDialMediaRouteProvider,
 BASE_FEATURE(kStartCastSessionWithoutTerminating,
              "StartCastSessionWithoutTerminating",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
+BASE_FEATURE(kFallbackToAudioTabMirroring,
+             "FallbackToAudioTabMirroring",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kCastDialogStopButton,
+             "CastDialogStopButton",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #if BUILDFLAG(IS_CHROMEOS)
 BASE_FEATURE(kGlobalMediaControlsCastStartStop,
              "GlobalMediaControlsCastStartStop",
@@ -64,7 +77,6 @@ BASE_FEATURE(kGlobalMediaControlsCastStartStop,
              "GlobalMediaControlsCastStartStop",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS)
-
 #endif  // BUILDFLAG(IS_ANDROID)
 
 namespace {
@@ -98,9 +110,12 @@ bool MediaRouterEnabled(content::BrowserContext* context) {
     return false;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-  // The MediaRouter service is shared across the original and the incognito
-  // profiles, so we must use the original context for consistency between them.
-  context = chrome::GetBrowserContextRedirectedInIncognito(context);
+  if (!base::FeatureList::IsEnabled(kMediaRouterOTRInstance)) {
+    // The MediaRouter service is shared across the original and the incognito
+    // profiles, so we must use the original context for consistency between
+    // them.
+    context = chrome::GetBrowserContextRedirectedInIncognito(context);
+  }
 
   // If the Media Router was already enabled or disabled for |context|, then it
   // must remain so.  The Media Router does not support dynamic

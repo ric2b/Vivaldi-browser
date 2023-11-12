@@ -4,12 +4,12 @@
 
 #include "chrome/updater/configurator.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/containers/flat_map.h"
-#include "base/cxx17_backports.h"
 #include "base/enterprise_util.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
@@ -56,7 +56,14 @@ Configurator::Configurator(scoped_refptr<UpdaterPrefs> prefs,
       unzip_factory_(
           base::MakeRefCounted<update_client::InProcessUnzipperFactory>()),
       patch_factory_(
-          base::MakeRefCounted<update_client::InProcessPatcherFactory>()) {
+          base::MakeRefCounted<update_client::InProcessPatcherFactory>()),
+      is_managed_device_([]() {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+        return base::IsManagedOrEnterpriseDevice();
+#else
+        return absl::nullopt;
+#endif
+      }()) {
 #if BUILDFLAG(IS_LINUX)
   // On Linux creating the NetworkFetcherFactory requires performing blocking IO
   // to load an external library. This should be done when the configurator is
@@ -71,7 +78,7 @@ base::TimeDelta Configurator::InitialDelay() const {
 }
 
 base::TimeDelta Configurator::ServerKeepAliveTime() const {
-  return base::clamp(external_constants_->ServerKeepAliveTime(),
+  return std::clamp(external_constants_->ServerKeepAliveTime(),
                      base::Seconds(1), kServerKeepAliveTime);
 }
 
@@ -95,6 +102,14 @@ std::vector<GURL> Configurator::UpdateUrl() const {
 
 std::vector<GURL> Configurator::PingUrl() const {
   return UpdateUrl();
+}
+
+GURL Configurator::CrashUploadURL() const {
+  return external_constants_->CrashUploadURL();
+}
+
+GURL Configurator::DeviceManagementURL() const {
+  return external_constants_->DeviceManagementURL();
 }
 
 std::string Configurator::GetProdId() const {
@@ -186,23 +201,7 @@ Configurator::GetProtocolHandlerFactory() const {
 }
 
 absl::optional<bool> Configurator::IsMachineExternallyManaged() const {
-#if BUILDFLAG(IS_WIN)
-  // TODO (crbug.com/1320776): For legacy compatibility, this uses
-  // base::IsEnrolledToDomain(). It cannot use IsEnterpriseDevice() because
-  // checking for AAD-join status involves a potentially blocking which is
-  // currently not allowed in this method.
-  // Consider whether this should use IsManagedDevice() instead.
-  return base::win::IsEnrolledToDomain();
-#elif BUILDFLAG(IS_MAC)
-  // TODO (crbug.com/1320776): For legacy compatibility, this uses
-  // IsEnterpriseDevice() which effectively equates to a domain join check.
-  // IsManagedDevice() involves potentially blocking calls which are currently
-  // not allowed in this method.
-  // Consider whether this should use IsManagedDevice() instead.
-  return base::IsEnterpriseDevice();
-#else
-  return absl::nullopt;
-#endif
+  return is_managed_device_;
 }
 
 scoped_refptr<PolicyService> Configurator::GetPolicyService() const {

@@ -104,8 +104,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
                          content::RenderFrameHost* sender) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
-                     const GURL& validated_url) override;
+  void DocumentOnLoadCompletedInPrimaryMainFrame() override;
   void PrimaryMainDocumentElementAvailable() override;
   void BeforeUnloadFired(bool proceed) override;
 
@@ -115,7 +114,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
 
   bool has_resumed_ = false;
 
-  VivaldiBrowserWindow* window_;  // owner
+  const raw_ptr<VivaldiBrowserWindow> window_;  // owner
 };
 
 #endif  // UI_VIVALDI_APP_WINDOW_CONTENTS_H_

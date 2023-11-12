@@ -54,10 +54,10 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
 
   virtual bool IsDocumentTimeline() const { return false; }
   virtual bool IsScrollTimeline() const { return false; }
-  virtual bool IsCSSScrollTimeline() const { return false; }
   virtual bool IsViewTimeline() const { return false; }
 
   virtual bool IsActive() const = 0;
+  virtual bool IsResolved() const { return true; }
   virtual AnimationTimeDelta ZeroTime() = 0;
   // https://w3.org/TR/web-animations-1/#monotonically-increasing-timeline
   // A timeline is monotonically increasing if its reported current time is
@@ -72,21 +72,18 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
   // Changing scroll-linked animation start_time initialization is under
   // consideration here: https://github.com/w3c/csswg-drafts/issues/2075.
   virtual absl::optional<base::TimeDelta> InitialStartTimeForAnimations() = 0;
+
   virtual AnimationTimeDelta CalculateIntrinsicIterationDuration(
-      const Animation*,
+      const absl::optional<TimelineOffset>& rangeStart,
+      const absl::optional<TimelineOffset>& rangeEnd,
       const Timing&) {
     return AnimationTimeDelta();
   }
 
-  // Converts timeline offsets to start and end delays in time units based on
-  // the timeline duration. In the event that the timeline is not an instance
-  // of a view timeline, the delays are zero.
-  using TimeDelayPair = std::pair<AnimationTimeDelta, AnimationTimeDelta>;
-  virtual TimeDelayPair ComputeEffectiveAnimationDelays(
-      const Animation* animation,
-      const Timing& timing) const {
-    return std::make_pair(timing.start_delay.AsTimeValue(),
-                          timing.end_delay.AsTimeValue());
+  virtual AnimationTimeDelta CalculateIntrinsicIterationDuration(
+      const Animation*,
+      const Timing&) {
+    return AnimationTimeDelta();
   }
 
   Document* GetDocument() const { return document_; }
@@ -100,7 +97,8 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
   // Schedules animation timing update on next frame.
   virtual void ScheduleServiceOnNextFrame();
 
-  Animation* Play(AnimationEffect*, ExceptionState& = ASSERT_NO_EXCEPTION);
+  virtual Animation* Play(AnimationEffect*,
+                          ExceptionState& = ASSERT_NO_EXCEPTION);
 
   virtual bool NeedsAnimationTimingUpdate();
   virtual bool HasAnimations() const { return !animations_.empty(); }

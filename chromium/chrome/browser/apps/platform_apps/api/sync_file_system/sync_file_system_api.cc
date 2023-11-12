@@ -398,13 +398,13 @@ SyncFileSystemSetConflictResolutionPolicyFunction::Run() {
     return RespondNow(Error(base::StringPrintf(
         kUnsupportedConflictResolutionPolicy, policy_string.c_str())));
   }
-  return RespondNow(WithArguments());
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
 SyncFileSystemGetConflictResolutionPolicyFunction::Run() {
   return RespondNow(WithArguments(sync_file_system::ToString(
-      sync_file_system::CONFLICT_RESOLUTION_POLICY_LAST_WRITE_WIN)));
+      sync_file_system::ConflictResolutionPolicy::kLastWriteWin)));
 }
 
 ExtensionFunction::ResponseAction

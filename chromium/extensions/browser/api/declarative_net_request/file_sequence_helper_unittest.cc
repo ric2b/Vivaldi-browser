@@ -35,11 +35,10 @@ namespace declarative_net_request {
 namespace {
 
 api::declarative_net_request::Rule GetAPIRule(const TestRule& rule) {
-  base::Value value(rule.ToValue());
   api::declarative_net_request::Rule result;
   std::u16string error;
-  EXPECT_TRUE(
-      api::declarative_net_request::Rule::Populate(value, &result, &error))
+  EXPECT_TRUE(api::declarative_net_request::Rule::Populate(rule.ToValue(),
+                                                           result, error))
       << error;
   EXPECT_TRUE(error.empty()) << error;
   return result;
@@ -343,8 +342,7 @@ TEST_F(FileSequenceHelperTest, UpdateDynamicRules) {
   {
     base::ScopedAllowBlockingForTesting allow_blocking_for_testing;
     std::string data = "Invalid JSON";
-    ASSERT_EQ(data.size(), static_cast<size_t>(base::WriteFile(
-                               source.json_path(), data.c_str(), data.size())));
+    ASSERT_TRUE(base::WriteFile(source.json_path(), data));
   }
 
   {

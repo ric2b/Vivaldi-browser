@@ -72,8 +72,8 @@ class VivaldiQuitConfirmationDialog : public views::DialogDelegateView {
 
   QuitCallback quit_callback_;
 
-  views::Label* label_;
-  views::Checkbox* checkbox_ = nullptr;
+  raw_ptr<views::Label> label_ = nullptr;
+  raw_ptr<views::Checkbox> checkbox_ = nullptr;
 
   // The dialog takes ownership of the delegate
   std::unique_ptr<VivaldiDialogDelegate> delegate_;

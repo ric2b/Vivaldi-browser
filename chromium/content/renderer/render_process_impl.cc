@@ -40,7 +40,6 @@
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_frame.h"
-#include "third_party/blink/public/web/web_v8_features.h"
 #include "v8/include/v8-initialization.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -62,9 +61,17 @@ void SetV8FlagIfFeature(const base::Feature& feature, const char* v8_flag) {
   }
 }
 
-void SetV8FlagIfNotFeature(const base::Feature& feature, const char* v8_flag) {
-  if (!base::FeatureList::IsEnabled(feature)) {
-    v8::V8::SetFlagsFromString(v8_flag, strlen(v8_flag));
+void SetV8FlagIfOverridden(const base::Feature& feature,
+                           const char* enabling_flag,
+                           const char* disabling_flag) {
+  auto overridden_state = base::FeatureList::GetStateIfOverridden(feature);
+  if (!overridden_state.has_value()) {
+    return;
+  }
+  if (overridden_state.value()) {
+    v8::V8::SetFlagsFromString(enabling_flag, strlen(enabling_flag));
+  } else {
+    v8::V8::SetFlagsFromString(disabling_flag, strlen(disabling_flag));
   }
 }
 
@@ -129,6 +136,11 @@ RenderProcessImpl::RenderProcessImpl()
     v8::V8::SetFlagsFromString(optimize_flag.c_str(), optimize_flag.size());
   }
 
+  /////////////////////////////////////////////////////////////////////////////
+  // V8 flags are typically set in gin/v8_initializer.cc. Only those flags
+  // should be set here that cannot be set in gin/v8_initializer.cc because
+  // e.g. the flag can be set in chrome://flags.
+  /////////////////////////////////////////////////////////////////////////////
   SetV8FlagIfHasSwitch(switches::kDisableJavaScriptHarmonyShipping,
                        "--noharmony-shipping");
   SetV8FlagIfHasSwitch(switches::kJavaScriptHarmony, "--harmony");
@@ -138,47 +150,47 @@ RenderProcessImpl::RenderProcessImpl()
   SetV8FlagIfFeature(features::kJavaScriptExperimentalSharedMemory,
                      "--shared-string-table --harmony-struct");
 
-  SetV8FlagIfFeature(features::kJavaScriptArrayGrouping,
-                     "--harmony-array-grouping");
-  SetV8FlagIfNotFeature(features::kJavaScriptArrayGrouping,
+  SetV8FlagIfOverridden(features::kJavaScriptArrayGrouping,
+                        "--harmony-array-grouping",
                         "--no-harmony-array-grouping");
 
-  SetV8FlagIfFeature(features::kV8VmFuture, "--future");
-  SetV8FlagIfNotFeature(features::kV8VmFuture, "--no-future");
+  SetV8FlagIfOverridden(features::kV8VmFuture, "--future", "--no-future");
 
-  SetV8FlagIfFeature(features::kWebAssemblyBaseline, "--liftoff");
-  SetV8FlagIfNotFeature(features::kWebAssemblyBaseline, "--no-liftoff");
+  SetV8FlagIfOverridden(features::kWebAssemblyBaseline, "--liftoff",
+                        "--no-liftoff");
 
 #if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
   // V8's WASM stack switching support is sufficient to enable JavaScript
   // Promise Integration.
-  SetV8FlagIfFeature(features::kEnableExperimentalWebAssemblyJSPI,
-                     "--experimental-wasm-stack-switching");
-  SetV8FlagIfNotFeature(features::kEnableExperimentalWebAssemblyJSPI,
+  SetV8FlagIfOverridden(features::kEnableExperimentalWebAssemblyJSPI,
+                        "--experimental-wasm-stack-switching",
                         "--no-experimental-wasm-stack-switching");
 #endif  // defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_ARM64)
 
-  SetV8FlagIfFeature(features::kWebAssemblyGarbageCollection,
-                     "--experimental-wasm-gc");
-  SetV8FlagIfNotFeature(features::kWebAssemblyGarbageCollection,
-                        "--no-experimental-wasm-gc");
+  SetV8FlagIfOverridden(features::kWebAssemblyGarbageCollection,
+                        "--experimental-wasm-gc", "--no-experimental-wasm-gc");
 
-  SetV8FlagIfFeature(features::kWebAssemblyLazyCompilation,
-                     "--wasm-lazy-compilation");
-  SetV8FlagIfNotFeature(features::kWebAssemblyLazyCompilation,
+  SetV8FlagIfOverridden(features::kWebAssemblyLazyCompilation,
+                        "--wasm-lazy-compilation",
                         "--no-wasm-lazy-compilation");
 
-  SetV8FlagIfFeature(features::kWebAssemblyRelaxedSimd,
-                     "--experimental-wasm-relaxed-simd");
-  SetV8FlagIfNotFeature(features::kWebAssemblyRelaxedSimd,
+  SetV8FlagIfOverridden(features::kWebAssemblyRelaxedSimd,
+                        "--experimental-wasm-relaxed-simd",
                         "--no-experimental-wasm-relaxed-simd");
+
+  SetV8FlagIfOverridden(features::kWebAssemblyStringref,
+                        "--experimental-wasm-stringref",
+                        "--no-experimental-wasm-stringref");
+
+  SetV8FlagIfOverridden(features::kWebAssemblyTiering, "--wasm-tier-up",
+                        "--no-wasm-tier-up");
+
+  SetV8FlagIfOverridden(features::kWebAssemblyDynamicTiering,
+                        "--wasm-dynamic-tiering", "--no-wasm-dynamic-tiering");
 
   constexpr char kImportAssertionsFlag[] = "--harmony-import-assertions";
   v8::V8::SetFlagsFromString(kImportAssertionsFlag,
                              sizeof(kImportAssertionsFlag));
-
-  constexpr char kAtomicsFlag[] = "--harmony-atomics";
-  v8::V8::SetFlagsFromString(kAtomicsFlag, sizeof(kAtomicsFlag));
 
   bool enable_shared_array_buffer_unconditionally =
       base::FeatureList::IsEnabled(features::kSharedArrayBuffer);
@@ -199,12 +211,6 @@ RenderProcessImpl::RenderProcessImpl()
   }
 #endif
 
-  // The following line enables V8 support for SharedArrayBuffer. Note that the
-  // SharedArrayBuffer constructor will be added to every global object only if
-  // the v8 flag `sharedarraybuffer-per-context` is disabled (cf. next block of
-  // code).
-  blink::WebV8Features::EnableSharedArrayBuffer();
-
   if (!enable_shared_array_buffer_unconditionally) {
     // It is still possible to enable SharedArrayBuffer per context using the
     // `SharedArrayBufferConstructorEnabledCallback`. This will be done if the
@@ -214,14 +220,6 @@ RenderProcessImpl::RenderProcessImpl()
         "--enable-sharedarraybuffer-per-context";
     v8::V8::SetFlagsFromString(kSABPerContextFlag, sizeof(kSABPerContextFlag));
   }
-
-  SetV8FlagIfFeature(features::kWebAssemblyTiering, "--wasm-tier-up");
-  SetV8FlagIfNotFeature(features::kWebAssemblyTiering, "--no-wasm-tier-up");
-
-  SetV8FlagIfFeature(features::kWebAssemblyDynamicTiering,
-                     "--wasm-dynamic-tiering");
-  SetV8FlagIfNotFeature(features::kWebAssemblyDynamicTiering,
-                        "--no-wasm-dynamic-tiering");
 
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && defined(ARCH_CPU_X86_64)
   if (base::FeatureList::IsEnabled(features::kWebAssemblyTrapHandler)) {

@@ -34,7 +34,7 @@ namespace ash {
 namespace {
 
 constexpr auto kScrollViewMargin = gfx::Insets::TLBR(0, 12, 16, 12);
-constexpr auto kTileMargin = gfx::Insets::TLBR(1, 4, 8, 4);
+constexpr auto kTileMargin = gfx::Insets::TLBR(4, 4, 8, 4);
 constexpr auto kSliderPadding = gfx::Insets::TLBR(4, 0, 0, 0);
 constexpr auto kSliderBorder = gfx::Insets::VH(0, 4);
 
@@ -47,7 +47,6 @@ DisplayDetailedView::DisplayDetailedView(
       unified_system_tray_controller_(tray_controller) {
   CreateScrollableList();
   CreateTitleRow(IDS_ASH_STATUS_TRAY_DISPLAY);
-  CreateTitleSettingsButton();
   // Sets the margin for `ScrollView` to leave some space for the focus ring.
   scroller()->SetProperty(views::kMarginsKey, kScrollViewMargin);
 
@@ -105,7 +104,7 @@ views::View* DisplayDetailedView::GetScrollContentForTest() {
   return scroll_content();
 }
 
-void DisplayDetailedView::CreateTitleSettingsButton() {
+void DisplayDetailedView::CreateExtraTitleRowButtons() {
   DCHECK(!settings_button_);
 
   tri_view()->SetContainerVisible(TriView::Container::END, /*visible=*/true);

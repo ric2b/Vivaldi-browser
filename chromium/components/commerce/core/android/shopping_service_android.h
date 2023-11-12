@@ -73,9 +73,27 @@ class ShoppingServiceAndroid : public base::SupportsUserData::Data,
                    const JavaParamRef<jstring>& j_id,
                    const JavaParamRef<jobject>& j_callback);
 
+  void IsSubscribed(JNIEnv* env,
+                    const JavaParamRef<jobject>& obj,
+                    jint j_type,
+                    jint j_id_type,
+                    jint j_management_type,
+                    const JavaParamRef<jstring>& j_id,
+                    const JavaParamRef<jobject>& j_callback);
+
+  bool IsSubscribedFromCache(JNIEnv* env,
+                             const JavaParamRef<jobject>& obj,
+                             jint j_type,
+                             jint j_id_type,
+                             jint j_management_type,
+                             const JavaParamRef<jstring>& j_id);
+
   bool IsShoppingListEligible(JNIEnv* env, const JavaParamRef<jobject>& obj);
 
   bool IsMerchantViewerEnabled(JNIEnv* env, const JavaParamRef<jobject>& obj);
+
+  bool IsCommercePriceTrackingEnabled(JNIEnv* env,
+                                      const JavaParamRef<jobject>& obj);
 
   ScopedJavaGlobalRef<jobject> java_ref() { return java_ref_; }
 
@@ -90,12 +108,8 @@ class ShoppingServiceAndroid : public base::SupportsUserData::Data,
                                   const GURL& url,
                                   absl::optional<MerchantInfo> info);
 
-  void OnSubscribe(const std::vector<CommerceSubscription>& subscriptions,
-                   bool succeeded) override;
-  void OnUnsubscribe(const std::vector<CommerceSubscription>& subscriptions,
-                     bool succeeded) override;
-  ScopedJavaLocalRef<jobject> ConvertSubscriptionsToJavaList(
-      const std::vector<CommerceSubscription>& subscriptions);
+  void OnSubscribe(const CommerceSubscription& sub, bool succeeded) override;
+  void OnUnsubscribe(const CommerceSubscription& sub, bool succeeded) override;
 
   // A handle to the backing shopping service. This is held as a raw pointer
   // since this object's lifecycle is tied to the service itself. This object

@@ -393,7 +393,7 @@ ci.builder(
     name = "ToTiOS",
     builderless = False,
     cores = None,
-    os = os.MAC_12,
+    os = os.MAC_DEFAULT,
     ssd = True,
     console_view_entry = consoles.console_view_entry(
         category = "iOS|public",
@@ -406,7 +406,7 @@ ci.builder(
     name = "ToTiOSDevice",
     builderless = False,
     cores = None,
-    os = os.MAC_12,
+    os = os.MAC_DEFAULT,
     ssd = True,
     console_view_entry = consoles.console_view_entry(
         category = "iOS|public",
@@ -422,6 +422,7 @@ clang_mac_builder(
         category = "ToT Mac",
         short_name = "rel",
     ),
+    execution_timeout = 16 * time.hour,
 )
 
 clang_mac_builder(
@@ -431,6 +432,7 @@ clang_mac_builder(
         category = "ToT Mac",
         short_name = "dbg",
     ),
+    execution_timeout = 16 * time.hour,
 )
 
 clang_mac_builder(
@@ -440,6 +442,7 @@ clang_mac_builder(
         category = "ToT Mac",
         short_name = "asn",
     ),
+    execution_timeout = 16 * time.hour,
 )
 
 clang_mac_builder(

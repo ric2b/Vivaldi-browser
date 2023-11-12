@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include "base/cxx17_backports.h"
 #include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -261,7 +260,13 @@ bool GestureDetector::OnTouchEvent(const MotionEvent& ev,
         timeout_handler_->StartTimeout(SHORT_PRESS);
         timeout_handler_->StartTimeout(LONG_PRESS);
       }
-      handled |= listener_->OnDown(ev);
+
+      // Number of complete taps that have occurred in the current tap sequence.
+      int previous_tap_count = is_down_candidate_for_repeated_single_tap_
+                                   ? (1 + current_single_tap_repeat_count_) %
+                                         single_tap_repeat_interval_
+                                   : 0;
+      handled |= listener_->OnDown(ev, 1 + previous_tap_count);
     } break;
 
     case MotionEvent::Action::MOVE: {
@@ -441,7 +446,7 @@ void GestureDetector::Init(const Config& config) {
   DCHECK_GT(config.maximum_swipe_deviation_angle, 0);
   DCHECK_LE(config.maximum_swipe_deviation_angle, 45);
   const float maximum_swipe_deviation_angle =
-      base::clamp(config.maximum_swipe_deviation_angle, 0.001f, 45.0f);
+      std::clamp(config.maximum_swipe_deviation_angle, 0.001f, 45.0f);
   min_swipe_direction_component_ratio_ =
       1.f / tan(gfx::DegToRad(maximum_swipe_deviation_angle));
 

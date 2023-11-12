@@ -224,6 +224,8 @@ const char PeopleHandler::kConfigurePageStatus[] = "configure";
 const char PeopleHandler::kDonePageStatus[] = "done";
 const char PeopleHandler::kPassphraseFailedPageStatus[] = "passphraseFailed";
 
+// TODO(crbug/1420597): Delete parts needed only by PasswordManager once
+// kPasswordManagerRedesign is launched.
 PeopleHandler::PeopleHandler(Profile* profile)
     : profile_(profile), configuring_sync_(false) {}
 
@@ -592,7 +594,7 @@ void PeopleHandler::HandleShowSyncSetupUI(const base::Value::List& args) {
   // Sync was set up but then was reset via the dashboard. This also pokes the
   // SyncService to start up immediately, i.e. bypass deferred startup.
   if (service)
-    service->GetUserSettings()->SetSyncRequested(true);
+    service->SetSyncFeatureRequested();
 
   GetLoginUIService()->SetLoginUI(this);
 
@@ -1076,7 +1078,7 @@ void PeopleHandler::MarkFirstSetupComplete() {
   // Note that this has to happen *before* checking if first-time setup is
   // already marked complete, because on some platforms (e.g. ChromeOS) that
   // gets set automatically.
-  service->GetUserSettings()->SetSyncRequested(true);
+  service->SetSyncFeatureRequested();
 
   // If the first-time setup is already complete, there's nothing else to do.
   if (service->GetUserSettings()->IsFirstSetupComplete())

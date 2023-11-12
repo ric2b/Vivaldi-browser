@@ -499,6 +499,15 @@ namespace {
 size_t CountPaintOpType(const cc::PaintRecord& record, cc::PaintOpType type) {
   size_t count = 0;
   for (const cc::PaintOp& op : record) {
+    if (op.IsPaintOpWithFlags()) {
+      const cc::PaintFlags& flags =
+          static_cast<const cc::PaintOpWithFlags&>(op).flags;
+      if (const cc::PaintShader* shader = flags.getShader()) {
+        if (shader->shader_type() == cc::PaintShader::Type::kPaintRecord) {
+          count += CountPaintOpType(*shader->paint_record(), type);
+        }
+      }
+    }
     if (op.GetType() == type) {
       ++count;
     } else if (op.GetType() == cc::PaintOpType::DrawRecord) {
@@ -557,6 +566,51 @@ TEST_F(SVGImageSimTest, SpriteSheetCulling) {
   Compositor().BeginFrame();
   record = GetDocument().View()->GetPaintRecord();
   EXPECT_EQ(3U, CountPaintOpType(record, cc::PaintOpType::DrawOval));
+}
+
+// Tests the culling of invisible sprites from a larger sprite sheet where the
+// element also has a border-radius. This is intended to cover the
+// Image::ApplyShader() fast-path in GraphicsContext::DrawImageRRect().
+TEST_F(SVGImageSimTest, SpriteSheetCullingBorderRadius) {
+  WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
+  SimRequest main_resource("https://example.com/", "text/html");
+  LoadURL("https://example.com/");
+  main_resource.Complete(
+      "<style>"
+      "  body { zoom: 2.5; }"
+      "  #div {"
+      "    width: 100px;"
+      "    height: 100px;"
+      "    background-image: url(\"data:image/svg+xml,"
+      "      <svg xmlns='http://www.w3.org/2000/svg' width='100' height='300'>"
+      "        <circle cx='50' cy='50' r='10' fill='red'/>"
+      "        <circle cx='50' cy='150' r='10' fill='green'/>"
+      "        <circle cx='25' cy='250' r='10' fill='blue'/>"
+      "        <circle cx='50' cy='250' r='10' fill='blue'/>"
+      "        <circle cx='75' cy='250' r='10' fill='blue'/>"
+      "      </svg>\");"
+      "    background-position-y: -100px;"
+      "    background-repeat: no-repeat;"
+      "    border-radius: 5px;"
+      "  }"
+      "</style>"
+      "<div id='div'></div>");
+
+  Compositor().BeginFrame();
+
+  // Initially, only the green circle should be recorded.
+  PaintRecord record = GetDocument().View()->GetPaintRecord();
+  EXPECT_EQ(1U, CountPaintOpType(record, cc::PaintOpType::DrawRRect));
+  EXPECT_EQ(1U, CountPaintOpType(record, cc::PaintOpType::DrawOval));
+
+  // Adjust the height so one green circle and three blue circles are visible,
+  // and ensure four circles are recorded.
+  Element* div = GetDocument().getElementById("div");
+  div->setAttribute(html_names::kStyleAttr, "height: 200px;");
+  Compositor().BeginFrame();
+  record = GetDocument().View()->GetPaintRecord();
+  EXPECT_EQ(1U, CountPaintOpType(record, cc::PaintOpType::DrawRRect));
+  EXPECT_EQ(4U, CountPaintOpType(record, cc::PaintOpType::DrawOval));
 }
 
 // Similar to `SpriteSheetCulling` but using a full-sized sprite sheet <img>
@@ -672,6 +726,14 @@ TEST_F(SVGImageSimTest, ClippedStaticImageSpriteSheetCulling) {
   Compositor().BeginFrame();
   record = GetDocument().View()->GetPaintRecord();
   EXPECT_EQ(3U, CountPaintOpType(record, cc::PaintOpType::DrawOval));
+
+  // Adjust the div's position to be fractional and ensure only three blue
+  // circles are still recorded.
+  div_element->setAttribute(html_names::kStyleAttr,
+                            "margin-left: 0.5px; height: 200px;");
+  Compositor().BeginFrame();
+  record = GetDocument().View()->GetPaintRecord();
+  EXPECT_EQ(3U, CountPaintOpType(record, cc::PaintOpType::DrawOval));
 }
 
 // Similar to `SpriteSheetCulling` but using a regular scrolling interest rect
@@ -749,12 +811,24 @@ TEST_F(SVGImageSimTest, SpriteSheetNonDrawingCulling) {
       "    height: 100px;"
       "    background-image: url(\"data:image/svg+xml,"
       "      <svg xmlns='http://www.w3.org/2000/svg' width='100' height='300'>"
+      "        <g mask='url(does_not_exist)'>"
+      "          <circle cx='25' cy='50' r='10' fill='red'/>"
+      "        </g>"
       "        <g transform='translate(50, 50)'>"
       "          <circle cx='0' cy='0' r='10' fill='red'/>"
       "        </g>"
+      "        <g filter='blur(1px)'>"
+      "          <circle cx='75' cy='50' r='10' fill='red'/>"
+      "        </g>"
       "        <circle cx='50' cy='150' r='10' fill='green'/>"
+      "        <g mask='url(does_not_exist)'>"
+      "          <circle cx='25' cy='250' r='10' fill='red'/>"
+      "        </g>"
       "        <g transform='translate(50, 250)'>"
       "          <circle cx='0' cy='0' r='10' fill='red'/>"
+      "        </g>"
+      "        <g filter='blur(1px)'>"
+      "          <circle cx='75' cy='250' r='10' fill='red'/>"
       "        </g>"
       "      </svg>\");"
       "    background-position-y: -100px;"

@@ -254,56 +254,56 @@ void CalendarEventRouter::ExtensiveCalendarChangesBeginning(
 
 void CalendarEventRouter::ExtensiveCalendarChangesEnded(
     CalendarService* model) {}
-std::unique_ptr<CalendarEvent> CreateVivaldiEvent(
-    const calendar::EventResult& event) {
-  std::unique_ptr<CalendarEvent> cal_event(new CalendarEvent());
 
-  cal_event->id = base::NumberToString(event.id);
-  cal_event->calendar_id = base::NumberToString(event.calendar_id);
-  cal_event->alarm_id = base::NumberToString(event.alarm_id);
+CalendarEvent CreateVivaldiEvent(calendar::EventRow event) {
+  CalendarEvent cal_event;
 
-  cal_event->title = base::UTF16ToUTF8(event.title);
-  cal_event->description = base::UTF16ToUTF8(event.description);
-  cal_event->start = MilliSecondsFromTime(event.start);
-  cal_event->end = MilliSecondsFromTime(event.end);
-  cal_event->all_day = event.all_day;
-  cal_event->is_recurring = event.is_recurring;
-  cal_event->location = base::UTF16ToUTF8(event.location);
-  cal_event->url = base::UTF16ToUTF8(event.url);
-  cal_event->etag = event.etag;
-  cal_event->href = event.href;
-  cal_event->uid = event.uid;
-  cal_event->event_type_id = base::NumberToString(event.event_type_id);
-  cal_event->task = event.task;
-  cal_event->complete = event.complete;
-  cal_event->trash = event.trash;
-  cal_event->trash_time = MilliSecondsFromTime(event.trash_time);
-  cal_event->sequence = event.sequence;
-  cal_event->ical = base::UTF16ToUTF8(event.ical);
-  cal_event->rrule = event.rrule;
-  cal_event->recurrence_exceptions =
+  cal_event.id = base::NumberToString(event.id);
+  cal_event.calendar_id = base::NumberToString(event.calendar_id);
+  cal_event.alarm_id = base::NumberToString(event.alarm_id);
+
+  cal_event.title = base::UTF16ToUTF8(event.title);
+  cal_event.description = base::UTF16ToUTF8(event.description);
+  cal_event.start = MilliSecondsFromTime(event.start);
+  cal_event.end = MilliSecondsFromTime(event.end);
+  cal_event.all_day = event.all_day;
+  cal_event.is_recurring = event.is_recurring;
+  cal_event.location = base::UTF16ToUTF8(event.location);
+  cal_event.url = base::UTF16ToUTF8(event.url);
+  cal_event.etag = event.etag;
+  cal_event.href = event.href;
+  cal_event.uid = event.uid;
+  cal_event.event_type_id = base::NumberToString(event.event_type_id);
+  cal_event.task = event.task;
+  cal_event.complete = event.complete;
+  cal_event.trash = event.trash;
+  cal_event.trash_time = MilliSecondsFromTime(event.trash_time);
+  cal_event.sequence = event.sequence;
+  cal_event.ical = base::UTF16ToUTF8(event.ical);
+  cal_event.rrule = event.rrule;
+  cal_event.recurrence_exceptions =
       CreateRecurrenceException(event.recurrence_exceptions);
 
-  cal_event->notifications = CreateNotifications(event.notifications);
-  cal_event->invites = CreateInvites(event.invites);
-  cal_event->organizer = event.organizer;
-  cal_event->timezone = event.timezone;
-  cal_event->priority = event.priority;
-  cal_event->status = event.status;
-  cal_event->percentage_complete = event.percentage_complete;
-  cal_event->categories = base::UTF16ToUTF8(event.categories);
-  cal_event->component_class = base::UTF16ToUTF8(event.component_class);
-  cal_event->attachment = base::UTF16ToUTF8(event.attachment);
-  cal_event->completed = MilliSecondsFromTime(event.completed);
-  cal_event->sync_pending = event.sync_pending;
-  cal_event->delete_pending = event.delete_pending;
+  cal_event.notifications = CreateNotifications(event.notifications);
+  cal_event.invites = CreateInvites(event.invites);
+  cal_event.organizer = event.organizer;
+  cal_event.timezone = event.timezone;
+  cal_event.priority = event.priority;
+  cal_event.status = event.status;
+  cal_event.percentage_complete = event.percentage_complete;
+  cal_event.categories = base::UTF16ToUTF8(event.categories);
+  cal_event.component_class = base::UTF16ToUTF8(event.component_class);
+  cal_event.attachment = base::UTF16ToUTF8(event.attachment);
+  cal_event.completed = MilliSecondsFromTime(event.completed);
+  cal_event.sync_pending = event.sync_pending;
+  cal_event.delete_pending = event.delete_pending;
   return cal_event;
 }
 void CalendarEventRouter::OnEventCreated(CalendarService* service,
                                          const calendar::EventResult& event) {
-  std::unique_ptr<CalendarEvent> createdEvent = CreateVivaldiEvent(event);
+  CalendarEvent createdEvent = CreateVivaldiEvent(event);
 
-  base::Value::List args = OnEventCreated::Create(*createdEvent);
+  base::Value::List args = OnEventCreated::Create(createdEvent);
   DispatchEvent(profile_, OnEventCreated::kEventName, std::move(args));
 }
 
@@ -461,15 +461,12 @@ ExtensionFunction::ResponseAction CalendarGetAllEventsFunction::Run() {
 }
 
 void CalendarGetAllEventsFunction::GetAllEventsComplete(
-    std::shared_ptr<calendar::EventQueryResults> results) {
+    std::vector<calendar::EventRow> results) {
   EventList eventList;
 
-  if (results && !results->empty()) {
-    for (calendar::EventQueryResults::EventResultVector::const_iterator
-             iterator = results->begin();
-         iterator != results->end(); ++iterator) {
-      eventList.push_back(std::move(
-          *base::WrapUnique((CreateVivaldiEvent(**iterator).release()))));
+  if (!results.empty()) {
+    for (const auto& result : results) {
+      eventList.push_back(CreateVivaldiEvent(result));
     }
   }
 
@@ -482,9 +479,9 @@ Profile* CalendarAsyncFunction::GetProfile() const {
 }
 
 ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::EventCreate::Params> params(
+  absl::optional<vivaldi::calendar::EventCreate::Params> params(
       vivaldi::calendar::EventCreate::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
   calendar::EventRow createEvent = calendar::GetEventRow(params->event);
@@ -497,20 +494,20 @@ ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
 }
 
 void CalendarEventCreateFunction::CreateEventComplete(
-    std::shared_ptr<calendar::EventResultCB> results) {
-  if (!results->success) {
-    Respond(Error("Error creating event. " + results->message));
+    calendar::EventResultCB results) {
+  if (!results.success) {
+    Respond(Error("Error creating event. " + results.message));
   } else {
-    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
+    CalendarEvent event = CreateVivaldiEvent(results.event);
     Respond(ArgumentList(
-        extensions::vivaldi::calendar::EventCreate::Results::Create(*event)));
+        extensions::vivaldi::calendar::EventCreate::Results::Create(event)));
   }
 }
 
 ExtensionFunction::ResponseAction CalendarEventsCreateFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::EventsCreate::Params> params(
+  absl::optional<vivaldi::calendar::EventsCreate::Params> params(
       vivaldi::calendar::EventsCreate::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
 
@@ -543,17 +540,17 @@ CreateEventsResults GetCreateEventsItem(
 }
 
 void CalendarEventsCreateFunction::CreateEventsComplete(
-    std::shared_ptr<calendar::CreateEventsResult> results) {
-  CreateEventsResults return_results = GetCreateEventsItem(*results);
+    calendar::CreateEventsResult results) {
+  CreateEventsResults return_results = GetCreateEventsItem(results);
   Respond(
       ArgumentList(extensions::vivaldi::calendar::EventsCreate::Results::Create(
           return_results)));
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::UpdateEvent::Params> params(
+  absl::optional<vivaldi::calendar::UpdateEvent::Params> params(
       vivaldi::calendar::UpdateEvent::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   calendar::EventRow updatedEvent;
 
@@ -753,21 +750,21 @@ ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
 }
 
 void CalendarUpdateEventFunction::UpdateEventComplete(
-    std::shared_ptr<calendar::EventResultCB> results) {
-  if (!results->success) {
+    calendar::EventResultCB results) {
+  if (!results.success) {
     Respond(Error("Error updating event"));
   } else {
-    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
+    CalendarEvent event = CreateVivaldiEvent(results.event);
     Respond(ArgumentList(
-        extensions::vivaldi::calendar::UpdateEvent::Results::Create(*event)));
+        extensions::vivaldi::calendar::UpdateEvent::Results::Create(event)));
   }
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteEventFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::DeleteEvent::Params> params(
+  absl::optional<vivaldi::calendar::DeleteEvent::Params> params(
       vivaldi::calendar::DeleteEvent::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->id);
@@ -787,9 +784,8 @@ ExtensionFunction::ResponseAction CalendarDeleteEventFunction::Run() {
                           // asynchronously.
 }
 
-void CalendarDeleteEventFunction::DeleteEventComplete(
-    std::shared_ptr<calendar::DeleteEventResult> results) {
-  if (!results->success) {
+void CalendarDeleteEventFunction::DeleteEventComplete(bool results) {
+  if (!results) {
     Respond(Error("Error deleting event"));
   } else {
     Respond(NoArguments());
@@ -798,10 +794,10 @@ void CalendarDeleteEventFunction::DeleteEventComplete(
 
 ExtensionFunction::ResponseAction
 CalendarUpdateRecurrenceExceptionFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::UpdateRecurrenceException::Params> params(
+  absl::optional<vivaldi::calendar::UpdateRecurrenceException::Params> params(
       vivaldi::calendar::UpdateRecurrenceException::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->recurrence_id);
@@ -859,23 +855,22 @@ CalendarUpdateRecurrenceExceptionFunction::Run() {
 }
 
 void CalendarUpdateRecurrenceExceptionFunction::
-    UpdateRecurrenceExceptionComplete(
-        std::shared_ptr<calendar::EventResultCB> results) {
-  if (!results->success) {
+    UpdateRecurrenceExceptionComplete(calendar::EventResultCB results) {
+  if (!results.success) {
     Respond(Error("Error updating recurrence exception"));
   } else {
-    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
+    CalendarEvent event = CreateVivaldiEvent(results.event);
     Respond(
         ArgumentList(extensions::vivaldi::calendar::UpdateRecurrenceException::
-                         Results::Create(*event)));
+                         Results::Create(event)));
   }
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteEventExceptionFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::DeleteEventException::Params> params(
+  absl::optional<vivaldi::calendar::DeleteEventException::Params> params(
       vivaldi::calendar::DeleteEventException::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->exception_id);
@@ -898,45 +893,44 @@ ExtensionFunction::ResponseAction CalendarDeleteEventExceptionFunction::Run() {
 }
 
 void CalendarDeleteEventExceptionFunction::DeleteEventExceptionComplete(
-    std::shared_ptr<calendar::EventResultCB> results) {
-  if (!results->success) {
+    calendar::EventResultCB results) {
+  if (!results.success) {
     Respond(Error("Error deleting event exception"));
   } else {
-    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
+    CalendarEvent event = CreateVivaldiEvent(results.event);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::DeleteEventException::Results::Create(
-            *event)));
+            event)));
   }
 }
 
-std::unique_ptr<vivaldi::calendar::Calendar> CreateVivaldiCalendar(
-    const calendar::CalendarResult& result) {
-  std::unique_ptr<vivaldi::calendar::Calendar> calendar(
-      new vivaldi::calendar::Calendar());
+vivaldi::calendar::Calendar CreateVivaldiCalendar(
+    const calendar::CalendarRow& result) {
+  vivaldi::calendar::Calendar calendar;
 
-  calendar->id = base::NumberToString(result.id());
-  calendar->account_id = base::NumberToString(result.account_id());
-  calendar->name = base::UTF16ToUTF8(result.name());
+  calendar.id = base::NumberToString(result.id());
+  calendar.account_id = base::NumberToString(result.account_id());
+  calendar.name = base::UTF16ToUTF8(result.name());
 
-  calendar->description = base::UTF16ToUTF8(result.description());
-  calendar->orderindex = result.orderindex();
-  calendar->color = result.color();
-  calendar->hidden = result.hidden();
-  calendar->ctag = result.ctag();
-  calendar->active = result.active();
-  calendar->iconindex = result.iconindex();
-  calendar->last_checked = MilliSecondsFromTime(result.last_checked());
-  calendar->timezone = result.timezone();
-  calendar->supported_calendar_component =
+  calendar.description = base::UTF16ToUTF8(result.description());
+  calendar.orderindex = result.orderindex();
+  calendar.color = result.color();
+  calendar.hidden = result.hidden();
+  calendar.ctag = result.ctag();
+  calendar.active = result.active();
+  calendar.iconindex = result.iconindex();
+  calendar.last_checked = MilliSecondsFromTime(result.last_checked());
+  calendar.timezone = result.timezone();
+  calendar.supported_calendar_component =
       GetSupportedComponents(result.supported_component_set());
 
   return calendar;
 }
 
 ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::Create::Params> params(
+  absl::optional<vivaldi::calendar::Create::Params> params(
       vivaldi::calendar::Create::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   calendar::CalendarRow createCalendar;
 
@@ -1016,11 +1010,11 @@ ExtensionFunction::ResponseAction CalendarCreateFunction::Run() {
 }
 
 void CalendarCreateFunction::CreateComplete(
-    std::shared_ptr<calendar::CreateCalendarResult> results) {
-  if (!results->success) {
+    calendar::CreateCalendarResult results) {
+  if (!results.success) {
     Respond(Error("Error creating calendar"));
   } else {
-    Calendar ev = GetCalendarItem(results->createdRow);
+    Calendar ev = GetCalendarItem(results.createdRow);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::Create::Results::Create(ev)));
   }
@@ -1039,16 +1033,14 @@ ExtensionFunction::ResponseAction CalendarGetAllFunction::Run() {
                           // asynchronously.
 }
 
-void CalendarGetAllFunction::GetAllComplete(
-    std::shared_ptr<calendar::CalendarQueryResults> results) {
+void CalendarGetAllFunction::GetAllComplete(calendar::CalendarRows results) {
   CalendarList calendarList;
 
-  if (results && !results->empty()) {
-    for (calendar::CalendarQueryResults::CalendarResultVector::const_iterator
-             iterator = results->begin();
-         iterator != results->end(); ++iterator) {
-      calendarList.push_back(std::move(
-          *base::WrapUnique((CreateVivaldiCalendar(*iterator).release()))));
+  if (!results.empty()) {
+    if (!results.empty()) {
+      for (const auto& result : results) {
+        calendarList.push_back(CreateVivaldiCalendar(result));
+      }
     }
   }
 
@@ -1057,9 +1049,9 @@ void CalendarGetAllFunction::GetAllComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::Update::Params> params(
+  absl::optional<vivaldi::calendar::Update::Params> params(
       vivaldi::calendar::Update::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   calendar::Calendar updatedCalendar;
 
@@ -1146,9 +1138,8 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
                           // asynchronously.
 }
 
-void CalendarUpdateFunction::UpdateCalendarComplete(
-    std::shared_ptr<calendar::UpdateCalendarResult> results) {
-  if (!results->success) {
+void CalendarUpdateFunction::UpdateCalendarComplete(bool results) {
+  if (!results) {
     Respond(
         ErrorWithArguments(vivaldi::calendar::Update::Results::Create(false),
                            "Error updating calendar"));
@@ -1158,10 +1149,10 @@ void CalendarUpdateFunction::UpdateCalendarComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::Delete::Params> params(
+  absl::optional<vivaldi::calendar::Delete::Params> params(
       vivaldi::calendar::Delete::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->id);
@@ -1181,9 +1172,8 @@ ExtensionFunction::ResponseAction CalendarDeleteFunction::Run() {
                           // asynchronously.
 }
 
-void CalendarDeleteFunction::DeleteCalendarComplete(
-    std::shared_ptr<calendar::DeleteCalendarResult> results) {
-  if (!results->success) {
+void CalendarDeleteFunction::DeleteCalendarComplete(bool results) {
+  if (!results) {
     Respond(Error("Error deleting calendar"));
   } else {
     Respond(ArgumentList(vivaldi::calendar::Delete::Results::Create(true)));
@@ -1203,9 +1193,9 @@ ExtensionFunction::ResponseAction CalendarGetAllEventTypesFunction::Run() {
 }
 
 void CalendarGetAllEventTypesFunction::GetAllEventTypesComplete(
-    std::shared_ptr<calendar::EventTypeRows> results) {
+    calendar::EventTypeRows results) {
   EventTypeList event_type_list;
-  for (EventTypeRow event_type : *results) {
+  for (EventTypeRow event_type : results) {
     event_type_list.push_back(GetEventType(std::move(event_type)));
   }
 
@@ -1214,9 +1204,9 @@ void CalendarGetAllEventTypesFunction::GetAllEventTypesComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarEventTypeCreateFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::EventTypeCreate::Params> params(
+  absl::optional<vivaldi::calendar::EventTypeCreate::Params> params(
       vivaldi::calendar::EventTypeCreate::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   calendar::EventTypeRow create_event_type;
 
@@ -1244,9 +1234,8 @@ ExtensionFunction::ResponseAction CalendarEventTypeCreateFunction::Run() {
   return RespondLater();
 }
 
-void CalendarEventTypeCreateFunction::CreateEventTypeComplete(
-    std::shared_ptr<calendar::CreateEventTypeResult> results) {
-  if (!results->success) {
+void CalendarEventTypeCreateFunction::CreateEventTypeComplete(bool results) {
+  if (!results) {
     Respond(Error("Error creating event type"));
   } else {
     Respond(NoArguments());
@@ -1254,9 +1243,9 @@ void CalendarEventTypeCreateFunction::CreateEventTypeComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarEventTypeUpdateFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::EventTypeUpdate::Params> params(
+  absl::optional<vivaldi::calendar::EventTypeUpdate::Params> params(
       vivaldi::calendar::EventTypeUpdate::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->id);
@@ -1297,9 +1286,8 @@ ExtensionFunction::ResponseAction CalendarEventTypeUpdateFunction::Run() {
   return RespondLater();
 }
 
-void CalendarEventTypeUpdateFunction::UpdateEventTypeComplete(
-    std::shared_ptr<calendar::UpdateEventTypeResult> results) {
-  if (!results->success) {
+void CalendarEventTypeUpdateFunction::UpdateEventTypeComplete(bool results) {
+  if (!results) {
     Respond(Error("Error updating event type"));
   } else {
     Respond(NoArguments());
@@ -1307,9 +1295,9 @@ void CalendarEventTypeUpdateFunction::UpdateEventTypeComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteEventTypeFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::DeleteEventType::Params> params(
+  absl::optional<vivaldi::calendar::DeleteEventType::Params> params(
       vivaldi::calendar::DeleteEventType::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->id);
@@ -1330,9 +1318,8 @@ ExtensionFunction::ResponseAction CalendarDeleteEventTypeFunction::Run() {
                           // asynchronously.
 }
 
-void CalendarDeleteEventTypeFunction::DeleteEventTypeComplete(
-    std::shared_ptr<calendar::DeleteEventTypeResult> result) {
-  if (!result->success) {
+void CalendarDeleteEventTypeFunction::DeleteEventTypeComplete(bool result) {
+  if (!result) {
     Respond(Error("Error deleting event type"));
   } else {
     Respond(NoArguments());
@@ -1340,9 +1327,9 @@ void CalendarDeleteEventTypeFunction::DeleteEventTypeComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarCreateEventExceptionFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::CreateEventException::Params> params(
+  absl::optional<vivaldi::calendar::CreateEventException::Params> params(
       vivaldi::calendar::CreateEventException::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->parent_event_id);
@@ -1380,14 +1367,14 @@ ExtensionFunction::ResponseAction CalendarCreateEventExceptionFunction::Run() {
 }
 
 void CalendarCreateEventExceptionFunction::CreateEventExceptionComplete(
-    std::shared_ptr<calendar::EventResultCB> results) {
-  if (!results->success) {
+    calendar::EventResultCB results) {
+  if (!results.success) {
     Respond(Error("Error creating event exception"));
   } else {
-    std::unique_ptr<CalendarEvent> event = CreateVivaldiEvent(results->event);
+    CalendarEvent event = CreateVivaldiEvent(results.event);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::CreateEventException::Results::Create(
-            *event)));
+            event)));
   }
 }
 
@@ -1405,10 +1392,10 @@ ExtensionFunction::ResponseAction CalendarGetAllNotificationsFunction::Run() {
 }
 
 void CalendarGetAllNotificationsFunction::GetAllNotificationsComplete(
-    std::shared_ptr<calendar::GetAllNotificationResult> result) {
+    calendar::GetAllNotificationResult result) {
   NotificaionList notification_list;
 
-  for (const auto& notification : result->notifications) {
+  for (const auto& notification : result.notifications) {
     notification_list.push_back(CreateNotification(notification));
   }
 
@@ -1417,9 +1404,9 @@ void CalendarGetAllNotificationsFunction::GetAllNotificationsComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::CreateNotification::Params> params(
+  absl::optional<vivaldi::calendar::CreateNotification::Params> params(
       vivaldi::calendar::CreateNotification::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   NotificationRow row;
   if (params->create_notification.event_id.has_value()) {
@@ -1460,11 +1447,11 @@ ExtensionFunction::ResponseAction CalendarCreateNotificationFunction::Run() {
 }
 
 void CalendarCreateNotificationFunction::CreateNotificationComplete(
-    std::shared_ptr<calendar::NotificationResult> results) {
-  if (!results->success) {
+    calendar::NotificationResult results) {
+  if (!results.success) {
     Respond(Error("Error creating notification"));
   } else {
-    Notification notification = CreateNotification(results->notification_row);
+    Notification notification = CreateNotification(results.notification_row);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::CreateNotification::Results::Create(
             notification)));
@@ -1472,9 +1459,9 @@ void CalendarCreateNotificationFunction::CreateNotificationComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateNotificationFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::UpdateNotification::Params> params(
+  absl::optional<vivaldi::calendar::UpdateNotification::Params> params(
       vivaldi::calendar::UpdateNotification::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   calendar::UpdateNotificationRow update_notification;
 
@@ -1530,11 +1517,11 @@ ExtensionFunction::ResponseAction CalendarUpdateNotificationFunction::Run() {
 }
 
 void CalendarUpdateNotificationFunction::UpdateNotificationComplete(
-    std::shared_ptr<calendar::NotificationResult> results) {
-  if (!results->success) {
-    Respond(Error(results->message));
+    calendar::NotificationResult results) {
+  if (!results.success) {
+    Respond(Error(results.message));
   } else {
-    Notification notification = CreateNotification(results->notification_row);
+    Notification notification = CreateNotification(results.notification_row);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::UpdateNotification::Results::Create(
             notification)));
@@ -1542,10 +1529,10 @@ void CalendarUpdateNotificationFunction::UpdateNotificationComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteNotificationFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::DeleteNotification::Params> params(
+  absl::optional<vivaldi::calendar::DeleteNotification::Params> params(
       vivaldi::calendar::DeleteNotification::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->id);
@@ -1568,8 +1555,8 @@ ExtensionFunction::ResponseAction CalendarDeleteNotificationFunction::Run() {
 }
 
 void CalendarDeleteNotificationFunction::DeleteNotificationComplete(
-    std::shared_ptr<calendar::DeleteNotificationResult> results) {
-  if (!results->success) {
+    bool results) {
+  if (!results) {
     Respond(Error("Error deleting event"));
   } else {
     Respond(NoArguments());
@@ -1577,9 +1564,9 @@ void CalendarDeleteNotificationFunction::DeleteNotificationComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarCreateInviteFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::CreateInvite::Params> params(
+  absl::optional<vivaldi::calendar::CreateInvite::Params> params(
       vivaldi::calendar::CreateInvite::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   InviteRow row;
 
@@ -1613,21 +1600,21 @@ ExtensionFunction::ResponseAction CalendarCreateInviteFunction::Run() {
 }
 
 void CalendarCreateInviteFunction::CreateInviteComplete(
-    std::shared_ptr<calendar::InviteResult> results) {
-  if (!results->success) {
+    calendar::InviteResult results) {
+  if (!results.success) {
     Respond(Error("Error creating invite"));
   } else {
-    vivaldi::calendar::Invite invite = CreateInviteItem(results->inviteRow);
+    vivaldi::calendar::Invite invite = CreateInviteItem(results.inviteRow);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::CreateInvite::Results::Create(invite)));
   }
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteInviteFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::DeleteNotification::Params> params(
+  absl::optional<vivaldi::calendar::DeleteNotification::Params> params(
       vivaldi::calendar::DeleteNotification::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->id);
@@ -1647,9 +1634,8 @@ ExtensionFunction::ResponseAction CalendarDeleteInviteFunction::Run() {
                           // asynchronously.
 }
 
-void CalendarDeleteInviteFunction::DeleteInviteComplete(
-    std::shared_ptr<calendar::DeleteInviteResult> results) {
-  if (!results->success) {
+void CalendarDeleteInviteFunction::DeleteInviteComplete(bool results) {
+  if (!results) {
     Respond(Error("Error deleting invite"));
   } else {
     Respond(NoArguments());
@@ -1657,10 +1643,10 @@ void CalendarDeleteInviteFunction::DeleteInviteComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateInviteFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::UpdateInvite::Params> params(
+  absl::optional<vivaldi::calendar::UpdateInvite::Params> params(
       vivaldi::calendar::UpdateInvite::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->update_invite.id);
@@ -1706,25 +1692,25 @@ ExtensionFunction::ResponseAction CalendarUpdateInviteFunction::Run() {
       updateInvite,
       base::BindOnce(&CalendarUpdateInviteFunction::UpdateInviteComplete, this),
       &task_tracker_);
-  return RespondLater();  // DeleteInviteComplete() will be called
+  return RespondLater();  // UpdateInviteComplete() will be called
                           // asynchronously.
 }
 
 void CalendarUpdateInviteFunction::UpdateInviteComplete(
-    std::shared_ptr<calendar::InviteResult> results) {
-  if (!results->success) {
+    calendar::InviteResult results) {
+  if (!results.success) {
     Respond(Error("Error updating invite"));
   } else {
-    vivaldi::calendar::Invite invite = CreateInviteItem(results->inviteRow);
+    vivaldi::calendar::Invite invite = CreateInviteItem(results.inviteRow);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::UpdateInvite::Results::Create(invite)));
   }
 }
 
 ExtensionFunction::ResponseAction CalendarCreateAccountFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::CreateAccount::Params> params(
+  absl::optional<vivaldi::calendar::CreateAccount::Params> params(
       vivaldi::calendar::CreateAccount::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   AccountRow row;
   row.name = base::UTF8ToUTF16(params->to_create.name);
@@ -1747,11 +1733,11 @@ ExtensionFunction::ResponseAction CalendarCreateAccountFunction::Run() {
 }
 
 void CalendarCreateAccountFunction::CreateAccountComplete(
-    std::shared_ptr<calendar::CreateAccountResult> results) {
-  if (!results->success) {
+    calendar::CreateAccountResult results) {
+  if (!results.success) {
     Respond(Error("Error creating account"));
   } else {
-    vivaldi::calendar::Account account = GetAccountType(results->createdRow);
+    vivaldi::calendar::Account account = GetAccountType(results.createdRow);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::CreateAccount::Results::Create(account,
                                                                       true)));
@@ -1759,9 +1745,9 @@ void CalendarCreateAccountFunction::CreateAccountComplete(
 }
 
 ExtensionFunction::ResponseAction CalendarDeleteAccountFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::DeleteAccount::Params> params(
+  absl::optional<vivaldi::calendar::DeleteAccount::Params> params(
       vivaldi::calendar::DeleteAccount::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string id;
   id = base::UTF8ToUTF16(params->id);
@@ -1782,20 +1768,20 @@ ExtensionFunction::ResponseAction CalendarDeleteAccountFunction::Run() {
 }
 
 void CalendarDeleteAccountFunction::DeleteAccountComplete(
-    std::shared_ptr<calendar::DeleteAccountResult> results) {
-  if (!results->success) {
+    calendar::DeleteAccountResult results) {
+  if (!results.success) {
     Respond(Error("Error deleting account"));
   } else {
     Respond(ArgumentList(
         extensions::vivaldi::calendar::DeleteAccount::Results::Create(
-            results->success)));
+            results.success)));
   }
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
-  std::unique_ptr<vivaldi::calendar::UpdateAccount::Params> params(
+  absl::optional<vivaldi::calendar::UpdateAccount::Params> params(
       vivaldi::calendar::UpdateAccount::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   AccountRow row;
   CalendarService* model = CalendarServiceFactory::GetForProfile(GetProfile());
@@ -1848,11 +1834,11 @@ ExtensionFunction::ResponseAction CalendarUpdateAccountFunction::Run() {
 }
 
 void CalendarUpdateAccountFunction::UpdateAccountComplete(
-    std::shared_ptr<calendar::UpdateAccountResult> results) {
-  if (!results->success) {
+    calendar::UpdateAccountResult results) {
+  if (!results.success) {
     Respond(Error("Error updating account"));
   } else {
-    vivaldi::calendar::Account account = GetAccountType(results->updatedRow);
+    vivaldi::calendar::Account account = GetAccountType(results.updatedRow);
     Respond(ArgumentList(
         extensions::vivaldi::calendar::CreateAccount::Results::Create(account,
                                                                       true)));
@@ -1871,11 +1857,11 @@ ExtensionFunction::ResponseAction CalendarGetAllAccountsFunction::Run() {
 }
 
 void CalendarGetAllAccountsFunction::GetAllAccountsComplete(
-    std::shared_ptr<calendar::AccountRows> accounts) {
+    calendar::AccountRows accounts) {
   AccountList accountList;
 
-  for (calendar::AccountRow account : *accounts) {
-    accountList.push_back(GetAccountType(std::move(account)));
+  for (calendar::AccountRow account : accounts) {
+    accountList.push_back(GetAccountType(account));
   }
 
   Respond(ArgumentList(
@@ -1896,15 +1882,12 @@ ExtensionFunction::ResponseAction CalendarGetAllEventTemplatesFunction::Run() {
 }
 
 void CalendarGetAllEventTemplatesFunction::GetAllEventTemplatesComplete(
-    std::shared_ptr<calendar::EventQueryResults> results) {
+    std::vector<calendar::EventRow> results) {
   EventList eventList;
 
-  if (results && !results->empty()) {
-    for (calendar::EventQueryResults::EventResultVector::const_iterator
-             iterator = results->begin();
-         iterator != results->end(); ++iterator) {
-      eventList.push_back(std::move(
-          *base::WrapUnique((CreateVivaldiEvent(**iterator).release()))));
+  if (!results.empty()) {
+    for (const auto& result : results) {
+      eventList.push_back(CreateVivaldiEvent(result));
     }
   }
 

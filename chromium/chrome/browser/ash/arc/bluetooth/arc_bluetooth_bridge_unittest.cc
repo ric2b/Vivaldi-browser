@@ -554,4 +554,63 @@ TEST_F(ArcBluetoothBridgeTest, WritingMissingDescriptorFailsGracefully) {
   run_loop.Run();
 }
 
+TEST_F(ArcBluetoothBridgeTest, ReadMissingCharacteristicFailsGracefully) {
+  base::RunLoop run_loop;
+
+  // Pass clearly invalid values to guarantee that we won't be able to find a
+  // valid GATT characteristic.
+  arc_bluetooth_bridge_->ReadGattCharacteristic(
+      /*remote_addr=*/mojom::BluetoothAddress::New(),
+      /*service_id=*/mojom::BluetoothGattServiceID::New(),
+      /*char_id=*/mojom::BluetoothGattID::New(),
+      base::BindOnce(
+          [](base::RepeatingClosure quit_closure,
+             mojom::BluetoothGattValuePtr value) {
+            ASSERT_TRUE(value);
+            EXPECT_TRUE(value->value.empty());
+            EXPECT_EQ(value->status, mojom::BluetoothGattStatus::GATT_FAILURE);
+            quit_closure.Run();
+          },
+          run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
+TEST_F(ArcBluetoothBridgeTest, WriteMissingCharacteristicFailsGracefully) {
+  base::RunLoop run_loop;
+
+  // Pass clearly invalid values to guarantee that we won't be able to find a
+  // valid GATT characteristic.
+  arc_bluetooth_bridge_->WriteGattCharacteristic(
+      /*remote_addr=*/mojom::BluetoothAddress::New(),
+      /*service_id=*/mojom::BluetoothGattServiceID::New(),
+      /*char_id=*/mojom::BluetoothGattID::New(),
+      /*value=*/mojom::BluetoothGattValue::New(),
+      /*prepare=*/false,
+      base::BindOnce(
+          [](base::RepeatingClosure quit_closure,
+             mojom::BluetoothGattStatus status) {
+            EXPECT_EQ(status, mojom::BluetoothGattStatus::GATT_FAILURE);
+            quit_closure.Run();
+          },
+          run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
+TEST_F(ArcBluetoothBridgeTest, SetDiscoverabilityAndTimeout) {
+  // Setting discoverable without setting the timeout first is not allowed
+  arc_bluetooth_bridge_->SetAdapterProperty(
+      mojom::BluetoothProperty::NewAdapterScanMode(
+          mojom::BluetoothScanMode::CONNECTABLE_DISCOVERABLE));
+  ASSERT_FALSE(adapter_->IsDiscoverable());
+
+  // Setting discoverable after setting the timeout is OK
+  // Timeout of zero is OK
+  arc_bluetooth_bridge_->SetAdapterProperty(
+      mojom::BluetoothProperty::NewDiscoveryTimeout(0));
+  arc_bluetooth_bridge_->SetAdapterProperty(
+      mojom::BluetoothProperty::NewAdapterScanMode(
+          mojom::BluetoothScanMode::CONNECTABLE_DISCOVERABLE));
+  ASSERT_TRUE(adapter_->IsDiscoverable());
+}
+
 }  // namespace arc

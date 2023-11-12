@@ -106,6 +106,7 @@ class MockBrowserViewLayoutDelegate : public BrowserViewLayoutDelegate {
   void MoveWindowForFindBarIfNecessary() const override {}
   bool IsWindowControlsOverlayEnabled() const override { return false; }
   void UpdateWindowControlsOverlay(const gfx::Rect& rect) const override {}
+  bool ShouldLayoutTabStrip() const override { return true; }
 
  private:
   bool tab_strip_visible_ = true;
@@ -226,7 +227,6 @@ class BrowserViewLayoutTest : public ChromeViewsTestBase {
         /*web_app_frame_toolbar=*/nullptr,
         /*web_app_window_title=*/nullptr, tab_strip_region_view, tab_strip_,
         toolbar_, infobar_container_, contents_container_,
-        /*left_aligned_side_panel=*/nullptr,
         /*left_aligned_side_panel_separator=*/nullptr,
         /*unified_side_panel=*/nullptr,
         /*right_aligned_side_panel_separator=*/nullptr,

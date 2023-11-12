@@ -685,6 +685,9 @@ public class PaymentRequestService
                 case MethodStrings.GOOGLE_PAY:
                     methodTypes.add(PaymentMethodCategory.GOOGLE);
                     break;
+                case MethodStrings.GOOGLE_PAY_AUTHENTICATION:
+                    methodTypes.add(PaymentMethodCategory.GOOGLE_PAY_AUTHENTICATION);
+                    break;
                 case MethodStrings.GOOGLE_PLAY_BILLING:
                     methodTypes.add(PaymentMethodCategory.PLAY_BILLING);
                     break;
@@ -799,6 +802,9 @@ public class PaymentRequestService
             if (method.equals(MethodStrings.ANDROID_PAY)
                     || method.equals(MethodStrings.GOOGLE_PAY)) {
                 category = PaymentMethodCategory.GOOGLE;
+                break;
+            } else if (method.equals(MethodStrings.GOOGLE_PAY_AUTHENTICATION)) {
+                category = PaymentMethodCategory.GOOGLE_PAY_AUTHENTICATION;
                 break;
             } else if (method.equals(MethodStrings.GOOGLE_PLAY_BILLING)) {
                 assert invokedPaymentApp.getPaymentAppType() == PaymentAppType.NATIVE_MOBILE_APP;
@@ -1653,13 +1659,10 @@ public class PaymentRequestService
      * @param shippingAddress The shipping address to redact in place.
      */
     private static void redactShippingAddress(PaymentAddress shippingAddress) {
-        if (PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
-                    PaymentFeatureList.WEB_PAYMENTS_REDACT_SHIPPING_ADDRESS)) {
-            shippingAddress.organization = "";
-            shippingAddress.phone = "";
-            shippingAddress.recipient = "";
-            shippingAddress.addressLine = new String[0];
-        }
+        shippingAddress.organization = "";
+        shippingAddress.phone = "";
+        shippingAddress.recipient = "";
+        shippingAddress.addressLine = new String[0];
     }
 
     // PaymentAppFactoryParams implementation.
@@ -1820,13 +1823,6 @@ public class PaymentRequestService
 
         onShippingAddressChange(shippingAddress);
         return true;
-    }
-
-    // Implements PaymentApp.InstrumentDetailsCallback:
-    @Override
-    public void onInstrumentDetailsLoadingWithoutUI() {
-        if (mPaymentResponseHelper == null || mBrowserPaymentRequest == null) return;
-        mBrowserPaymentRequest.onInstrumentDetailsLoading();
     }
 
     // Implements PaymentApp.InstrumentDetailsCallback:

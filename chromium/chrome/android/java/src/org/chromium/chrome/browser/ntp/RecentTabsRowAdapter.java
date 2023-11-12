@@ -26,9 +26,9 @@ import androidx.annotation.IntDef;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSession;
-import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSessionTab;
-import org.chromium.chrome.browser.ntp.ForeignSessionHelper.ForeignSessionWindow;
+import org.chromium.chrome.browser.recent_tabs.ForeignSessionHelper.ForeignSession;
+import org.chromium.chrome.browser.recent_tabs.ForeignSessionHelper.ForeignSessionTab;
+import org.chromium.chrome.browser.recent_tabs.ForeignSessionHelper.ForeignSessionWindow;
 import org.chromium.chrome.browser.signin.LegacySyncPromoView;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.FaviconImageCallback;
@@ -540,14 +540,13 @@ public class RecentTabsRowAdapter extends BaseExpandableListAdapter {
                 drawable.setColorFilter(
                         SemanticColorUtils.getDefaultIconColor(mActivity), PorterDuff.Mode.SRC_IN);
                 viewHolder.imageView.setImageDrawable(drawable);
-                viewHolder.itemLayout.getLayoutParams().height =
+                viewHolder.itemLayout.setMinimumHeight(
                         mActivity.getResources().getDimensionPixelSize(
-                                R.dimen.recent_tabs_show_history_item_size);
+                                R.dimen.recent_tabs_show_history_item_size));
                 return;
             }
-            viewHolder.itemLayout.getLayoutParams().height =
-                    mActivity.getResources().getDimensionPixelSize(
-                            R.dimen.recent_tabs_foreign_session_group_item_height);
+            viewHolder.itemLayout.setMinimumHeight(mActivity.getResources().getDimensionPixelSize(
+                    R.dimen.recent_tabs_foreign_session_group_item_height));
             RecentlyClosedEntry entry = getChild(childPosition);
             if (!(entry instanceof RecentlyClosedTab)) {
                 int tabCount = 0;

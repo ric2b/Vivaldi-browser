@@ -536,11 +536,6 @@ Google Chrome is unable to recover your settings.
       </message>
       <!-- Add account dialog -->
       <if expr="chromeos_ash">
-        <message name="IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2" desc="Text body for the Welcome screen in ChromeOS 'Add account' dialog.">
-If you want to use this account one-time only, you can use Guest mode in Chrome browser. If you want to add an account for someone else, <ph name="LINK_BEGIN">&lt;a target="_blank" id="newPersonLink" href="$1<ex>https://google.com/</ex>"&gt;</ph>add a new person<ph name="LINK_END">&lt;/a&gt;</ph> to your <ph name="DEVICE_TYPE">$2<ex>Chromebook</ex></ph>.
-
-Permissions you've already given to websites and apps may apply to this account. You can manage your Google Accounts in <ph name="SETTINGS_LINK_BEGIN">&lt;a id="osSettingsLink" href="$3<ex>https://google.com/</ex>"&gt;</ph>Settings<ph name="SETTINGS_LINK_END">&lt;/a&gt;</ph>.
-        </message>
         <message name="IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2_WITH_GUEST_MODE" desc="Text body for the Welcome screen in ChromeOS 'Add account' dialog.">
 If you want to use this account one-time only, you can use <ph name="GUEST_LINK_BEGIN">&lt;a id="guestModeLink" href="#"&gt;</ph>Guest mode<ph name="GUEST_LINK_END">&lt;/a&gt;</ph> in Chrome browser. If you want to add an account for someone else, <ph name="LINK_BEGIN">&lt;a target="_blank" id="newPersonLink" href="$1<ex>https://google.com/</ex>"&gt;</ph>add a new person<ph name="LINK_END">&lt;/a&gt;</ph> to your <ph name="DEVICE_TYPE">$2<ex>Chromebook</ex></ph>.
 
@@ -577,17 +572,8 @@ Permissions you've already given to websites and apps may apply to this account.
         In Google Password Manager on this device
       </message>
       <if expr="is_macosx">
-        <message name="IDS_PASSWORDS_PAGE_AUTHENTICATION_PROMPT" desc="Text for the dialog box that prompts the user for their OS account password before revealing plaintext passwords on the password page.">
-          Google Chrome is trying to show passwords.
-        </message>
-        <message name="IDS_PASSWORDS_PAGE_COPY_AUTHENTICATION_PROMPT" desc="Text for the dialog box that prompts the user for their OS account password before copying plaintext passwords into the clipbord.">
-          Google Chrome is trying to copy passwords.
-        </message>
-        <message name="IDS_PASSWORDS_PAGE_EDIT_AUTHENTICATION_PROMPT" desc="Text for the dialog box that prompts the user for their OS account password before editing plaintext passwords on the password page.">
-          Google Chrome is trying to edit passwords.
-        </message>
-        <message name="IDS_PASSWORDS_PAGE_EXPORT_AUTHENTICATION_PROMPT" desc="Text for the dialog box that prompts the user for their OS account password before exporting passwords to a file.">
-          Google Chrome wants to export your passwords.
+        <message name="IDS_PASSWORDS_AUTHENTICATION_PROMPT_PREFIX" desc="Text shown in the beginning of the OS-level user authentication prompt before performing a seneitive operation such as show passwords in plain text.">
+          Google Chrome is trying to <ph name="AUTHENTICATION_PURPOSE">$1<ex>show passwords</ex></ph>
         </message>
       </if>
       <if expr="is_win">
@@ -603,6 +589,9 @@ Permissions you've already given to websites and apps may apply to this account.
         <message name="IDS_PASSWORDS_PAGE_EXPORT_AUTHENTICATION_PROMPT" desc="Text for the dialog box that prompts the user for their OS account password before exporting passwords to a file.">
           Google Chrome wants to export your passwords. Type your Windows password to allow this.
         </message>
+        <message name="IDS_PASSWORDS_PAGE_IMPORT_AUTHENTICATION_PROMPT" desc="Text for the dialog box that prompts the user for their OS account password before overriding passwords during Import.">
+          Google Chrome is trying to replace existing passwords. Type your Windows password to allow this.
+        </message>
         <message name="IDS_INSTALL_HIGHER_VERSION" desc="Error displayed when higher version already exists.">
           This computer already has a more recent version of Google Chrome. If the software is not working, please uninstall Google Chrome and try again.
         </message>
@@ -616,7 +605,7 @@ Permissions you've already given to websites and apps may apply to this account.
           Installation failed due to unspecified error. Please download Google Chrome again.
         </message>
         <message name="IDS_INSTALL_OS_NOT_SUPPORTED" desc="Error displayed if OS is not supported">
-          Google Chrome requires Windows 7 or higher.
+          Google Chrome requires Windows 10 or higher.
         </message>
         <message name="IDS_INSTALL_OS_ERROR" desc="Error displayed when any Windows API call fails and we do not have more specific information.">
           An operating system error occurred during installation. Please download Google Chrome again.
@@ -657,9 +646,6 @@ Permissions you've already given to websites and apps may apply to this account.
       </if>
       <message name="IDS_DEFAULT_BROWSER_INFOBAR_TEXT" desc="Text to show in an infobar when Google Chrome is not the current default browser.">
         Google Chrome isn't your default browser
-      </message>
-      <message name="IDS_TAILORED_SECURITY_CONSENTED_ENABLE_NOTIFICATION_DESCRIPTION" desc="The text of the notification asking if the user wants to enable Enhanced Safe Browsing">
-        You turned on Enhanced Safe Browsing in your account. Now get it for Chrome.
       </message>
       <if expr="is_win">
         <!-- Try Chrome Toast Dialog -->
@@ -857,6 +843,19 @@ Permissions you've already given to websites and apps may apply to this account.
         </if>
       </if>
 
+      <if expr="is_win or is_macosx or is_linux">
+        <if expr="use_titlecase">
+          <message name="IDS_RELAUNCH_TO_UPDATE_ALT" desc="Alternate text label of the relaunch to update Chrome menu item">
+            Relaunch to Update - Your tabs will reopen
+          </message>
+        </if>
+        <if expr="not use_titlecase">
+          <message name="IDS_RELAUNCH_TO_UPDATE_ALT" desc="Alternate text label of the relaunch to update Chrome menu item">
+            Relaunch to update - your tabs will reopen
+          </message>
+        </if>
+      </if>
+
       <if expr="is_macosx">
         <message name="IDS_APP_MENU_PRODUCT_NAME" desc="The application's short name, used for the Mac's application menu, activity monitor, etc. This should be less than 16 characters. Example: Chrome, not Google Chrome.">
           Chrome
@@ -868,6 +867,10 @@ Permissions you've already given to websites and apps may apply to this account.
           Chrome Helper
         </message>
       </if>
+
+      <message name="IDS_VIEW_PASSWORDS" desc="Item in the app menu which shows Password Manager page">
+        Google Password Manager
+      </message>
 
       <!-- Chrome sign-in page -->
       <message name="IDS_CHROME_SIGNIN_TITLE" desc="Title on the about:chrome-signin page">
@@ -1067,10 +1070,17 @@ Permissions you've already given to websites and apps may apply to this account.
 
       <if expr="not is_android">
         <!-- WebHID system tray icon -->
-        <message name="IDS_WEBHID_SYSTEM_TRAY_ICON_TOOLTIP" desc="Tooltip for the WebHID system tray icon when one or more HID devices are being accessed.">
+        <message name="IDS_WEBHID_SYSTEM_TRAY_ICON_TITLE_SINGLE_EXTENSION" desc="Title for the WebHID system tray icon when one or more HID devices are being accessed by an extension.">
             {NUM_DEVICES, plural,
-            =1 {Google Chrome is connected to a HID device}
-            other {Google Chrome is connected to HID devices}}
+            =0 {A Google Chrome extension was accessing HID devices}
+            =1 {A Google Chrome extension is accessing 1 HID device}
+            other {A Google Chrome extension is accessing # HID devices}}
+        </message>
+        <message name="IDS_WEBHID_SYSTEM_TRAY_ICON_TITLE_MULTIPLE_EXTENSIONS" desc="Title for the WebHID system tray icon when HID devices are being accessed by multiple extensions.">
+            {NUM_DEVICES, plural,
+            =0 {Google Chrome extensions were accessing HID devices}
+            =1 {Google Chrome extensions are accessing HID devices}
+            other {Google Chrome extensions are accessing # HID devices}}
         </message>
       </if>
 
@@ -1238,6 +1248,18 @@ Permissions you've already given to websites and apps may apply to this account.
         </message>
       </if>
 
+      <if expr="is_win or is_macosx or is_linux">
+        <message name="IDS_UPDATE_RECOMMENDED_DIALOG_TITLE_ALT" desc="Alternate window title for the Update Recommended dialog.">
+          Relaunch to finish Chrome update
+        </message>
+        <message name="IDS_UPDATE_RECOMMENDED_ALT" desc="Alternate main text of the Update Recommended dialog with a count of open Incognito windows.">
+          {COUNT, plural,
+           =0 {Chrome is done updating. You can use the latest version as soon as you relaunch. After, your current tabs will reopen.}
+           =1 {Chrome is done updating. You can use the latest version as soon as you relaunch. After, your current tabs will reopen. Your Incognito window won't reopen.}
+          other {Chrome is done updating. You can use the latest version as soon as you relaunch. After, your current tabs will reopen. Your # Incognito windows won't reopen.}}
+        </message>
+      </if>
+
       <!-- Update bubble -->
       <message name="IDS_REINSTALL_APP" desc="Text for the button the user clicks to reinstall the app.">
         Reinstall Chrome
@@ -1293,10 +1315,8 @@ Permissions you've already given to websites and apps may apply to this account.
       </message>
 
       <!-- Critical Notification bubble -->
-      <message name="IDS_CRITICAL_NOTIFICATION_TITLE" desc="The title for a bubble that appears when there is a critical update and Chrome must restart to install it. It counts down from # seconds and then Chrome automatically restarts.">
-        {SECONDS, plural,
-         =1 {Google Chrome will restart in 1 second}
-         other {Google Chrome will restart in # seconds}}
+      <message name="IDS_CRITICAL_NOTIFICATION_TITLE" desc="The title for a bubble that appears when there is a critical update and Chrome must restart to install it. It counts down a timer and then Chrome automatically restarts.">
+        Google Chrome will restart in <ph name="REMAINING_TIME">$1<ex>1 minute, 7 seconds</ex></ph>
       </message>
       <message name="IDS_CRITICAL_NOTIFICATION_TITLE_ALTERNATE" desc="The title for a bubble that appears when there is a critical update and Chrome must restart to install it. The title was previously countng down to an automatic restart and now it has finished. Will only be seen if a web page stops the shutdown process.">
         Please restart Chrome now
@@ -1450,23 +1470,33 @@ Permissions you've already given to websites and apps may apply to this account.
 
     <!-- Idle timeout dialog. -->
     <if expr="not is_android and not is_chromeos">
-      <message name="IDS_IDLE_TIMEOUT_TITLE" desc="TODO">
-        Chrome is inactive
+      <message name="IDS_IDLE_TIMEOUT_CLOSE_TITLE" desc="Title of the Idle Timeout dialog, warning the user that their windows are about to close.">
+        Chrome will soon close
+      </message>
+      <message name="IDS_IDLE_TIMEOUT_CLEAR_TITLE" desc="Title of the Idle Timeout dialog, warning the user that their browsing data will be lost soon.">
+        Chrome will soon delete browsing data
+      </message>
+      <message name="IDS_IDLE_TIMEOUT_CLOSE_AND_CLEAR_TITLE" desc="Title of the Idle Timeout dialog, warning the user that their windows are about to close and their browsing data will be lost.">
+        Chrome will soon close and delete data
       </message>
       <!-- TODO(crbug.com/1326685): Show different text for long durations.
            e.g., say "4 hours" instead of "240 minutes". -->
-      <message name="IDS_IDLE_TIMEOUT_BODY" desc="TODO">
+      <message name="IDS_IDLE_TIMEOUT_CLOSE_BODY" desc="First sentence in the Idle Timeout dialog, warning the user that Chrome is going to close automatically.">
         {COUNT, plural,
-          =1 {Your administrator has configured Chrome to close if it is idle for more than 1 minute.}
-          other {Your administrator has configured Chrome to close if it is idle for more than # minutes.}}
+          =1 {Your administrator automatically closes Chrome when it isn't used for 1 minute.}
+          other {Your administrator automatically closes Chrome when it isn't used for # minutes.}}
       </message>
-      <message name="IDS_IDLE_TIMEOUT_COUNTDOWN" desc="TODO">
-        {0, plural,
-          =0 {Chrome will close now.}
-          =1 {Chrome will close in 1 second.}
-          other {Chrome will close in # seconds.}}
+      <message name="IDS_IDLE_TIMEOUT_CLEAR_BODY" desc="First sentence in the Idle Timeout dialog, warning the user that Chrome is going to clear data automatically.">
+        {COUNT, plural,
+          =1 {Your administrator automatically deletes browsing data when it isn't used for 1 minute. This could include history, autofill, and downloads. Your existing tabs will remain open.}
+          other {Your administrator automatically deletes browsing data when it isn't used for # minutes. This could include history, autofill, and downloads. Your existing tabs will remain open.}}
       </message>
-      <message name="IDS_IDLE_ACCEPT_BUTTON" desc="TODO">
+      <message name="IDS_IDLE_TIMEOUT_CLOSE_AND_CLEAR_BODY" desc="First sentence in the Idle Timeout dialog, warning the user that Chrome is going to close and clear data automatically.">
+        {COUNT, plural,
+          =1 {Your administrator automatically closes Chrome when it isn't used for 1 minute. Browsing data is deleted. This could include history, autofill, and downloads.}
+          other {Your administrator automatically closes Chrome when it isn't used for # minutes. Browsing data is deleted. This could include history, autofill, and downloads.}}
+      </message>
+      <message name="IDS_IDLE_DISMISS_BUTTON" desc="Button label in the Idle Timeout dialog, this button dismisses the dialog and prevents browsers from closing automatically.">
         Continue using Chrome
       </message>
     </if>
@@ -1497,9 +1527,11 @@ Permissions you've already given to websites and apps may apply to this account.
           <message name="IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_PROFILE_TYPE_CHOICE_SUBTITLE_LACROS" desc="Profile picker profile type choice subtitle">
             To access your Chrome browser stuff across all your devices, sign in, then turn on sync
           </message>
-
           <message name="IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_ACCOUNT_SELECTION_LACROS_SUBTITLE" desc="Profile picker, account selection screen subtitle">
             Sign in to Chrome
+          </message>
+          <message name="IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_ACCOUNT_SELECTION_LACROS_SUBTITLE_WITH_GUEST" desc="Profile picker, account selection screen subtitle">
+            Sign in to Chrome. If you want to sign in an account one-time only, you can <ph name="GUEST_LINK_BEGIN">&lt;a id="guestModeLink" href="#"&gt;</ph>use the device as guest<ph name="GUEST_LINK_END">&lt;/a&gt;</ph>.
           </message>
         </if>
         <if expr="not chromeos_lacros">
@@ -1572,6 +1604,9 @@ Permissions you've already given to websites and apps may apply to this account.
         <message name="IDS_PROFILE_SWITCH_PROMO_SCREENREADER" desc="Text announced by screenreaders to explain how to switch between profiles.">
           <ph name="SHORTCUT">$1<ex>CTRL+SHIFT+M</ex></ph> can switch between Chrome profiles
         </message>
+        <message name="IDS_PASSWORD_MANAGER_IPH_BODY_WEB_APP_PROFILE_SWITCH" desc="Body of the in Product Help for profile switching shown in the password manager web app.">
+          You can switch to see passwords from another Chrome profile
+        </message>
       </if>
 
       <!-- Strings for full restore notifications -->
@@ -1607,6 +1642,9 @@ Permissions you've already given to websites and apps may apply to this account.
       </message>
       <message name="IDS_TAILORED_SECURITY_UNCONSENTED_PROMOTION_MESSAGE_DESCRIPTION" desc="Description shown in the message shown when a user changes their account-level tailored security setting encouraging them to enable Enhanced Safe Browsing">
         Enhanced protection does more to block phishing and malware
+      </message>
+      <message name="IDS_TAILORED_SECURITY_UNCONSENTED_PROMOTION_MESSAGE_DESCRIPTION_UPDATED" desc="Description shown in the message shown when a user changes their account-level tailored security setting encouraging them to enable Enhanced Safe Browsing">
+        Enhanced Safe Browsing does more to protect you against dangerous websites and downloads
       </message>
       <message name="IDS_TAILORED_SECURITY_UNCONSENTED_PROMOTION_MESSAGE_ACCEPT" desc="Accept button shown in the message shown when a user changes their account-level tailored security setting encouraging them to enable Enhanced Safe Browsing">
         Continue
@@ -1759,16 +1797,6 @@ Permissions you've already given to websites and apps may apply to this account.
 
       <!-- High Efficiency IPH strings -->
       <if expr="not is_android">
-        <if expr="use_titlecase">
-          <message name="IDS_HIGH_EFFICIENCY_INFO_MODE_PROMO_TITLE" desc="In Title Case: The title for the high efficiency info mode in-product promo bubble.">
-            Memory Saver Made Chrome Faster
-          </message>
-        </if>
-        <if expr="not use_titlecase">
-          <message name="IDS_HIGH_EFFICIENCY_INFO_MODE_PROMO_TITLE" desc="The title for the high efficiency info mode in-product promo bubble.">
-            Memory Saver made Chrome faster
-          </message>
-        </if>
         <if expr="use_titlecase">
           <message name="IDS_HIGH_EFFICIENCY_MODE_PROMO_TITLE" desc="In Title Case: The title for the high efficiency mode in-product promo bubble">
             Make Chrome Faster

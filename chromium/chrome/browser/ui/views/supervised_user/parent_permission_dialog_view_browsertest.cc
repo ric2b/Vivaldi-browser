@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/supervised_user/parent_permission_dialog.h"
 
 #include <memory>
@@ -20,6 +21,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/supervised_user/supervised_user_extensions_delegate_impl.h"
 #include "chrome/browser/supervised_user/supervised_user_extensions_metrics_recorder.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
@@ -42,6 +44,7 @@
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/test/result_catcher.h"
 #include "google_apis/gaia/fake_gaia.h"
@@ -151,7 +154,9 @@ class ParentPermissionDialogViewTest
     MixinBasedInProcessBrowserTest::SetUpOnMainThread();
     logged_in_user_mixin_.LogInUser(/*issue_any_scope_token=*/true);
 
-    SetSupervisedUserExtensionsMayRequestPermissionsPref(true);
+    supervised_user_test_util::
+        SetSupervisedUserExtensionsMayRequestPermissionsPref(
+            browser()->profile(), true);
 
     if (browser()->profile()->IsChild())
       InitializeFamilyData();
@@ -230,16 +235,6 @@ class ParentPermissionDialogViewTest
   }
 
  protected:
-  SupervisedUserService* GetSupervisedUserService() {
-    return SupervisedUserServiceFactory::GetForProfile(browser()->profile());
-  }
-
-  void SetSupervisedUserExtensionsMayRequestPermissionsPref(bool enabled) {
-    GetSupervisedUserService()
-        ->SetSupervisedUserExtensionsMayRequestPermissionsPrefForTesting(
-            enabled);
-  }
-
   const extensions::Extension* test_extension() {
     return test_extension_.get();
   }
@@ -254,9 +249,8 @@ class ParentPermissionDialogViewTest
   }
 
  private:
-  ParentPermissionDialogView* view_ = nullptr;
+  raw_ptr<ParentPermissionDialogView, ExperimentalAsh> view_ = nullptr;
   std::unique_ptr<ParentPermissionDialog> parent_permission_dialog_;
-
   ParentPermissionDialog::Result result_;
 
   // Emulate consumer ownership (create public owner key file, install
@@ -536,7 +530,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionEnableFlowTestSupervised,
 
   // Simulate the parent disabling the "Permissions for sites, apps and
   // extensions" toggle.
-  SetSupervisedUserExtensionsMayRequestPermissionsPref(false);
+  supervised_user_test_util::
+      SetSupervisedUserExtensionsMayRequestPermissionsPref(browser()->profile(),
+                                                           false);
 
   extensions::ScopedTestDialogAutoConfirm auto_confirm(
       extensions::ScopedTestDialogAutoConfirm::ACCEPT);
@@ -580,20 +576,25 @@ class ExtensionManagementApiTestSupervised
       // In addition to the two extensions from the PRE test, there's one more
       // test extension from the ParentPermissionDialogViewTest parent class.
       EXPECT_EQ(3u, extension_registry()->disabled_extensions().size());
+      scoped_refptr<const extensions::Extension> test_extension;
       for (const auto& e : extension_registry()->disabled_extensions()) {
         if (e->name() == "disabled_extension") {
           disabled_extension_id_ = e->id();
         } else if (e->name() == "Extension Management API Test") {
+          CHECK(test_extension_id_.empty());
           test_extension_id_ = e->id();
+          test_extension = e;
         }
       }
       EXPECT_FALSE(disabled_extension_id_.empty());
       EXPECT_FALSE(test_extension_id_.empty());
-
       // Approve the extension for running the test.
-      GetSupervisedUserService()->UpdateApprovedExtensionForTesting(
-          test_extension_id_,
-          SupervisedUserService::ApprovedExtensionChange::kAdd);
+      std::unique_ptr<extensions::SupervisedUserExtensionsDelegate>
+          supervised_user_extensions_delegate_ = std::make_unique<
+              extensions::SupervisedUserExtensionsDelegateImpl>(
+              browser()->profile());
+      supervised_user_extensions_delegate_->AddExtensionApproval(
+          *test_extension);
     }
   }
 
@@ -735,7 +736,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionManagementApiTestSupervised,
 
   // Simulate the parent disabling the "Permissions for sites, apps and
   // extensions" toggle.
-  SetSupervisedUserExtensionsMayRequestPermissionsPref(false);
+  supervised_user_test_util::
+      SetSupervisedUserExtensionsMayRequestPermissionsPref(browser()->profile(),
+                                                           false);
 
   extensions::ScopedTestDialogAutoConfirm auto_confirm(
       extensions::ScopedTestDialogAutoConfirm::ACCEPT);

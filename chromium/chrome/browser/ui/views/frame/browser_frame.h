@@ -16,6 +16,10 @@
 #include "ui/base/ui_base_types.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "third_party/abseil-cpp/absl/types/optional.h"
+#endif
+
 class BrowserNonClientFrameView;
 class BrowserRootView;
 enum class BrowserThemeChangeType;
@@ -159,6 +163,10 @@ class BrowserFrame : public views::Widget, public views::ContextMenuController {
                                   const gfx::Point& p,
                                   ui::MenuSourceType source_type) override;
 
+  // Returns whether MenuRunner is running or not. Useful to check if the system
+  // context menu is showing, when menu_runner_ is used.
+  bool IsMenuRunnerRunningForTesting() const;
+
   // Returns the menu model. BrowserFrame owns the returned model.
   // Note that in multi user mode this will upon each call create a new model.
   ui::MenuModel* GetSystemMenuModel();
@@ -173,6 +181,7 @@ class BrowserFrame : public views::Widget, public views::ContextMenuController {
  protected:
   // views::Widget:
   ui::ColorProviderManager::Key GetColorProviderKey() const override;
+  absl::optional<SkColor> GetUserColor() const override;
 
  private:
   void OnTouchUiChanged();
@@ -228,11 +237,11 @@ class BrowserFrame : public views::Widget, public views::ContextMenuController {
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
-  // Store the number of virtual desks that currently exist. Used to determine
-  // whether the system menu should be reset. If the value is -1, then either
-  // the ash::DesksHelper does not exist or haven't retrieved the system menu
-  // model yet.
-  int num_desks_ = -1;
+  // Store the number of virtual desks that currently exist and if the window
+  // state is float state type. Used to determine  whether the system menu
+  // should be reset.
+  absl::optional<int> num_desks_;
+  absl::optional<bool> is_float_state_type_;
 #endif
 };
 

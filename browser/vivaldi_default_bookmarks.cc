@@ -137,8 +137,8 @@ class BookmarkUpdater {
                   std::string icon_path);
 
   FaviconServiceGetter favicons_getter_;
-  const DefaultBookmarkTree* default_bookmark_tree_;
-  BookmarkModel* model_;
+  const raw_ptr<const DefaultBookmarkTree> default_bookmark_tree_;
+  const raw_ptr<BookmarkModel> model_;
   std::set<base::GUID> deleted_partner_guids_;
 
   std::map<base::GUID, const BookmarkNode*> guid_node_map_;
@@ -200,7 +200,7 @@ void DefaultBookmarkParser::ParseBookmarkList(
       LOG(ERROR) << "bookmark node with missing or unknown name";
       continue;
     }
-    if (base::Value* children = dict.FindKey(kChildrenKey)) {
+    if (base::Value* children = dict.GetDict().Find(kChildrenKey)) {
       // Folder
       item.guid = details->guid;
       item.title = details->title;
@@ -295,7 +295,7 @@ void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
   }
   tree.version = std::move(*version);
 
-  base::Value* bookmark_list = default_bookmarks_value.FindKey(kChildrenKey);
+  base::Value* bookmark_list = default_bookmarks_value.GetDict().Find(kChildrenKey);
   if (!bookmark_list) {
     LOG(ERROR) << "no " << kChildrenKey << " array.";
     return;
@@ -359,9 +359,9 @@ void BookmarkUpdater::RunCleanUpdate() {
         const BookmarkNode* node = i->second;
         if (!model_->is_permanent_node(node)) {
           VLOG(2) << "Removing non-existing partner title=" << node->GetTitle()
-                  << " guid=" << node->guid();
+                  << " guid=" << node->uuid();
           i = existing_partner_bookmarks_.erase(i);
-          model_->Remove(node);
+          model_->Remove(node, {});
           continue;
         }
       }
@@ -377,7 +377,7 @@ void BookmarkUpdater::FindExistingPartners(const BookmarkNode* top_node) {
   ui::TreeNodeIterator<const BookmarkNode> iterator(top_node);
   while (iterator.has_next()) {
     const BookmarkNode* node = iterator.Next();
-    base::GUID guid = node->guid();
+    base::GUID guid = node->uuid();
 
     // If the guid was for a former locale-specific partner id, adjust it to
     // locale-independent one as guid_node_map_ is used to check for presence of
@@ -387,7 +387,7 @@ void BookmarkUpdater::FindExistingPartners(const BookmarkNode* top_node) {
     if (!inserted_guid.second) {
       // This happens after sync mixed older locale-based partners from several
       // locales.
-      VLOG(1) << "Duplicated GUID node_guid=" << node->guid()
+      VLOG(1) << "Duplicated GUID node_guid=" << node->uuid()
               << " adjusted_guid=" << guid;
     }
 
@@ -471,7 +471,7 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
       return error("Partner url became a bookmark folder");
   }
 
-  VLOG(2) << "Updatning " << item.title << " guid=" << node->guid();
+  VLOG(2) << "Updatning " << item.title << " guid=" << node->uuid();
   model_->SetTitle(node, base::UTF8ToUTF16(item.title),
                    bookmarks::metrics::BookmarkEditSource::kUser);
   if (!item.url.is_empty()) {
@@ -540,7 +540,7 @@ void BookmarkUpdater::MovePartnerIfRequired(
   // partners to another location. Ideally if the user moves a partner or a
   // folder, we should mark it as user-moved and stop any movement here.
   size_t new_index = expected_parent->children().size();
-  VLOG(2) << "Moving " << item.title << " guid=" << node->guid() << " to "
+  VLOG(2) << "Moving " << item.title << " guid=" << node->uuid() << " to "
           << parent_item->title << " folder, index=" << new_index;
   model_->Move(node, expected_parent, new_index);
   stats_.moved++;
@@ -561,10 +561,10 @@ const BookmarkNode* BookmarkUpdater::TryToAdd(const DefaultBookmarkItem& item,
     const BookmarkNode* node = iter->second;
     VLOG_IF(1, !item.children.empty())
         << "Found former partner folder by GUID match, title="
-        << node->GetTitle() << " guid=" << node->guid();
+        << node->GetTitle() << " guid=" << node->uuid();
     VLOG_IF(2, item.children.empty())
         << "Skipping former partner bookmark, title=" << node->GetTitle()
-        << " guid=" << node->guid();
+        << " guid=" << node->uuid();
     return node;
   }
 
@@ -582,7 +582,7 @@ const BookmarkNode* BookmarkUpdater::TryToAdd(const DefaultBookmarkItem& item,
     if (iter != existing_partner_bookmarks_.end()) {
       const BookmarkNode* node = iter->second->parent();
       VLOG(1) << "Guessed a folder from a child, title=" << node->GetTitle()
-              << " guid=" << node->guid();
+              << " guid=" << node->uuid();
       return node;
     }
   }

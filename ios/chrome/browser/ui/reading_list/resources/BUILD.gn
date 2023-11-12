@@ -1,0 +1,10 @@
+# Copyright 2022 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/asset_catalog.gni")
+
+imageset("vivaldi_reading_list_empty") {
+  sources = [
+    "vivaldi_reading_list_empty.imageset/Contents.json",
+    "vivaldi_reading_list_empty.imageset/vivaldi_reading_list_empty.pdf",
+  ]
+}

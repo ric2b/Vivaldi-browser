@@ -32,6 +32,7 @@
 #include "components/performance_manager/embedder/graph_features.h"
 #include "components/performance_manager/embedder/performance_manager_lifetime.h"
 #include "components/performance_manager/embedder/performance_manager_registry.h"
+#include "components/performance_manager/graph/policies/bfcache_policy.h"
 #include "components/performance_manager/performance_manager_feature_observer_client.h"
 #include "components/performance_manager/public/decorators/page_live_state_decorator.h"
 #include "components/performance_manager/public/decorators/page_load_tracker_decorator_helper.h"
@@ -66,6 +67,7 @@
 #if !BUILDFLAG(IS_ANDROID)
 #include "base/power_monitor/battery_state_sampler.h"
 #include "chrome/browser/performance_manager/mechanisms/page_freezer.h"
+#include "chrome/browser/performance_manager/policies/heuristic_memory_saver_policy.h"
 #include "chrome/browser/performance_manager/policies/high_efficiency_mode_policy.h"
 #include "chrome/browser/performance_manager/policies/page_discarding_helper.h"
 #include "chrome/browser/performance_manager/policies/page_freezing_policy.h"
@@ -73,7 +75,6 @@
 #include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
 #include "chrome/browser/performance_manager/user_tuning/user_performance_tuning_notifier.h"
 #include "chrome/browser/tab_contents/form_interaction_tab_helper.h"
-#include "components/performance_manager/graph/policies/bfcache_policy.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 namespace {
@@ -138,14 +139,8 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
 #if !BUILDFLAG(IS_ANDROID)
   graph->PassToGraph(FormInteractionTabHelper::CreateGraphObserver());
 
-  if (URGENT_DISCARDING_FROM_PERFORMANCE_MANAGER() ||
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable) ||
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kBatterySaverModeAvailable)) {
-    graph->PassToGraph(std::make_unique<
-                       performance_manager::policies::PageDiscardingHelper>());
-  }
+  graph->PassToGraph(
+      std::make_unique<performance_manager::policies::PageDiscardingHelper>());
 
 #if URGENT_DISCARDING_FROM_PERFORMANCE_MANAGER()
   if (base::FeatureList::IsEnabled(
@@ -177,7 +172,23 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
       std::make_unique<performance_manager::policies::PageFreezingPolicy>());
 
   if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable)) {
+          performance_manager::features::kHeuristicMemorySaver)) {
+    graph->PassToGraph(std::make_unique<performance_manager::policies::
+                                            HeuristicMemorySaverPolicy>(
+        performance_manager::features::
+            kHeuristicMemorySaverAvailableMemoryThresholdPercent.Get(),
+        performance_manager::features::
+            kHeuristicMemorySaverAvailableMemoryThresholdMb.Get(),
+        base::Seconds(
+            performance_manager::features::
+                kHeuristicMemorySaverThresholdReachedHeartbeatSeconds.Get()),
+        base::Seconds(
+            performance_manager::features::
+                kHeuristicMemorySaverThresholdNotReachedHeartbeatSeconds.Get()),
+        base::Minutes(
+            performance_manager::features::
+                kHeuristicMemorySaverMinimumMinutesInBackground.Get())));
+  } else {
     graph->PassToGraph(
         std::make_unique<
             performance_manager::policies::HighEfficiencyModePolicy>());
@@ -193,14 +204,11 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
         std::make_unique<performance_manager::metrics::PageTimelineMonitor>());
   }
 
-  // TODO(crbug.com/1225070): Consider using this policy on Android.
-#if !BUILDFLAG(IS_ANDROID)
   if (base::FeatureList::IsEnabled(
           performance_manager::features::kBFCachePerformanceManagerPolicy)) {
     graph->PassToGraph(
         std::make_unique<performance_manager::policies::BFCachePolicy>());
   }
-#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
 content::FeatureObserverClient*
@@ -224,35 +232,27 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
   g_browser_process->profile_manager()->AddObserver(this);
 
 #if !BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable) ||
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kBatterySaverModeAvailable)) {
-    profile_discard_opt_out_list_helper_ = std::make_unique<
-        performance_manager::user_tuning::ProfileDiscardOptOutListHelper>();
-    // Create the UserPerformanceTuningManager here so that early UI code can
-    // register observers, but only start it in PreMainMessageLoopRun because it
-    // requires the HostFrameSinkManager to exist.
-    int tab_count_threshold =
-        performance_manager::features::kHighEfficiencyModePromoTabCountThreshold
-            .Get();
-    int memory_percent_threshold =
-        performance_manager::features::
-            kHighEfficiencyModePromoMemoryPercentThreshold.Get();
-    uint64_t system_memory_kb = base::SysInfo::AmountOfPhysicalMemory() / 1024;
-    DCHECK_GT(tab_count_threshold, 0);
-    user_performance_tuning_manager_ = base::WrapUnique(
-        new performance_manager::user_tuning::UserPerformanceTuningManager(
-            g_browser_process->local_state(),
-            std::make_unique<performance_manager::user_tuning::
-                                 UserPerformanceTuningNotifier>(
-                base::WrapUnique(new performance_manager::user_tuning::
-                                     UserPerformanceTuningManager::
-                                         UserPerformanceTuningReceiverImpl),
-                /*resident_set_threshold_kb=*/system_memory_kb * 100 /
-                    memory_percent_threshold,
-                /*tab_count_threshold=*/tab_count_threshold)));
-  }
+  profile_discard_opt_out_list_helper_ = std::make_unique<
+      performance_manager::user_tuning::ProfileDiscardOptOutListHelper>();
+  // Create the UserPerformanceTuningManager here so that early UI code can
+  // register observers, but only start it in PreMainMessageLoopRun because it
+  // requires the HostFrameSinkManager to exist.
+  uint64_t system_memory_kb = base::SysInfo::AmountOfPhysicalMemory() / 1024;
+  user_performance_tuning_manager_ = base::WrapUnique(
+      new performance_manager::user_tuning::UserPerformanceTuningManager(
+          g_browser_process->local_state(),
+          std::make_unique<
+              performance_manager::user_tuning::UserPerformanceTuningNotifier>(
+              base::WrapUnique(new performance_manager::user_tuning::
+                                   UserPerformanceTuningManager::
+                                       UserPerformanceTuningReceiverImpl),
+              /*resident_set_threshold_kb=*/system_memory_kb * 100 /
+                  performance_manager::user_tuning::
+                      UserPerformanceTuningNotifier::
+                          kMemoryPercentThresholdForPromo,
+              /*tab_count_threshold=*/
+              performance_manager::user_tuning::UserPerformanceTuningNotifier::
+                  kTabCountThresholdForPromo)));
 #endif
 
   page_load_metrics_observer_ =
@@ -291,21 +291,15 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
 
 void ChromeBrowserMainExtraPartsPerformanceManager::PreMainMessageLoopRun() {
 #if !BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable) ||
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kBatterySaverModeAvailable)) {
-    // This object requires the host frame sink manager to exist, which is
-    // created after all the extra parts have run their PostCreateThreads.
-    performance_manager::user_tuning::UserPerformanceTuningManager::
-        GetInstance()
-            ->Start();
+  // This object requires the host frame sink manager to exist, which is
+  // created after all the extra parts have run their PostCreateThreads.
+  performance_manager::user_tuning::UserPerformanceTuningManager::GetInstance()
+      ->Start();
 
-    // This object is created by the metrics service before threads, but it
-    // needs the UserPerformanceTuningManager to exist. At this point it's
-    // instantiated, but still needs to be initialized.
-    performance_manager::MetricsProvider::GetInstance()->Initialize();
-  }
+  // This object is created by the metrics service before threads, but it
+  // needs the UserPerformanceTuningManager to exist. At this point it's
+  // instantiated, but still needs to be initialized.
+  performance_manager::MetricsProvider::GetInstance()->Initialize();
 #endif
 }
 
@@ -345,12 +339,7 @@ void ChromeBrowserMainExtraPartsPerformanceManager::OnProfileAdded(
       ->NotifyBrowserContextAdded(profile);
 
 #if !BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable) ||
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kBatterySaverModeAvailable)) {
-    profile_discard_opt_out_list_helper_->OnProfileAdded(profile);
-  }
+  profile_discard_opt_out_list_helper_->OnProfileAdded(profile);
 #endif
 }
 
@@ -366,11 +355,6 @@ void ChromeBrowserMainExtraPartsPerformanceManager::OnProfileWillBeDestroyed(
       ->NotifyBrowserContextRemoved(profile);
 
 #if !BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kHighEfficiencyModeAvailable) ||
-      base::FeatureList::IsEnabled(
-          performance_manager::features::kBatterySaverModeAvailable)) {
-    profile_discard_opt_out_list_helper_->OnProfileWillBeRemoved(profile);
-  }
+  profile_discard_opt_out_list_helper_->OnProfileWillBeRemoved(profile);
 #endif
 }

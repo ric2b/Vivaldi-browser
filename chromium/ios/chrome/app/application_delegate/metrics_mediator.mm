@@ -27,16 +27,18 @@
 #import "ios/chrome/app/startup/ios_enable_sandbox_dump_buildflags.h"
 #import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/crash_report/crash_helper.h"
+#import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/main/browser_provider.h"
+#import "ios/chrome/browser/main/browser_provider_interface.h"
 #import "ios/chrome/browser/metrics/first_user_action_recorder.h"
+#import "ios/chrome/browser/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/coordinator/scene/connection_information.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/signin/signin_util.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
-#import "ios/chrome/browser/ui/main/browser_interface_provider.h"
-#import "ios/chrome/browser/ui/main/connection_information.h"
-#import "ios/chrome/browser/ui/main/scene_state.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_util.h"
+#import "ios/chrome/browser/tabs/inactive_tabs/metrics.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/widget_kit/features.h"
@@ -187,6 +189,24 @@ void DumpEnvironment(id<StartupInformation> startup_information) {
   [data writeToFile:file_path atomically:YES];
 }
 #endif  // BUILDFLAG(IOS_ENABLE_SANDBOX_DUMP)
+
+// Returns the associated setting from inactive tab preference value.
+InactiveTabsThresholdSetting InactiveTabsSettingFromPreference(int preference) {
+  switch (preference) {
+    case -1:
+      return InactiveTabsThresholdSetting::kNeverMove;
+    case 0:
+      return InactiveTabsThresholdSetting::kDefaultValue;
+    case 7:
+      return InactiveTabsThresholdSetting::kOneWeek;
+    case 14:
+      return InactiveTabsThresholdSetting::kTwoWeeks;
+    case 21:
+      return InactiveTabsThresholdSetting::kThreeWeeks;
+    default:
+      return InactiveTabsThresholdSetting::kUnknown;
+  }
+}
 }  // namespace
 
 // A class to log the "load" time in uma.
@@ -294,6 +314,16 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
 // prefs, so as not to trigger upload of various stale data.
 // Mirrors the function in metrics_reporting_state.cc.
 - (void)updateMetricsPrefsOnPermissionChange:(BOOL)enabled;
+// Logs the inactive tabs settings preference.
++ (void)recordInactiveTabsSettingsAtStartup:(int)preference;
+// Logs the number of active tabs (based on the arm's definition of
+// active/inactive).
++ (void)recordNumActiveTabAtStartup:(int)numTabs;
+// Logs the number of inactive tabs (based on the arm's definition of
+// active/inactive).
++ (void)recordNumInactiveTabAtStartup:(int)numTabs;
+// Logs the number of tabs older than 21 days.
++ (void)recordNumAbsoluteInactiveTabAtStartup:(int)numTabs;
 // Logs the number of tabs with UMAHistogramCount100 and allows testing.
 + (void)recordNumTabAtStartup:(int)numTabs;
 // Logs the number of tabs with UMAHistogramCount100 and allows testing.
@@ -367,14 +397,6 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
   base::UmaHistogramCounts100(
       "Startup.ConsecutiveDidFinishLaunchingWithoutLaunch",
       consecutiveDidFinishLaunching);
-
-  if ([connectionInformation startupParameters]) {
-    base::UmaHistogramTimes("Startup.ColdStartWithExternalURLTime",
-                            mainToNowTime);
-  } else {
-    base::UmaHistogramTimes("Startup.ColdStartWithoutExternalURLTime",
-                            mainToNowTime);
-  }
 #if BUILDFLAG(IOS_ENABLE_SANDBOX_DUMP)
   DumpEnvironment(startupInformation);
 #endif  // BUILDFLAG(IOS_ENABLE_SANDBOX_DUMP)
@@ -396,12 +418,22 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
   int numLiveNTPTabs = 0;
   int numOldTabs = 0;
   int numDuplicatedTabs = 0;
+  int numActiveTabs = 0;
+  int numInactiveTabs = 0;
+  int numAbsoluteInactiveTabs = 0;
+
+  // Amount of time after which a tab is considered as old.
+  constexpr base::TimeDelta kOldTabThreshold = base::Days(7);
+
+  // Amount of time after which a tab is considered as absolutely inactive.
+  constexpr base::TimeDelta kAbsoluteInactiveTabThreshold = base::Days(21);
 
   NSMutableSet* uniqueURLs = [NSMutableSet set];
   std::vector<base::TimeDelta> timesSinceCreation;
+  const base::Time now = base::Time::Now();
 
   for (SceneState* scene in scenes) {
-    if (!scene.interfaceProvider) {
+    if (!scene.browserProviderInterface) {
       // The scene might not yet be initiated.
       // TODO(crbug.com/1064611): This will not be an issue when the tabs are
       // counted in sessions instead of scenes.
@@ -409,11 +441,19 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
     }
 
     const WebStateList* webStateList =
-        scene.interfaceProvider.mainInterface.browser->GetWebStateList();
-    numTabs += webStateList->count();
-
-    const base::Time now = base::Time::Now();
+        scene.browserProviderInterface.mainBrowserProvider.browser
+            ->GetWebStateList();
+    const WebStateList* inactiveWebStateList =
+        scene.browserProviderInterface.mainBrowserProvider.inactiveBrowser
+            ->GetWebStateList();
     const int webStateListCount = webStateList->count();
+    const int inactiveWebStateListCount = inactiveWebStateList->count();
+
+    numTabs += webStateListCount + inactiveWebStateListCount;
+    numActiveTabs += webStateListCount;
+    numInactiveTabs += inactiveWebStateListCount;
+    // All inactive tabs are inactive since minimum 7 days or more.
+    numOldTabs += inactiveWebStateListCount;
 
     for (int i = 0; i < webStateListCount; i++) {
       web::WebState* webState = webStateList->GetWebStateAt(i);
@@ -433,9 +473,14 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
         [uniqueURLs addObject:URLString];
       }
 
-      // Count old (e.g. more than 7 days inactive) tabs.
-      if (now - webState->GetLastActiveTime() > base::Days(7)) {
+      // Count old tabs.
+      base::TimeDelta inactiveTime = now - webState->GetLastActiveTime();
+      if (inactiveTime > kOldTabThreshold) {
         numOldTabs++;
+        // Count absolute inactive tabs.
+        if (inactiveTime > kAbsoluteInactiveTabThreshold) {
+          numAbsoluteInactiveTabs++;
+        }
       }
 
       // Calculate the age (time elapsed since creation) of WebState.
@@ -444,9 +489,30 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
 
       DCHECK_EQ(wasWebStateRealized, webState->IsRealized());
     }
+
+    for (int i = 0; i < inactiveWebStateListCount; i++) {
+      web::WebState* webState = inactiveWebStateList->GetWebStateAt(i);
+
+      // Calculate the age (time elapsed since creation) of WebState.
+      base::TimeDelta timeSinceCreation = now - webState->GetCreationTime();
+      timesSinceCreation.push_back(timeSinceCreation);
+
+      // Calculate absolute inactive tabs.
+      base::TimeDelta inactiveTime =
+          base::Time::Now() - webState->GetLastActiveTime();
+      if (inactiveTime > kAbsoluteInactiveTabThreshold) {
+        numAbsoluteInactiveTabs++;
+      }
+    }
   }
 
   if (startupInformation.isColdStart) {
+    [self recordInactiveTabsSettingsAtStartup:
+              GetApplicationContext()->GetLocalState()->GetInteger(
+                  prefs::kInactiveTabsTimeThreshold)];
+    [self recordNumActiveTabAtStartup:numActiveTabs];
+    [self recordNumInactiveTabAtStartup:numInactiveTabs];
+    [self recordNumAbsoluteInactiveTabAtStartup:numAbsoluteInactiveTabs];
     [self recordNumTabAtStartup:numTabs];
     [self recordNumNTPTabAtStartup:numNTPTabs];
     [self recordNumOldTabAtStartup:numOldTabs];
@@ -490,7 +556,7 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
 
     if (activeScene) {
       web::WebState* currentWebState =
-          activeScene.interfaceProvider.currentInterface.browser
+          activeScene.browserProviderInterface.currentBrowserProvider.browser
               ->GetWebStateList()
               ->GetActiveWebState();
       if (currentWebState &&
@@ -644,8 +710,6 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
 
 + (void)applicationDidEnterBackground:(NSInteger)memoryWarningCount {
   base::RecordAction(base::UserMetricsAction("MobileEnteredBackground"));
-  base::UmaHistogramCounts100("MemoryWarning.OccurrencesPerSession",
-                              memoryWarningCount);
 
   task_vm_info task_info_data;
   mach_msg_type_number_t count = sizeof(task_vm_info) / sizeof(natural_t);
@@ -660,6 +724,23 @@ using metrics_mediator::kAppDidFinishLaunchingConsecutiveCallsKey;
 }
 
 #pragma mark - interfaces methods
+
++ (void)recordInactiveTabsSettingsAtStartup:(int)preference {
+  UMA_HISTOGRAM_ENUMERATION(kInactiveTabsThresholdSettingHistogram,
+                            InactiveTabsSettingFromPreference(preference));
+}
+
++ (void)recordNumActiveTabAtStartup:(int)numTabs {
+  base::UmaHistogramCounts100("Tabs.ActiveCountAtStartup", numTabs);
+}
+
++ (void)recordNumInactiveTabAtStartup:(int)numTabs {
+  base::UmaHistogramCounts100("Tabs.InactiveCountAtStartup", numTabs);
+}
+
++ (void)recordNumAbsoluteInactiveTabAtStartup:(int)numTabs {
+  base::UmaHistogramCounts100("Tabs.OldCountAtStartup", numTabs);
+}
 
 + (void)recordNumTabAtStartup:(int)numTabs {
   base::UmaHistogramCounts100("Tabs.CountAtStartup", numTabs);

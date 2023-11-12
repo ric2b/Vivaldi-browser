@@ -101,7 +101,7 @@ class MenubarMenuShowFunction
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  std::string PopulateModel(vivaldi::menubar_menu::Show::Params* params,
+  std::string PopulateModel(absl::optional<vivaldi::menubar_menu::Show::Params> &params,
                             int menu_id,
                             bool dark_text_color,
                             const std::vector<Element>& list,
@@ -135,7 +135,7 @@ class MenubarMenuShowFunction
   // Data used by the menu code outside this object.
   ::vivaldi::MenubarMenuParams menuParams_;
   // Parsed data from the JS layer.
-  std::unique_ptr<vivaldi::menubar_menu::Show::Params> params_;
+  absl::optional<vivaldi::menubar_menu::Show::Params> params_;
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
   std::unique_ptr<::vivaldi::BookmarkMenuContainer> bookmark_menu_container_;
   std::unique_ptr<::vivaldi::VivaldiMenubarMenu> menu_;

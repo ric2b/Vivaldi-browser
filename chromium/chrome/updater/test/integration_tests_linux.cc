@@ -14,8 +14,10 @@
 #include "base/path_service.h"
 #include "base/process/process_iterator.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "base/test/test_timeouts.h"
+#include "build/branding_buildflags.h"
 #include "chrome/updater/activity_impl_util_posix.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants_builder.h"
@@ -124,18 +126,25 @@ void ExpectClean(UpdaterScope scope) {
   if (path && base::PathExists(*path)) {
     // If the path exists, then expect only the log file to be present.
     int count = CountDirectoryFiles(*path);
-    EXPECT_LT(count, 2);
-    if (count == 1) {
+    EXPECT_LE(count, 2);
+    if (count >= 1) {
       EXPECT_TRUE(base::PathExists(path->AppendASCII("updater.log")));
+    }
+    if (count == 2) {
+      EXPECT_TRUE(base::PathExists(path->AppendASCII("prefs.json")));
     }
   }
 
   EXPECT_FALSE(SystemdUnitsInstalled(scope));
 }
 
-void EnterTestMode(const GURL& url) {
+void EnterTestMode(const GURL& update_url,
+                   const GURL& crash_upload_url,
+                   const GURL& device_management_url) {
   ASSERT_TRUE(ExternalConstantsBuilder()
-                  .SetUpdateURL({url.spec()})
+                  .SetUpdateURL({update_url.spec()})
+                  .SetCrashUploadURL(crash_upload_url.spec())
+                  .SetDeviceManagementURL(device_management_url.spec())
                   .SetUseCUP(false)
                   .SetInitialDelay(base::Milliseconds(100))
                   .SetServerKeepAliveTime(base::Seconds(1))
@@ -171,15 +180,30 @@ void ExpectNotActive(UpdaterScope scope, const std::string& app_id) {
 }
 
 void SetupRealUpdaterLowerVersion(UpdaterScope scope) {
-  // TODO(crbug.com/1398845): Add CI for `old_updater`.
-  NOTIMPLEMENTED();
+  base::FilePath exe_path;
+  ASSERT_TRUE(base::PathService::Get(base::DIR_EXE, &exe_path));
+  base::FilePath old_updater_path = exe_path.AppendASCII("old_updater");
+#if BUILDFLAG(CHROMIUM_BRANDING)
+  old_updater_path = old_updater_path.AppendASCII("chromium_linux64");
+#elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  old_updater_path = old_updater_path.AppendASCII("chrome_linux64");
+#endif
+  old_updater_path = old_updater_path.AppendASCII(
+      base::StrCat({kExecutableName, kExecutableSuffix}));
+
+  base::CommandLine command_line(old_updater_path);
+  command_line.AppendSwitch(kInstallSwitch);
+  LOG(ERROR) << "Command " << command_line.GetCommandLineString();
+  int exit_code = -1;
+  Run(scope, command_line, &exit_code);
+  ASSERT_EQ(exit_code, 0);
 }
 
-void SetupFakeLegacyUpdaterData(UpdaterScope scope) {
+void SetupFakeLegacyUpdater(UpdaterScope scope) {
   // No legacy migration for Linux.
 }
 
-void ExpectLegacyUpdaterDataMigrated(UpdaterScope scope) {
+void ExpectLegacyUpdaterMigrated(UpdaterScope scope) {
   // No legacy migration for Linux.
 }
 

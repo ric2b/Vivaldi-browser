@@ -17,6 +17,7 @@
 #include "ash/test/ash_test_base.h"
 #include "base/base64.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -81,8 +82,9 @@ class TestMessageCenter : public message_center::FakeMessageCenter {
 
   void RemoveNotification(const std::string& id, bool by_user) override {
     notification_.reset();
-    for (auto& observer : observer_list())
+    for (auto& observer : observer_list()) {
       observer.OnNotificationRemoved(id, by_user);
+    }
   }
 
   message_center::Notification* FindVisibleNotificationById(
@@ -104,16 +106,18 @@ class TestMessageCenter : public message_center::FakeMessageCenter {
   }
 
   void Close(const std::string& id, bool by_user) {
-    if (notification_)
+    if (notification_) {
       notification_->delegate()->Close(by_user);
+    }
   }
 
   void CloseNotificationsWhenRemoved() { close_ = true; }
 
   void RemoveNotificationsForNotifierId(
       const message_center::NotifierId& notifier_id) override {
-    if (notification_ && close_)
+    if (notification_ && close_) {
       notification_->delegate()->Close(/*by_user=*/false);
+    }
 
     remove_notifications_for_notifier_id_ = true;
     notification_.reset();
@@ -209,7 +213,7 @@ class FastPairPresenterImplTest : public AshTestBase {
   std::unique_ptr<signin::IdentityTestEnvironment> identity_test_environment_;
   std::unique_ptr<MockQuickPairBrowserDelegate> browser_delegate_;
   signin::IdentityTestEnvironment identity_test_env_;
-  signin::IdentityManager* identity_manager_;
+  raw_ptr<signin::IdentityManager, ExperimentalAsh> identity_manager_;
   DiscoveryAction discovery_action_;
   DiscoveryAction secondary_discovery_action_;
   PairingFailedAction pairing_failed_action_;
@@ -236,7 +240,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   repository_->SetOptInStatus(nearby::fastpair::OptInStatus::STATUS_OPTED_IN);
@@ -263,7 +267,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   repository_->SetOptInStatus(nearby::fastpair::OptInStatus::STATUS_OPTED_IN);
@@ -289,7 +293,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   repository_->SetOptInStatus(nearby::fastpair::OptInStatus::STATUS_OPTED_IN);
@@ -316,7 +320,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryGuestNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   repository_->SetOptInStatus(nearby::fastpair::OptInStatus::STATUS_OPTED_OUT);
@@ -343,7 +347,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   repository_->SetOptInStatus(nearby::fastpair::OptInStatus::STATUS_OPTED_IN);
@@ -369,7 +373,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   repository_->SetOptInStatus(nearby::fastpair::OptInStatus::STATUS_OPTED_IN);
@@ -390,7 +394,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Child) {
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_CHILD);
   base::RunLoop().RunUntilIdle();
@@ -412,7 +416,7 @@ TEST_F(FastPairPresenterImplTest, RemoveNotifications) {
       /*disabled_features=*/{features::kFastPairSavedDevices,
                              features::kFastPairSavedDevicesStrictOptIn});
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowDiscovery(
@@ -437,7 +441,7 @@ TEST_F(FastPairPresenterImplTest, ExtendNotification) {
       /*enabled_features=*/{features::kFastPairSavedDevices},
       /*disabled_features=*/{features::kFastPairSavedDevicesStrictOptIn});
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowDiscovery(
@@ -465,7 +469,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
@@ -493,7 +497,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
@@ -520,7 +524,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
@@ -548,7 +552,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   nearby::fastpair::Device metadata;
@@ -581,7 +585,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   nearby::fastpair::Device metadata;
@@ -614,7 +618,7 @@ TEST_F(FastPairPresenterImplTest,
       kFastPairDiscoveryUserNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   nearby::fastpair::Device metadata;
@@ -722,7 +726,7 @@ TEST_F(FastPairPresenterImplTest,
 
 TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_User_ConnectClicked) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
@@ -748,7 +752,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_User_ConnectClicked) {
 
 TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_User_LearnMoreClicked) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
@@ -774,7 +778,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_User_LearnMoreClicked) {
 
 TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_User_DismissedByUser) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
@@ -801,7 +805,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_User_DismissedByUser) {
 TEST_F(FastPairPresenterImplTest,
        ShowInitialDiscovery_User_DismissedByTimeout) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   test_message_center_.CloseNotificationsWhenRemoved();
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::test::ScopedFeatureList feature_list;
@@ -827,7 +831,7 @@ TEST_F(FastPairPresenterImplTest,
 
 TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_User_DismissedByOS) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
@@ -856,7 +860,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Guest) {
       kFastPairDiscoveryGuestNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_GUEST);
   base::RunLoop().RunUntilIdle();
@@ -876,7 +880,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_KioskApp) {
       kFastPairDiscoveryGuestNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_KIOSK_APP);
   base::test::ScopedFeatureList feature_list;
@@ -899,7 +903,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_KioskApp) {
 
 TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Guest_ConnectClicked) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_GUEST);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowDiscovery(
@@ -920,7 +924,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Guest_ConnectClicked) {
 
 TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Guest_LearnMoreClicked) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_GUEST);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowDiscovery(
@@ -941,7 +945,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Guest_LearnMoreClicked) {
 
 TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Guest_DismissedByUser) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_GUEST);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowDiscovery(
@@ -963,7 +967,7 @@ TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Guest_DismissedByUser) {
 TEST_F(FastPairPresenterImplTest,
        ShowInitialDiscovery_Guest_DismissedByTimeout) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   test_message_center_.CloseNotificationsWhenRemoved();
   Login(user_manager::UserType::USER_TYPE_GUEST);
   base::RunLoop().RunUntilIdle();
@@ -984,7 +988,7 @@ TEST_F(FastPairPresenterImplTest,
 
 TEST_F(FastPairPresenterImplTest, ShowInitialDiscovery_Guest_DismissedByOS) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_GUEST);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowDiscovery(
@@ -1008,7 +1012,7 @@ TEST_F(FastPairPresenterImplTest, ShowPairing) {
       kFastPairPairingNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
@@ -1024,7 +1028,7 @@ TEST_F(FastPairPresenterImplTest, ShowPairing_NoDeviceMetadata) {
       kFastPairPairingNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
@@ -1041,7 +1045,7 @@ TEST_F(FastPairPresenterImplTest, ShowPairingFailed) {
       kFastPairErrorNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
@@ -1061,7 +1065,7 @@ TEST_F(FastPairPresenterImplTest, ShowPairingFailed_NoDeviceMetadata) {
       kFastPairErrorNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
@@ -1079,7 +1083,7 @@ TEST_F(FastPairPresenterImplTest, ShowPairingFailed_NoDeviceMetadata) {
 
 TEST_F(FastPairPresenterImplTest, ShowPairingFailed_SettingsClicked) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowPairingFailed(
@@ -1100,7 +1104,7 @@ TEST_F(FastPairPresenterImplTest, ShowPairingFailed_SettingsClicked) {
 
 TEST_F(FastPairPresenterImplTest, ShowPairingFailed_DismissedByOS) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_GUEST);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowPairingFailed(
@@ -1124,7 +1128,7 @@ TEST_F(FastPairPresenterImplTest, ShowAssociateAccount) {
       kFastPairAssociateAccountNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
@@ -1145,7 +1149,7 @@ TEST_F(FastPairPresenterImplTest, ShowAssociateAccount) {
 
 TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_SaveClicked) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowAssociateAccount(
@@ -1162,7 +1166,7 @@ TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_SaveClicked) {
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(associate_account_action_,
-            AssociateAccountAction::kAssoicateAccount);
+            AssociateAccountAction::kAssociateAccount);
 }
 
 TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_NoDeviceMetadata) {
@@ -1170,7 +1174,7 @@ TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_NoDeviceMetadata) {
       kFastPairAssociateAccountNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   repository_->ClearFakeMetadata(kValidModelId);
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
@@ -1209,7 +1213,7 @@ TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_NoIdentityManager) {
 
 TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_LearnMoreClicked) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowAssociateAccount(
@@ -1230,7 +1234,7 @@ TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_LearnMoreClicked) {
 
 TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_DismissedByUser) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowAssociateAccount(
@@ -1252,7 +1256,7 @@ TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_DismissedByUser) {
 
 TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_DismissedByTimeout) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   test_message_center_.CloseNotificationsWhenRemoved();
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
@@ -1274,7 +1278,7 @@ TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_DismissedByTimeout) {
 
 TEST_F(FastPairPresenterImplTest, ShowAssociateAccount_DismissedByOS) {
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
   fast_pair_presenter_->ShowAssociateAccount(
@@ -1298,7 +1302,7 @@ TEST_F(FastPairPresenterImplTest, ShowSubsequentDiscovery_Connect) {
       kFastPairDiscoverySubsequentNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
@@ -1323,7 +1327,7 @@ TEST_F(FastPairPresenterImplTest, ShowSubsequentDiscovery_LearnMore) {
       kFastPairDiscoverySubsequentNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
@@ -1348,7 +1352,7 @@ TEST_F(FastPairPresenterImplTest, ShowSubsequentDiscovery_DismissedByUser) {
       kFastPairDiscoverySubsequentNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();
@@ -1374,7 +1378,7 @@ TEST_F(FastPairPresenterImplTest, ShowSubsequentDiscovery_DismissedByOS) {
       kFastPairDiscoverySubsequentNotificationId));
 
   ON_CALL(*browser_delegate_, GetIdentityManager())
-      .WillByDefault(testing::Return(identity_manager_));
+      .WillByDefault(testing::Return(identity_manager_.get()));
 
   Login(user_manager::UserType::USER_TYPE_REGULAR);
   base::RunLoop().RunUntilIdle();

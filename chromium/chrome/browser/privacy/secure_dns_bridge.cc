@@ -14,6 +14,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "chrome/browser/browser_process.h"
@@ -42,9 +43,13 @@ namespace secure_dns = chrome_browser_net::secure_dns;
 namespace {
 
 net::DohProviderEntry::List GetFilteredProviders() {
-  return secure_dns::ProvidersForCountry(
-      secure_dns::SelectEnabledProviders(net::DohProviderEntry::GetList()),
-      country_codes::GetCurrentCountryID());
+  // Note: Check whether each provider is enabled *after* filtering based on
+  // country code so that if we are doing experimentation via Finch for a
+  // regional provider, the experiment groups will be less likely to include
+  // users from other regions unnecessarily (since a client will be included in
+  // the experiment if the provider feature flag is checked).
+  return secure_dns::SelectEnabledProviders(secure_dns::ProvidersForCountry(
+      net::DohProviderEntry::GetList(), country_codes::GetCurrentCountryID()));
 }
 
 // Runs a DNS probe according to the configuration in |overrides|,
@@ -98,13 +103,14 @@ static ScopedJavaLocalRef<jobjectArray> JNI_SecureDnsBridge_GetProviders(
   net::DohProviderEntry::List providers = GetFilteredProviders();
   std::vector<std::vector<std::u16string>> ret;
   ret.reserve(providers.size());
-  std::transform(providers.begin(), providers.end(), std::back_inserter(ret),
-                 [](const auto* entry) -> std::vector<std::u16string> {
-                   net::DnsOverHttpsConfig config({entry->doh_server_config});
-                   return {base::UTF8ToUTF16(entry->ui_name),
-                           base::UTF8ToUTF16(config.ToString()),
-                           base::UTF8ToUTF16(entry->privacy_policy)};
-                 });
+  base::ranges::transform(
+      providers, std::back_inserter(ret),
+      [](const auto* entry) -> std::vector<std::u16string> {
+        net::DnsOverHttpsConfig config({entry->doh_server_config});
+        return {base::UTF8ToUTF16(entry->ui_name),
+                base::UTF8ToUTF16(config.ToString()),
+                base::UTF8ToUTF16(entry->privacy_policy)};
+      });
   return base::android::ToJavaArrayOfStringArray(env, ret);
 }
 

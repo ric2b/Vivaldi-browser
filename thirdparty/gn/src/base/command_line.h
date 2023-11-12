@@ -31,6 +31,7 @@ class CommandLine {
  public:
 #if defined(OS_WIN)
   // The native command line string type.
+  // See StringTypeToUTF8() and UTF8ToStringType() below.
   using StringType = std::u16string;
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   using StringType = std::string;
@@ -38,7 +39,7 @@ class CommandLine {
 
   using CharType = StringType::value_type;
   using StringVector = std::vector<StringType>;
-  using SwitchMap = std::map<std::string, StringType, std::less<>>;
+  using SwitchMap = std::multimap<std::string, StringType, std::less<>>;
 
   // A constructor for CommandLines that only carry switches and arguments.
   enum NoProgram { NO_PROGRAM };
@@ -56,6 +57,10 @@ class CommandLine {
   CommandLine& operator=(const CommandLine& other);
 
   ~CommandLine();
+
+  // Converts the platform string type to/from UTF-8.
+  static std::string StringTypeToUTF8(const StringType& input);
+  static StringType UTF8ToStringType(std::string_view input);
 
 #if defined(OS_WIN)
   // By default this class will treat command-line arguments beginning with
@@ -167,24 +172,35 @@ class CommandLine {
   bool HasSwitch(std::string_view switch_string) const;
   bool HasSwitch(const char switch_constant[]) const;
 
-  // Returns the value associated with the given switch. If the switch has no
-  // value or isn't present, this method returns the empty string.
-  // Switch names must be lowercase.
-  std::string GetSwitchValueASCII(std::string_view switch_string) const;
+  // Returns the last value associated with the given switch. If the switch has
+  // no value or isn't present, this method returns the empty string. Switch
+  // names must be lowercase.
+  //
+  // The "string" version returns an 8-bit representation. On Windows, this will
+  // convert to UTF-8, on 8-bit systems it will return the raw input.
+  std::string GetSwitchValueString(std::string_view switch_string) const;
   FilePath GetSwitchValuePath(std::string_view switch_string) const;
   StringType GetSwitchValueNative(std::string_view switch_string) const;
+
+  // Returns all values associated with the given switch.
+  std::vector<std::string> GetSwitchValueStrings(
+      std::string_view switch_string) const;
+  std::vector<StringType> GetSwitchValuesNative(
+      std::string_view switch_string) const;
 
   // Get a copy of all switches, along with their values.
   const SwitchMap& GetSwitches() const { return switches_; }
 
   // Append a switch [with optional value] to the command line.
   // Note: Switches will precede arguments regardless of appending order.
+  //
+  // The version that takes an 8-bit switch value converts from UTF-8 on
+  // Windows.
   void AppendSwitch(const std::string& switch_string);
   void AppendSwitchPath(const std::string& switch_string, const FilePath& path);
   void AppendSwitchNative(const std::string& switch_string,
                           const StringType& value);
-  void AppendSwitchASCII(const std::string& switch_string,
-                         const std::string& value);
+  void AppendSwitch(const std::string& switch_string, const std::string& value);
 
   // Copy a set of switches (and any values) from another command line.
   // Commonly used when launching a subprocess.

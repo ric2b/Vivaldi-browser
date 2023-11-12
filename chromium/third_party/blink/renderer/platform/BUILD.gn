@@ -318,10 +318,6 @@ component("platform") {
     "audio/audio_io_callback.h",
     "audio/audio_processor.cc",
     "audio/audio_processor.h",
-    "audio/audio_resampler.cc",
-    "audio/audio_resampler.h",
-    "audio/audio_resampler_kernel.cc",
-    "audio/audio_resampler_kernel.h",
     "audio/audio_source_provider.h",
     "audio/audio_source_provider_client.h",
     "audio/audio_utilities.cc",
@@ -403,6 +399,7 @@ component("platform") {
     "bindings/active_script_wrappable_base.h",
     "bindings/active_script_wrappable_manager.cc",
     "bindings/active_script_wrappable_manager.h",
+    "bindings/bigint.h",
     "bindings/binding_security_for_platform.cc",
     "bindings/binding_security_for_platform.h",
     "bindings/callback_function_base.cc",
@@ -616,8 +613,6 @@ component("platform") {
     "fonts/font_height.cc",
     "fonts/font_height.h",
     "fonts/font_invalidation_reason.h",
-    "fonts/font_matching_metrics.cc",
-    "fonts/font_matching_metrics.h",
     "fonts/font_metrics.cc",
     "fonts/font_metrics.h",
     "fonts/font_metrics_override.h",
@@ -640,6 +635,7 @@ component("platform") {
     "fonts/font_selector.cc",
     "fonts/font_selector.h",
     "fonts/font_selector_client.h",
+    "fonts/font_size_adjust.h",
     "fonts/font_smoothing_mode.cc",
     "fonts/font_smoothing_mode.h",
     "fonts/font_unique_name_lookup.cc",
@@ -702,6 +698,8 @@ component("platform") {
     "fonts/shaping/harfbuzz_font_data.h",
     "fonts/shaping/harfbuzz_shaper.cc",
     "fonts/shaping/harfbuzz_shaper.h",
+    "fonts/shaping/ng_shape_cache.cc",
+    "fonts/shaping/ng_shape_cache.h",
     "fonts/shaping/run_segmenter.cc",
     "fonts/shaping/run_segmenter.h",
     "fonts/shaping/shape_cache.h",
@@ -753,7 +751,6 @@ component("platform") {
     "fonts/web_font_render_style.cc",
     "fonts/web_font_typeface_factory.cc",
     "fonts/web_font_typeface_factory.h",
-    "geometry/anchor_query_enums.h",
     "geometry/blend.h",
     "geometry/calculation_expression_node.cc",
     "geometry/calculation_expression_node.h",
@@ -769,8 +766,6 @@ component("platform") {
     "geometry/layout_point.h",
     "geometry/layout_rect.cc",
     "geometry/layout_rect.h",
-    "geometry/layout_rect_outsets.cc",
-    "geometry/layout_rect_outsets.h",
     "geometry/layout_size.cc",
     "geometry/layout_size.h",
     "geometry/layout_unit.cc",
@@ -782,6 +777,7 @@ component("platform") {
     "geometry/length_functions.h",
     "geometry/length_point.h",
     "geometry/length_size.h",
+    "geometry/math_functions.h",
     "graphics/accelerated_static_bitmap_image.cc",
     "graphics/accelerated_static_bitmap_image.h",
     "graphics/animation_worklet_mutator.h",
@@ -815,7 +811,6 @@ component("platform") {
     "graphics/color.h",
     "graphics/color_behavior.cc",
     "graphics/color_behavior.h",
-    "graphics/color_blend.h",
     "graphics/color_space_gamut.cc",
     "graphics/color_space_gamut.h",
     "graphics/color_space_profile_data.cc",
@@ -994,6 +989,7 @@ component("platform") {
     "graphics/intercepting_canvas.h",
     "graphics/interpolation_space.cc",
     "graphics/interpolation_space.h",
+    "graphics/lcd_text_preference.h",
     "graphics/logging_canvas.cc",
     "graphics/logging_canvas.h",
     "graphics/mailbox_ref.cc",
@@ -1384,13 +1380,8 @@ component("platform") {
     "storage/blink_storage_key_mojom_traits.cc",
     "supplementable.cc",
     "supplementable.h",
-    "text/bidi_character_run.h",
-    "text/bidi_context.cc",
-    "text/bidi_context.h",
-    "text/bidi_resolver.h",
-    "text/bidi_run_list.h",
-    "text/bidi_text_run.cc",
-    "text/bidi_text_run.h",
+    "text/bidi_paragraph.cc",
+    "text/bidi_paragraph.h",
     "text/capitalize.cc",
     "text/capitalize.h",
     "text/character.cc",
@@ -1435,7 +1426,6 @@ component("platform") {
     "text/text_encoding_detector.h",
     "text/text_run.cc",
     "text/text_run.h",
-    "text/text_run_iterator.h",
     "text/truncation.h",
     "text/unicode_bidi.h",
     "text/unicode_range.cc",
@@ -1511,8 +1501,8 @@ component("platform") {
     "webrtc/webrtc_video_frame_adapter.h",
     "webrtc/webrtc_video_utils.cc",
     "webrtc/webrtc_video_utils.h",
-    "widget/compositing/categorized_worker_pool.cc",
-    "widget/compositing/categorized_worker_pool.h",
+    "widget/compositing/blink_categorized_worker_pool_delegate.cc",
+    "widget/compositing/blink_categorized_worker_pool_delegate.h",
     "widget/compositing/layer_tree_settings.cc",
     "widget/compositing/layer_tree_settings.h",
     "widget/compositing/layer_tree_view.cc",
@@ -1690,6 +1680,7 @@ component("platform") {
     "//base/allocator:buildflags",
     "//build:chromecast_buildflags",
     "//build:chromeos_buildflags",
+    "//cc",
     "//cc/ipc",
     "//cc/mojo_embedder",
     "//components/paint_preview/common",
@@ -1837,10 +1828,6 @@ component("platform") {
   if (use_webaudio_pffft) {
     include_dirs += [ "//third_party/pffft/src" ]
     deps += [ "//third_party/pffft" ]
-  }
-
-  if (skia_use_dawn) {
-    deps += [ "//third_party/dawn/src/dawn:cpp" ]
   }
 
   if (!is_debug && !optimize_for_size) {
@@ -2060,6 +2047,7 @@ source_set("blink_platform_unittests_sources") {
     "fonts/shaping/caching_word_shaper_test.cc",
     "fonts/shaping/font_features_test.cc",
     "fonts/shaping/harfbuzz_shaper_test.cc",
+    "fonts/shaping/ng_shape_cache_test.cc",
     "fonts/shaping/run_segmenter_test.cc",
     "fonts/shaping/shape_result_bloberizer_test.cc",
     "fonts/shaping/shape_result_run_info_test.cc",
@@ -2176,6 +2164,7 @@ source_set("blink_platform_unittests_sources") {
     "peerconnection/rtc_rtp_source_test.cc",
     "peerconnection/rtc_stats_test.cc",
     "peerconnection/rtc_video_decoder_adapter_test.cc",
+    "peerconnection/rtc_video_decoder_factory_test.cc",
     "peerconnection/rtc_video_decoder_stream_adapter_test.cc",
     "peerconnection/rtc_video_encoder_factory_test.cc",
     "peerconnection/rtc_video_encoder_test.cc",
@@ -2194,8 +2183,7 @@ source_set("blink_platform_unittests_sources") {
     "runtime_enabled_features_test.cc",
     "storage/blink_storage_key_mojom_traits_test.cc",
     "storage/blink_storage_key_test.cc",
-    "text/bidi_resolver_test.cc",
-    "text/bidi_test_harness.h",
+    "text/bidi_paragraph_test.cc",
     "text/capitalize_test.cc",
     "text/character_test.cc",
     "text/date_time_format_test.cc",
@@ -2226,7 +2214,6 @@ source_set("blink_platform_unittests_sources") {
     "weborigin/security_policy_test.cc",
     "webrtc/convert_to_webrtc_video_frame_buffer_test.cc",
     "webrtc/webrtc_video_frame_adapter_test.cc",
-    "widget/compositing/categorized_worker_pool_unittest.cc",
     "widget/compositing/layer_tree_settings_unittest.cc",
     "widget/compositing/layer_tree_view_unittest.cc",
     "widget/compositing/render_frame_metadata_observer_impl_unittest.cc",
@@ -2522,6 +2509,14 @@ fuzzer_test("math_transform_fuzzer") {
   dict = "//testing/libfuzzer/fuzzers/dicts/math_transform.dict"
 }
 
+fuzzer_test("layout_locale_fuzzer") {
+  sources = [ "text/layout_locale_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+}
+
 # Fuzzer for blink::FindCategory.
 fuzzer_test("mathml_operator_dictionary_fuzzer") {
   sources = [ "text/mathml_operator_dictionary_fuzzer.cc" ]
@@ -2593,7 +2588,7 @@ fuzzer_test("blink_png_decoder_fuzzer") {
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/png.dict"
   seed_corpuses = [
-    "//components/viz/test/data",
+    "//components/test/data/viz",
     "//third_party/blink/web_tests/images/png-suite/samples",
     "//third_party/blink/web_tests/images/resources/pngfuzz",
   ]

@@ -84,6 +84,7 @@
 <translation id="1722487484194605434">正在压缩 <ph name="NUMBER_OF_ITEMS" /> 项内容…</translation>
 <translation id="1722687688096767818">正在添加配置文件…</translation>
 <translation id="1726100011689679555">域名服务器</translation>
+<translation id="1727562178154619254">可以开始同步了</translation>
 <translation id="1729953886957086472">德语（德国）</translation>
 <translation id="1730235522912993863">中文仓颉</translation>
 <translation id="1731889557567069540">已复制 <ph name="NUMBER_OF_ITEMS" /> 项。</translation>
@@ -106,7 +107,6 @@
 <translation id="1834290891154666894">主题备用名称的匹配条目无效</translation>
 <translation id="1838709767668011582">Google 网站</translation>
 <translation id="1853795129690976061">已与 Linux 共享此文件夹</translation>
-<translation id="1859422890169495746">此 Chromebook</translation>
 <translation id="1864756863218646478">找不到该文件。</translation>
 <translation id="1884013283844450420">第 <ph name="NETWORK_INDEX" /> 个网络（共 <ph name="NETWORK_COUNT" /> 个），<ph name="NETWORK_NAME" />，连接</translation>
 <translation id="1920670151694390848">马拉雅拉姆语音译</translation>
@@ -118,7 +118,6 @@
 <translation id="1942765061641586207">图片分辨率</translation>
 <translation id="1972984168337863910">展开文件反馈面板</translation>
 <translation id="1995337122023280937">转到文件位置</translation>
-<translation id="1999709132469742660">所有网址都能访问文件</translation>
 <translation id="2001796770603320721">在云端硬盘中管理</translation>
 <translation id="2009067268969781306">将驱动器格式化会删除其中存储的所有数据。此操作无法撤消。</translation>
 <translation id="2025955442973426285">蒂格尼亚语</translation>
@@ -130,6 +129,7 @@
 <translation id="2084108471225856927">设备设置</translation>
 <translation id="2084809735218147718">一个人在用手势表达谢意</translation>
 <translation id="2088690981887365033">VPN 网络</translation>
+<translation id="2111134541987263231">开启<ph name="BEGIN_BOLD" />在无痕模式下启用<ph name="END_BOLD" /></translation>
 <translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> 项内容将被删除且无法恢复。</translation>
 <translation id="2122305276694332719">自动连接至隐藏的网络会导致其他人能查看您的设备和一些网络设置，因此我们建议不要这样做。</translation>
 <translation id="2125607626296734455">高棉语</translation>
@@ -150,6 +150,7 @@
 <translation id="2236732657580416950">您的 Google 云端硬盘缓存被清除了。</translation>
 <translation id="2239068707900391003">一个人在喝咖啡</translation>
 <translation id="2251368349685848079">从回收站还原</translation>
+<translation id="2278133026967558505">所有网站和网址都能访问文件</translation>
 <translation id="2282155092769082568">自动配置网址：</translation>
 <translation id="2284767815536050991">可拆卸式存储设备</translation>
 <translation id="2288278176040912387">电唱机</translation>
@@ -158,6 +159,7 @@
 <translation id="2304820083631266885">星球</translation>
 <translation id="2305020378527873881">已移除 <ph name="VOLUME_NAME" />。</translation>
 <translation id="2307462900900812319">配置网络</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{找不到以下 ID 对应的扩展程序：<ph name="BEGIN_LIST" /><ph name="END_LIST" />。请联系您的管理员。}other{找不到以下 ID 对应的扩展程序：<ph name="BEGIN_LIST" /><ph name="END_LIST" />。请联系您的管理员。}}</translation>
 <translation id="2325650632570794183">不支持此文件类型。请访问 Chrome 应用商店，找到能打开此文件类型的应用。</translation>
 <translation id="2326539130272988168">保加利亚语</translation>
 <translation id="2337715497728194187">与 Bruschetta 共享</translation>
@@ -227,6 +229,7 @@
 <translation id="290843123675549676">马拉地语</translation>
 <translation id="2923240520113693977">爱沙尼亚语</translation>
 <translation id="2938685643439809023">蒙古语</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{找不到扩展程序}other{找不到扩展程序}}</translation>
 <translation id="2943503720238418293">请使用一个较短的名称</translation>
 <translation id="2949781154072577687">正在将“<ph name="DRIVE_NAME" />”格式化…</translation>
 <translation id="2951236788251446349">海蜇</translation>
@@ -272,6 +275,7 @@
 <translation id="3290356915286466215">无保护</translation>
 <translation id="3291218047831493686">必须连接到此网络，才能更改 SIM 卡锁定设置</translation>
 <translation id="3293023191599135697">WEP 网络不受支持</translation>
+<translation id="3295006446256079333">此卷</translation>
 <translation id="3295357220137379386">设备正忙</translation>
 <translation id="3296763833017966289">格鲁吉亚语</translation>
 <translation id="3307875152560779385">乌克兰语</translation>
@@ -281,6 +285,7 @@
 <translation id="3356580349448036450">已完成</translation>
 <translation id="3358452157379365236">吉他</translation>
 <translation id="3368922792935385530">已连接</translation>
+<translation id="3372635229069101468">点击<ph name="BEGIN_BOLD" />详细信息<ph name="END_BOLD" /></translation>
 <translation id="3382143449143186018">尼泊尔语 InScript 键盘</translation>
 <translation id="338691029516748599">第 <ph name="NETWORK_INDEX" /> 个网络（共 <ph name="NETWORK_COUNT" /> 个），<ph name="NETWORK_NAME" />，<ph name="SECURITY_STATUS" />，信号强度为 <ph name="SIGNAL_STRENGTH" />%，由您的管理员管理，连接</translation>
 <translation id="3408072735282270043">激活，<ph name="NETWORK_NAME" /></translation>
@@ -365,6 +370,7 @@
 <translation id="4124935795427217608">独角兽</translation>
 <translation id="4131235941541910880">将不需要的内容移至回收站</translation>
 <translation id="4134804435730168042">第 <ph name="NETWORK_INDEX" /> 个网络（共 <ph name="NETWORK_COUNT" /> 个），<ph name="NETWORK_NAME" />，<ph name="NETWORK_PROVIDER_NAME" />，在设备完成设置后启用</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{在无痕模式下启用以下扩展程序：}other{在无痕模式下启用以下扩展程序：}}</translation>
 <translation id="4153015322587141338">只需右键点击某个文件并选择“<ph name="PIN_COMMAND" />”，即可在任务栏中快速访问相应文件。</translation>
 <translation id="4157569377477607576">管理员政策不建议：</translation>
 <translation id="4159731583141908892">已移动 <ph name="FILE_NAME" />。</translation>
@@ -461,12 +467,15 @@
 <translation id="4801956050125744859">保留两种版本</translation>
 <translation id="4804827417948292437">牛油果</translation>
 <translation id="4805966553127040832">正在恢复 <ph name="COUNT" /> 项内容</translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{根据贵单位的要求，您必须安装一个扩展程序才能使用无痕模式}other{根据贵单位的要求，您必须安装一些扩展程序才能使用无痕模式}}</translation>
 <translation id="4823651846660089135">设备目前处于只读模式</translation>
 <translation id="4826849268470072925">泰米尔语 ITRANS</translation>
+<translation id="482932175346970750">在浏览器中输入 <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" /></translation>
 <translation id="4839847978919684242">已经选择 <ph name="SELCTED_FILES_COUNT" /> 个文件或目录</translation>
 <translation id="4843566743023903107">Chromebase</translation>
 <translation id="4850886885716139402">视图</translation>
 <translation id="485316830061041779">德语</translation>
+<translation id="4862885579661885411">“文件”相关设置</translation>
 <translation id="4867079195717347957">点击即可按降序对此列排序。</translation>
 <translation id="4867297348137739678">上一周</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> 字节</translation>
@@ -527,6 +536,7 @@
 <translation id="5262311848634918433"><ph name="MARKUP_1" />可随时随地访问文件，即使处于离线状态也没关系。<ph name="MARKUP_2" />Google 云端硬盘上的文件是最新的，并可通过任意设备访问。<ph name="MARKUP_3" /><ph name="MARKUP_4" />可确保文件安全。<ph name="MARKUP_5" />无论您的设备出现什么状况，您的文件都会安全地存储在 Google 云端硬盘上。<ph name="MARKUP_6" /><ph name="MARKUP_7" />文件集中存储，方便您与他人在同一个地方共享、创建和协作处理<ph name="MARKUP_8" />文件。<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">从 Google 云端硬盘恢复的文件</translation>
 <translation id="5278111733643988471">若要恢复这项内容，请将其拖至回收站以外的新文件夹。这项内容的原始文件夹“<ph name="PARENT_FOLDER_NAME" />”已被删除。</translation>
+<translation id="5283101102242354279">要在无痕模式下启用扩展程序，请执行以下操作：</translation>
 <translation id="5286194356314741248">正在扫描</translation>
 <translation id="5288441970121584418">汉堡包</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -537,7 +547,6 @@
 <translation id="5323213332664049067">拉丁美洲</translation>
 <translation id="5330145655348521461">这些文件已在其他桌面打开。请转至<ph name="USER_NAME" />(<ph name="MAIL_ADDRESS" />)查看这些文件。</translation>
 <translation id="5330512191124428349">获取信息</translation>
-<translation id="5337538975554986899">除 <ph name="NON_RESTRICTED_DESTINATIONS" /> 之外的所有网址都能访问文件</translation>
 <translation id="5344246330454251646">管理 Bruschetta 共享</translation>
 <translation id="535792325654997756">一个人和几只猫</translation>
 <translation id="5358764674931277">帧速率</translation>
@@ -610,6 +619,7 @@
 <translation id="5911887972742538906">安装 Linux 应用时出错。</translation>
 <translation id="5912396950572065471">格式</translation>
 <translation id="5913638992615760742">复制操作失败，出现了意外的错误：<ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">新的搜索功能现已推出</translation>
 <translation id="5926082595146149752">荷兰语（荷兰）美式国际 PC 键盘</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063">第 <ph name="NETWORK_INDEX" /> 个网络（共 <ph name="NETWORK_COUNT" /> 个），<ph name="NETWORK_NAME" />，在设备完成设置后启用</translation>
@@ -622,6 +632,7 @@
 <translation id="603895874132768835">在设置新 PIN 码之前，您将无法使用此网络</translation>
 <translation id="6040143037577758943">关闭</translation>
 <translation id="6055907707645252013">“<ph name="NETWORK_TYPE" />”类型的网络，未连接</translation>
+<translation id="6073060579181816027">多个文件位置</translation>
 <translation id="6074825444536523002">Google 表单</translation>
 <translation id="6079871810119356840">匈牙利语 Qwerty 键盘</translation>
 <translation id="6096979789310008754">已清除搜索文本，目前显示的是所有文件和文件夹。</translation>
@@ -699,6 +710,7 @@
 <translation id="6732801395666424405">未加载证书</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6740270213273127264">与 Bruschetta 共享文件夹</translation>
+<translation id="6750737795876287924">当前目录</translation>
 <translation id="6751256176799620176">已选择 1 个文件夹</translation>
 <translation id="6755827872271341378">ChromeOS Flex 设备</translation>
 <translation id="6790428901817661496">播放</translation>
@@ -736,7 +748,6 @@
 <translation id="6973630695168034713">文件夹</translation>
 <translation id="6976795442547527108">狮子</translation>
 <translation id="6979158407327259162">Google 云端硬盘</translation>
-<translation id="6979737339423435258">时间不限</translation>
 <translation id="6989942356279143254">瑞典语</translation>
 <translation id="6990081529015358884">空间不足</translation>
 <translation id="6993826899923627728">这些内容位于您的回收站中</translation>
@@ -762,6 +773,7 @@
 <translation id="7162080671816799010">缺少“主体备用名称匹配”或“域名后缀匹配”，无法验证服务器身份</translation>
 <translation id="7165320105431587207">无法配置网络</translation>
 <translation id="7170041865419449892">超出范围</translation>
+<translation id="7179579940054351344">除 <ph name="NON_RESTRICTED_DESTINATIONS" /> 之外的所有网站和网址都能访问文件</translation>
 <translation id="7180611975245234373">刷新</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> GB</translation>
 <translation id="7191454237977785534">文件另存为</translation>
@@ -771,6 +783,7 @@
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />，详细信息</translation>
 <translation id="7246947237293279874">FTP 代理</translation>
 <translation id="7248671827512403053">应用</translation>
+<translation id="7252604552361840748">查找以上扩展程序</translation>
 <translation id="7256405249507348194">无法识别的错误：<ph name="DESC" /></translation>
 <translation id="7268659760406822741">可用服务</translation>
 <translation id="7292816689782057017">管理员政策会限制您将文件保存到某些位置。</translation>
@@ -792,7 +805,6 @@
 <translation id="7458955835361612701">没有任何近期图片</translation>
 <translation id="7460898608667578234">乌克兰语</translation>
 <translation id="7469894403370665791">自动连接到该网络</translation>
-<translation id="7481358317100446445">准备就绪</translation>
 <translation id="7486315294984620427">若要将某个文件拖放到 Parallels Desktop，必须先将此文件复制到“Windows 文件”文件夹。</translation>
 <translation id="749452993132003881">平假名</translation>
 <translation id="7495372004724182530">马拉雅拉姆语注音</translation>
@@ -936,6 +948,7 @@
 <translation id="8492972329130824181">无法使用家庭网络。必须启用移动数据漫游才能联网。</translation>
 <translation id="8499098729323186194">正在提取 <ph name="NUMBER_OF_ITEMS" /> 个项目…</translation>
 <translation id="8502913769543567768">第 <ph name="NETWORK_INDEX" /> 个网络（共 <ph name="NETWORK_COUNT" /> 个），<ph name="NETWORK_NAME" />，<ph name="NETWORK_PROVIDER_NAME" />，在设备完成设置后启用，由您的管理员管理</translation>
+<translation id="8512483403832814140">不限时间</translation>
 <translation id="8521441079177373948">英国英语</translation>
 <translation id="853494022971700746">法语（法国）</translation>
 <translation id="8540608333167683902">第 <ph name="NETWORK_INDEX" /> 个网络（共 <ph name="NETWORK_COUNT" /> 个），<ph name="NETWORK_NAME" />，<ph name="CONNECTION_STATUS" />，信号强度为 <ph name="SIGNAL_STRENGTH" />%，详细信息</translation>

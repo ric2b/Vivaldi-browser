@@ -249,7 +249,7 @@ TEST_F(BookmarkUtilsTest, GetBookmarksMatchingPropertiesConjunction) {
 
 // Copy and paste is not yet supported on iOS. http://crbug.com/228147
 #if !BUILDFLAG(IS_IOS)
-TEST_F(BookmarkUtilsTest, DISABLED_PasteBookmarkFromURL) {
+TEST_F(BookmarkUtilsTest, PasteBookmarkFromURL) {
   std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const std::u16string url_text = u"http://www.google.com/";
   const BookmarkNode* new_folder =
@@ -293,7 +293,8 @@ TEST_F(BookmarkUtilsTest, MAYBE_CopyPaste) {
   // Copy a node to the clipboard.
   std::vector<const BookmarkNode*> nodes;
   nodes.push_back(node);
-  CopyToClipboard(model.get(), nodes, false);
+  CopyToClipboard(model.get(), nodes, false,
+                  metrics::BookmarkEditSource::kOther);
 
   // And make sure we can paste a bookmark from the clipboard.
   EXPECT_TRUE(CanPasteFromClipboard(model.get(), model->bookmark_bar_node()));
@@ -310,7 +311,7 @@ TEST_F(BookmarkUtilsTest, MAYBE_CopyPaste) {
 
 // Test for updating title such that url and title pair are unique among the
 // children of parent.
-TEST_F(BookmarkUtilsTest, DISABLED_MakeTitleUnique) {
+TEST_F(BookmarkUtilsTest, MakeTitleUnique) {
   std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const std::u16string url_text = u"http://www.google.com/";
   const std::u16string title_text = u"foobar";
@@ -326,7 +327,8 @@ TEST_F(BookmarkUtilsTest, DISABLED_MakeTitleUnique) {
   // Copy a node to the clipboard.
   std::vector<const BookmarkNode*> nodes;
   nodes.push_back(node);
-  CopyToClipboard(model.get(), nodes, false);
+  CopyToClipboard(model.get(), nodes, false,
+                  metrics::BookmarkEditSource::kOther);
 
   // Now we should be able to paste from the clipboard.
   EXPECT_TRUE(CanPasteFromClipboard(model.get(), bookmark_bar_node));
@@ -342,7 +344,7 @@ TEST_F(BookmarkUtilsTest, DISABLED_MakeTitleUnique) {
   EXPECT_EQ(u"foobar (1)", bookmark_bar_node->children()[1]->GetTitle());
 }
 
-TEST_F(BookmarkUtilsTest, DISABLED_CopyPasteMetaInfo) {
+TEST_F(BookmarkUtilsTest, CopyPasteMetaInfo) {
   std::unique_ptr<BookmarkModel> model(TestBookmarkClient::CreateModel());
   const BookmarkNode* node = model->AddURL(model->other_node(), 0, u"foo bar",
                                            GURL("http://www.google.com"));
@@ -352,7 +354,8 @@ TEST_F(BookmarkUtilsTest, DISABLED_CopyPasteMetaInfo) {
   // Copy a node to the clipboard.
   std::vector<const BookmarkNode*> nodes;
   nodes.push_back(node);
-  CopyToClipboard(model.get(), nodes, false);
+  CopyToClipboard(model.get(), nodes, false,
+                  metrics::BookmarkEditSource::kOther);
 
   // Paste node to a different folder.
   const BookmarkNode* folder =
@@ -395,7 +398,8 @@ TEST_F(BookmarkUtilsTest, MAYBE_CutToClipboard) {
   std::vector<const BookmarkNode*> nodes;
   nodes.push_back(n1);
   nodes.push_back(n2);
-  CopyToClipboard(model.get(), nodes, true);
+  CopyToClipboard(model.get(), nodes, true,
+                  metrics::BookmarkEditSource::kOther);
 
   // Make sure the nodes were removed.
   EXPECT_EQ(0u, model->other_node()->children().size());
@@ -426,7 +430,8 @@ TEST_F(BookmarkUtilsTest, MAYBE_PasteNonEditableNodes) {
   // Copy a node to the clipboard.
   std::vector<const BookmarkNode*> nodes;
   nodes.push_back(node);
-  CopyToClipboard(model.get(), nodes, false);
+  CopyToClipboard(model.get(), nodes, false,
+                  metrics::BookmarkEditSource::kOther);
 
   // And make sure we can paste a bookmark from the clipboard.
   EXPECT_TRUE(CanPasteFromClipboard(model.get(), model->bookmark_bar_node()));

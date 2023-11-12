@@ -1,4 +1,76 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hy">
+<translation id="1066692930984703744">Միացրեք հետևիչների ու գովազդի արգելափակումը՝ ավելի արագ ու ապահով նավարկելու համար</translation>
+<translation id="1116694919640316211">Ծրագրի մասին</translation>
+<translation id="132683371494960526">Կրկնակի հպեք՝ ներառող պանակը փոխելու համար։</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> նոթ</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Օգտագործման պայմաններ ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Գաղտնիության դրույթներ ➔<ph name="END_LINK2" /></translation>
+<translation id="173924678149983125">Մուտքագրեք արգելափակման ցանկի ներկրման հասցեն</translation>
+<translation id="1751280147639351837">Գովազդի ու հետևիչների արգելափակիչ</translation>
+<translation id="1809939268435598390">Ջնջել պանակը</translation>
+<translation id="1929299157575856072">ՍՏԱՆԴԱՐՏ ԱՐԳԵԼԱՓԱԿՄԱՆ ՄԱԿԱՐԴԱԿ</translation>
+<translation id="2034405583989639424">Խմբագրել արագ կանչը</translation>
+<translation id="2272338747456392228">Հաշիվը կողպվել է</translation>
+<translation id="2324160330092901720"><ph name="EMAIL_ID" />-ին ուղարկվել է հաստատման կոդ</translation>
+<translation id="2359808026110333948">Շարունակել</translation>
+<translation id="2386793615875593361">1 ընտրված</translation>
+<translation id="2392369802118427583">Ակտիվացնել</translation>
+<translation id="2536780277491102902">ԲԱՑԱՌՈՒԹՅՈՒՆՆԵՐ</translation>
+<translation id="2677862276555105603">Գովազդ է
+արգելափակված</translation>
+<translation id="2678542925523700624">Էստոներեն (<ph name="ORIGIN" />)</translation>
+<translation id="2745324713975967671">Ծածկագրման գաղտնաբառ</translation>
+<translation id="3039671569659952257">Ջնջել պանակը</translation>
+<translation id="33451081266695216">Միացումը խեղդվել է սերվերի կողմից։</translation>
+<translation id="3346386541263128307">Էլ. փոստի հասցեները պետք է համընկնեն։</translation>
+<translation id="3365991203476235715">Անգլերեն (<ph name="ORIGIN" />)</translation>
+<translation id="3435896845095436175">Միացնել</translation>
+<translation id="3451162533623145500">Ստեղծեք հաշիվ</translation>
+<translation id="3509379002674019679">Ստեղծեք, պահպանեք և կառավարեք Ձեր գաղտնաբառերը՝ կայքեր և հավելվածներ հեշտությամբ մուտք գործելու համար։</translation>
+<translation id="3866249974567520381">Նկարագրություն</translation>
+<translation id="3997823869212225788">Մուտքագրեք 6 թվանշանից կազմված կոդը</translation>
+<translation id="4032606071208172574">(Ստանդարտ)</translation>
+<translation id="4176463684765177261">Անջատված</translation>
+<translation id="4219175188138757774">Չեխական ու սլովակական (<ph name="ORIGIN" />)</translation>
+<translation id="4394049700291259645">Անջատել</translation>
+<translation id="4413780690230851155">Ջնջել դիտման պատմությունը</translation>
+<translation id="4563480492836333884">Էլ. փոստը չի ընդունվել։ Խնդրում ենք օգտագործել այլ դոմեն։</translation>
+<translation id="4640946580087069269">Պատճենել նոթի մեջ</translation>
+<translation id="4929196061847506605">Հզոր։ Անձնական։ Անվտանգ։</translation>
+<translation id="5037761343305489956">Պատճենված է նոթի մեջ</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Նորից կոդ ուղարկել<ph name="END_LINK" /></translation>
+<translation id="5238642303473095117">Ջնջել տվյալները</translation>
+<translation id="5787420647064736989">Սարքի անուն</translation>
+<translation id="5859825823508296659">Խմբագրել դոմենը</translation>
+<translation id="5871497086027727873">1 նոթ տեղափոխված է</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> նոթ տեղափոխված է</translation>
+<translation id="6404511346730675251">Խմբագրել էջանիշը</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> ընտրված</translation>
+<translation id="6627583120233659107">Խմբագրել պանակը</translation>
+<translation id="6642196070615520677">Ջնջել սինքրոնացման տվյալները սերվերից</translation>
+<translation id="6656103420185847513">Խմբագրել պանակը</translation>
+<translation id="6757792528048321576">Գովազդի ու հետևիչների արգելափակիչ</translation>
+<translation id="7196846668589096106">Համակարգչային ներդիրներ</translation>
+<translation id="7229439505896086266">Ստեղծել նոթ</translation>
+<translation id="7299721129597238157">Ջնջել էջանիշը</translation>
+<translation id="7379938540614588640">Հոլանդերեն (<ph name="ORIGIN" />)</translation>
+<translation id="750493650310597496">0 ընտրված</translation>
+<translation id="7525067979554623046">Ստեղծել</translation>
+<translation id="7587132259180664054">Նամակը հաջողությամբ ուղարկվել է</translation>
+<translation id="7702907602086592255">Դոմեն</translation>
+<translation id="7914995060146784406">Խմբագրել նոթը</translation>
+<translation id="8008214489230610096">Հաստատեք վերականգնման էլ. փոստի հասցեն</translation>
+<translation id="804786196054284061">Օգտագործման պայմաններ</translation>
+<translation id="8165573437634525334">Տվյալները պաշտպանված են ծածկագրման գաղտնաբառով</translation>
+<translation id="8257908958623224237">Կոնֆլիկտ մեկ այլ սպասառուի տվյալների հետ։</translation>
+<translation id="8261506727792406068">Ջնջել</translation>
+<translation id="8458397775385147834">1 նոթ ջնջված է</translation>
+<translation id="8515808232153642813">Վերծանել</translation>
+<translation id="8517852590337319813">Ակտիվացրեք Ձեր հաշիվը</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> նոթ ջնջված է</translation>
+<translation id="9065203028668620118">Խմբագրել</translation>
+<translation id="9083392325882095631">1 նոթ</translation>
+<translation id="9097127519290088802">Ծածկագրման գաղտնաբառը պարտադիր է</translation>
+<translation id="984650419570014454">Ակտիվացման կոդը պետք է 6 թվանշանից կազմված լինի։</translation>
 </translationbundle>

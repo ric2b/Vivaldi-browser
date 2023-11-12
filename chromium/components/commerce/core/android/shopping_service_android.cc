@@ -20,6 +20,18 @@ using base::android::ScopedJavaLocalRef;
 
 namespace commerce {
 
+namespace {
+
+ScopedJavaLocalRef<jobject> ToJavaObject(JNIEnv* env,
+                                         const CommerceSubscription& sub) {
+  return Java_ShoppingService_createSubscription(
+      env, static_cast<int>(sub.type), static_cast<int>(sub.id_type),
+      static_cast<int>(sub.management_type),
+      ConvertUTF8ToJavaString(env, sub.id));
+}
+
+}  // namespace
+
 ShoppingServiceAndroid::ShoppingServiceAndroid(ShoppingService* service)
     : shopping_service_(service), weak_ptr_factory_(this) {
   java_ref_.Reset(Java_ShoppingService_create(
@@ -201,34 +213,59 @@ void ShoppingServiceAndroid::Unsubscribe(
   shopping_service_->Unsubscribe(std::move(subs), std::move(callback));
 }
 
-void ShoppingServiceAndroid::OnSubscribe(
-    const std::vector<CommerceSubscription>& subscriptions,
-    bool succeeded) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_ShoppingService_onSubscribe(
-      env, java_ref_, ConvertSubscriptionsToJavaList(subscriptions), succeeded);
+void ShoppingServiceAndroid::IsSubscribed(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint j_type,
+    jint j_id_type,
+    jint j_management_type,
+    const JavaParamRef<jstring>& j_id,
+    const JavaParamRef<jobject>& j_callback) {
+  std::string id = ConvertJavaStringToUTF8(j_id);
+  CHECK(!id.empty());
+
+  CommerceSubscription sub(SubscriptionType(j_type), IdentifierType(j_id_type),
+                           id, ManagementType(j_management_type),
+                           kUnknownSubscriptionTimestamp, absl::nullopt);
+
+  shopping_service_->IsSubscribed(
+      std::move(sub),
+      base::BindOnce(
+          [](const ScopedJavaGlobalRef<jobject>& callback, bool is_tracked) {
+            base::android::RunBooleanCallbackAndroid(callback, is_tracked);
+          },
+          ScopedJavaGlobalRef<jobject>(j_callback)));
 }
 
-void ShoppingServiceAndroid::OnUnsubscribe(
-    const std::vector<CommerceSubscription>& subscriptions,
-    bool succeeded) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_ShoppingService_onUnsubscribe(
-      env, java_ref_, ConvertSubscriptionsToJavaList(subscriptions), succeeded);
+bool ShoppingServiceAndroid::IsSubscribedFromCache(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jint j_type,
+    jint j_id_type,
+    jint j_management_type,
+    const JavaParamRef<jstring>& j_id) {
+  std::string id = ConvertJavaStringToUTF8(j_id);
+  CHECK(!id.empty());
+
+  CommerceSubscription sub(SubscriptionType(j_type), IdentifierType(j_id_type),
+                           id, ManagementType(j_management_type),
+                           kUnknownSubscriptionTimestamp, absl::nullopt);
+
+  return shopping_service_->IsSubscribedFromCache(std::move(sub));
 }
 
-ScopedJavaLocalRef<jobject>
-ShoppingServiceAndroid::ConvertSubscriptionsToJavaList(
-    const std::vector<CommerceSubscription>& subscriptions) {
+void ShoppingServiceAndroid::OnSubscribe(const CommerceSubscription& sub,
+                                         bool succeeded) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> j_subs = nullptr;
-  for (const auto& sub : subscriptions) {
-    j_subs = Java_ShoppingService_createSubscriptionAndAddToList(
-        env, java_ref_, j_subs, static_cast<int>(sub.type),
-        static_cast<int>(sub.id_type), static_cast<int>(sub.management_type),
-        ConvertUTF8ToJavaString(env, sub.id));
-  }
-  return j_subs;
+  Java_ShoppingService_onSubscribe(env, java_ref_, ToJavaObject(env, sub),
+                                   succeeded);
+}
+
+void ShoppingServiceAndroid::OnUnsubscribe(const CommerceSubscription& sub,
+                                           bool succeeded) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_ShoppingService_onUnsubscribe(env, java_ref_, ToJavaObject(env, sub),
+                                     succeeded);
 }
 
 bool ShoppingServiceAndroid::IsShoppingListEligible(
@@ -245,6 +282,14 @@ bool ShoppingServiceAndroid::IsMerchantViewerEnabled(
   CHECK(shopping_service_);
 
   return shopping_service_->IsMerchantViewerEnabled();
+}
+
+bool ShoppingServiceAndroid::IsCommercePriceTrackingEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  CHECK(shopping_service_);
+
+  return shopping_service_->IsCommercePriceTrackingEnabled();
 }
 
 }  // namespace commerce

@@ -7,18 +7,24 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/public/side_swipe_toolbar_snapshot_providing.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_coordinatee.h"
 
 @class AdaptiveToolbarViewController;
 class Browser;
-@protocol PopupMenuLongPressDelegate;
+@class LocationBarCoordinator;
 
 // Coordinator for the adaptive toolbar. This Coordinator is the super class of
 // the specific coordinator (primary or secondary).
 @interface AdaptiveToolbarCoordinator
     : ChromeCoordinator<SideSwipeToolbarSnapshotProviding, ToolbarCoordinatee>
+
+// The Toolbar view controller owned by this coordinator.
+@property(nonatomic, strong) AdaptiveToolbarViewController* viewController;
+
+// A reference to the location bar coordinator.
+@property(nonatomic, weak) LocationBarCoordinator* locationBarCoordinator;
 
 // Initializes this Coordinator with its `browser` and a nil base view
 // controller.
@@ -27,11 +33,10 @@ class Browser;
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser NS_UNAVAILABLE;
 
-// The Toolbar view controller owned by this coordinator.
-@property(nonatomic, strong) AdaptiveToolbarViewController* viewController;
-
-// Delegate for the long press gesture recognizer triggering popup menu.
-@property(nonatomic, weak) id<PopupMenuLongPressDelegate> longPressDelegate;
+// Whether the omnibox is currently the first responder.
+- (BOOL)isOmniboxFirstResponder;
+// Whether the omnibox popup is currently presented.
+- (BOOL)showingOmniboxPopup;
 
 @end
 

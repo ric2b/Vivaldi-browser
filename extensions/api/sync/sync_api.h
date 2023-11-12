@@ -40,7 +40,7 @@ class SyncEventRouter : public syncer::SyncServiceObserver {
   void OnSyncShutdown(syncer::SyncService* sync) override;
 
  private:
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 };
 
 class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
@@ -63,7 +63,7 @@ class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
  private:
   friend class BrowserContextKeyedAPIFactory<SyncAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "SyncAPI"; }

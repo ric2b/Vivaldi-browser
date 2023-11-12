@@ -7,7 +7,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "Win Builder",
-              "project": "chromium-m112"
+              "project": "chromium-m114"
             },
             "builder_spec": {
               "build_gs_bucket": "chromium-win-archive",
@@ -15,7 +15,6 @@
               "execution_mode": "COMPILE_AND_TEST",
               "legacy_chromium_config": {
                 "apply_configs": [
-                  "goma_enable_global_file_stat_cache",
                   "mb"
                 ],
                 "build_config": "Release",
@@ -33,7 +32,7 @@
         {
           "bucket": "ci",
           "builder": "Win Builder",
-          "project": "chromium-m112"
+          "project": "chromium-m114"
         }
       ]
     }

@@ -11,12 +11,6 @@ namespace extensions {
 
 using api::system_cpu::CpuInfo;
 
-SystemCpuGetInfoFunction::SystemCpuGetInfoFunction() {
-}
-
-SystemCpuGetInfoFunction::~SystemCpuGetInfoFunction() {
-}
-
 ExtensionFunction::ResponseAction SystemCpuGetInfoFunction::Run() {
   CpuInfoProvider::Get()->StartQueryInfo(
       base::BindOnce(&SystemCpuGetInfoFunction::OnGetCpuInfoCompleted, this));
@@ -25,8 +19,7 @@ ExtensionFunction::ResponseAction SystemCpuGetInfoFunction::Run() {
 
 void SystemCpuGetInfoFunction::OnGetCpuInfoCompleted(bool success) {
   if (success) {
-    Respond(
-        OneArgument(base::Value(CpuInfoProvider::Get()->cpu_info().ToValue())));
+    Respond(WithArguments(CpuInfoProvider::Get()->cpu_info().ToValue()));
   } else {
     Respond(Error("Error occurred when querying cpu information."));
   }

@@ -210,8 +210,9 @@ void IndexedDBContextImpl::BindIndexedDBImpl(
     mojo::PendingReceiver<blink::mojom::IDBFactory> receiver,
     storage::QuotaErrorOr<storage::BucketInfo> bucket_info) {
   absl::optional<storage::BucketInfo> bucket;
-  if (bucket_info.ok())
+  if (bucket_info.has_value()) {
     bucket = bucket_info.value();
+  }
   dispatcher_host_.AddReceiver(
       IndexedDBDispatcherHost::ReceiverContext(
           bucket, std::move(client_state_checker_remote)),
@@ -264,8 +265,8 @@ void IndexedDBContextImpl::DeleteForStorageKey(
 void IndexedDBContextImpl::OnGotBucketsForDeletion(
     base::OnceCallback<void(bool)> callback,
     storage::QuotaErrorOr<std::set<storage::BucketInfo>> buckets) {
-  if (!buckets.ok() || buckets.value().empty()) {
-    std::move(callback).Run(buckets.ok());
+  if (!buckets.has_value() || buckets.value().empty()) {
+    std::move(callback).Run(buckets.has_value());
     return;
   }
 
@@ -449,7 +450,7 @@ void IndexedDBContextImpl::OnBucketInfoReady(
       bucket_map;
 
   for (const auto& quota_error_or_bucket_info : bucket_infos) {
-    if (!quota_error_or_bucket_info.ok()) {
+    if (!quota_error_or_bucket_info.has_value()) {
       continue;
     }
     const storage::BucketInfo& bucket_info = quota_error_or_bucket_info.value();
@@ -612,9 +613,9 @@ void IndexedDBContextImpl::ApplyPolicyUpdates(
   DCHECK(IDBTaskRunner()->RunsTasksInCurrentSequence());
   for (const auto& update : policy_updates) {
     if (!update->purge_on_shutdown) {
-      sites_to_purge_on_shutdown_.erase(net::SchemefulSite(update->origin));
+      origins_to_purge_on_shutdown_.erase(update->origin);
     } else {
-      sites_to_purge_on_shutdown_.insert(net::SchemefulSite(update->origin));
+      origins_to_purge_on_shutdown_.insert(update->origin);
     }
   }
 }
@@ -896,6 +897,10 @@ std::vector<base::FilePath> IndexedDBContextImpl::GetStoragePaths(
 
 const base::FilePath IndexedDBContextImpl::GetDataPath(
     const storage::BucketLocator& bucket_locator) const {
+  if (is_incognito()) {
+    return base::FilePath();
+  }
+
   if (indexed_db::ShouldUseLegacyFilePath(bucket_locator)) {
     // First-party idb files for the default, for legacy reasons, are stored at:
     // {{storage_partition_path}}/IndexedDB/
@@ -1002,22 +1007,34 @@ void IndexedDBContextImpl::ShutdownOnIDBSequence() {
     return;
 
   // Clear session-only databases.
-  if (sites_to_purge_on_shutdown_.empty())
+  if (origins_to_purge_on_shutdown_.empty()) {
     return;
+  }
 
   IndexedDBFactory* factory = GetIDBFactory();
   const auto& storage_key_to_file_path = FindLegacyIndexedDBFiles();
   const auto& bucket_id_to_file_path = FindIndexedDBFiles();
   for (const auto& bucket_locator : bucket_set_) {
-    const auto& origin_it = sites_to_purge_on_shutdown_.find(
-        net::SchemefulSite(bucket_locator.storage_key.origin()));
-    const auto& top_site_it = sites_to_purge_on_shutdown_.find(
-        bucket_locator.storage_key.top_level_site());
-    if (origin_it == sites_to_purge_on_shutdown_.end() &&
-        top_site_it == sites_to_purge_on_shutdown_.end()) {
-      // No match for a site we want to clear in this bucket locator.
+    // Delete the storage if its origin matches one of the origins to purge, or
+    // if it is third-party and the top-level site is same-site with one of
+    // those origins.
+    auto delete_bucket = origins_to_purge_on_shutdown_.find(
+                             bucket_locator.storage_key.origin()) !=
+                         origins_to_purge_on_shutdown_.end();
+
+    if (!delete_bucket && bucket_locator.storage_key.IsThirdPartyContext()) {
+      auto& bucket_site = bucket_locator.storage_key.top_level_site();
+      for (const auto& origin_to_purge : origins_to_purge_on_shutdown_) {
+        if (net::SchemefulSite(origin_to_purge) == bucket_site) {
+          delete_bucket = true;
+          break;
+        }
+      }
+    }
+    if (!delete_bucket) {
       continue;
     }
+
     base::FilePath path;
     const auto& legacy_it =
         storage_key_to_file_path.find(bucket_locator.storage_key);
@@ -1160,10 +1177,9 @@ void IndexedDBContextImpl::InitializeFromFilesIfNeeded(
   auto on_lookup_done = base::BindRepeating(
       [](Barrier barrier,
          storage::QuotaErrorOr<storage::BucketInfo> bucket_info) {
-        if (bucket_info.ok())
-          barrier.Run(bucket_info->ToBucketLocator());
-        else
-          barrier.Run(absl::nullopt);
+        barrier.Run(bucket_info.has_value()
+                        ? absl::make_optional(bucket_info->ToBucketLocator())
+                        : absl::nullopt);
       },
       barrier);
 

@@ -42,6 +42,7 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "base/win/windows_version.h"
+#include "media/base/win/mf_feature_checks.h"
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
@@ -91,8 +92,8 @@ enum class ConfigChangeType {
   ENCRYPTED_TO_ENCRYPTED = 3,
 };
 
-// Whether the video should be played once or twice.
-enum class PlayCount { ONCE, TWICE };
+// Whether the video should be not played or played once or twice.
+enum class PlayCount { ZERO = 0, ONCE = 1, TWICE = 2 };
 
 // Base class for encrypted media tests.
 class EncryptedMediaTestBase : public MediaBrowserTest {
@@ -158,31 +159,27 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
       query_params.emplace_back("forceInvalidResponse", "1");
     if (!session_to_load.empty())
       query_params.emplace_back("sessionToLoad", session_to_load);
-    if (play_count == PlayCount::TWICE)
-      query_params.emplace_back("playTwice", "1");
+    query_params.emplace_back(
+        "playCount", base::NumberToString(static_cast<int>(play_count)));
     RunEncryptedMediaTestPage(html_page, key_system, query_params,
                               expected_title);
   }
 
   void RunSimpleEncryptedMediaTest(const std::string& media_file,
                                    const std::string& key_system,
-                                   SrcType src_type) {
+                                   SrcType src_type,
+                                   PlayCount play_count) {
     std::string expected_title = media::kEndedTitle;
     if (!IsPlayBackPossible(key_system)) {
       expected_title = kEmeUpdateFailed;
     }
 
     RunEncryptedMediaTest(kDefaultEmePlayer, media_file, key_system, src_type,
-                          kNoSessionToLoad, false, PlayCount::ONCE,
-                          expected_title);
+                          kNoSessionToLoad, false, play_count, expected_title);
     // Check KeyMessage received for all key systems.
-    bool receivedKeyMessage = false;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-        browser()->tab_strip_model()->GetActiveWebContents(),
-        "window.domAutomationController.send("
-        "document.querySelector('video').receivedKeyMessage);",
-        &receivedKeyMessage));
-    EXPECT_TRUE(receivedKeyMessage);
+    EXPECT_EQ(true, content::EvalJs(
+                        browser()->tab_strip_model()->GetActiveWebContents(),
+                        "document.querySelector('video').receivedKeyMessage;"));
   }
 
   void RunEncryptedMediaMultipleFileTest(const std::string& key_system,
@@ -313,6 +310,8 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
 #if BUILDFLAG(IS_WIN)
     if (IsMediaFoundationClearKey(key_system)) {
       RegisterMediaFoundationClearKeyCdm(enabled_features);
+      enabled_features.push_back(
+          {media::kHardwareSecureDecryptionExperiment, {}});
       // TODO(crbug.com/1412485): Remove this line so that real hardware
       // capabilities can be checked.
       command_line->AppendSwitchASCII(
@@ -436,7 +435,7 @@ class ParameterizedEncryptedMediaTestBase : public EncryptedMediaTestBase {
 
   void TestSimplePlayback(const std::string& encrypted_media) {
     RunSimpleEncryptedMediaTest(encrypted_media, CurrentKeySystem(),
-                                CurrentSourceType());
+                                CurrentSourceType(), PlayCount::ONCE);
   }
 
   void TestMultiplePlayback(const std::string& encrypted_media) {
@@ -849,17 +848,12 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, PlatformVerificationTest) {
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, MAYBE_MessageTypeTest) {
   TestPlaybackCase(media::kExternalClearKeyMessageTypeTestKeySystem,
                    kNoSessionToLoad, media::kEndedTitle);
-
-  int num_received_message_types = 0;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      "window.domAutomationController.send("
-      "document.querySelector('video').receivedMessageTypes.size);",
-      &num_received_message_types));
-
   // Expects 3 message types: 'license-request', 'license-renewal' and
   // 'individualization-request'.
-  EXPECT_EQ(3, num_received_message_types);
+  EXPECT_EQ(3,
+            content::EvalJs(
+                browser()->tab_strip_model()->GetActiveWebContents(),
+                "document.querySelector('video').receivedMessageTypes.size;"));
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadPersistentLicense) {
@@ -883,13 +877,13 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadSessionAfterClose) {
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, DecryptOnly_VideoAudio_WebM) {
   RunSimpleEncryptedMediaTest("bear-320x240-av_enc-av.webm",
                               media::kExternalClearKeyDecryptOnlyKeySystem,
-                              SrcType::MSE);
+                              SrcType::MSE, PlayCount::ONCE);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, DecryptOnly_VideoOnly_MP4_VP9) {
   RunSimpleEncryptedMediaTest("bear-320x240-v_frag-vp9-cenc.mp4",
                               media::kExternalClearKeyDecryptOnlyKeySystem,
-                              SrcType::MSE);
+                              SrcType::MSE, PlayCount::ONCE);
 }
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -1005,3 +999,79 @@ IN_PROC_BROWSER_TEST_F(ECKIncognitoEncryptedMediaTest, LoadSessionAfterClose) {
                             media::kEndedTitle);
 }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
+
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(USE_PROPRIETARY_CODECS)
+// MediaFoundation Clear Key Key System uses Windows Media Foundation's decoders
+// and H264 is always supported.
+class MediaFoundationEncryptedMediaTest : public EncryptedMediaTestBase {
+ public:
+  void TestLicenseExchange(const std::string& encrypted_media) {
+    // Skip the playback since we test the EME parts only.
+    RunSimpleEncryptedMediaTest(encrypted_media,
+                                media::kMediaFoundationClearKeyKeySystem,
+                                SrcType::MSE, PlayCount::ZERO);
+  }
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    EncryptedMediaTestBase::SetUpCommandLine(command_line);
+    SetUpCommandLineForKeySystem(media::kMediaFoundationClearKeyKeySystem,
+                                 command_line);
+  }
+
+  bool IsMediaFoundationEncryptedPlaybackSupported() {
+    static bool is_mediafoundation_encrypted_playback_supported =
+        media::SupportMediaFoundationEncryptedPlayback();
+    DLOG(INFO) << "is_mediafoundation_encrypted_playback_supported="
+               << is_mediafoundation_encrypted_playback_supported;
+
+    // Run test only if the test machine supports MediaFoundation playback.
+    // Otherwise, NotSupportedError is expected.
+    if (!is_mediafoundation_encrypted_playback_supported) {
+      // if (!is_mediafoundation_encrypted_playback_supported) {
+      auto os_version = static_cast<int>(base::win::GetVersion());
+      DLOG(WARNING)
+          << "Test method "
+          << ::testing::UnitTest::GetInstance()->current_test_info()->name()
+          << " is inconclusive since MediaFoundation "
+             "playback is not supported. "
+          << "os_version=" << os_version;
+    }
+
+    return is_mediafoundation_encrypted_playback_supported;
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(MediaFoundationEncryptedMediaTest,
+                       Playback_ClearLeadEncryptedCencVideo_Success) {
+  if (!IsMediaFoundationEncryptedPlaybackSupported()) {
+    GTEST_SKIP();
+  }
+
+  TestLicenseExchange("bear-640x360-v_frag-cenc.mp4");  // H.264
+}
+
+IN_PROC_BROWSER_TEST_F(MediaFoundationEncryptedMediaTest,
+                       Playback_ClearLeadEncryptedCbcsVideo_Success) {
+  if (!IsMediaFoundationEncryptedPlaybackSupported()) {
+    GTEST_SKIP();
+  }
+
+  TestLicenseExchange("bear-640x360-v_frag-cbcs.mp4");  // H.264
+}
+
+IN_PROC_BROWSER_TEST_F(MediaFoundationEncryptedMediaTest,
+                       Playback_EncryptedAudioCbcs_MediaTypeUnsupported) {
+  if (!IsMediaFoundationEncryptedPlaybackSupported()) {
+    GTEST_SKIP();
+  }
+
+  // MediaFoundation Clear Key Key System supports only H.264 videos
+  // (codecs=avc1.64001E). See AddMediaFoundationClearKey() in
+  // components/cdm/renderer/key_system_support_update.cc
+  RunEncryptedMediaTest(
+      kDefaultEmePlayer, "bear-640x360-a_frag-cbcs.mp4" /*codecs=mp4a.40.2*/,
+      media::kMediaFoundationClearKeyKeySystem, SrcType::MSE, kNoSessionToLoad,
+      false, PlayCount::ONCE, kEmeNotSupportedError);
+}
+#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(USE_PROPRIETARY_CODECS)

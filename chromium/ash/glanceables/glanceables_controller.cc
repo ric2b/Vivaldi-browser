@@ -7,11 +7,8 @@
 #include <memory>
 
 #include "ash/ambient/ambient_controller.h"
-#include "ash/ambient/ambient_weather_controller.h"
 #include "ash/glanceables/glanceables_delegate.h"
-#include "ash/glanceables/glanceables_util.h"
 #include "ash/glanceables/glanceables_view.h"
-#include "ash/glanceables/glanceables_window_hider.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/root_window_controller.h"
@@ -63,9 +60,6 @@ void GlanceablesController::Init(
     std::unique_ptr<GlanceablesDelegate> delegate) {
   DCHECK(delegate);
   delegate_ = std::move(delegate);
-
-  glanceables_util::RecordSignoutScreenshotDurationMetric(
-      Shell::Get()->local_state());
 }
 
 void GlanceablesController::ShowOnLogin() {
@@ -83,20 +77,6 @@ void GlanceablesController::ShowOnLogin() {
     return;
   }
 
-  show_session_restore_ = true;
-  CreateUi();
-  FetchData();
-}
-
-void GlanceablesController::ShowFromOverview() {
-  if (Shell::Get()->IsInTabletMode()) {
-    // TODO(crbug.com/1360528): Implement tablet mode support.
-    return;
-  }
-
-  // Hide any open windows.
-  window_hider_ = std::make_unique<GlanceablesWindowHider>();
-  show_session_restore_ = false;
   CreateUi();
   FetchData();
 }
@@ -123,8 +103,7 @@ void GlanceablesController::CreateUi() {
   params.opacity = views::Widget::InitParams::WindowOpacity::kTranslucent;
   widget_->Init(std::move(params));
 
-  view_ = widget_->SetContentsView(
-      std::make_unique<GlanceablesView>(show_session_restore_));
+  view_ = widget_->SetContentsView(std::make_unique<GlanceablesView>());
 
   ApplyBackdrop();
   widget_->Show();
@@ -134,17 +113,7 @@ void GlanceablesController::DestroyUi() {
   widget_.reset();
   view_ = nullptr;
   delegate_->OnGlanceablesClosed();
-  window_hider_.reset();  // Show hidden windows.
-}
-
-void GlanceablesController::RestoreSession() {
-  delegate_->RestoreSession();
-  // Ensure glanceables are closed, even if the session had no windows.
-  DestroyUi();
-}
-
-bool GlanceablesController::ShouldTakeSignoutScreenshot() const {
-  return delegate_->ShouldTakeSignoutScreenshot();
+  weather_refresher_.reset();
 }
 
 void GlanceablesController::OnWindowActivated(
@@ -170,10 +139,10 @@ void GlanceablesController::OnTabletModeStarted() {
 
 void GlanceablesController::FetchData() {
   // GlanceablesWeatherView observes the weather model for updates.
-  Shell::Get()
-      ->ambient_controller()
-      ->ambient_weather_controller()
-      ->FetchWeather();
+  weather_refresher_ = Shell::Get()
+                           ->ambient_controller()
+                           ->ambient_weather_controller()
+                           ->CreateScopedRefresher();
 
   Shell::Get()->system_tray_model()->calendar_model()->FetchEvents(
       start_of_month_utc_);

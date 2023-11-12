@@ -15,30 +15,37 @@
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
-#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#import "ios/chrome/browser/ui/icons/chrome_icon.h"
-#import "ios/chrome/browser/ui/image_util/image_util.h"
+#import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
+#import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/util/image/image_util.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/cells/note_parent_folder_item.h"
-#import "ios/notes/cells/note_text_field_item.h"
-#import "ios/notes/cells/note_text_view_item.h"
-#import "ios/notes/note_folder_view_controller.h"
+#import "ios/notes/note_folder_chooser_view_controller.h"
 #import "ios/notes/note_mediator.h"
 #import "ios/notes/note_model_bridge_observer.h"
 #import "ios/notes/note_ui_constants.h"
 #import "ios/notes/note_utils_ios.h"
+#import "ios/notes/note_mediator.h"
+#import "ios/notes/note_model_bridge_observer.h"
+#import "ios/notes/note_parent_folder_view.h"
+#import "ios/notes/note_ui_constants.h"
+#import "ios/notes/note_utils_ios.h"
 #import "ios/notes/notes_factory.h"
+#import "ios/ui/custom_views/vivaldi_text_view.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/l10n/l10n_util.h"
 #import "ui/gfx/image/image.h"
 #import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -52,26 +59,22 @@ using vivaldi::NoteNode;
 
 namespace {
 
-typedef NS_ENUM(NSInteger, SectionIdentifier) {
-  SectionIdentifierInfo = kSectionIdentifierEnumZero,
-};
+UIEdgeInsets noteTextViewPadding = UIEdgeInsetsMake(8, 8, 0, 8);
+CGFloat noteTextViewBottomPadding = 12;
 
-typedef NS_ENUM(NSInteger, ItemType) {
-  ItemTypeName = kItemTypeEnumZero,
-  ItemTypeFolder,
-};
+// Padding for the body container view
+UIEdgeInsets bodyContainerViewPadding = UIEdgeInsetsMake(12, 12, 0, 12);
+CGFloat bodyContainerCornerRadius = 6;
 
-// Estimated Table Row height.
-const CGFloat kEstimatedTableRowHeight = 50;
-// Estimated TableSection Footer height.
-const CGFloat kEstimatedTableSectionFooterHeight = 40;
+// Padding for the parent folder view
+UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(0, 12, 12, 12);
+CGFloat parentFolderHeight = 64;
 }  // namespace
 
-@interface NoteAddEditViewController () <NoteFolderViewControllerDelegate,
-                                          NoteModelBridgeObserver,
-                                          UITextViewDelegate,
-                                          NoteTextFieldItemDelegate,
-                                          NoteTextViewItemDelegate> {
+@interface NoteAddEditViewController () <NoteParentFolderViewDelegate,
+                                        NoteFolderChooserViewControllerDelegate,
+                                        NoteModelBridgeObserver,
+                                        UITextViewDelegate> {
   // Flag to ignore note model changes notifications.
   BOOL _ignoresNotesModelChanges;
 
@@ -93,7 +96,8 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 
 // The folder picker view controller.
 // Redefined to be readwrite. // Not currently changeble from within
-@property(nonatomic, strong) NoteFolderViewController* folderViewController;
+@property(nonatomic, strong) NoteFolderChooserViewController*
+    folderViewController;
 
 @property(nonatomic, assign) Browser* browser;
 
@@ -105,13 +109,20 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 // Done button item in navigation bar.
 @property(nonatomic, strong) UIBarButtonItem* doneItem;
 
-// CollectionViewItem-s from the collection.
-@property(nonatomic, strong) NoteTextViewItem* contentItem;
+// The note text content view
+@property(nonatomic, weak) VivaldiTextView* noteTextView;
 
 // The action sheet coordinator, if one is currently being shown.
 @property(nonatomic, strong) ActionSheetCoordinator* actionSheetCoordinator;
 
+// Editing an existing item
 @property(nonatomic, assign) BOOL editingExistingItem;
+
+// A view that holds the parent folder details
+@property(nonatomic,weak) NoteParentFolderView* parentFolderView;
+
+// Should the controller setup Cancel and Done buttons instead of a back button.
+@property(nonatomic, assign) BOOL allowsCancel;
 
 // Reports the changes to the delegate, that has the responsibility to save the
 // note.
@@ -125,14 +136,13 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 // method updates the state of the Save button accordingly.
 - (void)updateSaveButtonState;
 
-// Reloads the folder label text.
-- (void)updateFolderLabel;
-
 // Populates the UI with information from the models.
 - (void)updateUIFromNote;
 
 // Called when the Delete button is pressed.
 - (void)deleteNote;
+
+- (void)moveNodesToTrash;
 
 // Called when the Folder button is pressed.
 - (void)moveNote;
@@ -141,7 +151,10 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 - (void)cancel;
 
 // Called when the Done button is pressed.
-- (void)save;
+- (void)saveNote;
+
+// Bottom constraint for the note text view.
+@property (nonatomic, strong) NSLayoutConstraint *noteTextViewBottomConstraint;
 
 @end
 
@@ -158,32 +171,44 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 @synthesize browserState = _browserState;
 @synthesize cancelItem = _cancelItem;
 @synthesize doneItem = _doneItem;
-@synthesize contentItem = _contentItem;
 @synthesize editingExistingItem = _editingExistingItem;
+@synthesize parentFolderView = _parentFolderView;
+@synthesize noteTextView = _noteTextView;
+@synthesize allowsCancel = _allowsCancel;
+@synthesize noteTextViewBottomConstraint = _noteTextViewBottomConstraint;
 
 #pragma mark - Lifecycle
 
-- (instancetype)initWithNote:(const NoteNode*)note
-                      parent:(const NoteNode*)parent
-                     browser:(Browser*)browser {
++ (instancetype)initWithBrowser:(Browser*)browser
+                           item:(const NoteNode*)note
+                         parent:(const NoteNode*)parent
+                      isEditing:(BOOL)isEditing
+                   allowsCancel:(BOOL)allowsCancel {
   DCHECK(note || parent);
   DCHECK(browser);
-  UITableViewStyle style = ChromeTableViewStyle();
-  self = [super initWithStyle:style];
-  if (self) {
+  NoteAddEditViewController* controller = [[NoteAddEditViewController alloc]
+                                           initWithBrowser:browser];
+  controller.note = note;
+  controller.folder = parent;
+  controller.allowsCancel = allowsCancel;
+  if (controller.note) {
+      controller.folder = note->parent();
+      controller.editingExistingItem = YES;
+  } else
+      controller.editingExistingItem = NO;
+  return controller;
+}
+
+- (instancetype)initWithBrowser:(Browser*)browser {
+    DCHECK(browser);
+    self = [super init];
+    if (self) {
     // Browser may be OTR, which is why the original browser state is being
     // explicitly requested.
     _browser = browser;
     _browserState = browser->GetBrowserState()->GetOriginalChromeBrowserState();
-    _note = note;
-    _folder = parent;
     _noteModel =
         vivaldi::NotesModelFactory::GetForBrowserState(_browserState);
-
-    if (note) {
-      _folder = _note->parent();
-      _editingExistingItem = YES;
-    }
 
     // Set up the note model oberver.
     _modelBridge.reset(
@@ -192,15 +217,7 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
   return self;
 }
 
-- (void)textViewDidChange:(UITextView*)textView {
-    _contentItem.text = textView.text;
-}
-
 - (void)dealloc {
-  [self shutdown];
-}
-
-- (void)shutdown {
   _folderViewController.delegate = nil;
 }
 
@@ -208,65 +225,240 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.tableView.estimatedRowHeight = kEstimatedTableRowHeight;
-  self.tableView.rowHeight = UITableViewAutomaticDimension;
-  self.tableView.sectionHeaderHeight = 0;
-  self.tableView.sectionFooterHeight = UITableViewAutomaticDimension;
-  self.tableView.estimatedSectionFooterHeight =
-      kEstimatedTableSectionFooterHeight;
-  self.view.accessibilityIdentifier = kNoteAddEditViewContainerIdentifier;
-
-  [self.tableView
-      setSeparatorInset:UIEdgeInsetsMake(0, kNoteCellHorizontalLeadingInset,
-                                         0, 0)];
-  if (self.note)
-    self.title = l10n_util::GetNSString(IDS_VIVALDI_NOTE_EDIT_SCREEN_TITLE);
-  else
-    self.title = l10n_util::GetNSString(IDS_VIVALDI_NOTE_NEW_NOTE);
-
-  self.navigationItem.hidesBackButton = YES;
-
-  UIBarButtonItem* cancelItem = [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
-                           target:self
-                           action:@selector(cancel)];
-  cancelItem.accessibilityIdentifier = @"Cancel";
-  self.navigationItem.leftBarButtonItem = cancelItem;
-  self.cancelItem = cancelItem;
-
-  UIBarButtonItem* doneItem = [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-                           target:self
-                           action:@selector(save)];
-  doneItem.accessibilityIdentifier =
-      kNoteEditNavigationBarDoneButtonIdentifier;
-  self.navigationItem.rightBarButtonItem = doneItem;
-  self.doneItem = doneItem;
-
-  // Setup the bottom toolbar.
-  NSString* titleString = l10n_util::GetNSString(IDS_VIVALDI_NOTE_DELETE);
-  UIBarButtonItem* deleteButton =
-      [[UIBarButtonItem alloc] initWithTitle:titleString
-                                       style:UIBarButtonItemStylePlain
-                                      target:self
-                                      action:@selector(deleteNote)];
-  deleteButton.accessibilityIdentifier = kNoteEditDeleteButtonIdentifier;
-  UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
-      initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
-                           target:nil
-                           action:nil];
-  deleteButton.tintColor = [UIColor colorNamed:kRedColor];
-
-  [self setToolbarItems:@[ spaceButton, deleteButton, spaceButton ]
-               animated:NO];
-
-  [self updateUIFromNote];
+  [self setUpUI];
+  [self updateNoteUI];
+  [self.noteTextView setFocus];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
   // Whevener this VC is displayed the bottom toolbar will be shown.
   self.navigationController.toolbarHidden = NO;
+  [self updateFolderState];
+}
+
+/// Updates the textfields if editing an item, and the parent folder components.
+- (void)updateNoteUI {
+  if (self.note) {
+    [self updateUIFromNote];
+  }
+  // Update the textfield with folder title if in editing mode
+  if (self.editingExistingItem) {
+    [self updateFolderState];
+  }
+}
+
+- (void)setUpUI {
+  self.view.backgroundColor =
+    [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+  // Disable interactive dismissal of the view controller.
+  // This prevents accidental close by slide in gesture or any other reason.
+  // Note editor should be closed only by button tap to make sure users
+  // do not lose any text on accidental close.
+  self.modalInPresentation = true;
+  self.view.accessibilityIdentifier = kNoteAddEditViewContainerIdentifier;
+  [self setupKeyboardObservers];
+  [self setUpNavBarView];
+  [self setupContentView];
+  [self setupToolbar];
+}
+
+-(void)setUpNavBarView {
+  // Set up navigation bar
+  if (self.note)
+      self.title = l10n_util::GetNSString(IDS_VIVALDI_NOTE_EDIT_SCREEN_TITLE);
+  else
+      self.title = l10n_util::GetNSString(IDS_VIVALDI_NOTE_NEW_NOTE);
+
+  self.navigationItem.hidesBackButton = YES;
+
+  if (self.allowsCancel) {
+      UIBarButtonItem* cancelItem = [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+                               target:self
+                               action:@selector(cancel)];
+    cancelItem.accessibilityIdentifier = @"Cancel";
+    self.navigationItem.leftBarButtonItem = cancelItem;
+    self.cancelItem = cancelItem;
+  }
+
+  UIBarButtonItem* doneItem = [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                               target:self
+                               action:@selector(saveNote)];
+  doneItem.accessibilityIdentifier =
+    kNoteEditNavigationBarDoneButtonIdentifier;
+  self.navigationItem.rightBarButtonItem = doneItem;
+  self.doneItem = doneItem;
+}
+
+- (void)setupToolbar{
+  // Setup the bottom toolbar.
+  NSString* titleString = l10n_util::GetNSString(IDS_VIVALDI_NOTE_DELETE);
+  UIBarButtonItem* deleteButton =
+  [[UIBarButtonItem alloc] initWithTitle:titleString
+                                   style:UIBarButtonItemStylePlain
+                                  target:self
+                                  action:@selector(deleteNote)];
+  deleteButton.accessibilityIdentifier = kNoteEditDeleteButtonIdentifier;
+  UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
+      initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+                           target:nil
+                           action:nil];
+  deleteButton.tintColor = [UIColor colorNamed:kRedColor];
+  [self setToolbarItems:@[ spaceButton, deleteButton, spaceButton ]
+               animated:NO];
+}
+
+-(void)setupContentView {
+  NSString* locationTitleString =
+      l10n_util::GetNSString(IDS_IOS_NOTE_LOCATION);
+
+  // Set up views
+  UIView* bodyContainerView = [UIView new];
+  bodyContainerView.backgroundColor =
+      [UIColor colorNamed: kGroupedSecondaryBackgroundColor];
+  bodyContainerView.layer.cornerRadius = bodyContainerCornerRadius;
+  bodyContainerView.clipsToBounds = YES;
+
+  [self.view addSubview:bodyContainerView];
+  [bodyContainerView
+      fillSuperviewToSafeAreaInsetWithPadding:bodyContainerViewPadding];
+
+  // Note parent folder view
+  NoteParentFolderView* parentFolderView =
+    [[NoteParentFolderView alloc]
+      initWithTitle: [locationTitleString uppercaseString]];
+  _parentFolderView = parentFolderView;
+  parentFolderView.delegate = self;
+
+  [bodyContainerView addSubview:parentFolderView];
+  [parentFolderView anchorTop:nil
+                      leading:bodyContainerView.leadingAnchor
+                       bottom:bodyContainerView.bottomAnchor
+                     trailing:bodyContainerView.trailingAnchor
+                      padding:parentFolderViewPadding
+                         size:CGSizeMake(0, parentFolderHeight)];
+
+  // Note text view
+  VivaldiTextView* noteTextView = [[VivaldiTextView alloc] init];
+  _noteTextView = noteTextView;
+
+  [bodyContainerView addSubview:self.noteTextView];
+  // Add anchoring of note textView
+  [noteTextView anchorTop:bodyContainerView.topAnchor
+                  leading:bodyContainerView.leadingAnchor
+                   bottom:nil
+                 trailing:bodyContainerView.trailingAnchor
+                  padding:noteTextViewPadding];
+
+  self.noteTextViewBottomConstraint =
+      [noteTextView.bottomAnchor
+        constraintEqualToAnchor:parentFolderView.topAnchor
+                       constant:-noteTextViewBottomPadding];
+  [self.noteTextViewBottomConstraint setActive:YES];
+}
+
+- (void)setupKeyboardObservers {
+
+  NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
+  [defaultCenter addObserver:self
+                    selector:@selector(handleKeyboardNotification:)
+                        name:UIKeyboardWillShowNotification
+                      object:nil];
+
+  [defaultCenter addObserver:self
+                    selector:@selector(handleKeyboardNotification:)
+                        name:UIKeyboardWillHideNotification
+                      object:nil];
+}
+
+- (void)removeKeyboardObservers {
+  NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
+  [defaultCenter removeObserver:self
+                        name:UIKeyboardWillShowNotification
+                      object:nil];
+  [defaultCenter removeObserver:self
+                        name:UIKeyboardWillHideNotification
+                      object:nil];
+}
+
+- (void)handleKeyboardNotification:(NSNotification *)notification {
+  // Extract the keyboard frame from the notification's user info
+  NSDictionary* userInfo = [notification userInfo];
+  CGRect keyboardFrame =
+      [[userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue];
+  // Determine if the keyboard is showing based on the notification name
+  BOOL isKeyboardShowing =
+      [notification.name isEqualToString:UIKeyboardWillShowNotification];
+
+  // The constant we're changing when the keyboard state changes.
+  // 1: If the keyboard is closed, the constant is noteTextViewBottomPadding.
+  // 2: If the keyboard is open, the constant is calculated to position the
+  // view just above the keyboard.
+
+  // Calculate the bottom padding, which should include the bottom safe area
+  // height.
+  // This is necessary to account for the space occupied by the bottom toolbar
+  // with the 'Delete' button.
+  // However, modal presentations on iPads have extra bottom padding apart from
+  // the safe area.
+  // In this case, we need to calculate the bottom padding based on the window
+  // size and current view size.
+  CGFloat bottomPadding = 0;
+  UIWindow *window = self.view.window;
+  if (window) {
+    // Convert the view's bounds to window coordinates
+    CGRect viewFrameInWindow =
+        [self.view convertRect:self.view.bounds toView:window];
+    // Calculate the gap between the bottom of the window and the bottom of
+    // the view
+    CGFloat visibleGap =
+        CGRectGetHeight(window.bounds) - CGRectGetMaxY(viewFrameInWindow);
+    // If there is a gap (for modally presented views on iPad), add it to the
+    // bottom padding
+    if (visibleGap > 0) {
+      bottomPadding = visibleGap + self.view.safeAreaInsets.bottom;
+    } else {
+      // If there's no gap (other cases), just use the bottom safe area inset
+      bottomPadding = self.view.safeAreaInsets.bottom;
+    }
+  } else {
+    // If there's no window (shouldn't happen, but better to be safe), use the
+    // bottom safe area inset
+    bottomPadding = self.view.safeAreaInsets.bottom;
+  }
+
+  // Calculate the total height used by the layout, including the height of
+  // the keyboard,
+  // the bottom padding and the note text view bottom padding
+  CGFloat usedHeight =
+      parentFolderHeight + bottomPadding + noteTextViewBottomPadding;
+
+  // Determine the constant for the bottom constraint of the note text view
+  CGFloat keyboardVisibleConstant = 0;
+  // If the used height is greater or equal to the height of the keyboard,
+  // just use the note text view bottom padding. Otherwise, calculate the extra
+  // padding needed.
+  if (usedHeight >= keyboardFrame.size.height) {
+    keyboardVisibleConstant = noteTextViewBottomPadding;
+  } else {
+    keyboardVisibleConstant = keyboardFrame.size.height - usedHeight;
+  }
+
+  // Set the new constant for the note text view's bottom constraint
+  // If the keyboard is showing, the constant is negative to move the view up.
+  // Otherwise, it's the negative of noteTextViewBottomPadding
+  self.noteTextViewBottomConstraint.constant =
+      isKeyboardShowing ? -keyboardVisibleConstant : -noteTextViewBottomPadding;
+
+  // Animate the change in the view's frame
+  [UIView animateWithDuration:0
+                        delay:0
+                      options:UIViewAnimationOptionCurveEaseOut
+                   animations:^{
+    [self.view layoutIfNeeded];
+  } completion: nil];
 }
 
 #pragma mark - Presentation controller integration
@@ -286,7 +478,7 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 
 // Retrieves input note name string from UI.
 - (NSString*)inputNoteName {
-    return self.contentItem.text;
+    return self.noteTextView.getText;
 }
 
 - (void)commitNoteChanges {
@@ -294,17 +486,29 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
   // ignore note model updates notifications.
   base::AutoReset<BOOL> autoReset(&_ignoresNotesModelChanges, YES);
 
-  // Tell delegate if note name or title has been changed.
-  if (self.note &&
-      self.note->GetTitle() !=
-           base::SysNSStringToUTF16([self inputNoteName]) ) {
-    [self.delegate noteEditorWillCommitContentChange:self];
+  if (self.editingExistingItem && self.note) {
+      // Tell delegate if note name or title has been changed.
+      if (self.note &&
+          self.note->GetTitle() !=
+          base::SysNSStringToUTF16([self inputNoteName]) ) {
+          [self.delegate noteEditorWillCommitContentChange:self];
+      }
+      [self.snackbarCommandsHandler
+        showSnackbarMessage:
+           note_utils_ios::CreateOrUpdateNoteWithToast(
+           self.note, [self inputNoteName], GURL(),
+           self.folder, self.noteModel, self.browserState)];
+  } else {
+      std::u16string folderTitle =
+          l10n_util::GetStringUTF16(IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_NOTE);
+      std::u16string titleString =
+      base::SysNSStringToUTF16([self inputNoteName]);
+      self.noteModel->AddNote(self.folder,
+                              self.folder->children().size(),
+                              titleString,
+                              GURL(),
+                              titleString);
   }
-  [self.snackbarCommandsHandler
-      showSnackbarMessage:
-          note_utils_ios::CreateOrUpdateNoteWithUndoToast(
-                self.note, [self inputNoteName], GURL(),
-                self.folder, self.noteModel, self.browserState)];
 }
 
 - (void)changeFolder:(const NoteNode*)folder {
@@ -312,47 +516,29 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
   self.folder = folder;
   [NoteMediator setFolderForNewNotes:self.folder
                               inBrowserState:self.browserState];
-  [self updateFolderLabel];
+}
+
+/// Updates the parent folder view componets, i.e. title and icon.
+- (void)updateFolderState {
+  [self.parentFolderView setParentFolderAttributesWithItem:self.folder];
 }
 
 - (void)dismiss {
   [self.view endEditing:YES];
-
   // Dismiss this controller.
+  [self cancel];
+  [self removeKeyboardObservers];
   [self.delegate noteEditorWantsDismissal:self];
 }
 
 #pragma mark - Layout
 
 - (void)updateSaveButtonState {
-    self.doneItem.enabled = YES;
-}
-
-- (void)updateFolderLabel {
-  NSIndexPath* indexPath =
-      [self.tableViewModel indexPathForItemType:ItemTypeFolder
-                              sectionIdentifier:SectionIdentifierInfo];
-  if (!indexPath) {
-    return;
-  }
-
-  [self.tableView reloadRowsAtIndexPaths:@[ indexPath ]
-                        withRowAnimation:UITableViewRowAnimationNone];
+  self.doneItem.enabled = YES;
 }
 
 - (void)updateUIFromNote {
-  [self loadModel];
-  TableViewModel* model = self.tableViewModel;
-
-  [model addSectionWithIdentifier:SectionIdentifierInfo];
-  self.contentItem = [[NoteTextViewItem alloc] initWithType:ItemTypeName];
-  self.contentItem.accessibilityIdentifier = @"Title Field";
-  self.contentItem.placeholder =
-      l10n_util::GetNSString(IDS_VIVALDI_NOTE_NAME_FIELD_HEADER);
-  if (self.note)
-      self.contentItem.text = note_utils_ios::TitleForNoteNode(self.note);
-  self.contentItem.delegate = self;
-  [model addItem:self.contentItem toSectionWithIdentifier:SectionIdentifierInfo];
+  self.noteTextView.text = note_utils_ios::TitleForNoteNode(self.note);
   // Save button state.
   [self updateSaveButtonState];
 }
@@ -360,19 +546,36 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 #pragma mark - Actions
 
 - (void)deleteNote {
-  if (self.note && self.noteModel->loaded()) {
-    // To stop getting recursive events from committed note editing changes
-    // ignore note model updates notifications.
-    base::AutoReset<BOOL> autoReset(&_ignoresNotesModelChanges, YES);
-
-    std::set<const NoteNode*> nodes;
-    nodes.insert(self.note);
-    [self.snackbarCommandsHandler
-        showSnackbarMessage:note_utils_ios::DeleteNotesWithUndoToast(
-                                nodes, self.noteModel, self.browserState)];
-    self.note = nil;
+  if (self.note) {
+    if (!self.folder->is_trash()) {
+        [self moveNodesToTrash];
+    } else {
+      if (self.note && self.noteModel->loaded()) {
+          // To stop getting recursive events from committed note editing
+          // changes, ignore note model updates notifications.
+          base::AutoReset<BOOL> autoReset(&_ignoresNotesModelChanges, YES);
+          std::set<const NoteNode*> nodes;
+          nodes.insert(self.note);
+          [self.snackbarCommandsHandler
+             showSnackbarMessage:note_utils_ios::DeleteNotesWithToast(
+             nodes, self.noteModel, self.browserState)];
+          self.note = nil;
+      }
+    }
   }
-  [self.delegate noteEditorWantsDismissal:self];
+  [self cancel];
+}
+
+- (void)moveNodesToTrash {
+  std::set<const vivaldi::NoteNode*> nodes;
+  nodes.insert(self.note);
+  DCHECK_GE(nodes.size(), 1u);
+
+  const NoteNode* trashFolder = self.noteModel->trash_node();
+  [self.snackbarCommandsHandler
+      showSnackbarMessage:note_utils_ios::MoveNotesWithToast(
+                              nodes, self.noteModel, trashFolder,
+                              self.browserState)];
 }
 
 - (void)moveNote {
@@ -381,8 +584,8 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 
   std::set<const NoteNode*> editedNodes;
   editedNodes.insert(self.note);
-  NoteFolderViewController* folderViewController =
-      [[NoteFolderViewController alloc]
+  NoteFolderChooserViewController* folderViewController =
+      [[NoteFolderChooserViewController alloc]
           initWithNotesModel:self.noteModel
                allowsNewFolders:YES
                     editedNodes:editedNodes
@@ -399,88 +602,27 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 }
 
 - (void)cancel {
-  [self dismiss];
+  self.allowsCancel = YES;
+  if (self.allowsCancel) {
+    [self dismissViewControllerAnimated:YES completion:nil];
+  } else {
+    [self.navigationController popViewControllerAnimated:YES];
+  }
 }
 
-- (void)save {
+- (void)saveNote {
   [self commitNoteChanges];
   [self dismiss];
 }
 
-#pragma mark - NoteTextFieldItemDelegate
-
-- (void)textDidChangeForItem:(NoteTextFieldItem*)item {
-  self.modalInPresentation = YES;
-  [self updateSaveButtonState];
+- (void)stop {
+  self.folderViewController = nil;
+  self.folderViewController.delegate = nil;
 }
 
-- (BOOL)textFieldShouldReturn:(UITextField*)textField {
-  [textField resignFirstResponder];
-  return YES;
-}
+#pragma mark - NoteFolderChooserViewControllerDelegate
 
-#pragma mark - NoteTextViewItemDelegate
-
-- (void)textDidChangeForTextViewItem:(NoteTextViewItem*)item {
-  self.modalInPresentation = YES;
-  [self updateSaveButtonState];
-}
-
-- (BOOL)textFieldLongShouldReturn:(UITextField*)textField {
-  [textField resignFirstResponder];
-  return YES;
-}
-
-#pragma mark - UITableViewDataSource
-
-- (UITableViewCell*)tableView:(UITableView*)tableView
-        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK_EQ(tableView, self.tableView);
-  UITableViewCell* cell =
-      [super tableView:tableView cellForRowAtIndexPath:indexPath];
-  NSInteger type = [self.tableViewModel itemTypeForIndexPath:indexPath];
-  switch (type) {
-    case ItemTypeName:
-      cell.selectionStyle = UITableViewCellSelectionStyleNone;
-      break;
-    case ItemTypeFolder:
-      break;
-  }
-  return cell;
-}
-
-#pragma mark - UITableViewDelegate
-
-- (void)tableView:(UITableView*)tableView
-    didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
-  DCHECK_EQ(tableView, self.tableView);
-  if ([self.tableViewModel itemTypeForIndexPath:indexPath] == ItemTypeFolder)
-    [self moveNote];
-}
-
-- (UIView*)tableView:(UITableView*)tableView
-    viewForFooterInSection:(NSInteger)section {
-  UIView* footerView =
-      [super tableView:tableView viewForFooterInSection:section];
-  if (section ==
-      [self.tableViewModel sectionForSectionIdentifier:SectionIdentifierInfo]) {
-    UITableViewHeaderFooterView* headerFooterView =
-        base::mac::ObjCCastStrict<UITableViewHeaderFooterView>(footerView);
-    headerFooterView.textLabel.font =
-        [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
-    headerFooterView.textLabel.textColor = [UIColor colorNamed:kRedColor];
-  }
-  return footerView;
-}
-
-- (CGFloat)tableView:(UITableView*)tableView
-    heightForRowAtIndexPath:(NSIndexPath*)indexPath {
-    return tableView.bounds.size.height;
-}
-
-#pragma mark - NoteFolderViewControllerDelegate
-
-- (void)folderPicker:(NoteFolderViewController*)folderPicker
+- (void)folderPicker:(NoteFolderChooserViewController*)folderPicker
     didFinishWithFolder:(const NoteNode*)folder {
   [self changeFolder:folder];
   // This delegate method can be called on two occasions:
@@ -492,22 +634,19 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
   // to reveal this note editor. Thus the call to
   // |popToViewController:animated:|.
   [self.navigationController popToViewController:self animated:YES];
-  self.folderViewController.delegate = nil;
-  self.folderViewController = nil;
+  [self stop];
 }
 
-- (void)folderPickerDidCancel:(NoteFolderViewController*)folderPicker {
+- (void)folderPickerDidCancel:(NoteFolderChooserViewController*)folderPicker {
   // This delegate method can only be called from the folder picker, which is
   // the only view controller on top of this note editor (|self|). Thus the
   // call to |popViewControllerAnimated:|.
   [self.navigationController popViewControllerAnimated:YES];
-  self.folderViewController.delegate = nil;
-  self.folderViewController = nil;
+  [self stop];
 }
 
-- (void)folderPickerDidDismiss:(NoteFolderViewController*)folderPicker {
-  self.folderViewController.delegate = nil;
-  self.folderViewController = nil;
+- (void)folderPickerDidDismiss:(NoteFolderChooserViewController*)folderPicker {
+  [self stop];
   [self dismiss];
 }
 
@@ -521,15 +660,13 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
   if (_ignoresNotesModelChanges)
     return;
 
-  if (self.note == noteNode)
+  if (self.note && self.note == noteNode)
     [self updateUIFromNote];
 }
 
 - (void)noteNodeChildrenChanged:(const NoteNode*)noteNode {
   if (_ignoresNotesModelChanges)
     return;
-
-  [self updateFolderLabel];
 }
 
 - (void)noteNode:(const NoteNode*)noteNode
@@ -583,7 +720,7 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
       addItemWithTitle:l10n_util::GetNSString(
                            IDS_IOS_VIEW_CONTROLLER_DISMISS_SAVE_CHANGES)
                 action:^{
-                  [weakSelf save];
+                  [weakSelf saveNote];
                 }
                  style:UIAlertActionStyleDefault];
   [self.actionSheetCoordinator
@@ -629,4 +766,25 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
   [self dismiss];
 }
 
+#pragma mark - NoteParentFolderViewDelegate
+
+- (void) didTapParentFolder {
+    if (!self.folder)
+        return;
+
+    std::set<const NoteNode*> editedNodes;
+    NoteFolderChooserViewController* folderViewController =
+    [[NoteFolderChooserViewController alloc]
+        initWithNotesModel:self.noteModel
+             allowsNewFolders:YES
+                  editedNodes:editedNodes
+                 allowsCancel:NO
+               selectedFolder:self.folder
+                      browser:self.browser];
+  folderViewController.delegate = self;
+
+  self.folderViewController = folderViewController;
+  [self.navigationController pushViewController:folderViewController
+                                     animated:YES];
+}
 @end

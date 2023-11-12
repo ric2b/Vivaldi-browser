@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/connectivity_services.h"
 #include "ash/public/cpp/esim_manager.h"
 #include "ash/public/cpp/network_config_service.h"
 #include "ash/webui/network_ui/network_diagnostics_resource_provider.h"
@@ -881,6 +882,13 @@ base::Value::Dict NetworkUI::GetLocalizedStrings() {
   localized_strings.Set(
       "NetworkDiagnosticsSendFeedback",
       l10n_util::GetStringUTF16(IDS_NETWORK_DIAGNOSTICS_SEND_FEEDBACK));
+  localized_strings.Set("renderNetworkSelectButtonText",
+                        l10n_util::GetStringUTF16(
+                            IDS_NETWORK_UI_RENDER_NETWORK_SELECT_BUTTON_TEXT));
+  localized_strings.Set(
+      "renderNetworkSelectButtonDescription",
+      l10n_util::GetStringUTF16(
+          IDS_NETWORK_UI_RENDER_NETWORK_SELECT_BUTTON_DESCRIPTION));
 
   // Network Metrics
   localized_strings.Set(
@@ -1008,6 +1016,12 @@ void NetworkUI::BindInterface(
 void NetworkUI::BindInterface(
     mojo::PendingReceiver<cellular_setup::mojom::ESimManager> receiver) {
   GetESimManager(std::move(receiver));
+}
+
+void NetworkUI::BindInterface(
+    mojo::PendingReceiver<chromeos::connectivity::mojom::PasspointService>
+        receiver) {
+  GetPasspointService(std::move(receiver));
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(NetworkUI)

@@ -27,6 +27,8 @@
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/ozone/common/features.h"
+#include "ui/ozone/platform/wayland/common/wayland_object.h"
+#include "ui/ozone/platform/wayland/host/fractional_scale_manager.h"
 #include "ui/ozone/platform/wayland/host/gtk_primary_selection_device_manager.h"
 #include "ui/ozone/platform/wayland/host/gtk_shell1.h"
 #include "ui/ozone/platform/wayland/host/org_kde_kwin_idle.h"
@@ -48,6 +50,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_shm.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
+#include "ui/ozone/platform/wayland/host/wayland_zaura_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_zaura_shell.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_management_output.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_color_manager.h"
@@ -76,7 +79,7 @@ constexpr uint32_t kMaxXdgShellVersion = 5;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
 constexpr uint32_t kMaxWpViewporterVersion = 1;
 constexpr uint32_t kMaxTextInputManagerVersion = 1;
-constexpr uint32_t kMaxTextInputExtensionVersion = 7;
+constexpr uint32_t kMaxTextInputExtensionVersion = 8;
 constexpr uint32_t kMaxExplicitSyncVersion = 2;
 constexpr uint32_t kMaxAlphaCompositingVersion = 1;
 constexpr uint32_t kMaxXdgDecorationVersion = 1;
@@ -128,6 +131,8 @@ WaylandConnection::~WaylandConnection() = default;
 bool WaylandConnection::Initialize() {
   // Register factories for classes that implement wl::GlobalObjectRegistrar<T>.
   // Keep alphabetical order for convenience.
+  RegisterGlobalObjectFactory(FractionalScaleManager::kInterfaceName,
+                              &FractionalScaleManager::Instantiate);
   RegisterGlobalObjectFactory(GtkPrimarySelectionDeviceManager::kInterfaceName,
                               &GtkPrimarySelectionDeviceManager::Instantiate);
   RegisterGlobalObjectFactory(GtkShell1::kInterfaceName,
@@ -138,6 +143,8 @@ bool WaylandConnection::Initialize() {
                               &OverlayPrioritizer::Instantiate);
   RegisterGlobalObjectFactory(SurfaceAugmenter::kInterfaceName,
                               &SurfaceAugmenter::Instantiate);
+  RegisterGlobalObjectFactory(WaylandZAuraOutputManager::kInterfaceName,
+                              &WaylandZAuraOutputManager::Instantiate);
   RegisterGlobalObjectFactory(WaylandDataDeviceManager::kInterfaceName,
                               &WaylandDataDeviceManager::Instantiate);
   RegisterGlobalObjectFactory(WaylandDrm::kInterfaceName,
@@ -528,6 +535,13 @@ void WaylandConnection::Global(void* data,
     }
   } else if (!connection->xdg_output_manager_ &&
              strcmp(interface, "zxdg_output_manager_v1") == 0) {
+    // Responsibilities of zxdg_output_manager_v1 have been subsumed into the
+    // zaura_output_manager. If using the zaura_output_manager avoid binding
+    // unnecessarily.
+    if (connection->zaura_output_manager_) {
+      LOG(WARNING) << "Skipping bind to zxdg_output_manager_v1";
+      return;
+    }
     connection->xdg_output_manager_ = wl::Bind<struct zxdg_output_manager_v1>(
         registry, name, std::min(version, kMaxXdgOutputManagerVersion));
     if (!connection->xdg_output_manager_) {
@@ -599,6 +613,10 @@ const gfx::PointF WaylandConnection::MaybeConvertLocation(
   gfx::PointF converted(location);
   converted.InvScale(window->applied_state().window_scale);
   return converted;
+}
+
+bool WaylandConnection::ShouldUseOverlayDelegation() const {
+  return IsWaylandOverlayDelegationEnabled() && !overlay_delegation_disabled_;
 }
 
 // static

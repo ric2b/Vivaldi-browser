@@ -18,18 +18,20 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.weblayer_private.interfaces.BrowserFragmentArgs;
 import org.chromium.weblayer_private.interfaces.DarkModeStrategy;
 import org.chromium.weblayer_private.interfaces.IBrowser;
 import org.chromium.weblayer_private.interfaces.IBrowserClient;
-import org.chromium.weblayer_private.interfaces.IBrowserFragment;
 import org.chromium.weblayer_private.interfaces.IMediaRouteDialogFragment;
+import org.chromium.weblayer_private.interfaces.IRemoteFragment;
 import org.chromium.weblayer_private.interfaces.ITab;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 import org.chromium.weblayer_private.media.MediaRouteDialogFragmentImpl;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -46,7 +48,10 @@ public class BrowserImpl extends IBrowser.Stub {
 
     private long mNativeBrowser;
     private final ProfileImpl mProfile;
+    private final boolean mIsExternalIntentsEnabled;
     private Context mServiceContext;
+
+    private @Nullable List<Origin> mAllowedOrigins;
 
     private IBrowserClient mClient;
     private boolean mInDestroy;
@@ -97,6 +102,22 @@ public class BrowserImpl extends IBrowser.Stub {
 
         mProfile.checkNotDestroyed(); // TODO(swestphal): or mProfile != null
 
+        mIsExternalIntentsEnabled =
+                fragmentArgs.getBoolean(BrowserFragmentArgs.IS_EXTERNAL_INTENTS_ENABLED);
+
+        List<String> allowedOriginStrings =
+                fragmentArgs.getStringArrayList(BrowserFragmentArgs.ALLOWED_ORIGINS);
+        if (allowedOriginStrings != null) {
+            mAllowedOrigins = new ArrayList<Origin>();
+
+            for (String allowedOriginString : allowedOriginStrings) {
+                Origin allowedOrigin = Origin.create(allowedOriginString);
+                if (allowedOrigin != null) {
+                    mAllowedOrigins.add(allowedOrigin);
+                }
+            }
+        }
+
         if (!isIncognito && !TextUtils.isEmpty(persistenceId)) {
             mFullPersistenceInfo = new FullPersistenceInfo();
             mFullPersistenceInfo.mPersistenceId = persistenceId;
@@ -106,15 +127,14 @@ public class BrowserImpl extends IBrowser.Stub {
                 mProfile.getNativeProfile(), serviceContext.getPackageName(), this);
         mPasswordEchoEnabled = null;
 
-        mBrowserFragmentImpl = new BrowserFragmentImpl(this, serviceContext);
-
-        notifyFragmentInit();
+        notifyFragmentInit(); // TODO(swestphal): Perhaps move to createBrowserFragmentImpl()?
     }
 
     @Override
-    public IBrowserFragment getBrowserFragmentImpl() {
+    public IRemoteFragment createBrowserFragmentImpl() {
         StrictModeWorkaround.apply();
-        return mBrowserFragmentImpl.asIBrowserFragment();
+        mBrowserFragmentImpl = new BrowserFragmentImpl(this, mServiceContext);
+        return mBrowserFragmentImpl;
     }
 
     @Override
@@ -290,6 +310,19 @@ public class BrowserImpl extends IBrowser.Stub {
 
     void notifyFragmentPause() {
         BrowserImplJni.get().onFragmentPause(mNativeBrowser);
+    }
+
+    boolean isExternalIntentsEnabled() {
+        return mIsExternalIntentsEnabled;
+    }
+
+    boolean isUrlAllowed(String url) {
+        // Defaults to all origins being allowed if a developer list is not provided.
+        if (mAllowedOrigins == null) {
+            return true;
+        }
+
+        return mAllowedOrigins.contains(Origin.create(url));
     }
 
     public boolean isWindowOnSmallDevice() {

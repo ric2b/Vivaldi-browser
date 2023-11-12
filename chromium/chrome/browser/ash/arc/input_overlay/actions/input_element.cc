@@ -9,59 +9,20 @@
 #include "base/containers/contains.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "chrome/browser/ash/arc/input_overlay/util.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
 namespace arc::input_overlay {
-
-int ModifierDomCodeToEventFlag(ui::DomCode code) {
-  switch (code) {
-    case ui::DomCode::ALT_LEFT:
-    case ui::DomCode::ALT_RIGHT:
-      return ui::EF_ALT_DOWN;
-    case ui::DomCode::CAPS_LOCK:
-      return ui::EF_CAPS_LOCK_ON;
-    case ui::DomCode::META_LEFT:
-    case ui::DomCode::META_RIGHT:
-      return ui::EF_COMMAND_DOWN;
-    case ui::DomCode::SHIFT_LEFT:
-    case ui::DomCode::SHIFT_RIGHT:
-      return ui::EF_SHIFT_DOWN;
-    case ui::DomCode::CONTROL_LEFT:
-    case ui::DomCode::CONTROL_RIGHT:
-      return ui::EF_CONTROL_DOWN;
-    default:
-      return ui::EF_NONE;
-  }
-}
-
-bool IsSameDomCode(ui::DomCode a, ui::DomCode b) {
-  return a == b ||
-         (ModifierDomCodeToEventFlag(a) != ui::EF_NONE &&
-          ModifierDomCodeToEventFlag(a) == ModifierDomCodeToEventFlag(b));
-}
-
-MouseAction ConvertToMouseActionEnum(const std::string& mouse_action) {
-  if (mouse_action == kPrimaryClick)
-    return MouseAction::PRIMARY_CLICK;
-  if (mouse_action == kSecondaryClick)
-    return MouseAction::SECONDARY_CLICK;
-  if (mouse_action == kHoverMove)
-    return MouseAction::HOVER_MOVE;
-  if (mouse_action == kPrimaryDragMove)
-    return MouseAction::PRIMARY_DRAG_MOVE;
-  if (mouse_action == kSecondaryDragMove)
-    return MouseAction::SECONDARY_DRAG_MOVE;
-  return MouseAction::NONE;
-}
 
 InputElement::InputElement() {}
 
 InputElement::InputElement(ui::DomCode code) {
   input_sources_ = InputSource::IS_KEYBOARD;
   keys_.emplace_back(code);
-  if (ModifierDomCodeToEventFlag(code) != ui::EF_NONE)
+  if (ModifierDomCodeToEventFlag(code) != ui::EF_NONE) {
     is_modifier_key_ = true;
+  }
 }
 
 InputElement::InputElement(const InputElement& other) = default;
@@ -161,8 +122,9 @@ bool InputElement::IsOverlapped(const InputElement& input_element) const {
   }
   if (input_sources_ == InputSource::IS_KEYBOARD) {
     for (auto key : input_element.keys()) {
-      if (base::Contains(keys_, key))
+      if (base::Contains(keys_, key)) {
         return true;
+      }
     }
     return false;
   }
@@ -171,8 +133,9 @@ bool InputElement::IsOverlapped(const InputElement& input_element) const {
 
 void InputElement::SetKey(size_t index, ui::DomCode code) {
   DCHECK(index < keys_.size());
-  if (index >= keys_.size())
+  if (index >= keys_.size()) {
     return;
+  }
   keys_[index] = code;
 }
 
@@ -196,13 +159,16 @@ std::unique_ptr<InputElementProto> InputElement::ConvertToProto() {
 }
 
 bool InputElement::operator==(const InputElement& other) const {
-  if (this->input_sources_ != other.input_sources())
+  if (this->input_sources_ != other.input_sources()) {
     return false;
+  }
   bool equal = true;
-  if (!!(this->input_sources_ & InputSource::IS_KEYBOARD))
+  if (!!(this->input_sources_ & InputSource::IS_KEYBOARD)) {
     equal = equal && (this->keys_ == other.keys());
-  if (!!(this->input_sources_ & InputSource::IS_MOUSE))
+  }
+  if (!!(this->input_sources_ & InputSource::IS_MOUSE)) {
     equal = equal && (this->mouse_action_ == other.mouse_action());
+  }
   return equal;
 }
 

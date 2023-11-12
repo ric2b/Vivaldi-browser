@@ -17,7 +17,6 @@
 #include "android_webview/browser/aw_pdf_exporter.h"
 #include "android_webview/browser/aw_render_process.h"
 #include "android_webview/browser/aw_renderer_priority.h"
-#include "android_webview/browser/aw_resource_context.h"
 #include "android_webview/browser/aw_settings.h"
 #include "android_webview/browser/aw_web_contents_delegate.h"
 #include "android_webview/browser/gfx/aw_gl_functor.h"
@@ -62,7 +61,10 @@
 #include "base/threading/thread_restrictions.h"
 #include "components/android_autofill/browser/android_autofill_manager.h"
 #include "components/android_autofill/browser/autofill_provider_android.h"
+#include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
+#include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
@@ -327,20 +329,10 @@ void AwContents::InitAutofillIfNecessary(bool autocomplete_enabled) {
   if (!autofill_provider && !autocomplete_enabled)
     return;
 
-  AwAutofillClient::CreateForWebContents(web_contents);
-
   // WebView browser tests use BrowserAutofillManager if `!autofill_provider`.
-  ContentAutofillDriverFactory::DriverInitCallback driver_init_hook =
-      autofill_provider
-          ? base::BindRepeating(&autofill::AndroidDriverInitHook,
-                                AwAutofillClient::FromWebContents(web_contents))
-          : base::BindRepeating(&autofill::BrowserDriverInitHook,
-                                AwAutofillClient::FromWebContents(web_contents),
-                                base::android::GetDefaultLocaleString());
-
-  ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
-      web_contents, AwAutofillClient::FromWebContents(web_contents),
-      std::move(driver_init_hook));
+  AwAutofillClient::CreateForWebContents(
+      web_contents,
+      /*use_android_autofill_manager=*/!!autofill_provider);
 }
 
 void AwContents::SetAwAutofillClient(const JavaRef<jobject>& client) {
@@ -1391,11 +1383,10 @@ void AwContents::SetExtraHeadersForUrl(
   std::string extra_headers;
   if (jextra_headers)
     extra_headers = ConvertJavaStringToUTF8(env, jextra_headers);
-  AwResourceContext* resource_context = static_cast<AwResourceContext*>(
-      AwBrowserContext::FromWebContents(web_contents_.get())
-          ->GetResourceContext());
-  resource_context->SetExtraHeaders(GURL(ConvertJavaStringToUTF8(env, url)),
-                                    extra_headers);
+  auto* browser_context =
+      AwBrowserContext::FromWebContents(web_contents_.get());
+  browser_context->SetExtraHeaders(GURL(ConvertJavaStringToUTF8(env, url)),
+                                   extra_headers);
 }
 
 void AwContents::SetJsOnlineProperty(JNIEnv* env, jboolean network_up) {

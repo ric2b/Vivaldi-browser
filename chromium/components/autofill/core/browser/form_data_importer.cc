@@ -21,6 +21,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/address_profile_save_manager.h"
 #include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
@@ -29,6 +30,8 @@
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/iban.h"
 #include "components/autofill/core/browser/data_model/phone_number.h"
+#include "components/autofill/core/browser/field_type_utils.h"
+#include "components/autofill/core/browser/form_parsing/form_field.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
@@ -356,13 +359,14 @@ size_t FormDataImporter::ExtractAddressProfiles(
                               << "Form is empty." << CTag{};
   } else {
     // Relevant sections for address fields.
-    std::set<Section> sections;
+    std::map<Section, std::vector<const AutofillField*>> section_fields;
     for (const auto& field : form) {
-      if (field->Type().group() != FieldTypeGroup::kCreditCard)
-        sections.insert(field->section);
+      if (IsAddressType(field->Type())) {
+        section_fields[field->section].push_back(field.get());
+      }
     }
 
-    for (const Section& section : sections) {
+    for (const auto& [section, fields] : section_fields) {
       if (num_complete_profiles == kMaxNumAddressProfilesSaved)
         break;
       // Log the output from a section in a separate div for readability.
@@ -373,7 +377,7 @@ size_t FormDataImporter::ExtractAddressProfiles(
           << CTag{};
       // Try to extract an address profile from the form fields of this section.
       // Only allow for a prompt if no other complete profile was found so far.
-      if (ExtractAddressProfileFromSection(form, section,
+      if (ExtractAddressProfileFromSection(fields, form.source_url(),
                                            address_profile_import_candidates,
                                            &import_log_buffer)) {
         num_complete_profiles++;
@@ -381,26 +385,11 @@ size_t FormDataImporter::ExtractAddressProfiles(
       // And close the div of the section import log.
       LOG_AF(import_log_buffer) << CTag{"div"};
     }
-    // Run the extract on the union of the section if the import was not
-    // successful and if there is more than one section.
-    if (num_complete_profiles > 0) {
-      autofill_metrics::LogAddressFormImportStatusMetric(
-          autofill_metrics::AddressProfileImportStatusMetric::REGULAR_IMPORT);
-    } else if (sections.size() > 1) {
-      // Try to extract by combining all sections.
-      if (ExtractAddressProfileFromSection(form, absl::nullopt,
-                                           address_profile_import_candidates,
-                                           &import_log_buffer)) {
-        num_complete_profiles++;
-        autofill_metrics::LogAddressFormImportStatusMetric(
-            autofill_metrics::AddressProfileImportStatusMetric::
-                SECTION_UNION_IMPORT);
-      }
-    }
-    if (num_complete_profiles == 0) {
-      autofill_metrics::LogAddressFormImportStatusMetric(
-          autofill_metrics::AddressProfileImportStatusMetric::NO_IMPORT);
-    }
+    autofill_metrics::LogAddressFormImportStatusMetric(
+        num_complete_profiles == 0
+            ? autofill_metrics::AddressProfileImportStatusMetric::kNoImport
+            : autofill_metrics::AddressProfileImportStatusMetric::
+                  kRegularImport);
   }
   LOG_AF(import_log_buffer)
       << LogMessage::kImportAddressProfileFromFormNumberOfImports
@@ -413,8 +402,8 @@ size_t FormDataImporter::ExtractAddressProfiles(
 }
 
 bool FormDataImporter::ExtractAddressProfileFromSection(
-    const FormStructure& form,
-    const absl::optional<Section>& section,
+    base::span<const AutofillField* const> section_fields,
+    const GURL& source_url,
     std::vector<FormDataImporter::AddressProfileImportCandidate>*
         address_profile_import_candidates,
     LogBuffer* import_log_buffer) {
@@ -444,19 +433,14 @@ bool FormDataImporter::ExtractAddressProfileFromSection(
   bool ignore_phone_number_fields = false;
 
   // Metadata about the way we construct candidate_profile.
-  ProfileImportMetadata import_metadata{
-      .origin = url::Origin::Create(form.source_url())};
+  ProfileImportMetadata import_metadata{.origin =
+                                            url::Origin::Create(source_url)};
 
   // Tracks if any of the fields belongs to FormType::kAddressForm.
   bool has_address_related_fields = false;
 
   // Go through each |form| field and attempt to constitute a valid profile.
-  for (const auto& field : form) {
-    // Reject fields that are not within the specified |section|.
-    // If no section is passed, use all fields.
-    if (section && field->section != *section)
-      continue;
-
+  for (const auto* field : section_fields) {
     std::u16string value;
     base::TrimWhitespace(field->value, base::TRIM_ALL, &value);
 
@@ -465,10 +449,10 @@ bool FormDataImporter::ExtractAddressProfileFromSection(
     if (!field->IsFieldFillable() || value.empty())
       continue;
 
-    // When `kAutofillImportFromAutoccompleteUnrecognized` is enabled, Autofill
+    // When `kAutofillImportFromAutocompleteUnrecognized` is enabled, Autofill
     // imports from fields despite an unrecognized autocomplete attribute.
     if (field->HasPredictionDespiteUnrecognizedAutocompleteAttribute()) {
-      if (!features::kAutofillImportFromAutoccompleteUnrecognized.Get()) {
+      if (!features::kAutofillImportFromAutocompleteUnrecognized.Get()) {
         continue;
       }
       import_metadata.num_autocomplete_unrecognized_fields++;
@@ -545,21 +529,8 @@ bool FormDataImporter::ExtractAddressProfileFromSection(
         candidate_profile.SetInfoWithVerificationStatus(
             field_type, value, page_language, VerificationStatus::kObserved);
       }
-      // Check if the country code was still not determined correctly.
-      if (!candidate_profile.HasRawInfo(ADDRESS_HOME_COUNTRY)) {
-        has_invalid_country = true;
-        // If AutofillIgnoreInvalidCountryOnImport is enable, we cannot just
-        // set `has_invalid_country` to false, because the flag is used to
-        // collect metrics further down.
-        import_metadata.did_ignore_invalid_country =
-            base::FeatureList::IsEnabled(
-                features::kAutofillIgnoreInvalidCountryOnImport);
-        if (!import_metadata.did_ignore_invalid_country) {
-          LOG_AF(import_log_buffer)
-              << LogMessage::kImportAddressProfileFromFormFailed
-              << "Missing country." << CTag{};
-        }
-      }
+      has_invalid_country = has_invalid_country ||
+                            !candidate_profile.HasRawInfo(ADDRESS_HOME_COUNTRY);
     }
 
     if (FieldTypeGroupToFormType(field_type.group()) ==
@@ -579,20 +550,12 @@ bool FormDataImporter::ExtractAddressProfileFromSection(
       GetPredictedCountryCode(candidate_profile, variation_country_code,
                               app_locale_, import_log_buffer);
 
-  bool should_complement_country =
-      !has_invalid_country || import_metadata.did_ignore_invalid_country;
-
   // When setting a phone number, the region is deduced from the profile's
   // country or the app locale. For the `variation_country_code` to take
   // precedence over the app locale, country code complemention needs to happen
   // before `SetPhoneNumber()`.
-  bool complement_country_early =
-      base::FeatureList::IsEnabled(features::kAutofillComplementCountryEarly);
-  if (complement_country_early) {
-    import_metadata.did_complement_country =
-        should_complement_country &&
-        ComplementCountry(candidate_profile, predicted_country_code);
-  }
+  import_metadata.did_complement_country =
+      ComplementCountry(candidate_profile, predicted_country_code);
 
   if (!SetPhoneNumber(candidate_profile, combined_phone)) {
     candidate_profile.ClearFields({PHONE_HOME_WHOLE_NUMBER});
@@ -613,8 +576,7 @@ bool FormDataImporter::ExtractAddressProfileFromSection(
   // `IsValidLearnableProfile()` goes first to collect metrics.
   bool has_invalid_information =
       !IsValidLearnableProfile(candidate_profile, import_log_buffer) ||
-      has_multiple_distinct_email_addresses || has_invalid_field_types ||
-      (has_invalid_country && !import_metadata.did_ignore_invalid_country);
+      has_multiple_distinct_email_addresses || has_invalid_field_types;
 
   // Profiles with valid information qualify for multi-step imports.
   // This requires the profile to be finalized to apply the merging logic.
@@ -627,12 +589,6 @@ bool FormDataImporter::ExtractAddressProfileFromSection(
     predicted_country_code =
         GetPredictedCountryCode(candidate_profile, variation_country_code,
                                 app_locale_, /*import_log_buffer=*/nullptr);
-  }
-
-  if (!complement_country_early) {
-    import_metadata.did_complement_country =
-        should_complement_country &&
-        ComplementCountry(candidate_profile, predicted_country_code);
   }
 
   // This relies on the profile's country code and must be done strictly after
@@ -684,7 +640,7 @@ bool FormDataImporter::ExtractAddressProfileFromSection(
 
   AddressProfileImportCandidate import_candidate;
   import_candidate.profile = candidate_profile;
-  import_candidate.url = form.source_url();
+  import_candidate.url = source_url;
   import_candidate.all_requirements_fulfilled = all_fulfilled;
   import_candidate.import_metadata = import_metadata;
   address_profile_import_candidates->push_back(import_candidate);
@@ -878,7 +834,7 @@ absl::optional<CreditCard> FormDataImporter::ExtractCreditCard(
     return (card->record_type() == CreditCard::MASKED_SERVER_CARD &&
             card->LastFourDigits() == cand.LastFourDigits()) ||
            (card->record_type() == CreditCard::FULL_SERVER_CARD &&
-            cand.HasSameNumberAs(*card));
+            cand.MatchingCardDetails(*card));
   };
   auto find_matching_server_card = [&]() {
     const auto& server_cards = personal_data_manager_->GetServerCreditCards();
@@ -917,6 +873,13 @@ absl::optional<IBAN> FormDataImporter::ExtractIBAN(const FormStructure& form) {
   IBAN candidate_iban = ExtractIBANFromForm(form);
   if (candidate_iban.value().empty())
     return absl::nullopt;
+
+  // Sets the `kAutofillHasSeenIban` pref to true indicating that the user has
+  // submitted a form with an IBAN, which indicates that the user is familiar
+  // with IBANs as a concept. We set the pref so that even if the user travels
+  // to a country where IBAN functionality is not typically used, they will
+  // still be able to save new IBANs from the settings page using this pref.
+  personal_data_manager_->SetAutofillHasSeenIban();
 
   bool found_existing_local_iban = base::ranges::any_of(
       personal_data_manager_->GetLocalIBANs(), [&](const auto& iban) {
@@ -994,15 +957,14 @@ IBAN FormDataImporter::ExtractIBANFromForm(const FormStructure& form) {
   IBAN candidate_iban;
 
   for (const auto& field : form) {
-    std::u16string value;
-    base::TrimWhitespace(field->value, base::TRIM_ALL, &value);
-
-    if (!field->IsFieldFillable() || value.empty())
+    if (!field->IsFieldFillable() || field->value.empty()) {
       continue;
+    }
 
     AutofillType field_type = field->Type();
-    if (field_type.GetStorableType() == IBAN_VALUE) {
-      candidate_iban.SetInfo(field_type, value, app_locale_);
+    if (field_type.GetStorableType() == IBAN_VALUE &&
+        IBAN::IsValid(field->value)) {
+      candidate_iban.SetInfo(field_type, field->value, app_locale_);
       break;
     }
   }

@@ -27,6 +27,7 @@
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/autocomplete_scoring_signals_annotator.h"
 #include "components/omnibox/browser/history_url_provider.h"
 #include "components/omnibox/browser/in_memory_url_index.h"
 #include "components/omnibox/browser/keyword_provider.h"
@@ -37,6 +38,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/page_transition_types.h"
@@ -96,7 +98,7 @@ void HistoryQuickProvider::DoAutocomplete() {
   // Get the matching URLs from the DB.
   ScoredHistoryMatches matches = in_memory_url_index_->HistoryItemsForTerms(
       autocomplete_input_.text(), autocomplete_input_.cursor_position(), "",
-      max_matches);
+      max_matches, client()->GetOmniboxTriggeredFeatureService());
   if (matches.empty())
     return;
 
@@ -154,12 +156,13 @@ void HistoryQuickProvider::DoAutocomplete() {
     ScoredHistoryMatches host_matches =
         in_memory_url_index_->HistoryItemsForTerms(
             autocomplete_input_.text(), autocomplete_input_.cursor_position(),
-            host, max_host_matches);
+            host, max_host_matches,
+            client()->GetOmniboxTriggeredFeatureService());
     // TODO(manukh): Consider using a new `AutocompleteMatchType` for domain
     //  suggestions to distinguish them in metrics.
     if (!host_matches.empty()) {
       client()->GetOmniboxTriggeredFeatureService()->FeatureTriggered(
-          OmniboxTriggeredFeatureService::Feature::kDomainSuggestions);
+          metrics::OmniboxEventProto_Feature_DOMAIN_SUGGESTIONS);
       static const bool counterfactual =
           OmniboxFieldTrial::kDomainSuggestionsCounterfactual.Get();
       if (!counterfactual)
@@ -358,14 +361,16 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
     match.from_keyword = true;
   }
 
-  if (OmniboxFieldTrial::IsLogUrlScoringSignalsEnabled()) {
+  if (OmniboxFieldTrial::IsLogUrlScoringSignalsEnabled() &&
+      AutocompleteScoringSignalsAnnotator::IsEligibleMatch(match)) {
     // Propagate scoring signals to AC Match for ML Model training data.
     // `allowed_to_be_default_match` is set in this function, after the ACMatch
     // is constructed, rather than in ScoredHistoryMatch. We have to propagate
     // that signal to `scoring_signals` in addition to all signals calculated in
     // the ScoredHistoryMatch.
+    DCHECK(history_match.scoring_signals.has_value());
     match.scoring_signals = history_match.scoring_signals;
-    match.scoring_signals.set_allowed_to_be_default_match(
+    match.scoring_signals->set_allowed_to_be_default_match(
         match.allowed_to_be_default_match);
   }
   match.RecordAdditionalInfo("typed count", info.typed_count());
@@ -375,10 +380,5 @@ AutocompleteMatch HistoryQuickProvider::QuickMatchToACMatch(
                              history_match.raw_score_before_domain_boosting);
   match.RecordAdditionalInfo("raw score after domain boosting",
                              history_match.raw_score_after_domain_boosting);
-  if (history_match.raw_score_before_domain_boosting <
-      history_match.raw_score_after_domain_boosting) {
-    client()->GetOmniboxTriggeredFeatureService()->FeatureTriggered(
-        OmniboxTriggeredFeatureService::Feature::kDomainSuggestions);
-  }
   return match;
 }

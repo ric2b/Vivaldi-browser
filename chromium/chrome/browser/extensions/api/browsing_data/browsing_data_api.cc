@@ -20,9 +20,9 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/common/pref_names.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
 #include "components/browsing_data/core/pref_names.h"
+#include "components/history/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -149,6 +149,9 @@ bool IsRemovalPermitted(uint64_t removal_mask, PrefService* prefs) {
 
 // Returns true if Sync is currently running (i.e. enabled and not in error).
 bool IsSyncRunning(Profile* profile) {
+  if (profile->IsOffTheRecord()) {
+    return false;
+  }
   return GetSyncStatusMessageType(profile) == SyncStatusMessageType::kSynced;
 }
 }  // namespace
@@ -279,7 +282,7 @@ void BrowsingDataRemoverFunction::OnTaskFinished() {
     return;
   synced_data_deletion_.reset();
   observation_.Reset();
-  Respond(WithArguments());
+  Respond(NoArguments());
   Release();  // Balanced in StartRemoving.
 }
 
@@ -504,7 +507,7 @@ bool BrowsingDataRemoveFunction::GetRemovalMask(uint64_t* removal_mask) {
     return false;
 
   *removal_mask = 0;
-  for (const auto kv : args()[1].DictItems()) {
+  for (const auto kv : args()[1].GetDict()) {
     if (!kv.second.is_bool())
       return false;
     if (kv.second.GetBool())

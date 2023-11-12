@@ -30,6 +30,7 @@ class ResourceSchedulerClient;
 class URLLoader;
 class URLLoaderFactory;
 struct ResourceRequest;
+class SharedDictionaryStorage;
 
 namespace cors {
 class CorsURLLoader;
@@ -141,7 +142,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
   const int32_t process_id_ = mojom::kInvalidProcessId;
   const absl::optional<url::Origin> request_initiator_origin_lock_;
   const bool ignore_isolated_world_origin_;
-  const mojom::TrustTokenRedemptionPolicy trust_token_redemption_policy_;
+  const mojom::TrustTokenOperationPolicyVerdict trust_token_issuance_policy_;
+  const mojom::TrustTokenOperationPolicyVerdict trust_token_redemption_policy_;
   net::IsolationInfo isolation_info_;
   const bool automatically_assign_isolation_info_;
   const std::string debug_tag_;
@@ -164,6 +166,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) CorsURLLoaderFactory final
   // Accessed by instances in `loaders_` too. Since the factory outlives them,
   // it's safe.
   const raw_ptr<const OriginAccessList> origin_access_list_;
+
+  scoped_refptr<SharedDictionaryStorage> shared_dictionary_storage_;
 
   static bool allow_external_preflights_for_testing_;
 };

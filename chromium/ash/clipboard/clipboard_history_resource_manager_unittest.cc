@@ -15,6 +15,7 @@
 #include "ash/test/ash_test_base.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/repeating_test_future.h"
@@ -110,8 +111,9 @@ class ClipboardHistoryResourceManagerTest : public AshTestBase {
   }
 
  private:
-  const ClipboardHistory* clipboard_history_;
-  const ClipboardHistoryResourceManager* resource_manager_;
+  raw_ptr<const ClipboardHistory, ExperimentalAsh> clipboard_history_;
+  raw_ptr<const ClipboardHistoryResourceManager, ExperimentalAsh>
+      resource_manager_;
   std::unique_ptr<MockClipboardImageModelFactory> mock_image_factory_;
 };
 
@@ -135,8 +137,8 @@ TEST_F(ClipboardHistoryResourceManagerTest, BasicImgCachedImageModel) {
 
   ASSERT_EQ(clipboard_history()->GetItems().size(), 1u);
   const auto& item = clipboard_history()->GetItems().front();
-  ASSERT_TRUE(item.html_preview().has_value());
-  EXPECT_EQ(item.html_preview().value(), expected_image_model);
+  ASSERT_TRUE(item.display_image().has_value());
+  EXPECT_EQ(item.display_image().value(), expected_image_model);
 }
 
 // Tests that an image model is rendered when HTML with a <table> tag is copied.
@@ -159,8 +161,8 @@ TEST_F(ClipboardHistoryResourceManagerTest, BasicTableCachedImageModel) {
 
   ASSERT_EQ(clipboard_history()->GetItems().size(), 1u);
   const auto& item = clipboard_history()->GetItems().front();
-  ASSERT_TRUE(item.html_preview().has_value());
-  EXPECT_EQ(item.html_preview().value(), expected_image_model);
+  ASSERT_TRUE(item.display_image().has_value());
+  EXPECT_EQ(item.display_image().value(), expected_image_model);
 }
 
 // Tests that an image model is not rendered when HTML without render-eligible
@@ -184,7 +186,7 @@ TEST_F(ClipboardHistoryResourceManagerTest, BasicIneligibleCachedImageModel) {
 
   ASSERT_EQ(clipboard_history()->GetItems().size(), 1u);
   EXPECT_FALSE(
-      clipboard_history()->GetItems().front().html_preview().has_value());
+      clipboard_history()->GetItems().front().display_image().has_value());
 }
 
 // Tests that copying duplicate HTML to the buffer results in only one render
@@ -220,8 +222,8 @@ TEST_F(ClipboardHistoryResourceManagerTest, DuplicateHTML) {
   auto items = clipboard_history()->GetItems();
   EXPECT_EQ(items.size(), 2u);
   for (const auto& item : items) {
-    ASSERT_TRUE(item.html_preview().has_value());
-    EXPECT_EQ(item.html_preview().value(), expected_image_model);
+    ASSERT_TRUE(item.display_image().has_value());
+    EXPECT_EQ(item.display_image().value(), expected_image_model);
   }
 }
 
@@ -255,12 +257,12 @@ TEST_F(ClipboardHistoryResourceManagerTest, DifferentHTML) {
 
   std::list<ClipboardHistoryItem> items = clipboard_history()->GetItems();
   ASSERT_EQ(items.size(), 2u);
-  ASSERT_TRUE(items.front().html_preview().has_value());
-  EXPECT_EQ(items.front().html_preview().value(), second_expected_image_model);
+  ASSERT_TRUE(items.front().display_image().has_value());
+  EXPECT_EQ(items.front().display_image().value(), second_expected_image_model);
 
   items.pop_front();
-  ASSERT_TRUE(items.front().html_preview().has_value());
-  EXPECT_EQ(items.front().html_preview().value(), first_expected_image_model);
+  ASSERT_TRUE(items.front().display_image().has_value());
+  EXPECT_EQ(items.front().display_image().value(), first_expected_image_model);
 }
 
 // Tests that copying content with non-HTML display formats does not result in
@@ -280,9 +282,11 @@ TEST_F(ClipboardHistoryResourceManagerTest, IneligibleDisplayTypes) {
   }
   FlushMessageLoop();
 
+  // There should be a display image for the bitmap, but no render request
+  // should have been issued.
   ASSERT_EQ(clipboard_history()->GetItems().size(), 1u);
-  EXPECT_FALSE(
-      clipboard_history()->GetItems().front().html_preview().has_value());
+  EXPECT_TRUE(
+      clipboard_history()->GetItems().front().display_image().has_value());
 
   // Write clipboard data without an HTML format. No image model should be
   // rendered.
@@ -294,9 +298,10 @@ TEST_F(ClipboardHistoryResourceManagerTest, IneligibleDisplayTypes) {
   }
   FlushMessageLoop();
 
+  // There should be neither a display image nor any issued render request.
   ASSERT_EQ(clipboard_history()->GetItems().size(), 2u);
   EXPECT_FALSE(
-      clipboard_history()->GetItems().front().html_preview().has_value());
+      clipboard_history()->GetItems().front().display_image().has_value());
 }
 
 // Tests that a placeholder image model is cached while rendering is ongoing.
@@ -336,9 +341,9 @@ TEST_F(ClipboardHistoryResourceManagerTest, PlaceholderDuringRender) {
   // image model finishes rendering, it should have a placeholder HTML preview.
   ASSERT_EQ(clipboard_history()->GetItems().size(), 1u);
   const auto& item = clipboard_history()->GetItems().front();
-  ASSERT_TRUE(item.html_preview().has_value());
-  EXPECT_NE(item.html_preview().value(), expected_image_model);
-  EXPECT_EQ(item.html_preview().value(),
+  ASSERT_TRUE(item.display_image().has_value());
+  EXPECT_NE(item.display_image().value(), expected_image_model);
+  EXPECT_EQ(item.display_image().value(),
             clipboard_history_util::GetHtmlPreviewPlaceholder());
 
   // Allow the resource manager to process the rendered image model.
@@ -347,8 +352,8 @@ TEST_F(ClipboardHistoryResourceManagerTest, PlaceholderDuringRender) {
 
   // After the resource manager processes the rendered image, it should be
   // cached in the clipboard history item.
-  ASSERT_TRUE(item.html_preview().has_value());
-  EXPECT_EQ(item.html_preview().value(), expected_image_model);
+  ASSERT_TRUE(item.display_image().has_value());
+  EXPECT_EQ(item.display_image().value(), expected_image_model);
 }
 
 }  // namespace ash

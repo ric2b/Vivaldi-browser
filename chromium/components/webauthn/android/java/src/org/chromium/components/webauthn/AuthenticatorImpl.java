@@ -228,11 +228,9 @@ public final class AuthenticatorImpl implements Authenticator {
             return;
         }
 
-        // The WebAuthenticationConditionalUI feature will only be enabled on Android when gmscore
-        // supports silent discovery. If the gmscore and chromium versions are out of sync for some
-        // reason, this method will return true but chrome will ignore conditional requests.
-        // Android surfaces only platform credentials on conditional requests, use IsUVPAA as a
-        // proxy for availability.
+        // If the gmscore and chromium versions are out of sync for some reason, this method will
+        // return true but chrome will ignore conditional requests. Android surfaces only platform
+        // credentials on conditional requests, use IsUVPAA as a proxy for availability.
         mIsUserVerifyingPlatformAuthenticatorAvailableCallbackQueue.add(callback);
         getFido2CredentialRequest().handleIsUserVerifyingPlatformAuthenticatorAvailableRequest(
                 mRenderFrameHost,
@@ -255,7 +253,7 @@ public final class AuthenticatorImpl implements Authenticator {
     /**
      * Callbacks for receiving responses from the internal handlers.
      */
-    public void onRegisterResponse(Integer status, MakeCredentialAuthenticatorResponse response) {
+    public void onRegisterResponse(int status, MakeCredentialAuthenticatorResponse response) {
         // In case mojo pipe is closed due to the page begin destroyed while waiting for response.
         if (!mIsOperationPending) return;
 
@@ -265,7 +263,7 @@ public final class AuthenticatorImpl implements Authenticator {
         close();
     }
 
-    public void onSignResponse(Integer status, GetAssertionAuthenticatorResponse response) {
+    public void onSignResponse(int status, GetAssertionAuthenticatorResponse response) {
         // In case mojo pipe is closed due to the page begin destroyed while waiting for response.
         if (!mIsOperationPending) return;
 

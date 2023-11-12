@@ -6,7 +6,6 @@ package org.chromium.chrome.browser;
 
 import android.app.Application;
 import android.content.res.Configuration;
-import android.os.Build;
 
 import androidx.annotation.Nullable;
 
@@ -61,7 +60,7 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
             // this point to check.
             if (ChromeFeatureList.sEarlyLibraryLoad.isEnabled() && ProductConfig.IS_BUNDLE) {
                 // Kick off library loading in a separate thread so it's ready when we need it.
-                new Thread(() -> LibraryLoader.getInstance().ensureMainDexInitialized()).start();
+                new Thread(() -> LibraryLoader.getInstance().ensureInitialized()).start();
             }
 
             // Initializes the support for dynamic feature modules (browser only).
@@ -79,10 +78,8 @@ public class ChromeApplicationImpl extends SplitCompatApplication.Impl {
 
             AppHooks.get().getChimeDelegate().initialize();
 
-            // Initialize the AccessibilityHierarchySnapshotter. Do not include in release builds,
-            // or T+ builds until underlying bug in package is addressed (see crbug.com/1411347).
-            if (!BuildConfig.IS_CHROME_BRANDED
-                    && (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S)) {
+            // Initialize the AccessibilityHierarchySnapshotter. Do not include in release builds.
+            if (!BuildConfig.IS_CHROME_BRANDED) {
                 HierarchySnapshotter.initialize();
             }
         }

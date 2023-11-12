@@ -18,6 +18,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/system/system_monitor.h"
@@ -122,10 +123,18 @@ void CrasAudioHandler::AudioObserver::OnOutputStarted() {}
 
 void CrasAudioHandler::AudioObserver::OnOutputStopped() {}
 
+void CrasAudioHandler::AudioObserver::OnNonChromeOutputStarted() {}
+
+void CrasAudioHandler::AudioObserver::OnNonChromeOutputStopped() {}
+
 void CrasAudioHandler::AudioObserver::OnSurveyTriggered(
     const AudioSurveyData& /*survey_specific_data */) {}
 
 void CrasAudioHandler::AudioObserver::OnSpeakOnMuteDetected() {}
+
+void CrasAudioHandler::NumberOfNonChromeOutputStreamsChanged() {
+  GetNumberOfNonChromeOutputStreams();
+}
 
 // static
 void CrasAudioHandler::Initialize(
@@ -400,6 +409,10 @@ bool CrasAudioHandler::IsOutputMutedForDevice(uint64_t device_id) {
   return audio_pref_handler_->GetMuteValue(*device);
 }
 
+bool CrasAudioHandler::IsOutputForceMuted() {
+  return IsOutputMutedByPolicy() || IsOutputMutedBySecurityCurtain();
+}
+
 bool CrasAudioHandler::IsOutputMutedByPolicy() {
   return output_mute_forced_by_policy_;
 }
@@ -428,7 +441,7 @@ bool CrasAudioHandler::IsInputMutedForDevice(uint64_t device_id) {
   return false;
 }
 
-int CrasAudioHandler::GetOutputDefaultVolumeMuteThreshold() {
+int CrasAudioHandler::GetOutputDefaultVolumeMuteThreshold() const {
   return kMuteThresholdPercent;
 }
 
@@ -546,13 +559,17 @@ void CrasAudioHandler::RefreshNoiseCancellationState() {
       (internal_mic->audio_effect & cras::EFFECT_TYPE_NOISE_CANCELLATION));
 }
 
-void CrasAudioHandler::SetNoiseCancellationState(bool noise_cancellation_on) {
+void CrasAudioHandler::SetNoiseCancellationState(
+    bool noise_cancellation_on,
+    AudioSettingsChangeSource source) {
   CrasAudioClient::Get()->SetNoiseCancellationEnabled(noise_cancellation_on);
   audio_pref_handler_->SetNoiseCancellationState(noise_cancellation_on);
 
   for (auto& observer : observers_) {
     observer.OnNoiseCancellationStateChanged();
   }
+  base::UmaHistogramEnumeration(kNoiseCancellationEnabledSourceHistogramName,
+                                source);
 }
 
 void CrasAudioHandler::RequestNoiseCancellationSupported(
@@ -848,6 +865,14 @@ void CrasAudioHandler::SetOutputMute(bool mute_on) {
     observer.OnOutputMuteChanged(output_mute_on_);
 }
 
+void CrasAudioHandler::SetOutputMute(
+    bool mute_on,
+    CrasAudioHandler::AudioSettingsChangeSource source) {
+  SetOutputMute(mute_on);
+  base::UmaHistogramEnumeration(
+      CrasAudioHandler::kOutputVolumeMuteSourceHistogramName, source);
+}
+
 void CrasAudioHandler::SetOutputMuteLockedBySecurityCurtain(bool mute_on) {
   if (output_mute_forced_by_security_curtain_ == mute_on)
     return;
@@ -890,6 +915,15 @@ void CrasAudioHandler::SetInputMute(bool mute_on,
     for (auto& observer : observers_)
       observer.OnInputMuteChanged(input_mute_on_, method);
   }
+}
+
+void CrasAudioHandler::SetInputMute(
+    bool mute_on,
+    InputMuteChangeMethod method,
+    CrasAudioHandler::AudioSettingsChangeSource source) {
+  SetInputMute(mute_on, method);
+  base::UmaHistogramEnumeration(
+      CrasAudioHandler::kInputGainMuteSourceHistogramName, source);
 }
 
 void CrasAudioHandler::SetActiveDevice(const AudioDevice& active_device,
@@ -994,6 +1028,20 @@ void CrasAudioHandler::SetMuteForDevice(uint64_t device_id, bool mute_on) {
     audio_pref_handler_->SetMuteValue(*device, mute_on);
 }
 
+void CrasAudioHandler::SetMuteForDevice(
+    uint64_t device_id,
+    bool mute_on,
+    CrasAudioHandler::AudioSettingsChangeSource source) {
+  SetMuteForDevice(device_id, mute_on);
+  if (device_id == active_output_node_id_) {
+    base::UmaHistogramEnumeration(
+        CrasAudioHandler::kOutputVolumeMuteSourceHistogramName, source);
+  } else if (device_id == active_input_node_id_) {
+    base::UmaHistogramEnumeration(
+        CrasAudioHandler::kInputGainMuteSourceHistogramName, source);
+  }
+}
+
 // If the HDMI device is the active output device, when the device enters/exits
 // docking mode, or HDMI display changes resolution, or chromeos device
 // suspends/resumes, cras will lose the HDMI output node for a short period of
@@ -1068,8 +1116,13 @@ void CrasAudioHandler::NodesChanged() {
 void CrasAudioHandler::OutputNodeVolumeChanged(uint64_t node_id, int volume) {
   const AudioDevice* device = this->GetDeviceFromId(node_id);
   if (!device || device->is_input) {
-    LOG(ERROR) << "Unexpexted OutputNodeVolumeChanged received on node: 0x"
+    LOG(ERROR) << "Unexpected OutputNodeVolumeChanged received on node: 0x"
                << std::hex << node_id;
+    return;
+  }
+  if (volume < 0 || volume > 100) {
+    LOG(ERROR) << "Unexpected OutputNodeVolumeChanged received on volume: "
+               << volume;
     return;
   }
 
@@ -1345,6 +1398,7 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   RequestNoiseCancellationSupported(base::BindOnce(
       &CrasAudioHandler::GetNodes, weak_ptr_factory_.GetWeakPtr()));
   GetNumberOfOutputStreams();
+  GetNumberOfNonChromeOutputStreams();
   GetNumberOfInputStreamsWithPermissionInternal();
   CrasAudioClient::Get()->SetFixA2dpPacketSize(
       base::FeatureList::IsEnabled(features::kBluetoothFixA2dpPacketSize));
@@ -1419,10 +1473,7 @@ void CrasAudioHandler::SetOutputNodeVolumePercent(uint64_t node_id,
 }
 
 bool CrasAudioHandler::SetOutputMuteInternal(bool mute_on) {
-  bool is_output_mute_forced = (output_mute_forced_by_policy_ ||
-                                output_mute_forced_by_security_curtain_);
-
-  if (is_output_mute_forced && !mute_on) {
+  if (IsOutputForceMuted() && !mute_on) {
     // Do not allow unmuting if the policy forces the device to remain muted.
     return false;
   }
@@ -1467,6 +1518,12 @@ void CrasAudioHandler::SetInputMuteInternal(bool mute_on) {
 void CrasAudioHandler::GetNodes() {
   CrasAudioClient::Get()->GetNodes(base::BindOnce(
       &CrasAudioHandler::HandleGetNodes, weak_ptr_factory_.GetWeakPtr()));
+}
+
+void CrasAudioHandler::GetNumberOfNonChromeOutputStreams() {
+  CrasAudioClient::Get()->GetNumberOfNonChromeOutputStreams(
+      base::BindOnce(&CrasAudioHandler::HandleGetNumberOfNonChromeOutputStreams,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CrasAudioHandler::GetNumberOfOutputStreams() {
@@ -2035,6 +2092,28 @@ void CrasAudioHandler::HandleGetNodes(absl::optional<AudioNodeList> node_list) {
 
   for (auto& observer : observers_)
     observer.OnAudioNodesChanged();
+}
+
+void CrasAudioHandler::HandleGetNumberOfNonChromeOutputStreams(
+    absl::optional<int32_t> new_output_streams_count) {
+  if (!new_output_streams_count.has_value()) {
+    LOG(ERROR) << "Failed to retrieve number of active output streams.";
+    return;
+  }
+  DCHECK_GE(*new_output_streams_count, 0);
+
+  if (*new_output_streams_count > 0 &&
+      num_active_nonchrome_output_streams_ == 0) {
+    for (auto& observer : observers_) {
+      observer.OnNonChromeOutputStarted();
+    }
+  } else if (*new_output_streams_count == 0 &&
+             num_active_nonchrome_output_streams_ > 0) {
+    for (auto& observer : observers_) {
+      observer.OnNonChromeOutputStopped();
+    }
+  }
+  num_active_nonchrome_output_streams_ = *new_output_streams_count;
 }
 
 void CrasAudioHandler::HandleGetNumActiveOutputStreams(

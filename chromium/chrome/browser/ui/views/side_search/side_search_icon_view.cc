@@ -21,6 +21,7 @@
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/tracker.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -50,6 +51,10 @@ SideSearchIconView::SideSearchIconView(
   SetUpForInOutAnimation();
   SetPaintLabelOverSolidBackground(true);
   browser_->tab_strip_model()->AddObserver(this);
+  SetAccessibilityProperties(
+      /*role*/ absl::nullopt,
+      l10n_util::GetStringUTF16(
+          IDS_TOOLTIP_SIDE_SEARCH_TOOLBAR_BUTTON_NOT_ACTIVATED));
 }
 
 SideSearchIconView::~SideSearchIconView() {
@@ -103,12 +108,12 @@ void SideSearchIconView::UpdateImpl() {
       !side_search::IsSideSearchToggleOpen(browser_view);
   SetVisible(should_show);
 
-  if (should_show && !was_visible && !MaybeShowPageActionLabel() &&
-      tab_contents_helper->returned_to_previous_srp_count() > 0) {
-    // If we are not animating-in the label text make a request to show the
-    // IPH if we detect the user may be engaging in a pogo-sticking journey.
+  if (should_show && !was_visible) {
+    // Now IPH and action label share the same frontend triggering condition.
+    // Make sure we show IPH first if possible.
     browser_view->MaybeShowFeaturePromo(
         feature_engagement::kIPHSideSearchFeature);
+    MaybeShowPageActionLabel();
   }
 
   if (!should_show) {
@@ -148,17 +153,14 @@ views::BubbleDialogDelegate* SideSearchIconView::GetBubble() const {
 
 const gfx::VectorIcon& SideSearchIconView::GetVectorIcon() const {
   // Default to the kSearchIcon if the DSE icon image is not available.
-  return vector_icons::kSearchIcon;
+  return OmniboxFieldTrial::IsChromeRefreshIconsEnabled()
+             ? vector_icons::kSearchChromeRefreshIcon
+             : vector_icons::kSearchIcon;
 }
 
 ui::ImageModel SideSearchIconView::GetSizedIconImage(int size) const {
   return DefaultSearchIconSource::GetOrCreateForBrowser(browser_)
       ->GetSizedIconImage(size);
-}
-
-std::u16string SideSearchIconView::GetTextForTooltipAndAccessibleName() const {
-  return l10n_util::GetStringUTF16(
-      IDS_TOOLTIP_SIDE_SEARCH_TOOLBAR_BUTTON_NOT_ACTIVATED);
 }
 
 void SideSearchIconView::AnimationProgressed(const gfx::Animation* animation) {

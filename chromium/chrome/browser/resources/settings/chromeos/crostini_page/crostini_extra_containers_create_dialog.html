@@ -42,10 +42,6 @@
   #containerFileInput {
     width: 100%;
   }
-
-  iron-icon {
-    margin-inline-start: 16px;
-  }
 </style>
 <cr-dialog id="dialog" close-text="$i18n{close}">
   <div slot="title">$i18n{crostiniExtraContainersCreateDialogTitle}</div>
@@ -68,7 +64,9 @@
     <cr-button id="advancedToggle" on-click="advancedToggleClicked_"
         aria-expanded$="[[boolToString_(advancedToggleExpanded_)]]">
       <span>$i18n{advancedPageTitle}</span>
-      <iron-icon icon="[[getArrowIcon_(advancedToggleExpanded_)]]">
+      <iron-icon
+        icon="[[getArrowIcon_(advancedToggleExpanded_)]]"
+        slot="suffix-icon">
       </iron-icon>
     </cr-button>
     <div class="advanced-section" hidden="[[!advancedToggleExpanded_]]">
@@ -98,10 +96,10 @@
 
   <div slot="body" class="custom-body">
     <div slot="button-container" class="custom-button-container">
-      <cr-button id="cancel" class="cancel-button" on-click="onCancelTap_">
+      <cr-button id="cancel" class="cancel-button" on-click="onCancelClick_">
         $i18n{cancel}
       </cr-button>
-      <cr-button id="create" class="action-button" on-click="onCreateTap_"
+      <cr-button id="create" class="action-button" on-click="onCreateClick_"
           disabled="[[disableCreateButton_]]">
         $i18n{crostiniExtraContainersCreate}
       </cr-button>

@@ -5,15 +5,19 @@
 #include "base/barrier_closure.h"
 #include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/test_future.h"
 #include "content/browser/serial/serial_test_utils.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/test_support/fake_message_dispatch_context.h"
+#include "mojo/public/cpp/test_support/test_utils.h"
 #include "services/device/public/cpp/test/fake_serial_port_client.h"
 #include "services/device/public/cpp/test/fake_serial_port_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -89,7 +93,9 @@ class SerialTest : public RenderViewHostImplTestHarness {
   SerialTestContentBrowserClient test_client_;
   raw_ptr<ContentBrowserClient> original_client_ = nullptr;
   device::FakeSerialPortManager port_manager_;
-  SerialDelegate::Observer* observer_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #addr-of
+  RAW_PTR_EXCLUSION SerialDelegate::Observer* observer_ = nullptr;
 };
 
 }  // namespace
@@ -216,6 +222,8 @@ TEST_F(SerialTest, OpenAndNavigateCrossOrigin) {
 }
 
 TEST_F(SerialTest, AddAndRemovePorts) {
+  NavigateAndCommit(GURL(kTestUrl));
+
   mojo::Remote<blink::mojom::SerialService> service;
   contents()->GetPrimaryMainFrame()->BindSerialService(
       service.BindNewPipeAndPassReceiver());
@@ -441,6 +449,63 @@ TEST_F(SerialTest, OpenTwoPortsAndRevokePermission) {
   EXPECT_TRUE(port2.is_connected());
   service.FlushForTesting();
   EXPECT_TRUE(service.is_connected());
+}
+
+TEST_F(SerialTest, RejectOpaqueOrigin) {
+  // Create a fake dispatch context to trigger a bad message in.
+  mojo::FakeMessageDispatchContext fake_dispatch_context;
+  mojo::test::BadMessageObserver bad_message_observer;
+
+  auto response_headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>(std::string());
+  response_headers->SetHeader("Content-Security-Policy",
+                              "sandbox allow-scripts");
+  auto navigation_simulator = NavigationSimulator::CreateRendererInitiated(
+      GURL("https://opaque.com"), main_test_rfh());
+  navigation_simulator->SetResponseHeaders(response_headers);
+  navigation_simulator->Start();
+  navigation_simulator->Commit();
+
+  mojo::Remote<blink::mojom::SerialService> service;
+  main_test_rfh()->BindSerialService(service.BindNewPipeAndPassReceiver());
+  EXPECT_EQ(bad_message_observer.WaitForBadMessage(),
+            "Web Serial is not allowed when the top-level document has an "
+            "opaque origin.");
+}
+
+TEST_F(SerialTest, RejectOpaqueOriginEmbeddedFrame) {
+  // Create a fake dispatch context to trigger a bad message in.
+  mojo::FakeMessageDispatchContext fake_dispatch_context;
+  mojo::test::BadMessageObserver bad_message_observer;
+
+  auto response_headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>(std::string());
+  response_headers->SetHeader("Content-Security-Policy",
+                              "sandbox allow-scripts");
+  auto navigation_simulator = NavigationSimulator::CreateRendererInitiated(
+      GURL("https://opaque.com"), main_test_rfh());
+  navigation_simulator->SetResponseHeaders(response_headers);
+  navigation_simulator->Start();
+  navigation_simulator->Commit();
+
+  const GURL kEmbeddedUrl("https://opaque.com");
+  RenderFrameHost* embedded_rfh =
+      RenderFrameHostTester::For(main_test_rfh())
+          ->AppendChildWithPolicy(
+              "embedded_frame",
+              {{blink::mojom::PermissionsPolicyFeature::kSerial,
+                /*allowed_origins=*/{},
+                /*self_if_matches=*/url::Origin::Create(kEmbeddedUrl),
+                /*matches_all_origins=*/false, /*matches_opaque_src=*/true}});
+  embedded_rfh = NavigationSimulator::NavigateAndCommitFromDocument(
+      kEmbeddedUrl, embedded_rfh);
+
+  mojo::Remote<blink::mojom::SerialService> service;
+  static_cast<TestRenderFrameHost*>(embedded_rfh)
+      ->BindSerialService(service.BindNewPipeAndPassReceiver());
+  EXPECT_EQ(bad_message_observer.WaitForBadMessage(),
+            "Web Serial is not allowed when the top-level document has an "
+            "opaque origin.");
 }
 
 }  // namespace content

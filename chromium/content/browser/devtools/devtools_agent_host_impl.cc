@@ -133,9 +133,7 @@ void DevToolsAgentHost::StartRemoteDebuggingServer(
     const base::FilePath& debug_frontend_dir) {
   DevToolsManagerDelegate* delegate =
       DevToolsManager::GetInstance()->delegate();
-  if (!delegate) {
-    return;
-  }
+  CHECK(delegate);
   SetDevToolsHttpHandler(std::make_unique<DevToolsHttpHandler>(
       delegate, std::move(server_socket_factory), active_port_output_directory,
       debug_frontend_dir));
@@ -358,12 +356,18 @@ bool DevToolsAgentHostImpl::Inspect() {
 }
 
 void DevToolsAgentHostImpl::ForceDetachAllSessions() {
-  scoped_refptr<DevToolsAgentHostImpl> protect(this);
+  std::ignore = ForceDetachAllSessionsImpl();
+}
+
+scoped_refptr<DevToolsAgentHost>
+DevToolsAgentHostImpl::ForceDetachAllSessionsImpl() {
+  scoped_refptr<DevToolsAgentHost> retain_this(this);
   while (!sessions_.empty()) {
     DevToolsAgentHostClient* client = (*sessions_.begin())->GetClient();
     DetachClient(client);
     client->AgentHostClosed(this);
   }
+  return retain_this;
 }
 
 void DevToolsAgentHostImpl::ForceDetachRestrictedSessions(

@@ -17,6 +17,7 @@
 #include "net/base/features.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_delegate.h"
+#include "net/base/schemeful_site.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_inclusion_status.h"
 #include "net/cookies/cookie_setting_override.h"
@@ -24,6 +25,7 @@
 #include "net/cookies/static_cookie_policy.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace network {
 namespace {
@@ -351,6 +353,14 @@ bool CookieSettings::HasSessionOnlyOrigins() const {
 bool CookieSettings::IsAllowedByStorageAccessGrant(
     const GURL& url,
     const GURL& first_party_url) const {
+  // The Storage Access API allows access in A(B(A)) case (or similar). Do the
+  // same-origin check first for performance reasons.
+  const url::Origin origin = url::Origin::Create(url);
+  const url::Origin first_party_origin = url::Origin::Create(first_party_url);
+  if (origin.IsSameOriginWith(first_party_origin) ||
+      net::SchemefulSite(origin) == net::SchemefulSite(first_party_origin)) {
+    return true;
+  }
   const ContentSettingPatternSource* match =
       FindMatchingSetting(url, first_party_url, storage_access_grants_);
   return match && match->GetContentSetting() == CONTENT_SETTING_ALLOW;

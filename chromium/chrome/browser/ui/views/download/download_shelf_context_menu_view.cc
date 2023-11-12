@@ -8,7 +8,7 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_functions.h"
-#include "chrome/browser/download/bubble/download_bubble_controller.h"
+#include "chrome/browser/download/bubble/download_bubble_ui_controller.h"
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/ui/views/download/download_item_view.h"
@@ -84,8 +84,6 @@ void DownloadShelfContextMenuView::OnMenuWillShow(ui::SimpleMenuModel* source) {
 
 void DownloadShelfContextMenuView::ExecuteCommand(int command_id,
                                                   int event_flags) {
-  DownloadShelfContextMenu::ExecuteCommand(command_id, event_flags);
-
   if (!download_commands_executed_recorded_[command_id]) {
     base::UmaHistogramEnumeration(
         "Download.ShelfContextMenuAction",
@@ -94,4 +92,7 @@ void DownloadShelfContextMenuView::ExecuteCommand(int command_id,
             /*clicked=*/true));
     download_commands_executed_recorded_[command_id] = true;
   }
+
+  DownloadShelfContextMenu::ExecuteCommand(command_id, event_flags);
+  // ExecuteCommand can delete `this`.
 }

@@ -48,6 +48,11 @@ AutofillDownloadManager* AutofillClient::GetDownloadManager() {
   return nullptr;
 }
 
+AutofillOptimizationGuide* AutofillClient::GetAutofillOptimizationGuide()
+    const {
+  return nullptr;
+}
+
 IBANManager* AutofillClient::GetIBANManager() {
   return nullptr;
 }
@@ -83,6 +88,10 @@ profile_metrics::BrowserProfileType AutofillClient::GetProfileType() const {
   // This is an abstract interface and thus never instantiated directly,
   // therefore it is safe to always return |kRegular| here.
   return profile_metrics::BrowserProfileType::kRegular;
+}
+
+FastCheckoutClient* AutofillClient::GetFastCheckoutClient() {
+  return nullptr;
 }
 
 void AutofillClient::ShowUnmaskAuthenticatorSelectionDialog(
@@ -130,7 +139,7 @@ AutofillClient::CreateCreditCardInternalAuthenticator(AutofillDriver* driver) {
 #endif
 
 void AutofillClient::ShowCardUnmaskOtpInputDialog(
-    const size_t& otp_length,
+    const CardUnmaskChallengeOption& challenge_option,
     base::WeakPtr<OtpUnmaskDelegate> delegate) {
   // This is overridden by platform subclasses. Currently only
   // ChromeAutofillClient (Chrome Desktop and Clank) implements this.
@@ -186,6 +195,11 @@ const AutofillAblationStudy& AutofillClient::GetAblationStudy() const {
   // As finch configs are profile independent we can use a static instance here.
   static base::NoDestructor<AutofillAblationStudy> ablation_study;
   return *ablation_study;
+}
+
+scoped_refptr<device_reauth::DeviceAuthenticator>
+AutofillClient::GetDeviceAuthenticator() const {
+  return nullptr;
 }
 
 }  // namespace autofill

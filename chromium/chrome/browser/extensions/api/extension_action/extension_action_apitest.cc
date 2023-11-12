@@ -29,7 +29,6 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/background_script_executor.h"
-#include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_icon_image.h"
@@ -304,13 +303,13 @@ IN_PROC_BROWSER_TEST_F(BrowserActionAPITest, TestNoUnnecessaryIO) {
   ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
 
   // The script template to update the browser action.
-  constexpr char kUpdate[] =
+  static constexpr char kUpdate[] =
       R"(chrome.browserAction.setBadgeText(%s);
-         domAutomationController.send('pass');)";
+         chrome.test.sendScriptResult('pass');)";
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   SessionID tab_id = sessions::SessionTabHelper::IdForTab(web_contents);
-  constexpr char kBrowserActionKey[] = "browser_action";
+  static constexpr char kBrowserActionKey[] = "browser_action";
   TestStateStoreObserver test_state_store_observer(profile(), extension->id());
 
   {
@@ -319,8 +318,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionAPITest, TestNoUnnecessaryIO) {
     // First, update a specific tab.
     std::string update_options =
         base::StringPrintf("{text: 'New Text', tabId: %d}", tab_id.id());
-    EXPECT_EQ("pass", browsertest_util::ExecuteScriptInBackgroundPage(
-                          profile(), extension->id(),
+    EXPECT_EQ("pass", ExecuteScriptInBackgroundPage(
+                          extension->id(),
                           base::StringPrintf(kUpdate, update_options.c_str())));
     test_api_observer.Wait();
 
@@ -337,8 +336,8 @@ IN_PROC_BROWSER_TEST_F(BrowserActionAPITest, TestNoUnnecessaryIO) {
                                                      extension->id());
     // Next, update the default badge text.
     EXPECT_EQ("pass",
-              browsertest_util::ExecuteScriptInBackgroundPage(
-                  profile(), extension->id(),
+              ExecuteScriptInBackgroundPage(
+                  extension->id(),
                   base::StringPrintf(kUpdate, "{text: 'Default Text'}")));
     test_api_observer.Wait();
     // The action update should not be associated with a specific tab.
@@ -639,11 +638,7 @@ IN_PROC_BROWSER_TEST_P(MultiActionAPITest,
       content::WebContents::FromRenderFrameHost(render_frame_host);
   ASSERT_TRUE(popup_contents);
 
-  std::string foo;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      popup_contents, "domAutomationController.send(sessionStorage.foo)",
-      &foo));
-  EXPECT_EQ("1", foo);
+  EXPECT_EQ("1", content::EvalJs(popup_contents, "sessionStorage.foo"));
 
   const std::string session_storage_id1 =
       popup_contents->GetController().GetDefaultSessionStorageNamespace()->id();
@@ -671,11 +666,7 @@ IN_PROC_BROWSER_TEST_P(MultiActionAPITest,
   // Verify that sessionStorage did not persist. The reason is that closing the
   // popup ends the session and clears objects in sessionStorage.
   EXPECT_NE(session_storage_id1, session_storage_id2);
-  foo = "";
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      popup_contents, "domAutomationController.send(sessionStorage.foo)",
-      &foo));
-  EXPECT_EQ("1", foo);
+  EXPECT_EQ("1", content::EvalJs(popup_contents, "sessionStorage.foo"));
 }
 
 using ActionAndBrowserActionAPITest = MultiActionAPITest;
@@ -935,11 +926,8 @@ IN_PROC_BROWSER_TEST_P(MultiActionAPITest, SetIconWithJavascriptHooks) {
       R"(Object.defineProperty(
              Object.prototype, 'imageData',
              { set() { console.warn('intercepted set'); } });
-         domAutomationController.send('done');)";
-  std::string result;
-  ASSERT_TRUE(
-      content::ExecuteScriptAndExtractString(web_contents, kScript, &result));
-  ASSERT_EQ("done", result);
+         'done';)";
+  ASSERT_EQ("done", content::EvalJs(web_contents, kScript));
 
   constexpr char kOnePathScript[] =
       "setIcon({tabId: %d, path: 'blue_icon.png'});";
@@ -1001,12 +989,8 @@ IN_PROC_BROWSER_TEST_P(MultiActionAPITest, SetIconWithSelfDefined) {
   EnsureActionIsEnabledOnActiveTab(action);
 
   // Override 'self' in a local variable.
-  constexpr char kOverrideSelfScript[] =
-      "var self = ''; domAutomationController.send('done');";
-  std::string result;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      web_contents, kOverrideSelfScript, &result));
-  ASSERT_EQ("done", result);
+  constexpr char kOverrideSelfScript[] = "var self = ''; 'done';";
+  ASSERT_EQ("done", content::EvalJs(web_contents, kOverrideSelfScript));
 
   // Try setting the icon. This should succeed. Previously, the custom bindings
   // for the setIcon code looked at the 'self' variable, but this could be
@@ -1081,15 +1065,7 @@ IN_PROC_BROWSER_TEST_P(MultiActionAPITest, SetIconInTabWithInvalidPath) {
 // Tests calling setIcon() in the service worker with an invalid icon paths
 // specified. Regression test for https://crbug.com/1262029. Regression test for
 // https://crbug.com/1372518.
-// Flaky (https://crbug.com/1383903)
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_SetIconInWorkerWithInvalidPath \
-  DISABLED_SetIconInWorkerWithInvalidPath
-#else
-#define MAYBE_SetIconInWorkerWithInvalidPath SetIconInWorkerWithInvalidPath
-#endif
-IN_PROC_BROWSER_TEST_F(ExtensionActionAPITest,
-                       MAYBE_SetIconInWorkerWithInvalidPath) {
+IN_PROC_BROWSER_TEST_F(ExtensionActionAPITest, SetIconInWorkerWithInvalidPath) {
   constexpr char kManifestTemplate[] =
       R"({
            "name": "Bad Icon Path In Worker",
@@ -1101,6 +1077,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionAPITest,
 
   constexpr char kBackgroundJs[] =
       R"(let expectedError = "%s";
+         let anotherExpectedError = "%s";
          const singlePath = 'does_not_exist.png';
          const multiplePaths = {
            16: 'does_not_exist.png',
@@ -1120,28 +1097,43 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionAPITest,
                  'Error: ' + expectedError);
              chrome.test.succeed();
            },
+           /*
+              Multiple icons are loaded asynchronously and either one could
+              end up failing first. However only the first error is emitted,
+              we check against both possibilities.
+           */
            function multipleWithCallback() {
-             chrome.action.setIcon({path: multiplePaths}, () => {
-               chrome.test.assertLastError(expectedError);
+             chrome.action.setIcon({ path: multiplePaths }, () => {
+               let errorMessage = chrome.runtime.lastError.message;
+               chrome.test.assertTrue(errorMessage === expectedError
+                 || errorMessage === anotherExpectedError);
                chrome.test.succeed();
              });
            },
-           async function multipleWithPromise() {
-             await chrome.test.assertPromiseRejects(
-                 chrome.action.setIcon({path: multiplePaths}),
-                 'Error: ' + expectedError);
-             chrome.test.succeed();
+           function multipleWithPromise() {
+             chrome.action.setIcon({ path: multiplePaths })
+               .then(() => {
+                 chrome.test.fail();
+               })
+               .catch((error) => {
+                 chrome.test.assertTrue(error.message === expectedError
+                   || error.message === anotherExpectedError);
+                 chrome.test.succeed();
+               });
            }
          ]);)";
 
   constexpr char kExpectedError[] =
       "Failed to set icon 'does_not_exist.png': Failed to fetch";
+  constexpr char kAnotherExpectedError[] =
+      "Failed to set icon 'also_does_not_exist.png': Failed to fetch";
 
   TestExtensionDir test_dir;
   test_dir.WriteManifest(kManifestTemplate);
 
-  test_dir.WriteFile(FILE_PATH_LITERAL("worker.js"),
-                     base::StringPrintf(kBackgroundJs, kExpectedError));
+  test_dir.WriteFile(
+      FILE_PATH_LITERAL("worker.js"),
+      base::StringPrintf(kBackgroundJs, kExpectedError, kAnotherExpectedError));
 
   // Calling setIcon with an invalid path in a service worker context should
   // reject the promise or call the callback with lastError set.

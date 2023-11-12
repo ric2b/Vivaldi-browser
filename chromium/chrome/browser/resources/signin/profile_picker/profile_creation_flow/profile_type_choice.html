@@ -59,7 +59,6 @@
   /* Tangible sync style details are found in go/tangible-sync-ui */
   .tangible-sync-style cr-button {
     --cr-button-height: 36px;
-    font-family: 'Google Sans', arial, sans-serif;
     font-size: 0.75rem;
   }
 
@@ -108,13 +107,12 @@
 }
 </style>
 
-<div id="leftBanner" class="banner" hidden="[[isTangibleSyncEnabled_]]"></div>
-<img id="tangible-sync-style-left-banner" hidden="[[!isTangibleSyncEnabled_]]">
 <div id="headerContainer"
     style$="--theme-frame-color:[[profileThemeInfo.themeFrameColor]];
             --theme-text-color:[[profileThemeInfo.themeFrameTextColor]];">
   <cr-icon-button id="backButton" iron-icon="cr:arrow-back"
       on-click="onBackClick_" aria-label$="[[getBackButtonAriaLabel_()]]"
+      title$="[[getBackButtonAriaLabel_()]]"
       disabled="[[profileCreationInProgress]]">
   </cr-icon-button>
   <div id="avatarContainer">
@@ -135,8 +133,6 @@
     $i18n{notNowButtonLabel}
   </cr-button>
 </div>
-<div id="rightBanner" class="banner" hidden="[[isTangibleSyncEnabled_]]"></div>
-<img id="tangible-sync-style-right-banner" hidden="[[!isTangibleSyncEnabled_]]">
 
 <template is="dom-if" if="[[managedDeviceDisclaimer_]]">
   <div id="infoContainer">

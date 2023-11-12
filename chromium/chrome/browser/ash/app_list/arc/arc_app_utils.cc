@@ -41,7 +41,6 @@
 #include "chrome/browser/ash/arc/window_predictor/window_predictor.h"
 #include "chrome/browser/ash/arc/window_predictor/window_predictor_utils.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
-#include "chrome/browser/ash/policy/handlers/powerwash_requirements_checker.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -94,8 +93,8 @@ constexpr char kAndroidClockAppId[] = "ddmmnabaeomoacfpfjgghfpocfolhjlg";
 constexpr char kAndroidFilesAppId[] = "gmiohhmfhgfclpeacmdfancbipocempm";
 
 constexpr char const* kAppIdsHiddenInLauncher[] = {
-    kAndroidClockAppId, kSettingsAppId, kAndroidFilesAppId,
-    kAndroidContactsAppId, kPlayGamesAppId};
+    kAndroidClockAppId,    kSettingsAppId,  kAndroidFilesAppId,
+    kAndroidContactsAppId, kPlayGamesAppId, kPackageInstallerAppId};
 
 // Returns true if |event_flags| came from a mouse or touch event.
 bool IsMouseOrTouchEventFromFlags(int event_flags) {
@@ -253,6 +252,7 @@ const char kGooglePhotosAppId[] = "fdbkkojdbojonckghlanfaopfakedeca";
 const char kGoogleTVAppId[] = "kadljooblnjdohjelobhphgeimdbcpbo";
 const char kInfinitePainterAppId[] = "afihfgfghkmdmggakhkgnfhlikhdpima";
 const char kLightRoomAppId[] = "fpegfnbgomakooccabncdaelhfppceni";
+const char kPackageInstallerAppId[] = "jegcgkleafemmaabigncnldhlhnddfkf";
 const char kPlayBooksAppId[] = "cafegjnmmjpfibnlddppihpnkbkgicbg";
 const char kPlayGamesAppId[] = "nplnnjkbeijcggmpdcecpabgbjgeiedc";
 const char kPlayMoviesAppId[] = "dbbihmicnlldbflflckpafphlekmjfnm";
@@ -313,19 +313,6 @@ bool LaunchAppWithIntent(content::BrowserContext* context,
     VLOG(1) << "Attempt to launch " << app_id
             << " while ARC++ is blocked due to incompatible file system.";
     arc::ShowArcMigrationGuideNotification(profile);
-    return false;
-  }
-
-  // Check if ARC apps are not allowed to start because device needs to be
-  // powerwashed. If it is so then show notification instead of starting
-  // the application.
-  policy::PowerwashRequirementsChecker pw_checker(
-      policy::PowerwashRequirementsChecker::Context::kArc, profile);
-  if (pw_checker.GetState() !=
-      policy::PowerwashRequirementsChecker::State::kNotRequired) {
-    VLOG(1) << "Attempt to launch " << app_id
-            << " while ARC++ is blocked due to powerwash request.";
-    pw_checker.ShowNotification();
     return false;
   }
 

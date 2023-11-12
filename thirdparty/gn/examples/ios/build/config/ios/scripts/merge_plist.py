@@ -18,11 +18,15 @@ import sys
 VARIABLE_PATTERN = re.compile(r'\$\(([^)]*)\)')
 
 
+def GetCommandOutput(command):
+  """Returns the output of `command` as a string."""
+  return subprocess.check_output(command, encoding='utf-8')
+
+
 def LoadPlist(plist_path):
   """Loads Apple Property List file at |plist_path|."""
   return json.loads(
-      subprocess.check_output(
-          ['plutil', '-convert', 'json', '-o', '-', plist_path]))
+      GetCommandOutput(['plutil', '-convert', 'json', '-o', '-', plist_path]))
 
 
 def SavePlist(plist_path, content, format):
@@ -30,7 +34,7 @@ def SavePlist(plist_path, content, format):
   proc = subprocess.Popen(
       ['plutil', '-convert', format, '-o', plist_path, '-'],
       stdin=subprocess.PIPE)
-  output, _ = proc.communicate(json.dumps(content))
+  output, _ = proc.communicate(json.dumps(content).encode('utf-8'))
   if proc.returncode:
     raise subprocess.CalledProcessError(
         proc.returncode,
@@ -76,7 +80,7 @@ def PerformSubstitutions(plist, substitutions):
   if isinstance(plist, list):
     return [ PerformSubstitutions(item, substitutions) for item in plist ]
 
-  if isinstance(plist, (str, unicode)):
+  if isinstance(plist, str):
     result = plist
     while True:
       match = VARIABLE_PATTERN.search(result)

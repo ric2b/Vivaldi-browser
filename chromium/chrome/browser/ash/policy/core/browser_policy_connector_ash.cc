@@ -151,7 +151,7 @@ BrowserPolicyConnectorAsh::BrowserPolicyConnectorAsh()
               std::move(device_cloud_policy_store));
       providers_for_init_.push_back(
           base::WrapUnique<ConfigurationPolicyProvider>(
-              device_active_directory_policy_manager_));
+              device_active_directory_policy_manager_.get()));
     } else {
       state_keys_broker_ = std::make_unique<ServerBackedStateKeysBroker>(
           ash::SessionManagerClient::Get());
@@ -172,7 +172,7 @@ BrowserPolicyConnectorAsh::BrowserPolicyConnectorAsh()
           state_keys_broker_.get());
       providers_for_init_.push_back(
           base::WrapUnique<ConfigurationPolicyProvider>(
-              device_cloud_policy_manager_));
+              device_cloud_policy_manager_.get()));
     }
   }
 
@@ -322,12 +322,15 @@ void BrowserPolicyConnectorAsh::Init(
           chromeos::PowerManagerClient::Get(),
           new ash::AdbSideloadingPolicyChangeNotification());
 
+  reboot_notifications_scheduler_ =
+      std::make_unique<RebootNotificationsScheduler>();
+
   device_scheduled_reboot_handler_ =
       std::make_unique<DeviceScheduledRebootHandler>(
           ash::CrosSettings::Get(),
           std::make_unique<ScheduledTaskExecutorImpl>(
               DeviceScheduledRebootHandler::kRebootTimerTag),
-          std::make_unique<RebootNotificationsScheduler>());
+          reboot_notifications_scheduler_.get());
 }
 
 void BrowserPolicyConnectorAsh::PreShutdown() {
@@ -367,6 +370,8 @@ void BrowserPolicyConnectorAsh::Shutdown() {
   device_scheduled_update_checker_.reset();
 
   device_scheduled_reboot_handler_.reset();
+
+  reboot_notifications_scheduler_.reset();
 
   // The policy handler is registered as an observer to BuildState which gets
   // destructed before BrowserPolicyConnectorAsh. So destruct the policy
@@ -587,12 +592,6 @@ base::flat_set<std::string> BrowserPolicyConnectorAsh::device_affiliation_ids()
     return {ids.begin(), ids.end()};
   }
   return {};
-}
-
-ash::AffiliationIDSet BrowserPolicyConnectorAsh::GetDeviceAffiliationIDs()
-    const {
-  base::flat_set<std::string> affiliation_ids = device_affiliation_ids();
-  return {affiliation_ids.begin(), affiliation_ids.end()};
 }
 
 const em::PolicyData* BrowserPolicyConnectorAsh::GetDevicePolicy() const {

@@ -65,29 +65,32 @@ class PA_TRIVIAL_ABI PA_GSL_POINTER raw_ref {
   // hooks that provide BRP-ASan instrumentation for raw_ref.
   using Inner = raw_ptr<T, Traits | RawPtrTraits::kDisableHooks>;
 
+  // Some underlying implementations do not clear on move, which produces an
+  // inconsistent behaviour. We want consistent behaviour such that using a
+  // raw_ref after move is caught and aborts, so do it when the underlying
+  // implementation doesn't. Failure to clear would be indicated by the related
+  // death tests not CHECKing appropriately.
+  static constexpr bool kNeedClearAfterMove = !Inner::kZeroOnMove;
+
  public:
   using Impl = typename Inner::Impl;
 
-  // These impls do not clear on move, which produces an inconsistent behaviour.
-  // We want consistent behaviour such that using a raw_ref after move is caught
-  // and aborts. Failure to clear would be indicated by the related death tests
-  // not CHECKing appropriately.
-  static constexpr bool need_clear_after_move =
-#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-      std::is_same_v<Impl,
-                     internal::MTECheckedPtrImpl<
-                         internal::MTECheckedPtrImplPartitionAllocSupport>> ||
-#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-#if BUILDFLAG(USE_ASAN_UNOWNED_PTR)
-      std::is_same_v<Impl, internal::RawPtrAsanUnownedImpl<true>> ||
-      std::is_same_v<Impl, internal::RawPtrAsanUnownedImpl<false>> ||
-#endif  // BUILDFLAG(USE_ASAN_UNOWNED_PTR)
-      std::is_same_v<Impl, internal::RawPtrNoOpImpl>;
+  // Construct a raw_ref from a pointer, which must not be null.
+  //
+  // This function is safe to use with any pointer, as it will CHECK and
+  // terminate the process if the pointer is null. Avoid dereferencing a pointer
+  // to avoid this CHECK as you may be dereferencing null.
+  PA_ALWAYS_INLINE constexpr static raw_ref from_ptr(T* ptr) noexcept {
+    PA_RAW_PTR_CHECK(ptr);
+    return raw_ref(*ptr);
+  }
 
-  PA_ALWAYS_INLINE explicit raw_ref(T& p) noexcept
+  // Construct a raw_ref from a reference.
+  PA_ALWAYS_INLINE constexpr explicit raw_ref(T& p) noexcept
       : inner_(std::addressof(p)) {}
 
-  PA_ALWAYS_INLINE raw_ref& operator=(T& p) noexcept {
+  // Assign a new reference to the raw_ref, replacing the existing reference.
+  PA_ALWAYS_INLINE constexpr raw_ref& operator=(T& p) noexcept {
     inner_.operator=(&p);
     return *this;
   }
@@ -96,73 +99,88 @@ class PA_TRIVIAL_ABI PA_GSL_POINTER raw_ref {
   raw_ref(const T&& p) = delete;
   raw_ref& operator=(const T&& p) = delete;
 
-  PA_ALWAYS_INLINE raw_ref(const raw_ref& p) noexcept : inner_(p.inner_) {
+  PA_ALWAYS_INLINE constexpr raw_ref(const raw_ref& p) noexcept
+      : inner_(p.inner_) {
     PA_RAW_PTR_CHECK(inner_);  // Catch use-after-move.
   }
 
-  PA_ALWAYS_INLINE raw_ref(raw_ref&& p) noexcept : inner_(std::move(p.inner_)) {
+  PA_ALWAYS_INLINE constexpr raw_ref(raw_ref&& p) noexcept
+      : inner_(std::move(p.inner_)) {
     PA_RAW_PTR_CHECK(inner_);  // Catch use-after-move.
-    if constexpr (need_clear_after_move) {
+    if constexpr (kNeedClearAfterMove) {
       p.inner_ = nullptr;
     }
   }
 
-  PA_ALWAYS_INLINE raw_ref& operator=(const raw_ref& p) noexcept {
+  PA_ALWAYS_INLINE constexpr raw_ref& operator=(const raw_ref& p) noexcept {
     PA_RAW_PTR_CHECK(p.inner_);  // Catch use-after-move.
     inner_.operator=(p.inner_);
     return *this;
   }
 
-  PA_ALWAYS_INLINE raw_ref& operator=(raw_ref&& p) noexcept {
+  PA_ALWAYS_INLINE constexpr raw_ref& operator=(raw_ref&& p) noexcept {
     PA_RAW_PTR_CHECK(p.inner_);  // Catch use-after-move.
     inner_.operator=(std::move(p.inner_));
-    if constexpr (need_clear_after_move) {
+    if constexpr (kNeedClearAfterMove) {
       p.inner_ = nullptr;
     }
     return *this;
   }
 
   // Deliberately implicit in order to support implicit upcast.
-  template <class U, class = std::enable_if_t<std::is_convertible_v<U&, T&>>>
+  // Delegate cross-kind conversion to the inner raw_ptr, which decides when to
+  // allow it.
+  template <class U,
+            RawPtrTraits PassedTraits,
+            class = std::enable_if_t<std::is_convertible_v<U&, T&>>>
   // NOLINTNEXTLINE(google-explicit-constructor)
-  PA_ALWAYS_INLINE raw_ref(const raw_ref<U, Traits>& p) noexcept
+  PA_ALWAYS_INLINE constexpr raw_ref(const raw_ref<U, PassedTraits>& p) noexcept
       : inner_(p.inner_) {
     PA_RAW_PTR_CHECK(inner_);  // Catch use-after-move.
   }
   // Deliberately implicit in order to support implicit upcast.
-  template <class U, class = std::enable_if_t<std::is_convertible_v<U&, T&>>>
+  // Delegate cross-kind conversion to the inner raw_ptr, which decides when to
+  // allow it.
+  template <class U,
+            RawPtrTraits PassedTraits,
+            class = std::enable_if_t<std::is_convertible_v<U&, T&>>>
   // NOLINTNEXTLINE(google-explicit-constructor)
-  PA_ALWAYS_INLINE raw_ref(raw_ref<U, Traits>&& p) noexcept
+  PA_ALWAYS_INLINE constexpr raw_ref(raw_ref<U, PassedTraits>&& p) noexcept
       : inner_(std::move(p.inner_)) {
     PA_RAW_PTR_CHECK(inner_);  // Catch use-after-move.
-    if constexpr (need_clear_after_move) {
+    if constexpr (kNeedClearAfterMove) {
       p.inner_ = nullptr;
     }
   }
 
-  static PA_ALWAYS_INLINE raw_ref from_ptr(T* ptr) noexcept {
-    PA_RAW_PTR_CHECK(ptr);
-    return raw_ref(*ptr);
-  }
-
   // Upcast assignment
-  template <class U, class = std::enable_if_t<std::is_convertible_v<U&, T&>>>
-  PA_ALWAYS_INLINE raw_ref& operator=(const raw_ref<U, Traits>& p) noexcept {
+  // Delegate cross-kind conversion to the inner raw_ptr, which decides when to
+  // allow it.
+  template <class U,
+            RawPtrTraits PassedTraits,
+            class = std::enable_if_t<std::is_convertible_v<U&, T&>>>
+  PA_ALWAYS_INLINE constexpr raw_ref& operator=(
+      const raw_ref<U, PassedTraits>& p) noexcept {
     PA_RAW_PTR_CHECK(p.inner_);  // Catch use-after-move.
     inner_.operator=(p.inner_);
     return *this;
   }
-  template <class U, class = std::enable_if_t<std::is_convertible_v<U&, T&>>>
-  PA_ALWAYS_INLINE raw_ref& operator=(raw_ref<U, Traits>&& p) noexcept {
+  // Delegate cross-kind conversion to the inner raw_ptr, which decides when to
+  // allow it.
+  template <class U,
+            RawPtrTraits PassedTraits,
+            class = std::enable_if_t<std::is_convertible_v<U&, T&>>>
+  PA_ALWAYS_INLINE constexpr raw_ref& operator=(
+      raw_ref<U, PassedTraits>&& p) noexcept {
     PA_RAW_PTR_CHECK(p.inner_);  // Catch use-after-move.
     inner_.operator=(std::move(p.inner_));
-    if constexpr (need_clear_after_move) {
+    if constexpr (kNeedClearAfterMove) {
       p.inner_ = nullptr;
     }
     return *this;
   }
 
-  PA_ALWAYS_INLINE T& operator*() const {
+  PA_ALWAYS_INLINE constexpr T& operator*() const {
     PA_RAW_PTR_CHECK(inner_);  // Catch use-after-move.
     return inner_.operator*();
   }
@@ -171,12 +189,13 @@ class PA_TRIVIAL_ABI PA_GSL_POINTER raw_ref {
   // rather than GetForDereference semantics (see raw_ptr.h). This should be
   // used in place of operator*() when the memory referred to by the reference
   // is not immediately going to be accessed.
-  PA_ALWAYS_INLINE T& get() const {
+  PA_ALWAYS_INLINE constexpr T& get() const {
     PA_RAW_PTR_CHECK(inner_);  // Catch use-after-move.
     return *inner_.get();
   }
 
-  PA_ALWAYS_INLINE T* operator->() const PA_ATTRIBUTE_RETURNS_NONNULL {
+  PA_ALWAYS_INLINE constexpr T* operator->() const
+      PA_ATTRIBUTE_RETURNS_NONNULL {
     PA_RAW_PTR_CHECK(inner_);  // Catch use-after-move.
     return inner_.operator->();
   }
@@ -189,89 +208,90 @@ class PA_TRIVIAL_ABI PA_GSL_POINTER raw_ref {
     inner_.ReportIfDangling();
   }
 
-  friend PA_ALWAYS_INLINE void swap(raw_ref& lhs, raw_ref& rhs) noexcept {
+  PA_ALWAYS_INLINE friend constexpr void swap(raw_ref& lhs,
+                                              raw_ref& rhs) noexcept {
     PA_RAW_PTR_CHECK(lhs.inner_);  // Catch use-after-move.
     PA_RAW_PTR_CHECK(rhs.inner_);  // Catch use-after-move.
     swap(lhs.inner_, rhs.inner_);
   }
 
   template <typename U, typename V, RawPtrTraits Traits1, RawPtrTraits Traits2>
-  friend PA_ALWAYS_INLINE bool operator==(const raw_ref<U, Traits1>& lhs,
-                                          const raw_ref<V, Traits2>& rhs);
+  friend bool operator==(const raw_ref<U, Traits1>& lhs,
+                         const raw_ref<V, Traits2>& rhs);
   template <typename U, typename V, RawPtrTraits Traits1, RawPtrTraits Traits2>
-  friend PA_ALWAYS_INLINE bool operator!=(const raw_ref<U, Traits1>& lhs,
-                                          const raw_ref<V, Traits2>& rhs);
+  friend bool operator!=(const raw_ref<U, Traits1>& lhs,
+                         const raw_ref<V, Traits2>& rhs);
   template <typename U, typename V, RawPtrTraits Traits1, RawPtrTraits Traits2>
-  friend PA_ALWAYS_INLINE bool operator<(const raw_ref<U, Traits1>& lhs,
-                                         const raw_ref<V, Traits2>& rhs);
+  friend bool operator<(const raw_ref<U, Traits1>& lhs,
+                        const raw_ref<V, Traits2>& rhs);
   template <typename U, typename V, RawPtrTraits Traits1, RawPtrTraits Traits2>
-  friend PA_ALWAYS_INLINE bool operator>(const raw_ref<U, Traits1>& lhs,
-                                         const raw_ref<V, Traits2>& rhs);
+  friend bool operator>(const raw_ref<U, Traits1>& lhs,
+                        const raw_ref<V, Traits2>& rhs);
   template <typename U, typename V, RawPtrTraits Traits1, RawPtrTraits Traits2>
-  friend PA_ALWAYS_INLINE bool operator<=(const raw_ref<U, Traits1>& lhs,
-                                          const raw_ref<V, Traits2>& rhs);
+  friend bool operator<=(const raw_ref<U, Traits1>& lhs,
+                         const raw_ref<V, Traits2>& rhs);
   template <typename U, typename V, RawPtrTraits Traits1, RawPtrTraits Traits2>
-  friend PA_ALWAYS_INLINE bool operator>=(const raw_ref<U, Traits1>& lhs,
-                                          const raw_ref<V, Traits2>& rhs);
+  friend bool operator>=(const raw_ref<U, Traits1>& lhs,
+                         const raw_ref<V, Traits2>& rhs);
 
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator==(const raw_ref& lhs, const U& rhs) {
+  PA_ALWAYS_INLINE friend bool operator==(const raw_ref& lhs, const U& rhs) {
     PA_RAW_PTR_CHECK(lhs.inner_);  // Catch use-after-move.
     return lhs.inner_ == &rhs;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator!=(const raw_ref& lhs, const U& rhs) {
+  PA_ALWAYS_INLINE friend bool operator!=(const raw_ref& lhs, const U& rhs) {
     PA_RAW_PTR_CHECK(lhs.inner_);  // Catch use-after-move.
     return lhs.inner_ != &rhs;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator<(const raw_ref& lhs, const U& rhs) {
+  PA_ALWAYS_INLINE friend bool operator<(const raw_ref& lhs, const U& rhs) {
     PA_RAW_PTR_CHECK(lhs.inner_);  // Catch use-after-move.
     return lhs.inner_ < &rhs;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator>(const raw_ref& lhs, const U& rhs) {
+  PA_ALWAYS_INLINE friend bool operator>(const raw_ref& lhs, const U& rhs) {
     PA_RAW_PTR_CHECK(lhs.inner_);  // Catch use-after-move.
     return lhs.inner_ > &rhs;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator<=(const raw_ref& lhs, const U& rhs) {
+  PA_ALWAYS_INLINE friend bool operator<=(const raw_ref& lhs, const U& rhs) {
     PA_RAW_PTR_CHECK(lhs.inner_);  // Catch use-after-move.
     return lhs.inner_ <= &rhs;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator>=(const raw_ref& lhs, const U& rhs) {
+  PA_ALWAYS_INLINE friend bool operator>=(const raw_ref& lhs, const U& rhs) {
     PA_RAW_PTR_CHECK(lhs.inner_);  // Catch use-after-move.
     return lhs.inner_ >= &rhs;
   }
 
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator==(const U& lhs, const raw_ref& rhs) {
+  PA_ALWAYS_INLINE friend bool operator==(const U& lhs, const raw_ref& rhs) {
     PA_RAW_PTR_CHECK(rhs.inner_);  // Catch use-after-move.
     return &lhs == rhs.inner_;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator!=(const U& lhs, const raw_ref& rhs) {
+  PA_ALWAYS_INLINE friend bool operator!=(const U& lhs, const raw_ref& rhs) {
     PA_RAW_PTR_CHECK(rhs.inner_);  // Catch use-after-move.
     return &lhs != rhs.inner_;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator<(const U& lhs, const raw_ref& rhs) {
+  PA_ALWAYS_INLINE friend bool operator<(const U& lhs, const raw_ref& rhs) {
     PA_RAW_PTR_CHECK(rhs.inner_);  // Catch use-after-move.
     return &lhs < rhs.inner_;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator>(const U& lhs, const raw_ref& rhs) {
+  PA_ALWAYS_INLINE friend bool operator>(const U& lhs, const raw_ref& rhs) {
     PA_RAW_PTR_CHECK(rhs.inner_);  // Catch use-after-move.
     return &lhs > rhs.inner_;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator<=(const U& lhs, const raw_ref& rhs) {
+  PA_ALWAYS_INLINE friend bool operator<=(const U& lhs, const raw_ref& rhs) {
     PA_RAW_PTR_CHECK(rhs.inner_);  // Catch use-after-move.
     return &lhs <= rhs.inner_;
   }
   template <class U, class = std::enable_if_t<!internal::is_raw_ref_v<U>, void>>
-  friend PA_ALWAYS_INLINE bool operator>=(const U& lhs, const raw_ref& rhs) {
+  PA_ALWAYS_INLINE friend bool operator>=(const U& lhs, const raw_ref& rhs) {
     PA_RAW_PTR_CHECK(rhs.inner_);  // Catch use-after-move.
     return &lhs >= rhs.inner_;
   }

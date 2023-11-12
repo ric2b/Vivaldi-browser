@@ -10,6 +10,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -17,6 +18,7 @@
 #include "components/headless/command_handler/headless_command_switches.h"
 #include "components/headless/test/bitmap_utils.h"
 #include "components/headless/test/capture_std_stream.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test.h"
 #include "headless/lib/browser/headless_browser_context_impl.h"
 #include "headless/lib/browser/headless_browser_impl.h"
@@ -24,6 +26,7 @@
 #include "headless/public/headless_browser.h"
 #include "headless/public/headless_browser_context.h"
 #include "headless/public/headless_web_contents.h"
+#include "headless/public/switches.h"
 #include "headless/test/headless_browser_test.h"
 #include "headless/test/headless_browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -35,7 +38,17 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_POSIX)
+#include <signal.h>
+#include <unistd.h>
+#endif
+
+#if BUILDFLAG(IS_WIN)
+#include <Windows.h>
+#endif
 
 #if BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(ENABLE_PDF)
 #include "components/headless/test/pdf_utils.h"
@@ -51,7 +64,8 @@ bool DecodePNG(const std::string& png_data, SkBitmap* bitmap) {
 }
 }  // namespace
 
-class HeadlessCommandBrowserTest : public HeadlessBrowserTest {
+class HeadlessCommandBrowserTest : public HeadlessBrowserTest,
+                                   public content::WebContentsObserver {
  public:
   HeadlessCommandBrowserTest() = default;
 
@@ -69,24 +83,38 @@ class HeadlessCommandBrowserTest : public HeadlessBrowserTest {
     HeadlessWebContents* web_contents =
         builder.SetInitialURL(handler_url).Build();
 
+    content::WebContents* content_web_contents =
+        HeadlessWebContentsImpl::From(web_contents)->web_contents();
+
+    content::WebContentsObserver::Observe(content_web_contents);
+
     HeadlessCommandHandler::ProcessCommands(
-        HeadlessWebContentsImpl::From(web_contents)->web_contents(),
-        GetTargetUrl(),
+        content_web_contents, GetTargetUrl(),
         base::BindOnce(&HeadlessCommandBrowserTest::FinishTest,
                        base::Unretained(this)),
         base::SingleThreadTaskRunner::GetCurrentDefault());
 
     RunAsynchronousTest();
 
+    if (aborted_) {
+      return;
+    }
+
+    content::WebContentsObserver::Observe(nullptr);
+
     web_contents->Close();
     browser_context->Close();
     base::RunLoop().RunUntilIdle();
   }
 
+  void set_aborted() { aborted_ = true; }
+
  private:
   virtual GURL GetTargetUrl() = 0;
 
   void FinishTest() { FinishAsynchronousTest(); }
+
+  bool aborted_ = false;
 };
 
 class HeadlessDumpDomCommandBrowserTest : public HeadlessCommandBrowserTest {
@@ -251,6 +279,40 @@ IN_PROC_BROWSER_TEST_F(HeadlessScreenshotWithBackgroundCommandBrowserTest,
                                SkColorSetRGB(0xff, 0x00, 0x00)));
 }
 
+class HeadlessScreenshotCommandBrowserTestWithWindowSize
+    : public HeadlessScreenshotCommandBrowserTest {
+ public:
+  static constexpr gfx::Size kWindowSize = {4096, 2160};
+
+  HeadlessScreenshotCommandBrowserTestWithWindowSize() = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    HeadlessScreenshotCommandBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitchASCII(
+        switches::kWindowSize,
+        base::StringPrintf("%u,%u", kWindowSize.width(), kWindowSize.height()));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(HeadlessScreenshotCommandBrowserTestWithWindowSize,
+                       ScreenshotWindowSize) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  RunTest();
+
+  ASSERT_TRUE(base::PathExists(screenshot_filename_)) << screenshot_filename_;
+
+  std::string png_data;
+  ASSERT_TRUE(base::ReadFileToString(screenshot_filename_, &png_data))
+      << screenshot_filename_;
+
+  SkBitmap bitmap;
+  ASSERT_TRUE(DecodePNG(png_data, &bitmap));
+
+  EXPECT_EQ(bitmap.width(), kWindowSize.width());
+  EXPECT_EQ(bitmap.height(), kWindowSize.height());
+}
+
 #if BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(ENABLE_PDF)
 
 class HeadlessPrintToPdfCommandBrowserTest
@@ -330,5 +392,37 @@ IN_PROC_BROWSER_TEST_F(HeadlessPrintToPdfWithBackgroundCommandBrowserTest,
 }
 
 #endif  // BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(ENABLE_PDF)
+
+// Graceful signal handling is currently available only on Linux, Mac and
+// Windows.
+#if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_WIN)
+
+class HeadlessCommandSignalBrowserTest
+    : public HeadlessDumpDomCommandBrowserTest {
+ public:
+  HeadlessCommandSignalBrowserTest() = default;
+
+  // content::WebContentsObserver implementation:
+  void DocumentOnLoadCompletedInPrimaryMainFrame() override {
+    set_aborted();
+
+#if BUILDFLAG(IS_POSIX)
+    set_expected_exit_code(128 + SIGINT);
+    raise(SIGINT);
+#elif BUILDFLAG(IS_WIN)
+    ::GenerateConsoleCtrlEvent(CTRL_C_EVENT, 0);
+#endif
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(HeadlessCommandSignalBrowserTest, SendCtrlCSignal) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  RunTest();
+
+  // Command execution is expected to be Ctrl+C'ed gracefully.
+}
+
+#endif  // #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_WIN)
 
 }  // namespace headless

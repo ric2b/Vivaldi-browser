@@ -6,9 +6,9 @@
 #import <UIKit/UIKit.h>
 
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/ad_tracker_blocker/cells/vivaldi_atb_setting_item.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
@@ -286,7 +286,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
       if (!self.adblockManager)
         return;
       [self.adblockManager setExceptionFromBlockingType:settingType];
-      [self.adblockManager getSettingOptions];
       break;
     }
     case ItemTypeExceptionSetting:

@@ -177,20 +177,14 @@ void BrowsingDataRemoverBrowserTestBase::RunScriptAndCheckResult(
     content::WebContents* web_contents) {
   if (!web_contents)
     web_contents = GetActiveWebContents();
-  std::string data;
-  ASSERT_TRUE(
-      content::ExecuteScriptAndExtractString(web_contents, script, &data));
-  ASSERT_EQ(data, result);
+  ASSERT_EQ(result, content::EvalJs(web_contents, script));
 }
 
 bool BrowsingDataRemoverBrowserTestBase::RunScriptAndGetBool(
     const std::string& script,
     content::WebContents* web_contents) {
   EXPECT_TRUE(web_contents);
-  bool data;
-  EXPECT_TRUE(
-      content::ExecuteScriptAndExtractBool(web_contents, script, &data));
-  return data;
+  return content::EvalJs(web_contents, script).ExtractBool();
 }
 
 void BrowsingDataRemoverBrowserTestBase::VerifyDownloadCount(size_t expected,
@@ -385,11 +379,7 @@ int BrowsingDataRemoverBrowserTestBase::GetCookiesTreeModelCount(
   int count = 0;
   for (const auto& node : root->children()) {
     EXPECT_GE(node->children().size(), 1u);
-    count += base::ranges::count_if(node->children(), [](const auto& child) {
-      // TODO(crbug.com/1307796): Include quota nodes.
-      return child->GetDetailedInfo().node_type !=
-             CookieTreeNode::DetailedInfo::TYPE_QUOTA;
-    });
+    count += node->children().size();
   }
   return count;
 }

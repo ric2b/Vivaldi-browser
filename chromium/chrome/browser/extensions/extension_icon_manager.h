@@ -72,7 +72,7 @@ class ExtensionIconManager {
   raw_ptr<Observer> observer_ = nullptr;
 
   // Vivaldi specific; used for broadcasting the onIconLoaded event.
-  content::BrowserContext* context_;
+  raw_ptr<content::BrowserContext> context_;
 
   base::WeakPtrFactory<ExtensionIconManager> weak_ptr_factory_{this};
 };

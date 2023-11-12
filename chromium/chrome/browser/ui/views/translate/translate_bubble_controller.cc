@@ -17,7 +17,10 @@
 #include "chrome/browser/ui/translate/translate_bubble_ui_action_logger.h"
 #include "chrome/browser/ui/views/translate/partial_translate_bubble_view.h"
 #include "components/contextual_search/core/browser/contextual_search_delegate_impl.h"
+#include "components/translate/content/browser/partial_translate_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
+#include "components/translate/core/browser/translate_ui_delegate.h"
+#include "components/translate/core/browser/translate_ui_languages_manager.h"
 #include "components/translate/core/common/translate_constants.h"
 #include "components/translate/core/common/translate_errors.h"
 #include "components/translate/core/common/translate_util.h"
@@ -225,12 +228,11 @@ void TranslateBubbleController::CreatePartialTranslateBubble(
   if (partial_model_factory_callback_) {
     model = partial_model_factory_callback_.Run();
   } else {
-    // Start with kUnknownLanguageCode to make the server run language
-    // detection.
-    auto ui_delegate = std::make_unique<translate::TranslateUIDelegate>(
-        ChromeTranslateClient::GetManagerFromWebContents(web_contents)
-            ->GetWeakPtr(),
-        translate::kUnknownLanguageCode, target_language);
+    auto translate_ui_languages_manager =
+        std::make_unique<translate::TranslateUILanguagesManager>(
+            ChromeTranslateClient::GetManagerFromWebContents(web_contents)
+                ->GetWeakPtr(),
+            source_language, target_language);
 
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
@@ -241,7 +243,8 @@ void TranslateBubbleController::CreatePartialTranslateBubble(
 
     model = std::make_unique<PartialTranslateBubbleModelImpl>(
         view_state, error_type, truncated_source_text, target_text,
-        std::move(partial_translate_manager), std::move(ui_delegate));
+        std::move(partial_translate_manager),
+        std::move(translate_ui_languages_manager));
   }
   model->SetSourceTextTruncated(is_truncated);
 

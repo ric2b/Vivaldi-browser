@@ -8,15 +8,15 @@
 
 #import "base/check_op.h"
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_image_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_tabs_search_suggested_history_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_url_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/suggested_actions/suggested_actions_delegate.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_image_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_tabs_search_suggested_history_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -86,11 +86,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self.tableView setTableHeaderView:[[UIView alloc] initWithFrame:frame]];
   [self.tableView setTableFooterView:[[UIView alloc] initWithFrame:frame]];
 
-  if (UseSymbols()) {
-    self.tableView.layer.cornerRadius = kGridCellCornerRadius;
-  } else {
-    self.tableView.layer.cornerRadius = kLegacyGridCellCornerRadius;
-  }
+  self.tableView.layer.cornerRadius = kGridCellCornerRadius;
   [self loadModel];
   [self.tableView reloadData];
   [self.tableView layoutIfNeeded];

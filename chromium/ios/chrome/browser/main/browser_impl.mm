@@ -11,7 +11,7 @@
 #import "ios/chrome/browser/main/browser_observer.h"
 #import "ios/chrome/browser/main/browser_web_state_list_delegate.h"
 #import "ios/chrome/browser/sessions/session_service_ios.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_delegate.h"
 
@@ -19,15 +19,19 @@
 #error "This file requires ARC support."
 #endif
 
-BrowserImpl::BrowserImpl(ChromeBrowserState* browser_state, bool inactive)
+BrowserImpl::BrowserImpl(ChromeBrowserState* browser_state,
+                         BrowserImpl* active_browser)
     : browser_state_(browser_state),
       command_dispatcher_([[CommandDispatcher alloc] init]),
-      is_inactive_(inactive) {
+      active_browser_(active_browser ?: this) {
   DCHECK(browser_state_);
+  DCHECK(active_browser_);
 
   web_state_list_delegate_ = std::make_unique<BrowserWebStateListDelegate>();
   web_state_list_ =
       std::make_unique<WebStateList>(web_state_list_delegate_.get());
+
+  AttachBrowserAgents(this);
 }
 
 BrowserImpl::~BrowserImpl() {
@@ -61,22 +65,32 @@ base::WeakPtr<Browser> BrowserImpl::AsWeakPtr() {
 }
 
 bool BrowserImpl::IsInactive() const {
-  return is_inactive_;
+  return active_browser_ != this;
+}
+
+Browser* BrowserImpl::GetActiveBrowser() {
+  return active_browser_;
+}
+
+Browser* BrowserImpl::GetInactiveBrowser() {
+  return IsInactive() ? this : inactive_browser_.get();
+}
+
+Browser* BrowserImpl::CreateInactiveBrowser() {
+  CHECK(!IsInactive()) << "This browser already is the inactive one.";
+  CHECK(!inactive_browser_.get())
+      << "This browser already links to its inactive counterpart.";
+  inactive_browser_ = std::make_unique<BrowserImpl>(browser_state_, this);
+  return inactive_browser_.get();
+}
+
+void BrowserImpl::DestroyInactiveBrowser() {
+  CHECK(!IsInactive())
+      << "This browser is the inactive one. Call this on the active one.";
+  inactive_browser_.reset();
 }
 
 // static
 std::unique_ptr<Browser> Browser::Create(ChromeBrowserState* browser_state) {
-  std::unique_ptr<BrowserImpl> browser =
-      std::make_unique<BrowserImpl>(browser_state, /*inactive=*/false);
-  AttachBrowserAgents(browser.get());
-  return browser;
-}
-
-// static
-std::unique_ptr<Browser> Browser::CreateForInactiveTabs(
-    ChromeBrowserState* browser_state) {
-  std::unique_ptr<BrowserImpl> browser =
-      std::make_unique<BrowserImpl>(browser_state, /*inactive=*/true);
-  AttachBrowserAgents(browser.get());
-  return browser;
+  return std::make_unique<BrowserImpl>(browser_state);
 }

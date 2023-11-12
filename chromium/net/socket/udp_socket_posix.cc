@@ -34,8 +34,8 @@
 #include "base/rand_util.h"
 #include "base/task/current_thread.h"
 #include "base/task/thread_pool.h"
-#include "base/trace_event/typed_macros.h"
 #include "build/chromeos_buildflags.h"
+#include "net/base/cronet_buildflags.h"
 #include "net/base/features.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
@@ -44,17 +44,16 @@
 #include "net/base/network_activity_monitor.h"
 #include "net/base/sockaddr_storage.h"
 #include "net/base/trace_constants.h"
+#include "net/base/tracing.h"
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_source_type.h"
-#include "net/socket/ios_cronet_buildflags.h"
 #include "net/socket/socket_descriptor.h"
 #include "net/socket/socket_options.h"
 #include "net/socket/socket_tag.h"
 #include "net/socket/udp_net_log_parameters.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "third_party/perfetto/include/perfetto/tracing/string_helpers.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/native_library.h"
@@ -244,7 +243,6 @@ void UDPSocketPosix::ReceivedActivityMonitor::OnTimerFired() {
 
 void UDPSocketPosix::Close() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  CHECK(!dont_close_);
 
   owned_socket_count_.Reset();
 
@@ -1065,6 +1063,14 @@ int UDPSocketPosix::SetDiffServCodePoint(DiffServCodePoint dscp) {
   return OK;
 }
 
+int UDPSocketPosix::SetIPv6Only(bool ipv6_only) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  if (is_connected()) {
+    return ERR_SOCKET_IS_CONNECTED;
+  }
+  return net::SetIPv6Only(socket_, ipv6_only);
+}
+
 void UDPSocketPosix::DetachFromThread() {
   DETACH_FROM_THREAD(thread_checker_);
 }
@@ -1088,10 +1094,6 @@ int UDPSocketPosix::SetIOSNetworkServiceType(int ios_network_service_type) {
   }
 #endif  // BUILDFLAG(IS_IOS)
   return OK;
-}
-
-void UDPSocketPosix::SetDontClose(bool dont_close) {
-  dont_close_ = dont_close;
 }
 
 }  // namespace net

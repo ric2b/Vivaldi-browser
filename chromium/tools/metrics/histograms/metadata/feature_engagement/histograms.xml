@@ -28,10 +28,14 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <variants name="IPHFeature">
+  <variant name="IPH_AdaptiveButtonInTopToolbarCustomization_AddToBookmarks"
+      summary="the add to bookmarks adaptive button in the top toolbar"/>
   <variant name="IPH_AdaptiveButtonInTopToolbarCustomization_NewTab"
       summary="the new tab adaptive button in the top toolbar"/>
   <variant name="IPH_AdaptiveButtonInTopToolbarCustomization_Share"
       summary="the share adaptive button in the top toolbar"/>
+  <variant name="IPH_AdaptiveButtonInTopToolbarCustomization_Translate"
+      summary="the translate adaptive button in the top toolbar"/>
   <variant name="IPH_AdaptiveButtonInTopToolbarCustomization_VoiceSearch"
       summary="the voice search adaptive button in the top toolbar"/>
   <variant name="IPH_AddToHomescreenMessage"
@@ -48,10 +52,19 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_AutoDarkUserEducationMessageOptIn"
       summary="message educating users about enabling auto dark web contents
                feature globally"/>
+  <variant name="IPH_AutofillExternalAccountProfileSuggestion"
+      summary="message shown along with the externally created (e.g. in
+               Google Pay) profile suggestion option in the Autofill dropdown"/>
+  <variant name="IPH_AutofillFeedbackNewBadge"
+      summary="New badge shown along with the autofill feedback option in the
+               menu dropdown"/>
   <variant name="IPH_AutofillVirtualCardSuggestion"
       summary="message shown along with the virtual card suggestion option in
                the Autofill dropdown to educate users virtual cards come with
                better security"/>
+  <variant name="IPH_BackNavigationMenu"
+      summary="educating users about the back navigation menu to navigate
+               back more than one page at a time."/>
   <variant name="IPH_BadgedReadingList" summary="badged reading list"/>
   <variant name="IPH_BatterySaverMode" summary="battery saver mode"/>
   <variant name="IPH_Bookmark" summary="bookmark"/>
@@ -90,12 +103,13 @@ chromium-metrics-reviews@google.com.
                order to get better translations"/>
   <variant name="IPH_ContextualSearchWebSearch"
       summary="contextual search for users who use web search"/>
-  <variant name="IPH_Crow" summary="notifying users about the Crow feature"/>
   <variant name="IPH_DataSaverDetail" summary="data saver detail"/>
   <variant name="IPH_DataSaverMilestonePromo"
       summary="data saver milestone promo"/>
   <variant name="IPH_DataSaverPreview" summary="data saver preview"/>
   <variant name="IPH_DefaultSiteView" summary="default site view info on iOS"/>
+  <variant name="IPH_DesktopCustomizeChrome"
+      summary="customizing new tab page"/>
   <variant name="IPH_DesktopPwaInstall" summary="desktop PWA install icon"/>
   <variant name="IPH_DesktopTabGroupsNewGroup"
       summary="creating a new tab group"/>
@@ -111,6 +125,7 @@ chromium-metrics-reviews@google.com.
       summary="download page for screenshot"/>
   <variant name="IPH_DownloadSettings"
       summary="accessing download settings from download home"/>
+  <variant name="IPH_DownloadToolbarButton" summary="download toolbar button"/>
   <variant name="IPH_EphemeralTab"
       summary="new label on the context menu for Ephemeral Tab"/>
   <variant name="IPH_ExploreSitesTile" summary="Explore Sites feature"/>
@@ -162,6 +177,16 @@ chromium-metrics-reviews@google.com.
       summary="default browser badge promo on the overflow menu"/>
   <variant name="IPH_iOSDefaultBrowserSettingsBadge"
       summary="default browser badge promo on the settings menu row"/>
+  <variant name="IPH_iOSPromoAppStore"
+      summary="showing the App Store Promo on iOS"/>
+  <variant name="IPH_iOSPromoCredentialProviderExtension"
+      summary="showing the Credential Provider Extension Promo on iOS"/>
+  <variant name="IPH_iOSPromoDefaultBrowser"
+      summary="showing the Default Browser Promo on iOS"/>
+  <variant name="IPH_iOSPromoPostRestore"
+      summary="showing the Post Restore Promo on iOS"/>
+  <variant name="IPH_iOSPromoWhatsNew"
+      summary="showing the Whats New Promo on iOS"/>
   <variant name="IPH_KeyboardAccessoryAddressFilling"
       summary="address autofill suggestions"/>
   <variant name="IPH_KeyboardAccessoryPasswordFilling"
@@ -170,6 +195,8 @@ chromium-metrics-reviews@google.com.
       summary="payments autofill suggestions"/>
   <variant name="IPH_KeyboardAccessoryPaymentOffer"
       summary="payments autofill suggestions that have an offer"/>
+  <variant name="IPH_LauncherSearchHelpUi"
+      summary="show launcher search chips in the launcher"/>
   <variant name="IPH_LiveCaption" summary="Live Caption"/>
   <variant name="IPH_LongPressToolbarTip" summary="LongPress toolbar"/>
   <variant name="IPH_MicToolbar" summary="the mic button in the toolbar"/>
@@ -185,15 +212,27 @@ chromium-metrics-reviews@google.com.
       summary="educating users about the zoom option in the main menu"/>
   <variant name="IPH_PasswordsAccountStorage"
       summary="passwords account storage"/>
+  <variant name="IPH_PasswordsManagementBubbleAfterSave"
+      summary="educating the users about the password management bubble after
+               saving a password"/>
+  <variant name="IPH_PasswordsManagementBubbleDuringSignin"
+      summary="educating the users about the password management bubble
+               during signin flows"/>
   <variant name="IPH_PasswordSuggestions"
       summary="the Autofill password suggestions on iOS"/>
+  <variant name="IPH_PasswordsWebAppProfileSwitch"
+      summary="profile switch in Password Manager web app"/>
   <variant name="IPH_PerformanceNewBadge"
       summary="New badge shows next to performance item on the app menu"/>
+  <variant name="IPH_PowerBookmarksSidePanel"
+      summary="prompting users to view bookmarks in the side panel"/>
   <variant name="IPH_PreviewsOmniboxUI"
       summary="the Previews UI in the Android Omnibox"/>
   <variant name="IPH_PriceDropNTP"
       summary="the in product help message to inform users that a price drop
                has occurred in a tab"/>
+  <variant name="IPH_PriceTrackingChipFeature"
+      summary="first time user sees the price tracking page action icon"/>
   <variant name="IPH_PriceTrackingInSidePanel"
       summary="first time user tracks a product to educate them to see the
                price tracking list in side panel"/>
@@ -258,6 +297,8 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_TabGroupsTapToSeeAnotherTab" summary="tab strip"/>
   <variant name="IPH_TabGroupsYourTabsTogether"
       summary="tab switcher cards with multiple tab thumbnails"/>
+  <variant name="IPH_TabPinnedFeature"
+      summary="the hint to find the tab the user just pinned"/>
   <variant name="IPH_TabSearch" summary="tab search discovery"/>
   <variant name="IPH_TabSwitcherButton" summary="tab switcher button"/>
   <variant name="IPH_TranslateMenuButton" summary="translate menu button"/>
@@ -296,7 +337,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="InProductHelp.Config.ParsingEvent" enum="ConfigParsingEvent"
-    expires_after="2023-05-27">
+    expires_after="2023-09-03">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if in-product help configuration is parsed correctly, and the
@@ -343,7 +384,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.DismissalReason.iOS"
-    enum="InProductHelpDismissalReason" expires_after="2023-06-25">
+    enum="InProductHelpDismissalReason" expires_after="2023-09-03">
   <owner>lpromero@google.com</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
@@ -459,7 +500,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.SnoozeAction" enum="InProductHelpSnoozeAction"
-    expires_after="2023-06-25">
+    expires_after="2023-09-03">
   <owner>haileywang@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <summary>
@@ -468,7 +509,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="InProductHelp.TextBubble.ShownTime" units="ms"
-    expires_after="2023-08-13">
+    expires_after="2023-10-15">
   <owner>haileywang@chromium.org</owner>
   <owner>shaktisahu@chromium.org</owner>
   <summary>
@@ -510,7 +551,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Tutorial.TabGroup.EditedTitle" enum="BooleanSuccess"
-    expires_after="2023-07-09">
+    expires_after="2023-09-24">
   <owner>dpenning@chromium.org</owner>
   <owner>dfried@chromium.org</owner>
   <summary>

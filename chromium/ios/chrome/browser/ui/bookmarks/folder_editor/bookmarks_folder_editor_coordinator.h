@@ -7,8 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 #import "ios/chrome/browser/ui/bookmarks/folder_editor/bookmarks_folder_editor_coordinator_delegate.h"
-#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
 namespace bookmarks {
 class BookmarkNode;
@@ -24,7 +24,7 @@ class BookmarkNode;
 
 // Initializes BookmarksFolderEditorCoordinator, to create a new folder in
 // `parentFolderNode`.
-// If `parentFolderNode` is `nullptr`, a default parent will be set.
+// `parentFolderNode` cannot be `nullptr`.
 - (instancetype)initWithBaseNavigationController:
                     (UINavigationController*)navigationController
                                          browser:(Browser*)browser
@@ -33,7 +33,8 @@ class BookmarkNode;
     NS_DESIGNATED_INITIALIZER;
 // Initializes BookmarksFolderEditorCoordinator. The view will edit the bookmark
 // folder node.
-// `folderNode` cannot be `nullptr` or editable.
+// `folderNode` cannot be `nullptr` and must be editable (`folderNode` can't be
+// the root node or any of the permanent nodes).
 - (instancetype)
     initWithBaseViewController:(UIViewController*)navigationController
                        browser:(Browser*)browser

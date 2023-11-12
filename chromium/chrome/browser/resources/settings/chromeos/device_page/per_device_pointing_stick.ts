@@ -26,14 +26,13 @@ import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route} from '../router.js';
 
-import {getInputDeviceSettingsProvider} from './input_device_mojo_interface_provider.js';
-import {InputDeviceSettingsProviderInterface, PointingStick} from './input_device_settings_types.js';
+import {PointingStick} from './input_device_settings_types.js';
 import {getTemplate} from './per_device_pointing_stick.html.js';
 
 const SettingsPerDevicePointingStickElementBase =
     RouteObserverMixin(PolymerElement);
 
-class SettingsPerDevicePointingStickElement extends
+export class SettingsPerDevicePointingStickElement extends
     SettingsPerDevicePointingStickElementBase {
   static get is(): string {
     return 'settings-per-device-pointing-stick';
@@ -52,24 +51,12 @@ class SettingsPerDevicePointingStickElement extends
   }
 
   protected pointingSticks: PointingStick[];
-  private inputDeviceSettingsProvider: InputDeviceSettingsProviderInterface =
-      getInputDeviceSettingsProvider();
-
-  constructor() {
-    super();
-    this.fetchConnectedPointingSticks();
-  }
 
   override currentRouteChanged(route: Route): void {
     // Does not apply to this page.
     if (route !== routes.PER_DEVICE_POINTING_STICK) {
       return;
     }
-  }
-
-  private async fetchConnectedPointingSticks(): Promise<void> {
-    this.pointingSticks = await this.inputDeviceSettingsProvider
-                              .getConnectedPointingStickSettings();
   }
 }
 

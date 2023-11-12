@@ -32,6 +32,7 @@ class PreferenceSpecifics;
 
 namespace sync_preferences {
 
+class DualLayerUserPrefStore;
 class PrefModelAssociatorClient;
 
 class PrefServiceForAssociator {
@@ -39,6 +40,7 @@ class PrefServiceForAssociator {
   virtual base::Value::Type GetRegisteredPrefType(
       const std::string& pref_name) const = 0;
   virtual void OnIsSyncingChanged() = 0;
+  virtual uint32_t GetWriteFlags(const std::string& pref_name) const = 0;
 };
 
 // Contains all preference sync related logic.
@@ -50,6 +52,15 @@ class PrefModelAssociator : public syncer::SyncableService,
   PrefModelAssociator(const PrefModelAssociatorClient* client,
                       scoped_refptr<WriteablePrefStore> user_prefs,
                       syncer::ModelType type);
+
+  // The |client| is not owned and must outlive this object.
+  // |user_prefs| is the PrefStore to be hooked up to Sync.
+  // Note: This must be called iff EnablePreferencesAccountStorage feature is
+  // enabled.
+  PrefModelAssociator(
+      const PrefModelAssociatorClient* client,
+      scoped_refptr<DualLayerUserPrefStore> dual_layer_user_prefs,
+      syncer::ModelType type);
 
   PrefModelAssociator(const PrefModelAssociator&) = delete;
   PrefModelAssociator& operator=(const PrefModelAssociator&) = delete;
@@ -75,6 +86,7 @@ class PrefModelAssociator : public syncer::SyncableService,
       const syncer::SyncDataList& initial_sync_data,
       std::unique_ptr<syncer::SyncChangeProcessor> sync_processor) override;
   void StopSyncing(syncer::ModelType type) override;
+  void OnBrowserShutdown(syncer::ModelType type) override;
   absl::optional<syncer::ModelError> ProcessSyncChanges(
       const base::Location& from_here,
       const syncer::SyncChangeList& change_list) override;
@@ -92,15 +104,6 @@ class PrefModelAssociator : public syncer::SyncableService,
 
   // See |legacy_model_type_preferences_|.
   void RegisterPrefWithLegacyModelType(const std::string& name);
-
-  // Merges the local_value into the supplied server_value and returns
-  // the result. If there is a conflict, the server value takes precedence. Note
-  // that only certain preferences will actually be merged, all others will
-  // return a copy of the server value.
-  // Exposed for testing.
-  base::Value MergePreference(const std::string& name,
-                              const base::Value& local_value,
-                              const base::Value& server_value) const;
 
   // Fills |sync_data| with a sync representation of the preference data
   // provided.
@@ -131,6 +134,8 @@ class PrefModelAssociator : public syncer::SyncableService,
   // Note this does not refer to SYNCABLE_PREF.
   bool IsPrefSyncedForTesting(const std::string& name) const;
 
+  bool IsUsingDualLayerUserPrefStoreForTesting() const;
+
  private:
   // Create an association for a given preference. If |sync_pref| is valid,
   // signifying that sync has data for this preference, we reconcile their data
@@ -155,6 +160,8 @@ class PrefModelAssociator : public syncer::SyncableService,
   // synced.
   void NotifyStartedSyncing(const std::string& path) const;
 
+  void Stop(bool is_browser_shutdown);
+
   // The datatype that this associator is responsible for, either PREFERENCES or
   // PRIORITY_PREFERENCES or OS_PREFERENCES or OS_PRIORITY_PREFERENCES.
   const syncer::ModelType type_;
@@ -163,6 +170,10 @@ class PrefModelAssociator : public syncer::SyncableService,
 
   // The PrefStore we are syncing to.
   scoped_refptr<WriteablePrefStore> user_prefs_;
+  // This is set if EnablePreferencesAccountStorage is enabled. This points to
+  // the DualLayerUserPrefStore instance, if one exists, which shares the
+  // ownership of `user_prefs_`.
+  scoped_refptr<DualLayerUserPrefStore> dual_layer_user_prefs_;
 
   // The interface to the PrefService.
   raw_ptr<PrefServiceForAssociator> pref_service_ = nullptr;

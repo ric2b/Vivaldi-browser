@@ -156,8 +156,9 @@ void ZWPTextInputWrapperV1::Reset() {
 void ZWPTextInputWrapperV1::Activate(WaylandWindow* window,
                                      TextInputClient::FocusReason reason) {
   DCHECK(connection_->seat());
-  if (wl::get_version_of_object(extended_obj_.get()) >=
-      ZCR_EXTENDED_TEXT_INPUT_V1_SET_FOCUS_REASON_SINCE_VERSION) {
+  if (extended_obj_.get() &&
+      wl::get_version_of_object(extended_obj_.get()) >=
+          ZCR_EXTENDED_TEXT_INPUT_V1_SET_FOCUS_REASON_SINCE_VERSION) {
     absl::optional<uint32_t> wayland_focus_reason;
     switch (reason) {
       case ui::TextInputClient::FocusReason::FOCUS_REASON_NONE:
@@ -221,19 +222,40 @@ void ZWPTextInputWrapperV1::SetSurroundingText(
 void ZWPTextInputWrapperV1::SetContentType(ui::TextInputType type,
                                            ui::TextInputMode mode,
                                            uint32_t flags,
-                                           bool should_do_learning) {
+                                           bool should_do_learning,
+                                           bool can_compose_inline) {
   // If wayland compositor supports the extended version of set input type,
   // use it to avoid losing the info.
-  if (extended_obj_.get() &&
-      wl::get_version_of_object(extended_obj_.get()) >=
-          ZCR_EXTENDED_TEXT_INPUT_V1_SET_INPUT_TYPE_SINCE_VERSION) {
-    zcr_extended_text_input_v1_set_input_type(
-        extended_obj_.get(), ui::wayland::ConvertFromTextInputType(type),
-        ui::wayland::ConvertFromTextInputMode(mode),
-        ui::wayland::ConvertFromTextInputFlags(flags),
-        should_do_learning ? ZCR_EXTENDED_TEXT_INPUT_V1_LEARNING_MODE_ENABLED
-                           : ZCR_EXTENDED_TEXT_INPUT_V1_LEARNING_MODE_DISABLED);
-    return;
+  if (extended_obj_.get()) {
+    uint32_t wl_server_version = wl::get_version_of_object(extended_obj_.get());
+    if (wl_server_version >=
+        ZCR_EXTENDED_TEXT_INPUT_V1_SET_INPUT_TYPE_SINCE_VERSION) {
+      zcr_extended_text_input_v1_set_input_type(
+          extended_obj_.get(), ui::wayland::ConvertFromTextInputType(type),
+          ui::wayland::ConvertFromTextInputMode(mode),
+          ui::wayland::ConvertFromTextInputFlags(flags),
+          should_do_learning
+              ? ZCR_EXTENDED_TEXT_INPUT_V1_LEARNING_MODE_ENABLED
+              : ZCR_EXTENDED_TEXT_INPUT_V1_LEARNING_MODE_DISABLED,
+          can_compose_inline
+              ? ZCR_EXTENDED_TEXT_INPUT_V1_INLINE_COMPOSITION_SUPPORT_SUPPORTED
+              : ZCR_EXTENDED_TEXT_INPUT_V1_INLINE_COMPOSITION_SUPPORT_UNSUPPORTED);
+      return;
+    }
+    if (wl_server_version >=
+        ZCR_EXTENDED_TEXT_INPUT_V1_DEPRECATED_SET_INPUT_TYPE_SINCE_VERSION) {
+      // TODO(crbug.com/1420448) This deprecated method is used here only to
+      // maintain backwards compatibility with an older version of Exo. Once
+      // Exo has stabilized on the new set_input_type, remove this call.
+      zcr_extended_text_input_v1_deprecated_set_input_type(
+          extended_obj_.get(), ui::wayland::ConvertFromTextInputType(type),
+          ui::wayland::ConvertFromTextInputMode(mode),
+          ui::wayland::ConvertFromTextInputFlags(flags),
+          should_do_learning
+              ? ZCR_EXTENDED_TEXT_INPUT_V1_LEARNING_MODE_ENABLED
+              : ZCR_EXTENDED_TEXT_INPUT_V1_LEARNING_MODE_DISABLED);
+      return;
+    }
   }
 
   // Otherwise, fallback to the standard set_content_type.

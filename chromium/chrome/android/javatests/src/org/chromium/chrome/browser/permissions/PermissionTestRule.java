@@ -10,6 +10,8 @@ import androidx.annotation.IdRes;
 
 import org.hamcrest.Matchers;
 import org.junit.Assert;
+import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Criteria;
@@ -18,11 +20,11 @@ import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.InfoBarTestAnimationListener;
 import org.chromium.chrome.test.util.InfoBarUtil;
 import org.chromium.components.browser_ui.modaldialog.ModalDialogTestUtils;
-import org.chromium.components.browser_ui.modaldialog.R;
 import org.chromium.components.browser_ui.modaldialog.TabModalPresenter;
 import org.chromium.components.infobars.InfoBar;
 import org.chromium.components.permissions.PermissionDialogController;
@@ -102,6 +104,21 @@ public class PermissionTestRule extends ChromeTabbedActivityTestRule {
 
     public PermissionTestRule(boolean useHttpsServer) {
         getEmbeddedTestServerRule().setServerUsesHttps(useHttpsServer);
+    }
+
+    @Override
+    public Statement apply(Statement base, Description description) {
+        return super.apply(new Statement() {
+            @Override
+            public void evaluate() throws Throwable {
+                try {
+                    ModalDialogTestUtils.overrideEnableButtonTapProtection(false);
+                    base.evaluate();
+                } finally {
+                    ModalDialogTestUtils.overrideEnableButtonTapProtection(true);
+                }
+            }
+        }, description);
     }
 
     /**

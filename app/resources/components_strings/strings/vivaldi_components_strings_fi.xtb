@@ -11,7 +11,7 @@
 <translation id="1375198122581997741">Tietoja versiosta</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> ei lähettänyt tietoa.</translation>
 <translation id="1559528461873125649">Tiedostoa tai hakemistoa ei ole olemassa</translation>
-<translation id="1640244768702815859">Yritä <ph name="BEGIN_LINK" />avata sivuston aloitussivu<ph name="END_LINK" />.</translation>
+<translation id="1640244768702815859">Yritä <ph name="BEGIN_LINK" />avata sivuston etusivu<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Yhteyskäytäntöä ei tueta</translation>
 <translation id="1710259589646384581">Käyttöjärjestelmä</translation>
 <translation id="1728677426644403582">Tämä on verkkosivun lähdekoodi</translation>
@@ -25,14 +25,14 @@
 <translation id="2166378884831602661">Tämä sivusto ei voi tarjota suojattua yhteyttä</translation>
 <translation id="2187317261103489799">Tunnista (oletus)</translation>
 <translation id="2224337661447660594">Ei internetyhteyttä</translation>
-<translation id="2292556288342944218">Internetyhteytesi on estetty</translation>
+<translation id="2292556288342944218">Internet-yhteytesi on estetty</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> vaatii käyttäjätunnuksen ja salasanan.</translation>
 <translation id="2337852623177822836">Järjestelmänvalvojan hallinnoima asetus</translation>
 <translation id="2355395290879513365">Hyökkääjät saattavat nähdä kuvat, joita katselet sivustolla ja huijata sinua muokkaamalla niitä.</translation>
 <translation id="2356070529366658676">Kysy</translation>
 <translation id="2359808026110333948">Jatka</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Diagnosoidaan verkkoa<ph name="END_LINK" /></translation>
-<translation id="2491414235131909199">Laajennus on estänyt tämän sivun</translation>
+<translation id="2491414235131909199">Laajennus on estänyt sivun</translation>
 <translation id="2501278716633472235">Palaa takaisin</translation>
 <translation id="2539524384386349900">Tunnista</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> lähetti virheellisen vastauksen.</translation>
@@ -65,17 +65,17 @@
 <translation id="3447661539832366887">Tämän laitteen omistaja on poistanut dinosauruspelin käytöstä.</translation>
 <translation id="3447884698081792621">Näytä varmenne (myöntänyt <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Piilota lisäasetukset</translation>
-<translation id="3484560055331845446">Saatat menettää pääsyn Google-tiliisi. Chrome suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>
+<translation id="3484560055331845446">Saatat menettää pääsyn Google-tiliisi. Vivaldi suosittelee vaihtamaan salasanan nyt. Sinua pyydetään kirjautumaan sisään.</translation>
 <translation id="3566021033012934673">Yhteytesi ei ole yksityinen</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Piilota lisätiedot</translation>
-<translation id="3630155396527302611">Jos sillä on jo verkon käyttöoikeus, kokeile sen poistamista
-      sallittujen ohjelmien luettelosta ja lisäämistä sitten uudelleen.</translation>
+<translation id="3630155396527302611">Jos se listataan jo sovelluksissa, joilla on verkon käyttöoikeus,
+kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="3658742229777143148">Päivitetty versio</translation>
 <translation id="3681007416295224113">Varmenteen tiedot</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />tarkistaa välityspalvelin-, palomuuri- ja nimipalvelinasetukset<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Jos käytät välityspalvelinta…</translation>
-<translation id="3894751534882749287">Jos silti haluat nähdä sivun, sen jäljityssuojaustasoa voi säätää jäljityksenestoikkunassa tai napsauttamalla Salli-painiketta</translation>
+<translation id="3894751534882749287">Jos haluat tästä huolimatta avata sivun, voit vaihtaa seurantasuojauksen tasoa seurantaeston ponnahduksesta tai painaa Salli-painiketta</translation>
 <translation id="3950820424414687140">Kirjaudu</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> on estetty</translation>
 <translation id="3987940399970879459">Alle 1 Mt</translation>
@@ -96,7 +96,7 @@
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> ei hyväksynyt kirjautumisvarmennettasi tai varmennetta ei toimitettu.</translation>
 <translation id="4506599922270137252">ottaa yhteyttä järjestelmän ylläpitoon</translation>
 <translation id="4522570452068850558">Tiedot</translation>
-<translation id="4558551763791394412">Kokeile poistaa laajennukset käytöstä.</translation>
+<translation id="4558551763791394412">Kokeile laajennusten käytöstä poistoa.</translation>
 <translation id="4592951414987517459">Yhteytesi sivustoon <ph name="DOMAIN" /> on suojattu nykyaikaisella salaustekniikalla.</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Yhteys keskeytyi</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 käytössä)}other{(# käytössä)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />tarkistaa välityspalvelimen osoite<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bittinen)</translation>
-<translation id="5287240709317226393">Näytä evästeet</translation>
 <translation id="5355557959165512791"><ph name="SITE" /> ei juuri nyt ole käytettävissä, koska sen varmenne on peruttu. Verkkovirheet ja hyökkäykset ovat yleensä väliaikaisia, joten sivu luultavasti toimii myöhemmin.</translation>
 <translation id="5386426401304769735">Sivuston varmenneketjussa on SHA-1:llä allekirjoitettu varmenne.</translation>
 <translation id="5452270690849572955">Tätä sivuston <ph name="HOST_NAME" /> sivua ei löydy</translation>
@@ -139,7 +138,7 @@
 <translation id="6165508094623778733">Lisätietoja</translation>
 <translation id="6177128806592000436">Yhteys sivustoon ei ole suojattu</translation>
 <translation id="6203231073485539293">Tarkista Internet-yhteys</translation>
-<translation id="6225522625585012689">Estetyt URL-osoitteet ja muut järjestelmänvalvojasi pakottamat käytännöt näkee osoitteesta &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
+<translation id="6225522625585012689">Näet estetyt URL-osoitteet ja muut järjestelmänvalvojasi pakottamat käytännöt osoitteesta &lt;strong&gt;vivaldi://policy&lt;/strong&gt;.</translation>
 <translation id="6264485186158353794">Palaa suojattuun tilaan</translation>
 <translation id="6305205051461490394"><ph name="URL" /> ei ole tavoitettavissa.</translation>
 <translation id="6321917430147971392">Tarkista DNS-asetukset</translation>
@@ -150,17 +149,18 @@
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> kieltäytyi muodostamasta yhteyttä.</translation>
 <translation id="6447842834002726250">Evästeet</translation>
 <translation id="6451458296329894277">Vahvista lomakkeen uudelleenlähetys</translation>
-<translation id="6569060085658103619">Olet laajennussivulla</translation>
+<translation id="6569060085658103619">Tarkastelet laajennussivua</translation>
 <translation id="6657585470893396449">Salasana</translation>
 <translation id="6711464428925977395">Välityspalvelimessa on jotain vikaa tai osoite on virheellinen.</translation>
 <translation id="6757797048963528358">Laitteesi siirtyi nukkumaan.</translation>
+<translation id="6890956352250146925">Eväste- ja sivustotietoasetukset</translation>
 <translation id="6897140037006041989">User agent</translation>
 <translation id="7053983685419859001">Estä</translation>
 <translation id="7079718277001814089">Sivustolla on haittaohjelmia</translation>
 <translation id="7096937462164235847">Sivuston identiteettiä ei ole tarkistettu.</translation>
 <translation id="7108819624672055576">Laajennuksen sallima</translation>
 <translation id="7111012039238467737">(voimassa)</translation>
-<translation id="7113310725918019676">Salli <ph name="BLOCKED_TYPE" /> alueelta <ph name="DOMAIN" /></translation>
+<translation id="7113310725918019676">Salli <ph name="BLOCKED_TYPE" /> verkkotunnukselta <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata suojausstandardeja.</translation>
 <translation id="7219179957768738017">Yhteys käyttää salauksen versiota <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Näytä ilmoitukset</translation>
@@ -168,14 +168,14 @@
 <translation id="7353601530677266744">Komentorivi</translation>
 <translation id="7364115444476960850">Vivaldin <ph name="BLOCKER_NAME" /> on estänyt sivun, jolle yrität päästä</translation>
 <translation id="7419106976560586862">Profiilin polku</translation>
-<translation id="7445762425076701745">Palvelimen identiteettiä ei voi täysin todentaa. Palvelinyhteys käyttää verkkonimeä, joka kelpaa vain omassa verkossasi eikä ulkopuolinen varmenteen myöntäjä voi todentaa sen omistajaa. Jotkin varmenneauktoriteetit myöntävät kuitenkin näillekin nimille varmenteita, joten et voi olla varma, onko yhteytesi haluamaasi sivustoon eikä hyökkääjän sivustoon.</translation>
+<translation id="7445762425076701745">Palvelimen identiteettiä ei voida täysin varmentaa. Olet yhdistänyt palvelimeen, jonka verkkonimi on kelvollinen vain paikallisessa lähiverkossa, eikä ulkopuolinen varmenteen myöntäjä voi mitenkään todentaa sen omistajaa. Koska jotkin varmentajat tästä huolimatta myöntävät näillekin verkkonimille varmenteita, ei välttämättä ole täysin mahdollista varmistaa, että olet yhdistänyt haluamaasi sivustoon etkä hyökkääjään.</translation>
 <translation id="7455133967321480974">Käytä yleistä oletusasetusta (estä)</translation>
 <translation id="7518003948725431193">Verkkosivua ei löytynyt osoitteelle: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Tämän sivun näyttäminen oikein edellyttää aiemmin lähetettyjä tietoja. Voit lähettää tiedot uudelleen, mutta tällöin sivulla mahdollisesti suoritettu toiminto toistetaan.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> ei voi tällä hetkellä käsitellä tätä pyyntöä.</translation>
 <translation id="7662298039739062396">Laajennuksen hallinnoima asetus</translation>
 <translation id="7663736086183791259">Varmenne <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Sivustolle hyökännyt taho saattaa pyrkiä huijaamaan sinua asentamaan sovelluksia, jotka vahingoittavat selauskokemustasi (esimerkiksi muuttamalla aloitussivuasi tai näyttämällä lisämainoksia käyttämilläsi sivustoilla).</translation>
+<translation id="7669271284792375604">Sivustolle hyökännyt taho saattaa pyrkiä huijaamaan sinua asentamaan sovelluksia, jotka vahingoittavat selauskokemustasi (esimerkiksi muuttamalla kotisivuasi tai näyttämällä lisämainoksia käyttämilläsi sivustoilla).</translation>
 <translation id="7714464543167945231">Varmenne</translation>
 <translation id="7716147886133743102">Järjestelmänvalvojan estämä</translation>
 <translation id="7716424297397655342">Tätä sivustoa ei voi ladata välimuistista</translation>
@@ -188,7 +188,7 @@
 <translation id="8037357227543935929">Kysy (oletus)</translation>
 <translation id="8041940743680923270">Käytä yleistä oletusasetusta (kysy)</translation>
 <translation id="808894953321890993">Vaihda salasana</translation>
-<translation id="8119307142152921512">jäljitys ja mainokset</translation>
+<translation id="8119307142152921512">seurannat ja mainokset</translation>
 <translation id="8149426793427495338">Tietokoneesi siirtyi nukkumaan.</translation>
 <translation id="8150722005171944719">Tiedosto osoitteessa <ph name="URL" /> ei ole luettavissa. Se on voitu poistaa tai siirtää, tai tiedoston käyttöluvat voivat estää sen käytön.</translation>
 <translation id="8184538546369750125">Käytä yleistä oletusasetusta (salli)</translation>
@@ -214,7 +214,7 @@
 <translation id="9062620674789239642">Se on voitu siirtää tai poistaa tai sitä on muutettu.</translation>
 <translation id="9069693763241529744">Laajennuksen estämä</translation>
 <translation id="9073799351042754113">Olet poistanut tietoturvavaroitukset käytöstä tällä sivustolla.</translation>
-<translation id="910924428752220542">Vivaldi-salasanat</translation>
+<translation id="910924428752220542">Vivaldin salasanat</translation>
 <translation id="9169664750068251925">Estä aina tällä sivustolla</translation>
 <translation id="9180553614777056266">Mainosesto</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> käyttää protokollaa, jota ei tueta.</translation>

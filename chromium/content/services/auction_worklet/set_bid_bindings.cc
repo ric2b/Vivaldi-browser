@@ -4,6 +4,7 @@
 
 #include "content/services/auction_worklet/set_bid_bindings.h"
 
+#include <cmath>
 #include <memory>
 #include <string>
 #include <utility>
@@ -15,15 +16,18 @@
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/bidder_worklet.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
+#include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
 #include "third_party/blink/public/common/interest_group/ad_auction_constants.h"
+#include "third_party/blink/public/common/interest_group/ad_auction_currencies.h"
+#include "third_party/blink/public/common/interest_group/ad_display_size_utils.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 #include "v8/include/v8-exception.h"
 #include "v8/include/v8-external.h"
 #include "v8/include/v8-function-callback.h"
-#include "v8/include/v8-template.h"
+#include "v8/include/v8-function.h"
 
 namespace auction_worklet {
 
@@ -60,6 +64,67 @@ bool IsAllowedAdUrl(
   return false;
 }
 
+// Parse the field corresponds to 'render' or the entry in 'adComponents' array.
+// Return whether the parse is successful.
+// The JavaScript object can be in one of two forms:
+// 1. Contains only the url field:
+//      {url: "https://example.test/"}
+// 2. Contains the url and both width and height fields:
+//      {url: "https://example.test/", width: "100sw", height: "50px"}
+//
+// The size units are allowed to be specified as:
+// 1. "px": pixels.
+// 2. "sw": screenwidth.
+//
+// Note the parse is still considered successful even if the size unit ends up
+// being invalid, for example:
+// {url: "https://example.test/", width: "100ft", height: "50in"}
+//
+// This will be immediately handled by `HoldsInvalidSize`, so we know the reason
+// for the failure in order to emit more accurate error messages.
+bool TryToParseUrlWithSize(v8::Isolate* isolate,
+                           const v8::Local<v8::Value>& value,
+                           std::string& ad_url,
+                           absl::optional<blink::AdSize>& size) {
+  if (!value->IsObject()) {
+    return false;
+  }
+
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  gin::Dictionary dict(isolate, value.As<v8::Object>());
+  if (!dict.Get("url", &ad_url)) {
+    return false;
+  }
+
+  // The object being parse must either:
+  // 1. contain the 'url' field only.
+  // 2. contain the 'url', 'width' and 'height' fields.
+  uint32_t properties_count = value.As<v8::Object>()
+                                  ->GetPropertyNames(context)
+                                  .ToLocalChecked()
+                                  ->Length();
+  if (properties_count == 1u) {
+    return true;
+  }
+  if (properties_count != 3u) {
+    return false;
+  }
+
+  std::string render_width;
+  std::string render_height;
+  if (!dict.Get("width", &render_width) ||
+      !dict.Get("height", &render_height)) {
+    return false;
+  }
+
+  auto [width_val, width_units] = blink::ParseAdSizeString(render_width);
+  auto [height_val, height_units] = blink::ParseAdSizeString(render_height);
+
+  size = blink::AdSize(width_val, width_units, height_val, height_units);
+
+  return true;
+}
+
 }  // namespace
 
 mojom::BidderWorkletBidPtr SetBidBindings::TakeBid() {
@@ -79,31 +144,34 @@ void SetBidBindings::ReInitialize(
     base::TimeTicks start,
     bool has_top_level_seller_origin,
     const mojom::BidderWorkletNonSharedParams* bidder_worklet_non_shared_params,
+    const absl::optional<blink::AdCurrency>& per_buyer_currency,
     base::RepeatingCallback<bool(const GURL&)> is_ad_excluded,
     base::RepeatingCallback<bool(const GURL&)> is_component_ad_excluded) {
   DCHECK(bidder_worklet_non_shared_params->ads.has_value());
   start_ = start;
   has_top_level_seller_origin_ = has_top_level_seller_origin;
   bidder_worklet_non_shared_params_ = bidder_worklet_non_shared_params;
+  per_buyer_currency_ = per_buyer_currency;
   is_ad_excluded_ = std::move(is_ad_excluded);
   is_component_ad_excluded_ = std::move(is_component_ad_excluded);
 }
 
-void SetBidBindings::FillInGlobalTemplate(
-    v8::Local<v8::ObjectTemplate> global_template) {
+void SetBidBindings::AttachToContext(v8::Local<v8::Context> context) {
   v8::Local<v8::External> v8_this =
       v8::External::New(v8_helper_->isolate(), this);
-  v8::Local<v8::FunctionTemplate> v8_template = v8::FunctionTemplate::New(
-      v8_helper_->isolate(), &SetBidBindings::SetBid, v8_this);
-  v8_template->RemovePrototype();
-  global_template->Set(v8_helper_->CreateStringFromLiteral("setBid"),
-                       v8_template);
+  v8::Local<v8::Function> v8_function =
+      v8::Function::New(context, &SetBidBindings::SetBid, v8_this)
+          .ToLocalChecked();
+  context->Global()
+      ->Set(context, v8_helper_->CreateStringFromLiteral("setBid"), v8_function)
+      .Check();
 }
 
 void SetBidBindings::Reset() {
   bid_.reset();
   // Make sure we don't keep any dangling references to auction input.
   bidder_worklet_non_shared_params_ = nullptr;
+  per_buyer_currency_ = absl::nullopt;
   is_ad_excluded_.Reset();
   is_component_ad_excluded_.Reset();
 }
@@ -172,11 +240,37 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
     return true;
   }
 
+  absl::optional<blink::AdCurrency> bid_currency;
+  std::string bid_currency_str;
+  if (result_dict.Get("bidCurrency", &bid_currency_str)) {
+    if (!blink::IsValidAdCurrencyCode(bid_currency_str)) {
+      errors_out.push_back(
+          base::StringPrintf("%sbidCurrency of '%s' is not a currency code.",
+                             error_prefix.c_str(), bid_currency_str.c_str()));
+      return false;
+    }
+    bid_currency = blink::AdCurrency::From(bid_currency_str);
+  }
+
+  if (!blink::VerifyAdCurrencyCode(per_buyer_currency_, bid_currency)) {
+    errors_out.push_back(base::StringPrintf(
+        "%sbidCurrency mismatch; returned '%s', expected '%s'.",
+        error_prefix.c_str(), blink::PrintableAdCurrency(bid_currency).c_str(),
+        blink::PrintableAdCurrency(per_buyer_currency_).c_str()));
+    return false;
+  }
+
+  absl::optional<double> ad_cost;
+  double tmp_ad_cost;
+  if (result_dict.Get("adCost", &tmp_ad_cost)) {
+    ad_cost = tmp_ad_cost;
+  }
+
   v8::Local<v8::Value> ad_object;
-  std::string render_url_string;
+  v8::Local<v8::Value> ad_render;
   // Parse and validate values.
   if (!result_dict.Get("ad", &ad_object) ||
-      !result_dict.Get("render", &render_url_string)) {
+      !result_dict.Get("render", &ad_render)) {
     errors_out.push_back(
         base::StrCat({error_prefix, "bid has incorrect structure."}));
     return false;
@@ -208,6 +302,43 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
     }
   }
 
+  absl::optional<double> modeling_signals;
+  double tmp_modeling_signals;
+  if (result_dict.Get("modelingSignals", &tmp_modeling_signals) &&
+      !std::isnan(tmp_modeling_signals) && !std::isinf(tmp_modeling_signals) &&
+      tmp_modeling_signals >= 0 && tmp_modeling_signals < (1 << 12)) {
+    modeling_signals = tmp_modeling_signals;
+  }
+
+  std::string render_url_string;
+  absl::optional<blink::AdSize> render_size = absl::nullopt;
+  if (ad_render->IsString()) {
+    // Old behavior before FLEDGE API incorporating ad size.
+    // The 'render' field corresponds to an url string, for example:
+    // render: "https://response.test/"
+    if (!gin::ConvertFromV8(isolate, ad_render, &render_url_string)) {
+      errors_out.push_back(
+          base::StrCat({error_prefix, "bid has incorrect structure."}));
+      return false;
+    }
+  } else if (!TryToParseUrlWithSize(isolate, ad_render, render_url_string,
+                                    render_size)) {
+    // New behavior after FLEDGE API incorporating ad size.
+    // The 'render' field corresponds to an object that contains the url string,
+    // and optional width and height, for example:
+    // 1. render: {url: "https://example.test/"}
+    // 2. render: {url: "https://example.test/", width: "100sw", height: "50px"}
+    errors_out.push_back(
+        base::StrCat({error_prefix, "bid has incorrect structure."}));
+    return false;
+  }
+
+  if (render_size.has_value() && !IsValidAdSize(render_size.value())) {
+    errors_out.push_back(
+        base::StrCat({error_prefix, "bid has invalid size for render ad."}));
+    return false;
+  }
+
   GURL render_url(render_url_string);
   if (!IsAllowedAdUrl(render_url, error_prefix, "render", is_ad_excluded_,
                       bidder_worklet_non_shared_params_->ads.value(),
@@ -215,7 +346,7 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
     return false;
   }
 
-  absl::optional<std::vector<GURL>> ad_component_urls;
+  absl::optional<std::vector<blink::AdDescriptor>> ad_component_descriptors;
   v8::Local<v8::Value> ad_components;
   if (result_dict.Get("adComponents", &ad_components) &&
       !ad_components->IsNullOrUndefined()) {
@@ -241,19 +372,57 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
       return false;
     }
 
-    ad_component_urls.emplace();
+    ad_component_descriptors.emplace();
     for (size_t i = 0; i < ad_components_array->Length(); ++i) {
-      std::string url_string;
-      if (!gin::ConvertFromV8(
-              isolate, ad_components_array->Get(context, i).ToLocalChecked(),
-              &url_string)) {
-        errors_out.push_back(base::StrCat(
-            {error_prefix,
-             "bid adComponents value must be an array of strings."}));
+      std::string ad_component_url_string;
+      absl::optional<blink::AdSize> ad_component_size = absl::nullopt;
+      if (ad_components_array->Get(context, i).ToLocalChecked()->IsString()) {
+        // Old behavior before FLEDGE API incorporating ad size.
+        // The 'adComponents' field corresponds to an array of url strings, for
+        // example:
+        // adComponents: ["https://test/1",
+        //                "https://test/2",
+        //                "https://test/3"]
+        if (!gin::ConvertFromV8(
+                isolate, ad_components_array->Get(context, i).ToLocalChecked(),
+                &ad_component_url_string)) {
+          errors_out.push_back(base::StrCat(
+              {error_prefix,
+               "bid adComponents value must be an array of strings or objects "
+               "that contain the url string field and optional width and "
+               "height fields."}));
+          return false;
+        }
+      } else if (!TryToParseUrlWithSize(
+                     isolate,
+                     ad_components_array->Get(context, i).ToLocalChecked(),
+                     ad_component_url_string, ad_component_size)) {
+        // New behavior after FLEDGE API incorporating ad size.
+        // The 'adComponents' field corresponds to
+        // 1. an array of url strings or
+        // 2. objects that contain the url string, and optional width and height
+        //    fiedls
+        // For example:
+        // adComponents: [{url: "https://test/1"},
+        //                {url: "https://test/2", width: "10sw", height: "5px"},
+        //                "https://test/3"]
+        errors_out.push_back(
+            base::StrCat({error_prefix,
+                          "bid adComponents value must be an array of strings "
+                          "or objects that contain the url string field and "
+                          "optional width and height fields."}));
         return false;
       }
 
-      GURL ad_component_url(url_string);
+      if (ad_component_size.has_value() &&
+          !IsValidAdSize(ad_component_size.value())) {
+        errors_out.push_back(base::StrCat(
+            {error_prefix,
+             "bid adComponents have invalid size for ad component."}));
+        return false;
+      }
+
+      GURL ad_component_url(ad_component_url_string);
       if (!IsAllowedAdUrl(
               ad_component_url, error_prefix, "adComponents",
               is_component_ad_excluded_,
@@ -261,7 +430,8 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
               errors_out)) {
         return false;
       }
-      ad_component_urls->emplace_back(std::move(ad_component_url));
+      ad_component_descriptors->emplace_back(std::move(ad_component_url),
+                                             std::move(ad_component_size));
     }
   }
 
@@ -269,10 +439,11 @@ bool SetBidBindings::SetBid(v8::Local<v8::Value> generate_bid_result,
   // including the time from the last setBid() call to when the bidder worklet
   // timed out, if the worklet did time out. So `bid_duration` is calculated
   // when ownership of the bid is taken by the caller, instead of here.
-  bid_ = mojom::BidderWorkletBid::New(std::move(ad_json), bid,
-                                      std::move(render_url),
-                                      std::move(ad_component_urls),
-                                      /*bid_duration=*/base::TimeDelta());
+  bid_ = mojom::BidderWorkletBid::New(
+      std::move(ad_json), bid, std::move(bid_currency), std::move(ad_cost),
+      blink::AdDescriptor(render_url, render_size),
+      std::move(ad_component_descriptors), std::move(modeling_signals),
+      /*bid_duration=*/base::TimeDelta());
   return true;
 }
 

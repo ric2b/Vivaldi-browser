@@ -210,6 +210,10 @@ const OsIntegrationManager& WebAppProvider::os_integration_manager() const {
   return *os_integration_manager_;
 }
 
+WebAppOriginAssociationManager& WebAppProvider::origin_association_manager() {
+  return *origin_association_manager_;
+}
+
 WebAppCommandManager& WebAppProvider::command_manager() {
   // Note: It is OK to access the command manager before connection or start.
   // Internally it will queue commands to only happen after it has started.
@@ -291,8 +295,16 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
   command_manager_ = std::make_unique<WebAppCommandManager>(profile, this);
   command_scheduler_ = std::make_unique<WebAppCommandScheduler>(*profile, this);
 
+  origin_association_manager_ =
+      std::make_unique<WebAppOriginAssociationManager>();
+
   registrar_ = std::move(registrar);
   sync_bridge_ = std::move(sync_bridge);
+
+#if (BUILDFLAG(IS_CHROMEOS))
+  web_app_run_on_os_login_manager_ =
+      std::make_unique<WebAppRunOnOsLoginManager>(command_scheduler_.get());
+#endif
 }
 
 void WebAppProvider::ConnectSubsystems() {
@@ -305,11 +317,7 @@ void WebAppProvider::ConnectSubsystems() {
       install_manager_.get(), registrar_.get(), ui_manager_.get(),
       sync_bridge_.get(), os_integration_manager_.get(), icon_manager_.get(),
       web_app_policy_manager_.get(), translation_manager_.get(),
-      command_manager_.get());
-  install_manager_->SetSubsystems(
-      registrar_.get(), os_integration_manager_.get(), command_manager_.get(),
-      install_finalizer_.get(), icon_manager_.get(), sync_bridge_.get(),
-      translation_manager_.get());
+      command_manager_.get(), origin_association_manager_.get());
   manifest_update_manager_->SetSubsystems(install_manager_.get(),
                                           registrar_.get(), ui_manager_.get(),
                                           command_scheduler_.get());
@@ -364,6 +372,12 @@ void WebAppProvider::OnSyncBridgeReady() {
   install_manager_->Start();
   preinstalled_web_app_manager_->Start(external_manager_barrier);
   web_app_policy_manager_->Start(external_manager_barrier);
+#if (BUILDFLAG(IS_CHROMEOS))
+  on_external_managers_synchronized_.Post(
+      FROM_HERE,
+      base::BindOnce(&WebAppRunOnOsLoginManager::Start,
+                     web_app_run_on_os_login_manager_->GetWeakPtr()));
+#endif
   manifest_update_manager_->Start();
   os_integration_manager_->Start();
   ui_manager_->Start();
@@ -385,8 +399,8 @@ void WebAppProvider::DoMigrateProfilePrefs(Profile* profile) {
   ScopedRegistryUpdate update(sync_bridge_.get());
   for (const auto& iter : sources) {
     WebApp* web_app = update->UpdateApp(iter.first);
-    if (web_app && !web_app->install_source_for_metrics()) {
-      web_app->SetInstallSourceForMetrics(
+    if (web_app && !web_app->latest_install_source()) {
+      web_app->SetLatestInstallSource(
           static_cast<webapps::WebappInstallSource>(iter.second));
     }
   }

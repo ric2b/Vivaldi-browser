@@ -224,7 +224,12 @@ void ButtonExample::CreateExampleView(View* container) {
                                    .SetIsDefault(true),
                                Builder<MdTextButton>()
                                    .CopyAddressTo(&md_tonal_button_)
+                                   .SetStyle(MdTextButton::Style::kTonal)
                                    .SetText(u"Tonal"),
+                               Builder<MdTextButton>()
+                                   .CopyAddressTo(&md_text_button_)
+                                   .SetStyle(MdTextButton::Style::kText)
+                                   .SetText(u"Material Text"),
                                Builder<ImageButton>()
                                    .CopyAddressTo(&image_button_)
                                    .SetAccessibleName(l10n_util::GetStringUTF16(
@@ -245,6 +250,11 @@ void ButtonExample::CreateExampleView(View* container) {
                           base::Unretained(this)),
       u"Fab Prototype"));
 
+  view->AddChildView(ImageButton::CreateIconButton(
+      base::BindRepeating(&ButtonExample::ImageButtonPressed,
+                          base::Unretained(this)),
+      views::kLaunchIcon, u"Icon button"));
+
   image_button_->SetImage(ImageButton::STATE_NORMAL,
                           rb.GetImageNamed(IDR_CLOSE).ToImageSkia());
   image_button_->SetImage(ImageButton::STATE_HOVERED,
@@ -252,7 +262,6 @@ void ButtonExample::CreateExampleView(View* container) {
   image_button_->SetImage(ImageButton::STATE_PRESSED,
                           rb.GetImageNamed(IDR_CLOSE_P).ToImageSkia());
 
-  md_tonal_button_->SetStyle(MdTextButton::Style::kTonal);
   container->AddChildView(std::move(view));
 }
 

@@ -120,7 +120,7 @@ bool IndexCodec::Decode(Index_Node* items, const base::FilePath& directory,
 }
 
 bool IndexCodec::Decode(Index_Node* items, Index_Node* backup,
-                        const base::Value& value) {
+                        Index_Node* persistent, const base::Value& value) {
   if (!value.is_list()) {
     LOG(ERROR) << "Session Index Codec: No list";
     return false;
@@ -154,8 +154,11 @@ bool IndexCodec::Decode(Index_Node* items, Index_Node* backup,
             }
           }
         } else if (*guid == Index_Node::backup_node_guid()) {
-          // We just populate the existing node. There are no children
+          // Populate provided node. There are no children.
           SetNodeFields(backup, nullptr, entry);
+        } else if (*guid == Index_Node::persistent_node_guid()) {
+          // Populate provided node. There are no children.
+          SetNodeFields(persistent, nullptr, entry);
         } else {
           LOG(ERROR) << "Session Index Codec: Illegal top level guid";
         }
@@ -242,12 +245,16 @@ void IndexCodec::SetNodeFields(Index_Node* node, Index_Node* parent,
                                const base::Value& value) {
   const std::string* filename = value.FindStringPath("filename");
   const std::string* container_guid = value.FindStringPath("containerguid");
-  const double create_time = value.FindDoubleKey("createtime").value_or(0);
-  const double modify_time = value.FindDoubleKey("modifytime").value_or(0);
-  const int windows_count = value.FindIntKey("windowscount").value_or(0);
-  const int tabs_count = value.FindIntKey("tabscount").value_or(0);
+  const double create_time = value.GetDict().FindDouble("createtime").value_or(0);
+  const double modify_time = value.GetDict().FindDouble("modifytime").value_or(0);
+  const int windows_count = value.GetDict().FindInt("windowscount").value_or(0);
+  const int tabs_count = value.GetDict().FindInt("tabscount").value_or(0);
+  const int quarantine_count = value.GetDict().FindInt("quarantinecount").value_or(0);
   const base::Value::List* workspaces = value.GetIfDict()
     ? value.GetIfDict()->FindList("workspaces")
+    : nullptr;
+  const base::Value::Dict* group_names = value.GetIfDict()
+    ? value.GetIfDict()->FindDict("groupnames")
     : nullptr;
   if (filename) {
     node->SetFilename(*filename);
@@ -261,9 +268,14 @@ void IndexCodec::SetNodeFields(Index_Node* node, Index_Node* parent,
   node->SetModifyTime(modify_time);
   node->SetWindowsCount(windows_count);
   node->SetTabsCount(tabs_count);
+  node->SetQuarantineCount(quarantine_count);
   if (workspaces) {
     base::Value::List list(workspaces->Clone());
     node->SetWorkspaces(std::move(list));
+  }
+  if (group_names) {
+    base::Value::Dict dict(group_names->Clone());
+    node->SetGroupNames(std::move(dict));
   }
 }
 
@@ -273,6 +285,14 @@ base::Value IndexCodec::Encode(Index_Model* model) {
   if (model->backup_node()) {
     list.GetList().Append(EncodeNode(model->backup_node()));
   }
+  // The persistent node contains tabs that are pinned or in a WS. On Mac these
+  // will be lost when closing the last window and opening a new. They will
+  // survive if one quits the app after closing the window. So, we do not write
+  // this node to disk as it will, if it exists, be automatically loaded on next
+  // startup causing duplications.
+  //if (model->persistent_node()) {
+  //  list.GetList().Append(EncodeNode(model->persistent_node()));
+  //}
   return list;
 }
 
@@ -289,8 +309,11 @@ base::Value IndexCodec::EncodeNode(Index_Node* node) {
       dict.SetKey("modifytime", base::Value(node->modify_time()));
       dict.SetKey("windowscount", base::Value(node->windows_count()));
       dict.SetKey("tabscount", base::Value(node->tabs_count()));
+      dict.SetKey("quarantinecount", base::Value(node->quarantine_count()));
       base::Value::List workspaces(node->workspaces().Clone());
       dict.SetKey("workspaces", base::Value(std::move(workspaces)));
+      base::Value::Dict group_names(node->group_names().Clone());
+      dict.SetKey("groupnames", base::Value(std::move(group_names)));
     }
     base::Value list(base::Value::Type::LIST);
     for (const auto& child : node->children()) {
@@ -310,8 +333,11 @@ base::Value IndexCodec::EncodeNode(Index_Node* node) {
   dict.SetKey("modifytime", base::Value(node->modify_time()));
   dict.SetKey("windowscount", base::Value(node->windows_count()));
   dict.SetKey("tabscount", base::Value(node->tabs_count()));
+  dict.SetKey("quarantinecount", base::Value(node->quarantine_count()));
   base::Value::List workspaces(node->workspaces().Clone());
   dict.SetKey("workspaces", base::Value(std::move(workspaces)));
+  base::Value::Dict group_names(node->group_names().Clone());
+  dict.SetKey("groupnames", base::Value(std::move(group_names)));
 
   return dict;
 }

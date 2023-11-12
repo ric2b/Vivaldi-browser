@@ -5,7 +5,6 @@
 #ifndef UI_VIEWS_STYLE_TYPOGRAPHY_H_
 #define UI_VIEWS_STYLE_TYPOGRAPHY_H_
 
-#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/color/color_id.h"
 #include "ui/views/views_export.h"
@@ -14,11 +13,7 @@ namespace gfx {
 class FontList;
 }
 
-namespace views {
-
-class View;
-
-namespace style {
+namespace views::style {
 
 // Where a piece of text appears in the UI. This influences size and weight, but
 // typically not style or color.
@@ -29,9 +24,12 @@ enum TextContext {
   // "CONTEXT_" represent the actual TextContexts: the rest are markers.
   VIEWS_TEXT_CONTEXT_START = 0,
 
+  // Text that appears on a views::Badge. Always 9pt.
+  CONTEXT_BADGE = VIEWS_TEXT_CONTEXT_START,
+
   // Text that appears on a button control. Usually 12pt. This includes controls
   // with button-like behavior, such as Checkbox.
-  CONTEXT_BUTTON = VIEWS_TEXT_CONTEXT_START,
+  CONTEXT_BUTTON,
 
   // Text that appears on an MD-styled dialog button control. Usually 12pt.
   CONTEXT_BUTTON_MD,
@@ -50,6 +48,9 @@ enum TextContext {
 
   // An editable text field. Usually matches CONTROL_LABEL.
   CONTEXT_TEXTFIELD,
+
+  // Placeholder text in a text field.
+  CONTEXT_TEXTFIELD_PLACEHOLDER,
 
   // Text in a menu.
   CONTEXT_MENU,
@@ -127,11 +128,8 @@ VIEWS_EXPORT ui::ResourceBundle::FontDetails GetFontDetails(int context,
 VIEWS_EXPORT const gfx::FontList& GetFont(int context, int style);
 VIEWS_EXPORT int GetLineHeight(int context, int style);
 
-// `GetColor` is deprecated - use `GetColorId` instead. (crbug.com/1412688)
-VIEWS_EXPORT SkColor GetColor(const views::View& view, int context, int style);
 VIEWS_EXPORT ui::ColorId GetColorId(int context, int style);
 
-}  // namespace style
-}  // namespace views
+}  // namespace views::style
 
 #endif  // UI_VIEWS_STYLE_TYPOGRAPHY_H_

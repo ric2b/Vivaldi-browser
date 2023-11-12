@@ -27,12 +27,17 @@
 namespace vivaldi {
 
 struct SessionOptions {
+  SessionOptions();
+  ~SessionOptions();
+
   // Always open a new window and start loading tabs from there
   bool newWindow_ = false;
   // Load all tabs into the same window
   bool oneWindow_ = false;
   // Include tabs that are part of a workspace
   bool withWorkspace_ = true;
+  // Only open tabs (given by id) in this list. All if list is empty
+  std::vector<int32_t> tabs_to_include_;
 };
 
 // We cannot inherit from SessionService, and changing that class to be
@@ -62,6 +67,10 @@ class VivaldiSessionService {
             const SessionOptions& opts);
   std::vector<std::unique_ptr<sessions::SessionCommand>> LoadSettingInfo(
       const base::FilePath& path);
+
+  int SetCommands(
+    std::vector<std::unique_ptr<sessions::SessionWindow>>& windows,
+    std::vector<std::unique_ptr<sessions::SessionTab>>& tabs);
 
  private:
   void ResetFile(const base::FilePath& file_name);
@@ -95,6 +104,11 @@ class VivaldiSessionService {
                                    bool is_selected_tab);
   void NotifySessionServiceOfRestoredTabs(Browser* browser, int initial_count);
   void ShowBrowser(Browser* browser, int selected_tab_index);
+
+  void SetCommandsForWindow(
+    const sessions::SessionWindow& window,
+    std::vector<std::unique_ptr<sessions::SessionTab>>& tabs);
+  void SetCommandsForTab(const sessions::SessionTab& tab);
 
   // Reads a single command, returning it. A return value of NULL indicates
   // either there are no commands, or there was an error. Use errored_ to
@@ -132,9 +146,9 @@ class VivaldiSessionService {
   size_t available_count_;
 
   // When loading a session, restore the first windows' tabs to this browser
-  Browser* browser_;
+  raw_ptr<Browser> browser_ = nullptr;
 
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 
   // Session open options
   SessionOptions opts_;

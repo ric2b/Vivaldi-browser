@@ -207,7 +207,7 @@ bool NotesCodec::DecodeHelper(NoteNode* notes_node,
   if (!version || *version > kCurrentVersion)
     return false;  // Unknown version.
 
-  const base::Value* checksum_value = value.FindKey(kChecksumKey);
+  const base::Value* checksum_value = value.GetDict().Find(kChecksumKey);
   if (checksum_value) {
     const std::string* checksum = checksum_value->GetIfString();
     if (checksum)

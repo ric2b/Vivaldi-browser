@@ -8,9 +8,6 @@
 <translation id="1175958423215084756">Εντοπίστηκε σύνδεσμος. <ph name="HOSTNAME" /></translation>
 <translation id="1197694886744716213">Η σελίδα <ph name="PAGE_NUMBER" /> διαγράφηκε</translation>
 <translation id="1258009455399840361">Περιστροφή 90 μοιρών δεξιόστροφα</translation>
-<translation id="1300209025925956156">Σάρωση του εγγράφου σας</translation>
-<translation id="1309250603447638106">Λήψη ενημερώσεων για τη σάρωση εγγράφων</translation>
-<translation id="137991641490787891"><ph name="ASPECT_RATIO_WIDTH" />. Αναζήτηση + αριστερό βέλος για πρόσβαση.</translation>
 <translation id="1417314334557041815">Επεξεργασία σελίδας <ph name="INDEX" /></translation>
 <translation id="1467231725790366244">Η κάμερα <ph name="CAMERA" /> είναι αποσυνδεδεμένη.</translation>
 <translation id="1473110567575736769">Χρονόμετρο 3 δευτερολέπτων</translation>
@@ -24,14 +21,12 @@
 <translation id="1664224225747386870">Καμία εγγραφή</translation>
 <translation id="1838104802459806957">Κλίση προς τα πάνω</translation>
 <translation id="1843105061469674856">Σάρωση επιπλέον σελίδας</translation>
-<translation id="1851169887664797861">Υπάρχουν διαθέσιμα επιπλέον στοιχεία ελέγχου κάμερας</translation>
 <translation id="1851616744363735765">ΣΕ ΠΑΥΣΗ</translation>
 <translation id="1899697626337024495">Ανάλυση φωτογραφίας</translation>
 <translation id="1925845977604399247">Μετάβαση στο Gallery</translation>
 <translation id="199526504800285197">Η εγγραφή διακόπηκε</translation>
 <translation id="1995951722691075581">Η εγγραφή σας διακόπηκε λόγω περιορισμένου αποθηκευτικού χώρου συσκευής. Για να εγγράψετε περισσότερα βίντεο, θα πρέπει να ελευθερώσετε χώρο στη συσκευή σας.</translation>
 <translation id="2036868001356139588">Διάρκεια χρονομέτρου</translation>
-<translation id="2050339315714019657">Κάθετα</translation>
 <translation id="2064538373111010176"><ph name="CAMERA" /> ενεργή</translation>
 <translation id="2134029355740465625">Ρυθμίσεις βίντεο</translation>
 <translation id="2144806332417375165">Προσαρμοσμένες παράμετροι βίντεο</translation>
@@ -49,7 +44,6 @@
 <translation id="2761536921376153655">Τύπος σάρωσης</translation>
 <translation id="28682968802727151">Προεπισκόπηση κατοπτρισμού</translation>
 <translation id="2879583609344924966">Η κάμερα <ph name="CAMERA" /> είναι συνδεδεμένη.</translation>
-<translation id="2904654629665923749">Διατίθεται λειτουργία σάρωσης εγγράφων</translation>
 <translation id="3067436040345934772">Μετακίνηση δεξιά</translation>
 <translation id="3081586908890909590">Μετάβαση στη λειτουργία εγγραφής βίντεο</translation>
 <translation id="313467653172006084">30 καρέ ανά δευτερόλεπτο</translation>
@@ -74,7 +68,6 @@
 <translation id="4269820728363426813">Αντιγρ. διεύθυνσης συνδέσμου</translation>
 <translation id="4281620174117014503">Μεσαία ανάλυση</translation>
 <translation id="428234092390943511">Μικρογραφία σελίδας</translation>
-<translation id="4340659173795395806">Μπορείτε πλέον να δημιουργείτε PDF πολλών σελίδων.</translation>
 <translation id="4383571725254449280">Εκτύπωση αρχείου καταγραφής απόδοσης</translation>
 <translation id="4445542136948522167">Διακοπή λήψης φωτογραφίας</translation>
 <translation id="4570032796877367747">Μπροστινή κάμερα</translation>
@@ -87,6 +80,7 @@
 <translation id="4864143361253542638">Λίστα σαρωμένων σελίδων</translation>
 <translation id="4890010094662541459">3 x 3</translation>
 <translation id="491895758387112773">Εγγραφή βίντεο πολλαπλής ροής</translation>
+<translation id="495170559598752135">Ενέργειες</translation>
 <translation id="4984613436295737187">Quad HD (1440p)</translation>
 <translation id="5034763830503483128">Λόγος διαστάσεων φωτογραφίας</translation>
 <translation id="5057360777601936059">Η κάμερά σας δεν είναι διαθέσιμη προς το παρόν.
@@ -97,7 +91,6 @@
 <translation id="5317780077021120954">Αποθήκευση</translation>
 <translation id="5320594929574852403">Μετακινείται με κατεύθυνση προς τα αριστερά</translation>
 <translation id="5374917190292010970">4K (2160p)</translation>
-<translation id="5444515100983837161">Τοποθετήστε όλες τις άκρες του εγγράφου μέσα στο πλαίσιο. Η σάρωση λειτουργεί καλύτερα εάν το έγγραφο και το φόντο έχουν διαφορετικά χρώματα.</translation>
 <translation id="5662366948659129155">Σάρωση σελίδας <ph name="COUNT" /></translation>
 <translation id="5671277269877808209">Τετράγωνο</translation>
 <translation id="5746169159649715125">Αποθήκευση ως PDF</translation>
@@ -127,6 +120,7 @@
 <translation id="6888362557094394345">Μετακινείται με κατεύθυνση προς τα κάτω</translation>
 <translation id="695140971690006676">Επαναφορά όλων</translation>
 <translation id="6965382102122355670">OK</translation>
+<translation id="6965830616442491568">Πορτρέτο</translation>
 <translation id="698156982839284926">3 δευτερόλεπτα</translation>
 <translation id="7134221860976209830">Χρονόμετρο 10 δευτερολέπτων</translation>
 <translation id="7191890674911603392">Τύπος εγγραφής</translation>
@@ -142,6 +136,7 @@
 <translation id="7658239707568436148">Ακύρωση</translation>
 <translation id="7670511624014457267">60 καρέ ανά δευτερόλεπτο</translation>
 <translation id="7671804233658741790">Κάτω δεξιά γωνία του εγγράφου</translation>
+<translation id="7684446460490665873">Εγγραφή βίντεο με time lapse</translation>
 <translation id="7692090236657809299">Ενεργοποίηση μετακίνησης, κλίσης, εστίασης</translation>
 <translation id="7726641833034062494">Εγγραφή κανονικού βίντεο</translation>
 <translation id="7748344063862150053">Επάνω δεξιά γωνία του εγγράφου</translation>
@@ -157,7 +152,6 @@
 <translation id="8428213095426709021">Ρυθμίσεις</translation>
 <translation id="8629662593426079630">360p</translation>
 <translation id="8711011893539266636">Εναλλαγή σίγασης μικροφώνου. Η σίγαση είναι ενεργοποιημένη</translation>
-<translation id="8712637175834984815">Κατάλαβα!</translation>
 <translation id="8730621377337864115">Ολοκληρώθηκε</translation>
 <translation id="8732462232047530626">Προεπισκόπηση μεταδεδομένων</translation>
 <translation id="8815966864175525708">Μετάβαση στη λειτουργία λήψης φωτογραφίας πορτραίτου</translation>
@@ -168,6 +162,7 @@
 <translation id="9045010116236796332">Τοποθετήστε όλες τις άκρες του εγγράφου μέσα στο πλαίσιο.</translation>
 <translation id="9045155556724273246">10 δευτερόλεπτα</translation>
 <translation id="906331135292332864">Επεξεργασία εικόνας…</translation>
+<translation id="9161584225258678723">Time Lapse</translation>
 <translation id="922762992951083513">Κατοπτρισμός ενεργός</translation>
 <translation id="945522503751344254">Αποστολή σχολίων</translation>
 </translationbundle>

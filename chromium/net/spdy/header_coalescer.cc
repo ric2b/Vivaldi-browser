@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/ranges/algorithm.h"
-#include "base/strings/abseil_string_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -35,7 +34,7 @@ void NetLogInvalidHeader(const NetLogWithSource& net_log,
                                   capture_mode, std::string(header_name),
                                   std::string(header_value))));
                      dict.Set("error", error_message);
-                     return base::Value(std::move(dict));
+                     return dict;
                    });
 }
 
@@ -52,9 +51,9 @@ HeaderCoalescer::HeaderCoalescer(uint32_t max_header_list_size,
 void HeaderCoalescer::OnHeader(absl::string_view key, absl::string_view value) {
   if (error_seen_)
     return;
-  if (!AddHeader(base::StringViewToStringPiece(key),
-                 base::StringViewToStringPiece(value)))
+  if (!AddHeader(key, value)) {
     error_seen_ = true;
+  }
 }
 
 spdy::Http2HeaderBlock HeaderCoalescer::release_headers() {
@@ -122,8 +121,7 @@ bool HeaderCoalescer::AddHeader(base::StringPiece key,
     }
   }
 
-  headers_.AppendValueOrAddHeader(base::StringPieceToStringView(key),
-                                  base::StringPieceToStringView(value));
+  headers_.AppendValueOrAddHeader(key, value);
   return true;
 }
 

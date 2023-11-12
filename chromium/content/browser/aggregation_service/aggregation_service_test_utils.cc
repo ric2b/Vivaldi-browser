@@ -18,22 +18,22 @@
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/strings/strcat.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequence_bound.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/aggregation_service/aggregation_service_storage.h"
 #include "content/browser/aggregation_service/aggregation_service_storage_sql.h"
 #include "content/browser/aggregation_service/public_key.h"
 #include "content/browser/aggregation_service/public_key_parsing_utils.h"
-#include "content/common/aggregatable_report.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/private_aggregation/aggregatable_report.mojom.h"
 #include "third_party/boringssl/src/include/openssl/hpke.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -98,6 +98,10 @@ testing::AssertionResult AggregatableReportsEqual(
            << ", actual: " << actual.shared_info();
   }
 
+  if (expected.additional_fields() != actual.additional_fields()) {
+    return testing::AssertionFailure() << "Expected additional fields to match";
+  }
+
   return testing::AssertionSuccess();
 }
 
@@ -128,6 +132,10 @@ testing::AssertionResult ReportRequestsEqual(
     return testing::AssertionFailure()
            << "Expected reporting_path " << expected.reporting_path()
            << ", actual: " << actual.reporting_path();
+  }
+
+  if (expected.additional_fields() != actual.additional_fields()) {
+    return testing::AssertionFailure() << "Expected additional fields to match";
   }
 
   return SharedInfoEqual(expected.shared_info(), actual.shared_info());
@@ -220,7 +228,7 @@ testing::AssertionResult SharedInfoEqual(
 }
 
 AggregatableReportRequest CreateExampleRequest(
-    mojom::AggregationServiceMode aggregation_mode,
+    blink::mojom::AggregationServiceMode aggregation_mode,
     int failed_send_attempts,
     ::aggregation_service::mojom::AggregationCoordinator
         aggregation_coordinator) {
@@ -231,28 +239,29 @@ AggregatableReportRequest CreateExampleRequest(
 
 AggregatableReportRequest CreateExampleRequestWithReportTime(
     base::Time report_time,
-    mojom::AggregationServiceMode aggregation_mode,
+    blink::mojom::AggregationServiceMode aggregation_mode,
     int failed_send_attempts,
     ::aggregation_service::mojom::AggregationCoordinator
         aggregation_coordinator) {
   return AggregatableReportRequest::Create(
              AggregationServicePayloadContents(
                  AggregationServicePayloadContents::Operation::kHistogram,
-                 {mojom::AggregatableReportHistogramContribution(
+                 {blink::mojom::AggregatableReportHistogramContribution(
                      /*bucket=*/123,
                      /*value=*/456)},
                  aggregation_mode, aggregation_coordinator),
              AggregatableReportSharedInfo(
                  /*scheduled_report_time=*/report_time,
                  /*report_id=*/
-                 base::GUID::GenerateRandomV4(),
+                 base::Uuid::GenerateRandomV4(),
                  url::Origin::Create(GURL("https://reporting.example")),
                  AggregatableReportSharedInfo::DebugMode::kDisabled,
                  /*additional_fields=*/base::Value::Dict(),
                  /*api_version=*/"",
                  /*api_identifier=*/"example-api"),
              /*reporting_path=*/"example-path",
-             /*debug_key=*/absl::nullopt, failed_send_attempts)
+             /*debug_key=*/absl::nullopt, /*additional_fields=*/{},
+             failed_send_attempts)
       .value();
 }
 
@@ -261,7 +270,8 @@ AggregatableReportRequest CloneReportRequest(
   return AggregatableReportRequest::CreateForTesting(
              request.processing_urls(), request.payload_contents(),
              request.shared_info().Clone(), request.reporting_path(),
-             request.debug_key(), request.failed_send_attempts())
+             request.debug_key(), request.additional_fields(),
+             request.failed_send_attempts())
       .value();
 }
 
@@ -273,7 +283,8 @@ AggregatableReport CloneAggregatableReport(const AggregatableReport& report) {
   }
 
   return AggregatableReport(std::move(payloads), report.shared_info(),
-                            report.debug_key());
+                            report.debug_key(), report.additional_fields(),
+                            report.aggregation_coordinator());
 }
 
 TestHpkeKey GenerateKey(std::string key_id) {
@@ -459,12 +470,13 @@ std::ostream& operator<<(
   }
 }
 
-std::ostream& operator<<(std::ostream& out,
-                         mojom::AggregationServiceMode aggregation_mode) {
+std::ostream& operator<<(
+    std::ostream& out,
+    blink::mojom::AggregationServiceMode aggregation_mode) {
   switch (aggregation_mode) {
-    case mojom::AggregationServiceMode::kTeeBased:
+    case blink::mojom::AggregationServiceMode::kTeeBased:
       return out << "kTeeBased";
-    case mojom::AggregationServiceMode::kExperimentalPoplar:
+    case blink::mojom::AggregationServiceMode::kExperimentalPoplar:
       return out << "kExperimentalPoplar";
   }
 }

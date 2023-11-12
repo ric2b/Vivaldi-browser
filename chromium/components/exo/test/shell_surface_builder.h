@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "cc/base/region.h"
 #include "components/exo/client_controlled_shell_surface.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -45,6 +46,7 @@ class ShellSurfaceBuilder {
   // builder as they need the widget created in the commit process.
   ShellSurfaceBuilder& SetNoCommit();
   ShellSurfaceBuilder& SetCanMinimize(bool can_minimize);
+  ShellSurfaceBuilder& SetCanMaximize(bool can_maximize);
   ShellSurfaceBuilder& SetMaximumSize(const gfx::Size& size);
   ShellSurfaceBuilder& SetMinimumSize(const gfx::Size& size);
   ShellSurfaceBuilder& SetGeometry(const gfx::Rect& geometry);
@@ -65,6 +67,7 @@ class ShellSurfaceBuilder {
   ShellSurfaceBuilder& EnableDefaultScaleCancellation();
   ShellSurfaceBuilder& SetDelegate(
       std::unique_ptr<ClientControlledShellSurface::Delegate> delegate);
+  ShellSurfaceBuilder& DisableSupportsFloatedState();
 
   // Must be called only once for either of the below and the object cannot
   // be used to create multiple windows.
@@ -92,18 +95,19 @@ class ShellSurfaceBuilder {
   absl::optional<gfx::Rect> geometry_;
   absl::optional<cc::Region> input_region_;
   absl::optional<SurfaceFrameType> type_;
-  SecurityDelegate* security_delegate_ = nullptr;
+  raw_ptr<SecurityDelegate, ExperimentalAsh> security_delegate_ = nullptr;
   std::string application_id_;
   bool use_system_modal_container_ = false;
   bool system_modal_ = false;
   bool commit_on_build_ = true;
   bool can_minimize_ = true;
+  bool can_maximize_ = true;
   bool disable_movement_ = false;
   bool centered_ = false;
   bool built_ = false;
 
   // ShellSurface-specific parameters.
-  ShellSurface* parent_shell_surface_ = nullptr;
+  raw_ptr<ShellSurface, ExperimentalAsh> parent_shell_surface_ = nullptr;
   bool popup_ = false;
   bool menu_ = false;
 
@@ -111,6 +115,7 @@ class ShellSurfaceBuilder {
   absl::optional<chromeos::WindowStateType> window_state_;
   bool default_scale_cancellation_ = false;
   std::unique_ptr<ClientControlledShellSurface::Delegate> delegate_;
+  bool supports_floated_state_ = true;
 };
 
 }  // namespace test

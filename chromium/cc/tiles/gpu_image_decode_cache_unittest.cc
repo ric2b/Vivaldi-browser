@@ -16,6 +16,8 @@
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/simple_test_tick_clock.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "cc/base/switches.h"
 #include "cc/paint/draw_image.h"
 #include "cc/paint/image_transfer_cache_entry.h"
@@ -33,11 +35,21 @@
 #include "gpu/config/gpu_finch_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkColorFilter.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkImageGenerator.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkM44.h"
+#include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
+#include "third_party/skia/include/core/SkSize.h"
+#include "third_party/skia/include/core/SkYUVAPixmaps.h"
 #include "third_party/skia/include/effects/SkHighContrastFilter.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
 
 using testing::_;
 using testing::StrictMock;
@@ -655,8 +667,9 @@ class GpuImageDecodeCacheTest
             draw_image, static_cast<YUVIndex>(i));
       }
       ASSERT_TRUE(original_uploaded_plane);
-      auto plane_with_mips = original_uploaded_plane->makeTextureImage(
-          context_provider()->GrContext(), GrMipMapped::kYes);
+      auto plane_with_mips = SkImages::TextureFromImage(
+          context_provider()->GrContext(), original_uploaded_plane,
+          GrMipMapped::kYes);
       ASSERT_TRUE(plane_with_mips);
       EXPECT_EQ(should_have_mips, original_uploaded_plane == plane_with_mips);
     }
@@ -1446,7 +1459,7 @@ TEST_P(GpuImageDecodeCacheTest, GetHdrDecodedImageForDrawToHdr) {
   PaintImage image = PaintImageBuilder::WithDefault()
                          .set_id(PaintImage::kInvalidId)
                          .set_is_high_bit_depth(true)
-                         .set_image(SkImage::MakeFromBitmap(bitmap),
+                         .set_image(SkImages::RasterFromBitmap(bitmap),
                                     PaintImage::GetNextContentId())
                          .TakePaintImage();
 
@@ -1500,7 +1513,7 @@ TEST_P(GpuImageDecodeCacheTest, GetHdrDecodedImageForDrawToSdr) {
   PaintImage image = PaintImageBuilder::WithDefault()
                          .set_id(PaintImage::kInvalidId)
                          .set_is_high_bit_depth(true)
-                         .set_image(SkImage::MakeFromBitmap(bitmap),
+                         .set_image(SkImages::RasterFromBitmap(bitmap),
                                     PaintImage::GetNextContentId())
                          .TakePaintImage();
 
@@ -2943,7 +2956,7 @@ TEST_P(GpuImageDecodeCacheTest,
        NonLazyImageUploadTaskCancelledMultipleClients) {
   if (do_yuv_decode_) {
     // YUV bitmap images do not happen, so this test will always skip for YUV.
-    GTEST_SKIP();
+    return;
   }
 
   auto cache = CreateCache();
@@ -3173,17 +3186,18 @@ TEST_P(GpuImageDecodeCacheTest, BasicMips) {
         EnsureImageBacked(std::move(serialized_decoded_draw_image));
     EXPECT_TRUE(decoded_draw_image.image());
     EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
+    EXPECT_EQ(should_have_mips, decoded_draw_image.image()->hasMipmaps());
 
     if (do_yuv_decode_) {
-      // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus,
+      // Skia will flatten a YUV SkImage upon calling TextureFromImage. Thus,
       // we must separately request mips for each plane and compare to the
       // original uploaded planes.
       CompareAllPlanesToMippedVersions(
           cache.get(), draw_image, transfer_cache_entry_id, should_have_mips);
     } else {
-      sk_sp<SkImage> image_with_mips =
-          decoded_draw_image.image()->makeTextureImage(
-              context_provider()->GrContext(), GrMipMapped::kYes);
+      sk_sp<SkImage> image_with_mips = SkImages::TextureFromImage(
+          context_provider()->GrContext(), decoded_draw_image.image(),
+          GrMipMapped::kYes);
       EXPECT_EQ(should_have_mips,
                 image_with_mips == decoded_draw_image.image());
     }
@@ -3245,16 +3259,16 @@ TEST_P(GpuImageDecodeCacheTest, MipsAddedSubsequentDraw) {
 
     // No mips should be generated.
     if (do_yuv_decode_) {
-      // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus,
+      // Skia will flatten a YUV SkImage upon calling TextureFromImage. Thus,
       // we must separately request mips for each plane and compare to the
       // original uploaded planes.
       CompareAllPlanesToMippedVersions(cache.get(), draw_image,
                                        transfer_cache_entry_id,
                                        false /* should_have_mips */);
     } else {
-      sk_sp<SkImage> image_with_mips =
-          decoded_draw_image.image()->makeTextureImage(
-              context_provider()->GrContext(), GrMipMapped::kYes);
+      sk_sp<SkImage> image_with_mips = SkImages::TextureFromImage(
+          context_provider()->GrContext(), decoded_draw_image.image(),
+          GrMipMapped::kYes);
       ASSERT_TRUE(image_with_mips);
       EXPECT_NE(image_with_mips, decoded_draw_image.image());
     }
@@ -3293,16 +3307,16 @@ TEST_P(GpuImageDecodeCacheTest, MipsAddedSubsequentDraw) {
 
     // Mips should be generated
     if (do_yuv_decode_) {
-      // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus,
+      // Skia will flatten a YUV SkImage upon calling TextureFromImage. Thus,
       // we must separately request mips for each plane and compare to the
       // original uploaded planes.
       CompareAllPlanesToMippedVersions(cache.get(), draw_image,
                                        transfer_cache_entry_id,
                                        true /* should_have_mips */);
     } else {
-      sk_sp<SkImage> image_with_mips =
-          decoded_draw_image.image()->makeTextureImage(
-              context_provider()->GrContext(), GrMipMapped::kYes);
+      sk_sp<SkImage> image_with_mips = SkImages::TextureFromImage(
+          context_provider()->GrContext(), decoded_draw_image.image(),
+          GrMipMapped::kYes);
       EXPECT_EQ(image_with_mips, decoded_draw_image.image());
     }
     cache->DrawWithImageFinished(draw_image, decoded_draw_image);
@@ -3348,16 +3362,16 @@ TEST_P(GpuImageDecodeCacheTest, MipsAddedWhileOriginalInUse) {
 
     // No mips should be generated.
     if (do_yuv_decode_) {
-      // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus,
+      // Skia will flatten a YUV SkImage upon calling TextureFromImage. Thus,
       // we must separately request mips for each plane and compare to the
       // original uploaded planes.
       CompareAllPlanesToMippedVersions(cache.get(), draw_image,
                                        transfer_cache_entry_id,
                                        false /* should_have_mips */);
     } else {
-      sk_sp<SkImage> image_with_mips =
-          decoded_draw_image.image()->makeTextureImage(
-              context_provider()->GrContext(), GrMipMapped::kYes);
+      sk_sp<SkImage> image_with_mips = SkImages::TextureFromImage(
+          context_provider()->GrContext(), decoded_draw_image.image(),
+          GrMipMapped::kYes);
       EXPECT_NE(image_with_mips, decoded_draw_image.image());
     }
     images_to_unlock.push_back({draw_image, decoded_draw_image});
@@ -3389,16 +3403,16 @@ TEST_P(GpuImageDecodeCacheTest, MipsAddedWhileOriginalInUse) {
 
     // Mips should be generated.
     if (do_yuv_decode_) {
-      // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus,
+      // Skia will flatten a YUV SkImage upon calling TextureFromImage. Thus,
       // we must separately request mips for each plane and compare to the
       // original uploaded planes.
       CompareAllPlanesToMippedVersions(cache.get(), draw_image,
                                        transfer_cache_entry_id,
                                        true /* should_have_mips */);
     } else {
-      sk_sp<SkImage> image_with_mips =
-          decoded_draw_image.image()->makeTextureImage(
-              context_provider()->GrContext(), GrMipMapped::kYes);
+      sk_sp<SkImage> image_with_mips = SkImages::TextureFromImage(
+          context_provider()->GrContext(), decoded_draw_image.image(),
+          GrMipMapped::kYes);
       EXPECT_EQ(image_with_mips, decoded_draw_image.image());
     }
     images_to_unlock.push_back({draw_image, decoded_draw_image});
@@ -3483,7 +3497,7 @@ TEST_P(GpuImageDecodeCacheTest,
     EXPECT_TRUE(decoded_draw_image.image());
     EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
 
-    // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus, we
+    // Skia will flatten a YUV SkImage upon calling TextureFromImage. Thus, we
     // must separately request mips for each plane and compare to the original
     // uploaded planes.
     CompareAllPlanesToMippedVersions(cache, draw_image, transfer_cache_entry_id,
@@ -3587,7 +3601,7 @@ TEST_P(GpuImageDecodeCacheTest, HighBitDepthYUVDecoding) {
                                    cache->SupportsColorSpaceConversion();
 
     if (decodes_to_yuv && !color_converted_to_rgba) {
-      // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus, we
+      // Skia will flatten a YUV SkImage upon calling TextureFromImage. Thus, we
       // must separately request mips for each plane and compare to the original
       // uploaded planes.
       CompareAllPlanesToMippedVersions(cache, draw_image,
@@ -3799,7 +3813,7 @@ TEST_P(GpuImageDecodeCacheTest, ScaledYUVDecodeScaledDrawCorrectlyMipsPlanes) {
         EXPECT_TRUE(decoded_draw_image.image());
         EXPECT_TRUE(decoded_draw_image.image()->isTextureBacked());
 
-        // Skia will flatten a YUV SkImage upon calling makeTextureImage. Thus,
+        // Skia will flatten a YUV SkImage upon calling TextureFromImage. Thus,
         // we must separately request mips for each plane and compare to the
         // original uploaded planes.
         CompareAllPlanesToMippedVersions(cache, draw_image,
@@ -4565,6 +4579,193 @@ TEST_P(GpuImageDecodeCacheWithAcceleratedDecodesFlagsTest,
 INSTANTIATE_TEST_SUITE_P(
     GpuImageDecodeCacheTestsOOPR,
     GpuImageDecodeCacheWithAcceleratedDecodesFlagsTest,
+    testing::Combine(testing::Values(kN32_SkColorType),
+                     testing::Values(true) /* use_transfer_cache */,
+                     testing::Bool() /* do_yuv_decode */,
+                     testing::Bool() /* allow_accelerated_jpeg_decoding */,
+                     testing::Bool() /* allow_accelerated_webp_decoding */,
+                     testing::Bool() /* advertise_accelerated_decoding */,
+                     testing::Values(false) /* enable_clipped_image_scaling */,
+                     testing::Bool() /* no_discardable_memory */));
+
+class GpuImageDecodeCachePurgeOnTimerTest : public GpuImageDecodeCacheTest {
+ public:
+  void SetUp() override {
+    GpuImageDecodeCacheTest::SetUp();
+
+    cache_ = CreateCache();
+    task_runner_ = base::MakeRefCounted<base::TestMockTimeTaskRunner>();
+    cache_->SetTimerTaskRunnerForTesting(task_runner_);
+    client_id_ = cache_->GenerateClientId();
+
+    // We can't convert a lambda with capture to a raw function pointer, so we
+    // use a static variable here.
+    static auto lambda = [this]() {
+      return task_runner_->GetMockTickClock()->NowTicks();
+    };
+
+    time_override_ = std::make_unique<base::subtle::ScopedTimeClockOverrides>(
+        nullptr, []() { return lambda(); }, nullptr);
+  }
+
+  void FastForwardBy(base::TimeDelta t) { task_runner_->FastForwardBy(t); }
+
+  // Creates and adds an image to the cache. For when we don't care about the
+  // particular image, just that it is saved in the cache.
+  void CreateAndUnrefImage(unsigned n = 1) {
+    while (n--) {
+      PaintImage image = CreatePaintImageInternal(GetNormalImageSize());
+      DrawImage draw_image = CreateDrawImageInternal(image);
+      ImageDecodeCache::TaskResult result = cache_->GetTaskForImageAndRef(
+          client_id_, draw_image, ImageDecodeCache::TracingInfo());
+      EXPECT_TRUE(result.need_unref);
+      EXPECT_TRUE(result.task);
+      TestTileTaskRunner::ProcessTask(result.task->dependencies()[0].get());
+      TestTileTaskRunner::ProcessTask(result.task.get());
+      cache_->TouchCacheEntryForTesting(draw_image);
+      cache_->UnrefImage(draw_image);
+    }
+  }
+
+  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
+  std::unique_ptr<GpuImageDecodeCache> cache_;
+  uint32_t client_id_;
+  std::unique_ptr<base::subtle::ScopedTimeClockOverrides> time_override_;
+};
+
+TEST_P(GpuImageDecodeCachePurgeOnTimerTest, SimplePurgeOneImage) {
+  base::test::ScopedFeatureList fl;
+  fl.InitAndEnableFeature(kPurgeOldCacheEntriesOnTimer);
+
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  ASSERT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+
+  CreateAndUnrefImage();
+
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 1u);
+  ASSERT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval / 2);
+
+  // We haven't fast forwarded enough, so the entry is still in the cache.
+  EXPECT_EQ(cache_->GetNumCacheEntriesForTesting(), 1u);
+  EXPECT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval);
+
+  // Cache has been emptied
+  EXPECT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  EXPECT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+}
+
+// Tests that we are able to purge multiple images from cache.
+TEST_P(GpuImageDecodeCachePurgeOnTimerTest, SimplePurgeMultipleImages) {
+  base::test::ScopedFeatureList fl;
+  fl.InitAndEnableFeature(kPurgeOldCacheEntriesOnTimer);
+
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  ASSERT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+
+  CreateAndUnrefImage(3);
+
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 3u);
+  ASSERT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval / 2);
+
+  // We haven't fast forwarded enough, so the entry is still in the cache.
+  EXPECT_EQ(cache_->GetNumCacheEntriesForTesting(), 3u);
+  EXPECT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval);
+
+  // Cache has been emptied
+  EXPECT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  EXPECT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+}
+
+TEST_P(GpuImageDecodeCachePurgeOnTimerTest, MultipleImagesWithDelay) {
+  base::test::ScopedFeatureList fl;
+  fl.InitAndEnableFeature(kPurgeOldCacheEntriesOnTimer);
+
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  ASSERT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+
+  // Task posted, will run at 30s.
+  CreateAndUnrefImage(3);
+
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 3u);
+  ASSERT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  // Time is now 15s.
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval / 2);
+
+  // No task posted, since we already have a task.
+  CreateAndUnrefImage(4);
+
+  // We haven't fast forwarded enough, so the both old and new entries are
+  // still in the cache.
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 7u);
+  ASSERT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  // Time is now 30s, our task runs, and posts a new one.
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval / 2);
+
+  // The original images are purged, the newer ones are not, since they are only
+  // 15s old.
+  EXPECT_EQ(cache_->GetNumCacheEntriesForTesting(), 4u);
+  EXPECT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  // Time is now 45s, second batch of images is now 30s old.
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval / 2);
+
+  // The images are old enough to be purged, but the task to purge them has not
+  // run yet.
+  EXPECT_EQ(cache_->GetNumCacheEntriesForTesting(), 4u);
+  EXPECT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  // Time is now 60s, images are 45s old.
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval / 2);
+
+  // Cache has been emptied
+  EXPECT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  EXPECT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+}
+
+TEST_P(GpuImageDecodeCachePurgeOnTimerTest, MultipleImagesWithTimeGap) {
+  base::test::ScopedFeatureList fl;
+  fl.InitAndEnableFeature(kPurgeOldCacheEntriesOnTimer);
+
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  ASSERT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+
+  // Task posted, will run at 30s.
+  CreateAndUnrefImage(3);
+
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 3u);
+  ASSERT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  // Time is now 30s, cache is emptied.
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval);
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  ASSERT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+
+  CreateAndUnrefImage(4);
+
+  // New task is posted.
+  ASSERT_EQ(cache_->GetNumCacheEntriesForTesting(), 4u);
+  ASSERT_TRUE(cache_->HasPendingPurgeTaskForTesting());
+
+  FastForwardBy(GpuImageDecodeCache::kPurgeInterval);
+
+  // Cache has been emptied
+  EXPECT_EQ(cache_->GetNumCacheEntriesForTesting(), 0u);
+  EXPECT_FALSE(cache_->HasPendingPurgeTaskForTesting());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    GpuImageDecodeCacheTestsOOPR,
+    GpuImageDecodeCachePurgeOnTimerTest,
     testing::Combine(testing::Values(kN32_SkColorType),
                      testing::Values(true) /* use_transfer_cache */,
                      testing::Bool() /* do_yuv_decode */,

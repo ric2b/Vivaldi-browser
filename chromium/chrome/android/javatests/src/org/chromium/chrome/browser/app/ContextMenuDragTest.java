@@ -10,10 +10,10 @@ import static org.mockito.Mockito.mock;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Build.VERSION_CODES;
-import android.support.test.InstrumentationRegistry;
 import android.view.DragEvent;
 import android.view.View;
 
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
 
 import org.junit.After;
@@ -99,7 +99,8 @@ public class ContextMenuDragTest {
 
     @Before
     public void setUp() {
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         mTestUrl = mTestServer.getURL(TEST_PATH);
 
         sActivityTestRule.loadUrl(mTestUrl);

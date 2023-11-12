@@ -80,6 +80,7 @@ class InterestGroupManager;
 class PlatformNotificationContext;
 class ServiceWorkerContext;
 class SharedWorkerService;
+class StoragePartitionConfig;
 class ZoomLevelDelegate;
 class NavigationRequest;
 
@@ -91,6 +92,9 @@ class NavigationRequest;
 // the cookies, localStorage, etc., that normal web renderers have access to.
 class CONTENT_EXPORT StoragePartition {
  public:
+  // Returns the StoragePartitionConfig that represents this StoragePartition.
+  virtual const StoragePartitionConfig& GetConfig() = 0;
+
   virtual base::FilePath GetPath() = 0;
 
   // Returns a raw mojom::NetworkContext pointer. When network service crashes
@@ -228,11 +232,6 @@ class CONTENT_EXPORT StoragePartition {
                                   uint32_t quota_storage_remove_mask,
                                   const GURL& storage_origin,
                                   base::OnceClosure callback) = 0;
-
-  // Retrieves all the buckets for a specific storage key and then clears their
-  // data.
-  virtual void ClearDataForAllBuckets(const blink::StorageKey& storage_key,
-                                      base::OnceClosure callback) = 0;
 
   // Starts a task that will clear the data of each bucket name for the
   // specified storage key.

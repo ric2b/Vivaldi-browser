@@ -56,7 +56,6 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
-#include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -66,10 +65,10 @@
 
 namespace blink {
 
-class AbstractInlineTextBox;
 class AXRelationCache;
 class HTMLAreaElement;
 class LocalFrameView;
+class NGAbstractInlineTextBox;
 class WebLocalFrameClient;
 
 // Describes a decicion on whether to create an AXNodeObject, an AXLayoutObject,
@@ -152,15 +151,30 @@ class MODULES_EXPORT AXObjectCacheImpl
   void ListboxOptionStateChanged(HTMLOptionElement*) override;
   void ListboxSelectedChildrenChanged(HTMLSelectElement*) override;
   void ListboxActiveIndexChanged(HTMLSelectElement*) override;
+  void SetMenuListOptionsBounds(HTMLSelectElement*,
+                                const WTF::Vector<gfx::Rect>&) override;
   void LocationChanged(const LayoutObject*) override;
   void ImageLoaded(const LayoutObject*) override;
 
+  // Removes AXObject backed by passed-in object, if there is one.
+  // It will also notify the parent that its children have changed, so that the
+  // parent will recompute its children and be reserialized.
   void Remove(AccessibleNode*) override;
   void Remove(LayoutObject*) override;
   void Remove(Node*) override;
   void Remove(Document*) override;
-  void Remove(AbstractInlineTextBox*) override;
-  void Remove(AXObject*);  // Calls more specific Remove methods as necessary.
+  void Remove(NGAbstractInlineTextBox*) override;
+  // Remove an AXObject or its subtree, and if |notify_parent| is true,
+  // recompute the parent's children and reserialize the parent.
+  void Remove(AXObject*, bool notify_parent);
+  void Remove(Node*, bool notify_parent);
+  // This will remove all AXObjects in the subtree, whether they or not they are
+  // marked as included for serialization. They can only be called while flat
+  // tree traversal is safe and there are no slot assignments pending.
+  // To remove only included nodes, use RemoveIncludedSubtree(), which can be
+  // called at any time.
+  void RemoveSubtreeWithFlatTraversal(Node* node);
+  void RemoveSubtreeWithFlatTraversal(AXObject*, bool notify_parent);
 
   // For any ancestor that could contain the passed-in AXObject* in their cached
   // children, clear their children and set needs to update children on them.
@@ -187,6 +201,7 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   void HandleAttributeChanged(const QualifiedName& attr_name,
                               Element*) override;
+  void FinishedParsingTable(HTMLTableElement*) override;
   void HandleValidationMessageVisibilityChanged(
       const Node* form_control) override;
   void HandleEventListenerAdded(const Node& node,
@@ -260,7 +275,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   AXObject* GetOrCreate(Node*, AXObject* parent_if_known);
   AXObject* GetOrCreate(Node*);
   AXObject* GetOrCreate(const Node*);
-  AXObject* GetOrCreate(AbstractInlineTextBox*, AXObject* parent_if_known);
+  AXObject* GetOrCreate(NGAbstractInlineTextBox*, AXObject* parent_if_known);
 
   AXID GetAXID(Node*) override;
 
@@ -269,7 +284,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   // Return an AXObject for the AccessibleNode. If the AccessibleNode is
   // attached to an element, will return the AXObject for that element instead.
   AXObject* Get(AccessibleNode*);
-  AXObject* Get(AbstractInlineTextBox*);
+  AXObject* Get(NGAbstractInlineTextBox*);
 
   // Get an AXObject* backed by the passed-in DOM node or the node's layout
   // object, whichever is available.
@@ -277,7 +292,11 @@ class MODULES_EXPORT AXObjectCacheImpl
   // will Invalidate() the AXObject so that it is refreshed with a new object
   // when safe to do so.
   AXObject* Get(const Node*);
-  AXObject* Get(const LayoutObject*);
+  // Get an AXObject* backed by the passed-in LayoutObject, or the
+  // LayoutObject's DOM node, whiever is available.
+  // If |parent_for_repair| is provided, and the object had been detached from
+  // its parent, it will be set as the new parent.
+  AXObject* Get(const LayoutObject*, AXObject* parent_for_repair = nullptr);
 
   // Get an AXObject* in a way that is safe for the current calling context:
   // - No calls into layout during an unclean layout phase
@@ -335,10 +354,9 @@ class MODULES_EXPORT AXObjectCacheImpl
   void HandleValidationMessageVisibilityChangedWithCleanLayout(const Node*);
   void HandleUpdateActiveMenuOptionWithCleanLayout(Node*);
   void HandleEditableTextContentChangedWithCleanLayout(Node*);
+  void UpdateTableRoleWithCleanLayout(Node*);
 
   bool InlineTextBoxAccessibilityEnabled();
-
-  void RemoveAXID(AXObject*);
 
   AXID GenerateAXID() const override;
 
@@ -438,16 +456,13 @@ class MODULES_EXPORT AXObjectCacheImpl
     return ax_tree_source_->GetPluginRoot();
   }
 
-  bool SerializeEntireTree(bool exclude_offscreen,
-                           size_t max_node_count,
+  bool SerializeEntireTree(size_t max_node_count,
                            base::TimeDelta timeout,
                            ui::AXTreeUpdate*) override;
 
   void MarkAllImageAXObjectsDirty() override {
     return Root()->MarkAllImageAXObjectsDirty();
   }
-
-  void ResetSerializer() override { ax_tree_serializer_->Reset(); }
 
   void MarkAXObjectDirtyWithDetails(
       AXObject* obj,
@@ -464,23 +479,19 @@ class MODULES_EXPORT AXObjectCacheImpl
       bool& had_load_complete_messages,
       bool& need_to_send_location_changes) override;
 
-  void ClearDirtyObjectsAndPendingEvents() override {
-    dirty_objects_.clear();
-    pending_events_.clear();
-  }
+  void GetImagesToAnnotate(ui::AXTreeUpdate& updates,
+                           std::vector<ui::AXNodeData*>& nodes) override;
 
   bool HasDirtyObjects() const override { return !dirty_objects_.empty(); }
 
   bool AddPendingEvent(const ui::AXEvent& event,
                        bool insert_at_beginning) override;
 
-  void InvalidateSerializerSubtree(AXObject& obj) {
-    ax_tree_serializer_->InvalidateSubtree(&obj);
+  void MarkSerializerSubtreeDirty(AXObject& obj) {
+    ax_tree_serializer_->MarkSubtreeDirty(&obj);
   }
 
-  bool IsInClientTree(AXObject& obj) {
-    return ax_tree_serializer_->IsInClientTree(&obj);
-  }
+  bool IsDirty(AXObject& obj) { return ax_tree_serializer_->IsDirty(&obj); }
 
   void OnLoadInlineTextBoxes(AXObject& obj) {
     ax_tree_source_->OnLoadInlineTextBoxes(obj);
@@ -499,6 +510,9 @@ class MODULES_EXPORT AXObjectCacheImpl
   static constexpr int kDataTableHeuristicMinRows = 20;
 
   void UpdateAXForAllDocuments() override;
+  void MarkDocumentDirty() override;
+  void ResetSerializer() override;
+  void MarkElementDirty(const Node*) override;
 
  protected:
   void PostPlatformNotification(
@@ -521,8 +535,6 @@ class MODULES_EXPORT AXObjectCacheImpl
   // ChildrenChanged() on the parent of invalidated objects. Automatically
   // de-dupes extra object refreshes and ChildrenChanged() calls.
   void Invalidate(Document&, AXID);
-
-  void Remove(AXID);
 
  private:
   struct AXDirtyObject : public GarbageCollected<AXDirtyObject> {
@@ -559,13 +571,32 @@ class MODULES_EXPORT AXObjectCacheImpl
                           LayoutObject*,
                           AXObject* parent_if_known,
                           AXID use_axid = 0);
-  // Helpers for CreateAndInitIfRelevant() methods..
+  // Helpers for CreateAndInit().
   AXObject* CreateFromRenderer(LayoutObject*);
   AXObject* CreateFromNode(Node*);
 
-  AXObject* CreateFromInlineTextBox(AbstractInlineTextBox*);
+  AXObject* CreateFromInlineTextBox(NGAbstractInlineTextBox*);
 
-  mojo::Remote<mojom::blink::RenderAccessibilityHost>&
+  // Removes AXObject backed by passed-in object, if there is one.
+  // It will also notify the parent that its children have changed, so that the
+  // parent will recompute its children and be reserialized, unless
+  // |notify_parent| is passed in as false.
+  void Remove(AccessibleNode*, bool notify_parent);
+  void Remove(LayoutObject*, bool notify_parent);
+  void Remove(NGAbstractInlineTextBox*, bool notify_parent);
+
+  // Remove the cached subtree of included AXObjects. If |remove_root| is false,
+  // then only descendants will be removed. To remove unincluded AXObjects as
+  // well, call RemoveSubtreeWithFlatTraversal().
+  void RemoveIncludedSubtree(AXObject* object, bool remove_root);
+
+  // Helper to remove the object from the cache.
+  // Most callers should be using Remove(AXObject) instead.
+  void Remove(AXID, bool notify_parent);
+  // Helper to clean up any references to the AXObject's AXID.
+  void RemoveReferencesToAXID(AXID);
+
+  HeapMojoRemote<mojom::blink::RenderAccessibilityHost>&
   GetOrCreateRemoteRenderAccessibilityHost();
   WebLocalFrameClient* GetWebLocalFrameClient() const;
   void ProcessDeferredAccessibilityEventsImpl(Document&);
@@ -634,8 +665,8 @@ class MODULES_EXPORT AXObjectCacheImpl
       ax::mojom::blink::EventFrom event_from,
       ax::mojom::blink::Action event_from_action);
   void MarkAXSubtreeDirty(AXObject*);
-  void MarkElementDirty(const Node*);
   void MarkElementDirtyWithCleanLayout(const Node*);
+  void MarkDocumentDirtyWithCleanLayout();
 
   // Given an object to mark dirty or fire an event on, return an object
   // included in the tree that can be used with the serializer, or null if there
@@ -653,12 +684,12 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   ui::AXMode ax_mode_;
   HeapHashMap<AXID, Member<AXObject>> objects_;
-  // LayoutObject and AbstractInlineTextBox are not on the Oilpan heap so we
-  // do not use HeapHashMap for those mappings.
   HeapHashMap<Member<AccessibleNode>, AXID> accessible_node_mapping_;
   HeapHashMap<Member<const LayoutObject>, AXID> layout_object_mapping_;
   HeapHashMap<Member<const Node>, AXID> node_object_mapping_;
-  HashMap<AbstractInlineTextBox*, AXID> inline_text_box_object_mapping_;
+  // NGAbstractInlineTextBox are not on the Oilpan heap so we do not use
+  // HeapHashMap for those mappings.
+  HashMap<NGAbstractInlineTextBox*, AXID> inline_text_box_object_mapping_;
   int modification_count_;
 
   // Used for a mock AXObject representing the message displayed in the
@@ -731,9 +762,6 @@ class MODULES_EXPORT AXObjectCacheImpl
   // When a <tr> or <td> is inserted or removed, the containing table may have
   // gained or lost rows or columns.
   void ContainingTableRowsOrColsMaybeChanged(Node*);
-
-  // Must be called an entire subtree of accessible objects are no longer valid.
-  void RemoveAXObjectsInLayoutSubtree(AXObject* subtree, int depth);
 
   // Object for HTML validation alerts. Created at most once per object cache.
   AXObject* GetOrCreateValidationMessageObject();
@@ -898,8 +926,7 @@ class MODULES_EXPORT AXObjectCacheImpl
   // instead.
   static bool use_ax_menu_list_;
 
-  GC_PLUGIN_IGNORE("https://crbug.com/1381979")
-  mojo::Remote<mojom::blink::RenderAccessibilityHost>
+  HeapMojoRemote<mojom::blink::RenderAccessibilityHost>
       render_accessibility_host_;
 
   Member<BlinkAXTreeSource> ax_tree_source_;
@@ -909,8 +936,11 @@ class MODULES_EXPORT AXObjectCacheImpl
 
   Deque<ui::AXEvent> pending_events_;
 
+  // Make sure the next serialization sends everything.
+  bool mark_all_dirty_ = false;
+
   FRIEND_TEST_ALL_PREFIXES(AccessibilityTest, PauseUpdatesAfterMaxNumberQueued);
-  FRIEND_TEST_ALL_PREFIXES(AccessibilityTest, RemoveAXID);
+  FRIEND_TEST_ALL_PREFIXES(AccessibilityTest, RemoveReferencesToAXID);
 };
 
 // This is the only subclass of AXObjectCache.

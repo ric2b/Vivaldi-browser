@@ -21,6 +21,16 @@ class StyleRule;
 
 using SpeculationRuleSetId = String;
 
+// Summary of an error got in parse.
+enum class SpeculationRuleSetErrorType {
+  kNoError,
+  // Source is not a valid JSON object and entire parse failed.
+  kSourceIsNotJsonObject,
+  // An invalid or unsupported rule was ignored.
+  kInvalidRulesSkipped,
+  kMaxValue = kInvalidRulesSkipped,
+};
+
 // A set of rules generated from a single <script type=speculationrules>, which
 // provides rules to identify URLs and corresponding conditions for speculation,
 // grouped by the action that is suggested.
@@ -52,12 +62,10 @@ class CORE_EXPORT SpeculationRuleSet final
 
   SpeculationRuleSet(base::PassKey<SpeculationRuleSet>, Source* source);
 
-  // If provided, |out_error| may be populated with an error/warning message.
-  // A warning may be present even if parsing succeeds, to indicate a case that,
-  // though valid, is likely to be an error.
-  static SpeculationRuleSet* Parse(Source* source,
-                                   ExecutionContext* context,
-                                   String* out_error = nullptr);
+  // Returns parsed rule sets (never nullptr). If an error occurred in
+  // parsing entire JSON object, returns an empty rule set. If an error
+  // occurred in parsing a rule set for a key or a rule, skips that one.
+  static SpeculationRuleSet* Parse(Source* source, ExecutionContext* context);
 
   SpeculationRuleSetId InspectorId() const { return inspector_id_; }
 
@@ -73,14 +81,28 @@ class CORE_EXPORT SpeculationRuleSet final
   }
 
   bool has_document_rule() const { return has_document_rule_; }
+  bool requires_unfiltered_input() const { return requires_unfiltered_input_; }
 
   Source* source() const { return source_; }
 
   const HeapVector<Member<StyleRule>>& selectors() { return selectors_; }
 
+  // Returns an summary and detail of an error got in `Parse`.
+  // `error_message` is empty iff `error_type` is `kNoError`.
+  SpeculationRuleSetErrorType error_type() const { return error_type_; }
+  const String& error_message() const { return error_message_; }
+  // Shorthand to check `error_type` is not `kNoError`.
+  bool HasError() const;
+  bool ShouldReportUMAForError() const;
+
+  static mojom::blink::SpeculationTargetHint SpeculationTargetHintFromString(
+      const StringView& target_hint_str);
+
   void Trace(Visitor*) const;
 
  private:
+  void SetError(SpeculationRuleSetErrorType error_type, String error_message_);
+
   SpeculationRuleSetId inspector_id_;
   HeapVector<Member<SpeculationRule>> prefetch_rules_;
   HeapVector<Member<SpeculationRule>> prefetch_with_subresources_rules_;
@@ -90,6 +112,16 @@ class CORE_EXPORT SpeculationRuleSet final
   Member<Source> source_;
   HeapVector<Member<StyleRule>> selectors_;
   bool has_document_rule_ = false;
+
+  // If true, this ruleset contains a rule which may not work correctly if input
+  // is filtered.
+  // TODO(crbug.com/1425870): Remove this once such rules work without this
+  // hack.
+  bool requires_unfiltered_input_ = false;
+
+  SpeculationRuleSetErrorType error_type_ =
+      SpeculationRuleSetErrorType::kNoError;
+  String error_message_;
 };
 
 }  // namespace blink

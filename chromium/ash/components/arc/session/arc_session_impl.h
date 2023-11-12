@@ -13,6 +13,7 @@
 #include "ash/components/arc/session/arc_session.h"
 #include "base/files/scoped_file.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "chromeos/ash/components/system/scheduler_configuration_manager_base.h"
@@ -212,15 +213,6 @@ class ArcSessionImpl : public ArcSession,
   // Called when arcbridge socket is created.
   void OnSocketCreated(base::ScopedFD fd);
 
-  // Loads ARC data/ snapshot if necessary.
-  // |callback| is called once the load process is finished.
-  void StartLoadingDataSnapshot(base::OnceClosure callback);
-
-  // Called when ARC data/ snapshot step is done: either snapshot is loaded or
-  // skipped.
-  // |socket_fd| should be a socket to be passed to OnUpgraded.
-  void OnDataSnapshotLoaded(base::ScopedFD scoped_fd);
-
   // D-Bus callback for UpgradeArcContainer(). |socket_fd| should be a socket
   // which should be accept(2)ed to connect ArcBridgeService Mojo channel.
   void OnUpgraded(base::ScopedFD socket_fd, bool result);
@@ -290,11 +282,11 @@ class ArcSessionImpl : public ArcSession,
   std::unique_ptr<mojom::ArcBridgeHost> arc_bridge_host_;
 
   int lcd_density_ = 0;
-  ash::SchedulerConfigurationManagerBase* const
+  const raw_ptr<ash::SchedulerConfigurationManagerBase, ExperimentalAsh>
       scheduler_configuration_manager_;
 
   // Owned by ArcSessionManager.
-  AdbSideloadingAvailabilityDelegate* const
+  const raw_ptr<AdbSideloadingAvailabilityDelegate, ExperimentalAsh>
       adb_sideloading_availability_delegate_;
 
   // Callback to read system memory info.

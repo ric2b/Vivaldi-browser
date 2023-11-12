@@ -6,10 +6,9 @@ package org.chromium.chrome.browser.privacy.settings;
 
 import static org.chromium.base.test.util.Batch.PER_CLASS;
 
-import android.support.test.InstrumentationRegistry;
-
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.LargeTest;
 
 import org.hamcrest.Matchers;
@@ -21,11 +20,11 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -61,7 +60,7 @@ public class HttpsFirstModeSettingTest {
         mSettingsActivityTestRule.startSettingsActivity();
         final PrivacySettings privacySettings = mSettingsActivityTestRule.getFragment();
         final String unlockedSummaryText =
-                InstrumentationRegistry.getContext().getResources().getString(
+                ApplicationProvider.getApplicationContext().getResources().getString(
                         R.string.settings_https_first_mode_summary);
 
         Preference pref = waitForPreference(privacySettings, PREF_HTTPS_FIRST_MODE);
@@ -79,7 +78,7 @@ public class HttpsFirstModeSettingTest {
 
         final PrivacySettings privacySettings = mSettingsActivityTestRule.getFragment();
         final String lockedSummaryText =
-                InstrumentationRegistry.getContext().getResources().getString(
+                ApplicationProvider.getApplicationContext().getResources().getString(
                         R.string.settings_https_first_mode_with_advanced_protection_summary);
 
         Preference pref = waitForPreference(privacySettings, PREF_HTTPS_FIRST_MODE);

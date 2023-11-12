@@ -14,9 +14,10 @@
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
+#import "ios/chrome/browser/shared/public/commands/qr_generation_commands.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/sync/send_tab_to_self_sync_service_factory.h"
-#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
-#import "ios/chrome/browser/ui/commands/qr_generation_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/sharing/activity_services/activities/bookmark_activity.h"
 #import "ios/chrome/browser/ui/sharing/activity_services/activities/copy_activity.h"
@@ -37,7 +38,6 @@
 #import "ios/chrome/browser/ui/sharing/activity_services/data/share_image_data.h"
 #import "ios/chrome/browser/ui/sharing/activity_services/data/share_to_data.h"
 #import "ios/chrome/browser/ui/sharing/sharing_positioner.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
@@ -49,9 +49,8 @@
 
 @interface ActivityServiceMediator ()
 
-@property(nonatomic, weak)
-    id<BrowserCommands, BrowserCoordinatorCommands, FindInPageCommands>
-        handler;
+@property(nonatomic, weak) id<BrowserCoordinatorCommands, FindInPageCommands>
+    handler;
 
 @property(nonatomic, weak) id<BookmarksCommands> bookmarksHandler;
 
@@ -66,21 +65,24 @@
 // The navigation agent.
 @property(nonatomic, readonly) WebNavigationBrowserAgent* navigationAgent;
 
+@property(nonatomic, readonly) ReadingListBrowserAgent* readingListBrowserAgent;
+
 @end
 
 @implementation ActivityServiceMediator
 
 #pragma mark - Public
 
-- (instancetype)initWithHandler:(id<BrowserCommands,
-                                    BrowserCoordinatorCommands,
-                                    FindInPageCommands>)handler
+- (instancetype)initWithHandler:
+                    (id<BrowserCoordinatorCommands, FindInPageCommands>)handler
                bookmarksHandler:(id<BookmarksCommands>)bookmarksHandler
             qrGenerationHandler:(id<QRGenerationCommands>)qrGenerationHandler
                     prefService:(PrefService*)prefService
                   bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
              baseViewController:(UIViewController*)baseViewController
-                navigationAgent:(WebNavigationBrowserAgent*)navigationAgent {
+                navigationAgent:(WebNavigationBrowserAgent*)navigationAgent
+        readingListBrowserAgent:
+            (ReadingListBrowserAgent*)readingListBrowserAgent {
   if (self = [super init]) {
     _handler = handler;
     _bookmarksHandler = bookmarksHandler;
@@ -89,6 +91,7 @@
     _bookmarkModel = bookmarkModel;
     _baseViewController = baseViewController;
     _navigationAgent = navigationAgent;
+    _readingListBrowserAgent = readingListBrowserAgent;
   }
   return self;
 }
@@ -139,7 +142,7 @@
     ReadingListActivity* readingListActivity =
         [[ReadingListActivity alloc] initWithURL:data.shareURL
                                            title:data.title
-                                      dispatcher:self.handler];
+                         readingListBrowserAgent:self.readingListBrowserAgent];
     [applicationActivities addObject:readingListActivity];
 
     // Vivaldi: We won't show bookmark add/edit in share menu.

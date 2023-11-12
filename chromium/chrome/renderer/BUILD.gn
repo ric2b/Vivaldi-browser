@@ -117,7 +117,10 @@ static_library("renderer") {
 
   defines = []
 
-  public_deps = [ "//components/contextual_search:buildflags" ]
+  public_deps = [
+    "//components/contextual_search:buildflags",
+    "//components/signin/public/base:signin_buildflags",
+  ]
 
   deps = [
     "//base/allocator:buildflags",
@@ -433,10 +436,10 @@ static_library("renderer") {
 
   if (is_chromeos_ash) {
     sources += [
+      "ash_merge_session_loader_throttle.cc",
+      "ash_merge_session_loader_throttle.h",
       "chromeos_delayed_callback_group.cc",
       "chromeos_delayed_callback_group.h",
-      "chromeos_merge_session_loader_throttle.cc",
-      "chromeos_merge_session_loader_throttle.h",
     ]
   }
 

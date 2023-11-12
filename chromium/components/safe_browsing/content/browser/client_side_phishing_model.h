@@ -9,10 +9,14 @@
 #include <memory>
 
 #include "base/callback_list.h"
+#include "base/containers/flat_map.h"
 #include "base/files/file.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/synchronization/lock.h"
+#include "components/safe_browsing/content/browser/client_side_phishing_model.h"
+#include "components/safe_browsing/core/common/proto/client_model.pb.h"
+#include "components/safe_browsing/core/common/proto/csd.pb.h"
 
 namespace safe_browsing {
 
@@ -71,6 +75,9 @@ class ClientSidePhishingModel {
   // Notifies all the callbacks of a change in model.
   void NotifyCallbacksOfUpdateForTesting();
 
+  const base::flat_map<std::string, TfLiteModelMetadata::Threshold>&
+  GetVisualTfLiteModelThresholds() const;
+
   // Called to check the command line and maybe override the current model.
   void MaybeOverrideModel();
 
@@ -95,6 +102,10 @@ class ClientSidePhishingModel {
 
   // Visual TFLite model file. Protected by lock_.
   base::File visual_tflite_model_;
+
+  // Thresholds in visual TFLite model file to be used for comparison after
+  // visual classification
+  base::flat_map<std::string, TfLiteModelMetadata::Threshold> thresholds_;
 
   // Model type as inferred by feature flag. Protected by lock_.
   CSDModelType model_type_ = CSDModelType::kNone;

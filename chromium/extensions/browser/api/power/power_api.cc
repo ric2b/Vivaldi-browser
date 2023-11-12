@@ -7,6 +7,7 @@
 #include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "content/public/browser/device_service.h"
+#include "extensions/browser/api/power/activity_reporter_delegate.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/api/power.h"
 #include "extensions/common/extension.h"
@@ -36,8 +37,8 @@ base::LazyInstance<BrowserContextKeyedAPIFactory<PowerAPI>>::DestructorAtExit
 }  // namespace
 
 ExtensionFunction::ResponseAction PowerRequestKeepAwakeFunction::Run() {
-  std::unique_ptr<api::power::RequestKeepAwake::Params> params(
-      api::power::RequestKeepAwake::Params::Create(args()));
+  absl::optional<api::power::RequestKeepAwake::Params> params =
+      api::power::RequestKeepAwake::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   PowerAPI::Get(browser_context())->AddRequest(extension_id(), params->level);
   return RespondNow(NoArguments());
@@ -47,6 +48,17 @@ ExtensionFunction::ResponseAction PowerReleaseKeepAwakeFunction::Run() {
   PowerAPI::Get(browser_context())->RemoveRequest(extension_id());
   return RespondNow(NoArguments());
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+ExtensionFunction::ResponseAction PowerReportActivityFunction::Run() {
+  absl::optional<std::string> error =
+      extensions::ActivityReporterDelegate::GetDelegate()->ReportActivity();
+  if (error.has_value()) {
+    return RespondNow(Error(error.value()));
+  }
+  return RespondNow(NoArguments());
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // static
 PowerAPI* PowerAPI::Get(content::BrowserContext* context) {

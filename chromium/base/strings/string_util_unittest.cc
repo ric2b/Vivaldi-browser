@@ -24,42 +24,42 @@ using ::testing::ElementsAre;
 
 namespace base {
 
-static const struct trim_case {
+namespace {
+
+const struct trim_case {
   const wchar_t* input;
   const TrimPositions positions;
   const wchar_t* output;
   const TrimPositions return_value;
 } trim_cases[] = {
-  {L" Google Video ", TRIM_LEADING, L"Google Video ", TRIM_LEADING},
-  {L" Google Video ", TRIM_TRAILING, L" Google Video", TRIM_TRAILING},
-  {L" Google Video ", TRIM_ALL, L"Google Video", TRIM_ALL},
-  {L"Google Video", TRIM_ALL, L"Google Video", TRIM_NONE},
-  {L"", TRIM_ALL, L"", TRIM_NONE},
-  {L"  ", TRIM_LEADING, L"", TRIM_LEADING},
-  {L"  ", TRIM_TRAILING, L"", TRIM_TRAILING},
-  {L"  ", TRIM_ALL, L"", TRIM_ALL},
-  {L"\t\rTest String\n", TRIM_ALL, L"Test String", TRIM_ALL},
-  {L"\x2002Test String\x00A0\x3000", TRIM_ALL, L"Test String", TRIM_ALL},
+    {L" Google Video ", TRIM_LEADING, L"Google Video ", TRIM_LEADING},
+    {L" Google Video ", TRIM_TRAILING, L" Google Video", TRIM_TRAILING},
+    {L" Google Video ", TRIM_ALL, L"Google Video", TRIM_ALL},
+    {L"Google Video", TRIM_ALL, L"Google Video", TRIM_NONE},
+    {L"", TRIM_ALL, L"", TRIM_NONE},
+    {L"  ", TRIM_LEADING, L"", TRIM_LEADING},
+    {L"  ", TRIM_TRAILING, L"", TRIM_TRAILING},
+    {L"  ", TRIM_ALL, L"", TRIM_ALL},
+    {L"\t\rTest String\n", TRIM_ALL, L"Test String", TRIM_ALL},
+    {L"\x2002Test String\x00A0\x3000", TRIM_ALL, L"Test String", TRIM_ALL},
 };
 
-static const struct trim_case_ascii {
+const struct trim_case_ascii {
   const char* input;
   const TrimPositions positions;
   const char* output;
   const TrimPositions return_value;
 } trim_cases_ascii[] = {
-  {" Google Video ", TRIM_LEADING, "Google Video ", TRIM_LEADING},
-  {" Google Video ", TRIM_TRAILING, " Google Video", TRIM_TRAILING},
-  {" Google Video ", TRIM_ALL, "Google Video", TRIM_ALL},
-  {"Google Video", TRIM_ALL, "Google Video", TRIM_NONE},
-  {"", TRIM_ALL, "", TRIM_NONE},
-  {"  ", TRIM_LEADING, "", TRIM_LEADING},
-  {"  ", TRIM_TRAILING, "", TRIM_TRAILING},
-  {"  ", TRIM_ALL, "", TRIM_ALL},
-  {"\t\rTest String\n", TRIM_ALL, "Test String", TRIM_ALL},
+    {" Google Video ", TRIM_LEADING, "Google Video ", TRIM_LEADING},
+    {" Google Video ", TRIM_TRAILING, " Google Video", TRIM_TRAILING},
+    {" Google Video ", TRIM_ALL, "Google Video", TRIM_ALL},
+    {"Google Video", TRIM_ALL, "Google Video", TRIM_NONE},
+    {"", TRIM_ALL, "", TRIM_NONE},
+    {"  ", TRIM_LEADING, "", TRIM_LEADING},
+    {"  ", TRIM_TRAILING, "", TRIM_TRAILING},
+    {"  ", TRIM_ALL, "", TRIM_ALL},
+    {"\t\rTest String\n", TRIM_ALL, "Test String", TRIM_ALL},
 };
-
-namespace {
 
 // Helper used to test TruncateUTF8ToByteSize.
 bool Truncated(const std::string& input,
@@ -72,7 +72,7 @@ bool Truncated(const std::string& input,
 
 using TestFunction = bool (*)(StringPiece str);
 
-// Helper used to test IsStringUTF8{,AllowingNoncharacters}.
+// Helper used to test IsStringUTF8[AllowingNoncharacters].
 void TestStructurallyValidUtf8(TestFunction fn) {
   EXPECT_TRUE(fn("abc"));
   EXPECT_TRUE(fn("\xC2\x81"));
@@ -92,7 +92,7 @@ void TestStructurallyValidUtf8(TestFunction fn) {
   EXPECT_TRUE(fn(kEmbeddedNull));
 }
 
-// Helper used to test IsStringUTF8{,AllowingNoncharacters}.
+// Helper used to test IsStringUTF8[AllowingNoncharacters].
 void TestStructurallyInvalidUtf8(TestFunction fn) {
   // Invalid encoding of U+1FFFE (0x8F instead of 0x9F)
   EXPECT_FALSE(fn("\xF0\x8F\xBF\xBE"));
@@ -151,7 +151,7 @@ void TestStructurallyInvalidUtf8(TestFunction fn) {
   EXPECT_FALSE(fn(kUtf32LeBom));
 }
 
-// Helper used to test IsStringUTF8{,AllowingNoncharacters}.
+// Helper used to test IsStringUTF8[AllowingNoncharacters].
 void TestNoncharacters(TestFunction fn, bool expected_result) {
   EXPECT_EQ(fn("\xEF\xB7\x90"), expected_result);      // U+FDD0
   EXPECT_EQ(fn("\xEF\xB7\x9F"), expected_result);      // U+FDDF
@@ -191,8 +191,6 @@ void TestNoncharacters(TestFunction fn, bool expected_result) {
   EXPECT_EQ(fn("\xF4\x8F\xBF\xBE"), expected_result);  // U+10FFFE
   EXPECT_EQ(fn("\xF4\x8F\xBF\xBF"), expected_result);  // U+10FFFF
 }
-
-}  // namespace
 
 TEST(StringUtilTest, TruncateUTF8ToByteSize) {
   std::string output;
@@ -1214,21 +1212,28 @@ TEST(StringUtilTest, LcpyTest) {
   // Test the normal case where we fit in our buffer.
   {
     char dst[10];
+    char16_t u16dst[10];
     wchar_t wdst[10];
     EXPECT_EQ(7U, strlcpy(dst, "abcdefg", std::size(dst)));
-    EXPECT_EQ(0, memcmp(dst, "abcdefg", 8));
+    EXPECT_EQ(0, memcmp(dst, "abcdefg", sizeof(dst[0]) * 8));
+    EXPECT_EQ(7U, u16cstrlcpy(u16dst, u"abcdefg", std::size(u16dst)));
+    EXPECT_EQ(0, memcmp(u16dst, u"abcdefg", sizeof(u16dst[0]) * 8));
     EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", std::size(wdst)));
-    EXPECT_EQ(0, memcmp(wdst, L"abcdefg", sizeof(wchar_t) * 8));
+    EXPECT_EQ(0, memcmp(wdst, L"abcdefg", sizeof(wdst[0]) * 8));
   }
 
   // Test dst_size == 0, nothing should be written to |dst| and we should
   // have the equivalent of strlen(src).
   {
     char dst[2] = {1, 2};
+    char16_t u16dst[2] = {1, 2};
     wchar_t wdst[2] = {1, 2};
     EXPECT_EQ(7U, strlcpy(dst, "abcdefg", 0));
     EXPECT_EQ(1, dst[0]);
     EXPECT_EQ(2, dst[1]);
+    EXPECT_EQ(7U, u16cstrlcpy(u16dst, u"abcdefg", 0));
+    EXPECT_EQ(char16_t{1}, u16dst[0]);
+    EXPECT_EQ(char16_t{2}, u16dst[1]);
     EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", 0));
     EXPECT_EQ(static_cast<wchar_t>(1), wdst[0]);
     EXPECT_EQ(static_cast<wchar_t>(2), wdst[1]);
@@ -1237,31 +1242,40 @@ TEST(StringUtilTest, LcpyTest) {
   // Test the case were we _just_ competely fit including the null.
   {
     char dst[8];
+    char16_t u16dst[8];
     wchar_t wdst[8];
     EXPECT_EQ(7U, strlcpy(dst, "abcdefg", std::size(dst)));
     EXPECT_EQ(0, memcmp(dst, "abcdefg", 8));
+    EXPECT_EQ(7U, u16cstrlcpy(u16dst, u"abcdefg", std::size(u16dst)));
+    EXPECT_EQ(0, memcmp(u16dst, u"abcdefg", sizeof(u16dst)));
     EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", std::size(wdst)));
-    EXPECT_EQ(0, memcmp(wdst, L"abcdefg", sizeof(wchar_t) * 8));
+    EXPECT_EQ(0, memcmp(wdst, L"abcdefg", sizeof(wdst)));
   }
 
   // Test the case were we we are one smaller, so we can't fit the null.
   {
     char dst[7];
+    char16_t u16dst[7];
     wchar_t wdst[7];
     EXPECT_EQ(7U, strlcpy(dst, "abcdefg", std::size(dst)));
-    EXPECT_EQ(0, memcmp(dst, "abcdef", 7));
+    EXPECT_EQ(0, memcmp(dst, "abcdef", sizeof(dst[0]) * 7));
+    EXPECT_EQ(7U, u16cstrlcpy(u16dst, u"abcdefg", std::size(u16dst)));
+    EXPECT_EQ(0, memcmp(u16dst, u"abcdef", sizeof(u16dst[0]) * 7));
     EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", std::size(wdst)));
-    EXPECT_EQ(0, memcmp(wdst, L"abcdef", sizeof(wchar_t) * 7));
+    EXPECT_EQ(0, memcmp(wdst, L"abcdef", sizeof(wdst[0]) * 7));
   }
 
   // Test the case were we are just too small.
   {
     char dst[3];
+    char16_t u16dst[3];
     wchar_t wdst[3];
     EXPECT_EQ(7U, strlcpy(dst, "abcdefg", std::size(dst)));
-    EXPECT_EQ(0, memcmp(dst, "ab", 3));
+    EXPECT_EQ(0, memcmp(dst, "ab", sizeof(dst)));
+    EXPECT_EQ(7U, u16cstrlcpy(u16dst, u"abcdefg", std::size(u16dst)));
+    EXPECT_EQ(0, memcmp(u16dst, u"ab", sizeof(u16dst)));
     EXPECT_EQ(7U, wcslcpy(wdst, L"abcdefg", std::size(wdst)));
-    EXPECT_EQ(0, memcmp(wdst, L"ab", sizeof(wchar_t) * 3));
+    EXPECT_EQ(0, memcmp(wdst, L"ab", sizeof(wdst)));
   }
 }
 
@@ -1335,28 +1349,6 @@ TEST(StringUtilTest, MakeBasicStringPieceTest) {
   EXPECT_EQ(MakeWStringPiece(baz.begin(), baz.end()).data(), baz.data());
   EXPECT_EQ(MakeWStringPiece(baz.begin(), baz.end()).size(), baz.size());
   EXPECT_TRUE(MakeWStringPiece(baz.end(), baz.end()).empty());
-}
-
-enum class StreamableTestEnum { kGreeting, kLocation };
-
-std::ostream& operator<<(std::ostream& os, const StreamableTestEnum& value) {
-  switch (value) {
-    case StreamableTestEnum::kGreeting:
-      return os << "hello";
-    case StreamableTestEnum::kLocation:
-      return os << "world";
-  }
-}
-
-TEST(StringUtilTest, StreamableToString) {
-  EXPECT_EQ(StreamableToString("foo"), "foo");
-  EXPECT_EQ(StreamableToString(123), "123");
-  EXPECT_EQ(StreamableToString(StreamableTestEnum::kGreeting), "hello");
-  EXPECT_EQ(StreamableToString(StreamableTestEnum::kGreeting, " ",
-                               StreamableTestEnum::kLocation),
-            "hello world");
-  EXPECT_EQ(StreamableToString("42 in hex is ", std::hex, 42),
-            "42 in hex is 2a");
 }
 
 TEST(StringUtilTest, RemoveChars) {
@@ -1616,5 +1608,7 @@ TEST_F(WriteIntoTest, WriteInto) {
   EXPECT_EQ(kLive, live);
   EXPECT_EQ(4u, live.size());
 }
+
+}  // namespace
 
 }  // namespace base

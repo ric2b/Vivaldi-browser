@@ -39,6 +39,13 @@ FencedFrameConfig::FencedFrameConfig(
   KURL urn_uuid = KURL(*urn);
   urn_uuid_.emplace(std::move(urn_uuid));
 
+  const absl::optional<FencedFrame::RedactedFencedFrameProperty<gfx::Size>>&
+      container_size = config.container_size();
+  if (container_size.has_value() &&
+      container_size->potentially_opaque_value.has_value()) {
+    container_size_.emplace(*container_size->potentially_opaque_value);
+  }
+
   // `content_size` and `deprecated_should_freeze_initial_size` temporarily need
   // to be treated differently than other fields, because for implementation
   // convenience the fenced frame size is frozen by the embedder. In the long
@@ -71,6 +78,18 @@ V8UnionOpaquePropertyOrUnsignedLong* FencedFrameConfig::width() const {
 
 V8UnionOpaquePropertyOrUnsignedLong* FencedFrameConfig::height() const {
   return Get<Attribute::kHeight>();
+}
+
+void FencedFrameConfig::setSharedStorageContext(const String& context) {
+  shared_storage_context_ =
+      (context.length() <= kFencedFrameConfigSharedStorageContextMaxLength)
+          ? context
+          : context.Substring(0,
+                              kFencedFrameConfigSharedStorageContextMaxLength);
+}
+
+String FencedFrameConfig::GetSharedStorageContext() const {
+  return shared_storage_context_;
 }
 
 }  // namespace blink

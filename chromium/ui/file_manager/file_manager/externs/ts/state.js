@@ -36,11 +36,16 @@ export const EntryType = {
  * * `icon` can be either a string or a IconSet which is an object including
  * both high/low DPI icon data.
  *
+ * TODO(b/271485133): `children` here only store sub directories for now, it
+ * should store all children including files, it's up to the container to do
+ * filter and sorting if needed.
+ *
  * @typedef {{
  *   entry: (Entry|FilesAppEntry),
  *   icon: (!string|!chrome.fileManagerPrivate.IconSet),
  *   label: string,
  *   volumeType: (VolumeManagerCommon.VolumeType|null),
+ *   rootType: (VolumeManagerCommon.RootType|null),
  *   metadata: !MetadataItem,
  *   isDirectory: boolean,
  *   type: !EntryType,
@@ -49,6 +54,7 @@ export const EntryType = {
  *   shouldDelayLoadingChildren: !boolean,
  *   children: (!Array<!FileKey>),
  *   expanded: !boolean,
+ *   disabled: !boolean,
  * }}
  */
 export let FileData;
@@ -216,7 +222,7 @@ export let CurrentDirectory;
  */
 export const SearchLocation = {
   EVERYWHERE: 'everywhere',
-  THIS_CHROMEBOOK: 'this_chromebook',
+  ROOT_FOLDER: 'root_folder',
   THIS_FOLDER: 'this_folder',
 };
 
@@ -234,24 +240,11 @@ export const SearchRecency = {
 };
 
 /**
- * Enumeration of all supported file types. We use generic buckets such as
- * Images, to denote all "*.jpg", "*.gif", "*.png", etc., file types.
- * @enum{string}
- */
-export const SearchFileType = {
-  ALL_TYPES: 'all_types',
-  AUDIO: 'audio',
-  DOCUMENTS: 'documents',
-  IMAGES: 'images',
-  VIDEOS: 'videos',
-};
-
-/**
  * The options used by the file search operation.
  * @typedef {{
- *   location: SearchLocation,
+ *   location: !SearchLocation,
  *   recency: SearchRecency,
- *   type: SearchFileType,
+ *   fileCategory:  chrome.fileManagerPrivate.FileCategory,
  * }}
  */
 export let SearchOptions;
@@ -386,7 +379,9 @@ export let VolumeMap;
  *   volumes: !Object<!VolumeId, !Volume>,
  *   uiEntries: !Array<!FileKey>,
  *   folderShortcuts: !Array<!FileKey>,
- *   androidApps: !Object<!string, !chrome.fileManagerPrivate.AndroidApp>
+ *   androidApps: !Object<!string, !chrome.fileManagerPrivate.AndroidApp>,
+ *   bulkPinning: (chrome.fileManagerPrivate.BulkPinProgress|undefined),
+ *   preferences: (chrome.fileManagerPrivate.Preferences|undefined),
  * }}
  */
 export let State;

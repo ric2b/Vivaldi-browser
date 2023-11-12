@@ -23,6 +23,7 @@
 #include "base/values.h"
 #include "base/version.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/extensions/cws_info_service.h"
 #include "chrome/browser/extensions/extension_management_constants.h"
 #include "chrome/browser/extensions/extension_management_internal.h"
 #include "chrome/browser/extensions/external_policy_loader.h"
@@ -64,9 +65,7 @@
 namespace extensions {
 
 ExtensionManagement::ExtensionManagement(Profile* profile)
-    : profile_(profile),
-      pref_service_(profile_->GetPrefs()),
-      is_child_(profile_->IsChild()) {
+    : profile_(profile), pref_service_(profile_->GetPrefs()) {
   TRACE_EVENT0("browser,startup",
                "ExtensionManagement::ExtensionManagement::ctor");
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -93,6 +92,8 @@ ExtensionManagement::ExtensionManagement(Profile* profile)
                              pref_change_callback);
 #endif
   pref_change_registrar_.Add(pref_names::kManifestV2Availability,
+                             pref_change_callback);
+  pref_change_registrar_.Add(pref_names::kExtensionUnpublishedAvailability,
                              pref_change_callback);
   // Note that both |global_settings_| and |default_settings_| will be null
   // before first call to Refresh(), so in order to resolve this, Refresh() must
@@ -325,6 +326,41 @@ bool ExtensionManagement::IsAllowedManifestVersion(const Extension* extension) {
                                   extension->id(), extension->GetType());
 }
 
+bool ExtensionManagement::IsAllowedByUnpublishedAvailabilityPolicy(
+    const Extension* extension) {
+  // This policy only applies to extensions that update from CWS.
+  if (!UpdatesFromWebstore(*extension)) {
+    return true;
+  }
+  switch (global_settings_->unpublished_availability_setting) {
+    case internal::GlobalSettings::UnpublishedAvailability::kAllowUnpublished:
+      return true;
+    case internal::GlobalSettings::UnpublishedAvailability::kDisableUnpublished:
+      auto* extension_prefs = ExtensionPrefs::Get(profile_);
+      base::Time last_update_time =
+          extension_prefs->GetLastUpdateTime(extension->id());
+      // If the extension is being installed (prefs haven't been saved yet) it
+      // is live in CWS since it was downloaded from there. If it was recently
+      // installed, it is most likely live in CWS as well.
+      if ((last_update_time == base::Time()) ||
+          ((base::Time::Now() - last_update_time) < base::Days(1))) {
+        return true;
+      }
+      break;
+  }
+  if (!cws_info_service_) {
+    // TODO(anunoy): Once CWSInfoService is implemented, get the instance here.
+    return true;
+  }
+  // Return the current live-in-CWS status of the extension in CWS if available,
+  // otherwise assume it's currently published and return true.
+  // Current publish status may not available if the policy setting just changed
+  // to |kDisableUnpublished|. The actual publish status will be retrieved
+  // by CWSInfoService separately and will trigger this same policy check.
+  auto live_status = cws_info_service_->IsLiveInCWS(*extension);
+  return live_status.value_or(true);
+}
+
 APIPermissionSet ExtensionManagement::GetBlockedAPIPermissions(
     const Extension* extension) {
   const std::string* update_url =
@@ -482,6 +518,9 @@ void ExtensionManagement::Refresh() {
   const base::Value* manifest_v2_pref =
       LoadPreference(pref_names::kManifestV2Availability,
                      /*force_managed=*/true, base::Value::Type::INTEGER);
+  const base::Value* unpublished_availability_pref =
+      LoadPreference(pref_names::kExtensionUnpublishedAvailability,
+                     /*force_managed=*/true, base::Value::Type::INTEGER);
 
   // Reset all settings.
   global_settings_ = std::make_unique<internal::GlobalSettings>();
@@ -572,6 +611,12 @@ void ExtensionManagement::Refresh() {
             manifest_v2_pref->GetInt());
   }
 
+  if (unpublished_availability_pref) {
+    global_settings_->unpublished_availability_setting =
+        static_cast<internal::GlobalSettings::UnpublishedAvailability>(
+            unpublished_availability_pref->GetInt());
+  }
+
   if (dict_pref) {
     // Parse new extension management preference.
 
@@ -581,8 +626,8 @@ void ExtensionManagement::Refresh() {
     if (defer_load_settings) {
       auto* extension_prefs = ExtensionPrefs::Get(profile_);
       auto extensions_info = extension_prefs->GetInstalledExtensionsInfo();
-      for (auto& extension_info : extensions_info) {
-        installed_extensions.insert(extension_info->extension_id);
+      for (const auto& extension_info : extensions_info) {
+        installed_extensions.insert(extension_info.extension_id);
       }
     }
 

@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/memory/memory_pressure_listener.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
@@ -116,7 +117,7 @@ class WorkingSetTrimmerPolicyChromeOS : public WorkingSetTrimmerPolicy {
   virtual void TrimArcProcesses();
   virtual bool IsArcProcessEligibleForReclaim(
       const arc::ArcProcess& arc_process);
-  virtual bool TrimArcProcess(base::ProcessId pid);
+  virtual void TrimArcProcess(base::ProcessId pid);
 
   // TrimArcVmProcesses will ask the delegate if it is safe to reclaim memory
   // from ARCVM, and do that when it is. These are virtual for testing.
@@ -181,7 +182,7 @@ class WorkingSetTrimmerPolicyChromeOS : public WorkingSetTrimmerPolicy {
   void ReportArcVmTrimMetric();
   void ReportArcVmTrimMetricOnDestruction();
 
-  Graph* graph_ = nullptr;
+  raw_ptr<Graph, ExperimentalAsh> graph_ = nullptr;
 
   bool trim_on_freeze_ = false;
   bool trim_arc_on_memory_pressure_ = false;

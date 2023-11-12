@@ -13,11 +13,11 @@ import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.firstrun.MobileFreProgress;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.services.FREMobileIdentityConsistencyFieldTrial;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.ProfileDataCache;
 import org.chromium.chrome.browser.signin.services.SigninManager;
@@ -36,6 +36,7 @@ import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.AccountsChangeObserver;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
+import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -151,11 +152,9 @@ public class SigninFirstRunMediator
         // the delegate after the mediator is destroyed. See https://crbug.com/1294998.
         if (mDestroyed) return;
 
-        if (!shouldUseNewInitializationFlow()) {
-            // Old initialization flow requires native to be ready before the initial loading
-            // spinner can be hidden.
-            if (!mDelegate.getNativeInitializationPromise().isFulfilled()) return;
-        }
+        // The initialization flow requires native to be ready before the initial loading spinner
+        // can be hidden.
+        if (!mDelegate.getNativeInitializationPromise().isFulfilled()) return;
 
         if (mDelegate.getChildAccountStatusSupplier().get() != null
                 && mDelegate.getPolicyLoadListener().get() != null && !mInitialLoadCompleted) {
@@ -254,23 +253,14 @@ public class SigninFirstRunMediator
      * Callback for the PropertyKey {@link SigninFirstRunProperties#ON_CONTINUE_AS_CLICKED}.
      */
     private void onContinueAsClicked() {
+        assert mDelegate.getNativeInitializationPromise().isFulfilled();
         if (isContinueOrDismissClicked()) return;
         assert !mModel.get(SigninFirstRunProperties.SHOW_INITIAL_LOAD_PROGRESS_SPINNER)
             : "The continue button shouldn't be visible while the load spinner is shown!";
 
         if (!mModel.get(SigninFirstRunProperties.IS_SIGNIN_SUPPORTED)) {
-            if (mDelegate.getNativeInitializationPromise().isFulfilled()) {
-                mDelegate.acceptTermsOfService(mAllowMetricsAndCrashUploading);
-                mDelegate.advanceToNextPage();
-            } else {
-                // Show the progress spinner while the native finishes loading.
-                mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER, true);
-                mDelegate.getNativeInitializationPromise().then(ignored -> {
-                    // When the native is loaded - mark ToS as accepted and move to the next page.
-                    mDelegate.acceptTermsOfService(mAllowMetricsAndCrashUploading);
-                    mDelegate.advanceToNextPage();
-                });
-            }
+            mDelegate.acceptTermsOfService(mAllowMetricsAndCrashUploading);
+            mDelegate.advanceToNextPage();
             return;
         }
         if (mSelectedAccountName == null) {
@@ -278,22 +268,17 @@ public class SigninFirstRunMediator
             return;
         }
 
-        if (mDelegate.getNativeInitializationPromise().isFulfilled()) {
-            handleContinueWithNative();
+        if (BuildInfo.getInstance().isAutomotive) {
+            mDelegate.displayDeviceLockPage();
             return;
         }
-        mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER_WITH_TEXT, true);
-        mDelegate.getNativeInitializationPromise().then(ignored -> { handleContinueWithNative(); });
+        proceedWithSignIn();
     }
 
-    private void handleContinueWithNative() {
-        if (mDestroyed) {
-            // FirstRunActivity was destroyed while we were waiting for native.
-            return;
-        }
-
-        assert mDelegate.getNativeInitializationPromise().isFulfilled();
-
+    /**
+     * Accepts ToS and completes the account sign-in with the selected account.
+     */
+    public void proceedWithSignIn() {
         // This is needed to get metrics/crash reports from the sign-in flow itself.
         mDelegate.acceptTermsOfService(mAllowMetricsAndCrashUploading);
         if (mModel.get(SigninFirstRunProperties.IS_SELECTED_ACCOUNT_SUPERVISED)) {
@@ -319,8 +304,8 @@ public class SigninFirstRunMediator
         mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER_WITH_TEXT, true);
         final SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
                 Profile.getLastUsedRegularProfile());
-        signinManager.signin(
-                AccountUtils.createAccountFromName(mSelectedAccountName), new SignInCallback() {
+        signinManager.signin(AccountUtils.createAccountFromName(mSelectedAccountName),
+                SigninAccessPoint.SIGNIN_PROMO, new SignInCallback() {
                     @Override
                     public void onSignInComplete() {
                         if (mDestroyed) {
@@ -350,22 +335,15 @@ public class SigninFirstRunMediator
         assert !mModel.get(SigninFirstRunProperties.SHOW_INITIAL_LOAD_PROGRESS_SPINNER)
             : "The dismiss button shouldn't be visible while the load spinner is shown!";
 
-        if (mDelegate.getNativeInitializationPromise().isFulfilled()) {
-            handleDismissWithNative();
-            return;
-        }
-        mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER, true);
-        mDelegate.getNativeInitializationPromise().then(ignored -> { handleDismissWithNative(); });
-    }
-
-    private void handleDismissWithNative() {
-        if (mDestroyed) {
-            // FirstRunActivity was destroyed while we were waiting for native.
-            return;
-        }
-
         assert mDelegate.getNativeInitializationPromise().isFulfilled();
 
+        dismiss();
+    }
+
+    /**
+     * Dismisses the sign-in page and continues without a signed-in account.
+     */
+    public void dismiss() {
         mDelegate.recordFreProgressHistogram(MobileFreProgress.WELCOME_DISMISS);
         mDelegate.acceptTermsOfService(mAllowMetricsAndCrashUploading);
         SigninPreferencesManager.getInstance().temporarilySuppressNewTabPagePromos();
@@ -469,9 +447,5 @@ public class SigninFirstRunMediator
 
         // Apply spans to footer string.
         return SpanApplier.applySpans(footerString, spans.toArray(new SpanApplier.SpanInfo[0]));
-    }
-
-    private static boolean shouldUseNewInitializationFlow() {
-        return FREMobileIdentityConsistencyFieldTrial.shouldUseNewInitializationFlow();
     }
 }

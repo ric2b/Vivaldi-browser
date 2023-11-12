@@ -30,10 +30,6 @@ and optional in "api_config" field.
   // source origin. Formatted as a base-10 string.
   "max_sources_per_origin": "1024",
 
-  // Non-negative integer that controls the valid range of source event ID. No
-  // limit if zero. Formatted as a base-10 string.
-  "source_event_id_cardinality": "0",
-
   // Positive integer that controls the maximum number of distinct destinations
   // covered by pending sources for a given (source site, reporting origin).
   // Formatted as a base-10 string.
@@ -66,13 +62,10 @@ and optional in "api_config" field.
   // that are attributed to an event source. Formatted as a base-10 string.
   "event_source_trigger_data_cardinality": "2",
 
-  // A double between 0 and 1 that controls the randomized response probability
-  // of a navigation source.
-  "navigation_source_randomized_response_rate": 0.0024,
-
-  // A double between 0 and 1 that controls the randomized response probabiity
-  // of an event source.
-  "event_source_randomized_response_rate": 0.0000025,
+  // A string that encodes either "inf" or a double greater than or equal to 0.
+  // This controls the randomized response mechanism for event-level reports by
+  // adjusting the flip probability.
+  "randomized_response_epsilon": "14",
 
   // Positive integer that controls how many event-level reports can be in the
   // storage per destination. Formatted as a base-10 string.
@@ -357,7 +350,7 @@ and triggers.
 
           // Decimal number between 0 and 1 indicating how often noise is
           // applied.
-          "randomized_trigger_rate": 0.0024,
+          "randomized_trigger_rate": 0.0024263,
 
           // Debug key set on the source. Omitted if not set.
           "source_debug_key": "123",

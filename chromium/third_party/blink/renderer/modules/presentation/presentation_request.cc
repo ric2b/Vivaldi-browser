@@ -218,7 +218,8 @@ ScriptPromise PresentationRequest::start(ScriptState* script_state,
   }
 
   PresentationController* controller = PresentationController::From(*window);
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
 
   controller->GetPresentationService()->StartPresentation(
       urls_,
@@ -240,7 +241,8 @@ ScriptPromise PresentationRequest::reconnect(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
 
   ControllerPresentationConnection* existing_connection =
       controller->FindExistingConnection(urls_, id);
@@ -297,6 +299,8 @@ void PresentationRequest::Trace(Visitor* visitor) const {
 
 PresentationRequest::PresentationRequest(ExecutionContext* execution_context,
                                          const Vector<KURL>& urls)
-    : ExecutionContextClient(execution_context), urls_(urls) {}
+    : ActiveScriptWrappable<PresentationRequest>({}),
+      ExecutionContextClient(execution_context),
+      urls_(urls) {}
 
 }  // namespace blink

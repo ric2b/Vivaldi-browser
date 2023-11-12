@@ -22,9 +22,9 @@ BASE_FEATURE(kNetworkServiceOutOfProcessMemoryThreshold,
              "NetworkServiceOutOfProcessMemoryThreshold",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Using 1077 rather than 1024 because 1) it helps ensure that devices with
+// Using 1077 rather than 1024 because it helps ensure that devices with
 // exactly 1GB of RAM won't get included because of inaccuracies or off-by-one
-// errors and 2) this is the bucket boundary in Memory.Stats.Win.TotalPhys2.
+// errors.
 constexpr base::FeatureParam<int> kNetworkServiceOutOfProcessThresholdMb{
     &kNetworkServiceOutOfProcessMemoryThreshold,
     "network_service_oop_threshold_mb", 1077};
@@ -41,19 +41,22 @@ bool IsOutOfProcessNetworkService() {
 }
 
 bool IsInProcessNetworkService() {
+#if BUILDFLAG(IS_ANDROID)
+  // Check RAM size before looking at kNetworkServiceInProcess flag
+  // so that we can throttle the finch groups including control.
+  if (base::SysInfo::AmountOfPhysicalMemoryMB() <=
+      kNetworkServiceOutOfProcessThresholdMb.Get()) {
+    return true;
+  }
+#endif
+
   if (g_force_in_process_network_service ||
       base::FeatureList::IsEnabled(features::kNetworkServiceInProcess) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSingleProcess)) {
     return true;
   }
-
-#if BUILDFLAG(IS_ANDROID)
-  return base::SysInfo::AmountOfPhysicalMemoryMB() <=
-         kNetworkServiceOutOfProcessThresholdMb.Get();
-#else
   return false;
-#endif
 }
 
 void ForceInProcessNetworkService(bool is_forced) {

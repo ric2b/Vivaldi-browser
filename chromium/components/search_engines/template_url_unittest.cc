@@ -24,9 +24,9 @@
 #include "components/search_engines/testing_search_terms_data.h"
 #include "net/base/url_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/metrics_proto/chrome_searchbox_stats.pb.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
+#include "third_party/omnibox_proto/chrome_searchbox_stats.pb.h"
 
 using base::ASCIIToUTF16;
 using RequestSource = SearchTermsData::RequestSource;
@@ -665,14 +665,14 @@ TEST_F(TemplateURLTest, ReplaceAssistedQueryStats) {
   feature_list.InitWithFeatures({omnibox::kReportAssistedQueryStats},
                                 {omnibox::kReportSearchboxStats});
 
-  metrics::ChromeSearchboxStats searchbox_stats;
+  omnibox::metrics::ChromeSearchboxStats searchbox_stats;
   searchbox_stats.set_client_name("chrome");
   searchbox_stats.set_zero_prefix_enabled(true);
 
   struct TestData {
     const std::u16string search_term;
     const std::string aqs;
-    const metrics::ChromeSearchboxStats searchbox_stats;
+    const omnibox::metrics::ChromeSearchboxStats searchbox_stats;
     const std::string base_url;
     const std::string url;
     const std::string expected_result;
@@ -724,14 +724,14 @@ TEST_F(TemplateURLTest, ReplaceSearchboxStats) {
   feature_list.InitWithFeatures({omnibox::kReportSearchboxStats},
                                 {omnibox::kReportAssistedQueryStats});
 
-  metrics::ChromeSearchboxStats searchbox_stats;
+  omnibox::metrics::ChromeSearchboxStats searchbox_stats;
   searchbox_stats.set_client_name("chrome");
   searchbox_stats.set_zero_prefix_enabled(true);
 
   struct TestData {
     const std::u16string search_term;
     const std::string aqs;
-    const metrics::ChromeSearchboxStats searchbox_stats;
+    const omnibox::metrics::ChromeSearchboxStats searchbox_stats;
     const std::string base_url;
     const std::string url;
     const std::string expected_result;
@@ -782,14 +782,14 @@ TEST_F(TemplateURLTest, ReplaceSearchboxStatsAndAssistedQueryStats) {
   feature_list.InitWithFeatures(
       {omnibox::kReportSearchboxStats, omnibox::kReportAssistedQueryStats}, {});
 
-  metrics::ChromeSearchboxStats searchbox_stats;
+  omnibox::metrics::ChromeSearchboxStats searchbox_stats;
   searchbox_stats.set_client_name("chrome");
   searchbox_stats.set_zero_prefix_enabled(true);
 
   struct TestData {
     const std::u16string search_term;
     const std::string aqs;
-    const metrics::ChromeSearchboxStats searchbox_stats;
+    const omnibox::metrics::ChromeSearchboxStats searchbox_stats;
     const std::string base_url;
     const std::string url;
     const std::string expected_result;
@@ -1996,7 +1996,7 @@ TEST_F(TemplateURLTest, ContextualSearchParameters) {
   // event.
   TemplateURLRef::SearchTermsArgs::ContextualSearchParams params(
       2, 1, std::string(), 0, 0, false, std::string(), std::string(),
-      std::string(), std::string());
+      std::string(), std::string(), false);
   search_terms_args.contextual_search_params = params;
   result = url.url_ref().ReplaceSearchTerms(search_terms_args,
                                             search_terms_data_);
@@ -2010,7 +2010,7 @@ TEST_F(TemplateURLTest, ContextualSearchParameters) {
   search_terms_args.contextual_search_params =
       TemplateURLRef::SearchTermsArgs::ContextualSearchParams(
           2, 2, "CH", 1657713458, 5, false, std::string(), std::string(),
-          std::string(), std::string());
+          std::string(), std::string(), false);
   result =
       url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_);
 
@@ -2027,7 +2027,7 @@ TEST_F(TemplateURLTest, ContextualSearchParameters) {
   search_terms_args.contextual_search_params =
       TemplateURLRef::SearchTermsArgs::ContextualSearchParams(
           2, 1, std::string(), 0, 0, true, std::string(), std::string(),
-          std::string(), std::string());
+          std::string(), std::string(), false);
   result =
       url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_);
   // Find our param.
@@ -2038,7 +2038,7 @@ TEST_F(TemplateURLTest, ContextualSearchParameters) {
   search_terms_args.contextual_search_params =
       TemplateURLRef::SearchTermsArgs::ContextualSearchParams(
           2, 1, std::string(), 0, 0, true, "es", "de", std::string(),
-          std::string());
+          std::string(), false);
   result =
       url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_);
   // Find our params.
@@ -2051,7 +2051,7 @@ TEST_F(TemplateURLTest, ContextualSearchParameters) {
   search_terms_args.contextual_search_params =
       TemplateURLRef::SearchTermsArgs::ContextualSearchParams(
           2, 1, std::string(), 0, 0, true, std::string(), std::string(),
-          "es,de", std::string());
+          "es,de", std::string(), false);
   result =
       url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_);
   // Find our param.  These may actually be URL encoded.
@@ -2062,12 +2062,23 @@ TEST_F(TemplateURLTest, ContextualSearchParameters) {
   search_terms_args.contextual_search_params =
       TemplateURLRef::SearchTermsArgs::ContextualSearchParams(
           2, 1, std::string(), 0, 0, true, std::string(), std::string(),
-          std::string(), "1RbCu");
+          std::string(), "1RbCu", false);
   result =
       url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_);
   // Find our param.
   size_t ctxsl_rs_pos = result.find("&ctxsl_rs=1RbCu");
   EXPECT_NE(ctxsl_rs_pos, std::string::npos);
+
+  // Test apply language hint.
+  search_terms_args.contextual_search_params =
+      TemplateURLRef::SearchTermsArgs::ContextualSearchParams(
+          2, 1, std::string(), 0, 0, true, std::string(), std::string(),
+          std::string(), std::string(), true);
+  result =
+      url.url_ref().ReplaceSearchTerms(search_terms_args, search_terms_data_);
+  // Find our param.
+  size_t ctxsl_applylh = result.find("&ctxsl_applylh=1");
+  EXPECT_NE(ctxsl_applylh, std::string::npos);
 }
 
 TEST_F(TemplateURLTest, GenerateKeyword) {

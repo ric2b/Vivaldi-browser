@@ -18,6 +18,7 @@
 #import "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/public/thread/web_thread.h"
 #import "ios/web/web_state/web_state_impl.h"
+#import "third_party/abseil-cpp/absl/types/optional.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -30,6 +31,10 @@ JavaScriptFindInPageManagerImpl::JavaScriptFindInPageManagerImpl(
     WebState* web_state)
     : web_state_(web_state), weak_factory_(this) {
   web_state_->AddObserver(this);
+  web::WebFramesManager* web_frames_manager =
+      FindInPageJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          web_state);
+  web_frames_manager->AddObserver(this);
 }
 
 void JavaScriptFindInPageManagerImpl::CreateForWebState(WebState* web_state) {
@@ -56,19 +61,18 @@ void JavaScriptFindInPageManagerImpl::SetDelegate(
   delegate_ = delegate;
 }
 
-void JavaScriptFindInPageManagerImpl::WebFrameDidBecomeAvailable(
-    WebState* web_state,
+void JavaScriptFindInPageManagerImpl::WebFrameBecameAvailable(
+    WebFramesManager* web_frames_manager,
     WebFrame* web_frame) {
   const std::string frame_id = web_frame->GetFrameId();
   last_find_request_.AddFrame(web_frame);
 }
 
-void JavaScriptFindInPageManagerImpl::WebFrameWillBecomeUnavailable(
-    WebState* web_state,
-    WebFrame* web_frame) {
-  int match_count =
-      last_find_request_.GetMatchCountForFrame(web_frame->GetFrameId());
-  last_find_request_.RemoveFrame(web_frame->GetFrameId());
+void JavaScriptFindInPageManagerImpl::WebFrameBecameUnavailable(
+    WebFramesManager* web_frames_manager,
+    const std::string& frame_id) {
+  int match_count = last_find_request_.GetMatchCountForFrame(frame_id);
+  last_find_request_.RemoveFrame(frame_id);
 
   // Only notify the delegate if the match count has changed.
   if (delegate_ && last_find_request_.GetRequestQuery() && match_count > 0) {
@@ -102,9 +106,15 @@ void JavaScriptFindInPageManagerImpl::Find(NSString* query,
 }
 
 void JavaScriptFindInPageManagerImpl::StartSearch(NSString* query) {
+  if (!web_state_) {
+    return;
+  }
+
   RecordSearchStartedAction();
-  std::set<WebFrame*> all_frames =
-      web_state_->GetPageWorldWebFramesManager()->GetAllWebFrames();
+  WebFramesManager* frames_manager =
+      FindInPageJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          web_state_);
+  std::set<WebFrame*> all_frames = frames_manager->GetAllWebFrames();
   last_find_request_.Reset(query, all_frames.size());
   if (all_frames.size() == 0) {
     // No frames to search in.
@@ -142,11 +152,19 @@ void JavaScriptFindInPageManagerImpl::StartSearch(NSString* query) {
 }
 
 void JavaScriptFindInPageManagerImpl::StopFinding() {
+  if (!web_state_) {
+    return;
+  }
+
   last_find_request_.Reset(/*new_query=*/nil,
                            /*new_pending_frame_call_count=*/0);
 
-  for (WebFrame* frame :
-       web_state_->GetPageWorldWebFramesManager()->GetAllWebFrames()) {
+  WebFramesManager* frames_manager =
+      FindInPageJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          web_state_);
+  std::set<WebFrame*> all_frames = frames_manager->GetAllWebFrames();
+
+  for (WebFrame* frame : all_frames) {
     FindInPageJavaScriptFeature::GetInstance()->Stop(frame);
   }
   if (delegate_) {
@@ -173,7 +191,10 @@ void JavaScriptFindInPageManagerImpl::ProcessFindInPageResult(
     return;
   }
 
-  WebFrame* frame = GetWebFrameWithId(web_state_, frame_id);
+  FindInPageJavaScriptFeature* feature =
+      FindInPageJavaScriptFeature::GetInstance();
+  WebFrame* frame =
+      feature->GetWebFramesManager(web_state_)->GetFrameWithId(frame_id);
   if (!result_matches || !frame) {
     // The frame no longer exists or the function call timed out. In both cases,
     // result will be null.
@@ -183,7 +204,7 @@ void JavaScriptFindInPageManagerImpl::ProcessFindInPageResult(
     // If response is equal to kFindInPagePending, find did not finish in the
     // JavaScript. Call pumpSearch to continue find.
     if (result_matches.value() == find_in_page::kFindInPagePending) {
-      FindInPageJavaScriptFeature::GetInstance()->Pump(
+      feature->Pump(
           frame, base::BindOnce(
                      &JavaScriptFindInPageManagerImpl::ProcessFindInPageResult,
                      weak_factory_.GetWeakPtr(), frame_id, unique_id));
@@ -218,10 +239,12 @@ void JavaScriptFindInPageManagerImpl::SelectDidFinish(
     const base::Value* result) {
   std::string match_context_string;
   if (result && result->is_dict()) {
+    const base::Value::Dict& result_dict = result->GetDict();
     // Get updated match count.
-    const base::Value* matches = result->FindKey(kSelectAndScrollResultMatches);
-    if (matches && matches->is_double()) {
-      int match_count = static_cast<int>(matches->GetDouble());
+    const absl::optional<double> matches =
+        result_dict.FindDouble(kSelectAndScrollResultMatches);
+    if (matches) {
+      int match_count = static_cast<int>(matches.value());
       if (match_count != last_find_request_.GetMatchCountForSelectedFrame()) {
         last_find_request_.SetMatchCountForSelectedFrame(match_count);
         if (delegate_) {
@@ -232,17 +255,17 @@ void JavaScriptFindInPageManagerImpl::SelectDidFinish(
       }
     }
     // Get updated currently selected index.
-    const base::Value* index = result->FindKey(kSelectAndScrollResultIndex);
-    if (index && index->is_double()) {
-      int current_index = static_cast<int>(index->GetDouble());
+    const absl::optional<double> index =
+        result_dict.FindDouble(kSelectAndScrollResultIndex);
+    if (index) {
+      int current_index = static_cast<int>(index.value());
       last_find_request_.SetCurrentSelectedMatchFrameIndex(current_index);
     }
     // Get context string.
-    const base::Value* context_string =
-        result->FindKey(kSelectAndScrollResultContextString);
-    if (context_string && context_string->is_string()) {
-      match_context_string =
-          static_cast<std::string>(context_string->GetString());
+    const std::string* context_string =
+        result_dict.FindString(kSelectAndScrollResultContextString);
+    if (context_string) {
+      match_context_string = *context_string;
     }
   }
   if (delegate_) {
@@ -279,10 +302,14 @@ void JavaScriptFindInPageManagerImpl::SelectPreviousMatch() {
 }
 
 void JavaScriptFindInPageManagerImpl::SelectCurrentMatch() {
-  web::WebFrame* frame =
-      GetWebFrameWithId(web_state_, last_find_request_.GetSelectedFrameId());
+  FindInPageJavaScriptFeature* feature =
+      FindInPageJavaScriptFeature::GetInstance();
+  WebFrame* frame =
+      feature->GetWebFramesManager(web_state_)
+          ->GetFrameWithId(last_find_request_.GetSelectedFrameId());
+
   if (frame) {
-    FindInPageJavaScriptFeature::GetInstance()->SelectMatch(
+    feature->SelectMatch(
         frame, last_find_request_.GetCurrentSelectedMatchFrameIndex(),
         base::BindOnce(&JavaScriptFindInPageManagerImpl::SelectDidFinish,
                        weak_factory_.GetWeakPtr()));

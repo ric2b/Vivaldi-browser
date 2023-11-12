@@ -444,10 +444,13 @@ void VivaldiDesktopWindowTreeHostWin::UpdateWindowBorderColor(
     }
   } else {
     // System accent border colors are disabled, let dark and light mode decide.
+    Profile* profile = window_->GetProfile();
     bool is_dark_mode =
-        (static_cast<int>(vivaldiprefs::SystemDesktopThemeColorValues::kDark) ==
-         window_->GetProfile()->GetPrefs()->GetInteger(
-             vivaldiprefs::kSystemDesktopThemeColor));
+        profile ? (static_cast<int>(
+                       vivaldiprefs::SystemDesktopThemeColorValues::kDark) ==
+                   profile->GetPrefs()->GetInteger(
+                       vivaldiprefs::kSystemDesktopThemeColor))
+                : false;
     window_border_color_ =
         is_dark_mode ? VIVALDI_WINDOW_BORDER_DARK : VIVALDI_WINDOW_BORDER_LIGHT;
   }

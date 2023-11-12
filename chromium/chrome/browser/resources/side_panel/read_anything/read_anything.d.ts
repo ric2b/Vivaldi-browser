@@ -70,7 +70,7 @@ declare namespace chrome {
 
     // Called when a user makes a selection change. AnchorNodeID and
     // focusAXNodeID are AXNodeIDs which identify the anchor and focus AXNodes
-    // in the main pane.
+    // in the main pane. The selection can either be forward or backwards.
     function onSelectionChange(
         anchorNodeId: number, anchorOffset: number, focusNodeId: number,
         focusOffset: number): void;
@@ -105,9 +105,15 @@ declare namespace chrome {
     // Implemented in read_anything/app.ts and called by native c++.
     ////////////////////////////////////////////////////////////////
 
+    // Display a loading screen to tell the user we are distilling the page.
+    function showLoading(): void;
+
     // Ping that an AXTree has been distilled for the active tab's render frame
     // and is available to consume.
     function updateContent(): void;
+
+    // Ping that the selection has been updated.
+    function updateSelection(): void;
 
     // Ping that the theme choices of the user have been changed using the
     // toolbar and are ready to consume.

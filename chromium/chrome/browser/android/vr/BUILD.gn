@@ -160,6 +160,12 @@ if (enable_arcore) {
   }
 }
 
+if (enable_cardboard) {
+  generate_jni("vr_jni_headers") {
+    sources = [ "//chrome/android/java/src/org/chromium/chrome/browser/vr/VrCompositorDelegateProviderImpl.java" ]
+  }
+}
+
 group("test_support") {
   public_deps = [ ":ui_default_factory" ]
 }
@@ -185,6 +191,7 @@ test("vr_android_unittests") {
     "//components/translate/core/language_detection:language_detection",
     "//components/webxr:webxr",
     "//device/vr:vr_fakes",
+    "//device/vr/android:vr_android",
     "//device/vr/public/mojom:isolated_xr_service",
     "//mojo/core/embedder",
     "//mojo/public/cpp/bindings",

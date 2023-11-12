@@ -5,10 +5,14 @@
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_keyboard_backlight_provider_impl.h"
 
 #include <memory>
+#include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "ash/rgb_keyboard/rgb_keyboard_manager.h"
+#include "ash/shell.h"
 #include "ash/system/keyboard_brightness/keyboard_backlight_color_controller.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_metrics.h"
@@ -32,8 +36,9 @@ const AccountId account_id =
 class TestKeyboardBacklightObserver
     : public ash::personalization_app::mojom::KeyboardBacklightObserver {
  public:
-  void OnBacklightColorChanged(mojom::BacklightColor backlight_color) override {
-    backlight_color_ = backlight_color;
+  void OnBacklightStateChanged(
+      mojom::CurrentBacklightStatePtr current_backlight_state) override {
+    current_backlight_state_ = std::move(current_backlight_state);
   }
 
   void OnWallpaperColorChanged(SkColor wallpaper_color) override {
@@ -50,9 +55,9 @@ class TestKeyboardBacklightObserver
     return keyboard_backlight_observer_receiver_.BindNewPipeAndPassRemote();
   }
 
-  mojom::BacklightColor backlight_color() {
+  mojom::CurrentBacklightState* current_backlight_state() {
     keyboard_backlight_observer_receiver_.FlushForTesting();
-    return backlight_color_;
+    return current_backlight_state_.get();
   }
 
   SkColor wallpaper_color() {
@@ -63,8 +68,8 @@ class TestKeyboardBacklightObserver
  private:
   mojo::Receiver<ash::personalization_app::mojom::KeyboardBacklightObserver>
       keyboard_backlight_observer_receiver_{this};
-
-  mojom::BacklightColor backlight_color_ = mojom::BacklightColor::kWallpaper;
+  mojom::CurrentBacklightStatePtr current_backlight_state_ =
+      mojom::CurrentBacklightState::NewColor(mojom::BacklightColor::kRed);
   SkColor wallpaper_color_ = SK_ColorTRANSPARENT;
 };
 
@@ -76,7 +81,9 @@ class PersonalizationAppKeyboardBacklightProviderImplTest
   PersonalizationAppKeyboardBacklightProviderImplTest()
       : scoped_user_manager_(std::make_unique<ash::FakeChromeUserManager>()),
         profile_manager_(TestingBrowserProcess::GetGlobal()) {
-    scoped_feature_list_.InitWithFeatures({ash::features::kRgbKeyboard}, {});
+    scoped_feature_list_.InitWithFeatures(
+        {ash::features::kRgbKeyboard, ash::features::kMultiZoneRgbKeyboard},
+        {});
   }
   PersonalizationAppKeyboardBacklightProviderImplTest(
       const PersonalizationAppKeyboardBacklightProviderImplTest&) = delete;
@@ -140,14 +147,20 @@ class PersonalizationAppKeyboardBacklightProviderImplTest
         test_keyboard_backlight_observer_.pending_remote());
   }
 
-  mojom::BacklightColor ObservedBacklightColor() {
+  mojom::CurrentBacklightState* ObservedBacklightColor() {
     keyboard_backlight_provider_remote_.FlushForTesting();
-    return test_keyboard_backlight_observer_.backlight_color();
+    return test_keyboard_backlight_observer_.current_backlight_state();
   }
 
   SkColor ObservedWallpaperColor() {
     keyboard_backlight_provider_remote_.FlushForTesting();
     return test_keyboard_backlight_observer_.wallpaper_color();
+  }
+
+  void set_rgb_capability(rgbkbd::RgbKeyboardCapabilities capability) {
+    RgbKeyboardManager* rgb_keyboard_manager =
+        Shell::Get()->rgb_keyboard_manager();
+    rgb_keyboard_manager->OnCapabilityUpdatedForTesting(capability);
   }
 
  private:
@@ -156,7 +169,7 @@ class PersonalizationAppKeyboardBacklightProviderImplTest
   TestingProfileManager profile_manager_;
   content::TestWebUI web_ui_;
   std::unique_ptr<content::WebContents> web_contents_;
-  TestingProfile* profile_;
+  raw_ptr<TestingProfile, ExperimentalAsh> profile_;
   std::unique_ptr<KeyboardBacklightColorController>
       keyboard_backlight_color_controller_;
   mojo::Remote<ash::personalization_app::mojom::KeyboardBacklightProvider>
@@ -175,10 +188,34 @@ TEST_F(PersonalizationAppKeyboardBacklightProviderImplTest, SetBacklightColor) {
       mojom::BacklightColor::kBlue);
 
   // Verify JS side is notified.
-  EXPECT_EQ(mojom::BacklightColor::kBlue, ObservedBacklightColor());
+  EXPECT_TRUE(ObservedBacklightColor()->is_color());
+  EXPECT_EQ(mojom::BacklightColor::kBlue,
+            ObservedBacklightColor()->get_color());
   histogram_tester().ExpectBucketCount(
       kPersonalizationKeyboardBacklightColorHistogramName,
       mojom::BacklightColor::kBlue, 1);
+}
+
+TEST_F(PersonalizationAppKeyboardBacklightProviderImplTest,
+       SetBacklightZoneColor) {
+  SimulateUserLogin(account_id);
+  SetKeyboardBacklightObserver();
+  set_rgb_capability(rgbkbd::RgbKeyboardCapabilities::kFourZoneFortyLed);
+  keyboard_backlight_provider_remote()->FlushForTesting();
+
+  keyboard_backlight_provider()->SetBacklightColor(
+      mojom::BacklightColor::kBlue);
+  EXPECT_TRUE(ObservedBacklightColor()->is_color());
+
+  keyboard_backlight_provider()->SetBacklightZoneColor(
+      1, mojom::BacklightColor::kRed);
+  // Verify JS side is notified.
+  EXPECT_TRUE(ObservedBacklightColor()->is_zone_colors());
+  const auto zone_colors = ObservedBacklightColor()->get_zone_colors();
+  for (size_t i = 0; i < zone_colors.size(); i++) {
+    EXPECT_EQ(zone_colors[i], i == 1 ? mojom::BacklightColor::kRed
+                                     : mojom::BacklightColor::kBlue);
+  }
 }
 
 TEST_F(PersonalizationAppKeyboardBacklightProviderImplTest,

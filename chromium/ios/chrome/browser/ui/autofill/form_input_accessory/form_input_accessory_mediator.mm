@@ -23,16 +23,15 @@
 #import "ios/chrome/browser/autofill/form_input_suggestions_provider.h"
 #import "ios/chrome/browser/autofill/form_suggestion_tab_helper.h"
 #import "ios/chrome/browser/autofill/manual_fill/passwords_fetcher.h"
-#import "ios/chrome/browser/passwords/password_generation_utils.h"
+#import "ios/chrome/browser/default_browser/utils.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
+#import "ios/chrome/browser/shared/public/commands/security_alert_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_chromium_text_data.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_consumer.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_suggestion_view.h"
-#import "ios/chrome/browser/ui/commands/security_alert_commands.h"
-#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
-#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/elements/form_input_accessory_view.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_event.h"
@@ -133,9 +132,12 @@ using base::UmaHistogramEnumeration;
                    handler:(id<FormInputAccessoryMediatorHandler>)handler
               webStateList:(WebStateList*)webStateList
        personalDataManager:(autofill::PersonalDataManager*)personalDataManager
-             passwordStore:
-                 (scoped_refptr<password_manager::PasswordStoreInterface>)
-                     passwordStore
+      profilePasswordStore:
+          (scoped_refptr<password_manager::PasswordStoreInterface>)
+              profilePasswordStore
+      accountPasswordStore:
+          (scoped_refptr<password_manager::PasswordStoreInterface>)
+              accountPasswordStore
       securityAlertHandler:(id<SecurityAlertCommands>)securityAlertHandler
     reauthenticationModule:(ReauthenticationModule*)reauthenticationModule {
   self = [super init];
@@ -180,11 +182,12 @@ using base::UmaHistogramEnumeration;
     // In BVC unit tests the password store doesn't exist. Skip creating the
     // fetcher.
     // TODO:(crbug.com/878388) Remove this workaround.
-    if (passwordStore) {
-      _passwordFetcher =
-          [[PasswordFetcher alloc] initWithPasswordStore:passwordStore
-                                                delegate:self
-                                                     URL:GURL::EmptyGURL()];
+    if (profilePasswordStore) {
+      _passwordFetcher = [[PasswordFetcher alloc]
+          initWithProfilePasswordStore:profilePasswordStore
+                  accountPasswordStore:accountPasswordStore
+                              delegate:self
+                                   URL:GURL::EmptyGURL()];
     }
     if (personalDataManager) {
       _personalDataManager = personalDataManager;
@@ -284,7 +287,7 @@ using base::UmaHistogramEnumeration;
   }
 
   // Return early and reset if frame is missing or can't call JS.
-  if (!frame || !frame->CanCallJavaScriptFunction()) {
+  if (!frame) {
     [self reset];
     return;
   }
@@ -533,6 +536,10 @@ using base::UmaHistogramEnumeration;
     if (provider.type == SuggestionProviderTypeAutofill) {
       LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeMadeForIOS);
     }
+
+    if (suggestions.firstObject.featureForIPH.length > 0) {
+      [self.handler showAutofillSuggestionIPHIfNeeded];
+    }
   }
 }
 
@@ -554,6 +561,12 @@ using base::UmaHistogramEnumeration;
     }
     if (strongSelf.currentProvider.type == SuggestionProviderTypePassword) {
       LogLikelyInterestedDefaultBrowserUserActivity(DefaultPromoTypeStaySafe);
+    }
+    if (formSuggestion.featureForIPH.length) {
+      // The IPH is only shown if the suggestion was the first one. It doesn't
+      // matter if the IPH was shown for this suggestion as we don't want to
+      // show more IPH's to the user.
+      [self.handler notifyAutofillSuggestionWithIPHSelected];
     }
     [strongSelf.currentProvider didSelectSuggestion:formSuggestion];
   };

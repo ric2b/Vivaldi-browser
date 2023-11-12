@@ -3563,6 +3563,44 @@ void GLES2Implementation::CopySharedImageINTERNAL(GLint xoffset,
   CheckGLError();
 }
 
+void GLES2Implementation::CopySharedImageToTextureINTERNAL(
+    GLuint texture,
+    GLenum target,
+    GLuint internal_format,
+    GLenum type,
+    GLint src_x,
+    GLint src_y,
+    GLsizei width,
+    GLsizei height,
+    GLboolean flip_y,
+    const GLbyte* src_mailbox) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG(
+      "[" << GetLogPrefix() << "] glCopySharedImageToTextureINTERNAL("
+          << texture << ", " << GLES2Util::GetStringEnum(target) << ", "
+          << internal_format << ", " << GLES2Util::GetStringEnum(type) << ", "
+          << src_x << ", " << src_y << ", " << width << ", " << height << ", "
+          << GLES2Util::GetStringBool(flip_y) << ", "
+          << static_cast<const void*>(src_mailbox) << ")");
+  uint32_t count = 16;
+  for (uint32_t ii = 0; ii < count; ++ii)
+    GPU_CLIENT_LOG("value[" << ii << "]: " << src_mailbox[ii]);
+  if (width < 0) {
+    SetGLError(GL_INVALID_VALUE, "glCopySharedImageToTextureINTERNAL",
+               "width < 0");
+    return;
+  }
+  if (height < 0) {
+    SetGLError(GL_INVALID_VALUE, "glCopySharedImageToTextureINTERNAL",
+               "height < 0");
+    return;
+  }
+  helper_->CopySharedImageToTextureINTERNALImmediate(
+      texture, target, internal_format, type, src_x, src_y, width, height,
+      flip_y, src_mailbox);
+  CheckGLError();
+}
+
 void GLES2Implementation::BlendEquationiOES(GLuint buf, GLenum mode) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
   GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glBlendEquationiOES(" << buf
@@ -3629,4 +3667,211 @@ void GLES2Implementation::ProvokingVertexANGLE(GLenum provokeMode) {
   CheckGLError();
 }
 
+void GLES2Implementation::FramebufferMemorylessPixelLocalStorageANGLE(
+    GLint plane,
+    GLenum internalformat) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glFramebufferMemorylessPixelLocalStorageANGLE("
+                     << plane << ", "
+                     << GLES2Util::GetStringEnum(internalformat) << ")");
+  helper_->FramebufferMemorylessPixelLocalStorageANGLE(plane, internalformat);
+  CheckGLError();
+}
+
+void GLES2Implementation::FramebufferTexturePixelLocalStorageANGLE(
+    GLint plane,
+    GLuint backingtexture,
+    GLint level,
+    GLint layer) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glFramebufferTexturePixelLocalStorageANGLE(" << plane
+                     << ", " << backingtexture << ", " << level << ", " << layer
+                     << ")");
+  helper_->FramebufferTexturePixelLocalStorageANGLE(plane, backingtexture,
+                                                    level, layer);
+  CheckGLError();
+}
+
+void GLES2Implementation::FramebufferPixelLocalClearValuefvANGLE(
+    GLint plane,
+    const GLfloat* value) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glFramebufferPixelLocalClearValuefvANGLE(" << plane
+                     << ", " << static_cast<const void*>(value) << ")");
+  uint32_t count = 4;
+  for (uint32_t ii = 0; ii < count; ++ii)
+    GPU_CLIENT_LOG("value[" << ii << "]: " << value[ii]);
+  helper_->FramebufferPixelLocalClearValuefvANGLEImmediate(plane, value);
+  CheckGLError();
+}
+
+void GLES2Implementation::FramebufferPixelLocalClearValueivANGLE(
+    GLint plane,
+    const GLint* value) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glFramebufferPixelLocalClearValueivANGLE(" << plane
+                     << ", " << static_cast<const void*>(value) << ")");
+  uint32_t count = 4;
+  for (uint32_t ii = 0; ii < count; ++ii)
+    GPU_CLIENT_LOG("value[" << ii << "]: " << value[ii]);
+  helper_->FramebufferPixelLocalClearValueivANGLEImmediate(plane, value);
+  CheckGLError();
+}
+
+void GLES2Implementation::FramebufferPixelLocalClearValueuivANGLE(
+    GLint plane,
+    const GLuint* value) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glFramebufferPixelLocalClearValueuivANGLE(" << plane
+                     << ", " << static_cast<const void*>(value) << ")");
+  uint32_t count =
+      GLES2Util::CalcFramebufferPixelLocalClearValueuivANGLEDataCount(plane);
+  DCHECK_LE(count, 4u);
+  if (count == 0) {
+    SetGLErrorInvalidEnum("glFramebufferPixelLocalClearValueuivANGLE", plane,
+                          "plane");
+    return;
+  }
+  for (uint32_t ii = 0; ii < count; ++ii)
+    GPU_CLIENT_LOG("value[" << ii << "]: " << value[ii]);
+  helper_->FramebufferPixelLocalClearValueuivANGLEImmediate(plane, value);
+  CheckGLError();
+}
+
+void GLES2Implementation::BeginPixelLocalStorageANGLE(GLsizei count,
+                                                      const GLenum* loadops) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glBeginPixelLocalStorageANGLE("
+                     << count << ", " << static_cast<const void*>(loadops)
+                     << ")");
+  GPU_CLIENT_LOG_CODE_BLOCK({
+    for (GLsizei i = 0; i < count; ++i) {
+      GPU_CLIENT_LOG("  " << i << ": " << loadops[0 + i * 1]);
+    }
+  });
+  if (count < 0) {
+    SetGLError(GL_INVALID_VALUE, "glBeginPixelLocalStorageANGLE", "count < 0");
+    return;
+  }
+  helper_->BeginPixelLocalStorageANGLEImmediate(count, loadops);
+  CheckGLError();
+}
+
+void GLES2Implementation::EndPixelLocalStorageANGLE(GLsizei count,
+                                                    const GLenum* storeops) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glEndPixelLocalStorageANGLE("
+                     << count << ", " << static_cast<const void*>(storeops)
+                     << ")");
+  GPU_CLIENT_LOG_CODE_BLOCK({
+    for (GLsizei i = 0; i < count; ++i) {
+      GPU_CLIENT_LOG("  " << i << ": " << storeops[0 + i * 1]);
+    }
+  });
+  if (count < 0) {
+    SetGLError(GL_INVALID_VALUE, "glEndPixelLocalStorageANGLE", "count < 0");
+    return;
+  }
+  helper_->EndPixelLocalStorageANGLEImmediate(count, storeops);
+  CheckGLError();
+}
+
+void GLES2Implementation::PixelLocalStorageBarrierANGLE() {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glPixelLocalStorageBarrierANGLE("
+                     << ")");
+  helper_->PixelLocalStorageBarrierANGLE();
+  CheckGLError();
+}
+
+void GLES2Implementation::FramebufferPixelLocalStorageInterruptANGLE() {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glFramebufferPixelLocalStorageInterruptANGLE("
+                     << ")");
+  helper_->FramebufferPixelLocalStorageInterruptANGLE();
+  CheckGLError();
+}
+
+void GLES2Implementation::FramebufferPixelLocalStorageRestoreANGLE() {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glFramebufferPixelLocalStorageRestoreANGLE("
+                     << ")");
+  helper_->FramebufferPixelLocalStorageRestoreANGLE();
+  CheckGLError();
+}
+
+void GLES2Implementation::GetFramebufferPixelLocalStorageParameterfvANGLE(
+    GLint plane,
+    GLenum pname,
+    GLfloat* params) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glGetFramebufferPixelLocalStorageParameterfvANGLE("
+                     << plane << ", " << GLES2Util::GetStringEnum(pname) << ", "
+                     << static_cast<const void*>(params) << ")");
+  TRACE_EVENT0(
+      "gpu",
+      "GLES2Implementation::GetFramebufferPixelLocalStorageParameterfvANGLE");
+  if (GetFramebufferPixelLocalStorageParameterfvANGLEHelper(plane, pname,
+                                                            params)) {
+    return;
+  }
+  typedef cmds::GetFramebufferPixelLocalStorageParameterfvANGLE::Result Result;
+  ScopedResultPtr<Result> result = GetResultAs<Result>();
+  if (!result) {
+    return;
+  }
+  result->SetNumResults(0);
+  helper_->GetFramebufferPixelLocalStorageParameterfvANGLE(
+      plane, pname, GetResultShmId(), result.offset());
+  WaitForCmd();
+  result->CopyResult(params);
+  GPU_CLIENT_LOG_CODE_BLOCK({
+    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+    }
+  });
+  CheckGLError();
+}
+void GLES2Implementation::GetFramebufferPixelLocalStorageParameterivANGLE(
+    GLint plane,
+    GLenum pname,
+    GLint* params) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_VALIDATE_DESTINATION_INITALIZATION(GLint, params);
+  GPU_CLIENT_LOG("[" << GetLogPrefix()
+                     << "] glGetFramebufferPixelLocalStorageParameterivANGLE("
+                     << plane << ", " << GLES2Util::GetStringEnum(pname) << ", "
+                     << static_cast<const void*>(params) << ")");
+  TRACE_EVENT0(
+      "gpu",
+      "GLES2Implementation::GetFramebufferPixelLocalStorageParameterivANGLE");
+  if (GetFramebufferPixelLocalStorageParameterivANGLEHelper(plane, pname,
+                                                            params)) {
+    return;
+  }
+  typedef cmds::GetFramebufferPixelLocalStorageParameterivANGLE::Result Result;
+  ScopedResultPtr<Result> result = GetResultAs<Result>();
+  if (!result) {
+    return;
+  }
+  result->SetNumResults(0);
+  helper_->GetFramebufferPixelLocalStorageParameterivANGLE(
+      plane, pname, GetResultShmId(), result.offset());
+  WaitForCmd();
+  result->CopyResult(params);
+  GPU_CLIENT_LOG_CODE_BLOCK({
+    for (int32_t i = 0; i < result->GetNumResults(); ++i) {
+      GPU_CLIENT_LOG("  " << i << ": " << result->GetData()[i]);
+    }
+  });
+  CheckGLError();
+}
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_IMPLEMENTATION_IMPL_AUTOGEN_H_

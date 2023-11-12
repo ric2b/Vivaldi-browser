@@ -4,8 +4,7 @@
 
 package org.chromium.chrome.browser.tab;
 
-import android.support.test.InstrumentationRegistry;
-
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
@@ -139,7 +138,8 @@ public class InterceptNavigationDelegateTest {
             delegate.setExternalNavigationHandler(new TestExternalNavigationHandler());
             delegate.associateWithWebContents(tab.getWebContents());
         });
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
     }
 
     @After

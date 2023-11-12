@@ -172,4 +172,8 @@ if(!is_ios) {
     sources -= ["product.icon"]
     sources += ["//vivaldi/app/resources/message_center_vector_icons/product.icon"]
   }
+  update_template_instance("//components/omnibox/browser:omnibox_vector_icons") {
+    sources -= ["product.icon"]
+    sources += ["//vivaldi/app/resources/vector_icons/product.icon"]
+  }
 }

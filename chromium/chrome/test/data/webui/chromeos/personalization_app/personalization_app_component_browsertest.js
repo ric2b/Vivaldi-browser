@@ -46,7 +46,7 @@ var PersonalizationAppComponentBrowserTest = class extends PolymerTest {
  ['AmbientPreviewLargeTest', 'ambient_preview_large_element_test.js'],
  ['AmbientPreviewSmallTest', 'ambient_preview_small_element_test.js'],
  ['AmbientSubpageTest', 'ambient_subpage_element_test.js'],
- ['AvatarCameraTest', 'avatar_list_element_test.js'],
+ ['AvatarCameraTest', 'avatar_camera_element_test.js'],
  ['AvatarListTest', 'avatar_list_element_test.js'],
  ['DynamicColorTest', 'dynamic_color_element_test.js'],
  ['GooglePhotosAlbumsTest', 'google_photos_albums_element_test.js'],
@@ -56,6 +56,7 @@ var PersonalizationAppComponentBrowserTest = class extends PolymerTest {
    'google_photos_photos_by_album_id_element_test.js',
  ],
  ['GooglePhotosPhotosTest', 'google_photos_photos_element_test.js'],
+ ['GooglePhotosZeroStateTest', 'google_photos_zero_state_element_test.js'],
  ['KeyboardBacklightTest', 'keyboard_backlight_element_test.js'],
  ['LocalImagesTest', 'local_images_element_test.js'],
  [
@@ -79,10 +80,11 @@ var PersonalizationAppComponentBrowserTest = class extends PolymerTest {
    'GooglePhotosSharedAlbumDialogTest',
    'google_photos_shared_album_dialog_element_test.js'
  ],
+ ['ZoneCustomizationTest', 'zone_customization_element_test.js'],
 ].forEach(test => registerTest(...test));
 
 function registerTest(testName, module, caseName) {
-  const className = `PersonalizationApp${testName}`;
+  const className = `PersonalizationAppComponent${testName}`;
   this[className] = class extends PersonalizationAppComponentBrowserTest {
     /** @override */
     get browsePreload() {

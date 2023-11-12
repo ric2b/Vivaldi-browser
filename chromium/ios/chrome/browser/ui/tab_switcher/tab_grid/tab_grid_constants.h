@@ -5,12 +5,16 @@
 #ifndef IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_TAB_GRID_CONSTANTS_H_
 #define IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_TAB_GRID_CONSTANTS_H_
 
-#include <CoreGraphics/CoreGraphics.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
 // Vivaldi
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
 // End Vivaldi
+
+namespace base {
+class TimeDelta;
+}  // namespace base
 
 // Keys of UMA IOS.TabSwitcher.Idle histograms.
 extern const char kUMATabSwitcherIdleIncognitoTabGridPageHistogram[];
@@ -32,6 +36,7 @@ extern NSString* const kTabGridScrollViewIdentifier;
 extern NSString* const kRegularTabGridIdentifier;
 extern NSString* const kIncognitoTabGridIdentifier;
 extern NSString* const kInactiveTabGridIdentifier;
+extern NSString* const kInactiveTabGridCloseAllButtonIdentifier;
 
 extern NSString* const kTabGridEditButtonIdentifier;
 extern NSString* const kTabGridEditCloseTabsButtonIdentifier;
@@ -88,5 +93,8 @@ extern const CGFloat kThumbStripPlusSignButtonSlideOutDistance;
 
 // Alpha of the background color of the toolbar.
 extern const CGFloat kToolbarBackgroundAlpha;
+
+// Duration for animations in the tab grid.
+extern const base::TimeDelta kAnimationDuration;
 
 #endif  // IOS_CHROME_BROWSER_UI_TAB_SWITCHER_TAB_GRID_TAB_GRID_CONSTANTS_H_

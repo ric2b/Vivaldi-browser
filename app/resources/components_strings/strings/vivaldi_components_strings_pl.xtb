@@ -30,7 +30,7 @@
 <translation id="2337852623177822836">Ustawienie kontrolowane przez administratora</translation>
 <translation id="2355395290879513365">Osoby dokonujące ataków mogą widzieć te same obrazy w witrynie co ty i zmodyfikować je by cię oszukać.</translation>
 <translation id="2356070529366658676">Pytaj</translation>
-<translation id="2359808026110333948">Dalej</translation>
+<translation id="2359808026110333948">Kontynuuj</translation>
 <translation id="2467694685043708798">Spróbuj przeprowadzić <ph name="BEGIN_LINK" />diagnostykę sieci<ph name="END_LINK" /></translation>
 <translation id="2491414235131909199">Ta strona została zablokowana przez rozszerzenie</translation>
 <translation id="2501278716633472235">Przejdź wstecz</translation>
@@ -65,7 +65,7 @@
 <translation id="3447661539832366887">Właściciel tego urządzenia wyłączył grę z dinozaurem.</translation>
 <translation id="3447884698081792621">Pokaż certyfikat (wydany przez: <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Ukryj zaawansowane</translation>
-<translation id="3484560055331845446">Możesz stracić dostęp do swojego konta Google. Chrome zaleca natychmiastową zmianę hasła. Zobaczysz prośbę, by się zalogować.</translation>
+<translation id="3484560055331845446">Możesz stracić dostęp do swojego konta Vivaldi. Zalecamy natychmiastową zmianę hasła. Zobaczysz prośbę o ponowne zalogowanie się.</translation>
 <translation id="3566021033012934673">Połączenie nie jest prywatne</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ukryj szczegóły</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(w użyciu: 1)}few{(w użyciu: #)}many{(w użyciu: #)}other{(w użyciu: #)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Sprawdź adres serwera proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5287240709317226393">Pokaż ciasteczka</translation>
 <translation id="5355557959165512791">Nie możesz teraz otworzyć strony <ph name="SITE" />, bo jej certyfikat został unieważniony. Błędy sieci i ataki są zazwyczaj przejściowe, więc prawdopodobnie strona będzie wkrótce działać.</translation>
 <translation id="5386426401304769735">Łańcuch certyfikatów tej witryny zawiera certyfikat podpisany za pomocą SHA-1.</translation>
 <translation id="5452270690849572955">Nie można znaleźć tej strony na <ph name="HOST_NAME" /></translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Hasło</translation>
 <translation id="6711464428925977395">Serwer proxy działa nieprawidłowo albo adres jest błędny.</translation>
 <translation id="6757797048963528358">Twój komputer przeszedł w stan uśpienia.</translation>
+<translation id="6890956352250146925">Opcje ciasteczek i danych stron</translation>
 <translation id="6897140037006041989">User agent (id przeglądarki)</translation>
 <translation id="7053983685419859001">Blokuj</translation>
 <translation id="7079718277001814089">Ta strona zawiera złośliwe oprogramowanie</translation>
@@ -218,7 +218,7 @@
 <translation id="9169664750068251925">Zawsze blokuj na tej stronie</translation>
 <translation id="9180553614777056266">Blokowanie reklam</translation>
 <translation id="9183425211371246419">Serwer <ph name="HOST_NAME" /> używa nieobsługiwanego protokołu.</translation>
-<translation id="936602727769022409">Możesz stracić dostęp do swojego konta Google. Chromium zaleca natychmiastową zmianę hasła. Zobaczysz prośbę, by się zalogować.</translation>
+<translation id="936602727769022409">Możesz stracić dostęp do swojego konta Vivaldi. Zalecamy natychmiastową zmianę hasła. Zobaczysz prośbę o ponowne zalogowanie się.</translation>
 <translation id="969892804517981540">Oficjalna wersja</translation>
 <translation id="988159990683914416">Wersja rozwojowa</translation>
 </translationbundle>

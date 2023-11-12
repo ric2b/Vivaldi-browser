@@ -253,6 +253,8 @@ bool ExecProcess(const base::CommandLine& cmdline,
       argv_cstr[argv.size()] = nullptr;
       execvp(argv_cstr[0], argv_cstr.get());
       _exit(127);
+      // Avoid `fall through` warning on some gcc versions.
+      break;
     }
     default:  // parent
     {

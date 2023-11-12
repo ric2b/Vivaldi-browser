@@ -48,7 +48,8 @@ struct CONTENT_EXPORT IdentityProviderData {
                        const std::vector<IdentityRequestAccount>& accounts,
                        const IdentityProviderMetadata& idp_metadata,
                        const ClientMetadata& client_metadata,
-                       const blink::mojom::RpContext& rp_context);
+                       const blink::mojom::RpContext& rp_context,
+                       const bool request_permission);
   IdentityProviderData(const IdentityProviderData& other);
   ~IdentityProviderData();
 
@@ -57,6 +58,9 @@ struct CONTENT_EXPORT IdentityProviderData {
   IdentityProviderMetadata idp_metadata;
   ClientMetadata client_metadata;
   blink::mojom::RpContext rp_context;
+  // Whether the dialog should ask for the user's permission to share
+  // the id/email/name/picture permission or not.
+  bool request_permission;
 };
 
 // IdentityRequestDialogController is in interface for control of the UI
@@ -68,18 +72,20 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.content.webid
   // GENERATED_JAVA_CLASS_NAME_OVERRIDE: IdentityRequestDialogDismissReason
   enum class DismissReason {
-    OTHER = 0,
-    CLOSE_BUTTON = 1,
-    SWIPE = 2,
-    VIRTUAL_KEYBOARD_SHOWN = 3,
+    kOther = 0,
+    kCloseButton = 1,
+    kSwipe = 2,
+    kVirtualKeyboardShown = 3,
 
-    COUNT = 4,
+    kMaxValue = kVirtualKeyboardShown,
   };
 
   using AccountSelectionCallback =
       base::OnceCallback<void(const GURL& idp_config_url,
                               const std::string& /*account_id*/,
                               bool /*is_sign_in*/)>;
+  using TokenCallback = base::OnceCallback<void(const std::string& /*token*/)>;
+
   using DismissCallback =
       base::OnceCallback<void(DismissReason dismiss_reason)>;
 
@@ -100,12 +106,16 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   // icon is displayed in the accounts dialog.
   virtual int GetBrandIconMinimumSize();
 
+  // When this is true, the dialog should not be immediately auto-accepted.
+  virtual void SetIsInterceptionEnabled(bool enabled);
+
   // Shows and accounts selections for the given IDP. The |on_selected| callback
   // is called with the selected account id or empty string otherwise.
   // |sign_in_mode| represents whether this is an auto re-authn flow.
   virtual void ShowAccountsDialog(
       WebContents* rp_web_contents,
-      const std::string& rp_for_display,
+      const std::string& top_frame_for_display,
+      const absl::optional<std::string>& iframe_for_display,
       const std::vector<IdentityProviderData>& identity_provider_data,
       IdentityRequestAccount::SignInMode sign_in_mode,
       bool show_auto_reauthn_checkbox,
@@ -115,13 +125,28 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   // Shows a failure UI when the accounts fetch is failed such that it is
   // observable by users. This could happen when an IDP claims that the user is
   // signed in but not respond with any user account during browser fetches.
-  virtual void ShowFailureDialog(WebContents* rp_web_contents,
-                                 const std::string& rp_for_display,
-                                 const std::string& idp_for_display,
-                                 DismissCallback dismiss_callback);
+  virtual void ShowFailureDialog(
+      WebContents* rp_web_contents,
+      const std::string& top_frame_for_display,
+      const absl::optional<std::string>& iframe_for_display,
+      const std::string& idp_for_display,
+      const IdentityProviderMetadata& idp_metadata,
+      DismissCallback dismiss_callback);
+
+  // Only to be called after a dialog is shown.
+  virtual std::string GetTitle() const;
+  virtual absl::optional<std::string> GetSubtitle() const;
 
   // Show dialog notifying user that IdP sign-in failed.
   virtual void ShowIdpSigninFailureDialog(base::OnceClosure dismiss_callback);
+
+  // Show a pop-up window that the IdP controls.
+  virtual void ShowPopUpWindow(const GURL& url,
+                               TokenCallback on_resolve,
+                               DismissCallback dismiss_callback);
+
+ protected:
+  bool is_interception_enabled_{false};
 };
 
 }  // namespace content

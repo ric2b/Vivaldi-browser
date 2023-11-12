@@ -14,12 +14,15 @@ import shutil
 import sys
 import time
 import zipfile
+import pathlib
 
 import javac_output_processor
 from util import build_utils
 from util import md5_check
 from util import jar_info_utils
 from util import server_utils
+import action_helpers  # build_utils adds //build to sys.path.
+import zip_helpers
 
 _JAVAC_EXTRACTOR = os.path.join(build_utils.DIR_SOURCE_ROOT, 'third_party',
                                 'android_prebuilts', 'build_tools', 'common',
@@ -235,6 +238,17 @@ def ProcessJavacOutput(output, target_name):
 
   output = build_utils.FilterReflectiveAccessJavaWarnings(output)
 
+  # Warning currently cannot be silenced via javac flag.
+  if 'Unsafe is internal proprietary API' in output:
+    # Example:
+    # HiddenApiBypass.java:69: warning: Unsafe is internal proprietary API and
+    # may be removed in a future release
+    # import sun.misc.Unsafe;
+    #                 ^
+    output = re.sub(r'.*?Unsafe is internal proprietary API[\s\S]*?\^\n', '',
+                    output)
+    output = re.sub(r'\d+ warnings\n', '', output)
+
   lines = (l for l in output.split('\n') if ApplyFilters(l))
   lines = (Elaborate(l) for l in lines)
 
@@ -251,24 +265,24 @@ def CreateJarFile(jar_path,
                   extra_classes_jar=None):
   """Zips files from compilation into a single jar."""
   logging.info('Start creating jar file: %s', jar_path)
-  with build_utils.AtomicOutput(jar_path) as f:
+  with action_helpers.atomic_output(jar_path) as f:
     with zipfile.ZipFile(f.name, 'w') as z:
-      build_utils.ZipDir(z, classes_dir)
+      zip_helpers.zip_directory(z, classes_dir)
       if service_provider_configuration_dir:
         config_files = build_utils.FindInDirectory(
             service_provider_configuration_dir)
         for config_file in config_files:
           zip_path = os.path.relpath(config_file,
                                      service_provider_configuration_dir)
-          build_utils.AddToZipHermetic(z, zip_path, src_path=config_file)
+          zip_helpers.add_to_zip_hermetic(z, zip_path, src_path=config_file)
 
       if additional_jar_files:
         for src_path, zip_path in additional_jar_files:
-          build_utils.AddToZipHermetic(z, zip_path, src_path=src_path)
+          zip_helpers.add_to_zip_hermetic(z, zip_path, src_path=src_path)
       if extra_classes_jar:
-        build_utils.MergeZips(
-            z, [extra_classes_jar],
-            path_transform=lambda p: p if p.endswith('.class') else None)
+        path_transform = lambda p: p if p.endswith('.class') else None
+        zip_helpers.merge_zips(z, [extra_classes_jar],
+                               path_transform=path_transform)
   logging.info('Completed jar file: %s', jar_path)
 
 
@@ -397,7 +411,7 @@ class _InfoFileContext:
     entries = self._Collect()
 
     logging.info('Writing info file: %s', output_path)
-    with build_utils.AtomicOutput(output_path, mode='wb') as f:
+    with action_helpers.atomic_output(output_path, mode='wb') as f:
       jar_info_utils.WriteJarInfoFile(f, entries, self._srcjar_files)
     logging.info('Completed info file: %s', output_path)
 
@@ -447,15 +461,23 @@ def _OnStaleMd5(changes, options, javac_cmd, javac_args, java_files, kt_files):
 
   # Compiles with Error Prone take twice as long to run as pure javac. Thus GN
   # rules run both in parallel, with Error Prone only used for checks.
-  _RunCompiler(changes,
-               options,
-               javac_cmd + javac_args,
-               java_files,
-               options.jar_path,
-               kt_files=kt_files,
-               jar_info_path=jar_info_path,
-               intermediates_out_dir=intermediates_out_dir,
-               enable_partial_javac=True)
+  try:
+    _RunCompiler(changes,
+                 options,
+                 javac_cmd + javac_args,
+                 java_files,
+                 options.jar_path,
+                 kt_files=kt_files,
+                 jar_info_path=jar_info_path,
+                 intermediates_out_dir=intermediates_out_dir,
+                 enable_partial_javac=True)
+  except build_utils.CalledProcessError as e:
+    # Do not output stacktrace as it takes up space on gerrit UI, forcing
+    # you to click though to find the actual compilation error. It's never
+    # interesting to see the Python stacktrace for a Java compilation error.
+    sys.stderr.write(e.output)
+    sys.exit(1)
+
   logging.info('Completed all steps in _OnStaleMd5')
 
 
@@ -533,9 +555,9 @@ def _RunCompiler(changes,
                                            options.jar_info_exclude_globs)
 
     if intermediates_out_dir is None:
-      input_srcjars_dir = os.path.join(temp_dir, 'input_srcjars')
-    else:
-      input_srcjars_dir = os.path.join(intermediates_out_dir, 'input_srcjars')
+      intermediates_out_dir = temp_dir
+
+    input_srcjars_dir = os.path.join(intermediates_out_dir, 'input_srcjars')
 
     if java_srcjars:
       logging.info('Extracting srcjars to %s', input_srcjars_dir)
@@ -607,7 +629,7 @@ def _RunCompiler(changes,
 
 def _ParseOptions(argv):
   parser = optparse.OptionParser()
-  build_utils.AddDepfileOption(parser)
+  action_helpers.add_depfile_arg(parser)
 
   parser.add_option('--target-name', help='Fully qualified GN target name.')
   parser.add_option('--skip-build-server',
@@ -686,10 +708,10 @@ def _ParseOptions(argv):
   options, args = parser.parse_args(argv)
   build_utils.CheckOptions(options, parser, required=('jar_path', ))
 
-  options.classpath = build_utils.ParseGnList(options.classpath)
-  options.processorpath = build_utils.ParseGnList(options.processorpath)
-  options.java_srcjars = build_utils.ParseGnList(options.java_srcjars)
-  options.jar_info_exclude_globs = build_utils.ParseGnList(
+  options.classpath = action_helpers.parse_gn_list(options.classpath)
+  options.processorpath = action_helpers.parse_gn_list(options.processorpath)
+  options.java_srcjars = action_helpers.parse_gn_list(options.java_srcjars)
+  options.jar_info_exclude_globs = action_helpers.parse_gn_list(
       options.jar_info_exclude_globs)
 
   additional_jar_files = []

@@ -13,6 +13,7 @@
 #include "base/hash/md5.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 // AV1 stateless decoding not supported upstream yet
 #if BUILDFLAG(IS_CHROMEOS)
@@ -56,8 +57,8 @@ constexpr char kHelpMsg[] =
     "        Optional. Number of frames to decode, defaults to all.\n"
     "        Override with a positive integer to decode at most that many.\n"
     "    --output_format=<str>\n"
-    "        Optional. Output type for decoded frames\n"
-    "        Formats currently supported are YUV or PNG\n"
+    "        Optional. Output type for decoded frames, defaults to YUV.\n"
+    "        YUV and PNG are supported.\n"
     "    --output_path_prefix=<path>\n"
     "        Optional. Prefix to the filepaths where raw YUV or PNG files\n"
     "        will be written. For example, setting <path> to \"test/test_\"\n"
@@ -78,7 +79,8 @@ constexpr char kHelpMsg[] =
 
 // Computes the md5 of given I420 data |yuv_plane| and prints the md5 to stdout.
 // This functionality is needed for tast tests.
-void ComputeAndPrintMD5hash(const std::vector<char>& yuv_plane, const base::FilePath md5_log_location) {
+void ComputeAndPrintMD5hash(const std::vector<uint8_t>& yuv_plane,
+                            const base::FilePath md5_log_location) {
   base::MD5Digest md5_digest;
   base::MD5Sum(yuv_plane.data(), yuv_plane.size(), &md5_digest);
   std::string md5_digest_b16 = MD5DigestToBase16(md5_digest);
@@ -136,11 +138,14 @@ int main(int argc, char** argv) {
   const std::string output_file_prefix =
       cmd->GetSwitchValueASCII("output_path_prefix");
 
-  std::string output_format = cmd->GetSwitchValueASCII("output_format");
-  if (output_format != "yuv" && output_format != "png") {
-    LOG(ERROR) << "Unsupported output format: " << output_format
-               << " so default to YUV.";
-    output_format = "yuv";
+  std::string output_format = "yuv";
+  if (has_output_file && cmd->HasSwitch("output_format")) {
+    output_format =
+        base::ToLowerASCII(cmd->GetSwitchValueASCII("output_format"));
+    if (output_format != "yuv" && output_format != "png") {
+      LOG(ERROR) << "Unsupported output format: " << output_format;
+      return EXIT_FAILURE;
+    }
   }
 
   const base::FilePath video_path = cmd->GetSwitchValuePath("video");
@@ -179,14 +184,12 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  dec->Initialize();
-
   for (int i = 0; i < n_frames || n_frames == 0; i++) {
     LOG(INFO) << "Frame " << i << "...";
 
-    std::vector<char> y_plane;
-    std::vector<char> u_plane;
-    std::vector<char> v_plane;
+    std::vector<uint8_t> y_plane;
+    std::vector<uint8_t> u_plane;
+    std::vector<uint8_t> v_plane;
     gfx::Size size;
     const VideoDecoder::Result res =
         dec->DecodeNextFrame(y_plane, u_plane, v_plane, size, i);
@@ -201,7 +204,7 @@ int main(int argc, char** argv) {
     if (cmd->HasSwitch("visible") && !dec->LastDecodedFrameVisible())
       continue;
 
-    std::vector<char> yuv_plane(y_plane);
+    std::vector<uint8_t> yuv_plane(y_plane);
     yuv_plane.insert(yuv_plane.end(), u_plane.begin(), u_plane.end());
     yuv_plane.insert(yuv_plane.end(), v_plane.begin(), v_plane.end());
 
@@ -217,9 +220,10 @@ int main(int argc, char** argv) {
         filename, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
 
     if (output_format == "yuv") {
-      output_file.Write(0, yuv_plane.data(), yuv_plane.size());
+      output_file.Write(0, reinterpret_cast<const char*>(yuv_plane.data()),
+                        yuv_plane.size());
     } else {
-      std::vector<unsigned char> image_buffer = dec->ConvertYUVToPNG(
+      std::vector<uint8_t> image_buffer = dec->ConvertYUVToPNG(
           y_plane.data(), u_plane.data(), v_plane.data(), size);
       output_file.Write(0, reinterpret_cast<char*>(image_buffer.data()),
                         image_buffer.size());

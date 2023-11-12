@@ -4,8 +4,9 @@
 
 package org.chromium.chrome.browser.autofill;
 
-import android.support.test.InstrumentationRegistry;
+import android.os.Build;
 
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 
 import org.junit.After;
@@ -17,6 +18,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.infobar.AutofillSaveCardInfoBar;
@@ -55,7 +57,7 @@ public class AutofillUpstreamTest {
     public void setUp() {
         mActivityTestRule.setUpAccountAndEnableSyncForTesting();
         mServer = new EmbeddedTestServer();
-        mServer.initializeNative(InstrumentationRegistry.getContext(),
+        mServer.initializeNative(ApplicationProvider.getApplicationContext(),
                 EmbeddedTestServer.ServerHTTPSSetting.USE_HTTP);
         mServer.addDefaultHandlers(TEST_SERVER_DIR);
         mServer.start();
@@ -104,6 +106,8 @@ public class AutofillUpstreamTest {
     @Test
     @MediumTest
     @Restriction(Restriction.RESTRICTION_TYPE_INTERNET)
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.Q, message = "https://crbug.com/1424178")
     public void testSaveCardInfoBarWithAllFieldsFilled() throws TimeoutException {
         mActivityTestRule.loadUrl(mServer.getURL(TEST_FORM_URL));
         final WebContents webContents = mActivityTestRule.getActivity().getCurrentWebContents();
@@ -187,6 +191,8 @@ public class AutofillUpstreamTest {
     @Test
     @MediumTest
     @Restriction(Restriction.RESTRICTION_TYPE_INTERNET)
+    @DisableIf.
+    Build(sdk_is_less_than = Build.VERSION_CODES.Q, message = "https://crbug.com/1424178")
     public void testSaveCardInfoBarWithEmptyName() throws TimeoutException {
         mActivityTestRule.loadUrl(mServer.getURL(TEST_FORM_URL));
         final WebContents webContents = mActivityTestRule.getActivity().getCurrentWebContents();

@@ -92,7 +92,9 @@ WorkletGlobalScope::WorkletGlobalScope(
           creation_params->worker_clients,
           std::move(creation_params->content_settings_client),
           std::move(creation_params->web_worker_fetch_context),
-          reporting_proxy),
+          reporting_proxy,
+          /*is_worker_loaded_from_data_url=*/false),
+      ActiveScriptWrappable<WorkletGlobalScope>({}),
       url_(creation_params->script_url),
       user_agent_(creation_params->user_agent),
       document_security_origin_(creation_params->starter_origin),
@@ -102,9 +104,12 @@ WorkletGlobalScope::WorkletGlobalScope(
       thread_type_(thread_type),
       frame_(frame),
       worker_thread_(worker_thread),
-      // Worklets should always have a parent LocalFrameToken.
+      // Worklets should often have a parent LocalFrameToken. Only shared
+      // storage worklet does not have it.
       frame_token_(
-          creation_params->parent_context_token->GetAs<LocalFrameToken>()),
+          creation_params->parent_context_token
+              ? creation_params->parent_context_token->GetAs<LocalFrameToken>()
+              : blink::LocalFrameToken()),
       parent_cross_origin_isolated_capability_(
           creation_params->parent_cross_origin_isolated_capability),
       parent_is_isolated_context_(creation_params->parent_is_isolated_context) {
@@ -113,7 +118,8 @@ WorkletGlobalScope::WorkletGlobalScope(
 
   // Worklet should be in the owner's agent cluster.
   // https://html.spec.whatwg.org/C/#obtain-a-worklet-agent
-  DCHECK(creation_params->agent_cluster_id);
+  DCHECK(creation_params->agent_cluster_id ||
+         !creation_params->parent_context_token);
 
   // Step 2: "Let inheritedAPIBaseURL be outsideSettings's API base URL."
   // |url_| is the inheritedAPIBaseURL passed from the parent Document.
@@ -319,10 +325,10 @@ ukm::UkmRecorder* WorkletGlobalScope::UkmRecorder() {
   if (ukm_recorder_)
     return ukm_recorder_.get();
 
-  mojo::PendingRemote<ukm::mojom::UkmRecorderInterface> recorder;
+  mojo::Remote<ukm::mojom::UkmRecorderFactory> factory;
   GetBrowserInterfaceBroker().GetInterface(
-      recorder.InitWithNewPipeAndPassReceiver());
-  ukm_recorder_ = std::make_unique<ukm::MojoUkmRecorder>(std::move(recorder));
+      factory.BindNewPipeAndPassReceiver());
+  ukm_recorder_ = ukm::MojoUkmRecorder::Create(*factory);
 
   return ukm_recorder_.get();
 }

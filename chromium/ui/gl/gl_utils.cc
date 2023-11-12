@@ -27,12 +27,15 @@
 #if BUILDFLAG(IS_WIN)
 #include <d3d11_1.h>
 #include "base/strings/stringprintf.h"
-#include "media/base/win/mf_helpers.h"
+#include "ui/gl/debug_utils.h"
 #include "ui/gl/direct_composition_support.h"
 #endif
 
 namespace gl {
 namespace {
+
+// The global set of workarounds.
+GlWorkarounds g_workarounds;
 
 int GetIntegerv(unsigned int name) {
   int value = 0;
@@ -123,6 +126,14 @@ bool PassthroughCommandDecoderSupported() {
 #endif  // defined(USE_EGL)
 }
 
+const GlWorkarounds& GetGlWorkarounds() {
+  return g_workarounds;
+}
+
+void SetGlWorkarounds(const GlWorkarounds& workarounds) {
+  g_workarounds = workarounds;
+}
+
 #if BUILDFLAG(IS_WIN)
 unsigned int FrameRateToPresentDuration(float frame_rate) {
   if (frame_rate == 0)
@@ -158,7 +169,7 @@ void LabelSwapChainBuffers(IDXGISwapChain* swap_chain,
     }
     const std::string buffer_name =
         base::StringPrintf("%s_Buffer_%d", name_prefix, i);
-    hr = media::SetDebugName(swap_chain_buffer.Get(), buffer_name.c_str());
+    hr = SetDebugName(swap_chain_buffer.Get(), buffer_name.c_str());
     if (FAILED(hr)) {
       DLOG(ERROR) << "Failed to label swap chain buffer " << i << ": "
                   << logging::SystemErrorCodeToString(hr);
@@ -170,7 +181,7 @@ void LabelSwapChainBuffers(IDXGISwapChain* swap_chain,
 // operations
 void LabelSwapChainAndBuffers(IDXGISwapChain* swap_chain,
                               const char* name_prefix) {
-  media::SetDebugName(swap_chain, name_prefix);
+  SetDebugName(swap_chain, name_prefix);
   LabelSwapChainBuffers(swap_chain, name_prefix);
 }
 #endif  // BUILDFLAG(IS_WIN)

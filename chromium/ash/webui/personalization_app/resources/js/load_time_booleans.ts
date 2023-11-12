@@ -19,16 +19,16 @@ export function isGooglePhotosSharedAlbumsEnabled() {
   return loadTimeData.getBoolean('isGooglePhotosSharedAlbumsEnabled');
 }
 
-export function isDarkLightModeEnabled() {
-  return loadTimeData.getBoolean('isDarkLightModeEnabled');
-}
-
 export function isAmbientModeAllowed() {
   return loadTimeData.getBoolean('isAmbientModeAllowed');
 }
 
 export function isRgbKeyboardSupported() {
   return loadTimeData.getBoolean('isRgbKeyboardSupported');
+}
+
+export function isScreenSaverDurationEnabled() {
+  return loadTimeData.getBoolean('isScreenSaverDurationEnabled');
 }
 
 export function isScreenSaverPreviewEnabled() {
@@ -40,5 +40,13 @@ export function isPersonalizationJellyEnabled() {
 }
 
 export function isMultiZoneRgbKeyboardSupported() {
-  return loadTimeData.getBoolean('isMultiZoneRgbKeyboardSupported');
+  return loadTimeData.getInteger('keyboardBacklightZoneCount') > 1;
+}
+
+export function isUserAvatarCustomizationSelectorsEnabled() {
+  return loadTimeData.getBoolean('isUserAvatarCustomizationSelectorsEnabled');
+}
+
+export function isTimeOfDayScreenSaverEnabled() {
+  return loadTimeData.getBoolean('isTimeOfDayScreenSaverEnabled');
 }

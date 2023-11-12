@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -80,6 +81,7 @@
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/geometry/size_f.h"
 
 #if BUILDFLAG(ENABLE_TAGGED_PDF)
 #include "ui/accessibility/ax_tree_update.h"
@@ -104,6 +106,13 @@ enum PrintPreviewHelperEvents {
   PREVIEW_EVENT_NEW_SETTINGS,     // Unused.
   PREVIEW_EVENT_INITIATED,        // Initiated print preview.
   PREVIEW_EVENT_MAX,
+};
+
+// The result for `CalculatePrintParamsForCss()`. `content_size` is used to
+// prevent integer truncation when calculating scaled content sizes.
+struct PrintParamsWithFloatingSize {
+  mojom::PrintParamsPtr params;
+  gfx::SizeF content_size;
 };
 
 // Also set in third_party/WebKit/Source/core/page/PrintContext.h
@@ -143,27 +152,6 @@ int GetDPI(const mojom::PrintParams& print_params) {
       std::max(print_params.dpi.width(), print_params.dpi.height()));
 #endif  // BUILDFLAG(IS_APPLE)
 }
-
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-std::string PrintMsgPrintParamsErrorDetails(const mojom::PrintParams& params) {
-  std::vector<base::StringPiece> details;
-
-  if (params.content_size.IsEmpty())
-    details.push_back("content size is empty");
-  if (params.page_size.IsEmpty())
-    details.push_back("page size is empty");
-  if (params.printable_area.IsEmpty())
-    details.push_back("printable area is empty");
-  if (!params.document_cookie)
-    details.push_back("invalid document cookie");
-  if (params.dpi.width() <= kMinDpi || params.dpi.height() <= kMinDpi)
-    details.push_back("invalid DPI dimensions");
-  if (params.margin_top < 0 || params.margin_left < 0)
-    details.push_back("invalid margins");
-
-  return base::JoinString(details, "; ");
-}
-#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 // Helper function to check for fit to page
 bool IsPrintScalingOptionFitToPage(const mojom::PrintParams& params) {
@@ -238,12 +226,13 @@ mojom::PrintParamsPtr GetCssPrintParams(blink::WebLocalFrame* frame,
   return page_css_params;
 }
 
-double FitPrintParamsToPage(const mojom::PrintParams& page_params,
-                            mojom::PrintParams* params_to_fit) {
-  double content_width =
-      static_cast<double>(params_to_fit->content_size.width());
-  double content_height =
-      static_cast<double>(params_to_fit->content_size.height());
+double FitPrintParamsToPage(
+    const mojom::PrintParams& page_params,
+    PrintParamsWithFloatingSize& params_with_floating_size) {
+  mojom::PrintParamsPtr& params_to_fit = params_with_floating_size.params;
+  gfx::SizeF& content_size = params_with_floating_size.content_size;
+  double content_width = static_cast<double>(content_size.width());
+  double content_height = static_cast<double>(content_size.height());
   int default_page_size_height = page_params.page_size.height();
   int default_page_size_width = page_params.page_size.width();
   int css_page_size_height = params_to_fit->page_size.height();
@@ -271,13 +260,15 @@ double FitPrintParamsToPage(const mojom::PrintParams& page_params,
       (params_to_fit->margin_left * scale_factor));
   params_to_fit->content_size = gfx::Size(static_cast<int>(content_width),
                                           static_cast<int>(content_height));
+  content_size = gfx::SizeF(content_width, content_height);
   params_to_fit->page_size = page_params.page_size;
   return scale_factor;
 }
 
 mojom::PageSizeMarginsPtr CalculatePageLayoutFromPrintParams(
-    const mojom::PrintParams& params,
+    const PrintParamsWithFloatingSize& params_with_floating_size,
     double scale_factor) {
+  const mojom::PrintParams& params = *params_with_floating_size.params;
   bool fit_to_page = IsPrintScalingOptionFitToPage(params);
   int dpi = GetDPI(params);
   int content_width = params.content_size.width();
@@ -286,10 +277,12 @@ mojom::PageSizeMarginsPtr CalculatePageLayoutFromPrintParams(
   // Otherwise we will get negative margins.
   bool scale = fit_to_page || params.print_to_pdf;
   if (scale && scale_factor >= PrintRenderFrameHelper::kEpsilon) {
-    content_width =
-        static_cast<int>(static_cast<double>(content_width) * scale_factor);
-    content_height =
-        static_cast<int>(static_cast<double>(content_height) * scale_factor);
+    // `content_size` is used to properly calculate the `content_width` and
+    // `content_height` when multiplied by `scale_factor`. This avoids integer
+    // truncation which would occur with a gfx::Size.
+    const gfx::SizeF& content_size = params_with_floating_size.content_size;
+    content_width = std::round(content_size.width() * scale_factor);
+    content_height = std::round(content_size.height() * scale_factor);
   }
 
   int margin_bottom =
@@ -524,24 +517,31 @@ gfx::Size ScaleAndRoundSize(gfx::Size original, double scaling) {
                    ScaleAndRound(original.height(), scaling));
 }
 
-mojom::PrintParamsPtr CalculatePrintParamsForCss(
+PrintParamsWithFloatingSize CalculatePrintParamsForCss(
     blink::WebLocalFrame* frame,
     uint32_t page_index,
     const mojom::PrintParams& page_params,
     bool ignore_css_margins,
     bool fit_to_page,
     double* scale_factor) {
+  PrintParamsWithFloatingSize params_with_floating_size;
+  gfx::SizeF& content_size = params_with_floating_size.content_size;
   mojom::PrintParamsPtr css_params =
       GetCssPrintParams(frame, page_index, page_params);
 
   mojom::PrintParamsPtr params = page_params.Clone();
   EnsureOrientationMatches(*css_params, params.get());
+  content_size = gfx::SizeF(params->content_size.width() / *scale_factor,
+                            params->content_size.height() / *scale_factor);
+  params->content_size.SetSize(static_cast<int>(content_size.width()),
+                               static_cast<int>(content_size.height()));
+  if (ignore_css_margins && fit_to_page) {
+    params_with_floating_size.params = std::move(params);
+    return params_with_floating_size;
+  }
 
-  params->content_size = ScaleAndRoundSize(params->content_size, *scale_factor);
-  if (ignore_css_margins && fit_to_page)
-    return params;
-
-  mojom::PrintParamsPtr result_params = std::move(css_params);
+  params_with_floating_size.params = std::move(css_params);
+  mojom::PrintParamsPtr& result_params = params_with_floating_size.params;
   // If not printing a pdf or fitting to page, scale the page size.
   bool scale = !params->print_to_pdf;
   double page_scaling = scale ? *scale_factor : 1.0f;
@@ -567,19 +567,23 @@ mojom::PrintParamsPtr CalculatePrintParamsForCss(
     int default_margin_bottom = params->page_size.height() -
                                 params->content_size.height() -
                                 params->margin_top;
-    result_params->content_size =
-        gfx::Size(result_params->page_size.width() -
-                      result_params->margin_left - default_margin_right,
-                  result_params->page_size.height() -
-                      result_params->margin_top - default_margin_bottom);
+    int content_width = result_params->page_size.width() -
+                        result_params->margin_left - default_margin_right;
+    int content_height = result_params->page_size.height() -
+                         result_params->margin_top - default_margin_bottom;
+    result_params->content_size = gfx::Size(content_width, content_height);
+    content_size = gfx::SizeF(result_params->content_size);
+
   } else {
     // Using the CSS parameters. Scale CSS content size.
+    content_size =
+        gfx::SizeF(result_params->content_size.width() / *scale_factor,
+                   result_params->content_size.height() / *scale_factor);
     result_params->content_size =
         ScaleAndRoundSize(result_params->content_size, *scale_factor);
     if (fit_to_page) {
-      double factor = FitPrintParamsToPage(*params, result_params.get());
-      if (scale_factor)
-        *scale_factor *= factor;
+      double factor = FitPrintParamsToPage(*params, params_with_floating_size);
+      *scale_factor *= factor;
     } else {
       // Already scaled the page, need to also scale the CSS margins since they
       // are begin applied
@@ -590,7 +594,7 @@ mojom::PrintParamsPtr CalculatePrintParamsForCss(
     }
   }
 
-  return result_params;
+  return params_with_floating_size;
 }
 
 bool CopyMetafileDataToReadOnlySharedMem(
@@ -1094,9 +1098,11 @@ void PrepareFrameAndViewForPrint::ComputeScalingAndPrintParams(
   frame->PrintBegin(web_print_params_, node_to_print_);
   double scale_factor = PrintRenderFrameHelper::GetScaleFactor(
       print_params->scale_factor, is_pdf);
-  print_params = CalculatePrintParamsForCss(frame, /*page_index=*/0,
-                                            *print_params, ignore_css_margins,
-                                            fit_to_page, &scale_factor);
+  PrintParamsWithFloatingSize params_with_floating_size =
+      CalculatePrintParamsForCss(frame, /*page_index=*/0, *print_params,
+                                 ignore_css_margins, fit_to_page,
+                                 &scale_factor);
+  print_params = std::move(params_with_floating_size.params);
   if (selection)
     *selection = frame->SelectionAsMarkup().Utf8();
   frame->PrintEnd();
@@ -1365,9 +1371,6 @@ void PrintRenderFrameHelper::PrintRequestedPages() {
 void PrintRenderFrameHelper::PrintWithParams(
     mojom::PrintPagesParamsPtr settings,
     PrintWithParamsCallback callback) {
-  DCHECK(!settings->params->dpi.IsEmpty());
-  DCHECK(settings->params->document_cookie);
-
   ScopedIPC scoped_ipc(weak_ptr_factory_.GetWeakPtr());
   if (ipc_nesting_level_ > kAllowedIpcDepthForPrint) {
     std::move(callback).Run(mojom::PrintWithParamsResult::NewFailureReason(
@@ -1636,9 +1639,14 @@ void PrintRenderFrameHelper::SnapshotForContentAnalysis(
     SnapshotForContentAnalysisCallback callback) {
   // Use default print params to snapshot the page.
   mojom::PrintPagesParams print_pages_params;
-  print_pages_params.params = mojom::PrintParams::New();
   GetPrintManagerHost()->GetDefaultPrintSettings(&print_pages_params.params);
+  if (!print_pages_params.params) {
+    LOG(ERROR) << "GetDefaultPrintSettings() failed";
+    std::move(callback).Run(nullptr);
+    return;
+  }
 
+  CHECK(PrintMsgPrintParamsIsValid(*print_pages_params.params));
   ContentProxySet typeface_content_info;
   auto metafile = std::make_unique<MetafileSkia>(
       print_pages_params.params->printed_doc_type,
@@ -1655,6 +1663,7 @@ void PrintRenderFrameHelper::SnapshotForContentAnalysis(
   if (page_count == 0) {
     frame->PrintEnd();
     metafile->FinishDocument();
+    LOG(ERROR) << "PrintBegin() returned 0 pages";
     std::move(callback).Run(nullptr);
     return;
   }
@@ -1677,6 +1686,7 @@ void PrintRenderFrameHelper::SnapshotForContentAnalysis(
 
   if (!CopyMetafileDataToDidPrintContentParams(*metafile,
                                                page_params->content.get())) {
+    LOG(ERROR) << "CopyMetafileDataToDidPrintContentParams() failed";
     std::move(callback).Run(nullptr);
     return;
   }
@@ -2144,20 +2154,20 @@ void PrintRenderFrameHelper::Print(blink::WebLocalFrame* frame,
       return;
 
     // GetPrintSettingsFromUser() could return nullptr when
-    // |print_manager_host_| is closed.
-    if (!print_settings)
+    // |print_manager_host_| is closed, or when the user cancels.
+    if (!print_settings) {
+      if (print_manager_host_) {
+        // Release resources and fail silently if the user cancels.
+        DidFinishPrinting(OK);
+      }
       return;
+    }
 
     print_settings->params->print_scaling_option =
         print_settings->params->prefer_css_page_size
             ? mojom::PrintScalingOption::kSourceSize
             : scaling_option;
     SetPrintPagesParams(*print_settings);
-    if (print_settings->params->dpi.IsEmpty() ||
-        !print_settings->params->document_cookie) {
-      DidFinishPrinting(OK);  // Release resources and fail silently on failure.
-      return;
-    }
   }
 
   // Render Pages for printing.
@@ -2223,8 +2233,7 @@ void PrintRenderFrameHelper::DidFinishPrinting(PrintingResult result) {
       break;
     case INVALID_SETTINGS:
       if (preview_ui_)
-        preview_ui_->PrinterSettingsInvalid(
-            cookie, request_id, print_preview_context_.last_error_details());
+        preview_ui_->PrinterSettingsInvalid(cookie, request_id);
       print_preview_context_.Failed(false);
       break;
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -2289,12 +2298,11 @@ bool PrintRenderFrameHelper::PrintPagesNative(
   const mojom::PrintPagesParams& params = *print_pages_params_;
   const mojom::PrintParams& print_params = *params.params;
 
+  // Provide a typeface context to use with serializing to the print compositor.
+  ContentProxySet typeface_content_info;
   MetafileSkia metafile(print_params.printed_doc_type,
                         print_params.document_cookie);
   CHECK(metafile.Init());
-
-  // Provide a typeface context to use with serializing to the print compositor.
-  ContentProxySet typeface_content_info;
   metafile.UtilizeTypefaceContext(&typeface_content_info);
 
   // If tagged PDF exporting is enabled, we also need to capture an
@@ -2305,8 +2313,7 @@ bool PrintRenderFrameHelper::PrintPagesNative(
   std::unique_ptr<content::AXTreeSnapshotter> snapshotter;
   if (delegate_->ShouldGenerateTaggedPDF()) {
     snapshotter = render_frame()->CreateAXTreeSnapshotter(ui::AXMode::kPDF);
-    snapshotter->Snapshot(/* exclude_offscreen= */ false,
-                          /* max_node_count= */ 0,
+    snapshotter->Snapshot(/* max_node_count= */ 0,
                           /* timeout= */ {}, &metafile.accessibility_tree());
   }
 
@@ -2366,10 +2373,12 @@ PrintRenderFrameHelper::ComputePageLayoutInPointsForCss(
     bool ignore_css_margins,
     double* scale_factor) {
   double input_scale_factor = *scale_factor;
-  mojom::PrintParamsPtr params = CalculatePrintParamsForCss(
-      frame, page_index, page_params, ignore_css_margins,
-      IsPrintScalingOptionFitToPage(page_params), scale_factor);
-  return CalculatePageLayoutFromPrintParams(*params, input_scale_factor);
+  PrintParamsWithFloatingSize params_with_floating_size =
+      CalculatePrintParamsForCss(
+          frame, page_index, page_params, ignore_css_margins,
+          IsPrintScalingOptionFitToPage(page_params), scale_factor);
+  return CalculatePageLayoutFromPrintParams(params_with_floating_size,
+                                            input_scale_factor);
 }
 
 void PrintRenderFrameHelper::IPCReceived() {
@@ -2393,25 +2402,24 @@ void PrintRenderFrameHelper::IPCProcessed() {
 }
 
 bool PrintRenderFrameHelper::InitPrintSettings(bool fit_to_paper_size) {
-  mojom::PrintPagesParams settings;
-  settings.params = mojom::PrintParams::New();
-  GetPrintManagerHost()->GetDefaultPrintSettings(&settings.params);
-
-  // Check if the printer returned any settings, if the settings is empty, we
-  // can safely assume there are no printer drivers configured. So we safely
-  // terminate.
-  const bool result = PrintMsgPrintParamsIsValid(*settings.params);
-
   // Reset to default values.
   ignore_css_margins_ = false;
-  settings.pages.clear();
+
+  mojom::PrintPagesParams settings;
+  GetPrintManagerHost()->GetDefaultPrintSettings(&settings.params);
+
+  // Check if the printer returned any settings, if the settings are null,
+  // assume there are no printer drivers configured. So safely terminate.
+  if (!settings.params) {
+    // Caller will reset `print_pages_params_`.
+    return false;
+  }
 
   settings.params->print_scaling_option =
       fit_to_paper_size ? mojom::PrintScalingOption::kFitToPrintableArea
                         : mojom::PrintScalingOption::kSourceSize;
-
   SetPrintPagesParams(settings);
-  return result;
+  return true;
 }
 
 bool PrintRenderFrameHelper::CalculateNumberOfPages(blink::WebLocalFrame* frame,
@@ -2470,24 +2478,10 @@ bool PrintRenderFrameHelper::UpdatePrintSettings(
     job_settings = &modified_job_settings;
   }
 
-  // Send the cookie so that UpdatePrintSettings can reuse PrinterQuery when
-  // possible.
-  int cookie =
-      print_pages_params_ ? print_pages_params_->params->document_cookie : 0;
   mojom::PrintPagesParamsPtr settings;
-  bool canceled = false;
-  GetPrintManagerHost()->UpdatePrintSettings(cookie, job_settings->Clone(),
-                                             &settings, &canceled);
-
-  // If mojom::PrintManagerHost is disconnected in the browser after calling
-  // UpdatePrintSettings(), |settings| could be null.
+  GetPrintManagerHost()->UpdatePrintSettings(job_settings->Clone(), &settings);
   if (!settings) {
     print_preview_context_.set_error(PREVIEW_ERROR_EMPTY_PRINTER_SETTINGS);
-    return false;
-  }
-
-  if (canceled) {
-    notify_browser_of_print_failure_ = false;
     return false;
   }
 
@@ -2505,14 +2499,7 @@ bool PrintRenderFrameHelper::UpdatePrintSettings(
       frame, node, source_is_html, *job_settings, *settings->params);
 
   SetPrintPagesParams(*settings);
-
-  if (PrintMsgPrintParamsIsValid(*settings->params))
-    return true;
-
-  print_preview_context_.set_error(PREVIEW_ERROR_INVALID_PRINTER_SETTINGS);
-  print_preview_context_.set_error_details(
-      PrintMsgPrintParamsErrorDetails(*settings->params));
-  return false;
+  return true;
 }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
@@ -2796,8 +2783,7 @@ bool PrintRenderFrameHelper::PreviewPageRendered(
   // http://crbug.com/1039817
   if (snapshotter_ && page_number == 0) {
     ui::AXTreeUpdate accessibility_tree;
-    snapshotter_->Snapshot(/* exclude_offscreen= */ false,
-                           /* max_node_count= */ 0,
+    snapshotter_->Snapshot(/* max_node_count= */ 0,
                            /* timeout= */ {}, &accessibility_tree);
     GetPrintManagerHost()->SetAccessibilityTree(
         print_pages_params_->params->document_cookie, accessibility_tree);
@@ -3031,11 +3017,6 @@ void PrintRenderFrameHelper::PrintPreviewContext::set_error(
   error_ = error;
 }
 
-void PrintRenderFrameHelper::PrintPreviewContext::set_error_details(
-    const std::string& details) {
-  error_details_ = details;
-}
-
 blink::WebLocalFrame*
 PrintRenderFrameHelper::PrintPreviewContext::source_frame() {
   DCHECK(state_ != UNINITIALIZED);
@@ -3092,18 +3073,12 @@ int PrintRenderFrameHelper::PrintPreviewContext::last_error() const {
   return error_;
 }
 
-const std::string&
-PrintRenderFrameHelper::PrintPreviewContext::last_error_details() const {
-  return error_details_;
-}
-
 void PrintRenderFrameHelper::PrintPreviewContext::ClearContext() {
   prep_frame_view_.reset();
   metafile_.reset();
   typeface_content_info_.clear();
   pages_to_render_.clear();
   error_ = PREVIEW_ERROR_NONE;
-  error_details_ = std::string();
 }
 
 void PrintRenderFrameHelper::PrintPreviewContext::CalculatePluginAttributes() {
@@ -3113,6 +3088,7 @@ void PrintRenderFrameHelper::PrintPreviewContext::CalculatePluginAttributes() {
 
 void PrintRenderFrameHelper::SetPrintPagesParams(
     const mojom::PrintPagesParams& settings) {
+  CHECK(PrintMsgPrintParamsIsValid(*settings.params));
   print_pages_params_ = settings.Clone();
 }
 

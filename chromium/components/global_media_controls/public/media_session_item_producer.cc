@@ -153,7 +153,11 @@ void MediaSessionItemProducer::Session::OnSessionInteractedWith() {
 }
 
 bool MediaSessionItemProducer::Session::IsPlaying() const {
-  return is_playing_;
+  // Since both MediaSessionItemProducer and MediaSessionNotificationItem
+  // registered for MediaControllerObserver::MediaSessionInfoChanged(), we need
+  // to check both places to get the most recent playback state in case one has
+  // been updated while the other has not yet when this is called.
+  return is_playing_ || item_->IsPlaying();
 }
 
 void MediaSessionItemProducer::Session::SetAudioSinkId(const std::string& id) {
@@ -288,7 +292,8 @@ void MediaSessionItemProducer::OnFocusGained(
             this, id,
             std::make_unique<MediaSessionNotificationItem>(
                 this, id, session->source_name.value_or(std::string()),
-                std::move(item_controller), std::move(session->session_info)),
+                session->source_id, std::move(item_controller),
+                std::move(session->session_info)),
             std::move(session_controller)));
   }
 }

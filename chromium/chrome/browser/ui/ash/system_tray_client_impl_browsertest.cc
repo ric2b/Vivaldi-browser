@@ -13,6 +13,7 @@
 #include "ash/system/model/enterprise_domain_model.h"
 #include "ash/system/model/system_tray_model.h"
 #include "base/i18n/time_formatting.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -48,6 +49,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
+#include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/web_contents.h"
@@ -444,24 +446,37 @@ class SystemTrayClientShowCalendarTest : public ash::LoginManagerTest {
   ~SystemTrayClientShowCalendarTest() override = default;
 
   apps::AppPtr MakeApp(const char* app_id, const char* name) {
+    auto google_meet_filter =
+        apps_util::MakeIntentFilterForUrlScope(GURL("https://meet.google.com"));
+    auto calendar_filter = apps_util::MakeIntentFilterForUrlScope(
+        GURL("https://calendar.google.com"));
     apps::AppPtr app =
         std::make_unique<apps::App>(apps::AppType::kChromeApp, app_id);
     app->name = name;
     app->short_name = name;
+    app->readiness = apps::Readiness::kReady;
+    app->handles_intents = true;
+    app->intent_filters.push_back(google_meet_filter->Clone());
+    app->intent_filters.push_back(calendar_filter->Clone());
     return app;
   }
 
-  void InstallApp(const char* app_id, const char* name) {
+  apps::AppServiceProxyAsh* proxy() {
     const user_manager::User* user = UserManager::Get()->FindUser(account_id_);
     Profile* profile = ProfileHelper::Get()->GetProfileByUser(user);
-    apps::AppServiceProxyAsh* proxy =
-        apps::AppServiceProxyFactory::GetForProfile(profile);
+    return apps::AppServiceProxyFactory::GetForProfile(profile);
+  }
 
+  void InstallApp(const char* app_id, const char* name) {
     std::vector<apps::AppPtr> registry_deltas;
     registry_deltas.push_back(MakeApp(app_id, name));
-    proxy->AppRegistryCache().OnApps(std::move(registry_deltas),
-                                     apps::AppType::kUnknown,
-                                     /*should_notify_initialized=*/false);
+    proxy()->AppRegistryCache().OnApps(std::move(registry_deltas),
+                                       apps::AppType::kChromeApp,
+                                       /*should_notify_initialized=*/false);
+  }
+
+  void SetPreferredApp(const char* app_id) {
+    proxy()->SetSupportedLinksPreference(app_id);
   }
 
  protected:
@@ -558,12 +573,12 @@ IN_PROC_BROWSER_TEST_F(SystemTrayClientShowCalendarTest, UnofficialEventUrl) {
   EXPECT_EQ(final_url.spec(), GURL(kOfficialCalendarEventUrl).spec());
 }
 
-class SystemTrayClientShowGoogleMeetTest
+class SystemTrayClientShowVideoConferenceTest
     : public SystemTrayClientShowCalendarTest {
  public:
-  SystemTrayClientShowGoogleMeetTest() = default;
+  SystemTrayClientShowVideoConferenceTest() = default;
 
-  ~SystemTrayClientShowGoogleMeetTest() override = default;
+  ~SystemTrayClientShowVideoConferenceTest() override = default;
 
  protected:
   // ash::LoginManagerTest:
@@ -575,30 +590,64 @@ class SystemTrayClientShowGoogleMeetTest
     ASSERT_TRUE(browser_);
   }
 
-  Browser* browser_ = nullptr;
+  raw_ptr<Browser, ExperimentalAsh> browser_ = nullptr;
 };
 
-IN_PROC_BROWSER_TEST_F(SystemTrayClientShowGoogleMeetTest,
-                       LaunchGoogleMeetInBrowser) {
-  constexpr char kMeetUrl[] = "https://meet.google.com/abc-123";
+IN_PROC_BROWSER_TEST_F(SystemTrayClientShowVideoConferenceTest,
+                       LaunchGoogleMeetUrlInBrowser_WhenAppIsNotInstalled) {
+  const auto kVideoConferenceUrl = GURL("https://meet.google.com/abc-123");
 
-  ash::Shell::Get()->system_tray_model()->client()->ShowGoogleMeet(kMeetUrl);
+  ash::Shell::Get()->system_tray_model()->client()->ShowVideoConference(
+      kVideoConferenceUrl);
 
   EXPECT_EQ(
-      GURL(kMeetUrl),
+      GURL(kVideoConferenceUrl),
       browser_->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
 }
 
-IN_PROC_BROWSER_TEST_F(SystemTrayClientShowGoogleMeetTest,
-                       LaunchGoogleMeetInGoogleMeetApp) {
-  constexpr char kMeetUrl[] = "https://meet.google.com/abc-123";
-
+IN_PROC_BROWSER_TEST_F(
+    SystemTrayClientShowVideoConferenceTest,
+    LaunchGoogleMeetUrlInBrowser_WhenAppIsInstalledButNotPreferred) {
+  const auto kVideoConferenceUrl = GURL("https://meet.google.com/abc-123");
   InstallApp(web_app::kGoogleMeetAppId, "Google Meet");
-  ash::Shell::Get()->system_tray_model()->client()->ShowGoogleMeet(kMeetUrl);
 
-  // Expect the meet_url not to have opened in the browser.
+  ash::Shell::Get()->system_tray_model()->client()->ShowVideoConference(
+      kVideoConferenceUrl);
+
+  EXPECT_EQ(
+      GURL(kVideoConferenceUrl),
+      browser_->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    SystemTrayClientShowVideoConferenceTest,
+    LaunchGoogleMeetUrlInApp_WhenAppIsInstalledAndPreferred) {
+  const auto kVideoConferenceUrl = GURL("https://meet.google.com/abc-123");
+  InstallApp(web_app::kGoogleMeetAppId, "Google Meet");
+  SetPreferredApp(web_app::kGoogleMeetAppId);
+
+  ASSERT_EQ(
+      web_app::kGoogleMeetAppId,
+      proxy()->PreferredAppsList().FindPreferredAppForUrl(kVideoConferenceUrl));
+
+  ash::Shell::Get()->system_tray_model()->client()->ShowVideoConference(
+      kVideoConferenceUrl);
+
+  // Expect the url not to have opened in the browser.
   EXPECT_NE(
-      GURL(kMeetUrl),
+      GURL(kVideoConferenceUrl),
+      browser_->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
+}
+
+IN_PROC_BROWSER_TEST_F(SystemTrayClientShowVideoConferenceTest,
+                       Launch3PVideoConferenceUrlInBrowser) {
+  const auto kVideoConferenceUrl = GURL("https://some.third.party.com/abc-123");
+
+  ash::Shell::Get()->system_tray_model()->client()->ShowVideoConference(
+      kVideoConferenceUrl);
+
+  EXPECT_EQ(
+      GURL(kVideoConferenceUrl),
       browser_->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
 }
 

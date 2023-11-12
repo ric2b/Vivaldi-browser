@@ -98,6 +98,13 @@ NET_EXPORT BASE_DECLARE_FEATURE(kEnableTLS13EarlyData);
 // https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-13
 NET_EXPORT BASE_DECLARE_FEATURE(kEncryptedClientHello);
 
+// Enables the TLS Encrypted ClientHello feature for QUIC. Only takes effect if
+// kEncryptedClientHello is also enabled.
+//
+// TODO(crbug.com/1287248): Remove this flag when ECH for QUIC is fully
+// implemented. This flag is just a temporary mechanism for now.
+NET_EXPORT BASE_DECLARE_FEATURE(kEncryptedClientHelloQuic);
+
 // Enables optimizing the network quality estimation algorithms in network
 // quality estimator (NQE).
 NET_EXPORT BASE_DECLARE_FEATURE(kNetworkQualityEstimator);
@@ -108,6 +115,11 @@ NET_EXPORT BASE_DECLARE_FEATURE(kSplitCacheByIncludeCredentials);
 // Splits cache entries by the request's NetworkIsolationKey if one is
 // available.
 NET_EXPORT BASE_DECLARE_FEATURE(kSplitCacheByNetworkIsolationKey);
+
+// Splits the generated code cache by the request's NetworkIsolationKey if one
+// is available. Note that this feature is also gated behind
+// `net::HttpCache::IsSplitCacheEnabled()`.
+NET_EXPORT BASE_DECLARE_FEATURE(kSplitCodeCacheByNetworkIsolationKey);
 
 // Splits host cache entries by the DNS request's NetworkIsolationKey if one is
 // available. Also prevents merging live DNS lookups when there is a NIK
@@ -141,14 +153,13 @@ NET_EXPORT BASE_DECLARE_FEATURE(kPartitionSSLSessionsByNetworkIsolationKey);
 // testing.
 NET_EXPORT BASE_DECLARE_FEATURE(kPartitionNelAndReportingByNetworkIsolationKey);
 
-// Creates a <double key + is_cross_site> NetworkAnonymizationKey which is used
-// to partition the network state. This double key will have the following
-// properties: `top_frame_site` -> the schemeful site of the top level page.
-// `frame_site ` -> nullopt
-// `is_cross_site` -> true if the `top_frame_site` is cross site when compared
-// to the frame site. The frame site will not be stored in this key so the value
-// of is_cross_site will be computed at key construction.
-NET_EXPORT BASE_DECLARE_FEATURE(kEnableCrossSiteFlagNetworkAnonymizationKey);
+// Creates a <double key + is_cross_site> NetworkIsolationKey which is used
+// to partition the HTTP cache. This key will have the following properties:
+// `top_frame_site_` -> the schemeful site of the top level page.
+// `frame_site_` -> absl::nullopt.
+// `is_cross_site_` -> a boolean indicating whether the frame site is
+// schemefully cross-site from the top-level site.
+NET_EXPORT BASE_DECLARE_FEATURE(kEnableCrossSiteFlagNetworkIsolationKey);
 
 // Enables sending TLS 1.3 Key Update messages on TLS 1.3 connections in order
 // to ensure that this corner of the spec is exercised. This is currently
@@ -163,17 +174,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kPermuteTLSExtensions);
 
 // Enables Kyber-based post-quantum key-agreements in TLS 1.3 connections.
 NET_EXPORT BASE_DECLARE_FEATURE(kPostQuantumKyber);
-
-// Enables CECPQ2, a post-quantum key-agreement, in TLS 1.3 connections.
-// Ineffective if kPostQuantumKyber is enabled.
-NET_EXPORT BASE_DECLARE_FEATURE(kPostQuantumCECPQ2);
-
-// Enables CECPQ2, a post-quantum key-agreement, in TLS 1.3 connections for a
-// subset of domains. (This is intended as Finch kill-switch. For testing
-// compatibility with large ClientHello messages, use |kPostQuantumCECPQ2|.)
-NET_EXPORT BASE_DECLARE_FEATURE(kPostQuantumCECPQ2SomeDomains);
-NET_EXPORT extern const base::FeatureParam<std::string>
-    kPostQuantumCECPQ2Prefix;
 
 // Changes the timeout after which unused sockets idle sockets are cleaned up.
 NET_EXPORT BASE_DECLARE_FEATURE(kNetUnusedIdleSocketTimeout);
@@ -196,18 +196,12 @@ NET_EXPORT BASE_DECLARE_FEATURE(kSameSiteDefaultChecksMethodRigorously);
 
 #if BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
 NET_EXPORT BASE_DECLARE_FEATURE(kCertDualVerificationTrialFeature);
-#if BUILDFLAG(IS_MAC)
-NET_EXPORT extern const base::FeatureParam<int> kCertDualVerificationTrialImpl;
-#endif /* BUILDFLAG(IS_MAC) */
-#endif /* BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED) */
+#endif  // BUILDFLAG(TRIAL_COMPARISON_CERT_VERIFIER_SUPPORTED)
 
-#if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
+#if BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
 // When enabled, use the Chrome Root Store instead of the system root store
 NET_EXPORT BASE_DECLARE_FEATURE(kChromeRootStoreUsed);
-#if BUILDFLAG(IS_MAC)
-NET_EXPORT extern const base::FeatureParam<int> kChromeRootStoreSysImpl;
-#endif /* BUILDFLAG(IS_MAC) */
-#endif /* BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED) */
+#endif  // BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
 
 // When enabled, TrustStore implementations will use TRUSTED_LEAF,
 // TRUSTED_ANCHOR_OR_LEAF, and TRUSTED_ANCHOR as appropriate. When disabled,
@@ -302,10 +296,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kPartitionedCookies);
 // frames.
 NET_EXPORT BASE_DECLARE_FEATURE(kNoncedPartitionedCookies);
 
-// Enable recording UMAs for network activities which can wake-up radio on
-// Android.
-NET_EXPORT BASE_DECLARE_FEATURE(kRecordRadioWakeupTrigger);
-
 // When enabled, cookies cannot have an expiry date further than 400 days in the
 // future.
 NET_EXPORT BASE_DECLARE_FEATURE(kClampCookieExpiryTo400Days);
@@ -318,8 +308,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kCookieDomainRejectNonASCII);
 
 // Blocks the 'Set-Cookie' request header on outbound fetch requests.
 NET_EXPORT BASE_DECLARE_FEATURE(kBlockSetCookieHeader);
-
-NET_EXPORT BASE_DECLARE_FEATURE(kOptimisticBlockfileWrite);
 
 NET_EXPORT BASE_DECLARE_FEATURE(kThirdPartyStoragePartitioning);
 NET_EXPORT BASE_DECLARE_FEATURE(kSupportPartitionedBlobUrl);
@@ -356,6 +344,38 @@ NET_EXPORT BASE_DECLARE_FEATURE(kPriorityIncremental);
 // Prefetch to follow normal semantics instead of 5-minute rule
 // https://crbug.com/1345207
 NET_EXPORT BASE_DECLARE_FEATURE(kPrefetchFollowsNormalCacheSemantics);
+
+// A flag for new Kerberos feature, that suggests new UI
+// when Kerberos authentication in browser fails on ChromeOS.
+// b/260522530
+#if BUILDFLAG(IS_CHROMEOS)
+NET_EXPORT BASE_DECLARE_FEATURE(kKerberosInBrowserRedirect);
+#endif
+
+// A flag to use asynchronous session creation for new QUIC sessions.
+NET_EXPORT BASE_DECLARE_FEATURE(kAsyncQuicSession);
+
+// Enables custom proxy configuration for the IP Protection experimental proxy.
+NET_EXPORT BASE_DECLARE_FEATURE(kEnableIpProtectionProxy);
+
+// Sets the name of the IP protection proxy.
+NET_EXPORT extern const base::FeatureParam<std::string> kIpPrivacyProxyServer;
+
+// Sets the allow list for the IP protection proxy.
+NET_EXPORT extern const base::FeatureParam<std::string>
+    kIpPrivacyProxyAllowlist;
+
+// Whether QuicParams::migrate_sessions_on_network_change_v2 defaults to true or
+// false. This is needed as a workaround to set this value to true on Android
+// but not on WebView (until crbug.com/1430082 has been fixed).
+NET_EXPORT BASE_DECLARE_FEATURE(kMigrateSessionsOnNetworkChangeV2);
+
+#if BUILDFLAG(IS_LINUX)
+// AddressTrackerLinux will not run inside the network service in this
+// configuration, which will improve the Linux network service sandbox.
+// TODO(crbug.com/1312226): remove this.
+NET_EXPORT BASE_DECLARE_FEATURE(kAddressTrackerLinuxIsProxied);
+#endif  // BUILDFLAG(IS_LINUX)
 
 }  // namespace net::features
 

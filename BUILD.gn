@@ -77,6 +77,7 @@ group("All") {
       "//components/zucchini:zucchini",
       "//components/zucchini:zucchini64",
       "//vivaldi/update_notifier",
+      # "//ui/views/examples:views_examples", # example test software for viewing icons
     ]
     if (vivaldi_build_tests) {
       deps += [
@@ -149,6 +150,9 @@ group("All") {
   }
   if (is_ios) {
     deps += ["//ios/chrome/app:chrome"]
+    if (is_official_build) {
+      deps += ["//vivaldi/ios:ios_dsym_archive"]
+    }
     if (getenv("CHROME_HEADLESS") != "1") {  # Signing provisions needed for building on builders
       deps += ["//ios/components:all_tests"]
     }

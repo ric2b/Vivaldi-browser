@@ -14,11 +14,11 @@
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/ash/wilco_dtc_supportd/wilco_dtc_supportd_client.h"
 #include "chrome/common/chrome_paths.h"
+#include "chromeos/ash/components/attestation/attestation_features.h"
 #include "chromeos/ash/components/cryptohome/system_salt_getter.h"
 #include "chromeos/ash/components/dbus/anomaly_detector/anomaly_detector_client.h"
 #include "chromeos/ash/components/dbus/arc/arc_appfuse_provider_client.h"
 #include "chromeos/ash/components/dbus/arc/arc_camera_client.h"
-#include "chromeos/ash/components/dbus/arc/arc_data_snapshotd_client.h"
 #include "chromeos/ash/components/dbus/arc/arc_keymaster_client.h"
 #include "chromeos/ash/components/dbus/arc/arc_keymint_client.h"
 #include "chromeos/ash/components/dbus/arc/arc_midis_client.h"
@@ -44,6 +44,7 @@
 #include "chromeos/ash/components/dbus/federated/federated_client.h"
 #include "chromeos/ash/components/dbus/gnubby/gnubby_client.h"
 #include "chromeos/ash/components/dbus/hermes/hermes_clients.h"
+#include "chromeos/ash/components/dbus/hiberman/hiberman_client.h"
 #include "chromeos/ash/components/dbus/human_presence/human_presence_dbus_client.h"
 #include "chromeos/ash/components/dbus/image_burner/image_burner_client.h"
 #include "chromeos/ash/components/dbus/image_loader/image_loader_client.h"
@@ -54,6 +55,7 @@
 #include "chromeos/ash/components/dbus/os_install/os_install_client.h"
 #include "chromeos/ash/components/dbus/patchpanel/patchpanel_client.h"
 #include "chromeos/ash/components/dbus/pciguard/pciguard_client.h"
+#include "chromeos/ash/components/dbus/printscanmgr/printscanmgr_client.h"
 #include "chromeos/ash/components/dbus/private_computing/private_computing_client.h"
 #include "chromeos/ash/components/dbus/resourced/resourced_client.h"
 #include "chromeos/ash/components/dbus/rgbkbd/rgbkbd_client.h"
@@ -76,7 +78,6 @@
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/dbus/virtual_file_provider/virtual_file_provider_client.h"
 #include "chromeos/ash/components/dbus/vm_plugin_dispatcher/vm_plugin_dispatcher_client.h"
-#include "chromeos/ash/components/hibernate/buildflags.h"  // ENABLE_HIBERNATE
 #include "chromeos/ash/components/install_attributes/install_attributes.h"
 #include "chromeos/dbus/constants/dbus_paths.h"
 #include "chromeos/dbus/dlp/dlp_client.h"
@@ -96,10 +97,6 @@
 #if BUILDFLAG(PLATFORM_CFM)
 #include "chromeos/ash/components/chromebox_for_meetings/features.h"
 #include "chromeos/ash/components/dbus/chromebox_for_meetings/cfm_hotline_client.h"
-#endif
-
-#if BUILDFLAG(ENABLE_HIBERNATE)
-#include "chromeos/ash/components/dbus/hiberman/hiberman_client.h"  // nogncheck
 #endif
 
 namespace ash {
@@ -139,7 +136,6 @@ void InitializeDBus() {
   InitializeDBusClient<AnomalyDetectorClient>(bus);
   InitializeDBusClient<ArcAppfuseProviderClient>(bus);
   InitializeDBusClient<ArcCameraClient>(bus);
-  InitializeDBusClient<ArcDataSnapshotdClient>(bus);
   InitializeDBusClient<ArcKeymasterClient>(bus);
   InitializeDBusClient<ArcKeyMintClient>(bus);
   InitializeDBusClient<ArcMidisClient>(bus);
@@ -168,9 +164,7 @@ void InitializeDBus() {
   InitializeDBusClient<FederatedClient>(bus);
   InitializeDBusClient<GnubbyClient>(bus);
   hermes_clients::Initialize(bus);
-#if BUILDFLAG(ENABLE_HIBERNATE)
   InitializeDBusClient<HibermanClient>(bus);
-#endif
   InitializeDBusClient<ImageBurnerClient>(bus);
   InitializeDBusClient<ImageLoaderClient>(bus);
   InitializeDBusClient<InstallAttributesClient>(bus);
@@ -184,6 +178,7 @@ void InitializeDBus() {
   InitializeDBusClient<OsInstallClient>(bus);
   InitializeDBusClient<PatchPanelClient>(bus);
   InitializeDBusClient<PciguardClient>(bus);
+  InitializeDBusClient<PrintscanmgrClient>(bus);
   InitializeDBusClient<PrivateComputingClient>(bus);
   InitializeDBusClient<chromeos::PermissionBrokerClient>(bus);
   InitializeDBusClient<chromeos::PowerManagerClient>(bus);
@@ -204,6 +199,7 @@ void InitializeDBus() {
   InitializeDBusClient<VirtualFileProviderClient>(bus);
   InitializeDBusClient<VmPluginDispatcherClient>(bus);
 
+  attestation::AttestationFeatures::Initialize();
   // Initialize the device settings service so that we'll take actions per
   // signals sent from the session manager. This needs to happen before
   // g_browser_process initializes BrowserPolicyConnector.
@@ -295,6 +291,7 @@ void ShutdownDBus() {
   }
   chromeos::PowerManagerClient::Shutdown();
   chromeos::PermissionBrokerClient::Shutdown();
+  PrintscanmgrClient::Shutdown();
   PciguardClient::Shutdown();
   PatchPanelClient::Shutdown();
   PrivateComputingClient::Shutdown();
@@ -309,9 +306,7 @@ void ShutdownDBus() {
   InstallAttributesClient::Shutdown();
   ImageLoaderClient::Shutdown();
   ImageBurnerClient::Shutdown();
-#if BUILDFLAG(ENABLE_HIBERNATE)
   HibermanClient::Shutdown();
-#endif
   hermes_clients::Shutdown();
   GnubbyClient::Shutdown();
   featured::FeaturedClient::Shutdown();
@@ -339,7 +334,6 @@ void ShutdownDBus() {
   ArcMidisClient::Shutdown();
   ArcKeyMintClient::Shutdown();
   ArcKeymasterClient::Shutdown();
-  ArcDataSnapshotdClient::Shutdown();
   ArcCameraClient::Shutdown();
   ArcAppfuseProviderClient::Shutdown();
   AnomalyDetectorClient::Shutdown();

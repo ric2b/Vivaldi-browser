@@ -84,6 +84,7 @@
 <translation id="1722487484194605434">Komprimerer <ph name="NUMBER_OF_ITEMS" /> elementer...</translation>
 <translation id="1722687688096767818">Tilføjer profilen...</translation>
 <translation id="1726100011689679555">Navneservere</translation>
+<translation id="1727562178154619254">Klar til synkronisering</translation>
 <translation id="1729953886957086472">Tysk (Tyskland)</translation>
 <translation id="1730235522912993863">Kinesisk cangjie</translation>
 <translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> elementer blev kopieret.</translation>
@@ -106,7 +107,6 @@
 <translation id="1834290891154666894">Ugyldig indtastning for match af alternativt emnenavn</translation>
 <translation id="1838709767668011582">Google-website</translation>
 <translation id="1853795129690976061">Denne mappe deles med Linux</translation>
-<translation id="1859422890169495746">Denne Chromebook</translation>
 <translation id="1864756863218646478">Filen blev ikke fundet.</translation>
 <translation id="1884013283844450420">Netværk <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, opret forbindelse</translation>
 <translation id="1920670151694390848">Malayalam translitteration</translation>
@@ -118,7 +118,6 @@
 <translation id="1942765061641586207">Billedopløsning</translation>
 <translation id="1972984168337863910">Udvid paneler med feedback til filer</translation>
 <translation id="1995337122023280937">Gå til filplacering</translation>
-<translation id="1999709132469742660">Filadgang for alle webadresser</translation>
 <translation id="2001796770603320721">Administrer i Drev</translation>
 <translation id="2009067268969781306">Formatering af et drev sletter alle de data, der er gemt på det. Denne handling kan ikke fortrydes.</translation>
 <translation id="2025955442973426285">Tigrinsk</translation>
@@ -130,6 +129,7 @@
 <translation id="2084108471225856927">Enhedsindstillinger</translation>
 <translation id="2084809735218147718">Siger tak på tegnsprog</translation>
 <translation id="2088690981887365033">VPN-netværk</translation>
+<translation id="2111134541987263231">Aktivér <ph name="BEGIN_BOLD" />Tillad i inkognito<ph name="END_BOLD" />.</translation>
 <translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> elementer slettes, og du kan ikke gendanne dem.</translation>
 <translation id="2122305276694332719">Vi anbefaler, at du ikke tillader automatisk forbindelse til skjulte netværk, da det gør det muligt for andre at se din enhed og visse netværksindstillinger.</translation>
 <translation id="2125607626296734455">Khmer</translation>
@@ -150,6 +150,7 @@
 <translation id="2236732657580416950">Din Google Drev-cache blev ryddet.</translation>
 <translation id="2239068707900391003">Person med kaffe</translation>
 <translation id="2251368349685848079">Gendan fra papirkurven</translation>
+<translation id="2278133026967558505">Filadgang for alle websites og webadresser</translation>
 <translation id="2282155092769082568">Webadresse til automatisk konfiguration:</translation>
 <translation id="2284767815536050991">flytbart lager</translation>
 <translation id="2288278176040912387">Pladespiller</translation>
@@ -158,6 +159,7 @@
 <translation id="2304820083631266885">Planet</translation>
 <translation id="2305020378527873881"><ph name="VOLUME_NAME" /> er skubbet ud.</translation>
 <translation id="2307462900900812319">Konfigurer netværk</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{En udvidelse med id'et <ph name="BEGIN_LIST" /><ph name="END_LIST" /> blev ikke fundet. Kontakt din administrator.}one{En udvidelse med id'et <ph name="BEGIN_LIST" /><ph name="END_LIST" /> blev ikke fundet. Kontakt din administrator.}other{Udvidelser med id'erne <ph name="BEGIN_LIST" /><ph name="END_LIST" /> blev ikke fundet. Kontakt din administrator.}}</translation>
 <translation id="2325650632570794183">Denne filtype understøttes ikke. Gå til Chrome Webshop for at finde en app, der kan åbne denne filtype.</translation>
 <translation id="2326539130272988168">Bulgarsk</translation>
 <translation id="2337715497728194187">Del med Bruschetta</translation>
@@ -227,6 +229,7 @@
 <translation id="290843123675549676">Marathi</translation>
 <translation id="2923240520113693977">Estisk</translation>
 <translation id="2938685643439809023">Mongolsk</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{Udvidelsen blev ikke fundet}one{Udvidelsen blev ikke fundet}other{Udvidelserne blev ikke fundet}}</translation>
 <translation id="2943503720238418293">Brug et kortere navn</translation>
 <translation id="2949781154072577687">Formaterer <ph name="DRIVE_NAME" />…</translation>
 <translation id="2951236788251446349">Vandmand</translation>
@@ -272,6 +275,7 @@
 <translation id="3290356915286466215">Ikke beskyttet</translation>
 <translation id="3291218047831493686">Opret forbindelse til dette netværk for at skifte indstillingen for SIM-lås</translation>
 <translation id="3293023191599135697">WEP-netværk understøttes ikke</translation>
+<translation id="3295006446256079333">Denne mængde</translation>
 <translation id="3295357220137379386">Enheden er optaget</translation>
 <translation id="3296763833017966289">Georgisk</translation>
 <translation id="3307875152560779385">Ukrainsk</translation>
@@ -281,6 +285,7 @@
 <translation id="3356580349448036450">Fuldført</translation>
 <translation id="3358452157379365236">Guitar</translation>
 <translation id="3368922792935385530">Tilsluttet</translation>
+<translation id="3372635229069101468">Klik på <ph name="BEGIN_BOLD" />Detaljer<ph name="END_BOLD" /></translation>
 <translation id="3382143449143186018">Nepalesisk InScript-tastatur</translation>
 <translation id="338691029516748599">Netværk <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, signalstyrke <ph name="SIGNAL_STRENGTH" /> %, administreret af din administrator, opret forbindelse</translation>
 <translation id="3408072735282270043">Aktivér <ph name="NETWORK_NAME" /></translation>
@@ -365,6 +370,7 @@
 <translation id="4124935795427217608">Enhjørning</translation>
 <translation id="4131235941541910880">Flyt overflødige elementer til papirkurven</translation>
 <translation id="4134804435730168042">Netværk <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, aktivér efter konfiguration af enhed</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{Aktivér følgende udvidelse i inkognito:}one{Aktivér følgende udvidelse i inkognito:}other{Aktivér følgende udvidelser i inkognito:}}</translation>
 <translation id="4153015322587141338">Højreklik på en fil, og vælg "<ph name="PIN_COMMAND" />" for at få hurtig adgang til dine filer på hylden.</translation>
 <translation id="4157569377477607576">Administratorpolitikken fraråder:</translation>
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> blev flyttet.</translation>
@@ -461,12 +467,15 @@
 <translation id="4801956050125744859">Behold begge</translation>
 <translation id="4804827417948292437">Avocado</translation>
 <translation id="4805966553127040832"><ph name="COUNT" /> elementer gendannes</translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{Din organisation kræver en udvidelse, før du kan bruge inkognito}one{Din organisation kræver en udvidelse, før du kan bruge inkognito}other{Din organisation kræver nogle udvidelser, før du kan bruge inkognito}}</translation>
 <translation id="4823651846660089135">Enheden er skrivebeskyttet</translation>
 <translation id="4826849268470072925">Tamil ITRANS</translation>
+<translation id="482932175346970750">Indtast <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" /> i din browser</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> elementer valgt</translation>
 <translation id="4843566743023903107">Chromebases</translation>
 <translation id="4850886885716139402">Vis</translation>
 <translation id="485316830061041779">Tysk</translation>
+<translation id="4862885579661885411">Indstillinger for Filer</translation>
 <translation id="4867079195717347957">Klik for at sortere kolonnen i faldende rækkefølge.</translation>
 <translation id="4867297348137739678">Sidste uge</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> bytes</translation>
@@ -532,6 +541,7 @@
         om filer med andre på ét sted.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">Gendannede filer fra Google Drev</translation>
 <translation id="5278111733643988471">Hvis du vil gendanne elementet, skal du trække det til en ny mappe uden for papirkurven. Den oprindelige mappe "<ph name="PARENT_FOLDER_NAME" />" for dette element er blevet slettet.</translation>
+<translation id="5283101102242354279">Aktivér en udvidelse i inkognito:</translation>
 <translation id="5286194356314741248">Søger</translation>
 <translation id="5288441970121584418">Burger</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -542,7 +552,6 @@
 <translation id="5323213332664049067">Latinamerikansk</translation>
 <translation id="5330145655348521461">Disse filer blev åbnet på en anden computer. Skift til <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) for at se dem.</translation>
 <translation id="5330512191124428349">Hent oplysninger</translation>
-<translation id="5337538975554986899">Filadgang for alle webadresser undtagen <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="5344246330454251646">Administrer deling med Bruschetta</translation>
 <translation id="535792325654997756">Person med katte</translation>
 <translation id="5358764674931277">Billedfrekvens</translation>
@@ -615,6 +624,7 @@
 <translation id="5911887972742538906">Der opstod en fejl ved installationen af Linux-appen.</translation>
 <translation id="5912396950572065471">Format</translation>
 <translation id="5913638992615760742">Kopiering mislykkedes, uventet fejl: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">Der er kommet nye søgefunktioner</translation>
 <translation id="5926082595146149752">Hollandsk (Holland) med amerikansk internationalt computertastatur</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063">Netværk <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, aktivér efter konfiguration af enhed</translation>
@@ -627,6 +637,7 @@
 <translation id="603895874132768835">Du kan ikke bruge dette netværk, før du har oprettet en ny pinkode</translation>
 <translation id="6040143037577758943">Luk</translation>
 <translation id="6055907707645252013"><ph name="NETWORK_TYPE" />-netværk, ingen forbindelse</translation>
+<translation id="6073060579181816027">Flere filplaceringer</translation>
 <translation id="6074825444536523002">Google-formular</translation>
 <translation id="6079871810119356840">Ungarsk Qwerty-tastatur</translation>
 <translation id="6096979789310008754">Søgeteksten blev ryddet. Viser alle filer og mapper.</translation>
@@ -704,6 +715,7 @@
 <translation id="6732801395666424405">Certifikaterne blev ikke indlæst</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6740270213273127264">Del mappe med Bruschetta</translation>
+<translation id="6750737795876287924">Aktuel mappe</translation>
 <translation id="6751256176799620176">1 mappe er valgt</translation>
 <translation id="6755827872271341378">ChromeOS Flex-enhed</translation>
 <translation id="6790428901817661496">Afspil</translation>
@@ -741,7 +753,6 @@
 <translation id="6973630695168034713">Mapper</translation>
 <translation id="6976795442547527108">Løve</translation>
 <translation id="6979158407327259162">Google Drev</translation>
-<translation id="6979737339423435258">Altid</translation>
 <translation id="6989942356279143254">Svensk</translation>
 <translation id="6990081529015358884">Der er ikke mere plads</translation>
 <translation id="6993826899923627728">Disse elementer er i din papirkurv</translation>
@@ -767,6 +778,7 @@
 <translation id="7162080671816799010">Der mangler et "Match af alternativt emnenavn" eller "Match af domænesuffiks" for at validere identiteten for godkendelsesserveren</translation>
 <translation id="7165320105431587207">Netværket kunne ikke konfigureres</translation>
 <translation id="7170041865419449892">Intet signal</translation>
+<translation id="7179579940054351344">Filadgang for alle websites og webadresser undtagen <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="7180611975245234373">Opdater</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> GB</translation>
 <translation id="7191454237977785534">Gem fil som</translation>
@@ -776,6 +788,7 @@
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />, oplysninger</translation>
 <translation id="7246947237293279874">FTP-proxy</translation>
 <translation id="7248671827512403053">Applikation</translation>
+<translation id="7252604552361840748">Find udvidelsen ovenfor</translation>
 <translation id="7256405249507348194">Ukendt fejl: <ph name="DESC" /></translation>
 <translation id="7268659760406822741">Tilgængelige tjenester</translation>
 <translation id="7292816689782057017">Administratorpolitikken begrænser lagring til visse placeringer.</translation>
@@ -797,7 +810,6 @@
 <translation id="7458955835361612701">Du har ikke åbnet nogen billeder for nylig</translation>
 <translation id="7460898608667578234">ukrainsk</translation>
 <translation id="7469894403370665791">Opret automatisk forbindelse til dette netværk</translation>
-<translation id="7481358317100446445">Klar</translation>
 <translation id="7486315294984620427">Filer skal først kopieres til mappen med Windows-filer, før du kan trække dem til Parallels Desktop.</translation>
 <translation id="749452993132003881">Hiragana</translation>
 <translation id="7495372004724182530">Malayalam fonetisk</translation>
@@ -941,6 +953,7 @@
 <translation id="8492972329130824181">Hjemmenetværket er ikke tilgængeligt. Dataroaming med mobildata skal være aktiveret, før du kan oprette forbindelse.</translation>
 <translation id="8499098729323186194">Udtrækker <ph name="NUMBER_OF_ITEMS" /> elementer…</translation>
 <translation id="8502913769543567768">Netværk <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, aktivér efter konfiguration af enhed, administreret af din administrator</translation>
+<translation id="8512483403832814140">Når som helst</translation>
 <translation id="8521441079177373948">Britisk</translation>
 <translation id="853494022971700746">Fransk (Frankrig)</translation>
 <translation id="8540608333167683902">Netværk <ph name="NETWORK_INDEX" /> af <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, signalstyrke <ph name="SIGNAL_STRENGTH" /> %, info</translation>
@@ -1000,7 +1013,7 @@
 <translation id="9035689366572880647">Angiv aktuel pinkode</translation>
 <translation id="9038620279323455325">Der findes allerede en fil med navnet "<ph name="FILE_NAME" />". Vælg et andet navn.</translation>
 <translation id="9046895021617826162">Forbindelsen mislykkedes</translation>
-<translation id="9065512565307033593">Hvis du ikke bekræfter, mister du adgangen til netværket.</translation>
+<translation id="9065512565307033593">Hvis du ikke verificerer, mister du adgangen til netværket.</translation>
 <translation id="908378762078012445">Russisk med fonetisk AATSEEL-tastatur</translation>
 <translation id="9086302186042011942">Synkroniserer</translation>
 <translation id="9099674669267916096">Sideantal</translation>

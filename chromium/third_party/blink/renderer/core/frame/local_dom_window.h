@@ -33,10 +33,10 @@
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink.h"
-#include "third_party/blink/public/common/frame/fullscreen_request_token.h"
+#include "third_party/blink/public/common/frame/delegated_capability_request_token.h"
 #include "third_party/blink/public/common/frame/history_user_activation_state.h"
-#include "third_party/blink/public/common/frame/payment_request_token.h"
 #include "third_party/blink/public/common/metrics/post_message_counter.h"
+#include "third_party/blink/public/common/performance/performance_timeline_constants.h"
 #include "third_party/blink/public/common/scheduler/task_attribution_id.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
@@ -75,7 +75,6 @@ class External;
 class Fence;
 class FrameConsole;
 class History;
-class IdleRequestOptions;
 class InputMethodController;
 class LocalFrame;
 class MediaQueryList;
@@ -94,7 +93,6 @@ class SourceLocation;
 class StyleMedia;
 class TrustedTypePolicyFactory;
 class V8FrameRequestCallback;
-class V8IdleRequestCallback;
 class V8VoidFunction;
 struct WebPictureInPictureWindowOptions;
 class WindowAgent;
@@ -346,10 +344,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // https://html.spec.whatwg.org/C/#dom-originagentcluster
   bool originAgentCluster() const;
 
-  // Idle callback extensions
-  int requestIdleCallback(V8IdleRequestCallback*, const IdleRequestOptions*);
-  void cancelIdleCallback(int id);
-
   // Custom elements
   CustomElementRegistry* customElements(ScriptState*) const;
   CustomElementRegistry* customElements() const;
@@ -478,17 +472,24 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   void DidReceiveUserActivation();
 
-  // Returns the state of the |PaymentRequestToken| in this document.
+  // Returns the state of the |payment_request_token_| in this document.
   bool IsPaymentRequestTokenActive() const;
 
-  // Consumes the |PaymentRequestToken| if it was active in this document.
+  // Consumes the |payment_request_token_| if it was active in this document.
   bool ConsumePaymentRequestToken();
 
-  // Returns the state of the |FullscreenRequestToken| in this document.
+  // Returns the state of the |fullscreen_request_token_| in this document.
   bool IsFullscreenRequestTokenActive() const;
 
-  // Consumes the |FullscreenRequestToken| if it was active in this document.
+  // Consumes the |fullscreen_request_token_| if it was active in this document.
   bool ConsumeFullscreenRequestToken();
+
+  // Returns the state of the |display_capture_request_token_| in this document.
+  bool IsDisplayCaptureRequestTokenActive() const;
+
+  // Consumes the |display_capture_request_token_| if it was active in this
+  // document.
+  bool ConsumeDisplayCaptureRequestToken();
 
   // Called when a network request buffered an additional `num_bytes` while this
   // frame is in back-forward cache.
@@ -521,6 +522,9 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // Sets the HasStorageAccess member. Note that it can only be granted for a
   // given window, it cannot be taken away.
   void SetHasStorageAccess();
+
+  bool HadActivationlessPaymentRequest() const;
+  void SetHadActivationlessPaymentRequest();
 
  protected:
   // EventTarget overrides.
@@ -578,10 +582,11 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   HeapHashSet<WeakMember<EventListenerObserver>> event_listener_observers_;
 
-  // Trackers for delegated payment and fullscreen requests.  These are related
-  // to |Frame::user_activation_state_|.
-  PaymentRequestToken payment_request_token_;
-  FullscreenRequestToken fullscreen_request_token_;
+  // Trackers for delegated payment, fullscreen, and display-capture requests.
+  // These are related to |Frame::user_activation_state_|.
+  DelegatedCapabilityRequestToken payment_request_token_;
+  DelegatedCapabilityRequestToken fullscreen_request_token_;
+  DelegatedCapabilityRequestToken display_capture_request_token_;
 
   // https://dom.spec.whatwg.org/#window-current-event
   // We represent the "undefined" value as nullptr.
@@ -660,11 +665,17 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // The navigation id of a document is to identify navigation of special types
   // like bfcache navigation or soft navigation. It increments when navigations
   // of these types occur.
-  uint32_t navigation_id_ = 1;
+  uint32_t navigation_id_ = kNavigationIdDefaultValue;
 
   // Records whether this window has obtained storage access. It cannot be
   // revoked once set to true.
   bool has_storage_access_ = false;
+
+  // Tracks whether this window has shown a payment request without a user
+  // activation. It cannot be revoked once set to true.
+  // TODO(crbug.com/1439565): Move this bit to a new payments-specific
+  // per-LocalDOMWindow class in the payments module.
+  bool had_activationless_payment_request_ = false;
 };
 
 template <>

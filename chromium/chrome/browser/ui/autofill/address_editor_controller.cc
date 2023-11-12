@@ -4,6 +4,11 @@
 
 #include "chrome/browser/ui/autofill/address_editor_controller.h"
 
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "base/callback_list.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/validation_rules_storage_factory.h"
@@ -14,6 +19,7 @@
 #include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/geo/address_i18n.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
+#include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/ui/country_combobox_model.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
@@ -22,9 +28,11 @@
 
 AddressEditorController::AddressEditorController(
     const autofill::AutofillProfile& profile_to_edit,
-    content::WebContents* web_contents)
+    content::WebContents* web_contents,
+    bool is_validatable)
     : profile_to_edit_(profile_to_edit),
-      locale_(g_browser_process->GetApplicationLocale()) {
+      locale_(g_browser_process->GetApplicationLocale()),
+      is_validatable_(is_validatable) {
   DCHECK(web_contents);
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
@@ -44,7 +52,18 @@ size_t AddressEditorController::GetCountriesSize() {
 std::unique_ptr<ui::ComboboxModel>
 AddressEditorController::GetCountryComboboxModel() {
   auto model = std::make_unique<autofill::CountryComboboxModel>();
-  model->SetCountries(*pdm_, /*filter=*/base::NullCallback(), locale_);
+  base::RepeatingCallback<bool(const std::string&)> filter;
+  if (is_filter_out_unsupported_countries()) {
+    // TODO(crbug.com/1432505): remove temporary unsupported countries
+    // filtering.
+    filter = base::BindRepeating(
+        [](const autofill::PersonalDataManager* personal_data,
+           const std::string& country) {
+          return personal_data->IsCountryEligibleForAccountStorage(country);
+        },
+        pdm_);
+  }
+  model->SetCountries(*pdm_, std::move(filter), locale_);
   if (model->countries().size() != countries_.size())
     UpdateCountries(model.get());
   return model;
@@ -66,7 +85,8 @@ void AddressEditorController::UpdateEditorFields() {
   editor_fields_.emplace_back(
       autofill::ADDRESS_HOME_COUNTRY,
       l10n_util::GetStringUTF16(IDS_LIBADDRESSINPUT_COUNTRY_OR_REGION_LABEL),
-      EditorField::LengthHint::HINT_LONG, EditorField::ControlType::COMBOBOX);
+      EditorField::LengthHint::HINT_LONG, /*is_required=*/false,
+      EditorField::ControlType::COMBOBOX);
 
   for (const std::vector<autofill::ExtendedAddressUiComponent>& line :
        components) {
@@ -83,22 +103,23 @@ void AddressEditorController::UpdateEditorFields() {
               ? EditorField::ControlType::COMBOBOX
               : EditorField::ControlType::TEXTFIELD;
 
-      editor_fields_.emplace_back(server_field_type,
-                                  base::UTF8ToUTF16(component.name),
-                                  length_hint, control_type);
+      editor_fields_.emplace_back(
+          server_field_type, base::UTF8ToUTF16(component.name), length_hint,
+          component.is_required, control_type);
     }
   }
   // Always add phone number and email at the end.
   editor_fields_.emplace_back(
       autofill::PHONE_HOME_WHOLE_NUMBER,
       l10n_util::GetStringUTF16(IDS_SETTINGS_AUTOFILL_ADDRESSES_PHONE),
-      EditorField::LengthHint::HINT_SHORT,
+      EditorField::LengthHint::HINT_SHORT, /*is_required=*/false,
       EditorField::ControlType::TEXTFIELD_NUMBER);
 
   editor_fields_.emplace_back(
       autofill::EMAIL_ADDRESS,
       l10n_util::GetStringUTF16(IDS_SETTINGS_AUTOFILL_ADDRESSES_EMAIL),
-      EditorField::LengthHint::HINT_LONG, EditorField::ControlType::TEXTFIELD);
+      EditorField::LengthHint::HINT_LONG, /*is_required=*/false,
+      EditorField::ControlType::TEXTFIELD);
 }
 
 void AddressEditorController::SetProfileInfo(autofill::ServerFieldType type,
@@ -166,4 +187,28 @@ void AddressEditorController::UpdateCountries(
 
 const autofill::AutofillProfile& AddressEditorController::GetAddressProfile() {
   return profile_to_edit_;
+}
+
+void AddressEditorController::SetIsValid(bool is_valid) {
+  bool should_notify = is_valid_ != is_valid;
+  is_valid_ = is_valid;
+  if (should_notify) {
+    on_is_valid_change_callbacks_.Notify(is_valid);
+  }
+}
+
+base::CallbackListSubscription
+AddressEditorController::AddIsValidChangedCallback(
+    OnIsValidChangeCallbackList::CallbackType callback) {
+  return on_is_valid_change_callbacks_.Add(std::move(callback));
+}
+
+bool AddressEditorController::IsValid(const EditorField& field,
+                                      const std::u16string& value) {
+  if (is_validatable_ && field.is_required &&
+      base::CollapseWhitespace(value, true).empty()) {
+    return false;
+  }
+
+  return true;
 }

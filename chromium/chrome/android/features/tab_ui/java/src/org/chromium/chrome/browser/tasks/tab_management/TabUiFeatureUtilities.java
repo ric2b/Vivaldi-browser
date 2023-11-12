@@ -4,9 +4,10 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import android.content.Context;
+import static org.chromium.chrome.browser.device.DeviceClassManager.GTS_ACCESSIBILITY_SUPPORT;
+import static org.chromium.chrome.browser.device.DeviceClassManager.GTS_LOW_END_SUPPORT;
 
-import androidx.annotation.Nullable;
+import android.content.Context;
 
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
@@ -16,6 +17,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.DoubleCachedFieldTrialParameter;
 import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.ui.base.DeviceFormFactor;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
@@ -33,20 +35,15 @@ public class TabUiFeatureUtilities {
             new BooleanCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_TO_GTS_ANIMATION, SKIP_SLOW_ZOOMING_PARAM, true);
 
+    private static final String GTS_ACCESSIBILITY_LIST_MODE_PARAM = "gts-accessibility-list-mode";
+    public static final BooleanCachedFieldTrialParameter GTS_ACCESSIBILITY_LIST_MODE =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID,
+                    GTS_ACCESSIBILITY_LIST_MODE_PARAM, false);
+
     public static final String THUMBNAIL_ASPECT_RATIO_PARAM = "thumbnail_aspect_ratio";
     public static final DoubleCachedFieldTrialParameter THUMBNAIL_ASPECT_RATIO =
             new DoubleCachedFieldTrialParameter(
                     ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, THUMBNAIL_ASPECT_RATIO_PARAM, 0.85);
-
-    private static final String LAUNCH_BUG_FIX_PARAM = "enable_launch_bug_fix";
-    public static final BooleanCachedFieldTrialParameter ENABLE_LAUNCH_BUG_FIX =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, LAUNCH_BUG_FIX_PARAM, false);
-
-    private static final String LAUNCH_POLISH_PARAM = "enable_launch_polish";
-    public static final BooleanCachedFieldTrialParameter ENABLE_LAUNCH_POLISH =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, LAUNCH_POLISH_PARAM, false);
 
     // Field trial parameter for the minimum physical memory size to enable zooming animation.
     private static final String MIN_MEMORY_MB_PARAM = "zooming-min-memory-mb";
@@ -59,8 +56,8 @@ public class TabUiFeatureUtilities {
     private static final String TAB_GROUP_AUTO_CREATION_PARAM = "enable_tab_group_auto_creation";
 
     public static final BooleanCachedFieldTrialParameter ENABLE_TAB_GROUP_AUTO_CREATION =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID, TAB_GROUP_AUTO_CREATION_PARAM, true);
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
+                    TAB_GROUP_AUTO_CREATION_PARAM, false);
 
     // Field trial parameter for configuring the "Open in new tab" and "Open in new tab in group"
     // item order in the context menu.
@@ -69,77 +66,44 @@ public class TabUiFeatureUtilities {
 
     public static final BooleanCachedFieldTrialParameter SHOW_OPEN_IN_TAB_GROUP_MENU_ITEM_FIRST =
             new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID,
-                    SHOW_OPEN_IN_TAB_GROUP_MENU_ITEM_FIRST_PARAM, false);
+                    SHOW_OPEN_IN_TAB_GROUP_MENU_ITEM_FIRST_PARAM, true);
 
-    private static final String TAB_GROUP_SHARING_PARAM = "enable_tab_group_sharing";
-    public static final BooleanCachedFieldTrialParameter ENABLE_TAB_GROUP_SHARING =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID,
-                    TAB_GROUP_SHARING_PARAM, false);
+    // Field trial parameter for disabling new tab button anchor for tab strip redesign.
+    private static final String TAB_STRIP_REDESIGN_DISABLE_NTB_ANCHOR_PARAM = "disable_ntb_anchor";
+    public static final BooleanCachedFieldTrialParameter TAB_STRIP_REDESIGN_DISABLE_NTB_ANCHOR =
+            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_REDESIGN,
+                    TAB_STRIP_REDESIGN_DISABLE_NTB_ANCHOR_PARAM, false);
 
-    // Field trial parameter for enabling launch polish for the grid tab switcher for tablets.
-    private static final String GRID_TAB_SWITCHER_FOR_TABLETS_POLISH_PARAM = "enable_launch_polish";
-    public static final BooleanCachedFieldTrialParameter GRID_TAB_SWITCHER_FOR_TABLETS_POLISH =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS,
-                    GRID_TAB_SWITCHER_FOR_TABLETS_POLISH_PARAM, false); // Vivaldi
-
-    // Field trial parameter for controlling delay grid tab switcher creation for tablets.
-    private static final String DELAY_GTS_CREATION_PARAM = "delay_creation";
-    public static final BooleanCachedFieldTrialParameter DELAY_GTS_CREATION =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS,
-                    DELAY_GTS_CREATION_PARAM, true);
-
-    // Field trial parameter for defining tab width for tab strip improvements.
-    private static final String TAB_STRIP_IMPROVEMENTS_TAB_WIDTH_PARAM = "min_tab_width";
-    public static final DoubleCachedFieldTrialParameter TAB_STRIP_TAB_WIDTH =
-            new DoubleCachedFieldTrialParameter(ChromeFeatureList.TAB_STRIP_IMPROVEMENTS,
-                    TAB_STRIP_IMPROVEMENTS_TAB_WIDTH_PARAM, 108.f);
-
-    // Field trial parameter for controlling share tabs in TabSelectionEditorV2.
-    private static final String TAB_SELECTION_EDITOR_V2_SHARE_PARAM = "enable_share";
-    public static final BooleanCachedFieldTrialParameter ENABLE_TAB_SELECTION_EDITOR_V2_SHARE =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_SELECTION_EDITOR_V2,
-                    TAB_SELECTION_EDITOR_V2_SHARE_PARAM, false);
-    // Field trial parameter for controlling longpress entry into TabSelectionEditorV2 from
-    // TabGridDialog and TabSwitcher.
-    private static final String TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY_PARAM =
-            "enable_longpress_entrypoint";
-    public static final BooleanCachedFieldTrialParameter
-            ENABLE_TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY =
-                    new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_SELECTION_EDITOR_V2,
-                            TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY_PARAM, false);
-
-    // Field trial parameter for controlling bookmark tabs in TabSelectionEditorV2.
-    private static final String TAB_SELECTION_EDITOR_V2_BOOKMARKS_PARAM = "enable_bookmarks";
-    public static final BooleanCachedFieldTrialParameter ENABLE_TAB_SELECTION_EDITOR_V2_BOOKMARKS =
-            new BooleanCachedFieldTrialParameter(ChromeFeatureList.TAB_SELECTION_EDITOR_V2,
-                    TAB_SELECTION_EDITOR_V2_BOOKMARKS_PARAM, false);
-
-    // Field trial parameter for deferring favicon fetching until required.
-    private static final String DEFERRED_FAVICON = "deferred_favicon";
-    public static final BooleanCachedFieldTrialParameter ENABLE_DEFERRED_FAVICON =
-            new BooleanCachedFieldTrialParameter(
-                    ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, DEFERRED_FAVICON, false);
-
-    private static Boolean sTabManagementModuleSupportedForTesting;
-    private static Boolean sGridTabSwitcherPolishEnabledForTesting;
-    private static Boolean sGridTabSwitcherDelayCreationEnabledForTesting;
+    private static boolean sTabSelectionEditorLongPressEntryEnabled;
 
     /**
-     * Set whether the tab management module is supported for testing.
+     * Set whether the longpress entry for TabSelectionEditor is enabled. Currently only in tests.
      */
-    public static void setTabManagementModuleSupportedForTesting(@Nullable Boolean enabled) {
-        sTabManagementModuleSupportedForTesting = enabled;
+    public static void setTabSelectionEditorLongPressEntryEnabledForTesting(boolean enabled) {
+        sTabSelectionEditorLongPressEntryEnabled = enabled;
     }
 
     /**
-     * @return Whether the tab management module is supported.
+     * @return Whether New tab button anchor for tab strip redesign is disabled.
      */
-    private static boolean isTabManagementModuleSupported() {
-        if (sTabManagementModuleSupportedForTesting != null) {
-            return sTabManagementModuleSupportedForTesting;
-        }
+    public static boolean isTabStripNtbAnchorDisabled() {
+        return TAB_STRIP_REDESIGN_DISABLE_NTB_ANCHOR.getValue();
+    }
 
-        return TabManagementModuleProvider.isTabManagementModuleSupported();
+    /**
+     * Whether the longpress entry for TabSelectionEditor is enabled. Currently only in tests.
+     */
+    public static boolean isTabSelectionEditorLongPressEntryEnabled() {
+        return sTabSelectionEditorLongPressEntryEnabled;
+    }
+
+    /**
+     * @return Whether we should delay the placeholder tab strip removal on startup.
+     * @param context The activity context.
+     */
+    public static boolean isDelayTempStripRemovalEnabled(Context context) {
+        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
+                && ChromeFeatureList.sDelayTempStripRemoval.isEnabled();
     }
 
     /**
@@ -150,30 +114,31 @@ public class TabUiFeatureUtilities {
         // Note(david@vivaldi.com): But we want it.
         if (!ChromeApplicationImpl.isVivaldi())
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
-            return isTabletGridTabSwitcherEnabled(context);
+            return true;
         }
 
         // Having Tab Groups or Start implies Grid Tab Switcher.
-        return isTabManagementModuleSupported() || isTabGroupsAndroidEnabled(context)
+        return isTabGroupsAndroidEnabled(context)
                 || ReturnToChromeUtil.isStartSurfaceEnabled(context);
     }
 
     /**
-     * @return Whether the tablet Grid Tab Switcher UI is enabled and available for use.
+     * @return Whether the Grid Tab Switcher UI should use list mode.
      * @param context The activity context.
      */
-    public static boolean isTabletGridTabSwitcherEnabled(Context context) {
-        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                && ChromeFeatureList.sGridTabSwitcherForTablets.isEnabled();
-    }
-
-    /**
-     * @return Whether the tab strip improvements are enabled.
-     * @param context The activity context.
-     */
-    public static boolean isTabStripImprovementsEnabled(Context context) {
-        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                && ChromeFeatureList.sTabStripImprovements.isEnabled();
+    public static boolean shouldUseListMode(Context context) {
+        if (!isTabGroupsAndroidContinuationEnabled(context)) {
+            return false;
+        }
+        // Low-end forces list mode regardless of accessibility behavior.
+        if (GTS_LOW_END_SUPPORT.getValue() && SysUtils.isLowEndDevice()) {
+            return true;
+        }
+        if (GTS_ACCESSIBILITY_SUPPORT.getValue()
+                && ChromeAccessibilityUtil.get().isAccessibilityEnabled()) {
+            return GTS_ACCESSIBILITY_LIST_MODE.getValue();
+        }
+        return false;
     }
 
     /**
@@ -182,49 +147,8 @@ public class TabUiFeatureUtilities {
      */
     public static boolean isTabletTabGroupsEnabled(Context context) {
         return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                && ChromeFeatureList.sGridTabSwitcherForTablets.isEnabled()
-                && ChromeFeatureList.sTabStripImprovements.isEnabled()
                 && ChromeFeatureList.sTabGroupsForTablets.isEnabled()
                 && !DeviceClassManager.enableAccessibilityLayout(context);
-    }
-
-    /**
-     * Set whether the tablet grid tab switcher polish is enabled for testing.
-     */
-    public static void setTabletGridTabSwitcherPolishEnabledForTesting(@Nullable Boolean enabled) {
-        sGridTabSwitcherPolishEnabledForTesting = enabled;
-    }
-
-    /**
-     * Set whether the tablet grid tab switcher polish is enabled for testing.
-     */
-    public static void setGtsDelayCreationEnabledForTesting(@Nullable Boolean enabled) {
-        sGridTabSwitcherDelayCreationEnabledForTesting = enabled;
-    }
-
-    /**
-     * @return Whether the tablet Grid Tab Switcher Polish is enabled.
-     * @param context The activity context.
-     */
-    public static boolean isTabletGridTabSwitcherPolishEnabled(Context context) {
-        if (sGridTabSwitcherPolishEnabledForTesting != null) {
-            return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                    && sGridTabSwitcherPolishEnabledForTesting;
-        }
-        return DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                && GRID_TAB_SWITCHER_FOR_TABLETS_POLISH.getValue();
-    }
-
-    /**
-     * @return Whether the tablet Grid Tab Switcher creation should be delayed to on GTS load
-     *         instead of on startup.
-     */
-    public static boolean isTabletGridTabSwitcherDelayCreationEnabled() {
-        if (sGridTabSwitcherDelayCreationEnabledForTesting != null) {
-            return sGridTabSwitcherDelayCreationEnabledForTesting;
-        }
-
-        return DELAY_GTS_CREATION.getValue();
     }
 
     /**
@@ -243,8 +167,7 @@ public class TabUiFeatureUtilities {
         }
 
         return !DeviceClassManager.enableAccessibilityLayout(context)
-                && ChromeFeatureList.sTabGroupsAndroid.isEnabled()
-                && isTabManagementModuleSupported();
+                && ChromeFeatureList.sTabGroupsAndroid.isEnabled();
     }
 
     /**
@@ -258,15 +181,6 @@ public class TabUiFeatureUtilities {
     }
 
     /**
-     * @return Whether the tab selection editor v2 is enabled and available for use.
-     * @param context The activity context.
-     */
-    public static boolean isTabSelectionEditorV2Enabled(Context context) {
-        return isTabGroupsAndroidEnabled(context)
-                && ChromeFeatureList.sTabSelectionEditorV2.isEnabled();
-    }
-
-    /**
      * @return Whether the thumbnail_aspect_ratio field trail is set.
      */
     public static boolean isTabThumbnailAspectRatioNotOne() {
@@ -276,11 +190,12 @@ public class TabUiFeatureUtilities {
     /**
      * @return Whether the Tab-to-Grid (and Grid-to-Tab) transition animation is enabled.
      */
-    public static boolean isTabToGtsAnimationEnabled() {
+    public static boolean isTabToGtsAnimationEnabled(Context context) {
         Log.d(TAG, "GTS.MinMemoryMB = " + ZOOMING_MIN_MEMORY.getValue());
         if (ChromeApplicationImpl.isVivaldi()) return false;
         return ChromeFeatureList.sTabToGTSAnimation.isEnabled()
-                && SysUtils.amountOfPhysicalMemoryKB() / 1024 >= ZOOMING_MIN_MEMORY.getValue();
+                && SysUtils.amountOfPhysicalMemoryKB() / 1024 >= ZOOMING_MIN_MEMORY.getValue()
+                && !shouldUseListMode(context);
     }
 
     /**
@@ -292,39 +207,7 @@ public class TabUiFeatureUtilities {
                 && !SysUtils.isLowEndDevice();
     }
 
-    /**
-     * @return Whether the Grid/Group launch polish is enabled.
-     */
-    public static boolean isLaunchPolishEnabled() {
-        return ENABLE_LAUNCH_POLISH.getValue();
-    }
-
-    private static Float sTabMinWidthForTesting;
-
-    /**
-     * Set the min tab width for testing.
-     */
-    public static void setTabMinWidthForTesting(@Nullable Float minWidth) {
-        sTabMinWidthForTesting = minWidth;
-    }
-
-    /**
-     * @return The min tab width.
-     */
-    public static float getTabMinWidth() {
-        if (sTabMinWidthForTesting != null) {
-            return sTabMinWidthForTesting;
-        }
-
-        return (float) TAB_STRIP_TAB_WIDTH.getValue();
-    }
-
-    /**
-     * @return Whether the Grid/Group launch bug fix is enabled.
-     */
-    public static boolean isLaunchBugFixEnabled() {
-        return ENABLE_LAUNCH_BUG_FIX.getValue();
-    }
+    public static Float sTabMinWidthForTesting;
 
     /**
      * @return Whether the "Open in new tab in group" context menu item should show before the

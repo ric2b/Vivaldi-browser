@@ -16,13 +16,15 @@
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/locks/lock.h"
 #include "chrome/browser/web_applications/locks/web_app_lock_manager.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
-#include "chrome/browser/web_applications/web_app_install_task.h"
+#include "chrome/browser/web_applications/web_app_install_manager.h"
+#include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/browser/web_applications/web_app_url_loader.h"
+#include "chrome/browser/web_applications/web_contents/web_app_url_loader.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -41,13 +43,13 @@ base::Value::Dict CreateCommandMetadata(const WebAppCommand& command) {
   return dict;
 }
 
-base::Value CreateLogValue(const WebAppCommand& command,
-                           absl::optional<CommandResult> result) {
+base::Value::Dict CreateLogValue(const WebAppCommand& command,
+                                 absl::optional<CommandResult> result) {
   base::Value::Dict dict = CreateCommandMetadata(command);
   base::Value debug_value = command.ToDebugValue();
-  bool is_empty_dict = debug_value.is_dict() && debug_value.DictEmpty();
+  bool is_empty_dict = debug_value.is_dict() && debug_value.GetDict().empty();
   if (!debug_value.is_none() && !is_empty_dict) {
-    dict.Set("value", command.ToDebugValue());
+    dict.Set("value", std::move(debug_value));
   }
   if (result) {
     switch (result.value()) {
@@ -62,7 +64,7 @@ base::Value CreateLogValue(const WebAppCommand& command,
         break;
     }
   }
-  return base::Value(std::move(dict));
+  return dict;
 }
 
 }  // namespace
@@ -100,7 +102,8 @@ void WebAppCommandManager::ScheduleCommand(
     return;
   }
   if (is_in_shutdown_) {
-    AddValueToLog(CreateLogValue(*command, CommandResult::kShutdown));
+    AddValueToLog(
+        base::Value(CreateLogValue(*command, CommandResult::kShutdown)));
     return;
   }
   DCHECK(!base::Contains(commands_, command->id()));
@@ -294,7 +297,7 @@ void WebAppCommandManager::OnCommandComplete(
     CommandResult result,
     base::OnceClosure completion_callback) {
   DCHECK(running_command);
-  AddValueToLog(CreateLogValue(*running_command, result));
+  AddValueToLog(base::Value(CreateLogValue(*running_command, result)));
 
   auto command_it = commands_.find(running_command->id());
   DCHECK(command_it != commands_.end());
@@ -335,7 +338,10 @@ content::WebContents* WebAppCommandManager::EnsureWebContentsCreated(
 content::WebContents* WebAppCommandManager::EnsureWebContentsCreated() {
   DCHECK(profile_);
   if (!shared_web_contents_)
-    shared_web_contents_ = WebAppInstallTask::CreateWebContents(profile_);
+    shared_web_contents_ = content::WebContents::Create(
+        content::WebContents::CreateParams(profile_));
+  web_app::CreateWebAppInstallTabHelpers(shared_web_contents_.get());
+
   return shared_web_contents_.get();
 }
 

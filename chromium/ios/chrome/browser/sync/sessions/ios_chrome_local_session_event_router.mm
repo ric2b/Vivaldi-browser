@@ -39,15 +39,18 @@ IOSChromeLocalSessionEventRouter::IOSChromeLocalSessionEventRouter(
     ChromeBrowserState* browser_state,
     sync_sessions::SyncSessionsClient* sessions_client,
     const syncer::SyncableService::StartSyncFlare& flare)
-    : handler_(nullptr), sessions_client_(sessions_client), flare_(flare) {
-  tab_parented_subscription_ =
-      TabParentingGlobalObserver::GetInstance()->RegisterCallback(
-          base::BindRepeating(&IOSChromeLocalSessionEventRouter::OnTabParented,
-                              base::Unretained(this)));
-
-  registrars_.insert(std::make_unique<AllWebStateListObservationRegistrar>(
-      browser_state, std::make_unique<Observer>(this),
-      AllWebStateListObservationRegistrar::Mode::REGULAR));
+    : registrar_(std::make_unique<AllWebStateListObservationRegistrar>(
+          browser_state,
+          std::make_unique<Observer>(this),
+          AllWebStateListObservationRegistrar::Mode::REGULAR)),
+      sessions_client_(sessions_client),
+      flare_(flare),
+      tab_parented_subscription_(
+          TabParentingGlobalObserver::GetInstance()->RegisterCallback(
+              base::BindRepeating(
+                  &IOSChromeLocalSessionEventRouter::OnTabParented,
+                  base::Unretained(this)))) {
+  DCHECK(sessions_client_);
 }
 
 IOSChromeLocalSessionEventRouter::~IOSChromeLocalSessionEventRouter() {}
@@ -141,8 +144,7 @@ void IOSChromeLocalSessionEventRouter::OnSessionEventEnded() {
   if (handler_)
     handler_->OnSessionRestoreComplete();
   if (!flare_.is_null()) {
-    flare_.Run(syncer::SESSIONS);
-    flare_.Reset();
+    std::move(flare_).Run(syncer::SESSIONS);
   }
 }
 
@@ -154,14 +156,19 @@ void IOSChromeLocalSessionEventRouter::OnWebStateChange(
       GetSyncedTabDelegateFromWebState(web_state);
   if (!tab)
     return;
+  // Some WebState event happen during the navigation restoration. Ignore
+  // them as the tab is still considered as placeholder by this point as
+  // the session cannot be forwarded to sync yet.
+  if (tab->IsPlaceholderTab()) {
+    return;
+  }
   if (handler_)
     handler_->OnLocalTabModified(tab);
   if (!tab->ShouldSync(sessions_client_))
     return;
 
   if (!flare_.is_null()) {
-    flare_.Run(syncer::SESSIONS);
-    flare_.Reset();
+    std::move(flare_).Run(syncer::SESSIONS);
   }
 }
 

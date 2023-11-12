@@ -8,73 +8,39 @@
 #include <stdint.h>
 
 #include <iosfwd>
-#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/containers/enum_set.h"
 #include "base/containers/flat_set.h"
-#include "base/guid.h"
-#include "base/observer_list.h"
-#include "base/run_loop.h"
-#include "base/thread_annotations.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/aggregation_service/aggregation_service.mojom.h"
-#include "components/attribution_reporting/aggregatable_dedup_key.h"
-#include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
-#include "components/attribution_reporting/bounded_list.h"
-#include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/destination_set.h"
-#include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
-#include "components/attribution_reporting/registration_type.mojom-forward.h"
-#include "components/attribution_reporting/source_registration.h"
-#include "components/attribution_reporting/source_registration_error.mojom-forward.h"
 #include "components/attribution_reporting/source_type.mojom.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/test_utils.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
-#include "content/browser/attribution_reporting/attribution_config.h"
-#include "content/browser/attribution_reporting/attribution_host.h"
 #include "content/browser/attribution_reporting/attribution_info.h"
-#include "content/browser/attribution_reporting/attribution_input_event.h"
-#include "content/browser/attribution_reporting/attribution_manager.h"
-#include "content/browser/attribution_reporting/attribution_observer.h"
-#include "content/browser/attribution_reporting/attribution_observer_types.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
-#include "content/browser/attribution_reporting/attribution_storage.h"
 #include "content/browser/attribution_reporting/attribution_storage_delegate.h"
 #include "content/browser/attribution_reporting/attribution_trigger.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
+#include "content/browser/attribution_reporting/create_report_result.h"
 #include "content/browser/attribution_reporting/send_result.h"
 #include "content/browser/attribution_reporting/storable_source.h"
 #include "content/browser/attribution_reporting/stored_source.h"
 #include "content/public/browser/attribution_data_model.h"
-#include "content/public/test/test_navigation_observer.h"
-#include "content/test/test_content_browser_client.h"
-#include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/blink/public/common/navigation/impression.h"
-#include "third_party/blink/public/mojom/conversions/attribution_data_host.mojom.h"
-
-namespace mojo {
-
-template <typename Interface>
-class PendingReceiver;
-
-}  // namespace mojo
 
 namespace net {
 class SchemefulSite;
 }  // namespace net
-
-namespace url {
-class Origin;
-}  // namespace url
 
 namespace network {
 class TriggerAttestation;
@@ -82,9 +48,7 @@ class TriggerAttestation;
 
 namespace content {
 
-class AttributionDataHostManager;
-class AttributionObserver;
-class AttributionTrigger;
+class AttributionManager;
 
 enum class RateLimitResult : int;
 
@@ -93,339 +57,14 @@ constexpr auto kSourceTypes =
                   attribution_reporting::mojom::SourceType::kMinValue,
                   attribution_reporting::mojom::SourceType::kMaxValue>::All();
 
-template <class SuperClass>
-class MockAttributionReportingContentBrowserClientBase : public SuperClass {
- public:
-  // ContentBrowserClient:
-  MOCK_METHOD(bool,
-              IsAttributionReportingOperationAllowed,
-              (content::BrowserContext * browser_context,
-               ContentBrowserClient::AttributionReportingOperation operation,
-               content::RenderFrameHost* rfh,
-               const url::Origin* source_origin,
-               const url::Origin* destination_origin,
-               const url::Origin* reporting_origin),
-              (override));
-};
+base::Uuid DefaultExternalReportID();
 
-using MockAttributionReportingContentBrowserClient =
-    MockAttributionReportingContentBrowserClientBase<TestContentBrowserClient>;
+base::Time GetExpiryTimeForTesting(base::TimeDelta declared_expiry,
+                                   base::Time source_time);
 
-class MockAttributionHost : public AttributionHost {
- public:
-  static MockAttributionHost* Override(WebContents* web_contents);
-
-  ~MockAttributionHost() override;
-
-  MOCK_METHOD(
-      void,
-      RegisterDataHost,
-      (mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
-       attribution_reporting::mojom::RegistrationType),
-      (override));
-
-  MOCK_METHOD(
-      void,
-      RegisterNavigationDataHost,
-      (mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
-       const blink::AttributionSrcToken& attribution_src_token),
-      (override));
-
- private:
-  explicit MockAttributionHost(WebContents* web_contents);
-};
-
-class MockDataHost : public blink::mojom::AttributionDataHost {
- public:
-  explicit MockDataHost(
-      mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host);
-  ~MockDataHost() override;
-
-  void WaitForSourceData(size_t num_source_data);
-  void WaitForTriggerData(size_t num_trigger_data);
-
-  const std::vector<attribution_reporting::SourceRegistration>& source_data()
-      const {
-    return source_data_;
-  }
-
-  const std::vector<attribution_reporting::TriggerRegistration>& trigger_data()
-      const {
-    return trigger_data_;
-  }
-
-  mojo::Receiver<blink::mojom::AttributionDataHost>& receiver() {
-    return receiver_;
-  }
-
- private:
-  // blink::mojom::AttributionDataHost:
-  void SourceDataAvailable(
-      attribution_reporting::SuitableOrigin reporting_origin,
-      attribution_reporting::SourceRegistration) override;
-  void TriggerDataAvailable(
-      attribution_reporting::SuitableOrigin reporting_origin,
-      attribution_reporting::TriggerRegistration,
-      absl::optional<network::TriggerAttestation> attestation) override;
-
-  size_t min_source_data_count_ = 0;
-  std::vector<attribution_reporting::SourceRegistration> source_data_;
-
-  size_t min_trigger_data_count_ = 0;
-  std::vector<attribution_reporting::TriggerRegistration> trigger_data_;
-
-  base::RunLoop wait_loop_;
-  mojo::Receiver<blink::mojom::AttributionDataHost> receiver_{this};
-};
-
-base::GUID DefaultExternalReportID();
-
-class ConfigurableStorageDelegate : public AttributionStorageDelegate {
- public:
-  ConfigurableStorageDelegate();
-  ~ConfigurableStorageDelegate() override;
-
-  // AttributionStorageDelegate
-  base::Time GetEventLevelReportTime(const CommonSourceInfo& source,
-                                     base::Time trigger_time) const override;
-  base::Time GetAggregatableReportTime(base::Time trigger_time) const override;
-  base::TimeDelta GetDeleteExpiredSourcesFrequency() const override;
-  base::TimeDelta GetDeleteExpiredRateLimitsFrequency() const override;
-  base::GUID NewReportID() const override;
-  absl::optional<OfflineReportDelayConfig> GetOfflineReportDelayConfig()
-      const override;
-  void ShuffleReports(std::vector<AttributionReport>& reports) override;
-  RandomizedResponse GetRandomizedResponse(
-      const CommonSourceInfo& source) override;
-
-  void set_max_attributions_per_source(int max);
-
-  void set_max_sources_per_origin(int max);
-
-  void set_max_reports_per_destination(AttributionReport::Type report_type,
-                                       int max);
-
-  void set_max_destinations_per_source_site_reporting_origin(int max);
-
-  void set_aggregatable_budget_per_source(int64_t max);
-
-  void set_rate_limits(AttributionConfig::RateLimitConfig c);
-
-  void set_delete_expired_sources_frequency(base::TimeDelta frequency);
-
-  void set_delete_expired_rate_limits_frequency(base::TimeDelta frequency);
-
-  void set_report_delay(base::TimeDelta report_delay);
-
-  void set_offline_report_delay_config(
-      absl::optional<OfflineReportDelayConfig> config);
-
-  void set_reverse_reports_on_shuffle(bool reverse);
-
-  // Note that these rates are *not* used to produce a randomized response; that
-  // is controlled deterministically by `set_randomized_response()`.
-  void set_randomized_response_rates(double navigation, double event);
-
-  void set_randomized_response(RandomizedResponse randomized_response);
-
-  void set_trigger_data_cardinality(uint64_t navigation, uint64_t event);
-
-  void set_source_event_id_cardinality(uint64_t cardinality);
-
-  // Detaches the delegate from its current sequence in preparation for being
-  // moved to storage, which runs on its own sequence.
-  void DetachFromSequence();
-
- private:
-  base::TimeDelta delete_expired_sources_frequency_
-      GUARDED_BY_CONTEXT(sequence_checker_);
-  base::TimeDelta delete_expired_rate_limits_frequency_
-      GUARDED_BY_CONTEXT(sequence_checker_);
-
-  base::TimeDelta report_delay_ GUARDED_BY_CONTEXT(sequence_checker_);
-
-  absl::optional<OfflineReportDelayConfig> offline_report_delay_config_
-      GUARDED_BY_CONTEXT(sequence_checker_);
-
-  // If true, `ShuffleReports()` reverses the reports to allow testing the
-  // proper call from `AttributionStorage::GetAttributionReports()`.
-  bool reverse_reports_on_shuffle_ GUARDED_BY_CONTEXT(sequence_checker_) =
-      false;
-
-  RandomizedResponse randomized_response_
-      GUARDED_BY_CONTEXT(sequence_checker_) = absl::nullopt;
-};
-
-class MockAttributionManager : public AttributionManager {
- public:
-  MockAttributionManager();
-  ~MockAttributionManager() override;
-
-  // AttributionManager:
-  MOCK_METHOD(void,
-              HandleSource,
-              (StorableSource source, GlobalRenderFrameHostId render_frame_id),
-              (override));
-
-  MOCK_METHOD(void,
-              HandleTrigger,
-              (AttributionTrigger trigger,
-               GlobalRenderFrameHostId render_frame_id),
-              (override));
-
-  MOCK_METHOD(void,
-              GetActiveSourcesForWebUI,
-              (base::OnceCallback<void(std::vector<StoredSource>)> callback),
-              (override));
-
-  MOCK_METHOD(
-      void,
-      GetPendingReportsForInternalUse,
-      (AttributionReport::Types report_types,
-       int limit,
-       base::OnceCallback<void(std::vector<AttributionReport>)> callback),
-      (override));
-
-  MOCK_METHOD(void,
-              SendReportsForWebUI,
-              (const std::vector<AttributionReport::Id>& ids,
-               base::OnceClosure done),
-              (override));
-
-  MOCK_METHOD(void,
-              ClearData,
-              (base::Time delete_begin,
-               base::Time delete_end,
-               StoragePartition::StorageKeyMatcherFunction filter,
-               BrowsingDataFilterBuilder* filter_builder,
-               bool delete_rate_limit_data,
-               base::OnceClosure done),
-              (override));
-
-  MOCK_METHOD(void,
-              NotifyFailedSourceRegistration,
-              (const std::string& header_value,
-               const attribution_reporting::SuitableOrigin& source_origin,
-               const attribution_reporting::SuitableOrigin& reporting_origin,
-               attribution_reporting::mojom::SourceType,
-               attribution_reporting::mojom::SourceRegistrationError),
-              (override));
-
-  MOCK_METHOD(void,
-              GetAllDataKeys,
-              (base::OnceCallback<
-                  void(std::vector<AttributionManager::DataKey>)> callback),
-              (override));
-
-  MOCK_METHOD(void,
-              RemoveAttributionDataByDataKey,
-              (const AttributionManager::DataKey& data_key,
-               base::OnceClosure callback),
-              (override));
-
-  void AddObserver(AttributionObserver* observer) override;
-  void RemoveObserver(AttributionObserver* observer) override;
-  AttributionDataHostManager* GetDataHostManager() override;
-
-  void NotifySourcesChanged();
-  void NotifyReportsChanged(AttributionReport::Type report_type);
-  void NotifySourceHandled(
-      const StorableSource& source,
-      StorableSource::Result result,
-      absl::optional<uint64_t> cleared_debug_key = absl::nullopt);
-  void NotifyReportSent(const AttributionReport& report,
-                        bool is_debug_report,
-                        const SendResult& info);
-  void NotifyTriggerHandled(
-      const AttributionTrigger& trigger,
-      const CreateReportResult& result,
-      absl::optional<uint64_t> cleared_debug_key = absl::nullopt);
-  void NotifySourceRegistrationFailure(
-      const std::string& header_value,
-      const attribution_reporting::SuitableOrigin& source_origin,
-      const attribution_reporting::SuitableOrigin& reporting_origin,
-      attribution_reporting::mojom::SourceType,
-      attribution_reporting::mojom::SourceRegistrationError);
-  void NotifyDebugReportSent(const AttributionDebugReport&,
-                             int status,
-                             base::Time time);
-
-  void SetDataHostManager(std::unique_ptr<AttributionDataHostManager> manager);
-
- private:
-  std::unique_ptr<AttributionDataHostManager> data_host_manager_;
-  base::ObserverList<AttributionObserver, /*check_empty=*/true> observers_;
-};
-
-class MockAttributionObserver : public AttributionObserver {
- public:
-  MockAttributionObserver();
-  ~MockAttributionObserver() override;
-
-  MockAttributionObserver(const MockAttributionObserver&) = delete;
-  MockAttributionObserver(MockAttributionObserver&&) = delete;
-
-  MockAttributionObserver& operator=(const MockAttributionObserver&) = delete;
-  MockAttributionObserver& operator=(MockAttributionObserver&&) = delete;
-
-  MOCK_METHOD(void, OnSourcesChanged, (), (override));
-
-  MOCK_METHOD(void, OnReportsChanged, (AttributionReport::Type), (override));
-
-  MOCK_METHOD(void,
-              OnSourceHandled,
-              (const StorableSource& source,
-               absl::optional<uint64_t> cleared_debug_key,
-               StorableSource::Result result),
-              (override));
-
-  MOCK_METHOD(void,
-              OnReportSent,
-              (const AttributionReport& report,
-               bool is_debug_report,
-               const SendResult& info),
-              (override));
-
-  MOCK_METHOD(void,
-              OnDebugReportSent,
-              (const AttributionDebugReport& report,
-               int status,
-               base::Time time),
-              (override));
-
-  MOCK_METHOD(void,
-              OnTriggerHandled,
-              (const AttributionTrigger& trigger,
-               absl::optional<uint64_t> cleared_debug_key,
-               const CreateReportResult& result),
-              (override));
-};
-
-// WebContentsObserver that waits until a source is available on a
-// navigation handle for a finished navigation.
-class SourceObserver : public TestNavigationObserver {
- public:
-  explicit SourceObserver(WebContents* contents, size_t num_impressions = 1u);
-  ~SourceObserver() override;
-
-  // WebContentsObserver:
-  void OnDidFinishNavigation(NavigationHandle* navigation_handle) override;
-
-  const blink::Impression& last_impression() const { return *last_impression_; }
-
-  // Waits for |expected_num_impressions_| navigations with impressions, and
-  // returns the last impression.
-  const blink::Impression& Wait();
-
-  bool WaitForNavigationWithNoImpression();
-
- private:
-  size_t num_impressions_ = 0u;
-  const size_t expected_num_impressions_ = 0u;
-  absl::optional<blink::Impression> last_impression_;
-  bool waiting_for_null_impression_ = false;
-  base::RunLoop impression_loop_;
-};
+absl::optional<base::Time> GetReportWindowTimeForTesting(
+    absl::optional<base::TimeDelta> declared_window,
+    base::Time source_time);
 
 // Helper class to construct a StorableSource for tests using default data.
 // StorableSource members are not mutable after construction requiring a
@@ -450,11 +89,6 @@ class SourceBuilder {
   SourceBuilder& SetSourceEventId(uint64_t source_event_id);
 
   SourceBuilder& SetSourceOrigin(attribution_reporting::SuitableOrigin);
-
-  // TODO(apaseltiner): Rename this to `SetDestination()`, since the origin
-  // itself is no longer used.
-  SourceBuilder& SetDestinationOrigin(
-      const attribution_reporting::SuitableOrigin&);
 
   SourceBuilder& SetDestinationSites(base::flat_set<net::SchemefulSite>);
 
@@ -601,7 +235,6 @@ class TriggerBuilder {
 class AttributionInfoBuilder {
  public:
   explicit AttributionInfoBuilder(
-      StoredSource source,
       // For most tests, the context origin is irrelevant.
       attribution_reporting::SuitableOrigin context_origin =
           *attribution_reporting::SuitableOrigin::Deserialize(
@@ -615,7 +248,6 @@ class AttributionInfoBuilder {
   AttributionInfo Build() const;
 
  private:
-  StoredSource source_;
   base::Time time_;
   absl::optional<uint64_t> debug_key_;
   attribution_reporting::SuitableOrigin context_origin_;
@@ -625,7 +257,7 @@ class AttributionInfoBuilder {
 // data.
 class ReportBuilder {
  public:
-  explicit ReportBuilder(AttributionInfo attribution_info);
+  explicit ReportBuilder(AttributionInfo attribution_info, StoredSource);
   ~ReportBuilder();
 
   ReportBuilder& SetTriggerData(uint64_t trigger_data);
@@ -634,14 +266,11 @@ class ReportBuilder {
 
   ReportBuilder& SetPriority(int64_t priority);
 
-  ReportBuilder& SetExternalReportId(base::GUID external_report_id);
+  ReportBuilder& SetExternalReportId(base::Uuid external_report_id);
 
   ReportBuilder& SetRandomizedTriggerRate(double rate);
 
-  ReportBuilder& SetReportId(AttributionReport::EventLevelData::Id id);
-
-  ReportBuilder& SetReportId(
-      AttributionReport::AggregatableAttributionData::Id id);
+  ReportBuilder& SetReportId(AttributionReport::Id id);
 
   ReportBuilder& SetAggregatableHistogramContributions(
       std::vector<AggregatableHistogramContribution> contributions);
@@ -656,16 +285,17 @@ class ReportBuilder {
 
   AttributionReport BuildAggregatableAttribution() const;
 
+  AttributionReport BuildNullAggregatable() const;
+
  private:
   AttributionInfo attribution_info_;
+  StoredSource source_;
   uint64_t trigger_data_ = 0;
   base::Time report_time_;
   int64_t priority_ = 0;
-  base::GUID external_report_id_;
+  base::Uuid external_report_id_;
   double randomized_trigger_rate_ = 0;
-  AttributionReport::EventLevelData::Id report_id_{0};
-  AttributionReport::AggregatableAttributionData::Id
-      aggregatable_attribution_report_id_{0};
+  AttributionReport::Id report_id_{0};
   std::vector<AggregatableHistogramContribution> contributions_;
   ::aggregation_service::mojom::AggregationCoordinator
       aggregation_coordinator_ =
@@ -695,8 +325,14 @@ bool operator==(const AggregatableHistogramContribution& a,
 bool operator==(const AttributionReport::EventLevelData& a,
                 const AttributionReport::EventLevelData& b);
 
+bool operator==(const AttributionReport::CommonAggregatableData& a,
+                const AttributionReport::CommonAggregatableData& b);
+
 bool operator==(const AttributionReport::AggregatableAttributionData& a,
                 const AttributionReport::AggregatableAttributionData& b);
+
+bool operator==(const AttributionReport::NullAggregatableData& a,
+                const AttributionReport::NullAggregatableData& b);
 
 bool operator==(const AttributionReport& a, const AttributionReport& b);
 
@@ -731,14 +367,17 @@ std::ostream& operator<<(std::ostream& out,
 std::ostream& operator<<(std::ostream& out,
                          const AttributionReport::EventLevelData& data);
 
+std::ostream& operator<<(std::ostream& out,
+                         const AttributionReport::CommonAggregatableData&);
+
 std::ostream& operator<<(
     std::ostream& out,
     const AttributionReport::AggregatableAttributionData& data);
 
-std::ostream& operator<<(std::ostream& out, const AttributionReport& report);
-
 std::ostream& operator<<(std::ostream& out,
-                         AttributionReport::Type report_type);
+                         const AttributionReport::NullAggregatableData&);
+
+std::ostream& operator<<(std::ostream& out, const AttributionReport& report);
 
 std::ostream& operator<<(std::ostream& out, SendResult::Status status);
 
@@ -758,29 +397,23 @@ std::ostream& operator<<(std::ostream& out,
 std::vector<AttributionReport> GetAttributionReportsForTesting(
     AttributionManager* manager);
 
-std::unique_ptr<MockDataHost> GetRegisteredDataHost(
-    mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host);
-
 // Source matchers
+
+MATCHER_P(SourceRegistrationIs, matcher, "") {
+  return ExplainMatchResult(matcher, arg.registration(), result_listener);
+}
 
 MATCHER_P(CommonSourceInfoIs, matcher, "") {
   return ExplainMatchResult(matcher, arg.common_info(), result_listener);
 }
 
 MATCHER_P(SourceEventIdIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.common_info().source_event_id(),
-                            result_listener);
+  return ExplainMatchResult(matcher, arg.source_event_id(), result_listener);
 }
 
 MATCHER_P(ImpressionOriginIs, matcher, "") {
   return ExplainMatchResult(matcher, arg.common_info().source_origin(),
                             result_listener);
-}
-
-MATCHER_P(DestinationSiteIs, matcher, "") {
-  return ExplainMatchResult(
-      ::testing::ElementsAre(matcher),
-      arg.common_info().destination_sites().destinations(), result_listener);
 }
 
 MATCHER_P(ReportingOriginIs, matcher, "") {
@@ -793,19 +426,12 @@ MATCHER_P(SourceTypeIs, matcher, "") {
                             result_listener);
 }
 
-MATCHER_P(SourcePriorityIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.common_info().priority(),
-                            result_listener);
-}
-
 MATCHER_P(SourceDebugKeyIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.common_info().debug_key(),
-                            result_listener);
+  return ExplainMatchResult(matcher, arg.debug_key(), result_listener);
 }
 
 MATCHER_P(SourceFilterDataIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.common_info().filter_data(),
-                            result_listener);
+  return ExplainMatchResult(matcher, arg.filter_data(), result_listener);
 }
 
 MATCHER_P(DedupKeysAre, matcher, "") {
@@ -818,8 +444,7 @@ MATCHER_P(AggregatableDedupKeysAre, matcher, "") {
 }
 
 MATCHER_P(AggregationKeysAre, matcher, "") {
-  return ExplainMatchResult(matcher, arg.common_info().aggregation_keys(),
-                            result_listener);
+  return ExplainMatchResult(matcher, arg.aggregation_keys(), result_listener);
 }
 
 MATCHER_P(AggregatableBudgetConsumedIs, matcher, "") {
@@ -840,12 +465,16 @@ MATCHER_P(TriggerDestinationOriginIs, matcher, "") {
 // Report matchers
 
 MATCHER_P(ReportSourceIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.attribution_info().source,
-                            result_listener);
+  return ExplainMatchResult(matcher, *arg.GetStoredSource(), result_listener);
 }
 
 MATCHER_P(ReportTimeIs, matcher, "") {
   return ExplainMatchResult(matcher, arg.report_time(), result_listener);
+}
+
+MATCHER_P(InitialReportTimeIs, matcher, "") {
+  return ExplainMatchResult(matcher, arg.initial_report_time(),
+                            result_listener);
 }
 
 MATCHER_P(FailedSendAttemptsIs, matcher, "") {
@@ -896,12 +525,8 @@ MATCHER_P(AggregatableHistogramContributionsAre, matcher, "") {
   return ExplainMatchResult(matcher, arg.contributions, result_listener);
 }
 
-MATCHER_P(InitialReportTimeIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.initial_report_time, result_listener);
-}
-
 MATCHER_P(AggregationCoordinatorIs, matcher, "") {
-  return ExplainMatchResult(matcher, arg.aggregation_coordinator,
+  return ExplainMatchResult(matcher, arg.common_data.aggregation_coordinator,
                             result_listener);
 }
 
@@ -941,6 +566,32 @@ MATCHER_P(DroppedEventLevelReportIs, matcher, "") {
                             result_listener);
 }
 
+struct SourceRegistrationMatcherConfig {
+  ::testing::Matcher<uint64_t> source_event_id = ::testing::_;
+  ::testing::Matcher<const attribution_reporting::DestinationSet&>
+      destination_set = ::testing::_;
+  ::testing::Matcher<uint64_t> priority = ::testing::_;
+  ::testing::Matcher<absl::optional<uint64_t>> debug_key = ::testing::_;
+  ::testing::Matcher<const attribution_reporting::AggregationKeys&>
+      aggregation_keys = ::testing::_;
+  ::testing::Matcher<bool> debug_reporting = ::testing::_;
+
+  SourceRegistrationMatcherConfig() = delete;
+  explicit SourceRegistrationMatcherConfig(
+      ::testing::Matcher<uint64_t> source_event_id = ::testing::_,
+      ::testing::Matcher<const attribution_reporting::DestinationSet&>
+          destination_set = ::testing::_,
+      ::testing::Matcher<uint64_t> priority = ::testing::_,
+      ::testing::Matcher<absl::optional<uint64_t>> debug_key = ::testing::_,
+      ::testing::Matcher<const attribution_reporting::AggregationKeys&>
+          aggregation_keys = ::testing::_,
+      ::testing::Matcher<bool> debug_reporting = ::testing::_);
+  ~SourceRegistrationMatcherConfig();
+};
+
+::testing::Matcher<const attribution_reporting::SourceRegistration&>
+SourceRegistrationMatches(const SourceRegistrationMatcherConfig&);
+
 struct EventTriggerDataMatcherConfig {
   ::testing::Matcher<uint64_t> data;
   ::testing::Matcher<int64_t> priority;
@@ -960,42 +611,19 @@ struct EventTriggerDataMatcherConfig {
 ::testing::Matcher<const attribution_reporting::EventTriggerData&>
 EventTriggerDataMatches(const EventTriggerDataMatcherConfig&);
 
-template <typename T>
-struct BoundedListMatcherConfig {
-  ::testing::Matcher<const std::vector<T>&> vec = ::testing::_;
-
-  BoundedListMatcherConfig() = delete;
-  explicit BoundedListMatcherConfig(
-      ::testing::Matcher<const std::vector<T>&> vec = ::testing::_)
-      : vec(std::move(vec)) {}
-
-  ~BoundedListMatcherConfig() = default;
-};
-
-template <typename T, size_t kMaxSize>
-::testing::Matcher<const attribution_reporting::BoundedList<T, kMaxSize>&>
-BoundedListMatches(const BoundedListMatcherConfig<T>& cfg) {
-  return Property("vec", &attribution_reporting::BoundedList<T, kMaxSize>::vec,
-                  cfg.vec);
-}
-
-using EventTriggerDataListMatcherConfig =
-    BoundedListMatcherConfig<attribution_reporting::EventTriggerData>;
-
-constexpr auto EventTriggerDataListMatches =
-    BoundedListMatches<attribution_reporting::EventTriggerData,
-                       attribution_reporting::kMaxEventTriggerData>;
-
 struct TriggerRegistrationMatcherConfig {
   ::testing::Matcher<const attribution_reporting::FilterPair&> filters =
       ::testing::_;
   ::testing::Matcher<absl::optional<uint64_t>> debug_key = ::testing::_;
-  ::testing::Matcher<const attribution_reporting::EventTriggerDataList&>
+  ::testing::Matcher<
+      const std::vector<attribution_reporting::EventTriggerData>&>
       event_triggers = ::testing::_;
-  ::testing::Matcher<const attribution_reporting::AggregatableDedupKeyList&>
+  ::testing::Matcher<
+      const std::vector<attribution_reporting::AggregatableDedupKey>&>
       aggregatable_dedup_keys = ::testing::_;
   ::testing::Matcher<bool> debug_reporting = ::testing::_;
-  ::testing::Matcher<const attribution_reporting::AggregatableTriggerDataList&>
+  ::testing::Matcher<
+      const std::vector<attribution_reporting::AggregatableTriggerData>&>
       aggregatable_trigger_data = ::testing::_;
   ::testing::Matcher<const attribution_reporting::AggregatableValues&>
       aggregatable_values = ::testing::_;
@@ -1007,13 +635,15 @@ struct TriggerRegistrationMatcherConfig {
       ::testing::Matcher<const attribution_reporting::FilterPair&> filters =
           ::testing::_,
       ::testing::Matcher<absl::optional<uint64_t>> debug_key = ::testing::_,
-      ::testing::Matcher<const attribution_reporting::EventTriggerDataList&>
+      ::testing::Matcher<
+          const std::vector<attribution_reporting::EventTriggerData>&>
           event_triggers = ::testing::_,
-      ::testing::Matcher<const attribution_reporting::AggregatableDedupKeyList&>
+      ::testing::Matcher<
+          const std::vector<attribution_reporting::AggregatableDedupKey>&>
           aggregatable_dedup_keys = ::testing::_,
       ::testing::Matcher<bool> debug_reporting = ::testing::_,
       ::testing::Matcher<
-          const attribution_reporting::AggregatableTriggerDataList&>
+          const std::vector<attribution_reporting::AggregatableTriggerData>&>
           aggregatable_trigger_data = ::testing::_,
       ::testing::Matcher<const attribution_reporting::AggregatableValues&>
           aggregatable_values = ::testing::_,
@@ -1069,6 +699,14 @@ TriggerBuilder DefaultAggregatableTriggerBuilder(
 std::vector<AggregatableHistogramContribution>
 DefaultAggregatableHistogramContributions(
     const std::vector<uint32_t>& histogram_values = {1});
+
+#if BUILDFLAG(IS_ANDROID)
+struct OsRegistration;
+
+bool operator==(const OsRegistration&, const OsRegistration&);
+
+std::ostream& operator<<(std::ostream&, const OsRegistration&);
+#endif
 
 }  // namespace content
 

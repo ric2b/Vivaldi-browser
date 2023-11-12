@@ -15,6 +15,9 @@ namespace floss {
 
 // All Floss D-Bus methods return immediately, so the timeout can be very short.
 int kDBusTimeoutMs = 2000;
+// Timeout for waiting HCI enabled changed. Make it longer since it takes longer
+// when there is a connected device.
+int kAdapterPowerTimeoutMs = 5000;
 
 // TODO(b/189499077) - Expose via floss package
 const char kAdapterService[] = "org.chromium.bluetooth";
@@ -72,6 +75,9 @@ const char kSetPin[] = "SetPin";
 const char kSetPasskey[] = "SetPasskey";
 const char kGetBondedDevices[] = "GetBondedDevices";
 const char kGetConnectedDevices[] = "GetConnectedDevices";
+const char kSdpSearch[] = "SdpSearch";
+const char kCreateSdpRecord[] = "CreateSdpRecord";
+const char kRemoveSdpRecord[] = "RemoveSdpRecord";
 
 // TODO(abps) - Rename this to AdapterCallback in platform and here
 const char kCallbackInterface[] = "org.chromium.bluetooth.BluetoothCallback";
@@ -88,12 +94,15 @@ const char kOnDiscoveringChanged[] = "OnDiscoveringChanged";
 const char kOnSspRequest[] = "OnSspRequest";
 
 const char kOnBondStateChanged[] = "OnBondStateChanged";
+const char kOnSdpSearchComplete[] = "OnSdpSearchComplete";
+const char kOnSdpRecordCreated[] = "OnSdpRecordCreated";
 const char kOnDeviceConnected[] = "OnDeviceConnected";
 const char kOnDeviceDisconnected[] = "OnDeviceDisconnected";
 
 const char kOnScannerRegistered[] = "OnScannerRegistered";
 const char kOnScanResult[] = "OnScanResult";
-const char kOnScanResultLost[] = "OnScanResultLost";
+const char kOnAdvertisementFound[] = "OnAdvertisementFound";
+const char kOnAdvertisementLost[] = "OnAdvertisementLost";
 }  // namespace adapter
 
 namespace manager {
@@ -116,15 +125,21 @@ namespace socket_manager {
 const char kRegisterCallback[] = "RegisterCallback";
 const char kListenUsingInsecureL2capChannel[] =
     "ListenUsingInsecureL2capChannel";
+const char kListenUsingInsecureL2capLeChannel[] =
+    "ListenUsingInsecureL2capLeChannel";
 const char kListenUsingInsecureRfcommWithServiceRecord[] =
     "ListenUsingInsecureRfcommWithServiceRecord";
 const char kListenUsingL2capChannel[] = "ListenUsingL2capChannel";
+const char kListenUsingL2capLeChannel[] = "ListenUsingL2capLeChannel";
+const char kListenUsingRfcomm[] = "ListenUsingRfcomm";
 const char kListenUsingRfcommWithServiceRecord[] =
     "ListenUsingRfcommWithServiceRecord";
 const char kCreateInsecureL2capChannel[] = "CreateInsecureL2capChannel";
+const char kCreateInsecureL2capLeChannel[] = "CreateInsecureL2capLeChannel";
 const char kCreateInsecureRfcommSocketToServiceRecord[] =
     "CreateInsecureRfcommSocketToServiceRecord";
 const char kCreateL2capChannel[] = "CreateL2capChannel";
+const char kCreateL2capLeChannel[] = "CreateL2capLeChannel";
 const char kCreateRfcommSocketToServiceRecord[] =
     "CreateRfcommSocketToServiceRecord";
 const char kAccept[] = "Accept";
@@ -193,6 +208,7 @@ const char kServerSendNotification[] = "SendNotification";
 const char kOnServerRegistered[] = "OnServerRegistered";
 const char kOnServerConnectionState[] = "OnServerConnectionState";
 const char kOnServerServiceAdded[] = "OnServiceAdded";
+const char kOnServerServiceRemoved[] = "OnServiceRemoved";
 const char kOnServerCharacteristicReadRequest[] = "OnCharacteristicReadRequest";
 const char kOnServerDescriptorReadRequest[] = "OnDescriptorReadRequest";
 const char kOnServerCharacteristicWriteRequest[] =

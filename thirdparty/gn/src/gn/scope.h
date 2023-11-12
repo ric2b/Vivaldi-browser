@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -15,6 +16,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "gn/err.h"
+#include "gn/location.h"
 #include "gn/pattern.h"
 #include "gn/source_dir.h"
 #include "gn/source_file.h"
@@ -110,6 +112,21 @@ class Scope {
 
     // When set, those variables are not merged.
     std::set<std::string> excluded_values;
+  };
+
+  // Details about a Scope's creation as a template invocation
+  struct TemplateInvocationEntry {
+    // Produce a printable string that describes the template invocation:
+    //
+    // 'template_name("target_name")  //some/BUILD.gn:<line>'
+    //
+    // The target name is only the string that's passed to the template as the
+    // name, it's not a complete GN label.
+    std::string Describe() const;
+
+    std::string template_name;
+    std::string target_name;
+    Location location;
   };
 
   // Creates an empty toplevel scope.
@@ -337,6 +354,15 @@ class Scope {
   void SetProperty(const void* key, void* value);
   void* GetProperty(const void* key, const Scope** found_on_scope) const;
 
+  // Track template invocations for printing or debugging.
+  void SetTemplateInvocationEntry(std::string template_name,
+                                  std::string target_name,
+                                  Location location);
+
+  // Return a vector containing the current stack of template invocations that
+  // lead up to this scope.
+  std::vector<TemplateInvocationEntry> GetTemplateInvocationEntries() const;
+
   static UpdateParseMap &GetTargetUpdaters() {
     return target_update_list;
   }
@@ -365,6 +391,13 @@ class Scope {
   // of the values may be different).
   static bool RecordMapValuesEqual(const RecordMap& a, const RecordMap& b);
 
+  // Walk up the containing scopes and any "invoker" Value scopes to gather any
+  // previous template invocations.
+  void AppendTemplateInvocationEntries(std::vector<TemplateInvocationEntry>* out) const;
+
+  // Walk up the containing scopes to find a TemplateInvocationEntry.
+  const TemplateInvocationEntry* FindTemplateInvocationEntry() const;
+
   // Scopes can have no containing scope (both null), a mutable containing
   // scope, or a const containing scope. The reason is that when we're doing
   // a new target, we want to refer to the base_config scope which will be read
@@ -381,6 +414,9 @@ class Scope {
   unsigned mode_flags_;
 
   RecordMap values_;
+
+  // If this is a template scope, track the template invocation.
+  std::unique_ptr<TemplateInvocationEntry> template_invocation_entry_;
 
   // Note that this can't use string pieces since the names are constructed from
   // Values which might be deallocated before this goes out of scope.

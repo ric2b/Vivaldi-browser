@@ -1553,9 +1553,9 @@ TEST_F(NetworkContextTest, P2PHostResolution) {
       url::Origin::Create(GURL(base::StringPrintf("https://%s", kHostname)));
   const net::NetworkAnonymizationKey kOtherNaks[] = {
       net::NetworkAnonymizationKey(),
-      net::NetworkAnonymizationKey(
-          net::SchemefulSite(kDestinationOrigin) /* top_frame_origin */,
-          net::SchemefulSite(kDestinationOrigin) /* frame_origin */)};
+      net::NetworkAnonymizationKey::CreateSameSite(
+          net::SchemefulSite(kDestinationOrigin)),
+  };
   for (const auto& other_nak : kOtherNaks) {
     std::unique_ptr<net::HostResolver::ResolveHostRequest> request2 =
         host_resolver.CreateRequest(kHostPortPair, other_nak,
@@ -2192,12 +2192,12 @@ TEST_F(NetworkContextTest, LookupServerBasicAuthCredentials) {
   GURL origin("http://foo.test");
   GURL origin2("http://bar.test");
   GURL origin3("http://baz.test");
-  net::NetworkAnonymizationKey network_anonymization_key1(
-      net::SchemefulSite(url::Origin::Create(origin)),
-      net::SchemefulSite(url::Origin::Create(origin)));
-  net::NetworkAnonymizationKey network_anonymization_key2(
-      net::SchemefulSite(url::Origin::Create(origin2)),
-      net::SchemefulSite(url::Origin::Create(origin2)));
+  const auto network_anonymization_key1 =
+      net::NetworkAnonymizationKey::CreateSameSite(
+          net::SchemefulSite(url::Origin::Create(origin)));
+  const auto network_anonymization_key2 =
+      net::NetworkAnonymizationKey::CreateSameSite(
+          net::SchemefulSite(url::Origin::Create(origin2)));
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
   network_context->SetSplitAuthCacheByNetworkAnonymizationKey(true);
@@ -3013,7 +3013,8 @@ TEST_F(NetworkContextTest, ProxyLookupWithNetworkIsolationKey) {
   const GURL kUrl("http://bar.test/");
   const net::SchemefulSite kSite =
       net::SchemefulSite(GURL("https://foo.test/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey(kSite, kSite);
+  const auto kNetworkAnonymizationKey =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite);
 
   // Pac scripts must contain this string to be passed to the
   // ProxyResolverFactory.
@@ -3266,7 +3267,7 @@ TEST_F(NetworkContextTest, CreateRestrictedUDPSocket) {
     network_context->CreateRestrictedUDPSocket(
         server_addr, mojom::RestrictedUDPSocketMode::BOUND,
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
-        /*options=*/nullptr, server_socket.BindNewPipeAndPassReceiver(),
+        /*params=*/nullptr, server_socket.BindNewPipeAndPassReceiver(),
         socket_listener_receiver.BindNewPipeAndPassRemote(),
         create_future.GetCallback());
     ASSERT_EQ(create_future.Get<0>(), net::OK);
@@ -3286,7 +3287,7 @@ TEST_F(NetworkContextTest, CreateRestrictedUDPSocket) {
     network_context->CreateRestrictedUDPSocket(
         server_addr, mojom::RestrictedUDPSocketMode::CONNECTED,
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
-        /*options=*/nullptr, client_socket.BindNewPipeAndPassReceiver(),
+        /*params=*/nullptr, client_socket.BindNewPipeAndPassReceiver(),
         client_listener_receiver.BindNewPipeAndPassRemote(),
         create_future.GetCallback());
     ASSERT_EQ(create_future.Get<0>(), net::OK);
@@ -3329,9 +3330,9 @@ TEST_F(NetworkContextTest, CreateRestrictedUDPSocket) {
         CreateTestMessage(static_cast<uint8_t>(j), kDatagramSize));
     {
       base::test::TestFuture<int32_t> send_future;
-      server_socket->SendTo(test_msg,
-                            net::HostPortPair::FromIPEndPoint(client_addr),
-                            send_future.GetCallback());
+      server_socket->SendTo(
+          test_msg, net::HostPortPair::FromIPEndPoint(client_addr),
+          net::DnsQueryType::UNSPECIFIED, send_future.GetCallback());
       ASSERT_EQ(send_future.Get(), net::OK);
     }
   }
@@ -3736,7 +3737,8 @@ TEST_F(NetworkContextTest, ResolveHost_Failure_Async) {
 TEST_F(NetworkContextTest, ResolveHost_NetworkAnonymizationKey) {
   const net::SchemefulSite kSite =
       net::SchemefulSite(GURL("https://foo.test/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey(kSite, kSite);
+  const auto kNetworkAnonymizationKey =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite);
 
   auto resolver = std::make_unique<net::MockHostResolver>();
   resolver->rules()->AddRule("nik.test", "1.2.3.4");
@@ -4177,8 +4179,6 @@ TEST_F(NetworkContextTest, CreateHostResolverWithConfigOverrides) {
   // enablable for the build config).
   ASSERT_EQ(1u, factory->resolvers().size());
   net::ContextHostResolver* internal_resolver = factory->resolvers().front();
-
-  EXPECT_TRUE(internal_resolver->GetDnsConfigAsValue().is_dict());
 
   // Override DnsClient with a basic mock.
   net::DnsConfig base_configuration;
@@ -4895,14 +4895,10 @@ TEST_F(NetworkContextTest, PreconnectNetworkIsolationKey) {
 
   const auto kSiteFoo = net::SchemefulSite(GURL("http://foo.test"));
   const auto kSiteBar = net::SchemefulSite(GURL("http://bar.test"));
-  const net::NetworkAnonymizationKey kKey1(kSiteFoo, kSiteFoo);
-  const net::NetworkAnonymizationKey kKey2(kSiteBar, kSiteBar);
-  const net::NetworkAnonymizationKey kNak1(net::SchemefulSite(kSiteFoo),
-                                           net::SchemefulSite(kSiteFoo),
-                                           /*is_cross_site=*/false);
-  const net::NetworkAnonymizationKey kNak2(net::SchemefulSite(kSiteBar),
-                                           net::SchemefulSite(kSiteBar),
-                                           /*is_cross_site=*/false);
+  const auto kKey1 = net::NetworkAnonymizationKey::CreateSameSite(kSiteFoo);
+  const auto kKey2 = net::NetworkAnonymizationKey::CreateSameSite(kSiteBar);
+  const auto kNak1 = net::NetworkAnonymizationKey::CreateSameSite(kSiteFoo);
+  const auto kNak2 = net::NetworkAnonymizationKey::CreateSameSite(kSiteBar);
   network_context->PreconnectSockets(1, test_server.base_url(),
                                      /*allow_credentials=*/false, kKey1);
   network_context->PreconnectSockets(2, test_server.base_url(),
@@ -7147,6 +7143,27 @@ TEST_F(NetworkContextTest, EnableTrustTokens) {
   EXPECT_TRUE(success);
 }
 
+TEST_F(NetworkContextTest, EnableTrustTokensForFledge) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures({features::kFledgePst},
+                                       {features::kPrivateStateTokens});
+
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateNetworkContextParamsForTesting());
+
+  EXPECT_TRUE(network_context->trust_token_store());
+
+  base::RunLoop run_loop;
+  bool success = false;
+  network_context->trust_token_store()->ExecuteOrEnqueue(
+      base::BindLambdaForTesting([&](TrustTokenStore* store) {
+        success = !!store;
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+  EXPECT_TRUE(success);
+}
+
 TEST_F(NetworkContextTestWithMockTime, EnableTrustTokensWithStoreOnDisk) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kPrivateStateTokens);
@@ -7294,7 +7311,7 @@ TEST_F(NetworkContextExpectBadMessageTest,
 
   auto factory_params = mojom::URLLoaderFactoryParams::New();
   factory_params->trust_token_redemption_policy =
-      mojom::TrustTokenRedemptionPolicy::kForbid;
+      mojom::TrustTokenOperationPolicyVerdict::kForbid;
   std::unique_ptr<TestURLLoaderClient> client =
       FetchRequest(my_request, network_context.get(), mojom::kURLLoadOptionNone,
                    mojom::kBrowserProcessId, std::move(factory_params));
@@ -7324,7 +7341,39 @@ TEST_F(NetworkContextExpectBadMessageTest,
 
   auto factory_params = mojom::URLLoaderFactoryParams::New();
   factory_params->trust_token_redemption_policy =
-      mojom::TrustTokenRedemptionPolicy::kForbid;
+      mojom::TrustTokenOperationPolicyVerdict::kForbid;
+  std::unique_ptr<TestURLLoaderClient> client =
+      FetchRequest(my_request, network_context.get(), mojom::kURLLoadOptionNone,
+                   mojom::kBrowserProcessId, std::move(factory_params));
+
+  AssertBadMessage();
+}
+
+TEST_F(NetworkContextExpectBadMessageTest,
+       FailsTrustTokenIssuanceWhenForbidden) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kPrivateStateTokens);
+
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateNetworkContextParamsForTesting());
+
+  // Allow |network_context|'s Trust Tokens store time to initialize
+  // asynchronously, if necessary.
+  task_environment_.RunUntilIdle();
+
+  ASSERT_TRUE(network_context->trust_token_store());
+
+  ResourceRequest my_request;
+  my_request.trust_token_params =
+      OptionalTrustTokenParams(mojom::TrustTokenParams::New());
+  my_request.trust_token_params->version =
+      mojom::TrustTokenMajorVersion::kPrivateStateTokenV1;
+  my_request.trust_token_params->operation =
+      mojom::TrustTokenOperationType::kIssuance;
+
+  auto factory_params = mojom::URLLoaderFactoryParams::New();
+  factory_params->trust_token_issuance_policy =
+      mojom::TrustTokenOperationPolicyVerdict::kForbid;
   std::unique_ptr<TestURLLoaderClient> client =
       FetchRequest(my_request, network_context.get(), mojom::kURLLoadOptionNone,
                    mojom::kBrowserProcessId, std::move(factory_params));
@@ -7756,8 +7805,6 @@ TEST_F(NetworkContextExpectBadMessageTest, DataUrl) {
   ResourceRequest request;
   request.url = GURL("data:,foo");
   auto factory_params = mojom::URLLoaderFactoryParams::New();
-  factory_params->trust_token_redemption_policy =
-      mojom::TrustTokenRedemptionPolicy::kForbid;
   std::unique_ptr<TestURLLoaderClient> client =
       FetchRequest(request, network_context.get(), mojom::kURLLoadOptionNone,
                    mojom::kBrowserProcessId, std::move(factory_params));
@@ -7779,18 +7826,21 @@ class NetworkContextBrowserCookieTest
       net::HttpRequestHeaders headers,
       int options = mojom::kURLLoadOptionNone,
       mojom::RequestMode mode = mojom::RequestMode::kNoCors,
-      net::HttpRequestHeaders cors_exempt_headers = net::HttpRequestHeaders()) {
-    CreateLoaderAndStart(InitializeURLLoaderFactory(options),
-                         BuildResourceRequest(url, std::move(headers), mode,
-                                              std::move(cors_exempt_headers)),
-                         options);
+      net::HttpRequestHeaders cors_exempt_headers = net::HttpRequestHeaders(),
+      bool set_request_body = false) {
+    CreateLoaderAndStart(
+        InitializeURLLoaderFactory(options),
+        BuildResourceRequest(url, std::move(headers), mode,
+                             std::move(cors_exempt_headers), set_request_body),
+        options);
   }
 
   ResourceRequest BuildResourceRequest(
       const GURL& url,
       net::HttpRequestHeaders headers,
       mojom::RequestMode mode,
-      net::HttpRequestHeaders cors_exempt_headers) {
+      net::HttpRequestHeaders cors_exempt_headers,
+      bool set_request_body = false) {
     ResourceRequest request;
     request.url = url;
     request.method = "GET";
@@ -7801,6 +7851,9 @@ class NetworkContextBrowserCookieTest
     request.trusted_params = ResourceRequest::TrustedParams();
     request.trusted_params->allow_cookies_from_browser =
         AllowCookiesFromBrowser();
+    if (set_request_body) {
+      request.request_body = new network::ResourceRequestBody();
+    }
     return request;
   }
 
@@ -7958,6 +8011,28 @@ class NetworkContextBrowserCookieTest
 
 TEST_P(NetworkContextBrowserCookieTest, Request) {
   StartLoadingURL(test_server()->GetURL("/echo"), GenerateTestRequestHeaders());
+  url_loader_client()->RunUntilComplete();
+  EXPECT_EQ(net::OK, url_loader_client()->completion_status().error_code);
+
+  // Confirm that the processed request contains the expected headers.
+  if (AllowCookiesFromBrowser()) {
+    // Only the non-existing new cookie is added.
+    ValidateRequestHeaderValue(
+        net::HttpRequestHeaders::kCookie,
+        base::JoinString({kCookie1, kCookie2, kCookie3}, "; "));
+  } else {
+    ValidateRequestHeaderValue(net::HttpRequestHeaders::kCookie,
+                               base::JoinString({kCookie1, kCookie2}, "; "));
+  }
+  ValidateRequestHeaderValue(kHeader1Name, kHeader1Value);
+  ValidateRequestHeaderValue(kHeader2Name, kHeader2Value);
+}
+
+TEST_P(NetworkContextBrowserCookieTest, RequestWithBody) {
+  StartLoadingURL(test_server()->GetURL("/echo"), GenerateTestRequestHeaders(),
+                  mojom::kURLLoadOptionNone, mojom::RequestMode::kNoCors,
+                  net::HttpRequestHeaders(),
+                  /*set_request_body=*/true);
   url_loader_client()->RunUntilComplete();
   EXPECT_EQ(net::OK, url_loader_client()->completion_status().error_code);
 

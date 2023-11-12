@@ -103,7 +103,7 @@ ash::OnDeviceToServerSpeechRecognitionFallbackReason GetFallbackReason(
 
 // static
 void ProjectorClientImpl::InitForProjectorAnnotator(views::WebView* web_view) {
-  web_view->LoadInitialURL(GURL(ash::kChromeUITrustedAnnotatorUrl));
+  web_view->LoadInitialURL(GURL(ash::kChromeUIUntrustedAnnotatorUrl));
 }
 
 // Using base::Unretained for callback is safe since the ProjectorClientImpl
@@ -182,6 +182,11 @@ void ProjectorClientImpl::StartSpeechRecognition() {
 }
 
 void ProjectorClientImpl::StopSpeechRecognition() {
+  if (!speech_recognizer_) {
+    LOG(ERROR) << "Stop was called on a destroyed speech recognizer.";
+    return;
+  }
+
   speech_recognizer_->Stop();
 }
 

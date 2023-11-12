@@ -7,12 +7,12 @@
 #include <memory>
 
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/uuid.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -34,6 +34,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/prefs/pref_service.h"
@@ -44,6 +45,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/menu_button.h"
@@ -331,11 +333,13 @@ TEST_F(BookmarkBarViewTest, RemoveNode) {
   EXPECT_EQ(2u, test_helper_->GetBookmarkButtonCount());
 
   // Remove the 2nd node, should still only have 1 visible.
-  model()->Remove(bookmark_bar_node->children()[1].get());
+  model()->Remove(bookmark_bar_node->children()[1].get(),
+                  bookmarks::metrics::BookmarkEditSource::kOther);
   EXPECT_EQ("a", GetStringForVisibleButtons());
 
   // Remove the first node, should force a new button (for the 'c' node).
-  model()->Remove(bookmark_bar_node->children()[0].get());
+  model()->Remove(bookmark_bar_node->children()[0].get(),
+                  bookmarks::metrics::BookmarkEditSource::kOther);
   ASSERT_EQ("c", GetStringForVisibleButtons());
 }
 
@@ -438,7 +442,8 @@ TEST_F(BookmarkBarViewTest, DropCallbackTest) {
   EXPECT_EQ("a b c d e f", GetStringForVisibleButtons());
 
   ui::mojom::DragOperation output_drag_op;
-  std::move(cb).Run(target_event, output_drag_op);
+  std::move(cb).Run(target_event, output_drag_op,
+                    /*drag_image_layer_owner=*/nullptr);
   EXPECT_EQ("z a b c d e f", GetStringForVisibleButtons());
   EXPECT_EQ(output_drag_op, ui::mojom::DragOperation::kCopy);
 }
@@ -459,7 +464,8 @@ TEST_F(BookmarkBarViewTest, MutateModelDuringDrag) {
   ASSERT_TRUE(bookmark_bar_view()->CanDrop(drop_data));
   bookmark_bar_view()->OnDragUpdated(target_event);
   EXPECT_NE(-1, test_helper_->GetDropLocationModelIndexForTesting());
-  model()->Remove(model()->bookmark_bar_node()->children()[4].get());
+  model()->Remove(model()->bookmark_bar_node()->children()[4].get(),
+                  bookmarks::metrics::BookmarkEditSource::kOther);
   EXPECT_EQ(-1, test_helper_->GetDropLocationModelIndexForTesting());
 }
 
@@ -482,7 +488,8 @@ TEST_F(BookmarkBarViewTest, DropCallback_InvalidatePtrTest) {
   EXPECT_EQ(6u, test_helper_->GetBookmarkButtonCount());
 
   ui::mojom::DragOperation output_drag_op = ui::mojom::DragOperation::kNone;
-  std::move(cb).Run(target_event, output_drag_op);
+  std::move(cb).Run(target_event, output_drag_op,
+                    /*drag_image_layer_owner=*/nullptr);
   EXPECT_EQ("a b c d e f", GetStringForVisibleButtons());
   EXPECT_EQ(output_drag_op, ui::mojom::DragOperation::kNone);
 }
@@ -538,7 +545,7 @@ TEST_F(BookmarkBarViewTest, OnSavedTabGroupUpdateBookmarkBarCallsLayout) {
   keyed_service->model()->Add(SavedTabGroup(
       std::u16string(u"tab group 1"), tab_groups::TabGroupColorId::kGrey, {}));
 
-  base::GUID button_2_id = base::GUID::GenerateRandomV4();
+  base::Uuid button_2_id = base::Uuid::GenerateRandomV4();
   keyed_service->model()->Add(SavedTabGroup(std::u16string(u"tab group 2"),
                                             tab_groups::TabGroupColorId::kGrey,
                                             {}, button_2_id));

@@ -80,7 +80,7 @@ class ServiceImpl : public Service, public content_injection::Provider {
 
   void RebuildStaticInjections();
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
   std::map<base::FilePath, ScriptDirectory> directories_;
 
   std::map<content::WebContents*, RestoreInfo> script_overrides_to_restore_;

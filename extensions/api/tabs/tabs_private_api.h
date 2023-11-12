@@ -57,7 +57,7 @@ absl::optional<double> GetTabWorkspaceId(const std::string& viv_extdata);
 class TabsPrivateAPI : public BrowserContextKeyedAPI {
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
   std::unique_ptr<TabMutingHandler> tabmuting_handler_;
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "TabsPrivateAPI"; }

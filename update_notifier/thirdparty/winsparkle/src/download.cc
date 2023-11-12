@@ -51,7 +51,7 @@ void CloseInetHandle(HINTERNET& handle) {
 }
 
 std::wstring MakeUserAgent() {
-  std::string userAgent = PRODUCT_NAME "/" VIVALDI_VERSION " WinSparkle/0.5.2";
+  std::string userAgent = PRODUCT_NAME "/" VIVALDI_VERSION_STRING " WinSparkle/0.5.2";
 #ifdef _WIN64
   userAgent += " (Win64)";
 #endif

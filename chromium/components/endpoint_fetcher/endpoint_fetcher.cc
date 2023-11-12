@@ -271,9 +271,12 @@ void EndpointFetcher::OnResponseFetched(
     response->error_type =
         absl::make_optional<FetchErrorType>(FetchErrorType::kAuthError);
     // We cannot assume that the response was in JSON, and hence cannot sanitize
-    // the response. Send the respond as-is.
+    // the response. Send the respond as-is. For error cases, we may not have a
+    // valid string pointer -- if we don't, send a simple message indicating
+    // there was a response error (similar to below).
     // TODO: Think about how to better handle different MIME-types here.
-    response->response = *response_body;
+    response->response =
+        response_body.get() ? *response_body : "There was a response error";
     std::move(endpoint_fetcher_callback).Run(std::move(response));
     return;
   }
@@ -306,17 +309,12 @@ void EndpointFetcher::OnSanitizationResult(
     std::unique_ptr<EndpointResponse> response,
     EndpointFetcherCallback endpoint_fetcher_callback,
     data_decoder::JsonSanitizer::Result result) {
-  if (result.value.has_value()) {
-    response->response = result.value.value();
-  } else if (result.error.has_value()) {
-    response->error_type =
-        absl::make_optional<FetchErrorType>(FetchErrorType::kResultParseError);
-    response->response =
-        "There was a sanitization error: " + result.error.value();
+  if (result.has_value()) {
+    response->response = result.value();
   } else {
     response->error_type =
         absl::make_optional<FetchErrorType>(FetchErrorType::kResultParseError);
-    response->response = "There was an unknown sanitization error";
+    response->response = "There was a sanitization error: " + result.error();
   }
   // The EndpointFetcher and its members will be destroyed after
   // any the below callback. Do not access The EndpointFetcher

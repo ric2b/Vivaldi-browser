@@ -442,8 +442,8 @@ void BookmarksAPI::OnListenerAdded(const EventListenerInfo& details) {
 }
 
 ExtensionFunction::ResponseValue BookmarksGetFunction::RunOnReady() {
-  std::unique_ptr<api::bookmarks::Get::Params> params(
-      api::bookmarks::Get::Params::Create(args()));
+  absl::optional<api::bookmarks::Get::Params> params =
+      api::bookmarks::Get::Params::Create(args());
   if (!params)
     return BadMessage();
 
@@ -474,8 +474,8 @@ ExtensionFunction::ResponseValue BookmarksGetFunction::RunOnReady() {
 }
 
 ExtensionFunction::ResponseValue BookmarksGetChildrenFunction::RunOnReady() {
-  std::unique_ptr<api::bookmarks::GetChildren::Params> params(
-      api::bookmarks::GetChildren::Params::Create(args()));
+  absl::optional<api::bookmarks::GetChildren::Params> params =
+      api::bookmarks::GetChildren::Params::Create(args());
   if (!params)
     return BadMessage();
 
@@ -494,8 +494,8 @@ ExtensionFunction::ResponseValue BookmarksGetChildrenFunction::RunOnReady() {
 }
 
 ExtensionFunction::ResponseValue BookmarksGetRecentFunction::RunOnReady() {
-  std::unique_ptr<api::bookmarks::GetRecent::Params> params(
-      api::bookmarks::GetRecent::Params::Create(args()));
+  absl::optional<api::bookmarks::GetRecent::Params> params =
+      api::bookmarks::GetRecent::Params::Create(args());
   if (!params)
     return BadMessage();
   if (params->number_of_items < 1) {
@@ -528,8 +528,8 @@ ExtensionFunction::ResponseValue BookmarksGetTreeFunction::RunOnReady() {
 }
 
 ExtensionFunction::ResponseValue BookmarksGetSubTreeFunction::RunOnReady() {
-  std::unique_ptr<api::bookmarks::GetSubTree::Params> params(
-      api::bookmarks::GetSubTree::Params::Create(args()));
+  absl::optional<api::bookmarks::GetSubTree::Params> params =
+      api::bookmarks::GetSubTree::Params::Create(args());
   if (!params)
     return BadMessage();
 
@@ -545,8 +545,8 @@ ExtensionFunction::ResponseValue BookmarksGetSubTreeFunction::RunOnReady() {
 }
 
 ExtensionFunction::ResponseValue BookmarksSearchFunction::RunOnReady() {
-  std::unique_ptr<api::bookmarks::Search::Params> params(
-      api::bookmarks::Search::Params::Create(args()));
+  absl::optional<api::bookmarks::Search::Params> params =
+      api::bookmarks::Search::Params::Create(args());
   if (!params)
     return BadMessage();
 
@@ -590,8 +590,8 @@ ExtensionFunction::ResponseValue BookmarksRemoveFunctionBase::RunOnReady() {
   if (!EditBookmarksEnabled())
     return Error(bookmark_api_constants::kEditBookmarksDisabled);
 
-  std::unique_ptr<api::bookmarks::Remove::Params> params(
-      api::bookmarks::Remove::Params::Create(args()));
+  absl::optional<api::bookmarks::Remove::Params> params =
+      api::bookmarks::Remove::Params::Create(args());
   if (!params)
     return BadMessage();
 
@@ -629,7 +629,7 @@ ExtensionFunction::ResponseValue BookmarksRemoveFunctionBase::RunOnReady() {
     // If it's already in trash or a separator, just delete it.
     if (bookmarks::IsDescendantOf(node, trash_node) ||
         vivaldi_bookmark_kit::IsSeparator(node)) {
-      model->Remove(node);
+      model->Remove(node, {});
     } else {
       model->Move(node, trash_node, 0);
     }
@@ -657,13 +657,12 @@ ExtensionFunction::ResponseValue BookmarksCreateFunction::RunOnReady() {
   if (!EditBookmarksEnabled())
     return Error(bookmark_api_constants::kEditBookmarksDisabled);
 
-  std::unique_ptr<api::bookmarks::Create::Params> params(
-      api::bookmarks::Create::Params::Create(args()));
+  absl::optional<api::bookmarks::Create::Params> params =
+      api::bookmarks::Create::Params::Create(args());
   if (!params)
     return BadMessage();
 
   std::string error;
-
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
   const BookmarkNode* node =
@@ -680,8 +679,8 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
   if (!EditBookmarksEnabled())
     return Error(bookmark_api_constants::kEditBookmarksDisabled);
 
-  std::unique_ptr<api::bookmarks::Move::Params> params(
-      api::bookmarks::Move::Params::Create(args()));
+  absl::optional<api::bookmarks::Move::Params> params =
+      api::bookmarks::Move::Params::Create(args());
   if (!params)
     return BadMessage();
 
@@ -742,8 +741,8 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
   if (!EditBookmarksEnabled())
     return Error(bookmark_api_constants::kEditBookmarksDisabled);
 
-  std::unique_ptr<api::bookmarks::Update::Params> params(
-      api::bookmarks::Update::Params::Create(args()));
+  absl::optional<api::bookmarks::Update::Params> params =
+      api::bookmarks::Update::Params::Create(args());
   if (!params)
     return BadMessage();
 

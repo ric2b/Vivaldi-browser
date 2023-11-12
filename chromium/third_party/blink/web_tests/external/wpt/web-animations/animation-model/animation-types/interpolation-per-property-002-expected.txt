@@ -1,5 +1,5 @@
 This is a testharness.js-based test.
-Found 340 tests; 325 PASS, 15 FAIL, 0 TIMEOUT, 0 NOTRUN.
+Found 340 tests; 329 PASS, 11 FAIL, 0 TIMEOUT, 0 NOTRUN.
 PASS Setup
 PASS isolation (type: discrete) has testInterpolation function
 PASS isolation uses discrete animation when animating between "auto" and "isolate" with linear easing
@@ -266,9 +266,9 @@ PASS text-transform uses discrete animation when animating between "capitalize" 
 PASS text-transform uses discrete animation when animating between "capitalize" and "uppercase" with effect easing
 PASS text-transform uses discrete animation when animating between "capitalize" and "uppercase" with keyframe easing
 PASS text-wrap (type: discrete) has testInterpolation function
-FAIL text-wrap uses discrete animation when animating between "wrap" and "nowrap" with linear easing assert_equals: The value should be nowrap at 500ms expected "nowrap" but got "wrap"
-FAIL text-wrap uses discrete animation when animating between "wrap" and "nowrap" with effect easing assert_equals: The value should be nowrap at 960ms expected "nowrap" but got "wrap"
-FAIL text-wrap uses discrete animation when animating between "wrap" and "nowrap" with keyframe easing assert_equals: The value should be nowrap at 960ms expected "nowrap" but got "wrap"
+PASS text-wrap uses discrete animation when animating between "wrap" and "nowrap" with linear easing
+PASS text-wrap uses discrete animation when animating between "wrap" and "nowrap" with effect easing
+PASS text-wrap uses discrete animation when animating between "wrap" and "nowrap" with keyframe easing
 PASS touch-action (type: discrete) has testInterpolation function
 PASS touch-action uses discrete animation when animating between "auto" and "none" with linear easing
 PASS touch-action uses discrete animation when animating between "auto" and "none" with effect easing
@@ -309,7 +309,7 @@ PASS translate (type: translateList) has testInterpolation function
 PASS translate with two unspecified values
 PASS translate with one unspecified value
 PASS translate with all three values specified
-FAIL translate with combination of percentages and lengths assert_equals: The value should be calc(0% + 200px) calc(25% - 50.5px) 200px at 500ms expected "calc(0% + 200px) calc(25% - 50.5px) 200px" but got "200px calc(25% - 50.5px) 200px"
+PASS translate with combination of percentages and lengths
 PASS scale (type: scaleList) has testInterpolation function
 PASS scale with two unspecified values
 PASS scale with one unspecified value

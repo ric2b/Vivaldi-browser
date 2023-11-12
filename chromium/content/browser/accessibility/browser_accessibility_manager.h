@@ -188,15 +188,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager
   void DidActivatePortal(WebContents* predecessor_contents,
                          base::TimeTicks activation_time) override;
 
-  // Keep track of if this page is hidden by an interstitial, in which case
-  // we need to suppress all events.
-  void set_hidden_by_interstitial_page(bool hidden) {
-    hidden_by_interstitial_page_ = hidden;
-  }
-  bool hidden_by_interstitial_page() const {
-    return hidden_by_interstitial_page_;
-  }
-
   // For testing only, register a function to be called when
   // a generated event is fired from this BrowserAccessibilityManager.
   void SetGeneratedEventCallbackForTesting(
@@ -224,6 +215,8 @@ class CONTENT_EXPORT BrowserAccessibilityManager
   void DoDefaultAction(const BrowserAccessibility& node);
   void GetImageData(const BrowserAccessibility& node,
                     const gfx::Size& max_size);
+  void Expand(const BrowserAccessibility& node);
+  void Collapse(const BrowserAccessibility& node);
   // Per third_party/blink/renderer/core/layout/hit_test_location.h, Blink
   // expects hit test points in page coordinates. However, WebAXObject::HitTest
   // applies the visual viewport offset, so we want to pass that function a
@@ -244,6 +237,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager
           ax::mojom::ScrollBehavior::kDoNotScrollIfVisible);
   void ScrollToPoint(const BrowserAccessibility& node, gfx::Point point);
   void SetAccessibilityFocus(const BrowserAccessibility& node);
+  void Blur(const BrowserAccessibility& node);
   void SetFocus(const BrowserAccessibility& node);
   void SetSequentialFocusNavigationStartingPoint(
       const BrowserAccessibility& node);
@@ -256,10 +250,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager
 
   // Retrieve the bounds of the parent View in screen coordinates.
   gfx::Rect GetViewBoundsInScreenCoordinates() const;
-
-  // Fire an event telling native assistive technology to move focus to the
-  // given find in page result.
-  void ActivateFindInPageResult(int request_id, int match_index);
 
   // Called when the renderer process has notified us of tree changes. Returns
   // false in fatal-error conditions, in which case the caller should destroy
@@ -536,10 +526,6 @@ class CONTENT_EXPORT BrowserAccessibilityManager
 
   // True if the user has initiated a navigation to another page.
   bool user_is_navigating_away_;
-
-  // Interstitial page, like an SSL warning.
-  // If so we need to suppress any events.
-  bool hidden_by_interstitial_page_ = false;
 
   // If the load complete event is suppressed due to CanFireEvents() returning
   // false, this is set to true and the event will be fired later.

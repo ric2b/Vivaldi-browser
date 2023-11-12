@@ -315,6 +315,15 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_NOTE_NEW_GROUP_EDITOR_EDIT_TITLE" desc="Title of the view controller to edit an existing folder. [Length: 30em.] [iOS only]">
         Edit Folder
       </message>
+      <message name="IDS_IOS_NOTE_PARENT_FOLDER" desc="Header text for title of parent folder of the note [CHAR_LIMIT=32]">
+        Parent folder
+      </message>
+      <message name="IDS_IOS_NOTE_FOLDER_TITLE" desc="Label specifying the title of the note folder. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
+        Title
+      </message>
+      <message name="IDS_IOS_NOTE_LOCATION" desc="Label specifying the location of the note. [CHAR_LIMIT=32]" meaning="Name of an inanimate object">
+        Location
+      </message>
       <message name="IDS_VIVALDI_NOTE_NEW_MANY_ITEM_LABEL" desc="Text that indicates that a user has selected many notes for editing. It will be prefaced with a single number greater than 1. e.g. '5 selected' [Length: 30em.]">
         <ph name="NUMBER_OF_SELECTED_NOTES">$1<ex>2</ex></ph> selected
       </message>
@@ -524,7 +533,7 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NEW_TAB_PRIVATE_SEARCH" desc="The iOS menu item for opening a new Private tab and doing a new search in that tab." meaning="Do a new search in a new Private tab">
         Private Search
       </message>
-      <message name="IDS_IOS_NEW_TAB_PRIVATE_MESSAGE" desc="Message shown when a user opens an private tab explaining incognito mode">
+      <message name="IDS_IOS_NEW_TAB_PRIVATE_MESSAGE" desc="Message shown when a user opens a private tab explaining Private mode">
         Browsing in a Private Tab means that searches, sites visited, cookies and temporary files won't be stored by Vivaldi. It does not encrypt or otherwise modify your connection.
       </message>
       <!-- Sync -->
@@ -572,6 +581,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_BACKUP_ENCRYPTION_KEY" desc="(Vivaldi) Title of encryption backup key">
         Backup encryption key
+      </message>
+      <message name="IDS_VIVALDI_SYNC_IMPORT_ENCRYPTION_KEY" desc="(Vivaldi) Title of button to import the backup encryption key">
+        <ph name="BEGIN_LINK">BEGIN_LINK</ph>Import<ph name="END_LINK">END_LINK</ph>
       </message>
       <message name="IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_SECTION" desc="(Vivaldi) Sync encryption password.">
         Data secured by encryption password
@@ -731,6 +743,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_REQUIRED" desc="Message shown when logging into sync and encryption passphrase is not provided.">
         Encryption password required
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_WRONG" desc="Message shown when entered encryption passphrase is wrong.">
+        Wrong password entered
       </message>
       <message name="IDS_VIVALDI_CREATE_ACCOUNT_TEXT" desc="(Vivaldi) Request the creation of a new vivaldi account.">
         New to Vivaldi? <ph name="BEGIN_LINK">BEGIN_LINK</ph>Create an Account ➔<ph name="END_LINK">END_LINK</ph>
@@ -1092,6 +1107,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_VIETNAMESE" desc="The origin of the blocking list source file">
         Vietnamese (<ph name="ORIGIN">$1</ph>)
       </message>
+      <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_APPLYING_SETTINGS" desc="Title for the ad and tracker blocker site settings in progress state">
+        Applying New Blocker Settings...
+      </message>
       <!-- END AD AND TRACKER BLOCKER -->
       <message name="IDS_VIVALDI_BOOKMARK_EMPTY_MESSAGE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
         Add your first bookmark by tapping the plus icon below
@@ -1116,6 +1134,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_FOLDER_NO_ITEMS" desc="Displayed when there are is one item in a note or bookmark folder">
         This folder is empty
+      </message>
+      <message name="IDS_IOS_NOTE_FOLDER_SELECTION_SEARCHBAR_PLACEHOLDER" desc="Placeholder text for the search bar used to search folder on folder selection page">
+        Search Folder
       </message>
       <!-- START PAGE LAYOUT SETTINGS -->
       <message name="IDS_IOS_PREFS_VIVALDI_START_PAGE_LAYOUT" desc="Title for the start page layout settings">
@@ -1192,6 +1213,9 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_SAVE_PASSWORDS_HEADER_MESSAGE" desc="Message for the password manager page.">
         Saved passwords will appear here.
       </message>
+      <message name="IDS_VIVALDI_SAVE_PASSWORDS_MANAGE_ACCOUNT_HEADER" desc="Header text with link for the view in Settings for managing saved passwords. [Length: unlimited] [iOS only]">
+        Create, save, and manage your passwords so you can easily sign in to sites and apps.
+      </message>
       <message name="IDS_VIVALDI_SAVE_PASSWORD_FOOTER_DISPLAYING_USER_EMAIL" desc="The footer text of the infobar that offers user to save/update a password to Vivaldi; also display's current user's email.">
         You can use saved passwords on any device. They're saved to Vivaldi Password Manager for <ph name="EMAIL">$1<ex>johndoe@gmail.com</ex></ph>
       </message>
@@ -1210,7 +1234,7 @@ locale.  The strings in this file are specific to iOS.
       <!-- END PASSWORD MANAGER -->
       <!-- COMMON URLS -->
       <message name="IDS_VIVALDI_IOS_HELP_URL" desc="URL for help and support" translateable="false">
-        https://help.vivaldi.com
+        https://help.vivaldi.com/ios/
       </message>
       <message name="IDS_VIVALDI_IOS_TOS_URL" desc="URL for terms of service" translateable="false">
         https://vivaldi.com/privacy/vivaldi-end-user-license-agreement/
@@ -1261,6 +1285,59 @@ locale.  The strings in this file are specific to iOS.
         Keep browsing the web smarter, smoother and faster with Vivaldi.
       </message>
       <!-- END DEFAULT BROWSER PROMO -->
+      <!-- ONBOARDING -->
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_TITLE" desc="Title for welcome text on the onboarding start page">
+        Welcome to Vivaldi
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_SUBTITLE" desc="Subtitle for welcome text the the onboarding start page">
+        Powerful. Personal. Private.
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_LETS_GET_STARTED_TITLE" desc="Title for the let's get started button on the onboarding start page">
+        Let's get started
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_START_TITLE" desc="Title for the first part of agreement text [non tapable] on the onboarding start page">
+        By continuing, you agree to Vivaldi's
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_AND_TITLE" desc="Title for the 'and' text [non tapable] in between license and privacy policy link on the onboarding start page">
+        and
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_LICENSE_TITLE" desc="Title for the End User License Agreement on the onboarding start page">
+        End User License Agreement
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_PRIVACY_TITLE" desc="Title for the Privacy Policy on the onboarding start page">
+        Privacy Policy
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_DEFAULT_BROWSER_TITLE" desc="Title for default browser page in the onboarding flow">
+        Set Vivaldi as your default
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_DEFAULT_BROWSER_SUBTITLE" desc="Subtitle for default browser page in the onboarding flow">
+        Want to open all links in Vivaldi? Be sure to set us as the Default.
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_DEFAULT_BROWSER_SET_TITLE" desc="Title for the set vivaldi as default button in the default browser page">
+        Set Vivaldi as default
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_DEFAULT_BROWSER_MAYBE_LATER_TITLE" desc="Title for the may be later button in the default browser page">
+        Maybe Later
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_CONTINUE_TITLE" desc="Title for the continue button">
+        Continue
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_BLOCK_ADS_AND_TRACKERS_TITLE" desc="Title for the block ads and trackers page on onboarding flow">
+        Block Ads and Trackers
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_BLOCK_ADS_AND_TRACKERS_DESCRIPTION" desc="Description for the block ads and trackers page on onboarding flow">
+        Choose your preferred level of blocking.
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_TABS_TITLE" desc="Title for the tabs settings page on onboarding flow">
+        Set your Tab style
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_SHOW_TAB_BAR_TITLE" desc="Title for the show tab bar setting on onboarding flow">
+        Show Tab Bar
+      </message>
+      <message name="IDS_VIVALDI_IOS_ONBOARDING_TABS_DESCRIPTION" desc="Description for the tabs settings page on onboarding flow">
+        Choose between full desktop tabs, or the simplified tab switcher.
+      </message>
+      <!-- END ONBOARDING -->
     </messages>
   </release>
 </grit>

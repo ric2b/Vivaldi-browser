@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -18,7 +19,7 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
-#include "chrome/browser/ui/color/chrome_color_mixer.h"
+#include "chrome/browser/ui/color/chrome_color_provider_utils.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -33,6 +34,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/menu_model.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/display/display.h"
@@ -203,6 +205,7 @@ ToolbarButton::ToolbarButton(PressedCallback callback,
   SetProperty(views::kInternalPaddingKey, gfx::Insets());
 
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+  views::FocusRing::Get(this)->SetOutsetFocusRingDisabled(true);
 }
 
 ToolbarButton::~ToolbarButton() = default;
@@ -255,11 +258,11 @@ void ToolbarButton::UpdateColorsAndInsets() {
 
   SetEnabledTextColors(highlight_color_animation_.GetTextColor());
 
-  // ToolbarButtons are always the height the location bar.
+  // ToolbarButton height is constrained by the height of the location bar.
+  const int extra_height = std::max(
+      0, target_size.height() - GetLayoutConstant(LOCATION_BAR_HEIGHT));
   const gfx::Insets paint_insets =
-      gfx::Insets(
-          (target_size.height() - GetLayoutConstant(LOCATION_BAR_HEIGHT)) / 2) +
-      *GetProperty(views::kInternalPaddingKey);
+      gfx::Insets(extra_height / 2) + *GetProperty(views::kInternalPaddingKey);
 
   absl::optional<SkColor> background_color =
       highlight_color_animation_.GetBackgroundColor();
@@ -319,8 +322,7 @@ SkColor ToolbarButton::GetForegroundColor(ButtonState state) const {
     case ButtonState::STATE_NORMAL:
       return color_provider->GetColor(kColorToolbarButtonIcon);
     default:
-      NOTREACHED();
-      return gfx::kPlaceholderColor;
+      NOTREACHED_NORETURN();
   }
 }
 
@@ -329,9 +331,7 @@ void ToolbarButton::UpdateIconsWithColors(const gfx::VectorIcon& icon,
                                           SkColor hovered_color,
                                           SkColor pressed_color,
                                           SkColor disabled_color) {
-  const int icon_size = ui::TouchUiController::Get()->touch_ui()
-                            ? kDefaultTouchableIconSize
-                            : kDefaultIconSize;
+  const int icon_size = GetIconSize();
   SetImageModel(ButtonState::STATE_NORMAL,
                 ui::ImageModel::FromVectorIcon(icon, normal_color, icon_size));
   SetImageModel(ButtonState::STATE_HOVERED,
@@ -340,6 +340,15 @@ void ToolbarButton::UpdateIconsWithColors(const gfx::VectorIcon& icon,
                 ui::ImageModel::FromVectorIcon(icon, pressed_color, icon_size));
   SetImageModel(Button::STATE_DISABLED, ui::ImageModel::FromVectorIcon(
                                             icon, disabled_color, icon_size));
+}
+
+int ToolbarButton::GetIconSize() const {
+  if (ui::TouchUiController::Get()->touch_ui()) {
+    return kDefaultTouchableIconSize;
+  }
+
+  return features::IsChromeRefresh2023() ? kDefaultIconSizeChromeRefresh
+                                         : kDefaultIconSize;
 }
 
 void ToolbarButton::SetVectorIcon(const gfx::VectorIcon& icon) {

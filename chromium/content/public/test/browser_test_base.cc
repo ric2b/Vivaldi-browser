@@ -187,11 +187,17 @@ enum class TraceBasenameType {
 };
 
 std::string GetDefaultTraceBasename(TraceBasenameType type) {
-  std::string test_suite_name = ::testing::UnitTest::GetInstance()
-                                    ->current_test_info()
-                                    ->test_suite_name();
-  std::string test_name =
-      ::testing::UnitTest::GetInstance()->current_test_info()->name();
+  const testing::TestInfo* test_info =
+      ::testing::UnitTest::GetInstance()->current_test_info();
+
+  // A default is required in case we are in a fuzz test or something else
+  // without gtest.
+  std::string test_suite_name = "<unknown>";
+  std::string test_name = "<unknown>";
+  if (test_info) {
+    test_suite_name = test_info->test_suite_name();
+    test_name = test_info->name();
+  }
   // Parameterised tests might have slashes in their full name — replace them
   // before using it as a file name to avoid trying to write to an incorrect
   // location.
@@ -210,12 +216,11 @@ std::string GetDefaultTraceBasename(TraceBasenameType type) {
       base::NumberToString(base::RandInt(1e7, 1e8 - 1));
   std::string status;
   if (type == TraceBasenameType::kWithTestStatus) {
-    status = ::testing::UnitTest::GetInstance()
-                     ->current_test_info()
-                     ->result()
-                     ->Passed()
-                 ? "OK"
-                 : "FAIL";
+    if (test_info) {
+      status = test_info->result()->Passed() ? "OK" : "FAIL";
+    } else {
+      status = "UNKNOWN";  // for fuzz tests only, not functional tests
+    }
   } else {
     // In order to be able to stream the test to the file,
     status = "NOT_FINISHED";
@@ -715,7 +720,6 @@ void BrowserTestBase::SetUp() {
   // thread tear down.
   base::PermanentThreadAllowance::AllowBlocking();
 
-  base::PostTaskAndroid::SignalNativeSchedulerShutdownForTesting();
   BrowserTaskExecutor::Shutdown();
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -880,20 +884,24 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     }
     initial_web_contents_ = nullptr;
     SetUpOnMainThread();
-    initial_navigation_observer.reset();
 
-    // Tests would have added their host_resolver() rules by now, so copy them
-    // to the network process if it's in use.
-    InitializeNetworkProcess();
+    if (!IsSkipped()) {
+      initial_navigation_observer.reset();
 
-    {
-      auto* test = ::testing::UnitTest::GetInstance()->current_test_info();
-      TRACE_EVENT("test", "RunTestOnMainThread", "test_name",
-                  test->test_suite_name() + std::string(".") + test->name(),
-                  "file", test->file(), "line", test->line());
-      base::ScopedDisallowBlocking disallow_blocking;
-      RunTestOnMainThread();
+      // Tests would have added their host_resolver() rules by now, so copy them
+      // to the network process if it's in use.
+      InitializeNetworkProcess();
+
+      {
+        auto* test = ::testing::UnitTest::GetInstance()->current_test_info();
+        TRACE_EVENT("test", "RunTestOnMainThread", "test_name",
+                    test->test_suite_name() + std::string(".") + test->name(),
+                    "file", test->file(), "line", test->line());
+        base::ScopedDisallowBlocking disallow_blocking;
+        RunTestOnMainThread();
+      }
     }
+
     TearDownOnMainThread();
     AssertThatNetworkServiceDidNotCrash();
   }

@@ -31,6 +31,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/webui/resource_path.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/image/image.h"
@@ -114,6 +115,8 @@ SigninReauthUI::SigninReauthUI(content::WebUI* web_ui)
                               IDR_SIGNIN_SIGNIN_REAUTH_SIGNIN_REAUTH_HTML);
 
   source->AddString("accountImageUrl", GetAccountImageURL(profile));
+
+  webui::SetupChromeRefresh2023(source);
 
   signin_metrics::ReauthAccessPoint access_point =
       GetReauthAccessPointForReauthConfirmationURL(

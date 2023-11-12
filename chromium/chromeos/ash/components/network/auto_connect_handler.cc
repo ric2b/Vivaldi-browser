@@ -135,7 +135,7 @@ void AutoConnectHandler::Init(
 
   network_state_handler_ = network_state_handler;
   if (network_state_handler_) {
-    network_state_handler_observer_.Observe(network_state_handler_);
+    network_state_handler_observer_.Observe(network_state_handler_.get());
   }
 
   managed_configuration_handler_ = managed_network_configuration_handler;
@@ -410,7 +410,7 @@ void AutoConnectHandler::DisableAutoconnectForNetwork(
     const std::string& network_type) {
   NET_LOG(EVENT) << "Disable auto-connect forced by policy: "
                  << NetworkPathId(service_path);
-  base::Value properties(base::Value::Type::DICT);
+  base::Value::Dict properties;
 
   std::string autoconnect_path;
   if (network_type == ::onc::network_config::kWiFi) {
@@ -422,7 +422,7 @@ void AutoConnectHandler::DisableAutoconnectForNetwork(
   } else {
     NOTREACHED();
   }
-  properties.SetBoolPath(autoconnect_path, false);
+  properties.SetByDottedPath(autoconnect_path, false);
   managed_configuration_handler_->SetProperties(
       service_path, properties, base::DoNothing(),
       base::BindOnce(&SetPropertiesErrorCallback));

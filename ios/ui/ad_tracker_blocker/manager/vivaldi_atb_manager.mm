@@ -389,7 +389,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 /// Adds exception for a given domain
 - (void)setExceptionForDomain:(NSString*)domain
                  blockingType:(ATBSettingType)blockingType {
-  [self removeExceptionForDomain:domain];
   switch (blockingType) {
     case ATBSettingNoBlocking:
       [self setTrackerBlockingExceptionForDomain:domain enableBlocking:NO];
@@ -409,8 +408,28 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 /// Removes exception for a given domain
 - (void)removeExceptionForDomain:(NSString*)domain {
-  [self removeTrackerBlockingExceptionForDomain:domain];
-  [self removeAdBlockingExceptionForDomain:domain];
+  if (!_ruleManager)
+    return;
+
+  NSString* host = [VivaldiGlobalHelpers hostOfURLString:domain];
+  std::string hostString = base::SysNSStringToUTF8(host);
+
+  _ruleManager->
+      RemoveExceptionForDomain(RuleGroup::kTrackingRules,
+                               kProcessList,
+                               hostString);
+  _ruleManager->
+      RemoveExceptionForDomain(RuleGroup::kTrackingRules,
+                               kExemptList,
+                               hostString);
+  _ruleManager->
+      RemoveExceptionForDomain(RuleGroup::kAdBlockingRules,
+                               kProcessList,
+                               hostString);
+  _ruleManager->
+      RemoveExceptionForDomain(RuleGroup::kAdBlockingRules,
+                               kExemptList,
+                               hostString);
 }
 
 /// Add rule source for the given source type.
@@ -581,32 +600,13 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   _ruleManager->
       RemoveExceptionForDomain(RuleGroup::kTrackingRules,
-                               enableBlocking ? kProcessList : kExemptList,
+                               enableBlocking ? kExemptList : kProcessList,
                                hostString);
 
   _ruleManager->
       AddExceptionForDomain(RuleGroup::kTrackingRules,
                             enableBlocking ? kProcessList : kExemptList,
                             hostString);
-}
-
-/// Removes the tracker blocking exceptions from a given domain.
-- (void)removeTrackerBlockingExceptionForDomain:(NSString*)domain {
-  if (!_ruleManager)
-    return;
-
-  NSString* host = [VivaldiGlobalHelpers hostOfURLString:domain];
-  std::string hostString = base::SysNSStringToUTF8(host);
-
-  _ruleManager->
-      RemoveExceptionForDomain(RuleGroup::kTrackingRules,
-                               kProcessList,
-                               hostString);
-
-  _ruleManager->
-      RemoveExceptionForDomain(RuleGroup::kTrackingRules,
-                               kExemptList,
-                               hostString);
 }
 
 /// Sets ad blocking exceptions for a given domain based
@@ -622,7 +622,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
   _ruleManager->
       RemoveExceptionForDomain(RuleGroup::kAdBlockingRules,
-                               enableBlocking ? kProcessList : kExemptList,
+                               enableBlocking ? kExemptList: kProcessList,
                                hostString);
 
   _ruleManager->
@@ -630,25 +630,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
                             enableBlocking ? kProcessList : kExemptList,
                             hostString);
 }
-
-/// Removes the ad blocking exceptions from a given domain.
-- (void)removeAdBlockingExceptionForDomain:(NSString*)domain {
-  if (!_ruleManager)
-    return;
-
-  NSString* host = [VivaldiGlobalHelpers hostOfURLString:domain];
-  std::string hostString = base::SysNSStringToUTF8(host);
-
-  _ruleManager->
-      RemoveExceptionForDomain(RuleGroup::kAdBlockingRules,
-                               kProcessList,
-                               hostString);
-  _ruleManager->
-      RemoveExceptionForDomain(RuleGroup::kAdBlockingRules,
-                               kExemptList,
-                               hostString);
-}
-
 
 #pragma mark: - OBSERVERS
 #pragma mark: - VivaldiATBConsumer
@@ -667,6 +648,17 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 
 - (void)ruleServiceStateDidLoad {
   [self initRuleManagerAndSourceHandler];
+  SEL selector = @selector(ruleServiceStateDidLoad);
+  if ([self.consumer respondsToSelector:selector]) {
+    [self.consumer ruleServiceStateDidLoad];
+  }
+}
+
+- (void)rulesListDidApply:(RuleGroup)group {
+  SEL selector = @selector(rulesListDidApply:);
+  if ([self.consumer respondsToSelector:selector]) {
+    [self.consumer rulesListDidApply:group];
+  }
 }
 
 - (void)ruleSourceDidUpdate:(uint32_t)key

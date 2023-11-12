@@ -109,13 +109,12 @@ bool IsMinimumAddress(const AutofillProfile& profile,
       !(is_line1_missing || is_city_missing || is_state_missing ||
         is_zip_missing || is_zip_or_state_requirement_violated ||
         is_line1_or_house_number_violated);
-  if (is_minimum_address &&
-      base::FeatureList::IsEnabled(
-          features::kAutofillRequireNameForProfileImport)) {
-    is_minimum_address &= ValidateAndLog(
-        /*required=*/true, {NAME_FULL},
-        AddressImportRequirement::kNameRequirementFulfilled,
-        AddressImportRequirement::kNameRequirementViolated);
+  // TODO(crbug.com/1413205): Merge this into is_minimum_address.
+  if (is_minimum_address && country.requires_full_name()) {
+    is_minimum_address &=
+        ValidateAndLog(/*required=*/true, {NAME_FULL},
+                       AddressImportRequirement::kNameRequirementFulfilled,
+                       AddressImportRequirement::kNameRequirementViolated);
   }
   if (collect_metrics) {
     autofill_metrics::
@@ -209,14 +208,8 @@ MultiStepImportMerger::~MultiStepImportMerger() = default;
 void MultiStepImportMerger::ProcessMultiStepImport(
     AutofillProfile& profile,
     ProfileImportMetadata& import_metadata) {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableMultiStepImports)) {
-    return;
-  }
-
-  multistep_candidates_.RemoveOutdatedItems(
-      features::kAutofillMultiStepImportCandidateTTL.Get(),
-      import_metadata.origin);
+  multistep_candidates_.RemoveOutdatedItems(kMultiStepImportTTL,
+                                            import_metadata.origin);
   bool has_min_address_requirements =
       MergeProfileWithMultiStepCandidates(profile, import_metadata);
   if (!has_min_address_requirements) {
@@ -244,22 +237,14 @@ bool MultiStepImportMerger::MergeProfileWithMultiStepCandidates(
   auto candidate = multistep_candidates_.begin();
   AutofillProfile completed_profile = profile;
   ProfileImportMetadata completed_metadata = import_metadata;
-  // If `complement_country_early` is enabled, merging might fail due to an
-  // incorrectly complemented country in one of the merge candidates.
-  // Without the feature, the country complement logic has not happened yet.
-  bool complement_country_early =
-      base::FeatureList::IsEnabled(features::kAutofillComplementCountryEarly);
-  DCHECK(complement_country_early ||
-         !completed_metadata.did_complement_country);
-  while (candidate != multistep_candidates_.end()) {
-    if (!comparator_.AreMergeable(completed_profile, candidate->profile) &&
-        (!complement_country_early ||
-         !MergeableByRemovingIncorrectlyComplementedCountry(
-             completed_profile, completed_metadata.did_complement_country,
-             candidate->profile,
-             candidate->import_metadata.did_complement_country))) {
-      break;
-    }
+  // Merging might fail due to an incorrectly complemented country in one of the
+  // merge candidates. In this case, try removing the complemented country.
+  while (candidate != multistep_candidates_.end() &&
+         (comparator_.AreMergeable(completed_profile, candidate->profile) ||
+          MergeableByRemovingIncorrectlyComplementedCountry(
+              completed_profile, completed_metadata.did_complement_country,
+              candidate->profile,
+              candidate->import_metadata.did_complement_country))) {
     completed_profile.MergeDataFrom(candidate->profile, app_locale_);
     MergeImportMetadata(candidate->import_metadata, completed_metadata);
     candidate++;
@@ -345,13 +330,6 @@ void MultiStepImportMerger::OnBrowsingHistoryCleared(
 
 void MultiStepImportMerger::OnPersonalDataChanged(
     PersonalDataManager& personal_data_manager) {
-  // Complete profiles are only stored if multi-step complements are enabled.
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableMultiStepImports) ||
-      !features::kAutofillEnableMultiStepImportComplements.Get()) {
-    return;
-  }
-
   auto it = multistep_candidates_.begin();
   while (it != multistep_candidates_.end()) {
     // `it` might get erased, so `it++` at the end of the loop doesn't suffice.

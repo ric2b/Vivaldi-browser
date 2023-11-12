@@ -152,7 +152,8 @@ const PresetSourceInfo kPresetAdBlockSources[] = {
      "78610306-e2ab-4147-9a10-fb6072e6675e"}};
 
 struct PresetSourceInfoWithSize {
-  const PresetSourceInfo* preset_source_info;
+  /* Not a rwa ptr, because used for static data.*/
+  RAW_PTR_EXCLUSION const PresetSourceInfo* preset_source_info;
   const size_t size;
 };
 

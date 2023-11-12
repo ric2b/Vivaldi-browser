@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "media/media_buildflags.h"
 
 #if BUILDFLAG(USE_ARC_PROTECTED_MEDIA)
@@ -28,6 +29,7 @@ class ArcPlayStoreEnabledPreferenceHandler;
 class ArcServiceManager;
 class ArcSessionManager;
 class ArcVmDataMigrationNotifier;
+class BrowserUrlOpener;
 
 // Detects ARC availability and launches ARC bridge service.
 class ArcServiceLauncher {
@@ -96,10 +98,11 @@ class ArcServiceLauncher {
   std::unique_ptr<ArcDiskSpaceMonitor> arc_disk_space_monitor_;
   std::unique_ptr<ArcIconCacheDelegateProvider>
       arc_icon_cache_delegate_provider_;
+  std::unique_ptr<BrowserUrlOpener> arc_net_url_opener_;
   std::unique_ptr<ArcVmDataMigrationNotifier> arc_vm_data_migration_notifier_;
 
   // |scheduler_configuration_manager_| outlives |this|.
-  ash::SchedulerConfigurationManagerBase* const
+  const raw_ptr<ash::SchedulerConfigurationManagerBase, ExperimentalAsh>
       scheduler_configuration_manager_;
 
 #if BUILDFLAG(USE_ARC_PROTECTED_MEDIA)

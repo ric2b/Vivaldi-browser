@@ -9,6 +9,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/tray/tray_detailed_view.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 
 namespace views {
@@ -37,8 +38,8 @@ class ASH_EXPORT DisplayDetailedView : public TrayDetailedView {
   views::View* GetScrollContentForTest();
 
  private:
-  // Creates the `settings_button_` on the right end of the title row.
-  void CreateTitleSettingsButton();
+  // TrayDetailedView:
+  void CreateExtraTitleRowButtons() override;
 
   // Callback of the `settings_button_` to open the display system settings
   // page.
@@ -46,7 +47,8 @@ class ASH_EXPORT DisplayDetailedView : public TrayDetailedView {
 
   std::unique_ptr<UnifiedBrightnessSliderController>
       brightness_slider_controller_;
-  UnifiedSystemTrayController* const unified_system_tray_controller_;
+  const raw_ptr<UnifiedSystemTrayController, ExperimentalAsh>
+      unified_system_tray_controller_;
 
   // The vector of `FeaturePodControllerBase`. This is needed to store the
   // controllers of both tiles so that the controllers exist while the page is
@@ -55,7 +57,7 @@ class ASH_EXPORT DisplayDetailedView : public TrayDetailedView {
       feature_tile_controllers_;
 
   // Owned by the views hierarchy.
-  views::Button* settings_button_ = nullptr;
+  raw_ptr<views::Button, ExperimentalAsh> settings_button_ = nullptr;
 
   base::WeakPtrFactory<DisplayDetailedView> weak_factory_{this};
 };

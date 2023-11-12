@@ -5,6 +5,10 @@
 #include "components/supervised_user/core/common/supervised_user_utils.h"
 
 #include "base/notreached.h"
+#include "components/prefs/pref_service.h"
+#include "components/supervised_user/core/common/pref_names.h"
+#include "components/url_matcher/url_util.h"
+#include "url/gurl.h"
 
 namespace supervised_user {
 
@@ -14,8 +18,6 @@ std::string FilteringBehaviorReasonToString(FilteringBehaviorReason reason) {
       return "Default";
     case FilteringBehaviorReason::ASYNC_CHECKER:
       return "AsyncChecker";
-    case FilteringBehaviorReason::DENYLIST:
-      return "Denylist";
     case FilteringBehaviorReason::MANUAL:
       return "Manual";
     case FilteringBehaviorReason::ALLOWLIST:
@@ -24,6 +26,22 @@ std::string FilteringBehaviorReasonToString(FilteringBehaviorReason reason) {
       return "NotSignedIn";
   }
   return "Unknown";
+}
+
+GURL NormalizeUrl(const GURL& url) {
+  GURL effective_url = url_matcher::util::GetEmbeddedURL(url);
+  if (!effective_url.is_valid()) {
+    effective_url = url;
+  }
+  return url_matcher::util::Normalize(effective_url);
+}
+
+bool AreWebFilterPrefsDefault(const PrefService& pref_service) {
+  return pref_service
+             .FindPreference(prefs::kDefaultSupervisedUserFilteringBehavior)
+             ->IsDefaultValue() ||
+         pref_service.FindPreference(prefs::kSupervisedUserSafeSites)
+             ->IsDefaultValue();
 }
 
 }  // namespace supervised_user

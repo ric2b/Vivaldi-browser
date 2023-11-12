@@ -17,15 +17,13 @@ constexpr char kTabIdKey[] = "tab_id";
 constexpr char kInspectTabIdKey[] = "inspect_tab_id";
 
 bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
-    const base::Value& create_params) {
-  DCHECK(create_params.is_dict());
-
+    const base::Value::Dict& create_params) {
   auto callback = base::BindOnce(
       &GuestViewInternalCreateGuestFunction::CreateGuestCallback, this);
   content::WebContents* contents = nullptr;
 
-  auto tab_id_value = create_params.FindIntKey(kTabIdKey);
-  auto inspect_tab_id_value = create_params.FindIntKey(kInspectTabIdKey);
+  auto tab_id_value = create_params.FindInt(kTabIdKey);
+  auto inspect_tab_id_value = create_params.FindInt(kInspectTabIdKey);
   int tab_id = (tab_id_value.has_value() ? tab_id_value.value()
                                          : (inspect_tab_id_value.has_value()
                                                 ? inspect_tab_id_value.value()

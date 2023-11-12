@@ -10,6 +10,7 @@
 #include "base/time/clock.h"
 #include "components/segmentation_platform/internal/post_processor/post_processor.h"
 #include "components/segmentation_platform/internal/selection/segment_result_provider.h"
+#include "components/segmentation_platform/internal/stats.h"
 #include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/input_context.h"
 #include "components/segmentation_platform/public/prediction_options.h"
@@ -118,8 +119,12 @@ void RequestHandlerImpl::OnGetModelResultForClassification(
   PredictionStatus status = PredictionStatus::kFailed;
   proto::PredictionResult pred_result;
   if (result) {
+    stats::RecordSegmentSelectionFailure(
+        *config_, stats::GetSuccessOrFailureReason(result->state));
     status = ResultStateToPredictionStatus(result->state);
     pred_result = result->result;
+    stats::RecordClassificationResultComputed(*config_, pred_result);
+
     // Collect training data. The execution service and training data collector
     // might be null in testing.
     if (execution_service_ && execution_service_->training_data_collector()) {
@@ -127,6 +132,10 @@ void RequestHandlerImpl::OnGetModelResultForClassification(
           config_->segments.begin()->first, input_context,
           proto::TrainingOutputs::TriggerConfig::ONDEMAND);
     }
+  } else {
+    stats::RecordSegmentSelectionFailure(
+        *config_, stats::SegmentationSelectionFailureReason::
+                      kOnDemandModelExecutionFailed);
   }
   ClassificationResult classification_result =
       post_processor.GetPostProcessedClassificationResult(pred_result, status);

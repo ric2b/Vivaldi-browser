@@ -62,10 +62,10 @@
 <translation id="3308738399950580893">anúncios</translation>
 <translation id="3422472998109090673">No momento, não é possível acessar <ph name="HOST_NAME" />.</translation>
 <translation id="3427092606871434483">Permitir (padrão)</translation>
-<translation id="3447661539832366887">O proprietário deste dispositivo desativou o jogo do Tony.</translation>
+<translation id="3447661539832366887">O proprietário deste equipamento desativou o jogo do dinossauro.</translation>
 <translation id="3447884698081792621">Mostrar certificado (emitido por <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Ocultar detalhes</translation>
-<translation id="3484560055331845446">Você pode perder o acesso à sua Conta do Google. O Chrome recomenda que sua senha seja alterada agora. Solicitaremos que você faça login.</translation>
+<translation id="3484560055331845446">Você pode perder o acesso à sua Conta do Google. O Vivaldi recomenda que sua senha seja alterada agora. Solicitaremos que você faça login.</translation>
 <translation id="3566021033012934673">Sua conexão não é particular</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ocultar detalhes</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 em uso)} other {(# em uso)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Verificar o endereço do proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>
-<translation id="5287240709317226393">Mostrar cookies</translation>
 <translation id="5355557959165512791">Não é possível acessar <ph name="SITE" /> neste momento, porque o certificado dele foi revogado. Como os ataques e erros de rede são geralmente temporários, esta página provavelmente funcionará mais tarde.</translation>
 <translation id="5386426401304769735">A cadeia de certificados desse site contém um certificado assinado usando SHA-1.</translation>
 <translation id="5452270690849572955">Não foi possível encontrar esta página em <ph name="HOST_NAME" /></translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Senha</translation>
 <translation id="6711464428925977395">Existe algum problema com o servidor proxy, ou o endereço está incorreto.</translation>
 <translation id="6757797048963528358">Seu dispositivo entrou em suspensão.</translation>
+<translation id="6890956352250146925">Opções para cookies e dados do site</translation>
 <translation id="6897140037006041989">User-Agent</translation>
 <translation id="7053983685419859001">Bloquear</translation>
 <translation id="7079718277001814089">Este site contém malware</translation>
@@ -218,7 +218,7 @@
 <translation id="9169664750068251925">Sempre bloquear neste site</translation>
 <translation id="9180553614777056266">Bloqueador de Anúncios</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> usa um protocolo incompatível.</translation>
-<translation id="936602727769022409">Você pode perder o acesso à sua Conta do Google. O Chromium recomenda que sua senha seja alterada agora. Solicitaremos que você faça login.</translation>
+<translation id="936602727769022409">Você pode perder o acesso à sua Conta do Google. O Vivaldi recomenda que sua senha seja alterada agora. Solicitaremos que você faça login.</translation>
 <translation id="969892804517981540">Versão Oficial</translation>
 <translation id="988159990683914416">Versão de Desenvolvimento</translation>
 </translationbundle>

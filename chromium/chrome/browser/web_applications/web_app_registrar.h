@@ -21,6 +21,7 @@
 #include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
+#include "chrome/browser/web_applications/scope_extension_info.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
@@ -221,13 +222,21 @@ class WebAppRegistrar : public ProfileManagerObserver {
   // Returns the "url_handlers" field from the app manifest.
   apps::UrlHandlers GetAppUrlHandlers(const AppId& app_id) const;
 
+  // Returns the `scope_extensions` field from the app manifest after
+  // validation. Entries with an origin that validated association with this web
+  // app are returned. Other entries are removed. See
+  // https://github.com/WICG/manifest-incubations/blob/gh-pages/scope_extensions-explainer.md
+  // for association requirements.
+  base::flat_set<ScopeExtensionInfo> GetValidatedScopeExtensions(
+      const AppId& app_id) const;
+
   GURL GetAppManifestUrl(const AppId& app_id) const;
 
   base::Time GetAppLastBadgingTime(const AppId& app_id) const;
   base::Time GetAppLastLaunchTime(const AppId& app_id) const;
   base::Time GetAppInstallTime(const AppId& app_id) const;
 
-  absl::optional<webapps::WebappInstallSource> GetAppInstallSourceForMetrics(
+  absl::optional<webapps::WebappInstallSource> GetLatestAppInstallSource(
       const AppId& app_id) const;
 
   // Returns the "icons" field from the app manifest, use |WebAppIconManager| to
@@ -459,6 +468,17 @@ class WebAppRegistrar : public ProfileManagerObserver {
   // is a subset of GetAppsIncludingStubs().
   AppSet GetApps() const;
 
+#if BUILDFLAG(IS_CHROMEOS)
+  // Set (or replace existing) temporary experimental overrides for
+  // UserDisplayMode. `overrides` maps app IDs to their overridden value.
+  void SetUserDisplayModeOverridesForExperiment(
+      base::flat_map<AppId, mojom::UserDisplayMode> overrides);
+#endif
+
+  // Returns a dict with debug values for each app in the registry, including
+  // registrar-evaluated effective fields.
+  base::Value AsDebugValue() const;
+
  protected:
   Profile* profile() const { return profile_; }
 
@@ -488,6 +508,9 @@ class WebAppRegistrar : public ProfileManagerObserver {
 #if DCHECK_IS_ON()
   size_t mutations_count_ = 0;
 #endif
+
+  base::flat_map<AppId, mojom::UserDisplayMode>
+      user_display_mode_overrides_for_experiment_;
 
   base::WeakPtrFactory<WebAppRegistrar> weak_factory_{this};
 };

@@ -80,7 +80,6 @@ extern const char kDisableDefaultApps[];
 extern const char kDisableDomainReliability[];
 extern const char kDisableExtensions[];
 extern const char kDisableExtensionsExcept[];
-extern const char kDisableExtensionsFileAccessCheck[];
 extern const char kDisablePrintPreview[];
 extern const char kDisablePromptOnRepost[];
 extern const char kDisableStackProfiler[];
@@ -173,12 +172,14 @@ extern const char kSSLVersionTLSv12[];
 extern const char kSSLVersionTLSv13[];
 extern const char kStartMaximized[];
 extern const char kStartStackProfiler[];
+extern const char kStartStackProfilerPeriodicOnly[];
 extern const char kStartStackProfilerBrowserTest[];
 extern const char kStoragePressureNotificationInterval[];
 extern const char kSupervisedUserId[];
 extern const char kSystemLogUploadFrequency[];
 extern const char kThisTabCaptureAutoAccept[];
 extern const char kThisTabCaptureAutoReject[];
+extern const char kTestMemoryLogDelayInMinutes[];
 extern const char kTestName[];
 extern const char kTrustedDownloadSources[];
 extern const char kTryChromeAgain[];
@@ -209,6 +210,7 @@ extern const char kForceDisableSigninFRE[];
 extern const char kForceUpdateMenuType[];
 extern const char kForceHideNonDisplayableAccountEmailFRE[];
 extern const char kMarketUrlForTesting[];
+extern const char kRequestDesktopSites[];
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

@@ -57,7 +57,9 @@
 #include "chrome/browser/ui/webui/ash/login/user_creation_screen_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/login/auth/auth_metrics_recorder.h"
+#include "chromeos/ash/components/login/auth/auth_performer.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/strings/grit/components_strings.h"
 #include "extensions/common/features/feature_session_type.h"
@@ -189,6 +191,7 @@ bool IsAuthError(SigninError error) {
 LoginDisplayHostCommon::LoginDisplayHostCommon()
     : keep_alive_(KeepAliveOrigin::LOGIN_DISPLAY_HOST_WEBUI,
                   KeepAliveRestartOption::DISABLED),
+      login_ui_pref_controller_(std::make_unique<LoginUIPrefController>()),
       wizard_context_(std::make_unique<WizardContext>()) {
   // Close the login screen on app termination (for the case where shutdown
   // occurs before login completes).
@@ -376,12 +379,6 @@ void LoginDisplayHostCommon::SetDisplayAndGivenName(
                                                         given_name);
 }
 
-bool LoginDisplayHostCommon::IsGaiaDialogVisibleForTesting() {
-  return IsOobeUIDialogVisible() &&
-         GetWizardController()->current_screen()->screen_id() ==
-             GaiaView::kScreenId;
-}
-
 void LoginDisplayHostCommon::ShowAllowlistCheckFailedError() {
   StartWizard(GaiaView::kScreenId);
 
@@ -499,13 +496,14 @@ void LoginDisplayHostCommon::StartUserOnboarding() {
   StartWizard(LocaleSwitchView::kScreenId);
 }
 
-void LoginDisplayHostCommon::ResumeUserOnboarding(OobeScreenId screen_id) {
+void LoginDisplayHostCommon::ResumeUserOnboarding(const PrefService& prefs,
+                                                  OobeScreenId screen_id) {
   SetScreenAfterManagedTos(screen_id);
 
   if (features::IsOobeChoobeEnabled()) {
-    if (ChoobeFlowController::IsOptionalScreen(screen_id)) {
-      GetWizardController()->GetChoobeFlowController()->MaybeResumeChoobe(
-          *ProfileManager::GetActiveUserProfile()->GetPrefs());
+    if (ChoobeFlowController::ShouldResumeChoobe(prefs)) {
+      GetWizardController()->CreateChoobeFlowController();
+      GetWizardController()->choobe_flow_controller()->ResumeChoobe(prefs);
     }
   }
 
@@ -531,7 +529,10 @@ void LoginDisplayHostCommon::ShowNewTermsForFlexUsers() {
 
 void LoginDisplayHostCommon::SetAuthSessionForOnboarding(
     const UserContext& user_context) {
-  if (PinSetupScreen::ShouldSkipBecauseOfPolicy() &&
+  AuthPerformer auth_performer(UserDataAuthClient::Get());
+  CryptohomePinEngine cryptohome_pin_engine(&auth_performer);
+  if (cryptohome_pin_engine.ShouldSkipSetupBecauseOfPolicy(
+          user_context.GetAccountId()) &&
       !features::IsCryptohomeRecoveryEnabled() &&
       RecoveryEligibilityScreen::ShouldSkipRecoverySetupBecauseOfPolicy()) {
     return;
@@ -720,6 +721,7 @@ void LoginDisplayHostCommon::Cleanup() {
   SigninProfileHandler::Get()->ClearSigninProfile(base::DoNothing());
   app_terminating_subscription_ = {};
   BrowserList::RemoveObserver(this);
+  login_ui_pref_controller_.reset();
 }
 
 void LoginDisplayHostCommon::OnAppTerminating() {

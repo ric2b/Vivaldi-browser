@@ -12,6 +12,7 @@ import {constants} from '../../common/constants.js';
 import {BridgeConstants} from './bridge_constants.js';
 import {BridgeHelper} from './bridge_helper.js';
 import {Command} from './command_store.js';
+import {EarconId} from './earcon_id.js';
 import {BaseLog, SerializableLog} from './log_types.js';
 import {PanelTabMenuItemData} from './panel_menu_data.js';
 import {QueueMode, TtsSpeechProperties} from './tts_types.js';
@@ -130,6 +131,28 @@ BackgroundBridge.CommandHandler = {
     return BridgeHelper.sendMessage(
         BridgeConstants.CommandHandler.TARGET,
         BridgeConstants.CommandHandler.Action.ON_COMMAND, command);
+  },
+};
+
+BackgroundBridge.Earcons = {
+  /**
+   * @param {!EarconId} earconId
+   * @return {!Promise}
+   */
+  async cancelEarcon(earconId) {
+    return BridgeHelper.sendMessage(
+        BridgeConstants.Earcons.TARGET,
+        BridgeConstants.Earcons.Action.CANCEL_EARCON, earconId);
+  },
+
+  /**
+   * @param {!EarconId} earconId
+   * @return {!Promise}
+   */
+  async playEarcon(earconId) {
+    return BridgeHelper.sendMessage(
+        BridgeConstants.Earcons.TARGET,
+        BridgeConstants.Earcons.Action.PLAY_EARCON, earconId);
   },
 };
 
@@ -274,6 +297,13 @@ BackgroundBridge.PanelBackground = {
         BridgeConstants.PanelBackground.TARGET,
         BridgeConstants.PanelBackground.Action.INCREMENTAL_SEARCH, searchStr,
         dir, opt_nextObject);
+  },
+
+  /** @return {!Promise} */
+  async onTutorialReady() {
+    return BridgeHelper.sendMessage(
+        BridgeConstants.PanelBackground.TARGET,
+        BridgeConstants.PanelBackground.Action.ON_TUTORIAL_READY);
   },
 
   /**

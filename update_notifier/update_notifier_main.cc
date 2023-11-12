@@ -633,7 +633,7 @@ ExitCode WinMainImpl(HINSTANCE instance, HINSTANCE prev) {
 
   // Make the first log entry for the new process visibly separated.
   LOG(INFO) << "\n\n"
-            << "*** " << VIVALDI_VERSION << " ***";
+            << "*** " << VIVALDI_VERSION_STRING << " ***";
   LOG(INFO) << command_line.GetCommandLineString();
 
   base::FilePath current_exe_path = vivaldi::GetPathOfCurrentExe();

@@ -4,11 +4,14 @@
 
 #include "chrome/browser/ash/app_list/search/federated_metrics_manager.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/shell.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/app_list/search/search_features.h"
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chromeos/ash/services/federated/public/cpp/federated_example_util.h"
 #include "chromeos/ash/services/federated/public/mojom/example.mojom.h"
 #include "chromeos/ash/services/federated/public/mojom/federated_service.mojom.h"
@@ -25,18 +28,22 @@ using chromeos::federated::mojom::Features;
 
 constexpr char kClientName[] = "launcher_query_analytics_v1";
 
-// Prefixes are short, for bandwidth conservation.
-constexpr char kExamplePrefixOnAbandon[] = "A_";
-constexpr char kExamplePrefixOnLaunch[] = "L_";
-
-bool IsLoggingEnabled() {
-  // TODO(b/262611120): Also check user metrics opt-in/out, any other relevant
-  // federated flags, etc.
-  return search_features::IsLauncherQueryFederatedAnalyticsPHHEnabled();
+std::string SearchSessionConclusionToString(
+    ash::SearchSessionConclusion conclusion) {
+  switch (conclusion) {
+    case ash::SearchSessionConclusion::kQuit:
+      return "quit";
+    case ash::SearchSessionConclusion::kLaunch:
+      return "launch";
+    case ash::SearchSessionConclusion::kAnswerCardSeen:
+      return "answer_card";
+    default:
+      NOTREACHED();
+  }
 }
 
-void LogAction(FederatedMetricsManager::Action action) {
-  base::UmaHistogramEnumeration(kHistogramAction, action);
+void LogSearchSessionConclusion(ash::SearchSessionConclusion conclusion) {
+  base::UmaHistogramEnumeration(kHistogramSearchSessionConclusion, conclusion);
 }
 
 void LogInitStatus(FederatedMetricsManager::InitStatus status) {
@@ -47,19 +54,16 @@ void LogReportStatus(FederatedMetricsManager::ReportStatus status) {
   base::UmaHistogramEnumeration(kHistogramReportStatus, status);
 }
 
-ExamplePtr CreateExamplePtr(const std::string& example_str) {
+ExamplePtr CreateExamplePtr(const std::string& query,
+                            const std::string& user_action) {
   ExamplePtr example = Example::New();
   example->features = Features::New();
   auto& feature_map = example->features->feature;
-  feature_map["query"] = CreateStringList({example_str});
-  return example;
-}
-
-std::string CreateExampleString(const std::string& prefix,
-                                const std::u16string& query) {
   // TODO(b/262611120): To be decided: Conversion to lowercase, white space
-  // stripping, truncation, etc.
-  return base::StrCat({prefix, base::UTF16ToUTF8(query)});
+  // stripping, truncation, etc. of query.
+  feature_map["query"] = CreateStringList({query});
+  feature_map["user_action"] = CreateStringList({user_action});
+  return example;
 }
 
 }  // namespace
@@ -95,14 +99,37 @@ FederatedMetricsManager::FederatedMetricsManager(
 
 FederatedMetricsManager::~FederatedMetricsManager() = default;
 
-void FederatedMetricsManager::OnAbandon(Location location,
-                                        const std::vector<Result>& results,
-                                        const std::u16string& query) {
+void FederatedMetricsManager::OnSearchSessionStarted() {
+  if (!IsLoggingEnabled()) {
+    return;
+  }
+  session_active_ = true;
+}
+
+void FederatedMetricsManager::OnSearchSessionEnded(
+    const std::u16string& query) {
+  if (!IsLoggingEnabled() || query.empty() || !session_active_) {
+    return;
+  }
+  // UMA logging:
+  LogSearchSessionConclusion(session_result_);
+  // Federated logging:
+  LogExample(base::UTF16ToUTF8(query));
+
+  session_result_ = ash::SearchSessionConclusion::kQuit;
+  session_active_ = false;
+}
+
+void FederatedMetricsManager::OnSeen(Location location,
+                                     const std::vector<Result>& results,
+                                     const std::u16string& query) {
   if (!IsLoggingEnabled() || query.empty()) {
     return;
   }
-  LogAction(Action::kAbandon);
-  LogExample(CreateExampleString(kExamplePrefixOnAbandon, query));
+  if (location == Location::kAnswerCard) {
+    DCHECK(session_active_);
+    session_result_ = ash::SearchSessionConclusion::kAnswerCardSeen;
+  }
 }
 
 void FederatedMetricsManager::OnLaunch(Location location,
@@ -112,12 +139,20 @@ void FederatedMetricsManager::OnLaunch(Location location,
   if (!IsLoggingEnabled() || query.empty()) {
     return;
   }
-  LogAction(Action::kLaunch);
-  LogExample(CreateExampleString(kExamplePrefixOnLaunch, query));
+  if (location == Location::kList || location == Location::kAnswerCard) {
+    DCHECK(session_active_);
+    session_result_ = ash::SearchSessionConclusion::kLaunch;
+  }
 }
 
 bool FederatedMetricsManager::IsFederatedServiceAvailable() {
   return controller_ && controller_->IsServiceAvailable();
+}
+
+bool FederatedMetricsManager::IsLoggingEnabled() {
+  return ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() &&
+         ash::features::IsFederatedServiceEnabled() &&
+         search_features::IsLauncherQueryFederatedAnalyticsPHHEnabled();
 }
 
 void FederatedMetricsManager::TryToBindFederatedServiceIfNecessary() {
@@ -131,7 +166,7 @@ void FederatedMetricsManager::TryToBindFederatedServiceIfNecessary() {
   }
 }
 
-void FederatedMetricsManager::LogExample(const std::string& example_str) {
+void FederatedMetricsManager::LogExample(const std::string& query) {
   if (!IsLoggingEnabled()) {
     return;
   }
@@ -144,7 +179,8 @@ void FederatedMetricsManager::LogExample(const std::string& example_str) {
     LogReportStatus(ReportStatus::kFederatedServiceNotConnected);
   } else {
     // Federated service available and connected.
-    ExamplePtr example = CreateExamplePtr(example_str);
+    ExamplePtr example = CreateExamplePtr(
+        query, SearchSessionConclusionToString(session_result_));
     federated_service_->ReportExample(kClientName, std::move(example));
     LogReportStatus(ReportStatus::kOk);
   }

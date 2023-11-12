@@ -9,10 +9,10 @@
 #include <iterator>
 
 #include "base/check.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
-#include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -331,17 +331,17 @@ bool TranslateLanguageList::SetSupportedLanguages(
 
   if (!json_value || !json_value->is_dict()) {
     NotifyEvent(__LINE__, "Language list is invalid");
-    NOTREACHED();
+    base::debug::DumpWithoutCrashing();
     return false;
   }
   // The first level dictionary contains two sub-dicts, first for source
   // languages and second for target languages. We want to use the target
   // languages.
-  base::Value* target_languages =
-      json_value->FindDictPath(TranslateLanguageList::kTargetLanguagesKey);
+  const base::Value::Dict* target_languages = json_value->GetDict().FindDict(
+      TranslateLanguageList::kTargetLanguagesKey);
   if (!target_languages) {
     NotifyEvent(__LINE__, "Target languages are not found in the response");
-    NOTREACHED();
+    base::debug::DumpWithoutCrashing();
     return false;
   }
 
@@ -351,7 +351,7 @@ bool TranslateLanguageList::SetSupportedLanguages(
   // Now we can clear language list.
   supported_languages_.clear();
   // ... and replace it with the values we just fetched from the server.
-  for (auto kv_pair : target_languages->DictItems()) {
+  for (auto kv_pair : *target_languages) {
     const std::string& lang = kv_pair.first;
     if (!l10n_util::IsLocaleNameTranslated(lang.c_str(), locale)) {
       // Don't include languages not displayable in current UI language.

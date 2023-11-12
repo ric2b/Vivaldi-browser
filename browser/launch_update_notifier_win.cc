@@ -59,14 +59,6 @@ base::RepeatingTimer& GetStandaloneAutoUpdateTimer() {
   return *instance;
 }
 
-// Activities related to standalone update  management run UI thread, but we
-// need to ensure that they are stopped on shutdown. So use an explicit
-// sequence.
-scoped_refptr<base::SingleThreadTaskRunner> GetStandaloneAutoUpdateSequence() {
-  return content::GetUIThreadTaskRunner(
-      {base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
-}
-
 void LaunchStandaloneAutoUpdateCheck(bool first_time) {
   DLOG(INFO) << "Starting standalone update check";
   base::CommandLine cmdline = ::vivaldi::GetCommonUpdateNotifierCommand();
@@ -96,7 +88,7 @@ void DoStopStandaloneUpdateCheck() {
 }
 
 void StartStandaloneAutoUpdateCheck() {
-  GetStandaloneAutoUpdateSequence()->PostTask(
+  content::GetUIThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&DoStartStandaloneAutoUpdateCheck));
 }
 
@@ -141,7 +133,7 @@ void DisableStandaloneAutoUpdate() {
   DCHECK(IsStandaloneBrowser());
   PrefService* prefs = g_browser_process->local_state();
   prefs->SetBoolean(vivaldiprefs::kVivaldiAutoUpdateStandalone, false);
-  GetStandaloneAutoUpdateSequence()->PostTask(
+  content::GetUIThreadTaskRunner()->PostTask(
       FROM_HERE, base::BindOnce(&DoStopStandaloneUpdateCheck));
   DLOG(INFO) << "Disabled standalone update notifier";
 }

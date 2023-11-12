@@ -17,7 +17,7 @@ try_.defaults.set(
     cores = 8,
     os = os.LINUX_DEFAULT,
     compilator_cores = 8,
-    compilator_reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
+    compilator_reclient_jobs = reclient.jobs.MID_JOBS_FOR_CQ,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
     orchestrator_cores = 2,
     reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
@@ -44,13 +44,6 @@ try_.builder(
             "chromecast/.+",
         ],
     ),
-)
-
-try_.builder(
-    name = "fuchsia-arm64-chrome-rel",
-    mirrors = [
-        "ci/fuchsia-arm64-chrome-rel",
-    ],
 )
 
 try_.orchestrator_builder(
@@ -136,6 +129,7 @@ try_.orchestrator_builder(
         "ci/fuchsia-x64-cast-receiver-rel",
     ],
     compilator = "fuchsia-x64-cast-receiver-rel-compilator",
+    coverage_test_types = ["unit", "overall"],
     experiments = {
         "enable_weetbix_queries": 100,
         "weetbix.retry_weak_exonerations": 100,
@@ -143,6 +137,7 @@ try_.orchestrator_builder(
     },
     main_list_view = "try",
     tryjob = try_.job(),
+    use_clang_coverage = True,
 )
 
 try_.compilator_builder(
@@ -151,13 +146,6 @@ try_.compilator_builder(
     cores = "8|16",
     ssd = True,
     main_list_view = "try",
-)
-
-try_.builder(
-    name = "fuchsia-x64-chrome-rel",
-    mirrors = [
-        "ci/fuchsia-x64-chrome-rel",
-    ],
 )
 
 try_.builder(

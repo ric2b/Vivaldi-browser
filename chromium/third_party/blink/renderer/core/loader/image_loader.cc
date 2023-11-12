@@ -25,6 +25,7 @@
 #include <memory>
 #include <utility>
 
+#include "services/network/public/mojom/attribution.mojom-blink.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -63,7 +64,6 @@
 #include "third_party/blink/renderer/platform/heap/cross_thread_handle.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
-#include "third_party/blink/renderer/platform/loader/attribution_header_constants.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -123,10 +123,10 @@ class ImageLoader::Task {
  public:
   Task(ImageLoader* loader,
        UpdateFromElementBehavior update_behavior,
-       network::mojom::ReferrerPolicy referrer_policy)
+       base::TimeTicks discovery_time)
       : loader_(loader),
         update_behavior_(update_behavior),
-        referrer_policy_(referrer_policy) {
+        discovery_time_(discovery_time) {
     ExecutionContext* context = loader_->GetElement()->GetExecutionContext();
     async_task_context_.Schedule(context, "Image");
     world_ = context->GetCurrentWorld();
@@ -137,7 +137,7 @@ class ImageLoader::Task {
       return;
     ExecutionContext* context = loader_->GetElement()->GetExecutionContext();
     probe::AsyncTask async_task(context, &async_task_context_);
-    loader_->DoUpdateFromElement(world_, update_behavior_, referrer_policy_);
+    loader_->DoUpdateFromElement(world_, update_behavior_, discovery_time_);
   }
 
   void ClearLoader() {
@@ -151,9 +151,9 @@ class ImageLoader::Task {
   WeakPersistent<ImageLoader> loader_;
   UpdateFromElementBehavior update_behavior_;
   scoped_refptr<const DOMWrapperWorld> world_;
-  network::mojom::ReferrerPolicy referrer_policy_;
 
   probe::AsyncTaskContext async_task_context_;
+  base::TimeTicks discovery_time_;
   base::WeakPtrFactory<Task> weak_factory_{this};
 };
 
@@ -287,24 +287,6 @@ void ImageLoader::SetImageForTest(ImageResourceContent* new_image) {
   SetImageWithoutConsideringPendingLoadEvent(new_image);
 }
 
-bool ImageLoader::ShouldUpdateOnInsertedInto(
-    ContainerNode& insertion_point,
-    network::mojom::ReferrerPolicy referrer_policy) const {
-  // If we're being inserted into a disconnected tree, we don't need to update.
-  if (!insertion_point.isConnected())
-    return false;
-
-  // If we already have image content, then we don't need an update.
-  if (image_content_)
-    return false;
-
-  // Finally, try to update if we're idle. This could be an indication that we
-  // skipped a previous load when inserted into an inactive document. Note that
-  // if we're not idle, we should also update our referrer policy if it has
-  // changed.
-  return !HasPendingActivity() || referrer_policy != last_referrer_policy_;
-}
-
 bool ImageLoader::ImageIsPotentiallyAvailable() const {
   bool is_lazyload = lazy_image_load_state_ == LazyImageLoadState::kDeferred;
 
@@ -389,6 +371,12 @@ static void ConfigureRequest(
 }
 
 inline void ImageLoader::DispatchErrorEvent() {
+  // The error event should not fire if the image data update is a result of
+  // environment change.
+  // https://html.spec.whatwg.org/C/#the-img-element:the-img-element-55
+  if (suppress_error_events_) {
+    return;
+  }
   // There can be cases where DispatchErrorEvent() is called when there is
   // already a scheduled error event for the previous load attempt.
   // In such cases we cancel the previous event (by overwriting
@@ -414,8 +402,8 @@ inline void ImageLoader::ClearFailedLoadURL() {
 
 inline void ImageLoader::EnqueueImageLoadingMicroTask(
     UpdateFromElementBehavior update_behavior,
-    network::mojom::ReferrerPolicy referrer_policy) {
-  auto task = std::make_unique<Task>(this, update_behavior, referrer_policy);
+    base::TimeTicks discovery_time) {
+  auto task = std::make_unique<Task>(this, update_behavior, discovery_time);
   pending_task_ = task->GetWeakPtr();
   element_->GetDocument().GetAgent().event_loop()->EnqueueMicrotask(
       WTF::BindOnce(&Task::Run, std::move(task)));
@@ -443,7 +431,7 @@ void ImageLoader::UpdateImageState(ImageResourceContent* new_image_content) {
 void ImageLoader::DoUpdateFromElement(
     scoped_refptr<const DOMWrapperWorld> world,
     UpdateFromElementBehavior update_behavior,
-    network::mojom::ReferrerPolicy referrer_policy,
+    base::TimeTicks discovery_time,
     UpdateType update_type,
     bool force_blocking) {
   // FIXME: According to
@@ -460,8 +448,15 @@ void ImageLoader::DoUpdateFromElement(
   load_delay_counter.swap(delay_until_do_update_from_element_);
 
   Document& document = element_->GetDocument();
-  if (!document.IsActive())
+  if (!document.IsActive()) {
+    // Clear if the loader was moved into a not fully active document - or the
+    // document was detached - after the microtask was queued. If moved into a
+    // not fully active document, ElementDidMoveToNewDocument() will have
+    // called ClearImage() already, but in the case of a detached document it
+    // won't have.
+    ClearImage();
     return;
+  }
 
   AtomicString image_source_url = element_->ImageSourceURL();
   const KURL url = ImageSourceToKURL(image_source_url);
@@ -476,6 +471,15 @@ void ImageLoader::DoUpdateFromElement(
       resource_request.SetCacheMode(mojom::blink::FetchCacheMode::kBypassCache);
     }
 
+    network::mojom::ReferrerPolicy referrer_policy =
+        network::mojom::ReferrerPolicy::kDefault;
+    AtomicString referrer_policy_attribute =
+        element_->FastGetAttribute(html_names::kReferrerpolicyAttr);
+    if (!referrer_policy_attribute.IsNull()) {
+      SecurityPolicy::ReferrerPolicyFromString(
+          referrer_policy_attribute, kSupportReferrerPolicyLegacyKeywords,
+          &referrer_policy);
+    }
     resource_request.SetReferrerPolicy(referrer_policy);
 
     // Correct the RequestContext if necessary.
@@ -505,9 +509,9 @@ void ImageLoader::DoUpdateFromElement(
         frame->GetAttributionSrcLoader()->CanRegister(
             url, To<HTMLImageElement>(GetElement()),
             /*request_id=*/absl::nullopt)) {
-      resource_request.SetHttpHeaderField(
-          http_names::kAttributionReportingEligible,
-          kAttributionEligibleEventSourceAndTrigger);
+      resource_request.SetAttributionReportingEligibility(
+          network::mojom::AttributionReportingEligibility::
+              kEventSourceOrTrigger);
     }
 
     bool page_is_being_dismissed =
@@ -532,6 +536,9 @@ void ImageLoader::DoUpdateFromElement(
 
     FetchParameters params(std::move(resource_request),
                            resource_loader_options);
+
+    params.SetDiscoveryTime(discovery_time);
+
     ConfigureRequest(params, *element_, frame->GetClientHintsPreferences());
 
     if (update_behavior != kUpdateForcedReload &&
@@ -626,17 +633,16 @@ void ImageLoader::DoUpdateFromElement(
     image_resource->ResetAnimation();
 }
 
-void ImageLoader::UpdateFromElement(
-    UpdateFromElementBehavior update_behavior,
-    network::mojom::ReferrerPolicy referrer_policy,
-    bool force_blocking) {
+void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
+                                    bool force_blocking) {
   if (!element_->GetDocument().IsActive()) {
     return;
   }
 
+  base::TimeTicks discovery_time = base::TimeTicks::Now();
+
   AtomicString image_source_url = element_->ImageSourceURL();
   suppress_error_events_ = (update_behavior == kUpdateSizeChanged);
-  last_referrer_policy_ = referrer_policy;
 
   if (update_behavior == kUpdateIgnorePreviousError)
     ClearFailedLoadURL();
@@ -670,7 +676,7 @@ void ImageLoader::UpdateFromElement(
   if (ShouldLoadImmediately(ImageSourceToKURL(image_source_url)) &&
       update_behavior != kUpdateFromMicrotask) {
     DoUpdateFromElement(element_->GetExecutionContext()->GetCurrentWorld(),
-                        update_behavior, referrer_policy, UpdateType::kSync,
+                        update_behavior, discovery_time, UpdateType::kSync,
                         force_blocking);
     return;
   }
@@ -682,19 +688,22 @@ void ImageLoader::UpdateFromElement(
       image->RemoveObserver(this);
     }
     image_content_ = nullptr;
+    image_complete_ = true;
     image_content_for_image_document_ = nullptr;
     delay_until_image_notify_finished_ = nullptr;
     if (lazy_image_load_state_ != LazyImageLoadState::kNone) {
       LazyImageHelper::StopMonitoring(GetElement());
       lazy_image_load_state_ = LazyImageLoadState::kNone;
     }
+  } else {
+    image_complete_ = false;
   }
 
   // Don't load images for inactive documents or active documents without V8
   // context. We don't want to slow down the raw HTML parsing case by loading
   // images we don't intend to display.
   if (element_->GetDocument().IsActive())
-    EnqueueImageLoadingMicroTask(update_behavior, referrer_policy);
+    EnqueueImageLoadingMicroTask(update_behavior, discovery_time);
 }
 
 KURL ImageLoader::ImageSourceToKURL(AtomicString image_source_url) const {
@@ -821,11 +830,7 @@ void ImageLoader::ImageNotifyFinished(ImageResourceContent* content) {
     if (error && error->IsAccessCheck())
       CrossSiteOrCSPViolationOccurred(AtomicString(error->FailingURL()));
 
-    // The error event should not fire if the image data update is a result of
-    // environment change.
-    // https://html.spec.whatwg.org/C/#the-img-element:the-img-element-55
-    if (!suppress_error_events_)
-      DispatchErrorEvent();
+    DispatchErrorEvent();
     return;
   }
 
@@ -945,17 +950,16 @@ ScriptPromise ImageLoader::Decode(ScriptState* script_state,
   UseCounter::Count(execution_context, WebFeature::kImageDecodeAPI);
 
   auto* request = MakeGarbageCollected<DecodeRequest>(
-      this, MakeGarbageCollected<ScriptPromiseResolver>(script_state));
+      this, MakeGarbageCollected<ScriptPromiseResolver>(
+                script_state, exception_state.GetContext()));
   execution_context->GetAgent()->event_loop()->EnqueueMicrotask(WTF::BindOnce(
       &DecodeRequest::ProcessForTask, WrapWeakPersistent(request)));
   decode_requests_.push_back(request);
   return request->promise();
 }
 
-void ImageLoader::LoadDeferredImage(
-    network::mojom::ReferrerPolicy referrer_policy,
-    bool force_blocking,
-    bool update_from_microtask) {
+void ImageLoader::LoadDeferredImage(bool force_blocking,
+                                    bool update_from_microtask) {
   if (lazy_image_load_state_ != LazyImageLoadState::kDeferred)
     return;
   DCHECK(!image_complete_);
@@ -965,7 +969,7 @@ void ImageLoader::LoadDeferredImage(
   // fully loaded now.
   UpdateFromElement(
       update_from_microtask ? kUpdateFromMicrotask : kUpdateNormal,
-      referrer_policy, force_blocking);
+      force_blocking);
 }
 
 void ImageLoader::ElementDidMoveToNewDocument() {

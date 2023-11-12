@@ -201,6 +201,7 @@ class Firefox(Browser):
             ("win", "x86"): "win",
             ("win", "AMD64"): "win64",
             ("macos", "x86_64"): "osx",
+            ("macos", "arm64"): "osx",
         }
         os_key = (self.platform, uname[4])
 
@@ -1878,6 +1879,32 @@ class WebKit(Browser):
 
     def install_webdriver(self, dest=None, channel=None, browser_binary=None):
         raise NotImplementedError
+
+    def version(self, binary=None, webdriver_binary=None):
+        return None
+
+
+class WebKitTestRunner(Browser):
+    """Interface for WebKitTestRunner.
+    """
+
+    product = "wktr"
+    requirements = None
+
+    def download(self, dest=None, channel=None, rename=None):
+        raise NotImplementedError
+
+    def install(self, dest=None, channel=None):
+        raise NotImplementedError
+
+    def install_webdriver(self, dest=None, channel=None, browser_binary=None):
+        raise NotImplementedError
+
+    def find_binary(self, venv_path=None, channel=None):
+        return None
+
+    def find_webdriver(self, venv_path=None, channel=None):
+        return None
 
     def version(self, binary=None, webdriver_binary=None):
         return None

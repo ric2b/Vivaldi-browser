@@ -313,7 +313,6 @@ class SimpleJSONWriter {
 
         if (line_end == std::string_view::npos) {
           out_ << json;
-          ;
           comma_ = {};
           return;
         }

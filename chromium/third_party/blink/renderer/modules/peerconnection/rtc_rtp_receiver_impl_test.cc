@@ -80,7 +80,7 @@ class RTCRtpReceiverImplTest : public ::testing::Test {
         mock_webrtc_receiver_.get(), std::move(track_ref), {});
     state.Initialize();
     return std::make_unique<RTCRtpReceiverImpl>(
-        peer_connection_.get(), std::move(state), encoded_insertable_streams);
+        peer_connection_, std::move(state), encoded_insertable_streams);
   }
 
   scoped_refptr<blink::TestWebRTCStatsReportObtainer> GetStats() {
@@ -154,7 +154,7 @@ TEST_F(RTCRtpReceiverImplTest, GetStats) {
   // not perform any stats filtering, we just set it to a dummy value.
   rtc::scoped_refptr<webrtc::RTCStatsReport> webrtc_report =
       webrtc::RTCStatsReport::Create(webrtc::Timestamp::Micros(0));
-  webrtc_report->AddStats(std::make_unique<webrtc::RTCInboundRTPStreamStats>(
+  webrtc_report->AddStats(std::make_unique<webrtc::RTCInboundRtpStreamStats>(
       "stats-id", webrtc::Timestamp::Micros(1234)));
   peer_connection_->SetGetStatsReport(webrtc_report.get());
 

@@ -16,7 +16,7 @@
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/app_service_test.h"
-#include "chrome/browser/apps/app_service/promise_apps/promise_apps.h"
+#include "chrome/browser/apps/app_service/promise_apps/promise_app.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/profiles/profile.h"
@@ -40,6 +40,7 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/arc/test/fake_app_instance.h"
 #include "ash/constants/ash_features.h"
+#include "chrome/browser/apps/app_service/promise_apps/promise_app_registry_cache.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps_factory.h"
 #include "chrome/browser/apps/app_service/publishers/standalone_browser_extension_apps.h"
@@ -54,9 +55,12 @@
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
+#include "chromeos/ash/components/standalone_browser/browser_support.h"
 #include "components/services/app_service/public/cpp/app_capability_access_cache.h"
 #include "components/services/app_service/public/cpp/capability_access_update.h"
 #include "components/user_manager/scoped_user_manager.h"
+
+using ash::standalone_browser::BrowserSupport;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
@@ -469,14 +473,6 @@ class PublisherTest : public extensions::ExtensionServiceTestBase {
               NOTREACHED();
             }));
   }
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  PromiseAppPtr& GetPromiseApp(const PackageId& package_id) {
-    PromiseAppRegistryCache& cache =
-        AppServiceProxyFactory::GetForProfile(profile())
-            ->PromiseAppRegistryCache();
-    return cache.promise_app_map_.find(package_id)->second;
-  }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -670,22 +666,25 @@ TEST_F(PublisherTest, BuiltinAppsOnApps) {
   VerifyAppTypeIsInitialized(AppType::kBuiltIn);
 }
 
-class LegacyPackagedAppLacorsNotPrimaryPublisherTest : public PublisherTest {
+class LegacyPackagedAppLacrosNotPrimaryPublisherTest : public PublisherTest {
  public:
-  LegacyPackagedAppLacorsNotPrimaryPublisherTest() {
-    crosapi::browser_util::SetLacrosEnabledForTest(true);
+  LegacyPackagedAppLacrosNotPrimaryPublisherTest() {
     scoped_feature_list_.Reset();
     scoped_feature_list_.InitAndDisableFeature(ash::features::kLacrosPrimary);
   }
 
-  LegacyPackagedAppLacorsNotPrimaryPublisherTest(
-      const LegacyPackagedAppLacorsNotPrimaryPublisherTest&) = delete;
-  LegacyPackagedAppLacorsNotPrimaryPublisherTest& operator=(
-      const LegacyPackagedAppLacorsNotPrimaryPublisherTest&) = delete;
-  ~LegacyPackagedAppLacorsNotPrimaryPublisherTest() override = default;
+  LegacyPackagedAppLacrosNotPrimaryPublisherTest(
+      const LegacyPackagedAppLacrosNotPrimaryPublisherTest&) = delete;
+  LegacyPackagedAppLacrosNotPrimaryPublisherTest& operator=(
+      const LegacyPackagedAppLacrosNotPrimaryPublisherTest&) = delete;
+  ~LegacyPackagedAppLacrosNotPrimaryPublisherTest() override = default;
+
+ private:
+  const base::AutoReset<bool> resetter_ =
+      BrowserSupport::SetLacrosEnabledForTest(true);
 };
 
-TEST_F(LegacyPackagedAppLacorsNotPrimaryPublisherTest,
+TEST_F(LegacyPackagedAppLacrosNotPrimaryPublisherTest,
        LegacyPackagedAppsOnApps) {
   ASSERT_FALSE(crosapi::browser_util::IsLacrosPrimaryBrowser());
 
@@ -715,25 +714,25 @@ TEST_F(LegacyPackagedAppLacorsNotPrimaryPublisherTest,
   VerifyAppTypeIsInitialized(AppType::kChromeApp);
 }
 
-class LegacyPackagedAppLacorsPrimaryPublisherTest : public PublisherTest {
+class LegacyPackagedAppLacrosPrimaryPublisherTest : public PublisherTest {
  public:
-  LegacyPackagedAppLacorsPrimaryPublisherTest() {
+  LegacyPackagedAppLacrosPrimaryPublisherTest() {
     scoped_feature_list_.Reset();
     scoped_feature_list_.InitAndEnableFeature(ash::features::kLacrosPrimary);
   }
 
-  LegacyPackagedAppLacorsPrimaryPublisherTest(
-      const LegacyPackagedAppLacorsNotPrimaryPublisherTest&) = delete;
-  LegacyPackagedAppLacorsPrimaryPublisherTest& operator=(
-      const LegacyPackagedAppLacorsNotPrimaryPublisherTest&) = delete;
-  ~LegacyPackagedAppLacorsPrimaryPublisherTest() override = default;
+  LegacyPackagedAppLacrosPrimaryPublisherTest(
+      const LegacyPackagedAppLacrosNotPrimaryPublisherTest&) = delete;
+  LegacyPackagedAppLacrosPrimaryPublisherTest& operator=(
+      const LegacyPackagedAppLacrosNotPrimaryPublisherTest&) = delete;
+  ~LegacyPackagedAppLacrosPrimaryPublisherTest() override = default;
 
  private:
   base::AutoReset<bool> set_lacros_enabled_ =
-      crosapi::browser_util::SetLacrosEnabledForTest(true);
+      BrowserSupport::SetLacrosEnabledForTest(true);
 };
 
-TEST_F(LegacyPackagedAppLacorsPrimaryPublisherTest, LegacyPackagedAppsOnApps) {
+TEST_F(LegacyPackagedAppLacrosPrimaryPublisherTest, LegacyPackagedAppsOnApps) {
   ASSERT_TRUE(crosapi::browser_util::IsLacrosPrimaryBrowser());
 
   // Re-init AppService to verify the init process.
@@ -840,7 +839,7 @@ class StandaloneBrowserPublisherTest : public PublisherTest {
 
  private:
   base::AutoReset<bool> set_lacros_enabled_ =
-      crosapi::browser_util::SetLacrosEnabledForTest(true);
+      BrowserSupport::SetLacrosEnabledForTest(true);
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 };
 
@@ -1392,17 +1391,22 @@ TEST_F(PublisherTest, ArcPublishPromiseApps) {
 
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
+
+  AppServiceProxy* proxy = AppServiceProxyFactory::GetForProfile(profile());
+  proxy->ReinitializeForTesting(profile());
+  PromiseAppRegistryCache* cache = proxy->PromiseAppRegistryCache();
+
   std::string package_name = "test.package.name";
   PackageId package_id = PackageId(AppType::kArc, package_name);
 
   // Confirm that there isn't a promise app yet.
-  ASSERT_FALSE(GetPromiseApp(package_id));
+  ASSERT_FALSE(cache->GetPromiseAppForTesting(package_id));
 
   // Notify the publisher about a started installation.
   arc_test.app_instance()->SendInstallationStarted(package_name);
 
   // Verify the ARC promise app is added to PromiseAppRegistryCache.
-  PromiseAppPtr& promise_app = GetPromiseApp(package_id);
+  const PromiseApp* promise_app = cache->GetPromiseAppForTesting(package_id);
   ASSERT_TRUE(promise_app);
   ASSERT_EQ(promise_app->package_id, package_id);
 }

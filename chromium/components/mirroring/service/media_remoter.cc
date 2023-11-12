@@ -147,7 +147,11 @@ void MediaRemoter::Stop(media::mojom::RemotingStopReason reason) {
   audio_config_ = absl::nullopt;
   video_config_ = absl::nullopt;
 
-  state_ = STOPPING_REMOTING;
+  // Don't change `state_` if remoting is disabled so that it won't attempt to
+  // start remoting again after mirroring resumed.
+  if (state_ != REMOTING_DISABLED) {
+    state_ = STOPPING_REMOTING;
+  }
   remoting_source_->OnStopped(reason);
   // Prevent the start of remoting until switching completes.
   remoting_source_->OnSinkGone();
@@ -199,8 +203,7 @@ void MediaRemoter::StartOpenscreenDataStreams(
   DCHECK(openscreen_audio_sender_ || openscreen_video_sender_);
 
   if (audio_pipe.is_valid() && audio_config_ &&
-      audio_config_->codec == Codec::CODEC_AUDIO_REMOTE &&
-      openscreen_audio_sender_) {
+      audio_config_->codec == Codec::kAudioRemote && openscreen_audio_sender_) {
     // NOTE: use of base::Unretained is safe because we own the sender.
     audio_sender_ = std::make_unique<RemotingSender>(
         cast_environment_, std::move(openscreen_audio_sender_), *audio_config_,
@@ -210,8 +213,7 @@ void MediaRemoter::StartOpenscreenDataStreams(
   }
 
   if (video_pipe.is_valid() && video_config_ &&
-      video_config_->codec == Codec::CODEC_VIDEO_REMOTE &&
-      openscreen_video_sender_) {
+      video_config_->codec == Codec::kVideoRemote && openscreen_video_sender_) {
     // NOTE: use of base::Unretained is safe because we own the sender.
     video_sender_ = std::make_unique<RemotingSender>(
         cast_environment_, std::move(openscreen_video_sender_), *video_config_,
@@ -229,7 +231,7 @@ void MediaRemoter::StartLegacyDataStreams(
     mojo::PendingReceiver<media::mojom::RemotingDataStreamSender>
         video_sender_receiver) {
   if (audio_pipe.is_valid() && audio_config_ &&
-      audio_config_->codec == Codec::CODEC_AUDIO_REMOTE) {
+      audio_config_->codec == Codec::kAudioRemote) {
     DCHECK(transport_);
     audio_sender_ = std::make_unique<RemotingSender>(
         cast_environment_, transport_, *audio_config_, std::move(audio_pipe),
@@ -239,7 +241,7 @@ void MediaRemoter::StartLegacyDataStreams(
   }
 
   if (video_pipe.is_valid() && video_config_ &&
-      video_config_->codec == Codec::CODEC_VIDEO_REMOTE) {
+      video_config_->codec == Codec::kVideoRemote) {
     DCHECK(transport_);
     video_sender_ = std::make_unique<RemotingSender>(
         cast_environment_, transport_, *video_config_, std::move(video_pipe),

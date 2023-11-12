@@ -9,7 +9,7 @@ import {I18nString} from './i18n_string.js';
 import * as loadTimeData from './models/load_time_data.js';
 import * as state from './state.js';
 import * as tooltip from './tooltip.js';
-import {AspectRatioSet, Facing, Resolution} from './type.js';
+import {AspectRatioSet, Facing, FpsRange, Resolution} from './type.js';
 
 /**
  * Creates a canvas element for 2D drawing.
@@ -95,9 +95,12 @@ const KEYBOARD_KEYS = [
   'AudioVolumeUp',
   'AudioVolumeDown',
   'BrowserBack',
-  'Delete',
+  'Delete',  // Alt + Backspace
+  'End',     // Ctrl + Alt + ArrowDown
   'Enter',
   'Escape',
+  'Home',  // Ctrl + Alt + ArrowUp
+  'Tab',
 ] as const;
 const KEYBOARD_KEY_SET = new Set(KEYBOARD_KEYS);
 type KeyboardKey = typeof KEYBOARD_KEYS[number];
@@ -233,6 +236,8 @@ export function bindElementAriaLabelWithState(
  */
 export function setInkdropEffect(el: HTMLElement): void {
   const tpl = instantiateTemplate('#inkdrop-template');
+  const ripple =
+      assertInstanceof(tpl.querySelector('.inkdrop-ripple'), HTMLElement);
   el.appendChild(tpl);
   el.addEventListener('click', async (e) => {
     const tRect =
@@ -246,7 +251,7 @@ export function setInkdropEffect(el: HTMLElement): void {
     el.style.setProperty('--drop-x', `${dropX}px`);
     el.style.setProperty('--drop-y', `${dropY}px`);
     el.style.setProperty('--drop-radius', `${radius}px`);
-    await animate.playOnChild(el);
+    await animate.play(ripple);
   });
 }
 
@@ -426,4 +431,41 @@ export async function loadImage(
     };
     image.src = src;
   });
+}
+
+/**
+ * Gets the mapping from name to enum value for a number enum.
+ *
+ * Note that in TypeScript, number enum contains both mapping from name to
+ * value and value to name, which most of the time isn't what we want.
+ */
+export function getNumberEnumMapping<T extends number>(
+    enumType: {[key: string]: T|string}): {[key: string]: T} {
+  return Object.fromEntries(Object.entries(enumType).flatMap(([k, v]) => {
+    if (typeof v === 'string') {
+      return [];
+    }
+    return [[k, v]];
+  }));
+}
+
+/**
+ * Returns FPS range from media track constraints.
+ */
+export function getFpsRangeFromConstraints(frameRate: ConstrainDouble|
+                                           undefined): FpsRange {
+  let minFps = 0;
+  let maxFps = 0;
+  // For devices that don't support constant frame rate, we pass {0,0} and let
+  // VCD fall back to the default range.
+  if (frameRate) {
+    if (typeof frameRate === 'number') {
+      minFps = frameRate;
+      maxFps = frameRate;
+    } else if (frameRate.exact) {
+      minFps = frameRate.exact;
+      maxFps = frameRate.exact;
+    }
+  }
+  return {minFps, maxFps};
 }

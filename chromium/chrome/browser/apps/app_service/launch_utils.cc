@@ -24,11 +24,13 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/app_update.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "components/sessions/core/session_id.h"
+#include "extensions/common/constants.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -38,6 +40,7 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chromeos/crosapi/mojom/app_service_types.mojom-shared.h"
 #include "chromeos/crosapi/mojom/app_service_types.mojom.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -315,10 +318,15 @@ extensions::AppLaunchSource GetAppLaunchSource(LaunchSource launch_source) {
       return extensions::AppLaunchSource::kSourceProtocolHandler;
     case LaunchSource::kFromUrlHandler:
       return extensions::AppLaunchSource::kSourceUrlHandler;
-    case apps::LaunchSource::kFromLockScreen:
+    case LaunchSource::kFromLockScreen:
       return extensions::AppLaunchSource::kSourceUntracked;
-    case apps::LaunchSource::kFromAppHomePage:
+    case LaunchSource::kFromAppHomePage:
       return extensions::AppLaunchSource::kSourceAppHomePage;
+    // No equivalent extensions launch source or not needed in extensions:
+    case LaunchSource::kFromReparenting:
+    case LaunchSource::kFromProfileMenu:
+    case LaunchSource::kFromSysTrayCalendar:
+      return extensions::AppLaunchSource::kSourceNone;
   }
 }
 
@@ -463,6 +471,44 @@ crosapi::mojom::LaunchParamsPtr CreateCrosapiLaunchParamsWithEventFlags(
       /*fallback_container=*/
       ConvertWindowModeToAppLaunchContainer(window_mode));
   return apps::ConvertLaunchParamsToCrosapi(launch_params, proxy->profile());
+}
+
+AppIdsToLaunchForUrl::AppIdsToLaunchForUrl() = default;
+AppIdsToLaunchForUrl::AppIdsToLaunchForUrl(AppIdsToLaunchForUrl&&) = default;
+AppIdsToLaunchForUrl::~AppIdsToLaunchForUrl() = default;
+
+AppIdsToLaunchForUrl FindAppIdsToLaunchForUrl(AppServiceProxy* proxy,
+                                              const GURL& url) {
+  AppIdsToLaunchForUrl result;
+  result.candidates = proxy->GetAppIdsForUrl(url, /*exclude_browsers=*/true);
+  if (result.candidates.empty()) {
+    return result;
+  }
+
+  absl::optional<std::string> preferred =
+      proxy->PreferredAppsList().FindPreferredAppForUrl(url);
+  if (preferred && base::Contains(result.candidates, *preferred)) {
+    result.preferred = std::move(preferred);
+  }
+
+  return result;
+}
+
+void MaybeLaunchPreferredAppForUrl(Profile* profile,
+                                   const GURL& url,
+                                   LaunchSource launch_source) {
+  if (AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile)) {
+    auto* proxy = AppServiceProxyFactory::GetForProfile(profile);
+    AppIdsToLaunchForUrl app_id_to_launch =
+        FindAppIdsToLaunchForUrl(proxy, url);
+    if (app_id_to_launch.preferred) {
+      proxy->LaunchAppWithUrl(*app_id_to_launch.preferred,
+                              /*event_flags=*/0, url, launch_source);
+      return;
+    }
+  }
+  NavigateParams params(profile, url, ui::PAGE_TRANSITION_LINK);
+  Navigate(&params);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 

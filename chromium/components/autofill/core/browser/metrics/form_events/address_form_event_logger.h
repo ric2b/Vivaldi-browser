@@ -8,6 +8,7 @@
 #include <string>
 
 #include "components/autofill/core/browser/autofill_field.h"
+#include "components/autofill/core/browser/autofill_trigger_source.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
@@ -17,7 +18,7 @@
 #include "components/autofill/core/browser/sync_utils.h"
 #include "components/autofill/core/common/dense_set.h"
 
-namespace autofill {
+namespace autofill::autofill_metrics {
 
 // To measure the added value of kAccount profiles, the filling assistance
 // metric is split by profile category. Since the metric is emitted at
@@ -44,7 +45,8 @@ class AddressFormEventLogger : public FormEventLoggerBase {
   void OnDidFillSuggestion(const AutofillProfile& profile,
                            const FormStructure& form,
                            const AutofillField& field,
-                           AutofillSyncSigninState sync_state);
+                           AutofillSyncSigninState sync_state,
+                           const AutofillTriggerSource trigger_source);
 
   void OnDidSeeFillableDynamicForm(AutofillSyncSigninState sync_state,
                                    const FormStructure& form);
@@ -73,6 +75,6 @@ class AddressFormEventLogger : public FormEventLoggerBase {
   DenseSet<AutofillProfileSourceCategory> profile_categories_filled_;
 };
 
-}  // namespace autofill
+}  // namespace autofill::autofill_metrics
 
 #endif  // COMPONENTS_AUTOFILL_CORE_BROWSER_METRICS_FORM_EVENTS_ADDRESS_FORM_EVENT_LOGGER_H_

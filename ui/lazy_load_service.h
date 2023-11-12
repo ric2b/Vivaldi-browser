@@ -3,8 +3,10 @@
 #ifndef UI_LAZY_LOAD_SERVICE_H_
 #define UI_LAZY_LOAD_SERVICE_H_
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_source_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
+
 class Profile;
 
 namespace vivaldi {
@@ -27,7 +29,7 @@ class LazyLoadService
       resource_coordinator::LifecycleUnit* lifecycle_unit) override;
 
  private:
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 };
 
 }  // namespace vivaldi

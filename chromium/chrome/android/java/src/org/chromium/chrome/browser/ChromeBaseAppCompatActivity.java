@@ -55,6 +55,7 @@ import org.chromium.base.Log;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
+import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions.DriverDistractionObserver;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -71,8 +72,9 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
     private SharedPreferencesManager.Observer mPreferenceObserver;
 
-    // Vivaldi OEM
+    // Vivaldi OEM (Lynk&Co)
     private static final String TAG = "OemLynkcoExt";
+
     ActivityResultLauncher<Intent> mStartForResult =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
                     result -> {
@@ -81,6 +83,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
                             finishAffinity();
                         }
                     });
+
+    DriverDistractionObserver mDriverDistractionObserver;
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -140,9 +144,10 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
 
         setDefaultTaskDescription();
 
-        // Vivaldi OEM
+        // Vivaldi OEM (Lynk&Co)
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             requestAllPermissions();
+            initDriverDistraction();
         }
 
     }
@@ -346,8 +351,9 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         }
     }
 
-    // Vivaldi OEM
+    // Vivaldi OEM (Lynk&Co)
     private void requestAllPermissions() {
+        assert BuildConfig.IS_OEM_LYNKCO_BUILD;
         if (checkIfAlreadyHavePermission()) {
             startOnboarding();
         } else {
@@ -355,11 +361,12 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         }
     }
 
-    // Vivaldi OEM
+    // Vivaldi OEM (Lynk&Co)
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String[] permissions,
                                            int[] grantResults) {
+        assert BuildConfig.IS_OEM_LYNKCO_BUILD;
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             if (grantResults[0] == PackageManager.PERMISSION_DENIED) {
@@ -368,15 +375,35 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         }
     }
 
-    // Vivaldi OEM
+    // Vivaldi OEM (Lynk&Co)
     private boolean checkIfAlreadyHavePermission() {
+        assert BuildConfig.IS_OEM_LYNKCO_BUILD;
         int result = ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET);
         return result == PackageManager.PERMISSION_GRANTED;
     }
 
-    // Vivaldi OEM
+    // Vivaldi OEM (Lynk&Co)
     private void startOnboarding() {
+        assert BuildConfig.IS_OEM_LYNKCO_BUILD;
         mStartForResult.launch(
                 OemLynkcoExtensions.getInstance().createOnBoardingActivityIntent(this));
+    }
+
+    // Vivaldi OEM (Lynk&Co)
+    private void initDriverDistraction() {
+        assert BuildConfig.IS_OEM_LYNKCO_BUILD;
+        OemLynkcoExtensions.getInstance().initDriverDistraction();
+        Log.d(TAG, "initDD, state: " + OemLynkcoExtensions.getInstance().isDriverDistracted());
+        mDriverDistractionObserver = new DriverDistractionObserver() {
+            @Override
+            public void onDriverDistracted(boolean distracted) {
+                Log.d(TAG, "onDriverDistracted: "+ distracted);
+                if (distracted) {
+                    mStartForResult.launch(OemLynkcoExtensions.getInstance()
+                            .createDriverDistractionIntent(getBaseContext()));
+                }
+            }
+        };
+        OemLynkcoExtensions.getInstance().addDriverDistractionObserver(mDriverDistractionObserver);
     }
 }

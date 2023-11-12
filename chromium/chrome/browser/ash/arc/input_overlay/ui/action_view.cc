@@ -22,10 +22,6 @@ namespace arc::input_overlay {
 namespace {
 constexpr int kMenuEntryOffset = 4;
 
-// TODO(b/250900717): Update according to UX/UI spec.
-constexpr int kTrashButtonSize = 20;
-constexpr SkColor kTrashIconColor = SK_ColorRED;
-
 // For the keys that are caught by display overlay, check if they are reserved
 // for special use.
 bool IsReservedDomCode(ui::DomCode code) {
@@ -66,8 +62,9 @@ void ActionView::SetDisplayMode(DisplayMode mode, ActionLabel* editing_label) {
     return;
   }
 
-  if (!editable_ && mode == DisplayMode::kEdit)
+  if (!editable_ && mode == DisplayMode::kEdit) {
     return;
+  }
 
   // Set display mode for ActionLabel first and then other components update the
   // layout according to ActionLabel.
@@ -82,18 +79,21 @@ void ActionView::SetDisplayMode(DisplayMode mode, ActionLabel* editing_label) {
     display_mode_ = DisplayMode::kView;
     RemoveEditButton();
     RemoveTrashButton();
-    if (!IsInputBound(action_->GetCurrentDisplayedInput()))
+    if (!IsInputBound(action_->GetCurrentDisplayedInput())) {
       SetVisible(false);
-    if (allow_reposition_)
+    }
+    if (allow_reposition_) {
       RemoveTouchPoint();
+    }
   }
   if (mode == DisplayMode::kEdit) {
     display_mode_ = DisplayMode::kEdit;
-    if (allow_reposition_)
+    if (allow_reposition_) {
       AddTouchPoint();
-    if (!IsInputBound(*action_->current_input()))
+    }
+    if (!IsInputBound(*action_->current_input())) {
       SetVisible(true);
-    AddTrashButton();
+    }
     AddEditButton();
   }
 }
@@ -109,8 +109,9 @@ void ActionView::SetPositionFromCenterPosition(
 
 gfx::Point ActionView::GetEditMenuPosition(gfx::Size menu_size) {
   DCHECK(menu_entry_);
-  if (!menu_entry_)
+  if (!menu_entry_) {
     return gfx::Point();
+  }
   int x = action_->on_left_or_middle_side()
               ? bounds().x()
               : std::max(0, bounds().right() - menu_size.width());
@@ -132,8 +133,7 @@ void ActionView::ShowErrorMsg(const base::StringPiece& message,
   if (ax_annouce) {
     GetViewAccessibility().AnnounceText(base::UTF8ToUTF16(message));
   } else {
-    editing_label->GetViewAccessibility().OverrideDescription(
-        base::UTF8ToUTF16(message));
+    editing_label->SetAccessibleDescription(base::UTF8ToUTF16(message));
   }
 }
 
@@ -142,12 +142,11 @@ void ActionView::ShowInfoMsg(const base::StringPiece& message,
   display_overlay_controller_->AddEditMessage(message, MessageType::kInfo);
 }
 
-void ActionView::ShowLabelFocusInfoMsg(const base::StringPiece& message,
-                                       ActionLabel* editing_label) {
+void ActionView::ShowFocusInfoMsg(const base::StringPiece& message,
+                                  views::View* view) {
   display_overlay_controller_->AddEditMessage(message,
                                               MessageType::kInfoLabelFocus);
-  editing_label->GetViewAccessibility().OverrideDescription(
-      base::UTF8ToUTF16(message));
+  view->SetAccessibleDescription(base::UTF8ToUTF16(message));
 }
 
 void ActionView::RemoveMessage() {
@@ -190,19 +189,22 @@ bool ActionView::ShouldShowErrorMsg(ui::DomCode code,
 }
 
 void ActionView::OnChildLabelUpdateFocus(ActionLabel* child, bool focus) {
-  if (labels_.size() == 1u)
+  if (labels_.size() == 1u) {
     return;
+  }
 
   for (auto* label : labels_) {
-    if (label == child)
+    if (label == child) {
       continue;
+    }
     label->OnSiblingUpdateFocus(focus);
   }
 }
 
 bool ActionView::ApplyMousePressed(const ui::MouseEvent& event) {
-  if (!allow_reposition_)
+  if (!allow_reposition_) {
     return false;
+  }
   OnDragStart(event);
   return true;
 }
@@ -212,30 +214,38 @@ bool ActionView::ApplyMouseDragged(const ui::MouseEvent& event) {
 }
 
 void ActionView::ApplyMouseReleased(const ui::MouseEvent& event) {
-  if (!allow_reposition_)
+  if (!allow_reposition_) {
     return;
+  }
   OnDragEnd();
-  RecordInputOverlayActionReposition(RepositionType::kMouseDragRepostion);
+  RecordInputOverlayActionReposition(
+      display_overlay_controller_->GetPackageName(),
+      RepositionType::kMouseDragRepostion,
+      display_overlay_controller_->GetWindowStateType());
 }
 
 void ActionView::ApplyGestureEvent(ui::GestureEvent* event) {
-  if (!allow_reposition_)
+  if (!allow_reposition_) {
     return;
+  }
   switch (event->type()) {
     case ui::ET_GESTURE_SCROLL_BEGIN:
       OnDragStart(*event);
       event->SetHandled();
       break;
     case ui::ET_GESTURE_SCROLL_UPDATE:
-      if (OnDragUpdate(*event))
+      if (OnDragUpdate(*event)) {
         event->SetHandled();
+      }
       break;
     case ui::ET_GESTURE_SCROLL_END:
     case ui::ET_SCROLL_FLING_START:
       OnDragEnd();
       event->SetHandled();
       RecordInputOverlayActionReposition(
-          RepositionType::kTouchscreenDragRepostion);
+          display_overlay_controller_->GetPackageName(),
+          RepositionType::kTouchscreenDragRepostion,
+          display_overlay_controller_->GetWindowStateType());
       break;
     default:
       break;
@@ -255,25 +265,30 @@ bool ActionView::ApplyKeyPressed(const ui::KeyEvent& event) {
 }
 
 bool ActionView::ApplyKeyReleased(const ui::KeyEvent& event) {
-  if (!allow_reposition_ || !ash::IsArrowKeyEvent(event))
+  if (!allow_reposition_ || !ash::IsArrowKeyEvent(event)) {
     return View::OnKeyReleased(event);
+  }
   DCHECK(touch_point_center_);
   ChangePositionBinding(gfx::Point(origin().x() + touch_point_center_->x(),
                                    origin().y() + touch_point_center_->y()));
   RecordInputOverlayActionReposition(
-      RepositionType::kKeyboardArrowKeyReposition);
+      display_overlay_controller_->GetPackageName(),
+      RepositionType::kKeyboardArrowKeyReposition,
+      display_overlay_controller_->GetWindowStateType());
   return true;
 }
 
 void ActionView::SetTouchPointCenter(const gfx::Point& touch_point_center) {
   touch_point_center_ = touch_point_center;
-  if (touch_point_)
+  if (touch_point_) {
     touch_point_->OnCenterPositionChanged(*touch_point_center_);
+  }
 }
 
 void ActionView::AddEditButton() {
-  if (!show_edit_button_ || !editable_ || menu_entry_)
+  if (!show_edit_button_ || !editable_ || menu_entry_) {
     return;
+  }
 
   menu_entry_ =
       AddChildView(std::make_unique<ActionEditButton>(base::BindRepeating(
@@ -287,69 +302,38 @@ void ActionView::AddEditButton() {
 }
 
 void ActionView::RemoveEditButton() {
-  if (!editable_ || !menu_entry_)
+  if (!editable_ || !menu_entry_) {
     return;
+  }
   RemoveChildViewT(menu_entry_);
   menu_entry_ = nullptr;
 }
 
-void ActionView::AddTrashButton() {
-  if (!beta_ || !editable_)
-    return;
-
-  auto trash_icon = ui::ImageModel::FromVectorIcon(
-      kTrashCanIcon, kTrashIconColor, kTrashButtonSize);
-  trash_button_ =
-      AddChildView(std::make_unique<views::ImageButton>(base::BindRepeating(
-          &ActionView::OnTrashButtonPressed, base::Unretained(this))));
-  trash_button_->SetImageModel(views::Button::STATE_NORMAL, trash_icon);
-  trash_button_->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
-  trash_button_->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
-  // TODO(b/253337606): Update the tooltip text.
-  trash_button_->SetTooltipText(u"Delete Action");
-  trash_button_->SetSize(gfx::Size(kTrashButtonSize, kTrashButtonSize));
-  UpdateTrashButtonPosition();
-}
-
 void ActionView::RemoveTrashButton() {
-  if (!editable_ || !trash_button_)
+  if (!editable_ || !trash_button_) {
     return;
+  }
 
   RemoveChildViewT(trash_button_);
   trash_button_ = nullptr;
 }
 
-void ActionView::OnTrashButtonPressed() {
-  if (!display_overlay_controller_)
-    return;
-
-  display_overlay_controller_->OnActionTrashButtonPressed(action_);
-}
-
 void ActionView::AddTouchPoint(ActionType action_type) {
-  if (touch_point_)
+  if (touch_point_) {
     return;
+  }
 
   DCHECK(touch_point_center_);
   touch_point_ = TouchPoint::Show(this, action_type, *touch_point_center_);
 }
 
 void ActionView::RemoveTouchPoint() {
-  if (!touch_point_)
+  if (!touch_point_) {
     return;
+  }
 
   RemoveChildViewT(touch_point_);
   touch_point_ = nullptr;
-}
-
-void ActionView::UpdateTrashButtonPosition() {
-  if (!trash_button_)
-    return;
-
-  DCHECK(touch_point_center_);
-  trash_button_->SetPosition(
-      gfx::Point(std::max(0, touch_point_center_->x() - kTrashButtonSize / 2),
-                 std::max(0, touch_point_center_->y() - kTrashButtonSize / 2)));
 }
 
 void ActionView::OnDragStart(const ui::LocatedEvent& event) {
@@ -372,13 +356,14 @@ void ActionView::OnDragEnd() {
 
 void ActionView::ChangePositionBinding(const gfx::Point& new_touch_center) {
   DCHECK(allow_reposition_);
-  if (!allow_reposition_)
+  if (!allow_reposition_) {
     return;
+  }
 
   action_->PrepareToBindPosition(new_touch_center);
 }
 
-gfx::Point ActionView::GetTouchCenterInWindow() {
+gfx::Point ActionView::GetTouchCenterInWindow() const {
   if (!touch_point_center_) {
     auto point = action_->GetUICenterPosition();
     return gfx::Point(point.x(), point.y());

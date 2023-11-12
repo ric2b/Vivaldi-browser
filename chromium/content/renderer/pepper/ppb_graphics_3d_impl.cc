@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/gpu_stream_constants.h"
@@ -106,7 +107,7 @@ class PPB_Graphics3D_Impl::ColorBuffer {
                   : viz::SinglePlaneFormat::kRGBX_8888,
         shared_image_size, gfx::ColorSpace::CreateSRGB(),
         kTopLeft_GrSurfaceOrigin, kUnpremul_SkAlphaType, usage,
-        gpu::SurfaceHandle());
+        "PPBGraphics3DImpl", gpu::SurfaceHandle());
 
     sync_token_ = sii_->GenVerifiedSyncToken();
   }
@@ -349,8 +350,8 @@ int32_t PPB_Graphics3D_Impl::DoSwapBuffers(const gpu::SyncToken& sync_token,
       target = GL_TEXTURE_RECTANGLE_ARB;
 #endif
     viz::TransferableResource resource = viz::TransferableResource::MakeGpu(
-        taken_front_buffer_, GL_LINEAR, target, sync_token, size,
-        viz::RGBA_8888, is_overlay_candidate);
+        taken_front_buffer_, target, sync_token, size,
+        viz::SinglePlaneFormat::kRGBA_8888, is_overlay_candidate);
     HostGlobals::Get()
         ->GetInstance(pp_instance())
         ->CommitTransferableResource(resource);
@@ -592,8 +593,8 @@ int32_t PPB_Graphics3D_Impl::DoPresent(const gpu::SyncToken& sync_token,
     constexpr uint32_t target = GL_TEXTURE_2D;
     auto mailbox = current_color_buffer_->Export();
     viz::TransferableResource resource = viz::TransferableResource::MakeGpu(
-        mailbox, GL_LINEAR, target, sync_token, current_color_buffer_->size(),
-        viz::RGBA_8888, is_overlay_candidate);
+        mailbox, target, sync_token, current_color_buffer_->size(),
+        viz::SinglePlaneFormat::kRGBA_8888, is_overlay_candidate);
     HostGlobals::Get()
         ->GetInstance(pp_instance())
         ->CommitTransferableResource(resource);

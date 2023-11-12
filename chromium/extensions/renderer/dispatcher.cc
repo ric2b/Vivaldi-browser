@@ -72,6 +72,7 @@
 #include "extensions/renderer/guest_view/guest_view_internal_custom_bindings.h"
 #include "extensions/renderer/id_generator_custom_bindings.h"
 #include "extensions/renderer/ipc_message_sender.h"
+#include "extensions/renderer/isolated_world_manager.h"
 #include "extensions/renderer/logging_native_handler.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/native_extension_bindings_system.h"
@@ -82,7 +83,6 @@
 #include "extensions/renderer/safe_builtins.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
-#include "extensions/renderer/script_injection.h"
 #include "extensions/renderer/script_injection_manager.h"
 #include "extensions/renderer/service_worker_natives.h"
 #include "extensions/renderer/set_icon_natives.h"
@@ -406,8 +406,9 @@ void Dispatcher::DidCreateScriptContext(
     int32_t world_id) {
   const base::TimeTicks start_time = base::TimeTicks::Now();
 
-  ScriptContext* context =
-      script_context_set_->Register(frame, v8_context, world_id);
+  ScriptContext* context = script_context_set_->Register(
+      frame, v8_context, world_id,
+      /*is_webview=*/webview_partition_id_.has_value());
 
   // Initialize origin permissions for content scripts, which can't be
   // initialized in |ActivateExtension|.
@@ -473,9 +474,12 @@ void Dispatcher::DidCreateScriptContext(
           "Extensions.DidCreateScriptContext_LockScreenExtension", elapsed);
       break;
     case Feature::OFFSCREEN_EXTENSION_CONTEXT:
-      // We don't really care about offscreen extension context initialization
-      // time at the moment - it's a strict subset (and very similar to)
-      // blessed extension context time.
+    case Feature::USER_SCRIPT_CONTEXT:
+      // We don't really care about offscreen extension context or user script
+      // context initialization time at the moment. Offscreen extension context
+      // initialization is a strict subset (and very similar to) blessed
+      // extension context time, while user script context initialization is
+      // very similar to content script initialization.
       break;
   }
 
@@ -578,11 +582,11 @@ void Dispatcher::WillEvaluateServiceWorkerOnWorkerThread(
     std::unique_ptr<IPCMessageSender> ipc_sender =
         IPCMessageSender::CreateWorkerThreadIPCMessageSender(
             worker_dispatcher, service_worker_version_id);
-    ActivationSequence worker_activation_sequence =
-        *RendererExtensionRegistry::Get()->GetWorkerActivationSequence(
+    base::UnguessableToken worker_activation_token =
+        *RendererExtensionRegistry::Get()->GetWorkerActivationToken(
             extension->id());
     worker_dispatcher->AddWorkerData(
-        service_worker_version_id, worker_activation_sequence, context,
+        service_worker_version_id, worker_activation_token, context,
         CreateBindingsSystem(std::move(ipc_sender)));
     worker_thread_util::SetWorkerContextProxy(context_proxy);
 
@@ -1051,6 +1055,7 @@ void Dispatcher::OnRendererAssociatedRequest(
 
 void Dispatcher::OnEventDispatcherRequest(
     mojo::PendingAssociatedReceiver<mojom::EventDispatcher> dispatcher) {
+  CHECK(!dispatcher_.is_bound());
   dispatcher_.Bind(std::move(dispatcher));
 }
 
@@ -1098,8 +1103,8 @@ void Dispatcher::LoadExtensions(
   for (auto& param : loaded_extensions) {
     std::string error;
     std::string id = param->id;
-    absl::optional<ActivationSequence> worker_activation_sequence =
-        param->worker_activation_sequence;
+    absl::optional<base::UnguessableToken> worker_activation_token =
+        param->worker_activation_token;
 
     scoped_refptr<const Extension> extension =
         ConvertToExtension(std::move(param), kRendererProfileId, &error);
@@ -1128,9 +1133,9 @@ void Dispatcher::LoadExtensions(
       NOTREACHED();
     }
 
-    if (worker_activation_sequence.has_value()) {
-      extension_registry->SetWorkerActivationSequence(
-          extension, std::move(*worker_activation_sequence));
+    if (worker_activation_token.has_value()) {
+      extension_registry->SetWorkerActivationToken(
+          extension, std::move(*worker_activation_token));
     }
 
     ExtensionsRendererClient::Get()->OnExtensionLoaded(*extension);
@@ -1183,7 +1188,7 @@ void Dispatcher::UnloadExtension(const std::string& extension_id) {
   // If the extension is later reloaded with a different set of permissions,
   // we'd like it to get a new isolated world ID, so that it can pick up the
   // changed origin allowlist.
-  ScriptInjection::RemoveIsolatedWorld(extension_id);
+  IsolatedWorldManager::GetInstance().RemoveIsolatedWorlds(extension_id);
 
   // Inform the bindings system that the contexts will be removed to allow time
   // to clear out context-specific data, and then remove the contexts
@@ -1242,7 +1247,7 @@ void Dispatcher::SetSystemFont(const std::string& font_family,
 
 void Dispatcher::SetWebViewPartitionID(const std::string& partition_id) {
   // |webview_partition_id_| cannot be changed once set.
-  CHECK(webview_partition_id_.empty() || webview_partition_id_ == partition_id);
+  CHECK(!webview_partition_id_ || webview_partition_id_ == partition_id);
   webview_partition_id_ = partition_id;
 }
 
@@ -1268,6 +1273,11 @@ void Dispatcher::UpdateDefaultPolicyHostRestrictions(
     }
   }
   UpdateAllBindings();
+}
+
+void Dispatcher::UpdateUserScriptWorld(mojom::UserScriptWorldInfoPtr info) {
+  IsolatedWorldManager::GetInstance().SetUserScriptWorldCsp(info->extension_id,
+                                                            info->csp);
 }
 
 void Dispatcher::UpdateUserHostRestrictions(URLPatternSet user_blocked_hosts,
@@ -1337,15 +1347,14 @@ void Dispatcher::OnDeliverMessage(int worker_thread_id,
 
 void Dispatcher::OnDispatchOnConnect(
     int worker_thread_id,
-    const PortId& target_port_id,
-    const std::string& channel_name,
-    const ExtensionMsg_TabConnectionInfo& source,
-    const ExtensionMsg_ExternalConnectionInfo& info) {
+    const ExtensionMsg_OnConnectData& connect_data) {
   DCHECK_EQ(kMainThreadId, worker_thread_id);
-  DCHECK(!target_port_id.is_opener);
+  DCHECK(!connect_data.target_port_id.is_opener);
 
   bindings_system_->messaging_service()->DispatchOnConnect(
-      script_context_set_.get(), target_port_id, channel_name, source, info,
+      script_context_set_.get(), connect_data.target_port_id,
+      connect_data.channel_type, connect_data.channel_name,
+      connect_data.tab_source, connect_data.external_connection_info,
       nullptr);  // All render frames.
 }
 
@@ -1503,6 +1512,7 @@ void Dispatcher::EnableCustomElementAllowlist() {
   blink::WebCustomElement::AddEmbedderCustomElementName("appview");
   blink::WebCustomElement::AddEmbedderCustomElementName("extensionoptions");
   blink::WebCustomElement::AddEmbedderCustomElementName("webview");
+  delegate_->EnableCustomElementAllowlist();
 }
 
 void Dispatcher::UpdateAllBindings() {

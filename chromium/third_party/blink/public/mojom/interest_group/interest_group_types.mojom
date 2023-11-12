@@ -7,6 +7,7 @@ module blink.mojom;
 import "mojo/public/mojom/base/int128.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
+import "third_party/blink/public/mojom/interest_group/ad_display_size.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
 
@@ -15,29 +16,14 @@ import "url/mojom/url.mojom";
 struct InterestGroupAd {
   // Must use https.
   url.mojom.Url render_url;
+  // Optional size groups assigned to this Ad.
+  string? size_group;
   // Opaque JSON data, persisted, then passed as object to auction worklet.
   string? metadata;
 };
 
-// The dimensions that an ad for an interest group can be. Note that an interest
-// group can have more than one `InterestGroupSize` associated with it.
-struct InterestGroupSize {
-  //  This is stable because it is persisted to storage.
-  [Stable, Extensible]
-  enum LengthUnit {
-    [Default] kInvalid,
-    kPixels,
-    kScreenWidth,
-  };
-  // Must be valid dimensions (ex. 100px, 50sw)
-  double width;
-  LengthUnit width_units;
-  double height;
-  LengthUnit height_units;
-};
-
 // The maximum size of a valid interest group in bytes.
-const uint32 kMaxInterestGroupSize = 51200; // 50 * 1024
+const uint32 kMaxInterestGroupSize = 1048576; // 1 * 1024 * 1024
 
 // Permissions granted by an interest group to sellers.
 struct SellerCapabilities {
@@ -74,11 +60,9 @@ struct InterestGroup {
     kGroupedByOriginMode,
     // kFrozenContext mode uses a "frozen" JavaScript context to execute the
     // bidding scripts for all interest groups that share a common biddnig
-    // script. Before the script is loaded the global object is recursively
-    // frozen to prevent persisting state. After the script is loaded, the
-    // script context is also frozen and checked for any state that may persist
-    // between function execution. If any potentially persistent state is
-    // identified, execution abandoned.
+    // script. After the script is loaded, the script context is frozen and
+    // checked for any state that may persist between function execution. If any
+    // potentially persistent state is identified, execution abandoned.
     kFrozenContext,
   };
 
@@ -114,7 +98,7 @@ struct InterestGroup {
   // `bidding_wasm_helper_url` must match the current frame URL's origin.
   url.mojom.Url? bidding_wasm_helper_url;
   // `update_url` must match the current frame URL's origin.
-  url.mojom.Url? daily_update_url;
+  url.mojom.Url? update_url;
   // `trusted_bidding_signals_url` must match the current frame URL's origin.
   url.mojom.Url? trusted_bidding_signals_url;
   array<string>? trusted_bidding_signals_keys;
@@ -122,7 +106,7 @@ struct InterestGroup {
   string?        user_bidding_signals;
   array<InterestGroupAd>? ads;
   array<InterestGroupAd>? ad_components;
-  map<string, InterestGroupSize>? ad_sizes;
+  map<string, AdSize>? ad_sizes;
   map<string, array<string>>? size_groups;
 };
 
@@ -245,6 +229,27 @@ union AuctionAdConfigMaybePromiseBuyerTimeouts {
   AuctionAdConfigBuyerTimeouts value;
 };
 
+struct AdCurrency {
+  // Must meet blink::IsValidAdCurrencyCode
+  string currency_code;
+};
+
+// See blink::AuctionConfig::BuyerCurrencies
+struct AuctionAdConfigBuyerCurrencies {
+  // Requirement for bid currency that, if specified, will apply to all bids
+  // made by buyers not specified in `per_buyer_currencies`.
+  AdCurrency? all_buyers_currency;
+
+  // Can provide a requirement for bid currency for buyers by origin.
+  map<url.mojom.Origin, AdCurrency>? per_buyer_currencies;
+};
+
+// See blink::AuctionConfig::MaybePromiseBuyerCurrencies
+union AuctionAdConfigMaybePromiseBuyerCurrencies {
+  uint32 promise; // value unused
+  AuctionAdConfigBuyerCurrencies value;
+};
+
 union AuctionAdConfigMaybePromiseDirectFromSellerSignals {
   uint32 promise;  // value unused
   DirectFromSellerSignals? value;
@@ -310,6 +315,16 @@ struct AuctionAdConfigNonSharedParams {
   // Timeouts for individual interest group worklet Javascript execution.
   AuctionAdConfigMaybePromiseBuyerTimeouts buyer_timeouts;
 
+  // Expectations for currency provided by seller when modifying bids for
+  // parent auctions or to help with mixed-currency reporting. If this is set,
+  // any currency annotation from seller will be checked against it.
+  AdCurrency? seller_currency;
+
+  // Expectations for currencies used by buyers to bid. If a currency is
+  // specified for a buyer here, and they annotate their bid with a currency,
+  // their consistency will be checked before accepting the bid.
+  AuctionAdConfigMaybePromiseBuyerCurrencies buyer_currencies;
+
   // Cumulative timeouts for all interest groups with the same buyer. Includes
   // launching worklet processes, loading scripts and signals, and running
   // the buyer's generateBid() functions.
@@ -351,6 +366,17 @@ struct AuctionAdConfigNonSharedParams {
   // For each type of buyer extended private aggregation reporting event,
   // provides the bucket offset and scalar multiplier for that event.
   map<BuyerReportType, AuctionReportBuyersConfig>? auction_report_buyers;
+
+  // The set of capabilities that each interest group must declare to
+  // participate in the auction. Interest groups that don't declare all these
+  // capabilities will not participate in the auction.
+  SellerCapabilities required_seller_capabilities;
+
+  // The requested ad creative size for the auction (strictly optional).
+  // If specified in the auction config, it is surfaced during the auction
+  // through browser signals and stored after the auction in the winning
+  // fenced frame config as its container size.
+  AdSize? requested_size;
 
   // Nested auctions whose results will also be fed to `seller`. Only the top
   // level auction config can have component auctions.

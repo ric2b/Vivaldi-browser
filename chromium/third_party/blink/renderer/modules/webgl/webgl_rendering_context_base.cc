@@ -134,6 +134,7 @@
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_utf8_adaptor.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "ui/gfx/geometry/size.h"
 
 // Populates parameters from texImage2D except for border, width, height, and
@@ -709,14 +710,16 @@ void WebGLRenderingContextBase::commit() {
 
   if (PaintRenderingResultsToCanvas(kBackBuffer)) {
     if (Host()->GetOrCreateCanvasResourceProvider(RasterModeHint::kPreferGPU)) {
-      Host()->Commit(Host()->ResourceProvider()->ProduceCanvasResource(),
+      Host()->Commit(Host()->ResourceProvider()->ProduceCanvasResource(
+                         CanvasResourceProvider::FlushReason::kNone),
                      SkIRect::MakeWH(width, height));
     }
   }
   MarkLayerComposited();
 }
 
-scoped_refptr<StaticBitmapImage> WebGLRenderingContextBase::GetImage() {
+scoped_refptr<StaticBitmapImage> WebGLRenderingContextBase::GetImage(
+    CanvasResourceProvider::FlushReason reason) {
   if (!GetDrawingBuffer())
     return nullptr;
 
@@ -760,7 +763,7 @@ scoped_refptr<StaticBitmapImage> WebGLRenderingContextBase::GetImage() {
     NOTREACHED();
     return nullptr;
   }
-  return resource_provider->Snapshot();
+  return resource_provider->Snapshot(reason);
 }
 
 ScriptPromise WebGLRenderingContextBase::makeXRCompatible(
@@ -782,8 +785,8 @@ ScriptPromise WebGLRenderingContextBase::makeXRCompatible(
   if (make_xr_compatible_resolver_)
     return make_xr_compatible_resolver_->Promise();
 
-  make_xr_compatible_resolver_ =
-      MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  make_xr_compatible_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = make_xr_compatible_resolver_->Promise();
 
   MakeXrCompatibleAsync();
@@ -1535,16 +1538,18 @@ bool WebGLRenderingContextBase::PushFrameWithCopy() {
     if (Host()->GetOrCreateCanvasResourceProvider(RasterModeHint::kPreferGPU)) {
       const int width = GetDrawingBuffer()->Size().width();
       const int height = GetDrawingBuffer()->Size().height();
-      submitted_frame =
-          Host()->PushFrame(Host()->ResourceProvider()->ProduceCanvasResource(),
-                            SkIRect::MakeWH(width, height));
+      submitted_frame = Host()->PushFrame(
+          Host()->ResourceProvider()->ProduceCanvasResource(
+              CanvasResourceProvider::FlushReason::kNon2DCanvas),
+          SkIRect::MakeWH(width, height));
     }
   }
   MarkLayerComposited();
   return submitted_frame;
 }
 
-void WebGLRenderingContextBase::FinalizeFrame(bool /*printing*/) {
+void WebGLRenderingContextBase::FinalizeFrame(
+    CanvasResourceProvider::FlushReason) {
   if (Host()->LowLatencyEnabled()) {
     // PaintRenderingResultsToCanvas will export drawing buffer if the resource
     // provider is single buffered.  Otherwise it will copy the drawing buffer.
@@ -1751,11 +1756,9 @@ bool WebGLRenderingContextBase::PaintRenderingResultsToCanvas(
     return false;
   if (!CopyRenderingResultsFromDrawingBuffer(Host()->ResourceProvider(),
                                              source_buffer)) {
-    // Currently, CopyRenderingResultsFromDrawingBuffer is expected to always
-    // succeed because cases where canvas()-buffer() is not accelerated are
-    // handled before reaching this point.  If that assumption ever stops
-    // holding true, we may need to implement a fallback right here.
-    NOTREACHED();
+    // CopyRenderingResultsFromDrawingBuffer handles both the
+    // hardware-accelerated and software cases, so there is no
+    // possible additional fallback for failures seen at this point.
     return false;
   }
   return true;
@@ -5459,7 +5462,8 @@ scoped_refptr<Image> WebGLRenderingContextBase::DrawImageIntoBufferForTexImage(
   draw_options.clamping_mode = Image::kDoNotClampImageToSourceRect;
   image->Draw(resource_provider->Canvas(), flags, gfx::RectF(dest_rect),
               gfx::RectF(src_rect), draw_options);
-  return resource_provider->Snapshot();
+  return resource_provider->Snapshot(
+      CanvasResourceProvider::FlushReason::kWebGLTexImage);
 }
 
 WebGLTexture* WebGLRenderingContextBase::ValidateTexImageBinding(
@@ -5629,7 +5633,7 @@ void WebGLRenderingContextBase::TexImageHelperImageData(TexImageParams params,
   }
 
   auto pixmap = pixels->GetSkPixmap();
-  auto image = SkImage::MakeFromRaster(pixmap, nullptr, nullptr);
+  auto image = SkImages::RasterFromPixmap(pixmap, nullptr, nullptr);
   TexImageSkImage(params, std::move(image), /*image_has_flip_y=*/false);
 }
 
@@ -5951,7 +5955,8 @@ void WebGLRenderingContextBase::TexImageHelperCanvasRenderingContextHost(
 
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
   scoped_refptr<Image> image = context_host->GetSourceImageForCanvas(
-      &source_image_status, gfx::SizeF(*params.width, *params.height));
+      CanvasResourceProvider::FlushReason::kWebGLTexImage, &source_image_status,
+      gfx::SizeF(*params.width, *params.height));
   if (source_image_status != kNormalSourceImageStatus)
     return;
 
@@ -6122,14 +6127,6 @@ void WebGLRenderingContextBase::TexImageHelperMediaVideoFrame(
       CanUseTexImageViaGPU(params) && transform == media::kNoTransformation &&
       unpack_color_space_is_srgb;
 
-#if BUILDFLAG(IS_WIN)
-  // TODO(crbug.com/1227921): When OOP GPU rasterization is disabled, uploading
-  // via the GPU becomes extremely slow.
-  const bool gpu_teximage_is_slow = !caps.supports_oop_raster;
-#else
-  const bool gpu_teximage_is_slow = false;
-#endif
-
   // Callers may chose to provide a renderer which ensures that generated
   // intermediates will be cached across TexImage calls for the same frame.
   std::unique_ptr<media::PaintCanvasVideoRenderer> local_video_renderer;
@@ -6176,7 +6173,7 @@ void WebGLRenderingContextBase::TexImageHelperMediaVideoFrame(
     // TODO(crbug.com/1180879): I420A should be supported, but currently fails
     // conformance/textures/misc/texture-video-transparent.html.
     if (!media_video_frame->HasTextures() &&
-        media::IsOpaque(media_video_frame->format()) && !gpu_teximage_is_slow &&
+        media::IsOpaque(media_video_frame->format()) &&
         video_renderer->CopyVideoFrameYUVDataToGLTexture(
             raster_context_provider, ContextGL(), media_video_frame,
             params.target, texture->Object(), adjusted_internalformat,
@@ -6247,9 +6244,9 @@ void WebGLRenderingContextBase::TexImageHelperMediaVideoFrame(
       params.function_id == kTexImage2D || params.function_id == kTexSubImage2D;
 #endif
 
-  const bool can_upload_via_gpu =
-      function_supports_gpu_teximage && CanUseTexImageViaGPU(params) &&
-      source_image_rect_is_default && !gpu_teximage_is_slow;
+  const bool can_upload_via_gpu = function_supports_gpu_teximage &&
+                                  CanUseTexImageViaGPU(params) &&
+                                  source_image_rect_is_default;
 
   // If we can upload via GPU, try to to use an accelerated resource provider
   // configured appropriately for video. Otherwise use the software cache.

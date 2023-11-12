@@ -352,8 +352,8 @@ suite('SecurityPage_SafeBrowsing', function() {
         assertTrue(page.$.safeBrowsingStandard.expanded);
         assertTrue(page.$.safeBrowsingEnhanced.expanded);
 
-        page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!
-            .$.confirm.click();
+        page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
+            .confirm.click();
         flush();
 
         // Wait for onDisableSafebrowsingDialogClose_ to finish.
@@ -376,14 +376,14 @@ suite('SecurityPage_SafeBrowsing', function() {
     // Previously selected option must remain opened.
     assertTrue(page.$.safeBrowsingStandard.expanded);
 
-    page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!.$
+    page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
         .confirm.click();
     flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
     await flushTasks();
 
-    assertFalse(isChildVisible(page, 'settings-disable-safebrowsing-dialog'));
+    assertFalse(isChildVisible(page, 'settings-simple-confirmation-dialog'));
 
     assertFalse(page.$.safeBrowsingEnhanced.checked);
     assertFalse(page.$.safeBrowsingStandard.checked);
@@ -404,14 +404,14 @@ suite('SecurityPage_SafeBrowsing', function() {
     // Previously selected option must remain opened.
     assertTrue(page.$.safeBrowsingEnhanced.expanded);
 
-    page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!.$
+    page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
         .cancel.click();
     flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
     await flushTasks();
 
-    assertFalse(isChildVisible(page, 'settings-disable-safebrowsing-dialog'));
+    assertFalse(isChildVisible(page, 'settings-simple-confirmation-dialog'));
 
     assertTrue(page.$.safeBrowsingEnhanced.checked);
     assertFalse(page.$.safeBrowsingStandard.checked);
@@ -432,14 +432,14 @@ suite('SecurityPage_SafeBrowsing', function() {
     // Previously selected option must remain opened.
     assertTrue(page.$.safeBrowsingStandard.expanded);
 
-    page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!.$
+    page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
         .cancel.click();
     flush();
 
     // Wait for onDisableSafebrowsingDialogClose_ to finish.
     await flushTasks();
 
-    assertFalse(isChildVisible(page, 'settings-disable-safebrowsing-dialog'));
+    assertFalse(isChildVisible(page, 'settings-simple-confirmation-dialog'));
 
     assertFalse(page.$.safeBrowsingEnhanced.checked);
     assertTrue(page.$.safeBrowsingStandard.checked);
@@ -482,7 +482,7 @@ suite('SecurityPage_SafeBrowsing', function() {
     // Previously selected option must remain opened.
     assertTrue(page.$.safeBrowsingStandard.expanded);
 
-    page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!.$
+    page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
         .confirm.click();
     flush();
 
@@ -503,7 +503,7 @@ suite('SecurityPage_SafeBrowsing', function() {
     // Previously selected option must remain opened.
     assertTrue(page.$.safeBrowsingStandard.expanded);
 
-    page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!.$
+    page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
         .confirm.click();
     flush();
 
@@ -537,7 +537,7 @@ suite('SecurityPage_SafeBrowsing', function() {
     // Previously selected option must remain opened.
     assertTrue(page.$.safeBrowsingStandard.expanded);
 
-    page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!.$
+    page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
         .confirm.click();
     flush();
 
@@ -633,7 +633,7 @@ suite('SecurityPage_SafeBrowsing', function() {
     testMetricsBrowserProxy.resetResolver(
         'recordSafeBrowsingInteractionHistogram');
     testMetricsBrowserProxy.resetResolver('recordAction');
-    page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!.$
+    page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
         .cancel.click();
     flush();
     const [disableDeniedResult, disableDeniedAction] = await Promise.all([
@@ -656,7 +656,7 @@ suite('SecurityPage_SafeBrowsing', function() {
     testMetricsBrowserProxy.resetResolver(
         'recordSafeBrowsingInteractionHistogram');
     testMetricsBrowserProxy.resetResolver('recordAction');
-    page.shadowRoot!.querySelector('settings-disable-safebrowsing-dialog')!.$
+    page.shadowRoot!.querySelector('settings-simple-confirmation-dialog')!.$
         .confirm.click();
     flush();
     const [disableConfirmedResult, disableConfirmedAction] = await Promise.all([
@@ -685,19 +685,40 @@ suite('SecurityPage_SafeBrowsing', function() {
             'recordSafeBrowsingInteractionHistogram'));
   });
 
-  test('enhancedProtectionAutoExpanded', function() {
+  test('standardProtectionExpandedIfNoQueryParam', function() {
     // Standard protection should be pre-expanded if there is no param.
     Router.getInstance().navigateTo(routes.SECURITY);
+    assertEquals(
+        page.prefs.generated.safe_browsing.value, SafeBrowsingSetting.STANDARD);
     assertFalse(page.$.safeBrowsingEnhanced.expanded);
     assertTrue(page.$.safeBrowsingStandard.expanded);
+  });
+
+  test('enhancedProtectionExpandedIfEsbCollapseDisabled', function() {
     // Enhanced protection should be pre-expanded if the param is set to
-    // enhanced.
+    // enhanced and enableEsbCollapse is false.
+    loadTimeData.overrideValues({enableEsbCollapse: false});
     Router.getInstance().navigateTo(
         routes.SECURITY,
         /* dynamicParams= */ new URLSearchParams('q=enhanced'));
     assertEquals(
-        SafeBrowsingSetting.STANDARD, page.prefs.generated.safe_browsing.value);
+        page.prefs.generated.safe_browsing.value, SafeBrowsingSetting.STANDARD);
     assertTrue(page.$.safeBrowsingEnhanced.expanded);
     assertFalse(page.$.safeBrowsingStandard.expanded);
   });
+
+  test('enhancedProtectionCollapsedIfEsbCollapseEnabled', function() {
+    // Enhanced protection should be collapsed if the param is set to
+    // enhanced and enableEsbCollapse is true.
+    loadTimeData.overrideValues({enableEsbCollapse: true});
+
+    Router.getInstance().navigateTo(
+        routes.SECURITY,
+        /* dynamicParams= */ new URLSearchParams('q=enhanced'));
+    assertEquals(
+        page.prefs.generated.safe_browsing.value, SafeBrowsingSetting.STANDARD);
+    assertFalse(page.$.safeBrowsingEnhanced.expanded);
+    assertFalse(page.$.safeBrowsingStandard.expanded);
+  });
+
 });

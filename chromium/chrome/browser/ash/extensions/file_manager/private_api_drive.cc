@@ -6,6 +6,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -16,6 +17,7 @@
 #include "base/functional/bind.h"
 #include "base/i18n/string_search.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
@@ -46,13 +48,17 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/webui/ash/manage_mirrorsync/manage_mirrorsync_dialog.h"
+#include "chrome/common/extensions/api/file_manager_private.h"
 #include "chrome/common/extensions/api/file_manager_private_internal.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "chromeos/ash/components/drivefs/drivefs_pin_manager.h"
 #include "chromeos/ash/components/drivefs/drivefs_util.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/drive/chromeos/search_metadata.h"
+#include "components/drive/drive_pref_names.h"
 #include "components/drive/event_logger.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -327,7 +333,7 @@ class SingleEntryPropertiesGetterForDocumentsProvider {
   // Given parameters.
   ResultCallback callback_;
   const storage::FileSystemURL file_system_url_;
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
 
   // Values used in the process.
   std::unique_ptr<EntryProperties> properties_;
@@ -368,8 +374,9 @@ void OnSearchDriveFs(
   base::Value::List result;
   for (const auto& item : *items) {
     base::FilePath path;
-    if (!root.AppendRelativePath(item->path, &path))
+    if (!root.AppendRelativePath(item->path, &path)) {
       path = item->path;
+    }
     base::Value::Dict entry;
     entry.Set("fileSystemName", fs_name);
     entry.Set("fileSystemRoot", fs_root);
@@ -450,7 +457,7 @@ FileManagerPrivateInternalGetEntryPropertiesFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   using api::file_manager_private_internal::GetEntryProperties::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
@@ -527,8 +534,9 @@ void FileManagerPrivateInternalGetEntryPropertiesFunction::
   properties_list_[index] = std::move(*properties);
 
   processed_count_++;
-  if (processed_count_ < properties_list_.size())
+  if (processed_count_ < properties_list_.size()) {
     return;
+  }
 
   Respond(
       ArgumentList(extensions::api::file_manager_private_internal::
@@ -546,7 +554,7 @@ FileManagerPrivateInternalPinDriveFileFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   using extensions::api::file_manager_private_internal::PinDriveFile::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
@@ -579,8 +587,9 @@ FileManagerPrivateInternalPinDriveFileFunction::RunAsyncForDriveFs(
   }
 
   auto* drivefs_interface = integration_service->GetDriveFsInterface();
-  if (!drivefs_interface)
+  if (!drivefs_interface) {
     return RespondNow(Error("Drive is disabled"));
+  }
 
   drivefs_interface->SetPinned(
       path, pin,
@@ -597,7 +606,7 @@ void FileManagerPrivateInternalPinDriveFileFunction::OnPinStateSet(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (error == drive::FILE_ERROR_OK) {
-    Respond(WithArguments());
+    Respond(NoArguments());
   } else {
     Respond(Error(drive::FileErrorToString(error)));
   }
@@ -610,7 +619,7 @@ FileManagerPrivateSearchDriveFunction::FileManagerPrivateSearchDriveFunction() {
 
 ExtensionFunction::ResponseAction FileManagerPrivateSearchDriveFunction::Run() {
   using extensions::api::file_manager_private::SearchDrive::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   if (!drive::util::GetIntegrationServiceByProfile(
@@ -624,6 +633,12 @@ ExtensionFunction::ResponseAction FileManagerPrivateSearchDriveFunction::Run() {
 
   auto query = drivefs::mojom::QueryParameters::New();
   query->text_content = params->search_params.query;
+  if (params->search_params.modified_timestamp.has_value()) {
+    query->modified_time =
+        base::Time::FromJsTime(*params->search_params.modified_timestamp);
+    query->modified_time_operator =
+        drivefs::mojom::QueryParameters::DateComparisonOperator::kGreaterThan;
+  }
   ash::RecentSource::FileType file_type;
   if (!file_manager::util::ToRecentSourceFileType(
           params->search_params.category, &file_type)) {
@@ -676,7 +691,7 @@ FileManagerPrivateSearchDriveMetadataFunction::
 ExtensionFunction::ResponseAction
 FileManagerPrivateSearchDriveMetadataFunction::Run() {
   using api::file_manager_private::SearchDriveMetadata::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
@@ -857,7 +872,7 @@ FileManagerPrivateInternalGetDownloadUrlFunction::
 ExtensionFunction::ResponseAction
 FileManagerPrivateInternalGetDownloadUrlFunction::Run() {
   using extensions::api::file_manager_private_internal::GetDownloadUrl::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   scoped_refptr<storage::FileSystemContext> file_system_context =
@@ -921,8 +936,9 @@ FileManagerPrivateInternalGetDownloadUrlFunction::RunAsyncForDriveFs(
   }
 
   auto* drivefs_interface = integration_service->GetDriveFsInterface();
-  if (!drivefs_interface)
+  if (!drivefs_interface) {
     return RespondNow(Error("Drive not available"));
+  }
 
   drivefs_interface->GetMetadata(
       path,
@@ -943,7 +959,7 @@ void FileManagerPrivateInternalGetDownloadUrlFunction::OnGotMetadata(
 ExtensionFunction::ResponseAction
 FileManagerPrivateNotifyDriveDialogResultFunction::Run() {
   using api::file_manager_private::NotifyDriveDialogResult::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   file_manager::EventRouter* const event_router =
@@ -970,7 +986,7 @@ FileManagerPrivateNotifyDriveDialogResultFunction::Run() {
   } else {
     return RespondNow(Error("Could not find event router"));
   }
-  return RespondNow(WithArguments());
+  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction
@@ -981,7 +997,26 @@ FileManagerPrivatePollDriveHostedFilePinStatesFunction::Run() {
   if (integration_service) {
     integration_service->PollHostedFilePinStates();
   }
-  return RespondNow(WithArguments());
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateGetBulkPinProgressFunction::Run() {
+  Profile* const profile = Profile::FromBrowserContext(browser_context());
+  drive::DriveIntegrationService* integration_service =
+      drive::util::GetIntegrationServiceByProfile(profile);
+  if (!integration_service) {
+    return RespondNow(Error("Drive not available"));
+  }
+
+  if (!integration_service->GetPinManager()) {
+    return RespondNow(Error("Pin Manager not available"));
+  }
+
+  return RespondNow(ArgumentList(
+      api::file_manager_private::GetBulkPinProgress::Results::Create(
+          file_manager::util::BulkPinProgressToJs(
+              integration_service->GetPinManager()->GetProgress()))));
 }
 
 ExtensionFunction::ResponseAction
@@ -990,7 +1025,7 @@ FileManagerPrivateOpenManageSyncSettingsFunction::Run() {
     ash::ManageMirrorSyncDialog::Show(
         Profile::FromBrowserContext(browser_context()));
   }
-  return RespondNow(WithArguments());
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

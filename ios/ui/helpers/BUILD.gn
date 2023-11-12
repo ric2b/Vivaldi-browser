@@ -1,7 +1,5 @@
 # Copyright 2023 Vivaldi Technologies. All rights reserved.
 
-import("//build/config/ios/swift_source_set.gni")
-
 source_set("helpers") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -20,10 +18,12 @@ source_set("helpers") {
   deps = [
    "//base",
    "//url",
+   "//components/url_formatter",
   ]
 
  frameworks = [
   "ImageIO.framework",
   "UIKit.framework",
+  "Foundation.framework",
  ]
 }

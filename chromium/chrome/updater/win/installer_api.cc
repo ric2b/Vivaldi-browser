@@ -4,12 +4,14 @@
 
 #include "chrome/updater/win/installer_api.h"
 
+#include <algorithm>
 #include <iterator>
 #include <string>
+#include <vector>
 
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
@@ -31,23 +33,6 @@
 namespace updater {
 namespace {
 
-// Opens the registry ClientState subkey for the `app_id`.
-absl::optional<base::win::RegKey> ClientStateAppKeyOpen(
-    UpdaterScope updater_scope,
-    const std::string& app_id,
-    REGSAM regsam) {
-  std::wstring subkey;
-  if (!base::UTF8ToWide(app_id.c_str(), app_id.size(), &subkey)) {
-    return absl::nullopt;
-  }
-  base::win::RegKey key(UpdaterScopeToHKeyRoot(updater_scope), CLIENT_STATE_KEY,
-                        Wow6432(regsam));
-  if (key.OpenKey(subkey.c_str(), Wow6432(regsam)) != ERROR_SUCCESS) {
-    return absl::nullopt;
-  }
-  return key;
-}
-
 // Creates or opens the registry ClientState subkey for the `app_id`. `regsam`
 // must contain the KEY_WRITE access right for the creation of the subkey to
 // succeed.
@@ -67,11 +52,74 @@ absl::optional<base::win::RegKey> ClientStateAppKeyCreate(
   return key;
 }
 
+bool RegRenameValue(base::win::RegKey& key,
+                    const std::wstring& old_value_name,
+                    const std::wstring& new_value_name) {
+  DWORD size = 0;
+  if (key.ReadValue(old_value_name.c_str(), nullptr, &size, nullptr) !=
+      ERROR_SUCCESS) {
+    return false;
+  }
+
+  std::vector<char> raw_value(size);
+  DWORD dtype = 0;
+  if (key.ReadValue(old_value_name.c_str(), raw_value.data(), &size, &dtype) !=
+      ERROR_SUCCESS) {
+    return false;
+  }
+
+  if (key.WriteValue(new_value_name.c_str(), raw_value.data(), size, dtype) !=
+      ERROR_SUCCESS) {
+    PLOG(WARNING) << "could not write: " << new_value_name;
+    return false;
+  }
+
+  PLOG_IF(WARNING, key.DeleteValue(old_value_name.c_str()) != ERROR_SUCCESS);
+  return true;
+}
+
+void PersistLastInstallerResultValues(UpdaterScope updater_scope,
+                                      const std::string& app_id) {
+  absl::optional<base::win::RegKey> key =
+      ClientStateAppKeyOpen(updater_scope, app_id, KEY_READ | KEY_WRITE);
+  if (!key) {
+    return;
+  }
+
+  // Rename InstallerResultXXX values to LastXXX.
+  RegRenameValue(key.value(), kRegValueInstallerResult,
+                 kRegValueLastInstallerResult);
+  RegRenameValue(key.value(), kRegValueInstallerError,
+                 kRegValueLastInstallerError);
+  RegRenameValue(key.value(), kRegValueInstallerExtraCode1,
+                 kRegValueLastInstallerExtraCode1);
+  RegRenameValue(key.value(), kRegValueInstallerResultUIString,
+                 kRegValueLastInstallerResultUIString);
+  RegRenameValue(key.value(), kRegValueInstallerSuccessLaunchCmdLine,
+                 kRegValueLastInstallerSuccessLaunchCmdLine);
+}
+
 }  // namespace
 
 InstallerOutcome::InstallerOutcome() = default;
 InstallerOutcome::InstallerOutcome(const InstallerOutcome&) = default;
 InstallerOutcome::~InstallerOutcome() = default;
+
+absl::optional<base::win::RegKey> ClientStateAppKeyOpen(
+    UpdaterScope updater_scope,
+    const std::string& app_id,
+    REGSAM regsam) {
+  std::wstring subkey;
+  if (!base::UTF8ToWide(app_id.c_str(), app_id.size(), &subkey)) {
+    return absl::nullopt;
+  }
+  base::win::RegKey key(UpdaterScopeToHKeyRoot(updater_scope), CLIENT_STATE_KEY,
+                        Wow6432(regsam));
+  if (key.OpenKey(subkey.c_str(), Wow6432(regsam)) != ERROR_SUCCESS) {
+    return absl::nullopt;
+  }
+  return key;
+}
 
 bool ClientStateAppKeyDelete(UpdaterScope updater_scope,
                              const std::string& app_id) {
@@ -95,7 +143,7 @@ int GetInstallerProgress(UpdaterScope updater_scope,
                   ERROR_SUCCESS) {
     return -1;
   }
-  return base::clamp(progress, DWORD{0}, DWORD{100});
+  return std::clamp(progress, DWORD{0}, DWORD{100});
 }
 
 bool SetInstallerProgressForTesting(UpdaterScope updater_scope,
@@ -174,6 +222,8 @@ absl::optional<InstallerOutcome> GetInstallerOutcome(
       }
     }
   }
+
+  PersistLastInstallerResultValues(updater_scope, app_id);
 
   return installer_outcome;
 }
@@ -258,7 +308,7 @@ Installer::Result MakeInstallerResult(
         if (installer_outcome->installer_cmd_line) {
           result.installer_cmd_line = *installer_outcome->installer_cmd_line;
         }
-        DCHECK_EQ(result.error, 0);
+        CHECK_EQ(result.error, 0);
         break;
 
       case InstallerResult::kCustomError:
@@ -279,7 +329,7 @@ Installer::Result MakeInstallerResult(
         if (installer_outcome->installer_text) {
           result.installer_text = *installer_outcome->installer_text;
         }
-        DCHECK_NE(result.error, 0);
+        CHECK_NE(result.error, 0);
         break;
 
       case InstallerResult::kMsiError:
@@ -296,7 +346,7 @@ Installer::Result MakeInstallerResult(
           result.extended_error = *installer_outcome->installer_extracode1;
         }
         result.installer_text = GetTextForSystemError(result.error);
-        DCHECK_NE(result.error, 0);
+        CHECK_NE(result.error, 0);
         break;
 
       case InstallerResult::kExitCode:

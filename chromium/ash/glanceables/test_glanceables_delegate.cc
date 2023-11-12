@@ -10,16 +10,8 @@ TestGlanceablesDelegate::TestGlanceablesDelegate() = default;
 
 TestGlanceablesDelegate::~TestGlanceablesDelegate() = default;
 
-void TestGlanceablesDelegate::RestoreSession() {
-  ++restore_session_count_;
-}
-
 void TestGlanceablesDelegate::OnGlanceablesClosed() {
   ++on_glanceables_closed_count_;
-}
-
-bool TestGlanceablesDelegate::ShouldTakeSignoutScreenshot() {
-  return should_take_signout_screenshot_;
 }
 
 }  // namespace ash

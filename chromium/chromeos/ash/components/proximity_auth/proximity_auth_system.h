@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "chromeos/ash/components/proximity_auth/screenlock_bridge.h"
 #include "components/account_id/account_id.h"
@@ -57,8 +58,7 @@ class ProximityAuthSystem : public ScreenlockBridge::Observer {
       absl::optional<ash::multidevice::RemoteDeviceRef> local_device);
 
   // Returns the RemoteDevices registered for |account_id|. Returns an empty
-  // list
-  // if no devices are registered for |account_id|.
+  // list if no devices are registered for |account_id|.
   ash::multidevice::RemoteDeviceRefList GetRemoteDevicesForUser(
       const AccountId& account_id) const;
 
@@ -114,7 +114,8 @@ class ProximityAuthSystem : public ScreenlockBridge::Observer {
   std::map<AccountId, ash::multidevice::RemoteDeviceRef> local_device_map_;
 
   // Entry point to the SecureChannel API.
-  ash::secure_channel::SecureChannelClient* secure_channel_client_;
+  raw_ptr<ash::secure_channel::SecureChannelClient, ExperimentalAsh>
+      secure_channel_client_;
 
   // Responsible for the life cycle of connecting and authenticating to
   // the RemoteDevice of the currently focused user.

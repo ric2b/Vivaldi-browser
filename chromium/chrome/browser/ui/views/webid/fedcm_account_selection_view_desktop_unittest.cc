@@ -24,7 +24,8 @@ using SignInMode = content::IdentityRequestAccount::SignInMode;
 
 namespace {
 
-constexpr char kRpEtldPlusOne[] = "rp-example.com";
+constexpr char kTopFrameEtldPlusOne[] = "top-frame-example.com";
+constexpr char kIframeEtldPlusOne[] = "iframe-example.com";
 constexpr char kIdpEtldPlusOne[] = "idp-example.com";
 
 // Mock AccountSelectionBubbleViewInterface which tracks state.
@@ -62,7 +63,8 @@ class TestBubbleView : public AccountSelectionBubbleViewInterface {
   }
 
   void ShowSingleAccountConfirmDialog(
-      const std::u16string& rp_for_display,
+      const std::u16string& top_frame_for_display,
+      const absl::optional<std::u16string>& iframe_for_display,
       const content::IdentityRequestAccount& account,
       const IdentityProviderDisplayData& idp_data,
       bool show_back_button) override {
@@ -71,10 +73,18 @@ class TestBubbleView : public AccountSelectionBubbleViewInterface {
     account_ids_ = {account.id};
   }
 
-  void ShowFailureDialog(const std::u16string& rp_for_display,
-                         const std::u16string& idp_for_display) override {
+  void ShowFailureDialog(
+      const std::u16string& top_frame_for_display,
+      const absl::optional<std::u16string>& iframe_for_display,
+      const std::u16string& idp_for_display,
+      const content::IdentityProviderMetadata& idp_metadata) override {
     sheet_type_ = SheetType::kFailure;
     account_ids_ = {};
+  }
+
+  std::string GetDialogTitle() const override { return std::string(); }
+  absl::optional<std::string> GetDialogSubtitle() const override {
+    return absl::nullopt;
   }
 
   bool show_back_button_{false};
@@ -106,7 +116,8 @@ class TestFedCmAccountSelectionView : public FedCmAccountSelectionView {
 
  protected:
   views::Widget* CreateBubbleWithAccessibleTitle(
-      const std::u16string& rp_etld_plus_one,
+      const std::u16string& top_frame_etld_plus_one,
+      const absl::optional<std::u16string>& iframe_etld_plus_one,
       const absl::optional<std::u16string>& idp_title,
       blink::mojom::RpContext rp_context,
       bool show_auto_reauthn_checkbox) override {
@@ -168,11 +179,12 @@ class FedCmAccountSelectionViewDesktopTest : public ChromeViewsTestBase {
     std::vector<content::IdentityRequestAccount> accounts;
     for (const auto& account_info : account_infos) {
       accounts.emplace_back(account_info.first, "", "", "", GURL::EmptyGURL(),
-                            account_info.second);
+                            std::vector<std::string>(), account_info.second);
     }
     return IdentityProviderDisplayData(u"", content::IdentityProviderMetadata(),
                                        content::ClientMetadata(GURL(), GURL()),
-                                       std::move(accounts));
+                                       std::move(accounts),
+                                       /*request_permission=*/true);
   }
 
   std::unique_ptr<TestFedCmAccountSelectionView> CreateAndShow(
@@ -190,10 +202,11 @@ class FedCmAccountSelectionViewDesktopTest : public ChromeViewsTestBase {
             SignInMode mode,
             bool show_auto_reauthn_checkbox = false) {
     controller.Show(
-        kRpEtldPlusOne,
+        kTopFrameEtldPlusOne,
+        absl::make_optional<std::string>(kIframeEtldPlusOne),
         {{kIdpEtldPlusOne, accounts, content::IdentityProviderMetadata(),
           content::ClientMetadata(GURL(), GURL()),
-          blink::mojom::RpContext::kSignIn}},
+          blink::mojom::RpContext::kSignIn, /* request_permission */ true}},
         mode, show_auto_reauthn_checkbox);
   }
 
@@ -310,7 +323,9 @@ TEST_F(FedCmAccountSelectionViewDesktopTest,
   AccountSelectionBubbleView::Observer* observer =
       static_cast<AccountSelectionBubbleView::Observer*>(controller.get());
 
-  controller->ShowFailureDialog(kRpEtldPlusOne, kIdpEtldPlusOne);
+  controller->ShowFailureDialog(kTopFrameEtldPlusOne, kIframeEtldPlusOne,
+                                kIdpEtldPlusOne,
+                                content::IdentityProviderMetadata());
   EXPECT_EQ(TestBubbleView::SheetType::kFailure, bubble_view_->sheet_type_);
 
   const char kAccountId[] = "account_id";
@@ -339,7 +354,9 @@ TEST_F(FedCmAccountSelectionViewDesktopTest,
   AccountSelectionBubbleView::Observer* observer =
       static_cast<AccountSelectionBubbleView::Observer*>(controller.get());
 
-  controller->ShowFailureDialog(kRpEtldPlusOne, kIdpEtldPlusOne);
+  controller->ShowFailureDialog(kTopFrameEtldPlusOne, kIframeEtldPlusOne,
+                                kIdpEtldPlusOne,
+                                content::IdentityProviderMetadata());
   EXPECT_EQ(TestBubbleView::SheetType::kFailure, bubble_view_->sheet_type_);
 
   const char kAccountId[] = "account_id";

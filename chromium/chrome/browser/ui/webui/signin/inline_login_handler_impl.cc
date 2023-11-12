@@ -228,11 +228,13 @@ void OnSigninComplete(Profile* profile,
   if (can_be_managed && !password.empty()) {
     password_manager::PasswordReuseManager* reuse_manager =
         PasswordReuseManagerFactory::GetForProfile(profile);
-    reuse_manager->SaveGaiaPasswordHash(
-        username, base::UTF8ToUTF16(password),
-        /*is_primary_account_=*/true,
-        password_manager::metrics_util::GaiaPasswordHashChange::
-            SAVED_ON_CHROME_SIGNIN);
+    if (reuse_manager) {
+      reuse_manager->SaveGaiaPasswordHash(
+          username, base::UTF8ToUTF16(password),
+          /*is_primary_account_=*/true,
+          password_manager::metrics_util::GaiaPasswordHashChange::
+              SAVED_ON_CHROME_SIGNIN);
+    }
   }
 
   if (can_be_managed && is_force_sign_in_with_usermanager) {
@@ -331,18 +333,17 @@ void InlineSigninHelper::OnClientOAuthSuccess(const ClientOAuthResult& result) {
     // TODO(https://crbug.com/1205147): In case of reauth, wait until cookies
     // are set before opening a browser window.
     profiles::OpenBrowserWindowForProfile(
-        base::BindOnce(
+        base::IgnoreArgs<Browser*>(base::BindOnce(
             &InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened,
-            base::Unretained(this), result),
+            base::Unretained(this), result)),
         true, false, true, profile_);
   } else {
-    OnClientOAuthSuccessAndBrowserOpened(result, profile_);
+    OnClientOAuthSuccessAndBrowserOpened(result);
   }
 }
 
 void InlineSigninHelper::OnClientOAuthSuccessAndBrowserOpened(
-    const ClientOAuthResult& result,
-    Profile* /*profile*/) {
+    const ClientOAuthResult& result) {
   HandlerSigninReason reason = GetHandlerSigninReason(current_url_);
   if (reason == HandlerSigninReason::kFetchLstOnly) {
     // Constants are only available on Windows for the Google Credential

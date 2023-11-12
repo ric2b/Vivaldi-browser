@@ -20,6 +20,10 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#include "chrome/test/base/scoped_channel_override.h"
+#endif
+
 using ::testing::_;
 using ::testing::ByMove;
 using ::testing::Eq;
@@ -45,6 +49,13 @@ void CreateCrashReport(crashpad::CrashReportDatabase* database,
             crashpad::CrashReportDatabase::kNoError);
 }
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Duplicating the definition of these variables here to ensure that changes to
+// those values in the source file are deliberate and caught by tests otherwise.
+constexpr char kCrashpadPollingIntervalFlag[] = "crashpad-polling-interval";
+constexpr int kDefaultCrashpadPollingIntervalSeconds = 3600;
+#endif
+
 }  // namespace
 
 class MockRealtimeCrashReportingClient : public RealtimeReportingClient {
@@ -56,14 +67,13 @@ class MockRealtimeCrashReportingClient : public RealtimeReportingClient {
   MockRealtimeCrashReportingClient& operator=(
       const MockRealtimeCrashReportingClient&) = delete;
 
-  absl::optional<enterprise_connectors::ReportingSettings>
-  GetReportingSettings() override {
-    return enterprise_connectors::ReportingSettings();
+  absl::optional<ReportingSettings> GetReportingSettings() override {
+    return ReportingSettings();
   }
 
   MOCK_METHOD4(ReportPastEvent,
                void(const std::string&,
-                    const enterprise_connectors::ReportingSettings& settings,
+                    const ReportingSettings& settings,
                     base::Value::Dict event,
                     const base::Time& time));
 };
@@ -101,20 +111,17 @@ TEST_F(CrashReportingContextTest, GetNewReportsFromDB) {
 
 TEST_F(CrashReportingContextTest, GetAndSetLatestCrashReportingTime) {
   TestingPrefServiceSimple pref_service;
-  pref_service.registry()->RegisterInt64Pref(
-      enterprise_connectors::kLatestCrashReportCreationTime, 0);
+  pref_service.registry()->RegisterInt64Pref(kLatestCrashReportCreationTime, 0);
   time_t timestamp = base::Time::Now().ToTimeT();
 
-  enterprise_connectors::SetLatestCrashReportTime(&pref_service, timestamp);
-  ASSERT_EQ(timestamp,
-            enterprise_connectors::GetLatestCrashReportTime(&pref_service));
+  SetLatestCrashReportTime(&pref_service, timestamp);
+  ASSERT_EQ(timestamp, GetLatestCrashReportTime(&pref_service));
 }
 
 TEST_F(CrashReportingContextTest, UploadToReportingServer) {
   TestingPrefServiceSimple pref_service;
-  pref_service.registry()->RegisterInt64Pref(
-      enterprise_connectors::kLatestCrashReportCreationTime, 0);
-  EXPECT_EQ(0u, enterprise_connectors::GetLatestCrashReportTime(&pref_service));
+  pref_service.registry()->RegisterInt64Pref(kLatestCrashReportCreationTime, 0);
+  EXPECT_EQ(0u, GetLatestCrashReportTime(&pref_service));
 
   time_t timestamp = base::Time::Now().ToTimeT();
   std::vector<crashpad::CrashReportDatabase::Report> reports;
@@ -137,10 +144,52 @@ TEST_F(CrashReportingContextTest, UploadToReportingServer) {
                               _, base::Time::FromTimeT(timestamp)))
       .Times(1);
   UploadToReportingServer(reporting_client, &pref_service, reports);
-  EXPECT_EQ(timestamp,
-            enterprise_connectors::GetLatestCrashReportTime(&pref_service));
+  EXPECT_EQ(timestamp, GetLatestCrashReportTime(&pref_service));
 }
 
-#endif
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
+struct PollingIntervalParams {
+  PollingIntervalParams(chrome::ScopedChannelOverride::Channel channel,
+                        const std::string cmd_flag,
+                        int expected_interval)
+      : channel(channel),
+        cmd_flag(cmd_flag),
+        expected_interval(expected_interval) {}
+
+  chrome::ScopedChannelOverride::Channel channel;
+  std::string cmd_flag;
+  int expected_interval;
+};
+
+class CrashpadPollingIntervalTest
+    : public testing::TestWithParam<PollingIntervalParams> {};
+
+TEST_P(CrashpadPollingIntervalTest, GetCrashpadPollingInterval) {
+  chrome::ScopedChannelOverride scoped_channel(GetParam().channel);
+  base::CommandLine* commandLine = base::CommandLine::ForCurrentProcess();
+  commandLine->AppendSwitchASCII(kCrashpadPollingIntervalFlag,
+                                 GetParam().cmd_flag);
+  EXPECT_EQ(GetCrashpadPollingInterval(),
+            base::Seconds(GetParam().expected_interval));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    CrashpadPollingIntervalTest,
+    CrashpadPollingIntervalTest,
+    testing::Values(
+        PollingIntervalParams(chrome::ScopedChannelOverride::Channel::kBeta,
+                              "-10",
+                              kDefaultCrashpadPollingIntervalSeconds),
+        PollingIntervalParams(chrome::ScopedChannelOverride::Channel::kBeta,
+                              "10",
+                              10),
+        PollingIntervalParams(chrome::ScopedChannelOverride::Channel::kStable,
+                              "10",
+                              kDefaultCrashpadPollingIntervalSeconds)));
+
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
+#endif  // !BUILDFLAG(IS_FUCHSIA) && !BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace enterprise_connectors

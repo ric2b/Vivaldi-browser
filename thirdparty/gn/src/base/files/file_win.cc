@@ -274,6 +274,11 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   if (flags & FLAG_OPEN)
     disposition = OPEN_EXISTING;
 
+  if (flags & FLAG_CREATE) {
+    DCHECK(!disposition);
+    disposition = CREATE_NEW;
+  }
+
   if (flags & FLAG_CREATE_ALWAYS) {
     DCHECK(!disposition);
     DCHECK(flags & FLAG_WRITE);

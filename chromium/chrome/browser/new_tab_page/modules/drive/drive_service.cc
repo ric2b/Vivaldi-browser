@@ -280,6 +280,8 @@ void DriveService::OnJsonReceived(const std::string& token,
   url_loader_.reset();
 
   if (net_error != net::OK || !response_body) {
+    base::UmaHistogramEnumeration("NewTabPage.Drive.ItemSuggestRequestResult",
+                                  ItemSuggestRequestResult::kNetworkError);
     for (auto& callback : callbacks_) {
       std::move(callback).Run(std::vector<drive::mojom::FilePtr>());
     }
@@ -297,42 +299,51 @@ void DriveService::OnJsonReceived(const std::string& token,
 void DriveService::OnJsonParsed(
     data_decoder::DataDecoder::ValueOrError result) {
   if (!result.has_value()) {
+    base::UmaHistogramEnumeration("NewTabPage.Drive.ItemSuggestRequestResult",
+                                  ItemSuggestRequestResult::kJsonParseError);
     for (auto& callback : callbacks_) {
       std::move(callback).Run(std::vector<drive::mojom::FilePtr>());
     }
     callbacks_.clear();
     return;
   }
-  auto* items = result->FindListPath("item");
+  auto* items = result->GetDict().FindList("item");
   if (!items) {
+    base::UmaHistogramEnumeration("NewTabPage.Drive.ItemSuggestRequestResult",
+                                  ItemSuggestRequestResult::kContentError);
     for (auto& callback : callbacks_) {
       std::move(callback).Run(std::vector<drive::mojom::FilePtr>());
     }
     callbacks_.clear();
     return;
   }
+  ItemSuggestRequestResult request_result = ItemSuggestRequestResult::kSuccess;
   std::vector<drive::mojom::FilePtr> document_list;
-  for (const auto& item : items->GetList()) {
-    auto* title = item.FindStringPath("driveItem.title");
-    auto* mime_type = item.FindStringPath("driveItem.mimeType");
-    auto* justification_text_segments = item.FindListPath(
+  for (const auto& item : *items) {
+    const auto& item_dict = item.GetDict();
+    auto* title = item_dict.FindStringByDottedPath("driveItem.title");
+    auto* mime_type = item_dict.FindStringByDottedPath("driveItem.mimeType");
+    auto* justification_text_segments = item_dict.FindListByDottedPath(
         "justification.unstructuredJustificationDescription.textSegment");
     if (!justification_text_segments ||
-        justification_text_segments->GetList().size() == 0) {
+        justification_text_segments->size() == 0) {
+      request_result = ItemSuggestRequestResult::kContentError;
       continue;
     }
     std::string justification_text;
-    for (auto& text_segment : justification_text_segments->GetList()) {
-      auto* justification_text_path = text_segment.FindStringPath("text");
+    for (auto& text_segment : *justification_text_segments) {
+      auto* justification_text_path = text_segment.GetDict().FindString("text");
       if (!justification_text_path) {
+        request_result = ItemSuggestRequestResult::kContentError;
         continue;
       }
       justification_text += *justification_text_path;
     }
-    auto* id = item.FindStringKey("itemId");
-    auto* item_url = item.FindStringKey("url");
+    auto* id = item_dict.FindString("itemId");
+    auto* item_url = item_dict.FindString("url");
     if (!title || !mime_type || justification_text.empty() || !id ||
         !item_url || !GURL(*item_url).is_valid()) {
+      request_result = ItemSuggestRequestResult::kContentError;
       continue;
     }
     auto mojo_drive_doc = drive::mojom::File::New();
@@ -343,6 +354,10 @@ void DriveService::OnJsonParsed(
     mojo_drive_doc->item_url = GURL(*item_url);
     document_list.push_back(std::move(mojo_drive_doc));
   }
+  base::UmaHistogramEnumeration("NewTabPage.Drive.ItemSuggestRequestResult",
+                                request_result);
+  base::UmaHistogramCounts100("NewTabPage.Drive.FileCount",
+                              document_list.size());
   for (auto& callback : callbacks_) {
     std::move(callback).Run(mojo::Clone(document_list));
   }

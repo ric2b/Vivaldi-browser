@@ -16,7 +16,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
+#include "base/strings/to_string.h"
 #include "base/values.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
@@ -85,9 +85,8 @@ base::Value OsStatesDebugValue(
     shortcut_data.Set("description", current_states.shortcut().description());
     base::Value::Dict icon_data;
     for (const auto& data : current_states.shortcut().icon_data_any()) {
-      icon_data.Set(
-          base::NumberToString(data.icon_size()),
-          base::StreamableToString(syncer::ProtoTimeToTime(data.timestamp())));
+      icon_data.Set(base::NumberToString(data.icon_size()),
+                    base::ToString(syncer::ProtoTimeToTime(data.timestamp())));
     }
     shortcut_data.Set("icon_size_to_timestamp_map",
                       base::Value(std::move(icon_data)));
@@ -112,9 +111,16 @@ base::Value OsStatesDebugValue(
   }
 
   if (current_states.has_uninstall_registration()) {
-    debug_dict.Set(
-        "uninstall_registration",
-        current_states.uninstall_registration().registered_with_os());
+    base::Value::Dict state;
+    proto::OsUninstallRegistration os_uninstall =
+        current_states.uninstall_registration();
+    if (os_uninstall.has_registered_with_os()) {
+      state.Set("registered_with_os", os_uninstall.registered_with_os());
+    }
+    if (os_uninstall.has_display_name()) {
+      state.Set("display_name", os_uninstall.display_name());
+    }
+    debug_dict.Set("uninstall_registration", std::move(state));
   }
 
   if (current_states.has_shortcut_menus()) {
@@ -125,20 +131,20 @@ base::Value OsStatesDebugValue(
       base::Value::Dict icon_data_maskable_dict;
       base::Value::Dict icon_data_monochrome_dict;
       for (const auto& icon_data_any : shortcut_menu.icon_data_any()) {
-        icon_data_any_dict.Set(base::NumberToString(icon_data_any.icon_size()),
-                               base::StreamableToString(syncer::ProtoTimeToTime(
-                                   icon_data_any.timestamp())));
+        icon_data_any_dict.Set(
+            base::NumberToString(icon_data_any.icon_size()),
+            base::ToString(syncer::ProtoTimeToTime(icon_data_any.timestamp())));
       }
       for (const auto& icon_data_maskable : shortcut_menu.icon_data_any()) {
         icon_data_maskable_dict.Set(
             base::NumberToString(icon_data_maskable.icon_size()),
-            base::StreamableToString(
+            base::ToString(
                 syncer::ProtoTimeToTime(icon_data_maskable.timestamp())));
       }
       for (const auto& icon_data_monochrome : shortcut_menu.icon_data_any()) {
         icon_data_monochrome_dict.Set(
             base::NumberToString(icon_data_monochrome.icon_size()),
-            base::StreamableToString(
+            base::ToString(
                 syncer::ProtoTimeToTime(icon_data_monochrome.timestamp())));
       }
       base::Value::Dict shortcut_menu_dict;
@@ -448,8 +454,13 @@ void WebApp::SetUrlHandlers(apps::UrlHandlers url_handlers) {
 }
 
 void WebApp::SetScopeExtensions(
-    std::vector<ScopeExtensionInfo> scope_extensions) {
+    base::flat_set<ScopeExtensionInfo> scope_extensions) {
   scope_extensions_ = std::move(scope_extensions);
+}
+
+void WebApp::SetValidatedScopeExtensions(
+    base::flat_set<ScopeExtensionInfo> validated_scope_extensions) {
+  validated_scope_extensions_ = std::move(validated_scope_extensions);
 }
 
 void WebApp::SetLockScreenStartUrl(const GURL& lock_screen_start_url) {
@@ -535,9 +546,9 @@ void WebApp::SetPermissionsPolicy(
   permissions_policy_ = std::move(permissions_policy);
 }
 
-void WebApp::SetInstallSourceForMetrics(
-    absl::optional<webapps::WebappInstallSource> install_source) {
-  install_source_for_metrics_ = install_source;
+void WebApp::SetLatestInstallSource(
+    absl::optional<webapps::WebappInstallSource> latest_install_source) {
+  latest_install_source_ = latest_install_source;
 }
 
 void WebApp::SetAppSizeInBytes(absl::optional<int64_t> app_size_in_bytes) {
@@ -580,6 +591,15 @@ void WebApp::AddInstallURLToManagementExternalConfigMap(
   DCHECK_NE(type, WebAppManagement::Type::kSync);
   DCHECK(install_url.is_valid());
   management_to_external_config_map_[type].install_urls.emplace(install_url);
+}
+
+void WebApp::AddPolicyIdToManagementExternalConfigMap(
+    WebAppManagement::Type type,
+    const std::string& policy_id) {
+  DCHECK_NE(type, WebAppManagement::Type::kSync);
+  DCHECK(!policy_id.empty());
+  management_to_external_config_map_[type].additional_policy_ids.emplace(
+      policy_id);
 }
 
 void WebApp::AddExternalSourceInformation(WebAppManagement::Type type,
@@ -648,6 +668,13 @@ base::Value WebApp::SyncFallbackData::AsDebugValue() const {
 }
 
 WebApp::ExternalManagementConfig::ExternalManagementConfig() = default;
+WebApp::ExternalManagementConfig::ExternalManagementConfig(
+    bool is_placeholder,
+    const base::flat_set<GURL>& install_urls,
+    const base::flat_set<std::string>& additional_policy_ids)
+    : is_placeholder(is_placeholder),
+      install_urls(install_urls),
+      additional_policy_ids(additional_policy_ids) {}
 
 WebApp::ExternalManagementConfig::~ExternalManagementConfig() = default;
 
@@ -660,10 +687,15 @@ WebApp::ExternalManagementConfig& WebApp::ExternalManagementConfig::operator=(
 base::Value::Dict WebApp::ExternalManagementConfig::AsDebugValue() const {
   base::Value::Dict root;
   base::Value::List urls;
-  for (auto it : install_urls) {
-    urls.Append(it.spec());
+  for (const auto& install_url : install_urls) {
+    urls.Append(install_url.spec());
+  }
+  base::Value::List policy_ids;
+  for (const auto& policy_id : additional_policy_ids) {
+    policy_ids.Append(policy_id);
   }
   root.Set("install_urls", std::move(urls));
+  root.Set("additional_policy_ids", std::move(policy_ids));
   root.Set("is_placeholder", is_placeholder);
   return root;
 }
@@ -697,7 +729,7 @@ base::Value WebApp::IsolationData::AsDebugValue() const {
 bool WebApp::operator==(const WebApp& other) const {
   auto AsTuple = [](const WebApp& app) {
     // Keep in order declared in web_app.h.
-    return std::make_tuple(
+    return std::tie(
         // Disable clang-format so diffs are clearer when fields are added.
         // clang-format off
         app.app_id_,
@@ -735,6 +767,7 @@ bool WebApp::operator==(const WebApp& other) const {
         app.disallowed_launch_protocols_,
         app.url_handlers_,
         app.scope_extensions_,
+        app.validated_scope_extensions_,
         app.lock_screen_start_url_,
         app.note_taking_new_note_url_,
         app.last_badging_time_,
@@ -756,18 +789,18 @@ bool WebApp::operator==(const WebApp& other) const {
         app.launch_handler_,
         app.parent_app_id_,
         app.permissions_policy_,
-        app.install_source_for_metrics_,
+        app.latest_install_source_,
         app.app_size_in_bytes_,
         app.data_size_in_bytes_,
         app.management_to_external_config_map_,
         app.tab_strip_,
         app.always_show_toolbar_in_fullscreen_,
-        app.current_os_integration_states_.SerializeAsString(),
+        app.current_os_integration_states_,
         app.isolation_data_
         // clang-format on
     );
   };
-  return (AsTuple(*this) == AsTuple(other));
+  return AsTuple(*this) == AsTuple(other);
 }
 
 bool WebApp::operator!=(const WebApp& other) const {
@@ -831,7 +864,7 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
   root.Set("dark_mode_background_color",
            ColorToString(dark_mode_background_color_));
 
-  root.Set("capture_links", base::StreamableToString(capture_links_));
+  root.Set("capture_links", base::ToString(capture_links_));
 
   if (data_size_in_bytes_.has_value()) {
     root.Set("data_size_in_bytes",
@@ -851,7 +884,7 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
 
   base::Value::Dict downloaded_icon_sizes_json;
   for (IconPurpose purpose : kIconPurposes) {
-    downloaded_icon_sizes_json.Set(base::StreamableToString(purpose),
+    downloaded_icon_sizes_json.Set(base::ToString(purpose),
                                    ConvertList(downloaded_icon_sizes(purpose)));
   }
   root.Set("downloaded_icon_sizes", std::move(downloaded_icon_sizes_json));
@@ -862,7 +895,7 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
     base::Value::Dict entry;
     entry.Set("index", static_cast<int>(i));
     for (IconPurpose purpose : kIconPurposes) {
-      entry.Set(base::StreamableToString(purpose),
+      entry.Set(base::ToString(purpose),
                 ConvertList(icon_sizes.GetSizesForPurpose(purpose)));
     }
     downloaded_shortcuts_menu_icons_sizes.Append(std::move(entry));
@@ -880,23 +913,22 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
 
   root.Set("manifest_icons", ConvertDebugValueList(manifest_icons_));
 
-  if (install_source_for_metrics_) {
-    root.Set("install_source_for_metrics",
-             static_cast<int>(*install_source_for_metrics_));
+  if (latest_install_source_) {
+    root.Set("latest_install_source",
+             static_cast<int>(*latest_install_source_));
   } else {
-    root.Set("install_source_for_metrics", "not set");
+    root.Set("latest_install_source", "not set");
   }
 
   base::Value::Dict external_map;
   for (auto it : management_to_external_config_map_) {
-    external_map.Set(base::StreamableToString(it.first),
-                     it.second.AsDebugValue());
+    external_map.Set(base::ToString(it.first), it.second.AsDebugValue());
   }
 
   root.Set("management_type_to_external_configuration_map",
            std::move(external_map));
 
-  root.Set("install_time", base::StreamableToString(install_time_));
+  root.Set("install_time", base::ToString(install_time_));
 
   root.Set("is_generated_icon", is_generated_icon_);
 
@@ -907,14 +939,14 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
 
   root.Set("is_uninstalling", is_uninstalling_);
 
-  root.Set("last_badging_time", base::StreamableToString(last_badging_time_));
+  root.Set("last_badging_time", base::ToString(last_badging_time_));
 
-  root.Set("last_launch_time", base::StreamableToString(last_launch_time_));
+  root.Set("last_launch_time", base::ToString(last_launch_time_));
 
   if (launch_handler_) {
     base::Value::Dict launch_handler_json;
-    launch_handler_json.Set(
-        "client_mode", base::StreamableToString(launch_handler_->client_mode));
+    launch_handler_json.Set("client_mode",
+                            base::ToString(launch_handler_->client_mode));
     root.Set("launch_handler", std::move(launch_handler_json));
   } else {
     root.Set("launch_handler", base::Value());
@@ -924,16 +956,14 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
 
   root.Set("manifest_id", ConvertOptional(manifest_id_));
 
-  root.Set("manifest_update_time",
-           base::StreamableToString(manifest_update_time_));
+  root.Set("manifest_update_time", base::ToString(manifest_update_time_));
 
-  root.Set("manifest_url", base::StreamableToString(manifest_url_));
+  root.Set("manifest_url", base::ToString(manifest_url_));
 
-  root.Set("lock_screen_start_url",
-           base::StreamableToString(lock_screen_start_url_));
+  root.Set("lock_screen_start_url", base::ToString(lock_screen_start_url_));
 
   root.Set("note_taking_new_note_url",
-           base::StreamableToString(note_taking_new_note_url_));
+           base::ToString(note_taking_new_note_url_));
 
   root.Set("parent_app_id", parent_app_id_ ? *parent_app_id_ : AppId());
 
@@ -949,8 +979,8 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
       }
       json_decl.Set("feature", feature_name->second);
       base::Value::List allowlist_json;
-      for (const auto& origin_with_possible_wildcards : decl.allowed_origins) {
-        allowlist_json.Append(origin_with_possible_wildcards.Serialize());
+      for (const auto& allowlist_item : GetSerializedAllowedOrigins(decl)) {
+        allowlist_json.Append(allowlist_item);
       }
       json_decl.Set("allowed_origins", std::move(allowlist_json));
       json_decl.Set("matches_all_origins", decl.matches_all_origins);
@@ -970,7 +1000,7 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
           ? RunOnOsLoginModeToString(*run_on_os_login_os_integration_state_)
           : "not set");
 
-  root.Set("scope", base::StreamableToString(scope_));
+  root.Set("scope", base::ToString(scope_));
 
   root.Set("share_target",
            share_target_ ? share_target_->AsDebugValue() : base::Value());
@@ -982,13 +1012,12 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
   for (int i = WebAppManagement::Type::kMinValue;
        i <= WebAppManagement::Type::kMaxValue; ++i) {
     if (sources_[i]) {
-      sources.Append(
-          base::StreamableToString(static_cast<WebAppManagement::Type>(i)));
+      sources.Append(base::ToString(static_cast<WebAppManagement::Type>(i)));
     }
   }
   root.Set("sources", std::move(sources));
 
-  root.Set("start_url", base::StreamableToString(start_url_));
+  root.Set("start_url", base::ToString(start_url_));
 
   root.Set("sync_fallback_data", sync_fallback_data_.AsDebugValue());
 
@@ -999,6 +1028,9 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
   root.Set("url_handlers", ConvertDebugValueList(url_handlers_));
 
   root.Set("scope_extensions", ConvertDebugValueList(scope_extensions_));
+
+  root.Set("scope_extensions_validated",
+           ConvertDebugValueList(validated_scope_extensions_));
 
   root.Set("user_display_mode",
            user_display_mode_.has_value()
@@ -1015,25 +1047,23 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
     base::Value::Dict tab_strip_json;
     if (absl::holds_alternative<TabStrip::Visibility>(
             tab_strip_.value().new_tab_button)) {
-      tab_strip_json.Set(
-          "new_tab_button",
-          base::StreamableToString(absl::get<TabStrip::Visibility>(
-              tab_strip_.value().new_tab_button)));
+      tab_strip_json.Set("new_tab_button",
+                         base::ToString(absl::get<TabStrip::Visibility>(
+                             tab_strip_.value().new_tab_button)));
     } else {
       base::Value::Dict new_tab_button_json;
       new_tab_button_json.Set(
-          "url", base::StreamableToString(
-                     absl::get<blink::Manifest::NewTabButtonParams>(
-                         tab_strip_.value().new_tab_button)
-                         .url.value_or(GURL(""))));
+          "url", base::ToString(absl::get<blink::Manifest::NewTabButtonParams>(
+                                    tab_strip_.value().new_tab_button)
+                                    .url.value_or(GURL(""))));
       tab_strip_json.Set("new_tab_button", std::move(new_tab_button_json));
     }
 
     if (absl::holds_alternative<TabStrip::Visibility>(
             tab_strip_.value().home_tab)) {
-      tab_strip_json.Set(
-          "home_tab", base::StreamableToString(absl::get<TabStrip::Visibility>(
-                          tab_strip_.value().home_tab)));
+      tab_strip_json.Set("home_tab",
+                         base::ToString(absl::get<TabStrip::Visibility>(
+                             tab_strip_.value().home_tab)));
     } else {
       base::Value::Dict home_tab_json;
       base::Value::List icons_json;
@@ -1095,15 +1125,56 @@ bool operator!=(const WebApp::SyncFallbackData& sync_fallback_data1,
   return !(sync_fallback_data1 == sync_fallback_data2);
 }
 
+std::ostream& operator<<(
+    std::ostream& out,
+    const WebApp::ExternalManagementConfig& management_config) {
+  return out << management_config.AsDebugValue().DebugString();
+}
+
 bool operator==(const WebApp::ExternalManagementConfig& management_config1,
                 const WebApp::ExternalManagementConfig& management_config2) {
-  return management_config1.install_urls == management_config2.install_urls &&
-         management_config1.is_placeholder == management_config2.is_placeholder;
+  return std::tie(management_config1.install_urls,
+                  management_config1.is_placeholder,
+                  management_config1.additional_policy_ids) ==
+         std::tie(management_config2.install_urls,
+                  management_config2.is_placeholder,
+                  management_config2.additional_policy_ids);
 }
 
 bool operator!=(const WebApp::ExternalManagementConfig& management_config1,
                 const WebApp::ExternalManagementConfig& management_config2) {
   return !(management_config1 == management_config2);
+}
+
+namespace proto {
+
+bool operator==(const WebAppOsIntegrationState& os_integration_state1,
+                const WebAppOsIntegrationState& os_integration_state2) {
+  return os_integration_state1.SerializeAsString() ==
+         os_integration_state2.SerializeAsString();
+}
+
+bool operator!=(const WebAppOsIntegrationState& os_integration_state1,
+                const WebAppOsIntegrationState& os_integration_state2) {
+  return !(os_integration_state1 == os_integration_state2);
+}
+
+}  // namespace proto
+
+std::vector<std::string> GetSerializedAllowedOrigins(
+    const blink::ParsedPermissionsPolicyDeclaration
+        permissions_policy_declaration) {
+  std::vector<std::string> allowed_origins;
+  if (permissions_policy_declaration.self_if_matches) {
+    CHECK(!permissions_policy_declaration.self_if_matches->opaque());
+    allowed_origins.push_back(
+        permissions_policy_declaration.self_if_matches->Serialize());
+  }
+  for (const auto& origin_with_possible_wildcards :
+       permissions_policy_declaration.allowed_origins) {
+    allowed_origins.push_back(origin_with_possible_wildcards.Serialize());
+  }
+  return allowed_origins;
 }
 
 }  // namespace web_app

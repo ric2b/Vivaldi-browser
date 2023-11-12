@@ -150,7 +150,7 @@ def get_parts(config):
                 verify_options=verify_options),
     }
 
-    if config.enable_updater():
+    if config.enable_updater:
         parts['privileged-helper'] = CodeSignedProduct(
             ('{.app_product}.app/Contents/Library/LaunchServices/' +
              '{}.UpdaterPrivilegedHelper').format(config,

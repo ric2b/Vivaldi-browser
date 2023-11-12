@@ -69,6 +69,17 @@ const DELEGATE = {
     await parentMessagePipe.sendMessage(
         Message.MAYBE_SHOW_RELEASE_NOTES_NOTIFICATION);
   },
+  getDeviceInfo() {
+    return /** @type {!Promise<!helpApp.DeviceInfo>} */ (
+        parentMessagePipe.sendMessage(Message.GET_DEVICE_INFO));
+  },
+  /**
+   * @override
+   * @param {string} url
+   */
+  async openUrlInBrowser(url) {
+    await parentMessagePipe.sendMessage(Message.OPEN_URL_IN_BROWSER, url);
+  },
 };
 
 window.customLaunchData = {

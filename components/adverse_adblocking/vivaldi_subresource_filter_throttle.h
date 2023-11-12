@@ -104,7 +104,7 @@ class VivaldiSubresourceFilterAdblockingThrottle
   // WillProcessResponse if there are ongoing safe browsing checks.
   bool deferring_ = false;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 };
 
 #endif  // COMPONENTS_ADVERSE_ADBLOCKING_VIVALDI_SUBRESOURCE_FILTER_THROTTLE_H_

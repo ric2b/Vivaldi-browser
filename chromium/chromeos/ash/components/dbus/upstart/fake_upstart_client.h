@@ -41,7 +41,6 @@ class COMPONENT_EXPORT(UPSTART_CLIENT) FakeUpstartClient
                chromeos::VoidDBusMethodCallback callback) override;
   void StartAuthPolicyService() override;
   void RestartAuthPolicyService() override;
-  void StartLacrosChrome(const std::vector<std::string>& upstart_env) override;
   void StartMediaAnalytics(const std::vector<std::string>& upstart_env,
                            chromeos::VoidDBusMethodCallback callback) override;
   void RestartMediaAnalytics(
@@ -50,10 +49,6 @@ class COMPONENT_EXPORT(UPSTART_CLIENT) FakeUpstartClient
   void StopMediaAnalytics(chromeos::VoidDBusMethodCallback callback) override;
   void StartWilcoDtcService(chromeos::VoidDBusMethodCallback callback) override;
   void StopWilcoDtcService(chromeos::VoidDBusMethodCallback callback) override;
-  void StartArcDataSnapshotd(
-      const std::vector<std::string>& upstart_env,
-      chromeos::VoidDBusMethodCallback callback) override;
-  void StopArcDataSnapshotd(chromeos::VoidDBusMethodCallback callback) override;
 
   void set_start_job_cb(const StartStopJobCallback& cb) { start_job_cb_ = cb; }
   void set_stop_job_cb(const StartStopJobCallback& cb) { stop_job_cb_ = cb; }

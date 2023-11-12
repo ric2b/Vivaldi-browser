@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/file_descriptor_posix.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -16,13 +17,21 @@
 #include "base/task/thread_pool.h"
 #include "components/printing/browser/print_manager_utils.h"
 #include "components/printing/common/print.mojom.h"
+#include "components/printing/common/print_params.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "printing/print_job_constants.h"
+#include "printing/print_settings.h"
 
 namespace android_webview {
 
 namespace {
+
+// Enables real document cookie values instead of a dummy value.
+// TODO(crbug.com/1286556): Remove this kill switch after a safe rollout.
+BASE_FEATURE(kRealAwPrintManagerCookies,
+             "RealAwPrintManagerCookies",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 uint32_t SaveDataToFd(int fd,
                       uint32_t page_count,
@@ -77,6 +86,11 @@ void AwPrintManager::GetDefaultPrintSettings(
   auto params = printing::mojom::PrintParams::New();
   printing::RenderParamsFromPrintSettings(*settings_, params.get());
   params->document_cookie = cookie();
+  if (!printing::PrintMsgPrintParamsIsValid(*params)) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
   std::move(callback).Run(std::move(params));
 }
 
@@ -89,27 +103,37 @@ void AwPrintManager::UpdateParam(
   settings_ = std::move(settings);
   fd_ = file_descriptor;
   set_pdf_writing_done_callback(std::move(callback));
-  set_cookie(1);  // Set a valid dummy cookie value.
+  constexpr int kDummyCookie = 1;
+  const int cookie = base::FeatureList::IsEnabled(kRealAwPrintManagerCookies)
+                         ? printing::PrintSettings::NewCookie()
+                         : kDummyCookie;
+  set_cookie(cookie);
 }
 
 void AwPrintManager::ScriptedPrint(
     printing::mojom::ScriptedPrintParamsPtr scripted_params,
     ScriptedPrintCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  auto params = printing::mojom::PrintPagesParams::New();
-  params->params = printing::mojom::PrintParams::New();
 
   if (scripted_params->is_scripted &&
       GetCurrentTargetFrame()->IsNestedWithinFencedFrame()) {
     DLOG(ERROR) << "Unexpected message received. Script Print is not allowed"
                    " in a fenced frame.";
-    std::move(callback).Run(std::move(params));
+    std::move(callback).Run(nullptr);
     return;
   }
 
+  auto params = printing::mojom::PrintPagesParams::New();
+  params->params = printing::mojom::PrintParams::New();
   printing::RenderParamsFromPrintSettings(*settings_, params->params.get());
   params->params->document_cookie = scripted_params->cookie;
   params->pages = settings_->ranges();
+
+  if (!printing::PrintMsgPrintParamsIsValid(*params->params)) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
   std::move(callback).Run(std::move(params));
 }
 

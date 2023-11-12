@@ -43,9 +43,9 @@ import {CrosNetworkConfigRemote, FilterType, NetworkStateProperties, NO_LIMIT} f
 import {ConnectionStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {afterNextRender, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {Constructor} from '../common/types.js';
 import {DeepLinkingMixin, DeepLinkingMixinInterface} from '../deep_linking_mixin.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin, RouteObserverMixinInterface} from '../route_observer_mixin.js';
 import {Route} from '../router.js';
@@ -178,6 +178,17 @@ class SettingsCupsPrintersElement extends SettingsCupsPrintersElementBase {
           Setting.kAddPrinter,
           Setting.kSavedPrinters,
         ]),
+      },
+
+      /**
+       * True when the "printer-settings-revamp" feature flag is enabled.
+       */
+      isPrinterSettingsRevampEnabled_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean('isPrinterSettingsRevampEnabled');
+        },
+        readOnly: true,
       },
     };
   }
@@ -391,7 +402,7 @@ class SettingsCupsPrintersElement extends SettingsCupsPrintersElementBase {
     this.entryManager_.setEnterprisePrintersList(this.enterprisePrinters_);
   }
 
-  private onAddPrinterTap_(): void {
+  private onAddPrinterClick_(): void {
     this.$.addPrinterDialog.open();
   }
 

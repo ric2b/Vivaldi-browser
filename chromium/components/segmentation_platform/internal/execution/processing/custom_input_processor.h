@@ -74,6 +74,21 @@ class CustomInputProcessor : public QueryProcessor {
   bool AddPredictionTime(const proto::CustomInput& custom_input,
                          std::vector<ProcessedValue>& out_tensor);
 
+  // Add a tensor value for CustomInput::FILL_DEVICE_RAM type and return
+  // whether it succeeded.
+  bool AddDeviceRAMInMB(const proto::CustomInput& custom_input,
+                        std::vector<ProcessedValue>& out_tensor);
+
+  // Add a tensor value for CustomInput::FILL_DEVICE_OS type and return
+  // whether it succeeded.
+  bool AddDeviceOSVersionNumber(const proto::CustomInput& custom_input,
+                                std::vector<ProcessedValue>& out_tensor);
+
+  // Add a tensor value for CustomInput::FILL_DEVICE_PPI type and return
+  // whether it succeeded.
+  bool AddDevicePPI(const proto::CustomInput& custom_input,
+                    std::vector<ProcessedValue>& out_tensor);
+
   // Add a tensor value for CustomInput::TIME_RANGE_BEFORE_PREDICTION type and
   // return whether it succeeded.
   bool AddTimeRangeBeforePrediction(const proto::CustomInput& custom_input,
@@ -85,7 +100,7 @@ class CustomInputProcessor : public QueryProcessor {
                            FeatureProcessorState* feature_processor_state,
                            std::vector<ProcessedValue>& out_tensor);
 
-  const raw_ptr<InputDelegateHolder> input_delegate_holder_;
+  const raw_ptr<InputDelegateHolder, DanglingUntriaged> input_delegate_holder_;
 
   // List of custom inputs to process into input tensors.
   base::flat_map<FeatureIndex, proto::CustomInput> custom_inputs_;

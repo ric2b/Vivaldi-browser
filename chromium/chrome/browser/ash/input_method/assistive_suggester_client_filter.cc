@@ -127,13 +127,6 @@ const char* kAllowedAppsForEmojiSuggester[] = {
     "mmfbcljfglbokpmkimbfghdkjmjhdgbg",  // System text
 };
 
-const char* kDeniedDomainAndPathsForDiacritics[][2] = {
-    // Google Slides: delete on insert does not work
-    {"docs.google.com", "/presentation"},
-    // Google Docs: delete on insert does not work
-    {"docs.google.com", "/document"},
-};
-
 const char* kDeniedUrlsForMultiwordSuggester[] = {
     "chrome-untrusted://crosh/",     // Crosh on Chrome browser
     "chrome-untrusted://terminal/",  // Terminal on Chrome browser
@@ -158,6 +151,11 @@ const char* kDeniedAppsForDiacritics[] = {
 const char* kDeniedUrlsForDiacritics[] = {
     "chrome-untrusted://crosh/",     // Crosh app
     "chrome-untrusted://terminal/",  // Terminal app
+};
+const char* kDeniedDomainsForDiacritics[] = {
+    "localhost",            // Lots of dev apps on localhost (e.g. code-server)
+    "cider.corp.google",    // Cider
+    "cider-v.corp.google",  // Cider-v
 };
 
 bool IsTestUrl(const absl::optional<GURL>& url) {
@@ -275,9 +273,8 @@ void ReturnEnabledSuggestions(
     const absl::optional<GURL>& current_url) {
   // Deny-list (will block if matched, otherwise allow)
   bool diacritic_suggestions_allowed =
+      !IsMatchedSubDomain(kDeniedDomainsForDiacritics, current_url) &&
       !IsMatchedApp(kDeniedAppsForDiacritics, window_properties) &&
-      !IsMatchedUrlWithPathPrefix(kDeniedDomainAndPathsForDiacritics,
-                                  current_url) &&
       !IsMatchedExactUrl(kDeniedUrlsForDiacritics, current_url);
 
   // TODO(b/245469813): Investigate if denied is intentional for suggesters

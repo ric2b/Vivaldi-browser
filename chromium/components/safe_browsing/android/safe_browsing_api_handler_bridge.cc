@@ -35,11 +35,14 @@ namespace safe_browsing {
 
 namespace {
 
-void RunCallbackOnIOThread(
+void RunCallbackOnSBThread(
     std::unique_ptr<SafeBrowsingApiHandlerBridge::ResponseCallback> callback,
     SBThreatType threat_type,
     const ThreatMetadata& metadata) {
-  content::GetIOThreadTaskRunner({})->PostTask(
+  auto task_runner = base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
+                         ? content::GetUIThreadTaskRunner({})
+                         : content::GetIOThreadTaskRunner({});
+  task_runner->PostTask(
       FROM_HERE, base::BindOnce(std::move(*callback), threat_type, metadata));
 }
 
@@ -91,8 +94,10 @@ using PendingCallbacksMap = std::unordered_map<
     jlong,
     std::unique_ptr<SafeBrowsingApiHandlerBridge::ResponseCallback>>;
 
-PendingCallbacksMap& GetPendingCallbacksMapOnIOThread() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+PendingCallbacksMap& GetPendingCallbacksMapOnSBThread() {
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
 
   // Holds the list of callback objects that we are currently waiting to hear
   // the result of from GmsCore.
@@ -101,11 +106,14 @@ PendingCallbacksMap& GetPendingCallbacksMapOnIOThread() {
   return *pending_callbacks;
 }
 
-bool StartAllowlistCheck(const GURL& url, const SBThreatType& sb_threat_type) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+absl::optional<bool> StartAllowlistCheck(const GURL& url,
+                                         const SBThreatType& sb_threat_type) {
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
   JNIEnv* env = AttachCurrentThread();
   if (!Java_SafeBrowsingApiBridge_ensureInitialized(env)) {
-    return false;
+    return absl::nullopt;
   }
 
   ScopedJavaLocalRef<jstring> j_url = ConvertUTF8ToJavaString(env, url.spec());
@@ -128,12 +136,14 @@ SafeBrowsingApiHandlerBridge& SafeBrowsingApiHandlerBridge::GetInstance() {
 //                 that will be called and then deleted here.
 //   |result_status| is one of those from SafeBrowsingApiHandlerBridge.java
 //   |metadata| is a JSON string classifying the threat if there is one.
-void OnUrlCheckDoneOnIOThread(jlong callback_id,
+void OnUrlCheckDoneOnSBThread(jlong callback_id,
                               jint result_status,
                               const std::string metadata) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
 
-  PendingCallbacksMap& pending_callbacks = GetPendingCallbacksMapOnIOThread();
+  PendingCallbacksMap& pending_callbacks = GetPendingCallbacksMapOnSBThread();
   bool found = base::Contains(pending_callbacks, callback_id);
   DCHECK(found) << "Not found in pending_callbacks: " << callback_id;
   if (!found)
@@ -194,9 +204,13 @@ void JNI_SafeBrowsingApiBridge_OnUrlCheckDone(
   TRACE_EVENT1("safe_browsing", "SafeBrowsingApiHandlerBridge::OnUrlCheckDone",
                "metadata", metadata_str);
 
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(&OnUrlCheckDoneOnIOThread, callback_id,
-                                result_status, metadata_str));
+  auto task_runner =
+      base::FeatureList::IsEnabled(safe_browsing::kSafeBrowsingOnUIThread)
+          ? content::GetUIThreadTaskRunner({})
+          : content::GetIOThreadTaskRunner({});
+  task_runner->PostTask(FROM_HERE,
+                        base::BindOnce(&OnUrlCheckDoneOnSBThread, callback_id,
+                                       result_status, metadata_str));
 }
 
 //
@@ -213,19 +227,21 @@ void SafeBrowsingApiHandlerBridge::StartURLCheck(
     interceptor_for_testing_->Check(std::move(callback), url);
     return;
   }
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  DCHECK_CURRENTLY_ON(base::FeatureList::IsEnabled(kSafeBrowsingOnUIThread)
+                          ? content::BrowserThread::UI
+                          : content::BrowserThread::IO);
   JNIEnv* env = AttachCurrentThread();
   if (!Java_SafeBrowsingApiBridge_ensureInitialized(env)) {
     // Mark all requests as safe. Only users who have an old, broken GMSCore or
     // have sideloaded Chrome w/o PlayStore should land here.
-    RunCallbackOnIOThread(std::move(callback), SB_THREAT_TYPE_SAFE,
+    RunCallbackOnSBThread(std::move(callback), SB_THREAT_TYPE_SAFE,
                           ThreatMetadata());
     ReportUmaResult(UMA_STATUS_UNSUPPORTED);
     return;
   }
 
   jlong callback_id = next_callback_id_++;
-  GetPendingCallbacksMapOnIOThread().insert({callback_id, std::move(callback)});
+  GetPendingCallbacksMapOnSBThread().insert({callback_id, std::move(callback)});
 
   DCHECK(!threat_types.empty());
 
@@ -240,10 +256,12 @@ void SafeBrowsingApiHandlerBridge::StartURLCheck(
 bool SafeBrowsingApiHandlerBridge::StartCSDAllowlistCheck(const GURL& url) {
   if (interceptor_for_testing_)
     return false;
-  return StartAllowlistCheck(url, safe_browsing::SB_THREAT_TYPE_CSD_ALLOWLIST);
+  return StartAllowlistCheck(url, safe_browsing::SB_THREAT_TYPE_CSD_ALLOWLIST)
+      .value_or(false);
 }
 
-bool SafeBrowsingApiHandlerBridge::StartHighConfidenceAllowlistCheck(
+absl::optional<bool>
+SafeBrowsingApiHandlerBridge::StartHighConfidenceAllowlistCheck(
     const GURL& url) {
   if (interceptor_for_testing_)
     return false;

@@ -25,15 +25,15 @@ import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
-import org.chromium.base.jank_tracker.DummyJankTracker;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.base.supplier.UnownedUserDataSupplier;
 import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.WebContentsFactory;
-import org.chromium.chrome.browser.app.omnibox.OmniboxPedalDelegateImpl;
+import org.chromium.chrome.browser.app.omnibox.ActionChipsDelegateImpl;
 import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
@@ -50,6 +50,7 @@ import org.chromium.chrome.browser.omnibox.OverrideUrlLoadingDelegate;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionsDropdownScrollListener;
+import org.chromium.chrome.browser.omnibox.suggestions.base.HistoryClustersProcessor.OpenHistoryClustersDelegate;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -67,6 +68,8 @@ import org.chromium.chrome.browser.ui.system.StatusBarColorController;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
+import org.chromium.components.browser_ui.widget.InsetObserverView;
+import org.chromium.components.browser_ui.widget.InsetObserverViewSupplier;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -152,6 +155,8 @@ public class SearchActivity extends AsyncInitializationActivity
     private SearchBoxDataProvider mSearchBoxDataProvider;
     private Tab mTab;
     private ObservableSupplierImpl<Profile> mProfileSupplier = new ObservableSupplierImpl<>();
+    protected final UnownedUserDataSupplier<InsetObserverView> mInsetObserverViewSupplier =
+            new InsetObserverViewSupplier();
 
     @Override
     protected boolean isStartedUpCorrectly(Intent intent) {
@@ -189,6 +194,17 @@ public class SearchActivity extends AsyncInitializationActivity
         mSearchBoxDataProvider = new SearchBoxDataProvider(this);
         mSearchBoxDataProvider.setIsFromQuickActionSearchWidget(isFromQuickActionSearchWidget());
 
+        ViewGroup rootView = (ViewGroup) getWindow().getDecorView().getRootView();
+        // Setting fitsSystemWindows to false ensures that the root view doesn't consume the
+        // insets.
+        rootView.setFitsSystemWindows(false);
+        // Add a custom view right after the root view that stores the insets to access later.
+        // WebContents needs the insets to determine the portion of the screen obscured by
+        // non-content displaying things such as the OSK.
+        mInsetObserverViewSupplier.attach(getWindowAndroid().getUnownedUserDataHost());
+        mInsetObserverViewSupplier.set(InsetObserverView.create(this));
+        rootView.addView(mInsetObserverViewSupplier.get(), 0);
+
         mContentView = createContentView();
         setContentView(mContentView);
 
@@ -222,23 +238,27 @@ public class SearchActivity extends AsyncInitializationActivity
         }
         // clang-format off
         mLocationBarCoordinator = new LocationBarCoordinator(mSearchBox, mAnchorView,
-                mProfileSupplier, PrivacyPreferencesManagerImpl.getInstance(),
-                mSearchBoxDataProvider, null, new WindowDelegate(getWindow()), getWindowAndroid(),
-                /*activityTabSupplier=*/() -> null, getModalDialogManagerSupplier(),
-                /*shareDelegateSupplier=*/null, /*incognitoStateProvider=*/null,
-                getLifecycleDispatcher(), overrideUrlLoadingDelegate, /*backKeyBehavior=*/this,
-                SearchEngineLogoUtils.getInstance(), /*launchAssistanceSettingsAction=*/() -> {},
-                /*pageInfoAction=*/(tab, pageInfoHighlight) -> {},
-                IntentHandler::bringTabToFront,
-                /*saveOfflineButtonState=*/(tab) -> false,
-                /*omniboxUma*/(url, transition, isNtp) -> {},
-                TabWindowManagerSingleton::getInstance, /*bookmarkState=*/(url) -> false,
-                VoiceToolbarButtonController::isToolbarMicEnabled, new DummyJankTracker(),
-                /*merchantTrustSignalsCoordinatorSupplier=*/null,
-                new OmniboxPedalDelegateImpl(this, new OneshotSupplierImpl<>(),
-                        getModalDialogManagerSupplier()), null,
-                ChromePureJavaExceptionReporter::reportJavaException, backPressManager,
-                /*OmniboxSuggestionsDropdownScrollListener=*/this);
+            mProfileSupplier, PrivacyPreferencesManagerImpl.getInstance(),
+            mSearchBoxDataProvider, null, new WindowDelegate(getWindow()), getWindowAndroid(),
+            /*activityTabSupplier=*/() -> null, getModalDialogManagerSupplier(),
+            /*shareDelegateSupplier=*/null, /*incognitoStateProvider=*/null,
+            getLifecycleDispatcher(), overrideUrlLoadingDelegate, /*backKeyBehavior=*/this,
+            SearchEngineLogoUtils.getInstance(),
+            /*pageInfoAction=*/(tab, pageInfoHighlight) -> {},
+            IntentHandler::bringTabToFront,
+            /*saveOfflineButtonState=*/(tab) -> false,
+            /*omniboxUma*/(url, transition, isNtp) -> {},
+            TabWindowManagerSingleton::getInstance, /*bookmarkState=*/(url) -> false,
+            VoiceToolbarButtonController::isToolbarMicEnabled,
+            /*merchantTrustSignalsCoordinatorSupplier=*/null,
+            new ActionChipsDelegateImpl(this, new OneshotSupplierImpl<>(),
+                getModalDialogManagerSupplier(), () -> null), null,
+            ChromePureJavaExceptionReporter::reportJavaException, backPressManager,
+            /*OmniboxSuggestionsDropdownScrollListener=*/this,
+            new OpenHistoryClustersDelegate() {
+                @Override
+                public void openHistoryClustersUi(String query) {}
+            });
         // clang-format on
         mLocationBarCoordinator.setUrlBarFocusable(true);
         mLocationBarCoordinator.setShouldShowMicButtonWhenUnfocused(true);
@@ -251,6 +271,7 @@ public class SearchActivity extends AsyncInitializationActivity
         if (!getActivityDelegate().shouldDelayNativeInitialization()) {
             mHandler.post(this::startDelayedNativeInitialization);
         }
+
         onInitialLayoutInflationComplete();
     }
 
@@ -315,7 +336,7 @@ public class SearchActivity extends AsyncInitializationActivity
             }
         };
 
-        WebContents webContents = WebContentsFactory.createWebContents(profile, false);
+        WebContents webContents = WebContentsFactory.createWebContents(profile, false, false);
         mTab = new TabBuilder()
                        .setWindow(getWindowAndroid())
                        .setLaunchType(TabLaunchType.FROM_EXTERNAL_APP)

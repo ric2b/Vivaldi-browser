@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/auto_reset.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/observer_list.h"
 #include "ui/events/events_export.h"
 #include "ui/events/platform_event.h"
@@ -92,20 +93,24 @@ class EVENTS_EXPORT PlatformEventSource {
   friend class ScopedEventDispatcher;
   friend class test::PlatformEventSourceTestAPI;
 
+  // Use a base::ObserverList<> instead of an std::vector<> to store the list of
+  // dispatchers, so that adding/removing dispatchers during an event dispatch
+  // is well-defined.
+  using PlatformEventDispatcherList =
+      base::ObserverList<PlatformEventDispatcher>::Unchecked;
+
   // This is invoked when the list of dispatchers changes (i.e. a new dispatcher
   // is added, or a dispatcher is removed).
   virtual void OnDispatcherListChanged();
 
   void OnOverriddenDispatcherRestored();
 
-  // Use an base::ObserverList<> instead of an std::vector<> to store the list
-  // of
-  // dispatchers, so that adding/removing dispatchers during an event dispatch
-  // is well-defined.
-  typedef base::ObserverList<PlatformEventDispatcher>::Unchecked
-      PlatformEventDispatcherList;
+  const base::AutoReset<PlatformEventSource*> resetter_;
+
   PlatformEventDispatcherList dispatchers_;
-  PlatformEventDispatcher* overridden_dispatcher_;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #addr-of
+  RAW_PTR_EXCLUSION PlatformEventDispatcher* overridden_dispatcher_;
 
   // Used to keep track of whether the current override-dispatcher has been
   // reset and a previous override-dispatcher has been restored.

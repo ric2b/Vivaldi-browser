@@ -18,7 +18,8 @@
 #include "ui/accessibility/ax_tree.h"
 #include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/ax_tree_id.h"
-#include "ui/accessibility/test_ax_tree_manager.h"
+#include "ui/accessibility/single_ax_tree_manager.h"
+#include "ui/accessibility/test_ax_tree_update.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace ui {
@@ -370,9 +371,9 @@ TEST(AXNodeTest, TreeWalkingCrossingTreeBoundary) {
   initial_state_2.tree_data = tree_data_2;
 
   auto tree_1 = std::make_unique<AXTree>(initial_state_1);
-  TestAXTreeManager tree_manager_1(std::move(tree_1));
+  SingleAXTreeManager tree_manager_1(std::move(tree_1));
   auto tree_2 = std::make_unique<AXTree>(initial_state_2);
-  TestAXTreeManager tree_manager_2(std::move(tree_2));
+  SingleAXTreeManager tree_manager_2(std::move(tree_2));
 
   const AXNode* root_node_1 = tree_manager_1.GetRoot();
   ASSERT_EQ(root_1.id, root_node_1->id());
@@ -476,7 +477,7 @@ TEST(AXNodeTest, GetValueForControlTextField) {
                   rich_text_field_line_2};
 
   auto tree = std::make_unique<AXTree>(update);
-  TestAXTreeManager manager(std::move(tree));
+  SingleAXTreeManager manager(std::move(tree));
 
   {
     const AXNode* text_field_node =
@@ -970,6 +971,79 @@ TEST(AXNodeTest, DescendantOfNonAtomicTextField) {
   EXPECT_FALSE(tree.GetFromId(spin_button_3.id)->data().IsTextField());
   EXPECT_TRUE(tree.GetFromId(spin_button_4.id)->data().IsSpinnerTextField());
   EXPECT_FALSE(tree.GetFromId(generic_container_5.id)->data().IsSpinnerTextField());
+}
+
+TEST(AXNodeTest, MenuItemCheckboxPosInSet) {
+  TestAXTreeUpdate update(std::string(R"HTML(
+    ++1 kRootWebArea
+    ++++2 kGroup
+    ++++++3 kMenuItemCheckBox
+    ++++++++4 kStaticText name="item"
+    ++++++++++5 kInlineTextBox name="item"
+    ++++++6 kMenuItemCheckBox
+    ++++++++7 kStaticText name="item2"
+    ++++++++++8 kInlineTextBox name="item2"
+  )HTML"));
+
+  AXTree tree(update);
+
+  EXPECT_EQ(tree.GetFromId(3)->GetPosInSet(), 1);
+  EXPECT_EQ(tree.GetFromId(3)->GetSetSize(), 2);
+  EXPECT_EQ(tree.GetFromId(6)->GetPosInSet(), 2);
+  EXPECT_EQ(tree.GetFromId(6)->GetSetSize(), 2);
+}
+
+TEST(AXNodeTest, TreeItemAsTreeItemParentPosInSetSetSize) {
+  TestAXTreeUpdate update(std::string(R"HTML(
+    ++1 kRootWebArea
+    ++++2 kTree
+    ++++++3 kTreeItem intAttribute=kPosInSet,1 intAttribute=kSetSize,2
+    ++++++++4 kTreeItem intAttribute=kPosInSet,1 intAttribute=kSetSize,6
+    ++++++++5 kTreeItem intAttribute=kPosInSet,2 intAttribute=kSetSize,6
+    ++++++6 kTreeItem intAttribute=kPosInSet,2 intAttribute=kSetSize,2
+    ++++++++7 kTreeItem intAttribute=kPosInSet,3 intAttribute=kSetSize,6
+  )HTML"));
+
+  AXTree tree(update);
+
+  EXPECT_EQ(tree.GetFromId(3)->GetPosInSet(), 1);
+  EXPECT_EQ(tree.GetFromId(3)->GetSetSize(), 2);
+
+  EXPECT_EQ(tree.GetFromId(4)->GetPosInSet(), 1);
+  EXPECT_EQ(tree.GetFromId(4)->GetSetSize(), 6);
+
+  EXPECT_EQ(tree.GetFromId(5)->GetPosInSet(), 2);
+  EXPECT_EQ(tree.GetFromId(5)->GetSetSize(), 6);
+
+  EXPECT_EQ(tree.GetFromId(6)->GetPosInSet(), 2);
+  EXPECT_EQ(tree.GetFromId(6)->GetSetSize(), 2);
+
+  EXPECT_EQ(tree.GetFromId(7)->GetPosInSet(), 3);
+  EXPECT_EQ(tree.GetFromId(7)->GetSetSize(), 6);
+}
+
+TEST(AXNodeTest, GroupAsTreeItemParentPosInSetSetSize) {
+  TestAXTreeUpdate update(std::string(R"HTML(
+    ++1 kRootWebArea
+    ++++2 kTree
+    ++++++3 kGroup
+    ++++++++4 kTreeItem intAttribute=kPosInSet,1 intAttribute=kSetSize,6
+    ++++++++5 kTreeItem intAttribute=kPosInSet,2 intAttribute=kSetSize,6
+    ++++++6 kTreeItem
+    ++++++++7 kGroup
+    ++++++++++8 kTreeItem intAttribute=kPosInSet,1 intAttribute=kSetSize,6
+  )HTML"));
+
+  AXTree tree(update);
+
+  EXPECT_EQ(tree.GetFromId(4)->GetPosInSet(), 1);
+  EXPECT_EQ(tree.GetFromId(4)->GetSetSize(), 6);
+
+  EXPECT_EQ(tree.GetFromId(5)->GetPosInSet(), 2);
+  EXPECT_EQ(tree.GetFromId(5)->GetSetSize(), 6);
+
+  EXPECT_EQ(tree.GetFromId(8)->GetPosInSet(), 1);
+  EXPECT_EQ(tree.GetFromId(8)->GetSetSize(), 6);
 }
 
 }  // namespace ui

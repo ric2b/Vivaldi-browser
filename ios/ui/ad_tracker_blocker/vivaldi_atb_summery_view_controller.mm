@@ -12,9 +12,9 @@
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
@@ -60,17 +60,23 @@ const UIEdgeInsets summeryViewPadding = UIEdgeInsetsMake(0, 20.f, 0, 20.f);
 
 // Section identifier for the page
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
-  SectionIdentifierGlobalSettings = kSectionIdentifierEnumZero
+  SectionIdentifierSiteSettings = kSectionIdentifierEnumZero
 };
 
 // Item type for the row
 typedef NS_ENUM(NSInteger, ItemType) {
-  ItemTypeGlobalSetting = kItemTypeEnumZero
+  ItemTypeSiteSetting = kItemTypeEnumZero
 };
 
 }
 
-@interface VivaldiATBSummeryViewController()<VivaldiATBConsumer>
+@interface VivaldiATBSummeryViewController()<VivaldiATBConsumer> {
+  // Track rule group updates.
+  BOOL ruleGroupApplied[2];
+  // Track if a rule apply in progress. This is set to 'YES' only when user
+  // triggers new settings.
+  BOOL ruleApplyInProgress;
+}
 
 // TView to show the summery of the blocked ads and trackers.
 @property (weak, nonatomic) VivaldiATBSummeryHeaderView* summeryView;
@@ -92,6 +98,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // The manager for the adblock that provides all methods and properties for
 // adblocker.
 @property(nonatomic, strong) VivaldiATBManager* adblockManager;
+// Available options for tracker blocker settings.
+@property(nonatomic, strong) NSArray* adblockerSettingOptions;
 
 @end
 
@@ -107,6 +115,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @synthesize browserState = _browserState;
 @synthesize host = _host;
 @synthesize adblockManager = _adblockManager;
+@synthesize adblockerSettingOptions = _adblockerSettingOptions;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithBrowser:(Browser*)browser
@@ -115,11 +124,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self = [super initWithStyle:style];
   if (self) {
     _host = host;
+    _adblockerSettingOptions = @[];
     _browser = browser;
     _browserState =
         _browser->GetBrowserState()->GetOriginalChromeBrowserState();
     _faviconLoader =
         IOSChromeFaviconLoaderFactory::GetForBrowserState(_browserState);
+    ruleGroupApplied[0] = NO;
+    ruleGroupApplied[1] = NO;
+    ruleApplyInProgress = NO;
   }
   [self setUpNavigationBarStyle];
   [self setUpCustomNavigationBarTitleView];
@@ -127,10 +140,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)dealloc {
-  if (!self.adblockManager)
-    return;
-  self.adblockManager.consumer = nil;
-  [self.adblockManager disconnect];
+  [self shutdown];
 }
 
 #pragma mark - VIEW CONTROLLER LIFECYCLE
@@ -265,6 +275,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 #pragma mark ACTIONS
 - (void)handleDoneButtonTap {
+
+  // Don't allow users to close the modal if rules apply is in progress.
+  // Otherwise, it would cause unexpected user experience.
+  if (ruleApplyInProgress)
+    return;
+
+  [self shutdown];
   [self dismissViewControllerAnimated:YES completion:nil];
 }
 
@@ -290,7 +307,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     return;
 
   [_summeryView setStatusFromSetting:
-        [self.adblockManager blockingSettingForDomain:_host]];
+      [self.adblockManager blockingSettingForDomain:_host]];
 }
 
 -(void)reloadModelWithOptions:(NSArray*)options {
@@ -299,17 +316,17 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   // Delete any existing section.
   if ([model
-          hasSectionForSectionIdentifier:SectionIdentifierGlobalSettings])
+          hasSectionForSectionIdentifier:SectionIdentifierSiteSettings])
     [model
-        removeSectionWithIdentifier:SectionIdentifierGlobalSettings];
+        removeSectionWithIdentifier:SectionIdentifierSiteSettings];
 
   // Creates Section for the setting options
   [model
-      addSectionWithIdentifier:SectionIdentifierGlobalSettings];
+      addSectionWithIdentifier:SectionIdentifierSiteSettings];
 
   for (id option in options) {
     VivaldiATBSettingItem* tableViewItem = [[VivaldiATBSettingItem alloc]
-        initWithType:ItemTypeGlobalSetting];
+        initWithType:ItemTypeSiteSetting];
     tableViewItem.item = option;
     tableViewItem.globalDefaultOption =
         [self.adblockManager globalBlockingSetting];
@@ -317,8 +334,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
         [self.adblockManager blockingSettingForDomain:_host];
     tableViewItem.showDefaultMarker = YES;
 
+    // Show selection check
+    if (tableViewItem.item.type ==
+          [self.adblockManager blockingSettingForDomain:_host]) {
+      tableViewItem.accessoryType = UITableViewCellAccessoryCheckmark;
+    } else {
+      tableViewItem.accessoryType = UITableViewCellAccessoryNone;
+    }
+
     [model addItem:tableViewItem
-         toSectionWithIdentifier:SectionIdentifierGlobalSettings];
+         toSectionWithIdentifier:SectionIdentifierSiteSettings];
   }
 
   [self.tableView reloadData];
@@ -377,39 +402,76 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self.navigationController pushViewController:controller animated:YES];
 }
 
-#pragma mark - UITABLEVIEW DELEGATE
+- (VivaldiATBSettingItem*) getSettingItemFromModel:(TableViewModel*)model
+                                       atIndexPath:(NSIndexPath*)indexPath {
+    TableViewItem* item = [model itemAtIndexPath:indexPath];
+    return base::mac::ObjCCastStrict<VivaldiATBSettingItem>(item);
+}
 
-- (void)tableView:(UITableView*)tableView
-  didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+- (void)removeCheckmarksFromSettingItemsInSectionWithIdentifier:
+    (TableViewModel*)model {
 
-  TableViewModel* model = self.tableViewModel;
+  if ([model hasSectionForSectionIdentifier:SectionIdentifierSiteSettings]) {
+    // Loop through the items in section.
+    for (TableViewItem* item in
+         [model itemsInSectionWithIdentifier:SectionIdentifierSiteSettings]) {
+      VivaldiATBSettingItem* settingItem =
+          base::mac::ObjCCastStrict<VivaldiATBSettingItem>(item);
+      if (settingItem.accessoryType == UITableViewCellAccessoryCheckmark) {
+        // Pass user preferred to "None" as we will only use this to deselect
+        // item.
+        [self updateAccessoryTypeForSettingItem:settingItem
+                                          model:model
+                                         toType:UITableViewCellAccessoryNone
+                            userPreferredOption:ATBSettingNone];
+      }
+    }
+  }
+}
 
-  VivaldiATBSettingItem* newSelectedCell =
-      base::mac::ObjCCastStrict<VivaldiATBSettingItem>
-          ([model itemAtIndexPath:indexPath]);
+- (void)updateAccessoryTypeForSettingItem:(VivaldiATBSettingItem*)settingItem
+                                    model:(TableViewModel*)model
+                                   toType:(UITableViewCellAccessoryType)type
+                      userPreferredOption:(ATBSettingType)userPreffered {
 
-  NSInteger type = newSelectedCell.item.type;
+  settingItem.accessoryType = type;
+  UITableViewCell* cell =
+      [self.tableView cellForRowAtIndexPath:
+          [model indexPathForItem:settingItem]];
+  cell.accessoryType = type;
+  [self configureCell:cell
+      withSettingItem:settingItem
+  userPreferredOption:userPreffered];
+}
 
-  ATBSettingType siteSpecificSetting;
+- (void)configureCell:(UITableViewCell*)cell
+      withSettingItem:(VivaldiATBSettingItem*)settingItem
+  userPreferredOption:(ATBSettingType)userPreffered {
 
   if (!self.adblockManager)
     return;
-  switch (type) {
-    case ATBSettingNoBlocking:
-      siteSpecificSetting = ATBSettingNoBlocking;
-      break;
-    case ATBSettingBlockTrackers:
-      siteSpecificSetting = ATBSettingBlockTrackers;
-      break;
-    case ATBSettingBlockTrackersAndAds:
-      siteSpecificSetting = ATBSettingBlockTrackersAndAds;
-      break;
-    default:
-      siteSpecificSetting = [self.adblockManager globalBlockingSetting];
-      break;
-  }
 
-  // Do nothing if previous and new selection are same.
+  VivaldiATBSettingItemCell* settingCell =
+      base::mac::ObjCCastStrict<VivaldiATBSettingItemCell>(cell);
+  [settingCell configurWithItem:settingItem.item
+            userPreferredOption:userPreffered
+            globalDefaultOption:[self.adblockManager globalBlockingSetting]
+              showDefaultMarker:YES];
+}
+
+- (void)setNewSelectionFor:(VivaldiATBSettingItem*)selectedItem
+                     model:(TableViewModel*)model
+               atIndexPath:(NSIndexPath*)indexPath {
+
+  ATBSettingType siteSpecificSetting =
+      [self getSiteSpecificSettingFromType:selectedItem.item.type];
+
+  // Update the new selection checkmark and text style.
+  [self updateAccessoryTypeForSettingItem:selectedItem
+                                    model:model
+                                   toType:UITableViewCellAccessoryCheckmark
+                      userPreferredOption:siteSpecificSetting];
+
   if (siteSpecificSetting ==
       [self.adblockManager blockingSettingForDomain:_host])
     return;
@@ -417,14 +479,67 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (![VivaldiGlobalHelpers isValidDomain:_host])
     return;
 
-  // Remove exceptions first if any.
-  [self.adblockManager removeExceptionForDomain:_host];
+  // Set the flag to track if a user triggered rule update in progress or not.
+  ruleApplyInProgress = YES;
+  // Disable interactive dismissal of the view controller.
+  self.modalInPresentation = true;
+
+  // Update the header status
+  [_summeryView setRulesGroupApplying:YES];
 
   // Add new exception.
   [self.adblockManager setExceptionForDomain:_host
                                 blockingType:siteSpecificSetting];
+}
 
-  [self dismissViewControllerAnimated:YES completion:nil];
+- (ATBSettingType)getSiteSpecificSettingFromType:(NSInteger)type {
+  switch (type) {
+    case ATBSettingNoBlocking:
+      return ATBSettingNoBlocking;
+    case ATBSettingBlockTrackers:
+      return ATBSettingBlockTrackers;
+    case ATBSettingBlockTrackersAndAds:
+      return ATBSettingBlockTrackersAndAds;
+    default:
+      if (!self.adblockManager)
+        NOTREACHED();
+      return [self.adblockManager globalBlockingSetting];
+  }
+}
+
+- (void)shutdown {
+  if (!self.adblockManager)
+    return;
+  self.adblockManager.consumer = nil;
+  [self.adblockManager disconnect];
+}
+
+#pragma mark - UITABLEVIEW DELEGATE
+
+- (void)tableView:(UITableView*)tableView
+  didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  TableViewModel* model = self.tableViewModel;
+
+  // If already rule group update is in progress don't allow users to select
+  // new settings.
+  if (ruleApplyInProgress)
+    return;
+
+  // Get newly selected item.
+  VivaldiATBSettingItem* selectedItem =
+      [self getSettingItemFromModel:model atIndexPath:indexPath];
+
+  // Return early if its already selected.
+  if (selectedItem.accessoryType == UITableViewCellAccessoryCheckmark) {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    return;
+  }
+
+  // Otherwise remove selection check from the old selected ite,
+  [self removeCheckmarksFromSettingItemsInSectionWithIdentifier:model];
+
+  // Set new selected item checkmark, style and notify adblock manager.
+  [self setNewSelectionFor:selectedItem model:model atIndexPath:indexPath];
 }
 
 #pragma mark: - VivaldiATBConsumer
@@ -432,8 +547,63 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)didRefreshSettingOptions:(NSArray*)options {
   if (options.count == 0)
     return;
-  [self reloadModelWithOptions:options];
+  _adblockerSettingOptions = options;
+
+  [self reloadModelWithOptions:_adblockerSettingOptions];
   [self updateTableViewHeader];
+}
+
+- (void)rulesListDidApply:(RuleGroup)group {
+
+  // If user explicitely did not trigger settings changes we will avoid
+  // listening to the changes. This method can be triggered other ways too.
+  if (!ruleApplyInProgress)
+    return;
+
+  switch (group) {
+    case RuleGroup::kTrackingRules:
+      ruleGroupApplied[0] = YES;
+      break;
+    case RuleGroup::kAdBlockingRules:
+      ruleGroupApplied[1] = YES;
+      break;
+  }
+
+  // Check if all groups have been triggered
+  if (ruleGroupApplied[0] && ruleGroupApplied[1]) {
+    // Notify observers.
+    NSDictionary *userInfo = @{vATBHostKey:_host};
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:vATBSiteSettingsDidChange
+                      object:nil
+                    userInfo:userInfo];
+
+    // Dismiss when all rules are applied.
+    ruleApplyInProgress = NO;
+    [self shutdown];
+    [self dismissViewControllerAnimated:YES completion:nil];
+  }
+}
+
+- (void)didRefreshExceptionsList:(NSArray*)exceptions {
+  // If we manually trigger the settings from this page, return early.
+  // We don't want to listen to this changes.
+  if (ruleApplyInProgress)
+    return;
+
+  // More checks.
+  if (exceptions.count == 0 ||
+      !_host ||
+      !_adblockerSettingOptions)
+    return;
+
+  for (id item in exceptions) {
+    VivaldiATBItem* exceptionItem = static_cast<VivaldiATBItem*>(item);
+    if ([exceptionItem.title isEqualToString:_host]) {
+      [self didRefreshSettingOptions:_adblockerSettingOptions];
+      break;
+    }
+  }
 }
 
 @end

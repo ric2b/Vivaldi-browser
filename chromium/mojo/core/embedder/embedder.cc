@@ -14,6 +14,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_runner.h"
 #include "build/build_config.h"
+#include "mojo/buildflags.h"
 #include "mojo/core/channel.h"
 #include "mojo/core/configuration.h"
 #include "mojo/core/core.h"
@@ -38,7 +39,7 @@ namespace mojo::core {
 
 namespace {
 
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 std::atomic<bool> g_mojo_ipcz_enabled{false};
 #else
 // Default to enabled even if InitFeatures() is never called.
@@ -51,7 +52,8 @@ std::atomic<bool> g_mojo_ipcz_enabled{true};
 void InitFeatures() {
   CHECK(base::FeatureList::GetInstance());
 
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL) && !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_NACL) && \
+    !BUILDFLAG(MOJO_USE_APPLE_CHANNEL)
   Channel::set_posix_use_writev(
       base::FeatureList::IsEnabled(kMojoPosixUseWritev));
 
@@ -75,9 +77,6 @@ void InitFeatures() {
 
   Channel::set_use_trivial_messages(
       base::FeatureList::IsEnabled(kMojoInlineMessagePayloads));
-
-  Core::set_avoid_random_pipe_id(
-      base::FeatureList::IsEnabled(kMojoAvoidRandomPipeId));
 
   if (base::FeatureList::IsEnabled(kMojoIpcz)) {
     EnableMojoIpcz();

@@ -28,7 +28,7 @@ class VivaldiMenuModelAdapterViews : public views::MenuModelAdapter {
   }
 
  private:
-  vivaldi::ContextMenuPostitionDelegate* delegate_;
+  const raw_ptr<vivaldi::ContextMenuPostitionDelegate> delegate_;
 };
 
 views::MenuItemView* ToolkitDelegateViews::VivaldiInit(

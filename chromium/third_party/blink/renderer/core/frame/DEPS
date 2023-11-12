@@ -4,6 +4,7 @@ specific_include_rules = {
   ],
   "attribution_src_loader(\.cc|\.h|_test\.cc)": [
     "+components/attribution_reporting",
+    "+services/network/public/cpp/attribution_utils.h",
     "+services/network/public/cpp/trigger_attestation.h",
   ],
   "child_frame_compositing_helper\.h": [
@@ -61,6 +62,9 @@ specific_include_rules = {
     "+printing/buildflags/buildflags.h",
     "+printing/metafile_skia.h",
     "+ui/gfx/transform_util.h",
+  ],
+  "root_frame_viewport\.cc": [
+    "+base/barrier_callback.h",
   ],
   "visual_viewport\.cc": [
     "+cc/layers/solid_color_scrollbar_layer.h",

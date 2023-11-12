@@ -29,6 +29,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/result_codes.h"
+#include "content/public/common/url_constants.h"
 #include "extensions/browser/api_activity_monitor.h"
 #include "extensions/browser/bad_message.h"
 #include "extensions/browser/content_script_tracker.h"
@@ -41,6 +42,7 @@
 #include "extensions/browser/process_map.h"
 #include "extensions/browser/quota_service.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/context_type_adapter.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_set.h"
@@ -416,9 +418,9 @@ void ExtensionFunctionDispatcher::Dispatch(
 }
 
 void ExtensionFunctionDispatcher::DispatchForServiceWorker(
-    const mojom::RequestParams& params,
+    mojom::RequestParamsPtr params,
     int render_process_id) {
-  ScopedRequestParamsCrashKeys request_params_crash_keys(params);
+  ScopedRequestParamsCrashKeys request_params_crash_keys(*params);
 
   // The IPC might race with RenderProcessHost destruction.  This may only
   // happen in scenarios that are already inherently racey, so dropping the IPC
@@ -430,30 +432,32 @@ void ExtensionFunctionDispatcher::DispatchForServiceWorker(
   if (!rph)
     return;
 
-  if (auto bad_message_code = ValidateRequest(params, nullptr, *rph)) {
+  if (auto bad_message_code = ValidateRequest(*params, nullptr, *rph)) {
     // Kill the renderer if it's an invalid request.
     bad_message::ReceivedBadMessage(render_process_id, *bad_message_code);
     return;
   }
 
-  WorkerId worker_id{params.extension_id, render_process_id,
-                     params.service_worker_version_id, params.worker_thread_id};
+  WorkerId worker_id{params->extension_id, render_process_id,
+                     params->service_worker_version_id,
+                     params->worker_thread_id};
   // Ignore if the worker has already stopped.
   if (!ProcessManager::Get(browser_context_)->HasServiceWorker(worker_id))
     return;
 
   WorkerResponseCallbackMapKey key(render_process_id,
-                                   params.service_worker_version_id);
+                                   params->service_worker_version_id);
   std::unique_ptr<WorkerResponseCallbackWrapper>& callback_wrapper =
       response_callback_wrappers_for_worker_[key];
   if (!callback_wrapper) {
     callback_wrapper = std::make_unique<WorkerResponseCallbackWrapper>(
-        weak_ptr_factory_.GetWeakPtr(), rph, params.worker_thread_id);
+        weak_ptr_factory_.GetWeakPtr(), rph, params->worker_thread_id);
   }
 
-  DispatchWithCallbackInternal(params, nullptr, render_process_id,
-                               callback_wrapper->CreateCallback(
-                                   params.request_id, params.worker_thread_id));
+  DispatchWithCallbackInternal(
+      *params, nullptr, render_process_id,
+      callback_wrapper->CreateCallback(params->request_id,
+                                       params->worker_thread_id));
 }
 
 void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
@@ -487,20 +491,45 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
     extension = registry->enabled_extensions().GetHostedAppByURL(*rfh_url);
   }
 
+  Feature::Context context_type =
+      MojomContextToFeatureContext(params.context_type);
+  if (!process_map->CanProcessHostContextType(extension, render_process_id,
+                                              context_type)) {
+    // TODO(https://crbug.com/1186557): Ideally, we'd be able to mark some
+    // of these as bad messages. We can't do that in all cases because there
+    // are times some of these might legitimately fail (for instance, during
+    // extension unload), but there are others that should never, ever happen
+    // (privileged extension contexts in web processes).
+    static constexpr char kInvalidContextType[] =
+        "Invalid context type provided.";
+    ResponseCallbackOnError(std::move(callback), ExtensionFunction::FAILED,
+                            kInvalidContextType);
+    return;
+  }
+
+  if (context_type == Feature::WEBUI_UNTRUSTED_CONTEXT) {
+    // TODO(https://crbug.com/1435575): We should, at minimum, be using an
+    // origin here. It'd be even better if we could have a more robust way of
+    // checking that a process can host untrusted webui.
+    if (extension || !rfh_url ||
+        !rfh_url->SchemeIs(content::kChromeUIUntrustedScheme)) {
+      constexpr char kInvalidWebUiUntrustedContext[] =
+          "Context indicated it was untrusted webui, but is invalid.";
+      ResponseCallbackOnError(std::move(callback), ExtensionFunction::FAILED,
+                              kInvalidWebUiUntrustedContext);
+      return;
+    }
+  }
+
   const bool is_worker_request = IsRequestFromServiceWorker(params);
 
   scoped_refptr<ExtensionFunction> function = CreateExtensionFunction(
       params, extension, render_process_id, is_worker_request, rfh_url,
-      *process_map, ExtensionAPI::GetSharedInstance(), std::move(callback));
+      context_type, ExtensionAPI::GetSharedInstance(), std::move(callback),
+      render_frame_host);
   if (!function.get())
     return;
 
-  function->set_worker_thread_id(params.worker_thread_id);
-  if (is_worker_request) {
-    function->set_service_worker_version_id(params.service_worker_version_id);
-  } else {
-    function->SetRenderFrameHost(render_frame_host);
-  }
   function->SetDispatcher(weak_ptr_factory_.GetWeakPtr());
   if (extension &&
       ExtensionsBrowserClient::Get()->CanExtensionCrossIncognito(
@@ -663,9 +692,10 @@ ExtensionFunctionDispatcher::CreateExtensionFunction(
     int requesting_process_id,
     bool is_worker_request,
     const GURL* rfh_url,
-    const ProcessMap& process_map,
+    Feature::Context context_type,
     ExtensionAPI* api,
-    ExtensionFunction::ResponseCallback callback) {
+    ExtensionFunction::ResponseCallback callback,
+    content::RenderFrameHost* render_frame_host) {
   constexpr char kCreationFailed[] = "Access to extension API denied.";
 
   scoped_refptr<ExtensionFunction> function =
@@ -678,9 +708,6 @@ ExtensionFunctionDispatcher::CreateExtensionFunction(
   }
 
   function->SetArgs(params.arguments.Clone());
-
-  const Feature::Context context_type = process_map.GetMostLikelyContextType(
-      extension, requesting_process_id, rfh_url);
 
   // Determine the source URL. When possible, prefer fetching this value from
   // the RenderFrameHost, but fallback to the value in the `params` object if
@@ -703,6 +730,12 @@ ExtensionFunctionDispatcher::CreateExtensionFunction(
   function->set_response_callback(std::move(callback));
   function->set_source_context_type(context_type);
   function->set_source_process_id(requesting_process_id);
+  function->set_worker_thread_id(params.worker_thread_id);
+  if (is_worker_request) {
+    function->set_service_worker_version_id(params.service_worker_version_id);
+  } else {
+    function->SetRenderFrameHost(render_frame_host);
+  }
 
   if (!function->HasPermission()) {
     LOG(ERROR) << "Permission denied for " << params.name;

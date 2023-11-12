@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "ash/display/cursor_window_controller.h"
+#include "base/memory/raw_ptr.h"
+
+#include <utility>
 
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/constants/ash_constants.h"
@@ -13,19 +16,38 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/command_line.h"
+#include "base/notreached.h"
+#include "base/strings/stringprintf.h"
 #include "components/prefs/pref_service.h"
+#include "ui/aura/client/cursor_shape_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
+#include "ui/base/layout.h"
+#include "ui/base/resource/mock_resource_bundle_delegate.h"
+#include "ui/base/resource/resource_bundle.h"
+#include "ui/base/resource/resource_scale_factor.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/color_utils.h"
-#include "ui/wm/core/coordinate_conversion.h"
+#include "ui/gfx/geometry/dip_util.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_conversions.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_conversions.h"
+#include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/image/image.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_rep.h"
+#include "ui/gfx/image/image_skia_source.h"
+#include "ui/wm/core/cursor_manager.h"
 
 namespace ash {
+
+using ::ui::mojom::CursorType;
 
 class CursorWindowControllerTest : public AshTestBase {
  public:
@@ -49,7 +71,7 @@ class CursorWindowControllerTest : public AshTestBase {
     SetCursorCompositionEnabled(true);
   }
 
-  ui::mojom::CursorType GetCursorType() const {
+  CursorType GetCursorType() const {
     return cursor_window_controller_->cursor_.type();
   }
 
@@ -83,7 +105,7 @@ class CursorWindowControllerTest : public AshTestBase {
 
  private:
   // Not owned.
-  CursorWindowController* cursor_window_controller_;
+  raw_ptr<CursorWindowController, ExperimentalAsh> cursor_window_controller_;
 };
 
 // Test that the composited cursor moves to another display when the real cursor
@@ -108,7 +130,7 @@ TEST_F(CursorWindowControllerTest, MoveToDifferentDisplay) {
 
   EXPECT_TRUE(primary_root->Contains(GetCursorWindow()));
   EXPECT_EQ(primary_display_id, GetCursorDisplayId());
-  EXPECT_EQ(ui::mojom::CursorType::kNull, GetCursorType());
+  EXPECT_EQ(CursorType::kNull, GetCursorType());
   gfx::Point hot_point = GetCursorHotPoint();
   EXPECT_EQ(gfx::Point(4, 4), hot_point);
   gfx::Rect cursor_bounds = GetCursorWindow()->GetBoundsInScreen();
@@ -132,7 +154,7 @@ TEST_F(CursorWindowControllerTest, MoveToDifferentDisplay) {
 
   EXPECT_TRUE(secondary_root->Contains(GetCursorWindow()));
   EXPECT_EQ(secondary_display_id, GetCursorDisplayId());
-  EXPECT_EQ(ui::mojom::CursorType::kNull, GetCursorType());
+  EXPECT_EQ(CursorType::kNull, GetCursorType());
   hot_point = GetCursorHotPoint();
   EXPECT_EQ(gfx::Point(3, 3), hot_point);
   cursor_bounds = GetCursorWindow()->GetBoundsInScreen();
@@ -172,25 +194,160 @@ TEST_F(CursorWindowControllerTest, VisibilityTest) {
   EXPECT_TRUE(GetCursorWindow()->IsVisible());
 }
 
-// Make sure that composition cursor stays big even when
-// the DSF becomes 1x as a result of zooming out.
-TEST_F(CursorWindowControllerTest, DSF) {
-  UpdateDisplay("1000x500*2");
-  int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+namespace {
 
-  display::test::ScopedSetInternalDisplayId set_internal(display_manager(),
-                                                         primary_id);
+// Emulates the behavior of BitmapImageSource used in ResourceBundle.
+class TestCursorImageSource : public gfx::ImageSkiaSource {
+ public:
+  TestCursorImageSource() = default;
+  TestCursorImageSource(const TestCursorImageSource&) = delete;
+  TestCursorImageSource operator=(const TestCursorImageSource&) = delete;
+  ~TestCursorImageSource() override = default;
+
+  // gfx::ImageSkiaSource:
+  gfx::ImageSkiaRep GetImageForScale(float scale) override {
+    float resource_scale = ui::GetSupportedResourceScaleFactor(scale);
+    if (resource_scale == 1.f) {
+      return rep_1x_;
+    } else if (resource_scale == 2.f) {
+      return rep_2x_;
+    }
+    NOTREACHED();
+    return rep_1x_;
+  }
+
+ private:
+  static SkBitmap CreateSolidColorBitmap(SkColor color, int size) {
+    SkBitmap bitmap;
+    bitmap.allocN32Pixels(size, size);
+    bitmap.eraseColor(color);
+    return bitmap;
+  }
+  gfx::ImageSkiaRep rep_1x_ =
+      gfx::ImageSkiaRep(CreateSolidColorBitmap(SK_ColorBLACK, 25), 1.f);
+  gfx::ImageSkiaRep rep_2x_ =
+      gfx::ImageSkiaRep(CreateSolidColorBitmap(SK_ColorWHITE, 50), 2.f);
+};
+
+}  // namespace
+
+// Make sure that composition cursor uses correct assets with various scales.
+TEST_F(CursorWindowControllerTest, ScaleUsesCorrectAssets) {
+  testing::NiceMock<ui::MockResourceBundleDelegate> mock_delegate;
+  gfx::ImageSkia image_skia(std::make_unique<TestCursorImageSource>(),
+                            gfx::Size(25, 25));
+
+  auto get_pixel_value = [&](float scale) {
+    uint32_t* data = static_cast<uint32_t*>(
+        GetCursorImage().GetRepresentation(scale).GetBitmap().getPixels());
+    return data[0];
+  };
+
+  EXPECT_CALL(mock_delegate, GetImageNamed(testing::_))
+      .WillOnce(testing::Return(gfx::Image(image_skia)));
+
+  ui::ResourceBundle test_bundle(&mock_delegate);
+  auto* original =
+      ui::ResourceBundle::SwapSharedInstanceForTesting(&test_bundle);
+  // Force re-create composited cursor.
+  SetCursorCompositionEnabled(false);
   SetCursorCompositionEnabled(true);
-  ASSERT_EQ(
-      2.0f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_TRUE(GetCursorImage().HasRepresentation(2.0f));
 
-  display_manager()->UpdateZoomFactor(primary_id, 0.5f);
-  ASSERT_EQ(
-      1.0f,
-      display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor());
-  EXPECT_TRUE(GetCursorImage().HasRepresentation(2.0f));
+  // The cursor should use 2x resources when dsf > 1.2.
+  EXPECT_EQ(SK_ColorWHITE, get_pixel_value(2.4f));
+  EXPECT_EQ(SK_ColorWHITE, get_pixel_value(2.f));
+  EXPECT_EQ(SK_ColorWHITE, get_pixel_value(1.25f));
+  EXPECT_EQ(SK_ColorBLACK, get_pixel_value(1.20f));
+  EXPECT_EQ(SK_ColorBLACK, get_pixel_value(1.15f));
+  EXPECT_EQ(SK_ColorBLACK, get_pixel_value(1.f));
+  EXPECT_EQ(SK_ColorBLACK, get_pixel_value(0.8f));
+
+  ui::ResourceBundle::SwapSharedInstanceForTesting(original);
+}
+
+// Test different properties of the composited cursor with different device
+// scale factors and zoom levels.
+TEST_F(CursorWindowControllerTest, DSF) {
+  const auto& cursor_shape_client = aura::client::GetCursorShapeClient();
+
+  auto cursor_test = [&](ui::Cursor cursor, float size, float cursor_scale) {
+    const float dsf =
+        display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor();
+    SCOPED_TRACE(testing::Message() << cursor.type() << " at scale " << dsf
+                                    << " and size " << size);
+
+    cursor_window_controller()->SetCursor(cursor);
+    const absl::optional<ui::CursorData> cursor_data =
+        cursor_shape_client.GetCursorData(cursor);
+    DCHECK(cursor_data);
+
+    // Software cursors look blurry if they are resized by the window they are
+    // rendered in, instead of by `ImageSkia`. Make sure
+    // `CursorWindowController` creates the cursor in a way that a
+    // representation for the display's device scale factor can be directly
+    // obtained.
+    const gfx::ImageSkiaRep& rep = GetCursorImage().GetRepresentation(dsf);
+    EXPECT_EQ(rep.scale(), dsf);
+
+    const gfx::Size kOriginalCursorSize =
+        // ImageSkiaRep::GetWidth() uses static_cast<int>.
+        gfx::ToFlooredSize(gfx::ConvertSizeToDips(
+            gfx::SkISizeToSize(cursor_data->bitmaps[0].dimensions()),
+            cursor_scale));
+    const gfx::Size kCursorSize =
+        size != 0 ? gfx::Size(size, size) : kOriginalCursorSize;
+    EXPECT_EQ(GetCursorImage().size(), kCursorSize);
+
+    // TODO(hferreiro): the cursor hotspot for non-custom cursors cannot be
+    // checked, since the software cursor uses `ImageSkia::MapToResourceScale`,
+    // and `CursorLoader::GetCursorData` uses
+    // `ui::GetSupportedResourceScaleFactor`, and 2x cursor hotspots are not
+    // just twice the 1x hotspots.
+    if (cursor.type() == CursorType::kCustom) {
+      const gfx::Point kHotspot = gfx::ToFlooredPoint(
+          gfx::ConvertPointToDips(cursor_data->hotspot, cursor_scale));
+      const float rescale =
+          static_cast<float>(kCursorSize.width()) / kOriginalCursorSize.width();
+      EXPECT_EQ(GetCursorHotPoint(),
+                gfx::ScaleToCeiledPoint(kHotspot, rescale));
+    }
+
+    // The cursor window should have the same size as the cursor.
+    EXPECT_EQ(GetCursorWindow()->bounds().size(), GetCursorImage().size());
+  };
+
+  auto* const cursor_manager = Shell::Get()->cursor_manager();
+  DCHECK(cursor_manager);
+
+  for (const float device_scale_factor : {1.0f, 1.5f, 2.0f, 2.5f}) {
+    for (const float zoom : {0.8f, 1.0f, 1.25f}) {
+      UpdateDisplay(
+          base::StringPrintf("1000x500*%f@%f", device_scale_factor, zoom));
+      const float dsf = display::Screen::GetScreen()
+                            ->GetPrimaryDisplay()
+                            .device_scale_factor();
+
+      for (const int size : {0, 32, 64}) {
+        cursor_manager->SetCursorSize(size == 0 ? ui::CursorSize::kNormal
+                                                : ui::CursorSize::kLarge);
+        Shell::Get()->SetLargeCursorSizeInDip(size);
+
+        // Default cursor.
+        cursor_test(CursorType::kPointer, size,
+                    // Use the nearest resource scale factor.
+                    ui::GetScaleForResourceScaleFactor(
+                        ui::GetSupportedResourceScaleFactor(dsf)));
+
+        // Custom cursor.
+        SkBitmap bitmap;
+        bitmap.allocN32Pixels(20, 20);
+        // Custom cursors are always scaled at the device scale factor. See
+        // `WebCursor::GetNativeCursor`.
+        cursor_test(ui::Cursor::NewCustom(bitmap, gfx::Point(10, 10), dsf),
+                    size, dsf);
+      }
+    }
+  }
 }
 
 // Test that cursor compositing is enabled if at least one of the features that
@@ -224,23 +381,19 @@ TEST_F(CursorWindowControllerTest, CursorColoringSpotCheck) {
     gfx::NativeCursor cursor;
   } kTestCases[] = {
       // Cursors should still have white.
-      {SK_ColorMAGENTA, SK_ColorBLUE, SK_ColorWHITE,
-       ui::mojom::CursorType::kHand},
-      {SK_ColorBLUE, SK_ColorMAGENTA, SK_ColorWHITE,
-       ui::mojom::CursorType::kCell},
-      {SK_ColorGREEN, SK_ColorBLUE, SK_ColorWHITE,
-       ui::mojom::CursorType::kNoDrop},
+      {SK_ColorMAGENTA, SK_ColorBLUE, SK_ColorWHITE, CursorType::kHand},
+      {SK_ColorBLUE, SK_ColorMAGENTA, SK_ColorWHITE, CursorType::kCell},
+      {SK_ColorGREEN, SK_ColorBLUE, SK_ColorWHITE, CursorType::kNoDrop},
       // Also cursors should still have transparent.
-      {SK_ColorRED, SK_ColorGREEN, SK_ColorTRANSPARENT,
-       ui::mojom::CursorType::kPointer},
+      {SK_ColorRED, SK_ColorGREEN, SK_ColorTRANSPARENT, CursorType::kPointer},
       // The no drop cursor has red in it, check it's still there:
       // Most of the cursor should be colored, but the red part shouldn't be
       // re-colored.
       {SK_ColorBLUE, SK_ColorGREEN, SkColorSetRGB(173, 8, 8),
-       ui::mojom::CursorType::kNoDrop},
+       CursorType::kNoDrop},
       // Similarly, the copy cursor has green in it.
       {SK_ColorBLUE, SK_ColorRED, SkColorSetRGB(19, 137, 16),
-       ui::mojom::CursorType::kCopy},
+       CursorType::kCopy},
   };
 
   for (const auto& test : kTestCases) {

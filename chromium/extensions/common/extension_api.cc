@@ -158,27 +158,34 @@ void ExtensionAPI::RegisterDependencyProvider(const std::string& name,
   dependency_providers_[name] = provider;
 }
 
-bool ExtensionAPI::IsAnyFeatureAvailableToContext(const Feature& api,
-                                                  const Extension* extension,
-                                                  Feature::Context context,
-                                                  const GURL& url,
-                                                  CheckAliasStatus check_alias,
-                                                  int context_id) {
+bool ExtensionAPI::IsAnyFeatureAvailableToContext(
+    const Feature& api,
+    const Extension* extension,
+    Feature::Context context,
+    const GURL& url,
+    CheckAliasStatus check_alias,
+    int context_id,
+    const ContextData& context_data) {
   auto provider = dependency_providers_.find("api");
   CHECK(provider != dependency_providers_.end());
 
-  if (api.IsAvailableToContext(extension, context, url, context_id)
-          .is_available())
+  if (api.IsAvailableToContext(extension, context, url, context_id,
+                               context_data)
+          .is_available()) {
     return true;
+  }
 
   // Check to see if there are any parts of this API that are allowed in this
   // context.
   const std::vector<const Feature*> features =
       provider->second->GetChildren(api);
   for (const Feature* feature : features) {
-    if (feature->IsAvailableToContext(extension, context, url, context_id)
-            .is_available())
+    if (feature
+            ->IsAvailableToContext(extension, context, url, context_id,
+                                   context_data)
+            .is_available()) {
       return true;
+    }
   }
 
   if (check_alias != CheckAliasStatus::ALLOWED)
@@ -193,28 +200,30 @@ bool ExtensionAPI::IsAnyFeatureAvailableToContext(const Feature& api,
                << " for API feature " << api.name();
   return IsAnyFeatureAvailableToContext(*alias, extension, context, url,
                                         CheckAliasStatus::NOT_ALLOWED,
-                                        context_id);
+                                        context_id, context_data);
 }
 
-Feature::Availability ExtensionAPI::IsAvailable(const std::string& full_name,
-                                                const Extension* extension,
-                                                Feature::Context context,
-                                                const GURL& url,
-                                                CheckAliasStatus check_alias,
-                                                int context_id) {
+Feature::Availability ExtensionAPI::IsAvailable(
+    const std::string& full_name,
+    const Extension* extension,
+    Feature::Context context,
+    const GURL& url,
+    CheckAliasStatus check_alias,
+    int context_id,
+    const ContextData& context_data) {
   const Feature* feature = GetFeatureDependency(full_name);
   if (!feature) {
     return Feature::Availability(Feature::NOT_PRESENT,
                                  std::string("Unknown feature: ") + full_name);
   }
 
-  Feature::Availability availability =
-      feature->IsAvailableToContext(extension, context, url, context_id);
+  Feature::Availability availability = feature->IsAvailableToContext(
+      extension, context, url, context_id, context_data);
   if (availability.is_available() || check_alias != CheckAliasStatus::ALLOWED)
     return availability;
 
   Feature::Availability alias_availability = IsAliasAvailable(
-      full_name, *feature, extension, context, url, context_id);
+      full_name, *feature, extension, context, url, context_id, context_data);
   return alias_availability.is_available() ? alias_availability : availability;
 }
 
@@ -289,7 +298,8 @@ Feature::Availability ExtensionAPI::IsAliasAvailable(
     const Extension* extension,
     Feature::Context context,
     const GURL& url,
-    int context_id) {
+    int context_id,
+    const ContextData& context_data) {
   const std::string& alias = feature.alias();
   if (alias.empty())
     return Feature::Availability(Feature::NOT_PRESENT, "Alias not defined");
@@ -317,7 +327,7 @@ Feature::Availability ExtensionAPI::IsAliasAvailable(
                        << " for API feature " << feature.name();
 
   return alias_feature->IsAvailableToContext(extension, context, url,
-                                             context_id);
+                                             context_id, context_data);
 }
 
 base::StringPiece ExtensionAPI::GetSchemaStringPieceUnsafe(

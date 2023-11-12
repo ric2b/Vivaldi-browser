@@ -4,8 +4,11 @@
 
 #include "ui/ozone/platform/scenic/scenic_window.h"
 
-#include <fuchsia/sys/cpp/fidl.h>
+#include <fidl/fuchsia.ui.pointer/cpp/hlcpp_conversion.h>
+#include <fidl/fuchsia.ui.views/cpp/hlcpp_conversion.h>
+#include <lib/async/default.h>
 #include <lib/sys/cpp/component_context.h>
+
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -13,8 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/fuchsia/fuchsia_component_connect.h"
 #include "base/fuchsia/fuchsia_logging.h"
-#include "base/fuchsia/process_context.h"
 #include "base/memory/scoped_refptr.h"
 #include "ui/base/cursor/platform_cursor.h"
 #include "ui/display/types/display_constants.h"
@@ -64,15 +67,27 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
     fuchsia::ui::scenic::SessionListenerHandle listener_handle;
     auto listener_request = listener_handle.NewRequest();
     endpoints.set_session_listener(std::move(listener_handle));
-    fuchsia::ui::pointer::TouchSourceHandle touch_source;
-    endpoints.set_touch_source(touch_source.NewRequest());
-    fuchsia::ui::pointer::MouseSourceHandle mouse_source;
-    endpoints.set_mouse_source(mouse_source.NewRequest());
+
+    auto touch_source_endpoints =
+        fidl::CreateEndpoints<fuchsia_ui_pointer::TouchSource>();
+    ZX_CHECK(touch_source_endpoints.is_ok(),
+             touch_source_endpoints.status_value());
+    endpoints.set_touch_source(
+        fidl::NaturalToHLCPP(std::move(touch_source_endpoints->server)));
+
+    auto mouse_source_endpoints =
+        fidl::CreateEndpoints<fuchsia_ui_pointer::MouseSource>();
+    ZX_CHECK(mouse_source_endpoints.is_ok(),
+             mouse_source_endpoints.status_value());
+    endpoints.set_mouse_source(
+        fidl::NaturalToHLCPP(std::move(mouse_source_endpoints->server)));
+
     endpoints.set_view_ref_focused(view_ref_focused_.NewRequest());
     manager_->GetScenic()->CreateSessionT(std::move(endpoints), [] {});
 
     // Set up pointer and focus event processors.
-    pointer_handler_.emplace(std::move(touch_source), std::move(mouse_source));
+    pointer_handler_.emplace(std::move(touch_source_endpoints->client),
+                             std::move(mouse_source_endpoints->client));
     pointer_handler_->StartWatching(base::BindRepeating(
         &ScenicWindow::DispatchEvent,
         // This is safe since |pointer_handler_| is a class member.
@@ -93,8 +108,7 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
         fit::bind_member(this, &ScenicWindow::OnScenicEvents));
     scenic_session_->SetDebugName("Chromium ScenicWindow");
 
-    view_.emplace(&scenic_session_.value(),
-                  std::move(std::move(properties.view_token)),
+    view_.emplace(&scenic_session_.value(), std::move(properties.view_token),
                   std::move(properties.view_ref_pair.control_ref),
                   CloneViewRef(), "chromium window");
 
@@ -123,14 +137,15 @@ ScenicWindow::ScenicWindow(ScenicWindowManager* window_manager,
 
   if (properties.enable_keyboard) {
     is_virtual_keyboard_enabled_ = properties.enable_virtual_keyboard;
-    keyboard_service_ = base::ComponentContextForProcess()
-                            ->svc()
-                            ->Connect<fuchsia::ui::input3::Keyboard>();
-    keyboard_service_.set_error_handler([](zx_status_t status) {
-      ZX_LOG(ERROR, status) << "input3.Keyboard service disconnected.";
-    });
-    keyboard_client_ = std::make_unique<KeyboardClient>(keyboard_service_.get(),
-                                                        CloneViewRef(), this);
+    auto keyboard_client_end =
+        base::fuchsia_component::Connect<fuchsia_ui_input3::Keyboard>();
+    CHECK(keyboard_client_end.is_ok())
+        << base::FidlConnectionErrorMessage(keyboard_client_end);
+    keyboard_fidl_client_.Bind(std::move(keyboard_client_end.value()),
+                               async_get_default_dispatcher(),
+                               &fidl_error_event_logger_);
+    keyboard_client_ = std::make_unique<KeyboardClient>(
+        keyboard_fidl_client_, fidl::HLCPPToNatural(CloneViewRef()), this);
   } else {
     DCHECK(!properties.enable_virtual_keyboard);
   }

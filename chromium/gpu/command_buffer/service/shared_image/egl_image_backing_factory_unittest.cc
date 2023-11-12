@@ -29,15 +29,16 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gl/buffer_format_utils.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
-#include "ui/gl/gl_image_stub.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/gl_utils.h"
@@ -96,8 +97,8 @@ void CreateSharedContext(const GpuDriverBugWorkarounds& workarounds,
       base::MakeRefCounted<gles2::FeatureInfo>(workarounds, GpuFeatureInfo());
   context_state = base::MakeRefCounted<SharedContextState>(
       std::move(share_group), surface, context,
-      false /* use_virtualized_gl_contexts */, base::DoNothing());
-  context_state->InitializeGrContext(GpuPreferences(), workarounds, nullptr);
+      /*use_virtualized_gl_contexts=*/false, base::DoNothing());
+  context_state->InitializeSkia(GpuPreferences(), workarounds);
   context_state->InitializeGL(GpuPreferences(), feature_info);
 }
 
@@ -110,11 +111,11 @@ class EGLImageBackingFactoryThreadSafeTest
     // |context_state_| and |context_state2_| must be destroyed on its own
     // context.
     if (context_state2_) {
-      context_state2_->MakeCurrent(surface2_.get(), true /* needs_gl */);
+      context_state2_->MakeCurrent(surface2_.get(), /*needs_gl=*/true);
       context_state2_.reset();
     }
     if (context_state_) {
-      context_state_->MakeCurrent(surface_.get(), true /* needs_gl */);
+      context_state_->MakeCurrent(surface_.get(), /*needs_gl=*/true);
       context_state_.reset();
     }
   }
@@ -176,7 +177,7 @@ class EGLImageBackingFactoryThreadSafeTest
     EXPECT_EQ(size.height(), backend_texture.height());
 
     // Create an Sk Image from GrBackendTexture.
-    auto sk_image = SkImage::MakeFromTexture(
+    auto sk_image = SkImages::BorrowTextureFrom(
         context_state_->gr_context(), backend_texture, kTopLeft_GrSurfaceOrigin,
         kRGBA_8888_SkColorType, kOpaque_SkAlphaType, nullptr);
 
@@ -249,7 +250,7 @@ TEST_P(EGLImageBackingFactoryThreadSafeTest, BasicThreadSafe) {
     return;
 
   CreateAndValidateSharedImageRepresentations shared_image(
-      backing_factory_.get(), get_format(), true /* is_thread_safe */,
+      backing_factory_.get(), get_format(), /*is_thread_safe=*/true,
       &mailbox_manager_, shared_image_manager_.get(),
       memory_type_tracker_.get(), shared_image_representation_factory_.get(),
       context_state_.get(), /*upload_initial_data=*/false);
@@ -262,7 +263,7 @@ TEST_P(EGLImageBackingFactoryThreadSafeTest, BasicInitialData) {
     return;
 
   CreateAndValidateSharedImageRepresentations shared_image(
-      backing_factory_.get(), get_format(), true /* is_thread_safe */,
+      backing_factory_.get(), get_format(), /*is_thread_safe=*/true,
       &mailbox_manager_, shared_image_manager_.get(),
       memory_type_tracker_.get(), shared_image_representation_factory_.get(),
       context_state_.get(), /*upload_initial_data=*/true);
@@ -278,7 +279,7 @@ TEST_P(EGLImageBackingFactoryThreadSafeTest, OneWriterOneReader) {
 
   // Create it on 1st SharedContextState |context_state_|.
   CreateAndValidateSharedImageRepresentations shared_image(
-      backing_factory_.get(), get_format(), true /* is_thread_safe */,
+      backing_factory_.get(), get_format(), /*is_thread_safe=*/true,
       &mailbox_manager_, shared_image_manager_.get(),
       memory_type_tracker_.get(), shared_image_representation_factory_.get(),
       context_state_.get(), /*upload_initial_data=*/false);
@@ -392,7 +393,7 @@ TEST_F(EGLImageBackingFactoryThreadSafeTest, Dawn_SkiaGL) {
   // requested to be.
   auto backing = backing_factory_->CreateSharedImage(
       mailbox, format, surface_handle, size, color_space,
-      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
+      kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage, "TestLabel",
       /* is_thread_safe=*/true);
   ASSERT_NE(backing, nullptr);
 
@@ -429,7 +430,7 @@ TEST_F(EGLImageBackingFactoryThreadSafeTest, Dawn_SkiaGL) {
 
     wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
     wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&renderPassDesc);
-    pass.EndPass();
+    pass.End();
     wgpu::CommandBuffer commands = encoder.Finish();
 
     wgpu::Queue queue = device.GetQueue();
@@ -478,11 +479,11 @@ CreateAndValidateSharedImageRepresentations::
         viz::ResourceSizes::CheckedSizeInBytes<unsigned int>(size_, format));
     backing_ = backing_factory->CreateSharedImage(
         mailbox_, format, size_, color_space, surface_origin, alpha_type, usage,
-        initial_data);
+        "TestLabel", initial_data);
   } else {
     backing_ = backing_factory->CreateSharedImage(
         mailbox_, format, surface_handle, size_, color_space, surface_origin,
-        alpha_type, usage, is_thread_safe);
+        alpha_type, usage, "TestLabel", is_thread_safe);
   }
 
   // As long as either |chromium_image_ar30| or |chromium_image_ab30| is

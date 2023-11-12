@@ -117,23 +117,21 @@ class UnretainedWrapper {
   // will be identical to `raw_ptr<T, PtrTraits>`.
   using DanglingRawPtrType = MayBeDangling<T, PtrTraits>;
 
-  // We want the getter type to be the exact same as the receiver parameter that
-  // it's passed into, to avoid having raw_ptr<T> -> T* -> raw_ptr<T> round
-  // trip, which could trigger the raw_ptr error detector if T* was dangling.
+ public:
+  // We want the getter type to match the receiver parameter that it is passed
+  // into, to minimize `raw_ptr<T>` <-> `T*` conversions. We also would like to
+  // match `StorageType`, but sometimes we can't have both, as shown in
+  // https://docs.google.com/document/d/1dLM34aKqbNBfRdOYxxV_T-zQU4J5wjmXwIBJZr7JvZM/edit
+  // When we can't have both, prefer the former, mostly because
+  // `GetPtrType`=`raw_ptr<T>` would break if e.g. UnretainedWrapper() is
+  // constructed using `char*`, but the receiver is of type `std::string&`.
   // This is enforced by static_asserts in base::internal::AssertConstructible.
-  //
-  // Returning raw_ptr<T> would also break if e.g. UnretainedWrapper() is
-  // constructed using char*, but the receiver is of type std::string&.
-  //
-  // TODO(bartekn): assert that the receiver type is exactly the same (or T*),
-  // to avoid raw_ptr<T> -> T* -> raw_ptr<T> trip. Or construct one from the
-  // other.
   using GetPtrType = std::conditional_t<
-      std::is_same_v<UnretainedTrait, unretained_traits::MayDangle>,
+      raw_ptr_traits::IsSupportedType<T>::value &&
+          std::is_same_v<UnretainedTrait, unretained_traits::MayDangle>,
       DanglingRawPtrType,
       T*>;
 
- public:
   static_assert(TypeSupportsUnretainedV<T>,
                 "Callback cannot capture an unprotected C++ pointer since this "
                 "Type is annotated with DISALLOW_UNRETAINED(). Please see "
@@ -153,32 +151,25 @@ class UnretainedWrapper {
   template <typename U = T>
   explicit UnretainedWrapper(raw_ptr<U, PtrTraits>&& o) : ptr_(std::move(o)) {}
 
-  GetPtrType get() const {
-    // `ptr_` is either a `raw_ptr` or a regular C++ pointer.
-    if constexpr (IsRawPtrV<StorageType>) {
-      if constexpr (std::is_same_v<UnretainedTrait,
-                                   unretained_traits::MayNotDangle>) {
-        ptr_.ReportIfDangling();
-      }
-      return ptr_;
-    } else {
-      return ptr_;
-    }
-  }
+  GetPtrType get() const { return GetInternal(ptr_); }
 
  private:
-#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-  // When `MTECheckedPtr` is enabled as the backing implementation of
-  // `raw_ptr`, there are too many different types that immediately
-  // cause Chrome to crash. Some of these are inutterable as forward
-  // declarations in `raw_ptr.h` (necessary to mark it as not
-  // `IsSupportedType`) - in particular, nested classes
-  // (`Foo::UnsupportedFoo`) cannot be marked as unsupported.
-  //
-  // As a compromise, we decay the wrapper to use `T*` only (rather
-  // than `raw_ptr`) when `raw_ptr` is `MTECheckedPtr`.
-  using StorageType = T*;
-#else   // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+  // `ptr_` is either a `raw_ptr` or a regular C++ pointer.
+  template <typename U>
+  static GetPtrType GetInternal(U* ptr) {
+    static_assert(std::is_same_v<T, U>);
+    return ptr;
+  }
+  template <typename U, RawPtrTraits Traits>
+  static GetPtrType GetInternal(const raw_ptr<U, Traits>& ptr) {
+    static_assert(std::is_same_v<T, U>);
+    if constexpr (std::is_same_v<UnretainedTrait,
+                                 unretained_traits::MayNotDangle>) {
+      ptr.ReportIfDangling();
+    }
+    return ptr;
+  }
+
   // `Unretained()` arguments often dangle by design (a common design pattern
   // is to manage an object's lifetime inside the callback itself, using
   // stateful information), so disable direct dangling pointer detection
@@ -192,11 +183,10 @@ class UnretainedWrapper {
       std::conditional_t<raw_ptr_traits::IsSupportedType<T>::value,
                          DanglingRawPtrType,
                          T*>;
-#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
   // Avoid converting between different `raw_ptr` types when calling `get()`.
-  // See the comment by `GetPtrType` describing why this wouldn't be good.
+  // It is allowable to convert `raw_ptr<T>` -> `T*`, but not in the other
+  // direction. See the comment by `GetPtrType` describing for more details.
   static_assert(std::is_pointer_v<GetPtrType> ||
-                std::is_pointer_v<StorageType> ||
                 std::is_same_v<GetPtrType, StorageType>);
   StorageType ptr_;
 };
@@ -230,46 +220,39 @@ class UnretainedRefWrapper {
   // instantiating UnretainedWrapper with a T that is not supported by
   // raw_ref would trigger raw_ref<T>'s static_assert.
   template <typename U = T>
-  explicit UnretainedRefWrapper(const raw_ref<U, PtrTraits>& o)
-      : ref_(o.get()) {}
+  explicit UnretainedRefWrapper(const raw_ref<U, PtrTraits>& o) : ref_(o) {}
   template <typename U = T>
-  explicit UnretainedRefWrapper(raw_ref<U, PtrTraits>&& o) : ref_(o.get()) {}
+  explicit UnretainedRefWrapper(raw_ref<U, PtrTraits>&& o)
+      : ref_(std::move(o)) {}
 
-  T& get() const {
-    // `ref_` is either a `raw_ref` or a regular C++ reference.
-    if constexpr (IsRawRefV<StorageType>) {
-      // The ultimate goal is to crash when a callback is invoked with a
-      // dangling pointer. This is checked here. For now, it is configured to
-      // either crash, DumpWithoutCrashing or be ignored. This depends on the
-      // PartitionAllocUnretainedDanglingPtr feature.
-      if constexpr (std::is_same_v<UnretainedTrait,
-                                   unretained_traits::MayNotDangle>) {
-        ref_.ReportIfDangling();
-      }
-      // We can't use operator* here, we need to use raw_ptr's GetForExtraction
-      // instead of GetForDereference. If we did use GetForDereference then we'd
-      // crash in ASAN builds on calling a bound callback with a dangling
-      // reference parameter even if that parameter is not used. This could hide
-      // a later unprotected issue that would be reached in release builds.
-      return ref_.get();
-    } else {
-      return ref_;
-    }
-  }
+  T& get() const { return GetInternal(ref_); }
 
  private:
-#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-  // When `MTECheckedPtr` is enabled as the backing implementation of
-  // `raw_ptr`, there are too many different types that immediately
-  // cause Chrome to crash. Some of these are inutterable as forward
-  // declarations in `raw_ptr.h` (necessary to mark it as not
-  // `IsSupportedType`) - in particular, nested classes
-  // (`Foo::UnsupportedFoo`) cannot be marked as unsupported.
-  //
-  // As a compromise, we decay the wrapper to use `T&` only (rather
-  // than `raw_ref`) when `raw_ptr` is `MTECheckedPtr`.
-  using StorageType = T&;
-#else   // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+  // `ref_` is either a `raw_ref` or a regular C++ reference.
+  template <typename U>
+  static T& GetInternal(U& ref) {
+    static_assert(std::is_same_v<T, U>);
+    return ref;
+  }
+  template <typename U, RawPtrTraits Traits>
+  static T& GetInternal(const raw_ref<U, Traits>& ref) {
+    static_assert(std::is_same_v<T, U>);
+    // The ultimate goal is to crash when a callback is invoked with a
+    // dangling pointer. This is checked here. For now, it is configured to
+    // either crash, DumpWithoutCrashing or be ignored. This depends on the
+    // PartitionAllocUnretainedDanglingPtr feature.
+    if constexpr (std::is_same_v<UnretainedTrait,
+                                 unretained_traits::MayNotDangle>) {
+      ref.ReportIfDangling();
+    }
+    // We can't use operator* here, we need to use raw_ptr's GetForExtraction
+    // instead of GetForDereference. If we did use GetForDereference then we'd
+    // crash in ASAN builds on calling a bound callback with a dangling
+    // reference parameter even if that parameter is not used. This could hide
+    // a later unprotected issue that would be reached in release builds.
+    return ref.get();
+  }
+
   // `Unretained()` arguments often dangle by design (a common design pattern
   // is to manage an object's lifetime inside the callback itself, using
   // stateful information), so disable direct dangling pointer detection
@@ -283,7 +266,6 @@ class UnretainedRefWrapper {
       std::conditional_t<raw_ptr_traits::IsSupportedType<T>::value,
                          raw_ref<T, DisableDanglingPtrDetection>,
                          T&>;
-#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
 
   StorageType ref_;
 };
@@ -947,8 +929,8 @@ struct InvokeHelper<false, ReturnType, indices...> {
   }
 };
 
-template <typename ReturnType, size_t... indices>
-struct InvokeHelper<true, ReturnType, indices...> {
+template <typename ReturnType, size_t index_target, size_t... index_tail>
+struct InvokeHelper<true, ReturnType, index_target, index_tail...> {
   // WeakCalls are only supported for functions with a void return type.
   // Otherwise, the function result would be undefined if the WeakPtr<>
   // is invalidated.
@@ -959,13 +941,18 @@ struct InvokeHelper<true, ReturnType, indices...> {
   static inline void MakeItSo(Functor&& functor,
                               BoundArgsTuple&& bound,
                               RunArgs&&... args) {
-    if (!std::get<0>(bound)) {
+    static_assert(index_target == 0);
+    // Note the validity of the weak pointer should be tested _after_ it is
+    // unwrapped, otherwise it creates a race for weak pointer implementations
+    // that allow cross-thread usage and perform `Lock()` in Unwrap() traits.
+    const auto& target = Unwrap(std::get<0>(bound));
+    if (!target) {
       return;
     }
     using Traits = MakeFunctorTraits<Functor>;
     Traits::Invoke(
-        std::forward<Functor>(functor),
-        Unwrap(std::get<indices>(std::forward<BoundArgsTuple>(bound)))...,
+        std::forward<Functor>(functor), target,
+        Unwrap(std::get<index_tail>(std::forward<BoundArgsTuple>(bound)))...,
         std::forward<RunArgs>(args)...);
   }
 };
@@ -1363,14 +1350,32 @@ struct IsOnceCallback : std::false_type {};
 template <typename Signature>
 struct IsOnceCallback<OnceCallback<Signature>> : std::true_type {};
 
-// IsUnretainedMayDangle is true if |T| is of type
-// UnretainedWrapper<T, unretained_traits::MayDangle>.
+// IsUnretainedMayDangle is true if StorageType is of type
+// `UnretainedWrapper<T, unretained_traits::MayDangle, PtrTraits>.
 // Note that it is false for unretained_traits::MayDangleUntriaged.
-template <typename T>
+template <typename StorageType>
 inline constexpr bool IsUnretainedMayDangle = false;
 template <typename T, RawPtrTraits PtrTraits>
 inline constexpr bool IsUnretainedMayDangle<
     UnretainedWrapper<T, unretained_traits::MayDangle, PtrTraits>> = true;
+
+// UnretainedAndRawPtrHaveCompatibleTraits is true if StorageType is of type
+// `UnretainedWrapper<T, unretained_traits::MayDangle, PtrTraits1>` and
+// FunctionParamType is of type `raw_ptr<T, PtrTraits2>`, and the former's
+// ::GetPtrType is the same type as the latter.
+template <typename StorageType, typename FunctionParamType>
+inline constexpr bool UnretainedAndRawPtrHaveCompatibleTraits = false;
+template <typename T,
+          RawPtrTraits PtrTraitsInUnretained,
+          RawPtrTraits PtrTraitsInReceiver>
+inline constexpr bool UnretainedAndRawPtrHaveCompatibleTraits<
+    UnretainedWrapper<T, unretained_traits::MayDangle, PtrTraitsInUnretained>,
+    raw_ptr<T, PtrTraitsInReceiver>> =
+    std::is_same_v<
+        typename UnretainedWrapper<T,
+                                   unretained_traits::MayDangle,
+                                   PtrTraitsInUnretained>::GetPtrType,
+        raw_ptr<T, PtrTraitsInReceiver>>;
 
 // Helpers to make error messages slightly more readable.
 template <int i>
@@ -1434,9 +1439,15 @@ struct BindArgument {
       // `UnretainedWrapper<T, unretained_traits::MayDangle, PtrTraits>`.
       static constexpr bool kBoundPtrMayDangle =
           IsUnretainedMayDangle<StorageType>;
+      // true if bound parameter of type `UnretainedWrapper` and parameter of
+      // type `raw_ptr` have compatible `RawPtrTraits`.
+      static constexpr bool kMayBeDanglingTraitsCorrectness =
+          UnretainedAndRawPtrHaveCompatibleTraits<StorageType,
+                                                  FunctionParamType>;
       // true if the receiver argument **must** be of type `MayBeDangling<T>`.
       static constexpr bool kMayBeDanglingMustBeUsed =
           kBoundPtrMayDangle && kParamIsDanglingRawPtr;
+
       // true iff:
       // - bound parameter is of type
       //   `UnretainedWrapper<T, unretained_traits::MayDangle, PtrTraits>`
@@ -1445,6 +1456,14 @@ struct BindArgument {
       static constexpr bool kMayBeDanglingPtrPassedCorrectly =
           kParamIsThisPointer<is_method> ||
           kBoundPtrMayDangle == kParamIsDanglingRawPtr;
+
+      // true if:
+      // - MayBeDangling<T> must not be used as receiver parameter.
+      // OR
+      // - MayBeDangling<T> must be used as receiver parameter and its traits
+      // are matching Unretained traits.
+      static constexpr bool kUnsafeDanglingAndMayBeDanglingHaveMatchingTraits =
+          !kMayBeDanglingMustBeUsed || kMayBeDanglingTraitsCorrectness;
     };
   };
 };
@@ -1535,6 +1554,12 @@ struct AssertConstructible {
           Storage>::template kMayBeDanglingPtrPassedCorrectly<is_method>,
       "base::UnsafeDangling() pointers must be received by functors with "
       "MayBeDangling<T> as parameter.");
+
+  static_assert(
+      BindArgument<i>::template ToParamWithType<Param>::template StoredAs<
+          Storage>::kUnsafeDanglingAndMayBeDanglingHaveMatchingTraits,
+      "MayBeDangling<T> parameter must receive the same RawPtrTraits as the "
+      "one passed to the corresponding base::UnsafeDangling() call.");
 };
 
 // Takes three same-length TypeLists, and applies AssertConstructible for each

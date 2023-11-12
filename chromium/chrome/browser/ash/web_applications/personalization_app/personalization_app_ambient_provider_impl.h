@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_ASH_WEB_APPLICATIONS_PERSONALIZATION_APP_PERSONALIZATION_APP_AMBIENT_PROVIDER_IMPL_H_
 #define CHROME_BROWSER_ASH_WEB_APPLICATIONS_PERSONALIZATION_APP_PERSONALIZATION_APP_AMBIENT_PROVIDER_IMPL_H_
 
+#include "ash/ambient/ambient_ui_settings.h"
 #include "ash/constants/ambient_theme.h"
 #include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/ambient/common/ambient_settings.h"
@@ -53,6 +54,7 @@ class PersonalizationAppAmbientProviderImpl
           observer) override;
   void SetAmbientModeEnabled(bool enabled) override;
   void SetAnimationTheme(ash::AmbientTheme animation_theme) override;
+  void SetScreenSaverDuration(int minutes) override;
   void SetTopicSource(ash::AmbientModeTopicSource topic_source) override;
   void SetTemperatureUnit(
       ash::AmbientModeTemperatureUnit temperature_unit) override;
@@ -62,10 +64,14 @@ class PersonalizationAppAmbientProviderImpl
   void SetPageViewed() override;
   void FetchSettingsAndAlbums() override;
   void StartScreenSaverPreview() override;
+  void ShouldShowTimeOfDayBanner(
+      ShouldShowTimeOfDayBannerCallback callback) override;
+  void HandleTimeOfDayBannerDismissed() override;
 
   // Notify WebUI the latest values.
   void OnAmbientModeEnabledChanged();
-  void OnAnimationThemeChanged();
+  void OnAmbientUiSettingsChanged();
+  void OnScreenSaverDurationChanged();
   void OnTemperatureUnitChanged();
   void OnTopicSourceChanged();
   void OnAlbumsChanged();
@@ -76,7 +82,7 @@ class PersonalizationAppAmbientProviderImpl
 
   bool IsAmbientModeEnabled();
 
-  ash::AmbientTheme GetCurrentAnimationTheme();
+  AmbientUiSettings GetCurrentUiSettings() const;
 
   // Update the local `settings_` to server.
   void UpdateSettings();
@@ -104,10 +110,8 @@ class PersonalizationAppAmbientProviderImpl
   // Update topic source if needed.
   void MaybeUpdateTopicSource(ash::AmbientModeTopicSource topic_source);
 
-  void FetchGooglePhotosAlbumsPreviews(
-      const std::vector<std::string>& album_ids);
-  void OnGooglePhotosAlbumsPreviewsFetched(
-      const std::vector<GURL>& preview_urls);
+  void FetchPreviewImages();
+  void OnPreviewsFetched(const std::vector<GURL>& preview_urls);
 
   ash::PersonalAlbum* FindPersonalAlbumById(const std::string& album_id);
 
@@ -115,6 +119,14 @@ class PersonalizationAppAmbientProviderImpl
 
   // Reset local settings to start a new session.
   void ResetLocalSettings();
+
+  // Not necessarily the same as `settings_.topic_source`. The `topic_source` in
+  // `settings_` should never be `kVideo` since it reflects what the server
+  // stores, and the server does not know about video. Note it's important to
+  // leave `settings_` untouched while the video theme is active so that the
+  // user's exact `AmbientSettings` can be restored when switching back to a
+  // non-video theme (ex: slideshow).
+  AmbientModeTopicSource GetCurrentTopicSource() const;
 
   mojo::Receiver<ash::personalization_app::mojom::AmbientProvider>
       ambient_receiver_{this};
@@ -156,6 +168,9 @@ class PersonalizationAppAmbientProviderImpl
   // Whether there are pending updates.
   bool has_pending_updates_for_backend_ = false;
 
+  // Whether to update previews when `UpdateSettings()` returns successfully.
+  bool needs_update_previews_ = false;
+
   // A flag to record if the user has seen the ambient mode page.
   bool page_viewed_ = false;
 
@@ -167,7 +182,7 @@ class PersonalizationAppAmbientProviderImpl
   base::WeakPtrFactory<PersonalizationAppAmbientProviderImpl>
       read_weak_factory_{this};
   base::WeakPtrFactory<PersonalizationAppAmbientProviderImpl>
-      google_photos_albums_previews_weak_factory_{this};
+      previews_weak_factory_{this};
 };
 
 }  // namespace ash::personalization_app

@@ -9,6 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -28,8 +29,8 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/network_session_configurator/common/network_switches.h"
-#include "content/public/browser/authenticator_environment.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/scoped_authenticator_environment_for_testing.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -91,29 +92,29 @@ class WebAuthnBrowserTest : public CertVerifierBrowserTest {
 
 static constexpr char kGetAssertionCredID1234[] = R"((() => {
   let cred_id = new Uint8Array([1,2,3,4]);
-  navigator.credentials.get({ publicKey: {
+  return navigator.credentials.get({ publicKey: {
     challenge: cred_id,
     timeout: 10000,
     userVerification: 'discouraged',
     allowCredentials: [{type: 'public-key', id: cred_id}],
-  }}).then(c => window.domAutomationController.send('webauthn: OK'),
-           e => window.domAutomationController.send('error ' + e));
+  }}).then(c => 'webauthn: OK',
+           e => 'error ' + e);
 })())";
 
 static constexpr char kMakeCredential[] = R"((() => {
-  navigator.credentials.create({ publicKey: {
+  return navigator.credentials.create({ publicKey: {
     rp: { name: "" },
     user: { id: new Uint8Array([0]), name: "foo", displayName: "" },
     pubKeyCredParams: [{type: "public-key", alg: -7}],
     challenge: new Uint8Array([0]),
     timeout: 10000,
     userVerification: 'discouraged',
-  }}).then(c => window.domAutomationController.send('webauthn: OK'),
-           e => window.domAutomationController.send('error ' + e));
+  }}).then(c => 'webauthn: OK',
+           e => 'error ' + e);
 })())";
 
 static constexpr char kMakeDiscoverableCredential[] = R"((() => {
-  navigator.credentials.create({ publicKey: {
+  return navigator.credentials.create({ publicKey: {
     rp: { name: "" },
     user: { id: new Uint8Array([0]), name: "foo", displayName: "" },
     pubKeyCredParams: [{type: "public-key", alg: -7}],
@@ -123,8 +124,8 @@ static constexpr char kMakeDiscoverableCredential[] = R"((() => {
     authenticatorSelection: {
       requireResidentKey: true,
     },
-  }}).then(c => window.domAutomationController.send('webauthn: OK'),
-           e => window.domAutomationController.send('error ' + e));
+  }}).then(c => 'webauthn: OK',
+           e => 'error ' + e);
 })())";
 
 IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, ChromeExtensions) {
@@ -177,17 +178,14 @@ IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, ChromeExtensions) {
   virtual_device_factory->mutable_state()->InjectRegistration(
       kCredentialID, "chrome-extension://" + extension_id);
 
-  content::AuthenticatorEnvironment::GetInstance()
-      ->ReplaceDefaultDiscoveryFactoryForTesting(
-          std::move(virtual_device_factory));
+  content::ScopedAuthenticatorEnvironmentForTesting auth_env(
+      std::move(virtual_device_factory));
 
   EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  std::string result;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      kGetAssertionCredID1234, &result));
-
-  EXPECT_EQ("webauthn: OK", result);
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      kGetAssertionCredID1234));
 }
 
 #if BUILDFLAG(IS_WIN)
@@ -201,9 +199,8 @@ IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, WinLargeBlob) {
   auto virtual_device_factory =
       std::make_unique<device::test::VirtualFidoDeviceFactory>();
   virtual_device_factory->set_win_webauthn_api(&fake_api);
-  content::AuthenticatorEnvironment::GetInstance()
-      ->ReplaceDefaultDiscoveryFactoryForTesting(
-          std::move(virtual_device_factory));
+  content::ScopedAuthenticatorEnvironmentForTesting auth_env(
+      std::move(virtual_device_factory));
 
   constexpr char kMakeCredentialLargeBlob[] = R"(
     let cred_id;
@@ -224,8 +221,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, WinLargeBlob) {
       cred_id = cred.rawId;
       if (!cred.getClientExtensionResults().largeBlob ||
           !cred.getClientExtensionResults().largeBlob.supported) {
-        window.domAutomationController.send('large blob not supported');
-        return;
+        throw new Error('large blob not supported');
       }
       return navigator.credentials.get({ publicKey: {
         challenge: new TextEncoder().encode('run a marathon'),
@@ -238,8 +234,7 @@ IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, WinLargeBlob) {
       }});
     }).then(assertion => {
       if (!assertion.getClientExtensionResults().largeBlob.written) {
-        window.domAutomationController.send('large blob not written to');
-        return;
+        throw new Error('large blob not written to');
       }
       return navigator.credentials.get({ publicKey: {
         challenge: new TextEncoder().encode('solve p=np'),
@@ -253,18 +248,15 @@ IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, WinLargeBlob) {
     }).then(assertion => {
       if (new TextDecoder().decode(
           assertion.getClientExtensionResults().largeBlob.blob) != blob) {
-        window.domAutomationController.send('blob does not match');
-        return;
+        throw new Error('blob does not match');
       }
-      window.domAutomationController.send('webauthn: OK');
-    }).catch(error => window.domAutomationController.send(
-                      'webauthn: ' + error.toString()));)";
+      return 'webauthn: OK';
+    }).catch(error => 'webauthn: ' + error.toString());)";
 
-  std::string result;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      kMakeCredentialLargeBlob, &result));
-  EXPECT_EQ("webauthn: OK", result);
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      kMakeCredentialLargeBlob));
 }
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -349,17 +341,26 @@ class WebAuthnConditionalUITest : public WebAuthnBrowserTest {
     config.resident_key_support = true;
     config.internal_uv_support = true;
     virtual_device_factory->SetCtap2Config(std::move(config));
-    content::AuthenticatorEnvironment::GetInstance()
-        ->ReplaceDefaultDiscoveryFactoryForTesting(
+    auth_env_ =
+        std::make_unique<content::ScopedAuthenticatorEnvironmentForTesting>(
             std::move(virtual_device_factory));
 
     ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(
         observer_.get());
   }
 
+  void PostRunTestOnMainThread() override {
+    // To avoid dangling raw_ptr's these values need to be destroyed before
+    // this test class.
+    virtual_device_factory_ = nullptr;
+    auth_env_.reset();
+    WebAuthnBrowserTest::PostRunTestOnMainThread();
+  }
+
  protected:
   std::unique_ptr<Observer> observer_;
   raw_ptr<device::test::VirtualFidoDeviceFactory> virtual_device_factory_;
+  std::unique_ptr<content::ScopedAuthenticatorEnvironmentForTesting> auth_env_;
 };
 
 static constexpr char kConditionalUIRequest[] = R"((() => {
@@ -419,7 +420,7 @@ class WebAuthnCableExtension : public WebAuthnBrowserTest {
 
  protected:
   static constexpr char kRequest[] = R"((() => {
-    navigator.credentials.get({
+    return navigator.credentials.get({
       publicKey: {
         timeout: 1000,
         challenge: new Uint8Array([
@@ -443,16 +444,11 @@ class WebAuthnCableExtension : public WebAuthnBrowserTest {
           }],
         },
       },
-    }).then(c => window.domAutomationController.send('webauthn: OK'),
-            e => window.domAutomationController.send('error ' + e));
+    }).then(c => 'webauthn: OK',
+            e => 'error ' + e);
   })())";
 
-  void MaybeInstall() {
-    if (installed_) {
-      return;
-    }
-    installed_ = true;
-
+  void DoRequest(std::string server_link_data) {
     EXPECT_TRUE(ui_test_utils::NavigateToURL(
         browser(), https_server_.GetURL("www.example.com", "/title1.html")));
 
@@ -460,25 +456,20 @@ class WebAuthnCableExtension : public WebAuthnBrowserTest {
         std::make_unique<device::test::VirtualFidoDeviceFactory>();
     virtual_device_factory->mutable_state()->InjectRegistration(
         kCredentialID, "www.example.com");
-    content::AuthenticatorEnvironment::GetInstance()
-        ->ReplaceDefaultDiscoveryFactoryForTesting(
-            std::move(virtual_device_factory));
+    std::unique_ptr<content::ScopedAuthenticatorEnvironmentForTesting>
+        auth_env =
+            std::make_unique<content::ScopedAuthenticatorEnvironmentForTesting>(
+                std::move(virtual_device_factory));
 
     ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(&observer_);
-  }
-
-  void DoRequest(std::string server_link_data) {
-    MaybeInstall();
 
     const std::string request =
         base::ReplaceStringPlaceholders(kRequest, {server_link_data}, nullptr);
 
-    std::string result;
-    ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-        browser()->tab_strip_model()->GetActiveWebContents(), request,
-        &result));
-
-    EXPECT_EQ("webauthn: OK", result);
+    EXPECT_EQ(
+        "webauthn: OK",
+        content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                        request));
   }
 
   class ExtensionObserver
@@ -506,7 +497,6 @@ class WebAuthnCableExtension : public WebAuthnBrowserTest {
     std::vector<std::string> extensions_;
   };
 
-  bool installed_ = false;
   ExtensionObserver observer_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
@@ -559,7 +549,7 @@ class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
     }
 
     void set_cable_data(
-        device::CableRequestType request_type,
+        device::FidoRequestType request_type,
         std::vector<device::CableDiscoveryData> cable_data,
         const absl::optional<std::array<uint8_t, device::cablev2::kQRKeySize>>&
             qr_generator_key,
@@ -749,15 +739,12 @@ class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
     void CableV2ExtensionSeen(
         base::span<const uint8_t> server_link_data) override {}
 
-    void ConfiguringCable(device::CableRequestType request_type) override {
+    void ConfiguringCable(device::FidoRequestType request_type) override {
       switch (request_type) {
-        case device::CableRequestType::kMakeCredential:
+        case device::FidoRequestType::kMakeCredential:
           parent_->trace() << "TYPE: mc" << std::endl;
           break;
-        case device::CableRequestType::kDiscoverableMakeCredential:
-          parent_->trace() << "TYPE: disco mc" << std::endl;
-          break;
-        case device::CableRequestType::kGetAssertion:
+        case device::FidoRequestType::kGetAssertion:
           parent_->trace() << "TYPE: ga" << std::endl;
           break;
       }
@@ -784,7 +771,9 @@ class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
 
  protected:
   std::ostringstream trace_;
-  AuthenticatorRequestDialogModel* model_ = nullptr;
+  // This field is not a raw_ptr<> to avoid returning a reference to a temporary
+  // T* (result of implicitly casting raw_ptr<T> to T*).
+  RAW_PTR_EXCLUSION AuthenticatorRequestDialogModel* model_ = nullptr;
 };
 
 // TODO(https://crbug.com/1219708): this test is flaky on Mac.
@@ -796,17 +785,16 @@ class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
 IN_PROC_BROWSER_TEST_F(WebAuthnCableSecondFactor, MAYBE_Test) {
   DelegateObserver observer(this);
   ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(&observer);
-  content::AuthenticatorEnvironment::GetInstance()
-      ->ReplaceDefaultDiscoveryFactoryForTesting(
-          std::make_unique<DiscoveryFactory>(this));
+  content::ScopedAuthenticatorEnvironmentForTesting auth_env(
+      std::make_unique<DiscoveryFactory>(this));
 
   EXPECT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_.GetURL("www.example.com", "/title1.html")));
 
-  std::string result;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      kGetAssertionCredID1234, &result));
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      kGetAssertionCredID1234));
 
   constexpr char kExpectedTrace[] = R"(
 TYPE: ga
@@ -825,7 +813,6 @@ CONTACT: phone_instance=4 step=3
 CONTACT: phone_instance=0 step=4
 )";
   EXPECT_EQ(kExpectedTrace, trace_.str());
-  EXPECT_EQ("webauthn: OK", result);
 }
 
 // These two tests are separate, rather than a for loop, because the testing
@@ -836,18 +823,16 @@ IN_PROC_BROWSER_TEST_F(WebAuthnCableSecondFactor, RequestTypesMakeCredential) {
   // Check that the correct request types are plumbed through.
   DelegateObserver observer(this);
   ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(&observer);
-  content::AuthenticatorEnvironment::GetInstance()
-      ->ReplaceDefaultDiscoveryFactoryForTesting(
-          std::make_unique<DiscoveryFactory>(this));
+  content::ScopedAuthenticatorEnvironmentForTesting auth_env(
+      std::make_unique<DiscoveryFactory>(this));
 
   EXPECT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_.GetURL("www.example.com", "/title1.html")));
 
-  std::string result;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      browser()->tab_strip_model()->GetActiveWebContents(), kMakeCredential,
-      &result));
-  EXPECT_EQ("webauthn: OK", result);
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      kMakeCredential));
   EXPECT_TRUE(trace_.str().find("TYPE: mc\n") != std::string::npos)
       << trace_.str();
 }
@@ -857,19 +842,17 @@ IN_PROC_BROWSER_TEST_F(WebAuthnCableSecondFactor,
   // Check that the correct request types are plumbed through.
   DelegateObserver observer(this);
   ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(&observer);
-  content::AuthenticatorEnvironment::GetInstance()
-      ->ReplaceDefaultDiscoveryFactoryForTesting(
-          std::make_unique<DiscoveryFactory>(this));
+  content::ScopedAuthenticatorEnvironmentForTesting auth_env(
+      std::make_unique<DiscoveryFactory>(this));
 
   EXPECT_TRUE(ui_test_utils::NavigateToURL(
       browser(), https_server_.GetURL("www.example.com", "/title1.html")));
 
-  std::string result;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      kMakeDiscoverableCredential, &result));
-  EXPECT_EQ("webauthn: OK", result);
-  EXPECT_TRUE(trace_.str().find("TYPE: disco mc\n") != std::string::npos)
+  EXPECT_EQ(
+      "webauthn: OK",
+      content::EvalJs(browser()->tab_strip_model()->GetActiveWebContents(),
+                      kMakeDiscoverableCredential));
+  EXPECT_TRUE(trace_.str().find("TYPE: mc\n") != std::string::npos)
       << trace_.str();
 }
 

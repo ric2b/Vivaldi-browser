@@ -12,7 +12,7 @@ from contextlib import ExitStack
 from typing import List
 
 from common import register_common_args, register_device_args, \
-                   register_log_args, resolve_packages, \
+                   register_log_args, resolve_packages, run_ffx_command, \
                    set_ffx_isolate_dir
 from compatible_utils import running_unattended
 from ffx_integration import ScopedFfxConfig, test_connection
@@ -64,7 +64,7 @@ def main():
     register_device_args(parser)
     register_emulator_args(parser)
     register_executable_test_args(parser)
-    register_update_args(parser, default_os_check='ignore', default_pave=True)
+    register_update_args(parser, default_os_check='ignore', default_pave=False)
     register_log_args(parser)
     register_package_args(parser, allow_temp_repo=True)
     register_serve_args(parser)
@@ -82,6 +82,8 @@ def main():
         if running_unattended():
             set_ffx_isolate_dir(
                 stack.enter_context(tempfile.TemporaryDirectory()))
+        run_ffx_command(('daemon', 'stop'), check=False)
+        if running_unattended():
             stack.enter_context(
                 ScopedFfxConfig('repository.server.listen', '"[::]:0"'))
         log_manager = stack.enter_context(LogManager(runner_args.logs_dir))

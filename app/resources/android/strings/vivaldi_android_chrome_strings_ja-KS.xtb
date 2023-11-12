@@ -8,12 +8,15 @@
 <translation id="17513872634828108">開けてるタブ</translation>
 <translation id="1829244130665387512">ページ内を検索するで</translation>
 <translation id="1910514478706885609">さらのタブスタックで開く</translation>
+<translation id="1925021887439448749">カスタムウェブアドレス入れる</translation>
 <translation id="2038563949887743358">[デスクトップ版サイトを見る] オンにしとくわ</translation>
 <translation id="2139186145475833000">ホームスクリーンにつける</translation>
+<translation id="2149973817440762519">ブックマークいらう</translation>
 <translation id="2306442503286132111">ブックマーク、<ph name="FOLDER_NAME" /> フォルダーに保存したで</translation>
 <translation id="2433507940547922241">ええ格好つける</translation>
 <translation id="2501278716633472235">戻る</translation>
 <translation id="2633278372998075009">プライベートタブ</translation>
+<translation id="2951071800649516099">ページあとでリーディングリストに入れる</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> 個のブックマーク}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> 個のブックマーク}}</translation>
@@ -36,6 +39,7 @@
 
 VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら、タッチ検索機能が使えるねん。</translation>
 <translation id="4759238208242260848">ダウンロード</translation>
+<translation id="4850886885716139402">表示</translation>
 <translation id="4883379392681899581">プライベートモードを離れるで</translation>
 <translation id="4943872375798546930">見つからへんわ</translation>
 <translation id="49576331685473090">コンテンツブロッカー</translation>
@@ -48,7 +52,9 @@ VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら�
 検索ワード調整するんやったら、長押しして選択して。検索精度上げるんやったら、パネルを一番上までスライドさせて、検索ボックスタップして。</translation>
 <translation id="572328651809341494">最近つこたタブ</translation>
 <translation id="6150320133806434356">ブックマーク作ったわ</translation>
+<translation id="6301525844455696527">リーディングリスト見てみよか</translation>
 <translation id="6336451774241870485">さらのプライベートタブ</translation>
+<translation id="6404511346730675251">ブックマークいらう</translation>
 <translation id="6585139692466700358">Vivaldiの翻訳サービス使うて他の言語に翻訳するか聞く</translation>
 <translation id="6593061639179217415">デスクトップ用サイト</translation>
 <translation id="6610147964972079463">プライベートタブをほかす</translation>
@@ -57,9 +63,15 @@ VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら�
 <translation id="732145680195464316">ブックマーク、<ph name="PRODUCT_NAME" /> に保存したで</translation>
 <translation id="7427132068601343474">Vivaldiって何や</translation>
 <translation id="7465104139234185284">プライベートタブを全てほかす</translation>
+<translation id="7481312909269577407">進む</translation>
+<translation id="7583262514280211622">リーディングリストここに出るで</translation>
+<translation id="7968014550143838305">リーディングリストに入れたで</translation>
 <translation id="804786196054284061">読まなあかんやつ</translation>
+<translation id="8127542551745560481">ホームページいらう</translation>
+<translation id="8560602726703398413">リーディングリストはブックマークにあるで</translation>
 <translation id="85991616550051997">ホーム行く</translation>
 <translation id="8820817407110198400">また来れるようにするやつ</translation>
 <translation id="9063523880881406963">[デスクトップ版サイトを見る] 切っとくわ</translation>
 <translation id="9080642952018487277">忍者モードにする</translation>
+<translation id="96681097142096641">簡易表示にする？</translation>
 </translationbundle>

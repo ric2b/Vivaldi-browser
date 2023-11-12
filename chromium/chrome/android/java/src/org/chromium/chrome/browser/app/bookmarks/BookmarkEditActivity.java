@@ -70,10 +70,11 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
                 BookmarkId.getBookmarkIdFromString(getIntent().getStringExtra(INTENT_BOOKMARK_ID));
         mModel.addObserver(mBookmarkModelObserver);
         BookmarkItem item = mModel.getBookmarkById(mBookmarkId);
-            if (!mModel.doesBookmarkExist(mBookmarkId) || item == null) {
-                finish();
-                return;
-            }
+        if (!mModel.doesBookmarkExist(mBookmarkId) || item == null) {
+            finish();
+            return;
+        }
+
         setContentView(R.layout.bookmark_edit);
         mTitleEditText = findViewById(R.id.title_text);
         mFolderTextView = (TextView) findViewById(R.id.folder_text);
@@ -92,6 +93,7 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+
         updateViewContent(false);
 
         View shadow = findViewById(R.id.shadow);
@@ -129,10 +131,11 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-            mDeleteButton = menu.add(R.string.bookmark_action_bar_delete)
+        mDeleteButton = menu.add(R.string.bookmark_toolbar_delete)
                                 .setIcon(TintedDrawable.constructTintedDrawable(
                                         this, R.drawable.ic_delete_white_24dp))
                                 .setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+
         return super.onCreateOptionsMenu(menu);
     }
 
@@ -141,6 +144,7 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
         if (item == mDeleteButton) {
             // Log added for detecting delete button double clicking.
             Log.i(TAG, "Delete button pressed by user! isFinishing() == " + isFinishing());
+
             mModel.deleteBookmark(mBookmarkId);
             finish();
             return true;

@@ -13,8 +13,10 @@
 #include "base/scoped_observation.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_piece_forward.h"
+#include "base/thread_annotations.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chrome/browser/ash/policy/reporting/metrics_reporting/apps/app_usage_collector.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/cros_healthd_sampler_handlers/cros_healthd_sampler_handler.h"
 #include "chrome/browser/ash/policy/reporting/metrics_reporting/cros_reporting_settings.h"
 #include "chrome/browser/ash/policy/status_collector/managed_session_service.h"
@@ -61,6 +63,10 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
     virtual std::unique_ptr<Sampler> GetHttpsLatencySampler() const;
 
     virtual std::unique_ptr<Sampler> GetNetworkTelemetrySampler() const;
+
+    // Returns app service availability for the given profile. Not all profiles
+    // can run apps (for example, non-guest incognito profiles).
+    virtual bool IsAppServiceAvailableForProfile(Profile* profile) const;
   };
 
   static std::unique_ptr<MetricReportingManager> Create(
@@ -168,6 +174,9 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
   void InitNetworkConfiguredSampler(const std::string& sampler_name,
                                     std::unique_ptr<Sampler> sampler);
 
+  // Initializes app telemetry samplers for the given profile.
+  void InitAppCollectors(Profile* profile);
+
   void InitAudioCollectors();
 
   void InitPeripheralsCollectors();
@@ -226,6 +235,11 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
 
   std::vector<std::unique_ptr<MetricEventObserverManager>>
       event_observer_managers_ GUARDED_BY_CONTEXT(sequence_checker_);
+
+  // App usage collector used to collect app usage reports from the
+  // `AppPlatformMetrics` component.
+  std::unique_ptr<AppUsageCollector> app_usage_collector_
+      GUARDED_BY_CONTEXT(sequence_checker_);
 
   std::unique_ptr<Delegate> delegate_;
 };

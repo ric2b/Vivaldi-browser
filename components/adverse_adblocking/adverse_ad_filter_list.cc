@@ -306,7 +306,7 @@ void AdverseAdFilterListService::LoadAndInitializeFromString(
     if (!entry.is_dict())
       continue;
 
-    auto* hostname_entry = entry.FindKey("reviewedSite");
+    auto* hostname_entry = entry.GetDict().Find("reviewedSite");
     if (!hostname_entry || !hostname_entry->is_string())
       continue;
 

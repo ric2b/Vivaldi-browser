@@ -34,7 +34,9 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/views/background.h"
 #include "ui/views/bubble/bubble_frame_view.h"
@@ -55,9 +57,19 @@ namespace {
 constexpr int kMinPermissionRowHeight = 40;
 constexpr float kMaxPermissionRowCount = 10.5;
 
+// Used to experiment with different icons through a finch parameter.
+enum class AboutThisSiteSeconaryIcon {
+  kNewTabIcon = 0,
+  kArrowIcon = 1,
+  kSidePanelIcon = 2,
+  kNoIcon = 3,
+};
+
 }  // namespace
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PageInfoMainView, kCookieButtonElementId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PageInfoMainView, kMainLayoutElementId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PageInfoMainView, kPermissionsElementId);
 
 PageInfoMainView::ContainerView::ContainerView() {
   SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -101,6 +113,8 @@ PageInfoMainView::PageInfoMainView(
   permissions_view_ = AddChildView(std::make_unique<views::View>());
   permissions_view_->SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kVertical);
+
+  SetProperty(views::kElementIdentifierKey, kMainLayoutElementId);
 
   site_settings_view_ = AddChildView(CreateContainerView());
 
@@ -247,6 +261,8 @@ void PageInfoMainView::SetPermissionInfo(
   content_view->SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kVertical);
   content_view->SetID(PageInfoViewFactory::VIEW_ID_PAGE_INFO_PERMISSION_VIEW);
+  content_view->SetProperty(views::kElementIdentifierKey,
+                            kPermissionsElementId);
 
   // If there is a permission that supports one time grants, offset all other
   // permissions to align toggles.
@@ -381,7 +397,6 @@ void PageInfoMainView::SetIdentityInfo(const IdentityInfo& identity_info) {
     if (page_info::IsAboutThisSiteFeatureEnabled(
             g_browser_process->GetApplicationLocale())) {
       auto info = ui_delegate_->GetAboutThisSiteInfo();
-      presenter_->SetAboutThisSiteShown(info.has_value());
       if (info.has_value()) {
         about_this_site_section_->RemoveAllChildViews();
         about_this_site_section_->AddChildView(
@@ -522,7 +537,7 @@ void PageInfoMainView::HandleMoreInfoRequestAsync(int view_id) {
       presenter_->OpenCookiesDialog();
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_NORETURN();
   }
 }
 
@@ -584,16 +599,13 @@ std::unique_ptr<views::View> PageInfoMainView::CreateAboutThisSiteSection(
       ->SetOrientation(views::LayoutOrientation::kVertical);
   about_this_site_section->AddChildView(PageInfoViewFactory::CreateSeparator());
 
-  RichHoverButton* about_this_site_button = nullptr;
-
-  if (page_info::IsMoreAboutThisSiteFeatureEnabled()) {
     const auto& description =
         info.has_description()
             ? base::UTF8ToUTF16(info.description().description())
             : l10n_util::GetStringUTF16(
                   IDS_PAGE_INFO_ABOUT_THIS_PAGE_DESCRIPTION_PLACEHOLDER);
 
-    about_this_site_button =
+    RichHoverButton* about_this_site_button =
         about_this_site_section->AddChildView(std::make_unique<RichHoverButton>(
             base::BindRepeating(
                 [](PageInfoMainView* view, GURL more_info_url,
@@ -615,32 +627,9 @@ std::unique_ptr<views::View> PageInfoMainView::CreateAboutThisSiteSection(
             description, PageInfoViewFactory::GetLaunchIcon()));
     about_this_site_button->SetID(
         PageInfoViewFactory::VIEW_ID_PAGE_INFO_ABOUT_THIS_SITE_BUTTON);
-  } else {
-    // The kPageInfoAboutThisSiteDescriptionPlaceholder feature must only be
-    // enabled together with kPageInfoAboutThisSiteMoreInfo
-    DCHECK(info.has_description());
-    about_this_site_button =
-        about_this_site_section->AddChildView(std::make_unique<RichHoverButton>(
-            base::BindRepeating(
-                [](PageInfoMainView* view,
-                   const page_info::proto::SiteInfo& info) {
-                  page_info::AboutThisSiteService::OnAboutThisSiteRowClicked(
-                      info.has_description());
-                  view->navigation_handler_->OpenAboutThisSitePage(info);
-                },
-                this, info),
-            PageInfoViewFactory::GetAboutThisSiteIcon(),
-            l10n_util::GetStringUTF16(IDS_PAGE_INFO_ABOUT_THIS_SITE_HEADER),
-            std::u16string(),
+    about_this_site_button->SetSubtitleMultiline(false);
 
-            l10n_util::GetStringUTF16(IDS_PAGE_INFO_ABOUT_THIS_SITE_TOOLTIP),
-            base::UTF8ToUTF16(info.description().description()),
-            PageInfoViewFactory::GetOpenSubpageIcon()));
-    about_this_site_button->SetID(
-        PageInfoViewFactory::VIEW_ID_PAGE_INFO_ABOUT_THIS_SITE_BUTTON);
-  }
-  about_this_site_button->SetSubtitleMultiline(false);
-  return about_this_site_section;
+    return about_this_site_section;
 }
 
 std::unique_ptr<views::View>

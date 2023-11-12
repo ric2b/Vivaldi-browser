@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "ash/ambient/metrics/ambient_multi_screen_metrics_recorder.h"
+#include "ash/ambient/metrics/ambient_session_metrics_recorder.h"
 #include "ash/ambient/resources/ambient_animation_static_resources.h"
 #include "ash/ambient/ui/ambient_animation_view.h"
 #include "ash/ambient/ui/ambient_view_delegate.h"
@@ -30,14 +30,11 @@ AmbientContainerView::AmbientContainerView(
     AmbientViewDelegateImpl* delegate,
     AmbientAnimationProgressTracker* progress_tracker,
     std::unique_ptr<AmbientAnimationStaticResources> animation_static_resources,
-    AmbientMultiScreenMetricsRecorder* multi_screen_metrics_recorder,
+    AmbientSessionMetricsRecorder* session_metrics_recorder,
     AmbientAnimationFrameRateController* frame_rate_controller) {
-  DCHECK(delegate);
-  DCHECK(multi_screen_metrics_recorder);
-  SetID(AmbientViewID::kAmbientContainerView);
-  // TODO(b/139954108): Choose a better dark mode theme color.
-  SetBackground(views::CreateSolidBackground(SK_ColorBLACK));
-  SetLayoutManager(std::make_unique<views::FillLayout>());
+  CHECK(delegate);
+  CHECK(session_metrics_recorder);
+  InitializeCommonSettings();
   View* main_rendering_view = nullptr;
   AmbientTheme theme = animation_static_resources
                            ? animation_static_resources->GetAmbientTheme()
@@ -45,17 +42,44 @@ AmbientContainerView::AmbientContainerView(
   if (animation_static_resources) {
     main_rendering_view = AddChildView(std::make_unique<AmbientAnimationView>(
         delegate, progress_tracker, std::move(animation_static_resources),
-        multi_screen_metrics_recorder, frame_rate_controller));
+        session_metrics_recorder, frame_rate_controller));
   } else {
     main_rendering_view = AddChildView(std::make_unique<PhotoView>(delegate));
-    multi_screen_metrics_recorder->RegisterScreen(/*animation=*/nullptr);
+    session_metrics_recorder->RegisterScreen(/*animation=*/nullptr);
   }
   orientation_metrics_recorder_ =
       std::make_unique<ambient::AmbientOrientationMetricsRecorder>(
           main_rendering_view, theme);
 }
 
+AmbientContainerView::AmbientContainerView(
+    AmbientTheme theme,
+    std::unique_ptr<views::View> main_rendering_view,
+    AmbientSessionMetricsRecorder* session_metrics_recorder) {
+  CHECK(main_rendering_view);
+  CHECK(session_metrics_recorder);
+  InitializeCommonSettings();
+  // Set up metrics common to all ambient UIs.
+  //
+  // TODO(esum): Find a way of recording multi-screen metrics without requiring
+  // the caller to pass in a |AmbientSessionMetricsRecorder|. Ideally, we
+  // just make a function call here or instantiate a private member as is done
+  // for |orientation_metrics_recorder_|.
+  session_metrics_recorder->RegisterScreen(/*animation=*/nullptr);
+  orientation_metrics_recorder_ =
+      std::make_unique<ambient::AmbientOrientationMetricsRecorder>(
+          main_rendering_view.get(), theme);
+  AddChildView(std::move(main_rendering_view));
+}
+
 AmbientContainerView::~AmbientContainerView() = default;
+
+void AmbientContainerView::InitializeCommonSettings() {
+  SetID(AmbientViewID::kAmbientContainerView);
+  // TODO(b/139954108): Choose a better dark mode theme color.
+  SetBackground(views::CreateSolidBackground(SK_ColorBLACK));
+  SetLayoutManager(std::make_unique<views::FillLayout>());
+}
 
 BEGIN_METADATA(AmbientContainerView, views::View)
 END_METADATA

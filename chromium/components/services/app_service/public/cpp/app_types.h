@@ -16,7 +16,6 @@
 #include "components/services/app_service/public/cpp/macros.h"
 #include "components/services/app_service/public/cpp/permission.h"
 #include "components/services/app_service/public/cpp/run_on_os_login_types.h"
-#include "components/services/app_service/public/cpp/shortcut.h"
 #include "components/services/app_service/public/protos/app_types.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -61,7 +60,8 @@ ENUM(Readiness,
      // apps, so publishers must set the app as uninstalled before
      // removing it.
      kRemoved,
-     kUninstalledByMigration)
+     // This is used for all non-user initiated uninstallation.
+     kUninstalledByNonUser)
 
 // How the app was installed.
 // This should be kept in sync with histograms.xml, InstallReason in

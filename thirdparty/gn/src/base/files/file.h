@@ -41,10 +41,12 @@ typedef struct stat64 stat_wrapper_t;
 class File {
  public:
   // FLAG_(OPEN|CREATE).* are mutually exclusive. You should specify exactly one
-  // of the five (possibly combining with other flags) when opening or creating
+  // of the three (possibly combining with other flags) when opening or creating
   // a file.
   enum Flags {
     FLAG_OPEN = 1 << 0,           // Opens a file, only if it exists.
+    FLAG_CREATE = 1 << 1,         // Creates a new file, only if it does not
+                                  // already exist.
     FLAG_CREATE_ALWAYS = 1 << 3,  // May overwrite an old file.
     FLAG_READ = 1 << 4,
     FLAG_WRITE = 1 << 5,
@@ -122,6 +124,7 @@ class File {
   File(const FilePath& path, uint32_t flags);
 
   // Takes ownership of |platform_file|.
+  explicit File(ScopedPlatformFile platform_file);
   explicit File(PlatformFile platform_file);
 
   // Creates an object with a specific error_details code.

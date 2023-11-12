@@ -65,7 +65,7 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
                   OutputCB output_cb,
                   EncoderStatusCB done_cb) override;
   void Encode(scoped_refptr<VideoFrame> frame,
-              bool key_frame,
+              const EncodeOptions& encode_options,
               EncoderStatusCB done_cb) override;
   void ChangeOptions(const Options& options,
                      OutputCB output_cb,
@@ -80,7 +80,7 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
   void BitstreamBufferReady(int32_t buffer_id,
                             const BitstreamBufferMetadata& metadata) override;
 
-  void NotifyError(VideoEncodeAccelerator::Error error) override;
+  void NotifyErrorStatus(const EncoderStatus& status) override;
 
   void NotifyEncoderInfoChange(const VideoEncoderInfo& info) override;
 
@@ -115,7 +115,7 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
                                      EncoderStatusCB done_cb);
   void InitializeInternalOnAcceleratorThread();
   void EncodeOnAcceleratorThread(scoped_refptr<VideoFrame> frame,
-                                 bool key_frame,
+                                 const EncodeOptions& encode_options,
                                  EncoderStatusCB done_cb);
   void FlushOnAcceleratorThread(EncoderStatusCB done_cb);
   void ChangeOptionsOnAcceleratorThread(const Options options,
@@ -131,7 +131,8 @@ class MEDIA_EXPORT VideoEncodeAcceleratorAdapter
 
   scoped_refptr<ReadOnlyRegionPool> input_pool_;
   scoped_refptr<base::UnsafeSharedMemoryPool> output_pool_;
-  std::unique_ptr<base::UnsafeSharedMemoryPool::Handle> output_handle_holder_;
+  std::vector<std::unique_ptr<base::UnsafeSharedMemoryPool::Handle>>
+      output_buffer_handles_;
   scoped_refptr<GpuMemoryBufferVideoFramePool> gmb_frame_pool_;
 
   std::unique_ptr<VideoEncodeAccelerator> accelerator_;

@@ -9,18 +9,38 @@
 #define CHROME_COMMON_SAFE_BROWSING_ZIP_ANALYZER_H_
 
 #include "base/files/file.h"
+#include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
+#include "chrome/common/safe_browsing/archive_analyzer.h"
+#include "components/safe_browsing/content/common/file_type_policies.h"
+#include "third_party/zlib/google/zip_reader.h"
 
 namespace safe_browsing {
 
-struct ArchiveAnalyzerResults;
+class ZipAnalyzer : public ArchiveAnalyzer {
+ public:
+  ZipAnalyzer();
+  ~ZipAnalyzer() override;
 
-namespace zip_analyzer {
+  ZipAnalyzer(const ZipAnalyzer&) = delete;
+  ZipAnalyzer& operator=(const ZipAnalyzer&) = delete;
 
-void AnalyzeZipFile(base::File zip_file,
-                    base::File temp_file,
-                    ArchiveAnalyzerResults* results);
+ private:
+  void Init() override;
+  bool ResumeExtraction() override;
+  base::WeakPtr<ArchiveAnalyzer> GetWeakPtr() override;
 
-}  // namespace zip_analyzer
+  void OnGetTempFile(base::File temp_file);
+
+  base::File temp_file_;
+  zip::ZipReader reader_;
+
+  bool has_encrypted_ = false;
+  bool has_aes_encrypted_ = false;
+
+  base::WeakPtrFactory<ZipAnalyzer> weak_factory_{this};
+};
+
 }  // namespace safe_browsing
 
 #endif  // CHROME_COMMON_SAFE_BROWSING_ZIP_ANALYZER_H_

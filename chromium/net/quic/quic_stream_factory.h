@@ -109,7 +109,8 @@ enum QuicPlatformNotification {
 enum AllActiveSessionsGoingAwayReason {
   kClockSkewDetected,
   kIPAddressChanged,
-  kCertDBChanged
+  kCertDBChanged,
+  kCertVerifierChanged
 };
 
 enum CreateSessionFailure {
@@ -249,7 +250,8 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
 class NET_EXPORT_PRIVATE QuicStreamFactory
     : public NetworkChangeNotifier::IPAddressObserver,
       public NetworkChangeNotifier::NetworkObserver,
-      public CertDatabase::Observer {
+      public CertDatabase::Observer,
+      public CertVerifier::Observer {
  public:
   // This class encompasses |destination| and |server_id|.
   // |destination| is a HostPortPair which is resolved
@@ -417,6 +419,10 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // We close all sessions when certificate database is changed.
   void OnCertDBChanged() override;
 
+  // CertVerifier::Observer:
+  // We close all sessions when certificate verifier settings have changed.
+  void OnCertVerifierChanged() override;
+
   bool is_quic_known_to_work_on_current_network() const {
     return is_quic_known_to_work_on_current_network_;
   }
@@ -477,17 +483,27 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   void OnJobComplete(Job* job, int rv);
   bool HasActiveSession(const QuicSessionKey& session_key) const;
   bool HasActiveJob(const QuicSessionKey& session_key) const;
-  int CreateSession(CompletionOnceCallback callback,
-                    const QuicSessionAliasKey& key,
-                    quic::ParsedQuicVersion quic_version,
-                    int cert_verify_flags,
-                    bool require_confirmation,
-                    const HostResolverEndpointResult& endpoint_result,
-                    base::TimeTicks dns_resolution_start_time,
-                    base::TimeTicks dns_resolution_end_time,
-                    const NetLogWithSource& net_log,
-                    QuicChromiumClientSession** session,
-                    handles::NetworkHandle* network);
+  int CreateSessionSync(const QuicSessionAliasKey& key,
+                        quic::ParsedQuicVersion quic_version,
+                        int cert_verify_flags,
+                        bool require_confirmation,
+                        const HostResolverEndpointResult& endpoint_result,
+                        base::TimeTicks dns_resolution_start_time,
+                        base::TimeTicks dns_resolution_end_time,
+                        const NetLogWithSource& net_log,
+                        QuicChromiumClientSession** session,
+                        handles::NetworkHandle* network);
+  int CreateSessionAsync(CompletionOnceCallback callback,
+                         const QuicSessionAliasKey& key,
+                         quic::ParsedQuicVersion quic_version,
+                         int cert_verify_flags,
+                         bool require_confirmation,
+                         const HostResolverEndpointResult& endpoint_result,
+                         base::TimeTicks dns_resolution_start_time,
+                         base::TimeTicks dns_resolution_end_time,
+                         const NetLogWithSource& net_log,
+                         QuicChromiumClientSession** session,
+                         handles::NetworkHandle* network);
   void FinishCreateSession(CompletionOnceCallback callback,
                            const QuicSessionAliasKey& key,
                            quic::ParsedQuicVersion quic_version,
@@ -501,6 +517,17 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
                            handles::NetworkHandle* network,
                            std::unique_ptr<DatagramClientSocket> socket,
                            int rv);
+  bool CreateSessionHelper(const QuicSessionAliasKey& key,
+                           quic::ParsedQuicVersion quic_version,
+                           int cert_verify_flags,
+                           bool require_confirmation,
+                           const HostResolverEndpointResult& endpoint_result,
+                           base::TimeTicks dns_resolution_start_time,
+                           base::TimeTicks dns_resolution_end_time,
+                           const NetLogWithSource& net_log,
+                           QuicChromiumClientSession** session,
+                           handles::NetworkHandle* network,
+                           std::unique_ptr<DatagramClientSocket> socket);
   void ActivateSession(const QuicSessionAliasKey& key,
                        QuicChromiumClientSession* session,
                        std::set<std::string> dns_aliases);

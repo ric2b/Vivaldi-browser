@@ -9,10 +9,9 @@
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/prefs/pref_service.h"
-#import "ios/chrome/browser/ui/commands/bookmark_add_command.h"
-#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
-#import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/public/commands/bookmark_add_command.h"
+#import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
@@ -77,19 +76,9 @@ NSString* const kBookmarkActivityType = @"com.google.chrome.bookmarkActivity";
 }
 
 - (UIImage*)activityImage {
-  if (UseSymbols()) {
-    if (self.bookmarked) {
-      return DefaultSymbolWithPointSize(kEditActionSymbol,
-                                        kSymbolActionPointSize);
-    }
-    return DefaultSymbolWithPointSize(kAddBookmarkActionSymbol,
-                                      kSymbolActionPointSize);
-  }
-
-  if (self.bookmarked) {
-    return [UIImage imageNamed:@"activity_services_edit_bookmark"];
-  }
-  return [UIImage imageNamed:@"activity_services_add_bookmark"];
+  NSString* symbolName =
+      self.bookmarked ? kEditActionSymbol : kAddBookmarkActionSymbol;
+  return DefaultSymbolWithPointSize(symbolName, kSymbolActionPointSize);
 }
 
 - (BOOL)canPerformWithActivityItems:(NSArray*)activityItems {

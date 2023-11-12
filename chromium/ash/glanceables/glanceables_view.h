@@ -6,6 +6,7 @@
 #define ASH_GLANCEABLES_GLANCEABLES_VIEW_H_
 
 #include "ash/ash_export.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/views/view.h"
 
 namespace views {
@@ -15,7 +16,6 @@ class Label;
 
 namespace ash {
 
-class GlanceablesRestoreView;
 class GlanceablesUpNextView;
 class GlanceablesWeatherView;
 class GlanceablesWelcomeLabel;
@@ -23,9 +23,7 @@ class GlanceablesWelcomeLabel;
 // Container view for the "welcome back" glanceables screen shown on login.
 class ASH_EXPORT GlanceablesView : public views::View {
  public:
-  // `show_session_restore` controls whether the session restore views are
-  // created.
-  explicit GlanceablesView(bool show_session_restore);
+  GlanceablesView();
   GlanceablesView(const GlanceablesView&) = delete;
   GlanceablesView& operator=(const GlanceablesView&) = delete;
   ~GlanceablesView() override;
@@ -37,13 +35,11 @@ class ASH_EXPORT GlanceablesView : public views::View {
  private:
   friend class GlanceablesTest;
 
-  views::BoxLayout* layout_ = nullptr;
-  GlanceablesWelcomeLabel* welcome_label_ = nullptr;
-  GlanceablesWeatherView* weather_view_ = nullptr;
-  views::Label* up_next_label_ = nullptr;
-  GlanceablesUpNextView* up_next_view_ = nullptr;
-  views::Label* restore_session_label_ = nullptr;
-  GlanceablesRestoreView* restore_view_ = nullptr;
+  raw_ptr<views::BoxLayout, ExperimentalAsh> layout_ = nullptr;
+  raw_ptr<GlanceablesWelcomeLabel, ExperimentalAsh> welcome_label_ = nullptr;
+  raw_ptr<GlanceablesWeatherView, ExperimentalAsh> weather_view_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> up_next_label_ = nullptr;
+  raw_ptr<GlanceablesUpNextView, ExperimentalAsh> up_next_view_ = nullptr;
 };
 
 }  // namespace ash

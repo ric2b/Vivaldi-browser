@@ -14,6 +14,7 @@ import android.view.Window;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsSessionToken;
 
@@ -46,6 +47,7 @@ import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.InflationObserver;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.RedirectHandlerTabHelper;
@@ -209,6 +211,21 @@ public class CustomTabActivityTabController implements InflationObserver {
         return model.getCount() == 1;
     }
 
+    /**
+     * Checks if the current tab contains unload events and if so it opens the dialog
+     * to ask the user before closing the tab.
+     *
+     * @return Whether we ran the unload events or not.
+     */
+    public boolean dispatchBeforeUnloadIfNeeded() {
+        Tab currentTab = mTabProvider.getTab();
+        if (currentTab.getWebContents().needToFireBeforeUnloadOrUnloadEvents()) {
+            currentTab.getWebContents().dispatchBeforeUnload(false);
+            return true;
+        }
+        return false;
+    }
+
     public void closeAndForgetTab() {
         // TODO(https://crbug.com/1379452): Store all the tabs in the tab model.
         if (mTabFactory.getTabModelSelector().getCurrentModel().getCount() > 0) {
@@ -336,7 +353,7 @@ public class CustomTabActivityTabController implements InflationObserver {
     @Nullable
     private Tab tryRestoringTab(TabModelOrchestrator tabModelOrchestrator) {
         if (mSavedInstanceStateSupplier.get() == null) return null;
-        tabModelOrchestrator.loadState(true);
+        tabModelOrchestrator.loadState(true, null);
         tabModelOrchestrator.restoreTabs(true);
         Tab tab = tabModelOrchestrator.getTabModelSelector().getCurrentTab();
         if (tab != null) {
@@ -439,9 +456,20 @@ public class CustomTabActivityTabController implements InflationObserver {
         }
 
         if (CustomTabsConnection.getInstance().isDynamicFeatureEnabled(
-                    ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)) {
+                    ChromeFeatureList.CCT_REAL_TIME_ENGAGEMENT_SIGNALS)
+                && PrivacyPreferencesManagerImpl.getInstance()
+                           .isUsageAndCrashReportingPermitted()) {
             mRealtimeEngagementSignalObserver = new RealtimeEngagementSignalObserver(
                     mTabObserverRegistrar, mConnection, mSession);
+            PrivacyPreferencesManagerImpl.getInstance().addObserver(permitted -> {
+                if (!permitted) {
+                    if (mRealtimeEngagementSignalObserver != null) {
+                        mConnection.notifyDidGetUserInteraction(mSession, false);
+                        mRealtimeEngagementSignalObserver.destroy();
+                        mRealtimeEngagementSignalObserver = null;
+                    }
+                }
+            });
         }
 
         // TODO(pshmakov): invert these dependencies.
@@ -516,5 +544,10 @@ public class CustomTabActivityTabController implements InflationObserver {
         }
         mTabProvider.removeTab();
         return true;
+    }
+
+    @VisibleForTesting
+    RealtimeEngagementSignalObserver getRealtimeEngagementSignalObserverForTesting() {
+        return mRealtimeEngagementSignalObserver;
     }
 }

@@ -356,7 +356,7 @@
   },
   {
     "cmd": [
-      "python",
+      "python3",
       "-u",
       "[START_DIR]/gn/build/gen.py",
       "-d"
@@ -513,7 +513,7 @@
   },
   {
     "cmd": [
-      "python",
+      "python3",
       "-u",
       "[START_DIR]/gn/build/gen.py",
       "--use-lto",
@@ -613,7 +613,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -659,7 +659,7 @@
   },
   {
     "cmd": [
-      "vpython",
+      "vpython3",
       "-u",
       "RECIPE_MODULE[recipe_engine::file]/resources/fileutil.py",
       "--json-output",
@@ -846,7 +846,7 @@
   },
   {
     "cmd": [
-      "python",
+      "python3",
       "-u",
       "[START_DIR]/gn/build/gen.py",
       "--use-lto",

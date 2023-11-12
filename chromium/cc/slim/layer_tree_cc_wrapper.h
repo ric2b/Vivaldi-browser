@@ -48,6 +48,7 @@ class LayerTreeCcWrapper : public LayerTree,
   void UpdateTopControlsVisibleHeight(float height) override;
   void SetNeedsAnimate() override;
   void SetNeedsRedraw() override;
+  void MaybeCompositeNow() override {}
   const scoped_refptr<Layer>& root() const override;
   void SetRoot(scoped_refptr<Layer> root) override;
   void SetFrameSink(std::unique_ptr<FrameSink> sink) override;
@@ -64,7 +65,6 @@ class LayerTreeCcWrapper : public LayerTree,
       bool,
       cc::PaintHoldingReason,
       absl::optional<cc::PaintHoldingCommitTrigger>) override {}
-  void OnPauseRenderingChanged(bool) override {}
   void OnCommitRequested() override {}
   void BeginMainFrameNotExpectedSoon() override {}
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}

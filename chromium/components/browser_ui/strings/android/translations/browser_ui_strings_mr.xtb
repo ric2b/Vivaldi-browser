@@ -26,6 +26,7 @@
 <translation id="1448064542941920355">झूम कमी करते</translation>
 <translation id="1510341833810331442">साइटना तुमच्या डिव्हाइसवर डेटा सेव्ह करण्याची अनुमती नाही</translation>
 <translation id="1547123415014299762">तृतीय पक्ष कुकीना अनुमती आहे</translation>
+<translation id="1593426485665524382">स्क्रीनच्या सर्वात वरच्या बाजूच्या जवळ नवीन कृती उपलब्ध आहेत</translation>
 <translation id="1620510694547887537">कॅमेरा</translation>
 <translation id="1633720957382884102">संबंधित साइट</translation>
 <translation id="1644574205037202324">इतिहास</translation>
@@ -39,7 +40,6 @@
 <translation id="1779089405699405702">इमेज डीकोडर</translation>
 <translation id="1785415724048343560">सर्वोत्तम अनुभवासाठी शिफारस केलेले</translation>
 <translation id="1818308510395330587"><ph name="APP_NAME" /> ला AR वापरू देण्यासाठी, <ph name="BEGIN_LINK" />Android सेटिंग्ज<ph name="END_LINK" />मध्ये कॅमेरादेखील सुरू करा.</translation>
-<translation id="1864927262126810325"><ph name="SOURCE_NAME" /> मधून</translation>
 <translation id="187227595286001730">संबंधित साइट तुमची या गटातील अ‍ॅक्टिव्हिटी पाहू शकतात</translation>
 <translation id="1887786770086287077">या डिव्हाइसाठी स्थान अ‍ॅक्सेस बंद आहे, <ph name="BEGIN_LINK" />Android सेटिंग्‍ज<ph name="END_LINK" /> मध्‍ये हे सुरू करा.</translation>
 <translation id="1915307458270490472">बंद करा</translation>
@@ -55,6 +55,7 @@
 <translation id="2030769033451695672"><ph name="URL_OF_THE_CURRENT_TAB" /> वर परत जाण्यासाठी टॅप करा</translation>
 <translation id="2079545284768500474">पहिल्यासारखे करा</translation>
 <translation id="2091887806945687916">ध्वनी</translation>
+<translation id="2117655453726830283">पुढील स्लाइड</translation>
 <translation id="2148716181193084225">आज</translation>
 <translation id="216989819110952009">डोरोथी आणि तिच्या मित्रमैत्रिणींचे डोळे हिरव्या चष्म्याने झाकले असले तरीही अद्भुत शहराच्या झगमगाटाने ते चकित झाले</translation>
 <translation id="2176704795966505152">मुख्य मेनूमध्ये झूम पर्याय दाखवा</translation>
@@ -81,6 +82,7 @@
 <translation id="2434158240863470628">डाउनलोड पूर्ण झाले <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
 <translation id="244264527810019436">काही साइटवरील वैशिष्ट्ये कदाचित गुप्त मोडमध्ये काम करणार नाहीत</translation>
 <translation id="2442870161001914531">नेहमी डेस्कटॉप साइटची विनंती करा</translation>
+<translation id="2479148705183875116">सेटिंग्ज वर जा</translation>
 <translation id="2482878487686419369">सूचना</translation>
 <translation id="2485422356828889247">अनइंस्टॉल करा</translation>
 <translation id="2490684707762498678"><ph name="APP_NAME" /> द्वारे व्यवस्थापित केले आहे</translation>
@@ -92,6 +94,7 @@
 <translation id="257931822824936280">विस्‍तृत केले - संकुचित करण्‍यासाठी क्‍लिक करा.</translation>
 <translation id="2586657967955657006">क्लिपबोर्ड</translation>
 <translation id="2597457036804169544">साइटवर गडद थीम लागू करू नका</translation>
+<translation id="2606760465469169465">ऑटो पडताळणी</translation>
 <translation id="2621115761605608342">विशिष्ट साइटसाठी JavaScript ला अनुमती द्या.</translation>
 <translation id="2653659639078652383">सबमिट करा</translation>
 <translation id="2677748264148917807">सोडा</translation>
@@ -99,8 +102,8 @@
 <translation id="2713106313042589954">कॅमेरा बंद करा</translation>
 <translation id="2717722538473713889">ईमेल ॲड्रेस</translation>
 <translation id="2750481671343847896">साइट ओळखीच्या सेवांकडून मिळणाऱ्या साइन इन सूचना दाखवू शकतात.</translation>
-<translation id="2779966372261694284">तुम्हाला या साइटमधून साइन आउट केले जाईल</translation>
 <translation id="2822354292072154809">तुम्हाला नक्की <ph name="CHOSEN_OBJECT_NAME" /> साठी सर्व साइट परवानग्या रीसेट करायच्या आहेत का?</translation>
+<translation id="2850913818900871965">मोबाइल दृश्याची विनंती करा</translation>
 <translation id="2870560284913253234">साइट</translation>
 <translation id="2874939134665556319">मागील ट्रॅक</translation>
 <translation id="2891975107962658722">साइटला तुमच्या डिव्हाइसवर डेटा सेव्ह करण्यापासून ब्लॉक करा</translation>
@@ -113,6 +116,7 @@
 <translation id="3008272652534848354">परवानग्या रीसेट करा</translation>
 <translation id="301521992641321250">आपोआप ब्लॉक केलेले</translation>
 <translation id="3069226013421428034">विशिष्ट साइटसाठी तृतीय पक्ष साइन-इनला अनुमती द्या.</translation>
+<translation id="310297983047869047">मागील स्लाइड</translation>
 <translation id="3109724472072898302">संकुचित केलेले</translation>
 <translation id="3114012059975132928">व्‍हिडिओ प्‍लेअर</translation>
 <translation id="3115898365077584848">माहिती दाखवा</translation>
@@ -121,7 +125,6 @@
 <translation id="3162899666601560689">तुमच्या ब्राउझिंग अनुभवात सुधारणा करण्यासाठी, उदाहरणार्थ, तुम्हाला साइन इन केलेले ठेवण्यासाठी किंवा तुमच्या शॉपिंग कार्टमधील आयटम लक्षात ठेवण्यासाठी साइट कुकी वापरू शकतात</translation>
 <translation id="3165022941318558018">साइटला तृतीय पक्ष कुकी वापरण्याची अनुमती द्या</translation>
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> संचयित केलेला डेटा</translation>
-<translation id="3203366800380907218">वेबवरील</translation>
 <translation id="321187648315454507"><ph name="APP_NAME" /> ने तुम्हाला सूचना पाठवण्यासाठी, <ph name="BEGIN_LINK" />Android सेटिंग्ज<ph name="END_LINK" /> मध्येदेखील सूचना सुरू करा.</translation>
 <translation id="3227137524299004712">मायक्रोफोन</translation>
 <translation id="3248611290851046188">ही साइट तुम्हाला जाहिराती दाखवण्यासाठी इतर साइट वापरू शकतात अशी स्वारस्ये परिभाषित करते. तुम्हाला आणखी उपयुक्त जाहिराती दाखवण्यासाठी ही साइट Chrome मधून तुमची स्वारस्येदेखील मिळवते.</translation>
@@ -145,8 +148,8 @@
 <translation id="3600792891314830896">ध्वनी प्ले करणाऱ्या साइट म्यूट करा</translation>
 <translation id="3602290021589620013">पूर्वावलोकन</translation>
 <translation id="3628308229821498208">सुचवलेले शोध</translation>
-<translation id="3636279694100170143">तुम्ही भेट देता त्या साइट, तुम्ही प्रत्यक्ष वापरकर्ता आहात आणि बॉट नाही याची पडताळणी करू शकतात</translation>
-<translation id="3649190289964910441">तुम्ही भेट देता ती साइट Chrome सह माहिती सेव्ह करू शकते, जी तुम्ही प्रत्यक्ष वापरकर्ता आहात हे प्रमाणित करते. तुम्ही ब्राउझ करत असताना, साइट या Chrome सह तपासू शकतात आणि तुम्ही विश्वासू वापरकर्ता असल्याची पहिल्या साइटवरून पडताळणी करू शकतात.</translation>
+<translation id="3707034683772193706">तुम्ही भेट देता ती साइट Chrome सह थोड्या प्रमाणात माहिती सेव्ह करू शकते, जी प्रामुख्याने तुम्ही बॉट नाही हे प्रमाणित करते</translation>
+<translation id="3721953990244350188">डिसमिस करा आणि पुढील उपलब्ध कृती दाखवा</translation>
 <translation id="3744111561329211289">पार्श्वभूमी सिंक</translation>
 <translation id="3763247130972274048">१० सेकंद पुढे जाण्यासाठी व्हिडिओवर डावीकडे किंवा उजवीकडे दोनदा टॅप करा</translation>
 <translation id="3794286421982011626">तुम्ही भेट दिलेली साइट ही तुम्ही काय करत आहात याबद्दलची माहिती सेव्ह करू शकते, ज्याद्वारे ती तुमच्या अपेक्षेनुसार काम करते, उदाहरणार्थ तुम्हाला साइटवर साइन इन केलेले ठेवण्यासाठी किंवा तुमच्या शॉपिंग कार्टमधील आयटम सेव्ह करण्यासाठी. साइट या बरेचदा तुमच्या डिव्हाइसवर ही माहिती तात्पुरती सेव्ह करतात.</translation>
@@ -189,17 +192,16 @@
 <translation id="4440642537584213025"><ph name="TARGET_DESCRIPTION" /> चा विस्तार करा</translation>
 <translation id="4468959413250150279">विशिष्ट साइटसाठी ध्वनी म्यूट करा.</translation>
 <translation id="4475912480633855319">{COOKIES,plural, =1{# कुकी}other{# कुकी}}</translation>
+<translation id="4478158430052450698">वेगवेगळ्या साइटसाठी झूम कस्टमाइझ करणे सोपे करा</translation>
 <translation id="4479647676395637221">साइटना तुमचा कॅमेरा वापरण्याची अनुमती देण्यापूर्वी प्रथम विचारा (शिफारस केलेले)</translation>
 <translation id="4505788138578415521">URL चा विस्तार केला गेला</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" /> ला तुमचा मायक्रोफोन ॲक्सेस करू देण्यासाठी, <ph name="BEGIN_LINK" />Android सेटिंग्ज<ph name="END_LINK" /> मध्येदेखील मायक्रोफोन सुरू करा.</translation>
 <translation id="4566417217121906555">मायक्रोफोन म्यूट करा</translation>
 <translation id="4570913071927164677">तपशील</translation>
-<translation id="4575264539271661854">तुम्ही भेट देता त्या साइटसाठी मजकूर आणि इमेजवर झूम करणे सोपे करा</translation>
 <translation id="4598549027014564149">गुप्त मोडमध्ये असताना सर्व साइटवरील, अगदी संबंधित साइटवरील तुमची ब्राउझिंग अ‍ॅक्टिव्हिटी पाहण्यासाठी साइट तुमच्या कुकी वापरू शकत नाहीत. जाहिराती पर्सनलाइझ करणे यासारख्या गोष्टींसाठी तुमची ब्राउझिंग अ‍ॅक्टिव्हिटी वापरली जात नाही. काही साइटवरील वैशिष्ट्ये कदाचित काम करणार नाहीत.</translation>
 <translation id="4645575059429386691">आपल्या पालकांद्वारे व्यवस्थापित करण्यात आले</translation>
 <translation id="4670064810192446073">आभासी वास्तविकता</translation>
 <translation id="4751476147751820511">मोशन किंवा प्रकाश सेन्सर</translation>
-<translation id="477781522763920796">हे सेटिंग तुम्हाला ओळखल्याशिवाय किंवा साइटला तुमचा ब्राउझिंग इतिहास पाहण्याची अनुमती न देता काम करते.</translation>
 <translation id="4779083564647765204">झूम</translation>
 <translation id="4811450222531576619">त्याचे स्रोत आणि विषय यांबद्दल जाणून घ्या</translation>
 <translation id="4836046166855586901">तुम्ही हे डिव्हाइस ॲक्टिव्हपणे कधी वापरता हे साइटला जाणून घ्यायचे असते तेव्हा विचारा</translation>
@@ -221,7 +223,6 @@
 <translation id="509133520954049755">डेस्कटॉप दृश्याची विनंती करा</translation>
 <translation id="5100237604440890931">संकुचित केले - विस्तृत करण्यासाठी क्लिक करा.</translation>
 <translation id="5123685120097942451">गुप्त टॅब</translation>
-<translation id="5134599672855298214">मोबाइल दृश्याची विनंती करा (शिफारस केलेले)</translation>
 <translation id="5186036860380548585">स्क्रीनच्या सर्वात वरती पर्याय उपलब्ध आहे</translation>
 <translation id="5197729504361054390">तुम्ही निवडलेले संपर्क <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />सोबत शेअर केले जातील.</translation>
 <translation id="5216942107514965959">आज शेवटची भेट दिली</translation>
@@ -278,12 +279,13 @@
 <translation id="6040143037577758943">बंद करा</translation>
 <translation id="6042308850641462728">अधिक</translation>
 <translation id="6064125863973209585">डाउनलोड पूर्ण झाले</translation>
+<translation id="6071501408666570960">तुम्हाला या साइटमधून साइन आउट केले जाऊ शकते</translation>
 <translation id="6165508094623778733">अधिक जाणून घ्या</translation>
 <translation id="6177111841848151710">सध्याच्या शोध इंजीनसाठी ब्लॉक केले</translation>
 <translation id="6177128806592000436">या साइटवरील तुमचे कनेक्शन सुरक्षित नाही</translation>
 <translation id="6181444274883918285">साइट एक्सेप्शन जोडा</translation>
 <translation id="6192792657125177640">अपवाद</translation>
-<translation id="6196640612572343990">तृतीय-पक्ष कुकीज ब्लॉक करा</translation>
+<translation id="6196640612572343990">तृतीय पक्ष कुकी ब्लॉक करा</translation>
 <translation id="6205314730813004066">जाहिरातींशी संबंधित गोपनीयता</translation>
 <translation id="6216432067784365534"><ph name="NAME_OF_LIST_ITEM" /> पर्याय</translation>
 <translation id="6231752747840485235">'<ph name="APP_NAME" />' अनइंस्टॉल करायचे आहे का?</translation>
@@ -328,7 +330,6 @@
 <translation id="7016516562562142042">वर्तमान शोध इंजिनसाठी अनुमती दिली</translation>
 <translation id="702275896380648118">ही साइट तुमच्या पसंतीच्या गोष्टी निर्धारित करते आणि इतर साइटना जाहिराती सुचवते. तुम्हाला आणखी उपयुक्त जाहिराती दाखवण्यासाठी, ही साइट Chrome मधून तुमचे जाहिरातीचे विषयदेखील मिळवते.</translation>
 <translation id="702463548815491781">TalkBack किंवा स्विच ॲक्सेस सुरू असताना शिफारस केलेले</translation>
-<translation id="7050519587566342213">ब्राउझिंग आणखी सुलभ होते, कारण एका साइटवरून दुसऱ्या साइटवर जाताना तुम्हाला विश्वासार्ह मानण्याची शक्यता अधिक असते.</translation>
 <translation id="7053983685419859001">ब्लॉक करा</translation>
 <translation id="7066151586745993502">{NUM_SELECTED,plural, =1{1 निवडला}other{# निवडले}}</translation>
 <translation id="7087918508125750058"><ph name="ITEM_COUNT" /> निवडले.  स्क्रीनच्या वरच्या बाजूला पर्याय उपलब्ध आहेत</translation>
@@ -344,6 +345,7 @@
 <translation id="7302486331832100261">तुम्ही सहसा सूचना ब्लॉक करता. अनुमती देण्यासाठी, तपशील वर टॅप करा.</translation>
 <translation id="7366415735885268578">एक साइट जोडा</translation>
 <translation id="7383715096023715447"><ph name="DOMAIN" /> साठी सेटिंग्ज</translation>
+<translation id="7406113532070524618">हे सेटिंग तुम्हाला ओळखल्याशिवाय किंवा साइटना तुमचा ब्राउझिंग इतिहास पाहण्याची परवानगी न देता काम करते, जरी साइट पडताळणीचा भाग म्हणून थोड्या प्रमाणात माहिती शेअर करू शकतात</translation>
 <translation id="7423098979219808738">प्रथम विचारा</translation>
 <translation id="7423538860840206698">क्लिपबोर्ड वाचणे ब्लॉक केले</translation>
 <translation id="7425915948813553151">साइटसाठी गडद थीम</translation>
@@ -353,7 +355,6 @@
 <translation id="757524316907819857">संरक्षित आशय प्ले करण्यापासून साइटवर ब्लॉक करा</translation>
 <translation id="7577900504646297215">स्वारस्ये व्यवस्थापित करा</translation>
 <translation id="7594634374516752650">ब्लूटूथ डिव्‍हाइसशी कनेक्ट केली आहे</translation>
-<translation id="7634280112532283638">स्पॅम आणि घोटाळा कमी करणे</translation>
 <translation id="7641339528570811325">ब्राउझिंग डेटा साफ करा...</translation>
 <translation id="7649070708921625228">मदत</translation>
 <translation id="7658239707568436148">रद्द करा</translation>
@@ -430,9 +431,11 @@
 <translation id="8751914237388039244">इमेज निवडा</translation>
 <translation id="8801436777607969138">विशिष्ट साइटसाठी JavaScript ब्लॉक करा.</translation>
 <translation id="8803526663383843427">सुरू असल्यास</translation>
+<translation id="8805385115381080995">ब्राउझिंग जलद आहे, कारण साइट तुम्हाला खरी व्यक्ती असल्याची पडताळणी करण्यास सांगण्याची शक्यता कमी आहे</translation>
 <translation id="8816026460808729765">साइटना सेन्सर ॲक्सेस करण्यापासून ब्लॉक करा</translation>
 <translation id="8823559166155093873">कुकी ब्लॉक करा</translation>
 <translation id="8847988622838149491">USB</translation>
+<translation id="8889294078294184559">तुम्ही ब्राउझ करणे पुढे सुरू ठेवता, तसे साइट Chrome सह तपासू शकतात आणि तुम्ही खरी व्यक्ती असल्याची भेट दिलेल्या मागील साइटवरून पडताळणी करू शकतात</translation>
 <translation id="8899807382908246773">नको असलेल्या जाहिराती</translation>
 <translation id="8903921497873541725">झूम इन करा</translation>
 <translation id="8921772741368021346"><ph name="POSITION" /> / <ph name="DURATION" /></translation>
@@ -453,5 +456,6 @@
 <translation id="9162462602695099906">हे पेज धोकादायक आहे</translation>
 <translation id="9201023452444595544">कोणताही ऑफलाइन डेटा साफ केला जाईल</translation>
 <translation id="930525582205581608">ही साइट विसरायची का?</translation>
+<translation id="947156494302904893">तुम्ही खरी व्यक्ती आहात आणि बॉट नाही याची तुम्ही भेट देता त्या साइट पडताळणी करू शकतात</translation>
 <translation id="967624055006145463">डेटा स्टोअर केला</translation>
 </translationbundle>

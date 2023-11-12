@@ -668,9 +668,12 @@ class PathParser {
             let responseJson = JSON.parse(response);
             if (responseJson.artifacts) {
               for (let artifact of responseJson.artifacts) {
-                let [_, testPath] = artifact.name.match(
+                let match = artifact.name.match(
                     /\/tests\/ninja:%2F%2F:[^%]*(%2F.*)\/results\//);
-                testPath = decodeURIComponent(testPath);
+                if (!match) {
+                  continue;
+                }
+                let testPath = decodeURIComponent(match[1]);
                 let cache = PathParser.resultDBArtifacts[testPath];
                 if (!cache) {
                   cache = PathParser.resultDBArtifacts[testPath] =
@@ -1758,9 +1761,7 @@ const GUI = {
       document.querySelector("#count_unexpected_pass").parentElement.classList.add("good");
 
     document.querySelector("#summary_total").innerText = counts.count_all;
-    if (!GUI.hasBaseExpectations)
-      document.querySelector("#flag-toolbar").classList.add("hidden");
-    else {
+    if (GUI.hasBaseExpectations || fullResults.flag_name) {
       document.querySelector("#flag-toolbar").classList.remove("hidden");
       let flagName = fullResults.flag_name || "";
       flagName = flagName.replace('/', '')
@@ -1768,6 +1769,8 @@ const GUI = {
       Array.from(document.querySelectorAll(".flag_name")).forEach( el => {
         el.innerText = flagName;
       });
+    } else {
+      document.querySelector("#flag-toolbar").classList.add("hidden");
     }
   },
 

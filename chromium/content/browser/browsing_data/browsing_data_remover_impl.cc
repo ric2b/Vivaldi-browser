@@ -215,16 +215,6 @@ void BrowsingDataRemoverImpl::RemoveWithFilterAndReply(
                  std::move(filter_builder), observer);
 }
 
-void BrowsingDataRemoverImpl::RemoveAllStorageBucketsAndReply(
-    const blink::StorageKey& storage_key,
-    base::OnceClosure callback) {
-  DCHECK(callback);
-  GetStoragePartition()->ClearDataForAllBuckets(
-      storage_key, base::BindPostTaskToCurrentDefault(base::BindOnce(
-                       &BrowsingDataRemoverImpl::DidRemoveStorageBuckets,
-                       GetWeakPtr(), std::move(callback))));
-}
-
 void BrowsingDataRemoverImpl::RemoveStorageBucketsAndReply(
     const blink::StorageKey& storage_key,
     const std::set<std::string>& storage_buckets,
@@ -849,6 +839,8 @@ const char* BrowsingDataRemoverImpl::GetHistogramSuffix(TracingDataType task) {
       return "Conversions";
     case TracingDataType::kDeferredCookies:
       return "DeferredCookies";
+    case TracingDataType::kSharedStorage:
+      return "SharedStorage";
   }
 }
 

@@ -135,6 +135,7 @@ enum MetricDimension {
   RESOLUTION_LEVEL = 34,
   ASPECT_RATIO_SET = 35,
   DOC_PAGE_COUNT = 36,
+  TIME_LAPSE_SPEED = 37,
 }
 
 /**
@@ -175,8 +176,8 @@ export async function initMetrics(): Promise<void> {
  * Types of different ways to launch CCA.
  */
 export enum LaunchType {
-  DEFAULT = 'default',
   ASSISTANT = 'assistant',
+  DEFAULT = 'default',
 }
 
 /**
@@ -206,9 +207,9 @@ export function sendLaunchEvent({launchType}: LaunchEventParam): void {
  * Types of intent result dimension.
  */
 export enum IntentResultType {
-  NOT_INTENT = '',
   CANCELED = 'canceled',
   CONFIRMED = 'confirmed',
+  NOT_INTENT = '',
 }
 
 /**
@@ -228,18 +229,19 @@ export enum RecordType {
   NOT_RECORDING = 0,
   NORMAL_VIDEO = 1,
   GIF = 2,
+  TIME_LAPSE = 3,
 }
 
 /**
  * Types of different ways to trigger shutter button.
  */
 export enum ShutterType {
-  UNKNOWN = 'unknown',
-  MOUSE = 'mouse',
-  KEYBOARD = 'keyboard',
-  TOUCH = 'touch',
-  VOLUME_KEY = 'volume-key',
   ASSISTANT = 'assistant',
+  KEYBOARD = 'keyboard',
+  MOUSE = 'mouse',
+  TOUCH = 'touch',
+  UNKNOWN = 'unknown',
+  VOLUME_KEY = 'volume-key',
 }
 
 /**
@@ -279,6 +281,8 @@ export interface CaptureEventParam {
 
   resolutionLevel: PhotoResolutionLevel|VideoResolutionLevel;
   aspectRatioSet: AspectRatioSet;
+
+  timeLapseSpeed?: number;
 }
 
 /**
@@ -296,6 +300,7 @@ export function sendCaptureEvent({
   gifResult = GifResultType.NOT_GIF_RESULT,
   resolutionLevel,
   aspectRatioSet,
+  timeLapseSpeed = 0,
 }: CaptureEventParam): void {
   function condState(
       states: state.StateUnion[],
@@ -347,6 +352,7 @@ export function sendCaptureEvent({
         [MetricDimension.DURATION, duration],
         [MetricDimension.RESOLUTION_LEVEL, resolutionLevel],
         [MetricDimension.ASPECT_RATIO_SET, aspectRatioSet],
+        [MetricDimension.TIME_LAPSE_SPEED, timeLapseSpeed],
       ]));
 }
 

@@ -37,6 +37,7 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
@@ -204,12 +205,6 @@ public class IntentHandler {
      * switcher UI, ranging from 0 ~ max_instances - 1. -1 for an invalid id.
      */
     public static final String EXTRA_WINDOW_ID = "org.chromium.chrome.browser.window_id";
-
-    /**
-     * A boolean to indicate whether the source of the Intent was a dragged link.
-     */
-    public static final String EXTRA_SOURCE_DRAG_DROP =
-            "org.chromium.chrome.browser.source_drag_drop";
 
     /**
      * Extra to indicate the launch type of the tab to be created.
@@ -572,7 +567,12 @@ public class IntentHandler {
                     || TranslateIntentHandler.handleTranslateTabIntent(intent, mDelegate);
         }
 
-        LoadUrlParams loadUrlParams = createLoadUrlParamsForIntent(url, intent);
+        var asyncTabParams = AsyncTabParamsManagerSingleton.getInstance().getAsyncTabParams().get(
+                getTabId(intent));
+        LoadUrlParams loadUrlParams =
+                (asyncTabParams == null || asyncTabParams.getLoadUrlParams() == null)
+                ? createLoadUrlParamsForIntent(url, intent)
+                : asyncTabParams.getLoadUrlParams();
 
         if (isIntentForMhtmlFileOrContent(intent) && tabOpenType == TabOpenType.OPEN_NEW_TAB
                 && loadUrlParams.getReferrer() == null
@@ -748,9 +748,9 @@ public class IntentHandler {
         }
         String query = results.get(0);
 
+        Profile profile = Profile.getLastUsedRegularProfile();
         AutocompleteMatch match;
-        try (var controller = AutocompleteControllerProvider.createCloseableController(
-                     Profile.getLastUsedRegularProfile())) {
+        try (var controller = AutocompleteControllerProvider.createCloseableController(profile)) {
             match = controller.get().classify(query, false);
         }
 
@@ -761,7 +761,9 @@ public class IntentHandler {
         if (urls != null && urls.size() > 0) {
             return urls.get(0);
         } else {
-            return TemplateUrlServiceFactory.get().getUrlForVoiceSearchQuery(query).getSpec();
+            return TemplateUrlServiceFactory.getForProfile(profile)
+                    .getUrlForVoiceSearchQuery(query)
+                    .getSpec();
         }
     }
 

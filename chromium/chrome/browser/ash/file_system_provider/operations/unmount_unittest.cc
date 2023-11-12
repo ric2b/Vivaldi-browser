@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ash/file_system_provider/operations/unmount.h"
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -69,7 +68,8 @@ TEST_F(FileSystemProviderOperationsUnmountTest, Execute) {
   ASSERT_TRUE(options_as_value->is_dict());
 
   UnmountRequestedOptions options;
-  ASSERT_TRUE(UnmountRequestedOptions::Populate(*options_as_value, &options));
+  ASSERT_TRUE(
+      UnmountRequestedOptions::Populate(options_as_value->GetDict(), options));
   EXPECT_EQ(kFileSystemId, options.file_system_id);
   EXPECT_EQ(kRequestId, options.request_id);
 }
@@ -96,8 +96,7 @@ TEST_F(FileSystemProviderOperationsUnmountTest, OnSuccess) {
 
   EXPECT_TRUE(unmount.Execute(kRequestId));
 
-  unmount.OnSuccess(kRequestId, std::make_unique<RequestValue>(),
-                    false /* has_more */);
+  unmount.OnSuccess(kRequestId, RequestValue(), false /* has_more */);
   ASSERT_EQ(1u, callback_log.size());
   base::File::Error event_result = callback_log[0];
   EXPECT_EQ(base::File::FILE_OK, event_result);
@@ -112,8 +111,7 @@ TEST_F(FileSystemProviderOperationsUnmountTest, OnError) {
 
   EXPECT_TRUE(unmount.Execute(kRequestId));
 
-  unmount.OnError(kRequestId, std::make_unique<RequestValue>(),
-                  base::File::FILE_ERROR_NOT_FOUND);
+  unmount.OnError(kRequestId, RequestValue(), base::File::FILE_ERROR_NOT_FOUND);
   ASSERT_EQ(1u, callback_log.size());
   base::File::Error event_result = callback_log[0];
   EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND, event_result);

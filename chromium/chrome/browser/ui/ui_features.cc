@@ -5,9 +5,9 @@
 #include "chrome/browser/ui/ui_features.h"
 
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "ui_features.h"
 
 namespace features {
 
@@ -26,18 +26,6 @@ BASE_FEATURE(kDesktopPWAsAppHomePage,
 // Enables Chrome Labs menu in the toolbar. See https://crbug.com/1145666
 BASE_FEATURE(kChromeLabs, "ChromeLabs", base::FEATURE_DISABLED_BY_DEFAULT);
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-// Enables "Tips for Chrome" in Main Chrome Menu | Help.
-BASE_FEATURE(kChromeTipsInMainMenu,
-             "ChromeTipsInMainMenu",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables "Tips for Chrome" in Main Chrome Menu | Help.
-BASE_FEATURE(kChromeTipsInMainMenuNewBadge,
-             "ChromeTipsInMainMenuNewBadge",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
 // Enables "Chrome What's New" UI.
 BASE_FEATURE(kChromeWhatsNewUI,
              "ChromeWhatsNewUI",
@@ -48,6 +36,12 @@ BASE_FEATURE(kChromeWhatsNewUI,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
+
+// Create new Extensions app menu option (removing "More Tools -> Extensions")
+// with submenu to manage extensions and visit chrome web store.
+BASE_FEATURE(kExtensionsMenuInAppMenu,
+             "ExtensionsMenuInAppMenu",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if !defined(ANDROID)
 // Enables "Access Code Cast" UI.
@@ -67,6 +61,45 @@ BASE_FEATURE(kEvDetailsInPageInfo,
              "EvDetailsInPageInfo",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Enables showing the "Get the most out of Chrome" section in settings.
+BASE_FEATURE(kGetTheMostOutOfChrome,
+             "GetTheMostOutOfChrome",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+#if !BUILDFLAG(IS_ANDROID) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// This feature controls whether the user can be shown the Chrome for iOS promo
+// when saving/updating their passwords.
+BASE_FEATURE(kIOSPromoPasswordBubble,
+             "IOSPromoPasswordBubble",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// This array lists the different activation params that can be passed in the
+// experiment config, with their corresponding string.
+constexpr base::FeatureParam<IOSPromoPasswordBubbleActivation>::Option
+    kIOSPromoPasswordBubbleActivationOptions[] = {
+        {IOSPromoPasswordBubbleActivation::kContextualDirect,
+         "contextual-direct"},
+        {IOSPromoPasswordBubbleActivation::kContextualIndirect,
+         "contextual-indirect"},
+        {IOSPromoPasswordBubbleActivation::kNonContextualDirect,
+         "non-contextual-direct"},
+        {IOSPromoPasswordBubbleActivation::kNonContextualIndirect,
+         "non-contextual-indirect"},
+        {IOSPromoPasswordBubbleActivation::kAlwaysShowWithPasswordBubbleDirect,
+         "always-show-direct"},
+        {IOSPromoPasswordBubbleActivation::
+             kAlwaysShowWithPasswordBubbleIndirect,
+         "always-show-indirect"}};
+
+constexpr base::FeatureParam<IOSPromoPasswordBubbleActivation>
+    kIOSPromoPasswordBubbleActivationParam{
+        &kIOSPromoPasswordBubble, "activation",
+        IOSPromoPasswordBubbleActivation::kContextualDirect,
+        &kIOSPromoPasswordBubbleActivationOptions};
+#endif
+
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Controls whether we use a different UX for simple extensions overriding
 // settings.
@@ -80,16 +113,14 @@ BASE_FEATURE(kPowerBookmarksSidePanel,
              "PowerBookmarksSidePanel",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables a more prominent active tab title in dark mode to aid with
-// accessibility.
-BASE_FEATURE(kProminentDarkModeActiveTabTitle,
-             "ProminentDarkModeActiveTabTitle",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables the QuickCommands UI surface. See https://crbug.com/1014639
 BASE_FEATURE(kQuickCommands,
              "QuickCommands",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the side search feature for Google Search. Presents recent Google
+// search results in a browser side panel.
+BASE_FEATURE(kSideSearch, "SideSearch", base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSideSearchFeedback,
              "SideSearchFeedback",
@@ -121,9 +152,11 @@ BASE_FEATURE(kSidePanelJourneysQueryless,
              "SidePanelJourneysQueryless",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSidePanelSearchCompanion,
-             "SidePanelSearchCompanion",
+#if !defined(ANDROID)
+BASE_FEATURE(kSidePanelCompanionDefaultPinned,
+             "SidePanelCompanionDefaultPinned",
              base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
 
 // Enables tabs to scroll in the tabstrip. https://crbug.com/951078
 BASE_FEATURE(kScrollableTabStrip,
@@ -176,8 +209,12 @@ BASE_FEATURE(kTabGroupsNewBadgePromo,
 BASE_FEATURE(kTabGroupsSave,
              "TabGroupsSave",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<bool> kTabGroupsSaveSyncIntegration{
-    &kTabGroupsSave, "TabGroupsSaveSyncIntegration", false};
+
+// Enables users to explicitly save and recall tab groups.
+// https://crbug.com/1223929
+BASE_FEATURE(kTabGroupsSaveSyncIntegration,
+             "TabGroupsSaveSyncIntegration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables preview images in tab-hover cards.
 // https://crbug.com/928954
@@ -200,11 +237,6 @@ const char kTabHoverCardImagesCrossfadePreviewAtParameterName[] =
 const char kTabHoverCardAdditionalMaxWidthDelay[] =
     "additional_max_width_delay";
 const char kTabHoverCardAlternateFormat[] = "alternate_format";
-
-// Enables tab outlines in additional situations for accessibility.
-BASE_FEATURE(kTabOutlinesInLowContrastThemes,
-             "TabOutlinesInLowContrastThemes",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTabSearchChevronIcon,
              "TabSearchChevronIcon",
@@ -274,6 +306,18 @@ BASE_FEATURE(kTopChromeWebUIUsesSpareRenderer,
              "TopChromeWebUIUsesSpareRenderer",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+// Enables alternate update-related text to be displayed in browser app menu
+// button, menu item and confirmation dialog.
+BASE_FEATURE(kUpdateTextOptions,
+             "UpdateTextOptions",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// Used to present different flavors of update strings in browser app menu
+// button.
+const base::FeatureParam<int> kUpdateTextOptionNumber{
+    &kUpdateTextOptions, "UpdateTextOptionNumber", 1};
+#endif
+
 // This enables enables persistence of a WebContents in a 1-to-1 association
 // with the current Profile for WebUI bubbles. See https://crbug.com/1177048.
 BASE_FEATURE(kWebUIBubblePerProfilePersistence,
@@ -341,16 +385,6 @@ int GetLocationPermissionsExperimentBubblePromptLimit() {
 int GetLocationPermissionsExperimentLabelPromptLimit() {
   return kLocationPermissionsExperimentLabelPromptLimit.Get();
 }
-#endif
-
-#if BUILDFLAG(IS_WIN)
-
-// Moves the Tab Search button into the browser frame's caption button area on
-// Windows 10 (crbug.com/1223847).
-BASE_FEATURE(kWin10TabSearchCaptionButton,
-             "Win10TabSearchCaptionButton",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 #endif
 
 // Reduce resource usage when view is hidden by not rendering loading animation.

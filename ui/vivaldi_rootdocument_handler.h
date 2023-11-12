@@ -115,8 +115,9 @@ class VivaldiRootDocumentHandler : public KeyedService,
   // These are the WebContents holders for our portal-windows. One document for
   // regular-windows and one for incognito-windows. Incognito is lazy loaded and
   // destroyed on the last private window closure.
-  VivaldiDocumentLoader* vivaldi_document_loader_ = nullptr;
-  VivaldiDocumentLoader* vivaldi_document_loader_off_the_record_ = nullptr;
+  raw_ptr<VivaldiDocumentLoader> vivaldi_document_loader_ = nullptr;
+  raw_ptr<VivaldiDocumentLoader> vivaldi_document_loader_off_the_record_ =
+      nullptr;
 
   // Observer handlers for the webcontents owned by the two
   // VivaldiDocumentLoaders.
@@ -128,9 +129,9 @@ class VivaldiRootDocumentHandler : public KeyedService,
 
   base::ObserverList<VivaldiRootDocumentHandlerObserver>::Unchecked observers_;
 
-  const Extension* vivaldi_extension_ = nullptr;
+  raw_ptr<const Extension> vivaldi_extension_ = nullptr;
   // The profile we observe.
-  Profile* profile_ = nullptr;
+  const raw_ptr<Profile> profile_ = nullptr;
 };
 
 }  // namespace extensions

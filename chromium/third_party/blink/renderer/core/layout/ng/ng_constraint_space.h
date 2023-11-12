@@ -88,7 +88,7 @@ enum class NGCacheSlot { kLayout, kMeasure };
 // The NGConstraintSpace represents a set of constraints and available space
 // which a layout algorithm may produce a NGFragment within.
 class CORE_EXPORT NGConstraintSpace final {
-  // Though some STACK_ALLOCATED classes, |NGContainerFragmentBuilder| and
+  // Though some STACK_ALLOCATED classes, |NGFragmentBuilder| and
   // |NGLineBreaker|, have reference to it, DISALLOW_NEW is applied here for
   // performance reason.
   DISALLOW_NEW();
@@ -424,7 +424,11 @@ class CORE_EXPORT NGConstraintSpace final {
   }
 
   // Whether the current node is a table-cell.
-  bool IsTableCell() const { return bitfields_.is_table_cell; }
+  bool IsTableCell() const {
+    return HasRareData() &&
+           rare_data_->data_union_type ==
+               static_cast<unsigned>(RareData::DataUnionType::kTableCellData);
+  }
 
   // Whether the table-cell fragment should be hidden (not painted) if it has
   // no children.
@@ -749,12 +753,8 @@ class CORE_EXPORT NGConstraintSpace final {
     return HasRareData() ? rare_data_->LinesUntilClamp() : absl::nullopt;
   }
 
-  const NGGridLayoutTrackCollection* SubgriddedColumns() const {
-    return HasRareData() ? rare_data_->SubgriddedColumns() : nullptr;
-  }
-
-  const NGGridLayoutTrackCollection* SubgriddedRows() const {
-    return HasRareData() ? rare_data_->SubgriddedRows() : nullptr;
+  const NGGridLayoutSubtree* GridLayoutSubtree() const {
+    return HasRareData() ? rare_data_->GridLayoutSubtree() : nullptr;
   }
 
   // Return true if the two constraint spaces are similar enough that it *may*
@@ -1148,6 +1148,8 @@ class CORE_EXPORT NGConstraintSpace final {
       EnsureBlockData()->lines_until_clamp = value;
     }
 
+    void SetIsTableCell() { EnsureTableCellData(); }
+
     NGBoxStrut TableCellBorders() const {
       return GetDataUnionType() == DataUnionType::kTableCellData
                  ? table_cell_data_.table_cell_borders
@@ -1278,25 +1280,14 @@ class CORE_EXPORT NGConstraintSpace final {
           target_stretch_block_sizes;
     }
 
-    const NGGridLayoutTrackCollection* SubgriddedColumns() const {
+    const NGGridLayoutSubtree* GridLayoutSubtree() const {
       return GetDataUnionType() == DataUnionType::kSubgridData
-                 ? subgrid_data_.layout_data.columns()
+                 ? &subgrid_data_.layout_subtree
                  : nullptr;
     }
 
-    void SetSubgriddedColumns(
-        std::unique_ptr<NGGridLayoutTrackCollection> columns) {
-      EnsureSubgridData()->layout_data.SetTrackCollection(std::move(columns));
-    }
-
-    const NGGridLayoutTrackCollection* SubgriddedRows() const {
-      return GetDataUnionType() == DataUnionType::kSubgridData
-                 ? subgrid_data_.layout_data.rows()
-                 : nullptr;
-    }
-
-    void SetSubgriddedRows(std::unique_ptr<NGGridLayoutTrackCollection> rows) {
-      EnsureSubgridData()->layout_data.SetTrackCollection(std::move(rows));
+    void SetGridLayoutSubtree(NGGridLayoutSubtree&& grid_layout_subtree) {
+      EnsureSubgridData()->layout_subtree = std::move(grid_layout_subtree);
     }
 
     DataUnionType GetDataUnionType() const {
@@ -1437,14 +1428,12 @@ class CORE_EXPORT NGConstraintSpace final {
 
     struct SubgridData {
       bool MaySkipLayout(const SubgridData& other) const {
-        return layout_data == other.layout_data;
+        return layout_subtree == other.layout_subtree;
       }
 
-      bool IsInitialForMaySkipLayout() const {
-        return layout_data == NGGridLayoutData();
-      }
+      bool IsInitialForMaySkipLayout() const { return !layout_subtree; }
 
-      NGGridLayoutData layout_data;
+      NGGridLayoutSubtree layout_subtree;
     };
 
     BlockData* EnsureBlockData() {
@@ -1545,7 +1534,6 @@ class CORE_EXPORT NGConstraintSpace final {
           writing_mode(
               static_cast<unsigned>(writing_direction.GetWritingMode())),
           direction(static_cast<unsigned>(writing_direction.Direction())),
-          is_table_cell(false),
           is_anonymous(false),
           is_new_formatting_context(false),
           is_orthogonal_writing_mode_root(false),
@@ -1572,7 +1560,6 @@ class CORE_EXPORT NGConstraintSpace final {
       return adjoining_object_types == other.adjoining_object_types &&
              writing_mode == other.writing_mode &&
              direction == other.direction &&
-             is_table_cell == other.is_table_cell &&
              is_anonymous == other.is_anonymous &&
              is_new_formatting_context == other.is_new_formatting_context &&
              is_orthogonal_writing_mode_root ==
@@ -1602,8 +1589,6 @@ class CORE_EXPORT NGConstraintSpace final {
     unsigned adjoining_object_types : 3;  // NGAdjoiningObjectTypes
     unsigned writing_mode : 3;
     unsigned direction : 1;
-
-    unsigned is_table_cell : 1;
 
     unsigned is_anonymous : 1;
     unsigned is_new_formatting_context : 1;

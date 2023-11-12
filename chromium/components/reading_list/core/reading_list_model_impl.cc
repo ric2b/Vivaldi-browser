@@ -18,6 +18,7 @@
 #include "components/reading_list/core/reading_list_model_storage.h"
 #include "components/reading_list/core/reading_list_sync_bridge.h"
 #include "components/sync/model/client_tag_based_model_type_processor.h"
+#include "google_apis/gaia/core_account_id.h"
 #include "url/gurl.h"
 
 ReadingListModelImpl::ScopedReadingListBatchUpdateImpl::
@@ -150,26 +151,7 @@ void ReadingListModelImpl::MarkAllSeen() {
       BeginBatchUpdatesWithSyncMetadata();
 
   for (auto& iterator : entries_) {
-    ReadingListEntry& entry = *(iterator.second);
-    if (entry.HasBeenSeen()) {
-      continue;
-    }
-    for (auto& observer : observers_) {
-      observer.ReadingListWillUpdateEntry(this, iterator.first);
-    }
-    UpdateEntryStateCountersOnEntryRemoval(entry);
-    entry.SetRead(false, clock_->Now());
-    UpdateEntryStateCountersOnEntryInsertion(entry);
-
-    batch->GetStorageBatch()->SaveEntry(entry);
-    sync_bridge_.DidAddOrUpdateEntry(entry, batch->GetSyncMetadataChangeList());
-
-    for (ReadingListModelObserver& observer : observers_) {
-      observer.ReadingListDidUpdateEntry(this, iterator.first);
-    }
-    for (auto& observer : observers_) {
-      observer.ReadingListDidApplyChanges(this);
-    }
+    MarkEntrySeenImpl(iterator.second.get());
   }
   DCHECK(unseen_entry_count_ == 0);
 }
@@ -183,7 +165,9 @@ bool ReadingListModelImpl::DeleteAllEntries() {
   for (const auto& url : GetKeys()) {
     RemoveEntryByURL(url);
   }
-  return entries_.empty();
+
+  DCHECK(entries_.empty());
+  return true;
 }
 
 void ReadingListModelImpl::UpdateEntryStateCountersOnEntryRemoval(
@@ -256,6 +240,10 @@ ReadingListEntry* ReadingListModelImpl::SyncMergeEntry(
   ReadingListEntry* existing_entry = GetMutableEntryFromURL(url);
   DCHECK(existing_entry);
 
+  // TODO(crbug.com/1424750): ReadingList(Will|Did)MoveEntry() in this context
+  // is quite meaningless and the observer API should merge it with
+  // ReadingList(Will|Did)UpdateEntry().
+
   for (auto& observer : observers_)
     observer.ReadingListWillMoveEntry(this, url);
 
@@ -325,6 +313,18 @@ bool ReadingListModelImpl::IsUrlSupported(const GURL& url) {
   return url.SchemeIsHTTPOrHTTPS();
 }
 
+CoreAccountId ReadingListModelImpl::GetAccountWhereEntryIsSavedTo(
+    const GURL& url) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(loaded());
+
+  if (entries_.find(url) == entries_.end()) {
+    return CoreAccountId();
+  }
+  return CoreAccountId::FromString(
+      sync_bridge_.change_processor()->TrackedAccountId());
+}
+
 bool ReadingListModelImpl::NeedsExplicitUploadToSyncServer(
     const GURL& url) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -350,7 +350,7 @@ const ReadingListEntry& ReadingListModelImpl::AddOrReplaceEntry(
     RemoveEntryByURL(url);
   }
 
-  std::string trimmed_title = base::CollapseWhitespaceASCII(title, false);
+  std::string trimmed_title = TrimTitle(title);
 
   auto entry =
       base::MakeRefCounted<ReadingListEntry>(url, trimmed_title, clock_->Now());
@@ -379,7 +379,6 @@ void ReadingListModelImpl::SetReadStatusIfExists(const GURL& url, bool read) {
   }
   UpdateEntryStateCountersOnEntryRemoval(entry);
   entry.SetRead(read, clock_->Now());
-  entry.MarkEntryUpdated(clock_->Now());
   UpdateEntryStateCountersOnEntryInsertion(entry);
 
   std::unique_ptr<ReadingListModelStorage::ScopedBatchUpdate> batch =
@@ -402,7 +401,7 @@ void ReadingListModelImpl::SetEntryTitleIfExists(const GURL& url,
     return;
   }
   ReadingListEntry& entry = *(iterator->second);
-  std::string trimmed_title = base::CollapseWhitespaceASCII(title, false);
+  std::string trimmed_title = TrimTitle(title);
   if (entry.Title() == trimmed_title) {
     return;
   }
@@ -554,9 +553,25 @@ ReadingListModelImpl::BeginBatchUpdatesWithSyncMetadata() {
   return token;
 }
 
+void ReadingListModelImpl::MarkEntrySeenIfExists(const GURL& url) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(loaded());
+
+  auto iterator = entries_.find(url);
+  if (iterator == entries_.end()) {
+    return;
+  }
+  MarkEntrySeenImpl(iterator->second.get());
+}
+
 bool ReadingListModelImpl::IsTrackingSyncMetadata() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return sync_bridge_.change_processor()->IsTrackingMetadata();
+}
+
+// static
+std::string ReadingListModelImpl::TrimTitle(const std::string& title) {
+  return base::CollapseWhitespaceASCII(title, false);
 }
 
 // static
@@ -636,12 +651,49 @@ ReadingListModelStorage* ReadingListModelImpl::StorageLayer() {
   return storage_layer_.get();
 }
 
+void ReadingListModelImpl::MarkEntrySeenImpl(ReadingListEntry* entry) {
+  DCHECK(entry);
+
+  if (entry->HasBeenSeen()) {
+    return;
+  }
+
+  for (auto& observer : observers_) {
+    observer.ReadingListWillUpdateEntry(this, entry->URL());
+  }
+
+  UpdateEntryStateCountersOnEntryRemoval(*entry);
+  DCHECK(!entry->IsRead());
+  // SetRead() is used to transition the entry from the UNSEEN state to the
+  // UNREAD state.
+  entry->SetRead(false, clock_->Now());
+  UpdateEntryStateCountersOnEntryInsertion(*entry);
+
+  std::unique_ptr<ReadingListModelStorage::ScopedBatchUpdate> batch =
+      storage_layer_->EnsureBatchCreated();
+  batch->SaveEntry(*entry);
+  sync_bridge_.DidAddOrUpdateEntry(*entry, batch->GetSyncMetadataChangeList());
+
+  for (ReadingListModelObserver& observer : observers_) {
+    observer.ReadingListDidUpdateEntry(this, entry->URL());
+  }
+  for (ReadingListModelObserver& observer : observers_) {
+    observer.ReadingListDidApplyChanges(this);
+  }
+}
+
 void ReadingListModelImpl::AddEntryImpl(scoped_refptr<ReadingListEntry> entry,
                                         reading_list::EntrySource source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(entry);
   DCHECK(loaded());
   DCHECK(GetMutableEntryFromURL(entry->URL()) == nullptr);
+
+  // TODO(crbug.com/1427677): Should decide if the DCHECK(entry) should be
+  // removed or there's a proper fix that remove the below condition.
+  if (!entry) {
+    return;
+  }
 
   const GURL url = entry->URL();
 

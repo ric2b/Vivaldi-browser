@@ -7,6 +7,7 @@
 
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/crosapi/browser_data_migrator_util.h"
@@ -23,26 +24,6 @@ namespace browser_data_back_migrator {
 constexpr char kTmpDir[] = "back_migrator_tmp";
 }  // namespace browser_data_back_migrator
 
-constexpr char kFinalStatusUMA[] = "Ash.BrowserDataBackMigrator.FinalStatus";
-constexpr char kPosixErrnoUMA[] = "Ash.BrowserDataBackMigrator.PosixErrno.";
-constexpr char kSuccessfulMigrationTimeUMA[] =
-    "Ash.BrowserDataBackMigrator.SuccessfulMigrationTime";
-
-constexpr char kPreMigrationCleanUpTimeUMA[] =
-    "Ash.BrowserDataBackMigrator.ElapsedTimePreMigrationCleanUp";
-constexpr char kMergeSplitItemsTimeUMA[] =
-    "Ash.BrowserDataBackMigrator.ElapsedTimeMergeSplitItems";
-constexpr char kDeleteAshItemsTimeUMA[] =
-    "Ash.BrowserDataBackMigrator.ElapsedTimeDeleteAshItems";
-constexpr char kMoveLacrosItemsToAshDirTimeUMA[] =
-    "Ash.BrowserDataBackMigrator.ElapsedTimeMoveLacrosItemsToAshDir";
-constexpr char kMoveMergedItemsBackToAshTimeUMA[] =
-    "Ash.BrowserDataBackMigrator.ElapsedTimeMoveMergedItemsBackToAsh";
-constexpr char kDeleteLacrosDirTimeUMA[] =
-    "Ash.BrowserDataBackMigrator.ElapsedTimeDeleteLacrosDir";
-constexpr char kDeleteTmpDirTimeUMA[] =
-    "Ash.BrowserDataBackMigrator.ElapsedTimeDeleteTmpDir";
-
 // Injects the restart function called from
 // `BrowserDataBackMigrator::AttemptRestart()` in RAII manner.
 class ScopedBackMigratorRestartAttemptForTesting {
@@ -52,7 +33,8 @@ class ScopedBackMigratorRestartAttemptForTesting {
   ~ScopedBackMigratorRestartAttemptForTesting();
 };
 
-class BrowserDataBackMigrator {
+// The interface is exposed to be inherited by fakes in tests.
+class BrowserDataBackMigratorBase {
  public:
   // Represents a result status.
   enum class Result {
@@ -60,78 +42,21 @@ class BrowserDataBackMigrator {
     kFailed,
   };
 
-  using BackMigrationFinishedCallback =
-      base::OnceCallback<void(BrowserDataBackMigrator::Result)>;
+  using BackMigrationFinishedCallback = base::OnceCallback<void(Result)>;
   using BackMigrationProgressCallback = base::RepeatingCallback<void(int)>;
+  using BackMigrationCanceledCallback = base::OnceClosure;
 
-  explicit BrowserDataBackMigrator(const base::FilePath& ash_profile_dir,
-                                   const std::string& user_id_hash,
-                                   PrefService* local_state);
-  BrowserDataBackMigrator(const BrowserDataBackMigrator&) = delete;
-  BrowserDataBackMigrator& operator=(const BrowserDataBackMigrator&) = delete;
-  ~BrowserDataBackMigrator();
+  virtual ~BrowserDataBackMigratorBase() = default;
 
-  // Calls `chrome::AttemptRestart()` unless
-  // `ScopedBackMigratorRestartAttemptForTesting` is in scope.
-  static void AttemptRestart();
+  virtual void Migrate(BackMigrationProgressCallback progress_callback,
+                       BackMigrationFinishedCallback finished_callback) = 0;
 
-  // Migrate performs the Lacros -> Ash migration.
-  // progress_callback is called repeatedly with the current progress.
-  // finished_callback is called when migration completes successfully or with
-  // an error.
-  // Migrate can only be called once.
-  void Migrate(BackMigrationProgressCallback progress_callback,
-               BackMigrationFinishedCallback finished_callback);
+  virtual void CancelMigration(
+      BackMigrationCanceledCallback canceled_callback) = 0;
+};
 
-  // IsBackMigrationEnabled determines if the feature is enabled.
-  // It checks the following in order:
-  // 1. The kForceBrowserDataBackwardMigration debug flag.
-  // 2. The LacrosDataBackwardMigrationMode policy.
-  // 3. The kLacrosProfileBackwardMigration feature flag.
-  // The policy value is cached at the beginning of the session and not
-  // updated.
-  static bool IsBackMigrationEnabled(
-      crosapi::browser_util::PolicyInitState policy_init_state);
-
-  // MaybeRestartToMigrateBack checks if backward migration should be
-  // triggered. Migration is started by adding extra flags to Chrome using
-  // session_manager and then restarting.
-  // Returns true if Chrome needs to restart to trigger backward migration.
-  // May block to check if the lacros folder is present.
-  static bool MaybeRestartToMigrateBack(
-      const AccountId& account_id,
-      const std::string& user_id_hash,
-      crosapi::browser_util::PolicyInitState policy_init_state);
-
- private:
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest, PreMigrationCleanUp);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
-                           MergeCommonExtensionsDataFiles);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
-                           MergeCommonIndexedDB);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
-                           MergeLocalStorageLevelDB);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
-                           MergeStateStoreLevelDB);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
-                           DeletesLacrosItemsFromAshDirCorrectly);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
-                           MovesLacrosItemsToAshDirCorrectly);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorUMATest, RecordFinalStatus);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorUMATest,
-                           RecordPosixErrnoIfAvailable);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorUMATest,
-                           RecordMigrationTimeIfSuccessful);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorUMATest, TaskStatusToString);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
-                           MergesAshOnlyPreferencesCorrectly);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
-                           MergesDictSplitPreferencesCorrectly);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
-                           MergesListSplitPreferencesCorrectly);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
-                           MergesLacrosPreferencesCorrectly);
-
+class BrowserDataBackMigrator : public BrowserDataBackMigratorBase {
+ public:
   // A list of all the possible results of migration, including success and all
   // failure types in each step of the migration.
   //
@@ -140,8 +65,7 @@ class BrowserDataBackMigrator {
   //
   // When adding new cases to this enum, also update the following:
   // - `BrowserDataBackMigrator::ToResult()`
-  // - `BrowserDataBackMigrator::TaskStatusToString()`
-  // - `BrowserDataBackMigratorUMATest.TaskStatusToString`
+  // - `browser_data_back_migrator_metrics::TaskStatusToString()`
   // - `Ash.BrowserDataBackMigrator.PosixErrno.{TaskStatus}` histogram
   // - `BrowserDataBackMigratorFinalStatus` histogram enum
   enum class TaskStatus {
@@ -166,6 +90,80 @@ class BrowserDataBackMigrator {
     kMaxValue = kMoveMergedItemsBackToAshCopyDirectoryFailed,
   };
 
+  struct TaskResult {
+    TaskStatus status;
+
+    // Value of `errno` set after a task has failed.
+    absl::optional<int> posix_errno;
+  };
+
+  explicit BrowserDataBackMigrator(const base::FilePath& ash_profile_dir,
+                                   const std::string& user_id_hash,
+                                   PrefService* local_state);
+  BrowserDataBackMigrator(const BrowserDataBackMigrator&) = delete;
+  BrowserDataBackMigrator& operator=(const BrowserDataBackMigrator&) = delete;
+  ~BrowserDataBackMigrator() override;
+
+  // Calls `chrome::AttemptRestart()` unless
+  // `ScopedBackMigratorRestartAttemptForTesting` is in scope.
+  static void AttemptRestart();
+
+  // Migrate performs the Lacros -> Ash migration.
+  // progress_callback is called repeatedly with the current progress.
+  // finished_callback is called when migration completes successfully or with
+  // an error.
+  // Migrate can only be called once.
+  void Migrate(BackMigrationProgressCallback progress_callback,
+               BackMigrationFinishedCallback finished_callback) override;
+
+  // IsBackMigrationEnabled determines if the feature is enabled.
+  // It checks the following in order:
+  // 1. The kForceBrowserDataBackwardMigration debug flag.
+  // 2. The LacrosDataBackwardMigrationMode policy.
+  // 3. The kLacrosProfileBackwardMigration feature flag.
+  // The policy value is cached at the beginning of the session and not
+  // updated.
+  static bool IsBackMigrationEnabled(
+      crosapi::browser_util::PolicyInitState policy_init_state);
+
+  // MaybeRestartToMigrateBack checks if backward migration should be
+  // triggered. Migration is started by adding extra flags to Chrome using
+  // session_manager and then restarting.
+  // Returns true if Chrome needs to restart to trigger backward migration.
+  // May block to check if the lacros folder is present.
+  static bool MaybeRestartToMigrateBack(
+      const AccountId& account_id,
+      const std::string& user_id_hash,
+      crosapi::browser_util::PolicyInitState policy_init_state);
+
+  // CancelMigration is called when the user chooses to cancel the migration
+  // from OOBE and it cleans up the in-progress migration.
+  void CancelMigration(
+      BackMigrationCanceledCallback canceled_callback) override;
+
+ private:
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest, PreMigrationCleanUp);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
+                           MergeCommonExtensionsDataFiles);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
+                           MergeCommonIndexedDB);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
+                           MergeLocalStorageLevelDB);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
+                           MergeStateStoreLevelDB);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
+                           DeletesLacrosItemsFromAshDirCorrectly);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorFilesSetupTest,
+                           MovesLacrosItemsToAshDirCorrectly);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
+                           MergesAshOnlyPreferencesCorrectly);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
+                           MergesDictSplitPreferencesCorrectly);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
+                           MergesListSplitPreferencesCorrectly);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataBackMigratorTest,
+                           MergesLacrosPreferencesCorrectly);
+
   enum class MigrationStep {
     kStart = 0,
     kPreMigrationCleanUp = 1,
@@ -180,25 +178,18 @@ class BrowserDataBackMigrator {
     kMaxValue = kDone,
   };
 
-  struct TaskResult {
-    TaskStatus status;
-
-    // Value of `errno` set after a task has failed.
-    absl::optional<int> posix_errno;
-  };
-
   bool running_ = false;
   BackMigrationProgressCallback progress_callback_;
   BackMigrationFinishedCallback finished_callback_;
+  BackMigrationCanceledCallback canceled_callback_;
 
   void SetProgress(MigrationStep step);
 
   // Creates `kTmpDir` and deletes its contents if it already exists. Deletes
   // ash and lacros `ItemType::kDeletable` items to free up extra space but this
   // does not affect `PreMigrationCleanUpResult::success`.
-  static TaskResult PreMigrationCleanUp(
-      const base::FilePath& ash_profile_dir,
-      const base::FilePath& lacros_profile_dir);
+  static TaskResult PreMigrationCleanUp(const base::FilePath& ash_profile_dir,
+                                        const base::FilePath& lacros_dir);
 
   // Called as a reply to `PreMigrationCleanUp()`.
   void OnPreMigrationCleanUp(TaskResult result);
@@ -250,11 +241,19 @@ class BrowserDataBackMigrator {
   // Called as a reply to `MarkMigrationComplete()`.
   void OnMarkMigrationComplete();
 
+  // Calls `DeleteLacrosDir()` and `DeleteTmpDir()` to clean up residual Lacros
+  // data upon failed migration that was canceled by the user.
+  static TaskResult FailedMigrationCleanUp(
+      const base::FilePath& ash_profile_dir);
+
+  // Called as a reply to `FailedMigrationCleanUp()`.
+  void OnFailedMigrationCleanUp(TaskResult result);
+
   // For `target_dir` copy subdirectories belonging to extensions that are in
-  // both Chromes from `lacros_profile_dir` to `tmp_user_dir`.
+  // both Chromes from `lacros_default_profile_dir` to `tmp_user_dir`.
   static bool MergeCommonExtensionsDataFiles(
       const base::FilePath& ash_profile_dir,
-      const base::FilePath& lacros_profile_dir,
+      const base::FilePath& lacros_default_profile_dir,
       const base::FilePath& tmp_user_dir,
       const std::string& target_dir);
 
@@ -266,13 +265,14 @@ class BrowserDataBackMigrator {
       const std::string& target_dir);
 
   // Merge IndexedDB objects for extensions that are both in Ash and Lacros.
-  // If both exists, delete Ash version and move Lacros version to its place.
+  // If both exist, delete Ash version and move Lacros version to its place.
   // If only Ash exists, do not delete it, i.e. do nothing.
   // If only Lacros exists, move to the expected Ash location.
   // If neither exists, do nothing.
-  static bool MergeCommonIndexedDB(const base::FilePath& ash_profile_dir,
-                                   const base::FilePath& lacros_profile_dir,
-                                   const char* extension_id);
+  static bool MergeCommonIndexedDB(
+      const base::FilePath& ash_profile_dir,
+      const base::FilePath& lacros_default_profile_dir,
+      const char* extension_id);
 
   // Merge Preferences.
   static bool MergePreferences(const base::FilePath& ash_pref_path,
@@ -342,22 +342,6 @@ class BrowserDataBackMigrator {
   // called once regardless of whether the migration succeeded or not.
   void InvokeCallback(TaskResult);
 
-  // Records the final status of the migration in `kFinalStatusUMA`.
-  static void RecordFinalStatus(TaskResult result);
-
-  // Records Ash.BrowserDataBackMigrator.PosixErrno.{result.status} UMA with the
-  // value of `result.posix_errno` if the migration failed.
-  static void RecordPosixErrnoIfAvailable(TaskResult result);
-
-  // Records `kSuccessfulMigrationTimeUMA` UMA with the elapsed time since
-  // starting backward migration. Only recorded if migration was successful.
-  static void RecordMigrationTimeIfSuccessful(
-      TaskResult result,
-      base::TimeTicks migration_start_time);
-
-  // Converts `TaskStatus` to string.
-  static std::string TaskStatusToString(TaskStatus task_status);
-
   // Path to the ash profile directory.
   const base::FilePath ash_profile_dir_;
 
@@ -365,7 +349,7 @@ class BrowserDataBackMigrator {
   const std::string user_id_hash_;
 
   // Local state prefs, not owned.
-  PrefService* local_state_ = nullptr;
+  raw_ptr<PrefService, ExperimentalAsh> local_state_ = nullptr;
 
   // Used to record how long the migration takes in UMA.
   base::TimeTicks migration_start_time_;

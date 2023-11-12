@@ -22,6 +22,7 @@ import '../../settings_shared.css.js';
 import '../os_settings_icons.css.js';
 import './cellular_networks_list.js';
 import './network_always_on_vpn.js';
+import './internet_subpage_menu.js';
 
 import {CrPolicyNetworkBehaviorMojo, CrPolicyNetworkBehaviorMojoInterface} from 'chrome://resources/ash/common/network/cr_policy_network_behavior_mojo.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
@@ -34,10 +35,10 @@ import {AlwaysOnVpnMode, AlwaysOnVpnProperties, CrosNetworkConfigRemote, FilterT
 import {ConnectionStateType, DeviceStateType, NetworkType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {afterNextRender, DomRepeatEvent, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {Setting} from '../../mojom-webui/setting.mojom-webui.js';
 import {castExists} from '../assert_extras.js';
 import {DeepLinkingMixin, DeepLinkingMixinInterface} from '../deep_linking_mixin.js';
 import {recordSettingChange} from '../metrics_recorder.js';
+import {Setting} from '../mojom-webui/setting.mojom-webui.js';
 import {routes} from '../os_settings_routes.js';
 import {RouteOriginMixin, RouteOriginMixinInterface} from '../route_origin_mixin.js';
 import {Route, Router} from '../router.js';
@@ -675,21 +676,21 @@ class SettingsInternetSubpageElement extends
     this.dispatchEvent(event);
   }
 
-  private onAddWifiButtonTap_(): void {
+  private onAddWifiButtonClick_(): void {
     assert(this.deviceState, 'Device state is falsey - Wifi expected.');
     const type = this.deviceState.type;
     assert(type === NetworkType.kWiFi, 'Wifi type expected.');
     this.dispatchShowConfigEvent_(OncMojo.getNetworkTypeString(type));
   }
 
-  private onAddVpnButtonTap_(): void {
+  private onAddVpnButtonClick_(): void {
     assert(this.deviceState, 'Device state is falsey - VPN expected.');
     const type = this.deviceState.type;
     assert(type === NetworkType.kVPN, 'VPN type expected.');
     this.dispatchShowConfigEvent_(OncMojo.getNetworkTypeString(type));
   }
 
-  private onAddThirdPartyVpnTap_(event: DomRepeatEvent<VpnProvider>): void {
+  private onAddThirdPartyVpnClick_(event: DomRepeatEvent<VpnProvider>): void {
     const provider = event.model.item;
     this.browserProxy_.addThirdPartyVpn(provider.appId);
     recordSettingChange();
@@ -703,7 +704,7 @@ class SettingsInternetSubpageElement extends
   /**
    * Event triggered when the known networks button is clicked.
    */
-  private onKnownNetworksTap_(): void {
+  private onKnownNetworksClick_(): void {
     assert(this.deviceState?.type === NetworkType.kWiFi);
     const showKnownNetworksEvent = new CustomEvent('show-known-networks', {
       bubbles: true,

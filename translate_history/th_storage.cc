@@ -51,12 +51,16 @@ void TH_Storage::OnModelWillBeDeleted() {
   model_ = nullptr;
 }
 
-bool TH_Storage::SerializeData(std::string* output) {
+absl::optional<std::string> TH_Storage::SerializeData() {
   TH_Codec codec;
-  JSONStringValueSerializer serializer(output);
+  std::string output;
+  JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(true);
   base::Value value = codec.Encode(*model_->list());
-  return serializer.Serialize(value);
+  if (!serializer.Serialize(value))
+    return absl::nullopt;
+
+  return output;
 }
 
 }  // namespace translate_history

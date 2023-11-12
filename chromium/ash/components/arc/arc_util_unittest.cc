@@ -14,14 +14,15 @@
 #include "ash/components/arc/session/arc_vm_data_migration_status.h"
 #include "ash/components/arc/test/arc_util_test_support.h"
 #include "ash/constants/app_types.h"
+#include "ash/test/ash_test_base.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/ptr_util.h"
-#include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "chromeos/ash/components/dbus/upstart/fake_upstart_client.h"
 #include "components/account_id/account_id.h"
 #include "components/exo/shell_surface_util.h"
@@ -29,6 +30,7 @@
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
@@ -105,7 +107,7 @@ class FakeUser : public user_manager::User {
   const user_manager::UserType user_type_;
 };
 
-class ArcUtilTest : public testing::Test {
+class ArcUtilTest : public ash::AshTestBase {
  public:
   ArcUtilTest() { ash::UpstartClient::InitializeFake(); }
   ArcUtilTest(const ArcUtilTest&) = delete;
@@ -113,12 +115,12 @@ class ArcUtilTest : public testing::Test {
   ~ArcUtilTest() override = default;
 
   void SetUp() override {
-    run_loop_ = std::make_unique<base::RunLoop>();
+    ash::AshTestBase::SetUp();
     prefs::RegisterProfilePrefs(profile_prefs_.registry());
     RemoveUpstartStartStopJobFailures();
   }
 
-  void TearDown() override { run_loop_.reset(); }
+  void TearDown() override { ash::AshTestBase::TearDown(); }
 
  protected:
   void InjectUpstartStartJobFailure(const std::string& job_name_to_fail) {
@@ -157,10 +159,6 @@ class ArcUtilTest : public testing::Test {
         }));
   }
 
-  void RecreateRunLoop() { run_loop_ = std::make_unique<base::RunLoop>(); }
-
-  base::RunLoop* run_loop() { return run_loop_.get(); }
-
   const std::vector<std::pair<std::string, bool>>& upstart_operations() const {
     return upstart_operations_;
   }
@@ -176,8 +174,6 @@ class ArcUtilTest : public testing::Test {
         ash::FakeUpstartClient::StartStopJobCallback());
   }
 
-  std::unique_ptr<base::RunLoop> run_loop_;
-  base::test::TaskEnvironment task_environment_;
   TestingPrefServiceSimple profile_prefs_;
 
   // List of upstart operations recorded. When it's "start" the boolean is set
@@ -393,12 +389,11 @@ TEST_F(ArcUtilTest, IsArcOptInVerificationDisabled) {
 }
 
 TEST_F(ArcUtilTest, IsArcAllowedForUser) {
+  TestingPrefServiceSimple local_state;
   user_manager::FakeUserManager* fake_user_manager =
-      new user_manager::FakeUserManager();
+      new user_manager::FakeUserManager(&local_state);
   user_manager::ScopedUserManager scoped_user_manager(
       base::WrapUnique(fake_user_manager));
-  TestingPrefServiceSimple local_state;
-  fake_user_manager->set_local_state(&local_state);
 
   struct {
     user_manager::UserType user_type;
@@ -420,7 +415,11 @@ TEST_F(ArcUtilTest, IsArcAllowedForUser) {
 
   // An ephemeral user is a logged in user but unknown to UserManager when
   // ephemeral policy is set.
-  fake_user_manager->SetEphemeralUsersEnabled(true);
+  fake_user_manager->SetEphemeralModeConfig(
+      user_manager::UserManager::EphemeralModeConfig(
+          /* included_by_default= */ true,
+          /* include_list= */ std::vector<AccountId>{},
+          /* exclude_list= */ std::vector<AccountId>{}));
   fake_user_manager->UserLoggedIn(
       AccountId::FromUserEmailGaiaId("test@test.com", "9876543210"),
       "test@test.com-hash", false /* browser_restart */, false /* is_child */);
@@ -500,12 +499,14 @@ TEST_F(ArcUtilTest, ConfigureUpstartJobs_Success) {
   };
   bool result = false;
   StartRecordingUpstartOperations();
-  ConfigureUpstartJobs(jobs,
-                       base::BindLambdaForTesting([&result, this](bool r) {
-                         result = r;
-                         run_loop()->Quit();
-                       }));
-  run_loop()->Run();
+  ConfigureUpstartJobs(
+      jobs,
+      base::BindLambdaForTesting(
+          [&result, quit_closure = task_environment()->QuitClosure()](bool r) {
+            result = r;
+            quit_closure.Run();
+          }));
+  task_environment()->RunUntilQuit();
   EXPECT_TRUE(result);
 
   auto ops = upstart_operations();
@@ -529,24 +530,27 @@ TEST_F(ArcUtilTest, ConfigureUpstartJobs_StopFail) {
   // Confirm that failing to stop a job is ignored.
   bool result = false;
   InjectUpstartStopJobFailure("Job_2dA");
-  ConfigureUpstartJobs(jobs,
-                       base::BindLambdaForTesting([&result, this](bool r) {
-                         result = r;
-                         run_loop()->Quit();
-                       }));
-  run_loop()->Run();
+  ConfigureUpstartJobs(
+      jobs,
+      base::BindLambdaForTesting(
+          [&result, quit_closure = task_environment()->QuitClosure()](bool r) {
+            result = r;
+            quit_closure.Run();
+          }));
+  task_environment()->RunUntilQuit();
   EXPECT_TRUE(result);
 
   // Do the same for the second task.
-  RecreateRunLoop();
   result = false;
   InjectUpstartStopJobFailure("Job_2dB");
-  ConfigureUpstartJobs(jobs,
-                       base::BindLambdaForTesting([&result, this](bool r) {
-                         result = r;
-                         run_loop()->Quit();
-                       }));
-  run_loop()->Run();
+  ConfigureUpstartJobs(
+      jobs,
+      base::BindLambdaForTesting(
+          [&result, quit_closure = task_environment()->QuitClosure()](bool r) {
+            result = r;
+            quit_closure.Run();
+          }));
+  task_environment()->RunUntilQuit();
   EXPECT_TRUE(result);
 }
 
@@ -559,24 +563,27 @@ TEST_F(ArcUtilTest, ConfigureUpstartJobs_StartFail) {
   // Confirm that failing to start a job is not ignored.
   bool result = true;
   InjectUpstartStartJobFailure("Job_2dB");
-  ConfigureUpstartJobs(jobs,
-                       base::BindLambdaForTesting([&result, this](bool r) {
-                         result = r;
-                         run_loop()->Quit();
-                       }));
-  run_loop()->Run();
+  ConfigureUpstartJobs(
+      jobs,
+      base::BindLambdaForTesting(
+          [&result, quit_closure = task_environment()->QuitClosure()](bool r) {
+            result = r;
+            quit_closure.Run();
+          }));
+  task_environment()->RunUntilQuit();
   EXPECT_FALSE(result);
 
   // Do the same for the third task.
-  RecreateRunLoop();
   result = true;
   InjectUpstartStartJobFailure("Job_2dC");
-  ConfigureUpstartJobs(std::move(jobs),
-                       base::BindLambdaForTesting([&result, this](bool r) {
-                         result = r;
-                         run_loop()->Quit();
-                       }));
-  run_loop()->Run();
+  ConfigureUpstartJobs(
+      std::move(jobs),
+      base::BindLambdaForTesting(
+          [&result, quit_closure = task_environment()->QuitClosure()](bool r) {
+            result = r;
+            quit_closure.Run();
+          }));
+  task_environment()->RunUntilQuit();
   EXPECT_FALSE(result);
 }
 
@@ -699,6 +706,84 @@ TEST_F(ArcUtilTest, ShouldUseVirtioBlkData_ArcVmDataMigration_Finished) {
   SetArcVmDataMigrationStatus(profile_prefs(),
                               ArcVmDataMigrationStatus::kFinished);
   EXPECT_TRUE(ShouldUseVirtioBlkData(profile_prefs()));
+}
+
+// Tests that GetDaysUntilArcVmDataMigrationDeadline() returns the correct value
+// when it is called just after the ARCVM /data migration notification is shown
+// for the first time.
+TEST_F(ArcUtilTest,
+       GetDaysUntilArcVmDataMigrationDeadline_JustAfterFirstNotification) {
+  profile_prefs()->SetTime(prefs::kArcVmDataMigrationNotificationFirstShownTime,
+                           base::Time::Now());
+  const int days_until_deadline =
+      GetDaysUntilArcVmDataMigrationDeadline(profile_prefs());
+  // Take into account cases where the test is executed around midnight.
+  EXPECT_TRUE(
+      days_until_deadline == kArcVmDataMigrationNumberOfDismissibleDays ||
+      days_until_deadline == (kArcVmDataMigrationNumberOfDismissibleDays - 1))
+      << "days_until_deadline = " << days_until_deadline;
+}
+
+// Tests that GetDaysUntilArcVmDataMigrationDeadline() returns the correct value
+// when it is called after kArcVmDataMigrationDismissibleTimeDelta has passed.
+TEST_F(ArcUtilTest, GetDaysUntilArcVmDataMigrationDeadline_JustAfterDeadline) {
+  // Remaining days should be 1 (i.e., the migration should be done today).
+  profile_prefs()->SetTime(
+      prefs::kArcVmDataMigrationNotificationFirstShownTime,
+      base::Time::Now() - kArcVmDataMigrationDismissibleTimeDelta);
+  EXPECT_EQ(GetDaysUntilArcVmDataMigrationDeadline(profile_prefs()), 1);
+}
+
+// Tests that GetDaysUntilArcVmDataMigrationDeadline() returns the correct value
+// when it is called after more days than kArcVmDataMigrationDismissibleDays
+// have passed.
+TEST_F(ArcUtilTest, GetDaysUntilArcVmDataMigrationDeadline_Overdue) {
+  // Remaining days should be kept 1.
+  profile_prefs()->SetTime(
+      prefs::kArcVmDataMigrationNotificationFirstShownTime,
+      base::Time::Now() -
+          (kArcVmDataMigrationDismissibleTimeDelta + base::Days(10)));
+  EXPECT_EQ(GetDaysUntilArcVmDataMigrationDeadline(profile_prefs()), 1);
+}
+
+// Tests that GetDaysUntilArcVmDataMigrationDeadline() returns the correct value
+// when the migration is in progress.
+TEST_F(ArcUtilTest, GetDaysUntilArcVmDataMigrationDeadline_MigrationStarted) {
+  SetArcVmDataMigrationStatus(profile_prefs(),
+                              ArcVmDataMigrationStatus::kStarted);
+  profile_prefs()->SetTime(prefs::kArcVmDataMigrationNotificationFirstShownTime,
+                           base::Time::Now());
+  EXPECT_EQ(GetDaysUntilArcVmDataMigrationDeadline(profile_prefs()), 1);
+}
+
+TEST_F(ArcUtilTest, GetDesiredDiskImageSizeForArcVmDataMigrationInBytes) {
+  EXPECT_EQ(GetDesiredDiskImageSizeForArcVmDataMigrationInBytes(0, 0),
+            4ULL << 30 /* kMinimumDiskImageSizeInBytes = 4 GB */);
+
+  EXPECT_EQ(GetDesiredDiskImageSizeForArcVmDataMigrationInBytes(
+                4ULL << 30 /* android_data_size_in_bytes = 4 GB */,
+                32ULL << 30 /* free_disk_space_in_bytes = 32 GB */),
+            35782443008ULL /* ~33 GB */);
+
+  EXPECT_EQ(GetDesiredDiskImageSizeForArcVmDataMigrationInBytes(
+                32ULL << 30 /* android_data_size_in_bytes = 32 GB */,
+                4ULL << 30 /* free_disk_space_in_bytes = 4 GB */),
+            41795399680ULL /* ~39 GB */);
+}
+
+TEST_F(ArcUtilTest, GetRequiredFreeDiskSpaceForArcVmDataMigrationInBytes) {
+  EXPECT_EQ(GetRequiredFreeDiskSpaceForArcVmDataMigrationInBytes(0, 0),
+            1ULL << 30 /* kMinimumRequiredFreeDiskSpaceInBytes = 1 GB */);
+
+  EXPECT_EQ(GetRequiredFreeDiskSpaceForArcVmDataMigrationInBytes(
+                4ULL << 30 /* android_data_size_in_bytes = 4 GB */,
+                32ULL << 30 /* free_disk_space_in_bytes = 32 GB */),
+            3ULL * (512ULL << 20) /* 1.5 GB */);
+
+  EXPECT_EQ(GetRequiredFreeDiskSpaceForArcVmDataMigrationInBytes(
+                32ULL << 30 /* android_data_size_in_bytes = 32 GB */,
+                4ULL << 30 /* free_disk_space_in_bytes = 4 GB */),
+            4ULL << 30 /* 4 GB */);
 }
 
 }  // namespace

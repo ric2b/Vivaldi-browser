@@ -29,6 +29,11 @@ BASE_FEATURE(kWebViewCheckReturnResources,
              "WebViewCheckReturnResources",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Server side sampling switch.
+BASE_FEATURE(kWebViewServerSideSampling,
+             "WebViewServerSideSampling",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Use the SafeBrowsingApiHandlerBridge which uses the connectionless GMS APIs.
 // This Feature is checked and used in downstream internal code.
 BASE_FEATURE(kWebViewConnectionlessSafeBrowsing,
@@ -62,11 +67,6 @@ BASE_FEATURE(kWebViewEmptyComponentLoaderPolicy,
              "WebViewEmptyComponentLoaderPolicy",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enable dns-prefetch and preconnect in link tags and HTTP header.
-BASE_FEATURE(kWebViewEnableDnsPrefetchAndPreconnect,
-             "WebViewEnableDnsPrefetchAndPreconnect",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // When enabled, passive mixed content (Audio/Video/Image subresources loaded
 // over HTTP on HTTPS sites) will be autoupgraded to HTTPS, and the load will be
 // blocked if the resource fails to load over HTTPS. This only affects apps that
@@ -88,15 +88,6 @@ BASE_FEATURE(kWebViewJavaJsBridgeMojo,
              "WebViewJavaJsBridgeMojo",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Measure the number of pixels occupied by one or more WebViews as a
-// proportion of the total screen size. Depending on the number of
-// WebVieaws and the size of the screen this might be expensive so
-// hidden behind a feature flag until the true runtime cost can be
-// measured.
-BASE_FEATURE(kWebViewMeasureScreenCoverage,
-             "WebViewMeasureScreenCoverage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Field trial feature for controlling support of Origin Trials on WebView.
 BASE_FEATURE(kWebViewOriginTrials,
              "WebViewOriginTrials",
@@ -112,6 +103,12 @@ BASE_FEATURE(kWebViewRecordAppDataDirectorySize,
 // happens via Digital Asset Links.
 BASE_FEATURE(kWebViewRestrictSensitiveContent,
              "WebViewRestrictSensitiveContent",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enable doing a JNI call to check safe browsing safe mode status before doing
+// a safe browsing check.
+BASE_FEATURE(kWebViewSafeBrowsingSafeMode,
+             "WebViewSafeBrowsingSafeMode",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Disallows window.{alert, prompt, confirm} if triggered inside a subframe that

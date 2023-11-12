@@ -25,7 +25,9 @@
 #include "base/time/time.h"
 #include "components/aggregation_service/parsing_utils.h"
 #include "components/attribution_reporting/aggregation_keys.h"
+#include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/parsing_utils.h"
+#include "components/attribution_reporting/source_registration.h"
 #include "components/attribution_reporting/source_registration_error.mojom.h"
 #include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "components/attribution_reporting/suitable_origin.h"
@@ -33,11 +35,12 @@
 #include "content/browser/attribution_reporting/attribution_debug_report.h"
 #include "content/browser/attribution_reporting/attribution_info.h"
 #include "content/browser/attribution_reporting/attribution_internals.mojom.h"
-#include "content/browser/attribution_reporting/attribution_observer_types.h"
+#include "content/browser/attribution_reporting/attribution_manager.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
 #include "content/browser/attribution_reporting/attribution_trigger.h"
 #include "content/browser/attribution_reporting/attribution_utils.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
+#include "content/browser/attribution_reporting/create_report_result.h"
 #include "content/browser/attribution_reporting/send_result.h"
 #include "content/browser/attribution_reporting/storable_source.h"
 #include "content/browser/attribution_reporting/stored_source.h"
@@ -48,12 +51,19 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "net/base/net_errors.h"
-#include "net/base/schemeful_site.h"
+#include "services/network/public/cpp/attribution_utils.h"
+#include "services/network/public/mojom/attribution.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/abseil-cpp/absl/utility/utility.h"
+#include "url/gurl.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "content/browser/attribution_reporting/attribution_reporting.mojom-forward.h"
+#include "content/browser/attribution_reporting/os_registration.h"
+#endif
 
 namespace content {
 
@@ -73,19 +83,15 @@ attribution_internals::mojom::WebUISourcePtr WebUISource(
     Attributability attributability) {
   const CommonSourceInfo& common_info = source.common_info();
   return attribution_internals::mojom::WebUISource::New(
-      common_info.source_event_id(), common_info.source_origin(),
-      std::vector<net::SchemefulSite>(
-          common_info.destination_sites().destinations().begin(),
-          common_info.destination_sites().destinations().end()),
-      common_info.reporting_origin(), common_info.source_time().ToJsTime(),
-      common_info.expiry_time().ToJsTime(),
-      common_info.event_report_window_time().ToJsTime(),
-      common_info.aggregatable_report_window_time().ToJsTime(),
-      common_info.source_type(), common_info.priority(),
-      common_info.debug_key(), source.dedup_keys(),
-      common_info.filter_data().filter_values(),
+      source.source_event_id(), common_info.source_origin(),
+      source.destination_sites(), common_info.reporting_origin(),
+      common_info.source_time().ToJsTime(), source.expiry_time().ToJsTime(),
+      source.event_report_window_time().ToJsTime(),
+      source.aggregatable_report_window_time().ToJsTime(),
+      common_info.source_type(), source.priority(), source.debug_key(),
+      source.dedup_keys(), source.filter_data().filter_values(),
       base::MakeFlatMap<std::string, std::string>(
-          common_info.aggregation_keys().keys(), {},
+          source.aggregation_keys().keys(), {},
           [](const auto& key) {
             return std::make_pair(
                 key.first,
@@ -146,12 +152,11 @@ attribution_internals::mojom::WebUIReportPtr WebUIReport(
 
   ai_mojom::WebUIReportDataPtr data = absl::visit(
       base::Overloaded{
-          [attribution_info](
-              const AttributionReport::EventLevelData& event_level_data) {
+          [](const AttributionReport::EventLevelData& event_level_data) {
             return ai_mojom::WebUIReportData::NewEventLevelData(
                 ai_mojom::WebUIReportEventLevelData::New(
                     event_level_data.priority,
-                    attribution_info.source.attribution_logic() ==
+                    event_level_data.source.attribution_logic() ==
                         StoredSource::AttributionLogic::kTruthfully));
           },
 
@@ -169,23 +174,29 @@ attribution_internals::mojom::WebUIReportPtr WebUIReport(
                       contribution.value());
                 });
 
-            ai_mojom::AttestationTokenPtr attestation_token =
-                aggregatable_data.attestation_token
-                    ? ai_mojom::AttestationToken::New(
-                          *aggregatable_data.attestation_token)
-                    : nullptr;
-
             return ai_mojom::WebUIReportData::NewAggregatableAttributionData(
                 ai_mojom::WebUIReportAggregatableAttributionData::New(
-                    std::move(contributions), std::move(attestation_token),
+                    std::move(contributions),
+                    aggregatable_data.common_data.attestation_token,
                     aggregation_service::SerializeAggregationCoordinator(
-                        aggregatable_data.aggregation_coordinator)));
+                        aggregatable_data.common_data
+                            .aggregation_coordinator)));
+          },
+
+          [](const AttributionReport::NullAggregatableData&)
+              -> ai_mojom::WebUIReportDataPtr {
+            // TODO(crbug.com/1432558): Display null reports in internals UI.
+            return nullptr;
           },
       },
       report.data());
 
+  if (!data) {
+    return nullptr;
+  }
+
   return attribution_internals::mojom::WebUIReport::New(
-      report.ReportId(), report.ReportURL(is_debug_report),
+      report.id(), report.ReportURL(is_debug_report),
       /*trigger_time=*/attribution_info.time.ToJsTime(),
       /*report_time=*/report.report_time().ToJsTime(),
       SerializeAttributionJson(report.ReportBody(), /*pretty_print=*/true),
@@ -198,9 +209,12 @@ void ForwardReportsToWebUI(
   std::vector<attribution_internals::mojom::WebUIReportPtr> web_ui_reports;
   web_ui_reports.reserve(pending_reports.size());
   for (const AttributionReport& report : pending_reports) {
-    web_ui_reports.push_back(
+    attribution_internals::mojom::WebUIReportPtr web_report =
         WebUIReport(report, /*is_debug_report=*/false,
-                    ReportStatus::NewPending(Empty::New())));
+                    ReportStatus::NewPending(Empty::New()));
+    if (web_report) {
+      web_ui_reports.push_back(std::move(web_report));
+    }
   }
 
   std::move(web_ui_callback).Run(std::move(web_ui_reports));
@@ -240,7 +254,10 @@ void AttributionInternalsHandlerImpl::IsAttributionReportingEnabled(
           /*destination_origin=*/nullptr, /*reporting_origin=*/nullptr);
   bool debug_mode = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kAttributionReportingDebugMode);
-  std::move(callback).Run(attribution_reporting_enabled, debug_mode);
+  std::move(callback).Run(
+      attribution_reporting_enabled, debug_mode,
+      static_cast<std::string>(network::GetAttributionSupportHeader(
+          AttributionManager::GetSupport())));
 }
 
 void AttributionInternalsHandlerImpl::GetActiveSources(
@@ -255,12 +272,10 @@ void AttributionInternalsHandlerImpl::GetActiveSources(
 }
 
 void AttributionInternalsHandlerImpl::GetReports(
-    AttributionReport::Type report_type,
     attribution_internals::mojom::Handler::GetReportsCallback callback) {
   if (AttributionManager* manager =
           AttributionManager::FromWebContents(web_ui_->GetWebContents())) {
     manager->GetPendingReportsForInternalUse(
-        AttributionReport::Types{report_type},
         /*limit=*/1000,
         base::BindOnce(&ForwardReportsToWebUI, std::move(callback)));
   } else {
@@ -296,9 +311,8 @@ void AttributionInternalsHandlerImpl::OnSourcesChanged() {
   observer_->OnSourcesChanged();
 }
 
-void AttributionInternalsHandlerImpl::OnReportsChanged(
-    AttributionReport::Type report_type) {
-  observer_->OnReportsChanged(report_type);
+void AttributionInternalsHandlerImpl::OnReportsChanged() {
+  observer_->OnReportsChanged();
 }
 
 namespace {
@@ -330,7 +344,9 @@ void AttributionInternalsHandlerImpl::OnSourceHandled(
   auto web_ui_source = WebUISourceRegistration::New();
   web_ui_source->registration = GetRegistration(
       source.common_info().source_time(), source.common_info().source_origin(),
-      source.common_info().reporting_origin(), source.registration_json(),
+      source.common_info().reporting_origin(),
+      SerializeAttributionJson(source.registration().ToJson(),
+                               /*pretty_print=*/true),
       cleared_debug_key);
   web_ui_source->type = source.common_info().source_type();
   web_ui_source->status =
@@ -361,8 +377,11 @@ void AttributionInternalsHandlerImpl::OnReportSent(
       break;
   }
 
-  observer_->OnReportSent(
-      WebUIReport(report, is_debug_report, std::move(status)));
+  attribution_internals::mojom::WebUIReportPtr web_report =
+      WebUIReport(report, is_debug_report, std::move(status));
+  if (web_report) {
+    observer_->OnReportSent(std::move(web_report));
+  }
 }
 
 void AttributionInternalsHandlerImpl::OnDebugReportSent(
@@ -405,6 +424,25 @@ void AttributionInternalsHandlerImpl::OnFailedSourceRegistration(
 
   observer_->OnSourceHandled(std::move(web_ui_source));
 }
+
+#if BUILDFLAG(IS_ANDROID)
+void AttributionInternalsHandlerImpl::OnOsRegistration(
+    base::Time time,
+    const OsRegistration& registration,
+    bool is_debug_key_allowed,
+    attribution_reporting::mojom::OsRegistrationResult result) {
+  auto web_ui_os_registration =
+      attribution_internals::mojom::WebUIOsRegistration::New();
+  web_ui_os_registration->time = time.ToJsTimeIgnoringNull();
+  web_ui_os_registration->registration_url = registration.registration_url;
+  web_ui_os_registration->top_level_origin = registration.top_level_origin;
+  web_ui_os_registration->is_debug_key_allowed = is_debug_key_allowed;
+  web_ui_os_registration->type = registration.GetType();
+  web_ui_os_registration->result = result;
+
+  observer_->OnOsRegistration(std::move(web_ui_os_registration));
+}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 namespace {
 
@@ -511,12 +549,14 @@ void AttributionInternalsHandlerImpl::OnTriggerHandled(
         AttributionTrigger::EventLevelResult::kSuccessDroppedLowerPriority);
     DCHECK(result.new_event_level_report().has_value());
 
-    observer_->OnReportDropped(
+    attribution_internals::mojom::WebUIReportPtr web_report =
         WebUIReport(*report, /*is_debug_report=*/false,
                     ReportStatus::NewReplacedByHigherPriorityReport(
                         result.new_event_level_report()
                             ->external_report_id()
-                            .AsLowercaseString())));
+                            .AsLowercaseString()));
+    DCHECK(web_report);
+    observer_->OnReportDropped(std::move(web_report));
   }
 }
 

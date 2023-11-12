@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <libdrm/drm_fourcc.h>
 #include <linux/media.h>
 #include <linux/videodev2.h>
 #include <poll.h>
@@ -31,7 +32,6 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/service/shared_image/gl_image_native_pixmap.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/media_switches.h"
 #include "media/base/scopedfd_helper.h"
 #include "media/base/video_types.h"
@@ -44,6 +44,7 @@
 #include "media/gpu/v4l2/v4l2_utils.h"
 #include "media/gpu/v4l2/v4l2_vda_helpers.h"
 #include "media/gpu/v4l2/v4l2_video_decoder_delegate_h264.h"
+#include "media/gpu/v4l2/v4l2_video_decoder_delegate_h265.h"
 #include "media/gpu/v4l2/v4l2_video_decoder_delegate_vp8.h"
 #include "media/gpu/v4l2/v4l2_video_decoder_delegate_vp9.h"
 #include "ui/gfx/native_pixmap_handle.h"
@@ -51,7 +52,8 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_display.h"
 #include "ui/gl/gl_surface_egl.h"
-#include "ui/gl/scoped_binders.h"
+#include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/surface_factory_ozone.h"
 
 #define NOTIFY_ERROR(x)                       \
   do {                                        \
@@ -83,7 +85,12 @@ namespace media {
 
 // static
 const uint32_t V4L2SliceVideoDecodeAccelerator::supported_input_fourccs_[] = {
-    V4L2_PIX_FMT_H264_SLICE, V4L2_PIX_FMT_VP8_FRAME, V4L2_PIX_FMT_VP9_FRAME,
+    V4L2_PIX_FMT_H264_SLICE,
+#if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+    V4L2_PIX_FMT_HEVC_SLICE,
+#endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+    V4L2_PIX_FMT_VP8_FRAME,
+    V4L2_PIX_FMT_VP9_FRAME,
 };
 
 // static
@@ -143,6 +150,48 @@ V4L2SliceVideoDecodeAccelerator::PictureRecord::PictureRecord(
     : cleared(cleared), picture(picture) {}
 
 V4L2SliceVideoDecodeAccelerator::PictureRecord::~PictureRecord() {}
+
+// static
+scoped_refptr<gpu::GLImageNativePixmap>
+V4L2SliceVideoDecodeAccelerator::CreateGLImage(const gfx::Size& size,
+                                               const Fourcc fourcc,
+                                               gfx::NativePixmapHandle handle,
+                                               GLenum target,
+                                               GLuint texture_id) {
+  DVLOGF(3);
+
+  size_t num_planes = handle.planes.size();
+  DCHECK_LE(num_planes, 3u);
+
+  gfx::BufferFormat buffer_format = gfx::BufferFormat::BGRA_8888;
+  switch (fourcc.ToV4L2PixFmt()) {
+    case DRM_FORMAT_ARGB8888:
+      buffer_format = gfx::BufferFormat::BGRA_8888;
+      break;
+    case DRM_FORMAT_NV12:
+      buffer_format = gfx::BufferFormat::YUV_420_BIPLANAR;
+      break;
+    case DRM_FORMAT_YVU420:
+      buffer_format = gfx::BufferFormat::YVU_420;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  scoped_refptr<gfx::NativePixmap> pixmap =
+      ui::OzonePlatform::GetInstance()
+          ->GetSurfaceFactoryOzone()
+          ->CreateNativePixmapFromHandle(0, size, buffer_format,
+                                         std::move(handle));
+
+  DCHECK(pixmap);
+
+  // TODO(b/220336463): plumb the right color space.
+  auto image = gpu::GLImageNativePixmap::Create(
+      size, buffer_format, std::move(pixmap), target, texture_id);
+  DCHECK(image);
+  return image;
+}
 
 V4L2SliceVideoDecodeAccelerator::V4L2SliceVideoDecodeAccelerator(
     scoped_refptr<V4L2Device> device,
@@ -285,6 +334,13 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
     decoder_ = std::make_unique<H264Decoder>(
         std::make_unique<V4L2VideoDecoderDelegateH264>(this, device_.get()),
         video_profile_, config.container_color_space);
+#if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+  } else if (video_profile_ >= HEVCPROFILE_MIN &&
+             video_profile_ <= HEVCPROFILE_MAX) {
+    decoder_ = std::make_unique<H265Decoder>(
+        std::make_unique<V4L2VideoDecoderDelegateH265>(this, device_.get()),
+        video_profile_, config.container_color_space);
+#endif
   } else if (video_profile_ >= VP8PROFILE_MIN &&
              video_profile_ <= VP8PROFILE_MAX) {
     decoder_ = std::make_unique<VP8Decoder>(
@@ -1430,6 +1486,7 @@ void V4L2SliceVideoDecodeAccelerator::CreateGLImageFor(
   DVLOGF(3) << "index=" << buffer_index;
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK_NE(texture_id, 0u);
+  DCHECK(gl_device->CanCreateEGLImageFrom(fourcc));
   TRACE_EVENT1("media,gpu", "V4L2SVDA::CreateGLImageFor", "picture_buffer_id",
                picture_buffer_id);
 
@@ -1445,16 +1502,14 @@ void V4L2SliceVideoDecodeAccelerator::CreateGLImageFor(
   }
 
   scoped_refptr<gpu::GLImageNativePixmap> gl_image =
-      gl_device->CreateGLImage(visible_size, fourcc, std::move(handle),
-                               gl_device->GetTextureTarget(), texture_id);
+      CreateGLImage(visible_size, fourcc, std::move(handle),
+                    gl_device->GetTextureTarget(), texture_id);
   if (!gl_image) {
     LOG(ERROR) << "Could not create GLImage,"
                << " index=" << buffer_index << " texture_id=" << texture_id;
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return;
   }
-  gl::ScopedTextureBinder bind_restore(gl_device->GetTextureTarget(),
-                                       texture_id);
   bool ret = bind_image_cb_.Run(client_texture_id,
                                 gl_device->GetTextureTarget(), gl_image);
   if (!ret) {

@@ -7,6 +7,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/cpp/request_destination.h"
 #include "services/network/public/cpp/request_mode.h"
+#include "services/network/public/mojom/attribution.mojom-blink.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink.h"
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -20,18 +21,18 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_signal.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_blob.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_form_data.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_private_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_readable_stream.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_request_init.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_trust_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_request_usvstring.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_url_search_params.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/fetch/attribution_reporting_to_mojom.h"
 #include "third_party/blink/renderer/core/fetch/blob_bytes_consumer.h"
 #include "third_party/blink/renderer/core/fetch/body_stream_buffer.h"
 #include "third_party/blink/renderer/core/fetch/fetch_manager.h"
 #include "third_party/blink/renderer/core/fetch/form_data_bytes_consumer.h"
-#include "third_party/blink/renderer/core/fetch/trust_token_issuance_authorization.h"
 #include "third_party/blink/renderer/core/fetch/trust_token_to_mojom.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/fileapi/public_url_manager.h"
@@ -103,6 +104,8 @@ FetchRequestData* CreateCopyOfFetchRequestDataForFetch(
   }
   request->SetWindowId(original->WindowId());
   request->SetTrustTokenParams(original->TrustTokenParams());
+  request->SetAttributionReportingEligibility(
+      original->AttributionReportingEligibility());
 
   // When a new request is created from another the destination is always reset
   // to be `kEmpty`.  In order to facilitate some later checks when a service
@@ -125,7 +128,7 @@ static bool AreAnyMembersPresent(const RequestInit* init) {
          init->hasCache() || init->hasRedirect() || init->hasIntegrity() ||
          init->hasKeepalive() || init->hasBrowsingTopics() ||
          init->hasPriority() || init->hasSignal() || init->hasDuplex() ||
-         init->hasTrustToken();
+         init->hasPrivateToken() || init->hasAttributionReporting();
 }
 
 static BodyStreamBuffer* ExtractBody(ScriptState* script_state,
@@ -474,9 +477,9 @@ Request* Request::CreateRequestWithRequestOrString(
   // present, and |unknown| otherwise."
   if (init->hasTargetAddressSpace()) {
     if (init->targetAddressSpace() == "local") {
-      request->SetTargetAddressSpace(network::mojom::IPAddressSpace::kLocal);
+      request->SetTargetAddressSpace(network::mojom::IPAddressSpace::kLoopback);
     } else if (init->targetAddressSpace() == "private") {
-      request->SetTargetAddressSpace(network::mojom::IPAddressSpace::kPrivate);
+      request->SetTargetAddressSpace(network::mojom::IPAddressSpace::kLocal);
     } else if (init->targetAddressSpace() == "public") {
       request->SetTargetAddressSpace(network::mojom::IPAddressSpace::kPublic);
     } else if (init->targetAddressSpace() == "unknown") {
@@ -575,13 +578,14 @@ Request* Request::CreateRequestWithRequestOrString(
     signal = init->signal();
   }
 
-  if (init->hasTrustToken()) {
+  if (init->hasPrivateToken()) {
     UseCounter::Count(ExecutionContext::From(script_state),
                       mojom::blink::WebFeature::kTrustTokenFetch);
 
     network::mojom::blink::TrustTokenParams params;
-    if (!ConvertTrustTokenToMojom(*init->trustToken(), &exception_state,
-                                  &params)) {
+    if (!ConvertTrustTokenToMojomAndCheckPermissions(
+            *init->privateToken(), execution_context, &exception_state,
+            &params)) {
       // Whenever parsing the trustToken argument fails, we expect a suitable
       // exception to be thrown.
       DCHECK(exception_state.HadException());
@@ -595,27 +599,21 @@ Request* Request::CreateRequestWithRequestOrString(
       return nullptr;
     }
 
-    if ((params.operation == TrustTokenOperationType::kRedemption ||
-         params.operation == TrustTokenOperationType::kSigning) &&
-        !execution_context->IsFeatureEnabled(
-            mojom::blink::PermissionsPolicyFeature::kTrustTokenRedemption)) {
-      exception_state.ThrowTypeError(
-          "trustToken: Redemption ('token-redemption') and signing "
-          "('send-redemption-record') operations require that the "
-          "trust-token-redemption "
-          "Permissions Policy feature be enabled.");
-      return nullptr;
-    }
-
-    if (params.operation == TrustTokenOperationType::kIssuance &&
-        !IsTrustTokenIssuanceAvailableInExecutionContext(*execution_context)) {
-      exception_state.ThrowTypeError(
-          "trustToken: Issuance ('token-request') is disabled except in "
-          "contexts with the TrustTokens Origin Trial enabled.");
-      return nullptr;
-    }
-
     request->SetTrustTokenParams(std::move(params));
+  }
+
+  if (init->hasAttributionReporting()) {
+    if (!execution_context->IsSecureContext()) {
+      exception_state.ThrowTypeError(
+          "attributionReporting: Attribution Reporting operations are only "
+          "available in secure contexts.");
+      return nullptr;
+    }
+
+    request->SetAttributionReportingEligibility(
+        ConvertAttributionReportingRequestOptionsToMojom(
+            *init->attributionReporting(), *execution_context,
+            exception_state));
   }
 
   // "Let |r| be a new Request object associated with |request| and a new
@@ -856,11 +854,11 @@ Request::Request(ScriptState* script_state,
                  FetchRequestData* request,
                  Headers* headers,
                  AbortSignal* signal)
-    : Body(ExecutionContext::From(script_state)),
+    : ActiveScriptWrappable<Request>({}),
+      Body(ExecutionContext::From(script_state)),
       request_(request),
       headers_(headers),
-      signal_(signal) {
-}
+      signal_(signal) {}
 
 Request::Request(ScriptState* script_state, FetchRequestData* request)
     : Request(script_state,
@@ -980,10 +978,10 @@ bool Request::keepalive() const {
 }
 String Request::targetAddressSpace() const {
   switch (request_->TargetAddressSpace()) {
+    case network::mojom::IPAddressSpace::kLoopback:
+      return "loopback";
     case network::mojom::IPAddressSpace::kLocal:
       return "local";
-    case network::mojom::IPAddressSpace::kPrivate:
-      return "private";
     case network::mojom::IPAddressSpace::kPublic:
       return "public";
     case network::mojom::IPAddressSpace::kUnknown:

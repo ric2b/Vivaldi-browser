@@ -9,12 +9,20 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.app.PendingIntent.CanceledException;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.IntentSender.SendIntentException;
+import android.graphics.Bitmap;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.Looper;
+import android.os.Parcelable;
+
+import androidx.core.os.BuildCompat;
 
 import org.junit.After;
 import org.junit.Before;
@@ -25,10 +33,14 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowPendingIntent;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Matchers;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -41,6 +53,8 @@ import org.chromium.ui.base.IntentRequestTracker;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.url.JUnitTestGURLs;
 
+import java.util.List;
+
 /**
  * Unit tests for static functions in {@link ShareHelper}.
  */
@@ -48,6 +62,11 @@ import org.chromium.url.JUnitTestGURLs;
 @Config(shadows = {ShadowPendingIntent.class})
 @Features.DisableFeatures(ChromeFeatureList.CHROME_SHARING_HUB_LAUNCH_ADJACENT)
 public class ShareHelperUnitTest {
+    private static final String INTENT_EXTRA_CHOOSER_CUSTOM_ACTIONS =
+            "android.intent.extra.CHOOSER_CUSTOM_ACTIONS";
+    private static final String KEY_CHOOSER_ACTION_ICON = "icon";
+    private static final String KEY_CHOOSER_ACTION_NAME = "name";
+    private static final String KEY_CHOOSER_ACTION_ACTION = "action";
     private static final String IMAGE_URI = "file://path/to/image.png";
     private static final ComponentName TEST_COMPONENT_NAME_1 =
             new ComponentName("test.package.one", "test.class.name.one");
@@ -71,7 +90,6 @@ public class ShareHelperUnitTest {
 
     @After
     public void tearDown() {
-        TargetChosenReceiver.resetForTesting();
         SharedPreferencesManager.getInstance().removeKey(
                 ChromePreferenceKeys.SHARING_LAST_SHARED_COMPONENT_NAME);
         mWindow.destroy();
@@ -80,7 +98,11 @@ public class ShareHelperUnitTest {
 
     @Test
     public void shareImageWithChooser() throws SendIntentException {
-        ShareHelper.shareImage(mWindow, null, null, mImageUri, JUnitTestGURLs.BLUE_1);
+        ShareParams params = new ShareParams.Builder(mWindow, "title", JUnitTestGURLs.BLUE_1)
+                                     .setBypassFixingDomDistillerUrl(true)
+                                     .setSingleImageUri(mImageUri)
+                                     .build();
+        ShareHelper.shareWithSystemShareSheetUi(params, null, true);
 
         Intent nextIntent = Shadows.shadowOf(mActivity).peekNextStartedActivity();
         assertNotNull("Shared intent is null.", nextIntent);
@@ -105,9 +127,12 @@ public class ShareHelperUnitTest {
     }
 
     @Test
-    public void shareImageWithComponentName() {
-        ShareHelper.shareImage(
-                mWindow, null, TEST_COMPONENT_NAME_1, mImageUri, JUnitTestGURLs.BLUE_1);
+    public void shareImageDirectly() {
+        ShareParams params = new ShareParams.Builder(mWindow, "title", JUnitTestGURLs.BLUE_1)
+                                     .setBypassFixingDomDistillerUrl(true)
+                                     .setSingleImageUri(mImageUri)
+                                     .build();
+        ShareHelper.shareDirectly(params, TEST_COMPONENT_NAME_1, null, false);
 
         Intent nextIntent = Shadows.shadowOf(mActivity).peekNextStartedActivity();
         assertNotNull("Shared intent is null.", nextIntent);
@@ -189,9 +214,99 @@ public class ShareHelperUnitTest {
                 nextIntent.getComponent());
     }
 
+    @Test
+    public void doNotTrustIntentWithoutTrustedExtra() throws CanceledException {
+        ShareHelper.shareWithSystemShareSheetUi(emptyShareParams(), null, true);
+
+        Intent nextIntent = Shadows.shadowOf(mActivity).peekNextStartedActivity();
+        assertNotNull("Shared intent is null.", nextIntent);
+
+        String packageName = ContextUtils.getApplicationContext().getPackageName();
+        Intent untrustedIntent = new Intent();
+        untrustedIntent.setPackage(packageName);
+        untrustedIntent.setAction(packageName + "/" + TargetChosenReceiver.class.getName()
+                + mActivity.getTaskId() + "_ACTION");
+        untrustedIntent.putExtra(Intent.EXTRA_CHOSEN_COMPONENT, TEST_COMPONENT_NAME_2);
+
+        PendingIntent
+                .getBroadcast(ContextUtils.getApplicationContext(), 0, untrustedIntent,
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_CANCEL_CURRENT)
+                .send();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertLastComponentNameRecorded(null);
+
+        Intent trustedIntent = new Intent(untrustedIntent);
+        IntentUtils.addTrustedIntentExtras(trustedIntent);
+        PendingIntent
+                .getBroadcast(ContextUtils.getApplicationContext(), 1, trustedIntent,
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_CANCEL_CURRENT)
+                .send();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertLastComponentNameRecorded(TEST_COMPONENT_NAME_2);
+    }
+
+    @Test
+    @Config(shadows = {ShadowBuildCompatForU.class, ShadowChooserActionHelper.class})
+    public void shareWithCustomActions() throws SendIntentException {
+        String actionKey = "key";
+        CallbackHelper callbackHelper = new CallbackHelper();
+        ChromeCustomShareAction.Provider provider =
+                new SingleCustomActionProvider(actionKey, callbackHelper);
+
+        ShareHelper.shareWithSystemShareSheetUi(emptyShareParams(), null, false, provider);
+
+        Intent nextIntent = Shadows.shadowOf(mActivity).peekNextStartedActivity();
+        assertNotNull("Shared intent is null.", nextIntent);
+        assertEquals(
+                "Intent is not a chooser intent.", Intent.ACTION_CHOOSER, nextIntent.getAction());
+        assertNotNull("Custom actions are not attached.",
+                nextIntent.getParcelableArrayExtra("android.intent.extra.CHOOSER_CUSTOM_ACTIONS"));
+
+        selectCustomActionFromChooserIntent(nextIntent, actionKey);
+        assertEquals("Custom action callback not called.", 1, callbackHelper.getCallCount());
+    }
+
+    @Test(expected = AssertionError.class)
+    public void customActionShouldNotUsedWhenNotSupported() {
+        ChromeCustomShareAction.Provider provider =
+                new SingleCustomActionProvider("key", new CallbackHelper());
+        ShareHelper.shareWithSystemShareSheetUi(emptyShareParams(), null, false, provider);
+    }
+
+    @Test
+    public void shareWithPreviewUri() {
+        ShareParams params = new ShareParams.Builder(mWindow, "title", JUnitTestGURLs.EXAMPLE_URL)
+                                     .setPreviewImageUri(mImageUri)
+                                     .setBypassFixingDomDistillerUrl(true)
+                                     .build();
+        ShareHelper.shareWithSystemShareSheetUi(params, null, true);
+
+        Intent nextIntent = Shadows.shadowOf(mActivity).peekNextStartedActivity();
+        assertNotNull("Shared intent is null.", nextIntent);
+        assertEquals(
+                "Intent is not a chooser intent.", Intent.ACTION_CHOOSER, nextIntent.getAction());
+
+        // Verify the intent has the right preview Uri.
+        Intent sharingIntent = nextIntent.getParcelableExtra(Intent.EXTRA_INTENT);
+        assertEquals("Intent is not a SEND intent.", Intent.ACTION_SEND, sharingIntent.getAction());
+        assertEquals("Preview image Uri not set correctly.", mImageUri,
+                sharingIntent.getClipData().getItemAt(0).getUri());
+    }
+
     private void selectComponentFromChooserIntent(Intent chooserIntent, ComponentName componentName)
             throws SendIntentException {
         Intent sendBackIntent = new Intent().putExtra(Intent.EXTRA_CHOSEN_COMPONENT, componentName);
+        IntentSender sender =
+                chooserIntent.getParcelableExtra(Intent.EXTRA_CHOSEN_COMPONENT_INTENT_SENDER);
+        sender.sendIntent(ContextUtils.getApplicationContext(), Activity.RESULT_OK, sendBackIntent,
+                null, null);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+    }
+
+    private void selectCustomActionFromChooserIntent(Intent chooserIntent, String action)
+            throws SendIntentException {
+        Intent sendBackIntent =
+                new Intent().putExtra(ShareHelper.EXTRA_SHARE_CUSTOM_ACTION, action);
         IntentSender sender =
                 chooserIntent.getParcelableExtra(Intent.EXTRA_CHOSEN_COMPONENT_INTENT_SENDER);
         sender.sendIntent(ContextUtils.getApplicationContext(), Activity.RESULT_OK, sendBackIntent,
@@ -206,5 +321,52 @@ public class ShareHelperUnitTest {
 
     private ShareParams emptyShareParams() {
         return new ShareParams.Builder(mWindow, "", "").build();
+    }
+
+    private static class SingleCustomActionProvider implements ChromeCustomShareAction.Provider {
+        private final CallbackHelper mCallbackHelper;
+        private final String mActionKey;
+
+        SingleCustomActionProvider(String actionKey, CallbackHelper callbackHelper) {
+            mCallbackHelper = callbackHelper;
+            mActionKey = actionKey;
+        }
+
+        @Override
+        public List<ChromeCustomShareAction> getCustomActions() {
+            return List.of(new ChromeCustomShareAction(mActionKey,
+                    Icon.createWithBitmap(Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)),
+                    "label", mCallbackHelper::notifyCalled));
+        }
+    }
+
+    // Work around shadow to assume runtime is at least U.
+    // TODO(https://crbug.com/1420388): Switch to @Config(sdk=34) this once API 34 exists.
+    @Implements(BuildCompat.class)
+    static class ShadowBuildCompatForU {
+        @Implementation
+        protected static boolean isAtLeastU() {
+            return true;
+        }
+    }
+
+    /**
+     * Test implementation to build a ChooserAction.
+     */
+    @Implements(ShareHelper.ChooserActionHelper.class)
+    static class ShadowChooserActionHelper {
+        @Implementation
+        protected static boolean isSupported() {
+            return true;
+        }
+
+        @Implementation
+        protected static Parcelable newChooserAction(Icon icon, String name, PendingIntent action) {
+            Bundle bundle = new Bundle();
+            bundle.putParcelable(KEY_CHOOSER_ACTION_ICON, icon);
+            bundle.putString(KEY_CHOOSER_ACTION_NAME, name);
+            bundle.putParcelable(KEY_CHOOSER_ACTION_ACTION, action);
+            return bundle;
+        }
     }
 }

@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/page_info/page_info_main_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_view_factory.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
@@ -82,8 +83,12 @@ class PageInfoBubbleViewDialogBrowserTest : public DialogBrowserTest {
     // launched. Disable features for the new version of "Cookies in use"
     // dialog. The new UI is covered by
     // PageInfoBubbleViewCookiesSubpageBrowserTest.
-    feature_list_.InitWithFeatures({}, {page_info::kPageSpecificSiteDataDialog,
-                                        page_info::kPageInfoCookiesSubpage});
+    feature_list_.InitWithFeatures(
+        {}, {page_info::kPageSpecificSiteDataDialog,
+             page_info::kPageInfoCookiesSubpage,
+             // TODO(crbug.com/1394910): Use HTTPS URLs in tests to avoid having
+             // to disable this feature.
+             features::kHttpsUpgrades});
   }
 
   PageInfoBubbleViewDialogBrowserTest(
@@ -521,17 +526,6 @@ class PageInfoBubbleViewAboutThisSiteDialogBrowserTest
 
     if (name == "AboutThisSite") {
       // No further action needed, default case.
-    } else if (name == "AboutThisSiteSubpage") {
-      auto* service =
-          AboutThisSiteServiceFactory::GetForProfile(browser()->profile());
-      auto source_id = browser()
-                           ->tab_strip_model()
-                           ->GetActiveWebContents()
-                           ->GetPrimaryMainFrame()
-                           ->GetPageUkmSourceId();
-      bubble_view->OpenAboutThisSitePage(
-          service->GetAboutThisSiteInfo(GetUrl(kAboutThisSiteUrl), source_id)
-              .value());
     } else {
       NOTREACHED();
     }
@@ -548,14 +542,6 @@ class PageInfoBubbleViewAboutThisSiteDialogBrowserTest
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteDialogBrowserTest,
                        InvokeUi_AboutThisSite) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteDialogBrowserTest,
-                       InvokeUi_AboutThisSiteSubpage) {
-  // The subpage only exists in the old UI.
-  if (base::FeatureList::IsEnabled(page_info::kPageInfoAboutThisSiteMoreInfo))
-    return;
   ShowAndVerifyUi();
 }
 
@@ -618,10 +604,9 @@ class PageInfoBubbleViewPrivacySandboxDialogBrowserTest
 
     if (name == "PrivacySandboxMain") {
       // No further action needed, default case.
-    } else if (name == "PrivacySandboxSubpage") {
-      bubble_view->OpenAdPersonalizationPage();
     } else {
-      NOTREACHED();
+      CHECK_EQ(name, "PrivacySandboxSubpage");
+      bubble_view->OpenAdPersonalizationPage();
     }
   }
 

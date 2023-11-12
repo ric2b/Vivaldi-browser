@@ -17,6 +17,7 @@
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/bookmarks/managed/managed_bookmark_service.h"
 
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
@@ -72,6 +73,10 @@ void PopulateBookmarkTreeNode(
 
   if (!node->is_folder()) {
     out_bookmark_tree_node->url = node->url().spec();
+    base::Time t = node->date_last_used();
+    if (!t.is_null()) {
+      out_bookmark_tree_node->date_last_used = floor(t.ToDoubleT() * 1000);
+    }
   } else {
     // Javascript Date wants milliseconds since the epoch, ToDoubleT is seconds.
     base::Time t = node->date_folder_modified();
@@ -101,7 +106,7 @@ void PopulateBookmarkTreeNode(
 
   if (bookmarks::IsDescendantOf(node, managed->managed_node())) {
     out_bookmark_tree_node->unmodifiable =
-        api::bookmarks::BOOKMARK_TREE_NODE_UNMODIFIABLE_MANAGED;
+        api::bookmarks::BookmarkTreeNodeUnmodifiable::kManaged;
   }
 
   if (recurse && node->is_folder()) {
@@ -153,7 +158,7 @@ bool RemoveNode(BookmarkModel* model,
     return false;
   }
 
-  model->Remove(node);
+  model->Remove(node, bookmarks::metrics::BookmarkEditSource::kExtension);
   return true;
 }
 

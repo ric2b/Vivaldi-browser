@@ -63,10 +63,6 @@ void FakeRemoteFrame::SetPageFocus(bool is_focused) {}
 
 void FakeRemoteFrame::RenderFallbackContent() {}
 
-void FakeRemoteFrame::RenderFallbackContentWithResourceTiming(
-    blink::mojom::ResourceTimingInfoPtr,
-    const std::string& server_timing_value) {}
-
 void FakeRemoteFrame::AddResourceTimingFromChild(
     blink::mojom::ResourceTimingInfoPtr timing) {}
 
@@ -109,4 +105,6 @@ void FakeRemoteFrame::CreateRemoteChild(
     blink::mojom::RemoteFrameInterfacesFromBrowserPtr remote_frame_interfaces) {
 }
 
+void FakeRemoteFrame::CreateRemoteChildren(
+    std::vector<blink::mojom::CreateRemoteChildParamsPtr> params) {}
 }  // namespace content

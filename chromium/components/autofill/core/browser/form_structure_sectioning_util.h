@@ -23,11 +23,12 @@ namespace autofill {
 //  2. All credit card fields are in one, distinct section, unless they have a
 //     valid autocomplete attribute section.
 //  3. All other fields that are focusable or <select> fields are partitioned
-//     into intervals, each of which is a section.
+//     into intervals, each of which is a section, and starts with a focusable
+//     field (i.e., it does not start with an unfocusable <select> field).
 //  4. All remaining fields are in one, distinct section.
 //
 // The basic idea of interval partitioning is to start a new section when the
-// same field type appears repeatedly. See `ShouldStartNewSection()` for the
+// same field type appears repeatedly. See `BelongsToCurrentSection()` for the
 // details.
 //
 // The motivation behind the special handling of credit card fields is that
@@ -111,6 +112,28 @@ namespace autofill {
 //   Name:      <input id=7>                               | field 5 based
 //   Country:   <input id=8>                               | field 5 based
 //   CC number: <input id=9>                               | field 5 based
+//   ------------------------------------------------------+-------------------
+//
+// d. `kAutofillSectioningModeExpandOverUnfocusableFields`: Without this
+//    parameter, unfocusable non-credit card fields are not sectioned. All such
+//    fields remain in the default section.
+//    When enabled, this parameter works like `kAutofillSectioningModeExpand`,
+//    except that it overwrites unfocsuable fields. In particular, it places
+//    non-focusable fields in the same section as the surrounding focusable
+//    fields.
+//    Contrary to `kAutofillSectioningModeExpand`, expanding the sections over
+//    unfocsuable fields happens after step 3, not after step 2.
+//    It doesn't make a difference on the "standard example" used above. In the
+//    following simpler example it assigns the "Country" field to the field 1
+//    based section.
+//
+//    Example:
+//   ------------------------------------------------------+-------------------
+//       HTML code                                         |      Section
+//   ------------------------------------------------------+-------------------
+//   Name:      <input id=1>                               | field 1 based
+//   Country:   <input id=2 style="display:none">          | field 1 based
+//   Street:    <input id=3>                               | field 1 based
 //   ------------------------------------------------------+-------------------
 void AssignSections(base::span<const std::unique_ptr<AutofillField>> fields);
 

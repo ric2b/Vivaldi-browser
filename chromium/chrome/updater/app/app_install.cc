@@ -91,15 +91,34 @@ AppInstall::AppInstall(SplashScreen::Maker splash_screen_maker,
     : splash_screen_maker_(std::move(splash_screen_maker)),
       app_install_controller_maker_(app_install_controller_maker),
       external_constants_(CreateExternalConstants()) {
-  DCHECK(splash_screen_maker_);
-  DCHECK(app_install_controller_maker_);
+  CHECK(splash_screen_maker_);
+  CHECK(app_install_controller_maker_);
 }
 
 AppInstall::~AppInstall() = default;
 
+void AppInstall::Initialize() {
+  setup_lock_ =
+      ScopedLock::Create(kSetupMutex, updater_scope(), kWaitForSetupLock);
+}
+
 void AppInstall::FirstTaskRun() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(base::SequencedTaskRunner::HasCurrentDefault());
+
+  if (WrongUser(updater_scope())) {
+    VLOG(0) << "The current user is not compatible with the current scope. "
+            << (updater_scope() == UpdaterScope::kSystem
+                    ? "Did you mean to run as admin/root?"
+                    : "Did you mean to run as a non-admin/non-root user?");
+    Shutdown(kErrorWrongUser);
+    return;
+  }
+
+  if (!setup_lock_) {
+    VLOG(0) << "Failed to acquire setup mutex; shutting down.";
+    Shutdown(kErrorFailedToLockSetupMutex);
+    return;
+  }
 
   const TagParsingResult tag_parsing_result =
       GetTagArgsForCommandLine(GetCommandLineLegacyCompatible());
@@ -113,7 +132,7 @@ void AppInstall::FirstTaskRun() {
       tag_parsing_result.tag_args.value_or(tagging::TagArgs());
   if (!tag_args.apps.empty()) {
     // TODO(crbug.com/1128631): support bundles. For now, assume one app.
-    DCHECK_EQ(tag_args.apps.size(), size_t{1});
+    CHECK_EQ(tag_args.apps.size(), size_t{1});
     const tagging::AppArgs& app_args = tag_args.apps.front();
     app_id_ = app_args.app_id;
     app_name_ = app_args.app_name;
@@ -178,8 +197,10 @@ void AppInstall::InstallCandidateDone(bool valid_version, int result) {
           base::BindOnce(
               [](UpdaterScope scope) {
                 scoped_refptr<GlobalPrefs> prefs = CreateGlobalPrefs(scope);
-                prefs->SetActiveVersion("");
-                PrefsCommitPendingWrites(prefs->GetPrefService());
+                if (prefs) {
+                  prefs->SetActiveVersion("");
+                  PrefsCommitPendingWrites(prefs->GetPrefService());
+                }
               },
               updater_scope()),
           base::BindOnce(&AppInstall::WakeCandidate, this));

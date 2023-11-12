@@ -17,6 +17,7 @@
 #include "services/network/public/mojom/http_raw_headers.mojom-forward.h"
 #include "services/network/public/mojom/ip_address_space.mojom-forward.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace network {
 
@@ -49,7 +50,7 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
       const absl::optional<net::CookiePartitionKey>& cookie_partition_key)
       override;
 
-  void OnPrivateNetworkRequest(
+  void OnLocalNetworkRequest(
       const absl::optional<std::string>& devtools_request_id,
       const GURL& url,
       bool is_warning,
@@ -114,7 +115,7 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
 
   void WaitUntilRawResponse(size_t goal);
   void WaitUntilRawRequest(size_t goal);
-  void WaitUntilPrivateNetworkRequest();
+  void WaitUntilLocalNetworkRequest();
   void WaitUntilCorsError();
 
   const net::CookieAndLineAccessResultList& raw_response_cookies() const {
@@ -148,15 +149,15 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
     return resource_address_space_;
   }
 
-  struct OnPrivateNetworkRequestParams {
-    OnPrivateNetworkRequestParams(
+  struct OnLocalNetworkRequestParams {
+    OnLocalNetworkRequestParams(
         const absl::optional<std::string>& devtools_request_id,
         const GURL& url,
         bool is_warning,
         network::mojom::IPAddressSpace resource_address_space,
         network::mojom::ClientSecurityStatePtr client_security_state);
-    OnPrivateNetworkRequestParams(OnPrivateNetworkRequestParams&&);
-    ~OnPrivateNetworkRequestParams();
+    OnLocalNetworkRequestParams(OnLocalNetworkRequestParams&&);
+    ~OnLocalNetworkRequestParams();
     absl::optional<std::string> devtools_request_id;
     GURL url;
     bool is_warning;
@@ -164,9 +165,9 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
     network::mojom::ClientSecurityStatePtr client_security_state;
   };
 
-  const absl::optional<OnPrivateNetworkRequestParams>&
-  private_network_request_params() const {
-    return params_of_private_network_request_;
+  const absl::optional<OnLocalNetworkRequestParams>&
+  local_network_request_params() const {
+    return params_of_local_network_request_;
   }
 
   struct OnCorsErrorParams {
@@ -179,7 +180,7 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
     absl::optional<::url::Origin> initiator_origin;
     mojom::ClientSecurityStatePtr client_security_state;
     GURL url;
-    network::CorsErrorStatus status;
+    absl::optional<network::CorsErrorStatus> status;
     bool is_warning = false;
   };
 
@@ -209,9 +210,8 @@ class MockDevToolsObserver : public mojom::DevToolsObserver {
   size_t wait_for_raw_request_goal_ = 0u;
   network::mojom::ClientSecurityStatePtr client_security_state_;
 
-  base::RunLoop wait_for_private_network_request_;
-  absl::optional<OnPrivateNetworkRequestParams>
-      params_of_private_network_request_;
+  base::RunLoop wait_for_local_network_request_;
+  absl::optional<OnLocalNetworkRequestParams> params_of_local_network_request_;
 
   base::RunLoop wait_for_cors_error_;
   absl::optional<OnCorsErrorParams> params_of_cors_error_;

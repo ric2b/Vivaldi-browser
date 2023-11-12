@@ -39,12 +39,12 @@ class TH_Storage : public base::ImportantFileWriter::DataSerializer {
   void OnModelWillBeDeleted();
 
   // ImportantFileWriter::DataSerializer implementation.
-  bool SerializeData(std::string* output) override;
+  absl::optional<std::string> SerializeData() override;
 
  private:
   friend class base::RefCountedThreadSafe<TH_Storage>;
 
-  TH_Model* model_;
+  raw_ptr<TH_Model> model_;
 
   // Sequenced task runner where file I/O operations will be performed at.
   scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;

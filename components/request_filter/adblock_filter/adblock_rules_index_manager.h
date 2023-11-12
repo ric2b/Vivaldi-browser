@@ -38,7 +38,7 @@ class RuleBufferHolder {
  private:
   std::string rule_buffer_;
   std::string checksum_;
-  const flat::RulesList* const rules_list_;
+  const raw_ptr<const flat::RulesList> rules_list_;
 };
 
 class RulesIndexManager : public RuleManager::Observer {

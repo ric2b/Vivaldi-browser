@@ -46,16 +46,19 @@ void IgnoreFileTaskExecuteResult(
 void ExecuteFileTaskForUrl(Profile* profile,
                            const file_tasks::TaskDescriptor& task,
                            const GURL& url) {
-  if (!shell_operations_allowed)
+  if (!shell_operations_allowed) {
     return;
+  }
   storage::FileSystemContext* file_system_context =
       GetFileManagerFileSystemContext(profile);
 
+  // There is no Files app window for spawned WebUI to be modal to.
+  gfx::NativeWindow modal_parent = nullptr;
   file_tasks::ExecuteFileTask(
       profile, task,
       std::vector<FileSystemURL>(
           1, file_system_context->CrackURLInFirstPartyContext(url)),
-      base::BindOnce(&IgnoreFileTaskExecuteResult));
+      modal_parent, base::BindOnce(&IgnoreFileTaskExecuteResult));
 }
 
 // Opens the file manager for the specified |url|. Used to implement
@@ -68,8 +71,9 @@ void OpenFileManagerWithInternalActionId(Profile* profile,
                                          const GURL& url,
                                          const std::string& action_id) {
   DCHECK(action_id == "open" || action_id == "select");
-  if (!shell_operations_allowed)
+  if (!shell_operations_allowed) {
     return;
+  }
   base::RecordAction(base::UserMetricsAction("ShowFileBrowserFullTab"));
 
   file_tasks::TaskDescriptor task(
@@ -91,14 +95,16 @@ void OpenFileMimeTypeAfterTasksListed(
         chosen_task = &task;
         break;
       }
-      if (!chosen_task)
+      if (!chosen_task) {
         chosen_task = &task;
+      }
     }
   }
 
   if (chosen_task != nullptr) {
-    if (shell_operations_allowed)
+    if (shell_operations_allowed) {
       ExecuteFileTaskForUrl(profile, chosen_task->task_descriptor, url);
+    }
     std::move(callback).Run(platform_util::OPEN_SUCCEEDED);
   } else {
     std::move(callback).Run(

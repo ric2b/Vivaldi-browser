@@ -14,12 +14,20 @@
 
 #include "absl/synchronization/internal/kernel_timeout.h"
 
+#ifndef _WIN32
+#include <sys/types.h>
+#endif
+
 #include <algorithm>
 #include <chrono>  // NOLINT(build/c++11)
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <limits>
 
+#include "absl/base/attributes.h"
+#include "absl/base/call_once.h"
 #include "absl/base/config.h"
 #include "absl/time/time.h"
 
@@ -31,6 +39,15 @@ namespace synchronization_internal {
 constexpr uint64_t KernelTimeout::kNoTimeout;
 constexpr int64_t KernelTimeout::kMaxNanos;
 #endif
+
+int64_t KernelTimeout::SteadyClockNow() {
+  if (!SupportsSteadyClock()) {
+    return absl::GetCurrentTimeNanos();
+  }
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
 
 KernelTimeout::KernelTimeout(absl::Time t) {
   // `absl::InfiniteFuture()` is a common "no timeout" value and cheaper to
@@ -73,12 +90,14 @@ KernelTimeout::KernelTimeout(absl::Duration d) {
     nanos = 0;
   }
 
-  // Values greater than or equal to kMaxNanos are converted to infinite.
-  if (nanos >= kMaxNanos) {
+  int64_t now = SteadyClockNow();
+  if (nanos > kMaxNanos - now) {
+    // Durations that would be greater than kMaxNanos are converted to infinite.
     rep_ = kNoTimeout;
     return;
   }
 
+  nanos += now;
   rep_ = (static_cast<uint64_t>(nanos) << 1) | uint64_t{1};
 }
 
@@ -87,9 +106,12 @@ int64_t KernelTimeout::MakeAbsNanos() const {
     return kMaxNanos;
   }
 
-  int64_t nanos = RawNanos();
+  int64_t nanos = RawAbsNanos();
 
   if (is_relative_timeout()) {
+    // We need to change epochs, because the relative timeout might be
+    // represented by an absolute timestamp from another clock.
+    nanos = std::max<int64_t>(nanos - SteadyClockNow(), 0);
     int64_t now = absl::GetCurrentTimeNanos();
     if (nanos > kMaxNanos - now) {
       // Overflow.
@@ -106,28 +128,52 @@ int64_t KernelTimeout::MakeAbsNanos() const {
   return nanos;
 }
 
+int64_t KernelTimeout::InNanosecondsFromNow() const {
+  if (!has_timeout()) {
+    return kMaxNanos;
+  }
+
+  int64_t nanos = RawAbsNanos();
+  if (is_absolute_timeout()) {
+    return std::max<int64_t>(nanos - absl::GetCurrentTimeNanos(), 0);
+  }
+  return std::max<int64_t>(nanos - SteadyClockNow(), 0);
+}
+
 struct timespec KernelTimeout::MakeAbsTimespec() const {
   return absl::ToTimespec(absl::Nanoseconds(MakeAbsNanos()));
 }
 
 struct timespec KernelTimeout::MakeRelativeTimespec() const {
+  return absl::ToTimespec(absl::Nanoseconds(InNanosecondsFromNow()));
+}
+
+#ifndef _WIN32
+struct timespec KernelTimeout::MakeClockAbsoluteTimespec(clockid_t c) const {
   if (!has_timeout()) {
     return absl::ToTimespec(absl::Nanoseconds(kMaxNanos));
   }
-  if (is_relative_timeout()) {
-    return absl::ToTimespec(absl::Nanoseconds(RawNanos()));
+
+  int64_t nanos = RawAbsNanos();
+  if (is_absolute_timeout()) {
+    nanos -= absl::GetCurrentTimeNanos();
+  } else {
+    nanos -= SteadyClockNow();
   }
 
-  int64_t nanos = RawNanos();
-  int64_t now = absl::GetCurrentTimeNanos();
-  if (now > nanos) {
-    // Convert past values to 0 to be safe.
-    nanos = 0;
-  } else {
-    nanos -= now;
+  struct timespec now;
+  ABSL_RAW_CHECK(clock_gettime(c, &now) == 0, "clock_gettime() failed");
+  absl::Duration from_clock_epoch =
+      absl::DurationFromTimespec(now) + absl::Nanoseconds(nanos);
+  if (from_clock_epoch <= absl::ZeroDuration()) {
+    // Some callers have assumed that 0 means no timeout, so instead we return a
+    // time of 1 nanosecond after the epoch. For safety we also do not return
+    // negative values.
+    return absl::ToTimespec(absl::Nanoseconds(1));
   }
-  return absl::ToTimespec(absl::Nanoseconds(nanos));
+  return absl::ToTimespec(from_clock_epoch);
 }
+#endif
 
 KernelTimeout::DWord KernelTimeout::InMillisecondsFromNow() const {
   constexpr DWord kInfinite = std::numeric_limits<DWord>::max();
@@ -136,32 +182,21 @@ KernelTimeout::DWord KernelTimeout::InMillisecondsFromNow() const {
     return kInfinite;
   }
 
-  const int64_t nanos = RawNanos();
-  constexpr uint64_t kNanosInMillis = uint64_t{1000000};
+  constexpr uint64_t kNanosInMillis = uint64_t{1'000'000};
+  constexpr uint64_t kMaxValueNanos =
+      std::numeric_limits<int64_t>::max() - kNanosInMillis + 1;
 
-  if (is_relative_timeout()) {
-    uint64_t ms = static_cast<uint64_t>(nanos) / kNanosInMillis;
-    if (ms > static_cast<uint64_t>(kInfinite)) {
-      ms = static_cast<uint64_t>(kInfinite);
-    }
-    return static_cast<DWord>(ms);
+  uint64_t ns_from_now = static_cast<uint64_t>(InNanosecondsFromNow());
+  if (ns_from_now >= kMaxValueNanos) {
+    // Rounding up would overflow.
+    return kInfinite;
   }
-
-  int64_t now = absl::GetCurrentTimeNanos();
-  if (nanos >= now) {
-    // Round up so that now + ms_from_now >= nanos.
-    constexpr uint64_t kMaxValueNanos =
-        std::numeric_limits<int64_t>::max() - kNanosInMillis + 1;
-    uint64_t ms_from_now =
-        (std::min(kMaxValueNanos, static_cast<uint64_t>(nanos - now)) +
-         kNanosInMillis - 1) /
-        kNanosInMillis;
-    if (ms_from_now > kInfinite) {
-      return kInfinite;
-    }
-    return static_cast<DWord>(ms_from_now);
+  // Convert to milliseconds, always rounding up.
+  uint64_t ms_from_now = (ns_from_now + kNanosInMillis - 1) / kNanosInMillis;
+  if (ms_from_now > kInfinite) {
+    return kInfinite;
   }
-  return DWord{0};
+  return static_cast<DWord>(ms_from_now);
 }
 
 std::chrono::time_point<std::chrono::system_clock>
@@ -174,16 +209,7 @@ KernelTimeout::ToChronoTimePoint() const {
   // std::ratio used by std::chrono::steady_clock doesn't convert to
   // std::nanoseconds, so it doesn't compile.
   auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::nanoseconds(RawNanos()));
-  if (is_relative_timeout()) {
-    auto now = std::chrono::system_clock::now();
-    if (micros >
-        std::chrono::time_point<std::chrono::system_clock>::max() - now) {
-      // Overflow.
-      return std::chrono::time_point<std::chrono::system_clock>::max();
-    }
-    return now + micros;
-  }
+      std::chrono::nanoseconds(MakeAbsNanos()));
   return std::chrono::system_clock::from_time_t(0) + micros;
 }
 
@@ -191,17 +217,7 @@ std::chrono::nanoseconds KernelTimeout::ToChronoDuration() const {
   if (!has_timeout()) {
     return std::chrono::nanoseconds::max();
   }
-  if (is_absolute_timeout()) {
-    auto d = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::nanoseconds(RawNanos()) -
-        (std::chrono::system_clock::now() -
-         std::chrono::system_clock::from_time_t(0)));
-    if (d < std::chrono::nanoseconds(0)) {
-      d = std::chrono::nanoseconds(0);
-    }
-    return d;
-  }
-  return std::chrono::nanoseconds(RawNanos());
+  return std::chrono::nanoseconds(InNanosecondsFromNow());
 }
 
 }  // namespace synchronization_internal

@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
@@ -44,6 +45,10 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/jni_array.h"
 #include "components/signin/public/android/jni_headers/AccountTrackerService_jni.h"
+#endif
+
+#if !(BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS))
+#include "components/supervised_user/core/common/features.h"
 #endif
 
 namespace {
@@ -105,8 +110,7 @@ bool SaveImage(scoped_refptr<base::RefCountedMemory> png_data,
     LOG(ERROR) << "Failed to create parent directory of: " << image_path;
     return false;
   }
-  if (base::WriteFile(image_path, png_data->front_as<char>(),
-                      png_data->size()) == -1) {
+  if (!base::WriteFile(image_path, *png_data)) {
     LOG(ERROR) << "Failed to save image to file: " << image_path;
     return false;
   }
@@ -289,6 +293,8 @@ void AccountTrackerService::StartTrackingAccount(
     const CoreAccountId& account_id) {
   if (!base::Contains(accounts_, account_id)) {
     DVLOG(1) << "StartTracking " << account_id;
+    base::UmaHistogramBoolean("Signin.AccountTracker.IsAccountIdEmpty",
+                              account_id.empty());
     AccountInfo account_info;
     account_info.account_id = account_id;
     accounts_.insert(std::make_pair(account_id, account_info));
@@ -362,6 +368,17 @@ void AccountTrackerService::SetAccountCapabilities(
   bool modified = account_info.capabilities.UpdateWith(account_capabilities);
   if (!modified)
     return;
+
+#if !(BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS))
+  // Set the child account status based on the account capabilities.
+  if (base::FeatureList::IsEnabled(
+          supervised_user::kEnableSupervisionOnDesktopAndIOS)) {
+    SetIsChildAccount(
+        account_id,
+        account_info.capabilities.is_subject_to_parental_controls() ==
+            signin::Tribool::kTrue);
+  }
+#endif
 
   if (!account_info.gaia.empty())
     NotifyAccountUpdated(account_info);

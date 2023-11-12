@@ -29,7 +29,7 @@ const std::u16string TitledUrlNode::GetTitledUrlNodeDescription() const {
 // > vivaldi_namespace = uuid.uuid5(uuid.NAMESPACE_DNS, "vivaldi.com")
 // > bookmarks_namespace = uuid.uuid5(vivaldi_namespace, "bookmarks")
 // > trash_guid = uuid.uuid5(bookmarks_namespace, "trash")
-const char BookmarkNode::kVivaldiTrashNodeGuid[] =
+const char BookmarkNode::kVivaldiTrashNodeUuid[] =
     "9f32a0fb-bfd9-5032-be46-07afe4a25400";
 
 const std::u16string BookmarkNode::GetTitledUrlNodeNickName() const {
@@ -46,7 +46,7 @@ std::unique_ptr<BookmarkPermanentNode> BookmarkPermanentNode::CreateTrashFolder(
     bool visible_when_empty) {
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new BookmarkPermanentNode(
-      id, TRASH, base::GUID::ParseLowercase(kVivaldiTrashNodeGuid),
+      id, TRASH, base::GUID::ParseLowercase(kVivaldiTrashNodeUuid),
       l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME),
       visible_when_empty));
 }

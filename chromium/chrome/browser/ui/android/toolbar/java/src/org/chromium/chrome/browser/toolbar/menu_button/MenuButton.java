@@ -127,6 +127,9 @@ public class MenuButton extends FrameLayout implements TintObserver {
                             .getDefaultColor();
         mMenuImageButtonAnimationDrawable.setColorFilter(color, PorterDuff.Mode.SRC_IN);
 
+        // Not reliably set in tests.
+        if (mStateSupplier == null) return;
+
         // As an optimization, don't re-calculate drawable state for the update badge unless we
         // intend to actually show it.
         // Note(david@vivaldi.com): When the button is placed in the tab switcher |mStateSupplier|

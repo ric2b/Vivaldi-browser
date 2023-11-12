@@ -20,11 +20,10 @@ group("main_settings") {
   ]
 }
 
-imageset("chrome_icon") {
+imageset("vivaldi_icon") {
   sources = [
-    "chrome_icon.imageset/Contents.json",
-    "chrome_icon.imageset/chrome_icon@2x.png",
-    "chrome_icon.imageset/chrome_icon@3x.png",
+    "vivaldi_icon.imageset/Contents.json",
+    "vivaldi_icon.imageset/vivaldi_icon.pdf",
   ]
 }
 

@@ -313,7 +313,7 @@ std::u16string CardUnmaskPromptControllerImpl::GetCardLastFourDigits() const {
 }
 
 std::u16string CardUnmaskPromptControllerImpl::GetCardExpiration() const {
-  return card_.ExpirationDateForDisplay();
+  return card_.AbbreviatedExpirationDateForDisplay(false);
 }
 
 const GURL& CardUnmaskPromptControllerImpl::GetCardArtUrl() const {
@@ -331,6 +331,12 @@ bool CardUnmaskPromptControllerImpl::ShouldOfferWebauthn() const {
 bool CardUnmaskPromptControllerImpl::GetWebauthnOfferStartState() const {
   return pref_service_->GetBoolean(
       prefs::kAutofillCreditCardFidoAuthOfferCheckboxState);
+}
+
+std::u16string CardUnmaskPromptControllerImpl::GetCvcImageAnnouncement() const {
+  return l10n_util::GetStringUTF16(
+      IsCvcInFront() ? IDS_AUTOFILL_CARD_UNMASK_CVC_IMAGE_ANNOUNCEMENT_AMEX
+                     : IDS_AUTOFILL_CARD_UNMASK_CVC_IMAGE_ANNOUNCEMENT);
 }
 #endif
 

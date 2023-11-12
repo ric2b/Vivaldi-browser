@@ -23,6 +23,7 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/ranges/algorithm.h"
@@ -134,6 +135,12 @@ const char* const kModelIdsBlockedForMediaFoundation[] = {
     // ACER Aspire VN7-571G. See https://crbug.com/1327948.
     "04f2:b469"};
 
+// Use this list only for USB webcams.
+const char* const kModelIdsBlockedForMediaFoundationD3D11VideoCapture[] = {
+    // D3D11 calls on textures produced by these cameras take so much time
+    // that MFCaptureEngine fails with E_MF_SAMPLEALLOCATOREMPTY error
+    "05a3:9331", "04f2:b6bf"};
+
 // Use this list only for non-USB webcams.
 const char* const kDisplayNamesBlockedForMediaFoundation[] = {
     // VMware Virtual Webcams cause hangs when there is no physical Webcam.
@@ -179,9 +186,21 @@ bool IsDeviceBlockedForMediaFoundationByModelId(const std::string& model_id) {
   return base::Contains(kModelIdsBlockedForMediaFoundation, model_id);
 }
 
+bool IsDeviceBlockedForMediaFoundationD3D11ByModelId(
+    const std::string& model_id) {
+  return base::Contains(kModelIdsBlockedForMediaFoundationD3D11VideoCapture,
+                        model_id);
+}
+
 bool IsDeviceBlockedForMediaFoundationByDisplayName(
     const std::string& display_name) {
   return base::Contains(kDisplayNamesBlockedForMediaFoundation, display_name);
+}
+
+HMODULE ExpandEnvironmentStringsAndLoadLibrary(const wchar_t* path) {
+  wchar_t expanded_path[MAX_PATH] = {0};
+  ExpandEnvironmentStringsW(path, expanded_path, std::size(expanded_path));
+  return LoadLibraryExW(expanded_path, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
 }
 
 bool LoadMediaFoundationDlls() {
@@ -194,12 +213,19 @@ bool LoadMediaFoundationDlls() {
   // (http://crbug/973868).
   SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY_REPEATEDLY();
 
+  // Load required DLLs.
   for (const wchar_t* kMfDLL : kMfDLLs) {
-    wchar_t path[MAX_PATH] = {0};
-    ExpandEnvironmentStringsW(kMfDLL, path, std::size(path));
-    if (!LoadLibraryExW(path, nullptr, LOAD_WITH_ALTERED_SEARCH_PATH))
+    if (!ExpandEnvironmentStringsAndLoadLibrary(kMfDLL)) {
       return false;
+    }
   }
+
+  // Load optional DLLs whose availability depends on Windows version.
+  if (base::win::GetVersion() >= base::win::Version::WIN11_22H2) {
+    ExpandEnvironmentStringsAndLoadLibrary(
+        L"%WINDIR%\\system32\\mfsensorgroup.dll");
+  }
+
   return true;
 }
 
@@ -283,15 +309,6 @@ DevicesInfo::const_iterator FindNonDirectShowDeviceInfoByNameAndModel(
       });
 }
 
-bool IsEnclosureLocationSupported() {
-  if (!base::win::ResolveCoreWinRTDelayload()) {
-    DLOG(ERROR) << "Failed loading functions from combase.dll";
-    return false;
-  }
-
-  return true;
-}
-
 void FindAndSetDefaultVideoCamera(
     std::vector<VideoCaptureDeviceInfo>* devices_info) {
   // When available, the default video camera should be external with
@@ -313,6 +330,34 @@ void FindAndSetDefaultVideoCamera(
 
 }  // namespace
 
+class VideoCaptureDeviceFactoryWin::ComThreadData
+    : public base::RefCountedThreadSafe<ComThreadData> {
+ public:
+  ComThreadData(base::WeakPtr<VideoCaptureDeviceFactoryWin> device_factory,
+                scoped_refptr<base::SingleThreadTaskRunner> com_thread_runner,
+                scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner)
+      : device_factory_(std::move(device_factory)),
+        com_thread_runner_(std::move(com_thread_runner)),
+        origin_task_runner_(std::move(origin_task_runner)) {}
+
+  void EnumerateDevicesUWP(std::vector<VideoCaptureDeviceInfo> devices_info,
+                           GetDevicesInfoCallback result_callback);
+
+  void FoundAllDevicesUWP(
+      std::vector<VideoCaptureDeviceInfo> devices_info,
+      GetDevicesInfoCallback result_callback,
+      IAsyncOperation<DeviceInformationCollection*>* operation);
+
+ private:
+  friend class base::RefCountedThreadSafe<ComThreadData>;
+  ~ComThreadData() = default;
+
+  std::unordered_set<IAsyncOperation<DeviceInformationCollection*>*> async_ops_;
+  base::WeakPtr<VideoCaptureDeviceFactoryWin> device_factory_;
+  scoped_refptr<base::SingleThreadTaskRunner> com_thread_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> origin_task_runner_;
+};
+
 // Returns true if the current platform supports the Media Foundation API
 // and that the DLLs are available.  On Vista this API is an optional download
 // but the API is advertised as a part of Windows 7 and onwards.  However,
@@ -321,7 +366,7 @@ void FindAndSetDefaultVideoCamera(
 // static
 bool VideoCaptureDeviceFactoryWin::PlatformSupportsMediaFoundation() {
   static const bool has_media_foundation =
-      LoadMediaFoundationDlls() && InitializeMediaFoundation();
+      InitializeMediaFoundation() && LoadMediaFoundationDlls();
   return has_media_foundation;
 }
 
@@ -355,12 +400,18 @@ VideoCaptureErrorOrDevice VideoCaptureDeviceFactoryWin::CreateDevice(
     case VideoCaptureApi::WIN_MEDIA_FOUNDATION_SENSOR: {
       DCHECK(PlatformSupportsMediaFoundation());
       ComPtr<IMFMediaSource> source;
+      const bool banned_for_d3d11 =
+          IsDeviceBlockedForMediaFoundationD3D11ByModelId(
+              GetDeviceModelId(device_descriptor.device_id));
+
       MFSourceOutcome outcome = CreateDeviceSourceMediaFoundation(
-          device_descriptor.device_id, device_descriptor.capture_api, &source);
+          device_descriptor.device_id, device_descriptor.capture_api,
+          banned_for_d3d11, &source);
       switch (outcome) {
         case MFSourceOutcome::kSuccess: {
           auto device = std::make_unique<VideoCaptureDeviceMFWin>(
-              device_descriptor, std::move(source), dxgi_device_manager_,
+              device_descriptor, std::move(source),
+              banned_for_d3d11 ? nullptr : dxgi_device_manager_,
               base::SingleThreadTaskRunner::GetCurrentDefault());
           DVLOG(1) << " MediaFoundation Device: "
                    << device_descriptor.display_name();
@@ -500,6 +551,7 @@ bool VideoCaptureDeviceFactoryWin::CreateDeviceFilterDirectShow(
 MFSourceOutcome VideoCaptureDeviceFactoryWin::CreateDeviceSourceMediaFoundation(
     const std::string& device_id,
     VideoCaptureApi capture_api,
+    const bool banned_for_d3d11,
     IMFMediaSource** source) {
   DCHECK(source);
   DCHECK(!*source);
@@ -520,11 +572,13 @@ MFSourceOutcome VideoCaptureDeviceFactoryWin::CreateDeviceSourceMediaFoundation(
   attributes->SetString(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
                         base::SysUTF8ToWide(device_id).c_str());
 
-  return CreateDeviceSourceMediaFoundation(std::move(attributes), source);
+  return CreateDeviceSourceMediaFoundation(std::move(attributes),
+                                           banned_for_d3d11, source);
 }
 
 MFSourceOutcome VideoCaptureDeviceFactoryWin::CreateDeviceSourceMediaFoundation(
     ComPtr<IMFAttributes> attributes,
+    const bool banned_for_d3d11,
     IMFMediaSource** source_out) {
   ComPtr<IMFMediaSource> source;
   HRESULT hr = MFCreateDeviceSource(attributes.Get(), &source);
@@ -534,7 +588,7 @@ MFSourceOutcome VideoCaptureDeviceFactoryWin::CreateDeviceSourceMediaFoundation(
     return MFSourceOutcome::kFailedSystemPermissions;
 
   if (SUCCEEDED(hr) && use_d3d11_with_media_foundation_ &&
-      dxgi_device_manager_) {
+      dxgi_device_manager_ && !banned_for_d3d11) {
     dxgi_device_manager_->RegisterWithMediaSource(source);
   }
   *source_out = source.Detach();
@@ -565,41 +619,36 @@ void VideoCaptureDeviceFactoryWin::GetDevicesInfo(
     devices_info = GetDevicesInfoDirectShow(devices_info);
   }
 
-  if (IsEnclosureLocationSupported()) {
-    origin_task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
-    com_thread_.init_com_with_mta(true);
-    com_thread_.Start();
-    com_thread_.task_runner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&VideoCaptureDeviceFactoryWin::EnumerateDevicesUWP,
-                       base::Unretained(this), std::move(devices_info),
-                       std::move(callback)));
-  } else {
-    DeviceInfoReady(std::move(devices_info), std::move(callback));
-  }
+  com_thread_.init_com_with_mta(true);
+  com_thread_.Start();
+  com_thread_data_ =
+      base::MakeRefCounted<VideoCaptureDeviceFactoryWin::ComThreadData>(
+          weak_ptr_factory_.GetWeakPtr(), com_thread_.task_runner(),
+          base::SingleThreadTaskRunner::GetCurrentDefault());
+  com_thread_.task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &VideoCaptureDeviceFactoryWin::ComThreadData::EnumerateDevicesUWP,
+          com_thread_data_, std::move(devices_info), std::move(callback)));
 }
 
-void VideoCaptureDeviceFactoryWin::EnumerateDevicesUWP(
+void VideoCaptureDeviceFactoryWin::ComThreadData::EnumerateDevicesUWP(
     std::vector<VideoCaptureDeviceInfo> devices_info,
     GetDevicesInfoCallback result_callback) {
   DCHECK_GE(base::win::OSInfo::GetInstance()->version_number().build, 10240u);
-
-  VideoCaptureDeviceFactoryWin* factory = this;
-  scoped_refptr<base::SingleThreadTaskRunner> com_thread_runner =
-      com_thread_.task_runner();
 
   // The |device_info_callback| created by base::BindRepeating() is copyable,
   // which is necessary for the below lambda function of |callback| for the
   // asynchronous operation. The reason is to permanently capture anything in a
   // lambda, it must be copyable, merely movable is insufficient.
   auto device_info_callback = base::BindRepeating(
-      &VideoCaptureDeviceFactoryWin::FoundAllDevicesUWP,
-      base::Unretained(factory), base::Passed(&devices_info),
+      &VideoCaptureDeviceFactoryWin::ComThreadData::FoundAllDevicesUWP,
+      scoped_refptr<ComThreadData>(this), base::Passed(&devices_info),
       base::Passed(&result_callback));
   auto callback = Microsoft::WRL::Callback<
       ABI::Windows::Foundation::IAsyncOperationCompletedHandler<
           DeviceInformationCollection*>>(
-      [com_thread_runner, device_info_callback](
+      [com_thread_runner = com_thread_runner_, device_info_callback](
           IAsyncOperation<DeviceInformationCollection*>* operation,
           AsyncStatus status) -> HRESULT {
         com_thread_runner->PostTask(
@@ -642,7 +691,7 @@ void VideoCaptureDeviceFactoryWin::EnumerateDevicesUWP(
   async_ops_.insert(async_op);
 }
 
-void VideoCaptureDeviceFactoryWin::FoundAllDevicesUWP(
+void VideoCaptureDeviceFactoryWin::ComThreadData::FoundAllDevicesUWP(
     std::vector<VideoCaptureDeviceInfo> devices_info,
     GetDevicesInfoCallback result_callback,
     IAsyncOperation<DeviceInformationCollection*>* operation) {
@@ -650,7 +699,7 @@ void VideoCaptureDeviceFactoryWin::FoundAllDevicesUWP(
     origin_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&VideoCaptureDeviceFactoryWin::DeviceInfoReady,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(devices_info),
+                       device_factory_, std::move(devices_info),
                        std::move(result_callback)));
     return;
   }
@@ -714,10 +763,9 @@ void VideoCaptureDeviceFactoryWin::FoundAllDevicesUWP(
   FindAndSetDefaultVideoCamera(&devices_info);
 
   origin_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&VideoCaptureDeviceFactoryWin::DeviceInfoReady,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(devices_info),
-                     std::move(result_callback)));
+      FROM_HERE, base::BindOnce(&VideoCaptureDeviceFactoryWin::DeviceInfoReady,
+                                device_factory_, std::move(devices_info),
+                                std::move(result_callback)));
 
   auto it = async_ops_.find(operation);
   DCHECK(it != async_ops_.end());
@@ -730,6 +778,7 @@ void VideoCaptureDeviceFactoryWin::DeviceInfoReady(
     GetDevicesInfoCallback result_callback) {
   if (com_thread_.IsRunning()) {
     com_thread_.Stop();
+    com_thread_data_.reset();
   }
 
   std::move(result_callback).Run(std::move(devices_info));
@@ -788,13 +837,15 @@ DevicesInfo VideoCaptureDeviceFactoryWin::GetDevicesInfoMediaFoundation() {
             ComPtr<IMFMediaSource> source;
             VideoCaptureControlSupport control_support;
             VideoCaptureFormats supported_formats;
+            const bool banned_for_d3d11 =
+                IsDeviceBlockedForMediaFoundationD3D11ByModelId(model_id);
             if (CreateDeviceSourceMediaFoundation(
-                    device_id, api_attributes.first, &source) ==
-                MFSourceOutcome::kSuccess) {
+                    device_id, api_attributes.first, banned_for_d3d11,
+                    &source) == MFSourceOutcome::kSuccess) {
               control_support =
                   VideoCaptureDeviceMFWin::GetControlSupport(source);
-              supported_formats =
-                  GetSupportedFormatsMediaFoundation(source, display_name);
+              supported_formats = GetSupportedFormatsMediaFoundation(
+                  source, banned_for_d3d11, display_name);
             }
             devices_info.emplace_back(VideoCaptureDeviceDescriptor(
                 display_name, device_id, model_id, api_attributes.first,
@@ -952,9 +1003,12 @@ VideoCaptureFormats VideoCaptureDeviceFactoryWin::GetSupportedFormatsDirectShow(
 VideoCaptureFormats
 VideoCaptureDeviceFactoryWin::GetSupportedFormatsMediaFoundation(
     ComPtr<IMFMediaSource> source,
+    const bool banned_for_d3d11,
     const std::string& display_name) {
   ComPtr<IMFAttributes> source_reader_attributes;
-  if (dxgi_device_manager_) {
+  const bool dxgi_device_manager_available =
+      (dxgi_device_manager_ != nullptr) && !banned_for_d3d11;
+  if (dxgi_device_manager_available) {
     dxgi_device_manager_->RegisterWithMediaSource(source);
 
     HRESULT hr = MFCreateAttributes(&source_reader_attributes, 1);
@@ -980,7 +1034,7 @@ VideoCaptureDeviceFactoryWin::GetSupportedFormatsMediaFoundation(
 
   DWORD stream_index = 0;
   ComPtr<IMFMediaType> type;
-  const bool dxgi_device_manager_available = dxgi_device_manager_ != nullptr;
+
   while (SUCCEEDED(hr = reader->GetNativeMediaType(
                        static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM),
                        stream_index, &type))) {

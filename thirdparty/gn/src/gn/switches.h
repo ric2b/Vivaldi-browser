@@ -114,6 +114,10 @@ extern const char kDefaultToolchain[];
 // so it can be shared between command_gen and ninja_build_writer.
 extern const char kRegeneration[];
 
+// This switch is read by Setup so needs to be in this global place, but is
+// relevant only by command_gen so is documented there.
+extern const char kAddExportCompileCommands[];
+
 }  // namespace switches
 
 #endif  // TOOLS_GN_SWITCHES_H_

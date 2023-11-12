@@ -92,9 +92,14 @@ bool Visibility::CheckItemVisibility(const Item* from,
                                      const Item* to,
                                      Err* err) {
   if (!to->visibility().CanSeeMe(from->label())) {
-    std::string to_label = to->label().GetUserVisibleName(false);
+    bool with_toolchain = from->settings()->ShouldShowToolchain({
+        &to->label(),
+        &from->label(),
+    });
+    std::string to_label = to->label().GetUserVisibleName(with_toolchain);
+    std::string from_label = from->label().GetUserVisibleName(with_toolchain);
     *err = Err(from->defined_from(), "Dependency not allowed.",
-               "The item " + from->label().GetUserVisibleName(false) +
+               "The item " + from_label +
                    "\n"
                    "can not depend on " +
                    to_label +

@@ -10,9 +10,9 @@
 #import "components/prefs/pref_registry_simple.h"
 #import "components/prefs/testing_pref_service.h"
 #import "ios/chrome/browser/bookmarks/bookmark_ios_unit_test_support.h"
-#import "ios/chrome/browser/ui/commands/bookmark_add_command.h"
-#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
-#import "ios/chrome/browser/ui/util/url_with_title.h"
+#import "ios/chrome/browser/shared/public/commands/bookmark_add_command.h"
+#import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
+#import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -57,7 +57,7 @@ class BookmarkActivityTest : public BookmarkIOSUnitTestSupport {
   BookmarkActivity* CreateActivity(const GURL& URL) {
     return [[BookmarkActivity alloc] initWithURL:URL
                                            title:kTestTitle
-                                   bookmarkModel:bookmark_model_
+                                   bookmarkModel:profile_bookmark_model_
                                          handler:mocked_handler_
                                      prefService:&testing_pref_service_];
   }
@@ -106,8 +106,8 @@ TEST_F(BookmarkActivityTest, ActivityTitle_AddBookmark) {
 TEST_F(BookmarkActivityTest, ActivityTitle_EditBookmark) {
   // Add a bookmark.
   const bookmarks::BookmarkNode* bookmark =
-      AddBookmark(bookmark_model_->mobile_node(), @"activity_test");
-  ASSERT_TRUE(bookmark_model_->IsBookmarked(bookmark->url()));
+      AddBookmark(profile_bookmark_model_->mobile_node(), @"activity_test");
+  ASSERT_TRUE(profile_bookmark_model_->IsBookmarked(bookmark->url()));
 
   BookmarkActivity* activity = CreateActivity(bookmark->url());
 

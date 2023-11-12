@@ -190,9 +190,9 @@ void OfflinePageTabHelper::DidStartNavigation(web::WebState* web_state,
         context->GetPageTransition(), ui::PAGE_TRANSITION_RELOAD);
     is_offline_navigation_ =
         reading_list::IsOfflineEntryURL(initial_navigation_url_);
+    navigation_transition_type_ = context->GetPageTransition();
     is_new_navigation_ =
         ui::PageTransitionIsNewNavigation(navigation_transition_type_);
-    navigation_transition_type_ = context->GetPageTransition();
     navigation_is_renderer_initiated_ = context->IsRendererInitiated();
   }
 
@@ -217,7 +217,7 @@ void OfflinePageTabHelper::DidFinishNavigation(
   if (reading_list::IsOfflineReloadURL(navigation_context->GetUrl())) {
     if (dont_reload_online_on_next_navigation_) {
       dont_reload_online_on_next_navigation_ = false;
-    } else {
+    } else if (reloading_from_offline_) {
       ReplaceLocationUrlAndReload(
           reading_list::ReloadURLForOfflineURL(navigation_context->GetUrl()));
       return;

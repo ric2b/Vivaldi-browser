@@ -22,6 +22,7 @@
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/run_on_os_login_types.h"
+#include "content/public/common/alternative_error_page_override_info.mojom.h"
 
 class GURL;
 class Profile;
@@ -31,6 +32,7 @@ class FilePath;
 }
 
 namespace content {
+class RenderFrameHost;
 class BrowserContext;
 }
 
@@ -38,13 +40,13 @@ namespace web_app {
 
 class WebAppProvider;
 
-namespace default_offline {
+namespace error_page {
 // |alternative_error_page_params| dictionary key values in the
 // |AlternativeErrorPageOverrideInfo| mojom struct.
-const char kMessage[] = "web_app_default_offline_message";
+const char kMessage[] = "web_app_error_page_message";
 const char kAppShortName[] = "app_short_name";
 const char kIconUrl[] = "icon_url";
-}  // namespace default_offline
+}  // namespace error_page
 
 // These functions return true if the WebApp System or its subset is allowed
 // for a given profile.
@@ -147,6 +149,10 @@ bool IsWebAppsCrosapiEnabled();
 void SetSkipMainProfileCheckForTesting(bool skip_check);
 
 bool IsMainProfileCheckSkippedForTesting();
+
+// Generates an appropriate path for a new web app profile. This does not create
+// the profile.
+base::FilePath GenerateWebAppProfilePath(const AppId& app_id);
 #endif
 
 constexpr char kAppSettingsPageEntryPointsHistogramName[] =
@@ -159,7 +165,8 @@ constexpr char kAppSettingsPageEntryPointsHistogramName[] =
 enum class AppSettingsPageEntryPoint {
   kPageInfoView = 0,
   kChromeAppsPage = 1,
-  kMaxValue = kChromeAppsPage,
+  kBrowserCommand = 2,
+  kMaxValue = kBrowserCommand,
 };
 
 // When user_display_mode indicates a user preference for opening in
@@ -187,6 +194,12 @@ std::string RunOnOsLoginModeToString(RunOnOsLoginMode mode);
 apps::RunOnOsLoginMode ConvertOsLoginMode(RunOnOsLoginMode login_mode);
 
 const char* IconsDownloadedResultToString(IconsDownloadedResult result);
+
+content::mojom::AlternativeErrorPageOverrideInfoPtr ConstructWebAppErrorPage(
+    const GURL& url,
+    content::RenderFrameHost* render_frame_host,
+    content::BrowserContext* browser_context,
+    std::u16string message);
 
 }  // namespace web_app
 

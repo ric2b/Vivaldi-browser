@@ -262,7 +262,7 @@ struct RequestFilterManager::RequestHandler::PendingRequest {
   PendingRequest() = default;
 
   // Information about the request that is being blocked. Not owned.
-  const FilteredRequestInfo* request = nullptr;
+  raw_ptr<const FilteredRequestInfo> request = nullptr;
 
   // The number of event handlers that we are awaiting a response from.
   int num_filters_blocking = 0;
@@ -272,32 +272,33 @@ struct RequestFilterManager::RequestHandler::PendingRequest {
 
   // If non-empty, this contains the new URL that the request will redirect to.
   // Only valid for OnBeforeRequest and OnHeadersReceived.
-  GURL* new_url = nullptr;
+  raw_ptr<GURL> new_url = nullptr;
 
   // Priority of the filter which set the new URL. Only filters with a higher
   // priority can change it again.
   size_t new_url_priority = 0;
 
   bool cancel_request;
-  bool* collapse;
+  raw_ptr<bool> collapse;
 
   // The request headers that will be issued along with this request. Only valid
   // for OnBeforeSendHeaders.
-  net::HttpRequestHeaders* request_headers = nullptr;
+  raw_ptr<net::HttpRequestHeaders> request_headers = nullptr;
 
   // The list of headers that have been modified/changed while handling
   // OnBeforeSendHeaders
-  std::set<std::string>* set_request_headers = nullptr;
-  std::set<std::string>* removed_request_headers = nullptr;
+  raw_ptr<std::set<std::string>> set_request_headers = nullptr;
+  raw_ptr<std::set<std::string>> removed_request_headers = nullptr;
 
   // The response headers that were received from the server and subsequently
   // filtered by the Declarative Net Request API. Only valid for
   // OnHeadersReceived.
-  const net::HttpResponseHeaders* original_response_headers;
+  raw_ptr<const net::HttpResponseHeaders> original_response_headers;
 
   // Location where to override response headers. Only valid for
   // OnHeadersReceived.
-  scoped_refptr<net::HttpResponseHeaders>* override_response_headers = nullptr;
+  raw_ptr<scoped_refptr<net::HttpResponseHeaders>> override_response_headers =
+      nullptr;
 
   // The request headers to be modified for each filter. Used during
   // OnBeforeSendHeaders.

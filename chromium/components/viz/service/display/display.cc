@@ -9,10 +9,10 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/containers/contains.h"
-#include "base/cxx17_backports.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
@@ -601,28 +601,43 @@ void Display::OnContextLost() {
 }
 
 namespace {
+
+DBG_FLAG_FBOOL("frame.debug.non_root_passes", debug_non_root_passes)
+
 void DebugDrawFrame(const AggregatedFrame& frame) {
   if (!VizDebugger::GetInstance()->IsEnabled())
     return;
 
-  auto& root_render_pass = *frame.render_pass_list.back();
-  DBG_LOG_OPT("frame.root.numquads", DBG_OPT_BLUE, "Num root quads=%d",
-              static_cast<int>(root_render_pass.quad_list.size()));
-  DBG_DRAW_RECT_OPT("frame.root.damage", DBG_OPT_RED,
-                    root_render_pass.damage_rect);
+  for (auto& render_pass : frame.render_pass_list) {
+    if (render_pass != frame.render_pass_list.back() &&
+        !debug_non_root_passes()) {
+      continue;
+    }
 
-  for (auto* quad : root_render_pass.quad_list) {
-    auto& transform = quad->shared_quad_state->quad_to_target_transform;
-    auto display_rect = transform.MapRect(gfx::RectF(quad->rect));
-    DBG_DRAW_TEXT_OPT("frame.root.material", DBG_OPT_GREEN,
-                      display_rect.origin(),
-                      base::NumberToString(static_cast<int>(quad->material)));
-    DBG_DRAW_TEXT_OPT("frame.root.display_rect", DBG_OPT_GREEN,
-                      display_rect.origin(), display_rect.ToString());
-    DBG_DRAW_TEXT_OPT(
-        "frame.root.resource_id", DBG_OPT_RED, display_rect.origin(),
-        base::NumberToString(quad->resources.ids[0].GetUnsafeValue()));
-    DBG_DRAW_RECT("frame.root.quad", display_rect);
+    DBG_LOG_OPT("frame.render_pass.numquads", DBG_OPT_BLUE,
+                "Num render pass quads=%d",
+                static_cast<int>(render_pass->quad_list.size()));
+
+    for (auto* quad : render_pass->quad_list) {
+      auto* sqs = quad->shared_quad_state;
+      auto& transform = sqs->quad_to_target_transform;
+      auto display_rect = transform.MapRect(gfx::RectF(quad->rect));
+      DBG_DRAW_TEXT_OPT("frame.render_pass.material", DBG_OPT_GREEN,
+                        display_rect.origin(),
+                        base::NumberToString(static_cast<int>(quad->material)));
+      DBG_DRAW_TEXT_OPT(
+          "frame.render_pass.layer_id", DBG_OPT_BLUE, display_rect.origin(),
+          base::StringPrintf("%u:%u", sqs->layer_namespace_id, sqs->layer_id));
+      DBG_DRAW_TEXT_OPT("frame.render_pass.display_rect", DBG_OPT_GREEN,
+                        display_rect.origin(), display_rect.ToString());
+      DBG_DRAW_TEXT_OPT(
+          "frame.render_pass.resource_id", DBG_OPT_RED, display_rect.origin(),
+          base::NumberToString(quad->resources.ids[0].GetUnsafeValue()));
+
+      DBG_DRAW_RECT("frame.render_pass.quad", display_rect);
+      DBG_DRAW_RECT_OPT("frame.render_pass.damage", DBG_OPT_RED,
+                        render_pass->damage_rect);
+    }
   }
 }
 
@@ -938,6 +953,9 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
       scheduler_->DidSwapBuffers();
     pending_swaps_++;
 
+    UMA_HISTOGRAM_COUNTS_100("Compositing.Display.PendingSwaps",
+                             pending_swaps_);
+
     renderer_->SwapBuffers(std::move(swap_frame_data));
   } else {
     TRACE_EVENT_INSTANT0("viz", "Swap skipped.", TRACE_EVENT_SCOPE_THREAD);
@@ -1164,7 +1182,7 @@ base::TimeDelta Display::GetEstimatedDisplayDrawTime(base::TimeDelta interval,
     // We do not want the deadline adjustmens to exceed a default of 1/3 VSync,
     // as we would not give other processes enough time to produce content. So
     // this would make high latency situations worse.
-    return base::clamp(
+    return std::clamp(
         draw_time_without_scheduling_waits_.Percentile(percentile),
         kMinEstimatedDisplayDrawTime, default_estimate);
   }
@@ -1239,11 +1257,10 @@ void Display::RemoveOverdrawQuads(AggregatedFrame* frame) {
       // Skip quad if it is a AggregatedRenderPassDrawQuad because it is a
       // special type of DrawQuad where the visible_rect of shared quad state is
       // not entirely covered by draw quads in it.
-      if (quad->material == DrawQuad::Material::kAggregatedRenderPass) {
+      if (auto* rpdq = quad->DynamicCast<AggregatedRenderPassDrawQuad>()) {
         // A RenderPass with backdrop filters may apply to a quad underlying
         // RenderPassQuad. These regions should be tracked so that correctly
         // handle splitting and occlusion of the underlying quad.
-        auto* rpdq = AggregatedRenderPassDrawQuad::MaterialCast(*quad);
         auto it = backdrop_filter_rects.find(rpdq->render_pass_id);
         if (it != backdrop_filter_rects.end()) {
           backdrop_filters_in_target_space.Union(it->second);

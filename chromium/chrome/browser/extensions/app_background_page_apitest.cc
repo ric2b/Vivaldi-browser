@@ -141,12 +141,8 @@ class AppBackgroundPageApiTest : public extensions::ExtensionApiTest {
     }
     base::FilePath manifest_path =
         app_dir_.GetPath().AppendASCII("manifest.json");
-    int bytes_written = base::WriteFile(manifest_path,
-                                        app_manifest.data(),
-                                        app_manifest.size());
-    if (bytes_written != static_cast<int>(app_manifest.size())) {
-      LOG(ERROR) << "Unable to write complete manifest to file. Return code="
-                 << bytes_written;
+    if (!base::WriteFile(manifest_path, app_manifest)) {
+      LOG(ERROR) << "Unable to write manifest to file.";
       return false;
     }
     *app_dir = app_dir_.GetPath();
@@ -311,12 +307,8 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, ManifestBackgroundPage) {
   // creating the background page through the manifest (not through
   // window.open).
   EXPECT_FALSE(background_contents->web_contents()->GetOpener());
-  bool window_opener_null_in_js;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      background_contents->web_contents(),
-      "domAutomationController.send(window.opener == null);",
-      &window_opener_null_in_js));
-  EXPECT_TRUE(window_opener_null_in_js);
+  EXPECT_EQ(true, content::EvalJs(background_contents->web_contents(),
+                                  "window.opener == null;"));
 
   UnloadExtension(extension->id());
 }
@@ -368,12 +360,8 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, NoJsBackgroundPage) {
   // Verify that window.opener in the background contents is not set when
   // allow_js_access=false.
   EXPECT_FALSE(background_contents->web_contents()->GetOpener());
-  bool window_opener_null_in_js;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      background_contents->web_contents(),
-      "domAutomationController.send(window.opener == null);",
-      &window_opener_null_in_js));
-  EXPECT_TRUE(window_opener_null_in_js);
+  EXPECT_EQ(true, content::EvalJs(background_contents->web_contents(),
+                                  "window.opener == null;"));
 
   // Verify multiple BackgroundContents don't get opened despite multiple
   // window.open calls.
@@ -419,12 +407,8 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, NoJsManifestBackgroundPage) {
   // creating the background page through the manifest (not through
   // window.open).
   EXPECT_FALSE(background_contents->web_contents()->GetOpener());
-  bool window_opener_null_in_js;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      background_contents->web_contents(),
-      "domAutomationController.send(window.opener == null);",
-      &window_opener_null_in_js));
-  EXPECT_TRUE(window_opener_null_in_js);
+  EXPECT_EQ(true, content::EvalJs(background_contents->web_contents(),
+                                  "window.opener == null;"));
 
   // window.open should return null.
   ASSERT_TRUE(RunExtensionTest("app_background_page/no_js_manifest")) <<
@@ -432,11 +416,8 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, NoJsManifestBackgroundPage) {
 
   // Verify that window.opener in the background contents is still not set.
   EXPECT_FALSE(background_contents->web_contents()->GetOpener());
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      background_contents->web_contents(),
-      "domAutomationController.send(window.opener == null);",
-      &window_opener_null_in_js));
-  EXPECT_TRUE(window_opener_null_in_js);
+  EXPECT_EQ(true, content::EvalJs(background_contents->web_contents(),
+                                  "window.opener == null;"));
 
   UnloadExtension(extension->id());
 }
@@ -569,11 +550,10 @@ IN_PROC_BROWSER_TEST_F(AppBackgroundPageApiTest, OpenThenClose) {
   content::RenderFrameHost* background_opener =
       background_contents->web_contents()->GetOpener();
   ASSERT_TRUE(background_opener);
-  std::string window_opener_href;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      background_contents->web_contents(),
-      "domAutomationController.send(window.opener.location.href);",
-      &window_opener_href));
+  std::string window_opener_href =
+      content::EvalJs(background_contents->web_contents(),
+                      "window.opener.location.href;")
+          .ExtractString();
   EXPECT_EQ(window_opener_href,
             background_opener->GetLastCommittedURL().spec());
 

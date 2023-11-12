@@ -19,6 +19,10 @@
 
 namespace {
 
+bool CompareLabel(const Target* a, const Target* b) {
+  return a->label() < b->label();
+}
+
 // InputConversion needs a global scheduler object.
 class CompileCommandsTest : public TestWithScheduler {
  public:
@@ -28,6 +32,15 @@ class CompileCommandsTest : public TestWithScheduler {
   const Settings* settings() { return setup_.settings(); }
   const TestWithScope& setup() { return setup_; }
   const Toolchain* toolchain() { return setup_.toolchain(); }
+
+  // Returns true if the two target vectors contain the same targets, order
+  // independent.
+  bool VectorsEqual(std::vector<const Target*> a,
+                    std::vector<const Target*> b) const {
+    std::sort(a.begin(), a.end(), &CompareLabel);
+    std::sort(b.begin(), b.end(), &CompareLabel);
+    return a == b;
+  }
 
  private:
   TestWithScope setup_;
@@ -586,55 +599,138 @@ TEST_F(CompileCommandsTest, EscapedFlags) {
   EXPECT_EQ(expected, out);
 }
 
-TEST_F(CompileCommandsTest, CompDBFilter) {
+TEST_F(CompileCommandsTest, CollectTargets) {
+  // Contruct the dependency tree:
+  //
+  //   //foo:bar1
+  //     //base:base
+  //   //foo:bar2
+  //     //base:i18n
+  //       //base:base
+  //       //third_party:icu
+  //   //random:random
   Err err;
-
   std::vector<const Target*> targets;
+
+  Target icu_target(settings(), Label(SourceDir("//third_party/"), "icu"));
+  icu_target.set_output_type(Target::SOURCE_SET);
+  icu_target.visibility().SetPublic();
+  icu_target.SetToolchain(toolchain());
+  ASSERT_TRUE(icu_target.OnResolved(&err));
+  targets.push_back(&icu_target);
+
+  Target base_target(settings(), Label(SourceDir("//base/"), "base"));
+  base_target.set_output_type(Target::SOURCE_SET);
+  base_target.visibility().SetPublic();
+  base_target.SetToolchain(toolchain());
+  ASSERT_TRUE(base_target.OnResolved(&err));
+  targets.push_back(&base_target);
+
+  Target base_i18n(settings(), Label(SourceDir("//base/"), "i18n"));
+  base_i18n.set_output_type(Target::SOURCE_SET);
+  base_i18n.visibility().SetPublic();
+  base_i18n.private_deps().push_back(LabelTargetPair(&icu_target));
+  base_i18n.public_deps().push_back(LabelTargetPair(&base_target));
+  base_i18n.SetToolchain(toolchain());
+  ASSERT_TRUE(base_i18n.OnResolved(&err))
+      << err.message() << " " << err.help_text();
+  targets.push_back(&base_i18n);
+
   Target target1(settings(), Label(SourceDir("//foo/"), "bar1"));
   target1.set_output_type(Target::SOURCE_SET);
-  target1.sources().push_back(SourceFile("//foo/input1.c"));
-  target1.config_values().cflags_c().push_back("-DCONFIG=\"/config\"");
+  target1.public_deps().push_back(LabelTargetPair(&base_target));
   target1.SetToolchain(toolchain());
   ASSERT_TRUE(target1.OnResolved(&err));
   targets.push_back(&target1);
 
   Target target2(settings(), Label(SourceDir("//foo/"), "bar2"));
   target2.set_output_type(Target::SOURCE_SET);
-  target2.sources().push_back(SourceFile("//foo/input2.c"));
-  target2.config_values().cflags_c().push_back("-DCONFIG=\"/config\"");
+  target2.public_deps().push_back(LabelTargetPair(&base_i18n));
   target2.SetToolchain(toolchain());
   ASSERT_TRUE(target2.OnResolved(&err));
   targets.push_back(&target2);
 
-  Target target3(settings(), Label(SourceDir("//foo/"), "bar3"));
-  target3.set_output_type(Target::SOURCE_SET);
-  target3.sources().push_back(SourceFile("//foo/input3.c"));
-  target3.config_values().cflags_c().push_back("-DCONFIG=\"/config\"");
-  target3.SetToolchain(toolchain());
-  ASSERT_TRUE(target3.OnResolved(&err));
-  targets.push_back(&target3);
+  Target random_target(settings(), Label(SourceDir("//random/"), "random"));
+  random_target.set_output_type(Target::SOURCE_SET);
+  random_target.SetToolchain(toolchain());
+  ASSERT_TRUE(random_target.OnResolved(&err));
+  targets.push_back(&random_target);
 
-  target1.private_deps().push_back(LabelTargetPair(&target2));
-  target1.private_deps().push_back(LabelTargetPair(&target3));
+  // Collect everything, the result should match the input.
+  const std::string source_root("/home/me/build/");
+  LabelPattern wildcard_pattern = LabelPattern::GetPattern(
+      SourceDir(), source_root, Value(nullptr, "//*"), &err);
+  ASSERT_FALSE(err.has_error());
+  std::vector<const Target*> output = CompileCommandsWriter::CollectTargets(
+      build_settings(), targets, std::vector<LabelPattern>{wildcard_pattern},
+      std::nullopt, &err);
+  EXPECT_TRUE(VectorsEqual(output, targets));
 
-  CompileCommandsWriter writer;
+  // Collect nothing.
+  output = CompileCommandsWriter::CollectTargets(build_settings(), targets,
+                                                 std::vector<LabelPattern>(),
+                                                 std::nullopt, &err);
+  EXPECT_TRUE(output.empty());
 
-  std::set<std::string> filter1;
-  std::vector<const Target*> test_results1 =
-      writer.FilterTargets(targets, filter1);
-  ASSERT_TRUE(test_results1.empty());
+  // Collect all deps of "//foo/*".
+  LabelPattern foo_wildcard = LabelPattern::GetPattern(
+      SourceDir(), source_root, Value(nullptr, "//foo/*"), &err);
+  ASSERT_FALSE(err.has_error());
+  output = CompileCommandsWriter::CollectTargets(
+      build_settings(), targets, std::vector<LabelPattern>{foo_wildcard},
+      std::nullopt, &err);
 
-  std::set<std::string> filter2;
-  filter2.insert(target1.label().name());
-  std::vector<const Target*> test_results2 =
-      writer.FilterTargets(targets, filter2);
-  ASSERT_EQ(test_results2, targets);
+  // The result should be everything except "random".
+  std::sort(output.begin(), output.end(), &CompareLabel);
+  ASSERT_EQ(5u, output.size());
+  EXPECT_EQ(&base_target, output[0]);
+  EXPECT_EQ(&base_i18n, output[1]);
+  EXPECT_EQ(&target1, output[2]);
+  EXPECT_EQ(&target2, output[3]);
+  EXPECT_EQ(&icu_target, output[4]);
 
-  std::set<std::string> filter3;
-  filter3.insert(target2.label().name());
-  std::vector<const Target*> test_result3 =
-      writer.FilterTargets(targets, filter3);
-  std::vector<const Target*> expected_results3;
-  expected_results3.push_back(&target2);
-  ASSERT_EQ(test_result3, expected_results3);
+  // Collect everything using the legacy filter (present string but empty).
+  output = CompileCommandsWriter::CollectTargets(build_settings(), targets,
+                                                 std::vector<LabelPattern>{},
+                                                 std::string(), &err);
+  EXPECT_TRUE(VectorsEqual(output, targets));
+
+  // Collect all deps of "bar2" using the legacy filter.
+  output = CompileCommandsWriter::CollectTargets(build_settings(), targets,
+                                                 std::vector<LabelPattern>{},
+                                                 std::string("bar2"), &err);
+  std::sort(output.begin(), output.end(), &CompareLabel);
+  ASSERT_EQ(4u, output.size());
+  EXPECT_EQ(&base_target, output[0]);
+  EXPECT_EQ(&base_i18n, output[1]);
+  EXPECT_EQ(&target2, output[2]);
+  EXPECT_EQ(&icu_target, output[3]);
+
+  // Collect all deps of "bar1" and "bar2" using the legacy filter.
+  output = CompileCommandsWriter::CollectTargets(
+      build_settings(), targets, std::vector<LabelPattern>{},
+      std::string("bar2,bar1"), &err);
+  std::sort(output.begin(), output.end(), &CompareLabel);
+  ASSERT_EQ(5u, output.size());
+  EXPECT_EQ(&base_target, output[0]);
+  EXPECT_EQ(&base_i18n, output[1]);
+  EXPECT_EQ(&target1, output[2]);
+  EXPECT_EQ(&target2, output[3]);
+  EXPECT_EQ(&icu_target, output[4]);
+
+  // Combine the legacy (bar1) and pattern (bar2) filters, we should get the
+  // union.
+  LabelPattern foo_bar2 = LabelPattern::GetPattern(
+      SourceDir(), source_root, Value(nullptr, "//foo:bar2"), &err);
+  ASSERT_FALSE(err.has_error());
+  output = CompileCommandsWriter::CollectTargets(
+      build_settings(), targets, std::vector<LabelPattern>{foo_bar2},
+      std::string("bar1"), &err);
+  std::sort(output.begin(), output.end(), &CompareLabel);
+  ASSERT_EQ(5u, output.size());
+  EXPECT_EQ(&base_target, output[0]);
+  EXPECT_EQ(&base_i18n, output[1]);
+  EXPECT_EQ(&target1, output[2]);
+  EXPECT_EQ(&target2, output[3]);
+  EXPECT_EQ(&icu_target, output[4]);
 }

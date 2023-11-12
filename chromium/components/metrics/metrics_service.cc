@@ -368,7 +368,7 @@ void MetricsService::StartUpdatingLastLiveTimestamp() {
       FROM_HERE,
       base::BindOnce(&MetricsService::UpdateLastLiveTimestampTask,
                      self_ptr_factory_.GetWeakPtr()),
-      base::Seconds(kUpdateAliveTimestampSeconds));
+      GetUpdateLastAliveTimestampDelay());
 }
 
 void MetricsService::Stop() {
@@ -453,12 +453,11 @@ void MetricsService::DisableRecording() {
   PushPendingLogsToPersistentStorage(
       MetricsLogsEventManager::CreateReason::kServiceShutdown);
 
-  // If kEmitHistogramsForIndependentLogs is set, call OnDidCreateMetricsLog()
-  // to provide histograms.
-  if (base::FeatureList::IsEnabled(features::kEmitHistogramsEarlier) &&
-      features::kEmitHistogramsForIndependentLogs.Get()) {
-    delegating_provider_.OnDidCreateMetricsLog();
-  }
+  // Because histograms may still be emitted after the last log was closed, an
+  // independent log may be created in a future session in order to report
+  // those histograms. To ensure that this independent log contains histograms
+  // that we wish to appear in every log, call OnDidCreateMetricsLog().
+  delegating_provider_.OnDidCreateMetricsLog();
 
   enablement_observers_.Notify(/*enabled=*/false);
 }
@@ -658,6 +657,7 @@ void MetricsService::ResetClientId() {
   // Pref must be cleared in order for ForceClientIdCreation to generate a new
   // client ID.
   local_state_->ClearPref(prefs::kMetricsClientID);
+  local_state_->ClearPref(prefs::kMetricsLogRecordId);
   state_manager_->ForceClientIdCreation();
   client_->SetMetricsClientId(state_manager_->client_id());
 }
@@ -666,6 +666,15 @@ void MetricsService::ResetClientId() {
 variations::SyntheticTrialRegistry*
 MetricsService::GetSyntheticTrialRegistry() {
   return client_->GetSyntheticTrialRegistry();
+}
+
+base::TimeDelta MetricsService::GetInitializationDelay() {
+  return base::Seconds(
+      client_->ShouldStartUpFastForTesting() ? 0 : kInitializationDelaySeconds);
+}
+
+base::TimeDelta MetricsService::GetUpdateLastAliveTimestampDelay() {
+  return base::Seconds(kUpdateAliveTimestampSeconds);
 }
 
 bool MetricsService::StageCurrentLogForTest() {
@@ -821,9 +830,7 @@ void MetricsService::OpenNewLog(bool call_providers) {
     // We only need to schedule that run once.
     state_ = INIT_TASK_SCHEDULED;
 
-    base::TimeDelta initialization_delay = base::Seconds(
-        client_->ShouldStartUpFastForTesting() ? 0
-                                               : kInitializationDelaySeconds);
+    base::TimeDelta initialization_delay = GetInitializationDelay();
     base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&MetricsService::StartInitTask,
@@ -861,6 +868,7 @@ MetricsService::MetricsLogHistogramWriter::~MetricsLogHistogramWriter() =
 
 void MetricsService::MetricsLogHistogramWriter::
     SnapshotStatisticsRecorderDeltas() {
+  SCOPED_UMA_HISTOGRAM_TIMER("UMA.MetricsService.SnapshotDeltasTime");
   snapshot_transaction_id_ = base::StatisticsRecorder::PrepareDeltas(
       /*include_persistent=*/true,
       /*flags_to_set=*/base::Histogram::kNoFlags, required_flags_,
@@ -1138,17 +1146,10 @@ void MetricsService::OnFinalLogInfoCollectionDone() {
   base::OnceClosure log_stored_callback =
       base::BindOnce(&MetricsService::OnPeriodicOngoingLogStored,
                      self_ptr_factory_.GetWeakPtr());
-  if (base::FeatureList::IsEnabled(features::kMetricsServiceAsyncCollection)) {
-    CloseCurrentLog(/*async=*/true,
-                    MetricsLogsEventManager::CreateReason::kPeriodic,
-                    std::move(log_stored_callback));
-    OpenNewLog(/*call_providers=*/false);
-  } else {
-    CloseCurrentLog(/*async=*/false,
-                    MetricsLogsEventManager::CreateReason::kPeriodic,
-                    std::move(log_stored_callback));
-    OpenNewLog();
-  }
+  CloseCurrentLog(/*async=*/true,
+                  MetricsLogsEventManager::CreateReason::kPeriodic,
+                  std::move(log_stored_callback));
+  OpenNewLog(/*call_providers=*/false);
 }
 
 void MetricsService::OnPeriodicOngoingLogStored() {
@@ -1237,6 +1238,7 @@ std::unique_ptr<MetricsLog> MetricsService::CreateLog(
     MetricsLog::LogType log_type) {
   auto new_metrics_log = std::make_unique<MetricsLog>(
       state_manager_->client_id(), session_id_, log_type, client_);
+  new_metrics_log->AssignRecordId(local_state_);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   absl::optional<std::string> user_id = GetCurrentUserId();
@@ -1422,6 +1424,7 @@ MetricsService::FinalizedLog MetricsService::FinalizeLog(
     bool truncate_events,
     std::string current_app_version,
     std::string signing_key) {
+  DCHECK(log->uma_proto()->has_record_id());
   std::string log_data;
   log->FinalizeLog(truncate_events, current_app_version, &log_data);
 

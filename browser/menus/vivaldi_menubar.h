@@ -100,13 +100,13 @@ class Menubar : public views::MenuDelegate {
                           int menu_id,
                           const favicon_base::FaviconImageResult& image_result);
 
-  views::MenuItemView* bookmark_menu_ = nullptr;
+  raw_ptr<views::MenuItemView> bookmark_menu_ = nullptr;
   std::unique_ptr<BookmarkMenuDelegate> bookmark_menu_delegate_;
 
   std::unique_ptr<views::MenuRunner> menu_runner_;
-  Browser* browser_;
-  MenubarMenuParams* params_;
-  favicon::FaviconService* favicon_service_ = nullptr;
+  const raw_ptr<Browser> browser_;
+  const raw_ptr<MenubarMenuParams> params_;
+  raw_ptr<favicon::FaviconService> favicon_service_ = nullptr;
   base::CancelableTaskTracker cancelable_task_tracker_;
   int run_types_;
   int active_menu_id_ = -1;

@@ -26,6 +26,7 @@
 #import "components/autofill/ios/browser/autofill_agent.h"
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 #import "components/autofill/ios/browser/autofill_driver_ios_factory.h"
+#import "components/autofill/ios/browser/autofill_java_script_feature.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
 #import "components/autofill/ios/browser/test_autofill_manager_injector.h"
 #import "components/autofill/ios/form_util/unique_id_data_tab_helper.h"
@@ -357,9 +358,10 @@ void AutofillControllerTest::SetUp() {
   accessory_mediator_ =
       [[FormInputAccessoryMediator alloc] initWithConsumer:nil
                                                    handler:nil
-                                              webStateList:NULL
-                                       personalDataManager:NULL
-                                             passwordStore:nullptr
+                                              webStateList:nullptr
+                                       personalDataManager:nullptr
+                                      profilePasswordStore:nullptr
+                                      accountPasswordStore:nullptr
                                       securityAlertHandler:nil
                                     reauthenticationModule:nil];
 
@@ -423,8 +425,10 @@ void AutofillControllerTest::WaitForCondition(ConditionBlock condition) {
 // registered as a FormStructure by the BrowserAutofillManager.
 TEST_F(AutofillControllerTest, ReadForm) {
   ASSERT_TRUE(LoadHtmlAndWaitForFormFetched(kProfileFormHtml, 1));
-  web::WebFrame* main_frame =
-      web_state()->GetPageWorldWebFramesManager()->GetMainWebFrame();
+  web::WebFramesManager* frames_manager =
+      AutofillJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          web_state());
+  web::WebFrame* main_frame = frames_manager->GetMainWebFrame();
   BrowserAutofillManager* autofill_manager =
       AutofillDriverIOS::FromWebStateAndWebFrame(web_state(), main_frame)
           ->autofill_manager();
@@ -444,8 +448,10 @@ TEST_F(AutofillControllerTest, ReadForm) {
 // and the name is correctly set.
 TEST_F(AutofillControllerTest, ReadFormName) {
   ASSERT_TRUE(LoadHtmlAndWaitForFormFetched(kMinimalFormWithNameHtml, 1));
-  web::WebFrame* main_frame =
-      web_state()->GetPageWorldWebFramesManager()->GetMainWebFrame();
+  web::WebFramesManager* frames_manager =
+      AutofillJavaScriptFeature::GetInstance()->GetWebFramesManager(
+          web_state());
+  web::WebFrame* main_frame = frames_manager->GetMainWebFrame();
   BrowserAutofillManager* autofill_manager =
       AutofillDriverIOS::FromWebStateAndWebFrame(web_state(), main_frame)
           ->autofill_manager();
@@ -568,7 +574,7 @@ TEST_F(AutofillControllerTest, MultipleProfileSuggestions) {
   PersonalDataManager* personal_data_manager =
       PersonalDataManagerFactory::GetForBrowserState(
           ChromeBrowserState::FromBrowserState(browser_state_.get()));
-  personal_data_manager->OnSyncServiceInitialized(nullptr);
+  personal_data_manager->SetSyncServiceForTest(nullptr);
   PersonalDataManagerFinishedProfileTasksWaiter waiter(personal_data_manager);
 
   AutofillProfile profile(base::GenerateGUID(), "https://www.example.com/");
@@ -762,7 +768,7 @@ TEST_F(AutofillControllerTest, CreditCardImport) {
   PersonalDataManager* personal_data_manager =
       PersonalDataManagerFactory::GetForBrowserState(
           ChromeBrowserState::FromBrowserState(browser_state_.get()));
-  personal_data_manager->OnSyncServiceInitialized(nullptr);
+  personal_data_manager->SetSyncServiceForTest(nullptr);
 
   // Check there are no registered profiles already.
   EXPECT_EQ(0U, personal_data_manager->GetCreditCards().size());

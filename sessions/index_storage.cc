@@ -83,7 +83,7 @@ void OnLoad(const base::FilePath& directory,
     } else {
       IndexCodec codec;
       if (!codec.Decode(details->items_node(), details->backup_node(),
-                        *root.get())) {
+                        details->persistent_node(), *root.get())) {
         LOG(ERROR)
           << "Session Index Storage: Failed to decode JSON content from: "
           << file;
@@ -98,8 +98,10 @@ void OnLoad(const base::FilePath& directory,
 }
 
 IndexLoadDetails::IndexLoadDetails(Index_Node* items_node,
-                                   Index_Node* backup_node)
-  : items_node_(items_node), backup_node_(backup_node) {}
+                                   Index_Node* backup_node,
+                                   Index_Node* persistent_node)
+  : items_node_(items_node), backup_node_(backup_node),
+    persistent_node_(persistent_node) {}
 
 IndexLoadDetails::~IndexLoadDetails() {}
 
@@ -165,15 +167,19 @@ void IndexStorage::OnModelWillBeDeleted() {
   if (writer_.HasPendingWrite())
     SaveNow();
 
-  model_ = NULL;
+  model_ = nullptr;
 }
 
-bool IndexStorage::SerializeData(std::string* output) {
+absl::optional<std::string> IndexStorage::SerializeData() {
   IndexCodec codec;
-  JSONStringValueSerializer serializer(output);
+  std::string output;
+  JSONStringValueSerializer serializer(&output);
   serializer.set_pretty_print(true);
   base::Value value = codec.Encode(model_);
-  return serializer.Serialize(value);
+  if (!serializer.Serialize(value))
+    return absl::nullopt;
+
+  return output;
 }
 
 void IndexStorage::OnLoadFinished(std::unique_ptr<IndexLoadDetails> details) {
@@ -190,21 +196,21 @@ bool IndexStorage::SaveNow() {
     return false;
   }
 
-  std::unique_ptr<std::string> data(new std::string);
-  if (!SerializeData(data.get()))
+  absl::optional<std::string> data = SerializeData();
+  if (!data)
     return false;
-  writer_.WriteNow(std::move(data));
+  writer_.WriteNow(data.value());
   return true;
 }
 
 bool IndexStorage::SaveValue(const std::unique_ptr<base::Value>& value) {
-  std::unique_ptr<std::string> data(new std::string);
-  JSONStringValueSerializer serializer(data.get());
+  std::string data;
+  JSONStringValueSerializer serializer(&data);
   serializer.set_pretty_print(true);
   if (!serializer.Serialize(*(value.get()))) {
     return false;
   }
-  writer_.WriteNow(std::move(data));
+  writer_.WriteNow(data);
   return true;
 }
 

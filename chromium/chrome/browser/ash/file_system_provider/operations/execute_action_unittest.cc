@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ash/file_system_provider/operations/execute_action.h"
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -80,8 +79,8 @@ TEST_F(FileSystemProviderOperationsExecuteActionTest, Execute) {
   ASSERT_TRUE(options_as_value->is_dict());
 
   ExecuteActionRequestedOptions options;
-  ASSERT_TRUE(
-      ExecuteActionRequestedOptions::Populate(*options_as_value, &options));
+  ASSERT_TRUE(ExecuteActionRequestedOptions::Populate(
+      options_as_value->GetDict(), options));
   EXPECT_EQ(kFileSystemId, options.file_system_id);
   EXPECT_EQ(kRequestId, options.request_id);
   ASSERT_EQ(entry_paths_.size(), options.entry_paths.size());
@@ -111,8 +110,7 @@ TEST_F(FileSystemProviderOperationsExecuteActionTest, OnSuccess) {
 
   EXPECT_TRUE(execute_action.Execute(kRequestId));
 
-  execute_action.OnSuccess(kRequestId, std::make_unique<RequestValue>(),
-                           false /* has_more */);
+  execute_action.OnSuccess(kRequestId, RequestValue(), false /* has_more */);
   ASSERT_EQ(1u, callback_log.size());
   EXPECT_EQ(base::File::FILE_OK, callback_log[0]);
 }
@@ -127,7 +125,7 @@ TEST_F(FileSystemProviderOperationsExecuteActionTest, OnError) {
 
   EXPECT_TRUE(execute_action.Execute(kRequestId));
 
-  execute_action.OnError(kRequestId, std::make_unique<RequestValue>(),
+  execute_action.OnError(kRequestId, RequestValue(),
                          base::File::FILE_ERROR_TOO_MANY_OPENED);
   ASSERT_EQ(1u, callback_log.size());
   EXPECT_EQ(base::File::FILE_ERROR_TOO_MANY_OPENED, callback_log[0]);

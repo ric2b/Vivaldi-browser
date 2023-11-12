@@ -26,6 +26,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ref.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/ranges/algorithm.h"
@@ -101,6 +102,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest_constants.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/types/display_constants.h"
@@ -250,30 +252,32 @@ class FakeArcAppIcon : public ArcAppIcon {
   FakeArcAppIcon& operator=(const FakeArcAppIcon&) = delete;
 
   void LoadSupportedScaleFactors() override {
-    arc_app_icon_requests_.insert(this);
-    if (max_arc_app_icon_request_count_ < arc_app_icon_requests_.size())
-      max_arc_app_icon_request_count_ = arc_app_icon_requests_.size();
+    arc_app_icon_requests_->insert(this);
+    if (*max_arc_app_icon_request_count_ < arc_app_icon_requests_->size()) {
+      *max_arc_app_icon_request_count_ = arc_app_icon_requests_->size();
+    }
 
     ArcAppIcon::LoadSupportedScaleFactors();
   }
 
  private:
   void LoadForScaleFactor(ui::ResourceScaleFactor scale_factor) override {
-    arc_app_icon_requests_.insert(this);
-    if (max_arc_app_icon_request_count_ < arc_app_icon_requests_.size())
-      max_arc_app_icon_request_count_ = arc_app_icon_requests_.size();
+    arc_app_icon_requests_->insert(this);
+    if (*max_arc_app_icon_request_count_ < arc_app_icon_requests_->size()) {
+      *max_arc_app_icon_request_count_ = arc_app_icon_requests_->size();
+    }
 
     ArcAppIcon::LoadForScaleFactor(scale_factor);
   }
 
   void OnIconRead(
       std::unique_ptr<ArcAppIcon::ReadResult> read_result) override {
-    arc_app_icon_requests_.erase(this);
+    arc_app_icon_requests_->erase(this);
     ArcAppIcon::OnIconRead(std::move(read_result));
   }
 
-  std::set<ArcAppIcon*>& arc_app_icon_requests_;
-  size_t& max_arc_app_icon_request_count_;
+  const raw_ref<std::set<ArcAppIcon*>, ExperimentalAsh> arc_app_icon_requests_;
+  const raw_ref<size_t, ExperimentalAsh> max_arc_app_icon_request_count_;
 };
 
 // FakeArcAppIconFactory is a sub class of ArcAppIconFactory, to generate
@@ -299,12 +303,12 @@ class FakeArcAppIconFactory : public arc::ArcAppIconFactory {
       ArcAppIcon::IconType icon_type) override {
     return std::make_unique<FakeArcAppIcon>(
         context, app_id, size_in_dip, observer, icon_type,
-        arc_app_icon_requests_, max_arc_app_icon_request_count_);
+        *arc_app_icon_requests_, *max_arc_app_icon_request_count_);
   }
 
  private:
-  std::set<ArcAppIcon*>& arc_app_icon_requests_;
-  size_t& max_arc_app_icon_request_count_;
+  const raw_ref<std::set<ArcAppIcon*>, ExperimentalAsh> arc_app_icon_requests_;
+  const raw_ref<size_t, ExperimentalAsh> max_arc_app_icon_request_count_;
 };
 
 ArcAppIconDescriptor GetAppListIconDescriptor(
@@ -451,7 +455,7 @@ ArcAppListPrefs::AppInfo GetAppInfoExpectation(const arc::mojom::AppInfo& app,
       ArcAppListPrefs::WindowLayout(), true /* ready */, false /* suspended */,
       launchable /* show_in_launcher*/, false /* shortcut */, launchable,
       false /* need_fixup */, absl::nullopt /* app_size */,
-      absl::nullopt /* data_size */);
+      absl::nullopt /* data_size */, app.app_category);
 }
 
 MATCHER_P(ArcPackageInfoIs, package, "") {
@@ -956,9 +960,6 @@ class ArcAppModelIconTest : public ArcAppModelBuilderRecreate,
   void SetUp() override {
     ArcAppModelBuilderRecreate::SetUp();
 
-    scoped_decode_request_for_testing_ =
-        std::make_unique<apps::ScopedDecodeRequestForTesting>();
-
     std::vector<ui::ResourceScaleFactor> supported_scale_factors;
     supported_scale_factors.push_back(ui::k100Percent);
     supported_scale_factors.push_back(ui::k200Percent);
@@ -1227,8 +1228,7 @@ class ArcAppModelIconTest : public ArcAppModelBuilderRecreate,
   }
 
  private:
-  std::unique_ptr<apps::ScopedDecodeRequestForTesting>
-      scoped_decode_request_for_testing_;
+  data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
   std::unique_ptr<ui::test::ScopedSetSupportedResourceScaleFactors>
       scoped_supported_scale_factors_;
   std::unique_ptr<base::RunLoop> run_loop_;

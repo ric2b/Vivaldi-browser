@@ -5,6 +5,7 @@
 #ifndef CONTENT_PUBLIC_BROWSER_BROWSER_PLUGIN_GUEST_DELEGATE_H_
 #define CONTENT_PUBLIC_BROWSER_BROWSER_PLUGIN_GUEST_DELEGATE_H_
 
+#include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/web_contents.h"
 
@@ -35,11 +36,13 @@ class CONTENT_EXPORT BrowserPluginGuestDelegate {
   // RenderFrameHost and not assume it's the owner's main frame.
   virtual RenderFrameHost* GetProspectiveOuterDocument();
 
+  virtual base::WeakPtr<BrowserPluginGuestDelegate> GetGuestDelegateWeakPtr();
+
   // NOTE(andre@vivaldi.com):
   // It is always set for tab and inspected webviews that might move between
   // embedders. Used to reset guest_host_ in between hand-overs. Ie. move
   // between docked/un-docked devtools.
-  BrowserPluginGuest* delegate_to_browser_plugin_ = nullptr;
+  raw_ptr<BrowserPluginGuest> delegate_to_browser_plugin_ = nullptr;
 
   // NOTE(andre@vivaldi.com):
   // Helper to create and initialize a BrowserPluginGuest for a webcontents

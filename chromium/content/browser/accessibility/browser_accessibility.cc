@@ -17,7 +17,6 @@
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/accessibility/web_ax_platform_tree_manager_delegate.h"
-#include "content/common/ax_serialization_utils.h"
 #include "content/public/common/content_client.h"
 #include "third_party/blink/public/strings/grit/blink_accessibility_strings.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -334,24 +333,6 @@ BrowserAccessibility::AllChildrenRange::Iterator::operator*() {
 
 gfx::RectF BrowserAccessibility::GetLocation() const {
   return GetData().relative_bounds.bounds;
-}
-
-gfx::Rect BrowserAccessibility::GetUnclippedRootFrameHypertextRangeBoundsRect(
-    const int start_offset,
-    const int end_offset,
-    ui::AXOffscreenResult* offscreen_result) const {
-  return GetHypertextRangeBoundsRect(
-      start_offset, end_offset, ui::AXCoordinateSystem::kRootFrame,
-      ui::AXClippingBehavior::kUnclipped, offscreen_result);
-}
-
-gfx::Rect BrowserAccessibility::GetUnclippedScreenInnerTextRangeBoundsRect(
-    const int start_offset,
-    const int end_offset,
-    ui::AXOffscreenResult* offscreen_result) const {
-  return GetInnerTextRangeBoundsRect(
-      start_offset, end_offset, ui::AXCoordinateSystem::kScreenDIPs,
-      ui::AXClippingBehavior::kUnclipped, offscreen_result);
 }
 
 gfx::Rect BrowserAccessibility::GetUnclippedRootFrameInnerTextRangeBoundsRect(
@@ -800,7 +781,11 @@ gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
     // did not include page scale factor, we need to apply it now.
     // TODO(crbug.com/1074116): this should probably apply visual viewport
     // offset as well.
-    if (!content::AXShouldIncludePageScaleFactorInRoot()) {
+    bool should_include_page_scale_factor_in_root = false;
+    #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC)
+      should_include_page_scale_factor_in_root = true;
+    #endif
+    if (!should_include_page_scale_factor_in_root) {
       BrowserAccessibilityManager* root_manager =
           manager()->GetManagerForRootFrame();
       if (root_manager)
@@ -960,35 +945,36 @@ size_t BrowserAccessibility::GetChildCount() const {
   return PlatformChildCount();
 }
 
-gfx::NativeViewAccessible BrowserAccessibility::ChildAtIndex(size_t index) {
+gfx::NativeViewAccessible BrowserAccessibility::ChildAtIndex(
+    size_t index) const {
   BrowserAccessibility* child = PlatformGetChild(index);
   if (!child)
     return nullptr;
   return child->GetNativeViewAccessible();
 }
 
-gfx::NativeViewAccessible BrowserAccessibility::GetFirstChild() {
+gfx::NativeViewAccessible BrowserAccessibility::GetFirstChild() const {
   BrowserAccessibility* child = PlatformGetFirstChild();
   if (!child)
     return nullptr;
   return child->GetNativeViewAccessible();
 }
 
-gfx::NativeViewAccessible BrowserAccessibility::GetLastChild() {
+gfx::NativeViewAccessible BrowserAccessibility::GetLastChild() const {
   BrowserAccessibility* child = PlatformGetLastChild();
   if (!child)
     return nullptr;
   return child->GetNativeViewAccessible();
 }
 
-gfx::NativeViewAccessible BrowserAccessibility::GetNextSibling() {
+gfx::NativeViewAccessible BrowserAccessibility::GetNextSibling() const {
   BrowserAccessibility* sibling = PlatformGetNextSibling();
   if (!sibling)
     return nullptr;
   return sibling->GetNativeViewAccessible();
 }
 
-gfx::NativeViewAccessible BrowserAccessibility::GetPreviousSibling() {
+gfx::NativeViewAccessible BrowserAccessibility::GetPreviousSibling() const {
   BrowserAccessibility* sibling = PlatformGetPreviousSibling();
   if (!sibling)
     return nullptr;
@@ -1124,11 +1110,11 @@ BrowserAccessibility* BrowserAccessibility::PlatformChildIterator::operator->()
   return platform_iterator.get();
 }
 
-std::unique_ptr<ui::ChildIterator> BrowserAccessibility::ChildrenBegin() {
+std::unique_ptr<ui::ChildIterator> BrowserAccessibility::ChildrenBegin() const {
   return std::make_unique<PlatformChildIterator>(PlatformChildrenBegin());
 }
 
-std::unique_ptr<ui::ChildIterator> BrowserAccessibility::ChildrenEnd() {
+std::unique_ptr<ui::ChildIterator> BrowserAccessibility::ChildrenEnd() const {
   return std::make_unique<PlatformChildIterator>(PlatformChildrenEnd());
 }
 
@@ -1174,7 +1160,7 @@ ui::AXPlatformNode* BrowserAccessibility::GetFromTreeIDAndNodeID(
   return node->GetAXPlatformNode();
 }
 
-absl::optional<size_t> BrowserAccessibility::GetIndexInParent() {
+absl::optional<size_t> BrowserAccessibility::GetIndexInParent() const {
   if (manager()->GetBrowserAccessibilityRoot() == this &&
       PlatformGetParent() == nullptr) {
     // If it is a root node of WebContent, it doesn't have a parent and a
@@ -1210,6 +1196,9 @@ bool BrowserAccessibility::AccessibilityPerformAction(
   switch (data.action) {
     case ax::mojom::Action::kDoDefault:
       manager_->DoDefaultAction(*this);
+      return true;
+    case ax::mojom::Action::kBlur:
+      manager_->Blur(*this);
       return true;
     case ax::mojom::Action::kFocus:
       manager_->SetFocus(*this);
@@ -1310,6 +1299,12 @@ bool BrowserAccessibility::AccessibilityPerformAction(
       return true;
     case ax::mojom::Action::kDecrement:
       manager_->Decrement(*this);
+      return true;
+    case ax::mojom::Action::kExpand:
+      manager_->Expand(*this);
+      return true;
+    case ax::mojom::Action::kCollapse:
+      manager_->Collapse(*this);
       return true;
     case ax::mojom::Action::kScrollBackward:
     case ax::mojom::Action::kScrollForward:
@@ -1897,6 +1892,10 @@ ui::TextAttributeMap BrowserAccessibility::GetSpellingAndGrammarAttributes()
         GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerStarts);
     const std::vector<int>& marker_ends =
         GetIntListAttribute(ax::mojom::IntListAttribute::kMarkerEnds);
+
+    CHECK_EQ(marker_types.size(), marker_starts.size());
+    CHECK_EQ(marker_types.size(), marker_ends.size());
+
     for (size_t i = 0; i < marker_types.size(); ++i) {
       bool is_spelling_error =
           (marker_types[i] &

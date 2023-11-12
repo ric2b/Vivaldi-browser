@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/values.h"
@@ -31,8 +32,8 @@ class TetherNotificationPresenterTest : public BrowserWithTestWindowTest {
  public:
   class TestNetworkConnect : public NetworkConnect {
    public:
-    TestNetworkConnect() {}
-    ~TestNetworkConnect() override {}
+    TestNetworkConnect() = default;
+    ~TestNetworkConnect() override = default;
 
     std::string network_id_to_connect() { return network_id_to_connect_; }
 
@@ -45,7 +46,7 @@ class TetherNotificationPresenterTest : public BrowserWithTestWindowTest {
     void ShowPortalSignin(const std::string& network_id,
                           NetworkConnect::Source source) override {}
     void ConfigureNetworkIdAndConnect(const std::string& network_id,
-                                      const base::Value& shill_properties,
+                                      const base::Value::Dict& shill_properties,
                                       bool shared) override {}
     void CreateConfigurationAndConnect(base::Value::Dict shill_properties,
                                        bool shared) override {}
@@ -63,8 +64,8 @@ class TetherNotificationPresenterTest : public BrowserWithTestWindowTest {
   class TestSettingsUiDelegate
       : public TetherNotificationPresenter::SettingsUiDelegate {
    public:
-    TestSettingsUiDelegate() {}
-    ~TestSettingsUiDelegate() override {}
+    TestSettingsUiDelegate() = default;
+    ~TestSettingsUiDelegate() override = default;
 
     Profile* last_profile() { return last_profile_; }
     std::string last_settings_subpage() { return last_settings_subpage_; }
@@ -103,7 +104,7 @@ class TetherNotificationPresenterTest : public BrowserWithTestWindowTest {
 
     test_settings_ui_delegate_ = new TestSettingsUiDelegate();
     notification_presenter_->SetSettingsUiDelegateForTesting(
-        base::WrapUnique(test_settings_ui_delegate_));
+        base::WrapUnique(test_settings_ui_delegate_.get()));
     has_verified_metrics_ = false;
   }
 
@@ -194,7 +195,7 @@ class TetherNotificationPresenterTest : public BrowserWithTestWindowTest {
   bool has_verified_metrics_;
 
   std::unique_ptr<TestNetworkConnect> test_network_connect_;
-  TestSettingsUiDelegate* test_settings_ui_delegate_;
+  raw_ptr<TestSettingsUiDelegate, ExperimentalAsh> test_settings_ui_delegate_;
   std::unique_ptr<TetherNotificationPresenter> notification_presenter_;
   std::unique_ptr<NotificationDisplayServiceTester> display_service_;
 };

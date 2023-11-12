@@ -4,21 +4,17 @@
 
 package org.chromium.chrome.browser.tasks;
 
-import static org.chromium.chrome.features.start_surface.StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_SECONDS;
-
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 
-import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.IntentUtils;
-import org.chromium.base.TimeUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.lifetime.Destroyable;
@@ -26,15 +22,20 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ChromeInactivityTracker;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.feed.FeedFeatures;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.IntCachedFieldTrialParameter;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.homepage.HomepagePolicyManager;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
+import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
@@ -43,7 +44,11 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.segmentation_platform.SegmentationPlatformServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.TabCreator;
+import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.ActiveTabState;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.util.BrowserUiUtils;
@@ -53,6 +58,7 @@ import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.chrome.features.start_surface.StartSurfaceState;
 import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
+import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.segmentation_platform.SegmentSelectionResult;
 import org.chromium.components.segmentation_platform.SegmentationPlatformService;
@@ -63,9 +69,6 @@ import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-
 /**
  * This is a utility class for managing features related to returning to Chrome after haven't used
  * Chrome for a while.
@@ -73,9 +76,6 @@ import java.lang.annotation.RetentionPolicy;
 public final class ReturnToChromeUtil {
     private static final String TAG = "TabSwitcherOnReturn";
 
-    @VisibleForTesting
-    public static final long INVALID_DECISION_TIMESTAMP = -1L;
-    public static final long MILLISECONDS_PER_DAY = TimeUtils.SECONDS_PER_DAY * 1000;
     @VisibleForTesting
     public static final String LAST_VISITED_TAB_IS_SRP_WHEN_OVERVIEW_IS_SHOWN_AT_LAUNCH_UMA =
             "Startup.Android.LastVisitedTabIsSRPWhenOverviewShownAtLaunch";
@@ -105,9 +105,12 @@ public final class ReturnToChromeUtil {
         private final Runnable mOnBackPressedCallback;
         private final ActivityTabProvider.ActivityTabTabObserver mActivityTabObserver;
         private final ActivityTabProvider mActivityTabProvider;
+        private final Supplier<Tab> mTabSupplier; // for debugging only
+        private final Supplier<LayoutStateProvider> mLayoutStateProviderSupplier;
 
-        public ReturnToChromeBackPressHandler(
-                ActivityTabProvider activityTabProvider, Runnable onBackPressedCallback) {
+        public ReturnToChromeBackPressHandler(ActivityTabProvider activityTabProvider,
+                Runnable onBackPressedCallback, Supplier<Tab> tabSupplier,
+                Supplier<LayoutStateProvider> layoutStateProviderSupplier) {
             mActivityTabProvider = activityTabProvider;
             mActivityTabObserver =
                     new ActivityTabProvider.ActivityTabTabObserver(activityTabProvider, true) {
@@ -117,6 +120,8 @@ public final class ReturnToChromeUtil {
                         }
                     };
             mOnBackPressedCallback = onBackPressedCallback;
+            mTabSupplier = tabSupplier;
+            mLayoutStateProviderSupplier = layoutStateProviderSupplier;
             onBackPressStateChanged();
         }
 
@@ -129,8 +134,16 @@ public final class ReturnToChromeUtil {
         public @BackPressResult int handleBackPress() {
             Tab tab = mActivityTabProvider.get();
             boolean res = tab != null && !tab.canGoBack() && isTabFromStartSurface(tab);
-            assert res
-                : String.format("tab %s; back press state %s", tab, tab != null && tab.canGoBack());
+            if (!res) {
+                var controlTab = mTabSupplier.get();
+                int layoutType = mLayoutStateProviderSupplier.hasValue()
+                        ? mLayoutStateProviderSupplier.get().getActiveLayoutType()
+                        : LayoutType.NONE;
+                assert false
+                    : String.format("tab %s; control tab %s; back press state %s; layout %s", tab,
+                              controlTab, tab != null && tab.canGoBack(), layoutType);
+            }
+
             mOnBackPressedCallback.run();
             return res ? BackPressResult.SUCCESS : BackPressResult.FAILURE;
         }
@@ -156,17 +169,13 @@ public final class ReturnToChromeUtil {
      *
      * @param lastTimeMillis The last time the application was backgrounded or foreground, depends
      *                       on which time is the max. Set in ChromeTabbedActivity::onStopWithNative
+     * @param isTablet Whether the activity is running in tablet mode.
      * @return true if past threshold, false if not past threshold or experiment cannot be loaded.
      */
-    public static boolean shouldShowTabSwitcher(final long lastTimeMillis) {
-        long tabSwitcherAfterMillis =
-                StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_SECONDS.getValue()
-                * DateUtils.SECOND_IN_MILLIS;
-        if (ChromeFeatureList.sStartSurfaceReturnTime.isEnabled()
-                && StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_SECONDS.getValue() != 0
-                && StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_USE_MODEL.getValue()) {
-            tabSwitcherAfterMillis = getReturnTimeFromSegmentation();
-        }
+    public static boolean shouldShowTabSwitcher(final long lastTimeMillis, boolean isTablet) {
+        long tabSwitcherAfterMillis = getReturnTime(isTablet
+                        ? StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_ON_TABLET_SECONDS
+                        : StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_SECONDS);
 
         // Note(david@vivaldi.com): We never show the tab switcher on startup. We reset the field
         // trial parameter here.
@@ -186,6 +195,19 @@ public final class ReturnToChromeUtil {
     }
 
     /**
+     * Gets the return time interval. The return time is in the unit of milliseconds.
+     * @param returnTime The return time parameter based on form factor, either phones or tablets.
+     */
+    private static long getReturnTime(IntCachedFieldTrialParameter returnTime) {
+        if (ChromeFeatureList.sStartSurfaceReturnTime.isEnabled() && returnTime.getValue() != 0
+                && StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_USE_MODEL.getValue()) {
+            return getReturnTimeFromSegmentation(returnTime);
+        }
+
+        return returnTime.getValue() * DateUtils.SECOND_IN_MILLIS;
+    }
+
+    /**
      * Gets the cached return time obtained from the segmentation platform service.
      * Note: this function should NOT been called on tablets! The default value for tablets is -1
      * which means not showing.
@@ -193,11 +215,11 @@ public final class ReturnToChromeUtil {
      *         0 means showing immediately. The return time is in the unit of milliseconds.
      */
     @VisibleForTesting
-    public static long getReturnTimeFromSegmentation() {
+    public static long getReturnTimeFromSegmentation(IntCachedFieldTrialParameter returnTime) {
         // Sets the default value as 8 hours; 0 means showing immediately.
         return SharedPreferencesManager.getInstance().readLong(
                 ChromePreferenceKeys.START_RETURN_TIME_SEGMENTATION_RESULT_MS,
-                START_SURFACE_RETURN_TIME_SECONDS.getDefaultValue());
+                returnTime.getDefaultValue());
     }
 
     /**
@@ -408,7 +430,7 @@ public final class ReturnToChromeUtil {
     public static boolean shouldHideStartSurfaceWithAccessibilityOn(Context context) {
         // TODO(crbug.com/1127732): Move this method back to StartSurfaceConfiguration.
         return ChromeAccessibilityUtil.get().isAccessibilityEnabled()
-                && !(StartSurfaceConfiguration.SUPPORT_ACCESSIBILITY.getValue()
+                && !(ChromeFeatureList.sStartSurfaceWithAccessibility.isEnabled()
                         && TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(context));
     }
 
@@ -453,6 +475,12 @@ public final class ReturnToChromeUtil {
         // If Start surface isn't enabled, return false.
         if (!ReturnToChromeUtil.isStartSurfaceEnabled(context)) return false;
 
+        return shouldShowHomeSurfaceAtStartupImpl(
+                false /* isTablet */, intent, tabModelSelector, inactivityTracker);
+    }
+
+    private static boolean shouldShowHomeSurfaceAtStartupImpl(boolean isTablet, Intent intent,
+            TabModelSelector tabModelSelector, ChromeInactivityTracker inactivityTracker) {
         // All of the following checks are based on Start surface is enabled.
         // If there's no tab existing, handle the initial tab creation.
         // Note: if user has a customized homepage, we don't show Start even there isn't any tab.
@@ -476,18 +504,22 @@ public final class ReturnToChromeUtil {
         // Checks whether to show the Start surface due to feature flag TAB_SWITCHER_ON_RETURN_MS.
         long lastVisibleTimeMs = inactivityTracker.getLastVisibleTimeMs();
         long lastBackgroundTimeMs = inactivityTracker.getLastBackgroundedTimeMs();
-        boolean tabSwitcherOnReturn = IntentUtils.isMainIntentFromLauncher(intent)
+        return IntentUtils.isMainIntentFromLauncher(intent)
                 && ReturnToChromeUtil.shouldShowTabSwitcher(
-                        Math.max(lastBackgroundTimeMs, lastVisibleTimeMs));
+                        Math.max(lastBackgroundTimeMs, lastVisibleTimeMs), isTablet);
+    }
 
-        // If the overview page won't be shown on startup, stops here.
-        if (!tabSwitcherOnReturn) return false;
+    /**
+     * Returns whether should show a NTP as the home surface at startup. This feature is only
+     * enabled on Tablet.
+     */
+    public static boolean shouldShowNtpAsHomeSurfaceAtStartup(boolean isTablet, Intent intent,
+            TabModelSelector tabModelSelector, ChromeInactivityTracker inactivityTracker) {
+        // If "Start surface on tablet" isn't enabled, return false.
+        if (!StartSurfaceConfiguration.isNtpAsHomeSurfaceEnabled(isTablet)) return false;
 
-        if (!TextUtils.isEmpty(StartSurfaceConfiguration.BEHAVIOURAL_TARGETING.getValue())) {
-            return ReturnToChromeUtil.userBehaviourSupported();
-        }
-
-        return true;
+        return shouldShowHomeSurfaceAtStartupImpl(
+                true /* isTablet */, intent, tabModelSelector, inactivityTracker);
     }
 
     /**
@@ -502,194 +534,76 @@ public final class ReturnToChromeUtil {
     }
 
     /**
-     * Returns whether to show the Start surface at startup based on whether user has done the
-     * targeted behaviour.
+     * Creates a new Tab and show Home surface UI. This is called when the last active Tab isn't a
+     * NTP, and we need to create one and show Home surface UI (a module showing the last active
+     * Tab).
+     * @param tabCreator The {@link TabCreator} object.
+     * @param tabModelSelector The {@link TabModelSelector} object.
+     * @param lastActiveTabUrl The URL of the last active Tab. It is non-null in cold startup before
+     *                         the Tab is restored.
+     * @param lastActiveTab The object of the last active Tab. It is non-null after TabModel is
+     *                      initialized, e.g., in warm startup.
      */
-    public static boolean userBehaviourSupported() {
-        SharedPreferencesManager manager = SharedPreferencesManager.getInstance();
-        long nextDecisionTimestamp =
-                manager.readLong(ChromePreferenceKeys.START_NEXT_SHOW_ON_STARTUP_DECISION_MS,
-                        INVALID_DECISION_TIMESTAMP);
-        boolean noPreviousHistory = nextDecisionTimestamp == INVALID_DECISION_TIMESTAMP;
-        // If this is the first time we make a decision, don't show the Start surface at startup.
-        if (noPreviousHistory) {
-            resetTargetBehaviourAndNextDecisionTime(false, null);
-            return false;
-        }
+    public static Tab createNewTabAndShowHomeSurfaceUi(TabCreator tabCreator,
+            TabModelSelector tabModelSelector, @Nullable String lastActiveTabUrl,
+            @Nullable Tab lastActiveTab) {
+        assert lastActiveTab != null || lastActiveTabUrl != null;
 
-        boolean previousResult = SharedPreferencesManager.getInstance().readBoolean(
-                ChromePreferenceKeys.START_SHOW_ON_STARTUP, false);
-        // Returns the current decision before the next decision timestamp.
-        if (System.currentTimeMillis() < nextDecisionTimestamp) {
-            return previousResult;
-        }
+        // Creates a new Tab if doesn't find an existing to reuse.
+        Tab ntpTab = tabCreator.createNewTab(
+                new LoadUrlParams(UrlConstants.NTP_URL), TabLaunchType.FROM_STARTUP, null);
 
-        // Shows the start surface st startup for a period of time if the behaviour tests return
-        // positive, otherwise, hides it.
-        String behaviourType = StartSurfaceConfiguration.BEHAVIOURAL_TARGETING.getValue();
-        // The behaviour type strings can contain
-        // 1. A feature name, in which case the prefs with the click counts are used to make
-        //    decision.
-        // 2. Just "all", in which case the threshold is applied to any of the feature usage.
-        // 3. Prefixed: "model_<feature>", in which case we still use the click count prefs for
-        //    making decision, but also record a comparison histogram with result from segmentation
-        //    platform.
-        // 4. Just "model", in which case we do not use click count prefs and instead just use the
-        //    result from segmentation.
-        boolean shouldAskModel = behaviourType.startsWith("model");
-        boolean shouldUseCodeResult = !behaviourType.equals("model");
-        String key = getBehaviourType(behaviourType);
-        boolean resetAllCounts = false;
-        int threshold = StartSurfaceConfiguration.USER_CLICK_THRESHOLD.getValue();
-
-        boolean resultFromCode = false;
-        boolean resultFromModel = false;
-
-        if (shouldUseCodeResult) {
-            if (TextUtils.equals(
-                        "all", StartSurfaceConfiguration.BEHAVIOURAL_TARGETING.getValue())) {
-                resultFromCode =
-                        manager.readInt(ChromePreferenceKeys.TAP_MV_TILES_COUNT) >= threshold
-                        || manager.readInt(ChromePreferenceKeys.TAP_FEED_CARDS_COUNT) >= threshold
-                        || manager.readInt(ChromePreferenceKeys.OPEN_NEW_TAB_PAGE_COUNT)
-                                >= threshold
-                        || manager.readInt(ChromePreferenceKeys.OPEN_RECENT_TABS_COUNT) >= threshold
-                        || manager.readInt(ChromePreferenceKeys.OPEN_HISTORY_COUNT) >= threshold;
-                resetAllCounts = true;
-            } else {
-                assert key != null;
-                int clicks = manager.readInt(key, 0);
-                resultFromCode = clicks >= threshold;
-            }
-        }
-        if (shouldAskModel) {
-            // When segmentation is not ready with results yet, use the result from click count
-            // prefs. If we do not have that too, then we do not want to switch the current behavior
-            // frequently, so use the existing setting to show start or not.
-            boolean defaultResult = shouldUseCodeResult ? resultFromCode : previousResult;
-            resultFromModel = getBehaviourResultFromSegmentation(defaultResult);
-            if (shouldUseCodeResult) {
-                // Record a comparison between segmentation and hard coded logic when code result
-                // should be used.
-                recordSegmentationResultComparison(resultFromCode);
-            } else {
-                // Clear all the prefs state, the result does not matter in this case.
-                resetAllCounts = true;
-            }
-        }
-
-        boolean showStartOnStartup = shouldUseCodeResult ? resultFromCode : resultFromModel;
-        if (resetAllCounts) {
-            resetTargetBehaviourAndNextDecisionTimeForAllCounts(showStartOnStartup);
+        // If the last active Tab isn't ready yet, we will listen to the willAddTab() event and find
+        // the Tab instance with the given last active Tab's URL. The last active Tab is always the
+        // first one to be restored.
+        if (lastActiveTab == null) {
+            assert lastActiveTabUrl != null;
+            TabModelObserver observer = new TabModelObserver() {
+                @Override
+                public void willAddTab(Tab tab, int type) {
+                    assert TextUtils.equals(lastActiveTabUrl, tab.getUrl().getSpec())
+                        : "The URL of first Tab restored doesn't match the URL of the last active Tab read from the Tab state metadata file!";
+                    showHomeSurfaceUiOnNtp(ntpTab, tab);
+                    tabModelSelector.getModel(false).removeObserver(this);
+                }
+            };
+            tabModelSelector.getModel(false).addObserver(observer);
         } else {
-            assert key != null;
-            resetTargetBehaviourAndNextDecisionTime(showStartOnStartup, key);
+            showHomeSurfaceUiOnNtp(ntpTab, lastActiveTab);
         }
-        return showStartOnStartup;
+
+        return ntpTab;
     }
 
     /**
-     * Returns the ChromePreferenceKeys of the type to record in the SharedPreference.
-     * @param behaviourType: the type of targeted behaviour.
+     * Shows a NTP on warm startup on tablets if return time arrives. Only create a new NTP if there
+     * isn't any existing NTP to reuse.
+     * @param isIncognito Whether the incognito mode is selected.
+     * @param shouldShowNtpHomeSurfaceOnStartup Whether to show a NTP as home surface on startup.
+     * @param currentTabModel The object of the current {@link  TabModel}.
+     * @param tabCreator The {@link TabCreator} object.
      */
-    private static @Nullable String getBehaviourType(String behaviourType) {
-        switch (behaviourType) {
-            case "mv_tiles":
-            case "model_mv_tiles":
-                return ChromePreferenceKeys.TAP_MV_TILES_COUNT;
-            case "feeds":
-            case "model_feeds":
-                return ChromePreferenceKeys.TAP_FEED_CARDS_COUNT;
-            case "open_new_tab":
-            case "model_open_new_tab":
-                return ChromePreferenceKeys.OPEN_NEW_TAB_PAGE_COUNT;
-            case "open_history":
-            case "model_open_history":
-                return ChromePreferenceKeys.OPEN_HISTORY_COUNT;
-            case "open_recent_tabs":
-            case "model_open_recent_tabs":
-                return ChromePreferenceKeys.OPEN_RECENT_TABS_COUNT;
-            default:
-                // Valid when the type is "model" when the decision is made by segmentation model.
-                return null;
+    public static void setInitialOverviewStateOnResumeOnTablet(boolean isIncognito,
+            boolean shouldShowNtpHomeSurfaceOnStartup, TabModel currentTabModel,
+            TabCreator tabCreator) {
+        if (isIncognito || !shouldShowNtpHomeSurfaceOnStartup) {
+            return;
         }
-    }
 
-    private static void resetTargetBehaviourAndNextDecisionTime(
-            boolean showStartOnStartup, @Nullable String behaviourTypeKey) {
-        resetTargetBehaviourAndNextDecisionTimeImpl(showStartOnStartup);
+        int index = currentTabModel.index();
+        Tab lastActiveTab = TabModelUtils.getCurrentTab(currentTabModel);
+        if (lastActiveTab == null) return;
 
-        if (behaviourTypeKey != null) {
-            SharedPreferencesManager.getInstance().removeKey(behaviourTypeKey);
-        }
-    }
+        int indexOfFirstNtp = TabModelUtils.getTabIndexByUrl(currentTabModel, UrlConstants.NTP_URL);
+        if (indexOfFirstNtp != TabModel.INVALID_TAB_INDEX) {
+            // If the last active Tab is NTP, early return here.
+            if (indexOfFirstNtp == index) return;
 
-    private static void resetTargetBehaviourAndNextDecisionTimeForAllCounts(
-            boolean showStartOnStartup) {
-        resetTargetBehaviourAndNextDecisionTimeImpl(showStartOnStartup);
-        resetAllCounts();
-    }
-
-    private static void resetTargetBehaviourAndNextDecisionTimeImpl(boolean showStartOnStartup) {
-        long nextDecisionTime = System.currentTimeMillis();
-
-        if (showStartOnStartup) {
-            nextDecisionTime += MILLISECONDS_PER_DAY
-                    * StartSurfaceConfiguration.NUM_DAYS_KEEP_SHOW_START_AT_STARTUP.getValue();
+            TabModelUtils.setIndex(currentTabModel, indexOfFirstNtp, false);
+            showHomeSurfaceUiOnNtp(currentTabModel.getTabAt(indexOfFirstNtp), lastActiveTab);
         } else {
-            nextDecisionTime += MILLISECONDS_PER_DAY
-                    * StartSurfaceConfiguration.NUM_DAYS_USER_CLICK_BELOW_THRESHOLD.getValue();
+            createNewTabAndShowHomeSurfaceUi(tabCreator, null, null, lastActiveTab);
         }
-        SharedPreferencesManager.getInstance().writeBoolean(
-                ChromePreferenceKeys.START_SHOW_ON_STARTUP, showStartOnStartup);
-        SharedPreferencesManager.getInstance().writeLong(
-                ChromePreferenceKeys.START_NEXT_SHOW_ON_STARTUP_DECISION_MS, nextDecisionTime);
-    }
-
-    private static void resetAllCounts() {
-        SharedPreferencesManager.getInstance().removeKey(ChromePreferenceKeys.TAP_MV_TILES_COUNT);
-        SharedPreferencesManager.getInstance().removeKey(ChromePreferenceKeys.TAP_FEED_CARDS_COUNT);
-        SharedPreferencesManager.getInstance().removeKey(
-                ChromePreferenceKeys.OPEN_NEW_TAB_PAGE_COUNT);
-        SharedPreferencesManager.getInstance().removeKey(
-                ChromePreferenceKeys.OPEN_RECENT_TABS_COUNT);
-        SharedPreferencesManager.getInstance().removeKey(ChromePreferenceKeys.OPEN_HISTORY_COUNT);
-    }
-
-    // Constants with ShowChromeStartSegmentationResult in enums.xml.
-    // These values are persisted to logs. Entries should not be renumbered and
-    // numeric values should never be reused.
-    @IntDef({ShowChromeStartSegmentationResult.UNINITIALIZED,
-            ShowChromeStartSegmentationResult.DONT_SHOW, ShowChromeStartSegmentationResult.SHOW})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface ShowChromeStartSegmentationResult {
-        int UNINITIALIZED = 0;
-        int DONT_SHOW = 1;
-        int SHOW = 2;
-        int NUM_ENTRIES = 3;
-    }
-
-    /*
-     * Computes result of the segmentation platform and store to prefs.
-     */
-    public static void cacheSegmentationResult() {
-        SegmentationPlatformService segmentationPlatformService =
-                SegmentationPlatformServiceFactory.getForProfile(
-                        Profile.getLastUsedRegularProfile());
-        segmentationPlatformService.getSelectedSegment(START_SEGMENTATION_PLATFORM_KEY, result -> {
-            @ShowChromeStartSegmentationResult
-            int resultEnum;
-            if (!result.isReady) {
-                resultEnum = ShowChromeStartSegmentationResult.UNINITIALIZED;
-            } else if (result.selectedSegment
-                    == SegmentId.OPTIMIZATION_TARGET_SEGMENTATION_CHROME_START_ANDROID) {
-                resultEnum = ShowChromeStartSegmentationResult.SHOW;
-            } else {
-                resultEnum = ShowChromeStartSegmentationResult.DONT_SHOW;
-            }
-            SharedPreferencesManager.getInstance().writeInt(
-                    ChromePreferenceKeys.SHOW_START_SEGMENTATION_RESULT, resultEnum);
-        });
     }
 
     /*
@@ -723,137 +637,6 @@ public final class ReturnToChromeUtil {
         }
         SharedPreferencesManager.getInstance().writeLong(
                 ChromePreferenceKeys.START_RETURN_TIME_SEGMENTATION_RESULT_MS, returnTimeMs);
-    }
-
-    /**
-     * Returns whether to show Start surface based on segmentation result. When unavailable, returns
-     * default value given.
-     */
-    private static boolean getBehaviourResultFromSegmentation(boolean defaultResult) {
-        @ShowChromeStartSegmentationResult
-        int resultEnum = SharedPreferencesManager.getInstance().readInt(
-                ChromePreferenceKeys.SHOW_START_SEGMENTATION_RESULT);
-        RecordHistogram.recordEnumeratedHistogram(
-                "Startup.Android.ShowChromeStartSegmentationResult", resultEnum,
-                ShowChromeStartSegmentationResult.NUM_ENTRIES);
-        switch (resultEnum) {
-            case ShowChromeStartSegmentationResult.DONT_SHOW:
-                return false;
-            case ShowChromeStartSegmentationResult.SHOW:
-                return true;
-
-            case ShowChromeStartSegmentationResult.UNINITIALIZED:
-            default:
-                return defaultResult;
-        }
-    }
-
-    // Constants with ShowChromeStartSegmentationResultComparison in enums.xml.
-    // These values are persisted to logs. Entries should not be renumbered and
-    // numeric values should never be reused.
-    @IntDef({ShowChromeStartSegmentationResultComparison.UNINITIALIZED,
-            ShowChromeStartSegmentationResultComparison.SEGMENTATION_ENABLED_LOGIC_ENABLED,
-            ShowChromeStartSegmentationResultComparison.SEGMENTATION_ENABLED_LOGIC_DISABLED,
-            ShowChromeStartSegmentationResultComparison.SEGMENTATION_DISABLED_LOGIC_ENABLED,
-            ShowChromeStartSegmentationResultComparison.SEGMENTATION_DISABLED_LOGIC_DISABLED})
-    @Retention(RetentionPolicy.SOURCE)
-    @VisibleForTesting
-    public @interface ShowChromeStartSegmentationResultComparison {
-        int UNINITIALIZED = 0;
-        int SEGMENTATION_ENABLED_LOGIC_ENABLED = 1;
-        int SEGMENTATION_ENABLED_LOGIC_DISABLED = 2;
-        int SEGMENTATION_DISABLED_LOGIC_ENABLED = 3;
-        int SEGMENTATION_DISABLED_LOGIC_DISABLED = 4;
-        int NUM_ENTRIES = 5;
-    }
-
-    /*
-     * Records UMA to compare the result of segmentation platform with hard coded logics.
-     */
-    private static void recordSegmentationResultComparison(boolean existingResult) {
-        @ShowChromeStartSegmentationResult
-        int segmentationResult = SharedPreferencesManager.getInstance().readInt(
-                ChromePreferenceKeys.SHOW_START_SEGMENTATION_RESULT);
-        @ShowChromeStartSegmentationResultComparison
-        int comparison = ShowChromeStartSegmentationResultComparison.UNINITIALIZED;
-        switch (segmentationResult) {
-            case ShowChromeStartSegmentationResult.UNINITIALIZED:
-                comparison = ShowChromeStartSegmentationResultComparison.UNINITIALIZED;
-                break;
-            case ShowChromeStartSegmentationResult.SHOW:
-                comparison = existingResult ? ShowChromeStartSegmentationResultComparison
-                                                      .SEGMENTATION_ENABLED_LOGIC_ENABLED
-                                            : ShowChromeStartSegmentationResultComparison
-                                                      .SEGMENTATION_ENABLED_LOGIC_DISABLED;
-                break;
-            case ShowChromeStartSegmentationResult.DONT_SHOW:
-                comparison = existingResult ? ShowChromeStartSegmentationResultComparison
-                                                      .SEGMENTATION_DISABLED_LOGIC_ENABLED
-                                            : ShowChromeStartSegmentationResultComparison
-                                                      .SEGMENTATION_DISABLED_LOGIC_DISABLED;
-                break;
-        }
-        RecordHistogram.recordEnumeratedHistogram(
-                "Startup.Android.ShowChromeStartSegmentationResultComparison", comparison,
-                ShowChromeStartSegmentationResultComparison.NUM_ENTRIES);
-    }
-
-    /**
-     * Called when a targeted behaviour happens. It may increase the count if the corresponding
-     * behaviour targeting type is set.
-     */
-    @VisibleForTesting
-    public static void onUIClicked(String chromePreferenceKey) {
-        String type = StartSurfaceConfiguration.BEHAVIOURAL_TARGETING.getValue();
-        if (TextUtils.isEmpty(type)
-                || (!TextUtils.equals("all", type)
-                        && !TextUtils.equals(getBehaviourType(type), chromePreferenceKey))) {
-            return;
-        }
-
-        int currentCount = SharedPreferencesManager.getInstance().readInt(chromePreferenceKey, 0);
-        SharedPreferencesManager.getInstance().writeInt(chromePreferenceKey, currentCount + 1);
-    }
-
-    /**
-     * Called when the "New Tab" from menu or "+" button is clicked. The count is only recorded when
-     * the behavioural targeting is enabled on the Start surface.
-     */
-    public static void onNewTabOpened() {
-        onUIClicked(ChromePreferenceKeys.OPEN_NEW_TAB_PAGE_COUNT);
-    }
-
-    /**
-     * Called when the "History" menu is clicked. The count is only recorded when the behavioural
-     * targeting is enabled on the Start surface.
-     */
-    public static void onHistoryOpened() {
-        onUIClicked(ChromePreferenceKeys.OPEN_HISTORY_COUNT);
-    }
-
-    /**
-     * Called when the "Recent tabs" menu is clicked. The count is only recorded when the
-     * behavioural targeting is enabled on the Start surface.
-     */
-    public static void onRecentTabsOpened() {
-        onUIClicked(ChromePreferenceKeys.OPEN_RECENT_TABS_COUNT);
-    }
-
-    /**
-     * Called when a Feed card is opened in 1) a foreground tab; 2) a background tab and 3) an
-     * incognito tab. The count is only recorded when the behavioural targeting is enabledf on the
-     * Start surface.
-     */
-    public static void onFeedCardOpened() {
-        onUIClicked(ChromePreferenceKeys.TAP_FEED_CARDS_COUNT);
-    }
-
-    /**
-     * Called when a MV tile is opened. The count is only recorded when the behavioural targeting is
-     * enabled on the Start surface.
-     */
-    public static void onMVTileOpened() {
-        onUIClicked(ChromePreferenceKeys.TAP_MV_TILES_COUNT);
     }
 
     /**
@@ -918,11 +701,6 @@ public final class ReturnToChromeUtil {
                 && TabUiFeatureUtilities.isGridTabSwitcherEnabled(context);
     }
 
-    @VisibleForTesting
-    public static String getBehaviourTypeKeyForTesting(String key) {
-        return getBehaviourType(key);
-    }
-
     /**
      * Records a user action that Start surface is showing due to tapping the back button.
      * @param from: Where the back navigation is initiated, either "FromTab" or "FromTabSwitcher".
@@ -958,5 +736,13 @@ public final class ReturnToChromeUtil {
             BrowserUiUtils.recordModuleClickHistogram(HostSurface.NEW_TAB_PAGE,
                     BrowserUiUtils.ModuleTypeOnStartAndNTP.TAB_SWITCHER_BUTTON);
         }
+    }
+
+    /**
+     * Shows the home surface UI on the given Ntp on tablets.
+     */
+    private static void showHomeSurfaceUiOnNtp(Tab ntpTab, Tab lastActiveTab) {
+        assert ntpTab.isNativePage();
+        ((NewTabPage) ntpTab.getNativePage()).showHomeSurfaceUi(lastActiveTab);
     }
 }

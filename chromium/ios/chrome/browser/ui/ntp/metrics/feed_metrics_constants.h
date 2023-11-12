@@ -42,6 +42,11 @@ extern NSString* const kLastUsedFeedForGoodVisitsKey;
 extern NSString* const kLastInteractionTimeForGoodVisits;
 extern NSString* const kLastInteractionTimeForDiscoverGoodVisits;
 extern NSString* const kLastInteractionTimeForFollowingGoodVisits;
+// Stores the last day the Time in Feed was reported on UMA. It stores the
+// midnight (beginning of the day) of the last interaction.
+extern NSString* const kLastDayTimeInFeedReportedKey;
+// Stores the time spent on the feed for a day.
+extern NSString* const kTimeSpentInFeedAggregateKey;
 
 #pragma mark - Enums
 
@@ -74,9 +79,13 @@ enum class FeedRefreshTrigger {
   kForegroundFeedVisibleOther = 6,
   kForegroundNotForced = 7,
   kForegroundFeedNotVisible = 8,
+  kForegroundNewFeedViewController = 9,
+  kForegroundAppClose = 10,
+  kBackgroundColdStartAppClose = 11,
+  kBackgroundWarmStartAppClose = 12,
 
   // Change this to match max value.
-  kMaxValue = kForegroundFeedNotVisible,
+  kMaxValue = kBackgroundWarmStartAppClose,
 };
 
 // Enum class contains values indicating the type of follow request. Ex.
@@ -201,6 +210,8 @@ enum class FeedSortType {
 
 #pragma mark - Histograms
 
+// Histogram name for the Time Spent in Feed.
+extern const char kTimeSpentInFeedHistogram[];
 // Histogram name for the Discover feed user actions.
 extern const char kDiscoverFeedUserActionHistogram[];
 
@@ -287,17 +298,18 @@ extern const char kFollowCountAfterUnfollow[];
 // After engaging with the Following feed.
 extern const char kFollowCountWhenEngaged[];
 
-// Histogram for an action taken on the regular NTP (not start surface).
-extern const char kActionOnNTP[];
-// Histogram for an action taken on the start surface.
-extern const char kActionOnStartSurface[];
-
 // Histogram name for last visible card when switching from Discover to
 // Following feed.
 extern const char kDiscoverIndexWhenSwitchingFeed[];
 // Histogram name for last visible card when switching from Following to
 // Discover feed.
 extern const char kFollowingIndexWhenSwitchingFeed[];
+
+// Histogram name for sign-in related UI triggered by Feed entry points.
+extern const char kFeedSignInUI[];
+
+// Histogram name for Feed sync related UI triggered by Feed entry points.
+extern const char kFeedSyncPromo[];
 
 #pragma mark - User Actions
 
@@ -380,9 +392,30 @@ extern const char kUnfollowFromMenu[];
 extern const char kFollowingFeedGroupByPublisher[];
 extern const char kFollowingFeedSortByLatest[];
 
+#pragma mark - User Actions for Feed Sign-in Promo
+
 // User actions triggered when a user clicks the buttons on the Feed sign-in
 // promo UI.
 extern const char kFeedSignInPromoUIContinueTapped[];
 extern const char kFeedSignInPromoUICancelTapped[];
+
+// User actions triggered when a user taps on Feed Back of Card menu
+// personalization options when not signed in.
+extern const char kShowFeedSignInOnlyUIWithUserId[];
+extern const char kShowFeedSignInOnlyUIWithoutUserId[];
+
+// User actions triggered when a user taps on Feed personalization controls and
+// a corresponding sign-in related UI is shown. Ex. A sign-in half sheet, a
+// sign-in only flow, or a disabled toast is shown.
+extern const char kShowSyncHalfSheetFromFeed[];
+extern const char kShowSignInOnlyFlowFromFeed[];
+extern const char kShowSignInDisableToastFromFeed[];
+
+#pragma mark - User Actions for Feed Sync Promo
+
+// User actions triggered when a user taps on the Feed sync promo and a sync
+// related UI is shown.
+extern const char kShowSyncFlowFromFeed[];
+extern const char kShowDisableToastFromFeed[];
 
 #endif  // IOS_CHROME_BROWSER_UI_NTP_METRICS_FEED_METRICS_CONSTANTS_H_

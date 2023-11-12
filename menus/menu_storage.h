@@ -96,7 +96,7 @@ class MenuStorage : public base::ImportantFileWriter::DataSerializer {
   void OnLoadFinished(std::unique_ptr<MenuLoadDetails> details);
 
   // ImportantFileWriter::DataSerializer implementation.
-  bool SerializeData(std::string* output) override;
+  absl::optional<std::string> SerializeData() override;
 
   bool SaveValue(const std::unique_ptr<base::Value>& value);
 
@@ -116,7 +116,7 @@ class MenuStorage : public base::ImportantFileWriter::DataSerializer {
   // Returns true on successful serialization.
   bool SaveNow();
 
-  Menu_Model* model_;
+  raw_ptr<Menu_Model> model_;
 
   // Path to the file where we can read and write data (in profile).
   base::ImportantFileWriter writer_;

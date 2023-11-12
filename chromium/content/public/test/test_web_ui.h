@@ -39,6 +39,7 @@ class TestWebUI : public WebUI {
   // WebUI overrides.
   WebContents* GetWebContents() override;
   WebUIController* GetController() override;
+  RenderFrameHost* GetRenderFrameHost() override;
   void SetController(std::unique_ptr<WebUIController> controller) override;
   float GetDeviceScaleFactor() override;
   const std::u16string& GetOverriddenTitle() override;
@@ -52,7 +53,7 @@ class TestWebUI : public WebUI {
                                MessageCallback callback) override;
   void ProcessWebUIMessage(const GURL& source_url,
                            const std::string& message,
-                           base::Value::List args) override {}
+                           base::Value::List args) override;
   bool CanCallJavascript() override;
   void CallJavascriptFunctionUnsafe(base::StringPiece function_name) override;
   void CallJavascriptFunctionUnsafe(

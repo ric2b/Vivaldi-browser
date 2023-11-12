@@ -214,7 +214,7 @@ ExtensionFunction::ResponseAction MenubarMenuShowFunction::Run() {
   namespace Results = vivaldi::menubar_menu::Show::Results;
 
   params_ = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params_.get());
+  EXTENSION_FUNCTION_VALIDATE(params_);
 
   // Set up needed information for the menu bar to request menus on demand.
   menuParams_.siblings.reserve(params_->properties.siblings.size());
@@ -270,7 +270,7 @@ std::string MenubarMenuShowFunction::Open(content::WebContents* web_contents,
 }
 
 std::string MenubarMenuShowFunction::PopulateModel(
-    vivaldi::menubar_menu::Show::Params* params,
+    absl::optional<vivaldi::menubar_menu::Show::Params> &params,
     int menu_id,
     bool dark_text_color,
     const std::vector<Element>& list,
@@ -469,7 +469,7 @@ void MenubarMenuShowFunction::PopulateModel(int menu_id,
   for (const vivaldi::menubar_menu::Menu& sibling : list) {
     if (sibling.id == menu_id) {
       std::string error =
-          PopulateModel(params_.get(), sibling.id, dark_text_color,
+          PopulateModel(params_, sibling.id, dark_text_color,
                         sibling.children, simple_menu_model);
       if (!error.empty()) {
         MenubarMenuAPI::SendError(browser_context(), error);
@@ -496,7 +496,7 @@ void MenubarMenuShowFunction::PopulateSubmodel(int menu_id,
   DCHECK(simple_menu_model);
 
   std::string error =
-      PopulateModel(params_.get(), menu_id, dark_text_color,
+      PopulateModel(params_, menu_id, dark_text_color,
                     *id_to_elementvector_map_[menu_id], simple_menu_model);
   if (!error.empty()) {
     MenubarMenuAPI::SendError(browser_context(), error);

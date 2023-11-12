@@ -3,15 +3,15 @@
 <translationbundle lang="es">
 <translation id="1033008476608128425">Paisaje 3</translation>
 <translation id="1118377629180821201">Paisaje 12</translation>
-<translation id="1158503667684816647">No volver a solicitar confirmación</translation>
+<translation id="1158503667684816647">No volver a preguntar</translation>
 <translation id="1222195720020481779">Iniciando el instalador...</translation>
 <translation id="1276145862619442150">Accesos rápidos</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Enviar el enlace por correo</translation>
-<translation id="1454726940098520109">No volver a solicitar confirmación</translation>
-<translation id="1462666970065907900">¿Estás seguro de cerrar esta ventana?</translation>
+<translation id="1454726940098520109">No volver a preguntar</translation>
+<translation id="1462666970065907900">¿Estás seguro de que quieres cerrar esta ventana?</translation>
 <translation id="1480046233931937785">Créditos</translation>
-<translation id="1526344461589023948">Ocurrió un error al intentar guardar los archivos de actualización descargados. Por favor, revisa que tu equipo tenga suficiente espacio en disco y reinténtalo más tarde.</translation>
+<translation id="1526344461589023948">Se ha producido un error al intentar guardar una actualización descargada. Por favor, comprueba que tu equipo tenga suficiente espacio en disco e inténtalo de nuevo más tarde.</translation>
 <translation id="1657174850639146440">Monstruo 9</translation>
 <translation id="1676595396635191120">Ventana privada nueva</translation>
 <translation id="1702758681952953055">Si el error persiste, por favor repórtalo e incluye los siguientes detalles:</translation>
@@ -25,24 +25,24 @@
 <translation id="19598411548897379">Genérico</translation>
 <translation id="1973351931613083086">autoreproducción</translation>
 <translation id="1985669426322966465">Actualización del programa</translation>
-<translation id="2079036669923635404">Clica aquí para actualizar Vivaldi a la versión <ph name="VERSION" />.</translation>
-<translation id="2141974047387702305">Ocurrió un error al descargar los archivos de actualización. Por favor, revisa tu conexión a internet y reinténtalo más tarde.</translation>
+<translation id="2079036669923635404">Haz clic aquí para actualizar Vivaldi a la versión <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Se ha producido un error al descargar los archivos de actualización. Por favor, comprueba tu conexión a Internet y vuelve a intentarlo más tarde.</translation>
 <translation id="2339641773402824483">Buscando actualizaciones...</translation>
 <translation id="2441056087170876076">Monstruo 2</translation>
-<translation id="2444387452209867610">Ingresar nota</translation>
+<translation id="2444387452209867610">Insertar nota</translation>
 <translation id="2486841023299517366">Animal 4</translation>
 <translation id="2612127540243995147">La nueva versión está lista para ser instalada. Vivaldi se cerrará y luego se reiniciará automáticamente.</translation>
 <translation id="2613387515621326337">Mostrar el sitio web de actualizaciones</translation>
-<translation id="2647368062414805334">Lamentablemente tus preferencias de Edge no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Edge y luego clica en Continuar.</translation>
+<translation id="2647368062414805334">Lamentablemente, las preferencias de Edge no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Edge y después haz clic en «Continuar».</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
 <translation id="2873951654529031587">Papelera</translation>
 <translation id="292258461174562431">Monstruo 4</translation>
 <translation id="2923448633003185837">Pegar e ir</translation>
-<translation id="2953943267837858202">No permitidos para autoreproducir videos</translation>
+<translation id="2953943267837858202">No permitidos para reproducir vídeos automáticamente</translation>
 <translation id="2977472760057091832">Abrir enlace en una ventana privada</translation>
 <translation id="2989805286512600854">Abrir en pestaña nueva</translation>
-<translation id="3027988479108856431">Lamentablemente tus preferencias de Yandex no estarán disponibles mientras dicho navegador esté ejecutándose. Para poder importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Yandex y luego clica en Continuar.</translation>
+<translation id="3027988479108856431">Lamentablemente, las preferencias de Yandex no estarán disponibles mientras dicho navegador esté ejecutándose. Para poder importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Yandex y después haz clic en «Continuar».</translation>
 <translation id="3084011186245865060">Paisaje 6</translation>
 <translation id="3093931836425623631">Vivaldi ha sido hecho posible gracias al proyecto de código abierto Chromium y a otros programas de código abierto.</translation>
 <translation id="3127383884976966729">Animal 7</translation>
@@ -59,18 +59,18 @@
 <translation id="3457498675806041407">Confirmar salida</translation>
 <translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> ha sido instalado, se activará después que reinicies el navegador.</translation>
 <translation id="3516213908976398531">Paisaje 11</translation>
-<translation id="3521635864657970829">¿Estás seguro de cerrar esta ventana?</translation>
+<translation id="3521635864657970829">¿Estás seguro de que quieres cerrar esta ventana?</translation>
 <translation id="3540597690227428180">Animal 9</translation>
 <translation id="3542768452570884558">Abrir enlace en una ventana nueva</translation>
 <translation id="3588820906588687999">Abrir imagen en una pestaña nueva</translation>
 <translation id="3601066750251199488">Monstruo 3</translation>
-<translation id="3620979700683094848">Los sitios pueden autoreproducir videos</translation>
+<translation id="3620979700683094848">Los sitios pueden reproducir vídeos automáticamente</translation>
 <translation id="3680031241659195730">¡Una nueva versión de Vivaldi está disponible!</translation>
-<translation id="3708982624815781692">La descarga fue cancelada.</translation>
-<translation id="3732157130969736834">Guardar en marcadores</translation>
+<translation id="3708982624815781692">Se ha cancelado la descarga.</translation>
+<translation id="3732157130969736834">Añadir a marcadores</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
-<translation id="3795800845758778870">Lamentablemente tus preferencias de Brave no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Brave y luego clica en Continuar.</translation>
+<translation id="3795800845758778870">Lamentablemente, las preferencias de Brave no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Brave y después haz clic en «Continuar».</translation>
 <translation id="3822431842304177896">Separador nuevo</translation>
 <translation id="3832132597516774400">Paisaje 5</translation>
 <translation id="3914946330804881301">Importado de Opera</translation>
@@ -81,9 +81,10 @@
 <translation id="4073157431025461511">&amp;No volver a mostrar</translation>
 <translation id="4074744496918018786">Abrir imagen en una ventana privada</translation>
 <translation id="410351446219883937">Autoreproducción</translation>
+<translation id="4281844954008187215">Condiciones de servicio</translation>
 <translation id="4324492550286218827">Paisaje 2</translation>
 <translation id="4406101500523955324">Abrir en ventana privada nueva</translation>
-<translation id="4420816922321010053">¿Estás seguro de salir de Vivaldi?</translation>
+<translation id="4420816922321010053">¿Estás seguro de que quieres salir de Vivaldi?</translation>
 <translation id="443008484043213881">Herramientas</translation>
 <translation id="4456211719108566931">Monstruo 6</translation>
 <translation id="4512900838580567989">Abrir enlace en una pestaña en segundo plano</translation>
@@ -94,6 +95,7 @@
 <translation id="4636708767492582204">Enviar por correo</translation>
 <translation id="4677434526832593569">Animal 8</translation>
 <translation id="474217410105706308">Silenciar pestaña</translation>
+<translation id="4861715717329665002">Sesiones autoguardadas</translation>
 <translation id="4881695831933465202">Abrir</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> de <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Acceso rápido importado</translation>
@@ -115,9 +117,9 @@
 <translation id="5770433027661640693">Paisaje 10</translation>
 <translation id="5857090052475505287">Carpeta nueva</translation>
 <translation id="588258955323874662">Pantalla completa</translation>
-<translation id="5916080360077521750">Lamentablemente tus preferencias de Chrome no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Chrome y luego clica en Continuar.</translation>
+<translation id="5916080360077521750">Lamentablemente, las preferencias de Chrome no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Chrome y después haz clic en «Continuar».</translation>
 <translation id="6040143037577758943">Cerrar</translation>
-<translation id="6229528619562190452">Clica aquí para actualizar Vivaldi.</translation>
+<translation id="6229528619562190452">Haz clic aquí para actualizar Vivaldi.</translation>
 <translation id="6234173136417926046">Usar imagen como fondo de la página de inicio</translation>
 <translation id="630690498669249215">Archivo de marcadores de Opera</translation>
 <translation id="6339818817272922368">Cuenta local</translation>
@@ -130,7 +132,7 @@
 <translation id="6635049669875534328">Notas de la versión:</translation>
 <translation id="6693585104974197539">Selecciona la carpeta del perfil de Edge a importar</translation>
 <translation id="6726279523566323394">Selecciona la carpeta del perfil de Brave a importar</translation>
-<translation id="6804831687363620480">Lamentablemente tus preferencias de Opera 15+ no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Opera 15+ y luego clica en Continuar.</translation>
+<translation id="6804831687363620480">Lamentablemente, las preferencias de Opera 15+ no estarán disponibles mientras dicho navegador esté ejecutándose. Para importarlas a Vivaldi, guarda tu trabajo, cierra todas las ventanas de Opera 15+ y después haz clic en «Continuar».</translation>
 <translation id="6892812721183419409">Abrir enlace como <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copiar</translation>
 <translation id="7086554968911045110">Paisaje 7</translation>
@@ -147,9 +149,9 @@
 <translation id="7865983598101744945">Confirmar salida</translation>
 <translation id="7957213167373139414">Mi calendario</translation>
 <translation id="8027581147000338959">Abrir en ventana nueva</translation>
-<translation id="8044382196220116469">No permitir que los sitios autoreproduzcan videos</translation>
+<translation id="8044382196220116469">No permitir que los sitios reproduzcan vídeos automáticamente</translation>
 <translation id="8099620695029051217">Copiar dirección de la página</translation>
-<translation id="8197810018650377191">Guardar en marcadores</translation>
+<translation id="8197810018650377191">Añadir a marcadores</translation>
 <translation id="8261506727792406068">Eliminar</translation>
 <translation id="8263047843452521549">Inspeccionar en segundo plano al trabajador del servicio</translation>
 <translation id="8331671104904436324">Abrir en pestaña en segundo plano</translation>
@@ -169,14 +171,14 @@
 <translation id="8689295374912158752">Inspeccionar documento del portal</translation>
 <translation id="8768970203213061953">Paisaje 14</translation>
 <translation id="8773635261052182196">No volverás a ver estas notificaciones. Puedes reactivarlas desde los ajustes de Vivaldi.</translation>
-<translation id="8774017153185436870">Los sitios pueden autoreproducir videos</translation>
-<translation id="8813277370772331957">Recordar más tarde</translation>
+<translation id="8774017153185436870">Los sitios pueden reproducir vídeos automáticamente</translation>
+<translation id="8813277370772331957">Recuérdamelo más tarde</translation>
 <translation id="8894900864683381599">Añadir enlace a un panel web</translation>
-<translation id="8912720443398351457">¿Estás seguro de salir de Vivaldi?</translation>
+<translation id="8912720443398351457">¿Estás seguro de que quieres salir de Vivaldi?</translation>
 <translation id="8947109330183116400">Selecciona el archivo de marcadores HTML</translation>
 <translation id="9017566390391482291">Selecciona la carpeta del perfil de Vivaldi a importar</translation>
 <translation id="9048058608784130603">Actualización <ph name="VERSION" /> pendiente</translation>
-<translation id="9048224371732578627">Permitidos para autoreproducir videos</translation>
+<translation id="9048224371732578627">Permitidos para reproducir vídeos automáticamente</translation>
 <translation id="9065203028668620118">Editar</translation>
 <translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Abrir imagen como <ph name="USER" /></translation>

@@ -354,6 +354,7 @@ found_pool:
 
 #ifdef __clang__
 ATTRIBUTE_NO_SANITIZE("unsigned-integer-overflow")
+ATTRIBUTE_NO_SANITIZE("unsigned-shift-base")
 #endif
 static uint32_t
 xmlDictComputeBigKey(const xmlChar* data, int namelen, int seed) {
@@ -389,6 +390,7 @@ xmlDictComputeBigKey(const xmlChar* data, int namelen, int seed) {
  */
 #ifdef __clang__
 ATTRIBUTE_NO_SANITIZE("unsigned-integer-overflow")
+ATTRIBUTE_NO_SANITIZE("unsigned-shift-base")
 #endif
 static unsigned long
 xmlDictComputeBigQKey(const xmlChar *prefix, int plen,
@@ -431,7 +433,8 @@ static unsigned long
 xmlDictComputeFastKey(const xmlChar *name, int namelen, int seed) {
     unsigned long value = seed;
 
-    if (name == NULL) return(0);
+    if ((name == NULL) || (namelen <= 0))
+        return(value);
     value += *name;
     value <<= 5;
     if (namelen > 10) {

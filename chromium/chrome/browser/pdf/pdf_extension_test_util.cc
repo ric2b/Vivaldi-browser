@@ -64,33 +64,32 @@ testing::AssertionResult EnsurePDFHasLoaded(
     const content::ToRenderFrameHost& frame,
     bool wait_for_hit_test_data,
     const std::string& pdf_element) {
-  bool load_success = false;
-  if (!content::ExecuteScriptAndExtractBool(
-          frame,
-          content::JsReplace(R"(window.addEventListener('message', event => {
-            if (event.origin !==
-                    'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai') {
-              return;
-            }
-            if (event.data.type === 'documentLoaded') {
-              window.domAutomationController.send(
-                  event.data.load_state === 'success');
-            } else if (event.data.type === 'passwordPrompted') {
-              window.domAutomationController.send(true);
-            }
-          });
-          document.getElementsByTagName($1)[0].postMessage(
-              {type: 'initialize'});)",
-                             pdf_element),
-          &load_success)) {
-    return testing::AssertionFailure()
-           << "Cannot communicate with PDF extension.";
-  }
+  bool load_success = content::EvalJs(frame, content::JsReplace(R"(
+            new Promise(resolve => {
+              window.addEventListener('message', event => {
+                if (event.origin !==
+                        'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai') {
+                  return;
+                }
+                if (event.data.type === 'documentLoaded') {
+                  resolve(
+                      event.data.load_state === 'success');
+                } else if (event.data.type === 'passwordPrompted') {
+                  resolve(true);
+                }
+              });
+              document.getElementsByTagName($1)[0].postMessage(
+                {type: 'initialize'});
+            });
+            )",
+                                                                pdf_element))
+                          .ExtractBool();
 
   if (wait_for_hit_test_data) {
     frame.render_frame_host()->ForEachRenderFrameHost(
-        static_cast<void (*)(content::RenderFrameHost*)>(
-            &content::WaitForHitTestData));
+        [](content::RenderFrameHost* render_frame_host) {
+          return content::WaitForHitTestData(render_frame_host);
+        });
   }
 
   return load_success ? testing::AssertionSuccess()
@@ -131,21 +130,11 @@ gfx::Point ConvertPageCoordToScreenCoord(
     return point;
   }
 
-  int x;
-  if (!content::ExecuteScriptAndExtractInt(
-          guest_main_frame,
-          "window.domAutomationController.send(linkScreenPositionX);", &x)) {
-    ADD_FAILURE() << "error getting linkScreenPositionX";
-    return point;
-  }
+  int x =
+      content::EvalJs(guest_main_frame, "linkScreenPositionX;").ExtractInt();
 
-  int y;
-  if (!content::ExecuteScriptAndExtractInt(
-          guest_main_frame,
-          "window.domAutomationController.send(linkScreenPositionY);", &y)) {
-    ADD_FAILURE() << "error getting linkScreenPositionY";
-    return point;
-  }
+  int y =
+      content::EvalJs(guest_main_frame, "linkScreenPositionY;").ExtractInt();
 
   return {x, y};
 }

@@ -6,6 +6,10 @@
 
 #import "base/check.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -66,6 +70,18 @@ NSString* const kFaviconDefaultImageKey = @"faviconDefaultImage";
 }
 
 + (instancetype)attributesWithDefaultImage {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return
+        [[self alloc] initWithImage:
+            [UIImage imageNamed:@"vivaldi_ntp_fallback_favicon"]
+                           monogram:nil
+                          textColor:nil
+                    backgroundColor:nil
+             defaultBackgroundColor:NO
+                   usesDefaultImage:YES];
+  } // End Vivaldi
+
   return
       [[self alloc] initWithImage:[UIImage imageNamed:@"default_world_favicon"]
                          monogram:nil

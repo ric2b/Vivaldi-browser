@@ -12,7 +12,7 @@
 
 namespace sandbox {
 
-#if 0 && defined(_WIN64)
+#if defined(_WIN64) && defined(NDEBUG)
 
 SANDBOX_INTERCEPT OriginalFunctions g_originals;
 
@@ -211,7 +211,7 @@ DWORD TargetGetModuleFileNameExW64(HANDLE hProcess,
 #endif // outer win64
 
 bool VivaldiSetupBasicInterceptions(InterceptionManager* manager) {
-#if 0 && defined(_WIN64)
+#if defined(_WIN64) && defined(NDEBUG)
   if (!vivaldi::IsVivaldiRunning())
     return true;
 

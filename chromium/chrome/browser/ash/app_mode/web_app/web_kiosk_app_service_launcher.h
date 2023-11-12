@@ -55,7 +55,6 @@ class WebKioskAppServiceLauncher : public KioskAppLauncher {
   void Initialize() override;
   void ContinueWithNetworkReady() override;
   void LaunchApp() override;
-  void RestartLauncher() override;
 
  private:
   // |KioskAppServiceLauncher| callbacks.
@@ -72,7 +71,7 @@ class WebKioskAppServiceLauncher : public KioskAppLauncher {
   // Get the current web application to be launched in the session.
   const WebKioskAppData* GetCurrentApp() const;
 
-  Profile* profile_;
+  raw_ptr<Profile, ExperimentalAsh> profile_;
   const AccountId account_id_;
   std::string app_id_;
   KioskAppLauncher::ObserverList observers_;

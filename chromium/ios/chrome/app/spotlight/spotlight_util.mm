@@ -38,34 +38,6 @@ enum Availability {
   SPOTLIGHT_AVAILABILITY_COUNT
 };
 
-// Documentation says that failed deletion should be retried. Set a maximum
-// value to avoid infinite loop.
-const int kMaxDeletionAttempts = 5;
-
-// Execute blockName block with up to retryCount retries on error. Execute
-// callback when done.
-void DoWithRetry(BlockWithError callback,
-                 NSUInteger retryCount,
-                 void (^blockName)(BlockWithError error)) {
-  BlockWithError retryCallback = ^(NSError* error) {
-    if (error && retryCount > 0) {
-      DoWithRetry(callback, retryCount - 1, blockName);
-    } else {
-      if (callback) {
-        callback(error);
-      }
-    }
-  };
-  blockName(retryCallback);
-}
-
-// Execute blockName block with up to kMaxDeletionAttempts retries on error.
-// Execute callback when done.
-void DoWithRetry(BlockWithError completion,
-                 void (^blockName)(BlockWithError error)) {
-  DoWithRetry(completion, kMaxDeletionAttempts, blockName);
-}
-
 // Strings corresponding to the domain/prefix for respectively bookmarks,
 // top sites and actions items for spotlight.
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -77,7 +49,11 @@ NSString* const kSpotlightTopSitesPrefix = @"com.google.chrome.topsites.";
 
 NSString* const kSpotlightActionsDomain = @"com.google.chrome.actions";
 NSString* const kSpotlightActionsPrefix = @"com.google.chrome.actions.";
+
+NSString* const kSpotlightReadingListDomain = @"org.chromium.readinglist";
+NSString* const kSpotlightReadingListPrefix = @"org.chromium.readinglist.";
 #else
+
 NSString* const kSpotlightBookmarkDomain = @"org.chromium.bookmarks";
 NSString* const kSpotlightBookmarkPrefix = @"org.chromium.bookmarks.";
 
@@ -86,6 +62,10 @@ NSString* const kSpotlightTopSitesPrefix = @"org.chromium.topsites.";
 
 NSString* const kSpotlightActionsDomain = @"org.chromium.actions";
 NSString* const kSpotlightActionsPrefix = @"org.chromium.actions.";
+
+NSString* const kSpotlightReadingListDomain = @"org.chromium.readinglist";
+NSString* const kSpotlightReadingListPrefix = @"org.chromium.readinglist.";
+
 #endif
 
 }  // namespace
@@ -112,6 +92,8 @@ Domain SpotlightDomainFromString(NSString* domain) {
     return DOMAIN_TOPSITES;
   } else if ([domain hasPrefix:kSpotlightActionsPrefix]) {
     return DOMAIN_ACTIONS;
+  } else if ([domain hasPrefix:kSpotlightReadingListPrefix]) {
+    return DOMAIN_READING_LIST;
   }
   // On normal flow, it is not possible to reach this point. When testing the
   // app, it may be possible though if the app is downgraded.
@@ -127,53 +109,14 @@ NSString* StringFromSpotlightDomain(Domain domain) {
       return kSpotlightTopSitesDomain;
     case DOMAIN_ACTIONS:
       return kSpotlightActionsDomain;
+    case DOMAIN_READING_LIST:
+      return kSpotlightReadingListDomain;
     default:
       // On normal flow, it is not possible to reach this point. When testing
       // the app, it may be possible though if the app is downgraded.
       NOTREACHED();
       return nil;
   }
-}
-
-void DeleteItemsWithIdentifiers(NSArray* items, BlockWithError callback) {
-  void (^deleteItems)(BlockWithError) = ^(BlockWithError errorBlock) {
-    [[CSSearchableIndex defaultSearchableIndex]
-        deleteSearchableItemsWithIdentifiers:items
-                           completionHandler:errorBlock];
-    [[SpotlightLogger sharedLogger] logDeletionOfItemsWithIdentifiers:items];
-  };
-
-  DoWithRetry(callback, deleteItems);
-}
-
-void DeleteSearchableDomainItems(Domain domain, BlockWithError callback) {
-  void (^deleteItems)(BlockWithError) = ^(BlockWithError errorBlock) {
-    NSString* domainString = StringFromSpotlightDomain(domain);
-    [[CSSearchableIndex defaultSearchableIndex]
-        deleteSearchableItemsWithDomainIdentifiers:@[ domainString ]
-                                 completionHandler:errorBlock];
-    [[SpotlightLogger sharedLogger] logDeletionOfItemsInDomain:domainString];
-  };
-
-  DoWithRetry(callback, deleteItems);
-}
-
-void ClearAllSpotlightEntries(BlockWithError callback) {
-  BlockWithError augmentedCallback = ^(NSError* error) {
-    [[NSUserDefaults standardUserDefaults]
-        removeObjectForKey:@(kSpotlightLastIndexingDateKey)];
-    if (callback) {
-      callback(error);
-    }
-  };
-
-  void (^deleteItems)(BlockWithError) = ^(BlockWithError errorBlock) {
-    [[CSSearchableIndex defaultSearchableIndex]
-        deleteAllSearchableItemsWithCompletionHandler:errorBlock];
-    [[SpotlightLogger sharedLogger] logDeletionOfAllItems];
-  };
-
-  DoWithRetry(augmentedCallback, deleteItems);
 }
 
 bool IsSpotlightAvailable() {
@@ -192,11 +135,6 @@ bool IsSpotlightAvailable() {
                               SPOTLIGHT_AVAILABILITY_COUNT);
   });
   return loaded && available;
-}
-
-void ClearSpotlightIndexWithCompletion(BlockWithError completion) {
-  DCHECK(IsSpotlightAvailable());
-  ClearAllSpotlightEntries(completion);
 }
 
 NSString* GetSpotlightCustomAttributeItemID() {

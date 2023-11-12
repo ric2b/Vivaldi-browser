@@ -66,6 +66,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
@@ -129,6 +130,7 @@ using ::ui::mojom::CursorType;
 
 constexpr char kEndRecordingReasonInClamshellHistogramName[] =
     "Ash.CaptureModeController.EndRecordingReason.ClamshellMode";
+constexpr char kScreenCaptureNotificationId[] = "capture_mode_notification";
 
 // Returns true if the software-composited cursor is enabled.
 bool IsCursorCompositingEnabled() {
@@ -138,22 +140,11 @@ bool IsCursorCompositingEnabled() {
       ->is_cursor_compositing_enabled();
 }
 
-bool HasNotificationWithId(const std::string& id) {
-  const message_center::NotificationList::Notifications notifications =
-      message_center::MessageCenter::Get()->GetVisibleNotifications();
-  for (const auto* notification : notifications) {
-    if (notification->id() == id)
-      return true;
-  }
-  return false;
-}
-
 const message_center::Notification* GetPreviewNotification() {
   const message_center::NotificationList::Notifications notifications =
       message_center::MessageCenter::Get()->GetVisibleNotifications();
   for (const auto* notification : notifications) {
-    if (base::StartsWith(notification->id(),
-                         capture_mode_util::kScreenCaptureNotificationId)) {
+    if (notification->id() == kScreenCaptureNotificationId) {
       return notification;
     }
   }
@@ -470,8 +461,7 @@ class CaptureNotificationWaiter : public message_center::MessageCenterObserver {
 
   // message_center::MessageCenterObserver:
   void OnNotificationAdded(const std::string& notification_id) override {
-    if (base::StartsWith(notification_id,
-                         capture_mode_util::kScreenCaptureNotificationId)) {
+    if (notification_id == kScreenCaptureNotificationId) {
       run_loop_.Quit();
     }
   }
@@ -1870,77 +1860,6 @@ TEST_F(CaptureModeTest, WindowChangesDuringCountdown) {
   EXPECT_TRUE(controller->is_recording_in_progress());
 }
 
-// Tests that metrics are recorded properly for capture mode entry points.
-TEST_F(CaptureModeTest, CaptureModeEntryPointHistograms) {
-  constexpr char kClamshellHistogram[] =
-      "Ash.CaptureModeController.EntryPoint.ClamshellMode";
-  constexpr char kTabletHistogram[] =
-      "Ash.CaptureModeController.EntryPoint.TabletMode";
-  base::HistogramTester histogram_tester;
-
-  auto* controller = CaptureModeController::Get();
-
-  // Test the various entry points in clamshell mode.
-  controller->Start(CaptureModeEntryType::kAccelTakeWindowScreenshot);
-  histogram_tester.ExpectBucketCount(
-      kClamshellHistogram, CaptureModeEntryType::kAccelTakeWindowScreenshot, 1);
-  controller->Stop();
-
-  controller->Start(CaptureModeEntryType::kAccelTakePartialScreenshot);
-  histogram_tester.ExpectBucketCount(
-      kClamshellHistogram, CaptureModeEntryType::kAccelTakePartialScreenshot,
-      1);
-  controller->Stop();
-
-  controller->Start(CaptureModeEntryType::kQuickSettings);
-  histogram_tester.ExpectBucketCount(kClamshellHistogram,
-                                     CaptureModeEntryType::kQuickSettings, 1);
-  controller->Stop();
-
-  controller->Start(CaptureModeEntryType::kStylusPalette);
-  histogram_tester.ExpectBucketCount(kClamshellHistogram,
-                                     CaptureModeEntryType::kStylusPalette, 1);
-  controller->Stop();
-
-  // Enter tablet mode and test the various entry points in tablet mode.
-  auto* tablet_mode_controller = Shell::Get()->tablet_mode_controller();
-  tablet_mode_controller->SetEnabledForTest(true);
-  ASSERT_TRUE(tablet_mode_controller->InTabletMode());
-
-  controller->Start(CaptureModeEntryType::kAccelTakeWindowScreenshot);
-  histogram_tester.ExpectBucketCount(
-      kTabletHistogram, CaptureModeEntryType::kAccelTakeWindowScreenshot, 1);
-  controller->Stop();
-
-  controller->Start(CaptureModeEntryType::kAccelTakePartialScreenshot);
-  histogram_tester.ExpectBucketCount(
-      kTabletHistogram, CaptureModeEntryType::kAccelTakePartialScreenshot, 1);
-  controller->Stop();
-
-  controller->Start(CaptureModeEntryType::kQuickSettings);
-  histogram_tester.ExpectBucketCount(kTabletHistogram,
-                                     CaptureModeEntryType::kQuickSettings, 1);
-  controller->Stop();
-
-  controller->Start(CaptureModeEntryType::kStylusPalette);
-  histogram_tester.ExpectBucketCount(kTabletHistogram,
-                                     CaptureModeEntryType::kStylusPalette, 1);
-  controller->Stop();
-
-  // Check total counts for each histogram to ensure calls aren't counted in
-  // multiple buckets.
-  histogram_tester.ExpectTotalCount(kClamshellHistogram, 4);
-  histogram_tester.ExpectTotalCount(kTabletHistogram, 4);
-
-  // Check that histogram isn't counted if we don't actually enter capture mode.
-  controller->Start(CaptureModeEntryType::kAccelTakePartialScreenshot);
-  histogram_tester.ExpectBucketCount(
-      kTabletHistogram, CaptureModeEntryType::kAccelTakePartialScreenshot, 2);
-  controller->Start(CaptureModeEntryType::kAccelTakePartialScreenshot);
-  histogram_tester.ExpectBucketCount(
-      kTabletHistogram, CaptureModeEntryType::kAccelTakePartialScreenshot, 2);
-}
-
 // Verifies that the video notification will show the same thumbnail image as
 // sent by recording service.
 TEST_F(CaptureModeTest, VideoNotificationThumbnail) {
@@ -1973,37 +1892,6 @@ TEST_F(CaptureModeTest, VideoNotificationThumbnail) {
   const SkBitmap notification_thumbnail = notification->image().AsBitmap();
   EXPECT_TRUE(
       gfx::test::AreBitmapsEqual(notification_thumbnail, service_thumbnail));
-}
-
-// Verifies that taking multiple screenshots generates multiple notifications.
-TEST_F(CaptureModeTest, MultipleNotificationsForMultipleScreenshots) {
-  // Take a screenshot.
-  auto* controller = StartCaptureSession(CaptureModeSource::kFullscreen,
-                                         CaptureModeType::kImage);
-  controller->PerformCapture();
-  auto path1 = WaitForCaptureFileToBeSaved();
-  EXPECT_TRUE(HasNotificationWithId(
-      capture_mode_util::GetScreenCaptureNotificationIdForPath(path1)));
-  auto notifications =
-      message_center::MessageCenter::Get()->GetVisibleNotifications();
-  EXPECT_EQ(notifications.size(), 1ul);
-
-  // Wait for one second. This ensures that the second screenshot has a
-  // different ID than the first screenshot.
-  WaitForSeconds(1);
-
-  // Take a second screenshot.
-  controller = StartCaptureSession(CaptureModeSource::kFullscreen,
-                                   CaptureModeType::kImage);
-  controller->PerformCapture();
-  auto path2 = WaitForCaptureFileToBeSaved();
-  notifications =
-      message_center::MessageCenter::Get()->GetVisibleNotifications();
-  EXPECT_EQ(notifications.size(), 2ul);
-  EXPECT_TRUE(HasNotificationWithId(
-      capture_mode_util::GetScreenCaptureNotificationIdForPath(path1)));
-  EXPECT_TRUE(HasNotificationWithId(
-      capture_mode_util::GetScreenCaptureNotificationIdForPath(path2)));
 }
 
 TEST_F(CaptureModeTest, LowDriveFsSpace) {
@@ -3663,78 +3551,6 @@ TEST_F(CaptureModeTest, FullscreenCapture) {
   EXPECT_FALSE(controller->IsActive());
 }
 
-// Tests that metrics are recorded properly for capture mode configurations when
-// taking a screenshot.
-TEST_F(CaptureModeTest, ScreenshotConfigurationHistogram) {
-  constexpr char kClamshellHistogram[] =
-      "Ash.CaptureModeController.CaptureConfiguration.ClamshellMode";
-  constexpr char kTabletHistogram[] =
-      "Ash.CaptureModeController.CaptureConfiguration.TabletMode";
-  base::HistogramTester histogram_tester;
-  // Use a set display size as we will be choosing points in this test.
-  UpdateDisplay("800x700");
-
-  // Create a window for window captures later.
-  std::unique_ptr<aura::Window> window1(
-      CreateTestWindow(gfx::Rect(600, 600, 100, 100)));
-
-  // Perform a fullscreen screenshot.
-  auto* controller = StartCaptureSession(CaptureModeSource::kFullscreen,
-                                         CaptureModeType::kImage);
-  controller->PerformCapture();
-  histogram_tester.ExpectBucketCount(
-      kClamshellHistogram, CaptureModeConfiguration::kFullscreenScreenshot, 1);
-
-  // Perform a region screenshot.
-  controller =
-      StartCaptureSession(CaptureModeSource::kRegion, CaptureModeType::kImage);
-  const gfx::Rect capture_region(200, 200, 400, 400);
-  SelectRegion(capture_region);
-  controller->PerformCapture();
-  histogram_tester.ExpectBucketCount(
-      kClamshellHistogram, CaptureModeConfiguration::kRegionScreenshot, 1);
-
-  // Perform a window screenshot.
-  controller =
-      StartCaptureSession(CaptureModeSource::kWindow, CaptureModeType::kImage);
-  auto* event_generator = GetEventGenerator();
-  event_generator->MoveMouseToCenterOf(window1.get());
-  EXPECT_EQ(window1.get(),
-            controller->capture_mode_session()->GetSelectedWindow());
-  controller->PerformCapture();
-  histogram_tester.ExpectBucketCount(
-      kClamshellHistogram, CaptureModeConfiguration::kWindowScreenshot, 1);
-
-  // Switch to tablet mode.
-  auto* tablet_mode_controller = Shell::Get()->tablet_mode_controller();
-  tablet_mode_controller->SetEnabledForTest(true);
-  ASSERT_TRUE(tablet_mode_controller->InTabletMode());
-
-  // Perform a fullscreen screenshot.
-  controller = StartCaptureSession(CaptureModeSource::kFullscreen,
-                                   CaptureModeType::kImage);
-  controller->PerformCapture();
-  histogram_tester.ExpectBucketCount(
-      kTabletHistogram, CaptureModeConfiguration::kFullscreenScreenshot, 1);
-
-  // Perform a region screenshot.
-  controller =
-      StartCaptureSession(CaptureModeSource::kRegion, CaptureModeType::kImage);
-  controller->PerformCapture();
-  histogram_tester.ExpectBucketCount(
-      kTabletHistogram, CaptureModeConfiguration::kRegionScreenshot, 1);
-
-  // Perform a window screenshot.
-  controller =
-      StartCaptureSession(CaptureModeSource::kWindow, CaptureModeType::kImage);
-  event_generator->MoveMouseToCenterOf(window1.get());
-  EXPECT_EQ(window1.get(),
-            controller->capture_mode_session()->GetSelectedWindow());
-  controller->PerformCapture();
-  histogram_tester.ExpectBucketCount(
-      kTabletHistogram, CaptureModeConfiguration::kWindowScreenshot, 1);
-}
-
 // Tests that there is no crash when touching the capture label widget in tablet
 // mode when capturing a window. Regression test for https://crbug.com/1152938.
 TEST_F(CaptureModeTest, TabletTouchCaptureLabelWidgetWindowMode) {
@@ -4798,6 +4614,61 @@ TEST_F(CaptureModeTest, SimulateUserCancelingDlpWarningDialog) {
   EXPECT_TRUE(holding_space_api.GetScreenCaptureViews().empty());
 }
 
+// Tests that `CaptureScreenshotOfGivenWindow` can take window screenshot
+// successfully and that the image size matches the window size.
+TEST_F(CaptureModeTest, InstantScreenshotForkWindow) {
+  const gfx::Rect window_bounds(10, 20, 700, 500);
+  std::unique_ptr<aura::Window> window(CreateTestWindow(window_bounds));
+  CaptureModeController::Get()->CaptureScreenshotOfGivenWindow(window.get());
+  const auto file_path = WaitForCaptureFileToBeSaved();
+  gfx::Image image = ReadAndDecodeImageFile(file_path);
+  EXPECT_EQ(image.Size(), window_bounds.size());
+}
+
+// Tests the capture mode behavior in the default capture mode session and
+// during video recording.
+TEST_F(CaptureModeTest, CaptureModeDefaultBehavior) {
+  CaptureModeController* controller = StartCaptureSession(
+      CaptureModeSource::kFullscreen, CaptureModeType::kVideo);
+  ASSERT_TRUE(controller->IsActive());
+  CaptureModeSession* session = controller->capture_mode_session();
+  CaptureModeBehavior* active_behavior = session->active_behavior();
+  ASSERT_TRUE(active_behavior);
+
+  auto expected_behavior = [&]() {
+    EXPECT_TRUE(active_behavior->ShouldImageCaptureTypeBeAllowed());
+    EXPECT_TRUE(active_behavior->ShouldVideoCaptureTypeBeAllowed());
+    EXPECT_TRUE(active_behavior->ShouldFulscreenCaptureSourceBeAllowed());
+    EXPECT_TRUE(active_behavior->ShouldRegionCaptureSourceBeAllowed());
+    EXPECT_TRUE(active_behavior->ShouldWindowCaptureSourceBeAllowed());
+    EXPECT_TRUE(active_behavior->ShouldAudioInputSettingsBeIncluded());
+    EXPECT_TRUE(active_behavior->ShouldCameraSelectionSettingsBeIncluded());
+    EXPECT_TRUE(active_behavior->ShouldDemoToolsSettingsBeIncluded());
+    EXPECT_TRUE(active_behavior->ShouldSaveToSettingsBeIncluded());
+    EXPECT_TRUE(active_behavior->ShouldGifBeSupported());
+    EXPECT_TRUE(active_behavior->ShouldShowPreviewNotification());
+    EXPECT_FALSE(active_behavior->ShouldSkipVideoRecordingCountDown());
+    EXPECT_FALSE(active_behavior->ShouldCreateRecordingOverlayController());
+    EXPECT_TRUE(active_behavior->ShouldShowUserNudge());
+    EXPECT_FALSE(active_behavior->ShouldAutoSelectFirstCamera());
+  };
+
+  expected_behavior();
+  views::Widget* bar_widget = GetCaptureModeBarWidget();
+  ASSERT_TRUE(bar_widget);
+
+  EXPECT_TRUE(GetImageToggleButton());
+  EXPECT_TRUE(GetVideoToggleButton());
+  EXPECT_TRUE(GetFullscreenToggleButton());
+  EXPECT_TRUE(GetRegionToggleButton());
+  EXPECT_TRUE(GetWindowToggleButton());
+  EXPECT_TRUE(GetSettingsButton());
+  EXPECT_TRUE(GetCloseButton());
+
+  StartVideoRecordingImmediately();
+  expected_behavior();
+}
+
 namespace {
 
 // -----------------------------------------------------------------------------
@@ -5813,6 +5684,65 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
   VerifyOverlayWindow(overlay_window, capture_source);
 }
 
+// Tests the projector behavior in the projector-initiated capture mode session
+// and during video recording.
+TEST_P(ProjectorCaptureModeIntegrationTests, ProjectorBehavior) {
+  CaptureModeController* controller = CaptureModeController::Get();
+  EXPECT_FALSE(controller->GetAudioRecordingEnabled());
+  EXPECT_TRUE(projector_helper_.CanStartProjectorSession());
+  StartProjectorModeSession();
+  ASSERT_TRUE(controller->IsActive());
+  CaptureModeSession* session = controller->capture_mode_session();
+  ASSERT_TRUE(session->is_in_projector_mode());
+  CaptureModeBehavior* projector_active_behavior = session->active_behavior();
+  ASSERT_TRUE(projector_active_behavior);
+
+  auto expected_behavior = [&]() {
+    EXPECT_FALSE(projector_active_behavior->ShouldImageCaptureTypeBeAllowed());
+    EXPECT_TRUE(projector_active_behavior->ShouldVideoCaptureTypeBeAllowed());
+    EXPECT_TRUE(
+        projector_active_behavior->ShouldFulscreenCaptureSourceBeAllowed());
+    EXPECT_TRUE(
+        projector_active_behavior->ShouldRegionCaptureSourceBeAllowed());
+    EXPECT_TRUE(
+        projector_active_behavior->ShouldWindowCaptureSourceBeAllowed());
+    EXPECT_TRUE(
+        projector_active_behavior->ShouldAudioInputSettingsBeIncluded());
+    EXPECT_TRUE(
+        projector_active_behavior->ShouldCameraSelectionSettingsBeIncluded());
+    EXPECT_TRUE(projector_active_behavior->ShouldDemoToolsSettingsBeIncluded());
+    EXPECT_FALSE(projector_active_behavior->ShouldSaveToSettingsBeIncluded());
+    EXPECT_FALSE(projector_active_behavior->ShouldGifBeSupported());
+    EXPECT_FALSE(projector_active_behavior->ShouldShowPreviewNotification());
+    EXPECT_FALSE(
+        projector_active_behavior->ShouldSkipVideoRecordingCountDown());
+    EXPECT_TRUE(
+        projector_active_behavior->ShouldCreateRecordingOverlayController());
+    EXPECT_FALSE(projector_active_behavior->ShouldShowUserNudge());
+    EXPECT_TRUE(projector_active_behavior->ShouldAutoSelectFirstCamera());
+  };
+
+  expected_behavior();
+  views::Widget* bar_widget = GetCaptureModeBarWidget();
+  ASSERT_TRUE(bar_widget);
+
+  EXPECT_FALSE(GetImageToggleButton());
+  EXPECT_TRUE(GetVideoToggleButton());
+  EXPECT_TRUE(GetFullscreenToggleButton());
+  EXPECT_TRUE(GetRegionToggleButton());
+  EXPECT_TRUE(GetWindowToggleButton());
+  EXPECT_TRUE(GetSettingsButton());
+  EXPECT_TRUE(GetCloseButton());
+
+  ProjectorControllerImpl* projector_controller =
+      ProjectorControllerImpl::Get();
+  projector_controller->EnableAnnotatorTool();
+  PressAndReleaseKey(ui::VKEY_RETURN);
+  WaitForRecordingToStart();
+  expected_behavior();
+  CaptureModeTestApi().StopVideoRecording();
+}
+
 namespace {
 
 // Defines a class that intercepts the events at the post-target handling phase
@@ -5837,7 +5767,7 @@ class EventTargetCatcher : public ui::EventHandler {
   }
 
  private:
-  ui::EventTarget* last_event_target_ = nullptr;
+  raw_ptr<ui::EventTarget, ExperimentalAsh> last_event_target_ = nullptr;
 };
 
 }  // namespace
@@ -6005,7 +5935,9 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
     histogram_tester_.ExpectBucketCount(
         GetCaptureModeHistogramName(
             kProjectorCaptureConfigurationHistogramBase),
-        GetConfiguration(CaptureModeType::kVideo, capture_source), 0);
+        GetConfiguration(CaptureModeType::kVideo, capture_source,
+                         RecordingType::kWebM),
+        0);
 
     StartRecordingForProjectorFromSource(capture_source);
     WaitForSeconds(1);
@@ -6015,7 +5947,9 @@ TEST_P(ProjectorCaptureModeIntegrationTests,
     histogram_tester_.ExpectUniqueSample(
         GetCaptureModeHistogramName(
             kProjectorCaptureConfigurationHistogramBase),
-        GetConfiguration(CaptureModeType::kVideo, capture_source), 1);
+        GetConfiguration(CaptureModeType::kVideo, capture_source,
+                         RecordingType::kWebM),
+        1);
 
     WaitForCaptureFileToBeSaved();
   }
@@ -7047,7 +6981,106 @@ class CaptureModeHistogramTest : public CaptureModeSettingsTest,
   }
 };
 
-TEST_P(CaptureModeHistogramTest, VideoRecordingAudioMetric) {
+// Tests that metrics are recorded properly for various capture mode entry
+// points.
+TEST_P(CaptureModeHistogramTest, CaptureModeEntryPointHistograms) {
+  constexpr char kHistogramNameBase[] = "Ash.CaptureModeController.EntryPoint";
+  base::HistogramTester histogram_tester;
+
+  auto* controller = CaptureModeController::Get();
+
+  controller->Start(CaptureModeEntryType::kAccelTakeWindowScreenshot);
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeEntryType::kAccelTakeWindowScreenshot, 1);
+  controller->Stop();
+
+  controller->Start(CaptureModeEntryType::kAccelTakePartialScreenshot);
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeEntryType::kAccelTakePartialScreenshot, 1);
+  controller->Stop();
+
+  controller->Start(CaptureModeEntryType::kQuickSettings);
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeEntryType::kQuickSettings, 1);
+  controller->Stop();
+
+  controller->Start(CaptureModeEntryType::kStylusPalette);
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeEntryType::kStylusPalette, 1);
+  controller->Stop();
+
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindow(gfx::Rect(10, 20, 700, 500)));
+  controller->CaptureScreenshotOfGivenWindow(window.get());
+  WaitForCaptureFileToBeSaved();
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeEntryType::kCaptureGivenWindow, 1);
+
+  // Check total counts for each histogram to ensure calls aren't counted in
+  // multiple buckets.
+  histogram_tester.ExpectTotalCount(
+      GetCaptureModeHistogramName(kHistogramNameBase), 5);
+  histogram_tester.ExpectTotalCount(
+      GetCaptureModeHistogramName(kHistogramNameBase), 5);
+}
+
+// Tests that metrics are recorded properly for capture mode configurations when
+// taking a screenshot.
+TEST_P(CaptureModeHistogramTest, ScreenshotConfigurationHistogram) {
+  constexpr char kHistogramNameBase[] =
+      "Ash.CaptureModeController.CaptureConfiguration";
+  base::HistogramTester histogram_tester;
+  // Use a set display size as we will be choosing points in this test.
+  UpdateDisplay("800x700");
+
+  // Create a window for window captures later.
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindow(gfx::Rect(600, 600, 100, 100)));
+
+  // Perform a fullscreen screenshot.
+  auto* controller = StartCaptureSession(CaptureModeSource::kFullscreen,
+                                         CaptureModeType::kImage);
+  controller->PerformCapture();
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeConfiguration::kFullscreenScreenshot, 1);
+
+  // Perform a region screenshot.
+  controller =
+      StartCaptureSession(CaptureModeSource::kRegion, CaptureModeType::kImage);
+  const gfx::Rect capture_region(200, 200, 400, 400);
+  SelectRegion(capture_region);
+  controller->PerformCapture();
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeConfiguration::kRegionScreenshot, 1);
+
+  // Perform a window screenshot.
+  controller =
+      StartCaptureSession(CaptureModeSource::kWindow, CaptureModeType::kImage);
+  auto* event_generator = GetEventGenerator();
+  event_generator->MoveMouseToCenterOf(window.get());
+  EXPECT_EQ(window.get(),
+            controller->capture_mode_session()->GetSelectedWindow());
+  controller->PerformCapture();
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeConfiguration::kWindowScreenshot, 1);
+
+  // Perform an instant window capture with `CaptureScreenshotOfGivenWindow`
+  // API.
+  controller->CaptureScreenshotOfGivenWindow(window.get());
+  histogram_tester.ExpectBucketCount(
+      GetCaptureModeHistogramName(kHistogramNameBase),
+      CaptureModeConfiguration::kWindowScreenshot, 2);
+}
+
+TEST_P(CaptureModeHistogramTest, VideoRecordingAudioVideoMetrics) {
   constexpr char kHistogramNameBase[] =
       "Ash.CaptureModeController.CaptureAudioOnMetric";
   base::HistogramTester histogram_tester;
@@ -7055,6 +7088,7 @@ TEST_P(CaptureModeHistogramTest, VideoRecordingAudioMetric) {
       GetCaptureModeHistogramName(kHistogramNameBase), false, 0);
   histogram_tester.ExpectBucketCount(
       GetCaptureModeHistogramName(kHistogramNameBase), true, 0);
+
   // Perform a video recording with audio off. A false should be recorded.
   StartSessionForVideo();
   CaptureModeTestApi().SetAudioRecordingEnabled(false);
@@ -7063,8 +7097,18 @@ TEST_P(CaptureModeHistogramTest, VideoRecordingAudioMetric) {
       GetCaptureModeHistogramName(kHistogramNameBase), false, 1);
   histogram_tester.ExpectBucketCount(
       GetCaptureModeHistogramName(kHistogramNameBase), true, 0);
+  WaitForSeconds(1);
   StopRecording();
   WaitForCaptureFileToBeSaved();
+
+  // Since getting the file size is an async operation, we have to run a loop
+  // until the task that records the file size is done.
+  base::RunLoop().RunUntilIdle();
+  histogram_tester.ExpectTotalCount(
+      GetCaptureModeHistogramName(
+          "Ash.CaptureModeController.ScreenRecordingFileSize"),
+      /*expected_count=*/1);
+
   // Perform a video recording with audio on. A true should be recorded.
   StartSessionForVideo();
   CaptureModeTestApi().SetAudioRecordingEnabled(true);

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {addCSSPrefixSelector} from '../common/js/dom_utils.js';
+
 import {css, CSSResultGroup, customElement, html, property, repeat, XfBase} from './xf_base.js';
 
 /**
@@ -36,9 +38,9 @@ export class XfPathDisplayElement extends XfBase {
     const tail = parts[parts.length - 1];
     return html`
       ${repeat(head, (e) => html`
-              <div class="folder" tabindex="0">${e}</div>
-              <div class="separator">&gt;</div>`)}
-      <div class="folder" tabindex="0">${tail}</div>
+              <div class="folder mid-folder" tabindex="0">${e}</div>
+              <div class="separator"></div>`)}
+      <div class="folder last-folder" tabindex="0">${tail}</div>
     `;
   }
 }
@@ -47,7 +49,7 @@ export class XfPathDisplayElement extends XfBase {
  * CSS used by the xf-path-display widget.
  */
 function getCSS(): CSSResultGroup {
-  return css`
+  const legacyStyle = css`
     :host([hidden]),
     [hidden] {
       display: none !important;
@@ -57,13 +59,13 @@ function getCSS(): CSSResultGroup {
       flex-direction: row;
       align-items: center;
       width: 100%;
-      height: 2lh;
+      line-height: 20px;
+      padding: 10px 0px;
       border-top: 1px solid var(--cros-separator-color);
       font-family: 'Roboto Medium';
-      font-size: 14px;
+      font-size: 13px;
       outline: none;
       user-select: none;
-      color: var(--cros-text-color-secondary);
     }
     div.folder {
       white-space: nowrap;
@@ -72,6 +74,14 @@ function getCSS(): CSSResultGroup {
       transition: all 300ms;
       flex-shrink: 1;
       min-width: 0;
+      padding: 4px 4px;
+      border-radius: 8px;
+    }
+    div.mid-folder {
+      color: var(--cros-text-color-secondary);
+    }
+    div.last-folder {
+      color: var(--cros-text-color-primary);
     }
     div.folder:hover {
       flex-shrink: 0;
@@ -82,9 +92,75 @@ function getCSS(): CSSResultGroup {
       min-width: auto;
     }
     div.separator {
-      padding: 0px 0.5ex;
+      -webkit-mask-image: url(/foreground/images/files/ui/arrow_right.svg);
+      -webkit-mask-position: center;
+      -webkit-mask-repeat: no-repeat;
+      background-color: var(--cros-text-color-secondary);
+      width: 20px;
+      height: 20px;
+      padding: 0 2px;
+      flex-grow: 0;
     }
   `;
+
+  const refresh23Style = css`
+      :host([hidden]),
+      [hidden] {
+        display: none !important;
+      }
+      :host {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        width: 100%;
+        line-height: 24px;
+        padding: 8px;
+        border-top: 1px solid var(--cros-sys-separator);
+        font-family: 'Roboto Medium';
+        font-size: 13px;
+        outline: none;
+        user-select: none;
+      }
+      div.folder {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: all 300ms;
+        flex-shrink: 1;
+        min-width: 0;
+        padding: 4px 4px;
+        border-radius: 8px;
+      }
+      div.mid-folder {
+        color: var(--cros-sys-on_surface_variant);
+      }
+      div.last-folder {
+        color: var(--cros-sys-on_surface);
+      }
+      div.folder:hover {
+        flex-shrink: 0;
+        min-width: auto;
+      }
+      div.folder:focus {
+        flex-shrink: 0;
+        min-width: auto;
+      }
+      div.separator {
+        -webkit-mask-image: url(/foreground/images/files/ui/arrow_right.svg);
+        -webkit-mask-position: center;
+        -webkit-mask-repeat: no-repeat;
+        background-color: var(--cros-sys-on_surface_variant);
+        width: 20px;
+        height: 20px;
+        padding: 0 2px;
+        flex-grow: 0;
+      }
+    `;
+
+  return [
+    addCSSPrefixSelector(legacyStyle, '[theme="legacy"]'),
+    addCSSPrefixSelector(refresh23Style, '[theme="refresh23"]'),
+  ];
 }
 
 declare global {

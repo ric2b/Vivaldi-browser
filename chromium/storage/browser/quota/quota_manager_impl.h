@@ -21,6 +21,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list_types.h"
+#include "base/scoped_observation_traits.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -32,11 +34,13 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/remote_set.h"
 #include "storage/browser/quota/quota_availability.h"
 #include "storage/browser/quota/quota_callbacks.h"
 #include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_database.h"
 #include "storage/browser/quota/quota_internals.mojom.h"
+#include "storage/browser/quota/quota_manager_observer.mojom.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "storage/browser/quota/quota_task.h"
 #include "storage/browser/quota/special_storage_policy.h"
@@ -223,8 +227,9 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
   // Retrieves the BucketInfo of the bucket with `bucket_name` for `storage_key`
   // and returns it to the callback. Will return a QuotaError if the bucket does
   // not exist or on operation failure.
-  // This method is declared as virtual to allow test code to override it.
-  virtual void GetBucketForTesting(
+  // This SHOULD NOT be used once you have the ID for a bucket. Prefer
+  // GetBucketById.
+  virtual void GetBucketByNameUnsafe(
       const blink::StorageKey& storage_key,
       const std::string& bucket_name,
       blink::mojom::StorageType type,
@@ -320,7 +325,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
   // of space, and trigger actions if deemed appropriate.
   //
   // This method is declared as virtual to allow test code to override it.
-  virtual void NotifyWriteFailed(const blink::StorageKey& storage_key);
+  virtual void OnClientWriteFailed(const blink::StorageKey& storage_key);
 
   void SetUsageCacheEnabled(QuotaClientType client_id,
                             const blink::StorageKey& storage_key,
@@ -380,8 +385,13 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
   void GetStatistics(GetStatisticsCallback callback) override;
   void RetrieveBucketsTable(RetrieveBucketsTableCallback callback) override;
   void GetGlobalUsageForInternals(
-      storage::mojom::StorageType storage_type,
+      blink::mojom::StorageType storage_type,
       GetGlobalUsageForInternalsCallback callback) override;
+  // Used from quota-internals page to test behavior of the storage pressure
+  // callback.
+  void SimulateStoragePressure(const url::Origin& origin_url) override;
+  void IsSimulateStoragePressureAvailable(
+      IsSimulateStoragePressureAvailableCallback callback) override;
 
   // QuotaEvictionHandler.
   void EvictExpiredBuckets(StatusCallback done) override;
@@ -420,7 +430,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
   // Called when StoragePartition is initialized if embedder has an
   // implementation of StorageNotificationService.
   void SetStoragePressureCallback(
-      base::RepeatingCallback<void(blink::StorageKey)>
+      base::RepeatingCallback<void(const blink::StorageKey&)>
           storage_pressure_callback);
 
   // DevTools Quota Override methods:
@@ -483,6 +493,9 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
   }
 
   bool is_db_disabled_for_testing() { return db_disabled_; }
+
+  void AddObserver(
+      mojo::PendingRemote<storage::mojom::QuotaManagerObserver> observer);
 
  protected:
   ~QuotaManagerImpl() override;
@@ -626,6 +639,14 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
       BucketInfo bucket_info,
       QuotaErrorOr<mojom::BucketTableEntryPtr> result);
 
+  // Called when the quota database or a quota client run into low disk space
+  // errors.
+  void OnFullDiskError(absl::optional<blink::StorageKey> storage_key);
+
+  // Notifies the embedder that space is too low. This ends up showing a
+  // user-facing dialog in Chrome.
+  void NotifyWriteFailed(const blink::StorageKey& storage_key);
+
   // Methods for eviction logic.
   void StartEviction();
   void DeleteBucketFromDatabase(
@@ -666,11 +687,18 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
   void DidRazeForReBootstrap(QuotaError raze_and_reopen_result);
   void OnComplete(QuotaError result);
 
+  void NotifyUpdatedBucket(const QuotaErrorOr<BucketInfo>& result);
+  void OnBucketDeleted(
+      base::OnceCallback<void(QuotaErrorOr<mojom::BucketTableEntryPtr>)>
+          callback,
+      QuotaErrorOr<mojom::BucketTableEntryPtr> result);
+
   void DidGetQuotaSettingsForBucketCreation(
       const BucketInitParams& bucket_params,
       base::OnceCallback<void(QuotaErrorOr<BucketInfo>)> callback,
       const QuotaSettings& settings);
-  void DidGetBucket(base::OnceCallback<void(QuotaErrorOr<BucketInfo>)> callback,
+  void DidGetBucket(bool notify_update_bucket,
+                    base::OnceCallback<void(QuotaErrorOr<BucketInfo>)> callback,
                     QuotaErrorOr<BucketInfo> result);
   void DidGetBucketCheckExpiration(
       const BucketInitParams& params,
@@ -694,15 +722,11 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
       base::OnceCallback<void(QuotaErrorOr<std::set<BucketInfo>>)> callback,
       QuotaErrorOr<std::set<BucketInfo>> result);
   void DidGetModifiedBetween(GetBucketsCallback callback,
-                             blink::mojom::StorageType type,
                              QuotaErrorOr<std::set<BucketLocator>> result);
 
   void MaybeRunStoragePressureCallback(const blink::StorageKey& storage_key,
                                        int64_t total_space,
                                        int64_t available_space);
-  // Used from quota-internals page to test behavior of the storage pressure
-  // callback.
-  void SimulateStoragePressure(const url::Origin& origin_url) override;
 
   // Evaluates disk statistics to identify storage pressure
   // (low disk space availability) and starts the storage
@@ -759,7 +783,8 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
 
   GetQuotaSettingsFunc get_settings_function_;
   scoped_refptr<base::TaskRunner> get_settings_task_runner_;
-  base::RepeatingCallback<void(blink::StorageKey)> storage_pressure_callback_;
+  base::RepeatingCallback<void(const blink::StorageKey&)>
+      storage_pressure_callback_;
   base::RepeatingClosure quota_change_callback_;
   QuotaSettings settings_;
   base::TimeTicks settings_timestamp_;
@@ -769,6 +794,14 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
       settings_callbacks_;
   CallbackQueue<StorageCapacityCallback, int64_t, int64_t>
       storage_capacity_callbacks_;
+
+  // The storage key for the last time a bucket was opened. This is used as an
+  // imperfect estimate of which site may have encountered the last quota
+  // database full disk error.
+  absl::optional<blink::StorageKey> last_opened_bucket_site_;
+
+  // The last time that an eviction round was started due to a full disk error.
+  base::TimeTicks last_full_disk_eviction_time_;
 
   GetBucketCallback lru_bucket_callback_;
 
@@ -829,6 +862,8 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) QuotaManagerImpl
   std::map<BucketDataDeleter*, std::unique_ptr<BucketDataDeleter>>
       bucket_data_deleters_;
   std::unique_ptr<StorageKeyGathererTask> storage_key_gatherer_;
+
+  mojo::RemoteSet<storage::mojom::QuotaManagerObserver> observers_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

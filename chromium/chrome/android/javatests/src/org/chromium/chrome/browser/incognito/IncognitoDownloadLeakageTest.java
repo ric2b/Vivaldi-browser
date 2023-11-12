@@ -8,9 +8,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.os.Environment;
-import android.support.test.InstrumentationRegistry;
 import android.view.View;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.LargeTest;
 
 import org.junit.After;
@@ -66,8 +67,7 @@ import java.util.concurrent.TimeoutException;
 @EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
 // TODO(crbug.com/1360906) remove INCOGNITO_DOWNLOADS_WARNING from the disabled features and fix
 // the test accordingly
-@DisableFeatures({ChromeFeatureList.INCOGNITO_DOWNLOADS_WARNING,
-        ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS})
+@DisableFeatures({ChromeFeatureList.INCOGNITO_DOWNLOADS_WARNING})
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         "enable-features=UseDownloadOfflineContentProvider"})
 public class IncognitoDownloadLeakageTest {
@@ -138,7 +138,8 @@ public class IncognitoDownloadLeakageTest {
 
     @Before
     public void setUp() throws Exception {
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         mDownloadTestPage = mTestServer.getURL(DOWNLOAD_TEST_PAGE_PATH);
 
         // Ensuring native is initialized before we access the CCT_INCOGNITO feature flag.

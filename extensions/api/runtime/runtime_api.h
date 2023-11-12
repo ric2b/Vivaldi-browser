@@ -15,6 +15,7 @@
 #include "extensions/schema/runtime_private.h"
 
 class ProfileAttributesStorage;
+class Browser;
 
 namespace extensions {
 
@@ -240,7 +241,7 @@ class RuntimePrivateCreateProfileFunction : public ExtensionFunction {
   void OnProfileCreated(bool create_shortcut,
                         Profile* profile);
   void CreateShortcutAndShowSuccess(bool create_shortcut, Profile* profile);
-  void OnBrowserReadyCallback(Profile* profile);
+  void OnBrowserReadyCallback(Browser* browser);
   void OpenNewWindowForProfile(Profile* profile);
 
   ResponseAction Run() override;

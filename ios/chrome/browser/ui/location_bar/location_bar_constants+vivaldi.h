@@ -11,8 +11,6 @@ extern const CGFloat vLocationBarSteadyViewLeadingPadding;
 // Trailing padding for location bar steady view when vivaldi menu button is
 // visible.
 extern const CGFloat vLocationBarSteadyViewTrailingPadding;
-// Padding for Vivaldi menu item on the location bar in iPhone.
-extern const UIEdgeInsets vLocationBarVivaldiMenuItemPadding;
 // Size for Vivaldi menu item on the location bar in iPhone.
 extern const CGSize vLocationBarVivaldiMenuItemSize;
 // Size for Vivaldi Shield button. Both with and height are same.

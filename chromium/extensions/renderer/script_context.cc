@@ -17,18 +17,17 @@
 #include "content/public/renderer/v8_value_converter.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/content_script_injection_url_getter.h"
-#include "extensions/common/context_data.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_handlers/sandboxed_page_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/renderer/dispatcher.h"
+#include "extensions/renderer/renderer_context_data.h"
 #include "extensions/renderer/renderer_extension_registry.h"
+#include "extensions/renderer/renderer_frame_context_data.h"
 #include "extensions/renderer/v8_helpers.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
-#include "third_party/blink/public/platform/web_security_origin.h"
-#include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_document_loader.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "v8/include/v8-context.h"
@@ -42,79 +41,13 @@ namespace extensions {
 
 namespace {
 
-class RendererContextData : public ContextData {
- public:
-  explicit RendererContextData(const blink::WebLocalFrame* frame)
-      : frame_(frame) {}
-
-  ~RendererContextData() override = default;
-
-  std::unique_ptr<ContextData> Clone() const override {
-    return std::make_unique<RendererContextData>(frame_);
-  }
-
-  std::unique_ptr<ContextData> GetLocalParentOrOpener() const override {
-    blink::WebFrame* parent_or_opener = nullptr;
-    if (frame_->Parent())
-      parent_or_opener = frame_->Parent();
-    else
-      parent_or_opener = frame_->Opener();
-    if (!parent_or_opener || !parent_or_opener->IsWebLocalFrame())
-      return nullptr;
-
-    blink::WebLocalFrame* local_parent_or_opener =
-        parent_or_opener->ToWebLocalFrame();
-    if (local_parent_or_opener->GetDocument().IsNull())
-      return nullptr;
-
-    return std::make_unique<RendererContextData>(local_parent_or_opener);
-  }
-
-  GURL GetUrl() const override {
-    if (frame_->GetDocument().Url().IsEmpty()) {
-      // It's possible for URL to be empty when `frame_` is on the initial empty
-      // document. TODO(https://crbug.com/1197308): Consider making  `frame_`'s
-      // document's URL about:blank instead of empty in that case.
-      return GURL(url::kAboutBlankURL);
-    }
-    return frame_->GetDocument().Url();
-  }
-
-  url::Origin GetOrigin() const override { return frame_->GetSecurityOrigin(); }
-
-  bool CanAccess(const url::Origin& target) const override {
-    return frame_->GetSecurityOrigin().CanAccess(target);
-  }
-
-  bool CanAccess(const ContextData& target) const override {
-    // It is important that below `web_security_origin` wraps the security
-    // origin of the `target_frame` (rather than a new origin created via
-    // url::Origin round-trip - such an origin wouldn't be 100% equivalent -
-    // e.g. `disallowdocumentaccess` information might be lost).  FWIW, this
-    // scenario is execised by ScriptContextTest.GetEffectiveDocumentURL.
-    const blink::WebLocalFrame* target_frame =
-        static_cast<const RendererContextData&>(target).frame_;
-    blink::WebSecurityOrigin web_security_origin =
-        target_frame->GetDocument().GetSecurityOrigin();
-
-    return frame_->GetSecurityOrigin().CanAccess(web_security_origin);
-  }
-
-  uintptr_t GetId() const override {
-    return reinterpret_cast<uintptr_t>(frame_);
-  }
-
- private:
-  const blink::WebLocalFrame* const frame_;
-};
-
 GURL GetEffectiveDocumentURL(
     blink::WebLocalFrame* frame,
     const GURL& document_url,
     MatchOriginAsFallbackBehavior match_origin_as_fallback,
     bool allow_inaccessible_parents) {
   return ContentScriptInjectionUrlGetter::Get(
-      RendererContextData(frame), document_url, match_origin_as_fallback,
+      RendererFrameContextData(frame), document_url, match_origin_as_fallback,
       allow_inaccessible_parents);
 }
 
@@ -140,6 +73,8 @@ std::string GetContextTypeDescriptionString(Feature::Context context_type) {
       return "LOCK_SCREEN_EXTENSION";
     case Feature::OFFSCREEN_EXTENSION_CONTEXT:
       return "OFFSCREEN_EXTENSION_CONTEXT";
+    case Feature::USER_SCRIPT_CONTEXT:
+      return "USER_SCRIPT_CONTEXT";
   }
   NOTREACHED();
   return std::string();
@@ -343,7 +278,7 @@ Feature::Availability ScriptContext::GetAvailability(
   }
   return ExtensionAPI::GetSharedInstance()->IsAvailable(
       api_name, extension, context_type_, url(), check_alias,
-      kRendererProfileId);
+      kRendererProfileId, RendererFrameContextData(web_frame()));
 }
 
 std::string ScriptContext::GetContextTypeDescription() const {
@@ -370,11 +305,18 @@ bool ScriptContext::IsAnyFeatureAvailableToContext(
     const Feature& api,
     CheckAliasStatus check_alias) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  if (web_frame()) {
+    return ExtensionAPI::GetSharedInstance()->IsAnyFeatureAvailableToContext(
+        api, extension(), context_type(),
+        GetDocumentLoaderURLForFrame(web_frame()), check_alias,
+        kRendererProfileId, RendererFrameContextData(web_frame()));
+  }
+
   // TODO(lazyboy): Decide what we should do for service workers, where
   // web_frame() is null.
-  GURL url = web_frame() ? GetDocumentLoaderURLForFrame(web_frame()) : url_;
   return ExtensionAPI::GetSharedInstance()->IsAnyFeatureAvailableToContext(
-      api, extension(), context_type(), url, check_alias, kRendererProfileId);
+      api, extension(), context_type(), url_, check_alias, kRendererProfileId,
+      RendererContextData());
 }
 
 // static

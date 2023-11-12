@@ -7,7 +7,6 @@
  * states
  */
 
-import 'chrome://resources/ash/common/cellular_setup/cellular_eid_dialog.js';
 import 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_icons.css.js';
@@ -428,7 +427,7 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
     menu.showAt(e.target as HTMLElement);
   }
 
-  private onShowEidDialogTap_(): void {
+  private onShowEidDialogClick_(): void {
     const actionMenu =
         castExists(this.shadowRoot!.querySelector('cr-action-menu'));
     actionMenu.close();
@@ -514,7 +513,7 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
     return OncMojo.deviceIsInhibited(this.cellularDeviceState);
   }
 
-  private onAddEsimButtonTap_(): void {
+  private onAddEsimButtonClick_(): void {
     const event = new CustomEvent('show-cellular-setup', {
       bubbles: true,
       composed: true,
@@ -567,7 +566,8 @@ class CellularNetworksListElement extends CellularNetworksListElementBase {
       inhibitReason: InhibitReason,
       eSimNetworks: NetworkList.NetworkListItemType[],
       eSimPendingProfiles: NetworkList.CustomItemState[]): boolean {
-    if (inhibitReason === InhibitReason.kInstallingProfile) {
+    if (inhibitReason === InhibitReason.kInstallingProfile ||
+        inhibitReason === InhibitReason.kRefreshingProfileList) {
       return false;
     }
 

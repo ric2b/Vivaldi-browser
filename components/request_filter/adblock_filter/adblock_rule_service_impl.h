@@ -58,6 +58,7 @@ class RuleServiceImpl : public RuleServiceContent,
   void AddObserver(RuleService::Observer* observer) override;
   void RemoveObserver(RuleService::Observer* observer) override;
   std::string GetRulesIndexChecksum(RuleGroup group) override;
+  IndexBuildResult GetRulesIndexBuildResult(RuleGroup group) override;
   RuleManager* GetRuleManager() override;
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
   BlockedUrlsReporter* GetBlockerUrlsReporter() override;
@@ -73,12 +74,12 @@ class RuleServiceImpl : public RuleServiceContent,
  private:
   void OnStateLoaded(RuleServiceStorage::LoadResult load_result);
 
-  void OnRulesIndexChanged();
+  void OnRulesIndexChanged(RuleGroup group);
   void OnRulesIndexLoaded(RuleGroup group);
 
   void AddRequestFilter(RuleGroup group);
 
-  content::BrowserContext* context_;
+  const raw_ptr<content::BrowserContext> context_;
   RuleSourceHandler::RulesCompiler rules_compiler_;
   std::string locale_;
 

@@ -13,6 +13,10 @@
 #import "components/version_info/version_info.h"
 #import "components/version_info/version_string.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -82,6 +86,11 @@ version_info::Channel GetChannel() {
 
   return g_channel;
 #else
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return version_info::Channel::STABLE;
+  } // End Vivaldi
+
   return version_info::Channel::UNKNOWN;
 #endif
 }

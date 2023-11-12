@@ -44,7 +44,6 @@
 #include "chrome/browser/background_fetch/background_fetch_delegate_impl.h"
 #include "chrome/browser/background_sync/background_sync_controller_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "chrome/browser/breadcrumbs/breadcrumb_manager_keyed_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
@@ -120,13 +119,11 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/net/safe_search_util.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "components/background_sync/background_sync_controller_impl.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/breadcrumbs/core/breadcrumbs_status.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -143,17 +140,21 @@
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/permissions/permission_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
+#include "components/policy/core/common/cloud/profile_cloud_policy_manager.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/profile_metrics/browser_profile_type.h"
+#include "components/safe_search_api/safe_search_util.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/site_isolation/site_isolation_policy.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/supervised_user/core/common/buildflags.h"
+#include "components/supervised_user/core/common/pref_names.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
@@ -198,6 +199,7 @@
 #include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chromeos/ash/components/account_manager/account_manager_factory.h"
+#include "chromeos/ash/components/standalone_browser/browser_support.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user.h"
@@ -375,9 +377,10 @@ void ProfileImpl::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kSavingBrowserHistoryDisabled, false);
   registry->RegisterBooleanPref(prefs::kAllowDeletingBrowserHistory, true);
-  registry->RegisterBooleanPref(prefs::kForceGoogleSafeSearch, false);
-  registry->RegisterIntegerPref(prefs::kForceYouTubeRestrict,
-                                safe_search_util::YOUTUBE_RESTRICT_OFF);
+  registry->RegisterBooleanPref(policy::policy_prefs::kForceGoogleSafeSearch,
+                                false);
+  registry->RegisterIntegerPref(policy::policy_prefs::kForceYouTubeRestrict,
+                                safe_search_api::YOUTUBE_RESTRICT_OFF);
   registry->RegisterStringPref(prefs::kAllowedDomainsForApps, std::string());
 
   registry->RegisterIntegerPref(prefs::kProfileAvatarIndex, -1);
@@ -574,7 +577,7 @@ void ProfileImpl::LoadPrefsForNormalStartup(bool async_prefs) {
   // policy data immediately.
   bool force_immediate_policy_load = !async_prefs;
 
-  policy::UserCloudPolicyManager* user_cloud_policy_manager;
+  policy::CloudPolicyManager* cloud_policy_manager;
   policy::ConfigurationPolicyProvider* policy_provider;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (force_immediate_policy_load)
@@ -586,7 +589,7 @@ void ProfileImpl::LoadPrefsForNormalStartup(bool async_prefs) {
       this, force_immediate_policy_load, io_task_runner_,
       &user_cloud_policy_manager_ash_, &active_directory_policy_manager_);
 
-  user_cloud_policy_manager = nullptr;
+  cloud_policy_manager = nullptr;
   policy_provider = GetUserCloudPolicyManagerAsh();
   if (!policy_provider) {
     policy_provider = GetActiveDirectoryPolicyManager();
@@ -600,7 +603,7 @@ void ProfileImpl::LoadPrefsForNormalStartup(bool async_prefs) {
         schema_registry_service_->registry(), std::move(loader));
     user_policy_provider_->Init(schema_registry_service_->registry());
     policy_provider = user_policy_provider_.get();
-    user_cloud_policy_manager = nullptr;
+    cloud_policy_manager = nullptr;
 
     // Start lacros-chrome volume list provider, which is robust against
     // API unavailability in ash-chrome.
@@ -611,17 +614,34 @@ void ProfileImpl::LoadPrefsForNormalStartup(bool async_prefs) {
 #else
   {
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-    user_cloud_policy_manager_ = policy::UserCloudPolicyManager::Create(
-        GetPath(), GetPolicySchemaRegistryService()->registry(),
-        force_immediate_policy_load, io_task_runner_,
-        base::BindRepeating(&content::GetNetworkConnectionTracker));
-    user_cloud_policy_manager = user_cloud_policy_manager_.get();
-    policy_provider = user_cloud_policy_manager;
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+    ProfileManager* profile_manager = g_browser_process->profile_manager();
+    ProfileAttributesEntry* entry =
+        profile_manager->GetProfileAttributesStorage()
+            .GetProfileAttributesWithPath(GetPath());
+
+    if (entry && !entry->GetProfileManagementEnrollmentToken().empty()) {
+      profile_cloud_policy_manager_ = policy::ProfileCloudPolicyManager::Create(
+          GetPath(), GetPolicySchemaRegistryService()->registry(),
+          force_immediate_policy_load, io_task_runner_,
+          base::BindRepeating(&content::GetNetworkConnectionTracker));
+      cloud_policy_manager = profile_cloud_policy_manager_.get();
+    } else {
+#else
+    {
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+      user_cloud_policy_manager_ = policy::UserCloudPolicyManager::Create(
+          GetPath(), GetPolicySchemaRegistryService()->registry(),
+          force_immediate_policy_load, io_task_runner_,
+          base::BindRepeating(&content::GetNetworkConnectionTracker));
+      cloud_policy_manager = user_cloud_policy_manager_.get();
+    }
+    policy_provider = cloud_policy_manager;
   }
 #endif
   profile_policy_connector_ =
       policy::CreateProfilePolicyConnectorForBrowserContext(
-          schema_registry_service_->registry(), user_cloud_policy_manager,
+          schema_registry_service_->registry(), cloud_policy_manager,
           policy_provider, g_browser_process->browser_policy_connector(),
           force_immediate_policy_load, this);
 
@@ -662,6 +682,7 @@ void ProfileImpl::LoadPrefsForNormalStartup(bool async_prefs) {
       ash::ProfileHelper::IsPrimaryProfile(this)) {
     auto& map = profile_policy_connector_->policy_service()->GetPolicies(
         policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME, std::string()));
+    ash::standalone_browser::BrowserSupport::Initialize();
     crosapi::browser_util::CacheLacrosAvailability(map);
     crosapi::browser_util::CacheLacrosDataBackwardMigrationMode(map);
     crosapi::browser_util::CacheLacrosSelection(map);
@@ -864,9 +885,6 @@ void ProfileImpl::DoFinalInit(CreateMode create_mode) {
           AnnouncementNotificationServiceFactory::GetForProfile(this)) {
     announcement_notification->MaybeShowNotification();
   }
-
-  if (breadcrumbs::IsEnabled())
-    BreadcrumbManagerKeyedServiceFactory::GetForBrowserContext(this);
 
   // Request an OriginTrialsControllerDelegate to ensure it is initialized.
   GetOriginTrialsControllerDelegate();
@@ -1193,6 +1211,7 @@ void ProfileImpl::OnPrefsLoaded(CreateMode create_mode, bool success) {
     if (ash::ProfileHelper::IsPrimaryProfile(this)) {
       auto& map = profile_policy_connector_->policy_service()->GetPolicies(
           policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME, std::string()));
+      ash::standalone_browser::BrowserSupport::Initialize();
       crosapi::browser_util::CacheLacrosAvailability(map);
       crosapi::browser_util::CacheLacrosDataBackwardMigrationMode(map);
       crosapi::browser_util::CacheLacrosSelection(map);
@@ -1280,6 +1299,11 @@ ProfileImpl::GetActiveDirectoryPolicyManager() {
 policy::UserCloudPolicyManager* ProfileImpl::GetUserCloudPolicyManager() {
   return user_cloud_policy_manager_.get();
 }
+
+policy::ProfileCloudPolicyManager* ProfileImpl::GetProfileCloudPolicyManager() {
+  return profile_cloud_policy_manager_.get();
+}
+
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 policy::ConfigurationPolicyProvider*
@@ -1295,7 +1319,11 @@ ProfileImpl::configuration_policy_provider() {
   if (user_policy_provider_)
     return user_policy_provider_.get();
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
-  return user_cloud_policy_manager_.get();
+  if (user_cloud_policy_manager_.get()) {
+    return user_cloud_policy_manager_.get();
+  } else {
+    return profile_cloud_policy_manager_.get();
+  }
 #endif
 }
 

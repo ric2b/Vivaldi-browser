@@ -1,4 +1,343 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
+<translation id="1016495303386450659">Elem frissítve</translation>
+<translation id="1066692930984703744">Nyomkövető- és reklámblokkolás bekapcsolása a gyorsabb és biztonságosabb böngészéshez</translation>
+<translation id="1116694919640316211">Névjegy</translation>
+<translation id="1123707809902612118">Követés- és reklámok blokkolása</translation>
+<translation id="1151972924205500581">Jelszó szükséges</translation>
+<translation id="1166425484559430538">A szinkronizációs adataid titkosítottak. Kérlek, add meg a titkosítási jelszavad az adatok dekódolásához.</translation>
+<translation id="1181037720776840403">Eltávolítás</translation>
+<translation id="1182668946911971500">Jegyzetek sáv</translation>
+<translation id="1198271701881992799">Kezdjünk hozzá</translation>
+<translation id="1201402288615127009">Következő</translation>
+<translation id="1208495925646914304">Cím</translation>
+<translation id="1254117744268754948">Mappa választása</translation>
+<translation id="1265555169187992603">Kérlek, olyan felhasználónevet válassz, mely 3-30 karakterből (a–z vagy A–Z) és számból (0–9) áll.</translation>
+<translation id="1267954839079880017">Olasz (<ph name="ORIGIN" />)</translation>
+<translation id="1272729688996227528">Szinkronizálás aktív</translation>
+<translation id="1275213816424141989">Talán később</translation>
+<translation id="1315107593850379616">Helyreállítási e-mail cím</translation>
+<translation id="1325473901257014816">A Vivaldival az összes lapod egy böngészőben marad, és az összes eszközön szinkronizálódik.</translation>
+<translation id="132683371494960526">A szülő mappa módosításához dupla koppintás.</translation>
+<translation id="1379470994139227452">Vivaldi beállítása alapértelmezettként</translation>
+<translation id="1381484244248892686">A mentett jelszavakat bármilyen eszközön használhatod. A Vivaldi Jelszókezelőben vannak tárolja, <ph name="EMAIL" /> számára</translation>
+<translation id="1383876407941801731">Keresés</translation>
+<translation id="1430638949087011281">Nincs blokkolás</translation>
+<translation id="1446108955355168157">A szinkronizált adatok (jelszavak, könyvjelzők, jegyzetek stb.) titkosításához és védelméhez hozz létre egy titkosítási jelszót. Ezt a jelszót mi sosem kapjuk meg.</translation>
+<translation id="145015347812617860"><ph name="COUNT" /> elem</translation>
+<translation id="1521731267649138856">helyreállítási e-mail címed.</translation>
+<translation id="1573784689611551537">Reklámblokkolási források kezelése</translation>
+<translation id="1577761519530347814">Weboldal tárolt jelszavainak szinkronizálása</translation>
+<translation id="1644574205037202324">Előzmények</translation>
+<translation id="1659112017960130179">Koreai (<ph name="ORIGIN" />)</translation>
+<translation id="1689333818294560261">Kulcsszó</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Felhasználási feltételek ➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Adatvédelmi szabályzat ➔<ph name="END_LINK2" /></translation>
+<translation id="1721552494230946796">Új Gyorshívó mappa</translation>
+<translation id="173924678149983125">URL megadása a blokkolási szabályok importálásához</translation>
+<translation id="1751280147639351837">Reklám- és nyomkövetés blokkoló</translation>
+<translation id="1752547299766512813">Jelszavak mentése</translation>
+<translation id="1754797958074421486">Használati feltételek</translation>
+<translation id="1771413903824396513">Kulcsszó szerint</translation>
+<translation id="1804522390855853698">Kínai (<ph name="ORIGIN" />)</translation>
+<translation id="1809939268435598390">Mappa törlése</translation>
+<translation id="1813686536470127172">Másik mappa</translation>
+<translation id="1828800626900562968">Koppints a lenti plusz ikonra új lap létrehozásához.</translation>
+<translation id="1861262398884155592">A mappa üres</translation>
+<translation id="1887193815546011584">Új Gyorshívó</translation>
+<translation id="1929299157575856072">ALAPÉRTELMEZETT BLOKKOLÁSI SZINT</translation>
+<translation id="1979539205367899613">Koppints a lenti plusz ikonra új privát lap létrehozásához.</translation>
+<translation id="2030706494969937066">Hitelesítő adatok bekérése sikertelen. Kérlek, lépj be újra.</translation>
+<translation id="2034405583989639424">Gyorshívó szerkesztése</translation>
+<translation id="2048247880942380698">Arab (<ph name="ORIGIN" />)</translation>
+<translation id="2079545284768500474">Visszavonás</translation>
+<translation id="2117093051794889870">Tartalom szerint</translation>
+<translation id="2129408066358825297">Életkor</translation>
+<translation id="2148384276939959392">Kiválasztott szinkronizálása</translation>
+<translation id="2195713384412091023">Ezzel törlődik minden szinkronizált adat a szerverünkről, alaphelyzetbe áll a titkosítási jelszavad, és ki leszel jelentkeztetve.</translation>
+<translation id="2243210264130642074">Jegyzet elmentve</translation>
+<translation id="2272338747456392228">A fiók zárolva</translation>
+<translation id="2273327106802955778">További menü</translation>
+<translation id="2324160330092901720">Az ellenőrző kód kiküldve: <ph name="EMAIL_ID" /></translation>
+<translation id="2359808026110333948">Folytatás</translation>
+<translation id="2386793615875593361">1 kiválasztott</translation>
+<translation id="2388224692799337242">Amint elkezdesz böngészni, az előzmények itt jelennek meg</translation>
+<translation id="2391028308389203648">Török (<ph name="ORIGIN" />)</translation>
+<translation id="2392369802118427583">Aktiválás</translation>
+<translation id="2434910957904013691">Minden szinkronizálása</translation>
+<translation id="2536780277491102902">KIVÉTELEK</translation>
+<translation id="2558801801411970131">Követés blokkolása</translation>
+<translation id="2577446409661931381">Új jegyzet</translation>
+<translation id="2619628557366098325">Portugál (<ph name="ORIGIN" />)</translation>
+<translation id="2677862276555105603">reklám
+blokkolva</translation>
+<translation id="2678542925523700624">Észt (<ph name="ORIGIN" />)</translation>
+<translation id="2709516037105925701">Automatikus kitöltés</translation>
+<translation id="271033894570825754">Új</translation>
+<translation id="2745324713975967671">Titkosítási jelszó</translation>
+<translation id="2765217105034171413">Kicsi</translation>
+<translation id="2825232297853754349">El kell fogadnod az Általános Szerződési Feltételekkel.</translation>
+<translation id="2842985007712546952">Szülő mappa</translation>
+<translation id="2843343418360315034">Magyar (<ph name="ORIGIN" />)</translation>
+<translation id="2850144663494818309">Inicializálás...</translation>
+<translation id="2874121295511641364">Begépelt URL-ek és nyitott lapok szinkronizálása</translation>
+<translation id="2898963176829412617">Új mappa…</translation>
+<translation id="2961573414320947355">Minden linket a Vivaldiban akarsz megnyitni? Győződj meg róla, hogy ez az alapértelmezett.</translation>
+<translation id="3006429105107822794">Nem szükséges emlékezned erre a jelszóra. A Vivaldi Jelszókezelőben lesz tárolva.</translation>
+<translation id="3018244467214569202">Görög (<ph name="ORIGIN" />)</translation>
+<translation id="3039671569659952257">Mappa törlése</translation>
+<translation id="3073196329485613487">Belépés a fiókodba</translation>
+<translation id="307859903981308731">A továbblépéssel elfogadod a Vivaldi</translation>
+<translation id="3086746722712840547">jegyzet</translation>
+<translation id="3091563570137981919">Követés- és reklám blokkolása</translation>
+<translation id="313566647356924831">Blokkoló beállításainak kezelése</translation>
+<translation id="3177673846235066154">A szerver elutasította a hitelesítő adataid.</translation>
+<translation id="3229182533910980085">Add hozzá az első könyvjelződet a lenti plusz ikonra koppintva</translation>
+<translation id="3236835587712044564">Elégedett vagy a Vivaldival? Állítsd be alapértelmezettként.</translation>
+<translation id="3270894089048358271">Vivaldi beállítása alapértelmezettként</translation>
+<translation id="3270930591809084274">Szinkronizált lapok</translation>
+<translation id="3335772982573114336">Új jegyzet</translation>
+<translation id="33451081266695216">A szerver elfojtja a kapcsolatot.</translation>
+<translation id="3346386541263128307">Az e-mail címeknek egyezniük kell.</translation>
+<translation id="3365991203476235715">Angol (<ph name="ORIGIN" />)</translation>
+<translation id="3368960138304620657">Litván (<ph name="ORIGIN" />)</translation>
+<translation id="3377025655491224618">Privát lap</translation>
+<translation id="3435896845095436175">Engedélyezés</translation>
+<translation id="3438160227308459316">Román (<ph name="ORIGIN" />)</translation>
+<translation id="3451162533623145500">Fiók létrehozása</translation>
+<translation id="3509379002674019679">Jelszavak létrehozása, mentése és kezelése, hogy könnyedén bejelentkezhess weboldalakra és alkalmazásokba.</translation>
+<translation id="3513566764071045027">Kijelentkezés</translation>
+<translation id="3527085408025491307">Mappa</translation>
+<translation id="3530991200302302959">Bolgár (<ph name="ORIGIN" />)</translation>
+<translation id="3601414719864711130">Dátum szerint</translation>
+<translation id="3607176258839749451">A regisztráció hiba miatt sikertelen volt. Később próbáld újra.</translation>
+<translation id="3646647753063635401">Minden adat szinkronizálása, és az új adattípusok szinkronizálása automatikus engedélyezése</translation>
+<translation id="3682791711395736890">Asztali verzió megjelenítése</translation>
+<translation id="3692650606013198282">Megnyitás privátban</translation>
+<translation id="3699026013955941879">A kód lejárt. Kérj egy új aktiváló kódot.</translation>
+<translation id="3700829948786686853">Üdvözöl a Vivaldi</translation>
+<translation id="3766350025418769949">A Vivaldi Jelszókezelőben tárolt jelszavakat az iPad más alkalmazásaiban is használhatod.</translation>
+<translation id="3858860766373142691">Név</translation>
+<translation id="3866249974567520381">Leírás</translation>
+<translation id="3872195896030547485">Kérlek, adj meg egy érvényes e-mail címet.</translation>
+<translation id="3894427358181296146">Mappa hozzáadása</translation>
+<translation id="3897092660631435901">Menü</translation>
+<translation id="3953599441418463312">Japán (<ph name="ORIGIN" />)</translation>
+<translation id="395506590020066151">Követés blokkolva</translation>
+<translation id="3997823869212225788">Add meg a 6-számjegyű kódot</translation>
+<translation id="4002066346123236978">Cím</translation>
+<translation id="4032606071208172574">(Alapértelmezett)</translation>
+<translation id="4048057312173843244">A más eszközökről szinkronizált lapok itt jelennek meg. A szolgáltatás használatához be kell jelentkezni a Szinkronizálásba.</translation>
+<translation id="4073968054795398875">A szinkronizációs szerver problémába ütközött. Szinkronizációs inicializálás újraindítása...</translation>
+<translation id="4096707694175478403">Oldalsáv</translation>
+<translation id="414098425907666915">Privát keresés</translation>
+<translation id="4141861385728508836">Skandináv (<ph name="ORIGIN" />)</translation>
+<translation id="4145489350420416595">Váratlan hiba.</translation>
+<translation id="4152011295694446843">A könyvjelzőket itt találod majd</translation>
+<translation id="4152623049003960417">Nyomkövető részletei</translation>
+<translation id="4176463684765177261">Kikapcsolva</translation>
+<translation id="4209092469652827314">Nagy</translation>
+<translation id="4219175188138757774">Cseh és Szlovák (<ph name="ORIGIN" />)</translation>
+<translation id="4276839458685471670">Létrehozás szerint</translation>
+<translation id="4277085371281330061">követés
+blokkolva</translation>
+<translation id="4299298331965375737">A Vivaldi legyen az alapértelmezett böngésző?</translation>
+<translation id="4304224509867189079">Bejelentkezés</translation>
+<translation id="432696242656678770">Orosz (<ph name="ORIGIN" />)</translation>
+<translation id="4350751486125178847">Spanyol (<ph name="ORIGIN" />)</translation>
+<translation id="4376661454588260127">Vietnámi (<ph name="ORIGIN" />)</translation>
+<translation id="4394049700291259645">Kikapcsolás</translation>
+<translation id="4413780690230851155">Böngészési előzmények törlése</translation>
+<translation id="4452878871193896747">Indonéz (<ph name="ORIGIN" />)</translation>
+<translation id="4493850495402472953">és</translation>
+<translation id="4497115807425788318">Helyszín</translation>
+<translation id="4507213865286211606">Méret előnézet</translation>
+<translation id="4515084385531683114">A jelszavak a Jelszókezelőben vannak elmentve az eszközön.</translation>
+<translation id="4525945044609022380">Ez az e-mail cím már egy másik fiókhoz van kapcsolva.</translation>
+<translation id="4526803704855831732">Privát lapok</translation>
+<translation id="4563480492836333884">Az e-mail nem fogadható el. Kérlek, használj más domaint.</translation>
+<translation id="457386861538956877">Több...</translation>
+<translation id="460370326897402035">A jelszó érvénytelen.</translation>
+<translation id="4619615317237390068">Lapok más eszközökről</translation>
+<translation id="4640946580087069269">Másolás jegyzetbe</translation>
+<translation id="4654578955713250802">Reklám- és követés blokkolása</translation>
+<translation id="4655510151391078468">A kód nem egyezik azzal, amit neked küldtünk.
+        Még <ph name="ATTEMPTS" /> próbálkozásod maradt.</translation>
+<translation id="466494460776294423">Megerősítő kód szükséges</translation>
+<translation id="4727698999970341158">Izlandi (<ph name="ORIGIN" />)</translation>
+<translation id="473775607612524610">Frissítés</translation>
+<translation id="4739712911308055817">Nincs beolvasva</translation>
+<translation id="4780953868408193639">követés
+blokkolva</translation>
+<translation id="4807415245238822255">A jelszavaknak egyezniük kell.</translation>
+<translation id="4833044618885331665">Frissítened kell a Vivaldit a szinkronizálás használatához.</translation>
+<translation id="4852383705713307704">Reklám blokkolva</translation>
+<translation id="4871370605780490696">Könyvjelző hozzáadása</translation>
+<translation id="4903325570808402486">Vivaldi beállítások szinkronizálása (még nem minden beállítás szinkronizálható)</translation>
+<translation id="4929196061847506605">Hatékony. Személyes. Privát.</translation>
+<translation id="4936710149174207991">Nem szinkronizált</translation>
+<translation id="4943266325467647391">A Vivaldi beépített nyomkövető- és reklámblokkolója megvéd a rosszindulatú programoktól és a reklámoktól.</translation>
+<translation id="495421405224926623">Elolvastam és elfogadom a Felhasználási feltételeket és az Adatvédelmi szabályzatot</translation>
+<translation id="497942794017668482">Követés- és reklámok blokkolása</translation>
+<translation id="5037761343305489956">Jegyzetbe másolva</translation>
+<translation id="504986598654589766">A Privát lapon böngészve a kereséseket, meglátogatott oldalakat, sütiket és ideiglenes fájlokat nem tárolja a Vivaldi. Nem titkosítja és más módon sem módosítja a kapcsolatot.</translation>
+<translation id="5116316489033177455">Könyvjelzők és Gyorshívók szinkronizálása</translation>
+<translation id="5122095890854520072">Lett (<ph name="ORIGIN" />)</translation>
+<translation id="5153806174841856652">Sikertelen belépés</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Kód újraküldése<ph name="END_LINK" /></translation>
+<translation id="5238642303473095117">Adat törlése</translation>
+<translation id="5245732982828228444">A jegyzeteket itt találod majd</translation>
+<translation id="5249199221558969362">Kérlek, adj meg egy valós élettartam számot.</translation>
+<translation id="5290452628447338707">Nincs jegyzet</translation>
+<translation id="5317780077021120954">Mentés</translation>
+<translation id="5349678548463426691">Leírás szerint</translation>
+<translation id="5350737901534958404">Reklámok engedélyezése partnereinktől (Vivaldi támogatása)</translation>
+<translation id="5351912500249789547">A Vivaldi.net elutasította a hitelesítő adataid: Hibakód <ph name="ERROR_CODE" /></translation>
+<translation id="5378841821586202982">Kuka mappa</translation>
+<translation id="5398772614898833570">Reklám blokkolva</translation>
+<translation id="5421638721143596928">A hitelesítő adataid dekódolása sikertelen. Kérlek, lépj be újra.</translation>
+<translation id="5422086212043657100">Használat Gyorshívó mappaként</translation>
+<translation id="5439835075346716808">A regisztráció átmenetileg blokkolva van erről az IP-címről. Később próbáld újra.</translation>
+<translation id="5486261815000869482">Jelszó megerősítése</translation>
+<translation id="5494016731375030300">Legutóbb bezárt lapok</translation>
+<translation id="5569279496588266002">Gyorshívó elrendezés</translation>
+<translation id="5639137028584114536">A szervezeted megköveteli, hogy privát módban böngéssz. Privát módban a lapok nem kerülnek mentésre.
+        <ph name="BEGIN_LINK" />Tudj meg többet<ph name="END_LINK" /></translation>
+<translation id="5684277895745049190">Lista</translation>
+<translation id="574392208103952083">Közepes</translation>
+<translation id="5787420647064736989">Eszköz neve</translation>
+<translation id="5822336771053074270">Jegyzet hozzáadása</translation>
+<translation id="5823830882692559950">A Vivaldi.net elutasította a hitelesítő adataid: <ph name="SERVER_ERROR" /> (<ph name="ERROR_CODE" />)</translation>
+<translation id="5857090052475505287">Új mappa</translation>
+<translation id="5859825823508296659">Domain szerkesztése</translation>
+<translation id="5867841422488265304">Keress, vagy írj be internetcímet</translation>
+<translation id="5871497086027727873">1 elem áthelyezve</translation>
+<translation id="5898502570200301364">A Vivaldi Jelszókezelőben tárolt jelszavakat az iPhone más alkalmazásaiban is használhatod.</translation>
+<translation id="5900160494089383343">Ez a felhasználónév nem elérhető.</translation>
+<translation id="6005497458542935062">Felsőbb mappába helyezés</translation>
+<translation id="6042308850641462728">Több</translation>
+<translation id="6077943432358741146">Gyorshívó</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> elem áthelyezve</translation>
+<translation id="6147094071357011481">A legutóbb bezárt lapok nem elérhetők</translation>
+<translation id="6193995664633100765">Indiai (<ph name="ORIGIN" />)</translation>
+<translation id="6365929278691047681">Német (<ph name="ORIGIN" />)</translation>
+<translation id="6404511346730675251">Könyvjelző szerkesztése</translation>
+<translation id="6406506848690869874">Szinkronizálás</translation>
+<translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> kiválasztva</translation>
+<translation id="6468130661190228905">Sajnáljuk, de úgy tűnik, kicsit még várnod kell, hogy a közösségünk tagja lehess. A csatlakozni kívánó tagunknak legalább 16 évesnek kell lennie.</translation>
+<translation id="6517411226162529295">Helyreállítási kulcs</translation>
+<translation id="6527303717912515753">Megosztás</translation>
+<translation id="6535988230515403205">Lengyel (<ph name="ORIGIN" />)</translation>
+<translation id="659351303388691480">Böngészési adatok törlése ...</translation>
+<translation id="6614744450826097546">Reklám részletei</translation>
+<translation id="6627583120233659107">Mappa szerkesztése</translation>
+<translation id="6631760746795162665">Kolumbiai (<ph name="ORIGIN" />)</translation>
+<translation id="6639866709520319699">Nyomkövetők és a hirdetések blokkolva. Egyes weboldalak hibásan működhetnek.</translation>
+<translation id="6642196070615520677">Szinkronizált adatok törlése</translation>
+<translation id="6645228090427373820">Nyomkövetők blokkolva, de a hirdetések nem. Egyes weboldalak hibásan működhetnek.</translation>
+<translation id="6656103420185847513">Mappa szerkesztése</translation>
+<translation id="6657585470893396449">Jelszó</translation>
+<translation id="6690955457036363013">Blokkolási szint kezelése oldalanként</translation>
+<translation id="6703516503311038964">Szeretnék Vivaldi hírlevelet kapni</translation>
+<translation id="6757792528048321576">Reklám- és nyomkövetés blokkoló</translation>
+<translation id="6798469570047202628">Hibás jelszó lett megadva</translation>
+<translation id="681368974849482173">Elem létrehozva</translation>
+<translation id="6830986331692390764">Szinkronizációs adatok törlése. Kérlek várj.</translation>
+<translation id="6875510405870945573">Válaszd ki a kívánt blokkolási szintet.</translation>
+<translation id="6885837502028760851">Csak a Gyorshívó mappák megjelenítése</translation>
+<translation id="6887143077297974801">Szinkronizálás indítása sikertelen.</translation>
+<translation id="6937750621455385628">Egy Vivaldi felhasználói fiókot kell használnod a belépéshez.</translation>
+<translation id="6945221475159498467">Kijelölés</translation>
+<translation id="6946395294519639514">A panelekkel a böngésző oldalsávjában könnyedén elérheted a legfontosabb eszközöket.</translation>
+<translation id="6967884871145366229">Adatvédelmi beállítások kezelése</translation>
+<translation id="6973630695168034713">Mappa</translation>
+<translation id="7029809446516969842">Jelszavak</translation>
+<translation id="7041964446309059643">Manuális</translation>
+<translation id="7194677467200983873">Utolsó szinkronizálás:</translation>
+<translation id="7196846668589096106">Asztali lapok</translation>
+<translation id="7210372243397300116">Keresés mappában</translation>
+<translation id="7215420652436283416">Cím szerint</translation>
+<translation id="7229439505896086266">Jegyzet létrehozása</translation>
+<translation id="7299721129597238157">Könyvjelző törlése</translation>
+<translation id="7311118006561484338">Cím szerint</translation>
+<translation id="7325310788570036874">Böngéssz gyorsabban, gördülékenyebben és okosabban a Vivaldi segítségével.</translation>
+<translation id="734110743815267231">Héber (<ph name="ORIGIN" />)</translation>
+<translation id="7362952245780030555">Válassz a teljes asztali lapok és az egyszerűsített lapváltó között.</translation>
+<translation id="7379938540614588640">Holland (<ph name="ORIGIN" />)</translation>
+<translation id="7388525939184421699">Új forrás hozzáadása</translation>
+<translation id="7400418766976504921">URL</translation>
+<translation id="7454640759045234067">Követés blokkolva</translation>
+<translation id="7461899062138731833">FORRÁSOK</translation>
+<translation id="750493650310597496">0 kiválasztott</translation>
+<translation id="7525067979554623046">Létrehozás</translation>
+<translation id="7541020606126512786">Reklám- és nyomkövetés blokkoló összegzés</translation>
+<translation id="7573518470897278603">Mobilos verzió megjelenítése</translation>
+<translation id="7574321014880720413">Új domain hozzáadása</translation>
+<translation id="7587132259180664054">E-mail sikeresen elküldve</translation>
+<translation id="7602336701644200880">Sikertelen e-mail küldés. Kérlek, próbáld újra.</translation>
+<translation id="7606108789437688910">Jegyzetcímek megnyitása inkognitóban</translation>
+<translation id="7622661618259256505">Kérlek, válassz egy legalább 12 karakteres jelszót.</translation>
+<translation id="7658239707568436148">Mégsem</translation>
+<translation id="767363698559661695">Lapstílus beállítása</translation>
+<translation id="7702907602086592255">Domain</translation>
+<translation id="7730831244010940855">Vivaldi legyen az iPad alapértelmezett böngészője?</translation>
+<translation id="7732622593814325274">Követésblokkolási források kezelése</translation>
+<translation id="7765158879357617694">Áthelyezés</translation>
+<translation id="7801204999757211519">Van már fiókod? <ph name="BEGIN_LINK" />Belépés ➔<ph name="END_LINK" /></translation>
+<translation id="7914995060146784406">Jegyzet szerkesztése</translation>
+<translation id="7925340978147141704">Jelszó megjelenítése</translation>
+<translation id="8008214489230610096">Helyreállítási e-mail cím megerősítése</translation>
+<translation id="804786196054284061">Általános Szerződési Feltételek</translation>
+<translation id="8053851743673939284">Francia (<ph name="ORIGIN" />)</translation>
+<translation id="8066170816074394954">Szerverhiba.</translation>
+<translation id="8076492880354921740">Lapok</translation>
+<translation id="8112996065264879835">A kód nem egyezik azzal, amit neked küldtünk.
+        Elérted a sikertelen próbálkozások maximális számát. Kérlek igényelj egy új kódot a lenti "újraküldés" lehetőséggel.</translation>
+<translation id="8147118677117542370">Kérlek, add meg az életkorod.</translation>
+<translation id="8165573437634525334">Az adatok titkosítási jelszóval vannak védve</translation>
+<translation id="8182979418912184986">Új privát lap</translation>
+<translation id="8257908958623224237">Ütközés történt egy másik felhasználó adataival.</translation>
+<translation id="8261506727792406068">Törlés</translation>
+<translation id="8273666073173891138">Jegyzet mentve: <ph name="FOLDER_TITLE" /></translation>
+<translation id="8275038454117074363">Importálás</translation>
+<translation id="8329813750766387010">Frissítve: <ph name="DATE" /></translation>
+<translation id="8347535536909603600">Süti-figyelmeztetések eltávolítása (<ph name="TYPE" />)</translation>
+<translation id="8366175803122817174">Minden jegyzetcím megnyitása</translation>
+<translation id="8384409685584033392">Oldal információ</translation>
+<translation id="8414685983518053656">Jegyzetek</translation>
+<translation id="8423076545503792640">A kérés hiba miatt sikertelen. Később próbáld újra.</translation>
+<translation id="8428213095426709021">Beállítások</translation>
+<translation id="8458397775385147834">1 elem törölve</translation>
+<translation id="8500459200727969761">Beépített listák visszaállítása</translation>
+<translation id="8503813439785031346">Felhasználónév</translation>
+<translation id="8515808232153642813">Dekódolás</translation>
+<translation id="8517852590337319813">Aktiváld a fiókodat</translation>
+<translation id="8546963963006468833">A Vivaldival könnyedén nyithatsz meg linkeket, kereshetsz widgeteket és tölthetsz ki automatikusan jelszavakat más alkalmazásokban.</translation>
+<translation id="8562452229998620586">A mentett jelszavak itt jelennek meg.</translation>
+<translation id="8605953154325672921">Felhasználónév szükséges</translation>
+<translation id="8675578805254882416">Beolvasás</translation>
+<translation id="8677007239430848917">Add hozzá az első jegyzetedet a lenti plusz ikonra koppintva</translation>
+<translation id="8684294196284714094">Alapértelmezett böngészővé akarod tenni a Vivaldit?</translation>
+<translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> elem törölve</translation>
+<translation id="8804164990146287819">Adatvédelmi szabályzat</translation>
+<translation id="8819841443522803117">Itt az alapértelmezett böngésző leváltásának ideje? Válaszd a Vivaldit.</translation>
+<translation id="8820817407110198400">Könyvjelzők</translation>
+<translation id="8855707633300847215">Lapsáv megjelenítése</translation>
+<translation id="8892354889971902600">A legutóbb bezárt lapok itt jelennek meg.</translation>
+<translation id="89390081013973080">Minden kész! Ideje eldöntened, milyen adatokat szinkronizálj az eszközök között.</translation>
+<translation id="8965371804397726192">Minden adat szinkronizálása</translation>
+<translation id="9028089729841356743">Hálózati hiba.</translation>
+<translation id="9043882097999887291">reklám
+blokkolva</translation>
+<translation id="9065203028668620118">Szerkesztés</translation>
+<translation id="9078193189520575214">Módosítások alkalmazása...</translation>
+<translation id="9079251484401922158">Finn (<ph name="ORIGIN" />)</translation>
+<translation id="9083392325882095631">1 elem</translation>
+<translation id="9091665118798175641">Automatikus kitöltési információk szinkronizálása</translation>
+<translation id="9097127519290088802">Titkosítási jelszó szükséges</translation>
+<translation id="9212737146310746733">Farszi (<ph name="ORIGIN" />)</translation>
+<translation id="9218693288527810093">Követés blokkolása</translation>
+<translation id="937440209447114831">Nem blokkolunk nyomkövetőt sem reklámot.</translation>
+<translation id="984650419570014454">Az aktiváló kód 6-számjegy hosszú.</translation>
+<translation id="992440609313570947">Új vagy a Vivaldinál? <ph name="BEGIN_LINK" />Fiók létrehozása ➔<ph name="END_LINK" /></translation>
 </translationbundle>

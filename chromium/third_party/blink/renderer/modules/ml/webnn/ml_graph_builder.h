@@ -20,13 +20,19 @@
 namespace blink {
 
 class ExceptionState;
+class MLActivation;
 class MLContext;
 class MLClampOptions;
 class MLConv2dOptions;
+class MLConvTranspose2dOptions;
+class MLEluOptions;
 class MLGemmOptions;
 class MLGraph;
+class MLLeakyReluOptions;
+class MLPadOptions;
 class MLPool2dOptions;
 class MLResample2dOptions;
+class MLTransposeOptions;
 class MLOperand;
 class MLOperandDescriptor;
 class ScriptPromiseResolver;
@@ -55,16 +61,30 @@ class MODULES_EXPORT MLGraphBuilder final : public ScriptWrappable {
     uint32_t end;
   };
 
-  // Calculate the effective padding based on WebNN auto padding rules.
+  // Calculate the effective padding for conv2d based on WebNN auto padding
+  // rules.
   //
   // TODO(crbug.com/1273291): Add the link to WebNN spec's algorithm once it is
   // defined, tracked by: https://github.com/webmachinelearning/webnn/issues/326
-  static absl::optional<PaddingSizes> CalculatePaddingForAutoPad(
+  static absl::optional<PaddingSizes> CalculateConv2dPadding(
       V8MLAutoPad::Enum auto_pad,
       const uint32_t input_size,
       const uint32_t filter_size,
       const uint32_t stride,
       const uint32_t dilation);
+
+  // Calculate the effective padding for convTranspose2d based on WebNN auto
+  // padding rules.
+  //
+  // TODO(crbug.com/1273291): Add the link to WebNN spec's algorithm once it is
+  // defined, tracked by: https://github.com/webmachinelearning/webnn/issues/326
+  static absl::optional<PaddingSizes> CalculateConvTransposed2dPadding(
+      V8MLAutoPad::Enum auto_pad,
+      const uint32_t input_size,
+      const uint32_t filter_size,
+      const uint32_t stride,
+      const uint32_t dilation,
+      const uint32_t output_padding);
 
   // ml_graph_builder.idl
   MLOperand* input(String name,
@@ -78,13 +98,22 @@ class MODULES_EXPORT MLGraphBuilder final : public ScriptWrappable {
   MLOperand* clamp(const MLOperand* input,
                    const MLClampOptions* options,
                    ExceptionState& exception_state);
-  MLOperator* clamp(const MLClampOptions* options,
+  MLActivation* clamp(const MLClampOptions* options,
+                      ExceptionState& exception_state);
+
+  MLOperand* concat(const HeapVector<Member<MLOperand>>& inputs,
+                    const uint32_t axis,
                     ExceptionState& exception_state);
 
   MLOperand* conv2d(const MLOperand* input,
                     const MLOperand* filter,
                     const MLConv2dOptions* options,
                     ExceptionState& exception_state);
+
+  MLOperand* convTranspose2d(const MLOperand* input,
+                             const MLOperand* filter,
+                             const MLConvTranspose2dOptions* options,
+                             ExceptionState& exception_state);
 
   // Element-wise binary operations
   MLOperand* add(const MLOperand* a,
@@ -106,13 +135,31 @@ class MODULES_EXPORT MLGraphBuilder final : public ScriptWrappable {
                  const MLOperand* b,
                  ExceptionState& exception_state);
 
+  MLOperand* elu(const MLOperand* input,
+                 const MLEluOptions* options,
+                 ExceptionState& exception_state);
+  MLActivation* elu(const MLEluOptions* options,
+                    ExceptionState& exception_state);
+
   MLOperand* gemm(const MLOperand* a,
                   const MLOperand* b,
                   const MLGemmOptions* options,
                   ExceptionState& exception_state);
 
   MLOperand* hardSwish(const MLOperand* input, ExceptionState& exception_state);
-  MLOperator* hardSwish(ExceptionState& exception_state);
+  MLActivation* hardSwish(ExceptionState& exception_state);
+
+  MLOperand* leakyRelu(const MLOperand* input,
+                       const MLLeakyReluOptions* options,
+                       ExceptionState& exception_state);
+  MLActivation* leakyRelu(const MLLeakyReluOptions* options,
+                          ExceptionState& exception_state);
+
+  MLOperand* pad(const MLOperand* input,
+                 const Vector<uint32_t>& beginningPadding,
+                 const Vector<uint32_t>& endingPadding,
+                 const MLPadOptions* options,
+                 ExceptionState& exception_state);
 
   // Pooling operations
   MLOperand* averagePool2d(const MLOperand* input,
@@ -122,8 +169,12 @@ class MODULES_EXPORT MLGraphBuilder final : public ScriptWrappable {
                        const MLPool2dOptions* options,
                        ExceptionState& exception_state);
 
+  MLOperand* prelu(const MLOperand* input,
+                   const MLOperand* slope,
+                   ExceptionState& exception_state);
+
   MLOperand* relu(const MLOperand* input, ExceptionState& exception_state);
-  MLOperator* relu(ExceptionState& exception_state);
+  MLActivation* relu(ExceptionState& exception_state);
 
   MLOperand* reshape(const MLOperand* input,
                      const Vector<absl::optional<uint32_t>>& new_shape,
@@ -134,9 +185,13 @@ class MODULES_EXPORT MLGraphBuilder final : public ScriptWrappable {
                         ExceptionState& exception_state);
 
   MLOperand* sigmoid(const MLOperand* input, ExceptionState& exception_state);
-  MLOperator* sigmoid(ExceptionState& exception_state);
+  MLActivation* sigmoid(ExceptionState& exception_state);
 
   MLOperand* softmax(const MLOperand* input, ExceptionState& exception_state);
+
+  MLOperand* transpose(const MLOperand* input,
+                       const MLTransposeOptions* options,
+                       ExceptionState& exception_state);
 
   ScriptPromise build(ScriptState* script_state,
                       const MLNamedOperands& outputs,

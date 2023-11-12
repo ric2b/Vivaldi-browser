@@ -62,7 +62,7 @@ public class FirstRunAppRestrictionInfoTest {
         UmaRecorderHolder.resetForTesting();
         ShadowPostTask.setTestImpl(new ShadowPostTask.TestImpl() {
             @Override
-            public void postDelayedTask(TaskTraits taskTraits, Runnable task, long delay) {
+            public void postDelayedTask(@TaskTraits int taskTraits, Runnable task, long delay) {
                 if (!mPauseDuringPostTask) {
                     task.run();
                 } else {
@@ -157,6 +157,7 @@ public class FirstRunAppRestrictionInfoTest {
         Assert.assertEquals("CallbackHelper should not triggered yet.", 0,
                 completionCallbackHelper3.getCallCount());
 
+        mPauseDuringPostTask = false;
         // Initialized the AppRestrictionInfo and wait until initialized.
         TestThreadUtils.runOnUiThreadBlocking(() -> mPendingPostTask.run());
 

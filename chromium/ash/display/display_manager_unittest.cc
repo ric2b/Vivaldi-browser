@@ -19,6 +19,8 @@
 #include "ash/display/screen_orientation_controller_test_api.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
+#include "ash/rounded_display/rounded_display_provider.h"
+#include "ash/rounded_display/rounded_display_provider_test_api.h"
 #include "ash/screen_util.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/shelf.h"
@@ -32,6 +34,7 @@
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/format_macros.h"
+#include "base/memory/raw_ptr.h"
 #include "base/numerics/math_constants.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -201,6 +204,10 @@ class DisplayManagerTest : public AshTestBase,
     check_root_window_on_destruction_ = false;
   }
 
+  base::test::ScopedFeatureList& scoped_feature_list() {
+    return scoped_features_;
+  }
+
  private:
   vector<display::Display> changed_;
   vector<display::Display> added_;
@@ -212,7 +219,63 @@ class DisplayManagerTest : public AshTestBase,
   bool check_root_window_on_destruction_ = true;
 
   absl::optional<display::ScopedDisplayObserver> display_observer_;
+
+  // Currently `display::features::kRoundedDisplay` feature is used during the
+  // `ash::Shell` shutdown as we call `AshTestBase::TearDown()`, therefore
+  // `scoped_features_` needs to outlive the call.
+  base::test::ScopedFeatureList scoped_features_;
 };
+
+TEST_F(DisplayManagerTest,
+       RoundedDisplayProviderIsOnlyCreatedForEachRoundedDisplay) {
+  scoped_feature_list().InitAndEnableFeature(
+      display::features::kRoundedDisplay);
+
+  WindowTreeHostManager* window_tree_host_manager =
+      Shell::Get()->window_tree_host_manager();
+
+  // Have 4 displays out of which 2 displays have rounded-corners. Value after
+  // '~' specifies radii of the display.
+  UpdateDisplay("500x400,400x300~15,400x300~16,500x400");
+  ASSERT_EQ(4U, display_manager()->GetNumDisplays());
+
+  for (auto& display : display_manager()->active_display_list()) {
+    const display::ManagedDisplayInfo& display_info =
+        display_manager()->GetDisplayInfo(display.id());
+    const RoundedDisplayProvider* rounded_display_provider =
+        window_tree_host_manager->GetRoundedDisplayProvider(display.id());
+    EXPECT_EQ(!!rounded_display_provider,
+              !display_info.rounded_corners_radii().IsEmpty());
+  }
+}
+
+TEST_F(DisplayManagerTest, RoundedDisplayProviderIsRemovedForRemovedDisplay) {
+  scoped_feature_list().InitAndEnableFeature(
+      display::features::kRoundedDisplay);
+
+  WindowTreeHostManager* window_tree_host_manager =
+      Shell::Get()->window_tree_host_manager();
+
+  // Have 4 displays out of which 2 displays have rounded-corners. Value after
+  // '~' specifies radii of the display.
+  UpdateDisplay("500x400,400x300~15,400x300~16,500x400");
+  ASSERT_EQ(4U, display_manager()->GetNumDisplays());
+
+  auto to_be_removed_display_id = display_manager()->GetDisplayAt(2).id();
+
+  const RoundedDisplayProvider* rounded_display_provider =
+      window_tree_host_manager->GetRoundedDisplayProvider(
+          to_be_removed_display_id);
+  EXPECT_TRUE(rounded_display_provider);
+
+  // Remove one display that had rounded corners.
+  UpdateDisplay("500x400,400x300~15");
+
+  rounded_display_provider =
+      window_tree_host_manager->GetRoundedDisplayProvider(
+          to_be_removed_display_id);
+  EXPECT_FALSE(rounded_display_provider);
+}
 
 TEST_F(DisplayManagerTest, UpdateDisplayTest) {
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
@@ -1710,7 +1773,15 @@ TEST_F(DisplayManagerTest, TestNativeDisplaysChangedNoInternal) {
       Shell::GetPrimaryRootWindow()->GetHost()->GetBoundsInPixels().size());
 }
 
-TEST_F(DisplayManagerTest, NativeDisplaysChangedAfterPrimaryChange) {
+// TODO(crbug.com/1431416): Fix the test flakiness on MSan.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_NativeDisplaysChangedAfterPrimaryChange \
+  DISABLED_NativeDisplaysChangedAfterPrimaryChange
+#else
+#define MAYBE_NativeDisplaysChangedAfterPrimaryChange \
+  NativeDisplaysChangedAfterPrimaryChange
+#endif
+TEST_F(DisplayManagerTest, MAYBE_NativeDisplaysChangedAfterPrimaryChange) {
   const int64_t internal_display_id =
       display::test::DisplayManagerTestApi(display_manager())
           .SetFirstDisplayAsInternalDisplay();
@@ -2020,8 +2091,8 @@ class CloseDisplayHandler : public ui::EventHandler {
   }
 
  private:
-  AshTestBase* test_base_;
-  aura::Window* root_;
+  raw_ptr<AshTestBase, ExperimentalAsh> test_base_;
+  raw_ptr<aura::Window, ExperimentalAsh> root_;
 };
 
 }  // namespace
@@ -2538,10 +2609,10 @@ TEST_F(DisplayManagerTest, UnifiedDesktopWithHardwareMirroring) {
   Shell::GetPrimaryRootWindow()->RemoveObserver(this);
 
   // Enter to hardware mirroring.
-  display::ManagedDisplayInfo d1(1, "", false);
-  d1.SetBounds(gfx::Rect(0, 0, 500, 400));
-  display::ManagedDisplayInfo d2(2, "", false);
-  d2.SetBounds(gfx::Rect(0, 0, 500, 400));
+  display::ManagedDisplayInfo d1 =
+      display::CreateDisplayInfo(1, gfx::Rect(0, 0, 500, 400));
+  display::ManagedDisplayInfo d2 =
+      display::CreateDisplayInfo(2, gfx::Rect(0, 0, 500, 400));
   std::vector<display::ManagedDisplayInfo> display_info_list;
   display_info_list.push_back(d1);
   display_info_list.push_back(d2);
@@ -3534,9 +3605,9 @@ TEST_F(DisplayManagerFontTest,
 
 TEST_F(DisplayManagerTest, CheckInitializationOfRotationProperty) {
   int64_t id = display_manager()->GetDisplayAt(0).id();
-  display_manager()->RegisterDisplayProperty(id, display::Display::ROTATE_90,
-                                             nullptr, gfx::Size(), 1.0f, 1.0f,
-                                             60.f, false);
+  display_manager()->RegisterDisplayProperty(
+      id, display::Display::ROTATE_90, nullptr, gfx::Size(), 1.0f, 1.0f, 60.f,
+      false, display::kVrrNotCapable, absl::nullopt);
 
   const display::ManagedDisplayInfo& info =
       display_manager()->GetDisplayInfo(id);
@@ -3681,44 +3752,6 @@ TEST_F(DisplayManagerTest, DisconnectedInternalDisplayShouldUpdateDisplayInfo) {
   EXPECT_EQ(1.6f, display_info.device_scale_factor());
   ASSERT_EQ(1u, display_info.display_modes().size());
   EXPECT_EQ(1.6f, display_info.display_modes()[0].device_scale_factor());
-}
-
-// TODO(crbug/1262970): Delete when we can read radius from command line.
-TEST_F(DisplayManagerTest, SettingDefaultRoundedCornersOnInternalDisplay) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(display::features::kRoundedDisplay);
-
-  Shell* shell = Shell::Get();
-  display::DisplayChangeObserver observer(shell->display_manager());
-
-  const std::unique_ptr<display::DisplaySnapshot> internal_snapshot =
-      display::FakeDisplaySnapshot::Builder()
-          .SetId(123)
-          .SetName("AmazingFakeRoundedDisplay")
-          .SetNativeMode(MakeDisplayMode())
-          .SetType(
-              display::DisplayConnectionType::DISPLAY_CONNECTION_TYPE_INTERNAL)
-          .Build();
-
-  internal_snapshot->set_current_mode(internal_snapshot->native_mode());
-
-  display::DisplayConfigurator::DisplayStateList outputs;
-  outputs.push_back(internal_snapshot.get());
-
-  // Update the display manager through DisplayChangeObserver.
-  observer.OnDisplayModeChanged(outputs);
-
-  display::Display primary_display =
-      display::Screen::GetScreen()->GetPrimaryDisplay();
-
-  WindowTreeHostManager* window_manager =
-      Shell::Get()->window_tree_host_manager();
-
-  aura::Window* primary_root =
-      window_manager->GetRootWindowForDisplayId(primary_display.id());
-
-  EXPECT_EQ(gfx::RoundedCornersF(16.0),
-            primary_root->layer()->rounded_corner_radii());
 }
 
 TEST_F(DisplayManagerTest, UpdateInternalDisplayNativeBounds) {

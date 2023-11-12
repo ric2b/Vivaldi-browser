@@ -21,8 +21,10 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchFieldTrial;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManager;
-import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
+import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.metrics.ChangeMetricsReportingStateCalledFrom;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
@@ -51,9 +53,15 @@ import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
  * Settings fragment controlling a number of features communicating with Google services, such as
  * search autocomplete and the automatic upload of crash reports.
  */
-public class GoogleServicesSettings extends PreferenceFragmentCompat
-        implements Preference.OnPreferenceChangeListener, Listener {
-    private static final String SIGN_OUT_DIALOG_TAG = "sign_out_dialog_tag";
+public class GoogleServicesSettings
+        extends PreferenceFragmentCompat implements Preference.OnPreferenceChangeListener, Listener,
+                                                    FragmentHelpAndFeedbackLauncher {
+    // No longer used. Do not delete. Do not reuse these same strings.
+    // private static final String SIGN_OUT_DIALOG_TAG = "sign_out_dialog_tag";
+    // public static final String PREF_AUTOFILL_ASSISTANT = "autofill_assistant";
+    // public static final String PREF_AUTOFILL_ASSISTANT_SUBSECTION =
+    // "autofill_assistant_subsection";
+
     private static final String CLEAR_DATA_PROGRESS_DIALOG_TAG = "clear_data_progress";
 
     @VisibleForTesting
@@ -62,10 +70,6 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
     private static final String PREF_USAGE_AND_CRASH_REPORTING = "usage_and_crash_reports";
     private static final String PREF_URL_KEYED_ANONYMIZED_DATA = "url_keyed_anonymized_data";
     private static final String PREF_CONTEXTUAL_SEARCH = "contextual_search";
-    @VisibleForTesting
-    public static final String PREF_AUTOFILL_ASSISTANT = "autofill_assistant";
-    @VisibleForTesting
-    public static final String PREF_AUTOFILL_ASSISTANT_SUBSECTION = "autofill_assistant_subsection";
     @VisibleForTesting
     public static final String PREF_USAGE_STATS_REPORTING = "usage_stats_reporting";
     @VisibleForTesting
@@ -88,6 +92,7 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
     private @Nullable Preference mContextualSearch;
     private Preference mPriceNotificationSection;
     private Preference mUsageStatsReporting;
+    private HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
 
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, String rootKey) {
@@ -125,12 +130,6 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
                 (ChromeSwitchPreference) findPreference(PREF_URL_KEYED_ANONYMIZED_DATA);
         mUrlKeyedAnonymizedData.setOnPreferenceChangeListener(this);
         mUrlKeyedAnonymizedData.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
-
-        Preference autofillAssistantSubsection = findPreference(PREF_AUTOFILL_ASSISTANT_SUBSECTION);
-
-        if (shouldShowAssistantVoiceSearchSetting()) {
-            autofillAssistantSubsection.setVisible(true);
-        }
 
         mContextualSearch = findPreference(PREF_CONTEXTUAL_SEARCH);
         if (!ContextualSearchFieldTrial.isEnabled()) {
@@ -178,9 +177,8 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.menu_id_targeted_help) {
-            HelpAndFeedbackLauncherImpl.getInstance().show(getActivity(),
-                    getString(R.string.help_context_sync_and_services),
-                    Profile.getLastUsedRegularProfile(), null);
+            mHelpAndFeedbackLauncher.show(
+                    getActivity(), getString(R.string.help_context_sync_and_services), null);
             return true;
         }
         return false;
@@ -229,7 +227,8 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
         } else if (PREF_SEARCH_SUGGESTIONS.equals(key)) {
             mPrefService.setBoolean(Pref.SEARCH_SUGGEST_ENABLED, (boolean) newValue);
         } else if (PREF_USAGE_AND_CRASH_REPORTING.equals(key)) {
-            UmaSessionStats.changeMetricsReportingConsent((boolean) newValue);
+            UmaSessionStats.changeMetricsReportingConsent(
+                    (boolean) newValue, ChangeMetricsReportingStateCalledFrom.UI_SETTINGS);
         } else if (PREF_URL_KEYED_ANONYMIZED_DATA.equals(key)) {
             UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(
                     Profile.getLastUsedRegularProfile(), (boolean) newValue);
@@ -304,15 +303,6 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
         };
     }
 
-    /**
-     * Whether or not the Assistant voice search section with a toggle should be shown.
-     */
-    public boolean shouldShowAssistantVoiceSearchSetting() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH)
-                && !ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.ASSISTANT_NON_PERSONALIZED_VOICE_SEARCH);
-    }
-
     // SignOutDialogListener implementation:
     @Override
     public void onSignOutClicked(boolean forceWipeUserData) {
@@ -342,5 +332,10 @@ public class GoogleServicesSettings extends PreferenceFragmentCompat
                         forceWipeUserData);
         mPrefService.setBoolean(Pref.SIGNIN_ALLOWED, false);
         updatePreferences();
+    }
+
+    @Override
+    public void setHelpAndFeedbackLauncher(HelpAndFeedbackLauncher helpAndFeedbackLauncher) {
+        mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
     }
 }

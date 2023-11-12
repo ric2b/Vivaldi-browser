@@ -43,8 +43,7 @@ namespace {
 NSString* const kWaitForPageToStartLoadingError = @"Page did not start to load";
 NSString* const kWaitForPageToFinishLoadingError =
     @"Page did not finish loading";
-NSString* const kTypedURLError =
-    @"Error occurred during typed URL verification.";
+NSString* const kHistoryError = @"Error occurred during history verification.";
 NSString* const kWaitForRestoreSessionToFinishError =
     @"Session restoration did not finish";
 
@@ -85,13 +84,7 @@ UIWindow* GetAnyKeyWindow() {
   }
   DCHECK(foregroundScenes <= 1);
 
-  NSArray<UIWindow*>* windows =
-      [GREY_REMOTE_CLASS_IN_APP(UIApplication) sharedApplication].windows;
-  for (UIWindow* window in windows) {
-    if (window.isKeyWindow)
-      return window;
-  }
-  return nil;
+  return [ChromeEarlGreyAppInterface keyWindow];
 }
 }  // namespace chrome_test_util
 
@@ -194,6 +187,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 - (void)removeBrowsingCache {
   EG_TEST_HELPER_ASSERT_NO_ERROR(
       [ChromeEarlGreyAppInterface removeBrowsingCache]);
+}
+
+- (void)saveSessionImmediately {
+  [ChromeEarlGreyAppInterface saveSessionImmediately];
 }
 
 #pragma mark - Navigation Utilities (EG2)
@@ -405,9 +402,36 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   EG_TEST_HELPER_ASSERT_TRUE(matchedElement, errorDescription);
 }
 
+- (void)waitForNotSufficientlyVisibleElementWithMatcher:
+    (id<GREYMatcher>)matcher {
+  NSString* errorDescription = [NSString
+      stringWithFormat:
+          @"Failed waiting for element with matcher %@ to become not visible",
+          matcher];
+
+  GREYCondition* waitForElement = [GREYCondition
+      conditionWithName:errorDescription
+                  block:^{
+                    NSError* error = nil;
+                    [[EarlGrey selectElementWithMatcher:matcher]
+                        assertWithMatcher:grey_sufficientlyVisible()
+                                    error:&error];
+                    return error != nil;
+                  }];
+
+  bool matchedElement =
+      [waitForElement waitWithTimeout:kWaitForUIElementTimeout.InSecondsF()];
+  EG_TEST_HELPER_ASSERT_TRUE(matchedElement, errorDescription);
+}
+
 - (void)waitForUIElementToAppearWithMatcher:(id<GREYMatcher>)matcher {
   [self waitForUIElementToAppearWithMatcher:matcher
                                     timeout:kWaitForUIElementTimeout];
+}
+
+- (BOOL)testUIElementAppearanceWithMatcher:(id<GREYMatcher>)matcher {
+  return [self testUIElementAppearanceWithMatcher:matcher
+                                          timeout:kWaitForUIElementTimeout];
 }
 
 - (void)waitForUIElementToAppearWithMatcher:(id<GREYMatcher>)matcher
@@ -415,7 +439,13 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   NSString* errorDescription = [NSString
       stringWithFormat:@"Failed waiting for element with matcher %@ to appear",
                        matcher];
+  bool matched = [self testUIElementAppearanceWithMatcher:matcher
+                                                  timeout:timeout];
+  EG_TEST_HELPER_ASSERT_TRUE(matched, errorDescription);
+}
 
+- (BOOL)testUIElementAppearanceWithMatcher:(id<GREYMatcher>)matcher
+                                   timeout:(base::TimeDelta)timeout {
   ConditionBlock condition = ^{
     NSError* error = nil;
     [[EarlGrey selectElementWithMatcher:matcher] assertWithMatcher:grey_notNil()
@@ -423,8 +453,7 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
     return error == nil;
   };
 
-  bool matched = WaitUntilConditionOrTimeout(timeout, condition);
-  EG_TEST_HELPER_ASSERT_TRUE(matched, errorDescription);
+  return WaitUntilConditionOrTimeout(timeout, condition);
 }
 
 - (void)waitForUIElementToDisappearWithMatcher:(id<GREYMatcher>)matcher {
@@ -757,14 +786,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   [ChromeEarlGreyAppInterface signInWithoutSyncWithIdentity:identity];
 }
 
-- (void)startSync {
-  [ChromeEarlGreyAppInterface startSync];
-}
-
-- (void)stopSync {
-  [ChromeEarlGreyAppInterface stopSync];
-}
-
 - (void)
     addUserDemographicsToSyncServerWithBirthYear:(int)rawBirthYear
                                           gender:
@@ -843,6 +864,11 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   [ChromeEarlGreyAppInterface addFakeSyncServerTypedURL:spec];
 }
 
+- (void)addFakeSyncServerHistoryVisit:(const GURL&)URL {
+  [ChromeEarlGreyAppInterface
+      addFakeSyncServerHistoryVisit:net::NSURLWithGURL(URL)];
+}
+
 - (void)addHistoryServiceTypedURL:(const GURL&)URL {
   NSString* spec = base::SysUTF8ToNSString(URL.spec());
   [ChromeEarlGreyAppInterface addHistoryServiceTypedURL:spec];
@@ -853,20 +879,19 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   [ChromeEarlGreyAppInterface deleteHistoryServiceTypedURL:spec];
 }
 
-- (void)waitForTypedURL:(const GURL&)URL
-          expectPresent:(BOOL)expectPresent
-                timeout:(base::TimeDelta)timeout {
+- (void)waitForHistoryURL:(const GURL&)URL
+            expectPresent:(BOOL)expectPresent
+                  timeout:(base::TimeDelta)timeout {
   NSString* spec = base::SysUTF8ToNSString(URL.spec());
-  GREYCondition* waitForTypedURL =
-      [GREYCondition conditionWithName:kTypedURLError
-                                 block:^{
-                                   return [ChromeEarlGreyAppInterface
-                                            isTypedURL:spec
-                                       presentOnClient:expectPresent];
-                                 }];
+  GREYCondition* waitForURL = [GREYCondition
+      conditionWithName:kHistoryError
+                  block:^{
+                    return [ChromeEarlGreyAppInterface isURL:spec
+                                             presentOnClient:expectPresent];
+                  }];
 
-  bool success = [waitForTypedURL waitWithTimeout:timeout.InSecondsF()];
-  EG_TEST_HELPER_ASSERT_TRUE(success, kTypedURLError);
+  bool success = [waitForURL waitWithTimeout:timeout.InSecondsF()];
+  EG_TEST_HELPER_ASSERT_TRUE(success, kHistoryError);
 }
 
 - (void)waitForSyncInvalidationFields {
@@ -1322,8 +1347,8 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   return [ChromeEarlGreyAppInterface isWebChannelsEnabled];
 }
 
-- (BOOL)isSFSymbolEnabled {
-  return [ChromeEarlGreyAppInterface isSFSymbolEnabled];
+- (BOOL)isUIButtonConfigurationEnabled {
+  return [ChromeEarlGreyAppInterface isUIButtonConfigurationEnabled];
 }
 
 #pragma mark - ContentSettings
@@ -1349,6 +1374,16 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 - (void)simulatePhysicalKeyboardEvent:(NSString*)input
                                 flags:(UIKeyModifierFlags)flags {
   [ChromeEarlGreyAppInterface simulatePhysicalKeyboardEvent:input flags:flags];
+}
+
+#pragma mark - Default Utilities (EG2)
+
+- (void)setUserDefaultObject:(id)value forKey:(NSString*)defaultName {
+  [ChromeEarlGreyAppInterface setUserDefaultObject:value forKey:defaultName];
+}
+
+- (void)removeUserDefaultObjectForKey:(NSString*)key {
+  [ChromeEarlGreyAppInterface removeUserDefaultObjectForKey:key];
 }
 
 #pragma mark - Pref Utilities (EG2)

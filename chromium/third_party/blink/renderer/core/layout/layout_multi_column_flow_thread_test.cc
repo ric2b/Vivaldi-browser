@@ -10,7 +10,6 @@
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_set.h"
 #include "third_party/blink/renderer/core/layout/layout_multi_column_spanner_placeholder.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -1412,6 +1411,21 @@ LayoutNGBlockFlow DIV id="mc"
   +--LayoutMultiColumnSet (anonymous)
 )DUMP",
             ToSimpleLayoutTree(container));
+}
+
+TEST_F(MultiColumnRenderingTest, FlowThreadUpdateGeometryCrash) {
+  SetBodyInnerHTML(R"HTML(
+      <video width="64" height="64" controls>
+      <iframe width=320 height=320></iframe>)HTML");
+  UpdateAllLifecyclePhasesForTest();
+  InsertStyleElement(R"CSS(
+      body, html {
+        column-count: 2;
+        overflow: clip;
+      })CSS");
+  UpdateAllLifecyclePhasesForTest();
+  // Pass if no crash in LayoutMultiColumnFlowThread::UpdateGeometry() call
+  // from LayoutMedia::ComputePanelWidth().
 }
 
 }  // anonymous namespace

@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Next MinVersion: 30
+// Next MinVersion: 32
 
 // This file defines the mojo interface between the ARC networking stack and
 // Chrome OS. There are three different groups of interactions:
@@ -122,12 +122,15 @@ struct PasspointCredentials {
   // Package name of the App that provided these credentials.
   string package_name@7;
 
-  // Friendly name of the home service provider.
+  // Friendly name of the home service provider. Taken from Android's
+  // android.net.wifi.hotspot2.pps.HomeSp.getFriendlyName().
   [MinVersion=22] string? friendly_name@8;
 
   // The time this subscription will expire or minimum value of 64-bit int to
   // indicate unset value. It is in the format of number of milliseconds since
   // January 1, 1970, 00:00:00 GMT.
+  // The field is a direct copy of Android's Java signed value taken from
+  // android.net.wifi.hotspot2.getSubscriptionExpirationTimeMillis().
   [MinVersion=22] int64 subscription_expiration_time_ms@9;
 };
 
@@ -729,7 +732,40 @@ struct LohsConfig {
   string? passphrase@3;
 };
 
-// Next Method ID: 21
+// Request object that is passed to the Chrome API RequestPasspointAppApproval.
+struct PasspointApprovalRequest {
+  // The package name of the app requesting the approval. This is needed for
+  // Chrome to check if the app window is valid.
+  string package_name;
+
+  // The name of the app requesting the approval.
+  string app_name;
+
+  // Friendly name of the home service provider. Matches Android's
+  // android.net.wifi.hotspot2.pps.HomeSp.getFriendlyName() and
+  // PasspointCredentials.friendly_name.
+  // This value can be different from |app_name|, for instance for aggregator
+  // Apps.
+  [MinVersion=31] string? friendly_name;
+
+  // The time this subscription will expire or minimum value of 64-bit int to
+  // indicate unset value. It is in the format of number of milliseconds since
+  // January 1, 1970, 00:00:00 GMT.
+  // The field is a direct copy of Android's Java signed value taken from
+  // android.net.wifi.hotspot2.getSubscriptionExpirationTimeMillis().
+  // The field also matches subscription_expiration_time_ms of
+  // PasspointCredentials.
+  [MinVersion=31] int64 subscription_expiration_time_ms;
+};
+
+// Result object that is returned to the caller to the Chrome API
+// RequestPasspointAppApproval.
+struct PasspointApprovalResponse {
+  // True if the user allowed the request.
+  bool allowed;
+};
+
+// Next Method ID: 22
 // IDs 3 and 9 are missing as they belonged to deprecated methods.
 // Mojo interface exposed by the Chrome browser process for
 // networking/WiFi/VPN, ARC is the client.
@@ -793,6 +829,11 @@ interface NetHost {
   // unless the lockdown is dictated via policy.
   // Call with empty string as |vpnPackage| to lift the restriction.
   [MinVersion=9] SetAlwaysOnVpn@13(string vpnPackage, bool lockdown);
+
+  // Sends a request to Chrome to ask for user approval for the app to set up
+  // WiFi networks through Passpoint.
+  [MinVersion=30] RequestPasspointAppApproval@21(
+      PasspointApprovalRequest request) => (PasspointApprovalResponse response);
 
   // Adds a PasspointCredentials block provided by an Android App onto the host
   // platform.

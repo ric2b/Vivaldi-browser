@@ -44,6 +44,8 @@ class VP9VaapiVideoEncoderDelegate : public VaapiVideoEncoderDelegate {
     // 0-255.
     uint8_t min_qp;
     uint8_t max_qp;
+
+    bool error_resilident_mode = false;
   };
 
   VP9VaapiVideoEncoderDelegate(scoped_refptr<VaapiWrapper> vaapi_wrapper,
@@ -78,7 +80,7 @@ class VP9VaapiVideoEncoderDelegate : public VaapiVideoEncoderDelegate {
   bool PrepareEncodeJob(EncodeJob& encode_job) override;
   BitstreamBufferMetadata GetMetadata(const EncodeJob& encode_job,
                                       size_t payload_size) override;
-  void BitrateControlUpdate(uint64_t encoded_chunk_size_bytes) override;
+  void BitrateControlUpdate(const BitstreamBufferMetadata& metadata) override;
 
   Vp9FrameHeader GetDefaultFrameHeader(const bool keyframe) const;
   void SetFrameHeader(bool keyframe,

@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/webui/ash/parent_access/parent_access_callback.pb.h"
 #include "chrome/browser/ui/webui/ash/parent_access/parent_access_state_tracker.h"
@@ -14,7 +15,6 @@
 #include "chrome/browser/ui/webui/ash/parent_access/parent_access_ui_handler_delegate.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
 class WebUI;
@@ -60,15 +60,11 @@ class ParentAccessUIHandlerImpl
   void OnParentAccessDone(parent_access_ui::mojom::ParentAccessResult result,
                           OnParentAccessDoneCallback callback) override;
   void GetParentAccessURL(GetParentAccessURLCallback callback) override;
+  void OnBeforeScreenDone(OnBeforeScreenDoneCallback callback) override;
 
   // Returns nullptr if the parent was not verified.
   const kids::platform::parentaccess::client::proto::ParentAccessToken*
   GetParentAccessTokenForTest();
-
-  // Returns the name of parent access widget error histogram for a flow type.
-  static std::string GetParentAccessWidgetErrorHistogramForFlowType(
-      absl::optional<parent_access_ui::mojom::ParentAccessParams::FlowType>
-          flow_type);
 
   // Used for metrics. These values are logged to UMA. Entries should not be
   // renumbered and numeric values should never be reused. Please keep in sync
@@ -92,11 +88,11 @@ class ParentAccessUIHandlerImpl
       ParentAccessUIHandlerImpl::ParentAccessWidgetError error);
 
   // Used to fetch OAuth2 access tokens.
-  signin::IdentityManager* identity_manager_ = nullptr;
+  raw_ptr<signin::IdentityManager, ExperimentalAsh> identity_manager_ = nullptr;
   std::unique_ptr<signin::AccessTokenFetcher> oauth2_access_token_fetcher_;
   // Not owned by this class, and provided by the class's creator.  Can be null
   // if the handler is created without a dialog.
-  ParentAccessUIHandlerDelegate* delegate_ = nullptr;
+  raw_ptr<ParentAccessUIHandlerDelegate, ExperimentalAsh> delegate_ = nullptr;
   mojo::Receiver<parent_access_ui::mojom::ParentAccessUIHandler> receiver_;
 
   // The Parent Access Token.  Only set if the parent was verified.
@@ -112,7 +108,6 @@ class ParentAccessUIHandlerImpl
 
   base::WeakPtrFactory<ParentAccessUIHandlerImpl> weak_ptr_factory_{this};
 };
-
 }  // namespace ash
 
 #endif  // CHROME_BROWSER_UI_WEBUI_ASH_PARENT_ACCESS_PARENT_ACCESS_UI_HANDLER_IMPL_H_

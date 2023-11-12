@@ -12,13 +12,13 @@ import org.chromium.base.Callback;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.offline_items_collection.OfflineItem;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
@@ -124,7 +124,7 @@ public class OfflineTestUtil {
     public static OfflinePageBridge getOfflinePageBridge() throws TimeoutException {
         final CallbackHelper ready = new CallbackHelper();
         final AtomicReference<OfflinePageBridge> result = new AtomicReference<OfflinePageBridge>();
-        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
+        PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> {
             OfflinePageBridge bridge =
                     OfflinePageBridge.getForProfile(Profile.getLastUsedRegularProfile());
             if (bridge == null || bridge.isOfflinePageModelLoaded()) {
@@ -171,18 +171,6 @@ public class OfflineTestUtil {
         CriteriaHelper.pollInstrumentationThread(() -> done.get());
     }
 
-    // Set the offline_pages.enabled_by_server pref for testing. If |enabled| is false,
-    // also ensures that the server-enabled check is due.
-    public static void setPrefetchingEnabledByServer(boolean enabled) {
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { OfflineTestUtilJni.get().setPrefetchingEnabledByServer(enabled); });
-    }
-
-    public static void setGCMTokenForTesting(String gcmToken) {
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { OfflineTestUtilJni.get().setGCMTokenForTesting(gcmToken); });
-    }
-
     @NativeMethods
     interface Natives {
         void getRequestsInQueue(Callback<SavePageRequest[]> callback);
@@ -194,7 +182,5 @@ public class OfflineTestUtil {
         void clearIntercepts();
         void dumpRequestCoordinatorState(Callback<String> callback);
         void waitForConnectivityState(boolean connected, Runnable callback);
-        void setPrefetchingEnabledByServer(boolean enabled);
-        void setGCMTokenForTesting(String gcmToken);
     }
 }

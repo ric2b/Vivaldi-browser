@@ -26,12 +26,15 @@ enum class ApiCallerSource {
   // fetch(<url>, {browsingTopics: true}), or XMLHttpRequest.send() with the
   // `deprecatedBrowsingTopics` property set to true.
   kFetch,
+
+  // The API usage is from <iframe src=[url] browsingtopics>.
+  kIframeAttribute,
 };
 
 // Represents the different reasons why the topics API access is denied. These
 // values are persisted to logs. Entries should not be renumbered and numeric
 // values should never be reused.
-enum class ApiAccessFailureReason {
+enum class ApiAccessResult {
   // The requesting context doesn't allow the API (e.g. permissions policy).
   kInvalidRequestingContext = 0,
 
@@ -41,7 +44,10 @@ enum class ApiAccessFailureReason {
   // Access is disallowed by user settings.
   kAccessDisallowedBySettings = 2,
 
-  kMaxValue = kAccessDisallowedBySettings,
+  // Call was a success and not a failure.
+  kSuccess = 3,
+
+  kMaxValue = kSuccess,
 };
 
 struct COMPONENT_EXPORT(BROWSING_TOPICS_COMMON) ApiUsageContext {

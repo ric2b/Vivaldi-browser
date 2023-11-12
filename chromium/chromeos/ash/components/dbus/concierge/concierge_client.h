@@ -9,7 +9,7 @@
 #include "base/files/scoped_file.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation_traits.h"
-#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
+#include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "chromeos/dbus/common/dbus_client.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
 #include "dbus/object_proxy.h"
@@ -40,15 +40,19 @@ class COMPONENT_EXPORT(CONCIERGE) ConciergeClient
    public:
     // OnVmStarted is signaled by Concierge when a VM starts.
     virtual void OnVmStarted(
-        const vm_tools::concierge::VmStartedSignal& signal) = 0;
+        const vm_tools::concierge::VmStartedSignal& signal) {}
 
     // OnVmStopped is signaled by Concierge when a VM stops.
     virtual void OnVmStopped(
-        const vm_tools::concierge::VmStoppedSignal& signal) = 0;
+        const vm_tools::concierge::VmStoppedSignal& signal) {}
 
     // OnVmStopping is signaled by Concierge when a VM is stopping.
     virtual void OnVmStopping(
         const vm_tools::concierge::VmStoppingSignal& signal) {}
+
+    // OnVmSwapping is signaled by Concierge when a VM is swapping.
+    virtual void OnVmSwapping(
+        const vm_tools::concierge::VmSwappingSignal& signal) {}
 
    protected:
     virtual ~VmObserver() = default;
@@ -295,6 +299,12 @@ class COMPONENT_EXPORT(CONCIERGE) ConciergeClient
   virtual void SwapVm(
       const vm_tools::concierge::SwapVmRequest& request,
       chromeos::DBusMethodCallback<vm_tools::concierge::SwapVmResponse>
+          callback) = 0;
+
+  virtual void InstallPflash(
+      base::ScopedFD fd,
+      const vm_tools::concierge::InstallPflashRequest& request,
+      chromeos::DBusMethodCallback<vm_tools::concierge::InstallPflashResponse>
           callback) = 0;
 
   // Creates and initializes the global instance. |bus| must not be null.

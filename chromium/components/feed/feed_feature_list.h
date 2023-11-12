@@ -69,6 +69,10 @@ BASE_DECLARE_FEATURE(kFeedBackToTop);
 // feed.
 BASE_DECLARE_FEATURE(kFeedBottomSyncBanner);
 
+// When enabled, shows a sign in bottom sheet when p13n actions on boc are used
+// by signed out client.
+BASE_DECLARE_FEATURE(kFeedBoCSigninInterstitial);
+
 // Feature that enables StAMP cards in the feed.
 BASE_DECLARE_FEATURE(kFeedStamp);
 
@@ -141,6 +145,9 @@ BASE_DECLARE_FEATURE(kSyntheticCapabilities);
 
 // Feature that enables Cormorant for users.
 BASE_DECLARE_FEATURE(kCormorant);
+
+// Feature that enables reporting feed user interaction reliability.
+BASE_DECLARE_FEATURE(kFeedUserInteractionReliabilityReport);
 
 }  // namespace feed
 

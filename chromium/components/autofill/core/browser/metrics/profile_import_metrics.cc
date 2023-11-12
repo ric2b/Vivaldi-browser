@@ -103,12 +103,6 @@ void LogNewProfileImportDecision(
                                 decision);
 }
 
-void LogNewProfileWithIgnoredCountryImportDecision(
-    AutofillClient::SaveAddressProfileOfferUserDecision decision) {
-  base::UmaHistogramEnumeration(
-      "Autofill.ProfileImport.NewProfileWithIgnoredCountryDecision", decision);
-}
-
 void LogNewProfileNumberOfAutocompleteUnrecognizedFields(int count) {
   base::UmaHistogramExactLinear(
       "Autofill.ProfileImport.NewProfileNumberOfAutocompleteUnrecognizedFields",
@@ -119,13 +113,6 @@ void LogProfileUpdateImportDecision(
     AutofillClient::SaveAddressProfileOfferUserDecision decision) {
   base::UmaHistogramEnumeration("Autofill.ProfileImport.UpdateProfileDecision",
                                 decision);
-}
-
-void LogProfileUpdateWithIgnoredCountryImportDecision(
-    AutofillClient::SaveAddressProfileOfferUserDecision decision) {
-  base::UmaHistogramEnumeration(
-      "Autofill.ProfileImport.UpdateProfileWithIgnoredCountryDecision",
-      decision);
 }
 
 void LogProfileUpdateNumberOfAutocompleteUnrecognizedFields(int count) {
@@ -206,6 +193,24 @@ void LogUpdateProfileNumberOfAffectedFields(
   // But also collect an histogram for any decision.
   base::UmaHistogramExactLinear(
       "Autofill.ProfileImport.UpdateProfileNumberOfAffectedFields.Any",
+      number_of_edited_fields, /*exclusive_max=*/15);
+}
+
+void LogProfileMigrationImportDecision(
+    AutofillClient::SaveAddressProfileOfferUserDecision decision) {
+  base::UmaHistogramEnumeration("Autofill.ProfileImport.MigrateProfileDecision",
+                                decision);
+}
+
+void LogProfileMigrationEditedType(ServerFieldType edited_type) {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.MigrateProfileEditedType",
+      ConvertSettingsVisibleFieldTypeForMetrics(edited_type));
+}
+
+void LogProfileMigrationNumberOfEditedFields(int number_of_edited_fields) {
+  base::UmaHistogramExactLinear(
+      "Autofill.ProfileImport.MigrateProfileNumberOfEditedFields",
       number_of_edited_fields, /*exclusive_max=*/15);
 }
 

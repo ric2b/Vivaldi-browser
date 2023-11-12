@@ -134,57 +134,11 @@ class EventResult : public EventRow {
   EventResult();
   EventResult(const EventRow& event_row);
   ~EventResult();
-
-  void SwapResult(EventResult* other);
-};
-
-class EventQueryResults {
- public:
-  typedef std::vector<std::unique_ptr<EventResult>> EventResultVector;
-
-  EventQueryResults();
-  ~EventQueryResults();
-  EventQueryResults(const EventQueryResults&) = delete;
-  EventQueryResults& operator=(const EventQueryResults&) = delete;
-
-  size_t size() const { return results_.size(); }
-  bool empty() const { return results_.empty(); }
-
-  EventResult& back() { return *results_.back(); }
-  const EventResult& back() const { return *results_.back(); }
-
-  EventResult& operator[](size_t i) { return *results_[i]; }
-  const EventResult& operator[](size_t i) const { return *results_[i]; }
-
-  EventResultVector::const_iterator begin() const { return results_.begin(); }
-  EventResultVector::const_iterator end() const { return results_.end(); }
-  EventResultVector::const_reverse_iterator rbegin() const {
-    return results_.rbegin();
-  }
-  EventResultVector::const_reverse_iterator rend() const {
-    return results_.rend();
-  }
-
-  // Swaps the current result with another. This allows ownership to be
-  // efficiently transferred without copying.
-  void Swap(EventQueryResults* other);
-
-  // Adds the given result to the map, using swap() on the members to avoid
-  // copying (there are a lot of strings and vectors). This means the parameter
-  // object will be cleared after this call.
-  void AppendEventBySwapping(EventResult* result);
-
- private:
-  // The ordered list of results. The pointers inside this are owned by this
-  // QueryResults object.
-  EventResultVector results_;
 };
 
 class EventResultCB {
  public:
   EventResultCB() = default;
-  EventResultCB(const EventResultCB&) = delete;
-  EventResultCB& operator=(const EventResultCB&) = delete;
 
   bool success;
   std::string message;
@@ -194,20 +148,8 @@ class EventResultCB {
 class CreateEventsResult {
  public:
   CreateEventsResult() = default;
-  CreateEventsResult(const CreateEventsResult&) = delete;
-  CreateEventsResult& operator=(const CreateEventsResult&) = delete;
-
   int number_failed;
   int number_success;
-};
-
-class DeleteEventResult {
- public:
-  DeleteEventResult();
-  DeleteEventResult(const DeleteEventResult&) = delete;
-  DeleteEventResult& operator=(const DeleteEventResult&) = delete;
-
-  bool success;
 };
 
 class EventTypeRow {
@@ -228,24 +170,6 @@ class EventTypeRow {
   std::u16string name_;
   std::string color_;
   int iconindex_;
-};
-
-class CreateEventTypeResult {
- public:
-  CreateEventTypeResult() = default;
-  CreateEventTypeResult(const CreateEventTypeResult&) = delete;
-  CreateEventTypeResult& operator=(const CreateEventTypeResult&) = delete;
-
-  bool success;
-};
-
-class UpdateEventTypeResult {
- public:
-  UpdateEventTypeResult();
-  UpdateEventTypeResult(const UpdateEventTypeResult&) = delete;
-  UpdateEventTypeResult& operator=(const UpdateEventTypeResult&) = delete;
-
-  bool success;
 };
 
 typedef std::vector<calendar::EventTypeRow> EventTypeRows;
@@ -269,15 +193,6 @@ enum UpdateEventTypeFields {
   NAME = 1 << 2,
   COLOR = 1 << 3,
   ICONINDEX = 1 << 4,
-};
-
-class DeleteEventTypeResult {
- public:
-  DeleteEventTypeResult() = default;
-  DeleteEventTypeResult(const DeleteEventTypeResult&) = delete;
-  DeleteEventTypeResult& operator=(const DeleteEventTypeResult&) = delete;
-
-  bool success;
 };
 
 }  // namespace calendar

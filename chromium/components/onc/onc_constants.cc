@@ -107,6 +107,7 @@ const char kActivationType[] = "ActivationType";
 const char kAllowRoaming[] = "AllowRoaming";
 const char kAPN[] = "APN";
 const char kAPNList[] = "APNList";
+const char kCustomAPNList[] = "CustomAPNList";
 const char kESN[] = "ESN";
 const char kFamily[] = "Family";
 const char kFirmwareRevision[] = "FirmwareRevision";
@@ -150,7 +151,6 @@ const char kTechnologyLte[] = "LTE";
 const char kTechnologyLteAdvanced[] = "LTEAdvanced";
 const char kTechnologyUmts[] = "UMTS";
 const char kTechnology5gNr[] = "5GNR";
-const char kUserAPNList[] = "UserAPNList";
 }  // namespace cellular
 
 namespace cellular_provider {
@@ -260,6 +260,8 @@ const char kWEP_PSK[] = "WEP-PSK";
 const char kWPA_EAP[] = "WPA-EAP";
 const char kWPA_PSK[] = "WPA-PSK";
 const char kWPA2_PSK[] = "WPA2-PSK";
+const char kPasspointId[] = "PasspointId";
+const char kPasspointMatchType[] = "PasspointMatchType";
 }  // namespace wifi
 
 // Deprecated, properties exist for ignoring old ONC config entries.

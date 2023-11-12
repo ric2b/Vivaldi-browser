@@ -22,6 +22,7 @@
 #include "components/services/storage/shared_storage/shared_storage_database_migrations.h"
 #include "components/services/storage/shared_storage/shared_storage_options.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "sql/database.h"
 #include "sql/error_delegate_util.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
@@ -218,14 +219,15 @@ SharedStorageDatabase::~SharedStorageDatabase() {
 
 bool SharedStorageDatabase::Destroy() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (db_.is_open() && !db_.RazeAndClose())
+  if (db_.is_open() && !db_.RazeAndPoison()) {
     return false;
+  }
 
   // The file already doesn't exist.
   if (!is_filebacked())
     return true;
 
-  return base::DeleteFile(db_path_);
+  return sql::Database::Delete(db_path_);
 }
 
 void SharedStorageDatabase::TrimMemory() {
@@ -440,13 +442,12 @@ int64_t SharedStorageDatabase::Length(url::Origin context_origin) {
 
 SharedStorageDatabase::OperationResult SharedStorageDatabase::Keys(
     const url::Origin& context_origin,
-    mojo::PendingRemote<
-        shared_storage_worklet::mojom::SharedStorageEntriesListener>
+    mojo::PendingRemote<blink::mojom::SharedStorageEntriesListener>
         pending_listener) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  mojo::Remote<shared_storage_worklet::mojom::SharedStorageEntriesListener>
-      keys_listener(std::move(pending_listener));
+  mojo::Remote<blink::mojom::SharedStorageEntriesListener> keys_listener(
+      std::move(pending_listener));
 
   if (LazyInit(DBCreationPolicy::kIgnoreIfAbsent) != InitStatus::kSuccess) {
     // We do not return an error if the database doesn't exist, but only if it
@@ -506,21 +507,18 @@ SharedStorageDatabase::OperationResult SharedStorageDatabase::Keys(
 
   while (has_more_entries) {
     has_more_entries = false;
-    std::vector<shared_storage_worklet::mojom::SharedStorageKeyAndOrValuePtr>
-        keys;
+    std::vector<blink::mojom::SharedStorageKeyAndOrValuePtr> keys;
 
     if (saved_first_key_for_next_batch) {
-      keys.push_back(
-          shared_storage_worklet::mojom::SharedStorageKeyAndOrValue::New(
-              saved_first_key_for_next_batch.value(), u""));
+      keys.push_back(blink::mojom::SharedStorageKeyAndOrValue::New(
+          saved_first_key_for_next_batch.value(), u""));
       saved_first_key_for_next_batch.reset();
     }
 
     while (select_statement.Step()) {
       if (keys.size() < max_iterator_batch_size_) {
-        keys.push_back(
-            shared_storage_worklet::mojom::SharedStorageKeyAndOrValue::New(
-                select_statement.ColumnString16(0), u""));
+        keys.push_back(blink::mojom::SharedStorageKeyAndOrValue::New(
+            select_statement.ColumnString16(0), u""));
       } else {
         // Cache the current key to use as the start of the next batch, as we're
         // already passing through this step and the next iteration of
@@ -551,13 +549,12 @@ SharedStorageDatabase::OperationResult SharedStorageDatabase::Keys(
 
 SharedStorageDatabase::OperationResult SharedStorageDatabase::Entries(
     const url::Origin& context_origin,
-    mojo::PendingRemote<
-        shared_storage_worklet::mojom::SharedStorageEntriesListener>
+    mojo::PendingRemote<blink::mojom::SharedStorageEntriesListener>
         pending_listener) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  mojo::Remote<shared_storage_worklet::mojom::SharedStorageEntriesListener>
-      entries_listener(std::move(pending_listener));
+  mojo::Remote<blink::mojom::SharedStorageEntriesListener> entries_listener(
+      std::move(pending_listener));
 
   if (LazyInit(DBCreationPolicy::kIgnoreIfAbsent) != InitStatus::kSuccess) {
     // We do not return an error if the database doesn't exist, but only if it
@@ -618,25 +615,22 @@ SharedStorageDatabase::OperationResult SharedStorageDatabase::Entries(
 
   while (has_more_entries) {
     has_more_entries = false;
-    std::vector<shared_storage_worklet::mojom::SharedStorageKeyAndOrValuePtr>
-        entries;
+    std::vector<blink::mojom::SharedStorageKeyAndOrValuePtr> entries;
 
     if (saved_first_key_for_next_batch) {
       DCHECK(saved_first_value_for_next_batch);
-      entries.push_back(
-          shared_storage_worklet::mojom::SharedStorageKeyAndOrValue::New(
-              saved_first_key_for_next_batch.value(),
-              saved_first_value_for_next_batch.value()));
+      entries.push_back(blink::mojom::SharedStorageKeyAndOrValue::New(
+          saved_first_key_for_next_batch.value(),
+          saved_first_value_for_next_batch.value()));
       saved_first_key_for_next_batch.reset();
       saved_first_value_for_next_batch.reset();
     }
 
     while (select_statement.Step()) {
       if (entries.size() < max_iterator_batch_size_) {
-        entries.push_back(
-            shared_storage_worklet::mojom::SharedStorageKeyAndOrValue::New(
-                select_statement.ColumnString16(0),
-                select_statement.ColumnString16(1)));
+        entries.push_back(blink::mojom::SharedStorageKeyAndOrValue::New(
+            select_statement.ColumnString16(0),
+            select_statement.ColumnString16(1)));
       } else {
         // Cache the current key and value to use as the start of the next
         // batch, as we're already passing through this step and the next
@@ -1268,7 +1262,7 @@ SharedStorageDatabase::InitStatus SharedStorageDatabase::InitImpl() {
   sql::Transaction transaction(&db_);
   if (!transaction.Begin()) {
     LOG(WARNING) << "Shared storage database begin initialization failed.";
-    db_.RazeAndClose();
+    db_.RazeAndPoison();
     return InitStatus::kError;
   }
 
@@ -1281,7 +1275,7 @@ SharedStorageDatabase::InitStatus SharedStorageDatabase::InitImpl() {
 
   if (meta_table_.GetCompatibleVersionNumber() > kCurrentVersionNumber) {
     LOG(WARNING) << "Shared storage database is too new.";
-    db_.RazeAndClose();
+    db_.RazeAndPoison();
     return InitStatus::kTooNew;
   }
 
@@ -1289,21 +1283,21 @@ SharedStorageDatabase::InitStatus SharedStorageDatabase::InitImpl() {
 
   if (cur_version <= kDeprecatedVersionNumber) {
     LOG(WARNING) << "Shared storage database is too old to be compatible.";
-    db_.RazeAndClose();
+    db_.RazeAndPoison();
     return InitStatus::kTooOld;
   }
 
   if (cur_version < kCurrentVersionNumber &&
       !UpgradeSharedStorageDatabaseSchema(db_, meta_table_, clock_)) {
     LOG(WARNING) << "Shared storage database upgrade failed.";
-    db_.RazeAndClose();
+    db_.RazeAndPoison();
     return InitStatus::kUpgradeFailed;
   }
 
   // The initialization is complete.
   if (!transaction.Commit()) {
     LOG(WARNING) << "Shared storage database initialization commit failed.";
-    db_.RazeAndClose();
+    db_.RazeAndPoison();
     return InitStatus::kError;
   }
 
@@ -1575,7 +1569,7 @@ void SharedStorageDatabase::LogInitHistograms() {
 
   if (is_filebacked()) {
     int64_t file_size = 0L;
-    if (GetFileSize(db_path_, &file_size)) {
+    if (base::GetFileSize(db_path_, &file_size)) {
       int64_t file_size_kb = file_size / 1024;
       base::UmaHistogramCounts10M(
           "Storage.SharedStorage.Database.FileBacked.FileSize.KB",

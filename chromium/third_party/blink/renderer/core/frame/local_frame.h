@@ -61,6 +61,7 @@
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/link_to_text/link_to_text.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/loader/resource_cache.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/navigation/renderer_eviction_reason.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/reporting/reporting.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/script/script_evaluation_params.mojom-blink-forward.h"
@@ -144,6 +145,7 @@ class NodeTraversal;
 class PerformanceMonitor;
 class PluginData;
 class PolicyContainer;
+class ResourceCacheImpl;
 class ScrollSnapshotClient;
 class SmoothScrollSequencer;
 class SpellChecker;
@@ -212,6 +214,8 @@ class CORE_EXPORT LocalFrame final
   //   storage, IndexedDB, BroadcastChannel, etc...
   // - |document_ukm_source_id| is the ukm source id for the new document. If
   //   you pass ukm::kInvalidSourceId, a new ukm source id will be generated.
+  // - `creator_base_url` is the base url of the initiator that created this
+  //    frame.
   //
   // Note: Usually, the initial empty document inherits its |policy_container|
   // and |storage_key| from the parent or the opener. The inheritance operation
@@ -222,7 +226,8 @@ class CORE_EXPORT LocalFrame final
             const DocumentToken& document_token,
             std::unique_ptr<PolicyContainer> policy_container,
             const StorageKey& storage_key,
-            ukm::SourceId document_ukm_source_id);
+            ukm::SourceId document_ukm_source_id,
+            const KURL& creator_base_url);
   void SetView(LocalFrameView*);
   void CreateView(const gfx::Size&, const Color&);
 
@@ -253,7 +258,7 @@ class CORE_EXPORT LocalFrame final
   void DidBufferLoadWhileInBackForwardCache(size_t num_bytes) override;
 
   void DidChangeThemeColor(bool update_theme_color_cache);
-  void DidChangeBackgroundColor(SkColor background_color, bool color_adjust);
+  void DidChangeBackgroundColor(SkColor4f background_color, bool color_adjust);
 
   // Returns false if detaching child frames reentrantly detached `this`.
   bool DetachChildren();
@@ -292,10 +297,6 @@ class CORE_EXPORT LocalFrame final
   BackgroundColorPaintImageGenerator* GetBackgroundColorPaintImageGenerator();
   BoxShadowPaintImageGenerator* GetBoxShadowPaintImageGenerator();
   ClipPathPaintImageGenerator* GetClipPathPaintImageGenerator();
-
-  void AddResourceTimingEntryFromNonNavigatedFrame(
-      mojom::blink::ResourceTimingInfoPtr timing,
-      blink::FrameOwnerElementType initiator_type);
 
   // A local root is the root of a connected subtree that contains only
   // LocalFrames. The local root is responsible for coordinating input, layout,
@@ -659,7 +660,7 @@ class CORE_EXPORT LocalFrame final
   bool IsHidden() const { return hidden_; }
 
   // Whether the frame clips its content to the frame's size.
-  bool ClipsContent() const;
+  bool ClipsContent(ScrollbarDisableReason* out_reason = nullptr) const;
 
   // For a navigation initiated from this LocalFrame with user gesture, record
   // the UseCounter AdClickNavigation if this frame is an adframe.
@@ -859,6 +860,21 @@ class CORE_EXPORT LocalFrame final
 
   void ScheduleNextServiceForScrollSnapshotClients();
 
+  void CollectAnchorScrollContainerIds(
+      Vector<cc::ElementId>* scroll_container_ids) const;
+
+  using BlockingDetailsList = Vector<mojom::blink::BlockingDetailsPtr>;
+  static BlockingDetailsList ConvertFeatureAndLocationToMojomStruct(
+      const BFCacheBlockingFeatureAndLocations&,
+      const BFCacheBlockingFeatureAndLocations&);
+
+  // Binds a ResourceCache. Creates a new ResourceCache when there is no
+  // existing one.
+  void BindResourceCache(mojo::PendingReceiver<mojom::blink::ResourceCache>);
+
+  // Sets a ResourceCache hosted by another frame in a different renderer.
+  void SetResourceCacheRemote(mojo::PendingRemote<mojom::blink::ResourceCache>);
+
  private:
   friend class FrameNavigationDisabler;
   // LocalFrameMojoHandler is a part of LocalFrame.
@@ -908,12 +924,12 @@ class CORE_EXPORT LocalFrame final
   ukm::SourceId GetUkmSourceId() override;
   void UpdateTaskTime(base::TimeDelta time) override;
   void UpdateBackForwardCacheDisablingFeatures(
-      uint64_t features_mask,
-      const BFCacheBlockingFeatureAndLocations&
-          non_sticky_features_and_js_locations,
-      const BFCacheBlockingFeatureAndLocations&
-          sticky_features_and_js_locations) override;
+      BlockingDetails details) override;
   const base::UnguessableToken& GetAgentClusterId() const override;
+  void OnTaskCompleted(base::TimeTicks start_time,
+                       base::TimeTicks end_time,
+                       base::TimeTicks desired_execution_time) override;
+  void MainFrameInteractive() override;
 
   // Activates the user activation states of this frame and all its ancestors.
   //
@@ -1076,6 +1092,9 @@ class CORE_EXPORT LocalFrame final
 
   HeapHashSet<WeakMember<ScrollSnapshotClient>>
       unvalidated_scroll_snapshot_clients_;
+
+  // Set lazily, when the browser asks to host a resource cache in this frame.
+  Member<ResourceCacheImpl> resource_cache_;
 
   // Manages a transient affordance for this frame to enter fullscreen.
   TransientAllowFullscreen transient_allow_fullscreen_;

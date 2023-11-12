@@ -191,6 +191,15 @@ struct BLINK_EXPORT WebNavigationInfo {
 
   // The initiator frame's LocalDOMWindow's has_storage_access state.
   bool has_storage_access = false;
+  // Whether this navigation was initiated by the container, e.g. iframe changed
+  // src. Only container-initiated navigation report resource timing to the
+  // parent.
+  bool is_container_initiated = false;
+
+  // True if the initiator requested that the tab become fullscreen
+  // after navigation (e.g. the initial navigation of a fullscreen popup).
+  // See: https://chromestatus.com/feature/6002307972464640
+  bool is_fullscreen_requested = false;
 };
 
 // This structure holds all information provided by the embedder that is
@@ -272,14 +281,11 @@ struct BLINK_EXPORT WebNavigationParams {
   // a failed navigation.
   WebURL pre_redirect_url_for_failed_navigations;
 
-  // If `url` is about:srcdoc, this is the default base URL to use for the new
-  // document. It corresponds to the initiator's base URL snapshotted when the
-  // navigation started.
-  // Note: this value is only used when the NewBaseUrlInheritanceBehavior
-  // feature is enabled in the embedder.
-  // TODO(wjmaclean): Revisit the naming here when we expand to sending base
-  // URLs for about:blank.
-  WebURL fallback_srcdoc_base_url;
+  // If `url` is about:srcdoc or about:blank, this is the default base URL to
+  // use for the new document. It corresponds to the initiator's base URL
+  // snapshotted when the navigation started. Note: this value is only used when
+  // the NewBaseUrlInheritanceBehavior feature is enabled in the embedder.
+  WebURL fallback_base_url;
 
   // The net error code for failed navigation. Must be non-zero when
   // |unreachable_url| is non-null.
@@ -483,14 +489,9 @@ struct BLINK_EXPORT WebNavigationParams {
   // Null, otherwise.
   absl::optional<WebVector<WebURL>> ad_auction_components;
 
-  // This boolean flag indicates whether there is associated reporting metadata
-  // with the fenced frame.
-  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
-  bool has_fenced_frame_reporting = false;
-
   // Whether the current context would be allowed to create an opaque-ads
   //  frame (based on the browser-side calculations). See
-  // HTMLFencedFrameElement::canLoadOpaqueURL for usage and
+  // NavigatorAuction::canLoadAdAuctionFencedFrame for usage and
   // ::blink::mojom::CommitNavigationParams::ancestor_or_self_has_cspee for
   // where the value is coming from.
   bool ancestor_or_self_has_cspee = false;
@@ -533,7 +534,7 @@ struct BLINK_EXPORT WebNavigationParams {
       modified_runtime_features;
 
   // Whether the document should be loaded with the has_storage_access bit set.
-  bool has_storage_access = false;
+  bool load_with_storage_access = false;
 };
 
 }  // namespace blink

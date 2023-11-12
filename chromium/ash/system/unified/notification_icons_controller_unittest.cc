@@ -4,9 +4,13 @@
 
 #include "ash/system/unified/notification_icons_controller.h"
 
+#include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
+#include "ash/public/cpp/shelf_prefs.h"
+#include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/vm_camera_mic_constants.h"
 #include "ash/shelf/shelf.h"
 #include "ash/system/notification_center/notification_center_tray.h"
@@ -24,6 +28,7 @@ namespace {
 const char kCapsLockNotifierId[] = "ash.caps-lock";
 const char kBatteryNotificationNotifierId[] = "ash.battery";
 const char kUsbNotificationNotifierId[] = "ash.power";
+constexpr int kIconsViewDisplaySizeThreshold = 768;
 }  // namespace
 
 class NotificationIconsControllerTest
@@ -42,15 +47,11 @@ class NotificationIconsControllerTest
     AshTestBase::SetUp();
   }
 
-  TrayItemView* separator() {
-    return GetNotificationIconsController()->separator_;
-  }
-
   bool IsQsRevampEnabled() { return GetParam(); }
 
   std::string AddNotification(bool is_pinned,
                               bool is_critical_warning,
-                              const std::string& app_id = "app") {
+                              const std::string& notifier_id = "app") {
     std::string id = base::NumberToString(notification_id_++);
 
     auto warning_level =
@@ -66,13 +67,53 @@ class NotificationIconsControllerTest
             u"test message", std::u16string() /*display_source */,
             GURL() /* origin_url */,
             message_center::NotifierId(
-                message_center::NotifierType::SYSTEM_COMPONENT, app_id,
+                message_center::NotifierType::SYSTEM_COMPONENT, notifier_id,
                 NotificationCatalogName::kTestCatalogName),
             rich_notification_data, nullptr /* delegate */, gfx::VectorIcon(),
             warning_level));
     notification_id_++;
 
     return id;
+  }
+
+  // Sets the shelf to always auto-hide and simulates logging in to a new user
+  // session with that preference set by returning a pointer to an instance of
+  // `NotificationIconsController` created after setting the preference.
+  std::unique_ptr<NotificationIconsController>
+  CreateControllerWithAutoHideShelf() {
+    // Clear all user sessions.
+    ClearLogin();
+
+    // Log in.
+    constexpr char kUserEmail[] = "user@gmail.com";
+    SimulateUserLogin(kUserEmail);
+
+    // Set the user's shelf auto-hide preference to always hide.
+    auto accountId = AccountId::FromUserEmail(kUserEmail);
+    auto* prefs = GetSessionControllerClient()->GetUserPrefService(accountId);
+    CHECK(prefs);
+    prefs->SetString(prefs::kShelfAutoHideBehaviorLocal,
+                     kShelfAutoHideBehaviorAlways);
+    prefs->SetString(prefs::kShelfAutoHideBehavior,
+                     kShelfAutoHideBehaviorAlways);
+
+    // Verify that the shelf auto-hides by creating and showing a window.
+    auto window = CreateTestWidget();
+    window->SetBounds(gfx::Rect(0, 0, 100, 100));
+    CHECK(GetPrimaryShelf()->GetAutoHideState() ==
+          ShelfAutoHideState::SHELF_AUTO_HIDE_HIDDEN);
+
+    // Create a local instance of `NotificationIconsController`. This allows the
+    // `NotificationIconsController` constructor to run after the shelf
+    // auto-hide preference has been set, which simulates logging into a new
+    // user session where that shelf preference is already set.
+    return std::make_unique<NotificationIconsController>(
+        GetPrimaryShelf(), /*model=*/nullptr,
+        GetPrimaryShelf()->GetStatusAreaWidget()->notification_center_tray());
+  }
+
+  TrayItemView* separator() {
+    return GetNotificationIconsController()->separator_;
   }
 
  protected:
@@ -92,6 +133,60 @@ class NotificationIconsControllerTest
 INSTANTIATE_TEST_SUITE_P(All,
                          NotificationIconsControllerTest,
                          testing::Bool() /* IsQsRevampEnabled() */);
+
+// Tests `icons_view_visible_` initialization behavior for the case where a
+// user logs in and the shelf is already set to auto-hide. It should initialize
+// to true when the display size meets or exceeds the threshold.
+TEST_P(NotificationIconsControllerTest,
+       IconsViewVisibleInitializationForAutoHiddenShelfAndLargeDisplay) {
+  if (!IsQsRevampEnabled()) {
+    // Without QsRevamp, icons view visibility is determined by the
+    // `UnifiedSystemTrayModel`.
+    return;
+  }
+
+  // Verify that the display size meets the threshold.
+  auto display_size = GetPrimaryDisplay().size();
+  ASSERT_GE(std::max(display_size.width(), display_size.height()),
+            kIconsViewDisplaySizeThreshold);
+
+  // Set the shelf to always auto-hide and get a new instance of
+  // `NotificationIconsController` that was created after setting that
+  // preference.
+  auto notification_icons_controller = CreateControllerWithAutoHideShelf();
+
+  // Verify that `icons_view_visible_` is true.
+  EXPECT_TRUE(notification_icons_controller->icons_view_visible());
+}
+
+// Tests `icons_view_visible_` initialization behavior for the case where a
+// user logs in and the shelf is already set to auto-hide. It should initialize
+// to false when the display size is smaller than the threshold.
+TEST_P(NotificationIconsControllerTest,
+       IconsViewVisibleInitializationForAutoHiddenShelfAndSmallDisplay) {
+  if (!IsQsRevampEnabled()) {
+    // Without QsRevamp, icons view visibility is determined by the
+    // `UnifiedSystemTrayModel`.
+    return;
+  }
+
+  // Update the display to have a size smaller than the threshold.
+  UpdateDisplay(base::NumberToString(kIconsViewDisplaySizeThreshold - 1) + "x" +
+                base::NumberToString(kIconsViewDisplaySizeThreshold - 2));
+
+  // Verify that the display size does not meet the threshold.
+  auto display_size = GetPrimaryDisplay().size();
+  ASSERT_LT(std::max(display_size.width(), display_size.height()),
+            kIconsViewDisplaySizeThreshold);
+
+  // Set the shelf to always auto-hide and get a new instance of
+  // `NotificationIconsController` that was created after setting that
+  // preference.
+  auto notification_icons_controller = CreateControllerWithAutoHideShelf();
+
+  // Verify that `icons_view_visible_` is false.
+  EXPECT_FALSE(notification_icons_controller->icons_view_visible());
+}
 
 TEST_P(NotificationIconsControllerTest, DisplayChanged) {
   AddNotification(true /* is_pinned */, false /* is_critical_warning */);
@@ -249,7 +344,26 @@ TEST_P(NotificationIconsControllerTest, NotShowNotificationIcons) {
 
   AddNotification(true /* is_pinned */, false /* is_critical_warning */,
                   kVmCameraMicNotifierId);
+
   // VM camera/mic notification should not be shown.
+  EXPECT_FALSE(
+      GetNotificationIconsController()->tray_items().back()->GetVisible());
+
+  if (!IsQsRevampEnabled()) {
+    EXPECT_FALSE(separator()->GetVisible());
+  }
+
+  // Notification count does not update for this notification (since there's
+  // another tray item for this).
+  GetNotificationIconsController()->notification_counter_view()->Update();
+  EXPECT_EQ(2, GetNotificationIconsController()
+                   ->notification_counter_view()
+                   ->count_for_display_for_testing());
+
+  AddNotification(true /* is_pinned */, false /* is_critical_warning */,
+                  kPrivacyIndicatorsNotifierId);
+
+  // Privacy indicator notification should not be shown.
   EXPECT_FALSE(
       GetNotificationIconsController()->tray_items().back()->GetVisible());
 

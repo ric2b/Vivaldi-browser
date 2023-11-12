@@ -15,10 +15,15 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/chromeos/launcher_search/search_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
 #include "chromeos/ash/components/string_matching/tokenized_string.h"
-#include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "chromeos/crosapi/cpp/gurl_os_handler_utils.h"
 #include "chromeos/crosapi/mojom/launcher_search.mojom.h"
 #include "components/omnibox/browser/autocomplete_input.h"
+#include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/autocomplete_match_type.h"
+#include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/search_suggestion_parser.h"
 #include "url/gurl.h"
 
 namespace app_list {
@@ -38,7 +43,9 @@ OmniboxLacrosProvider::OmniboxLacrosProvider(
     Profile* profile,
     AppListControllerDelegate* list_controller,
     crosapi::CrosapiManager* crosapi_manager)
-    : profile_(profile), list_controller_(list_controller) {
+    : search_provider_(nullptr),
+      profile_(profile),
+      list_controller_(list_controller) {
   DCHECK(profile_);
   DCHECK(list_controller_);
 
@@ -51,12 +58,44 @@ OmniboxLacrosProvider::OmniboxLacrosProvider(
 OmniboxLacrosProvider::~OmniboxLacrosProvider() = default;
 
 void OmniboxLacrosProvider::Start(const std::u16string& query) {
-  if (!search_provider_)
+  if (!search_provider_ || !search_provider_->IsSearchControllerConnected()) {
+    const bool is_system_url =
+        ChromeWebUIControllerFactory::GetInstance()->CanHandleUrl(GURL(query));
+    if (is_system_url) {
+      AutocompleteInput input;
+
+      SearchSuggestionParser::SuggestResult suggest_result(
+          query, AutocompleteMatchType::URL_WHAT_YOU_TYPED, /*subtypes=*/{},
+          /*from_keyword=*/false,
+          /*relevance=*/kMaxOmniboxScore, /*relevance_from_server=*/false,
+          /*input_text=*/query);
+      AutocompleteMatch match(/*provider=*/nullptr, suggest_result.relevance(),
+                              /*deletable=*/false, suggest_result.type());
+      match.destination_url = GURL(query);
+      match.allowed_to_be_default_match = true;
+      match.contents = suggest_result.match_contents();
+      match.contents_class = suggest_result.match_contents_class();
+      match.suggestion_group_id = suggest_result.suggestion_group_id();
+      match.answer = suggest_result.answer();
+      match.stripped_destination_url = GURL(query);
+
+      crosapi::mojom::SearchResultPtr result =
+          crosapi::CreateResult(match, /*controller=*/nullptr,
+                                /*favicon_cache=*/nullptr,
+                                /*bookmark_model=*/nullptr, input);
+
+      SearchProvider::Results new_results;
+      new_results.emplace_back(std::make_unique<OmniboxResult>(
+          profile_, list_controller_, std::move(result), query));
+      SwapResults(&new_results);
+    }
     return;
+  }
 
   last_query_ = query;
   last_tokenized_query_.emplace(query, TokenizedString::Mode::kCamelCase);
 
+  query_finished_ = false;
   // Use page classification value CHROMEOS_APP_LIST to differentiate the
   // suggest requests initiated by ChromeOS app_list from the ones by Chrome
   // omnibox.
@@ -72,6 +111,7 @@ void OmniboxLacrosProvider::Start(const std::u16string& query) {
 void OmniboxLacrosProvider::StopQuery() {
   last_query_.clear();
   last_tokenized_query_.reset();
+  query_finished_ = false;
   weak_factory_.InvalidateWeakPtrs();
 }
 
@@ -124,7 +164,12 @@ void OmniboxLacrosProvider::OnResultsReceived(
   std::move(list_results.begin(), list_results.end(),
             std::back_inserter(new_results));
 
-  SwapResults(&new_results);
+  // The search system requires only return once per StartSearch, so we need to
+  // ensure no further results swap after the first one.
+  if (!query_finished_) {
+    query_finished_ = true;
+    SwapResults(&new_results);
+  }
 }
 
 }  // namespace app_list

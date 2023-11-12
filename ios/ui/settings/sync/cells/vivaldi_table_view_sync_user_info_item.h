@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/table_view/cells/table_view_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_header_footer_item.h"
 
 @interface VivaldiTableViewSyncUserInfoItem : TableViewHeaderFooterItem
 @property(nonatomic, copy) NSString* userName;

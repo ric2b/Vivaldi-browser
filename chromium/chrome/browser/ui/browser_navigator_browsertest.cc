@@ -28,13 +28,13 @@
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/omnibox/browser/tab_matcher.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/notification_types.h"
@@ -205,12 +205,12 @@ void BrowserNavigatorTest::RunDoNothingIfIncognitoIsForcedTest(
   // Set kIncognitoModeAvailability to FORCED.
   PrefService* prefs1 = browser->profile()->GetPrefs();
   prefs1->SetInteger(
-      prefs::kIncognitoModeAvailability,
-      static_cast<int>(IncognitoModePrefs::Availability::kForced));
+      policy::policy_prefs::kIncognitoModeAvailability,
+      static_cast<int>(policy::IncognitoModeAvailability::kForced));
   PrefService* prefs2 = browser->profile()->GetOriginalProfile()->GetPrefs();
   prefs2->SetInteger(
-      prefs::kIncognitoModeAvailability,
-      static_cast<int>(IncognitoModePrefs::Availability::kForced));
+      policy::policy_prefs::kIncognitoModeAvailability,
+      static_cast<int>(policy::IncognitoModeAvailability::kForced));
 
   // Navigate to the page.
   NavigateParams params(MakeNavigateParams(browser));
@@ -1876,6 +1876,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   // Opening a picture in picture window should create a new browser.
   NavigateParams params(MakeNavigateParams(browser()));
   params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+  params.source_contents = browser()->tab_strip_model()->GetActiveWebContents();
   params.contents_to_insert = WebContents::Create(web_contents_params);
   Navigate(&params);
 
@@ -1904,6 +1905,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   // Opening a picture in picture window should create a new browser.
   NavigateParams params(MakeNavigateParams(browser()));
   params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+  params.source_contents = browser()->tab_strip_model()->GetActiveWebContents();
   params.contents_to_insert = WebContents::Create(web_contents_params);
   Navigate(&params);
 
@@ -1921,9 +1923,23 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
                                            browser()->profile());
   NavigateParams params(MakeNavigateParams(pip));
   params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+  params.source_contents = browser()->tab_strip_model()->GetActiveWebContents();
   Navigate(&params);
 
   EXPECT_EQ(params.browser, nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    BrowserNavigatorTest,
+    Disposition_PictureInPicture_CantWithoutASourceContents) {
+  // Opening a picture-in-picture window without a source contents should fail.
+  Browser* pip = CreateEmptyBrowserForType(Browser::TYPE_PICTURE_IN_PICTURE,
+                                           browser()->profile());
+  NavigateParams params(MakeNavigateParams(pip));
+  params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+  params.source_contents = nullptr;
+
+  EXPECT_EQ(nullptr, Navigate(&params));
 }
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -2034,6 +2050,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_BrowserNavigatorTestWithMockScreen,
     // Open the PiP window.
     NavigateParams params(MakeNavigateParams(browser()));
     params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+    params.source_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
     params.contents_to_insert = WebContents::Create(web_contents_params);
     Navigate(&params);
 
@@ -2060,6 +2078,8 @@ IN_PROC_BROWSER_TEST_F(MAYBE_BrowserNavigatorTestWithMockScreen,
     // Open the PiP window.
     NavigateParams params(MakeNavigateParams(browser()));
     params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+    params.source_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
     params.contents_to_insert = WebContents::Create(web_contents_params);
     Navigate(&params);
 

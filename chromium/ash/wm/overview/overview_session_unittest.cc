@@ -35,9 +35,10 @@
 #include "ash/test/ash_test_util.h"
 #include "ash/test/test_window_builder.h"
 #include "ash/wm/desks/desk.h"
-#include "ash/wm/desks/desks_bar_view.h"
+#include "ash/wm/desks/desks_constants.h"
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/desks/desks_util.h"
+#include "ash/wm/desks/legacy_desk_bar_view.h"
 #include "ash/wm/desks/templates/saved_desk_save_desk_button.h"
 #include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/desks/zero_state_button.h"
@@ -63,10 +64,8 @@
 #include "ash/wm/splitview/split_view_divider.h"
 #include "ash/wm/splitview/split_view_drag_indicators.h"
 #include "ash/wm/splitview/split_view_utils.h"
-#include "ash/wm/tablet_mode/tablet_mode_browser_window_drag_delegate.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
-#include "ash/wm/tablet_mode/tablet_mode_window_resizer.h"
 #include "ash/wm/window_preview_view.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_delegate.h"
@@ -76,6 +75,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -105,6 +105,7 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/gfx/geometry/insets_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/geometry/transform_util.h"
@@ -154,7 +155,7 @@ class TweenTester : public ui::LayerAnimationObserver {
 
  private:
   gfx::Tween::Type tween_type_ = gfx::Tween::LINEAR;
-  aura::Window* window_;
+  raw_ptr<aura::Window, ExperimentalAsh> window_;
   bool will_animate_ = false;
 };
 
@@ -484,6 +485,24 @@ TEST_P(OverviewSessionTest, BasicGesture) {
   GetEventGenerator()->GestureTapAt(
       GetTransformedTargetBounds(window2.get()).CenterPoint());
   EXPECT_EQ(window2.get(), window_util::GetFocusedWindow());
+}
+
+// Tests that calling `views::Widget::CloseNow` on a minimized window that is
+// currently being dragged does not cause a crash. Regression test for
+// b/268413746.
+TEST_P(OverviewSessionTest, CloseNowDraggedMinimizedWindow) {
+  std::unique_ptr<aura::Window> window = CreateAppWindow();
+  WindowState::Get(window.get())->Minimize();
+
+  // Start dragging the window.
+  ToggleOverview();
+  GetEventGenerator()->set_current_screen_location(
+      GetTransformedTargetBounds(window.get()).CenterPoint());
+  GetEventGenerator()->PressLeftButton();
+
+  // Call `views::Widget::CloseNow` on the window mid drag and verify no crash.
+  // This could happen in production when an exo window shuts down.
+  views::Widget::GetWidgetForNativeView(window.release())->CloseNow();
 }
 
 // Tests that the user action WindowSelector_ActiveWindowChanged is
@@ -1093,56 +1112,6 @@ TEST_P(OverviewSessionTest, ActivationCancelsOverview) {
   EXPECT_EQ(window1.get(), window_util::GetFocusedWindow());
 }
 
-// Tests that if a window is dragged while overview is open, the activation
-// of the dragged window does not cancel overview.
-TEST_P(OverviewSessionTest, ActivateDraggedWindowNotCancelOverview) {
-  UpdateDisplay("800x600");
-  EnterTabletMode();
-  std::unique_ptr<aura::Window> window1(CreateTestWindow());
-  window1->SetProperty(aura::client::kAppType,
-                       static_cast<int>(AppType::BROWSER));
-  std::unique_ptr<aura::Window> window2(CreateTestWindow());
-  EXPECT_FALSE(InOverviewSession());
-
-  // Start drag on |window1|.
-  std::unique_ptr<WindowResizer> resizer(CreateWindowResizer(
-      window1.get(), gfx::PointF(), HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_TOUCH));
-  EXPECT_TRUE(InOverviewSession());
-
-  resizer->Drag(gfx::PointF(400, 0), 0);
-  EXPECT_TRUE(InOverviewSession());
-
-  wm::ActivateWindow(window1.get());
-  EXPECT_TRUE(InOverviewSession());
-
-  resizer->CompleteDrag();
-  EXPECT_FALSE(InOverviewSession());
-}
-
-// Tests that activate a non-dragged window during window drag will not cancel
-// overview mode.
-TEST_P(OverviewSessionTest, ActivateAnotherWindowDuringDragNotCancelOverview) {
-  UpdateDisplay("800x600");
-  EnterTabletMode();
-  std::unique_ptr<aura::Window> window1(CreateTestWindow());
-  window1->SetProperty(aura::client::kAppType,
-                       static_cast<int>(AppType::BROWSER));
-  std::unique_ptr<aura::Window> window2(CreateTestWindow());
-  EXPECT_FALSE(InOverviewSession());
-
-  // Start drag on |window1|.
-  wm::ActivateWindow(window1.get());
-  std::unique_ptr<WindowResizer> resizer(CreateWindowResizer(
-      window1.get(), gfx::PointF(), HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_TOUCH));
-  EXPECT_TRUE(InOverviewSession());
-
-  // Activate |window2| should not cancel overview mode.
-  wm::ActivateWindow(window2.get());
-  EXPECT_FALSE(WindowState::Get(window2.get())->is_dragged());
-  EXPECT_TRUE(wm::IsActiveWindow(window2.get()));
-  EXPECT_TRUE(InOverviewSession());
-}
-
 // Tests that if an overview item is dragged, the activation of the
 // corresponding window does not cancel overview.
 TEST_P(OverviewSessionTest, ActivateDraggedOverviewWindowNotCancelOverview) {
@@ -1486,26 +1455,6 @@ TEST_P(OverviewSessionTest, DropTargetOnCorrectDisplayForDraggingFromOverview) {
   EXPECT_FALSE(GetDropTarget(1));
 }
 
-// Tests that the drop target is removed if a window is destroyed while being
-// dragged from the top.
-TEST_P(OverviewSessionTest,
-       DropTargetRemovedIfWindowDraggedFromTopIsDestroyed) {
-  EnterTabletMode();
-  std::unique_ptr<aura::Window> window = CreateTestWindow();
-  std::unique_ptr<aura::Window> window2 = CreateTestWindow();
-  window->SetProperty(aura::client::kAppType,
-                      static_cast<int>(AppType::BROWSER));
-  std::unique_ptr<WindowResizer> resizer =
-      CreateWindowResizer(window.get(), gfx::PointF(400, 0), HTCAPTION,
-                          ::wm::WINDOW_MOVE_SOURCE_TOUCH);
-  ASSERT_TRUE(InOverviewSession());
-  EXPECT_TRUE(GetDropTarget(0));
-  resizer.reset();
-  window.reset();
-  ASSERT_TRUE(InOverviewSession());
-  EXPECT_FALSE(GetDropTarget(0));
-}
-
 namespace {
 
 // A simple window delegate that returns the specified hit-test code when
@@ -1758,9 +1707,8 @@ TEST_P(OverviewSessionTest, NoWindowsIndicatorPosition) {
 
   // Verify that originally the label is in the center of the workspace.
   // Midpoint of height minus shelf.
-  int expected_y = (300 - ShelfConfig::Get()->shelf_size() +
-                    DesksBarView::kZeroStateBarHeight) /
-                   2;
+  int expected_y =
+      (300 - ShelfConfig::Get()->shelf_size() + kDeskBarZeroStateHeight) / 2;
   EXPECT_EQ(gfx::Point(200, expected_y),
             no_windows_widget->GetWindowBoundsInScreen().CenterPoint());
 
@@ -1771,9 +1719,8 @@ TEST_P(OverviewSessionTest, NoWindowsIndicatorPosition) {
   display_manager()->SetDisplayRotation(
       display.id(), display::Display::ROTATE_90,
       display::Display::RotationSource::ACTIVE);
-  expected_y = (400 - ShelfConfig::Get()->shelf_size() +
-                DesksBarView::kZeroStateBarHeight) /
-               2;
+  expected_y =
+      (400 - ShelfConfig::Get()->shelf_size() + kDeskBarZeroStateHeight) / 2;
   EXPECT_EQ(gfx::Point(150, expected_y),
             no_windows_widget->GetWindowBoundsInScreen().CenterPoint());
 }
@@ -2468,29 +2415,6 @@ TEST_P(OverviewSessionTest, OverviewWidgetStackingOrder) {
       "Ash.Overview.WindowDrag.PresentationTime.MaxLatency.TabletMode", 1);
 }
 
-// Test that dragging a window from the top creates a drop target stacked at the
-// bottom. Test that dropping into overview removes the drop target.
-TEST_P(OverviewSessionTest, DropTargetStackedAtBottomForWindowDraggedFromTop) {
-  UpdateDisplay("800x600");
-  EnterTabletMode();
-  std::unique_ptr<aura::Window> window1(CreateTestWindow());
-  window1->SetProperty(aura::client::kAppType,
-                       static_cast<int>(AppType::BROWSER));
-  std::unique_ptr<aura::Window> window2(CreateTestWindow());
-  aura::Window* parent = window1->parent();
-  ASSERT_EQ(parent, window2->parent());
-  wm::ActivateWindow(window2.get());
-  wm::ActivateWindow(window1.get());
-  std::unique_ptr<WindowResizer> resizer =
-      CreateWindowResizer(window1.get(), gfx::PointF(400, 0), HTCAPTION,
-                          ::wm::WINDOW_MOVE_SOURCE_TOUCH);
-  ASSERT_TRUE(GetDropTarget(0));
-  EXPECT_TRUE(IsStackedBelow(GetDropTarget(0)->GetWindow(), window2.get()));
-  resizer->Drag(gfx::PointF(400, 500), ui::EF_NONE);
-  resizer->CompleteDrag();
-  EXPECT_FALSE(GetDropTarget(0));
-}
-
 // Test that dragging an overview item to snap creates a drop target stacked at
 // the bottom. Test that ending the drag removes the drop target.
 TEST_P(OverviewSessionTest, DropTargetStackedAtBottomForOverviewItem) {
@@ -2675,6 +2599,13 @@ TEST_P(OverviewSessionTest, ShadowBounds) {
     return boundsf.width() / boundsf.height();
   };
 
+  // Helper function which returns the ratio of the item width and height minus
+  // the header and window margin.
+  auto item_ratio = [](OverviewItem* item) {
+    gfx::RectF boundsf = item->GetWindowTargetBoundsWithInsets();
+    return boundsf.width() / boundsf.height();
+  };
+
   // Add three windows which in overview mode will be considered wide, tall and
   // normal. Set top view insets to 0 so it is easy to check the ratios of the
   // shadows match the ratios of the untransformed windows.
@@ -2709,9 +2640,11 @@ TEST_P(OverviewSessionTest, ShadowBounds) {
   EXPECT_TRUE(contains(tall_widget, tall_item));
   EXPECT_TRUE(contains(normal_widget, normal_item));
 
-  // Verify the shadows preserve the ratios of the original windows.
-  EXPECT_NEAR(shadow_ratio(wide_item), 4.f, 0.01f);
-  EXPECT_NEAR(shadow_ratio(tall_item), 0.25f, 0.01f);
+  // Verify the shadow of window with normal type preserves the ratio of the
+  // original window. Otherwise, it preserves the ratio of the item bounds minus
+  // the header of window margin.
+  EXPECT_NEAR(shadow_ratio(wide_item), item_ratio(wide_item), 0.01f);
+  EXPECT_NEAR(shadow_ratio(tall_item), item_ratio(tall_item), 0.01f);
   EXPECT_NEAR(shadow_ratio(normal_item), 1.f, 0.01f);
 
   // Verify all the shadows are within the bounds of their respective item
@@ -2723,8 +2656,8 @@ TEST_P(OverviewSessionTest, ShadowBounds) {
   EXPECT_TRUE(contains(tall_widget, tall_item));
   EXPECT_TRUE(contains(normal_widget, normal_item));
 
-  EXPECT_NEAR(shadow_ratio(wide_item), 4.f, 0.01f);
-  EXPECT_NEAR(shadow_ratio(tall_item), 0.25f, 0.01f);
+  EXPECT_NEAR(shadow_ratio(wide_item), item_ratio(wide_item), 0.01f);
+  EXPECT_NEAR(shadow_ratio(tall_item), item_ratio(tall_item), 0.01f);
   EXPECT_NEAR(shadow_ratio(normal_item), 1.f, 0.01f);
 
   // Test that leaving overview mode cleans up properly.
@@ -2866,32 +2799,6 @@ TEST_P(OverviewSessionTest, PositionWindows) {
   EXPECT_EQ(bounds1, item1->target_bounds());
   EXPECT_EQ(bounds2, item2->target_bounds());
   EXPECT_NE(bounds3, item3->target_bounds());
-}
-
-// Tests that overview mode is entered with kWindowDragged mode when a window is
-// dragged from the top of the screen. For the purposes of this test, we use a
-// browser window.
-TEST_P(OverviewSessionTest, DraggingFromTopAnimation) {
-  EnterTabletMode();
-  std::unique_ptr<views::Widget> widget(CreateTestWidget(
-      nullptr, desks_util::GetActiveDeskContainerId(), gfx::Rect(200, 200)));
-  widget->GetNativeWindow()->SetProperty(aura::client::kTopViewInset, 20);
-
-  // Drag from the the top of the app to enter overview.
-  ui::GestureEvent event(0, 0, 0, base::TimeTicks(),
-                         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN));
-  WindowState* window_state = WindowState::Get(widget->GetNativeWindow());
-  window_state->CreateDragDetails(event.location_f(), HTCAPTION,
-                                  ::wm::WINDOW_MOVE_SOURCE_TOUCH);
-  auto drag_controller = std::make_unique<TabletModeWindowResizer>(
-      window_state, std::make_unique<TabletModeBrowserWindowDragDelegate>());
-  ui::Event::DispatcherApi dispatch_helper(&event);
-  dispatch_helper.set_target(widget->GetNativeWindow());
-  drag_controller->Drag(event.location_f(), event.flags());
-
-  ASSERT_TRUE(InOverviewSession());
-  EXPECT_EQ(OverviewEnterExitType::kImmediateEnter,
-            GetOverviewSession()->enter_exit_overview_type());
 }
 
 // Tests the grid bounds are as expected with different shelf auto hide
@@ -3150,8 +3057,9 @@ TEST_P(OverviewSessionTest, AccessibilityFocusAnnotator) {
   // flip for Save & Recall has truly landed, remove the `NoSavedDesks` variant
   // of this test below and remove the Save & Recall feature check at the start
   // of this test.
-  if (GetParam() || !saved_desk_util::IsDeskSaveAndRecallEnabled())
+  if (GetParam() || !saved_desk_util::IsSavedDesksEnabled()) {
     return;
+  }
 
   auto window3 = CreateTestWindow(gfx::Rect(100, 100));
   auto window2 = CreateTestWindow(gfx::Rect(100, 100));
@@ -3202,8 +3110,9 @@ TEST_P(OverviewSessionTest, AccessibilityFocusAnnotator) {
 TEST_P(OverviewSessionTest, AccessibilityFocusAnnotatorNoSavedDesks) {
   // If saved desk is enabled, the a11y order changes. This is tested in
   // the saved desk test suite.
-  if (GetParam() || saved_desk_util::IsDeskSaveAndRecallEnabled())
+  if (GetParam() || saved_desk_util::IsSavedDesksEnabled()) {
     return;
+  }
 
   auto window3 = CreateTestWindow(gfx::Rect(100, 100));
   auto window2 = CreateTestWindow(gfx::Rect(100, 100));
@@ -3294,6 +3203,18 @@ TEST_P(OverviewSessionTest, ClosingTransientTree) {
 
   EXPECT_TRUE(widget_observer.widget_destroyed());
   EXPECT_TRUE(child_widget_observer.widget_destroyed());
+}
+
+// Tests that enabling or disabling ChromeVox works in overview mode. Regression
+// test for b/270929836.
+TEST_P(OverviewSessionTest, ToggleChromeVox) {
+  ToggleOverview();
+  PressAndReleaseKey(ui::VKEY_Z, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN);
+  EXPECT_TRUE(
+      Shell::Get()->accessibility_controller()->spoken_feedback().enabled());
+  PressAndReleaseKey(ui::VKEY_Z, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN);
+  EXPECT_FALSE(
+      Shell::Get()->accessibility_controller()->spoken_feedback().enabled());
 }
 
 TEST_P(OverviewSessionTest, FrameThrottlingBrowser) {
@@ -3412,8 +3333,8 @@ TEST_P(OverviewSessionTest, FrameThrottlingArc) {
   }
 
   std::vector<aura::Window*> windows_to_throttle(window_count, nullptr);
-  std::transform(windows.begin(), windows.end(), windows_to_throttle.begin(),
-                 [](std::unique_ptr<aura::Window>& w) { return w.get(); });
+  base::ranges::transform(windows, windows_to_throttle.begin(),
+                          &std::unique_ptr<aura::Window>::get);
   EXPECT_CALL(observer,
               OnThrottlingStarted(
                   testing::UnorderedElementsAreArray(windows_to_throttle),
@@ -3702,11 +3623,11 @@ class TabletModeOverviewSessionTest : public OverviewTestBase {
   }
 
   void DispatchLongPress(OverviewItem* item) {
-    ui::TouchEvent long_press(
-        ui::ET_GESTURE_LONG_PRESS,
-        gfx::ToRoundedPoint(item->target_bounds().CenterPoint()),
-        base::TimeTicks::Now(),
-        ui::PointerDetails(ui::EventPointerType::kTouch));
+    const gfx::Point point =
+        gfx::ToRoundedPoint(item->target_bounds().CenterPoint());
+    ui::GestureEvent long_press(
+        point.x(), point.y(), 0, base::TimeTicks::Now(),
+        ui::GestureEventDetails(ui::ET_GESTURE_LONG_PRESS));
     GetEventGenerator()->Dispatch(&long_press);
   }
 
@@ -3885,7 +3806,8 @@ TEST_F(TabletModeOverviewSessionTest, WindowDestroyWhileScrolling) {
 
 // Tests the windows are stacked correctly when entering or exiting splitview
 // while the new overivew layout is enabled.
-TEST_F(TabletModeOverviewSessionTest, StackingOrderSplitviewWindow) {
+// TODO(b/278952025): Fix this test to match the common user CUJs.
+TEST_F(TabletModeOverviewSessionTest, StackingOrderSplitViewWindow) {
   std::unique_ptr<aura::Window> window1 = CreateTestWindow();
   std::unique_ptr<aura::Window> window2 = CreateUnsnappableWindow();
   std::unique_ptr<aura::Window> window3 = CreateTestWindow();
@@ -3893,8 +3815,8 @@ TEST_F(TabletModeOverviewSessionTest, StackingOrderSplitviewWindow) {
   ToggleOverview();
   ASSERT_TRUE(InOverviewSession());
 
-  // Snap |window1| to the left and exit overview. |window3| should have higher
-  // z-order now, since it is the MRU window.
+  // Snap `window1` to the left and exit overview, `window3` will be snapped.
+  // `window3` will be stacked on top.
   split_view_controller()->SnapWindow(
       window1.get(), SplitViewController::SnapPosition::kPrimary);
   ToggleOverview();
@@ -3902,14 +3824,14 @@ TEST_F(TabletModeOverviewSessionTest, StackingOrderSplitviewWindow) {
             split_view_controller()->state());
   ASSERT_TRUE(IsStackedBelow(window1.get(), window3.get()));
 
-  // Test that on entering overview, |window3| is of a lower z-order, so that
-  // when we scroll the grid, it will be seen under |window1|.
+  // Test that on entering overview, `window3` is also of a lower z-order, so
+  // that when we scroll the grid, it will be seen under `window1`.
   ToggleOverview();
   EXPECT_TRUE(IsStackedBelow(window3.get(), window1.get()));
 
-  // Test that |window2| has a cannot snap widget indicating that it cannot be
-  // snapped, and that both |window2| and the widget are lower z-order than
-  // |window1|.
+  // Test that `window2` has a cannot snap widget indicating that it cannot be
+  // snapped, and that both `window2` and the widget are lower z-order than
+  // `window1`.
   views::Widget* cannot_snap_widget =
       static_cast<views::Widget*>(GetOverviewItemForWindow(window2.get())
                                       ->cannot_snap_widget_for_testing());
@@ -3919,10 +3841,10 @@ TEST_F(TabletModeOverviewSessionTest, StackingOrderSplitviewWindow) {
   EXPECT_TRUE(IsStackedBelow(window2.get(), window1.get()));
   EXPECT_TRUE(IsStackedBelow(cannot_snap_window, window1.get()));
 
-  // Test that on exiting overview, |window3| becomes activated, so it returns
-  // to being higher on the z-order than |window1|.
+  // Test that on exiting overview, the relative stacking order between
+  // `window3` and `window1` remains unchanged.
   ToggleOverview();
-  EXPECT_TRUE(IsStackedBelow(window1.get(), window3.get()));
+  EXPECT_TRUE(IsStackedBelow(window3.get(), window1.get()));
 }
 
 // Tests the windows are remain stacked underneath the split view window after
@@ -4552,7 +4474,7 @@ class SplitViewOverviewSessionTest : public OverviewTestBase {
       return;
     split_view_controller()->StopAndShoveAnimatedDivider();
     split_view_controller()->EndResizeWithDividerImpl();
-    split_view_controller()->EndTabletSplitViewAfterResizingIfAppropriate();
+    split_view_controller()->EndSplitViewAfterResizingAtEdgeIfAppropriate();
   }
 
   void EndSplitView() { split_view_controller()->EndSplitView(); }
@@ -6393,7 +6315,8 @@ TEST_F(SplitViewOverviewSessionTest, SwapWindowAndOverviewGrid) {
                     SplitViewController::SnapPosition::kSecondary,
                     /*window_for_minimum_size=*/nullptr)));
 
-  split_view_controller()->SwapWindows();
+  split_view_controller()->SwapWindows(
+      SplitViewController::SwapWindowsSource::kDoubleTap);
   EXPECT_EQ(split_view_controller()->state(),
             SplitViewController::State::kSecondarySnapped);
   EXPECT_EQ(split_view_controller()->default_snap_position(),

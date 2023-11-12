@@ -18,6 +18,7 @@
 
 // SETTERS
 - (void)setStatusFromSetting:(ATBSettingType)settingType;
+- (void)setRulesGroupApplying:(BOOL)isApplying;
 
 @end
 

@@ -422,7 +422,7 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   bool CouldPlayIfEnoughData() override;
   bool IsMediaPlayerRendererClient() override;
   void StopForDemuxerReset() override;
-  bool RestartForHls() override;
+  void RestartForHls() override;
   bool IsSecurityOriginCryptographic() const override;
   void UpdateLoadedUrl(const GURL& url) override;
 
@@ -436,6 +436,11 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
                      const std::string& language,
                      bool is_first_track) override;
 #endif  // BUILDFLAG(ENABLE_FFMPEG)
+
+#if BUILDFLAG(ENABLE_HLS_DEMUXER)
+  base::SequenceBound<media::HlsDataSourceProvider> GetHlsDataSourceProvider()
+      override;
+#endif  // BUILDFLAG(ENABLE_HLS_DEMUXER)
 
   // Simplified watch time reporting.
   void OnSimpleWatchTimerTick();
@@ -1086,6 +1091,10 @@ class PLATFORM_EXPORT WebMediaPlayerImpl
   const bool should_pause_background_muted_audio_;
 
   bool was_suspended_for_frame_closed_ = false;
+
+  // Request pipeline to suspend. It should not block other signals after
+  // suspended.
+  bool pending_oneshot_suspend_ = false;
 
   base::CancelableOnceClosure have_enough_after_lazy_load_cb_;
 

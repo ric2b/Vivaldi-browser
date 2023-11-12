@@ -613,7 +613,7 @@ RenderWidgetTargetResult RenderWidgetHostInputEventRouter::FindViewAtLocation(
 
 void RenderWidgetHostInputEventRouter::RouteMouseEvent(
     RenderWidgetHostViewBase* root_view,
-    blink::WebMouseEvent* event,
+    const blink::WebMouseEvent* event,
     const ui::LatencyInfo& latency) {
   if (VivaldiEventHooks::HandleMouseEvent(root_view, *event))
     return;

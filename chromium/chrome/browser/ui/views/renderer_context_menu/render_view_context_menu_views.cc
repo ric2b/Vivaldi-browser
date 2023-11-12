@@ -267,7 +267,7 @@ bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
       *accel = ui::Accelerator(ui::VKEY_SPACE,
                                ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
       return true;
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
       *accel = ui::Accelerator(ui::VKEY_SPACE,
                                ui::EF_SHIFT_DOWN | ui::EF_COMMAND_DOWN);
       return true;
@@ -282,8 +282,7 @@ bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
       return false;
 #else
-      NOTREACHED();
-      return false;
+      NOTREACHED_NORETURN();
 #endif
     default:
       return false;
@@ -295,8 +294,7 @@ void RenderViewContextMenuViews::ExecuteCommand(int command_id,
   switch (command_id) {
     case IDC_WRITING_DIRECTION_DEFAULT:
       // WebKit's current behavior is for this menu item to always be disabled.
-      NOTREACHED();
-      break;
+      NOTREACHED_NORETURN();
 
     case IDC_WRITING_DIRECTION_RTL:
     case IDC_WRITING_DIRECTION_LTR: {
@@ -380,7 +378,13 @@ void RenderViewContextMenuViews::AppendPlatformEditableItems() {
 
 void RenderViewContextMenuViews::ExecOpenInReadAnything() {
   Browser* browser = GetBrowser();
+  if (!browser) {
+    return;
+  }
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  if (!browser_view) {
+    return;
+  }
   browser_view->side_panel_coordinator()->Show(
       SidePanelEntry::Id::kReadAnything,
       SidePanelUtil::SidePanelOpenTrigger::kReadAnythingContextMenu);

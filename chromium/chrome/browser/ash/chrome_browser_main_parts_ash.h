@@ -24,10 +24,6 @@ class ChromeKeyboardControllerClient;
 class ImageDownloaderImpl;
 
 namespace arc {
-namespace data_snapshotd {
-class ArcDataSnapshotdManager;
-}  // namespace data_snapshotd
-
 class ArcServiceLauncher;
 }  // namespace arc
 
@@ -65,6 +61,7 @@ namespace ash {
 class AccessibilityEventRewriterDelegateImpl;
 class ArcKioskAppManager;
 class AudioSurveyHandler;
+class AuthParts;
 class BluetoothPrefStateObserver;
 class BulkPrintersCalculatorFactory;
 class CameraGeneralSurveyHandler;
@@ -80,11 +77,13 @@ class IdleActionWarningObserver;
 class LoginScreenExtensionsStorageCleaner;
 class LowDiskNotification;
 class AuthMetricsRecorder;
+class MultiCaptureLoginNotification;
 class MultiCaptureNotification;
 class NetworkChangeManagerClient;
 class NetworkPrefStateObserver;
 class NetworkThrottlingObserver;
 class MemoryMetrics;
+class MisconfiguredUserCleaner;
 class PowerMetricsReporter;
 class RendererFreezer;
 class SessionTerminationManager;
@@ -220,6 +219,8 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<WebKioskAppManager> web_kiosk_app_manager_;
   std::unique_ptr<KioskAppManager> kiosk_app_manager_;
   std::unique_ptr<MultiCaptureNotification> multi_capture_notification_;
+  std::unique_ptr<MultiCaptureLoginNotification>
+      multi_capture_login_notification_;
 
   std::unique_ptr<ShortcutMappingPrefService> shortcut_mapping_pref_service_;
   std::unique_ptr<ChromeKeyboardControllerClient>
@@ -281,9 +282,6 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<GnubbyNotification> gnubby_notification_;
   std::unique_ptr<system::BreakpadConsentWatcher> breakpad_consent_watcher_;
 
-  std::unique_ptr<arc::data_snapshotd::ArcDataSnapshotdManager>
-      arc_data_snapshotd_manager_;
-
   std::unique_ptr<platform_keys::KeyPermissionsManager>
       system_token_key_permissions_manager_;
 
@@ -304,9 +302,12 @@ class ChromeBrowserMainPartsAsh : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<traffic_counters::TrafficCountersHandler>
       traffic_counters_handler_;
   std::unique_ptr<ash::AuthMetricsRecorder> auth_metrics_recorder_;
+  std::unique_ptr<ash::AuthParts> auth_parts_;
 
   std::unique_ptr<video_conference::VideoConferenceManagerClientImpl>
       video_conference_manager_client_;
+
+  std::unique_ptr<MisconfiguredUserCleaner> misconfigured_user_cleaner_;
 
   base::WeakPtrFactory<ChromeBrowserMainPartsAsh> weak_ptr_factory_{this};
 };

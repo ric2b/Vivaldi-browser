@@ -9,6 +9,7 @@
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/constants/app_types.h"
 #include "ash/public/cpp/app_types_util.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/arc/accessibility/accessibility_helper_instance_remote_proxy.h"
 #include "chrome/browser/ash/arc/accessibility/arc_accessibility_test_util.h"
 #include "chrome/browser/ash/arc/accessibility/arc_accessibility_util.h"
@@ -36,7 +37,7 @@ class ArcAccessibilityTreeTrackerTest : public ChromeViewsTestBase {
                                       accessibility_helper_instance,
                                       arc_bridge_service) {}
 
-    aura::Window* focused_window_ = nullptr;
+    raw_ptr<aura::Window, ExperimentalAsh> focused_window_ = nullptr;
     absl::optional<bool> last_dispatched_talkback_state_;
 
     void TrackWindow(aura::Window* window) {
@@ -157,18 +158,26 @@ TEST_F(ArcAccessibilityTreeTrackerTest, WindowIdTaskIdMapping) {
   ASSERT_EQ(0U, key_to_tree.size());
 
   // Set task ID 1 to the window.
-  // Also, set a11y window id to the window.
+  // Also, set a11y window id to a child window.
   tree_tracker.TrackWindow(test_window.get());
   exo::SetShellApplicationId(test_window.get(), "org.chromium.arc.1");
-  exo::SetShellClientAccessibilityId(test_window.get(), 10);
+
+  std::unique_ptr<aura::Window> child_window1 =
+      CreateWindow(ash::AppType::NON_APP);
+  exo::SetShellClientAccessibilityId(child_window1.get(), 10);
+  test_window->AddChild(child_window1.get());
 
   AXTreeSourceArc* tree1 =
       tree_tracker.OnAccessibilityEvent(event.Clone().get());
   ASSERT_NE(nullptr, tree1);
   ASSERT_EQ(1U, key_to_tree.size());
 
-  // In the same task, update window id.
-  exo::SetShellClientAccessibilityId(test_window.get(), 11);
+  // Add another child window with different id. (and call AddChild first.)
+  std::unique_ptr<aura::Window> child_window2 =
+      CreateWindow(ash::AppType::NON_APP);
+  test_window->AddChild(child_window2.get());
+  exo::SetShellClientAccessibilityId(child_window2.get(), 11);
+
   event->window_id = 11;
 
   AXTreeSourceArc* tree2 =
@@ -195,7 +204,10 @@ TEST_F(ArcAccessibilityTreeTrackerTest, WindowIdTaskIdMapping) {
 
   std::unique_ptr<aura::Window> another_window = CreateWindow();
   exo::SetShellApplicationId(another_window.get(), "org.chromium.arc.2");
-  exo::SetShellClientAccessibilityId(another_window.get(), 20);
+  std::unique_ptr<aura::Window> another_child_window =
+      CreateWindow(ash::AppType::NON_APP);
+  exo::SetShellClientAccessibilityId(another_child_window.get(), 20);
+  another_window->AddChild(another_child_window.get());
 
   tree_tracker.TrackWindow(another_window.get());
 
@@ -232,9 +244,13 @@ TEST_F(ArcAccessibilityTreeTrackerTest, TrackArcGhostWindow) {
 
   // A ghost window is replaced with an actual ARC window.
   exo::SetShellApplicationId(test_window.get(), "org.chromium.arc.1");
-  exo::SetShellClientAccessibilityId(test_window.get(), 10);
   test_window->SetProperty(aura::client::kAppType,
                            static_cast<int>(ash::AppType::ARC_APP));
+
+  std::unique_ptr<aura::Window> child_window =
+      CreateWindow(ash::AppType::NON_APP);
+  exo::SetShellClientAccessibilityId(child_window.get(), 10);
+  test_window->AddChild(child_window.get());
 
   tree_tracker.OnAccessibilityEvent(event.Clone().get());
   ASSERT_EQ(1U, key_to_tree.size());

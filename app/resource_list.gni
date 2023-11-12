@@ -138,6 +138,13 @@ if(!is_ios) {
       },
     ],
     [
+      "//ui/resources:webui_resources_grd",
+      "//vivaldi/app/resources/webui_resources/vivaldi_webui_resources.grd",
+      {
+        have_strings_flag = false
+      },
+    ],
+    [
       "//components/strings:components_chromium_strings",
       "//vivaldi/app/resources/components/vivaldi_components.grd",
       {
@@ -157,6 +164,18 @@ if(!is_ios) {
       },
     ],
   ]
+
+  if(!is_android) {
+    CHROMIUM_VIVALDI_RESOURCE_LIST += [
+      [
+        "//chrome/browser/resources/signin/profile_picker:resources",
+        "//vivaldi/app/resources/profile_picker/vivaldi_profile_picker.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+    ]
+  }
 }
 
 ANDROID_VIVALDI_RESOURCE_LIST = [
@@ -242,6 +261,72 @@ IOS_VIVALDI_RESOURCE_LIST = [
       vivaldi_file_prefix="vivaldi_ios_strings_"
       add_mobile_locales = true
       extra_locale=["af"]
+    },
+  ],
+  [
+    "//ios/chrome/search_widget_extension/strings:ios_search_widget_extension_google_chrome_strings",
+    "//vivaldi/app/resources/ios_search_extension_google_chrome_strings/vivaldi_ios_search_widget_extension_google_chrome_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_search_widget_extension_google_chrome_strings_"
+      source = "ios_search_widget_extension_google_chrome_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_search_widget_extension_google_chrome_strings_"
+    },
+  ],
+  [
+    "//ios/chrome/search_widget_extension/strings:ios_search_widget_extension_strings",
+    "//vivaldi/app/resources/ios_search_extension_strings/vivaldi_ios_search_widget_extension_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_search_widget_extension_strings_"
+      source = "ios_search_widget_extension_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_search_widget_extension_strings_"
+    },
+  ],
+  [
+    "//ios/chrome/widget_kit_extension/strings:strings",
+    "//vivaldi/app/resources/ios_widget_kit_extension_strings/vivaldi_ios_widget_kit_extension_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_widget_kit_extension_strings_"
+      source = "ios_widget_kit_extension_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_widget_kit_extension_strings_"
+    },
+  ],
+  [
+    "//ios/chrome/content_widget_extension/strings:ios_content_widget_extension_google_chrome_strings",
+    "//vivaldi/app/resources/ios_content_extension_strings/vivaldi_ios_content_widget_extension_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_content_widget_extension_google_chrome_strings_"
+      source = "ios_content_widget_extension_google_chrome_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_content_widget_extension_google_chrome_strings_"
+    },
+  ],
+  [
+    "//ios/chrome/share_extension/strings:strings",
+    "//vivaldi/app/resources/ios_share_extension_strings/vivaldi_ios_share_extension_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_share_extension_strings_"
+      source = "ios_share_extension_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_share_extension_strings_"
+    },
+  ],
+  [
+    "//ios/chrome/credential_provider_extension/strings:strings",
+    "//vivaldi/app/resources/ios_credential_extension_strings/vivaldi_ios_credential_provider_extension_strings.grd",
+    {
+      translation_dir_setting = "resources"
+      pak_file_prefix="ios_credential_provider_extension_strings_"
+      source = "ios_credential_provider_extension_strings.grd"
+      vivaldi_translation_dir_setting = "strings"
+      vivaldi_file_prefix="vivaldi_ios_credential_provider_extension_strings_"
     },
   ],
 ]

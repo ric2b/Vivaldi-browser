@@ -46,6 +46,22 @@
 
 namespace blink {
 
+namespace {
+
+String CoopReportOnlyErrorMessage(const String& property_name) {
+  String call;
+  if (property_name == "named") {
+    call = "window[\"name\"]";
+  } else if (property_name == "indexed") {
+    call = "window[i]";
+  } else {
+    call = "window." + property_name;
+  }
+  return "Cross-Origin-Opener-Policy policy would block the " + call + " call.";
+}
+
+}  // namespace
+
 DOMWindow::DOMWindow(Frame& frame)
     : frame_(frame),
       window_proxy_manager_(frame.GetWindowProxyManager()),
@@ -627,7 +643,11 @@ void DOMWindow::ReportCoopAccess(const char* property_name) {
         location->Url() ? location->Url() : "", location->LineNumber(),
         location->ColumnNumber());
 
-    // TODO(https://crbug.com/1124251): Notify Devtool about the access attempt.
+    accessing_window->GetFrameConsole()->AddMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kJavaScript,
+            mojom::blink::ConsoleMessageLevel::kError,
+            CoopReportOnlyErrorMessage(property_name), location->Clone()));
 
     // If the reporting document hasn't specified any network report
     // endpoint(s), then it is likely not interested in receiving
@@ -783,6 +803,9 @@ void DOMWindow::DoPostMessage(scoped_refptr<SerializedScriptValue> message,
     } else if (capability_list.Contains("fullscreen")) {
       delegated_capability =
           mojom::blink::DelegatedCapability::kFullscreenRequest;
+    } else if (capability_list.Contains("display-capture")) {
+      delegated_capability =
+          mojom::blink::DelegatedCapability::kDisplayCaptureRequest;
     } else {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kNotSupportedError,

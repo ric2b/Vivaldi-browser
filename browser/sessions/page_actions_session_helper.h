@@ -26,8 +26,8 @@ class PageActionsSessionHelper : public page_actions::Service::Observer,
   void OnProfileWillBeDestroyed(Profile* profile) override;
 
  private:
-  SessionService* session_service_;
-  Profile* profile_;
+  const raw_ptr<SessionService> session_service_;
+  raw_ptr<Profile> profile_;
 };
 
 #endif  // BROWSER_SESSIONS_PAGE_ACTIONS_SESSION_HELPER_H_

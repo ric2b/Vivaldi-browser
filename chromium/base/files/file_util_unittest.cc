@@ -384,6 +384,58 @@ void GetIsInheritable(FILE* stream, bool* is_inheritable) {
 #endif
 }
 
+#if BUILDFLAG(IS_POSIX)
+class ScopedWorkingDirectory {
+ public:
+  explicit ScopedWorkingDirectory(const FilePath& new_working_dir) {
+    CHECK(base::GetCurrentDirectory(&original_working_directory_));
+    CHECK(base::SetCurrentDirectory(new_working_dir));
+  }
+
+  ~ScopedWorkingDirectory() {
+    CHECK(base::SetCurrentDirectory(original_working_directory_));
+  }
+
+ private:
+  base::FilePath original_working_directory_;
+};
+
+TEST_F(FileUtilTest, MakeAbsoluteFilePathNoResolveSymbolicLinks) {
+  FilePath cwd;
+  ASSERT_TRUE(GetCurrentDirectory(&cwd));
+  const std::pair<FilePath, absl::optional<FilePath>> kExpectedResults[]{
+      {FilePath(), absl::nullopt},
+      {FilePath("."), cwd},
+      {FilePath(".."), cwd.DirName()},
+      {FilePath("a/.."), cwd},
+      {FilePath("a/b/.."), cwd.Append(FPL("a"))},
+      {FilePath("/tmp/../.."), FilePath("/")},
+      {FilePath("/tmp/../"), FilePath("/")},
+      {FilePath("/tmp/a/b/../c/../.."), FilePath("/tmp")},
+      {FilePath("/././tmp/./a/./b/../c/./../.."), FilePath("/tmp")},
+      {FilePath("/.././../tmp"), FilePath("/tmp")},
+      {FilePath("/..///.////..////tmp"), FilePath("/tmp")},
+      {FilePath("//..///.////..////tmp"), FilePath("//tmp")},
+      {FilePath("///..///.////..////tmp"), FilePath("/tmp")},
+  };
+
+  for (auto& expected_result : kExpectedResults) {
+    EXPECT_EQ(MakeAbsoluteFilePathNoResolveSymbolicLinks(expected_result.first),
+              expected_result.second);
+  }
+
+  // Test that MakeAbsoluteFilePathNoResolveSymbolicLinks() returns an empty
+  // path if GetCurrentDirectory() fails.
+  const FilePath temp_dir_path = temp_dir_.GetPath();
+  ScopedWorkingDirectory scoped_cwd(temp_dir_path);
+  // Delete the cwd so that GetCurrentDirectory() fails.
+  ASSERT_TRUE(temp_dir_.Delete());
+  ASSERT_FALSE(
+      MakeAbsoluteFilePathNoResolveSymbolicLinks(FilePath("relative_file_path"))
+          .has_value());
+}
+#endif  // BUILDFLAG(IS_POSIX)
+
 TEST_F(FileUtilTest, FileAndDirectorySize) {
   // Create three files of 20, 30 and 3 chars (utf8). ComputeDirectorySize
   // should return 53 bytes.
@@ -996,6 +1048,58 @@ TEST_F(FileUtilTest, CreateAndReadSymlinks) {
   EXPECT_FALSE(ReadSymbolicLink(link_to, &result));
   FilePath missing = temp_dir_.GetPath().Append(FPL("missing"));
   EXPECT_FALSE(ReadSymbolicLink(missing, &result));
+}
+
+TEST_F(FileUtilTest, CreateAndReadRelativeSymlinks) {
+  FilePath link_from = temp_dir_.GetPath().Append(FPL("from_file"));
+  FilePath filename_link_to("to_file");
+  FilePath link_to = temp_dir_.GetPath().Append(filename_link_to);
+  FilePath link_from_in_subdir =
+      temp_dir_.GetPath().Append(FPL("subdir")).Append(FPL("from_file"));
+  FilePath link_to_in_subdir = FilePath(FPL("..")).Append(filename_link_to);
+  CreateTextFile(link_to, bogus_content);
+
+  ASSERT_TRUE(CreateDirectory(link_from_in_subdir.DirName()));
+  ASSERT_TRUE(CreateSymbolicLink(link_to_in_subdir, link_from_in_subdir));
+
+  ASSERT_TRUE(CreateSymbolicLink(filename_link_to, link_from))
+      << "Failed to create file symlink.";
+
+  // If we created the link properly, we should be able to read the contents
+  // through it.
+  EXPECT_EQ(bogus_content, ReadTextFile(link_from));
+  EXPECT_EQ(bogus_content, ReadTextFile(link_from_in_subdir));
+
+  FilePath result;
+  ASSERT_TRUE(ReadSymbolicLink(link_from, &result));
+  EXPECT_EQ(filename_link_to.value(), result.value());
+
+  absl::optional<FilePath> absolute_link = ReadSymbolicLinkAbsolute(link_from);
+  ASSERT_TRUE(absolute_link);
+  EXPECT_EQ(link_to.value(), absolute_link->value());
+
+  absolute_link = ReadSymbolicLinkAbsolute(link_from_in_subdir);
+  ASSERT_TRUE(absolute_link);
+  EXPECT_EQ(link_to.value(), absolute_link->value());
+
+  // Link to a directory.
+  link_from = temp_dir_.GetPath().Append(FPL("from_dir"));
+  filename_link_to = FilePath("to_dir");
+  link_to = temp_dir_.GetPath().Append(filename_link_to);
+  ASSERT_TRUE(CreateDirectory(link_to));
+  ASSERT_TRUE(CreateSymbolicLink(filename_link_to, link_from))
+      << "Failed to create relative directory symlink.";
+
+  ASSERT_TRUE(ReadSymbolicLink(link_from, &result));
+  EXPECT_EQ(filename_link_to.value(), result.value());
+
+  absolute_link = ReadSymbolicLinkAbsolute(link_from);
+  ASSERT_TRUE(absolute_link);
+  EXPECT_EQ(link_to.value(), absolute_link->value());
+
+  // Test failures.
+  EXPECT_FALSE(CreateSymbolicLink(link_to, link_to));
+  EXPECT_FALSE(ReadSymbolicLink(link_to, &result));
 }
 
 // The following test of NormalizeFilePath() require that we create a symlink.
@@ -2905,6 +3009,24 @@ TEST_F(FileUtilTest, FILEToFile) {
   EXPECT_EQ(file.GetLength(), 5L);
 }
 
+#if BUILDFLAG(IS_WIN)
+TEST_F(FileUtilTest, GetSecureSystemTemp) {
+  FilePath secure_system_temp;
+  ASSERT_EQ(GetSecureSystemTemp(&secure_system_temp), !!::IsUserAnAdmin());
+  if (!::IsUserAnAdmin()) {
+    return;
+  }
+
+  FilePath dir_windows;
+  ASSERT_TRUE(PathService::Get(DIR_WINDOWS, &dir_windows));
+  FilePath dir_program_files;
+  ASSERT_TRUE(PathService::Get(DIR_PROGRAM_FILES, &dir_program_files));
+
+  ASSERT_TRUE((dir_windows.AppendASCII("SystemTemp") == secure_system_temp) ||
+              (dir_program_files == secure_system_temp));
+}
+#endif  // BUILDFLAG(IS_WIN)
+
 TEST_F(FileUtilTest, CreateNewTempDirectoryTest) {
   FilePath temp_dir;
   ASSERT_TRUE(CreateNewTempDirectory(FilePath::StringType(), &temp_dir));
@@ -2912,9 +3034,9 @@ TEST_F(FileUtilTest, CreateNewTempDirectoryTest) {
 
 #if BUILDFLAG(IS_WIN)
   FilePath expected_parent_dir;
-  EXPECT_TRUE(PathService::Get(
-      ::IsUserAnAdmin() ? int{DIR_PROGRAM_FILES} : int{DIR_TEMP},
-      &expected_parent_dir));
+  if (!GetSecureSystemTemp(&expected_parent_dir)) {
+    EXPECT_TRUE(PathService::Get(DIR_TEMP, &expected_parent_dir));
+  }
   EXPECT_TRUE(expected_parent_dir.IsParent(temp_dir));
 #endif  // BUILDFLAG(IS_WIN)
 

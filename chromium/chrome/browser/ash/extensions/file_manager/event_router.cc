@@ -22,6 +22,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/single_thread_task_runner.h"
@@ -101,8 +102,9 @@ bool DoFilesSwaWindowsExist(Profile* profile) {
 bool IsRecoveryToolRunning(Profile* profile) {
   extensions::ExtensionPrefs* extension_prefs =
       extensions::ExtensionPrefs::Get(profile);
-  if (!extension_prefs)
+  if (!extension_prefs) {
     return false;
+  }
 
   const std::string kRecoveryToolIds[] = {
       "kkebgepbbgbcmghedmmdfcbdcodlkngh",  // Recovery tool staging
@@ -110,8 +112,9 @@ bool IsRecoveryToolRunning(Profile* profile) {
   };
 
   for (const auto& extension_id : kRecoveryToolIds) {
-    if (extension_prefs->IsExtensionRunning(extension_id))
+    if (extension_prefs->IsExtensionRunning(extension_id)) {
       return true;
+    }
   }
 
   return false;
@@ -232,8 +235,10 @@ bool ShouldShowNotificationForVolume(
     return false;
   }
 
-  if (device_event_router.is_resuming() || device_event_router.is_starting_up())
+  if (device_event_router.is_resuming() ||
+      device_event_router.is_starting_up()) {
     return false;
+  }
 
   // Do not attempt to open File Manager while the login is in progress or
   // the screen is locked or running in kiosk app mode and make sure the file
@@ -246,8 +251,9 @@ bool ShouldShowNotificationForVolume(
   }
 
   // Do not pop-up the File Manager, if the recovery tool is running.
-  if (IsRecoveryToolRunning(profile))
+  if (IsRecoveryToolRunning(profile)) {
     return false;
+  }
 
   // If the disable-default-apps flag is on, the Files app is not opened
   // automatically on device mount not to obstruct the manual test.
@@ -315,7 +321,7 @@ class DeviceEventRouterImpl : public DeviceEventRouter {
   }
 
  private:
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
 };
 
 class DriveFsEventRouterImpl : public DriveFsEventRouter {
@@ -411,8 +417,9 @@ class DriveFsEventRouterImpl : public DriveFsEventRouter {
     extensions::EventRouter::Get(profile_)->BroadcastEvent(std::move(event));
   }
 
-  Profile* const profile_;
-  const std::map<base::FilePath, std::unique_ptr<FileWatcher>>* const
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
+  const raw_ptr<const std::map<base::FilePath, std::unique_ptr<FileWatcher>>,
+                ExperimentalAsh>
       file_watchers_;
 };
 
@@ -455,12 +462,13 @@ void RecordFileSystemProviderMountMetrics(const Volume& volume) {
         GetUmaForFileSystemProvider();
     FileSystemProviderMountedTypeMap::iterator sample =
         fsp_sample_map.find(fsp_key);
-    if (sample != fsp_sample_map.end())
+    if (sample != fsp_sample_map.end()) {
       UMA_HISTOGRAM_ENUMERATION(kFileSystemProviderMountedMetricName,
                                 sample->second);
-    else
+    } else {
       UMA_HISTOGRAM_ENUMERATION(kFileSystemProviderMountedMetricName,
                                 FileSystemProviderMountedType::UNKNOWN);
+    }
   }
 }
 
@@ -551,13 +559,15 @@ void EventRouter::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   ash::TabletMode* tablet_mode = ash::TabletMode::Get();
-  if (tablet_mode)
+  if (tablet_mode) {
     tablet_mode->RemoveObserver(this);
+  }
 
   auto* intent_helper =
       arc::ArcIntentHelperBridge::GetForBrowserContext(profile_);
-  if (intent_helper)
+  if (intent_helper) {
     intent_helper->RemoveObserver(this);
+  }
 
   ash::system::TimezoneSettings::GetInstance()->RemoveObserver(this);
 
@@ -577,6 +587,7 @@ void EventRouter::Shutdown() {
       DriveIntegrationServiceFactory::FindForProfile(profile_);
   if (integration_service) {
     integration_service->RemoveObserver(this);
+    integration_service->RemoveObserver(drivefs_event_router_.get());
     integration_service->GetDriveFsHost()->RemoveObserver(
         drivefs_event_router_.get());
     integration_service->GetDriveFsHost()->set_dialog_handler({});
@@ -587,8 +598,9 @@ void EventRouter::Shutdown() {
     volume_manager->RemoveObserver(this);
     volume_manager->RemoveObserver(device_event_router_.get());
     auto* io_task_controller = volume_manager->io_task_controller();
-    if (io_task_controller)
+    if (io_task_controller) {
       io_task_controller->RemoveObserver(this);
+    }
   }
 
   chromeos::PowerManagerClient* const power_manager_client =
@@ -642,6 +654,7 @@ void EventRouter::ObserveEvents() {
       DriveIntegrationServiceFactory::FindForProfile(profile_);
   if (integration_service) {
     integration_service->AddObserver(this);
+    integration_service->AddObserver(drivefs_event_router_.get());
     integration_service->GetDriveFsHost()->AddObserver(
         drivefs_event_router_.get());
     integration_service->GetDriveFsHost()->set_dialog_handler(
@@ -657,6 +670,8 @@ void EventRouter::ObserveEvents() {
 
   auto file_manager_prefs_callback = base::BindRepeating(
       &EventRouter::OnFileManagerPrefsChanged, weak_factory_.GetWeakPtr());
+  pref_change_registrar_->Add(drive::prefs::kDriveFsBulkPinningEnabled,
+                              file_manager_prefs_callback);
   pref_change_registrar_->Add(drive::prefs::kDisableDriveOverCellular,
                               file_manager_prefs_callback);
   pref_change_registrar_->Add(drive::prefs::kDisableDrive,
@@ -689,17 +704,20 @@ void EventRouter::ObserveEvents() {
 
   auto* intent_helper =
       arc::ArcIntentHelperBridge::GetForBrowserContext(profile_);
-  if (intent_helper)
+  if (intent_helper) {
     intent_helper->AddObserver(this);
+  }
 
   auto* guest_os_share_path =
       guest_os::GuestOsSharePath::GetForProfile(profile_);
-  if (guest_os_share_path)
+  if (guest_os_share_path) {
     guest_os_share_path->AddObserver(this);
+  }
 
   ash::TabletMode* tablet_mode = ash::TabletMode::Get();
-  if (tablet_mode)
+  if (tablet_mode) {
     tablet_mode->AddObserver(this);
+  }
 
   auto* registry = guest_os::GuestOsService::GetForProfile(profile_)
                        ->MountProviderRegistry();
@@ -744,12 +762,14 @@ void EventRouter::RemoveFileWatch(const base::FilePath& local_path,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto iter = file_watchers_.find(local_path);
-  if (iter == file_watchers_.end())
+  if (iter == file_watchers_.end()) {
     return;
+  }
   // Remove the watcher if |local_path| is no longer watched by any extensions.
   iter->second->RemoveListener(listener_origin);
-  if (iter->second->GetListeners().empty())
+  if (iter->second->GetListeners().empty()) {
     file_watchers_.erase(iter);
+  }
 }
 
 void EventRouter::OnWatcherManagerNotification(
@@ -892,8 +912,9 @@ void EventRouter::OnVolumeMounted(ash::MountError error_code,
   // happen at shutdown. This should be removed after removing Drive mounting
   // code in addMount. (addMount -> OnFileSystemMounted -> OnVolumeMounted is
   // the only path to come here after Shutdown is called).
-  if (!profile_)
+  if (!profile_) {
     return;
+  }
 
   DispatchMountCompletedEvent(
       file_manager_private::MOUNT_COMPLETED_EVENT_TYPE_MOUNT, error_code,
@@ -999,8 +1020,9 @@ void EventRouter::SendCrostiniEvent(
   std::string file_system_name;
   std::string full_path;
   if (!util::ExtractMountNameFileSystemNameFullPath(
-          path, &mount_name, &file_system_name, &full_path))
+          path, &mount_name, &file_system_name, &full_path)) {
     return;
+  }
 
   const std::string event_name(
       file_manager_private::OnCrostiniChanged::kEventName);
@@ -1178,9 +1200,9 @@ void EventRouter::OnIOTaskStatus(const io_task::ProgressStatus& status) {
   // notifications for folders outside of those being watched by a file watcher.
   if (status.IsCompleted()) {
     std::set<std::pair<base::FilePath, url::Origin>> updated_paths;
-    if (status.destination_folder.is_valid()) {
-      updated_paths.emplace(status.destination_folder.virtual_path(),
-                            status.destination_folder.origin());
+    if (status.GetDestinationFolder().is_valid()) {
+      updated_paths.emplace(status.GetDestinationFolder().virtual_path(),
+                            status.GetDestinationFolder().origin());
     }
     for (const auto& source : status.sources) {
       updated_paths.emplace(source.url.virtual_path().DirName(),
@@ -1201,6 +1223,7 @@ void EventRouter::OnIOTaskStatus(const io_task::ProgressStatus& status) {
   event_status.task_id = status.task_id;
   event_status.type = GetIOTaskType(status.type);
   event_status.state = GetIOTaskState(status.state);
+  event_status.destination_volume_id = status.GetDestinationVolumeId();
   event_status.show_notification = status.show_notification;
 
   // Speedometer can produce infinite result which can't be serialized to JSON
@@ -1209,9 +1232,9 @@ void EventRouter::OnIOTaskStatus(const io_task::ProgressStatus& status) {
     event_status.remaining_seconds = status.remaining_seconds;
   }
 
-  if (status.destination_folder.is_valid()) {
+  if (status.GetDestinationFolder().is_valid()) {
     event_status.destination_name =
-        util::GetDisplayablePath(profile_, status.destination_folder)
+        util::GetDisplayablePath(profile_, status.GetDestinationFolder())
             .value_or(base::FilePath())
             .BaseName()
             .value();

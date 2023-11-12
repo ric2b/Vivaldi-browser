@@ -70,8 +70,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   static GuestViewBase* FromInstanceID(int owner_process_id, int instance_id);
 
   // Prefer using FromRenderFrameHost. See https://crbug.com/1362569.
-  static GuestViewBase* FromWebContents(
-      const content::WebContents* web_contents);
+  static GuestViewBase* FromWebContents(content::WebContents* web_contents);
 
   static GuestViewBase* FromRenderFrameHost(content::RenderFrameHost* rfh);
   static GuestViewBase* FromRenderFrameHostId(
@@ -375,6 +374,8 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
       const content::WebContents::CreateParams& create_params,
       int disposition) final;
   content::WebContents* GetOwnerWebContents() final;
+  base::WeakPtr<content::BrowserPluginGuestDelegate> GetGuestDelegateWeakPtr()
+      final;
 
   // WebContentsDelegate implementation.
   // Vivaldi-note;Was final, but changed for VB-11750.

@@ -212,7 +212,8 @@ class ScrollLatencyBrowserTest : public ContentBrowserTest {
 
 // Disabled due to flakiness https://crbug.com/1163246.
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    BUILDFLAG(IS_ANDROID)
+    BUILDFLAG(IS_ANDROID) ||                                         \
+    (BUILDFLAG(IS_CHROMEOS) && defined(ADDRESS_SANITIZER))
 #define MAYBE_MultipleWheelScroll DISABLED_MultipleWheelScroll
 #else
 #define MAYBE_MultipleWheelScroll MultipleWheelScroll
@@ -225,8 +226,11 @@ IN_PROC_BROWSER_TEST_F(ScrollLatencyBrowserTest, MAYBE_MultipleWheelScroll) {
   RunMultipleWheelScroll();
 }
 
-// Disabled due to flakiness https://crbug.com/1163246 and https://crbug.com/1349901
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
+// Disabled due to flakiness https://crbug.com/1163246
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID) || \
+    BUILDFLAG(IS_MAC) ||                                                 \
+    (BUILDFLAG(IS_CHROMEOS) &&                                           \
+     (!defined(NDEBUG) || defined(ADDRESS_SANITIZER)))
 #define MAYBE_MultipleWheelScrollOnMain DISABLED_MultipleWheelScrollOnMain
 #else
 #define MAYBE_MultipleWheelScrollOnMain MultipleWheelScrollOnMain
@@ -293,13 +297,8 @@ class ScrollLatencyScrollbarBrowserTest : public ScrollLatencyBrowserTest {
     // The following features need to be disabled:
     // - kOverlayScrollbar since overlay scrollbars are not hit-testable (thus
     // input is not routed to scrollbars).
-    // - kCompositorThreadedScrollbarScrolling since this feature is already
-    // tested by ScrollLatencyCompositedScrollbarBrowserTest. Hence, this
-    // current test can be used exclusively to test the main thread scrollbar
-    // path.
     scoped_feature_list_.InitWithFeaturesAndParameters(
-        {}, {features::kOverlayScrollbar,
-             features::kCompositorThreadedScrollbarScrolling});
+        {}, {features::kOverlayScrollbar});
   }
 
   ~ScrollLatencyScrollbarBrowserTest() override = default;
@@ -369,27 +368,6 @@ class ScrollLatencyScrollbarBrowserTest : public ScrollLatencyBrowserTest {
 #endif  // !BUILDFLAG(IS_ANDROID)
   }
 
-  virtual bool DoesScrollbarScrollOnMainThread() const { return true; }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-class ScrollLatencyCompositedScrollbarBrowserTest
-    : public ScrollLatencyScrollbarBrowserTest {
- public:
-  ScrollLatencyCompositedScrollbarBrowserTest() {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ScrollLatencyScrollbarBrowserTest::SetUpCommandLine(command_line);
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kCompositorThreadedScrollbarScrolling);
-  }
-
-  ~ScrollLatencyCompositedScrollbarBrowserTest() override {}
-
- protected:
-  bool DoesScrollbarScrollOnMainThread() const override { return false; }
-
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -399,7 +377,7 @@ class ScrollLatencyCompositedScrollbarBrowserTest
 #else
 #define MAYBE_ScrollbarThumbDragLatency ScrollbarThumbDragLatency
 #endif
-IN_PROC_BROWSER_TEST_F(ScrollLatencyCompositedScrollbarBrowserTest,
+IN_PROC_BROWSER_TEST_F(ScrollLatencyScrollbarBrowserTest,
                        MAYBE_ScrollbarThumbDragLatency) {
   LoadURL();
 

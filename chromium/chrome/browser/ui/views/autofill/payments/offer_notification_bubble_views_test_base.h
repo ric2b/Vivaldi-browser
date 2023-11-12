@@ -18,6 +18,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/test_autofill_manager_injector.h"
+#include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
@@ -67,8 +68,9 @@ class OfferNotificationBubbleViewsTestBase
   OfferNotificationBubbleViewsTestBase& operator=(
       const OfferNotificationBubbleViewsTestBase&) = delete;
 
-  // InProcessBrowserTest::SetUpOnMainThread:
+  // InProcessBrowserTest:
   void SetUpOnMainThread() override;
+  void TearDownOnMainThread() override;
 
   // OfferNotificationBubbleControllerImpl::ObserverForTest:
   void OnBubbleShown() override;
@@ -122,7 +124,9 @@ class OfferNotificationBubbleViewsTestBase
 
   AutofillOfferManager* GetOfferManager();
 
-  void WaitForObservedEvent() { event_waiter_->Wait(); }
+  [[nodiscard]] testing::AssertionResult WaitForObservedEvent() {
+    return event_waiter_->Wait();
+  }
 
   PersonalDataManager* personal_data() { return personal_data_; }
 
@@ -146,9 +150,10 @@ class OfferNotificationBubbleViewsTestBase
   std::string GetDefaultTestDetailsUrlString() const;
 
  private:
+  test::AutofillBrowserTestEnvironment autofill_test_environment_;
   TestAutofillManagerInjector<TestAutofillManager> autofill_manager_injector_;
-  raw_ptr<PersonalDataManager, DanglingUntriaged> personal_data_;
-  raw_ptr<CouponService, DanglingUntriaged> coupon_service_;
+  raw_ptr<PersonalDataManager> personal_data_ = nullptr;
+  raw_ptr<CouponService> coupon_service_ = nullptr;
   std::unique_ptr<autofill::EventWaiter<DialogEvent>> event_waiter_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };

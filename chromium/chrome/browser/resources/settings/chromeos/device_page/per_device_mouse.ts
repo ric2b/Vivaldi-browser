@@ -26,13 +26,13 @@ import {routes} from '../os_settings_routes.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route} from '../router.js';
 
-import {getInputDeviceSettingsProvider} from './input_device_mojo_interface_provider.js';
-import {InputDeviceSettingsProviderInterface, Mouse} from './input_device_settings_types.js';
+import {Mouse, MousePolicies} from './input_device_settings_types.js';
 import {getTemplate} from './per_device_mouse.html.js';
 
 const SettingsPerDeviceMouseElementBase = RouteObserverMixin(PolymerElement);
 
-class SettingsPerDeviceMouseElement extends SettingsPerDeviceMouseElementBase {
+export class SettingsPerDeviceMouseElement extends
+    SettingsPerDeviceMouseElementBase {
   static get is(): string {
     return 'settings-per-device-mouse';
   }
@@ -46,28 +46,21 @@ class SettingsPerDeviceMouseElement extends SettingsPerDeviceMouseElementBase {
       mice: {
         type: Array,
       },
+
+      mousePolicies: {
+        type: Object,
+      },
     };
   }
 
   protected mice: Mouse[];
-  private inputDeviceSettingsProvider: InputDeviceSettingsProviderInterface =
-      getInputDeviceSettingsProvider();
-
-  constructor() {
-    super();
-    this.fetchConnectedMice();
-  }
+  protected mousePolicies: MousePolicies;
 
   override currentRouteChanged(route: Route): void {
     // Does not apply to this page.
     if (route !== routes.PER_DEVICE_MOUSE) {
       return;
     }
-  }
-
-  private async fetchConnectedMice(): Promise<void> {
-    this.mice =
-        await this.inputDeviceSettingsProvider.getConnectedMouseSettings();
   }
 }
 

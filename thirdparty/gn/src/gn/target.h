@@ -294,6 +294,10 @@ class Target : public Item {
     return allow_circular_includes_from_;
   }
 
+  // Pool option
+  const LabelPtrPair<Pool>& pool() const { return pool_; }
+  void set_pool(LabelPtrPair<Pool> pool) { pool_ = std::move(pool); }
+
   const InheritedLibraries& inherited_libraries() const {
     return inherited_libraries_;
   }
@@ -494,6 +498,8 @@ class Target : public Item {
   UniqueVector<LabelConfigPair> public_configs_;
 
   std::set<Label> allow_circular_includes_from_;
+
+  LabelPtrPair<Pool> pool_;
 
   // Static libraries, shared libraries, and source sets from transitive deps
   // that need to be linked.

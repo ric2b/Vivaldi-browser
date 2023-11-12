@@ -29,6 +29,9 @@ tast_disabled_tests_from_chrome_all = [
   # https://crbug.com/1400636
   "graphics.ScreenshotCLI",
 
+  # https://crbug.com/1430723
+  "graphics.FPS.lacros",
+
   # b/251833060
   "peripherals.LaunchAppFromGuestSession.diagnostics",
 
@@ -68,6 +71,11 @@ tast_disabled_tests_from_chrome_all = [
   "security.SELinuxFilesARC",
   "security.NetworkListenersARC",
   "security.SELinuxProcessesARC",
+
+  # https://crbug.com/1430753
+  "mlservice.WebHandwritingRecognitionNotSupported",
+  "security.ChromeSandboxed",
+  "security.GPUSandboxed",
 
   # https://crbug.com/1282481
   "quicksettings.OpenSettings",
@@ -148,10 +156,6 @@ tast_disabled_tests_from_chrome_all = [
   # https://crbug.com/1312908
   "policy.DefaultNotificationsSetting",
 
-  # https://crbug.com/1318989
-  "assistant.StartupInSignedOutMode",
-  "login.ChangePassword",
-
   # https://crbug.com/1401568
   "assistant.Hotkey.search_plus_a",
 
@@ -230,23 +234,18 @@ tast_disabled_tests_from_chrome_all = [
   # https://crbug.com/1361078
   "shelf.HotseatSmoke",
 
-  # https://crbug.com/1362184
-  "dlp.DataLeakPreventionRulesListClipboardHistory.ash",
-  "dlp.DataLeakPreventionRulesListPrinting.ash_blocked",
-  "dlp.DataLeakPreventionRulesListScreenshot.ash_allowed",
-  "dlp.DataLeakPreventionRulesListScreenshot.ash_blocked",
-  "dlp.DataLeakPreventionRulesListClipboardOmni",
-  "dlp.DataLeakPreventionRulesListPrinting.ash_allowed",
-  "dlp.DataLeakPreventionRulesListPrinting.ash_blocked",
-  "dlp.DataLeakPreventionRulesListPrivacyScreen",
-  "dlp.DataLeakPreventionRulesListScreenshot.ash_allowed",
-  "dlp.DataLeakPreventionRulesListScreenshot.ash_blocked",
-
   # https://crbug.com/1365284
   "crostini.RestartApp.clamshell_stable",
 
   # https://crbug.com/1366112
   "crostini.ResizeInstallation.stable",
+
+  # b/271636906
+  "crostini.SecureCopyPaste.copy_wayland_bullseye_stable",
+  "crostini.SecureCopyPaste.copy_x11_bullseye_stable",
+  "crostini.SecureCopyPaste.paste_wayland_bullseye_stable",
+  "crostini.RestartIcon.buster_stable",
+  "crostini.RestartIcon.bullseye_stable",
 
   # https://crbug.com/1368586
   "u2fd.WebauthnUsingPassword.tpm1",
@@ -308,15 +307,33 @@ tast_disabled_tests_from_chrome_all = [
   "crostini.ResizeRestart.bullseye_stable",
   "crostini.ResizeRestart.buster_stable",
 
-  # https://crbug.com/1416610
-  "enterprise.ARCBlockedAppInstall",
-  "enterprise.ARCPlayStoreModeBlocklist",
+  # https://b/272357159
+  "crostini.AppAudacity.bullseye_clamshell_stable",
+  "crostini.AppAudacity.buster_clamshell_stable",
+  "crostini.AppEmacs.bullseye_clamshell_stable",
+  "crostini.AppEmacs.clamshell_stable",
+  "crostini.AppGedit.bullseye_clamshell_stable",
+  "crostini.AppGedit.clamshell_stable",
+  "crostini.AppGeditUnshareFolder.bullseye_clamshell_stable",
+  "crostini.AppGeditUnshareFolder.clamshell_stable",
+  "crostini.AppVscode.bullseye_clamshell_stable",
+  "crostini.AppVscode.clamshell_stable",
 
-  # http://b/270400217 
-  "login.AuthError",
+  # https://crbug.com/1427905
+  "inputs.VirtualKeyboardHandwriting.floating",
+  "inputs.VirtualKeyboardTypingUserMode.incognito",
+
+  # b/279351324: Until crrev.com/c/4475024 upreved.
+  "a11y.LiveCaption.lacros",
 
   # READ COMMENT AT TOP BEFORE ADDING NEW TESTS HERE.
 ]
+
+if (!is_official_build) {
+  # b/274341001: By design, ui.ChromeCrashEarly.strict fails on non-official
+  # builds.
+  tast_disabled_tests_from_chrome_all += [ "ui.ChromeCrashEarly.strict" ]
+}
 
 # To create filters to be used on specific builders add them like this:
 # tast_disabled_tests_from_lacros_example = [ "lacros.Basic" ]
@@ -339,4 +356,16 @@ tast_disabled_tests_from_lacros_all = [
 
   # https://crbug.com/1376638
   "lacros.AudioRecord",
+
+  # https://crbug.com/1422603
+  "tast.inputs.PhysicalKeyboardAutocorrect.*@jacuzzi",
+  "tast.inputs.PhysicalKeyboardShapeBasedChineseTyping.*@jacuzzi",
+  "tast.inputs.VirtualKeyboardTypingOmnibox.*@jacuzzi",
+  "tast.inputs.PhysicalKeyboardZhuyinTyping.*@jacuzzi",
+  "tast.inputs.VirtualKeyboardDeadKeys.*@jacuzzi",
+  "tast.inputs.PhysicalKeyboardShapeBasedChineseTyping.array_lacros",
+  "tast.inputs.VirtualKeyboardSpeech.lacros",
+
+  # https://crbug.com/1431937
+  "tast.lacros.ShelfLaunch.primary",
 ]

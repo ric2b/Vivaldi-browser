@@ -141,10 +141,13 @@ class CORE_EXPORT ElementRuleCollector {
   void SetPseudoElementStyleRequest(const StyleRequest& request) {
     pseudo_style_request_ = request;
   }
-  void SetSameOriginOnly(bool f) { same_origin_only_ = f; }
 
   void SetMatchingUARules(bool matching_ua_rules) {
     matching_ua_rules_ = matching_ua_rules;
+  }
+  // If true, :visited will never match. Has no effect otherwise.
+  void SetSuppressVisited(bool suppress_visited) {
+    suppress_visited_ = suppress_visited;
   }
 
   const MatchResult& MatchedResult() const;
@@ -167,8 +170,11 @@ class CORE_EXPORT ElementRuleCollector {
   void FinishAddingPresentationalHints() {
     result_.FinishAddingPresentationalHints();
   }
-  void FinishAddingAuthorRulesForTreeScope(const TreeScope& tree_scope) {
-    result_.FinishAddingAuthorRulesForTreeScope(tree_scope);
+  void BeginAddingAuthorRulesForTreeScope(const TreeScope& tree_scope) {
+    result_.BeginAddingAuthorRulesForTreeScope(tree_scope);
+  }
+  void FinishAddingAuthorRulesForTreeScope() {
+    result_.FinishAddingAuthorRulesForTreeScope();
   }
 
   // Return the pseudo id if the style request is for rules associated with a
@@ -275,8 +281,8 @@ class CORE_EXPORT ElementRuleCollector {
   StyleRequest pseudo_style_request_;
   SelectorChecker::Mode mode_;
   bool can_use_fast_reject_;
-  bool same_origin_only_;
   bool matching_ua_rules_;
+  bool suppress_visited_;
   EInsideLink inside_link_;
 
   HeapVector<MatchedRule, 32> matched_rules_;

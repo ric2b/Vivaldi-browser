@@ -50,12 +50,6 @@ BASE_FEATURE(kDismissPromos,
              "DismissNtpPromos",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, the NTP "realbox" will be themed like the omnibox
-// (same background/text/selected/hover colors).
-BASE_FEATURE(kRealboxMatchOmniboxTheme,
-             "NtpRealboxMatchOmniboxTheme",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // If enabled, the NTP "realbox" will have same border/drop shadow in hover
 // state as searchbox.
 BASE_FEATURE(kRealboxMatchSearchboxTheme,
@@ -74,6 +68,11 @@ BASE_FEATURE(kRealboxUseGoogleGIcon,
              "NtpRealboxUseGoogleGIcon",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// If enabled, alpha NTP backgrounds will show in Customize Chrome.
+BASE_FEATURE(kNtpAlphaBackgroundCollections,
+             "NtpAlphaBackgroundCollections",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If enabled, chrome cart module will be shown.
 BASE_FEATURE(kNtpChromeCartModule,
              "NtpChromeCartModule",
@@ -83,7 +82,7 @@ BASE_FEATURE(kNtpChromeCartModule,
 // on the New Tab Page, excluding the Realbox.
 BASE_FEATURE(kNtpComprehensiveTheming,
              "NtpComprehensiveTheming",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, Comprehensive Theming color changes will be applied to the
 // Realbox on the New Tab Page.
@@ -115,6 +114,11 @@ BASE_FEATURE(kNtpHandleMostVisitedNavigationExplicitly,
 // If enabled, logo will be shown.
 BASE_FEATURE(kNtpLogo, "NtpLogo", base::FEATURE_ENABLED_BY_DEFAULT);
 
+// If enabled, logo will fill up less vertical space.
+BASE_FEATURE(kNtpReducedLogoSpace,
+             "NtpReducedLogoSpace",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If enabled, middle slot promo will be shown.
 BASE_FEATURE(kNtpMiddleSlotPromo,
              "NtpMiddleSlotPromo",
@@ -131,9 +135,9 @@ BASE_FEATURE(kNtpModulesLoadTimeoutMilliseconds,
              "NtpModulesLoadTimeoutMilliseconds",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Dummy feature to set param "NtpModulesMaxWidthParam".
-BASE_FEATURE(kNtpModulesParams,
-             "NtpModulesParams",
+// If true, extends width of modules if space allows.
+BASE_FEATURE(kNtpWideModules,
+             "NtpWideModules",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Dummy feature to set param "NtpModulesOrderParam".
@@ -228,6 +232,11 @@ BASE_FEATURE(kNtpSafeBrowsingModule,
 // If enabled, shortcuts will be shown.
 BASE_FEATURE(kNtpShortcuts, "NtpShortcuts", base::FEATURE_ENABLED_BY_DEFAULT);
 
+// If enabled, shortcuts will be shown in a wide single row.
+BASE_FEATURE(kNtpSingleRowShortcuts,
+             "NtpSingleRowShortcuts",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If enabled, the History clusters module will be shown.
 BASE_FEATURE(kNtpHistoryClustersModule,
              "NtpHistoryClustersModule",
@@ -236,6 +245,11 @@ BASE_FEATURE(kNtpHistoryClustersModule,
 // Dummy feature to set kNtpHistoryClustersModuleBeginTimeDurationHoursParam.
 BASE_FEATURE(kNtpHistoryClustersModuleBeginTimeDuration,
              "NtpHistoryClustersModuleBeginTimeDuration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Dummy feature to set kNtpHistoryClustersModuleMinimumVisitsRequiredParam.
+BASE_FEATURE(kNtpHistoryClustersModuleMinimumVisitsRequired,
+             "NtpHistoryClustersModuleMinimumVisitsRequired",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Dummy feature to set kNtpHistoryClustersModuleMinimumImagesRequiredParam.
@@ -253,6 +267,32 @@ BASE_FEATURE(kNtpHistoryClustersModuleCategories,
 // counterfactually log or trigger.
 BASE_FEATURE(kNtpHistoryClustersModuleLoad,
              "NtpHistoryClustersModuleLoad",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Dummy feature to set kNtpHistoryClustersModuleMaxClustersParam.
+BASE_FEATURE(kNtpHistoryClustersModuleMaxClusters,
+             "NtpHistoryClustersMaxClusters",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, module headers will display an associated icon.
+BASE_FEATURE(kNtpModulesHeaderIcon,
+             "NtpModulesHeaderIcon",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, ChromeCart tile will show in the History clusters module when
+// available.
+BASE_FEATURE(kNtpChromeCartInHistoryClusterModule,
+             "NtpChromeCartInHistoryClusterModule",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kNtpHistoryClustersModuleUseModelRanking,
+             "NtpHistoryClustersModuleUseModelRanking",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, ChromeCart module will show together with ChromeCart+History
+// cluster module when available.
+BASE_FEATURE(kNtpChromeCartHistoryClusterCoexist,
+             "NtpChromeCartHistoryClusterCoexist",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 const base::FeatureParam<double>
@@ -275,7 +315,6 @@ const char kNtpModulesEligibleForHappinessTrackingSurveyParam[] =
     "NtpModulesEligibleForHappinessTrackingSurveyParam";
 const char kNtpModulesLoadTimeoutMillisecondsParam[] =
     "NtpModulesLoadTimeoutMillisecondsParam";
-const char kNtpModulesMaxWidthParam[] = "NtpModulesMaxWidthParam";
 const char kNtpModulesOrderParam[] = "NtpModulesOrderParam";
 const char kNtpChromeCartModuleDataParam[] = "NtpChromeCartModuleDataParam";
 const char kNtpChromeCartModuleAbandonedCartDiscountParam[] =
@@ -292,6 +331,10 @@ const char kNtpDriveModuleCacheMaxAgeSParam[] =
     "NtpDriveModuleCacheMaxAgeSParam";
 const char kNtpDriveModuleExperimentGroupParam[] =
     "NtpDriveModuleExperimentGroupParam";
+const char kNtpHistoryClustersModuleDataParam[] =
+    "NtpHistoryClustersModuleDataParam";
+const char kNtpChromeCartInHistoryClustersModuleDataParam[] =
+    "NtpChromeCartInHistoryClustersModuleDataParam";
 const char kNtpMiddleSlotPromoDismissalParam[] =
     "NtpMiddleSlotPromoDismissalParam";
 const char kNtpPhotosModuleDataParam[] = "NtpPhotosModuleDataParam";
@@ -302,8 +345,6 @@ const char kNtpSafeBrowsingModuleCooldownPeriodDaysParam[] =
     "NtpSafeBrowsingModuleCooldownPeriodDaysParam";
 const char kNtpSafeBrowsingModuleCountMaxParam[] =
     "NtpSafeBrowsingModuleCountMaxParam";
-const char kRealboxMatchOmniboxThemeVariantParam[] =
-    "RealboxMatchOmniboxThemeVariantParam";
 const char kNtpRecipeTasksModuleDataParam[] = "NtpRecipeTasksModuleDataParam";
 const char kNtpRecipeTasksModuleCacheMaxAgeSParam[] =
     "NtpRecipeTasksModuleCacheMaxAgeSParam";
@@ -311,10 +352,18 @@ const char kNtpRecipeTasksModuleExperimentGroupParam[] =
     "NtpRecipeTasksModuleExperimentGroupParam";
 const char kNtpHistoryClustersModuleBeginTimeDurationHoursParam[] =
     "NtpHistoryClustersModuleBeginTimeDurationHoursParam";
+const char kNtpHistoryClustersModuleMinimumVisitsRequiredParam[] =
+    "NtpHistoryClustersModuleMinimumVisitsRequiredParam";
 const char kNtpHistoryClustersModuleMinimumImagesRequiredParam[] =
     "NtpHistoryClustersModuleMinimumImagesRequiredParam";
-const char kNtpHistoryClustersModuleCategoriesParam[] =
+const char kNtpHistoryClustersModuleCategoriesAllowlistParam[] =
     "NtpHistoryClustersModuleCategoriesParam";
+const char kNtpHistoryClustersModuleCategoriesBlocklistParam[] =
+    "NtpHistoryClustersModuleCategoriesBlocklistParam";
+const char kNtpHistoryClustersModuleCategoriesBoostlistParam[] =
+    "NtpHistoryClustersModuleCategoriesBoostlistParam";
+const char kNtpHistoryClustersModuleMaxClustersParam[] =
+    "NtpHistoryClustersModuleMaxClustersParam";
 
 base::TimeDelta GetModulesLoadTimeout() {
   std::string param_value = base::GetFieldTrialParamValueByFeature(
@@ -327,12 +376,6 @@ base::TimeDelta GetModulesLoadTimeout() {
     return base::Seconds(3);
   }
   return base::Milliseconds(param_value_as_int);
-}
-
-absl::optional<int> GetModulesMaxWidthPixels() {
-  int max_width_px = base::GetFieldTrialParamByFeatureAsInt(
-      kNtpModulesParams, kNtpModulesMaxWidthParam, -1);
-  return (max_width_px > 0) ? absl::optional<int>{max_width_px} : absl::nullopt;
 }
 
 std::vector<std::string> GetModulesOrder() {

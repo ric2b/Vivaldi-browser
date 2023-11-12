@@ -9,6 +9,10 @@
 
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_view.h"
 
+// Vivaldi
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
+// End Vivaldi
+
 @class ToolbarButtonFactory;
 
 // View for the primary toolbar. In an adaptive toolbar paradigm, this is the
@@ -86,6 +90,8 @@
 /// Update the vivaldi more actions based on web context. This is only available
 /// for iPhone landscape mode.
 - (void)setVivaldiMoreActionItemsWithShareState:(BOOL)enabled;
+/// Update tracker blocker shield icon based on settings.
+- (void)updateVivaldiShieldState:(ATBSettingType)setting;
 // End Vivaldi
 
 @end

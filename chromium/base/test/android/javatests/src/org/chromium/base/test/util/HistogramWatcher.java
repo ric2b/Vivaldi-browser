@@ -109,15 +109,15 @@ public class HistogramWatcher {
          * value}.
          */
         public Builder expectBooleanRecord(String histogram, boolean value) {
-            return expectBooleanRecords(histogram, value, 1);
+            return expectBooleanRecordTimes(histogram, value, 1);
         }
 
         /**
          * Add an expectation that {@code histogram} will be recorded a number of {@code times} with
          * a boolean {@code value}.
          */
-        public Builder expectBooleanRecords(String histogram, boolean value, int times) {
-            return expectIntRecords(histogram, value ? 1 : 0, times);
+        public Builder expectBooleanRecordTimes(String histogram, boolean value, int times) {
+            return expectIntRecordTimes(histogram, value ? 1 : 0, times);
         }
 
         /**
@@ -125,17 +125,25 @@ public class HistogramWatcher {
          * value}.
          */
         public Builder expectIntRecord(String histogram, int value) {
-            return expectIntRecords(histogram, value, 1);
+            return expectIntRecordTimes(histogram, value, 1);
+        }
+
+        /**
+         * Add expectations that {@code histogram} will be recorded with each of the int {@code
+         * values} provided.
+         */
+        public Builder expectIntRecords(String histogram, int... values) {
+            for (int value : values) {
+                expectIntRecord(histogram, value);
+            }
+            return this;
         }
 
         /**
          * Add an expectation that {@code histogram} will be recorded a number of {@code times} with
          * an int {@code value}.
          */
-        public Builder expectIntRecords(String histogram, int value, int times) {
-            if (value < 0) {
-                throw new IllegalArgumentException("Histograms cannot record negative values");
-            }
+        public Builder expectIntRecordTimes(String histogram, int value, int times) {
             if (times < 0) {
                 throw new IllegalArgumentException(
                         "Cannot expect records a negative number of times");
@@ -155,14 +163,14 @@ public class HistogramWatcher {
          * Add an expectation that {@code histogram} will be recorded once with any value.
          */
         public Builder expectAnyRecord(String histogram) {
-            return expectAnyRecords(histogram, 1);
+            return expectAnyRecordTimes(histogram, 1);
         }
 
         /**
          * Add an expectation that {@code histogram} will be recorded a number of {@code times} with
          * any values.
          */
-        public Builder expectAnyRecords(String histogram, int times) {
+        public Builder expectAnyRecordTimes(String histogram, int times) {
             HistogramAndValue histogramAndValue = new HistogramAndValue(histogram, ANY_VALUE);
             incrementRecordsExpected(histogramAndValue, times);
             incrementTotalRecordsExpected(histogram, times);
@@ -173,7 +181,8 @@ public class HistogramWatcher {
          * Add an expectation that {@code histogram} will not be recorded with any values.
          */
         public Builder expectNoRecords(String histogram) {
-            if (mTotalRecordsExpected.getOrDefault(histogram, 0) != 0) {
+            Integer recordsAlreadyExpected = mTotalRecordsExpected.get(histogram);
+            if (recordsAlreadyExpected != null && recordsAlreadyExpected != 0) {
                 throw new IllegalStateException(
                         "Cannot expect no records but also expect records in previous calls.");
             }
@@ -203,12 +212,18 @@ public class HistogramWatcher {
         }
 
         private void incrementRecordsExpected(HistogramAndValue histogramAndValue, int increase) {
-            int previousCountExpected = mRecordsExpected.getOrDefault(histogramAndValue, 0);
+            Integer previousCountExpected = mRecordsExpected.get(histogramAndValue);
+            if (previousCountExpected == null) {
+                previousCountExpected = 0;
+            }
             mRecordsExpected.put(histogramAndValue, previousCountExpected + increase);
         }
 
         private void incrementTotalRecordsExpected(String histogram, int increase) {
-            int previousCountExpected = mTotalRecordsExpected.getOrDefault(histogram, 0);
+            Integer previousCountExpected = mTotalRecordsExpected.get(histogram);
+            if (previousCountExpected == null) {
+                previousCountExpected = 0;
+            }
             mTotalRecordsExpected.put(histogram, previousCountExpected + increase);
         }
     }
@@ -323,8 +338,11 @@ public class HistogramWatcher {
         }
 
         boolean allowAnyNumberOfExtraRecords = mHistogramsAllowedExtraRecords.contains(histogram);
-        int expectedExtraRecords =
-                mRecordsExpected.getOrDefault(new HistogramAndValue(histogram, ANY_VALUE), 0);
+        Integer expectedExtraRecords =
+                mRecordsExpected.get(new HistogramAndValue(histogram, ANY_VALUE));
+        if (expectedExtraRecords == null) {
+            expectedExtraRecords = 0;
+        }
         if (!allowAnyNumberOfExtraRecords && actualExtraRecords > expectedExtraRecords
                 || actualExtraRecords < expectedExtraRecords) {
             // Expected |extraRecordsExpected| records with any value, found |extraActualRecords|.
@@ -459,6 +477,23 @@ public class HistogramWatcher {
         } else {
             fail(defaultMessage);
         }
+    }
+
+    /**
+     * Polls the instrumentation thread until the expected histograms are recorded.
+     *
+     * Throws {@link CriteriaNotSatisfiedException} if the polling times out, wrapping the
+     * assertion to printed out the state of the histograms at the last check.
+     */
+    public void pollInstrumentationThreadUntilSatisfied() {
+        CriteriaHelper.pollInstrumentationThread(() -> {
+            try {
+                assertExpected();
+                return true;
+            } catch (AssertionError e) {
+                throw new CriteriaNotSatisfiedException(e);
+            }
+        });
     }
 
     private static class HistogramAndValue {

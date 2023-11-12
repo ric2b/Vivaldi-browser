@@ -4,16 +4,23 @@
 
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_input_assistant_items.h"
 
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_views.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_views_utils.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_ui_bar_button_item.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/voice_search/voice_search_api.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -26,6 +33,9 @@ NSArray<UIBarButtonItemGroup*>* OmniboxAssistiveKeyboardLeadingBarButtonGroups(
     id<UIPasteConfigurationSupporting> pasteTarget) {
   NSMutableArray<UIBarButtonItem*>* items = [NSMutableArray array];
 
+  // Vivaldi: Voice search is not available for chromium, so we will skip
+  // adding the voice search button in keyboard accessory view.
+  if (!IsVivaldiRunning()) {
   UIImage* voiceSearchIcon =
       [[UIImage imageNamed:@"keyboard_accessory_voice_search"]
           imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
@@ -40,9 +50,16 @@ NSArray<UIBarButtonItemGroup*>* OmniboxAssistiveKeyboardLeadingBarButtonGroups(
   voiceSearchItem.accessibilityLabel = accessibilityLabel;
   voiceSearchItem.accessibilityIdentifier = kVoiceSearchInputAccessoryViewID;
   [items addObject:voiceSearchItem];
+  } // End Vivaldi
 
   UIImage* cameraIcon = [[UIImage imageNamed:@"keyboard_accessory_qr_scanner"]
       imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+
+  if (IsVivaldiRunning())
+    cameraIcon = [[UIImage imageNamed:vMenuQRCode]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  // End Vivaldi
+
   UIBarButtonItem* cameraItem = [[UIBarButtonItem alloc]
       initWithImage:cameraIcon
               style:UIBarButtonItemStylePlain

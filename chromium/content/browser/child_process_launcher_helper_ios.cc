@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/mac/mach_port_rendezvous.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/child_process_launcher_helper.h"
 #include "content/browser/child_process_launcher_helper_posix.h"
@@ -33,6 +34,11 @@ ChildProcessLauncherHelper::GetFilesToMap() {
 bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
     FileMappedForLaunch& files_to_register,
     base::LaunchOptions* options) {
+  mojo::PlatformHandle endpoint =
+      mojo_channel_->TakeRemoteEndpoint().TakePlatformHandle();
+  DCHECK(endpoint.is_valid_mach_receive());
+  options->mach_ports_for_rendezvous.insert(std::make_pair(
+      'mojo', base::MachRendezvousPort(endpoint.TakeMachReceiveRight())));
   return true;
 }
 
@@ -42,17 +48,17 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
     std::unique_ptr<PosixFileDescriptorInfo> files_to_register,
     bool* is_synchronous_launch,
     int* launch_result) {
-  DCHECK(!options);
+  DCHECK(options);
   *is_synchronous_launch = true;
   ChildProcessLauncherHelper::Process process;
-  //  process.process = base::LaunchProcess(*command_line(), *options);
+  process.process = base::LaunchProcess(*command_line(), *options);
   *launch_result =
       process.process.IsValid() ? LAUNCH_RESULT_SUCCESS : LAUNCH_RESULT_FAILURE;
   return process;
 }
 
 bool ChildProcessLauncherHelper::IsUsingLaunchOptions() {
-  return false;
+  return true;
 }
 
 void ChildProcessLauncherHelper::AfterLaunchOnLauncherThread(
@@ -71,8 +77,7 @@ bool ChildProcessLauncherHelper::TerminateProcess(const base::Process& process,
                                                   int exit_code) {
   // TODO(https://crbug.com/818244): Determine whether we should also call
   // EnsureProcessTerminated() to make sure of process-exit, and reap it.
-  // return process.Terminate(exit_code, false);
-  return false;
+  return process.Terminate(exit_code, false);
 }
 
 // static
@@ -81,8 +86,8 @@ void ChildProcessLauncherHelper::ForceNormalProcessTerminationSync(
   DCHECK(CurrentlyOnProcessLauncherTaskRunner());
   // Client has gone away, so just kill the process.  Using exit code 0 means
   // that UMA won't treat this as a crash.
-  //  process.process.Terminate(RESULT_CODE_NORMAL_EXIT, false);
-  //  base::EnsureProcessTerminated(std::move(process.process));
+  process.process.Terminate(RESULT_CODE_NORMAL_EXIT, false);
+  base::EnsureProcessTerminated(std::move(process.process));
 }
 
 void ChildProcessLauncherHelper::SetProcessBackgroundedOnLauncherThread(

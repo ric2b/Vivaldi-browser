@@ -27,6 +27,18 @@
       "use_remoteexec": true
     }
   },
+  "Dawn Linux TSAN Release": {
+    "gn_args": {
+      "dawn_enable_opengles": true,
+      "dcheck_always_on": true,
+      "is_component_build": false,
+      "is_debug": false,
+      "is_tsan": true,
+      "symbol_level": 1,
+      "use_dawn": true,
+      "use_remoteexec": true
+    }
+  },
   "Dawn Linux x64 Builder": {
     "gn_args": {
       "dawn_enable_desktop_gl": true,
@@ -55,13 +67,10 @@
     "gn_args": {
       "dawn_enable_opengles": true,
       "dcheck_always_on": true,
-      "enable_backup_ref_ptr_support": false,
-      "enable_mte_checked_ptr_support": false,
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
       "use_dawn": true,
-      "use_partition_alloc_as_malloc": false,
       "use_remoteexec": true
     }
   },
@@ -69,18 +78,16 @@
     "gn_args": {
       "dawn_enable_opengles": true,
       "dcheck_always_on": true,
-      "enable_backup_ref_ptr_support": false,
-      "enable_mte_checked_ptr_support": false,
       "is_component_build": false,
       "is_debug": false,
       "symbol_level": 1,
       "use_dawn": true,
-      "use_partition_alloc_as_malloc": false,
       "use_remoteexec": true
     }
   },
   "Dawn Win10 x64 ASAN Release": {
     "gn_args": {
+      "dawn_enable_d3d11": true,
       "dawn_enable_opengles": true,
       "dcheck_always_on": true,
       "is_asan": true,
@@ -93,6 +100,7 @@
   },
   "Dawn Win10 x64 Builder": {
     "gn_args": {
+      "dawn_enable_d3d11": true,
       "dawn_enable_opengles": true,
       "dcheck_always_on": true,
       "is_component_build": false,
@@ -104,6 +112,7 @@
   },
   "Dawn Win10 x64 DEPS Builder": {
     "gn_args": {
+      "dawn_enable_d3d11": true,
       "dawn_enable_opengles": true,
       "dcheck_always_on": true,
       "is_component_build": false,
@@ -115,6 +124,7 @@
   },
   "Dawn Win10 x86 Builder": {
     "gn_args": {
+      "dawn_enable_d3d11": true,
       "dawn_enable_opengles": true,
       "dcheck_always_on": true,
       "is_component_build": false,
@@ -127,6 +137,7 @@
   },
   "Dawn Win10 x86 DEPS Builder": {
     "gn_args": {
+      "dawn_enable_d3d11": true,
       "dawn_enable_opengles": true,
       "dcheck_always_on": true,
       "is_component_build": false,

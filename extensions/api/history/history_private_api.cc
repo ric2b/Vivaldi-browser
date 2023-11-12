@@ -217,8 +217,8 @@ void HistoryPrivateEventRouter::DispatchEvent(Profile* profile,
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
-  std::unique_ptr<DBSearch::Params> params(DBSearch::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<DBSearch::Params> params(DBSearch::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   int max_hits = 100;
 
@@ -262,8 +262,8 @@ void HistoryPrivateDbSearchFunction::SearchComplete(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
-  std::unique_ptr<Search::Params> params(Search::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Search::Params> params(Search::Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::u16string search_text = base::UTF8ToUTF16(params->query.text);
 
@@ -340,9 +340,9 @@ void HistoryPrivateSearchFunction::SearchComplete(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
-  std::unique_ptr<vivaldi::history_private::DeleteVisits::Params> params(
+  absl::optional<vivaldi::history_private::DeleteVisits::Params> params(
       vivaldi::history_private::DeleteVisits::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   GURL url;
   std::string error;
@@ -375,9 +375,9 @@ void HistoryPrivateDeleteVisitsFunction::DeleteVisitComplete() {
 
 ExtensionFunction::ResponseAction
 HistoryPrivateGetTopUrlsPerDayFunction::Run() {
-  std::unique_ptr<GetTopUrlsPerDay::Params> params(
+  absl::optional<GetTopUrlsPerDay::Params> params(
       GetTopUrlsPerDay::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   double number_of_days = kMaxResultsWithinDay;
   if (params->max_top_url_results)
@@ -448,9 +448,9 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
-  std::unique_ptr<VisitSearch::Params> params(
+  absl::optional<VisitSearch::Params> params(
       VisitSearch::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   history::QueryOptions options;
 
@@ -488,9 +488,9 @@ void HistoryPrivateVisitSearchFunction::VisitsComplete(
 }
 
 ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
-  std::unique_ptr<vivaldi::history_private::GetTypedHistory::Params> params(
+  absl::optional<vivaldi::history_private::GetTypedHistory::Params> params(
       vivaldi::history_private::GetTypedHistory::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   history::URLDatabase::TypedUrlResults results;
   history::KeywordID prefix_keyword_id;
@@ -526,9 +526,9 @@ ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
 
 ExtensionFunction::ResponseAction
 HistoryPrivateMigrateOldTypedUrlFunction::Run() {
-  std::unique_ptr<vivaldi::history_private::MigrateOldTypedUrl::Params> params(
+  absl::optional<vivaldi::history_private::MigrateOldTypedUrl::Params> params(
       vivaldi::history_private::MigrateOldTypedUrl::Params::Create(args()));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   history::HistoryService* hs = GetFunctionCallerHistoryService(*this);
   if (!hs) {

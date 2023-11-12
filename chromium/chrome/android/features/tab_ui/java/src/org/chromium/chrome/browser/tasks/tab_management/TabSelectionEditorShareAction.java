@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.content.ClipData;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -27,7 +26,6 @@ import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.share.ShareImageFileUtils;
 import org.chromium.components.browser_ui.share.ShareParams;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.url.GURL;
 
@@ -129,15 +127,6 @@ public class TabSelectionEditorShareAction extends TabSelectionEditorAction {
                         .Builder(tabList.getTabAt(sortedTabIndexList.get(0)).getWindowAndroid(),
                                 tabTitle, tabUrl)
                         .setText(tabText)
-                        .setCallback(new ShareParams.TargetChosenCallback() {
-                            @Override
-                            public void onTargetChosen(ComponentName chosenComponent) {
-                                TabUiMetricsHelper.recordSelectionEditorActionMetrics(actionId);
-                            }
-
-                            @Override
-                            public void onCancel() {}
-                        })
                         .build();
 
         final Intent shareIntent = new Intent(Intent.ACTION_SEND);
@@ -153,7 +142,7 @@ public class TabSelectionEditorShareAction extends TabSelectionEditorAction {
                 AppCompatResources.getDrawable(mContext, R.drawable.chrome_sync_logo),
                 (int) mContext.getResources().getDimension(
                         R.dimen.tab_selection_editor_share_sheet_preview_thumbnail_padding));
-        createShareableImageAndSendIntent(shareIntent, drawable);
+        createShareableImageAndSendIntent(shareIntent, drawable, actionId);
         return true;
     }
 
@@ -162,7 +151,8 @@ public class TabSelectionEditorShareAction extends TabSelectionEditorAction {
         return true;
     }
 
-    private void createShareableImageAndSendIntent(Intent shareIntent, Drawable drawable) {
+    private void createShareableImageAndSendIntent(Intent shareIntent, Drawable drawable,
+            @TabSelectionEditorActionMetricGroups int actionId) {
         PostTask.postTask(TaskTraits.USER_BLOCKING_MAY_BLOCK, () -> {
             // Allotted thumbnail size is approx. 72 dp, with the icon left at default size.
             // The padding is adjusted accordingly, taking into account the scaling factor.
@@ -177,9 +167,10 @@ public class TabSelectionEditorShareAction extends TabSelectionEditorAction {
                             R.string.tab_selection_editor_share_sheet_preview_thumbnail),
                     bitmap, uri -> {
                         bitmap.recycle();
-                        PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+                        PostTask.postTask(TaskTraits.UI_DEFAULT, () -> {
                             shareIntent.setClipData(ClipData.newRawUri("", uri));
                             mContext.startActivity(Intent.createChooser(shareIntent, null));
+                            TabUiMetricsHelper.recordSelectionEditorActionMetrics(actionId);
                             TabUiMetricsHelper.recordShareStateHistogram(
                                     TabSelectionEditorShareActionState.SUCCESS);
                         });

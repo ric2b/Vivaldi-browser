@@ -13,7 +13,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
-#include "ui/gfx/paint_vector_icon.h"
+#include "ui/base/models/image_model.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -41,7 +41,7 @@ LoginErrorBubble::~LoginErrorBubble() = default;
 
 void LoginErrorBubble::SetContent(std::unique_ptr<views::View> content) {
   if (content_) {
-    RemoveChildViewT(content_);
+    RemoveChildViewT(content_.get());
   }
   content_ = AddChildView(std::move(content));
 }

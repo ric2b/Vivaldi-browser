@@ -18,19 +18,47 @@
 
 namespace syncer {
 
+namespace {
+
+class ForwardingCommitQueue : public CommitQueue {
+ public:
+  explicit ForwardingCommitQueue(base::WeakPtr<CommitQueue> other)
+      : other_(std::move(other)) {}
+  ~ForwardingCommitQueue() override = default;
+
+  void NudgeForCommit() override {
+    if (other_) {
+      other_->NudgeForCommit();
+    }
+  }
+
+ private:
+  const base::WeakPtr<CommitQueue> other_;
+};
+
+}  // namespace
+
 MockModelTypeWorker::MockModelTypeWorker(
     const sync_pb::ModelTypeState& model_type_state,
     ModelTypeProcessor* processor)
     : model_type_state_(model_type_state), processor_(processor) {
-  model_type_state_.set_initial_sync_done(true);
+  model_type_state_.set_initial_sync_state(
+      sync_pb::ModelTypeState_InitialSyncState_INITIAL_SYNC_DONE);
 }
 
 MockModelTypeWorker::~MockModelTypeWorker() = default;
 
+std::unique_ptr<CommitQueue> MockModelTypeWorker::MakeForwardingCommitQueue() {
+  return std::make_unique<ForwardingCommitQueue>(
+      weak_ptr_factory_.GetWeakPtr());
+}
+
 void MockModelTypeWorker::NudgeForCommit() {
-  processor_->GetLocalChanges(
-      INT_MAX, base::BindRepeating(&MockModelTypeWorker::LocalChangesReceived,
-                                   weak_ptr_factory_.GetWeakPtr()));
+  if (get_local_changes_upon_nudge_enabled_) {
+    processor_->GetLocalChanges(
+        INT_MAX, base::BindRepeating(&MockModelTypeWorker::LocalChangesReceived,
+                                     weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void MockModelTypeWorker::LocalChangesReceived(
@@ -345,6 +373,10 @@ void MockModelTypeWorker::UpdateWithGarbageCollection(
     UpdateResponseDataList update,
     const sync_pb::GarbageCollectionDirective& gcd) {
   processor_->OnUpdateReceived(model_type_state_, std::move(update), gcd);
+}
+
+void MockModelTypeWorker::DisableGetLocalChangesUponNudge() {
+  get_local_changes_upon_nudge_enabled_ = false;
 }
 
 std::string MockModelTypeWorker::GenerateId(const ClientTagHash& tag_hash) {

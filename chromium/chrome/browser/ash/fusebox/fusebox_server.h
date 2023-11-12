@@ -11,6 +11,7 @@
 #include "base/files/file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/sequence_bound.h"
 #include "base/values.h"
@@ -73,6 +74,14 @@ class Server {
   storage::FileSystemURL ResolveFilename(Profile* profile,
                                          const std::string& filename);
 
+  // Performs the inverse of ResolveFilename. It converts a FileSystemURL like
+  // "filesystem:origin/external/mount_name/xxx/yyy/p/q.txt" to a FuseBox
+  // filename like "/media/fuse/fusebox/subdir/p/q.txt".
+  //
+  // It returns an empty base::FilePath on failure, such as when there was no
+  // previously registered (subdir, fs_url_prefix) that matched.
+  base::FilePath InverseResolveFSURL(const storage::FileSystemURL& fs_url);
+
   // Returns human-readable debugging information as a JSON value.
   base::Value GetDebugJSON();
 
@@ -113,6 +122,11 @@ class Server {
   using Open2Callback =
       base::OnceCallback<void(const Open2ResponseProto& response)>;
   void Open2(const Open2RequestProto& request, Open2Callback callback);
+
+  // Rename is analogous to "/usr/bin/mv".
+  using RenameCallback =
+      base::OnceCallback<void(const RenameResponseProto& response)>;
+  void Rename(const RenameRequestProto& request, RenameCallback callback);
 
   // Read2 reads from a virtual file opened by Open2.
   using Read2Callback =
@@ -306,7 +320,7 @@ class Server {
   // Returns the fuse_handle that is the map key.
   uint64_t InsertFuseFileMapEntry(FuseFileMapEntry&& entry);
 
-  Delegate* delegate_;
+  raw_ptr<Delegate, ExperimentalAsh> delegate_;
   FuseFileMap fuse_file_map_;
   fusebox::MonikerMap moniker_map_;
   PrefixMap prefix_map_;

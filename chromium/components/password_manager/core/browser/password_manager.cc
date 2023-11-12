@@ -33,6 +33,7 @@
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/credential_cache.h"
 #include "components/password_manager/core/browser/field_info_manager.h"
+#include "components/password_manager/core/browser/leak_detection/leak_detection_request_utils.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 #include "components/password_manager/core/browser/password_form_manager.h"
@@ -132,7 +133,7 @@ bool ShouldShowManualFallbackForGeneratedPassword(
 #endif
 }
 
-#if !BUILDFLAG(IS_IOS)
+#if BUILDFLAG(USE_BLINK)
 // Finds the matched form manager with id |form_renderer_id| in
 // |form_managers|.
 PasswordFormManager* FindMatchedManagerByRendererId(
@@ -145,14 +146,13 @@ PasswordFormManager* FindMatchedManagerByRendererId(
   }
   return nullptr;
 }
-#endif  // !BUILDFLAG(IS_IOS)
+#endif  // BUILDFLAG(USE_BLINK)
 
 bool HasSingleUsernameVote(const FormPredictions& form) {
-  for (const auto& field : form.fields) {
-    if (field.type == autofill::SINGLE_USERNAME)
-      return true;
-  }
-  return false;
+  return base::ranges::any_of(
+      form.fields,
+      [](const auto& type) { return type == autofill::SINGLE_USERNAME; },
+      &PasswordFieldPrediction::type);
 }
 
 // Returns true if at least one of the fields in |form| has a prediction to be a
@@ -160,19 +160,21 @@ bool HasSingleUsernameVote(const FormPredictions& form) {
 bool HasNewPasswordVote(const FormPredictions& form) {
   if (!base::FeatureList::IsEnabled(
           password_manager::features::
-              kEnablePasswordGenerationForClearTextFields))
+              kEnablePasswordGenerationForClearTextFields)) {
     return false;
-  for (const auto& field : form.fields) {
-    if (field.type == ACCOUNT_CREATION_PASSWORD || field.type == NEW_PASSWORD)
-      return true;
   }
-  return false;
+  auto is_creation_password_or_new_password = [](const auto& type) {
+    return type == ACCOUNT_CREATION_PASSWORD || type == NEW_PASSWORD;
+  };
+
+  return base::ranges::any_of(form.fields, is_creation_password_or_new_password,
+                              &PasswordFieldPrediction::type);
 }
 
 // Adds predictions to |predictions->fields| if |field_info_manager| has
 // predictions for corresponding fields. Predictions from |field_info_manager|
 // have priority over server predictions.
-void AddLocallySavedPredictions(FieldInfoManager* field_info_manager,
+void AddLocallySavedPredictions(const FieldInfoManager* field_info_manager,
                                 FormPredictions* predictions,
                                 BrowserSavePasswordProgressLogger* logger) {
   DCHECK(predictions);
@@ -281,7 +283,9 @@ void PasswordManager::RegisterProfilePrefs(
       prefs::kSyncedLastTimePasswordCheckCompleted, base::Time(),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
 
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   registry->RegisterDictionaryPref(prefs::kAccountStoragePerAccountSettings);
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 
   registry->RegisterTimePref(prefs::kProfileStoreDateLastUsedForFilling,
                              base::Time());
@@ -301,6 +305,7 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kPasswordDismissCompromisedAlertEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(prefs::kPasswordsPrefWithNewLabelUsed, false);
 #if BUILDFLAG(IS_ANDROID)
   registry->RegisterBooleanPref(prefs::kOfferToSavePasswordsEnabledGMS, true);
   registry->RegisterBooleanPref(prefs::kSavePasswordsSuspendedByError, false);
@@ -311,7 +316,6 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterDoublePref(prefs::kTimeOfLastMigrationAttempt, 0.0);
   registry->RegisterBooleanPref(prefs::kRequiresMigrationAfterSyncStatusChange,
                                 false);
-  registry->RegisterBooleanPref(prefs::kPasswordsPrefWithNewLabelUsed, false);
   registry->RegisterBooleanPref(
       prefs::kUnenrolledFromGoogleMobileServicesDueToErrors, false);
   registry->RegisterIntegerPref(
@@ -336,6 +340,15 @@ void PasswordManager::RegisterProfilePrefs(
                                 false);
   registry->RegisterBooleanPref(prefs::kBiometricAuthenticationBeforeFilling,
                                 false);
+#endif
+  registry->RegisterBooleanPref(prefs::kPasswordsGroupingInfoRequested, false);
+#if BUILDFLAG(IS_IOS)
+  registry->RegisterBooleanPref(prefs::kAccountStorageNoticeShown, false);
+  registry->RegisterIntegerPref(prefs::kAccountStorageNewFeatureIconImpressions,
+                                0);
+#endif
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
+  registry->RegisterListPref(prefs::kPasswordManagerPromoCardsList);
 #endif
 }
 
@@ -506,10 +519,10 @@ void PasswordManager::UpdateFormManagers() {
   }
 
   // Remove the duplicates.
-  std::sort(fetchers.begin(), fetchers.end());
-  fetchers.erase(std::unique(fetchers.begin(), fetchers.end()), fetchers.end());
-  std::sort(drivers.begin(), drivers.end());
-  drivers.erase(std::unique(drivers.begin(), drivers.end()), drivers.end());
+  base::ranges::sort(fetchers);
+  fetchers.erase(base::ranges::unique(fetchers), fetchers.end());
+  base::ranges::sort(drivers);
+  drivers.erase(base::ranges::unique(drivers), drivers.end());
   // Refetch credentials for all the forms and update the drivers.
   for (FormFetcher* fetcher : fetchers)
     fetcher->Fetch();
@@ -534,7 +547,7 @@ void PasswordManager::DropFormManagers() {
   predictions_.clear();
 }
 
-bool PasswordManager::IsPasswordFieldDetectedOnPage() {
+bool PasswordManager::IsPasswordFieldDetectedOnPage() const {
   return !form_managers_.empty();
 }
 
@@ -624,12 +637,13 @@ void PasswordManager::OnUserModifiedNonPasswordField(
     PasswordManagerDriver* driver,
     autofill::FieldRendererId renderer_id,
     const std::u16string& field_name,
-    const std::u16string& value) {
+    const std::u16string& value,
+    bool autocomplete_attribute_has_username) {
   // |driver| might be empty on iOS or in tests.
   int driver_id = driver ? driver->GetId() : 0;
   possible_username_.emplace(GetSignonRealm(driver->GetLastCommittedURL()),
                              renderer_id, field_name, value, base::Time::Now(),
-                             driver_id);
+                             driver_id, autocomplete_attribute_has_username);
 }
 
 void PasswordManager::OnInformAboutUserInput(PasswordManagerDriver* driver,
@@ -841,7 +855,7 @@ PasswordFormManager* PasswordManager::ProvisionallySaveForm(
   return matched_manager;
 }
 
-#if !BUILDFLAG(IS_IOS)
+#if BUILDFLAG(USE_BLINK)
 void PasswordManager::LogFirstFillingResult(
     PasswordManagerDriver* driver,
     autofill::FormRendererId form_renderer_id,
@@ -852,7 +866,7 @@ void PasswordManager::LogFirstFillingResult(
     return;
   matching_manager->GetMetricsRecorder()->RecordFirstFillingResult(result);
 }
-#endif  // !BUILDFLAG(IS_IOS)
+#endif  // BUILDFLAG(USE_BLINK)
 
 void PasswordManager::NotifyStorePasswordCalled() {
   store_password_called_ = true;
@@ -1013,7 +1027,7 @@ void PasswordManager::OnPasswordFormsRendered(
       driver &&
 #endif
       !driver->IsInPrimaryMainFrame() &&
-      submitted_manager->driver_id() != driver->GetId()) {
+      submitted_manager->GetFrameId() != driver->GetFrameId()) {
     // Frames different from the main frame and the frame of the submitted form
     // are unlikely relevant to success of submission.
     return;
@@ -1083,7 +1097,8 @@ void PasswordManager::OnLoginSuccessful() {
           submitted_manager->GetInsecureCredentials(),
           submitted_manager->GetSubmittedForm()->username_value) &&
       !IsSingleUsernameSubmission(*submitted_manager->GetSubmittedForm())) {
-    leak_delegate_.StartLeakCheck(submitted_manager->GetPendingCredentials());
+    leak_delegate_.StartLeakCheck(LeakDetectionInitiator::kSignInCheck,
+                                  submitted_manager->GetPendingCredentials());
   }
 
   auto submission_event =
@@ -1218,6 +1233,10 @@ void PasswordManager::MaybeSavePasswordHash(
 void PasswordManager::ProcessAutofillPredictions(
     PasswordManagerDriver* driver,
     const std::vector<FormStructure*>& forms) {
+  // Don't do anything if Password store is not available.
+  if(!client_->GetProfilePasswordStore())
+    return;
+
   std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   if (password_manager_util::IsLoggingActive(client_)) {
     logger = std::make_unique<BrowserSavePasswordProgressLogger>(

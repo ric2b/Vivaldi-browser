@@ -25,8 +25,6 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/simple_message_box.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/grit/chromium_strings.h"
@@ -34,7 +32,6 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
-#include "components/saved_tab_groups/saved_tab_group.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/page_navigator.h"
@@ -75,7 +72,9 @@ std::vector<UrlAndId> GetURLsToOpen(
     content::BrowserContext* browser_context = nullptr,
     bool incognito_urls_only = false) {
   std::vector<UrlAndId> url_and_ids;
-  const auto AddUrlIfLegal = [&](const GURL url, int64_t id) {
+  const auto AddUrlIfLegal = [browser_context, incognito_urls_only,
+                              &url_and_ids](const GURL& url,
+                                            const base::Uuid& id) {
     if (!incognito_urls_only || IsURLAllowedInIncognito(url, browser_context)) {
       UrlAndId url_and_id;
       url_and_id.url = url;
@@ -85,13 +84,13 @@ std::vector<UrlAndId> GetURLsToOpen(
   };
   for (const BookmarkNode* node : nodes) {
     if (node->is_url()) {
-      AddUrlIfLegal(node->url(), node->id());
+      AddUrlIfLegal(node->url(), node->uuid());
     } else {
       // If the node is not a URL, it is a folder. We want to add those of its
       // children which are URLs.
       for (const auto& child : node->children()) {
         if (child->is_url())
-          AddUrlIfLegal(child->url(), child->id());
+          AddUrlIfLegal(child->url(), child->uuid());
       }
     }
   }
@@ -109,7 +108,6 @@ int ChildURLCountTotal(const BookmarkNode* node) {
                          count_children);
 }
 
-#if !BUILDFLAG(IS_ANDROID)
 // Returns in |urls|, the url and title pairs for each open tab in browser.
 void GetURLsAndFoldersForOpenTabs(
     Browser* browser,
@@ -134,7 +132,6 @@ void GetURLsAndFoldersForOpenTabs(
   }
   GetURLsAndFoldersForTabEntries(folder_data, tab_entries, groups_by_index);
 }
-#endif
 
 // Represents a reference set of web contents opened by OpenAllHelper() so that
 // the actual web contents and what browsers they are located in can be
@@ -199,7 +196,7 @@ OpenedWebContentsSet OpenAllHelper(Browser* browser,
     if (!opened_tab)
       continue;
 
-    if (url_and_id_it->id != -1) {
+    if (url_and_id_it->id.is_valid()) {
       ChromeNavigationUIData* ui_data =
           static_cast<ChromeNavigationUIData*>(handle->GetNavigationUIData());
       if (ui_data)
@@ -246,7 +243,6 @@ OpenedWebContentsSet OpenAllHelper(Browser* browser,
 
 }  // namespace
 
-#if !BUILDFLAG(IS_ANDROID)
 void OpenAllIfAllowed(Browser* browser,
                       const std::vector<const bookmarks::BookmarkNode*>& nodes,
                       WindowOpenDisposition initial_disposition,
@@ -339,117 +335,6 @@ void OpenAllNow(Browser* browser,
                 initial_disposition);
 }
 
-void OpenSavedTabGroupHelper(Browser* browser,
-                             const base::GUID& saved_group_id,
-                             chrome::MessageBoxResult result) {
-  if (result != chrome::MESSAGE_BOX_RESULT_YES)
-    return;
-
-  SavedTabGroupKeyedService* service =
-      SavedTabGroupServiceFactory::GetForProfile(browser->profile());
-
-  const SavedTabGroup* saved_group = service->model()->Get(saved_group_id);
-
-  // In the case where this function is called after confirmation of an
-  // interstitial, the saved_group could be null, so protect against this by
-  // early returning.
-  if (!saved_group)
-    return;
-
-  if (saved_group->local_group_id().has_value()) {
-    TabStripModel* model_for_activation =
-        service->listener()->GetTabStripModelWithTabGroupId(
-            saved_group->local_group_id().value());
-
-    // Only activate the tab group's first tab if it exists in any browser's
-    // tabstrip model.
-    if (model_for_activation) {
-      absl::optional<int> first_tab =
-          model_for_activation->group_model()
-              ->GetTabGroup(saved_group->local_group_id().value())
-              ->GetFirstTab();
-      DCHECK(first_tab.has_value());
-      model_for_activation->ActivateTabAt(first_tab.value());
-      return;
-    }
-  }
-
-  // If our tab group was not found in any tabstrip model, open the group in
-  // this browser's tabstrip model.
-  TabStripModel* model_for_creation = browser->tab_strip_model();
-
-  std::vector<UrlAndId> url_and_ids;
-  for (const SavedTabGroupTab& saved_tab : saved_group->saved_tabs()) {
-    if (!saved_tab.url().is_valid())
-      continue;
-
-    UrlAndId url_and_id;
-    url_and_id.url = saved_tab.url();
-    url_and_id.id = -1;
-    url_and_ids.push_back(std::move(url_and_id));
-  }
-
-  if (url_and_ids.empty())
-    return;
-  const auto opened_web_contents =
-      OpenAllHelper(browser, std::move(url_and_ids),
-                    WindowOpenDisposition::NEW_BACKGROUND_TAB);
-
-  // Figure out which tabs we actually opened in this browser that aren't
-  // already in groups.
-  std::vector<int> tab_indices;
-  for (int i = 0; i < model_for_creation->count(); ++i) {
-    if (base::Contains(opened_web_contents,
-                       model_for_creation->GetWebContentsAt(i)) &&
-        !model_for_creation->GetTabGroupForTab(i).has_value()) {
-      tab_indices.push_back(i);
-    }
-  }
-
-  const std::u16string& title = saved_group->title();
-  const tab_groups::TabGroupColorId& color = saved_group->color();
-  tab_groups::TabGroupId tab_group_id = tab_groups::TabGroupId::GenerateNew();
-
-  // If the group does not exist, create a tab group with the same group_id.
-  model_for_creation->AddToGroupForRestore(tab_indices, tab_group_id);
-  TabGroup* group =
-      model_for_creation->group_model()->GetTabGroup(tab_group_id);
-  tab_groups::TabGroupVisualData visual_data(title, color,
-                                             /*is_collapsed=*/false);
-  group->SetVisualData(visual_data, /*is_customized=*/true);
-
-  service->model()->OnGroupOpenedInTabStrip(saved_group->saved_guid(),
-                                            tab_group_id);
-
-  absl::optional<int> first_tab =
-      model_for_creation->group_model()
-          ->GetTabGroup(saved_group->local_group_id().value())
-          ->GetFirstTab();
-  DCHECK(first_tab.has_value());
-  model_for_creation->ActivateTabAt(first_tab.value());
-}
-
-void OpenSavedTabGroup(Browser* browser,
-                       const base::GUID& saved_group_id,
-                       const size_t num_tabs) {
-  // Skip the prompt if there are few bookmarks.
-  if (num_tabs < kNumBookmarkUrlsBeforePrompting) {
-    OpenSavedTabGroupHelper(browser, saved_group_id,
-                            chrome::MESSAGE_BOX_RESULT_YES);
-    return;
-  }
-
-  // The callback passed contains the pointer |browser|. This is safe
-  // since if |browser| is closed, the message box will be destroyed
-  // before the user can answer "Yes".
-  ShowQuestionMessageBox(
-      browser->window()->GetNativeWindow(),
-      l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
-      l10n_util::GetStringFUTF16(IDS_BOOKMARK_BAR_SHOULD_OPEN_ALL,
-                                 base::NumberToString16(num_tabs)),
-      base::BindOnce(&OpenSavedTabGroupHelper, browser, saved_group_id));
-}
-
 int OpenCount(gfx::NativeWindow parent,
               const std::vector<const bookmarks::BookmarkNode*>& nodes,
               content::BrowserContext* incognito_context) {
@@ -533,6 +418,5 @@ void GetURLsAndFoldersForTabEntries(
     }
   }
 }
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace chrome

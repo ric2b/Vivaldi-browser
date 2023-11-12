@@ -179,6 +179,10 @@ base::Value::Dict PolicyWatcher::GetDefaultPolicies() {
   result.Set(key::kRemoteAccessHostUdpPortRange, "");
   result.Set(key::kRemoteAccessHostClipboardSizeBytes, -1);
   result.Set(key::kRemoteAccessHostAllowRemoteSupportConnections, true);
+#if BUILDFLAG(IS_CHROMEOS)
+  result.Set(key::kRemoteAccessHostAllowEnterpriseRemoteSupportConnections,
+             true);
+#endif
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
   result.Set(key::kRemoteAccessHostMatchUsername, false);
 #endif
@@ -213,10 +217,10 @@ PolicyWatcher::PolicyWatcher(
     std::unique_ptr<policy::ConfigurationPolicyProvider> owned_policy_provider,
     std::unique_ptr<policy::SchemaRegistry> owned_schema_registry)
     : default_values_(GetDefaultPolicies()),
-      policy_service_(policy_service),
       owned_schema_registry_(std::move(owned_schema_registry)),
       owned_policy_provider_(std::move(owned_policy_provider)),
-      owned_policy_service_(std::move(owned_policy_service)) {
+      owned_policy_service_(std::move(owned_policy_service)),
+      policy_service_(policy_service) {
   DCHECK(policy_service_);
   DCHECK(owned_schema_registry_);
 }

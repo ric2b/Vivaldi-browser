@@ -26,7 +26,6 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.FeatureList;
 import org.chromium.base.FeatureListJni;
-import org.chromium.base.jank_tracker.DummyJankTracker;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
@@ -51,7 +50,6 @@ import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
-import org.chromium.chrome.browser.share.crow.CrowButtonDelegateImpl;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProviderJni;
 import org.chromium.chrome.browser.signin.services.SigninManager;
@@ -116,6 +114,7 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
 
     private final OneshotSupplierImpl<IncognitoReauthController>
             mIncognitoReauthControllerSupplier = new OneshotSupplierImpl<>();
+    private ObservableSupplierImpl<Profile> mProfileSupplier = new ObservableSupplierImpl<>();
 
     private static class MockTabModelFilterProvider extends TabModelFilterProvider {
         public MockTabModelFilterProvider(Activity activity) {
@@ -273,9 +272,8 @@ public class StartSurfaceCoordinatorUnitTestRule implements TestRule {
                 Mockito.mock(ChromeActivityNativeDelegate.class),
                 new ActivityLifecycleDispatcherImpl(mActivity), new MockTabCreatorManager(),
                 Mockito.mock(MenuOrKeyboardActionController.class),
-                new MultiWindowModeStateDispatcherImpl(mActivity), new DummyJankTracker(),
-                new ObservableSupplierImpl<>(), new CrowButtonDelegateImpl(),
-                new BackPressManager(), mIncognitoReauthControllerSupplier, null);
+                new MultiWindowModeStateDispatcherImpl(mActivity), new ObservableSupplierImpl<>(),
+                new BackPressManager(), mIncognitoReauthControllerSupplier, null, mProfileSupplier);
 
         Assert.assertFalse(LibraryLoader.getInstance().isLoaded());
         when(mLibraryLoader.isInitialized()).thenReturn(true);

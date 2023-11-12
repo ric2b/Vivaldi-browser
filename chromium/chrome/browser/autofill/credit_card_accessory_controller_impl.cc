@@ -166,11 +166,10 @@ CreditCardAccessoryControllerImpl::GetSheetData() const {
   if (!unmasked_cards.empty()) {
     // Add the cached server cards first, so that they show up on the top of the
     // manual filling view.
-    std::transform(unmasked_cards.begin(), unmasked_cards.end(),
-                   std::back_inserter(info_to_add),
-                   [allow_filling](const CachedServerCardInfo* data) {
-                     return TranslateCachedCard(data, allow_filling);
-                   });
+    base::ranges::transform(unmasked_cards, std::back_inserter(info_to_add),
+                            [allow_filling](const CachedServerCardInfo* data) {
+                              return TranslateCachedCard(data, allow_filling);
+                            });
   }
   // Only add cards that are not present in the cache. Otherwise, we might
   // show duplicates.
@@ -241,20 +240,9 @@ void CreditCardAccessoryControllerImpl::OnFillingTriggered(
     return;
   }
 
-  const CreditCard* matching_card = UnwrapCardOrVirtualCard(*card_iter);
-  switch (matching_card->record_type()) {
-    case CreditCard::RecordType::MASKED_SERVER_CARD:
-    case CreditCard::RecordType::VIRTUAL_CARD:
-      last_focused_field_id_ = focused_field_id;
-      GetManager()->GetCreditCardAccessManager()->FetchCreditCard(matching_card,
-                                                                  AsWeakPtr());
-      break;
-    case CreditCard::RecordType::LOCAL_CARD:
-    case CreditCard::RecordType::FULL_SERVER_CARD:
-      GetDriver()->RendererShouldFillFieldWithValue(focused_field_id,
-                                                    matching_card->number());
-      break;
-  }
+  last_focused_field_id_ = focused_field_id;
+  GetManager()->GetCreditCardAccessManager()->FetchCreditCard(
+      UnwrapCardOrVirtualCard(*card_iter), AsWeakPtr());
 }
 
 void CreditCardAccessoryControllerImpl::OnOptionSelected(

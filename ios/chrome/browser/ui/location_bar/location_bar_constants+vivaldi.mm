@@ -11,10 +11,7 @@
 const CGFloat vLocationBarSteadyViewLeadingPadding = 8.f;
 // Trailing padding for location bar steady view when vivaldi menu button is
 // visible.
-const CGFloat vLocationBarSteadyViewTrailingPadding = -12.f;
-// Padding for Vivaldi menu item on the location bar in iPhone.
-const UIEdgeInsets vLocationBarVivaldiMenuItemPadding =
-  UIEdgeInsetsMake(0.f, 0.f, 0.f, 4.f);
+const CGFloat vLocationBarSteadyViewTrailingPadding = -8.f;
 // Size for Vivaldi menu item on the location bar in iPhone.
 const CGSize vLocationBarVivaldiMenuItemSize = CGSizeMake(28.f, 28.f);
 // Size for Vivaldi Shield button. Both with and height are same.

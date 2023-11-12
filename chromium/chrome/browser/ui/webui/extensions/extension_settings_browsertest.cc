@@ -157,16 +157,15 @@ IN_PROC_BROWSER_TEST_F(ExtensionSettingsUIBrowserTest, ViewSource) {
             browser()->tab_strip_model()->GetActiveWebContents());
 
   // Verify the contents of the view-source tab.
-  std::string actual_source_text;
   std::string view_source_extraction_script = R"(
       output = "";
       document.querySelectorAll(".line-content").forEach(function(elem) {
           output += elem.innerText;
       });
-      domAutomationController.send(output); )";
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      view_source_contents, view_source_extraction_script,
-      &actual_source_text));
+      output; )";
+  std::string actual_source_text =
+      content::EvalJs(view_source_contents, view_source_extraction_script)
+          .ExtractString();
   base::FilePath source_path =
       test_data_dir().AppendASCII("options_page_in_view/options.html");
   std::string expected_source_text;
@@ -283,10 +282,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionsActivityLogTest, TestActivityLogVisible) {
   // See chrome/browser/resources/extensions for the Polymer code.
   // This test only serves as an end to end test, and most of the functionality
   // is covered in the JS unit tests.
-  bool has_api_call = false;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
-      activity_log_contents,
-      R"(let manager = document.querySelector('extensions-manager');
+  EXPECT_EQ(true,
+            content::EvalJs(
+                activity_log_contents,
+                R"(let manager = document.querySelector('extensions-manager');
          let activityLog =
              manager.shadowRoot.querySelector('extensions-activity-log');
          let activityLogHistory =
@@ -302,10 +301,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsActivityLogTest, TestActivityLogVisible) {
              let item = activityLogHistory.shadowRoot.querySelector(
                  'activity-log-history-item');
              let activityKey = item.shadowRoot.getElementById('activity-key');
-             window.domAutomationController.send(
-                 activityKey.innerText === 'test.sendMessage');
+             return activityKey.innerText === 'test.sendMessage';
          });
-      )",
-      &has_api_call));
-  EXPECT_TRUE(has_api_call);
+      )"));
 }

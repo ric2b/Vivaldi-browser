@@ -181,7 +181,7 @@ MenuContentAPI::GetFactoryInstance() {
 }
 
 ExtensionFunction::ResponseAction MenuContentGetFunction::Run() {
-  std::unique_ptr<vivaldi::menu_content::Get::Params> params(
+  absl::optional<vivaldi::menu_content::Get::Params> params(
       vivaldi::menu_content::Get::Params::Create(args()));
   NodeModel pair = GetMenu(browser_context(), params->named_menu);
   if (pair.first) {
@@ -205,7 +205,7 @@ ExtensionFunction::ResponseAction MenuContentGetFunction::Run() {
 }
 
 void MenuContentGetFunction::MenuModelLoaded(Menu_Model* model) {
-  std::unique_ptr<vivaldi::menu_content::Get::Params> params(
+  absl::optional<vivaldi::menu_content::Get::Params> params(
       vivaldi::menu_content::Get::Params::Create(args()));
   SendResponse(model, params->named_menu);
   model->RemoveObserver(this);
@@ -238,7 +238,7 @@ void MenuContentGetFunction::SendResponse(Menu_Model* model,
 }
 
 ExtensionFunction::ResponseAction MenuContentMoveFunction::Run() {
-  std::unique_ptr<vivaldi::menu_content::Move::Params> params(
+  absl::optional<vivaldi::menu_content::Move::Params> params(
       vivaldi::menu_content::Move::Params::Create(args()));
   bool success = false;
   NodeModel pair = GetMenu(browser_context(), params->named_menu);
@@ -271,7 +271,7 @@ ExtensionFunction::ResponseAction MenuContentMoveFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction MenuContentCreateFunction::Run() {
-  std::unique_ptr<vivaldi::menu_content::Create::Params> params(
+  absl::optional<vivaldi::menu_content::Create::Params> params(
       vivaldi::menu_content::Create::Params::Create(args()));
   bool success = false;
   std::vector<std::string> ids;
@@ -334,7 +334,7 @@ ExtensionFunction::ResponseAction MenuContentCreateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction MenuContentRemoveFunction::Run() {
-  std::unique_ptr<vivaldi::menu_content::Remove::Params> params(
+  absl::optional<vivaldi::menu_content::Remove::Params> params(
       vivaldi::menu_content::Remove::Params::Create(args()));
   bool success = false;
   NodeModel pair = GetMenu(browser_context(), params->named_menu);
@@ -377,7 +377,7 @@ void MenuContentRemoveActionFunction::MenuModelLoaded(Menu_Model* model) {
 }
 
 bool MenuContentRemoveActionFunction::HandleRemoval() {
-  std::unique_ptr<vivaldi::menu_content::RemoveAction::Params> params(
+  absl::optional<vivaldi::menu_content::RemoveAction::Params> params(
       vivaldi::menu_content::RemoveAction::Params::Create(args()));
   Menu_Model* model =
       MainMenuServiceFactory::GetForBrowserContext(browser_context());
@@ -398,7 +398,7 @@ bool MenuContentRemoveActionFunction::HandleRemoval() {
 }
 
 ExtensionFunction::ResponseAction MenuContentUpdateFunction::Run() {
-  std::unique_ptr<vivaldi::menu_content::Update::Params> params(
+  absl::optional<vivaldi::menu_content::Update::Params> params(
       vivaldi::menu_content::Update::Params::Create(args()));
   bool success = false;
   NodeModel pair = GetMenu(browser_context(), params->named_menu);
@@ -438,7 +438,7 @@ ExtensionFunction::ResponseAction MenuContentUpdateFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction MenuContentResetFunction::Run() {
-  std::unique_ptr<vivaldi::menu_content::Reset::Params> params(
+  absl::optional<vivaldi::menu_content::Reset::Params> params(
       vivaldi::menu_content::Reset::Params::Create(args()));
   bool success = false;
   NodeModel pair = GetMenu(browser_context(), params->named_menu);

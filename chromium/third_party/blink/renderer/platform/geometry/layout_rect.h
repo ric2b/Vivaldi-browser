@@ -35,7 +35,6 @@
 
 #include "base/compiler_specific.h"
 #include "third_party/blink/renderer/platform/geometry/layout_point.h"
-#include "third_party/blink/renderer/platform/geometry/layout_rect_outsets.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -90,8 +89,8 @@ class PLATFORM_EXPORT LayoutRect {
   void SetLocation(const LayoutPoint& location) { location_ = location; }
   void SetSize(const LayoutSize& size) { size_ = size; }
 
-  constexpr ALWAYS_INLINE LayoutUnit X() const { return location_.X(); }
-  constexpr ALWAYS_INLINE LayoutUnit Y() const { return location_.Y(); }
+  ALWAYS_INLINE constexpr LayoutUnit X() const { return location_.X(); }
+  ALWAYS_INLINE constexpr LayoutUnit Y() const { return location_.Y(); }
   ALWAYS_INLINE LayoutUnit MaxX() const { return X() + Width(); }
   ALWAYS_INLINE LayoutUnit MaxY() const { return Y() + Height(); }
   constexpr LayoutUnit Width() const { return size_.Width(); }
@@ -105,7 +104,7 @@ class PLATFORM_EXPORT LayoutRect {
   void SetWidth(LayoutUnit width) { size_.SetWidth(width); }
   void SetHeight(LayoutUnit height) { size_.SetHeight(height); }
 
-  constexpr ALWAYS_INLINE bool IsEmpty() const { return size_.IsEmpty(); }
+  ALWAYS_INLINE constexpr bool IsEmpty() const { return size_.IsEmpty(); }
 
   // NOTE: The result is rounded to integer values, and thus may be not the
   // exact center point.
@@ -124,10 +123,6 @@ class PLATFORM_EXPORT LayoutRect {
   void Move(int dx, int dy) { location_.Move(LayoutUnit(dx), LayoutUnit(dy)); }
 
   void Expand(const LayoutSize& size) { size_ += size; }
-  void Expand(const LayoutRectOutsets& box) {
-    location_.Move(-box.Left(), -box.Top());
-    size_.Expand(box.Left() + box.Right(), box.Top() + box.Bottom());
-  }
   void Expand(LayoutUnit dw, LayoutUnit dh) { size_.Expand(dw, dh); }
   void ExpandEdges(LayoutUnit top,
                    LayoutUnit right,
@@ -139,22 +134,12 @@ class PLATFORM_EXPORT LayoutRect {
   void Contract(const LayoutSize& size) { size_ -= size; }
   void Contract(LayoutUnit dw, LayoutUnit dh) { size_.Expand(-dw, -dh); }
   void Contract(int dw, int dh) { size_.Expand(-dw, -dh); }
-  void Contract(const LayoutRectOutsets& box) {
-    location_.Move(box.Left(), box.Top());
-    size_.Shrink(box.Left() + box.Right(), box.Top() + box.Bottom());
-  }
   void ContractEdges(LayoutUnit top,
                      LayoutUnit right,
                      LayoutUnit bottom,
                      LayoutUnit left) {
     location_.Move(left, top);
     size_.Shrink(left + right, top + bottom);
-  }
-
-  // Convert to an outsets for {{0, 0}, size} rect.
-  LayoutRectOutsets ToOutsets(const LayoutSize& size) const {
-    return LayoutRectOutsets(-Y(), MaxX() - size.Width(),
-                             MaxY() - size.Height(), -X());
   }
 
   void ShiftXEdgeTo(LayoutUnit edge) {
@@ -318,7 +303,7 @@ inline LayoutRect UnionRectEvenIfEmpty(const LayoutRect& a,
 
 PLATFORM_EXPORT LayoutRect UnionRectEvenIfEmpty(const Vector<LayoutRect>&);
 
-constexpr ALWAYS_INLINE bool operator==(const LayoutRect& a,
+ALWAYS_INLINE constexpr bool operator==(const LayoutRect& a,
                                         const LayoutRect& b) {
   return a.Location() == b.Location() && a.Size() == b.Size();
 }

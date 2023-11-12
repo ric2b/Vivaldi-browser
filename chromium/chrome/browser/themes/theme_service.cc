@@ -35,6 +35,7 @@
 #include "chrome/browser/extensions/theme_installed_infobar_delegate.h"
 #include "chrome/browser/new_tab_page/chrome_colors/chrome_colors_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search/background/ntp_custom_background_service.h"
 #include "chrome/browser/themes/browser_theme_pack.h"
 #include "chrome/browser/themes/custom_theme_supplier.h"
 #include "chrome/browser/themes/theme_properties.h"
@@ -51,6 +52,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/prefs/pref_service.h"
+#include "components/search/ntp_features.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
@@ -411,13 +413,11 @@ void ThemeService::RemoveUnusedThemes() {
 
   std::string current_theme = GetThemeID();
   std::vector<std::string> remove_list;
-  std::unique_ptr<const extensions::ExtensionSet> extensions(
+  const extensions::ExtensionSet extensions =
       extensions::ExtensionRegistry::Get(profile_)
-          ->GenerateInstalledExtensionsSet());
+          ->GenerateInstalledExtensionsSet();
   extensions::ExtensionPrefs* prefs = extensions::ExtensionPrefs::Get(profile_);
-  for (extensions::ExtensionSet::const_iterator it = extensions->begin();
-       it != extensions->end(); ++it) {
-    const extensions::Extension* extension = it->get();
+  for (const auto& extension : extensions) {
     if (extension->is_theme() && extension->id() != current_theme) {
       // Only uninstall themes which are not disabled or are disabled with
       // reason DISABLE_USER_ACTION. We cannot blanket uninstall all disabled
@@ -425,7 +425,7 @@ void ThemeService::RemoveUnusedThemes() {
       int disable_reason = prefs->GetDisableReasons(extension->id());
       if (!prefs->IsExtensionDisabled(extension->id()) ||
           disable_reason == extensions::disable_reason::DISABLE_USER_ACTION) {
-        remove_list.push_back((*it)->id());
+        remove_list.push_back(extension->id());
       }
     }
   }
@@ -509,6 +509,11 @@ SkColor ThemeService::GetPolicyThemeColor() const {
   return profile_->GetPrefs()->GetInteger(prefs::kPolicyThemeColor);
 }
 
+ThemeService::BrowserColorScheme ThemeService::GetBrowserColorScheme() const {
+  return static_cast<BrowserColorScheme>(
+      profile_->GetPrefs()->GetInteger(prefs::kBrowserColorScheme));
+}
+
 // static
 void ThemeService::DisableThemePackForTesting() {
   g_dont_write_theme_pack_for_testing = true;
@@ -575,6 +580,9 @@ void ThemeService::ClearAllThemeData() {
 
   SwapThemeSupplier(nullptr);
   ClearThemePrefs();
+  if (base::FeatureList::IsEnabled(ntp_features::kCustomizeChromeSidePanel)) {
+    NtpCustomBackgroundService::ResetProfilePrefs(profile_);
+  }
 
   // Disable extension after modifying the prefs so that unloading the extension
   // doesn't trigger |ClearAllThemeData| again.
@@ -812,6 +820,9 @@ void ThemeService::ClearThemePrefs() {
 void ThemeService::SetThemePrefsForExtension(
     const extensions::Extension* extension) {
   ClearThemePrefs();
+  if (base::FeatureList::IsEnabled(ntp_features::kCustomizeChromeSidePanel)) {
+    NtpCustomBackgroundService::ResetProfilePrefs(profile_);
+  }
 
   profile_->GetPrefs()->SetString(prefs::kCurrentThemeID, extension->id());
 

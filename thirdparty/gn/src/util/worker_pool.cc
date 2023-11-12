@@ -53,7 +53,7 @@ void ProcessorGroupSetter::SetProcessorGroup(std::thread* thread) {
 
 int GetThreadCount() {
   std::string thread_count =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueString(
           switches::kThreads);
 
   // See if an override was specified on the command line.

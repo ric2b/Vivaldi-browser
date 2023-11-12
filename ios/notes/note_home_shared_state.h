@@ -7,7 +7,7 @@
 
 #import <set>
 
-#import "ios/chrome/browser/ui/list_model/list_model.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "notes/notes_model.h"
 
 @protocol NoteTableCellTitleEditing;

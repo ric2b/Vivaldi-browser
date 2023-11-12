@@ -30,6 +30,7 @@
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/supervised_user/core/common/pref_names.h"
 #include "content/public/browser/render_frame_host.h"
 #include "extensions/browser/blocklist_extension_prefs.h"
 #include "extensions/browser/blocklist_state.h"
@@ -582,9 +583,9 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   bool permissions_increase =
       (disable_reasons & disable_reason::DISABLE_PERMISSIONS_INCREASE) != 0;
   info->disable_reasons.parent_disabled_permissions =
-      supervised_user_service_->IsChild() &&
-      !supervised_user_service_
-           ->GetSupervisedUserExtensionsMayRequestPermissionsPref() &&
+      supervised_user_service_->AreExtensionsPermissionsEnabled() &&
+      !profile->GetPrefs()->GetBoolean(
+          prefs::kSupervisedUserExtensionsMayRequestPermissions) &&
       (custodian_approval_required || permissions_increase);
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 

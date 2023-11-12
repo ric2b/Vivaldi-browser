@@ -16,6 +16,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -38,6 +39,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/ash/components/attestation/fake_certificate.h"
 #include "chromeos/ash/components/attestation/mock_attestation_flow.h"
+#include "chromeos/ash/components/attestation/stub_attestation_features.h"
 #include "chromeos/ash/components/cryptohome/system_salt_getter.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
@@ -111,13 +113,6 @@ void CertCallbackSuccessWithValidCertificate(
     ash::attestation::AttestationFlow::CertificateCallback callback) {
   std::string certificate;
   ash::attestation::GetFakeCertificatePEM(base::Days(10), &certificate);
-  CertCallbackSuccess(std::move(callback), std::move(certificate));
-}
-
-void CertCallbackSuccessWithExpiredCertificate(
-    ash::attestation::AttestationFlow::CertificateCallback callback) {
-  std::string certificate;
-  ash::attestation::GetFakeCertificatePEM(base::Days(-1), &certificate);
   CertCallbackSuccess(std::move(callback), std::move(certificate));
 }
 
@@ -212,7 +207,7 @@ class DeviceCloudPolicyManagerAshTest
         std::make_unique<MockCloudExternalDataManager>();
     external_data_manager_ = external_data_manager.get();
     manager_ = std::make_unique<TestingDeviceCloudPolicyManagerAsh>(
-        base::WrapUnique(store_), std::move(external_data_manager),
+        base::WrapUnique(store_.get()), std::move(external_data_manager),
         base::SingleThreadTaskRunner::GetCurrentDefault(), &state_keys_broker_);
 
     RegisterLocalState(local_state_.registry());
@@ -352,9 +347,10 @@ class DeviceCloudPolicyManagerAshTest
   ServerBackedStateKeysBroker state_keys_broker_;
   StrictMock<ash::attestation::MockAttestationFlow> mock_attestation_flow_;
 
-  DeviceCloudPolicyStoreAsh* store_;
+  raw_ptr<DeviceCloudPolicyStoreAsh, ExperimentalAsh> store_;
   SchemaRegistry schema_registry_;
-  MockCloudExternalDataManager* external_data_manager_;
+  ash::attestation::ScopedStubAttestationFeatures attestation_features_;
+  raw_ptr<MockCloudExternalDataManager, ExperimentalAsh> external_data_manager_;
   std::unique_ptr<TestingDeviceCloudPolicyManagerAsh> manager_;
   std::unique_ptr<DeviceCloudPolicyInitializer> initializer_;
   network::TestURLLoaderFactory test_url_loader_factory_;
@@ -637,16 +633,7 @@ class DeviceCloudPolicyManagerAshEnrollmentTest
           mock_attestation_flow_,
           GetCertificate(
               ash::attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, _, _,
-              /*force_new_key=*/false, _, _, _, _))
-          .Times(1)
-          .WillOnce(
-              WithArgs<7>(Invoke(CertCallbackSuccessWithExpiredCertificate)));
-      EXPECT_CALL(
-          mock_attestation_flow_,
-          GetCertificate(
-              ash::attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE, _, _,
               /*force_new_key=*/true, _, _, _, _))
-          .Times(1)
           .WillOnce(
               WithArgs<7>(Invoke(CertCallbackSuccessWithValidCertificate)));
     }
@@ -834,7 +821,8 @@ class DeviceCloudPolicyManagerAshEnrollmentTest
 
       // For the refresh token for the robot account to be visible, the robot
       // account ID must not be empty.
-      token_service->set_robot_account_id_for_testing(CoreAccountId("dummy"));
+      token_service->set_robot_account_id_for_testing(
+          CoreAccountId::FromRobotEmail("robot_account@gserviceaccount.com"));
 
       EXPECT_TRUE(token_service->RefreshTokenIsAvailable());
       EXPECT_EQ(device_policy_->GetBlob(),

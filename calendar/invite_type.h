@@ -52,6 +52,8 @@ class UpdateInviteRow {
  public:
   UpdateInviteRow() = default;
   ~UpdateInviteRow() = default;
+  UpdateInviteRow(const UpdateInviteRow& invite) = default;
+  UpdateInviteRow& operator=(UpdateInviteRow& invite) = default;
 
   InviteRow invite_row;
   int updateFields = 0;
@@ -63,23 +65,13 @@ typedef std::vector<InviteToCreate> InvitesToCreate;
 class InviteResult {
  public:
   InviteResult() = default;
-  InviteResult(const InviteResult&) = delete;
-  InviteResult& operator=(const InviteResult&) = delete;
+  InviteResult(const InviteResult& invite) = default;
+  InviteResult& operator=(InviteResult& invite) = default;
 
   bool success;
   std::string message;
   InviteRow inviteRow;
 };
-
-class DeleteInviteResult {
- public:
-  DeleteInviteResult() = default;
-  DeleteInviteResult(const DeleteInviteResult&) = delete;
-  DeleteInviteResult& operator=(const DeleteInviteResult&) = delete;
-
-  bool success;
-};
-
 }  // namespace calendar
 
 #endif  //  CALENDAR_INVITE_TYPE_H_

@@ -30,13 +30,14 @@
 #import "ios/chrome/browser/crash_report/crash_keys_helper.h"
 #import "ios/chrome/browser/download/background_service/background_download_service_factory.h"
 #import "ios/chrome/browser/feature_engagement/tracker_factory.h"
+#import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/main/browser_provider.h"
 #import "ios/chrome/browser/push_notification/push_notification_delegate.h"
 #import "ios/chrome/browser/push_notification/push_notification_util.h"
-#import "ios/chrome/browser/ui/keyboard/features.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_controller.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_delegate.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/ui/keyboard/menu_builder.h"
-#import "ios/chrome/browser/ui/main/scene_controller.h"
-#import "ios/chrome/browser/ui/main/scene_delegate.h"
-#import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/web/common/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -87,10 +88,11 @@ const int kMainIntentCheckDelay = 1;
     [_mainController setMetricsMediator:_metricsMediator];
     _browserLauncher = _mainController;
     _startupInformation = _mainController;
-    _pushNotificationDelegate = [[PushNotificationDelegate alloc] init];
     _appState = [[AppState alloc] initWithBrowserLauncher:_browserLauncher
                                        startupInformation:_startupInformation
                                       applicationDelegate:self];
+    _pushNotificationDelegate =
+        [[PushNotificationDelegate alloc] initWithAppState:_appState];
     [_mainController setAppState:_appState];
   }
   return self;
@@ -106,6 +108,10 @@ const int kMainIntentCheckDelay = 1;
 - (BOOL)application:(UIApplication*)application
     didFinishLaunchingWithOptions:(NSDictionary*)launchOptions {
   self.didFinishLaunching = YES;
+
+  UNUserNotificationCenter* center =
+      [UNUserNotificationCenter currentNotificationCenter];
+  center.delegate = _pushNotificationDelegate;
 
   _appState.startupInformation.didFinishLaunchingTime = base::TimeTicks::Now();
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
@@ -236,6 +242,8 @@ const int kMainIntentCheckDelay = 1;
   // This method is invoked by iOS on the successful registration of the app to
   // APNS and retrieval of the device's APNS token.
   _didRegisterDeviceWithAPNS = YES;
+  base::UmaHistogramBoolean("IOS.PushNotification.APNSDeviceRegistration",
+                            true);
   [_pushNotificationDelegate applicationDidRegisterWithAPNS:deviceToken];
 }
 
@@ -256,16 +264,17 @@ const int kMainIntentCheckDelay = 1;
     completionHandler();
     return;
   }
-  ChromeBrowserState* browserState =
-      _mainController.interfaceProvider.mainInterface.browserState;
-  if (!browserState) {
+  Browser* browser =
+      _mainController.browserProviderInterface.mainBrowserProvider.browser;
+  if (!browser) {
     // TODO(crbug.com/1368617): We should store the completionHandler and wait
-    // for mainInterface creation.
+    // for mainBrowserProvider creation.
     completionHandler();
     return;
   }
   download::BackgroundDownloadService* download_service =
-      BackgroundDownloadServiceFactory::GetForBrowserState(browserState);
+      BackgroundDownloadServiceFactory::GetForBrowserState(
+          browser->GetBrowserState());
   if (download_service) {
     download_service->HandleEventsForBackgroundURLSession(
         base::BindOnce(completionHandler));
@@ -384,7 +393,7 @@ const int kMainIntentCheckDelay = 1;
 - (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder {
   [super buildMenuWithBuilder:builder];
 
-  if (IsKeyboardShortcutsMenuEnabled()) {
+  if (@available(iOS 15, *)) {
     [MenuBuilder buildMainMenuWithBuilder:builder];
   }
 }
@@ -415,10 +424,6 @@ const int kMainIntentCheckDelay = 1;
 // were received while Chrome was open.
 - (void)registerDeviceForPushNotifications {
   if (!_didRegisterDeviceWithAPNS && IsPriceNotificationsEnabled()) {
-    UNUserNotificationCenter* center =
-        UNUserNotificationCenter.currentNotificationCenter;
-    center.delegate = _pushNotificationDelegate;
-
     [PushNotificationUtil registerDeviceWithAPNS];
   }
 }
@@ -427,16 +432,17 @@ const int kMainIntentCheckDelay = 1;
 // the share sheet), which is an eligibility criterion for the default browser
 // blue dot promo.
 - (void)notifyFETAppStartupFromExternalIntent {
-  ChromeBrowserState* browserState =
-      _mainController.interfaceProvider.mainInterface.browserState;
+  Browser* browser =
+      _mainController.browserProviderInterface.mainBrowserProvider.browser;
 
   // OTR browsers are ignored because they can sometimes cause a nullptr tracker
   // to be returned from the tracker factory.
-  if (!browserState || browserState->IsOffTheRecord()) {
+  if (!browser || browser->GetBrowserState()->IsOffTheRecord()) {
     return;
   }
 
-  feature_engagement::TrackerFactory::GetForBrowserState(browserState)
+  feature_engagement::TrackerFactory::GetForBrowserState(
+      browser->GetBrowserState())
       ->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
 }
 

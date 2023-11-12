@@ -9,11 +9,14 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/system/video_conference/fake_video_conference_tray_controller.h"
-#include "ash/system/video_conference/video_conference_media_state.h"
+#include "ash/system/video_conference/video_conference_common.h"
 #include "ash/test/test_window_builder.h"
+#include "base/command_line.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -110,7 +113,7 @@ class FakeAppInstance {
     // Ideally, the following should be automatically triggered by showing the
     // window_; but that is not the case for now.
     auto instance = instance_->Clone();
-    instance->UpdateState(apps::InstanceState::kVisible, base::Time::Now());
+    instance->UpdateState(apps::InstanceState::kActive, base::Time::Now());
     instance_registry_->OnInstance(std::move(instance));
   }
 
@@ -133,13 +136,15 @@ class FakeAppInstance {
 
 class VideoConferenceAppServiceClientTest : public InProcessBrowserTest {
  public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(
+        ::ash::switches::kCameraEffectsSupportedByHardware);
+  }
+
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
 
     client_ = VideoConferenceAppServiceClient::GetForTesting();
-    // This is not triggered automatically.
-    client_->OnSessionStateChanged(
-        Shell::Get()->session_controller()->GetSessionState());
 
     Profile* profile = ProfileManager::GetActiveUserProfile();
     instance_registry_ = &apps::AppServiceProxyFactory::GetForProfile(profile)
@@ -228,10 +233,12 @@ class VideoConferenceAppServiceClientTest : public InProcessBrowserTest {
   }
 
  protected:
-  apps::InstanceRegistry* instance_registry_ = nullptr;
-  apps::AppRegistryCache* app_registry_cache_ = nullptr;
-  apps::AppCapabilityAccessCache* capability_cache_ = nullptr;
-  VideoConferenceAppServiceClient* client_ = nullptr;
+  raw_ptr<apps::InstanceRegistry, ExperimentalAsh> instance_registry_ = nullptr;
+  raw_ptr<apps::AppRegistryCache, ExperimentalAsh> app_registry_cache_ =
+      nullptr;
+  raw_ptr<apps::AppCapabilityAccessCache, ExperimentalAsh> capability_cache_ =
+      nullptr;
+  raw_ptr<VideoConferenceAppServiceClient, ExperimentalAsh> client_ = nullptr;
 
   base::test::ScopedFeatureList scoped_feature_list_{
       ash::features::kVideoConference};
@@ -375,6 +382,10 @@ IN_PROC_BROWSER_TEST_F(VideoConferenceAppServiceClientTest, MediaCapturing) {
   // Install two apps so that they will can be tracked inside GetMediaApps.
   InstallApp(kAppId1);
   InstallApp(kAppId2);
+  FakeAppInstance instance1(instance_registry_, kAppId1);
+  instance1.Start();
+  FakeAppInstance instance2(instance_registry_, kAppId2);
+  instance2.Start();
 
   // no-camera, no-mic should not start a tracking of the app.
   SetAppCapabilityAccess(kAppId1, /*is_capturing_camera=*/false,
@@ -504,6 +515,20 @@ IN_PROC_BROWSER_TEST_F(VideoConferenceAppServiceClientTest, CloseApp) {
   instance2.Close();
   // Wait for the VideoConferenceAppServiceClient::MaybeRemoveApp to be called
   // in the PostTask.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(GetMediaApps().empty());
+
+  // This should not add the app tracking back because there is no running
+  // instance.
+  SetAppCapabilityAccess(kAppId1, /*is_capturing_camera=*/false,
+                         /*is_capturing_microphone=*/true);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(GetMediaApps().empty());
+
+  // This should not add the app tracking back because there is no running
+  // instance.
+  SetAppCapabilityAccess(kAppId1, /*is_capturing_camera=*/false,
+                         /*is_capturing_microphone=*/false);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(GetMediaApps().empty());
 }

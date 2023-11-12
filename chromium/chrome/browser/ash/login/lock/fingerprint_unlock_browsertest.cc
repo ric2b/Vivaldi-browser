@@ -2,10 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/ash/login/lock/screen_locker.h"
 
 #include "ash/constants/ash_pref_names.h"
 #include "ash/login/ui/lock_contents_view.h"
+#include "ash/login/ui/lock_contents_view_test_api.h"
 #include "ash/login/ui/lock_screen.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -179,7 +181,7 @@ class FingerprintUnlockTest : public InProcessBrowserTest {
     bool fingerprint_available = time_change < expiration_time;
 
     LockScreen::TestApi lock_screen_test(LockScreen::Get());
-    LockContentsView::TestApi lock_contents_test(
+    LockContentsViewTestApi lock_contents_test(
         lock_screen_test.contents_view());
     // Allow lock screen timer to be executed.
     base::RunLoop().RunUntilIdle();
@@ -214,7 +216,7 @@ class FingerprintUnlockTest : public InProcessBrowserTest {
   }
 
  protected:
-  FakeBiodClient* biod_;  // Non-owning pointer.
+  raw_ptr<FakeBiodClient, ExperimentalAsh> biod_;  // Non-owning pointer.
   std::unique_ptr<base::SimpleTestClock> test_clock_;
   std::unique_ptr<base::SimpleTestTickClock> test_tick_clock_;
 
@@ -230,7 +232,7 @@ class FingerprintUnlockTest : public InProcessBrowserTest {
 
   base::OnceClosure fingerprint_session_callback_;
 
-  QuickUnlockStorage* quick_unlock_storage_;
+  raw_ptr<QuickUnlockStorage, ExperimentalAsh> quick_unlock_storage_;
 
   std::unique_ptr<ui::ScopedAnimationDurationScaleMode> zero_duration_mode_;
   std::unique_ptr<quick_unlock::TestApi> test_api_;
@@ -277,8 +279,7 @@ IN_PROC_BROWSER_TEST_F(FingerprintUnlockTest, BiodFailsBeforeLockScreenReady) {
   tester.Lock();
 
   LockScreen::TestApi lock_screen_test(LockScreen::Get());
-  LockContentsView::TestApi lock_contents_test(
-      lock_screen_test.contents_view());
+  LockContentsViewTestApi lock_contents_test(lock_screen_test.contents_view());
 
   base::RunLoop().RunUntilIdle();
 
@@ -314,8 +315,7 @@ IN_PROC_BROWSER_TEST_F(FingerprintUnlockEnrollTest,
   tester.Lock();
 
   LockScreen::TestApi lock_screen_test(LockScreen::Get());
-  LockContentsView::TestApi lock_contents_test(
-      lock_screen_test.contents_view());
+  LockContentsViewTestApi lock_contents_test(lock_screen_test.contents_view());
 
   base::RunLoop().RunUntilIdle();
 
@@ -355,8 +355,7 @@ IN_PROC_BROWSER_TEST_F(FingerprintUnlockEnrollTest,
   tester.Lock();
 
   LockScreen::TestApi lock_screen_test(LockScreen::Get());
-  LockContentsView::TestApi lock_contents_test(
-      lock_screen_test.contents_view());
+  LockContentsViewTestApi lock_contents_test(lock_screen_test.contents_view());
 
   base::RunLoop().RunUntilIdle();
 

@@ -777,9 +777,6 @@ export class BookmarksCommandManagerElement extends
     } else {
       this.openCommandMenuAtPosition(e.detail.x!, e.detail.y!, e.detail.source);
     }
-    this.browserProxy_.recordInHistogram(
-        'BookmarkManager.CommandMenuOpened', e.detail.source,
-        MenuSource.NUM_VALUES);
   }
 
   private onCommandClick_(e: Event) {
@@ -817,11 +814,11 @@ export class BookmarksCommandManagerElement extends
     this.closeCommandMenu();
   }
 
-  private onOpenCancelTap_() {
+  private onOpenCancelClick_() {
     this.$.openDialog.get().cancel();
   }
 
-  private onOpenConfirmTap_() {
+  private onOpenConfirmClick_() {
     assert(this.confirmOpenCallback_);
     this.confirmOpenCallback_();
     this.$.openDialog.get().close();

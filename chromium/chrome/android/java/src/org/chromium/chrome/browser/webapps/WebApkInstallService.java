@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker.SystemNotificationType;
 import org.chromium.chrome.browser.notifications.NotificationWrapperBuilderFactory;
@@ -35,7 +36,6 @@ import org.chromium.webapk.lib.client.WebApkNavigationClient;
 /** Java counterpart to webapk_install_service.h. */
 public class WebApkInstallService {
     /** Prefix used for generating a unique notification tag. */
-    @VisibleForTesting
     static final String WEBAPK_INSTALL_NOTIFICATION_TAG_PREFIX =
             "webapk_install_notification_tag_prefix.";
 
@@ -59,7 +59,7 @@ public class WebApkInstallService {
 
         showNotification(notificationId, SystemNotificationType.WEBAPK_INSTALL_COMPLETE, shortName,
                 url, icon, context.getResources().getString(R.string.notification_webapk_installed),
-                clickPendingIntent);
+                clickPendingIntent, null);
     }
 
     /** Display a notification when an install starts. */
@@ -73,7 +73,7 @@ public class WebApkInstallService {
             icon = WebappsIconUtils.generateAdaptiveIconBitmap(icon);
         }
         showNotification(notificationId, SystemNotificationType.WEBAPK_INSTALL_IN_PROGRESS,
-                shortName, url, icon, message, null);
+                shortName, url, icon, message, null, null);
         WebappsUtils.showToast(message);
     }
 
@@ -81,7 +81,8 @@ public class WebApkInstallService {
     @CalledByNative
     @VisibleForTesting
     static void showInstallFailedNotification(String notificationId, String shortName, String url,
-            Bitmap icon, boolean isIconMaskable, @WebApkInstallResult int resultCode) {
+            Bitmap icon, boolean isIconMaskable, @WebApkInstallResult int resultCode,
+            byte[] serializedProto) {
         Context context = ContextUtils.getApplicationContext();
         String titleMessage = context.getResources().getString(
                 R.string.notification_webapk_install_failed, shortName);
@@ -89,18 +90,25 @@ public class WebApkInstallService {
 
         PendingIntentProvider openUrlIntent =
                 WebApkInstallBroadcastReceiver.createPendingIntent(context, notificationId, url,
-                        WebApkInstallBroadcastReceiver.ACTION_OPEN_IN_BROWSER);
+                        WebApkInstallBroadcastReceiver.ACTION_OPEN_IN_BROWSER, null);
+        PendingIntentProvider retryIntent = null;
+        if (canRetryFailedInstall(resultCode) && serializedProto != null
+                && serializedProto.length > 0) {
+            retryIntent =
+                    WebApkInstallBroadcastReceiver.createPendingIntent(context, notificationId, url,
+                            WebApkInstallBroadcastReceiver.ACTION_RETRY_INSTALL, serializedProto);
+        }
 
         if (isIconMaskable && WebappsIconUtils.doesAndroidSupportMaskableIcons()) {
             icon = WebappsIconUtils.generateAdaptiveIconBitmap(icon);
         }
         showNotification(notificationId, SystemNotificationType.WEBAPK_INSTALL_FAILED, titleMessage,
-                url, icon, contentMessage, openUrlIntent);
+                url, icon, contentMessage, openUrlIntent, retryIntent);
     }
 
     private static void showNotification(String notificationId, @SystemNotificationType int type,
             String shortName, String url, Bitmap icon, String message,
-            PendingIntentProvider clickPendingIntent) {
+            PendingIntentProvider clickPendingIntent, PendingIntentProvider retryIntent) {
         Context context = ContextUtils.getApplicationContext();
 
         String channelId;
@@ -114,7 +122,7 @@ public class WebApkInstallService {
         }
 
         NotificationMetadata metadata = new NotificationMetadata(
-                type, WEBAPK_INSTALL_NOTIFICATION_TAG_PREFIX + notificationId, PLATFORM_ID);
+                type, getInstallNotificationTag(notificationId), PLATFORM_ID);
 
         NotificationWrapperBuilder notificationBuilder =
                 NotificationWrapperBuilderFactory.createNotificationWrapperBuilder(
@@ -131,6 +139,13 @@ public class WebApkInstallService {
                 .setAutoCancel(true);
 
         if (type == SystemNotificationType.WEBAPK_INSTALL_FAILED) {
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_APK_INSTALL_RETRY)
+                    && retryIntent != null) {
+                notificationBuilder.addAction(0 /* no icon */,
+                        context.getResources().getString(
+                                R.string.webapk_install_failed_action_retry),
+                        retryIntent, NotificationUmaTracker.ActionType.WEB_APK_ACTION_RETRY);
+            }
             notificationBuilder.addAction(0 /* no icon */,
                     context.getResources().getString(R.string.webapk_install_failed_action_open),
                     clickPendingIntent,
@@ -149,15 +164,34 @@ public class WebApkInstallService {
     static void cancelNotification(String notificationId) {
         NotificationManagerProxy notificationManager =
                 new NotificationManagerProxyImpl(ContextUtils.getApplicationContext());
-        notificationManager.cancel(
-                WEBAPK_INSTALL_NOTIFICATION_TAG_PREFIX + notificationId, PLATFORM_ID);
+        notificationManager.cancel(getInstallNotificationTag(notificationId), PLATFORM_ID);
+    }
+
+    private static boolean canRetryFailedInstall(@WebApkInstallResult int resultCode) {
+        switch (resultCode) {
+            case WebApkInstallResult.FAILURE:
+            case WebApkInstallResult.SERVER_ERROR:
+            case WebApkInstallResult.REQUEST_TIMEOUT:
+            case WebApkInstallResult.NOT_ENOUGH_SPACE:
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static String getInstallErrorMessage(@WebApkInstallResult int resultCode) {
-        // TODO(eirage): This uses the generic error message for now. needs to update to specific
-        // error message.
-        String message = ContextUtils.getApplicationContext().getResources().getString(
-                R.string.notification_webapk_install_failed_contents_general);
+        String message;
+        if (resultCode == WebApkInstallResult.NOT_ENOUGH_SPACE) {
+            message = ContextUtils.getApplicationContext().getResources().getString(
+                    R.string.notification_webapk_install_failed_space);
+        } else {
+            message = ContextUtils.getApplicationContext().getResources().getString(
+                    R.string.notification_webapk_install_failed_contents_general);
+        }
         return message;
+    }
+
+    static String getInstallNotificationTag(String notificationId) {
+        return WebApkInstallService.WEBAPK_INSTALL_NOTIFICATION_TAG_PREFIX + notificationId;
     }
 }

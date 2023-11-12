@@ -24,6 +24,10 @@
 @property (nonatomic, weak)
   id<VivaldiBookmarkAddEditControllerDelegate> delegate;
 
+// Will provide the necessary UI to create a folder. `YES` by default.
+// Should be set before calling `start`.
+@property(nonatomic) BOOL allowsNewFolders;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_VIVALDI_BOOKMARK_ADD_EDIT_FOLDER_VIEW_CONTROLLER_H_

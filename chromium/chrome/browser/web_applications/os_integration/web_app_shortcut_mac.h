@@ -100,11 +100,6 @@
 
 // -----------------------------------------------------------------------------
 
-// Whether to enable update and launch of app shims in tests. (Normally shims
-// are never created or launched in tests). Note that update only creates
-// internal shim bundles, i.e. it does not create new shims in ~/Applications.
-extern bool g_app_shims_allow_update_and_launch_in_tests;
-
 namespace web_app {
 
 enum class LaunchShimUpdateBehavior {
@@ -145,12 +140,14 @@ void LaunchShimForTesting(const base::FilePath& shim_path,
 // Waits for the shim with the given `app_id` and `shim_path` to terminate. If
 // there is no running application matching `app_id` and `shim_path` returns
 // immediately.
+// If `terminate_shim` is true, causes the shim to terminate before waiting.
 void WaitForShimToQuitForTesting(const base::FilePath& shim_path,
-                                 const std::string& app_id);
+                                 const std::string& app_id,
+                                 bool terminate_shim = false);
 
-// Return true if launching and updating app shims will fail because of the
-// testing environment.
-bool AppShimLaunchDisabled();
+// Disable app shims in tests if the shortcut folder is not set.
+// Because shims created in ~/Applications will not be cleaned up.
+bool AppShimCreationAndLaunchDisabledForTest();
 
 // Returns a path to the Chrome Apps folder in ~/Applications.
 base::FilePath GetChromeAppsFolder();
@@ -217,6 +214,8 @@ class WebAppShortcutCreator {
   // Returns the paths to app bundles with the given id as found by launch
   // services, sorted by preference.
   std::vector<base::FilePath> GetAppBundlesById() const;
+
+  std::string GetAppBundleId() const;
 
   bool CreateShortcuts(ShortcutCreationReason creation_reason,
                        ShortcutLocations creation_locations);

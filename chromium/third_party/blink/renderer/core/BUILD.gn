@@ -77,6 +77,10 @@ import("//third_party/blink/renderer/core/xmlhttprequest/build.gni")
 import("//third_party/blink/renderer/platform/platform_generated.gni")
 import("//third_party/protobuf/proto_library.gni")
 
+if (is_ios) {
+  import("//build/config/ios/bundle_data_from_filelist.gni")
+}
+
 visibility = [
   "//third_party/blink/public/*",
   "//third_party/blink/renderer/*",
@@ -425,6 +429,7 @@ blink_core_sources("core_hot") {
     "//services/metrics/public/cpp:ukm_builders",
     "//third_party/blink/public:image_resources_grit",
     "//third_party/blink/public/strings",
+    "//third_party/blink/renderer/bindings:buildflags",
     "//third_party/blink/renderer/core/animation:animation",
     "//third_party/blink/renderer/core/exported",
     "//third_party/blink/renderer/core/probe:probe",
@@ -515,6 +520,8 @@ source_set("testing") {
     "testing/internals_get_all_cookies.h",
     "testing/internals_get_named_cookie.cc",
     "testing/internals_get_named_cookie.h",
+    "testing/internals_ukm_recorder.cc",
+    "testing/internals_ukm_recorder.h",
     "testing/intersection_observer_test_helper.h",
     "testing/mock_clipboard_host.cc",
     "testing/mock_clipboard_host.h",
@@ -551,6 +558,21 @@ source_set("testing") {
   ]
 
   public_deps = [ "//testing/gmock:gmock" ]
+}
+
+if (is_ios) {
+  bundle_data_from_filelist("core_test_bundle_data") {
+    testonly = true
+    filelist_name = "testing/data/core_test_bundle_data.filelist"
+  }
+  bundle_data_from_filelist("animation_test_bundle_data") {
+    testonly = true
+    filelist_name = "animation/test_data/animation_test_bundle_data.filelist"
+  }
+  bundle_data_from_filelist("paint_test_bundle_data") {
+    testonly = true
+    filelist_name = "paint/test_data/paint_test_bundle_data.filelist"
+  }
 }
 
 # generate_event_interfaces ----------------------------------------------------
@@ -1245,6 +1267,7 @@ target(core_generated_target_type, "core_generated") {
     ":prerequisites",
     "//gin",
     "//skia",
+    "//third_party/blink/renderer/bindings:buildflags",
     "//third_party/blink/renderer/platform:make_platform_generated",
     "//third_party/blink/renderer/platform/wtf",
     "//third_party/iccjpeg",
@@ -1396,6 +1419,7 @@ source_set("unit_tests") {
     ":unit_test_support",
     "//build:chromeos_buildflags",
     "//cc",
+    "//components/autofill/core/common:features",
     "//components/paint_preview/common:common",
     "//components/shared_highlighting/core/common",
     "//components/shared_highlighting/core/common:data_driven_testing",

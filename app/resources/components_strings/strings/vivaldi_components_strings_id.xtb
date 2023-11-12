@@ -65,7 +65,7 @@
 <translation id="3447661539832366887">Pemilik perangkat ini mematikan permainan dinosaurus.</translation>
 <translation id="3447884698081792621">Tampilkan sertifikat (diterbitkan oleh <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Sembunyikan lanjutan</translation>
-<translation id="3484560055331845446">Anda dapat kehilangan akses ke Akun Google Anda. Chrome merekomendasikan Anda untuk mengubah sandi sekarang juga. Anda akan diminta untuk masuk akun.</translation>
+<translation id="3484560055331845446">Anda dapat kehilangan akses ke Akun Google Anda. Kami merekomendasikan Anda untuk mengubah sandi sekarang juga. Anda akan diminta untuk masuk akun.</translation>
 <translation id="3566021033012934673">Koneksi Anda tidak pribadi</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Sembunyikan semua detail</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 dipakai)} other {(# dipakai)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Memeriksa alamat proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bit)</translation>
-<translation id="5287240709317226393">Tampilkan kuki</translation>
 <translation id="5355557959165512791">Anda tidak dapat membuka <ph name="SITE" /> sekarang karena sertifikatnya telah dicabut. Kesalahan jaringan dan serangan biasanya bersifat sementara, sehingga halaman ini mungkin akan berfungsi nanti.</translation>
 <translation id="5386426401304769735">Rantai sertifikat untuk situs ini berisi sertifikat yang ditandatangani dengan SHA-1.</translation>
 <translation id="5452270690849572955">Halaman <ph name="HOST_NAME" /> ini tidak dapat ditemukan</translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Sandi</translation>
 <translation id="6711464428925977395">Ada yang salah dengan server proxy, atau alamat tidak benar.</translation>
 <translation id="6757797048963528358">Perangkat Anda siap untuk tidur.</translation>
+<translation id="6890956352250146925">Opsi untuk kuki dan data situs</translation>
 <translation id="6897140037006041989">Agen Pengguna</translation>
 <translation id="7053983685419859001">Blokir</translation>
 <translation id="7079718277001814089">Situs ini berisi malware</translation>
@@ -218,7 +218,7 @@
 <translation id="9169664750068251925">Selalu blokir di situs ini</translation>
 <translation id="9180553614777056266">Pemblokir Iklan</translation>
 <translation id="9183425211371246419"><ph name="HOST_NAME" /> menggunakan protokol yang tidak didukung.</translation>
-<translation id="936602727769022409">Anda dapat kehilangan akses ke Akun Google Anda. Chromium merekomendasikan Anda untuk mengubah sandi sekarang juga. Anda akan diminta untuk masuk akun.</translation>
+<translation id="936602727769022409">Anda dapat kehilangan akses ke Akun Google Anda. Kami merekomendasikan Anda untuk mengubah sandi sekarang juga. Anda akan diminta untuk masuk akun.</translation>
 <translation id="969892804517981540">Buatan Resmi</translation>
 <translation id="988159990683914416">Buatan Pengembang</translation>
 </translationbundle>

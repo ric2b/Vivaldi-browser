@@ -160,6 +160,15 @@ void FakeWebAppProvider::SetWebAppPolicyManager(
   web_app_policy_manager_ = std::move(web_app_policy_manager);
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+void FakeWebAppProvider::SetWebAppRunOnOsLoginManager(
+    std::unique_ptr<WebAppRunOnOsLoginManager>
+        web_app_run_on_os_login_manager) {
+  CheckNotStarted();
+  web_app_run_on_os_login_manager_ = std::move(web_app_run_on_os_login_manager);
+}
+#endif
+
 void FakeWebAppProvider::SetCommandManager(
     std::unique_ptr<WebAppCommandManager> command_manager) {
   CheckNotStarted();
@@ -174,6 +183,13 @@ void FakeWebAppProvider::SetPreinstalledWebAppManager(
   preinstalled_web_app_manager_ = std::move(preinstalled_web_app_manager);
 }
 
+void FakeWebAppProvider::SetOriginAssociationManager(
+    std::unique_ptr<WebAppOriginAssociationManager>
+        origin_association_manager) {
+  CheckNotStarted();
+  origin_association_manager_ = std::move(origin_association_manager);
+}
+
 WebAppRegistrarMutable& FakeWebAppProvider::GetRegistrarMutable() const {
   DCHECK(registrar_);
   return *static_cast<WebAppRegistrarMutable*>(registrar_.get());
@@ -183,6 +199,14 @@ WebAppIconManager& FakeWebAppProvider::GetIconManager() const {
   DCHECK(icon_manager_);
   return *icon_manager_;
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+WebAppRunOnOsLoginManager& FakeWebAppProvider::GetWebAppRunOnOsLoginManager()
+    const {
+  DCHECK(web_app_run_on_os_login_manager_);
+  return *web_app_run_on_os_login_manager_;
+}
+#endif
 
 WebAppCommandManager& FakeWebAppProvider::GetCommandManager() const {
   DCHECK(command_manager_);
@@ -250,6 +274,11 @@ void FakeWebAppProvider::SetDefaultFakeSubsystems() {
 
   SetPreinstalledWebAppManager(
       std::make_unique<PreinstalledWebAppManager>(profile_));
+
+#if BUILDFLAG(IS_CHROMEOS)
+  SetWebAppRunOnOsLoginManager(
+      std::make_unique<WebAppRunOnOsLoginManager>(command_scheduler_.get()));
+#endif
 
   ON_CALL(processor(), IsTrackingMetadata())
       .WillByDefault(testing::Return(true));

@@ -89,8 +89,8 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
   void OnSyncShutdown(syncer::SyncService* sync) override;
 
  private:
-  VivaldiSyncServiceImpl* sync_service_;
-  VivaldiAccountManager* account_manager_;
+  const raw_ptr<VivaldiSyncServiceImpl> sync_service_;
+  const raw_ptr<VivaldiAccountManager> account_manager_;
 
   bool tried_decrypt_ = false;
 };

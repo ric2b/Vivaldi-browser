@@ -34,9 +34,14 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.OptIn;
 import androidx.annotation.RequiresApi;
+import androidx.core.os.BuildCompat;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +53,8 @@ import java.util.List;
  * validation errors on low Android versions.
  */
 public class ApiCompatibilityUtils {
+    private static final String TAG = "ApiCompatUtil";
+
     private ApiCompatibilityUtils() {
     }
 
@@ -303,6 +310,65 @@ public class ApiCompatibilityUtils {
             return ApisO.createLaunchDisplayIdActivityOptions(displayId);
         }
         return null;
+    }
+
+    /**
+     * Sets the mode {@link ActivityOptions#MODE_BACKGROUND_ACTIVITY_START_ALLOWED} to the
+     * given {@link ActivityOptions}. The options can be used to send {@link PendingIntent}
+     * passed to Chrome from a backgrounded app.
+     * @param options {@ActivityOptions} to set the required mode to.
+     */
+    @OptIn(markerClass = androidx.core.os.BuildCompat.PrereleaseSdkCheck.class)
+    public static void setActivityOptionsBackgroundActivityStartMode(
+            @NonNull ActivityOptions options) {
+        if (!BuildCompat.isAtLeastU()) return;
+
+        // options.setPendingIntentBackgroundActivityStartMode(
+        //     ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+        // TODO(crbug.com/1423489): Replace the reflection with the normal API.
+        try {
+            Method method = ActivityOptions.class.getMethod(
+                    "setPendingIntentBackgroundActivityStartMode", int.class);
+            Field field = ActivityOptions.class.getField("MODE_BACKGROUND_ACTIVITY_START_ALLOWED");
+            int mode = field.getInt(null);
+            method.invoke(options, mode);
+        } catch (IllegalAccessException | InvocationTargetException | NoSuchFieldException
+                | NoSuchMethodException e) {
+            Log.e(TAG, "Reflection failure: " + e);
+            assert false : "PendingIntent from background activity may fail to run.";
+        }
+    }
+
+    /**
+     * Sets the bottom handwriting bounds offset of the given view to 0.
+     * See https://crbug.com/1427112
+     * @param view The view on which to set the handwriting bounds.
+     */
+    @OptIn(markerClass = androidx.core.os.BuildCompat.PrereleaseSdkCheck.class)
+    public static void clearHandwritingBoundsOffsetBottom(View view) {
+        // TODO(crbug.com/1427112): Replace uses of this method with direct calls once the API is
+        // available.
+        if (!BuildCompat.isAtLeastU()) return;
+        // Set the bottom handwriting bounds offset to 0 so that the view doesn't intercept
+        // stylus events meant for the web contents.
+        try {
+            // float offsetTop = this.getHandwritingBoundsOffsetTop();
+            float offsetTop =
+                    (float) View.class.getMethod("getHandwritingBoundsOffsetTop").invoke(view);
+            // float offsetLeft = this.getHandwritingBoundsOffsetLeft();
+            float offsetLeft =
+                    (float) View.class.getMethod("getHandwritingBoundsOffsetLeft").invoke(view);
+            // float offsetRight = this.getHandwritingBoundsOffsetRight();
+            float offsetRight =
+                    (float) View.class.getMethod("getHandwritingBoundsOffsetRight").invoke(view);
+            // this.setHandwritingBoundsOffsets(offsetLeft, offsetTop, offsetRight, 0);
+            Method setHandwritingBoundsOffsets = View.class.getMethod("setHandwritingBoundsOffsets",
+                    float.class, float.class, float.class, float.class);
+            setHandwritingBoundsOffsets.invoke(view, offsetLeft, offsetTop, offsetRight, 0);
+        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException
+                | NullPointerException e) {
+            // Do nothing.
+        }
     }
 
     // Access this via ContextUtils.getProcessName().

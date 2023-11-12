@@ -11,6 +11,7 @@ import org.chromium.android_webview.common.Flag;
 import org.chromium.android_webview.common.FlagOverrideHelper;
 import org.chromium.android_webview.common.PlatformServiceBridge;
 import org.chromium.android_webview.common.ProductionSupportedFlagList;
+import org.chromium.android_webview.safe_browsing.AwSafeBrowsingSafeModeAction;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
@@ -19,7 +20,6 @@ import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -116,9 +116,14 @@ public class AwContentsStatics {
         // API.
         Callback<Boolean> wrapperCallback = b -> {
             if (callback != null) {
-                PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, callback.bind(b));
+                PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, callback.bind(b));
             }
         };
+
+        if (AwSafeBrowsingSafeModeAction.isSafeBrowsingDisabled()) {
+            wrapperCallback.onResult(PlatformServiceBridge.getInstance().canUseGms());
+            return;
+        }
 
         PlatformServiceBridge.getInstance().warmUpSafeBrowsing(
                 context.getApplicationContext(), wrapperCallback);
@@ -138,7 +143,7 @@ public class AwContentsStatics {
 
     public static void logFlagOverridesWithNative(Map<String, Boolean> flagOverrides) {
         // Do work asynchronously to avoid blocking startup.
-        PostTask.postTask(TaskTraits.THREAD_POOL_BEST_EFFORT, () -> {
+        PostTask.postTask(TaskTraits.BEST_EFFORT, () -> {
             FlagOverrideHelper helper =
                     new FlagOverrideHelper(ProductionSupportedFlagList.sFlagList);
             ArrayList<String> switches = new ArrayList<>();

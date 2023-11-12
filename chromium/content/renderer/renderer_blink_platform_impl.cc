@@ -13,10 +13,10 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
-#include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/pattern.h"
@@ -30,14 +30,15 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
+#include "base/time/time_delta_from_string.h"
 #include "build/build_config.h"
 #include "cc/trees/raster_context_provider_wrapper.h"
-#include "components/attribution_reporting/os_support.mojom.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/viz/common/features.h"
 #include "content/child/child_process.h"
 #include "content/common/android/sync_compositor_statics.h"
 #include "content/common/content_constants_internal.h"
+#include "content/common/features.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/gpu_stream_constants.h"
@@ -79,6 +80,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/attribution.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/viz/public/cpp/gpu/context_provider_command_buffer.h"
 #include "storage/common/database/database_identifier.h"
@@ -104,6 +106,7 @@
 #include "third_party/blink/public/web/modules/media/audio/audio_device_factory.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_media_inspector.h"
+#include "third_party/blink/public/web/web_user_level_memory_pressure_signal_generator.h"
 #include "third_party/sqlite/sqlite3.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/buildflags.h"
@@ -175,15 +178,18 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
       sudden_termination_disables_(0),
       is_locked_to_site_(false),
       main_thread_scheduler_(main_thread_scheduler) {
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  sk_sp<font_service::FontLoader> font_loader;
+#endif
+
   // RenderThread may not exist in some tests.
   if (RenderThreadImpl::current()) {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     mojo::PendingRemote<font_service::mojom::FontService> font_service;
     RenderThreadImpl::current()->BindHostReceiver(
         font_service.InitWithNewPipeAndPassReceiver());
-    font_loader_ =
-        sk_make_sp<font_service::FontLoader>(std::move(font_service));
-    SkFontConfigInterface::SetGlobal(font_loader_);
+    font_loader = sk_make_sp<font_service::FontLoader>(std::move(font_service));
+    SkFontConfigInterface::SetGlobal(font_loader);
 #endif
   }
 
@@ -192,7 +198,7 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
 #if BUILDFLAG(IS_MAC)
     sandbox_support_ = std::make_unique<WebSandboxSupportMac>();
 #else
-    sandbox_support_ = std::make_unique<WebSandboxSupportLinux>(font_loader_);
+    sandbox_support_ = std::make_unique<WebSandboxSupportLinux>(font_loader);
 #endif
   } else {
     DVLOG(1) << "Disabling sandbox support for testing.";
@@ -312,16 +318,6 @@ bool RendererBlinkPlatformImpl::IsRedirectSafe(const GURL& from_url,
          (!GetContentClient()->renderer() ||  // null in unit tests.
           GetContentClient()->renderer()->IsSafeRedirectTarget(from_url,
                                                                to_url));
-}
-
-blink::WebResourceRequestSenderDelegate*
-RendererBlinkPlatformImpl::GetResourceRequestSenderDelegate() {
-  auto* render_thread = RenderThreadImpl::current();
-
-  // RenderThreadImpl is null in some tests.
-  if (!render_thread)
-    return nullptr;
-  return render_thread->GetResourceRequestSenderDelegate();
 }
 
 void RendererBlinkPlatformImpl::AppendVariationsThrottles(
@@ -880,13 +876,16 @@ void RendererBlinkPlatformImpl::CreateServiceWorkerSubresourceLoaderFactory(
         blink::mojom::ServiceWorkerContainerHostInterfaceBase>
         service_worker_container_host,
     const blink::WebString& client_id,
+    blink::mojom::ServiceWorkerFetchHandlerBypassOption
+        fetch_handler_bypass_option,
     std::unique_ptr<network::PendingSharedURLLoaderFactory> fallback_factory,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   ServiceWorkerSubresourceLoaderFactory::Create(
       base::MakeRefCounted<ControllerServiceWorkerConnector>(
           std::move(service_worker_container_host),
-          /*remote_controller=*/mojo::NullRemote(), client_id.Utf8()),
+          /*remote_controller=*/mojo::NullRemote(), client_id.Utf8(),
+          fetch_handler_bypass_option),
       network::SharedURLLoaderFactory::Create(std::move(fallback_factory)),
       std::move(receiver), std::move(task_runner));
 }
@@ -1000,13 +999,13 @@ base::PlatformThreadId RendererBlinkPlatformImpl::GetIOThreadId() const {
   return io_thread_id_;
 }
 
-attribution_reporting::mojom::OsSupport
-RendererBlinkPlatformImpl::GetOsSupportForAttributionReporting() {
+network::mojom::AttributionSupport
+RendererBlinkPlatformImpl::GetAttributionReportingSupport() {
   auto* render_thread = RenderThreadImpl::current();
   // RenderThreadImpl is null in some tests.
   if (!render_thread)
-    return attribution_reporting::mojom::OsSupport::kDisabled;
-  return render_thread->GetOsSupportForAttributionReporting();
+    return network::mojom::AttributionSupport::kWeb;
+  return render_thread->GetAttributionReportingSupport();
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -1036,6 +1035,42 @@ void RendererBlinkPlatformImpl::SetPrivateMemoryFootprint(
   CHECK(render_thread);
   render_thread->SetPrivateMemoryFootprint(private_memory_footprint_bytes);
 }
-#endif
+
+bool RendererBlinkPlatformImpl::IsUserLevelMemoryPressureSignalEnabled() {
+  static bool enabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kUserLevelMemoryPressureSignalParams);
+  return enabled;
+}
+
+std::pair<base::TimeDelta, base::TimeDelta> RendererBlinkPlatformImpl::
+    InertAndMinimumIntervalOfUserLevelMemoryPressureSignal() {
+  constexpr std::pair<base::TimeDelta, base::TimeDelta>
+      kDefaultInertAndMinInterval =
+          std::make_pair(base::TimeDelta::Min(), base::Minutes(10));
+
+  if (!IsUserLevelMemoryPressureSignalEnabled()) {
+    return kDefaultInertAndMinInterval;
+  }
+
+  std::vector<base::StringPiece> parameters = base::SplitStringPiece(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kUserLevelMemoryPressureSignalParams),
+      ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+  if (parameters.size() != 2) {
+    return kDefaultInertAndMinInterval;
+  }
+
+  absl::optional<base::TimeDelta> inert_interval =
+      base::TimeDeltaFromString(parameters.at(0));
+  absl::optional<base::TimeDelta> minimum_interval =
+      base::TimeDeltaFromString(parameters.at(1));
+  if (!inert_interval.has_value() || !minimum_interval.has_value()) {
+    return kDefaultInertAndMinInterval;
+  }
+
+  return std::make_pair(inert_interval.value(), minimum_interval.value());
+}
+
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace content

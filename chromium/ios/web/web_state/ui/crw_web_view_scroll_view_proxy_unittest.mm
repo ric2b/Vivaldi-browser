@@ -6,7 +6,6 @@
 
 #import <UIKit/UIKit.h>
 
-#import "base/compiler_specific.h"
 #import "base/test/scoped_feature_list.h"
 #import "ios/web/common/features.h"
 #import "ios/web/web_state/ui/crw_web_view_scroll_view_delegate_proxy.h"
@@ -328,6 +327,10 @@ TEST_F(CRWWebViewScrollViewProxyTest, SetClipsToBoundsBeforeSettingScrollView) {
 
 // Tests that frame changes are communicated to observers.
 TEST_F(CRWWebViewScrollViewProxyTest, FrameDidChange) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      web::features::kSmoothScrollingDefault);
+
   UIScrollView* underlying_scroll_view =
       [[UIScrollView alloc] initWithFrame:CGRectZero];
   [web_view_scroll_view_proxy_ setScrollView:underlying_scroll_view];
@@ -343,6 +346,10 @@ TEST_F(CRWWebViewScrollViewProxyTest, FrameDidChange) {
 
 // Tests that contentInset changes are communicated to observers.
 TEST_F(CRWWebViewScrollViewProxyTest, ContentInsetDidChange) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      web::features::kSmoothScrollingDefault);
+
   UIScrollView* underlying_scroll_view =
       [[UIScrollView alloc] initWithFrame:CGRectZero];
   [web_view_scroll_view_proxy_ setScrollView:underlying_scroll_view];

@@ -5,9 +5,9 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/table_view/cells/table_view_switch_cell.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_switch_item.h"
-#import "ios/chrome/browser/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/ad_tracker_blocker/cells/vivaldi_atb_source_setting_item.h"
 #import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"

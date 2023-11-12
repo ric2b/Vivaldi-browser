@@ -21,6 +21,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -288,7 +289,8 @@ struct ShowLoginWizardSwitchLanguageCallbackData {
       : first_screen(first_screen), startup_manifest(startup_manifest) {}
 
   const OobeScreenId first_screen;
-  const StartupCustomizationDocument* const startup_manifest;
+  const raw_ptr<const StartupCustomizationDocument, ExperimentalAsh>
+      startup_manifest;
 
   // lock UI while resource bundle is being reloaded.
   InputEventsBlocker events_blocker;
@@ -806,6 +808,7 @@ void LoginDisplayHostWebUI::LoadURL(const GURL& url) {
   // Subscribe to crash events.
   content::WebContentsObserver::Observe(login_view_->GetWebContents());
   login_view_->LoadURL(url);
+  login_window_->Show();
   CHECK(GetOobeUI());
   GetOobeUI()->AddObserver(this);
 }
@@ -929,7 +932,6 @@ void LoginDisplayHostWebUI::OnLoginPromptVisible() {
 
 void LoginDisplayHostWebUI::CreateExistingUserController() {
   existing_user_controller_ = std::make_unique<ExistingUserController>();
-  login_display_->set_delegate(existing_user_controller_.get());
 }
 
 void LoginDisplayHostWebUI::ShowGaiaDialog(const AccountId& prefilled_account) {
@@ -1009,11 +1011,6 @@ void LoginDisplayHostWebUI::RemoveObserver(
   observers_.RemoveObserver(observer);
 }
 
-void LoginDisplayHostWebUI::OnNetworkErrorScreenShown() {
-  VLOG(1) << "Login WebUI >> WEBUI_VISIBLE(ERROR_SCREEN)";
-  ShowWebUI();
-}
-
 void LoginDisplayHostWebUI::OnLoginOrLockScreenVisible() {
   VLOG(1) << "Login WebUI >> WEBUI_VISIBLE";
   ShowWebUI();
@@ -1081,21 +1078,6 @@ void ShowLoginWizard(OobeScreenId first_screen) {
   input_method::InputMethodManager* manager =
       input_method::InputMethodManager::Get();
 
-  // Set up keyboards. For example, when `locale` is "en-US", enable US qwerty
-  // and US dvorak keyboard layouts.
-  if (g_browser_process && g_browser_process->local_state()) {
-    manager->GetActiveIMEState()->SetInputMethodLoginDefault();
-
-    PrefService* prefs = g_browser_process->local_state();
-    // Apply owner preferences for tap-to-click and mouse buttons swap for
-    // login screen.
-    system::InputDeviceSettings::Get()->SetPrimaryButtonRight(
-        prefs->GetBoolean(prefs::kOwnerPrimaryMouseButtonRight));
-    system::InputDeviceSettings::Get()->SetPointingStickPrimaryButtonRight(
-        prefs->GetBoolean(prefs::kOwnerPrimaryPointingStickButtonRight));
-    system::InputDeviceSettings::Get()->SetTapToClick(
-        prefs->GetBoolean(prefs::kOwnerTapToClickEnabled));
-  }
   system::InputDeviceSettings::Get()->SetNaturalScroll(
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kNaturalScrollDefault));
@@ -1144,8 +1126,7 @@ void ShowLoginWizard(OobeScreenId first_screen) {
   }
 
   if (StartupUtils::IsEulaAccepted()) {
-    DelayNetworkCall(base::Milliseconds(kDefaultNetworkRetryDelayMS),
-                     ServicesCustomizationDocument::GetInstance()
+    DelayNetworkCall(ServicesCustomizationDocument::GetInstance()
                          ->EnsureCustomizationAppliedClosure());
 
     g_browser_process->platform_part()

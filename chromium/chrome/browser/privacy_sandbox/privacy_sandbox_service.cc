@@ -29,6 +29,7 @@
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/first_party_sets_handler.h"
@@ -245,11 +246,14 @@ PrivacySandboxService::PrivacySandboxService(
     // Disable trials prefs.
     pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2, false);
 
-    // Disable M1 prefs.
+    // Disable M1 prefs. Measurement pref should not be reset when restricted
+    // notice feature is enabled.
     pref_service_->SetBoolean(prefs::kPrivacySandboxM1TopicsEnabled, false);
     pref_service_->SetBoolean(prefs::kPrivacySandboxM1FledgeEnabled, false);
-    pref_service_->SetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled,
-                              false);
+    if (!privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.Get()) {
+      pref_service_->SetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled,
+                                false);
+    }
 
     // Clear any recorded consent information.
     pref_service_->ClearPref(prefs::kPrivacySandboxTopicsConsentGiven);
@@ -258,6 +262,15 @@ PrivacySandboxService::PrivacySandboxService(
         prefs::kPrivacySandboxTopicsConsentLastUpdateReason);
     pref_service_->ClearPref(
         prefs::kPrivacySandboxTopicsConsentTextAtLastUpdate);
+  }
+
+  // kRestricted prompt suppression reason must be cleared at startup when
+  // restricted notice feature is enabled.
+  if (privacy_sandbox::kPrivacySandboxSettings4RestrictedNotice.Get() &&
+      static_cast<PromptSuppressedReason>(
+          pref_service->GetInteger(prefs::kPrivacySandboxM1PromptSuppressed)) ==
+          PromptSuppressedReason::kRestricted) {
+    pref_service_->ClearPref(prefs::kPrivacySandboxM1PromptSuppressed);
   }
 
   // Check for FPS pref init at each startup.
@@ -326,15 +339,24 @@ void PrivacySandboxService::PromptActionOccurredM1(
     if (privacy_sandbox::kPrivacySandboxSettings4ConsentRequired.Get()) {
       pref_service_->SetBoolean(prefs::kPrivacySandboxM1EEANoticeAcknowledged,
                                 true);
+      // It's possible the user is seeing this notice as part of an upgrade to
+      // EEA consent. In this instance, we shouldn't alter the control state,
+      // as the user may have already altered it in settings.
+      if (!pref_service_->GetBoolean(
+              prefs::kPrivacySandboxM1RowNoticeAcknowledged)) {
+        pref_service_->SetBoolean(prefs::kPrivacySandboxM1FledgeEnabled, true);
+        pref_service_->SetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled,
+                                  true);
+      }
     } else {
       DCHECK(privacy_sandbox::kPrivacySandboxSettings4NoticeRequired.Get());
       pref_service_->SetBoolean(prefs::kPrivacySandboxM1RowNoticeAcknowledged,
                                 true);
       pref_service_->SetBoolean(prefs::kPrivacySandboxM1TopicsEnabled, true);
+      pref_service_->SetBoolean(prefs::kPrivacySandboxM1FledgeEnabled, true);
+      pref_service_->SetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled,
+                                true);
     }
-    pref_service_->SetBoolean(prefs::kPrivacySandboxM1FledgeEnabled, true);
-    pref_service_->SetBoolean(prefs::kPrivacySandboxM1AdMeasurementEnabled,
-                              true);
   } else if (PromptAction::kConsentAccepted == action) {
     DCHECK(privacy_sandbox::kPrivacySandboxSettings4ConsentRequired.Get());
     pref_service_->SetBoolean(prefs::kPrivacySandboxM1ConsentDecisionMade,
@@ -350,6 +372,8 @@ void PrivacySandboxService::PromptActionOccurredM1(
     RecordUpdatedTopicsConsent(
         privacy_sandbox::TopicsConsentUpdateSource::kConfirmation, false);
   }
+  // TODO(crbug.com/1428506): Handle PromptAction::kRestrictedNoticeAcknowledge
+  // and PromptAction::kRestrictedNoticeOpenSettings.
 }
 
 // static
@@ -412,6 +436,10 @@ bool PrivacySandboxService::IsPrivacySandboxManaged() {
 
 bool PrivacySandboxService::IsPrivacySandboxRestricted() {
   return privacy_sandbox_settings_->IsPrivacySandboxRestricted();
+}
+
+bool PrivacySandboxService::IsRestrictedNoticeEnabled() {
+  return privacy_sandbox_settings_->IsRestrictedNoticeEnabled();
 }
 
 void PrivacySandboxService::SetPrivacySandboxEnabled(bool enabled) {
@@ -659,9 +687,18 @@ void PrivacySandboxService::RecordPrivacySandbox4StartupMetrics() {
               : PromptStartupState::kEEAFlowCompletedWithTopicsDeclined);
       return;
     }
+
+    case PromptSuppressedReason::
+        kROWFlowCompletedAndTopicsDisabledBeforeEEAMigration: {
+      base::UmaHistogramEnumeration(
+          privacy_sandbox_prompt_startup_histogram,
+          PromptStartupState::kROWNoticeFlowCompleted);
+      return;
+    }
   }
 
   // Prompt was not suppressed explicitly at this point.
+  CHECK_EQ(prompt_suppressed_reason, PromptSuppressedReason::kNone);
 
   // Check if prompt was suppressed implicitly.
   if (IsM1PrivacySandboxEffectivelyManaged(pref_service_)) {
@@ -922,7 +959,9 @@ PrivacySandboxService::GetSampleFirstPartySets() const {
             {net::SchemefulSite(GURL("https://chromium.org")),
              net::SchemefulSite(GURL("https://chromium.org"))},
             {net::SchemefulSite(GURL("https://googlesource.com")),
-             net::SchemefulSite(GURL("https://chromium.org"))}};
+             net::SchemefulSite(GURL("https://chromium.org"))},
+            {net::SchemefulSite(GURL("https://muenchen.de")),
+             net::SchemefulSite(GURL("https://xn--mnchen-3ya.de"))}};
   }
 
   return {};
@@ -973,9 +1012,7 @@ PrivacySandboxService::GetFirstPartySetOwnerForDisplay(
     return absl::nullopt;
   }
 
-  // TODO(crbug.com/1332513): Apply formatting that correctly displays unicode
-  // domains.
-  return base::UTF8ToUTF16(site_owner->GetURL().host());
+  return url_formatter::IDNToUnicode(site_owner->GetURL().host());
 }
 
 bool PrivacySandboxService::IsPartOfManagedFirstPartySet(
@@ -1249,6 +1286,11 @@ PrivacySandboxService::GetRequiredPromptTypeInternalM1(
     return PromptType::kM1NoticeEEA;
   }
 
+  if (privacy_sandbox::
+          kPrivacySandboxSettings4ForceShowNoticeRestrictedForTesting.Get()) {
+    return PromptType::kM1NoticeRestricted;
+  }
+
   // If this a non-Chrome build, do not show a prompt.
   if (!is_chrome_build) {
     return PromptType::kNone;
@@ -1325,7 +1367,20 @@ PrivacySandboxService::GetRequiredPromptTypeInternalM1(
         return PromptType::kM1NoticeEEA;
       }
     } else {
-      // A consent decision has not yet been made, so show the consent prompt.
+      // A consent decision has not yet been made. If the user has seen a notice
+      // and disabled Topics, we should not attempt to consent them. As they
+      // already have sufficient notice for the other APIs, no prompt is
+      // required.
+      if (pref_service->GetBoolean(
+              prefs::kPrivacySandboxM1RowNoticeAcknowledged) &&
+          !pref_service->GetBoolean(prefs::kPrivacySandboxM1TopicsEnabled)) {
+        pref_service->SetInteger(
+            prefs::kPrivacySandboxM1PromptSuppressed,
+            static_cast<int>(
+                PromptSuppressedReason::
+                    kROWFlowCompletedAndTopicsDisabledBeforeEEAMigration));
+        return PromptType::kNone;
+      }
       return PromptType::kM1Consent;
     }
   }
@@ -1589,6 +1644,16 @@ void PrivacySandboxService::RecordPromptActionMetrics(
     case (PromptAction::kNoticeMoreButtonClicked): {
       base::RecordAction(base::UserMetricsAction(
           "Settings.PrivacySandbox.Notice.MoreButtonClicked"));
+      break;
+    }
+    case (PromptAction::kRestrictedNoticeAcknowledge): {
+      base::RecordAction(base::UserMetricsAction(
+          "Settings.PrivacySandbox.RestrictedNotice.Acknowledged"));
+      break;
+    }
+    case (PromptAction::kRestrictedNoticeOpenSettings): {
+      base::RecordAction(base::UserMetricsAction(
+          "Settings.PrivacySandbox.RestrictedNotice.OpenedSettings"));
       break;
     }
   }

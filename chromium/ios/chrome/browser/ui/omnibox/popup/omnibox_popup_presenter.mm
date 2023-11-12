@@ -4,14 +4,14 @@
 
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_presenter.h"
 
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/util/named_guide.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/popup/content_providing.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_container_view.h"
 #import "ios/chrome/browser/ui/toolbar/buttons/toolbar_configuration.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_constants.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/named_guide.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_theme_resources.h"
@@ -68,7 +68,8 @@ const CGFloat vPopupContainerCornerRadius = 8;
     // Popup uses same colors as the toolbar, so the ToolbarConfiguration is
     // used to get the style.
     ToolbarConfiguration* configuration = [[ToolbarConfiguration alloc]
-        initWithStyle:incognito ? INCOGNITO : NORMAL];
+        initWithStyle:incognito ? ToolbarStyle::kIncognito
+                                : ToolbarStyle::kNormal];
 
     UIView* containerView = [[OmniboxPopupContainerView alloc] init];
     [containerView addSubview:viewController.view];

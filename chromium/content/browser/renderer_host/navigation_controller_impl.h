@@ -45,6 +45,7 @@ struct NavigationDownloadPolicy;
 namespace content {
 class FrameTree;
 class FrameTreeNode;
+class NavigationEntryScreenshotCache;
 class NavigationRequest;
 class RenderFrameHostImpl;
 class SiteInstance;
@@ -167,6 +168,12 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // what this means.
   void CreateInitialEntry();
 
+  // Gets the `NavigationEntryScreenshotCache` for this `NavigationController`.
+  // Due to MPArch there can be multiple `FrameTree`s within a single tab. This
+  // should only be called for the primary FrameTree.  This cache is
+  // lazy-initialized when this method is first called.
+  NavigationEntryScreenshotCache* GetNavigationEntryScreenshotCache();
+
   // Starts a navigation in a newly created subframe as part of a history
   // navigation. Returns true if the history navigation could start, false
   // otherwise.  If this returns false, the caller should do a regular
@@ -227,7 +234,10 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       base::TimeTicks navigation_start_time,
       bool is_embedder_initiated_fenced_frame_navigation = false,
       bool is_unfenced_top_navigation = false,
-      bool force_new_browsing_instance = false);
+      bool force_new_browsing_instance = false,
+      bool is_container_initiated = false,
+      absl::optional<std::u16string> embedder_shared_storage_context =
+          absl::nullopt);
 
   // Navigates to the history entry associated with the given navigation API
   // |key|. Searches |entries_| for a FrameNavigationEntry associated with
@@ -268,6 +278,13 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
 
   // Return the index of the entry with the given unique id, or -1 if not found.
   int GetEntryIndexWithUniqueID(int nav_entry_id) const;
+
+  // Returns the index that would be used by `GoBack`. This respects skippable
+  // entries. Returns nullopt if no unskippable back entry exists.
+  absl::optional<int> GetIndexForGoBack();
+  // Returns the index that would be used by `GoForward`. This respects
+  // skippable entries. Returns nullopt if no forward entry exists.
+  absl::optional<int> GetIndexForGoForward();
 
   // Return the entry with the given unique id, or null if not found.
   NavigationEntryImpl* GetEntryWithUniqueID(int nav_entry_id) const;
@@ -653,7 +670,10 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       FrameNavigationEntry* frame_entry,
       base::TimeTicks navigation_start_time,
       bool is_embedder_initiated_fenced_frame_navigation = false,
-      bool is_unfenced_top_navigation = false);
+      bool is_unfenced_top_navigation = false,
+      bool is_container_initiated = false,
+      absl::optional<std::u16string> embedder_shared_storage_context =
+          absl::nullopt);
 
   // Creates and returns a NavigationRequest for a navigation to |entry|. Will
   // return nullptr if the parameters are invalid and the navigation cannot
@@ -947,6 +967,11 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // Stores frozen RenderFrameHost. Restores them on history navigation.
   // See BackForwardCache class documentation.
   BackForwardCacheImpl back_forward_cache_;
+
+  // Stores captured screenshots for this `NavigationController`. The
+  // screenshots are used to present the user with the previews of the
+  // previously visited pages when the back/forward navigations occur.
+  std::unique_ptr<NavigationEntryScreenshotCache> nav_entry_screenshot_cache_;
 
   // Holds the entry that was committed at the time an error page was triggered
   // due to a call to LoadPostCommitErrorPage. The error entry will take its

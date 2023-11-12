@@ -11,6 +11,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/math_constants.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
@@ -18,8 +19,10 @@
 #include "device/vr/android/arcore/arcore_math_utils.h"
 #include "device/vr/android/arcore/arcore_plane_manager.h"
 #include "device/vr/android/arcore/type_converters.h"
+#include "device/vr/create_anchor_request.h"
 #include "device/vr/public/mojom/pose.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
+#include "device/vr/public/mojom/xr_session.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -66,8 +69,8 @@ std::set<ArTrackableType> GetArCoreEntityTypes(
     const std::vector<device::mojom::EntityTypeForHitTest>& entity_types) {
   std::set<ArTrackableType> result;
 
-  std::transform(entity_types.begin(), entity_types.end(),
-                 std::inserter(result, result.end()), GetArCoreEntityType);
+  base::ranges::transform(entity_types, std::inserter(result, result.end()),
+                          GetArCoreEntityType);
 
   return result;
 }
@@ -842,7 +845,7 @@ void ArCoreImpl::BuildImageDatabase(
                           kOpaque_SkAlphaType),
         SkBitmap::kZeroPixels_AllocFlag);
     SkCanvas gray_canvas(canvas_bitmap);
-    sk_sp<SkImage> src_image = SkImage::MakeFromBitmap(src_bitmap);
+    sk_sp<SkImage> src_image = SkImages::RasterFromBitmap(src_bitmap);
     gray_canvas.drawImage(src_image, 0, 0);
     SkPixmap gray_pixmap;
     if (!gray_canvas.peekPixels(&gray_pixmap)) {
@@ -2013,39 +2016,11 @@ std::unique_ptr<ArCore> ArCoreImplFactory::Create() {
   return std::make_unique<ArCoreImpl>();
 }
 
-CreateAnchorRequest::CreateAnchorRequest(
-    const mojom::XRNativeOriginInformation& native_origin_information,
-    const gfx::Transform& native_origin_from_anchor,
-    ArCore::CreateAnchorCallback callback)
-    : native_origin_information_(native_origin_information.Clone()),
-      native_origin_from_anchor_(native_origin_from_anchor),
-      request_start_time_(base::TimeTicks::Now()),
-      callback_(std::move(callback)) {}
-CreateAnchorRequest::CreateAnchorRequest(CreateAnchorRequest&& other) = default;
-CreateAnchorRequest::~CreateAnchorRequest() = default;
-
-const mojom::XRNativeOriginInformation&
-CreateAnchorRequest::GetNativeOriginInformation() const {
-  return *native_origin_information_;
-}
-
-gfx::Transform CreateAnchorRequest::GetNativeOriginFromAnchor() const {
-  return native_origin_from_anchor_;
-}
-
-base::TimeTicks CreateAnchorRequest::GetRequestStartTime() const {
-  return request_start_time_;
-}
-
-ArCore::CreateAnchorCallback CreateAnchorRequest::TakeCallback() {
-  return std::move(callback_);
-}
-
 CreatePlaneAttachedAnchorRequest::CreatePlaneAttachedAnchorRequest(
     const mojom::XRNativeOriginInformation& native_origin_information,
     const gfx::Transform& native_origin_from_anchor,
     uint64_t plane_id,
-    ArCore::CreateAnchorCallback callback)
+    CreateAnchorCallback callback)
     : native_origin_information_(native_origin_information.Clone()),
       native_origin_from_anchor_(native_origin_from_anchor),
       plane_id_(plane_id),
@@ -2073,7 +2048,7 @@ base::TimeTicks CreatePlaneAttachedAnchorRequest::GetRequestStartTime() const {
   return request_start_time_;
 }
 
-ArCore::CreateAnchorCallback CreatePlaneAttachedAnchorRequest::TakeCallback() {
+CreateAnchorCallback CreatePlaneAttachedAnchorRequest::TakeCallback() {
   return std::move(callback_);
 }
 

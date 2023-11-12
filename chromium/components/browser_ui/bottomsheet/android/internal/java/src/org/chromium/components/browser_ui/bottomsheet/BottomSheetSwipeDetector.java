@@ -12,6 +12,9 @@ import android.view.VelocityTracker;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ThreadUtils;
 
+/** Vivaldi **/
+import android.view.View;
+
 /**
  * A class that determines whether a sequence of motion events is a valid swipe in the context of a
  * bottom sheet. The {@link SwipeableBottomSheet} that this class is built with provides information
@@ -42,6 +45,10 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
 
     /** Whether or not the user is scrolling the bottom sheet. */
     private boolean mIsScrolling;
+
+    /** Vivaldi **/
+    private boolean mSwipeWithToolbar;
+    private float toolbarHeight = 64.0f;
 
     /**
      * An interface for views that are swipable from the bottom of the screen. This interface
@@ -195,6 +202,16 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
      * @return Whether or not the event was intercepted.
      */
     public boolean onInterceptTouchEvent(MotionEvent e) {
+
+        /** Vivaldi : Pass through if not in toolbar **/
+        if (mSwipeWithToolbar) {
+            float toolbarYPos = e.getY() /
+                    ((View) mSheetDelegate).getResources().getDisplayMetrics().density;
+            if (toolbarYPos > toolbarHeight) {
+                return false;
+            }
+        } // End Vivaldi
+
         // The incoming motion event may have been adjusted by the view sending it down. Create a
         // motion event with the raw (x, y) coordinates of the original so the gesture detector
         // functions properly.
@@ -243,6 +260,11 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
     public boolean isScrolling() {
         return mIsScrolling;
     }
+
+    /** Vivaldi **/
+    public void swipeWithToolbar() {
+        mSwipeWithToolbar = true;
+    } // End Vivaldi
 
     /**
      * Creates an unadjusted version of a MotionEvent.

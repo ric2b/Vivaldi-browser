@@ -10,7 +10,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.Settings;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -26,7 +25,6 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
-import org.chromium.chrome.browser.signin.services.FREMobileIdentityConsistencyFieldTrial;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.components.crash.CrashKeyIndex;
@@ -71,15 +69,8 @@ public abstract class FirstRunFlowSequencer  {
                 // if sync is not allowed.
                 return false;
             }
-            if (FREMobileIdentityConsistencyFieldTrial.isEnabled()) {
                 // Show the sync consent page only to the signed-in users.
-                return identityManager.hasPrimaryAccount(ConsentLevel.SIGNIN);
-            } else {
-                // We show the sync consent page if sync is allowed, and not signed in, and
-                // - "skip the first use hints" is not set, or
-                // - "skip the first use hints" is set, but there is at least one account.
-                return !shouldSkipFirstUseHints(activity) || !accounts.isEmpty();
-            }
+            return identityManager.hasPrimaryAccount(ConsentLevel.SIGNIN);
         }
 
         /** @return true if the Search Engine promo page should be shown. */
@@ -97,15 +88,7 @@ public abstract class FirstRunFlowSequencer  {
             SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
                     Profile.getLastUsedRegularProfile());
             return FirstRunUtils.canAllowSync() && !signinManager.isSigninDisabledByPolicy()
-                    && signinManager.isSigninSupported();
-        }
-
-        /** @return true if first use hints should be skipped. */
-        @VisibleForTesting
-        protected boolean shouldSkipFirstUseHints(Activity activity) {
-            return Settings.Secure.getInt(
-                           activity.getContentResolver(), Settings.Secure.SKIP_FIRST_USE_HINTS, 0)
-                    != 0;
+                    && signinManager.isSigninSupported(/*requireUpdatedPlayServices=*/false);
         }
     }
 

@@ -58,3 +58,6 @@ const CGFloat vTabGridSectionPaddingiPhoneLandscape = 36.0;
 const CGFloat vTabGridSectionPaddingiPadPortrait = 64.0;
 // Tab grid section padding for iPad landscape
 const CGFloat vTabGridSectionPaddingiPadLandscape = 64.0;
+
+// Section header height for recent and sync tabs.
+const CGFloat vSectionHeaderHeight = 24;

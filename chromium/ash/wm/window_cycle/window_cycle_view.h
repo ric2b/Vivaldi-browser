@@ -9,8 +9,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/wm/gestures/wm_fling_handler.h"
-#include "ash/wm/window_cycle/window_cycle_tab_slider.h"
 #include "base/containers/flat_set.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/aura/window_occlusion_tracker.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/compositor/layer_animation_observer.h"
@@ -26,7 +26,9 @@ class Label;
 }
 
 namespace ash {
+class LabelSliderButton;
 class SystemShadow;
+class TabSlider;
 class WindowCycleItemView;
 
 // A view that shows a collection of windows the user can cycle through.
@@ -95,11 +97,11 @@ class ASH_EXPORT WindowCycleView : public views::WidgetDelegateView,
   // Called when a fling ends, cleans up fling state.
   void OnFlingEnd();
 
-  // Sets whether the `tab_slider_container_` is focused.
+  // Sets whether the `tab_slider_` is focused.
   void SetFocusTabSlider(bool focus);
 
-  // Returns whether the `tab_slider_container_` is focused.
-  bool IsTabSliderFocused();
+  // Returns whether the `tab_slider_` is focused.
+  bool IsTabSliderFocused() const;
 
   // Returns the corresponding window for the `WindowCycleItemView` located at
   // `screen_point`.
@@ -112,7 +114,6 @@ class ASH_EXPORT WindowCycleView : public views::WidgetDelegateView,
   // views::WidgetDelegateView:
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
-  void OnThemeChanged() override;
 
   // ui::ImplicitAnimationObserver:
   void OnImplicitAnimationsCompleted() override;
@@ -133,27 +134,36 @@ class ASH_EXPORT WindowCycleView : public views::WidgetDelegateView,
   gfx::Rect GetContentContainerBounds() const;
 
   // The root window that `this` resides on.
-  aura::Window* const root_window_;
+  const raw_ptr<aura::Window, ExperimentalAsh> root_window_;
 
   // A mapping from a window to its respective `WindowCycleItemView`.
   std::map<aura::Window*, WindowCycleItemView*> window_view_map_;
 
   // A container that houses and lays out all the `WindowCycleItemView`s.
-  views::View* mirror_container_ = nullptr;
+  raw_ptr<views::View, ExperimentalAsh> mirror_container_ = nullptr;
 
-  // Tab slider and no recent items are only used when Bento is enabled.
-  WindowCycleTabSlider* tab_slider_container_ = nullptr;
-  views::Label* no_recent_items_label_ = nullptr;
+  // Tells users that there are no app windows on the active desk. It only shows
+  // when there're more than 1 desk.
+  raw_ptr<views::Label, ExperimentalAsh> no_recent_items_label_ = nullptr;
+
+  // The `tab_slider_` only shows when there're more than 1 desk. It contains
+  // `all_desks_tab_slider_button_` and `current_desk_tab_slider_button_` which
+  // user can tab through or toggle between.
+  raw_ptr<TabSlider, ExperimentalAsh> tab_slider_ = nullptr;
+  raw_ptr<LabelSliderButton, ExperimentalAsh> all_desks_tab_slider_button_ =
+      nullptr;
+  raw_ptr<LabelSliderButton, ExperimentalAsh> current_desk_tab_slider_button_ =
+      nullptr;
 
   // The |target_window_| is the window that has the focus ring. When the user
   // completes cycling the |target_window_| is activated.
-  aura::Window* target_window_ = nullptr;
+  raw_ptr<aura::Window, ExperimentalAsh> target_window_ = nullptr;
 
   // The |current_window_| is the window that the window cycle list uses to
   // determine the layout and positioning of the list's items. If this window's
   // preview can equally divide the list it is centered, otherwise it is
   // off-center.
-  aura::Window* current_window_ = nullptr;
+  raw_ptr<aura::Window, ExperimentalAsh> current_window_ = nullptr;
 
   // Used when the widget bounds update should be deferred during the cycle
   // view's scaling animation..
@@ -179,6 +189,11 @@ class ASH_EXPORT WindowCycleView : public views::WidgetDelegateView,
   std::unique_ptr<WmFlingHandler> fling_handler_;
 
   std::unique_ptr<SystemShadow> shadow_;
+
+  // Indicates whether the selector view on `tab_slider_` is focused or not. We
+  // need to manually schedule paint for the focus ring since the tab slider
+  // buttons are not focusable.
+  bool is_tab_slider_focused_ = false;
 
   // True once `DestroyContents` is called. Used to prevent `Layout` from being
   // called once all the child views have been removed. See

@@ -23,7 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="Search.Ambient.Query" enum="AmbientSearchEntryPoint"
-    expires_after="2023-08-07">
+    expires_after="2023-10-08">
   <owner>juanmojica@google.com</owner>
   <owner>schechter@google.com</owner>
   <owner>stanfield@google.com</owner>
@@ -57,7 +57,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ContextualSearch.All.Searches"
-    enum="BooleanBottomSearchKind" expires_after="2023-08-20">
+    enum="BooleanBottomSearchKind" expires_after="2023-10-22">
 <!-- TODO(donnd): change expires_after to "never" once established and
        approved. -->
 
@@ -789,7 +789,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ContextualSearchPrivacyOptInPreferenceStateChange"
-    enum="BooleanOptedIn" expires_after="2023-08-13">
+    enum="BooleanOptedIn" expires_after="2023-10-15">
   <owner>donnd@chromium.org</owner>
   <owner>contextual-search-eng@google.com</owner>
   <summary>
@@ -888,7 +888,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ContextualSearchQuickActions.Category"
-    enum="ContextualSearchQuickActionCategory" expires_after="2023-08-20">
+    enum="ContextualSearchQuickActionCategory" expires_after="2023-10-22">
   <owner>donnd@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -1317,26 +1317,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Search.HistoryReport.DeltaFile.LastSeqNo" units="count"
-    expires_after="M71">
-  <owner>wychen@chromium.org</owner>
-  <owner>yusufo@chromium.org</owner>
-  <summary>
-    The last sequential number in the delta file for Icing. This is measured on
-    cold start.
-  </summary>
-</histogram>
-
-<histogram name="Search.HistoryReport.DeltaFile.LevelDBEntries" units="entries"
-    expires_after="2019-06-01">
-  <owner>wychen@chromium.org</owner>
-  <owner>yusufo@chromium.org</owner>
-  <summary>
-    The number of entries in the delta file level DB for Icing. This is measured
-    on cold start.
-  </summary>
-</histogram>
-
 <histogram name="Search.HistoryReport.UsageReportsBuffer.LevelDBEntries"
     units="entries" expires_after="2019-06-01">
   <owner>wychen@chromium.org</owner>
@@ -1370,13 +1350,39 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Search.Image.Camera.Result" enum="CameraResult"
+    expires_after="2023-08-07">
+  <owner>juanmojica@google.com</owner>
+  <owner>schechter@google.com</owner>
+  <owner>stanfield@google.com</owner>
+  <owner>hujasonx@google.com</owner>
+  <owner>lens-chrome-eng@google.com</owner>
+  <summary>
+    Records camera results such as successful image capture, user exited, etc.
+    This is recorded every time the user opens the Lens viewfinder camera.
+  </summary>
+</histogram>
+
 <histogram name="Search.iOS.SelectDefaultSearchEngine"
-    enum="OmniboxSearchEngineType" expires_after="2023-07-16">
+    enum="OmniboxSearchEngineType" expires_after="2023-09-24">
   <owner>sczs@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
     When an iOS user changes the default search engine in chrome Settings,
     records the search engine's type.
+  </summary>
+</histogram>
+
+<histogram name="Search.Lens.PingDuration" units="ms"
+    expires_after="2023-08-07">
+  <owner>hujasonx@google.com</owner>
+  <owner>lens-chrome-eng@google.com</owner>
+  <summary>
+    When the user performs a Lens search on Desktop, records the time elapsed
+    from when a Lens Ping was sent and the response was received. Recorded if
+    enable-lens-ping and ping-lens-sequentially are both true. If the ping was
+    never received, or was an unexpected type, such as a non 204 response code,
+    this event will not be logged.
   </summary>
 </histogram>
 
@@ -1433,7 +1439,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.QueryTiles.FetcherHttpResponseCode"
-    enum="HttpResponseCode" expires_after="2023-07-09">
+    enum="HttpResponseCode" expires_after="2023-09-10">
   <owner>qinmin@chromium.org</owner>
   <owner>chrome-upboarding-eng@google.com</owner>
   <summary>Records the HTTP response code get from TileFetcher.</summary>
@@ -1512,7 +1518,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Search.QueryTiles.ShowQueryTilesSegmentationResultComparison"
     enum="ShowQueryTilesSegmentationResultComparison"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
   <owner>haileywang@chromium.org</owner>
   <owner>ssid@chromium.org</owner>
   <summary>
@@ -1557,24 +1563,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Search.QueryTiles.TilesFitPerRow" units="tiles"
-    expires_after="M94">
-  <owner>shaktisahu@chromium.org</owner>
-  <owner>chrome-upboarding-eng@google.com</owner>
-  <summary>
-    Records the number of tiles per row that can be fit into the screen in the
-    default scroll position.
-  </summary>
-</histogram>
-
-<histogram name="Search.QueryTiles.TileWidth" units="dp" expires_after="M94">
-  <owner>shaktisahu@chromium.org</owner>
-  <owner>chrome-upboarding-eng@google.com</owner>
-  <summary>
-    Records the width of a single query tile when shown in the carousel.
-  </summary>
-</histogram>
-
 <histogram name="Search.QueryTiles.TrendingTileEvent" enum="TrendingTileEvent"
     expires_after="2023-08-31">
   <owner>qinmin@chromium.org</owner>
@@ -1586,7 +1574,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RegionSearch.Lens.RegionAspectRatio"
-    enum="LensRegionSearchAspectRatio" expires_after="2023-08-08">
+    enum="LensRegionSearchAspectRatio" expires_after="2023-10-08">
   <owner>juanmojica@google.com</owner>
   <owner>benwgold@google.com</owner>
   <owner>stanfield@google.com</owner>
@@ -1598,7 +1586,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RegionSearch.Lens.RegionViewportProportion" units="pct"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>juanmojica@google.com</owner>
   <owner>benwgold@google.com</owner>
   <owner>stanfield@google.com</owner>
@@ -1610,7 +1598,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RegionSearch.Lens.Result"
-    enum="LensRegionSearchCaptureResult" expires_after="2023-08-08">
+    enum="LensRegionSearchCaptureResult" expires_after="2023-10-08">
   <owner>juanmojica@google.com</owner>
   <owner>benwgold@google.com</owner>
   <owner>stanfield@google.com</owner>
@@ -1636,7 +1624,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RelatedSearches.CarouselLastVisibleItemPosition"
-    units="position" expires_after="2023-08-20">
+    units="position" expires_after="2023-10-22">
   <owner>donnd@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>related-searches-vteam@google.com</owner>
@@ -1650,7 +1638,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RelatedSearches.CarouselScrollAndClick"
-    enum="ScrollAndClickStatus" expires_after="2023-08-08">
+    enum="ScrollAndClickStatus" expires_after="2023-10-08">
   <owner>donnd@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>related-searches-vteam@google.com</owner>
@@ -1662,7 +1650,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RelatedSearches.CarouselScrolled" enum="Boolean"
-    expires_after="2023-08-13">
+    expires_after="2023-10-15">
   <owner>donnd@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>related-searches-vteam@google.com</owner>
@@ -1689,7 +1677,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RelatedSearches.NumberOfSuggestionsClicked2"
-    units="selected" expires_after="2023-08-20">
+    units="selected" expires_after="2023-10-22">
   <owner>donnd@chromium.org</owner>
   <owner>related-searches-vteam@google.com</owner>
   <summary>
@@ -1700,7 +1688,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RelatedSearches.QualifiedUsers" enum="Boolean"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
   <owner>donnd@chromium.org</owner>
   <owner>related-searches-vteam@google.com</owner>
   <summary>
@@ -1715,7 +1703,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RelatedSearches.SelectedCarouselIndex" units="position"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
   <owner>donnd@chromium.org</owner>
   <owner>related-searches-vteam@google.com</owner>
   <summary>
@@ -1726,7 +1714,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RelatedSearches.SelectedSuggestionIndex"
-    units="position" expires_after="2023-08-20">
+    units="position" expires_after="2023-10-22">
   <owner>donnd@chromium.org</owner>
   <owner>related-searches-vteam@google.com</owner>
   <summary>

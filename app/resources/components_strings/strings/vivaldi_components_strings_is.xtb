@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 í notkun)} other {(# í notkun)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" /> Athuga proxy-veffang<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bita)</translation>
-<translation id="5287240709317226393">Sýna vafrakökur</translation>
 <translation id="5355557959165512791">Þú getur ekki heimsótt <ph name="SITE" /> núna þar sem að vottorð síðunnar hefur verið endurkalla. Tengi vandamál og netárásir eru yfirleitt tímabundnar þannnig að síðan mun líklega virka aftur síðar.</translation>
 <translation id="5386426401304769735">Vottorðskeðjan fyrir þessa síðu inniheldur vottorð undirritað með SHA-1.</translation>
 <translation id="5452270690849572955">Þessi <ph name="HOST_NAME" /> síða var ekki fundin</translation>
@@ -154,6 +153,7 @@ Hafðu samband við kerfisstjóra.</translation>
 <translation id="6657585470893396449">Lykilorð</translation>
 <translation id="6711464428925977395">Það er eitthvað að vefseli þjónsins eða veffangið ekki rétt.</translation>
 <translation id="6757797048963528358">Tækið þitt sofnaði.</translation>
+<translation id="6890956352250146925">Valkostir fyrir kökur og vefsvæðagögn</translation>
 <translation id="6897140037006041989">Kennistrengur</translation>
 <translation id="7053983685419859001">Hamla</translation>
 <translation id="7079718277001814089">Þessi síða inniheldur spilliforrit</translation>

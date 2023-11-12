@@ -123,6 +123,7 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
 
   virtual bool IsStringKeyframeEffectModel() const { return false; }
   virtual bool IsTransitionKeyframeEffectModel() const { return false; }
+  virtual bool IsCssKeyframeEffectModel() { return false; }
 
   bool HasSyntheticKeyframes() const {
     EnsureKeyframeGroups();
@@ -170,6 +171,13 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
 
   virtual KeyframeEffectModelBase* Clone() = 0;
 
+  void SetViewTimelineIfRequired(const ViewTimeline* timeline);
+
+  // Ensure timeline offsets are properly resolved. If any of the offsets
+  // changed, the keyframes are resorted and cached data is cleared. Returns
+  // true if one or more offsets were affected.
+  bool ResolveTimelineOffsets(double range_start, double range_end);
+
   void Trace(Visitor*) const override;
 
  protected:
@@ -209,6 +217,15 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
       ShouldSnapshotPropertyFunction should_process_property,
       ShouldSnapshotKeyframeFunction should_process_keyframe) const;
 
+  // Keyframes require tracking of the original position in the list and
+  // resolution of computed offsets for sorting. As timeline offsets are layout
+  // dependent, keyframes require shuffling whenever a timeline offset resolves
+  // to a new value. Different ordering rules are needed for generation of
+  // property specific keyframes and for reporting in a getKeyframes calls.
+  // In both cases, the ordering rules depend on a combination of the computed
+  // offset and original index.
+  void IndexKeyframesAndResolveComputedOffsets();
+
   KeyframeVector keyframes_;
   // The spec describes filtering the normalized keyframes at sampling time
   // to get the 'property-specific keyframes'. For efficiency, we cache the
@@ -226,6 +243,8 @@ class CORE_EXPORT KeyframeEffectModelBase : public EffectModel {
   mutable bool has_revert_ = false;
   mutable bool has_named_range_keyframes_ = false;
 
+  Member<const ViewTimeline> view_timeline_;
+
   friend class KeyframeEffectModelTest;
 };
 
@@ -241,6 +260,7 @@ class KeyframeEffectModel : public KeyframeEffectModelBase {
       bool has_named_range_keyframes = false)
       : KeyframeEffectModelBase(composite, std::move(default_keyframe_easing)) {
     keyframes_.AppendVector(keyframes);
+    IndexKeyframesAndResolveComputedOffsets();
     has_named_range_keyframes_ = has_named_range_keyframes;
   }
 

@@ -9,6 +9,7 @@
 #include "ash/constants/app_types.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/window_positioning_utils.h"
+#include "base/memory/raw_ptr.h"
 #include "components/exo/buffer.h"
 #include "components/exo/display.h"
 #include "components/exo/security_delegate.h"
@@ -26,7 +27,7 @@ namespace {
 // Internal structure that owns buffer, surface and subsurface instances.
 // This is owned by the host window as an owned property.
 struct Holder {
-  exo::Surface* root_surface = nullptr;
+  raw_ptr<exo::Surface, ExperimentalAsh> root_surface = nullptr;
   std::vector<std::tuple<std::unique_ptr<exo::Buffer>,
                          std::unique_ptr<exo::Surface>,
                          std::unique_ptr<exo::SubSurface>>>
@@ -161,6 +162,12 @@ ShellSurfaceBuilder& ShellSurfaceBuilder::SetCanMinimize(bool can_minimize) {
   return *this;
 }
 
+ShellSurfaceBuilder& ShellSurfaceBuilder::SetCanMaximize(bool can_maximize) {
+  DCHECK(!built_);
+  can_maximize_ = can_maximize;
+  return *this;
+}
+
 ShellSurfaceBuilder& ShellSurfaceBuilder::SetMaximumSize(
     const gfx::Size& size) {
   DCHECK(!built_);
@@ -259,6 +266,12 @@ ShellSurfaceBuilder& ShellSurfaceBuilder::SetDelegate(
   return *this;
 }
 
+ShellSurfaceBuilder& ShellSurfaceBuilder::DisableSupportsFloatedState() {
+  DCHECK(!built_);
+  supports_floated_state_ = false;
+  return *this;
+}
+
 // static
 void ShellSurfaceBuilder::DestroyRootSurface(ShellSurfaceBase* shell_surface) {
   Holder* holder =
@@ -310,7 +323,7 @@ ShellSurfaceBuilder::BuildClientControlledShellSurface() {
   holder->AddRootSurface(root_buffer_size_, root_buffer_format_);
   auto shell_surface = Display().CreateOrGetClientControlledShellSurface(
       holder->root_surface, GetContainer(), GetDefaultDeviceScaleFactor(),
-      default_scale_cancellation_);
+      default_scale_cancellation_, supports_floated_state_);
   shell_surface->host_window()->SetProperty(kBuilderResourceHolderKey,
                                             std::move(holder));
 
@@ -364,6 +377,8 @@ ShellSurfaceBuilder::BuildClientControlledShellSurface() {
     shell_surface->GetWidget()->GetNativeWindow()->SetProperty(
         aura::client::kAppType, static_cast<int>(ash::AppType::ARC_APP));
   }
+
+  shell_surface->SetCanMaximize(can_maximize_);
 
   return shell_surface;
 }

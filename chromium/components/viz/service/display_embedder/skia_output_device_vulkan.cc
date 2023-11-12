@@ -83,17 +83,17 @@ gpu::SurfaceHandle SkiaOutputDeviceVulkan::GetChildSurfaceHandle() {
 }
 #endif
 
-bool SkiaOutputDeviceVulkan::Reshape(
-    const SkSurfaceCharacterization& characterization,
-    const gfx::ColorSpace& color_space,
-    float device_scale_factor,
-    gfx::OverlayTransform transform) {
+bool SkiaOutputDeviceVulkan::Reshape(const SkImageInfo& image_info,
+                                     const gfx::ColorSpace& color_space,
+                                     int sample_count,
+                                     float device_scale_factor,
+                                     gfx::OverlayTransform transform) {
   DCHECK(!scoped_write_);
 
   if (UNLIKELY(!vulkan_surface_))
     return false;
 
-  return RecreateSwapChain(characterization, transform);
+  return RecreateSwapChain(image_info, sample_count, transform);
 }
 
 void SkiaOutputDeviceVulkan::Submit(bool sync_cpu, base::OnceClosure callback) {
@@ -111,15 +111,12 @@ void SkiaOutputDeviceVulkan::Submit(bool sync_cpu, base::OnceClosure callback) {
   SkiaOutputDevice::Submit(sync_cpu, std::move(callback));
 }
 
-void SkiaOutputDeviceVulkan::SwapBuffers(BufferPresentedCallback feedback,
-                                         OutputSurfaceFrame frame) {
-  PostSubBuffer(gfx::Rect(vulkan_surface_->image_size()), std::move(feedback),
-                std::move(frame));
-}
-
-void SkiaOutputDeviceVulkan::PostSubBuffer(const gfx::Rect& rect,
-                                           BufferPresentedCallback feedback,
-                                           OutputSurfaceFrame frame) {
+void SkiaOutputDeviceVulkan::Present(
+    const absl::optional<gfx::Rect>& update_rect,
+    BufferPresentedCallback feedback,
+    OutputSurfaceFrame frame) {
+  gfx::Rect rect =
+      update_rect.value_or(gfx::Rect(vulkan_surface_->image_size()));
   // Reshape should have been called first.
   DCHECK(vulkan_surface_);
   DCHECK(!scoped_write_);
@@ -333,20 +330,22 @@ bool SkiaOutputDeviceVulkan::Initialize() {
 }
 
 bool SkiaOutputDeviceVulkan::RecreateSwapChain(
-    const SkSurfaceCharacterization& characterization,
+    const SkImageInfo& image_info,
+    int sample_count,
     gfx::OverlayTransform transform) {
   auto generation = vulkan_surface_->swap_chain_generation();
 
   // Call vulkan_surface_->Reshape() will recreate vulkan swapchain if it is
   // necessary.
   if (UNLIKELY(!vulkan_surface_->Reshape(
-          gfx::SkISizeToSize(characterization.dimensions()), transform)))
+          gfx::SkISizeToSize(image_info.dimensions()), transform))) {
     return false;
+  }
 
-  bool recreate = vulkan_surface_->swap_chain_generation() != generation ||
-                  !SkColorSpace::Equals(characterization.colorSpace(),
-                                        color_space_.get()) ||
-                  sample_count_ != characterization.sampleCount();
+  bool recreate =
+      vulkan_surface_->swap_chain_generation() != generation ||
+      !SkColorSpace::Equals(image_info.colorSpace(), color_space_.get()) ||
+      sample_count_ != sample_count;
   if (LIKELY(recreate)) {
     // swapchain is changed, we need recreate all cached sk surfaces.
     for (const auto& sk_surface_size_pair : sk_surface_size_pairs_) {
@@ -355,9 +354,9 @@ bool SkiaOutputDeviceVulkan::RecreateSwapChain(
     auto num_images = vulkan_surface_->swap_chain()->num_images();
     sk_surface_size_pairs_.clear();
     sk_surface_size_pairs_.resize(num_images);
-    color_type_ = characterization.colorType();
-    color_space_ = characterization.refColorSpace();
-    sample_count_ = characterization.sampleCount();
+    color_type_ = image_info.colorType();
+    color_space_ = image_info.refColorSpace();
+    sample_count_ = sample_count;
     damage_of_images_.resize(num_images);
     for (auto& damage : damage_of_images_)
       damage = gfx::Rect(vulkan_surface_->image_size());

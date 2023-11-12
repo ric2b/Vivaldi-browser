@@ -161,6 +161,13 @@ export class EntryList {
     this.isFile = false;
     this.type_name = 'EntryList';
     this.fullPath = '/';
+
+    /**
+     * @public {boolean} EntryList can be a placeholder of a real volume (e.g.
+     * MyFiles or DriveFakeRootEntryList), it can be disabled if the
+     * corresponding volume type is disabled.
+     */
+    this.disabled = false;
   }
 
   /**
@@ -250,12 +257,19 @@ export class EntryList {
   /**
    * @param {!VolumeInfo} volumeInfo that's desired to be removed.
    * This method is specific to VolumeEntry/EntryList instance.
+   * Note: we compare the volumeId instead of the whole volumeInfo reference
+   * because the same volume could be mounted multiple times and every time a
+   * new volumeInfo is created.
    * @return {number} index of entry on this EntryList or -1 if not found.
    */
   findIndexByVolumeInfo(volumeInfo) {
-    return this.children_.findIndex(childEntry => {
-      return /** @type {VolumeEntry} */ (childEntry).volumeInfo === volumeInfo;
-    });
+    return this.children_.findIndex(
+        childEntry =>
+            /** @type {VolumeEntry} */ (childEntry).volumeInfo ?
+            /** @type {VolumeEntry} */ (childEntry).volumeInfo.volumeId ===
+                volumeInfo.volumeId :
+            false,
+    );
   }
 
   /**
@@ -316,6 +330,23 @@ export class EntryList {
   getNativeEntry() {
     return null;
   }
+
+  /**
+   * EntryList can be a placeholder for the real volume (e.g. MyFiles or
+   * DriveFakeRootEntryList), if so this field will be the volume type of the
+   * volume it represents.
+   * @return {VolumeManagerCommon.VolumeType|null}
+   */
+  get volumeType() {
+    switch (this.rootType) {
+      case VolumeManagerCommon.RootType.MY_FILES:
+        return VolumeManagerCommon.VolumeType.DOWNLOADS;
+      case VolumeManagerCommon.RootType.DRIVE_FAKE_ROOT:
+        return VolumeManagerCommon.VolumeType.DRIVE;
+      default:
+        return null;
+    }
+  }
 }
 
 /**
@@ -355,7 +386,9 @@ export class VolumeEntry {
     }
     this.type_name = 'VolumeEntry';
 
-    // TODO(lucmult): consider deriving this from volumeInfo.
+    // TODO(b/271485133): consider deriving this from volumeInfo. Setting
+    // rootType here breaks some integration tests, e.g.
+    // saveAsDlpRestrictedAndroid.
     this.rootType = null;
 
     this.disabled_ = false;
@@ -564,12 +597,19 @@ export class VolumeEntry {
   /**
    * @param {!VolumeInfo} volumeInfo that's desired to be removed.
    * This method is specific to VolumeEntry/EntryList instance.
+   * Note: we compare the volumeId instead of the whole volumeInfo reference
+   * because the same volume could be mounted multiple times and every time a
+   * new volumeInfo is created.
    * @return {number} index of entry within VolumeEntry or -1 if not found.
    */
   findIndexByVolumeInfo(volumeInfo) {
     return this.children_.findIndex(
         childEntry =>
-            /** @type {VolumeEntry} */ (childEntry).volumeInfo === volumeInfo);
+            /** @type {VolumeEntry} */ (childEntry).volumeInfo ?
+            /** @type {VolumeEntry} */ (childEntry).volumeInfo.volumeId ===
+                volumeInfo.volumeId :
+            false,
+    );
   }
 
   /**
@@ -756,6 +796,21 @@ export class FakeEntryImpl {
   createReader() {
     return new StaticReader([]);
   }
+
+  /**
+   * FakeEntry can be a placeholder for the real volume, if so this field will
+   * be the volume type of the volume it represents.
+   * @return {VolumeManagerCommon.VolumeType|null}
+   */
+  get volumeType() {
+    // Recent rootType has no corresponding volume type, and it will throw error
+    // in the below getVolumeTypeFromRootType() call, we need to return null
+    // here.
+    if (this.rootType === VolumeManagerCommon.RootType.RECENT) {
+      return null;
+    }
+    return VolumeManagerCommon.getVolumeTypeFromRootType(this.rootType);
+  }
 }
 
 /**
@@ -801,5 +856,13 @@ export class GuestOsPlaceholder extends FakeEntryImpl {
   /** @override */
   toURL() {
     return `fake-entry://guest-os/${this.guest_id}`;
+  }
+
+  /** @override */
+  get volumeType() {
+    if (this.vm_type === chrome.fileManagerPrivate.VmType.ARCVM) {
+      return VolumeManagerCommon.VolumeType.ANDROID_FILES;
+    }
+    return VolumeManagerCommon.VolumeType.GUEST_OS;
   }
 }

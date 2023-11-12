@@ -26,6 +26,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/power_monitor/power_monitor.h"
@@ -35,7 +36,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/clock.h"
 #include "base/trace_event/common/trace_event_common.h"
-#include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
@@ -45,6 +45,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/trace_constants.h"
+#include "net/base/tracing.h"
 #include "net/base/transport_info.h"
 #include "net/base/upload_data_stream.h"
 #include "net/cert/cert_status_flags.h"
@@ -1242,7 +1243,7 @@ int HttpCache::Transaction::DoOpenOrCreateEntryComplete(int result) {
     } else {
       params.Set("net_error", result);
     }
-    return base::Value(std::move(params));
+    return params;
   });
 
   cache_pending_ = false;
@@ -1804,7 +1805,7 @@ int HttpCache::Transaction::DoStartPartialCacheValidation() {
 }
 
 int HttpCache::Transaction::DoCompletePartialCacheValidation(int result) {
-  if (!result) {
+  if (!result && reading_) {
     // This is the end of the request.
     DoneWithEntry(true);
     TransitionToState(STATE_FINISH_HEADERS);
@@ -2640,7 +2641,9 @@ void HttpCache::Transaction::SetRequest(const NetLogWithSource& net_log) {
   // can stop iterating kSpecialHeaders.
   //
   static const struct {
-    const HeaderNameAndValue* search;
+    // This field is not a raw_ptr<> because it was filtered by the rewriter
+    // for: #global-scope
+    RAW_PTR_EXCLUSION const HeaderNameAndValue* search;
     int load_flag;
   } kSpecialHeaders[] = {
     { kPassThroughHeaders, LOAD_DISABLE_CACHE },
@@ -2752,16 +2755,6 @@ bool HttpCache::Transaction::ShouldPassThrough() {
   } else {
     cacheable = false;
   }
-
-  NetworkIsolationKeyPresent nik_present_enum =
-      request_->network_isolation_key.IsFullyPopulated()
-          ? NetworkIsolationKeyPresent::kPresent
-          : cacheable
-                ? NetworkIsolationKeyPresent::kNotPresentCacheableRequest
-                : NetworkIsolationKeyPresent::kNotPresentNonCacheableRequest;
-
-  UMA_HISTOGRAM_ENUMERATION("HttpCache.NetworkIsolationKeyPresent2",
-                            nik_present_enum);
 
   return !cacheable;
 }
@@ -3460,7 +3453,7 @@ int HttpCache::Transaction::DoConnectedCallback() {
 int HttpCache::Transaction::DoConnectedCallbackComplete(int result) {
   if (result != OK) {
     if (result ==
-        ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_PRIVATE_NETWORK_ACCESS_POLICY) {
+        ERR_CACHED_IP_ADDRESS_SPACE_BLOCKED_BY_LOCAL_NETWORK_ACCESS_POLICY) {
       DoomInconsistentEntry();
       UpdateCacheEntryStatus(CacheEntryStatus::ENTRY_OTHER);
       TransitionToState(reading_ ? STATE_SEND_REQUEST
@@ -3886,10 +3879,6 @@ void HttpCache::Transaction::RecordHistograms() {
     return;
   }
 
-  bool validation_request =
-      cache_entry_status_ == CacheEntryStatus::ENTRY_VALIDATED ||
-      cache_entry_status_ == CacheEntryStatus::ENTRY_UPDATED;
-
   bool is_third_party = false;
 
   // Given that cache_entry_status_ is not ENTRY_UNDEFINED, the request must
@@ -3952,16 +3941,6 @@ void HttpCache::Transaction::RecordHistograms() {
 
   CACHE_STATUS_HISTOGRAMS("");
   IS_NO_STORE_HISTOGRAMS("", is_no_store);
-
-  if (validation_request) {
-    UMA_HISTOGRAM_ENUMERATION("HttpCache.ValidationCause", validation_cause_,
-                              VALIDATION_CAUSE_MAX);
-  }
-
-  if (cache_entry_status_ == CacheEntryStatus::ENTRY_CANT_CONDITIONALIZE) {
-    UMA_HISTOGRAM_ENUMERATION("HttpCache.CantConditionalizeCause",
-                              validation_cause_, VALIDATION_CAUSE_MAX);
-  }
 
   if (cache_entry_status_ == CacheEntryStatus::ENTRY_OTHER)
     return;

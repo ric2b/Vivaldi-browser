@@ -13,6 +13,7 @@
 #include "components/omnibox/browser/test_scheme_classifier.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/omnibox_proto/entity_info.pb.h"
 
 namespace {
@@ -53,14 +54,14 @@ bool ProtosAreEqual(const google::protobuf::MessageLite& actual,
 
 TEST(SearchSuggestionParserTest, DeserializeNonListJsonIsInvalid) {
   std::string json_data = "{}";
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value::List> result =
       SearchSuggestionParser::DeserializeJsonData(json_data);
   ASSERT_FALSE(result);
 }
 
 TEST(SearchSuggestionParserTest, DeserializeMalformedJsonIsInvalid) {
   std::string json_data = "} malformed json {";
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value::List> result =
       SearchSuggestionParser::DeserializeJsonData(json_data);
   ASSERT_FALSE(result);
 }
@@ -70,7 +71,7 @@ TEST(SearchSuggestionParserTest, DeserializeJsonData) {
   absl::optional<base::Value> manifest_value =
       base::JSONReader::Read(json_data);
   ASSERT_TRUE(manifest_value);
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value::List> result =
       SearchSuggestionParser::DeserializeJsonData(json_data);
   ASSERT_TRUE(result);
   ASSERT_EQ(*manifest_value, *result);
@@ -82,7 +83,7 @@ TEST(SearchSuggestionParserTest, DeserializeWithXssiGuard) {
   std::string json_data = R"([non-json [prefix [{"one": 1}])";
   // Parsing succeeds at:                      ^
 
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value::List> result =
       SearchSuggestionParser::DeserializeJsonData(json_data);
   ASSERT_TRUE(result);
 
@@ -96,7 +97,7 @@ TEST(SearchSuggestionParserTest, DeserializeWithTrailingComma) {
   // The comma in this string makes this badly formed JSON, but we explicitly
   // allow for this error in the JSON data.
   std::string json_data = R"([{"one": 1},])";
-  std::unique_ptr<base::Value> result =
+  absl::optional<base::Value::List> result =
       SearchSuggestionParser::DeserializeJsonData(json_data);
   ASSERT_TRUE(result);
 }
@@ -110,7 +111,7 @@ TEST(SearchSuggestionParserTest, DeserializeWithTrailingComma) {
 // ParseSuggestResults:
 
 TEST(SearchSuggestionParserTest, ParseEmptyValueIsInvalid) {
-  base::Value root_val;
+  base::Value::List root_val;
   AutocompleteInput input;
   TestSchemeClassifier scheme_classifier;
   int default_result_relevance = 0;
@@ -125,17 +126,26 @@ TEST(SearchSuggestionParserTest, ParseNonSuggestionValueIsInvalid) {
   std::string json_data = R"([{"one": 1}])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   AutocompleteInput input;
   TestSchemeClassifier scheme_classifier;
   int default_result_relevance = 0;
   bool is_keyword_result = false;
   SearchSuggestionParser::Results results;
   ASSERT_FALSE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, default_result_relevance,
+      root_val->GetList(), input, scheme_classifier, default_result_relevance,
       is_keyword_result, &results));
 }
 
 TEST(SearchSuggestionParserTest, ParseSuggestResults) {
+  omnibox::EntityInfo entity_info;
+  entity_info.set_annotation("American author");
+  entity_info.set_dominant_color("#424242");
+  entity_info.set_image_url("http://example.com/a.png");
+  entity_info.set_suggest_search_parameters("gs_ssp=abc");
+  entity_info.set_name("Christopher Doe");
+  entity_info.set_entity_id("/m/065xxm");
+
   std::string json_data = R"([
       "chris",
       ["christmas", "christopher doe"],
@@ -149,12 +159,9 @@ TEST(SearchSuggestionParserTest, ParseSuggestResults) {
         "google:fieldtrialtriggered": true,
         "google:suggestdetail": [{
           }, {
-            "a": "American author",
-            "dc": "#424242",
-            "i": "http://example.com/a.png",
-            "zae": "/m/065xxm",
-            "q": "gs_ssp=abc",
-            "t": "Christopher Doe"
+            "google:entityinfo": ")" +
+                          SerializeAndEncodeEntityInfo(entity_info) +
+                          R"("
           }],
         "google:suggestrelevance": [607, 606],
         "google:suggesttype": ["QUERY", "ENTITY"],
@@ -167,12 +174,14 @@ TEST(SearchSuggestionParserTest, ParseSuggestResults) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"chris", metrics::OmniboxEventProto::NTP,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
   // We have "google:suggestrelevance".
   ASSERT_EQ(true, results.relevances_from_server);
@@ -230,12 +239,14 @@ TEST(SearchSuggestionParserTest, ParsePrerenderSuggestion) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"pre", metrics::OmniboxEventProto::BLANK,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
   {
     const auto& suggestion_result = results.suggest_results[0];
@@ -264,12 +275,14 @@ TEST(SearchSuggestionParserTest, ParseBothPrefetchAndPrerenderSuggestion) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"pre", metrics::OmniboxEventProto::BLANK,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
   {
     const auto& suggestion_result = results.suggest_results[0];
@@ -368,500 +381,6 @@ TEST(SearchSuggestionParserTest, ParseSuggestionGroupInfo) {
                           scheme_classifier);
 
   {
-    std::string json_data = R"([
-      "",
-      ["los angeles", "san diego", "las vegas", "san francisco"],
-      ["", "history", "", ""],
-      [],
-      {
-        "google:clientdata": {
-          "bpc": false,
-          "tlw": false
-        },
-        "google:headertexts":{
-          "a":{
-            "40000":"Recent Searches",
-            "40008":"Recommended for you",
-            "garbage_non_int":"NOT RECOMMENDED FOR YOU"
-          },
-          "h":[40000, "40008", "garbage_non_int"]
-        },
-        "google:suggestdetail":[
-          {
-          },
-          {
-            "zl":40000
-          },
-          {
-            "zl":40008
-          },
-          {
-            "zl":40009
-          }
-        ],
-        "google:suggestrelevance": [607, 606, 605, 604],
-        "google:suggesttype": ["QUERY", "PERSONALIZED_QUERY", "QUERY", "QUERY"]
-      }])";
-    absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
-    ASSERT_TRUE(root_val);
-
-    SearchSuggestionParser::Results results;
-    ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
-        /*is_keyword_result=*/false, &results));
-
-    // Suggestion group headers, original group ids, sections, and default
-    // visibilities are correctly parsed and populated.
-    ASSERT_EQ(2U, results.suggestion_groups_map.size());
-
-    ASSERT_EQ(
-        "Recent Searches",
-        results.suggestion_groups_map[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST]
-            .header_text());
-    ASSERT_EQ(
-        omnibox::SECTION_REMOTE_ZPS_1,
-        results.suggestion_groups_map[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST]
-            .section());
-    ASSERT_EQ(
-        omnibox::GroupConfig_Visibility_HIDDEN,
-        results.suggestion_groups_map[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST]
-            .visibility());
-
-    ASSERT_EQ("Recommended for you",
-              results
-                  .suggestion_groups_map
-                      [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS]
-                  .header_text());
-    ASSERT_EQ(omnibox::GroupConfig_Visibility_DEFAULT_VISIBLE,
-              results
-                  .suggestion_groups_map
-                      [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS]
-                  .visibility());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_2,
-              results
-                  .suggestion_groups_map
-                      [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS]
-                  .section());
-
-    ASSERT_EQ(u"los angeles", results.suggest_results[0].suggestion());
-    // This suggestion does not belong to a group.
-    ASSERT_EQ(absl::nullopt, results.suggest_results[0].suggestion_group_id());
-
-    ASSERT_EQ(u"san diego", results.suggest_results[1].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST,
-              *results.suggest_results[1].suggestion_group_id());
-
-    ASSERT_EQ(u"las vegas", results.suggest_results[2].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS,
-              *results.suggest_results[2].suggestion_group_id());
-
-    ASSERT_EQ(u"san francisco", results.suggest_results[3].suggestion());
-    ASSERT_EQ(static_cast<omnibox::GroupId>(40009),
-              results.suggest_results[3].suggestion_group_id());
-  }
-  {
-    std::string json_data = R"([
-      "",
-      ["los angeles", "san diego", "las vegas", "san francisco"],
-      ["", "", "history", ""],
-      [],
-      {
-        "google:clientdata": {
-          "bpc": false,
-          "tlw": false
-        },
-        "google:headertexts":{
-          "a":{
-            "40000":"Recent Searches",
-            "40008":"Recommended for you",
-            "40009": 123
-          },
-          "h":[40000, "40008", 40009]
-        },
-        "google:suggestdetail":[
-          {
-            "zl":40008
-          },
-          {
-            "zl":40008
-          },
-          {
-            "zl":40000
-          },
-          {
-            "zl":40009
-          }
-        ],
-        "google:suggestrelevance": [607, 606, 605, 604],
-        "google:suggesttype": ["QUERY", "QUERY", "PERSONALIZED_QUERY", "QUERY"]
-      }])";
-    absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
-    ASSERT_TRUE(root_val);
-
-    SearchSuggestionParser::Results results;
-    ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
-        /*is_keyword_result=*/false, &results));
-
-    // Suggestion group headers, original group ids, sections, and default
-    // visibilities are correctly parsed and populated.
-    ASSERT_EQ(2U, results.suggestion_groups_map.size());
-
-    ASSERT_EQ(
-        "Recommended for you",
-        results.suggestion_groups_map[omnibox::GROUP_PREVIOUS_SEARCH_RELATED]
-            .header_text());
-    ASSERT_EQ(
-        omnibox::GroupConfig_Visibility_DEFAULT_VISIBLE,
-        results.suggestion_groups_map[omnibox::GROUP_PREVIOUS_SEARCH_RELATED]
-            .visibility());
-    ASSERT_EQ(
-        omnibox::SECTION_REMOTE_ZPS_1,
-        results.suggestion_groups_map[omnibox::GROUP_PREVIOUS_SEARCH_RELATED]
-            .section());
-
-    ASSERT_EQ(
-        "Recent Searches",
-        results.suggestion_groups_map[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST]
-            .header_text());
-    ASSERT_EQ(
-        omnibox::SECTION_REMOTE_ZPS_2,
-        results.suggestion_groups_map[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST]
-            .section());
-    ASSERT_EQ(
-        omnibox::GroupConfig_Visibility_HIDDEN,
-        results.suggestion_groups_map[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST]
-            .visibility());
-
-    ASSERT_EQ(u"los angeles", results.suggest_results[0].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED,
-              *results.suggest_results[0].suggestion_group_id());
-
-    ASSERT_EQ(u"san diego", results.suggest_results[1].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED,
-              *results.suggest_results[1].suggestion_group_id());
-
-    ASSERT_EQ(u"las vegas", results.suggest_results[2].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST,
-              *results.suggest_results[2].suggestion_group_id());
-
-    ASSERT_EQ(u"san francisco", results.suggest_results[3].suggestion());
-    ASSERT_EQ(static_cast<omnibox::GroupId>(40009),
-              results.suggest_results[3].suggestion_group_id());
-  }
-  {
-    std::string json_data = R"([
-      "",
-      ["los angeles", "san diego", "las vegas", "san francisco"],
-      ["", "", "", "history"],
-      [],
-      {
-        "google:clientdata": {
-          "bpc": false,
-          "tlw": false
-        },
-        "google:headertexts":{
-          "a":{
-            "40007":"Related Searches",
-            "40008":"Recommended for you",
-            "40009":"NOT RECOMMENDED FOR YOU"
-          },
-          "h":[40007, "40008", "garbage_non_int"]
-        },
-        "google:suggestdetail":[
-          {
-            "zl":40008
-          },
-          {
-            "zl":40007
-          },
-          {
-            "zl":40008
-          },
-          {
-            "zl":40000
-          }
-        ],
-        "google:suggestrelevance": [607, 606, 605, 604],
-        "google:suggesttype": ["QUERY", "QUERY", "QUERY", "PERSONALIZED_QUERY"]
-      }])";
-    absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
-    ASSERT_TRUE(root_val);
-
-    SearchSuggestionParser::Results results;
-    ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
-        /*is_keyword_result=*/false, &results));
-
-    // Suggestion group headers, original group ids, sections, and default
-    // visibilities are correctly parsed and populated.
-    ASSERT_EQ(3U, results.suggestion_groups_map.size());
-
-    ASSERT_EQ(
-        "Recommended for you",
-        results.suggestion_groups_map[omnibox::GROUP_PREVIOUS_SEARCH_RELATED]
-            .header_text());
-    ASSERT_EQ(
-        omnibox::SECTION_REMOTE_ZPS_1,
-        results.suggestion_groups_map[omnibox::GROUP_PREVIOUS_SEARCH_RELATED]
-            .section());
-    ASSERT_EQ(
-        omnibox::GroupConfig_Visibility_DEFAULT_VISIBLE,
-        results.suggestion_groups_map[omnibox::GROUP_PREVIOUS_SEARCH_RELATED]
-            .visibility());
-
-    ASSERT_EQ("Related Searches",
-              results
-                  .suggestion_groups_map
-                      [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS]
-                  .header_text());
-    ASSERT_EQ(omnibox::GroupConfig_Visibility_HIDDEN,
-              results
-                  .suggestion_groups_map
-                      [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS]
-                  .visibility());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_2,
-              results
-                  .suggestion_groups_map
-                      [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS]
-                  .section());
-
-    ASSERT_EQ(
-        "NOT RECOMMENDED FOR YOU",
-        results.suggestion_groups_map[omnibox::GROUP_TRENDS].header_text());
-    ASSERT_EQ(
-        omnibox::GroupConfig_Visibility_DEFAULT_VISIBLE,
-        results.suggestion_groups_map[omnibox::GROUP_TRENDS].visibility());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_3,
-              results.suggestion_groups_map[omnibox::GROUP_TRENDS].section());
-
-    ASSERT_EQ(u"los angeles", results.suggest_results[0].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED,
-              *results.suggest_results[0].suggestion_group_id());
-
-    ASSERT_EQ(u"san diego", results.suggest_results[1].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS,
-              *results.suggest_results[1].suggestion_group_id());
-
-    ASSERT_EQ(u"las vegas", results.suggest_results[2].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED,
-              *results.suggest_results[2].suggestion_group_id());
-
-    ASSERT_EQ(u"san francisco", results.suggest_results[3].suggestion());
-    ASSERT_EQ(static_cast<omnibox::GroupId>(40000),
-              results.suggest_results[3].suggestion_group_id());
-  }
-  {
-    std::string json_data = R"([
-    "",
-    [
-      "1",
-      "2",
-      "3",
-      "4",
-      "5",
-      "6",
-      "7"
-    ],
-    [
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      ""
-    ],
-    [],
-    {
-      "google:clientdata":{
-        "bpc":false,
-        "tlw":false
-      },
-      "google:headertexts":{
-        "a":{
-          "40000":"1",
-          "40001":"2",
-          "40002":"3",
-          "40003":"4",
-          "40004":"5",
-          "40005":"6",
-          "40006":"7"
-        },
-        "h":[
-          40005,
-          "40006",
-          "garbage_non_int"
-        ]
-      },
-      "google:suggestdetail":[
-        {
-          "zl":40000
-        },
-        {
-          "zl":40001
-        },
-        {
-          "zl":40002
-        },
-        {
-          "zl":40003
-        },
-        {
-          "zl":40004
-        },
-        {
-          "zl":40005
-        },
-        {
-          "zl":40006
-        }
-      ],
-      "google:suggestrelevance":[
-        611,
-        610,
-        609,
-        608,
-        607,
-        606,
-        605
-      ],
-      "google:suggesttype":[
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY"
-      ]
-    }])";
-    absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
-    ASSERT_TRUE(root_val);
-
-    SearchSuggestionParser::Results results;
-    ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
-        /*is_keyword_result=*/false, &results));
-
-    // Suggestion group headers, original group ids, sections, and default
-    // visibilities are correctly parsed and populated.
-    ASSERT_EQ(6U, results.suggestion_groups_map.size());
-    ASSERT_EQ(7U, results.suggest_results.size());
-    ASSERT_EQ(omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST,
-              *results.suggest_results[0].suggestion_group_id());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS,
-              *results.suggest_results[1].suggestion_group_id());
-    ASSERT_EQ(omnibox::GROUP_TRENDS_ENTITY_CHIPS,
-              *results.suggest_results[3].suggestion_group_id());
-    ASSERT_EQ(omnibox::GROUP_RELATED_QUERIES,
-              *results.suggest_results[4].suggestion_group_id());
-    ASSERT_EQ(omnibox::GROUP_VISITED_DOC_RELATED,
-              *results.suggest_results[5].suggestion_group_id());
-    ASSERT_EQ(static_cast<omnibox::GroupId>(40006),
-              results.suggest_results[6].suggestion_group_id());
-  }
-}
-
-TEST(SearchSuggestionParserTest, ParseSuggestionEntityInfo) {
-  TestSchemeClassifier scheme_classifier;
-  AutocompleteInput input(u"the m", metrics::OmniboxEventProto::NTP_REALBOX,
-                          scheme_classifier);
-
-  std::string json_data = R"([
-    "the m",
-    ["the menu", "the menu", "the midnight club"],
-    ["", "", ""],
-    [],
-    {
-      "google:clientdata": {
-        "bpc": false,
-        "tlw": false
-      },
-      "google:suggestdetail": [
-        {},
-        {
-          "a": "2022 film",
-          "dc": "#424242",
-          "i": "https://encrypted-tbn0.gstatic.com/images?q=the+menu",
-          "q": "gs_ssp=eJzj4tVP1zc0LCwoKssryyg3YPTiKMlIVchNzSsFAGrSCGQ",
-          "t": "The Menu",
-          "zae": "/g/11qprvnvhw"
-        },
-        {
-          "a": "Thriller series",
-          "dc": "#283e75",
-          "i": "https://encrypted-tbn0.gstatic.com/images?q=the+midnight+club",
-          "q": "gs_ssp=eJzj4tVP1zc0zMqrNCvJNkwyYPQSLMlIVcjNTMnLTM8oUUjOKU0CALmyCz8",
-          "t": "The Midnight Club",
-          "zae": "/g/11jny6tk1b"
-        }
-      ],
-      "google:suggestrelevance": [701, 700, 553],
-      "google:suggestsubtypes": [
-        [512, 433, 131, 355],
-        [131, 433, 512],
-        [512, 433]
-      ],
-      "google:suggesttype": ["QUERY", "ENTITY", "ENTITY"],
-      "google:verbatimrelevance": 851
-    }])";
-
-  absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
-  ASSERT_TRUE(root_val);
-
-  SearchSuggestionParser::Results results;
-  ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
-      /*is_keyword_result=*/false, &results));
-
-  ASSERT_EQ(3U, results.suggest_results.size());
-
-  // For each suggestion, verify that the JSON fields were correctly parsed.
-  ASSERT_EQ(u"the menu", results.suggest_results[0].suggestion());
-  ASSERT_TRUE(ProtosAreEqual(results.suggest_results[0].entity_info(),
-                             omnibox::EntityInfo::default_instance()));
-  ASSERT_EQ(u"", results.suggest_results[0].annotation());
-  // Empty "t" value from server results in suggestion being used instead.
-  ASSERT_EQ(u"the menu", results.suggest_results[0].match_contents());
-
-  ASSERT_EQ(u"the menu", results.suggest_results[1].suggestion());
-  ASSERT_EQ(u"2022 film", results.suggest_results[1].annotation());
-  ASSERT_EQ("#424242",
-            results.suggest_results[1].entity_info().dominant_color());
-  ASSERT_EQ(
-      "https://encrypted-tbn0.gstatic.com/"
-      "images?q=the+menu",
-      results.suggest_results[1].entity_info().image_url());
-  ASSERT_EQ(
-      "gs_ssp=eJzj4tVP1zc0LCwoKssryyg3YPTiKMlIVchNzSsFAGrSCGQ",
-      results.suggest_results[1].entity_info().suggest_search_parameters());
-  ASSERT_EQ(u"The Menu", results.suggest_results[1].match_contents());
-  ASSERT_EQ("/g/11qprvnvhw",
-            results.suggest_results[1].entity_info().entity_id());
-
-  ASSERT_EQ(u"the midnight club", results.suggest_results[2].suggestion());
-  ASSERT_EQ(u"Thriller series", results.suggest_results[2].annotation());
-  ASSERT_EQ("#283e75",
-            results.suggest_results[2].entity_info().dominant_color());
-  ASSERT_EQ(
-      "https://encrypted-tbn0.gstatic.com/"
-      "images?q=the+midnight+club",
-      results.suggest_results[2].entity_info().image_url());
-  ASSERT_EQ(
-      "gs_ssp=eJzj4tVP1zc0zMqrNCvJNkwyYPQSLMlIVcjNTMnLTM8oUUjOKU0CALmyCz8",
-      results.suggest_results[2].entity_info().suggest_search_parameters());
-  ASSERT_EQ(u"The Midnight Club", results.suggest_results[2].match_contents());
-  ASSERT_EQ("/g/11jny6tk1b",
-            results.suggest_results[2].entity_info().entity_id());
-}
-
-TEST(SearchSuggestionParserTest, ParseSuggestionGroupInfo_FromProto) {
-  TestSchemeClassifier scheme_classifier;
-  AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
-                          scheme_classifier);
-
-  {
     omnibox::GroupsInfo groups_info;
     auto* group_configs_map = groups_info.mutable_group_configs();
     auto& group_config_1 = (*group_configs_map)
@@ -880,14 +399,6 @@ TEST(SearchSuggestionParserTest, ParseSuggestionGroupInfo_FromProto) {
         "google:clientdata": {
           "bpc": false,
           "tlw": false
-        },
-        "google:headertexts":{
-          "a":{
-            "10000":"Related Entities",
-            "10001":"Trending Searches",
-            "40000":"Recent Searches"
-          },
-          "h":[10000, "10001"]
         },
         "google:groupsinfo": ")" +
                             SerializeAndEncodeGroupsInfo(groups_info) + R"(",
@@ -909,10 +420,12 @@ TEST(SearchSuggestionParserTest, ParseSuggestionGroupInfo_FromProto) {
       }])";
     absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
     ASSERT_TRUE(root_val);
+    ASSERT_TRUE(root_val.value().is_list());
 
     SearchSuggestionParser::Results results;
     ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+        root_val->GetList(), input, scheme_classifier,
+        /*default_result_relevance=*/400,
         /*is_keyword_result=*/false, &results));
 
     // Ensure suggestion groups are correctly parsed from the serialized proto.
@@ -947,38 +460,38 @@ TEST(SearchSuggestionParserTest, ParseSuggestionGroupInfo_FromProto) {
               *results.suggest_results[2].suggestion_group_id());
 
     ASSERT_EQ(u"san francisco", results.suggest_results[3].suggestion());
-    ASSERT_EQ(static_cast<omnibox::GroupId>(40000),
+    ASSERT_EQ(omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST,
               results.suggest_results[3].suggestion_group_id());
   }
   {
     omnibox::GroupsInfo groups_info;
     auto* group_configs_map = groups_info.mutable_group_configs();
-    auto& group_config_1 = (*group_configs_map)
+    // Group 1
+    auto& group_config_1 = (*group_configs_map)[omnibox::GROUP_TRENDS];
+    group_config_1.set_header_text("Trending Searches");
+    group_config_1.set_visibility(omnibox::GroupConfig_Visibility_HIDDEN);
+    // Group 2
+    auto& group_config_2 = (*group_configs_map)
         [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS];
-    group_config_1.set_header_text("Related Entities");
-    auto& group_config_2 = (*group_configs_map)[omnibox::GROUP_TRENDS];
-    group_config_2.set_header_text("Trending Searches");
-    group_config_2.set_visibility(omnibox::GroupConfig_Visibility_HIDDEN);
+    group_config_2.set_header_text("Related Entities");
+    // Group 3
     auto& group_config_3 =
         (*group_configs_map)[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST];
     group_config_3.set_header_text("Recent Searches");
+    // Group 4
+    auto& group_config_4 =
+        (*group_configs_map)[static_cast<omnibox::GroupId>(101)];
+    group_config_4.set_header_text("Unrecognized Suggestions");
 
     std::string json_data = R"([
       "",
-      ["los angeles", "san diego", "las vegas", "san francisco"],
+      ["los angeles", "san diego", "las vegas", "san francisco", "sacramento"],
       ["", "history", "", ""],
       [],
       {
         "google:clientdata": {
           "bpc": false,
           "tlw": false
-        },
-        "google:headertexts":{
-          "a":{
-            "10000":"Related Entities",
-            "10001":"Trending Searches"
-          },
-          "h":[10000, "10001"]
         },
         "google:groupsinfo": ")" +
                             SerializeAndEncodeGroupsInfo(groups_info) + R"(",
@@ -992,42 +505,49 @@ TEST(SearchSuggestionParserTest, ParseSuggestionGroupInfo_FromProto) {
             "zl":10001
           },
           {
+            "zl":102
+          },
+          {
+            "zl":101
           }
         ],
-        "google:suggestrelevance": [607, 606, 605, 604],
-        "google:suggesttype": ["QUERY", "PERSONALIZED_QUERY", "QUERY", "QUERY"]
+        "google:suggestrelevance": [607, 606, 605, 604, 603],
+        "google:suggesttype": ["QUERY", "QUERY", "QUERY", "QUERY", "QUERY"]
       }])";
     absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
     ASSERT_TRUE(root_val);
+    ASSERT_TRUE(root_val.value().is_list());
 
     SearchSuggestionParser::Results results;
     ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+        root_val->GetList(), input, scheme_classifier,
+        /*default_result_relevance=*/400,
         /*is_keyword_result=*/false, &results));
 
-    // Ensure suggestion groups are correctly parsed from the serialized proto.
+    // Ensure group configs are correctly parsed from the serialized proto.
+    // group configs with invalid or unrecognized group IDs are dropped.
     ASSERT_EQ(3U, results.suggestion_groups_map.size());
-
-    const auto& group_1 = results.suggestion_groups_map[omnibox::GROUP_TRENDS];
+    // Group 1
+    const auto& group_1 =
+        results.suggestion_groups_map.at(omnibox::GROUP_TRENDS);
     ASSERT_EQ("Trending Searches", group_1.header_text());
     ASSERT_EQ(omnibox::GroupConfig_Visibility_HIDDEN, group_1.visibility());
     ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_1, group_1.section());
-
-    const auto& group_2 =
-        results.suggestion_groups_map
-            [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS];
+    // Group 2
+    const auto& group_2 = results.suggestion_groups_map.at(
+        omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS);
     ASSERT_EQ("Related Entities", group_2.header_text());
     ASSERT_EQ(omnibox::GroupConfig_Visibility_DEFAULT_VISIBLE,
               group_2.visibility());
     ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_2, group_2.section());
-
-    const auto& group_3 =
-        results.suggestion_groups_map[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST];
+    // Group 3
+    const auto& group_3 = results.suggestion_groups_map.at(
+        omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST);
     ASSERT_EQ("Recent Searches", group_3.header_text());
     ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_3, group_3.section());
 
     // Ensure suggestion group IDs are correctly set in the suggestions.
-    ASSERT_EQ(4U, results.suggest_results.size());
+    ASSERT_EQ(5U, results.suggest_results.size());
 
     ASSERT_EQ(u"los angeles", results.suggest_results[0].suggestion());
     // This suggestion does not belong to a group.
@@ -1042,200 +562,18 @@ TEST(SearchSuggestionParserTest, ParseSuggestionGroupInfo_FromProto) {
               *results.suggest_results[2].suggestion_group_id());
 
     ASSERT_EQ(u"san francisco", results.suggest_results[3].suggestion());
-    // This suggestion does not belong to a group.
-    ASSERT_EQ(absl::nullopt, results.suggest_results[3].suggestion_group_id());
-  }
-  {
-    omnibox::GroupsInfo groups_info;
-    auto* group_configs_map = groups_info.mutable_group_configs();
-    auto& group_config_1 =
-        (*group_configs_map)[omnibox::GROUP_PREVIOUS_SEARCH_RELATED];
-    group_config_1.set_header_text("Related Searches");
-    auto& group_config_2 = (*group_configs_map)
-        [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS];
-    group_config_2.set_header_text("Related Entities");
-    auto& group_config_3 = (*group_configs_map)[omnibox::GROUP_TRENDS];
-    group_config_3.set_header_text("Trending Searches");
-    auto& group_config_4 =
-        (*group_configs_map)[omnibox::GROUP_TRENDS_ENTITY_CHIPS];
-    group_config_4.set_header_text("Trending Entities");
-    auto& group_config_5 = (*group_configs_map)[omnibox::GROUP_RELATED_QUERIES];
-    group_config_5.set_header_text("Related Questions");
-    auto& group_config_6 =
-        (*group_configs_map)[omnibox::GROUP_VISITED_DOC_RELATED];
-    group_config_6.set_header_text("Related To Websites");
-    auto& group_config_7 =
-        (*group_configs_map)[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST];
-    group_config_7.set_header_text("Recent Searches");
-    auto& group_config_8 =
-        (*group_configs_map)[omnibox::GROUP_POLARIS_RESERVED_MAX];
-    group_config_8.set_header_text("Uknown Group");
+    // This suggestion belongs to an unrecognized group.
+    ASSERT_EQ(omnibox::GROUP_INVALID,
+              results.suggest_results[3].suggestion_group_id());
 
-    std::string json_data = R"([
-    "",
-    [
-      "1",
-      "2",
-      "3",
-      "4",
-      "5",
-      "6",
-      "7",
-      "8"
-    ],
-    [
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      ""
-    ],
-    [],
-    {
-      "google:clientdata":{
-        "bpc":false,
-        "tlw":false
-      },
-      "google:groupsinfo": ")" +
-                            SerializeAndEncodeGroupsInfo(groups_info) + R"(",
-      "google:suggestdetail":[
-        {
-          "zl":10000
-        },
-        {
-          "zl":10001
-        },
-        {
-          "zl":10002
-        },
-        {
-          "zl":10003
-        },
-        {
-          "zl":10004
-        },
-        {
-          "zl":10005
-        },
-        {
-          "zl":40000
-        },
-        {
-        }
-      ],
-      "google:suggestrelevance":[
-        611,
-        610,
-        609,
-        608,
-        607,
-        606,
-        605,
-        604
-      ],
-      "google:suggesttype":[
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY",
-        "QUERY"
-      ]
-    }])";
-    absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
-    ASSERT_TRUE(root_val);
-
-    SearchSuggestionParser::Results results;
-    ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
-        /*is_keyword_result=*/false, &results));
-
-    // Ensure suggestion groups are correctly parsed from the serialized proto.
-    ASSERT_EQ(8U, results.suggestion_groups_map.size());
-
-    const auto& group_1 =
-        results.suggestion_groups_map[omnibox::GROUP_PREVIOUS_SEARCH_RELATED];
-    ASSERT_EQ("Related Searches", group_1.header_text());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_1, group_1.section());
-
-    const auto& group_2 =
-        results.suggestion_groups_map
-            [omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS];
-    ASSERT_EQ("Related Entities", group_2.header_text());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_2, group_2.section());
-
-    const auto& group_3 = results.suggestion_groups_map[omnibox::GROUP_TRENDS];
-    ASSERT_EQ("Trending Searches", group_3.header_text());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_3, group_3.section());
-
-    const auto& group_4 =
-        results.suggestion_groups_map[omnibox::GROUP_TRENDS_ENTITY_CHIPS];
-    ASSERT_EQ("Trending Entities", group_4.header_text());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_4, group_4.section());
-
-    const auto& group_5 =
-        results.suggestion_groups_map[omnibox::GROUP_RELATED_QUERIES];
-    ASSERT_EQ("Related Questions", group_5.header_text());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_5, group_5.section());
-
-    const auto& group_6 =
-        results.suggestion_groups_map[omnibox::GROUP_VISITED_DOC_RELATED];
-    ASSERT_EQ("Related To Websites", group_6.header_text());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_6, group_6.section());
-
-    const auto& group_7 =
-        results.suggestion_groups_map[omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST];
-    ASSERT_EQ("Recent Searches", group_7.header_text());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_7, group_7.section());
-
-    const auto& group_8 =
-        results.suggestion_groups_map[omnibox::GROUP_POLARIS_RESERVED_MAX];
-    ASSERT_EQ("Uknown Group", group_8.header_text());
-    ASSERT_EQ(omnibox::SECTION_REMOTE_ZPS_8, group_8.section());
-
-    // Ensure suggestion group IDs are correctly set in the suggestions.
-    ASSERT_EQ(8U, results.suggest_results.size());
-
-    ASSERT_EQ(u"1", results.suggest_results[0].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED,
-              *results.suggest_results[0].suggestion_group_id());
-
-    ASSERT_EQ(u"2", results.suggest_results[1].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PREVIOUS_SEARCH_RELATED_ENTITY_CHIPS,
-              *results.suggest_results[1].suggestion_group_id());
-
-    ASSERT_EQ(u"3", results.suggest_results[2].suggestion());
-    ASSERT_EQ(omnibox::GROUP_TRENDS,
-              *results.suggest_results[2].suggestion_group_id());
-
-    ASSERT_EQ(u"4", results.suggest_results[3].suggestion());
-    ASSERT_EQ(omnibox::GROUP_TRENDS_ENTITY_CHIPS,
-              *results.suggest_results[3].suggestion_group_id());
-
-    ASSERT_EQ(u"5", results.suggest_results[4].suggestion());
-    ASSERT_EQ(omnibox::GROUP_RELATED_QUERIES,
-              *results.suggest_results[4].suggestion_group_id());
-
-    ASSERT_EQ(u"6", results.suggest_results[5].suggestion());
-    ASSERT_EQ(omnibox::GROUP_VISITED_DOC_RELATED,
-              *results.suggest_results[5].suggestion_group_id());
-
-    ASSERT_EQ(u"7", results.suggest_results[6].suggestion());
-    ASSERT_EQ(omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST,
-              *results.suggest_results[6].suggestion_group_id());
-
-    ASSERT_EQ(u"8", results.suggest_results[7].suggestion());
-    // This suggestion does not belong to a group.
-    ASSERT_EQ(absl::nullopt, results.suggest_results[7].suggestion_group_id());
+    ASSERT_EQ(u"sacramento", results.suggest_results[4].suggestion());
+    // This suggestion belongs to an unrecognized group.
+    ASSERT_EQ(omnibox::GROUP_INVALID,
+              results.suggest_results[4].suggestion_group_id());
   }
 }
 
-TEST(SearchSuggestionParserTest, ParseSuggestionEntityInfo_FromProto) {
+TEST(SearchSuggestionParserTest, ParseSuggestionEntityInfo) {
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"the m", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
@@ -1299,10 +637,12 @@ TEST(SearchSuggestionParserTest, ParseSuggestionEntityInfo_FromProto) {
 
     absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
     ASSERT_TRUE(root_val);
+    ASSERT_TRUE(root_val.value().is_list());
 
     SearchSuggestionParser::Results results;
     ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+        root_val->GetList(), input, scheme_classifier,
+        /*default_result_relevance=*/400,
         /*is_keyword_result=*/false, &results));
 
     ASSERT_EQ(3U, results.suggest_results.size());
@@ -1325,8 +665,7 @@ TEST(SearchSuggestionParserTest, ParseSuggestionEntityInfo_FromProto) {
                                second_entity_info));
   }
 
-  // If possible, fall back to individual JSON fields when attempting to parse
-  // EntityInfo data from garbled proto field.
+  // Parse EntityInfo data from garbled proto field.
   {
     std::string json_data = R"([
       "the m",
@@ -1341,22 +680,10 @@ TEST(SearchSuggestionParserTest, ParseSuggestionEntityInfo_FromProto) {
         "google:suggestdetail": [
           {},
           {
-            "google:entityinfo": "<< invalid format >>",
-            "a": "2022 film",
-            "dc": "#424242",
-            "i": "https://encrypted-tbn0.gstatic.com/images?q=the+menu",
-            "q": "gs_ssp=eJzj4tVP1zc0LCwoKssryyg3YPTiKMlIVchNzSsFAGrSCGQ",
-            "t": "The Menu",
-            "zae": "/g/11qprvnvhw"
+            "google:entityinfo": "<< invalid format >>"
           },
           {
-            "google:entityinfo": "<< invalid format >>",
-            "a": "Thriller series",
-            "dc": "#283e75",
-            "i": "https://encrypted-tbn0.gstatic.com/images?q=the+midnight+club",
-            "q": "gs_ssp=eJzj4tVP1zc0zMqrNCvJNkwyYPQSLMlIVcjNTMnLTM8oUUjOKU0CALmyCz8",
-            "t": "The Midnight Club",
-            "zae": "/g/11jny6tk1b"
+            "google:entityinfo": "<< invalid format >>"
           }
         ],
         "google:suggestrelevance": [701, 700, 553],
@@ -1371,10 +698,12 @@ TEST(SearchSuggestionParserTest, ParseSuggestionEntityInfo_FromProto) {
 
     absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
     ASSERT_TRUE(root_val);
+    ASSERT_TRUE(root_val.value().is_list());
 
     SearchSuggestionParser::Results results;
     ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+        root_val->GetList(), input, scheme_classifier,
+        /*default_result_relevance=*/400,
         /*is_keyword_result=*/false, &results));
 
     ASSERT_EQ(3U, results.suggest_results.size());
@@ -1388,35 +717,12 @@ TEST(SearchSuggestionParserTest, ParseSuggestionEntityInfo_FromProto) {
     ASSERT_EQ(u"the menu", results.suggest_results[0].match_contents());
 
     ASSERT_EQ(u"the menu", results.suggest_results[1].suggestion());
-    ASSERT_EQ(u"2022 film", results.suggest_results[1].annotation());
-    ASSERT_EQ("#424242",
-              results.suggest_results[1].entity_info().dominant_color());
-    ASSERT_EQ(
-        "https://encrypted-tbn0.gstatic.com/"
-        "images?q=the+menu",
-        results.suggest_results[1].entity_info().image_url());
-    ASSERT_EQ(
-        "gs_ssp=eJzj4tVP1zc0LCwoKssryyg3YPTiKMlIVchNzSsFAGrSCGQ",
-        results.suggest_results[1].entity_info().suggest_search_parameters());
-    ASSERT_EQ(u"The Menu", results.suggest_results[1].match_contents());
-    ASSERT_EQ("/g/11qprvnvhw",
-              results.suggest_results[1].entity_info().entity_id());
+    ASSERT_TRUE(ProtosAreEqual(results.suggest_results[1].entity_info(),
+                               omnibox::EntityInfo::default_instance()));
 
     ASSERT_EQ(u"the midnight club", results.suggest_results[2].suggestion());
-    ASSERT_EQ(u"Thriller series", results.suggest_results[2].annotation());
-    ASSERT_EQ("#283e75",
-              results.suggest_results[2].entity_info().dominant_color());
-    ASSERT_EQ(
-        "https://encrypted-tbn0.gstatic.com/"
-        "images?q=the+midnight+club",
-        results.suggest_results[2].entity_info().image_url());
-    ASSERT_EQ(
-        "gs_ssp=eJzj4tVP1zc0zMqrNCvJNkwyYPQSLMlIVcjNTMnLTM8oUUjOKU0CALmyCz8",
-        results.suggest_results[2].entity_info().suggest_search_parameters());
-    ASSERT_EQ(u"The Midnight Club",
-              results.suggest_results[2].match_contents());
-    ASSERT_EQ("/g/11jny6tk1b",
-              results.suggest_results[2].entity_info().entity_id());
+    ASSERT_TRUE(ProtosAreEqual(results.suggest_results[2].entity_info(),
+                               omnibox::EntityInfo::default_instance()));
   }
 }
 
@@ -1434,12 +740,14 @@ TEST(SearchSuggestionParserTest, ParseValidSubtypes) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
 
   {
@@ -1479,12 +787,14 @@ TEST(SearchSuggestionParserTest, IgnoresExcessiveSubtypeEntries) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
 
   ASSERT_THAT(results.suggest_results[0].subtypes(), testing::ElementsAre(1));
@@ -1506,12 +816,14 @@ TEST(SearchSuggestionParserTest, IgnoresMissingSubtypeEntries) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
 
   ASSERT_THAT(results.suggest_results[0].subtypes(),
@@ -1535,12 +847,14 @@ TEST(SearchSuggestionParserTest, IgnoresUnexpectedSubtypeValues) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
 
   ASSERT_THAT(results.suggest_results[0].subtypes(), testing::ElementsAre(1));
@@ -1565,12 +879,14 @@ TEST(SearchSuggestionParserTest, IgnoresSubtypesIfNotAList) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
 
   ASSERT_TRUE(results.suggest_results[0].subtypes().empty());
@@ -1592,12 +908,14 @@ TEST(SearchSuggestionParserTest, SubtypesWithEmptyArraysAreValid) {
       }])";
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
 
   ASSERT_TRUE(results.suggest_results[0].subtypes().empty());
@@ -1617,12 +935,14 @@ TEST(SearchSuggestionParserTest, FuzzTestCaseFailsGracefully) {
 
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
 }
 
@@ -1649,12 +969,14 @@ TEST(SearchSuggestionParserTest, BadAnswersFailGracefully) {
   for (std::string json_data : cases) {
     absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
     ASSERT_TRUE(root_val);
+    ASSERT_TRUE(root_val.value().is_list());
     TestSchemeClassifier scheme_classifier;
     AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_REALBOX,
                             scheme_classifier);
     SearchSuggestionParser::Results results;
     ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-        *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+        root_val->GetList(), input, scheme_classifier,
+        /*default_result_relevance=*/400,
         /*is_keyword_result=*/false, &results));
   }
 }
@@ -1663,6 +985,15 @@ TEST(SearchSuggestionParserTest, ParseCalculatorSuggestion) {
   TestSchemeClassifier scheme_classifier;
   AutocompleteInput input(u"1 + 1", metrics::OmniboxEventProto::NTP_REALBOX,
                           scheme_classifier);
+
+  omnibox::EntityInfo entity_info;
+  entity_info.set_annotation("Song");
+  entity_info.set_dominant_color("#424242");
+  entity_info.set_image_url("https://encrypted-tbn0.gstatic.com/images?q=song");
+  entity_info.set_suggest_search_parameters(
+      "gs_ssp=eJzj4tFP1zcsNjAzMykwKDZg9GI1VNBWMAQAOlEEsA");
+  entity_info.set_name("1+1");
+  entity_info.set_entity_id("/g/1s0664p0s");
 
   const std::string json_data = R"([
     "1 + 1",
@@ -1682,12 +1013,9 @@ TEST(SearchSuggestionParserTest, ParseCalculatorSuggestion) {
         {},
         {},
         {
-          "a": "Song",
-          "dc": "#424242",
-          "i": "https://encrypted-tbn0.gstatic.com/images?q=song",
-          "q": "gs_ssp=eJzj4tFP1zcsNjAzMykwKDZg9GI1VNBWMAQAOlEEsA",
-          "t": "1+1",
-          "zae": "/g/1s0664p0s"
+          "google:entityinfo": ")" +
+                                SerializeAndEncodeEntityInfo(entity_info) +
+                                R"("
         }
       ],
       "google:suggestrelevance": [1300, 1252, 1250],
@@ -1707,10 +1035,12 @@ TEST(SearchSuggestionParserTest, ParseCalculatorSuggestion) {
 
   absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
   ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
 
   SearchSuggestionParser::Results results;
   ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
-      *root_val, input, scheme_classifier, /*default_result_relevance=*/400,
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
       /*is_keyword_result=*/false, &results));
 
   ASSERT_EQ(3U, results.suggest_results.size());
@@ -1751,4 +1081,62 @@ TEST(SearchSuggestionParserTest, ParseCalculatorSuggestion) {
   ASSERT_EQ(u"1+1", results.suggest_results[2].match_contents());
   ASSERT_EQ("/g/1s0664p0s",
             results.suggest_results[2].entity_info().entity_id());
+}
+
+TEST(SearchSuggestionParserTest, ParseTailSuggestion) {
+  TestSchemeClassifier scheme_classifier;
+  AutocompleteInput input(u"hobbit hole for sale in ",
+                          metrics::OmniboxEventProto::NTP_REALBOX,
+                          scheme_classifier);
+
+  const std::string json_data = R"([
+    "hobbit hole for sale in ",
+    [
+      "hobbit hole for sale in california"
+    ],
+    [
+      ""
+    ],
+    [],
+    {
+      "google:clientdata": {
+        "bpc": false,
+        "tlw": false
+      },
+      "google:suggestdetail": [
+        {
+          "mp": "… ",
+          "t": "in california"
+        }
+      ],
+      "google:suggestrelevance": [
+        601
+      ],
+      "google:suggestsubtypes": [
+        [
+          160
+        ]
+      ],
+      "google:suggesttype": [
+        "TAIL"
+      ],
+      "google:verbatimrelevance": 851
+    }
+  ])";
+
+  absl::optional<base::Value> root_val = base::JSONReader::Read(json_data);
+  ASSERT_TRUE(root_val);
+  ASSERT_TRUE(root_val.value().is_list());
+
+  SearchSuggestionParser::Results results;
+  ASSERT_TRUE(SearchSuggestionParser::ParseSuggestResults(
+      root_val->GetList(), input, scheme_classifier,
+      /*default_result_relevance=*/400,
+      /*is_keyword_result=*/false, &results));
+
+  ASSERT_EQ(1U, results.suggest_results.size());
+  ASSERT_EQ(u"hobbit hole for sale in california",
+            results.suggest_results[0].suggestion());
+  ASSERT_EQ(u"in california", results.suggest_results[0].match_contents());
+  ASSERT_EQ(u"… ", results.suggest_results[0].match_contents_prefix());
 }

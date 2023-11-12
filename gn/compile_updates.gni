@@ -59,6 +59,7 @@ if (is_linux) {
       "-rpath",
       "\$ORIGIN/", # Find libffmpeg.so
     ]
+    deps += [ "//third_party/expat" ]
   }
   if (target_cpu == "arm64") {
     update_template_instance("//third_party/swiftshader/third_party/llvm-10.0:swiftshader_llvm") {

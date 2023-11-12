@@ -230,7 +230,11 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
     // The original BeginFrameArgs that triggered the latest update from the
     // main thread.
     viz::BeginFrameArgs origin_begin_main_frame_args;
+    // Indicates if there are SharedElementDrawQuads in this frame.
     bool has_shared_element_resources = false;
+    // Indicates if this frame has a save directive which will add copy requests
+    // for render passes in the Viz process.
+    bool has_view_transition_save_directive = false;
   };
 
   // A struct of data for a single UIResource, including the backing
@@ -245,7 +249,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
     UIResourceData& operator=(UIResourceData&&);
 
     bool opaque;
-    viz::ResourceFormat format;
+    viz::SharedImageFormat format;
 
     // Backing for software compositing.
     viz::SharedBitmapId shared_bitmap_id;
@@ -381,6 +385,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   void UpdateBrowserControlsState(BrowserControlsState constraints,
                                   BrowserControlsState current,
                                   bool animate) override;
+  bool HasScrollLinkedAnimation(ElementId for_scroller) const override;
 
   bool CanInjectJankOnMain() const;
   FrameSequenceTrackerCollection& frame_trackers() { return frame_trackers_; }
@@ -914,6 +919,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   void SetDownsampleMetricsForTesting(bool value) {
     downsample_metrics_ = value;
   }
+
+  std::string GetHungCommitDebugInfo() const;
 
  protected:
   LayerTreeHostImpl(

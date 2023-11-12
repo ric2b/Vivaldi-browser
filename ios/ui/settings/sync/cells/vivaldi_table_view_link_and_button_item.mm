@@ -3,8 +3,9 @@
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_link_and_button_item.h"
 
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/table_view/chrome_table_view_styler.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
@@ -18,16 +19,12 @@
 namespace {
 // Alpha value for the disabled action button.
 const CGFloat kDisabledButtonAlpha = 0.5;
-// Vertical spacing between stackView and cell contentView.
-const CGFloat kStackViewVerticalSpacing = 9.0;
 // Horizontal spacing between stackView and cell contentView.
-const CGFloat kStackViewHorizontalSpacing = 16.0;
-// SubView spacing within stackView.
-const CGFloat kStackViewSubViewSpacing = 13.0;
+const CGFloat kStackViewHorizontalSpacing = 40.0;
 // Horizontal Inset between button contents and edge.
-const CGFloat kButtonTitleHorizontalContentInset = 40.0;
+const CGFloat kButtonTitleHorizontalContentInset = 16.0;
 // Vertical Inset between button contents and edge.
-const CGFloat kButtonTitleVerticalContentInset = 8.0;
+const CGFloat kButtonTitleVerticalContentInset = 12.0;
 // Button corner radius.
 const CGFloat kButtonCornerRadius = 8;
 // Default Text alignment.
@@ -46,6 +43,7 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
     self.cellClass = [VivaldiTableViewLinkAndButtonCell class];
     _enabled = YES;
     _textAlignment = kDefaultTextAlignment;
+    _reverseOrder = NO;
   }
   return self;
 }
@@ -68,12 +66,9 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
   } else {
     cell.label.textColor = [UIColor colorNamed:kTextSecondaryColor];
   }
-  [cell enableItemSpacing:[self.linkText length]];
-  [cell disableButtonIntrinsicWidth:self.disableButtonIntrinsicWidth];
   cell.label.textAlignment = self.textAlignment;
 
   [cell.button setTitle:self.buttonText forState:UIControlStateNormal];
-  [cell disableButtonIntrinsicWidth:self.disableButtonIntrinsicWidth];
   // Decide cell.button titleColor in order:
   //   1. self.buttonTextColor;
   //   2. [UIColor colorNamed:kSolidButtonTextColor]
@@ -98,6 +93,8 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
     cell.button.backgroundColor = [cell.button.backgroundColor
         colorWithAlphaComponent:kDisabledButtonAlpha];
   }
+
+  [cell initStackView:self.reverseOrder];
 }
 
 @end
@@ -105,8 +102,6 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
 @interface VivaldiTableViewLinkAndButtonCell ()
 // StackView that contains the cell's Button and Label.
 @property(nonatomic, strong) UIStackView* horizontalStackView;
-// Constraints used to match the Button width to the StackView.
-@property(nonatomic, strong) NSArray* expandedButtonWidthConstraints;
 @end
 
 @implementation VivaldiTableViewLinkAndButtonCell
@@ -126,9 +121,9 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
     self.button.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.button.layer.cornerRadius = kButtonCornerRadius;
     self.button.clipsToBounds = YES;
-    self.button.contentEdgeInsets = UIEdgeInsetsMake(
+    SetContentEdgeInsets(self.button, UIEdgeInsetsMake(
         kButtonTitleVerticalContentInset, kButtonTitleHorizontalContentInset,
-        kButtonTitleVerticalContentInset, kButtonTitleHorizontalContentInset);
+        kButtonTitleVerticalContentInset, kButtonTitleHorizontalContentInset));
 
     self.button.pointerInteractionEnabled = YES;
     // This button's background color is configured whenever the cell is
@@ -136,47 +131,30 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
     // appropriate style based on the background color at runtime.
     self.button.pointerStyleProvider =
         CreateOpaqueOrTransparentButtonPointerStyleProvider();
-
-    // Horizontal stackView to hold label and button.
-    self.horizontalStackView = [[UIStackView alloc]
-        initWithArrangedSubviews:@[ self.label, self.button ]];
-    self.horizontalStackView.alignment = UIStackViewAlignmentCenter;
-    self.horizontalStackView.axis = UILayoutConstraintAxisHorizontal;
-    self.horizontalStackView.translatesAutoresizingMaskIntoConstraints = NO;
-
-    [self.contentView addSubview:self.horizontalStackView];
-
-    // Add constraints for stackView
-    [self.horizontalStackView fillSuperviewWithPadding:
-      UIEdgeInsetsMake(kStackViewVerticalSpacing,
-                       kStackViewHorizontalSpacing,
-                       kStackViewVerticalSpacing,
-                       kStackViewHorizontalSpacing)];
-
-    self.expandedButtonWidthConstraints = @[
-      [self.button.leadingAnchor
-          constraintEqualToAnchor:self.horizontalStackView.centerXAnchor],
-      [self.button.trailingAnchor
-          constraintEqualToAnchor:self.horizontalStackView.trailingAnchor],
-    ];
   }
   return self;
 }
 
-#pragma mark - Public Methods
-
-- (void)enableItemSpacing:(BOOL)enable {
-  self.horizontalStackView.spacing = enable ? kStackViewSubViewSpacing : 0;
-}
-
-- (void)disableButtonIntrinsicWidth:(BOOL)disable {
-  if (disable) {
-    [NSLayoutConstraint
-        activateConstraints:self.expandedButtonWidthConstraints];
+- (void)initStackView:(BOOL)reverse {
+  // Horizontal stackView to hold label and button.
+  if (![self.label.text length]) {
+    self.horizontalStackView = [[UIStackView alloc]
+        initWithArrangedSubviews:@[ self.button ]];
+  } else if (reverse) {
+    self.horizontalStackView = [[UIStackView alloc]
+        initWithArrangedSubviews:@[ self.button, self.label ]];
   } else {
-    [NSLayoutConstraint
-        deactivateConstraints:self.expandedButtonWidthConstraints];
+    self.horizontalStackView = [[UIStackView alloc]
+        initWithArrangedSubviews:@[ self.label, self.button ]];
   }
+
+  self.horizontalStackView.alignment = UIStackViewAlignmentCenter;
+  self.horizontalStackView.axis = UILayoutConstraintAxisHorizontal;
+  self.horizontalStackView.translatesAutoresizingMaskIntoConstraints = NO;
+  self.horizontalStackView.spacing = kStackViewHorizontalSpacing;
+
+  [self.contentView addSubview:self.horizontalStackView];
+  [self.horizontalStackView centerXInSuperview];
 }
 
 - (UITextView*)label {
@@ -203,7 +181,6 @@ const NSTextAlignment kDefaultTextAlignment = NSTextAlignmentCenter;
   [self.button setTitleColor:[UIColor colorNamed:kSolidButtonTextColor]
                     forState:UIControlStateNormal];
   self.label.textAlignment = kDefaultTextAlignment;
-  [self disableButtonIntrinsicWidth:NO];
 }
 
 @end

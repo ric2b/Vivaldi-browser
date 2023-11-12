@@ -50,6 +50,7 @@ class ChromeWebClient : public web::WebClient {
                         base::OnceCallback<void(NSString*)> callback) override;
   UIView* GetWindowedContainer() override;
   bool EnableLongPressUIContextMenu() const override;
+  bool EnableWebInspector() const override;
   web::UserAgentType GetDefaultUserAgent(web::WebState* web_state,
                                          const GURL& url) const override;
   void LogDefaultUserAgent(web::WebState* web_state,
@@ -64,9 +65,9 @@ class ChromeWebClient : public web::WebClient {
       web::WebState* web_state) const override API_AVAILABLE(ios(16));
   void StartTextSearchInWebState(web::WebState* web_state) override;
   void StopTextSearchInWebState(web::WebState* web_state) override;
-
   bool IsMixedContentAutoupgradeEnabled(
       web::BrowserState* browser_state) const override;
+  bool IsBrowserLockdownModeEnabled(web::BrowserState* browser_state) override;
 
  private:
   // Reference to a view that is attached to a window.

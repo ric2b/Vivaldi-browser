@@ -23,7 +23,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 
-namespace autofill {
+namespace autofill::autofill_metrics {
 
 CreditCardFormEventLogger::CreditCardFormEventLogger(
     bool is_in_any_main_frame,
@@ -67,11 +67,23 @@ void CreditCardFormEventLogger::OnDidShowSuggestions(
 
   suggestion_shown_timestamp_ = AutofillTickClock::NowTicks();
 
-  // Log if metadata is shown for any of the suggestions.
-  if (metadata_logging_context_.card_product_description_shown ||
-      metadata_logging_context_.card_art_image_shown) {
-    Log(FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SHOWN, form);
+  // Log if any of the suggestions had metadata.
+  Log(metadata_logging_context_.card_metadata_available
+          ? FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SHOWN
+          : FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_SHOWN,
+      form);
+  if (!has_logged_suggestion_with_metadata_shown_) {
+    Log(metadata_logging_context_.card_metadata_available
+            ? FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SHOWN_ONCE
+            : FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_SHOWN_ONCE,
+        form);
   }
+  // Log issuer-specific metrics on whether metadata was shown.
+  LogCardWithMetadataFormEventMetric(
+      autofill_metrics::CardMetadataLoggingEvent::kShown,
+      metadata_logging_context_,
+      HasBeenLogged(has_logged_suggestion_with_metadata_shown_));
+  has_logged_suggestion_with_metadata_shown_ = true;
 }
 
 void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
@@ -114,6 +126,25 @@ void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
   autofill_metrics::LogAcceptanceLatency(
       AutofillTickClock::NowTicks() - suggestion_shown_timestamp_,
       metadata_logging_context_, credit_card);
+
+  // Log if the selected suggestion had metadata.
+  metadata_logging_context_ =
+      autofill_metrics::GetMetadataLoggingContext({credit_card});
+  Log(metadata_logging_context_.card_metadata_available
+          ? FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SELECTED
+          : FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_SELECTED,
+      form);
+  if (!has_logged_suggestion_with_metadata_selected_) {
+    Log(metadata_logging_context_.card_metadata_available
+            ? FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SELECTED_ONCE
+            : FORM_EVENT_CARD_SUGGESTION_WITHOUT_METADATA_SELECTED_ONCE,
+        form);
+  }
+  LogCardWithMetadataFormEventMetric(
+      autofill_metrics::CardMetadataLoggingEvent::kSelected,
+      metadata_logging_context_,
+      HasBeenLogged(has_logged_suggestion_with_metadata_selected_));
+  has_logged_suggestion_with_metadata_selected_ = true;
 }
 
 void CreditCardFormEventLogger::OnDidFillSuggestion(
@@ -122,7 +153,8 @@ void CreditCardFormEventLogger::OnDidFillSuggestion(
     const AutofillField& field,
     const base::flat_set<FieldGlobalId>& newly_filled_fields,
     const base::flat_set<FieldGlobalId>& safe_fields,
-    AutofillSyncSigninState sync_state) {
+    AutofillSyncSigninState sync_state,
+    const AutofillTriggerSource trigger_source) {
   CreditCard::RecordType record_type = credit_card.record_type();
   sync_state_ = sync_state;
   ukm::builders::Autofill_CreditCardFill builder =
@@ -193,7 +225,9 @@ void CreditCardFormEventLogger::OnDidFillSuggestion(
 
   form_interactions_ukm_logger_->Record(std::move(builder));
 
-  ++form_interaction_counts_.autofill_fills;
+  if (trigger_source != AutofillTriggerSource::kFastCheckout) {
+    ++form_interaction_counts_.autofill_fills;
+  }
   UpdateFlowId();
 }
 
@@ -391,4 +425,4 @@ bool CreditCardFormEventLogger::DoSuggestionsIncludeVirtualCard() {
   return base::ranges::any_of(suggestions_, is_virtual_card);
 }
 
-}  // namespace autofill
+}  // namespace autofill::autofill_metrics

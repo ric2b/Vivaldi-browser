@@ -41,6 +41,8 @@ namespace {
 
 const char kDisabledMessage[] = "This device has been disabled.";
 
+constexpr char kDeviceLocalAccountKioskAccountId[] = "kiosk_account_id";
+
 }  // namespace
 
 class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
@@ -108,6 +110,7 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     proto->set_report_login_logout(enable_reporting);
     proto->set_report_crd_sessions(enable_reporting);
     proto->set_device_activity_heartbeat_enabled(enable_reporting);
+    proto->set_report_network_events(enable_reporting);
     proto->set_report_network_telemetry_collection_rate_ms(frequency);
     proto->set_report_network_telemetry_event_checking_rate_ms(frequency);
     proto->set_device_status_frequency(frequency);
@@ -184,7 +187,8 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
         kReportDeviceSecurityStatus, kReportDeviceGraphicsStatus,
         kReportDeviceCrashReportInfo, kReportDeviceAppInfo,
         kReportDevicePrintJobs, kReportDeviceLoginLogout, kReportOsUpdateStatus,
-        kReportRunningKioskApp, kDeviceActivityHeartbeatEnabled};
+        kReportRunningKioskApp, kDeviceActivityHeartbeatEnabled,
+        kDeviceReportNetworkEvents};
 
     const base::Value expected_enable_value(expected_enable_state);
     for (auto* setting : reporting_settings) {
@@ -720,6 +724,56 @@ TEST_F(DeviceSettingsProviderTest, LegacyDeviceLocalAccounts) {
   entry_dict.Set(kAccountsPrefDeviceLocalAccountsKeyType,
                  policy::DeviceLocalAccount::TYPE_PUBLIC_SESSION);
   expected_accounts.Append(std::move(entry_dict));
+  const base::Value* actual_accounts =
+      provider_->Get(kAccountsPrefDeviceLocalAccounts);
+  EXPECT_EQ(expected_accounts, actual_accounts->GetList());
+}
+
+TEST_F(DeviceSettingsProviderTest,
+       DeviceLocalAccountsWithoutEphemeralModeField) {
+  em::DeviceLocalAccountInfoProto* account =
+      device_policy_->payload().mutable_device_local_accounts()->add_account();
+  account->set_account_id(kDeviceLocalAccountKioskAccountId);
+  account->set_type(em::DeviceLocalAccountInfoProto::ACCOUNT_TYPE_KIOSK_APP);
+
+  BuildAndInstallDevicePolicy();
+
+  base::Value::List expected_accounts = base::Value::List().Append(
+      base::Value::Dict()
+          .Set(kAccountsPrefDeviceLocalAccountsKeyId,
+               kDeviceLocalAccountKioskAccountId)
+          .Set(kAccountsPrefDeviceLocalAccountsKeyType,
+               static_cast<int>(policy::DeviceLocalAccount::TYPE_KIOSK_APP))
+          .Set(kAccountsPrefDeviceLocalAccountsKeyEphemeralMode,
+               static_cast<int>(
+                   policy::DeviceLocalAccount::EphemeralMode::kUnset)));
+
+  const base::Value* actual_accounts =
+      provider_->Get(kAccountsPrefDeviceLocalAccounts);
+  EXPECT_EQ(expected_accounts, actual_accounts->GetList());
+}
+
+TEST_F(DeviceSettingsProviderTest, DeviceLocalAccountsWithEphemeralModeField) {
+  em::DeviceLocalAccountInfoProto* account =
+      device_policy_->payload().mutable_device_local_accounts()->add_account();
+  account->set_account_id(kDeviceLocalAccountKioskAccountId);
+  account->set_type(
+      em::DeviceLocalAccountInfoProto::ACCOUNT_TYPE_WEB_KIOSK_APP);
+  account->set_ephemeral_mode(
+      em::DeviceLocalAccountInfoProto::EPHEMERAL_MODE_ENABLE);
+
+  BuildAndInstallDevicePolicy();
+
+  base::Value::List expected_accounts = base::Value::List().Append(
+      base::Value::Dict()
+          .Set(kAccountsPrefDeviceLocalAccountsKeyId,
+               kDeviceLocalAccountKioskAccountId)
+          .Set(kAccountsPrefDeviceLocalAccountsKeyType,
+               static_cast<int>(policy::DeviceLocalAccount::TYPE_WEB_KIOSK_APP))
+          .Set(kAccountsPrefDeviceLocalAccountsKeyEphemeralMode,
+               static_cast<int>(
+                   policy::DeviceLocalAccount::EphemeralMode::kEnable)));
+
   const base::Value* actual_accounts =
       provider_->Get(kAccountsPrefDeviceLocalAccounts);
   EXPECT_EQ(expected_accounts, actual_accounts->GetList());

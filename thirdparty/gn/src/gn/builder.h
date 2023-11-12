@@ -101,9 +101,9 @@ class Builder {
   bool AddGenDeps(BuilderRecord* record,
                   const LabelTargetVector& targets,
                   Err* err);
-  bool AddActionValuesDep(BuilderRecord* record,
-                          const ActionValues& action_values,
-                          Err* err);
+  bool AddPoolDep(BuilderRecord* record,
+                  const Target* target,
+                  Err* err);
   bool AddToolchainDep(BuilderRecord* record, const Target* target, Err* err);
 
   // Given a target, sets the "should generate" bit and pushes it through the
@@ -129,7 +129,7 @@ class Builder {
   // if anything isn't found or if the type doesn't match.
   bool ResolveDeps(LabelTargetVector* deps, Err* err);
   bool ResolveConfigs(UniqueVector<LabelConfigPair>* configs, Err* err);
-  bool ResolveActionValues(ActionValues* action_values, Err* err);
+  bool ResolvePool(Target* target, Err* err);
   bool ResolveToolchain(Target* target, Err* err);
   bool ResolvePools(Toolchain* toolchain, Err* err);
 

@@ -23,6 +23,8 @@ template("ios_toolchain") {
                             [
                               "--target-cpu",
                               current_cpu,
+                              "--target-environment",
+                              target_environment,
                               "--deployment-target",
                               ios_deployment_target,
                             ],

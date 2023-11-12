@@ -130,21 +130,24 @@ void CalendarBackend::InitImpl(
   }
 }
 
-void CalendarBackend::GetAllEvents(std::shared_ptr<EventQueryResults> results) {
-  EventRows rows;
+std::vector<calendar::EventRow> CalendarBackend::GetAllEvents() {
+  std::vector<calendar::EventRow> rows;
   db_->GetAllCalendarEvents(&rows);
-  GetEvents(rows, results);
+  std::vector<calendar::EventRow> results;
+  FillEventsWithExceptions(rows, &results);
+  return results;
 }
 
-void CalendarBackend::GetAllEventTemplates(
-    std::shared_ptr<EventQueryResults> results) {
-  EventRows rows;
+std::vector<calendar::EventRow> CalendarBackend::GetAllEventTemplates() {
+  std::vector<calendar::EventRow> rows;
   db_->GetAllCalendarEventTemplates(&rows);
-  GetEvents(rows, results);
+  std::vector<calendar::EventRow> results;
+  FillEventsWithExceptions(rows, &results);
+  return results;
 }
 
-void CalendarBackend::GetEvents(EventRows rows,
-                                std::shared_ptr<EventQueryResults> results) {
+void CalendarBackend::FillEventsWithExceptions(EventRows rows,
+                                               EventRows* results) {
   RecurrenceExceptionRows recurrence_exception_rows;
   db_->GetAllRecurrenceExceptions(&recurrence_exception_rows);
 
@@ -177,47 +180,43 @@ void CalendarBackend::GetEvents(EventRows rows,
     db_->GetInvitesForEvent(eventRow.id, &invite_rows);
     eventRow.invites = invite_rows;
 
-    EventResult result(eventRow);
-    results->AppendEventBySwapping(&result);
+    results->push_back(eventRow);
   }
 }
 
-void CalendarBackend::CreateCalendarEvents(
-    std::vector<calendar::EventRow> events,
-    std::shared_ptr<CreateEventsResult> result) {
+CreateEventsResult CalendarBackend::CreateCalendarEvents(
+    std::vector<calendar::EventRow> events) {
+  CreateEventsResult result;
   int success_counter = 0;
   int failed_counter = 0;
 
   size_t count = events.size();
 
-  std::shared_ptr<EventResultCB> event_result =
-      std::shared_ptr<EventResultCB>(new EventResultCB());
-
   for (size_t i = 0; i < count; i++) {
     EventRow ev = events[i];
 
-    CreateCalendarEvent(ev, false, event_result);
+    EventResultCB event_result = CreateCalendarEvent(ev, false);
 
-    if (event_result->success) {
+    if (event_result.success) {
       success_counter++;
     } else {
       failed_counter++;
     }
   }
 
-  result->number_success = success_counter;
-  result->number_failed = failed_counter;
+  result.number_success = success_counter;
+  result.number_failed = failed_counter;
   NotifyCalendarChanged();
+  return result;
 }
 
-void CalendarBackend::CreateCalendarEvent(
-    EventRow ev,
-    bool notify,
-    std::shared_ptr<EventResultCB> result) {
+EventResultCB CalendarBackend::CreateCalendarEvent(EventRow ev, bool notify) {
+  EventResultCB result;
+
   if (!db_->DoesCalendarIdExist(ev.calendar_id)) {
-    result->success = false;
-    result->message = "Calendar does not exist.";
-    return;
+    result.success = false;
+    result.message = "Calendar does not exist.";
+    return result;
   }
 
   EventID id = db_->CreateCalendarEvent(ev);
@@ -256,14 +255,16 @@ void CalendarBackend::CreateCalendarEvent(
       }
     }
 
-    result->success = true;
+    result.success = true;
     EventResult res = FillEvent(id);
-    result->event = res;
+    result.event = res;
     if (notify) {
       NotifyCalendarChanged();
     }
+    return result;
   } else {
-    result->success = false;
+    result.success = false;
+    return result;
   }
 }
 
@@ -302,31 +303,33 @@ EventResult CalendarBackend::FillEvent(EventID id) {
   return res;
 }
 
-void CalendarBackend::CreateRecurrenceException(
-    RecurrenceExceptionRow row,
-    std::shared_ptr<EventResultCB> result) {
+EventResultCB CalendarBackend::CreateRecurrenceException(
+    RecurrenceExceptionRow row) {
+  EventResultCB result;
   if (!db_->DoesEventIdExist(row.parent_event_id)) {
-    result->success = false;
-    result->message = "Event does not exist.";
-    return;
+    result.success = false;
+    result.message = "Event does not exist.";
+    return result;
   }
 
   RecurrenceExceptionID id = db_->CreateRecurrenceException(row);
   EventID parent_event_id = row.parent_event_id;
 
   if (id) {
-    result->event = FillEvent(parent_event_id);
-    result->success = true;
+    result.event = FillEvent(parent_event_id);
+    result.success = true;
     NotifyCalendarChanged();
-  } else {
-    result->success = false;
+    return result;
   }
+
+  result.success = false;
+  return result;
 }
 
-void CalendarBackend::UpdateRecurrenceException(
+EventResultCB CalendarBackend::UpdateRecurrenceException(
     RecurrenceExceptionID recurrence_id,
-    const RecurrenceExceptionRow& recurrence,
-    std::shared_ptr<EventResultCB> result) {
+    const RecurrenceExceptionRow& recurrence) {
+  EventResultCB result;
   RecurrenceExceptionRow recurrence_row;
   if (db_->GetRecurrenceException(recurrence_id, &recurrence_row)) {
     if (recurrence.updateFields & calendar::CANCELLED) {
@@ -346,46 +349,49 @@ void CalendarBackend::UpdateRecurrenceException(
     }
   }
 
-  result->success = db_->UpdateRecurrenceExceptionRow(recurrence_row);
+  result.success = db_->UpdateRecurrenceExceptionRow(recurrence_row);
 
-  if (result->success) {
-    result->event = FillEvent(recurrence_row.parent_event_id);
+  if (result.success) {
+    result.event = FillEvent(recurrence_row.parent_event_id);
     NotifyCalendarChanged();
+    return result;
   } else {
-    result->success = false;
-    result->message = "Could not find recurrence exception row in DB";
+    result.success = false;
+    result.message = "Could not find recurrence exception row in DB";
     NOTREACHED() << "Could not find recurrence exception row in DB";
-    return;
+    return result;
   }
 }
 
-void CalendarBackend::GetAllNotifications(
-    std::shared_ptr<GetAllNotificationResult> results) {
+GetAllNotificationResult CalendarBackend::GetAllNotifications() {
   NotificationRows rows;
+  GetAllNotificationResult results;
   db_->GetAllNotifications(&rows);
   for (size_t i = 0; i < rows.size(); i++) {
     const NotificationRow notification_row = rows[i];
-    results->notifications.push_back(notification_row);
+    results.notifications.push_back(notification_row);
   }
+  return results;
 }
 
-void CalendarBackend::CreateNotification(
-    calendar::NotificationRow row,
-    std::shared_ptr<NotificationResult> result) {
+NotificationResult CalendarBackend::CreateNotification(
+    calendar::NotificationRow row) {
+  NotificationResult result;
   NotificationID id = db_->CreateNotification(row);
   if (id) {
     row.id = id;
-    result->success = true;
-    result->notification_row = row;
+    result.success = true;
+    result.notification_row = row;
     NotifyNotificationChanged(row);
   } else {
-    result->success = false;
+    result.success = false;
   }
+  return result;
 }
 
-void CalendarBackend::UpdateNotification(
-    calendar::UpdateNotificationRow row,
-    std::shared_ptr<NotificationResult> result) {
+NotificationResult CalendarBackend::UpdateNotification(
+    calendar::UpdateNotificationRow row) {
+  NotificationResult result;
   NotificationRow notification_row;
   if (db_->GetNotificationRow(row.notification_row.id, &notification_row)) {
     if (row.updateFields & calendar::NOTIFICATION_NAME) {
@@ -408,59 +414,57 @@ void CalendarBackend::UpdateNotification(
       notification_row.delay = row.notification_row.delay;
     }
 
-    result->success = db_->UpdateNotificationRow(notification_row);
+    result.success = db_->UpdateNotificationRow(notification_row);
 
-    if (result->success) {
+    if (result.success) {
       NotificationRow notification_changed_row;
       if (db_->GetNotificationRow(row.notification_row.id,
                                   &notification_changed_row)) {
-        result->success = true;
-        result->notification_row = notification_changed_row;
+        result.success = true;
+        result.notification_row = notification_changed_row;
         NotifyCalendarChanged();
       }
     }
+    return result;
   } else {
-    result->success = false;
-    result->message = "Could not find notification  row in DB";
+    result.success = false;
+    result.message = "Could not find notification  row in DB";
     NOTREACHED() << "Could not find notification row in DB";
-    return;
+    return result;
   }
 }
 
-void CalendarBackend::DeleteNotification(
-    NotificationID notification_id,
-    std::shared_ptr<DeleteNotificationResult> result) {
+bool CalendarBackend::DeleteNotification(NotificationID notification_id) {
   if (!db_) {
-    result->success = false;
-    return;
+    return false;
   }
 
   if (db_->DeleteNotification(notification_id)) {
-    result->success = true;
     NotificationRow notification_row;
     NotifyCalendarChanged();
-  } else {
-    result->success = false;
+    return true;
   }
+  return false;
 }
 
-void CalendarBackend::CreateInvite(calendar::InviteRow row,
-                                   std::shared_ptr<InviteResult> result) {
+InviteResult CalendarBackend::CreateInvite(calendar::InviteRow row) {
+  InviteResult result;
   NotificationID id = db_->CreateInvite(row);
   if (id) {
     row.id = id;
-    result->success = true;
-    result->inviteRow = row;
+    result.success = true;
+    result.inviteRow = row;
     EventRow event_row;
     NotifyCalendarChanged();
   } else {
-    result->success = false;
+    result.success = false;
   }
+  return result;
 }
 
-void CalendarBackend::UpdateInvite(calendar::UpdateInviteRow row,
-                                   std::shared_ptr<InviteResult> result) {
+InviteResult CalendarBackend::UpdateInvite(calendar::UpdateInviteRow row) {
   InviteRow invite_row;
+  InviteResult result;
   if (db_->GetInviteRow(row.invite_row.id, &invite_row)) {
     if (row.updateFields & calendar::INVITE_ADDRESS) {
       invite_row.address = row.invite_row.address;
@@ -478,56 +482,50 @@ void CalendarBackend::UpdateInvite(calendar::UpdateInviteRow row,
       invite_row.sent = row.invite_row.sent;
     }
 
-    result->success = db_->UpdateInvite(invite_row);
+    result.success = db_->UpdateInvite(invite_row);
 
-    if (result->success) {
+    if (result.success) {
       EventRow changed_row;
       if (db_->GetRowForEvent(invite_row.event_id, &changed_row)) {
-        result->inviteRow = invite_row;
+        result.inviteRow = invite_row;
         NotifyCalendarChanged();
       }
     }
+    return result;
   } else {
-    result->success = false;
-    result->message = "Could not find invite row in DB";
+    result.success = false;
+    result.message = "Could not find invite row in DB";
     NOTREACHED() << "Could not find invite row in DB";
-    return;
+    return result;
   }
 }
 
-void CalendarBackend::DeleteInvite(InviteID invite_id,
-                                   std::shared_ptr<DeleteInviteResult> result) {
+bool CalendarBackend::DeleteInvite(InviteID invite_id) {
   if (!db_) {
-    result->success = false;
-    return;
+    return false;
   }
 
   if (db_->DeleteInvite(invite_id)) {
-    result->success = true;
     EventRow event_row;
     NotifyCalendarChanged();
-  } else {
-    result->success = false;
+    return true;
   }
+  return false;
 }
 
-void CalendarBackend::GetAllCalendars(
-    std::shared_ptr<CalendarQueryResults> results) {
+CalendarRows CalendarBackend::GetAllCalendars() {
   CalendarRows rows;
   db_->GetAllCalendars(&rows);
-  for (size_t i = 0; i < rows.size(); i++) {
-    const CalendarRow calendarRow = rows[i];
-    CalendarResult result(calendarRow);
-    results->AppendCalendarBySwapping(&result);
-  }
+  return rows;
 }
 
-void CalendarBackend::UpdateEvent(EventID event_id,
-                                  const EventRow& event,
-                                  std::shared_ptr<EventResultCB> result) {
+EventResultCB CalendarBackend::UpdateEvent(EventID event_id,
+                                           const EventRow& event) {
+  EventResultCB result;
+
   if (!db_) {
-    result->success = false;
-    return;
+    result.success = false;
+    return result;
   }
 
   EventRow event_row;
@@ -652,42 +650,43 @@ void CalendarBackend::UpdateEvent(EventID event_id,
       event_row.delete_pending = event.delete_pending;
     }
 
-    result->success = db_->UpdateEventRow(event_row);
+    result.success = db_->UpdateEventRow(event_row);
 
     EventResult updatedEvent = FillEvent(event_id);
-    result->event = updatedEvent;
+    result.event = updatedEvent;
 
-    if (result->success) {
+    if (result.success) {
       EventRow changed_row;
       if (db_->GetRowForEvent(event_id, &changed_row)) {
         NotifyCalendarChanged();
       }
     }
+    return result;
   } else {
-    result->success = false;
-    result->message = "Could not find event row in DB";
+    result.success = false;
+    result.message = "Could not find event row in DB";
     NOTREACHED() << "Could not find event row in DB";
-    return;
+    return result;
   }
 }
 
-void CalendarBackend::GetAllEventTypes(std::shared_ptr<EventTypeRows> results) {
+EventTypeRows CalendarBackend::GetAllEventTypes() {
   EventTypeRows event_type_rows;
   db_->GetAllEventTypes(&event_type_rows);
 
+  EventTypeRows results;
+
   for (size_t i = 0; i < event_type_rows.size(); i++) {
     EventTypeRow event_type_row = event_type_rows[i];
-    results->push_back(event_type_row);
+    results.push_back(event_type_row);
   }
+  return results;
 }
 
-void CalendarBackend::UpdateEventType(
-    EventTypeID event_type_id,
-    const EventType& event,
-    std::shared_ptr<UpdateEventTypeResult> result) {
+bool CalendarBackend::UpdateEventType(EventTypeID event_type_id,
+                                      const EventType& event) {
   if (!db_) {
-    result->success = false;
-    return;
+    return false;
   }
 
   EventTypeRow event_row;
@@ -704,43 +703,36 @@ void CalendarBackend::UpdateEventType(
       event_row.set_iconindex(event.iconindex);
     }
 
-    result->success = db_->UpdateEventTypeRow(event_row);
+    bool result = db_->UpdateEventTypeRow(event_row);
 
-    if (result->success) {
+    if (result) {
       EventTypeRow changed_row;
       if (db_->GetRowForEventType(event_type_id, &changed_row)) {
         NotifyCalendarChanged();
       }
     }
-  } else {
-    result->success = false;
-    NOTREACHED() << "Could not find event type row in DB";
-    return;
+    return result;
   }
+  NOTREACHED() << "Could not find event type row in DB";
+  return false;
 }
 
-void CalendarBackend::DeleteEventType(
-    EventTypeID event_type_id,
-    std::shared_ptr<DeleteEventTypeResult> result) {
+bool CalendarBackend::DeleteEventType(EventTypeID event_type_id) {
   if (!db_) {
-    result->success = false;
-    return;
+    return false;
   }
-
+  bool result = false;
   EventTypeRow event_type_row;
   if (db_->GetRowForEventType(event_type_id, &event_type_row)) {
-    result->success = db_->DeleteEventType(event_type_id);
+    result = db_->DeleteEventType(event_type_id);
     NotifyCalendarChanged();
-  } else {
-    result->success = false;
   }
+  return result;
 }
 
-void CalendarBackend::DeleteEvent(EventID event_id,
-                                  std::shared_ptr<DeleteEventResult> result) {
+bool CalendarBackend::DeleteEvent(EventID event_id) {
   if (!db_) {
-    result->success = false;
-    return;
+    return false;
   }
 
   EventRow event_row;
@@ -751,41 +743,41 @@ void CalendarBackend::DeleteEvent(EventID event_id,
       if (db_->GetAllEventExceptionIds(event_id, &event_ids)) {
         for (auto it = event_ids.begin(); it != event_ids.end(); ++it) {
           if (!db_->DeleteEvent(*it)) {
-            result->success = false;
-            return;
+            return false;
           }
         }
       }
       if (!db_->DeleteRecurrenceExceptions(event_id)) {
-        result->success = false;
-        return;
+        return false;
       }
     }
 
     if (!db_->DeleteNotificationsForEvent(event_id)) {
-      result->success = false;
-      return;
+      return false;
     }
 
-    result->success = db_->DeleteEvent(event_id);
-    NotifyCalendarChanged();
-  } else {
-    result->success = false;
+    if (db_->DeleteEvent(event_id)) {
+      NotifyCalendarChanged();
+      return true;
+    }
+    return false;
   }
+
+  return false;
 }
 
-void CalendarBackend::DeleteEventRecurrenceException(
-    RecurrenceExceptionID exception_id,
-    std::shared_ptr<EventResultCB> result) {
+EventResultCB CalendarBackend::DeleteEventRecurrenceException(
+    RecurrenceExceptionID exception_id) {
+  EventResultCB result;
   if (!db_) {
-    result->success = false;
-    return;
+    result.success = false;
+    return result;
   }
 
   RecurrenceExceptionRow recurrence_exception_row;
   if (!db_->GetRecurrenceException(exception_id, &recurrence_exception_row)) {
-    result->success = false;
-    return;
+    result.success = false;
+    return result;
   }
 
   if (!recurrence_exception_row.cancelled) {
@@ -796,37 +788,35 @@ void CalendarBackend::DeleteEventRecurrenceException(
     EventRow event_row;
     if (db_->GetRowForEvent(recurrence_exception_row.parent_event_id,
                             &event_row)) {
-      result->event = event_row;
-      result->success = true;
+      result.event = event_row;
+      result.success = true;
       NotifyCalendarChanged();
     }
-    return;
+    return result;
   }
-  result->success = false;
+  result.success = false;
+  return result;
 }
 
-void CalendarBackend::CreateCalendar(
-    CalendarRow calendar,
-    std::shared_ptr<CreateCalendarResult> result) {
+CreateCalendarResult CalendarBackend::CreateCalendar(CalendarRow calendar) {
+  CreateCalendarResult result;
   CalendarID id = db_->CreateCalendar(calendar);
 
   if (id) {
     calendar.set_id(id);
-    result->success = true;
-    result->createdRow = calendar;
+    result.success = true;
+    result.createdRow = calendar;
     NotifyCalendarChanged();
-  } else {
-    result->success = false;
+    return result;
   }
+  result.success = false;
+  return result;
 }
 
-void CalendarBackend::UpdateCalendar(
-    CalendarID calendar_id,
-    const Calendar& calendar,
-    std::shared_ptr<UpdateCalendarResult> result) {
+bool CalendarBackend::UpdateCalendar(CalendarID calendar_id,
+                                     const Calendar& calendar) {
   if (!db_) {
-    result->success = false;
-    return;
+    return false;
   }
 
   CalendarRow calendar_row;
@@ -876,27 +866,24 @@ void CalendarBackend::UpdateCalendar(
           calendar.supported_component_set);
     }
 
-    result->success = db_->UpdateCalendarRow(calendar_row);
+    bool result = db_->UpdateCalendarRow(calendar_row);
 
-    if (result->success) {
+    if (result) {
       CalendarRow changed_row;
       if (db_->GetRowForCalendar(calendar_id, &changed_row)) {
         NotifyCalendarChanged();
       }
     }
+    return result;
   } else {
-    result->success = false;
     NOTREACHED() << "Could not find calendar row in DB";
-    return;
+    return false;
   }
 }
 
-void CalendarBackend::DeleteCalendar(
-    CalendarID calendar_id,
-    std::shared_ptr<DeleteCalendarResult> result) {
+bool CalendarBackend::DeleteCalendar(CalendarID calendar_id) {
   if (!db_) {
-    result->success = false;
-    return;
+    return false;
   }
 
   CalendarRow calendar_row;
@@ -905,75 +892,72 @@ void CalendarBackend::DeleteCalendar(
     db_->DeleteNotificationsForCalendar(calendar_id);
     db_->DeleteInvitesForCalendar(calendar_id);
     db_->DeleteEventsForCalendar(calendar_id);
-    result->success = db_->DeleteCalendar(calendar_id);
+    bool res = db_->DeleteCalendar(calendar_id);
     NotifyCalendarChanged();
-  } else {
-    result->success = false;
+    return res;
   }
+  return false;
 }
 
-void CalendarBackend::CreateEventType(
-    EventTypeRow event_type_row,
-    std::shared_ptr<CreateEventTypeResult> result) {
+bool CalendarBackend::CreateEventType(EventTypeRow event_type_row) {
   EventTypeID id = db_->CreateEventType(event_type_row);
 
   if (id) {
     event_type_row.set_id(id);
-    result->success = true;
+
     NotifyCalendarChanged();
-  } else {
-    result->success = false;
+    return true;
   }
+  return false;
 }
 
-void CalendarBackend::CreateAccount(
-    AccountRow account_row,
-    std::shared_ptr<CreateAccountResult> result) {
+CreateAccountResult CalendarBackend::CreateAccount(AccountRow account_row) {
+  CreateAccountResult result;
   EventTypeID id = db_->CreateAccount(account_row);
 
   if (id) {
     account_row.id = id;
-    result->success = true;
-    result->createdRow = account_row;
+    result.success = true;
+    result.createdRow = account_row;
     NotifyCalendarChanged();
-  } else {
-    result->success = false;
+    return result;
   }
+  result.success = false;
+  return result;
 }
 
-void CalendarBackend::DeleteAccount(
-    AccountID account_id,
-    std::shared_ptr<DeleteAccountResult> result) {
+DeleteAccountResult CalendarBackend::DeleteAccount(AccountID account_id) {
+  DeleteAccountResult result;
   CalendarIDs calendars;
   db_->GetAllCalendarIdsForAccount(&calendars, account_id);
 
   for (size_t i = 0; i < calendars.size(); i++) {
     CalendarID calendarId = calendars[i];
-    auto delete_calendar_result =
-        std::shared_ptr<DeleteCalendarResult>(new DeleteCalendarResult());
 
-    DeleteCalendar(calendarId, delete_calendar_result);
+    bool res = DeleteCalendar(calendarId);
 
-    if (!delete_calendar_result->success) {
-      result->success = false;
-      result->message = "Error deleting calendar";
-      return;
+    if (!res) {
+      result.success = false;
+      result.message = "Error deleting calendar";
+      return result;
     }
   }
 
   if (db_->DeleteAccount(account_id)) {
-    result->success = true;
+    result.success = true;
     NotifyCalendarChanged();
+    return result;
   } else {
-    result->success = false;
+    result.success = false;
+    return result;
   }
 }
-void CalendarBackend::UpdateAccount(
-    AccountRow update_account_row,
-    std::shared_ptr<UpdateAccountResult> result) {
+UpdateAccountResult CalendarBackend::UpdateAccount(
+    AccountRow update_account_row) {
+  UpdateAccountResult result;
   if (!db_) {
-    result->success = false;
-    return;
+    result.success = false;
+    return result;
   }
 
   AccountID account_id = update_account_row.id;
@@ -1000,24 +984,24 @@ void CalendarBackend::UpdateAccount(
     }
 
     if (db_->UpdateAccountRow(account)) {
-      result->success = true;
-      result->updatedRow = account;
+      result.success = true;
+      result.updatedRow = account;
       NotifyCalendarChanged();
+      return result;
     } else {
-      result->message = "Error updating account";
-      result->success = false;
+      result.message = "Error updating account";
+      result.success = false;
+      return result;
     }
   }
+  return result;
 }
 
-void CalendarBackend::GetAllAccounts(std::shared_ptr<AccountRows> results) {
+AccountRows CalendarBackend::GetAllAccounts() {
   AccountRows account_rows;
   db_->GetAllAccounts(&account_rows);
 
-  for (size_t i = 0; i < account_rows.size(); i++) {
-    AccountRow account_row = account_rows[i];
-    results->push_back(account_row);
-  }
+  return account_rows;
 }
 
 void CalendarBackend::CloseAllDatabases() {

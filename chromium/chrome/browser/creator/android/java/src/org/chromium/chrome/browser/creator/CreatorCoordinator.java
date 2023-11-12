@@ -14,6 +14,7 @@ import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.FrameLayout;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.OnScrollListener;
@@ -24,12 +25,13 @@ import org.chromium.base.supplier.UnownedUserDataSupplier;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
 import org.chromium.chrome.browser.feed.FeedAutoplaySettingsDelegate;
 import org.chromium.chrome.browser.feed.FeedContentFirstLoadWatcher;
+import org.chromium.chrome.browser.feed.FeedListContentManager;
+import org.chromium.chrome.browser.feed.FeedListContentManager.FeedContent;
 import org.chromium.chrome.browser.feed.FeedStream;
-import org.chromium.chrome.browser.feed.FeedSurfaceScopeDependencyProvider;
+import org.chromium.chrome.browser.feed.FeedStreamViewResizer;
+import org.chromium.chrome.browser.feed.FeedSurfaceScopeDependencyProviderImpl;
 import org.chromium.chrome.browser.feed.FeedSurfaceTracker;
 import org.chromium.chrome.browser.feed.NativeViewListRenderer;
-import org.chromium.chrome.browser.feed.NtpListContentManager;
-import org.chromium.chrome.browser.feed.NtpListContentManager.FeedContent;
 import org.chromium.chrome.browser.feed.SingleWebFeedEntryPoint;
 import org.chromium.chrome.browser.feed.SingleWebFeedParameters;
 import org.chromium.chrome.browser.feed.Stream;
@@ -44,7 +46,6 @@ import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
-import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
@@ -55,6 +56,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFacto
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
+import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.components.url_formatter.UrlFormatter;
@@ -86,13 +88,14 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
     private CreatorMediator mMediator;
     private CreatorTabMediator mTabMediator;
     private Activity mActivity;
-    private NtpListContentManager mContentManager;
+    private FeedListContentManager mContentManager;
+    private UiConfig mUiConfig;
     private RecyclerView mRecyclerView;
     private View mProfileView;
     private ViewGroup mLayoutView;
     private HybridListRenderer mHybridListRenderer;
     private SurfaceScope mSurfaceScope;
-    private FeedSurfaceScopeDependencyProvider mDependencyProvider;
+    private FeedSurfaceScopeDependencyProviderImpl mDependencyProvider;
     private PropertyModel mCreatorModel;
     private PropertyModelChangeProcessor<PropertyModel, CreatorProfileView, PropertyKey>
             mCreatorProfileModelChangeProcessor;
@@ -123,6 +126,8 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
     private GURL mBottomSheetUrl;
     private int mEntryPoint;
 
+    private @Nullable FeedStreamViewResizer mStreamViewResizer;
+
     private static final String CREATOR_PROFILE_ID = "CreatorProfileView";
     private static final String CREATOR_PRIVACY_ID = "CreatorPrivacyId";
 
@@ -146,7 +151,7 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
             WindowAndroid windowAndroid, Profile profile, String url,
             WebContentsCreator creatorWebContents, NewTabCreator creatorOpenTab,
             UnownedUserDataSupplier<ShareDelegate> bottomsheetShareDelegateSupplier, int entryPoint,
-            boolean isFollowing) {
+            boolean isFollowing, SignInInterstitialInitiator signInInterstitialInitiator) {
         mActivity = activity;
         mProfile = profile;
         mSnackbarManager = snackbarManager;
@@ -160,8 +165,8 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
 
         mProfileView =
                 (View) LayoutInflater.from(mActivity).inflate(R.layout.creator_profile, null);
-        List<NtpListContentManager.FeedContent> contentPreviewsList = new ArrayList<>();
-        contentPreviewsList.add(new NtpListContentManager.NativeViewContent(
+        List<FeedListContentManager.FeedContent> contentPreviewsList = new ArrayList<>();
+        contentPreviewsList.add(new FeedListContentManager.NativeViewContent(
                 getContentPreviewsPaddingPx(), CREATOR_PROFILE_ID, mProfileView));
         mContentManager.addContents(0, contentPreviewsList);
         mHeaderCount = 1;
@@ -170,6 +175,9 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
         mCreatorViewGroup =
                 (ViewGroup) LayoutInflater.from(mActivity).inflate(R.layout.creator_activity, null);
         mLayoutView = mCreatorViewGroup.findViewById(R.id.creator_layout);
+        mUiConfig = new UiConfig(mLayoutView);
+        mStreamViewResizer =
+                FeedStreamViewResizer.createAndAttach(mActivity, mRecyclerView, mUiConfig);
         mLayoutView.addView(mRecyclerView);
 
         // Generate Creator Model
@@ -186,7 +194,8 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
                 mCreatorModel, (CreatorToolbarView) mLayoutView, CreatorToolbarViewBinder::bind);
         setUpToolbarListener();
 
-        mMediator = new CreatorMediator(mActivity, mCreatorModel, mCreatorSnackbarController);
+        mMediator = new CreatorMediator(
+                mActivity, mCreatorModel, mCreatorSnackbarController, signInInterstitialInitiator);
     }
 
     /**
@@ -253,7 +262,7 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
         }
 
         mStream.bind(mRecyclerView, mContentManager, /*FeedScrollState*/ null, mSurfaceScope,
-                mHybridListRenderer, new FeedLaunchReliabilityLogger() {}, mHeaderCount);
+                mHybridListRenderer, null, mHeaderCount);
     }
 
     private class StreamsMediatorImpl implements Stream.StreamsMediator {
@@ -283,11 +292,11 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
 
     private RecyclerView setUpView() {
         // TODO(crbug.com/1374744): Refactor NTP naming out of the general Feed code.
-        mContentManager = new NtpListContentManager();
+        mContentManager = new FeedListContentManager();
         ProcessScope processScope = FeedSurfaceTracker.getInstance().getXSurfaceProcessScope();
 
         if (processScope != null) {
-            mDependencyProvider = new FeedSurfaceScopeDependencyProvider(
+            mDependencyProvider = new FeedSurfaceScopeDependencyProviderImpl(
                     mActivity, mActivity, ColorUtils.inNightMode(mActivity));
             mSurfaceScope = processScope.obtainSurfaceScope(mDependencyProvider);
         } else {
@@ -308,6 +317,7 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
             view.setId(R.id.creator_feed_stream_recycler_view);
             view.setClipToPadding(false);
             view.setBackgroundColor(SemanticColorUtils.getDefaultBgColor(mActivity));
+            view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         } else {
             view = null;
         }
@@ -372,6 +382,7 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
         }, mCreatorViewGroup, mActivity.getResources().getColor(R.color.default_scrim_color));
 
         mBottomSheetContainer = new FrameLayout(mActivity);
+        mBottomSheetContainer.setId(R.id.creator_content_preview_bottom_sheet);
         mBottomSheetContainer.setLayoutParams(
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         mCreatorViewGroup.addView(mBottomSheetContainer);
@@ -564,7 +575,7 @@ public class CreatorCoordinator implements FeedAutoplaySettingsDelegate,
                 List<FeedContent> privacyList = new ArrayList<>();
                 View privacyView =
                         LayoutInflater.from(mActivity).inflate(R.layout.creator_privacy, null);
-                privacyList.add(new NtpListContentManager.NativeViewContent(
+                privacyList.add(new FeedListContentManager.NativeViewContent(
                         getContentPreviewsPaddingPx(), CREATOR_PRIVACY_ID, privacyView));
                 mContentManager.addContents(mHeaderCount, privacyList);
                 mHeaderCount += privacyList.size();

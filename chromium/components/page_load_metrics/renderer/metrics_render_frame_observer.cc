@@ -61,14 +61,15 @@ class MojoPageTimingSender : public PageTimingSender {
                   const mojom::FrameRenderDataUpdate& render_data,
                   const mojom::CpuTimingPtr& cpu_timing,
                   mojom::InputTimingPtr input_timing_delta,
-                  mojom::SubresourceLoadMetricsPtr subresource_load_metrics,
+                  const absl::optional<blink::SubresourceLoadMetrics>&
+                      subresource_load_metrics,
                   uint32_t soft_navigation_count) override {
     DCHECK(page_load_metrics_);
     page_load_metrics_->UpdateTiming(
         limited_sending_mode_ ? CreatePageLoadTiming() : timing->Clone(),
         metadata->Clone(), new_features, std::move(resources),
         render_data.Clone(), cpu_timing->Clone(), std::move(input_timing_delta),
-        std::move(subresource_load_metrics), soft_navigation_count);
+        subresource_load_metrics, soft_navigation_count);
   }
 
   void SetUpSmoothnessReporting(
@@ -141,17 +142,10 @@ void MetricsRenderFrameObserver::DidObserveLoadingBehavior(
 }
 
 void MetricsRenderFrameObserver::DidObserveSubresourceLoad(
-    uint32_t number_of_subresources_loaded,
-    uint32_t number_of_subresource_loads_handled_by_service_worker,
-    bool pervasive_payload_requested,
-    int64_t pervasive_bytes_fetched,
-    int64_t total_bytes_fetched) {
+    const blink::SubresourceLoadMetrics& subresource_load_metrics) {
   if (page_timing_metrics_sender_)
     page_timing_metrics_sender_->DidObserveSubresourceLoad(
-        number_of_subresources_loaded,
-        number_of_subresource_loads_handled_by_service_worker,
-        pervasive_payload_requested, pervasive_bytes_fetched,
-        total_bytes_fetched);
+        subresource_load_metrics);
 }
 
 void MetricsRenderFrameObserver::DidObserveNewFeatureUsage(
@@ -286,9 +280,8 @@ void MetricsRenderFrameObserver::DidSetPageLifecycleState() {
 void MetricsRenderFrameObserver::ReadyToCommitNavigation(
     blink::WebDocumentLoader* document_loader) {
   // Create a new data use tracker for the new document load.
-  provisional_frame_resource_data_use_ =
-      std::make_unique<PageResourceDataUse>();
-  provisional_frame_resource_id_ = 0;
+  provisional_frame_resource_data_use_ = std::make_unique<PageResourceDataUse>(
+      PageResourceDataUse::kUnknownResourceId);
 
   // Send current metrics before the next page load commits. Don't reset here
   // as it may be a same document load.
@@ -331,7 +324,7 @@ void MetricsRenderFrameObserver::DidCreateDocumentElement() {
   page_timing_metrics_sender_ = std::make_unique<PageTimingMetricsSender>(
       CreatePageTimingSender(true /* limited_sending_mode */), CreateTimer(),
       std::move(timing.relative_timing), timing.monotonic_timing,
-      std::make_unique<PageResourceDataUse>());
+      /* initial_request=*/nullptr);
 
   OnMetricsSenderCreated();
 }
@@ -343,15 +336,6 @@ void MetricsRenderFrameObserver::DidCommitProvisionalLoad(
 
   if (HasNoRenderFrame())
     return;
-
-  // Update metadata once the load has been committed. There is no guarantee
-  // that the provisional resource will have been reported as an ad by this
-  // point. Therefore, need to update metadata for the resource after the load.
-  // Consumers may receive the correct ad information late.
-  UpdateResourceMetadata(provisional_frame_resource_data_use_->resource_id());
-
-  provisional_frame_resource_id_ =
-      provisional_frame_resource_data_use_->resource_id();
 
   Timing timing = GetTiming();
   page_timing_metrics_sender_ = std::make_unique<PageTimingMetricsSender>(
@@ -459,8 +443,7 @@ MetricsRenderFrameObserver::Timing& MetricsRenderFrameObserver::Timing::
 operator=(Timing&&) = default;
 
 void MetricsRenderFrameObserver::UpdateResourceMetadata(int request_id) {
-  if (!page_timing_metrics_sender_)
-    return;
+  DCHECK(page_timing_metrics_sender_);
 
   // If the request is an ad, pop it off the list of known ad requests.
   auto ad_resource_it = ad_request_ids_.find(request_id);
@@ -686,34 +669,6 @@ MetricsRenderFrameObserver::Timing MetricsRenderFrameObserver::GetTiming()
     timing->paint_timing->largest_contentful_paint->type =
         LargestContentfulPaintTypeToUKMFlags(
             perf.LargestContentfulPaintTypeForMetrics());
-  }
-  if (perf.ExperimentalLargestImagePaintSize() > 0) {
-    timing->paint_timing->experimental_largest_contentful_paint
-        ->largest_image_paint_size = perf.ExperimentalLargestImagePaintSize();
-    // Note that size can be nonzero while the time is 0 since a time of 0 is
-    // sent when the image is painting. We assign the time even when it is 0 so
-    // that it's not ignored, but need to be careful when doing operations on
-    // the value.
-    timing->paint_timing->experimental_largest_contentful_paint
-        ->largest_image_paint =
-        perf.ExperimentalLargestImagePaint() == 0.0
-            ? base::TimeDelta()
-            : CreateTimeDeltaFromTimestampsInSeconds(
-                  perf.ExperimentalLargestImagePaint(), start);
-    timing->paint_timing->experimental_largest_contentful_paint->type =
-        LargestContentfulPaintTypeToUKMFlags(
-            perf.LargestContentfulPaintTypeForMetrics());
-  }
-  if (perf.ExperimentalLargestTextPaintSize() > 0) {
-    // ExperimentalLargestTextPaint and ExperimentalLargestTextPaintSize should
-    // be available at the same time. This is a renderer side DCHECK to ensure
-    // this.
-    DCHECK(perf.ExperimentalLargestTextPaint());
-    timing->paint_timing->experimental_largest_contentful_paint
-        ->largest_text_paint = CreateTimeDeltaFromTimestampsInSeconds(
-        perf.ExperimentalLargestTextPaint(), start);
-    timing->paint_timing->experimental_largest_contentful_paint
-        ->largest_text_paint_size = perf.ExperimentalLargestTextPaintSize();
   }
   // It is possible for a frame to switch from eligible for painting to
   // ineligible for it prior to the first paint. If this occurs, we need to

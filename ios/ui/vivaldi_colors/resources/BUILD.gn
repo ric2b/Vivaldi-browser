@@ -20,6 +20,7 @@ group("resources") {
     ":viv_system_gray_05",
     ":viv_system_gray_06",
     ":viv_system_gray_07",
+    ":viv_top_toolbar_tint_color",
   ]
 }
 
@@ -85,4 +86,8 @@ colorset("viv_system_gray_06") {
 
 colorset("viv_system_gray_07") {
   sources = [ "viv_system_gray_07.colorset/Contents.json" ]
+}
+
+colorset("viv_top_toolbar_tint_color") {
+  sources = [ "viv_top_toolbar_tint_color.colorset/Contents.json" ]
 }

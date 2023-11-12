@@ -11,14 +11,30 @@
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_model.h"
 #include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_prefs.h"
 #include "chrome/common/accessibility/read_anything_constants.h"
+#include "chrome/test/base/browser_with_test_window_test.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
-#include "ui/accessibility/accessibility_features.h"
+
+using testing::_;
+class MockReadAnythingModelObserver : public ReadAnythingModel::Observer {
+ public:
+  MOCK_METHOD(void,
+              OnReadAnythingThemeChanged,
+              (const std::string& font_name,
+               double font_scale,
+               ui::ColorId foreground_color_id,
+               ui::ColorId background_color_id,
+               ui::ColorId separator_color_id,
+               ui::ColorId dropdown_color_id,
+               ui::ColorId selection_color_id,
+               read_anything::mojom::LineSpacing line_spacing,
+               read_anything::mojom::LetterSpacing letter_spacing),
+              (override));
+};
 
 class ReadAnythingControllerTest : public TestWithBrowserView {
  public:
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures({features::kReadAnythingWithScreen2x},
-                                          {});
     TestWithBrowserView::SetUp();
 
     model_ = std::make_unique<ReadAnythingModel>();
@@ -28,7 +44,7 @@ class ReadAnythingControllerTest : public TestWithBrowserView {
     // Reset prefs to default values for test.
     browser()->profile()->GetPrefs()->SetString(
         prefs::kAccessibilityReadAnythingFontName,
-        kReadAnythingDefaultFontName);
+        string_constants::kReadAnythingDefaultFontName);
     browser()->profile()->GetPrefs()->SetDouble(
         prefs::kAccessibilityReadAnythingFontScale,
         kReadAnythingDefaultFontScale);
@@ -69,8 +85,6 @@ class ReadAnythingControllerTest : public TestWithBrowserView {
     model_->Init(font_name, font_scale, colors, line_spacing, letter_spacing);
   }
 
-  void OnUIReady() { controller_->OnUIReady(); }
-
   std::string GetPrefFontName() {
     return browser()->profile()->GetPrefs()->GetString(
         prefs::kAccessibilityReadAnythingFontName);
@@ -96,10 +110,12 @@ class ReadAnythingControllerTest : public TestWithBrowserView {
         prefs::kAccessibilityReadAnythingLetterSpacing);
   }
 
+  TabStripModel* GetTabStripModel() { return browser()->tab_strip_model(); }
+
  protected:
   std::unique_ptr<ReadAnythingModel> model_;
   std::unique_ptr<ReadAnythingController> controller_;
-  base::test::ScopedFeatureList scoped_feature_list_;
+  MockReadAnythingModelObserver model_observer_;
 };
 
 TEST_F(ReadAnythingControllerTest, ValidIndexUpdatesFontNamePref) {
@@ -244,9 +260,4 @@ TEST_F(ReadAnythingControllerTest, OnLetterSpacingChangedInvalidInput) {
   MockOnLetterSpacingChanged(10);
 
   EXPECT_EQ(GetPrefsLetterSpacing(), 1);
-}
-
-TEST_F(ReadAnythingControllerTest, CallOnUIReadyTwiceNoCrash) {
-  OnUIReady();
-  OnUIReady();
 }

@@ -6,7 +6,9 @@
 
 #include <memory>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/public/cpp/sensor_disabled_notification_delegate.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -14,9 +16,11 @@
 #include "ash/system/privacy_hub/privacy_hub_controller.h"
 #include "ash/system/privacy_hub/privacy_hub_notification_controller.h"
 #include "ash/system/system_notification_controller.h"
+#include "base/check.h"
 #include "base/functional/bind.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "components/prefs/pref_service.h"
+#include "ui/message_center/public/cpp/notification_types.h"
 
 namespace ash {
 namespace {
@@ -46,20 +50,7 @@ MicrophonePrivacySwitchController::MicrophonePrivacySwitchController()
     : input_stream_count_(CountActiveInputStreams()),
       mic_mute_on_(CrasAudioHandler::Get()->IsInputMuted()),
       mic_muted_by_mute_switch_(
-          CrasAudioHandler::Get()->input_muted_by_microphone_mute_switch()),
-      mute_switch_notification_(
-          kNotificationId,
-          IDS_MICROPHONE_MUTED_BY_HW_SWITCH_NOTIFICATION_TITLE,
-          {IDS_MICROPHONE_MUTED_NOTIFICATION_MESSAGE,
-           IDS_MICROPHONE_MUTED_NOTIFICATION_MESSAGE_WITH_ONE_APP_NAME,
-           IDS_MICROPHONE_MUTED_NOTIFICATION_MESSAGE_WITH_TWO_APP_NAMES},
-          {SensorDisabledNotificationDelegate::Sensor::kMicrophone},
-          base::MakeRefCounted<PrivacyHubNotificationClickDelegate>(
-              base::BindRepeating(
-                  PrivacyHubNotificationController::OpenSupportUrl,
-                  PrivacyHubNotificationController::Sensor::kMicrophone)),
-          ash::NotificationCatalogName::kMicrophoneMute,
-          IDS_ASH_LEARN_MORE) {
+          CrasAudioHandler::Get()->input_muted_by_microphone_mute_switch()) {
   Shell::Get()->session_controller()->AddObserver(this);
   CrasAudioHandler::Get()->AddAudioObserver(this);
 }
@@ -92,8 +83,8 @@ void MicrophonePrivacySwitchController::OnInputMuteChanged(
   mic_muted_by_mute_switch_ =
       CrasAudioHandler::Get()->input_muted_by_microphone_mute_switch();
 
-  if (input_stream_count_) {
-    SetMicrophoneNotificationVisible(mic_mute_on_);
+  if (!mic_mute_on_) {
+    SetMicrophoneNotificationVisible(false);
   }
 
   // `pref_change_registrar_` is only initialized after a user logs in.
@@ -124,19 +115,50 @@ void MicrophonePrivacySwitchController::
 
   mic_muted_by_mute_switch_ = muted;
 
-  if (input_stream_count_) {
-    SetMicrophoneNotificationVisible(mic_mute_on_);
+  if (features::IsVideoConferenceEnabled()) {
+    // The `VideoConferenceTrayController` shows this info as a toast.
+    return;
+  }
+
+  auto* privacy_hub_notification_controller =
+      PrivacyHubNotificationController::Get();
+  CHECK(privacy_hub_notification_controller);
+
+  if (mic_mute_on_) {
+    bool is_mic_sw_switch_notification_shown =
+        privacy_hub_notification_controller
+            ->IsSoftwareSwitchNotificationDisplayedForSensor(
+                SensorDisabledNotificationDelegate::Sensor::kMicrophone);
+
+    if (is_mic_sw_switch_notification_shown) {
+      // Set priority to LOW to make sure the notification will be just added
+      // to the message center (and not be shown as a popup).
+      privacy_hub_notification_controller
+          ->SetPriorityForMicrophoneHardwareNotification(
+              message_center::NotificationPriority::LOW_PRIORITY);
+      SetMicrophoneNotificationVisible(mic_mute_on_);
+      // Restore priority to DEFAULT - so next notifications to be popups.
+      privacy_hub_notification_controller
+          ->SetPriorityForMicrophoneHardwareNotification(
+              message_center::NotificationPriority::DEFAULT_PRIORITY);
+    }
+  } else {
+    SetMicrophoneNotificationVisible(false);
   }
 }
 
 void MicrophonePrivacySwitchController::
     OnNumberOfInputStreamsWithPermissionChanged() {
+  if (features::IsVideoConferenceEnabled()) {
+    // The `VideoConferenceTrayController` shows this info as a toast.
+    return;
+  }
   // Catches the case where a mic-using app is launched while the mic is muted.
   const size_t input_stream_count = CountActiveInputStreams();
   const bool stream_count_increased = input_stream_count > input_stream_count_;
   input_stream_count_ = input_stream_count;
 
-  if (!input_stream_count_) {
+  if (input_stream_count_ == 0) {
     SetMicrophoneNotificationVisible(false);
   } else if (stream_count_increased) {
     SetMicrophoneNotificationVisible(input_stream_count_ && mic_mute_on_);
@@ -164,35 +186,48 @@ void MicrophonePrivacySwitchController::SetSystemMute() {
 
 void MicrophonePrivacySwitchController::SetMicrophoneNotificationVisible(
     const bool visible) {
-  mute_switch_notification_.Hide();
-
-  if (mic_muted_by_mute_switch_ && visible) {
-    mute_switch_notification_.Show();
+  if (features::IsVideoConferenceEnabled()) {
+    // The `VideoConferenceTrayController` shows this info as a toast.
     return;
   }
 
-  PrivacyHubNotificationController* const privacy_hub_notification_controller =
-      Shell::Get()->system_notification_controller()->privacy_hub();
+  auto* privacy_hub_notification_controller =
+      PrivacyHubNotificationController::Get();
+
   if (visible) {
-    privacy_hub_notification_controller->ShowSensorDisabledNotification(
-        PrivacyHubNotificationController::Sensor::kMicrophone);
+    if (mic_muted_by_mute_switch_) {
+      privacy_hub_notification_controller->ShowHardwareSwitchNotification(
+          SensorDisabledNotificationDelegate::Sensor::kMicrophone);
+    } else {
+      privacy_hub_notification_controller->ShowSoftwareSwitchNotification(
+          SensorDisabledNotificationDelegate::Sensor::kMicrophone);
+    }
+
   } else {
-    privacy_hub_notification_controller->RemoveSensorDisabledNotification(
-        PrivacyHubNotificationController::Sensor::kMicrophone);
+    privacy_hub_notification_controller->RemoveSoftwareSwitchNotification(
+        SensorDisabledNotificationDelegate::Sensor::kMicrophone);
+    privacy_hub_notification_controller->RemoveHardwareSwitchNotification(
+        SensorDisabledNotificationDelegate::Sensor::kMicrophone);
   }
 }
 
 void MicrophonePrivacySwitchController::UpdateMicrophoneNotification() {
-  if (mic_muted_by_mute_switch_) {
-    mute_switch_notification_.Update();
+  if (features::IsVideoConferenceEnabled()) {
+    // The `VideoConferenceTrayController` shows this info as a toast.
     return;
   }
 
-  Shell::Get()
-      ->system_notification_controller()
-      ->privacy_hub()
-      ->UpdateSensorDisabledNotification(
-          PrivacyHubNotificationController::Sensor::kMicrophone);
+  auto* privacy_hub_notification_controller =
+      PrivacyHubNotificationController::Get();
+  CHECK(privacy_hub_notification_controller);
+
+  if (mic_muted_by_mute_switch_) {
+    privacy_hub_notification_controller->UpdateHardwareSwitchNotification(
+        SensorDisabledNotificationDelegate::Sensor::kMicrophone);
+  } else {
+    privacy_hub_notification_controller->UpdateSoftwareSwitchNotification(
+        SensorDisabledNotificationDelegate::Sensor::kMicrophone);
+  }
 }
 
 }  // namespace ash

@@ -25,10 +25,15 @@
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/frame_sinks/gpu_vsync_begin_frame_source.h"
 #include "components/viz/service/hit_test/hit_test_aggregator.h"
+#include "services/viz/public/mojom/compositing/layer_context.mojom.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "components/viz/service/frame_sinks/external_begin_frame_source_android.h"
+#endif
+
+#if BUILDFLAG(IS_IOS)
+#include "components/viz/service/frame_sinks/external_begin_frame_source_ios.h"
 #endif
 
 namespace viz {
@@ -130,6 +135,10 @@ RootCompositorFrameSinkImpl::Create(
         std::make_unique<ExternalBeginFrameSourceAndroid>(
             restart_id, params->refresh_rate,
             /*requires_align_with_java=*/false);
+#elif BUILDFLAG(IS_IOS)
+    hw_support_for_multiple_refresh_rates = true;
+    external_begin_frame_source =
+        std::make_unique<ExternalBeginFrameSourceIOS>(restart_id);
 #else
     if (params->disable_frame_rate_limit) {
       synthetic_begin_frame_source =
@@ -423,6 +432,10 @@ void RootCompositorFrameSinkImpl::SetWantsAnimateOnlyBeginFrames() {
   support_->SetWantsAnimateOnlyBeginFrames();
 }
 
+void RootCompositorFrameSinkImpl::SetWantsBeginFrameAcks() {
+  support_->SetWantsBeginFrameAcks();
+}
+
 void RootCompositorFrameSinkImpl::SubmitCompositorFrame(
     const LocalSurfaceId& local_surface_id,
     CompositorFrame frame,
@@ -485,6 +498,11 @@ void RootCompositorFrameSinkImpl::InitializeCompositorFrameSinkType(
   support_->InitializeCompositorFrameSinkType(type);
 }
 
+void RootCompositorFrameSinkImpl::BindLayerContext(
+    mojom::PendingLayerContextPtr context) {
+  support_->BindLayerContext(*context);
+}
+
 #if BUILDFLAG(IS_ANDROID)
 void RootCompositorFrameSinkImpl::SetThreadIds(
     const std::vector<int32_t>& thread_ids) {
@@ -527,10 +545,24 @@ RootCompositorFrameSinkImpl::RootCompositorFrameSinkImpl(
                        Display::kEnableSharedImages,
                        hw_support_for_multiple_refresh_rates);
   support_->SetUpHitTest(display_.get());
+#if BUILDFLAG(IS_IOS)
+  // iOS supports preferred refresh rate interval set as a hint how often a
+  // client wants to refresh the content. It works two ways - a client setting a
+  // preferred refresh rate and the system throttling the refresh rate in case
+  // of battery saving or any other events.
+  DCHECK(hw_support_for_multiple_refresh_rates);
+  use_preferred_interval_ = true;
+#else
   if (!hw_support_for_multiple_refresh_rates) {
     display_->SetSupportedFrameIntervals(
         {display_frame_interval_, display_frame_interval_ * 2});
     use_preferred_interval_ = true;
+  }
+#endif
+
+  if (external_begin_frame_source_) {
+    display_frame_interval_ =
+        external_begin_frame_source_->GetMaximumRefreshFrameInterval();
   }
 }
 
@@ -640,6 +672,11 @@ BeginFrameSource* RootCompositorFrameSinkImpl::begin_frame_source() {
   if (external_begin_frame_source_)
     return external_begin_frame_source_.get();
   return synthetic_begin_frame_source_.get();
+}
+
+void RootCompositorFrameSinkImpl::SetMaxVrrInterval(
+    absl::optional<base::TimeDelta> max_vrr_interval) {
+  // TODO(b/221220344): Use VRR parameters in frame scheduling logic.
 }
 
 }  // namespace viz

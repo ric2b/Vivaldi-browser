@@ -35,6 +35,18 @@ class MirroringServiceHost {
   // session if exist. Doesn't need to be called on UI thread.
   virtual absl::optional<int> GetTabSourceId() const = 0;
 
+  // Fetches the statistics of the current mirroring sessions.
+  virtual void GetMirroringStats(
+      base::OnceCallback<void(const base::Value)> json_stats_cb) = 0;
+
+  // Makes a call to the VideoCaptureHost to pause the current mirroring
+  // session.
+  virtual void Pause(base::OnceClosure on_paused_callback) = 0;
+
+  // Makes a call to the VideoCaptureHost to resume the current mirroring
+  // session.
+  virtual void Resume(base::OnceClosure on_resumed_callback) = 0;
+
   base::WeakPtr<MirroringServiceHost> GetWeakPtr();
 
  protected:

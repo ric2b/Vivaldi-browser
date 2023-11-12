@@ -10,6 +10,7 @@
 #import "base/functional/bind.h"
 #import "base/functional/callback.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/sessions/core/session_id.h"
 #import "ios/web/common/crw_content_view.h"
 #import "ios/web/js_messaging/web_frames_manager_impl.h"
 #import "ios/web/public/js_messaging/web_frame.h"
@@ -40,9 +41,12 @@ void FakeWebState::CloseWebState() {
   is_closed_ = true;
 }
 
-FakeWebState::FakeWebState(NSString* stable_identifier)
-    : stable_identifier_(stable_identifier ? stable_identifier
-                                           : [[NSUUID UUID] UUIDString]) {}
+FakeWebState::FakeWebState()
+    : stable_identifier_([[NSUUID UUID] UUIDString]),
+      unique_identifier_(SessionID::NewUnique()) {
+  DCHECK(stable_identifier_.length);
+  DCHECK(unique_identifier_.is_valid());
+}
 
 FakeWebState::~FakeWebState() {
   for (auto& observer : observers_)
@@ -151,12 +155,12 @@ NavigationManager* FakeWebState::GetNavigationManager() {
   return navigation_manager_.get();
 }
 
-const WebFramesManager* FakeWebState::GetPageWorldWebFramesManager() const {
-  return web_frames_manager_.get();
+WebFramesManager* FakeWebState::GetPageWorldWebFramesManager() {
+  return web_frames_managers_[ContentWorld::kPageContentWorld].get();
 }
 
-WebFramesManager* FakeWebState::GetPageWorldWebFramesManager() {
-  return web_frames_manager_.get();
+WebFramesManager* FakeWebState::GetWebFramesManager(ContentWorld world) {
+  return web_frames_managers_[world].get();
 }
 
 const SessionCertificatePolicyCache*
@@ -176,6 +180,7 @@ CRWSessionStorage* FakeWebState::BuildSessionStorage() {
           ->GetUserDataForSession();
   session_storage.itemStorages = @[ [[CRWNavigationItemStorage alloc] init] ];
   session_storage.stableIdentifier = stable_identifier_;
+  session_storage.uniqueIdentifier = unique_identifier_;
   return session_storage;
 }
 
@@ -186,7 +191,14 @@ void FakeWebState::SetNavigationManager(
 
 void FakeWebState::SetWebFramesManager(
     std::unique_ptr<WebFramesManager> web_frames_manager) {
-  web_frames_manager_ = std::move(web_frames_manager);
+  SetWebFramesManager(ContentWorld::kPageContentWorld,
+                      std::move(web_frames_manager));
+}
+
+void FakeWebState::SetWebFramesManager(
+    ContentWorld content_world,
+    std::unique_ptr<WebFramesManager> web_frames_manager) {
+  web_frames_managers_[content_world] = std::move(web_frames_manager);
 }
 
 void FakeWebState::SetView(UIView* view) {
@@ -221,6 +233,10 @@ void FakeWebState::ExecuteUserJavaScript(NSString* javaScript) {}
 
 NSString* FakeWebState::GetStableIdentifier() const {
   return stable_identifier_;
+}
+
+SessionID FakeWebState::GetUniqueIdentifier() const {
+  return unique_identifier_;
 }
 
 const std::string& FakeWebState::GetContentsMimeType() const {

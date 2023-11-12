@@ -5,13 +5,13 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_control.h"
 
 #import <CoreGraphics/CoreGraphics.h>
+
 #import <algorithm>
 
 #import "base/check_op.h"
-#import "base/cxx17_backports.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -76,19 +76,12 @@ namespace {
 
 // Height and width of the slider.
 const CGFloat kSliderHeight = 40.0;
-const CGFloat kLegacySliderWidth = 78.0;
 const CGFloat kSliderWidth = 65.0;
 
 // Height and width of each segment.
-const CGFloat kLegacySegmentHeight = 36.0;
-const CGFloat kLegacySegmentWidth = 64.0;
 const CGFloat kSegmentHeight = 44.0;
 const CGFloat kSegmentWidth = 65.0;
 
-// Points that the slider overhangs a segment on each side, or 0 if the slider
-// is narrower than a segment.
-const CGFloat kLegacySliderOverhang =
-    std::max((kLegacySliderWidth - kLegacySegmentWidth) / 2.0, 0.0);
 // Margin between the slider and the leading/trailing segments.
 const CGFloat kSliderMargin = 2.0;
 
@@ -100,19 +93,9 @@ const CGFloat kSliderVerticalMargin =
 const CGFloat kSeparatorWidth = 1.0;
 const CGFloat kSeparatorHeight = 22.0;
 
-// Width of the background -- three segments plus two separators.
-const CGFloat kLegacyBackgroundWidth =
-    3 * kLegacySegmentWidth + 2 * kSeparatorWidth;
-
 // Overall height of the control -- the larger of the slider and segment
 // heights.
-const CGFloat kLegacyOverallHeight =
-    std::max(kSliderHeight, kLegacySegmentHeight);
 const CGFloat kOverallHeight = std::max(kSliderHeight, kSegmentHeight);
-// Overall width of the control -- the background width plus twice the slider
-// overhang.
-const CGFloat kLegacyOverallWidth =
-    kLegacyBackgroundWidth + 2 * kLegacySliderOverhang;
 // Overall width -- three segments plus two separators plus two margins between
 // leading/trailing segments and the slider.
 const CGFloat kOverallWidth =
@@ -121,7 +104,6 @@ const CGFloat kOverallWidth =
 // Radius used to draw the background and the slider.
 const CGFloat kSliderCornerRadius = 13.0;
 const CGFloat kBackgroundCornerRadius = 15.0;
-const CGFloat kLegacyBackgroundCornerRadius = 13.0;
 
 // Sizes for the labels and their selected counterparts.
 const CGFloat kLabelSize = 20.0;
@@ -131,14 +113,9 @@ const CGFloat kLabelSizeToFontSize = 0.6;
 // Maximum duration of slider motion animation.
 const NSTimeInterval kSliderMoveDuration = 0.2;
 
-// Color for the slider
-const int kLegacySliderColor = 0xF8F9FA;
 // Alpha for the background view.
-const CGFloat kLegacyBackgroundAlpha = 0.3;
 const CGFloat kBackgroundAlpha = 0.15;
 const CGFloat kScrolledToTopBackgroundAlpha = 0.25;
-// Color for the regular tab count label and icons.
-const CGFloat kLegacySelectedColor = 0x3C4043;
 
 // The sizes of the symbol images.
 const CGFloat kUnselectedSymbolSize = 22.;
@@ -149,26 +126,6 @@ CGPoint RectCenter(CGRect rect) {
   return CGPointMake(CGRectGetMidX(rect), CGRectGetMidY(rect));
 }
 
-// Image names for the different icon state.
-NSString* kImagePageControlRegularSelected =
-    @"page_control_regular_tabs_selected";
-NSString* kImagePageControlRegularNotSelected = @"page_control_regular_tabs";
-NSString* kImagePageControlIncognitoSelected =
-    @"page_control_incognito_tabs_selected";
-NSString* kImagePageControlIncognitoNotSelected =
-    @"page_control_incognito_tabs";
-NSString* kImagePageControlRemoteSelected =
-    @"page_control_remote_tabs_selected";
-NSString* kImagePageControlRemoteNotSelected = @"page_control_remote_tabs";
-
-// Returns an UIImageView for the given imgageName.
-UIImageView* ImageViewForImageNamed(NSString* imageName) {
-  return [[UIImageView alloc]
-      initWithImage:
-          [[UIImage imageNamed:imageName]
-              imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
-}
-
 // Returns an UIImageView for the given `symbolName` and `selected` state.
 UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   CGFloat size = selected ? kSelectedSymbolSize : kUnselectedSymbolSize;
@@ -177,11 +134,6 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 }
 
 }  // namespace
-
-// View class used for the background of this control; it draws the grey
-// rectangles with clear separators.
-@interface TabGridPageControlBackground : UIView
-@end
 
 @interface TabGridPageControl () <UIGestureRecognizerDelegate,
                                   UIPointerInteractionDelegate> {
@@ -274,12 +226,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 }
 
 - (instancetype)init {
-  CGRect frame;
-  if (UseSymbols()) {
-    frame = CGRectMake(0, 0, kOverallWidth, kOverallHeight);
-  } else {
-    frame = CGRectMake(0, 0, kLegacyOverallWidth, kLegacyOverallHeight);
-  }
+  CGRect frame = CGRectMake(0, 0, kOverallWidth, kOverallHeight);
 
   if (IsVivaldiRunning()) {
     frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
@@ -336,15 +283,21 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 }
 
 - (void)setScrollViewScrolledToEdge:(BOOL)scrolledToEdge {
-  if (!UseSymbols() || _scrolledToEdge == scrolledToEdge)
+  if (_scrolledToEdge == scrolledToEdge) {
     return;
+  }
 
   _scrolledToEdge = scrolledToEdge;
 
+  if (IsVivaldiRunning()) {
+    self.background.backgroundColor = [UIColor colorNamed:vBackgroundColor];
+  } else {
   CGFloat backgroundAlpha =
       scrolledToEdge ? kScrolledToTopBackgroundAlpha : kBackgroundAlpha;
   self.background.backgroundColor = [UIColor colorWithWhite:1
                                                       alpha:backgroundAlpha];
+  } // End Vivaldi
+
 }
 
 #pragma mark - Public Properies
@@ -355,7 +308,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 
 - (void)setSliderPosition:(CGFloat)sliderPosition {
   // Clamp `selectionOffset` to (0.0 - 1.0).
-  sliderPosition = base::clamp<CGFloat>(sliderPosition, 0.0, 1.0);
+  sliderPosition = std::clamp<CGFloat>(sliderPosition, 0.0, 1.0);
   CGPoint center = self.sliderView.center;
   center.x = self.sliderOrigin + self.sliderRange * sliderPosition;
   self.sliderView.center = center;
@@ -524,15 +477,11 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 #pragma mark - UIView
 
 - (CGSize)intrinsicContentSize {
-
   if (IsVivaldiRunning()) {
     return CGSizeMake(vOverallWidth, vOverallHeight);
   } // End Vivaldi
 
-  if (UseSymbols()) {
-    return CGSizeMake(kOverallWidth, kOverallHeight);
-  }
-  return CGSizeMake(kLegacyOverallWidth, kLegacyOverallHeight);
+  return CGSizeMake(kOverallWidth, kOverallHeight);
 }
 
 - (void)willMoveToSuperview:(UIView*)newSuperview {
@@ -662,20 +611,14 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   UIImageView* iconNotSelected;
   switch (tab) {
     case TabGridPageRegularTabs: {
-
       if (IsVivaldiRunning()) {
-        iconSelected = ImageViewForImageNamed(kImagePageControlRegularSelected);
+        iconSelected =
+            ImageViewForSymbol(kImagePageControlRegularSelected, true);
         iconNotSelected =
-            ImageViewForImageNamed(kImagePageControlRegularNotSelected);
+            ImageViewForSymbol(kImagePageControlRegularNotSelected, false);
       } else {
-      if (UseSymbols()) {
-        iconSelected = ImageViewForSymbol(kSquareNumberSymbol, true);
-        iconNotSelected = ImageViewForSymbol(kSquareNumberSymbol, false);
-      } else {
-        iconSelected = ImageViewForImageNamed(kImagePageControlRegularSelected);
-        iconNotSelected =
-            ImageViewForImageNamed(kImagePageControlRegularNotSelected);
-      }
+      iconSelected = ImageViewForSymbol(kSquareNumberSymbol, true);
+      iconNotSelected = ImageViewForSymbol(kSquareNumberSymbol, false);
       } // End Vivaldi
 
       self.regularSelectedIcon = iconSelected;
@@ -683,22 +626,14 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
       break;
     }
     case TabGridPageIncognitoTabs: {
-
       if (IsVivaldiRunning()) {
         iconSelected =
-            ImageViewForImageNamed(kImagePageControlIncognitoSelected);
+            ImageViewForSymbol(kImagePageControlIncognitoSelected, true);
         iconNotSelected =
-            ImageViewForImageNamed(kImagePageControlIncognitoNotSelected);
+            ImageViewForSymbol(kImagePageControlIncognitoNotSelected, false);
       } else {
-      if (UseSymbols()) {
-        iconSelected = ImageViewForSymbol(kIncognitoSymbol, true);
-        iconNotSelected = ImageViewForSymbol(kIncognitoSymbol, false);
-      } else {
-        iconSelected =
-            ImageViewForImageNamed(kImagePageControlIncognitoSelected);
-        iconNotSelected =
-            ImageViewForImageNamed(kImagePageControlIncognitoNotSelected);
-      }
+      iconSelected = ImageViewForSymbol(kIncognitoSymbol, true);
+      iconNotSelected = ImageViewForSymbol(kIncognitoSymbol, false);
       } // End Vivaldi
 
       self.incognitoSelectedIcon = iconSelected;
@@ -706,22 +641,28 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
       break;
     }
     case TabGridPageRemoteTabs: {
-      if (UseSymbols()) {
-        iconSelected = ImageViewForSymbol(kRecentTabsSymbol, true);
-        iconNotSelected = ImageViewForSymbol(kRecentTabsSymbol, false);
-      } else {
-        iconSelected = ImageViewForImageNamed(kImagePageControlRemoteSelected);
+
+      if (IsVivaldiRunning()) {
+        iconSelected =
+            ImageViewForSymbol(kImagePageControlRemoteSelected, true);
         iconNotSelected =
-            ImageViewForImageNamed(kImagePageControlRemoteNotSelected);
-      }
+            ImageViewForSymbol(kImagePageControlRemoteNotSelected, false);
+      } else {
+      iconSelected = ImageViewForSymbol(kRecentTabsSymbol, true);
+      iconNotSelected = ImageViewForSymbol(kRecentTabsSymbol, false);
+      } // End Vivaldi
+
       self.remoteSelectedIcon = iconSelected;
       self.remoteNotSelectedIcon = iconNotSelected;
       break;
     }
+
     // Vivaldi
     case TabGridPageClosedTabs: {
-      iconSelected = ImageViewForImageNamed(kImagePageControlClosedSelected);
-      iconNotSelected = ImageViewForImageNamed(kImagePageControlClosedNotSelected);
+      iconSelected =
+          ImageViewForSymbol(kImagePageControlClosedSelected, true);
+      iconNotSelected =
+          ImageViewForSymbol(kImagePageControlClosedNotSelected, false);
       self.closedSelectedIcon = iconSelected;
       self.closedNotSelectedIcon = iconNotSelected;
       break;
@@ -730,13 +671,8 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 
   }
 
-  if (UseSymbols()) {
-    iconNotSelected.tintColor = [UIColor colorNamed:kStaticGrey300Color];
-    iconSelected.tintColor = UIColor.blackColor;
-  } else {
-    iconNotSelected.tintColor = UIColorFromRGB(kLegacySliderColor);
-    iconSelected.tintColor = UIColorFromRGB(kLegacySelectedColor);
-  }
+  iconNotSelected.tintColor = [UIColor colorNamed:kStaticGrey300Color];
+  iconSelected.tintColor = UIColor.blackColor;
 
   if (IsVivaldiRunning()) {
     iconNotSelected.tintColor = [UIColor colorNamed: vNotSelectedColor];
@@ -749,36 +685,24 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 // Sets up all of the subviews for this control, as well as the layout guides
 // used to position the section content.
 - (void)setupViews {
-  UIView* backgroundView = nil;
-  if (UseSymbols()) {
-    self.scrolledToEdge = YES;
+  self.scrolledToEdge = YES;
 
-    backgroundView = [[UIView alloc]
-        initWithFrame:CGRectMake(0, 0, kOverallWidth, kSegmentHeight)];
-    backgroundView.backgroundColor =
-        [UIColor colorWithWhite:1 alpha:kScrolledToTopBackgroundAlpha];
-
-  } else {
-    backgroundView = [[TabGridPageControlBackground alloc] init];
-  }
+  UIView* backgroundView = [[UIView alloc]
+      initWithFrame:CGRectMake(0, 0, kOverallWidth, kSegmentHeight)];
+  backgroundView.backgroundColor =
+      [UIColor colorWithWhite:1 alpha:kScrolledToTopBackgroundAlpha];
   backgroundView.userInteractionEnabled = NO;
-  if (UseSymbols()) {
-    backgroundView.layer.cornerRadius = kBackgroundCornerRadius;
-  } else {
-    backgroundView.layer.cornerRadius = kLegacyBackgroundCornerRadius;
-  }
+  backgroundView.layer.cornerRadius = kBackgroundCornerRadius;
   backgroundView.layer.masksToBounds = YES;
   [self addSubview:backgroundView];
-  if (UseSymbols()) {
-    backgroundView.center =
-        CGPointMake(kOverallWidth / 2.0, kOverallHeight / 2.0);
-  } else {
-    backgroundView.center =
-        CGPointMake(kLegacyOverallWidth / 2.0, kLegacyOverallHeight / 2.0);
-  }
+  backgroundView.center =
+      CGPointMake(kOverallWidth / 2.0, kOverallHeight / 2.0);
   self.background = backgroundView;
 
   if (IsVivaldiRunning()) {
+    backgroundView.frame = CGRectMake(0, 0, vOverallWidth, vOverallHeight);
+    backgroundView.backgroundColor =
+        [UIColor colorNamed:vBackgroundColor];
     backgroundView.layer.cornerRadius = vCornerRadius;
     backgroundView.center =
       CGPointMake(vOverallWidth / 2.0, vOverallHeight / 2.0);
@@ -804,17 +728,11 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   // All of the guides are of the same height, and vertically centered in the
   // control.
   for (UILayoutGuide* guide in @[ incognitoGuide, regularGuide, remoteGuide ]) {
-    if (UseSymbols()) {
-      [guide.heightAnchor constraintEqualToConstant:kOverallHeight].active =
-          YES;
-      // Guides are all the same width. The regular guide is centered in the
-      // control, and the incognito and remote guides are on the leading and
-      // trailing sides of it, with separators in between.
-      [guide.widthAnchor constraintEqualToConstant:kSegmentWidth].active = YES;
-    } else {
-      [guide.heightAnchor constraintEqualToConstant:kLegacyOverallHeight]
-          .active = YES;
-    }
+    [guide.heightAnchor constraintEqualToConstant:kOverallHeight].active = YES;
+    // Guides are all the same width. The regular guide is centered in the
+    // control, and the incognito and remote guides are on the leading and
+    // trailing sides of it, with separators in between.
+    [guide.widthAnchor constraintEqualToConstant:kSegmentWidth].active = YES;
 
     if (IsVivaldiRunning()) {
       [guide.heightAnchor
@@ -824,7 +742,6 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
     [guide.centerYAnchor constraintEqualToAnchor:self.centerYAnchor].active =
         YES;
   }
-
 
   if (IsVivaldiRunning()) {
 
@@ -853,64 +770,39 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
           constraintEqualToAnchor:remoteGuide.trailingAnchor],
     ]];
   } else {
-  if (UseSymbols()) {
-    UIView* firstSeparator = [self newSeparator];
-    [self addSubview:firstSeparator];
-    self.firstSeparator = firstSeparator;
-    UIView* secondSeparator = [self newSeparator];
-    [self addSubview:secondSeparator];
-    self.secondSeparator = secondSeparator;
+  UIView* firstSeparator = [self newSeparator];
+  [self addSubview:firstSeparator];
+  self.firstSeparator = firstSeparator;
+  UIView* secondSeparator = [self newSeparator];
+  [self addSubview:secondSeparator];
+  self.secondSeparator = secondSeparator;
 
-    [NSLayoutConstraint activateConstraints:@[
-      [incognitoGuide.trailingAnchor
-          constraintEqualToAnchor:firstSeparator.leadingAnchor],
-      [firstSeparator.trailingAnchor
-          constraintEqualToAnchor:regularGuide.leadingAnchor],
-      [regularGuide.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-      [regularGuide.trailingAnchor
-          constraintEqualToAnchor:secondSeparator.leadingAnchor],
-      [secondSeparator.trailingAnchor
-          constraintEqualToAnchor:remoteGuide.leadingAnchor],
+  [NSLayoutConstraint activateConstraints:@[
+    [incognitoGuide.trailingAnchor
+        constraintEqualToAnchor:firstSeparator.leadingAnchor],
+    [firstSeparator.trailingAnchor
+        constraintEqualToAnchor:regularGuide.leadingAnchor],
+    [regularGuide.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+    [regularGuide.trailingAnchor
+        constraintEqualToAnchor:secondSeparator.leadingAnchor],
+    [secondSeparator.trailingAnchor
+        constraintEqualToAnchor:remoteGuide.leadingAnchor],
 
-      [firstSeparator.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-      [secondSeparator.centerYAnchor
-          constraintEqualToAnchor:self.centerYAnchor],
-    ]];
-
-  } else {
-    // Guides are all the same width (except the regular guide is wider to
-    // include the separators on either side of it). The regular guide is
-    // centered in the control, and the incognito and remote guides are on the
-    // leading and trailing sides of it.
-    [NSLayoutConstraint activateConstraints:@[
-      [incognitoGuide.widthAnchor
-          constraintEqualToConstant:kLegacySegmentWidth],
-      [regularGuide.widthAnchor
-          constraintEqualToConstant:kLegacySegmentWidth + 2 * kSeparatorWidth],
-      [remoteGuide.widthAnchor constraintEqualToConstant:kLegacySegmentWidth],
-      [regularGuide.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-      [incognitoGuide.trailingAnchor
-          constraintEqualToAnchor:regularGuide.leadingAnchor],
-      [remoteGuide.leadingAnchor
-          constraintEqualToAnchor:regularGuide.trailingAnchor]
-    ]];
-  }
+    [firstSeparator.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+    [secondSeparator.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+  ]];
   } // End Vivaldi
 
   // Add the slider above the section images and labels.
-  CGRect sliderFrame;
-  if (UseSymbols()) {
-    sliderFrame =
-        CGRectMake(0, kSliderVerticalMargin, kSliderWidth, kSliderHeight);
-  } else {
-    sliderFrame = CGRectMake(0, 0, kLegacySliderWidth, kSliderHeight);
-  }
+  CGRect sliderFrame =
+      CGRectMake(0, kSliderVerticalMargin, kSliderWidth, kSliderHeight);
 
   if (IsVivaldiRunning()) {
     sliderFrame = CGRectMake(0, 4, vSliderWidth, vSliderHeight);
   } // End Vivaldi
 
   UIView* slider = [[UIView alloc] initWithFrame:sliderFrame];
+
   slider.layer.cornerRadius = kSliderCornerRadius;
 
   if (IsVivaldiRunning()) {
@@ -921,11 +813,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   if (IsVivaldiRunning()) {
     slider.backgroundColor = vSliderColor;
   } else {
-  if (UseSymbols()) {
-    slider.backgroundColor = UIColor.whiteColor;
-  } else {
-    slider.backgroundColor = UIColorFromRGB(kLegacySliderColor);
-  }
+  slider.backgroundColor = UIColor.whiteColor;
   } // End Vivaldi
 
   [self addSubview:slider];
@@ -933,13 +821,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 
   // Selected images and labels are added to the selected image view so they
   // will be clipped by the slider.
-  CGRect selectedImageFrame;
-  if (UseSymbols()) {
-    selectedImageFrame = CGRectMake(0, 0, kOverallWidth, kOverallHeight);
-  } else {
-    selectedImageFrame =
-        CGRectMake(0, 0, kLegacyOverallWidth, kLegacyOverallHeight);
-  }
+  CGRect selectedImageFrame = CGRectMake(0, 0, kOverallWidth, kOverallHeight);
   UIView* selectedImageView = [[UIView alloc] initWithFrame:selectedImageFrame];
 
   if (IsVivaldiRunning()) {
@@ -965,12 +847,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   [self.selectedImageView addSubview:regularSelectedLabel];
   self.regularSelectedLabel = regularSelectedLabel;
 
-  CGRect segmentRect;
-  if (UseSymbols()) {
-    segmentRect = CGRectMake(0, 0, kSegmentWidth, kSegmentHeight);
-  } else {
-    segmentRect = CGRectMake(0, 0, kLegacySegmentWidth, kLegacyOverallHeight);
-  }
+  CGRect segmentRect = CGRectMake(0, 0, kSegmentWidth, kSegmentHeight);
 
   if (IsVivaldiRunning()) {
     segmentRect = CGRectMake(0, 0, vSegmentWidth, vOverallHeight);
@@ -1039,26 +916,22 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 // Selected labels use a different size and are black.
 - (UILabel*)labelSelected:(BOOL)selected {
   CGFloat size = selected ? kSelectedLabelSize : kLabelSize;
-  UIColor* color;
-  if (UseSymbols()) {
-    color = selected ? UIColor.blackColor
-                     : [UIColor colorNamed:kStaticGrey300Color];
-  } else {
-    color = selected ? UIColorFromRGB(kLegacySelectedColor)
-                     : UIColorFromRGB(kLegacySliderColor);
-  }
 
   if (IsVivaldiRunning()) {
-    color =
-        selected ? UIColorFromRGB(kLegacySelectedColor) :
-                   [UIColor colorNamed: vNotSelectedColor];
     size = kLabelSize;
   } // End Vivaldi
 
   UILabel* label = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, size, size)];
   label.backgroundColor = UIColor.clearColor;
   label.textAlignment = NSTextAlignmentCenter;
-  label.textColor = color;
+  if (IsVivaldiRunning()) {
+      label.textColor = selected ?
+          UIColorFromRGB(kLegacySelectedColor) :
+          [UIColor colorNamed: vNotSelectedColor];
+  } else {
+  label.textColor =
+      selected ? UIColor.blackColor : [UIColor colorNamed:kStaticGrey300Color];
+  } // End Vivaldi
   return label;
 }
 
@@ -1153,6 +1026,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 
 #pragma mark - Vivaldi
 
+
 - (void)setupRecentlyClosedTabAccessibilityElement {
   _closedAccessibilityElement =
       [[UIAccessibilityElement alloc] initWithAccessibilityContainer:self];
@@ -1194,62 +1068,5 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   }
 }
 // End Vivaldi
-
-@end
-
-@implementation TabGridPageControlBackground
-
-- (instancetype)init {
-  DCHECK(!UseSymbols());
-  CGRect frame = CGRectMake(0, 0, kLegacyBackgroundWidth, kLegacySegmentHeight);
-  self = [super initWithFrame:frame];
-
-  if (IsVivaldiRunning()) {
-    self.frame = CGRectMake(0, 0, vBackgroundWidth, vSegmentHeight);
-  } // End Vivaldi
-
-  if (self) {
-    self.backgroundColor = UIColor.clearColor;
-  }
-  return self;
-}
-
-- (CGSize)intrinsicContentsSize {
-
-  if (IsVivaldiRunning()) {
-    return CGSizeMake(vBackgroundWidth, vSegmentHeight);
-  } // End Vivaldi
-
-  return CGSizeMake(kLegacyBackgroundWidth, kLegacySegmentHeight);
-}
-
-- (void)drawRect:(CGRect)rect {
-
-  if (IsVivaldiRunning()) {
-    CGContextRef drawing = UIGraphicsGetCurrentContext();
-    UIColor* backgroundColor = [UIColor colorNamed:vBackgroundColor];
-    CGContextSetFillColorWithColor(drawing, backgroundColor.CGColor);
-    CGRect fillRect = CGRectMake(0, 0, vSegmentWidth, vSegmentHeight);
-    CGContextFillRect(drawing, fillRect);
-    fillRect.origin.x += vSegmentWidth;
-    CGContextFillRect(drawing, fillRect);
-    fillRect.origin.x += vSegmentWidth;
-    CGContextFillRect(drawing, fillRect);
-    fillRect.origin.x += vSegmentWidth;
-    CGContextFillRect(drawing, fillRect);
-    return;
-  } // End Vivaldi
-
-  CGContextRef drawing = UIGraphicsGetCurrentContext();
-  UIColor* backgroundColor = [UIColor colorWithWhite:1
-                                               alpha:kLegacyBackgroundAlpha];
-  CGContextSetFillColorWithColor(drawing, backgroundColor.CGColor);
-  CGRect fillRect = CGRectMake(0, 0, kSegmentWidth, kSegmentHeight);
-  CGContextFillRect(drawing, fillRect);
-  fillRect.origin.x += kSegmentWidth + kSeparatorWidth;
-  CGContextFillRect(drawing, fillRect);
-  fillRect.origin.x += kSegmentWidth + kSeparatorWidth;
-  CGContextFillRect(drawing, fillRect);
-}
 
 @end

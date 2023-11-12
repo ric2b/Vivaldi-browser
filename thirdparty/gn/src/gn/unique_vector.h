@@ -186,9 +186,26 @@ class UniqueVector {
       push_back(*i);
   }
 
-  // Append another vector into this one.
-  void Append(const UniqueVector& other) {
+  // Append from any iterable container with begin() and end()
+  // methods, whose iterators derefence to values convertible to T.
+  template <typename C,
+            typename = std::void_t<
+                decltype(static_cast<const T>(*std::declval<C>().begin())),
+                decltype(static_cast<const T>(*std::declval<C>().end()))>>
+  void Append(const C& other) {
     Append(other.begin(), other.end());
+  }
+
+  // Append from any moveable iterable container with begin() and
+  // end() methods. This variant moves items from the container
+  // into the UniqueVector instance.
+  template <typename C,
+            typename = std::void_t<
+                decltype(static_cast<T>(*std::declval<C>().begin())),
+                decltype(static_cast<T>(*std::declval<C>().end()))>>
+  void Append(C&& other) {
+    for (auto it = other.begin(); it != other.end(); ++it)
+      push_back(std::move(*it));
   }
 
   // Returns true if the item is already in the vector.

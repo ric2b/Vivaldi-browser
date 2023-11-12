@@ -9,13 +9,15 @@
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/test/gmock_callback_support.h"
+#include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/enterprise/idle/browser_closer.h"
+#include "chrome/browser/enterprise/idle/dialog_manager.h"
 #include "chrome/browser/policy/profile_policy_connector_builder.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -34,6 +36,7 @@
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -42,6 +45,7 @@
 #include "ui/base/test/idle_test_utils.h"
 
 using base::TestMockTimeTaskRunner;
+using testing::_;
 using testing::ElementsAre;
 using testing::IsEmpty;
 using testing::Not;
@@ -172,14 +176,14 @@ class IdleServiceTest : public InProcessBrowserTest {
   }
 
   bool IsDialogOpen() const {
-    return enterprise_idle::BrowserCloser::GetInstance()
+    return enterprise_idle::DialogManager::GetInstance()
         ->IsDialogOpenForTesting();
   }
 
  private:
   testing::NiceMock<policy::MockConfigurationPolicyProvider>
       policy_providers_[2];
-  raw_ptr<MockIdleTimeProvider> idle_time_provider_;
+  raw_ptr<MockIdleTimeProvider, DanglingUntriaged> idle_time_provider_;
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   std::unique_ptr<ui::test::ScopedIdleProviderForTest> scoped_idle_provider_;
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
@@ -244,7 +248,7 @@ IN_PROC_BROWSER_TEST_F(IdleServiceTest, DidNotClose) {
 
   EXPECT_CALL(idle_time_provider(), CalculateIdleTime())
       .WillRepeatedly(Return(base::Seconds(61)));
-  BrowserCloser::GetInstance()->DismissDialogForTesting();
+  DialogManager::GetInstance()->DismissDialogForTesting();
   task_runner()->FastForwardBy(base::Seconds(30));
   EXPECT_EQ(1, GetBrowserCount(profile));
   EXPECT_FALSE(IsDialogOpen());
@@ -452,7 +456,7 @@ IN_PROC_BROWSER_TEST_F(IdleServiceTest, DialogDismissedByUser) {
       .WillOnce(Return(base::Seconds(60)));
   task_runner()->FastForwardBy(base::Seconds(1));
   EXPECT_TRUE(IsDialogOpen());
-  BrowserCloser::GetInstance()->DismissDialogForTesting();
+  DialogManager::GetInstance()->DismissDialogForTesting();
 
   EXPECT_CALL(idle_time_provider(), CalculateIdleTime())
       .WillRepeatedly(Return(base::Seconds(75)));
@@ -553,6 +557,44 @@ IN_PROC_BROWSER_TEST_F(IdleServiceTest, DISABLED_JustShowProfilePicker) {
   task_runner()->FastForwardBy(base::Seconds(1));
   EXPECT_FALSE(IsDialogOpen());
   EXPECT_TRUE(ProfilePicker::IsOpen());
+
+  // Browsers are still open.
+  EXPECT_EQ(1, GetBrowserCount(profile));
+}
+
+IN_PROC_BROWSER_TEST_F(IdleServiceTest, ReloadPages) {
+  EXPECT_CALL(idle_time_provider(), CalculateIdleTime())
+      .WillOnce(Return(base::Seconds(58)));
+  Profile* profile = browser()->profile();
+  SetIdleTimeoutPolicies(policy_provider(0), /*idle_timeout=*/1,
+                         /*idle_timeout_actions=*/{"reload_pages"});
+
+  EXPECT_EQ(1, GetBrowserCount(profile));
+  EXPECT_FALSE(IsDialogOpen());
+  EXPECT_FALSE(ProfilePicker::IsOpen());
+
+  auto* web_contents = browser()->tab_strip_model()->GetWebContentsAt(0);
+  ASSERT_NE(nullptr, web_contents);
+
+  // This callback should run after a navigation happens.
+  base::MockCallback<base::RepeatingCallback<void(content::NavigationHandle*)>>
+      cb;
+  base::RunLoop run_loop;
+  EXPECT_CALL(cb, Run(_))
+      .WillOnce(base::test::RunClosure(run_loop.QuitClosure()));
+  content::DidFinishNavigationObserver observer(web_contents, cb.Get());
+
+  // 60s, threshold is reached. This should show NOT show the dialog, which is
+  // tied to the "close_browsers" action.
+  EXPECT_CALL(idle_time_provider(), CalculateIdleTime())
+      .WillOnce(Return(base::Seconds(60)));
+  task_runner()->FastForwardBy(base::Seconds(1));
+  EXPECT_CALL(idle_time_provider(), CalculateIdleTime())
+      .WillRepeatedly(Return(base::Seconds(15)));
+  task_runner()->FastForwardBy(base::Seconds(30));
+  EXPECT_FALSE(IsDialogOpen());
+  EXPECT_FALSE(ProfilePicker::IsOpen());
+  run_loop.Run();
 
   // Browsers are still open.
   EXPECT_EQ(1, GetBrowserCount(profile));

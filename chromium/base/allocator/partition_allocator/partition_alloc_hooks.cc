@@ -71,8 +71,9 @@ void PartitionAllocHooks::AllocationObserverHookIfEnabled(
     void* address,
     size_t size,
     const char* type_name) {
-  if (auto* hook = allocation_observer_hook_.load(std::memory_order_relaxed))
+  if (auto* hook = allocation_observer_hook_.load(std::memory_order_relaxed)) {
     hook(address, size, type_name);
+  }
 }
 
 bool PartitionAllocHooks::AllocationOverrideHookIfEnabled(
@@ -80,19 +81,22 @@ bool PartitionAllocHooks::AllocationOverrideHookIfEnabled(
     unsigned int flags,
     size_t size,
     const char* type_name) {
-  if (auto* hook = allocation_override_hook_.load(std::memory_order_relaxed))
+  if (auto* hook = allocation_override_hook_.load(std::memory_order_relaxed)) {
     return hook(out, flags, size, type_name);
+  }
   return false;
 }
 
 void PartitionAllocHooks::FreeObserverHookIfEnabled(void* address) {
-  if (auto* hook = free_observer_hook_.load(std::memory_order_relaxed))
+  if (auto* hook = free_observer_hook_.load(std::memory_order_relaxed)) {
     hook(address);
+  }
 }
 
 bool PartitionAllocHooks::FreeOverrideHookIfEnabled(void* address) {
-  if (auto* hook = free_override_hook_.load(std::memory_order_relaxed))
+  if (auto* hook = free_override_hook_.load(std::memory_order_relaxed)) {
     return hook(address);
+  }
   return false;
 }
 
@@ -120,6 +124,8 @@ bool PartitionAllocHooks::ReallocOverrideHookIfEnabled(size_t* out,
   return false;
 }
 
+// Do not unset the hook if there are remaining quarantined slots
+// not to break checks on unquarantining.
 void PartitionAllocHooks::SetQuarantineOverrideHook(
     QuarantineOverrideHook* hook) {
   quarantine_override_hook_.store(hook, std::memory_order_release);

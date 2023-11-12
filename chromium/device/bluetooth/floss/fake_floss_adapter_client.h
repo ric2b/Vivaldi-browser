@@ -31,11 +31,13 @@ class DEVICE_BLUETOOTH_EXPORT FakeFlossAdapterClient
   static const char kClassicName[];
   static const uint32_t kPasskey;
   static const uint32_t kHeadsetClassOfDevice;
+  static const uint32_t kKeyboardClassofDevice;
 
   // Fake overrides.
   void Init(dbus::Bus* bus,
             const std::string& service_name,
-            const int adapter_index) override;
+            const int adapter_index,
+            base::OnceClosure on_ready) override;
   void StartDiscovery(ResponseCallback<Void> callback) override;
   void CancelDiscovery(ResponseCallback<Void> callback) override;
   void CreateBond(ResponseCallback<bool> callback,

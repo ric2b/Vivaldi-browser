@@ -18,6 +18,7 @@
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/system_display/display_info_provider_chromeos.h"
@@ -49,14 +50,14 @@ void ErrorCallback(std::string* result,
 
 class DisplayInfoProviderChromeosTest : public ChromeAshTestBase {
  public:
-  DisplayInfoProviderChromeosTest() {}
+  DisplayInfoProviderChromeosTest() = default;
 
   DisplayInfoProviderChromeosTest(const DisplayInfoProviderChromeosTest&) =
       delete;
   DisplayInfoProviderChromeosTest& operator=(
       const DisplayInfoProviderChromeosTest&) = delete;
 
-  ~DisplayInfoProviderChromeosTest() override {}
+  ~DisplayInfoProviderChromeosTest() override = default;
 
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -197,7 +198,7 @@ class DisplayInfoProviderChromeosTest : public ChromeAshTestBase {
   std::unique_ptr<ash::CrosDisplayConfig> cros_display_config_;
 
  protected:
-  DisplayInfoProvider* provider_;
+  raw_ptr<DisplayInfoProvider, ExperimentalAsh> provider_;
 };
 
 TEST_F(DisplayInfoProviderChromeosTest, GetBasic) {
@@ -685,18 +686,18 @@ TEST_F(DisplayInfoProviderChromeosTest, Layout) {
   // Confirm layout.
   EXPECT_EQ(displays[1].id, layout[0].id);
   EXPECT_EQ(primary_id, layout[0].parent_id);
-  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT, layout[0].position);
+  EXPECT_EQ(api::system_display::LayoutPosition::kRight, layout[0].position);
   EXPECT_EQ(0, layout[0].offset);
 
   EXPECT_EQ(displays[2].id, layout[1].id);
   EXPECT_EQ(layout[0].id, layout[1].parent_id);
-  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT, layout[1].position);
+  EXPECT_EQ(api::system_display::LayoutPosition::kRight, layout[1].position);
   EXPECT_EQ(0, layout[1].offset);
 
   // Modify layout.
   layout[0].offset = 100;
   layout[1].parent_id = primary_id;
-  layout[1].position = api::system_display::LAYOUT_POSITION_BOTTOM;
+  layout[1].position = api::system_display::LayoutPosition::kBottom;
   layout[1].offset = -100;
 
   // Update with modified layout.
@@ -708,12 +709,12 @@ TEST_F(DisplayInfoProviderChromeosTest, Layout) {
   // Confirm modified layout.
   EXPECT_EQ(displays[1].id, layout[0].id);
   EXPECT_EQ(primary_id, layout[0].parent_id);
-  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT, layout[0].position);
+  EXPECT_EQ(api::system_display::LayoutPosition::kRight, layout[0].position);
   EXPECT_EQ(100, layout[0].offset);
 
   EXPECT_EQ(displays[2].id, layout[1].id);
   EXPECT_EQ(primary_id, layout[1].parent_id);
-  EXPECT_EQ(api::system_display::LAYOUT_POSITION_BOTTOM, layout[1].position);
+  EXPECT_EQ(api::system_display::LayoutPosition::kBottom, layout[1].position);
   EXPECT_EQ(-100, layout[1].offset);
 
   // TODO(stevenjb/oshima): Implement and test illegal layout prevention.
@@ -741,17 +742,17 @@ TEST_F(DisplayInfoProviderChromeosTest, UnifiedModeLayout) {
   // Confirm the horizontal layout.
   EXPECT_EQ(displays[1].id, default_layout[0].id);
   EXPECT_EQ(displays[0].id, default_layout[0].parent_id);
-  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT,
+  EXPECT_EQ(api::system_display::LayoutPosition::kRight,
             default_layout[0].position);
   EXPECT_EQ(0, default_layout[0].offset);
   EXPECT_EQ(displays[2].id, default_layout[1].id);
   EXPECT_EQ(displays[1].id, default_layout[1].parent_id);
-  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT,
+  EXPECT_EQ(api::system_display::LayoutPosition::kRight,
             default_layout[1].position);
   EXPECT_EQ(0, default_layout[1].offset);
   EXPECT_EQ(displays[3].id, default_layout[2].id);
   EXPECT_EQ(displays[2].id, default_layout[2].parent_id);
-  EXPECT_EQ(api::system_display::LAYOUT_POSITION_RIGHT,
+  EXPECT_EQ(api::system_display::LayoutPosition::kRight,
             default_layout[2].position);
   EXPECT_EQ(0, default_layout[2].offset);
 
@@ -762,13 +763,13 @@ TEST_F(DisplayInfoProviderChromeosTest, UnifiedModeLayout) {
   layout.resize(3u);
   layout[0].id = displays[1].id;
   layout[0].parent_id = displays[3].id;
-  layout[0].position = api::system_display::LAYOUT_POSITION_RIGHT;
+  layout[0].position = api::system_display::LayoutPosition::kRight;
   layout[1].id = displays[2].id;
   layout[1].parent_id = displays[3].id;
-  layout[1].position = api::system_display::LAYOUT_POSITION_BOTTOM;
+  layout[1].position = api::system_display::LayoutPosition::kBottom;
   layout[2].id = displays[0].id;
   layout[2].parent_id = displays[2].id;
-  layout[2].position = api::system_display::LAYOUT_POSITION_RIGHT;
+  layout[2].position = api::system_display::LayoutPosition::kRight;
 
   EXPECT_TRUE(SetDisplayLayout(layout));
   EXPECT_EQ(gfx::Size(650, 743),
@@ -1442,12 +1443,14 @@ TEST_F(DisplayInfoProviderChromeosTest, DisplayMode) {
   const api::system_display::DisplayMode* cur_mode = nullptr;
   const api::system_display::DisplayMode* other_mode = nullptr;
   for (const auto& mode : secondary_info.modes) {
-    if (mode.is_selected)
+    if (mode.is_selected) {
       cur_mode = &mode;
-    else if (!other_mode)
+    } else if (!other_mode) {
       other_mode = &mode;
-    if (cur_mode && other_mode)
+    }
+    if (cur_mode && other_mode) {
       break;
+    }
   }
   ASSERT_TRUE(cur_mode);
   ASSERT_TRUE(other_mode);
@@ -1463,9 +1466,8 @@ TEST_F(DisplayInfoProviderChromeosTest, DisplayMode) {
 
   // Switch modes.
   api::system_display::DisplayProperties info;
-  info.display_mode = std::move(*api::system_display::DisplayMode::FromValue(
-                                     base::Value(other_mode->ToValue()))
-                                     .get());
+  info.display_mode =
+      api::system_display::DisplayMode::FromValue(other_mode->ToValue());
 
   EXPECT_TRUE(CallSetDisplayUnitInfo(base::NumberToString(id), info));
 
@@ -1487,10 +1489,12 @@ TEST_F(DisplayInfoProviderChromeosTest, GetDisplayZoomFactor) {
   DisplayUnitInfoList displays = GetAllDisplaysInfo();
 
   for (const auto& display : displays) {
-    if (display.id == base::NumberToString(display_id_list[0]))
+    if (display.id == base::NumberToString(display_id_list[0])) {
       EXPECT_EQ(display.display_zoom_factor, zoom_factor_1);
-    if (display.id == base::NumberToString(display_id_list[1]))
+    }
+    if (display.id == base::NumberToString(display_id_list[1])) {
       EXPECT_EQ(display.display_zoom_factor, zoom_factor_2);
+    }
   }
 }
 
@@ -1581,14 +1585,14 @@ TEST_F(DisplayInfoProviderChromeosTest, SetDisplayZoomFactor) {
 class DisplayInfoProviderChromeosTouchviewTest
     : public DisplayInfoProviderChromeosTest {
  public:
-  DisplayInfoProviderChromeosTouchviewTest() {}
+  DisplayInfoProviderChromeosTouchviewTest() = default;
 
   DisplayInfoProviderChromeosTouchviewTest(
       const DisplayInfoProviderChromeosTouchviewTest&) = delete;
   DisplayInfoProviderChromeosTouchviewTest& operator=(
       const DisplayInfoProviderChromeosTouchviewTest&) = delete;
 
-  ~DisplayInfoProviderChromeosTouchviewTest() override {}
+  ~DisplayInfoProviderChromeosTouchviewTest() override = default;
 
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -1631,14 +1635,14 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
   {
     // Mirroring source id not specified fails.
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     EXPECT_FALSE(SetMirrorMode(info));
   }
 
   {
     // Mirroring destination ids not specified fails.
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = "1000000";
     EXPECT_FALSE(SetMirrorMode(info));
   }
@@ -1646,7 +1650,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
   {
     // Mirroring source id in bad format fails.
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = "bad_format_id";
     info.mirroring_destination_ids.emplace();
     EXPECT_FALSE(SetMirrorMode(info));
@@ -1655,7 +1659,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
   {
     // Mirroring destination id in bad format fails.
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = "1000000";
     info.mirroring_destination_ids.emplace();
     info.mirroring_destination_ids->emplace_back("bad_format_id");
@@ -1666,7 +1670,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
     // Single display fails.
     EXPECT_EQ(1U, display_manager()->num_connected_displays());
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = "1000000";
     info.mirroring_destination_ids.emplace();
     EXPECT_FALSE(SetMirrorMode(info));
@@ -1681,7 +1685,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
   {
     // Mirroring source id not found fails.
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = "1000000";
     info.mirroring_destination_ids.emplace();
     EXPECT_FALSE(SetMirrorMode(info));
@@ -1690,7 +1694,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
   {
     // Mirroring destination ids empty fails.
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = base::NumberToString(id_list[0]);
     info.mirroring_destination_ids.emplace();
     EXPECT_FALSE(SetMirrorMode(info));
@@ -1699,7 +1703,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
   {
     // Mirroring destination ids not found fails.
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = base::NumberToString(id_list[0]);
     info.mirroring_destination_ids.emplace();
     info.mirroring_destination_ids->emplace_back(
@@ -1710,7 +1714,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
   {
     // Duplicate display id fails.
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = base::NumberToString(id_list[0]);
     info.mirroring_destination_ids.emplace();
     info.mirroring_destination_ids->emplace_back(
@@ -1722,7 +1726,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
     // Turn on mixed mirror mode (mirroring from the first display to the second
     // one).
     api::system_display::MirrorModeInfo info;
-    info.mode = api::system_display::MIRROR_MODE_MIXED;
+    info.mode = api::system_display::MirrorMode::kMixed;
     info.mirroring_source_id = base::NumberToString(id_list[0]);
     info.mirroring_destination_ids.emplace();
     info.mirroring_destination_ids->emplace_back(
@@ -1736,7 +1740,7 @@ TEST_F(DisplayInfoProviderChromeosTest, SetMIXEDMode) {
     EXPECT_EQ(id_list[1], software_mirroring_display_list[0].id());
 
     // Turn off mixed mirror mode.
-    info.mode = api::system_display::MIRROR_MODE_OFF;
+    info.mode = api::system_display::MirrorMode::kOff;
     EXPECT_TRUE(SetMirrorMode(info));
     EXPECT_FALSE(display_manager()->IsInMirrorMode());
   }

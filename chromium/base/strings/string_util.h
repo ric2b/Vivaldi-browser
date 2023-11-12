@@ -13,7 +13,6 @@
 #include <stdint.h>
 
 #include <initializer_list>
-#include <sstream>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -61,6 +60,9 @@ inline int snprintf(char* buffer, size_t size, const char* format, ...) {
 // If the return value is >= dst_size, then the output was truncated.
 // NOTE: All sizes are in number of characters, NOT in bytes.
 BASE_EXPORT size_t strlcpy(char* dst, const char* src, size_t dst_size);
+BASE_EXPORT size_t u16cstrlcpy(char16_t* dst,
+                               const char16_t* src,
+                               size_t dst_size);
 BASE_EXPORT size_t wcslcpy(wchar_t* dst, const wchar_t* src, size_t dst_size);
 
 // Scan a wprintf format string to determine whether it's portable across a
@@ -109,14 +111,6 @@ constexpr StringPiece16 MakeStringPiece16(Iter begin, Iter end) {
 template <typename Iter>
 constexpr WStringPiece MakeWStringPiece(Iter begin, Iter end) {
   return MakeBasicStringPiece<wchar_t>(begin, end);
-}
-
-// Convert a type with defined `operator<<` into a string.
-template <typename... Streamable>
-std::string StreamableToString(const Streamable&... values) {
-  std::ostringstream ss;
-  (ss << ... << values);
-  return ss.str();
 }
 
 // ASCII-specific tolower.  The standard library's tolower is locale sensitive,

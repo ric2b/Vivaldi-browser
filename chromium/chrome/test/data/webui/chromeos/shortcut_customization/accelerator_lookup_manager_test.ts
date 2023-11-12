@@ -91,12 +91,6 @@ suite('acceleratorLookupManagerTest', function() {
       // We expect 1 subcategory for kBrowser: kTabs.
       assertEquals(
           1, getManager().getSubcategories(AcceleratorCategory.kBrowser)!.size);
-
-      // We expect 1 subcategory for kEventRewriter: kSixPackKeys.
-      assertEquals(
-          1,
-          getManager().getSubcategories(
-                          AcceleratorCategory.kEventRewriter)!.size);
     });
   });
 
@@ -387,6 +381,16 @@ suite('acceleratorLookupManagerTest', function() {
       const textLookup = getManager().getTextAcceleratorInfos(
           AcceleratorSource.kAmbient, expectedCycleTabsAction);
       assertEquals(1, textLookup.length);
+    });
+  });
+
+  test('SetAndGetHasLauncherButton', () => {
+    getProvider().setFakeHasLauncherButton(true);
+    return getProvider().hasLauncherButton().then((result) => {
+      assertEquals(true, result.hasLauncherButton);
+
+      getManager().setHasLauncherButton(result.hasLauncherButton);
+      assertEquals(true, getManager().getHasLauncherButton());
     });
   });
 });

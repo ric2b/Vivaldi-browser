@@ -5,8 +5,8 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/table_view/cells/table_view_cell.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_cell.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_item.h"
 
 // VivaldiTableViewLinkAndButtonItem contains the model for
 // VivaldiTableViewLinkAndButtonCell.
@@ -40,9 +40,9 @@
 // default.
 @property(nonatomic, assign, getter=isEnabled) BOOL enabled;
 
-// If YES the item's button width will expand to match the cell's. If NO the
-// button will maintain its intrinsic size based on its title. NO by default.
-@property(nonatomic, assign) BOOL disableButtonIntrinsicWidth;
+// Normal order is label on left, button on right
+// This reverses the order.
+@property(nonatomic, assign) BOOL reverseOrder;
 
 @end
 
@@ -56,14 +56,7 @@
 // Action button. Note: Set action method in the TableView datasource method.
 @property(nonatomic, strong) UIButton* button;
 
-// Enables spacing between items. If there's only one item (e.g. just a button),
-// disable the spacing or an extra top padding will be added.
-- (void)enableItemSpacing:(BOOL)enable;
-
-// If `disabled` is YES the button's width will expand to match the cell's
-// container. If NO, the button will maintain its intrinsic size based on its
-// title.
-- (void)disableButtonIntrinsicWidth:(BOOL)disable;
+- (void)initStackView:(BOOL)reverse;
 
 @end
 

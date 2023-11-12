@@ -33,7 +33,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="NoteCreation.CreationStatus" enum="BooleanCreated"
-    expires_after="2023-06-25">
+    expires_after="2023-09-17">
   <owner>sebsg@chromium.org</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>
@@ -43,7 +43,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NoteCreation.Funnel" enum="NoteCreationFunnel"
-    expires_after="2023-06-25">
+    expires_after="2023-09-03">
   <owner>sebsg@chromium.org</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>
@@ -53,14 +53,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NoteCreation.NoteShared" enum="BooleanShared"
-    expires_after="2023-04-23">
+    expires_after="2023-06-25">
   <owner>sebsg@chromium.org</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>Records whether the created note was shared or not.</summary>
 </histogram>
 
 <histogram name="NoteCreation.NumberOfTemplateChanges"
-    units="Number of changes" expires_after="2023-04-23">
+    units="Number of changes" expires_after="2023-06-25">
   <owner>sebsg@chromium.org</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>
@@ -70,6 +70,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="NoteCreation.SelectedDynamicTemplateID" units="count"
     expires_after="2023-04-23">
+  <obsolete>
+    Removed 2023-03
+  </obsolete>
   <owner>graysonlafleur@google.com</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>
@@ -82,6 +85,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="NoteCreation.SelectedDynamicTemplateIndex" units="count"
     expires_after="2023-04-23">
+  <obsolete>
+    Removed 2023-03
+  </obsolete>
   <owner>graysonlafleur@google.com</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>
@@ -93,7 +99,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NoteCreation.SelectedTemplate" enum="NoteTemplate"
-    expires_after="2023-06-25">
+    expires_after="2023-09-17">
   <owner>sebsg@chromium.org</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>
@@ -102,7 +108,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NoteCreation.ShareDestination" enum="NoteShareDestination"
-    expires_after="2023-04-23">
+    expires_after="2023-06-25">
   <owner>sebsg@chromium.org</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>
@@ -110,18 +116,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NoteCreation.TemplateFetchSuccess" enum="BooleanSuccess"
-    expires_after="2023-04-23">
-  <owner>graysonlafleur@google.com</owner>
-  <owner>chrome-creation@google.com</owner>
-  <summary>
-    Records whether the Webnote Stylize template data was successfully fetched
-    from gStatic.
-  </summary>
-</histogram>
-
 <histogram name="NoteCreation.TimeTo{action}" units="ms"
-    expires_after="2023-04-23">
+    expires_after="2023-06-25">
   <owner>sebsg@chromium.org</owner>
   <owner>chrome-creation@google.com</owner>
   <summary>
@@ -143,7 +139,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SharedHighlights.AndroidShareSheet.SharedState"
-    enum="LinkGenerationSharedStatus" expires_after="2023-06-25">
+    enum="LinkGenerationSharedStatus" expires_after="2023-08-27">
   <owner>sebsg@chromium.org</owner>
   <owner>jeffreycohen@chromium.org</owner>
   <owner>chrome-shared-highlighting@google.com</owner>
@@ -176,7 +172,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SharedHighlights.Desktop.CopiedLinkType"
-    enum="LinkGenerationCopiedLinkType" expires_after="2023-06-18">
+    enum="LinkGenerationCopiedLinkType" expires_after="2023-09-10">
   <owner>sebsg@chromium.org</owner>
   <owner>jeffreycohen@chromium.org</owner>
   <owner>chrome-shared-highlighting@google.com</owner>
@@ -186,7 +182,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SharedHighlights.LinkGenerated.Error"
-    enum="LinkGenerationError" expires_after="2023-08-20">
+    enum="LinkGenerationError" expires_after="2023-10-22">
   <owner>jeffreycohen@chromium.org</owner>
   <owner>chrome-shared-highlighting@google.com</owner>
   <summary>
@@ -207,7 +203,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SharedHighlights.LinkGenerated.Error.Requested"
-    enum="LinkGenerationError" expires_after="2023-06-25">
+    enum="LinkGenerationError" expires_after="2023-08-27">
   <owner>jeffreycohen@chromium.org</owner>
   <owner>chrome-shared-highlighting@google.com</owner>
   <summary>
@@ -342,7 +338,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TextFragmentAnchor.LinkOpenSource"
-    enum="TextFragmentLinkOpenSource" expires_after="2023-06-30">
+    enum="TextFragmentLinkOpenSource" expires_after="2023-09-03">
   <owner>jeffreycohen@chromium.org</owner>
   <owner>chrome-shared-highlighting@google.com</owner>
   <summary>

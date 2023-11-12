@@ -1282,17 +1282,18 @@ TEST_P(WaylandWindowDragControllerTest, MotionEventsSkippedWhileReattaching) {
 // Test that cursor position is using DIP coordinates and is updated correctly
 // on DragMotion event.
 TEST_P(WaylandWindowDragControllerTest, CursorPositionIsUpdatedOnMotion) {
-  const gfx::Rect output_bounds(0, 0, 1920, 1080);
-  PostToServerAndWait([output_bounds](wl::TestWaylandServerThread* server) {
+  constexpr gfx::Rect kOutputBounds(0, 0, 1920, 1080);
+  PostToServerAndWait([&](wl::TestWaylandServerThread* server) {
     // Configure the first output with scale 1.
     wl::TestOutput* output1 = server->output();
-    output1->SetRect(output_bounds);
-    output1->SetScale(1);
+    output1->SetPhysicalAndLogicalBounds(kOutputBounds);
+    output1->Flush();
 
     // Creating a second output with scale 2.
-    wl::TestOutput* output2 = server->CreateAndInitializeOutput();
-    output2->SetRect(output_bounds);
+    auto* output2 =
+        server->CreateAndInitializeOutput(wl::TestOutputMetrics(kOutputBounds));
     output2->SetScale(2);
+    output2->SetDeviceScaleFactor(2);
   });
 
   WaitForAllDisplaysReady();
@@ -1671,7 +1672,10 @@ INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,
 INSTANTIATE_TEST_SUITE_P(
     XdgVersionStableTestWithAuraShell,
     WaylandWindowDragControllerTest,
-    Values(wl::ServerConfig{
-        .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled}));
+    Values(wl::ServerConfig{.enable_aura_shell =
+                                wl::EnableAuraShellProtocol::kEnabled},
+           wl::ServerConfig{
+               .enable_aura_shell = wl::EnableAuraShellProtocol::kEnabled,
+               .use_aura_output_manager = true}));
 
 }  // namespace ui

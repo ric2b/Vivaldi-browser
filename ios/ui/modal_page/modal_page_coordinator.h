@@ -3,7 +3,7 @@
 #ifndef IOS_UI_MODAL_PAGE_MODAL_PAGE_COORDINATOR_H_
 #define IOS_UI_MODAL_PAGE_MODAL_PAGE_COORDINATOR_H_
 
-#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
 class Browser;
 

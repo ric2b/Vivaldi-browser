@@ -73,8 +73,6 @@ class MockRenderThread : public RenderThread {
   void RemoveFilter(IPC::MessageFilter* filter) override;
   void AddObserver(RenderThreadObserver* observer) override;
   void RemoveObserver(RenderThreadObserver* observer) override;
-  void SetResourceRequestSenderDelegate(
-      blink::WebResourceRequestSenderDelegate* delegate) override;
   void RecordAction(const base::UserMetricsAction& action) override;
   void RecordComputedAction(const std::string& action) override;
   int PostTaskToAllWebWorkers(base::RepeatingClosure closure) override;
@@ -95,8 +93,7 @@ class MockRenderThread : public RenderThread {
   void WriteIntoTrace(
       perfetto::TracedProto<perfetto::protos::pbzero::RenderProcessHost> proto)
       override;
-  attribution_reporting::mojom::OsSupport GetOsSupportForAttributionReporting()
-      override;
+  network::mojom::AttributionSupport GetAttributionReportingSupport() override;
 
   // Returns a new, unique routing ID that can be assigned to the next view,
   // widget, or frame.

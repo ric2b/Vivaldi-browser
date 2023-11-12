@@ -66,7 +66,7 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
 
  private:
   // ImportantFileWriter::DataSerializer implementation.
-  bool SerializeData(std::string* output) override;
+   absl::optional<std::string> SerializeData() override;
 
   // Callback from backend after obtaining the sources from file.
   void OnLoadFinished(LoadResult load_result);
@@ -76,7 +76,7 @@ class RuleServiceStorage : public base::ImportantFileWriter::DataSerializer {
 
   LoadingDoneCallback loading_done_callback_;
 
-  RuleService* rule_service_;
+  const raw_ptr<RuleService> rule_service_;
 
   // Helper to write rule sources safely.
   base::ImportantFileWriter writer_;

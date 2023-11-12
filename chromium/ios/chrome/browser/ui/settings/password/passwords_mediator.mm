@@ -5,23 +5,20 @@
 #import "ios/chrome/browser/ui/settings/password/passwords_mediator.h"
 
 #import "base/memory/raw_ptr.h"
-#import "base/strings/sys_string_conversions.h"
-#import "base/strings/utf_string_conversions.h"
-#import "base/time/time.h"
 #import "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #import "components/password_manager/core/browser/password_manager_util.h"
 #import "components/password_manager/core/common/password_manager_features.h"
-#import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/sync/driver/sync_service_utils.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/passwords/password_check_observer_bridge.h"
+#import "ios/chrome/browser/passwords/password_checkup_utils.h"
 #import "ios/chrome/browser/passwords/password_manager_util_ios.h"
 #import "ios/chrome/browser/passwords/save_passwords_consumer.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
 #import "ios/chrome/browser/sync/sync_setup_service.h"
-#import "ios/chrome/browser/ui/settings/password/password_checkup/password_checkup_utils.h"
+#import "ios/chrome/browser/ui/settings/password/account_storage_utils.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_consumer.h"
 #import "ios/chrome/browser/ui/settings/password/saved_passwords_presenter_observer.h"
 #import "ios/chrome/browser/ui/settings/utils/password_auto_fill_status_manager.h"
@@ -32,26 +29,16 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "net/base/mac/url_conversions.h"
 #import "ui/base/l10n/l10n_util_mac.h"
-#import "ui/base/l10n/time_format.h"
 #import "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-namespace {
-// Amount of time after which timestamp is shown instead of "just now".
-constexpr base::TimeDelta kJustCheckedTimeThresholdInMinutes = base::Minutes(1);
+using password_manager::WarningType;
+using password_manager::features::IsPasswordCheckupEnabled;
 
-// Returns true if the Password Checkup feature flag is enabled.
-bool IsPasswordCheckupEnabled() {
-  return base::FeatureList::IsEnabled(
-      password_manager::features::kIOSPasswordCheckup);
-}
-}  // namespace
-
-@interface PasswordsMediator () <IdentityManagerObserverBridgeDelegate,
-                                 PasswordCheckObserver,
+@interface PasswordsMediator () <PasswordCheckObserver,
                                  SavedPasswordsPresenterObserver,
                                  SyncObserverModelBridge> {
   // The service responsible for password check feature.
@@ -74,10 +61,6 @@ bool IsPasswordCheckupEnabled() {
   // Current state of password check.
   PasswordCheckState _currentState;
 
-  // IdentityManager observer.
-  std::unique_ptr<signin::IdentityManagerObserverBridge>
-      _identityManagerObserver;
-
   // Sync observer.
   std::unique_ptr<SyncObserverBridge> _syncObserver;
 
@@ -99,20 +82,17 @@ bool IsPasswordCheckupEnabled() {
 
 @implementation PasswordsMediator
 
-- (instancetype)
-    initWithPasswordCheckManager:
-        (scoped_refptr<IOSChromePasswordCheckManager>)passwordCheckManager
-                syncSetupService:(SyncSetupService*)syncSetupService
-                   faviconLoader:(FaviconLoader*)faviconLoader
-                 identityManager:(signin::IdentityManager*)identityManager
-                     syncService:(syncer::SyncService*)syncService {
+- (instancetype)initWithPasswordCheckManager:
+                    (scoped_refptr<IOSChromePasswordCheckManager>)
+                        passwordCheckManager
+                            syncSetupService:(SyncSetupService*)syncSetupService
+                               faviconLoader:(FaviconLoader*)faviconLoader
+                                 syncService:(syncer::SyncService*)syncService {
   self = [super init];
   if (self) {
     _syncService = syncService;
     _faviconLoader = faviconLoader;
-    _identityManagerObserver =
-        std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
-                                                                self);
+
     _syncObserver = std::make_unique<SyncObserverBridge>(self, syncService);
 
     _syncSetupService = syncSetupService;
@@ -127,7 +107,6 @@ bool IsPasswordCheckupEnabled() {
     _passwordsPresenterObserver =
         std::make_unique<SavedPasswordsPresenterObserverBridge>(
             self, _savedPasswordsPresenter);
-    [[PasswordAutoFillStatusManager sharedManager] addObserver:self];
   }
   return self;
 }
@@ -141,15 +120,16 @@ bool IsPasswordCheckupEnabled() {
 
   _currentState = _passwordCheckManager->GetPasswordCheckState();
   [self updateConsumerPasswordCheckState:_currentState];
+  [self.consumer
+      setSavingPasswordsToAccount:password_manager_util::GetPasswordSyncState(
+                                      _syncService) !=
+                                  password_manager::SyncState::kNotSyncing];
 }
 
 - (void)disconnect {
-  _identityManagerObserver.reset();
   _syncObserver.reset();
   _passwordsPresenterObserver.reset();
   _passwordCheckObserver.reset();
-  [[PasswordAutoFillStatusManager sharedManager] removeObserver:self];
-
   _passwordCheckManager.reset();
   _syncSetupService = nullptr;
   _savedPasswordsPresenter = nullptr;
@@ -170,33 +150,10 @@ bool IsPasswordCheckupEnabled() {
   _passwordCheckManager->StartPasswordCheck();
 }
 
-- (NSString*)formatElapsedTimeSinceLastCheck {
-  base::Time lastCompletedCheck =
+- (NSString*)formattedElapsedTimeSinceLastCheck {
+  absl::optional<base::Time> lastCompletedCheck =
       _passwordCheckManager->GetLastPasswordCheckTime();
-
-  // lastCompletedCheck is 0.0 in case the check never completely ran before.
-  if (lastCompletedCheck == base::Time())
-    return l10n_util::GetNSString(IDS_IOS_CHECK_NEVER_RUN);
-
-  base::TimeDelta elapsedTime = base::Time::Now() - lastCompletedCheck;
-
-  NSString* timestamp;
-  // If check finished in less than `kJustCheckedTimeThresholdInMinutes` show
-  // "just now" instead of timestamp.
-  if (elapsedTime < kJustCheckedTimeThresholdInMinutes)
-    timestamp = l10n_util::GetNSString(IDS_IOS_CHECK_FINISHED_JUST_NOW);
-  else
-    timestamp = base::SysUTF8ToNSString(
-        base::UTF16ToUTF8(ui::TimeFormat::SimpleWithMonthAndYear(
-            ui::TimeFormat::FORMAT_ELAPSED, ui::TimeFormat::LENGTH_LONG,
-            elapsedTime, true)));
-
-  return IsPasswordCheckupEnabled()
-             ? l10n_util::GetNSStringF(
-                   IDS_IOS_PASSWORD_CHECKUP_LAST_COMPLETED_CHECK,
-                   base::SysNSStringToUTF16(timestamp))
-             : l10n_util::GetNSStringF(IDS_IOS_LAST_COMPLETED_CHECK,
-                                       base::SysNSStringToUTF16(timestamp));
+  return password_manager::FormatElapsedTimeSinceLastCheck(lastCompletedCheck);
 }
 
 - (NSAttributedString*)passwordCheckErrorInfo {
@@ -285,9 +242,14 @@ bool IsPasswordCheckupEnabled() {
   return OnDeviceEncryptionStateNotShown;
 }
 
-- (BOOL)isSyncingPasswords {
-  return password_manager_util::GetPasswordSyncState(_syncService) !=
-         password_manager::SyncState::kNotSyncing;
+- (BOOL)shouldShowLocalOnlyIconForCredential:
+    (const password_manager::CredentialUIEntry&)credential {
+  return password_manager::ShouldShowLocalOnlyIcon(credential, _syncService);
+}
+
+- (BOOL)shouldShowLocalOnlyIconForGroup:
+    (const password_manager::AffiliatedGroup&)group {
+  return password_manager::ShouldShowLocalOnlyIconForGroup(group, _syncService);
 }
 
 #pragma mark - PasswordCheckObserver
@@ -300,21 +262,12 @@ bool IsPasswordCheckupEnabled() {
 }
 
 - (void)insecureCredentialsDidChange {
-  // Compromised passwords changes has no effect on UI while check is running.
+  // Insecure password changes have no effect on UI while check is running.
   if (_passwordCheckManager->GetPasswordCheckState() ==
       PasswordCheckState::kRunning)
     return;
 
   [self updateConsumerPasswordCheckState:_currentState];
-}
-
-#pragma mark - PasswordAutoFillStatusObserver
-
-- (void)passwordAutoFillStatusDidChange {
-  // Since this action is appended to the main queue, at this stage,
-  // self.consumer should have already been setup.
-  DCHECK(self.consumer);
-  [self.consumer updatePasswordsInOtherAppsDetailedText];
 }
 
 #pragma mark - Private Methods
@@ -341,8 +294,7 @@ bool IsPasswordCheckupEnabled() {
   }
 }
 
-// Updates the `_consumer` Password Check UI State and Unmuted Compromised
-// Passwords.
+// Updates the `_consumer` Password Check UI State and Insecure Passwords.
 - (void)updateConsumerPasswordCheckState:
     (PasswordCheckState)passwordCheckState {
   DCHECK(self.consumer);
@@ -375,6 +327,10 @@ bool IsPasswordCheckupEnabled() {
     case PasswordCheckState::kNoPasswords:
       return PasswordCheckStateDisabled;
     case PasswordCheckState::kSignedOut:
+      if (!IsPasswordCheckupEnabled() && !insecureCredentials.empty()) {
+        return PasswordCheckStateUnmutedCompromisedPasswords;
+      }
+      return PasswordCheckStateSignedOut;
     case PasswordCheckState::kOffline:
     case PasswordCheckState::kQuotaLimit:
     case PasswordCheckState::kOther:
@@ -443,8 +399,8 @@ bool IsPasswordCheckupEnabled() {
 
 #pragma mark - TableViewFaviconDataSource
 
-- (void)faviconForURL:(CrURL*)URL
-           completion:(void (^)(FaviconAttributes*))completion {
+- (void)faviconForPageURL:(CrURL*)URL
+               completion:(void (^)(FaviconAttributes*))completion {
   BOOL isPasswordSyncEnabled =
       password_manager_util::IsPasswordSyncNormalEncryptionEnabled(
           _syncService);
@@ -453,17 +409,13 @@ bool IsPasswordCheckupEnabled() {
       /*fallback_to_google_server=*/isPasswordSyncEnabled, completion);
 }
 
-#pragma mark - IdentityManagerObserverBridgeDelegate
-
-- (void)onPrimaryAccountChanged:
-    (const signin::PrimaryAccountChangeEvent&)event {
-  [self.consumer updateOnDeviceEncryptionSessionAndUpdateTableView];
-}
-
 #pragma mark - SyncObserverModelBridge
 
 - (void)onSyncStateChanged {
-  [self.consumer updateOnDeviceEncryptionSessionAndUpdateTableView];
+  [self.consumer
+      setSavingPasswordsToAccount:password_manager_util::GetPasswordSyncState(
+                                      _syncService) !=
+                                  password_manager::SyncState::kNotSyncing];
 }
 
 @end

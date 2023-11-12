@@ -5,7 +5,32 @@
 module ash.mojom;
 
 import "mojo/public/mojom/base/time.mojom";
-import "ui/chromeos/events/mojom/modifier_key.mojom";
+import "ui/events/ash/mojom/modifier_key.mojom";
+
+// The current status of the enterprise policy for the stated setting.
+enum PolicyStatus {
+  kManaged,
+  kRecommended
+};
+
+// Represents an enterprise policy that has a status via `PolicyStatus` and a
+// boolean value.
+struct InputDeviceSettingsPolicy {
+  PolicyStatus policy_status;
+  bool value;
+};
+
+// Represents the current set of keyboard enterprise policies. All members are
+// optional. When null, there is no enterprise policy set for the given setting.
+struct KeyboardPolicies {
+  InputDeviceSettingsPolicy? top_row_are_fkeys_policy;
+};
+
+// Represents the current set of mouse enterprise policies. All members are
+// optional. When null, there is no enterprise policy set for the given setting.
+struct MousePolicies {
+  InputDeviceSettingsPolicy? swap_right_policy;
+};
 
 // MetaKey denotes all the possible options deducable from the users external or
 // internal keyboard. Used to show the correct key to the user in the settings
@@ -44,15 +69,14 @@ struct KeyboardSettings {
   map<ui.mojom.ModifierKey, ui.mojom.ModifierKey> modifier_remappings;
   bool top_row_are_fkeys;
   bool suppress_meta_fkey_rewrites;
-  bool auto_repeat_enabled;
-  mojo_base.mojom.TimeDelta auto_repeat_delay;
-  mojo_base.mojom.TimeDelta auto_repeat_interval;
 };
 
 // Contains all information needed to display, apply, and update mouse
 // settings.
 struct Mouse {
   string name;
+  // Used to display different names and settings in the settings app.
+  bool is_external;
   // Unique identifier for the mouse which is assigned by ozone when it is
   // connected and is reassigned when disconnected and reconnected to the
   // system. These ids can be rarely reused for multiple devices if the original
@@ -85,6 +109,8 @@ struct MouseSettings {
 // settings.
 struct Touchpad {
   string name;
+  // Used to display different names and settings in the settings app.
+  bool is_external;
   // Unique identifier for the touchpad which is assigned by ozone when it is
   // connected and is reassigned when disconnected and reconnected to the
   // system. These ids can be rarely reused for multiple devices if the original
@@ -123,9 +149,10 @@ struct TouchpadSettings {
 
 // Contains all information needed to display, apply, and update pointing stick
 // settings.
-// TODO(michaelcheco): add `settings` to `mojom::PointingStick` struct.
 struct PointingStick {
   string name;
+  // Used to display different names and settings in the settings app.
+  bool is_external;
   // Unique identifier for the pointing stick which is assigned by ozone when
   // it is connected and is reassigned when disconnected and reconnected to the
   // system. These ids can be rarely reused for multiple devices if the original

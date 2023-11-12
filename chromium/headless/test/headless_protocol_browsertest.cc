@@ -168,9 +168,8 @@ void HeadlessProtocolBrowserTest::ProcessTestResult(
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kResetResults)) {
     LOG(INFO) << "Updating expectations at " << expectation_path;
-    int result = base::WriteFile(expectation_path, test_result.data(),
-                                 static_cast<int>(test_result.size()));
-    CHECK(test_result.size() == static_cast<size_t>(result));
+    bool succcess = base::WriteFile(expectation_path, test_result);
+    CHECK(succcess);
   }
 
   std::string expectation;
@@ -261,12 +260,15 @@ HEADLESS_PROTOCOL_TEST(DISABLED_VirtualTimeErrorLoop,
                        "emulation/virtual-time-error-loop.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeFetchStream,
                        "emulation/virtual-time-fetch-stream.js")
+HEADLESS_PROTOCOL_TEST(VirtualTimeFetchReadBody,
+                       "emulation/virtual-time-fetch-read-body.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeDialogWhileLoading,
                        "emulation/virtual-time-dialog-while-loading.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeHistoryNavigation,
                        "emulation/virtual-time-history-navigation.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeHistoryNavigationSameDoc,
                        "emulation/virtual-time-history-navigation-same-doc.js")
+HEADLESS_PROTOCOL_TEST(VirtualTimeSVG, "emulation/virtual-time-svg.js")
 
 // Flaky on Mac. TODO(crbug.com/1419801): Re-enable.
 #if BUILDFLAG(IS_MAC)
@@ -287,6 +289,8 @@ HEADLESS_PROTOCOL_TEST(VirtualTimeWorkerLockstep,
 #endif
 HEADLESS_PROTOCOL_TEST(MAYBE_VirtualTimeWorkerFetch,
                        "emulation/virtual-time-worker-fetch.js")
+HEADLESS_PROTOCOL_TEST(VirtualTimeWorkerTerminate,
+                       "emulation/virtual-time-worker-terminate.js")
 
 // Flaky on Mac. TODO(crbug.com/1164173): Re-enable.
 #if BUILDFLAG(IS_MAC)
@@ -355,6 +359,9 @@ HEADLESS_PROTOCOL_TEST(ShowFilePickerInterception,
                        "sanity/show-file-picker-interception.js")
 
 HEADLESS_PROTOCOL_TEST(WindowSizeOnStart, "sanity/window-size-on-start.js")
+
+HEADLESS_PROTOCOL_TEST(LargeBrowserWindowSize,
+                       "sanity/large-browser-window-size.js")
 
 HEADLESS_PROTOCOL_TEST(ScreencastBasics, "sanity/screencast-basics.js")
 

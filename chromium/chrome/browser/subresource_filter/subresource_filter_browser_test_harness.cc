@@ -19,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "components/blocked_content/safe_browsing_triggered_popup_blocker.h"
@@ -68,7 +69,9 @@ MockSubresourceFilterObserver::MockSubresourceFilterObserver(
 MockSubresourceFilterObserver::~MockSubresourceFilterObserver() = default;
 
 SubresourceFilterBrowserTest::SubresourceFilterBrowserTest() {
-  scoped_feature_list_.InitAndEnableFeature(kAdTagging);
+  scoped_feature_list_.InitWithFeatures(
+      /*enabled_features=*/{kAdTagging},
+      /*disabled_features=*/{features::kHttpsUpgrades});
 }
 
 SubresourceFilterBrowserTest::~SubresourceFilterBrowserTest() = default;
@@ -197,15 +200,13 @@ void SubresourceFilterBrowserTest::ExpectFramesIncludedInLayout(
 bool SubresourceFilterBrowserTest::IsDynamicScriptElementLoaded(
     content::RenderFrameHost* rfh) {
   DCHECK(rfh);
-  return content::EvalJs(rfh, "insertScriptElementAndReportSuccess()",
-                         content::EXECUTE_SCRIPT_USE_MANUAL_REPLY)
+  return content::EvalJs(rfh, "insertScriptElementAndReportSuccess()")
       .ExtractBool();
 }
 
 void SubresourceFilterBrowserTest::InsertDynamicFrameWithScript() {
   EXPECT_EQ(true, content::EvalJs(web_contents()->GetPrimaryMainFrame(),
-                                  "insertFrameWithScriptAndNotify()",
-                                  content::EXECUTE_SCRIPT_USE_MANUAL_REPLY));
+                                  "insertFrameWithScriptAndNotify()"));
 }
 
 void SubresourceFilterBrowserTest::NavigateFromRendererSide(const GURL& url) {

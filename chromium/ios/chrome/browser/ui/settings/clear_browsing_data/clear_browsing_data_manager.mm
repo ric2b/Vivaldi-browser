@@ -36,14 +36,19 @@
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
+#import "ios/chrome/browser/shared/ui/symbols/chrome_icon.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_button_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_link_item.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
-#import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
-#import "ios/chrome/browser/ui/icons/chrome_icon.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/ui/settings/cells/clear_browsing_data_constants.h"
 #import "ios/chrome/browser/ui/settings/cells/search_engine_item.h"
 #import "ios/chrome/browser/ui/settings/cells/table_view_clear_browsing_data_item.h"
@@ -51,11 +56,6 @@
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_consumer.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_ui_constants.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/time_range_selector_table_view_controller.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_detail_icon_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
-#import "ios/chrome/browser/ui/table_view/cells/table_view_text_link_item.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/common/channel_info.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -125,7 +125,7 @@ UIImage* SymbolForItemType(ClearBrowsingDataItemType itemType) {
   // Observer for browsing data removal events and associated
   // base::ScopedObservation used to track registration with
   // BrowsingDataRemover.
-  std::unique_ptr<BrowsingDataRemoverObserver> _observer;
+  std::unique_ptr<BrowsingDataRemoverObserver> _browsingDataRemoverObserver;
   std::unique_ptr<
       base::ScopedObservation<BrowsingDataRemover, BrowsingDataRemoverObserver>>
       _scoped_observation;
@@ -187,9 +187,12 @@ UIImage* SymbolForItemType(ClearBrowsingDataItemType itemType) {
     _timeRangePref.Init(browsing_data::prefs::kDeleteTimePeriod,
                         _browserState->GetPrefs());
 
-    _observer = std::make_unique<BrowsingDataRemoverObserverBridge>(self);
-    _scoped_observation = std::make_unique<base::ScopedObservation<
-        BrowsingDataRemover, BrowsingDataRemoverObserver>>(_observer.get());
+    _browsingDataRemoverObserver =
+        std::make_unique<BrowsingDataRemoverObserverBridge>(self);
+    _scoped_observation =
+        std::make_unique<base::ScopedObservation<BrowsingDataRemover,
+                                                 BrowsingDataRemoverObserver>>(
+            _browsingDataRemoverObserver.get());
     _scoped_observation->Observe(remover);
 
     _prefChangeRegistrar.Init(_browserState->GetPrefs());
@@ -244,7 +247,12 @@ UIImage* SymbolForItemType(ClearBrowsingDataItemType itemType) {
 }
 
 - (void)disconnect {
+  _timeRangePref.Destroy();
+  _prefObserverBridge.reset();
   _prefChangeRegistrar.RemoveAll();
+  _browsingDataRemoverObserver.reset();
+  _scoped_observation.reset();
+  _countersByMasks.clear();
 }
 
 // Add items for types of browsing data to clear.
@@ -466,26 +474,7 @@ UIImage* SymbolForItemType(ClearBrowsingDataItemType itemType) {
   clearDataItem.checkedBackgroundColor = [[UIColor colorNamed:kBlueColor]
       colorWithAlphaComponent:kSelectedBackgroundColorAlpha];
 
-  if (UseSymbols()) {
-    clearDataItem.image = SymbolForItemType(itemType);
-  } else {
-    static NSDictionary* const imageNamesByItemTypes = @{
-      [NSNumber numberWithInteger:ItemTypeDataTypeBrowsingHistory] :
-          @"clear_browsing_data_history",
-      [NSNumber numberWithInteger:ItemTypeDataTypeCookiesSiteData] :
-          @"clear_browsing_data_cookies",
-      [NSNumber numberWithInteger:ItemTypeDataTypeCache] :
-          @"clear_browsing_data_cached_images",
-      [NSNumber numberWithInteger:ItemTypeDataTypeSavedPasswords] :
-          @"password_key",
-      [NSNumber numberWithInteger:ItemTypeDataTypeAutofill] :
-          @"clear_browsing_data_autofill",
-    };
-
-    clearDataItem.image = [UIImage
-        imageNamed:[imageNamesByItemTypes
-                       objectForKey:[NSNumber numberWithInteger:itemType]]];
-  }
+  clearDataItem.image = SymbolForItemType(itemType);
 
   if (itemType == ItemTypeDataTypeCookiesSiteData) {
     // Because there is no counter for cookies, an explanatory text is

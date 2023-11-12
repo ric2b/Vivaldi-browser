@@ -10,7 +10,7 @@
 <translation id="5288672417093782294">Ir a los ajustes de notificaciones de Vivaldi</translation>
 <translation id="5743878272102782872">Administrador de tareas - Vivaldi</translation>
 <translation id="6524604576097824284">Al activarse, Vivaldi liberará memoria usada por las pestañas inactivas. Esto permite redistribuir los recursos de tu equipo a las pestañas activas u otras aplicaciones. Tus pestañas inactivas se activarán automáticamente cuando las selecciones. <ph name="BEGIN_LINK" />Conoce más<ph name="END_LINK" /></translation>
-<translation id="6569282126279967574">¡Vaya! Hubo un fallo en Vivaldi. ¿Quieres reiniciarlo ahora?</translation>
-<translation id="7642161109152167169">Al activarse, Vivaldi ahorrará energía de la batería al limitar la actividad en segundo plano y los efectos visuales, como el desplazamiento suave y velocidad de fotogramas de los videos. <ph name="BEGIN_LINK" />Conoce más<ph name="END_LINK" /></translation>
+<translation id="6569282126279967574">¡Vaya! Vivaldi ha muerto. ¿Quieres reiniciarlo ahora?</translation>
+<translation id="7642161109152167169">Al activarse, Vivaldi ahorrará energía de la batería al limitar la actividad en segundo plano y los efectos visuales, como el desplazamiento suave y velocidad de fotogramas de los vídeos. <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="8031581238030785388">Aplicaciones de Vivaldi</translation>
 </translationbundle>

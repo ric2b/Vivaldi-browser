@@ -4,6 +4,7 @@
 
 // Use the <code>chrome.feedbackPrivate</code> API to provide Chrome [OS]
 // feedback to the Google Feedback servers.
+[modernised_enums]
 namespace feedbackPrivate {
 
   dictionary AttachedFile {
@@ -11,7 +12,7 @@ namespace feedbackPrivate {
     [instanceOf=Blob] object? data;
   };
 
-  dictionary SystemInformation {
+  dictionary LogsMapEntry {
     DOMString key;
     DOMString value;
   };
@@ -66,7 +67,7 @@ namespace feedbackPrivate {
 
     // An array of key/value pairs providing system information for this
     // feedback report.
-    SystemInformation[]? systemInformation;
+    LogsMapEntry[]? systemInformation;
 
     // True if we have permission to add histograms to this feedback report.
     boolean? sendHistograms;
@@ -211,7 +212,7 @@ namespace feedbackPrivate {
 
   callback GetUserEmailCallback = void(DOMString email);
   callback GetSystemInformationCallback =
-      void(SystemInformation[] systemInformation);
+      void(LogsMapEntry[] systemInformation);
   callback SendFeedbackCallback = void(SendFeedbackResult result);
   callback ReadLogSourceCallback = void (ReadLogSourceResult result);
 

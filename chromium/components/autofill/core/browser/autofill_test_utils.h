@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "base/feature_list.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
@@ -74,29 +76,51 @@ using FormGroupValues = std::vector<FormGroupValue>;
 
 using RandomizeFrame = base::StrongAlias<struct RandomizeFrameTag, bool>;
 
-// AutofillEnvironment encapsulates global state for test data that should
+// AutofillTestEnvironment encapsulates global state for test data that should
 // be reset automatically after each test.
-class AutofillEnvironment {
+class AutofillTestEnvironment {
  public:
-  static AutofillEnvironment& GetCurrent(const base::Location& = FROM_HERE);
+  struct Options {
+    bool disable_server_communication = true;
+  };
 
-  AutofillEnvironment();
-  AutofillEnvironment(const AutofillEnvironment&) = delete;
-  AutofillEnvironment& operator=(const AutofillEnvironment&) = delete;
-  ~AutofillEnvironment();
+  static AutofillTestEnvironment& GetCurrent(const base::Location& = FROM_HERE);
+
+  AutofillTestEnvironment(const AutofillTestEnvironment&) = delete;
+  AutofillTestEnvironment& operator=(const AutofillTestEnvironment&) = delete;
+  ~AutofillTestEnvironment();
 
   LocalFrameToken NextLocalFrameToken();
   FormRendererId NextFormRendererId();
   FieldRendererId NextFieldRendererId();
 
+ protected:
+  explicit AutofillTestEnvironment(const Options& options = {
+                                       .disable_server_communication = false});
+
  private:
-  static AutofillEnvironment* current_instance_;
+  static AutofillTestEnvironment* current_instance_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   // Use some distinct 64 bit numbers to start the counters.
   uint64_t local_frame_token_counter_high_ = 0xAAAAAAAAAAAAAAAA;
   uint64_t local_frame_token_counter_low_ = 0xBBBBBBBBBBBBBBBB;
   FormRendererId::underlying_type form_renderer_id_counter_ = 10;
   FieldRendererId::underlying_type field_renderer_id_counter_ = 10;
+};
+
+// This encapsulates global unittest state.
+class AutofillUnitTestEnvironment : public AutofillTestEnvironment {
+ public:
+  AutofillUnitTestEnvironment() = default;
+};
+
+// This encapsulates global browsertest state. By default this environment
+// disables `kAutofillServerCommunication` feature.
+class AutofillBrowserTestEnvironment : public AutofillTestEnvironment {
+ public:
+  explicit AutofillBrowserTestEnvironment(
+      const Options& options = {.disable_server_communication = false});
 };
 
 // Creates non-empty LocalFrameToken. If `randomize` is false, the
@@ -106,12 +130,12 @@ LocalFrameToken MakeLocalFrameToken(
 
 // Creates new, pairwise distinct FormRendererIds.
 inline FormRendererId MakeFormRendererId() {
-  return AutofillEnvironment::GetCurrent().NextFormRendererId();
+  return AutofillTestEnvironment::GetCurrent().NextFormRendererId();
 }
 
 // Creates new, pairwise distinct FieldRendererIds.
 inline FieldRendererId MakeFieldRendererId() {
-  return AutofillEnvironment::GetCurrent().NextFieldRendererId();
+  return AutofillTestEnvironment::GetCurrent().NextFieldRendererId();
 }
 
 // Creates new, pairwise distinct FormGlobalIds. If `randomize` is true, the
@@ -147,6 +171,11 @@ void VerifyFormGroupValues(const FormGroup& form_group,
                            bool ignore_status = false);
 
 const char kEmptyOrigin[] = "";
+// A valid France IBAN number.
+const char kIbanValue[] = "FR76 3000 6000 0112 3456 7890 189";
+// Two valid Switzerland IBAN numbers.
+const char kIbanValue_1[] = "CH56 0483 5012 3456 7800 9";
+const char kIbanValue_2[] = "CH93 0076 2011 6238 5295 7";
 
 // The following methods return a PrefService that can be used for
 // Autofill-related testing in contexts where the PrefService would otherwise
@@ -232,6 +261,12 @@ void CreateTestCreditCardFormData(FormData* form,
                                   bool split_names = false,
                                   const char* unique_id = nullptr);
 
+// Populates `form_data` with data corresponding to an IBAN form (a form with a
+// single IBAN field). Note that this actually appends fields to the form data,
+// which can be useful for building up more complex test forms.
+void CreateTestIbanFormData(FormData* form_data,
+                            const char* value = kIbanValue);
+
 // Strips those members from |form| and |field| that are not serialized via
 // mojo, i.e., resets them to `{}`.
 FormData WithoutUnserializedData(FormData form);
@@ -239,9 +274,6 @@ FormFieldData WithoutUnserializedData(FormFieldData field);
 
 // Returns a full profile with valid info according to rules for Canada.
 AutofillProfile GetFullValidProfileForCanada();
-
-// Returns a full profile with valid info according to rules for China.
-AutofillProfile GetFullValidProfileForChina();
 
 // Returns a profile full of dummy info.
 AutofillProfile GetFullProfile();
@@ -268,11 +300,23 @@ AutofillProfile GetServerProfile();
 AutofillProfile GetServerProfile2();
 
 // Sets the `profile`s source and initial creator to match `category`.
-void SetProfileCategory(AutofillProfile& profile,
-                        AutofillProfileSourceCategory category);
+void SetProfileCategory(
+    AutofillProfile& profile,
+    autofill_metrics::AutofillProfileSourceCategory category);
+
+// Returns the stripped (without characters representing whitespace) value of
+// the given `value`.
+std::string GetStrippedValue(const char* value);
 
 // Returns an IBAN full of dummy info.
 IBAN GetIBAN();
+
+// Returns an IBAN full of dummy info, different to the above.
+IBAN GetIBAN2();
+
+// Returns an IBAN full of dummy info, different to the above and without
+// nickname.
+IBAN GetIBANWithoutNickname();
 
 // Returns a credit card full of dummy info.
 CreditCard GetCreditCard();
@@ -291,6 +335,7 @@ CreditCard GetIncompleteCreditCard();
 CreditCard GetMaskedServerCard();
 CreditCard GetMaskedServerCardWithNonLegacyId();
 CreditCard GetMaskedServerCardWithLegacyId();
+CreditCard GetMaskedServerCardVisa();
 CreditCard GetMaskedServerCardAmex();
 CreditCard GetMaskedServerCardWithNickname();
 CreditCard GetMaskedServerCardEnrolledIntoVirtualCardNumber();
@@ -486,12 +531,13 @@ std::string TenYearsFromNow();
 // Creates a `FieldPrediction` instance, with a plausible value for `source()`.
 ::autofill::AutofillQueryResponse::FormSuggestion::FieldSuggestion::
     FieldPrediction
-    CreateFieldPrediction(ServerFieldType type);
+    CreateFieldPrediction(ServerFieldType type, bool is_override = false);
 
 void AddFieldPredictionToForm(
     const autofill::FormFieldData& field_data,
     ServerFieldType field_type,
-    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion);
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion,
+    bool is_override = false);
 
 void AddFieldPredictionsToForm(
     const autofill::FormFieldData& field_data,

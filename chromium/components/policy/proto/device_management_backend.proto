@@ -308,6 +308,8 @@ message CheckUserAccountResponse {
 
 // Response from server to device register request.
 message DeviceRegisterResponse {
+  reserved 6;
+
   // Device management token for this registration.  This token MUST be
   // part of HTTP Authorization header for all future requests from
   // device to server.
@@ -348,10 +350,6 @@ message DeviceRegisterResponse {
   // registering for policy is affiliated on the device.
   // Only sent if DeviceRegisterRequest.Type == USER
   repeated string user_affiliation_ids = 5;
-
-  // The unique directory api ID of the device which was generated on the
-  // server-side.
-  optional string directory_api_id = 6;
 }
 
 // Request from device to server to unregister device.
@@ -1639,6 +1637,9 @@ message DeviceStatusReportRequest {
 
   // Root device size as displayed in the device UI.
   optional int64 root_device_total_storage_bytes = 47;
+
+  // Flag whether LaCros is the primary browser.
+  optional bool is_lacros_primary_browser = 48;
 }
 
 message OsUpdateStatus {
@@ -1913,21 +1914,6 @@ message Extension {
   optional int32 manifest_version = 14;
 }
 
-// Plugin information.
-message Plugin {
-  // The human friendly name of plugin.
-  optional string name = 1;
-
-  // Currently installed version of the plugin.
-  optional string version = 2;
-
-  // The file name from the path of the plugin.
-  optional string filename = 3;
-
-  // More details of the plugin.
-  optional string description = 4;
-}
-
 // Policy information.
 message Policy {
   // The name of the policy.
@@ -2063,6 +2049,8 @@ message ChromeUserProfileInfo {
 
 // Report browser level status.
 message BrowserReport {
+  reserved 7;
+
   // The Chrome browser version, as seen from within Chrome code as opposed to
   // user agent.
   optional string browser_version = 1;
@@ -2084,9 +2072,6 @@ message BrowserReport {
   // upload full details due to the limitation of the report size.
   // These details will be uploaded in the following reports.
   repeated ChromeUserProfileInfo chrome_user_profile_infos = 6;
-
-  // A list of plugins installed in the browser.
-  repeated Plugin plugins = 7;
 
   // The installed version of the browser if it differs from |browser_version|,
   // or absent otherwise. When present, it indicates that an update (of a higher
@@ -2529,10 +2514,21 @@ message DeviceAutoEnrollmentResponse {
   repeated bytes hashes = 2;
 }
 
-// Sent by the client to the server. The device management server keeps a
-// mapping of device identifiers to device state. Devices query this table after
-// hard reset in order recover state. This request is keyed just by the opaque
-// server-backed state key; there is no further authentication.
+// Sent by the client to the server. This request is keyed by the opaque
+// server-backed state key, (optionally) serial number and RLZ brand code; there
+// is no further authentication.
+//
+// This message can be used for secondary state determination by managed devices
+// after a hard reset to recover state. In this case, the client only sets the
+// `server_backed_state_key`. The device management server keeps a mapping of
+// this identifier to device state. In case device has been deprovisioned, the
+// server also performs initial enrollment check using the serial number and
+// brand code stored in device state from previous enrollment.
+//
+// It is also used for unified state determination, which replaces both initial
+// and secondary state enrollment. In this case, this request can also be sent
+// by brand new devices and the server would not know their serial number and
+// brand code, hence the values are supplied as part of the request.
 message DeviceStateRetrievalRequest {
   // Opaque, client-determined, unpredictable, stable and unique device
   // identifier to retrieve state for. This field contains 32 bytes of data that
@@ -2540,6 +2536,12 @@ message DeviceStateRetrievalRequest {
   // a concatenation of suitable device identifiers through a cryptographic hash
   // algorithm such as SHA-256.
   optional bytes server_backed_state_key = 1;
+
+  // The serial number of the device.
+  optional string serial_number = 2;
+
+  // The 4-character brand code of the device.
+  optional string brand_code = 3;
 }
 
 // Sent by the client to the server when in registered state to update the

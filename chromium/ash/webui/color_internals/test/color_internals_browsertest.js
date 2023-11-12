@@ -6,7 +6,7 @@
  * @fileoverview Test suite for chrome://color-internals/
  */
 
-GEN('#include "ash/constants/ash_features.h"');
+GEN('#include "chromeos/constants/chromeos_features.h"');
 GEN('#include "content/public/test/browser_test.h"');
 
 const HOST_ORIGIN = 'chrome://color-internals';
@@ -27,12 +27,13 @@ var ColorInternalsUIBrowserTest = class extends testing.Test {
   }
   /** @override */
   get featureList() {
-    return {enabled: ['ash::features::kJelly']};
+    return {enabled: ['chromeos::features::kJelly']};
   }
 };
 
 // Tests that chrome://color-internals loads successfully.
 TEST_F('ColorInternalsUIBrowserTest', 'HasChromeSchemeURL', async () => {
+  await import('chrome://webui-test/mojo_webui_test_support.js');
   assertEquals(document.location.origin, HOST_ORIGIN);
   testDone();
 });
@@ -40,12 +41,14 @@ TEST_F('ColorInternalsUIBrowserTest', 'HasChromeSchemeURL', async () => {
 // Tests that the table body has been constructed properly and has had token
 // rows added into it.
 TEST_F('ColorInternalsUIBrowserTest', 'BuildsTokenTable', async () => {
+  await import('chrome://webui-test/mojo_webui_test_support.js');
   const table = document.querySelector('table');
   assertNotEquals(table.tBodies[0].rows.length, 0);
   testDone();
 });
 
 TEST_F('ColorInternalsUIBrowserTest', 'DisplaysWallpaperColors', async () => {
+  await import('chrome://webui-test/mojo_webui_test_support.js');
   // Wait for initial load to finish to reduce flakiness.
   await new Promise(async (resolve) => {
     const block = document.getElementById('wallpaper-block');

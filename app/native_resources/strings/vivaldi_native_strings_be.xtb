@@ -4,7 +4,7 @@
 <translation id="1033008476608128425">Краявід 3</translation>
 <translation id="1118377629180821201">Краявід 12</translation>
 <translation id="1158503667684816647">Больш не пытацца пацвярджэння</translation>
-<translation id="1222195720020481779">Запуск праграмы ўсталёўкі…</translation>
+<translation id="1222195720020481779">Запуск праграмы ўсталявання…</translation>
 <translation id="1276145862619442150">Старонкі для хуткага адкрыцця</translation>
 <translation id="1281950884873973195">Жывёліна 6</translation>
 <translation id="1411638389238344450">Адправіць спасылку па электроннай пошце</translation>
@@ -25,8 +25,8 @@
 <translation id="19598411548897379">Звычайны</translation>
 <translation id="1973351931613083086">аўтаматычнае прайграванне</translation>
 <translation id="1985669426322966465">Абнаўленне праграмнага забеспячэння</translation>
-<translation id="2079036669923635404">Пстрыкніце сюды, каб абнавіць Vivaldi да версіі <ph name="VERSION" /> .</translation>
-<translation id="2141974047387702305">Падчас спампоўвання абнаўлення адбылася памылка. Калі ласка, праверце злучэнне і паўтарыце спробу.</translation>
+<translation id="2079036669923635404">Націсніце сюды, каб абнавіць Vivaldi да версіі <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Падчас спампоўвання абнаўлення адбылася памылка. Праверце злучэнне і паўтарыце спробу.</translation>
 <translation id="2339641773402824483">Праверка наяўнасці абнаўленняў…</translation>
 <translation id="2441056087170876076">Пачварка 2</translation>
 <translation id="2444387452209867610">Уставіць нататку</translation>
@@ -57,7 +57,7 @@
 <translation id="3402602684546832928">Абраць файл закладак Opera</translation>
 <translation id="3451317331714872347">Краявід 8</translation>
 <translation id="3457498675806041407">Пацвердзіце выхад</translation>
-<translation id="3470981972195599598">Версія Vivaldi <ph name="VERSION" /> усталяваная і актывуецца пасля перазапуску браузера.</translation>
+<translation id="3470981972195599598">Версія Vivaldi <ph name="VERSION" /> усталяваная і актывуецца пасля перазапуску браўзера.</translation>
 <translation id="3516213908976398531">Краявід 11</translation>
 <translation id="3521635864657970829">Сапраўды хочаце закрыць гэтае акно?</translation>
 <translation id="3540597690227428180">Жывёліна 9</translation>
@@ -81,6 +81,7 @@
 <translation id="4073157431025461511">&amp;Больш не</translation>
 <translation id="4074744496918018786">Адкрыць выяву ў прыватным акне</translation>
 <translation id="410351446219883937">Аўтаматычнае прайграванне</translation>
+<translation id="4281844954008187215">Умовы выкарыстання</translation>
 <translation id="4324492550286218827">Краявід 2</translation>
 <translation id="4406101500523955324">Адкрыць у новым прыватным акне</translation>
 <translation id="4420816922321010053">Сапраўды хочаце выйсці з Vivaldi ?</translation>
@@ -94,6 +95,7 @@
 <translation id="4636708767492582204">Адправіць па электроннай пошце</translation>
 <translation id="4677434526832593569">Жывёліна 8</translation>
 <translation id="474217410105706308">Адключыць гук на ўкладцы</translation>
+<translation id="4861715717329665002">Аўтаматычна захаваныя сеансы</translation>
 <translation id="4881695831933465202">Адкрыць</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> з <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Імпартаваныя старонкі для хуткага адкрыцця</translation>
@@ -117,7 +119,7 @@
 <translation id="588258955323874662">Поўнаэкранны рэжым</translation>
 <translation id="5916080360077521750">Нажаль, налады Chrome недаступныя для імпарту падчас працы браўзера. Каб імпартаваць налады ў Vivaldi, закрыйце ўсе вокны Chrome і націсніце "Працягнуць".</translation>
 <translation id="6040143037577758943">Закрыць</translation>
-<translation id="6229528619562190452">Пстрыкніце сюды, каб абнавіць Vivaldi.</translation>
+<translation id="6229528619562190452">Націсніце сюды, каб абнавіць Vivaldi.</translation>
 <translation id="6234173136417926046">Зрабіць выяву фонам старонкі</translation>
 <translation id="630690498669249215">Файл закладак Opera</translation>
 <translation id="6339818817272922368">Лакальны акаўнт</translation>

@@ -4,8 +4,7 @@
 
 package org.chromium.chrome.browser.offlinepages;
 
-import android.support.test.InstrumentationRegistry;
-
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
@@ -60,8 +59,8 @@ public class OfflinePageRequestTest {
     @SmallTest
     @DisabledTest(message = "crbug.com/786233")
     public void testLoadOfflinePageOnDisconnectedNetwork() throws Exception {
-        EmbeddedTestServer testServer =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         String testUrl = testServer.getURL(TEST_PAGE);
         String aboutUrl = testServer.getURL(ABOUT_PAGE);
 
@@ -92,8 +91,8 @@ public class OfflinePageRequestTest {
     @SmallTest
     @DisabledTest(message = "crbug.com/786233")
     public void testLoadOfflinePageWithFragmentOnDisconnectedNetwork() throws Exception {
-        EmbeddedTestServer testServer =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         String testUrl = testServer.getURL(TEST_PAGE);
         String testUrlWithFragment = testUrl + "#ref";
 
@@ -120,8 +119,8 @@ public class OfflinePageRequestTest {
     @DisabledTest(message = "crbug.com/786233")
     public void testLoadOfflinePageFromDownloadsOnDisconnectedNetwork() throws Exception {
         // Specifically tests saving to and loading from Downloads.
-        EmbeddedTestServer testServer =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         String testUrl = testServer.getURL(TEST_PAGE);
         String aboutUrl = testServer.getURL(ABOUT_PAGE);
 

@@ -24,10 +24,73 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/policy/messaging_layer/proto/synced/log_upload_event.pb.h"
+#include "chrome/browser/policy/messaging_layer/public/report_client.h"
+#include "components/reporting/proto/synced/record.pb.h"
+#include "components/reporting/proto/synced/record_constants.pb.h"
 #include "components/reporting/proto/synced/upload_tracker.pb.h"
+#include "components/reporting/resources/resource_manager.h"
+#include "components/reporting/storage/storage_module_interface.h"
 #include "components/reporting/util/status.h"
 
 namespace reporting {
+
+namespace {
+
+// These three helpers call `Initiate`, `NextStep` and `Finalize` in
+// delegate on respective task runner and make sure to call `cb` even if
+// `delegate` is invalidated.
+void CallInitiateOnSequence(
+    base::WeakPtr<FileUploadJob::Delegate> delegate,
+    base::StringPiece origin_path,
+    base::StringPiece upload_parameters,
+    base::OnceCallback<void(
+        StatusOr<std::pair<int64_t /*total*/, std::string /*session_token*/>>)>
+        cb) {
+  if (!delegate) {
+    std::move(cb).Run(Status(error::UNAVAILABLE, "Delegate is unavailable"));
+    return;
+  }
+  delegate->DoInitiate(origin_path, upload_parameters, std::move(cb));
+}
+
+void CallNextStepOnSequence(
+    base::WeakPtr<FileUploadJob::Delegate> delegate,
+    int64_t total,
+    int64_t uploaded,
+    base::StringPiece session_token,
+    ScopedReservation scoped_reservation,
+    base::OnceCallback<void(StatusOr<std::pair<int64_t /*uploaded*/,
+                                               std::string /*session_token*/>>)>
+        cb) {
+  if (!delegate) {
+    std::move(cb).Run(Status(error::UNAVAILABLE, "Delegate is unavailable"));
+    return;
+  }
+  delegate->DoNextStep(total, uploaded, session_token,
+                       std::move(scoped_reservation), std::move(cb));
+}
+
+void CallFinalizeOnSequence(
+    base::WeakPtr<FileUploadJob::Delegate> delegate,
+    base::StringPiece session_token,
+    base::OnceCallback<void(StatusOr<std::string /*access_parameters*/>)> cb) {
+  if (!delegate) {
+    std::move(cb).Run(Status(error::UNAVAILABLE, "Delegate is unavailable"));
+    return;
+  }
+  delegate->DoFinalize(session_token, std::move(cb));
+}
+}  // namespace
+
+// Delegate base class implementation.
+
+FileUploadJob::Delegate::Delegate() = default;
+FileUploadJob::Delegate::~Delegate() = default;
+
+base::WeakPtr<FileUploadJob::Delegate> FileUploadJob::Delegate::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
 
 // Manager implementation.
 
@@ -45,26 +108,30 @@ FileUploadJob::Manager::instance_ref() {
 }
 
 FileUploadJob::Manager::Manager()
-    : sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})) {
+    : sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::TaskPriority::BEST_EFFORT, base::MayBlock()})) {
   DETACH_FROM_SEQUENCE(manager_sequence_checker_);
 }
 
 FileUploadJob::Manager::~Manager() = default;
 
 void FileUploadJob::Manager::Register(
-    const UploadSettings& settings,
-    const UploadTracker& tracker,
-    Delegate* delegate,
+    Priority priority,
+    Record record_copy,
+    ::ash::reporting::LogUploadEvent log_upload_event,
+    base::WeakPtr<Delegate> delegate,
     base::OnceCallback<void(StatusOr<FileUploadJob*>)> result_cb) {
   sequenced_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
-          [](Manager* self, const UploadSettings settings,
-             const UploadTracker tracker, Delegate* delegate,
+          [](Manager* self, Priority priority, Record record_copy,
+             ::ash::reporting::LogUploadEvent log_upload_event,
+             base::WeakPtr<Delegate> delegate,
              base::OnceCallback<void(StatusOr<FileUploadJob*>)> result_cb) {
             // Serialize settings to get the map key.
             std::string serialized_settings;
-            if (!settings.SerializeToString(&serialized_settings)) {
+            if (!log_upload_event.upload_settings().SerializeToString(
+                    &serialized_settings)) {
               std::move(result_cb).Run(Status(
                   error::INVALID_ARGUMENT, "Job settings failed to serialize"));
               return;
@@ -77,7 +144,9 @@ void FileUploadJob::Manager::Register(
             if (it == self->uploads_in_progress_.end()) {
               auto res = self->uploads_in_progress_.emplace(
                   serialized_settings,
-                  std::make_unique<FileUploadJob>(settings, tracker, delegate));
+                  std::make_unique<FileUploadJob>(
+                      log_upload_event.upload_settings(),
+                      log_upload_event.upload_tracker(), delegate));
               DCHECK(res.second);
               it = res.first;
               DCHECK_CALLED_ON_VALID_SEQUENCE(
@@ -104,10 +173,26 @@ void FileUploadJob::Manager::Register(
                       },
                       base::Unretained(self), std::move(serialized_settings)));
             }
-            std::move(result_cb).Run(it->second.get());
+            auto* job = it->second.get();
+            // Check the `job` state, schedule the action.
+            DCHECK_CALLED_ON_VALID_SEQUENCE(job->job_sequence_checker_);
+            if (job->event_helper_) {
+              // The job already executes, the event we are dealing with
+              // is likely the one that caused this, do not upload it
+              // (otherwise we would lose track of the job if the device
+              // restarts).
+              std::move(result_cb).Run(
+                  Status(error::ALREADY_EXISTS, "Duplicate event"));
+              return;
+            }
+            // Attach the event to the job.
+            job->event_helper_ = std::make_unique<FileUploadJob::EventHelper>(
+                job->GetWeakPtr(), priority, std::move(record_copy),
+                std::move(log_upload_event));
+            std::move(result_cb).Run(job);
           },
-          base::Unretained(this), settings, tracker, base::Unretained(delegate),
-          std::move(result_cb)));
+          base::Unretained(this), priority, std::move(record_copy),
+          std::move(log_upload_event), delegate, std::move(result_cb)));
 }
 
 scoped_refptr<base::SequencedTaskRunner>
@@ -115,26 +200,175 @@ FileUploadJob::Manager::sequenced_task_runner() const {
   return sequenced_task_runner_;
 }
 
+// EventHelper implementation.
+
+FileUploadJob::EventHelper::EventHelper(
+    base::WeakPtr<FileUploadJob> job,
+    Priority priority,
+    Record record_copy,
+    ::ash::reporting::LogUploadEvent log_upload_event)
+    : job_(job),
+      priority_(priority),
+      record_copy_(std::move(record_copy)),
+      log_upload_event_(std::move(log_upload_event)) {}
+
+FileUploadJob::EventHelper::~EventHelper() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (done_cb_) {
+    Complete(Status(error::DATA_LOSS,
+                    "Helper started but completion callback not called."));
+  }
+}
+
+void FileUploadJob::EventHelper::Run(
+    const ScopedReservation& scoped_reservation,
+    base::OnceCallback<void(Status)> done_cb) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!done_cb_) << "Helper already running";
+  done_cb_ = std::move(done_cb);
+  if (job_->tracker().has_status()) {
+    // The job already failed before. Upload the event as is.
+    Complete();
+    return;
+  }
+  if (!job_->tracker().access_parameters().empty()) {
+    // Job complete, nothing left to do. Upload the event as is.
+    Complete();
+    return;
+  }
+  if (job_->tracker().session_token().empty()) {
+    // Job not initiated yet, do it now. Upon completion success post new
+    // event and upload the current one.
+    job_->Initiate(base::BindOnce(&EventHelper::RepostAndComplete,
+                                  weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+  if (log_upload_event_.upload_tracker().session_token().empty()) {
+    // Event refers to the job_ before it was initiated.
+    // Upload the event, do not post a new one.
+    Complete();
+    return;
+  }
+  // Job in progress check what was uploaded.
+  if (job_->tracker().uploaded() >
+      log_upload_event_.upload_tracker().uploaded()) {
+    // The `job_` is more advanced than the event implies.
+    // Upload the event, do not post a new one.
+    Complete();
+    return;
+  }
+  if (job_->tracker().uploaded() <
+      log_upload_event_.upload_tracker().uploaded()) {
+    // The `job_` is less advanced than the event implies, it should not be
+    // possible unless the `job_` is corrupt.
+    LOG(WARNING) << "Corrupt FileUploadJob";
+    // Upload the event, do not post a new one.
+    Complete();
+    return;
+  }
+  // Exact match, resume the `job_`. Note that if the `job_` is already
+  // active, this will be a no-op.
+  if (job_->tracker().uploaded() < job_->tracker().total()) {
+    // Job in progress, perform next step. Upon completion success post new
+    // event and upload the current one.
+    job_->NextStep(scoped_reservation,
+                   base::BindOnce(&EventHelper::RepostAndComplete,
+                                  weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+  // Upload complete, finalize the job_.
+  job_->Finalize(base::BindOnce(&EventHelper::RepostAndComplete,
+                                weak_ptr_factory_.GetWeakPtr()));
+}
+
+void FileUploadJob::EventHelper::Complete(Status status) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(done_cb_);
+  std::move(done_cb_).Run(status);
+  // Disconnect from the job, self destruct.
+  DCHECK_CALLED_ON_VALID_SEQUENCE(job_->job_sequence_checker_);
+  job_->event_helper_.reset();
+}
+
+void FileUploadJob::EventHelper::RepostAndComplete() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Post a new event reflecting its state to track later.
+  // If `job_` is not available, do not allow to upload the current event.
+  if (!job_) {
+    Complete(Status(error::DATA_LOSS, "Upload Job has been removed"));
+    return;
+  }
+  // Job is still around. Update the new event with its status.
+  if (job_->tracker().access_parameters().empty() &&
+      !job_->tracker().has_status()) {
+    // The job_ is in progress (not succeeded and not failed),
+    // flag the new tracking event to be processed when reaching uploader.
+    record_copy_.set_needs_local_unencrypted_copy(true);
+  }
+  // Copy it tracking state to the new event.
+  *log_upload_event_.mutable_upload_settings() = job_->settings();
+  *log_upload_event_.mutable_upload_tracker() = job_->tracker();
+  // Patch the copy event.
+  if (!log_upload_event_.SerializeToString(record_copy_.mutable_data())) {
+    Complete(Status(error::INVALID_ARGUMENT,
+                    base::StrCat({"Updated event ",
+                                  Destination_Name(record_copy_.destination()),
+                                  " failed to serialize"})));
+    return;
+  }
+  // Repost the copy event and return result via `Complete`.
+  FileUploadJob::AddRecordToStorage(
+      priority_, std::move(record_copy_),
+      base::BindPostTaskToCurrentDefault(base::BindOnce(
+          &EventHelper::Complete, weak_ptr_factory_.GetWeakPtr())));
+}
+
 // FileUploadJob implementation.
 
 FileUploadJob::FileUploadJob(const UploadSettings& settings,
                              const UploadTracker& tracker,
-                             Delegate* delegate)  // not owned!
-    : delegate_(delegate), settings_(settings), tracker_(tracker) {
-  DCHECK(delegate_);
-}
+                             base::WeakPtr<Delegate> delegate)
+    : delegate_(delegate), settings_(settings), tracker_(tracker) {}
 
 FileUploadJob::~FileUploadJob() = default;
 
+base::ScopedClosureRunner FileUploadJob::CompletionCb(
+    base::OnceClosure done_cb) {
+  return base::ScopedClosureRunner(
+      base::BindPostTaskToCurrentDefault(base::BindOnce(
+          [](base::WeakPtr<FileUploadJob> job, base::OnceClosure done_cb) {
+            // If `job` has not been destructed yet,
+            // analyze its status and delete the file, if it has completed with
+            // success or the last retry failed.
+            if (job) {
+              DCHECK_CALLED_ON_VALID_SEQUENCE(job->job_sequence_checker_);
+              DCHECK(job->event_helper_)
+                  << "Event must be associated with the job";
+              if (!job->tracker_.access_parameters().empty() ||  // success
+                  (job->tracker_.has_status() &&
+                   job->settings_.retry_count() <= 0)) {  // last retry
+                // Perform deletion on a thread pool, do not wait for completion
+                // and do not report the outcome.
+                Manager::GetInstance()->sequenced_task_runner()->PostTask(
+                    FROM_HERE,
+                    base::BindOnce(&Delegate::DoDeleteFile, job->delegate_,
+                                   std::string(job->settings_.origin_path())));
+              }
+            }
+            // Execute the callback regardless of whether the `job` exists or
+            // not.
+            std::move(done_cb).Run();
+          },
+          weak_ptr_factory_.GetWeakPtr(), std::move(done_cb))));
+}
+
 void FileUploadJob::Initiate(base::OnceClosure done_cb) {
-  base::ScopedClosureRunner done(std::move(done_cb));
   DCHECK_CALLED_ON_VALID_SEQUENCE(job_sequence_checker_);
+  DCHECK(event_helper_) << "Event must be associated with the job";
+  base::ScopedClosureRunner done(
+      FileUploadJob::CompletionCb(std::move(done_cb)));
   if (tracker_.has_status()) {
     // Error detected earlier.
-    return;
-  }
-  if (in_action_) {
-    // The job is already executing some action, do nothing.
     return;
   }
   if (!tracker_.session_token().empty()) {
@@ -148,13 +382,12 @@ void FileUploadJob::Initiate(base::OnceClosure done_cb) {
     return;
   }
   settings_.set_retry_count(settings_.retry_count() - 1);
-  in_action_ = true;
   if (timer_.IsRunning()) {
     timer_.Reset();
   }
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
-      base::BindOnce(&Delegate::DoInitiate, base::Unretained(delegate_),
+  Manager::GetInstance()->sequenced_task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CallInitiateOnSequence, delegate_,
                      settings_.origin_path(), settings_.upload_parameters(),
                      base::BindPostTaskToCurrentDefault(base::BindOnce(
                          &FileUploadJob::DoneInitiate,
@@ -166,7 +399,7 @@ void FileUploadJob::DoneInitiate(
     StatusOr<std::pair<int64_t /*total*/, std::string /*session_token*/>>
         result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(job_sequence_checker_);
-  in_action_ = false;
+  DCHECK(event_helper_) << "Event must be associated with the job";
   if (!result.ok()) {
     result.status().SaveTo(tracker_.mutable_status());
     return;
@@ -189,15 +422,14 @@ void FileUploadJob::DoneInitiate(
   tracker_.set_session_token(session_token.data(), session_token.size());
 }
 
-void FileUploadJob::NextStep(base::OnceClosure done_cb) {
-  base::ScopedClosureRunner done(std::move(done_cb));
+void FileUploadJob::NextStep(const ScopedReservation& scoped_reservation,
+                             base::OnceClosure done_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(job_sequence_checker_);
+  DCHECK(event_helper_) << "Event must be associated with the job";
+  base::ScopedClosureRunner done(
+      FileUploadJob::CompletionCb(std::move(done_cb)));
   if (tracker_.has_status()) {
     // Error detected earlier.
-    return;
-  }
-  if (in_action_) {
-    // The job is already executing some action, do nothing.
     return;
   }
   if (tracker_.session_token().empty()) {
@@ -216,15 +448,14 @@ void FileUploadJob::NextStep(base::OnceClosure done_cb) {
     // All done, Status is OK.
     return;
   }
-  in_action_ = true;
   if (timer_.IsRunning()) {
     timer_.Reset();
   }
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
-      base::BindOnce(&Delegate::DoNextStep, base::Unretained(delegate_),
-                     tracker_.total(), tracker_.uploaded(),
-                     tracker_.session_token(),
+  Manager::GetInstance()->sequenced_task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CallNextStepOnSequence, delegate_, tracker_.total(),
+                     tracker_.uploaded(), tracker_.session_token(),
+                     ScopedReservation(0uL, scoped_reservation),
                      base::BindPostTaskToCurrentDefault(base::BindOnce(
                          &FileUploadJob::DoneNextStep,
                          weak_ptr_factory_.GetWeakPtr(), std::move(done)))));
@@ -235,7 +466,7 @@ void FileUploadJob::DoneNextStep(
     StatusOr<std::pair<int64_t /*uploaded*/, std::string /*session_token*/>>
         result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(job_sequence_checker_);
-  in_action_ = false;
+  DCHECK(event_helper_) << "Event must be associated with the job";
   if (!result.ok()) {
     result.status().SaveTo(tracker_.mutable_status());
     return;
@@ -261,14 +492,12 @@ void FileUploadJob::DoneNextStep(
 }
 
 void FileUploadJob::Finalize(base::OnceClosure done_cb) {
-  base::ScopedClosureRunner done(std::move(done_cb));
   DCHECK_CALLED_ON_VALID_SEQUENCE(job_sequence_checker_);
+  DCHECK(event_helper_) << "Event must be associated with the job";
+  base::ScopedClosureRunner done(
+      FileUploadJob::CompletionCb(std::move(done_cb)));
   if (tracker_.has_status()) {
     // Error detected earlier.
-    return;
-  }
-  if (in_action_) {
-    // The job is already executing some action, do nothing.
     return;
   }
   if (tracker_.session_token().empty()) {
@@ -284,14 +513,13 @@ void FileUploadJob::Finalize(base::OnceClosure done_cb) {
         .SaveTo(tracker_.mutable_status());
     return;
   }
-  in_action_ = true;
   if (timer_.IsRunning()) {
     timer_.Reset();
   }
 
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
-      base::BindOnce(&Delegate::DoFinalize, base::Unretained(delegate_),
+  Manager::GetInstance()->sequenced_task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&CallFinalizeOnSequence, delegate_,
                      tracker_.session_token(),
                      base::BindPostTaskToCurrentDefault(base::BindOnce(
                          &FileUploadJob::DoneFinalize,
@@ -302,7 +530,7 @@ void FileUploadJob::DoneFinalize(
     base::ScopedClosureRunner done,
     StatusOr<std::string /*access_parameters*/> result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(job_sequence_checker_);
-  in_action_ = false;
+  DCHECK(event_helper_) << "Event must be associated with the job";
   if (!result.ok()) {
     result.status().SaveTo(tracker_.mutable_status());
     return;
@@ -316,6 +544,37 @@ void FileUploadJob::DoneFinalize(
   tracker_.clear_session_token();
   tracker_.set_access_parameters(access_parameters.data(),
                                  access_parameters.size());
+}
+
+// static
+void FileUploadJob::AddRecordToStorage(
+    Priority priority,
+    Record record_copy,
+    base::OnceCallback<void(Status)> done_cb) {
+  ReportingClient::GetInstance()->sequenced_task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](Priority priority, Record record_copy,
+                        base::OnceCallback<void(Status)> done_cb) {
+                       // We can only get to here from upload, which originates
+                       // from Storage Module, so `storage()` below cannot be
+                       // null.
+                       DCHECK(ReportingClient::GetInstance()->storage());
+                       ReportingClient::GetInstance()->storage()->AddRecord(
+                           priority, std::move(record_copy),
+                           std::move(done_cb));
+                     },
+                     priority, std::move(record_copy), std::move(done_cb)));
+}
+
+void FileUploadJob::SetEventHelperForTest(
+    std::unique_ptr<FileUploadJob::EventHelper> event_helper) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(job_sequence_checker_);
+  event_helper_ = std::move(event_helper);
+}
+
+FileUploadJob::EventHelper* FileUploadJob::event_helper() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(job_sequence_checker_);
+  return event_helper_.get();
 }
 
 const UploadSettings& FileUploadJob::settings() const {

@@ -1,5 +1,5 @@
 
-#include "components/os_crypt/keychain_password_mac.h"
+#include "components/os_crypt/sync/keychain_password_mac.h"
 
 #import <Security/Security.h>
 

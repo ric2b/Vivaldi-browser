@@ -123,6 +123,11 @@
     <message name="IDS_SIDE_PANEL_TRACKED_PRODUCTS" desc="Text shown for a product-specific bookmark folder in the side panel. Users can click this item to view their tracked products.">
       Tracked Products
     </message>
+    <message name="IDS_PRICE_TRACKING_CHIP_IPH" desc="Text shown when user see the price tracking chip for the first time. Text attached to the price tracking chip to show the usefulness of the feature.">
+      Get email alerts if the price drops on any site
+    </message>
+
+
     <if expr="is_macosx">
       <message name="IDS_SIDE_PANEL_UNTRACK_BUTTON" desc="Text shown when user right-clicks a tracked product from the side panel. User can click this button to untrack this product.">
         Untrack Price
@@ -141,6 +146,9 @@
       </message>
       <message name="IDS_PRICE_TRACKING_TRACK_PRODUCT_ACCESSIBILITY" desc="Accessibility string for the price tracking toggle button and bell icon when this product is not currently being tracked. User can click this button or icon to track this product.">
         Track Price
+      </message>
+      <message name="IDS_PRICE_TRACKING_SIDE_PANEL_ERROR_BUTTON" desc="Text shown in side panel toast button when an attempt to track or untrack a product failed. Clicking the button would retry the failed attempt to track or untrack a product.">
+        Try Again
       </message>
     </if> <!-- is_macosx -->
     <if expr="not is_macosx">
@@ -162,6 +170,9 @@
       <message name="IDS_PRICE_TRACKING_TRACK_PRODUCT_ACCESSIBILITY" desc="Accessibility string for the price tracking toggle button and bell icon when this product is not currently being tracked. User can click this button or icon to track this product.">
         Track price
       </message>
+      <message name="IDS_PRICE_TRACKING_SIDE_PANEL_ERROR_BUTTON" desc="Text shown in side panel toast button when an attempt to track or untrack a product failed. Clicking the button would retry the failed attempt to track or untrack a product.">
+        Try again
+      </message>
     </if> <!-- not is_macosx -->
 
     <message name="IDS_PRICE_TRACKING_SETTINGS_TITLE" desc="Text shown in chrome settings. User can turn on or off the toggle next to this setting item to manage whether they want to receive price drop notifications.">
@@ -172,6 +183,9 @@
     </message>
     <message name="IDS_PRICE_TRACKING_SETTINGS_POPUP_DESCRIPTION" desc="Text shown in chrome settings indicating that the price drop notifications will be sent via chrome popups. User can turn on or off the toggle next to this setting item to manage whether they want to receive such notifications.">
       Price drop alerts show up as popup notifications on your desktop
+    </message>
+    <message name="IDS_PRICE_TRACKING_SIDE_PANEL_ERROR_MESSAGE" desc="Text shown in side panel toast when an attempt to track or untrack a product failed.">
+      Something went wrong.
     </message>
   </if>
 

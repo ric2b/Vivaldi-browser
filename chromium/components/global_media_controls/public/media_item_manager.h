@@ -5,10 +5,12 @@
 #ifndef COMPONENTS_GLOBAL_MEDIA_CONTROLS_PUBLIC_MEDIA_ITEM_MANAGER_H_
 #define COMPONENTS_GLOBAL_MEDIA_CONTROLS_PUBLIC_MEDIA_ITEM_MANAGER_H_
 
+#include <list>
 #include <memory>
 #include <string>
 
 #include "base/component_export.h"
+#include "base/memory/weak_ptr.h"
 
 namespace global_media_controls {
 
@@ -67,6 +69,12 @@ class COMPONENT_EXPORT(GLOBAL_MEDIA_CONTROLS) MediaItemManager {
 
   // True if there is an open MediaDialogDelegate associated with this service.
   virtual bool HasOpenDialog() = 0;
+
+  // Returns active media item IDs gathered from all the item producers and
+  // items being actively played will be in the front.
+  virtual std::list<std::string> GetActiveItemIds() = 0;
+
+  virtual base::WeakPtr<MediaItemManager> GetWeakPtr() = 0;
 };
 
 }  // namespace global_media_controls

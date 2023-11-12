@@ -4,8 +4,11 @@
 
 #include "chrome/browser/ash/events/event_rewriter_delegate_impl.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/public/cpp/input_device_settings_controller.h"
 #include "ash/public/cpp/window_properties.h"
+#include "ash/public/mojom/input_device_settings.mojom.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/notifications/deprecation_notification_controller.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
@@ -13,7 +16,9 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/events/ash/mojom/modifier_key.mojom-shared.h"
 #include "ui/message_center/message_center.h"
 
 namespace ash {
@@ -23,14 +28,17 @@ EventRewriterDelegateImpl::EventRewriterDelegateImpl(
     : EventRewriterDelegateImpl(
           activation_client,
           std::make_unique<DeprecationNotificationController>(
-              message_center::MessageCenter::Get())) {}
+              message_center::MessageCenter::Get()),
+          InputDeviceSettingsController::Get()) {}
 
 EventRewriterDelegateImpl::EventRewriterDelegateImpl(
     wm::ActivationClient* activation_client,
-    std::unique_ptr<DeprecationNotificationController> deprecation_controller)
+    std::unique_ptr<DeprecationNotificationController> deprecation_controller,
+    InputDeviceSettingsController* input_device_settings_controller)
     : pref_service_for_testing_(nullptr),
       activation_client_(activation_client),
-      deprecation_controller_(std::move(deprecation_controller)) {}
+      deprecation_controller_(std::move(deprecation_controller)),
+      input_device_settings_controller_(input_device_settings_controller) {}
 
 EventRewriterDelegateImpl::~EventRewriterDelegateImpl() {}
 
@@ -49,35 +57,65 @@ bool EventRewriterDelegateImpl::RewriteModifierKeys() {
   return !suppress_modifier_key_rewrites_;
 }
 
-bool EventRewriterDelegateImpl::GetKeyboardRemappedPrefValue(
-    const std::string& pref_name,
-    int* value) const {
-  DCHECK(value);
-  // If we're at the login screen, try to get the pref from the global prefs
-  // dictionary.
-  if (LoginDisplayHost::default_host() &&
-      LoginDisplayHost::default_host()->GetKeyboardRemappedPrefValue(pref_name,
-                                                                     value)) {
-    return true;
-  }
-  const PrefService* pref_service = GetPrefService();
-  if (!pref_service)
-    return false;
-  const PrefService::Preference* preference =
-      pref_service->FindPreference(pref_name);
-  if (!preference)
-    return false;
+absl::optional<ui::mojom::ModifierKey>
+EventRewriterDelegateImpl::GetKeyboardRemappedModifierValue(
+    int device_id,
+    ui::mojom::ModifierKey modifier_key,
+    const std::string& pref_name) const {
+  // `modifier_key` and `device_id` are unused when the flag is disabled.
+  if (!ash::features::IsInputDeviceSettingsSplitEnabled()) {
+    // If we're at the login screen, try to get the pref from the global prefs
+    // dictionary.
+    int value;
+    if (LoginDisplayHost::default_host() &&
+        LoginDisplayHost::default_host()->GetKeyboardRemappedPrefValue(
+            pref_name, &value)) {
+      return static_cast<ui::mojom::ModifierKey>(value);
+    }
+    const PrefService* pref_service = GetPrefService();
+    if (!pref_service) {
+      return absl::nullopt;
+    }
+    const PrefService::Preference* preference =
+        pref_service->FindPreference(pref_name);
+    if (!preference) {
+      return absl::nullopt;
+    }
 
-  DCHECK_EQ(preference->GetType(), base::Value::Type::INTEGER);
-  *value = preference->GetValue()->GetInt();
-  return true;
+    DCHECK_EQ(preference->GetType(), base::Value::Type::INTEGER);
+    return static_cast<ui::mojom::ModifierKey>(
+        preference->GetValue()->GetInt());
+  }
+
+  // `pref_name` is unused when the flag is enabled.
+  const mojom::KeyboardSettings* settings =
+      input_device_settings_controller_->GetKeyboardSettings(device_id);
+  if (!settings) {
+    return modifier_key;
+  }
+
+  auto iter = settings->modifier_remappings.find(modifier_key);
+  if (iter == settings->modifier_remappings.end()) {
+    return modifier_key;
+  }
+
+  return iter->second;
 }
 
-bool EventRewriterDelegateImpl::TopRowKeysAreFunctionKeys() const {
-  const PrefService* pref_service = GetPrefService();
-  if (!pref_service)
-    return false;
-  return pref_service->GetBoolean(prefs::kSendFunctionKeys);
+bool EventRewriterDelegateImpl::TopRowKeysAreFunctionKeys(int device_id) const {
+  // When the flag is disabled, `device_id` is unused.
+  if (!ash::features::IsInputDeviceSettingsSplitEnabled()) {
+    const PrefService* pref_service = GetPrefService();
+    if (!pref_service) {
+      return false;
+    }
+    return pref_service->GetBoolean(prefs::kSendFunctionKeys);
+  }
+
+  const mojom::KeyboardSettings* settings =
+      input_device_settings_controller_->GetKeyboardSettings(device_id);
+  // TODO(dpad): Add metric for when settings are not able to be found.
+  return settings && settings->top_row_are_fkeys;
 }
 
 bool EventRewriterDelegateImpl::IsExtensionCommandRegistered(
@@ -112,6 +150,24 @@ bool EventRewriterDelegateImpl::IsSearchKeyAcceleratorReserved() const {
   aura::Window* active_window = activation_client_->GetActiveWindow();
   return active_window &&
          active_window->GetProperty(kSearchKeyAcceleratorReservedKey);
+}
+
+bool EventRewriterDelegateImpl::RewriteMetaTopRowKeyComboEvents(
+    int device_id) const {
+  // When the flag is disabled, `device_id` is unused.
+  if (!ash::features::IsInputDeviceSettingsSplitEnabled()) {
+    return !suppress_meta_top_row_key_rewrites_;
+  }
+
+  const mojom::KeyboardSettings* settings =
+      input_device_settings_controller_->GetKeyboardSettings(device_id);
+  // TODO(dpad): Add metric for when settings are not able to be found.
+  return !(settings && settings->suppress_meta_fkey_rewrites);
+}
+
+void EventRewriterDelegateImpl::SuppressMetaTopRowKeyComboRewrites(
+    bool should_suppress) {
+  suppress_meta_top_row_key_rewrites_ = should_suppress;
 }
 
 bool EventRewriterDelegateImpl::NotifyDeprecatedRightClickRewrite() {

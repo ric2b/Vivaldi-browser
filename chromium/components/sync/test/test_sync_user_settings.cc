@@ -45,20 +45,6 @@ TestSyncUserSettings::TestSyncUserSettings(TestSyncService* service)
 
 TestSyncUserSettings::~TestSyncUserSettings() = default;
 
-bool TestSyncUserSettings::IsSyncRequested() const {
-  return !service_->HasDisableReason(SyncService::DISABLE_REASON_USER_CHOICE);
-}
-
-void TestSyncUserSettings::SetSyncRequested(bool requested) {
-  SyncService::DisableReasonSet disable_reasons = service_->GetDisableReasons();
-  if (requested) {
-    disable_reasons.Remove(SyncService::DISABLE_REASON_USER_CHOICE);
-  } else {
-    disable_reasons.Put(SyncService::DISABLE_REASON_USER_CHOICE);
-  }
-  service_->SetDisableReasons(disable_reasons);
-}
-
 bool TestSyncUserSettings::IsFirstSetupComplete() const {
   return first_setup_complete_;
 }
@@ -89,6 +75,11 @@ UserSelectableTypeSet TestSyncUserSettings::GetSelectedTypes() const {
   return selected_types_;
 }
 
+bool TestSyncUserSettings::IsTypeManagedByPolicy(
+    UserSelectableType type) const {
+  return false;
+}
+
 ModelTypeSet TestSyncUserSettings::GetPreferredDataTypes() const {
   ModelTypeSet types = UserSelectableTypesToModelTypes(GetSelectedTypes());
   types.PutAll(AlwaysPreferredUserTypes());
@@ -112,6 +103,11 @@ bool TestSyncUserSettings::IsSyncAllOsTypesEnabled() const {
 
 UserSelectableOsTypeSet TestSyncUserSettings::GetSelectedOsTypes() const {
   return selected_os_types_;
+}
+
+bool TestSyncUserSettings::IsOsTypeManagedByPolicy(
+    UserSelectableOsType type) const {
+  return false;
 }
 
 void TestSyncUserSettings::SetSelectedOsTypes(bool sync_all_os_types,

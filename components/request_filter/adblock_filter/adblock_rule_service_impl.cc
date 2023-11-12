@@ -101,6 +101,11 @@ std::string RuleServiceImpl::GetRulesIndexChecksum(RuleGroup group) {
   return index_managers_[static_cast<size_t>(group)]->index_checksum();
 }
 
+RuleServiceImpl::IndexBuildResult RuleServiceImpl::GetRulesIndexBuildResult(
+    RuleGroup group) {
+  return kBuildSuccess;
+}
+
 void RuleServiceImpl::OnStateLoaded(
     RuleServiceStorage::LoadResult load_result) {
   // All cases of base::Unretained here are safe. We are generally passing
@@ -132,10 +137,10 @@ void RuleServiceImpl::OnStateLoaded(
         context_, this, group,
         load_result.index_checksums[static_cast<size_t>(group)],
         base::BindRepeating(&RuleServiceImpl::OnRulesIndexChanged,
-                            base::Unretained(this)),
+                            base::Unretained(this), group),
         base::BindRepeating(&RuleServiceImpl::OnRulesIndexLoaded,
                             base::Unretained(this), group),
-        base::BindRepeating(&RuleManager::OnRulesBufferReadFailCallback,
+        base::BindRepeating(&RuleManager::OnCompiledRulesReadFailCallback,
                             base::Unretained(&rule_manager_.value())),
         file_task_runner_);
 
@@ -207,10 +212,12 @@ void RuleServiceImpl::OnExceptionListChanged(RuleGroup group,
   }
 }
 
-void RuleServiceImpl::OnRulesIndexChanged() {
+void RuleServiceImpl::OnRulesIndexChanged(RuleGroup group) {
   // The state store will read all checksums when saving. No need to worry about
   // which has changed.
   state_store_->ScheduleSave();
+  for (RuleService::Observer& observer : observers_)
+    observer.OnRulesIndexBuilt(group, RuleService::kBuildSuccess);
 }
 
 void RuleServiceImpl::OnRulesIndexLoaded(RuleGroup group) {

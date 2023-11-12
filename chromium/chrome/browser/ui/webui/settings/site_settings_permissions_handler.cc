@@ -27,7 +27,8 @@ namespace {
 // Reflects the maximum number of days between a permissions being revoked and
 // the time when the user regrants the permission through the unused site
 // permission module of Safete Check. The maximum number of days is determined
-// by `kRevocationCleanUpThreshold`.
+// by `content_settings::features::
+// kSafetyCheckUnusedSitePermissionsRevocationCleanUpThreshold`.
 size_t kAllowAgainMetricsExclusiveMaxCount = 31;
 // Using a single bucket per day, following the value of
 // |kAllowAgainMetricsExclusiveMaxCount|.
@@ -72,7 +73,9 @@ void SiteSettingsPermissionsHandler::HandleAllowPermissionsAgainForUnusedSite(
       origin.GetURL(), origin.GetURL(),
       ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS, &info));
   base::Time revoked_time =
-      info.metadata.expiration - permissions::kRevocationCleanUpThreshold;
+      info.metadata.expiration -
+      content_settings::features::
+          kSafetyCheckUnusedSitePermissionsRevocationCleanUpThreshold.Get();
   base::UmaHistogramCustomCounts(
       "Settings.SafetyCheck.UnusedSitePermissionsAllowAgainDays",
       (clock_->Now() - revoked_time).InDays(), 0,
@@ -195,9 +198,12 @@ SiteSettingsPermissionsHandler::GetUnusedSitePermissionsFromDict(
   std::set<ContentSettingsType> permission_types;
   for (const auto& permission : *permissions) {
     CHECK(permission.is_string());
-    const std::string& type = permission.GetString();
-    permission_types.insert(
-        site_settings::ContentSettingsTypeFromGroupName(type));
+    const std::string& type_string = permission.GetString();
+    ContentSettingsType type =
+        site_settings::ContentSettingsTypeFromGroupName(type_string);
+    CHECK(type != ContentSettingsType::DEFAULT)
+        << type_string << " is not expected to have a UI representation.";
+    permission_types.insert(type);
   }
 
   const base::Value* js_expiration =

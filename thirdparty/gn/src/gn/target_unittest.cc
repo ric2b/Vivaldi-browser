@@ -926,7 +926,7 @@ TEST_F(TargetTest, CheckStampFileName) {
                                              &computed_outputs, &err));
   ASSERT_EQ(1u, computed_outputs.size());
   EXPECT_EQ("//out/Debug/obj/a/a.stamp", computed_outputs[0].value())
-    << "was instead: " << computed_outputs[0].value();
+      << "was instead: " << computed_outputs[0].value();
 }
 
 // Tests Target::GetOutputFilesForSource for action_foreach targets (these, like
@@ -1219,13 +1219,16 @@ TEST_F(TargetTest, ResolvePrecompiledHeaders) {
   TestWithScope setup;
   Err err;
 
-  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar",
+                                        SourceDir("//toolchain/"), "default"));
 
   // Target with no settings, no configs, should be a no-op.
   EXPECT_TRUE(target.ResolvePrecompiledHeaders(&err));
 
   // Config with PCH values.
-  Config config_1(setup.settings(), Label(SourceDir("//foo/"), "c1"));
+  Config config_1(
+      setup.settings(),
+      Label(SourceDir("//foo/"), "c1", SourceDir("//toolchain/"), "default"));
   std::string pch_1("pch.h");
   SourceFile pcs_1("//pcs.cc");
   config_1.own_values().set_precompiled_header(pch_1);
@@ -1246,7 +1249,9 @@ TEST_F(TargetTest, ResolvePrecompiledHeaders) {
   EXPECT_TRUE(target.config_values().precompiled_source() == pcs_1);
 
   // Second config with different PCH values.
-  Config config_2(setup.settings(), Label(SourceDir("//foo/"), "c2"));
+  Config config_2(
+      setup.settings(),
+      Label(SourceDir("//foo/"), "c2", SourceDir("//toolchain/"), "default"));
   std::string pch_2("pch2.h");
   SourceFile pcs_2("//pcs2.cc");
   config_2.own_values().set_precompiled_header(pch_2);

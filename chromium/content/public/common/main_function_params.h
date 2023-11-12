@@ -9,6 +9,7 @@
 
 #include "base/command_line.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 
@@ -42,10 +43,14 @@ struct CONTENT_EXPORT MainFunctionParams {
   MainFunctionParams(MainFunctionParams&&);
   MainFunctionParams& operator=(MainFunctionParams&&);
 
-  const base::CommandLine* command_line;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #union
+  RAW_PTR_EXCLUSION const base::CommandLine* command_line;
 
 #if BUILDFLAG(IS_WIN)
-  sandbox::SandboxInterfaceInfo* sandbox_info = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #union
+  RAW_PTR_EXCLUSION sandbox::SandboxInterfaceInfo* sandbox_info = nullptr;
 #elif BUILDFLAG(IS_MAC)
   base::mac::ScopedNSAutoreleasePool* autorelease_pool = nullptr;
 #elif BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID)
@@ -55,13 +60,6 @@ struct CONTENT_EXPORT MainFunctionParams {
   // Set to true if this content process's main function should enable startup
   // tracing after initializing Mojo.
   bool needs_startup_tracing_after_mojo_init = false;
-
-#if BUILDFLAG(IS_IOS)
-  // For iOS in order to enter the UIApplication we must store the initial
-  // argc/argv from main().
-  int argc = 0;
-  const char** argv = nullptr;
-#endif
 
   // Used by BrowserTestBase. If set, BrowserMainLoop runs this task instead of
   // the main message loop.

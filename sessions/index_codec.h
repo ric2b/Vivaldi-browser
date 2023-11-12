@@ -41,7 +41,8 @@ class IndexCodec {
   // false otherwise.
   // Offical builds will fail immediately on error, whiole internal will
   // continue as long as possible to simplify debugging. Errors are logged.
-  bool Decode(Index_Node* items, Index_Node* backup, const base::Value& value);
+  bool Decode(Index_Node* items, Index_Node* backup, Index_Node* persistent,
+              const base::Value& value);
 
   // Reads fields from 'value' and assigns to 'node'.
   void SetNodeFields(Index_Node* node,  Index_Node* parent,

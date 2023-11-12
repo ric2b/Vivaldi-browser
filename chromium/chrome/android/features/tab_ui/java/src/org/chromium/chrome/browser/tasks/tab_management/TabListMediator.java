@@ -52,7 +52,6 @@ import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tab.state.CouponPersistedTabData;
 import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabList;
@@ -224,28 +223,6 @@ class TabListMediator {
                 mPriceWelcomeMessageController.showPriceWelcomeMessage(
                         new PriceTabData(mTab.getId(), shoppingPersistedTabData.getPriceDrop()));
             });
-        }
-    }
-
-    /**
-     * Asynchronously acquire {@link CouponPersistedTabData}
-     */
-    static class CouponPersistedTabDataFetcher {
-        protected Tab mTab;
-
-        /**
-         * @param tab {@link Tab} {@link CouponPersistedTabData} will be acquired for.
-         */
-        CouponPersistedTabDataFetcher(Tab tab) {
-            mTab = tab;
-        }
-
-        /**
-         * Asynchronously acquire {@link CouponPersistedTabData}
-         * @param callback {@link Callback} to pass {@link CouponPersistedTabData} back in
-         */
-        public void fetch(Callback<CouponPersistedTabData> callback) {
-            CouponPersistedTabData.from(mTab, (res) -> { callback.onResult(res); });
         }
     }
 
@@ -472,7 +449,7 @@ class TabListMediator {
                 return;
             }
             if (mModel.indexFromId(tab.getId()) == TabModel.INVALID_TAB_INDEX) return;
-            if (TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) {
+            if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
                 mModel.get(mModel.indexFromId(tab.getId()))
                         .model.set(TabProperties.FAVICON_FETCHER,
                                 mTabListFaviconProvider.getDefaultFaviconFetcher(
@@ -566,9 +543,7 @@ class TabListMediator {
             @Nullable GridCardOnClickListenerProvider gridCardOnClickListenerProvider,
             @Nullable TabGridDialogHandler dialogHandler,
             @Nullable PriceWelcomeMessageController priceWelcomeMessageController,
-            String componentName, @UiType int uiType,
-            @Nullable TabGridItemTouchHelperCallback
-                    .OnLongPressTabItemEventListener onLongPressTabItemEventListener) {
+            String componentName, @UiType int uiType) {
         mContext = context;
         mTabModelSelector = tabModelSelector;
         mThumbnailProvider = thumbnailProvider;
@@ -602,6 +577,7 @@ class TabListMediator {
                     // undo, identify the related TabIds and determine newIndex based on if any of
                     // the related ids are present in model.
                     newIndex = getIndexForTabWithRelatedTabs(tab);
+                    model.updateTabListModelIdForGroup(tab, newIndex);
                 }
 
                 mLastSelectedTabListModelIndex = oldIndex;
@@ -777,12 +753,13 @@ class TabListMediator {
 
         mTabGridItemTouchHelperCallback = new TabGridItemTouchHelperCallback(context, mModel,
                 mTabModelSelector, mTabClosedListener, mTabGridDialogHandler, mComponentName,
-                mActionsOnAllRelatedTabs, mMode, onLongPressTabItemEventListener);
+                mActionsOnAllRelatedTabs, mMode);
 
         // Right now we need to update layout only if there is a price welcome message card in tab
         // switcher.
         if (mMode == TabListMode.GRID && mUiType != UiType.SELECTABLE
-                && PriceTrackingFeatures.isPriceTrackingEnabled()) {
+                && PriceTrackingFeatures.isPriceTrackingEnabled()
+                && !ChromeApplicationImpl.isVivaldi()) { // Vivaldi
             mListObserver = new ListObserver<Void>() {
                 @Override
                 public void onItemRangeInserted(ListObservable source, int index, int count) {
@@ -807,6 +784,16 @@ class TabListMediator {
             };
             mModel.addObserver(mListObserver);
         }
+    }
+
+    /**
+     * @param onLongPressTabItemEventListener to handle long press events on tabs.
+     */
+    public void setOnLongPressTabItemEventListener(
+            @Nullable TabGridItemTouchHelperCallback
+                    .OnLongPressTabItemEventListener onLongPressTabItemEventListener) {
+        mTabGridItemTouchHelperCallback.setOnLongPressTabItemEventListener(
+                onLongPressTabItemEventListener);
     }
 
     private void selectTab(int oldIndex, int newIndex) {
@@ -1077,7 +1064,7 @@ class TabListMediator {
         }
 
         if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
-            mTabGroupTitleEditor = new TabGroupTitleEditor(mTabModelSelector) {
+            mTabGroupTitleEditor = new TabGroupTitleEditor(mContext, mTabModelSelector) {
                 @Override
                 protected void updateTabGroupTitle(Tab tab, String title) {
                     // Only update title in PropertyModel for tab switcher.
@@ -1088,7 +1075,7 @@ class TabListMediator {
                     if (index == TabModel.INVALID_TAB_INDEX) return;
                     mModel.get(index).model.set(TabProperties.TITLE, title);
                     updateDescriptionString(PseudoTab.fromTab(tab), mModel.get(index).model);
-                    if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+                    if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
                         updateCloseButtonDescriptionString(
                                 PseudoTab.fromTab(tab), mModel.get(index).model);
                     }
@@ -1205,7 +1192,7 @@ class TabListMediator {
      * TODO(https://crbug.com/1413213): Revist this it is very inefficient for multi-thumbnails.
      */
     void prepareTabSwitcherView() {
-        if (!TabUiFeatureUtilities.isTabToGtsAnimationEnabled()
+        if (!TabUiFeatureUtilities.isTabToGtsAnimationEnabled(mContext)
                 || !mTabModelSelector.isTabStateInitialized()) {
             return;
         }
@@ -1397,7 +1384,7 @@ class TabListMediator {
         mModel.get(index).model.set(
                 TabProperties.TAB_CLOSED_LISTENER, isRealTab ? mTabClosedListener : null);
         updateDescriptionString(pseudoTab, mModel.get(index).model);
-        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+        if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
             updateCloseButtonDescriptionString(pseudoTab, mModel.get(index).model);
         }
         if (isRealTab) {
@@ -1417,9 +1404,11 @@ class TabListMediator {
                 && (mModel.get(index).model.get(TabProperties.THUMBNAIL_FETCHER) == null
                         || forceUpdate || isUpdatingId || forceUpdateLastSelected
                         || forceUpdateColorForSelectableGroup)) {
+            boolean isSelectable = mUiType == UiType.SELECTABLE;
             ThumbnailFetcher callback = new ThumbnailFetcher(mThumbnailProvider, pseudoTab.getId(),
-                    forceUpdate || forceUpdateLastSelected,
-                    forceUpdate && !TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
+                    (forceUpdate || forceUpdateLastSelected) && !isSelectable,
+                    forceUpdate && !TabUiFeatureUtilities.isTabToGtsAnimationEnabled(mContext)
+                            && !isSelectable);
             mModel.get(index).model.set(TabProperties.THUMBNAIL_FETCHER, callback);
         }
     }
@@ -1690,7 +1679,7 @@ class TabListMediator {
                         .with(CARD_TYPE, TAB)
                         .build();
 
-        if (TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) {
+        if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
             tabInfo.set(TabProperties.FAVICON_FETCHER,
                     mTabListFaviconProvider.getDefaultFaviconFetcher(pseudoTab.isIncognito()));
         } else {
@@ -1727,7 +1716,7 @@ class TabListMediator {
             tabInfo.set(TabProperties.TAB_SELECTED_LISTENER, tabSelectedListener);
             tabInfo.set(TabProperties.TAB_CLOSED_LISTENER, isRealTab ? mTabClosedListener : null);
             updateDescriptionString(pseudoTab, tabInfo);
-            if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
+            if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
                 updateCloseButtonDescriptionString(pseudoTab, tabInfo);
             }
         }
@@ -1743,8 +1732,11 @@ class TabListMediator {
         updateFaviconForTab(pseudoTab, null, null);
 
         if (mThumbnailProvider != null && mVisible) {
+            boolean isSelectable = mUiType == UiType.SELECTABLE;
             ThumbnailFetcher callback = new ThumbnailFetcher(mThumbnailProvider, pseudoTab.getId(),
-                    isSelected, isSelected && !TabUiFeatureUtilities.isTabToGtsAnimationEnabled());
+                    isSelected && !isSelectable,
+                    isSelected && !TabUiFeatureUtilities.isTabToGtsAnimationEnabled(mContext)
+                            && !isSelectable);
             tabInfo.set(TabProperties.THUMBNAIL_FETCHER, callback);
         }
         if (pseudoTab.getTab() != null) pseudoTab.getTab().addObserver(mTabObserver);
@@ -1785,7 +1777,7 @@ class TabListMediator {
     }
 
     private void updateCloseButtonDescriptionString(PseudoTab pseudoTab, PropertyModel model) {
-        if (!TabUiFeatureUtilities.isLaunchPolishEnabled()) return;
+        if (!TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) return;
         if (mActionsOnAllRelatedTabs) {
             int numOfRelatedTabs = getRelatedTabsForId(pseudoTab.getId()).size();
             if (numOfRelatedTabs > 1) {
@@ -1876,14 +1868,7 @@ class TabListMediator {
                 mModel.get(index).model.set(
                         TabProperties.SHOPPING_PERSISTED_TAB_DATA_FETCHER, null);
             }
-            if (CouponUtilities.isCouponsOnTabsEnabled() && isUngroupedTab(pseudoTab.getId())) {
-                mModel.get(index).model.set(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER,
-                        new CouponPersistedTabDataFetcher(pseudoTab.getTab()));
-            } else {
-                mModel.get(index).model.set(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER, null);
-            }
         } else {
-            mModel.get(index).model.set(TabProperties.COUPON_PERSISTED_TAB_DATA_FETCHER, null);
             mModel.get(index).model.set(TabProperties.SHOPPING_PERSISTED_TAB_DATA_FETCHER, null);
         }
     }
@@ -1921,16 +1906,10 @@ class TabListMediator {
             }
 
             // For tab group card in grid tab switcher, the favicon is the composed favicon.
-            if (TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) {
-                mModel.get(modelIndex)
-                        .model.set(TabProperties.FAVICON_FETCHER,
-                                mTabListFaviconProvider.getComposedFaviconImageFetcher(
-                                        urls, pseudoTab.isIncognito()));
-            } else {
-                mTabListFaviconProvider.getComposedFaviconImageAsync(
-                        urls, pseudoTab.isIncognito(), faviconCallback);
-            }
-
+            mModel.get(modelIndex)
+                    .model.set(TabProperties.FAVICON_FETCHER,
+                            mTabListFaviconProvider.getComposedFaviconImageFetcher(
+                                    urls, pseudoTab.isIncognito()));
             return;
         }
         if (!mTabListFaviconProvider.isInitialized()) {
@@ -1939,7 +1918,7 @@ class TabListMediator {
 
         // If there is an available icon, we fetch favicon synchronously; otherwise asynchronously.
         if (icon != null && iconUrl != null) {
-            if (TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) {
+            if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
                 mModel.get(modelIndex)
                         .model.set(TabProperties.FAVICON_FETCHER,
                                 mTabListFaviconProvider.getFaviconFromBitmapFetcher(icon, iconUrl));
@@ -1950,7 +1929,7 @@ class TabListMediator {
             return;
         }
 
-        if (TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) {
+        if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(mContext)) {
             TabFaviconFetcher fetcher = mTabListFaviconProvider.getFaviconForUrlFetcher(
                     pseudoTab.getUrl(), pseudoTab.isIncognito());
             mModel.get(modelIndex).model.set(TabProperties.FAVICON_FETCHER, fetcher);

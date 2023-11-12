@@ -6,6 +6,8 @@
 #ifndef NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
 #define NOTES_SCOPED_GROUP_NOTES_ACTIONS_H_
 
+#include "base/memory/raw_ptr.h"
+
 namespace vivaldi {
 
 class NotesModel;
@@ -19,7 +21,7 @@ class ScopedGroupNotesActions {
   ScopedGroupNotesActions& operator=(const ScopedGroupNotesActions&) = delete;
 
  private:
-  NotesModel* model_;
+  const raw_ptr<NotesModel> model_;
 };
 }  // namespace vivaldi
 

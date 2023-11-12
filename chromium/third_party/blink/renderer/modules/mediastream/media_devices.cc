@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/modules/mediastream/crop_target.h"
@@ -52,6 +53,7 @@
 #include "third_party/blink/renderer/platform/mediastream/webrtc_uma_histograms.h"
 #include "third_party/blink/renderer/platform/privacy_budget/identifiability_digest_helpers.h"
 #include "third_party/blink/renderer/platform/region_capture_crop_id.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -176,7 +178,61 @@ void RecordUma(ProduceCropTargetPromiseResult result) {
   base::UmaHistogramEnumeration(
       "Media.RegionCapture.ProduceCropTarget.Promise.Result", result);
 }
-#endif
+#endif  // !BUILDFLAG(IS_ANDROID)
+
+// When `blink::features::kGetDisplayMediaRequiresUserActivation` is enabled,
+// calls to `getDisplayMedia()` will require a transient user activation. This
+// can be bypassed with the `ScreenCaptureWithoutGestureAllowedForOrigins`
+// policy though.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class GetDisplayMediaTransientActivation {
+  kPresent = 0,
+  kMissing = 1,
+  kMissingButFeatureDisabled = 2,
+  kMissingButPolicyOverrides = 3,
+  kMaxValue = kMissingButPolicyOverrides
+};
+
+void RecordUma(GetDisplayMediaTransientActivation activation) {
+  base::UmaHistogramEnumeration(
+      "Media.GetDisplayMedia.RequiresUserActivationResult", activation);
+}
+
+bool TransientActivationRequirementSatisfied(LocalDOMWindow* window) {
+  DCHECK(window);
+
+  LocalFrame* const frame = window->GetFrame();
+  if (!frame) {
+    return false;  // Err on the side of caution. Intentionally neglect UMA.
+  }
+
+  const Settings* const settings = frame->GetSettings();
+  if (!settings) {
+    return false;  // Err on the side of caution. Intentionally neglect UMA.
+  }
+
+  if (LocalFrame::HasTransientUserActivation(frame) ||
+      (RuntimeEnabledFeatures::
+           CapabilityDelegationDisplayCaptureRequestEnabled() &&
+       window->IsDisplayCaptureRequestTokenActive())) {
+    RecordUma(GetDisplayMediaTransientActivation::kPresent);
+    return true;
+  }
+
+  if (!RuntimeEnabledFeatures::GetDisplayMediaRequiresUserActivationEnabled()) {
+    RecordUma(GetDisplayMediaTransientActivation::kMissingButFeatureDisabled);
+    return true;
+  }
+
+  if (!settings->GetRequireTransientActivationForGetDisplayMedia()) {
+    RecordUma(GetDisplayMediaTransientActivation::kMissingButPolicyOverrides);
+    return true;
+  }
+
+  RecordUma(GetDisplayMediaTransientActivation::kMissing);
+  return false;
+}
 
 void RecordEnumerateDevicesLatency(base::TimeTicks start_time) {
   const base::TimeDelta elapsed = base::TimeTicks::Now() - start_time;
@@ -267,8 +323,9 @@ MediaStreamConstraints* ToMediaStreamConstraints(
 MediaStreamConstraints* ToMediaStreamConstraints(
     const DisplayMediaStreamOptions* source) {
   MediaStreamConstraints* const constraints = MediaStreamConstraints::Create();
-  if (source->hasAudio())
+  if (source->hasAudio()) {
     constraints->setAudio(source->audio());
+  }
   if (source->hasVideo()) {
     constraints->setVideo(source->video());
   }
@@ -308,7 +365,8 @@ MediaDevices* MediaDevices::mediaDevices(Navigator& navigator) {
 }
 
 MediaDevices::MediaDevices(Navigator& navigator)
-    : Supplement<Navigator>(navigator),
+    : ActiveScriptWrappable<MediaDevices>({}),
+      Supplement<Navigator>(navigator),
       ExecutionContextLifecycleObserver(navigator.DomWindow()),
       stopped_(false),
       dispatcher_host_(navigator.GetExecutionContext()),
@@ -448,8 +506,42 @@ ScriptPromise MediaDevices::SendUserMediaRequest(
         UserMediaRequestResult::kInsecureContext);
     return ScriptPromise();
   }
+
+#if !BUILDFLAG(IS_ANDROID)
+  if (media_type == UserMediaRequestType::kDisplayMedia) {
+    window->ConsumeDisplayCaptureRequestToken();
+  }
+#endif
+
   request->Start();
   return promise;
+}
+
+ScriptPromise MediaDevices::getAllScreensMedia(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  // This timeout of base::Seconds(6) is an initial value and based on the data
+  // in Media.MediaDevices.GetAllScreensMedia.Latency, it should be iterated
+  // upon.
+  auto* resolver = MakeGarbageCollected<
+      ScriptPromiseResolverWithTracker<UserMediaRequestResult>>(
+      script_state, "Media.MediaDevices.GetAllScreensMedia", base::Seconds(6));
+
+  ExecutionContext* const context = GetExecutionContext();
+  if (!context) {
+    resolver->RecordAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "No media device client available; is this a detached window?",
+        UserMediaRequestResult::kContextDestroyed);
+    return ScriptPromise();
+  }
+
+  MediaStreamConstraints* constraints = MediaStreamConstraints::Create();
+  constraints->setVideo(
+      MakeGarbageCollected<V8UnionBooleanOrMediaTrackConstraints>(true));
+  constraints->setAutoSelectAllScreens(true);
+  return SendUserMediaRequest(UserMediaRequestType::kDisplayMediaSet, resolver,
+                              constraints, exception_state);
 }
 
 ScriptPromise MediaDevices::getDisplayMediaSet(
@@ -513,16 +605,11 @@ ScriptPromise MediaDevices::getDisplayMedia(
     return ScriptPromise();
   }
 
-  if (!LocalFrame::HasTransientUserActivation(window->GetFrame())) {
-    UseCounter::Count(window,
-                      WebFeature::kGetDisplayMediaWithoutUserActivation);
-    if (RuntimeEnabledFeatures::
-            GetDisplayMediaRequiresUserActivationEnabled()) {
-      exception_state.ThrowDOMException(
-          DOMExceptionCode::kInvalidStateError,
-          "getDisplayMedia() requires transient activation (user gesture).");
-      return ScriptPromise();
-    }
+  if (!TransientActivationRequirementSatisfied(window)) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "getDisplayMedia() requires transient activation (user gesture).");
+    return ScriptPromise();
   }
 
   if (options->hasAutoSelectAllScreens() && options->autoSelectAllScreens()) {
@@ -648,10 +735,9 @@ ScriptPromise MediaDevices::ProduceCropTarget(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  if (!element || !element->IsSupportedByRegionCapture()) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kNotSupportedError,
-        "Support for this subtype is not yet implemented.");
+  if (!element) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      "Invalid element.");
     return ScriptPromise();
   }
 
@@ -669,7 +755,8 @@ ScriptPromise MediaDevices::ProduceCropTarget(ScriptState* script_state,
   if (old_crop_id) {
     // The Element has a crop-ID which was previously produced.
     DCHECK(!old_crop_id->value().is_zero());
-    auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+    auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+        script_state, exception_state.GetContext());
     const ScriptPromise promise = resolver->Promise();
     resolver->Resolve(MakeGarbageCollected<CropTarget>(WTF::String(
         blink::TokenToGUID(old_crop_id->value()).AsLowercaseString())));
@@ -691,7 +778,8 @@ ScriptPromise MediaDevices::ProduceCropTarget(ScriptState* script_state,
 
   // Mints a new crop-ID on the browser process. Resolve when it's produced
   // and ready to be used.
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   crop_id_resolvers_.insert(element, resolver);
   const ScriptPromise promise = resolver->Promise();
   GetDispatcherHost(window->GetFrame())
@@ -1020,7 +1108,6 @@ void MediaDevices::CloseFocusWindowOfOpportunity(
   }
 
   if (capture_controller) {
-    DCHECK(RuntimeEnabledFeatures::ConditionalFocusEnabled(context));
     capture_controller->FinalizeFocusDecision();
   }
 

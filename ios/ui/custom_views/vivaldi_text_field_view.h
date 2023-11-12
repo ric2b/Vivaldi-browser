@@ -33,6 +33,12 @@ typedef NS_ENUM(NSUInteger, URLValidationType) {
 - (void)setURLMode;
 /// Set URL Validation type. e.g. Domain or Generic URL.
 - (void)setURLValidationType:(URLValidationType)type;
+/// Set focus and opens the keyboard
+- (void)setFocus;
+/// Set auto correct disabled.
+/// Preferred in certain places like adding domain or exceptions
+/// in Adblocker settings.
+- (void)setAutoCorrectDisabled:(BOOL)disable;
 
 // GETTERS
 - (BOOL)hasText;

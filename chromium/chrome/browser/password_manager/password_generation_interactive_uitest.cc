@@ -14,12 +14,12 @@
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/password_manager/passwords_navigation_observer.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/password_generation_popup_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -79,34 +79,30 @@ class PasswordGenerationInteractiveTest
   void WaitForNonEmptyFieldValue(const std::string& field_id) {
     const std::string script = base::StringPrintf(
         "element = document.getElementById('%s');"
-        "if (!element) {"
-        "  setTimeout(window.domAutomationController.send(%d), 0);"
-        "}"
-        "if (element.value) {"
-        "  setTimeout(window.domAutomationController.send(%d), 0); "
-        "} else {"
-        "  element.onchange = function() {"
-        "    if (element.value) {"
-        "      window.domAutomationController.send(%d);"
+        "new Promise(resolve => {"
+        "  if (!element) {"
+        "    setTimeout(() => resolve(%d), 0);"
+        "  }"
+        "  if (element.value) {"
+        "    setTimeout(() => resolve(%d), 0); "
+        "  } else {"
+        "    element.onchange = function() {"
+        "      if (element.value) {"
+        "        resove(%d);"
+        "      }"
         "    }"
         "  }"
-        "}",
+        "});",
         field_id.c_str(), RETURN_CODE_NO_ELEMENT, RETURN_CODE_OK,
         RETURN_CODE_OK);
     EXPECT_EQ(RETURN_CODE_OK,
               content::EvalJs(RenderFrameHost(), script,
-                              content::EXECUTE_SCRIPT_NO_USER_GESTURE |
-                                  content::EXECUTE_SCRIPT_USE_MANUAL_REPLY));
+                              content::EXECUTE_SCRIPT_NO_USER_GESTURE));
   }
 
   std::string GetFocusedElement() {
-    std::string focused_element;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-        WebContents(),
-        "window.domAutomationController.send("
-        "    document.activeElement.id)",
-        &focused_element));
-    return focused_element;
+    return content::EvalJs(WebContents(), "document.activeElement.id")
+        .ExtractString();
   }
 
   void FocusPasswordField() {
@@ -224,7 +220,7 @@ IN_PROC_BROWSER_TEST_F(PasswordGenerationInteractiveTest,
   // The same flow happens when user generates a password from the context menu.
   password_manager_util::UserTriggeredManualGenerationFromContextMenu(
       ChromePasswordManagerClient::FromWebContents(WebContents()),
-      autofill::ChromeAutofillClient::FromWebContents(WebContents()));
+      autofill::ContentAutofillClient::FromWebContents(WebContents()));
   WaitForStatus(TestGenerationPopupObserver::GenerationPopup::kShown);
   EXPECT_TRUE(GenerationPopupShowing());
   SendKeyToPopup(ui::VKEY_DOWN);
@@ -267,7 +263,7 @@ IN_PROC_BROWSER_TEST_F(
   // The user generates a password from the context menu.
   password_manager_util::UserTriggeredManualGenerationFromContextMenu(
       ChromePasswordManagerClient::FromWebContents(WebContents()),
-      autofill::ChromeAutofillClient::FromWebContents(WebContents()));
+      autofill::ContentAutofillClient::FromWebContents(WebContents()));
   WaitForStatus(TestGenerationPopupObserver::GenerationPopup::kShown);
   EXPECT_TRUE(GenerationPopupShowing());
 
@@ -279,7 +275,7 @@ IN_PROC_BROWSER_TEST_F(
       ObservingAutofillClient::FromWebContents(WebContents());
   password_manager::ContentPasswordManagerDriver* driver =
       driver_factory->GetDriverForFrame(WebContents()->GetPrimaryMainFrame());
-  driver->GetPasswordAutofillManager()->set_autofill_client(
+  driver->GetPasswordAutofillManager()->set_autofill_client_for_test(
       observing_autofill_client);
 
   // Click on the password field to display the autofill popup.

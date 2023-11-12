@@ -99,6 +99,8 @@ api::scripting::ExecutionWorld ConvertExecutionWorldForAPI(
       return api::scripting::EXECUTION_WORLD_ISOLATED;
     case mojom::ExecutionWorld::kMain:
       return api::scripting::EXECUTION_WORLD_MAIN;
+    case mojom::ExecutionWorld::kUserScript:
+      NOTREACHED() << "UserScript worlds are not supported in this API.";
   }
 
   NOTREACHED();
@@ -467,8 +469,9 @@ std::unique_ptr<UserScript> ParseUserScript(
   result->set_host_id(
       mojom::HostID(mojom::HostID::HostType::kExtensions, extension.id()));
 
-  if (content_script.run_at != api::extension_types::RUN_AT_NONE)
+  if (content_script.run_at != api::extension_types::RunAt::kNone) {
     result->set_run_location(ConvertRunLocation(content_script.run_at));
+  }
 
   if (content_script.all_frames)
     result->set_match_all_frames(*content_script.all_frames);
@@ -579,8 +582,8 @@ ScriptingExecuteScriptFunction::ScriptingExecuteScriptFunction() = default;
 ScriptingExecuteScriptFunction::~ScriptingExecuteScriptFunction() = default;
 
 ExtensionFunction::ResponseAction ScriptingExecuteScriptFunction::Run() {
-  std::unique_ptr<api::scripting::ExecuteScript::Params> params(
-      api::scripting::ExecuteScript::Params::Create(args()));
+  absl::optional<api::scripting::ExecuteScript::Params> params =
+      api::scripting::ExecuteScript::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
   injection_ = std::move(params->injection);
 
@@ -746,8 +749,8 @@ ScriptingInsertCSSFunction::ScriptingInsertCSSFunction() = default;
 ScriptingInsertCSSFunction::~ScriptingInsertCSSFunction() = default;
 
 ExtensionFunction::ResponseAction ScriptingInsertCSSFunction::Run() {
-  std::unique_ptr<api::scripting::InsertCSS::Params> params(
-      api::scripting::InsertCSS::Params::Create(args()));
+  absl::optional<api::scripting::InsertCSS::Params> params =
+      api::scripting::InsertCSS::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   injection_ = std::move(params->injection);
@@ -847,8 +850,8 @@ ScriptingRemoveCSSFunction::ScriptingRemoveCSSFunction() = default;
 ScriptingRemoveCSSFunction::~ScriptingRemoveCSSFunction() = default;
 
 ExtensionFunction::ResponseAction ScriptingRemoveCSSFunction::Run() {
-  std::unique_ptr<api::scripting::RemoveCSS::Params> params(
-      api::scripting::RemoveCSS::Params::Create(args()));
+  absl::optional<api::scripting::RemoveCSS::Params> params =
+      api::scripting::RemoveCSS::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   api::scripting::CSSInjection& injection = params->injection;
@@ -927,8 +930,8 @@ ScriptingRegisterContentScriptsFunction::
 
 ExtensionFunction::ResponseAction
 ScriptingRegisterContentScriptsFunction::Run() {
-  std::unique_ptr<api::scripting::RegisterContentScripts::Params> params(
-      api::scripting::RegisterContentScripts::Params::Create(args()));
+  absl::optional<api::scripting::RegisterContentScripts::Params> params =
+      api::scripting::RegisterContentScripts::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::vector<api::scripting::RegisteredContentScript>& scripts =
@@ -1010,6 +1013,12 @@ ScriptingRegisterContentScriptsFunction::Run() {
 void ScriptingRegisterContentScriptsFunction::OnContentScriptFilesValidated(
     std::set<std::string> persistent_script_ids,
     ValidateContentScriptsResult result) {
+  // We cannot proceed if the `browser_context` is not valid as the
+  // `ExtensionSystem` will not exist.
+  if (!browser_context()) {
+    return;
+  }
+
   auto error = std::move(result.second);
   auto scripts = std::move(result.first);
   ExtensionUserScriptLoader* loader =
@@ -1051,8 +1060,8 @@ ScriptingGetRegisteredContentScriptsFunction::
 
 ExtensionFunction::ResponseAction
 ScriptingGetRegisteredContentScriptsFunction::Run() {
-  std::unique_ptr<api::scripting::GetRegisteredContentScripts::Params> params(
-      api::scripting::GetRegisteredContentScripts::Params::Create(args()));
+  absl::optional<api::scripting::GetRegisteredContentScripts::Params> params =
+      api::scripting::GetRegisteredContentScripts::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const absl::optional<api::scripting::ContentScriptFilter>& filter =
@@ -1093,7 +1102,8 @@ ScriptingUnregisterContentScriptsFunction::
 
 ExtensionFunction::ResponseAction
 ScriptingUnregisterContentScriptsFunction::Run() {
-  auto params(api::scripting::UnregisterContentScripts::Params::Create(args()));
+  auto params =
+      api::scripting::UnregisterContentScripts::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   absl::optional<api::scripting::ContentScriptFilter>& filter = params->filter;
@@ -1151,8 +1161,8 @@ ScriptingUpdateContentScriptsFunction::
     ~ScriptingUpdateContentScriptsFunction() = default;
 
 ExtensionFunction::ResponseAction ScriptingUpdateContentScriptsFunction::Run() {
-  std::unique_ptr<api::scripting::UpdateContentScripts::Params> params(
-      api::scripting::UpdateContentScripts::Params::Create(args()));
+  absl::optional<api::scripting::UpdateContentScripts::Params> params =
+      api::scripting::UpdateContentScripts::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   std::vector<api::scripting::RegisteredContentScript>& scripts =
@@ -1229,8 +1239,9 @@ ExtensionFunction::ResponseAction ScriptingUpdateContentScriptsFunction::Run() {
           *update_delta.match_origin_as_fallback;
     }
 
-    if (update_delta.run_at != api::extension_types::RUN_AT_NONE)
+    if (update_delta.run_at != api::extension_types::RunAt::kNone) {
       updated_script.run_at = update_delta.run_at;
+    }
 
     // Parse/Create user script.
     std::unique_ptr<UserScript> user_script =
@@ -1273,6 +1284,12 @@ ExtensionFunction::ResponseAction ScriptingUpdateContentScriptsFunction::Run() {
 void ScriptingUpdateContentScriptsFunction::OnContentScriptFilesValidated(
     std::set<std::string> persistent_script_ids,
     ValidateContentScriptsResult result) {
+  // We cannot proceed if the `browser_context` is not valid as the
+  // `ExtensionSystem` will not exist.
+  if (!browser_context()) {
+    return;
+  }
+
   auto error = std::move(result.second);
   auto scripts = std::move(result.first);
   ExtensionUserScriptLoader* loader =

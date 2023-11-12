@@ -99,7 +99,7 @@ TEST(CommitContributionImplTest, PopulateCommitProtoDefault) {
   EXPECT_EQ(modification_time.ToJsTime(), entity.mtime());
   EXPECT_EQ(creation_time.ToJsTime(), entity.ctime());
   EXPECT_FALSE(entity.name().empty());
-  EXPECT_FALSE(entity.client_defined_unique_tag().empty());
+  EXPECT_FALSE(entity.client_tag_hash().empty());
   EXPECT_EQ(kTag.value(), entity.specifics().preference().name());
   EXPECT_FALSE(entity.deleted());
   EXPECT_EQ(kValue, entity.specifics().preference().value());
@@ -140,7 +140,7 @@ TEST(CommitContributionImplTest, PopulateCommitProtoBookmark) {
   EXPECT_EQ(modification_time.ToJsTime(), entity.mtime());
   EXPECT_EQ(creation_time.ToJsTime(), entity.ctime());
   EXPECT_FALSE(entity.name().empty());
-  EXPECT_TRUE(entity.client_defined_unique_tag().empty());
+  EXPECT_TRUE(entity.client_tag_hash().empty());
   EXPECT_EQ(kURL, entity.specifics().bookmark().url());
   EXPECT_FALSE(entity.deleted());
   EXPECT_EQ(kTitle, entity.specifics().bookmark().legacy_canonicalized_title());
@@ -182,7 +182,7 @@ TEST(CommitContributionImplTest, PopulateCommitProtoBookmarkFolder) {
   EXPECT_EQ(modification_time.ToJsTime(), entity.mtime());
   EXPECT_EQ(creation_time.ToJsTime(), entity.ctime());
   EXPECT_FALSE(entity.name().empty());
-  EXPECT_TRUE(entity.client_defined_unique_tag().empty());
+  EXPECT_TRUE(entity.client_tag_hash().empty());
   EXPECT_FALSE(entity.specifics().bookmark().has_url());
   EXPECT_FALSE(entity.deleted());
   EXPECT_EQ(kTitle, entity.specifics().bookmark().legacy_canonicalized_title());
@@ -195,7 +195,6 @@ TEST(CommitContributionImplTest, PopulateCommitProtoBookmarkFolder) {
 // is properly encrypted except for password metadata.
 TEST(CommitContributionImplTest,
      PopulateCommitProtoPasswordWithoutCustomPassphrase) {
-  const std::string kMetadataUrl = "http://foo.com";
   const std::string kSignonRealm = "signon_realm";
   const int64_t kBaseVersion = 7;
   const int kDummyTimestamp = 123;
@@ -208,7 +207,13 @@ TEST(CommitContributionImplTest,
   password_data->set_date_last_used(kDummyTimestamp);
 
   data->specifics.mutable_password()->mutable_unencrypted_metadata()->set_url(
-      kMetadataUrl);
+      kSignonRealm);
+  data->specifics.mutable_password()
+      ->mutable_unencrypted_metadata()
+      ->set_blacklisted(false);
+  data->specifics.mutable_password()
+      ->mutable_unencrypted_metadata()
+      ->set_date_last_used_windows_epoch_micros(kDummyTimestamp);
 
   auto request_data = std::make_unique<CommitRequestData>();
   request_data->sequence_number = 2;
@@ -239,7 +244,7 @@ TEST(CommitContributionImplTest,
   EXPECT_TRUE(entity.id_string().empty());
   EXPECT_EQ(7, entity.version());
   EXPECT_EQ("encrypted", entity.name());
-  EXPECT_EQ(kTag.value(), entity.client_defined_unique_tag());
+  EXPECT_EQ(kTag.value(), entity.client_tag_hash());
   EXPECT_FALSE(entity.deleted());
   EXPECT_FALSE(entity.specifics().has_encrypted());
   EXPECT_TRUE(entity.specifics().has_password());
@@ -262,8 +267,8 @@ TEST(CommitContributionImplTest,
 // |unencrypted_metadata| should be cleared.
 TEST(CommitContributionImplTest,
      PopulateCommitProtoPasswordWithCustomPassphrase) {
-  const std::string kMetadataUrl = "http://foo.com";
   const std::string kSignonRealm = "signon_realm";
+  const int kDummyTimestamp = 123;
   const int64_t kBaseVersion = 7;
 
   auto data = std::make_unique<syncer::EntityData>();
@@ -273,7 +278,13 @@ TEST(CommitContributionImplTest,
   password_data->set_signon_realm(kSignonRealm);
 
   data->specifics.mutable_password()->mutable_unencrypted_metadata()->set_url(
-      kMetadataUrl);
+      kSignonRealm);
+  data->specifics.mutable_password()
+      ->mutable_unencrypted_metadata()
+      ->set_blacklisted(false);
+  data->specifics.mutable_password()
+      ->mutable_unencrypted_metadata()
+      ->set_date_last_used_windows_epoch_micros(kDummyTimestamp);
 
   auto request_data = std::make_unique<CommitRequestData>();
   request_data->sequence_number = 2;
@@ -304,7 +315,7 @@ TEST(CommitContributionImplTest,
   EXPECT_TRUE(entity.id_string().empty());
   EXPECT_EQ(7, entity.version());
   EXPECT_EQ("encrypted", entity.name());
-  EXPECT_EQ(kTag.value(), entity.client_defined_unique_tag());
+  EXPECT_EQ(kTag.value(), entity.client_tag_hash());
   EXPECT_FALSE(entity.deleted());
   EXPECT_FALSE(entity.specifics().has_encrypted());
   EXPECT_TRUE(entity.specifics().has_password());

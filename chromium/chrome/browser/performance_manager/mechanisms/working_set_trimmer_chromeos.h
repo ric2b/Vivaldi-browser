@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_PERFORMANCE_MANAGER_MECHANISMS_WORKING_SET_TRIMMER_CHROMEOS_H_
 #define CHROME_BROWSER_PERFORMANCE_MANAGER_MECHANISMS_WORKING_SET_TRIMMER_CHROMEOS_H_
 
+#include "ash/components/arc/mojom/memory.mojom-forward.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/no_destructor.h"
 #include "base/process/process_handle.h"
+#include "base/timer/elapsed_timer.h"
 #include "chrome/browser/performance_manager/mechanisms/working_set_trimmer.h"
 
 namespace content {
@@ -42,7 +45,7 @@ class WorkingSetTrimmerChromeOS : public WorkingSetTrimmer {
 
   // WorkingSetTrimmer implementation:
   bool PlatformSupportsWorkingSetTrim() override;
-  bool TrimWorkingSet(const ProcessNode* process_node) override;
+  void TrimWorkingSet(const ProcessNode* process_node) override;
 
  private:
   friend class base::NoDestructor<WorkingSetTrimmerChromeOS>;
@@ -57,7 +60,7 @@ class WorkingSetTrimmerChromeOS : public WorkingSetTrimmer {
       content::BrowserContext* context);
 
   // TrimWorkingSet based on ProcessId |pid|.
-  bool TrimWorkingSet(base::ProcessId pid);
+  void TrimWorkingSet(base::ProcessId pid);
 
   // Asks vm_concierge to trim ARCVM's memory in the same way as TrimWorkingSet.
   // The function must be called on the UI thread.
@@ -73,12 +76,22 @@ class WorkingSetTrimmerChromeOS : public WorkingSetTrimmer {
                          int page_limit,
                          bool result);
 
+  // |elapsed_timer| measures the time since the reclaim operation started.
+  void OnArcVmMemoryGuestReclaim(
+      std::unique_ptr<base::ElapsedTimer> elapsed_timer,
+      TrimArcVmWorkingSetCallback callback,
+      arc::mojom::ReclaimResultPtr result);
+
+  void LogErrorAndInvokeCallback(const char* error,
+                                 TrimArcVmWorkingSetCallback callback);
+
   // The constructor is made private to prevent instantiation of this class
   // directly, it should always be retrieved via
   // WorkingSetTrimmer::GetInstance().
   WorkingSetTrimmerChromeOS();
 
-  content::BrowserContext* context_for_testing_ = nullptr;
+  raw_ptr<content::BrowserContext, ExperimentalAsh> context_for_testing_ =
+      nullptr;
 
   base::WeakPtrFactory<WorkingSetTrimmerChromeOS> weak_factory_{this};
 };

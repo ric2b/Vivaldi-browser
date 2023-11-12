@@ -10,9 +10,9 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/sync_service_factory.h"
-#include "components/image_service/image_service.h"
+#include "components/page_image_service/image_service.h"
 
-namespace image_service {
+namespace page_image_service {
 
 // static
 ImageService* ImageServiceFactory::GetForBrowserContext(
@@ -28,7 +28,14 @@ ImageServiceFactory& ImageServiceFactory::GetInstance() {
 }
 
 ImageServiceFactory::ImageServiceFactory()
-    : ProfileKeyedServiceFactory("ImageService") {
+    : ProfileKeyedServiceFactory(
+          "ImageService",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOriginalOnly)
+              .Build()) {
   DependsOn(OptimizationGuideKeyedServiceFactory::GetInstance());
   DependsOn(SyncServiceFactory::GetInstance());
 }
@@ -49,4 +56,4 @@ void ImageServiceFactory::EnsureFactoryBuilt() {
   GetInstance();
 }
 
-}  // namespace image_service
+}  // namespace page_image_service

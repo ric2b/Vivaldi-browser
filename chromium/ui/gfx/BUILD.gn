@@ -9,6 +9,10 @@ import("//device/vr/buildflags/buildflags.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 
+if (is_ios) {
+  import("//build/config/ios/bundle_data_from_filelist.gni")
+}
+
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
@@ -403,6 +407,7 @@ component("gfx") {
 
   if (is_apple) {
     frameworks = [ "IOSurface.framework" ]
+    deps += [ "//ui/base:features" ]
   }
   if (is_mac) {
     frameworks += [
@@ -495,6 +500,12 @@ source_set("native_widget_types") {
     ":gfx_export",
     "//base",
   ]
+
+  if (is_mac) {
+    sources = [ "native_widget_types.mm" ]
+
+    frameworks = [ "AppKit.framework" ]
+  }
 
   deps = [ "//build:chromeos_buildflags" ]
 }
@@ -848,10 +859,12 @@ test("gfx_unittests") {
   ]
 
   if (use_blink) {
-    sources += [
-      "bidi_line_iterator_unittest.cc",
-      "render_text_unittest.cc",
-    ]
+    sources += [ "bidi_line_iterator_unittest.cc" ]
+    if (!is_ios) {
+      # TODO(crbug.com/1428953): many render text tests fail on iOS, even when
+      # use_blink is true.
+      sources += [ "render_text_unittest.cc" ]
+    }
     deps += [ "//third_party:freetype_harfbuzz" ]
   }
 
@@ -979,4 +992,11 @@ fuzzer_test("render_text_api_fuzzer") {
   ]
 
   dict = "test/data/render_text/unicode_text_fuzzer.dict"
+}
+
+if (is_ios) {
+  bundle_data_from_filelist("unit_tests_bundle_data") {
+    testonly = true
+    filelist_name = "test/data/unit_tests_bundle_data.filelist"
+  }
 }

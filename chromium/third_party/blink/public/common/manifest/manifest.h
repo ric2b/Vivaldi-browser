@@ -14,7 +14,10 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/common_export.h"
+#include "third_party/blink/public/common/url_pattern.h"
+#include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
+#include "third_party/blink/public/mojom/manifest/manifest_launch_handler.mojom-forward.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -137,13 +140,16 @@ class BLINK_COMMON_EXPORT Manifest {
   struct BLINK_COMMON_EXPORT LaunchHandler {
     using ClientMode = mojom::ManifestLaunchHandler_ClientMode;
 
+    LaunchHandler();
+    explicit LaunchHandler(ClientMode client_mode);
+
     bool operator==(const LaunchHandler& other) const;
     bool operator!=(const LaunchHandler& other) const;
 
     bool TargetsExistingClients() const;
     bool NeverNavigateExistingClients() const;
 
-    ClientMode client_mode = ClientMode::kAuto;
+    ClientMode client_mode;
   };
 
   // Structure containing translations for the translatable manifest fields.
@@ -166,6 +172,7 @@ class BLINK_COMMON_EXPORT Manifest {
     bool operator==(const HomeTabParams& other) const;
 
     std::vector<ImageResource> icons;
+    std::vector<UrlPattern> scope_patterns;
   };
 
   // Parameters for the new tab button customisation to the tab strip.

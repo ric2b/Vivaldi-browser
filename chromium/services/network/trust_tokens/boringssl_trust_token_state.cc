@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "third_party/boringssl/src/include/openssl/base.h"
@@ -29,6 +30,12 @@ std::unique_ptr<BoringsslTrustTokenState> BoringsslTrustTokenState::Create(
     case mojom::TrustTokenProtocolVersion::kTrustTokenV3Voprf:
       method = TRUST_TOKEN_experiment_v2_voprf();
       break;
+    case mojom::TrustTokenProtocolVersion::kPrivateStateTokenV1Pmb:
+      method = TRUST_TOKEN_pst_v1_pmb();
+      break;
+    case mojom::TrustTokenProtocolVersion::kPrivateStateTokenV1Voprf:
+      method = TRUST_TOKEN_pst_v1_voprf();
+      break;
   }
 
   auto ctx = bssl::UniquePtr<TRUST_TOKEN_CLIENT>(TRUST_TOKEN_CLIENT_new(
@@ -38,7 +45,7 @@ std::unique_ptr<BoringsslTrustTokenState> BoringsslTrustTokenState::Create(
     return nullptr;
   }
 
-  return absl::WrapUnique(new BoringsslTrustTokenState(std::move(ctx)));
+  return base::WrapUnique(new BoringsslTrustTokenState(std::move(ctx)));
 }
 
 BoringsslTrustTokenState::~BoringsslTrustTokenState() = default;

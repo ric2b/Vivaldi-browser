@@ -86,7 +86,6 @@ class MockAutofillManager : public AutofillManager {
   }
 
   MOCK_METHOD(bool, ShouldClearPreviewedForm, (), (override));
-  MOCK_METHOD(AutofillOfferManager*, GetOfferManager, (), (override));
   MOCK_METHOD(CreditCardAccessManager*,
               GetCreditCardAccessManager,
               (),
@@ -96,13 +95,15 @@ class MockAutofillManager : public AutofillManager {
               (const FormData& form,
                const FormFieldData& field,
                const CreditCard& credit_card,
-               const std::u16string& cvc),
+               const std::u16string& cvc,
+               const AutofillTriggerSource trigger_source),
               (override));
   MOCK_METHOD(void,
               FillProfileFormImpl,
               (const FormData& form,
                const FormFieldData& field,
-               const AutofillProfile& profile),
+               const AutofillProfile& profile,
+               const AutofillTriggerSource trigger_source),
               (override));
   MOCK_METHOD(void,
               OnFocusNoLongerOnFormImpl,
@@ -168,10 +169,7 @@ class MockAutofillManager : public AutofillManager {
                const FormFieldData& field,
                const gfx::RectF& bounding_box),
               (override));
-  MOCK_METHOD(bool,
-              ShouldParseForms,
-              (const std::vector<FormData>& forms),
-              (override));
+  MOCK_METHOD(bool, ShouldParseForms, (), (override));
   MOCK_METHOD(void, OnBeforeProcessParsedForms, (), (override));
   MOCK_METHOD(void,
               OnFormProcessed,
@@ -309,7 +307,7 @@ class AutofillManagerTest : public testing::Test {
  protected:
   base::test::ScopedFeatureList scoped_feature_list_async_parse_form_;
   base::test::TaskEnvironment task_environment_;
-  test::AutofillEnvironment autofill_environment_;
+  test::AutofillUnitTestEnvironment autofill_test_environment_;
   NiceMock<MockAutofillClient> client_;
   std::unique_ptr<MockAutofillDriver> driver_;
   std::unique_ptr<MockAutofillManager> manager_;

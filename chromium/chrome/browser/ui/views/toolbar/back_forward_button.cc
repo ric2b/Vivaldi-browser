@@ -5,6 +5,8 @@
 #include "chrome/browser/ui/views/toolbar/back_forward_button.h"
 
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/chained_back_navigation_tracker.h"
+#include "chrome/browser/preloading/chrome_preloading.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/toolbar/back_forward_menu_model.h"
@@ -13,8 +15,11 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/ui_base_features.h"
+#include "ui/base/window_open_disposition_utils.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/view_class_properties.h"
 
@@ -28,12 +33,16 @@ BackForwardButton::BackForwardButton(Direction direction,
                             ? BackForwardMenuModel::ModelType::kBackward
                             : BackForwardMenuModel::ModelType::kForward),
                     browser->tab_strip_model()),
-      browser_(browser) {
+      browser_(browser),
+      direction_(direction) {
   SetHideInkDropWhenShowingContextMenu(false);
   SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON |
                            ui::EF_MIDDLE_MOUSE_BUTTON);
   if (direction == Direction::kBack) {
-    SetVectorIcons(vector_icons::kBackArrowIcon, kBackArrowTouchIcon);
+    SetVectorIcons(features::IsChromeRefresh2023()
+                       ? vector_icons::kBackArrowChromeRefreshIcon
+                       : vector_icons::kBackArrowIcon,
+                   kBackArrowTouchIcon);
     SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_BACK));
     SetAccessibleName(l10n_util::GetStringUTF16(IDS_ACCNAME_BACK));
     GetViewAccessibility().OverrideDescription(
@@ -41,7 +50,10 @@ BackForwardButton::BackForwardButton(Direction direction,
     SetID(VIEW_ID_BACK_BUTTON);
     SetProperty(views::kElementIdentifierKey, kBackButtonElementId);
   } else {
-    SetVectorIcons(vector_icons::kForwardArrowIcon, kForwardArrowTouchIcon);
+    SetVectorIcons(features::IsChromeRefresh2023()
+                       ? vector_icons::kForwardArrowChromeRefreshIcon
+                       : vector_icons::kForwardArrowIcon,
+                   kForwardArrowTouchIcon);
     SetTooltipText(l10n_util::GetStringUTF16(IDS_TOOLTIP_FORWARD));
     SetAccessibleName(l10n_util::GetStringUTF16(IDS_ACCNAME_FORWARD));
     GetViewAccessibility().OverrideDescription(
@@ -75,10 +87,50 @@ void BackForwardButton::NotifyClick(const ui::Event& event) {
       GetViewAccessibility().AnnounceText(message);
   }
 
+  content::WebContents* web_contents =
+      browser_->tab_strip_model()->GetActiveWebContents();
+  chrome::ChainedBackNavigationTracker* tracker =
+      chrome::ChainedBackNavigationTracker::FromWebContents(web_contents);
+  CHECK(tracker);
+  tracker->RecordBackButtonClickForChainedBackNavigation();
+
   // Do this last because upon activation the MenuModel gets updated, removing
   // the label for the page about to be loaded. However, the title associated
   // with the ContentsWebView has not yet been updated.
   ToolbarButton::NotifyClick(event);
+}
+
+void BackForwardButton::StateChanged(ButtonState old_state) {
+  ToolbarButton::StateChanged(old_state);
+  if (direction_ != Direction::kBack) {
+    return;
+  }
+
+  if (old_state == ButtonState::STATE_NORMAL &&
+      GetState() == ButtonState::STATE_HOVERED) {
+    content::WebContents* active_contents =
+        browser_->tab_strip_model()->GetActiveWebContents();
+    if (active_contents) {
+      active_contents->BackNavigationLikely(
+          chrome_preloading_predictor::kBackButtonHover,
+          last_back_assumed_disposition_);
+    }
+  }
+}
+
+void BackForwardButton::OnMouseEntered(const ui::MouseEvent& event) {
+  if (direction_ == Direction::kBack) {
+    // Record this before the event triggers `StateChanged` via
+    // `ToolbarButton::OnMouseEntered`.
+    last_back_assumed_disposition_ = ui::DispositionFromEventFlags(
+        event.flags(), WindowOpenDisposition::CURRENT_TAB);
+  }
+
+  ToolbarButton::OnMouseEntered(event);
+}
+
+bool BackForwardButton::ShouldShowInkdropAfterIphInteraction() {
+  return false;
 }
 
 BEGIN_METADATA(BackForwardButton, ToolbarButton)

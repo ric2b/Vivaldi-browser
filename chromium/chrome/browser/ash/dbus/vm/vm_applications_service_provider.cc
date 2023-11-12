@@ -24,7 +24,7 @@
 #include "chrome/browser/ash/guest_os/guest_os_terminal.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_util.h"
-#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
+#include "chrome/browser/chromeos/policy/dlp/dlp_file_destination.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
@@ -113,6 +113,12 @@ void VmApplicationsServiceProvider::UpdateApplicationList(
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
   auto* registry_service =
       guest_os::GuestOsRegistryServiceFactory::GetForProfile(profile);
+  if (!registry_service) {
+    std::move(response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(method_call, DBUS_ERROR_FAILED,
+                                                 "Shutting down"));
+    return;
+  }
   registry_service->UpdateApplicationList(request);
 
   std::move(response_sender).Run(dbus::Response::FromMethodCall(method_call));
@@ -168,8 +174,15 @@ void VmApplicationsServiceProvider::UpdateMimeTypes(
   }
 
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
-  guest_os::GuestOsMimeTypesServiceFactory::GetForProfile(profile)
-      ->UpdateMimeTypes(request);
+  auto* mime_types_service =
+      guest_os::GuestOsMimeTypesServiceFactory::GetForProfile(profile);
+  if (!mime_types_service) {
+    std::move(response_sender)
+        .Run(dbus::ErrorResponse::FromMethodCall(method_call, DBUS_ERROR_FAILED,
+                                                 "Shutting down"));
+    return;
+  }
+  mime_types_service->UpdateMimeTypes(request);
 
   std::move(response_sender).Run(dbus::Response::FromMethodCall(method_call));
 }
@@ -226,7 +239,7 @@ void VmApplicationsServiceProvider::SelectFile(
     ui::EndpointType source = ui::EndpointType::kUnknownVm;
     if (request.vm_name() == crostini::kCrostiniDefaultVmName) {
       source = ui::EndpointType::kCrostini;
-      owner.dialog_caller = policy::DlpFilesController::DlpFileDestination(
+      owner.dialog_caller = policy::DlpFileDestination(
           policy::DlpRulesManager::Component::kCrostini);
     }
     std::vector<base::FilePath> paths =

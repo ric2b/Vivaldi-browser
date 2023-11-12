@@ -54,15 +54,6 @@ class GuestViewInternalCustomBindings : public ObjectBackedNativeHandler {
   void RegisterDestructionCallback(
       const v8::FunctionCallbackInfo<v8::Value>& args);
 
-  // Takes no params, returns true if running vivaldi.
-  void IsVivaldi(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  // RegisterElementResizeCallback registers a JavaScript callback function to
-  // be called when the element is resized. RegisterElementResizeCallback takes
-  // a single parameter, |callback|.
-  void RegisterElementResizeCallback(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-
   // RegisterView takes in a view ID and a GuestView element, and stores the
   // pair as an entry in |view_map_|. The view can then be retrieved using
   // GetViewFromID.
@@ -82,6 +73,9 @@ class GuestViewInternalCustomBindings : public ObjectBackedNativeHandler {
   // with allowlisted custom element names.
   void AllowGuestViewElementDefinition(
       const v8::FunctionCallbackInfo<v8::Value>& args);
+
+  // Takes no params, returns true if running vivaldi.
+  void IsVivaldi(const v8::FunctionCallbackInfo<v8::Value>& args);
 };
 
 }  // namespace extensions

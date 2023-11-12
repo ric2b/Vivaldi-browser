@@ -17,7 +17,6 @@
 #include "chrome/browser/ash/phonehub/phone_hub_manager_factory.h"
 #include "chrome/browser/ash/printing/cups_printers_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/webui/settings/ash/constants/constants_util.h"
 #include "chrome/browser/ui/webui/settings/ash/hierarchy.h"
@@ -27,12 +26,14 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/local_search_service/public/cpp/local_search_service_proxy.h"
 #include "chromeos/ash/components/local_search_service/public/cpp/local_search_service_proxy_factory.h"
 #include "chromeos/ash/components/local_search_service/search_metrics_reporter.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/accessibility_features.h"
+#include "ui/base/ime/ash/mock_input_method_manager.h"
 
 namespace ash::settings {
 
@@ -52,7 +53,8 @@ class OsSettingsManagerTest : public testing::Test {
   // testing::Test:
   void SetUp() override {
     scoped_feature_list_.InitWithFeatures(
-        {::features::kAccessibilitySelectToSpeakPageMigration,
+        {::features::kAccessibilityChromeVoxPageMigration,
+         ::features::kAccessibilitySelectToSpeakPageMigration,
          ash::features::kInputDeviceSettingsSplit},
         {});
     ASSERT_TRUE(profile_manager_.SetUp());
@@ -63,6 +65,10 @@ class OsSettingsManagerTest : public testing::Test {
         pref_service_.registry());
     local_search_service::LocalSearchServiceProxyFactory::GetInstance()
         ->SetLocalState(&pref_service_);
+    input_method::MockInputMethodManager::Initialize(
+        new input_method::MockInputMethodManager);
+
+    UserDataAuthClient::InitializeFake();
 
     manager_ = std::make_unique<OsSettingsManager>(
         profile, local_search_service_proxy_.get(),
@@ -70,7 +76,6 @@ class OsSettingsManagerTest : public testing::Test {
             profile),
         phonehub::PhoneHubManagerFactory::GetForProfile(profile),
         SyncServiceFactory::GetForProfile(profile),
-        SupervisedUserServiceFactory::GetForProfile(profile),
         KerberosCredentialsManagerFactory::Get(profile),
         ArcAppListPrefsFactory::GetForBrowserContext(profile),
         IdentityManagerFactory::GetForProfile(profile),

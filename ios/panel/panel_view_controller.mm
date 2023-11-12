@@ -5,9 +5,9 @@
 #import <stdint.h>
 
 #import "base/strings/utf_string_conversions.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
-#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -100,14 +100,13 @@ using l10n_util::GetNSString;
   [topView.heightAnchor constraintEqualToConstant:panel_search_view_height]
         .active = YES;
   positionConstraint.active = YES;
-
   // Create and add segmentedControl
   segmentedControl = [[UISegmentedControl alloc]
                       initWithItems:@[
-                [UIImage imageNamed:vOverflowBookmarks],
-                [UIImage imageNamed:vOverflowReadingList],
-                [UIImage imageNamed:vOverflowHistory],
-                [UIImage imageNamed:vOverflowNotes]]];
+                [UIImage imageNamed:vPanelBookmarks],
+                [UIImage imageNamed:vPanelReadingList],
+                [UIImage imageNamed:vPanelHistory],
+                [UIImage imageNamed:vPanelNotes]]];
   [segmentedControl addTarget:self action:@selector(segmentTapped:)
                  forControlEvents:UIControlEventValueChanged];
   self.segmentControl = segmentedControl;

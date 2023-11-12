@@ -82,15 +82,17 @@ bool ThemeSelectionScreen::ShouldBeSkipped(const WizardContext& context) const {
   const PrefService::Preference* pref =
       ProfileManager::GetActiveUserProfile()->GetPrefs()->FindPreference(
           prefs::kDarkModeScheduleType);
-  if (pref->IsManaged() || pref->IsRecommended() ||
-      !features::IsDarkLightModeEnabled()) {
+  if (pref->IsManaged() || pref->IsRecommended()) {
     return true;
   }
 
   if (features::IsOobeChoobeEnabled()) {
-    return WizardController::default_controller()
-        ->GetChoobeFlowController()
-        ->ShouldScreenBeSkipped(ThemeSelectionScreenView::kScreenId);
+    auto* choobe_controller =
+        WizardController::default_controller()->choobe_flow_controller();
+    if (choobe_controller) {
+      return choobe_controller->ShouldScreenBeSkipped(
+          ThemeSelectionScreenView::kScreenId);
+    }
   }
 
   return false;
@@ -117,10 +119,6 @@ void ThemeSelectionScreen::OnUserAction(const base::Value::List& args) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   const std::string& action_id = args[0].GetString();
 
-  // Set the nudge shown count to 0 once the user goes through the Dark / Light
-  // setup to avoiding triggering Dark / Light nudge after OOBE.
-  profile->GetPrefs()->SetInteger(prefs::kDarkLightModeNudgeLeftToShowCount, 0);
-
   if (action_id == kUserActionSelect) {
     const SelectedTheme selected_theme =
         static_cast<SelectedTheme>(args[1].GetInt());
@@ -137,10 +135,30 @@ void ThemeSelectionScreen::OnUserAction(const base::Value::List& args) {
     }
   } else if (action_id == kUserActionNext) {
     RecordSelectedTheme(profile);
+    if (features::IsOobeChoobeEnabled()) {
+      auto* choobe_controller =
+          WizardController::default_controller()->choobe_flow_controller();
+      if (choobe_controller) {
+        choobe_controller->OnScreenCompleted(
+            *ProfileManager::GetActiveUserProfile()->GetPrefs(),
+            ThemeSelectionScreenView::kScreenId);
+      }
+    }
+
     exit_callback_.Run(Result::kProceed);
   } else {
     BaseScreen::OnUserAction(args);
   }
+}
+
+ScreenSummary ThemeSelectionScreen::GetScreenSummary() {
+  ScreenSummary summary;
+  summary.screen_id = ThemeSelectionScreenView::kScreenId;
+  summary.icon_id = "oobe-32:stars";
+  summary.title_id = "choobeThemeSelectionTitle";
+  summary.is_revisitable = true;
+  summary.is_synced = false;
+  return summary;
 }
 
 }  // namespace ash

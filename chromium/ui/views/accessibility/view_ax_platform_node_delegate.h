@@ -29,7 +29,7 @@ namespace ui {
 
 struct AXActionData;
 class AXUniqueId;
-class AXDummyTreeManager;
+class SingleAXTreeManager;
 
 }  // namespace ui
 
@@ -67,7 +67,7 @@ class VIEWS_EXPORT ViewAXPlatformNodeDelegate
   // ui::AXPlatformNodeDelegate.
   const ui::AXNodeData& GetData() const override;
   size_t GetChildCount() const override;
-  gfx::NativeViewAccessible ChildAtIndex(size_t index) override;
+  gfx::NativeViewAccessible ChildAtIndex(size_t index) const override;
   bool HasModalDialog() const override;
   // Also in |ViewAccessibility|.
   bool IsChildOfLeaf() const override;
@@ -161,7 +161,7 @@ class VIEWS_EXPORT ViewAXPlatformNodeDelegate
 
   // A tree manager that is used to hook up `AXPosition` to text fields in
   // Views.
-  mutable std::unique_ptr<ui::AXDummyTreeManager> dummy_tree_manager_;
+  mutable std::unique_ptr<ui::SingleAXTreeManager> single_tree_manager_;
 
   // We own this, but it is reference-counted on some platforms so we can't use
   // a unique_ptr. It is destroyed in the destructor.

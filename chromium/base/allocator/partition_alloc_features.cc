@@ -32,7 +32,7 @@ const base::FeatureParam<UnretainedDanglingPtrMode>
 
 BASE_FEATURE(kPartitionAllocDanglingPtr,
              "PartitionAllocDanglingPtr",
-#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_FEATURE_FLAGS_FOR_BOTS)
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_FEATURE_FLAG)
              FEATURE_ENABLED_BY_DEFAULT
 #else
              FEATURE_DISABLED_BY_DEFAULT
@@ -104,8 +104,8 @@ BASE_FEATURE(kPartitionAllocLargeEmptySlotSpanRing,
 
 BASE_FEATURE(kPartitionAllocBackupRefPtr,
              "PartitionAllocBackupRefPtr",
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) ||                \
-    BUILDFLAG(ENABLE_DANGLING_RAW_PTR_FEATURE_FLAGS_FOR_BOTS) || \
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) ||    \
+    BUILDFLAG(ENABLE_BACKUP_REF_PTR_FEATURE_FLAG) || \
     (BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) && BUILDFLAG(IS_LINUX))
              FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -124,7 +124,8 @@ constexpr FeatureParam<BackupRefPtrEnabledProcesses>::Option
 const base::FeatureParam<BackupRefPtrEnabledProcesses>
     kBackupRefPtrEnabledProcessesParam {
   &kPartitionAllocBackupRefPtr, "enabled-processes",
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || \
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) ||    \
+    BUILDFLAG(ENABLE_BACKUP_REF_PTR_FEATURE_FLAG) || \
     (BUILDFLAG(USE_ASAN_BACKUP_REF_PTR) && BUILDFLAG(IS_LINUX))
       BackupRefPtrEnabledProcesses::kNonRenderer,
 #else
@@ -137,8 +138,12 @@ constexpr FeatureParam<BackupRefPtrMode>::Option kBackupRefPtrModeOptions[] = {
     {BackupRefPtrMode::kDisabled, "disabled"},
     {BackupRefPtrMode::kEnabled, "enabled"},
     {BackupRefPtrMode::kEnabledWithoutZapping, "enabled-without-zapping"},
+    {BackupRefPtrMode::kEnabledWithMemoryReclaimer,
+     "enabled-with-memory-reclaimer"},
     {BackupRefPtrMode::kDisabledButSplitPartitions2Way,
      "disabled-but-2-way-split"},
+    {BackupRefPtrMode::kDisabledButSplitPartitions2WayWithMemoryReclaimer,
+     "disabled-but-2-way-split-with-memory-reclaimer"},
     {BackupRefPtrMode::kDisabledButSplitPartitions3Way,
      "disabled-but-3-way-split"},
     {BackupRefPtrMode::kDisabledButAddDummyRefCount,
@@ -157,15 +162,21 @@ const base::FeatureParam<bool> kBackupRefPtrAsanEnableExtractionCheckParam{
 const base::FeatureParam<bool> kBackupRefPtrAsanEnableInstantiationCheckParam{
     &kPartitionAllocBackupRefPtr, "asan-enable-instantiation-check", true};
 
-// If enabled, switches the bucket distribution to an alternate one. Only one of
-// these features may b e enabled at a time.
+// If enabled, switches the bucket distribution to an alternate one.
+//
+// We enable this by default everywhere except for 32-bit Android, since we saw
+// regressions there.
 BASE_FEATURE(kPartitionAllocUseAlternateDistribution,
              "PartitionAllocUseAlternateDistribution",
-             FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_32_BITS)
+             FEATURE_DISABLED_BY_DEFAULT
+#else
+             FEATURE_ENABLED_BY_DEFAULT
+#endif  // BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_32_BITS)
+);
 const base::FeatureParam<AlternateBucketDistributionMode>::Option
     kPartitionAllocAlternateDistributionOption[] = {
         {AlternateBucketDistributionMode::kDefault, "default"},
-        {AlternateBucketDistributionMode::kCoarser, "coarser"},
         {AlternateBucketDistributionMode::kDenser, "denser"},
 };
 const base::FeatureParam<AlternateBucketDistributionMode>

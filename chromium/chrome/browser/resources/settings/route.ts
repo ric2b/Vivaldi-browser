@@ -35,6 +35,13 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
         r.PRIVACY_SANDBOX.createChild('/adPrivacy/sites');
     r.PRIVACY_SANDBOX_AD_MEASUREMENT =
         r.PRIVACY_SANDBOX.createChild('/adPrivacy/measurement');
+  } else if (loadTimeData.getBoolean(
+                 'isPrivacySandboxRestrictedNoticeEnabled')) {
+    r.PRIVACY_SANDBOX = r.PRIVACY.createChild('/adPrivacy');
+    // When the view is restricted, but the notice is configured to show, allow
+    // measurement settings only.
+    r.PRIVACY_SANDBOX_AD_MEASUREMENT =
+        r.PRIVACY_SANDBOX.createChild('/adPrivacy/measurement');
   }
 
   // <if expr="use_nss_certs">
@@ -64,12 +71,12 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
   // TODO(tommycli): Find a way to refactor these repetitive category
   // routes.
   r.SITE_SETTINGS_ADS = r.SITE_SETTINGS.createChild('ads');
-  if (loadTimeData.getBoolean('privateStateTokensEnabled')) {
-    r.SITE_SETTINGS_ANTI_ABUSE = r.SITE_SETTINGS.createChild('antiAbuse');
-  }
   r.SITE_SETTINGS_AR = r.SITE_SETTINGS.createChild('ar');
   r.SITE_SETTINGS_AUTOMATIC_DOWNLOADS =
       r.SITE_SETTINGS.createChild('automaticDownloads');
+  if (loadTimeData.getBoolean('privateStateTokensEnabled')) {
+    r.SITE_SETTINGS_AUTO_VERIFY = r.SITE_SETTINGS.createChild('autoVerify');
+  }
   r.SITE_SETTINGS_BACKGROUND_SYNC =
       r.SITE_SETTINGS.createChild('backgroundSync');
   r.SITE_SETTINGS_CAMERA = r.SITE_SETTINGS.createChild('camera');
@@ -168,13 +175,15 @@ function createBrowserSettingsRoutes(): SettingsRoutes {
   if (visibility.autofill !== false) {
     r.AUTOFILL = r.BASIC.createSection(
         '/autofill', 'autofill', loadTimeData.getString('autofillPageTitle'));
-    r.PASSWORDS = r.AUTOFILL.createChild('/passwords');
-    if (loadTimeData.getBoolean('enablePasswordViewPage')) {
-      r.PASSWORD_VIEW = r.PASSWORDS.createChild('view');
-    }
-    r.CHECK_PASSWORDS = r.PASSWORDS.createChild('check');
+    if (!loadTimeData.getBoolean('enableNewPasswordManagerPage')) {
+      r.PASSWORDS = r.AUTOFILL.createChild('/passwords');
+      if (loadTimeData.getBoolean('enablePasswordViewPage')) {
+        r.PASSWORD_VIEW = r.PASSWORDS.createChild('view');
+      }
+      r.CHECK_PASSWORDS = r.PASSWORDS.createChild('check');
 
-    r.DEVICE_PASSWORDS = r.PASSWORDS.createChild('device');
+      r.DEVICE_PASSWORDS = r.PASSWORDS.createChild('device');
+    }
 
     r.PAYMENTS = r.AUTOFILL.createChild('/payments');
     r.ADDRESSES = r.AUTOFILL.createChild('/addresses');
@@ -258,13 +267,20 @@ function createBrowserSettingsRoutes(): SettingsRoutes {
       // </if>
     }
 
-    if (visibility.performance !== false &&
-        ((loadTimeData.getBoolean('highEfficiencyModeAvailable')) ||
-         (loadTimeData.getBoolean('batterySaverModeAvailable')))) {
+    if (visibility.performance !== false) {
       r.PERFORMANCE = r.BASIC.createSection(
           '/performance', 'performance',
           loadTimeData.getString('performancePageTitle'));
     }
+
+    // <if expr="_google_chrome">
+    if (visibility.getMostChrome !== false &&
+        loadTimeData.getBoolean('showGetTheMostOutOfChromeSection')) {
+      r.GET_MOST_CHROME = r.ADVANCED.createSection(
+          '/getMostChrome', 'getMostChrome',
+          loadTimeData.getString('getTheMostOutOfChrome'));
+    }
+    // </if>
   }
   return r as unknown as SettingsRoutes;
 }

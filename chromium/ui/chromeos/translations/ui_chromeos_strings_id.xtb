@@ -84,6 +84,7 @@
 <translation id="1722487484194605434">Membuat file zip <ph name="NUMBER_OF_ITEMS" /> item...</translation>
 <translation id="1722687688096767818">Menambahkan Profil ...</translation>
 <translation id="1726100011689679555">Nama server</translation>
+<translation id="1727562178154619254">Siap disinkronkan</translation>
 <translation id="1729953886957086472">Jerman (Jerman)</translation>
 <translation id="1730235522912993863">Cangjie China</translation>
 <translation id="1731889557567069540"><ph name="NUMBER_OF_ITEMS" /> item disalin.</translation>
@@ -106,7 +107,6 @@
 <translation id="1834290891154666894">Entri kecocokan nama alternatif subjek tidak valid</translation>
 <translation id="1838709767668011582">Situs Google</translation>
 <translation id="1853795129690976061">Folder ini dibagikan ke Linux</translation>
-<translation id="1859422890169495746">Chromebook ini</translation>
 <translation id="1864756863218646478">File tidak dapat ditemukan.</translation>
 <translation id="1884013283844450420">Jaringan <ph name="NETWORK_INDEX" /> dari <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Sambungkan</translation>
 <translation id="1920670151694390848">Transliterasi Malayalam</translation>
@@ -118,7 +118,6 @@
 <translation id="1942765061641586207">Resolusi gambar</translation>
 <translation id="1972984168337863910">Luaskan panel masukan file</translation>
 <translation id="1995337122023280937">Buka lokasi file</translation>
-<translation id="1999709132469742660">Akses file oleh semua URL</translation>
 <translation id="2001796770603320721">Kelola di Drive</translation>
 <translation id="2009067268969781306">Memformat drive akan menghapus semua data yang tersimpan di dalamnya. Tindakan ini tidak dapat diurungkan.</translation>
 <translation id="2025955442973426285">Tigrinya</translation>
@@ -130,6 +129,7 @@
 <translation id="2084108471225856927">Setelan perangkat</translation>
 <translation id="2084809735218147718">Menandatangani terima kasih</translation>
 <translation id="2088690981887365033">Jaringan VPN</translation>
+<translation id="2111134541987263231">Aktifkan <ph name="BEGIN_BOLD" />Izinkan dalam mode Samaran<ph name="END_BOLD" /></translation>
 <translation id="2114191879048183086"><ph name="NUMBER_OF_ITEMS" /> item akan dihapus dan Anda tidak akan dapat memulihkannya.</translation>
 <translation id="2122305276694332719">Menghubungkan ke jaringan tersembunyi secara otomatis akan memungkinkan orang lain melihat perangkat Anda dan beberapa setelan jaringan, sehingga tindakan ini tidak direkomendasikan.</translation>
 <translation id="2125607626296734455">Khmer</translation>
@@ -150,6 +150,7 @@
 <translation id="2236732657580416950">Cache Google Drive Anda telah dihapus.</translation>
 <translation id="2239068707900391003">Orang dengan kopi</translation>
 <translation id="2251368349685848079">Pulihkan dari sampah</translation>
+<translation id="2278133026967558505">Akses file oleh semua situs dan URL</translation>
 <translation id="2282155092769082568">URL konfigurasi otomatis:</translation>
 <translation id="2284767815536050991">penyimpanan eksternal</translation>
 <translation id="2288278176040912387">Pemutar piringan hitam</translation>
@@ -158,6 +159,7 @@
 <translation id="2304820083631266885">Planet</translation>
 <translation id="2305020378527873881"><ph name="VOLUME_NAME" /> telah dikeluarkan.</translation>
 <translation id="2307462900900812319">Konfigurasi jaringan</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{Ekstensi dengan ID <ph name="BEGIN_LIST" /><ph name="END_LIST" /> tidak dapat ditemukan. Hubungi administrator Anda.}other{Ekstensi dengan ID <ph name="BEGIN_LIST" /><ph name="END_LIST" /> tidak dapat ditemukan. Hubungi administrator Anda.}}</translation>
 <translation id="2325650632570794183">Jenis file ini tidak didukung. Kunjungi Chrome Webstore untuk menemukan aplikasi yang dapat membuka jenis file ini.</translation>
 <translation id="2326539130272988168">Bulgaria</translation>
 <translation id="2337715497728194187">Bagikan ke Bruschetta</translation>
@@ -227,6 +229,7 @@
 <translation id="290843123675549676">Marathi</translation>
 <translation id="2923240520113693977">Estonia</translation>
 <translation id="2938685643439809023">Mongolia</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{Tidak dapat menemukan ekstensi}other{Tidak dapat menemukan ekstensi}}</translation>
 <translation id="2943503720238418293">Gunakan nama yang lebih pendek</translation>
 <translation id="2949781154072577687">Memformat <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">Ubur-ubur</translation>
@@ -272,6 +275,7 @@
 <translation id="3290356915286466215">Tidak aman</translation>
 <translation id="3291218047831493686">Hubungkan ke jaringan ini untuk mengubah setelan kunci SIM</translation>
 <translation id="3293023191599135697">Jaringan WEP tidak didukung</translation>
+<translation id="3295006446256079333">Volume ini</translation>
 <translation id="3295357220137379386">Perangkat sibuk</translation>
 <translation id="3296763833017966289">Georgian</translation>
 <translation id="3307875152560779385">Ukraina</translation>
@@ -281,6 +285,7 @@
 <translation id="3356580349448036450">Selesai</translation>
 <translation id="3358452157379365236">Gitar</translation>
 <translation id="3368922792935385530">Terhubung</translation>
+<translation id="3372635229069101468">Klik <ph name="BEGIN_BOLD" />Detail<ph name="END_BOLD" /></translation>
 <translation id="3382143449143186018">Nepali dengan keyboard InScript</translation>
 <translation id="338691029516748599">Jaringan <ph name="NETWORK_INDEX" /> dari <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, Kekuatan Sinyal <ph name="SIGNAL_STRENGTH" />%, Dikelola oleh Administrator Anda, Sambungkan</translation>
 <translation id="3408072735282270043">Aktifkan, <ph name="NETWORK_NAME" /></translation>
@@ -365,6 +370,7 @@
 <translation id="4124935795427217608">Unicorn</translation>
 <translation id="4131235941541910880">Pindahkan item yang tidak Anda butuhkan ke sampah</translation>
 <translation id="4134804435730168042">Jaringan <ph name="NETWORK_INDEX" /> dari <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Aktifkan setelah penyiapan perangkat</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{Aktifkan ekstensi berikut dalam mode Samaran:}other{Aktifkan ekstensi berikut dalam mode Samaran:}}</translation>
 <translation id="4153015322587141338">Klik kanan file, lalu pilih "<ph name="PIN_COMMAND" />" untuk akses cepat ke file Anda di rak.</translation>
 <translation id="4157569377477607576">Kebijakan administrator tidak merekomendasikan:</translation>
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> dipindahkan.</translation>
@@ -461,12 +467,15 @@
 <translation id="4801956050125744859">Simpan keduanya</translation>
 <translation id="4804827417948292437">Avokad</translation>
 <translation id="4805966553127040832">Memulihkan <ph name="COUNT" /> item</translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{Untuk menggunakan mode Samaran, organisasi Anda memerlukan ekstensi}other{Untuk menggunakan mode Samaran, organisasi Anda memerlukan beberapa ekstensi}}</translation>
 <translation id="4823651846660089135">Perangkat berstatus hanya-baca</translation>
 <translation id="4826849268470072925">ITRANS Tamil</translation>
+<translation id="482932175346970750">Ketik <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" /> di browser Anda</translation>
 <translation id="4839847978919684242"><ph name="SELCTED_FILES_COUNT" /> item dipilih</translation>
 <translation id="4843566743023903107">Chromebase</translation>
 <translation id="4850886885716139402">Lihat</translation>
 <translation id="485316830061041779">Jerman</translation>
+<translation id="4862885579661885411">Setelan File</translation>
 <translation id="4867079195717347957">Klik untuk mengurutkan kolom dari atas ke bawah.</translation>
 <translation id="4867297348137739678">Minggu lalu</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> byte</translation>
@@ -532,6 +541,7 @@
     dalam file bersama orang lain, semuanya di satu tempat.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">File yang dipulihkan dari Google Drive</translation>
 <translation id="5278111733643988471">Untuk memulihkan item ini, tarik ke folder baru di luar sampah. Folder asli "<ph name="PARENT_FOLDER_NAME" />" untuk item ini telah dihapus.</translation>
+<translation id="5283101102242354279">Aktifkan ekstensi dalam mode Samaran:</translation>
 <translation id="5286194356314741248">Memindai</translation>
 <translation id="5288441970121584418">Burger</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -542,7 +552,6 @@
 <translation id="5323213332664049067">Amerika Latin</translation>
 <translation id="5330145655348521461">File ini dibuka pada desktop yang berbeda. Pindahkan ke <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />) untuk melihatnya.</translation>
 <translation id="5330512191124428349">Dapatkan info</translation>
-<translation id="5337538975554986899">Akses file oleh semua URL kecuali <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="5344246330454251646">Kelola berbagi dengan Bruschetta</translation>
 <translation id="535792325654997756">Orang dengan kucing</translation>
 <translation id="5358764674931277">Kecepatan frame</translation>
@@ -615,6 +624,7 @@
 <translation id="5911887972742538906">Terjadi error saat menginstal aplikasi Linux.</translation>
 <translation id="5912396950572065471">Format</translation>
 <translation id="5913638992615760742">Operasi penyalinan gagal, terjadi error: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">Fitur penelusuran baru tersedia</translation>
 <translation id="5926082595146149752">Belanda (Belanda) dengan keyboard International PC AS</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063">Jaringan <ph name="NETWORK_INDEX" /> dari <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, Aktifkan setelah penyiapan perangkat</translation>
@@ -627,6 +637,7 @@
 <translation id="603895874132768835">Anda tidak akan dapat menggunakan jaringan ini hingga Anda menyiapkan PIN baru</translation>
 <translation id="6040143037577758943">Tutup</translation>
 <translation id="6055907707645252013">Jaringan <ph name="NETWORK_TYPE" />, tidak terhubung</translation>
+<translation id="6073060579181816027">Beberapa lokasi file</translation>
 <translation id="6074825444536523002">Google Formulir</translation>
 <translation id="6079871810119356840">Hungaria dengan keyboard Qwerty</translation>
 <translation id="6096979789310008754">Teks penelusuran dihapus, menampilkan semua file dan folder.</translation>
@@ -704,6 +715,7 @@
 <translation id="6732801395666424405">Sertifikat tidak dimuat</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6740270213273127264">Bagikan folder ke Bruschetta</translation>
+<translation id="6750737795876287924">Direktori saat ini</translation>
 <translation id="6751256176799620176">1 folder dipilih</translation>
 <translation id="6755827872271341378">Perangkat ChromeOS Flex</translation>
 <translation id="6790428901817661496">Putar</translation>
@@ -741,7 +753,6 @@
 <translation id="6973630695168034713">Folder</translation>
 <translation id="6976795442547527108">Singa</translation>
 <translation id="6979158407327259162">Google Drive</translation>
-<translation id="6979737339423435258">Semua</translation>
 <translation id="6989942356279143254">Swedia</translation>
 <translation id="6990081529015358884">Anda telah kehabisan ruang</translation>
 <translation id="6993826899923627728">Item ini ada di sampah Anda</translation>
@@ -767,6 +778,7 @@
 <translation id="7162080671816799010">'Kecocokan nama alternatif subjek' atau 'Kecocokan suffix domain' tidak ada untuk memvalidasi identitas server autentikasi</translation>
 <translation id="7165320105431587207">Gagal mengonfigurasi jaringan</translation>
 <translation id="7170041865419449892">Di luar cakupan</translation>
+<translation id="7179579940054351344">Akses file oleh semua situs dan URL kecuali <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="7180611975245234373">Perbarui</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> GB</translation>
 <translation id="7191454237977785534">Simpan file sebagai</translation>
@@ -776,6 +788,7 @@
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />, Detail</translation>
 <translation id="7246947237293279874">Proxy FTP</translation>
 <translation id="7248671827512403053">Aplikasi</translation>
+<translation id="7252604552361840748">Temukan ekstensi di atas</translation>
 <translation id="7256405249507348194">Kesalahan tidak dikenal: <ph name="DESC" /></translation>
 <translation id="7268659760406822741">Layanan yang tersedia</translation>
 <translation id="7292816689782057017">Kebijakan administrator membatasi penyimpanan ke beberapa lokasi.</translation>
@@ -797,7 +810,6 @@
 <translation id="7458955835361612701">Tidak ada gambar terbaru</translation>
 <translation id="7460898608667578234">Ukraina</translation>
 <translation id="7469894403370665791">Otomatis hubungkan ke jaringan ini</translation>
-<translation id="7481358317100446445">Siap</translation>
 <translation id="7486315294984620427">Untuk melepaskan file di Parallels Desktop, file harus disalin ke file Windows.</translation>
 <translation id="749452993132003881">Hiragana</translation>
 <translation id="7495372004724182530">Fonetik Malayalam</translation>
@@ -941,6 +953,7 @@
 <translation id="8492972329130824181">Jaringan rumah tidak tersedia. Roaming data seluler harus diaktifkan agar dapat terhubung.</translation>
 <translation id="8499098729323186194">Mengekstrak <ph name="NUMBER_OF_ITEMS" /> item ...</translation>
 <translation id="8502913769543567768">Jaringan <ph name="NETWORK_INDEX" /> dari <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, Aktifkan setelah penyiapan perangkat, Dikelola oleh Administrator Anda</translation>
+<translation id="8512483403832814140">Kapan saja</translation>
 <translation id="8521441079177373948">Inggris</translation>
 <translation id="853494022971700746">Prancis (Prancis)</translation>
 <translation id="8540608333167683902">Jaringan <ph name="NETWORK_INDEX" /> dari <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, Kekuatan Sinyal <ph name="SIGNAL_STRENGTH" />%, Detail</translation>

@@ -147,7 +147,10 @@ component("evdev") {
       "numberpad_metrics.cc",
       "numberpad_metrics.h",
     ]
-    deps += [ "//chromeos/ash/components/feature_usage" ]
+    deps += [
+      "//ash/constants",
+      "//chromeos/ash/components/feature_usage",
+    ]
   }
 
   public_configs = [ ":evdev_config" ]
@@ -195,6 +198,7 @@ component("evdev") {
   visibility += [
     "//ash/webui/diagnostics_ui/*",
     "//ui/chromeos/*",
+    "//ui/events/*",
     "//ui/ozone/*",
   ]
 }
@@ -212,9 +216,11 @@ source_set("event_device_info") {
   ]
 
   visibility += [
+    "//ash:ash_unittests",
     "//ash/webui/diagnostics_ui/backend:*",
     "//chromeos/ash/services/cros_healthd/*",
     "//ui/chromeos/*",
+    "//ui/events/ash/*",
   ]
 }
 
@@ -232,7 +238,10 @@ source_set("event_device_info_test_utils") {
     "//base",
   ]
 
-  visibility += [ "//ash/webui/diagnostics_ui/backend:unit_tests" ]
+  visibility += [
+    "//ash:ash_unittests",
+    "//ash/webui/diagnostics_ui/backend:unit_tests",
+  ]
 }
 
 source_set("unittests") {
@@ -284,9 +293,13 @@ source_set("unittests") {
   if (is_chromeos_ash) {
     sources += [
       "input_device_factory_evdev_unittest.cc",
+      "mouse_button_map_evdev_unittest.cc",
       "numberpad_metrics_unittest.cc",
     ]
-    deps += [ "//chromeos/ash/components/feature_usage" ]
+    deps += [
+      "//ash/constants",
+      "//chromeos/ash/components/feature_usage",
+    ]
   }
 
   visibility += [ "//ui/events/ozone:unittests" ]

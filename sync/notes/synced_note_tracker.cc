@@ -21,8 +21,8 @@
 #include "base/trace_event/memory_usage_estimator.h"
 #include "components/sync/base/time.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
-#include "components/sync/protocol/entity_data.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
+#include "components/sync/protocol/model_type_state_helper.h"
 #include "components/sync/protocol/notes_model_metadata.pb.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 #include "components/sync_bookmarks/switches.h"
@@ -90,7 +90,8 @@ SyncedNoteTracker::CreateFromNotesModelAndMetadata(
     file_sync::SyncedFileStore* synced_file_store) {
   DCHECK(model);
 
-  if (!model_metadata.model_type_state().initial_sync_done()) {
+  if (!syncer::IsInitialSyncDone(
+          model_metadata.model_type_state().initial_sync_state())) {
     return nullptr;
   }
 
@@ -416,7 +417,7 @@ SyncedNoteTracker::SyncedNoteTracker(
 bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
     const vivaldi::NotesModel* model,
     sync_pb::NotesModelMetadata model_metadata) {
-  DCHECK(model_type_state_.initial_sync_done());
+  DCHECK(syncer::IsInitialSyncDone(model_type_state_.initial_sync_state()));
 
   // Build a temporary map to look up note nodes efficiently by node ID.
   std::unordered_map<int64_t, const vivaldi::NoteNode*> id_to_note_node_map =

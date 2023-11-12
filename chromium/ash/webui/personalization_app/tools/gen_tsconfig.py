@@ -53,7 +53,8 @@ def main(args):
     arguments = parse_arguments(args)
     # execute the ts build target to generate the tsconfig.json file.
     subprocess.check_call(
-        ['autoninja', '-C', arguments.root_out_dir, arguments.gn_target])
+        ['autoninja', '-C', arguments.root_out_dir, arguments.gn_target],
+        stdout=subprocess.DEVNULL)
 
     gn_target_src_dir, gn_target_suffix = arguments.gn_target.split(':')
 
@@ -72,12 +73,12 @@ def main(args):
     with open(out_json_path, 'r') as f:
         out_json = json.load(f)
 
-    curdir = os.path.curdir
     out_json_dir = os.path.dirname(out_json_path)
     local_json = {
         'extends': normalize_path(out_json_dir, out_json['extends']),
         'compilerOptions': {
             'baseUrl': '.',
+            'allowJs': out_json['compilerOptions'].get('allowJs', False),
             'rootDirs': [
                 '.',
                 normalize_path(out_json_dir,
@@ -89,13 +90,36 @@ def main(args):
                 for key, value in out_json['compilerOptions']['paths'].items()
             },
         },
+        'files': [
+            # Add the .d.ts files.
+            normalize_path(out_json_dir, path)
+            for path in out_json['files'] if path.endswith('.d.ts')
+        ],
+        'include': [
+            # Include every source file underneath the generated tsconfig.json.
+            '**/*'
+        ],
         'references': [{
             'path': normalize_path(out_json_dir, path['path'])
         } for path in out_json['references']],
     }
 
-    with open(os.path.join(gn_target_src_dir, 'tsconfig.json'), 'w') as f:
+    #TODO(xiaohuic): remove special case for ChromeOS Settings below.
+    if '/settings/chromeos' in arguments.gn_target:
+        # ChromeOS Settings app setup is special, the ts input dir root is not
+        # matching the source code root. It uses the browser Settings app
+        # source code root instead because of sharing some browser Settings
+        # files directly.  We should remove direct file sharing between the two
+        # Settings apps.
+        local_json['compilerOptions']['rootDirs'].append(
+                normalize_path(out_json_dir,
+                    out_json['compilerOptions']['rootDir'] + '/chromeos'))
+
+    output_path = os.path.join(gn_target_src_dir, 'tsconfig.json')
+    with open(output_path, 'w') as f:
         json.dump(local_json, f, indent=2)
+
+    print(os.path.basename(__file__), 'wrote file', output_path)
 
 
 if __name__ == '__main__':

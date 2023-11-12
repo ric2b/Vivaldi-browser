@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/search_test_utils.h"
@@ -48,6 +49,10 @@ using content::BrowserThread;
 class HistoryBrowserTest : public InProcessBrowserTest {
  protected:
   HistoryBrowserTest() {
+    // TODO(crbug.com/1394910): Use HTTPS URLs in tests to avoid having to
+    // disable this feature.
+    feature_list_.InitAndDisableFeature(features::kHttpsUpgrades);
+
     test_server_.ServeFilesFromSourceDirectory(GetChromeTestDataDir());
   }
 
@@ -163,6 +168,7 @@ class HistoryBrowserTest : public InProcessBrowserTest {
     std::move(closure).Run();
   }
 
+  base::test::ScopedFeatureList feature_list_;
   net::EmbeddedTestServer test_server_;
 };
 
@@ -537,11 +543,12 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, Subframe) {
       ui_test_utils::GetTestUrl(base::FilePath().AppendASCII("History"),
                                 base::FilePath().AppendASCII("target.html"));
 
-  RenderFrameHostGrabber rfh_grabber(
-      browser()->tab_strip_model()->GetActiveWebContents(), initial_subframe);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_page));
-  rfh_grabber.Wait();
-  content::RenderFrameHost* frame = rfh_grabber.render_frame_host();
+  content::RenderFrameHost* frame = ChildFrameAt(browser()
+                                                     ->tab_strip_model()
+                                                     ->GetActiveWebContents()
+                                                     ->GetPrimaryMainFrame(),
+                                                 0);
   ASSERT_TRUE(frame);
   ASSERT_TRUE(HistoryContainsURL(main_page));
   ASSERT_FALSE(HistoryContainsURL(initial_subframe));
@@ -554,7 +561,11 @@ IN_PROC_BROWSER_TEST_F(HistoryBrowserTest, Subframe) {
   ASSERT_TRUE(HistoryContainsURL(manual_subframe));
 
   // After navigation, the current RenderFrameHost may change.
-  frame = rfh_grabber.render_frame_host();
+  frame = ChildFrameAt(browser()
+                           ->tab_strip_model()
+                           ->GetActiveWebContents()
+                           ->GetPrimaryMainFrame(),
+                       0);
   // Page-initiated location.replace subframe navigations should not show up in
   // history.
   std::string script = "location.replace('form.html')";

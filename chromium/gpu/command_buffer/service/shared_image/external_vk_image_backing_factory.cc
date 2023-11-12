@@ -7,6 +7,7 @@
 #include "build/build_config.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
 #include "components/viz/common/resources/shared_image_format.h"
+#include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/shared_image/external_vk_image_backing.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
@@ -17,6 +18,7 @@
 #include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "ui/gfx/buffer_format_util.h"
+#include "ui/gfx/gpu_memory_buffer.h"
 
 namespace gpu {
 
@@ -81,10 +83,10 @@ constexpr uint32_t kSupportedUsage =
     SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
     SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
     SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_WEBGPU |
-    SHARED_IMAGE_USAGE_PROTECTED | SHARED_IMAGE_USAGE_VIDEO_DECODE |
+    SHARED_IMAGE_USAGE_VIDEO_DECODE |
     SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
     SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
-    SHARED_IMAGE_USAGE_CPU_WRITE;
+    SHARED_IMAGE_USAGE_CPU_WRITE | SHARED_IMAGE_USAGE_WEBGPU_STORAGE_TEXTURE;
 
 ExternalVkImageBackingFactory::ExternalVkImageBackingFactory(
     scoped_refptr<SharedContextState> context_state)
@@ -117,6 +119,7 @@ ExternalVkImageBackingFactory::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     bool is_thread_safe) {
   DCHECK(!is_thread_safe);
   return ExternalVkImageBacking::Create(
@@ -134,6 +137,7 @@ ExternalVkImageBackingFactory::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     base::span<const uint8_t> pixel_data) {
   return ExternalVkImageBacking::Create(
       context_state_, command_pool_.get(), mailbox, format, size, color_space,
@@ -150,7 +154,8 @@ ExternalVkImageBackingFactory::CreateSharedImage(
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
-    uint32_t usage) {
+    uint32_t usage,
+    std::string debug_label) {
   DCHECK(CanImportGpuMemoryBuffer(handle.type));
   if (plane != gfx::BufferPlane::DEFAULT) {
     LOG(ERROR) << "Invalid plane";
@@ -178,7 +183,14 @@ bool ExternalVkImageBackingFactory::IsSupported(
     GrContextType gr_context_type,
     base::span<const uint8_t> pixel_data) {
   if (format.is_multi_plane()) {
-    return false;
+    if (gmb_type != gfx::EMPTY_BUFFER) {
+      return false;
+    }
+
+    if (format != viz::MultiPlaneFormat::kNV12 &&
+        format != viz::MultiPlaneFormat::kYV12) {
+      return false;
+    }
   }
 
   // ALPHA_8 is only used by UI and should never need GL/Vulkan interop.
@@ -189,28 +201,25 @@ bool ExternalVkImageBackingFactory::IsSupported(
     return false;
   }
 
-  // TODO: remove it when below formats are converted to multi plane shared
-  // image formats.
 #if BUILDFLAG(IS_LINUX)
-  switch (format.resource_format()) {
-    case viz::YUV_420_BIPLANAR:
-    case viz::YUVA_420_TRIPLANAR:
-      return false;
-    default:
-      break;
+  if (format.IsLegacyMultiplanar()) {
+    // ExternalVkImageBacking doesn't work properly with external sampler
+    // multi-planar formats on Linux, see https://crbug.com/1394888.
+    return false;
   }
 #endif
 
-  if (gmb_type != gfx::EMPTY_BUFFER && !CanImportGpuMemoryBuffer(gmb_type)) {
-    return false;
+  if (gmb_type == gfx::EMPTY_BUFFER) {
+    if (usage & SHARED_IMAGE_USAGE_CPU_WRITE) {
+      // Only CPU writable when the client provides a NativePixmap.
+      return false;
+    }
+  } else {
+    if (!CanImportGpuMemoryBuffer(gmb_type)) {
+      return false;
+    }
   }
 
-  // TODO(crbug.com/969114): Not all shared image factory implementations
-  // support concurrent read/write usage.
-  constexpr uint32_t kInvalidUsages = SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE;
-  if (usage & kInvalidUsages) {
-    return false;
-  }
   if (thread_safe) {
     LOG(ERROR) << "ExternalVkImageBackingFactory currently do not support "
                   "cross-thread usage.";

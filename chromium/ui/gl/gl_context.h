@@ -30,6 +30,15 @@ class GLDisplayEGL;
 
 namespace gpu {
 class GLContextVirtual;
+
+#if BUILDFLAG(IS_APPLE)
+class GL_EXPORT BackpressureMetalSharedEvent {
+ public:
+  virtual ~BackpressureMetalSharedEvent() = default;
+  virtual bool HasCompleted() const = 0;
+};
+#endif  // #if BUILDFLAG(IS_APPLE)
+
 }  // namespace gpu
 
 namespace gl {
@@ -67,14 +76,14 @@ enum ContextPriority {
 
 // Angle allows selecting context virtualization group at context creation time.
 // This enum is used to specify the group number to use for a given context.
-// Currently all contexts which does not specify any group number are part of
-// default angle context virtualization group. DrDc and the
-// GLImageProcessorBackend will use below enum to become part of different
-// virtualization groups.
+// Currently all contexts which do not specify any group number are part of
+// default angle context virtualization group. The below use cases in Chrome use
+// become part of different virtualization groups via this enum.
 enum class AngleContextVirtualizationGroup {
   kDefault = -1,
   kDrDc = 1,
-  kGLImageProcessor = 2
+  kGLImageProcessor = 2,
+  kWebViewRenderThread = 3
 };
 
 struct GL_EXPORT GLContextAttribs {
@@ -106,6 +115,9 @@ struct GL_EXPORT GLContextAttribs {
   // If true, EGL_ANGLE_external_context_and_surface extension will be used to
   // create ANGLE context from the current native EGL context.
   bool angle_create_from_external_context = false;
+
+  // If true, ANGLE will support the creation of client arrays.
+  bool angle_create_context_client_arrays = false;
 
   // If true, an ANGLE external context will be created with
   // EGL_EXTERNAL_CONTEXT_SAVE_STATE_ANGLE is true, so when ReleaseCurrent is
@@ -250,6 +262,8 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext>,
 #endif  // USE_EGL
 
 #if BUILDFLAG(IS_APPLE)
+  virtual void AddMetalSharedEventsForBackpressure(
+      std::vector<std::unique_ptr<gpu::BackpressureMetalSharedEvent>> events);
   // Create a fence for all work submitted to this context so far, and return a
   // monotonically increasing handle to it. This returned handle never needs to
   // be freed. This method is used to create backpressure to throttle GL work
@@ -344,7 +358,13 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext>,
   bool context_lost_ = false;
 
 #if BUILDFLAG(IS_APPLE)
-  std::map<uint64_t, std::unique_ptr<GLFence>> backpressure_fences_;
+  using GLFenceAndMetalSharedEvents = std::pair<
+      std::unique_ptr<GLFence>,
+      std::vector<std::unique_ptr<gpu::BackpressureMetalSharedEvent>>>;
+
+  std::vector<std::unique_ptr<gpu::BackpressureMetalSharedEvent>>
+      next_backpressure_events_;
+  std::map<uint64_t, GLFenceAndMetalSharedEvents> backpressure_fences_;
   uint64_t next_backpressure_fence_ = 0;
 #endif
 };

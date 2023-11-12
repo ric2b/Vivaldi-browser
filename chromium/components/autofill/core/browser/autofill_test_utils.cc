@@ -8,13 +8,14 @@
 #include <iterator>
 #include <string>
 
-#include "base/guid.h"
 #include "base/rand_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
@@ -34,7 +35,7 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/form_field_data_predictions.h"
 #include "components/autofill/core/common/unique_ids.h"
-#include "components/os_crypt/os_crypt_mocker.h"
+#include "components/os_crypt/sync/os_crypt_mocker.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
@@ -53,7 +54,9 @@ bool operator==(const FormFieldDataPredictions& a,
                 const FormFieldDataPredictions& b) {
   auto members = [](const FormFieldDataPredictions& p) {
     return std::tie(p.host_form_signature, p.signature, p.heuristic_type,
-                    p.server_type, p.overall_type, p.parseable_name, p.section);
+                    p.server_type, p.overall_type, p.parseable_name, p.section,
+                    p.rank, p.rank_in_signature_group, p.rank_in_host_form,
+                    p.rank_in_host_form_signature_group);
   };
   return members(a) == members(b);
 }
@@ -79,46 +82,54 @@ std::string GetRandomCardNumber() {
 
 }  // namespace
 
-AutofillEnvironment* AutofillEnvironment::current_instance_ = nullptr;
+AutofillTestEnvironment* AutofillTestEnvironment::current_instance_ = nullptr;
 
-AutofillEnvironment& AutofillEnvironment::GetCurrent(
+AutofillTestEnvironment& AutofillTestEnvironment::GetCurrent(
     const base::Location& location) {
   CHECK(current_instance_)
       << location.ToString() << " "
-      << "tried to access the current AutofillEnvironment, but none "
-         "exists. Add an autofill::test::AutofillEnvironment member to "
-         "test your test fixture.";
+      << "tried to access the current AutofillTestEnvironment, but none "
+         "exists. Add an autofill::test::Autofill(Browser|Unit)TestEnvironment "
+         "member to test your test fixture.";
   return *current_instance_;
 }
 
-AutofillEnvironment::AutofillEnvironment() {
-  CHECK(!current_instance_) << "An autofill::test::AutofillEnvironment has "
+AutofillTestEnvironment::AutofillTestEnvironment(const Options& options) {
+  CHECK(!current_instance_) << "An autofill::test::AutofillTestEnvironment has "
                                "already been registered.";
   current_instance_ = this;
+  if (options.disable_server_communication) {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::test::kAutofillServerCommunication);
+  }
 }
 
-AutofillEnvironment::~AutofillEnvironment() {
+AutofillTestEnvironment::~AutofillTestEnvironment() {
   CHECK_EQ(current_instance_, this);
   current_instance_ = nullptr;
 }
 
-LocalFrameToken AutofillEnvironment::NextLocalFrameToken() {
+LocalFrameToken AutofillTestEnvironment::NextLocalFrameToken() {
   return LocalFrameToken(base::UnguessableToken::CreateForTesting(
       ++local_frame_token_counter_high_, ++local_frame_token_counter_low_));
 }
 
-FormRendererId AutofillEnvironment::NextFormRendererId() {
+FormRendererId AutofillTestEnvironment::NextFormRendererId() {
   return FormRendererId(++form_renderer_id_counter_);
 }
 
-FieldRendererId AutofillEnvironment::NextFieldRendererId() {
+FieldRendererId AutofillTestEnvironment::NextFieldRendererId() {
   return FieldRendererId(++field_renderer_id_counter_);
 }
+
+AutofillBrowserTestEnvironment::AutofillBrowserTestEnvironment(
+    const Options& options)
+    : AutofillTestEnvironment(options) {}
 
 LocalFrameToken MakeLocalFrameToken(RandomizeFrame randomize) {
   if (*randomize) {
     return LocalFrameToken(
-        AutofillEnvironment::GetCurrent().NextLocalFrameToken());
+        AutofillTestEnvironment::GetCurrent().NextLocalFrameToken());
   } else {
     return LocalFrameToken(
         base::UnguessableToken::CreateForTesting(98765, 43210));
@@ -412,6 +423,12 @@ void CreateTestCreditCardFormData(FormData* form,
   form->fields.push_back(field);
 }
 
+void CreateTestIbanFormData(FormData* form_data, const char* value) {
+  FormFieldData field;
+  test::CreateTestFormField("IBAN Value:", "iban_value", value, "text", &field);
+  form_data->fields.push_back(field);
+}
+
 FormData WithoutUnserializedData(FormData form) {
   form.url = {};
   form.main_frame_origin = {};
@@ -438,23 +455,17 @@ inline void check_and_set(
 }
 
 AutofillProfile GetFullValidProfileForCanada() {
-  AutofillProfile profile(base::GenerateGUID(), kEmptyOrigin);
+  AutofillProfile profile(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                          kEmptyOrigin);
   SetProfileInfo(&profile, "Alice", "", "Wonderland", "alice@wonderland.ca",
                  "Fiction", "666 Notre-Dame Ouest", "Apt 8", "Montreal", "QC",
                  "H3B 2T9", "CA", "15141112233");
   return profile;
 }
 
-AutofillProfile GetFullValidProfileForChina() {
-  AutofillProfile profile(base::GenerateGUID(), kEmptyOrigin);
-  SetProfileInfo(&profile, "John", "H.", "Doe", "johndoe@google.cn", "Google",
-                 "100 Century Avenue", "", "赫章县", "毕节地区", "贵州省",
-                 "200120", "CN", "+86-21-6133-7666");
-  return profile;
-}
-
 AutofillProfile GetFullProfile() {
-  AutofillProfile profile(base::GenerateGUID(), kEmptyOrigin);
+  AutofillProfile profile(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                          kEmptyOrigin);
   SetProfileInfo(&profile, "John", "H.", "Doe", "johndoe@hades.com",
                  "Underworld", "666 Erebus St.", "Apt 8", "Elysium", "CA",
                  "91111", "US", "16502111111");
@@ -462,7 +473,8 @@ AutofillProfile GetFullProfile() {
 }
 
 AutofillProfile GetFullProfile2() {
-  AutofillProfile profile(base::GenerateGUID(), kEmptyOrigin);
+  AutofillProfile profile(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                          kEmptyOrigin);
   SetProfileInfo(&profile, "Jane", "A.", "Smith", "jsmith@example.com", "ACME",
                  "123 Main Street", "Unit 1", "Greensdale", "MI", "48838", "US",
                  "13105557889");
@@ -470,7 +482,8 @@ AutofillProfile GetFullProfile2() {
 }
 
 AutofillProfile GetFullCanadianProfile() {
-  AutofillProfile profile(base::GenerateGUID(), kEmptyOrigin);
+  AutofillProfile profile(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                          kEmptyOrigin);
   SetProfileInfo(&profile, "Wayne", "", "Gretzky", "wayne@hockey.com", "NHL",
                  "123 Hockey rd.", "Apt 8", "Moncton", "New Brunswick",
                  "E1A 0A6", "CA", "15068531212");
@@ -478,7 +491,8 @@ AutofillProfile GetFullCanadianProfile() {
 }
 
 AutofillProfile GetIncompleteProfile1() {
-  AutofillProfile profile(base::GenerateGUID(), kEmptyOrigin);
+  AutofillProfile profile(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                          kEmptyOrigin);
   SetProfileInfo(&profile, "John", "H.", "Doe", "jsmith@example.com", "ACME",
                  "123 Main Street", "Unit 1", "Greensdale", "MI", "48838", "US",
                  "");
@@ -486,7 +500,8 @@ AutofillProfile GetIncompleteProfile1() {
 }
 
 AutofillProfile GetIncompleteProfile2() {
-  AutofillProfile profile(base::GenerateGUID(), kEmptyOrigin);
+  AutofillProfile profile(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                          kEmptyOrigin);
   SetProfileInfo(&profile, "", "", "", "jsmith@example.com", "", "", "", "", "",
                  "", "", "");
   return profile;
@@ -538,56 +553,82 @@ AutofillProfile GetServerProfile2() {
   return profile;
 }
 
-void SetProfileCategory(AutofillProfile& profile,
-                        AutofillProfileSourceCategory category) {
+void SetProfileCategory(
+    AutofillProfile& profile,
+    autofill_metrics::AutofillProfileSourceCategory category) {
   switch (category) {
-    case AutofillProfileSourceCategory::kLocalOrSyncable:
+    case autofill_metrics::AutofillProfileSourceCategory::kLocalOrSyncable:
       profile.set_source_for_testing(AutofillProfile::Source::kLocalOrSyncable);
       break;
-    case AutofillProfileSourceCategory::kAccountChrome:
-    case AutofillProfileSourceCategory::kAccountNonChrome:
+    case autofill_metrics::AutofillProfileSourceCategory::kAccountChrome:
+    case autofill_metrics::AutofillProfileSourceCategory::kAccountNonChrome:
       profile.set_source_for_testing(AutofillProfile::Source::kAccount);
       // Any value that is not kInitialCreatorOrModifierChrome works.
       const int kInitialCreatorOrModifierNonChrome =
           AutofillProfile::kInitialCreatorOrModifierChrome + 1;
       profile.set_initial_creator_id(
-          category == AutofillProfileSourceCategory::kAccountChrome
+          category == autofill_metrics::AutofillProfileSourceCategory::
+                          kAccountChrome
               ? AutofillProfile::kInitialCreatorOrModifierChrome
               : kInitialCreatorOrModifierNonChrome);
       break;
   }
 }
 
+std::string GetStrippedValue(const char* value) {
+  std::u16string stripped_value;
+  base::RemoveChars(base::UTF8ToUTF16(value), base::kWhitespaceUTF16,
+                    &stripped_value);
+  return base::UTF16ToUTF8(stripped_value);
+}
+
 IBAN GetIBAN() {
-  IBAN iban(base::GenerateGUID());
-  iban.set_value(u"DE91 1000 0000 0123 4567 89");
+  IBAN iban(base::Uuid::GenerateRandomV4().AsLowercaseString());
+  iban.set_value(base::UTF8ToUTF16(std::string(kIbanValue)));
   iban.set_nickname(u"Nickname for Iban");
   return iban;
 }
 
+IBAN GetIBAN2() {
+  IBAN iban;
+  iban.set_value(base::UTF8ToUTF16(std::string(kIbanValue_1)));
+  iban.set_nickname(u"My doctor's IBAN");
+  return iban;
+}
+
+IBAN GetIBANWithoutNickname() {
+  IBAN iban;
+  iban.set_value(base::UTF8ToUTF16(std::string(kIbanValue_2)));
+  return iban;
+}
+
 CreditCard GetCreditCard() {
-  CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
+  CreditCard credit_card(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                         kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "Test User", "4111111111111111" /* Visa */,
                     NextMonth().c_str(), NextYear().c_str(), "1");
   return credit_card;
 }
 
 CreditCard GetCreditCard2() {
-  CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
+  CreditCard credit_card(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                         kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "Someone Else", "378282246310005" /* AmEx */,
                     NextMonth().c_str(), TenYearsFromNow().c_str(), "1");
   return credit_card;
 }
 
 CreditCard GetExpiredCreditCard() {
-  CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
+  CreditCard credit_card(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                         kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "Test User", "4111111111111111" /* Visa */,
                     NextMonth().c_str(), LastYear().c_str(), "1");
   return credit_card;
 }
 
 CreditCard GetIncompleteCreditCard() {
-  CreditCard credit_card(base::GenerateGUID(), kEmptyOrigin);
+  CreditCard credit_card(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                         kEmptyOrigin);
   SetCreditCardInfo(&credit_card, "", "4111111111111111" /* Visa */,
                     NextMonth().c_str(), NextYear().c_str(), "1");
   return credit_card;
@@ -630,6 +671,14 @@ CreditCard GetMaskedServerCardWithNonLegacyId() {
                           "2109" /* Mastercard */, NextMonth().c_str(),
                           NextYear().c_str(), "1");
   credit_card.SetNetworkForMaskedCard(kMasterCard);
+  return credit_card;
+}
+
+CreditCard GetMaskedServerCardVisa() {
+  CreditCard credit_card(CreditCard::MASKED_SERVER_CARD, "a123");
+  test::SetCreditCardInfo(&credit_card, "Bonnie Parker", "1111" /* Visa */,
+                          NextMonth().c_str(), NextYear().c_str(), "1");
+  credit_card.SetNetworkForMaskedCard(kVisaCard);
   return credit_card;
 }
 
@@ -696,8 +745,11 @@ CreditCard GetRandomCreditCard(CreditCard::RecordType record_type) {
 
   CreditCard credit_card =
       (record_type == CreditCard::LOCAL_CARD)
-          ? CreditCard(base::GenerateGUID(), kEmptyOrigin)
-          : CreditCard(record_type, base::GenerateGUID().substr(24));
+          ? CreditCard(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                       kEmptyOrigin)
+          : CreditCard(
+                record_type,
+                base::Uuid::GenerateRandomV4().AsLowercaseString().substr(24));
   test::SetCreditCardInfo(
       &credit_card, "Justin Thyme", GetRandomCardNumber().c_str(),
       base::StringPrintf("%d", base::RandInt(1, 12)).c_str(),
@@ -825,6 +877,12 @@ std::vector<CardUnmaskChallengeOption> GetCardUnmaskChallengeOptions(
             u"3 digit security code on the back of your card",
             /*challenge_input_length=*/3U,
             /*cvc_position=*/CvcPosition::kBackOfCard));
+        break;
+      case CardUnmaskChallengeOptionType::kEmailOtp:
+        challenge_options.emplace_back(
+            CardUnmaskChallengeOption::ChallengeOptionId("345"), type,
+            /*challenge_info=*/u"a******b@google.com",
+            /*challenge_input_length=*/6U);
         break;
       default:
         NOTREACHED();
@@ -1133,9 +1191,13 @@ FieldPrediction CreateFieldPrediction(ServerFieldType type,
   return field_prediction;
 }
 
-FieldPrediction CreateFieldPrediction(ServerFieldType type) {
-  if (type == NO_SERVER_DATA)
+FieldPrediction CreateFieldPrediction(ServerFieldType type, bool is_override) {
+  if (is_override) {
+    return CreateFieldPrediction(type, FieldPrediction::SOURCE_OVERRIDE);
+  }
+  if (type == NO_SERVER_DATA) {
     return CreateFieldPrediction(type, FieldPrediction::SOURCE_UNSPECIFIED);
+  }
   return CreateFieldPrediction(
       type, GroupTypeOfServerFieldType(type) == FieldTypeGroup::kPasswordField
                 ? FieldPrediction::SOURCE_PASSWORDS_DEFAULT
@@ -1145,11 +1207,13 @@ FieldPrediction CreateFieldPrediction(ServerFieldType type) {
 void AddFieldPredictionToForm(
     const FormFieldData& field_data,
     ServerFieldType field_type,
-    AutofillQueryResponse_FormSuggestion* form_suggestion) {
+    AutofillQueryResponse_FormSuggestion* form_suggestion,
+    bool is_override) {
   auto* field_suggestion = form_suggestion->add_field_suggestions();
   field_suggestion->set_field_signature(
       CalculateFieldSignatureForField(field_data).value());
-  *field_suggestion->add_predictions() = CreateFieldPrediction(field_type);
+  *field_suggestion->add_predictions() =
+      CreateFieldPrediction(field_type, is_override);
 }
 
 void AddFieldPredictionsToForm(
@@ -1159,8 +1223,9 @@ void AddFieldPredictionsToForm(
   std::vector<FieldPrediction> field_predictions;
   field_predictions.reserve(field_types.size());
   base::ranges::transform(field_types, std::back_inserter(field_predictions),
-                          static_cast<FieldPrediction (*)(ServerFieldType)>(
-                              &CreateFieldPrediction));
+                          [](ServerFieldType field_type) {
+                            return CreateFieldPrediction(field_type);
+                          });
   return AddFieldPredictionsToForm(field_data, field_predictions,
                                    form_suggestion);
 }

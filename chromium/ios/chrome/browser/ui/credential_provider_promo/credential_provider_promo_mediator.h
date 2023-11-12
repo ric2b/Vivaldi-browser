@@ -7,7 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/ui/commands/credential_provider_promo_commands.h"
+#import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
 #import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_constants.h"
 
 @protocol CredentialProviderPromoConsumer;
@@ -15,11 +15,18 @@
 class PrefService;
 class PromosManager;
 
+namespace feature_engagement {
+class Tracker;
+}
+
 // Manages the state and interactions of the CredentialProviderPromoConsumer.
 @interface CredentialProviderPromoMediator : NSObject
 
 // The main consumer for this mediator.
 @property(nonatomic, weak) id<CredentialProviderPromoConsumer> consumer;
+
+// The feature engagement tracker to alert of promo events.
+@property(nonatomic, assign) feature_engagement::Tracker* tracker;
 
 // Designated initializer. Initializes the mediator with the
 // PromosManager, presenter, and PrefService.

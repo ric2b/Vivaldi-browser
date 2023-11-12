@@ -75,10 +75,6 @@ std::string GLImplementationParts::GLString() const {
   switch (gl) {
     case GLImplementation::kGLImplementationNone:
       return "none";
-    case GLImplementation::kGLImplementationDesktopGL:
-      return "desktop-gl";
-    case GLImplementation::kGLImplementationDesktopGLCoreProfile:
-      return "desktop-gl-core-profile";
     case GLImplementation::kGLImplementationEGLGLES2:
       return "egl-gles2";
     case GLImplementation::kGLImplementationMockGL:
@@ -126,8 +122,6 @@ const struct {
   const char* angle_name;
   GLImplementationParts implementation;
 } kGLImplementationNamePairs[] = {
-    {kGLImplementationDesktopName, kANGLEImplementationNoneName,
-     GLImplementationParts(kGLImplementationDesktopGL)},
     {kGLImplementationEGLName, kANGLEImplementationNoneName,
      GLImplementationParts(kGLImplementationEGLGLES2)},
     {kGLImplementationANGLEName, kANGLEImplementationNoneName,
@@ -235,7 +229,10 @@ gfx::ExtensionSet GetGLExtensionsFromCurrentContext(
 
 }  // namespace
 
-base::ThreadLocalPointer<CurrentGL>* g_current_gl_context_tls = NULL;
+CurrentGL*& GetGlContextForCurrentThread() {
+  thread_local CurrentGL* gl_context = nullptr;
+  return gl_context;
+}
 
 #if defined(USE_EGL)
 EGLApi* g_current_egl_context;
@@ -371,11 +368,6 @@ void SetANGLEImplementation(ANGLEImplementation implementation) {
 
 ANGLEImplementation GetANGLEImplementation() {
   return g_gl_implementation.angle;
-}
-
-bool HasDesktopGLFeatures() {
-  return kGLImplementationDesktopGL == g_gl_implementation.gl ||
-         kGLImplementationDesktopGLCoreProfile == g_gl_implementation.gl;
 }
 
 void AddGLNativeLibrary(base::NativeLibrary library) {

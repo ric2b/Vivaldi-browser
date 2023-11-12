@@ -1353,25 +1353,9 @@ std::unique_ptr<quic::QuicReceivedPacket> QuicTestPacketMaker::BuildPacketImpl(
         quic::QuicPacketCreator::MinPlaintextPacketSize(
             version_, header_.packet_number_length);
     if (frames_size < min_plaintext_packet_size) {
-      if (GetQuicRestartFlag(quic_allow_smaller_packets)) {
-        frames_copy.insert(frames_copy.begin(),
-                           quic::QuicFrame(quic::QuicPaddingFrame(
-                               min_plaintext_packet_size - frames_size)));
-      } else {
-        const size_t expansion_on_new_frame =
-            frames.empty()
-                ? 0
-                : quic::QuicPacketCreator::ExpansionOnNewFrameWithLastFrame(
-                      frames.back(), version_.transport_version);
-        const size_t padding_length =
-            std::max(1 + expansion_on_new_frame,
-                     min_plaintext_packet_size - frames_size) -
-            expansion_on_new_frame;
-        CHECK_LE(padding_length + packet_size + expansion_on_new_frame,
-                 max_plaintext_size);
-        frames_copy.push_back(
-            quic::QuicFrame(quic::QuicPaddingFrame(padding_length)));
-      }
+      frames_copy.insert(frames_copy.begin(),
+                         quic::QuicFrame(quic::QuicPaddingFrame(
+                             min_plaintext_packet_size - frames_size)));
     }
   }
   std::unique_ptr<quic::QuicPacket> packet(quic::test::BuildUnsizedDataPacket(
@@ -1470,15 +1454,15 @@ std::string QuicTestPacketMaker::GenerateHttp3PriorityData(
     quic::QuicStreamId stream_id) {
   std::string priority_data;
   quic::PriorityUpdateFrame priority_update;
-  quic::QuicStreamPriority priority{
-      spdy_priority, quic::QuicStreamPriority::kDefaultIncremental};
+  quic::HttpStreamPriority priority{
+      spdy_priority, quic::HttpStreamPriority::kDefaultIncremental};
   if (client_priority_uses_incremental_ &&
       base::FeatureList::IsEnabled(features::kPriorityIncremental)) {
     priority.incremental = kDefaultPriorityIncremental;
   }
 
-  if (priority.urgency != quic::QuicStreamPriority::kDefaultUrgency ||
-      priority.incremental != quic::QuicStreamPriority::kDefaultIncremental) {
+  if (priority.urgency != quic::HttpStreamPriority::kDefaultUrgency ||
+      priority.incremental != quic::HttpStreamPriority::kDefaultIncremental) {
     priority_update.priority_field_value =
         quic::SerializePriorityFieldValue(priority);
   }

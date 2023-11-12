@@ -8,6 +8,8 @@
 #define IOS_CHROME_BROWSER_FIRST_RUN_FIRST_RUN_H_
 
 #include "base/files/file.h"
+#include "components/startup_metric_utils/browser/startup_metric_utils.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace base {
 class FilePath;
@@ -24,20 +26,6 @@ class PrefRegistrySyncable;
 // or explicitly skipped.
 class FirstRun {
  public:
-  // Result to create sentinel file. This enum is defined in
-  // src/tools/metrics/histograms/enums.xml
-  enum SentinelResult {
-    // No error.
-    SENTINEL_RESULT_SUCCESS,
-    // GetFirstRunSentinelFilePath() returned no file path.
-    SENTINEL_RESULT_FAILED_TO_GET_PATH,
-    // Sentinel file already exists.
-    SENTINEL_RESULT_FILE_PATH_EXISTS,
-    // File system error.
-    SENTINEL_RESULT_FILE_ERROR,
-    SENTINEL_RESULT_MAX,
-  };
-
   FirstRun() = delete;
   FirstRun(const FirstRun&) = delete;
   FirstRun& operator=(const FirstRun&) = delete;
@@ -45,15 +33,26 @@ class FirstRun {
   // Returns true if this is the first time chrome is run for this user.
   static bool IsChromeFirstRun();
 
+  // If the first run sentinel file exist, returns the info; otherwise, return
+  // `absl::nullopt`.
+  static absl::optional<base::File::Info> GetSentinelInfo();
+
   // Creates the sentinel file that signals that chrome has been configured if
-  // the file does not exist yet. Returns SENTINEL_RESULT_SUCCESS if the file
-  // was created. If SENTINEL_RESULT_FILE_ERROR is returned, `error` is set to
-  // the file system error, if non-nil.
-  static SentinelResult CreateSentinel(base::File::Error* error);
+  // the file does not exist yet.
+  // Returns `startup_metric_utils::FirstRunSentinelCreationResult::kSuccess` if
+  // the file was created. If
+  // `startup_metric_utils::FirstRunSentinelCreationResult::kFileSystemError` is
+  // returned, `error` is set to the file system error, if non-nil.
+  static startup_metric_utils::FirstRunSentinelCreationResult CreateSentinel(
+      base::File::Error* error);
 
   // Removes the sentinel file created in ConfigDone(). Returns false if the
   // sentinel file could not be removed.
   static bool RemoveSentinel();
+
+  // Retrieve the first run sentinel file info to be accessed in the future;
+  // note that this method should NOT be accessed from any non-blocking thread.
+  static void LoadSentinelInfo();
 
   // Get RLZ ping delay pref name.
   static const char* GetPingDelayPrefName();

@@ -146,11 +146,11 @@ WebsiteMetrics::UrlInfo::UrlInfo(const base::Value& value) {
   promotable = promotable_value.value();
 }
 
-base::Value WebsiteMetrics::UrlInfo::ConvertToValue() const {
-  base::Value usage_time_dict(base::Value::Type::DICT);
-  usage_time_dict.SetPath(kRunningTimeKey,
-                          base::TimeDeltaToValue(running_time_in_two_hours));
-  usage_time_dict.SetBoolKey(kPromotableKey, promotable);
+base::Value::Dict WebsiteMetrics::UrlInfo::ConvertToDict() const {
+  base::Value::Dict usage_time_dict;
+  usage_time_dict.Set(kRunningTimeKey,
+                      base::TimeDeltaToValue(running_time_in_two_hours));
+  usage_time_dict.Set(kPromotableKey, promotable);
   return usage_time_dict;
 }
 
@@ -225,6 +225,13 @@ void WebsiteMetrics::OnWindowActivated(ActivationReason reason,
 
 void WebsiteMetrics::OnURLsDeleted(history::HistoryService* history_service,
                                    const history::DeletionInfo& deletion_info) {
+  if (deletion_info.is_from_expiration()) {
+    // This is an auto-expiration of history that happens after 90 days. Any
+    // data recorded here must be newer than this threshold, so ignore the
+    // expiration.
+    return;
+  }
+
   // To simplify the implementation, remove all recorded urls no matter whatever
   // `deletion_info`.
   webcontents_to_ukm_key_.clear();
@@ -551,7 +558,7 @@ void WebsiteMetrics::SaveUsageTime() {
     }
     // Save all urls running time in the past two hours to the user pref.
     if (!it.second.running_time_in_two_hours.is_zero()) {
-      dict.Set(it.first.spec(), it.second.ConvertToValue());
+      dict.Set(it.first.spec(), it.second.ConvertToDict());
     }
   }
 

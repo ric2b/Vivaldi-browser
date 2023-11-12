@@ -16,10 +16,11 @@ HighEfficiencyModePolicy* g_high_efficiency_mode_policy = nullptr;
 
 }
 
+const base::TimeDelta HighEfficiencyModePolicy::kDefaultDiscardTimeInterval =
+    base::Hours(2);
+
 HighEfficiencyModePolicy::HighEfficiencyModePolicy()
-    : time_before_discard_(
-          performance_manager::features::kHighEfficiencyModeTimeBeforeDiscard
-              .Get()) {
+    : time_before_discard_(kDefaultDiscardTimeInterval) {
   DCHECK(!g_high_efficiency_mode_policy);
   g_high_efficiency_mode_policy = this;
 }
@@ -152,7 +153,7 @@ void HighEfficiencyModePolicy::DiscardPageTimerCallback(
   DCHECK(IsHighEfficiencyDiscardingEnabled());
 
   PageDiscardingHelper::GetFromGraph(graph_)->ImmediatelyDiscardSpecificPage(
-      page_node);
+      page_node, PageDiscardingHelper::DiscardReason::PROACTIVE);
 }
 
 }  // namespace performance_manager::policies

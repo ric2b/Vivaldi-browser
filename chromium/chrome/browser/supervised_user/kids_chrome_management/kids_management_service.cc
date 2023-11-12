@@ -18,7 +18,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/supervised_user/child_accounts/permission_request_creator_apiary.h"
-#include "chrome/browser/supervised_user/kids_chrome_management/kids_external_fetcher.h"
 #include "chrome/browser/supervised_user/kids_chrome_management/kids_profile_manager.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
@@ -28,6 +27,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_change_event.h"
 #include "components/signin/public/identity_manager/tribool.h"
+#include "components/supervised_user/core/browser/kids_external_fetcher.h"
 #include "components/supervised_user/core/browser/proto/families_common.pb.h"
 #include "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
 #include "components/supervised_user/core/common/buildflags.h"
@@ -177,8 +177,8 @@ void KidsManagementService::SetActive(bool newValue) {
         << "StartFetchFamilyMembers should make the status started";
 
     // Registers a request for permission for the user to access a blocked site.
-    supervised_user_service_->web_approvals_manager()
-        .AddRemoteApprovalRequestCreator(
+    supervised_user_service_->remote_web_approvals_manager()
+        .AddApprovalRequestCreator(
             PermissionRequestCreatorApiary::CreateWithProfile(profile_));
   } else {
     StopFetchFamilyMembers();
@@ -291,9 +291,15 @@ const std::string& KidsManagementService::GetEndpointUrl() {
 }
 
 KidsManagementServiceFactory::KidsManagementServiceFactory()
-    : ProfileKeyedServiceFactory("KidsManagementService") {
+    : ProfileKeyedServiceFactory(
+          "KidsManagementService",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOriginalOnly)
+              .Build()) {
   DependsOn(IdentityManagerFactory::GetInstance());
-  DependsOn(SyncServiceFactory::GetInstance());
   DependsOn(SupervisedUserServiceFactory::GetInstance());
 }
 KidsManagementServiceFactory::~KidsManagementServiceFactory() = default;

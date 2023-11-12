@@ -5,9 +5,10 @@
 package org.chromium.chrome.browser.partnercustomizations;
 
 import android.net.Uri;
-import android.support.test.InstrumentationRegistry;
 import android.view.View;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -16,10 +17,10 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.homepage.HomepageManager;
@@ -31,6 +32,7 @@ import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsProvider;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
@@ -71,6 +73,21 @@ public class PartnerHomepageIntegrationTest {
         Assert.assertEquals(Uri.parse(TestPartnerBrowserCustomizationsProvider.HOMEPAGE_URI),
                 Uri.parse(ChromeTabUtils.getUrlStringOnUiThread(
                         mActivityTestRule.getActivity().getActivityTab())));
+        Assert.assertEquals("<Android.PartnerBrowserCustomizationInitDuration> not recorded.", 1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Android.PartnerBrowserCustomizationInitDuration"));
+        Assert.assertEquals(
+                "<Android.PartnerBrowserCustomizationInitDuration.WithCallbacks> not recorded.", 1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Android.PartnerBrowserCustomizationInitDuration.WithCallbacks"));
+        Assert.assertEquals(
+                "<Android.PartnerCustomizationInitializedBeforeInitialTab> not recorded.", 1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        "Android.PartnerCustomizationInitializedBeforeInitialTab"));
+        Assert.assertEquals(
+                "<Android.PartnerCustomizationInitializedBeforeInitialTab> should record true.", 1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        "Android.PartnerCustomizationInitializedBeforeInitialTab", 1));
     }
 
     /**
@@ -80,8 +97,8 @@ public class PartnerHomepageIntegrationTest {
     @MediumTest
     @Feature({"Homepage"})
     public void testHomepageButtonClick() throws InterruptedException {
-        EmbeddedTestServer testServer =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         try {
             // Load non-homepage URL.
             mActivityTestRule.loadUrl(testServer.getURL(TEST_PAGE));

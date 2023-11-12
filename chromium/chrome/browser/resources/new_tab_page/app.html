@@ -26,12 +26,11 @@
     }
   }
 
-  @media (min-width: 768px) {
-    :host {
-      --ntp-module-layout-width:
-          var(--ntp-module-max-width, var(--ntp-search-box-width));
-      --ntp-module-width:
-          var(--ntp-module-max-width, var(--ntp-search-box-width));
+  /*A module width of 768px with 18px gaps on each side. */
+  @media (min-width: 804px) {
+    :host([wide-modules-enabled_]) {
+      --ntp-module-layout-width: 768px;
+      --ntp-module-width: 768px;
     }
   }
 
@@ -100,6 +99,21 @@
   ntp-modules {
     flex-shrink: 0;
     width: var(--ntp-module-layout-width);
+  }
+
+  ntp-modules:not([hidden]) {
+    /* We use animation instead of transition to allow a fade-in out of
+       display: none. */
+    animation: 300ms ease-in-out fade-in-animation;
+  }
+
+  @keyframes fade-in-animation {
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
   }
 
   ntp-middle-slot-promo {
@@ -357,7 +371,8 @@
   <dom-if if="[[lazyRender_]]" on-dom-change="onLazyRendered_">
     <template>
       <template is="dom-if" if="[[shortcutsEnabled_]]">
-        <cr-most-visited id="mostVisited" theme="[[theme_.mostVisited]]">
+        <cr-most-visited id="mostVisited" theme="[[theme_.mostVisited]]"
+            single-row="[[singleRowShortcutsEnabled_]]">
         </cr-most-visited>
       </template>
       <template is="dom-if" if="[[middleSlotPromoEnabled_]]">

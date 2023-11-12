@@ -2,16 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import <TestLib/EarlGreyImpl/EarlGrey.h>
 #import <UIKit/UIKit.h>
 
 #import "base/ios/ios_util.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/ui/settings/password/password_settings/password_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_table_view_constants.h"
 #import "ios/chrome/browser/ui/settings/settings_root_table_constants.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
@@ -171,14 +170,6 @@
       waitForSufficientlyVisibleElementWithMatcher:chrome_test_util::Omnibox()];
 }
 
-// Tests sync server converted helpers in chrome_earl_grey.h.
-- (void)testSyncServerHelpers {
-  [ChromeEarlGrey startSync];
-  [ChromeEarlGrey waitForSyncEngineInitialized:NO
-                                   syncTimeout:base::Seconds(10)];
-  [ChromeEarlGrey clearSyncServerData];
-}
-
 // Tests executeJavaScript:error: in chrome_earl_grey.h
 - (void)testExecuteJavaScript {
   base::Value result = [ChromeEarlGrey evaluateJavaScript:@"0"];
@@ -269,29 +260,13 @@
 
 // Tests hard kill(crash) through AppLaunchManager.
 - (void)testAppLaunchManagerForceRelaunchByKilling {
-  [ChromeEarlGrey openNewIncognitoTab];
-  [ChromeEarlGrey openNewTab];
-  [ChromeEarlGrey loadURL:GURL("chrome://version")];
-  [[AppLaunchManager sharedManager]
-      ensureAppLaunchedWithFeaturesEnabled:{}
-                                  disabled:{kRemoveCrashInfobar}
-                            relaunchPolicy:ForceRelaunchByKilling];
-  [ChromeEarlGrey
-      waitForSufficientlyVisibleElementWithMatcher:grey_text(@"Restore")];
-  [ChromeEarlGrey waitForMainTabCount:1];
-  [ChromeEarlGrey waitForIncognitoTabCount:0];
-}
-
-// Tests hard kill(crash) through AppLaunchManager.
-- (void)testAppLaunchManagerForceRelaunchByKillingNoRestoreInfobar {
   [ChromeEarlGrey loadURL:GURL("chrome://version")];
   [ChromeEarlGrey openNewIncognitoTab];
   [ChromeEarlGrey openNewTab];
   [ChromeEarlGrey loadURL:GURL("chrome://about")];
-  [[AppLaunchManager sharedManager]
-      ensureAppLaunchedWithFeaturesEnabled:{kRemoveCrashInfobar}
-                                  disabled:{}
-                            relaunchPolicy:ForceRelaunchByKilling];
+  [[AppLaunchManager sharedManager] ensureAppLaunchedWithFeaturesEnabled:{}
+      disabled:{}
+      relaunchPolicy:ForceRelaunchByKilling];
   [ChromeEarlGrey waitForMainTabCount:2];
   [ChromeEarlGrey waitForIncognitoTabCount:1];
   [[EarlGrey selectElementWithMatcher:grey_text(@"Restore")]

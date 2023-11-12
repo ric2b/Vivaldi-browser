@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -21,7 +22,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/signatures.h"
-#include "components/os_crypt/os_crypt_mocker.h"
+#include "components/os_crypt/sync/os_crypt_mocker.h"
 #include "components/password_manager/core/browser/affiliation/mock_affiliated_match_helper.h"
 #include "components/password_manager/core/browser/affiliation/mock_affiliation_service.h"
 #include "components/password_manager/core/browser/fake_password_store_backend.h"
@@ -67,6 +68,8 @@ constexpr const char kTestAffiliatedRealm[] = "https://one.example/";
 constexpr const char kTestAffiliatedURL[] = "https://one.example/path";
 constexpr const char kTestAffiliatedPSLWebRealm[] = "https://two.example/";
 constexpr const char kTestAffiliatedPSLWebURL[] = "https://two.example/path";
+constexpr const char kTestGroupRealm[] = "https://one-good.example/";
+constexpr const char kTestGroupURL[] = "https://one-good.example/path";
 constexpr const char kTestWebRealm1[] = "https://one.example.com/";
 constexpr const char kTestWebOrigin1[] = "https://one.example.com/origin";
 constexpr const char kTestWebRealm2[] = "https://two.example.com/";
@@ -210,10 +213,12 @@ class PasswordStoreTest : public testing::Test {
       base::test::TaskEnvironment::MainThreadType::UI,
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
+ protected:
+  base::test::ScopedFeatureList feature_list_;
+
  private:
   base::ScopedTempDir temp_dir_;
   TestingPrefServiceSimple pref_service_;
-  base::test::ScopedFeatureList feature_list_;
 };
 
 absl::optional<PasswordHashData> GetPasswordFromPref(
@@ -252,7 +257,8 @@ TEST_F(PasswordStoreTest, UpdateLoginPrimaryKeyFields) {
       FillPasswordFormWithData(kTestCredentials[0]));
   old_form->password_issues = {
       {InsecureType::kLeaked,
-       InsecurityMetadata(base::Time(), IsMuted(false))}};
+       InsecurityMetadata(base::Time(), IsMuted(false),
+                          TriggerBackendNotification(false))}};
   store->AddLogin(*old_form);
   WaitForPasswordStore();
 
@@ -282,6 +288,89 @@ TEST_F(PasswordStoreTest, UpdateLoginPrimaryKeyFields) {
   EXPECT_CALL(mock_consumer,
               OnGetPasswordStoreResultsOrErrorFrom(
                   store.get(), LoginsResultsOrErrorAre(&expected_forms)));
+  store->GetAutofillableLogins(mock_consumer.GetWeakPtr());
+  WaitForPasswordStore();
+
+  store->RemoveObserver(&mock_observer);
+  store->ShutdownOnUIThread();
+}
+
+TEST_F(PasswordStoreTest, AddLogins) {
+  std::vector<std::unique_ptr<PasswordForm>> all_credentials;
+  all_credentials.push_back(FillPasswordFormWithData(
+      CreateTestPasswordFormDataByOrigin(kTestWebRealm1)));
+  all_credentials.push_back(FillPasswordFormWithData(
+      CreateTestPasswordFormDataByOrigin(kTestAndroidRealm1)));
+
+  scoped_refptr<PasswordStore> store = CreatePasswordStore();
+  store->Init(/*prefs=*/nullptr, /*affiliated_match_helper=*/nullptr);
+
+  MockPasswordStoreObserver mock_observer;
+  store->AddObserver(&mock_observer);
+
+  EXPECT_CALL(mock_observer, OnLoginsChanged(_, testing::SizeIs(2u)));
+  store->AddLogins({*all_credentials[0], *all_credentials[1]});
+  WaitForPasswordStore();
+
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+
+  MockPasswordStoreConsumer mock_consumer;
+
+  EXPECT_CALL(mock_consumer,
+              OnGetPasswordStoreResultsOrErrorFrom(
+                  store.get(), LoginsResultsOrErrorAre(&all_credentials)));
+  store->GetAutofillableLogins(mock_consumer.GetWeakPtr());
+  WaitForPasswordStore();
+
+  store->RemoveObserver(&mock_observer);
+  store->ShutdownOnUIThread();
+}
+
+TEST_F(PasswordStoreTest, UpdateLogins) {
+  PasswordFormData form_data_1 =
+      CreateTestPasswordFormDataByOrigin(kTestWebRealm1);
+  PasswordFormData form_data_2 =
+      CreateTestPasswordFormDataByOrigin(kTestAndroidRealm1);
+  std::vector<PasswordForm> all_credentials = {
+      *FillPasswordFormWithData(form_data_1),
+      *FillPasswordFormWithData(form_data_2)};
+
+  scoped_refptr<PasswordStore> store = CreatePasswordStore();
+  store->Init(/*prefs=*/nullptr, /*affiliated_match_helper=*/nullptr);
+
+  store->AddLogins(all_credentials);
+
+  WaitForPasswordStore();
+
+  form_data_1.password_value = u"new_password1";
+  form_data_2.password_value = u"new_password2";
+
+  std::unique_ptr<PasswordForm> updated_form_1 =
+      FillPasswordFormWithData(form_data_1);
+  std::unique_ptr<PasswordForm> updated_form_2 =
+      FillPasswordFormWithData(form_data_2);
+
+  std::vector<PasswordForm> updated_credentials = {*updated_form_1,
+                                                   *updated_form_2};
+
+  MockPasswordStoreObserver mock_observer;
+  store->AddObserver(&mock_observer);
+
+  EXPECT_CALL(mock_observer, OnLoginsChanged(_, testing::SizeIs(2u)));
+  store->UpdateLogins(updated_credentials);
+  WaitForPasswordStore();
+
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+
+  MockPasswordStoreConsumer mock_consumer;
+
+  std::vector<std::unique_ptr<PasswordForm>> expected_results;
+  expected_results.push_back(std::move(updated_form_1));
+  expected_results.push_back(std::move(updated_form_2));
+
+  EXPECT_CALL(mock_consumer,
+              OnGetPasswordStoreResultsOrErrorFrom(
+                  store.get(), LoginsResultsOrErrorAre(&expected_results)));
   store->GetAutofillableLogins(mock_consumer.GetWeakPtr());
   WaitForPasswordStore();
 
@@ -346,7 +435,8 @@ TEST_F(PasswordStoreTest, InsecureCredentialsObserverOnLoginUpdated) {
       FillPasswordFormWithData(kTestCredential));
   test_form->password_issues = {
       {InsecureType::kLeaked,
-       InsecurityMetadata(base::Time::FromTimeT(1), IsMuted(false))}};
+       InsecurityMetadata(base::Time::FromTimeT(1), IsMuted(false),
+                          TriggerBackendNotification(false))}};
   store->AddLogin(*test_form);
   WaitForPasswordStore();
 
@@ -388,7 +478,8 @@ TEST_F(PasswordStoreTest, InsecureCredentialsObserverOnLoginAdded) {
       FillPasswordFormWithData(kTestCredential));
   test_form->password_issues = {
       {InsecureType::kLeaked,
-       InsecurityMetadata(base::Time::FromTimeT(1), IsMuted(false))}};
+       InsecurityMetadata(base::Time::FromTimeT(1), IsMuted(false),
+                          TriggerBackendNotification(false))}};
   store->AddLogin(*test_form);
   WaitForPasswordStore();
 
@@ -436,7 +527,8 @@ TEST_F(PasswordStoreTest, InsecurePasswordObserverOnInsecureCredentialAdded) {
   EXPECT_CALL(mock_observer, OnLoginsChanged);
   test_form->password_issues = {
       {InsecureType::kLeaked,
-       InsecurityMetadata(base::Time::FromTimeT(1), IsMuted(false))}};
+       InsecurityMetadata(base::Time::FromTimeT(1), IsMuted(false),
+                          TriggerBackendNotification(false))}};
   store->UpdateLogin(*test_form);
 
   WaitForPasswordStore();
@@ -463,7 +555,8 @@ TEST_F(PasswordStoreTest, InsecurePasswordObserverOnInsecureCredentialRemoved) {
       FillPasswordFormWithData(kTestCredentials));
   test_form->password_issues = {
       {InsecureType::kLeaked,
-       InsecurityMetadata(base::Time::FromTimeT(1), IsMuted(false))}};
+       InsecurityMetadata(base::Time::FromTimeT(1), IsMuted(false),
+                          TriggerBackendNotification(false))}};
   store->AddLogin(*test_form);
   WaitForPasswordStore();
 
@@ -969,6 +1062,127 @@ INSTANTIATE_TEST_SUITE_P(Federation,
                          PasswordStoreFederationTest,
                          testing::Bool());
 
+// The 'bool' param corresponds to 'kFillingAcrossGroupedSites'.
+class PasswordStoreGroupsTest : public PasswordStoreTest,
+                                      public testing::WithParamInterface<bool> {
+  void SetUp() override {
+    PasswordStoreTest::SetUp();
+    feature_list_.Reset();
+    if (GetParam()) {
+      feature_list_.InitWithFeatures(
+          /*enabled_features=*/{features::kFillingAcrossGroupedSites,
+                                features::kFillingAcrossAffiliatedWebsites},
+          /*disabled_features=*/{});
+    } else {
+      feature_list_.InitWithFeatures(
+          /*enabled_features=*/{features::kFillingAcrossAffiliatedWebsites},
+          /*disabled_features=*/{features::kFillingAcrossGroupedSites});
+    }
+    store_ = CreatePasswordStore();
+    MockAffiliationService mock_affiliation_service;
+    auto owning_mock_match_helper =
+        std::make_unique<MockAffiliatedMatchHelper>(&mock_affiliation_service);
+    mock_affiliated_match_helper_ = owning_mock_match_helper.get();
+    store_->Init(/*prefs=*/nullptr, std::move(owning_mock_match_helper));
+  }
+
+  void TearDown() override { store_->ShutdownOnUIThread(); }
+
+ protected:
+  std::vector<std::unique_ptr<PasswordForm>> CreateCredentialsAndAddToStore() {
+    static const PasswordFormData kTestCredentials[] = {
+        // Credential that is an exact match of the observed form.
+        {PasswordForm::Scheme::kHtml, kTestWebRealm1, kTestWebOrigin1, "", u"",
+         u"", u"", u"username_1", u"12345"},
+
+        // Credential that is a PSL, non affiliated match of the observed form.
+        {PasswordForm::Scheme::kHtml, kTestPSLMatchingWebRealm,
+         kTestPSLMatchingWebOrigin, "", u"", u"", u"", u"username_2", u"asdf"},
+
+        // Credential that is a PSL and affiliated match of the observed form.
+        {PasswordForm::Scheme::kHtml, kTestWebRealm2, kTestWebOrigin2, "", u"",
+         u"", u"", u"username_3", u"password"},
+
+        // Credential that is a group match of the observed form.
+        {PasswordForm::Scheme::kHtml, kTestGroupRealm, kTestGroupURL, "",
+         u"", u"", u"", u"username_4", u"password1"},
+
+        // Credential that is a PSL match of an affiliated form. It should be
+        // filtered out.
+        {PasswordForm::Scheme::kHtml, kTestAffiliatedPSLWebRealm,
+         kTestAffiliatedPSLWebURL, "", u"", u"", u"", u"username_5",
+         u"password3"},
+
+        // Credential for unrelated origin.
+        {PasswordForm::Scheme::kUsernameOnly, kTestUnrelatedWebRealm2,
+         kTestUnrelatedWebOrigin2, "", u"", u"", u"", u"username_6",
+         u"password2"}};
+    std::vector<std::unique_ptr<PasswordForm>> credentials;
+    for (const auto& i : kTestCredentials) {
+      credentials.push_back(FillPasswordFormWithData(i, false));
+      store_->AddLogin(*credentials.back());
+    }
+    return credentials;
+  }
+
+  scoped_refptr<PasswordStore> store_;
+  raw_ptr<MockAffiliatedMatchHelper> mock_affiliated_match_helper_;
+};
+
+// Retrieve matching passwords for affiliated groups credentials and make sure
+// the properties are set correctly.
+TEST_P(PasswordStoreGroupsTest, GetLoginsWithWebGroup) {
+  std::vector<std::unique_ptr<PasswordForm>> all_credentials =
+      CreateCredentialsAndAddToStore();
+
+  PasswordFormDigest observed_form = {PasswordForm::Scheme::kHtml,
+                                      kTestWebRealm1, GURL(kTestWebOrigin1)};
+
+  std::vector<std::unique_ptr<PasswordForm>> expected_results;
+
+  // Credential that is an exact match of the observed form.
+  expected_results.push_back(
+      std::make_unique<PasswordForm>(*all_credentials[0]));
+  // Credential that is a PSL, non affiliated match of the observed form.
+  expected_results.push_back(
+      std::make_unique<PasswordForm>(*all_credentials[1]));
+  expected_results[1]->is_public_suffix_match = true;
+  // Credential that is a PSL and affiliated match of the observed form.
+  expected_results.push_back(
+      std::make_unique<PasswordForm>(*all_credentials[2]));
+  expected_results[2]->is_public_suffix_match = true;
+  expected_results[2]->is_affiliation_based_match = true;
+  // Credential that is a group match of the observed form.
+  if (base::FeatureList::IsEnabled(features::kFillingAcrossGroupedSites)) {
+    expected_results.push_back(
+        std::make_unique<PasswordForm>(*all_credentials[3]));
+    expected_results[3]->is_affiliation_based_match = true;
+    expected_results[3]->is_grouped_match = true;
+  }
+
+  // In the production 'kTestWebRealm1' won't be in the list but the code should
+  // protect against it.
+  std::vector<std::string> affiliated_realms = {kTestWebRealm1, kTestWebRealm2};
+  if (base::FeatureList::IsEnabled(features::kFillingAcrossGroupedSites)) {
+    mock_affiliated_match_helper_->ExpectCallToGetGroup(observed_form,
+                                                        {kTestGroupRealm});
+  }
+  mock_affiliated_match_helper_->ExpectCallToGetAffiliatedAndroidRealms(
+      observed_form, affiliated_realms);
+
+  MockPasswordStoreConsumer mock_consumer;
+  EXPECT_CALL(mock_consumer,
+              OnGetPasswordStoreResultsOrErrorFrom(
+                  store_.get(), LoginsResultsOrErrorAre(&expected_results)));
+
+  store_->GetLogins(observed_form, mock_consumer.GetWeakPtr());
+  WaitForPasswordStore();
+}
+
+INSTANTIATE_TEST_SUITE_P(Groups,
+                         PasswordStoreGroupsTest,
+                         testing::Bool());
+
 TEST_F(PasswordStoreTest, DelegatesGetAllLoginsToBackend) {
   auto [store, mock_backend] = CreateUnownedStoreWithOwnedMockBackend();
   store->Init(/*prefs=*/nullptr, /*affiliated_match_helper=*/nullptr);
@@ -1398,7 +1612,8 @@ TEST_F(PasswordStoreTest, RemoveInsecureCredentialsSyncOnUpdate) {
   std::unique_ptr<PasswordForm> form(FillPasswordFormWithData(kTestCredential));
   form->password_issues = {
       {InsecureType::kLeaked,
-       InsecurityMetadata(base::Time::FromTimeT(100), IsMuted(false))}};
+       InsecurityMetadata(base::Time::FromTimeT(100), IsMuted(false),
+                          TriggerBackendNotification(false))}};
   store->AddLogin(*form);
 
   WaitForPasswordStore();

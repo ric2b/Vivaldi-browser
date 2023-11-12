@@ -80,8 +80,8 @@ ContentSettingsType ConvertToContentSettingsType(
 ExtensionFunction::ResponseAction SettingsSetContentSettingFunction::Run() {
   using vivaldi::settings::SetContentSetting::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
   HostContentSettingsMap* content_settings =

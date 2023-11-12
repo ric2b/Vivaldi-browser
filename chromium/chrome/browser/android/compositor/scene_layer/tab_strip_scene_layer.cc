@@ -35,7 +35,6 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
     : SceneLayer(env, jobj),
       tab_strip_layer_(cc::slim::SolidColorLayer::Create()),
       scrollable_strip_layer_(cc::slim::Layer::Create()),
-      scrim_layer_(cc::slim::SolidColorLayer::Create()),
       new_tab_button_(cc::slim::UIResourceLayer::Create()),
       new_tab_button_background_(cc::slim::UIResourceLayer::Create()),
       left_fade_(cc::slim::UIResourceLayer::Create()),
@@ -50,19 +49,12 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
   model_selector_button_background_->SetIsDrawable(true);
   left_fade_->SetIsDrawable(true);
   right_fade_->SetIsDrawable(true);
-  scrim_layer_->SetIsDrawable(true);
   tab_strip_redesign_enabled = is_tab_strip_redesign_enabled;
 
   // When the ScrollingStripStacker is used, the new tab button and tabs scroll,
   // while the incognito button and left/ride fade stay fixed. Put the new tab
   // button and tabs in a separate layer placed visually below the others.
   scrollable_strip_layer_->SetIsDrawable(true);
-  const bool tab_strip_improvements_enabled =
-      base::FeatureList::IsEnabled(chrome::android::kTabStripImprovements);
-  if (!tab_strip_improvements_enabled) {
-    scrollable_strip_layer_->AddChild(new_tab_button_);
-  }
-
   tab_strip_layer_->SetIsDrawable(true);
   tab_strip_layer_->AddChild(scrollable_strip_layer_);
 
@@ -71,13 +63,10 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
   tab_strip_layer_->AddChild(model_selector_button_);
   tab_strip_layer_->AddChild(model_selector_button_background_);
   model_selector_button_background_->AddChild(model_selector_button_);
-  if (tab_strip_improvements_enabled) {
-    if (tab_strip_redesign_enabled) {
-      tab_strip_layer_->AddChild(new_tab_button_background_);
-    }
-    tab_strip_layer_->AddChild(new_tab_button_);
+  if (tab_strip_redesign_enabled) {
+    tab_strip_layer_->AddChild(new_tab_button_background_);
   }
-  tab_strip_layer_->AddChild(scrim_layer_);
+  tab_strip_layer_->AddChild(new_tab_button_);
 
   // Note(david@vivaldi.com): The correct layer child assignment will be done
   // in |SetContentTree()| as we are dealing with a pair of
@@ -184,26 +173,6 @@ void TabStripSceneLayer::UpdateTabStripLayer(JNIEnv* env,
   }
 }
 
-void TabStripSceneLayer::UpdateStripScrim(JNIEnv* env,
-                                          const JavaParamRef<jobject>& jobj,
-                                          jfloat x,
-                                          jfloat y,
-                                          jint width,
-                                          jint height,
-                                          jint color,
-                                          jfloat alpha) {
-  if (alpha == 0.f) {
-    scrim_layer_->SetIsDrawable(false);
-    return;
-  }
-  scrim_layer_->SetIsDrawable(true);
-  // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
-  scrim_layer_->SetBackgroundColor(SkColor4f::FromColor(color));
-  scrim_layer_->SetBounds(gfx::Size(width, height));
-  scrim_layer_->SetPosition(gfx::PointF(x, y));
-  scrim_layer_->SetOpacity(alpha);
-}
-
 void TabStripSceneLayer::UpdateNewTabButton(
     JNIEnv* env,
     const JavaParamRef<jobject>& jobj,
@@ -230,11 +199,6 @@ void TabStripSceneLayer::UpdateNewTabButton(
 
   new_tab_button_->SetUIResourceId(button_resource->ui_resource()->id());
 
-  // The touch target for the new tab button is skewed towards the end of the
-  // strip. This ensures that the view itself is correctly aligned without
-  // adjusting the touch target.
-  float left_offset = touch_target_offset;
-
   new_tab_button_->SetBounds(button_resource->size());
   new_tab_button_->SetHideLayerAndSubtree(!visible);
   new_tab_button_->SetOpacity(button_alpha);
@@ -252,7 +216,7 @@ void TabStripSceneLayer::UpdateNewTabButton(
                                   2;
     new_tab_button_background_->SetUIResourceId(
         button_background_resource->ui_resource()->id());
-    new_tab_button_background_->SetPosition(gfx::PointF(x + left_offset, y));
+    new_tab_button_background_->SetPosition(gfx::PointF(x, y));
 
     new_tab_button_background_->SetBounds(button_background_resource->size());
     new_tab_button_background_->SetHideLayerAndSubtree(!visible);
@@ -261,6 +225,11 @@ void TabStripSceneLayer::UpdateNewTabButton(
         gfx::PointF(background_left_offset, background_top_offset));
     new_tab_button_background_->AddChild(new_tab_button_);
   } else {
+    // The touch target for the new tab button is skewed towards the end of the
+    // strip. This ensures that the view itself is correctly aligned without
+    // adjusting the touch target.
+    float left_offset = touch_target_offset;
+
     // Only show new tab button icon when TSR is disabled
     new_tab_button_->SetPosition(gfx::PointF(x + left_offset, y));
   }
@@ -336,6 +305,7 @@ void TabStripSceneLayer::UpdateModelSelectorButtonBackground(
   float background_top_offset = (button_background_resource->size().height() -
                                  button_resource->size().height()) /
                                 2;
+
   model_selector_button_background_->SetPosition(gfx::PointF(x, y));
 
   model_selector_button_background_->SetBounds(
@@ -376,9 +346,8 @@ void TabStripSceneLayer::UpdateTabStripLeftFade(
   left_fade_->SetUIResourceId(fade_resource->ui_resource()->id());
 
   // The same resource is used for both left and right fade, so the
-  // resource must be rotated for the left fade.
-  gfx::Transform fade_transform;
-  fade_transform.RotateAboutYAxis(180.0);
+  // resource must be mirrored for the left fade.
+  gfx::Transform fade_transform = gfx::Transform::MakeScale(-1.0f, 1.0f);
   left_fade_->SetTransform(fade_transform);
 
   // Set opacity.

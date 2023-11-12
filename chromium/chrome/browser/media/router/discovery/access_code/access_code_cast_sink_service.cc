@@ -10,7 +10,8 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
-#include "chrome/browser/media/router/discovery/access_code/access_code_cast_pref_updater.h"
+#include "chrome/browser/media/router/discovery/access_code/access_code_cast_feature.h"
+#include "chrome/browser/media/router/discovery/access_code/access_code_cast_pref_updater_impl.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_media_sink_util.h"
 #include "chrome/browser/media/router/discovery/discovery_network_monitor.h"
 #include "chrome/browser/media/router/discovery/mdns/media_sink_util.h"
@@ -127,7 +128,9 @@ AccessCodeCastSinkService::AccessCodeCastSinkService(
   // We don't need to post this task per the DiscoveryNetworkMonitor's
   // promise: "All observers will be notified of network changes on the thread
   // from which they registered."
-  pref_updater_ = std::make_unique<AccessCodeCastPrefUpdater>(prefs_);
+
+  pref_updater_ = std::make_unique<AccessCodeCastPrefUpdaterImpl>(prefs_);
+
   network_monitor_->AddObserver(this);
   InitAllStoredDevices();
   user_prefs_registrar_ = std::make_unique<PrefChangeRegistrar>();
@@ -182,9 +185,11 @@ void AccessCodeCastSinkService::AccessCodeMediaRoutesObserver::OnRoutesUpdated(
 
     // Only record the start time for local routes
     bool is_route_local = false;
+    MediaSource source = MediaSource::ForAnyTab();
     for (const auto& route : routes) {
       if (route.media_route_id() == new_route_id && route.is_local()) {
         is_route_local = true;
+        source = route.media_source();
       }
     }
 
@@ -199,7 +204,7 @@ void AccessCodeCastSinkService::AccessCodeMediaRoutesObserver::OnRoutesUpdated(
                 MediaRoute::GetSinkIdFromMediaRouteId(new_route_id)),
             base::BindOnce(&AccessCodeCastSinkService::HandleMediaRouteAdded,
                            access_code_sink_service_->GetWeakPtr(),
-                           new_route_id, is_route_local));
+                           new_route_id, is_route_local, source));
   }
 
   // No routes were removed.
@@ -274,6 +279,7 @@ void AccessCodeCastSinkService::HandleMediaRouteRemovedByAccessCode(
 void AccessCodeCastSinkService::HandleMediaRouteAdded(
     const MediaRoute::Id route_id,
     const bool is_route_local,
+    const MediaSource media_source,
     const MediaSinkInternal* sink) {
   if (!IsSinkValidAccessCodeSink(sink))
     return;
@@ -282,8 +288,19 @@ void AccessCodeCastSinkService::HandleMediaRouteAdded(
     current_route_start_times_[route_id] = base::Time::Now();
   }
 
+  bool is_saved = sink->cast_data().discovery_type ==
+                  CastDiscoveryType::kAccessCodeRememberedDevice;
+  AccessCodeCastCastMode source_type = AccessCodeCastCastMode::kPresentation;
+  if (media_source.IsTabMirroringSource()) {
+    source_type = AccessCodeCastCastMode::kTabMirror;
+  } else if (media_source.IsDesktopMirroringSource()) {
+    source_type = AccessCodeCastCastMode::kDesktopMirror;
+  } else if (media_source.IsRemotePlaybackSource()) {
+    source_type = AccessCodeCastCastMode::kRemotePlayback;
+  }
+
   AccessCodeCastMetrics::RecordAccessCodeRouteStarted(
-      GetAccessCodeDeviceDurationPref(profile_));
+      GetAccessCodeDeviceDurationPref(profile_), is_saved, source_type);
 }
 
 void AccessCodeCastSinkService::OnAccessCodeRouteRemoved(

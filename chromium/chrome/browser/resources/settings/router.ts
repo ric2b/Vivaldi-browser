@@ -29,6 +29,9 @@ export interface SettingsRoutes {
   DOWNLOADS: Route;
   EDIT_DICTIONARY: Route;
   FONTS: Route;
+  // <if expr="_google_chrome">
+  GET_MOST_CHROME: Route;
+  // </if>
   IMPORT_DATA: Route;
   INCOMPATIBLE_APPLICATIONS: Route;
   LANGUAGES: Route;
@@ -59,10 +62,10 @@ export interface SettingsRoutes {
   SIGN_OUT: Route;
   SITE_SETTINGS: Route;
   SITE_SETTINGS_ADS: Route;
-  SITE_SETTINGS_ANTI_ABUSE: Route;
   SITE_SETTINGS_ALL: Route;
   SITE_SETTINGS_AR: Route;
   SITE_SETTINGS_AUTOMATIC_DOWNLOADS: Route;
+  SITE_SETTINGS_AUTO_VERIFY: Route;
   SITE_SETTINGS_BACKGROUND_SYNC: Route;
   SITE_SETTINGS_BLUETOOTH_DEVICES: Route;
   SITE_SETTINGS_BLUETOOTH_SCANNING: Route;

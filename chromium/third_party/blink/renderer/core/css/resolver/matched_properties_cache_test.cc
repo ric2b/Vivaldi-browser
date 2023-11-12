@@ -34,8 +34,9 @@ class MatchedPropertiesCacheTestKey {
     result_.FinishAddingUserRules();
     result_.FinishAddingPresentationalHints();
     auto* set = css_test_helpers::ParseDeclarationBlock(block_text);
+    result_.BeginAddingAuthorRulesForTreeScope(tree_scope);
     result_.AddMatchedProperties(set);
-    result_.FinishAddingAuthorRulesForTreeScope(tree_scope);
+    result_.FinishAddingAuthorRulesForTreeScope();
     return result_;
   }
 
@@ -60,8 +61,7 @@ class MatchedPropertiesCacheTestCache {
   void Add(const TestKey& key,
            const ComputedStyle& style,
            const ComputedStyle& parent_style) {
-    cache_.Add(key.InnerKey(), ComputedStyle::Clone(style),
-               ComputedStyle::Clone(parent_style));
+    cache_.Add(key.InnerKey(), &style, &parent_style);
   }
 
   const CachedMatchedProperties* Find(const TestKey& key,

@@ -15,8 +15,8 @@ namespace extensions {
 ExtensionFunction::ResponseAction InfobarsSendButtonActionFunction::Run() {
   using vivaldi::infobars::SendButtonAction::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   int identifier = params->identifier;
   int tab_id = params->tab_id;

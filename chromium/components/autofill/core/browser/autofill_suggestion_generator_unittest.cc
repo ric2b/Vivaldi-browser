@@ -4,7 +4,6 @@
 
 #include <vector>
 
-#include "base/guid.h"
 #include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -12,12 +11,14 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/autofill/core/browser/autofill_suggestion_generator.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/iban.h"
-#include "components/autofill/core/browser/form_structure_test_api.h"
 #include "components/autofill/core/browser/metrics/payments/card_metadata_metrics.h"
+#include "components/autofill/core/browser/mock_autofill_optimization_guide.h"
+#include "components/autofill/core/browser/payments/constants.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
@@ -26,13 +27,17 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/feature_engagement/public/feature_constants.h"
+#include "components/grit/components_scaled_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/mock_resource_bundle_delegate.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/resources/grit/ui_resources.h"
+
+using gfx::test::AreImagesEqual;
 
 namespace autofill {
 
@@ -52,13 +57,6 @@ class TestAutofillSuggestionGenerator : public AutofillSuggestionGenerator {
     return AutofillSuggestionGenerator::CreateCreditCardSuggestion(
         credit_card, type, /*prefix_matched_suggestion=*/false,
         virtual_card_option, /*app_locale=*/"", card_linked_offer_available);
-  }
-
-  std::map<Suggestion::BackendId, InternalId> backend_to_internal_map() {
-    return backend_to_internal_map_;
-  }
-  std::map<InternalId, Suggestion::BackendId> internal_to_backend_map() {
-    return internal_to_backend_map_;
   }
 };
 
@@ -80,6 +78,7 @@ class AutofillSuggestionGeneratorTest : public testing::Test {
                           /*local_state=*/autofill_client_.GetPrefs(),
                           /*identity_manager=*/nullptr,
                           /*history_service=*/nullptr,
+                          /*sync_service=*/nullptr,
                           /*strike_database=*/nullptr,
                           /*image_fetcher=*/nullptr,
                           /*is_off_the_record=*/false);
@@ -115,9 +114,22 @@ class AutofillSuggestionGeneratorTest : public testing::Test {
     return local_card;
   }
 
-  gfx::Image& CreateCardArtImage() {
-    return ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
-        IDR_DEFAULT_FAVICON);
+  gfx::Image CreateFakeImage() { return gfx::test::CreateImage(32, 32); }
+
+  void SetUpIbanImageResources() {
+    original_resource_bundle_ =
+        ui::ResourceBundle::SwapSharedInstanceForTesting(nullptr);
+    ui::ResourceBundle::InitSharedInstanceWithLocale(
+        "en-US", &mock_resource_delegate_,
+        ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+    ON_CALL(mock_resource_delegate_, GetImageNamed(IDR_AUTOFILL_IBAN))
+        .WillByDefault(testing::Return(CreateFakeImage()));
+  }
+
+  void CleanUpIbanImageResources() {
+    ui::ResourceBundle::CleanupSharedInstance();
+    ui::ResourceBundle::SwapSharedInstanceForTesting(
+        original_resource_bundle_.ExtractAsDangling());
   }
 
   bool VerifyCardArtImageExpectation(Suggestion& suggestion,
@@ -126,7 +138,7 @@ class AutofillSuggestionGeneratorTest : public testing::Test {
 #if BUILDFLAG(IS_ANDROID)
     return suggestion.custom_icon_url == expected_url;
 #else
-    return gfx::test::AreImagesEqual(suggestion.custom_icon, expected_image);
+    return AreImagesEqual(suggestion.custom_icon, expected_image);
 #endif
   }
 
@@ -144,10 +156,12 @@ class AutofillSuggestionGeneratorTest : public testing::Test {
   base::test::ScopedFeatureList scoped_feature_list_async_parse_form_;
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::SYSTEM_TIME};
-  test::AutofillEnvironment autofill_environment_;
-  std::unique_ptr<TestAutofillSuggestionGenerator> suggestion_generator_;
+  test::AutofillUnitTestEnvironment autofill_test_environment_;
   TestAutofillClient autofill_client_;
+  std::unique_ptr<TestAutofillSuggestionGenerator> suggestion_generator_;
   scoped_refptr<AutofillWebDataService> database_;
+  testing::NiceMock<ui::MockResourceBundleDelegate> mock_resource_delegate_;
+  raw_ptr<ui::ResourceBundle> original_resource_bundle_;
 };
 
 TEST_F(AutofillSuggestionGeneratorTest,
@@ -166,7 +180,9 @@ TEST_F(AutofillSuggestionGeneratorTest,
   all_card_ptrs.reserve(kNumCards);
   for (size_t i = 0; i < kNumCards; ++i) {
     constexpr base::TimeDelta k30Days = base::Days(30);
-    all_card_data.emplace_back(base::GenerateGUID(), "https://example.com");
+    all_card_data.emplace_back(
+        base::Uuid::GenerateRandomV4().AsLowercaseString(),
+        "https://example.com");
     if (i < 5) {
       all_card_data.back().set_use_date(kNow - (i + i + 1) * k30Days);
       test::SetCreditCardInfo(&all_card_data.back(), "Clyde Barrow",
@@ -491,21 +507,9 @@ TEST_F(AutofillSuggestionGeneratorTest, ShouldDisplayGpayLogo) {
   }
 }
 
+// Test that the virtual card option is shown when all of the prerequisites are
+// met.
 TEST_F(AutofillSuggestionGeneratorTest, ShouldShowVirtualCardOption) {
-  // Create a complete form.
-  FormData credit_card_form;
-  test::CreateTestCreditCardFormData(&credit_card_form, true, false);
-  FormStructure form_structure(credit_card_form);
-  form_structure.DetermineHeuristicTypes(nullptr, nullptr);
-  // Clear the heuristic types, and instead set the appropriate server types.
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  for (size_t i = 0; i < credit_card_form.fields.size(); ++i) {
-    heuristic_types.push_back(UNKNOWN_TYPE);
-    server_types.push_back(form_structure.field(i)->heuristic_type());
-  }
-  FormStructureTestApi(&form_structure)
-      .SetFieldTypes(heuristic_types, server_types);
-
   // Create a server card.
   CreditCard server_card =
       CreateServerCard(/*guid=*/"00000000-0000-0000-0000-000000000001");
@@ -521,31 +525,99 @@ TEST_F(AutofillSuggestionGeneratorTest, ShouldShowVirtualCardOption) {
   EXPECT_TRUE(
       suggestion_generator()->ShouldShowVirtualCardOption(&server_card));
   EXPECT_TRUE(suggestion_generator()->ShouldShowVirtualCardOption(&local_card));
+}
 
-  // Reset server card virtual card enrollment state.
+// Test that the virtual card option is shown when the autofill optimization
+// guide is not present.
+TEST_F(AutofillSuggestionGeneratorTest,
+       ShouldShowVirtualCardOption_AutofillOptimizationGuideNotPresent) {
+  // Create a server card.
+  CreditCard server_card =
+      CreateServerCard(/*guid=*/"00000000-0000-0000-0000-000000000001");
   server_card.set_virtual_card_enrollment_state(
-      CreditCard::VirtualCardEnrollmentState::UNSPECIFIED);
-  personal_data()->ClearCreditCards();
+      CreditCard::VirtualCardEnrollmentState::ENROLLED);
+  personal_data()->AddServerCreditCard(server_card);
+  autofill_client()->ResetAutofillOptimizationGuide();
+
+  // Create a local card with same information.
+  CreditCard local_card =
+      CreateLocalCard(/*guid=*/"00000000-0000-0000-0000-000000000002");
+
+  // If all prerequisites are met, it should return true.
+  EXPECT_TRUE(
+      suggestion_generator()->ShouldShowVirtualCardOption(&server_card));
+  EXPECT_TRUE(suggestion_generator()->ShouldShowVirtualCardOption(&local_card));
+}
+
+// Test that the virtual card option is not shown if the merchant is opted-out
+// of virtual cards.
+TEST_F(AutofillSuggestionGeneratorTest,
+       ShouldNotShowVirtualCardOption_MerchantOptedOutOfVirtualCards) {
+  // Create an enrolled server card.
+  CreditCard server_card =
+      CreateServerCard(/*guid=*/"00000000-0000-0000-0000-000000000001");
+  server_card.set_virtual_card_enrollment_state(
+      CreditCard::VirtualCardEnrollmentState::ENROLLED);
   personal_data()->AddServerCreditCard(server_card);
 
-  // For server card not enrolled, should return false.
+  // Create a local card with same information.
+  CreditCard local_card =
+      CreateLocalCard(/*guid=*/"00000000-0000-0000-0000-000000000002");
+
+  // If the URL is opted-out of virtual cards for `server_card`, do not display
+  // the virtual card suggestion.
+  auto* optimization_guide = autofill_client()->GetAutofillOptimizationGuide();
+  ON_CALL(*static_cast<MockAutofillOptimizationGuide*>(optimization_guide),
+          ShouldBlockFormFieldSuggestion)
+      .WillByDefault(testing::Return(true));
   EXPECT_FALSE(
       suggestion_generator()->ShouldShowVirtualCardOption(&server_card));
   EXPECT_FALSE(
       suggestion_generator()->ShouldShowVirtualCardOption(&local_card));
+}
 
-  // Remove the server credit card.
-  personal_data()->ClearCreditCards();
+// Test that the virtual card option is not shown if the server card we might be
+// showing a virtual card option for is not enrolled into virtual card.
+TEST_F(AutofillSuggestionGeneratorTest,
+       ShouldNotShowVirtualCardOption_ServerCardNotEnrolledInVirtualCard) {
+  // Create an unenrolled server card.
+  CreditCard server_card =
+      CreateServerCard(/*guid=*/"00000000-0000-0000-0000-000000000001");
+  server_card.set_virtual_card_enrollment_state(
+      CreditCard::VirtualCardEnrollmentState::UNSPECIFIED);
+  personal_data()->AddServerCreditCard(server_card);
 
-  // The local card no longer has a server duplicate, should return false.
+  // Create a local card with same information.
+  CreditCard local_card =
+      CreateLocalCard(/*guid=*/"00000000-0000-0000-0000-000000000002");
+
+  // For server card not enrolled, both local and server card should return
+  // false.
+  EXPECT_FALSE(
+      suggestion_generator()->ShouldShowVirtualCardOption(&server_card));
+  EXPECT_FALSE(
+      suggestion_generator()->ShouldShowVirtualCardOption(&local_card));
+}
+
+// Test that the virtual card option is not shown for a local card with no
+// server card duplicate.
+TEST_F(AutofillSuggestionGeneratorTest,
+       ShouldNotShowVirtualCardOption_LocalCardWithoutServerCardDuplicate) {
+  // Create a local card with same information.
+  CreditCard local_card =
+      CreateLocalCard(/*guid=*/"00000000-0000-0000-0000-000000000002");
+
+  // The local card does not have a server duplicate, should return false.
   EXPECT_FALSE(
       suggestion_generator()->ShouldShowVirtualCardOption(&local_card));
 }
 
 TEST_F(AutofillSuggestionGeneratorTest, GetIBANSuggestions) {
+  SetUpIbanImageResources();
+
   auto MakeIBAN = [](const std::u16string& value,
                      const std::u16string& nickname) {
-    IBAN iban(base::GenerateGUID());
+    IBAN iban(base::Uuid::GenerateRandomV4().AsLowercaseString());
     iban.set_value(value);
     if (!nickname.empty())
       iban.set_nickname(nickname);
@@ -560,45 +632,61 @@ TEST_F(AutofillSuggestionGeneratorTest, GetIBANSuggestions) {
   std::vector<Suggestion> iban_suggestions =
       AutofillSuggestionGenerator::GetSuggestionsForIBANs(
           {&iban0, &iban1, &iban2, &iban3});
-  EXPECT_TRUE(iban_suggestions.size() == 4);
+
+  // There are 6 suggestions, 4 for IBAN suggestions, followed by a separator,
+  // and followed by "Manage payment methods..." which redirect to Chrome
+  // payment settings page.
+  ASSERT_EQ(iban_suggestions.size(), 6u);
 
   EXPECT_EQ(iban_suggestions[0].main_text.value,
             iban0.GetIdentifierStringForAutofillDisplay());
-  EXPECT_EQ(
-      iban_suggestions[0].GetPayload<Suggestion::ValueToFill>().value(),
-      iban0.GetIdentifierStringForAutofillDisplay(/*is_value_masked=*/false));
+  EXPECT_EQ(iban_suggestions[0].GetPayload<Suggestion::ValueToFill>().value(),
+            iban0.GetStrippedValue());
   ASSERT_EQ(iban_suggestions[0].labels.size(), 1u);
   ASSERT_EQ(iban_suggestions[0].labels[0].size(), 1u);
   EXPECT_EQ(iban_suggestions[0].labels[0][0].value, u"My doctor's IBAN");
   EXPECT_EQ(iban_suggestions[0].frontend_id, POPUP_ITEM_ID_IBAN_ENTRY);
+  EXPECT_TRUE(
+      AreImagesEqual(iban_suggestions[0].custom_icon, CreateFakeImage()));
 
   EXPECT_EQ(iban_suggestions[1].main_text.value,
             iban1.GetIdentifierStringForAutofillDisplay());
-  EXPECT_EQ(
-      iban_suggestions[1].GetPayload<Suggestion::ValueToFill>().value(),
-      iban1.GetIdentifierStringForAutofillDisplay(/*is_value_masked=*/false));
+  EXPECT_EQ(iban_suggestions[1].GetPayload<Suggestion::ValueToFill>().value(),
+            iban1.GetStrippedValue());
   ASSERT_EQ(iban_suggestions[1].labels.size(), 1u);
   ASSERT_EQ(iban_suggestions[1].labels[0].size(), 1u);
   EXPECT_EQ(iban_suggestions[1].labels[0][0].value, u"My brother's IBAN");
   EXPECT_EQ(iban_suggestions[1].frontend_id, POPUP_ITEM_ID_IBAN_ENTRY);
+  EXPECT_TRUE(
+      AreImagesEqual(iban_suggestions[1].custom_icon, CreateFakeImage()));
 
   EXPECT_EQ(iban_suggestions[2].main_text.value,
             iban2.GetIdentifierStringForAutofillDisplay());
-  EXPECT_EQ(
-      iban_suggestions[2].GetPayload<Suggestion::ValueToFill>().value(),
-      iban2.GetIdentifierStringForAutofillDisplay(/*is_value_masked=*/false));
+  EXPECT_EQ(iban_suggestions[2].GetPayload<Suggestion::ValueToFill>().value(),
+            iban2.GetStrippedValue());
   ASSERT_EQ(iban_suggestions[2].labels.size(), 1u);
   ASSERT_EQ(iban_suggestions[2].labels[0].size(), 1u);
   EXPECT_EQ(iban_suggestions[2].labels[0][0].value, u"My teacher's IBAN");
   EXPECT_EQ(iban_suggestions[2].frontend_id, POPUP_ITEM_ID_IBAN_ENTRY);
+  EXPECT_TRUE(
+      AreImagesEqual(iban_suggestions[2].custom_icon, CreateFakeImage()));
 
   EXPECT_EQ(iban_suggestions[3].main_text.value,
             iban3.GetIdentifierStringForAutofillDisplay());
-  EXPECT_EQ(
-      iban_suggestions[3].GetPayload<Suggestion::ValueToFill>().value(),
-      iban3.GetIdentifierStringForAutofillDisplay(/*is_value_masked=*/false));
+  EXPECT_EQ(iban_suggestions[3].GetPayload<Suggestion::ValueToFill>().value(),
+            iban3.GetStrippedValue());
   EXPECT_EQ(iban_suggestions[3].labels.size(), 0u);
   EXPECT_EQ(iban_suggestions[3].frontend_id, POPUP_ITEM_ID_IBAN_ENTRY);
+  EXPECT_TRUE(
+      AreImagesEqual(iban_suggestions[3].custom_icon, CreateFakeImage()));
+
+  EXPECT_EQ(iban_suggestions[4].frontend_id, POPUP_ITEM_ID_SEPARATOR);
+
+  EXPECT_EQ(iban_suggestions[5].main_text.value,
+            l10n_util::GetStringUTF16(IDS_AUTOFILL_MANAGE_PAYMENT_METHODS));
+  EXPECT_EQ(iban_suggestions[5].frontend_id, POPUP_ITEM_ID_AUTOFILL_OPTIONS);
+
+  CleanUpIbanImageResources();
 }
 
 TEST_F(AutofillSuggestionGeneratorTest,
@@ -693,58 +781,57 @@ TEST_F(AutofillSuggestionGeneratorTest,
             POPUP_ITEM_ID_MERCHANT_PROMO_CODE_ENTRY);
 }
 
-TEST_F(AutofillSuggestionGeneratorTest, BackendIdAndInternalIdMappings) {
-  // Test that internal ID retrieval with an invalid backend ID works correctly.
+TEST_F(AutofillSuggestionGeneratorTest, BackendIdAndFrontendIdMappings) {
+  // Test that frontend ID retrieval with an invalid backend ID works correctly.
   Suggestion::BackendId backend_id = Suggestion::BackendId();
-  EXPECT_FALSE(
-      suggestion_generator()->BackendIdToInternalIdForTesting(backend_id));
+  EXPECT_FALSE(suggestion_generator()->MakeFrontendIdFromBackendId(backend_id));
 
-  // Test that internal ID retrieval with valid backend IDs works correctly.
+  // Test that frontend ID retrieval with valid backend IDs works correctly.
   std::string valid_guid_digits = "00000000-0000-0000-0000-000000000000";
   for (int i = 1; i <= 2; i++) {
     valid_guid_digits.back() = base::NumberToString(i)[0];
     backend_id = Suggestion::BackendId(valid_guid_digits);
 
-    // Check that querying AutofillSuggestionGenerator::BackendIdToInternalId(~)
-    // with a new backend id creates a new entry in the
-    // backend_to_internal_map() and internal_to_backend_map() maps.
-    const InternalId& internal_id =
-        suggestion_generator()->BackendIdToInternalIdForTesting(backend_id);
-    EXPECT_TRUE(internal_id);
-    EXPECT_EQ(static_cast<int>(
-                  suggestion_generator()->backend_to_internal_map().size()),
+    // Check that querying
+    // AutofillSuggestionGenerator::MakeFrontendIdFromBackendId(~) with a new
+    // backend id creates a new entry in the backend_to_frontend_map() and
+    // frontend_to_backend_map() maps.
+    const int& frontend_id =
+        suggestion_generator()->MakeFrontendIdFromBackendId(backend_id);
+    EXPECT_GT(frontend_id, 0);
+    EXPECT_EQ(static_cast<int>(suggestion_generator()
+                                   ->backend_to_frontend_map_for_testing()
+                                   .size()),
               i);
-    EXPECT_EQ(static_cast<int>(
-                  suggestion_generator()->internal_to_backend_map().size()),
+    EXPECT_EQ(static_cast<int>(suggestion_generator()
+                                   ->frontend_to_backend_map_for_testing()
+                                   .size()),
               i);
 
-    // Check that querying AutofillSuggestionGenerator::BackendIdToInternalId(~)
-    // again returns the previously added entry, and does not create a new entry
-    // in the backend_to_internal_map() and internal_to_backend_map() maps.
-    EXPECT_TRUE(suggestion_generator()->BackendIdToInternalIdForTesting(
-                    backend_id) == internal_id);
-    EXPECT_EQ(static_cast<int>(
-                  suggestion_generator()->backend_to_internal_map().size()),
+    // Check that querying
+    // AutofillSuggestionGenerator::GetBackendIdFromFrontendId(~) again returns
+    // the previously added entry, and does not create a new entry in the
+    // backend_to_frontend_map() and frontend_to_backend_map() maps.
+    EXPECT_TRUE(suggestion_generator()->MakeFrontendIdFromBackendId(
+                    backend_id) == frontend_id);
+    EXPECT_EQ(static_cast<int>(suggestion_generator()
+                                   ->backend_to_frontend_map_for_testing()
+                                   .size()),
               i);
-    EXPECT_EQ(static_cast<int>(
-                  suggestion_generator()->internal_to_backend_map().size()),
+    EXPECT_EQ(static_cast<int>(suggestion_generator()
+                                   ->frontend_to_backend_map_for_testing()
+                                   .size()),
               i);
   }
 
   // The test cases below are run after the
-  // AutofillSuggestionGenerator::BackendIdToInternalId(~) test cases to ensure
-  // the maps backend_to_internal_map() and internal_to_backend_map() are
+  // AutofillSuggestionGenerator::GetBackendIdFromFrontendId(~) test cases to
+  // ensure the maps backend_to_frontend_map() and frontend_to_backend_map() are
   // populated.
 
-  // Test that backend ID retrieval with an invalid internal ID works correctly.
-  EXPECT_TRUE(suggestion_generator()
-                  ->InternalIdToBackendIdForTesting(InternalId())
-                  ->empty());
-
-  // Test that backend ID retrieval with valid internal IDs works correctly.
+  // Test that backend ID retrieval with valid frontend IDs works correctly.
   for (int i = 1; i <= 2; i++) {
-    backend_id =
-        suggestion_generator()->InternalIdToBackendIdForTesting(InternalId(i));
+    backend_id = suggestion_generator()->GetBackendIdFromFrontendId(i);
     EXPECT_FALSE(backend_id->empty());
     valid_guid_digits.back() = base::NumberToString(i)[0];
     EXPECT_EQ(*backend_id, valid_guid_digits);
@@ -985,31 +1072,22 @@ class AutofillSuggestionGeneratorTestForMetadata
     : public AutofillSuggestionGeneratorTest,
       public testing::WithParamInterface<std::tuple<bool, bool, bool>> {
  public:
-  AutofillSuggestionGeneratorTestForMetadata()
-      : card_product_description_enabled_(std::get<0>(GetParam())),
-        card_art_image_enabled_(std::get<1>(GetParam())),
-        card_has_linked_virtual_card_(std::get<2>(GetParam())) {
+  AutofillSuggestionGeneratorTestForMetadata() {
     feature_list_card_product_description_.InitWithFeatureState(
-        features::kAutofillEnableCardProductName,
-        card_product_description_enabled_);
+        features::kAutofillEnableCardProductName, std::get<0>(GetParam()));
     feature_list_card_art_image_.InitWithFeatureState(
-        features::kAutofillEnableCardArtImage, card_art_image_enabled_);
+        features::kAutofillEnableCardArtImage, std::get<1>(GetParam()));
   }
 
   ~AutofillSuggestionGeneratorTestForMetadata() override = default;
 
   bool card_product_description_enabled() const {
-    return card_product_description_enabled_;
+    return std::get<0>(GetParam());
   }
-  bool card_art_image_enabled() const { return card_art_image_enabled_; }
-  bool card_has_linked_virtual_card() const {
-    return card_has_linked_virtual_card_;
-  }
+  bool card_art_image_enabled() const { return std::get<1>(GetParam()); }
+  bool card_has_static_art_image() const { return std::get<2>(GetParam()); }
 
  private:
-  const bool card_product_description_enabled_;
-  const bool card_art_image_enabled_;
-  const bool card_has_linked_virtual_card_;
   base::test::ScopedFeatureList feature_list_card_product_description_;
   base::test::ScopedFeatureList feature_list_card_art_image_;
 };
@@ -1026,7 +1104,7 @@ TEST_P(AutofillSuggestionGeneratorTestForMetadata,
   CreditCard server_card = CreateServerCard();
   GURL card_art_url = GURL("https://www.example.com/card-art");
   server_card.set_card_art_url(card_art_url);
-  gfx::Image fake_image = CreateCardArtImage();
+  gfx::Image fake_image = CreateFakeImage();
   personal_data()->AddCardArtImage(card_art_url, fake_image);
 
   Suggestion virtual_card_suggestion =
@@ -1082,7 +1160,7 @@ TEST_P(AutofillSuggestionGeneratorTestForMetadata,
 
   GURL card_art_url = GURL("https://www.example.com/card-art");
   server_card.set_card_art_url(card_art_url);
-  gfx::Image fake_image = CreateCardArtImage();
+  gfx::Image fake_image = CreateFakeImage();
   personal_data()->AddServerCreditCard(server_card);
   personal_data()->AddCardArtImage(card_art_url, fake_image);
 
@@ -1123,9 +1201,9 @@ TEST_P(AutofillSuggestionGeneratorTestForMetadata,
   {
     // Create one server card with no metadata.
     CreditCard server_card = CreateServerCard();
-    if (card_has_linked_virtual_card()) {
-      server_card.set_virtual_card_enrollment_state(
-          CreditCard::VirtualCardEnrollmentState::ENROLLED);
+    server_card.set_issuer_id(kCapitalOneCardIssuerId);
+    if (card_has_static_art_image()) {
+      server_card.set_card_art_url(GURL(kCapitalOneCardArtUrl));
     }
     personal_data()->AddServerCreditCard(server_card);
 
@@ -1140,6 +1218,13 @@ TEST_P(AutofillSuggestionGeneratorTestForMetadata,
     EXPECT_FALSE(metadata_logging_context.card_metadata_available);
     EXPECT_FALSE(metadata_logging_context.card_product_description_shown);
     EXPECT_FALSE(metadata_logging_context.card_art_image_shown);
+
+    // Verify that a record is added that a Capital One card suggestion
+    // was generated, and it did not have metadata.
+    base::flat_map<std::string, bool> expected_issuer_to_metadata_availability =
+        {{kCapitalOneCardIssuerId, false}};
+    EXPECT_EQ(metadata_logging_context.issuer_to_metadata_availability,
+              expected_issuer_to_metadata_availability);
   }
 
   personal_data()->ClearCreditCards();
@@ -1147,13 +1232,10 @@ TEST_P(AutofillSuggestionGeneratorTestForMetadata,
   {
     // Create a server card with card product description & card art image.
     CreditCard server_card_with_metadata = CreateServerCard();
+    server_card_with_metadata.set_issuer_id(kCapitalOneCardIssuerId);
     server_card_with_metadata.set_product_description(u"product_description");
     server_card_with_metadata.set_card_art_url(
         GURL("https://www.example.com/card-art.png"));
-    if (card_has_linked_virtual_card()) {
-      server_card_with_metadata.set_virtual_card_enrollment_state(
-          CreditCard::VirtualCardEnrollmentState::ENROLLED);
-    }
     personal_data()->AddServerCreditCard(server_card_with_metadata);
 
     bool should_display_gpay_logo;
@@ -1168,7 +1250,14 @@ TEST_P(AutofillSuggestionGeneratorTestForMetadata,
     EXPECT_EQ(metadata_logging_context.card_product_description_shown,
               card_product_description_enabled());
     EXPECT_EQ(metadata_logging_context.card_art_image_shown,
-              card_art_image_enabled() || card_has_linked_virtual_card());
+              card_art_image_enabled());
+
+    // Verify that a record is added that a Capital One card suggestion
+    // was generated, and it had metadata.
+    base::flat_map<std::string, bool> expected_issuer_to_metadata_availability =
+        {{kCapitalOneCardIssuerId, true}};
+    EXPECT_EQ(metadata_logging_context.issuer_to_metadata_availability,
+              expected_issuer_to_metadata_availability);
   }
 }
 

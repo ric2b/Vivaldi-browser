@@ -46,25 +46,12 @@ class SharingHubBubbleController {
   // ShareAttempt? Does that make sense, even?
   virtual std::vector<SharingHubAction> GetFirstPartyActions() = 0;
 
-  // Returns whether the sharing hub should show a preview section or not.
-  // TODO(ellyjones): Remove this once the preview section is launched.
-  virtual bool ShouldUsePreview() = 0;
-
-  // The sharing hub can load images asynchronously under some circumstances; to
-  // allow for that, the controller allows clients to register a callback to be
-  // notified when a new image is loaded.
-  using PreviewImageChangedCallback =
-      base::RepeatingCallback<void(ui::ImageModel)>;
-  virtual base::CallbackListSubscription RegisterPreviewImageChangedCallback(
-      PreviewImageChangedCallback callback) = 0;
-
   virtual base::WeakPtr<SharingHubBubbleController> GetWeakPtr() = 0;
 
   // Client code should call these when the corresponding things happen in the
   // View.
   virtual void OnBubbleClosed() = 0;
-  virtual void OnActionSelected(int command_id,
-                                std::string feature_name_for_metrics) = 0;
+  virtual void OnActionSelected(const SharingHubAction& action) = 0;
 #endif
 };
 

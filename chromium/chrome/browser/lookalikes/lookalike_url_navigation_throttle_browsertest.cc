@@ -225,6 +225,13 @@ void ConfigureAllowlistWithScopes() {
   cohort->add_canonical_index(0);  // google.com
   pattern->add_cohort_index(0);
 
+  // example·com.com is xn--examplecom-rra.com in punycode & fails spoof checks.
+  auto* idn_pattern = config_proto->add_allowed_pattern();  // Index 2
+  idn_pattern->set_pattern("xn--examplecom-rra.com/");
+  auto* idn_cohort = config_proto->add_cohort();  // Index 1
+  idn_cohort->add_allowed_index(2);
+  idn_pattern->add_cohort_index(1);
+
   lookalikes::SetSafetyTipsRemoteConfigProto(std::move(config_proto));
 }
 
@@ -234,6 +241,10 @@ class LookalikeUrlNavigationThrottleBrowserTest
     : public InProcessBrowserTest,
       public testing::WithParamInterface<PrewarmLookalike> {
  protected:
+  LookalikeUrlNavigationThrottleBrowserTest()
+      : https_server_(
+            new net::EmbeddedTestServer(net::EmbeddedTestServer::TYPE_HTTPS)) {}
+
   void SetUp() override {
     std::vector<base::test::FeatureRef> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
@@ -252,7 +263,6 @@ class LookalikeUrlNavigationThrottleBrowserTest
 
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
-    ASSERT_TRUE(embedded_test_server()->Start());
     test_ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
     test_helper_ =
         std::make_unique<LookalikeTestHelper>(test_ukm_recorder_.get());
@@ -264,6 +274,11 @@ class LookalikeUrlNavigationThrottleBrowserTest
         LookalikeUrlService::Get(browser()->profile());
     lookalike_service->SetClockForTesting(&test_clock_);
 
+    // Use HTTPS URLs in tests.
+    mock_cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
+    https_server_->AddDefaultHandlers(GetChromeTestDataDir());
+    ASSERT_TRUE(https_server_->Start());
+
     LookalikeTestHelper::SetUpLookalikeTestParams();
     InProcessBrowserTest::SetUpOnMainThread();
   }
@@ -273,8 +288,20 @@ class LookalikeUrlNavigationThrottleBrowserTest
     LookalikeTestHelper::TearDownLookalikeTestParams();
   }
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    mock_cert_verifier_.SetUpCommandLine(command_line);
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    mock_cert_verifier_.SetUpInProcessBrowserTestFixture();
+  }
+
+  void TearDownInProcessBrowserTestFixture() override {
+    mock_cert_verifier_.TearDownInProcessBrowserTestFixture();
+  }
+
   GURL GetURL(const char* hostname) const {
-    return embedded_test_server()->GetURL(hostname, "/title1.html");
+    return https_server()->GetURL(hostname, "/title1.html");
   }
 
   GURL GetURLWithoutPath(const char* hostname) const {
@@ -285,10 +312,10 @@ class LookalikeUrlNavigationThrottleBrowserTest
                        const char* via_hostname2,
                        const char* dest_hostname) const {
     GURL dest = GetURL(dest_hostname);
-    GURL mid = embedded_test_server()->GetURL(
-        via_hostname2, "/server-redirect?" + dest.spec());
-    return embedded_test_server()->GetURL(via_hostname1,
-                                          "/server-redirect?" + mid.spec());
+    GURL mid = https_server()->GetURL(via_hostname2,
+                                      "/server-redirect?" + dest.spec());
+    return https_server()->GetURL(via_hostname1,
+                                  "/server-redirect?" + mid.spec());
   }
 
   // Checks that UKM recorded an event for each URL in |navigated_urls| with the
@@ -442,11 +469,14 @@ class LookalikeUrlNavigationThrottleBrowserTest
   ukm::TestUkmRecorder* test_ukm_recorder() { return test_ukm_recorder_.get(); }
 
   base::SimpleTestClock* test_clock() { return &test_clock_; }
+  net::EmbeddedTestServer* https_server() const { return https_server_.get(); }
 
  private:
   base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> test_ukm_recorder_;
   std::unique_ptr<LookalikeTestHelper> test_helper_;
+  std::unique_ptr<net::EmbeddedTestServer> https_server_;
+  content::ContentMockCertVerifier mock_cert_verifier_;
   base::SimpleTestClock test_clock_;
 };
 
@@ -684,23 +714,6 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 }
 
 // The navigated domain will fall back to punycode because it fails standard
-// ICU spoof checks in IDN spoof checker. If the feature flag to show
-// interstitials for punycode fallback is enabled, this will show a punycode
-// interstitial. Otherwise, the navigation won't be blocked.
-// but there won't be an interstitial because the domain
-// doesn't match a top domain.
-IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
-                       Punycode_NoSuggestedUrl_NoInterstitial) {
-  const GURL kNavigatedUrl = GetURL("ɴoτ-τoρ-ďoᛖaiɴ.com");
-
-  TestPunycodeInterstitialShown(browser(), kNavigatedUrl,
-                                NavigationSuggestionEvent::kFailedSpoofChecks);
-  CheckInterstitialUkm({kNavigatedUrl}, "MatchType",
-                       LookalikeUrlMatchType::kFailedSpoofChecks);
-  test_helper()->CheckSafetyTipUkmCount(0);
-}
-
-// The navigated domain will fall back to punycode because it fails standard
 // ICU spoof checks in the IDN spoof checker. However, no interstitial will be
 // shown as the domain name is single character.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
@@ -733,13 +746,25 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 // (latin middle dot) is configured to show a punycode interstitial.
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        Punycode_NoSuggestedUrl_Interstitial) {
-  // Navigate to a domain that doesn't trigger target embedding:
   const GURL kNavigatedUrl = GetURL("example·com.com");
   TestPunycodeInterstitialShown(browser(), kNavigatedUrl,
                                 NavigationSuggestionEvent::kFailedSpoofChecks);
   CheckInterstitialUkm({kNavigatedUrl}, "MatchType",
                        LookalikeUrlMatchType::kFailedSpoofChecks);
   test_helper()->CheckSafetyTipUkmCount(0);
+}
+
+// The navigated domain will fall back to punycode because it fails spoof checks
+// in IDN spoof checker. The heuristic that changes this domain to punycode
+// (latin middle dot) is configured to show a punycode interstitial, but the
+// domain is allowlisted.
+IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
+                       Punycode_NoSuggestedUrl_Allowlisted) {
+  ConfigureAllowlistWithScopes();
+  const GURL kNavigatedUrl = GetURL("example·com.com");
+
+  TestInterstitialNotShown(browser(), kNavigatedUrl);
+  test_helper()->CheckNoLookalikeUkm();
 }
 
 // The navigated domain will fall back to punycode because it fails spoof checks
@@ -1073,7 +1098,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        Idn_SiteEngagement_SafeRedirect) {
   const GURL kExpectedSuggestedUrl = GetURLWithoutPath("site1.com");
-  const GURL kNavigatedUrl = embedded_test_server()->GetURL(
+  const GURL kNavigatedUrl = https_server()->GetURL(
       "sité1.com", "/server-redirect?" + kExpectedSuggestedUrl.spec());
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   SetEngagementScore(browser(), kExpectedSuggestedUrl, kHighEngagement);
@@ -1088,9 +1113,9 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
 IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
                        Idn_SiteEngagement_MidRedirectSpoofsIgnored) {
   const GURL kFinalUrl = GetURLWithoutPath("site1.com");
-  const GURL kMidUrl = embedded_test_server()->GetURL(
+  const GURL kMidUrl = https_server()->GetURL(
       "sité1.com", "/server-redirect?" + kFinalUrl.spec());
-  const GURL kNavigatedUrl = embedded_test_server()->GetURL(
+  const GURL kNavigatedUrl = https_server()->GetURL(
       "other-site.test", "/server-redirect?" + kMidUrl.spec());
 
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
@@ -1531,7 +1556,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleBrowserTest,
   // Go to the affected site directly. This should not result in an
   // interstitial.
   TestInterstitialNotShown(browser(),
-                           embedded_test_server()->GetURL("example.net", "/"));
+                           https_server()->GetURL("example.net", "/"));
 }
 
 // Navigate to a URL that triggers combo squatting heuristic via the
@@ -1766,7 +1791,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottleSignedExchangeBrowserTest,
                                          "content/test/data/sxg/fallback.html");
   const GURL kSgxCacheUrl = https_server_.GetURL(
       "google-com.test.com", "/sxg/test.example.org_test.sxg");
-  const GURL kNavigatedUrl = embedded_test_server()->GetURL(
+  const GURL kNavigatedUrl = https_server()->GetURL(
       "apple-com.site.test", "/server-redirect?" + kSgxCacheUrl.spec());
 
   TestInterstitialNotShown(browser(), kNavigatedUrl);
@@ -1831,7 +1856,7 @@ class LookalikeUrlNavigationThrottlePrerenderBrowserTest
   }
 
   void SetUpOnMainThread() override {
-    prerender_helper_->SetUp(embedded_test_server());
+    prerender_helper_->SetUp(https_server());
     LookalikeUrlNavigationThrottleBrowserTest::SetUpOnMainThread();
   }
 
@@ -1864,7 +1889,7 @@ IN_PROC_BROWSER_TEST_P(LookalikeUrlNavigationThrottlePrerenderBrowserTest,
 
   // Start a prerender.
   const GURL kPrerenderUrl =
-      embedded_test_server()->GetURL("googlé.com", "/title1.html?prerender");
+      https_server()->GetURL("googlé.com", "/title1.html?prerender");
   content::test::PrerenderHostObserver host_observer(*web_contents(),
                                                      kPrerenderUrl);
   prerender_helper_->AddPrerenderAsync(kPrerenderUrl);

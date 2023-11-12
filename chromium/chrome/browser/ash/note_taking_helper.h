@@ -6,7 +6,6 @@
 #define CHROME_BROWSER_ASH_NOTE_TAKING_HELPER_H_
 
 #include <memory>
-// #include <set>
 #include <string>
 #include <vector>
 
@@ -109,9 +108,11 @@ class NoteTakingHelper : public arc::ArcIntentHelperObserver,
     WEB_APP_SUCCESS = 8,
     // The requested web app was unavailable.
     WEB_APP_MISSING = 9,
+    // Unable to find an internal display.
+    NO_INTERNAL_DISPLAY_FOUND = 10,
     // This value must remain last and should be incremented when a new reason
     // is inserted.
-    MAX = 10,
+    MAX = 11,
   };
 
   // Callback used to launch a Chrome app.

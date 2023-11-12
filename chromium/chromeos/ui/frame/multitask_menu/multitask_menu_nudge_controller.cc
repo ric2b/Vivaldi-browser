@@ -4,6 +4,8 @@
 
 #include "chromeos/ui/frame/multitask_menu/multitask_menu_nudge_controller.h"
 
+#include "base/metrics/user_metrics.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "chromeos/ui/base/tablet_state.h"
 #include "chromeos/ui/wm/features.h"
@@ -20,6 +22,11 @@
 #include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/widget/widget.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/constants/ash_pref_names.h"
+#include "components/user_manager/user_manager.h"
+#endif
 
 namespace chromeos {
 
@@ -91,8 +98,10 @@ std::unique_ptr<views::Widget> CreateWidget(aura::Window* window) {
   contents_view->SetBackground(views::CreateThemedRoundedRectBackground(
       ui::kColorSysSurface3, corner_radius));
   contents_view->SetBorder(std::make_unique<views::HighlightBorder>(
-      corner_radius, views::HighlightBorder::Type::kHighlightBorder1,
-      /*use_light_colors=*/false));
+      corner_radius,
+      chromeos::features::IsJellyrollEnabled()
+          ? views::HighlightBorder::Type::kHighlightBorderOnShadow
+          : views::HighlightBorder::Type::kHighlightBorder1));
 
   widget->SetContentsView(std::move(contents_view));
   return widget;
@@ -101,13 +110,23 @@ std::unique_ptr<views::Widget> CreateWidget(aura::Window* window) {
 }  // namespace
 
 MultitaskMenuNudgeController::Delegate::~Delegate() {
-  DCHECK_EQ(this, g_delegate_instance);
+  CHECK_EQ(this, g_delegate_instance);
   g_delegate_instance = nullptr;
 }
 
 MultitaskMenuNudgeController::Delegate::Delegate() {
-  DCHECK_EQ(nullptr, g_delegate_instance);
+  CHECK_EQ(nullptr, g_delegate_instance);
   g_delegate_instance = this;
+}
+
+bool MultitaskMenuNudgeController::Delegate::IsUserNew() const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  return user_manager::UserManager::IsInitialized()
+             ? user_manager::UserManager::Get()->IsCurrentUserNew()
+             : false;
+#else
+  return false;
+#endif
 }
 
 MultitaskMenuNudgeController::MultitaskMenuNudgeController() {
@@ -119,14 +138,20 @@ MultitaskMenuNudgeController::~MultitaskMenuNudgeController() {
   display::Screen::GetScreen()->RemoveObserver(this);
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // static
 void MultitaskMenuNudgeController::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
-  registry->RegisterIntegerPref(kClamshellShownCountPrefName, 0);
-  registry->RegisterIntegerPref(kTabletShownCountPrefName, 0);
-  registry->RegisterTimePref(kClamshellLastShownPrefName, base::Time());
-  registry->RegisterTimePref(kTabletLastShownPrefName, base::Time());
+  registry->RegisterIntegerPref(
+      ash::prefs::kMultitaskMenuNudgeClamshellShownCount, 0);
+  registry->RegisterIntegerPref(ash::prefs::kMultitaskMenuNudgeTabletShownCount,
+                                0);
+  registry->RegisterTimePref(ash::prefs::kMultitaskMenuNudgeClamshellLastShown,
+                             base::Time());
+  registry->RegisterTimePref(ash::prefs::kMultitaskMenuNudgeTabletLastShown,
+                             base::Time());
 }
+#endif
 
 void MultitaskMenuNudgeController::MaybeShowNudge(aura::Window* window) {
   MaybeShowNudge(window, /*anchor_view=*/nullptr);
@@ -134,13 +159,13 @@ void MultitaskMenuNudgeController::MaybeShowNudge(aura::Window* window) {
 
 void MultitaskMenuNudgeController::MaybeShowNudge(aura::Window* window,
                                                   views::View* anchor_view) {
-  if (!chromeos::wm::features::IsWindowLayoutMenuEnabled() ||
-      g_suppress_nudge_for_testing || nudge_widget_) {
+  // Delegate could be null if the associated window was created during OOBE.
+  if (!g_delegate_instance || g_delegate_instance->IsUserNew()) {
     return;
   }
 
-  // TODO(sammiequon): Delegate is not available for lacros yet.
-  if (!g_delegate_instance) {
+  if (!chromeos::wm::features::IsWindowLayoutMenuEnabled() ||
+      g_suppress_nudge_for_testing || nudge_widget_) {
     return;
   }
 
@@ -174,6 +199,14 @@ void MultitaskMenuNudgeController::DismissNudge() {
 }
 
 void MultitaskMenuNudgeController::OnMenuOpened(bool tablet_mode) {
+  // Avoid sending prefs through the cros API or recording user actions if the
+  // nudge isn't shown.
+  if (!nudge_widget_ || nudge_widget_->IsClosed()) {
+    return;
+  }
+
+  base::RecordAction(
+      base::UserMetricsAction("Nudge_Active_When_MultitaskMenu_Opened"));
   DismissNudge();
 
   if (g_delegate_instance) {
@@ -187,8 +220,16 @@ void MultitaskMenuNudgeController::OnWindowParentChanged(aura::Window* window,
   if (!parent) {
     return;
   }
-  DCHECK_EQ(window_, window);
+  CHECK_EQ(window_, window);
   UpdateWidgetAndPulse();
+}
+
+void MultitaskMenuNudgeController::OnWindowVisibilityChanged(
+    aura::Window* window,
+    bool visible) {
+  if (window == window_ && !visible) {
+    DismissNudge();
+  }
 }
 
 void MultitaskMenuNudgeController::OnWindowBoundsChanged(
@@ -196,14 +237,14 @@ void MultitaskMenuNudgeController::OnWindowBoundsChanged(
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
     ui::PropertyChangeReason reason) {
-  DCHECK_EQ(window_, window);
+  CHECK_EQ(window_, window);
   UpdateWidgetAndPulse();
 }
 
 void MultitaskMenuNudgeController::OnWindowTargetTransformChanging(
     aura::Window* window,
     const gfx::Transform& new_transform) {
-  DCHECK_EQ(window_, window);
+  CHECK_EQ(window_, window);
   // Prevent unintended behaviour in situations that use transforms such as
   // overview mode.
   // TODO(hewer): Decide how the cue behaves when adjusting the split view
@@ -213,7 +254,7 @@ void MultitaskMenuNudgeController::OnWindowTargetTransformChanging(
 
 void MultitaskMenuNudgeController::OnWindowStackingChanged(
     aura::Window* window) {
-  DCHECK_EQ(window_, window);
+  CHECK_EQ(window_, window);
 
   // Stacking may change during the construction of the widget, at which
   // `nudge_widget_` would still be null.
@@ -228,7 +269,7 @@ void MultitaskMenuNudgeController::OnWindowStackingChanged(
 }
 
 void MultitaskMenuNudgeController::OnWindowDestroying(aura::Window* window) {
-  DCHECK_EQ(window_, window);
+  CHECK_EQ(window_, window);
   DismissNudge();
 }
 
@@ -291,12 +332,15 @@ void MultitaskMenuNudgeController::OnGetPreferences(
   }
 
   window_ = window;
-  window_observation_.Observe(window_);
 
   nudge_widget_ = CreateWidget(window_);
+  anchor_view_ = anchor_view;
+
   nudge_widget_->Show();
 
-  anchor_view_ = anchor_view;
+  // Note that order matters because in some cases, creating the widget may
+  // trigger some window observations.
+  window_observation_.Observe(window_.get());
 
   if (!tablet_mode) {
     // Create the layer which pulses on the maximize/restore button.
@@ -307,7 +351,7 @@ void MultitaskMenuNudgeController::OnGetPreferences(
   }
 
   UpdateWidgetAndPulse();
-  DCHECK(nudge_widget_);
+  CHECK(nudge_widget_);
 
   // Fade the education nudge in.
   ui::Layer* layer = nudge_widget_->GetLayer();
@@ -351,13 +395,13 @@ void MultitaskMenuNudgeController::OnDismissTimerEnded() {
 }
 
 void MultitaskMenuNudgeController::UpdateWidgetAndPulse() {
-  DCHECK(window_);
-  DCHECK(nudge_widget_);
+  CHECK(window_);
+  CHECK(nudge_widget_);
 
   const bool tablet_mode = TabletState::Get()->InTabletMode();
   if (!tablet_mode) {
-    DCHECK(pulse_layer_);
-    DCHECK(anchor_view_);
+    CHECK(pulse_layer_);
+    CHECK(anchor_view_);
   }
 
   // Dismiss the nudge if the window (or anchor in clamshell mode) is not
@@ -441,7 +485,7 @@ void MultitaskMenuNudgeController::PerformPulseAnimation(int pulse_count) {
     return;
   }
 
-  DCHECK(pulse_layer_);
+  CHECK(pulse_layer_);
 
   // The pulse animation scales up and fades out on top of the maximize/restore
   // button until the nudge disappears.

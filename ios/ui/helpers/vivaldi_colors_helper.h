@@ -25,6 +25,7 @@
 +(UIColor*)vSystemGray05;
 +(UIColor*)vSystemGray06;
 +(UIColor*)vSystemGray07;
++(UIColor*)vTopToolbarTintColor;
 
 @end
 

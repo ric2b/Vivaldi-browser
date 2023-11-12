@@ -6,8 +6,7 @@ package org.chromium.chrome.browser.contextualsearch;
 
 import static org.mockito.Mockito.when;
 
-import android.support.test.InstrumentationRegistry;
-
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 
 import org.junit.After;
@@ -33,6 +32,7 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.search_engines.TemplateUrl;
+import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.url.GURL;
@@ -158,14 +158,16 @@ public class ContextualSearchPolicyTest {
     @Feature({"ContextualSearch"})
     public void testDoSendBasePageUrlWhenNonGoogleSearchEngine() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
+            TemplateUrlService templateUrlService =
+                    TemplateUrlServiceFactory.getForProfile(Profile.getLastUsedRegularProfile());
             TemplateUrl defaultSearchEngine =
-                    TemplateUrlServiceFactory.get().getDefaultSearchEngineTemplateUrl();
+                    templateUrlService.getDefaultSearchEngineTemplateUrl();
             setupAllConditionsToSendUrl();
-            TemplateUrlServiceFactory.get().setSearchEngine("yahoo.com");
+            templateUrlService.setSearchEngine("yahoo.com");
             Assert.assertFalse(mPolicy.doSendBasePageUrl());
             // Set default search engine back to default to prevent cross-talk from
             // this test which sets it to Yahoo
-            TemplateUrlServiceFactory.get().setSearchEngine(defaultSearchEngine.getShortName());
+            templateUrlService.setSearchEngine(defaultSearchEngine.getShortName());
         });
     }
 

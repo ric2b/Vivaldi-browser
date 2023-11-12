@@ -19,18 +19,19 @@ enum class TrialComparisonResult {
   kPrimaryErrorSecondaryValid = 3,
   kBothValidDifferentDetails = 4,
   kBothErrorDifferentDetails = 5,
-  kIgnoredMacUndesiredRevocationChecking = 6,
+  // Deprecated: kIgnoredMacUndesiredRevocationChecking = 6,
   kIgnoredMultipleEVPoliciesAndOneMatchesRoot = 7,
   kIgnoredDifferentPathReVerifiesEquivalent = 8,
-  kIgnoredLocallyTrustedLeaf = 9,
+  // Deprecated: kIgnoredLocallyTrustedLeaf = 9,
   kIgnoredConfigurationChanged = 10,
   kIgnoredSHA1SignaturePresent = 11,
-  kIgnoredWindowsRevCheckingEnabled = 12,
+  // Deprecated: kIgnoredWindowsRevCheckingEnabled = 12,
   kIgnoredBothAuthorityInvalid = 13,
   kIgnoredBothKnownRoot = 14,
   kIgnoredBuiltinAuthorityInvalidPlatformSymantec = 15,
   kIgnoredLetsEncryptExpiredRoot = 16,
-  kMaxValue = kIgnoredLetsEncryptExpiredRoot
+  kIgnoredAndroidErrorDatePriority = 17,
+  kMaxValue = kIgnoredAndroidErrorDatePriority,
 };
 
 NET_EXPORT_PRIVATE bool CertVerifyResultEqual(const CertVerifyResult& a,

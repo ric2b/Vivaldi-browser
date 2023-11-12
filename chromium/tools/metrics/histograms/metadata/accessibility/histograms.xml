@@ -211,9 +211,10 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Tracks the number of AccessibilityEvents dropped when the OnDemand
-    accessibility services feature is enabled, and the ComputeAXMode feature is
-    enabled, and the number of events dropped is 100%. Tracks for when the
-    AXMode is set to {AXMode}. Recorded a the end of a session.
+    accessibility services feature is enabled, and the AccessibilityAXModes
+    feature is enabled, and the number of events dropped is 100%. Tracks for
+    when the AXMode is set to {AXMode}. Recorded at the end of a session.
+    Updated in M114 to add FormControls variant.
   </summary>
   <token key="AXMode">
     <variant name="Basic"
@@ -221,6 +222,9 @@ chromium-metrics-reviews@google.com.
     <variant name="Complete"
         summary="kAXModeComplete - Includes NativeAPIs, WebContents,
                  InlineTextBoxes, ScreenReader, and HTML"/>
+    <variant name="FormControls"
+        summary="kAXModeFormControls - Includes only NativeAPIs, WebContents,
+                 HTML, and ExperimentalFormControls"/>
   </token>
 </histogram>
 
@@ -242,9 +246,9 @@ chromium-metrics-reviews@google.com.
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Tracks the percentage of AccessibilityEvents dropped when the OnDemand
-    accessibility services feature is enabled, and the ComputeAXMode feature is
-    enabled. Tracks for when the AXMode is set to {AXMode}. Recorded at the end
-    of a session.
+    accessibility services feature is enabled, and the AccessibilityAXModes
+    feature is enabled. Tracks for when the AXMode is set to {AXMode}. Recorded
+    at the end of a session. Updated in M114 to add FormControls variant.
   </summary>
   <token key="AXMode">
     <variant name="Basic"
@@ -252,6 +256,9 @@ chromium-metrics-reviews@google.com.
     <variant name="Complete"
         summary="kAXModeComplete - Includes NativeAPIs, WebContents,
                  InlineTextBoxes, ScreenReader, and HTML"/>
+    <variant name="FormControls"
+        summary="kAXModeFormControls - Includes only NativeAPIs, WebContents,
+                 HTML, and ExperimentalFormControls"/>
   </token>
 </histogram>
 
@@ -351,20 +358,8 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="Accessibility.Android.TabSwitcherPreferenceEnabled"
-    enum="BooleanEnabled" expires_after="M81">
-  <owner>twellington@chromium.org</owner>
-  <owner>tedchoc@chromium.org</owner>
-  <summary>
-    Tracks whether the accessibility tab switcher is enabled when an
-    accessibility service (e.g. TalkBack or Switch Access) is enabled that would
-    typically cause the accessibility tab switcher to be used. Recorded when the
-    activity is resumed or accessibility services are turned on.
-  </summary>
-</histogram>
-
 <histogram name="Accessibility.Android.UserFontSizePref.Change" units="%"
-    expires_after="2023-07-01">
+    expires_after="2023-09-03">
   <owner>twellington@chromium.org</owner>
   <owner>skym@chromium.org</owner>
   <summary>
@@ -375,7 +370,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.Android.UserFontSizePref.OnStartup" units="%"
-    expires_after="2023-07-01">
+    expires_after="2023-09-03">
   <owner>twellington@chromium.org</owner>
   <owner>skym@chromium.org</owner>
   <summary>
@@ -1014,6 +1009,20 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Accessibility.ExperimentalModeFlag.FormControls"
+    enum="BooleanEnabled" expires_after="2023-11-30">
+  <owner>aldietz@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Records whether the experimental form controls mode flag is set for the
+    AXMode. Tracked when the experimental form controls mode flag is flipped to
+    true. This flag is flipped automatically when software communicates with
+    Chrome via accessibility APIs.
+
+    This is currently only used on Android OS.
+  </summary>
+</histogram>
+
 <histogram name="Accessibility.FocusHighlight.ToggleEnabled"
     enum="BooleanEnabled" expires_after="never">
   <owner>aleventhal@chromium.org</owner>
@@ -1167,7 +1176,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.InactiveTime" units="ms"
-    expires_after="2023-07-30">
+    expires_after="2023-10-01">
   <owner>aleventhal@chromium.org</owner>
   <owner>abigailbklein@chromium.org</owner>
   <owner>janewman@microsoft.com</owner>
@@ -1186,10 +1195,10 @@ chromium-metrics-reviews@google.com.
     This metric is related to the Preferred Content Size chosen by the user. It
     is only recorded once per session. This is hit if the chosen category is not
     listed in the map defined in
-    /ios/chrome/browser/ui/util/dynamic_type_util.mm. In that case, we should
-    update the code by adding an entry for the new category in that map. This is
-    logged when the helper to returning the multiplier associated with the
-    current preferred content size is called.
+    /ios/chrome/browser/shared/ui/util/dynamic_type_util.mm. In that case, we
+    should update the code by adding an entry for the new category in that map.
+    This is logged when the helper to returning the multiplier associated with
+    the current preferred content size is called.
   </summary>
 </histogram>
 
@@ -1475,6 +1484,20 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram
+    name="Accessibility.LiveCaption.{SodaLanguageCode}.SessionContainsRecognizedSpeech"
+    enum="BooleanEnabled" expires_after="2024-02-01">
+  <owner>evliu@google.com</owner>
+  <owner>chrome-media-ux@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Whether the speech recognition session contains any recognized speech. This
+    is logged once per media stream upon the destruction of the
+    SpeechRecognitionRecognizerImpl.
+  </summary>
+  <token key="SodaLanguageCode" variants="SodaLanguageCode"/>
+</histogram>
+
 <histogram name="Accessibility.LiveCaption2" enum="BooleanEnabled"
     expires_after="2023-11-30">
   <owner>katie@chromium.org</owner>
@@ -1486,6 +1509,21 @@ chromium-metrics-reviews@google.com.
     Live Caption controller is initialized on platforms that support Live
     Caption.
   </summary>
+</histogram>
+
+<histogram name="Accessibility.LiveTranslate.EnableFrom{Entrypoint}"
+    enum="BooleanEnabled" expires_after="2023-06-13">
+  <owner>evliu@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Records when a user enables or disables the Live Translate feature from
+    {Entrypoint}.
+  </summary>
+  <token key="Entrypoint">
+    <variant name="GlobalMediaControls"
+        summary="global media controls (Zenith)"/>
+    <variant name="Settings" summary="chrome://settings"/>
+  </token>
 </histogram>
 
 <histogram name="Accessibility.Mac.ScreenReader{AccessibilityEveryReport}"
@@ -1559,7 +1597,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.Performance.AXTree.Destroy" units="ms"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>agarwaltushar@google.com</owner>
   <owner>olivierli@chromium.org</owner>
   <summary>
@@ -1695,6 +1733,42 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="Accessibility.ReadAnything.Color" enum="ReadAnythingColor"
+    expires_after="2023-11-30">
+  <owner>abigailbklein@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Records the user-chosen color theme for the Read Anything panel.
+  </summary>
+</histogram>
+
+<histogram name="Accessibility.ReadAnything.FontScale" units="em"
+    expires_after="2023-11-30">
+  <owner>abigailbklein@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Records the user-chosen font scale for the Read Anything panel.
+  </summary>
+</histogram>
+
+<histogram name="Accessibility.ReadAnything.LetterSpacing"
+    enum="ReadAnythingLetterSpacing" expires_after="2023-11-30">
+  <owner>abigailbklein@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Records the user-chosen letter spacing for the Read Anything panel.
+  </summary>
+</histogram>
+
+<histogram name="Accessibility.ReadAnything.LineSpacing"
+    enum="ReadAnythingLineSpacing" expires_after="2023-11-30">
+  <owner>abigailbklein@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Records the user-chosen line spacing for the Read Anything panel.
+  </summary>
+</histogram>
+
 <histogram name="Accessibility.Reliability.Tree.UnserializeError"
     enum="AccessibilityTreeUnserializeError" expires_after="2023-11-30">
   <owner>aleventhal@chromium.org</owner>
@@ -1722,6 +1796,16 @@ chromium-metrics-reviews@google.com.
     <variant name="Failure" summary="has failed"/>
     <variant name="Success" summary="has succeeded"/>
   </token>
+</histogram>
+
+<histogram name="Accessibility.ScreenAI.LibraryLoadDetailedResultOnWindows"
+    enum="WinGetLastError" expires_after="2023-11-30">
+  <owner>rhalavati@chromium.org</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Records a Screen AI library load result on Windows. The result is recorded
+    after initialization of Screen AI service and loading chrome_screen_ai.dll.
+  </summary>
 </histogram>
 
 <histogram name="Accessibility.ScreenAI.LoadLibraryResult"
@@ -1764,46 +1848,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Accessibility.Shortcuts.CrosDockedMagnifier"
-    enum="BooleanEnabled" expires_after="2021-12-12">
-  <owner>amraboelkher@chromium.org</owner>
-  <owner>poromov@chromium.org</owner>
-  <summary>
-    Whether the Chrome OS Docked Magnifier shortcut is enabled. It's being
-    emitted when the Docked Magnifier shortcut is triggered.
-  </summary>
-</histogram>
-
-<histogram name="Accessibility.Shortcuts.CrosHighContrast"
-    enum="BooleanEnabled" expires_after="2021-08-09">
-  <owner>amraboelkher@chromium.org</owner>
-  <owner>poromov@chromium.org</owner>
-  <summary>
-    Whether the Chrome OS High Contrast mode shortcut is enabled. It's being
-    emitted when the High Contrast shortcut is triggered.
-  </summary>
-</histogram>
-
-<histogram name="Accessibility.Shortcuts.CrosScreenMagnifier"
-    enum="BooleanEnabled" expires_after="2021-08-09">
-  <owner>amraboelkher@chromium.org</owner>
-  <owner>poromov@chromium.org</owner>
-  <summary>
-    Whether the Chrome OS Full-screen Magnifier mode shortcut is enabled. It's
-    being emitted when the Full-screen Magnifier shortcut is triggered.
-  </summary>
-</histogram>
-
-<histogram name="Accessibility.Shortcuts.CrosSpokenFeedback"
-    enum="BooleanEnabled" expires_after="2021-08-09">
-  <owner>amraboelkher@chromium.org</owner>
-  <owner>poromov@chromium.org</owner>
-  <summary>
-    Whether the Chrome OS Spoken Feedback shortcut is enabled. It's being
-    emitted when the Spoken Feedback shortcut is triggered.
-  </summary>
-</histogram>
-
 <histogram name="Accessibility.VTTContainsStyleBlock" enum="BooleanEnabled"
     expires_after="2023-09-06">
   <owner>evliu@google.com</owner>
@@ -1815,7 +1859,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Accessibility.WebSpeech.Duration" units="ms"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
   <owner>evliu@google.com</owner>
   <owner>chrome-media-ux@google.com</owner>
   <summary>
@@ -1957,32 +2001,6 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram name="DomDistiller.DistillabilityRejection" enum="DistillRejection"
-    expires_after="M85">
-  <owner>wychen@chromium.org</owner>
-  <summary>
-    The reason to reject distillability at PageDistillableAfterParsing time.
-  </summary>
-</histogram>
-
-<histogram name="DomDistiller.DistillabilityScoreNMF.Negative" units="score"
-    expires_after="M77">
-  <owner>wychen@chromium.org</owner>
-  <summary>
-    Score of distillability from AdaBoost model, non-mobile-friendly only. The
-    score shown here is multiplied by 100.
-  </summary>
-</histogram>
-
-<histogram name="DomDistiller.DistillabilityScoreNMF.Positive" units="score"
-    expires_after="M77">
-  <owner>wychen@chromium.org</owner>
-  <summary>
-    Score of distillability from AdaBoost model, non-mobile-friendly only. The
-    score shown here is multiplied by 100.
-  </summary>
-</histogram>
-
 <histogram name="DomDistiller.InfoBarUsage" enum="BooleanUsage"
     expires_after="2023-06-25">
   <obsolete>
@@ -1998,52 +2016,14 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="DomDistiller.LongArticleScoreNMF.Negative" units="score"
-    expires_after="M85">
-  <owner>wychen@chromium.org</owner>
-  <summary>
-    Score of long article from AdaBoost model, distillable and
-    non-mobile-friendly only. The score shown here is multiplied by 100.
-  </summary>
-</histogram>
-
-<histogram name="DomDistiller.LongArticleScoreNMF.Positive" units="score"
-    expires_after="M85">
-  <owner>wychen@chromium.org</owner>
-  <summary>
-    Score of long article from AdaBoost model, distillable and
-    non-mobile-friendly only. The score shown here is multiplied by 100.
-  </summary>
-</histogram>
-
 <histogram name="DomDistiller.MessageDismissalCondition"
-    enum="ReaderModeMessageDismissalCondition" expires_after="2023-07-09">
+    enum="ReaderModeMessageDismissalCondition" expires_after="2023-09-10">
   <owner>twellington@chromium.org</owner>
   <owner>aishwaryarj@google.com</owner>
   <summary>
     Records whether the user accepted or ignored/dismissed the Reader Mode
     message prompt in conjunction with the Reader Mode accessibility setting.
     Recorded for Android only.
-  </summary>
-</histogram>
-
-<histogram name="DomDistiller.PageDistillableAfterLoading"
-    enum="DistillableType2" expires_after="M85">
-  <owner>wychen@chromium.org</owner>
-  <summary>
-    Records the &quot;Distillable Type&quot; (mobile-friendly not distillable,
-    mobile-friendly distillable, non-mobile-friendly not distillable,
-    non-mobile-friendly distillable) for each analyzed page after loading.
-  </summary>
-</histogram>
-
-<histogram name="DomDistiller.PageDistillableAfterParsing"
-    enum="DistillableType2" expires_after="M85">
-  <owner>wychen@chromium.org</owner>
-  <summary>
-    Records the &quot;Distillable Type&quot; (mobile-friendly not distillable,
-    mobile-friendly distillable, non-mobile-friendly not distillable,
-    non-mobile-friendly distillable) for each analyzed page after parsing.
   </summary>
 </histogram>
 
@@ -2083,7 +2063,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="DomDistiller.ReaderShownForPageLoad" enum="Boolean"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
   <owner>mdjones@chromium.org</owner>
   <summary>
     Records if the panel became visible at any point after a page was navigated.
@@ -2101,6 +2081,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="DomDistiller.Statistics.WordCount" units="words"
     expires_after="M85">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records the number of words in a distilled page. For articles with multiple
@@ -2138,6 +2121,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="DomDistiller.Time.ArticleProcessing" units="ms"
     expires_after="M77">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>yfriedman@chromium.org</owner>
   <summary>
     Time spent in DomDistiller's identification of text content.
@@ -2146,11 +2132,17 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="DomDistiller.Time.DistillationTotal" units="ms"
     expires_after="M85">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>yfriedman@chromium.org</owner>
   <summary>Complete time spent in DomDistiller's processing of a page.</summary>
 </histogram>
 
 <histogram name="DomDistiller.Time.DistillPage" units="ms" expires_after="M77">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>wychen@chromium.org</owner>
   <summary>
     Time spent in DistillPageImpl(), mostly ExecuteJavaScript(), including
@@ -2160,6 +2152,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="DomDistiller.Time.DocumentConstruction" units="ms"
     expires_after="M77">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>yfriedman@chromium.org</owner>
   <summary>
     Time spent in creating DomDistiller's internal representation of the HTML
@@ -2168,6 +2163,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="DomDistiller.Time.Formatting" units="ms" expires_after="M77">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>yfriedman@chromium.org</owner>
   <summary>
     Time spent in DomDistiller's final processing of article content/formatting.
@@ -2176,6 +2174,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="DomDistiller.Time.MarkupParsing" units="ms"
     expires_after="M77">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>yfriedman@chromium.org</owner>
   <summary>
     Time spent in DomDistiller's processing of article metadata.
@@ -2201,7 +2202,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="DomDistiller.Time.ViewingReaderModePage" units="ms"
-    expires_after="2023-07-02">
+    expires_after="2023-09-03">
   <owner>mdjones@chromium.org</owner>
   <summary>
     Records the amount of time a user spent on a Reader Mode Page.
@@ -2234,7 +2235,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="SodaInstaller.BinaryInstallationResult" enum="BooleanSuccess"
-    expires_after="2023-06-01">
+    expires_after="2023-09-17">
   <owner>abigailbklein@google.com</owner>
   <owner>evliu@google.com</owner>
   <owner>yilkal@chromium.org</owner>

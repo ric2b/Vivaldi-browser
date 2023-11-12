@@ -16,6 +16,7 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
@@ -226,7 +227,7 @@ class NetworkConfigurationHandler::ProfileEntryDeleter {
                                          false /* failed */);
   }
 
-  NetworkConfigurationHandler* owner_;  // Unowned
+  raw_ptr<NetworkConfigurationHandler, ExperimentalAsh> owner_;  // Unowned
   std::string service_path_;
   // Non empty if the service has to be removed only from a single profile. This
   // value is the profile path of the profile in question.
@@ -266,9 +267,9 @@ void NetworkConfigurationHandler::GetShillProperties(
        network_state->IsNonShillCellularNetwork())) {
     // This is a Tether network or a Cellular network with no Service.
     // Provide properties from NetworkState.
-    base::Value dictionary(base::Value::Type::DICT);
+    base::Value::Dict dictionary;
     network_state->GetStateProperties(&dictionary);
-    std::move(callback).Run(service_path, std::move(dictionary.GetDict()));
+    std::move(callback).Run(service_path, std::move(dictionary));
     return;
   }
   ShillServiceClient::Get()->GetProperties(
@@ -513,7 +514,7 @@ void NetworkConfigurationHandler::Init(
   network_device_handler_ = network_device_handler;
 
   // Observer is removed in OnShuttingDown() observer override.
-  network_state_handler_observer_.Observe(network_state_handler_);
+  network_state_handler_observer_.Observe(network_state_handler_.get());
 }
 
 void NetworkConfigurationHandler::ConfigurationFailed(

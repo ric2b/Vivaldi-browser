@@ -24,7 +24,7 @@ class VivaldiWebViewWithGuestFunction : public ExtensionFunction {
  protected:
   ~VivaldiWebViewWithGuestFunction() override = default;
 
-  WebViewGuest* guest_ = nullptr;
+  raw_ptr<WebViewGuest> guest_ = nullptr;
 
  private:
   bool PreRunValidation(std::string* error) override;

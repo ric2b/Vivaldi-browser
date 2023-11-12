@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.feature_engagement;
 
+import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.database.Cursor;
 import android.net.Uri;
@@ -11,9 +14,12 @@ import android.provider.MediaStore;
 import android.test.mock.MockContentProvider;
 import android.test.mock.MockContentResolver;
 
+import androidx.core.content.ContextCompat;
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -21,14 +27,16 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.ui.base.MimeTypeUtils;
 import org.chromium.ui.display.DisplayAndroid;
 
 import java.util.concurrent.Semaphore;
@@ -65,8 +73,29 @@ public class ScreenshotMonitorTest {
         }
     }
 
+    private static class TestContext extends ContextWrapper {
+        public TestContext(Context base) {
+            super(base);
+        }
+
+        @Override
+        public int checkPermission(String permission, int pid, int uid) {
+            return PackageManager.PERMISSION_GRANTED;
+        }
+    }
+
     @Before
     public void setUp() {
+        // Replaces the application context with a test implementation which will return true for
+        // permission requests. This is needed for the permission check in
+        // ScreenshotMonitorImpl#doesChangeLookLikeScreenshot.
+        Context context = new TestContext(InstrumentationRegistry.getTargetContext());
+        ContextUtils.initApplicationContextForTests(context);
+        Assume.assumeTrue(
+                ContextCompat.checkSelfPermission(ContextUtils.getApplicationContext(),
+                        MimeTypeUtils.getPermissionNameForMimeType(MimeTypeUtils.Type.IMAGE))
+                == PackageManager.PERMISSION_GRANTED);
+
         MockitoAnnotations.initMocks(this);
         mTestScreenshotMonitorDelegate = new TestScreenshotMonitorDelegate();
 
@@ -220,7 +249,7 @@ public class ScreenshotMonitorTest {
     private void startMonitoringOnUiThreadBlocking() {
         final Semaphore semaphore = new Semaphore(0);
 
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
+        PostTask.postTask(TaskTraits.UI_DEFAULT, new Runnable() {
             @Override
             public void run() {
                 mTestScreenshotMonitor.startMonitoring();
@@ -238,7 +267,7 @@ public class ScreenshotMonitorTest {
     private void stopMonitoringOnUiThreadBlocking() {
         final Semaphore semaphore = new Semaphore(0);
 
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
+        PostTask.postTask(TaskTraits.UI_DEFAULT, new Runnable() {
             @Override
             public void run() {
                 mTestScreenshotMonitor.stopMonitoring();
@@ -257,7 +286,7 @@ public class ScreenshotMonitorTest {
     private void assertScreenshotShowUiCountOnUiThreadBlocking(int expectedCount) {
         final Semaphore semaphore = new Semaphore(0);
 
-        PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
+        PostTask.postTask(TaskTraits.UI_DEFAULT, new Runnable() {
             @Override
             public void run() {
                 semaphore.release();

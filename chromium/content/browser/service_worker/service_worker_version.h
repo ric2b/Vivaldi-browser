@@ -137,6 +137,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
       base::OnceCallback<void(blink::mojom::ServiceWorkerEventStatus)>;
   using FetchHandlerExistence = blink::mojom::FetchHandlerExistence;
   using FetchHandlerType = blink::mojom::ServiceWorkerFetchHandlerType;
+  using FetchHandlerBypassOption =
+      blink::mojom::ServiceWorkerFetchHandlerBypassOption;
 
   // Current version status; some of the status (e.g. INSTALLED and ACTIVATED)
   // should be persisted unlike running status.
@@ -252,6 +254,17 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Note that FCP/LCP with skippable fetch handler type is taken in this
   // way.
   FetchHandlerType EffectiveFetchHandlerType() const;
+
+  // Return the option indicating how the fetch handler should be bypassed.
+  // ServiceWorkerBypassFetchHandler feature uses this to let the renderer know
+  // to bypass fetch handlers for subresources.
+  FetchHandlerBypassOption fetch_handler_bypass_option() {
+    return fetch_handler_bypass_option_;
+  }
+  void set_fetch_handler_bypass_option(
+      FetchHandlerBypassOption fetch_handler_bypass_option) {
+    fetch_handler_bypass_option_ = fetch_handler_bypass_option;
+  }
 
   base::TimeDelta TimeSinceNoControllees() const {
     return GetTickDuration(no_controllees_time_);
@@ -672,6 +685,16 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void ExecuteScriptForTest(const std::string& script,
                             ServiceWorkerScriptExecutionCallback callback);
 
+  // Returns true if this SW is going to warm-up. This function can be called
+  // anytime. If the `running_status()` is `RUNNING`, `STOPPING` or `STOPPED`,
+  // this function returns false.
+  bool IsWarmingUp() const;
+
+  // Returns true if this SW already warmed-up. This function can be called
+  // anytime. If the `running_status()` is `RUNNING`, `STOPPING` or `STOPPED`,
+  // this function returns false.
+  bool IsWarmedUp() const;
+
   blink::mojom::AncestorFrameType ancestor_frame_type() const {
     return ancestor_frame_type_;
   }
@@ -779,6 +802,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
       service_worker_version_unittest::ServiceWorkerVersionTest,
       Doom);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerRegistryTest, ScriptResponseTime);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerBrowserTest,
+                           WarmUpAndStartServiceWorker);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerBrowserTest, WarmUpWorkerAndTimeout);
 
   // Contains timeout info for InflightRequest.
   struct InflightRequestTimeoutInfo {
@@ -819,6 +845,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
   static constexpr base::TimeDelta kStartNewWorkerTimeout = base::Minutes(5);
   // Timeout for the worker to stop.
   static constexpr base::TimeDelta kStopWorkerTimeout = base::Seconds(5);
+  // Duration to keep worker warmed-up.
+  static constexpr base::TimeDelta kWarmUpDuration = base::Minutes(10);
 
   ~ServiceWorkerVersion() override;
 
@@ -830,6 +858,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // EmbeddedWorkerInstance::Listener overrides:
   void OnScriptEvaluationStart() override;
+  void OnScriptLoaded() override;
   void OnStarting() override;
   void OnStarted(blink::mojom::ServiceWorkerStartStatus status,
                  FetchHandlerType fetch_handler_type) override;
@@ -981,6 +1010,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // https://w3c.github.io/ServiceWorker/#dfn-type
   const blink::mojom::ScriptType script_type_;
   absl::optional<FetchHandlerType> fetch_handler_type_;
+
+  FetchHandlerBypassOption fetch_handler_bypass_option_ =
+      FetchHandlerBypassOption::kDefault;
+
   // The source of truth for navigation preload state is the
   // ServiceWorkerRegistration. |navigation_preload_state_| is essentially a
   // cached value because it must be looked up quickly and a live registration
@@ -1029,6 +1062,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // re-enter StartWorker().
   bool is_running_start_callbacks_ = false;
   std::vector<StatusCallback> start_callbacks_;
+  std::vector<StatusCallback> warm_up_callbacks_;
   std::vector<base::OnceClosure> stop_callbacks_;
   std::vector<base::OnceClosure> status_change_callbacks_;
 
@@ -1134,12 +1168,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   bool force_bypass_cache_for_scripts_ = false;
   bool is_update_scheduled_ = false;
   bool in_dtor_ = false;
-
-  // When true, script evaluation doesn't start until InitializeGlobalScope() is
-  // called. This allows the browser process to prevent the renderer from
-  // evaluating the script immediately after the script has been loaded, until
-  // the subresource loader factories are updated.
-  bool initialize_global_scope_after_main_script_loaded_for_testing = false;
 
   // Populated via network::mojom::URLResponseHead of the main script.
   std::unique_ptr<MainScriptResponse> main_script_response_;

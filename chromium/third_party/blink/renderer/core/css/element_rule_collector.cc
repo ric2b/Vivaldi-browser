@@ -56,8 +56,28 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
+#include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/page/scrolling/fragment_anchor.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+
+namespace blink {
+namespace {
+struct CumulativeRulePerfKey {
+  String selector;
+  String style_sheet_id;
+  CumulativeRulePerfKey(const String& selector, const String& style_sheet_id)
+      : selector(selector), style_sheet_id(style_sheet_id) {}
+};
+}  // namespace
+}  // namespace blink
+
+namespace WTF {
+template <>
+struct HashTraits<blink::CumulativeRulePerfKey>
+    : TwoFieldsHashTraits<blink::CumulativeRulePerfKey,
+                          &blink::CumulativeRulePerfKey::selector,
+                          &blink::CumulativeRulePerfKey::style_sheet_id> {};
+}  // namespace WTF
 
 namespace blink {
 
@@ -222,22 +242,26 @@ struct CumulativeRulePerfData {
 };
 
 using SelectorStatisticsRuleMap =
-    HashMap<const RuleData*, CumulativeRulePerfData>;
+    HashMap<CumulativeRulePerfKey, CumulativeRulePerfData>;
 SelectorStatisticsRuleMap& GetSelectorStatisticsRuleMap() {
   DEFINE_STATIC_LOCAL(SelectorStatisticsRuleMap, rule_map, {});
   return rule_map;
 }
 
 void AggregateRulePerfData(
-    const HeapVector<RulePerfDataPerRequest>& rules_statistics) {
+    const HeapVector<RulePerfDataPerRequest>& rules_statistics,
+    const CSSStyleSheet* style_sheet) {
   SelectorStatisticsRuleMap& map = GetSelectorStatisticsRuleMap();
   for (const auto& rule_stats : rules_statistics) {
-    auto it = map.find(rule_stats.rule);
+    CumulativeRulePerfKey key{
+        rule_stats.rule->Selector().SelectorText(),
+        IdentifiersFactory::IdForCSSStyleSheet(style_sheet)};
+    auto it = map.find(key);
     if (it == map.end()) {
       CumulativeRulePerfData data{
           /*match_attempts*/ 1, (rule_stats.fast_reject) ? 1 : 0,
           (rule_stats.did_match) ? 1 : 0, rule_stats.elapsed};
-      map.insert(rule_stats.rule, data);
+      map.insert(key, data);
     } else {
       it->value.elapsed += rule_stats.elapsed;
       it->value.match_attempts++;
@@ -273,8 +297,8 @@ ElementRuleCollector::ElementRuleCollector(
       mode_(SelectorChecker::kResolvingStyle),
       can_use_fast_reject_(
           selector_filter_.ParentStackIsConsistent(context.ParentNode())),
-      same_origin_only_(false),
       matching_ua_rules_(false),
+      suppress_visited_(false),
       inside_link_(inside_link),
       result_(result) {
   if (!g_selector_stats_tracing_enabled) {
@@ -350,11 +374,12 @@ bool SlowMatchWithNoResultFlags(
     SelectorChecker::SelectorCheckingContext& context,
     const CSSSelector& selector,
     const RuleData& rule_data,
+    bool suppress_visited,
     unsigned expected_proximity = std::numeric_limits<unsigned>::max()) {
   SelectorChecker::MatchResult result;
   context.selector = &selector;
-  context.is_inside_visited_link =
-      rule_data.LinkMatchType() == CSSSelector::kMatchVisited;
+  context.match_visited = !suppress_visited && rule_data.LinkMatchType() ==
+                                                   CSSSelector::kMatchVisited;
   bool match = checker.Match(context, result);
   DCHECK_EQ(0, result.flags);
   DCHECK_EQ(kPseudoIdNone, result.dynamic_pseudo);
@@ -387,8 +412,8 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
   context.vtt_originating_element = match_request.VTTOriginatingElement();
   context.style_scope_frame =
       &style_scope_frame.GetParentFrameOrThis(context_.GetElement());
-  context.is_initial = !style_recalc_context_.is_ensuring_style &&
-                       !style_recalc_context_.old_style;
+  bool is_initial = !style_recalc_context_.is_ensuring_style &&
+                    !style_recalc_context_.old_style;
 
   CascadeLayerSeeker layer_seeker(
       context.scope, context.vtt_originating_element, style_sheet, rule_set);
@@ -404,16 +429,14 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
         static_cast<wtf_size_t>(rules.size()));
   }
 
-  const bool case_sensitive_tag_matching =
-      context.element->IsHTMLElement() ||
-      !IsA<HTMLDocument>(context.element->GetDocument());
-
   for (const RuleData& rule_data : rules) {
     if (perf_trace_enabled) {
       selector_statistics_collector.EndCollectionForCurrentRule();
       selector_statistics_collector.BeginCollectionForRule(&rule_data);
     }
-
+    if (!is_initial && rule_data.IsInitial()) {
+      continue;
+    }
     if (can_use_fast_reject_ &&
         selector_filter_.FastRejectSelector<RuleData::kMaximumIdentifierCount>(
             rule_data.DescendantSelectorIdentifierHashes())) {
@@ -421,12 +444,6 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
       if (perf_trace_enabled) {
         selector_statistics_collector.SetWasFastRejected();
       }
-      continue;
-    }
-
-    // Don't return cross-origin rules if we did not explicitly ask for them
-    // through SetSameOriginOnly.
-    if (same_origin_only_ && !rule_data.HasDocumentSecurityOrigin()) {
       continue;
     }
 
@@ -449,29 +466,19 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
       if (pseudo_style_request_.pseudo_id != kPseudoIdNone) {
         continue;
       }
-      if (context.style_scope != nullptr &&
-          RuntimeEnabledFeatures::CSSScopeEnabled() &&
-          !checker.CheckInStyleScope(context, result)) {
-        DCHECK(
-            !SlowMatchWithNoResultFlags(checker, context, selector, rule_data));
-        continue;
-      }
+      DCHECK(!context.style_scope);
       DCHECK(SlowMatchWithNoResultFlags(checker, context, selector, rule_data,
-                                        result.proximity));
-    } else if (case_sensitive_tag_matching && rule_data.SelectorIsEasy()) {
+                                        suppress_visited_, result.proximity));
+    } else if (context.vtt_originating_element == nullptr &&
+               rule_data.SelectorIsEasy()) {
       if (pseudo_style_request_.pseudo_id != kPseudoIdNone) {
         continue;
       }
       bool easy_match = EasySelectorChecker::Match(&selector, context.element);
-
-      if (context.style_scope != nullptr &&
-          RuntimeEnabledFeatures::CSSScopeEnabled() &&
-          !checker.CheckInStyleScope(context, result)) {
-        easy_match = false;
-      }
-      DCHECK_EQ(easy_match,
-                SlowMatchWithNoResultFlags(checker, context, selector,
-                                           rule_data, result.proximity))
+      DCHECK(!context.style_scope);
+      DCHECK_EQ(easy_match, SlowMatchWithNoResultFlags(
+                                checker, context, selector, rule_data,
+                                suppress_visited_, result.proximity))
           << "Mismatch for selector " << selector.SelectorText()
           << " on element " << context.element;
       if (!easy_match) {
@@ -479,10 +486,9 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
       }
     } else {
       context.selector = &selector;
-      context.is_inside_visited_link =
+      context.match_visited =
+          !suppress_visited_ &&
           rule_data.LinkMatchType() == CSSSelector::kMatchVisited;
-      DCHECK(!context.is_inside_visited_link ||
-             inside_link_ != EInsideLink::kNotInsideLink);
       bool match = checker.Match(context, result);
       result_.AddFlags(result.flags);
       if (!match) {
@@ -513,9 +519,15 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
       if (pseudo_style_request_.pseudo_id != kPseudoIdNone ||
           result.dynamic_pseudo == kPseudoIdNone) {
         Element* style_container_candidate =
-            pseudo_style_request_.pseudo_id == kPseudoIdNone
-                ? context_.GetElement().ParentOrShadowHostElement()
-                : &context_.GetElement();
+            style_recalc_context_.style_container;
+        if (!style_container_candidate) {
+          if (pseudo_style_request_.pseudo_id == kPseudoIdNone) {
+            style_container_candidate =
+                context_.GetElement().ParentOrShadowHostElement();
+          } else {
+            style_container_candidate = &context_.GetElement();
+          }
+        }
         if (!EvaluateAndAddContainerQueries(
                 style_container_candidate, *container_query,
                 style_recalc_context_, container_selector_cache_, result_)) {
@@ -537,8 +549,10 @@ void ElementRuleCollector::CollectMatchingRulesForListInternal(
   }
 
   if (perf_trace_enabled) {
+    DCHECK_EQ(mode_, SelectorChecker::kResolvingStyle);
     selector_statistics_collector.EndCollectionForCurrentRule();
-    AggregateRulePerfData(selector_statistics_collector.PerRuleStatistics());
+    AggregateRulePerfData(selector_statistics_collector.PerRuleStatistics(),
+                          style_sheet);
   }
 
   StyleEngine& style_engine =
@@ -743,19 +757,6 @@ void ElementRuleCollector::CollectMatchingRules(
                                   checker);
     }
   }
-  if (inside_link_ != EInsideLink::kNotInsideLink) {
-    // Collect rules for visited links regardless of whether they affect
-    // rendering to prevent sniffing of visited links via CSS transitions.
-    // If the visited or unvisited style changes and an affected property has
-    // a transition rule, we create a transition even if it has no visible
-    // effect.
-    for (const auto bundle : match_request.AllRuleSets()) {
-      CollectMatchingRulesForList(bundle.rule_set->VisitedDependentRules(),
-                                  match_request, bundle.rule_set,
-                                  bundle.style_sheet, bundle.style_sheet_index,
-                                  checker);
-    }
-  }
   if (SelectorChecker::MatchesFocusPseudoClass(element)) {
     for (const auto bundle : match_request.AllRuleSets()) {
       CollectMatchingRulesForList(bundle.rule_set->FocusPseudoClassRules(),
@@ -940,6 +941,9 @@ void ElementRuleCollector::SortAndTransferMatchedRules(
   for (unsigned i = 0; i < matched_rules_.size(); i++) {
     const MatchedRule& matched_rule = matched_rules_[i];
     const RuleData* rule_data = matched_rule.GetRuleData();
+    if (rule_data->IsInitial()) {
+      result_.AddFlags(static_cast<MatchFlags>(MatchFlag::kAffectedByInitial));
+    }
     result_.AddMatchedProperties(
         &rule_data->Rule()->Properties(),
         AddMatchedPropertiesOptions::Builder()
@@ -994,14 +998,14 @@ void ElementRuleCollector::DidMatchRule(
         // When there is no default @namespace, *::selection and *|*::selection
         // are stored without the star, so we are universal if there’s nothing
         // before (e.g. x::selection) and nothing after (e.g. y ::selection).
-        universal = selector.IsLastInTagHistory();
-      } else if (const CSSSelector* next = selector.TagHistory()) {
+        universal = selector.IsLastInComplexSelector();
+      } else if (const CSSSelector* next = selector.NextSimpleSelector()) {
         // When there is a default @namespace, ::selection and *::selection (not
         // universal) are stored as g_null_atom|*::selection, |*::selection (not
         // universal) is stored as g_empty_atom|*::selection, and *|*::selection
         // (the only universal form) is stored as g_star_atom|*::selection.
         universal =
-            next->IsLastInTagHistory() &&
+            next->IsLastInComplexSelector() &&
             CSSSelector::GetPseudoId(next->GetPseudoType()) == dynamic_pseudo &&
             selector.Match() == CSSSelector::kTag &&
             selector.TagQName().LocalName().IsNull() &&
@@ -1041,8 +1045,8 @@ void ElementRuleCollector::DumpAndClearRulesPerfMap() {
             perfetto::TracedValue item = array.AppendItem();
             perfetto::TracedDictionary item_dict =
                 std::move(item).WriteDictionary();
-            const CSSSelector& selector = it.key->Selector();
-            item_dict.Add("selector", selector.SelectorText());
+            item_dict.Add("selector", it.key.selector);
+            item_dict.Add("style_sheet_id", it.key.style_sheet_id);
             item_dict.Add("elapsed (us)", it.value.elapsed);
             item_dict.Add("match_attempts", it.value.match_attempts);
             item_dict.Add("fast_reject_count", it.value.fast_reject_count);

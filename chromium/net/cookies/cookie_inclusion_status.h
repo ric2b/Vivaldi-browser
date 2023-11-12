@@ -5,7 +5,10 @@
 #ifndef NET_COOKIES_COOKIE_INCLUSION_STATUS_H_
 #define NET_COOKIES_COOKIE_INCLUSION_STATUS_H_
 
+#include <stdint.h>
+
 #include <bitset>
+#include <cstdint>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -306,7 +309,7 @@ class NET_EXPORT CookieInclusionStatus {
   // SameSiteCookieContext::|schemeful_context| downgrade that will prevent its
   // access schemefully. If the function returns true and |reason| is valid then
   // |reason| will contain which warning was found.
-  bool HasDowngradeWarning(
+  bool HasSchemefulDowngradeWarning(
       CookieInclusionStatus::WarningReason* reason = nullptr) const;
 
   // Add an warning reason.

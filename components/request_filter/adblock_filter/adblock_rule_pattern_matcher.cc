@@ -19,11 +19,10 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <ostream>
 
+#include "base/check_op.h"
 #include "base/i18n/case_conversion.h"
-#include "base/logging.h"
 #include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/strings/string_util.h"
@@ -219,7 +218,7 @@ bool IsCaseSensitiveMatch(base::StringPiece url_pattern,
       return false;
     text.remove_prefix(subpattern.size());
   } else if ((anchor_type & flat::AnchorType_HOST) != 0) {
-    if (!url_host.is_nonempty())
+    if (url_host.is_empty())
       return false;
     const size_t match_begin =
         FindSubdomainAnchoredSubpattern(url_spec, url_host, subpattern);

@@ -14,6 +14,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "components/drive/drive_pref_names.h"
@@ -99,63 +100,85 @@ void LogLatency(base::TimeDelta latency) {
                           latency);
 }
 
-//---------------
-// JSON utilities
-//---------------
+//----------------------
+// JSON response parsing
+//----------------------
 
-const base::Value::List* GetList(const base::Value* value,
-                                 const std::string& key) {
-  if (!value->is_dict()) {
-    return nullptr;
-  }
-  const base::Value* field = value->FindListKey(key);
-  if (!field) {
-    return nullptr;
-  }
-  return &field->GetList();
-}
-
-absl::optional<std::string> GetString(const base::Value* value,
+absl::optional<std::string> GetString(const base::Value::Dict& value,
                                       const std::string& key) {
-  if (!value->is_dict()) {
-    return absl::nullopt;
-  }
-  const std::string* field = value->GetDict().FindString(key);
+  const auto* field = value.FindString(key);
   if (!field) {
     return absl::nullopt;
   }
   return *field;
 }
 
-//----------------------
-// JSON response parsing
-//----------------------
-
 absl::optional<ItemSuggestCache::Result> ConvertResult(
     const base::Value* value) {
-  const auto& item_id = GetString(value, "itemId");
-  const auto& display_text = GetString(value, "displayText");
-  const auto& prediction_reason = GetString(value, "predictionReason");
+  if (!value->is_dict()) {
+    return absl::nullopt;
+  }
+  const auto& value_dict = value->GetDict();
 
-  // Allow |prediction_reason| to be nullopt.
+  // Get the item ID and display name.
+  const auto& item_id = GetString(value_dict, "itemId");
+  const auto& display_text = GetString(value_dict, "displayText");
   if (!item_id || !display_text) {
     return absl::nullopt;
   }
 
-  return ItemSuggestCache::Result(item_id.value(), display_text.value(),
-                                  prediction_reason);
+  ItemSuggestCache::Result result(item_id.value(), display_text.value(),
+                                  /*prediction_reason=*/absl::nullopt);
+
+  // Get the justification string. We allow this to be empty, so return the
+  // previously-created `result` on failure.
+  const auto* justification_dict = value_dict.FindDict("justification");
+  if (!justification_dict) {
+    return result;
+  }
+
+  // We use `unstructuredJustificationDescription` because justifications are
+  // displayed on one line, and `justificationDescription` is intended for
+  // multi-line formatting.
+  const auto* description =
+      justification_dict->FindDict("unstructuredJustificationDescription");
+  if (!description) {
+    return result;
+  }
+
+  // `unstructuredJustificationDescription` contains only one text segment by
+  // convention.
+  const auto* text_segments = description->FindList("textSegment");
+  if (!text_segments || text_segments->empty() ||
+      !(*text_segments)[0].is_dict()) {
+    return result;
+  }
+  const auto& text_segment = (*text_segments)[0].GetDict();
+
+  const auto justification = GetString(text_segment, "text");
+  if (!justification) {
+    return result;
+  }
+
+  result.prediction_reason = justification;
+  return result;
 }
 
 absl::optional<ItemSuggestCache::Results> ConvertResults(
     const base::Value* value) {
-  const auto& suggestion_id = GetString(value, "suggestionSessionId");
+  if (!value->is_dict()) {
+    return absl::nullopt;
+  }
+  const auto& value_dict = value->GetDict();
+
+  const auto suggestion_id = GetString(value_dict, "suggestionSessionId");
   if (!suggestion_id) {
     return absl::nullopt;
   }
 
   ItemSuggestCache::Results results(suggestion_id.value());
 
-  const auto* items = GetList(value, "item");
+  const auto* items = value_dict.FindList("item");
   if (!items) {
     // Return empty results if there are no items.
     return results;
@@ -209,12 +232,14 @@ ItemSuggestCache::Results::Results(const Results& other)
 ItemSuggestCache::Results::~Results() = default;
 
 ItemSuggestCache::ItemSuggestCache(
+    const std::string& locale,
     Profile* profile,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
     : made_request_(false),
       enabled_(kEnabled.Get()),
       server_url_(kServerUrl.Get()),
       multiple_queries_per_session_(kMultipleQueriesPerSession.Get()),
+      locale_(locale),
       profile_(profile),
       url_loader_factory_(std::move(url_loader_factory)) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -240,20 +265,22 @@ std::string ItemSuggestCache::GetRequestBody() {
   // client_tags can be set via Finch based on what is expected by the
   // ItemSuggest backend, and unexpected tags will be assigned a default model.
   static constexpr char kRequestBody[] = R"({
-        'client_info': {
-          'platform_type': 'CHROME_OS',
-          'scenario_type': 'CHROME_OS_ZSS_FILES',
-          'request_type': 'BACKGROUND_REQUEST',
-          'client_tags': {
-            'name': '$1'
+        "client_info": {
+          "platform_type": "CHROME_OS",
+          "scenario_type": "CHROME_OS_ZSS_FILES",
+          "language_code": "$1",
+          "request_type": "BACKGROUND_REQUEST",
+          "client_tags": {
+            "name": "$2"
           }
         },
-        'max_suggestions': 10,
-        'type_detail_fields': 'drive_item.title,justification.display_text'
+        "max_suggestions": 10,
+        "type_detail_fields": "drive_item.title,justification.display_text"
       })";
 
   const std::string& model = kModelName.Get();
-  return base::ReplaceStringPlaceholders(kRequestBody, {model}, nullptr);
+  return base::ReplaceStringPlaceholders(kRequestBody, {locale_, model},
+                                         nullptr);
 }
 
 base::TimeDelta ItemSuggestCache::GetDelay() {

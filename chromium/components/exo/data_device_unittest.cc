@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ash/shell.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -117,7 +118,7 @@ class TestDataDeviceDelegate : public DataDeviceDelegate {
  private:
   std::vector<DataEvent> events_;
   std::unique_ptr<DataOffer> data_offer_;
-  Surface* entered_surface_ = nullptr;
+  raw_ptr<Surface, ExperimentalAsh> entered_surface_ = nullptr;
   bool can_accept_data_events_for_surface_ = true;
 };
 
@@ -134,7 +135,7 @@ class TestSeat : public Seat {
   Surface* GetFocusedSurface() override { return surface_; }
 
  private:
-  Surface* surface_ = nullptr;
+  raw_ptr<Surface, ExperimentalAsh> surface_ = nullptr;
 };
 
 class DataDeviceTest : public test::ExoTestBase {
@@ -184,100 +185,6 @@ TEST_F(DataDeviceTest, DataEventsDrop) {
             device_->OnDragUpdated(event).drag_operation);
   ASSERT_EQ(1u, delegate_.PopEvents(&events));
   EXPECT_EQ(DataEvent::kMotion, events[0]);
-
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&TestDataDeviceDelegate::DeleteDataOffer,
-                                base::Unretained(&delegate_), true));
-
-  auto drop_cb = device_->GetDropCallback();
-  DragOperation output_drag_op;
-  std::move(drop_cb).Run(output_drag_op);
-  EXPECT_EQ(DragOperation::kLink, output_drag_op);
-  ASSERT_EQ(1u, delegate_.PopEvents(&events));
-  EXPECT_EQ(DataEvent::kDrop, events[0]);
-}
-
-// Helper class to plumb the ExtendedDragSource instance.
-class TestExtendedDragSourceDelegate : public ExtendedDragSource::Delegate {
- public:
-  TestExtendedDragSourceDelegate() = default;
-  TestExtendedDragSourceDelegate(const TestExtendedDragSourceDelegate&) =
-      delete;
-  TestExtendedDragSourceDelegate& operator=(
-      const TestExtendedDragSourceDelegate&) = delete;
-  ~TestExtendedDragSourceDelegate() override = default;
-
-  // ExtendedDragSource::Delegate:
-  bool ShouldAllowDropAnywhere() const override { return false; }
-  bool ShouldLockCursor() const override { return false; }
-
-  void OnSwallowed(const std::string& mime_type) override {}
-
-  void OnUnswallowed(const std::string& mime_type,
-                     const gfx::Vector2d& offset) override {}
-  void OnDataSourceDestroying() override {}
-};
-
-// Helper class to plumb the DataSource instance.
-class TestDataSourceDelegate : public DataSourceDelegate {
- public:
-  TestDataSourceDelegate() = default;
-  ~TestDataSourceDelegate() override = default;
-
-  void OnDataSourceDestroying(DataSource* source) override {}
-  void OnTarget(const absl::optional<std::string>& mime_type) override {}
-  void OnSend(const std::string& mime_type, base::ScopedFD fd) override {}
-  void OnCancelled() override {}
-  void OnDndDropPerformed() override {}
-  void OnDndFinished() override {}
-  void OnAction(DndAction dnd_action) override {}
-  bool CanAcceptDataEventsForSurface(Surface* surface) const override {
-    return true;
-  }
-};
-
-TEST_F(DataDeviceTest, DataEventsPreventMotion) {
-  // Create a DataDevice with a focused Surface.
-  seat_->set_focused_surface(surface_.get());
-  device_.reset();
-  std::vector<DataEvent> events;
-  delegate_.PopEvents(&events);
-  device_ = std::make_unique<DataDevice>(&delegate_, seat_.get());
-
-  // Start a drag operation.
-  ui::DropTargetEvent event(data_, gfx::PointF(), gfx::PointF(),
-                            ui::DragDropTypes::DRAG_MOVE);
-  ui::Event::DispatcherApi(&event).set_target(surface_->window());
-
-  device_->OnDragEntered(event);
-  delegate_.PopEvents(&events);
-
-  // Minic a window detach (new Surface creation).
-  auto shell_surface =
-      exo::test::ShellSurfaceBuilder({10, 10}).BuildShellSurface();
-  auto* other_surface = shell_surface->root_surface();
-
-  device_->OnSurfaceFocused(other_surface, nullptr, true);
-  delegate_.PopEvents(&events);
-
-  // Mimic an extended_drag_source drag operation.
-  TestDataSourceDelegate data_source_delegate;
-  auto data_source = std::make_unique<DataSource>(&data_source_delegate);
-  TestExtendedDragSourceDelegate extended_drag_source_delegate;
-  auto extended_drag_source = std::make_unique<ExtendedDragSource>(
-      data_source.get(), &extended_drag_source_delegate);
-  extended_drag_source->Drag(other_surface, gfx::Vector2d());
-
-  // Prevent drag.motion events to be sent.
-  other_surface->window()->GetToplevelWindow()->SetProperty(
-      chromeos::kCanAttachToAnotherWindowKey, false);
-
-  EXPECT_EQ(ui::DragDropTypes::DRAG_LINK,
-            device_->OnDragUpdated(event).drag_operation);
-  ASSERT_EQ(0u, delegate_.PopEvents(&events));
-
-  other_surface->window()->GetToplevelWindow()->ClearProperty(
-      chromeos::kCanAttachToAnotherWindowKey);
 
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&TestDataDeviceDelegate::DeleteDataOffer,

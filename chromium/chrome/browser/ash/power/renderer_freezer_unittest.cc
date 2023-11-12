@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "chrome/browser/ash/login/users/scoped_test_user_manager.h"
@@ -147,6 +148,10 @@ class RendererFreezerTest : public testing::Test {
     renderer_freezer_.reset();
   }
 
+  void SimulateRenderProcessHostCreated(content::RenderProcessHost* rph) {
+    renderer_freezer_->OnRenderProcessHostCreated(rph);
+  }
+
  protected:
   void Init() {
     renderer_freezer_ = std::make_unique<RendererFreezer>(
@@ -154,7 +159,7 @@ class RendererFreezerTest : public testing::Test {
   }
 
   // Owned by |renderer_freezer_|.
-  TestDelegate* test_delegate_;
+  raw_ptr<TestDelegate, ExperimentalAsh> test_delegate_;
   std::unique_ptr<RendererFreezer> renderer_freezer_;
 
  private:
@@ -270,15 +275,11 @@ class RendererFreezerTestWithExtensions : public RendererFreezerTest {
     extensions::ProcessMap::Get(profile_)
         ->Insert(extension->id(), rph->GetID(), site_instance->GetId());
 
-    // Send the notification that the RenderProcessHost has been created.
-    content::NotificationService::current()->Notify(
-        content::NOTIFICATION_RENDERER_PROCESS_CREATED,
-        content::Source<content::RenderProcessHost>(rph),
-        content::NotificationService::NoDetails());
+    SimulateRenderProcessHostCreated(rph);
   }
 
   // Owned by |profile_manager_|.
-  TestingProfile* profile_;
+  raw_ptr<TestingProfile, ExperimentalAsh> profile_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
 
  private:
@@ -299,11 +300,7 @@ TEST_F(RendererFreezerTestWithExtensions, FreezesNonExtensionRenderers) {
   content::RenderProcessHost* rph =
       rph_factory->CreateRenderProcessHost(profile_, site_instance.get());
 
-  // Send the notification that the RenderProcessHost has been created.
-  content::NotificationService::current()->Notify(
-      content::NOTIFICATION_RENDERER_PROCESS_CREATED,
-      content::Source<content::RenderProcessHost>(rph),
-      content::NotificationService::NoDetails());
+  SimulateRenderProcessHostCreated(rph);
 
   EXPECT_EQ(kSetShouldFreezeRenderer, test_delegate_->GetActions());
 }

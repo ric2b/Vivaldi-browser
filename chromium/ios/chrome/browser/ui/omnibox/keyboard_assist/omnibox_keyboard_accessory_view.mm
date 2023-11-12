@@ -4,14 +4,19 @@
 
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_keyboard_accessory_view.h"
 
+#import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/flags/system_flags.h"
 #import "ios/chrome/browser/search_engines/search_engine_observer_bridge.h"
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/elements/extended_touch_target_button.h"
+#import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
+#import "ios/chrome/browser/ui/lens/lens_availability.h"
+#import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_views.h"
 #import "ios/chrome/browser/ui/omnibox/keyboard_assist/omnibox_assistive_keyboard_views_utils.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
+#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/public/provider/chrome/browser/lens/lens_api.h"
@@ -32,6 +37,9 @@
 // The search stack view that is displayed by this view.
 @property(nonatomic, weak) UIStackView* searchStackView;
 
+// The text field that this view is an accessory to.
+@property(nonatomic, weak) UITextField* textField;
+
 // Called when a keyboard shortcut button is pressed.
 - (void)keyboardButtonPressed:(NSString*)title;
 // Creates a button shortcut for `title`.
@@ -49,13 +57,15 @@
 - (instancetype)initWithButtons:(NSArray<NSString*>*)buttonTitles
                        delegate:(id<OmniboxAssistiveKeyboardDelegate>)delegate
                     pasteTarget:(id<UIPasteConfigurationSupporting>)pasteTarget
-             templateURLService:(TemplateURLService*)templateURLService {
+             templateURLService:(TemplateURLService*)templateURLService
+                      textField:(UITextField*)textField {
   self = [super initWithFrame:CGRectZero
                inputViewStyle:UIInputViewStyleKeyboard];
   if (self) {
     _buttonTitles = buttonTitles;
     _delegate = delegate;
     _pasteTarget = pasteTarget;
+    _textField = textField;
     self.translatesAutoresizingMaskIntoConstraints = NO;
     self.allowsSelfSizing = YES;
     self.templateURLService = templateURLService;
@@ -141,7 +151,8 @@
   UIColor* kTitleColorStateNormal = [UIColor colorWithWhite:0.0 alpha:1.0];
   UIColor* kTitleColorStateHighlighted = [UIColor colorWithWhite:0.0 alpha:0.3];
 
-  UIButton* button = [UIButton buttonWithType:UIButtonTypeCustom];
+  UIButton* button =
+      [ExtendedTouchTargetButton buttonWithType:UIButtonTypeCustom];
   [button setTitleColor:kTitleColorStateNormal forState:UIControlStateNormal];
   [button setTitleColor:kTitleColorStateHighlighted
                forState:UIControlStateHighlighted];
@@ -149,15 +160,22 @@
   [button setTitle:title forState:UIControlStateNormal];
   [button setTitleColor:[UIColor colorNamed:kTextPrimaryColor]
                forState:UIControlStateNormal];
-  // TODO(crbug.com/1418068): Remove after minimum version required is >=
+  // TODO(crbug.com/1418068): Simplify after minimum version required is >=
   // iOS 15.
-#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
-  button.configuration.contentInsets = NSDirectionalEdgeInsetsMake(
-      0, kHorizontalEdgeInset, 0, kHorizontalEdgeInset);
-#else
-  button.contentEdgeInsets =
-      UIEdgeInsetsMake(0, kHorizontalEdgeInset, 0, kHorizontalEdgeInset);
-#endif  // __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
+  if (base::ios::IsRunningOnIOS15OrLater() &&
+      IsUIButtonConfigurationEnabled()) {
+    if (@available(iOS 15, *)) {
+      UIButtonConfiguration* buttonConfiguration =
+          [UIButtonConfiguration plainButtonConfiguration];
+      buttonConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(
+          0, kHorizontalEdgeInset, 0, kHorizontalEdgeInset);
+      button.configuration = buttonConfiguration;
+    }
+  } else {
+    UIEdgeInsets contentEdgeInsets =
+        UIEdgeInsetsMake(0, kHorizontalEdgeInset, 0, kHorizontalEdgeInset);
+    SetContentEdgeInsets(button, contentEdgeInsets);
+  }
   button.clipsToBounds = YES;
   [button.titleLabel setFont:[UIFont systemFontOfSize:kButtonTitleFontSize
                                                weight:UIFontWeightMedium]];
@@ -178,6 +196,17 @@
   UIButton* button = base::mac::ObjCCastStrict<UIButton>(sender);
   [[UIDevice currentDevice] playInputClick];
   [_delegate keyPressed:[button currentTitle]];
+}
+
+- (void)didMoveToWindow {
+  [super didMoveToWindow];
+  if (!self.window || ![self.textField isFirstResponder]) {
+    return;
+  }
+  // Log the Lens support status when the keyboard is opened.
+  lens_availability::CheckAndLogAvailabilityForLensEntryPoint(
+      LensEntrypoint::Keyboard,
+      [self isGoogleSearchEngine:self.templateURLService]);
 }
 
 #pragma mark - Setters

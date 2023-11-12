@@ -11,6 +11,8 @@
  *    <settings-ui prefs="{{prefs}}"></settings-ui>
  */
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
+import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
+import 'chrome://resources/cr_components/settings_prefs/prefs.js';
 import 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
 import 'chrome://resources/cr_elements/cr_page_host_style.css.js';
 import 'chrome://resources/cr_elements/icons.html.js';
@@ -19,9 +21,9 @@ import '../os_settings_menu/os_settings_menu.js';
 import '../os_settings_main/os_settings_main.js';
 import '../os_toolbar/os_toolbar.js';
 import '../../settings_shared.css.js';
-import '../../prefs/prefs.js';
 import '../../settings_vars.css.js';
 
+import {SettingsPrefsElement} from 'chrome://resources/cr_components/settings_prefs/prefs.js';
 import {CrContainerShadowMixin} from 'chrome://resources/cr_elements/cr_container_shadow_mixin.js';
 import {CrDrawerElement} from 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
 import {FindShortcutMixin} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
@@ -30,7 +32,6 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {listenOnce} from 'chrome://resources/js/util_ts.js';
 import {Debouncer, DomIf, microTask, PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {SettingsPrefsElement} from '../../prefs/prefs.js';
 import {castExists} from '../assert_extras.js';
 import {setGlobalScrollTarget} from '../common/global_scroll_target_mixin.js';
 import {recordClick, recordNavigation, recordPageBlur, recordPageFocus, recordSettingChange} from '../metrics_recorder.js';
@@ -40,6 +41,7 @@ import {OsToolbarElement} from '../os_toolbar/os_toolbar.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, Router} from '../router.js';
 
+import {OsSettingsHatsBrowserProxy, OsSettingsHatsBrowserProxyImpl} from './os_settings_hats_browser_proxy.js';
 import {getTemplate} from './os_settings_ui.html.js';
 
 declare global {
@@ -65,7 +67,7 @@ assert(
     !window.settings || !defaultResourceLoaded,
     'os_settings_ui.js was executed twice. You probably have an invalid import.');
 
-interface OsSettingsUiElement {
+export interface OsSettingsUiElement {
   $: {
     container: HTMLDivElement,
     prefs: SettingsPrefsElement,
@@ -79,7 +81,7 @@ const OsSettingsUiElementBase =
     RouteObserverMixin(
         FindShortcutMixin(CrContainerShadowMixin(PolymerElement)));
 
-class OsSettingsUiElement extends OsSettingsUiElementBase {
+export class OsSettingsUiElement extends OsSettingsUiElementBase {
   static get is() {
     return 'os-settings-ui';
   }
@@ -178,6 +180,8 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
   private narrowThreshold_: number;
   private activeRoute_: Route|null;
   private scrollEndDebouncer_: Debouncer|null;
+  private osSettingsHatsBrowserProxy_: OsSettingsHatsBrowserProxy;
+  private boundTriggerSettingsHats_: () => void;
 
   constructor() {
     super();
@@ -191,6 +195,11 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
     this.scrollEndDebouncer_ = null;
 
     Router.getInstance().initializeRouteFromUrl();
+
+    this.osSettingsHatsBrowserProxy_ =
+        OsSettingsHatsBrowserProxyImpl.getInstance();
+
+    this.boundTriggerSettingsHats_ = this.triggerSettingsHats_.bind(this);
   }
 
   override ready() {
@@ -262,6 +271,13 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
         drawer.cancel();
       });
     });
+
+    this.addEventListener(
+        'search-changed',
+        () => {
+          this.osSettingsHatsBrowserProxy_.settingsUsedSearch();
+        },
+        /*AddEventListenerOptions=*/ {once: true});
   }
 
   override connectedCallback() {
@@ -269,10 +285,8 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
 
     document.documentElement.classList.remove('loading');
 
-    setTimeout(function() {
-      chrome.send(
-          'metricsHandler:recordTime',
-          ['Settings.TimeUntilInteractive', window.performance.now()]);
+    setTimeout(() => {
+      this.recordTimeUntilInteractive_();
     });
 
     // Preload bold Roboto so it doesn't load and flicker the first time used.
@@ -316,6 +330,8 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
     window.addEventListener('focus', recordPageFocus);
     window.addEventListener('blur', recordPageBlur);
 
+    window.addEventListener('blur', this.boundTriggerSettingsHats_);
+
     // Clicks need to be captured because unlike focus/blur to the settings
     // window, a click's propagation can be stopped by child elements.
     window.addEventListener('click', recordClick, /*capture=*/ true);
@@ -326,6 +342,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
 
     window.removeEventListener('focus', recordPageFocus);
     window.removeEventListener('blur', recordPageBlur);
+    window.removeEventListener('blur', this.boundTriggerSettingsHats_);
     window.removeEventListener('click', recordClick);
     Router.getInstance().resetRouteForTesting();
   }
@@ -395,10 +412,10 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
   /**
    * Called when a section is selected.
    */
-  private onIronActivate_(e: CustomEvent<{selected: string}>) {
+  private onSectionSelect_(e: CustomEvent<{selected: string}>) {
     assert(this.showNavMenu_);
-    const section = e.detail.selected;
-    const path = new URL(section).pathname;
+    const url = e.detail.selected;
+    const path = new URL(url).pathname;
     const route = Router.getInstance().getRouteForPath(path);
     assert(route, 'os-settings-menu has an entry with an invalid route.');
     this.activeRoute_ = route;
@@ -412,7 +429,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
     this.navigateToActiveRoute_();
   }
 
-  private onMenuButtonTap_() {
+  private onMenuButtonClick_() {
     if (!this.showNavMenu_) {
       return;
     }
@@ -486,6 +503,16 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
    */
   private onDrawerIconClick_() {
     this.getDrawer_().cancel();
+  }
+
+  private recordTimeUntilInteractive_(): void {
+    const METRIC_NAME = 'ChromeOS.Settings.TimeUntilInteractive';
+    const timeMs = Math.round(window.performance.now());
+    chrome.metricsPrivate.recordTime(METRIC_NAME, timeMs);
+  }
+
+  private triggerSettingsHats_(): void {
+    this.osSettingsHatsBrowserProxy_.sendSettingsHats();
   }
 }
 

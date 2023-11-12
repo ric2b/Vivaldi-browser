@@ -375,6 +375,11 @@
 #define glConvertYUVAMailboxesToRGBINTERNAL \
   GLES2_GET_FUN(ConvertYUVAMailboxesToRGBINTERNAL)
 #define glCopySharedImageINTERNAL GLES2_GET_FUN(CopySharedImageINTERNAL)
+#define glCopySharedImageToTextureINTERNAL \
+  GLES2_GET_FUN(CopySharedImageToTextureINTERNAL)
+#define glReadbackARGBImagePixelsINTERNAL \
+  GLES2_GET_FUN(ReadbackARGBImagePixelsINTERNAL)
+#define glWritePixelsINTERNAL GLES2_GET_FUN(WritePixelsINTERNAL)
 #define glEnableiOES GLES2_GET_FUN(EnableiOES)
 #define glDisableiOES GLES2_GET_FUN(DisableiOES)
 #define glBlendEquationiOES GLES2_GET_FUN(BlendEquationiOES)
@@ -384,5 +389,27 @@
 #define glColorMaskiOES GLES2_GET_FUN(ColorMaskiOES)
 #define glIsEnablediOES GLES2_GET_FUN(IsEnablediOES)
 #define glProvokingVertexANGLE GLES2_GET_FUN(ProvokingVertexANGLE)
+#define glFramebufferMemorylessPixelLocalStorageANGLE \
+  GLES2_GET_FUN(FramebufferMemorylessPixelLocalStorageANGLE)
+#define glFramebufferTexturePixelLocalStorageANGLE \
+  GLES2_GET_FUN(FramebufferTexturePixelLocalStorageANGLE)
+#define glFramebufferPixelLocalClearValuefvANGLE \
+  GLES2_GET_FUN(FramebufferPixelLocalClearValuefvANGLE)
+#define glFramebufferPixelLocalClearValueivANGLE \
+  GLES2_GET_FUN(FramebufferPixelLocalClearValueivANGLE)
+#define glFramebufferPixelLocalClearValueuivANGLE \
+  GLES2_GET_FUN(FramebufferPixelLocalClearValueuivANGLE)
+#define glBeginPixelLocalStorageANGLE GLES2_GET_FUN(BeginPixelLocalStorageANGLE)
+#define glEndPixelLocalStorageANGLE GLES2_GET_FUN(EndPixelLocalStorageANGLE)
+#define glPixelLocalStorageBarrierANGLE \
+  GLES2_GET_FUN(PixelLocalStorageBarrierANGLE)
+#define glFramebufferPixelLocalStorageInterruptANGLE \
+  GLES2_GET_FUN(FramebufferPixelLocalStorageInterruptANGLE)
+#define glFramebufferPixelLocalStorageRestoreANGLE \
+  GLES2_GET_FUN(FramebufferPixelLocalStorageRestoreANGLE)
+#define glGetFramebufferPixelLocalStorageParameterfvANGLE \
+  GLES2_GET_FUN(GetFramebufferPixelLocalStorageParameterfvANGLE)
+#define glGetFramebufferPixelLocalStorageParameterivANGLE \
+  GLES2_GET_FUN(GetFramebufferPixelLocalStorageParameterivANGLE)
 
 #endif  // GPU_GLES2_GL2CHROMIUM_AUTOGEN_H_

@@ -677,6 +677,14 @@ void Editor::RevealSelectionAfterEditingOperation(
   GetFrameSelection().RevealSelection(alignment, kDoNotRevealExtent);
 }
 
+void Editor::AddImageResourceObserver(ImageResourceObserver* observer) {
+  image_resource_observers_.insert(observer);
+}
+
+void Editor::RemoveImageResourceObserver(ImageResourceObserver* observer) {
+  image_resource_observers_.erase(observer);
+}
+
 void Editor::AddToKillRing(const EphemeralRange& range) {
   if (should_start_new_kill_ring_sequence_)
     GetKillRing().StartNewSequence();
@@ -948,12 +956,23 @@ void Editor::ReplaceSelection(const String& text) {
                            InputEvent::InputType::kInsertReplacementText);
 }
 
+void Editor::ElementRemoved(Element* element) {
+  if (!RuntimeEnabledFeatures::DontLeakDetachedInputEnabled()) {
+    return;
+  }
+  if (last_edit_command_ &&
+      last_edit_command_->EndingSelection().RootEditableElement() == element) {
+    last_edit_command_ = nullptr;
+  }
+}
+
 void Editor::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
   visitor->Trace(last_edit_command_);
   visitor->Trace(undo_stack_);
   visitor->Trace(mark_);
   visitor->Trace(typing_style_);
+  visitor->Trace(image_resource_observers_);
 }
 
 }  // namespace blink

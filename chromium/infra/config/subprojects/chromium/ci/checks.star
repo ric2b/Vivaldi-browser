@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 """Definitions of builders in the presubmit.linux builder group."""
 
-load("//lib/builders.star", "os")
+load("//lib/builders.star", "os", "sheriff_rotations")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 
@@ -22,15 +22,13 @@ ci.builder(
     builderless = True,
     cores = 32,
     os = os.LINUX_DEFAULT,
+    sheriff_rotations = sheriff_rotations.CHROMIUM,
     console_view_entry = consoles.console_view_entry(
         console_view = "checks",
         category = "presubmit",
         short_name = "linux",
     ),
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
-
-    # TODO(crbug.com/1370463): remove this.
-    omit_python2 = False,
     properties = {
         "$depot_tools/presubmit": {
             "runhooks": True,
@@ -46,19 +44,13 @@ ci.builder(
     builderless = True,
     cores = 32,
     os = os.WINDOWS_DEFAULT,
-
-    # Adding sheriff rotations to none for the time being until we confirm
-    # this works
-    sheriff_rotations = None,
+    sheriff_rotations = sheriff_rotations.CHROMIUM,
     console_view_entry = consoles.console_view_entry(
         console_view = "checks",
         category = "presubmit",
         short_name = "win",
     ),
     execution_timeout = 6 * time.hour,
-
-    # TODO(crbug.com/1370463): remove this.
-    omit_python2 = False,
     properties = {
         "$depot_tools/presubmit": {
             "runhooks": True,

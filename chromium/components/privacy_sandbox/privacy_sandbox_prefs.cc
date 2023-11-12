@@ -32,6 +32,8 @@ const char kPrivacySandboxM1FledgeEnabled[] =
 const char kPrivacySandboxM1AdMeasurementEnabled[] =
     "privacy_sandbox.m1.ad_measurement_enabled";
 
+const char kPrivacySandboxM1Restricted[] = "privacy_sandbox.m1.restricted";
+
 const char kPrivacySandboxApisEnabled[] = "privacy_sandbox.apis_enabled";
 
 const char kPrivacySandboxApisEnabledV2[] = "privacy_sandbox.apis_enabled_v2";
@@ -118,6 +120,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
     registry->RegisterBooleanPref(prefs::kPrivacySandboxM1FledgeEnabled, false);
     registry->RegisterBooleanPref(prefs::kPrivacySandboxM1AdMeasurementEnabled,
                                   false);
+    registry->RegisterBooleanPref(prefs::kPrivacySandboxM1Restricted, false);
   } else {
   registry->RegisterBooleanPref(
       prefs::kPrivacySandboxApisEnabled, true,
@@ -134,7 +137,9 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kPrivacySandboxM1FledgeEnabled, false);
   registry->RegisterBooleanPref(prefs::kPrivacySandboxM1AdMeasurementEnabled,
                                 false);
+  registry->RegisterBooleanPref(prefs::kPrivacySandboxM1Restricted, false);
   } // vivaldi disabled
+
   registry->RegisterBooleanPref(
       prefs::kPrivacySandboxManuallyControlled, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);

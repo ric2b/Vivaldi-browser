@@ -29,9 +29,23 @@ WaylandZAuraOutput::WaylandZAuraOutput() : obj_(nullptr) {}
 WaylandZAuraOutput::~WaylandZAuraOutput() = default;
 
 bool WaylandZAuraOutput::IsReady() const {
-  return wl::get_version_of_object(obj_.get()) <
-             ZAURA_OUTPUT_DISPLAY_ID_SINCE_VERSION ||
-         display_id_.has_value();
+  return is_ready_;
+}
+
+void WaylandZAuraOutput::OnDone() {
+  // If `display_id_` has been set the server must have propagated all the
+  // necessary state events for this zaura_output.
+  is_ready_ = display_id_.has_value();
+}
+
+void WaylandZAuraOutput::UpdateMetrics(WaylandOutput::Metrics& metrics) {
+  if (!IsReady()) {
+    return;
+  }
+
+  metrics.insets = insets_;
+  metrics.logical_transform = logical_transform_.value();
+  metrics.display_id = display_id_.value();
 }
 
 void WaylandZAuraOutput::OnScale(void* data,

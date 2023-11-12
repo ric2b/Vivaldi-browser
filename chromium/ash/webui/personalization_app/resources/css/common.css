@@ -87,6 +87,10 @@ iron-list {
   border-radius: 16px;
 }
 
+:host-context(body.jelly-enabled) .preview-container {
+  border: none;
+}
+
 .preview-text-container,
 .preview-text-placeholder {
   align-items: flex-start;
@@ -284,4 +288,10 @@ iron-list {
 
 :host-context([dir=rtl]) iron-icon[icon='cr:chevron-right'] {
   transform: scaleX(-1);
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

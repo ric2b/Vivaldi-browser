@@ -7,10 +7,12 @@ import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/cr_url_list_item/cr_url_list_item.js';
+import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
 import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import {CrUrlListItemSize} from 'chrome://resources/cr_elements/cr_url_list_item/cr_url_list_item.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './power_bookmark_row.html.js';
@@ -39,6 +41,10 @@ export class PowerBookmarkRowElement extends PolymerElement {
         type: String,
         value: '',
       },
+      forceHover: {
+        type: Boolean,
+        value: false,
+      },
       hasCheckbox: {
         type: Boolean,
         reflectToAttribute: true,
@@ -49,11 +55,27 @@ export class PowerBookmarkRowElement extends PolymerElement {
         reflectToAttribute: true,
         value: false,
       },
+      imageUrls: {
+        type: Array,
+        value: () => [],
+      },
+      rowAriaDescription: {
+        type: String,
+        value: '',
+      },
+      rowAriaLabel: {
+        type: String,
+        value: '',
+      },
       trailingIcon: {
         type: String,
         value: '',
       },
       trailingIconAriaLabel: {
+        type: String,
+        value: '',
+      },
+      trailingIconTooltip: {
         type: String,
         value: '',
       },
@@ -64,10 +86,25 @@ export class PowerBookmarkRowElement extends PolymerElement {
   checkboxDisabled: boolean;
   compact: boolean;
   description: string;
+  forceHover: boolean;
   hasCheckbox: boolean;
   hasInput: boolean;
+  rowAriaDescription: string;
+  rowAriaLabel: string;
   trailingIcon: string;
   trailingIconAriaLabel: string;
+  trailingIconTooltip: string;
+  imageUrls: string[];
+
+  constructor() {
+    super();
+
+    // The row has a [tabindex] attribute on it to move focus using iron-list
+    // but the row itself should not be focusable. By setting `delegatesFocus`
+    // to true, the browser will automatically move focus to the focusable
+    // elements within it when the row itself tries to gain focus.
+    this.attachShadow({mode: 'open', delegatesFocus: true});
+  }
 
   override connectedCallback() {
     super.connectedCallback();
@@ -76,6 +113,14 @@ export class PowerBookmarkRowElement extends PolymerElement {
 
   private getItemSize_() {
     return this.compact ? CrUrlListItemSize.COMPACT : CrUrlListItemSize.LARGE;
+  }
+
+  private isBookmarksBar_(): boolean {
+    return this.bookmark.id === loadTimeData.getString('bookmarksBarId');
+  }
+
+  private showTrailingIcon_(): boolean {
+    return !this.hasInput && !this.hasCheckbox;
   }
 
   private onInputDisplayChange_() {
@@ -89,16 +134,20 @@ export class PowerBookmarkRowElement extends PolymerElement {
    * Dispatches a custom click event when the user clicks anywhere on the row.
    */
   private onRowClicked_(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-    this.dispatchEvent(new CustomEvent('row-clicked', {
-      bubbles: true,
-      composed: true,
-      detail: {
-        bookmark: this.bookmark,
-        event: event,
-      },
-    }));
+    // Ignore clicks on the row when it has an input, to ensure the row doesn't
+    // eat input clicks.
+    if (!this.hasInput) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.dispatchEvent(new CustomEvent('row-clicked', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          bookmark: this.bookmark,
+          event: event,
+        },
+      }));
+    }
   }
 
   /**

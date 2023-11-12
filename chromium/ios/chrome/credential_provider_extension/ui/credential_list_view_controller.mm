@@ -18,7 +18,10 @@
 #import "ios/chrome/credential_provider_extension/metrics_util.h"
 #import "ios/chrome/credential_provider_extension/ui/credential_list_global_header_view.h"
 #import "ios/chrome/credential_provider_extension/ui/credential_list_header_view.h"
-#import "ios/chrome/credential_provider_extension/ui/feature_flags.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -90,15 +93,9 @@ UIColor* BackgroundColor() {
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  if (IsPasswordManagerBrandingUpdateEnable()) {
-    self.title = NSLocalizedString(
-        @"IDS_IOS_CREDENTIAL_PROVIDER_CREDENTIAL_LIST_BRANDED_TITLE",
-        @"Google Password Manager");
-  } else {
-    self.title =
-        NSLocalizedString(@"IDS_IOS_CREDENTIAL_PROVIDER_CREDENTIAL_LIST_TITLE",
-                          @"AutoFill Chrome Password");
-  }
+  self.title = NSLocalizedString(
+      @"IDS_IOS_CREDENTIAL_PROVIDER_CREDENTIAL_LIST_BRANDED_TITLE",
+      @"Google Password Manager");
 
   self.view.backgroundColor = BackgroundColor();
   self.navigationItem.leftBarButtonItem = [self navigationCancelButton];
@@ -238,11 +235,21 @@ UIColor* BackgroundColor() {
 
     // Use the default world icon as fallback.
     if (!self.defaultWorldIconAttributes) {
+
+      if (vivaldi::IsVivaldiRunning()) {
+        self.defaultWorldIconAttributes = [FaviconAttributes
+            attributesWithImage:
+                [[UIImage imageNamed:@"vivaldi_ntp_fallback_favicon"]
+                    imageWithTintColor:[UIColor colorNamed:kTextQuaternaryColor]
+                         renderingMode:UIImageRenderingModeAlwaysOriginal]];
+      } else {
       self.defaultWorldIconAttributes = [FaviconAttributes
           attributesWithImage:
               [[UIImage imageNamed:@"default_world_favicon"]
                   imageWithTintColor:[UIColor colorNamed:kTextQuaternaryColor]
                        renderingMode:UIImageRenderingModeAlwaysOriginal]];
+      } // End Vivaldi
+
     }
     [credentialCell.faviconView
         configureWithAttributes:self.defaultWorldIconAttributes];
@@ -426,8 +433,7 @@ UIColor* BackgroundColor() {
 
 // Returns YES if given section is for global header.
 - (BOOL)isGlobalHeaderSection:(int)section {
-  return section == 0 && IsPasswordManagerBrandingUpdateEnable() &&
-         ![self isEmptyTable];
+  return section == 0 && ![self isEmptyTable];
 }
 
 // Returns the credential at the passed index.

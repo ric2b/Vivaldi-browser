@@ -268,10 +268,6 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
         mPermissionParamsListBuilder = new PermissionParamsListBuilder(mContext, mWindowAndroid);
         mNativePageInfoController = PageInfoControllerJni.get().init(this, mWebContents);
 
-        for (PageInfoSubpageController controller : mSubpageControllers) {
-            controller.onNativeInitialized();
-        }
-
         mWebContentsObserver = new WebContentsObserver(webContents) {
             @Override
             public void navigationEntryCommitted(LoadCommittedDetails details) {
@@ -457,15 +453,6 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
     }
 
     @Override
-    public void setAboutThisSiteShown(boolean wasAboutThisSiteShown) {
-        assert mNativePageInfoController != 0;
-        if (mNativePageInfoController != 0) {
-            PageInfoControllerJni.get().setAboutThisSiteShown(
-                    mNativePageInfoController, PageInfoController.this, wasAboutThisSiteShown);
-        }
-    }
-
-    @Override
     public void refreshPermissions() {
         mPermissionParamsListBuilder.clearPermissionEntries();
         if (mNativePageInfoController != 0) {
@@ -543,8 +530,6 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
         void destroy(long nativePageInfoControllerAndroid, PageInfoController caller);
         void recordPageInfoAction(
                 long nativePageInfoControllerAndroid, PageInfoController caller, int action);
-        void setAboutThisSiteShown(long nativePageInfoControllerAndroid, PageInfoController caller,
-                boolean wasAboutThisSiteShown);
         void updatePermissions(long nativePageInfoControllerAndroid, PageInfoController caller);
     }
 

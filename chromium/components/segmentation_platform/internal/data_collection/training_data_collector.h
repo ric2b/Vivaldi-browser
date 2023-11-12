@@ -11,9 +11,11 @@
 #include "components/segmentation_platform/internal/database/storage_service.h"
 #include "components/segmentation_platform/internal/execution/default_model_manager.h"
 #include "components/segmentation_platform/internal/signals/histogram_signal_handler.h"
+#include "components/segmentation_platform/internal/signals/user_action_signal_handler.h"
 #include "components/segmentation_platform/public/input_context.h"
 #include "components/segmentation_platform/public/proto/model_metadata.pb.h"
 #include "components/segmentation_platform/public/proto/segmentation_platform.pb.h"
+#include "components/segmentation_platform/public/trigger.h"
 
 class PrefService;
 
@@ -39,6 +41,7 @@ class TrainingDataCollector {
   static std::unique_ptr<TrainingDataCollector> Create(
       processing::FeatureListQueryProcessor* processor,
       HistogramSignalHandler* histogram_signal_handler,
+      UserActionSignalHandler* user_action_signal_handler,
       StorageService* storage_service,
       std::vector<std::unique_ptr<Config>>* configs,
       PrefService* profile_prefs,
@@ -79,7 +82,7 @@ class TrainingDataCollector {
   // training data and upload all training data.
   virtual void OnObservationTrigger(
       const absl::optional<ImmediaCollectionParam>& param,
-      TrainingDataCache::RequestId request_id,
+      TrainingRequestId request_id,
       const proto::SegmentInfo& segment_info) = 0;
 
   virtual ~TrainingDataCollector();

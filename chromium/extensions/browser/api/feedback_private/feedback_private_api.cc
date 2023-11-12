@@ -43,7 +43,7 @@
 #include "extensions/browser/api/feedback_private/log_source_access_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-using extensions::api::feedback_private::SystemInformation;
+using extensions::api::feedback_private::LogsMapEntry;
 using feedback::FeedbackData;
 
 namespace extensions {
@@ -52,11 +52,10 @@ namespace feedback_private = api::feedback_private;
 
 using feedback_private::FeedbackFlow;
 using feedback_private::FeedbackInfo;
+using feedback_private::LogsMapEntry;
 using feedback_private::LogSource;
-using feedback_private::SystemInformation;
 
-using SystemInformationList =
-    std::vector<api::feedback_private::SystemInformation>;
+using LogsMap = std::vector<api::feedback_private::LogsMapEntry>;
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<FeedbackPrivateAPI>>::
     DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
@@ -84,7 +83,7 @@ feedback_private::LandingPageType GetLandingPageType(
       ->GetFeedbackPrivateDelegate()
       ->GetLandingPageType(feedback_data);
 #else
-  return feedback_private::LANDING_PAGE_TYPE_NORMAL;
+  return feedback_private::LandingPageType::kNormal;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
@@ -137,6 +136,10 @@ void SendFeedback(content::BrowserContext* browser_context,
     feedback_data->set_user_email(*feedback_info.email);
   if (feedback_info.trace_id)
     feedback_data->set_trace_id(*feedback_info.trace_id);
+  if (feedback_params.send_autofill_metadata &&
+      feedback_info.autofill_metadata) {
+    feedback_data->set_autofill_metadata(*feedback_info.autofill_metadata);
+  }
 
   // Note that the blob_uuids are generated in
   // renderer/resources/feedback_private_custom_bindings.js
@@ -161,8 +164,9 @@ void SendFeedback(content::BrowserContext* browser_context,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (feedback_info.system_information) {
-    for (const SystemInformation& info : *feedback_info.system_information)
+    for (const LogsMapEntry& info : *feedback_info.system_information) {
       feedback_data->AddLog(std::move(info.key), std::move(info.value));
+    }
   }
 
   auto landing_page_type = GetLandingPageType(*feedback_data);
@@ -172,12 +176,13 @@ void SendFeedback(content::BrowserContext* browser_context,
   FeedbackPrivateAPI::GetFactoryInstance()
       ->Get(browser_context)
       ->GetService()
-      ->SendFeedback(feedback_params, feedback_data, std::move(send_callback));
+      ->RedactThenSendFeedback(feedback_params, feedback_data,
+                               std::move(send_callback));
 }
 
 feedback_private::Status ToFeedbackStatus(bool success) {
-  return success ? feedback_private::STATUS_SUCCESS
-                 : feedback_private::STATUS_DELAYED;
+  return success ? feedback_private::Status::kSuccess
+                 : feedback_private::Status::kDelayed;
 }
 
 }  // namespace
@@ -242,7 +247,7 @@ std::unique_ptr<FeedbackInfo> FeedbackPrivateAPI::CreateFeedbackInfo(
 
   // Any extra diagnostics information should be added to the sys info.
   if (!extra_diagnostics.empty()) {
-    SystemInformation extra_info;
+    LogsMapEntry extra_info;
     extra_info.key = "EXTRA_DIAGNOSTICS";
     extra_info.value = extra_diagnostics;
     info->system_information->emplace_back(std::move(extra_info));
@@ -293,7 +298,7 @@ FeedbackPrivateGetSystemInformationFunction::Run() {
 
 void FeedbackPrivateGetSystemInformationFunction::OnCompleted(
     std::unique_ptr<system_logs::SystemLogsResponse> sys_info) {
-  SystemInformationList sys_info_list;
+  LogsMap sys_info_list;
   if (sys_info) {
     sys_info_list.reserve(sys_info->size());
     for (auto& itr : *sys_info) {
@@ -304,7 +309,7 @@ void FeedbackPrivateGetSystemInformationFunction::OnCompleted(
       // that don't go through this.
       if (FeedbackCommon::IncludeInSystemLogs(itr.first,
                                               send_all_crash_report_ids_)) {
-        SystemInformation sys_info_entry;
+        LogsMapEntry sys_info_entry;
         sys_info_entry.key = std::move(itr.first);
         sys_info_entry.value = std::move(itr.second);
         sys_info_list.emplace_back(std::move(sys_info_entry));
@@ -319,7 +324,7 @@ void FeedbackPrivateGetSystemInformationFunction::OnCompleted(
 ExtensionFunction::ResponseAction FeedbackPrivateReadLogSourceFunction::Run() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   using Params = feedback_private::ReadLogSource::Params;
-  std::unique_ptr<Params> api_params = Params::Create(args());
+  absl::optional<Params> api_params = Params::Create(args());
 
   LogSourceAccessManager* log_source_manager =
       FeedbackPrivateAPI::GetFactoryInstance()
@@ -351,8 +356,8 @@ void FeedbackPrivateReadLogSourceFunction::OnCompleted(
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 ExtensionFunction::ResponseAction FeedbackPrivateSendFeedbackFunction::Run() {
-  std::unique_ptr<feedback_private::SendFeedback::Params> params(
-      feedback_private::SendFeedback::Params::Create(args()));
+  absl::optional<feedback_private::SendFeedback::Params> params =
+      feedback_private::SendFeedback::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   bool load_system_info =
@@ -386,8 +391,8 @@ void FeedbackPrivateSendFeedbackFunction::OnCompleted(
 }
 
 ExtensionFunction::ResponseAction FeedbackPrivateOpenFeedbackFunction::Run() {
-  std::unique_ptr<feedback_private::OpenFeedback::Params> params(
-      feedback_private::OpenFeedback::Params::Create(args()));
+  absl::optional<feedback_private::OpenFeedback::Params> params =
+      feedback_private::OpenFeedback::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   ExtensionsAPIClient::Get()->GetFeedbackPrivateDelegate()->OpenFeedback(

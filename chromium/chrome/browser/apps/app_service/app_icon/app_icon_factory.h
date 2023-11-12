@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
 #include "build/chromeos_buildflags.h"
@@ -23,14 +24,11 @@
 #include "ui/base/resource/resource_scale_factor.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-namespace content {
-class BrowserContext;
-}
-
 namespace gfx {
 class ImageSkia;
 }
 
+class Profile;
 class SkBitmap;
 
 namespace apps {
@@ -48,22 +46,28 @@ gfx::ImageSkia CreateResizedResourceImage(int icon_resource,
 
 apps::ScaleToSize GetScaleToSize(const gfx::ImageSkia& image_skia);
 
-// Decodes `data` to a SkBitmap. The decode happens in-process, so must only be
-// done with trusted data. Returns an empty bitmap if decoding fails.
-SkBitmap DecompressToSkBitmap(const unsigned char* data, size_t size);
+// Converts compressed image data to a SkBitmap. Decoding happens in an isolated
+// process.
+void CompressedDataToSkBitmap(
+    base::span<const uint8_t> compressed_data,
+    base::OnceCallback<void(const SkBitmap&)> callback);
 
-// Creates an ImageSkia for the given `bitmap` and `icon_scale`;
-gfx::ImageSkia SkBitmapToImageSkia(SkBitmap bitmap, float icon_scale);
+// Converts compressed image data to an ImageSkia. Decoding happens in an
+// isolated process.
+void CompressedDataToImageSkia(
+    base::span<const uint8_t> compressed_data,
+    float icon_scale,
+    base::OnceCallback<void(gfx::ImageSkia)> callback);
 
-// Returns a callback that converts compressed data to an ImageSkia.
+// Returns a callback that converts compressed image data to an ImageSkia.
+// Decoding happens in an isolated process.
 base::OnceCallback<void(std::vector<uint8_t> compressed_data)>
 CompressedDataToImageSkiaCallback(
     base::OnceCallback<void(gfx::ImageSkia)> callback,
     float icon_scale);
 
-// Converts compressed data to a SkBitmap.
-void CompressedDataToSkBitmap(std::vector<uint8_t> compressed_data,
-                              base::OnceCallback<void(SkBitmap)> callback);
+// Creates an ImageSkia for the given `bitmap` and `icon_scale`.
+gfx::ImageSkia SkBitmapToImageSkia(const SkBitmap& bitmap, float icon_scale);
 
 // Encodes a single SkBitmap representation from the given ImageSkia to the
 // compressed PNG data. |rep_icon_scale| argument denotes, which ImageSkiaRep to
@@ -122,13 +126,13 @@ void ConvertUncompressedIconToCompressedIcon(IconValuePtr iv,
 // Loads an icon from an extension.
 void LoadIconFromExtension(IconType icon_type,
                            int size_hint_in_dip,
-                           content::BrowserContext* context,
+                           Profile* profile,
                            const std::string& extension_id,
                            IconEffects icon_effects,
                            LoadIconCallback callback);
 
 // Loads an icon from a web app.
-void LoadIconFromWebApp(content::BrowserContext* context,
+void LoadIconFromWebApp(Profile* profile,
                         IconType icon_type,
                         int size_hint_in_dip,
                         const std::string& web_app_id,
@@ -137,7 +141,7 @@ void LoadIconFromWebApp(content::BrowserContext* context,
 
 #if BUILDFLAG(IS_CHROMEOS)
 // Requests a compressed icon data for an web app identified by `web_app_id`.
-void GetWebAppCompressedIconData(content::BrowserContext* context,
+void GetWebAppCompressedIconData(Profile* profile,
                                  const std::string& web_app_id,
                                  int size_in_dip,
                                  ui::ResourceScaleFactor scale_factor,
@@ -145,7 +149,7 @@ void GetWebAppCompressedIconData(content::BrowserContext* context,
 
 // Requests a compressed icon data for a chrome app identified by
 // `extension_id`.
-void GetChromeAppCompressedIconData(content::BrowserContext* context,
+void GetChromeAppCompressedIconData(Profile* profile,
                                     const std::string& extension_id,
                                     int size_in_dip,
                                     ui::ResourceScaleFactor scale_factor,
@@ -154,14 +158,14 @@ void GetChromeAppCompressedIconData(content::BrowserContext* context,
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 // Requests a compressed icon data for an ARC app identified by `app_id`.
-void GetArcAppCompressedIconData(content::BrowserContext* context,
+void GetArcAppCompressedIconData(Profile* profile,
                                  const std::string& app_id,
                                  int size_in_dip,
                                  ui::ResourceScaleFactor scale_factor,
                                  LoadIconCallback callback);
 
 // Requests a compressed icon data for a Guest OS app identified by `app_id`.
-void GetGuestOSAppCompressedIconData(content::BrowserContext* context,
+void GetGuestOSAppCompressedIconData(Profile* profile,
                                      const std::string& app_id,
                                      int size_in_dip,
                                      ui::ResourceScaleFactor scale_factor,

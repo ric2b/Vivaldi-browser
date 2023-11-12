@@ -105,6 +105,7 @@
 #include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "components/viz/common/quads/compositor_render_pass_draw_quad.h"
 #include "components/viz/common/quads/frame_deadline.h"
+#include "components/viz/common/quads/shared_element_draw_quad.h"
 #include "components/viz/common/quads/shared_quad_state.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/resources/bitmap_allocation.h"
@@ -122,6 +123,7 @@
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_latency_info.pbzero.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -157,7 +159,7 @@ bool IsMobileOptimized(LayerTreeImpl* active_tree) {
                                  active_tree->viewport_mobile_optimized());
 }
 
-viz::ResourceFormat TileRasterBufferFormat(
+viz::SharedImageFormat TileRasterBufferFormat(
     const LayerTreeSettings& settings,
     viz::ContextProvider* context_provider,
     bool use_gpu_rasterization) {
@@ -166,19 +168,19 @@ viz::ResourceFormat TileRasterBufferFormat(
   // because we don't need to communicate the actual ordering as the code all
   // assumes the native skia format.
   if (!context_provider)
-    return viz::RGBA_8888;
+    return viz::SinglePlaneFormat::kRGBA_8888;
 
   // RGBA4444 overrides the defaults if specified, but only for gpu compositing.
   // It is always supported on platforms where it is specified.
   if (settings.use_rgba_4444)
-    return viz::RGBA_4444;
+    return viz::SinglePlaneFormat::kRGBA_4444;
   // Otherwise we use BGRA textures if we can but it depends on the context
   // capabilities, and we have different preferences when rastering to textures
   // vs uploading textures.
   const gpu::Capabilities& caps = context_provider->ContextCapabilities();
   if (use_gpu_rasterization)
-    return viz::PlatformColor::BestSupportedRenderBufferResourceFormat(caps);
-  return viz::PlatformColor::BestSupportedTextureResourceFormat(caps);
+    return viz::PlatformColor::BestSupportedRenderBufferFormat(caps);
+  return viz::PlatformColor::BestSupportedTextureFormat(caps);
 }
 
 void DidVisibilityChange(LayerTreeHostImpl* id, bool visible) {
@@ -234,12 +236,12 @@ class LayerTreeHostImpl::ImageDecodeCacheHolder {
                          bool gpu_compositing,
                          scoped_refptr<RasterContextProviderWrapper>
                              worker_context_provider_wrapper,
-                         viz::ResourceFormat tile_format,
+                         viz::SharedImageFormat tile_format,
                          size_t decoded_image_working_set_budget_bytes,
                          int max_texture_size,
                          RasterDarkModeFilter* dark_mode_filter) {
     if (use_gpu_rasterization) {
-      auto color_type = viz::ResourceFormatToClosestSkColorType(
+      auto color_type = viz::ToClosestSkColorType(
           /*gpu_compositing=*/true, tile_format);
       if (enable_shared_image_cache_for_gpu) {
         image_decode_cache_ptr_ =
@@ -254,7 +256,7 @@ class LayerTreeHostImpl::ImageDecodeCacheHolder {
       }
     } else {
       image_decode_cache_ = std::make_unique<SoftwareImageDecodeCache>(
-          viz::ResourceFormatToClosestSkColorType(gpu_compositing, tile_format),
+          viz::ToClosestSkColorType(gpu_compositing, tile_format),
           decoded_image_working_set_budget_bytes);
     }
 
@@ -370,6 +372,10 @@ void LayerTreeHostImpl::UpdateBrowserControlsState(
     bool animate) {
   browser_controls_offset_manager_->UpdateBrowserControlsState(
       constraints, current, animate);
+}
+
+bool LayerTreeHostImpl::HasScrollLinkedAnimation(ElementId for_scroller) const {
+  return mutator_host_->HasScrollLinkedAnimation(for_scroller);
 }
 
 bool LayerTreeHostImpl::IsInHighLatencyMode() const {
@@ -982,8 +988,10 @@ void LayerTreeHostImpl::NotifyPendingTreeFullyPainted() {
     // is important for SingleThreadProxy and impl-side painting case. For
     // STP, we commit to active tree and RequiresHighResToDraw, and set
     // Scheduler to wait for ReadyToDraw signal to avoid Checkerboard.
-    if (CommitToActiveTree())
+    if (CommitToActiveTree() ||
+        settings_.wait_for_all_pipeline_stages_before_draw) {
       NotifyReadyToDraw();
+    }
   }
 }
 
@@ -1323,6 +1331,9 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
     }
   }
 
+  frame->has_view_transition_save_directive =
+      active_tree_->HasViewTransitionSaveRequest();
+
   // Damage rects for non-root passes aren't meaningful, so set them to be
   // equal to the output rect.
   for (size_t i = 0; i + 1 < frame->render_passes.size(); ++i) {
@@ -1475,8 +1486,8 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
 
   // Only enable frame rate estimation if it would help lower the composition
   // rate for videos.
-  const bool enable_frame_rate_estimation = num_of_layers_with_videos > 1;
-  frame_rate_estimator_.SetFrameEstimationEnabled(enable_frame_rate_estimation);
+  const bool assumes_video_conference_mode = num_of_layers_with_videos > 1;
+  frame_rate_estimator_.SetVideoConferenceMode(assumes_video_conference_mode);
 
   // When doing a resourceless software draw, we don't have control over the
   // surface the compositor draws to, so even though the frame may not be
@@ -1625,7 +1636,7 @@ DrawResult LayerTreeHostImpl::PrepareToDraw(FrameData* frame) {
   // This will cause NotifyTileStateChanged() to be called for any tiles that
   // completed, which will add damage for visible tiles to the frame for them so
   // they appear as part of the current frame being drawn.
-  tile_manager_.CheckForCompletedTasks();
+  tile_manager_.PrepareToDraw();
 
   frame->render_surface_list = &active_tree_->GetRenderSurfaceList();
   frame->render_passes.clear();
@@ -1663,6 +1674,9 @@ void LayerTreeHostImpl::RemoveRenderPasses(FrameData* frame) {
   // A set of viz::RenderPassDrawQuads that we have seen (stored by the
   // RenderPasses they refer to).
   base::flat_map<viz::CompositorRenderPassId, int> pass_references;
+  // A set of viz::SharedElementDrawQuad references that we have seen.
+  base::flat_set<viz::ViewTransitionElementResourceId>
+      view_transition_quad_references;
 
   // Iterate RenderPasses in draw order, removing empty render passes (except
   // the root RenderPass).
@@ -1671,6 +1685,13 @@ void LayerTreeHostImpl::RemoveRenderPasses(FrameData* frame) {
 
     // Remove orphan viz::RenderPassDrawQuads.
     for (auto it = pass->quad_list.begin(); it != pass->quad_list.end();) {
+      if (it->material == viz::DrawQuad::Material::kSharedElement) {
+        view_transition_quad_references.insert(
+            viz::SharedElementDrawQuad::MaterialCast(*it)->resource_id);
+        ++it;
+        continue;
+      }
+
       if (it->material != viz::DrawQuad::Material::kCompositorRenderPass) {
         ++it;
         continue;
@@ -1717,19 +1738,30 @@ void LayerTreeHostImpl::RemoveRenderPasses(FrameData* frame) {
     // drop references to earlier RenderPasses allowing them to be removed to.
     viz::CompositorRenderPass* pass =
         frame->render_passes[frame->render_passes.size() - 2 - i].get();
-    if (!pass->copy_requests.empty() ||
-        pass->view_transition_element_resource_id.IsValid()) {
+
+    if (!pass->copy_requests.empty()) {
       continue;
     }
+
     if (pass_references[pass->id])
       continue;
 
+    // Retain render passes generating ViewTransition snapshots if they are
+    // referenced by a quad or this frame will process a save directive. We need
+    // to render and screenshot offscreen content as well, which won't be
+    // referenced by a quad.
+    if (pass->view_transition_element_resource_id.IsValid() &&
+        (frame->has_view_transition_save_directive ||
+         view_transition_quad_references.contains(
+             pass->view_transition_element_resource_id))) {
+      continue;
+    }
+
     for (auto it = pass->quad_list.begin(); it != pass->quad_list.end(); ++it) {
-      if (it->material != viz::DrawQuad::Material::kCompositorRenderPass)
-        continue;
-      const viz::CompositorRenderPassDrawQuad* quad =
-          viz::CompositorRenderPassDrawQuad::MaterialCast(*it);
-      pass_references[quad->render_pass_id]--;
+      if (const viz::CompositorRenderPassDrawQuad* quad =
+              it->DynamicCast<viz::CompositorRenderPassDrawQuad>()) {
+        pass_references[quad->render_pass_id]--;
+      }
     }
 
     frame->render_passes.erase(frame->render_passes.end() - 2 - i);
@@ -2682,11 +2714,13 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
       frame->deadline_in_frames.value_or(0u), CurrentBeginFrameArgs().interval,
       frame->use_default_lower_bound_deadline);
 
+  static const bool feature_allowed =
+      base::FeatureList::IsEnabled(features::kReducedFrameRateEstimation);
   constexpr auto kFudgeDelta = base::Milliseconds(1);
   constexpr auto kTwiceOfDefaultInterval =
       viz::BeginFrameArgs::DefaultInterval() * 2;
   constexpr auto kMinDelta = kTwiceOfDefaultInterval - kFudgeDelta;
-  if (mutator_host_->MainThreadAnimationsCount() == 0 &&
+  if (feature_allowed && mutator_host_->MainThreadAnimationsCount() == 0 &&
       !mutator_host_->HasSmilAnimation() &&
       mutator_host_->NeedsTickAnimations() &&
       !frame_rate_estimator_.input_priority_mode() &&
@@ -3597,7 +3631,7 @@ void LayerTreeHostImpl::RecreateTileResources() {
 }
 
 void LayerTreeHostImpl::CreateTileManagerResources() {
-  viz::ResourceFormat tile_format = TileRasterBufferFormat(
+  viz::SharedImageFormat tile_format = TileRasterBufferFormat(
       settings_, layer_tree_frame_sink_->context_provider(),
       use_gpu_rasterization_);
 
@@ -3649,7 +3683,7 @@ LayerTreeHostImpl::CreateRasterBufferProvider() {
   viz::RasterContextProvider* worker_context_provider =
       layer_tree_frame_sink_->worker_context_provider();
 
-  viz::ResourceFormat tile_format = TileRasterBufferFormat(
+  viz::SharedImageFormat tile_format = TileRasterBufferFormat(
       settings_, compositor_context_provider, use_gpu_rasterization_);
 
   if (use_gpu_rasterization_) {
@@ -3891,13 +3925,19 @@ bool LayerTreeHostImpl::InitializeFrameSink(
   has_valid_layer_tree_frame_sink_ = true;
 
   auto* context_provider = layer_tree_frame_sink_->context_provider();
+  auto* worker_context_provider =
+      layer_tree_frame_sink_->worker_context_provider();
 
-  if (context_provider) {
+  if (worker_context_provider) {
+    viz::RasterContextProvider::ScopedRasterContextLock scoped_context(
+        worker_context_provider);
+    max_texture_size_ =
+        worker_context_provider->ContextCapabilities().max_texture_size;
+  } else if (context_provider) {
     max_texture_size_ =
         context_provider->ContextCapabilities().max_texture_size;
   } else {
-    // Pick an arbitrary limit here similar to what hardware might.
-    max_texture_size_ = 16 * 1024;
+    max_texture_size_ = settings_.max_render_buffer_bounds_for_sw;
   }
 
   resource_pool_ = std::make_unique<ResourcePool>(
@@ -4630,8 +4670,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
           caps);
     }
   } else {
-    shm = viz::bitmap_allocation::AllocateSharedBitmap(
-        upload_size, format.resource_format());
+    shm = viz::bitmap_allocation::AllocateSharedBitmap(upload_size, format);
     shared_bitmap_id = viz::SharedBitmap::GenerateId();
   }
 
@@ -4644,7 +4683,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
       auto* sii = context_provider->SharedImageInterface();
       mailbox = sii->CreateSharedImage(
           format, upload_size, color_space, kTopLeft_GrSurfaceOrigin,
-          kPremul_SkAlphaType, shared_image_usage,
+          kPremul_SkAlphaType, shared_image_usage, "LayerTreeHostUIResource",
           base::span<const uint8_t>(bitmap.GetPixels(), bitmap.SizeInBytes()));
     } else {
       DCHECK_EQ(bitmap.GetFormat(), UIResourceBitmap::RGBA8);
@@ -4709,7 +4748,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
       auto* sii = context_provider->SharedImageInterface();
       mailbox = sii->CreateSharedImage(
           format, upload_size, color_space, kTopLeft_GrSurfaceOrigin,
-          kPremul_SkAlphaType, shared_image_usage,
+          kPremul_SkAlphaType, shared_image_usage, "LayerTreeHostUIResource",
           base::span<const uint8_t>(
               reinterpret_cast<const uint8_t*>(pixmap.addr()),
               pixmap.computeByteSize()));
@@ -4730,7 +4769,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
                                     ->GenUnverifiedSyncToken();
 
     transferable = viz::TransferableResource::MakeGpu(
-        mailbox, GL_LINEAR, texture_target, sync_token, upload_size, format,
+        mailbox, texture_target, sync_token, upload_size, format,
         overlay_candidate);
   } else {
     layer_tree_frame_sink_->DidAllocateSharedBitmap(std::move(shm.region),
@@ -4750,7 +4789,7 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
 
   UIResourceData data;
   data.opaque = bitmap.GetOpaque();
-  data.format = format.resource_format();
+  data.format = format;
   data.shared_bitmap_id = shared_bitmap_id;
   data.shared_mapping = std::move(shm.mapping);
   data.mailbox = mailbox;
@@ -5235,6 +5274,23 @@ void LayerTreeHostImpl::ApplyFirstScrollTracking(const ui::LatencyInfo& latency,
   // to the given `frame_token`.
   presentation_time_callbacks_.RegisterCompositorThreadSuccessfulCallbacks(
       frame_token, std::move(callbacks));
+}
+
+std::string LayerTreeHostImpl::GetHungCommitDebugInfo() const {
+  return base::StringPrintf(
+             "ptfp%d pwpd%d tmrta%d as%d gpur%d%d ltfs%d%d zc%d ",
+             static_cast<int>(pending_tree_fully_painted_),
+             static_cast<int>(paint_worklet_painter_ &&
+                              paint_worklet_painter_->HasOngoingDispatch()),
+             static_cast<int>(tile_manager_.IsReadyToActivate()),
+             static_cast<int>(GetActivelyScrollingType()),
+             static_cast<int>(use_gpu_rasterization_),
+             static_cast<int>(gpu_rasterization_status_),
+             static_cast<int>(has_valid_layer_tree_frame_sink_),
+             static_cast<int>(layer_tree_frame_sink_ &&
+                              layer_tree_frame_sink_->context_provider()),
+             static_cast<int>(settings_.use_zero_copy)) +
+         tile_manager_.GetHungCommitDebugInfo();
 }
 
 }  // namespace cc

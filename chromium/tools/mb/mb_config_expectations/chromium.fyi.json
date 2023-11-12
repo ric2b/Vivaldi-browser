@@ -1,6 +1,6 @@
 {
   "Comparison Android (reclient)": {
-    "goma": {
+    "build1": {
       "gn_args": {
         "debuggable_apks": false,
         "ffmpeg_branding": "Chrome",
@@ -11,10 +11,10 @@
         "system_webview_package_name": "com.google.android.webview",
         "target_cpu": "arm64",
         "target_os": "android",
-        "use_goma": true
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "gn_args": {
         "debuggable_apks": false,
         "ffmpeg_branding": "Chrome",
@@ -30,17 +30,17 @@
     }
   },
   "Comparison Linux (reclient)": {
-    "goma": {
+    "build1": {
       "gn_args": {
         "dcheck_always_on": false,
         "ffmpeg_branding": "Chrome",
         "is_component_build": false,
         "is_debug": false,
         "proprietary_codecs": true,
-        "use_goma": true
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "gn_args": {
         "dcheck_always_on": false,
         "ffmpeg_branding": "Chrome",
@@ -52,7 +52,7 @@
     }
   },
   "Comparison Mac (reclient)": {
-    "goma": {
+    "build1": {
       "gn_args": {
         "dcheck_always_on": false,
         "enable_nacl": false,
@@ -61,10 +61,10 @@
         "is_debug": false,
         "proprietary_codecs": true,
         "symbol_level": 1,
-        "use_goma": true
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "gn_args": {
         "dcheck_always_on": false,
         "enable_nacl": false,
@@ -78,7 +78,7 @@
     }
   },
   "Comparison Mac arm64 (reclient)": {
-    "goma": {
+    "build1": {
       "gn_args": {
         "dcheck_always_on": false,
         "enable_nacl": false,
@@ -88,10 +88,10 @@
         "proprietary_codecs": true,
         "symbol_level": 1,
         "target_cpu": "arm64",
-        "use_goma": true
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "gn_args": {
         "dcheck_always_on": false,
         "enable_nacl": false,
@@ -106,7 +106,7 @@
     }
   },
   "Comparison Mac arm64 on arm64 (reclient)": {
-    "goma": {
+    "build1": {
       "gn_args": {
         "dcheck_always_on": false,
         "enable_nacl": false,
@@ -116,10 +116,10 @@
         "proprietary_codecs": true,
         "symbol_level": 1,
         "target_cpu": "arm64",
-        "use_goma": true
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "gn_args": {
         "dcheck_always_on": false,
         "enable_nacl": false,
@@ -134,18 +134,18 @@
     }
   },
   "Comparison Simple Chrome (reclient)": {
-    "goma": {
+    "build1": {
       "args_file": "//build/args/chromeos/amd64-generic-vm.gni",
       "gn_args": {
         "also_build_lacros_chrome_for_architecture": "amd64",
         "dcheck_always_on": false,
         "is_chromeos_device": true,
         "ozone_platform_headless": true,
-        "use_goma": true,
-        "use_real_dbus_clients": false
+        "use_real_dbus_clients": false,
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "args_file": "//build/args/chromeos/amd64-generic-vm.gni",
       "gn_args": {
         "also_build_lacros_chrome_for_architecture": "amd64",
@@ -158,7 +158,7 @@
     }
   },
   "Comparison Windows (8 cores) (reclient)": {
-    "goma": {
+    "build1": {
       "gn_args": {
         "dcheck_always_on": false,
         "ffmpeg_branding": "Chrome",
@@ -166,10 +166,10 @@
         "is_debug": false,
         "proprietary_codecs": true,
         "symbol_level": 1,
-        "use_goma": true
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "gn_args": {
         "dcheck_always_on": false,
         "ffmpeg_branding": "Chrome",
@@ -182,7 +182,7 @@
     }
   },
   "Comparison Windows (reclient)": {
-    "goma": {
+    "build1": {
       "gn_args": {
         "dcheck_always_on": false,
         "ffmpeg_branding": "Chrome",
@@ -190,10 +190,10 @@
         "is_debug": false,
         "proprietary_codecs": true,
         "symbol_level": 1,
-        "use_goma": true
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "gn_args": {
         "dcheck_always_on": false,
         "ffmpeg_branding": "Chrome",
@@ -206,7 +206,7 @@
     }
   },
   "Comparison ios (reclient)": {
-    "goma": {
+    "build1": {
       "gn_args": {
         "enable_run_ios_unittests_with_xctest": true,
         "is_component_build": false,
@@ -215,10 +215,10 @@
         "target_cpu": "x64",
         "target_environment": "simulator",
         "target_os": "ios",
-        "use_goma": true
+        "use_remoteexec": true
       }
     },
-    "reclient": {
+    "build2": {
       "gn_args": {
         "enable_run_ios_unittests_with_xctest": true,
         "is_component_build": false,
@@ -375,7 +375,6 @@
       "debuggable_apks": false,
       "enable_backup_ref_ptr_slow_checks": true,
       "enable_backup_ref_ptr_support": true,
-      "enable_dangling_raw_ptr_checks": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
@@ -395,7 +394,6 @@
       "debuggable_apks": false,
       "enable_backup_ref_ptr_slow_checks": true,
       "enable_backup_ref_ptr_support": true,
-      "enable_dangling_raw_ptr_checks": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
@@ -407,6 +405,16 @@
       "use_goma": false,
       "use_partition_alloc_as_malloc": true,
       "use_remoteexec": true
+    }
+  },
+  "android-build-perf-developer": {
+    "gn_args": {
+      "enable_nacl": false,
+      "is_component_build": true,
+      "is_debug": true,
+      "symbol_level": 2,
+      "target_cpu": "arm64",
+      "target_os": "android"
     }
   },
   "android-fieldtrial-rel": {
@@ -444,6 +452,7 @@
   "build-perf-android": {
     "gn_args": {
       "android_static_analysis": "off",
+      "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "dcheck_always_on": true,
       "debuggable_apks": false,
       "fail_on_android_expectations": true,
@@ -457,7 +466,52 @@
       "system_webview_package_name": "com.google.android.apps.chrome",
       "target_cpu": "arm64",
       "target_os": "android",
+      "use_clang_coverage": true,
       "use_remoteexec": true
+    }
+  },
+  "build-perf-android-siso": {
+    "builtin": {
+      "gn_args": {
+        "android_static_analysis": "off",
+        "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
+        "dcheck_always_on": true,
+        "debuggable_apks": false,
+        "fail_on_android_expectations": true,
+        "ffmpeg_branding": "Chrome",
+        "is_component_build": false,
+        "is_debug": false,
+        "proprietary_codecs": true,
+        "skip_secondary_abi_for_cq": true,
+        "strip_debug_info": true,
+        "symbol_level": 0,
+        "system_webview_package_name": "com.google.android.apps.chrome",
+        "target_cpu": "arm64",
+        "target_os": "android",
+        "use_clang_coverage": true,
+        "use_remoteexec": false
+      }
+    },
+    "reproxy": {
+      "gn_args": {
+        "android_static_analysis": "off",
+        "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
+        "dcheck_always_on": true,
+        "debuggable_apks": false,
+        "fail_on_android_expectations": true,
+        "ffmpeg_branding": "Chrome",
+        "is_component_build": false,
+        "is_debug": false,
+        "proprietary_codecs": true,
+        "skip_secondary_abi_for_cq": true,
+        "strip_debug_info": true,
+        "symbol_level": 0,
+        "system_webview_package_name": "com.google.android.apps.chrome",
+        "target_cpu": "arm64",
+        "target_os": "android",
+        "use_clang_coverage": true,
+        "use_remoteexec": true
+      }
     }
   },
   "build-perf-linux": {
@@ -465,6 +519,9 @@
       "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "dcheck_always_on": true,
       "devtools_skip_typecheck": false,
+      "enable_backup_ref_ptr_feature_flag": true,
+      "enable_dangling_raw_ptr_checks": true,
+      "enable_dangling_raw_ptr_feature_flag": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
@@ -475,10 +532,51 @@
       "use_remoteexec": true
     }
   },
+  "build-perf-linux-siso": {
+    "builtin": {
+      "gn_args": {
+        "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
+        "dcheck_always_on": true,
+        "devtools_skip_typecheck": false,
+        "enable_backup_ref_ptr_feature_flag": true,
+        "enable_dangling_raw_ptr_checks": true,
+        "enable_dangling_raw_ptr_feature_flag": true,
+        "ffmpeg_branding": "Chrome",
+        "is_component_build": false,
+        "is_debug": false,
+        "proprietary_codecs": true,
+        "symbol_level": 0,
+        "use_clang_coverage": true,
+        "use_dummy_lastchange": true,
+        "use_goma": false,
+        "use_remoteexec": false
+      }
+    },
+    "reproxy": {
+      "gn_args": {
+        "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
+        "dcheck_always_on": true,
+        "devtools_skip_typecheck": false,
+        "enable_backup_ref_ptr_feature_flag": true,
+        "enable_dangling_raw_ptr_checks": true,
+        "enable_dangling_raw_ptr_feature_flag": true,
+        "ffmpeg_branding": "Chrome",
+        "is_component_build": false,
+        "is_debug": false,
+        "proprietary_codecs": true,
+        "symbol_level": 0,
+        "use_clang_coverage": true,
+        "use_dummy_lastchange": true,
+        "use_remoteexec": true
+      }
+    }
+  },
   "build-perf-windows": {
     "gn_args": {
       "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
       "dcheck_always_on": true,
+      "enable_dangling_raw_ptr_checks": true,
+      "enable_dangling_raw_ptr_feature_flag": true,
       "enable_resource_allowlist_generation": false,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
@@ -487,6 +585,41 @@
       "symbol_level": 0,
       "use_clang_coverage": true,
       "use_remoteexec": true
+    }
+  },
+  "build-perf-windows-siso": {
+    "builtin": {
+      "gn_args": {
+        "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
+        "dcheck_always_on": true,
+        "enable_dangling_raw_ptr_checks": true,
+        "enable_dangling_raw_ptr_feature_flag": true,
+        "enable_resource_allowlist_generation": false,
+        "ffmpeg_branding": "Chrome",
+        "is_component_build": false,
+        "is_debug": false,
+        "proprietary_codecs": true,
+        "symbol_level": 0,
+        "use_clang_coverage": true,
+        "use_goma": false,
+        "use_remoteexec": false
+      }
+    },
+    "reproxy": {
+      "gn_args": {
+        "coverage_instrumentation_input_file": "//.code-coverage/files_to_instrument.txt",
+        "dcheck_always_on": true,
+        "enable_dangling_raw_ptr_checks": true,
+        "enable_dangling_raw_ptr_feature_flag": true,
+        "enable_resource_allowlist_generation": false,
+        "ffmpeg_branding": "Chrome",
+        "is_component_build": false,
+        "is_debug": false,
+        "proprietary_codecs": true,
+        "symbol_level": 0,
+        "use_clang_coverage": true,
+        "use_remoteexec": true
+      }
     }
   },
   "chromeos-amd64-generic-rel (reclient compare)": {
@@ -514,10 +647,14 @@
   "ios-blink-dbg-fyi": {
     "gn_args": {
       "enable_run_ios_unittests_with_xctest": true,
+      "is_component_build": false,
       "is_debug": true,
+      "symbol_level": 1,
+      "target_cpu": "arm64",
       "target_environment": "simulator",
       "target_os": "ios",
-      "use_blink": true
+      "use_blink": true,
+      "use_remoteexec": true
     }
   },
   "ios-fieldtrial-rel": {
@@ -778,7 +915,6 @@
       "dcheck_always_on": true,
       "enable_backup_ref_ptr_slow_checks": true,
       "enable_backup_ref_ptr_support": true,
-      "enable_dangling_raw_ptr_checks": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
@@ -830,6 +966,14 @@
       "proprietary_codecs": true,
       "symbol_level": 1,
       "use_remoteexec": true
+    }
+  },
+  "linux-build-perf-developer": {
+    "gn_args": {
+      "enable_nacl": false,
+      "is_component_build": true,
+      "is_debug": true,
+      "symbol_level": 2
     }
   },
   "linux-chromeos-annotator-rel": {
@@ -930,6 +1074,15 @@
       "use_remoteexec": true
     }
   },
+  "linux-network-sandbox-rel": {
+    "gn_args": {
+      "dcheck_always_on": false,
+      "is_component_build": false,
+      "is_debug": false,
+      "symbol_level": 1,
+      "use_remoteexec": true
+    }
+  },
   "linux-perfetto-rel": {
     "gn_args": {
       "dcheck_always_on": false,
@@ -1020,7 +1173,6 @@
       "dcheck_always_on": true,
       "enable_backup_ref_ptr_slow_checks": true,
       "enable_backup_ref_ptr_support": true,
-      "enable_dangling_raw_ptr_checks": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
@@ -1038,6 +1190,17 @@
       "dcheck_always_on": false,
       "is_component_build": false,
       "is_debug": false,
+      "use_remoteexec": true
+    }
+  },
+  "mac-osxbeta-rel": {
+    "gn_args": {
+      "dcheck_always_on": true,
+      "ffmpeg_branding": "Chrome",
+      "is_component_build": false,
+      "is_debug": true,
+      "proprietary_codecs": true,
+      "symbol_level": 0,
       "use_remoteexec": true
     }
   },
@@ -1126,7 +1289,6 @@
       "dcheck_always_on": true,
       "enable_backup_ref_ptr_slow_checks": true,
       "enable_backup_ref_ptr_support": true,
-      "enable_dangling_raw_ptr_checks": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
@@ -1144,7 +1306,6 @@
       "dcheck_always_on": true,
       "enable_backup_ref_ptr_slow_checks": true,
       "enable_backup_ref_ptr_support": true,
-      "enable_dangling_raw_ptr_checks": true,
       "ffmpeg_branding": "Chrome",
       "is_component_build": false,
       "is_debug": false,
@@ -1155,6 +1316,14 @@
       "use_goma": false,
       "use_partition_alloc_as_malloc": true,
       "use_remoteexec": true
+    }
+  },
+  "win-build-perf-developer": {
+    "gn_args": {
+      "enable_nacl": false,
+      "is_component_build": true,
+      "is_debug": true,
+      "symbol_level": 2
     }
   },
   "win-celab-builder-rel": {

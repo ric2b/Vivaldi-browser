@@ -11,19 +11,21 @@
 
         promise_test(function () {
             return fetch('/wpt_internal/trust-tokens/resources/trust_token_issuance.py', {
-                trustToken: { version: 1, operation: 'token-request' }
+                privateToken: { version: 1, operation: 'token-request' }
             }).then(function (response) {
                 assert_equals(response.status, 200);
-                assert_equals(response.headers.get('Sec-Trust-Token'), null);
+                assert_equals(response.headers.get('Sec-Private-State-Token'), null);
             })
         }, 'Token issuance succeeds.');
 
         promise_test(function () {
             return fetch('/wpt_internal/trust-tokens/resources/trust_token_redemption.py', {
-                trustToken: { version: 1, operation: 'token-redemption' }
-            }).then(function (response) {
+                privateToken: { version: 1, operation: 'token-redemption' }
+            }).then(async function (response) {
                 assert_equals(response.status, 200);
-                assert_equals(response.headers.get('Sec-Trust-Token'), null);
+                assert_equals(response.headers.get('Sec-Private-State-Token'), null);
+                const redemptionResponse = await response.text()
+                assert_equals(redemptionResponse, 'dummy redemption record');
             })
         }, 'Token redemption succeeds.');
 
@@ -31,13 +33,14 @@
             const host_info = get_host_info();
             const frame = document.createElement('iframe');
             frame.src = '/wpt_internal/trust-tokens/resources/trust_token_send_redemption_record.py';
-            frame.trustToken = JSON.stringify({ version: 1, operation: 'send-redemption-record', issuers: [host_info.ORIGIN] });
+            frame.privateToken = JSON.stringify({ version: 1, operation: 'send-redemption-record', issuers: [host_info.ORIGIN] });
             document.body.appendChild(frame);
 
             return new Promise(resolve => {
                 frame.addEventListener("load", resolve);
             }).then(event => {
-                assert_equals(frame.contentWindow.document.body.innerText, 'Trust token RR succeeded.');
+                const redemptionRecord = frame.contentWindow.document.body.innerText;
+                assert_true(redemptionRecord.includes('redemption-record="dummy redemption record"'));
             });
         }, 'Trust token RR succeeds using iframes.');
     </script>

@@ -16,7 +16,6 @@
 
 // Partners with branding for Vivaldi
 "duckduckgo.com",
-"neeva.com",
 "qwant.com",
 "startpage.com",
 "you.com",

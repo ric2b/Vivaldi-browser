@@ -30,15 +30,16 @@
 
 #include "third_party/blink/public/platform/web_url_response.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/ranges/algorithm.h"
 #include "net/ssl/ssl_info.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/trigger_attestation.h"
+#include "services/network/public/mojom/cors.mojom-shared.h"
 #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "services/network/public/mojom/load_timing_info.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -148,10 +149,9 @@ WebURLResponse WebURLResponse::Create(
   response.SetPadding(head.padding);
   WebVector<KURL> url_list_via_service_worker(
       head.url_list_via_service_worker.size());
-  std::transform(head.url_list_via_service_worker.begin(),
-                 head.url_list_via_service_worker.end(),
-                 url_list_via_service_worker.begin(),
-                 [](const GURL& h) { return KURL(h); });
+  base::ranges::transform(head.url_list_via_service_worker,
+                          url_list_via_service_worker.begin(),
+                          [](const GURL& h) { return KURL(h); });
   response.SetUrlListViaServiceWorker(url_list_via_service_worker);
   response.SetCacheStorageCacheName(
       head.service_worker_response_source ==
@@ -160,20 +160,22 @@ WebURLResponse WebURLResponse::Create(
           : WebString());
 
   WebVector<WebString> dns_aliases(head.dns_aliases.size());
-  std::transform(head.dns_aliases.begin(), head.dns_aliases.end(),
-                 dns_aliases.begin(),
-                 [](const std::string& h) { return WebString::FromASCII(h); });
+  base::ranges::transform(head.dns_aliases, dns_aliases.begin(),
+                          &WebString::FromASCII);
   response.SetDnsAliases(dns_aliases);
   response.SetRemoteIPEndpoint(head.remote_endpoint);
   response.SetAddressSpace(head.response_address_space);
   response.SetClientAddressSpace(head.client_address_space);
+  response.SetPrivateNetworkAccessPreflightResult(
+      head.private_network_access_preflight_result);
 
   WebVector<WebString> cors_exposed_header_names(
       head.cors_exposed_header_names.size());
-  std::transform(head.cors_exposed_header_names.begin(),
-                 head.cors_exposed_header_names.end(),
-                 cors_exposed_header_names.begin(),
-                 [](const std::string& h) { return WebString::FromLatin1(h); });
+  base::ranges::transform(head.cors_exposed_header_names,
+                          cors_exposed_header_names.begin(),
+                          [](const auto& header_name) {
+                            return WebString::FromLatin1(header_name);
+                          });
   response.SetCorsExposedHeaderNames(cors_exposed_header_names);
   response.SetDidServiceWorkerNavigationPreload(
       head.did_service_worker_navigation_preload);
@@ -521,9 +523,7 @@ void WebURLResponse::SetUrlListViaServiceWorker(
     const WebVector<WebURL>& url_list_via_service_worker) {
   Vector<KURL> url_list(
       base::checked_cast<wtf_size_t>(url_list_via_service_worker.size()));
-  std::transform(url_list_via_service_worker.begin(),
-                 url_list_via_service_worker.end(), url_list.begin(),
-                 [](const WebURL& url) { return url; });
+  base::ranges::copy(url_list_via_service_worker, url_list.begin());
   resource_response_->SetUrlListViaServiceWorker(url_list);
 }
 
@@ -583,6 +583,16 @@ network::mojom::IPAddressSpace WebURLResponse::ClientAddressSpace() const {
 void WebURLResponse::SetClientAddressSpace(
     network::mojom::IPAddressSpace client_address_space) {
   resource_response_->SetClientAddressSpace(client_address_space);
+}
+
+network::mojom::PrivateNetworkAccessPreflightResult
+WebURLResponse::PrivateNetworkAccessPreflightResult() const {
+  return resource_response_->PrivateNetworkAccessPreflightResult();
+}
+
+void WebURLResponse::SetPrivateNetworkAccessPreflightResult(
+    network::mojom::PrivateNetworkAccessPreflightResult result) {
+  resource_response_->SetPrivateNetworkAccessPreflightResult(result);
 }
 
 void WebURLResponse::SetIsValidated(bool is_validated) {
@@ -683,8 +693,8 @@ bool WebURLResponse::FromArchive() const {
 
 void WebURLResponse::SetDnsAliases(const WebVector<WebString>& aliases) {
   Vector<String> dns_aliases(base::checked_cast<wtf_size_t>(aliases.size()));
-  std::transform(aliases.begin(), aliases.end(), dns_aliases.begin(),
-                 [](const WebString& h) { return WTF::String(h); });
+  base::ranges::transform(aliases, dns_aliases.begin(),
+                          &WebString::operator WTF::String);
   resource_response_->SetDnsAliases(std::move(dns_aliases));
 }
 

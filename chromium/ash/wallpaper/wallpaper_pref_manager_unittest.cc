@@ -7,7 +7,6 @@
 #include <string>
 #include <utility>
 
-#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/wallpaper/wallpaper_info.h"
 #include "ash/session/session_controller_impl.h"
@@ -15,9 +14,11 @@
 #include "ash/session/test_session_controller_client.h"
 #include "ash/wallpaper/test_wallpaper_controller_client.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/user_manager/user_type.h"
@@ -33,6 +34,16 @@ using testing::Lt;
 
 constexpr char kUser1[] = "user1@test.com";
 const AccountId account_id_1 = AccountId::FromUserEmailGaiaId(kUser1, kUser1);
+
+constexpr char kDummyUrl[] = "https://best_wallpaper/1";
+constexpr char kDummyUrl2[] = "https://best_wallpaper/2";
+constexpr char kDummyUrl3[] = "https://best_wallpaper/3";
+constexpr char kDummyUrl4[] = "https://best_wallpaper/4";
+
+const uint64_t kAssetId = 1;
+const uint64_t kAssetId2 = 2;
+const uint64_t kAssetId3 = 3;
+const uint64_t kAssetId4 = 4;
 
 constexpr char kFakeGooglePhotosPhotoId[] = "fake_photo";
 
@@ -190,7 +201,7 @@ class WallpaperPrefManagerTest : public testing::Test {
  protected:
   base::test::SingleThreadTaskEnvironment task_environment_;
 
-  TestProfileHelper* profile_helper_;
+  raw_ptr<TestProfileHelper, ExperimentalAsh> profile_helper_;
 
   TestWallpaperControllerClient client_;
   std::unique_ptr<TestingPrefServiceSimple> local_state_;
@@ -457,7 +468,7 @@ TEST_F(WallpaperPrefManagerTest, SetCalculatedColors) {
 
 TEST_F(WallpaperPrefManagerTest, CalculatedColorsEmptyIfKMeanMissing) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature({features::kJelly});
+  scoped_feature_list.InitAndDisableFeature({chromeos::features::kJelly});
   const char location[] = "location";
 
   const std::vector<SkColor> prominent_colors = {
@@ -469,7 +480,7 @@ TEST_F(WallpaperPrefManagerTest, CalculatedColorsEmptyIfKMeanMissing) {
 }
 
 TEST_F(WallpaperPrefManagerTest, CalculatedColorsWhenJellyEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list(features::kJelly);
+  base::test::ScopedFeatureList scoped_feature_list(chromeos::features::kJelly);
   const char location[] = "location";
 
   const SkColor k_mean_color = SkColorSetRGB(0xAB, 0xBC, 0xEF);
@@ -487,13 +498,49 @@ TEST_F(WallpaperPrefManagerTest, CalculatedColorsWhenJellyEnabled) {
 
 TEST_F(WallpaperPrefManagerTest,
        CalculatedColorsEmptyIfCelebiMissingWhenJellyEnabled) {
-  base::test::ScopedFeatureList scoped_feature_list(features::kJelly);
+  base::test::ScopedFeatureList scoped_feature_list(chromeos::features::kJelly);
   const char location[] = "location";
 
   const SkColor k_mean_color = SkColorSetRGB(0xAB, 0xBC, 0xEF);
   pref_manager_->CacheKMeanColor(location, k_mean_color);
 
   EXPECT_FALSE(pref_manager_->GetCachedWallpaperColors(location));
+}
+
+TEST_F(WallpaperPrefManagerTest, ShouldSyncOut) {
+  EXPECT_TRUE(WallpaperPrefManager::ShouldSyncOut(
+      InfoWithType(WallpaperType::kOnline)));
+
+  std::vector<OnlineWallpaperVariant> variants;
+  variants.emplace_back(kAssetId, GURL(kDummyUrl),
+                        backdrop::Image::IMAGE_TYPE_LIGHT_MODE);
+  variants.emplace_back(kAssetId2, GURL(kDummyUrl2),
+                        backdrop::Image::IMAGE_TYPE_DARK_MODE);
+  variants.emplace_back(kAssetId3, GURL(kDummyUrl3),
+                        backdrop::Image::IMAGE_TYPE_MORNING_MODE);
+  variants.emplace_back(kAssetId4, GURL(kDummyUrl4),
+                        backdrop::Image::IMAGE_TYPE_LATE_AFTERNOON_MODE);
+  WallpaperInfo info = InfoWithType(WallpaperType::kOnline);
+  info.variants = variants;
+  EXPECT_FALSE(WallpaperPrefManager::ShouldSyncOut(info));
+}
+
+TEST_F(WallpaperPrefManagerTest, ShouldSyncIn) {
+  WallpaperInfo local_info = InfoWithType(WallpaperType::kOnline);
+  WallpaperInfo synced_info = InfoWithType(WallpaperType::kDaily);
+  EXPECT_TRUE(WallpaperPrefManager::ShouldSyncIn(synced_info, local_info));
+
+  std::vector<OnlineWallpaperVariant> variants;
+  variants.emplace_back(kAssetId, GURL(kDummyUrl),
+                        backdrop::Image::IMAGE_TYPE_LIGHT_MODE);
+  variants.emplace_back(kAssetId2, GURL(kDummyUrl2),
+                        backdrop::Image::IMAGE_TYPE_DARK_MODE);
+  variants.emplace_back(kAssetId3, GURL(kDummyUrl3),
+                        backdrop::Image::IMAGE_TYPE_MORNING_MODE);
+  variants.emplace_back(kAssetId4, GURL(kDummyUrl4),
+                        backdrop::Image::IMAGE_TYPE_LATE_AFTERNOON_MODE);
+  local_info.variants = variants;
+  EXPECT_FALSE(WallpaperPrefManager::ShouldSyncIn(synced_info, local_info));
 }
 
 }  // namespace

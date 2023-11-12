@@ -215,6 +215,9 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         if (mOnNativeLoadedCalled) return;
         mOnNativeLoadedCalled = true;
 
+        // TODO(swestphal): Move this earlier when it is not depending on native code being loaded.
+        ChildProcessLauncherHelper.warmUp(appContext, true);
+
         CrashReporterControllerImpl.getInstance().notifyNativeInitialized();
         NetworkChangeNotifier.init();
         NetworkChangeNotifier.registerToReceiveNotificationsAlways();
@@ -287,14 +290,7 @@ public final class WebLayerImpl extends IWebLayer.Stub {
             }
         }
 
-        // Enable ATRace on debug OS or app builds. Requires commandline initialization.
-        int applicationFlags = wrappedAppContext.getApplicationInfo().flags;
-        boolean isAppDebuggable = (applicationFlags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
-        boolean isOsDebuggable = BuildInfo.isDebugAndroid();
-        // Requires command-line flags.
-        TraceEvent.maybeEnableEarlyTracing(
-                (isAppDebuggable || isOsDebuggable) ? TraceEvent.ATRACE_TAG_APP : 0,
-                /*readCommandLine=*/true);
+        TraceEvent.maybeEnableEarlyTracing(/*readCommandLine=*/true);
         TraceEvent.begin("WebLayer init");
 
         WebApkValidator.init(
@@ -311,7 +307,6 @@ public final class WebLayerImpl extends IWebLayer.Stub {
         BundleUtils.setIsBundle(ProductConfig.IS_BUNDLE);
 
         setChildProcessCreationParams(wrappedAppContext, packageInfo.packageName);
-        ChildProcessLauncherHelper.warmUp(wrappedAppContext, true);
 
         // Creating the Android shared preferences object causes I/O.
         try (StrictModeContext ignored = StrictModeContext.allowDiskWrites()) {
@@ -690,7 +685,7 @@ public final class WebLayerImpl extends IWebLayer.Stub {
 
         // TODO: The call to onResourcesLoaded() can be slow, we may need to parallelize this with
         // other expensive startup tasks.
-        org.chromium.base.R.onResourcesLoaded(lightPackageId);
+        R.onResourcesLoaded(lightPackageId);
 
         // Wrap the app context so that it can be used to load WebLayer implementation classes.
         appContext = ClassLoaderContextWrapperFactory.get(appContext);

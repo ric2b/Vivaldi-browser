@@ -21,7 +21,7 @@
 #include "content/browser/loader/content_security_notifier.h"
 #include "content/browser/renderer_host/code_cache_host_impl.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
-#include "content/browser/renderer_host/private_network_access_util.h"
+#include "content/browser/renderer_host/local_network_access_util.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_main_resource_handle.h"
@@ -400,7 +400,7 @@ void DedicatedWorkerHost::DidStartScriptLoad(
       worker_client_security_state_->is_web_secure_context =
           network::IsUrlPotentiallyTrustworthy(final_response_url) &&
           creator_client_security_state_->is_web_secure_context;
-      worker_client_security_state_->private_network_request_policy =
+      worker_client_security_state_->local_network_request_policy =
           DerivePrivateNetworkRequestPolicy(
               worker_client_security_state_->ip_address_space,
               worker_client_security_state_->is_web_secure_context,
@@ -533,9 +533,16 @@ DedicatedWorkerHost::CreateNetworkFactoryForSubresources(
           worker_client_security_state_->Clone(), std::move(coep_reporter),
           worker_process_host_,
           ancestor_render_frame_host->IsFeatureEnabled(
+              blink::mojom::PermissionsPolicyFeature::
+                  kPrivateStateTokenIssuance)
+              ? network::mojom::TrustTokenOperationPolicyVerdict::
+                    kPotentiallyPermit
+              : network::mojom::TrustTokenOperationPolicyVerdict::kForbid,
+          ancestor_render_frame_host->IsFeatureEnabled(
               blink::mojom::PermissionsPolicyFeature::kTrustTokenRedemption)
-              ? network::mojom::TrustTokenRedemptionPolicy::kPotentiallyPermit
-              : network::mojom::TrustTokenRedemptionPolicy::kForbid,
+              ? network::mojom::TrustTokenOperationPolicyVerdict::
+                    kPotentiallyPermit
+              : network::mojom::TrustTokenOperationPolicyVerdict::kForbid,
           ancestor_render_frame_host->GetCookieSettingOverrides(),
           "DedicatedWorkerHost::CreateNetworkFactoryForSubresources");
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
@@ -746,7 +753,7 @@ void DedicatedWorkerHost::CreateCodeCacheHost(
   RenderProcessHost* rph = GetProcessHost();
   code_cache_host_receivers_.Add(rph->GetID(),
                                  isolation_info_.network_isolation_key(),
-                                 std::move(receiver));
+                                 GetStorageKey(), std::move(receiver));
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -952,16 +959,14 @@ void DedicatedWorkerHost::EvictFromBackForwardCache(
 }
 
 void DedicatedWorkerHost::DidChangeBackForwardCacheDisablingFeatures(
-    uint64_t features_mask) {
+    BackForwardCacheBlockingDetails details) {
   RenderFrameHostImpl* ancestor_render_frame_host =
       RenderFrameHostImpl::FromID(ancestor_render_frame_host_id_);
   if (!ancestor_render_frame_host) {
     // The frame may have already been closed.
     return;
   }
-  bfcache_disabling_features_ =
-      blink::scheduler::WebSchedulerTrackedFeatures::FromEnumBitmask(
-          features_mask);
+  bfcache_blocking_details_ = std::move(details);
   ancestor_render_frame_host->MaybeEvictFromBackForwardCache();
 }
 
@@ -1013,7 +1018,17 @@ GlobalRenderFrameHostId DedicatedWorkerHost::GetAssociatedRenderFrameHostId()
 
 blink::scheduler::WebSchedulerTrackedFeatures
 DedicatedWorkerHost::GetBackForwardCacheDisablingFeatures() const {
-  return bfcache_disabling_features_;
+  blink::scheduler::WebSchedulerTrackedFeatures features;
+  for (auto& details : bfcache_blocking_details_) {
+    features.Put(static_cast<blink::scheduler::WebSchedulerTrackedFeature>(
+        details->feature));
+  }
+  return features;
+}
+
+const DedicatedWorkerHost::BackForwardCacheBlockingDetails&
+DedicatedWorkerHost::GetBackForwardCacheBlockingDetails() const {
+  return bfcache_blocking_details_;
 }
 
 base::WeakPtr<ServiceWorkerContainerHost>

@@ -7,6 +7,8 @@
 
 #import <Foundation/Foundation.h>
 
+class PromosManager;
+
 // Key to store whether the What's New promo has been register.
 extern NSString* const kWhatsNewPromoRegistrationKey;
 
@@ -25,7 +27,7 @@ extern NSString* const kWhatsNewUsageEntryKey;
 bool WasWhatsNewUsed();
 
 // Set that What's New was used in the overflow menu.
-void SetWhatsNewUsed();
+void SetWhatsNewUsed(PromosManager* promosManager);
 
 // Returns whether What's New is enabled.
 bool IsWhatsNewEnabled();
@@ -37,5 +39,13 @@ void setWhatsNewPromoRegistration();
 // This is used to avoid registering the What's New promo in the promo manager
 // more than once.
 bool ShouldRegisterWhatsNewPromo();
+
+// Vivaldi: We don't want to use and mess up with the chromium logic to show
+// the first run or what's new related promo when browser is updated.
+extern NSString* vWhatsNewWasShownKey;
+
+bool IsVivaldiWhatsNewShown();
+void setVivaldiWhatsNewShown(bool shown);
+// End Vivaldi
 
 #endif  // IOS_CHROME_BROWSER_UI_WHATS_NEW_WHATS_NEW_UTIL_H_

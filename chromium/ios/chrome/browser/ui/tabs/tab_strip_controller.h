@@ -14,7 +14,6 @@
 #import "ios/web/public/web_state.h"
 // End Vivaldi
 
-@protocol PopupMenuLongPressDelegate;
 @protocol TabStripContaining;
 @protocol TabStripPresentation;
 @class ViewRevealingVerticalPanHandler;
@@ -28,9 +27,6 @@ class Browser;
 
 @property(nonatomic, assign) BOOL highlightsSelectedTab;
 @property(nonatomic, readonly, strong) UIView<TabStripContaining>* view;
-
-// Delegate for the long press gesture recognizer triggering popup menu.
-@property(nonatomic, weak) id<PopupMenuLongPressDelegate> longPressDelegate;
 
 // The duration to wait before starting tab strip animations. Used to
 // synchronize animations.

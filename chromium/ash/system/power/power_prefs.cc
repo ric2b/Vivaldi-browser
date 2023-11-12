@@ -13,6 +13,7 @@
 #include "ash/shell.h"
 #include "ash/system/human_presence/human_presence_metrics.h"
 #include "ash/system/human_presence/lock_on_leave_controller.h"
+#include "ash/system/power/adaptive_charging_controller.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/metrics/histogram_functions.h"
@@ -129,7 +130,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
 double GetAdaptiveChargingMinProbability() {
   // An AdaptiveCharging decision is considered to be reliable if the inference
   // score is higher than this number.
-  constexpr double kDefaultAdaptiveChargingMinProbability = 0.2;
+  constexpr double kDefaultAdaptiveChargingMinProbability = 0.35;
 
   return base::GetFieldTrialParamByFeatureAsDouble(
       ash::features::kAdaptiveCharging, "adaptive_charging_min_probability",
@@ -433,7 +434,10 @@ void PowerPrefs::UpdatePowerPolicyFromPrefs() {
         local_state_->GetBoolean(prefs::kUsbPowerShareEnabled);
   }
 
-  if (features::IsAdaptiveChargingEnabled()) {
+  if (features::IsAdaptiveChargingEnabled() &&
+      Shell::Get()
+          ->adaptive_charging_controller()
+          ->IsAdaptiveChargingSupported()) {
     values.adaptive_charging_enabled =
         prefs->GetBoolean(prefs::kPowerAdaptiveChargingEnabled);
     if (values.adaptive_charging_enabled) {

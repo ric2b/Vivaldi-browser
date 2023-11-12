@@ -14,6 +14,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/preloading/chrome_preloading.h"
@@ -30,7 +31,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -90,7 +90,7 @@ class AutocompleteActionPredictorObserverImpl
   }
 
   void OnInitialized() override {
-    DCHECK(waiting_);
+    CHECK(waiting_);
     std::move(waiting_).Run();
   }
 
@@ -112,8 +112,7 @@ class PrerenderOmniboxUIBrowserTest : public InProcessBrowserTest,
             &PrerenderOmniboxUIBrowserTest::GetActiveWebContents,
             base::Unretained(this))) {
     scoped_feature_list_.InitWithFeatures(
-        {features::kOmniboxTriggerForPrerender2},
-        {kSearchPrefetchOnlyAllowDefaultMatchPreloading});
+        {}, {kSearchPrefetchOnlyAllowDefaultMatchPreloading});
   }
 
   void SetUp() override {
@@ -174,13 +173,11 @@ class PrerenderOmniboxUIBrowserTest : public InProcessBrowserTest,
   }
 
   void SelectAutocompleteMatchAndWaitForActivation(
-      const AutocompleteMatch& match,
+      OmniboxPopupSelection selection,
       int host_id) {
-    GURL url = match.destination_url;
     content::test::PrerenderHostObserver prerender_observer(
         *GetActiveWebContents(), host_id);
-    omnibox()->model()->OpenMatch(match, WindowOpenDisposition::CURRENT_TAB,
-                                  url, std::u16string(), 0);
+    omnibox()->model()->OpenSelection(selection);
     prerender_observer.WaitForActivation();
   }
 
@@ -510,8 +507,7 @@ class PrerenderPreloaderHoldbackBrowserTest
  public:
   PrerenderPreloaderHoldbackBrowserTest() {
     feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kOmniboxTriggerForPrerender2,
-                              features::kPrerender2Holdback},
+        /*enabled_features=*/{features::kPrerender2Holdback},
         /* disabled_features=*/{
             kSearchPrefetchOnlyAllowDefaultMatchPreloading});
   }
@@ -979,7 +975,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxSearchSuggestionUIBrowserTest,
 
   content::NavigationHandleObserver activation_observer(
       GetActiveWebContents(), prerender_match->destination_url);
-  SelectAutocompleteMatchAndWaitForActivation(*prerender_match, host_id);
+  SelectAutocompleteMatchAndWaitForActivation(
+      OmniboxPopupSelection(std::distance(
+          autocomplete_controller->result().begin(), prerender_match)),
+      host_id);
   EXPECT_TRUE(IsPrerenderingNavigation());
 
   // Wait until the history is updated.
@@ -1133,7 +1132,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxSearchSuggestionUIBrowserTest,
   ASSERT_NE(prerender_match, std::end(autocomplete_controller->result()));
   content::NavigationHandleObserver activation_observer(
       GetActiveWebContents(), prerender_match->destination_url);
-  SelectAutocompleteMatchAndWaitForActivation(*prerender_match, host_id);
+  SelectAutocompleteMatchAndWaitForActivation(
+      OmniboxPopupSelection(std::distance(
+          autocomplete_controller->result().begin(), prerender_match)),
+      host_id);
   EXPECT_TRUE(IsPrerenderingNavigation());
   base::RunLoop().RunUntilIdle();
 
@@ -1223,7 +1225,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderOmniboxSearchSuggestionUIBrowserTest,
 
   content::NavigationHandleObserver activation_observer(
       GetActiveWebContents(), prerender_match->destination_url);
-  SelectAutocompleteMatchAndWaitForActivation(*prerender_match, host_id2);
+  SelectAutocompleteMatchAndWaitForActivation(
+      OmniboxPopupSelection(std::distance(
+          autocomplete_controller->result().begin(), prerender_match)),
+      host_id2);
   EXPECT_TRUE(IsPrerenderingNavigation());
 
   {

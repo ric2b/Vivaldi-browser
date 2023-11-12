@@ -18,9 +18,9 @@
 
 #endif  // COMPILER_MSVC
 
-#if COMPILER_GCC && defined(NDEBUG)
+#if defined(COMPILER_GCC) && defined(NDEBUG)
 #define ALWAYS_INLINE inline __attribute__((__always_inline__))
-#elif COMPILER_MSVC && defined(NDEBUG)
+#elif defined(COMPILER_MSVC) && defined(NDEBUG)
 #define ALWAYS_INLINE __forceinline
 #else
 #define ALWAYS_INLINE inline

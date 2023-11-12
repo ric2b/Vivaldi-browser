@@ -15,6 +15,12 @@ const char kAppStoreRatingPolicyEnabled[] = "ios.app_store_rating_enabled";
 // Boolean that is true when Suggest support is enabled.
 const char kArticlesForYouEnabled[] = "suggestions.articles_enabled";
 
+// Boolean which indicates if the omnibox should be at the bottom of the screen.
+const char kBottomOmnibox[] = "ios.bottom_omnibox";
+
+// Boolean that is true when Browser Lockdown Mode is enabled.
+const char kBrowserLockdownModeEnabled[] = "ios.browser_lockdown_mode_enabled";
+
 // A map of browser state data directory to cached information. This cache can
 // be used to display information about browser states without actually having
 // to load them.
@@ -62,11 +68,11 @@ const char kFeaturePushNotificationPermissions[] =
 // Prefs for persisting HttpServerProperties.
 const char kHttpServerProperties[] = "net.http_server_properties";
 
-// Integer that specifies whether Incognito mode is:
-// 0 - Enabled. Default behaviour. Default mode is available on demand.
-// 1 - Disabled. User cannot browse pages in Incognito mode.
-// 2 - Forced. All pages/sessions are forced into Incognito.
-const char kIncognitoModeAvailability[] = "incognito.mode_availability";
+// User preferred time for inactivity delay:
+// * if == -1: Disabled by user.
+// * if >= 1: Inactivity days threshold.
+// * Otherwise: Default value driven by Finch config.
+const char kInactiveTabsTimeThreshold[] = "ios.inactive_tabs.time_threshold";
 
 // Boolean that is true when the Incognito interstitial for third-party intents
 // is enabled.
@@ -96,6 +102,11 @@ const char kIosBookmarkPromoAlreadySeen[] = "ios.bookmark.promo_already_seen";
 const char kIosBookmarkSigninPromoDisplayedCount[] =
     "ios.bookmark.signin_promo_displayed_count";
 
+// Boolean to represent if the Bring Android Tabs prompt has been displayed for
+// the user.
+const char kIosBringAndroidTabsPromptDisplayed[] =
+    "ios.bring_android_tabs.prompt_displayed";
+
 // Boolean that is true when the CredentialProviderPromoEnabled policy is
 // enabled.
 const char kIosCredentialProviderPromoPolicyEnabled[] =
@@ -120,6 +131,12 @@ const char kIosDiscoverFeedLastRefreshTime[] =
 // visible to the user.
 const char kIosDiscoverFeedLastUnseenRefreshTime[] =
     "ios.discover_feed.last_unseen_refresh_time";
+
+// The number of consecutive times the user dismissed the password bottom sheet.
+// This gets reset to 0 whenever the user selects a password from the bottom
+// sheet or from the keyboard accessory.
+const char kIosPasswordBottomSheetDismissCount[] =
+    "ios.password_bottom_sheet_dismiss_count";
 
 // The user's account info from before a device restore.
 const char kIosPreRestoreAccountInfo[] = "ios.pre_restore_account_info";
@@ -156,6 +173,11 @@ const char kIosShareChromeCount[] = "ios.share_chrome.count";
 // Preference to store the last time the user shared the chrome app.
 const char kIosShareChromeLastShare[] = "ios.share_chrome.last_share";
 
+// Preference to store the number of times the user opens the New Tab Page
+// with foreign history included in segments data (i.e. Most Visited Tiles).
+const char kIosSyncSegmentsNewTabPageDisplayCount[] =
+    "ios.sync_segments.ntp.display_count";
+
 // Preference that hold a boolean indicating if the user has already dismissed
 // the sign-in promo in the ntp feed top section.
 const char kIosNtpFeedTopPromoAlreadySeen[] =
@@ -165,6 +187,16 @@ const char kIosNtpFeedTopPromoAlreadySeen[] =
 // in the ntp feed top section.
 const char kIosNtpFeedTopSigninPromoDisplayedCount[] =
     "ios.ntp_feed_top.signin_promo_displayed_count";
+
+// Preference that hold a boolean indicating if the user has already dismissed
+// the sign-in promo in the reading list.
+const char kIosReadingListPromoAlreadySeen[] =
+    "ios.reading_list.promo_already_seen";
+
+// Integer to represent the number of time the sign-in promo has been displayed
+// in the reading list view.
+const char kIosReadingListSigninPromoDisplayedCount[] =
+    "ios.reading_list.signin_promo_displayed_count";
 
 // Preference that holds a boolean indicating whether the link previews are
 // enabled. Link previews display a live preview of the selected link after a
@@ -203,6 +235,11 @@ const char kSearchSuggestEnabled[] = "search.suggest_enabled";
 // Boolean indicating if displaying price drops for shopping URLs on Tabs
 // in the Tab Switching UI is enabled.
 const char kTrackPricesOnTabsEnabled[] = "track_prices_on_tabs.enabled";
+
+// Boolean indicating if Lens camera assited searches are allowed by enterprise
+// policy.
+const char kLensCameraAssistedSearchPolicyAllowed[] =
+    "ios.lens_camera_assited_search_policy.allowed";
 
 // An integer set to one of the NetworkPredictionSetting enum values indicating
 // network prediction settings.

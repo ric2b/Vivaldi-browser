@@ -23,6 +23,7 @@
 <translation id="1921101374471252440">&amp;Resmi Yeniden Yükle</translation>
 <translation id="1924750141060565109">Manzara 15</translation>
 <translation id="19598411548897379">Genel</translation>
+<translation id="1973351931613083086">otomatik oynatma</translation>
 <translation id="1985669426322966465">Yazılım Güncellemesi</translation>
 <translation id="2079036669923635404">Vivaldi'yi <ph name="VERSION" /> sürümüne güncellemek için buraya tıklayın.</translation>
 <translation id="2141974047387702305">Güncelleme dosyalarını indirirken bir hata oldu. Lütfen internet bağlantınızı kontrol edin yeniden deneyin.</translation>
@@ -47,6 +48,7 @@
 <translation id="3156398087075132709">Yeni Yer İmi</translation>
 <translation id="3255747772218936245">Güncellemeyi yükle</translation>
 <translation id="3259769196742189631">Geçerliliğini Doğrula</translation>
+<translation id="3291915639428159043">Otomatik oynatma engellendi</translation>
 <translation id="3302905971452834934">Canavar 1</translation>
 <translation id="3334610655141903168">(başlık yok)</translation>
 <translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> şu anki en son sürüm.</translation>
@@ -61,6 +63,7 @@
 <translation id="3542768452570884558">Bağlantıyı Yeni Pencerede Aç</translation>
 <translation id="3588820906588687999">Resmi Yeni Sekmede Aç</translation>
 <translation id="3601066750251199488">Canavar 3</translation>
+<translation id="3620979700683094848">Siteler otomatik olarak video oynatabilir</translation>
 <translation id="3680031241659195730">Yeni bir Vivaldi sürümü var!</translation>
 <translation id="3708982624815781692">Güncelleme iptal edildi.</translation>
 <translation id="3732157130969736834">Bağlantıyı Yer imlerine Ekle</translation>
@@ -76,6 +79,7 @@
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Tekrar gösterme</translation>
 <translation id="4074744496918018786">Resmi Gizli Pencerede Aç</translation>
+<translation id="410351446219883937">Otomatik oynatma</translation>
 <translation id="4324492550286218827">Manzara 2</translation>
 <translation id="4406101500523955324">Yeni Gizli Pencerede Aç</translation>
 <translation id="4420816922321010053">Gerçekten Vivaldi'den çıkmak istiyor musunuz?</translation>
@@ -89,6 +93,7 @@
 <translation id="4636708767492582204">E-posta ile Gönder</translation>
 <translation id="4677434526832593569">Hayvan 8</translation>
 <translation id="474217410105706308">Sekmeyi Sustur</translation>
+<translation id="4861715717329665002">Otomatik Kaydedilen Oturumlar</translation>
 <translation id="4881695831933465202">Aç</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> / <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">İçe Aktarılan Hızlı Erişim</translation>
@@ -137,10 +142,12 @@
 <translation id="7724603315864178912">Kes</translation>
 <translation id="7727481996062361502">Güncelleme doğrulanıyor...</translation>
 <translation id="7793738202466490491">Takvime Etkinlik olarak Ekle</translation>
+<translation id="7834693436815575883">Otomatik oynatmaya izin verildi</translation>
 <translation id="7848222781052558334">İndirilen dosyaların sayısal imzası doğrulanamadı.</translation>
 <translation id="7865983598101744945">Çıkmayı onayla</translation>
 <translation id="7957213167373139414">Takvimim</translation>
 <translation id="8027581147000338959">Yeni Pencerede Aç</translation>
+<translation id="8044382196220116469">Sitelerin otomatik olarak video oynatmasına izin verme</translation>
 <translation id="8099620695029051217">Sayfa Adresini Kopyala</translation>
 <translation id="8197810018650377191">Yer İmi Sayfası</translation>
 <translation id="8261506727792406068">Sil</translation>
@@ -160,6 +167,7 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Manzara 14</translation>
 <translation id="8773635261052182196">Artık bu bildirimleri görmeyeceksiniz. Bunları vivaldi ayarlarından tekrar etkinleştirebilirsiniz.</translation>
+<translation id="8774017153185436870">Siteler otomatik olarak video oynatabilir</translation>
 <translation id="8813277370772331957">Sonra hatırlat</translation>
 <translation id="8894900864683381599">Bağlantıyı Panele Ekle</translation>
 <translation id="8912720443398351457">Gerçekten Vivaldi'den Çıkmak İstiyor Musunuz?</translation>

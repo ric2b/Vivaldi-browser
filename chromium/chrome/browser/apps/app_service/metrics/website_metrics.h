@@ -8,10 +8,12 @@
 #include <map>
 
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_tab_strip_tracker.h"
@@ -115,7 +117,7 @@ class WebsiteMetrics : public BrowserListObserver,
     void OnInstallableWebAppStatusUpdated() override;
 
    private:
-    WebsiteMetrics* owner_;
+    raw_ptr<WebsiteMetrics, ExperimentalAsh> owner_;
     base::ScopedObservation<webapps::AppBannerManager,
                             webapps::AppBannerManager::Observer>
         app_banner_manager_observer_{this};
@@ -135,13 +137,13 @@ class WebsiteMetrics : public BrowserListObserver,
     bool is_activated = false;
     bool promotable = false;
 
-    // Converts the struct UsageTime to base::Value, e.g.:
+    // Converts the struct UsageTime to base::Value::Dict, e.g.:
     // {
     //    "time": "3600",
     //    "url_content": "scope",
     //    "promotable": "false",
     // }
-    base::Value ConvertToValue() const;
+    base::Value::Dict ConvertToDict() const;
   };
 
   // Observes the root window's activation client for the OnWindowActivated

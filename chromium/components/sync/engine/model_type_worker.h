@@ -176,7 +176,7 @@ class ModelTypeWorker : public UpdateHandler,
       const sync_pb::DataTypeContext& mutated_context,
       const SyncEntityList& applicable_updates,
       StatusController* status) override;
-  void ApplyUpdates(StatusController* status) override;
+  void ApplyUpdates(StatusController* status, bool cycle_done) override;
   void RecordRemoteInvalidation(
       std::unique_ptr<SyncInvalidation> incoming) override;
   void CollectPendingInvalidations(sync_pb::GetUpdateTriggers* msg) override;
@@ -237,11 +237,6 @@ class ModelTypeWorker : public UpdateHandler,
   // If initial sync isn't done yet, the first ApplyUpdates() will take care of
   // pushing the data in such cases instead (the processor relies on this).
   void SendPendingUpdatesToProcessorIfReady();
-
-  // Returns true if this type has successfully fetched all available updates
-  // from the server at least once. Our state may or may not be stale, but at
-  // least we know that it was valid at some point in the past.
-  bool IsTypeInitialized() const;
 
   // Returns true if this type is prepared to commit items. Currently, this
   // depends on having downloaded the initial data and having the encryption

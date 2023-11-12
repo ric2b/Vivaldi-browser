@@ -11,7 +11,6 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.BundleUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.base.metrics.RecordHistogram;
@@ -24,7 +23,6 @@ import org.chromium.chrome.browser.xsurface.LoggingParameters;
 import org.chromium.chrome.browser.xsurface.PersistentKeyValueCache;
 import org.chromium.chrome.browser.xsurface.ProcessScopeDependencyProvider;
 import org.chromium.components.version_info.VersionConstants;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 /**
  * Provides logging and context for all surfaces.
@@ -81,10 +79,11 @@ public class FeedProcessScopeDependencyProvider implements ProcessScopeDependenc
 
     @Override
     public void postTask(int taskType, Runnable task, long delayMs) {
-        TaskTraits traits;
+        @TaskTraits
+        int traits;
         switch (taskType) {
             case ProcessScopeDependencyProvider.TASK_TYPE_UI_THREAD:
-                traits = UiThreadTaskTraits.DEFAULT;
+                traits = TaskTraits.UI_DEFAULT;
                 break;
             case ProcessScopeDependencyProvider.TASK_TYPE_BACKGROUND_MAY_BLOCK:
                 traits = TaskTraits.BEST_EFFORT_MAY_BLOCK;
@@ -149,10 +148,6 @@ public class FeedProcessScopeDependencyProvider implements ProcessScopeDependenc
 
     @Override
     public int[] getExperimentIds() {
-        // TODO(iwells): figure out why this is being called from another thread right after FRE
-        if (!ThreadUtils.runningOnUiThread()) {
-            return new int[0];
-        }
         return FeedProcessScopeDependencyProviderJni.get().getExperimentIds();
     }
 

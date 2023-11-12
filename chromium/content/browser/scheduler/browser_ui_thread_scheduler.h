@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/task/sequence_manager/task_queue.h"
 #include "base/time/time.h"
 #include "content/browser/scheduler/browser_task_queues.h"
@@ -40,7 +41,9 @@ class CONTENT_EXPORT BrowserUIThreadScheduler {
     void MoveFrom(UserInputActiveHandle* other);
     // Only this constructor actually creates a UserInputActiveHandle that will
     // inform scheduling decisions.
-    BrowserUIThreadScheduler* scheduler_ = nullptr;
+    // This field is not a raw_ptr<> because it was filtered by the rewriter
+    // for: #union
+    RAW_PTR_EXCLUSION BrowserUIThreadScheduler* scheduler_ = nullptr;
   };
 
   enum ScrollState { kGestureScrollActive, kFlingActive, kNone };
@@ -79,7 +82,6 @@ class CONTENT_EXPORT BrowserUIThreadScheduler {
   // experiments.
   void PostFeatureListSetup();
   void EnableBrowserPrioritizesNativeWork();
-  void EnableAlternatingScheduler();
   void EnableDeferringBrowserUIThreadTasks();
 
   // Used in the BrowserPrioritizeNativeWork experiment, when we want to
@@ -157,7 +159,6 @@ class CONTENT_EXPORT BrowserUIThreadScheduler {
   // There five variables are used in the kBrowserPeriodicYieldingToNative finch
   // experiment, |scroll_state_| should indicate the scroll state upton which
   // the yielding to looper delay will depend.
-  bool browser_enable_periodic_yielding_native_ = false;
   ScrollState scroll_state_ = ScrollState::kNone;
   base::TimeDelta yield_to_native_for_normal_input_after_ms_;
   base::TimeDelta yield_to_native_for_fling_input_after_ms_;

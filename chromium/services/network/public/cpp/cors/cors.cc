@@ -38,22 +38,6 @@ namespace {
 const char kAsterisk[] = "*";
 const char kLowerCaseTrue[] = "true";
 
-// TODO(toyoshim): Consider to move the following method to
-// //net/base/mime_util, and expose to Blink platform/network in order to
-// replace the existing equivalent method in HTTPParser.
-// We may prefer to implement a strict RFC2616 media-type
-// (https://tools.ietf.org/html/rfc2616#section-3.7) parser.
-std::string ExtractMIMETypeFromMediaType(const std::string& media_type) {
-  std::string::size_type semicolon = media_type.find(';');
-  std::string top_level_type;
-  std::string subtype;
-  if (net::ParseMimeTypeWithoutParameter(media_type.substr(0, semicolon),
-                                         &top_level_type, &subtype)) {
-    return top_level_type + "/" + subtype;
-  }
-  return std::string();
-}
-
 // Returns true only if |header_value| satisfies ABNF: 1*DIGIT [ "." 1*DIGIT ]
 bool IsSimilarToDoubleABNF(const std::string& header_value) {
   if (header_value.empty())
@@ -111,9 +95,15 @@ bool IsCorsSafelistedLowerCaseContentType(const std::string& value) {
   if (base::ranges::any_of(value, IsCorsUnsafeRequestHeaderByte))
     return false;
 
-  std::string mime_type = ExtractMIMETypeFromMediaType(value);
-  return mime_type == "application/x-www-form-urlencoded" ||
-         mime_type == "multipart/form-data" || mime_type == "text/plain";
+  absl::optional<std::string> mime_type =
+      net::ExtractMimeTypeFromMediaType(value,
+                                        /*accept_comma_separated=*/false);
+  if (!mime_type.has_value()) {
+    return false;
+  }
+
+  return *mime_type == "application/x-www-form-urlencoded" ||
+         *mime_type == "multipart/form-data" || *mime_type == "text/plain";
 }
 
 bool IsNoCorsSafelistedHeaderNameLowerCase(const std::string& lower_name) {
@@ -157,7 +147,7 @@ base::expected<void, CorsErrorStatus> CheckAccess(
     // to be sent, even with Access-Control-Allow-Credentials set to true.
     // See https://fetch.spec.whatwg.org/#cors-protocol-and-credentials.
     if (credentials_mode != mojom::CredentialsMode::kInclude)
-      return base::expected<void, CorsErrorStatus>();
+      return base::ok();
 
     // Since the credential is a concept for network schemes, we perform the
     // wildcard check only for HTTP and HTTPS. This is a quick hack to allow
@@ -166,11 +156,11 @@ base::expected<void, CorsErrorStatus> CheckAccess(
     // browser process or network service, this check won't be needed any more
     // because it is always for network requests there.
     if (response_url.SchemeIsHTTPOrHTTPS()) {
-      return base::unexpected<CorsErrorStatus>(
+      return base::unexpected(
           CorsErrorStatus(mojom::CorsError::kWildcardOriginNotAllowed));
     }
   } else if (!allow_origin_header) {
-    return base::unexpected<CorsErrorStatus>(
+    return base::unexpected(
         CorsErrorStatus(mojom::CorsError::kMissingAllowOriginHeader));
   } else if (*allow_origin_header != origin.Serialize()) {
     // We do not use url::Origin::IsSameOriginWith() here for two reasons below.
@@ -190,13 +180,13 @@ base::expected<void, CorsErrorStatus> CheckAccess(
     // Does not allow to have multiple origins in the allow origin header.
     // See https://fetch.spec.whatwg.org/#http-access-control-allow-origin.
     if (allow_origin_header->find_first_of(" ,") != std::string::npos) {
-      return base::unexpected<CorsErrorStatus>(CorsErrorStatus(
+      return base::unexpected(CorsErrorStatus(
           mojom::CorsError::kMultipleAllowOriginValues, *allow_origin_header));
     }
 
     // Check valid "null" first since GURL assumes it as invalid.
     if (*allow_origin_header == "null") {
-      return base::unexpected<CorsErrorStatus>(CorsErrorStatus(
+      return base::unexpected(CorsErrorStatus(
           mojom::CorsError::kAllowOriginMismatch, *allow_origin_header));
     }
 
@@ -204,11 +194,11 @@ base::expected<void, CorsErrorStatus> CheckAccess(
     // validation, but should be ok for providing error details to developers.
     GURL header_origin(*allow_origin_header);
     if (!header_origin.is_valid()) {
-      return base::unexpected<CorsErrorStatus>(CorsErrorStatus(
+      return base::unexpected(CorsErrorStatus(
           mojom::CorsError::kInvalidAllowOriginValue, *allow_origin_header));
     }
 
-    return base::unexpected<CorsErrorStatus>(CorsErrorStatus(
+    return base::unexpected(CorsErrorStatus(
         mojom::CorsError::kAllowOriginMismatch, *allow_origin_header));
   }
 
@@ -217,12 +207,12 @@ base::expected<void, CorsErrorStatus> CheckAccess(
     // This check should be case sensitive.
     // See also https://fetch.spec.whatwg.org/#http-new-header-syntax.
     if (allow_credentials_header != kLowerCaseTrue) {
-      return base::unexpected<CorsErrorStatus>(
+      return base::unexpected(
           CorsErrorStatus(mojom::CorsError::kInvalidAllowCredentials,
                           allow_credentials_header.value_or(std::string())));
     }
   }
-  return base::expected<void, CorsErrorStatus>();
+  return base::ok();
 }
 
 base::expected<void, CorsErrorStatus> CheckAccessAndReportMetrics(

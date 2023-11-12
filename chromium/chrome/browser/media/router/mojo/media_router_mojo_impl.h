@@ -18,12 +18,14 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "chrome/browser/media/router/mojo/media_router_debugger_impl.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_controller.h"
 #include "components/media_router/browser/issue_manager.h"
 #include "components/media_router/browser/logger_impl.h"
 #include "components/media_router/browser/media_router_base.h"
 #include "components/media_router/browser/media_router_debugger.h"
 #include "components/media_router/browser/media_routes_observer.h"
+#include "components/media_router/browser/mirroring_media_controller_host.h"
 #include "components/media_router/common/issue.h"
 #include "components/media_router/common/mojom/logger.mojom.h"
 #include "components/media_router/common/mojom/media_router.mojom.h"
@@ -83,6 +85,8 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   void OnUserGesture() override;
   std::vector<MediaRoute> GetCurrentRoutes() const override;
   std::unique_ptr<media::FlingingController> GetFlingingController(
+      const MediaRoute::Id& route_id) override;
+  MirroringMediaControllerHost* GetMirroringMediaControllerHost(
       const MediaRoute::Id& route_id) override;
   void GetMediaController(
       const MediaRoute::Id& route_id,
@@ -323,6 +327,7 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       const std::string& route_id,
       std::vector<mojom::RouteMessagePtr> messages) override;
   void GetLogger(mojo::PendingReceiver<mojom::Logger> receiver) override;
+  void GetDebugger(mojo::PendingReceiver<mojom::Debugger> receiver) override;
   void GetLogsAsString(GetLogsAsStringCallback callback) override;
   void GetMediaSinkServiceStatus(
       mojom::MediaRouter::GetMediaSinkServiceStatusCallback callback) override;
@@ -357,6 +362,8 @@ class MediaRouterMojoImpl : public MediaRouterBase,
 
   // Callback called by MRP's CreateMediaRouteController().
   void OnMediaControllerCreated(const MediaRoute::Id& route_id, bool success);
+
+  void AddMirroringMediaControllerHost(const MediaRoute& route);
 
   // Method for obtaining a pointer to the provider associated with the given
   // object. Returns a nullopt when such a provider is not found.
@@ -417,6 +424,9 @@ class MediaRouterMojoImpl : public MediaRouterBase,
                  std::unique_ptr<PresentationConnectionMessageObserverList>>
       message_observers_;
 
+  base::flat_map<MediaRoute::Id, std::unique_ptr<MirroringMediaControllerHost>>
+      mirroring_media_controller_hosts_;
+
   // Receivers for Mojo remotes to |this| held by media route providers.
   mojo::ReceiverSet<mojom::MediaRouter> receivers_;
 
@@ -428,7 +438,7 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   // TODO(crbug.com/1077138): Limit logging before Media Router usage.
   LoggerImpl logger_;
 
-  MediaRouterDebugger media_router_debugger_;
+  MediaRouterDebuggerImpl media_router_debugger_;
 };
 
 }  // namespace media_router

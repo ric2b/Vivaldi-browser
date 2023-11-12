@@ -11,10 +11,11 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/style/ash_color_provider.h"
 #include "ash/style/rounded_label.h"
+#include "ash/style/typography.h"
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_preview_view.h"
+#include "ash/wm/desks/templates/saved_desk_constants.h"
 #include "ash/wm/desks/templates/saved_desk_grid_view.h"
 #include "ash/wm/desks/templates/saved_desk_item_view.h"
 #include "ash/wm/desks/templates/saved_desk_name_view.h"
@@ -23,9 +24,12 @@
 #include "ash/wm/overview/overview_grid.h"
 #include "ash/wm/overview/overview_grid_event_handler.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/aura/window_targeter.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/insets.h"
@@ -41,9 +45,6 @@
 namespace ash {
 namespace {
 
-constexpr char kGridLabelFont[] = "Roboto";
-constexpr int kGridLabelFontSize = 16;
-
 // Grids use landscape mode if the available width is greater or equal to this.
 constexpr int kLandscapeMinWidth = 756;
 
@@ -53,7 +54,6 @@ constexpr gfx::Size kLabelSizePortrait = {464, 24};
 
 // "No items" label dimensions.
 constexpr gfx::Size kNoItemsLabelPadding = {16, 8};
-constexpr int kNoItemsLabelCornerRadius = 16;
 constexpr int kNoItemsLabelHeight = 32;
 
 // Between child spacing of Library page scroll content view.
@@ -131,9 +131,8 @@ std::unique_ptr<views::View> GetLabelAndGridGroupContents() {
 std::unique_ptr<views::Label> MakeGridLabel(int label_string_id) {
   auto label = std::make_unique<views::Label>(
       l10n_util::GetStringUTF16(label_string_id));
-  label->SetFontList(gfx::FontList({kGridLabelFont}, gfx::Font::NORMAL,
-                                   kGridLabelFontSize,
-                                   gfx::Font::Weight::MEDIUM));
+  TypographyProvider::Get()->StyleLabel(TypographyToken::kCrosTitle1, *label);
+  label->SetEnabledColorId(cros_tokens::kCrosSysOnSurface);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   return label;
 }
@@ -194,7 +193,7 @@ class SavedDeskLibraryWindowTargeter : public aura::WindowTargeter {
   }
 
  private:
-  SavedDeskLibraryView* const owner_;
+  const raw_ptr<SavedDeskLibraryView, ExperimentalAsh> owner_;
 };
 
 // -----------------------------------------------------------------------------
@@ -222,7 +221,7 @@ class SavedDeskLibraryEventHandler : public ui::EventHandler {
   void OnKeyEvent(ui::KeyEvent* event) override { owner_->OnKeyEvent(event); }
 
  private:
-  SavedDeskLibraryView* const owner_;
+  const raw_ptr<SavedDeskLibraryView, ExperimentalAsh> owner_;
 };
 
 // -----------------------------------------------------------------------------
@@ -310,7 +309,7 @@ SavedDeskLibraryView::SavedDeskLibraryView() {
 
     scroll_contents->AddChildView(std::move(group_contents));
   }
-  if (saved_desk_util::IsDeskSaveAndRecallEnabled()) {
+  if (saved_desk_util::IsSavedDesksEnabled()) {
     auto group_contents = GetLabelAndGridGroupContents();
     grid_labels_.push_back(group_contents->AddChildView(MakeGridLabel(
         IDS_ASH_DESKS_TEMPLATES_LIBRARY_SAVE_AND_RECALL_GRID_LABEL)));
@@ -324,7 +323,7 @@ SavedDeskLibraryView::SavedDeskLibraryView() {
   no_items_label_ =
       scroll_contents->AddChildView(std::make_unique<RoundedLabel>(
           kNoItemsLabelPadding.width(), kNoItemsLabelPadding.height(),
-          kNoItemsLabelCornerRadius, kNoItemsLabelHeight,
+          kSaveDeskCornerRadius, kNoItemsLabelHeight,
           l10n_util::GetStringUTF16(
               saved_desk_util::AreDesksTemplatesEnabled()
                   ? IDS_ASH_DESKS_TEMPLATES_LIBRARY_NO_TEMPLATES_OR_DESKS_LABEL
@@ -342,7 +341,7 @@ SavedDeskLibraryView::~SavedDeskLibraryView() {
 }
 
 SavedDeskItemView* SavedDeskLibraryView::GetItemForUUID(
-    const base::GUID& uuid) {
+    const base::Uuid& uuid) {
   for (auto* grid_view : grid_views()) {
     if (auto* item = grid_view->GetItemForUUID(uuid))
       return item;
@@ -352,7 +351,7 @@ SavedDeskItemView* SavedDeskLibraryView::GetItemForUUID(
 
 void SavedDeskLibraryView::AddOrUpdateEntries(
     const std::vector<const DeskTemplate*>& entries,
-    const base::GUID& order_first_uuid,
+    const base::Uuid& order_first_uuid,
     bool animate) {
   SavedDesks grouped = Group(entries);
   if (desk_template_grid_view_ && !grouped.desk_templates.empty()) {
@@ -367,7 +366,7 @@ void SavedDeskLibraryView::AddOrUpdateEntries(
   Layout();
 }
 
-void SavedDeskLibraryView::DeleteEntries(const std::vector<base::GUID>& uuids,
+void SavedDeskLibraryView::DeleteEntries(const std::vector<base::Uuid>& uuids,
                                          bool delete_animation) {
   if (desk_template_grid_view_)
     desk_template_grid_view_->DeleteEntries(uuids, delete_animation);
@@ -377,7 +376,7 @@ void SavedDeskLibraryView::DeleteEntries(const std::vector<base::GUID>& uuids,
   Layout();
 }
 
-void SavedDeskLibraryView::AnimateDeskLaunch(const base::GUID& uuid,
+void SavedDeskLibraryView::AnimateDeskLaunch(const base::Uuid& uuid,
                                              DeskMiniView* mini_view) {
   SavedDeskItemView* grid_item = GetItemForUUID(uuid);
   DCHECK(grid_item);
@@ -603,17 +602,6 @@ void SavedDeskLibraryView::OnKeyEvent(ui::KeyEvent* event) {
   }
   if (is_scrolling_event)
     scroll_view_->vertical_scroll_bar()->OnKeyEvent(event);
-}
-
-void SavedDeskLibraryView::OnThemeChanged() {
-  views::View::OnThemeChanged();
-
-  auto* color_provider = AshColorProvider::Get();
-  for (views::Label* label : grid_labels_) {
-    label->SetBackgroundColor(SK_ColorTRANSPARENT);
-    label->SetEnabledColor(color_provider->GetContentLayerColor(
-        AshColorProvider::ContentLayerType::kTextColorPrimary));
-  }
 }
 
 void SavedDeskLibraryView::OnWindowDestroying(aura::Window* window) {

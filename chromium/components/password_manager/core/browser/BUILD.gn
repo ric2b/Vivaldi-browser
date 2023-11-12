@@ -11,10 +11,6 @@ if (is_android) {
   import("//build/config/android/config.gni")
 }
 
-if (is_ios) {
-  import("//build/config/ios/bundle_data_from_filelist.gni")
-}
-
 config("password_reuse_detection_config") {
   defines = []
   if (!is_ios) {
@@ -179,8 +175,8 @@ static_library("browser") {
     "password_manager_constants.cc",
     "password_manager_constants.h",
     "password_manager_driver.h",
-    "password_manager_features_util.cc",
     "password_manager_features_util.h",
+    "password_manager_features_util_common.cc",
     "password_manager_interface.h",
     "password_manager_metrics_recorder.cc",
     "password_manager_metrics_recorder.h",
@@ -194,8 +190,6 @@ static_library("browser") {
     "password_notes_table.h",
     "password_requirements_service.cc",
     "password_requirements_service.h",
-    "password_reuse_detection_manager.cc",
-    "password_reuse_detection_manager.h",
     "password_reuse_detector.cc",
     "password_reuse_detector.h",
     "password_reuse_detector_consumer.cc",
@@ -299,6 +293,7 @@ static_library("browser") {
     ":password_hash_data",
     "//base",
     "//base:i18n",
+    "//build:blink_buildflags",
     "//build:branding_buildflags",
     "//build:chromeos_buildflags",
     "//components/autofill/core/browser",
@@ -309,7 +304,7 @@ static_library("browser") {
     "//components/device_reauth",
     "//components/favicon/core",
     "//components/keyed_service/core",
-    "//components/os_crypt",
+    "//components/os_crypt/sync",
     "//components/password_manager/core/browser/form_parsing",
     "//components/password_manager/core/browser/import:csv",
     "//components/password_manager/core/browser/leak_detection:leak_detection",
@@ -347,6 +342,12 @@ static_library("browser") {
     "//ui/gfx/range",
     "//url",
   ]
+
+  if (!is_android && !is_ios) {
+    sources += [ "password_manager_features_util_desktop.cc" ]
+  } else {
+    sources += [ "password_manager_features_util_mobile.cc" ]
+  }
 
   if (is_android) {
     sources += [
@@ -489,7 +490,7 @@ static_library("hash_password_manager") {
   deps = [
     ":password_hash_data",
     "//base:base",
-    "//components/os_crypt",
+    "//components/os_crypt/sync",
     "//components/password_manager/core/common",
     "//components/prefs",
   ]
@@ -589,14 +590,6 @@ static_library("test_support") {
   ]
 }
 
-if (is_ios) {
-  bundle_data_from_filelist("unit_tests_bundle_data") {
-    visibility = [ ":unit_tests" ]
-    testonly = true
-    filelist_name = "unit_tests_bundle_data.filelist"
-  }
-}
-
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -664,7 +657,6 @@ source_set("unit_tests") {
     "password_manager_util_unittest.cc",
     "password_notes_table_unittest.cc",
     "password_requirements_service_unittest.cc",
-    "password_reuse_detection_manager_unittest.cc",
     "password_reuse_detector_unittest.cc",
     "password_reuse_manager_impl_unittest.cc",
     "password_save_manager_impl_unittest.cc",
@@ -734,8 +726,8 @@ source_set("unit_tests") {
     "//components/device_reauth",
     "//components/device_reauth:test_support",
     "//components/favicon/core/test:test_support",
-    "//components/os_crypt",
-    "//components/os_crypt:test_support",
+    "//components/os_crypt/sync",
+    "//components/os_crypt/sync:test_support",
     "//components/password_manager/core/browser:affiliation_proto",
     "//components/password_manager/core/browser/form_parsing:form_parsing",
     "//components/password_manager/core/browser/form_parsing:unit_tests",
@@ -749,6 +741,7 @@ source_set("unit_tests") {
     "//components/password_manager/core/common",
     "//components/password_manager/core/common:features",
     "//components/prefs:test_support",
+    "//components/safe_browsing/core/browser/password_protection:test_support",
     "//components/safe_browsing/core/common",
     "//components/safe_browsing/core/common:safe_browsing_prefs",
     "//components/security_state/core",
@@ -792,8 +785,10 @@ source_set("unit_tests") {
       "//components/password_manager/core/browser/import:importer",
       "//components/password_manager/core/browser/import:importer_unit_tests",
     ]
-  } else {
-    deps += [ ":unit_tests_bundle_data" ]
+  }
+
+  if (is_ios) {
+    deps += [ "//components/test:password_manager_test_bundle_data" ]
   }
 
   if (is_android) {
@@ -801,7 +796,7 @@ source_set("unit_tests") {
   }
 }
 
-if (use_libfuzzer) {
+if (use_fuzzing_engine_with_lpm) {
   fuzzer_test("lookup_affiliation_response_parser_fuzzer") {
     sources = [ "affiliation/lookup_affiliation_response_parser_fuzzer.cc" ]
     deps = [
@@ -860,6 +855,7 @@ if (is_android) {
 
   fuzzable_proto_library("unified_password_manager_proto") {
     sources = [
+      "protos/list_affiliated_passwords_result.proto",
       "protos/list_passwords_result.proto",
       "protos/password_with_local_data.proto",
     ]
@@ -870,6 +866,7 @@ if (is_android) {
   proto_java_library("unified_password_manager_proto_java") {
     proto_path = "//"
     sources = [
+      "protos/list_affiliated_passwords_result.proto",
       "protos/list_passwords_result.proto",
       "protos/password_with_local_data.proto",
     ]

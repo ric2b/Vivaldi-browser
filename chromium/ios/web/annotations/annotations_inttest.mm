@@ -286,6 +286,32 @@ TEST_F(AnnotationTextManagerTest, DecorateText) {
             "</body></html>");
 }
 
+// Tests page decoration on no-decoration tags.
+// Covers: DecorateAnnotations, ConvertMatchToAnnotation.
+TEST_F(AnnotationTextManagerTest, NoDecorateText) {
+  LoadHtmlAndExtractText("<html><body>"
+                         "<p>text</p>"
+                         "<a>annotation1</a>"
+                         "<input type=\"radio\">"
+                         "<label>annotation2</label>"
+                         "<p>text</p>"
+                         "</body></html>");
+
+  std::string text = "\ntext"
+                     "annotation1"
+                     "annotation2"
+                     "\ntext";
+  EXPECT_EQ(text, observer()->extracted_text());
+
+  // Create annotation.
+  NSString* source = base::SysUTF8ToNSString(text);
+  CreateAndApplyAnnotations(source, @[ @"annotation1", @"annotation2" ],
+                            observer() -> seq_id());
+
+  EXPECT_EQ(observer()->successes(), 0);
+  EXPECT_EQ(observer()->annotations(), 2);
+}
+
 // Tests different annotation cases, including tags boundaries.
 // Covers: RemoveDecorations
 TEST_F(AnnotationTextManagerTest, DecorateTextCrossingElements) {
@@ -320,6 +346,30 @@ TEST_F(AnnotationTextManagerTest, DecorateTextCrossingElements) {
   CheckHtml(html);
 }
 
+// Tests annotation cases with line breaks, including tags boundaries.
+// Covers: DecorateAnnotations, RemoveDecorations
+TEST_F(AnnotationTextManagerTest, DecorateTextBreakElements) {
+  std::string html = "<html><body>"
+                     "<p>abc<br>\ndef</p>"
+                     "</body></html>";
+  LoadHtmlAndExtractText(html);
+  CheckHtml(html);
+
+  NSString* source = base::SysUTF8ToNSString(observer()->extracted_text());
+  CreateAndApplyAnnotations(source, @[ @"abc\n\ndef" ], observer() -> seq_id());
+
+  // Check the resulting html is annotating at the right place.
+  CheckHtml("<html><body>"
+            "<p><chrome_annotation>abc</chrome_annotation><br>"
+            "<chrome_annotation>\ndef</chrome_annotation></p>"
+            "</body></html>");
+
+  // Make sure it's back to the original.
+  auto* manager = AnnotationsTextManager::FromWebState(web_state());
+  manager->RemoveDecorations();
+  CheckHtml(html);
+}
+
 // Tests on click handler.
 // Covers: OnClick.
 TEST_F(AnnotationTextManagerTest, ClickAnnotation) {
@@ -331,7 +381,9 @@ TEST_F(AnnotationTextManagerTest, ClickAnnotation) {
   NSString* source = base::SysUTF8ToNSString(observer()->extracted_text());
   CreateAndApplyAnnotations(source, @[ @"annotation" ], observer() -> seq_id());
   ClickAnnotation(0);
-  EXPECT_EQ(observer()->clicks(), 1);
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^{
+    return observer()->clicks() == 1;
+  }));
 }
 
 }  // namespace web

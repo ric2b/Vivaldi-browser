@@ -35,6 +35,7 @@
 
 #include "base/dcheck_is_on.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/renderer/core/accessibility/axid.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -73,6 +74,7 @@ class AXObject;
 class AXObjectCacheImpl;
 class LayoutObject;
 class LocalFrameView;
+class NGAbstractInlineTextBox;
 class Node;
 class ScrollableArea;
 
@@ -327,6 +329,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool HasAOMPropertyOrARIAAttribute(AOMStringProperty,
                                      AtomicString& result) const;
   virtual AccessibleNode* GetAccessibleNode() const;
+  virtual NGAbstractInlineTextBox* GetInlineTextBox() const { return nullptr; }
 
   static void TokenVectorFromAttribute(Element* element,
                                        Vector<String>&,
@@ -464,6 +467,13 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool IsVisible() const;
   virtual bool IsVisited() const;
 
+  // Returns true if the current element is text or an image, and all
+  // the children are also plain content by this definition.
+  // TODO(https://crbug.com/1426889): return false if there are "interesting"
+  // elements in the subtree, even within a deep descendant, possibly reusing
+  // CSS :has() in order to make a performant and flexible implementation.
+  bool IsPlainContent() const;
+
   // Check whether value can be modified.
   bool CanSetValueAttribute() const;
 
@@ -506,6 +516,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // Some objects, such as table header containers, could be the children of
   // more than one object but have only one primary parent.
   bool HasIndirectChildren() const;
+  bool IsExcludedByFormControlsFilter() const;
 
   //
   // Accessible name calculation
@@ -781,7 +792,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual ax::mojom::blink::IsPopup IsPopup() const;
 
   // Heuristic to get the target popover for an invoking element.
-  AXObject* GetTargetPopoverForInvoker();
+  AXObject* GetTargetPopoverForInvoker() const;
 
   // Heuristic to get the listbox for an <input role="combobox">.
   AXObject* GetControlsListboxForTextfieldCombobox();
@@ -1144,6 +1155,10 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // 2. LayoutObject traversal. This is necessary if there is no parent node,
   // or in a pseudo element subtree.
   bool ShouldUseLayoutObjectTraversalForChildren() const;
+  // Is this a safe time to use FlatTreeTraversal in this document? Also covers
+  // use of LayoutTreeBuilderTraversal, which is used often in the accessibility
+  // module, and built on top of FlatTreeTraversal.
+  static bool CanSafelyUseFlatTreeTraversalNow(Document& document);
   virtual bool CanHaveChildren() const { return true; }
   void UpdateChildrenIfNecessary();
   bool NeedsToUpdateChildren() const;
@@ -1257,6 +1272,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool RequestSetSequentialFocusNavigationStartingPointAction();
   bool RequestSetValueAction(const String&);
   bool RequestShowContextMenuAction();
+  bool RequestExpandAction();
+  bool RequestCollapseAction();
 
   // These are actions, just like the actions above, and they allow us
   // to keep track of nodes that gain or lose accessibility focus, but
@@ -1269,6 +1286,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // event listeners. These all return true if handled.
   virtual bool OnNativeDecrementAction();
   virtual bool OnNativeClickAction();
+  virtual bool OnNativeBlurAction();
   virtual bool OnNativeFocusAction();
   virtual bool OnNativeIncrementAction();
   bool OnNativeScrollToGlobalPointAction(const gfx::Point&) const;
@@ -1281,9 +1299,11 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool OnNativeSetSequentialFocusNavigationStartingPointAction();
   virtual bool OnNativeSetValueAction(const String&);
   bool OnNativeShowContextMenuAction();
+  bool OnNativeKeyboardAction(const ax::mojom::Action action);
 
   // Notifications that this object may have changed.
-  virtual void ChildrenChangedWithCleanLayout() {}
+  // TODO(accessibility): Remove virtual -- the only override is in a unit test.
+  virtual void ChildrenChangedWithCleanLayout();
   virtual void HandleActiveDescendantChanged() {}
   virtual void HandleAutofillStateChanged(WebAXAutofillState) {}
   virtual void HandleAriaExpandedChanged() {}
@@ -1440,6 +1460,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   void SerializeTableAttributes(ui::AXNodeData* node_data);
   void SerializeUnignoredAttributes(ui::AXNodeData* node_data,
                                     ui::AXMode accessibility_mode);
+  void SerializeComputedDetailsRelation(ui::AXNodeData* node_data) const;
 
   // Serialization implemented in specific subclasses.
   virtual void SerializeMarkerAttributes(ui::AXNodeData* node_data) const;
@@ -1511,6 +1532,10 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // objects generated. Returns nullptr if a native scroll action to the node is
   // not possible.
   LayoutObject* GetLayoutObjectForNativeScrollAction() const;
+
+  void DispatchKeyboardEvent(LocalDOMWindow* local_dom_window,
+                             WebInputEvent::Type type,
+                             ax::mojom::blink::Action action) const;
 
   static unsigned number_of_live_ax_objects_;
 

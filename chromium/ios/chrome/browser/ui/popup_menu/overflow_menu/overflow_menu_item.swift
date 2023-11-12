@@ -18,52 +18,32 @@ import SwiftUI
   /// Whether the symbol is monochrome or default configuration.
   @Published public var monochromeSymbol: Bool
 
-  /// The base `UIImage` used to load the image for SwiftUI.
-  /// TODO(crbug.com/1315544): Remove this once the symbols have shipped.
-  @Published public var storedImage: UIImage
-
-  /// The SwiftUI `Image` for the action icon.
-  /// TODO(crbug.com/1315544): Remove this once the symbols have shipped.
-  public var image: Image {
-    return Image(uiImage: self.storedImage)
-  }
-
   /// The accessibility identifier for this item.
   @Published public var accessibilityIdentifier: String
 
   /// Whether the action is disabled by enterprise policy.
   @Published public var enterpriseDisabled: Bool
 
+  /// Whether the action should display the "N" IPH icon.
+  @Published public var displayNewLabelIcon: Bool
+
   /// Closure to execute when item is selected.
   @Published public var handler: () -> Void
-
-  public init(
-    name: String, image: UIImage, accessibilityIdentifier: String, enterpriseDisabled: Bool,
-    handler: @escaping () -> Void
-  ) {
-    self.name = name
-    storedImage = image
-    symbolName = ""
-    systemSymbol = false
-    monochromeSymbol = false
-    self.accessibilityIdentifier = accessibilityIdentifier
-    self.enterpriseDisabled = enterpriseDisabled
-    self.handler = handler
-  }
 
   public init(
     name: String, symbolName: String, systemSymbol: Bool, monochromeSymbol: Bool,
     accessibilityIdentifier: String,
     enterpriseDisabled: Bool,
+    displayNewLabelIcon: Bool,
     handler: @escaping () -> Void
   ) {
     self.name = name
-    self.storedImage = UIImage()
     self.symbolName = symbolName
     self.systemSymbol = systemSymbol
     self.monochromeSymbol = monochromeSymbol
     self.accessibilityIdentifier = accessibilityIdentifier
     self.enterpriseDisabled = enterpriseDisabled
+    self.displayNewLabelIcon = displayNewLabelIcon
     self.handler = handler
   }
 

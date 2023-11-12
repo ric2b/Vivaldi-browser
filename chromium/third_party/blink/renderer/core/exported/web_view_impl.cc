@@ -452,7 +452,8 @@ WebView* WebView::Create(
     bool is_hidden,
     bool is_prerendering,
     bool is_inside_portal,
-    absl::optional<mojom::blink::FencedFrameMode> fenced_frame_mode,
+    absl::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
+        fenced_frame_mode,
     bool compositing_enabled,
     bool widgets_never_composited,
     WebView* opener,
@@ -476,7 +477,8 @@ WebViewImpl* WebViewImpl::Create(
     mojom::blink::PageVisibilityState visibility,
     bool is_prerendering,
     bool is_inside_portal,
-    absl::optional<mojom::blink::FencedFrameMode> fenced_frame_mode,
+    absl::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
+        fenced_frame_mode,
     bool compositing_enabled,
     bool widgets_never_composited,
     WebViewImpl* opener,
@@ -551,7 +553,8 @@ WebViewImpl::WebViewImpl(
     mojom::blink::PageVisibilityState visibility,
     bool is_prerendering,
     bool is_inside_portal,
-    absl::optional<mojom::blink::FencedFrameMode> fenced_frame_mode,
+    absl::optional<blink::FencedFrame::DeprecatedFencedFrameMode>
+        fenced_frame_mode,
     bool does_composite,
     bool widgets_never_composited,
     WebViewImpl* opener,
@@ -599,7 +602,7 @@ WebViewImpl::WebViewImpl(
 
   if (fenced_frame_mode && features::IsFencedFramesEnabled()) {
     page_->SetIsMainFrameFencedFrameRoot();
-    page_->SetFencedFrameMode(*fenced_frame_mode);
+    page_->SetDeprecatedFencedFrameMode(*fenced_frame_mode);
   } else {
     // `fenced_frame_mode` should only be set if creating an MPArch
     // fenced frame.
@@ -1575,6 +1578,8 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   settings->SetPrimaryPointerType(prefs.primary_pointer_type);
   settings->SetAvailableHoverTypes(prefs.available_hover_types);
   settings->SetPrimaryHoverType(prefs.primary_hover_type);
+  settings->SetOutputDeviceUpdateAbilityType(
+      prefs.output_device_update_ability_type);
   settings->SetBarrelButtonForDragEnabled(prefs.barrel_button_for_drag_enabled);
 
   settings->SetEditingBehavior(prefs.editing_behavior);
@@ -1710,6 +1715,10 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
 
   settings->SetAccessibilityAlwaysShowFocus(prefs.always_show_focus);
   settings->SetAutoplayPolicy(prefs.autoplay_policy);
+  settings->SetRequireTransientActivationForGetDisplayMedia(
+      prefs.require_transient_activation_for_get_display_media);
+  settings->SetRequireTransientActivationForShowFileOrDirectoryPicker(
+      prefs.require_transient_activation_for_show_file_or_directory_picker);
   settings->SetViewportEnabled(prefs.viewport_enabled);
   settings->SetViewportMetaEnabled(prefs.viewport_meta_enabled);
   settings->SetViewportStyle(prefs.viewport_style);
@@ -1853,11 +1862,6 @@ void WebView::ApplyWebPreferences(const web_pref::WebPreferences& prefs,
   // overrides the corresponding RuntimeEnabledFeature (via its Pref).
   if (!prefs.strict_mime_type_check_for_worker_scripts_enabled) {
     RuntimeEnabledFeatures::SetStrictMimeTypesForWorkersEnabled(false);
-  }
-
-  if (features::OSKResizesVisualViewportByDefault()) {
-    RuntimeEnabledFeatures::SetViewportMetaInteractiveWidgetPropertyEnabled(
-        true);
   }
 }
 
@@ -3367,24 +3371,41 @@ void WebViewImpl::ActivatePrerenderedPage(
   // prerenderchange event and post-prerendering activation steps on each
   // document, which could mutate the frame tree and make iteration over it
   // complicated.
-  HeapVector<Member<Document>> documents;
+  HeapVector<Member<Document>> child_frame_documents;
+  Member<Document> main_frame_document;
+  if (auto* local_frame = DynamicTo<LocalFrame>(GetPage()->MainFrame())) {
+    main_frame_document = local_frame->GetDocument();
+  }
+
   for (Frame* frame = GetPage()->MainFrame(); frame;
        frame = frame->Tree().TraverseNext()) {
-    if (auto* local_frame = DynamicTo<LocalFrame>(frame))
-      documents.push_back(local_frame->GetDocument());
+    if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
+      if (local_frame->GetDocument() != main_frame_document) {
+        child_frame_documents.push_back(local_frame->GetDocument());
+      }
+    }
   }
 
   // A null `activation_start` is sent to the WebViewImpl that does not host the
   // main frame, in which case we expect that it does not have any documents
   // since cross-origin documents are not loaded during prerendering.
-  DCHECK(documents.size() == 0 ||
+  DCHECK((!main_frame_document && child_frame_documents.size() == 0) ||
          !prerender_page_activation_params->activation_start.is_null());
+  // We also only send view_transition_state to the main frame.
+  DCHECK(main_frame_document ||
+         !prerender_page_activation_params->view_transition_state);
+
+  if (main_frame_document) {
+    main_frame_document->ActivateForPrerendering(
+        *prerender_page_activation_params);
+    prerender_page_activation_params->view_transition_state.reset();
+  }
 
   // While the spec says to post a task on the networking task source for each
   // document, we don't post a task here for simplicity. This allows dispatching
   // the event on all documents without a chance for other IPCs from the browser
   // to arrive in the intervening time, resulting in an unclear state.
-  for (auto& document : documents) {
+  for (auto& document : child_frame_documents) {
     document->ActivateForPrerendering(*prerender_page_activation_params);
   }
 
@@ -3817,7 +3838,6 @@ void WebViewImpl::ApplyViewportChanges(const ApplyViewportChangesArgs& args) {
 
   if (args.page_scale_delta != 1) {
     double_tap_zoom_pending_ = false;
-    visual_viewport.UserDidChangeScale();
   }
 
   elastic_overscroll_ += args.elastic_overscroll_delta;

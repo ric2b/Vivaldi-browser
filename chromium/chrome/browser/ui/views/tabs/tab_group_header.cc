@@ -65,6 +65,7 @@
 
 namespace {
 
+// The amount of padding between the label and the sync icon.
 constexpr int kSyncIconPaddingFromLabel = 4;
 
 class TabGroupHighlightPathGenerator : public views::HighlightPathGenerator {
@@ -94,9 +95,9 @@ class TabGroupHighlightPathGenerator : public views::HighlightPathGenerator {
 
 }  // namespace
 
-TabGroupHeader::TabGroupHeader(TabSlotController &tab_slot_controller,
-                               const tab_groups::TabGroupId &group,
-                               const TabGroupStyle &style)
+TabGroupHeader::TabGroupHeader(TabSlotController& tab_slot_controller,
+                               const tab_groups::TabGroupId& group,
+                               const TabGroupStyle& style)
     : tab_slot_controller_(tab_slot_controller),
       title_chip_(AddChildView(std::make_unique<views::View>())),
       title_(title_chip_->AddChildView(std::make_unique<views::Label>())),
@@ -107,7 +108,9 @@ TabGroupHeader::TabGroupHeader(TabSlotController &tab_slot_controller,
               ? SavedTabGroupServiceFactory::GetForProfile(
                     tab_slot_controller_->GetBrowser()->profile())
               : nullptr),
-      style_(style), editor_bubble_tracker_(tab_slot_controller) {
+      group_style_(style),
+      tab_style_(TabStyle::Get()),
+      editor_bubble_tracker_(tab_slot_controller) {
   set_group(group);
   set_context_menu_controller(this);
 
@@ -129,8 +132,8 @@ TabGroupHeader::TabGroupHeader(TabSlotController &tab_slot_controller,
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   views::FocusRing::Install(this);
   views::HighlightPathGenerator::Install(
-      this, std::make_unique<TabGroupHighlightPathGenerator>(title_chip_,
-                                                             title_, *style_));
+      this, std::make_unique<TabGroupHighlightPathGenerator>(
+                title_chip_, title_, *group_style_));
   // The tab group gets painted with a solid color that may not contrast well
   // with the focus indicator, so draw an outline around the focus ring for it
   // to contrast with the solid color.
@@ -188,8 +191,9 @@ bool TabGroupHeader::OnMousePressed(const ui::MouseEvent& event) {
   // the actual widget destruction happens in a posted task. That task
   // gets run after we receive the mouse event. If this sounds brittle,
   // that's because it is!
-  if (editor_bubble_tracker_.is_open())
+  if (editor_bubble_tracker_.is_open()) {
     return false;
+  }
 
   // Allow a right click from touch to drag, which corresponds to a long click.
   if (event.IsOnlyLeftMouseButton() ||
@@ -344,8 +348,9 @@ void TabGroupHeader::ShowContextMenuForViewImpl(
     views::View* source,
     const gfx::Point& point,
     ui::MenuSourceType source_type) {
-  if (editor_bubble_tracker_.is_open())
+  if (editor_bubble_tracker_.is_open()) {
     return;
+  }
 
   // When the context menu is triggered via keyboard, the keyboard event
   // propagates to the textfield inside the Editor Bubble. In those cases, we
@@ -386,7 +391,7 @@ bool TabGroupHeader::DoesIntersectRect(const views::View* target,
   // The distance from the endge of the view to the tab separator is half of the
   // overlap distance. We should only accept events between the separators.
   gfx::Rect contents_rect = GetLocalBounds();
-  contents_rect.Inset(gfx::Insets::VH(0, TabStyle::GetTabOverlap() / 2));
+  contents_rect.Inset(gfx::Insets::VH(0, tab_style_->GetTabOverlap() / 2));
   return contents_rect.Intersects(rect);
 }
 
@@ -395,15 +400,16 @@ int TabGroupHeader::GetDesiredWidth() const {
   // match the left margin. The left margin is always the group stroke inset.
   // Using these values also guarantees the chip aligns with the collapsed
   // stroke.
-  if (tab_slot_controller_->IsGroupCollapsed(group().value()))
+  if (tab_slot_controller_->IsGroupCollapsed(group().value())) {
     return title_chip_->width() + 2 * TabGroupUnderline::GetStrokeInset();
+  }
 
   // We don't want tabs to visually overlap group headers, so we add that space
   // to the width to compensate. We don't want to actually remove the overlap
   // during layout however; that would cause an the margin to be visually uneven
   // when the header is in the first slot and thus wouldn't overlap anything to
   // the left.
-  const int overlap_margin = TabStyle::GetTabOverlap() * 2;
+  const int overlap_margin = tab_style_->GetTabOverlap() * 2;
 
   // The empty and non-empty chips have different sizes and corner radii, but
   // both should look nestled against the group stroke of the tab to the right.
@@ -414,7 +420,7 @@ int TabGroupHeader::GetDesiredWidth() const {
   const std::u16string title =
       tab_slot_controller_->GetGroupTitle(group().value());
   const int right_adjust =
-      style_->GetTitleAdjustmentToTabGroupHeaderDesiredWidth(title);
+      group_style_->GetTitleAdjustmentToTabGroupHeaderDesiredWidth(title);
 
   return overlap_margin + title_chip_->width() + right_adjust;
 }
@@ -432,20 +438,21 @@ void TabGroupHeader::VisualsChanged() {
   if (ShouldShowSyncIcon()) {
     sync_icon_->SetImage(ui::ImageModel::FromVectorIcon(
         kTabGroupsSyncIcon, color_utils::GetColorWithMaxContrast(color),
-        style_->GetSyncIconWidth()));
+        group_style_->GetSyncIconWidth()));
   }
 
   sync_icon_->SetVisible(ShouldShowSyncIcon());
 
   if (title.empty()) {
-    title_chip_->SetBoundsRect(style_->GetEmptyTitleChipBounds(this));
-    title_chip_->SetBackground(style_->GetEmptyTitleChipBackground(color));
+    title_chip_->SetBoundsRect(group_style_->GetEmptyTitleChipBounds(this));
+    title_chip_->SetBackground(
+        group_style_->GetEmptyTitleChipBackground(color));
 
     if (ShouldShowSyncIcon()) {
       // The `sync_icon` should be centered in the title chip.
       gfx::Rect sync_icon_bounds = title_chip_->GetLocalBounds();
-      sync_icon_bounds.ClampToCenteredSize(
-          gfx::Size(style_->GetSyncIconWidth(), style_->GetSyncIconWidth()));
+      sync_icon_bounds.ClampToCenteredSize(gfx::Size(
+          group_style_->GetSyncIconWidth(), group_style_->GetSyncIconWidth()));
       sync_icon_->SetBoundsRect(sync_icon_bounds);
     } else {
       sync_icon_->SetBounds(0, 0, 0, 0);
@@ -466,7 +473,7 @@ void TabGroupHeader::VisualsChanged() {
 
     const gfx::Size sync_icon_size =
         ShouldShowSyncIcon()
-            ? gfx::Size(style_->GetSyncIconWidth(), text_height)
+            ? gfx::Size(group_style_->GetSyncIconWidth(), text_height)
             : gfx::Size();
 
     const int padding_between_label_sync_icon =
@@ -475,7 +482,7 @@ void TabGroupHeader::VisualsChanged() {
     // The max width of the content should be half the standard tab width (not
     // counting overlap).
     const int text_max_width =
-        (TabStyle::GetStandardWidth() - TabStyle::GetTabOverlap()) / 2 -
+        (tab_style_->GetStandardWidth() - tab_style_->GetTabOverlap()) / 2 -
         sync_icon_size.width() - padding_between_label_sync_icon;
 
     const int text_width =
@@ -487,13 +494,14 @@ void TabGroupHeader::VisualsChanged() {
         text_width + sync_icon_size.width() + padding_between_label_sync_icon;
 
     // horizontal and vertical insets of the title chip.
-    const gfx::Insets title_chip_insets = style_->GetInsetsForHeaderChip();
+    const gfx::Insets title_chip_insets =
+        group_style_->GetInsetsForHeaderChip();
     const int title_chip_vertical_inset = title_chip_insets.top();
     const int title_chip_horizontal_inset = title_chip_insets.left();
 
     // Width of title chip should atleast be the width of an empty title chip.
     const int title_chip_width =
-        std::max(style_->GetEmptyTitleChipBounds(this).width(),
+        std::max(group_style_->GetEmptyTitleChipBounds(this).width(),
                  content_width + 2 * title_chip_horizontal_inset);
 
     // The bounds and background for the `title_chip_` is set here.
@@ -509,17 +517,17 @@ void TabGroupHeader::VisualsChanged() {
     // Bounds and background of the `title_` and the `sync_icon` are set here.
     // Cannot use `title_chip_horizontal_inset` as x coordinate in the case
     // `title_chip_width` is the width of an empty title chip.
-    const int start_of_title = (title_chip_->width() - content_width) / 2;
-    title_->SetBounds(start_of_title, title_chip_vertical_inset, text_width,
-                      text_height);
-    sync_icon_->SetBounds(
-        start_of_title + text_width + padding_between_label_sync_icon,
-        title_chip_vertical_inset, sync_icon_size.width(),
-        sync_icon_size.height());
+    const int start_of_sync_icon = (title_chip_->width() - content_width) / 2;
+    sync_icon_->SetBounds(start_of_sync_icon, title_chip_vertical_inset,
+                          sync_icon_size.width(), text_height);
+    title_->SetBounds(start_of_sync_icon + sync_icon_size.width() +
+                          padding_between_label_sync_icon,
+                      title_chip_vertical_inset, text_width, text_height);
   }
 
-  if (views::FocusRing::Get(this))
+  if (views::FocusRing::Get(this)) {
     views::FocusRing::Get(this)->Layout();
+  }
 
   const bool collapsed_state =
       tab_slot_controller_->IsGroupCollapsed(group().value());
@@ -536,9 +544,11 @@ void TabGroupHeader::VisualsChanged() {
 
 int TabGroupHeader::GetCollapsedHeaderWidth() const {
   const int title_adjustment =
-      style_->GetTitleAdjustmentToTabGroupHeaderDesiredWidth(title_->GetText());
+      group_style_->GetTitleAdjustmentToTabGroupHeaderDesiredWidth(
+          title_->GetText());
   const int title_chip_width = GetTabSizeInfo().standard_width -
-                               2 * TabStyle::GetTabOverlap() - title_adjustment;
+                               2 * tab_style_->GetTabOverlap() -
+                               title_adjustment;
   return title_chip_width + 2 * TabGroupUnderline::GetStrokeInset();
 }
 

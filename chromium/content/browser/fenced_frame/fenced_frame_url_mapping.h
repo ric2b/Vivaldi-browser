@@ -12,15 +12,21 @@
 
 #include "base/containers/flat_map.h"
 #include "base/functional/callback_forward.h"
-#include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/types/id_type.h"
 #include "content/browser/fenced_frame/fenced_frame_config.h"
 #include "content/browser/fenced_frame/fenced_frame_reporter.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
-#include "url/origin.h"
+
+namespace blink {
+
+struct AdDescriptor;
+struct AdSize;
+
+}  // namespace blink
 
 namespace content {
 
@@ -36,6 +42,9 @@ using SharedStorageReportingMap = base::flat_map<std::string, ::GURL>;
 // 2. finalizing the pending config.
 class CONTENT_EXPORT FencedFrameURLMapping {
  public:
+  // A unique id for each instance of this class.
+  using Id = base::IdTypeU64<FencedFrameURLMapping>;
+
   // The runURLSelectionOperation's url mapping result. It contains the mapped
   // url, the `SharedStorageBudgetMetadata`, and a FencedFrameReporter.
   struct CONTENT_EXPORT SharedStorageURNMappingResult {
@@ -90,10 +99,11 @@ class CONTENT_EXPORT FencedFrameURLMapping {
   blink::FencedFrame::RedactedFencedFrameConfig
   AssignFencedFrameURLAndInterestGroupInfo(
       const GURL& urn_uuid,
-      const GURL& url,
+      absl::optional<blink::AdSize> container_size,
+      const blink::AdDescriptor& ad_descriptor,
       AdAuctionData auction_data,
       base::RepeatingClosure on_navigate_callback,
-      std::vector<GURL> ad_component_urls,
+      std::vector<blink::AdDescriptor> ad_component_descriptors,
       scoped_refptr<FencedFrameReporter> fenced_frame_reporter = nullptr);
 
   // Generate a URN that is not yet mapped to a URL.
@@ -173,6 +183,8 @@ class CONTENT_EXPORT FencedFrameURLMapping {
       const GURL& urn_uuid,
       const std::vector<std::pair<std::string, std::string>>& substitutions);
 
+  Id unique_id() { return unique_id_; }
+
  private:
   friend class FencedFrameURLMappingTestPeer;
 
@@ -180,6 +192,9 @@ class CONTENT_EXPORT FencedFrameURLMapping {
 
   // The maximum number of urn mappings.
   static constexpr size_t kMaxUrnMappingSize = 65536;
+
+  // Generates the next unique id for instances of this class.
+  static Id GetNextId();
 
   // Adds an entry to `urn_uuid_to_url_map_` for `url`, generating a unique URN
   // as the key. Insertion fails if number of entries has reached the limit.
@@ -199,6 +214,8 @@ class CONTENT_EXPORT FencedFrameURLMapping {
   // observers to be notified when the mapping decision is made.
   std::map<GURL, std::set<raw_ptr<MappingResultObserver>>>
       pending_urn_uuid_to_url_map_;
+
+  const Id unique_id_;
 };
 
 }  // namespace content

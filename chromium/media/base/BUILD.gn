@@ -35,6 +35,7 @@ source_set("base") {
 
   if (is_win) {
     visibility += [ "//media/base/win:color_space_util_win" ]
+    visibility += [ "//media/base/win:media_foundation_util" ]
   }
 
   if (is_android) {
@@ -43,6 +44,8 @@ source_set("base") {
   }
 
   sources = [
+    "amplitude_peak_detector.cc",
+    "amplitude_peak_detector.h",
     "android_overlay_config.cc",
     "android_overlay_config.h",
     "android_overlay_mojo_factory.h",
@@ -96,7 +99,6 @@ source_set("base") {
     "audio_shifter.h",
     "audio_timestamp_helper.cc",
     "audio_timestamp_helper.h",
-    "bind_to_current_loop.h",
     "bit_reader.cc",
     "bit_reader.h",
     "bit_reader_core.cc",
@@ -559,6 +561,7 @@ static_library("test_support") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "amplitude_peak_detector_unittest.cc",
     "audio_block_fifo_unittest.cc",
     "audio_buffer_converter_unittest.cc",
     "audio_buffer_queue_unittest.cc",
@@ -663,7 +666,7 @@ source_set("unit_tests") {
   if (is_win) {
     sources += [ "win/dxgi_device_scope_handle_unittest.cc" ]
     deps += [
-      "//media/base/win:media_foundation_util",
+      "//media",
       "//ui/events:test_support",
     ]
     libs = [

@@ -44,12 +44,16 @@ void MergeAllDependentConfigsFrom(const Target* from_target,
 }
 
 Err MakeTestOnlyError(const Item* from, const Item* to) {
+  bool with_toolchain = from->settings()->ShouldShowToolchain({
+    &from->label(),
+    &to->label(),
+  });
   return Err(
       from->defined_from(), "Test-only dependency not allowed.",
-      from->label().GetUserVisibleName(false) +
+      from->label().GetUserVisibleName(with_toolchain) +
           "\n"
           "which is NOT marked testonly can't depend on\n" +
-          to->label().GetUserVisibleName(false) +
+          to->label().GetUserVisibleName(with_toolchain) +
           "\n"
           "which is marked testonly. Only targets with \"testonly = true\"\n"
           "can depend on other test-only targets.\n"
@@ -1082,19 +1086,24 @@ bool Target::ResolvePrecompiledHeaders(Err* err) {
       // Already have a precompiled header values, the settings must match.
       if (config_values_->precompiled_header() != cur.precompiled_header() ||
           config_values_->precompiled_source() != cur.precompiled_source()) {
+        bool with_toolchain = settings()->ShouldShowToolchain({
+          &label(),
+          pch_header_settings_from,
+          &config->label(),
+        });
         *err = Err(
             defined_from(), "Precompiled header setting conflict.",
-            "The target " + label().GetUserVisibleName(false) +
+            "The target " + label().GetUserVisibleName(with_toolchain) +
                 "\n"
                 "has conflicting precompiled header settings.\n"
                 "\n"
                 "From " +
-                pch_header_settings_from->GetUserVisibleName(false) +
+                pch_header_settings_from->GetUserVisibleName(with_toolchain) +
                 "\n  header: " + config_values_->precompiled_header() +
                 "\n  source: " + config_values_->precompiled_source().value() +
                 "\n\n"
                 "From " +
-                config->label().GetUserVisibleName(false) +
+                config->label().GetUserVisibleName(with_toolchain) +
                 "\n  header: " + cur.precompiled_header() +
                 "\n  source: " + cur.precompiled_source().value());
         return false;
@@ -1131,7 +1140,7 @@ bool Target::CheckSourceSetLanguages(Err* err) const {
   if (output_type() == Target::SOURCE_SET &&
       source_types_used().RustSourceUsed()) {
     *err = Err(defined_from(), "source_set contained Rust code.",
-               label().GetUserVisibleName(false) +
+               label().GetUserVisibleName(!settings()->is_default()) +
                    " has Rust code. Only C/C++ source_sets are supported.");
     return false;
   }
@@ -1177,7 +1186,7 @@ bool Target::CheckAssertNoDeps(Err* err) const {
                                   &failure_path_str, &failure_pattern)) {
     *err = Err(
         defined_from(), "assert_no_deps failed.",
-        label().GetUserVisibleName(false) +
+        label().GetUserVisibleName(!settings()->is_default()) +
             " has an assert_no_deps entry:\n  " + failure_pattern->Describe() +
             "\nwhich fails for the dependency path:\n" + failure_path_str);
     return false;

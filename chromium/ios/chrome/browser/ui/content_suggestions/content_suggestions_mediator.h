@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_gesture_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_consumer.h"
-#import "ios/chrome/browser/ui/content_suggestions/start_suggest_service_response_bridge.h"
 #import "ios/chrome/browser/ui/start_surface/start_surface_recent_tab_removal_observer_bridge.h"
 
 namespace favicon {
@@ -31,9 +30,12 @@ class PrefRegistrySyncable;
 @protocol ApplicationCommands;
 class Browser;
 @protocol BrowserCoordinatorCommands;
+@class ContentSuggestionsMetricsRecorder;
 @protocol FeedDelegate;
 class GURL;
 class LargeIconCache;
+@protocol NewTabPageMetricsDelegate;
+class PromosManager;
 class ReadingListModel;
 @protocol SnackbarCommands;
 class WebStateList;
@@ -42,8 +44,7 @@ class WebStateList;
 @interface ContentSuggestionsMediator
     : NSObject <ContentSuggestionsCommands,
                 ContentSuggestionsGestureCommands,
-                StartSurfaceRecentTabObserving,
-                StartSuggestServiceResponseDelegating>
+                StartSurfaceRecentTabObserving>
 
 // Default initializer.
 - (instancetype)
@@ -77,14 +78,22 @@ class WebStateList;
 // The consumer that will be notified when the data change.
 @property(nonatomic, weak) id<ContentSuggestionsConsumer> consumer;
 
-// YES if the Start Surface is being shown.
-@property(nonatomic, assign) BOOL showingStartSurface;
-
 // WebStateList associated with this mediator.
 @property(nonatomic, assign) WebStateList* webStateList;
 
 // The web state associated with this NTP.
 @property(nonatomic, assign) web::WebState* webState;
+
+// The promos manager to alert if the user uses What's New.
+@property(nonatomic, assign) PromosManager* promosManager;
+
+// Delegate for reporting content suggestions actions to the NTP metrics
+// recorder.
+@property(nonatomic, weak) id<NewTabPageMetricsDelegate> NTPMetricsDelegate;
+
+// Recorder for content suggestions metrics.
+@property(nonatomic, assign)
+    ContentSuggestionsMetricsRecorder* contentSuggestionsMetricsRecorder;
 
 // Disconnects the mediator.
 - (void)disconnect;

@@ -22,6 +22,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.MutableFlagWithSafeDefault;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
 import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
@@ -184,6 +185,17 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     protected String mUrlForDisplay;
     private boolean mOmniboxUpdatedConnectionSecurityIndicatorsEnabled;
 
+    // notifyUrlChanged and notifySecurityStateChanged are usually called 3 times across a same
+    // document navigation. The first call is usually necessary, which updates the UrlBar to reflect
+    // the new url. All subsequent calls are spurious and can be avoided. This experiment involves
+    // using the flags below to short circuit all calls after the UrlBar has already been updated.
+    private static final MutableFlagWithSafeDefault sSameDocOptimizationsFlag =
+            new MutableFlagWithSafeDefault(
+                    ChromeFeatureList.REDUCE_TOOLBAR_UPDATES_FOR_SAME_DOC_NAVIGATIONS, false);
+    private boolean mIsInSameDocNav;
+    private boolean mAlreadyUpdatedUrlBarForSameDocNav;
+    private boolean mAlreadyChangedSecurityStateForSameDocNav;
+
     /**
      * Default constructor for this class.
      * @param context The Context used for styling the toolbar visuals.
@@ -339,11 +351,21 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     }
 
     public void notifyUrlChanged() {
-        if (!updateVisibleGurl()) return;
-        // Url has changed, propagate it.
+        if (shouldDoSameDocOptimzations() && mAlreadyUpdatedUrlBarForSameDocNav) {
+            return;
+        }
 
+        if (!updateVisibleGurl()) {
+            return;
+        }
+
+        // Url has changed, propagate it.
         for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
             observer.onUrlChanged();
+        }
+
+        if (isSameDocOptimizationEnabled()) {
+            mAlreadyUpdatedUrlBarForSameDocNav = mIsInSameDocNav;
         }
     }
 
@@ -774,6 +796,10 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     }
 
     public void notifySecurityStateChanged() {
+        if (shouldDoSameDocOptimzations() && mAlreadyChangedSecurityStateForSameDocNav) {
+            return;
+        }
+
         @ConnectionSecurityLevel
         int securityLevel = getSecurityLevel();
         if (securityLevel == ConnectionSecurityLevel.DANGEROUS) {
@@ -782,6 +808,10 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
 
         for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
             observer.onSecurityStateChanged();
+        }
+
+        if (isSameDocOptimizationEnabled()) {
+            mAlreadyChangedSecurityStateForSameDocNav = mIsInSameDocNav;
         }
     }
 
@@ -854,6 +884,43 @@ public class LocationBarModel implements ToolbarDataProvider, LocationBarDataPro
     public void setStartSurfaceState(@StartSurfaceState int startSurfaceState) {
         mStartSurfaceState = startSurfaceState;
         notifyUrlChanged();
+    }
+
+    public void notifyDidStartNavigation(boolean isSameDocument) {
+        if (isSameDocOptimizationEnabled()) {
+            resetSameDocNavFlags();
+            mIsInSameDocNav = isSameDocument;
+        }
+    }
+
+    public void notifyDidFinishNavigationEnd() {
+        resetSameDocNavFlags();
+    }
+
+    public void notifyOnCrash() {
+        resetSameDocNavFlags();
+    }
+
+    public void notifyContentChanged() {
+        resetSameDocNavFlags();
+    }
+
+    public void notifyWebContentsSwapped() {
+        resetSameDocNavFlags();
+    }
+
+    public boolean shouldDoSameDocOptimzations() {
+        return isSameDocOptimizationEnabled() && mIsInSameDocNav;
+    }
+
+    private boolean isSameDocOptimizationEnabled() {
+        return sSameDocOptimizationsFlag.isEnabled();
+    }
+
+    private void resetSameDocNavFlags() {
+        mIsInSameDocNav = false;
+        mAlreadyUpdatedUrlBarForSameDocNav = false;
+        mAlreadyChangedSecurityStateForSameDocNav = false;
     }
 
     @NativeMethods

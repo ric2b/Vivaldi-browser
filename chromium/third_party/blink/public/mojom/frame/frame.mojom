@@ -13,8 +13,12 @@ import "mojo/public/mojom/base/values.mojom";
 import "services/network/public/mojom/content_security_policy.mojom";
 import "services/network/public/mojom/cross_origin_opener_policy.mojom";
 import "services/network/public/mojom/fetch_api.mojom";
+import "services/network/public/mojom/load_timing_info.mojom";
+import "services/network/public/mojom/network_types.mojom";
 import "services/network/public/mojom/source_location.mojom";
+import "services/network/public/mojom/url_loader_completion_status.mojom";
 import "skia/public/mojom/skcolor.mojom";
+import "skia/public/mojom/skcolor4f.mojom";
 import "third_party/blink/public/mojom/blob/blob.mojom";
 import "third_party/blink/public/mojom/blob/blob_url_store.mojom";
 import "third_party/blink/public/mojom/choosers/popup_menu.mojom";
@@ -183,6 +187,8 @@ struct IframeAttributes {
   network.mojom.ContentSecurityPolicy? parsed_csp_attribute;
   // 'credentialless' attribute of the iframe.
   bool credentialless;
+  // 'browsingtopics' attribute of the iframe.
+  bool browsing_topics;
   // 'id' attribute of the iframe. This can be optional because id might not be set.
   string? id;
   // 'name' attribute of the iframe. This is different from window.name, which is
@@ -267,7 +273,7 @@ interface LocalFrameHost {
   // Notifies the browser that the associated frame has changed its computed CSS
   // background color. This will be called on main-frames only.
   // |color_adjust| is true if the background is forced by color adjustments.
-  DidChangeBackgroundColor(skia.mojom.SkColor background_color, bool color_adjust);
+  DidChangeBackgroundColor(skia.mojom.SkColor4f background_color, bool color_adjust);
 
   // Sent when the renderer fails to load with |error_code| which means a net
   // error code.
@@ -308,6 +314,12 @@ interface LocalFrameHost {
   // process.
   BubbleLogicalScrollInParentFrame(ScrollDirection direction,
                                    ui.mojom.ScrollGranularity granularity);
+
+  // Sent by the renderer to indicate that a same document navigation
+  // commit was requested, but was deferred by script via the NavigationApi. The
+  // browser should show loading UI while waiting for the script to undefer and
+  // allow the commit to proceed.
+  StartLoadingForAsyncNavigationApiCommit();
 
   // Indicates an attempt by the associated frame to navigate from the
   // |initiator_url| to the |blocked_url|, but the navigation was
@@ -433,14 +445,20 @@ interface LocalFrameHost {
   // Initiates a download based on user actions like 'ALT+click'.
   DownloadURL(DownloadURLParams params);
 
-  // Sent to the browser when focus changes inside the frame. The first
-  // parameter says whether the newly focused element needs keyboard input
-  // (true for textfields, text areas and content editable divs).
-  // The second parameter is the newly focused element's bounds relative to
-  // local root's view, and it will be an empty bounds if there is no focused
-  // element.
+  // Sent to the browser when focus changes inside the frame.
+  // - is_editable_element: Whether the newly focused element needs
+  //   keyboard input (true for textfields, text areas and content
+  //   editable divs).
+  // - is_richly_editable_element: Whether the newly focused element
+  //   is richly editable (true for content editable divs).
+  // - bounds_in_frame_widget: The newly focused element's bounds
+  //   relative to local root's view, and it will be an empty bounds
+  //   if there is no focused element.
+  // - foucus_type: Focus type.
   FocusedElementChanged(bool is_editable_element,
-                        gfx.mojom.Rect bounds_in_frame_widget, blink.mojom.FocusType focus_type);
+                        bool is_richly_editable_element,
+                        gfx.mojom.Rect bounds_in_frame_widget,
+                        blink.mojom.FocusType focus_type);
 
   // Notification that the text selection has changed.
   // Note: The second parameter is the character based offset of the
@@ -580,20 +598,26 @@ interface LocalFrameHost {
   // A document in a fenced frame can invoke the reportEvent API to request the
   // browser to send `eventData` in a beacon toward the URL registered against
   // `eventType` by the worklet in registerAdBeacon. Depending on the declared
-  // `destination`, the beacon is sent to either the buyer's or the seller's
+  // `destination`, the beacon is sent to the reporting destination's
   // registered URL.
+  // Note the `destination` above is a WebIDL sequence, which means it may
+  // contain multiple destinations. It is forwarded as a collection in a single
+  // IPC call, instead of making an IPC call for each destination.
+  // For the list of available reporting destinations, see enum
+  // ReportingDestination defined in:
+  // third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom
   SendFencedFrameReportingBeacon(string event_data,
                                  string event_type,
-                                 ReportingDestination destination);
+                                 array<ReportingDestination> destinations);
 
   // Fenced frames can send beacons automatically when an event happens.
   //
   // For now, only "reserved.top_navigation" is supported. The `event_data` is
-  // installed in the RenderFrameHost and will be sent toward `destination` on
+  // installed in the RenderFrameHost and will be sent toward `destinations` on
   // the next cross-document top-frame navigation.
   SetFencedFrameAutomaticBeaconReportEventData(
       string event_data,
-      array<ReportingDestination> destination);
+      array<ReportingDestination> destinations);
 
   // See:
   // https://github.com/WICG/turtledove/blob/main/FLEDGE_extended_PA_reporting.md
@@ -648,7 +672,6 @@ interface LocalFrameHost {
   CreateFencedFrame(
       pending_associated_receiver<blink.mojom.FencedFrameOwnerHost>
         fenced_frame,
-      blink.mojom.FencedFrameMode mode,
       RemoteFrameInterfacesFromRenderer remote_frame_interfaces,
       blink.mojom.RemoteFrameToken frame_token,
       mojo_base.mojom.UnguessableToken devtools_frame_token);
@@ -694,22 +717,6 @@ interface LocalFrame {
   GetTextSurroundingSelection(uint32 max_length)
       => (mojo_base.mojom.String16 content, uint32 start_offset,
           uint32 end_offset);
-
-  // Report ResourceTiming information about cancelled navigation in iframe
-  // initiated from this document. This is required to prevent revealing
-  // information about the status codes to the parent frame. (See crbug.com/1346924)
-  //
-  // Example of cancelled navigations:
-  // - 204 - No Content
-  // - 205 - Reset Content
-  // - Extension blocking navigation (e.g. Ad blocker)
-  // - etc
-  //
-  // |parent_frame_element_type| is used on the blink side to determine the
-  // 'initiator_type' of the entry.
-  AddResourceTimingEntryFromNonNavigatedFrame(
-    ResourceTimingInfo timing,
-    blink.mojom.FrameOwnerElementType parent_frame_element_type);
 
   // Creates an intervention report in the frame with contents |id| and
   // |message|, returns once the report has been queued. |id| identifies the
@@ -791,13 +798,6 @@ interface LocalFrame {
   // This is only used for <object> elements that failed a navigation with a
   // network error.
   RenderFallbackContent();
-
-  // Sent to this frame in parent frame's process to render fallback contents.
-  // This is only used for <object> elements that failed a navigation with an
-  // HTTP error.
-  RenderFallbackContentWithResourceTiming(
-      ResourceTimingInfo timing,
-      string server_timing_value);
 
   // Instructs the frame to invoke the beforeunload event handler.
   //
@@ -993,6 +993,31 @@ interface LocalFrame {
   // See https://drafts.csswg.org/css-view-transitions-1/ for details.
   SnapshotDocumentForViewTransition() => (
       blink.mojom.ViewTransitionState view_transition_state);
+
+  // Allows the browser to add a resource timing entry for a subframe
+  // navigation that has failed before committing - a non-ok object navigation
+  // or a no-content response (204/205).
+  AddResourceTimingEntryForFailedSubframeNavigation(
+    blink.mojom.FrameToken subframe_token,
+    url.mojom.Url initial_url,
+    mojo_base.mojom.TimeTicks start_time,
+    mojo_base.mojom.TimeTicks redirect_time,
+    mojo_base.mojom.TimeTicks request_start,
+    mojo_base.mojom.TimeTicks response_start,
+    uint32 response_code,
+    string mime_type,
+    network.mojom.LoadTimingInfo load_timing_info,
+    network.mojom.ConnectionInfo connection_info,
+    string alpn_negotiated_protocol,
+    bool is_secure_transport,
+    bool is_validated,
+    string normalized_server_timing,
+    network.mojom.URLLoaderCompletionStatus completion_status
+  );
+
+  // The browser requests the renderer to fullscreen the document element.
+  // See: https://chromestatus.com/feature/6002307972464640
+  RequestFullscreenDocumentElement();
 };
 
 // Also implemented in Blink, this interface defines frame-specific methods

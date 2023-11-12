@@ -17,8 +17,8 @@
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_bridge_observer.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
@@ -165,7 +165,8 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
         _browser->GetBrowserState()->GetOriginalChromeBrowserState();
     _faviconLoader =
         IOSChromeFaviconLoaderFactory::GetForBrowserState(_browserState);
-    _bookmarks = ios::BookmarkModelFactory::GetForBrowserState(_browserState);
+    _bookmarks = ios::LocalOrSyncableBookmarkModelFactory::
+                      GetForBrowserState(_browserState);
     _bridge.reset(new BookmarkModelBridge(self, _bookmarks));
   }
   return self;
@@ -919,7 +920,7 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
 
 #pragma mark - BOOKMARK MODEL OBSERVER
 
-- (void)bookmarkModelLoaded {
+- (void)bookmarkModelLoaded:(bookmarks::BookmarkModel*)model {
   // If the view hasn't loaded yet, then return early. The eventual call to
   // viewDidLoad will properly initialize the views.  This early return must
   // come *after* the call to setRootNode above.
@@ -928,26 +929,30 @@ targetContentOffsetForProposedContentOffset:(CGPoint)proposedContentOffset {
   [self loadSpeedDialViews];
 }
 
-- (void)bookmarkNodeChanged:(const BookmarkNode*)node {
+- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+        didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   // No-op. Mediator is responsible for refreshing.
 }
 
-- (void)bookmarkNodeChildrenChanged:(const BookmarkNode*)bookmarkNode {
+- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+    didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
   // No-op. Mediator is responsible for refreshing.
 }
 
-- (void)bookmarkNode:(const BookmarkNode*)bookmarkNode
-     movedFromParent:(const BookmarkNode*)oldParent
-            toParent:(const BookmarkNode*)newParent {
+- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+          didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
+           fromParent:(const bookmarks::BookmarkNode*)oldParent
+             toParent:(const bookmarks::BookmarkNode*)newParent {
   // No-op. Mediator is responsible for refreshing.
 }
 
-- (void)bookmarkNodeDeleted:(const BookmarkNode*)node
-                 fromFolder:(const BookmarkNode*)folder {
+- (void)bookmarkModel:(bookmarks::BookmarkModel*)model
+        didDeleteNode:(const bookmarks::BookmarkNode*)node
+           fromFolder:(const bookmarks::BookmarkNode*)folder {
   // No-op. Mediator is responsible for refreshing.
 }
 
-- (void)bookmarkModelRemovedAllNodes {
+- (void)bookmarkModelRemovedAllNodes:(bookmarks::BookmarkModel*)model {
   // No-op. Mediator is responsible for refreshing.
 }
 

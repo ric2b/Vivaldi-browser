@@ -26,24 +26,31 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillEditorBase;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
+import org.chromium.chrome.browser.autofill.Source;
 import org.chromium.chrome.browser.autofill.prefeditor.EditorDialog;
-import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
+import org.chromium.chrome.browser.feedback.FragmentHelpAndFeedbackLauncher;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.payments.AutofillAddress;
 import org.chromium.chrome.browser.payments.SettingsAutofillAndPaymentsObserver;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
+import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.components.autofill.prefeditor.EditorObserverForTest;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.components.sync.UserSelectableType;
 
 /**
  * Autofill profiles fragment, which allows the user to edit autofill profiles.
  */
-public class AutofillProfilesFragment extends PreferenceFragmentCompat
-        implements PersonalDataManager.PersonalDataManagerObserver {
+public class AutofillProfilesFragment
+        extends PreferenceFragmentCompat implements PersonalDataManager.PersonalDataManagerObserver,
+                                                    FragmentHelpAndFeedbackLauncher {
     private static EditorObserverForTest sObserverForTest;
     static final String PREF_NEW_PROFILE = "new_profile";
     private @Nullable EditorDialog mEditorDialog;
+
+    private HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -76,9 +83,8 @@ public class AutofillProfilesFragment extends PreferenceFragmentCompat
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.menu_id_targeted_help) {
-            HelpAndFeedbackLauncherImpl.getInstance().show(getActivity(),
-                    getActivity().getString(R.string.help_context_autofill),
-                    Profile.getLastUsedRegularProfile(), null);
+            mHelpAndFeedbackLauncher.show(
+                    getActivity(), getActivity().getString(R.string.help_context_autofill), null);
             return true;
         }
         return super.onOptionsItemSelected(item);
@@ -114,13 +120,14 @@ public class AutofillProfilesFragment extends PreferenceFragmentCompat
             }
 
             @Override
-            public boolean isPreferenceClickDisabledByPolicy(Preference preference) {
+            public boolean isPreferenceClickDisabled(Preference preference) {
                 return PersonalDataManager.isAutofillProfileManaged()
                         && !PersonalDataManager.isAutofillProfileEnabled();
             }
         });
         getPreferenceScreen().addPreference(autofillSwitch);
 
+        final boolean addressSyncEnabled = isAddressSyncEnabled();
         for (AutofillProfile profile : PersonalDataManager.getInstance().getProfilesForSettings()) {
             assert profile.getIsLocal();
             // Add a preference for the profile.
@@ -128,6 +135,11 @@ public class AutofillProfilesFragment extends PreferenceFragmentCompat
             pref.setTitle(profile.getFullName());
             pref.setSummary(profile.getLabel());
             pref.setKey(pref.getTitle().toString()); // For testing.
+            if (!addressSyncEnabled && profile.getSource() != Source.ACCOUNT) {
+                // Conditionally set local profile icon for address profiles that are neither
+                // synced, nor saved in the account.
+                pref.setWidgetLayoutResource(R.layout.autofill_local_profile_icon);
+            }
             Bundle args = pref.getExtras();
             args.putString(AutofillEditorBase.AUTOFILL_GUID, profile.getGUID());
             try (StrictModeContext ignored = StrictModeContext.allowDiskWrites()) {
@@ -212,7 +224,9 @@ public class AutofillProfilesFragment extends PreferenceFragmentCompat
     }
 
     private void editAddress(EditorDialog dialog, AutofillAddress autofillAddress) {
-        AddressEditor addressEditor = new AddressEditor(/*saveToDisk=*/true);
+        AddressEditor addressEditor = new AddressEditor(
+                /*saveToDisk=*/true, /*isUpdate=*/autofillAddress != null,
+                /*isMigrationToAccount=*/false);
         addressEditor.setEditorDialog(dialog);
 
         /*
@@ -235,6 +249,12 @@ public class AutofillProfilesFragment extends PreferenceFragmentCompat
         });
     }
 
+    private boolean isAddressSyncEnabled() {
+        SyncService syncService = SyncService.get();
+        return syncService != null && syncService.isSyncFeatureEnabled()
+                && syncService.getSelectedTypes().contains(UserSelectableType.AUTOFILL);
+    }
+
     private Context getStyledContext() {
         return getPreferenceManager().getContext();
     }
@@ -242,5 +262,10 @@ public class AutofillProfilesFragment extends PreferenceFragmentCompat
     @VisibleForTesting
     EditorDialog getEditorDialogForTest() {
         return mEditorDialog;
+    }
+
+    @Override
+    public void setHelpAndFeedbackLauncher(HelpAndFeedbackLauncher helpAndFeedbackLauncher) {
+        mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
     }
 }

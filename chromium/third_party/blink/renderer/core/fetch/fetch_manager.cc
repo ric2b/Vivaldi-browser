@@ -126,6 +126,18 @@ void HistogramNetErrorForTrustTokensOperation(
       net_error);
 }
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class FetchManagerLoaderCheckPoint {
+  kConstructor = 0,
+  kFailed = 1,
+  kMaxValue = kFailed,
+};
+
+void SendHistogram(FetchManagerLoaderCheckPoint cp) {
+  base::UmaHistogramEnumeration("Net.Fetch.CheckPoint.FetchManagerLoader", cp);
+}
+
 }  // namespace
 
 class FetchManager::Loader final
@@ -204,9 +216,10 @@ class FetchManager::Loader final
       if (result == Result::kDone) {
         SubresourceIntegrity::ReportInfo report_info;
         bool check_result = true;
-        if (response_type_ != FetchResponseType::kBasic &&
-            response_type_ != FetchResponseType::kCors &&
-            response_type_ != FetchResponseType::kDefault) {
+        bool body_is_null = !updater_;
+        if (body_is_null || (response_type_ != FetchResponseType::kBasic &&
+                             response_type_ != FetchResponseType::kCors &&
+                             response_type_ != FetchResponseType::kDefault)) {
           report_info.AddConsoleErrorMessage(
               "Subresource Integrity: The resource '" + url_.ElidedString() +
               "' has an integrity attribute, but the response is not "
@@ -232,8 +245,10 @@ class FetchManager::Loader final
       }
       String error_message =
           "Unknown error occurred while trying to verify integrity.";
-      updater_->Update(
-          BytesConsumer::CreateErrored(BytesConsumer::Error(error_message)));
+      if (updater_) {
+        updater_->Update(
+            BytesConsumer::CreateErrored(BytesConsumer::Error(error_message)));
+      }
       loader_->PerformNetworkError(error_message);
     }
 
@@ -328,6 +343,7 @@ FetchManager::Loader::Loader(ExecutionContext* execution_context,
   v8::Local<v8::Value> exception =
       V8ThrowException::CreateTypeError(isolate, "Failed to fetch");
   exception_.Reset(isolate, exception);
+  SendHistogram(FetchManagerLoaderCheckPoint::kConstructor);
 }
 
 FetchManager::Loader::~Loader() {
@@ -826,6 +842,8 @@ void FetchManager::Loader::PerformHTTPFetch() {
   }
 
   request.SetBrowsingTopics(fetch_request_data_->BrowsingTopics());
+  request.SetAttributionReportingEligibility(
+      fetch_request_data_->AttributionReportingEligibility());
 
   request.SetOriginalDestination(fetch_request_data_->OriginalDestination());
 
@@ -937,6 +955,7 @@ void FetchManager::Loader::Failed(
                      IdentifiersFactory::IdFromToken(*issue_id)));
       }
       resolver_->Reject(value);
+      SendHistogram(FetchManagerLoaderCheckPoint::kFailed);
     }
   }
   NotifyFinished();
@@ -963,7 +982,8 @@ ScriptPromise FetchManager::Fetch(ScriptState* script_state,
 
   request->SetDestination(network::mojom::RequestDestination::kEmpty);
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = resolver->Promise();
 
   auto* loader =

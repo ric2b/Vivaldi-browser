@@ -21,11 +21,9 @@
 namespace ash {
 
 // This class caches hotspot related status and implements methods to get
-// current state, active client count, capabilities and configure the hotspot
-// configurations.
+// current state and active client count.
 class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotStateHandler
-    : public ShillPropertyChangedObserver,
-      public LoginState::Observer {
+    : public ShillPropertyChangedObserver {
  public:
   class Observer : public base::CheckedObserver {
    public:
@@ -46,21 +44,13 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotStateHandler
   // Return the latest hotspot state
   const hotspot_config::mojom::HotspotState& GetHotspotState() const;
 
+  // Returns the reason for hotspot being disabled. nullopt is returned when the
+  // disable reason isn't set
+  const absl::optional<hotspot_config::mojom::DisableReason> GetDisableReason()
+      const;
+
   // Return the latest hotspot active client count
   size_t GetHotspotActiveClientCount() const;
-
-  // Return the current hotspot configuration
-  hotspot_config::mojom::HotspotConfigPtr GetHotspotConfig() const;
-  // Return callback for the SetHotspotConfig method. |success| indicates
-  // whether the operation is success or not.
-
-  using SetHotspotConfigCallback = base::OnceCallback<void(
-      hotspot_config::mojom::SetHotspotConfigResult result)>;
-
-  // Set hotspot configuration with given |config|. |callback| is called with
-  // the success result of SetHotspotConfig operation.
-  void SetHotspotConfig(hotspot_config::mojom::HotspotConfigPtr config,
-                        SetHotspotConfigCallback callback);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -71,9 +61,6 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotStateHandler
   void OnPropertyChanged(const std::string& key,
                          const base::Value& value) override;
 
-  // LoginState::Observer
-  void LoggedInStateChanged() override;
-
   // Callback to handle the manager properties with hotspot related properties.
   void OnManagerProperties(absl::optional<base::Value::Dict> properties);
 
@@ -81,26 +68,18 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) HotspotStateHandler
   // status in Shill.
   void UpdateHotspotStatus(const base::Value::Dict& status);
 
+  // Updates the reason for hotspot getting disabled and notifies observers.
+  void UpdateDisableReason(const base::Value::Dict& status);
+
   // Notify observers that hotspot state or active client count was changed.
   void NotifyHotspotStatusChanged();
 
-  // Update the cached hotspot_config_ with the tethering configuration
-  // from |manager_properties|, and then run the |callback|.
-  void UpdateHotspotConfigAndRunCallback(
-      SetHotspotConfigCallback callback,
-      absl::optional<base::Value::Dict> manager_properties);
-
-  // Callback when the SetHotspotConfig operation succeeded.
-  void OnSetHotspotConfigSuccess(SetHotspotConfigCallback callback);
-
-  // Callback when the SetHotspotConfig operation failed.
-  void OnSetHotspotConfigFailure(SetHotspotConfigCallback callback,
-                                 const std::string& error_name,
-                                 const std::string& error_message);
-
   hotspot_config::mojom::HotspotState hotspot_state_ =
       hotspot_config::mojom::HotspotState::kDisabled;
-  absl::optional<base::Value::Dict> hotspot_config_ = absl::nullopt;
+
+  absl::optional<hotspot_config::mojom::DisableReason> disable_reason_ =
+      absl::nullopt;
+
   size_t active_client_count_ = 0;
 
   base::ObserverList<Observer> observer_list_;

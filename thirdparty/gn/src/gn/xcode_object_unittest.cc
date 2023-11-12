@@ -38,7 +38,7 @@ std::unique_ptr<PBXGroup> GetPBXGroupObject() {
 // Instantiate a PBXProject object with arbitrary names.
 std::unique_ptr<PBXProject> GetPBXProjectObject() {
   std::unique_ptr<PBXProject> pbx_project(
-      new PBXProject("project", "config", "out/build", PBXAttributes()));
+      new PBXProject("project", {"config"}, "out/build", PBXAttributes()));
   return pbx_project;
 }
 
@@ -61,7 +61,7 @@ std::unique_ptr<PBXBuildFile> GetPBXBuildFileObject(
 // Instantiate a PBXAggregateTarget object with arbitrary names.
 std::unique_ptr<PBXAggregateTarget> GetPBXAggregateTargetObject() {
   std::unique_ptr<PBXAggregateTarget> pbx_aggregate_target(
-      new PBXAggregateTarget("target_name", "shell_script", "config_name",
+      new PBXAggregateTarget("target_name", "shell_script", {"config_name"},
                              PBXAttributes()));
   return pbx_aggregate_target;
 }
@@ -70,7 +70,7 @@ std::unique_ptr<PBXAggregateTarget> GetPBXAggregateTargetObject() {
 std::unique_ptr<PBXNativeTarget> GetPBXNativeTargetObject(
     const PBXFileReference* product_reference) {
   std::unique_ptr<PBXNativeTarget> pbx_native_target(new PBXNativeTarget(
-      "target_name", "ninja gn_unittests", "config_name", PBXAttributes(),
+      "target_name", "ninja gn_unittests", {"config_name"}, PBXAttributes(),
       "com.apple.product-type.application", "product_name", product_reference));
   return pbx_native_target;
 }
@@ -104,7 +104,7 @@ std::unique_ptr<XCBuildConfiguration> GetXCBuildConfigurationObject() {
 std::unique_ptr<XCConfigurationList> GetXCConfigurationListObject(
     const PBXObject* owner_reference) {
   std::unique_ptr<XCConfigurationList> xc_configuration_list(
-      new XCConfigurationList("config_list_name", PBXAttributes(),
+      new XCConfigurationList({"config_list_name"}, PBXAttributes(),
                               owner_reference));
   return xc_configuration_list;
 }

@@ -2,18 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/polymer/v3_0/paper-ripple/paper-ripple.js';
+
 import {getTemplate} from './file_handler_card.html.js';
 
 /**
  * The BaseCardElement defines the base class for all the file handler and
  * accordion cards.
  */
-class BaseCardElement extends HTMLElement {
+export class BaseCardElement extends HTMLElement {
   constructor() {
     super();
     const shadowRoot = this.attachShadow({mode: 'open'});
     shadowRoot.innerHTML = getTemplate();
     this.addStyles();
+    this.addEventListener('keyup', this.onKeyUp.bind(this));
   }
 
   $(query: string): HTMLElement {
@@ -21,7 +24,20 @@ class BaseCardElement extends HTMLElement {
   }
 
   addStyles() {
-    this.$('#card')!.classList.add('margin-top', 'round-top', 'round-bottom');
+    this.$('#container')!.classList.add(
+        'margin-top', 'round-top', 'round-bottom');
+    this.tabIndex = 0;
+  }
+
+  onKeyUp(e: KeyboardEvent) {
+    if (e.key !== ' ' && e.key !== 'Enter') {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    this.click();
   }
 }
 
@@ -37,18 +53,23 @@ export class AccordionTopCardElement extends BaseCardElement {
     this.$('#icon')!.style.display = 'none';
     this.$('#title')!.innerHTML = 'Other apps';
     this.$('#right-icon')!.classList.add('chevron');
+    this.$('#container')!.removeChild(this.$('paper-ripple'));
+    this.ariaExpanded = 'false';
+    this.role = 'button';
   }
 
   toggleExpandedState(): boolean {
     this.expanded_ = !this.expanded_;
     if (this.expanded_) {
-      this.$('#card')!.classList.add('separator-bottom');
-      this.$('#card')!.classList.remove('round-bottom');
+      this.$('#container')!.classList.add('separator-bottom');
+      this.$('#container')!.classList.remove('round-bottom');
       this.$('#right-icon')!.setAttribute('expanded', '');
+      this.ariaExpanded = 'true';
     } else {
-      this.$('#card')!.classList.remove('separator-bottom');
-      this.$('#card')!.classList.add('round-bottom');
+      this.$('#container')!.classList.remove('separator-bottom');
+      this.$('#container')!.classList.add('round-bottom');
       this.$('#right-icon')!.removeAttribute('expanded');
+      this.ariaExpanded = 'false';
     }
     return this.expanded_;
   }
@@ -65,12 +86,23 @@ export class AccordionTopCardElement extends BaseCardElement {
 export class FileHandlerCardElement extends BaseCardElement {
   private selected_ = false;
 
+  constructor() {
+    super();
+    this.ariaSelected = 'false';
+    this.ariaCurrent = 'false';
+    this.role = 'option';
+  }
+
   updateSelection(selected: boolean) {
     this.selected_ = selected;
     if (this.selected_) {
-      this.$('#card')!.setAttribute('checked', '');
+      this.$('#card')!.setAttribute('selected', '');
+      this.ariaSelected = 'true';
+      this.ariaCurrent = 'true';
     } else {
-      this.$('#card')!.removeAttribute('checked');
+      this.$('#card')!.removeAttribute('selected');
+      this.ariaSelected = 'false';
+      this.ariaCurrent = 'false';
     }
   }
 
@@ -120,10 +152,12 @@ export class LocalHandlerCardElement extends FileHandlerCardElement {
 
   show() {
     this.style.display = '';
+    this.tabIndex = 0;
   }
 
   hide() {
     this.style.display = 'none';
+    this.tabIndex = -1;
   }
 
   get taskPosition(): number {

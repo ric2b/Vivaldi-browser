@@ -21,7 +21,7 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_service.h"
-#include "chrome/browser/supervised_user/supervised_user_service_observer.h"
+#include "components/supervised_user/core/browser/supervised_user_service_observer.h"
 #endif
 
 class AvatarMenuObserver;
@@ -139,11 +139,6 @@ class AvatarMenu :
   // Returns the index of the active profile or `absl::nullopt` if there is no
   // active profile.
   absl::optional<size_t> GetActiveProfileIndex() const;
-
-  // Returns information about a supervised user which will be displayed in the
-  // avatar menu. If the profile does not belong to a supervised user, an empty
-  // string will be returned.
-  std::u16string GetSupervisedUserInformation() const;
 
   // This menu is also used for the always-present Mac and Linux system menubar.
   // If the last active browser changes, the menu will need to reference that

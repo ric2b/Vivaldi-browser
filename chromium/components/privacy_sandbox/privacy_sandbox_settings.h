@@ -52,6 +52,10 @@ class PrivacySandboxSettings : public KeyedService {
     // When this returns false, access control functions for Topics will
     // return as not allowed.
     virtual bool HasAppropriateTopicsConsent() const = 0;
+
+    // Whether the profile is subject to being given notice of restrictions to
+    // the standard set of Privacy Sandbox APIs.
+    virtual bool IsSubjectToM1NoticeRestricted() const = 0;
   };
 
   // Returns whether the Topics API is allowed at all. If false, Topics API
@@ -88,7 +92,7 @@ class PrivacySandboxSettings : public KeyedService {
   // future, in which case no history is eligible.
   virtual base::Time TopicsDataAccessibleSince() const = 0;
 
-  // Returns whether any Attribution Rerpoting operation would ever be allowed.
+  // Returns whether any Attribution Reporting operation would ever be allowed.
   // If false, no attribution reporting operation is allowed (e.g. because the
   // user has disabled the setting). If true, the appropriate context specific
   // check must also be made.
@@ -187,6 +191,15 @@ class PrivacySandboxSettings : public KeyedService {
   // delegate. Forwards directly to the corresponding delegate function.
   // Virtual to allow mocking in tests.
   virtual bool IsPrivacySandboxRestricted() const = 0;
+
+  // Returns whether the privacy sandbox restricted notice should be shown,
+  // based on account characteristics. Forwards to the delegate. Virtual for
+  // mocking in tests.
+  virtual bool IsSubjectToM1NoticeRestricted() const = 0;
+
+  // Returns whether the Privacy Sandbox is partially enabled based on
+  // restrictions.
+  virtual bool IsRestrictedNoticeEnabled() const = 0;
 
   // Called when there's a broad cookies clearing action. For example, this
   // should be called on "Clear browsing data", but shouldn't be called on the

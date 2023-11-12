@@ -10,7 +10,6 @@ import {
 import * as dom from '../../dom.js';
 import {reportError} from '../../error.js';
 import * as expert from '../../expert.js';
-import {Flag} from '../../flag.js';
 import * as h264 from '../../h264.js';
 import {I18nString} from '../../i18n_string.js';
 import {LowStorageActionType, sendLowStorageEvent} from '../../metrics.js';
@@ -18,6 +17,7 @@ import {Filenamer} from '../../models/file_namer.js';
 import * as loadTimeData from '../../models/load_time_data.js';
 import {
   GifSaver,
+  TimeLapseSaver,
   VideoSaver,
 } from '../../models/video_saver.js';
 import {ChromeHelper} from '../../mojo/chrome_helper.js';
@@ -41,6 +41,7 @@ import {
   Resolution,
   VideoType,
 } from '../../type.js';
+import {getFpsRangeFromConstraints} from '../../util.js';
 import {WaitableEvent} from '../../waitable_event.js';
 import {StreamConstraints} from '../stream_constraints.js';
 import {StreamManager} from '../stream_manager.js';
@@ -83,10 +84,31 @@ const MAX_GIF_DURATION_MS = 5000;
 const GRAB_GIF_FRAME_RATIO = 2;
 
 /**
+ * Initial speed for time-lapse recording.
+ */
+const TIME_LAPSE_INITIAL_SPEED = 5;
+
+/**
+ * Minimum bitrate multiplier for time lapse recording.
+ */
+const TIME_LAPSE_MIN_BITRATE_MULTIPLIER = 6;
+
+/**
  * Sets avc1 parameter used in video recording.
  */
 export function setAvc1Parameters(params: h264.EncoderParameters|null): void {
   avc1Parameters = params;
+}
+
+/**
+ * Generate AVC suffix string from given h264 params.
+ *
+ * @return Suffix string for AVC codecs.
+ */
+function getAVCSuffix(param: h264.EncoderParameters) {
+  const {profile, level} = param;
+  return '.' + profile.toString(16).padStart(2, '0') +
+      level.toString(16).padStart(4, '0');
 }
 
 /**
@@ -95,14 +117,28 @@ export function setAvc1Parameters(params: h264.EncoderParameters|null): void {
  * @return Video recording MIME type.
  */
 function getVideoMimeType(param: h264.EncoderParameters|null): string {
-  let suffix = '';
-  if (param !== null) {
-    const {profile, level} = param;
-    suffix = '.' + profile.toString(16).padStart(2, '0') +
-        level.toString(16).padStart(4, '0');
-  }
+  const suffix = param !== null ? getAVCSuffix(param) : '';
   return `video/x-matroska;codecs=avc1${suffix},pcm`;
 }
+
+/**
+ * Gets VideoEncoder's config from current h264 params and resolutions.
+ *
+ * @return VideoEncoderConfig.
+ */
+function getVideoEncoderConfig(
+    param: h264.EncoderParameters, resolution: Resolution): VideoEncoderConfig {
+  const suffix = getAVCSuffix(param);
+  return {
+    codec: `avc1${suffix}`,
+    width: resolution.width,
+    height: resolution.height,
+    bitrate: param.bitrate,
+    bitrateMode: 'constant',
+    avc: {format: 'annexb'},
+  };
+}
+
 
 /**
  * The 'beforeunload' listener which will show confirm dialog when trying to
@@ -128,6 +164,15 @@ export interface GifResult {
   duration: number;
 }
 
+export interface TimeLapseResult {
+  autoStopped: boolean;
+  duration: number;
+  everPaused: boolean;
+  resolution: Resolution;
+  speed: number;
+  timeLapseSaver: TimeLapseSaver;
+}
+
 /**
  * Provides functions with external dependency used by video mode and handles
  * the captured result video.
@@ -151,6 +196,8 @@ export interface VideoHandler {
   onGifCaptureDone(gifResult: GifResult): Promise<void>;
 
   onVideoCaptureDone(videoResult: VideoResult): Promise<void>;
+
+  onTimeLapseCaptureDone(timeLapseResult: TimeLapseResult): Promise<void>;
 }
 
 // This is used as an enum.
@@ -158,6 +205,7 @@ export interface VideoHandler {
 const RecordType = {
   NORMAL: state.State.RECORD_TYPE_NORMAL,
   GIF: state.State.RECORD_TYPE_GIF,
+  TIME_LAPSE: state.State.RECORD_TYPE_TIME_LAPSE,
 } as const;
 /* eslint-enable @typescript-eslint/naming-convention */
 
@@ -235,6 +283,7 @@ export class Video extends ModeBase {
       private readonly snapshotResolution: Resolution|null,
       facing: Facing,
       private readonly handler: VideoHandler,
+      private readonly frameRate: number,
   ) {
     super(video, facing);
 
@@ -339,11 +388,6 @@ export class Video extends ModeBase {
    * start/resume the recording.
    */
   private async startMonitorStorage(): Promise<boolean> {
-    // If the monitoring is not enabled, skip setting callback and return true
-    // to always allow users to start/resume recording.
-    if (!loadTimeData.getChromeFlag(Flag.LOW_STORAGE_WARNING)) {
-      return true;
-    }
     const onChange = (newState: StorageMonitorStatus) => {
       if (newState === StorageMonitorStatus.NORMAL) {
         this.toggleLowStorageWarning(false);
@@ -379,6 +423,11 @@ export class Video extends ModeBase {
       return this.togglePausedInternal;
     }
     this.everPaused = true;
+
+    if (this.recordingType === RecordType.TIME_LAPSE) {
+      return this.togglePausedTimeLapse();
+    }
+
     const waitable = new WaitableEvent();
     this.togglePausedInternal = waitable.wait();
 
@@ -387,13 +436,11 @@ export class Video extends ModeBase {
     const toBePaused = this.mediaRecorder.state !== 'paused';
     const toggledEvent = toBePaused ? 'pause' : 'resume';
 
-    if (!toBePaused) {
-      const canResume = await this.startMonitorStorage();
-      if (!canResume) {
-        this.autoStopped = true;
-        this.stop();
-        return;
-      }
+    if (!toBePaused && !(await this.resumeMonitorStorage())) {
+      // Keep |togglePausedInternal| non-null to prevent pause/resume while
+      // stopping the recording.
+      waitable.signal();
+      return;
     }
 
     const onToggled = () => {
@@ -403,25 +450,64 @@ export class Video extends ModeBase {
       this.togglePausedInternal = null;
       waitable.signal();
     };
-    async function playEffect() {
-      state.set(state.State.RECORDING_UI_PAUSED, toBePaused);
-      await sound.play(dom.get(
-          toBePaused ? '#sound-rec-pause' : '#sound-rec-start',
-          HTMLAudioElement));
-    }
 
     this.mediaRecorder.addEventListener(toggledEvent, onToggled);
     if (toBePaused) {
-      waitable.wait().then(playEffect);
+      waitable.wait().then(() => this.playPauseEffect(toBePaused));
       this.recordTime.stop({pause: true});
       this.mediaRecorder.pause();
     } else {
-      await playEffect();
+      await this.playPauseEffect(toBePaused);
       this.recordTime.start({resume: true});
       this.mediaRecorder.resume();
     }
 
     return waitable.wait();
+  }
+
+  private async togglePausedTimeLapse(): Promise<void> {
+    const toggleDone = new WaitableEvent();
+    this.togglePausedInternal = toggleDone.wait();
+    const toBePaused = !state.get(state.State.RECORDING_PAUSED);
+
+    if (!toBePaused && !(await this.resumeMonitorStorage())) {
+      toggleDone.signal();
+      return;
+    }
+
+    // Pause: Pause -> Update Timer -> Sound/Button UI
+    // Resume: Sound/Button UI -> Update Timer -> Resume
+    if (toBePaused) {
+      state.set(state.State.RECORDING_PAUSED, true);
+      this.recordTime.stop({pause: true});
+      await this.playPauseEffect(true);
+    } else {
+      await this.playPauseEffect(false);
+      this.recordTime.start({resume: true});
+      state.set(state.State.RECORDING_PAUSED, false);
+    }
+
+    toggleDone.signal();
+    this.togglePausedInternal = null;
+  }
+
+  private async playPauseEffect(toBePaused: boolean): Promise<void> {
+    state.set(state.State.RECORDING_UI_PAUSED, toBePaused);
+    await sound.play(dom.get(
+        toBePaused ? '#sound-rec-pause' : '#sound-rec-start',
+        HTMLAudioElement));
+  }
+
+  /**
+   * Resumes storage monitoring and returns if the recording can be resumed.
+   */
+  private async resumeMonitorStorage(): Promise<boolean> {
+    const canResume = await this.startMonitorStorage();
+    if (!canResume) {
+      this.autoStopped = true;
+      this.stop();
+    }
+    return canResume;
   }
 
   private getEncoderParameters(): h264.EncoderParameters|null {
@@ -430,7 +516,10 @@ export class Video extends ModeBase {
     }
     const preference = encoderPreference.get(loadTimeData.getBoard()) ??
         {profile: h264.Profile.HIGH, multiplier: 2};
-    const {profile, multiplier} = preference;
+    let {profile, multiplier} = preference;
+    if (this.recordingType === RecordType.TIME_LAPSE) {
+      multiplier = Math.max(multiplier, TIME_LAPSE_MIN_BITRATE_MULTIPLIER);
+    }
     const {width, height, frameRate} =
         getVideoTrackSettings(this.getVideoTrack());
     const resolution = new Resolution(width, height);
@@ -468,7 +557,9 @@ export class Video extends ModeBase {
     this.autoStopped = false;
     this.stopped = false;
 
-    if (this.recordingType === RecordType.NORMAL) {
+    this.recordingType = this.getToggledRecordOption();
+    if (this.recordingType === RecordType.NORMAL ||
+        this.recordingType === RecordType.TIME_LAPSE) {
       const canStart = await this.startMonitorStorage();
       if (!canStart) {
         ChromeHelper.getInstance().stopMonitorStorage();
@@ -490,8 +581,9 @@ export class Video extends ModeBase {
       this.recordingImageCapture = new CrosImageCapture(this.getVideoTrack());
     }
 
+    let param: h264.EncoderParameters|null = null;
     try {
-      const param = this.getEncoderParameters();
+      param = this.getEncoderParameters();
       const mimeType = getVideoMimeType(param);
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         throw new Error(
@@ -511,7 +603,6 @@ export class Video extends ModeBase {
       throw new CanceledError('Recording stopped');
     }
 
-    this.recordingType = this.getToggledRecordOption();
     // TODO(b/191950622): Remove complex state logic bind with this enable flag
     // after GIF recording move outside of expert mode and replace it with
     // |RECORD_TYPE_GIF|.
@@ -544,6 +635,32 @@ export class Video extends ModeBase {
         gifSaver,
         resolution: this.captureResolution,
         duration: this.gifRecordTime.inMilliseconds(),
+      })];
+    } else if (this.recordingType === RecordType.TIME_LAPSE) {
+      this.recordTime.start({resume: false});
+      let timeLapseSaver: TimeLapseSaver|null = null;
+      try {
+        assert(param !== null);
+        timeLapseSaver = await this.captureTimeLapse(param);
+      } finally {
+        state.set(state.State.RECORDING, false);
+        this.recordTime.stop({pause: false});
+      }
+
+      if (this.recordTime.inMilliseconds() <
+          (MINIMUM_VIDEO_DURATION_IN_MILLISECONDS * TIME_LAPSE_INITIAL_SPEED)) {
+        toast.show(I18nString.ERROR_MSG_VIDEO_TOO_SHORT);
+        timeLapseSaver.cancel();
+        return [Promise.resolve()];
+      }
+
+      return [this.handler.onTimeLapseCaptureDone({
+        autoStopped: this.autoStopped,
+        duration: this.recordTime.inMilliseconds(),
+        everPaused: this.everPaused,
+        resolution: this.captureResolution,
+        speed: timeLapseSaver.speed,
+        timeLapseSaver,
       })];
     } else {
       this.recordTime.start({resume: false});
@@ -592,15 +709,16 @@ export class Video extends ModeBase {
 
   override stop(): void {
     this.stopped = true;
-    if (loadTimeData.getChromeFlag(Flag.LOW_STORAGE_WARNING)) {
-      ChromeHelper.getInstance().stopMonitorStorage();
-    }
+    ChromeHelper.getInstance().stopMonitorStorage();
     this.toggleLowStorageWarning(false);
     if (!state.get(state.State.RECORDING)) {
       return;
     }
-    if (this.recordingType === RecordType.GIF) {
+    if (this.recordingType === RecordType.GIF ||
+        this.recordingType === RecordType.TIME_LAPSE) {
       state.set(state.State.RECORDING, false);
+      state.set(state.State.RECORDING_PAUSED, false);
+      state.set(state.State.RECORDING_UI_PAUSED, false);
     } else {
       sound.cancel(dom.get('#sound-rec-start', HTMLAudioElement));
 
@@ -616,8 +734,6 @@ export class Video extends ModeBase {
   /**
    * Starts recording gif animation and waits for stop recording event triggered
    * by stop shutter or time out over 5 seconds.
-   *
-   * @return Saves recorded video.
    */
   private async captureGif(): Promise<GifSaver> {
     // TODO(b/191950622): Grab frames from capture stream when multistream
@@ -633,7 +749,8 @@ export class Video extends ModeBase {
     const gifSaver = await GifSaver.create(new Resolution(width, height));
     const canvas = new OffscreenCanvas(width, height);
     const context = assertInstanceof(
-        canvas.getContext('2d'), OffscreenCanvasRenderingContext2D);
+        canvas.getContext('2d', {willReadFrequently: true}),
+        OffscreenCanvasRenderingContext2D);
     if (videoTrack.readyState === 'ended') {
       throw new NoFrameError();
     }
@@ -669,10 +786,69 @@ export class Video extends ModeBase {
   }
 
   /**
+   * Initial time-lapse saver with specified encoder parameters. Then, Starts
+   * recording time-lapse and waits for stop recording event.
+   */
+  private async captureTimeLapse(param: h264.EncoderParameters):
+      Promise<TimeLapseSaver> {
+    const encoderConfig = getVideoEncoderConfig(param, this.captureResolution);
+    const video = this.video.video;
+
+    // Creates a saver given the initial speed.
+    const saver = await TimeLapseSaver.create(
+        encoderConfig, this.captureResolution, this.frameRate,
+        TIME_LAPSE_INITIAL_SPEED);
+
+    // Creates a frame reader from track processor.
+    const track = this.getVideoTrack() as MediaStreamVideoTrack;
+    const trackProcessor = new MediaStreamTrackProcessor({track});
+    const reader = trackProcessor.readable.getReader();
+
+    state.set(state.State.RECORDING, true);
+    const frames = await new Promise<number>((resolve, reject) => {
+      let frameCount = 0;
+      let writtenFrameCount = 0;
+      // TODO(b/236800499): Investigate whether we should use async, or use
+      // reader.read().then() instead.
+      async function updateFrame(): Promise<void> {
+        if (!state.get(state.State.RECORDING)) {
+          resolve(writtenFrameCount);
+          return;
+        }
+        if (state.get(state.State.RECORDING_PAUSED)) {
+          video.requestVideoFrameCallback(updateFrame);
+          return;
+        }
+        if (frameCount % saver.speed === 0) {
+          try {
+            const {done, value: frame} = await reader.read();
+            if (done) {
+              resolve(writtenFrameCount);
+              return;
+            }
+            saver.write(frame, frameCount);
+            writtenFrameCount++;
+            frame.close();
+          } catch (e) {
+            reject(e);
+          }
+        }
+        frameCount++;
+        video.requestVideoFrameCallback(updateFrame);
+      }
+      video.requestVideoFrameCallback(updateFrame);
+    });
+
+    if (frames === 0) {
+      throw new NoFrameError();
+    }
+
+    return saver;
+  }
+
+  /**
    * Starts recording and waits for stop recording event triggered by stop
    * shutter.
-   *
-   * @return Saves recorded video.
    */
   private async captureVideo(): Promise<VideoSaver> {
     const saver = await this.handler.createVideoSaver();
@@ -769,8 +945,10 @@ export class VideoFactory extends ModeFactory {
     }
     assert(this.previewVideo !== null);
     assert(this.facing !== null);
+    const frameRate =
+        getFpsRangeFromConstraints(this.constraints.video.frameRate).minFps;
     return new Video(
         this.previewVideo, captureConstraints, this.captureResolution,
-        this.snapshotResolution, this.facing, this.handler);
+        this.snapshotResolution, this.facing, this.handler, frameRate);
   }
 }

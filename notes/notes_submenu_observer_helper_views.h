@@ -42,8 +42,8 @@ class NotesSubMenuObserverHelperViews : public NotesSubMenuObserverHelper {
                                    ui::MenuModel::ItemType menu_type);
   void InitMap();
 
-  NotesSubMenuObserver* sub_menu_observer_;
-  ToolkitDelegateViews* toolkit_delegate_;
+  const raw_ptr<NotesSubMenuObserver> sub_menu_observer_;
+  const raw_ptr<ToolkitDelegateViews> toolkit_delegate_;
   MenuModelToMenuView menumodel_to_view_map_;
 };
 

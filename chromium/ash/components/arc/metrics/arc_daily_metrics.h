@@ -10,9 +10,10 @@
 #include <unordered_set>
 
 #include "ash/components/arc/mojom/process.mojom.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/values.h"
-#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
+#include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "components/metrics/daily_event.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -70,7 +71,7 @@ class ArcDailyMetrics {
     kKillCountNum,
   };
 
-  PrefService* const prefs_;
+  const raw_ptr<PrefService, ExperimentalAsh> prefs_;
   std::unique_ptr<metrics::DailyEvent> daily_event_;
 
   // Members for tracking Android App kill counts.

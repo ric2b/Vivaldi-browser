@@ -30,6 +30,9 @@ class WebState;
 // This object's delegate.
 @property(nonatomic, weak) id<NoteInteractionControllerDelegate> delegate;
 
+// The base view controller for this coordinator
+@property(nonatomic, weak, readwrite) UIViewController* baseViewController;
+
 @property(nonatomic, weak) PanelInteractionController* panelDelegate;
 
 // The navigation controller that is being presented, if any.
@@ -60,6 +63,10 @@ class WebState;
 
 // Removes any snackbar related to notes that could have been presented.
 - (void)dismissSnackbar;
+
+- (void)presentNoteFolderEditor:(const vivaldi::NoteNode*)node
+                         parent:(const vivaldi::NoteNode*)parentNode
+                      isEditing:(BOOL)isEditing;
 
 @end
 

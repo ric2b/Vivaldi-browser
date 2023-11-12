@@ -48,10 +48,10 @@ class NotesAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<NotesAPI>;
 
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   // Initialized lazily upon the first OnListenerAdded.
-  ::vivaldi::NotesModel* model_ = nullptr;
+  raw_ptr<::vivaldi::NotesModel> model_ = nullptr;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "NotesAPI"; }

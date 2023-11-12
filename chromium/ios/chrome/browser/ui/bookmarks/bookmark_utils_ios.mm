@@ -23,13 +23,17 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/common/bookmark_features.h"
 #import "components/bookmarks/common/bookmark_metrics.h"
 #import "components/query_parser/query_parser.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/sync/sync_setup_service.h"
 #import "ios/chrome/browser/ui/bookmarks/undo_manager_wrapper.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "third_party/skia/include/core/SkColor.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -52,27 +56,52 @@ namespace bookmark_utils_ios {
 
 NSString* const kBookmarksSnackbarCategory = @"BookmarksSnackbarCategory";
 
-absl::optional<NodeSet> FindNodesByIds(bookmarks::BookmarkModel* model,
-                                       const std::set<int64_t>& ids) {
-  DCHECK(model);
+BookmarkNodeReference::BookmarkNodeReference(
+    const base::Uuid& uuid,
+    bookmarks::BookmarkModel* bookmark_model)
+    : uuid(uuid), bookmark_model(bookmark_model) {}
+
+BookmarkNodeReference::BookmarkNodeReference(
+    const BookmarkNodeReference& other) = default;
+
+BookmarkNodeReference::~BookmarkNodeReference() = default;
+
+bool BookmarkNodeReference::operator<(
+    const BookmarkNodeReference reference) const {
+  return (bookmark_model == reference.bookmark_model)
+             ? (uuid < reference.uuid)
+             : (bookmark_model < reference.bookmark_model);
+}
+
+NodeReferenceSet FindNodeReferenceByNodes(
+    NodeSet nodes,
+    bookmarks::BookmarkModel* profile_bookmark_model,
+    bookmarks::BookmarkModel* account_bookmark_model) {
+  NodeReferenceSet references;
+  for (const BookmarkNode* node : nodes) {
+    bookmarks::BookmarkModel* model = GetBookmarkModelForNode(
+        node, profile_bookmark_model, account_bookmark_model);
+    references.insert(BookmarkNodeReference(node->uuid(), model));
+  }
+  return references;
+}
+
+const bookmarks::BookmarkNode* FindNodeByNodeReference(
+    BookmarkNodeReference reference) {
+  if (!reference.bookmark_model) {
+    return nullptr;
+  }
+  return FindNodeByUuid(reference.bookmark_model, reference.uuid);
+}
+
+NodeSet FindNodesByNodeReferences(NodeReferenceSet references) {
   NodeSet nodes;
-  ui::TreeNodeIterator<const BookmarkNode> iterator(model->root_node());
-  while (iterator.has_next()) {
-    const BookmarkNode* node = iterator.Next();
-    if (ids.find(node->id()) == ids.end()) {
-      continue;
-    }
-
-    nodes.insert(node);
-    if (ids.size() == nodes.size()) {
-      break;
+  for (BookmarkNodeReference reference : references) {
+    const BookmarkNode* node = FindNodeByNodeReference(reference);
+    if (node) {
+      nodes.insert(node);
     }
   }
-
-  if (ids.size() != nodes.size()) {
-    return absl::nullopt;
-  }
-
   return nodes;
 }
 
@@ -85,7 +114,19 @@ const BookmarkNode* FindNodeById(bookmarks::BookmarkModel* model, int64_t id) {
       return node;
     }
   }
+  return nullptr;
+}
 
+const bookmarks::BookmarkNode* FindNodeByUuid(bookmarks::BookmarkModel* model,
+                                              const base::Uuid& uuid) {
+  CHECK(model);
+  ui::TreeNodeIterator<const BookmarkNode> iterator(model->root_node());
+  while (iterator.has_next()) {
+    const BookmarkNode* node = iterator.Next();
+    if (node->uuid() == uuid) {
+      return node;
+    }
+  }
   return nullptr;
 }
 
@@ -120,6 +161,8 @@ NSString* TitleForBookmarkNode(const BookmarkNode* node) {
   return title;
 }
 
+#pragma mark - Profile and account
+
 BookmarkModelType GetBookmarkModelType(
     const bookmarks::BookmarkNode* bookmark_node,
     bookmarks::BookmarkModel* profile_model,
@@ -131,6 +174,41 @@ BookmarkModelType GetBookmarkModelType(
   DCHECK(account_model &&
          bookmark_node->HasAncestor(account_model->root_node()));
   return BookmarkModelType::kAccount;
+}
+
+bookmarks::BookmarkModel* GetBookmarkModelForNode(
+    const bookmarks::BookmarkNode* bookmark_node,
+    bookmarks::BookmarkModel* profile_model,
+    bookmarks::BookmarkModel* account_model) {
+  BookmarkModelType modelType =
+      GetBookmarkModelType(bookmark_node, profile_model, account_model);
+  return modelType == BookmarkModelType::kAccount ? account_model
+                                                  : profile_model;
+}
+
+bool ShouldDisplayCloudSlashIconForProfileModel(
+    SyncSetupService* sync_setup_service) {
+  if (!base::FeatureList::IsEnabled(
+          bookmarks::kEnableBookmarksAccountStorage)) {
+    return false;
+  }
+  return !(
+      sync_setup_service->IsSyncRequested() &&
+      sync_setup_service->IsDataTypePreferred(syncer::ModelType::BOOKMARKS));
+}
+
+bool IsAccountBookmarkModelAvailable(
+    AuthenticationService* authenticationService) {
+  if (!base::FeatureList::IsEnabled(
+          bookmarks::kEnableBookmarksAccountStorage)) {
+    return false;
+  }
+  // TODO (crbug.com/1430453): Implements the distinction of profile/account
+  // models when both models are used.
+  return authenticationService->HasPrimaryIdentity(
+             signin::ConsentLevel::kSignin) &&
+         !authenticationService->HasPrimaryIdentity(
+             signin::ConsentLevel::kSync);
 }
 
 #pragma mark - Updating Bookmarks
@@ -145,7 +223,7 @@ void DeleteBookmarks(const std::set<const BookmarkNode*>& bookmarks,
   }
 
   if (bookmarks.find(node) != bookmarks.end()) {
-    model->Remove(node);
+    model->Remove(node, bookmarks::metrics::BookmarkEditSource::kUser);
   }
 }
 
@@ -293,14 +371,15 @@ MDCSnackbarMessage* UpdateBookmarkPositionWithUndoToast(
 
 void DeleteBookmarks(const std::set<const BookmarkNode*>& bookmarks,
                      bookmarks::BookmarkModel* model) {
-  DCHECK(model->loaded());
+  CHECK(model && model->loaded()) << "Model: " << model;
   DeleteBookmarks(bookmarks, model, model->root_node());
 }
 
 MDCSnackbarMessage* DeleteBookmarksWithUndoToast(
     const std::set<const BookmarkNode*>& nodes,
-    bookmarks::BookmarkModel* model,
+    const std::vector<bookmarks::BookmarkModel*>& bookmark_models,
     ChromeBrowserState* browser_state) {
+  CHECK_GT(bookmark_models.size(), 0u);
   size_t node_count = nodes.size();
   DCHECK_GT(node_count, 0u);
 
@@ -309,7 +388,9 @@ MDCSnackbarMessage* DeleteBookmarksWithUndoToast(
 
   // Delete the selected bookmarks.
   [wrapper startGroupingActions];
-  bookmark_utils_ios::DeleteBookmarks(nodes, model);
+  for (auto* model : bookmark_models) {
+    bookmark_utils_ios::DeleteBookmarks(nodes, model);
+  }
   [wrapper stopGroupingActions];
   [wrapper resetUndoManagerChanged];
 
@@ -551,8 +632,8 @@ std::vector<NodeVector::size_type> MissingNodesIndices(
 
 #pragma mark - Cache position in table view.
 
-NSArray* CreateBookmarkPath(bookmarks::BookmarkModel* model,
-                            int64_t folder_id) {
+NSArray<NSNumber*>* CreateBookmarkPath(bookmarks::BookmarkModel* model,
+                                       int64_t folder_id) {
   // Create an array with root node id, if folder_id == root node.
   if (model->root_node()->id() == folder_id) {
     return @[ [NSNumber numberWithLongLong:model->root_node()->id()] ];
@@ -563,7 +644,7 @@ NSArray* CreateBookmarkPath(bookmarks::BookmarkModel* model,
     return nil;
   }
 
-  NSMutableArray* bookmarkPath = [NSMutableArray array];
+  NSMutableArray<NSNumber*>* bookmarkPath = [NSMutableArray array];
   [bookmarkPath addObject:[NSNumber numberWithLongLong:folder_id]];
   while (model->root_node()->id() != bookmark->id()) {
     bookmark = bookmark->parent();

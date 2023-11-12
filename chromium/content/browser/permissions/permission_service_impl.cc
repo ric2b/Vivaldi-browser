@@ -132,15 +132,15 @@ void PermissionServiceImpl::RequestPermissions(
   if (!permissions.empty() &&
       PermissionUtil::IsDomainOverride(permissions[0])) {
     if (!PermissionUtil::ValidateDomainOverride(
-            types, context_->render_frame_host())) {
+            types, context_->render_frame_host(), permissions[0])) {
       ReceivedBadMessage();
       return;
     }
-    url::Origin requested_origin =
+    const url::Origin& requesting_origin =
         PermissionUtil::ExtractDomainOverride(permissions[0]);
     PermissionControllerImpl::FromBrowserContext(browser_context)
         ->RequestPermissions(
-            types, context_->render_frame_host(), requested_origin,
+            types, context_->render_frame_host(), requesting_origin,
             user_gesture,
             base::BindOnce(&PermissionServiceImpl::OnRequestPermissionsResponse,
                            weak_factory_.GetWeakPtr(), pending_request_id));
@@ -239,6 +239,18 @@ PermissionStatus PermissionServiceImpl::GetPermissionStatus(
   if (!type) {
     ReceivedBadMessage();
     return PermissionStatus::DENIED;
+  }
+  if (PermissionUtil::IsDomainOverride(permission) &&
+      context_->render_frame_host()) {
+    BrowserContext* browser_context = context_->GetBrowserContext();
+    if (browser_context &&
+        PermissionUtil::ValidateDomainOverride(
+            {type.value()}, context_->render_frame_host(), permission)) {
+      return PermissionControllerImpl::FromBrowserContext(browser_context)
+          ->GetPermissionStatusForEmbeddedRequester(
+              *type, context_->render_frame_host(),
+              PermissionUtil::ExtractDomainOverride(permission));
+    }
   }
   return GetPermissionStatusFromType(*type);
 }

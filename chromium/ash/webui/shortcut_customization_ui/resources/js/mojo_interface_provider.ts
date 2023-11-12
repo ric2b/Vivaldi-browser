@@ -4,11 +4,11 @@
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
 
-import {AcceleratorConfigurationProvider, AcceleratorConfigurationProviderRemote, AcceleratorsUpdatedObserverRemote} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
+import {AcceleratorConfigurationProvider, AcceleratorConfigurationProviderRemote, AcceleratorResultData, AcceleratorsUpdatedObserverRemote} from '../mojom-webui/ash/webui/shortcut_customization_ui/mojom/shortcut_customization.mojom-webui.js';
 
 import {fakeAcceleratorConfig, fakeLayoutInfo} from './fake_data.js';
 import {FakeShortcutProvider} from './fake_shortcut_provider.js';
-import {Accelerator, AcceleratorConfigResult, AcceleratorSource, MojoAcceleratorConfig, MojoLayoutInfo, ShortcutProviderInterface} from './shortcut_types.js';
+import {Accelerator, AcceleratorSource, MojoAcceleratorConfig, MojoLayoutInfo, ShortcutProviderInterface} from './shortcut_types.js';
 
 
 
@@ -25,11 +25,15 @@ let shortcutProvider: ShortcutProviderInterface|null = null;
  * This variable is intended to be manually set by developers for the
  * purposes of debugging.
  */
-const useFakeProvider: boolean = false;
+export let useFakeProvider: boolean = false;
 
 export function setShortcutProviderForTesting(
     testProvider: ShortcutProviderInterface): void {
   shortcutProvider = testProvider;
+}
+
+export function setUseFakeProviderForTesting(useFake: boolean): void {
+  useFakeProvider = useFake;
 }
 
 /**
@@ -78,30 +82,46 @@ export class ShortcutProviderWrapper implements ShortcutProviderInterface {
     return this.remote.isMutable(source);
   }
 
+  hasLauncherButton(): Promise<{hasLauncherButton: boolean}> {
+    return this.remote.hasLauncherButton();
+  }
+
+  addAccelerator(
+      source: AcceleratorSource, action: number,
+      accelerator: Accelerator): Promise<{result: AcceleratorResultData}> {
+    return this.remote.addAccelerator(source, action, accelerator);
+  }
+
   removeAccelerator(
       source: AcceleratorSource, action: number,
-      accelerator: Accelerator): Promise<AcceleratorConfigResult> {
-    // TODO(cambickel) Replace with real mojo method.
-    return this.fakeProvider.removeAccelerator(source, action, accelerator);
+      accelerator: Accelerator): Promise<{result: AcceleratorResultData}> {
+    return this.remote.removeAccelerator(source, action, accelerator);
   }
 
   replaceAccelerator(
       source: AcceleratorSource, action: number, oldAccelerator: Accelerator,
-      newAccelerator: Accelerator): Promise<AcceleratorConfigResult> {
-    // TODO(cambickel) Replace with real mojo method.
-    return this.fakeProvider.replaceAccelerator(
+      newAccelerator: Accelerator): Promise<{result: AcceleratorResultData}> {
+    return this.remote.replaceAccelerator(
         source, action, oldAccelerator, newAccelerator);
-  }
-
-  addUserAccelerator(
-      source: AcceleratorSource, action: number,
-      accelerator: Accelerator): Promise<AcceleratorConfigResult> {
-    // TODO(cambickel) Replace with real mojo method.
-    return this.fakeProvider.addUserAccelerator(source, action, accelerator);
   }
 
   addObserver(observer: AcceleratorsUpdatedObserverRemote): void {
     return this.remote.addObserver(observer);
+  }
+
+  restoreDefault(source: AcceleratorSource, actionId: number):
+      Promise<{result: AcceleratorResultData}> {
+    return this.remote.restoreDefault(source, actionId);
+  }
+
+  restoreAllDefaults(): Promise<{result: AcceleratorResultData}> {
+    return this.remote.restoreAllDefaults();
+  }
+
+  preventProcessingAccelerators(preventProcessingAccelerators: boolean):
+      Promise<void> {
+    return this.remote.preventProcessingAccelerators(
+        preventProcessingAccelerators);
   }
 }
 

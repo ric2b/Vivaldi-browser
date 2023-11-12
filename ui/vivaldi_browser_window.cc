@@ -52,6 +52,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/autofill/autofill_bubble_handler_impl.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
+#include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
 #include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/common/chrome_switches.h"
@@ -113,6 +114,7 @@
 #include "ui/vivaldi_quit_confirmation_dialog.h"
 #include "ui/vivaldi_rootdocument_handler.h"
 #include "ui/vivaldi_ui_utils.h"
+#include "ui/window_registry_service.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if defined(USE_AURA)
@@ -176,6 +178,7 @@ class VivaldiBrowserWindow::InterfaceHelper final
       public ManagePasswordsIconView,
       public autofill::AutofillBubbleHandler,
       public extensions::ExtensionFunctionDispatcher::Delegate,
+      public extensions::ExtensionKeybindingRegistry::Delegate,
       public extensions::ExtensionRegistryObserver,
       public extensions::VivaldiRootDocumentHandlerObserver,
       public infobars::InfoBarContainer::Delegate,
@@ -312,6 +315,12 @@ class VivaldiBrowserWindow::InterfaceHelper final
     return window_.web_contents();
   }
 
+  // ExtensionKeybindingRegistry::Delegate overrides
+
+  content::WebContents* GetWebContentsForExtension() override {
+    return GetActiveWebContents();
+  }
+
   // ExtensionRegistryObserver overrides
 
   void OnExtensionUnloaded(
@@ -326,11 +335,14 @@ class VivaldiBrowserWindow::InterfaceHelper final
   // VivaldiRootDocumentHandlerObserver
 
   void OnRootDocumentDidFinishNavigation() override {
-    GURL resource_url =
-        window_.extension_->GetResourceURL(window_.resource_relative_url_);
-    window_.web_contents()->GetController().LoadURL(
-        resource_url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
-        std::string());
+    if (!vivaldi_runtime_feature::IsEnabled(GetProfile(),
+                                           "portal_browserwindow")) {
+      GURL resource_url =
+          window_.extension_->GetResourceURL(window_.resource_relative_url_);
+      window_.web_contents()->GetController().LoadURL(
+          resource_url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
+          std::string());
+    }
     // This window is no longer interested in states from the root document.
     window_.root_doc_handler_->RemoveObserver(this);
   }
@@ -366,6 +378,10 @@ class VivaldiBrowserWindow::InterfaceHelper final
     window_.widget_->RemoveObserver(this);
     window_.widget_ = nullptr;
     window_.OnNativeClose();
+
+    // Reset the keybinding registry here. Otherwise its destructor will be
+    // called too late and crash the browser.
+    extension_keybinding_registry_.reset();
   }
 
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override {
@@ -382,6 +398,14 @@ class VivaldiBrowserWindow::InterfaceHelper final
     Browser* browser = window_.browser();
     if (!active && browser) {
       BrowserList::NotifyBrowserNoLongerActive(browser);
+    }
+
+    if (!extension_keybinding_registry_ &&
+        widget->GetFocusManager()) {  // focus manager can be null in tests.
+      extension_keybinding_registry_ =
+          std::make_unique<ExtensionKeybindingRegistryViews>(
+              browser->profile(), widget->GetFocusManager(),
+              extensions::ExtensionKeybindingRegistry::ALL_EXTENSIONS, this);
     }
   }
 
@@ -447,6 +471,10 @@ class VivaldiBrowserWindow::InterfaceHelper final
   }
 
   VivaldiBrowserWindow& window_;
+
+  // The class that registers for keyboard shortcuts for extension commands.
+  std::unique_ptr<ExtensionKeybindingRegistryViews>
+      extension_keybinding_registry_;
 };
 
 namespace {
@@ -600,6 +628,7 @@ VivaldiBrowserWindow::VivaldiBrowserWindow()
 }
 
 VivaldiBrowserWindow::~VivaldiBrowserWindow() {
+  vivaldi::WindowRegistryService::Get(GetProfile())->RemoveWindow(window_key_);
   DCHECK(root_doc_handler_);
   root_doc_handler_->RemoveObserver(interface_helper_.get());
   OnDidFinishNavigation(false);
@@ -769,7 +798,13 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   DCHECK(root_doc_handler_);
   root_doc_handler_->AddObserver(interface_helper_.get());
-
+  if (vivaldi_runtime_feature::IsEnabled(GetProfile(),
+                                         "portal_browserwindow")) {
+    GURL resource_url = extension_->GetResourceURL(params.resource_relative_url);
+    web_contents()->GetController().LoadURL(
+        resource_url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
+        std::string());
+  }
   PrefService* prefs = GetProfile()->GetPrefs();
   prompt_on_quit_ = prefs->GetBoolean(
     vivaldiprefs::kSystemShowExitConfirmationDialog);
@@ -780,6 +815,7 @@ void VivaldiBrowserWindow::InitWidget(
   widget_delegate_ = std::make_unique<VivaldiWindowWidgetDelegate>(this);
   widget_delegate_->SetCanResize(browser_->create_params().can_resize);
 
+  // widget_ is owned by the native widget it creates.
   widget_ = new views::Widget();
   widget_->AddObserver(interface_helper_.get());
 
@@ -887,7 +923,11 @@ void VivaldiBrowserWindow::ContentsDidStartNavigation() {}
 
 void VivaldiBrowserWindow::ContentsLoadCompletedInMainFrame() {
   // inject the browser id when the document is done loading
-  std::string js = base::StringPrintf("window.vivaldiWindowId = %i;", id());
+  std::string js = base::StringPrintf(
+      "window.vivaldiWindowId = %i; window.selectWindow = map => map.get(%i);",
+      id(),
+      id()
+  );
   std::u16string script;
   if (!base::UTF8ToUTF16(js.c_str(), js.length(), &script)) {
     NOTREACHED();
@@ -909,6 +949,10 @@ void VivaldiBrowserWindow::InjectVivaldiWindowIdComplete(base::Value result) {
 }
 
 void VivaldiBrowserWindow::Show() {
+  // This function can not do the actual showing of window. It is called too
+  // early by StartupBrowserCreatorImpl::OpenTabsInBrowser() &&
+  // SessionRestoreImpl::RestoreTab() for VivaldiSplashBackground to be ready.
+  // Actual showing of window takes place in ShowForReal().
 #if !BUILDFLAG(IS_WIN)
   // The Browser associated with this browser window must become the active
   // browser at the time |Show()| is called. This is the natural behavior under
@@ -921,11 +965,9 @@ void VivaldiBrowserWindow::Show() {
     BrowserList::SetLastActive(browser());
   }
 #endif
+}
 
-  if (has_been_shown_)
-    return;
-
-  has_been_shown_ = true;
+void VivaldiBrowserWindow::ShowForReal() {
   is_hidden_ = false;
 
   keep_alive_ = std::make_unique<ScopedKeepAlive>(
@@ -949,6 +991,12 @@ void VivaldiBrowserWindow::Show() {
   }
 
   OnNativeWindowChanged();
+
+  // Loads any persistent tabs (pinned and ws) that were present when last
+  // window was closed without quitting application. Only Mac saves this
+  // informantion now, but we may have to extend this for all due to extensions
+  // that allow the application to run in background with no windows.
+  sessions::OpenPersistentTabs(browser_.get());
 }
 
 void VivaldiBrowserWindow::Hide() {
@@ -1007,6 +1055,37 @@ void VivaldiBrowserWindow::CloseCleanup() {
   MovePersistentTabsToOtherWindowIfNeeded();
   extensions::DevtoolsConnectorAPI::CloseDevtoolsForBrowser(GetProfile(),
                                                             browser());
+}
+
+bool VivaldiBrowserWindow::HasPersistentTabs() {
+  TabStripModel* tab_strip_model = browser_->tab_strip_model();
+  for (int i = 0; i < tab_strip_model->count(); ++i) {
+    if (tab_strip_model->IsTabPinned(i)) {
+      return true;
+    }
+    content::WebContents *content = tab_strip_model->GetWebContentsAt(i);
+    if (extensions::IsTabInAWorkspace(content)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::vector<int> VivaldiBrowserWindow::GetPersistentTabIds() {
+  std::vector<int> ids;
+  TabStripModel* tab_strip_model = browser_->tab_strip_model();
+  for (int i = 0; i < tab_strip_model->count(); ++i) {
+    if (tab_strip_model->IsTabPinned(i)) {
+      content::WebContents *content = tab_strip_model->GetWebContentsAt(i);
+      ids.push_back(sessions::SessionTabHelper::IdForTab(content).id());
+    } else {
+      content::WebContents *content = tab_strip_model->GetWebContentsAt(i);
+      if (extensions::IsTabInAWorkspace(content)) {
+        ids.push_back(sessions::SessionTabHelper::IdForTab(content).id());
+      }
+    }
+  }
+  return ids;
 }
 
 void VivaldiBrowserWindow::MovePersistentTabsToOtherWindowIfNeeded() {
@@ -1132,6 +1211,17 @@ bool VivaldiBrowserWindow::ConfirmWindowClose() {
   }
 #endif  // !BUILDFLAG(IS_MAC)
 
+#if BUILDFLAG(IS_MAC)
+  // Save pinned tabs and/or WS tabs to a session file when we close the last
+  // normal window (without quitting). It will be used to restore those tabs if
+  // we open a new window.
+  if (!browser_shutdown::IsTryingToQuit() &&
+       ShouldSavePersistentTabsOnCloseWindow()) {
+    std::vector<int> ids = GetPersistentTabIds();
+    sessions::SavePersistentTabs(GetProfile(), ids);
+  }
+#endif  // BUILDFLAG(IS_MAC)
+
   // Since we do not show any dialog we have to call code that the delegate
   // would otherwise do.
   // TODO: This is too early (because of ShouldCloseWindow() below), but we do
@@ -1245,6 +1335,25 @@ bool VivaldiBrowserWindow::ShouldShowDialogOnCloseWindow() {
          !browser()->tab_strip_model()->empty() &&
          browser()->type() == Browser::TYPE_NORMAL &&
          !GetProfile()->IsGuestSession();
+}
+bool VivaldiBrowserWindow::ShouldSavePersistentTabsOnCloseWindow() {
+  if (GetProfile()->IsGuestSession() || GetProfile()->IsOffTheRecord()) {
+    return false;
+  }
+  int tabbed_windows_cnt = 0;
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->type() == Browser::TYPE_NORMAL) {
+      if (!browser->profile()->IsGuestSession() &&
+          !browser->profile()->IsOffTheRecord()) {
+        tabbed_windows_cnt ++;
+      }
+    }
+  }
+  if (tabbed_windows_cnt != 1) {
+    return false;
+  }
+
+  return HasPersistentTabs();
 }
 
 void VivaldiBrowserWindow::SetQuitDialogOwner(VivaldiBrowserWindow* owner) {
@@ -1597,7 +1706,7 @@ bool VivaldiBrowserWindow::IsVisibleOnAllWorkspaces() const {
 }
 
 Profile* VivaldiBrowserWindow::GetProfile() const {
-  return browser_->profile();
+  return browser_ ? browser_->profile() : nullptr;
 }
 
 content::WebContents* VivaldiBrowserWindow::GetActiveWebContents() const {
@@ -1616,13 +1725,6 @@ ShowTranslateBubbleResult VivaldiBrowserWindow::ShowTranslateBubble(
 
 void VivaldiBrowserWindow::UpdateDevTools() {
   TabStripModel* tab_strip_model = browser_->tab_strip_model();
-
-  // Get the docking state.
-  auto& prefs = browser_->profile()->GetPrefs()->GetDict(
-      prefs::kDevToolsPreferences);
-
-  std::string docking_state;
-  std::string device_mode;
 
   // DevToolsWindow code has already activated the tab.
   content::WebContents* contents = tab_strip_model->GetActiveWebContents();
@@ -1645,6 +1747,13 @@ void VivaldiBrowserWindow::UpdateDevTools() {
       ResetDockingState(id);
     }
   }
+
+  // Get the docking state.
+  auto& prefs = browser_->profile()->GetPrefs()->GetDict(
+      prefs::kDevToolsPreferences);
+
+  std::string docking_state;
+
   DevToolsWindow* window =
       DevToolsWindow::GetInstanceForInspectedWebContents(contents);
 
@@ -1664,15 +1773,6 @@ void VivaldiBrowserWindow::UpdateDevTools() {
 
           extensions::DevtoolsConnectorAPI::SendDockingStateChanged(
               browser_->profile(), tab_id, docking_state);
-        }
-      }
-      tmp_str = prefs.FindString("showDeviceMode");
-      if (tmp_str) {
-        device_mode = *tmp_str;
-        base::ReplaceChars(device_mode, "\"", "", &device_mode);
-        bool device_mode_enabled = device_mode == "true";
-        if (item->device_mode_enabled() == device_mode_enabled) {
-          item->set_device_mode_enabled(device_mode_enabled);
         }
       }
     }

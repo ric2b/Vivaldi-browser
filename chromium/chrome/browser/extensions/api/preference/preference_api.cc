@@ -72,6 +72,8 @@ constexpr char kPermissionErrorMessage[] =
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 constexpr char kPrimaryProfileOnlyErrorMessage[] =
     "You may only access the preference '*' in the primary profile.";
+constexpr char kAshDoesNotSupportPreference[] =
+    "The browser preference is not supported.";
 #endif
 constexpr char kIncognitoKey[] = "incognito";
 constexpr char kScopeKey[] = "scope";
@@ -526,15 +528,13 @@ void PreferenceAPI::OnContentSettingChanged(const std::string& extension_id,
   if (incognito) {
     ExtensionPrefs::Get(profile_)->UpdateExtensionPref(
         extension_id, pref_names::kPrefIncognitoContentSettings,
-        base::Value::ToUniquePtrValue(
-            base::Value(content_settings_store()->GetSettingsForExtension(
-                extension_id, kExtensionPrefsScopeIncognitoPersistent))));
+        base::Value(content_settings_store()->GetSettingsForExtension(
+            extension_id, kExtensionPrefsScopeIncognitoPersistent)));
   } else {
     ExtensionPrefs::Get(profile_)->UpdateExtensionPref(
         extension_id, pref_names::kPrefContentSettings,
-        base::Value::ToUniquePtrValue(
-            base::Value(content_settings_store()->GetSettingsForExtension(
-                extension_id, kExtensionPrefsScopeRegular))));
+        base::Value(content_settings_store()->GetSettingsForExtension(
+            extension_id, kExtensionPrefsScopeRegular)));
   }
 }
 
@@ -666,7 +666,7 @@ ExtensionFunction::ResponseAction GetPreferenceFunction::Run() {
   ProduceGetResult(&result, pref->GetValue(), level_of_control, browser_pref,
                    incognito);
 
-  return RespondNow(OneArgument(base::Value(std::move(result))));
+  return RespondNow(WithArguments(std::move(result)));
 }
 
 void GetPreferenceFunction::ProduceGetResult(
@@ -705,6 +705,11 @@ void GetPreferenceFunction::OnLacrosGetSuccess(
     return;
   }
 
+  if (!opt_value) {
+    Respond(Error(kAshDoesNotSupportPreference));
+    return;
+  }
+
   // Get read/write permissions and pref name again.
   Profile* profile = Profile::FromBrowserContext(browser_context());
 
@@ -729,7 +734,7 @@ void GetPreferenceFunction::OnLacrosGetSuccess(
   ProduceGetResult(&result, pref_value, level_of_control, cached_browser_pref_,
                    incognito);
 
-  Respond(OneArgument(base::Value(std::move(result))));
+  Respond(WithArguments(std::move(result)));
 }
 #endif
 

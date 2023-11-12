@@ -5,6 +5,7 @@
 #include "gpu/config/gpu_finch_features.h"
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "gpu/config/gpu_switches.h"
@@ -145,7 +146,8 @@ BASE_FEATURE(kDefaultEnableGpuRasterization,
 // Enables the use of out of process rasterization for canvas.
 BASE_FEATURE(kCanvasOopRasterization,
              "CanvasOopRasterization",
-#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_WIN) || \
+    (BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64))
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -183,11 +185,22 @@ BASE_FEATURE(kDisableVideoOverlayIfMoving,
 BASE_FEATURE(kNoUndamagedOverlayPromotion,
              "NoUndamagedOverlayPromotion",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Use a DCompPresenter as the root surface, instead of a
+// DirectCompositionSurfaceWin. DCompPresenter is surface-less and the actual
+// allocation of the root surface will be owned by the
+// SkiaOutputDeviceDCompPresenter.
+BASE_FEATURE(kDCompPresenter,
+             "DCompPresenter",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_IOS)
-// Enable use of Metal for OOP rasterization.
-BASE_FEATURE(kMetal, "Metal", base::FEATURE_DISABLED_BY_DEFAULT);
+// If enabled, the TASK_CATEGORY_POLICY value of the GPU process will be
+// adjusted to match the one from the browser process every time it changes.
+BASE_FEATURE(kAdjustGpuProcessPriority,
+             "AdjustGpuProcessPriority",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 // Causes us to use the SharedImageManager, removing support for the old
@@ -317,9 +330,12 @@ const base::FeatureParam<std::string> kDrDcBlockListByAndroidBuildFP{
     &kEnableDrDc, "BlockListByAndroidBuildFP", ""};
 #endif  // BUILDFLAG(IS_ANDROID)
 
-// Enable SkiaRenderer Dawn graphics backend. On Windows this will use D3D12,
-// and on Linux this will use Vulkan.
-BASE_FEATURE(kSkiaDawn, "SkiaDawn", base::FEATURE_DISABLED_BY_DEFAULT);
+// Enable Skia Graphite. This will use the Dawn backend by default, but can be
+// overridden with command line flags for testing on non-official developer
+// builds. See --skia-graphite-backend flag in gpu_switches.h.
+BASE_FEATURE(kSkiaGraphite,
+             "SkiaUseGraphite",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable GrShaderCache to use with Vulkan backend.
 BASE_FEATURE(kEnableGrShaderCacheForVulkan,
@@ -346,7 +362,7 @@ BASE_FEATURE(kReduceOpsTaskSplitting,
 // discardable memory.
 BASE_FEATURE(kNoDiscardableMemoryForGpuDecodePath,
              "NoDiscardableMemoryForGpuDecodePath",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Use a 100-command limit before forcing context switch per command buffer
 // instead of 20.
@@ -377,6 +393,12 @@ BASE_FEATURE(kPassthroughYuvRgbConversion,
 BASE_FEATURE(kCmdDecoderAlwaysGetSizeFromSourceTexture,
              "CmdDecoderAlwaysGetSizeFromSourceTexture",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// When the application is in background, whether to perform immediate GPU
+// cleanup when executing deferred requests.
+BASE_FEATURE(kGpuCleanupInBackground,
+             "GpuCleanupInBackground",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool UseGles2ForOopR() {
 #if BUILDFLAG(IS_ANDROID)

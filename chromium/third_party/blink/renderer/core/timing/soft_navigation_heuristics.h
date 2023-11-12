@@ -16,8 +16,7 @@
 namespace blink {
 
 // This class contains the logic for calculating Single-Page-App soft navigation
-// heuristics. See
-// https://docs.google.com/document/d/1W5Yfcxq5zKgmW5ZCao9FDH85xw3B1K1OrRhSZu0U_IQ/edit#
+// heuristics. See https://github.com/WICG/soft-navigations
 class SoftNavigationHeuristics
     : public GarbageCollected<SoftNavigationHeuristics>,
       public Supplement<LocalDOMWindow>,
@@ -36,13 +35,10 @@ class SoftNavigationHeuristics
   // The class's API.
   void UserInitiatedClick(ScriptState*);
   void ClickEventEnded(ScriptState*);
-  void SawURLChange(ScriptState*,
-                    const String& url,
-                    bool skip_descendant_check = false);
+  void SameDocumentNavigationStarted(ScriptState*);
+  void SameDocumentNavigationCommitted(ScriptState*, const String& url);
   void ModifiedDOM(ScriptState*);
   uint32_t SoftNavigationCount() { return soft_navigation_count_; }
-  void SetBackForwardNavigationURL(ScriptState* script_state,
-                                   const String& url);
 
   // TaskAttributionTracker::Observer's implementation.
   void OnCreateTaskScope(const scheduler::TaskAttributionId&) override;
@@ -60,8 +56,7 @@ class SoftNavigationHeuristics
   bool IsCurrentTaskDescendantOfClickEventHandler(ScriptState*);
   bool SetFlagIfDescendantAndCheck(ScriptState*,
                                    FlagType,
-                                   absl::optional<String> url = absl::nullopt,
-                                   bool skip_descendant_check = false);
+                                   bool run_descendent_check);
   void ResetHeuristic();
   void ResetPaintsIfNeeded(LocalFrame*, LocalDOMWindow*);
 

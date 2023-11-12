@@ -63,6 +63,8 @@ std::string ResultTypeToString(const ash::AppListSearchResultType result_type) {
       return "Image search";
     case ash::AppListSearchResultType::kSystemInfo:
       return "System info";
+    case ash::AppListSearchResultType::kDesksAdminTemplate:
+      return "Desks Admin template";
   }
   NOTREACHED();
 }
@@ -177,6 +179,10 @@ std::string MetricsTypeToString(const ash::SearchResultType metrics_type) {
       return "SEARCH_RESULT_TYPE_BOUNDARY";
     case ash::SearchResultType::SYSTEM_INFO:
       return "SYSTEM_INFO";
+    case ash::SearchResultType::IMAGE_SEARCH:
+      return "IMAGE_SEARCH";
+    case ash::SearchResultType::DESKS_ADMIN_TEMPLATE:
+      return "DESKS_ADMIN_TEMPLATE";
   }
   NOTREACHED();
 }
@@ -195,6 +201,8 @@ std::string DisplayTypeToString(
       return "Continue";
     case ash::SearchResultDisplayType::kRecentApps:
       return "RecentApps";
+    case ash::SearchResultDisplayType::kImage:
+      return "Image";
   }
   NOTREACHED();
 }

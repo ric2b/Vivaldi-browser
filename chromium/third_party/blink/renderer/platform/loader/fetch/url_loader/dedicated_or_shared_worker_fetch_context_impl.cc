@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/functional/bind.h"
+#include "base/ranges/algorithm.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -14,6 +15,7 @@
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/loader_constants.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_fetch_handler_bypass_option.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_provider.mojom.h"
 #include "third_party/blink/public/platform/child_url_loader_factory_bundle.h"
@@ -48,6 +50,7 @@ void CreateServiceWorkerSubresourceLoaderFactory(
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   Platform::Current()->CreateServiceWorkerSubresourceLoaderFactory(
       std::move(service_worker_container_host), client_id,
+      mojom::blink::ServiceWorkerFetchHandlerBypassOption::kDefault,
       std::move(fallback_factory), std::move(receiver), std::move(task_runner));
 }
 
@@ -661,10 +664,9 @@ WebDedicatedOrSharedWorkerFetchContext::Create(
 
   Vector<String> cors_exempt_header_list(
       base::checked_cast<wtf_size_t>(web_cors_exempt_header_list.size()));
-  std::transform(web_cors_exempt_header_list.begin(),
-                 web_cors_exempt_header_list.end(),
-                 cors_exempt_header_list.begin(),
-                 [](const WebString& h) { return WTF::String(h); });
+  base::ranges::transform(web_cors_exempt_header_list,
+                          cors_exempt_header_list.begin(),
+                          &WebString::operator WTF::String);
 
   scoped_refptr<DedicatedOrSharedWorkerFetchContextImpl> worker_fetch_context =
       base::AdoptRef(new DedicatedOrSharedWorkerFetchContextImpl(

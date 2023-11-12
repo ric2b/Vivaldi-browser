@@ -51,6 +51,9 @@ public class PasswordAccessReauthenticationHelper {
          * Reauthentication is required in order to copy a password.
          */
         int COPY_PASSWORD = 2;
+
+        // Vivaldi
+        int UNLOCK_APPLICATION = 3;
     }
 
     private final Context mContext;
@@ -103,6 +106,12 @@ public class PasswordAccessReauthenticationHelper {
                         R.string.lockscreen_description_copy, View.NO_ID, mFragmentManager,
                         ReauthScope.ONE_AT_A_TIME);
                 break;
+            // Vivaldi
+            case ReauthReason.UNLOCK_APPLICATION:
+                ReauthenticationManager.displayReauthenticationFragment(
+                        R.string.unlock_vivaldi, View.NO_ID, mFragmentManager,
+                        ReauthScope.ONE_AT_A_TIME);
+                break;
         }
     }
 
@@ -117,6 +126,13 @@ public class PasswordAccessReauthenticationHelper {
                     .show();
             return;
         }
+
+        // Vivaldi
+        if (reason == ReauthReason.UNLOCK_APPLICATION) {
+            Toast.makeText(mContext, R.string.unlock_vivaldi_toast, Toast.LENGTH_LONG).show();
+            return;
+        }
+
         Toast.makeText(mContext, R.string.password_entry_view_set_screen_lock, Toast.LENGTH_LONG)
                 .show();
     }

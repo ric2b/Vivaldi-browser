@@ -23,12 +23,14 @@ const UIEdgeInsets statusContainerPadding = UIEdgeInsetsMake(12, 0, 12, 0);
 
 @interface VivaldiATBSummeryHeaderView ()
 @property (weak, nonatomic) UIView* statusContainer;
+@property (weak, nonatomic) UIView* pulseAnimationView;
 @property (weak, nonatomic) UILabel* statusLabel;
 @end
 
 @implementation VivaldiATBSummeryHeaderView
 
 @synthesize statusContainer = _statusContainer;
+@synthesize pulseAnimationView = _pulseAnimationView;
 @synthesize statusLabel = _statusLabel;
 
 #pragma mark - INITIALIZER
@@ -59,6 +61,12 @@ const UIEdgeInsets statusContainerPadding = UIEdgeInsetsMake(12, 0, 12, 0);
 
   [containerView addSubview:statusContainer];
   [statusContainer fillSuperviewWithPadding:statusContainerPadding];
+
+  // Pulse animation view
+  UIView *pulseAnimationView = [UIView new];
+  _pulseAnimationView = pulseAnimationView;
+  [statusContainer addSubview:pulseAnimationView];
+  [pulseAnimationView fillSuperview];
 
   // Status label
   UILabel* statusLabel = [UILabel new];
@@ -91,6 +99,28 @@ const UIEdgeInsets statusContainerPadding = UIEdgeInsetsMake(12, 0, 12, 0);
       break;
     default: break;
   }
+}
+
+- (void)setRulesGroupApplying:(BOOL)isApplying {
+  _statusLabel.text =
+      GetNSString(IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_APPLYING_SETTINGS);
+
+  // Pulse animation.
+  UIColor *regularBlue = UIColor.vSystemPurple;
+  UIColor *pulsingBlue = UIColor.vSystemBlue;
+
+  // Create animation
+  CABasicAnimation *pulseAnimation =
+      [CABasicAnimation animationWithKeyPath:@"backgroundColor"];
+  pulseAnimation.fromValue = (id)regularBlue.CGColor;
+  pulseAnimation.toValue = (id)pulsingBlue.CGColor;
+  pulseAnimation.duration = 1.0;
+  pulseAnimation.autoreverses = YES;
+  pulseAnimation.repeatCount = HUGE_VALF;
+
+  // Add the animation to the layer
+  [_pulseAnimationView.layer addAnimation:pulseAnimation
+                                  forKey:@"pulseAnimation"];
 }
 
 @end

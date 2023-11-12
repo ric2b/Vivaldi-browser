@@ -17,7 +17,7 @@
 #include "components/safe_browsing/core/browser/sync/safe_browsing_primary_account_token_fetcher.h"
 #include "components/safe_browsing/core/browser/sync/sync_utils.h"
 #include "components/safe_browsing/core/common/features.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace safe_browsing {
 
@@ -35,7 +35,14 @@ PingManager* ChromePingManagerFactory::GetForBrowserContext(
 }
 
 ChromePingManagerFactory::ChromePingManagerFactory()
-    : ProfileKeyedServiceFactory("ChromeSafeBrowsingPingManager") {
+    : ProfileKeyedServiceFactory(
+          "ChromeSafeBrowsingPingManager",
+          ProfileSelections::Builder()
+              .WithRegular(ProfileSelection::kOriginalOnly)
+              // TODO(crbug.com/1418376): Check if this service is needed in
+              // Guest mode.
+              .WithGuest(ProfileSelection::kOriginalOnly)
+              .Build()) {
   DependsOn(IdentityManagerFactory::GetInstance());
 }
 

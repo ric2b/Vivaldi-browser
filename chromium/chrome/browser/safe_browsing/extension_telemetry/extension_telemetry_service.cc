@@ -23,6 +23,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/cookies_get_all_signal_processor.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/cookies_get_signal_processor.h"
+#include "chrome/browser/safe_browsing/extension_telemetry/declarative_net_request_signal_processor.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_signal.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_config_manager.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_file_processor.h"
@@ -252,6 +253,9 @@ void ExtensionTelemetryService::SetEnabled(bool enable) {
         ExtensionSignalType::kCookiesGetAll,
         std::make_unique<CookiesGetAllSignalProcessor>());
     signal_processors_.emplace(
+        ExtensionSignalType::kDeclarativeNetRequest,
+        std::make_unique<DeclarativeNetRequestSignalProcessor>());
+    signal_processors_.emplace(
         ExtensionSignalType::kTabsExecuteScript,
         std::make_unique<TabsExecuteScriptSignalProcessor>());
     signal_processors_.emplace(
@@ -267,6 +271,10 @@ void ExtensionTelemetryService::SetEnabled(bool enable) {
         signal_processors_[ExtensionSignalType::kCookiesGet].get()};
     std::vector<ExtensionSignalProcessor*> subscribers_for_cookies_get_all = {
         signal_processors_[ExtensionSignalType::kCookiesGetAll].get()};
+    std::vector<ExtensionSignalProcessor*>
+        subscribers_for_declarative_net_request = {
+            signal_processors_[ExtensionSignalType::kDeclarativeNetRequest]
+                .get()};
     std::vector<ExtensionSignalProcessor*> subscribers_for_tabs_execute_script =
         {signal_processors_[ExtensionSignalType::kTabsExecuteScript].get()};
     std::vector<ExtensionSignalProcessor*>
@@ -281,6 +289,9 @@ void ExtensionTelemetryService::SetEnabled(bool enable) {
                                 std::move(subscribers_for_cookies_get));
     signal_subscribers_.emplace(ExtensionSignalType::kCookiesGetAll,
                                 std::move(subscribers_for_cookies_get_all));
+    signal_subscribers_.emplace(
+        ExtensionSignalType::kDeclarativeNetRequest,
+        std::move(subscribers_for_declarative_net_request));
     signal_subscribers_.emplace(ExtensionSignalType::kTabsExecuteScript,
                                 std::move(subscribers_for_tabs_execute_script));
     signal_subscribers_.emplace(
@@ -383,13 +394,13 @@ void ExtensionTelemetryService::Shutdown() {
   pref_change_registrar_.RemoveAll();
 }
 
-bool ExtensionTelemetryService::SignalDataPresent() {
+bool ExtensionTelemetryService::SignalDataPresent() const {
   return (extension_store_.size() > 0);
 }
 
 bool ExtensionTelemetryService::IsSignalEnabled(
     const extensions::ExtensionId& extension_id,
-    ExtensionSignalType signal_type) {
+    ExtensionSignalType signal_type) const {
   return config_manager_->IsSignalEnabled(extension_id, signal_type);
 }
 
@@ -543,9 +554,9 @@ std::unique_ptr<ExtensionTelemetryReportRequest>
 ExtensionTelemetryService::CreateReport() {
   // Don't create a telemetry report if there were no signals generated (i.e.,
   // extension store is empty) AND there are no installed extensions currently.
-  std::unique_ptr<extensions::ExtensionSet> installed_extensions =
+  extensions::ExtensionSet installed_extensions =
       extension_registry_->GenerateInstalledExtensionsSet();
-  if (extension_store_.empty() && installed_extensions->is_empty()) {
+  if (extension_store_.empty() && installed_extensions.empty()) {
     return nullptr;
   }
 
@@ -583,11 +594,11 @@ ExtensionTelemetryService::CreateReport() {
   // them. Note that these installed extension reports will only contain
   // extension information (and no signal data).
   for (const auto& entry : extension_store_) {
-    installed_extensions->Remove(entry.first /* extension_id */);
+    installed_extensions.Remove(entry.first /* extension_id */);
   }
 
-  for (const scoped_refptr<const extensions::Extension> installed_entry :
-       *installed_extensions) {
+  for (const scoped_refptr<const extensions::Extension>& installed_entry :
+       installed_extensions) {
     auto report_entry_pb =
         std::make_unique<ExtensionTelemetryReportRequest_Report>();
 
@@ -660,26 +671,175 @@ void ExtensionTelemetryService::DumpReportForTest(
        << "  DisableReasons: 0x" << std::hex << extension_pb.disable_reasons()
        << "\n";
 
+    if (extension_pb.has_manifest_json()) {
+      ss << "  ManifestJSON: " << extension_pb.manifest_json() << "\n";
+    }
+
+    const RepeatedPtrField<
+        ExtensionTelemetryReportRequest_ExtensionInfo_FileInfo>& file_infos =
+        extension_pb.file_infos();
+    if (!file_infos.empty()) {
+      ss << "  FileInfos: \n";
+      for (const auto& file_info : file_infos) {
+        ss << "    File name: " << file_info.name()
+           << " File hash: " << file_info.hash() << "\n";
+      }
+    }
+
     const RepeatedPtrField<ExtensionTelemetryReportRequest_SignalInfo>&
         signals = report_pb.signals();
     for (const auto& signal_pb : signals) {
-      const auto& tabs_execute_script_info_pb =
-          signal_pb.tabs_execute_script_info();
-      const RepeatedPtrField<
-          ExtensionTelemetryReportRequest_SignalInfo_TabsExecuteScriptInfo_ScriptInfo>&
-          scripts = tabs_execute_script_info_pb.scripts();
-      if (!scripts.empty()) {
-        ss << "  Signal: TabsExecuteScript\n";
-        for (const auto& script_pb : scripts) {
-          ss << "    Script hash: "
-             << base::HexEncode(script_pb.hash().c_str(),
-                                script_pb.hash().size())
-             << " count: " << script_pb.execution_count() << "\n";
+      // Tabs Execute Script
+      if (signal_pb.has_tabs_execute_script_info()) {
+        const auto& tabs_execute_script_info_pb =
+            signal_pb.tabs_execute_script_info();
+        const RepeatedPtrField<
+            ExtensionTelemetryReportRequest_SignalInfo_TabsExecuteScriptInfo_ScriptInfo>&
+            scripts = tabs_execute_script_info_pb.scripts();
+        if (!scripts.empty()) {
+          ss << "  Signal: TabsExecuteScript\n";
+          for (const auto& script_pb : scripts) {
+            ss << "    Script hash: "
+               << base::HexEncode(script_pb.hash().c_str(),
+                                  script_pb.hash().size())
+               << " count: " << script_pb.execution_count() << "\n";
+          }
         }
+        continue;
+      }
+
+      // Remote Host Contacted
+      if (signal_pb.has_remote_host_contacted_info()) {
+        const auto& remote_host_contacted_info_pb =
+            signal_pb.remote_host_contacted_info();
+        const RepeatedPtrField<
+            ExtensionTelemetryReportRequest_SignalInfo_RemoteHostContactedInfo_RemoteHostInfo>&
+            remote_host_infos = remote_host_contacted_info_pb.remote_host();
+        if (!remote_host_infos.empty()) {
+          ss << "  Signal: RemoteHostContacted\n";
+          for (const auto& remote_host_info_pb : remote_host_infos) {
+            ss << "    RemoteHostInfo:\n"
+               << "      URL: " << remote_host_info_pb.url() << "\n"
+               << "      ConnectionProtocal: "
+               << remote_host_info_pb.connection_protocol() << "\n"
+               << "      count: " << remote_host_info_pb.contact_count()
+               << "\n";
+          }
+        }
+        continue;
+      }
+
+      // Cookies Get All
+      if (signal_pb.has_cookies_get_all_info()) {
+        const auto& cookies_get_all_info_pb = signal_pb.cookies_get_all_info();
+        const RepeatedPtrField<
+            ExtensionTelemetryReportRequest_SignalInfo_CookiesGetAllInfo_GetAllArgsInfo>&
+            get_all_args_infos = cookies_get_all_info_pb.get_all_args_info();
+        if (!get_all_args_infos.empty()) {
+          ss << "  Signal: CookiesGetAll\n";
+          for (const auto& get_all_args_pb : get_all_args_infos) {
+            ss << "    GetAllArgsInfo:\n"
+               << "      Domain: " << get_all_args_pb.domain() << "\n"
+               << "      Name: " << get_all_args_pb.name() << "\n"
+               << "      Path: " << get_all_args_pb.path() << "\n"
+               << "      Secure: " << (get_all_args_pb.secure() ? "Y" : "N")
+               << "\n"
+               << "      StoreId: " << get_all_args_pb.store_id() << "\n"
+               << "      URL: " << get_all_args_pb.url() << "\n"
+               << "      IsSession: "
+               << (get_all_args_pb.is_session() ? "Y" : "N") << "\n"
+               << "      count: " << get_all_args_pb.count() << "\n";
+          }
+        }
+        continue;
+      }
+
+      // Cookies Get
+      if (signal_pb.has_cookies_get_info()) {
+        const auto& cookies_get_info_pb = signal_pb.cookies_get_info();
+        const RepeatedPtrField<
+            ExtensionTelemetryReportRequest_SignalInfo_CookiesGetInfo_GetArgsInfo>&
+            get_args_infos = cookies_get_info_pb.get_args_info();
+        if (!get_args_infos.empty()) {
+          ss << "  Signal: CookiesGet\n";
+          for (const auto& get_args_pb : get_args_infos) {
+            ss << "    GetArgsInfo:\n"
+               << "      Name: " << get_args_pb.name() << "\n"
+               << "      URL: " << get_args_pb.url() << "\n"
+               << "      StoreId: " << get_args_pb.store_id() << "\n"
+               << "      count: " << get_args_pb.count() << "\n";
+          }
+        }
+        continue;
+      }
+
+      // Potential Password Theft
+      if (signal_pb.has_potential_password_theft_info()) {
+        const auto& potential_password_theft_info_pb =
+            signal_pb.potential_password_theft_info();
+        const RepeatedPtrField<
+            ExtensionTelemetryReportRequest_SignalInfo_PotentialPasswordTheftInfo_PasswordReuseInfo>&
+            reused_password_infos =
+                potential_password_theft_info_pb.reused_password_infos();
+        const RepeatedPtrField<
+            ExtensionTelemetryReportRequest_SignalInfo_PotentialPasswordTheftInfo_RemoteHostData>&
+            remote_hosts_data =
+                potential_password_theft_info_pb.remote_hosts_data();
+        if (!reused_password_infos.empty() && !remote_hosts_data.empty()) {
+          ss << "  Signal: PotentialPasswordTheft\n";
+          for (const auto& remote_hosts_data_pb : remote_hosts_data) {
+            ss << "    RemoteHostData:\n"
+               << "      URL: " << remote_hosts_data_pb.remote_host_url()
+               << "\n"
+               << "      count: " << remote_hosts_data_pb.count() << "\n";
+          }
+          for (const auto& reused_password_infos_pb : reused_password_infos) {
+            ss << "    PasswordReuseInfo:\n";
+            ss << "      DomainsMatchingPassword:\n";
+            for (const std::string& matching_domain :
+                 reused_password_infos_pb.domains_matching_password()) {
+              ss << "        " << matching_domain << "\n";
+            }
+            ss << "      IsChromeSigninPassword: "
+               << (reused_password_infos_pb.is_chrome_signin_password() ? "Y"
+                                                                        : "N")
+               << "\n";
+            ss << "      ReusedPasswordAccountType:\n";
+            ss << "        IsAccountSyncing: "
+               << (reused_password_infos_pb.reused_password_account_type()
+                           .is_account_syncing()
+                       ? "Y"
+                       : "N")
+               << "\n";
+            ss << "        AccountType: "
+               << reused_password_infos_pb.reused_password_account_type()
+                      .account_type()
+               << "\n";
+            ss << "      ReuseCount: " << reused_password_infos_pb.count()
+               << "\n";
+          }
+        }
+      }
+
+      // Declarative Net Request
+      if (signal_pb.has_declarative_net_request_info()) {
+        const auto& declarative_net_request_info_pb =
+            signal_pb.declarative_net_request_info();
+        const RepeatedPtrField<std::string>& rules =
+            declarative_net_request_info_pb.rules();
+        if (!rules.empty()) {
+          ss << "  Signal: DeclarativeNetRequest\n";
+          for (const auto& rule : rules) {
+            ss << "    Rule:" << rule << "\n";
+          }
+          ss << "    MaxExceededRulesCount:"
+             << declarative_net_request_info_pb.max_exceeded_rules_count()
+             << "\n";
+        }
+        continue;
       }
     }
   }
-
   DVLOG(1) << "Telemetry Report: " << ss.str();
 }
 
@@ -827,10 +987,10 @@ void ExtensionTelemetryService::StartOffstoreFileDataCollection() {
 }
 
 void ExtensionTelemetryService::GetOffstoreExtensionDirs() {
-  std::unique_ptr<extensions::ExtensionSet> installed_extensions =
+  const extensions::ExtensionSet installed_extensions =
       extension_registry_->GenerateInstalledExtensionsSet();
 
-  for (const auto& extension : *installed_extensions) {
+  for (const auto& extension : installed_extensions) {
     if (!extension->from_webstore() &&
         !extensions::Manifest::IsComponentLocation(extension->location())) {
       offstore_extension_dirs_[extension->id()] = extension->path();

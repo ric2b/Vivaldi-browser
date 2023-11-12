@@ -31,12 +31,13 @@ struct CredentialUIEntry;
 // Shows form to manually enter new password credentials.
 - (void)showAddPasswordSheet;
 
-// Shows promotional view for Passwords In Other Apps.
-- (void)showPasswordsInOtherAppsPromo;
-
 // Shows delete confirmation for batch passwords delete.
 - (void)showPasswordDeleteDialogWithOrigins:(NSArray<NSString*>*)origins
                                  completion:(void (^)(void))completion;
+
+// Shows a dialog offering the user to set a passcode in order to see the
+// password details.
+- (void)showSetupPasscodeDialog;
 
 @end
 

@@ -19,8 +19,6 @@ import org.chromium.webengine.interfaces.IPostMessageCallback;
 import org.chromium.webengine.interfaces.IStringCallback;
 import org.chromium.webengine.interfaces.ITabParams;
 import org.chromium.webengine.interfaces.ITabProxy;
-import org.chromium.webengine.interfaces.IWebMessageCallback;
-import org.chromium.webengine.interfaces.IWebMessageReplyProxy;
 
 import java.util.List;
 
@@ -28,33 +26,67 @@ import java.util.List;
  * Tab controls the tab content and state.
  */
 public class Tab {
+    @NonNull
+    private WebEngine mWebEngine;
+
+    @NonNull
     private ITabProxy mTabProxy;
+
+    @NonNull
     private TabNavigationController mTabNavigationController;
+
+    @NonNull
     private TabObserverDelegate mTabObserverDelegate;
+
+    @NonNull
     private String mGuid;
+
+    @NonNull
     private Uri mUri;
+
+    @NonNull
     private ObserverList<MessageEventListenerProxy> mMessageEventListenerProxies =
             new ObserverList<>();
+
     private boolean mPostMessageReady;
 
-    Tab(@NonNull ITabParams tabParams) {
+    @NonNull
+    private FullscreenCallbackDelegate mFullscreenCallbackDelegate;
+
+    Tab(@NonNull WebEngine webEngine, @NonNull ITabParams tabParams) {
         assert tabParams.tabProxy != null;
         assert tabParams.tabGuid != null;
         assert tabParams.navigationControllerProxy != null;
         assert tabParams.uri != null;
 
+        mWebEngine = webEngine;
         mTabProxy = tabParams.tabProxy;
         mGuid = tabParams.tabGuid;
         mUri = Uri.parse(tabParams.uri);
         mTabObserverDelegate = new TabObserverDelegate(this);
-        mTabNavigationController = new TabNavigationController(tabParams.navigationControllerProxy);
+        mTabNavigationController =
+                new TabNavigationController(this, tabParams.navigationControllerProxy);
+        mFullscreenCallbackDelegate = new FullscreenCallbackDelegate(mWebEngine, this);
 
         try {
             mTabProxy.setTabObserverDelegate(mTabObserverDelegate);
+            mTabProxy.setFullscreenCallbackDelegate(mFullscreenCallbackDelegate);
         } catch (RemoteException e) {
         }
     }
 
+    /**
+     * Returns the WebEngine instance associated with this Tab.
+     */
+    @NonNull
+    public WebEngine getWebEngine() {
+        return mWebEngine;
+    }
+
+    /**
+     * Returns the URL of the page displayed.
+     */
+    @NonNull
     public Uri getDisplayUri() {
         return mUri;
     }
@@ -63,6 +95,10 @@ public class Tab {
         mUri = uri;
     }
 
+    /**
+     * Returns a unique identifier for the Tab.
+     */
+    @NonNull
     public String getGuid() {
         return mGuid;
     }
@@ -71,6 +107,10 @@ public class Tab {
      * Sets this Tab to active.
      */
     public void setActive() {
+        // TODO(rayankans): Should we make this return a ListenableFuture that resolves after the
+        // tab becomes active?
+        ThreadCheck.ensureOnUiThread();
+
         if (mTabProxy == null) {
             throw new IllegalStateException("WebSandbox has been destroyed");
         }
@@ -84,6 +124,9 @@ public class Tab {
      * Closes this Tab.
      */
     public void close() {
+        // TODO(rayankans): Should we make this return a ListenableFuture that resolves after the
+        // tab is closed?
+        ThreadCheck.ensureOnUiThread();
         if (mTabProxy == null) {
             throw new IllegalStateException("WebSandbox has been destroyed");
         }
@@ -93,8 +136,19 @@ public class Tab {
         }
     }
 
+    /**
+     * Executes the script, and resolves with the result of the execution.
+     *
+     * @param useSeparateIsolate If true, runs the script in a separate v8 Isolate. This uses more
+     * memory, but separates the injected scrips from scripts in the page. This prevents any
+     * potentially malicious interaction between first-party scripts in the page, and injected
+     * scripts. Use with caution, only pass false for this argument if you know this isn't an issue
+     * or you need to interact with first-party scripts.
+     */
+    @NonNull
     public ListenableFuture<String> executeScript(
             @NonNull String script, boolean useSeparateIsolate) {
+        ThreadCheck.ensureOnUiThread();
         if (mTabProxy == null) {
             return Futures.immediateFailedFuture(
                     new IllegalStateException("WebSandbox has been destroyed"));
@@ -130,59 +184,6 @@ public class Tab {
     }
 
     /**
-     * Adds a WebMessageCallback and injects a JavaScript object into each frame that the
-     * WebMessageCallback will listen on.
-     *
-     * The injected JavaScript object will be named {@code jsObjectName} in the global scope. This
-     * will inject the JavaScript object in any frame whose origin matches {@code
-     * allowedOriginRules} for every navigation after this call, and the JavaScript object will be
-     * available immediately when the page begins to load.
-     */
-    public void registerWebMessageCallback(
-            WebMessageCallback callback, String jsObjectName, List<String> allowedOrigins) {
-        if (mTabProxy == null) {
-            throw new IllegalStateException("WebSandbox has been destroyed");
-        }
-        try {
-            mTabProxy.registerWebMessageCallback(new IWebMessageCallback.Stub() {
-                @Override
-                public void onWebMessageReceived(
-                        IWebMessageReplyProxy iReplyProxy, String message) {
-                    callback.onWebMessageReceived(new WebMessageReplyProxy(iReplyProxy), message);
-                }
-
-                @Override
-                public void onWebMessageReplyProxyClosed(IWebMessageReplyProxy iReplyProxy) {
-                    callback.onWebMessageReplyProxyClosed(new WebMessageReplyProxy(iReplyProxy));
-                }
-
-                @Override
-                public void onWebMessageReplyProxyActiveStateChanged(
-                        IWebMessageReplyProxy iReplyProxy) {
-                    callback.onWebMessageReplyProxyActiveStateChanged(
-                            new WebMessageReplyProxy(iReplyProxy));
-                }
-            }, jsObjectName, allowedOrigins);
-        } catch (RemoteException e) {
-        }
-    }
-
-    /**
-     * Removes the JavaScript object previously registered by way of registerWebMessageCallback.
-     * This impacts future navigations (not any already loaded navigations).
-     *
-     * @param jsObjectName Name of the JavaScript object.
-     */
-    public void unregisterWebMessageCallback(String jsObjectName) {
-        if (mTabProxy == null) {
-            throw new IllegalStateException("WebSandbox has been destroyed");
-        }
-        try {
-            mTabProxy.unregisterWebMessageCallback(jsObjectName);
-        } catch (RemoteException e) {
-        }
-    }
-    /**
      * Registers a {@link TabObserver} and returns if successful.
      *
      * @param tabObserver The TabObserver.
@@ -190,6 +191,7 @@ public class Tab {
      * @return true if observer was added to the list of observers.
      */
     public boolean registerTabObserver(@NonNull TabObserver tabObserver) {
+        ThreadCheck.ensureOnUiThread();
         return mTabObserverDelegate.registerObserver(tabObserver);
     }
 
@@ -201,6 +203,7 @@ public class Tab {
      * @return true if observer was removed from the list of observers.
      */
     public boolean unregisterTabObserver(@NonNull TabObserver tabObserver) {
+        ThreadCheck.ensureOnUiThread();
         return mTabObserverDelegate.unregisterObserver(tabObserver);
     }
 
@@ -238,6 +241,8 @@ public class Tab {
      */
     public void addMessageEventListener(
             @NonNull MessageEventListener listener, @NonNull List<String> allowedOrigins) {
+        ThreadCheck.ensureOnUiThread();
+
         if (mTabProxy == null) {
             throw new IllegalStateException("WebSandbox has been destroyed");
         }
@@ -280,6 +285,8 @@ public class Tab {
      * Removes the event listener.
      */
     public void removeMessageEventListener(@NonNull MessageEventListener listener) {
+        ThreadCheck.ensureOnUiThread();
+
         MessageEventListenerProxy targetProxy = null;
         for (MessageEventListenerProxy proxy : mMessageEventListenerProxies) {
             if (proxy.getListener().equals(listener)) {
@@ -322,6 +329,8 @@ public class Tab {
      * provided, the message will be accepted by a page of any origin.
      */
     public void postMessage(@NonNull String message, @NonNull String targetOrigin) {
+        ThreadCheck.ensureOnUiThread();
+
         if (mTabProxy == null) {
             throw new IllegalStateException("WebSandbox has been destroyed");
         }
@@ -329,6 +338,14 @@ public class Tab {
             mTabProxy.postMessage(message, targetOrigin);
         } catch (RemoteException e) {
         }
+    }
+
+    /**
+     * Attaches a callback to handle fullscreen events from the web content.
+     */
+    public void setFullscreenCallback(@NonNull FullscreenCallback callback) {
+        ThreadCheck.ensureOnUiThread();
+        mFullscreenCallbackDelegate.setFullscreenCallback(callback);
     }
 
     @Override

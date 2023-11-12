@@ -11,14 +11,18 @@
 #include "device/udev_linux/fake_udev_loader.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/accelerators/accelerator.h"
-#include "ui/chromeos/events/keyboard_capability.h"
+#include "ui/events/ash/keyboard_capability.h"
 #include "ui/events/devices/device_data_manager_test_api.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 
 namespace ash {
 
 namespace {
 
 constexpr char kKbdTopRowPropertyName[] = "CROS_KEYBOARD_TOP_ROW_LAYOUT";
+
+constexpr char kKbdTopRowLayoutUnspecified[] = "";
 constexpr char kKbdTopRowLayout1Tag[] = "1";
 constexpr char kKbdTopRowLayout2Tag[] = "2";
 constexpr char kKbdTopRowLayoutWilcoTag[] = "3";
@@ -30,6 +34,9 @@ struct AcceleratorAliasConverterTestData {
 };
 
 struct TopRowAcceleratorAliasConverterTestData {
+  // All currently connected keyboards' connection type, e.g.
+  // INPUT_DEVICE_INTERNAL.
+  std::vector<ui::InputDeviceType> keyboard_connection_type_;
   // All currently connected keyboards' layout types.
   std::vector<std::string> keyboard_layout_types_;
   ui::Accelerator accelerator_;
@@ -77,7 +84,15 @@ class FakeDeviceManager {
 
 using AcceleratorAliasConverterTest = AshTestBase;
 
-TEST_F(AcceleratorAliasConverterTest, CheckTopRowAlias) {
+TEST_F(AcceleratorAliasConverterTest, CheckTopRowAliasNoAlias) {
+  std::unique_ptr<FakeDeviceManager> fake_keyboard_manager_ =
+      std::make_unique<FakeDeviceManager>();
+  ui::InputDevice fake_keyboard(
+      /*id=*/1, /*type=*/ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH,
+      /*name=*/kKbdTopRowLayout1Tag);
+  fake_keyboard.sys_path = base::FilePath("path");
+  fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard, kKbdTopRowLayout1Tag);
+
   AcceleratorAliasConverter accelerator_alias_converter_;
 
   // Top row keys not fKeys prevents remapping.
@@ -92,6 +107,85 @@ TEST_F(AcceleratorAliasConverterTest, CheckTopRowAlias) {
   EXPECT_EQ(accelerator, accelerator_aliases[0]);
 }
 
+TEST_F(AcceleratorAliasConverterTest, CheckGlobeKeyAlias) {
+  std::unique_ptr<FakeDeviceManager> fake_keyboard_manager_ =
+      std::make_unique<FakeDeviceManager>();
+  ui::InputDevice fake_keyboard(
+      /*id=*/1, /*type=*/ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH,
+      /*name=*/kKbdTopRowLayout1Tag);
+  fake_keyboard.sys_path = base::FilePath("path");
+  fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard, kKbdTopRowLayout1Tag);
+
+  AcceleratorAliasConverter accelerator_alias_converter_;
+
+  const ui::Accelerator accelerator{ui::VKEY_MODECHANGE, ui::EF_NONE};
+  std::vector<ui::Accelerator> accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(accelerator);
+  EXPECT_EQ(0u, accelerator_aliases.size());
+
+  ui::InputDevice wilco_keyboard(
+      /*id=*/2, /*type=*/ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+      /*name=*/kKbdTopRowLayout1Tag);
+  wilco_keyboard.sys_path = base::FilePath("path2");
+  fake_keyboard_manager_->AddFakeKeyboard(wilco_keyboard,
+                                          kKbdTopRowLayoutWilcoTag);
+  accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(accelerator);
+  EXPECT_EQ(1u, accelerator_aliases.size());
+  EXPECT_EQ(accelerator, accelerator_aliases[0]);
+}
+
+TEST_F(AcceleratorAliasConverterTest, CheckCalculatorKeyAlias) {
+  std::unique_ptr<FakeDeviceManager> fake_keyboard_manager_ =
+      std::make_unique<FakeDeviceManager>();
+  ui::InputDevice fake_keyboard(
+      /*id=*/1, /*type=*/ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+      /*name=*/kKbdTopRowLayout1Tag);
+  fake_keyboard.sys_path = base::FilePath("path");
+  fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard, kKbdTopRowLayout1Tag);
+
+  AcceleratorAliasConverter accelerator_alias_converter_;
+
+  const ui::Accelerator accelerator{ui::VKEY_MEDIA_LAUNCH_APP2, ui::EF_NONE};
+  std::vector<ui::Accelerator> accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(accelerator);
+  EXPECT_EQ(0u, accelerator_aliases.size());
+
+  ui::InputDevice wilco_keyboard(
+      /*id=*/2, /*type=*/ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH,
+      /*name=*/kKbdTopRowLayout1Tag);
+  wilco_keyboard.sys_path = base::FilePath("path2");
+  fake_keyboard_manager_->AddFakeKeyboard(wilco_keyboard,
+                                          kKbdTopRowLayoutWilcoTag);
+  accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(accelerator);
+  EXPECT_EQ(1u, accelerator_aliases.size());
+  EXPECT_EQ(accelerator, accelerator_aliases[0]);
+}
+
+TEST_F(AcceleratorAliasConverterTest, CheckCapsLockAlias) {
+  std::unique_ptr<FakeDeviceManager> fake_keyboard_manager_ =
+      std::make_unique<FakeDeviceManager>();
+  ui::InputDevice fake_keyboard(
+      /*id=*/1, /*type=*/ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+      /*name=*/kKbdTopRowLayout1Tag);
+  fake_keyboard.sys_path = base::FilePath("path");
+  fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard, kKbdTopRowLayout1Tag);
+
+  AcceleratorAliasConverter accelerator_alias_converter_;
+
+  const ui::Accelerator good_accelerator{ui::VKEY_LWIN, ui::EF_ALT_DOWN};
+  const ui::Accelerator bad_accelerator{ui::VKEY_MENU, ui::EF_COMMAND_DOWN};
+  std::vector<ui::Accelerator> accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(good_accelerator);
+  EXPECT_EQ(1u, accelerator_aliases.size());
+  EXPECT_EQ(good_accelerator, accelerator_aliases[0]);
+
+  accelerator_aliases =
+      accelerator_alias_converter_.CreateAcceleratorAlias(bad_accelerator);
+  EXPECT_EQ(0u, accelerator_aliases.size());
+}
+
 class TopRowAliasTest : public AcceleratorAliasConverterTest,
                         public testing::WithParamInterface<
                             TopRowAcceleratorAliasConverterTestData> {
@@ -101,6 +195,7 @@ class TopRowAliasTest : public AcceleratorAliasConverterTest,
     Shell::Get()->keyboard_capability()->SetTopRowKeysAsFKeysEnabledForTesting(
         true);
     TopRowAcceleratorAliasConverterTestData test_data = GetParam();
+    keyboard_connection_type_ = test_data.keyboard_connection_type_;
     keyboard_layout_types_ = test_data.keyboard_layout_types_;
     accelerator_ = test_data.accelerator_;
     expected_accelerator_ = test_data.expected_accelerator_;
@@ -108,6 +203,7 @@ class TopRowAliasTest : public AcceleratorAliasConverterTest,
   }
 
  protected:
+  std::vector<ui::InputDeviceType> keyboard_connection_type_;
   std::vector<std::string> keyboard_layout_types_;
   ui::Accelerator accelerator_;
   std::vector<ui::Accelerator> expected_accelerator_;
@@ -119,121 +215,155 @@ INSTANTIATE_TEST_SUITE_P(
     ,
     TopRowAliasTest,
     testing::ValuesIn(std::vector<TopRowAcceleratorAliasConverterTestData>{
-        // [Search] as original modifier prevents remapping.
-        {{kKbdTopRowLayout1Tag},
+        // [Search] as original modifier prevents remapping, regardless of
+        // keyboard connection type.
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayout1Tag},
          ui::Accelerator{ui::VKEY_ZOOM, ui::EF_COMMAND_DOWN},
-         {}},
+         {ui::Accelerator{ui::VKEY_ZOOM, ui::EF_COMMAND_DOWN}}},
 
-        // key_code not as a top row key prevents remapping.
-        {{kKbdTopRowLayout1Tag, kKbdTopRowLayout2Tag},
+        // key_code not as a top row key prevents remapping, regardless of
+        // keyboard connection type.
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+          ui::InputDeviceType::INPUT_DEVICE_USB},
+         {kKbdTopRowLayout1Tag, kKbdTopRowLayout2Tag},
          ui::Accelerator{ui::VKEY_TAB, ui::EF_ALT_DOWN},
-         {}},
+         {ui::Accelerator{ui::VKEY_TAB, ui::EF_ALT_DOWN}}},
 
         // Below are testing each layout type.
 
         // For TopRowLayout1: [Alt] + [Back] -> [Alt] + [Search] + [F1].
         // TopRowKeysAreFKeys() remains true. This statement applies to all
         // tests in TopRowAliasTest class.
-        {{kKbdTopRowLayout1Tag},
+        {{ui::InputDeviceType::INPUT_DEVICE_USB},
+         {kKbdTopRowLayoutUnspecified},
          ui::Accelerator{ui::VKEY_BROWSER_BACK, ui::EF_ALT_DOWN},
          {ui::Accelerator{ui::VKEY_F1, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
 
+        // For internal keyboard only, we shows icon + meta.
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayout1Tag},
+         ui::Accelerator{ui::VKEY_BROWSER_BACK, ui::EF_ALT_DOWN},
+         {ui::Accelerator{ui::VKEY_BROWSER_BACK,
+                          ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
+
+        // For internal keyboard only, layout1 doesn't have
+        // VKEY_MEDIA_PLAY_PAUSE key.
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayout1Tag},
+         ui::Accelerator{ui::VKEY_MEDIA_PLAY_PAUSE, ui::EF_ALT_DOWN},
+         {}},
+
+        // For internal keyboard only, layout2 doesn't have
+        // VKEY_BROWSER_FORWARD key.
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayout2Tag},
+         ui::Accelerator{ui::VKEY_BROWSER_FORWARD, ui::EF_ALT_DOWN},
+         {}},
+
+        // Layout2 doesn't have VKEY_ALL_APPLICATIONS key.
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayout2Tag},
+         ui::Accelerator{ui::VKEY_ALL_APPLICATIONS, ui::EF_ALT_DOWN},
+         {}},
+
+        // Layout1 doesn't have VKEY_SNAPSHOT key.
+        {{ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH},
+         {kKbdTopRowLayout1Tag},
+         ui::Accelerator{ui::VKEY_SNAPSHOT, ui::EF_ALT_DOWN},
+         {}},
+
+        // LayoutWilco doesn't have VKEY_MICROPHONE_MUTE_TOGGLE key.
+        {{ui::InputDeviceType::INPUT_DEVICE_USB},
+         {kKbdTopRowLayoutWilcoTag},
+         ui::Accelerator{ui::VKEY_MICROPHONE_MUTE_TOGGLE, ui::EF_ALT_DOWN},
+         {}},
+
         // For TopRowLayout1: [Alt] + [Forward] -> [Alt] + [Search] + [F2].
-        {{kKbdTopRowLayout1Tag},
+        {{ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH},
+         {kKbdTopRowLayoutUnspecified},
          ui::Accelerator{ui::VKEY_BROWSER_FORWARD, ui::EF_ALT_DOWN},
          {ui::Accelerator{ui::VKEY_F2, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
 
         // For TopRowLayout1: [Alt] + [Zoom] -> [Alt] + [Search] + [F4].
-        {{kKbdTopRowLayout1Tag},
+        {{ui::InputDeviceType::INPUT_DEVICE_USB},
+         {kKbdTopRowLayoutUnspecified},
          ui::Accelerator{ui::VKEY_ZOOM, ui::EF_ALT_DOWN},
          {ui::Accelerator{ui::VKEY_F4, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
 
         // For TopRowLayout2: [Alt] + [Shift] + [Back] -> [Alt] + [Shift] +
-        // [Search] + [F1].
-        {{kKbdTopRowLayout2Tag},
+        // [Search] + [Back].
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayout2Tag},
          ui::Accelerator{ui::VKEY_BROWSER_BACK,
                          ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN},
-         {ui::Accelerator{ui::VKEY_F1, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN |
-                                           ui::EF_SHIFT_DOWN}}},
+         {ui::Accelerator{ui::VKEY_BROWSER_BACK, ui::EF_COMMAND_DOWN |
+                                                     ui::EF_ALT_DOWN |
+                                                     ui::EF_SHIFT_DOWN}}},
 
         // For TopRowLayout2: [Alt] + [Zoom] -> [Alt] + [Search] + [F3].
-        {{kKbdTopRowLayout2Tag},
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayout2Tag},
          ui::Accelerator{ui::VKEY_ZOOM, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F3, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
+         {ui::Accelerator{ui::VKEY_ZOOM,
+                          ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
 
         // For TopRowLayout2: [Alt] + [Pause] -> [Alt] + [Search] + [F7].
-        {{kKbdTopRowLayout2Tag},
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayout2Tag},
          ui::Accelerator{ui::VKEY_MEDIA_PLAY_PAUSE, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F7, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
+         {ui::Accelerator{ui::VKEY_MEDIA_PLAY_PAUSE,
+                          ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
 
         // For TopRowLayoutWilco: [Alt] + [Zoom] -> [Alt] + [Search] + [F3].
-        {{kKbdTopRowLayoutWilcoTag},
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayoutWilcoTag},
          ui::Accelerator{ui::VKEY_ZOOM, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F3, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
+         {ui::Accelerator{ui::VKEY_ZOOM,
+                          ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
 
         // For TopRowLayoutWilco: [Alt] + [VolumeUp] -> [Alt] + [Search] + [F9].
-        {{kKbdTopRowLayoutWilcoTag},
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayoutWilcoTag},
          ui::Accelerator{ui::VKEY_VOLUME_UP, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F9, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
+         {ui::Accelerator{ui::VKEY_VOLUME_UP,
+                          ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
 
         // For kKbdTopRowLayoutDrallionTag: [Alt] + [Mute] -> [Alt] + [Search] +
         // [F7].
-        {{kKbdTopRowLayoutDrallionTag},
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayoutDrallionTag},
          ui::Accelerator{ui::VKEY_VOLUME_MUTE, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F7, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
-
-        // Below are testing multiple connected keyboards.
-
-        // Two keyboards with the same layout type: [Alt] + [Forward] -> [Alt] +
-        // [Search] + [F2]. No duplicated alias exists.
-        {{kKbdTopRowLayout1Tag, kKbdTopRowLayout1Tag},
-         ui::Accelerator{ui::VKEY_BROWSER_FORWARD, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F2, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
-
-        // For TopRowLayout1 + TopRowLayout2: [Alt] + [Forward] -> [Alt] +
-        // [Search] + [F2]. Only layout1 has [Forward] key.
-        {{kKbdTopRowLayout1Tag, kKbdTopRowLayout2Tag},
-         ui::Accelerator{ui::VKEY_BROWSER_FORWARD, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F2, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
-
-        // For TopRowLayout1 + TopRowLayout2: [Alt] + [Refresh] -> [Alt] +
-        // [Search] + [F2] AND [Alt] + [Search] + [F3]. Layout1's [Refresh] key
-        // maps to [F3], while layout2 maps to [F2].
-        {{kKbdTopRowLayout1Tag, kKbdTopRowLayout2Tag},
-         ui::Accelerator{ui::VKEY_BROWSER_REFRESH, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F2, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},
-          ui::Accelerator{ui::VKEY_F3, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
-
-        // For TopRowLayout1 + TopRowLayout2: [Alt] + [VolumeUp] -> [Alt] +
-        // [Search] + [F10]. Both layout1 and layout2' [VolumeUp] key maps to
-        // [F10]. No duplicated alias exists.
-        {{kKbdTopRowLayout1Tag, kKbdTopRowLayout2Tag},
-         ui::Accelerator{ui::VKEY_VOLUME_UP, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F10,
+         {ui::Accelerator{ui::VKEY_VOLUME_MUTE,
                           ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
 
-        // For TopRowLayout1 + TopRowLayout2 + TopRowLayoutWilco: [Alt] + [Back]
-        // -> [Alt] + [Search] + [F1]. All layouts' [Back] key maps to [F1]. No
-        // duplicated alias exists.
-        {{kKbdTopRowLayout1Tag, kKbdTopRowLayout2Tag, kKbdTopRowLayoutWilcoTag},
-         ui::Accelerator{ui::VKEY_BROWSER_BACK, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F1, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
+        // Aliasing should be for the most recently connected external keyboard
+        // (last item in the list).
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+          ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH,
+          ui::InputDeviceType::INPUT_DEVICE_USB},
+         {kKbdTopRowLayout1Tag, kKbdTopRowLayoutUnspecified,
+          kKbdTopRowLayout2Tag},
+         ui::Accelerator{ui::VKEY_MEDIA_PLAY_PAUSE, ui::EF_NONE},
+         {ui::Accelerator{ui::VKEY_MEDIA_PLAY_PAUSE, ui::EF_COMMAND_DOWN}}},
 
-        // For TopRowLayout1 + TopRowLayout2 + TopRowLayoutWilco: [Alt] + [Zoom]
-        // -> [Alt] + [Search] + [F3] AND [Alt] + [Search] + [F4].
-        {{kKbdTopRowLayout1Tag, kKbdTopRowLayout2Tag, kKbdTopRowLayoutWilcoTag},
-         ui::Accelerator{ui::VKEY_ZOOM, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F3, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},
-          ui::Accelerator{ui::VKEY_F4, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
+        // Since the external keyboard uses Layout1 by default, it does not have
+        // play/pause which means there should be no mapped accelerator.
+        {{ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+          ui::InputDeviceType::INPUT_DEVICE_USB},
+         {kKbdTopRowLayout2Tag, kKbdTopRowLayoutUnspecified},
+         ui::Accelerator{ui::VKEY_MEDIA_PLAY_PAUSE, ui::EF_NONE},
+         {}},
 
-        // For TopRowLayout1 + TopRowLayout2 + TopRowLayoutWilco +
-        // TopRowLayoutDrallion: [Alt] + [Launch] -> [Alt] + [Search] + [F4] AND
-        // [Alt] + [Search] + [F5].
-        {{kKbdTopRowLayout1Tag, kKbdTopRowLayout2Tag, kKbdTopRowLayoutWilcoTag,
-          kKbdTopRowLayoutDrallionTag},
-         ui::Accelerator{ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_ALT_DOWN},
-         {ui::Accelerator{ui::VKEY_F4, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},
-          ui::Accelerator{ui::VKEY_F5, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}}},
+        // Since the external keyboard uses Layout1 by default, it does not have
+        // play/pause which means there should be no mapped accelerator.
+        // Eventhough the internal keyboard is listed last, the external
+        // keyboard should still be used for aliasing.
+        {{ui::InputDeviceType::INPUT_DEVICE_USB,
+          ui::InputDeviceType::INPUT_DEVICE_INTERNAL},
+         {kKbdTopRowLayoutUnspecified, kKbdTopRowLayout2Tag},
+         ui::Accelerator{ui::VKEY_MEDIA_PLAY_PAUSE, ui::EF_NONE},
+         {}},
     }));
 
 TEST_P(TopRowAliasTest, CheckTopRowAlias) {
@@ -241,10 +371,11 @@ TEST_P(TopRowAliasTest, CheckTopRowAlias) {
   fake_keyboard_manager_->RemoveAllDevices();
   for (int i = 0; const std::string& layout : keyboard_layout_types_) {
     ui::InputDevice fake_keyboard(
-        /*id=*/i++, /*type=*/ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+        /*id=*/i, /*type=*/keyboard_connection_type_[i],
         /*name=*/layout);
     fake_keyboard.sys_path = base::FilePath("path" + layout);
     fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard, layout);
+    i++;
   }
 
   AcceleratorAliasConverter accelerator_alias_converter_;
@@ -252,18 +383,14 @@ TEST_P(TopRowAliasTest, CheckTopRowAlias) {
   std::vector<ui::Accelerator> accelerator_alias =
       accelerator_alias_converter_.CreateAcceleratorAlias(accelerator_);
 
-  EXPECT_TRUE(Shell::Get()->keyboard_capability()->TopRowKeysAreFKeys());
-  if (expected_accelerator_.size() > 0) {
-    EXPECT_EQ(expected_accelerator_.size(), accelerator_alias.size());
-    for (size_t i = 0; i < expected_accelerator_.size(); i++) {
-      EXPECT_EQ(expected_accelerator_[i], accelerator_alias[i]);
-    }
-  } else {
-    EXPECT_EQ(accelerator_, accelerator_alias[0]);
+  ASSERT_TRUE(Shell::Get()->keyboard_capability()->TopRowKeysAreFKeys());
+  ASSERT_EQ(expected_accelerator_.size(), accelerator_alias.size());
+  for (size_t i = 0; i < expected_accelerator_.size(); i++) {
+    EXPECT_EQ(expected_accelerator_[i], accelerator_alias[i]);
   }
 }
 
-class SixPackAliasTest
+class SixPackAliasTestWithExternalKeyboard
     : public AcceleratorAliasConverterTest,
       public testing::WithParamInterface<AcceleratorAliasConverterTestData> {
   void SetUp() override {
@@ -271,17 +398,19 @@ class SixPackAliasTest
     AcceleratorAliasConverterTestData test_data = GetParam();
     accelerator_ = test_data.accelerator_;
     expected_accelerator_ = test_data.expected_accelerator_;
+    fake_keyboard_manager_ = std::make_unique<FakeDeviceManager>();
   }
 
  protected:
   ui::Accelerator accelerator_;
   absl::optional<ui::Accelerator> expected_accelerator_;
+  std::unique_ptr<FakeDeviceManager> fake_keyboard_manager_;
 };
 
 INSTANTIATE_TEST_SUITE_P(
     // Empty to simplify gtest output
     ,
-    SixPackAliasTest,
+    SixPackAliasTestWithExternalKeyboard,
     testing::ValuesIn(std::vector<AcceleratorAliasConverterTestData>{
         // [Search] as original modifier prevents remapping.
         {ui::Accelerator{ui::VKEY_ZOOM, ui::EF_COMMAND_DOWN}, absl::nullopt},
@@ -330,7 +459,14 @@ INSTANTIATE_TEST_SUITE_P(
          ui::Accelerator{ui::VKEY_HOME,
                          ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN}}}));
 
-TEST_P(SixPackAliasTest, CheckSixPackAlias) {
+TEST_P(SixPackAliasTestWithExternalKeyboard, CheckSixPackAlias) {
+  fake_keyboard_manager_->RemoveAllDevices();
+  ui::InputDevice fake_keyboard(
+      /*id=*/1, /*type=*/ui::InputDeviceType::INPUT_DEVICE_BLUETOOTH,
+      /*name=*/kKbdTopRowLayout1Tag);
+  fake_keyboard.sys_path = base::FilePath("path");
+  fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard, kKbdTopRowLayout1Tag);
+
   AcceleratorAliasConverter accelerator_alias_converter_;
 
   std::vector<ui::Accelerator> accelerator_alias =
@@ -343,6 +479,101 @@ TEST_P(SixPackAliasTest, CheckSixPackAlias) {
     EXPECT_EQ(accelerator_, accelerator_alias[1]);
   } else {
     // Accelerator doesn't have a valid remapping.
+    EXPECT_EQ(1u, accelerator_alias.size());
+    ASSERT_EQ(accelerator_, accelerator_alias[0]);
+  }
+}
+
+class SixPackAliasTestWithInternalKeyboard
+    : public AcceleratorAliasConverterTest,
+      public testing::WithParamInterface<AcceleratorAliasConverterTestData> {
+  void SetUp() override {
+    AcceleratorAliasConverterTest::SetUp();
+    AcceleratorAliasConverterTestData test_data = GetParam();
+    accelerator_ = test_data.accelerator_;
+    expected_accelerator_ = test_data.expected_accelerator_;
+    fake_keyboard_manager_ = std::make_unique<FakeDeviceManager>();
+  }
+
+ protected:
+  ui::Accelerator accelerator_;
+  absl::optional<ui::Accelerator> expected_accelerator_;
+  std::unique_ptr<FakeDeviceManager> fake_keyboard_manager_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    // Empty to simplify gtest output
+    ,
+    SixPackAliasTestWithInternalKeyboard,
+    testing::ValuesIn(std::vector<AcceleratorAliasConverterTestData>{
+        // A keyboard without six pack keys should not affect the aliasing of
+        // six pack key, but only affect the aliasing of reversed six pack key.
+
+        // [Search] as original modifier prevents remapping.
+        {ui::Accelerator{ui::VKEY_ZOOM, ui::EF_COMMAND_DOWN}, absl::nullopt},
+        // key_code not as six pack key prevents remapping.
+        {ui::Accelerator{ui::VKEY_TAB, ui::EF_ALT_DOWN}, absl::nullopt},
+        // [Shift] + [Delete] should not be remapped.
+        {ui::Accelerator{ui::VKEY_DELETE, ui::EF_SHIFT_DOWN}, absl::nullopt},
+        // [Shift] + [Insert] should not be remapped.
+        {ui::Accelerator{ui::VKEY_INSERT, ui::EF_SHIFT_DOWN}, absl::nullopt},
+        // For Insert: [modifiers] -> [Search] + [Shift] + [original_modifiers].
+        {ui::Accelerator{ui::VKEY_INSERT, ui::EF_ALT_DOWN},
+         ui::Accelerator{ui::VKEY_BACK, ui::EF_COMMAND_DOWN |
+                                            ui::EF_SHIFT_DOWN |
+                                            ui::EF_ALT_DOWN}},
+        // For other six-pack-keys: [modifiers] -> [Search] +
+        // [original_modifiers].
+        {ui::Accelerator{ui::VKEY_DELETE, ui::EF_ALT_DOWN},
+         ui::Accelerator{ui::VKEY_BACK, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN}},
+
+        // Below are tests for reversed six pack alias.
+        // All reversed six pack aliasing which work with an external
+        // keyboard should stop working with an internal keyboard.
+        // [Back] + [Search] -> None.
+        {ui::Accelerator{ui::VKEY_BACK, ui::EF_COMMAND_DOWN}, absl::nullopt},
+        // [Back] + [Shift] + [Search] -> None.
+        {ui::Accelerator{ui::VKEY_BACK,
+                         ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN},
+         absl::nullopt},
+        // // [Back] + [Shift] + [Search] + [Alt] -> None.
+        {ui::Accelerator{ui::VKEY_BACK, ui::EF_COMMAND_DOWN |
+                                            ui::EF_SHIFT_DOWN |
+                                            ui::EF_ALT_DOWN},
+         absl::nullopt},
+        // [Back] + [Search] + [Alt] -> None.
+        {ui::Accelerator{ui::VKEY_BACK, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},
+         absl::nullopt},
+        // [Left] + [Search] + [Alt] -> None.
+        {ui::Accelerator{ui::VKEY_LEFT, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN},
+         absl::nullopt},
+        // [Left] + [Search] + [Shift] + [Alt] -> None.
+        {ui::Accelerator{ui::VKEY_LEFT, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN |
+                                            ui::EF_SHIFT_DOWN},
+         absl::nullopt}}));
+
+TEST_P(SixPackAliasTestWithInternalKeyboard, CheckSixPackAlias) {
+  fake_keyboard_manager_->RemoveAllDevices();
+  ui::InputDevice fake_keyboard(
+      /*id=*/1, /*type=*/ui::InputDeviceType::INPUT_DEVICE_INTERNAL,
+      /*name=*/kKbdTopRowLayout1Tag);
+  fake_keyboard.sys_path = base::FilePath("path");
+  fake_keyboard_manager_->AddFakeKeyboard(fake_keyboard, kKbdTopRowLayout2Tag);
+
+  AcceleratorAliasConverter accelerator_alias_converter_;
+
+  std::vector<ui::Accelerator> accelerator_alias =
+      accelerator_alias_converter_.CreateAcceleratorAlias(accelerator_);
+
+  if (expected_accelerator_.has_value()) {
+    // Accelerator has valid a remapping.
+    EXPECT_EQ(1u, accelerator_alias.size());
+    EXPECT_EQ(expected_accelerator_, accelerator_alias[0]);
+  } else if (ui::KeyboardCapability::IsSixPackKey(accelerator_.key_code())) {
+    // Original accelerator has six pack key, which is not supported by internal
+    // keyboard.
+    EXPECT_EQ(0u, accelerator_alias.size());
+  } else {
     EXPECT_EQ(1u, accelerator_alias.size());
     EXPECT_EQ(accelerator_, accelerator_alias[0]);
   }

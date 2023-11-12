@@ -164,6 +164,6 @@ void VivaldiSyncServiceImpl::ResetEncryptionBootstrapToken(
     const std::string& token) {
   StopAndClear();
   sync_prefs_.SetEncryptionBootstrapToken(token);
-  GetUserSettings()->SetSyncRequested(true);
+  SetSyncFeatureRequested();
 }
 }  // namespace vivaldi

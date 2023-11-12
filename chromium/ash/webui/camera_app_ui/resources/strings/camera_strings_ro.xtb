@@ -8,9 +8,6 @@
 <translation id="1175958423215084756">A fost detectat un link. <ph name="HOSTNAME" /></translation>
 <translation id="1197694886744716213">Pagina <ph name="PAGE_NUMBER" /> a fost ștearsă</translation>
 <translation id="1258009455399840361">Rotește spre dreapta cu 90 de grade</translation>
-<translation id="1300209025925956156">Scanează documentul</translation>
-<translation id="1309250603447638106">Se descarcă actualizările pentru scanarea documentelor</translation>
-<translation id="137991641490787891"><ph name="ASPECT_RATIO_WIDTH" />. Tasta de căutare + săgeată spre stânga pentru acces.</translation>
 <translation id="1417314334557041815">Editează pagina <ph name="INDEX" /></translation>
 <translation id="1467231725790366244"><ph name="CAMERA" /> este deconectată.</translation>
 <translation id="1473110567575736769">Cronometru de 3 secunde</translation>
@@ -24,14 +21,12 @@
 <translation id="1664224225747386870">Nu s-a înregistrat nimic</translation>
 <translation id="1838104802459806957">Înclină în sus</translation>
 <translation id="1843105061469674856">Scanează o pagină suplimentară</translation>
-<translation id="1851169887664797861">Comenzi pentru cameră suplimentare disponibile</translation>
 <translation id="1851616744363735765">ÎNTRERUPTĂ</translation>
 <translation id="1899697626337024495">Rezoluție foto</translation>
 <translation id="1925845977604399247">Accesează Galeria</translation>
 <translation id="199526504800285197">Înregistrarea a fost oprită</translation>
 <translation id="1995951722691075581">Înregistrarea s-a oprit din cauza spațiului de stocare redus de pe dispozitiv. Pentru a înregistra mai multe videoclipuri, trebuie să eliberezi spațiu pe dispozitiv.</translation>
 <translation id="2036868001356139588">Durata temporizatorului</translation>
-<translation id="2050339315714019657">Portret</translation>
 <translation id="2064538373111010176"><ph name="CAMERA" /> s-a activat</translation>
 <translation id="2134029355740465625">Setări video</translation>
 <translation id="2144806332417375165">Parametri video personalizați</translation>
@@ -49,7 +44,6 @@
 <translation id="2761536921376153655">Tip de scanare</translation>
 <translation id="28682968802727151">Previzualizarea oglindirii</translation>
 <translation id="2879583609344924966"><ph name="CAMERA" /> este conectată.</translation>
-<translation id="2904654629665923749">Este disponibilă scanarea documentelor</translation>
 <translation id="3067436040345934772">Deplasează la dreapta</translation>
 <translation id="3081586908890909590">Comută pentru a înregistra un videoclip</translation>
 <translation id="313467653172006084">30 FPS</translation>
@@ -74,7 +68,6 @@
 <translation id="4269820728363426813">Copiază adresa linkului</translation>
 <translation id="4281620174117014503">Rezoluție medie</translation>
 <translation id="428234092390943511">Miniatură pentru pagină</translation>
-<translation id="4340659173795395806">Acum poți crea PDF-uri cu mai multe pagini</translation>
 <translation id="4383571725254449280">Printează jurnalele de performanță</translation>
 <translation id="4445542136948522167">Nu mai fotografia</translation>
 <translation id="4570032796877367747">Camera foto frontală</translation>
@@ -87,6 +80,7 @@
 <translation id="4864143361253542638">Lista paginilor scanate</translation>
 <translation id="4890010094662541459">3 x 3</translation>
 <translation id="491895758387112773">Înregistrare video pentru streamuri multiple</translation>
+<translation id="495170559598752135">Acțiuni</translation>
 <translation id="4984613436295737187">Quad HD (1440p)</translation>
 <translation id="5034763830503483128">Raportul de dimensiuni al fotografiei</translation>
 <translation id="5057360777601936059">Camera foto este indisponibilă.
@@ -97,7 +91,6 @@
 <translation id="5317780077021120954">Salvează</translation>
 <translation id="5320594929574852403">Se deplasează spre stânga</translation>
 <translation id="5374917190292010970">4K (2160p)</translation>
-<translation id="5444515100983837161">Încadrează toate marginile documentului în cadru. Scanarea funcționează optim dacă documentul și fundalul sunt de culori diferite.</translation>
 <translation id="5662366948659129155">Se scanează pagina <ph name="COUNT" /></translation>
 <translation id="5671277269877808209">Pătrat</translation>
 <translation id="5746169159649715125">Salvați ca PDF</translation>
@@ -127,6 +120,7 @@ Dacă feedbackul tău se referă la calitatea video sau a imaginii, atașează u
 <translation id="6888362557094394345">Se deplasează în jos</translation>
 <translation id="695140971690006676">Resetează-le pe toate</translation>
 <translation id="6965382102122355670">OK</translation>
+<translation id="6965830616442491568">Portret</translation>
 <translation id="698156982839284926">3 secunde</translation>
 <translation id="7134221860976209830">Cronometru de 10 secunde</translation>
 <translation id="7191890674911603392">Tip de înregistrare</translation>
@@ -142,6 +136,7 @@ Dacă feedbackul tău se referă la calitatea video sau a imaginii, atașează u
 <translation id="7658239707568436148">Anulează</translation>
 <translation id="7670511624014457267">60 CPS</translation>
 <translation id="7671804233658741790">Colțul din dreapta jos al documentului</translation>
+<translation id="7684446460490665873">Înregistrează un videoclip cu filmare lentă</translation>
 <translation id="7692090236657809299">Activează opțiunile de deplasare, înclinare și zoom</translation>
 <translation id="7726641833034062494">Înregistrează un videoclip obișnuit</translation>
 <translation id="7748344063862150053">Colțul din dreapta sus al documentului</translation>
@@ -157,7 +152,6 @@ Dacă feedbackul tău se referă la calitatea video sau a imaginii, atașează u
 <translation id="8428213095426709021">Setări</translation>
 <translation id="8629662593426079630">360p</translation>
 <translation id="8711011893539266636">Comută dezactivarea sunetului microfonului. Dezactivarea sunetului este activată</translation>
-<translation id="8712637175834984815">Am înțeles</translation>
 <translation id="8730621377337864115">Terminat</translation>
 <translation id="8732462232047530626">Metadatele de previzualizare</translation>
 <translation id="8815966864175525708">Comută pentru a face o fotografie portret</translation>
@@ -168,6 +162,7 @@ Dacă feedbackul tău se referă la calitatea video sau a imaginii, atașează u
 <translation id="9045010116236796332">Încadrează toate marginile documentului în cadru</translation>
 <translation id="9045155556724273246">10 secunde</translation>
 <translation id="906331135292332864">Se procesează imaginea...</translation>
+<translation id="9161584225258678723">Filmare lentă</translation>
 <translation id="922762992951083513">Oglindirea este activată</translation>
 <translation id="945522503751344254">Trimite feedback</translation>
 </translationbundle>

@@ -116,8 +116,7 @@ DialogActivationLocationAndCastMode GetActivationLocationAndCastMode(
     case MediaRouterDialogActivationLocation::TOTAL_COUNT:
       break;
   }
-  NOTREACHED();
-  return DialogActivationLocationAndCastMode::kMaxValue;
+  NOTREACHED_NORETURN();
 }
 
 }  // namespace
@@ -189,6 +188,11 @@ void CastDialogMetrics::OnCloseDialog(const base::Time& close_time) {
 void CastDialogMetrics::OnRecordSinkCount(
     const std::vector<CastDialogSinkButton*>& sink_buttons) {
   media_router::MediaRouterMetrics::RecordDeviceCount(sink_buttons.size());
+}
+
+void CastDialogMetrics::OnRecordSinkCount(
+    const std::vector<raw_ptr<CastDialogSinkView>>& sink_views) {
+  media_router::MediaRouterMetrics::RecordDeviceCount(sink_views.size());
 }
 
 void CastDialogMetrics::MaybeRecordFirstAction(MediaRouterUserAction action) {

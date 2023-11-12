@@ -26,7 +26,6 @@
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_focus_options.h"
-#include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
@@ -39,6 +38,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
+#include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
@@ -55,15 +55,7 @@ void HTMLDialogElement::SetFocusForDialogLegacy(HTMLDialogElement* dialog) {
   if (!dialog->isConnected())
     return;
 
-  // Showing a <dialog> should hide all open popovers.
   auto& document = dialog->GetDocument();
-  if (RuntimeEnabledFeatures::HTMLPopoverAttributeEnabled(
-          document.GetExecutionContext())) {
-    HTMLElement::HideAllPopoversUntil(
-        nullptr, document, HidePopoverFocusBehavior::kNone,
-        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions);
-  }
-
   dialog->previously_focused_element_ = document.FocusedElement();
 
   // TODO(kochi): How to find focusable element inside Shadow DOM is not
@@ -134,7 +126,7 @@ static void InertSubtreesChanged(Document& document,
   // tree can change inertness which means they must be added or removed from
   // the tree. The most foolproof way is to clear the entire tree and rebuild
   // it, though a more clever way is probably possible.
-  document.ClearAXObjectCache();
+  document.RefreshAccessibilityTree();
 }
 
 HTMLDialogElement::HTMLDialogElement(Document& document)
@@ -214,8 +206,18 @@ void HTMLDialogElement::show(ExceptionState& exception_state) {
   // Element::isFocusable, which requires an up-to-date layout.
   GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
 
+  // Showing a <dialog> should hide all open popovers.
+  auto& document = GetDocument();
+  if (RuntimeEnabledFeatures::HTMLPopoverAttributeEnabled(
+          document.GetExecutionContext())) {
+    HTMLElement::HideAllPopoversUntil(
+        nullptr, document, HidePopoverFocusBehavior::kNone,
+        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
+        HidePopoverIndependence::kHideUnrelated);
+  }
+
   if (RuntimeEnabledFeatures::DialogNewFocusBehaviorEnabled()) {
-    SetFocusForDialog();
+    SetFocusForDialog(is_modal_);
   } else {
     SetFocusForDialogLegacy(this);
   }
@@ -280,9 +282,7 @@ void HTMLDialogElement::showModal(ExceptionState& exception_state) {
 
   SetIsModal(true);
 
-  // Throw away the AX cache first, so the subsequent steps don't have a chance
-  // of queuing up AX events on objects that would be invalidated when the cache
-  // is thrown away.
+  // Refresh the AX cache first, because most of it is changing.
   InertSubtreesChanged(document, old_modal_dialog);
   document.UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
 
@@ -298,8 +298,17 @@ void HTMLDialogElement::showModal(ExceptionState& exception_state) {
     }
   }
 
+  // Showing a <dialog> should hide all open popovers.
+  if (RuntimeEnabledFeatures::HTMLPopoverAttributeEnabled(
+          document.GetExecutionContext())) {
+    HTMLElement::HideAllPopoversUntil(
+        nullptr, document, HidePopoverFocusBehavior::kNone,
+        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
+        HidePopoverIndependence::kHideUnrelated);
+  }
+
   if (RuntimeEnabledFeatures::DialogNewFocusBehaviorEnabled()) {
-    SetFocusForDialog();
+    SetFocusForDialog(is_modal_);
   } else {
     SetFocusForDialogLegacy(this);
   }
@@ -349,19 +358,11 @@ void HTMLDialogElement::CloseWatcherFiredClose() {
 }
 
 // https://html.spec.whatwg.org#dialog-focusing-steps
-void HTMLDialogElement::SetFocusForDialog() {
+void HTMLDialogElement::SetFocusForDialog(bool is_modal) {
   previously_focused_element_ = GetDocument().FocusedElement();
 
-  // Showing a <dialog> should hide all open popovers.
-  if (RuntimeEnabledFeatures::HTMLPopoverAttributeEnabled(
-          GetDocument().GetExecutionContext())) {
-    HTMLElement::HideAllPopoversUntil(
-        nullptr, GetDocument(), HidePopoverFocusBehavior::kNone,
-        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions);
-  }
-
   Element* control = GetFocusDelegate(/*autofocus_only=*/false);
-  if (is_modal_ && IsAutofocusable()) {
+  if (is_modal && IsAutofocusable()) {
     control = this;
   }
   if (!control)
@@ -369,8 +370,9 @@ void HTMLDialogElement::SetFocusForDialog() {
 
   if (control->IsFocusable())
     control->Focus();
-  else if (is_modal_)
+  else if (is_modal) {
     control->GetDocument().ClearFocusedElement();
+  }
 
   // 4. Let topDocument be the active document of control's node document's
   // browsing context's top-level browsing context.

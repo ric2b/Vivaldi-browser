@@ -18,9 +18,11 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/typed_macros.h"
+#include "base/types/expected.h"
 #include "build/build_config.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
+#include "content/browser/renderer_host/back_forward_cache_metrics.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/render_frame_host_delegate.h"
@@ -274,9 +276,9 @@ std::string GetBlockedCgiParams() {
 
 // Parses the “allowed_websites” and "blocked_websites" field trial parameters
 // and creates a map to represent hosts and corresponding path prefixes.
-std::map<std::string, std::vector<std::string>> ParseCommaSeparatedURLs(
+base::flat_map<std::string, std::vector<std::string>> ParseCommaSeparatedURLs(
     base::StringPiece comma_separated_urls) {
-  std::map<std::string, std::vector<std::string>> urls;
+  base::flat_map<std::string, std::vector<std::string>> urls;
   for (auto& it :
        base::SplitString(comma_separated_urls, ",", base::TRIM_WHITESPACE,
                          base::SPLIT_WANT_ALL)) {
@@ -287,14 +289,10 @@ std::map<std::string, std::vector<std::string>> ParseCommaSeparatedURLs(
 }
 
 // Parses the "cgi_params" field trial parameter into a set by splitting on "|".
-std::unordered_set<std::string> ParseBlockedCgiParams(
+base::flat_set<std::string> ParseBlockedCgiParams(
     base::StringPiece cgi_params_string) {
-  std::vector<std::string> split =
-      base::SplitString(cgi_params_string, "|", base::TRIM_WHITESPACE,
-                        base::SplitResult::SPLIT_WANT_NONEMPTY);
-  std::unordered_set<std::string> cgi_params;
-  cgi_params.insert(split.begin(), split.end());
-  return cgi_params;
+  return base::SplitString(cgi_params_string, "|", base::TRIM_WHITESPACE,
+                           base::SplitResult::SPLIT_WANT_NONEMPTY);
 }
 
 BackForwardCacheTestDelegate* g_bfcache_disabled_test_observer = nullptr;
@@ -867,16 +865,16 @@ void BackForwardCacheImpl::NotRestoredReasonBuilder::
     result.No(BackForwardCacheMetrics::NotRestoredReason::kHaveInnerContents);
   }
 
-#if !BUILDFLAG(IS_ANDROID)
-  const bool has_unload_handler = rfh->has_unload_handler();
-  if (has_unload_handler) {
-    // Note that pages with unload handlers are cached on android.
-    result.No(rfh->GetParent() ? BackForwardCacheMetrics::NotRestoredReason::
-                                     kUnloadHandlerExistsInSubFrame
-                               : BackForwardCacheMetrics::NotRestoredReason::
-                                     kUnloadHandlerExistsInMainFrame);
+  if (!IsUnloadAllowed()) {
+    const bool has_unload_handler = rfh->has_unload_handler();
+    if (has_unload_handler) {
+      // Note that pages with unload handlers are cached on android.
+      result.No(rfh->GetParent() ? BackForwardCacheMetrics::NotRestoredReason::
+                                       kUnloadHandlerExistsInSubFrame
+                                 : BackForwardCacheMetrics::NotRestoredReason::
+                                       kUnloadHandlerExistsInMainFrame);
+    }
   }
-#endif
 
   // When it's not the final decision for putting a page in the back-forward
   // cache, we should only consider "sticky" features here - features that
@@ -1216,6 +1214,16 @@ void BackForwardCache::DisableForRenderFrameHost(
     rfh->DisableBackForwardCache(reason, source_id);
 }
 
+// static
+void BackForwardCache::SetHadFormDataAssociated(Page& page) {
+  BackForwardCacheMetrics* metrics =
+      static_cast<RenderFrameHostImpl*>(&page.GetMainDocument())
+          ->GetBackForwardCacheMetrics();
+  if (metrics) {
+    metrics->SetHadFormDataAssociated(true);
+  }
+}
+
 void BackForwardCacheImpl::DisableForTesting(DisableForTestingReason reason) {
   is_disabled_for_testing_ = true;
 
@@ -1229,17 +1237,41 @@ BackForwardCacheImpl::GetEntries() {
   return entries_;
 }
 
-BackForwardCacheImpl::Entry* BackForwardCacheImpl::GetEntry(
-    int navigation_entry_id) {
+std::list<BackForwardCacheImpl::Entry*>
+BackForwardCacheImpl::GetEntriesForRenderViewHostImpl(
+    const RenderViewHostImpl* rvhi) const {
+  std::list<BackForwardCacheImpl::Entry*> entries_for_rvhi;
+  for (auto& entry : entries_) {
+    for (const auto& rvh : entry->render_view_hosts()) {
+      if (&*rvh == rvhi) {
+        entries_for_rvhi.push_back(entry.get());
+        break;
+      }
+    }
+  }
+  return entries_for_rvhi;
+}
+
+base::expected<BackForwardCacheImpl::Entry*,
+               BackForwardCacheImpl::GetEntryFailureCase>
+BackForwardCacheImpl::GetOrEvictEntry(int navigation_entry_id) {
   auto matching_entry = base::ranges::find(
       entries_, navigation_entry_id, [](std::unique_ptr<Entry>& entry) {
         return entry->render_frame_host()->nav_entry_id();
       });
 
-  if (matching_entry == entries_.end())
-    return nullptr;
+  if (matching_entry == entries_.end()) {
+    return base::unexpected(
+        BackForwardCacheImpl::GetEntryFailureCase::kEntryNotFound);
+  }
 
   auto* render_frame_host = (*matching_entry)->render_frame_host();
+  // Don't return the entry if it was evicted.
+  if (render_frame_host->is_evicted_from_back_forward_cache()) {
+    return base::unexpected(
+        BackForwardCacheImpl::GetEntryFailureCase::kEntryEvictedBefore);
+  }
+
   // If we are in the experiments to allow pages with cache-control:no-store
   // in back/forward cache and the page has cache-control:no-store, we should
   // record them as reasons. It might not be possible to restore the entry even
@@ -1250,11 +1282,9 @@ BackForwardCacheImpl::Entry* BackForwardCacheImpl::GetEntry(
   if (!bfcache_eligibility.CanRestore()) {
     render_frame_host->EvictFromBackForwardCacheWithFlattenedAndTreeReasons(
         bfcache_eligibility);
+    return base::unexpected(
+        BackForwardCacheImpl::GetEntryFailureCase::kEntryIneligibleAndEvicted);
   }
-
-  // Don't return the frame if it is evicted.
-  if (render_frame_host->is_evicted_from_back_forward_cache())
-    return nullptr;
 
   return (*matching_entry).get();
 }
@@ -1365,14 +1395,8 @@ void BackForwardCacheImpl::WillCommitNavigationToCachedEntry(
   // we've received confirmation that eviction is disabled from renderers.
   auto cb = base::BarrierClosure(
       bfcache_entry.render_view_hosts().size(),
-      base::BindOnce(
-          [](base::TimeTicks ipc_start_time, base::OnceClosure cb) {
-            std::move(cb).Run();
-            base::UmaHistogramTimes(
-                "BackForwardCache.Restore.DisableEvictionDelay",
-                base::TimeTicks::Now() - ipc_start_time);
-          },
-          base::TimeTicks::Now(), std::move(done_callback)));
+      base::BindOnce([](base::OnceClosure cb) { std::move(cb).Run(); },
+                     std::move(done_callback)));
 
   for (const auto& rvh : bfcache_entry.render_view_hosts()) {
     rvh->PrepareToLeaveBackForwardCache(cb);
@@ -1417,6 +1441,11 @@ bool BackForwardCacheImpl::IsMediaSessionServiceAllowed() {
 bool BackForwardCacheImpl::IsScreenReaderAllowed() {
   return base::FeatureList::IsEnabled(
       features::kEnableBackForwardCacheForScreenReader);
+}
+
+// Static
+bool BackForwardCacheImpl::IsUnloadAllowed() {
+  return base::FeatureList::IsEnabled(kBackForwardCacheUnloadAllowed);
 }
 
 // static

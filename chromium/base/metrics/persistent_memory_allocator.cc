@@ -10,6 +10,7 @@
 
 #include "base/bits.h"
 #include "base/debug/alias.h"
+#include "base/debug/crash_logging.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -17,6 +18,7 @@
 #include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_piece.h"
 #include "base/system/sys_info.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -29,6 +31,9 @@
 #include <winbase.h>
 #elif BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
 #include <sys/mman.h>
+#if BUILDFLAG(IS_ANDROID)
+#include <sys/prctl.h>
+#endif
 #endif
 
 namespace {
@@ -959,8 +964,12 @@ LocalPersistentMemoryAllocator::LocalPersistentMemoryAllocator(
     size_t size,
     uint64_t id,
     base::StringPiece name)
-    : PersistentMemoryAllocator(AllocateLocalMemory(size),
-                                size, 0, id, name, false) {}
+    : PersistentMemoryAllocator(AllocateLocalMemory(size, name),
+                                size,
+                                0,
+                                id,
+                                name,
+                                false) {}
 
 LocalPersistentMemoryAllocator::~LocalPersistentMemoryAllocator() {
   DeallocateLocalMemory(const_cast<char*>(mem_base_), mem_size_, mem_type_);
@@ -968,7 +977,8 @@ LocalPersistentMemoryAllocator::~LocalPersistentMemoryAllocator() {
 
 // static
 PersistentMemoryAllocator::Memory
-LocalPersistentMemoryAllocator::AllocateLocalMemory(size_t size) {
+LocalPersistentMemoryAllocator::AllocateLocalMemory(size_t size,
+                                                    base::StringPiece name) {
   void* address;
 
 #if BUILDFLAG(IS_WIN)
@@ -976,17 +986,21 @@ LocalPersistentMemoryAllocator::AllocateLocalMemory(size_t size) {
       ::VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
   if (address)
     return Memory(address, MEM_VIRTUAL);
-  UmaHistogramSparse("UMA.LocalPersistentMemoryAllocator.Failures.Win",
-                     static_cast<int>(::GetLastError()));
 #elif BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
   // MAP_ANON is deprecated on Linux but MAP_ANONYMOUS is not universal on Mac.
   // MAP_SHARED is not available on Linux <2.4 but required on Mac.
   address = ::mmap(nullptr, size, PROT_READ | PROT_WRITE,
                    MAP_ANON | MAP_SHARED, -1, 0);
-  if (address != MAP_FAILED)
+  if (address != MAP_FAILED) {
+#if BUILDFLAG(IS_ANDROID)
+    // Allow the anonymous memory region allocated by mmap(MAP_ANON) to be
+    // identified in /proc/$PID/smaps.  This helps improve visibility into
+    // Chrome's memory usage on Android.
+    const std::string arena_name = base::StrCat({"persistent:", name});
+    prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, address, size, arena_name.c_str());
+#endif
     return Memory(address, MEM_VIRTUAL);
-  UmaHistogramSparse("UMA.LocalPersistentMemoryAllocator.Failures.Posix",
-                     errno);
+  }
 #else
 #error This architecture is not (yet) supported.
 #endif
@@ -1163,26 +1177,11 @@ DelayedPersistentAllocation::DelayedPersistentAllocation(
     std::atomic<Reference>* ref,
     uint32_t type,
     size_t size,
-    bool make_iterable)
-    : DelayedPersistentAllocation(allocator,
-                                  ref,
-                                  type,
-                                  size,
-                                  0,
-                                  make_iterable) {}
-
-DelayedPersistentAllocation::DelayedPersistentAllocation(
-    PersistentMemoryAllocator* allocator,
-    std::atomic<Reference>* ref,
-    uint32_t type,
-    size_t size,
-    size_t offset,
-    bool make_iterable)
+    size_t offset)
     : allocator_(allocator),
       type_(type),
       size_(checked_cast<uint32_t>(size)),
       offset_(checked_cast<uint32_t>(offset)),
-      make_iterable_(make_iterable),
       reference_(ref) {
   DCHECK(allocator_);
   DCHECK_NE(0U, type_);
@@ -1196,6 +1195,14 @@ void* DelayedPersistentAllocation::Get() const {
   // Relaxed operations are acceptable here because it's not protecting the
   // contents of the allocation in any way.
   Reference ref = reference_->load(std::memory_order_acquire);
+
+#if !BUILDFLAG(IS_NACL)
+  // TODO(crbug/1432981): Remove these. They are used to investigate unexpected
+  // failures.
+  bool ref_found = (ref != 0);
+  bool raced = false;
+#endif  // !BUILDFLAG(IS_NACL)
+
   if (!ref) {
     ref = allocator_->Allocate(size_, type_);
     if (!ref)
@@ -1205,12 +1212,9 @@ void* DelayedPersistentAllocation::Get() const {
     // Use a "strong" exchange to ensure no false-negatives since the operation
     // cannot be retried.
     Reference existing = 0;  // Must be mutable; receives actual value.
-    if (reference_->compare_exchange_strong(existing, ref,
-                                            std::memory_order_release,
-                                            std::memory_order_relaxed)) {
-      if (make_iterable_)
-        allocator_->MakeIterable(ref);
-    } else {
+    if (!reference_->compare_exchange_strong(existing, ref,
+                                             std::memory_order_release,
+                                             std::memory_order_relaxed)) {
       // Failure indicates that something else has raced ahead, performed the
       // allocation, and stored its reference. Purge the allocation that was
       // just done and use the other one instead.
@@ -1218,11 +1222,27 @@ void* DelayedPersistentAllocation::Get() const {
       DCHECK_LE(size_, allocator_->GetAllocSize(existing));
       allocator_->ChangeType(ref, 0, type_, /*clear=*/false);
       ref = existing;
+#if !BUILDFLAG(IS_NACL)
+      raced = true;
+#endif  // !BUILDFLAG(IS_NACL)
     }
   }
 
   char* mem = allocator_->GetAsArray<char>(ref, type_, size_);
   if (!mem) {
+#if !BUILDFLAG(IS_NACL)
+    // TODO(crbug/1432981): Remove these. They are used to investigate
+    // unexpected failures.
+    SCOPED_CRASH_KEY_BOOL("PersistentMemoryAllocator", "full",
+                          allocator_->IsFull());
+    SCOPED_CRASH_KEY_BOOL("PersistentMemoryAllocator", "corrupted",
+                          allocator_->IsCorrupt());
+    SCOPED_CRASH_KEY_NUMBER("PersistentMemoryAllocator", "ref", ref);
+    SCOPED_CRASH_KEY_BOOL("PersistentMemoryAllocator", "ref_found", ref_found);
+    SCOPED_CRASH_KEY_BOOL("PersistentMemoryAllocator", "raced", raced);
+    SCOPED_CRASH_KEY_NUMBER("PersistentMemoryAllocator", "type_", type_);
+    SCOPED_CRASH_KEY_NUMBER("PersistentMemoryAllocator", "size_", size_);
+#endif  // !BUILDFLAG(IS_NACL)
     // This should never happen but be tolerant if it does as corruption from
     // the outside is something to guard against.
     NOTREACHED();

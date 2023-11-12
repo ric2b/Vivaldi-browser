@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_handler.h"
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -14,7 +15,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/containers/flat_map.h"
-#include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
@@ -30,6 +30,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/new_tab_page/customize_chrome/customize_chrome_feature_promo_helper.h"
 #include "chrome/browser/new_tab_page/modules/new_tab_page_modules.h"
 #include "chrome/browser/new_tab_page/promos/promo_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -368,7 +369,7 @@ new_tab_page::mojom::ImageDoodlePtr MakeImageDoodle(
         "data:image/png;base64,%s", share_button_icon.c_str()));
     doodle->share_button->background_color = SkColorSetA(
         ParseHexColor(share_button_bg),
-        base::clamp(share_button_opacity, 0.0, 1.0) * SK_AlphaOPAQUE);
+        std::clamp(share_button_opacity, 0.0, 1.0) * SK_AlphaOPAQUE);
   }
   if (type == search_provider_logos::LogoType::ANIMATED) {
     doodle->image_impression_log_url = cta_log_url;
@@ -460,6 +461,8 @@ NewTabPageHandler::NewTabPageHandler(
     ThemeService* theme_service,
     search_provider_logos::LogoService* logo_service,
     content::WebContents* web_contents,
+    std::unique_ptr<CustomizeChromeFeaturePromoHelper>
+        customize_chrome_feature_promo_helper,
     const base::Time& ntp_navigation_start_time,
     const std::vector<std::pair<const std::string, int>> module_id_names)
     : ntp_background_service_(
@@ -470,6 +473,8 @@ NewTabPageHandler::NewTabPageHandler(
       theme_service_(theme_service),
       profile_(profile),
       web_contents_(web_contents),
+      customize_chrome_feature_promo_helper_(
+          std::move(customize_chrome_feature_promo_helper)),
       ntp_navigation_start_time_(ntp_navigation_start_time),
       module_id_names_(module_id_names),
       logger_(profile,
@@ -484,6 +489,7 @@ NewTabPageHandler::NewTabPageHandler(
   CHECK(theme_service_);
   CHECK(promo_service_);
   CHECK(web_contents_);
+  CHECK(customize_chrome_feature_promo_helper_);
   ntp_background_service_->AddObserver(this);
   native_theme_observation_.Observe(ui::NativeTheme::GetInstanceForNativeUi());
   theme_service_observation_.Observe(theme_service_.get());
@@ -524,8 +530,8 @@ NewTabPageHandler::~NewTabPageHandler() {
 
 // static
 void NewTabPageHandler::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-  registry->RegisterListPref(prefs::kNtpDisabledModules, true);
-  registry->RegisterListPref(prefs::kNtpModulesOrder, true);
+  registry->RegisterListPref(prefs::kNtpDisabledModules);
+  registry->RegisterListPref(prefs::kNtpModulesOrder);
   registry->RegisterBooleanPref(prefs::kNtpModulesVisible, true);
   registry->RegisterIntegerPref(prefs::kNtpModulesShownCount, 0);
   registry->RegisterTimePref(prefs::kNtpModulesFirstShownTime, base::Time());
@@ -873,6 +879,15 @@ void NewTabPageHandler::SetCustomizeChromeSidePanelVisible(
       CustomizeChromeTabHelper::FromWebContents(web_contents_);
   customize_chrome_tab_helper->SetCustomizeChromeSidePanelVisible(visible,
                                                                   section_enum);
+
+  if (visible) {
+    // Record usage for customize chrome promo.
+    auto* tab = web_contents_.get();
+    customize_chrome_feature_promo_helper_->RecordCustomizeChromeFeatureUsage(
+        tab);
+    customize_chrome_feature_promo_helper_->CloseCustomizeChromeFeaturePromo(
+        tab);
+  }
 }
 
 void NewTabPageHandler::IncrementCustomizeChromeButtonOpenCount() {
@@ -883,6 +898,18 @@ void NewTabPageHandler::IncrementCustomizeChromeButtonOpenCount() {
       profile_->GetPrefs()->GetInteger(
           prefs::kNtpCustomizeChromeButtonOpenCount) +
           1);
+}
+
+void NewTabPageHandler::MaybeShowCustomizeChromeFeaturePromo() {
+  CHECK(profile_);
+  CHECK(profile_->GetPrefs());
+  const auto customize_chrome_button_open_count =
+      profile_->GetPrefs()->GetInteger(
+          prefs::kNtpCustomizeChromeButtonOpenCount);
+  if (customize_chrome_button_open_count == 0) {
+    customize_chrome_feature_promo_helper_
+        ->MaybeShowCustomizeChromeFeaturePromo(web_contents_.get());
+  }
 }
 
 void NewTabPageHandler::OnPromoDataUpdated() {

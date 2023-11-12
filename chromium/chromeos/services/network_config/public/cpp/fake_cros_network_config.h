@@ -85,7 +85,7 @@ class FakeCrosNetworkConfig : public mojom::CrosNetworkConfig {
       mojom::UInt32ValuePtr day,
       SetTrafficCountersAutoResetCallback callback) override {}
   void CreateCustomApn(const std::string& network_guid,
-                       mojom::ApnPropertiesPtr apn) override {}
+                       mojom::ApnPropertiesPtr apn) override;
   void RemoveCustomApn(const std::string& network_guid,
                        const std::string& apn_id) override {}
   void ModifyCustomApn(const std::string& network_guid,
@@ -112,6 +112,10 @@ class FakeCrosNetworkConfig : public mojom::CrosNetworkConfig {
   // `OnActiveNetworksChanged` for all observers in `observers_`.
   void AddNetworkAndDevice(mojom::NetworkStatePropertiesPtr network);
 
+  // Replaces an existing network in `visible_networks_` list with `network`
+  // and then calls `OnActiveNetworksChanged` for all observers in `observers_`.
+  void UpdateNetworkProperties(mojom::NetworkStatePropertiesPtr network);
+
   // Sets managed properties for a specific guid to
   // `guid_to_managed_properties_`. These properties can be later retrieved by
   // calling `GetManagedProperties`.
@@ -127,6 +131,10 @@ class FakeCrosNetworkConfig : public mojom::CrosNetworkConfig {
   int GetScanCount(mojom::NetworkType type);
 
   mojo::PendingRemote<mojom::CrosNetworkConfig> GetPendingRemote();
+
+  const std::vector<mojom::ApnPropertiesPtr>& custom_apns() {
+    return custom_apns_;
+  }
 
  private:
   // Adds `device_properties` to `device_properties_` if there are no device
@@ -148,6 +156,7 @@ class FakeCrosNetworkConfig : public mojom::CrosNetworkConfig {
       guid_to_managed_properties_;
   mojom::GlobalPolicyPtr global_policy_;
   std::map<mojom::NetworkType, int> scan_count_;
+  std::vector<mojom::ApnPropertiesPtr> custom_apns_;
   mojo::RemoteSet<mojom::CrosNetworkConfigObserver> observers_;
   mojo::Receiver<mojom::CrosNetworkConfig> receiver_{this};
 };

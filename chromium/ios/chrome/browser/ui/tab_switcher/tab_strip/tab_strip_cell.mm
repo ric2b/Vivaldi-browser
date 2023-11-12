@@ -4,9 +4,16 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/tab_strip_cell.h"
 
-#import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/image_util/image_util.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/image/image_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -32,6 +39,12 @@ const CGFloat kFontSize = 14.0;
 
     UIImage* favicon = [[UIImage imageNamed:@"default_world_favicon"]
         imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+
+    if (IsVivaldiRunning())
+      favicon = [[UIImage imageNamed:vNTPSDFallbackFavicon]
+                  imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    // End Vivaldi
+
     _faviconView = [[UIImageView alloc] initWithImage:favicon];
     [self.contentView addSubview:_faviconView];
     _faviconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -44,11 +57,7 @@ const CGFloat kFontSize = 14.0;
     ]];
 
     UIImage* close =
-        UseSymbols()
-            ? DefaultSymbolTemplateWithPointSize(kXMarkSymbol,
-                                                 kXmarkSymbolPointSize)
-            : [[UIImage imageNamed:@"grid_cell_close_button"]
-                  imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        DefaultSymbolTemplateWithPointSize(kXMarkSymbol, kXmarkSymbolPointSize);
     _closeButton = [UIButton buttonWithType:UIButtonTypeCustom];
     [_closeButton setImage:close forState:UIControlStateNormal];
     [self.contentView addSubview:_closeButton];

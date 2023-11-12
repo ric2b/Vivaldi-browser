@@ -303,15 +303,14 @@ void VivaldiUIWebContentsDelegate::UpdateDraggableRegions(
   }
 }
 
-void VivaldiUIWebContentsDelegate::DidFinishLoad(
-    content::RenderFrameHost* render_frame_host,
-    const GURL& validated_url) {
-  // Don't do anything for subframes.
-  if (!render_frame_host->IsInPrimaryMainFrame())
-    return;
-
+void VivaldiUIWebContentsDelegate::DocumentOnLoadCompletedInPrimaryMainFrame() {
   window_->UpdateTitleBar();
-  window_->Show();
+  if (!window_->browser()->is_type_normal()) {
+    // Settings & popup windows are shown once content is available. They are
+    // slightly faster to show than browser window, to the point where it makes
+    // more sense to skip showing the gray background.
+    window_->ShowForReal();
+  }
 }
 
 void VivaldiUIWebContentsDelegate::DidStartNavigation(
@@ -325,6 +324,11 @@ void VivaldiUIWebContentsDelegate::DidStartNavigation(
 }
 
 void VivaldiUIWebContentsDelegate::PrimaryMainDocumentElementAvailable() {
+  if (window_->browser()->is_type_normal()) {
+    // Browser windows are shown as early as possible, users look at the splash
+    // screen while waiting for content.
+    window_->ShowForReal();
+  }
   window_->ContentsLoadCompletedInMainFrame();
 }
 
@@ -378,5 +382,5 @@ void VivaldiUIWebContentsDelegate::BeforeUnloadFired(bool proceed) {}
 blink::mojom::DisplayMode VivaldiUIWebContentsDelegate::GetDisplayMode(
     const content::WebContents* source) {
   return window_->IsFullscreen() ? blink::mojom::DisplayMode::kFullscreen
-                        : blink::mojom::DisplayMode::kStandalone;
+                        : blink::mojom::DisplayMode::kBrowser;
 }

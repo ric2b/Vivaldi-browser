@@ -9,7 +9,6 @@ import android.view.View;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 
-import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 
 import java.lang.annotation.Retention;
@@ -105,8 +104,18 @@ public interface BottomSheetContent {
     };
 
     /**
-     * @return Whether this content owns its lifecycle. If false, the content will be hidden
-     *         when the user navigates away from the page or switches tab.
+     * @return Whether this content owns its lifecycle. If false, the content will be dismissed
+     *         when the user navigates away from the page, switches tabs, or a layout change
+     *         occurs.
+     *
+     * If a BottomSheetContent ever needs to suppress across a layout state change rather than
+     * being dismissed this can be addressed by:
+     * * Registering a LayoutStateObserver to re-request to be shown when the correct LayoutType
+     *   finishes showing.
+     * * For LayoutType.BROWSING also registering a TabModelSelectorObserver to dismiss if
+     *   a tab switch occurs.
+     * * The client is responsible for restoring any previous state of the BottomSheetContent
+     *   and the View's it hosts.
      */
     default boolean hasCustomLifecycle() {
         return false;
@@ -152,18 +161,6 @@ public interface BottomSheetContent {
      */
     default float getFullHeightRatio() {
         return HeightMode.DEFAULT;
-    }
-
-    /**
-     * Set a {@link ContentSizeListener} that should be notified when the size of the content
-     * has changed. This will be called only if {@link #getFullHeightRatio()} returns {@link
-     * HeightMode#WRAP_CONTENT}. Note that you need to implement this method only if the content
-     * view height changes are animated.
-     *
-     * @return Whether the listener was correctly set.
-     */
-    default boolean setContentSizeListener(@Nullable ContentSizeListener listener) {
-        return false;
     }
 
     /**
@@ -225,23 +222,4 @@ public interface BottomSheetContent {
      *         typically the name of your feature followed by 'closed'.
      */
     int getSheetClosedAccessibilityStringId();
-
-    /**
-     * Return {@code true} if the content expects {@link #setOffsetController} to be called.
-     *
-     * This is an experimental feature. Use it at your own risks. TODO(b/177037825): Remove or
-     * cleanup.
-     */
-    default boolean contentControlsOffset() {
-        return false;
-    }
-
-    /**
-     * Set or reset the set offset callback.
-     *
-     * The active content can use this callback to move the sheet to the given offset.
-     *
-     * Only called if {@link #contentControlsOffset} returns {@code true}.
-     */
-    default void setOffsetController(@Nullable Callback<Integer> setOffset) {}
 }

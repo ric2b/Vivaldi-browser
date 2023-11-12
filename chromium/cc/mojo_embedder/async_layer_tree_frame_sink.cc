@@ -96,6 +96,7 @@ bool AsyncLayerTreeFrameSink::BindToClient(LayerTreeFrameSinkClient* client) {
 
   if (wants_animate_only_begin_frames_)
     compositor_frame_sink_->SetWantsAnimateOnlyBeginFrames();
+  compositor_frame_sink_ptr_->SetWantsBeginFrameAcks();
 
   compositor_frame_sink_ptr_->InitializeCompositorFrameSinkType(
       viz::mojom::CompositorFrameSinkType::kLayerTree);
@@ -173,9 +174,6 @@ void AsyncLayerTreeFrameSink::SubmitCompositorFrame(
     } else {
       last_hit_test_data_ = *hit_test_region_list;
     }
-
-    UMA_HISTOGRAM_BOOLEAN("Event.VizHitTest.HitTestDataIsEqualAccuracy",
-                          !hit_test_region_list);
   } else {
     last_hit_test_data_ = *hit_test_region_list;
   }

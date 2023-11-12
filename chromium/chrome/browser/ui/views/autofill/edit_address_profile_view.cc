@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/views/autofill/edit_address_profile_view.h"
 
+#include <memory>
+#include <utility>
+
 #include "chrome/browser/ui/autofill/address_editor_controller.h"
 #include "chrome/browser/ui/autofill/edit_address_profile_dialog_controller.h"
 #include "chrome/browser/ui/views/autofill/address_editor_view.h"
@@ -11,6 +14,8 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/views/controls/label.h"
+#include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 
 namespace autofill {
@@ -33,7 +38,10 @@ EditAddressProfileView::EditAddressProfileView(
       &EditAddressProfileView::OnUserDecision, base::Unretained(this),
       AutofillClient::SaveAddressProfileOfferUserDecision::kEditDeclined));
 
-  SetLayoutManager(std::make_unique<views::FillLayout>());
+  SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kVertical, gfx::Insets(),
+      views::LayoutProvider::Get()->GetDistanceMetric(
+          views::DISTANCE_RELATED_CONTROL_VERTICAL)));
   set_margins(ChromeLayoutProvider::Get()->GetInsetsMetric(
       views::InsetsMetric::INSETS_DIALOG));
 
@@ -49,10 +57,31 @@ EditAddressProfileView::~EditAddressProfileView() = default;
 void EditAddressProfileView::ShowForWebContents(
     content::WebContents* web_contents) {
   DCHECK(web_contents);
-  address_editor_controller_ = std::make_unique<AddressEditorController>(
-      controller_->GetProfileToEdit(), web_contents);
-  address_editor_view_ = AddChildView(
-      std::make_unique<AddressEditorView>(address_editor_controller_.get()));
+  auto address_editor_controller = std::make_unique<AddressEditorController>(
+      controller_->GetProfileToEdit(), web_contents,
+      controller_->GetIsValidatable());
+
+  // Storing subscription (which gets canceled in the destructor) in a property
+  // secures using of Unretained(this).
+  on_is_valid_change_subscription_ =
+      address_editor_controller->AddIsValidChangedCallback(
+          base::BindRepeating(&EditAddressProfileView::UpdateActionButtonState,
+                              base::Unretained(this)));
+  UpdateActionButtonState(address_editor_controller->get_is_valid());
+
+  address_editor_view_ = AddChildView(std::make_unique<AddressEditorView>(
+      std::move(address_editor_controller)));
+
+  const std::u16string& footer_message = controller_->GetFooterMessage();
+  if (!footer_message.empty()) {
+    AddChildView(
+        views::Builder<views::Label>()
+            .SetText(footer_message)
+            .SetTextStyle(views::style::STYLE_SECONDARY)
+            .SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT)
+            .SetMultiLine(true)
+            .Build());
+  }
 }
 
 void EditAddressProfileView::Hide() {
@@ -82,6 +111,10 @@ void EditAddressProfileView::OnUserDecision(
     return;
   controller_->OnUserDecision(decision,
                               address_editor_view_->GetAddressProfile());
+}
+
+void EditAddressProfileView::UpdateActionButtonState(bool is_valid) {
+  SetButtonEnabled(ui::DIALOG_BUTTON_OK, is_valid);
 }
 
 }  // namespace autofill

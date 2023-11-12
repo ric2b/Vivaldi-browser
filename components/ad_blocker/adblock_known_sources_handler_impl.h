@@ -65,7 +65,7 @@ class KnownRuleSourcesHandlerImpl : public KnownRuleSourcesHandler {
                                 bool add_deleted_presets,
                                 bool store_missing_as_deleted);
 
-  RuleService* rule_service_;
+  const raw_ptr<RuleService> rule_service_;
 
   std::array<KnownRuleSources, kRuleGroupCount> known_sources_;
   std::array<std::set<std::string>, kRuleGroupCount> deleted_presets_;

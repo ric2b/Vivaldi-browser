@@ -6,10 +6,12 @@
 #define ASH_CAPTURE_MODE_VIDEO_RECORDING_WATCHER_H_
 
 #include "ash/ash_export.h"
+#include "ash/capture_mode/capture_mode_behavior.h"
 #include "ash/capture_mode/capture_mode_types.h"
 #include "ash/display/cursor_window_controller.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/wm/window_dimmer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -61,14 +63,17 @@ class ASH_EXPORT VideoRecordingWatcher
  public:
   VideoRecordingWatcher(
       CaptureModeController* controller,
+      CaptureModeBehavior* active_behavior,
       aura::Window* window_being_recorded,
       mojo::PendingRemote<viz::mojom::FrameSinkVideoCaptureOverlay>
           cursor_capture_overlay,
-      bool projector_mode);
+      bool projector_mode,
+      bool is_recording_audio);
   ~VideoRecordingWatcher() override;
 
   aura::Window* window_being_recorded() const { return window_being_recorded_; }
   bool is_in_projector_mode() const { return is_in_projector_mode_; }
+  bool is_recording_audio() const { return is_recording_audio_; }
   bool should_paint_layer() const { return should_paint_layer_; }
   bool is_shutting_down() const { return is_shutting_down_; }
   CaptureModeSource recording_source() const { return recording_source_; }
@@ -224,10 +229,13 @@ class ASH_EXPORT VideoRecordingWatcher
   // video recording.
   bool PointerHighlightingEnabled() const;
 
-  CaptureModeController* const controller_;
-  wm::CursorManager* const cursor_manager_;
-  aura::Window* const window_being_recorded_;
-  aura::Window* current_root_;
+  const raw_ptr<CaptureModeController, ExperimentalAsh> controller_;
+
+  // The currently active behavior which is passed from capture mode session.
+  CaptureModeBehavior* const active_behavior_;
+  const raw_ptr<wm::CursorManager, ExperimentalAsh> cursor_manager_;
+  const raw_ptr<aura::Window, ExperimentalAsh> window_being_recorded_;
+  raw_ptr<aura::Window, ExperimentalAsh> current_root_;
   const CaptureModeSource recording_source_;
 
   // The end point of the overlay owned by the video capturer on Viz, which is
@@ -273,6 +281,10 @@ class ASH_EXPORT VideoRecordingWatcher
 
   // True if the current in progress recording is for a Projector mode session.
   const bool is_in_projector_mode_;
+
+  // True if this active recording session started with audio recording turned
+  // on, and audio recording is being done by the recording service.
+  const bool is_recording_audio_;
 
   // True if we force hiding the cursor overlay. This happens when we record a
   // fullscreen, or a partial screen region, and the software-composited cursor

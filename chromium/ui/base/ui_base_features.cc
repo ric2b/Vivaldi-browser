@@ -131,11 +131,6 @@ bool IsPercentBasedScrollingEnabled() {
   return base::FeatureList::IsEnabled(features::kWindowsScrollingPersonality);
 }
 
-// Allows requesting unadjusted movement when entering pointerlock.
-BASE_FEATURE(kPointerLockOptions,
-             "PointerLockOptions",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Uses a stylus-specific tap slop region parameter for gestures.  Stylus taps
 // tend to slip more than touch taps (presumably because the user doesn't feel
 // the movement friction with a stylus).  As a result, it is harder to tap with
@@ -197,12 +192,6 @@ BASE_FEATURE(kUiCompositorScrollWithLayers,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
-
-// Enables compositor threaded scrollbar scrolling by mapping pointer events to
-// gesture events.
-BASE_FEATURE(kCompositorThreadedScrollbarScrolling,
-             "CompositorThreadedScrollbarScrolling",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the use of a touch fling curve that is based on the behavior of
 // native apps on Windows.
@@ -289,9 +278,12 @@ BASE_FEATURE(kDeprecateAltBasedSixPack,
 bool IsDeprecateAltBasedSixPackEnabled() {
   return base::FeatureList::IsEnabled(kDeprecateAltBasedSixPack);
 }
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
-// Whether to enable new touch text editing features for ChromeOS.
-// TODO(b/262297017): Remove after touch text editing redesign ships.
+// Whether to enable new touch text editing features such as extra touch
+// selection gestures and quick menu options. Planning to release for ChromeOS
+// first, then possibly also enable some parts for other platforms later.
+// TODO(b/262297017): Clean up after touch text editing redesign ships.
 BASE_FEATURE(kTouchTextEditingRedesign,
              "TouchTextEditingRedesign",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -299,7 +291,6 @@ BASE_FEATURE(kTouchTextEditingRedesign,
 bool IsTouchTextEditingRedesignEnabled() {
   return base::FeatureList::IsEnabled(kTouchTextEditingRedesign);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Enables forced colors mode for web content.
 BASE_FEATURE(kForcedColors, "ForcedColors", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -455,7 +446,7 @@ bool IsWaylandScreenCoordinatesEnabled() {
 // Enables chrome color management wayland protocol for lacros.
 BASE_FEATURE(kLacrosColorManagement,
              "LacrosColorManagement",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsLacrosColorManagementEnabled() {
   return base::FeatureList::IsEnabled(kLacrosColorManagement);
@@ -468,5 +459,49 @@ BASE_FEATURE(kChromeRefresh2023,
 bool IsChromeRefresh2023() {
   return base::FeatureList::IsEnabled(kChromeRefresh2023);
 }
+
+BASE_FEATURE(kChromeWebuiRefresh2023,
+             "ChromeWebuiRefresh2023",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsChromeWebuiRefresh2023() {
+  return IsChromeRefresh2023() &&
+         base::FeatureList::IsEnabled(kChromeWebuiRefresh2023);
+}
+
+constexpr base::FeatureParam<ChromeRefresh2023Level>::Option
+    kChromeRefresh2023LevelOption[] = {{ChromeRefresh2023Level::kLevel1, "1"},
+                                       {ChromeRefresh2023Level::kLevel2, "2"}};
+
+const base::FeatureParam<ChromeRefresh2023Level> kChromeRefresh2023Level(
+    &kChromeRefresh2023,
+    "level",
+    ChromeRefresh2023Level::kLevel2,
+    &kChromeRefresh2023LevelOption);
+
+ChromeRefresh2023Level GetChromeRefresh2023Level() {
+  static const ChromeRefresh2023Level level =
+      IsChromeRefresh2023() ? kChromeRefresh2023Level.Get()
+                            : ChromeRefresh2023Level::kDisabled;
+  return level;
+}
+
+#if !BUILDFLAG(IS_LINUX)
+BASE_FEATURE(kWebUiSystemFont,
+             "WebUiSystemFont",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+#if BUILDFLAG(IS_APPLE)
+// Font Smoothing was enabled by default prior to introducing this feature.
+// We want to experiment with disabling it to align with CR2023 designs.
+BASE_FEATURE(kCr2023MacFontSmoothing,
+             "Cr2023MacFontSmoothing",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
+
+BASE_FEATURE(kUseNanosecondsForMotionEvent,
+             "UseNanosecondsForMotionEvent",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features

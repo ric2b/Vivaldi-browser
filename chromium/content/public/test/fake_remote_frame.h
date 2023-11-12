@@ -64,9 +64,6 @@ class FakeRemoteFrame : public blink::mojom::RemoteFrame {
       const base::UnguessableToken& embedding_token) override;
   void SetPageFocus(bool is_focused) override;
   void RenderFallbackContent() override;
-  void RenderFallbackContentWithResourceTiming(
-      blink::mojom::ResourceTimingInfoPtr,
-      const std::string& server_timing_value) override;
   void AddResourceTimingFromChild(
       blink::mojom::ResourceTimingInfoPtr timing) override;
 
@@ -102,6 +99,8 @@ class FakeRemoteFrame : public blink::mojom::RemoteFrame {
       const base::UnguessableToken& devtools_frame_token,
       blink::mojom::RemoteFrameInterfacesFromBrowserPtr remote_frame_interfaces)
       override;
+  void CreateRemoteChildren(
+      std::vector<blink::mojom::CreateRemoteChildParamsPtr> params) override;
 
  private:
   mojo::AssociatedReceiver<blink::mojom::RemoteFrame> receiver_{this};

@@ -8,7 +8,9 @@ import './search_page.js';
 import './share_data_page.js';
 import './strings.m.js';
 
+import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {stringToMojoString16} from 'chrome://resources/ash/common/mojo_utils.js';
+import {startColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {FeedbackAppExitPath, FeedbackAppHelpContentOutcome, FeedbackAppPreSubmitAction, FeedbackContext, FeedbackServiceProviderInterface, Report, SendReportStatus} from './feedback_types.js';
@@ -59,6 +61,8 @@ export const AdditionalContextQueryParam = {
   PAGE_URL: 'page_url',
   FROM_ASSISTANT: 'from_assistant',
   FROM_SETTINGS_SEARCH: 'from_settings_search',
+  FROM_AUTOFILL: 'from_autofill',
+  AUTOFILL_METADATA: 'autofill_metadata',
 };
 
 /**
@@ -186,6 +190,13 @@ export class FeedbackFlowElement extends PolymerElement {
     this.shouldShowBluetoothCheckbox_;
 
     /**
+     * Whether to show the autofill checkbox in share data page.
+     * @type {boolean}
+     * @protected
+     */
+    this.shouldShowAutofillCheckbox_;
+
+    /**
      * Whether to show the assistant checkbox in share data page.
      * @type {boolean}
      */
@@ -255,6 +266,18 @@ export class FeedbackFlowElement extends PolymerElement {
     this.noHelpContentDisplayed_;
   }
 
+  connectedCallback() {
+    super.connectedCallback();
+    if (loadTimeData.getBoolean('isJellyEnabledForOsFeedback')) {
+      // TODO(b/276493287): After the Jelly experiment is launched, replace
+      // `cros_styles.css` with `theme/colors.css` directly in `index.html`.
+      document.querySelector('link[href*=\'cros_styles.css\']')
+          ?.setAttribute('href', 'chrome://theme/colors.css?sets=legacy,sys');
+      document.body.classList.add('jelly-enabled');
+      startColorChangeUpdater();
+    }
+  }
+
   ready() {
     super.ready();
 
@@ -264,6 +287,8 @@ export class FeedbackFlowElement extends PolymerElement {
       this.shouldShowAssistantCheckbox_ = !!this.feedbackContext_ &&
           this.feedbackContext_.isInternalAccount &&
           this.feedbackContext_.fromAssistant;
+      this.shouldShowAutofillCheckbox_ =
+          !!this.feedbackContext_ && this.feedbackContext_.fromAutofill;
     });
 
     window.addEventListener('message', event => {
@@ -385,6 +410,14 @@ export class FeedbackFlowElement extends PolymerElement {
     const fromSettingsSearch =
         params.get(AdditionalContextQueryParam.FROM_SETTINGS_SEARCH);
     this.set('feedbackContext_.fromSettingsSearch', !!fromSettingsSearch);
+
+    const fromAutofill = params.get(AdditionalContextQueryParam.FROM_AUTOFILL);
+    this.feedbackContext_.fromAutofill = !!fromAutofill;
+    const autofillMetadata =
+        params.get(AdditionalContextQueryParam.AUTOFILL_METADATA);
+    if (autofillMetadata) {
+      this.feedbackContext_.autofillMetadata = autofillMetadata;
+    }
   }
 
   /**

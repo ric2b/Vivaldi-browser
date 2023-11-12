@@ -93,10 +93,7 @@ class EarlyFeatureAccessTracker {
     // TODO(crbug.com/1383852): When we believe that all early accesses have
     // been fixed, remove this base::debug::DumpWithoutCrashing() and change the
     // above DCHECK to a CHECK.
-
-    // The following line is commented to reduce the crash volume while a fix
-    // for crbug.com/1392145 is prepared.
-    // base::debug::DumpWithoutCrashing();
+    base::debug::DumpWithoutCrashing();
 #endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID) &&
         // !BUILDFLAG(IS_CHROMEOS)
   }
@@ -114,17 +111,6 @@ class EarlyFeatureAccessTracker {
   // Whether AccessedFeature() should fail instantly.
   bool fail_instantly_ GUARDED_BY(lock_) = false;
 };
-
-// Controls whether a feature's override state will be cached in
-// `base::Feature::cached_value`. This field and the associated `base::Feature`
-// only exist to measure the impact of the caching on different performance
-// metrics.
-// TODO(crbug.com/1341292): Remove this global and this feature once the gains
-// are measured.
-bool g_cache_override_state = false;
-BASE_FEATURE(kCacheFeatureOverrideState,
-             "CacheFeatureOverrideState",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if DCHECK_IS_ON()
 const char* g_reason_overrides_disallowed = nullptr;
@@ -399,7 +385,7 @@ void FeatureList::RegisterFieldTrialOverride(const std::string& feature_name,
       << "(4) client-side field trials.";
 
   #if !(defined(VIVALDI_BUILD) && BUILDFLAG(IS_ANDROID))
-    RegisterOverride(feature_name, override_state, field_trial);
+  RegisterOverride(feature_name, override_state, field_trial);
   #endif
 }
 
@@ -591,9 +577,6 @@ void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
   internal::ConfigureRandBytesFieldTrial();
 #endif
 
-  g_cache_override_state =
-      base::FeatureList::IsEnabled(kCacheFeatureOverrideState);
-
 #if BUILDFLAG(DCHECK_IS_CONFIGURABLE)
   // Update the behaviour of LOGGING_DCHECK to match the Feature configuration.
   // DCHECK is also forced to be FATAL if we are running a death-test.
@@ -676,10 +659,6 @@ FeatureList::OverrideState FeatureList::GetOverrideState(
          "code or (for component builds) the code is built into multiple "
          "components (shared libraries) without a corresponding export "
          "statement";
-
-  // If caching is disabled, always perform the full lookup.
-  if (!g_cache_override_state)
-    return GetOverrideStateByFeatureName(feature.name);
 
   uint32_t current_cache_value =
       feature.cached_value.load(std::memory_order_relaxed);

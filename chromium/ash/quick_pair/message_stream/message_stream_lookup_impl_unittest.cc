@@ -6,11 +6,13 @@
 
 #include <memory>
 
+#include "ash/quick_pair/common/fake_bluetooth_adapter.h"
 #include "ash/quick_pair/common/logging.h"
 #include "ash/quick_pair/message_stream/fake_bluetooth_socket.h"
 #include "ash/quick_pair/message_stream/message_stream.h"
 #include "ash/quick_pair/message_stream/message_stream_lookup.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -50,52 +52,10 @@ const char kMessageStreamConnectToServiceTime[] =
 namespace ash {
 namespace quick_pair {
 
-class MessageStreamFakeBluetoothAdapter
-    : public testing::NiceMock<device::MockBluetoothAdapter> {
- public:
-  device::BluetoothDevice* GetDevice(const std::string& address) override {
-    for (const auto& it : mock_devices_) {
-      if (it->GetAddress() == address)
-        return it.get();
-    }
-    return nullptr;
-  }
-
-  void NotifyDeviceConnectedStateChanged(device::BluetoothDevice* device,
-                                         bool is_now_connected) {
-    for (auto& observer : observers_)
-      observer.DeviceConnectedStateChanged(this, device, is_now_connected);
-  }
-
-  void NotifyDeviceRemoved(device::BluetoothDevice* device) {
-    for (auto& observer : observers_)
-      observer.DeviceRemoved(this, device);
-  }
-
-  void NotifyDeviceAdded(device::BluetoothDevice* device) {
-    for (auto& observer : observers_)
-      observer.DeviceAdded(this, device);
-  }
-
-  void NotifyDevicePairedChanged(device::BluetoothDevice* device,
-                                 bool new_paired_status) {
-    for (auto& observer : observers_)
-      observer.DevicePairedChanged(this, device, new_paired_status);
-  }
-
-  void NotifyDeviceChanged(device::BluetoothDevice* device) {
-    for (auto& observer : observers_)
-      observer.DeviceChanged(this, device);
-  }
-
- private:
-  ~MessageStreamFakeBluetoothAdapter() override = default;
-};
-
 class MessageStreamFakeBluetoothDevice
     : public testing::NiceMock<device::MockBluetoothDevice> {
  public:
-  MessageStreamFakeBluetoothDevice(MessageStreamFakeBluetoothAdapter* adapter)
+  MessageStreamFakeBluetoothDevice(FakeBluetoothAdapter* adapter)
       : testing::NiceMock<device::MockBluetoothDevice>(adapter,
                                                        /*bluetooth_class=*/0u,
                                                        /*name=*/"Test Device",
@@ -143,7 +103,7 @@ class MessageStreamFakeBluetoothDevice
   bool dont_invoke_callback_ = false;
   bool error_ = false;
   std::string error_message_;
-  MessageStreamFakeBluetoothAdapter* fake_adapter_;
+  raw_ptr<FakeBluetoothAdapter, ExperimentalAsh> fake_adapter_;
   scoped_refptr<FakeBluetoothSocket> fake_socket_ =
       base::MakeRefCounted<FakeBluetoothSocket>();
 };
@@ -152,7 +112,7 @@ class MessageStreamLookupImplTest : public testing::Test,
                                     public MessageStreamLookup::Observer {
  public:
   void SetUp() override {
-    adapter_ = base::MakeRefCounted<MessageStreamFakeBluetoothAdapter>();
+    adapter_ = base::MakeRefCounted<FakeBluetoothAdapter>();
     std::unique_ptr<MessageStreamFakeBluetoothDevice> device =
         std::make_unique<MessageStreamFakeBluetoothDevice>(adapter_.get());
 
@@ -243,9 +203,9 @@ class MessageStreamLookupImplTest : public testing::Test,
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   base::HistogramTester histogram_tester_;
-  MessageStream* message_stream_ = nullptr;
-  scoped_refptr<MessageStreamFakeBluetoothAdapter> adapter_;
-  MessageStreamFakeBluetoothDevice* device_;
+  raw_ptr<MessageStream, ExperimentalAsh> message_stream_ = nullptr;
+  scoped_refptr<FakeBluetoothAdapter> adapter_;
+  raw_ptr<MessageStreamFakeBluetoothDevice, ExperimentalAsh> device_;
   std::unique_ptr<MessageStreamLookup> message_stream_lookup_;
 };
 

@@ -15,7 +15,9 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/media/router/data_decoder_util.h"
 #include "chrome/browser/media/router/providers/dial/dial_media_route_provider_metrics.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/media_router/common/media_source.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/origin.h"
 
 namespace media_router {
@@ -25,12 +27,6 @@ constexpr char kLoggerComponent[] = "DialMediaRouteProvider";
 
 url::Origin CreateOrigin(const std::string& url) {
   return url::Origin::Create(GURL(url));
-}
-
-void ReportParseError(DialParseMessageResult result,
-                      const std::string& error_message) {
-  DCHECK_NE(result, DialParseMessageResult::kSuccess);
-  DialMediaRouteProviderMetrics::RecordParseMessageResult(result);
 }
 
 static constexpr int kMaxPendingDialLaunches = 10;
@@ -220,7 +216,6 @@ void DialMediaRouteProvider::HandleParsedRouteMessage(
         base::StrCat({"Failed to parse the route message. ", result.error()}),
         "", MediaRoute::GetMediaSourceIdFromMediaRouteId(route_id),
         MediaRoute::GetPresentationIdFromMediaRouteId(route_id));
-    ReportParseError(DialParseMessageResult::kParseError, result.error());
     return;
   }
 
@@ -232,12 +227,8 @@ void DialMediaRouteProvider::HandleParsedRouteMessage(
                       base::StrCat({"Invalid route message. ", error}), "",
                       MediaRoute::GetMediaSourceIdFromMediaRouteId(route_id),
                       MediaRoute::GetPresentationIdFromMediaRouteId(route_id));
-    ReportParseError(DialParseMessageResult::kInvalidMessage, error);
     return;
   }
-
-  DialMediaRouteProviderMetrics::RecordParseMessageResult(
-      DialParseMessageResult::kSuccess);
 
   const DialActivity* activity = activity_manager_->GetActivity(route_id);
   if (!activity) {
@@ -479,17 +470,21 @@ void DialMediaRouteProvider::HandleStopAppResult(
                        MediaRoute::GetPresentationIdFromMediaRouteId(route_id));
       break;
     default:
-      // In this case, the MediaRoute still exists. but we disconnect the
-      // controller with the OnPresentationConnectionStateChanged() call
-      // below. This results in a local MediaRoute that is not associated with a
-      // PresentationConnection.
+      // In this case, the app may still be running on the receiver but we can
+      // not terminate it. So, we remove it from the list of routes tracked by
+      // Chrome, and inform the user to stop it from the receiver side as well.
       logger_->LogError(
           mojom::LogCategory::kRoute, kLoggerComponent,
-          base::StringPrintf(
-              "Failed to terminate route. %s RouteRequestResult: %d",
-              message.value_or("").c_str(), static_cast<int>(result_code)),
+          base::StringPrintf("Removed a route that may still be running on the "
+                             "receiver. %s RouteRequestResult: %d",
+                             message.value_or("").c_str(),
+                             static_cast<int>(result_code)),
           "", MediaRoute::GetMediaSourceIdFromMediaRouteId(route_id),
           MediaRoute::GetPresentationIdFromMediaRouteId(route_id));
+      media_router_->OnIssue(
+          {l10n_util::GetStringUTF8(IDS_MEDIA_ROUTER_ISSUE_CANNOT_TERMINATE),
+           IssueInfo::Severity::WARNING,
+           MediaRoute::GetSinkIdFromMediaRouteId(route_id)});
   }
   // We set the PresentationConnection state to "terminated" per the API spec:
   // https://w3c.github.io/presentation-api/#terminating-a-presentation-in-a-controlling-browsing-context

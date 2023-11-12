@@ -9,6 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/strings/string_util.h"
 #include "base/test/icu_test_util.h"
+#include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/clipboard/file_info.h"
@@ -18,42 +19,16 @@
 
 namespace ash {
 
+namespace {
+
+struct FormatPair {
+  ui::ClipboardInternalFormat clipboard_format;
+  crosapi::mojom::ClipboardHistoryDisplayFormat display_format;
+};
+
+}  // namespace
+
 using ClipboardHistoryItemTest = AshTestBase;
-
-TEST_F(ClipboardHistoryItemTest, GetImageDataUrl) {
-  using DisplayFormat = ClipboardHistoryItem::DisplayFormat;
-
-  constexpr const auto* kDataUrlStart = "data:image/png;base64,";
-
-  for (size_t i = 0; i <= static_cast<size_t>(DisplayFormat::kMaxValue); ++i) {
-    ClipboardHistoryItemBuilder builder;
-    const auto display_format = static_cast<DisplayFormat>(i);
-    switch (display_format) {
-      case DisplayFormat::kText:
-        builder.SetFormat(ui::ClipboardInternalFormat::kText);
-        break;
-      case DisplayFormat::kPng:
-        builder.SetFormat(ui::ClipboardInternalFormat::kPng);
-        break;
-      case DisplayFormat::kHtml:
-        builder.SetFormat(ui::ClipboardInternalFormat::kHtml);
-        break;
-      case DisplayFormat::kFile:
-        builder.SetFormat(ui::ClipboardInternalFormat::kFilenames);
-        break;
-    }
-    const auto item = builder.Build();
-    EXPECT_EQ(item.display_format(), display_format);
-
-    const auto maybe_image_data_url = item.GetImageDataUrl();
-    if (display_format == DisplayFormat::kText) {
-      EXPECT_FALSE(maybe_image_data_url);
-    } else {
-      ASSERT_TRUE(maybe_image_data_url);
-      EXPECT_TRUE(base::StartsWith(*maybe_image_data_url, kDataUrlStart));
-    }
-  }
-}
 
 TEST_F(ClipboardHistoryItemTest, DisplayText) {
   base::test::ScopedRestoreICUDefaultLocale locale("en_US");
@@ -123,6 +98,75 @@ TEST_F(ClipboardHistoryItemTest, DisplayText) {
   // In the absence of web smart paste data, file system data takes precedence.
   // NOTE: File system data is the only kind of custom data currently supported.
   EXPECT_EQ(builder.Build().display_text(), u"File.txt, Other File.txt");
+}
+
+class ClipboardHistoryItemDisplayTest
+    : public ClipboardHistoryItemTest,
+      public testing::WithParamInterface<FormatPair> {
+ public:
+  ClipboardHistoryItemDisplayTest() : item_(BuildClipboardHistoryItem()) {}
+  ~ClipboardHistoryItemDisplayTest() override = default;
+
+  ui::ClipboardInternalFormat GetClipboardFormat() const {
+    return GetParam().clipboard_format;
+  }
+  crosapi::mojom::ClipboardHistoryDisplayFormat GetDisplayFormat() const {
+    return GetParam().display_format;
+  }
+
+  const ClipboardHistoryItem& item() const { return item_; }
+
+ private:
+  ClipboardHistoryItem BuildClipboardHistoryItem() const {
+    ClipboardHistoryItemBuilder builder;
+    builder.SetFormat(GetClipboardFormat());
+    ClipboardHistoryItem item = builder.Build();
+    EXPECT_EQ(item.display_format(), GetDisplayFormat());
+    return item;
+  }
+
+  const ClipboardHistoryItem item_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ClipboardHistoryItemDisplayTest,
+    ::testing::Values(
+        FormatPair{ui::ClipboardInternalFormat::kText,
+                   crosapi::mojom::ClipboardHistoryDisplayFormat::kText},
+        FormatPair{ui::ClipboardInternalFormat::kPng,
+                   crosapi::mojom::ClipboardHistoryDisplayFormat::kPng},
+        FormatPair{ui::ClipboardInternalFormat::kHtml,
+                   crosapi::mojom::ClipboardHistoryDisplayFormat::kHtml},
+        FormatPair{ui::ClipboardInternalFormat::kFilenames,
+                   crosapi::mojom::ClipboardHistoryDisplayFormat::kFile}));
+
+TEST_P(ClipboardHistoryItemDisplayTest, Icon) {
+  const auto& maybe_icon = item().icon();
+  if (GetDisplayFormat() ==
+      crosapi::mojom::ClipboardHistoryDisplayFormat::kFile) {
+    ASSERT_TRUE(maybe_icon.has_value());
+    EXPECT_TRUE(maybe_icon.value().IsVectorIcon());
+  } else {
+    EXPECT_FALSE(maybe_icon.has_value());
+  }
+}
+
+TEST_P(ClipboardHistoryItemDisplayTest, DisplayImage) {
+  const auto& maybe_image = item().display_image();
+  switch (GetDisplayFormat()) {
+    case crosapi::mojom::ClipboardHistoryDisplayFormat::kUnknown:
+      NOTREACHED_NORETURN();
+    case crosapi::mojom::ClipboardHistoryDisplayFormat::kText:
+    case crosapi::mojom::ClipboardHistoryDisplayFormat::kFile:
+      EXPECT_FALSE(maybe_image);
+      break;
+    case crosapi::mojom::ClipboardHistoryDisplayFormat::kPng:
+    case crosapi::mojom::ClipboardHistoryDisplayFormat::kHtml:
+      ASSERT_TRUE(maybe_image);
+      EXPECT_TRUE(maybe_image.value().IsImage());
+      break;
+  }
 }
 
 }  // namespace ash

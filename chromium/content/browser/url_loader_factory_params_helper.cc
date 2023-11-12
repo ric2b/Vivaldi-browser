@@ -54,17 +54,18 @@ network::mojom::URLLoaderFactoryParamsPtr CreateParams(
     bool allow_universal_access_from_file_urls,
     bool is_for_isolated_world,
     mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer,
+    mojo::PendingRemote<network::mojom::TrustTokenAccessObserver>
+        trust_token_observer,
     mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
         url_loader_network_observer,
     mojo::PendingRemote<network::mojom::DevToolsObserver> devtools_observer,
-    network::mojom::TrustTokenRedemptionPolicy trust_token_redemption_policy,
+    network::mojom::TrustTokenOperationPolicyVerdict
+        trust_token_issuance_policy,
+    network::mojom::TrustTokenOperationPolicyVerdict
+        trust_token_redemption_policy,
     net::CookieSettingOverrides cookie_setting_overrides,
     base::StringPiece debug_tag) {
   DCHECK(process);
-
-  // "chrome-guest://..." is never used as a main or isolated world origin.
-  DCHECK_NE(kGuestScheme, origin.scheme());
-  DCHECK_NE(kGuestScheme, request_initiator_origin_lock.scheme());
 
   network::mojom::URLLoaderFactoryParamsPtr params =
       network::mojom::URLLoaderFactoryParams::New();
@@ -97,18 +98,20 @@ network::mojom::URLLoaderFactoryParamsPtr CreateParams(
     params->is_corb_enabled = true;
   }
 
+  params->trust_token_issuance_policy = trust_token_issuance_policy;
   params->trust_token_redemption_policy = trust_token_redemption_policy;
-
-  GetContentClient()->browser()->OverrideURLLoaderFactoryParams(
-      process->GetBrowserContext(), origin, is_for_isolated_world,
-      params.get());
 
   // If we have a URLLoaderNetworkObserver, request loading state updates.
   if (url_loader_network_observer) {
     params->provide_loading_state_updates = true;
   }
 
+  GetContentClient()->browser()->OverrideURLLoaderFactoryParams(
+      process->GetBrowserContext(), origin, is_for_isolated_world,
+      params.get());
+
   params->cookie_observer = std::move(cookie_observer);
+  params->trust_token_observer = std::move(trust_token_observer);
   params->url_loader_network_observer = std::move(url_loader_network_observer);
   params->devtools_observer = std::move(devtools_observer);
 
@@ -131,7 +134,10 @@ URLLoaderFactoryParamsHelper::CreateForFrame(
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
         coep_reporter,
     RenderProcessHost* process,
-    network::mojom::TrustTokenRedemptionPolicy trust_token_redemption_policy,
+    network::mojom::TrustTokenOperationPolicyVerdict
+        trust_token_issuance_policy,
+    network::mojom::TrustTokenOperationPolicyVerdict
+        trust_token_redemption_policy,
     net::CookieSettingOverrides cookie_setting_overrides,
     base::StringPiece debug_tag) {
   return CreateParams(
@@ -144,9 +150,11 @@ URLLoaderFactoryParamsHelper::CreateForFrame(
       frame->GetOrCreateWebPreferences().allow_universal_access_from_file_urls,
       false,  // is_for_isolated_world
       frame->CreateCookieAccessObserver(),
+      frame->CreateTrustTokenAccessObserver(),
       frame->CreateURLLoaderNetworkObserver(),
       NetworkServiceDevToolsObserver::MakeSelfOwned(frame->frame_tree_node()),
-      trust_token_redemption_policy, cookie_setting_overrides, debug_tag);
+      trust_token_issuance_policy, trust_token_redemption_policy,
+      cookie_setting_overrides, debug_tag);
 }
 
 // static
@@ -157,7 +165,10 @@ URLLoaderFactoryParamsHelper::CreateForIsolatedWorld(
     const url::Origin& main_world_origin,
     const net::IsolationInfo& isolation_info,
     network::mojom::ClientSecurityStatePtr client_security_state,
-    network::mojom::TrustTokenRedemptionPolicy trust_token_redemption_policy,
+    network::mojom::TrustTokenOperationPolicyVerdict
+        trust_token_issuance_policy,
+    network::mojom::TrustTokenOperationPolicyVerdict
+        trust_token_redemption_policy,
     net::CookieSettingOverrides cookie_setting_overrides) {
   return CreateParams(
       frame->GetProcess(),
@@ -170,10 +181,11 @@ URLLoaderFactoryParamsHelper::CreateForIsolatedWorld(
       frame->GetOrCreateWebPreferences().allow_universal_access_from_file_urls,
       true,  // is_for_isolated_world
       frame->CreateCookieAccessObserver(),
+      frame->CreateTrustTokenAccessObserver(),
       frame->CreateURLLoaderNetworkObserver(),
       NetworkServiceDevToolsObserver::MakeSelfOwned(frame->frame_tree_node()),
-      trust_token_redemption_policy, cookie_setting_overrides,
-      "ParamHelper::CreateForIsolatedWorld");
+      trust_token_issuance_policy, trust_token_redemption_policy,
+      cookie_setting_overrides, "ParamHelper::CreateForIsolatedWorld");
 }
 
 network::mojom::URLLoaderFactoryParamsPtr
@@ -197,9 +209,11 @@ URLLoaderFactoryParamsHelper::CreateForPrefetch(
       frame->GetOrCreateWebPreferences().allow_universal_access_from_file_urls,
       false,  // is_for_isolated_world
       frame->CreateCookieAccessObserver(),
+      frame->CreateTrustTokenAccessObserver(),
       frame->CreateURLLoaderNetworkObserver(),
       NetworkServiceDevToolsObserver::MakeSelfOwned(frame->frame_tree_node()),
-      network::mojom::TrustTokenRedemptionPolicy::kForbid,
+      network::mojom::TrustTokenOperationPolicyVerdict::kForbid,
+      network::mojom::TrustTokenOperationPolicyVerdict::kForbid,
       cookie_setting_overrides, "ParamHelper::CreateForPrefetch");
 }
 
@@ -232,12 +246,15 @@ URLLoaderFactoryParamsHelper::CreateForWorker(
       false,  // is_for_isolated_world
       static_cast<StoragePartitionImpl*>(process->GetStoragePartition())
           ->CreateCookieAccessObserverForServiceWorker(),
+      static_cast<StoragePartitionImpl*>(process->GetStoragePartition())
+          ->CreateTrustTokenAccessObserverForServiceWorker(),
       std::move(url_loader_network_observer), std::move(devtools_observer),
       // Trust Token redemption and signing operations require the Permissions
       // Policy. It seems Permissions Policy in worker contexts
       // is currently an open issue (as of 06/21/2022):
       // https://github.com/w3c/webappsec-permissions-policy/issues/207.
-      network::mojom::TrustTokenRedemptionPolicy::kPotentiallyPermit,
+      network::mojom::TrustTokenOperationPolicyVerdict::kPotentiallyPermit,
+      network::mojom::TrustTokenOperationPolicyVerdict::kPotentiallyPermit,
       net::CookieSettingOverrides(), debug_tag);
 }
 
@@ -250,7 +267,9 @@ URLLoaderFactoryParamsHelper::CreateForEarlyHintsPreload(
     const url::Origin& tentative_origin,
     NavigationRequest& navigation_request,
     const network::mojom::EarlyHints& early_hints,
-    mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer) {
+    mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer,
+    mojo::PendingRemote<network::mojom::TrustTokenAccessObserver>
+        trust_token_observer) {
   // TODO(crbug.com/1225556): Consider not using the speculative
   // RenderFrameHostImpl to create URLLoaderNetworkServiceObserver.
   // In general we should avoid using speculative RenderFrameHostImpl
@@ -273,7 +292,7 @@ URLLoaderFactoryParamsHelper::CreateForEarlyHintsPreload(
           early_hints.headers->cross_origin_embedder_policy,
           network::IsOriginPotentiallyTrustworthy(tentative_origin),
           early_hints.ip_address_space,
-          network::mojom::PrivateNetworkRequestPolicy::kBlock);
+          network::mojom::LocalNetworkRequestPolicy::kBlock);
 
   return CreateParams(
       process, /*origin=*/tentative_origin,
@@ -283,9 +302,10 @@ URLLoaderFactoryParamsHelper::CreateForEarlyHintsPreload(
       /*coep_reporter=*/mojo::NullRemote(),
       /*allow_universal_access_from_file_urls=*/false,
       /*is_for_isolated_world=*/false, std::move(cookie_observer),
-      std::move(url_loader_network_observer),
+      std::move(trust_token_observer), std::move(url_loader_network_observer),
       /*devtools_observer=*/mojo::NullRemote(),
-      network::mojom::TrustTokenRedemptionPolicy::kForbid,
+      network::mojom::TrustTokenOperationPolicyVerdict::kForbid,
+      network::mojom::TrustTokenOperationPolicyVerdict::kForbid,
       net::CookieSettingOverrides(), "ParamHelper::CreateForEarlyHintsPreload");
 }
 

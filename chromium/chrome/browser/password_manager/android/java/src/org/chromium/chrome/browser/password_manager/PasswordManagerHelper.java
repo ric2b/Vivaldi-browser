@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.password_manager;
 
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.PASSKEY_MANAGEMENT_USING_ACCOUNT_SETTINGS_ANDROID;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_ANDROID_BRANDING;
 
@@ -113,11 +114,6 @@ public class PasswordManagerHelper {
     private static final String PASSWORD_CHECKUP_LAUNCH_CREDENTIAL_MANAGER_SUCCESS_HISTOGRAM =
             "PasswordManager.PasswordCheckup.Launch.Success";
 
-    private static final String LOADING_DIALOG_CREDENTIAL_MANAGER_HISTOGRAM =
-            "PasswordManager.ModalLoadingDialog.CredentialManager.Outcome";
-    private static final String LOADING_DIALOG_PASSWORD_CHECKUP_HISTOGRAM =
-            "PasswordManager.ModalLoadingDialog.PasswordCheckup.Outcome";
-
     /**
      *  The identifier of the loading dialog outcome.
      *
@@ -147,10 +143,13 @@ public class PasswordManagerHelper {
      * Services.
      *
      * @param context used to show the UI to manage passwords.
+     * @param managePasskeys indicates whether passkey management is needed, which when true will
+     *      attempt to launch the credential manager even without syncing enabled.
      */
     public static void showPasswordSettings(Context context, @ManagePasswordsReferrer int referrer,
             SettingsLauncher settingsLauncher, SyncService syncService,
-            ObservableSupplier<ModalDialogManager> modalDialogManagerSupplier) {
+            ObservableSupplier<ModalDialogManager> modalDialogManagerSupplier,
+            boolean managePasskeys) {
         RecordHistogram.recordEnumeratedHistogram("PasswordManager.ManagePasswordsReferrer",
                 referrer, ManagePasswordsReferrer.MAX_VALUE + 1);
 
@@ -159,6 +158,29 @@ public class PasswordManagerHelper {
                     LoadingModalDialogCoordinator.create(modalDialogManagerSupplier, context);
             launchTheCredentialManager(referrer, syncService, loadingDialogCoordinator,
                     modalDialogManagerSupplier, context);
+            return;
+        }
+
+        if (managePasskeys && canUseAccountSettings()) {
+            // Passkey management has been selected but UPM is not available, possibly because
+            // password sync is not turned on. Attempt to use an AccountSettings intent to show
+            // an account chooser and open the native password manager, where passkeys are managed.
+            CredentialManagerLauncher credentialManagerLauncher;
+            try {
+                credentialManagerLauncher = getCredentialManagerLauncher();
+            } catch (CredentialManagerBackendException exception) {
+                if (exception.errorCode != CredentialManagerError.BACKEND_VERSION_NOT_SUPPORTED) {
+                    return;
+                }
+
+                showGmsUpdateDialog(modalDialogManagerSupplier, context);
+                return;
+            }
+
+            String accountName = (syncService != null)
+                    ? CoreAccountInfo.getEmailFrom(syncService.getAccountInfo())
+                    : "";
+            credentialManagerLauncher.getAccountSettingsIntent(accountName, context::startActivity);
             return;
         }
 
@@ -188,6 +210,23 @@ public class PasswordManagerHelper {
                 && hasChosenToSyncPasswords(syncService)
                 && !prefService.getBoolean(
                         Pref.UNENROLLED_FROM_GOOGLE_MOBILE_SERVICES_DUE_TO_ERRORS)
+                && PasswordManagerBackendSupportHelper.getInstance().isBackendPresent();
+    }
+
+    /**
+     * Checks the ability to use an AccountSettings intent to launch the password manager.
+     * This provides a fallback for users who attempt to manage passkeys when UPM is not
+     * available. Passkeys cannot be managed from the Chrome password settings page.
+     *
+     * Since there is not necessarily a signed in Chrome user, the intent might show an
+     * account chooser before showing the password manager.
+     *
+     * @return True if the AccountSettings intent is available for use, false otherwise.
+     */
+    public static boolean canUseAccountSettings() {
+        PrefService prefService = UserPrefs.get(Profile.getLastUsedRegularProfile());
+        return PasswordManagerHelper.usesUnifiedPasswordManagerUI()
+                && ChromeFeatureList.isEnabled(PASSKEY_MANAGEMENT_USING_ACCOUNT_SETTINGS_ANDROID)
                 && PasswordManagerBackendSupportHelper.getInstance().isBackendPresent();
     }
 
@@ -400,6 +439,7 @@ public class PasswordManagerHelper {
             SyncService syncService, LoadingModalDialogCoordinator loadingDialogCoordinator,
             ObservableSupplier<ModalDialogManager> modalDialogManagerSupplier, Context context) {
         assert canUseUpm();
+        assert syncService != null;
 
         CredentialManagerLauncher credentialManagerLauncher;
         try {
@@ -421,8 +461,6 @@ public class PasswordManagerHelper {
                                 intent, startTimeMs, true, loadingDialogCoordinator),
                 (exception) -> {
                     PasswordManagerHelper.recordFailureMetrics(exception, true);
-                    recordLoadingDialogMetrics(LOADING_DIALOG_CREDENTIAL_MANAGER_HISTOGRAM,
-                            loadingDialogCoordinator.getState());
                     loadingDialogCoordinator.dismiss();
                 });
     }
@@ -452,13 +490,10 @@ public class PasswordManagerHelper {
                         -> {
                     passwordCheckupMetricsRecorder.recordMetrics(Optional.empty());
                     maybeLaunchIntentWithLoadingDialog(loadingDialogCoordinator, intent,
-                            PASSWORD_CHECKUP_LAUNCH_CREDENTIAL_MANAGER_SUCCESS_HISTOGRAM,
-                            LOADING_DIALOG_PASSWORD_CHECKUP_HISTOGRAM);
+                            PASSWORD_CHECKUP_LAUNCH_CREDENTIAL_MANAGER_SUCCESS_HISTOGRAM);
                 },
                 (error) -> {
                     passwordCheckupMetricsRecorder.recordMetrics(Optional.of(error));
-                    recordLoadingDialogMetrics(LOADING_DIALOG_PASSWORD_CHECKUP_HISTOGRAM,
-                            loadingDialogCoordinator.getState());
                     loadingDialogCoordinator.dismiss();
                 });
     }
@@ -522,8 +557,7 @@ public class PasswordManagerHelper {
 
         maybeLaunchIntentWithLoadingDialog(loadingDialogCoordinator, intent,
                 forAccount ? ACCOUNT_LAUNCH_CREDENTIAL_MANAGER_SUCCESS_HISTOGRAM
-                           : LOCAL_LAUNCH_CREDENTIAL_MANAGER_SUCCESS_HISTOGRAM,
-                LOADING_DIALOG_CREDENTIAL_MANAGER_HISTOGRAM);
+                           : LOCAL_LAUNCH_CREDENTIAL_MANAGER_SUCCESS_HISTOGRAM);
     }
 
     private static void recordSuccessMetrics(long elapsedTimeMs, boolean forAccount) {
@@ -549,20 +583,18 @@ public class PasswordManagerHelper {
      */
     private static void maybeLaunchIntentWithLoadingDialog(
             LoadingModalDialogCoordinator loadingDialogCoordinator, PendingIntent intent,
-            String intentLaunchSuccessHistogram, String loadingDialogOutcomeHistogram) {
+            String intentLaunchSuccessHistogram) {
         @LoadingModalDialogCoordinator.State
         int loadingDialogState = loadingDialogCoordinator.getState();
         if (loadingDialogState == LoadingModalDialogCoordinator.State.CANCELLED
                 || loadingDialogState == LoadingModalDialogCoordinator.State.TIMED_OUT) {
             // Dialog was dismissed or timeout occurred before the loading finished, do not
             // launch the intent.
-            recordLoadingDialogMetrics(loadingDialogOutcomeHistogram, loadingDialogState);
             return;
         }
 
         if (loadingDialogState == LoadingModalDialogCoordinator.State.PENDING) {
             // Dialog is not yet visible, dismiss immediately.
-            recordLoadingDialogMetrics(loadingDialogOutcomeHistogram, loadingDialogState);
             loadingDialogCoordinator.dismiss();
             launchIntentAndRecordSuccess(intent, intentLaunchSuccessHistogram);
             return;
@@ -571,7 +603,6 @@ public class PasswordManagerHelper {
         if (loadingDialogCoordinator.isImmediatelyDismissable()) {
             // Dialog is visible and dismissable. Dismiss with a small delay to cover the intent
             // launch delay.
-            recordLoadingDialogMetrics(loadingDialogOutcomeHistogram, loadingDialogState);
             launchIntentAndRecordSuccess(intent, intentLaunchSuccessHistogram);
             new Handler(Looper.getMainLooper())
                     .postDelayed(
@@ -586,7 +617,6 @@ public class PasswordManagerHelper {
             public void onDismissable() {
                 // Record the known state - if the dialog was cancelled or timed out,
                 // {@link #onCancelledOrTimedOut()} would be called.
-                recordLoadingDialogMetrics(loadingDialogOutcomeHistogram, loadingDialogState);
                 launchIntentAndRecordSuccess(intent, intentLaunchSuccessHistogram);
                 new Handler(Looper.getMainLooper())
                         .postDelayed(
@@ -594,44 +624,8 @@ public class PasswordManagerHelper {
             }
 
             @Override
-            public void onDismissedWithState(@LoadingModalDialogCoordinator.State int finalState) {
-                recordLoadingDialogMetrics(loadingDialogOutcomeHistogram, finalState);
-            }
+            public void onDismissedWithState(@LoadingModalDialogCoordinator.State int finalState) {}
         });
-    }
-
-    /**
-     * Reports metric for the GMS Core UI loading dialog.
-     * Should be called right before launching the loaded intent or before dismissing the dialog
-     * if the intent will not be launched.
-     *
-     * @param histogramName Name of the histogram to report metric via.
-     * @param loadingDialogState State of the loading dialog before launching the intent.
-     */
-    private static void recordLoadingDialogMetrics(
-            String histogramName, @LoadingModalDialogCoordinator.State int loadingDialogState) {
-        switch (loadingDialogState) {
-            case LoadingModalDialogCoordinator.State.PENDING:
-                RecordHistogram.recordEnumeratedHistogram(histogramName,
-                        LoadingDialogOutcome.NOT_SHOWN_LOADED, LoadingDialogOutcome.NUM_ENTRIES);
-                break;
-            case LoadingModalDialogCoordinator.State.SHOWN:
-                RecordHistogram.recordEnumeratedHistogram(histogramName,
-                        LoadingDialogOutcome.SHOWN_LOADED, LoadingDialogOutcome.NUM_ENTRIES);
-                break;
-            case LoadingModalDialogCoordinator.State.CANCELLED:
-                RecordHistogram.recordEnumeratedHistogram(histogramName,
-                        LoadingDialogOutcome.SHOWN_CANCELLED, LoadingDialogOutcome.NUM_ENTRIES);
-                break;
-            case LoadingModalDialogCoordinator.State.TIMED_OUT:
-                RecordHistogram.recordEnumeratedHistogram(histogramName,
-                        LoadingDialogOutcome.SHOWN_TIMED_OUT, LoadingDialogOutcome.NUM_ENTRIES);
-                break;
-            case LoadingModalDialogCoordinator.State.READY:
-            case LoadingModalDialogCoordinator.State.FINISHED:
-                throw new AssertionError(
-                        "Unexpected state for metrics recording: " + loadingDialogState);
-        }
     }
 
     private static void showGmsUpdateDialog(

@@ -93,7 +93,7 @@ void UpdateMetadataForUsage(PasswordForm* credential) {
 
   // Remove alternate usernames. At this point we assume that we have found
   // the right username.
-  credential->all_possible_usernames.clear();
+  credential->all_alternative_usernames.clear();
 }
 
 password_manager::SyncState GetPasswordSyncState(
@@ -111,10 +111,12 @@ password_manager::SyncState GetPasswordSyncState(
 
   DCHECK(base::FeatureList::IsEnabled(
       password_manager::features::kEnablePasswordsAccountStorage));
-  // Account passwords are enabled only for users with normal encryption at
-  // the moment. Data types won't become active for non-sync users with custom
-  // passphrase.
-  return password_manager::SyncState::kAccountPasswordsActiveNormalEncryption;
+
+  return sync_service->GetUserSettings()->IsUsingExplicitPassphrase()
+             ? password_manager::SyncState::
+                   kAccountPasswordsActiveWithCustomPassphrase
+             : password_manager::SyncState::
+                   kAccountPasswordsActiveNormalEncryption;
 }
 
 void TrimUsernameOnlyCredentials(
@@ -162,9 +164,9 @@ bool ShowAllSavedPasswordsContextMenuEnabled(
 
   password_manager::PasswordManagerClient* client =
       password_manager->GetClient();
-  if (!client ||
-      !client->IsFillingFallbackEnabled(driver->GetLastCommittedURL()))
+  if (!client || !client->IsFillingEnabled(driver->GetLastCommittedURL())) {
     return false;
+  }
 
   return true;
 }
@@ -417,9 +419,8 @@ bool ShouldBiometricAuthenticationForFillingToggleBeVisible(
 
 bool ShouldShowBiometricAuthenticationBeforeFillingPromo(
     password_manager::PasswordManagerClient* client) {
-  return client && client->GetBiometricAuthenticator() &&
-         client->GetBiometricAuthenticator()->CanAuthenticate(
-             device_reauth::BiometricAuthRequester::kAutofillSuggestion) &&
+  return client && client->GetDeviceAuthenticator() &&
+         client->GetDeviceAuthenticator()->CanAuthenticateWithBiometrics() &&
          base::FeatureList::IsEnabled(
              password_manager::features::kBiometricAuthenticationForFilling) &&
          !client->GetPrefs()->GetBoolean(
@@ -427,8 +428,7 @@ bool ShouldShowBiometricAuthenticationBeforeFillingPromo(
 }
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 
-bool CanUseBiometricAuth(device_reauth::BiometricAuthenticator* authenticator,
-                         device_reauth::BiometricAuthRequester requester,
+bool CanUseBiometricAuth(device_reauth::DeviceAuthenticator* authenticator,
                          password_manager::PasswordManagerClient* client) {
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   if (!client || !client->GetLocalStatePrefs() || !client->GetPrefs() ||
@@ -438,7 +438,7 @@ bool CanUseBiometricAuth(device_reauth::BiometricAuthenticator* authenticator,
   return client->GetPasswordFeatureManager()
       ->IsBiometricAuthenticationBeforeFillingEnabled();
 #else
-  return authenticator && authenticator->CanAuthenticate(requester) &&
+  return authenticator && authenticator->CanAuthenticateWithBiometrics() &&
          base::FeatureList::IsEnabled(
              password_manager::features::kBiometricTouchToFill);
 #endif

@@ -20,7 +20,8 @@ below.**
     and the
     [Chromium Documentation Best Practices](documentation_best_practices.md).
 *   Markdown documents must follow the
-    [style guide](https://github.com/google/styleguide/tree/gh-pages/docguide).
+    [Markdown Style
+    Guide](https://chromium.googlesource.com/chromium/src/+/HEAD/styleguide/markdown/markdown.md).
 
 ### Previewing changes
 
@@ -343,6 +344,8 @@ used when committed.
     audio streams interact
 *   [Autoplay of HTMLMediaElements](media/autoplay.md) - How HTMLMediaElements
     are autoplayed.
+*   [Latency tracing](media/latency_tracing.md) - How to use the
+    `"audio.latency"` tracing category to measure audio latency.
 *   [Piranha Plant](piranha_plant.md) - Future architecture of MediaStreams
 *   [Video Encode Accelerator Tests](media/gpu/veatest_usage.md) - How to
     use the accelerated video encoder test program.

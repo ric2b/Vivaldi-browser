@@ -12,7 +12,10 @@
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/account_consistency_mode_manager_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
@@ -92,12 +95,16 @@ AccountConsistencyModeManager::AccountConsistencyModeManager(Profile* profile)
       account_consistency_initialized_(false) {
   DCHECK(profile_);
   DCHECK(ShouldBuildServiceForProfile(profile));
-
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  PrefService* prefs = profile->GetPrefs();
+  auto* entry = g_browser_process->profile_manager()
+                    ? g_browser_process->profile_manager()
+                          ->GetProfileAttributesStorage()
+                          .GetProfileAttributesWithPath(profile_->GetPath())
+                    : nullptr;
+  PrefService* prefs = profile_->GetPrefs();
   // Propagate settings changes from the previous launch to the signin-allowed
   // pref.
-  bool signin_allowed = IsDiceSignInAllowed() &&
+  bool signin_allowed = IsDiceSignInAllowed(entry) &&
                         prefs->GetBoolean(prefs::kSigninAllowedOnNextStartup);
   prefs->SetBoolean(prefs::kSigninAllowed, signin_allowed);
 
@@ -134,8 +141,10 @@ bool AccountConsistencyModeManager::IsDiceEnabledForProfile(Profile* profile) {
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 // static
-bool AccountConsistencyModeManager::IsDiceSignInAllowed() {
-  return CanEnableDiceForBuild() && IsBrowserSigninAllowedByCommandLine();
+bool AccountConsistencyModeManager::IsDiceSignInAllowed(
+    ProfileAttributesEntry* entry) {
+  return CanEnableDiceForBuild() && IsBrowserSigninAllowedByCommandLine() &&
+         (!entry || entry->GetProfileManagementEnrollmentToken().empty());
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
@@ -190,8 +199,9 @@ AccountConsistencyModeManager::ComputeAccountConsistencyMethod(
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   // Account consistency is unavailable on Managed Guest Sessions and Public
   // Sessions.
-  if (profiles::IsPublicSession())
+  if (profiles::IsPublicSession() || profile->IsGuestSession()) {
     return AccountConsistencyMethod::kDisabled;
+  }
 #endif
 
 #if BUILDFLAG(ENABLE_MIRROR)

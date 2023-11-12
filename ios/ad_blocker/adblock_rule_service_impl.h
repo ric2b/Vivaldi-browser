@@ -20,8 +20,7 @@
 #include "components/ad_blocker/adblock_rule_service_storage.h"
 #include "components/ad_blocker/adblock_rule_source_handler.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "ios/ad_blocker/adblock_content_rule_list_provider.h"
-#include "ios/web/web_state/ui/wk_web_view_configuration_provider_observer.h"
+#include "ios/ad_blocker/adblock_organized_rules_manager.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -32,9 +31,7 @@ class BrowserState;
 }
 
 namespace adblock_filter {
-class RuleServiceImpl : public RuleService,
-                        public RuleManager::Observer,
-                        public web::WKWebViewConfigurationProviderObserver {
+class RuleServiceImpl : public RuleService, public RuleManager::Observer {
  public:
   explicit RuleServiceImpl(web::BrowserState* browser_state,
                            RuleSourceHandler::RulesCompiler rules_compiler,
@@ -52,6 +49,7 @@ class RuleServiceImpl : public RuleService,
   void AddObserver(RuleService::Observer* observer) override;
   void RemoveObserver(RuleService::Observer* observer) override;
   std::string GetRulesIndexChecksum(RuleGroup group) override;
+  IndexBuildResult GetRulesIndexBuildResult(RuleGroup group) override;
   RuleManager* GetRuleManager() override;
   KnownRuleSourcesHandler* GetKnownSourcesHandler() override;
   BlockedUrlsReporter* GetBlockerUrlsReporter() override;
@@ -63,13 +61,13 @@ class RuleServiceImpl : public RuleService,
   void OnExceptionListChanged(RuleGroup group,
                               RuleManager::ExceptionsList list) override;
 
-  // Implementing WKWebViewConfigurationProviderObserver
-  void DidCreateNewConfiguration(
-      web::WKWebViewConfigurationProvider* config_provider,
-      WKWebViewConfiguration* new_config) override;
-
  private:
   void OnStateLoaded(RuleServiceStorage::LoadResult load_result);
+
+  void OnRulesIndexChanged(RuleGroup group,
+                           RuleService::IndexBuildResult build_result);
+
+  void OnRulesApplied(RuleGroup group);
 
   web::BrowserState* browser_state_;
   RuleSourceHandler::RulesCompiler rules_compiler_;
@@ -80,7 +78,8 @@ class RuleServiceImpl : public RuleService,
   bool is_loaded_ = false;
   absl::optional<RuleManagerImpl> rule_manager_;
   absl::optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
-  absl::optional<AdBlockerContentRuleListProvider> content_rule_list_provider_;
+  std::array<absl::optional<OrganizedRulesManager>, kRuleGroupCount>
+      organized_rules_manager_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 

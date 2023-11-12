@@ -77,7 +77,7 @@ update_target("//ios/chrome/browser/ui/location_bar:location_bar") {
   ]
 }
 
-update_target("//ios/chrome/browser/ui/table_view/cells:cells") {
+update_target("//ios/chrome/browser/shared/ui/table_view/cells:cells") {
   sources += [
     "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.h",
     "//vivaldi/ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.mm",
@@ -138,3 +138,25 @@ update_template_instance("//ios/chrome/app:info_plist") {
     "//vivaldi/ios/app/Disable-Multiscreen.plist",
   ]
  }
+
+update_template_instance("//ios/chrome/credential_provider_extension/ui/resources:consent_view_controller") {
+  sources -= [
+    "consent_view_controller.imageset/Contents.json",
+    "consent_view_controller.imageset/promo_passwords_in_other_apps@2x.png",
+    "consent_view_controller.imageset/promo_passwords_in_other_apps@3x.png",
+    "consent_view_controller.imageset/promo_passwords_in_other_apps_dark@2x.png",
+    "consent_view_controller.imageset/promo_passwords_in_other_apps_dark@3x.png",
+  ]
+  sources += [
+    "//vivaldi/ios/ui/widget/resources/consent_view_controller.imageset/Contents.json",
+    "//vivaldi/ios/ui/widget/resources/consent_view_controller.imageset/promo-passwords_in_other_apps@2x.png",
+    "//vivaldi/ios/ui/widget/resources/consent_view_controller.imageset/promo-passwords_in_other_apps@3x.png",
+  ]
+}
+
+update_target("//ios/chrome/browser/ui/webui:webui") {
+    sources += [
+      "//vivaldi/ios/ui/about/vivaldi_ios_about_version.mm",
+      "//vivaldi/ios/ui/about/vivaldi_ios_about_version.h",
+  ]
+}

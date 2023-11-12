@@ -44,7 +44,6 @@ FrameTreeNode* CreateDelegateFrameTreeNode(
 
 FencedFrame::FencedFrame(
     base::SafeRef<RenderFrameHostImpl> owner_render_frame_host,
-    blink::mojom::FencedFrameMode mode,
     bool was_discarded)
     : web_contents_(static_cast<WebContentsImpl*>(
           WebContents::FromRenderFrameHost(&*owner_render_frame_host))),
@@ -61,8 +60,7 @@ FencedFrame::FencedFrame(
                                       /*render_widget_delegate=*/web_contents_,
                                       /*manager_delegate=*/web_contents_,
                                       /*page_delegate=*/web_contents_,
-                                      FrameTree::Type::kFencedFrame)),
-      mode_(mode) {
+                                      FrameTree::Type::kFencedFrame)) {
   if (was_discarded)
     frame_tree_->root()->set_was_discarded();
 }
@@ -73,25 +71,39 @@ FencedFrame::~FencedFrame() {
   frame_tree_.reset();
 }
 
-void FencedFrame::Navigate(const GURL& url,
-                           base::TimeTicks navigation_start_time) {
+void FencedFrame::Navigate(
+    const GURL& url,
+    base::TimeTicks navigation_start_time,
+    const absl::optional<std::u16string>& embedder_shared_storage_context) {
   // We don't need guard against a bad message in the case of prerendering since
   // we wouldn't even establish the mojo connection in that case.
   DCHECK_NE(RenderFrameHost::LifecycleState::kPrerendering,
             owner_render_frame_host_->GetLifecycleState());
 
-  if (mode_ == blink::mojom::FencedFrameMode::kDefault &&
-      !blink::IsValidFencedFrameURL(url)) {
+  if (!blink::IsValidUrnUuidURL(url) && !blink::IsValidFencedFrameURL(url)) {
     bad_message::ReceivedBadMessage(owner_render_frame_host_->GetProcess(),
                                     bad_message::FF_NAVIGATION_INVALID_URL);
     return;
   }
 
-  if (mode_ == blink::mojom::FencedFrameMode::kOpaqueAds &&
-      !blink::IsValidUrnUuidURL(url) && !blink::IsValidFencedFrameURL(url)) {
-    bad_message::ReceivedBadMessage(owner_render_frame_host_->GetProcess(),
-                                    bad_message::FF_NAVIGATION_INVALID_URL);
-    return;
+  // Confirm that the navigation does not cause a mismatch with the embedder's
+  // mode, if the embedder is itself a fenced frame. The renderer should prevent
+  // this from happening.
+  DCHECK(outer_delegate_frame_tree_node_);
+  if (outer_delegate_frame_tree_node_->IsInFencedFrameTree()) {
+    bool is_nested_inside_opaque_ads_fenced_frame =
+        outer_delegate_frame_tree_node_->GetDeprecatedFencedFrameMode() ==
+        blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds;
+    bool is_nested_inside_default_fenced_frame =
+        !is_nested_inside_opaque_ads_fenced_frame;
+    if ((is_nested_inside_opaque_ads_fenced_frame &&
+         !blink::IsValidUrnUuidURL(url)) ||
+        (is_nested_inside_default_fenced_frame &&
+         !blink::IsValidFencedFrameURL(url))) {
+      bad_message::ReceivedBadMessage(
+          owner_render_frame_host_->GetProcess(),
+          bad_message::FF_DIFFERENT_MODE_THAN_EMBEDDER);
+    }
   }
 
   GURL validated_url = url;
@@ -100,8 +112,8 @@ void FencedFrame::Navigate(const GURL& url,
 
   FrameTreeNode* inner_root = frame_tree_->root();
 
-  // TODO(crbug.com/1237552): Resolve the discussion around navigations being
-  // treated as downloads, and implement the correct thing.
+  // The download policy will be controlled and modified by `NavigationRequest`,
+  // depending on whether the sandbox flags permit downloads.
   blink::NavigationDownloadPolicy download_policy;
 
   // This method is only invoked in the context of the embedder navigating
@@ -113,8 +125,8 @@ void FencedFrame::Navigate(const GURL& url,
   // need to provide a `source_site_instance`.
   url::Origin initiator_origin;
   // Similarly, we don't want to leak information from the outer frame tree via
-  // base url.
-  GURL initiator_base_url;
+  // base url, so we pass nullopt for `initiator_base_url` to
+  // NavigateFromFrameProxy.
 
   // TODO(yaoxia): implement this. This information will be propagated to the
   // `NavigationHandle`. Skip propagating here is fine for now, because we are
@@ -128,7 +140,7 @@ void FencedFrame::Navigate(const GURL& url,
       inner_root->current_frame_host(), validated_url,
       /*initiator_frame_token=*/nullptr,
       content::ChildProcessHost::kInvalidUniqueID, initiator_origin,
-      initiator_base_url,
+      /*initiator_base_url=*/absl::nullopt,
       /*source_site_instance=*/nullptr, content::Referrer(),
       ui::PAGE_TRANSITION_AUTO_SUBFRAME,
       /*should_replace_current_entry=*/true, download_policy, "GET",
@@ -138,7 +150,10 @@ void FencedFrame::Navigate(const GURL& url,
       /*is_form_submission=*/false,
       /*impression=*/absl::nullopt, initiator_activation_and_ad_status,
       navigation_start_time,
-      /*is_embedder_initiated_fenced_frame_navigation=*/true);
+      /*is_embedder_initiated_fenced_frame_navigation=*/true,
+      /*is_unfenced_top_navigation=*/false,
+      /*force_new_browsing_instance=*/false, /*is_container_initiated=*/false,
+      embedder_shared_storage_context);
 }
 
 bool FencedFrame::IsHidden() {
@@ -305,6 +320,11 @@ void FencedFrame::DidChangeFramePolicy(const blink::FramePolicy& frame_policy) {
   FrameTreeNode* inner_root = frame_tree_->root();
   const blink::FramePolicy& current_frame_policy =
       inner_root->pending_frame_policy();
+  // Observe that the sandbox flags sent from the renderer are currently
+  // ignored. The `sandbox` attribute on `HTMLFencedFrameElement` may only
+  // cause embedder-initiated navigations to fail for now---in the renderer.
+  // TODO(crbug.com/1347953): Handle sandbox flags for fenced frames properly
+  // in the browser, allowing us to use non-fixed sets of sandbox flags.
   inner_root->SetPendingFramePolicy(blink::FramePolicy(
       current_frame_policy.sandbox_flags, frame_policy.container_policy,
       current_frame_policy.required_document_policy));

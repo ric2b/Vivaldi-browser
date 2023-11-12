@@ -15,6 +15,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/case_conversion.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
@@ -38,7 +39,6 @@
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/search_engine_specifics.pb.h"
 #include "components/url_formatter/url_fixer.h"
-#include "components/variations/variations_associated_data.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 
@@ -178,7 +178,7 @@ bool OmniboxFieldTrialKeywordRequiresRegistry() {
   constexpr char kBundledExperimentFieldTrialName[] =
       "OmniboxBundledExperimentV1";
   constexpr char kKeywordRequiresRegistryRule[] = "KeywordRequiresRegistry";
-  const std::string value = variations::GetVariationParamValue(
+  const std::string value = base::GetFieldTrialParamValue(
       kBundledExperimentFieldTrialName, kKeywordRequiresRegistryRule);
   return value.empty() || (value == "true");
 }
@@ -2460,11 +2460,20 @@ void TemplateURLService::UpdateProvidersCreatedByPolicy(
         continue;
       }
 
-      TemplateURLID id = template_url->id();
-      RemoveFromMaps(template_url);
-      i = template_urls->erase(i);
-      if (web_data_service_)
-        web_data_service_->RemoveKeyword(id);
+      // If the previous default search provider was set as a recommended policy
+      // and the new provider is not set by policy, keep the previous provider
+      // in the database. This allows the recommended provider to remain in the
+      // list if the user switches to a different provider.
+      if (template_url->enforced_by_policy() || default_from_prefs) {
+        TemplateURLID id = template_url->id();
+        RemoveFromMaps(template_url);
+        i = template_urls->erase(i);
+        if (web_data_service_) {
+          web_data_service_->RemoveKeyword(id);
+        }
+      } else {
+        ++i;
+      }
     } else {
       ++i;
     }
@@ -2479,6 +2488,7 @@ void TemplateURLService::UpdateProvidersCreatedByPolicy(
     if (new_data.sync_guid.empty())
       new_data.GenerateSyncGUID();
     new_data.created_by_policy = true;
+    new_data.enforced_by_policy = is_mandatory;
     new_data.safe_for_autoreplace = false;
     new_data.is_active = TemplateURLData::ActiveStatus::kTrue;
     std::unique_ptr<TemplateURL> new_dse_ptr =

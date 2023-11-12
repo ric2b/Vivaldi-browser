@@ -190,10 +190,8 @@ bool IsTransportSocketPoolStalled(HttpNetworkSession* session) {
 // Takes in a Value created from a NetLogHttpResponseParameter, and returns
 // a JSONified list of headers as a single string.  Uses single quotes instead
 // of double quotes for easier comparison.
-std::string GetHeaders(const base::Value& params) {
-  if (!params.is_dict())
-    return "";
-  const base::Value::List* header_list = params.GetDict().FindList("headers");
+std::string GetHeaders(const base::Value::Dict& params) {
+  const base::Value::List* header_list = params.FindList("headers");
   if (!header_list)
     return "";
   std::string headers;
@@ -618,8 +616,8 @@ class HttpNetworkTransactionTest : public PlatformTest,
   const CommonConnectJobParams dummy_connect_job_params_;
 
   const net::NetworkAnonymizationKey kNetworkAnonymizationKey =
-      NetworkAnonymizationKey(SchemefulSite(GURL("https://foo.test/")),
-                              SchemefulSite(GURL("https://bar.test/")));
+      NetworkAnonymizationKey::CreateCrossSite(
+          SchemefulSite(GURL("https://foo.test/")));
 
   const net::NetworkIsolationKey kNetworkIsolationKey =
       NetworkIsolationKey(SchemefulSite(GURL("https://foo.test/")),
@@ -4558,10 +4556,12 @@ TEST_F(HttpNetworkTransactionTest, BasicAuthProxyMatchesServerAuthNoTunnel) {
 TEST_F(HttpNetworkTransactionTest,
        BasicAuthProxyMatchesServerAuthWithNetworkAnonymizationKeyNoTunnel) {
   const SchemefulSite kSite1(GURL("https://foo.test/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey1(kSite1, kSite1);
+  const auto kNetworkAnonymizationKey1 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite1);
   const net::NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
   const SchemefulSite kSite2(GURL("https://bar.test/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey2(kSite2, kSite2);
+  const auto kNetworkAnonymizationKey2 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite2);
   const net::NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
 
   // This test would need to use a single socket without this option enabled.
@@ -4820,10 +4820,12 @@ TEST_F(HttpNetworkTransactionTest,
 TEST_F(HttpNetworkTransactionTest,
        BasicAuthProxyMatchesServerAuthWithNetworkAnonymizationKeyWithTunnel) {
   const SchemefulSite kSite1(GURL("https://foo.test/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey1(kSite1, kSite1);
+  const auto kNetworkAnonymizationKey1 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite1);
   const net::NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
   const SchemefulSite kSite2(GURL("https://bar.test/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey2(kSite2, kSite2);
+  const auto kNetworkAnonymizationKey2 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite2);
   const net::NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
 
   // This test would need to use a single socket without this option enabled.
@@ -13259,9 +13261,7 @@ TEST_F(HttpNetworkTransactionTest, UploadUnreadableFile) {
   base::FilePath temp_file;
   ASSERT_TRUE(base::CreateTemporaryFile(&temp_file));
   std::string temp_file_content("Unreadable file.");
-  ASSERT_EQ(static_cast<int>(temp_file_content.length()),
-            base::WriteFile(temp_file, temp_file_content.c_str(),
-                            temp_file_content.length()));
+  ASSERT_TRUE(base::WriteFile(temp_file, temp_file_content));
   ASSERT_TRUE(base::MakeFileUnreadable(temp_file));
 
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
@@ -13646,10 +13646,12 @@ TEST_F(HttpNetworkTransactionTest,
       std::make_unique<HttpServerProperties>();
 
   const SchemefulSite kSite1(GURL("https://foo.test/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey1(kSite1, kSite1);
+  const auto kNetworkAnonymizationKey1 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite1);
   const net::NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
   const SchemefulSite kSite2(GURL("https://bar.test/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey2(kSite2, kSite2);
+  const auto kNetworkAnonymizationKey2 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite2);
   const net::NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
 
   MockRead data_reads[] = {
@@ -22687,8 +22689,10 @@ TEST_F(HttpNetworkTransactionTest, ClientCertSocketReuse) {
 TEST_F(HttpNetworkTransactionTest, NetworkIsolation) {
   const SchemefulSite kSite1(GURL("http://origin1/"));
   const SchemefulSite kSite2(GURL("http://origin2/"));
-  NetworkAnonymizationKey network_anonymization_key1(kSite1, kSite1);
-  NetworkAnonymizationKey network_anonymization_key2(kSite2, kSite2);
+  const auto network_anonymization_key1 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite1);
+  const auto network_anonymization_key2 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite2);
   NetworkIsolationKey network_isolation_key1(kSite1, kSite1);
   NetworkIsolationKey network_isolation_key2(kSite2, kSite2);
 
@@ -22840,8 +22844,10 @@ TEST_F(HttpNetworkTransactionTest, NetworkIsolation) {
 TEST_F(HttpNetworkTransactionTest, NetworkIsolationH2) {
   const SchemefulSite kSite1(GURL("http://origin1/"));
   const SchemefulSite kSite2(GURL("http://origin2/"));
-  NetworkAnonymizationKey network_anonymization_key1(kSite1, kSite1);
-  NetworkAnonymizationKey network_anonymization_key2(kSite2, kSite2);
+  const auto network_anonymization_key1 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite1);
+  const auto network_anonymization_key2 =
+      net::NetworkAnonymizationKey::CreateSameSite(kSite2);
   NetworkIsolationKey network_isolation_key1(kSite1, kSite1);
   NetworkIsolationKey network_isolation_key2(kSite2, kSite2);
 
@@ -23078,9 +23084,12 @@ TEST_F(HttpNetworkTransactionTest, NetworkIsolationPreconnect) {
   const SchemefulSite kSite1(GURL("http://origin1/"));
   const SchemefulSite kSite2(GURL("http://origin2/"));
   const SchemefulSite kSite3(GURL("http://origin3/"));
-  NetworkAnonymizationKey preconnect1_anonymization_key(kSite1, kSite1);
-  NetworkAnonymizationKey preconnect2_anonymization_key(kSite2, kSite2);
-  NetworkAnonymizationKey not_preconnected_anonymization_key(kSite3, kSite3);
+  auto preconnect1_anonymization_key =
+      NetworkAnonymizationKey::CreateSameSite(kSite1);
+  auto preconnect2_anonymization_key =
+      NetworkAnonymizationKey::CreateSameSite(kSite2);
+  auto not_preconnected_anonymization_key =
+      NetworkAnonymizationKey::CreateSameSite(kSite3);
   NetworkIsolationKey preconnect1_isolation_key(kSite1, kSite1);
   NetworkIsolationKey preconnect2_isolation_key(kSite2, kSite2);
   NetworkIsolationKey not_preconnected_isolation_key(kSite3, kSite3);
@@ -23207,9 +23216,11 @@ TEST_F(HttpNetworkTransactionTest, NetworkIsolationSSL) {
 
   const SchemefulSite kSite1(GURL("http://origin1/"));
   const SchemefulSite kSite2(GURL("http://origin2/"));
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey1(kSite1, kSite1);
+  const auto kNetworkAnonymizationKey1 =
+      NetworkAnonymizationKey::CreateSameSite(kSite1);
   const net::NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
-  const net::NetworkAnonymizationKey kNetworkAnonymizationKey2(kSite2, kSite2);
+  const auto kNetworkAnonymizationKey2 =
+      NetworkAnonymizationKey::CreateSameSite(kSite2);
   const net::NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
   std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
 
@@ -23335,8 +23346,10 @@ TEST_F(HttpNetworkTransactionTest, NetworkIsolationSSLProxy) {
 
   const SchemefulSite kSite1(GURL("http://origin1/"));
   const SchemefulSite kSite2(GURL("http://origin2/"));
-  const NetworkAnonymizationKey kNetworkAnonymizationKey1(kSite1, kSite1);
-  const NetworkAnonymizationKey kNetworkAnonymizationKey2(kSite2, kSite2);
+  const auto kNetworkAnonymizationKey1 =
+      NetworkAnonymizationKey::CreateSameSite(kSite1);
+  const auto kNetworkAnonymizationKey2 =
+      NetworkAnonymizationKey::CreateSameSite(kSite2);
   const net::NetworkIsolationKey kNetworkIsolationKey1(kSite1, kSite1);
   const net::NetworkIsolationKey kNetworkIsolationKey2(kSite2, kSite2);
   std::unique_ptr<HttpNetworkSession> session(CreateSession(&session_deps_));
@@ -23533,6 +23546,110 @@ TEST_F(HttpNetworkTransactionTest, SSLConfigChanged) {
   trans3.reset();
 }
 
+TEST_F(HttpNetworkTransactionTest, SSLConfigChangedDuringTransaction) {
+  SSLContextConfig ssl_context_config;
+  ssl_context_config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
+  auto ssl_config_service =
+      std::make_unique<TestSSLConfigService>(ssl_context_config);
+  TestSSLConfigService* ssl_config_service_raw = ssl_config_service.get();
+  session_deps_.ssl_config_service = std::move(ssl_config_service);
+
+  // First request will start connecting before SSLConfig change.
+  HttpRequestInfo request1;
+  request1.method = "GET";
+  request1.url = GURL("https://foo.test/1");
+  request1.traffic_annotation =
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  const MockWrite kWrites1[] = {
+      MockWrite("GET /1 HTTP/1.1\r\n"
+                "Host: foo.test\r\n"
+                "Connection: keep-alive\r\n\r\n"),
+  };
+  const MockRead kReads1[] = {
+      MockRead(ASYNC, ERR_IO_PENDING, 1),
+      MockRead(ASYNC, 2,
+               "HTTP/1.1 200 OK\r\n"
+               "Connection: keep-alive\r\n"
+               "Content-Length: 1\r\n\r\n"
+               "1"),
+  };
+
+  // Second request will be after SSLConfig changes so it should be on a new
+  // socket.
+  HttpRequestInfo request2;
+  request2.method = "GET";
+  request2.url = GURL("https://foo.test/2");
+  request2.traffic_annotation =
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  const MockWrite kWrites2[] = {
+      MockWrite("GET /2 HTTP/1.1\r\n"
+                "Host: foo.test\r\n"
+                "Connection: keep-alive\r\n\r\n")};
+
+  const MockRead kReads2[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"
+               "Connection: keep-alive\r\n"
+               "Content-Length: 1\r\n\r\n"
+               "2")};
+
+  SequencedSocketData data1(kReads1, kWrites1);
+  StaticSocketDataProvider data2(kReads2, kWrites2);
+  session_deps_.socket_factory->AddSocketDataProvider(&data1);
+  session_deps_.socket_factory->AddSocketDataProvider(&data2);
+
+  SSLSocketDataProvider ssl1(ASYNC, OK);
+  // 1st request starts before config change, so should see the initial
+  // SSLConfig.
+  ssl1.expected_ssl_version_max = SSL_PROTOCOL_VERSION_TLS1_3;
+
+  SSLSocketDataProvider ssl2(ASYNC, OK);
+  // 2nd request should be made on a new socket after config change, so should
+  // see the new SSLConfig.
+  ssl2.expected_ssl_version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl1);
+  session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl2);
+
+  std::unique_ptr<HttpNetworkSession> session = CreateSession(&session_deps_);
+
+  TestCompletionCallback callback1;
+  auto trans1 =
+      std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY, session.get());
+  int rv = trans1->Start(&request1, callback1.callback(), NetLogWithSource());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+
+  // Wait for the first transaction to connect and start reading data.
+  data1.RunUntilPaused();
+
+  // Change network config.
+  ssl_context_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
+  ssl_config_service_raw->UpdateSSLConfigAndNotify(ssl_context_config);
+
+  // Resume the first transaction reads.
+  data1.Resume();
+  EXPECT_THAT(callback1.GetResult(rv), IsOk());
+  std::string response_data1;
+  EXPECT_THAT(ReadTransaction(trans1.get(), &response_data1), IsOk());
+  EXPECT_EQ("1", response_data1);
+  trans1.reset();
+
+  // Start 2nd transaction. Since the config was changed, it should use a new
+  // socket.
+  TestCompletionCallback callback2;
+  auto trans2 =
+      std::make_unique<HttpNetworkTransaction>(DEFAULT_PRIORITY, session.get());
+  rv = trans2->Start(&request2, callback2.callback(), NetLogWithSource());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+
+  EXPECT_THAT(callback2.GetResult(rv), IsOk());
+  std::string response_data2;
+  EXPECT_THAT(ReadTransaction(trans2.get(), &response_data2), IsOk());
+  EXPECT_EQ("2", response_data2);
+  trans2.reset();
+}
+
 TEST_F(HttpNetworkTransactionTest, SSLConfigChangedPendingConnect) {
   SSLContextConfig ssl_context_config;
   ssl_context_config.version_max = SSL_PROTOCOL_VERSION_TLS1_3;
@@ -23548,11 +23665,27 @@ TEST_F(HttpNetworkTransactionTest, SSLConfigChangedPendingConnect) {
   request.traffic_annotation =
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS);
 
-  // Make a socket which never connects.
-  StaticSocketDataProvider data({}, {});
-  session_deps_.socket_factory->AddSocketDataProvider(&data);
-  SSLSocketDataProvider ssl_data(SYNCHRONOUS, ERR_IO_PENDING);
-  ssl_data.expected_ssl_version_max = SSL_PROTOCOL_VERSION_TLS1_3;
+  const MockWrite kWrites1[] = {
+      MockWrite("GET /1 HTTP/1.1\r\n"
+                "Host: foo.test\r\n"
+                "Connection: keep-alive\r\n\r\n"),
+  };
+  const MockRead kReads1[] = {
+      MockRead("HTTP/1.1 200 OK\r\n"
+               "Connection: keep-alive\r\n"
+               "Content-Length: 1\r\n\r\n"
+               "1"),
+  };
+
+  StaticSocketDataProvider data1(kReads1, kWrites1);
+  session_deps_.socket_factory->AddSocketDataProvider(&data1);
+  session_deps_.socket_factory->AddSocketDataProvider(&data1);
+
+  // Even though the transaction was created before the change, the connection
+  // shouldn't happen until after the SSLConfig change, so expect that the
+  // socket will be created with the new SSLConfig.
+  SSLSocketDataProvider ssl_data(ASYNC, OK);
+  ssl_data.expected_ssl_version_max = SSL_PROTOCOL_VERSION_TLS1_2;
   session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_data);
 
   std::unique_ptr<HttpNetworkSession> session = CreateSession(&session_deps_);
@@ -23566,7 +23699,11 @@ TEST_F(HttpNetworkTransactionTest, SSLConfigChangedPendingConnect) {
   ssl_context_config.version_max = SSL_PROTOCOL_VERSION_TLS1_2;
   ssl_config_service_raw->UpdateSSLConfigAndNotify(ssl_context_config);
 
-  EXPECT_THAT(callback.GetResult(rv), IsError(ERR_NETWORK_CHANGED));
+  EXPECT_THAT(callback.GetResult(rv), IsOk());
+  std::string response_data;
+  EXPECT_THAT(ReadTransaction(trans.get(), &response_data), IsOk());
+  EXPECT_EQ("1", response_data);
+  trans.reset();
 }
 
 // Test that HttpNetworkTransaction correctly handles existing sockets when the

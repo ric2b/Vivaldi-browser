@@ -15,7 +15,7 @@
 #include <windows.h>
 #include "base/win/wincrypt_shim.h"
 #include "crypto/scoped_capi_types.h"
-#elif BUILDFLAG(IS_APPLE)
+#elif BUILDFLAG(IS_IOS)
 #include <CoreFoundation/CFArray.h>
 #include <Security/SecTrust.h>
 #include "base/mac/scoped_cftyperef.h"
@@ -50,7 +50,10 @@ class NET_EXPORT TestRootCerts {
   // Returns true if there are no certificates that have been marked trusted.
   bool IsEmpty() const;
 
-#if BUILDFLAG(IS_APPLE)
+  // Returns true if `der_cert` has been marked as a known root for testing.
+  bool IsKnownRoot(base::span<const uint8_t> der_cert) const;
+
+#if BUILDFLAG(IS_IOS)
   CFArrayRef temporary_roots() const { return temporary_roots_; }
 
   // Modifies the root certificates of |trust_ref| to include the
@@ -71,6 +74,7 @@ class NET_EXPORT TestRootCerts {
  private:
   friend struct base::LazyInstanceTraitsBase<TestRootCerts>;
   friend class ScopedTestRoot;
+  friend class ScopedTestKnownRoot;
 
   TestRootCerts();
   ~TestRootCerts();
@@ -80,6 +84,9 @@ class NET_EXPORT TestRootCerts {
   // certificate could not be marked trusted.
   bool Add(X509Certificate* certificate, CertificateTrust trust);
 
+  // Marks |der_cert| as a known root. Does not change trust.
+  void AddKnownRoot(base::span<const uint8_t> der_cert);
+
   // Performs platform-dependent operations.
   void Init();
   bool AddImpl(X509Certificate* certificate);
@@ -87,11 +94,13 @@ class NET_EXPORT TestRootCerts {
 
 #if BUILDFLAG(IS_WIN)
   HCERTSTORE temporary_roots_;
-#elif BUILDFLAG(IS_APPLE)
+#elif BUILDFLAG(IS_IOS)
   base::ScopedCFTypeRef<CFMutableArrayRef> temporary_roots_;
 #endif
 
   TrustStoreInMemory test_trust_store_;
+
+  std::set<std::string, std::less<>> test_known_roots_;
 };
 
 // Scoped helper for unittests to handle safely managing trusted roots.
@@ -136,6 +145,28 @@ class NET_EXPORT ScopedTestRoot {
 
   // Returns true if this ScopedTestRoot has no certs assigned.
   bool IsEmpty() const { return certs_.empty(); }
+
+ private:
+  CertificateList certs_;
+};
+
+// Scoped helper for unittests to handle safely marking additional roots as
+// known roots. Note that this does not trust the root. If the root should be
+// trusted, a ScopedTestRoot should also be created.
+//
+// Limitations:
+// Same as for ScopedTestRoot, see comment above.
+class NET_EXPORT ScopedTestKnownRoot {
+ public:
+  ScopedTestKnownRoot();
+  explicit ScopedTestKnownRoot(X509Certificate* cert);
+
+  ScopedTestKnownRoot(const ScopedTestKnownRoot&) = delete;
+  ScopedTestKnownRoot& operator=(const ScopedTestKnownRoot&) = delete;
+  ScopedTestKnownRoot(ScopedTestKnownRoot&& other) = delete;
+  ScopedTestKnownRoot& operator=(ScopedTestKnownRoot&& other) = delete;
+
+  ~ScopedTestKnownRoot();
 
  private:
   CertificateList certs_;

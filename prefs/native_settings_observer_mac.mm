@@ -81,6 +81,10 @@ void MenubarSettingChanged(CFNotificationCenterRef center,
                            CFStringRef name,
                            const void* object,
                            CFDictionaryRef userInfo) {
+  if (!observer) {
+    return;
+  }
+
   reinterpret_cast<NativeSettingsObserver*>(observer)
       ->SetPref(vivaldiprefs::kSystemMacMenubarVisibleInFullscreen,
         getMenubarVisibleInFullscreen());
@@ -151,6 +155,8 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
       CFNotificationSuspensionBehaviorDeliverImmediately);
   }
   if (@available(macos 12.0.1, *)) {
+    CFNotificationCenterRemoveEveryObserver(
+        CFNotificationCenterGetLocalCenter(), this);
     CFNotificationCenterAddObserver(
       CFNotificationCenterGetLocalCenter(), this, MenubarSettingChanged,
       CFSTR("NSApplicationDidChangeSafeVisibleFrameNotification"), NULL,
@@ -161,8 +167,10 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
 NativeSettingsObserverMac::~NativeSettingsObserverMac() {
   CFNotificationCenterRemoveEveryObserver(
       CFNotificationCenterGetDistributedCenter(), this);
-  CFNotificationCenterRemoveEveryObserver(
-      CFNotificationCenterGetLocalCenter(), this);
+  if (@available(macos 12.0.1, *)) {
+    CFNotificationCenterRemoveEveryObserver(
+        CFNotificationCenterGetLocalCenter(), this);
+  }
 }
 
 }  // namespace vivaldi

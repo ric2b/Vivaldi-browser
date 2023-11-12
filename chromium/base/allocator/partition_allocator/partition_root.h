@@ -40,7 +40,6 @@
 #include "base/allocator/partition_allocator/chromecast_buildflags.h"
 #include "base/allocator/partition_allocator/freeslot_bitmap.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
-#include "base/allocator/partition_allocator/page_allocator_constants.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
 #include "base/allocator/partition_allocator/partition_alloc-inl.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/bits.h"
@@ -64,8 +63,6 @@
 #include "base/allocator/partition_allocator/partition_oom.h"
 #include "base/allocator/partition_allocator/partition_page.h"
 #include "base/allocator/partition_allocator/partition_ref_count.h"
-#include "base/allocator/partition_allocator/partition_tag.h"
-#include "base/allocator/partition_allocator/partition_tag_types.h"
 #include "base/allocator/partition_allocator/pkey.h"
 #include "base/allocator/partition_allocator/reservation_offset_table.h"
 #include "base/allocator/partition_allocator/tagging.h"
@@ -261,7 +258,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     kEnabled,
   };
 
-  enum class BucketDistribution : uint8_t { kDefault, kCoarser, kDenser };
+  enum class BucketDistribution : uint8_t { kDefault, kDenser };
 
   // Flags accessed on fast paths.
   //
@@ -275,11 +272,11 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     // Defines whether the root should be scanned.
     ScanMode scan_mode;
 
-    // It's important to default to the coarser distribution, otherwise a switch
-    // from dense -> coarse would leave some buckets with dirty memory forever,
-    // since no memory would be allocated from these, their freelist would
-    // typically not be empty, making these unreclaimable.
-    BucketDistribution bucket_distribution = BucketDistribution::kCoarser;
+    // It's important to default to the 'default' distribution, otherwise a
+    // switch from 'dense' -> 'default' would leave some buckets with dirty
+    // memory forever, since no memory would be allocated from these, their
+    // freelist would typically not be empty, making these unreclaimable.
+    BucketDistribution bucket_distribution = BucketDistribution::kDefault;
 
     bool with_thread_cache = false;
 
@@ -396,12 +393,6 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
 
   bool quarantine_always_for_testing = false;
 
-#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-  partition_alloc::PartitionTag current_partition_tag = 0;
-  // Points to the end of the committed tag bitmap region.
-  uintptr_t next_tag_bitmap_page = 0;
-#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-
   PartitionRoot()
       : flags{QuarantineMode::kAlwaysDisabled, ScanMode::kDisabled} {}
   explicit PartitionRoot(PartitionOptions opts) : flags() { Init(opts); }
@@ -445,11 +436,6 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   PA_ALWAYS_INLINE static PartitionRoot* FromAddrInFirstSuperpage(
       uintptr_t address);
 
-  PA_ALWAYS_INLINE void DecreaseTotalSizeOfAllocatedBytes(SlotSpan* slot_span)
-      PA_EXCLUSIVE_LOCKS_REQUIRED(lock_);
-  PA_ALWAYS_INLINE void IncreaseTotalSizeOfAllocatedBytes(SlotSpan* slot_span,
-                                                          size_t raw_size)
-      PA_EXCLUSIVE_LOCKS_REQUIRED(lock_);
   PA_ALWAYS_INLINE void DecreaseTotalSizeOfAllocatedBytes(uintptr_t addr,
                                                           size_t len)
       PA_EXCLUSIVE_LOCKS_REQUIRED(lock_);
@@ -617,10 +603,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   // This is safe to do because we are switching to a bucket distribution with
   // more buckets, meaning any allocations we have done before the switch are
   // guaranteed to have a bucket under the new distribution when they are
-  // eventually deallocated. We do not need synchronization here or below.
-  void SwitchToDefaultBucketDistribution() {
-    flags.bucket_distribution = BucketDistribution::kDefault;
-  }
+  // eventually deallocated. We do not need synchronization here.
   void SwitchToDenserBucketDistribution() {
     flags.bucket_distribution = BucketDistribution::kDenser;
   }
@@ -629,7 +612,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   // cannot allocate from, which will not cause problems besides wasting
   // memory.
   void ResetBucketDistributionForTesting() {
-    flags.bucket_distribution = BucketDistribution::kCoarser;
+    flags.bucket_distribution = BucketDistribution::kDefault;
   }
 
   ThreadCache* thread_cache_for_testing() const {
@@ -713,7 +696,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     return flags.scan_mode == ScanMode::kEnabled;
   }
 
-  static PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
+  PA_ALWAYS_INLINE static PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR size_t
   GetDirectMapMetadataAndGuardPagesSize() {
     // Because we need to fake a direct-map region to look like a super page, we
     // need to allocate more pages around the payload:
@@ -726,7 +709,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     return 2 * internal::PartitionPageSize();
   }
 
-  static PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
+  PA_ALWAYS_INLINE static PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR size_t
   GetDirectMapSlotSize(size_t raw_size) {
     // Caller must check that the size is not above the MaxDirectMapped()
     // limit before calling. This also guards against integer overflow in the
@@ -736,8 +719,8 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
         raw_size, internal::SystemPageSize());
   }
 
-  static PA_ALWAYS_INLINE size_t
-  GetDirectMapReservationSize(size_t padded_raw_size) {
+  PA_ALWAYS_INLINE static size_t GetDirectMapReservationSize(
+      size_t padded_raw_size) {
     // Caller must check that the size is not above the MaxDirectMapped()
     // limit before calling. This also guards against integer overflow in the
     // calculation here.
@@ -835,17 +818,6 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     max_empty_slot_spans_dirty_bytes_shift = 0;
   }
 
-#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-  PA_ALWAYS_INLINE partition_alloc::PartitionTag GetNewPartitionTag() {
-    // TODO(crbug.com/1298696): performance is not an issue. We can use
-    // random tags in lieu of sequential ones.
-    auto tag = ++current_partition_tag;
-    tag += !tag;  // Avoid 0.
-    current_partition_tag = tag;
-    return tag;
-  }
-#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-
   // Enables the sorting of active slot spans in PurgeMemory().
   static void EnableSortActiveSlotSpans();
 
@@ -922,6 +894,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
 
   // May return an invalid thread cache.
   PA_ALWAYS_INLINE ThreadCache* GetOrCreateThreadCache();
+  PA_ALWAYS_INLINE ThreadCache* GetThreadCache();
 
 #if PA_CONFIG(USE_PARTITION_ROOT_ENUMERATOR)
   static internal::Lock& GetEnumeratorLock();
@@ -946,9 +919,11 @@ class ScopedSyscallTimer {
   ~ScopedSyscallTimer() {
     root_->syscall_count.fetch_add(1, std::memory_order_relaxed);
 
-    uint64_t elapsed_nanos = (base::TimeTicks::Now() - tick_).InNanoseconds();
-    root_->syscall_total_time_ns.fetch_add(elapsed_nanos,
-                                           std::memory_order_relaxed);
+    int64_t elapsed_nanos = (base::TimeTicks::Now() - tick_).InNanoseconds();
+    if (elapsed_nanos > 0) {
+      root_->syscall_total_time_ns.fetch_add(
+          static_cast<uint64_t>(elapsed_nanos), std::memory_order_relaxed);
+    }
   }
 
  private:
@@ -1044,47 +1019,35 @@ PartitionAllocGetSlotStartInBRPPool(uintptr_t address) {
          bucket->slot_size * bucket->GetSlotNumber(offset_in_slot_span);
 }
 
-// Checks whether a given address stays within the same allocation slot after
-// modification.
+// Return values to indicate where a pointer is pointing relative to the bounds
+// of an allocation.
+enum class PtrPosWithinAlloc {
+  // When BACKUP_REF_PTR_POISON_OOB_PTR is disabled, end-of-allocation pointers
+  // are also considered in-bounds.
+  kInBounds,
+#if BUILDFLAG(BACKUP_REF_PTR_POISON_OOB_PTR)
+  kAllocEnd,
+#endif
+  kFarOOB
+};
+
+// Checks whether `test_address` is in the same allocation slot as
+// `orig_address`.
+//
+// This can be called after adding or subtracting from the `orig_address`
+// to produce a different pointer which must still stay in the same allocation.
+//
+// The `type_size` is the size of the type that the raw_ptr is pointing to,
+// which may be the type the allocation is holding or a compatible pointer type
+// such as a base class or char*. It is used to detect pointers near the end of
+// the allocation but not strictly beyond it.
 //
 // This isn't a general purpose function. The caller is responsible for ensuring
 // that the ref-count is in place for this allocation.
-template <typename Z>
-PA_ALWAYS_INLINE PtrPosWithinAlloc
-PartitionAllocIsValidPtrDelta(uintptr_t address, PtrDelta<Z> delta) {
-  // Required for pointers right past an allocation. See
-  // |PartitionAllocGetSlotStartInBRPPool()|.
-  uintptr_t adjusted_address = address - kPartitionPastAllocationAdjustment;
-  PA_DCHECK(IsManagedByNormalBucketsOrDirectMap(adjusted_address));
-  DCheckIfManagedByPartitionAllocBRPPool(adjusted_address);
-
-  uintptr_t slot_start = PartitionAllocGetSlotStartInBRPPool(adjusted_address);
-  // Don't use |adjusted_address| beyond this point at all. It was needed to
-  // pick the right slot, but now we're dealing with very concrete addresses.
-  // Zero it just in case, to catch errors.
-  adjusted_address = 0;
-
-  auto* slot_span = SlotSpanMetadata<ThreadSafe>::FromSlotStart(slot_start);
-  auto* root = PartitionRoot<ThreadSafe>::FromSlotSpan(slot_span);
-  // Double check that ref-count is indeed present.
-  PA_DCHECK(root->brp_enabled());
-
-  uintptr_t object_addr = root->SlotStartToObjectAddr(slot_start);
-  uintptr_t new_address =
-      address + static_cast<uintptr_t>(delta.delta_in_bytes);
-  uintptr_t object_end = object_addr + slot_span->GetUsableSize(root);
-  if (new_address < object_addr || object_end < new_address) {
-    return PtrPosWithinAlloc::kFarOOB;
-#if PA_CONFIG(USE_OOB_POISON)
-  } else if (object_end - delta.type_size < new_address) {
-    // Not even a single element of the type referenced by the pointer can fit
-    // between the pointer and the end of the object.
-    return PtrPosWithinAlloc::kAllocEnd;
-#endif
-  } else {
-    return PtrPosWithinAlloc::kInBounds;
-  }
-}
+PA_COMPONENT_EXPORT(PARTITION_ALLOC)
+PtrPosWithinAlloc IsPtrWithinSameAlloc(uintptr_t orig_address,
+                                       uintptr_t test_address,
+                                       size_t type_size);
 
 PA_ALWAYS_INLINE void PartitionAllocFreeForRefCounting(uintptr_t slot_start) {
   PA_DCHECK(!PartitionRefCountPointer(slot_start)->IsAlive());
@@ -1095,8 +1058,18 @@ PA_ALWAYS_INLINE void PartitionAllocFreeForRefCounting(uintptr_t slot_start) {
   // supports reference counts.
   PA_DCHECK(root->brp_enabled());
 
-  // memset() can be really expensive.
+  // Iterating over the entire slot can be really expensive.
 #if BUILDFLAG(PA_EXPENSIVE_DCHECKS_ARE_ON)
+  auto hook = PartitionAllocHooks::GetQuarantineOverrideHook();
+  // If we have a hook the object segment is not necessarily filled
+  // with |kQuarantinedByte|.
+  if (PA_LIKELY(!hook)) {
+    unsigned char* object =
+        static_cast<unsigned char*>(root->SlotStartToObject(slot_start));
+    for (size_t i = 0; i < slot_span->GetUsableSize(root); ++i) {
+      PA_DCHECK(object[i] == kQuarantinedByte);
+    }
+  }
   DebugMemset(SlotStartAddr2Ptr(slot_start), kFreedByte,
               slot_span->GetUtilizedSlotSize()
 #if BUILDFLAG(PUT_REF_COUNT_IN_PREVIOUS_SLOT)
@@ -1177,7 +1150,8 @@ PartitionRoot<thread_safe>::AllocFromBucket(Bucket* bucket,
     *usable_size = slot_span->GetUsableSize(this);
   }
   PA_DCHECK(slot_span->GetUtilizedSlotSize() <= slot_span->bucket->slot_size);
-  IncreaseTotalSizeOfAllocatedBytes(slot_span, raw_size);
+  IncreaseTotalSizeOfAllocatedBytes(
+      slot_start, slot_span->GetSlotSizeForBookkeeping(), raw_size);
 
 #if BUILDFLAG(USE_FREESLOT_BITMAP)
   if (!slot_span->bucket->is_direct_mapped()) {
@@ -1306,13 +1280,6 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooks(void* object) {
   // been touched above.
   PA_PREFETCH(slot_span);
 #endif  // PA_CONFIG(HAS_MEMORY_TAGGING)
-
-#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
-  if (!root->IsDirectMappedBucket(slot_span->bucket)) {
-    partition_alloc::internal::PartitionTagIncrementValue(
-        slot_start, slot_span->bucket->slot_size);
-  }
-#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
 
 #if BUILDFLAG(USE_STARSCAN)
   // TODO(bikineev): Change the condition to PA_LIKELY once PCScan is enabled by
@@ -1453,12 +1420,15 @@ template <bool thread_safe>
 PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeInSlotSpan(
     uintptr_t slot_start,
     SlotSpan* slot_span) {
-  DecreaseTotalSizeOfAllocatedBytes(slot_span);
+  DecreaseTotalSizeOfAllocatedBytes(slot_start,
+                                    slot_span->GetSlotSizeForBookkeeping());
+
 #if BUILDFLAG(USE_FREESLOT_BITMAP)
   if (!slot_span->bucket->is_direct_mapped()) {
     internal::FreeSlotBitmapMarkSlotAsFree(slot_start);
   }
 #endif
+
   return slot_span->Free(slot_start);
 }
 
@@ -1537,7 +1507,11 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::RawFreeBatch(
   // corresponding pages were faulted in (without acquiring the lock). So there
   // is no need to touch pages manually here before the lock.
   ::partition_alloc::internal::ScopedGuard guard{lock_};
-  DecreaseTotalSizeOfAllocatedBytes(slot_span);
+  // TODO(thiabaud): Fix the accounting here. The size is correct, but the
+  // pointer is not. This only affects local tools that record each allocation,
+  // not our metrics.
+  DecreaseTotalSizeOfAllocatedBytes(
+      0u, slot_span->GetSlotSizeForBookkeeping() * size);
   slot_span->AppendFreeList(head, tail, size);
 }
 
@@ -1547,7 +1521,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::RawFreeWithThreadCache(
     SlotSpan* slot_span) {
   // PA_LIKELY: performance-sensitive partitions have a thread cache,
   // direct-mapped allocations are uncommon.
-  ThreadCache* thread_cache = GetOrCreateThreadCache();
+  ThreadCache* thread_cache = GetThreadCache();
   if (PA_LIKELY(ThreadCache::IsValid(thread_cache) &&
                 !IsDirectMappedBucket(slot_span->bucket))) {
     size_t bucket_index =
@@ -1621,24 +1595,6 @@ PartitionRoot<thread_safe>::FromAddrInFirstSuperpage(uintptr_t address) {
   uintptr_t super_page = address & internal::kSuperPageBaseMask;
   PA_DCHECK(internal::IsReservationStart(super_page));
   return FromFirstSuperPage(super_page);
-}
-
-template <bool thread_safe>
-PA_ALWAYS_INLINE void
-PartitionRoot<thread_safe>::IncreaseTotalSizeOfAllocatedBytes(
-    SlotSpan* slot_span,
-    size_t raw_size) {
-  IncreaseTotalSizeOfAllocatedBytes(reinterpret_cast<uintptr_t>(slot_span),
-                                    slot_span->GetSlotSizeForBookkeeping(),
-                                    raw_size);
-}
-
-template <bool thread_safe>
-PA_ALWAYS_INLINE void
-PartitionRoot<thread_safe>::DecreaseTotalSizeOfAllocatedBytes(
-    SlotSpan* slot_span) {
-  DecreaseTotalSizeOfAllocatedBytes(reinterpret_cast<uintptr_t>(slot_span),
-                                    slot_span->GetSlotSizeForBookkeeping());
 }
 
 template <bool thread_safe>
@@ -1844,11 +1800,9 @@ PA_ALWAYS_INLINE uint16_t PartitionRoot<thread_safe>::SizeToBucketIndex(
     BucketDistribution bucket_distribution) {
   switch (bucket_distribution) {
     case BucketDistribution::kDefault:
-      return internal::BucketIndexLookup::GetIndexForDenserBuckets(size);
-    case BucketDistribution::kCoarser:
-      return internal::BucketIndexLookup::GetIndex(size);
+      return internal::BucketIndexLookup::GetIndexForDefaultBuckets(size);
     case BucketDistribution::kDenser:
-      return internal::BucketIndexLookup::GetIndexFor8Buckets(size);
+      return internal::BucketIndexLookup::GetIndexForDenserBuckets(size);
   }
 }
 
@@ -2272,6 +2226,11 @@ ThreadCache* PartitionRoot<thread_safe>::GetOrCreateThreadCache() {
     }
   }
   return thread_cache;
+}
+
+template <bool thread_safe>
+ThreadCache* PartitionRoot<thread_safe>::GetThreadCache() {
+  return PA_LIKELY(flags.with_thread_cache) ? ThreadCache::Get() : nullptr;
 }
 
 using ThreadSafePartitionRoot = PartitionRoot<internal::ThreadSafe>;

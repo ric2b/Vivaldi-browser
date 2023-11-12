@@ -45,7 +45,7 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
       bool use_partial_raster,
       bool use_gpu_memory_buffer_resources,
       int max_staging_buffer_usage_in_bytes,
-      viz::ResourceFormat tile_format);
+      viz::SharedImageFormat tile_format);
   OneCopyRasterBufferProvider(const OneCopyRasterBufferProvider&) = delete;
   ~OneCopyRasterBufferProvider() override;
 
@@ -61,7 +61,7 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
       bool depends_on_hardware_accelerated_jpeg_candidates,
       bool depends_on_hardware_accelerated_webp_candidates) override;
   void Flush() override;
-  viz::ResourceFormat GetResourceFormat() const override;
+  viz::SharedImageFormat GetFormat() const override;
   bool IsResourcePremultiplied() const override;
   bool CanPartialRasterIntoProvidedResource() const override;
   bool IsResourceReadyToDraw(
@@ -84,7 +84,7 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
       const gfx::Rect& raster_dirty_rect,
       const gfx::AxisTransform2d& transform,
       const gfx::Size& resource_size,
-      viz::ResourceFormat resource_format,
+      viz::SharedImageFormat format,
       const gfx::ColorSpace& color_space,
       const RasterSource::PlaybackSettings& playback_settings,
       uint64_t previous_content_id,
@@ -122,7 +122,7 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
 
     // These fields are for use on the worker thread.
     const gfx::Size resource_size_;
-    const viz::ResourceFormat resource_format_;
+    const viz::SharedImageFormat format_;
     const gfx::ColorSpace color_space_;
     const uint64_t previous_content_id_;
     const gpu::SyncToken before_raster_sync_token_;
@@ -140,7 +140,7 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
       const gfx::Rect& raster_full_rect,
       const gfx::Rect& raster_dirty_rect,
       const gfx::AxisTransform2d& transform,
-      viz::ResourceFormat format,
+      viz::SharedImageFormat format,
       const gfx::ColorSpace& dst_color_space,
       const RasterSource::PlaybackSettings& playback_settings,
       uint64_t previous_content_id,
@@ -148,7 +148,7 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
   gpu::SyncToken CopyOnWorkerThread(StagingBuffer* staging_buffer,
                                     const RasterSource* raster_source,
                                     const gfx::Rect& rect_to_copy,
-                                    viz::ResourceFormat resource_format,
+                                    viz::SharedImageFormat format,
                                     const gfx::Size& resource_size,
                                     gpu::Mailbox* mailbox,
                                     GLenum mailbox_texture_target,
@@ -167,7 +167,7 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
   // Context lock must be acquired when accessing this member.
   int bytes_scheduled_since_last_flush_;
 
-  const viz::ResourceFormat tile_format_;
+  const viz::SharedImageFormat tile_format_;
   StagingBufferPool staging_pool_;
 };
 

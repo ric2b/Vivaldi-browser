@@ -4,10 +4,10 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
-import android.content.Context;
-
+import androidx.annotation.DimenRes;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.power_bookmarks.PowerBookmarkMeta;
@@ -43,16 +43,13 @@ public final class BookmarkListEntry {
         int SHOPPING_FILTER = 9;
     }
 
-    /**
-     * Contains data used by section header in bookmark UI.
-     */
+    /** Contains data used by section header in bookmark UI. */
     static final class SectionHeaderData {
-        public final CharSequence headerTitle;
-        public final int topPadding;
-
-        SectionHeaderData(@Nullable CharSequence title, int topPadding) {
-            headerTitle = title;
-            this.topPadding = topPadding;
+        public final @StringRes int titleRes;
+        public final @DimenRes int topPaddingRes;
+        SectionHeaderData(@StringRes int titleRes, @DimenRes int topPaddingRes) {
+            this.titleRes = titleRes;
+            this.topPaddingRes = topPaddingRes;
         }
     }
 
@@ -111,25 +108,13 @@ public final class BookmarkListEntry {
     }
 
     /**
-     * Helper function that returns whether the view type represents a bookmark or bookmark folder.
-     * Returns false for other view holder types like divider, promo headers, etc.
-     * @param viewType The type of the view in the bookmark list UI.
-     */
-    static boolean isBookmarkEntry(@ViewType int viewType) {
-        return viewType == ViewType.BOOKMARK || viewType == ViewType.FOLDER
-                || viewType == ViewType.SHOPPING_POWER_BOOKMARK;
-    }
-
-    /**
      * Create an entry representing the reading list read/unread section header.
-     * @param title The title of the section header.
-     * @param topPadding The top padding of the section header. Only impacts the padding when
-     *         greater than 0.
-     * @param context The context to use.
+     * @param titleRes The resource id for the title of the section header.
+     * @param topPaddingRes The resource for the top padding of the section header. Ignored if 0.
      */
     static BookmarkListEntry createSectionHeader(
-            CharSequence title, int topPadding, Context context) {
-        SectionHeaderData sectionHeaderData = new SectionHeaderData(title, topPadding);
+            @StringRes int titleRes, @DimenRes int topPaddingRes) {
+        SectionHeaderData sectionHeaderData = new SectionHeaderData(titleRes, topPaddingRes);
         return new BookmarkListEntry(ViewType.SECTION_HEADER, null, sectionHeaderData);
     }
 
@@ -149,25 +134,11 @@ public final class BookmarkListEntry {
         return mBookmarkItem;
     }
 
-    /** @return The title text to be shown if it is a section header. */
-    @Nullable
-    CharSequence getHeaderTitle() {
-        return mSectionHeaderData.headerTitle;
-    }
-
     /**
      * @return The {@link SectionHeaderData}. Could be null if this entry is not a section header.
      */
     @Nullable
     SectionHeaderData getSectionHeaderData() {
         return mSectionHeaderData;
-    }
-
-    /**
-     * Creates a chip list.
-     */
-    static BookmarkListEntry createChipList() {
-        return new BookmarkListEntry(
-                ViewType.TAG_CHIP_LIST, /*bookmarkItem=*/null, /*sectionHeaderData=*/null);
     }
 }

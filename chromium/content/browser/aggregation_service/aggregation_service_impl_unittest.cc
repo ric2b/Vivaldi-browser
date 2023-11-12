@@ -61,8 +61,11 @@ AggregatableReport CreateExampleAggregatableReport() {
   payloads.emplace_back(/*payload=*/kABCD1234AsBytes,
                         /*key_id=*/"key_1",
                         /*debug_cleartext_payload=*/absl::nullopt);
-  return AggregatableReport(std::move(payloads), "example_shared_info",
-                            /*debug_key=*/absl::nullopt);
+  return AggregatableReport(
+      std::move(payloads), "example_shared_info",
+      /*debug_key=*/absl::nullopt,
+      /*additional_fields=*/{},
+      ::aggregation_service::mojom::AggregationCoordinator::kDefault);
 }
 
 }  // namespace
@@ -340,7 +343,7 @@ TEST_F(AggregationServiceImplTest, ScheduleReport_FailedAssembly) {
       });
 
   AggregatableReportRequest request = aggregation_service::CreateExampleRequest(
-      /*aggregation_mode=*/mojom::AggregationServiceMode::kDefault,
+      /*aggregation_mode=*/blink::mojom::AggregationServiceMode::kDefault,
       /*failed_send_attempts=*/AggregatableReportScheduler::kMaxRetries);
 
   service_impl_->ScheduleReport(std::move(request));
@@ -441,7 +444,7 @@ TEST_F(AggregationServiceImplTest,
       aggregation_service::CreateExampleRequest();
   AggregatableReportRequest request_2 =
       aggregation_service::CreateExampleRequest(
-          /*aggregation_mode=*/mojom::AggregationServiceMode::kDefault,
+          /*aggregation_mode=*/blink::mojom::AggregationServiceMode::kDefault,
           /*failed_send_attempts=*/2);
 
   service_impl_->ScheduleReport(std::move(request_1));

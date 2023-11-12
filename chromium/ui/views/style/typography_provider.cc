@@ -9,6 +9,7 @@
 #include "build/build_config.h"
 #include "ui/base/default_style.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
 #include "ui/views/style/typography.h"
 
@@ -75,8 +76,14 @@ ui::ResourceBundle::FontDetails TypographyProvider::GetFontDetails(
   ui::ResourceBundle::FontDetails details;
 
   switch (context) {
+    case style::CONTEXT_BADGE:
+      details.size_delta = ui::kBadgeFontSizeDelta;
+      details.weight = gfx::Font::Weight::BOLD;
+      break;
     case style::CONTEXT_BUTTON_MD:
-      details.size_delta = ui::kLabelFontSizeDelta;
+      details.size_delta = features::IsChromeRefresh2023()
+                               ? ui::kLabelFontSizeDeltaChromeRefresh2023
+                               : ui::kLabelFontSizeDelta;
       details.weight = TypographyProvider::MediumWeightForUI();
       break;
     case style::CONTEXT_DIALOG_TITLE:
@@ -145,9 +152,11 @@ ui::ColorId TypographyProvider::GetColorId(int context, int style) const {
       }
       break;
     case style::CONTEXT_TEXTFIELD:
-      return style == style::STYLE_INVALID
-                 ? ui::kColorTextfieldForegroundInvalid
-                 : ui::kColorTextfieldForeground;
+      return ui::kColorTextfieldForeground;
+    case style::CONTEXT_TEXTFIELD_PLACEHOLDER:
+      return (style == style::STYLE_INVALID)
+                 ? ui::kColorTextfieldForegroundPlaceholderInvalid
+                 : ui::kColorTextfieldForegroundPlaceholder;
     case style::CONTEXT_MENU:
     case style::CONTEXT_TOUCH_MENU:
       return GetMenuColorId(style);

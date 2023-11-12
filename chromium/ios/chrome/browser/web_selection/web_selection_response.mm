@@ -5,13 +5,32 @@
 #import "ios/chrome/browser/web_selection/web_selection_response.h"
 
 #import "base/strings/sys_string_conversions.h"
-#import "base/values.h"
 #import "components/shared_highlighting/ios/parsing_utils.h"
+#import "ios/web/public/ui/crw_web_view_proxy.h"
+#import "ios/web/public/ui/crw_web_view_scroll_view_proxy.h"
 #import "ios/web/public/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+
+CGRect ConvertToBrowserRect(CGRect web_view_rect, web::WebState* web_state) {
+  if (CGRectEqualToRect(web_view_rect, CGRectZero) || !web_state) {
+    return web_view_rect;
+  }
+
+  id<CRWWebViewProxy> web_view_proxy = web_state->GetWebViewProxy();
+  CGFloat zoom_scale = web_view_proxy.scrollViewProxy.zoomScale;
+
+  return CGRectMake((web_view_rect.origin.x * zoom_scale),
+                    (web_view_rect.origin.y * zoom_scale),
+                    (web_view_rect.size.width * zoom_scale),
+                    web_view_rect.size.height * zoom_scale);
+}
+
+}  // namespace
 
 @interface WebSelectionResponse ()
 - (instancetype)initWithSelectedText:(NSString*)selectedText
@@ -24,14 +43,13 @@
 
 @implementation WebSelectionResponse
 
-+ (instancetype)selectionResponseWithValue:(const base::Value&)value
-                                  webState:(web::WebState*)webState {
++ (instancetype)selectionResponseWithDict:(const base::Value::Dict&)dict
+                                 webState:(web::WebState*)webState {
   DCHECK(webState);
 
-  const base::Value::Dict& dict = value.GetDict();
   const std::string* selectedText = dict.FindString("selectedText");
   absl::optional<CGRect> sourceRect =
-      shared_highlighting::ParseRect(dict.Find("selectionRect"));
+      shared_highlighting::ParseRect(dict.FindDict("selectionRect"));
 
   // All values must be present to have a valid payload.
   if (!selectedText || !sourceRect) {
@@ -41,8 +59,7 @@
   return [[WebSelectionResponse alloc]
       initWithSelectedText:base::SysUTF8ToNSString(*selectedText)
                 sourceView:webState->GetView()
-                sourceRect:shared_highlighting::ConvertToBrowserRect(
-                               sourceRect.value(), webState)
+                sourceRect:ConvertToBrowserRect(sourceRect.value(), webState)
                      valid:YES];
 }
 

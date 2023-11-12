@@ -195,7 +195,8 @@ ScriptPromise WebSocketStream::UnderlyingSink::write(
     ExceptionState& exception_state) {
   DVLOG(1) << "WebSocketStream::UnderlyingSink " << this << " write()";
   is_writing_ = true;
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise result = resolver->Promise();
   base::OnceClosure callback =
       WTF::BindOnce(&UnderlyingSink::FinishWriteCallback,
@@ -215,7 +216,8 @@ ScriptPromise WebSocketStream::UnderlyingSink::close(
   closed_ = true;
   creator_->CloseWithUnspecifiedCode();
   DCHECK(!close_resolver_);
-  close_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  close_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   return close_resolver_->Promise();
 }
 
@@ -434,7 +436,8 @@ WebSocketStream* WebSocketStream::CreateInternal(
 
 WebSocketStream::WebSocketStream(ExecutionContext* execution_context,
                                  ScriptState* script_state)
-    : ExecutionContextLifecycleObserver(execution_context),
+    : ActiveScriptWrappable<WebSocketStream>({}),
+      ExecutionContextLifecycleObserver(execution_context),
       script_state_(script_state),
       connection_resolver_(
           MakeGarbageCollected<ScriptPromiseResolver>(script_state)),

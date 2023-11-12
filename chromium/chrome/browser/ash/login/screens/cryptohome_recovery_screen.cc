@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/webui/ash/login/cryptohome_recovery_screen_handler.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
+#include "components/user_manager/user_manager.h"
 
 namespace {
 
@@ -37,6 +38,8 @@ std::string CryptohomeRecoveryScreen::GetResultString(Result result) {
       return "Retry";
     case Result::kNoRecoveryFactor:
       return "NoRecoveryFactor";
+    case Result::kNotApplicable:
+      return BaseScreen::kNotApplicable;
   }
 }
 
@@ -95,6 +98,17 @@ void CryptohomeRecoveryScreen::OnGetAuthFactorsConfiguration(
     return;
   }
 
+  // TODO(b/272474463): remove the child user check.
+  // TODO(b/278780685): add browser test for the password change flow for child
+  // accounts.
+  auto* user =
+      user_manager::UserManager::Get()->FindUser(user_context->GetAccountId());
+  if (user && user->IsChild()) {
+    context()->user_context = std::move(user_context);
+    exit_callback_.Run(Result::kNotApplicable);
+    return;
+  }
+
   const auto& config = user_context->GetAuthFactorsConfiguration();
   bool is_configured =
       config.HasConfiguredFactor(cryptohome::AuthFactorType::kRecovery);
@@ -103,6 +117,7 @@ void CryptohomeRecoveryScreen::OnGetAuthFactorsConfiguration(
       if (context()->gaia_reauth_token_fetch_error) {
         view_->OnRecoveryFailed();
       } else {
+        LOG(WARNING) << "Reauth proof token is not present";
         RecordReauthReason(user_context->GetAccountId(),
                            ReauthReason::kCryptohomeRecovery);
         view_->ShowReauthNotification();

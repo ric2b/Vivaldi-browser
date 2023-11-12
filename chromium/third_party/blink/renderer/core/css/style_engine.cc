@@ -34,6 +34,7 @@
 #include "base/hash/hash.h"
 #include "base/ranges/algorithm.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
+#include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink.h"
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "third_party/blink/renderer/core/css/cascade_layer_map.h"
 #include "third_party/blink/renderer/core/css/check_pseudo_has_cache_scope.h"
@@ -102,6 +103,7 @@
 #include "third_party/blink/renderer/core/style/filter_operations.h"
 #include "third_party/blink/renderer/core/style/style_initial_data.h"
 #include "third_party/blink/renderer/core/svg/svg_resource.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
@@ -722,14 +724,7 @@ RuleSet* StyleEngine::RuleSetForSheet(CSSStyleSheet& sheet) {
   if (!sheet.MatchesMediaQueries(EnsureMediaQueryEvaluator())) {
     return nullptr;
   }
-
-  AddRuleFlags add_rule_flags = kRuleHasNoSpecialState;
-  if (document_->GetExecutionContext()->GetSecurityOrigin()->CanRequest(
-          sheet.BaseURL())) {
-    add_rule_flags = kRuleHasDocumentSecurityOrigin;
-  }
-  return &sheet.Contents()->EnsureRuleSet(*media_query_evaluator_,
-                                          add_rule_flags);
+  return &sheet.Contents()->EnsureRuleSet(*media_query_evaluator_);
 }
 
 RuleSet* StyleEngine::RuleSetScope::RuleSetForSheet(StyleEngine& engine,
@@ -759,7 +754,7 @@ void StyleEngine::ClearResolvers() {
 
   if (resolver_) {
     TRACE_EVENT1("blink", "StyleEngine::clearResolver", "frame",
-                 ToTraceValue(GetDocument().GetFrame()));
+                 GetFrameIdForTracing(GetDocument().GetFrame()));
     resolver_->Dispose();
     resolver_.Clear();
   }
@@ -824,6 +819,7 @@ void StyleEngine::UpdateGenericFontFamilySettings() {
   if (resolver_) {
     resolver_->InvalidateMatchedPropertiesCache();
   }
+  FontCache::Get().InvalidateNGShapeCache();
   FontCache::Get().InvalidateShapeCache();
 }
 
@@ -2258,7 +2254,6 @@ const unsigned kRuleSetFlagsAll = ~0u;
 unsigned GetRuleSetFlags(const HeapHashSet<Member<RuleSet>> rule_sets) {
   unsigned flags = 0;
   for (auto& rule_set : rule_sets) {
-    rule_set->CompactRulesIfNeeded();
     if (!rule_set->KeyframesRules().empty()) {
       flags |= kKeyframesRules;
     }
@@ -2992,31 +2987,58 @@ void StyleEngine::RecalcStyleForContainer(Element& container,
   RecalcStyle(change, StyleRecalcContext::FromAncestors(container));
 }
 
-void StyleEngine::RecalcStyleForNonLayoutNGContainerDescendants(
-    Element& container) {
+void StyleEngine::UpdateStyleForNonEligibleContainer(Element& container) {
   DCHECK(InRebuildLayoutTree());
-
-  // This method is called from AttachLayoutTree() when we are forced to use
-  // legacy layout for a query container. At the time of RecalcStyle, it is not
-  // necessarily known that some sibling tree may enforce us to have legacy
-  // layout, which means we may have skipped style recalc for the container
-  // subtree. Style recalc will not be resumed during layout for legacy layout.
-  // Instead, finish recalc for the subtree when it is discovered that the
-  // container is in legacy layout.
-  // Also, this method is called to complete a skipped style recalc where we
-  // could not predict that the LayoutObject would not be created, like if the
-  // parent LayoutObject returns false for IsChildAllowed.
+  // This method is called from AttachLayoutTree() when we skipped style recalc
+  // for descendants of a size query container but figured that the LayoutObject
+  // we created is not going to be reached for layout in ng_block_node.cc where
+  // we would otherwise resume style recalc.
+  //
+  // This may be due to legacy layout fallback, inline box, table box, etc.
+  // Also, if we could not predict that the LayoutObject would not be created,
+  // like if the parent LayoutObject returns false for IsChildAllowed.
   auto* cq_data = container.GetContainerQueryData();
   if (!cq_data) {
     return;
   }
 
-  if (cq_data->SkippedStyleRecalc()) {
-    DecrementSkippedContainerRecalc();
-    AllowMarkForReattachFromRebuildLayoutTreeScope allow_reattach(*this);
-    base::AutoReset<bool> cq_recalc(&in_container_query_style_recalc_, true);
-    RecalcStyleForContainer(container, {});
+  StyleRecalcChange change;
+  if (ContainerQueryEvaluator* evaluator =
+          cq_data->GetContainerQueryEvaluator()) {
+    ContainerQueryEvaluator::Change query_change =
+        evaluator->SizeContainerChanged(GetDocument(), container,
+                                        PhysicalSize(), kPhysicalAxisNone);
+    switch (query_change) {
+      case ContainerQueryEvaluator::Change::kNone:
+        DCHECK(cq_data->SkippedStyleRecalc());
+        break;
+      case ContainerQueryEvaluator::Change::kNearestContainer:
+        if (!IsShadowHost(container)) {
+          change = change.ForceRecalcSizeContainer();
+          break;
+        }
+        // Since the nearest container is found in shadow-including ancestors
+        // and not in flat tree ancestors, and style recalc traversal happens in
+        // flat tree order, we need to invalidate inside flat tree descendant
+        // containers if such containers are inside shadow trees.
+        //
+        // See also StyleRecalcChange::FlagsForChildren where we turn
+        // kRecalcContainer into kRecalcDescendantContainers when traversing
+        // past a shadow host.
+        [[fallthrough]];
+      case ContainerQueryEvaluator::Change::kDescendantContainers:
+        change = change.ForceRecalcDescendantSizeContainers();
+        break;
+    }
+    if (query_change != ContainerQueryEvaluator::Change::kNone) {
+      container.ComputedStyleRef().ClearCachedPseudoElementStyles();
+    }
   }
+
+  DecrementSkippedContainerRecalc();
+  AllowMarkForReattachFromRebuildLayoutTreeScope allow_reattach(*this);
+  base::AutoReset<bool> cq_recalc(&in_container_query_style_recalc_, true);
+  RecalcStyleForContainer(container, change);
 }
 
 void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
@@ -3111,7 +3133,7 @@ void StyleEngine::UpdateStyleAndLayoutTreeForContainer(
       DCHECK(FlatTreeTraversal::ContainsIncludingPseudoElement(
           container, *layout_tree_rebuild_root_.GetRootNode()));
     }
-    RebuildLayoutTree(RebuildTransitionPseudoTree::kNo);
+    RebuildLayoutTree(&container);
   }
 
   if (container == GetDocument().documentElement()) {
@@ -3188,17 +3210,27 @@ void StyleEngine::ClearEnsuredDescendantStyles(Element& root) {
   }
 }
 
-void StyleEngine::RebuildLayoutTreeForTraversalRootAncestors(Element* parent) {
+void StyleEngine::RebuildLayoutTreeForTraversalRootAncestors(
+    Element* parent,
+    Element* container_parent) {
+  bool is_container_ancestor = false;
+
   for (auto* ancestor = parent; ancestor;
        ancestor = ancestor->GetReattachParent()) {
-    ancestor->RebuildLayoutTreeForTraversalRootAncestor();
+    if (ancestor == container_parent) {
+      is_container_ancestor = true;
+    }
+    if (is_container_ancestor) {
+      ancestor->RebuildLayoutTreeForSizeContainerAncestor();
+    } else {
+      ancestor->RebuildLayoutTreeForTraversalRootAncestor();
+    }
     ancestor->ClearChildNeedsStyleRecalc();
     ancestor->ClearChildNeedsReattachLayoutTree();
   }
 }
 
-void StyleEngine::RebuildLayoutTree(
-    RebuildTransitionPseudoTree rebuild_transition_pseudo_tree) {
+void StyleEngine::RebuildLayoutTree(Element* size_container) {
   bool propagate_to_root = false;
   {
     DCHECK(GetDocument().documentElement());
@@ -3215,9 +3247,11 @@ void StyleEngine::RebuildLayoutTree(
       root_element.RebuildLayoutTree(whitespace_attacher);
     }
 
-    RebuildLayoutTreeForTraversalRootAncestors(
-        root_element.GetReattachParent());
-    if (rebuild_transition_pseudo_tree == RebuildTransitionPseudoTree::kYes) {
+    Element* container_parent =
+        size_container ? size_container->GetReattachParent() : nullptr;
+    RebuildLayoutTreeForTraversalRootAncestors(root_element.GetReattachParent(),
+                                               container_parent);
+    if (size_container == nullptr) {
       document_->documentElement()->RebuildTransitionPseudoLayoutTree(
           view_transition_names_);
     }
@@ -3228,7 +3262,7 @@ void StyleEngine::RebuildLayoutTree(
   if (propagate_to_root) {
     PropagateWritingModeAndDirectionToHTMLRoot();
     if (NeedsLayoutTreeRebuild()) {
-      RebuildLayoutTree(rebuild_transition_pseudo_tree);
+      RebuildLayoutTree(size_container);
     }
   }
 }
@@ -3241,18 +3275,14 @@ void StyleEngine::ReattachContainerSubtree(Element& container) {
   // cannot re-attach the fieldset itself in this case since we are in the
   // process of laying it out. Instead we re-attach all children, which should
   // be sufficient.
-  //
-  // The other case where the query container is marked for re-attachment is
-  // when one of the descendants requires a legacy box tree and the container is
-  // the closest formatting context.
 
   DCHECK(container.NeedsReattachLayoutTree());
-  DCHECK(DynamicTo<HTMLFieldSetElement>(container) ||
-         container.ShouldForceLegacyLayout());
+  DCHECK(DynamicTo<HTMLFieldSetElement>(container));
 
   base::AutoReset<bool> rebuild_scope(&in_layout_tree_rebuild_, true);
   container.ReattachLayoutTreeChildren(base::PassKey<StyleEngine>());
-  RebuildLayoutTreeForTraversalRootAncestors(&container);
+  RebuildLayoutTreeForTraversalRootAncestors(&container,
+                                             container.GetReattachParent());
   layout_tree_rebuild_root_.Clear();
 }
 
@@ -3282,7 +3312,7 @@ void StyleEngine::UpdateStyleAndLayoutTree() {
     if (NeedsLayoutTreeRebuild()) {
       TRACE_EVENT0("blink,blink_style", "Document::rebuildLayoutTree");
       SCOPED_BLINK_UMA_HISTOGRAM_TIMER_HIGHRES("Style.RebuildLayoutTreeTime");
-      RebuildLayoutTree(RebuildTransitionPseudoTree::kYes);
+      RebuildLayoutTree();
     }
   } else {
     style_recalc_root_.Clear();
@@ -3316,7 +3346,8 @@ void StyleEngine::ViewportDefiningElementDidChange() {
     //
     // This update is also necessary if the first body element changes because
     // another body element is inserted or removed.
-    layout_object->SetStyle(ComputedStyle::Clone(*layout_object->Style()));
+    layout_object->SetStyle(
+        ComputedStyleBuilder(*layout_object->Style()).TakeStyle());
   }
 }
 
@@ -3829,13 +3860,6 @@ void StyleEngine::MarkForLayoutTreeChangesAfterDetach() {
   auto* layout_object = parent_for_detached_subtree_.Get();
   if (auto* layout_object_element =
           DynamicTo<Element>(layout_object->GetNode())) {
-    // Use the LayoutObject pointed to by the element. There may be multiple
-    // LayoutObjects associated with an element for continuations. The
-    // LayoutObject pointed to by the element is the one that is checked for the
-    // flag during style recalc.
-    if (layout_object->IsInline()) {
-      layout_object = layout_object->ContinuationRoot();
-    }
     DCHECK_EQ(layout_object, layout_object_element->GetLayoutObject());
 
     // Mark the parent of a detached subtree for doing a whitespace or list item
@@ -3863,25 +3887,6 @@ void StyleEngine::MarkForLayoutTreeChangesAfterDetach() {
     }
   }
   parent_for_detached_subtree_ = nullptr;
-}
-
-void StyleEngine::ReportUseOfLegacyLayoutWithContainerQueries() {
-  DCHECK(!HasFullNGFragmentationSupport());
-
-  // Only report once.
-  if (legacy_layout_query_container_) {
-    return;
-  }
-
-  legacy_layout_query_container_ = true;
-
-  ConsoleMessage* console_message = MakeGarbageCollected<ConsoleMessage>(
-      mojom::blink::ConsoleMessageSource::kRendering,
-      mojom::blink::ConsoleMessageLevel::kWarning,
-      String::Format(
-          "Using container queries or units with printing, or in combination "
-          "with tables inside multicol will not work correctly."));
-  GetDocument().AddConsoleMessage(console_message);
 }
 
 bool StyleEngine::AllowSkipStyleRecalcForScope() const {

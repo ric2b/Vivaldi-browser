@@ -10,6 +10,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "components/viz/common/resources/release_callback.h"
 #include "components/viz/common/resources/shared_bitmap.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
@@ -102,6 +103,22 @@ class PLATFORM_EXPORT CanvasResource
   // CPU but can be used with GPU compositing (using GMBs).
   virtual bool SupportsAcceleratedCompositing() const = 0;
 
+  // Transfers ownership of the resource's vix::ReleaseCallback.  This is useful
+  // prior to transferring a resource to another thread, to retain the release
+  // callback on the current thread since the callback may not be thread safe.
+  // Even if the callback is never executed on another thread, simply transiting
+  // through another thread is dangerous because garbage collection races may
+  // make it impossible to return the resource to its thread of origin for
+  // destruction; in which case the callback (and its bound arguments) may be
+  // destroyed on the wrong thread.
+  virtual viz::ReleaseCallback TakeVizReleaseCallback() {
+    return viz::ReleaseCallback();
+  }
+
+  virtual void SetVizReleaseCallback(viz::ReleaseCallback cb) {
+    CHECK(cb.is_null());
+  }
+
   // Returns true if the resource is still usable. It maybe not be valid in the
   // case of a context loss or if we fail to initialize the memory backing for
   // the resource.
@@ -188,6 +205,8 @@ class PLATFORM_EXPORT CanvasResource
     return 0;
   }
 
+  virtual bool HasDetailedMemoryDumpProvider() const { return false; }
+
  protected:
   CanvasResource(base::WeakPtr<CanvasResourceProvider>,
                  cc::PaintFlags::FilterQuality,
@@ -218,8 +237,7 @@ class PLATFORM_EXPORT CanvasResource
   gpu::gles2::GLES2Interface* ContextGL() const;
   gpu::raster::RasterInterface* RasterInterface() const;
   gpu::webgpu::WebGPUInterface* WebGPUInterface() const;
-  GLenum GLFilter() const;
-  viz::ResourceFormat GetResourceFormat() const;
+  viz::SharedImageFormat GetSharedImageFormat() const;
   gfx::BufferFormat GetBufferFormat() const;
   gfx::ColorSpace GetColorSpace() const;
   GrDirectContext* GetGrContext() const;
@@ -363,6 +381,10 @@ class PLATFORM_EXPORT CanvasResourceRasterSharedImage final
   const gpu::Mailbox& GetOrCreateGpuMailbox(MailboxSyncMode) override;
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     size_t bytes_per_pixel) const override;
+  // Whether this type of CanvasResource can provide detailed memory data. If
+  // true, then the CanvasResourceProvider will not report data, to avoid
+  // double-countintg.
+  bool HasDetailedMemoryDumpProvider() const override { return true; }
 
  private:
   // These members are either only accessed on the owning thread, or are only
@@ -487,6 +509,12 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
 
   scoped_refptr<StaticBitmapImage> Bitmap() override;
   const gpu::Mailbox& GetOrCreateGpuMailbox(MailboxSyncMode) override;
+  viz::ReleaseCallback TakeVizReleaseCallback() override {
+    return std::move(release_callback_);
+  }
+  void SetVizReleaseCallback(viz::ReleaseCallback cb) override {
+    release_callback_ = std::move(cb);
+  }
 
  private:
   void TearDown() override;

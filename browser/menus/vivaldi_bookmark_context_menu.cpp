@@ -279,11 +279,11 @@ views::MenuItemView* AddMenuItem(views::MenuItemView* menu,
                                  unsigned int* menu_index,
                                  int id,
                                  const std::u16string& label,
-                                 const gfx::ImageSkia& icon,
+                                 const ui::ImageModel& icon,
                                  views::MenuItemView::Type type) {
   views::MenuItemView* item = menu->AddMenuItemAt(
       *menu_index, id, label, std::u16string(), std::u16string(),
-      ui::ImageModel(), ui::ImageModel::FromImageSkia(icon), type,
+      ui::ImageModel(), icon, type,
       ui::NORMAL_SEPARATOR);
   *menu_index += 1;
   return item;
@@ -313,13 +313,12 @@ const gfx::Image GetBookmarkDefaultIcon() {
   return Container->support.icons[BookmarkSupport::kUrl];
 }
 
-const gfx::ImageSkia* GetBookmarkletIcon(views::MenuItemView* menu,
+const gfx::Image GetBookmarkletIcon(views::MenuItemView* menu,
                                          views::Widget* widget) {
   return Container->support
       .icons[color_utils::IsDark(TextColorForMenu(menu, widget))
                  ? BookmarkSupport::kBookmarklet
-                 : BookmarkSupport::kBookmarkletDark]
-      .ToImageSkia();
+                 : BookmarkSupport::kBookmarkletDark];
 }
 
 ui::ImageModel GetBookmarkFolderIcon(views::MenuItemView* menu,

@@ -33,6 +33,11 @@ void FakeWebAppUiManager::SetNumWindowsForApp(const AppId& app_id,
   app_id_to_num_windows_map_[app_id] = num_windows_for_app;
 }
 
+void FakeWebAppUiManager::SetOnLaunchWebAppCallback(
+    OnLaunchWebAppCallback callback) {
+  on_launch_web_app_callback_ = std::move(callback);
+}
+
 WebAppUiManagerImpl* FakeWebAppUiManager::AsImpl() {
   return nullptr;
 }
@@ -105,8 +110,17 @@ base::Value FakeWebAppUiManager::LaunchWebApp(
     Profile& profile,
     LaunchWebAppCallback callback,
     AppLock& lock) {
+  // Due to this sometimes causing confusion in tests, print that a launch has
+  // been faked. To have launches create real WebContents in unit_tests (which
+  // will be non-functional anyways), populate the WebAppUiManagerImpl in the
+  // FakeWebAppProvider during startup.
+  LOG(INFO) << "Pretending to launch web app " << params.app_id;
   std::move(callback).Run(nullptr, nullptr,
                           apps::LaunchContainer::kLaunchContainerNone);
+  if (on_launch_web_app_callback_) {
+    on_launch_web_app_callback_.Run(std::move(params),
+                                    std::move(launch_setting));
+  }
   return base::Value("FakeWebAppUiManager::LaunchWebApp");
 }
 

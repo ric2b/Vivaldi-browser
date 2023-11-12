@@ -34,6 +34,7 @@
 #include "base/time/default_clock.h"
 #include "build/build_config.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
@@ -436,6 +437,17 @@ static base::TimeDelta FreshnessLifetime(const ResourceResponse& response,
   // If no cache headers are present, the specification leaves the decision to
   // the UA. Other browsers seem to opt for 0.
   return base::TimeDelta();
+}
+
+base::TimeDelta Resource::FreshnessLifetime() const {
+  base::TimeDelta lifetime =
+      blink::FreshnessLifetime(GetResponse(), response_timestamp_);
+  for (const auto& redirect : redirect_chain_) {
+    base::TimeDelta redirect_lifetime = blink::FreshnessLifetime(
+        redirect.redirect_response_, response_timestamp_);
+    lifetime = std::min(lifetime, redirect_lifetime);
+  }
+  return lifetime;
 }
 
 static bool CanUseResponse(const ResourceResponse& response,

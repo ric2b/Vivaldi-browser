@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.autofill;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.text.format.DateUtils;
 
@@ -16,6 +17,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileKey;
@@ -25,7 +27,6 @@ import org.chromium.components.image_fetcher.ImageFetcherConfig;
 import org.chromium.components.image_fetcher.ImageFetcherFactory;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.url.GURL;
 
 import java.util.ArrayList;
@@ -56,26 +57,6 @@ public class PersonalDataManager {
          * Called when the data is changed.
          */
         void onPersonalDataChanged();
-    }
-
-    /**
-     * Callback for full card request.
-     */
-    public interface FullCardRequestDelegate {
-        /**
-         * Called when user provided the full card details, including the CVC and the full PAN.
-         *
-         * @param card The full card.
-         * @param cvc The CVC for the card.
-         */
-        @CalledByNative("FullCardRequestDelegate")
-        void onFullCardDetails(CreditCard card, String cvc);
-
-        /**
-         * Called when user did not provide full card details.
-         */
-        @CalledByNative("FullCardRequestDelegate")
-        void onFullCardError();
     }
 
     /**
@@ -502,6 +483,10 @@ public class PersonalDataManager {
             mOrigin = origin;
         }
 
+        public void setSource(@Source int source) {
+            mSource = source;
+        }
+
         public void setHonorificPrefix(String honorificPrefix) {
             mHonorificPrefix =
                     new ValueWithStatus(honorificPrefix, VerificationStatus.USER_VERIFIED);
@@ -708,6 +693,13 @@ public class PersonalDataManager {
             return getMonth()
                     + context.getResources().getString(R.string.autofill_expiration_date_separator)
                     + getYear();
+        }
+
+        public String getFormattedExpirationDateWithTwoDigitYear(Context context) {
+            String twoDigityear = getYear().substring(2);
+            return getMonth()
+                    + context.getResources().getString(R.string.autofill_expiration_date_separator)
+                    + twoDigityear;
         }
 
         @CalledByNative("CreditCard")
@@ -1103,12 +1095,6 @@ public class PersonalDataManager {
                 mPersonalDataManagerAndroid, PersonalDataManager.this, profile);
     }
 
-    public void getFullCard(
-            WebContents webContents, CreditCard card, FullCardRequestDelegate delegate) {
-        PersonalDataManagerJni.get().getFullCardForPaymentRequest(
-                mPersonalDataManagerAndroid, PersonalDataManager.this, webContents, card, delegate);
-    }
-
     /**
      * Records the use of the profile associated with the specified {@code guid}. Effectively
      * increments the use count of the profile and sets its use date to the current time. Also logs
@@ -1194,6 +1180,25 @@ public class PersonalDataManager {
     @VisibleForTesting
     public static void setInstanceForTesting(PersonalDataManager manager) {
         sManager = manager;
+    }
+
+    /**
+     * Determines whether the logged in user (if any) is eligible to store
+     * Autofill address profiles to their account.
+     */
+    public boolean isEligibleForAddressAccountStorage() {
+        return PersonalDataManagerJni.get().isEligibleForAddressAccountStorage(
+                mPersonalDataManagerAndroid, PersonalDataManager.this);
+    }
+
+    /**
+     * Users based in unsupported countries and profiles with a country value set
+     * to an unsupported country are not eligible for account storage. This
+     * function determines if the `country_code` is eligible.
+     */
+    public boolean isCountryEligibleForAccountStorage(String countryCode) {
+        return PersonalDataManagerJni.get().isCountryEligibleForAccountStorage(
+                mPersonalDataManagerAndroid, PersonalDataManager.this, countryCode);
     }
 
     /**
@@ -1332,6 +1337,21 @@ public class PersonalDataManager {
     }
 
     /**
+     * @return Whether the Autofill feature for payment methods mandatory reauth is enabled.
+     */
+    public static boolean isAutofillPaymentMethodsMandatoryReauthEnabled() {
+        return getPrefService().getBoolean(Pref.AUTOFILL_PAYMENT_METHODS_MANDATORY_REAUTH);
+    }
+
+    /**
+     * Enables or disables the Autofill feature for payment methods mandatory reauth.
+     * @param enable True to enable payment methods mandatory reauth, false otherwise.
+     */
+    public static void setAutofillPaymentMethodsMandatoryReauth(boolean enable) {
+        getPrefService().setBoolean(Pref.AUTOFILL_PAYMENT_METHODS_MANDATORY_REAUTH, enable);
+    }
+
+    /**
      * @return Whether the Autofill feature is managed.
      */
     public static boolean isAutofillManaged() {
@@ -1402,23 +1422,48 @@ public class PersonalDataManager {
 
     /**
      * Return the card art image for the given `customImageUrl`.
-     *
+     * @param context required to get resources.
      * @param customImageUrl  URL of the image. If the image is available, it is returned, otherwise
      *         it is fetched from this URL.
+     * @param widthId Resource id of the width spec.
+     * @param heightId Resource id of the height spec.
+     * @param cornerRadiusId Resource id of the corner radius spec.
      * @return Bitmap if found in the local cache, else return null.
      */
-    public Bitmap getCustomImageForAutofillSuggestionIfAvailable(GURL customImageUrl) {
-        if (mCreditCardArtImages.containsKey(customImageUrl.getSpec())) {
-            return mCreditCardArtImages.get(customImageUrl.getSpec());
+    public Bitmap getCustomImageForAutofillSuggestionIfAvailable(
+            Context context, GURL customImageUrl, int widthId, int heightId, int cornerRadiusId) {
+        Resources res = context.getResources();
+        int width = res.getDimensionPixelSize(widthId);
+        int height = res.getDimensionPixelSize(heightId);
+        float cornerRadius = res.getDimension(cornerRadiusId);
+
+        // TODO(crbug.com/1313616): The Capital One icon for virtual cards is available in a single
+        // size via a static URL. Cache this image at different sizes so it can be used by different
+        // surfaces.
+        GURL urlToCache =
+                AutofillUiUtils.getCreditCardIconUrlWithParams(customImageUrl, width, height);
+        GURL urlToFetch = customImageUrl.getSpec().equals(AutofillUiUtils.CAPITAL_ONE_ICON_URL)
+                ? customImageUrl
+                : urlToCache;
+
+        if (mCreditCardArtImages.containsKey(urlToCache.getSpec())) {
+            return mCreditCardArtImages.get(urlToCache.getSpec());
         }
         // Schedule the fetching of image and return null so that the UI thread does not have to
         // wait and can show the default network icon.
-        fetchImage(customImageUrl, bitmap -> {
+        fetchImage(urlToFetch, bitmap -> {
             // TODO (crbug.com/1410418): Log image fetching failure metrics.
             // If the image fetching was unsuccessful, silently return.
             if (bitmap == null) return;
 
-            mCreditCardArtImages.put(customImageUrl.getSpec(), bitmap);
+            // When adding new sizes for card icons, check if the corner radius needs to be added as
+            // a suffix for caching (crbug.com/1431283).
+            mCreditCardArtImages.put(urlToCache.getSpec(),
+                    AutofillUiUtils.resizeAndAddRoundedCornersAndGreyBorder(bitmap, width, height,
+                            cornerRadius,
+                            ChromeFeatureList.isEnabled(
+                                    ChromeFeatureList
+                                            .AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES)));
         });
         return null;
     }
@@ -1453,6 +1498,10 @@ public class PersonalDataManager {
                 boolean includeOrganizationInLabel, boolean includeCountryInLabel);
         AutofillProfile getProfileByGUID(
                 long nativePersonalDataManagerAndroid, PersonalDataManager caller, String guid);
+        boolean isEligibleForAddressAccountStorage(
+                long nativePersonalDataManagerAndroid, PersonalDataManager caller);
+        boolean isCountryEligibleForAccountStorage(long nativePersonalDataManagerAndroid,
+                PersonalDataManager caller, String countryCode);
         String setProfile(long nativePersonalDataManagerAndroid, PersonalDataManager caller,
                 AutofillProfile profile);
         String setProfileToLocal(long nativePersonalDataManagerAndroid, PersonalDataManager caller,
@@ -1507,9 +1556,6 @@ public class PersonalDataManager {
                 long nativePersonalDataManagerAndroid, PersonalDataManager caller);
         void clearUnmaskedCache(
                 long nativePersonalDataManagerAndroid, PersonalDataManager caller, String guid);
-        void getFullCardForPaymentRequest(long nativePersonalDataManagerAndroid,
-                PersonalDataManager caller, WebContents webContents, CreditCard card,
-                FullCardRequestDelegate delegate);
         void loadRulesForAddressNormalization(long nativePersonalDataManagerAndroid,
                 PersonalDataManager caller, String regionCode);
         void loadRulesForSubKeys(long nativePersonalDataManagerAndroid, PersonalDataManager caller,

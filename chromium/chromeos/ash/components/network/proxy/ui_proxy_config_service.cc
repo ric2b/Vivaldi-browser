@@ -260,7 +260,7 @@ bool UIProxyConfigService::MergeEnforcedProxyConfig(
   DCHECK(local_state_prefs_);
   DCHECK(network_profile_handler_);
   PrefService* top_pref_service =
-      profile_prefs_ ? profile_prefs_ : local_state_prefs_;
+      profile_prefs_ ? profile_prefs_.get() : local_state_prefs_.get();
 
   // Get prefs proxy config if available.
   net::ProxyConfigWithAnnotation pref_config;
@@ -275,9 +275,10 @@ bool UIProxyConfigService::MergeEnforcedProxyConfig(
   if (GetProxyConfig(profile_prefs_, local_state_prefs_, *network,
                      network_profile_handler_, &network_config, &onc_source)) {
     // Network is private or shared with user using shared proxies.
-    NET_LOG(EVENT) << "UIProxyConfigService for "
-                   << (profile_prefs_ ? "user" : "login")
-                   << ": using proxy of network: " << NetworkId(network);
+    // Note: This is a common occurrence so we don't spam NET_LOG.
+    VLOG(2) << "UIProxyConfigService for "
+            << (profile_prefs_ ? "user" : "login")
+            << ": using proxy of network: " << NetworkId(network);
     network_availability = net::ProxyConfigService::CONFIG_VALID;
   }
 

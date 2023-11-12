@@ -12,6 +12,7 @@
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
+#include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -37,13 +38,12 @@
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/chromeos/policy/dlp/mock_dlp_rules_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
-#include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
-#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
 #include "chromeos/ash/components/dbus/cros_disks/cros_disks_client.h"
+#include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
 #include "chromeos/ash/components/disks/disk.h"
 #include "chromeos/ash/components/disks/mock_disk_mount_manager.h"
 #include "chromeos/dbus/dlp/dlp_client.h"
@@ -53,6 +53,7 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "extensions/browser/api_test_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/install_warning.h"
 #include "google_apis/common/test_util.h"
@@ -271,8 +272,9 @@ class FileManagerPrivateApiTest : public extensions::ExtensionApiTest {
       int disk_info_index = mp.disk_info_index;
       if (mp.disk_info_index >= 0) {
         EXPECT_GT(std::size(kTestDisks), static_cast<size_t>(disk_info_index));
-        if (static_cast<size_t>(disk_info_index) >= std::size(kTestDisks))
+        if (static_cast<size_t>(disk_info_index) >= std::size(kTestDisks)) {
           return;
+        }
 
         std::unique_ptr<Disk> disk =
             Disk::Builder()
@@ -332,27 +334,21 @@ class FileManagerPrivateApiTest : public extensions::ExtensionApiTest {
   }
 
   void ExpectCrostiniMount() {
-    std::string known_hosts;
-    base::Base64Encode("[hostname]:2222 pubkey", &known_hosts);
-    std::string identity;
-    base::Base64Encode("privkey", &identity);
-    std::vector<std::string> mount_options = {
-        "UserKnownHostsBase64=" + known_hosts, "IdentityBase64=" + identity,
-        "Port=2222"};
+    std::vector<std::string> mount_options;
     EXPECT_CALL(*disk_mount_manager_mock_,
-                MountPath("sshfs://testuser@hostname:", "",
-                          "crostini_user_termina_penguin", mount_options,
-                          ash::MountType::kNetworkStorage,
+                MountPath("sftp://3:1234", "", "crostini_user_termina_penguin",
+                          mount_options, ash::MountType::kNetworkStorage,
                           ash::MountAccessMode::kReadWrite, _))
         .WillOnce(Invoke(this, &FileManagerPrivateApiTest::SshfsMount));
   }
 
   base::ScopedTempDir temp_dir_;
   base::ScopedTempDir non_watchable_dir_;
-  ash::disks::MockDiskMountManager* disk_mount_manager_mock_ = nullptr;
+  raw_ptr<ash::disks::MockDiskMountManager, ExperimentalAsh>
+      disk_mount_manager_mock_ = nullptr;
   DiskMountManager::Disks volumes_;
   DiskMountManager::MountPoints mount_points_;
-  file_manager::EventRouter* event_router_ = nullptr;
+  raw_ptr<file_manager::EventRouter, ExperimentalAsh> event_router_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Mount) {
@@ -589,11 +585,12 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Crostini) {
   crostini::CrostiniManager* crostini_manager =
       crostini::CrostiniManager::GetForProfile(browser()->profile());
   crostini_manager->set_skip_restart_for_testing();
-  crostini_manager->AddRunningVmForTesting(crostini::kCrostiniDefaultVmName);
+  crostini_manager->AddRunningVmForTesting(crostini::kCrostiniDefaultVmName, 3);
   crostini_manager->AddRunningContainerForTesting(
       crostini::kCrostiniDefaultVmName,
       crostini::ContainerInfo(crostini::kCrostiniDefaultContainerName,
-                              "testuser", "/home/testuser", "PLACEHOLDER_IP"));
+                              "testuser", "/home/testuser", "PLACEHOLDER_IP",
+                              1234));
 
   ExpectCrostiniMount();
 
@@ -633,11 +630,12 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, CrostiniIncognito) {
   crostini::CrostiniManager* crostini_manager =
       crostini::CrostiniManager::GetForProfile(browser()->profile());
   crostini_manager->set_skip_restart_for_testing();
-  crostini_manager->AddRunningVmForTesting(crostini::kCrostiniDefaultVmName);
+  crostini_manager->AddRunningVmForTesting(crostini::kCrostiniDefaultVmName, 3);
   crostini_manager->AddRunningContainerForTesting(
       crostini::kCrostiniDefaultVmName,
       crostini::ContainerInfo(crostini::kCrostiniDefaultContainerName,
-                              "testuser", "/home/testuser", "PLACEHOLDER_IP"));
+                              "testuser", "/home/testuser", "PLACEHOLDER_IP",
+                              1234));
 
   ExpectCrostiniMount();
 
@@ -775,7 +773,8 @@ class FileManagerPrivateApiDlpTest : public FileManagerPrivateApiTest {
 
  protected:
   base::ScopedTempDir drive_path_;
-  policy::MockDlpRulesManager* mock_rules_manager_ = nullptr;
+  raw_ptr<policy::MockDlpRulesManager, ExperimentalAsh> mock_rules_manager_ =
+      nullptr;
   std::unique_ptr<policy::DlpFilesController> files_controller_;
   base::test::ScopedFeatureList scoped_feature_list_;
 };

@@ -33,6 +33,9 @@
 #include "components/password_manager/core/browser/ui/weak_check_utility.h"
 #endif
 
+using password_manager::IsMuted;
+using password_manager::TriggerBackendNotification;
+
 namespace password_manager {
 
 namespace {
@@ -52,8 +55,7 @@ base::flat_set<std::u16string> ExtractPasswords(
 bool IsCheckForReusedPasswordsEnabled() {
 #if BUILDFLAG(IS_IOS)
   // Weak and reused checks are controlled by the Password Checkup feature.
-  return base::FeatureList::IsEnabled(
-      password_manager::features::kIOSPasswordCheckup);
+  return password_manager::features::IsPasswordCheckupEnabled();
 #else
   return base::FeatureList::IsEnabled(
       password_manager::features::kPasswordManagerRedesign);
@@ -63,8 +65,7 @@ bool IsCheckForReusedPasswordsEnabled() {
 bool IsCheckForWeakPasswordsEnabled() {
 #if BUILDFLAG(IS_IOS)
   // Weak and reused checks are controlled by the Password Checkup feature.
-  return base::FeatureList::IsEnabled(
-      password_manager::features::kIOSPasswordCheckup);
+  return password_manager::features::IsPasswordCheckupEnabled();
 #else
   return true;
 #endif
@@ -122,7 +123,8 @@ void InsecureCredentialsManager::SaveInsecureCredential(
       CredentialUIEntry credential_to_update = credential;
       credential_to_update.password_issues.insert_or_assign(
           InsecureType::kLeaked,
-          InsecurityMetadata(base::Time::Now(), IsMuted(false)));
+          InsecurityMetadata(base::Time::Now(), IsMuted(false),
+                             TriggerBackendNotification(false)));
       presenter_->EditSavedCredentials(credential, credential_to_update);
     }
   }
@@ -163,7 +165,7 @@ InsecureCredentialsManager::GetInsecureCredentialEntries() const {
 #if BUILDFLAG(IS_ANDROID)
   // Otherwise erase entries which aren't leaked and phished.
   base::EraseIf(credentials, [](const auto& credential) {
-    return !credential.IsLeaked() && !credential.IsPhished();
+    return !IsCompromised(credential);
   });
   return credentials;
 #else
@@ -172,13 +174,15 @@ InsecureCredentialsManager::GetInsecureCredentialEntries() const {
       credential.password_issues.insert(
           {password_manager::InsecureType::kWeak,
            password_manager::InsecurityMetadata(
-               base::Time(), password_manager::IsMuted(false))});
+               base::Time(), IsMuted(false),
+               TriggerBackendNotification(false))});
     }
     if (reused_passwords_.contains(credential.password)) {
       credential.password_issues.insert(
           {password_manager::InsecureType::kReused,
            password_manager::InsecurityMetadata(
-               base::Time(), password_manager::IsMuted(false))});
+               base::Time(), IsMuted(false),
+               TriggerBackendNotification(false))});
     }
   }
 
@@ -200,6 +204,8 @@ void InsecureCredentialsManager::RemoveObserver(Observer* observer) {
 void InsecureCredentialsManager::OnReuseCheckDone(
     base::ElapsedTimer timer_since_reuse_check_start,
     base::flat_set<std::u16string> reused_passwords) {
+  base::UmaHistogramTimes("PasswordManager.ReuseCheck.Time",
+                          timer_since_reuse_check_start.Elapsed());
   reused_passwords_ = std::move(reused_passwords);
   NotifyInsecureCredentialsChanged();
 }

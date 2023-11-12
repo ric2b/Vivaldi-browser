@@ -28,6 +28,8 @@ if (!is_android) {
     "protocol/protocol.h",
     "protocol/security.cc",
     "protocol/security.h",
+    "protocol/storage.cc",
+    "protocol/storage.h",
     "protocol/target.cc",
     "protocol/target.h",
   ]
@@ -257,6 +259,8 @@ static_library("devtools") {
       "protocol/page_handler.h",
       "protocol/security_handler.cc",
       "protocol/security_handler.h",
+      "protocol/storage_handler.cc",
+      "protocol/storage_handler.h",
       "protocol/target_handler.cc",
       "protocol/target_handler.h",
     ]
@@ -293,7 +297,7 @@ static_library("test_support") {
     deps += [
       ":devtools",
       "//base",
-      "//chrome/browser:browser_process",
+      "//chrome/browser",
       "//chrome/browser/ui",
       "//content/public/browser",
       "//content/test:test_support",

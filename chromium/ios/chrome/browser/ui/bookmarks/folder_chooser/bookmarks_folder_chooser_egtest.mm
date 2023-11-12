@@ -5,9 +5,11 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
+#import "base/i18n/message_formatter.h"
 #import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/strings/utf_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
@@ -40,10 +42,10 @@ using chrome_test_util::TabGridEditButton;
 using chrome_test_util::TappableBookmarkNodeWithLabel;
 
 // Bookmark folders integration tests for Chrome.
-@interface BookmarksFolderTestCase : WebHttpServerChromeTestCase
+@interface BookmarksFolderChooserTestCase : WebHttpServerChromeTestCase
 @end
 
-@implementation BookmarksFolderTestCase
+@implementation BookmarksFolderChooserTestCase
 
 - (void)setUp {
   [super setUp];
@@ -59,7 +61,7 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
   [BookmarkEarlGrey clearBookmarksPositionCache];
 }
 
-#pragma mark - BookmarksTestFolders Tests
+#pragma mark - BookmarksFolderChooser Tests
 
 // Tests moving bookmarks into a new folder created in the moving process.
 - (void)testCreateNewFolderWhileMovingBookmarks {
@@ -835,14 +837,20 @@ using chrome_test_util::TappableBookmarkNodeWithLabel;
       assertWithMatcher:grey_notNil()];
 
   // Verify that the folder has only one element.
-  [BookmarkEarlGrey verifyChildCount:1 inFolderWithName:@"Sticky Folder"];
+  NSString* folderTitle = @"Sticky Folder";
+  [BookmarkEarlGrey verifyChildCount:1 inFolderWithName:folderTitle];
 
   // Bookmark the page.
   [BookmarkEarlGreyUI starCurrentTab];
 
   // Verify the snackbar title.
+  std::u16string title = base::SysNSStringToUTF16(folderTitle);
+  std::u16string pattern =
+      l10n_util::GetStringUTF16(IDS_IOS_BOOKMARK_PAGE_SAVED_FOLDER);
+  std::u16string result = base::i18n::MessageFormatter::FormatWithNamedArgs(
+      pattern, "count", 1, "title", title);
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(
-                                          @"Bookmarked to Sticky Folder")]
+                                          base::SysUTF16ToNSString(result))]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Verify that the newly-created bookmark is in the BookmarkModel.

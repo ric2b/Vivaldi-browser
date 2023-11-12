@@ -13,8 +13,9 @@ import {
   FileAccessEntry,
 } from './models/file_system_access_entry.js';
 import {ResultSaver} from './models/result_saver.js';
-import {VideoSaver} from './models/video_saver.js';
+import {TimeLapseSaver, VideoSaver} from './models/video_saver.js';
 import {ChromeHelper} from './mojo/chrome_helper.js';
+import {ToteMetricFormat} from './mojo/type.js';
 import {extractImageFromBlob} from './thumbnailer.js';
 import {
   ErrorLevel,
@@ -142,13 +143,15 @@ export class GalleryButton implements ResultSaver {
     this.coverPhoto.src = cover?.url ?? '';
 
     if (file !== null) {
-      ChromeHelper.getInstance().monitorFileDeletion(file.name, async () => {
-        try {
-          await this.checkCover();
-        } catch (e) {
-          reportError(ErrorType.CHECK_COVER_FAILURE, ErrorLevel.ERROR, e);
-        }
-      });
+      // The promise is only resolved after the file is deleted.
+      void ChromeHelper.getInstance().monitorFileDeletion(
+          file.name, async () => {
+            try {
+              await this.checkCover();
+            } catch (e) {
+              reportError(ErrorType.CHECK_COVER_FAILURE, ErrorLevel.ERROR, e);
+            }
+          });
     }
   }
 
@@ -163,7 +166,7 @@ export class GalleryButton implements ResultSaver {
 
     // Checks existence of cached cover photo.
     if (this.cover !== null) {
-      if (await dir.isExist(this.cover.name)) {
+      if (await dir.exists(this.cover.name)) {
         return;
       }
     }
@@ -222,8 +225,9 @@ export class GalleryButton implements ResultSaver {
     return cameraFolderStable.wait();
   }
 
-  async savePhoto(blob: Blob, name: string, metadata: Metadata|null):
-      Promise<void> {
+  async savePhoto(
+      blob: Blob, format: ToteMetricFormat, name: string,
+      metadata: Metadata|null): Promise<void> {
     const file = await filesystem.saveBlob(blob, name);
     if (metadata !== null) {
       const metadataBlob =
@@ -233,25 +237,31 @@ export class GalleryButton implements ResultSaver {
 
     ChromeHelper.getInstance().sendNewCaptureBroadcast(
         {isVideo: false, name: file.name});
+    ChromeHelper.getInstance().notifyTote(format, name);
     await this.updateCover(file);
   }
 
   async saveGif(blob: Blob, name: string): Promise<void> {
     const file = await filesystem.saveBlob(blob, name);
+    ChromeHelper.getInstance().notifyTote(ToteMetricFormat.VIDEO_GIF, name);
     await this.updateCover(file);
   }
 
   async startSaveVideo(videoRotation: number): Promise<VideoSaver> {
-    const file = await filesystem.createVideoFile(VideoType.MP4);
-    return VideoSaver.createForFile(file, videoRotation);
+    return VideoSaver.create(videoRotation);
   }
 
-  async finishSaveVideo(video: VideoSaver): Promise<void> {
+  async finishSaveVideo(video: TimeLapseSaver|VideoSaver): Promise<void> {
     const file = await video.endWrite();
     assert(file !== null);
 
+    const videoName = (new Filenamer()).newVideoName(VideoType.MP4);
+    assert(this.directory !== null);
+    await file.moveTo(this.directory, videoName);
     ChromeHelper.getInstance().sendNewCaptureBroadcast(
         {isVideo: true, name: file.name});
+    ChromeHelper.getInstance().notifyTote(
+        ToteMetricFormat.VIDEO_MP4, file.name);
     await this.updateCover(file);
   }
 }

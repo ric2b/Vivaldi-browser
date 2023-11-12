@@ -4,9 +4,10 @@
 
 package org.chromium.chrome.browser.test;
 
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
+
 import static org.hamcrest.Matchers.isIn;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -15,8 +16,9 @@ import android.app.Instrumentation;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.os.Build;
-import android.support.test.InstrumentationRegistry;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.uiautomator.UiDevice;
 
 import org.json.JSONArray;
@@ -171,8 +173,10 @@ public class ScreenShooter extends TestWatcher {
         setFilterValue(filters, DISPLAY_SIZE_FILTER,
                 String.format(Locale.US, "%d X %d", Math.min(displaySize.x, displaySize.y),
                         Math.max(displaySize.x, displaySize.y)));
-        int orientation =
-                InstrumentationRegistry.getContext().getResources().getConfiguration().orientation;
+        int orientation = ApplicationProvider.getApplicationContext()
+                                  .getResources()
+                                  .getConfiguration()
+                                  .orientation;
         setFilterValue(filters, ORIENTATION_FILTER,
                 orientation == Configuration.ORIENTATION_LANDSCAPE ? "landscape" : "portrait");
         setFilterValue(filters, ANDROID_VERSION_FILTER, Build.VERSION.RELEASE);

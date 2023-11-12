@@ -11,16 +11,15 @@
 #include "base/functional/bind.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread.h"
-#include "base/threading/thread_checker.h"
 #include "media/base/bitrate.h"
 #include "media/base/mac/videotoolbox_helpers.h"
 #include "media/base/video_codecs.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/video_encode_accelerator.h"
 #include "third_party/webrtc/common_video/include/bitrate_adjuster.h"
+#include "ui/gfx/color_space.h"
 
 namespace media {
 
@@ -63,20 +62,9 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
 
   ~VTVideoEncodeAccelerator() override;
 
-  // Encoding tasks to be run on |encoder_thread_|.
-  void EncodeTask(scoped_refptr<VideoFrame> frame, bool force_keyframe);
-  void UseOutputBitstreamBufferTask(
-      std::unique_ptr<BitstreamBufferRef> buffer_ref);
-  void RequestEncodingParametersChangeTask(const Bitrate& bitrate,
-                                           uint32_t framerate);
-  void DestroyTask();
-
   // Helper functions to set bitrate.
   void SetAdjustedConstantBitrate(uint32_t bitrate);
   void SetVariableBitrate(const Bitrate& bitrate);
-
-  // Helper function to notify the client of an error on |client_task_runner_|.
-  void NotifyError(VideoEncodeAccelerator::Error error);
 
   // Compression session callback function to handle compressed frames.
   static void CompressionCallback(void* encoder_opaque,
@@ -117,8 +105,11 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
 
   // Flushes the encoder. The flush callback won't be run until all pending
   // encodes have been completed.
-  void FlushTask(FlushCallback flush_callback);
   void MaybeRunFlushCallback();
+
+  void SetEncoderColorSpace();
+
+  void NotifyErrorStatus(EncoderStatus status);
 
   base::ScopedCFTypeRef<VTCompressionSessionRef> compression_session_;
 
@@ -156,28 +147,27 @@ class MEDIA_GPU_EXPORT VTVideoEncodeAccelerator
   base::circular_deque<std::unique_ptr<EncodeOutput>> encoder_output_queue_;
 
   // Our original calling task runner for the child thread.
-  const scoped_refptr<base::SequencedTaskRunner> client_task_runner_;
-  SEQUENCE_CHECKER(client_sequence_checker_);
+  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // To expose client callbacks from VideoEncodeAccelerator.
-  // NOTE: all calls to this object *MUST* be executed on
-  // |client_task_runner_|.
-  base::WeakPtr<Client> client_;
-  std::unique_ptr<base::WeakPtrFactory<Client>> client_ptr_factory_;
+  Client* client_ = nullptr;
 
-  // This thread services tasks posted from the VEA API entry points by the
-  // GPU child thread and CompressionCallback() posted from device thread.
-  scoped_refptr<base::SingleThreadTaskRunner> encoder_thread_task_runner_;
+  std::unique_ptr<MediaLog> media_log_;
 
   // Tracking information for ensuring flushes aren't completed until all
   // pending encodes have been returned.
   int pending_encodes_ = 0;
   FlushCallback pending_flush_cb_;
 
+  // Color space of the first frame sent to Encode().
+  absl::optional<gfx::ColorSpace> encoder_color_space_;
+  bool can_set_encoder_color_space_ = true;
+
   // Declared last to ensure that all weak pointers are invalidated before
   // other destructors run.
   base::WeakPtr<VTVideoEncodeAccelerator> encoder_weak_ptr_;
-  base::WeakPtrFactory<VTVideoEncodeAccelerator> encoder_task_weak_factory_;
+  base::WeakPtrFactory<VTVideoEncodeAccelerator> encoder_weak_factory_{this};
 };
 
 }  // namespace media

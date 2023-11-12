@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 """Definitions of builders in the chromium.gpu.fyi builder group."""
 
+load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
 load("//lib/builders.star", "reclient", "sheriff_rotations")
 load("//lib/ci.star", "ci")
@@ -25,6 +26,9 @@ ci.defaults.set(
 
 consoles.console_view(
     name = "chromium.gpu.fyi",
+    branch_selector = [
+        branches.selector.ANDROID_BRANCHES,
+    ],
     ordering = {
         None: ["Windows", "Mac", "Linux"],
         "*builder*": ["Builder"],
@@ -163,6 +167,7 @@ ci.thin_tester(
 
 ci.thin_tester(
     name = "Android FYI Release (Pixel 6)",
+    branch_selector = branches.selector.ANDROID_BRANCHES,
     triggered_by = ["GPU FYI Android arm64 Builder"],
     builder_spec = builder_config.builder_spec(
         execution_mode = builder_config.execution_mode.TEST,
@@ -188,9 +193,6 @@ ci.thin_tester(
         category = "Android|S64|ARM",
         short_name = "P6",
     ),
-    # TODO(crbug.com/1280418): Revert this to the default once more Pixel 6
-    # capacity is deployed.
-    execution_timeout = 8 * time.hour,
 )
 
 ci.thin_tester(
@@ -338,7 +340,7 @@ ci.gpu.linux_builder(
         ),
         run_tests_serially = True,
         skylab_upload_location = builder_config.skylab_upload_location(
-            gs_bucket = "lacros-arm64-generic-rel-skylab-try",
+            gs_bucket = "chromium-ci-skylab",
             gs_extra = "chromeos_gpu",
         ),
     ),
@@ -346,6 +348,9 @@ ci.gpu.linux_builder(
         category = "ChromeOS|ARM",
         short_name = "kvn",
     ),
+    # Given the capacity constraints, the default 6 hour timeout is not
+    # sufficient.
+    execution_timeout = 12 * time.hour,
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
 )
 
@@ -407,6 +412,7 @@ ci.gpu.linux_builder(
 
 ci.gpu.linux_builder(
     name = "GPU FYI Android arm64 Builder",
+    branch_selector = branches.selector.ANDROID_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",

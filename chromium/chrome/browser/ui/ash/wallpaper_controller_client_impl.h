@@ -11,6 +11,7 @@
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "ash/public/cpp/wallpaper/wallpaper_controller_client.h"
 #include "ash/public/cpp/wallpaper/wallpaper_types.h"
+#include "base/memory/raw_ptr.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
@@ -20,9 +21,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/core/session_manager_observer.h"
-#include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
-#include "url/gurl.h"
 
 class AccountId;
 
@@ -30,13 +29,19 @@ namespace {
 class WallpaperControllerClientImplTest;
 }
 
+namespace wallpaper_handlers {
+class WallpaperFetcherDelegate;
+}  // namespace wallpaper_handlers
+
 // Handles chrome-side wallpaper control alongside the ash-side controller.
 class WallpaperControllerClientImpl
     : public ash::WallpaperControllerClient,
       public file_manager::VolumeManagerObserver,
       public session_manager::SessionManagerObserver {
  public:
-  WallpaperControllerClientImpl();
+  explicit WallpaperControllerClientImpl(
+      std::unique_ptr<wallpaper_handlers::WallpaperFetcherDelegate>
+          wallpaper_fetcher_delegate);
 
   WallpaperControllerClientImpl(const WallpaperControllerClientImpl&) = delete;
   WallpaperControllerClientImpl& operator=(
@@ -49,6 +54,9 @@ class WallpaperControllerClientImpl
 
   // Tests can provide a mock interface for the ash controller.
   void InitForTesting(ash::WallpaperController* controller);
+
+  void SetWallpaperFetcherDelegateForTesting(
+      std::unique_ptr<wallpaper_handlers::WallpaperFetcherDelegate>);
 
   // Sets the initial wallpaper. Should be called after the session manager has
   // been initialized.
@@ -118,8 +126,9 @@ class WallpaperControllerClientImpl
                                     ash::WallpaperLayout layout);
   void ShowUserWallpaper(const AccountId& account_id);
   void ShowSigninWallpaper();
-  void ShowAlwaysOnTopWallpaper(const base::FilePath& image_path);
-  void RemoveAlwaysOnTopWallpaper();
+  void ShowOverrideWallpaper(const base::FilePath& image_path,
+                             bool always_on_top);
+  void RemoveOverrideWallpaper();
   void RemoveUserWallpaper(const AccountId& account_id,
                            base::OnceClosure on_removed);
   void RemovePolicyWallpaper(const AccountId& account_id);
@@ -181,18 +190,12 @@ class WallpaperControllerClientImpl
       ash::personalization_app::mojom::FetchGooglePhotosPhotosResponsePtr
           response);
 
-  void OnGooglePhotosTokenFetched(
-      FetchGooglePhotosAccessTokenCallback callback,
-      std::unique_ptr<signin::PrimaryAccountAccessTokenFetcher> fetcher,
-      GoogleServiceAuthError error,
-      signin::AccessTokenInfo access_token_info);
-
   void ObserveVolumeManagerForAccountId(const AccountId& account_id);
 
   // WallpaperController interface in ash.
-  ash::WallpaperController* wallpaper_controller_;
+  raw_ptr<ash::WallpaperController, ExperimentalAsh> wallpaper_controller_;
 
-  PrefService* local_state_;
+  raw_ptr<PrefService, ExperimentalAsh> local_state_;
 
   // The registrar used to watch DeviceWallpaperImageFilePath pref changes.
   PrefChangeRegistrar pref_registrar_;
@@ -208,6 +211,9 @@ class WallpaperControllerClientImpl
   std::map<AccountId,
            std::unique_ptr<wallpaper_handlers::GooglePhotosPhotosFetcher>>
       google_photos_photos_fetchers_;
+
+  std::unique_ptr<wallpaper_handlers::WallpaperFetcherDelegate>
+      wallpaper_fetcher_delegate_;
 
   base::ScopedMultiSourceObservation<file_manager::VolumeManager,
                                      file_manager::VolumeManagerObserver>

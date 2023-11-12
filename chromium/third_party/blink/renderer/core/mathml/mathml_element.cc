@@ -48,10 +48,10 @@ bool MathMLElement::IsPresentationAttribute(const QualifiedName& name) const {
   if (name == html_names::kDirAttr || name == mathml_names::kMathsizeAttr ||
       name == mathml_names::kMathcolorAttr ||
       name == mathml_names::kMathbackgroundAttr ||
-      name == mathml_names::kMathvariantAttr ||
       name == mathml_names::kScriptlevelAttr ||
-      name == mathml_names::kDisplaystyleAttr)
+      name == mathml_names::kDisplaystyleAttr) {
     return true;
+  }
   return Element::IsPresentationAttribute(name);
 }
 
@@ -124,12 +124,6 @@ void MathMLElement::CollectStyleForPresentationAttribute(
       AddPropertyToPresentationAttributeStyle(style, CSSPropertyID::kMathStyle,
                                               CSSValueID::kNormal);
     }
-  } else if (name == mathml_names::kMathvariantAttr) {
-    // TODO(crbug.com/1076420): this needs to handle all mathvariant values.
-    if (EqualIgnoringASCIICase(value, "normal")) {
-      AddPropertyToPresentationAttributeStyle(
-          style, CSSPropertyID::kTextTransform, CSSValueID::kNone);
-    }
   } else {
     Element::CollectStyleForPresentationAttribute(name, value, style);
   }
@@ -165,13 +159,15 @@ absl::optional<bool> MathMLElement::BooleanAttribute(
 
 const CSSPrimitiveValue* MathMLElement::ParseMathLength(
     const QualifiedName& attr_name,
-    AllowPercentages allow_percentages) {
+    AllowPercentages allow_percentages,
+    CSSPrimitiveValue::ValueRange value_range) {
   if (!FastHasAttribute(attr_name))
     return nullptr;
   auto value = FastGetAttribute(attr_name);
   const CSSPrimitiveValue* parsed_value = CSSParser::ParseLengthPercentage(
       value,
-      StrictCSSParserContext(GetExecutionContext()->GetSecureContextMode()));
+      StrictCSSParserContext(GetExecutionContext()->GetSecureContextMode()),
+      value_range);
   if (!parsed_value || parsed_value->IsCalculated() ||
       (parsed_value->IsPercentage() &&
        allow_percentages == AllowPercentages::kNo)) {
@@ -183,22 +179,22 @@ const CSSPrimitiveValue* MathMLElement::ParseMathLength(
 absl::optional<Length> MathMLElement::AddMathLengthToComputedStyle(
     const CSSToLengthConversionData& conversion_data,
     const QualifiedName& attr_name,
-    AllowPercentages allow_percentages) {
+    AllowPercentages allow_percentages,
+    CSSPrimitiveValue::ValueRange value_range) {
   if (const CSSPrimitiveValue* parsed_value =
-          ParseMathLength(attr_name, allow_percentages)) {
+          ParseMathLength(attr_name, allow_percentages, value_range)) {
     return parsed_value->ConvertToLength(conversion_data);
   }
   return absl::nullopt;
 }
 
-LayoutObject* MathMLElement::CreateLayoutObject(const ComputedStyle& style,
-                                                LegacyLayout legacy) {
+LayoutObject* MathMLElement::CreateLayoutObject(const ComputedStyle& style) {
   if (RuntimeEnabledFeatures::MathMLCoreEnabled() &&
-      legacy != LegacyLayout::kForce &&
       Node::HasTagName(mathml_names::kMtdTag) &&
-      style.Display() == EDisplay::kTableCell)
+      style.Display() == EDisplay::kTableCell) {
     return MakeGarbageCollected<LayoutNGTableCellWithAnonymousMrow>(this);
-  return Element::CreateLayoutObject(style, legacy);
+  }
+  return Element::CreateLayoutObject(style);
 }
 
 }  // namespace blink

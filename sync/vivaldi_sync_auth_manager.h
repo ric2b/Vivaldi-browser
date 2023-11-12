@@ -43,7 +43,7 @@ class VivaldiSyncAuthManager : public syncer::SyncAuthManager,
   void OnVivaldiAccountShutdown() override;
 
  private:
-  VivaldiAccountManager* account_manager_;  // Not owning.
+  const raw_ptr<VivaldiAccountManager> account_manager_;  // Not owning.
   bool registered_for_account_notifications_ = false;
 };
 

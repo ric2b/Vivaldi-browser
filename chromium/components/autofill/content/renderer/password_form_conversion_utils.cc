@@ -142,8 +142,8 @@ std::unique_ptr<FormData> CreateFormDataFromWebForm(
   form_data->username_predictions =
       GetUsernamePredictions(control_elements.ReleaseVector(), *form_data,
                              username_detector_cache, web_form);
-  form_data->button_titles = form_util::GetButtonTitles(
-      web_form, web_form.GetDocument(), button_titles_cache);
+  form_data->button_titles =
+      form_util::GetButtonTitles(web_form, button_titles_cache);
 
   return form_data;
 }
@@ -153,10 +153,8 @@ std::unique_ptr<FormData> CreateFormDataFromUnownedInputElements(
     const FieldDataManager* field_data_manager,
     UsernameDetectorCache* username_detector_cache,
     form_util::ButtonTitlesCache* button_titles_cache) {
-  std::vector<WebElement> fieldsets;
-
   std::vector<WebFormControlElement> control_elements =
-      form_util::GetUnownedFormFieldElements(frame.GetDocument(), &fieldsets);
+      form_util::GetUnownedFormFieldElements(frame.GetDocument());
   if (control_elements.empty())
     return nullptr;
 
@@ -165,17 +163,15 @@ std::unique_ptr<FormData> CreateFormDataFromUnownedInputElements(
   std::vector<WebElement> iframe_elements;
 
   auto form_data = std::make_unique<FormData>();
-  if (!UnownedFormElementsAndFieldSetsToFormData(
-          fieldsets, control_elements, iframe_elements, nullptr,
-          frame.GetDocument(), field_data_manager, form_util::EXTRACT_VALUE,
-          form_data.get(), nullptr /* FormFieldData */)) {
+  if (!UnownedFormElementsToFormData(control_elements, iframe_elements, nullptr,
+                                     frame.GetDocument(), field_data_manager,
+                                     form_util::EXTRACT_VALUE, form_data.get(),
+                                     nullptr /* FormFieldData */)) {
     return nullptr;
   }
 
   form_data->username_predictions = GetUsernamePredictions(
       control_elements, *form_data, username_detector_cache, WebFormElement());
-  form_data->button_titles = form_util::GetButtonTitles(
-      WebFormElement(), frame.GetDocument(), button_titles_cache);
 
   return form_data;
 }

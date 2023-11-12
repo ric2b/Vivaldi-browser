@@ -16,14 +16,29 @@
 #include "third_party/blink/renderer/platform/testing/test_paint_artifact.h"
 
 namespace blink {
+namespace {
 
 using testing::ElementsAre;
 
-static Vector<wtf_size_t> ChunkIndices(const PendingLayer& layer) {
+Vector<wtf_size_t> ChunkIndices(const PendingLayer& layer) {
   Vector<wtf_size_t> indices;
   for (auto it = layer.Chunks().begin(); it != layer.Chunks().end(); ++it)
     indices.push_back(it.IndexInPaintArtifact());
   return indices;
+}
+
+bool DefaultIsCompositedScroll(
+    const TransformPaintPropertyNode& scroll_translation) {
+  DCHECK(scroll_translation.ScrollNode());
+  return scroll_translation.HasDirectCompositingReasons();
+}
+
+bool Merge(PendingLayer& home,
+           const PendingLayer& guest,
+           LCDTextPreference lcd_text_preference = LCDTextPreference::kIgnored,
+           PendingLayer::IsCompositedScrollFunction is_composited_scroll =
+               DefaultIsCompositedScroll) {
+  return home.Merge(guest, lcd_text_preference, is_composited_scroll);
 }
 
 TEST(PendingLayerTest, Merge) {
@@ -47,7 +62,7 @@ TEST(PendingLayerTest, Merge) {
             pending_layer.RectKnownToBeOpaque());
 
   ASSERT_TRUE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
 
   // Bounds not equal to one PaintChunk.
   EXPECT_EQ(gfx::RectF(0, 0, 40, 60), pending_layer.BoundsForTesting());
@@ -55,7 +70,7 @@ TEST(PendingLayerTest, Merge) {
   EXPECT_EQ(gfx::RectF(0, 0, 30, 40), pending_layer.RectKnownToBeOpaque());
 
   ASSERT_TRUE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[2])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[2])));
 
   EXPECT_EQ(gfx::RectF(-5, -25, 45, 85), pending_layer.BoundsForTesting());
   EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0, 1, 2));
@@ -73,7 +88,7 @@ TEST(PendingLayerTest, MergeWithGuestTransform) {
 
   PendingLayer pending_layer(artifact, artifact->PaintChunks()[0]);
   ASSERT_TRUE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
   EXPECT_EQ(gfx::RectF(0, 0, 70, 85), pending_layer.BoundsForTesting());
   EXPECT_EQ(PropertyTreeState::Root(), pending_layer.GetPropertyTreeState());
 }
@@ -89,7 +104,7 @@ TEST(PendingLayerTest, MergeWithHomeTransform) {
 
   PendingLayer pending_layer(artifact, artifact->PaintChunks()[0]);
   ASSERT_TRUE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
   EXPECT_EQ(gfx::RectF(0, 0, 50, 65), pending_layer.BoundsForTesting());
   EXPECT_EQ(PropertyTreeState::Root(), pending_layer.GetPropertyTreeState());
 }
@@ -106,7 +121,7 @@ TEST(PendingLayerTest, MergeWithBothTransforms) {
 
   PendingLayer pending_layer(artifact, artifact->PaintChunks()[0]);
   ASSERT_TRUE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
   EXPECT_EQ(gfx::RectF(-20, -25, 70, 90), pending_layer.BoundsForTesting());
   EXPECT_EQ(PropertyTreeState::Root(), pending_layer.GetPropertyTreeState());
 }
@@ -123,7 +138,7 @@ TEST(PendingLayerTest, MergeSparseTinyLayers) {
 
   PendingLayer pending_layer(artifact, artifact->PaintChunks()[0]);
   ASSERT_TRUE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
   EXPECT_EQ(gfx::RectF(0, 0, 23, 24), pending_layer.BoundsForTesting());
   EXPECT_THAT(ChunkIndices(pending_layer), ElementsAre(0, 1));
 }
@@ -140,7 +155,7 @@ TEST(PendingLayerTest, DontMergeSparse) {
 
   PendingLayer pending_layer(artifact, artifact->PaintChunks()[0]);
   ASSERT_FALSE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
   EXPECT_EQ(gfx::RectF(0, 0, 30, 40), pending_layer.BoundsForTesting());
   EXPECT_EQ(artifact->PaintChunks()[0].properties,
             pending_layer.GetPropertyTreeState());
@@ -159,7 +174,7 @@ TEST(PendingLayerTest, PendingLayerDontMergeSparseWithTransforms) {
 
   PendingLayer pending_layer(artifact, artifact->PaintChunks()[0]);
   ASSERT_FALSE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
   EXPECT_EQ(gfx::RectF(0, 0, 30, 40), pending_layer.BoundsForTesting());
   EXPECT_EQ(artifact->PaintChunks()[0].properties,
             pending_layer.GetPropertyTreeState());
@@ -180,7 +195,7 @@ TEST(PendingLayerTest, DontMergeSparseInCompositedEffect) {
 
   PendingLayer pending_layer(artifact, artifact->PaintChunks()[0]);
   ASSERT_FALSE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
   EXPECT_EQ(gfx::RectF(0, 0, 30, 40), pending_layer.BoundsForTesting());
   EXPECT_EQ(artifact->PaintChunks()[0].properties,
             pending_layer.GetPropertyTreeState());
@@ -200,7 +215,7 @@ TEST(PendingLayerTest, MergeSparseInNonCompositedEffect) {
 
   PendingLayer pending_layer(artifact, artifact->PaintChunks()[0]);
   EXPECT_FALSE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
 }
 
 TEST(PendingLayerTest, KnownOpaque) {
@@ -219,30 +234,57 @@ TEST(PendingLayerTest, KnownOpaque) {
   EXPECT_TRUE(pending_layer.RectKnownToBeOpaque().IsEmpty());
 
   ASSERT_TRUE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[1])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[1])));
   // Chunk 2 doesn't cover the entire layer, so not opaque.
   EXPECT_EQ(gfx::RectF(0, 0, 25, 35), pending_layer.RectKnownToBeOpaque());
   EXPECT_NE(pending_layer.BoundsForTesting(),
             pending_layer.RectKnownToBeOpaque());
 
   ASSERT_TRUE(
-      pending_layer.Merge(PendingLayer(artifact, artifact->PaintChunks()[2])));
+      Merge(pending_layer, PendingLayer(artifact, artifact->PaintChunks()[2])));
   // Chunk 3 covers the entire layer, so now it's opaque.
   EXPECT_EQ(gfx::RectF(0, 0, 50, 60), pending_layer.BoundsForTesting());
   EXPECT_EQ(pending_layer.BoundsForTesting(),
             pending_layer.RectKnownToBeOpaque());
 }
 
+TEST(PendingLayerTest, SolidColor) {
+  auto artifact = TestPaintArtifact()
+                      .Chunk()
+                      .RectDrawing(gfx::Rect(100, 100, 250, 250), Color::kBlack)
+                      .IsSolidColor()
+                      .Chunk()
+                      .RectDrawing(gfx::Rect(100, 100, 150, 150), Color::kWhite)
+                      .IsSolidColor()
+                      .Chunk()
+                      .RectDrawing(gfx::Rect(0, 0, 100, 100), Color::kBlack)
+                      .RectDrawing(gfx::Rect(100, 100, 150, 150), Color::kWhite)
+                      .Build();
+
+  PendingLayer pending_layer1(artifact, artifact->PaintChunks()[0]);
+  EXPECT_TRUE(pending_layer1.IsSolidColor());
+  EXPECT_EQ(SkColors::kBlack, pending_layer1.ComputeBackgroundColor());
+  PendingLayer pending_layer2(artifact, artifact->PaintChunks()[1]);
+  EXPECT_TRUE(pending_layer2.IsSolidColor());
+  EXPECT_EQ(SkColors::kWhite, pending_layer2.ComputeBackgroundColor());
+  PendingLayer pending_layer3(artifact, artifact->PaintChunks()[2]);
+  EXPECT_FALSE(pending_layer3.IsSolidColor());
+  EXPECT_TRUE(Merge(pending_layer1, pending_layer2));
+  EXPECT_FALSE(pending_layer1.IsSolidColor());
+}
+
 class PendingLayerTextOpaquenessTest
     : public testing::Test,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<LCDTextPreference> {
  protected:
-  bool PrefersLCDText() const { return GetParam(); }
+  LCDTextPreference GetLCDTextPreference() const { return GetParam(); }
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         PendingLayerTextOpaquenessTest,
-                         ::testing::Values(false, true));
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    PendingLayerTextOpaquenessTest,
+    ::testing::Values(LCDTextPreference::kStronglyPreferred,
+                      LCDTextPreference::kIgnored));
 
 TEST_P(PendingLayerTextOpaquenessTest, OpaqueTextAndOpaqueText) {
   auto artifact = TestPaintArtifact()
@@ -257,7 +299,7 @@ TEST_P(PendingLayerTextOpaquenessTest, OpaqueTextAndOpaqueText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 400, 400), layer_a.BoundsForTesting());
   EXPECT_TRUE(layer_a.TextKnownToBeOnOpaqueBackground());
 }
@@ -274,8 +316,8 @@ TEST_P(PendingLayerTextOpaquenessTest, NonOpaqueTextAndOpaqueText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  bool merged = layer_a.Merge(layer_b, PrefersLCDText());
-  if (PrefersLCDText()) {
+  bool merged = Merge(layer_a, layer_b, GetLCDTextPreference());
+  if (GetLCDTextPreference() == LCDTextPreference::kStronglyPreferred) {
     // Not merged because merging would lose TextKnownToBeOnOpaqueBackground().
     ASSERT_FALSE(merged);
   } else {
@@ -297,8 +339,8 @@ TEST_P(PendingLayerTextOpaquenessTest, OpaqueTextAndNonOpaqueText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  bool merged = layer_a.Merge(layer_b, PrefersLCDText());
-  if (PrefersLCDText()) {
+  bool merged = Merge(layer_a, layer_b, GetLCDTextPreference());
+  if (GetLCDTextPreference() == LCDTextPreference::kStronglyPreferred) {
     // Not merged because merging would lose TextKnownToBeOnOpaqueBackground().
     ASSERT_FALSE(merged);
   } else {
@@ -321,7 +363,7 @@ TEST_P(PendingLayerTextOpaquenessTest, NonOpaqueTextAndOpaqueTextCovered) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 300, 300), layer_a.BoundsForTesting());
   EXPECT_EQ(gfx::RectF(200, 200, 100, 100), layer_a.RectKnownToBeOpaque());
   EXPECT_TRUE(layer_a.TextKnownToBeOnOpaqueBackground());
@@ -340,7 +382,7 @@ TEST_P(PendingLayerTextOpaquenessTest, OpaqueTextAndNonOpaqueTextCovered) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 250, 250), layer_a.BoundsForTesting());
   EXPECT_EQ(gfx::RectF(100, 100, 210, 210), layer_a.RectKnownToBeOpaque());
   EXPECT_TRUE(layer_a.TextKnownToBeOnOpaqueBackground());
@@ -358,7 +400,7 @@ TEST_P(PendingLayerTextOpaquenessTest, NoTextAndOpaqueText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 400, 400), layer_a.BoundsForTesting());
   EXPECT_EQ(gfx::RectF(100, 100, 210, 210), layer_a.RectKnownToBeOpaque());
   EXPECT_TRUE(layer_a.TextKnownToBeOnOpaqueBackground());
@@ -376,7 +418,7 @@ TEST_P(PendingLayerTextOpaquenessTest, OpaqueTextAndNoText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 400, 400), layer_a.BoundsForTesting());
   EXPECT_EQ(gfx::RectF(100, 100, 210, 210), layer_a.RectKnownToBeOpaque());
   EXPECT_TRUE(layer_a.TextKnownToBeOnOpaqueBackground());
@@ -392,7 +434,7 @@ TEST_P(PendingLayerTextOpaquenessTest, NonOpaqueNoTextAndNonOpaqueText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 400, 400), layer_a.BoundsForTesting());
   EXPECT_FALSE(layer_a.TextKnownToBeOnOpaqueBackground());
 }
@@ -407,7 +449,7 @@ TEST_P(PendingLayerTextOpaquenessTest, NonOpaqueTextAndNonOpaqueNoText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 400, 400), layer_a.BoundsForTesting());
   EXPECT_FALSE(layer_a.TextKnownToBeOnOpaqueBackground());
 }
@@ -423,7 +465,7 @@ TEST_P(PendingLayerTextOpaquenessTest, OpaqueNoTextAndNonOpaqueText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 250, 250), layer_a.BoundsForTesting());
   EXPECT_EQ(gfx::RectF(100, 100, 210, 210), layer_a.RectKnownToBeOpaque());
   EXPECT_TRUE(layer_a.TextKnownToBeOnOpaqueBackground());
@@ -440,7 +482,7 @@ TEST_P(PendingLayerTextOpaquenessTest, NonOpaqueTextAndOpaqueNoText) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(100, 100, 250, 250), layer_a.BoundsForTesting());
   EXPECT_EQ(gfx::RectF(100, 100, 210, 210), layer_a.RectKnownToBeOpaque());
   EXPECT_TRUE(layer_a.TextKnownToBeOnOpaqueBackground());
@@ -463,10 +505,11 @@ TEST_P(PendingLayerTextOpaquenessTest, UnitedClippedToOpaque) {
                       .Build();
   PendingLayer layer_a(artifact, artifact->PaintChunks()[0]);
   PendingLayer layer_b(artifact, artifact->PaintChunks()[1]);
-  ASSERT_TRUE(layer_a.Merge(layer_b, PrefersLCDText()));
+  ASSERT_TRUE(Merge(layer_a, layer_b, GetLCDTextPreference()));
   EXPECT_EQ(gfx::RectF(175, 175, 100, 100), layer_a.BoundsForTesting());
-  EXPECT_EQ(gfx::RectF(100, 100, 210, 210), layer_a.RectKnownToBeOpaque());
+  EXPECT_EQ(gfx::RectF(175, 175, 100, 100), layer_a.RectKnownToBeOpaque());
   EXPECT_TRUE(layer_a.TextKnownToBeOnOpaqueBackground());
 }
 
+}  // namespace
 }  // namespace blink

@@ -9,6 +9,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/constants/ash_constants.h"
+#include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "ui/aura/window.h"
@@ -20,7 +21,6 @@
 
 namespace gfx {
 class ImageSkia;
-class ImageSkiaRep;
 }  // namespace gfx
 
 namespace ash {
@@ -113,14 +113,11 @@ class ASH_EXPORT CursorWindowController {
   // Updates cursor view based on current cursor state.
   void UpdateCursorView();
 
-  // Gets the bitmap representing the cursor, adjusting as needed for color.
-  SkBitmap GetAdjustedBitmap(const gfx::ImageSkiaRep& image_rep) const;
-
   const gfx::ImageSkia& GetCursorImageForTest() const;
 
   base::ObserverList<Observer> observers_;
 
-  aura::Window* container_ = nullptr;
+  raw_ptr<aura::Window, ExperimentalAsh> container_ = nullptr;
 
   // The current cursor-compositing state.
   bool is_cursor_compositing_enabled_ = false;

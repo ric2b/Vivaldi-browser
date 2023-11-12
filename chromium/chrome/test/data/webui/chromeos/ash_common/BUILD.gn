@@ -9,21 +9,23 @@ import("//ui/webui/resources/tools/generate_grd.gni")
 ts_library("build_ts") {
   root_dir = "."
   out_dir = "$target_gen_dir/tsc"
-  tsconfig_base = "tsconfig_base.json"
+  tsconfig_base = "../../tsconfig_base.json"
   path_mappings = [ "chrome://webui-test/*|" +
                     rebase_path("$root_gen_dir/chrome/test/data/webui/tsc/*",
                                 target_gen_dir) ]
   in_files = [
     "cr_container_shadow_behavior_test.ts",
     "cr_deprecated_test.ts",
-    "cr_policy_indicator_behavior_tests.ts",
+    "cr_policy_indicator_behavior_test.ts",
     "cr_policy_strings.ts",
-    "cr_scrollable_behavior_tests.ts",
-    "list_property_update_behavior_tests.ts",
+    "cr_scrollable_behavior_test.ts",
+    "list_property_update_behavior_test.ts",
     "typescript_utils/strict_query_test.ts",
   ]
   deps = [
     "../..:build_ts",
+    "//ash/webui/common/resources:build_ts",
+    "//third_party/polymer/v3_0:library",
     "//ui/webui/resources/cr_elements:build_ts",
     "//ui/webui/resources/js:build_ts",
   ]

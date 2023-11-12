@@ -4,8 +4,9 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_strip/tab_strip_view_layout.h"
 
-#import "base/cxx17_backports.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import <algorithm>
+
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -39,7 +40,7 @@ const CGFloat kNewTabButtonWidth = 44;
 
   CGFloat visibleSpace = [self tabStripVisibleSpace];
   _currentTabWidth = (visibleSpace + (kTabOverlap * (num - 1))) / num;
-  _currentTabWidth = base::clamp(_currentTabWidth, kMinTabWidth, kMaxTabWidth);
+  _currentTabWidth = std::clamp(_currentTabWidth, kMinTabWidth, kMaxTabWidth);
 
   CGFloat width = _currentTabWidth * num - (num - 1) * kTabOverlap;
   width = MAX(width, collection.bounds.size.width);

@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_NEARBY_SHARING_NEARBY_CONNECTIONS_MANAGER_IMPL_H_
 #define CHROME_BROWSER_NEARBY_SHARING_NEARBY_CONNECTIONS_MANAGER_IMPL_H_
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/nearby_sharing/public/cpp/nearby_connections_manager.h"
 
 #include <memory>
@@ -67,6 +68,8 @@ class NearbyConnectionsManagerImpl
   Payload* GetIncomingPayload(int64_t payload_id) override;
   void Cancel(int64_t payload_id) override;
   void ClearIncomingPayloads() override;
+  absl::optional<std::string> GetAuthenticationToken(
+      const std::string& endpoint_id) override;
   absl::optional<std::vector<uint8_t>> GetRawAuthenticationToken(
       const std::string& endpoint_id) override;
   void UpgradeBandwidth(const std::string& endpoint_id) override;
@@ -134,12 +137,13 @@ class NearbyConnectionsManagerImpl
   absl::optional<Medium> GetUpgradedMedium(
       const std::string& endpoint_id) const;
 
-  ash::nearby::NearbyProcessManager* process_manager_;
+  raw_ptr<ash::nearby::NearbyProcessManager, ExperimentalAsh> process_manager_;
   std::unique_ptr<ash::nearby::NearbyProcessManager::NearbyProcessReference>
       process_reference_;
   NearbyFileHandler file_handler_;
-  IncomingConnectionListener* incoming_connection_listener_ = nullptr;
-  DiscoveryListener* discovery_listener_ = nullptr;
+  raw_ptr<IncomingConnectionListener, ExperimentalAsh>
+      incoming_connection_listener_ = nullptr;
+  raw_ptr<DiscoveryListener, ExperimentalAsh> discovery_listener_ = nullptr;
   base::flat_set<std::string> discovered_endpoints_;
   // A map of endpoint_id to NearbyConnectionCallback.
   base::flat_map<std::string, NearbyConnectionCallback>

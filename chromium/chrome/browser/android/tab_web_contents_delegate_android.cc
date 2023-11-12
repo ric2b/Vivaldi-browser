@@ -35,6 +35,7 @@
 #include "chrome/browser/prefetch/prefetch_prefs.h"
 #include "chrome/browser/preloading/prefetch/no_state_prefetch/no_state_prefetch_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/chrome_password_reuse_detection_manager_client.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
@@ -46,6 +47,7 @@
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/blocked_content/popup_blocker.h"
 #include "components/blocked_content/popup_tracker.h"
@@ -156,17 +158,12 @@ void TabWebContentsDelegateAndroid::PortalWebContentsCreated(
   // helpers that are unprepared for portal activation to transition them.
   // See https://crbug.com/1042323
   autofill::ChromeAutofillClient::CreateForWebContents(portal_contents);
-  autofill::ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
-      portal_contents,
-      autofill::ChromeAutofillClient::FromWebContents(portal_contents),
-      base::BindRepeating(
-          &autofill::BrowserDriverInitHook,
-          autofill::ChromeAutofillClient::FromWebContents(portal_contents),
-          g_browser_process->GetApplicationLocale()));
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       portal_contents,
-      autofill::ChromeAutofillClient::FromWebContents(portal_contents));
+      autofill::ContentAutofillClient::FromWebContents(portal_contents));
   HistoryTabHelper::CreateForWebContents(portal_contents);
+  ChromePasswordReuseDetectionManagerClient::CreateForWebContents(
+      portal_contents);
   infobars::ContentInfoBarManager::CreateForWebContents(portal_contents);
   PrefsTabHelper::CreateForWebContents(portal_contents);
   safe_browsing::SafeBrowsingNavigationObserver::MaybeCreateForWebContents(

@@ -15,7 +15,6 @@ import static org.chromium.ui.test.util.ViewUtils.waitForView;
 
 import android.view.View;
 
-import androidx.annotation.Nullable;
 import androidx.test.filters.LargeTest;
 
 import org.junit.After;
@@ -31,13 +30,13 @@ import org.chromium.base.CollectionUtil;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
 import org.chromium.components.search_engines.TemplateUrl;
@@ -83,8 +82,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     @Mock
     public TemplateUrl mMockSearchEngine;
 
-    private @Nullable TemplateUrlService mActualTemplateUrlService;
-
     @Before
     public void setUp() throws InterruptedException {
         initMocks(this);
@@ -96,10 +93,7 @@ public class ClearBrowsingDataFragmentBasicTest {
     @After
     public void tearDown() {
         TestThreadUtils.runOnUiThreadBlocking(() -> SyncService.resetForTests());
-        if (mActualTemplateUrlService != null) {
-            // Reset the actual service if the mock is used.
-            TemplateUrlServiceFactory.setInstanceForTesting(mActualTemplateUrlService);
-        }
+        TemplateUrlServiceFactory.setInstanceForTesting(null);
     }
 
     private void setSyncable(boolean syncable) {
@@ -113,10 +107,6 @@ public class ClearBrowsingDataFragmentBasicTest {
     }
 
     private void configureMockSearchEngine() {
-        // Cache the actual Url Service, so the test can put it back after tests.
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { mActualTemplateUrlService = TemplateUrlServiceFactory.get(); });
-
         TemplateUrlServiceFactory.setInstanceForTesting(mMockTemplateUrlService);
         Mockito.doReturn(mMockSearchEngine)
                 .when(mMockTemplateUrlService)

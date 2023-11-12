@@ -35,6 +35,7 @@ using FrameDataSet =
 
 using ::testing::AllOf;
 using ::testing::ByRef;
+using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
 using ::testing::Eq;
 using ::testing::Field;
@@ -43,8 +44,7 @@ using ::testing::Pointee;
 using ::testing::Property;
 using ::testing::UnorderedElementsAreArray;
 
-namespace autofill {
-namespace internal {
+namespace autofill::internal {
 namespace {
 
 // Matchers.
@@ -310,7 +310,7 @@ class FormForestTest : public content::RenderViewHostTestHarness {
   //   origins.
   // Child frames inherit the policy from their parents.
   // "Shared-autofill" restricts cross-origin filling (see
-  // FormForest::GetBrowserFormOfRendererForm() for details).
+  // FormForest::GetBrowserForm() for details).
   enum class Policy { kDefault, kSharedAutofill, kNoSharedAutofill };
 
   explicit FormForestTest(bool relax_shared_autofill = false) {
@@ -384,14 +384,18 @@ class FormForestTest : public content::RenderViewHostTestHarness {
         blink::mojom::PermissionsPolicyFeature::kSharedAutofill,
         {blink::OriginWithPossibleWildcards(origin,
                                             /*has_subdomain_wildcard=*/false)},
-        false, false)};
+        /*self_if_matches=*/absl::nullopt,
+        /*matches_all_origins=*/false,
+        /*matches_opaque_src=*/false)};
   }
 
   // Explicitly disallows shared-autofill on all origins.
   static blink::ParsedPermissionsPolicy DisallowSharedAutofill() {
     return {blink::ParsedPermissionsPolicyDeclaration(
-        blink::mojom::PermissionsPolicyFeature::kSharedAutofill, {}, false,
-        false)};
+        blink::mojom::PermissionsPolicyFeature::kSharedAutofill,
+        /*allowed_origins=*/{}, /*self_if_matches=*/absl::nullopt,
+        /*matches_all_origins=*/false,
+        /*matches_opaque_src=*/false)};
   }
 
   MockContentAutofillDriver* NavigateFrame(content::RenderFrameHost* rfh,
@@ -411,7 +415,7 @@ class FormForestTest : public content::RenderViewHostTestHarness {
   }
 
   base::test::ScopedFeatureList feature_list_;
-  test::AutofillEnvironment autofill_environment_;
+  test::AutofillUnitTestEnvironment autofill_test_environment_;
   std::map<content::RenderFrameHost*,
            std::unique_ptr<MockContentAutofillDriver>>
       autofill_drivers_;
@@ -454,8 +458,8 @@ class FormForestTestWithMockedTree : public FormForestTest {
             /*relax_shared_autofill=*/relax_shared_autofill) {}
 
   void TearDown() override {
-    mocked_forms_.Reset();
-    flattened_forms_.Reset();
+    TestApi(mocked_forms_).Reset();
+    TestApi(flattened_forms_).Reset();
     drivers_.clear();
     forms_.clear();
     FormForestTest::TearDown();
@@ -551,7 +555,7 @@ class FormForestTestWithMockedTree : public FormForestTest {
 
     // Copy |mocked_forms_| into |flattened_forms_|, without fields.
     if (frame_datas(flattened_forms_).empty() || force_flatten) {
-      flattened_forms_.Reset();
+      TestApi(flattened_forms_).Reset();
       std::vector<std::unique_ptr<FrameData>> copy;
       for (const auto& frame : frame_datas(mocked_forms_)) {
         copy.push_back(std::make_unique<FrameData>(frame->frame_token));
@@ -644,16 +648,6 @@ class FormForestTestUpdateTree : public FormForestTestWithMockedTree {
     ff.UpdateTreeOfRendererForm(GetMockedForm(form_name), driver(form_name));
   }
 };
-
-// Tests that reset empties a FormForest.
-TEST_F(FormForestTestUpdateTree, Reset) {
-  MockFormForest({.forms = {{.name = "main"}}});
-  FormForest ff;
-  UpdateTreeOfRendererForm(ff, "main");
-  EXPECT_FALSE(frame_datas(ff).empty());
-  ff.Reset();
-  EXPECT_TRUE(frame_datas(ff).empty());
-}
 
 // Tests that different root forms are not merged.
 TEST_F(FormForestTestUpdateTree, MultipleRoots) {
@@ -997,7 +991,8 @@ TEST_F(FormForestTestUpdateTree, EraseForm_FieldRemoval) {
   UpdateTreeOfRendererForm(ff, "inner");
   UpdateTreeOfRendererForm(ff, "leaf");
   FormGlobalId removed_form = GetMockedForm("leaf").global_id();
-  ff.EraseForm(removed_form);
+  EXPECT_THAT(ff.EraseForms(std::array{removed_form}),
+              ElementsAre(GetMockedForm("main").global_id()));
   base::EraseIf(
       (*frame_datas(mocked_forms_).find(removed_form.frame_token))->child_forms,
       [&](const FormData& form) { return form.global_id() == removed_form; });
@@ -1021,7 +1016,8 @@ TEST_F(FormForestTestUpdateTree, EraseForm_ParentReset) {
   UpdateTreeOfRendererForm(ff, "inner");
   UpdateTreeOfRendererForm(ff, "leaf");
   FormGlobalId removed_form = GetMockedForm("inner").global_id();
-  ff.EraseForm(removed_form);
+  EXPECT_THAT(ff.EraseForms(std::array{removed_form}),
+              ElementsAre(GetMockedForm("main").global_id()));
   base::EraseIf(
       (*frame_datas(mocked_forms_).find(removed_form.frame_token))->child_forms,
       [&](const FormData& form) { return form.global_id() == removed_form; });
@@ -1371,14 +1367,14 @@ TEST_F(FormForestTestUpdateTree, RemoveFrame) {
   EXPECT_THAT(ff, Equals(flattened_forms_));
 }
 
-// Tests of FormForest::GetBrowserFormOfRendererForm().
+// Tests of FormForest::GetBrowserForm().
 
 class FormForestTestFlatten : public FormForestTestWithMockedTree {
  protected:
   // The subject of this test fixture.
-  FormData GetBrowserFormOfRendererForm(base::StringPiece form_name) {
-    return flattened_forms_.GetBrowserFormOfRendererForm(
-        GetMockedForm(form_name));
+  FormData GetBrowserForm(base::StringPiece form_name) {
+    return *flattened_forms_.GetBrowserForm(
+        GetMockedForm(form_name).global_id());
   }
 };
 
@@ -1386,8 +1382,7 @@ class FormForestTestFlatten : public FormForestTestWithMockedTree {
 TEST_F(FormForestTestFlatten, SingleFrame) {
   MockFormForest({.url = kMainUrl, .forms = {{.name = "main"}}});
   MockFlattening({{"main"}});
-  EXPECT_THAT(GetBrowserFormOfRendererForm("main"),
-              Equals(GetFlattenedForm("main")));
+  EXPECT_THAT(GetBrowserForm("main"), Equals(GetFlattenedForm("main")));
 }
 
 class FormForestTestFlattenHierarchy
@@ -1404,8 +1399,7 @@ TEST_P(FormForestTestFlattenHierarchy, TwoFrames) {
             .frames = {{.forms = {{.name = "child3"}, {.name = "child4"}}}}}}});
   MockFlattening({{"main"}, {"child1"}, {"child2"}});
   MockFlattening({{"main2"}, {"child3"}, {"child4"}});
-  EXPECT_THAT(GetBrowserFormOfRendererForm(GetParam()),
-              Equals(GetFlattenedForm("main")));
+  EXPECT_THAT(GetBrowserForm(GetParam()), Equals(GetFlattenedForm("main")));
 }
 
 INSTANTIATE_TEST_SUITE_P(FormForestTest,
@@ -1560,11 +1554,12 @@ TEST_F(FormForestTestUnflatten, MainOriginPolicy) {
       WithValues(GetMockedForm("main"), Profile(0)),
       WithValues(GetMockedForm("child1"), Profile(1)),
       WithValues(GetMockedForm("child2"), Profile(2))};
-  // Clear sensitive fields.
-  for (size_t i = 2; i < expectation[0].fields.size(); ++i) {
-    expectation[0].fields[i].value.clear();
-    expectation[1].fields[i].value.clear();
-  }
+  // Clear sensitive fields: the credit card number (field index 2) and CVC
+  // (field index 5) in the two main-origin forms.
+  expectation[0].fields[2].value.clear();
+  expectation[0].fields[5].value.clear();
+  expectation[1].fields[2].value.clear();
+  expectation[1].fields[5].value.clear();
   EXPECT_THAT(GetRendererFormsOfBrowserForm("main", Origin(kIframeUrl),
                                             FieldTypeMap("main")),
               UnorderedArrayEquals(expectation));
@@ -1737,5 +1732,4 @@ INSTANTIATE_TEST_SUITE_P(
         ForEachInSetDifferenceTestParam{{1, 2, 3, 4}, {}, {1, 2, 3, 4}, 0}));
 
 }  // namespace
-}  // namespace internal
-}  // namespace autofill
+}  // namespace autofill::internal

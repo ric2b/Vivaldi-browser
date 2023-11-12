@@ -9,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.Px;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -114,15 +115,28 @@ public class AccountSelectionCoordinator implements AccountSelectionComponent {
     }
 
     @Override
-    public void showAccounts(String rpEtldPlusOne, String idpEtldPlusOne, List<Account> accounts,
-            IdentityProviderMetadata idpMetadata, ClientIdMetadata clientMetadata,
-            boolean isAutoReauthn) {
-        mMediator.showAccounts(rpEtldPlusOne, idpEtldPlusOne, accounts, idpMetadata, clientMetadata,
-                isAutoReauthn);
+    public void showAccounts(String topFrameEtldPlusOne, String iframeEtldPlusOne,
+            String idpEtldPlusOne, List<Account> accounts, IdentityProviderMetadata idpMetadata,
+            ClientIdMetadata clientMetadata, boolean isAutoReauthn, String rpContext) {
+        mMediator.showAccounts(topFrameEtldPlusOne, iframeEtldPlusOne, idpEtldPlusOne, accounts,
+                idpMetadata, clientMetadata, isAutoReauthn, rpContext);
     }
 
     @Override
     public void close() {
         mMediator.close();
+    }
+
+    @Override
+    public String getTitle() {
+        TextView title = mBottomSheetContent.getContentView().findViewById(R.id.header_title);
+        return String.valueOf(title.getText());
+    }
+
+    @Override
+    public String getSubtitle() {
+        TextView subtitle = mBottomSheetContent.getContentView().findViewById(R.id.header_subtitle);
+        if (subtitle == null || subtitle.getText().length() == 0) return null;
+        return String.valueOf(subtitle.getText());
     }
 }

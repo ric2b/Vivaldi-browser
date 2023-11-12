@@ -9,29 +9,25 @@
 
 namespace ash {
 
-// static
-const int VcEffectState::kUnusedId = -1;
-
-VcEffectState::VcEffectState(const gfx::VectorIcon* icon,
+VcEffectState::VcEffectState(const gfx::VectorIcon* enabled_icon,
                              const std::u16string& label_text,
                              int accessible_name_id,
                              views::Button::PressedCallback button_callback,
-                             absl::optional<int> state /*= absl::nullopt*/)
-    : icon_(icon),
+                             absl::optional<int> state_value)
+    : enabled_icon_(enabled_icon),
       label_text_(label_text),
       accessible_name_id_(accessible_name_id),
       button_callback_(button_callback),
-      state_(state) {
-  DCHECK(icon);
+      state_value_(state_value) {
+  DCHECK(enabled_icon);
 }
 
 VcEffectState::~VcEffectState() = default;
 
 VcHostedEffect::VcHostedEffect(VcEffectType type,
-                               GetEffectStateCallback get_state_callback)
-    : type_(type),
-      get_state_callback_(get_state_callback),
-      id_(VcEffectState::kUnusedId) {}
+                               GetEffectStateCallback get_state_callback,
+                               VcEffectId effect_id)
+    : type_(type), get_state_callback_(get_state_callback), id_(effect_id) {}
 
 VcHostedEffect::~VcHostedEffect() = default;
 

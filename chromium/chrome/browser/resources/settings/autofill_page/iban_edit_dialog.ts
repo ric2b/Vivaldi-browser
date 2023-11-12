@@ -23,12 +23,7 @@ import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './iban_edit_dialog.html.js';
-
-/**
- * Regular expression for valid IBAN value.
- */
-const IBAN_VALID_REGEX: RegExp = new RegExp(
-    '^[a-zA-Z]{2}[0-9]{2}[a-zA-Z0-9]{4}[0-9]{7}([a-zA-Z0-9]?){0,16}$');
+import {PaymentsManagerImpl, PaymentsManagerProxy} from './payments_manager_proxy.js';
 
 declare global {
   interface HTMLElementEventMap {
@@ -85,14 +80,22 @@ export class SettingsIbanEditDialogElement extends
   private value_?: string;
   private nickname_?: string;
   private title_: string;
+  private paymentsManager_: PaymentsManagerProxy =
+      PaymentsManagerImpl.getInstance();
 
   override connectedCallback() {
     super.connectedCallback();
 
-    this.title_ = this.i18n(this.iban ? 'editIbanTitle' : 'addIbanTitle');
     if (this.iban) {
+      // Save IBAN button is by default enabled in 'EDIT' mode as IBAN value is
+      // pre-populated.
       this.value_ = this.iban.value;
       this.nickname_ = this.iban.nickname;
+      this.title_ = this.i18n('editIbanTitle');
+    } else {
+      this.title_ = this.i18n('addIbanTitle');
+      // Save IBAN button is disabled in 'ADD' mode as IBAN value is empty.
+      this.$.saveButton.disabled = true;
     }
     this.$.dialog.showModal();
   }
@@ -123,15 +126,23 @@ export class SettingsIbanEditDialogElement extends
     this.close();
   }
 
-  private saveIbanEnabled_(): boolean {
+  private updateSaveIbanButtonEnablement_() {
+    this.isValidIban().then(isValid => {
+      this.$.saveButton.disabled = !isValid;
+    });
+  }
+
+  private async isValidIban(): Promise<boolean> {
     if (!this.value_) {
-      return false;
+      return Promise.resolve(false);
     }
     // The save button is enabled if the value of the IBAN is invalid (after
     // removing all whitespace from it).
-    const ibanWithoutWhitespace = this.value_.replace(/\s/g, '');
-    return !!IBAN_VALID_REGEX.test(ibanWithoutWhitespace!);
+    const isValid = await this.paymentsManager_.isValidIban(
+        this.value_!.replace(/\s/g, ''));
+    return isValid;
   }
+
 
   /**
    * @param  nickname of the IBAN, undefined when not set.

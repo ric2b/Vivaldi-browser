@@ -12,9 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
-#include "build/chromeos_buildflags.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/render_widget_host_view_event_handler.h"
@@ -35,7 +33,6 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/pointer/touch_editing_controller.h"
-#include "ui/base/ui_base_features.h"
 #include "ui/display/display_switches.h"
 #include "ui/events/event_sink.h"
 #include "ui/events/event_utils.h"
@@ -176,12 +173,7 @@ class TestTouchSelectionControllerClientAura
 
 class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
  public:
-  TouchSelectionControllerClientAuraTest() {
-#if BUILDFLAG(IS_CHROMEOS)
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kTouchTextEditingRedesign);
-#endif  // BUILDFLAG(IS_CHROMEOS)
-  }
+  TouchSelectionControllerClientAuraTest() = default;
 
   TouchSelectionControllerClientAuraTest(
       const TouchSelectionControllerClientAuraTest&) = delete;
@@ -204,18 +196,14 @@ class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
 
   gfx::PointF GetPointInsideText() {
     gfx::PointF point;
-    JSONToPoint(EvalJs(shell(), "get_point_inside_text()",
-                       EXECUTE_SCRIPT_USE_MANUAL_REPLY)
-                    .ExtractString(),
+    JSONToPoint(EvalJs(shell(), "get_point_inside_text()").ExtractString(),
                 &point);
     return point;
   }
 
   gfx::PointF GetPointInsideTextfield() {
     gfx::PointF point;
-    JSONToPoint(EvalJs(shell(), "get_point_inside_textfield()",
-                       EXECUTE_SCRIPT_USE_MANUAL_REPLY)
-                    .ExtractString(),
+    JSONToPoint(EvalJs(shell(), "get_point_inside_textfield()").ExtractString(),
                 &point);
     return point;
   }
@@ -261,8 +249,6 @@ class TouchSelectionControllerClientAuraTest : public ContentBrowserTest {
 
   raw_ptr<TestTouchSelectionControllerClientAura> selection_controller_client_ =
       nullptr;
-
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class TouchSelectionControllerClientAuraCAPFeatureTest
@@ -509,8 +495,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraSiteIsolationTest,
 
   // Find the location of some text to select.
   gfx::PointF point_f;
-  JSONToPoint(EvalJs(child->current_frame_host(), "get_point_inside_text()",
-                     EXECUTE_SCRIPT_USE_MANUAL_REPLY)
+  JSONToPoint(EvalJs(child->current_frame_host(), "get_point_inside_text()")
                   .ExtractString(),
               &point_f);
   point_f = child_view->TransformPointToRootCoordSpaceF(point_f);
@@ -631,8 +616,7 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraSiteIsolationTest,
 
   // Find the location of some text to select.
   gfx::PointF point_f;
-  JSONToPoint(EvalJs(child->current_frame_host(), "get_point_inside_text()",
-                     EXECUTE_SCRIPT_USE_MANUAL_REPLY)
+  JSONToPoint(EvalJs(child->current_frame_host(), "get_point_inside_text()")
                   .ExtractString(),
               &point_f);
   point_f = child_view->TransformPointToRootCoordSpaceF(point_f);
@@ -948,7 +932,6 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
             rwhva->selection_controller()->GetVisibleRectBetweenBounds());
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
 // Tests that the select all command in the quick menu works correctly and that
 // the touch handles and quick menu are shown after the command is executed.
 IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
@@ -1042,7 +1025,6 @@ IN_PROC_BROWSER_TEST_P(TouchSelectionControllerClientAuraCAPFeatureTest,
       selection_controller_client()->GetActiveMenuClient()->GetSelectedText(),
       u"Text");
 }
-#endif
 
 class TouchSelectionControllerClientAuraScaleFactorTest
     : public TouchSelectionControllerClientAuraTest {

@@ -13,6 +13,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "cc/paint/paint_flags.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -23,6 +24,7 @@
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
@@ -38,10 +40,6 @@
 #include "ui/views/round_rect_painter.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/constants/ash_features.h"
-#endif
 
 namespace views {
 
@@ -96,10 +94,6 @@ class MenuScrollButton : public View {
   void OnDragExited() override {
     DCHECK(host_->GetMenuItem()->GetMenuController());
     host_->GetMenuItem()->GetMenuController()->OnDragExitedScrollButton(host_);
-  }
-
-  void OnMouseEntered(const ui::MouseEvent& event) override {
-    host_->GetMenuItem()->GetMenuController()->SetEnabledScrollButtons(true);
   }
 
   DropCallback GetDropCallback(const ui::DropTargetEvent& event) override {
@@ -304,7 +298,7 @@ gfx::Size MenuScrollViewContainer::CalculatePreferredSize() const {
   const MenuConfig& config = MenuConfig::instance();
   // Leave space for the menu border, below the footnote.
   if (GetFootnote() && config.use_outer_border && !HasBubbleBorder() &&
-      !config.win11_style_menus) {
+      !config.use_bubble_border) {
     prefsize.Enlarge(0, 1);
   }
   return prefsize;
@@ -330,6 +324,16 @@ void MenuScrollViewContainer::OnPaintBackground(gfx::Canvas* canvas) {
   const MenuConfig& menu_config = MenuConfig::instance();
   extra.menu_background.corner_radius = menu_config.CornerRadiusForMenu(
       content_view_->GetMenuItem()->GetMenuController());
+  if (border_color_id_.has_value()) {
+    ui::ColorProvider* color_provider = GetColorProvider();
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    flags.setColor(color_provider->GetColor(border_color_id_.value()));
+    canvas->DrawRoundRect(GetLocalBounds(), extra.menu_background.corner_radius,
+                          flags);
+    return;
+  }
   GetNativeTheme()->Paint(canvas->sk_canvas(), GetColorProvider(),
                           ui::NativeTheme::kMenuPopupBackground,
                           ui::NativeTheme::kNormal, bounds, extra);
@@ -372,12 +376,10 @@ void MenuScrollViewContainer::OnBoundsChanged(
 
 void MenuScrollViewContainer::DidScrollToTop() {
   scroll_up_button_->SetVisible(false);
-  content_view_->GetMenuItem()->GetMenuController()->OnMenuEdgeReached();
 }
 
 void MenuScrollViewContainer::DidScrollToBottom() {
   scroll_down_button_->SetVisible(false);
-  content_view_->GetMenuItem()->GetMenuController()->OnMenuEdgeReached();
 }
 
 void MenuScrollViewContainer::DidScrollAwayFromTop() {
@@ -397,7 +399,8 @@ void MenuScrollViewContainer::CreateBorder() {
 
 void MenuScrollViewContainer::CreateDefaultBorder() {
   DCHECK_EQ(arrow_, BubbleBorder::NONE);
-
+  MenuController* menu_controller =
+      content_view_->GetMenuItem()->GetMenuController();
   const MenuConfig& menu_config = MenuConfig::instance();
   corner_radius_ = menu_config.CornerRadiusForMenu(
       content_view_->GetMenuItem()->GetMenuController());
@@ -415,18 +418,29 @@ void MenuScrollViewContainer::CreateDefaultBorder() {
   int bottom_inset = GetFootnote() ? 0 : vertical_inset;
 
   if (menu_config.use_outer_border) {
-    if (menu_config.win11_style_menus &&
-        menu_config.CornerRadiusForMenu(
-            content_view_->GetMenuItem()->GetMenuController())) {
+    if (menu_config.use_bubble_border && (corner_radius_ > 0) &&
+        !menu_controller->IsCombobox()) {
       CreateBubbleBorder();
     } else {
+      gfx::Insets insets = gfx::Insets::TLBR(vertical_inset, horizontal_inset,
+                                             bottom_inset, horizontal_inset);
+      // When a custom background color is used, ensure that the border uses
+      // the custom background color for its insets.
+      if (border_color_id_.has_value()) {
+        SetBorder(views::CreateThemedSolidSidedBorder(
+            insets, border_color_id_.value()));
+        return;
+      }
+
+      SetBackground(CreateThemedRoundedRectBackground(ui::kColorMenuBackground,
+                                                      corner_radius_));
+
       SkColor color = GetWidget()
                           ? GetColorProvider()->GetColor(ui::kColorMenuBorder)
                           : gfx::kPlaceholderColor;
       SetBorder(views::CreateBorderPainter(
           std::make_unique<views::RoundRectPainter>(color, corner_radius_),
-          gfx::Insets::TLBR(vertical_inset, horizontal_inset, bottom_inset,
-                            horizontal_inset)));
+          insets));
     }
   } else {
     SetBorder(CreateEmptyBorder(gfx::Insets::TLBR(
@@ -447,6 +461,10 @@ void MenuScrollViewContainer::CreateBubbleBorder() {
   if (use_ash_system_ui_layout_)
     shadow_type = BubbleBorder::CHROMEOS_SYSTEM_UI_SHADOW;
 #endif
+  if (border_color_id_.has_value()) {
+    // If there's a custom border color, use this for the bubble border color.
+    id = border_color_id_.value();
+  }
   auto bubble_border = std::make_unique<BubbleBorder>(arrow_, shadow_type, id);
   bool has_customized_corner = use_ash_system_ui_layout_ && menu_controller &&
                                menu_controller->rounded_corners().has_value();
@@ -481,13 +499,11 @@ void MenuScrollViewContainer::CreateBubbleBorder() {
     background_view_->layer()->SetRoundedCornerRadius(GetRoundedCorners());
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    if (ash::features::IsDarkLightModeEnabled()) {
-      background_view_->SetBorder(std::make_unique<HighlightBorder>(
-          GetRoundedCorners(),
-          // corner_radius_,
-          HighlightBorder::Type::kHighlightBorder1,
-          /*use_light_colors=*/false));
-    }
+    background_view_->SetBorder(std::make_unique<HighlightBorder>(
+        GetRoundedCorners(),
+        chromeos::features::IsJellyrollEnabled()
+            ? HighlightBorder::Type::kHighlightBorderOnShadow
+            : HighlightBorder::Type::kHighlightBorder1));
 #endif
   } else {
     SetBackground(std::make_unique<BubbleBackground>(bubble_border.get()));

@@ -20,8 +20,6 @@ blink_platform_sources("loader") {
   sources = [
     "allowed_by_nosniff.cc",
     "allowed_by_nosniff.h",
-    "attribution_header_constants.cc",
-    "attribution_header_constants.h",
     "child_url_loader_factory_bundle.cc",
     "cors/cors.cc",
     "cors/cors.h",
@@ -135,6 +133,7 @@ blink_platform_sources("loader") {
     "fetch/url_loader/navigation_body_loader.h",
     "fetch/url_loader/request_conversion.cc",
     "fetch/url_loader/request_conversion.h",
+    "fetch/url_loader/resource_request_client.h",
     "fetch/url_loader/resource_request_sender.cc",
     "fetch/url_loader/resource_request_sender.h",
     "fetch/url_loader/sync_load_context.cc",

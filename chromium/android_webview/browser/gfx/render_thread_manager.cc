@@ -9,7 +9,7 @@
 
 #include "android_webview/browser/gfx/compositor_frame_producer.h"
 #include "android_webview/browser/gfx/gpu_service_webview.h"
-#include "android_webview/browser/gfx/hardware_renderer_viz.h"
+#include "android_webview/browser/gfx/hardware_renderer.h"
 #include "android_webview/browser/gfx/scoped_app_gl_state_restore.h"
 #include "android_webview/browser/gfx/task_queue_webview.h"
 #include "android_webview/common/aw_features.h"
@@ -117,10 +117,7 @@ void RenderThreadManager::PostParentDrawDataToChildCompositorOnRT(
   {
     base::AutoLock lock(lock_);
     parent_draw_constraints_ = parent_draw_constraints;
-    // FrameTimingDetails are a sequence and it's ok to drop something in
-    // the middle of the sequence. This also means its ok to drop the details
-    // from early returned frames from WaitAndPruneFrameQueue as well.
-    timing_details_ = std::move(timing_details);
+    timing_details_.insert(timing_details.begin(), timing_details.end());
     presented_frame_token_ = frame_token;
     frame_sink_id_for_presentation_feedbacks_ = frame_sink_id;
   }
@@ -213,7 +210,7 @@ void RenderThreadManager::DrawOnRT(bool save_restore,
       getter = root_frame_sink_getter_;
     }
     DCHECK(getter);
-    hardware_renderer_ = std::make_unique<HardwareRendererViz>(
+    hardware_renderer_ = std::make_unique<HardwareRenderer>(
         this, std::move(getter), vulkan_context_provider_);
     hardware_renderer_->CommitFrame();
   }

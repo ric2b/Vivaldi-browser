@@ -226,7 +226,7 @@ DeviceActivityController::DeviceActivityController(
     LOG(ERROR) << "Setting value for |churn_active_status_ptr_| to 0.";
   }
 
-  churn_active_status_.InitializeValue(churn_active_value);
+  churn_active_status_.SetValue(churn_active_value);
 
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
@@ -366,6 +366,14 @@ void DeviceActivityController::OnMachineStatisticsLoaded(
   DeviceActivityClient::RecordDeviceActivityMethodCalled(
       DeviceActivityClient::DeviceActivityMethod::
           kDeviceActivityControllerOnMachineStatisticsLoaded);
+
+  // Block virtual machines and debug builds (dev mode enabled).
+  if (statistics_provider_->IsRunningOnVm() ||
+      statistics_provider_->IsCrosDebugMode()) {
+    LOG(ERROR) << "Terminate - device is running in VM or with cros_debug mode "
+                  "enabled.";
+    return;
+  }
 
   std::vector<std::unique_ptr<DeviceActiveUseCase>> use_cases;
   use_cases.push_back(std::make_unique<DailyUseCaseImpl>(

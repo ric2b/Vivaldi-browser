@@ -18,19 +18,31 @@ namespace blink {
 enum {
   kUnderInvalidationChecking = 1 << 0,
   kScrollUnification = 1 << 1,
+  kSolidColorLayers = 1 << 2,
+  kCompositeScrollAfterPaint = 1 << 3,
+  kUsedColorSchemeRootScrollbars = 1 << 4,
 };
 
 class PaintTestConfigurations
     : public testing::WithParamInterface<unsigned>,
-      private ScopedPaintUnderInvalidationCheckingForTest {
+      private ScopedPaintUnderInvalidationCheckingForTest,
+      private ScopedSolidColorLayersForTest,
+      private ScopedCompositeScrollAfterPaintForTest,
+      private ScopedUsedColorSchemeRootScrollbarsForTest {
  public:
   PaintTestConfigurations()
-      : ScopedPaintUnderInvalidationCheckingForTest(
-            GetParam() & kUnderInvalidationChecking) {
-    if (GetParam() & kScrollUnification)
+      : ScopedPaintUnderInvalidationCheckingForTest(GetParam() &
+                                                    kUnderInvalidationChecking),
+        ScopedSolidColorLayersForTest(GetParam() & kSolidColorLayers),
+        ScopedCompositeScrollAfterPaintForTest(GetParam() &
+                                               kCompositeScrollAfterPaint),
+        ScopedUsedColorSchemeRootScrollbarsForTest(
+            GetParam() & kUsedColorSchemeRootScrollbars) {
+    if (GetParam() & kScrollUnification) {
       feature_list_.InitAndEnableFeature(::features::kScrollUnification);
-    else
+    } else {
       feature_list_.InitAndDisableFeature(::features::kScrollUnification);
+    }
   }
   ~PaintTestConfigurations() override {
     // Must destruct all objects before toggling back feature flags.
@@ -47,11 +59,18 @@ class PaintTestConfigurations
   base::test::ScopedFeatureList feature_list_;
 };
 
-// For now this has only one configuration, but can be extended in the future
-// to include more configurations.
-#define INSTANTIATE_PAINT_TEST_SUITE_P(test_class) \
-  INSTANTIATE_TEST_SUITE_P(All, test_class,        \
-                           ::testing::Values(0, kScrollUnification))
+// Note: If a new test fails with kCompositeScrollAfterPaint, please add the
+// following at the beginning of the test to skip it temporarily:
+//  if (RuntimeEnabledFeatures::CompositeScrollAfterPaintEnabled()) {
+//    // TODO(crbug.com/1414885): Fix this test.
+//    return;
+//  }
+#define INSTANTIATE_PAINT_TEST_SUITE_P(test_class)                \
+  INSTANTIATE_TEST_SUITE_P(                                       \
+      All, test_class,                                            \
+      ::testing::Values(0, kScrollUnification, kSolidColorLayers, \
+                        kCompositeScrollAfterPaint,               \
+                        kUsedColorSchemeRootScrollbars))
 
 }  // namespace blink
 

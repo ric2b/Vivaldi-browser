@@ -15,6 +15,10 @@ namespace content {
 TestStoragePartition::TestStoragePartition() {}
 TestStoragePartition::~TestStoragePartition() {}
 
+const StoragePartitionConfig& TestStoragePartition::GetConfig() {
+  return config_;
+}
+
 base::FilePath TestStoragePartition::GetPath() {
   return file_path_;
 }
@@ -184,10 +188,6 @@ void TestStoragePartition::ClearDataForOrigin(
     uint32_t remove_mask,
     uint32_t quota_storage_remove_mask,
     const GURL& storage_origin,
-    base::OnceClosure callback) {}
-
-void TestStoragePartition::ClearDataForAllBuckets(
-    const blink::StorageKey& storage_key,
     base::OnceClosure callback) {}
 
 void TestStoragePartition::ClearDataForBuckets(

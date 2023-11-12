@@ -9,6 +9,7 @@
 
 #include "ash/constants/app_types.h"
 #include "ash/frame/non_client_frame_view_ash.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/sharesheet/sharesheet_metrics.h"
@@ -31,9 +32,11 @@
 #include "ui/base/clipboard/test/clipboard_test_util.h"
 #include "ui/base/clipboard/test/test_clipboard.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/lottie/resource.h"
 #include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -140,6 +143,8 @@ class SharesheetBubbleViewTest : public ChromeAshTestBase {
 
   bool IsSharesheetVisible() { return sharesheet_widget_->IsVisible(); }
 
+  views::Widget* sharesheet_widget() { return sharesheet_widget_; }
+
   SharesheetBubbleView* sharesheet_bubble_view() {
     return sharesheet_bubble_view_;
   }
@@ -161,9 +166,9 @@ class SharesheetBubbleViewTest : public ChromeAshTestBase {
  private:
   gfx::NativeWindow parent_window_;
   std::unique_ptr<TestingProfile> profile_;
-  SharesheetBubbleViewDelegate* bubble_delegate_;
-  SharesheetBubbleView* sharesheet_bubble_view_;
-  views::Widget* sharesheet_widget_;
+  raw_ptr<SharesheetBubbleViewDelegate, ExperimentalAsh> bubble_delegate_;
+  raw_ptr<SharesheetBubbleView, ExperimentalAsh> sharesheet_bubble_view_;
+  raw_ptr<views::Widget, ExperimentalAsh> sharesheet_widget_;
 };
 
 TEST_F(SharesheetBubbleViewTest, BubbleDoesOpenAndClose) {
@@ -257,6 +262,77 @@ TEST_F(SharesheetBubbleViewTest, ClickCopyToClipboard) {
 
   // Bubble should close after copy target was pressed.
   ASSERT_FALSE(IsSharesheetVisible());
+
+  // Copy to clipboard was clicked on.
+  histograms.ExpectBucketCount(
+      ::sharesheet::kSharesheetUserActionResultHistogram,
+      ::sharesheet::SharesheetMetrics::UserAction::kCopyAction, 1);
+
+  // Check text copied correctly.
+  std::u16string clipboard_text;
+  ui::Clipboard::GetForCurrentThread()->ReadText(
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+      &clipboard_text);
+  EXPECT_EQ(::sharesheet::kTestText, base::UTF16ToUTF8(clipboard_text));
+}
+
+TEST_F(SharesheetBubbleViewTest, KeyPressCopyToClipboard) {
+  base::HistogramTester histograms;
+
+  // Text intent should only show copy action.
+  ShowAndVerifyBubble(::sharesheet::CreateValidTextIntent(),
+                      ::sharesheet::LaunchSource::kUnknown);
+
+  // |targets_view| should only contain the copy to clipboard target.
+  views::View* targets_view = sharesheet_bubble_view()->GetViewByID(
+      SharesheetViewID::TARGETS_DEFAULT_VIEW_ID);
+  ASSERT_EQ(targets_view->children().size(), 1u);
+
+  GetEventGenerator()->PressAndReleaseKey(ui::VKEY_TAB);
+  ASSERT_TRUE(targets_view->children()[0]->HasFocus());
+  GetEventGenerator()->PressAndReleaseKey(ui::VKEY_RETURN);
+
+  // Bubble should close after copy target was pressed.
+  ASSERT_FALSE(IsSharesheetVisible());
+
+  // Copy to clipboard was clicked on.
+  histograms.ExpectBucketCount(
+      ::sharesheet::kSharesheetUserActionResultHistogram,
+      ::sharesheet::SharesheetMetrics::UserAction::kCopyAction, 1);
+
+  // Check text copied correctly.
+  std::u16string clipboard_text;
+  ui::Clipboard::GetForCurrentThread()->ReadText(
+      ui::ClipboardBuffer::kCopyPaste, /* data_dst = */ nullptr,
+      &clipboard_text);
+  EXPECT_EQ(::sharesheet::kTestText, base::UTF16ToUTF8(clipboard_text));
+}
+
+TEST_F(SharesheetBubbleViewTest, ClickAndKeyPressCopyToClipboardTogether) {
+  base::HistogramTester histograms;
+
+  // Text intent should only show copy action.
+  ShowAndVerifyBubble(::sharesheet::CreateValidTextIntent(),
+                      ::sharesheet::LaunchSource::kUnknown);
+
+  // |targets_view| should only contain the copy to clipboard target.
+  views::View* targets_view = sharesheet_bubble_view()->GetViewByID(
+      SharesheetViewID::TARGETS_DEFAULT_VIEW_ID);
+  ASSERT_EQ(targets_view->children().size(), 1u);
+
+  ui::ScopedAnimationDurationScaleMode normal_animation_duration(
+      ui::ScopedAnimationDurationScaleMode::SLOW_DURATION);
+  GetEventGenerator()->PressAndReleaseKey(ui::VKEY_TAB);
+  ASSERT_TRUE(targets_view->children()[0]->HasFocus());
+  GetEventGenerator()->PressAndReleaseKey(ui::VKEY_RETURN);
+
+  // Click on copy target.
+  Click(targets_view->children()[0]);
+
+  // Wait for the widget to get destroyed.
+  views::test::WidgetDestroyedWaiter widget_observer(sharesheet_widget());
+  // Ensure the widget does close.
+  widget_observer.Wait();
 
   // Copy to clipboard was clicked on.
   histograms.ExpectBucketCount(

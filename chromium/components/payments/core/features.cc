@@ -14,22 +14,6 @@ BASE_FEATURE(kWebPaymentsExperimentalFeatures,
              "WebPaymentsExperimentalFeatures",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-#if BUILDFLAG(IS_IOS)
-BASE_FEATURE(kWebPaymentsNativeApps,
-             "WebPaymentsNativeApps",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
-// TODO(rouslan): Remove this.
-BASE_FEATURE(kWebPaymentsMethodSectionOrderV2,
-             "WebPaymentsMethodSectionOrderV2",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// TODO(rouslan): Remove this.
-BASE_FEATURE(kWebPaymentsModifiers,
-             "WebPaymentsModifiers",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // TODO(rouslan): Remove this.
 BASE_FEATURE(kWebPaymentsSingleAppUiSkip,
              "WebPaymentsSingleAppUiSkip",
@@ -38,10 +22,6 @@ BASE_FEATURE(kWebPaymentsSingleAppUiSkip,
 // TODO(rouslan): Remove this.
 BASE_FEATURE(kWebPaymentsJustInTimePaymentApp,
              "WebPaymentsJustInTimePaymentApp",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kWebPaymentsRedactShippingAddress,
-             "WebPaymentsRedactShippingAddress",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAppStoreBilling,

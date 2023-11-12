@@ -9,13 +9,10 @@
 
 #include <string>
 
+#include "base/uuid.h"
 #include "components/sync/protocol/bookmark_specifics.pb.h"
 
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-namespace base {
-class GUID;
-}  // namespace base
 
 namespace bookmarks {
 class BookmarkModel;
@@ -77,13 +74,13 @@ sync_pb::BookmarkSpecifics::Type GetProtoTypeFromBookmarkNode(
     const bookmarks::BookmarkNode* node);
 
 // Replaces |node| with a BookmarkNode of equal properties and original node
-// creation timestamp but a different GUID, set to |guid|, which must be a
-// valid version 4 GUID. Intended to be used in cases where the GUID must be
+// creation timestamp but a different UUID, set to |guid|, which must be a
+// valid version 4 UUID. Intended to be used in cases where the UUID must be
 // modified despite being immutable within the BookmarkNode itself. Returns
 // the newly created node, and the original node gets deleted.
-const bookmarks::BookmarkNode* ReplaceBookmarkNodeGUID(
+const bookmarks::BookmarkNode* ReplaceBookmarkNodeUuid(
     const bookmarks::BookmarkNode* node,
-    const base::GUID& guid,
+    const base::Uuid& guid,
     bookmarks::BookmarkModel* model);
 
 // Checks if a bookmark specifics represents a valid bookmark. Valid specifics
@@ -91,12 +88,12 @@ const bookmarks::BookmarkNode* ReplaceBookmarkNodeGUID(
 // meta_info must be unique.
 bool IsValidBookmarkSpecifics(const sync_pb::BookmarkSpecifics& specifics);
 
-// Returns the inferred GUID for given remote update's originator information.
-base::GUID InferGuidFromLegacyOriginatorId(
+// Returns the inferred UUID for given remote update's originator information.
+base::Uuid InferGuidFromLegacyOriginatorId(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id);
 
-// Checks if bookmark specifics contain a GUID that matches the value that would
+// Checks if bookmark specifics contain a UUID that matches the value that would
 // be inferred from other redundant fields. |specifics| must be valid as per
 // IsValidBookmarkSpecifics().
 bool HasExpectedBookmarkGuid(const sync_pb::BookmarkSpecifics& specifics,

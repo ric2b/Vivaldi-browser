@@ -7,16 +7,24 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/quads/debug_border_draw_quad.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/service/display/display_resource_provider.h"
 #include "components/viz/service/display/output_surface.h"
+#include "gpu/config/gpu_finch_features.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gl/gl_utils.h"
 
 namespace viz {
 namespace {
+
+constexpr int kDCLayerDebugBorderWidth = 4;
+constexpr gfx::Insets kDCLayerDebugBorderInsets = gfx::Insets(-2);
+
 // Switching between enabling DC layers and not is expensive, so only
 // switch away after a large number of frames not needing DC layers have
 // been produced.
@@ -26,8 +34,10 @@ constexpr int kNumberOfFramesBeforeDisablingDCLayers = 60;
 
 OverlayProcessorWin::OverlayProcessorWin(
     OutputSurface* output_surface,
+    const DebugRendererSettings* debug_settings,
     std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor)
     : output_surface_(output_surface),
+      debug_settings_(debug_settings),
       dc_layer_overlay_processor_(std::move(dc_layer_overlay_processor)) {
   DCHECK(output_surface_->capabilities().supports_dc_layers);
 }
@@ -84,11 +94,94 @@ void OverlayProcessorWin::ProcessForOverlays(
   }
 
   if (was_using_dc_layers != using_dc_layers_) {
-    output_surface_->SetEnableDCLayers(using_dc_layers_);
     // The entire surface has to be redrawn if switching from or to direct
     // composition layers, because the previous contents are discarded and some
     // contents would otherwise be undefined.
     *damage_rect = root_render_pass->output_rect;
+  }
+
+  if (base::FeatureList::IsEnabled(features::kDCompPresenter)) {
+    if (!root_render_pass->copy_requests.empty()) {
+      // A DComp surface is not readable by viz.
+      // |DCLayerOverlayProcessor::Process| should avoid overlay candidates if
+      // there are e.g. copy output requests present.
+      DCHECK(!using_dc_layers_);
+    }
+
+    // We have overlays, so our root surface requires a backing that
+    // synchronizes with DComp commit. A swap chain's Present does not
+    // synchronize with the DComp tree updates and would result in minor desync
+    // during e.g. scrolling videos.
+    root_render_pass->needs_synchronous_dcomp_commit = using_dc_layers_;
+
+    // We only need to have a transparent backing if there's underlays, but we
+    // unconditionally ask for transparency to avoid thrashing allocations if a
+    // video alternated between overlay and underlay.
+    root_render_pass->has_transparent_background = using_dc_layers_;
+
+    // |root_render_pass| will be promoted to overlay only if
+    // |output_surface_plane| is present.
+    DCHECK_NE(output_surface_plane, nullptr);
+    output_surface_plane->enable_blending =
+        root_render_pass->has_transparent_background;
+  } else {
+    if (was_using_dc_layers != using_dc_layers_) {
+      output_surface_->SetEnableDCLayers(using_dc_layers_);
+    }
+  }
+
+  if (debug_settings_->show_dc_layer_debug_borders) {
+    InsertDebugBorderDrawQuadsForOverlayCandidates(
+        *candidates, root_render_pass, *damage_rect);
+
+    // Mark the entire output as damaged because the border quads might not be
+    // inside the current damage rect.  It's far simpler to mark the entire
+    // output as damaged instead of accounting for individual border quads which
+    // can change positions across frames.
+    *damage_rect = root_render_pass->output_rect;
+  }
+}
+
+void OverlayProcessorWin::InsertDebugBorderDrawQuadsForOverlayCandidates(
+    const OverlayCandidateList& dc_layer_overlays,
+    AggregatedRenderPass* root_render_pass,
+    const gfx::Rect& damage_rect) {
+  auto* shared_quad_state = root_render_pass->CreateAndAppendSharedQuadState();
+  auto& quad_list = root_render_pass->quad_list;
+
+  // Add debug borders for the root damage rect after overlay promotion.
+  {
+    SkColor4f border_color = SkColors::kGreen;
+    auto it =
+        quad_list.InsertBeforeAndInvalidateAllPointers<DebugBorderDrawQuad>(
+            quad_list.begin(), 1u);
+    auto* debug_quad = static_cast<DebugBorderDrawQuad*>(*it);
+
+    gfx::Rect rect = damage_rect;
+    rect.Inset(kDCLayerDebugBorderInsets);
+    debug_quad->SetNew(shared_quad_state, rect, rect, border_color,
+                       kDCLayerDebugBorderWidth);
+  }
+
+  // Add debug borders for overlays/underlays
+  for (const auto& dc_layer : dc_layer_overlays) {
+    gfx::Rect overlay_rect = gfx::ToEnclosingRect(
+        OverlayCandidate::DisplayRectInTargetSpace(dc_layer));
+    if (dc_layer.clip_rect) {
+      overlay_rect.Intersect(*dc_layer.clip_rect);
+    }
+
+    // Overlay:red, Underlay:blue.
+    SkColor4f border_color =
+        dc_layer.plane_z_order > 0 ? SkColors::kRed : SkColors::kBlue;
+    auto it =
+        quad_list.InsertBeforeAndInvalidateAllPointers<DebugBorderDrawQuad>(
+            quad_list.begin(), 1u);
+    auto* debug_quad = static_cast<DebugBorderDrawQuad*>(*it);
+
+    overlay_rect.Inset(kDCLayerDebugBorderInsets);
+    debug_quad->SetNew(shared_quad_state, overlay_rect, overlay_rect,
+                       border_color, kDCLayerDebugBorderWidth);
   }
 }
 

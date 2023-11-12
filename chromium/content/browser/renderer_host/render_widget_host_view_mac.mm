@@ -147,14 +147,6 @@ void RenderWidgetHostViewMac::AcceleratedWidgetCALayerParamsUpdated() {
       browser_compositor_->GetLastCALayerParams();
   if (ca_layer_params)
     ns_view_->SetCALayerParams(*ca_layer_params);
-
-  // Take this opportunity to update the VSync parameters, if needed.
-  if (display_link_) {
-    base::TimeTicks timebase;
-    base::TimeDelta interval;
-    if (display_link_->GetVSyncParameters(&timebase, &interval))
-      browser_compositor_->UpdateVSyncParameters(timebase, interval);
-  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -797,17 +789,9 @@ void RenderWidgetHostViewMac::UpdateTooltip(
 }
 
 void RenderWidgetHostViewMac::UpdateScreenInfo() {
-  // Update the size, scale factor, color profile, vsync parameters, and any
-  // other properties of the NSView or pertinent NSScreens. Propagate these to
-  // the RenderWidgetHostImpl as well.
-
-  display_link_ =
-      ui::DisplayLinkMac::GetForDisplay(screen_infos_.current().display_id);
-  if (!display_link_) {
-    // Note that on some headless systems, the display link will fail to be
-    // created, so this should not be a fatal error.
-    LOG(ERROR) << "Failed to create display link.";
-  }
+  // Update the size, scale factor, color profile, and any other properties of
+  // the NSView or pertinent NSScreens. Propagate these to the
+  // RenderWidgetHostImpl as well.
 
   // During auto-resize it is the responsibility of the caller to ensure that
   // the NSView and RenderWidgetHostImpl are kept in sync.
@@ -949,7 +933,6 @@ void RenderWidgetHostViewMac::GetPageTextForSpeech(SpeechCallback callback) {
   GetWebContents()->RequestAXTreeSnapshot(
       base::BindOnce(CombineTextNodesAndMakeCallback, std::move(callback)),
       ui::AXMode::kWebContents,
-      /* exclude_offscreen= */ false,
       /* max_nodes= */ 5000,
       /* timeout= */ {});
 }
@@ -2087,6 +2070,13 @@ void RenderWidgetHostViewMac::CopyToFindPboard() {
   WebContents* web_contents = GetWebContents();
   if (web_contents)
     web_contents->CopyToFindPboard();
+}
+
+void RenderWidgetHostViewMac::CenterSelection() {
+  WebContents* web_contents = GetWebContents();
+  if (web_contents) {
+    web_contents->CenterSelection();
+  }
 }
 
 void RenderWidgetHostViewMac::Paste() {

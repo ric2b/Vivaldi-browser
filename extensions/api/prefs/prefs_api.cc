@@ -193,8 +193,8 @@ ExtensionFunction::ResponseAction PrefsGetFunction::Run() {
   using vivaldi::prefs::Get::Params;
   namespace Results = vivaldi::prefs::Get::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const std::string& path = params->path;
 
@@ -210,8 +210,8 @@ ExtensionFunction::ResponseAction PrefsGetFunction::Run() {
 ExtensionFunction::ResponseAction PrefsSetFunction::Run() {
   using vivaldi::prefs::Set::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const std::string& path = params->new_value.path;
   const auto& value = params->new_value.value;
@@ -322,7 +322,7 @@ ExtensionFunction::ResponseAction PrefsGetForCacheFunction::Run() {
     array.Append(std::move(default_value));
   }
 
-  return RespondNow(OneArgument(base::Value(std::move(array))));
+  return RespondNow(WithArguments(base::Value(std::move(array))));
 }
 
 namespace {
@@ -348,8 +348,8 @@ PrefsSetLanguagePairToAlwaysTranslateFunction::Run() {
   using vivaldi::prefs::SetLanguagePairToAlwaysTranslate::Params;
   namespace Results = vivaldi::prefs::SetLanguagePairToAlwaysTranslate::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
       GetTranslateUIDelegate(params->tab_id, browser_context(),
@@ -380,8 +380,8 @@ PrefsSetLanguageToNeverTranslateFunction::Run() {
   using vivaldi::prefs::SetLanguageToNeverTranslate::Params;
   namespace Results = vivaldi::prefs::SetLanguageToNeverTranslate::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
       GetTranslateUIDelegate(params->tab_id, browser_context(),
@@ -408,8 +408,8 @@ ExtensionFunction::ResponseAction PrefsGetTranslateSettingsFunction::Run() {
   using vivaldi::prefs::GetTranslateSettings::Params;
   namespace Results = vivaldi::prefs::GetTranslateSettings::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
       GetTranslateUIDelegate(params->tab_id, browser_context(),
@@ -439,8 +439,8 @@ ExtensionFunction::ResponseAction PrefsSetSiteToNeverTranslateFunction::Run() {
   using vivaldi::prefs::SetSiteToNeverTranslate::Params;
   namespace Results = vivaldi::prefs::SetSiteToNeverTranslate::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
       GetTranslateUIDelegate(params->tab_id, browser_context(),
@@ -465,8 +465,8 @@ ExtensionFunction::ResponseAction PrefsSetTranslationDeclinedFunction::Run() {
   using vivaldi::prefs::SetTranslationDeclined::Params;
   namespace Results = vivaldi::prefs::SetTranslationDeclined::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   std::unique_ptr<translate::TranslateUIDelegate> ui_delegate(
       GetTranslateUIDelegate(params->tab_id, browser_context(),
@@ -516,8 +516,8 @@ void PrefsResetAllToDefaultFunction::HandlePrefValue(
 ExtensionFunction::ResponseAction PrefsResetAllToDefaultFunction::Run() {
   using vivaldi::prefs::ResetAllToDefault::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
   Profile* profile = Profile::FromBrowserContext(browser_context());
   PrefService* prefs = profile->GetPrefs();
   DCHECK(prefs);

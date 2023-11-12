@@ -61,11 +61,11 @@ class VivaldiContextMenuViews : public VivaldiContextMenu {
                  ui::MenuSourceType type);
 
   std::unique_ptr<ToolkitDelegateViews> toolkit_delegate_;
-  content::WebContents* web_contents_ = nullptr;
-  ui::SimpleMenuModel* menu_model_ = nullptr;
-  views::MenuItemView* menu_view_ = nullptr;  // owned by toolkit_delegate_
+  const raw_ptr<content::WebContents> web_contents_;
+  raw_ptr<ui::SimpleMenuModel> menu_model_ = nullptr;
+  raw_ptr<views::MenuItemView> menu_view_ = nullptr;  // owned by toolkit_delegate_
   gfx::Rect rect_;
-  VivaldiRenderViewContextMenu* context_menu_ = nullptr;
+  const raw_ptr<VivaldiRenderViewContextMenu> context_menu_;
 };
 
 }  // namespace vivaldi

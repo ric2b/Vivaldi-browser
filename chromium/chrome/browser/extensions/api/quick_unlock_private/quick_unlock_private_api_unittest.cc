@@ -13,6 +13,7 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/run_loop.h"
@@ -315,7 +316,8 @@ class QuickUnlockPrivateUnitTest
     absl::optional<base::Value> result =
         RunFunction(std::move(func), std::move(params));
     EXPECT_TRUE(result);
-    auto token_info = quick_unlock_private::TokenInfo::FromValue(*result);
+    auto token_info =
+        quick_unlock_private::TokenInfo::FromValueDeprecated(*result);
     EXPECT_TRUE(token_info);
     return token_info;
   }
@@ -426,9 +428,10 @@ class QuickUnlockPrivateUnitTest
     absl::optional<base::Value> result = RunFunction(
         base::MakeRefCounted<QuickUnlockPrivateCheckCredentialFunction>(),
         std::move(params));
+    EXPECT_TRUE(result->is_dict());
 
     CredentialCheck function_result;
-    EXPECT_TRUE(CredentialCheck::Populate(*result, &function_result));
+    EXPECT_TRUE(CredentialCheck::Populate(result->GetDict(), function_result));
     return function_result;
   }
 
@@ -441,9 +444,11 @@ class QuickUnlockPrivateUnitTest
         RunFunction(base::MakeRefCounted<
                         QuickUnlockPrivateGetCredentialRequirementsFunction>(),
                     std::move(params));
+    EXPECT_TRUE(result->is_dict());
 
     CredentialRequirements function_result;
-    EXPECT_TRUE(CredentialRequirements::Populate(*result, &function_result));
+    EXPECT_TRUE(
+        CredentialRequirements::Populate(result->GetDict(), function_result));
 
     EXPECT_EQ(function_result.min_length, expected_pin_min_length);
     EXPECT_EQ(function_result.max_length, expected_pin_max_length);
@@ -638,7 +643,8 @@ class QuickUnlockPrivateUnitTest
   }
 
   base::test::ScopedFeatureList feature_list_;
-  sync_preferences::TestingPrefServiceSyncable* test_pref_service_;
+  raw_ptr<sync_preferences::TestingPrefServiceSyncable, ExperimentalAsh>
+      test_pref_service_;
 
  private:
   // Runs the given |func| with the given |params|.
@@ -649,7 +655,7 @@ class QuickUnlockPrivateUnitTest
         api_test_utils::RunFunctionWithDelegateAndReturnSingleResult(
             std::move(func), std::move(params),
             std::make_unique<ExtensionFunctionDispatcher>(profile()),
-            api_test_utils::NONE);
+            api_test_utils::FunctionMode::kNone);
     base::RunLoop().RunUntilIdle();
     return result;
   }
@@ -660,7 +666,8 @@ class QuickUnlockPrivateUnitTest
     base::RunLoop().RunUntilIdle();
     auto dispatcher = std::make_unique<ExtensionFunctionDispatcher>(profile());
     api_test_utils::RunFunction(func.get(), std::move(params),
-                                std::move(dispatcher), api_test_utils::NONE);
+                                std::move(dispatcher),
+                                api_test_utils::FunctionMode::kNone);
     EXPECT_TRUE(func->GetResultListForTest()->empty());
     base::RunLoop().RunUntilIdle();
     return func->GetError();
@@ -674,7 +681,8 @@ class QuickUnlockPrivateUnitTest
     expect_modes_changed_ = false;
   }
 
-  ash::FakeChromeUserManager* fake_user_manager_ = nullptr;
+  raw_ptr<ash::FakeChromeUserManager, ExperimentalAsh> fake_user_manager_ =
+      nullptr;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
   QuickUnlockPrivateSetModesFunction::ModesChangedEventHandler
       modes_changed_handler_;

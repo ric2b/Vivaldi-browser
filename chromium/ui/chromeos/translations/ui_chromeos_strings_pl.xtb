@@ -84,6 +84,7 @@
 <translation id="1722487484194605434">Pakuję elementy (<ph name="NUMBER_OF_ITEMS" />)...</translation>
 <translation id="1722687688096767818">Dodawanie profilu…</translation>
 <translation id="1726100011689679555">Serwery nazw</translation>
+<translation id="1727562178154619254">Gotowe do synchronizacji</translation>
 <translation id="1729953886957086472">Niemiecki (Niemcy)</translation>
 <translation id="1730235522912993863">Chiński cangjie</translation>
 <translation id="1731889557567069540">Liczba skopiowanych elementów: <ph name="NUMBER_OF_ITEMS" />.</translation>
@@ -106,7 +107,6 @@
 <translation id="1834290891154666894">Nieprawidłowa pozycja dopasowania alternatywnej nazwy podmiotu</translation>
 <translation id="1838709767668011582">Witryna Google</translation>
 <translation id="1853795129690976061">Ten folder jest udostępniany Linuksowi</translation>
-<translation id="1859422890169495746">Ten Chromebook</translation>
 <translation id="1864756863218646478">Nie można znaleźć pliku.</translation>
 <translation id="1884013283844450420">Sieć <ph name="NETWORK_INDEX" /> z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, połącz</translation>
 <translation id="1920670151694390848">Malajalam – transliteracja</translation>
@@ -118,7 +118,6 @@
 <translation id="1942765061641586207">Rozdzielczość grafiki</translation>
 <translation id="1972984168337863910">Rozwiń panele informacji zwrotnej o plikach</translation>
 <translation id="1995337122023280937">Otwórz lokalizację pliku</translation>
-<translation id="1999709132469742660">Dostęp do plików dla wszystkich adresów URL</translation>
 <translation id="2001796770603320721">Zarządzaj na Dysku</translation>
 <translation id="2009067268969781306">Sformatowanie dysku spowoduje usunięcie wszystkich zapisanych na nim danych. Nie można tego cofnąć.</translation>
 <translation id="2025955442973426285">Tigrinia</translation>
@@ -130,6 +129,7 @@
 <translation id="2084108471225856927">Ustawienia urządzenia</translation>
 <translation id="2084809735218147718">Osoba śpiewająca, aby wyrazić podziękowanie</translation>
 <translation id="2088690981887365033">Sieć VPN</translation>
+<translation id="2111134541987263231">Włącz opcję <ph name="BEGIN_BOLD" />Zezwalaj w trybie incognito<ph name="END_BOLD" />.</translation>
 <translation id="2114191879048183086">Elementy (<ph name="NUMBER_OF_ITEMS" />) zostaną usunięte i nie będzie można ich przywrócić.</translation>
 <translation id="2122305276694332719">Automatyczne łączenie się z ukrytą siecią pozwala innym widzieć Twoje urządzenie wraz z niektórymi ustawieniami sieci. Nie zalecamy korzystania z tej funkcji.</translation>
 <translation id="2125607626296734455">Khmerski</translation>
@@ -150,6 +150,7 @@
 <translation id="2236732657580416950">Pamięć podręczna Dysku Google została wyczyszczona.</translation>
 <translation id="2239068707900391003">Osoba z kawą</translation>
 <translation id="2251368349685848079">Przywróć z kosza</translation>
+<translation id="2278133026967558505">Dostęp do plików dla wszystkich witryn i adresów URL</translation>
 <translation id="2282155092769082568">URL automatycznej konfiguracji:</translation>
 <translation id="2284767815536050991">pamięć wymienna</translation>
 <translation id="2288278176040912387">Gramofon</translation>
@@ -158,6 +159,7 @@
 <translation id="2304820083631266885">Planeta</translation>
 <translation id="2305020378527873881">Odłączono <ph name="VOLUME_NAME" />.</translation>
 <translation id="2307462900900812319">Skonfiguruj sieć</translation>
+<translation id="2312704192806647271">{COUNT,plural, =1{Nie udało się znaleźć rozszerzenia o identyfikatorze <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Skontaktuj się z administratorem.}few{Nie udało się znaleźć rozszerzeń o identyfikatorach <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Skontaktuj się z administratorem.}many{Nie udało się znaleźć rozszerzeń o identyfikatorach <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Skontaktuj się z administratorem.}other{Nie udało się znaleźć rozszerzeń o identyfikatorach <ph name="BEGIN_LIST" /><ph name="END_LIST" />. Skontaktuj się z administratorem.}}</translation>
 <translation id="2325650632570794183">Ten typ plików jest nieobsługiwany. W Chrome Web Store znajdziesz aplikację otwierającą pliki tego typu.</translation>
 <translation id="2326539130272988168">Bułgarski</translation>
 <translation id="2337715497728194187">Udostępnij maszynie wirtualnej Bruschetta</translation>
@@ -227,6 +229,7 @@
 <translation id="290843123675549676">Marathi</translation>
 <translation id="2923240520113693977">Estoński</translation>
 <translation id="2938685643439809023">Mongolski</translation>
+<translation id="293972288692056847">{COUNT,plural, =1{Nie można znaleźć rozszerzenia}few{Nie można znaleźć rozszerzeń}many{Nie można znaleźć rozszerzeń}other{Nie można znaleźć rozszerzeń}}</translation>
 <translation id="2943503720238418293">Użyj krótszej nazwy</translation>
 <translation id="2949781154072577687">Formatuję: <ph name="DRIVE_NAME" />...</translation>
 <translation id="2951236788251446349">Meduza</translation>
@@ -272,6 +275,7 @@
 <translation id="3290356915286466215">Niezabezpieczona</translation>
 <translation id="3291218047831493686">Połącz się z tą siecią, aby zmienić ustawienie blokady SIM</translation>
 <translation id="3293023191599135697">Sieci WEP nie są obsługiwane</translation>
+<translation id="3295006446256079333">Ten wolumin</translation>
 <translation id="3295357220137379386">Urządzenie jest zajęte</translation>
 <translation id="3296763833017966289">Gruziński</translation>
 <translation id="3307875152560779385">Ukraiński</translation>
@@ -281,6 +285,7 @@
 <translation id="3356580349448036450">Zakończone</translation>
 <translation id="3358452157379365236">Gitara</translation>
 <translation id="3368922792935385530">Połączone</translation>
+<translation id="3372635229069101468">Kliknij <ph name="BEGIN_BOLD" />Szczegóły<ph name="END_BOLD" /></translation>
 <translation id="3382143449143186018">Nepalski z klawiaturą InScript</translation>
 <translation id="338691029516748599">Sieć <ph name="NETWORK_INDEX" /> z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, siła sygnału: <ph name="SIGNAL_STRENGTH" />%, zarządzana przez administratora, połącz</translation>
 <translation id="3408072735282270043">Aktywuj, <ph name="NETWORK_NAME" /></translation>
@@ -365,6 +370,7 @@
 <translation id="4124935795427217608">Jednorożec</translation>
 <translation id="4131235941541910880">Przenieś niepotrzebne elementy do kosza</translation>
 <translation id="4134804435730168042">Sieć <ph name="NETWORK_INDEX" /> z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, aktywuj po skonfigurowaniu urządzenia</translation>
+<translation id="41501027364808384">{COUNT,plural, =1{Włącz to rozszerzenie w trybie incognito:}few{Włącz te rozszerzenia w trybie incognito:}many{Włącz te rozszerzenia w trybie incognito:}other{Włącz te rozszerzenia w trybie incognito:}}</translation>
 <translation id="4153015322587141338">Aby mieć szybki dostęp do swoich plików na półce, kliknij plik prawym przyciskiem i wybierz „<ph name="PIN_COMMAND" />”.</translation>
 <translation id="4157569377477607576">Zgodnie z zasadą administratora nie zaleca się:</translation>
 <translation id="4159731583141908892">Plik <ph name="FILE_NAME" /> został przeniesiony.</translation>
@@ -461,12 +467,15 @@
 <translation id="4801956050125744859">Zachowaj obie pozycje</translation>
 <translation id="4804827417948292437">Awokado</translation>
 <translation id="4805966553127040832">Przywracam elementy (<ph name="COUNT" />)</translation>
+<translation id="4816695657735045067">{COUNT,plural, =1{Aby korzystać z trybu incognito, musisz używać rozszerzenia wymaganego przez organizację}few{Aby korzystać z trybu incognito, musisz używać rozszerzeń wymaganych przez organizację}many{Aby korzystać z trybu incognito, musisz używać rozszerzeń wymaganych przez organizację}other{Aby korzystać z trybu incognito, musisz używać rozszerzeń wymaganych przez organizację}}</translation>
 <translation id="4823651846660089135">Urządzenie tylko do odczytu</translation>
 <translation id="4826849268470072925">Tamilski ITRANS</translation>
+<translation id="482932175346970750">Wpisz w przeglądarce <ph name="BEGIN_BOLD" />chrome://extensions<ph name="END_BOLD" /></translation>
 <translation id="4839847978919684242">Wybrano <ph name="SELCTED_FILES_COUNT" /> elementy(ów)</translation>
 <translation id="4843566743023903107">Komputery Chromebase</translation>
 <translation id="4850886885716139402">Widok</translation>
 <translation id="485316830061041779">Niemiecki</translation>
+<translation id="4862885579661885411">Ustawienia plików</translation>
 <translation id="4867079195717347957">Kliknij, by posortować kolumnę w kolejności malejącej.</translation>
 <translation id="4867297348137739678">Ostatni tydzień</translation>
 <translation id="4873265419374180291"><ph name="NUMBER_OF_BYTES" /> B</translation>
@@ -532,6 +541,7 @@
     je z innymi użytkownikami – wszystko w jednym miejscu.<ph name="MARKUP_9" /></translation>
 <translation id="5275973617553375938">Pliki odzyskane z Dysku Google</translation>
 <translation id="5278111733643988471">Aby przywrócić ten element, przeciągnij go do nowego folderu poza koszem. Pierwotny folder „<ph name="PARENT_FOLDER_NAME" />” tego elementu został usunięty.</translation>
+<translation id="5283101102242354279">Włączanie rozszerzenia w trybie incognito:</translation>
 <translation id="5286194356314741248">Skanowanie</translation>
 <translation id="5288441970121584418">Burger</translation>
 <translation id="5288481194217812690"><ph name="FILENAME" /></translation>
@@ -542,7 +552,6 @@
 <translation id="5323213332664049067">Ameryka Łacińska</translation>
 <translation id="5330145655348521461">Te pliki zostały otwarte na innym pulpicie. Przejdź do <ph name="USER_NAME" /> (<ph name="MAIL_ADDRESS" />), aby je zobaczyć.</translation>
 <translation id="5330512191124428349">Więcej informacji</translation>
-<translation id="5337538975554986899">Dostęp do plików dla wszystkich adresów URL oprócz <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="5344246330454251646">Zarządzaj udostępnianiem danych maszynie wirtualnej Bruschetta</translation>
 <translation id="535792325654997756">Osoba z kotami</translation>
 <translation id="5358764674931277">Liczba klatek</translation>
@@ -615,6 +624,7 @@
 <translation id="5911887972742538906">Podczas instalowania aplikacji na Linuksa wystąpił błąd.</translation>
 <translation id="5912396950572065471">Format</translation>
 <translation id="5913638992615760742">Kopiowanie nie powiodło się z powodu nieoczekiwanego błędu: <ph name="ERROR_MESSAGE" /></translation>
+<translation id="5918480239180455431">Dostępne są nowe funkcje wyszukiwania</translation>
 <translation id="5926082595146149752">Niderlandzki (Holandia) z klawiaturą amerykańską międzynarodową (PC)</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5948255720516436063">Sieć <ph name="NETWORK_INDEX" /> z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, aktywuj po skonfigurowaniu urządzenia</translation>
@@ -627,6 +637,7 @@
 <translation id="603895874132768835">Nie możesz korzystać z tej sieci, dopóki nie ustawisz nowego kodu PIN</translation>
 <translation id="6040143037577758943">Zamknij</translation>
 <translation id="6055907707645252013">Sieć <ph name="NETWORK_TYPE" />, nie połączono</translation>
+<translation id="6073060579181816027">Kilka lokalizacji plików</translation>
 <translation id="6074825444536523002">Formularz Google</translation>
 <translation id="6079871810119356840">Węgierski z klawiaturą QWERTY</translation>
 <translation id="6096979789310008754">Wyszukiwany tekst został wyczyszczony. Wyświetlam wszystkie pliki i foldery.</translation>
@@ -704,6 +715,7 @@
 <translation id="6732801395666424405">Certyfikaty nie zostały wczytane</translation>
 <translation id="6736329909263487977"><ph name="ISSUED_BY" /> [<ph name="ISSUED_TO" />]</translation>
 <translation id="6740270213273127264">Udostępnij folder maszynie wirtualnej Bruschetta</translation>
+<translation id="6750737795876287924">Bieżący katalog</translation>
 <translation id="6751256176799620176">Wybrano jeden folder</translation>
 <translation id="6755827872271341378">Urządzenie z ChromeOS Flex</translation>
 <translation id="6790428901817661496">Odtwórz</translation>
@@ -741,7 +753,6 @@
 <translation id="6973630695168034713">Foldery</translation>
 <translation id="6976795442547527108">Lew</translation>
 <translation id="6979158407327259162">Dysk Google</translation>
-<translation id="6979737339423435258">Od początku</translation>
 <translation id="6989942356279143254">Szwedzki</translation>
 <translation id="6990081529015358884">Nie masz już miejsca</translation>
 <translation id="6993826899923627728">Te elementy są w koszu</translation>
@@ -767,6 +778,7 @@
 <translation id="7162080671816799010">Brak wartości w polu „Dopasowanie alternatywnej nazwy podmiotu” lub „Dopasowanie sufiksu domeny” – nie można zweryfikować tożsamość serwera uwierzytelniania</translation>
 <translation id="7165320105431587207">Nie można skonfigurować sieci</translation>
 <translation id="7170041865419449892">Poza zasięgiem</translation>
+<translation id="7179579940054351344">Dostęp do plików dla wszystkich witryn i adresów URL oprócz <ph name="NON_RESTRICTED_DESTINATIONS" /></translation>
 <translation id="7180611975245234373">Odśwież</translation>
 <translation id="7189874332498648577"><ph name="NUMBER_OF_GB" /> GB</translation>
 <translation id="7191454237977785534">Zapisz plik jako</translation>
@@ -776,6 +788,7 @@
 <translation id="7238643356913091553"><ph name="NETWORK_NAME" />, szczegóły</translation>
 <translation id="7246947237293279874">Serwer proxy FTP</translation>
 <translation id="7248671827512403053">Aplikacja</translation>
+<translation id="7252604552361840748">Znajdź rozszerzenie powyżej</translation>
 <translation id="7256405249507348194">Nierozpoznany błąd: <ph name="DESC" /></translation>
 <translation id="7268659760406822741">Dostępne usługi</translation>
 <translation id="7292816689782057017">Zasady administratora nie pozwalają na zapisywanie w niektórych lokalizacjach.</translation>
@@ -797,7 +810,6 @@
 <translation id="7458955835361612701">Brak nowych obrazów</translation>
 <translation id="7460898608667578234">Ukraiński</translation>
 <translation id="7469894403370665791">Automatycznie łącz się z tą siecią</translation>
-<translation id="7481358317100446445">Gotowa</translation>
 <translation id="7486315294984620427">Aby można było przeciągnąć plik do Parallels Desktop, należy go skopiować do folderu Pliki systemu Windows.</translation>
 <translation id="749452993132003881">hiragana</translation>
 <translation id="7495372004724182530">Malajalam (znaki fonetyczne)</translation>
@@ -941,6 +953,7 @@
 <translation id="8492972329130824181">Sieć domowa jest niedostępna. Aby nawiązać połączenie, musisz włączyć komórkową transmisję danych w roamingu.</translation>
 <translation id="8499098729323186194">Wyodrębniam elementy (<ph name="NUMBER_OF_ITEMS" />)…</translation>
 <translation id="8502913769543567768">Sieć <ph name="NETWORK_INDEX" /> z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, aktywuj po skonfigurowaniu urządzenia, zarządzana przez administratora</translation>
+<translation id="8512483403832814140">Kiedykolwiek</translation>
 <translation id="8521441079177373948">brytyjska klawiatura</translation>
 <translation id="853494022971700746">Francuski (Francja)</translation>
 <translation id="8540608333167683902">Sieć <ph name="NETWORK_INDEX" /> z <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, siła sygnału: <ph name="SIGNAL_STRENGTH" />%, szczegóły</translation>

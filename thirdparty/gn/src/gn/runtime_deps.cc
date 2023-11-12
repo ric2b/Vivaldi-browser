@@ -133,7 +133,7 @@ bool CollectRuntimeDepsFromFlag(const BuildSettings* build_settings,
                                 RuntimeDepsVector* files_to_write,
                                 Err* err) {
   std::string deps_target_list_file =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueString(
           switches::kRuntimeDepsListFile);
 
   if (deps_target_list_file.empty())

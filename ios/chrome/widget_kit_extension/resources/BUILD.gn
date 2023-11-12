@@ -25,13 +25,6 @@ imageset("widget_qr_icon") {
   ]
 }
 
-imageset("widget_voice_search_icon") {
-  sources = [
-    "widget_voice_search_icon.imageset/Contents.json",
-    "widget_voice_search_icon.imageset/widget_voice_search_icon.pdf",
-  ]
-}
-
 colorset("widget_search_bar_color") {
   sources = [ "widget_search_bar_color.colorset/Contents.json" ]
 }

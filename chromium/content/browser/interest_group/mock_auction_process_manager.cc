@@ -122,8 +122,15 @@ void MockBidderWorklet::ReportWin(
     const std::string& seller_signals_json,
     const GURL& browser_signal_render_url,
     double browser_signal_bid,
+    const absl::optional<blink::AdCurrency>& browser_signal_bid_currency,
     double browser_signal_highest_scoring_other_bid,
+    const absl::optional<blink::AdCurrency>&
+        browser_signal_highest_scoring_other_bid_currency,
     bool browser_signal_made_highest_scoring_other_bid,
+    absl::optional<double> browser_signal_ad_cost,
+    absl::optional<uint16_t> browser_signal_modeling_signals,
+    uint8_t browser_signal_join_count,
+    uint8_t browser_signal_recency,
     const url::Origin& browser_signal_seller_origin,
     const absl::optional<url::Origin>& browser_signal_top_level_seller_origin,
     uint32_t bidding_signals_data_version,
@@ -149,6 +156,7 @@ void MockBidderWorklet::FinishGenerateBid(
     const absl::optional<std::string>& auction_signals_json,
     const absl::optional<std::string>& per_buyer_signals_json,
     const absl::optional<base::TimeDelta> per_buyer_timeout,
+    const absl::optional<blink::AdCurrency>& per_buyer_currency,
     const absl::optional<GURL>& direct_from_seller_per_buyer_signals,
     const absl::optional<GURL>& direct_from_seller_auction_signals) {
   // per_buyer_timeout passed to GenerateBid() should not be empty, because
@@ -186,9 +194,10 @@ void MockBidderWorklet::SetBiddingLatency(base::TimeDelta delta) {
 
 void MockBidderWorklet::InvokeGenerateBidCallback(
     absl::optional<double> bid,
-    const GURL& render_url,
+    const absl::optional<blink::AdCurrency>& bid_currency,
+    const blink::AdDescriptor& ad_descriptor,
     auction_worklet::mojom::BidderWorkletKAnonEnforcedBidPtr mojo_kanon_bid,
-    absl::optional<std::vector<GURL>> ad_component_urls,
+    absl::optional<std::vector<blink::AdDescriptor>> ad_component_descriptors,
     base::TimeDelta duration,
     const absl::optional<uint32_t>& bidding_signals_data_version,
     const absl::optional<GURL>& debug_loss_report_url,
@@ -217,6 +226,7 @@ void MockBidderWorklet::InvokeGenerateBidCallback(
         base::flat_map<std::string,
                        auction_worklet::mojom::PrioritySignalsDoublePtr>(),
         /*pa_requests=*/std::move(pa_requests),
+        /*non_kanon_pa_requests=*/{},
         /*bidding_latency=*/bidding_latency_,
         /*errors=*/std::vector<std::string>());
     return;
@@ -224,7 +234,9 @@ void MockBidderWorklet::InvokeGenerateBidCallback(
 
   generate_bid_client_->OnGenerateBidComplete(
       auction_worklet::mojom::BidderWorkletBid::New(
-          "ad", *bid, render_url, ad_component_urls, duration),
+          "ad", *bid, bid_currency, /*ad_cost=*/absl::nullopt,
+          std::move(ad_descriptor), ad_component_descriptors,
+          /*modeling_signals=*/absl::nullopt, duration),
       /*kanon_bid=*/std::move(mojo_kanon_bid),
       bidding_signals_data_version.value_or(0),
       bidding_signals_data_version.has_value(), debug_loss_report_url,
@@ -235,6 +247,7 @@ void MockBidderWorklet::InvokeGenerateBidCallback(
       base::flat_map<std::string,
                      auction_worklet::mojom::PrioritySignalsDoublePtr>(),
       /*pa_requests=*/std::move(pa_requests),
+      /*non_kanon_pa_requests=*/{},
       /*bidding_latency=*/bidding_latency_,
       /*errors=*/std::vector<std::string>());
 }
@@ -302,12 +315,14 @@ MockSellerWorklet::~MockSellerWorklet() {
 void MockSellerWorklet::ScoreAd(
     const std::string& ad_metadata_json,
     double bid,
+    const absl::optional<blink::AdCurrency>& bid_currency,
     const blink::AuctionConfig::NonSharedParams&
         auction_ad_config_non_shared_params,
     const absl::optional<GURL>& direct_from_seller_seller_signals,
     const absl::optional<GURL>& direct_from_seller_auction_signals,
     auction_worklet::mojom::ComponentAuctionOtherSellerPtr
         browser_signals_other_seller,
+    const absl::optional<blink::AdCurrency>& component_expect_bid_currency,
     const url::Origin& browser_signal_interest_group_owner,
     const GURL& browser_signal_render_url,
     const std::vector<GURL>& browser_signal_ad_components,
@@ -354,8 +369,11 @@ void MockSellerWorklet::ReportResult(
     const url::Origin& browser_signal_interest_group_owner,
     const GURL& browser_signal_render_url,
     double browser_signal_bid,
+    const absl::optional<blink::AdCurrency>& browser_signal_bid_currency,
     double browser_signal_desirability,
     double browser_signal_highest_scoring_other_bid,
+    const absl::optional<blink::AdCurrency>&
+        browser_signal_highest_scoring_other_bid_currency,
     auction_worklet::mojom::ComponentAuctionReportResultParamsPtr
         browser_signals_component_auction_report_result_params,
     uint32_t browser_signal_data_version,
@@ -430,10 +448,6 @@ RenderProcessHost* MockAuctionProcessManager::LaunchProcess(
     const std::string& display_name) {
   mojo::ReceiverId receiver_id =
       receiver_set_.Add(this, std::move(auction_worklet_service_receiver));
-
-  // Have to flush the receiver set, so that any closed receivers are removed,
-  // before searching for duplicate process names.
-  receiver_set_.FlushForTesting();
 
   // Each receiver should get a unique display name. This check serves to help
   // ensure that processes are correctly reused.

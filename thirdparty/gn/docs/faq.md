@@ -171,6 +171,22 @@ date of the output. This approach also may appear to work but is subtly wrong:
 the additions of new files to the source directory will not trigger the build
 step and that addition will not be reflected in an incremental build.
 
+## How can I reference all files in a directory (glob)?
+
+Sometimes people want to automatically refer to all files in a directory,
+typically something like `"*.cc"` for the sources. This is called a "glob."
+
+Globs are not supported in GN. In order for Ninja to know when to re-run
+GN, it would need to check the directory modification times of any
+directories being globbed. Directory modification times that reflect
+additions and removals of files are not as reliably implemented across
+platforms and filesystems as file modification times (for example, it is
+not supported on Windows FAT32 drives).
+
+Even if directory modification times work properly on your build systems,
+GN's philosophy prefers a very explicit build specification style that
+is contrary to globs.
+
 ## Why does "gn check" complain about conditionally included headers?
 
 The "gn check" feature (see `gn help check`) validates that the source code's

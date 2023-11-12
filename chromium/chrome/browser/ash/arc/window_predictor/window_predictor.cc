@@ -117,14 +117,12 @@ bool WindowPredictor::LaunchArcAppWithGhostWindow(
   arc::mojom::WindowInfoPtr predict_window_info =
       PredictAppWindowInfo(app_info, window_info.Clone());
 
-  // TODO(sstan): PredictAppWindowInfo should always return fulfilled info.
-  if (!predict_window_info || !predict_window_info->bounds.has_value())
-    return false;
+  DCHECK(predict_window_info);
 
   arc_task_handler->GetWindowPredictorArcAppRestoreHandler(launch_counter)
       ->LaunchGhostWindowWithApp(
           profile, arc_app_id, intent ? intent->Clone() : nullptr, event_flags,
-          GhostWindowType::kAppLaunch, std::move(predict_window_info));
+          window_type, std::move(predict_window_info));
 
   base::UmaHistogramEnumeration(kWindowPredictorLaunchHistogram,
                                 WindowPredictorLaunchType::kSuccess);
@@ -145,11 +143,19 @@ arc::mojom::WindowInfoPtr WindowPredictor::PredictAppWindowInfo(
         window_info->display_id, &disp);
   }
 
+  if (ash::TabletMode::Get()->IsInTabletMode()) {
+    // TODO: Figure out why setting kMaximized doesn't work.
+    window_info->state =
+        static_cast<int32_t>(chromeos::WindowStateType::kDefault);
+    return window_info;
+  }
+
   const auto& layout = app_info.initial_window_layout;
   switch (layout.type) {
     case arc::mojom::WindowSizeType::kMaximize:
       window_info->state =
           static_cast<int32_t>(chromeos::WindowStateType::kMaximized);
+      window_info->bounds = disp.work_area();
       break;
     case arc::mojom::WindowSizeType::kTabletSize:
       window_info->state =
@@ -157,10 +163,14 @@ arc::mojom::WindowInfoPtr WindowPredictor::PredictAppWindowInfo(
       window_info->bounds = GetMiddleBounds(disp, GetTabletSize());
       break;
     case arc::mojom::WindowSizeType::kPhoneSize:
+      window_info->state =
+          static_cast<int32_t>(chromeos::WindowStateType::kNormal);
+      window_info->bounds = GetMiddleBounds(disp, GetPhoneSize());
+      break;
     case arc::mojom::WindowSizeType::kUnknown:
     default:
       window_info->state =
-          static_cast<int32_t>(chromeos::WindowStateType::kNormal);
+          static_cast<int32_t>(chromeos::WindowStateType::kDefault);
       window_info->bounds = GetMiddleBounds(disp, GetPhoneSize());
   }
 

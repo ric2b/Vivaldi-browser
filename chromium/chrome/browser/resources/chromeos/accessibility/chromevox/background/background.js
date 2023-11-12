@@ -30,13 +30,16 @@ import {ChromeVoxState} from './chromevox_state.js';
 import {ChromeVoxBackground} from './classic_background.js';
 import {ClipboardHandler} from './clipboard_handler.js';
 import {CommandHandler} from './command_handler.js';
-import {DesktopAutomationHandler} from './desktop_automation_handler.js';
-import {DesktopAutomationInterface} from './desktop_automation_interface.js';
 import {DownloadHandler} from './download_handler.js';
 import {Earcons} from './earcons.js';
+import {DesktopAutomationHandler} from './event/desktop_automation_handler.js';
+import {DesktopAutomationInterface} from './event/desktop_automation_interface.js';
+import {FocusAutomationHandler} from './event/focus_automation_handler.js';
+import {MediaAutomationHandler} from './event/media_automation_handler.js';
+import {PageLoadSoundHandler} from './event/page_load_sound_handler.js';
+import {RangeAutomationHandler} from './event/range_automation_handler.js';
 import {EventSource} from './event_source.js';
 import {FindHandler} from './find_handler.js';
-import {FocusAutomationHandler} from './focus_automation_handler.js';
 import {FocusBounds} from './focus_bounds.js';
 import {GestureCommandHandler} from './gesture_command_handler.js';
 import {BackgroundKeyboardHandler} from './keyboard_handler.js';
@@ -45,13 +48,10 @@ import {EventStreamLogger} from './logging/event_stream_logger.js';
 import {LogStore} from './logging/log_store.js';
 import {LogUrlWatcher} from './logging/log_url_watcher.js';
 import {MathHandler} from './math_handler.js';
-import {MediaAutomationHandler} from './media_automation_handler.js';
 import {Output} from './output/output.js';
 import {OutputCustomEvent} from './output/output_types.js';
-import {PageLoadSoundHandler} from './page_load_sound_handler.js';
 import {PanelBackground} from './panel/panel_background.js';
 import {ChromeVoxPrefs} from './prefs.js';
-import {RangeAutomationHandler} from './range_automation_handler.js';
 import {SmartStickyMode} from './smart_sticky_mode.js';
 import {TtsBackground} from './tts_background.js';
 
@@ -153,14 +153,6 @@ export class Background extends ChromeVoxState {
   }
 
   /** @override */
-  getCurrentRange() {
-    if (ChromeVoxRange.getCurrentRangeWithoutRecovery()?.isValid()) {
-      return ChromeVoxRange.getCurrentRangeWithoutRecovery();
-    }
-    return null;
-  }
-
-  /** @override */
   get isReadingContinuously() {
     return this.isReadingContinuously_;
   }
@@ -173,20 +165,6 @@ export class Background extends ChromeVoxState {
   /** @override */
   get talkBackEnabled() {
     return this.talkBackEnabled_;
-  }
-
-  /** @override */
-  getCurrentRangeWithoutRecovery() {
-    return ChromeVoxRange.getCurrentRangeWithoutRecovery();
-  }
-
-  /**
-   * @param {CursorRange} newRange The new range.
-   * @override
-   */
-  setCurrentRange(newRange) {
-    ChromeVoxRange.previous = ChromeVoxRange.getCurrentRangeWithoutRecovery();
-    ChromeVoxRange.instance.current_ = newRange;
   }
 
   /** @override */
@@ -313,16 +291,6 @@ export class Background extends ChromeVoxState {
 
     if (!ChromeVoxRange.getCurrentRangeWithoutRecovery()?.isValid()) {
       ChromeVoxRange.set(ChromeVoxRange.previous);
-    }
-  }
-
-  /** @private */
-  async setCurrentRangeToFocus_() {
-    const focus = await AsyncUtil.getFocus();
-    if (focus) {
-      ChromeVoxRange.set(CursorRange.fromNode(focus));
-    } else {
-      ChromeVoxRange.set(null);
     }
   }
 

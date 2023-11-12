@@ -10,7 +10,6 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_helpers.h"
-#include "base/guid.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/strings/string_piece.h"
@@ -18,7 +17,9 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/buildflag.h"
 #include "build/chromeos_buildflags.h"
+#include "content/browser/webid/mdocs/mdoc_provider.h"
 #include "content/public/browser/anchor_element_preconnect_delegate.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "content/public/browser/browser_accessibility_state.h"
@@ -76,13 +77,25 @@
 #include "content/public/browser/tts_environment_android.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS)
-#include "content/public/browser/firewall_hole_proxy.h"
-#endif
-
 #include "app/vivaldi_apptools.h"
 
 namespace content {
+
+ClipboardPasteData::ClipboardPasteData(std::string text,
+                                       std::string image,
+                                       std::vector<std::string> file_paths)
+    : text(std::move(text)),
+      image(std::move(image)),
+      file_paths(std::move(file_paths)) {}
+ClipboardPasteData::ClipboardPasteData() = default;
+ClipboardPasteData::ClipboardPasteData(const ClipboardPasteData&) = default;
+ClipboardPasteData::ClipboardPasteData(ClipboardPasteData&&) = default;
+ClipboardPasteData& ClipboardPasteData::operator=(ClipboardPasteData&&) =
+    default;
+bool ClipboardPasteData::isEmpty() {
+  return text.empty() && image.empty() && file_paths.empty();
+}
+ClipboardPasteData::~ClipboardPasteData() = default;
 
 std::unique_ptr<BrowserMainParts> ContentBrowserClient::CreateBrowserMainParts(
     bool /* is_integration_test */) {
@@ -314,10 +327,6 @@ bool ContentBrowserClient::EnforceSystemAudioEchoCancellation() {
   return false;
 }
 
-bool ContentBrowserClient::ShouldAssignSiteForURL(const GURL& url) {
-  return true;
-}
-
 std::vector<url::Origin>
 ContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
   return std::vector<url::Origin>();
@@ -408,6 +417,12 @@ AllowServiceWorkerResult ContentBrowserClient::AllowServiceWorker(
     const GURL& script_url,
     BrowserContext* context) {
   return AllowServiceWorkerResult::Yes();
+}
+
+bool ContentBrowserClient::MayDeleteServiceWorkerRegistration(
+    const GURL& scope,
+    BrowserContext* browser_context) {
+  return true;
 }
 
 void ContentBrowserClient::UpdateEnabledBlinkRuntimeFeaturesInIsolatedWorker(
@@ -513,6 +528,10 @@ bool ContentBrowserClient::IsInterestGroupAPIAllowed(
   return false;
 }
 
+void ContentBrowserClient::OnAuctionComplete(
+    RenderFrameHost* render_frame_host,
+    InterestGroupManager::InterestGroupDataKey data_key) {}
+
 bool ContentBrowserClient::IsAttributionReportingOperationAllowed(
     content::BrowserContext* browser_context,
     AttributionReportingOperation operation,
@@ -522,6 +541,12 @@ bool ContentBrowserClient::IsAttributionReportingOperationAllowed(
     const url::Origin* reporting_origin) {
   return true;
 }
+
+#if BUILDFLAG(IS_ANDROID)
+bool ContentBrowserClient::IsWebAttributionReportingAllowed() {
+  return true;
+}
+#endif
 
 bool ContentBrowserClient::IsSharedStorageAllowed(
     content::BrowserContext* browser_context,
@@ -554,11 +579,6 @@ GeneratedCodeCacheSettings ContentBrowserClient::GetGeneratedCodeCacheSettings(
     BrowserContext* context) {
   // By default, code cache is disabled, embedders should override.
   return GeneratedCodeCacheSettings(false, 0, base::FilePath());
-}
-
-cert_verifier::mojom::CertVerifierServiceParamsPtr
-ContentBrowserClient::GetCertVerifierServiceParams() {
-  return nullptr;
 }
 
 void ContentBrowserClient::AllowCertificateError(
@@ -820,7 +840,8 @@ std::unique_ptr<NavigationUIData> ContentBrowserClient::GetNavigationUIData(
 }
 
 #if BUILDFLAG(IS_WIN)
-bool ContentBrowserClient::PreSpawnChild(sandbox::TargetPolicy* policy,
+
+bool ContentBrowserClient::PreSpawnChild(sandbox::TargetConfig* config,
                                          sandbox::mojom::Sandbox sandbox_type,
                                          ChildSpawnFlags flags) {
   return true;
@@ -1055,7 +1076,7 @@ FontAccessDelegate* ContentBrowserClient::GetFontAccessDelegate() {
   return nullptr;
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_CHROMEOS)
 SmartCardDelegate* ContentBrowserClient::GetSmartCardDelegate(
     BrowserContext* browser_context) {
   return nullptr;
@@ -1283,9 +1304,9 @@ void ContentBrowserClient::IsClipboardPasteContentAllowed(
     content::WebContents* web_contents,
     const GURL& url,
     const ui::ClipboardFormatType& data_type,
-    const std::string& data,
+    ClipboardPasteData clipboard_paste_data,
     IsClipboardPasteContentAllowedCallback callback) {
-  std::move(callback).Run(data);
+  std::move(callback).Run(std::move(clipboard_paste_data));
 }
 
 bool ContentBrowserClient::IsClipboardCopyAllowed(
@@ -1319,7 +1340,7 @@ bool ContentBrowserClient::ShouldServiceWorkerInheritPolicyContainerFromCreator(
   return url.SchemeIsLocal();
 }
 
-bool ContentBrowserClient::ShouldAllowInsecurePrivateNetworkRequests(
+bool ContentBrowserClient::ShouldAllowInsecureLocalNetworkRequests(
     BrowserContext* browser_context,
     const url::Origin& origin) {
   return false;
@@ -1356,6 +1377,10 @@ bool ContentBrowserClient::HasErrorPage(int http_status_code) {
 std::unique_ptr<IdentityRequestDialogController>
 ContentBrowserClient::CreateIdentityRequestDialogController() {
   return std::make_unique<IdentityRequestDialogController>();
+}
+
+std::unique_ptr<MDocProvider> ContentBrowserClient::CreateMDocProvider() {
+  return nullptr;
 }
 
 bool ContentBrowserClient::SuppressDifferentOriginSubframeJSDialogs(
@@ -1434,11 +1459,9 @@ bool ContentBrowserClient::IsFileSystemURLNavigationAllowed(
 }
 
 #if BUILDFLAG(IS_MAC)
-base::FilePath ContentBrowserClient::GetChildProcessPath(
-    int child_flags,
-    const base::FilePath& helpers_path) {
+std::string ContentBrowserClient::GetChildProcessSuffix(int child_flags) {
   NOTIMPLEMENTED();
-  return base::FilePath();
+  return std::string();
 }
 #endif
 
@@ -1446,6 +1469,23 @@ bool ContentBrowserClient::AreIsolatedWebAppsEnabled(
     BrowserContext* browser_context) {
   // The whole logic of the IWAs lives in //chrome. So IWAs should be
   // enabled at that layer.
+  return false;
+}
+
+bool ContentBrowserClient::IsThirdPartyStoragePartitioningAllowed(
+    content::BrowserContext*,
+    const url::Origin&) {
+  return true;
+}
+
+bool ContentBrowserClient::
+    IsTransientActivationRequiredForShowFileOrDirectoryPicker(
+        WebContents* web_contents) {
+  return true;
+}
+
+bool ContentBrowserClient::ShouldUseFirstPartyStorageKey(
+    const url::Origin& origin) {
   return false;
 }
 

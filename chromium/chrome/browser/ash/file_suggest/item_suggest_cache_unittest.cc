@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -30,7 +31,10 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+namespace ash::test {
 namespace {
+
+using base::test::ScopedFeatureList;
 
 constexpr char kEmail[] = "test-user@example.com";
 constexpr char16_t kEmail16[] = u"test-user@example.com";
@@ -46,12 +50,28 @@ constexpr char kValidJsonResponse[] = R"(
         {
           "itemId": "item id 2",
           "displayText": "display text 2",
-          "predictionReason": "prediction reason 2"
+          "justification": {
+            "unstructuredJustificationDescription": {
+              "textSegment": [
+                {
+                  "text": "prediction reason 2"
+                }
+              ]
+            }
+          }
         },
         {
           "itemId": "item id 3",
           "displayText": "display text 3",
-          "predictionReason": "prediction reason 3"
+          "justification": {
+            "unstructuredJustificationDescription": {
+              "textSegment": [
+                {
+                  "text": "prediction reason 3"
+                }
+              ]
+            }
+          }
         }
       ],
       "suggestionSessionId": "suggestion id 1"
@@ -59,10 +79,8 @@ constexpr char kValidJsonResponse[] = R"(
 constexpr char kStatusHistogramName[] = "Apps.AppList.ItemSuggestCache.Status";
 constexpr char kResponseSizeHistogramName[] =
     "Apps.AppList.ItemSuggestCache.ResponseSize";
-}  // namespace
 
-namespace ash::test {
-using base::test::ScopedFeatureList;
+}  // namespace
 
 class ItemSuggestCacheTest : public testing::Test {
  protected:
@@ -204,9 +222,10 @@ TEST_F(ItemSuggestCacheTest, ConvertJsonFailure) {
 TEST_F(ItemSuggestCacheTest, UpdateCacheDisabledByExperiment) {
   scoped_feature_list_.InitAndEnableFeatureWithParameters(
       feature_, {{"enabled", "false"}});
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
-  itemSuggestCache->MaybeUpdateCache();
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
+  item_suggest_cache->MaybeUpdateCache();
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(
       kStatusHistogramName, ItemSuggestCache::Status::kDisabledByExperiment, 1);
@@ -214,9 +233,10 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheDisabledByExperiment) {
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheDisabledByPolicy) {
   profile_->GetPrefs()->SetBoolean(drive::prefs::kDisableDrive, true);
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
-  itemSuggestCache->MaybeUpdateCache();
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
+  item_suggest_cache->MaybeUpdateCache();
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(
       kStatusHistogramName, ItemSuggestCache::Status::kDisabledByPolicy, 1);
@@ -226,9 +246,10 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheServerUrlIsNotHttps) {
   scoped_feature_list_.InitAndEnableFeatureWithParameters(
       feature_,
       {{"server_url", "http://appsitemsuggest-pa.googleapis.com/v1/items"}});
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
-  itemSuggestCache->MaybeUpdateCache();
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
+  item_suggest_cache->MaybeUpdateCache();
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(
       kStatusHistogramName, ItemSuggestCache::Status::kInvalidServerUrl, 1);
@@ -237,26 +258,29 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheServerUrlIsNotHttps) {
 TEST_F(ItemSuggestCacheTest, UpdateCacheServerUrlIsNotGoogleDomain) {
   scoped_feature_list_.InitAndEnableFeatureWithParameters(
       feature_, {{"server_url", "https://foo.com"}});
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
-  itemSuggestCache->MaybeUpdateCache();
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
+  item_suggest_cache->MaybeUpdateCache();
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(
       kStatusHistogramName, ItemSuggestCache::Status::kInvalidServerUrl, 1);
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheServerNoAuthToken) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
-  itemSuggestCache->MaybeUpdateCache();
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
+  item_suggest_cache->MaybeUpdateCache();
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(
       kStatusHistogramName, ItemSuggestCache::Status::kGoogleAuthError, 1);
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheInsufficientResourcesError) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -265,7 +289,7 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheInsufficientResourcesError) {
   network::URLLoaderCompletionStatus status(net::ERR_INSUFFICIENT_RESOURCES);
   url_loader_factory_.AddResponse(GURL(kRequestUrl), std::move(head), "content",
                                   status);
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(
@@ -273,8 +297,9 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheInsufficientResourcesError) {
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheNetError) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -283,7 +308,7 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheNetError) {
   network::URLLoaderCompletionStatus status(net::ERR_FAILED);
   url_loader_factory_.AddResponse(GURL(kRequestUrl), std::move(head), "content",
                                   status);
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(kStatusHistogramName,
@@ -291,8 +316,9 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheNetError) {
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCache5kkError) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -305,7 +331,7 @@ TEST_F(ItemSuggestCacheTest, UpdateCache5kkError) {
   url_loader_factory_.AddResponse(GURL(kRequestUrl), std::move(head),
                                   /* content= */ "",
                                   network::URLLoaderCompletionStatus(net::OK));
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(kStatusHistogramName,
@@ -313,8 +339,9 @@ TEST_F(ItemSuggestCacheTest, UpdateCache5kkError) {
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCache4kkError) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -327,7 +354,7 @@ TEST_F(ItemSuggestCacheTest, UpdateCache4kkError) {
   url_loader_factory_.AddResponse(GURL(kRequestUrl), std::move(head),
                                   /* content= */ "",
                                   network::URLLoaderCompletionStatus(net::OK));
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(kStatusHistogramName,
@@ -335,8 +362,9 @@ TEST_F(ItemSuggestCacheTest, UpdateCache4kkError) {
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCache3kkError) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -349,7 +377,7 @@ TEST_F(ItemSuggestCacheTest, UpdateCache3kkError) {
   url_loader_factory_.AddResponse(GURL(kRequestUrl), std::move(head),
                                   /* content= */ "",
                                   network::URLLoaderCompletionStatus(net::OK));
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(kStatusHistogramName,
@@ -357,15 +385,16 @@ TEST_F(ItemSuggestCacheTest, UpdateCache3kkError) {
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheEmptyResponse) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
   url_loader_factory_.AddResponse(kRequestUrl,
                                   /* content= */ "", net::HTTP_OK);
 
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(
@@ -373,26 +402,28 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheEmptyResponse) {
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheInvalidResponse) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
   url_loader_factory_.AddResponse(kRequestUrl, "invalid = json", net::HTTP_OK);
 
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(kResponseSizeHistogramName,
                                        /* sample= */ 14,
-                                       /* expected_count= */ 1);
+                                       /* expected_bucket_count= */ 1);
   histogram_tester_.ExpectUniqueSample(
       kStatusHistogramName, ItemSuggestCache::Status::kJsonParseFailure, 1);
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheConversionFailure) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -404,7 +435,7 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheConversionFailure) {
       )",
                                   net::HTTP_OK);
 
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(kResponseSizeHistogramName, 45, 1);
@@ -414,8 +445,9 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheConversionFailure) {
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheConversionEmptyResults) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -427,32 +459,33 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheConversionEmptyResults) {
     })",
                                   net::HTTP_OK);
 
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(kResponseSizeHistogramName,
                                        /* sample= */ 79,
-                                       /* expected_count= */ 1);
+                                       /* expected_bucket_count= */ 1);
   histogram_tester_.ExpectUniqueSample(
       kStatusHistogramName, ItemSuggestCache::Status::kNoResultsInResponse, 1);
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheSavesResults) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
   url_loader_factory_.AddResponse(kRequestUrl, kValidJsonResponse,
                                   net::HTTP_OK);
 
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
 
   task_environment_.RunUntilIdle();
   histogram_tester_.ExpectUniqueSample(kResponseSizeHistogramName,
-                                       /* sample= */ 477,
-                                       /* expected_count= */ 1);
-  ResultsMatch(itemSuggestCache->GetResults(), "suggestion id 1",
+                                       /* sample= */ 716,
+                                       /* expected_bucket_count= */ 1);
+  ResultsMatch(item_suggest_cache->GetResults(), "suggestion id 1",
                {{"item id 1", "display text 1", absl::nullopt},
                 {"item id 2", "display text 2", "prediction reason 2"},
                 {"item id 3", "display text 3", "prediction reason 3"}});
@@ -461,8 +494,9 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheSavesResults) {
 }
 
 TEST_F(ItemSuggestCacheTest, UpdateCacheSmallTimeBetweenUpdates) {
-  std::unique_ptr<ItemSuggestCache> itemSuggestCache =
-      std::make_unique<ItemSuggestCache>(profile_, shared_url_loader_factory_);
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en", profile_,
+                                         shared_url_loader_factory_);
   identity_test_env_->MakePrimaryAccountAvailable(kEmail,
                                                   signin::ConsentLevel::kSync);
   identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
@@ -479,9 +513,9 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheSmallTimeBetweenUpdates) {
     })",
                                   net::HTTP_OK);
 
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
   task_environment_.RunUntilIdle();
-  ResultsMatch(itemSuggestCache->GetResults(), "suggestion id 1",
+  ResultsMatch(item_suggest_cache->GetResults(), "suggestion id 1",
                {{"item id 1", "display text 1", absl::nullopt}});
 
   task_environment_.AdvanceClock(base::Minutes(2));
@@ -498,12 +532,33 @@ TEST_F(ItemSuggestCacheTest, UpdateCacheSmallTimeBetweenUpdates) {
       "suggestionSessionId": "suggestion id 2"
     })",
                                   net::HTTP_OK);
-  itemSuggestCache->MaybeUpdateCache();
+  item_suggest_cache->MaybeUpdateCache();
   task_environment_.RunUntilIdle();
   // The first set of results are in the cache since the second update occurred
   // before the minimum time between updates.
-  ResultsMatch(itemSuggestCache->GetResults(), "suggestion id 1",
+  ResultsMatch(item_suggest_cache->GetResults(), "suggestion id 1",
                {{"item id 1", "display text 1", absl::nullopt}});
+}
+
+TEST_F(ItemSuggestCacheTest, RequestIncludesLocale) {
+  std::unique_ptr<ItemSuggestCache> item_suggest_cache =
+      std::make_unique<ItemSuggestCache>("en-AU", profile_,
+                                         shared_url_loader_factory_);
+  identity_test_env_->MakePrimaryAccountAvailable(kEmail,
+                                                  signin::ConsentLevel::kSync);
+  identity_test_env_->SetAutomaticIssueOfAccessTokens(true);
+  item_suggest_cache->MaybeUpdateCache();
+
+  ASSERT_EQ(1, url_loader_factory_.NumPending());
+  std::string request_body(url_loader_factory_.pending_requests()
+                               ->at(0)
+                               .request.request_body->elements()
+                               ->at(0)
+                               .As<network::DataElementBytes>()
+                               .AsStringPiece());
+  auto body_value = Parse(request_body);
+  EXPECT_EQ("en-AU", *body_value.GetDict().FindStringByDottedPath(
+                         "client_info.language_code"));
 }
 
 }  // namespace ash::test

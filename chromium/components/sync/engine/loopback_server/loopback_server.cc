@@ -13,7 +13,6 @@
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
-#include "base/guid.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/clamped_math.h"
@@ -940,19 +939,20 @@ bool LoopbackServer::DeSerializeState(
   return true;
 }
 
-bool LoopbackServer::SerializeData(std::string* data) {
+absl::optional<std::string> LoopbackServer::SerializeData() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   sync_pb::LoopbackServerProto proto;
   SerializeState(&proto);
-  if (!proto.SerializeToString(data)) {
+  std::string data;
+  if (!proto.SerializeToString(&data)) {
     LOG(ERROR) << "Loopback sync proto could not be serialized";
-    return false;
+    return absl::nullopt;
   }
   UMA_HISTOGRAM_MEMORY_KB(
       "Sync.Local.FileSizeKB",
       base::saturated_cast<base::Histogram::Sample>(
-          base::ClampDiv(base::ClampAdd(data->size(), 512), 1024)));
-  return true;
+          base::ClampDiv(base::ClampAdd(data.size(), 512), 1024)));
+  return data;
 }
 
 bool LoopbackServer::ScheduleSaveStateToFile() {

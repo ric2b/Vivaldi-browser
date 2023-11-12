@@ -9,6 +9,7 @@ import "media/mojo/mojom/media_types.mojom";
 import "mojo/public/mojom/base/shared_memory.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
+import "ui/gfx/mojom/color_space.mojom";
 import "media/mojo/mojom/video_encoder_info.mojom";
 import "sandbox/policy/mojom/sandbox.mojom";
 
@@ -128,10 +129,14 @@ struct VariableBitrate {
   uint32 peak_bps;
 };
 
+struct ExternalBitrate {
+};
+
 // This defines a mojo transport format for media::Bitrate.
 union Bitrate {
   ConstantBitrate constant;
   VariableBitrate variable;
+  ExternalBitrate external;
 };
 
 // This defines a mojo transport format for
@@ -253,8 +258,6 @@ struct H264Metadata {
 
 struct H265Metadata {
   uint8 temporal_idx;
-  uint8 spatial_idx;
-  bool layer_sync;
 };
 
 struct Vp8Metadata {
@@ -276,13 +279,7 @@ struct Vp9Metadata {
 };
 
 struct Av1Metadata {
-  bool inter_pic_predicted;
-  bool switch_frame;
-  bool end_of_picture;
   uint8 temporal_idx;
-  uint8 spatial_idx;
-  array<gfx.mojom.Size> spatial_layer_resolutions;
-  array<uint8> f_diffs;
 };
 
 // Codec specific metadata.
@@ -301,6 +298,7 @@ struct BitstreamBufferMetadata {
   int32 qp;
   CodecMetadata? codec_metadata;
   gfx.mojom.Size? encoded_size;
+  gfx.mojom.ColorSpace? encoded_color_space;
 };
 
 interface VideoEncodeAcceleratorClient {
@@ -311,8 +309,9 @@ interface VideoEncodeAcceleratorClient {
 
   BitstreamBufferReady(int32 bitstream_buffer_id,
                        BitstreamBufferMetadata metadata);
-
-  NotifyError(VideoEncodeAccelerator.Error error);
+  // VideoEncodeAccelerator calls this when the error occurs and it cannot
+  // perform encoding any more. |status| represents the detail about the error.
+  NotifyErrorStatus(EncoderStatus status);
 
   // VideoEncodeAccelerator calls this when its VideoEncoderInfo is changed.
   // |info| is the updated VideoEncoderInfo.

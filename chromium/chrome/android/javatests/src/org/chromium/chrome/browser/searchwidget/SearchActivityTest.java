@@ -16,13 +16,13 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.net.Uri;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.runner.lifecycle.Stage;
 import android.view.KeyEvent;
 import android.view.View;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
+import androidx.test.runner.lifecycle.Stage;
 
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -48,7 +48,7 @@ import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
-import org.chromium.chrome.R;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.FileProviderHelper;
 import org.chromium.chrome.browser.IntentHandler;
@@ -59,12 +59,12 @@ import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.locale.LocaleManagerDelegate;
 import org.chromium.chrome.browser.omnibox.LocationBarCoordinator;
-import org.chromium.chrome.browser.omnibox.OmniboxSuggestionType;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.omnibox.suggestions.CachedZeroSuggestionsManager;
 import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestionUiType;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.DefaultSearchEngineDialogHelperUtils;
 import org.chromium.chrome.browser.search_engines.DefaultSearchEnginePromoDialog;
 import org.chromium.chrome.browser.search_engines.DefaultSearchEnginePromoDialog.DefaultSearchEnginePromoDialogObserver;
@@ -76,6 +76,7 @@ import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityConstant
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.MultiActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ActivityTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils.SuggestionInfo;
@@ -85,11 +86,13 @@ import org.chromium.components.browser_ui.share.ClipboardImageFileProvider;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteMatchBuilder;
 import org.chromium.components.omnibox.AutocompleteResult;
+import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.ui.base.Clipboard;
+import org.chromium.ui.test.util.DeviceRestriction;
 import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.url.GURL;
 
@@ -109,6 +112,7 @@ import java.util.concurrent.Callable;
  *
  *                    + Add microphone tests somehow (vague query + confident query).
  */
+@Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO}) // Search widget not supported on auto.
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @DoNotBatch(reason = "Test start up behaviors.")
@@ -152,7 +156,9 @@ public class SearchActivityTest {
 
                         @Override
                         public List<TemplateUrl> getSearchEnginesForPromoDialog(int promoType) {
-                            return TemplateUrlServiceFactory.get().getTemplateUrls();
+                            return TemplateUrlServiceFactory
+                                    .getForProfile(Profile.getLastUsedRegularProfile())
+                                    .getTemplateUrls();
                         }
                     });
                 });
@@ -564,7 +570,7 @@ public class SearchActivityTest {
 
         startSearchActivity();
         SuggestionInfo<BaseSuggestionView> info =
-                mOmnibox.getSuggestionByType(OmniboxSuggestionType.CLIPBOARD_IMAGE);
+                mOmnibox.findSuggestionWithType(OmniboxSuggestionType.CLIPBOARD_IMAGE);
 
         Assert.assertNotNull("The image clipboard suggestion should contains post content type.",
                 info.suggestion.getPostContentType());
@@ -589,8 +595,8 @@ public class SearchActivityTest {
             // them since on fast device tab jump to result page really quick but on slow device
             // may stay on upload page for a really long time.
             boolean isValid = tab.getUrl().equals(info.suggestion.getUrl())
-                    || TemplateUrlServiceFactory.get().isSearchResultsPageFromDefaultSearchProvider(
-                            tab.getUrl());
+                    || TemplateUrlServiceFactory.getForProfile(Profile.getLastUsedRegularProfile())
+                               .isSearchResultsPageFromDefaultSearchProvider(tab.getUrl());
             Criteria.checkThat(
                     "Invalid URL: " + tab.getUrl().getSpec(), isValid, Matchers.is(true));
         });
@@ -606,7 +612,7 @@ public class SearchActivityTest {
         // Start the Activity.
         final SearchActivity searchActivity = startSearchActivity();
         final SuggestionInfo<BaseSuggestionView> info =
-                mOmnibox.getSuggestionByType(OmniboxSuggestionType.CLIPBOARD_IMAGE);
+                mOmnibox.findSuggestionWithType(OmniboxSuggestionType.CLIPBOARD_IMAGE);
 
         Intent intent =
                 new Intent(Intent.ACTION_VIEW, Uri.parse(info.suggestion.getUrl().getSpec()));
@@ -629,8 +635,8 @@ public class SearchActivityTest {
         CriteriaHelper.pollUiThread(() -> {
             Tab tab = cta.getActivityTab();
             Criteria.checkThat("Unexpected URL: " + tab.getUrl().getSpec(),
-                    TemplateUrlServiceFactory.get().isSearchResultsPageFromDefaultSearchProvider(
-                            tab.getUrl()),
+                    TemplateUrlServiceFactory.getForProfile(Profile.getLastUsedRegularProfile())
+                            .isSearchResultsPageFromDefaultSearchProvider(tab.getUrl()),
                     Matchers.is(false));
         });
     }
@@ -700,6 +706,7 @@ public class SearchActivityTest {
 
     @Test
     @SmallTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // The active color is only apply to the phone.
     @EnableFeatures({ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE})
     @CommandLineFlags.
     Add({"enable-features=" + ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE + "<Study",
@@ -724,6 +731,7 @@ public class SearchActivityTest {
 
     @Test
     @SmallTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // The active color is only apply to the phone.
     @EnableFeatures({ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE})
     @CommandLineFlags.
     Add({"enable-features=" + ChromeFeatureList.OMNIBOX_MODERNIZE_VISUAL_UPDATE + "<Study",
@@ -764,9 +772,9 @@ public class SearchActivityTest {
     private void clickFirstClipboardSuggestion(SearchActivityLocationBarLayout locationBar)
             throws InterruptedException {
         SuggestionInfo<BaseSuggestionView> info =
-                mOmnibox.getSuggestionByType(OmniboxSuggestionUiType.CLIPBOARD_SUGGESTION);
-        TestTouchUtils.performClickOnMainSync(InstrumentationRegistry.getInstrumentation(),
-                info.view.getDecoratedSuggestionView());
+                mOmnibox.findSuggestionWithType(OmniboxSuggestionUiType.CLIPBOARD_SUGGESTION);
+        TestTouchUtils.performClickOnMainSync(
+                InstrumentationRegistry.getInstrumentation(), info.view);
     }
 
     private SearchActivity startSearchActivity() {

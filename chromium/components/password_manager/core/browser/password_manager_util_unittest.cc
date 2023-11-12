@@ -24,7 +24,7 @@
 #include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/common/password_generation_util.h"
-#include "components/device_reauth/mock_biometric_authenticator.h"
+#include "components/device_reauth/mock_device_authenticator.h"
 #include "components/password_manager/core/browser/mock_password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
@@ -41,7 +41,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 using autofill::password_generation::PasswordGenerationType;
-using device_reauth::MockBiometricAuthenticator;
+using device_reauth::MockDeviceAuthenticator;
 using password_manager::PasswordForm;
 
 namespace password_manager_util {
@@ -71,8 +71,8 @@ class MockPasswordManagerClient
   MOCK_METHOD(void, GeneratePassword, (PasswordGenerationType), (override));
   MOCK_METHOD(PrefService*, GetPrefs, (), (const, override));
   MOCK_METHOD(PrefService*, GetLocalStatePrefs, (), (const, override));
-  MOCK_METHOD(scoped_refptr<device_reauth::BiometricAuthenticator>,
-              GetBiometricAuthenticator,
+  MOCK_METHOD(scoped_refptr<device_reauth::DeviceAuthenticator>,
+              GetDeviceAuthenticator,
               (),
               (override));
 };
@@ -232,15 +232,6 @@ class MockAutofillClient : public autofill::AutofillClient {
               (override));
   MOCK_METHOD(bool, HasCreditCardScanFeature, (), (override));
   MOCK_METHOD(void, ScanCreditCard, (CreditCardScanCallback), (override));
-  MOCK_METHOD(bool, IsFastCheckoutSupported, (), (override));
-  MOCK_METHOD(bool,
-              TryToShowFastCheckout,
-              (const autofill::FormData&,
-               const autofill::FormFieldData&,
-               base::WeakPtr<autofill::AutofillManager>),
-              (override));
-  MOCK_METHOD(void, HideFastCheckout, (bool), (override));
-  MOCK_METHOD(bool, IsShowingFastCheckoutUI, (), (override));
   MOCK_METHOD(bool, IsTouchToFillCreditCardSupported, (), (override));
   MOCK_METHOD(bool,
               ShowTouchToFillCreditCard,
@@ -278,6 +269,12 @@ class MockAutofillClient : public autofill::AutofillClient {
               PropagateAutofillPredictions,
               (autofill::AutofillDriver*,
                const std::vector<autofill::FormStructure*>&),
+              (override));
+  MOCK_METHOD(void,
+              DidFillOrPreviewForm,
+              (autofill::mojom::RendererFormDataAction action,
+               autofill::AutofillTriggerSource trigger_source,
+               bool is_refill),
               (override));
   MOCK_METHOD(void,
               DidFillOrPreviewField,
@@ -348,7 +345,7 @@ class PasswordManagerUtilTest : public testing::Test {
  public:
   PasswordManagerUtilTest() {
     authenticator_ =
-        base::MakeRefCounted<device_reauth::MockBiometricAuthenticator>();
+        base::MakeRefCounted<device_reauth::MockDeviceAuthenticator>();
     pref_service_.registry()->RegisterBooleanPref(
         password_manager::prefs::kCredentialsEnableService, true);
     pref_service_.registry()->RegisterBooleanPref(
@@ -369,9 +366,10 @@ class PasswordManagerUtilTest : public testing::Test {
     ON_CALL(mock_client_, GetLocalStatePrefs())
         .WillByDefault(Return(&pref_service_));
     ON_CALL(mock_client_, GetPrefs()).WillByDefault(Return(&pref_service_));
-    ON_CALL(mock_client_, GetBiometricAuthenticator())
+    ON_CALL(mock_client_, GetDeviceAuthenticator())
         .WillByDefault(Return(authenticator_));
-    ON_CALL(*authenticator_, CanAuthenticate).WillByDefault(Return(true));
+    ON_CALL(*authenticator_, CanAuthenticateWithBiometrics)
+        .WillByDefault(Return(true));
 #endif
   }
 
@@ -385,7 +383,7 @@ class PasswordManagerUtilTest : public testing::Test {
 
  protected:
   MockPasswordManagerClient mock_client_;
-  scoped_refptr<device_reauth::MockBiometricAuthenticator> authenticator_;
+  scoped_refptr<device_reauth::MockDeviceAuthenticator> authenticator_;
   TestingPrefServiceSimple pref_service_;
   syncer::TestSyncService sync_service_;
 };
@@ -894,18 +892,12 @@ TEST_F(PasswordManagerUtilTest, CanUseBiometricAuth) {
   EXPECT_CALL(*(mock_client_.GetPasswordFeatureManager()),
               IsBiometricAuthenticationBeforeFillingEnabled)
       .WillOnce(Return(false));
-  EXPECT_FALSE(CanUseBiometricAuth(
-      authenticator_.get(),
-      device_reauth::BiometricAuthRequester::kAutofillSuggestion,
-      &mock_client_));
+  EXPECT_FALSE(CanUseBiometricAuth(authenticator_.get(), &mock_client_));
 
   EXPECT_CALL(*(mock_client_.GetPasswordFeatureManager()),
               IsBiometricAuthenticationBeforeFillingEnabled)
       .WillOnce(Return(true));
-  EXPECT_TRUE(CanUseBiometricAuth(
-      authenticator_.get(),
-      device_reauth::BiometricAuthRequester::kAutofillSuggestion,
-      &mock_client_));
+  EXPECT_TRUE(CanUseBiometricAuth(authenticator_.get(), &mock_client_));
 }
 
 TEST_F(PasswordManagerUtilTest, BiometricsUnavailable) {
@@ -914,7 +906,8 @@ TEST_F(PasswordManagerUtilTest, BiometricsUnavailable) {
       password_manager::features::kBiometricAuthenticationForFilling);
 
   SetBiometricAuthenticationBeforeFilling(/*available=*/false);
-  EXPECT_CALL(*authenticator_.get(), CanAuthenticate).WillOnce(Return(false));
+  EXPECT_CALL(*authenticator_.get(), CanAuthenticateWithBiometrics)
+      .WillOnce(Return(false));
   EXPECT_FALSE(
       ShouldShowBiometricAuthenticationBeforeFillingPromo(&mock_client_));
 }
@@ -924,7 +917,8 @@ TEST_F(PasswordManagerUtilTest, BiometricForFillingFlagDisabled) {
   scoped_feature_list.InitAndDisableFeature(
       password_manager::features::kBiometricAuthenticationForFilling);
   SetBiometricAuthenticationBeforeFilling(/*available=*/false);
-  EXPECT_CALL(*authenticator_.get(), CanAuthenticate).WillOnce(Return(true));
+  EXPECT_CALL(*authenticator_.get(), CanAuthenticateWithBiometrics)
+      .WillOnce(Return(true));
   EXPECT_FALSE(
       ShouldShowBiometricAuthenticationBeforeFillingPromo(&mock_client_));
 }
@@ -934,7 +928,8 @@ TEST_F(PasswordManagerUtilTest, BiometricForFillingEnabed) {
   scoped_feature_list.InitAndEnableFeature(
       password_manager::features::kBiometricAuthenticationForFilling);
   SetBiometricAuthenticationBeforeFilling(/*available=*/true);
-  EXPECT_CALL(*authenticator_.get(), CanAuthenticate).WillOnce(Return(true));
+  EXPECT_CALL(*authenticator_.get(), CanAuthenticateWithBiometrics)
+      .WillOnce(Return(true));
   EXPECT_FALSE(
       ShouldShowBiometricAuthenticationBeforeFillingPromo(&mock_client_));
 }
@@ -944,7 +939,8 @@ TEST_F(PasswordManagerUtilTest, ShouldShowBiometricAuthPromo) {
   scoped_feature_list.InitAndEnableFeature(
       password_manager::features::kBiometricAuthenticationForFilling);
   SetBiometricAuthenticationBeforeFilling(/*available=*/false);
-  EXPECT_CALL(*authenticator_.get(), CanAuthenticate).WillOnce(Return(true));
+  EXPECT_CALL(*authenticator_.get(), CanAuthenticateWithBiometrics)
+      .WillOnce(Return(true));
   EXPECT_TRUE(
       ShouldShowBiometricAuthenticationBeforeFillingPromo(&mock_client_));
 }

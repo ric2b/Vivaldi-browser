@@ -103,6 +103,9 @@ constexpr char kExtraDiagnosticsKey[] = "EXTRA_DIAGNOSTICS";
 
 }  // namespace
 
+ChromeOsFeedbackDelegate::ChromeOsFeedbackDelegate(content::WebUI* web_ui)
+    : ChromeOsFeedbackDelegate(Profile::FromWebUI(web_ui)) {}
+
 ChromeOsFeedbackDelegate::ChromeOsFeedbackDelegate(Profile* profile)
     : ChromeOsFeedbackDelegate(profile,
                                FeedbackPrivateAPI::GetFactoryInstance()
@@ -119,6 +122,17 @@ ChromeOsFeedbackDelegate::ChromeOsFeedbackDelegate(
     page_url_ = chrome::GetTargetTabUrl(
         browser->session_id(), browser->tab_strip_model()->active_index());
   }
+}
+
+ChromeOsFeedbackDelegate ChromeOsFeedbackDelegate::CreateForTesting(
+    Profile* profile) {
+  return ChromeOsFeedbackDelegate(profile);
+}
+
+ChromeOsFeedbackDelegate ChromeOsFeedbackDelegate::CreateForTesting(
+    Profile* profile,
+    scoped_refptr<extensions::FeedbackService> feedback_service) {
+  return ChromeOsFeedbackDelegate(profile, feedback_service);
 }
 
 ChromeOsFeedbackDelegate::~ChromeOsFeedbackDelegate() {
@@ -179,6 +193,7 @@ void ChromeOsFeedbackDelegate::SendReport(
   feedback_params.send_histograms = report->include_system_logs_and_histograms;
   feedback_params.send_bluetooth_logs = report->send_bluetooth_logs;
   feedback_params.send_tab_titles = report->include_screenshot;
+  feedback_params.send_autofill_metadata = report->include_autofill_metadata;
   feedback_params.is_internal_email =
       report->feedback_context->is_internal_account;
 
@@ -209,6 +224,11 @@ void ChromeOsFeedbackDelegate::SendReport(
 
   if (feedback_context->category_tag.has_value()) {
     feedback_data->set_category_tag(feedback_context->category_tag.value());
+  }
+
+  if (feedback_params.send_autofill_metadata &&
+      feedback_context->autofill_metadata.has_value()) {
+    feedback_data->set_autofill_metadata(*feedback_context->autofill_metadata);
   }
 
   scoped_refptr<base::RefCountedMemory> png_data = GetScreenshotData();
@@ -287,7 +307,7 @@ void ChromeOsFeedbackDelegate::SendReport(
     feedback_params.load_system_info = false;
   }
 
-  feedback_service_->SendFeedback(
+  feedback_service_->RedactThenSendFeedback(
       feedback_params, feedback_data,
       base::BindOnce(&ChromeOsFeedbackDelegate::OnSendFeedbackDone,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
@@ -310,7 +330,7 @@ void ChromeOsFeedbackDelegate::OpenExploreApp() {
 }
 
 void ChromeOsFeedbackDelegate::OpenMetricsDialog() {
-  OpenWebDialog(GURL(chrome::kChromeUIHistogramsURL));
+  OpenWebDialog(GURL(chrome::kChromeUIHistogramsURL), /*args=*/"");
 }
 
 void ChromeOsFeedbackDelegate::OpenSystemInfoDialog() {
@@ -318,14 +338,22 @@ void ChromeOsFeedbackDelegate::OpenSystemInfoDialog() {
   // For now, use the old Feedback tool's sys_info.html.
   GURL systemInfoUrl =
       GURL(base::StrCat({chrome::kChromeUIFeedbackURL, "html/sys_info.html"}));
-  OpenWebDialog(systemInfoUrl);
+  OpenWebDialog(systemInfoUrl, /*args=*/"");
+}
+
+void ChromeOsFeedbackDelegate::OpenAutofillMetadataDialog(
+    const std::string& autofill_metadata) {
+  GURL autofillInfoUrl = GURL(base::StrCat(
+      {chrome::kChromeUIFeedbackURL, "html/autofill_metadata_info.html"}));
+  OpenWebDialog(autofillInfoUrl, autofill_metadata);
 }
 
 bool ChromeOsFeedbackDelegate::IsChildAccount() {
   return profile_->IsChild();
 }
 
-void ChromeOsFeedbackDelegate::OpenWebDialog(GURL url) {
+void ChromeOsFeedbackDelegate::OpenWebDialog(GURL url,
+                                             const std::string& args) {
   Browser* feedback_browser = ash::FindSystemWebAppBrowser(
       profile_, ash::SystemWebAppType::OS_FEEDBACK);
 
@@ -336,7 +364,7 @@ void ChromeOsFeedbackDelegate::OpenWebDialog(GURL url) {
   ChildWebDialog* child_dialog = new ChildWebDialog(
       profile_, widget, url,
       /*title=*/std::u16string(),
-      /*modal_type=*/ui::MODAL_TYPE_NONE, /*dialog_width=*/640,
+      /*modal_type=*/ui::MODAL_TYPE_NONE, /*args=*/args, /*dialog_width=*/640,
       /*dialog_height=*/400, /*can_resize=*/true,
       /*can_minimize=*/true);
 

@@ -7,6 +7,7 @@
 #include <set>
 #include <vector>
 
+#include "base/guid.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "importer/imported_notes_entry.h"
@@ -19,7 +20,6 @@ class Profile;
 
 namespace base {
 class FilePath;
-class GUID;
 }  // namespace base
 
 namespace content {
@@ -261,12 +261,11 @@ class NotesModel : public KeyedService {
                     int index,
                     std::unique_ptr<NoteNode> node);
 
-  content::BrowserContext* context_;
   std::unique_ptr<NoteNode> root_;
 
-  PermanentNoteNode* main_node_ = nullptr;
-  PermanentNoteNode* other_node_ = nullptr;
-  PermanentNoteNode* trash_node_ = nullptr;
+  raw_ptr<PermanentNoteNode> main_node_ = nullptr;
+  raw_ptr<PermanentNoteNode> other_node_ = nullptr;
+  raw_ptr<PermanentNoteNode> trash_node_ = nullptr;
 
   bool loaded_ = false;
 
@@ -290,8 +289,8 @@ class NotesModel : public KeyedService {
   // current id for nodes. Used in getNewIndex()
   int64_t next_node_id_ = 1;
 
-  sync_notes::NoteSyncService* sync_service_;
-  file_sync::SyncedFileStore* synced_file_store_;
+  const raw_ptr<sync_notes::NoteSyncService> sync_service_;
+  const raw_ptr<file_sync::SyncedFileStore> synced_file_store_;
 
   base::WeakPtrFactory<NotesModel> weak_factory_{this};
 };

@@ -6,13 +6,13 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "cc/layers/video_frame_provider.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl_dxgi.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/win/mf_helpers.h"
 
 namespace content {
@@ -219,7 +219,7 @@ void DCOMPTextureWrapperImpl::CreateVideoFrame(
   gpu::MailboxHolder holder[media::VideoFrame::kMaxPlanes];
   gpu::Mailbox mailbox = sii->CreateSharedImage(
       gmb.get(), nullptr, gfx::ColorSpace(), kTopLeft_GrSurfaceOrigin,
-      kPremul_SkAlphaType, usage);
+      kPremul_SkAlphaType, usage, "DCOMPTextureWrapperImpl");
   gpu::SyncToken sync_token = sii->GenVerifiedSyncToken();
   holder[0] = gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D);
 

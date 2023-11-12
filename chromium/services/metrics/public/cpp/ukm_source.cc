@@ -66,6 +66,8 @@ SourceType ToProtobufSourceType(SourceIdType source_id_type) {
       return SourceType::CHROMEOS_WEBSITE_ID;
     case SourceIdType::EXTENSION_ID:
       return SourceType::EXTENSION_ID;
+    case SourceIdType::SOFT_NAVIGATION_ID:
+      return SourceType::SOFT_NAVIGATION_ID;
   }
 }
 
@@ -156,7 +158,6 @@ void UkmSource::UpdateUrl(const GURL& new_url) {
 void UkmSource::PopulateProto(Source* proto_source) const {
   DCHECK(!proto_source->has_id());
   DCHECK(!proto_source->has_type());
-  DCHECK(!proto_source->has_url());
 
   proto_source->set_id(id_);
   proto_source->set_type(ToProtobufSourceType(type_));

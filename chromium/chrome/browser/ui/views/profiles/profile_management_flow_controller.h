@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_MANAGEMENT_FLOW_CONTROLLER_H_
 #define CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_MANAGEMENT_FLOW_CONTROLLER_H_
 
+#include <string>
+
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
-#include "chrome/browser/ui/views/profiles/profile_management_utils.h"
+#include "chrome/browser/ui/views/profiles/profile_management_types.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_web_contents_host.h"
 #include "components/signin/public/base/signin_buildflags.h"
 
@@ -87,6 +89,12 @@ class ProfileManagementFlowController {
   // screen (if the original EntryPoint was to open the picker).
   virtual void CancelPostSignInFlow() = 0;
 
+  // Returns a string to use as title for the window, for accessibility
+  // purposes. It is used in case the host is not able to obtain a title from
+  // the content it's rendering. As a final fallback, if this value is empty
+  // (which is the default), the host will choose itself some generic title.
+  virtual std::u16string GetFallbackAccessibleWindowTitle() const;
+
  protected:
   void RegisterStep(Step step,
                     std::unique_ptr<ProfileManagementStepController>);
@@ -120,6 +128,11 @@ class ProfileManagementFlowController {
   ProfilePickerWebContentsHost* host() { return host_; }
 
  private:
+  // Called after a browser is open. Clears the host and then runs the callback.
+  void CloseHostAndRunCallback(
+      PostHostClearedCallback post_host_cleared_callback,
+      Browser* browser);
+
   Step current_step_ = Step::kUnknown;
 
   raw_ptr<ProfilePickerWebContentsHost> host_;
@@ -127,6 +140,8 @@ class ProfileManagementFlowController {
 
   base::flat_map<Step, std::unique_ptr<ProfileManagementStepController>>
       initialized_steps_;
+
+  base::WeakPtrFactory<ProfileManagementFlowController> weak_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PROFILES_PROFILE_MANAGEMENT_FLOW_CONTROLLER_H_

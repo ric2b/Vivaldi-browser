@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CurrentWallpaper, DefaultImageSymbol, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, kDefaultImageSymbol, OnlineImageType, SetDailyRefreshResponse, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperObserverInterface, WallpaperObserverRemote, WallpaperProviderInterface, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
+import {CurrentWallpaper, DefaultImageSymbol, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, kDefaultImageSymbol, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperLayout, WallpaperObserverInterface, WallpaperObserverRemote, WallpaperProviderInterface, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
@@ -45,24 +45,32 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
      */
     this.collections_ = [
       {
-        description: 'description for collection zero',
+        descriptionContent: 'description for collection zero',
         id: 'id_0',
         name: 'zero',
         previews: [{url: 'https://collections.googleusercontent.com/0'}],
       },
       {
-        description: '',
+        descriptionContent: '',
         id: 'id_1',
         name: 'one',
         previews: [{url: 'https://collections.googleusercontent.com/1'}],
       },
       {
-        description: '',
+        descriptionContent: '',
         id: 'id_2',
         name: 'dark-light',
         previews: [
           {url: 'https://collections.googleusercontent.com/2'},
           {url: 'https://collections.googleusercontent.com/3'},
+        ],
+      },
+      {
+        descriptionContent: '',
+        id: 'id_3',
+        name: 'time-of-day',
+        previews: [
+          {url: 'https://collections.googleusercontent.com/tod'},
         ],
       },
     ];
@@ -72,11 +80,11 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
      */
     this.images_ = [
       {
-        assetId: BigInt(0),
-        attribution: ['Image 0 dark'],
-        url: {url: 'https://images.googleusercontent.com/0'},
+        assetId: BigInt(1),
+        attribution: ['Image 0 light'],
+        url: {url: 'https://images.googleusercontent.com/1'},
         unitId: BigInt(1),
-        type: OnlineImageType.kDark,
+        type: OnlineImageType.kLight,
       },
       {
         assetId: BigInt(2),
@@ -86,11 +94,39 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
         type: OnlineImageType.kUnknown,
       },
       {
-        assetId: BigInt(1),
-        attribution: ['Image 0 light'],
-        url: {url: 'https://images.googleusercontent.com/1'},
+        assetId: BigInt(0),
+        attribution: ['Image 0 dark'],
+        url: {url: 'https://images.googleusercontent.com/0'},
         unitId: BigInt(1),
+        type: OnlineImageType.kDark,
+      },
+      {
+        assetId: BigInt(3),
+        attribution: ['Image 3'],
+        url: {url: 'https://images.googleusercontent.com/light-1'},
+        unitId: BigInt(3),
         type: OnlineImageType.kLight,
+      },
+      {
+        assetId: BigInt(4),
+        attribution: ['Image 3'],
+        url: {url: 'https://images.googleusercontent.com/morning-1'},
+        unitId: BigInt(3),
+        type: OnlineImageType.kMorning,
+      },
+      {
+        assetId: BigInt(5),
+        attribution: ['Image 3'],
+        url: {url: 'https://images.googleusercontent.com/afternoon-1'},
+        unitId: BigInt(3),
+        type: OnlineImageType.kLateAfternoon,
+      },
+      {
+        assetId: BigInt(6),
+        attribution: ['Image 3'],
+        url: {url: 'https://images.googleusercontent.com/dark-1'},
+        unitId: BigInt(3),
+        type: OnlineImageType.kDark,
       },
     ];
 
@@ -104,10 +140,8 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
 
     this.currentWallpaper = {
       attribution: ['Image 0 light'],
-      description: {
-        content: 'test content',
-        title: 'test title',
-      },
+      descriptionContent: 'test content',
+      descriptionTitle: 'test title',
       key: '1',
       layout: WallpaperLayout.kCenter,
       type: WallpaperType.kOnline,
@@ -116,6 +150,7 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
     this.albumId = '';
 
     this.collectionId = this.collections_![0]!.id;
+    this.timeOfDayCollectionId = this.collections_![3]!.id;
   }
 
   private collections_: WallpaperCollection[]|null;
@@ -139,12 +174,11 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
   currentWallpaper: CurrentWallpaper;
   albumId: string;
   collectionId: string;
+  setDailyRefreshCollectionIdResponse = {success: false};
+  timeOfDayCollectionId: string;
   selectWallpaperResponse = true;
   selectGooglePhotosPhotoResponse = true;
-  selectGooglePhotosAlbumResponse: SetDailyRefreshResponse = {
-    success: true,
-    forceRefresh: true,
-  };
+  selectGooglePhotosAlbumResponse = true;
   selectDefaultImageResponse = true;
   selectLocalImageResponse = true;
   updateDailyRefreshWallpaperResponse = true;
@@ -260,7 +294,7 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
 
   selectGooglePhotosAlbum(id: string) {
     this.methodCalled('selectGooglePhotosAlbum', id);
-    return Promise.resolve({response: this.selectGooglePhotosAlbumResponse});
+    return Promise.resolve({success: this.selectGooglePhotosAlbumResponse});
   }
 
   getGooglePhotosDailyRefreshAlbumId() {
@@ -280,7 +314,7 @@ export class TestWallpaperProvider extends TestBrowserProxy implements
 
   setDailyRefreshCollectionId(collectionId: string) {
     this.methodCalled('setDailyRefreshCollectionId', collectionId);
-    return Promise.resolve({response: {success: false, forceRefresh: false}});
+    return Promise.resolve(this.setDailyRefreshCollectionIdResponse);
   }
 
   getDailyRefreshCollectionId() {

@@ -52,7 +52,6 @@
 #include "third_party/blink/public/mojom/app_banner/app_banner.mojom.h"
 #include "third_party/blink/public/mojom/clipboard/clipboard.mojom.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
-#include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/blink/public/platform/web_cache.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_isolated_world_info.h"
@@ -304,7 +303,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void RemoveSpellCheckResolvedCallback();
   void RemoveWebPageOverlay();
   void ResolveBeforeInstallPromptPromise(const std::string& platform);
-  void RunIdleTasks(v8::Local<v8::Function> callback);
   void SendBluetoothManualChooserEvent(const std::string& event,
                                        const std::string& argument);
   void SetAcceptLanguages(const std::string& accept_languages);
@@ -378,6 +376,8 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
                             int min_height,
                             int max_width,
                             int max_height);
+  void DisableAutomaticDragDrop();
+  void GoToOffset(int offset);
   v8::Local<v8::Value> EvaluateScriptInIsolatedWorldAndReturnValue(
       int world_id,
       const std::string& script);
@@ -673,10 +673,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::RemoveWebPageOverlay)
       .SetMethod("resolveBeforeInstallPromptPromise",
                  &TestRunnerBindings::ResolveBeforeInstallPromptPromise)
-      // Immediately run all pending idle tasks, including all pending
-      // requestIdleCallback calls.  Invoke the callback when all
-      // idle tasks are complete.
-      .SetMethod("runIdleTasks", &TestRunnerBindings::RunIdleTasks)
       .SetMethod("selectionAsMarkup", &TestRunnerBindings::SelectionAsMarkup)
 
       // The Bluetooth functions are specified at
@@ -822,7 +818,10 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       // webHistoryItemCount is used by tests in web_tests\http\tests\history
       .SetProperty("webHistoryItemCount",
                    &TestRunnerBindings::WebHistoryItemCount)
-      .SetMethod("windowCount", &TestRunnerBindings::WindowCount);
+      .SetMethod("windowCount", &TestRunnerBindings::WindowCount)
+      .SetMethod("disableAutomaticDragDrop",
+                 &TestRunnerBindings::DisableAutomaticDragDrop)
+      .SetMethod("goToOffset", &TestRunnerBindings::GoToOffset);
 }
 
 BoundV8Callback TestRunnerBindings::WrapV8Callback(
@@ -2039,15 +2038,6 @@ void TestRunnerBindings::ResolveBeforeInstallPromptPromise(
   }
 }
 
-void TestRunnerBindings::RunIdleTasks(v8::Local<v8::Function> v8_callback) {
-  if (invalid_)
-    return;
-  blink::scheduler::WebThreadScheduler* scheduler =
-      content::RenderThreadImpl::current()->GetWebMainThreadScheduler();
-  blink::scheduler::RunIdleTasksForTesting(
-      scheduler, WrapV8Closure(std::move(v8_callback)));
-}
-
 std::string TestRunnerBindings::PlatformName() {
   if (invalid_)
     return {};
@@ -2181,6 +2171,20 @@ void TestRunnerBindings::ForceNextDrawingBufferCreationToFail() {
   if (invalid_)
     return;
   blink::ForceNextDrawingBufferCreationToFailForTest();
+}
+
+void TestRunnerBindings::DisableAutomaticDragDrop() {
+  if (invalid_) {
+    return;
+  }
+  runner_->DisableAutomaticDragDrop();
+}
+
+void TestRunnerBindings::GoToOffset(int offset) {
+  if (invalid_) {
+    return;
+  }
+  runner_->GoToOffset(offset);
 }
 
 void TestRunnerBindings::NotImplemented(const gin::Arguments& args) {}
@@ -3505,4 +3509,12 @@ void TestRunner::HandleBluetoothFakeAdapterSetterDisconnected() {
   bluetooth_fake_adapter_setter_.reset();
 }
 
+void TestRunner::DisableAutomaticDragDrop() {
+  web_test_runtime_flags_.set_auto_drag_drop_enabled(false);
+  OnWebTestRuntimeFlagsChanged();
+}
+
+bool TestRunner::AutomaticDragDropEnabled() {
+  return web_test_runtime_flags_.auto_drag_drop_enabled();
+}
 }  // namespace content

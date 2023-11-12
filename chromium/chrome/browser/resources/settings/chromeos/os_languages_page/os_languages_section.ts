@@ -25,7 +25,7 @@ import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {FocusConfig} from '../../focus_config.js';
+import {FocusConfig} from '../focus_config.js';
 import {routes} from '../os_settings_routes.js';
 import {Router} from '../router.js';
 
@@ -87,8 +87,7 @@ class OsSettingsLanguagesSectionElement extends
       smartInputsEnabled_: {
         type: Boolean,
         value() {
-          return loadTimeData.getBoolean('allowAssistivePersonalInfo') ||
-              loadTimeData.getBoolean('allowEmojiSuggestion');
+          return loadTimeData.getBoolean('allowEmojiSuggestion');
         },
       },
 

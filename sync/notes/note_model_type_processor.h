@@ -132,7 +132,7 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
                                          int index,
                                          base::Value::List* all_nodes) const;
 
-  file_sync::SyncedFileStore* synced_file_store_;
+  const raw_ptr<file_sync::SyncedFileStore> synced_file_store_;
 
   // Stores the start callback in between OnSyncStarting() and
   // ModelReadyToSync().
@@ -141,7 +141,7 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   // The note model we are processing local changes from and forwarding
   // remote changes to. It is set during ModelReadyToSync(), which is called
   // during startup, as part of the note-loading process.
-  vivaldi::NotesModel* notes_model_ = nullptr;
+  raw_ptr<vivaldi::NotesModel> notes_model_ = nullptr;
 
   // The callback used to schedule the persistence of note model as well as
   // the metadata to a file during which latest metadata should also be pulled

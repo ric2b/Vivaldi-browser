@@ -217,7 +217,7 @@ bool MenubarAPI::HandleActionById(content::BrowserContext* browser_context,
 
 ExtensionFunction::ResponseAction MenubarSetupFunction::Run() {
   auto params = menubar::Setup::Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   // Set up map based on the incoming actions and update id to match this map.
   if (SetIds(params->items, true)) {

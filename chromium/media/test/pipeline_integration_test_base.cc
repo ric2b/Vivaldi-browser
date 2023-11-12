@@ -109,7 +109,6 @@ static std::vector<std::unique_ptr<AudioDecoder>> CreateAudioDecodersForTest(
   audio_decoders.push_back(
       std::make_unique<FFmpegAudioDecoder>(media_task_runner, media_log));
 #endif
-
   return audio_decoders;
 }
 
@@ -590,7 +589,7 @@ std::string PipelineIntegrationTestBase::GetVideoHash() {
   return base::MD5DigestToBase16(digest);
 }
 
-std::string PipelineIntegrationTestBase::GetAudioHash() {
+const AudioHash& PipelineIntegrationTestBase::GetAudioHash() const {
   DCHECK(hashing_enabled_);
 
   if (clockless_playback_)

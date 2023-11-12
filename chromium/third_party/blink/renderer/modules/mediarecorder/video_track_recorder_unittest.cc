@@ -13,6 +13,7 @@
 #include "media/base/video_codecs.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
+#include "media/media_buildflags.h"
 #include "media/video/mock_gpu_video_accelerator_factories.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -62,10 +63,13 @@ const TestFrameType kTestFrameTypes[] = {TestFrameType::kNv12GpuMemoryBuffer,
                                          TestFrameType::kI420};
 
 const VideoTrackRecorder::CodecId kTrackRecorderTestCodec[] = {
-    VideoTrackRecorder::CodecId::kVp8, VideoTrackRecorder::CodecId::kVp9
+    VideoTrackRecorder::CodecId::kVp8,
+    VideoTrackRecorder::CodecId::kVp9,
 #if BUILDFLAG(RTC_USE_H264)
-    ,
-    VideoTrackRecorder::CodecId::kH264
+    VideoTrackRecorder::CodecId::kH264,
+#endif
+#if BUILDFLAG(ENABLE_LIBAOM)
+    VideoTrackRecorder::CodecId::kAv1,
 #endif
 };
 const gfx::Size kTrackRecorderTestSize[] = {
@@ -86,6 +90,10 @@ constexpr media::VideoCodec MediaVideoCodecFromCodecId(
 #if BUILDFLAG(RTC_USE_H264)
     case VideoTrackRecorder::CodecId::kH264:
       return media::VideoCodec::kH264;
+#endif
+#if BUILDFLAG(ENABLE_LIBAOM)
+    case VideoTrackRecorder::CodecId::kAv1:
+      return media::VideoCodec::kAV1;
 #endif
     default:
       return media::VideoCodec::kUnknown;
@@ -166,7 +174,8 @@ class VideoTrackRecorderTest
 
   void InitializeRecorder(VideoTrackRecorder::CodecProfile codec_profile) {
     video_track_recorder_ = std::make_unique<VideoTrackRecorderImpl>(
-        codec_profile, WebMediaStreamTrack(component_.Get()),
+        scheduler::GetSingleThreadTaskRunnerForTesting(), codec_profile,
+        WebMediaStreamTrack(component_.Get()),
         ConvertToBaseRepeatingCallback(
             CrossThreadBindRepeating(&VideoTrackRecorderTest::OnEncodedVideo,
                                      CrossThreadUnretained(this))),
@@ -196,7 +205,7 @@ class VideoTrackRecorderTest
   }
 
   void OnFailed() { FAIL(); }
-  void OnError() { video_track_recorder_->OnError(); }
+  void OnError() { video_track_recorder_->OnHardwareEncoderError(); }
 
   bool CanEncodeAlphaChannel() {
     bool result;
@@ -261,7 +270,7 @@ class VideoTrackRecorderTest
         frame_type == TestFrameType::kNv12Software
             ? media::VideoFrame::STORAGE_OWNED_MEMORY
             : media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER,
-        media::VideoPixelFormat::PIXEL_FORMAT_NV12);
+        media::VideoPixelFormat::PIXEL_FORMAT_NV12, base::TimeDelta());
     scoped_refptr<media::VideoFrame> video_frame2 = video_frame;
     if (frame_type == TestFrameType::kNv12GpuMemoryBuffer)
       video_frame2 = media::ConvertToMemoryMappedFrame(video_frame);
@@ -423,7 +432,7 @@ TEST_P(VideoTrackRecorderTest, EncodeFrameRGB) {
           : blink::CreateTestFrame(frame_size, gfx::Rect(frame_size),
                                    frame_size,
                                    media::VideoFrame::STORAGE_GPU_MEMORY_BUFFER,
-                                   media::PIXEL_FORMAT_XRGB);
+                                   media::PIXEL_FORMAT_XRGB, base::TimeDelta());
 
   base::RunLoop run_loop;
   EXPECT_CALL(*this, OnEncodedVideo(_, _, _, _, true))
@@ -606,6 +615,7 @@ class VideoTrackRecorderPassthroughTest
 
   void InitializeRecorder() {
     video_track_recorder_ = std::make_unique<VideoTrackRecorderPassthrough>(
+        scheduler::GetSingleThreadTaskRunnerForTesting(),
         WebMediaStreamTrack(component_.Get()),
         ConvertToBaseRepeatingCallback(CrossThreadBindRepeating(
             &VideoTrackRecorderPassthroughTest::OnEncodedVideo,

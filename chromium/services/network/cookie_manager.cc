@@ -315,10 +315,12 @@ void CookieManager::SetStorageAccessGrantSettings(
   std::move(callback).Run();
 }
 
-void CookieManager::SetTopLevelStorageAccessSettings(
-    const ContentSettingsForOneType& settings,
-    SetTopLevelStorageAccessSettingsCallback callback) {
-  cookie_settings_.set_top_level_storage_access_grants(settings);
+void CookieManager::SetAllStorageAccessSettings(
+    const ContentSettingsForOneType& standard_settings,
+    const ContentSettingsForOneType& top_level_settings,
+    SetStorageAccessGrantSettingsCallback callback) {
+  cookie_settings_.set_storage_access_grants(standard_settings);
+  cookie_settings_.set_top_level_storage_access_grants(top_level_settings);
 
   // Signal our storage update is complete.
   std::move(callback).Run();
@@ -390,6 +392,8 @@ CookieDeletionInfo DeletionFilterToInfo(mojom::CookieDeletionFilterPtr filter) {
       filter->cookie_partition_key_collection
           ? *filter->cookie_partition_key_collection
           : net::CookiePartitionKeyCollection::ContainsAll();
+
+  delete_info.partitioned_state_only = filter->partitioned_state_only;
 
   return delete_info;
 }

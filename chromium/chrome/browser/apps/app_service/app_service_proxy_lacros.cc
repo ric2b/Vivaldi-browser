@@ -416,6 +416,8 @@ void AppServiceProxyLacros::SetSupportedLinksPreference(
 
 void AppServiceProxyLacros::RemoveSupportedLinksPreference(
     const std::string& app_id) {
+  // If this is implemented, also add the crosapi method to
+  // LoopbackCrosapiAppServiceProxy.
   NOTIMPLEMENTED();
 }
 
@@ -441,6 +443,11 @@ void AppServiceProxyLacros::SetWebsiteMetricsServiceForTesting(
     std::unique_ptr<apps::WebsiteMetricsServiceLacros>
         website_metrics_service) {
   metrics_service_ = std::move(website_metrics_service);
+}
+
+crosapi::mojom::AppServiceSubscriber*
+AppServiceProxyLacros::AsAppServiceSubscriberForTesting() {
+  return this;
 }
 
 base::WeakPtr<AppServiceProxyLacros> AppServiceProxyLacros::GetWeakPtr() {
@@ -618,7 +625,7 @@ void AppServiceProxyLacros::ProxyLaunch(crosapi::mojom::LaunchParamsPtr params,
 
 void AppServiceProxyLacros::InitWebsiteMetrics() {
   if (metrics_service_) {
-    metrics_service_->Start();
+    metrics_service_->InitDeviceTypeAndStart();
   }
 }
 

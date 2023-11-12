@@ -8,6 +8,7 @@ import "content/services/auction_worklet/public/mojom/private_aggregation_reques
 import "mojo/public/mojom/base/time.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
 import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
+import "third_party/blink/public/mojom/interest_group/ad_display_size.mojom";
 import "third_party/blink/public/mojom/interest_group/interest_group_types.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
@@ -59,7 +60,7 @@ struct BidderWorkletNonSharedParams {
 
   blink.mojom.InterestGroup.ExecutionMode execution_mode;
 
-  url.mojom.Url? daily_update_url;
+  url.mojom.Url? update_url;
   array<string>? trusted_bidding_signals_keys;
   string? user_bidding_signals;
   array<blink.mojom.InterestGroupAd>? ads;
@@ -94,18 +95,27 @@ struct BidderWorkletBid {
   // Offered bid value. Always greater than 0.
   double bid;
 
+  // Currency for the bid.
+  blink.mojom.AdCurrency? bid_currency;
+
+  // 'adCost' returned by generateBid, if any.
+  double? ad_cost;
+
   // Render URL of the bid.
-  url.mojom.Url render_url;
+  blink.mojom.AdDescriptor ad_descriptor;
 
   // Ad components associated with bid, if any. These allow a single ad to be
-  // composed of multiple smaller ads. The `render_url` is the main URL, and
-  // is responsible for laying out these ads URLs in its subframes.
+  // composed of multiple smaller ads. The `ad_descriptor` contains the main
+  // URL, and is responsible for laying out these ads URLs in its subframes.
   //
   // May only contain URLs matching the `render_url`s of the `ad_components`
   // of the InterestGroup that made this bid. May have at most 20 URLs. Must
   // be null if the InterestGroup making this bid has a null `ad_components`
   // field.
-  array<url.mojom.Url>? ad_components;
+  array<blink.mojom.AdDescriptor>? ad_component_descriptors;
+
+  // `modelingSignals` returned by generateBid, if any.
+  uint16? modeling_signals;
 
   // How long it took to run the generateBid() script.
   mojo_base.mojom.TimeDelta bid_duration;
@@ -163,11 +173,11 @@ interface GenerateBidClient {
   //   were received, or the signals had not priorityVector for the interest
   //   group that is generating a bid.
   //
-  //  `trusted_signals_fetch_duration` The amount of time taken fetching trusted
+  //  `trusted_signals_fetch_latency` The amount of time taken fetching trusted
   //  bidding signals. If no trusted signals were fetched, returns a 0 duration.
   OnBiddingSignalsReceived(
       map<string, double> priority_vector,
-      mojo_base.mojom.TimeDelta trusted_signals_fetch_duration) => ();
+      mojo_base.mojom.TimeDelta trusted_signals_fetch_latency) => ();
 
   // Invoked once GenerateBid completes, either having successfully generated a
   // bid, or having failed to generate one for any reason.
@@ -221,7 +231,7 @@ interface GenerateBidClient {
   //
   // `pa_requests` The various requests made to the Private Aggregation API.
   //
-  // `bidding_duration` The amount of time taken running all bids (note that
+  // `bidding_latency` The amount of time taken running all bids (note that
   // there may be 2 bids if the first bid result was not k-anonymous).
   //
   // `errors` The various error messages to be used for debugging. These are too
@@ -239,7 +249,8 @@ interface GenerateBidClient {
       bool has_set_priority,
       map<string, PrioritySignalsDouble?> update_priority_signals_overrides,
       array<PrivateAggregationRequest> pa_requests,
-      mojo_base.mojom.TimeDelta bidding_duration,
+      array<PrivateAggregationRequest> non_kanon_pa_requests,
+      mojo_base.mojom.TimeDelta bidding_latency,
       array<string> errors);
 };
 
@@ -260,6 +271,8 @@ interface GenerateBidFinalizer {
   //  publisher page and provided to all interest groups with the same owner
   //  as the one specified `interest_group`.
   //
+  // `expected_buyer_currency` Currency restriction specified for this buyer.
+  //
   // `per_buyer_timeout` Restrict the runtime of particular buyer's bidding
   //  scripts. Any timeout higher than 500 ms will be clamped to 500 ms before
   //  passing in as `per_buyer_timeout`. Null if not provided by the publisher
@@ -272,6 +285,7 @@ interface GenerateBidFinalizer {
       string? auction_signals_json,
       string? per_buyer_signals_json,
       mojo_base.mojom.TimeDelta? per_buyer_timeout,
+      blink.mojom.AdCurrency? expected_buyer_currency,
       url.mojom.Url? direct_from_seller_per_buyer_signals,
       url.mojom.Url? direct_from_seller_auction_signals);
 };
@@ -292,9 +306,11 @@ interface GenerateBidFinalizer {
 interface BidderWorklet {
   // Loads the same-origin realtime bidding signals URL (if necessary), and
   // after the rest of the arguments for it have been provided via
-  // `bid_finalizer`, invokes the worklet's generateBid() method, returning the
-  // generated bid and associated data. Waits for the worklet script to be
-  // loaded first, if needed.
+  // a FinishGenerateBid() call on `bid_finalizer`, invokes the worklet's
+  // generateBid() method, returning the generated bid and associated data.
+  // Waits for the worklet script to be loaded first, if needed.
+  // FinishGenerateBid() *must* always be called, even if no parameters are
+  // provided as promises.
   //
   // Arguments:
   // `bidder_worklet_non_shared_params` values that can vary in the
@@ -413,14 +429,33 @@ interface BidderWorklet {
   //  BidderWorklet's generateBid() method, invoked as part of BidderWorklet
   //  creation.
   //
-  // `browser_signal_bid` The numeric value of the winning bid.
+  // `browser_signal_bid` The numeric value of the winning bid. This is always
+  //  in the bidder's own currency.
+  //
+  // `browser_signal_bid_currency` Currency for the winning bid.
+  //  The client should redact the currency if it's not guaranteed by the
+  //  auction configuration to avoid leaking information.
   //
   // `browser_signal_highest_scoring_other_bid` The numeric value of the bid
-  //  that got the second highest score.
+  //  that got the second highest score, or 0 if it's not available, either
+  //  because there is no such thing or because sellerCurrency is enabled, and
+  //  the relevant bid was in a different currency without scoreAd providing
+  //  a conversion for it.
+  //
+  // `browser_signal_highest_scoring_other_bid_currency` The currency associated
+  //  with `browser_signal_highest_scoring_other_bid`. If a concrete value is
+  //  provided, it's always the sellerCurrency for the auction.
   //
   // `browser_signal_made_highest_scoring_other_bid` True only if owner of
   //  the interest group that ReportWin() is being invoked on behalf of made
   //  all the second-highest scoring bids in the auction.
+  //
+  // `browser_signal_ad_cost` The numeric value of the adCost associated with
+  //  the winning bid, if specified by `generateBid()`.
+  //
+  //  `browser_signal_modeling_signals` The masked and noised numeric value of
+  //  the modelingSignals associated with the winning bid, if specified by
+  //  `generateBid()`.
   //
   // `browser_signal_seller_origin` The origin of the seller script running
   //  the auction. Typically a valid, non-opaque HTTPS origin.
@@ -463,8 +498,14 @@ interface BidderWorklet {
       string seller_signals_json,
       url.mojom.Url browser_signal_render_url,
       double browser_signal_bid,
+      blink.mojom.AdCurrency? browser_signal_bid_currency,
       double browser_signal_highest_scoring_other_bid,
+      blink.mojom.AdCurrency? browser_signal_highest_scoring_other_bid_currency,
       bool browser_signal_made_highest_scoring_other_bid,
+      double? browser_signal_ad_cost,
+      uint16? browser_signal_modeling_signals,
+      uint8 browser_signal_join_count,
+      uint8 browser_signal_recency,
       url.mojom.Origin browser_signal_seller_origin,
       url.mojom.Origin? browser_signal_top_level_seller_origin,
       uint32 bidding_signals_data_version,

@@ -10,7 +10,7 @@
 #import "components/keyed_service/ios/browser_state_dependency_manager.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/application_context/application_context.h"
-#import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#import "ios/chrome/browser/bookmarks/local_or_syncable_bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/commerce/session_proto_db_factory.h"
@@ -18,6 +18,7 @@
 #import "ios/chrome/browser/optimization_guide/optimization_guide_service_factory.h"
 #import "ios/chrome/browser/power_bookmarks/power_bookmark_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -50,13 +51,15 @@ ShoppingServiceFactory::ShoppingServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "ShoppingService",
           BrowserStateDependencyManager::GetInstance()) {
-  DependsOn(ios::BookmarkModelFactory::GetInstance());
-  DependsOn(OptimizationGuideServiceFactory::GetInstance());
   DependsOn(IdentityManagerFactory::GetInstance());
+  DependsOn(ios::LocalOrSyncableBookmarkModelFactory::GetInstance());
+  // TODO(crbug.com/1425818): Add AccountBookmarkModelFactory support.
+  DependsOn(OptimizationGuideServiceFactory::GetInstance());
+  DependsOn(PowerBookmarkServiceFactory::GetInstance());
   DependsOn(SessionProtoDBFactory<
             commerce_subscription_db::CommerceSubscriptionContentProto>::
                 GetInstance());
-  DependsOn(PowerBookmarkServiceFactory::GetInstance());
+  DependsOn(SyncServiceFactory::GetInstance());
 }
 
 std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
@@ -67,24 +70,16 @@ std::unique_ptr<KeyedService> ShoppingServiceFactory::BuildServiceInstanceFor(
   return std::make_unique<ShoppingService>(
       GetCurrentCountryCode(GetApplicationContext()->GetVariationsService()),
       GetApplicationContext()->GetApplicationLocale(),
-      ios::BookmarkModelFactory::GetInstance()->GetForBrowserState(
-          chrome_state),
+      ios::LocalOrSyncableBookmarkModelFactory::GetInstance()
+          ->GetForBrowserState(chrome_state),
       OptimizationGuideServiceFactory::GetForBrowserState(chrome_state),
       pref_service, IdentityManagerFactory::GetForBrowserState(chrome_state),
+      SyncServiceFactory::GetForBrowserState(chrome_state),
       chrome_state->GetSharedURLLoaderFactory(),
       SessionProtoDBFactory<commerce_subscription_db::
                                 CommerceSubscriptionContentProto>::GetInstance()
           ->GetForBrowserState(chrome_state),
       PowerBookmarkServiceFactory::GetForBrowserState(chrome_state));
-}
-
-web::BrowserState* ShoppingServiceFactory::GetBrowserStateToUse(
-    web::BrowserState* state) const {
-  return GetBrowserStateRedirectedInIncognito(state);
-}
-
-bool ShoppingServiceFactory::ServiceIsCreatedWithBrowserState() const {
-  return true;
 }
 
 bool ShoppingServiceFactory::ServiceIsNULLWhileTesting() const {

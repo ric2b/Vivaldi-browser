@@ -8,6 +8,8 @@ sdk_info = exec_script("//build/config/ios/scripts/sdk_info.py",
                        [
                          "--target-cpu",
                          current_cpu,
+                         "--target-environment",
+                         target_environment,
                          "--deployment-target",
                          ios_deployment_target,
                        ],

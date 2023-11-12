@@ -8,6 +8,7 @@
 #include "base/compiler_specific.h"
 #include "base/test/scoped_feature_list.h"
 #include "net/base/net_errors.h"
+#include "third_party/blink/public/common/fenced_frame/redacted_fenced_frame_config.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom.h"
 
 class GURL;
@@ -38,13 +39,18 @@ class FencedFrameTestHelper {
       RenderFrameHost* fenced_frame_parent,
       const GURL& url,
       net::Error expected_error_code = net::OK,
-      blink::mojom::FencedFrameMode mode =
-          blink::mojom::FencedFrameMode::kDefault);
+      blink::FencedFrame::DeprecatedFencedFrameMode mode =
+          blink::FencedFrame::DeprecatedFencedFrameMode::kDefault,
+      bool wait_for_load = true);
 
   // This method is similar to `FencedFrameTestHelper::CreateFencedFrame` but
   // doesn't wait until the fenced frame completes loading.
   void CreateFencedFrameAsync(RenderFrameHost* fenced_frame_parent_rfh,
                               const GURL& url);
+
+  void NavigateFencedFrameUsingFledge(RenderFrameHost* fenced_frame_parent,
+                                      const GURL& url,
+                                      const std::string fenced_frame_id);
 
   // This method provides a way to navigate frames within a fenced frame's tree,
   // and synchronously wait for the load to finish. This method returns the
@@ -57,7 +63,8 @@ class FencedFrameTestHelper {
   RenderFrameHost* NavigateFrameInFencedFrameTree(
       RenderFrameHost* rfh,
       const GURL& url,
-      net::Error expected_error_code = net::OK);
+      net::Error expected_error_code = net::OK,
+      bool wait_for_load = true);
 
   // Returns the last created fenced frame. This can be used by embedders who
   // must create fenced frames from script but need to get the fence frame's

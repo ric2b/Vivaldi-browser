@@ -22,16 +22,19 @@ const char kCastStartStopHistogramName[] = "Media.Notification.Cast.StartStop";
 enum GlobalMediaControlsCastMode {
   kPresentation = 0,
   kRemotePlayback = 1,
+  kTabMirror = 2,
 
   // NOTE: Do not reorder existing entries, and add entries only immediately
   // above this line.
-  kMaxValue = kRemotePlayback,
+  kMaxValue = kTabMirror,
 };
 
 }  // namespace
 
 class MediaItemUIMetrics {
  public:
+  static void RecordStartCastMode(media_router::MediaCastMode cast_mode);
+  static void RecordStopCastMode(media_router::MediaCastMode cast_mode);
   static void RecordStartCastingMetrics(
       media_router::SinkIconType sink_icon_type,
       media_router::MediaCastMode cast_mode,

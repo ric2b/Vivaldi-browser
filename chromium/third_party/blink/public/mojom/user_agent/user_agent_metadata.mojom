@@ -30,4 +30,5 @@ struct UserAgentMetadata {
 struct UserAgentOverride {
   string ua_string_override;
   UserAgentMetadata? ua_metadata_override;
+  map<string, UserAgentMetadata> domain_ua_metadata_override;
 };

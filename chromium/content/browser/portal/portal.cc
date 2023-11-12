@@ -4,7 +4,6 @@
 
 #include "content/browser/portal/portal.h"
 
-#include <unordered_map>
 #include <utility>
 
 #include "base/check_op.h"
@@ -13,7 +12,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "content/browser/bad_message.h"
-#include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/navigation_request.h"
@@ -21,17 +19,14 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_frame_host_manager.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
-#include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/page_type.h"
 #include "content/public/common/referrer_type_converters.h"
-#include "mojo/public/cpp/bindings/pending_remote.h"
-#include "services/service_manager/public/mojom/interface_provider.mojom.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
+#include "third_party/blink/public/common/messaging/transferable_message.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/navigation/navigation_initiator_activation_and_ad_status.mojom.h"
 
@@ -250,8 +245,8 @@ void Portal::Navigate(const GURL& url,
   FrameTreeNode* portal_root = portal_contents_->GetPrimaryFrameTree().root();
   RenderFrameHostImpl* portal_frame = portal_root->current_frame_host();
 
-  // TODO(crbug.com/1237547): Change our implementation to disallow downloads for
-  // portals.
+  // Use a default download policy, since downloads are explicitly disabled in
+  // `CanDownload()`.
   blink::NavigationDownloadPolicy download_policy;
 
   // Navigations in portals do not affect the host's session history. Upon
@@ -280,11 +275,17 @@ void Portal::Navigate(const GURL& url,
   // this call.
   const blink::LocalFrameToken frame_token =
       owner_render_frame_host_->GetFrameToken();
+  absl::optional<GURL> initiator_base_url;
+  if (!owner_render_frame_host_->GetInheritedBaseUrl().is_empty() &&
+      (out_validated_url.IsAboutBlank() || out_validated_url.IsAboutSrcdoc())) {
+    // Note: GetInheritedBaseUrl() will only be non-empty when
+    // blink::features::IsNewBaseUrlInheritanceBehaviour is true.
+    initiator_base_url = owner_render_frame_host_->GetInheritedBaseUrl();
+  }
   portal_root->navigator().NavigateFromFrameProxy(
       portal_frame, out_validated_url, &frame_token,
       owner_render_frame_host_->GetProcess()->GetID(),
-      owner_render_frame_host_->GetLastCommittedOrigin(),
-      owner_render_frame_host_->GetInheritedBaseUrl(),
+      owner_render_frame_host_->GetLastCommittedOrigin(), initiator_base_url,
       owner_render_frame_host_->GetSiteInstance(),
       mojo::ConvertTo<Referrer>(referrer), ui::PAGE_TRANSITION_LINK,
       should_replace_entry, download_policy, "GET", nullptr, "", nullptr,

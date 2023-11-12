@@ -754,7 +754,8 @@ WebTransport::WebTransport(PassKey,
 WebTransport::WebTransport(ScriptState* script_state,
                            const String& url,
                            ExecutionContext* context)
-    : ExecutionContextLifecycleObserver(context),
+    : ActiveScriptWrappable<WebTransport>({}),
+      ExecutionContextLifecycleObserver(context),
       script_state_(script_state),
       url_(NullURL(), url),
       connector_(context),
@@ -785,7 +786,8 @@ ScriptPromise WebTransport::createUnidirectionalStream(
     return ScriptPromise();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   create_stream_resolvers_.insert(resolver);
   transport_remote_->CreateStream(
       std::move(data_pipe_consumer), mojo::ScopedDataPipeProducerHandle(),
@@ -830,7 +832,8 @@ ScriptPromise WebTransport::createBidirectionalStream(
     return ScriptPromise();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   create_stream_resolvers_.insert(resolver);
   transport_remote_->CreateStream(
       std::move(outgoing_consumer), std::move(incoming_producer),
@@ -1146,13 +1149,17 @@ void WebTransport::Trace(Visitor* visitor) const {
   ExecutionContextLifecycleObserver::Trace(visitor);
 }
 
-void WebTransport::Init(const String& url,
+void WebTransport::Init(const String& url_for_diagnostics,
                         const WebTransportOptions& options,
                         ExceptionState& exception_state) {
-  DVLOG(1) << "WebTransport::Init() url=" << url << " this=" << this;
+  DVLOG(1) << "WebTransport::Init() url=" << url_for_diagnostics
+           << " this=" << this;
   if (!url_.IsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
-                                      "The URL '" + url + "' is invalid.");
+    // Do not use `url_` in the error message, since we want to display the
+    // original URL and not the canonicalized version stored in `url_`.
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kSyntaxError,
+        "The URL '" + url_for_diagnostics + "' is invalid.");
     return;
   }
 

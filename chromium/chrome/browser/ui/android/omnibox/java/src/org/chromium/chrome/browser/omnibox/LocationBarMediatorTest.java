@@ -231,6 +231,8 @@ public class LocationBarMediatorTest {
     private PreloadPagesSettingsBridge.Natives mPreloadPagesSettingsJni;
     @Mock
     private LocationBarMediator.OmniboxUma mOmniboxUma;
+    @Mock
+    private OmniboxSuggestionsDropdownEmbedderImpl mEmbedderImpl;
 
     @Captor
     private ArgumentCaptor<Runnable> mRunnableCaptor;
@@ -260,7 +262,6 @@ public class LocationBarMediatorTest {
         Profile.setLastUsedProfileForTesting(mProfile);
         doReturn(mIdentityManager).when(mIdentityServicesProvider).getIdentityManager(mProfile);
         IdentityServicesProvider.setInstanceForTests(mIdentityServicesProvider);
-        Runnable noAction = () -> {}; // launchAssistanceSettingsAction
         OneshotSupplierImpl<TemplateUrlService> templateUrlServiceSupplier =
                 new OneshotSupplierImpl<>();
         templateUrlServiceSupplier.set(mTemplateUrlService);
@@ -268,8 +269,8 @@ public class LocationBarMediatorTest {
                 mProfileSupplier, mPrivacyPreferencesManager, mOverrideUrlLoadingDelegate,
                 mLocaleManager, templateUrlServiceSupplier, mOverrideBackKeyBehaviorDelegate,
                 mWindowAndroid,
-                /*isTablet=*/false, mSearchEngineLogoUtils, mLensController, noAction,
-                tab -> true, mOmniboxUma, () -> mIsToolbarMicEnabled);
+                /*isTablet=*/false, mSearchEngineLogoUtils, mLensController,
+                tab -> true, mOmniboxUma, () -> mIsToolbarMicEnabled, mEmbedderImpl);
         mMediator.setCoordinators(mUrlCoordinator, mAutocompleteCoordinator, mStatusCoordinator);
         ObjectAnimatorShadow.setUrlAnimator(mUrlAnimator);
         GSAStateShadow.setGSAState(mGSAState);
@@ -278,8 +279,10 @@ public class LocationBarMediatorTest {
                 mLocationBarDataProvider, mProfileSupplier, mPrivacyPreferencesManager,
                 mOverrideUrlLoadingDelegate, mLocaleManager, templateUrlServiceSupplier,
                 mOverrideBackKeyBehaviorDelegate, mWindowAndroid,
-                /*isTablet=*/true, mSearchEngineLogoUtils, mLensController, noAction,
-                tab -> true, (tab, transition, isNtp) -> {}, () -> mIsToolbarMicEnabled);
+                /*isTablet=*/true, mSearchEngineLogoUtils, mLensController,
+                tab
+                -> true,
+                (tab, transition, isNtp) -> {}, () -> mIsToolbarMicEnabled, mEmbedderImpl);
         mTabletMediator.setCoordinators(
                 mUrlCoordinator, mAutocompleteCoordinator, mStatusCoordinator);
         ShadowUrlUtilities.sIsNtp = false;
@@ -378,7 +381,8 @@ public class LocationBarMediatorTest {
         verify(mUrlCoordinator).setAutocompleteText("text", "textWithAutocomplete");
     }
 
-    public void testLoadUrl_base() {
+    @Test
+    public void testLoadUrl() {
         mMediator.onFinishNativeInitialization();
 
         doReturn(mTab).when(mLocationBarDataProvider).getTab();
@@ -388,18 +392,6 @@ public class LocationBarMediatorTest {
         assertEquals(TEST_URL, mLoadUrlParamsCaptor.getValue().getUrl());
         assertEquals(PageTransition.TYPED | PageTransition.FROM_ADDRESS_BAR,
                 mLoadUrlParamsCaptor.getValue().getTransitionType());
-    }
-
-    @Test
-    @Features.DisableFeatures({ChromeFeatureList.POST_TASK_FOCUS_TAB})
-    public void testLoadUrlNoPostTaskFocusTab() {
-        testLoadUrl_base();
-    }
-
-    @Test
-    @Features.EnableFeatures({ChromeFeatureList.POST_TASK_FOCUS_TAB})
-    public void testLoadUrlPostTaskFocusTab() {
-        testLoadUrl_base();
     }
 
     @Test
@@ -498,7 +490,8 @@ public class LocationBarMediatorTest {
         verify(mUrlCoordinator).setKeyboardVisibility(true, false);
     }
 
-    private void testPerformSearchQuery_base() {
+    @Test
+    public void testPerformSearchQuery() {
         mMediator.onFinishNativeInitialization();
         String query = "example search";
         List<String> params = Arrays.asList("param 1", "param 2");
@@ -512,18 +505,6 @@ public class LocationBarMediatorTest {
         assertEquals("http://www.search.com", mLoadUrlParamsCaptor.getValue().getUrl());
         assertEquals(PageTransition.GENERATED | PageTransition.FROM_ADDRESS_BAR,
                 mLoadUrlParamsCaptor.getValue().getTransitionType());
-    }
-
-    @Test
-    @Features.DisableFeatures({ChromeFeatureList.POST_TASK_FOCUS_TAB})
-    public void testPerformSearchQueryNoPostTaskFocusTab() {
-        testPerformSearchQuery_base();
-    }
-
-    @Test
-    @Features.EnableFeatures({ChromeFeatureList.POST_TASK_FOCUS_TAB})
-    public void testPerformSearchQueryPostTaskFocusTab() {
-        testPerformSearchQuery_base();
     }
 
     @Test
@@ -852,7 +833,7 @@ public class LocationBarMediatorTest {
                 mLocaleManager, templateUrlServiceSupplier, mOverrideBackKeyBehaviorDelegate,
                 mWindowAndroid,
                 /*isTablet=*/false, mSearchEngineLogoUtils, mLensController,
-                () -> {}, tab -> true, mOmniboxUma, () -> mIsToolbarMicEnabled);
+                tab -> true, mOmniboxUma, () -> mIsToolbarMicEnabled, mEmbedderImpl);
         mMediator.setCoordinators(mUrlCoordinator, mAutocompleteCoordinator, mStatusCoordinator);
         int primeCount = sGeoHeaderPrimeCount;
         mMediator.addUrlFocusChangeListener(mUrlCoordinator);
@@ -1157,7 +1138,6 @@ public class LocationBarMediatorTest {
     }
 
     @Test
-    @Features.EnableFeatures({ChromeFeatureList.POST_TASK_FOCUS_TAB})
     public void testRecordHistogramOmniboxClick_Ntp() {
         mMediator.onFinishNativeInitialization();
         doReturn(mTab).when(mLocationBarDataProvider).getTab();

@@ -6,9 +6,9 @@ package org.chromium.android_webview.test;
 
 import android.graphics.Rect;
 import android.net.Uri;
-import android.support.test.InstrumentationRegistry;
 import android.webkit.JavascriptInterface;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 
 import org.hamcrest.Matchers;
@@ -402,9 +402,9 @@ public class PopupWindowTest {
         }
 
         @Override
-        public void onPostMessage(String message, Uri sourceOrigin, boolean isMainFrame,
+        public void onPostMessage(MessagePayload payload, Uri sourceOrigin, boolean isMainFrame,
                 JsReplyProxy replyProxy, MessagePort[] ports) {
-            mQueue.add(new Data(message, isMainFrame, replyProxy));
+            mQueue.add(new Data(payload.getAsString(), isMainFrame, replyProxy));
         }
 
         public Data waitForOnPostMessage() throws Exception {

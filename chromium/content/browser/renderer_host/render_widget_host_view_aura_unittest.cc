@@ -536,8 +536,10 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
         std::make_unique<MockRenderProcessHost>(browser_context_.get());
     process_host_->Init();
     auto site_instance = SiteInstance::Create(browser_context_.get());
-    site_instance_group_ = base::WrapRefCounted(new SiteInstanceGroup(
-        site_instance->GetBrowsingInstanceId(), process_host_.get()));
+    static_cast<SiteInstanceImpl*>(site_instance.get())
+        ->SetProcessForTesting(process_host_.get());
+    site_instance_group_ =
+        static_cast<SiteInstanceImpl*>(site_instance.get())->group();
 
     sink_ = &process_host_->sink();
 
@@ -5652,6 +5654,7 @@ TEST_F(RenderWidgetHostViewAuraTest, MAYBE_NewContentRenderingTimeout) {
   // No new LocalSurfaceId should be allocated for the first navigation and the
   // timer should not fire.
   widget_host_->DidNavigate();
+  widget_host_->StartNewContentRenderingTimeout();
   viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
   EXPECT_EQ(id0, id1);
   {
@@ -5666,6 +5669,7 @@ TEST_F(RenderWidgetHostViewAuraTest, MAYBE_NewContentRenderingTimeout) {
 
   // Start the timer. Verify that a new LocalSurfaceId is allocated.
   widget_host_->DidNavigate();
+  widget_host_->StartNewContentRenderingTimeout();
   viz::LocalSurfaceId id2 = view_->GetLocalSurfaceId();
   EXPECT_TRUE(id2.is_valid());
   EXPECT_LT(id1.parent_sequence_number(), id2.parent_sequence_number());
@@ -5965,9 +5969,9 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
         CreateViewForProcess(widget_host_for_first_process_);
 
     second_process_host_ = CreateNewProcessHost();
-    second_site_instance_group_ = base::WrapRefCounted(
-        new SiteInstanceGroup(tab_site_instance_group()->browsing_instance_id(),
-                              second_process_host_.get()));
+    second_site_instance_group_ =
+        base::WrapRefCounted(SiteInstanceGroup::CreateForTesting(
+            tab_site_instance_group(), second_process_host_.get()));
     widget_host_for_second_process_ =
         CreateRenderWidgetHostForSiteInstanceGroup(
             second_site_instance_group_.get());
@@ -5975,9 +5979,9 @@ class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
         CreateViewForProcess(widget_host_for_second_process_);
 
     third_process_host_ = CreateNewProcessHost();
-    third_site_instance_group_ = base::WrapRefCounted(
-        new SiteInstanceGroup(tab_site_instance_group()->browsing_instance_id(),
-                              third_process_host_.get()));
+    third_site_instance_group_ =
+        base::WrapRefCounted(SiteInstanceGroup::CreateForTesting(
+            tab_site_instance_group(), third_process_host_.get()));
     widget_host_for_third_process_ = CreateRenderWidgetHostForSiteInstanceGroup(
         third_site_instance_group_.get());
     view_for_third_process_ =

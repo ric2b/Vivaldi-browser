@@ -101,6 +101,10 @@ class BrowserCommandController : public CommandUpdater,
                            LockedFullscreen);
 
   // Overridden from TabStripModelObserver:
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
   void TabBlockedStateChanged(content::WebContents* contents,
                               int index) override;
 
@@ -159,6 +163,9 @@ class BrowserCommandController : public CommandUpdater,
   // app windows.
   void UpdateCommandsForHostedAppAvailability();
 
+  // Update commands that are used in the Extensions menu in the app menu.
+  void UpdateCommandsForExtensionsMenu();
+
 #if BUILDFLAG(IS_CHROMEOS)
   // Update commands whose state depends on whether the window is in locked
   // fullscreen mode or not.
@@ -200,6 +207,9 @@ class BrowserCommandController : public CommandUpdater,
 
   // Updates commands that depend on whether web contents is focused or not.
   void UpdateCommandsForWebContentsFocus();
+
+  // Updates commands that depend on the state of the tab strip model.
+  void UpdateCommandsForTabStripStateChanged();
 
   inline BrowserWindow* window();
   inline Profile* profile();

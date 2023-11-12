@@ -13,7 +13,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "base/strings/string_util.h"
+#include "base/strings/to_string.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -38,8 +38,7 @@ UpdateProtocolHandlerApprovalCommand::UpdateProtocolHandlerApprovalCommand(
       callback_(std::move(callback)) {
   debug_info_.Set("name", "UpdateProtocolHandlerApprovalCommand");
   debug_info_.Set("app_id", app_id_);
-  debug_info_.Set("api_approval_state",
-                  base::StreamableToString(approval_state_));
+  debug_info_.Set("api_approval_state", base::ToString(approval_state_));
   debug_info_.Set("protocol_scheme", protocol_scheme);
   DCHECK(!protocol_scheme.empty());
 }

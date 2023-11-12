@@ -12,12 +12,12 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/profile_waiter.h"
-#include "components/breadcrumbs/core/features.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/dependency_graph.h"
 #include "components/keyed_service/core/keyed_service_base_factory.h"
 #include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/test/browser_test.h"
+#include "extensions/buildflags/buildflags.h"
 #include "pdf/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/common/features.h"
@@ -159,7 +159,6 @@ class ProfileKeyedServiceBrowserTest : public InProcessBrowserTest {
 #if !BUILDFLAG(IS_ANDROID)
           features::kTrustSafetySentimentSurvey,
 #endif  // !BUILDFLAG(IS_ANDROID)
-          breadcrumbs::kLogBreadcrumbs,
           blink::features::kBrowsingTopics
         },
         {});
@@ -211,6 +210,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
   std::set<std::string> guest_otr_active_services {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     "CleanupManagerLacros",
+    "DownloadBubbleUpdateService",
     "DownloadCoreService",
 #else
     "LiveCaptionController",
@@ -231,11 +231,14 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "FileSystemAccessPermissionContext",
     "GeneratedPrefs",
     "HeavyAdService",
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    "HidConnectionResourceManager",
+#endif
     "HidDeviceManager",
     "HostContentSettingsMap",
-    "LastTabStandingTrackerKeyedService",
     "MediaRouterUIService",
     "NotificationDisplayService",
+    "OneTimePermissionsTrackerKeyedService",
     "OptimizationGuideKeyedService",
 #if BUILDFLAG(ENABLE_PDF)
     "PdfViewerPrivateEventRouter",
@@ -336,13 +339,15 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "BluetoothPrivateAPI",
     "BluetoothSocketEventDispatcher",
     "BookmarkManagerPrivateAPI",
+#if defined(TOOLKIT_VIEWS)
+    "BookmarkExpandedStateTracker",
+#endif
     "BookmarkModel",
     "BookmarkSyncServiceFactory",
     "BookmarkUndoService",
     "BookmarksAPI",
     "BookmarksApiWatcher",
     "BrailleDisplayPrivateAPI",
-    "BreadcrumbManagerService",
     "BrowsingTopicsService",
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
     "ChildAccountService",
@@ -355,6 +360,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "ContentSettingsService",
     "CookieSettings",
     "CookiesAPI",
+    "CWSInfoService",
     "DeveloperPrivateAPI",
     "DeviceInfoSyncService",
     "DownloadCoreService",
@@ -384,6 +390,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "GCMProfileService",
     "GeneratedPrefs",
     "HeavyAdService",
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    "HidConnectionResourceManager",
+#endif
     "HidDeviceManager",
     "HistoryAPI",
     "HistoryService",
@@ -397,8 +406,10 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "InstallVerifier",
     "InstanceIDProfileService",
     "InvalidationService",
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
+    "KidsChromeManagementClient",
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
     "LanguageSettingsPrivateDelegate",
-    "LastTabStandingTrackerKeyedService",
     "LazyBackgroundTaskQueue",
     "LoginUIServiceFactory",
     "MDnsAPI",
@@ -413,8 +424,8 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "NavigationPredictorKeyedService",
     "NetworkingPrivateEventRouter",
     "NotificationDisplayService",
-    "NotifierStateTracker",
     "OmniboxAPI",
+    "OneTimePermissionsTrackerKeyedService",
     "OperationManager",
     "OptimizationGuideKeyedService",
     "PageContentAnnotationsService",
@@ -431,7 +442,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceBrowserTest,
     "PluginManager",
     "PluginPrefs",
     "PowerBookmarkService",
-    "PrefMetricsService",
     "PrefWatcher",
     "PreferenceAPI",
     "PrimaryAccountPolicyManager",

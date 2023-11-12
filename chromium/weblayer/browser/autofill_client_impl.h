@@ -7,7 +7,7 @@
 
 #include "base/compiler_specific.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/autofill_client.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -16,11 +16,23 @@ namespace weblayer {
 // A minimal implementation of autofill::AutofillClient to satisfy the minor
 // touchpoints between the autofill implementation and its client that get
 // exercised within the WebLayer autofill flow.
-class AutofillClientImpl
-    : public autofill::AutofillClient,
-      public content::WebContentsUserData<AutofillClientImpl>,
-      public content::WebContentsObserver {
+class AutofillClientImpl : public autofill::ContentAutofillClient,
+                           public content::WebContentsObserver {
  public:
+  static AutofillClientImpl* FromWebContents(
+      content::WebContents* web_contents) {
+    return static_cast<AutofillClientImpl*>(
+        ContentAutofillClient::FromWebContents(web_contents));
+  }
+
+  static void CreateForWebContents(content::WebContents* contents) {
+    DCHECK(contents);
+    if (!ContentAutofillClient::FromWebContents(contents)) {
+      contents->SetUserData(UserDataKey(),
+                            base::WrapUnique(new AutofillClientImpl(contents)));
+    }
+  }
+
   AutofillClientImpl(const AutofillClientImpl&) = delete;
   AutofillClientImpl& operator=(const AutofillClientImpl&) = delete;
 
@@ -113,13 +125,6 @@ class AutofillClientImpl
       AddressProfileSavePromptCallback callback) override;
   bool HasCreditCardScanFeature() override;
   void ScanCreditCard(CreditCardScanCallback callback) override;
-  bool TryToShowFastCheckout(
-      const autofill::FormData& form,
-      const autofill::FormFieldData& field,
-      base::WeakPtr<autofill::AutofillManager> autofill_manager) override;
-  void HideFastCheckout(bool allow_further_runs) override;
-  bool IsFastCheckoutSupported() override;
-  bool IsShowingFastCheckoutUI() override;
   bool IsTouchToFillCreditCardSupported() override;
   bool ShowTouchToFillCreditCard(
       base::WeakPtr<autofill::TouchToFillDelegate> delegate,
@@ -142,6 +147,9 @@ class AutofillClientImpl
   void PropagateAutofillPredictions(
       autofill::AutofillDriver* driver,
       const std::vector<autofill::FormStructure*>& forms) override;
+  void DidFillOrPreviewForm(autofill::mojom::RendererFormDataAction action,
+                            autofill::AutofillTriggerSource trigger_source,
+                            bool is_refill) override;
   void DidFillOrPreviewField(const std::u16string& autofilled_value,
                              const std::u16string& profile_full_name) override;
   bool IsContextSecure() const override;
@@ -155,11 +163,8 @@ class AutofillClientImpl
 
  private:
   explicit AutofillClientImpl(content::WebContents* web_contents);
-  friend class content::WebContentsUserData<AutofillClientImpl>;
 
   std::unique_ptr<autofill::AutofillDownloadManager> download_manager_;
-
-  WEB_CONTENTS_USER_DATA_KEY_DECL();
 };
 
 }  // namespace weblayer

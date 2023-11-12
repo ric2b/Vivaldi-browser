@@ -48,9 +48,9 @@ class MenuContentAPI : public BrowserContextKeyedAPI,
  private:
   friend class BrowserContextKeyedAPIFactory<MenuContentAPI>;
 
-  content::BrowserContext* browser_context_;
-  menus::Menu_Model* main_menu_model_ = nullptr;
-  menus::Menu_Model* context_menu_model_ = nullptr;
+  const raw_ptr<content::BrowserContext> browser_context_;
+  raw_ptr<menus::Menu_Model> main_menu_model_ = nullptr;
+  raw_ptr<menus::Menu_Model> context_menu_model_ = nullptr;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "MenuContentAPI"; }

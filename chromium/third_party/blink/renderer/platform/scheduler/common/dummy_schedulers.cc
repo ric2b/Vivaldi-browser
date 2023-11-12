@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_priority.h"
+#include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_queue_type.h"
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_task_queue.h"
 #include "third_party/blink/renderer/platform/scheduler/public/widget_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
@@ -105,12 +106,14 @@ class DummyFrameScheduler : public FrameScheduler {
   void OnFirstContentfulPaintInMainFrame() override {}
   void OnFirstMeaningfulPaint() override {}
   void OnLoad() override {}
+  void OnMainFrameInteractive() override {}
   bool IsExemptFromBudgetBasedThrottling() const override { return false; }
   std::unique_ptr<blink::mojom::blink::PauseSubresourceLoadingHandle>
   GetPauseSubresourceLoadingHandle() override {
     return nullptr;
   }
   std::unique_ptr<WebSchedulingTaskQueue> CreateWebSchedulingTaskQueue(
+      WebSchedulingQueueType,
       WebSchedulingPriority) override {
     return nullptr;
   }
@@ -291,6 +294,8 @@ class DummyWebMainThreadScheduler : public WebThreadScheduler,
     DCHECK(isolate_);
     return isolate_;
   }
+
+  void StartIdlePeriodForTesting() override {}
 
  private:
   v8::Isolate* isolate_ = nullptr;

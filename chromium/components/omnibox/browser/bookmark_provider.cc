@@ -22,8 +22,8 @@
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
 #include "components/omnibox/browser/scoring_functor.h"
 #include "components/omnibox/browser/titled_url_match_utils.h"
-#include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/page_transition_types.h"
@@ -35,7 +35,8 @@ using bookmarks::TitledUrlMatch;
 BookmarkProvider::BookmarkProvider(AutocompleteProviderClient* client)
     : AutocompleteProvider(AutocompleteProvider::TYPE_BOOKMARK),
       client_(client),
-      bookmark_model_(client ? client_->GetBookmarkModel() : nullptr) {}
+      local_or_syncable_bookmark_model_(
+          client ? client_->GetLocalOrSyncableBookmarkModel() : nullptr) {}
 
 void BookmarkProvider::Start(const AutocompleteInput& input,
                              bool minimal_changes) {
@@ -53,8 +54,10 @@ BookmarkProvider::~BookmarkProvider() = default;
 
 void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
   // We may not have a bookmark model for some unit tests.
-  if (!bookmark_model_)
+  // TODO(https://crbug.com/1424825): Add support for account bookmarks.
+  if (!local_or_syncable_bookmark_model_) {
     return;
+  }
 
   // Retrieve enough bookmarks so that we have a reasonable probability of
   // suggesting the one that the user desires.
@@ -130,56 +133,22 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
   size_t num_matches = std::min(matches_.size(), max_matches);
   std::partial_sort(matches_.begin(), matches_.begin() + num_matches,
                     matches_.end(), AutocompleteMatch::MoreRelevant);
-  ResizeMatches(num_matches, OmniboxFieldTrial::IsMlRelevanceScoringEnabled());
+  ResizeMatches(
+      num_matches,
+      OmniboxFieldTrial::IsMlUrlScoringIncreaseNumCandidatesEnabled());
 }
 
 std::vector<TitledUrlMatch> BookmarkProvider::GetMatchesWithBookmarkPaths(
     const AutocompleteInput& input,
     size_t kMaxBookmarkMatches) {
-  // Determining whether the |kBookmarkPaths| feature had, or would have had, an
-  // impact for counterfactual logging is expensive as it requires invoking
-  // |BookmarkModel::GetBookmarksMatching()| twice. Therefore, the param
-  // |kBookmarkPathsCounterfactual| determines whether to counterfactual log:
-  // - When empty, counterfactual logging won't occur.
-  // - When set to "control" counterfactual logging will occur like usual; i.e.
-  //   path matched bookmarks won't be returned but will be compared to
-  //   determine if the feature triggered.
-  // - When set to "enabled", counterfactual logging will occur and path matched
-  //   bookmarks will be returned.
-  std::string counterfactual =
-      OmniboxFieldTrial::kBookmarkPathsCounterfactual.Get();
-
-  bool match_paths = base::FeatureList::IsEnabled(omnibox::kBookmarkPaths) &&
-                     counterfactual != "control";
-
   query_parser::MatchingAlgorithm matching_algorithm =
 #if BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
       query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH;
 #else
       GetMatchingAlgorithm(input);
 #endif
-
-  if (counterfactual.empty()) {
-    return bookmark_model_->GetBookmarksMatching(
-        input.text(), kMaxBookmarkMatches, matching_algorithm, match_paths);
-  }
-
-  std::vector<TitledUrlMatch> matches_without_paths =
-      bookmark_model_->GetBookmarksMatching(input.text(), kMaxBookmarkMatches,
-                                            matching_algorithm);
-  std::vector<TitledUrlMatch> matches_with_paths =
-      bookmark_model_->GetBookmarksMatching(input.text(), kMaxBookmarkMatches,
-                                            matching_algorithm, true);
-  DCHECK_LE(matches_without_paths.size(), matches_with_paths.size());
-
-  // It's unnecessary to compare the matches themselves because all
-  // |matches_without_paths| should be contained in |matches_with_paths|.
-  if (matches_without_paths.size() != matches_with_paths.size()) {
-    client_->GetOmniboxTriggeredFeatureService()->FeatureTriggered(
-        OmniboxTriggeredFeatureService::Feature::kBookmarkPaths);
-  }
-
-  return match_paths ? matches_with_paths : matches_without_paths;
+  return local_or_syncable_bookmark_model_->GetBookmarksMatching(
+      input.text(), kMaxBookmarkMatches, matching_algorithm);
 }
 
 query_parser::MatchingAlgorithm BookmarkProvider::GetMatchingAlgorithm(
@@ -200,8 +169,8 @@ query_parser::MatchingAlgorithm BookmarkProvider::GetMatchingAlgorithm(
           OmniboxFieldTrial::
               ShortBookmarkSuggestionsByTotalInputLengthThreshold()) {
     client_->GetOmniboxTriggeredFeatureService()->FeatureTriggered(
-        OmniboxTriggeredFeatureService::Feature::
-            kShortBookmarkSuggestionsByTotalInputLength);
+        metrics::
+            OmniboxEventProto_Feature_SHORT_BOOKMARK_SUGGESTIONS_BY_TOTAL_INPUT_LENGTH);
     return OmniboxFieldTrial::
                    kShortBookmarkSuggestionsByTotalInputLengthCounterfactual
                        .Get()
@@ -304,7 +273,7 @@ std::pair<int, int> BookmarkProvider::CalculateBookmarkMatchRelevance(
   // Boost the score if the bookmark's URL is referenced by other bookmarks.
   const int kURLCountBoost[4] = {0, 75, 125, 150};
   std::vector<const BookmarkNode*> nodes;
-  bookmark_model_->GetNodesByURL(url, &nodes);
+  local_or_syncable_bookmark_model_->GetNodesByURL(url, &nodes);
   DCHECK_GE(std::min(std::size(kURLCountBoost), nodes.size()), 1U);
   relevance +=
       kURLCountBoost[std::min(std::size(kURLCountBoost), nodes.size()) - 1];

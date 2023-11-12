@@ -39,6 +39,7 @@
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/posix/eintr_wrapper.h"
@@ -64,6 +65,7 @@
 #include "chromeos/components/sensors/buildflags.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
 #include "chromeos/system/core_scheduling.h"
+#include "components/user_manager/user_manager.h"
 #include "components/version_info/version_info.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/display/display.h"
@@ -152,6 +154,19 @@ std::vector<std::string> GenerateUpgradeProps(
           "%s.preferred_languages=%s", prefix.c_str(),
           base::JoinString(upgrade_params.preferred_languages, ",").c_str()));
     }
+  }
+
+  if (upgrade_params.enable_priority_app_lmk_delay &&
+      !upgrade_params.priority_app_lmk_delay_list.empty()) {
+    result.push_back(base::StringPrintf(
+        "%s.arc.lmk.enable_priority_app_delay=%d", prefix.c_str(),
+        upgrade_params.enable_priority_app_lmk_delay));
+    result.push_back(
+        base::StringPrintf("%s.arc.lmk.priority_apps=%s", prefix.c_str(),
+                           upgrade_params.priority_app_lmk_delay_list.c_str()));
+    result.push_back(base::StringPrintf(
+        "%s.arc.lmk.priority_app_delay_duration_sec=%d", prefix.c_str(),
+        upgrade_params.priority_app_lmk_delay_second));
   }
 
   return result;
@@ -366,11 +381,13 @@ vm_tools::concierge::StartArcVmRequest CreateStartArcVmRequest(
 
   mini_instance_request->set_enable_privacy_hub_for_chrome(
       base::FeatureList::IsEnabled(ash::features::kCrosPrivacyHub));
+  if (GetArcAndroidSdkVersionAsInt() == kArcVersionT) {
+    mini_instance_request->set_arc_switch_to_keymint(
+        base::FeatureList::IsEnabled(kSwitchToKeyMintOnT));
+  }
 
   request.set_enable_rw(file_system_status.is_host_rootfs_writable() &&
                         file_system_status.is_system_image_ext_format());
-  request.set_enable_gmscore_lmk_protection(
-      base::FeatureList::IsEnabled(arc::kVmGmsCoreLowMemoryKillerProtection));
   request.set_enable_broadcast_anr_prenotify(
       base::FeatureList::IsEnabled(arc::kVmBroadcastPreNotifyANR));
   request.set_enable_virtio_blk_data(start_params.use_virtio_blk_data);
@@ -878,8 +895,12 @@ class ArcVmClientAdapter : public ArcClientAdapter,
       return;
     }
 
-    // Use LVM backend if LVM application containers feature is supported.
-    bool use_lvm = base::FeatureList::IsEnabled(kLvmApplicationContainers);
+    // Use LVM backend if LVM application containers feature is supported and
+    // user cryptohome data is not ephemeral (b/278305150).
+    bool use_lvm =
+        base::FeatureList::IsEnabled(kLvmApplicationContainers) &&
+        !user_manager::UserManager::Get()->IsUserCryptohomeDataEphemeral(
+            arc::ArcServiceManager::Get()->account_id());
 
     // Allow tests to override use_lvm param.
     if (base::FeatureList::IsEnabled(kVirtioBlkDataConfigOverride)) {
@@ -1174,7 +1195,7 @@ class ArcVmClientAdapter : public ArcClientAdapter,
   FileSystemStatusRewriter file_system_status_rewriter_for_testing_;
 
   // The delegate is owned by ArcSessionRunner.
-  DemoModeDelegate* demo_mode_delegate_ = nullptr;
+  raw_ptr<DemoModeDelegate, ExperimentalAsh> demo_mode_delegate_ = nullptr;
 
   // For callbacks.
   base::WeakPtrFactory<ArcVmClientAdapter> weak_factory_{this};

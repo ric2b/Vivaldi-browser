@@ -33,10 +33,8 @@ namespace updater {
 // Allows the utility functions below to join processes. To avoid overzealously
 // granting access to |base::ScopedAllowBaseSyncPrimitives|, this class must
 // continue to live in a `.cc`.
-class SystemctlLauncherScopedAllowBaseSyncPrimitives {
- private:
-  base::ScopedAllowBaseSyncPrimitives allow_wait;
-};
+class [[maybe_unused, nodiscard]] SystemctlLauncherScopedAllowBaseSyncPrimitives
+    : public base::ScopedAllowBaseSyncPrimitives{};
 
 namespace {
 // Location of system-scoped unit files.
@@ -175,7 +173,7 @@ SystemdService::~SystemdService() = default;
 
 void SystemdService::OnSocketReadable() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(server_socket_.is_valid());
+  CHECK(server_socket_.is_valid());
 
   base::ScopedFD remote_fd(accept(server_socket_.get(), nullptr, nullptr));
   if (!remote_fd.is_valid()) {
@@ -190,6 +188,9 @@ bool InstallSystemdUnits(UpdaterScope scope) {
   if (!launcher_path || !unit_dir) {
     return false;
   }
+
+  // Uninstall existing units if they exist.
+  UninstallSystemdUnits(scope);
 
   if (!InstallSystemdUnit(
           unit_dir->AppendASCII(kUpdaterServiceName),

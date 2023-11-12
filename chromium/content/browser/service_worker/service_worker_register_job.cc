@@ -18,7 +18,7 @@
 #include "content/browser/devtools/devtools_instrumentation.h"
 #include "content/browser/devtools/devtools_throttle_handle.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
-#include "content/browser/renderer_host/private_network_access_util.h"
+#include "content/browser/renderer_host/local_network_access_util.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
@@ -394,7 +394,10 @@ void ServiceWorkerRegisterJob::OnUpdateCheckFinished(
       // for the completion.
       context_->registry()->UpdateResourceSha256Checksums(
           registration()->id(), key_, updated_checksum_map,
-          /*callback=*/base::DoNothing());
+          base::BindOnce([](blink::ServiceWorkerStatusCode status) {
+            UMA_HISTOGRAM_ENUMERATION(
+                "ServiceWorker.UpdateResourceSha256ChecksumsResult", status);
+          }));
     }
     ResolvePromise(blink::ServiceWorkerStatusCode::kOk, std::string(),
                    registration());

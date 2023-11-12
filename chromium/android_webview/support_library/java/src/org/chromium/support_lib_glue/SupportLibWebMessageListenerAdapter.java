@@ -11,6 +11,7 @@ import org.chromium.android_webview.JsReplyProxy;
 import org.chromium.android_webview.WebMessageListener;
 import org.chromium.base.Log;
 import org.chromium.content_public.browser.MessagePayload;
+import org.chromium.content_public.browser.MessagePayloadType;
 import org.chromium.content_public.browser.MessagePort;
 import org.chromium.support_lib_boundary.WebMessageListenerBoundaryInterface;
 import org.chromium.support_lib_boundary.util.BoundaryInterfaceReflectionUtil;
@@ -29,8 +30,8 @@ class SupportLibWebMessageListenerAdapter implements WebMessageListener {
     private static final String TAG = "WebMsgLtrAdptr";
 
     private final WebView mWebView;
-    private WebMessageListenerBoundaryInterface mImpl;
-    private String[] mSupportedFeatures;
+    private final WebMessageListenerBoundaryInterface mImpl;
+    private final String[] mSupportedFeatures;
 
     public SupportLibWebMessageListenerAdapter(
             WebView webView, /* WebMessageListener */ InvocationHandler handler) {
@@ -45,7 +46,7 @@ class SupportLibWebMessageListenerAdapter implements WebMessageListener {
     }
 
     @Override
-    public void onPostMessage(final String message, final Uri sourceOrigin,
+    public void onPostMessage(final MessagePayload payload, final Uri sourceOrigin,
             final boolean isMainFrame, final JsReplyProxy replyProxy, final MessagePort[] ports) {
         if (!BoundaryInterfaceReflectionUtil.containsFeature(
                     mSupportedFeatures, Features.WEB_MESSAGE_LISTENER)) {
@@ -53,11 +54,20 @@ class SupportLibWebMessageListenerAdapter implements WebMessageListener {
             return;
         }
 
-        mImpl.onPostMessage(mWebView,
-                BoundaryInterfaceReflectionUtil.createInvocationHandlerFor(
-                        new SupportLibWebMessageAdapter(new MessagePayload(message), ports)),
-                sourceOrigin, isMainFrame,
-                BoundaryInterfaceReflectionUtil.createInvocationHandlerFor(
-                        new SupportLibJsReplyProxyAdapter(replyProxy)));
+        if (payload.getType() == MessagePayloadType.STRING
+                || (payload.getType() == MessagePayloadType.ARRAY_BUFFER
+                        && BoundaryInterfaceReflectionUtil.containsFeature(
+                                mSupportedFeatures, Features.WEB_MESSAGE_ARRAY_BUFFER))) {
+            mImpl.onPostMessage(mWebView,
+                    BoundaryInterfaceReflectionUtil.createInvocationHandlerFor(
+                            new SupportLibWebMessageAdapter(payload, ports)),
+                    sourceOrigin, isMainFrame,
+                    BoundaryInterfaceReflectionUtil.createInvocationHandlerFor(
+                            new SupportLibJsReplyProxyAdapter(replyProxy)));
+        } else {
+            Log.e(TAG,
+                    "The AndroidX doesn't support payload type: "
+                            + MessagePayload.typeToString(payload.getType()));
+        }
     }
 }

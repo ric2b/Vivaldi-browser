@@ -11,6 +11,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 
 class GURL;
@@ -43,7 +44,9 @@ class SafeBrowsingApiHandlerBridge {
 
   bool StartCSDAllowlistCheck(const GURL& url);
 
-  bool StartHighConfidenceAllowlistCheck(const GURL& url);
+  // Return nullopt when the JNI env is not initialized. If the JNI env is
+  // initialized, then return whether the URL is in the allowlist.
+  absl::optional<bool> StartHighConfidenceAllowlistCheck(const GURL& url);
 
   void SetInterceptorForTesting(UrlCheckInterceptor* interceptor) {
     interceptor_for_testing_ = interceptor;
@@ -54,7 +57,9 @@ class SafeBrowsingApiHandlerBridge {
   // reputation from GmsCore.
   jlong next_callback_id_ = 0;
 
-  UrlCheckInterceptor* interceptor_for_testing_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #constexpr-ctor-field-initializer
+  RAW_PTR_EXCLUSION UrlCheckInterceptor* interceptor_for_testing_ = nullptr;
 };
 
 // Interface allowing simplified interception of calls to

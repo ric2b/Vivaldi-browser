@@ -144,8 +144,7 @@ class ChromeWebPlatformSecurityMetricsBrowserTest
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) final {
-    // For anonymous iframe:
-    command_line->AppendSwitch(switches::kEnableBlinkTestFeatures);
+    // For https_server()
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
@@ -182,12 +181,12 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
-                       PrivateNetworkAccessIgnoredCrossSitePreflightError) {
+                       LocalNetworkAccessIgnoredCrossSitePreflightError) {
   ASSERT_TRUE(content::NavigateToURL(
       web_contents(),
       https_server().GetURL(
           "a.com",
-          "/private_network_access/no-favicon-treat-as-public-address.html")));
+          "/local_network_access/no-favicon-treat-as-public-address.html")));
 
   ASSERT_EQ(true, content::EvalJs(
                       web_contents(),
@@ -195,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
                           "fetch($1).then(response => response.ok)",
                           https_server().GetURL("b.com", "/cors-ok.txt"))));
 
-  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredPreflightError, 1);
+  CheckCounter(WebFeature::kPrivateNetworkAccessPreflightWarning, 1);
   CheckCounter(
       WebFeature::kPrivateNetworkAccessIgnoredCrossOriginPreflightError, 1);
   CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredCrossSitePreflightError,
@@ -204,12 +203,12 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(
     ChromeWebPlatformSecurityMetricsBrowserTest,
-    PrivateNetworkAccessIgnoredCrossOriginSameSitePreflightError) {
+    LocalNetworkAccessIgnoredCrossOriginSameSitePreflightError) {
   ASSERT_TRUE(content::NavigateToURL(
       web_contents(),
       https_server().GetURL(
           "a.com",
-          "/private_network_access/no-favicon-treat-as-public-address.html")));
+          "/local_network_access/no-favicon-treat-as-public-address.html")));
 
   ASSERT_EQ(true, content::EvalJs(web_contents(),
                                   content::JsReplace(
@@ -217,7 +216,7 @@ IN_PROC_BROWSER_TEST_F(
                                       https_server().GetURL("subdomain.a.com",
                                                             "/cors-ok.txt"))));
 
-  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredPreflightError, 1);
+  CheckCounter(WebFeature::kPrivateNetworkAccessPreflightWarning, 1);
   CheckCounter(
       WebFeature::kPrivateNetworkAccessIgnoredCrossOriginPreflightError, 1);
   CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredCrossSitePreflightError,
@@ -225,12 +224,12 @@ IN_PROC_BROWSER_TEST_F(
 }
 
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
-                       PrivateNetworkAccessIgnoredSameOriginPreflightError) {
+                       LocalNetworkAccessIgnoredSameOriginPreflightError) {
   ASSERT_TRUE(content::NavigateToURL(
       web_contents(),
       https_server().GetURL(
           "a.com",
-          "/private_network_access/no-favicon-treat-as-public-address.html")));
+          "/local_network_access/no-favicon-treat-as-public-address.html")));
 
   ASSERT_EQ(true, content::EvalJs(
                       web_contents(),
@@ -238,7 +237,7 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
                           "fetch($1).then(response => response.ok)",
                           https_server().GetURL("a.com", "/cors-ok.txt"))));
 
-  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredPreflightError, 1);
+  CheckCounter(WebFeature::kPrivateNetworkAccessPreflightWarning, 1);
   CheckCounter(
       WebFeature::kPrivateNetworkAccessIgnoredCrossOriginPreflightError, 0);
   CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredCrossSitePreflightError,
@@ -2091,6 +2090,192 @@ IN_PROC_BROWSER_TEST_F(SameDocumentCrossOriginInitiatorTest,
                       "location.href += '#foo';"));
   EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
   CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       JavascriptUrlNavigationInIFrame) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    new Promise(resolve => {
+      let iframe = document.createElement("iframe");
+      iframe.src = 'javascript:1';
+      iframe.onload = resolve;
+      document.body.appendChild(iframe);
+    });
+  )"));
+  CheckCounter(WebFeature::kExecutedEmptyJavaScriptURLFromFrame, 0);
+  CheckCounter(WebFeature::kExecutedJavaScriptURLFromFrame, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       EmptyStringJavascriptUrlNavigationInIFrame) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    new Promise(resolve => {
+      let iframe = document.createElement("iframe");
+      iframe.src = 'javascript:""';
+      iframe.onload = resolve;
+      document.body.appendChild(iframe);
+    });
+  )"));
+  CheckCounter(WebFeature::kExecutedEmptyJavaScriptURLFromFrame, 1);
+  CheckCounter(WebFeature::kExecutedJavaScriptURLFromFrame, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       JavascriptUrlNavigationInTopFrame) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    location.href = 'javascript:""';
+  )"));
+  CheckCounter(WebFeature::kExecutedEmptyJavaScriptURLFromFrame, 0);
+  CheckCounter(WebFeature::kExecutedJavaScriptURLFromFrame, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       DanglingMarkupInIframeName) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    new Promise(resolve => {
+      let iframe = document.createElement("iframe");
+      iframe.src = '/empty.html';
+      iframe.name = "<\n>";
+      iframe.onload = resolve;
+      document.body.appendChild(iframe);
+    });
+  )"));
+  CheckCounter(WebFeature::kDanglingMarkupInWindowName, 1);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithNewLineOrGT,
+               0);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithGT, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTarget, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithGT, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithNewLineOrGT, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       DanglingMarkupInNameWithGreaterThan) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    new Promise(resolve => {
+      let iframe = document.createElement("iframe");
+      iframe.src = '/empty.html';
+      iframe.name = "<\n";
+      iframe.onload = resolve;
+      document.body.appendChild(iframe);
+    });
+  )"));
+  CheckCounter(WebFeature::kDanglingMarkupInWindowName, 1);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithNewLineOrGT,
+               0);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithGT, 1);
+  CheckCounter(WebFeature::kDanglingMarkupInTarget, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithGT, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithNewLineOrGT, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       DanglingMarkupInNameWithNewLineOrGreaterThan) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    new Promise(resolve => {
+      let iframe = document.createElement("iframe");
+      iframe.src = '/empty.html';
+      iframe.name = "<\ntest";
+      iframe.onload = resolve;
+      document.body.appendChild(iframe);
+    });
+  )"));
+
+  CheckCounter(WebFeature::kDanglingMarkupInWindowName, 1);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithNewLineOrGT,
+               1);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithGT, 1);
+  CheckCounter(WebFeature::kDanglingMarkupInTarget, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithGT, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithNewLineOrGT, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       DanglingMarkupInTarget) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    let link = document.createElement("a");
+    link.href = '/empty.html';
+    link.target = "<\n>";
+    document.body.appendChild(link);
+    link.click();
+  )"));
+
+  CheckCounter(WebFeature::kDanglingMarkupInWindowName, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithNewLineOrGT,
+               0);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithGT, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTarget, 1);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithGT, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithNewLineOrGT, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       DanglingMarkupInTargetWithNewLineOrGreaterThan) {
+  GURL url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    let link = document.createElement("a");
+    link.href = '/empty.html';
+    link.target = "<\n";
+    document.body.appendChild(link);
+    link.click();
+  )"));
+
+  CheckCounter(WebFeature::kDanglingMarkupInWindowName, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithNewLineOrGT,
+               0);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithGT, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTarget, 1);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithGT, 1);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithNewLineOrGT, 0);
+
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    let base = document.createElement("base");
+    base.target = "<\ntest";
+    document.body.appendChild(base);
+    let link = document.createElement("a");
+    link.href = '/empty.html';
+    document.body.appendChild(link);
+    link.click();
+  )"));
+  CheckCounter(WebFeature::kDanglingMarkupInWindowName, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithNewLineOrGT,
+               0);
+  CheckCounter(WebFeature::kDanglingMarkupInWindowNameNotEndsWithGT, 0);
+  CheckCounter(WebFeature::kDanglingMarkupInTarget, 2);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithGT, 2);
+  CheckCounter(WebFeature::kDanglingMarkupInTargetNotEndsWithNewLineOrGT, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       DocumentOpenAliasedOriginDocumentDomain) {
+  GURL url = https_server().GetURL("sub.a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+    const iframe = document.createElement("iframe");
+    iframe.src = location.href;
+    iframe.onload = () => {
+      iframe.contentDocument.write("<div></div>");
+      document.domain = "a.test";
+    };
+    document.body.appendChild(iframe);
+  )"));
+
+  CheckCounter(WebFeature::kDocumentOpenAliasedOriginDocumentDomain, 1);
 }
 
 // TODO(arthursonzogni): Add basic test(s) for the WebFeatures:

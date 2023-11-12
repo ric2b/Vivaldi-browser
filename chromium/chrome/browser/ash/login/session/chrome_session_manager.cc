@@ -222,9 +222,7 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
 }
 
 void LaunchShimlessRma() {
-  if (features::IsShimlessRMAFlowEnabled()) {
-    VLOG(1) << "ChromeSessionManager::LaunchShimlessRma";
-  }
+  VLOG(1) << "ChromeSessionManager::LaunchShimlessRma";
   session_manager::SessionManager::Get()->SetSessionState(
       session_manager::SessionState::RMA);
 
@@ -237,9 +235,7 @@ void LaunchShimlessRma() {
 
 // The callback invoked when RmadClient determines that RMA is required.
 void OnRmaIsRequiredResponse() {
-  if (features::IsShimlessRMAFlowEnabled()) {
-    VLOG(1) << "ChromeSessionManager::OnRmaIsRequiredResponse";
-  }
+  VLOG(1) << "ChromeSessionManager::OnRmaIsRequiredResponse";
   switch (session_manager::SessionManager::Get()->session_state()) {
     case session_manager::SessionState::UNKNOWN:
       LOG(ERROR) << "OnRmaIsRequiredResponse callback triggered unexpectedly";
@@ -327,9 +323,7 @@ void ChromeSessionManager::Initialize(
     RmadClient::Get()->SetRmaRequiredCallbackForSessionManager(
         base::BindOnce(&OnRmaIsRequiredResponse));
   } else {
-    if (features::IsShimlessRMAFlowEnabled()) {
-      VLOG(1) << "ChromeSessionManager::Initialize Shimless RMA is not allowed";
-    }
+    VLOG(1) << "ChromeSessionManager::Initialize Shimless RMA is not allowed";
   }
 
   if (base::FeatureList::IsEnabled(arc::kEnableArcVmDataMigration) &&
@@ -388,22 +382,6 @@ void ChromeSessionManager::Initialize(
 
   VLOG(1) << "Starting Chrome with a user session.";
   StartUserSession(profile, login_account_id.GetUserEmail());
-
-  misconfigured_user_cleaner_ = std::make_unique<MisconfiguredUserCleaner>(
-      g_browser_process->local_state());
-
-  // Check if we need to clean any users who did not successfully complete the
-  // user creation process during the previous boot. Unusable users will not be
-  // shown in the login ui, as we filter them as part of
-  // `UserManagerBase::EnsureUsersLoaded`
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &MisconfiguredUserCleaner::CleanMisconfiguredUser,
-          // `base::Unretained` is safe here because `ChromeSessionManager`
-          // owns `misconfigured_user_cleaner_` and it is destructed in
-          // `ChromeBrowserMainPartsAsh::PostMainMessageLoopRun`.
-          base::Unretained(misconfigured_user_cleaner_.get())));
 }
 
 void ChromeSessionManager::SessionStarted() {

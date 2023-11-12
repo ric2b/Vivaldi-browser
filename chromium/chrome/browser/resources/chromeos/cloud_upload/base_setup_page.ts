@@ -58,6 +58,8 @@ export class BaseSetupPageElement extends HTMLElement {
     contentElement.addEventListener(
         'scroll', this.updateContentFade.bind(undefined, contentElement),
         {passive: true});
+    // Focus the dialog so that the screen reader reads the title.
+    this.shadowRoot!.querySelector<HTMLElement>('#dialog')!.focus();
   }
 
   attributeChangedCallback(name: string, _oldValue: string, _newValue: string) {

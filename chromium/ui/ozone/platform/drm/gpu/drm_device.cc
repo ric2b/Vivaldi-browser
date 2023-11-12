@@ -15,6 +15,7 @@
 
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/current_thread.h"
 #include "base/trace_event/trace_event.h"
@@ -173,7 +174,7 @@ class DrmDevice::IOWatcher : public base::MessagePumpLibevent::FdWatcher {
 
   void OnFileCanWriteWithoutBlocking(int fd) override { NOTREACHED(); }
 
-  DrmDevice::PageFlipManager* page_flip_manager_;
+  raw_ptr<DrmDevice::PageFlipManager, ExperimentalAsh> page_flip_manager_;
 
   base::MessagePumpLibevent::FdWatchController controller_;
 
@@ -265,6 +266,17 @@ bool DrmDevice::CommitProperties(
 void DrmDevice::WriteIntoTrace(perfetto::TracedDictionary dict) const {
   dict.Add("planes", plane_manager_->planes());
   DrmWrapper::WriteIntoTrace(std::move(dict));
+}
+
+display::DrmFormatsAndModifiers DrmDevice::GetFormatsAndModifiersForCrtc(
+    uint32_t crtc_id) const {
+  display::DrmFormatsAndModifiers drm_formats_and_modifiers;
+  for (uint32_t format : plane_manager_->GetSupportedFormats()) {
+    std::vector<uint64_t> modifiers =
+        plane_manager_->GetFormatModifiers(crtc_id, format);
+    drm_formats_and_modifiers.emplace(format, modifiers);
+  }
+  return drm_formats_and_modifiers;
 }
 
 int DrmDevice::modeset_sequence_id() const { return modeset_sequence_id_; }

@@ -274,6 +274,16 @@ bool DirectoryExists(const FilePath& path) {
   return S_ISDIR(file_info.st_mode);
 }
 
+ScopedFD CreateAndOpenFdForTemporaryFileInDir(const FilePath& directory,
+                                              FilePath* path) {
+  *path = directory.Append(TempFileName());
+  const std::string& tmpdir_string = path->value();
+  // this should be OK since mkstemp just replaces characters in place
+  char* buffer = const_cast<char*>(tmpdir_string.c_str());
+
+  return ScopedFD(HANDLE_EINTR(mkstemp(buffer)));
+}
+
 #if !defined(OS_FUCHSIA)
 bool CreateSymbolicLink(const FilePath& target_path,
                         const FilePath& symlink_path) {
@@ -375,6 +385,11 @@ FilePath GetHomeDir() {
   return FilePath("/tmp");
 }
 #endif  // !defined(OS_MACOSX)
+
+File CreateAndOpenTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
+  ScopedFD fd = CreateAndOpenFdForTemporaryFileInDir(dir, temp_file);
+  return fd.is_valid() ? File(std::move(fd)) : File(File::GetLastFileError());
+}
 
 static bool CreateTemporaryDirInDirImpl(const FilePath& base_dir,
                                         const FilePath::StringType& name_tmpl,

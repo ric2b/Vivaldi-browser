@@ -7,13 +7,10 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/time/calendar_view_controller.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
-
-namespace views {
-class BoxLayout;
-}
 
 namespace ash {
 
@@ -30,6 +27,10 @@ class ASH_EXPORT CalendarUpNextView : public views::View {
   CalendarUpNextView& operator=(const CalendarUpNextView& other) = delete;
   ~CalendarUpNextView() override;
 
+  // Called by a timer in the calendar whilst the up next view is open to
+  // refresh any ongoing events.
+  void RefreshEvents();
+
   // Returns the `SkPath` for the background of the `CalendarUpNextView`.
   SkPath GetClipPath() const;
 
@@ -44,8 +45,7 @@ class ASH_EXPORT CalendarUpNextView : public views::View {
 
   // Populates the scroll view with events.
   void UpdateEvents(
-      const std::list<google_apis::calendar::CalendarEvent>& events,
-      views::BoxLayout* content_layout_manager);
+      const std::list<google_apis::calendar::CalendarEvent>& events);
 
   // Callbacks for scroll buttons.
   void OnScrollLeftButtonPressed(const ui::Event& event);
@@ -64,18 +64,22 @@ class ASH_EXPORT CalendarUpNextView : public views::View {
                                       const int target_edge);
 
   // Owned by `CalendarView`.
-  CalendarViewController* calendar_view_controller_;
+  raw_ptr<CalendarViewController, ExperimentalAsh> calendar_view_controller_;
 
   // Owned by `CalendarUpNextView`.
-  views::View* const todays_events_button_container_;
-  views::View* const header_view_;
-  views::Button* left_scroll_button_;
-  views::Button* right_scroll_button_;
-  views::ScrollView* const scroll_view_;
+  const raw_ptr<views::View, ExperimentalAsh> todays_events_button_container_;
+  const raw_ptr<views::View, ExperimentalAsh> header_view_;
+  raw_ptr<views::Button, ExperimentalAsh> left_scroll_button_;
+  raw_ptr<views::Button, ExperimentalAsh> right_scroll_button_;
+  const raw_ptr<views::ScrollView, ExperimentalAsh> scroll_view_;
+
+  // The current events displayed in calendar up next. Serves as a cache to diff
+  // against when refreshing events.
+  SingleDayEventList displayed_events_;
 
   // The content of the horizontal `scroll_view`, which carries a list of
   // `CalendarEventListItemView`.
-  views::View* const content_view_;
+  const raw_ptr<views::View, ExperimentalAsh> content_view_;
 
   // Helper class for animating the `scroll_view_` when a scroll button is
   // pressed.

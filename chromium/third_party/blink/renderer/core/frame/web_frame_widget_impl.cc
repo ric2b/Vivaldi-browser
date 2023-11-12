@@ -36,6 +36,7 @@
 #include "base/auto_reset.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/functional/callback_helpers.h"
 #include "base/functional/function_ref.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -127,12 +128,15 @@
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/graphics/animation_worklet_mutator_dispatcher_impl.h"
 #include "third_party/blink/renderer/platform/graphics/compositor_mutator_client.h"
 #include "third_party/blink/renderer/platform/graphics/paint_worklet_paint_dispatcher.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/keyboard_codes.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/non_main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/widget/input/main_thread_event_queue.h"
@@ -140,6 +144,7 @@
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-blink.h"
 #include "ui/gfx/geometry/point_conversions.h"
 
@@ -320,6 +325,13 @@ WebFrameWidgetImpl::~WebFrameWidgetImpl() {
 
 void WebFrameWidgetImpl::BindLocalRoot(WebLocalFrame& local_root) {
   local_root_ = To<WebLocalFrameImpl>(local_root);
+  if (RuntimeEnabledFeatures::LongAnimationFrameMonitoringEnabled() &&
+      !IsHidden()) {
+    DCHECK(local_root_->GetFrame());
+    animation_frame_timing_monitor_ =
+        MakeGarbageCollected<AnimationFrameTimingMonitor>(
+            *this, local_root_->GetFrame()->GetProbeSink());
+  }
 }
 
 bool WebFrameWidgetImpl::ForTopMostMainFrame() const {
@@ -341,6 +353,11 @@ void WebFrameWidgetImpl::Close() {
     View()->SetMainFrameViewWidget(nullptr);
   }
 
+  if (animation_frame_timing_monitor_) {
+    animation_frame_timing_monitor_->Shutdown();
+    animation_frame_timing_monitor_.Clear();
+  }
+
   mutator_dispatcher_ = nullptr;
   local_root_ = nullptr;
   widget_base_->Shutdown();
@@ -354,6 +371,52 @@ void WebFrameWidgetImpl::Close() {
 
 WebLocalFrame* WebFrameWidgetImpl::LocalRoot() const {
   return local_root_;
+}
+
+bool WebFrameWidgetImpl::RequestedMainFramePending() {
+  return View() && View()->does_composite() && LayerTreeHost() &&
+         LayerTreeHost()->RequestedMainFramePending();
+}
+
+ukm::UkmRecorder* WebFrameWidgetImpl::MainFrameUkmRecorder() {
+  DCHECK(local_root_);
+  if (!local_root_->IsOutermostMainFrame()) {
+    return nullptr;
+  }
+
+  if (!local_root_->GetFrame() || !local_root_->GetFrame()->DomWindow()) {
+    return nullptr;
+  }
+
+  return local_root_->GetFrame()->DomWindow()->UkmRecorder();
+}
+ukm::SourceId WebFrameWidgetImpl::MainFrameUkmSourceId() {
+  DCHECK(local_root_);
+  if (!local_root_->IsOutermostMainFrame()) {
+    return ukm::kInvalidSourceId;
+  }
+
+  if (!local_root_->GetFrame() || !local_root_->GetFrame()->DomWindow()) {
+    return ukm::kInvalidSourceId;
+  }
+
+  return local_root_->GetFrame()->DomWindow()->UkmSourceID();
+}
+
+bool WebFrameWidgetImpl::IsMainFrameFullyLoaded() const {
+  DCHECK(local_root_);
+  if (!local_root_->IsOutermostMainFrame()) {
+    return false;
+  }
+
+  return local_root_->GetFrame() &&
+         local_root_->GetFrame()->Loader().GetDocumentLoader() &&
+         !local_root_->GetFrame()
+              ->Loader()
+              .GetDocumentLoader()
+              ->GetTiming()
+              .LoadEventEnd()
+              .is_null();
 }
 
 gfx::Rect WebFrameWidgetImpl::ComputeBlockBound(
@@ -397,14 +460,13 @@ void WebFrameWidgetImpl::DragTargetDragEnter(
     DragOperationsMask operations_allowed,
     uint32_t key_modifiers,
     DragTargetDragEnterCallback callback) {
-  DCHECK(!current_drag_data_);
-
   current_drag_data_ = DataObject::Create(web_drag_data);
   operations_allowed_ = operations_allowed;
 
-  DragOperation operation = DragTargetDragEnterOrOver(
-      point_in_viewport, screen_point, kDragEnter, key_modifiers);
-  std::move(callback).Run(operation);
+  DragTargetDragEnterOrOver(point_in_viewport, screen_point, kDragEnter,
+                            key_modifiers);
+
+  std::move(callback).Run(drag_operation_);
 }
 
 void WebFrameWidgetImpl::DragTargetDragOver(
@@ -415,21 +477,19 @@ void WebFrameWidgetImpl::DragTargetDragOver(
     DragTargetDragOverCallback callback) {
   operations_allowed_ = operations_allowed;
 
-  DragOperation operation = DragTargetDragEnterOrOver(
-      point_in_viewport, screen_point, kDragOver, key_modifiers);
-  std::move(callback).Run(operation);
+  DragTargetDragEnterOrOver(point_in_viewport, screen_point, kDragOver,
+                            key_modifiers);
+
+  std::move(callback).Run(drag_operation_);
 }
 
 void WebFrameWidgetImpl::DragTargetDragLeave(
     const gfx::PointF& point_in_viewport,
     const gfx::PointF& screen_point) {
-  // TODO(paulmeyer): It shouldn't be possible for |current_drag_data_| to be
-  // null here, but this is somehow happening (rarely). This suggests that in
-  // some cases drag-leave is happening before drag-enter, which should be
-  // impossible. This needs to be investigated further. Once fixed, the extra
-  // check for |!current_drag_data_| should be removed. (crbug.com/671152)
+  base::ScopedClosureRunner runner(
+      WTF::BindOnce(&WebFrameWidgetImpl::CancelDrag, WrapWeakPersistent(this)));
+
   if (IgnoreInputEvents() || !current_drag_data_) {
-    CancelDrag();
     return;
   }
 
@@ -441,9 +501,6 @@ void WebFrameWidgetImpl::DragTargetDragLeave(
                                             *local_root_->GetFrame());
 
   // FIXME: why is the drag scroll timer not stopped here?
-
-  drag_operation_ = DragOperation::kNone;
-  current_drag_data_ = nullptr;
 }
 
 void WebFrameWidgetImpl::DragTargetDrop(const WebDragData& web_drag_data,
@@ -451,10 +508,14 @@ void WebFrameWidgetImpl::DragTargetDrop(const WebDragData& web_drag_data,
                                         const gfx::PointF& screen_point,
                                         uint32_t key_modifiers,
                                         base::OnceClosure callback) {
-  base::ScopedClosureRunner calllback_runner(std::move(callback));
-  gfx::PointF point_in_root_frame(ViewportToRootFrame(point_in_viewport));
+  base::ScopedClosureRunner callback_runner(std::move(callback));
+  base::ScopedClosureRunner runner(
+      WTF::BindOnce(&WebFrameWidgetImpl::CancelDrag, WrapWeakPersistent(this)));
 
-  DCHECK(current_drag_data_);
+  if (IgnoreInputEvents() || !current_drag_data_) {
+    return;
+  }
+
   current_drag_data_ = DataObject::Create(web_drag_data);
 
   // If this webview transitions from the "drop accepting" state to the "not
@@ -470,40 +531,32 @@ void WebFrameWidgetImpl::DragTargetDrop(const WebDragData& web_drag_data,
     return;
   }
 
-  if (!IgnoreInputEvents()) {
-    current_drag_data_->SetModifiers(key_modifiers);
-    DragData drag_data(current_drag_data_.Get(), point_in_root_frame,
-                       screen_point, operations_allowed_);
-
-    GetPage()->GetDragController().PerformDrag(&drag_data,
-                                               *local_root_->GetFrame());
-  }
-  drag_operation_ = DragOperation::kNone;
-  current_drag_data_ = nullptr;
+  current_drag_data_->SetModifiers(key_modifiers);
+  DragData drag_data(current_drag_data_.Get(),
+                     ViewportToRootFrame(point_in_viewport), screen_point,
+                     operations_allowed_);
+  GetPage()->GetDragController().PerformDrag(&drag_data,
+                                             *local_root_->GetFrame());
 }
 
 void WebFrameWidgetImpl::DragSourceEndedAt(const gfx::PointF& point_in_viewport,
                                            const gfx::PointF& screen_point,
                                            DragOperation operation,
                                            base::OnceClosure callback) {
-  base::ScopedClosureRunner calllback_runner(std::move(callback));
-  if (!local_root_) {
-    // We should figure out why |local_root_| could be nullptr
-    // (https://crbug.com/792345).
-    return;
-  }
+  base::ScopedClosureRunner callback_runner(std::move(callback));
+  base::ScopedClosureRunner runner(
+      WTF::BindOnce(&WebFrameWidgetImpl::DragSourceSystemDragEnded,
+                    WrapWeakPersistent(this)));
 
   if (IgnoreInputEvents()) {
-    CancelDrag();
     return;
   }
-  gfx::PointF point_in_root_frame =
-      GetPage()->GetVisualViewport().ViewportToRootFrame(point_in_viewport);
 
   WebMouseEvent fake_mouse_move(
-      WebInputEvent::Type::kMouseMove, point_in_root_frame, screen_point,
-      WebPointerProperties::Button::kLeft, 0, WebInputEvent::kNoModifiers,
-      base::TimeTicks::Now());
+      WebInputEvent::Type::kMouseMove,
+      GetPage()->GetVisualViewport().ViewportToRootFrame(point_in_viewport),
+      screen_point, WebPointerProperties::Button::kLeft, 0,
+      WebInputEvent::kNoModifiers, base::TimeTicks::Now());
   fake_mouse_move.SetFrameScale(1);
   local_root_->GetFrame()->GetEventHandler().DragSourceEndedAt(fake_mouse_move,
                                                                operation);
@@ -511,6 +564,14 @@ void WebFrameWidgetImpl::DragSourceEndedAt(const gfx::PointF& point_in_viewport,
 
 void WebFrameWidgetImpl::DragSourceSystemDragEnded() {
   CancelDrag();
+
+  // It's possible for this to be false if the source stopped dragging at a
+  // previous page.
+  if (!doing_drag_and_drop_) {
+    return;
+  }
+  GetPage()->GetDragController().DragEnded();
+  doing_drag_and_drop_ = false;
 }
 
 gfx::Rect WebFrameWidgetImpl::GetAbsoluteCaretBounds() {
@@ -607,10 +668,11 @@ void WebFrameWidgetImpl::GetStringAtPoint(const gfx::Point& point_in_local_root,
                                           GetStringAtPointCallback callback) {
   gfx::Point baseline_point;
   ui::mojom::blink::AttributedStringPtr attributed_string = nullptr;
-  NSAttributedString* string = SubstringUtil::AttributedWordAtPoint(
+  CFAttributedStringRef string = SubstringUtil::AttributedWordAtPoint(
       this, point_in_local_root, baseline_point);
-  if (string)
+  if (string) {
     attributed_string = ui::mojom::blink::AttributedString::From(string);
+  }
 
   std::move(callback).Run(std::move(attributed_string), baseline_point);
 }
@@ -1202,13 +1264,8 @@ WebInputEventResult WebFrameWidgetImpl::HandleCharEvent(
 }
 
 void WebFrameWidgetImpl::CancelDrag() {
-  // It's possible for this to be called while we're not doing a drag if
-  // it's from a previous page that got unloaded.
-  if (!doing_drag_and_drop_)
-    return;
-  GetPage()->GetDragController().DragEnded();
+  drag_operation_ = DragOperation::kNone;
   current_drag_data_ = nullptr;
-  doing_drag_and_drop_ = false;
 }
 
 void WebFrameWidgetImpl::StartDragging(const WebDragData& drag_data,
@@ -1233,20 +1290,14 @@ void WebFrameWidgetImpl::StartDragging(const WebDragData& drag_data,
       drag_obj_rect_in_dips, possible_drag_event_info_.Clone());
 }
 
-DragOperation WebFrameWidgetImpl::DragTargetDragEnterOrOver(
+void WebFrameWidgetImpl::DragTargetDragEnterOrOver(
     const gfx::PointF& point_in_viewport,
     const gfx::PointF& screen_point,
     DragAction drag_action,
     uint32_t key_modifiers) {
-  DCHECK(current_drag_data_);
-  // TODO(paulmeyer): It shouldn't be possible for |m_currentDragData| to be
-  // null here, but this is somehow happening (rarely). This suggests that in
-  // some cases drag-over is happening before drag-enter, which should be
-  // impossible. This needs to be investigated further. Once fixed, the extra
-  // check for |!m_currentDragData| should be removed. (crbug.com/671504)
   if (IgnoreInputEvents() || !current_drag_data_) {
     CancelDrag();
-    return DragOperation::kNone;
+    return;
   }
 
   gfx::PointF point_in_root_frame = ViewportToRootFrame(point_in_viewport);
@@ -1255,19 +1306,15 @@ DragOperation WebFrameWidgetImpl::DragTargetDragEnterOrOver(
   DragData drag_data(current_drag_data_.Get(), point_in_root_frame,
                      screen_point, operations_allowed_);
 
-  DragOperation drag_operation =
-      GetPage()->GetDragController().DragEnteredOrUpdated(
-          &drag_data, *local_root_->GetFrame());
+  drag_operation_ = GetPage()->GetDragController().DragEnteredOrUpdated(
+      &drag_data, *local_root_->GetFrame());
 
   // Mask the drag operation against the drag source's allowed
   // operations.
-  if (!(static_cast<int>(drag_operation) &
-        drag_data.DraggingSourceOperationMask()))
-    drag_operation = DragOperation::kNone;
-
-  drag_operation_ = drag_operation;
-
-  return drag_operation_;
+  if (!(static_cast<int>(drag_operation_) &
+        drag_data.DraggingSourceOperationMask())) {
+    drag_operation_ = DragOperation::kNone;
+  }
 }
 
 void WebFrameWidgetImpl::SendOverscrollEventFromImplSide(
@@ -1285,14 +1332,23 @@ void WebFrameWidgetImpl::SendOverscrollEventFromImplSide(
 }
 
 void WebFrameWidgetImpl::SendScrollEndEventFromImplSide(
+    bool affects_outer_viewport,
     cc::ElementId scroll_latched_element_id) {
   if (!RuntimeEnabledFeatures::ScrollEndEventsEnabled())
     return;
 
   Node* target_node = View()->FindNodeFromScrollableCompositorElementId(
       scroll_latched_element_id);
-  if (target_node)
-    target_node->GetDocument().EnqueueScrollEndEventForNode(target_node);
+  if (target_node) {
+    // Scrolls consumed entirely by the VisualViewport and not the
+    // LayoutViewport should not trigger scrollends on the document. The
+    // VisualViewport currently handles scroll but not scrollends. If that
+    // changes, we should consider firing scrollend at the visualviewport
+    // instead of simply bailing.
+    if (affects_outer_viewport || !target_node->IsDocumentNode()) {
+      target_node->GetDocument().EnqueueScrollEndEventForNode(target_node);
+    }
+  }
 }
 
 void WebFrameWidgetImpl::UpdateCompositorScrollState(
@@ -1314,8 +1370,11 @@ void WebFrameWidgetImpl::UpdateCompositorScrollState(
   // (e.g. during a long running main thread task), this will erroneously
   // dispatch the scroll end to the latter (still-scrolling) element.
   // https://crbug.com/1116780.
-  if (commit_data.scroll_gesture_did_end)
-    SendScrollEndEventFromImplSide(commit_data.scroll_latched_element_id);
+  if (commit_data.scroll_end_data.scroll_gesture_did_end) {
+    SendScrollEndEventFromImplSide(
+        commit_data.scroll_end_data.gesture_affects_outer_viewport_scroll,
+        commit_data.scroll_latched_element_id);
+  }
 }
 
 WebInputMethodController*
@@ -1361,6 +1420,7 @@ void WebFrameWidgetImpl::Trace(Visitor* visitor) const {
   visitor->Trace(input_target_receiver_);
   visitor->Trace(mouse_capture_element_);
   visitor->Trace(device_emulator_);
+  visitor->Trace(animation_frame_timing_monitor_);
 }
 
 void WebFrameWidgetImpl::SetNeedsRecalculateRasterScales() {
@@ -1428,6 +1488,10 @@ void WebFrameWidgetImpl::DidObserveFirstScrollDelay(
 }
 
 void WebFrameWidgetImpl::WillBeginMainFrame() {
+  if (animation_frame_timing_monitor_) {
+    animation_frame_timing_monitor_->WillBeginMainFrame();
+  }
+
   if (!RuntimeEnabledFeatures::ViewTransitionOnNavigationEnabled())
     return;
 
@@ -1450,12 +1514,40 @@ WebFrameWidgetImpl::AllocateNewLayerTreeFrameSink() {
   return nullptr;
 }
 
+void WebFrameWidgetImpl::ReportLongAnimationFrameTiming(
+    AnimationFrameTimingInfo* timing_info) {
+  ForEachLocalFrameControlledByWidget(
+      local_root_->GetFrame(), [&](WebLocalFrameImpl* local_frame) {
+        DOMWindowPerformance::performance(*local_frame->GetFrame()->DomWindow())
+            ->ReportLongAnimationFrameTiming(timing_info);
+      });
+}
+
+bool WebFrameWidgetImpl::ShouldReportLongAnimationFrameTiming() const {
+  return widget_base_ && !IsHidden();
+}
+void WebFrameWidgetImpl::OnTaskCompletedForFrame(
+    base::TimeTicks start_time,
+    base::TimeTicks end_time,
+    base::TimeTicks desired_execution_time,
+    LocalFrame* frame) {
+  if (animation_frame_timing_monitor_) {
+    animation_frame_timing_monitor_->OnTaskCompleted(
+        start_time, end_time, desired_execution_time, frame);
+  }
+}
+
 void WebFrameWidgetImpl::DidBeginMainFrame() {
   LocalFrame* root_frame = LocalRootImpl()->GetFrame();
   DCHECK(root_frame);
 
   if (LocalFrameView* frame_view = root_frame->View())
     frame_view->RunPostLifecycleSteps();
+
+  if (animation_frame_timing_monitor_) {
+    animation_frame_timing_monitor_->DidBeginMainFrame();
+  }
+
   if (Page* page = root_frame->GetPage())
     page->Animator().PostAnimate();
 }
@@ -1465,6 +1557,11 @@ void WebFrameWidgetImpl::UpdateLifecycle(WebLifecycleUpdate requested_update,
   TRACE_EVENT0("blink", "WebFrameWidgetImpl::UpdateLifecycle");
   if (!LocalRootImpl())
     return;
+
+  if (requested_update == WebLifecycleUpdate::kAll &&
+      animation_frame_timing_monitor_) {
+    animation_frame_timing_monitor_->WillPerformStyleAndLayoutCalculation();
+  }
 
   GetPage()->UpdateLifecycle(*LocalRootImpl()->GetFrame(), requested_update,
                              reason);
@@ -1484,7 +1581,7 @@ void WebFrameWidgetImpl::UpdateLifecycle(WebLifecycleUpdate requested_update,
       SetBackgroundColor(background_color);
       if (background_color != data.last_background_color) {
         LocalRootImpl()->GetFrame()->DidChangeBackgroundColor(
-            background_color, false /* color_adjust */);
+            SkColor4f::FromColor(background_color), false /* color_adjust */);
         data.last_background_color = background_color;
       }
     }
@@ -1828,6 +1925,13 @@ std::unique_ptr<cc::ScopedPauseRendering> WebFrameWidgetImpl::PauseRendering() {
   if (!View()->does_composite())
     return nullptr;
   return widget_base_->LayerTreeHost()->PauseRendering();
+}
+
+absl::optional<int> WebFrameWidgetImpl::GetMaxRenderBufferBounds() const {
+  if (!View()->does_composite()) {
+    return absl::nullopt;
+  }
+  return widget_base_->GetMaxRenderBufferBounds();
 }
 
 std::unique_ptr<cc::ScopedDeferMainFrameUpdate>
@@ -2231,6 +2335,14 @@ void WebFrameWidgetImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
                last_frame_time);
   DCHECK(!last_frame_time.is_null());
   CHECK(LocalRootImpl());
+
+  // The last_frame_time is created in the compositor thread, it's the time when
+  // the compositor is ready for a new frame and starts preparing it. For the
+  // purpose of animation frame timing, this is the desired time to start
+  // rendering, equivalent to the time when a work task is posted.
+  if (animation_frame_timing_monitor_) {
+    animation_frame_timing_monitor_->SetDesiredRenderStartTime(last_frame_time);
+  }
 
   // Dirty bit on MouseEventManager is not cleared in OOPIFs after scroll
   // or layout changes. Ensure the hover state is recomputed if necessary.
@@ -2638,10 +2750,6 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
   // frame.
   if (IsProvisional())
     return WebInputEventResult::kHandledSuppressed;
-
-  // Only record metrics for the root frame.
-  if (ForTopMostMainFrame())
-    GetPage()->GetVisualViewport().StartTrackingPinchStats();
 
   // If a drag-and-drop operation is in progress, ignore input events except
   // PointerCancel and GestureLongPress.
@@ -3092,12 +3200,9 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
 
   DidNotSwapAction DidNotSwap(DidNotSwapReason reason,
                               base::TimeTicks timestamp) override {
-    if (base::FeatureList::IsEnabled(
-            features::kReportFCPOnlyOnSuccessfulCommit)) {
-      if (reason != DidNotSwapReason::SWAP_FAILS &&
-          reason != DidNotSwapReason::COMMIT_NO_UPDATE) {
-        return DidNotSwapAction::KEEP_ACTIVE;
-      }
+    if (reason != DidNotSwapReason::SWAP_FAILS &&
+        reason != DidNotSwapReason::COMMIT_NO_UPDATE) {
+      return DidNotSwapAction::KEEP_ACTIVE;
     }
 
     DidNotSwapAction action = DidNotSwapAction::BREAK_PROMISE;
@@ -3496,8 +3601,11 @@ void WebFrameWidgetImpl::InjectGestureScrollEvent(
             injected_type, now, device, gfx::PointF(0, 0), delta, granularity);
     if (injected_type == WebInputEvent::Type::kGestureScrollBegin) {
       gesture_event->data.scroll_begin.scrollable_area_element_id =
-          scrollable_area_element_id.GetStableId();
-      gesture_event->data.scroll_begin.main_thread_hit_tested = true;
+          scrollable_area_element_id.GetInternalValue();
+      gesture_event->data.scroll_begin.main_thread_hit_tested_reasons =
+          device == WebGestureDevice::kScrollbar
+              ? cc::MainThreadScrollingReason::kScrollbarScrolling
+              : cc::MainThreadScrollingReason::kFailedHitTest;
     }
 
     // Notifies TestWebFrameWidget of the injected event. Does nothing outside
@@ -3567,7 +3675,7 @@ bool WebFrameWidgetImpl::IsProvisional() {
   return LocalRoot()->IsProvisional();
 }
 
-uint64_t WebFrameWidgetImpl::GetScrollableContainerIdAt(
+cc::ElementId WebFrameWidgetImpl::GetScrollableContainerIdAt(
     const gfx::PointF& point) {
   return HitTestResultAt(point).GetScrollableContainerId();
 }
@@ -3618,7 +3726,7 @@ void WebFrameWidgetImpl::SetPanAction(mojom::blink::PanAction pan_action) {
 }
 
 void WebFrameWidgetImpl::DidHandleGestureEvent(const WebGestureEvent& event) {
-#if BUILDFLAG(IS_ANDROID) || defined(USE_AURA)
+#if BUILDFLAG(IS_ANDROID) || defined(USE_AURA) || BUILDFLAG(IS_IOS)
   if (event.GetType() == WebInputEvent::Type::kGestureTap) {
     widget_base_->ShowVirtualKeyboard();
   } else if (event.GetType() == WebInputEvent::Type::kGestureLongPress) {
@@ -3827,6 +3935,14 @@ void WebFrameWidgetImpl::CopyToFindPboard() {
   if (!focused_frame)
     return;
   To<WebLocalFrameImpl>(focused_frame)->CopyToFindPboard();
+}
+
+void WebFrameWidgetImpl::CenterSelection() {
+  WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
+  if (!focused_frame) {
+    return;
+  }
+  To<WebLocalFrameImpl>(focused_frame)->CenterSelection();
 }
 
 void WebFrameWidgetImpl::Paste() {
@@ -4228,8 +4344,8 @@ void WebFrameWidgetImpl::DidUpdateSurfaceAndScreen(
     // order to send IPCs that query and change compositing state. So
     // WebFrameWidgetImpl::Resize() must come after this call, as it runs the
     // entire document lifecycle.
-    View()->GetSettings()->SetPreferCompositingToLCDTextEnabled(
-        widget_base_->ComputePreferCompositingToLCDText());
+    View()->GetSettings()->SetLCDTextPreference(
+        widget_base_->ComputeLCDTextPreference());
   }
 
   // When the device scale changes, the size and position of the popup would
@@ -4292,6 +4408,11 @@ void WebFrameWidgetImpl::WasHidden() {
                                       [](WebLocalFrameImpl* local_frame) {
                                         local_frame->Client()->WasHidden();
                                       });
+
+  if (animation_frame_timing_monitor_) {
+    animation_frame_timing_monitor_->Shutdown();
+    animation_frame_timing_monitor_.Clear();
+  }
 }
 
 void WebFrameWidgetImpl::WasShown(bool was_evicted) {
@@ -4304,6 +4425,14 @@ void WebFrameWidgetImpl::WasShown(bool was_evicted) {
         // On eviction, the last SurfaceId is invalidated. We need to
         // allocate a new id.
         &RemoteFrame::ResendVisualProperties);
+  }
+
+  if (!animation_frame_timing_monitor_ &&
+      RuntimeEnabledFeatures::LongAnimationFrameTimingEnabled()) {
+    DCHECK(local_root_->GetFrame());
+    animation_frame_timing_monitor_ =
+        MakeGarbageCollected<AnimationFrameTimingMonitor>(
+            *this, local_root_->GetFrame()->GetProbeSink());
   }
 }
 

@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/files/file_util.h"
-#include "base/files/platform_file.h"
 #include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
@@ -22,12 +21,10 @@
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_fence_handle.h"
-#include "ui/gfx/linux/drm_util_linux.h"
 #include "ui/gfx/linux/gbm_buffer.h"
 #include "ui/gfx/linux/test/mock_gbm_device.h"
 #include "ui/gfx/overlay_transform.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
-#include "ui/ozone/platform/drm/gpu/crtc_controller.h"
 #include "ui/ozone/platform/drm/gpu/drm_framebuffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_gpu_util.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_atomic.h"
@@ -173,7 +170,13 @@ uint64_t HardwareDisplayPlaneManagerTest::GetPlanePropertyValue(
 using HardwareDisplayPlaneManagerLegacyTest = HardwareDisplayPlaneManagerTest;
 using HardwareDisplayPlaneManagerAtomicTest = HardwareDisplayPlaneManagerTest;
 
-TEST_P(HardwareDisplayPlaneManagerTest, ResettingConnectorCache) {
+// TODO(crbug.com/1431767): Re-enable this test
+#if defined(LEAK_SANITIZER)
+#define MAYBE_ResettingConnectorCache DISABLED_ResettingConnectorCache
+#else
+#define MAYBE_ResettingConnectorCache ResettingConnectorCache
+#endif
+TEST_P(HardwareDisplayPlaneManagerTest, MAYBE_ResettingConnectorCache) {
   const int connector_and_crtc_count = 3;
   auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithDefaultObjects(
       connector_and_crtc_count,
@@ -249,6 +252,9 @@ TEST_P(HardwareDisplayPlaneManagerTest, ResettingConnectorCache) {
 
 TEST_P(HardwareDisplayPlaneManagerTest, SequenceIncrementOnModesetOnly) {
   auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithNoProperties();
+  // Add some resources so HardwareDisplayPlaneManager can properly initialize
+  // within |fake_drm_|.
+  drm_state.AddCrtcAndConnector();
   fake_drm_->InitializeState(drm_state, /*use_atomic=*/true);
 
   // Modeset Test
@@ -438,7 +444,13 @@ TEST_P(HardwareDisplayPlaneManagerLegacyTest, CheckFramebufferFormatMatch) {
       &state_, assigns, fake_drm_->crtc_property(0).id));
 }
 
-TEST_P(HardwareDisplayPlaneManagerAtomicTest, Modeset) {
+// TODO(crbug.com/1431767): Re-enable this test
+#if defined(LEAK_SANITIZER)
+#define MAYBE_Modeset DISABLED_Modeset
+#else
+#define MAYBE_Modeset Modeset
+#endif
+TEST_P(HardwareDisplayPlaneManagerAtomicTest, MAYBE_Modeset) {
   auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithDefaultObjects(
       /*crtc_count=*/1, /*planes_per_crtc=*/1);
   fake_drm_->InitializeState(drm_state, /*use_atomic=*/true);
@@ -474,7 +486,13 @@ TEST_P(HardwareDisplayPlaneManagerAtomicTest, DisableModeset) {
   EXPECT_EQ(1, fake_drm_->get_commit_count());
 }
 
-TEST_P(HardwareDisplayPlaneManagerAtomicTest, CheckPropsAfterModeset) {
+// TODO(crbug.com/1431767): Re-enable this test
+#if defined(LEAK_SANITIZER)
+#define MAYBE_CheckPropsAfterModeset DISABLED_CheckPropsAfterModeset
+#else
+#define MAYBE_CheckPropsAfterModeset CheckPropsAfterModeset
+#endif
+TEST_P(HardwareDisplayPlaneManagerAtomicTest, MAYBE_CheckPropsAfterModeset) {
   auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithDefaultObjects(
       /*crtc_count=*/1, /*planes_per_crtc=*/1);
   fake_drm_->InitializeState(drm_state, /*use_atomic=*/true);
@@ -511,7 +529,13 @@ TEST_P(HardwareDisplayPlaneManagerAtomicTest, CheckPropsAfterModeset) {
   EXPECT_EQ(kModePropId, crtc_prop_for_name.id);
 }
 
-TEST_P(HardwareDisplayPlaneManagerAtomicTest, CheckPropsAfterDisable) {
+// TODO(crbug.com/1431767): Re-enable this test
+#if defined(LEAK_SANITIZER)
+#define MAYBE_CheckPropsAfterDisable DISABLED_CheckPropsAfterDisable
+#else
+#define MAYBE_CheckPropsAfterDisable CheckPropsAfterDisable
+#endif
+TEST_P(HardwareDisplayPlaneManagerAtomicTest, MAYBE_CheckPropsAfterDisable) {
   auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithDefaultObjects(
       /*crtc_count=*/1, /*planes_per_crtc=*/1);
   fake_drm_->InitializeState(drm_state, /*use_atomic=*/true);
@@ -548,7 +572,13 @@ TEST_P(HardwareDisplayPlaneManagerAtomicTest, CheckPropsAfterDisable) {
   EXPECT_EQ(0U, crtc_prop_for_name.value);
 }
 
-TEST_P(HardwareDisplayPlaneManagerAtomicTest, CheckVrrAfterModeset) {
+// TODO(crbug.com/1431767): Re-enable this test
+#if defined(LEAK_SANITIZER)
+#define MAYBE_CheckVrrAfterModeset DISABLED_CheckVrrAfterModeset
+#else
+#define MAYBE_CheckVrrAfterModeset CheckVrrAfterModeset
+#endif
+TEST_P(HardwareDisplayPlaneManagerAtomicTest, MAYBE_CheckVrrAfterModeset) {
   auto drm_state = MockDrmDevice::MockDrmState::CreateStateWithDefaultObjects(
       /*crtc_count=*/1, /*planes_per_crtc=*/2);
   drm_state.crtc_properties[0].properties.push_back(

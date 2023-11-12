@@ -11,6 +11,8 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/common_export.h"
 
+#include "base/containers/flat_map.h"
+
 namespace blink {
 
 // Note: if changing this, see also
@@ -85,6 +87,18 @@ struct BLINK_COMMON_EXPORT UserAgentOverride {
   // should be used. If this is null, and |ua_string_override| is non-empty,
   // no UA client hints will be sent.
   absl::optional<UserAgentMetadata> ua_metadata_override;
+
+  base::flat_map<std::string, UserAgentMetadata> domain_ua_metadata_override;
+
+  absl::optional<UserAgentMetadata> GetUaMetaDataOverride(
+      const std::string& hostname, bool return_main_metadata=true) const;
+
+  static void AddGetUaMetaDataOverride(const std::string& domainname,
+                                       const UserAgentMetadata& metadata);
+
+  UserAgentOverride();
+  UserAgentOverride(const UserAgentOverride& old);
+  UserAgentOverride& operator =(const UserAgentOverride& other) = default;
 };
 
 bool BLINK_COMMON_EXPORT operator==(const UserAgentMetadata& a,

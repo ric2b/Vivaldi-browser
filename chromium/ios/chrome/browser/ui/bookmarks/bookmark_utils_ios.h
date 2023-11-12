@@ -13,11 +13,14 @@
 #include <vector>
 
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+class AuthenticationService;
 class ChromeBrowserState;
 class GURL;
 @class MDCSnackbarMessage;
+class SyncSetupService;
 
 namespace bookmarks {
 class BookmarkModel;
@@ -31,17 +34,50 @@ enum class BookmarkModelType {
 
 namespace bookmark_utils_ios {
 
+// This class holds a node id and its bookmark model.
+struct BookmarkNodeReference {
+  BookmarkNodeReference(const base::Uuid& uuid,
+                        bookmarks::BookmarkModel* bookmark_model);
+  BookmarkNodeReference(const BookmarkNodeReference&);
+  ~BookmarkNodeReference();
+
+  // This operator is needed to be used `BookmarkNodeReference` in a std::set.
+  bool operator<(const BookmarkNodeReference reference) const;
+  BookmarkNodeReference& operator=(const BookmarkNodeReference& other) = delete;
+
+  // Node id for the BookmarkNode.
+  const base::Uuid uuid;
+  // Bookmark model from the BookmarkNode.
+  bookmarks::BookmarkModel* bookmark_model;
+};
+
 typedef std::vector<const bookmarks::BookmarkNode*> NodeVector;
 typedef std::set<const bookmarks::BookmarkNode*> NodeSet;
+typedef std::set<BookmarkNodeReference> NodeReferenceSet;
 
-// Finds bookmark nodes from passed in `ids`. The optional is only set if all
-// the `ids` have been found.
-absl::optional<NodeSet> FindNodesByIds(bookmarks::BookmarkModel* model,
-                                       const std::set<int64_t>& ids);
+// Converts a set of BookmarkNode into a set of BookmarkNodeReference.
+NodeReferenceSet FindNodeReferenceByNodes(
+    NodeSet nodes,
+    bookmarks::BookmarkModel* profile_bookmark_model,
+    bookmarks::BookmarkModel* account_bookmark_model);
+
+// Converts a BookmarkNodeReference into a BookmarkNode. This function might
+// returns `nullptr` if the bookmark node doesn't exist anymore.
+const bookmarks::BookmarkNode* FindNodeByNodeReference(
+    BookmarkNodeReference reference);
+
+// Converts a set of BookmarkNodeReference into a set of BookmarkNode. This
+// function might return fewer BookmarkNodeReference objects than BookmarkNode
+// if the nodes don't exist anymore.
+NodeSet FindNodesByNodeReferences(NodeReferenceSet references);
 
 // Finds bookmark node passed in `id`, in the `model`.
 const bookmarks::BookmarkNode* FindNodeById(bookmarks::BookmarkModel* model,
                                             int64_t id);
+
+// Finds bookmark node passed in `uuid`, in the `model`.
+const bookmarks::BookmarkNode* FindNodeByUuid(bookmarks::BookmarkModel* model,
+                                              const base::Uuid& uuid);
 
 // Finds bookmark node passed in `id`, in the `model`. Returns null if the
 // node is found but not a folder.
@@ -57,7 +93,7 @@ NSString* TitleForBookmarkNode(const bookmarks::BookmarkNode* node);
 // `bookmark_node` is the bookmark to query. It can not be null.
 // `profile_model` is the profile mode. It can not be null.
 // `account_model` is the account mode. It can be null.
-// The node must belongs to one of the two models.
+// The node must belong to one of the two models.
 // This function is linear in time in the depth of the bookmark_node.
 // TODO(crbug.com/1417992): once the bookmark nodes has access to its model,
 // rewrite the function to be constant time.
@@ -66,7 +102,30 @@ BookmarkModelType GetBookmarkModelType(
     bookmarks::BookmarkModel* profile_model,
     bookmarks::BookmarkModel* account_model);
 
-#pragma mark - Updating Bookmarks
+// Returns the bookmark model for a node, based on profile model and account
+// model.
+// `bookmark_node` is the bookmark to query. It can not be null.
+// `profile_model` is the profile mode. It can not be null.
+// `account_model` is the account mode. It can be null.
+// The node must belong to one of the two models.
+// This function is linear in time in the depth of the bookmark_node because it
+// uses `GetBookmarkModelType(...)`.
+// TODO(crbug.com/1417992): once the bookmark nodes has access to its model,
+// rewrite the function to be constant time.
+bookmarks::BookmarkModel* GetBookmarkModelForNode(
+    const bookmarks::BookmarkNode* bookmark_node,
+    bookmarks::BookmarkModel* profile_model,
+    bookmarks::BookmarkModel* account_model);
+
+// Whether the Cloud Slash icon should be displayed for `bookmark_node`.
+// This method should be called only for nodes part of the profile model.
+// For nodes in account model, the icon should never been shown.
+bool ShouldDisplayCloudSlashIconForProfileModel(
+    SyncSetupService* sync_setup_service);
+
+// Returns true if the account bookmark model is available.
+bool IsAccountBookmarkModelAvailable(
+    AuthenticationService* authenticationService);
 
 // Creates the bookmark if `node` is NULL. Otherwise updates `node`.
 // `folder` is the intended parent of `node`.
@@ -102,12 +161,12 @@ MDCSnackbarMessage* UpdateBookmarkPositionWithUndoToast(
     bookmarks::BookmarkModel* bookmark_model,
     ChromeBrowserState* browser_state);
 
-// Deletes all bookmarks in `model` that are in `bookmarks`, and returns a
-// snackbar with an undo action. Returns nil if the operation wasn't successful
-// or there's nothing to undo.
+// Deletes all nodes in `bookmarks` from models in `bookmark_models` that are
+// in `bookmarks`, and returns a snackbar with an undo action. Returns nil if
+// the operation wasn't successful or there's nothing to undo.
 MDCSnackbarMessage* DeleteBookmarksWithUndoToast(
     const std::set<const bookmarks::BookmarkNode*>& bookmarks,
-    bookmarks::BookmarkModel* model,
+    const std::vector<bookmarks::BookmarkModel*>& bookmark_models,
     ChromeBrowserState* browser_state);
 
 // Deletes all nodes in `bookmarks`.
@@ -133,8 +192,6 @@ bool MoveBookmarks(std::set<const bookmarks::BookmarkNode*> bookmarks,
 // Category name for all bookmarks related snackbars.
 extern NSString* const kBookmarksSnackbarCategory;
 
-#pragma mark - Useful bookmark manipulation.
-
 // Sorts a vector full of folders by title.
 void SortFolders(NodeVector* vector);
 
@@ -154,12 +211,11 @@ std::vector<NodeVector::size_type> MissingNodesIndices(
     const NodeVector& vector1,
     const NodeVector& vector2);
 
-#pragma mark - Cache position in table view.
-
 // Creates bookmark path for `folderId` passed in. For eg: for folderId = 76,
 // Root node(0) --> MobileBookmarks (3) --> Test1(76) will be returned as [0, 3,
 // 76].
-NSArray* CreateBookmarkPath(bookmarks::BookmarkModel* model, int64_t folder_id);
+NSArray<NSNumber*>* CreateBookmarkPath(bookmarks::BookmarkModel* model,
+                                       int64_t folder_id);
 
 }  // namespace bookmark_utils_ios
 

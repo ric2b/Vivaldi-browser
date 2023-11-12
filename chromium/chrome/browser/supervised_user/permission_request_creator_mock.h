@@ -7,12 +7,14 @@
 
 #include <vector>
 
-#include "chrome/browser/supervised_user/permission_request_creator.h"
+#include "base/memory/raw_ptr.h"
+#include "components/supervised_user/core/browser/permission_request_creator.h"
 #include "url/gurl.h"
 
 class Profile;
 
-class PermissionRequestCreatorMock : public PermissionRequestCreator {
+class PermissionRequestCreatorMock
+    : public supervised_user::PermissionRequestCreator {
  public:
   explicit PermissionRequestCreatorMock(Profile* profile);
 
@@ -47,7 +49,7 @@ class PermissionRequestCreatorMock : public PermissionRequestCreator {
   bool delay_handling_ = false;
   int last_url_request_handled_index_ = 0;
 
-  Profile* profile_ = nullptr;
+  raw_ptr<Profile, ExperimentalAsh> profile_ = nullptr;
 
   std::vector<GURL> url_requests_;
 };

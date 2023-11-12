@@ -289,6 +289,11 @@ public class AutofillTestHelper {
         return String.valueOf(Calendar.getInstance().get(Calendar.YEAR) + 1);
     }
 
+    /** Returns the YY value of the year after the current year. */
+    public static String twoDigitNextYear() {
+        return nextYear().substring(2);
+    }
+
     /** Creates a simple {@link CreditCard}. */
     public static CreditCard createLocalCreditCard(
             String name, String number, String month, String year) {
@@ -315,14 +320,14 @@ public class AutofillTestHelper {
 
     public static CreditCard createCreditCard(String name, String number, String month, String year,
             boolean isLocal, String nameForAutofillDisplay, String obfuscatedLastFourDigits,
-            int iconId) {
+            int iconId, String network) {
         return new CreditCard(/* guid= */ "",
                 /* origin= */ "",
                 /* isLocal= */ isLocal, /* isCached= */ false, /* isVirtual= */ false,
                 /* name= */ name,
                 /* number= */ number,
                 /* obfuscatedNumber= */ "", /* month= */ month, year,
-                /* basicCardIssuerNetwork =*/"",
+                /* basicCardIssuerNetwork =*/network,
                 /* issuerIconDrawableId= */ iconId, /* billingAddressId= */ "",
                 /* serverId= */ "", /* instrumentId= */ 0, /* cardLabel= */ "", /* nickname= */ "",
                 /* cardArtUrl= */ null,

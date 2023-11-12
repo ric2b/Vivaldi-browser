@@ -5,6 +5,7 @@
 module device.mojom;
 
 import "device/gamepad/public/mojom/gamepad.mojom";
+import "device/vr/public/mojom/xr_session.mojom";
 import "mojo/public/mojom/base/big_buffer.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "gpu/ipc/common/mailbox_holder.mojom";
@@ -22,18 +23,16 @@ import "ui/gfx/mojom/transform.mojom";
 // Note on terminology: unless otherwise noted, all poses passed across mojo are
 // expressed in device space, aka mojo space, aka world space.
 
-// TODO(https://crbug.com/966099): Use EnableIf to only define values on
-// platforms that have implementations.
 // XRDeviceId is used in metrics, so don't reorder or reuse.
 enum XRDeviceId {
   WEB_TEST_DEVICE_ID = 0, // Fake device used by web_tests.
   FAKE_DEVICE_ID = 1, // Fake device used in unit tests.
   ORIENTATION_DEVICE_ID = 2,
-  GVR_DEVICE_ID = 3,
+  [EnableIf=enable_gvr_services] GVR_DEVICE_ID = 3,
   // OPENVR_DEVICE_ID = 4,
   // OCULUS_DEVICE_ID = 5,
   // WINDOWS_MIXED_REALITY_ID = 6,
-  ARCORE_DEVICE_ID = 7,
+  [EnableIf=enable_arcore] ARCORE_DEVICE_ID = 7,
   [EnableIf=enable_openxr] OPENXR_DEVICE_ID = 8,
   [EnableIf=enable_cardboard] CARDBOARD_DEVICE_ID = 9,
 };
@@ -50,29 +49,6 @@ enum XRTargetRayMode {
   TAPPING = 3
 };
 
-// These correspond with the features from the WebXR Spec:
-// https://immersive-web.github.io/webxr/#feature-descriptor
-enum XRSessionFeature {
-  REF_SPACE_VIEWER = 1,
-  REF_SPACE_LOCAL = 2,
-  REF_SPACE_LOCAL_FLOOR = 3,
-  REF_SPACE_BOUNDED_FLOOR = 4,
-  REF_SPACE_UNBOUNDED = 5,
-
-  DOM_OVERLAY = 6,
-  HIT_TEST = 7,
-  LIGHT_ESTIMATION = 8,
-  ANCHORS = 9,
-  CAMERA_ACCESS = 10,
-  PLANE_DETECTION = 11,
-  DEPTH = 12,
-  IMAGE_TRACKING = 13,
-  HAND_INPUT = 14,
-  SECONDARY_VIEWS = 15,
-  LAYERS = 16,
-  FRONT_FACING = 17,
-};
-
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // This enum corresponds to 'XRFeatureRequestStatus' in
@@ -82,16 +58,6 @@ enum XRSessionFeatureRequestStatus {
   kRequired = 1,
   kOptionalAccepted = 2,
   kOptionalRejected = 3,
-};
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-// These enum names come from the WebXR spec:
-// https://immersive-web.github.io/webxr/#xrsessionmode-enum
-enum XRSessionMode {
-  kInline = 1,
-  kImmersiveVr = 2,
-  kImmersiveAr = 3,
 };
 
 // These enum names come from the WebXR spec:

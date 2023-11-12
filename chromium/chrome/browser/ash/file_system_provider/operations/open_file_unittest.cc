@@ -112,7 +112,8 @@ TEST_F(FileSystemProviderOperationsOpenFileTest, Execute) {
   ASSERT_TRUE(options_as_value->is_dict());
 
   OpenFileRequestedOptions options;
-  ASSERT_TRUE(OpenFileRequestedOptions::Populate(*options_as_value, &options));
+  ASSERT_TRUE(
+      OpenFileRequestedOptions::Populate(options_as_value->GetDict(), options));
   EXPECT_EQ(kFileSystemId, options.file_system_id);
   EXPECT_EQ(kRequestId, options.request_id);
   EXPECT_EQ(kFilePath, options.file_path);
@@ -173,8 +174,7 @@ TEST_F(FileSystemProviderOperationsOpenFileTest, OnSuccess) {
 
   EXPECT_TRUE(open_file.Execute(kRequestId));
 
-  open_file.OnSuccess(kRequestId, std::make_unique<RequestValue>(),
-                      false /* has_more */);
+  open_file.OnSuccess(kRequestId, RequestValue(), false /* has_more */);
   ASSERT_EQ(1u, callback_logger.events().size());
   CallbackLogger::Event* event = callback_logger.events()[0].get();
   EXPECT_EQ(base::File::FILE_OK, event->result());
@@ -192,7 +192,7 @@ TEST_F(FileSystemProviderOperationsOpenFileTest, OnError) {
 
   EXPECT_TRUE(open_file.Execute(kRequestId));
 
-  open_file.OnError(kRequestId, std::make_unique<RequestValue>(),
+  open_file.OnError(kRequestId, RequestValue(),
                     base::File::FILE_ERROR_TOO_MANY_OPENED);
   ASSERT_EQ(1u, callback_logger.events().size());
   CallbackLogger::Event* event = callback_logger.events()[0].get();

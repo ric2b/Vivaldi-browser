@@ -23,10 +23,6 @@ struct SameSizeAsNGInlineItem {
 
 ASSERT_SIZE(NGInlineItem, SameSizeAsNGInlineItem);
 
-const char* kNGInlineItemTypeStrings[] = {
-    "Text",     "Control",  "AtomicInline",        "OpenTag",
-    "CloseTag", "Floating", "OutOfFlowPositioned", "BidiControl"};
-
 // Returns true if this inline box is "empty", i.e. if the node contains only
 // empty items it will produce a single zero block-size line box.
 //
@@ -149,8 +145,32 @@ void NGInlineItem::ComputeBoxProperties() {
   is_empty_item_ = true;
 }
 
-const char* NGInlineItem::NGInlineItemTypeToString(int val) const {
-  return kNGInlineItemTypeStrings[val];
+const char* NGInlineItem::NGInlineItemTypeToString(NGInlineItemType val) const {
+  switch (val) {
+    case kText:
+      return "Text";
+    case kControl:
+      return "Control";
+    case kAtomicInline:
+      return "AtomicInline";
+    case kBlockInInline:
+      return "BlockInInline";
+    case kOpenTag:
+      return "OpenTag";
+    case kCloseTag:
+      return "CloseTag";
+    case kFloating:
+      return "Floating";
+    case kOutOfFlowPositioned:
+      return "OutOfFlowPositioned";
+    case kInitialLetterBox:
+      return "InitialLetterBox";
+    case kListMarker:
+      return "ListMerker";
+    case kBidiControl:
+      return "BidiControl";
+  }
+  NOTREACHED_NORETURN();
 }
 
 void NGInlineItem::SetSegmentData(const RunSegmenter::RunSegmenterRange& range,
@@ -231,6 +251,39 @@ void NGInlineItem::Split(HeapVector<NGInlineItem>& items,
   items[index].end_offset_ = offset;
   items[index + 1].start_offset_ = offset;
 }
+
+#if DCHECK_IS_ON()
+void NGInlineItem::CheckTextType(const String& text_content) const {
+  const UChar character = Length() ? text_content[StartOffset()] : 0;
+  switch (character) {
+    case kNewlineCharacter:
+      DCHECK_EQ(Length(), 1u);
+      DCHECK_EQ(Type(), NGInlineItemType::kControl);
+      DCHECK_EQ(TextType(), NGTextType::kForcedLineBreak);
+      break;
+    case kTabulationCharacter:
+      DCHECK_EQ(Type(), NGInlineItemType::kControl);
+      DCHECK_EQ(TextType(), NGTextType::kFlowControl);
+      break;
+    case kCarriageReturnCharacter:
+    case kFormFeedCharacter:
+    case kZeroWidthSpaceCharacter:
+      if (Type() == NGInlineItemType::kControl) {
+        DCHECK_EQ(Length(), 1u);
+        DCHECK_EQ(TextType(), NGTextType::kFlowControl);
+      } else {
+        DCHECK_EQ(Type(), NGInlineItemType::kText);
+        DCHECK_EQ(TextType(), NGTextType::kNormal);
+      }
+      break;
+    default:
+      DCHECK_NE(Type(), NGInlineItemType::kControl);
+      DCHECK(TextType() == NGTextType::kNormal ||
+             TextType() == NGTextType::kSymbolMarker);
+      break;
+  }
+}
+#endif
 
 void NGInlineItem::Trace(Visitor* visitor) const {
   visitor->Trace(layout_object_);

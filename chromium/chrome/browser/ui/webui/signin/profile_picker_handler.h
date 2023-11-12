@@ -35,6 +35,8 @@ struct Account;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
+class Browser;
+
 // The handler for Javascript messages related to the profile picker main view.
 class ProfilePickerHandler : public content::WebUIMessageHandler,
                              public content::WebContentsObserver,
@@ -114,8 +116,8 @@ class ProfilePickerHandler : public content::WebUIMessageHandler,
                                    profiles::ProfileCategoryStats result);
   void OnSwitchToProfileComplete(bool new_profile,
                                  bool open_settings,
-                                 Profile* profile);
-  void OnSwitchToProfileCompleteOpenCustomization(Profile* profile);
+                                 Browser* browser);
+  void OnSwitchToProfileCompleteOpenCustomization(Browser* browser);
   void OnProfileInitialized(absl::optional<SkColor> profile_color,
                             bool create_shortcut,
                             Profile* profile);
@@ -160,6 +162,11 @@ class ProfilePickerHandler : public content::WebUIMessageHandler,
 
   // Opens the Ash account settings page in a new window.
   void HandleOpenAshAccountSettingsPage(const base::Value::List& args);
+
+  // Called when the user clicks the "use device guest" link in the account
+  // selection dialog. Opens a dialog in Ash (through mojo), offering a switch
+  // to device guest mode.
+  void HandleOpenDeviceGuestLinkLacros(const base::Value::List& args);
 
   // List of available accounts used by the profile choice and the account
   // selection screens.

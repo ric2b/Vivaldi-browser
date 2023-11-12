@@ -84,8 +84,7 @@ ClientSocketPool::GroupId::GroupId(
     : destination_(std::move(destination)),
       privacy_mode_(privacy_mode),
       network_anonymization_key_(
-          base::FeatureList::IsEnabled(
-              features::kPartitionConnectionsByNetworkIsolationKey)
+          NetworkAnonymizationKey::IsPartitioningEnabled()
               ? std::move(network_anonymization_key)
               : NetworkAnonymizationKey()),
       secure_dns_policy_(secure_dns_policy) {
@@ -113,8 +112,7 @@ std::string ClientSocketPool::GroupId::ToString() const {
   if (privacy_mode_)
     result = "pm/" + result;
 
-  if (base::FeatureList::IsEnabled(
-          features::kPartitionConnectionsByNetworkIsolationKey)) {
+  if (NetworkAnonymizationKey::IsPartitioningEnabled()) {
     result += " <";
     result += network_anonymization_key_.ToDebugString();
     result += ">";
@@ -163,10 +161,11 @@ void ClientSocketPool::NetLogTcpClientSocketPoolRequestedSocket(
                    [&] { return NetLogGroupIdParams(group_id); });
 }
 
-base::Value ClientSocketPool::NetLogGroupIdParams(const GroupId& group_id) {
+base::Value::Dict ClientSocketPool::NetLogGroupIdParams(
+    const GroupId& group_id) {
   base::Value::Dict event_params;
   event_params.Set("group_id", group_id.ToString());
-  return base::Value(std::move(event_params));
+  return event_params;
 }
 
 std::unique_ptr<ConnectJob> ClientSocketPool::CreateConnectJob(

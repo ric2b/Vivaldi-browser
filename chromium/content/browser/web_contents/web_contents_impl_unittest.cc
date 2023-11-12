@@ -86,32 +86,6 @@
 
 namespace content {
 namespace {
-class WebContentsImplTestBrowserClient : public TestContentBrowserClient {
- public:
-  WebContentsImplTestBrowserClient()
-      : original_browser_client_(SetBrowserClientForTesting(this)) {}
-
-  ~WebContentsImplTestBrowserClient() override {
-    SetBrowserClientForTesting(original_browser_client_);
-  }
-
-  bool ShouldAssignSiteForURL(const GURL& url) override {
-    if (site_assignment_for_url_.find(url) != site_assignment_for_url_.end()) {
-      return site_assignment_for_url_[url];
-    }
-
-    return true;
-  }
-
-  void set_assign_site_for_url(bool assign, const GURL& url) {
-    DCHECK(url.is_valid());
-    site_assignment_for_url_[url] = assign;
-  }
-
- private:
-  std::map<GURL, bool> site_assignment_for_url_;
-  raw_ptr<ContentBrowserClient> original_browser_client_;
-};
 
 class WebContentsImplTest : public RenderViewHostImplTestHarness {
  public:
@@ -772,13 +746,10 @@ TEST_F(WebContentsImplTest, NavigateTwoTabsCrossSite) {
 }
 
 // The embedder can request sites for certain urls not be be assigned to the
-// SiteInstance through ShouldAssignSiteForURL() in content browser client,
+// SiteInstance by adding their schemes as empty document schemes,
 // allowing to reuse the renderer backing certain chrome urls for subsequent
 // navigation. The test verifies that the override is honored.
 TEST_F(WebContentsImplTest, NavigateFromSitelessUrl) {
-  WebContentsImplTestBrowserClient browser_client;
-  SetBrowserClientForTesting(&browser_client);
-
   TestRenderFrameHost* orig_rfh = main_test_rfh();
   int orig_rvh_delete_count = 0;
   orig_rfh->GetRenderViewHost()->set_delete_counter(&orig_rvh_delete_count);
@@ -789,7 +760,7 @@ TEST_F(WebContentsImplTest, NavigateFromSitelessUrl) {
   url::ScopedSchemeRegistryForTests scheme_registry;
   url::AddEmptyDocumentScheme("non-site-url");
   const GURL native_url("non-site-url://stuffandthings");
-  browser_client.set_assign_site_for_url(false, native_url);
+  EXPECT_FALSE(SiteInstance::ShouldAssignSiteForURL(native_url));
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), native_url);
 
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
@@ -802,7 +773,6 @@ TEST_F(WebContentsImplTest, NavigateFromSitelessUrl) {
 
   // Navigate to new site (should keep same site instance).
   const GURL url("http://www.google.com");
-  browser_client.set_assign_site_for_url(true, url);
   auto navigation1 =
       NavigationSimulator::CreateBrowserInitiated(url, contents());
   navigation1->ReadyToCommit();
@@ -882,15 +852,14 @@ TEST_F(WebContentsImplTest, NavigateFromSitelessUrl) {
 // NavigateFromSitelessUrl in which the original navigation is a session
 // restore.
 TEST_F(WebContentsImplTest, NavigateFromRestoredSitelessUrl) {
-  WebContentsImplTestBrowserClient browser_client;
-  SetBrowserClientForTesting(&browser_client);
   SiteInstanceImpl* orig_instance = contents()->GetSiteInstance();
-  TestRenderFrameHost* orig_rfh = main_test_rfh();
 
   // Restore a navigation entry for URL that should not assign site to the
-  // SiteInstance.
+  // SiteInstance. The url also needs to be defined with an empty scheme.
+  url::ScopedSchemeRegistryForTests scheme_registry;
+  url::AddEmptyDocumentScheme("non-site-url");
   const GURL native_url("non-site-url://stuffandthings");
-  browser_client.set_assign_site_for_url(false, native_url);
+  EXPECT_FALSE(SiteInstance::ShouldAssignSiteForURL(native_url));
   std::vector<std::unique_ptr<NavigationEntry>> entries;
   std::unique_ptr<NavigationEntry> new_entry =
       NavigationController::CreateNavigationEntry(
@@ -905,15 +874,16 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredSitelessUrl) {
 
   EXPECT_TRUE(controller().NeedsReload());
   controller().LoadIfNecessary();
-  orig_rfh->SendNavigateWithTransition(0, false, native_url,
-                                       ui::PAGE_TRANSITION_RELOAD);
+  auto navigation = NavigationSimulator::CreateFromPending(controller());
+  navigation->Commit();
+
   EXPECT_EQ(orig_instance, contents()->GetSiteInstance());
   EXPECT_EQ(GURL(), contents()->GetSiteInstance()->GetSiteURL());
   EXPECT_FALSE(orig_instance->HasSite());
 
   // Navigate to a regular site and verify that the SiteInstance was kept.
   const GURL url("http://www.google.com");
-  browser_client.set_assign_site_for_url(true, url);
+  EXPECT_TRUE(SiteInstance::ShouldAssignSiteForURL(url));
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), url);
   EXPECT_EQ(orig_instance, contents()->GetSiteInstance());
 
@@ -924,15 +894,12 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredSitelessUrl) {
 // Complement for NavigateFromRestoredSitelessUrl, verifying that when a regular
 // tab is restored, the SiteInstance will change upon navigation.
 TEST_F(WebContentsImplTest, NavigateFromRestoredRegularUrl) {
-  WebContentsImplTestBrowserClient browser_client;
-  SetBrowserClientForTesting(&browser_client);
   SiteInstanceImpl* orig_instance = contents()->GetSiteInstance();
-  TestRenderFrameHost* orig_rfh = main_test_rfh();
 
-  // Restore a navigation entry for a regular URL ensuring that the embedder
-  // ShouldAssignSiteForUrl override is disabled (i.e. returns true).
+  // Restore a navigation entry for a regular URL with non-empty scheme, where
+  // ShouldAssignSiteForUrl returns true.
   const GURL regular_url("http://www.yahoo.com");
-  browser_client.set_assign_site_for_url(true, regular_url);
+  EXPECT_TRUE(SiteInstance::ShouldAssignSiteForURL(regular_url));
   std::vector<std::unique_ptr<NavigationEntry>> entries;
   std::unique_ptr<NavigationEntry> new_entry =
       NavigationController::CreateNavigationEntry(
@@ -947,9 +914,9 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredRegularUrl) {
   ASSERT_EQ(1, controller().GetEntryCount());
   EXPECT_TRUE(controller().NeedsReload());
   controller().LoadIfNecessary();
-  orig_rfh->PrepareForCommit();
-  orig_rfh->SendNavigateWithTransition(0, false, regular_url,
-                                       ui::PAGE_TRANSITION_RELOAD);
+  auto navigation = NavigationSimulator::CreateFromPending(controller());
+  navigation->Commit();
+
   EXPECT_EQ(orig_instance, contents()->GetSiteInstance());
   EXPECT_TRUE(orig_instance->HasSite());
   EXPECT_EQ(AreDefaultSiteInstancesEnabled(),
@@ -961,7 +928,7 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredRegularUrl) {
   if (AreDefaultSiteInstancesEnabled()) {
     // Verify this remains the default SiteInstance since |url| does
     // not require a dedicated process.
-    EXPECT_EQ(orig_instance, contents()->GetSiteInstance());
+    EXPECT_TRUE(contents()->GetSiteInstance()->IsDefaultSiteInstance());
 
     // Navigate to a URL that does require a dedicated process and verify that
     // the SiteInstance changes.
@@ -1890,22 +1857,6 @@ TEST_F(WebContentsImplTest,
   // The view should be re-hidden if the WebContents leaves PiP.
   contents()->SetHasPictureInPictureDocument(false);
   EXPECT_FALSE(view->is_showing());
-}
-
-TEST_F(WebContentsImplTest, PictureInPictureSetsCapture) {
-  // Setting pip on a content should create a capture lock and ending it should
-  // clear the associated lock.
-  ASSERT_FALSE(contents()->IsBeingCaptured());
-
-  contents()->SetHasPictureInPictureVideo(true);
-  ASSERT_TRUE(contents()->IsBeingCaptured());
-  contents()->SetHasPictureInPictureVideo(false);
-  ASSERT_FALSE(contents()->IsBeingCaptured());
-
-  contents()->SetHasPictureInPictureDocument(true);
-  ASSERT_TRUE(contents()->IsBeingCaptured());
-  contents()->SetHasPictureInPictureDocument(false);
-  ASSERT_FALSE(contents()->IsBeingCaptured());
 }
 
 namespace {

@@ -6,7 +6,6 @@
 #define COMPONENTS_AUTOFILL_CONTENT_BROWSER_CONTENT_AUTOFILL_DRIVER_H_
 
 #include <memory>
-#include <string>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -15,8 +14,7 @@
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/core/browser/autofill_driver.h"
 #include "components/autofill/core/browser/autofill_manager.h"
-#include "components/autofill/core/browser/browser_autofill_manager.h"
-#include "components/autofill/core/common/form_data_predictions.h"
+#include "components/autofill/core/common/form_data.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -24,8 +22,9 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+#include "components/autofill/core/browser/browser_autofill_manager.h"
+
 namespace content {
-class NavigationHandle;
 class RenderFrameHost;
 }  // namespace content
 
@@ -195,9 +194,8 @@ class ContentAutofillDriver : public AutofillDriver,
   // enabled.
   void ProbablyFormSubmitted(base::PassKey<ContentAutofillDriverFactory>);
 
-  // DidNavigateFrame() is called on the frame's driver, respectively, when a
-  // navigation occurs in that specific frame.
-  void DidNavigateFrame(content::NavigationHandle* navigation_handle);
+  // Called on certain types of navigations by ContentAutofillDriverFactory.
+  void Reset();
 
   // Key-press handlers capture the user input into fields from the renderer.
   // The AutofillPopupControllerImpl listens for input while showing a popup.
@@ -207,9 +205,6 @@ class ContentAutofillDriver : public AutofillDriver,
   // may be in a different frame than |render_frame_host_|. Therefore,
   // SetKeyPressHandler() and UnsetKeyPressHandler() are forwarded to the
   // last-queried source remembered by ContentAutofillRouter.
-  // For non-Autofill forms (i.e., password forms), which are not handled by
-  // ContentAutofillDriver and ContentAutofillRouter and hence are not
-  // frame-transcending, this routing must be skipped by setting |skip_routing|.
   void SetKeyPressHandler(
       const content::RenderWidgetHost::KeyPressEventCallback& handler);
   void UnsetKeyPressHandler();
@@ -345,7 +340,7 @@ class ContentAutofillDriver : public AutofillDriver,
 
   // Weak ref to the AutofillRouter associated with the WebContents.
   // Do not access directly, use autofill_router() instead.
-  raw_ptr<ContentAutofillRouter> autofill_router_ = nullptr;
+  const raw_ptr<ContentAutofillRouter> autofill_router_ = nullptr;
 
   // The form pushed from the AutofillAgent to the AutofillDriver. When the
   // ProbablyFormSubmitted() event is fired, this form is considered the

@@ -40,7 +40,9 @@ CSSNumericLiteralValue* CSSNumericLiteralValue::Create(double value,
   // At this point, we know that value is in a small range,
   // so we can use a simple cast instead of ClampTo<int>.
   int int_value = static_cast<int>(value);
-  if (value != int_value) {
+  // To handle negative zero, detect signed zero
+  // https://en.wikipedia.org/wiki/Signed_zero
+  if (value != int_value || (value == 0 && std::signbit(value))) {
     return MakeGarbageCollected<CSSNumericLiteralValue>(value, type);
   }
 
@@ -111,6 +113,11 @@ double CSSNumericLiteralValue::ComputeDegrees() const {
 double CSSNumericLiteralValue::ComputeDotsPerPixel() const {
   DCHECK(IsResolution());
   return DoubleValue() * ConversionToCanonicalUnitsScaleFactor(GetType());
+}
+
+double CSSNumericLiteralValue::ComputeInCanonicalUnit() const {
+  return DoubleValue() *
+         CSSPrimitiveValue::ConversionToCanonicalUnitsScaleFactor(GetType());
 }
 
 double CSSNumericLiteralValue::ComputeLengthPx(
@@ -335,6 +342,15 @@ bool CSSNumericLiteralValue::Equals(const CSSNumericLiteralValue& other) const {
     default:
       return false;
   }
+}
+
+CSSPrimitiveValue::UnitType CSSNumericLiteralValue::CanonicalUnit() const {
+  return CanonicalUnitTypeForCategory(UnitTypeToUnitCategory(GetType()));
+}
+
+CSSNumericLiteralValue* CSSNumericLiteralValue::CreateCanonicalUnitValue()
+    const {
+  return Create(ComputeInCanonicalUnit(), CanonicalUnit());
 }
 
 }  // namespace blink

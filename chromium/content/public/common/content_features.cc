@@ -29,6 +29,11 @@ BASE_FEATURE(kAndroidDownloadableFontsMatching,
              "AndroidDownloadableFontsMatching",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables FLEDGE and Attribution Reporting API integration.
+BASE_FEATURE(kAttributionFencedFrameReportingBeacon,
+             "AttributionFencedFrameReportingBeacon",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Launches the audio service on the browser startup.
 BASE_FEATURE(kAudioServiceLaunchOnStartup,
              "AudioServiceLaunchOnStartup",
@@ -78,14 +83,6 @@ BASE_FEATURE(kAvoidUnnecessaryBeforeUnloadCheckSync,
              "AvoidUnnecessaryBeforeUnloadCheckSync",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, stops canceling navigation when another navigation commits or
-// starts. This supports the same goal as kQueueNavigationsWhileWaitingForCommit
-// but for the non-queueing parts, and is disabled by default.
-// See https://crbug.com/838348 and https://crbug.com/1220337.
-BASE_FEATURE(kAvoidUnnecessaryNavigationCancellations,
-             "AvoidUnnecessaryNavigationCancellations",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Kill switch for Background Fetch.
 BASE_FEATURE(kBackgroundFetch,
              "BackgroundFetch",
@@ -95,6 +92,11 @@ BASE_FEATURE(kBackgroundFetch,
 BASE_FEATURE(kBackForwardCache,
              "BackForwardCache",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enable showing a page preview during back/forward navigations.
+BASE_FEATURE(kBackForwardTransitions,
+             "BackForwardTransitions",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables reporting ResourceTiming entries for document, who initiated a
 // cancelled navigation in one of their <iframe>.
@@ -215,19 +217,11 @@ BASE_FEATURE(kBrowserVerifiedUserActivationMouse,
              "BrowserVerifiedUserActivationMouse",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Compute the NavigationDownloadPolicy bit about sandbox flags from the browser
-// process side. This is a fix for https://crbug.com/1357366. The feature flag
-// is used as a temporary kill switch in case it breaks something important on
-// stable. To be removed by M111.
-BASE_FEATURE(kBrowserSideDownloadPolicySandbox,
-             "BrowserSideDownloadPolicySandbox",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // If Canvas2D Image Chromium is allowed, this feature controls whether it is
 // enabled.
 BASE_FEATURE(kCanvas2DImageChromium,
              "Canvas2DImageChromium",
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_CHROMEOS_LACROS)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -401,6 +395,9 @@ BASE_FEATURE(kFedCm, "FedCm", base::FEATURE_ENABLED_BY_DEFAULT);
 // is enabled.
 const char kFedCmIdpSignoutFieldTrialParamName[] = "IdpSignout";
 
+// Enables usage of the FedCM Authz API.
+BASE_FEATURE(kFedCmAuthz, "FedCmAuthz", base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables usage of the FedCM API with auto re-authentication. Note that actual
 // exposure of FedCM's auto re-authentication feature to web content is
 // controlled by the flag in RuntimeEnabledFeatures on the blink side. See also
@@ -464,6 +461,11 @@ const char kFedCmIdpSigninStatusFieldTrialParamName[] = "IdpSigninStatus";
 // `kFedCmIdpSigninStatusMetricsOnlyFieldTrialParamName`.
 const char kFedCmIdpSigninStatusMetricsOnlyFieldTrialParamName[] =
     "IdpSigninStatusMetricsOnly";
+
+// Enables the MDocs API in the IdentityCredential.
+BASE_FEATURE(kWebIdentityMDocs,
+             "WebIdentityMDocs",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables usage of First Party Sets to determine cookie availability.
 BASE_FEATURE(kFirstPartySets,
@@ -573,7 +575,7 @@ BASE_FEATURE(kInMemoryCodeCache,
 // cases, e.g. PDF tiles are ignored. See https://crbug.com/1360351 for details.
 BASE_FEATURE(kInnerFrameCompositorSurfaceEviction,
              "InnerFrameCompositorSurfaceEviction",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Kill switch for the GetInstalledRelatedApps API.
 BASE_FEATURE(kInstalledApp, "InstalledApp", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -587,6 +589,10 @@ BASE_FEATURE(kInstalledAppProvider,
 // isolated web apps via the isolated-app:// scheme, and other advanced isolated
 // app functionality. See https://github.com/reillyeon/isolated-web-apps for a
 // general overview.
+// Please don't use this feature flag directly to guard the IWA code. Use
+// IsolatedWebAppsPolicy::AreIsolatedWebAppsEnabled() in the browser process
+// or check kEnableIsolatedWebAppsInRenderer command line flag in the renderer
+// process.
 BASE_FEATURE(kIsolatedWebApps,
              "IsolatedWebApps",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -745,11 +751,6 @@ BASE_FEATURE(kMojoVideoCaptureSecondary,
              "MojoVideoCaptureSecondary",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// When enable, iframe does not implicit capture mouse event.
-BASE_FEATURE(kMouseSubframeNoImplicitCapture,
-             "MouseSubframeNoImplicitCapture",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // When NavigationNetworkResponseQueue is enabled, the browser will schedule
 // some tasks related to navigation network responses in a kHighest priority
 // queue.
@@ -870,6 +871,13 @@ BASE_FEATURE(kPrerender2Holdback,
 // and prerender) on all predictors. This is useful in comparing the impact of
 // blink::features::kPrerender2 experiment with and without them.
 
+// This Feature allows configuring preloading features via a parameter string.
+// See content/browser/preloading/preloading_config.cc to see how to use this
+// feature.
+BASE_FEATURE(kPreloadingConfig,
+             "PreloadingConfig",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Please note this feature is only used for experimental purposes, please don't
 // enable this feature by default.
 BASE_FEATURE(kPreloadingHoldback,
@@ -982,6 +990,19 @@ BASE_FEATURE(kRetryGetVideoCaptureDeviceInfos,
              "RetryGetVideoCaptureDeviceInfos",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Reuses RenderProcessHost up to a certain threshold. This mode ignores the
+// soft process limit and behaves just like a process-per-site policy for all
+// sites, with an additional restriction that a process may only be reused while
+// the number of main frames in that process stays below a threshold.
+BASE_FEATURE(kProcessPerSiteUpToMainFrameThreshold,
+             "ProcessPerSiteUpToMainFrameThreshold",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Specifies the threshold for `kProcessPerSiteUpToMainFrameThreshold` feature.
+constexpr base::FeatureParam<int> kProcessPerSiteMainFrameThreshold{
+    &kProcessPerSiteUpToMainFrameThreshold, "ProcessPerSiteMainFrameThreshold",
+    2};
+
 // Enables skipping the early call to CommitPending when navigating away from a
 // crashed frame.
 BASE_FEATURE(kSkipEarlyCommitPendingForCrashedFrame,
@@ -1006,10 +1027,25 @@ const base::FeatureParam<ServiceWorkerBypassFetchHandlerStrategy>
         &service_worker_bypass_fetch_handler_strategy_options};
 
 const base::FeatureParam<ServiceWorkerBypassFetchHandlerTarget>::Option
-    service_worker_bypass_fetch_handler_target_options[] = {{
-        ServiceWorkerBypassFetchHandlerTarget::kMainResource,
-        "main_resource",
-    }};
+    service_worker_bypass_fetch_handler_target_options[] = {
+        {
+            ServiceWorkerBypassFetchHandlerTarget::kMainResource,
+            "main_resource",
+        },
+        {
+            ServiceWorkerBypassFetchHandlerTarget::
+                kAllOnlyIfServiceWorkerNotStarted,
+            "all_only_if_service_worker_not_started",
+        },
+        {
+            ServiceWorkerBypassFetchHandlerTarget::kAllWithRaceNetworkRequest,
+            "all_with_race_network_request",
+        },
+        {
+            ServiceWorkerBypassFetchHandlerTarget::kSubResource,
+            "sub_resource",
+        },
+};
 const base::FeatureParam<ServiceWorkerBypassFetchHandlerTarget>
     kServiceWorkerBypassFetchHandlerTarget{
         &kServiceWorkerBypassFetchHandler, "bypass_for",
@@ -1051,12 +1087,23 @@ constexpr base::FeatureParam<bool> kStartServiceWorkerForEmptyFetchHandler{
 // This feature param controls if the service worker is started for an
 // empty service worker fetch handler while `kSkipEmptyFetchHandler` is on.
 // Unlike the feature param `kStartServiceWorkerForEmptyFetchHandler`,
-// this starts service worker in `TaskRunner::PostTask`.
+// this starts service worker in `TaskRunner::PostDelayTask`.
 constexpr base::FeatureParam<bool> kAsyncStartServiceWorkerForEmptyFetchHandler{
     &kServiceWorkerSkipIgnorableFetchHandler,
     "AsyncStartServiceWorkerForEmptyFetchHandler",
     false,
 };
+
+// This feature param controls duration to start fetch handler
+// if `kAsyncStartServiceWorkerForEmptyFetchHandler` is used.
+// Negative values and the value larger than a threshold is ignored, and
+// treated as 0.
+constexpr base::FeatureParam<int>
+    kAsyncStartServiceWorkerForEmptyFetchHandlerDurationInMs{
+        &kServiceWorkerSkipIgnorableFetchHandler,
+        "AsyncStartServiceWorkerForEmptyFetchHandlerDurationInMs",
+        0,
+    };
 
 // Run video capture service in the Browser process as opposed to a dedicated
 // utility process
@@ -1084,13 +1131,6 @@ BASE_FEATURE(kSecurePaymentConfirmationDebug,
              "SecurePaymentConfirmationDebug",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Remove the 'rp' field from the output SPC
-// CollectedClientAdditionalPaymentData dictionary. See
-// https://crbug.com/1356224 .
-BASE_FEATURE(kSecurePaymentConfirmationRemoveRpField,
-             "SecurePaymentConfirmationRemoveRpField",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Make sendBeacon throw for a Blob with a non simple type.
 BASE_FEATURE(kSendBeaconThrowForBlobWithNonSimpleType,
              "SendBeaconThrowForBlobWithNonSimpleType",
@@ -1115,6 +1155,12 @@ BASE_FEATURE(kSharedArrayBuffer,
 BASE_FEATURE(kSharedArrayBufferOnDesktop,
              "SharedArrayBufferOnDesktop",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Kill switch for creating first-party StorageKeys in
+// RenderFrameHostImpl::CalculateStorageKey for frames with extension URLs.
+BASE_FEATURE(kShouldAllowFirstPartyStorageKeyOverrideFromEmbedder,
+             "ShouldAllowFirstPartyStorageKeyOverrideFromEmbedder",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Signed Exchange Reporting for distributors
 // https://www.chromestatus.com/feature/5687904902840320
@@ -1196,11 +1242,6 @@ const base::FeatureParam<base::TimeDelta>
     kSiteIsolationForCrossOriginOpenerPolicyExpirationTimeoutParam{
         &kSiteIsolationForCrossOriginOpenerPolicy, "expiration_timeout",
         base::Days(7)};
-
-// This feature turns on site isolation support in <webview> guests.
-BASE_FEATURE(kSiteIsolationForGuests,
-             "SiteIsolationForGuests",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, OOPIFs will not try to reuse compatible processes from
 // unrelated tabs.
@@ -1356,6 +1397,12 @@ BASE_FEATURE(kWebAssemblyLazyCompilation,
 // Enable the use of WebAssembly Relaxed SIMD operations
 BASE_FEATURE(kWebAssemblyRelaxedSimd,
              "WebAssemblyRelaxedSimd",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enable support for the WebAssembly Stringref proposal:
+// https://github.com/WebAssembly/stringref.
+BASE_FEATURE(kWebAssemblyStringref,
+             "WebAssemblyStringref",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable WebAssembly tiering (Liftoff -> TurboFan).
@@ -1461,12 +1508,6 @@ BASE_FEATURE(kBindingManagerConnectionLimit,
              "BindingManagerConnectionLimit",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When this feature is enabled the BindingManager for non-low-end devices will
-// use a not perceptible binding for background renderers on Android Q+.
-BASE_FEATURE(kBindingManagerUseNotPerceptibleBinding,
-             "BindingManagerUseNotPerceptibleBinding",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Reduce the priority of GPU process when in background so it is more likely
 // to be killed first if the OS needs more memory.
 BASE_FEATURE(kReduceGpuPriorityOnBackground,
@@ -1505,6 +1546,12 @@ BASE_FEATURE(kRequestDesktopSiteExceptions,
 // when desktop user agent is used.
 BASE_FEATURE(kRequestDesktopSiteZoom,
              "RequestDesktopSiteZoom",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Text autosizing uses heuristics to inflate text sizes on devices with
+// small screens. This feature is for disabling these heuristics.
+BASE_FEATURE(kForceOffTextAutosizing,
+             "ForceOffTextAutosizing",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Screen Capture API support for Android

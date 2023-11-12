@@ -14,14 +14,15 @@
 #import "components/favicon_base/fallback_icon_style.h"
 #import "components/favicon_base/favicon_callback.h"
 #import "components/favicon_base/favicon_types.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "net/traffic_annotation/network_traffic_annotation.h"
 #import "skia/ext/skia_utils_ios.h"
 #import "url/gurl.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 // End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -259,8 +260,13 @@ void FaviconLoader::FaviconForIconUrl(
   };
 
   // First, return a fallback synchronously.
+  if (vivaldi::IsVivaldiRunning()) {
+    favicon_block_handler([FaviconAttributes
+        attributesWithImage:[UIImage imageNamed:vNTPSDFallbackFavicon]]);
+  } else {
   favicon_block_handler([FaviconAttributes
       attributesWithImage:[UIImage imageNamed:@"default_world_favicon"]]);
+  } // End Vivaldi
 
   // Now call the service for a better async icon.
   DCHECK(large_icon_service_);

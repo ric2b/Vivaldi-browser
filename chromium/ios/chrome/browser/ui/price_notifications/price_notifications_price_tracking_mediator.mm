@@ -15,10 +15,12 @@
 #import "components/power_bookmarks/core/power_bookmark_utils.h"
 #import "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
 #import "components/power_bookmarks/core/proto/shopping_specifics.pb.h"
+#import "ios/chrome/browser/push_notification/push_notification_client_id.h"
+#import "ios/chrome/browser/push_notification/push_notification_service.h"
 #import "ios/chrome/browser/push_notification/push_notification_util.h"
-#import "ios/chrome/browser/ui/commands/bookmark_add_command.h"
-#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
-#import "ios/chrome/browser/ui/commands/price_notifications_commands.h"
+#import "ios/chrome/browser/shared/public/commands/bookmark_add_command.h"
+#import "ios/chrome/browser/shared/public/commands/bookmarks_commands.h"
+#import "ios/chrome/browser/shared/public/commands/price_notifications_commands.h"
 #import "ios/chrome/browser/ui/price_notifications/cells/price_notifications_table_view_item.h"
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_alert_presenter.h"
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_consumer.h"
@@ -47,6 +49,9 @@ using PriceNotificationItems =
 // viewing.
 @property(nonatomic, assign) absl::optional<commerce::ProductInfo>
     currentSiteProductInfo;
+// The service responsible for updating the user's chrome-level push
+// notification permissions for Price Tracking.
+@property(nonatomic, assign) PushNotificationService* pushNotificationService;
 
 @end
 
@@ -57,17 +62,20 @@ using PriceNotificationItems =
               bookmarkModel:(bookmarks::BookmarkModel*)bookmarkModel
                imageFetcher:
                    (std::unique_ptr<image_fetcher::ImageDataFetcher>)fetcher
-                   webState:(web::WebState*)webState {
+                   webState:(web::WebState*)webState
+    pushNotificationService:(PushNotificationService*)pushNotificationService {
   self = [super init];
   if (self) {
     DCHECK(service);
     DCHECK(bookmarkModel);
     DCHECK(fetcher);
     DCHECK(webState);
+    DCHECK(pushNotificationService);
     _shoppingService = service;
     _bookmarkModel = bookmarkModel;
     _imageFetcher = std::move(fetcher);
     _webState = webState;
+    _pushNotificationService = pushNotificationService;
   }
 
   return self;
@@ -97,6 +105,14 @@ using PriceNotificationItems =
       // is displayed on the main thread.
       dispatch_async(dispatch_get_main_queue(), ^{
         [weakSelf.presenter presentPushNotificationPermissionAlert];
+      });
+    } else if (!error && promptShown && granted) {
+      // This callback can be executed on a background thread causing this
+      // function to fail. Thus, the invocation is scheduled to run on the main
+      // thread.
+      dispatch_async(dispatch_get_main_queue(), ^{
+        weakSelf.pushNotificationService->SetPreference(
+            weakSelf.gaiaID, PushNotificationClientId::kCommerce, true);
       });
     }
   }];
@@ -281,38 +297,47 @@ using PriceNotificationItems =
 // This function fetches the product data for the items the user has subscribed
 // to and populates the data into the Price Notifications UI.
 - (void)fetchTrackedItems {
-  std::vector<const bookmarks::BookmarkNode*> subscribedItems =
-      commerce::GetAllPriceTrackedBookmarks(self.bookmarkModel);
-  for (const bookmarks::BookmarkNode* bookmark : subscribedItems) {
-    std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
-        power_bookmarks::GetNodePowerBookmarkMeta(self.bookmarkModel, bookmark);
-    if (!meta || !meta->has_shopping_specifics()) {
-      continue;
-    }
-    const power_bookmarks::ShoppingSpecifics specifics =
-        meta->shopping_specifics();
-    // To build the PriceNotificationTableViewItem for product on current page
-    // which are not being tracked, we have to use its ProductInfo. To avoid
-    // duplicate APIs, here we also convert BookmarkMeta to ProductInfo to build
-    // the PriceNotificationTableViewItem for tracked products, instead of
-    // passing BookmarkMeta directly.
-    absl::optional<commerce::ProductInfo> info;
-    info.emplace();
-    info->title = specifics.title();
-    info->image_url = GURL(meta->lead_image().url());
-    info->product_cluster_id = specifics.product_cluster_id();
-    info->offer_id = specifics.offer_id();
-    info->currency_code = specifics.current_price().currency_code();
-    info->amount_micros = specifics.current_price().amount_micros();
-    info->country_code = specifics.country_code();
-    if (specifics.has_previous_price() &&
-        specifics.previous_price().amount_micros() >
-            specifics.current_price().amount_micros()) {
-      info->previous_amount_micros.emplace(
-          specifics.previous_price().amount_micros());
-    }
-    [self addTrackedItem:info fromSite:bookmark->url()];
-  }
+  __weak PriceNotificationsPriceTrackingMediator* weakSelf = self;
+  commerce::GetAllPriceTrackedBookmarks(
+      self.shoppingService, self.bookmarkModel,
+      base::BindOnce(
+          ^(std::vector<const bookmarks::BookmarkNode*> subscribedItems) {
+            if (!weakSelf) {
+              return;
+            }
+            for (const bookmarks::BookmarkNode* bookmark : subscribedItems) {
+              std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
+                  power_bookmarks::GetNodePowerBookmarkMeta(
+                      weakSelf.bookmarkModel, bookmark);
+              if (!meta || !meta->has_shopping_specifics()) {
+                continue;
+              }
+              const power_bookmarks::ShoppingSpecifics specifics =
+                  meta->shopping_specifics();
+              // To build the PriceNotificationTableViewItem for product on
+              // current page which are not being tracked, we have to use its
+              // ProductInfo. To avoid duplicate APIs, here we also convert
+              // BookmarkMeta to ProductInfo to build the
+              // PriceNotificationTableViewItem for tracked products, instead of
+              // passing BookmarkMeta directly.
+              absl::optional<commerce::ProductInfo> info;
+              info.emplace();
+              info->title = specifics.title();
+              info->image_url = GURL(meta->lead_image().url());
+              info->product_cluster_id = specifics.product_cluster_id();
+              info->offer_id = specifics.offer_id();
+              info->currency_code = specifics.current_price().currency_code();
+              info->amount_micros = specifics.current_price().amount_micros();
+              info->country_code = specifics.country_code();
+              if (specifics.has_previous_price() &&
+                  specifics.previous_price().amount_micros() >
+                      specifics.current_price().amount_micros()) {
+                info->previous_amount_micros.emplace(
+                    specifics.previous_price().amount_micros());
+              }
+              [weakSelf addTrackedItem:info fromSite:bookmark->url()];
+            }
+          }));
 }
 
 // Retrieves the product data for the items the user has subscribed to and the
@@ -410,7 +435,18 @@ using PriceNotificationItems =
   std::vector<const bookmarks::BookmarkNode*> nodes;
   self.bookmarkModel->GetNodesByURL(URL, &nodes);
   for (const bookmarks::BookmarkNode* node : nodes) {
-    if (commerce::IsBookmarkPriceTracked(self.bookmarkModel, node)) {
+    std::unique_ptr<power_bookmarks::PowerBookmarkMeta> meta =
+        power_bookmarks::GetNodePowerBookmarkMeta(self.bookmarkModel, node);
+
+    if (!meta || !meta->has_shopping_specifics() ||
+        !meta->shopping_specifics().has_product_cluster_id()) {
+      continue;
+    }
+
+    // TODO: This should use the async version of IsSubscribed.
+    if (self.shoppingService->IsSubscribedFromCache(
+            commerce::BuildUserSubscriptionForClusterId(
+                meta->shopping_specifics().product_cluster_id()))) {
       return true;
     }
   }

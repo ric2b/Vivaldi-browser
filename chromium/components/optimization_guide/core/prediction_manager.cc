@@ -12,7 +12,6 @@
 #include "base/containers/flat_set.h"
 #include "base/containers/flat_tree.h"
 #include "base/functional/callback.h"
-#include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_macros_local.h"
@@ -25,6 +24,7 @@
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "components/optimization_guide/core/model_info.h"
 #include "components/optimization_guide/core/model_util.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
@@ -105,8 +105,6 @@ class ScopedPredictionModelConstructionAndValidationRecorder {
         optimization_target_(optimization_target) {}
 
   ~ScopedPredictionModelConstructionAndValidationRecorder() {
-    base::UmaHistogramBoolean("OptimizationGuide.IsPredictionModelValid",
-                              is_valid_);
     base::UmaHistogramBoolean(
         "OptimizationGuide.IsPredictionModelValid." +
             GetStringNameForOptimizationTarget(optimization_target_),
@@ -117,9 +115,6 @@ class ScopedPredictionModelConstructionAndValidationRecorder {
     if (is_valid_) {
       base::TimeDelta validation_latency =
           base::TimeTicks::Now() - validation_start_time_;
-      base::UmaHistogramTimes(
-          "OptimizationGuide.PredictionModelValidationLatency",
-          validation_latency);
       base::UmaHistogramTimes(
           "OptimizationGuide.PredictionModelValidationLatency." +
               GetStringNameForOptimizationTarget(optimization_target_),
@@ -367,7 +362,7 @@ void PredictionManager::FetchModels(bool is_first_model_fetch) {
   proto::ModelInfo base_model_info;
   // There should only be one supported model engine version at a time.
   base_model_info.add_supported_model_engine_versions(
-      proto::MODEL_ENGINE_VERSION_TFLITE_2_12);
+      proto::MODEL_ENGINE_VERSION_TFLITE_2_13);
   // This histogram is used for integration tests. Do not remove.
   // Update this to be 10000 if/when we exceed 100 model engine versions.
   LOCAL_HISTOGRAM_COUNTS_100(
@@ -1073,7 +1068,7 @@ base::FilePath PredictionManager::GetBaseModelDirForDownload(
              ? prediction_model_store_->GetBaseModelDirForModelCacheKey(
                    optimization_target, model_cache_key_)
              : models_dir_path_.AppendASCII(
-                   base::GUID::GenerateRandomV4().AsLowercaseString());
+                   base::Uuid::GenerateRandomV4().AsLowercaseString());
 }
 
 void PredictionManager::OverrideTargetModelForTesting(

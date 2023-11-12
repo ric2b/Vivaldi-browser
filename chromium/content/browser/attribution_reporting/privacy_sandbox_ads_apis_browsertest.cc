@@ -7,6 +7,7 @@
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "content/browser/browsing_topics/test_util.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -240,16 +241,19 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxAdsAPIsAllEnabledBrowserTest,
                               R"(
     const xhr = new XMLHttpRequest();
 
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == XMLHttpRequest.DONE) {
-        domAutomationController.send('success');
+    const completePromise = new Promise(resolve => {
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState == XMLHttpRequest.DONE) {
+          resolve('success');
+        }
       }
-    }
+    });
 
     xhr.open('GET', 'https://example.test/page_without_ads_apis_ot.html');
     xhr.deprecatedBrowsingTopics = true;
-    xhr.send();)",
-                              EXECUTE_SCRIPT_USE_MANUAL_REPLY));
+    xhr.send();
+    completePromise;
+    )"));
 
   EXPECT_TRUE(last_request_is_topics_request());
   EXPECT_TRUE(last_topics_header());
@@ -268,19 +272,72 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxAdsAPIsAllEnabledBrowserTest,
                               R"(
     const xhr = new XMLHttpRequest();
 
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == XMLHttpRequest.DONE) {
-        domAutomationController.send('success');
+    const completePromise = new Promise(resolve => {
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState == XMLHttpRequest.DONE) {
+          resolve('success');
+        }
       }
-    }
+    });
 
     xhr.open('GET', 'https://example.test/page_without_ads_apis_ot.html');
     xhr.deprecatedBrowsingTopics = true;
-    xhr.send();)",
-                              EXECUTE_SCRIPT_USE_MANUAL_REPLY));
+    xhr.send();
+    completePromise;
+    )"));
 
   EXPECT_FALSE(last_request_is_topics_request());
   EXPECT_FALSE(last_topics_header());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    PrivacySandboxAdsAPIsAllEnabledBrowserTest,
+    OriginTrialEnabled_HasBrowsingTopicsIframeAttr_ConsideredForEmbedderOptIn) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GURL("https://example.test/page_with_ads_apis_ot.html")));
+
+  // Wait for the iframe navigation.
+  IframeBrowsingTopicsAttributeWatcher navigation_observer(
+      shell()->web_contents());
+
+  ExecuteScriptAsync(shell()->web_contents(), R"(
+    const iframe = document.createElement("iframe");
+    iframe.browsingTopics = true;
+    iframe.src = 'https://example.test/page_without_ads_apis_ot.html';
+    document.body.appendChild(iframe);
+              )");
+
+  navigation_observer.WaitForNavigationFinished();
+
+  EXPECT_EQ(navigation_observer.last_navigation_url(),
+            "https://example.test/page_without_ads_apis_ot.html");
+  EXPECT_TRUE(navigation_observer
+                  .last_navigation_has_iframe_browsing_topics_attribute());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    PrivacySandboxAdsAPIsAllEnabledBrowserTest,
+    OriginTrialDisabled_HasBrowsingTopicsIframeAttr_NotConsideredForEmbedderOptIn) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), GURL("https://example.test/page_without_ads_apis_ot.html")));
+
+  // Wait for the iframe navigation.
+  IframeBrowsingTopicsAttributeWatcher navigation_observer(
+      shell()->web_contents());
+
+  ExecuteScriptAsync(shell()->web_contents(), R"(
+    const iframe = document.createElement("iframe");
+    iframe.browsingTopics = true;
+    iframe.src = 'https://example.test/page_without_ads_apis_ot.html';
+    document.body.appendChild(iframe);
+              )");
+
+  navigation_observer.WaitForNavigationFinished();
+
+  EXPECT_EQ(navigation_observer.last_navigation_url(),
+            "https://example.test/page_without_ads_apis_ot.html");
+  EXPECT_FALSE(navigation_observer
+                   .last_navigation_has_iframe_browsing_topics_attribute());
 }
 
 class PrivacySandboxAdsAPIsTopicsDisabledBrowserTest
@@ -336,16 +393,19 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxAdsAPIsTopicsDisabledBrowserTest,
                               R"(
     const xhr = new XMLHttpRequest();
 
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == XMLHttpRequest.DONE) {
-        domAutomationController.send('success');
+    const completePromise = new Promise(resolve => {
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState == XMLHttpRequest.DONE) {
+          resolve('success');
+        }
       }
-    }
+    });
 
     xhr.open('GET', 'https://example.test/page_without_ads_apis_ot.html');
     xhr.deprecatedBrowsingTopics = true;
-    xhr.send();)",
-                              EXECUTE_SCRIPT_USE_MANUAL_REPLY));
+    xhr.send();
+    completePromise;
+    )"));
 
   EXPECT_FALSE(last_request_is_topics_request());
   EXPECT_FALSE(last_topics_header());
@@ -404,16 +464,19 @@ IN_PROC_BROWSER_TEST_F(PrivacySandboxAdsAPIsTopicsXHRDisabledBrowserTest,
                               R"(
     const xhr = new XMLHttpRequest();
 
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == XMLHttpRequest.DONE) {
-        domAutomationController.send('success');
+    const completePromise = new Promise(resolve => {
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState == XMLHttpRequest.DONE) {
+          resolve('success');
+        }
       }
-    }
+    });
 
     xhr.open('GET', 'https://example.test/page_without_ads_apis_ot.html');
     xhr.deprecatedBrowsingTopics = true;
-    xhr.send();)",
-                              EXECUTE_SCRIPT_USE_MANUAL_REPLY));
+    xhr.send();
+    completePromise;
+    )"));
 
   EXPECT_FALSE(last_request_is_topics_request());
   EXPECT_FALSE(last_topics_header());

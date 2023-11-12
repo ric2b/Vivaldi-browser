@@ -12,8 +12,8 @@
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
-#include "headless/public/version.h"
 
 namespace headless {
 
@@ -36,7 +36,7 @@ void HeadlessCrashReporterClient::GetProductNameAndVersion(
     std::string* version,
     std::string* channel) {
   *product_name = kChromeHeadlessProductName;
-  *version = PRODUCT_VERSION;
+  *version = CHROME_PRODUCT_VERSION;
   *channel = "";
 }
 #endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)

@@ -23,15 +23,15 @@
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter_observer_bridge.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/shared/ui/list_model/list_model.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/badges/badge_button.h"
 #import "ios/chrome/browser/ui/badges/badge_consumer.h"
 #import "ios/chrome/browser/ui/badges/badge_item.h"
 #import "ios/chrome/browser/ui/badges/badge_static_item.h"
 #import "ios/chrome/browser/ui/badges/badge_tappable_item.h"
 #import "ios/chrome/browser/ui/badges/badge_type_util.h"
-#import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/list_model/list_model.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer_bridge.h"
 #import "ios/web/public/permissions/permissions.h"
@@ -291,20 +291,6 @@ const char kInfobarOverflowBadgeShownUserAction[] =
   // Log overflow badge tap.
   base::RecordAction(
       base::UserMetricsAction(kInfobarOverflowBadgeTappedUserAction));
-  if (!UseSymbols()) {
-    NSMutableArray<id<BadgeItem>>* popupMenuBadges =
-        [[NSMutableArray alloc] init];
-    // Get all non-fullscreen badges.
-    for (id<BadgeItem> item in self.badges) {
-      if (!item.fullScreen) {
-        // Mark each badge as read since the overflow menu is about to be
-        // displayed.
-        [self onBadgeItemRead:item];
-        [popupMenuBadges addObject:item];
-      }
-    }
-    [self.dispatcher displayPopupMenuWithBadgeItems:popupMenuBadges];
-  }
   [self updateConsumerReadStatus];
 }
 
@@ -357,7 +343,6 @@ const char kInfobarOverflowBadgeShownUserAction[] =
     // Since there is only one non-fullscreen badge, it will be fixed as the
     // displayed badge, so mark it as read.
     [self onBadgeItemRead:displayedBadge];
-    [self.dispatcher dismissBadgePopupMenu];
   }
 
   if (displayedBadge.badgeType == kBadgeTypeOverflow) {
@@ -365,8 +350,16 @@ const char kInfobarOverflowBadgeShownUserAction[] =
     base::RecordAction(
         base::UserMetricsAction(kInfobarOverflowBadgeShownUserAction));
   }
+
+  InfoBarIOS* infoBar = nullptr;
+  if (displayedBadge.badgeType == kBadgeTypeSaveAddressProfile) {
+    infoBar = [self
+        infobarWithType:InfobarTypeForBadgeType(displayedBadge.badgeType)];
+  }
+
   [self.consumer updateDisplayedBadge:displayedBadge
-                      fullScreenBadge:self.offTheRecordBadge];
+                      fullScreenBadge:self.offTheRecordBadge
+                              infoBar:infoBar];
   [self updateConsumerReadStatus];
 }
 

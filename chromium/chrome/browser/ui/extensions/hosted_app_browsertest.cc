@@ -163,14 +163,14 @@ bool TryToLoadImage(const content::ToRenderFrameHost& adapter,
   const std::string script = base::StringPrintf(
       "let i = document.createElement('img');"
       "document.body.appendChild(i);"
-      "i.addEventListener('load', () => domAutomationController.send(true));"
-      "i.addEventListener('error', () => domAutomationController.send(false));"
-      "i.src = '%s';",
+      "new Promise(resolve => {"
+      "  i.addEventListener('load', () => resolve(true));"
+      "  i.addEventListener('error', () => resolve(false));"
+      "  i.src = '%s';"
+      "});",
       image_url.spec().c_str());
 
-  bool image_loaded;
-  CHECK(content::ExecuteScriptAndExtractBool(adapter, script, &image_loaded));
-  return image_loaded;
+  return content::EvalJs(adapter, script).ExtractBool();
 }
 
 }  // namespace
@@ -183,11 +183,16 @@ class HostedOrWebAppTest : public extensions::ExtensionBrowserTest,
   HostedOrWebAppTest()
       : app_browser_(nullptr),
         https_server_(net::EmbeddedTestServer::TYPE_HTTPS) {
-    scoped_feature_list_.InitWithFeatures({}, {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{},
+        /*disabled_features=*/{
+          // TODO(crbug.com/1394910): Remove this and use HTTPS URLs in the
+          // tests.
+          features::kHttpsUpgrades,
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-      features::kWebAppsCrosapi, ash::features::kLacrosPrimary
+              features::kWebAppsCrosapi, ash::features::kLacrosPrimary
 #endif
-    });
+        });
   }
 
   HostedOrWebAppTest(const HostedOrWebAppTest&) = delete;
@@ -983,14 +988,10 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, IframesInsideHostedApp) {
   // Verify that |same_dir| and |diff_dir| have the same origin according to
   // |window.origin| (even though they have different |same_dir_site| and
   // |diff_dir_site|).
-  std::string same_dir_origin;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      same_dir, "domAutomationController.send(window.origin)",
-      &same_dir_origin));
-  std::string diff_dir_origin;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      diff_dir, "domAutomationController.send(window.origin)",
-      &diff_dir_origin));
+  std::string same_dir_origin =
+      content::EvalJs(same_dir, "window.origin").ExtractString();
+  std::string diff_dir_origin =
+      content::EvalJs(diff_dir, "window.origin").ExtractString();
   EXPECT_EQ(diff_dir_origin, same_dir_origin);
 
   // Verify that (1) all same-site iframes stay in the process, (2) isolated
@@ -1016,13 +1017,10 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, IframesInsideHostedApp) {
 
   // Verify that |same_dir| and |diff_dir| can script each other.
   // (they should - they have the same origin).
-  std::string inner_text_from_other_frame;
   const std::string r_script =
       R"( var w = window.open('', 'SameOrigin-SamePath');
-          domAutomationController.send(w.document.body.innerText); )";
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      diff_dir, r_script, &inner_text_from_other_frame));
-  EXPECT_EQ("Simple test page.", inner_text_from_other_frame);
+          w.document.body.innerText; )";
+  EXPECT_EQ("Simple test page.", content::EvalJs(diff_dir, r_script));
 }
 
 // Check that if a hosted app has an iframe, and that iframe navigates to URLs
@@ -1178,16 +1176,10 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, PopupsInsideHostedApp) {
   }
 }
 
-// Tests that hosted app URLs loaded in iframes of non-app pages won't cause an
-// OOPIF unless there is another reason to create it, but popups from outside
-// the app will swap into the app.
-// TODO(crbug.com/807471): Flaky on Windows 7.
-#if BUILDFLAG(IS_WIN)
-#define MAYBE_FromOutsideHostedApp DISABLED_FromOutsideHostedApp
-#else
-#define MAYBE_FromOutsideHostedApp FromOutsideHostedApp
-#endif
-IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, MAYBE_FromOutsideHostedApp) {
+// This test was flaky on Win7 because it was bumping up against a 45 second
+// timeout. If it starts flaking on Windows 10+, it should be broken up into
+// smaller tests. See https://crbug.com/807471.
+IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, FromOutsideHostedApp) {
   // Set up and launch the hosted app.
   GURL app_url =
       embedded_test_server()->GetURL("app.site.test", "/frame_tree/simple.htm");

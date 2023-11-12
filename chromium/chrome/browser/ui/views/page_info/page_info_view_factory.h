@@ -11,12 +11,6 @@
 #include "ui/base/models/image_model.h"
 #include "ui/views/view.h"
 
-namespace page_info {
-namespace proto {
-class SiteInfo;
-}
-}  // namespace page_info
-
 class ChromePageInfoUiDelegate;
 class PageInfo;
 class PageInfoNavigationHandler;
@@ -104,6 +98,9 @@ class PageInfoViewFactory {
   // cookies dialog or site settings page).
   static const ui::ImageModel GetLaunchIcon();
 
+  // Returns the icon for the side panel.
+  static const ui::ImageModel GetSidePanelIcon();
+
   // Returns the not secure state icon for the SecurityInformationView.
   static const ui::ImageModel GetConnectionNotSecureIcon();
 
@@ -124,6 +121,10 @@ class PageInfoViewFactory {
 
   // Returns the icon for 'About this site' button.
   static const ui::ImageModel GetAboutThisSiteIcon();
+
+  // Returns a reference to the color vector icon for 'About this site'
+  // sidepanel.
+  static const gfx::VectorIcon& GetAboutThisSiteColorVectorIcon();
 
   // Returns a reference to the vector icon for 'About this site' button.
   static const gfx::VectorIcon& GetAboutThisSiteVectorIcon();
@@ -149,8 +150,6 @@ class PageInfoViewFactory {
   [[nodiscard]] std::unique_ptr<views::View> CreateSecurityPageView();
   [[nodiscard]] std::unique_ptr<views::View> CreatePermissionPageView(
       ContentSettingsType type);
-  [[nodiscard]] std::unique_ptr<views::View> CreateAboutThisSitePageView(
-      const page_info::proto::SiteInfo& info);
   [[nodiscard]] std::unique_ptr<views::View> CreateAdPersonalizationPageView();
   [[nodiscard]] std::unique_ptr<views::View> CreateCookiesPageView();
 

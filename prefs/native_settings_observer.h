@@ -5,6 +5,8 @@
 
 #include <string>
 
+#include "base/memory/raw_ptr.h"
+
 class Profile;
 
 namespace vivaldi {
@@ -21,7 +23,7 @@ class NativeSettingsObserver {
   void SetPref(const char* name, const bool value);
 
  private:
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 };
 
 }  // namespace vivaldi

@@ -30,6 +30,7 @@
 #include <stylus-tools-unstable-v1-server-protocol.h>
 #include <stylus-unstable-v2-server-protocol.h>
 #include <surface-augmenter-server-protocol.h>
+#include <sys/socket.h>
 #include <text-input-extension-unstable-v1-server-protocol.h>
 #include <text-input-unstable-v1-server-protocol.h>
 #include <touchpad-haptics-unstable-v1-server-protocol.h>
@@ -77,6 +78,7 @@
 #include "components/exo/wayland/wp_presentation.h"
 #include "components/exo/wayland/wp_viewporter.h"
 #include "components/exo/wayland/xdg_shell.h"
+#include "components/exo/wayland/zaura_output_manager.h"
 #include "components/exo/wayland/zaura_shell.h"
 #include "components/exo/wayland/zcr_alpha_compositing.h"
 #include "components/exo/wayland/zcr_color_manager.h"
@@ -132,6 +134,11 @@ const char kWaylandSocketGroup[] = "wayland";
 // Directory name where all custom wayland sockets will live.
 constexpr base::FilePath::CharType kCustomServerDir[] =
     FILE_PATH_LITERAL("wayland");
+
+// Number of clients that can be waiting for accept() before we start refusing
+// connections. This is *NOT* the maximum number of clients, just pending ones
+// (see `man 2 listen`).
+constexpr int kMaxPendingConnections = 128;
 
 bool IsDrmAtomicAvailable() {
 #if BUILDFLAG(IS_OZONE)
@@ -196,9 +203,10 @@ bool InitServerDirectory(const SecurityDelegate& security_delegate,
 bool Server::Open(bool default_path) {
   std::string socket_name = kSocketName;
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kWaylandServerSocket))
+  if (command_line->HasSwitch(switches::kWaylandServerSocket)) {
     socket_name =
         command_line->GetSwitchValueASCII(switches::kWaylandServerSocket);
+  }
 
   if (default_path) {
     char* runtime_dir_str = getenv("XDG_RUNTIME_DIR");
@@ -260,6 +268,23 @@ bool Server::Open(bool default_path) {
   return true;
 }
 
+bool Server::OpenFd(base::ScopedFD fd) {
+  if (listen(fd.get(), kMaxPendingConnections) != 0) {
+    PLOG(ERROR) << "listen";
+    return false;
+  }
+
+  if (wl_display_add_socket_fd(wl_display_.get(), fd.get()) != 0) {
+    PLOG(ERROR) << "Failed to add socket " << fd.get() << " to wl_display";
+    return false;
+  }
+
+  // wl_display will only close() a socket that it successfully added, so is is
+  // only safe to release() at this point
+  std::ignore = fd.release();
+  return true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Server, public:
 
@@ -284,10 +309,19 @@ void Server::Initialize() {
                      wayland_feedback_manager_->GetVersionSupportedByPlatform(),
                      wayland_feedback_manager_.get(), bind_linux_dmabuf);
   }
+
+  // aura_output_manager needs to be registered before the wl_output globals to
+  // ensure clients can bind to the aura_output_manager before any wl_outputs.
+  // This is necessary to ensure aura_output_manager can send relevant output
+  // events immediately after an output is bound to the client and before the
+  // data in these events might be needed by the client.
+  wl_global_create(wl_display_.get(), &zaura_output_manager_interface,
+                   kZAuraOutputManagerVersion, this, bind_aura_output_manager);
   wl_global_create(wl_display_.get(), &wl_subcompositor_interface, 1, display_,
                    bind_subcompositor);
-  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays())
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
     OnDisplayAdded(display);
+  }
   wl_global_create(wl_display_.get(), &zcr_vsync_feedback_v1_interface, 1,
                    display_, bind_vsync_feedback);
 
@@ -394,7 +428,7 @@ void Server::Initialize() {
 
   zcr_text_input_extension_data_ =
       std::make_unique<WaylandTextInputExtension>();
-  wl_global_create(wl_display_.get(), &zcr_text_input_extension_v1_interface, 7,
+  wl_global_create(wl_display_.get(), &zcr_text_input_extension_v1_interface, 9,
                    zcr_text_input_extension_data_.get(),
                    bind_text_input_extension);
 
@@ -415,8 +449,9 @@ void Server::Initialize() {
 void Server::Finalize(StartCallback callback, bool success) {
   // At this point, server creation was successful, so we should instantiate the
   // watcher.
-  if (success)
+  if (success) {
     wayland_watcher_ = std::make_unique<wayland::WaylandWatcher>(this);
+  }
   std::move(callback).Run(success, socket_path_);
 }
 
@@ -478,6 +513,14 @@ void Server::StartWithDefaultPath(StartCallback callback) {
   Finalize(std::move(callback), /*success=*/true);
 }
 
+void Server::StartWithFdAsync(base::ScopedFD fd, StartCallback callback) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, base::MayBlock(),
+      base::BindOnce(&Server::OpenFd, base::Unretained(this), std::move(fd)),
+      base::BindOnce(&Server::Finalize, base::Unretained(this),
+                     std::move(callback)));
+}
+
 bool Server::AddSocket(const std::string& name) {
   DCHECK(!name.empty());
   return !wl_display_add_socket(wl_display_.get(), name.c_str());
@@ -519,8 +562,9 @@ void Server::OnDisplayRemoved(const display::Display& old_display) {
 wl_resource* Server::GetOutputResource(wl_client* client, int64_t display_id) {
   DCHECK_NE(display_id, display::kInvalidDisplayId);
   auto iter = outputs_.find(display_id);
-  if (iter == outputs_.end())
+  if (iter == outputs_.end()) {
     return nullptr;
+  }
   return iter->second.get()->GetOutputResourceForClient(client);
 }
 

@@ -9,7 +9,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/drag_drop/drag_drop_capture_delegate.h"
+#include "ash/drag_drop/tab_drag_drop_windows_hider.h"
 #include "ash/wm/splitview/split_view_controller.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/aura/window_observer.h"
 #include "ui/gfx/geometry/point.h"
 
@@ -20,12 +22,12 @@ class Window;
 namespace ui {
 class OSExchangeData;
 class PresentationTimeRecorder;
-}
+}  // namespace ui
 
 namespace ash {
 
 class SplitViewDragIndicators;
-class TabletModeBrowserWindowDragSessionWindowsHider;
+class TabDragDropWindowsHider;
 
 // Provides special handling for Chrome tab drags on behalf of
 // DragDropController. This must be created at the beginning of a tab drag and
@@ -100,13 +102,12 @@ class ASH_EXPORT TabDragDropDelegate : public DragDropCaptureDelegate,
   // https://crbug.com/1316070
   bool ShouldPreventSnapToTheEdge(const gfx::Point& location_in_screen);
 
-  aura::Window* const root_window_;
-  aura::Window* source_window_;
+  const raw_ptr<aura::Window, ExperimentalAsh> root_window_;
+  raw_ptr<aura::Window, ExperimentalAsh> source_window_;
   const gfx::Point start_location_in_screen_;
 
   std::unique_ptr<SplitViewDragIndicators> split_view_drag_indicators_;
-  std::unique_ptr<TabletModeBrowserWindowDragSessionWindowsHider>
-      windows_hider_;
+  std::unique_ptr<TabDragDropWindowsHider> windows_hider_;
 
   // Presentation time recorder for tab dragging in tablet mode with webui
   // tab strip enable.

@@ -16,10 +16,11 @@
 #include <vector>
 
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/unguessable_token.h"
 #include "base/values.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/socket_permission_request.h"
-#include "extensions/common/activation_sequence.h"
+#include "extensions/common/api/messaging/channel_type.h"
 #include "extensions/common/api/messaging/message.h"
 #include "extensions/common/api/messaging/messaging_endpoint.h"
 #include "extensions/common/api/messaging/port_context.h"
@@ -68,6 +69,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(extensions::MessagingEndpoint::Type,
 IPC_ENUM_TRAITS_MAX_VALUE(extensions::SerializationFormat,
                           extensions::SerializationFormat::kLast)
 
+IPC_ENUM_TRAITS_MAX_VALUE(extensions::ChannelType,
+                          extensions::ChannelType::kLast)
+
 // Parameters structure for ExtensionHostMsg_AddAPIActionToActivityLog and
 // ExtensionHostMsg_AddEventToActivityLog.
 IPC_STRUCT_BEGIN(ExtensionHostMsg_APIActionOrEvent_Params)
@@ -98,44 +102,6 @@ IPC_STRUCT_BEGIN(ExtensionHostMsg_DOMAction_Params)
   // Type of DOM API call.
   IPC_STRUCT_MEMBER(int, call_type)
 IPC_STRUCT_END()
-
-// Parameters structure for ExtensionHostMsg_RequestWorker.
-IPC_STRUCT_TRAITS_BEGIN(extensions::mojom::RequestParams)
-  // Message name.
-  IPC_STRUCT_TRAITS_MEMBER(name)
-
-  // List of message arguments.
-  IPC_STRUCT_TRAITS_MEMBER(arguments)
-
-  // Extension ID this request was sent from. This can be empty, in the case
-  // where we expose APIs to normal web pages using the extension function
-  // system.
-  IPC_STRUCT_TRAITS_MEMBER(extension_id)
-
-  // URL of the frame the request was sent from. This isn't necessarily an
-  // extension url. Extension requests can also originate from content scripts,
-  // in which case extension_id will indicate the ID of the associated
-  // extension. Or, they can originate from hosted apps or normal web pages.
-  IPC_STRUCT_TRAITS_MEMBER(source_url)
-
-  // Unique request id to match requests and responses.
-  IPC_STRUCT_TRAITS_MEMBER(request_id)
-
-  // True if request has a callback specified.
-  IPC_STRUCT_TRAITS_MEMBER(has_callback)
-
-  // True if request is executed in response to an explicit user gesture.
-  IPC_STRUCT_TRAITS_MEMBER(user_gesture)
-
-  // If this API call is for a service worker, then this is the worker thread
-  // id. Otherwise, this is kMainThreadId.
-  IPC_STRUCT_TRAITS_MEMBER(worker_thread_id)
-
-  // If this API call is for a service worker, then this is the service
-  // worker version id. Otherwise, this is set to
-  // blink::mojom::kInvalidServiceWorkerVersionId.
-  IPC_STRUCT_TRAITS_MEMBER(service_worker_version_id)
-IPC_STRUCT_TRAITS_END()
 
 // Struct containing information about the sender of connect() calls that
 // originate from a tab.
@@ -258,6 +224,15 @@ IPC_STRUCT_BEGIN(ExtensionMsg_ResponseWorkerData)
   IPC_STRUCT_MEMBER(extensions::mojom::ExtraResponseDataPtr, extra_data)
 IPC_STRUCT_END()
 
+IPC_STRUCT_BEGIN(ExtensionMsg_OnConnectData)
+  IPC_STRUCT_MEMBER(extensions::PortId, target_port_id)
+  IPC_STRUCT_MEMBER(extensions::ChannelType, channel_type)
+  IPC_STRUCT_MEMBER(std::string, channel_name)
+  IPC_STRUCT_MEMBER(ExtensionMsg_TabConnectionInfo, tab_source)
+  IPC_STRUCT_MEMBER(ExtensionMsg_ExternalConnectionInfo,
+                    external_connection_info)
+IPC_STRUCT_END()
+
 // Singly-included section for custom IPC traits.
 #ifndef INTERNAL_EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
 #define INTERNAL_EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
@@ -283,14 +258,11 @@ IPC_MESSAGE_ROUTED2(ExtensionMsg_ValidateMessagePort,
                     extensions::PortId /* port_id */)
 
 // Dispatch the Port.onConnect event for message channels.
-IPC_MESSAGE_ROUTED5(ExtensionMsg_DispatchOnConnect,
+IPC_MESSAGE_ROUTED2(ExtensionMsg_DispatchOnConnect,
                     // For main thread, this is kMainThreadId.
                     // TODO(lazyboy): Can this be absl::optional<int> instead?
                     int /* worker_thread_id */,
-                    extensions::PortId /* target_port_id */,
-                    std::string /* channel_name */,
-                    ExtensionMsg_TabConnectionInfo /* source */,
-                    ExtensionMsg_ExternalConnectionInfo)
+                    ExtensionMsg_OnConnectData /* connect_data */)
 
 // Deliver a message sent with ExtensionHostMsg_PostMessage.
 IPC_MESSAGE_ROUTED3(ExtensionMsg_DeliverMessage,
@@ -314,9 +286,10 @@ IPC_MESSAGE_ROUTED1(ExtensionHostMsg_EventAck, int /* message_id */)
 // Open a channel to all listening contexts owned by the extension with
 // the given ID. This responds asynchronously with ExtensionMsg_AssignPortId.
 // If an error occurred, the opener will be notified asynchronously.
-IPC_MESSAGE_CONTROL4(ExtensionHostMsg_OpenChannelToExtension,
+IPC_MESSAGE_CONTROL5(ExtensionHostMsg_OpenChannelToExtension,
                      extensions::PortContext /* source_context */,
                      ExtensionMsg_ExternalConnectionInfo,
+                     extensions::ChannelType /* channel_type */,
                      std::string /* channel_name */,
                      extensions::PortId /* port_id */)
 
@@ -327,9 +300,10 @@ IPC_MESSAGE_CONTROL3(ExtensionHostMsg_OpenChannelToNativeApp,
 
 // Get a port handle to the given tab.  The handle can be used for sending
 // messages to the extension.
-IPC_MESSAGE_CONTROL4(ExtensionHostMsg_OpenChannelToTab,
+IPC_MESSAGE_CONTROL5(ExtensionHostMsg_OpenChannelToTab,
                      extensions::PortContext /* source_context */,
                      ExtensionMsg_TabTargetConnectionInfo,
+                     extensions::ChannelType /* channel_type */,
                      std::string /* channel_name */,
                      extensions::PortId /* port_id */)
 
@@ -415,11 +389,6 @@ IPC_MESSAGE_CONTROL2(ExtensionHostMsg_WakeEventPage,
 // Messages related to Extension Service Worker.
 #undef IPC_MESSAGE_START
 #define IPC_MESSAGE_START ExtensionWorkerMsgStart
-// A service worker thread sends this message when an extension service worker
-// starts an API request. The browser will always respond with a
-// ExtensionMsg_ResponseWorker.
-IPC_MESSAGE_CONTROL1(ExtensionHostMsg_RequestWorker,
-                     extensions::mojom::RequestParams)
 
 // The browser sends this message in response to all service worker extension
 // api calls.
@@ -430,23 +399,6 @@ IPC_MESSAGE_CONTROL5(ExtensionMsg_ResponseWorker,
                      ExtensionMsg_ResponseWorkerData /* response */,
                      std::string /* error */)
 
-// Asks the browser to increment the pending activity count for
-// the worker with version id |service_worker_version_id|.
-// Each request to increment must use unique |request_uuid|. If a request with
-// |request_uuid| is already in progress (due to race condition or renderer
-// compromise), browser process ignores the IPC.
-IPC_MESSAGE_CONTROL2(ExtensionHostMsg_IncrementServiceWorkerActivity,
-                     int64_t /* service_worker_version_id */,
-                     std::string /* request_uuid */)
-
-// Asks the browser to decrement the pending activity count for
-// the worker with version id |service_worker_version_id|.
-// |request_uuid| must match the GUID of a previous request, otherwise the
-// browser process ignores the IPC.
-IPC_MESSAGE_CONTROL2(ExtensionHostMsg_DecrementServiceWorkerActivity,
-                     int64_t /* service_worker_version_id */,
-                     std::string /* request_uuid */)
-
 // Tells the browser that an event with |event_id| was successfully dispatched
 // to the worker with version |service_worker_version_id|.
 IPC_MESSAGE_CONTROL4(ExtensionHostMsg_EventAckWorker,
@@ -454,54 +406,6 @@ IPC_MESSAGE_CONTROL4(ExtensionHostMsg_EventAckWorker,
                      int64_t /* service_worker_version_id */,
                      int /* worker_thread_id */,
                      int /* event_id */)
-
-// Tells the browser that an extension service worker context was initialized,
-// but possibly didn't start executing its top-level JavaScript.
-IPC_MESSAGE_CONTROL3(ExtensionHostMsg_DidInitializeServiceWorkerContext,
-                     std::string /* extension_id */,
-                     int64_t /* service_worker_version_id */,
-                     int /* worker_thread_id */)
-
-// Tells the browser that an extension service worker context has started and
-// finished executing its top-level JavaScript.
-// Start corresponds to EmbeddedWorkerInstance::OnStarted notification.
-//
-// TODO(lazyboy): This is a workaround: ideally this IPC should be redundant
-// because it directly corresponds to EmbeddedWorkerInstance::OnStarted message.
-// However, because OnStarted message is on different mojo IPC pipe, and most
-// extension IPCs are on legacy IPC pipe, this IPC is necessary to ensure FIFO
-// ordering of this message with rest of the extension IPCs.
-// Two possible solutions to this:
-//   - Associate extension IPCs with Service Worker IPCs. This can be done (and
-//     will be a requirement) when extension IPCs are moved to mojo, but
-//     requires resolving or defining ordering dependencies amongst the
-//     extension messages, and any additional messages in Chrome.
-//   - Make Service Worker IPCs channel-associated so that there's FIFO
-//     guarantee between extension IPCs and Service Worker IPCs. This isn't
-//     straightforward as it changes SW IPC ordering with respect of rest of
-//     Chrome.
-// See https://crbug.com/879015#c4 for details.
-IPC_MESSAGE_CONTROL5(ExtensionHostMsg_DidStartServiceWorkerContext,
-                     std::string /* extension_id */,
-                     extensions::ActivationSequence /* activation_sequence */,
-                     GURL /* service_worker_scope */,
-                     int64_t /* service_worker_version_id */,
-                     int /* worker_thread_id */)
-
-// Tells the browser that an extension service worker context has been
-// destroyed.
-IPC_MESSAGE_CONTROL5(ExtensionHostMsg_DidStopServiceWorkerContext,
-                     std::string /* extension_id */,
-                     extensions::ActivationSequence /* activation_sequence */,
-                     GURL /* service_worker_scope */,
-                     int64_t /* service_worker_version_id */,
-                     int /* worker_thread_id */)
-
-// Optional Ack message sent to the browser to notify that the response to a
-// function has been processed.
-IPC_MESSAGE_CONTROL2(ExtensionHostMsg_WorkerResponseAck,
-                     int /* request_id */,
-                     int64_t /* service_worker_version_id */)
 
 IPC_STRUCT_BEGIN(ExtensionMsg_AccessibilityEventBundleParams)
   // ID of the accessibility tree that this event applies to.

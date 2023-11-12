@@ -40,34 +40,34 @@ void ExpectReportingDataMatch(
   const std::string* uid = os_reporting_data.FindStringKey("unique_user_id");
   EXPECT_TRUE(uid && *uid == local_reporting_data.user_id);
   absl::optional<int> pings_since_last_month =
-      os_reporting_data.FindIntKey("pings_since_last_month");
+      os_reporting_data.GetDict().FindInt("pings_since_last_month");
   EXPECT_TRUE(pings_since_last_month &&
               *pings_since_last_month ==
                   local_reporting_data.pings_since_last_month);
   absl::optional<base::Time> next_daily_ping =
-      base::ValueToTime(os_reporting_data.FindKey("next_daily_ping"));
+      base::ValueToTime(os_reporting_data.GetDict().Find("next_daily_ping"));
   EXPECT_TRUE(next_daily_ping &&
               *next_daily_ping == local_reporting_data.next_pings.daily);
   absl::optional<base::Time> next_weekly_ping =
-      base::ValueToTime(os_reporting_data.FindKey("next_weekly_ping"));
+      base::ValueToTime(os_reporting_data.GetDict().Find("next_weekly_ping"));
   EXPECT_TRUE(next_weekly_ping &&
               *next_weekly_ping == local_reporting_data.next_pings.weekly);
   absl::optional<base::Time> next_monthly_ping =
-      base::ValueToTime(os_reporting_data.FindKey("next_monthly_ping"));
+      base::ValueToTime(os_reporting_data.GetDict().Find("next_monthly_ping"));
   EXPECT_TRUE(next_monthly_ping &&
               *next_monthly_ping == local_reporting_data.next_pings.monthly);
   absl::optional<base::Time> next_trimestrial_ping =
-      base::ValueToTime(os_reporting_data.FindKey("next_trimestrial_ping"));
+      base::ValueToTime(os_reporting_data.GetDict().Find("next_trimestrial_ping"));
   EXPECT_TRUE(next_trimestrial_ping &&
               *next_trimestrial_ping ==
                   local_reporting_data.next_pings.trimestrial);
   absl::optional<base::Time> next_semestrial_ping =
-      base::ValueToTime(os_reporting_data.FindKey("next_semestrial_ping"));
+      base::ValueToTime(os_reporting_data.GetDict().Find("next_semestrial_ping"));
   EXPECT_TRUE(next_semestrial_ping &&
               *next_semestrial_ping ==
                   local_reporting_data.next_pings.semestrial);
   absl::optional<base::Time> next_yearly_ping =
-      base::ValueToTime(os_reporting_data.FindKey("next_yearly_ping"));
+      base::ValueToTime(os_reporting_data.GetDict().Find("next_yearly_ping"));
   EXPECT_TRUE(next_yearly_ping &&
               *next_yearly_ping == local_reporting_data.next_pings.yearly);
 }

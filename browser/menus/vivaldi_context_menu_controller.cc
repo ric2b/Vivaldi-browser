@@ -29,7 +29,7 @@ namespace vivaldi {
 ContextMenuController::ContextMenuController(
     content::WebContents* window_web_contents,
     VivaldiRenderViewContextMenu* rv_context_menu,
-    std::unique_ptr<Params> params)
+    absl::optional<Params> params)
     : window_web_contents_(window_web_contents),
       rv_context_menu_(rv_context_menu),
       with_developer_tools_(!rv_context_menu_ ||
@@ -122,7 +122,7 @@ void ContextMenuController::InitModel() {
     root_menu_model_ = rv_context_menu_->root_menu_model();
   } else {
     root_menu_model_ = new ui::SimpleMenuModel(this);
-    models_.push_back(base::WrapUnique(root_menu_model_));
+    models_.push_back(base::WrapUnique(root_menu_model_.get()));
   }
 
   bool dark_text_color = menu_->HasDarkTextColor();

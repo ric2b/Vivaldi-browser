@@ -253,7 +253,6 @@ TEST_F(ChromeSigninClientSignoutTest, AllAllowed) {
 #endif
 }
 
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 TEST_F(ChromeSigninClientSignoutTest, ChildProfile) {
   TestingProfile::Builder builder;
   builder.SetIsSupervisedProfile();
@@ -261,7 +260,7 @@ TEST_F(ChromeSigninClientSignoutTest, ChildProfile) {
   EXPECT_TRUE(profile->IsChild());
 
   CreateClient(profile.get());
-#if !BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_ANDROID)
   EXPECT_FALSE(
       client_->IsClearPrimaryAccountAllowed(/*has_sync_account=*/false));
 #else
@@ -270,7 +269,6 @@ TEST_F(ChromeSigninClientSignoutTest, ChildProfile) {
 #endif
   EXPECT_TRUE(client_->IsRevokeSyncConsentAllowed());
 }
-#endif
 
 class ChromeSigninClientSignoutSourceTest
     : public ::testing::WithParamInterface<signin_metrics::ProfileSignout>,
@@ -305,6 +303,7 @@ bool IsAlwaysAllowedSignoutSources(
     case signin_metrics::ProfileSignout::kAccountReconcilorReconcile:
     case signin_metrics::ProfileSignout::kUserClickedSignoutProfileMenu:
     case signin_metrics::ProfileSignout::kAccountEmailUpdated:
+    case signin_metrics::ProfileSignout::kSigninManagerUpdateUPA:
       return false;
 
     case signin_metrics::ProfileSignout::kAccountRemovedFromDevice:
@@ -452,10 +451,11 @@ const signin_metrics::ProfileSignout kSignoutSources[] = {
         kUserClickedSignoutFromClearBrowsingDataPage,
     signin_metrics::ProfileSignout::kGaiaCookieUpdated,
     signin_metrics::ProfileSignout::kAccountReconcilorReconcile,
+    signin_metrics::ProfileSignout::kSigninManagerUpdateUPA,
 };
 // kNumberOfObsoleteSignoutSources should be updated when a ProfileSignout
 // value is deprecated.
-const int kNumberOfObsoleteSignoutSources = 5;
+const int kNumberOfObsoleteSignoutSources = 6;
 static_assert(std::size(kSignoutSources) + kNumberOfObsoleteSignoutSources ==
                   static_cast<int>(signin_metrics::ProfileSignout::kMaxValue) +
                       1,

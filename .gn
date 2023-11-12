@@ -39,6 +39,7 @@ default_args.enable_remoting = false
 default_args.enable_nacl = false
 default_args.enable_ipc_fuzzer = false
 default_args.angle_enable_commit_id = false
+default_args.enable_rust = false
 
 # We don't need the Chrome field trials
 default_args.disable_fieldtrial_testing_config = true

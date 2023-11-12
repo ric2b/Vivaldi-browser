@@ -13,26 +13,15 @@ const int kSyncStatusYellowColor = 0XFFCC48;
 const int kSyncStatusYellowBackgroundColor = 0xFFF7E2;
 
 const CGFloat kFooterSectionHeight = 32.0;
+const CGFloat kPasswordSectionFooterHeight = 8.0;
+const CGFloat kHeaderSectionHeight = 32.0;
+const CGFloat kLogoutSectionHeaderHeight = 96.0;
+const CGFloat kDecryptSectionHeaderHeight = 8.0;
+const CGFloat kSaveSectionHeaderHeight = 8.0;
 
 NSString* const kShowPasswordIcon = @"infobar_reveal_password_icon";
 NSString* const kHidePasswordIcon = @"infobar_hide_password_icon";
-NSString* const kVivaldiIcon = @"vivaldi_icon";
-
-// Vivaldi URLs
-NSString* const vVivaldiBrowserPrivacyUrl =
-    @"https://vivaldi.com/privacy/browser/";
-NSString* const vVivaldiCommunityPrivacyUrl =
-    @"https://vivaldi.com/privacy/community-privacy-policy";
-NSString* const vVivaldiSyncActivateAccountUrl =
-    @"https://login.vivaldi.net/profile/activation-code";
-NSString* const vVivaldiSyncRegistrationUrl =
-    @"https://login.vivaldi.net/profile/sync-registration";
-NSString* const vVivaldiSyncReSendActivationCodeUrl =
-    @"https://login.vivaldi.net/profile/resend-activation-code";
-NSString* const vVivaldiSyncValidateFieldUrl =
-    @"https://login.vivaldi.net/profile/validateField";
-NSString* const vVivaldiTermsOfServiceUrl =
-    @"https://vivaldi.com/privacy/vivaldi-end-user-license-agreement/";
+NSString* const kVivaldiIcon = @"blue_vivaldi_icon";
 
 // Vivaldi.net account creation validation
 const int vUserMinimumValidAge = 16;

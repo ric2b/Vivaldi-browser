@@ -8,18 +8,22 @@
 <translation id="1049795001945932310">&amp;Semua pengaturan bahasa</translation>
 <translation id="1054153489933238809">Buka &amp;Gambar Asli di Tab Baru</translation>
 <translation id="1056898198331236512">Peringatan</translation>
+<translation id="1067048845568873861">Dibuat</translation>
 <translation id="1084824384139382525">Salin ala&amp;mat tautan</translation>
 <translation id="1163931534039071049">&amp;Lihat sumber bingkai</translation>
 <translation id="1165039591588034296">Galat</translation>
 <translation id="1175364870820465910">&amp;Cetak...</translation>
 <translation id="1181037720776840403">Hapus</translation>
 <translation id="1187722533808055681">Bangun saat nganggur</translation>
+<translation id="122082903575839559">Algoritma Tanda Tangan Sertifikat</translation>
 <translation id="1221825588892235038">Khusus yang terpilih</translation>
 <translation id="1234736487471201993">Buat Kode QR untuk gambar ini</translation>
 <translation id="1244303850296295656">Ekstensi galat</translation>
 <translation id="125220115284141797">Standar</translation>
+<translation id="1257336506558170607">Ekspor sertifikat yang dipilih</translation>
 <translation id="1297175357211070620">Tujuan</translation>
 <translation id="1303101771013849280">Penanda Berkas HTML</translation>
+<translation id="1358741672408003399">Ejaan dan Gramatika</translation>
 <translation id="1430915738399379752">Cetak</translation>
 <translation id="1451375123200651445">Laman Web, Berkas Tunggal</translation>
 <translation id="1465176863081977902">S&amp;alin Alamat Audio</translation>
@@ -30,10 +34,12 @@
 <translation id="15662109988763471">Printer yang dipilih tidak tersedia atau tidak diinstal dengan benar. Periksa printer Anda atau coba pilih printer lainnya.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Buka Tautan Dengan...</translation>
+<translation id="1589055389569595240">Tampilkan Ejaan dan Gramatika</translation>
 <translation id="159359590073980872">Singgahan Gambar</translation>
 <translation id="1601560923496285236">Terapkan</translation>
 <translation id="1603914832182249871">(Penyamaran)</translation>
 <translation id="1627276047960621195">Deskriptor Berkas</translation>
+<translation id="166278006618318542">Algoritma Kunci Publik Subjek</translation>
 <translation id="1682548588986054654">Jendela Penyamaran Baru</translation>
 <translation id="1708338024780164500">(Tidak Aktif)</translation>
 <translation id="1723824996674794290">&amp;Jendela Baru</translation>
@@ -49,6 +55,8 @@
 <translation id="1886996562706621347">Izinkan situs meminta untuk jadi standar penangan protokol (disarankan)</translation>
 <translation id="1901303067676059328">Pilih semu&amp;a</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
+<translation id="1925021887439448749">Masukkan alamat web kustom</translation>
+<translation id="1932098463447129402">Tidak Sebelum</translation>
 <translation id="1936931585862840749">Gunakan angka untuk menunjukkan jumlah salinan yang akan dicetak (1 sampai <ph name="MAX_COPIES" />).</translation>
 <translation id="1994173015038366702">URL situs</translation>
 <translation id="2019718679933488176">&amp;Buka Audio di Tab Baru</translation>
@@ -57,6 +65,7 @@
 <translation id="2087822576218954668">Pencetakan: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Muat Ulang &amp;Bingkai</translation>
 <translation id="2142328300403846845">Buka Tautan sebagai</translation>
+<translation id="2144536955299248197">Penampil Sertifikat: <ph name="CERTIFICATE_NAME" /></translation>
 <translation id="2148892889047469596">Tab siaran</translation>
 <translation id="2150139952286079145">Telusuri tujuan</translation>
 <translation id="215753907730220065">Keluar dari Tampilan Layar Penuh</translation>
@@ -89,21 +98,28 @@
 <translation id="253557089021624350">Hitung yang tetap aktif</translation>
 <translation id="2550212893339833758">Memori yang di-swap</translation>
 <translation id="2553440850688409052">Sembunyikan Plugin Ini</translation>
+<translation id="2607101320794533334">Info Kunci Publik Subjek</translation>
 <translation id="26224892172169984">Jangan izinkan situs apapun menangani protokol</translation>
 <translation id="2653275834716714682">Penggantian Teks</translation>
+<translation id="265390580714150011">Nilai Bidang</translation>
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Aktifkan ulang</translation>
 <translation id="2678100101831051676">Tidak dapat menyiarkan.</translation>
+<translation id="2719936478972253983">Kuki berikut diblokir</translation>
 <translation id="2721037002783622288">&amp;Telusuri <ph name="SEARCH_ENGINE" /> untuk gambar</translation>
+<translation id="2738771556149464852">Tidak Setelah</translation>
+<translation id="2749881179542288782">Periksa Gramatika Dengan Ejaaan</translation>
 <translation id="2783321960289401138">Buat pintasan...</translation>
 <translation id="2785873697295365461">Semua deskriptor berkas</translation>
 <translation id="2809586584051668049">dan <ph name="NUMBER_ADDITIONAL_DISABLED" /> lainnya</translation>
+<translation id="2825758591930162672">Kunci Publik Subjek</translation>
 <translation id="2850541429955027218">Tambah tema</translation>
 <translation id="2861941300086904918">Pengelola keamanan Klien Asli</translation>
 <translation id="2881076733170862447">Saat Anda Mengklik Ekstensi</translation>
 <translation id="2889064240420137087">Buka tautan dengan...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> tidak dapat berkomunikasi dengan printer ini. Pastikan printer terpasang dan coba lagi.</translation>
 <translation id="2913331724188855103">Izinkan situs untuk menyimpan dan membaca data kuki (disarankan)</translation>
+<translation id="2916745397441987255">Telusuri ekstensi</translation>
 <translation id="2931157624143513983">Sesuaikan ke area yang dapat dicetak</translation>
 <translation id="2932085390869194046">Sarankan Sandi...</translation>
 <translation id="2932883381142163287">Laporkan penyalahgunaan</translation>
@@ -123,6 +139,7 @@
 <translation id="3124111068741548686">Semua penangan PENGGUNA</translation>
 <translation id="3129173833825111527">Batas kiri</translation>
 <translation id="3144647712221361880">Buka tautan sebagai</translation>
+<translation id="3202131003361292969">Jalur</translation>
 <translation id="3222066309010235055">Prarender: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Pilih akar direktori ekstensi untuk dikemas. Untuk memutakhirkan ekstensi, pilih juga berkas kunci pribadi untuk dipakai ulang.</translation>
 <translation id="3275778913554317645">Buka sebagai jendela</translation>
@@ -134,6 +151,7 @@
 <translation id="3303818374450886607">Salinan</translation>
 <translation id="3305661444342691068">Buka PDF di Pratinjau</translation>
 <translation id="3308134619352333507">Sembunyikan Tombol</translation>
+<translation id="3313622045786997898">Nilai Tanda Tangan Sertifikat</translation>
 <translation id="3317459757438853210">Dua sisi</translation>
 <translation id="3331974543021145906">Info aplikasi</translation>
 <translation id="3341703758641437857">Izinkan akses ke URL berkas</translation>
@@ -144,6 +162,7 @@
 <translation id="3390013585654699824">Detail aplikasi</translation>
 <translation id="3393582007140394275">Tidak dapat menyiarkan layar.</translation>
 <translation id="345693547134384690">Buka &amp;gambar di tab baru</translation>
+<translation id="3493881266323043047">Validitas</translation>
 <translation id="3494769164076977169">Tanyakan saat situs mencoba mengunduh berkas secara otomatis setelah berkas pertama (disarankan)</translation>
 <translation id="3505030558724226696">Mencabut akses perangkat</translation>
 <translation id="3511307672085573050">Salin Ala&amp;mat Tautan</translation>
@@ -159,11 +178,14 @@
 <translation id="3727187387656390258">Inspeksi sembulan</translation>
 <translation id="3760460896538743390">Inspeksi Halaman Latar &amp;Belakang</translation>
 <translation id="3797900183766075808">&amp;Menelusuri <ph name="SEARCH_ENGINE" /> untuk “<ph name="SEARCH_TERMS" />”</translation>
+<translation id="3798449238516105146">Versi</translation>
 <translation id="3800806661949714323">Tampilkan semua (disarankan)</translation>
 <translation id="3810973564298564668">Kelola</translation>
 <translation id="3838085852053358637">Gagal memuat ekstensi</translation>
 <translation id="383891835335927981">Tidak ada situs yang telah diperbesar atau diperkecil</translation>
 <translation id="385051799172605136">Kembali</translation>
+<translation id="3858860766373142691">Nama</translation>
+<translation id="3867944738977021751">Bidang Sertifikat</translation>
 <translation id="3905761538810670789">Perbaiki aplikasi</translation>
 <translation id="3908501907586732282">Aktifkan ekstensi</translation>
 <translation id="3909701002594999354">Tampilkan Semua &amp;Kontrol</translation>
@@ -177,6 +199,7 @@
 <translation id="398477389655464998">Salin Tautan ke Sorotan</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Tambahkan ke Kamus</translation>
+<translation id="4058793769387728514">Periksa Dokumen Sekarang</translation>
 <translation id="407520071244661467">Skala</translation>
 <translation id="4079140982534148664">Gunakan fitur Periksa Ejaan yang Ditingkatkan</translation>
 <translation id="4087089424473531098">Membuat ekstensi:
@@ -184,15 +207,20 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">Nonaktifkan semua ekstensi mode pengembang</translation>
 <translation id="4100839878934973028">Program lain di komputer anda menambahkan aplikasi yang dapat mengubah cara kerja Vivaldi.</translation>
+<translation id="4104163789986725820">E&amp;kspor...</translation>
 <translation id="4109898769411476438">Tutup Peramban Sebelum Mengimpor</translation>
 <translation id="4130207949184424187">Ekstensi ini telah mengubah halaman yang ditampilkan saat anda menelusuri dari Omnibox.</translation>
 <translation id="4131410914670010031">Hitam dan putih</translation>
 <translation id="4165986682804962316">Pengaturan situs</translation>
+<translation id="4170314459383239649">Bersihkan Saat Keluar</translation>
 <translation id="4176463684765177261">Dimatikan</translation>
 <translation id="4200983522494130825">&amp;Tab baru</translation>
 <translation id="4225397296022057997">Di semua situs</translation>
 <translation id="4256316378292851214">Sim&amp;pan Video Sebagai...</translation>
+<translation id="4270393598798225102">Versi <ph name="NUMBER" /></translation>
+<translation id="4278390842282768270">Diizinkan</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (<ph name="NUM_KILOBYTES_LIVE" />K langsung)</translation>
+<translation id="431076611119798497">&amp;Detail</translation>
 <translation id="4345587454538109430">Konfigurasikan...</translation>
 <translation id="4348766275249686434">Kumpulkan semua galat</translation>
 <translation id="4363771538994847871">Tujuan Siaran tidak ditemukan. Perlu bantuan?</translation>
@@ -201,6 +229,8 @@
 <translation id="4409697491990005945">Batas</translation>
 <translation id="4423376891418188461">Pulihkan Semua Pengaturan</translation>
 <translation id="4478664379124702289">Simpan Tauta&amp;n Sebagai...</translation>
+<translation id="4520385623207007473">Kuki yang sedang digunakan</translation>
+<translation id="4580596421317071374">Sandi disimpan ke <ph name="GOOGLE_PASSWORD_MANAGER" /> di perangkat ini.</translation>
 <translation id="4593021220803146968">&amp;Buka <ph name="URL" /></translation>
 <translation id="4595560905247879544">Semua aplikasi dan ekstensi hanya dapat diubah oleh pengelola (<ph name="CUSTODIAN_NAME" />).</translation>
 <translation id="4613271546271159013">Ekstensi telah mengubah apa yang ditampilkan halaman saat anda membuka tab baru.</translation>
@@ -210,6 +240,7 @@
 <translation id="4681930562518940301">Buka &amp;gambar asli di tab baru</translation>
 <translation id="4711638718396952945">Pulihkan semua pengaturan</translation>
 <translation id="4726710629007580002">Ada beberapa peringatan ketika mencoba memasang ekstensi ini:</translation>
+<translation id="4763408175235639573">Kuki berikut diatur saat Anda melihat halaman ini</translation>
 <translation id="479536056609751218">Laman Web, HTML Saja</translation>
 <translation id="4827904420700932487">Buat Kode QR untuk Gambar ini</translation>
 <translation id="4839303808932127586">Sim&amp;pan video sebagai...</translation>
@@ -233,6 +264,7 @@
 <translation id="5116628073786783676">Sim&amp;pan Audio Sebagai...</translation>
 <translation id="5143374789336132547">Ekstensi "<ph name="EXTENSION_NAME" />" telah mengubah halaman apa yang ditampilkan saat anda mengklik tombol Beranda.</translation>
 <translation id="5154108062446123722">Pengaturan lanjutan untuk <ph name="PRINTING_DESTINATION" /></translation>
+<translation id="5154702632169343078">Subjek</translation>
 <translation id="5171343362375269016">Memori yang Di-swap</translation>
 <translation id="5233019165164992427">Port debug NaCl</translation>
 <translation id="5233231016133573565">ID proses</translation>
@@ -251,6 +283,7 @@
 <translation id="5362741141255528695">Pilih berkas kunci pribadi.</translation>
 <translation id="536638840841140142">Tidak ada</translation>
 <translation id="5370819323174483825">&amp;Muat ulang</translation>
+<translation id="5390743329570580756">Kirim untuk</translation>
 <translation id="5398572795982417028">Di luar referensi batas halaman, batasannya adalah <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Lanjutkan mengunduh</translation>
 <translation id="5427459444770871191">Putar &amp;Searah Jarum Jam</translation>
@@ -264,15 +297,18 @@
 <translation id="5542132724887566711">Profil</translation>
 <translation id="5556459405103347317">Muat Ulang</translation>
 <translation id="5575473780076478375">Ekstensi Penyamaran: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5582839680698949063">Menu utama</translation>
 <translation id="5614553682702429503">Simpan sandi?</translation>
 <translation id="5623842676595125836">Catatan</translation>
 <translation id="5627086634964711283">Juga mengontrol apa yang ditampilkan halaman saat anda mengklik tombol Beranda.</translation>
 <translation id="563535393368633106">Tanyakan sebelum mengakses (disarankan)</translation>
+<translation id="5638309510554459422">Temukan ekstensi dan tema di <ph name="BEGIN_LINK" />Chrome Web Store<ph name="END_LINK" /></translation>
 <translation id="5677928146339483299">Diblokir</translation>
 <translation id="5707185214361380026">Gagal memuat ekstensi dari:</translation>
 <translation id="5713171467967533494">Buka di peramban Vivaldi</translation>
 <translation id="5715711091495208045">Perantara Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Simpan sebagai PDF</translation>
+<translation id="5747552184818312860">Kedaluwarsa</translation>
 <translation id="5747809636523347288">Te&amp;mpel dan buka <ph name="URL" /></translation>
 <translation id="5759728514498647443">Dokumen yang anda kirim untuk dicetak melalui <ph name="APP_NAME" /> dapat dibaca oleh <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Sim&amp;pan audio sebagai...</translation>
@@ -280,15 +316,22 @@
 <translation id="5804241973901381774">Semua Izin</translation>
 <translation id="5828633471261496623">Mencetak...</translation>
 <translation id="583281660410589416">Tidak diketahui</translation>
+<translation id="5851868085455377790">Penerbit</translation>
 <translation id="5860491529813859533">Aktifkan</translation>
 <translation id="5867841422488265304">Telusuri atau ketik alamat web</translation>
 <translation id="5910363049092958439">Sim&amp;pan Gambar Sebagai...</translation>
+<translation id="5914724413750400082">Modulus (<ph name="MODULUS_NUM_BITS" /> bit):
+  <ph name="MODULUS_HEX_DUMP" />
+
+  Eksponen Publik (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bit):
+  <ph name="EXPONENT_HEX_DUMP" /></translation>
 <translation id="5956585768868398362">Apakah ini halaman penelusuran yang anda harapkan?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> maksimal)</translation>
 <translation id="5965661248935608907">Juga mengontrol apa yang ditampilkan halaman saat anda mengklik tombol Beranda atau menelusuri dari Omnibox.</translation>
 <translation id="5978277834170881274">&amp;Gunakan fitur periksa ejaan dasar</translation>
 <translation id="5979421442488174909">&amp;Terjemahkan ke <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Lainnya</translation>
+<translation id="6059652578941944813">Hierarki Sertifikat</translation>
 <translation id="6086846494333236931">Dipasang oleh administrator Anda</translation>
 <translation id="6101226222197207147">Aplikasi baru ditambahkan (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">Koneksi Internet anda sedang dikendalikan</translation>
@@ -322,9 +365,12 @@
 <translation id="6550675742724504774">Semua Opsi</translation>
 <translation id="6579369886355986318">Tampilkan semua &amp;kontrol</translation>
 <translation id="6639554308659482635">Memori SQLite</translation>
+<translation id="6655190889273724601">Mode pengembang</translation>
 <translation id="666731172850799929">Buka di <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Simpan sandi Anda</translation>
 <translation id="6691936601825168937">&amp;Maju</translation>
+<translation id="6786747875388722282">Ekstensi</translation>
+<translation id="6787839852456839824">Pintasan papan ketik</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Simpan semua perubahan</translation>
 <translation id="6817174620439930047">Tanyakan saat situs ingin menggunakan pesan eksklusif sistem untuk mengakses perangkat MIDI (disarankan)</translation>
@@ -334,6 +380,7 @@
 <translation id="6892812721183419409">Buka Tautan sebagai <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplikasi Latar Belakang: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Cabut akses berkas</translation>
+<translation id="6916590542764765824">Kelola Ekstensi</translation>
 <translation id="6945221475159498467">Pilih</translation>
 <translation id="6955446738988643816">Inspeksi Sembulan</translation>
 <translation id="6970856801391541997">Cetak Halaman Spesifik</translation>
@@ -348,6 +395,8 @@
 <translation id="7186088072322679094">Simpan di Batang Alat</translation>
 <translation id="7287143125007575591">Akses ditolak.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
+<translation id="7339785458027436441">Periksa Ejaan Saat Mengetik</translation>
+<translation id="73786666777299047">Buka Chrome Web Store</translation>
 <translation id="7385854874724088939">Ada yang salah saat mencetak. Periksa printer anda dan coba kembali.</translation>
 <translation id="7412226954991670867">Memori GPU</translation>
 <translation id="7421925624202799674">&amp;Lihat Sumber Halaman</translation>
@@ -365,8 +414,10 @@
 <translation id="7684212569183643648">Dipasang oleh Administrator Anda</translation>
 <translation id="7685049629764448582">Memori JavaScript</translation>
 <translation id="7701869757853594372">Penangan PENGGUNA</translation>
+<translation id="7702907602086592255">Domain</translation>
 <translation id="7704305437604973648">Tugas</translation>
 <translation id="7710568461918838723">&amp;Siaran...</translation>
+<translation id="7714464543167945231">Sertifikat</translation>
 <translation id="7750228210027921155">Gambar dalam Gambar</translation>
 <translation id="7760004034676677601">Apakah ini halaman awal yang anda harapkan?</translation>
 <translation id="7771452384635174008">Tata letak</translation>
@@ -398,6 +449,7 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8032244173881942855">Tidak dapat menyiarkan tab.</translation>
 <translation id="8071432093239591881">Cetak sebagai gambar</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
+<translation id="8168435359814927499">Konten</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Unduhan sedang dalam proses} other {Unduhan sedang dalam proses}}</translation>
 <translation id="8230134520748321204">Simpan sandi untuk <ph name="ORIGIN" />?</translation>
@@ -407,6 +459,7 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="8413385045638830869">Tanyakan dahulu (disarankan)</translation>
 <translation id="8434480141477525001">Port Debug NaCl</translation>
 <translation id="8449008133205184768">Tempel dan Cocokkan Gaya</translation>
+<translation id="8477384620836102176">&amp;Umum</translation>
 <translation id="8496717697661868878">Jalankan Plugin Ini</translation>
 <translation id="8512476990829870887">Akhiri Proses</translation>
 <translation id="8523493869875972733">Simpan Perubahan</translation>
@@ -419,6 +472,7 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="862750493060684461">Singgahan CSS</translation>
 <translation id="8661290697478713397">Buka Tautan di Jendela Penya&amp;maran</translation>
 <translation id="8664389313780386848">&amp;Lihat sumber halaman</translation>
+<translation id="8705331520020532516">Nomor Seri</translation>
 <translation id="8708000541097332489">Bersihkan saat keluar</translation>
 <translation id="8714838604780058252">Grafis latar belakang</translation>
 <translation id="8725066075913043281">Coba lagi</translation>

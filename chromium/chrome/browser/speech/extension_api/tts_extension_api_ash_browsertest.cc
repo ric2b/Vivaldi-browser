@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
@@ -154,7 +155,7 @@ class AshTtsApiTest : public AshRequiresLacrosExtensionApiTest,
     }
 
    private:
-    extensions::AshTtsApiTest* owner_;
+    raw_ptr<extensions::AshTtsApiTest, ExperimentalAsh> owner_;
     mojo::Receiver<crosapi::mojom::TtsUtteranceClient> receiver_{this};
   };
 
@@ -286,6 +287,18 @@ IN_PROC_BROWSER_TEST_F(AshTtsApiTest, SpeakLacrosUtteranceWithAshSpeechEngine) {
   WaitUntilTtsEventReceivedByLacrosUtteranceEventDelegate();
   EXPECT_TRUE(TtsEventNotifiedInLacros());
   EXPECT_TRUE(TtsEventReceivedEq(content::TTS_EVENT_END));
+}
+
+IN_PROC_BROWSER_TEST_F(AshTtsApiTest, IsSpeaking) {
+  if (!ash_starter_.HasLacrosArgument()) {
+    return;
+  }
+
+  // Load Ash tts engine extension, register the tts engine events, and
+  // call tts.isSpeaking before/during/after tts.speak.
+  ASSERT_TRUE(RunExtensionTest("tts/is_speaking/", {},
+                               {.ignore_manifest_warnings = true}))
+      << message_;
 }
 
 }  // namespace extensions

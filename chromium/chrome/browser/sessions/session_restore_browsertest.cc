@@ -73,6 +73,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -166,11 +167,20 @@ class SessionRestoreTest : public InProcessBrowserTest {
  public:
   SessionRestoreTest() {
 #if !BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    // Disable What's New for non-branded builds where the welcome page will be
-    // disabled. Otherwise the bots may run with a configuration (What's New
-    // enabled + Welcome disabled) that does not actually occur in production,
-    // and causes tests to flake.
-    scoped_feature_list_.InitAndDisableFeature(features::kChromeWhatsNewUI);
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{},
+        /*disabled_features=*/{// Disable What's New for non-branded builds
+                               // where the welcome page will be
+                               // disabled. Otherwise the bots may run with a
+                               // configuration (What's New
+                               // enabled + Welcome disabled) that does not
+                               // actually occur in production,
+                               // and causes tests to flake.
+                               features::kChromeWhatsNewUI,
+                               // TODO(crbug.com/1394910): Use HTTPS URLs in
+                               // tests to avoid having to
+                               // disable this feature.
+                               features::kHttpsUpgrades});
 #endif  // !BUILDFLAG(GOOGLE_CHROME_BRANDING)
   }
   ~SessionRestoreTest() override = default;
@@ -492,12 +502,9 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
   // The middle tab only should have visible disposition.
   for (int i = 0; i < tab_strip_model->count(); ++i) {
     content::WebContents* contents = tab_strip_model->GetWebContentsAt(i);
-    std::string document_visibility_state;
-    const char kGetStateJS[] =
-        "window.domAutomationController.send("
-        "window.document.visibilityState);";
-    EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-        contents, kGetStateJS, &document_visibility_state));
+    const char kGetStateJS[] = "window.document.visibilityState;";
+    std::string document_visibility_state =
+        content::EvalJs(contents, kGetStateJS).ExtractString();
     if (i == 1) {
       EXPECT_EQ("visible", document_visibility_state);
     } else {
@@ -533,18 +540,10 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoredTabsHaveCorrectInitialSize) {
   const gfx::Size contents_size = restored->window()->GetContentsSize();
   for (int i = 0; i < tab_strip_model->count(); ++i) {
     content::WebContents* contents = tab_strip_model->GetWebContentsAt(i);
-    int width = 0;
-    const char kGetWidthJS[] =
-        "window.domAutomationController.send("
-        "window.innerWidth);";
-    EXPECT_TRUE(
-        content::ExecuteScriptAndExtractInt(contents, kGetWidthJS, &width));
-    int height = 0;
-    const char kGetHeigthJS[] =
-        "window.domAutomationController.send("
-        "window.innerHeight);";
-    EXPECT_TRUE(
-        content::ExecuteScriptAndExtractInt(contents, kGetHeigthJS, &height));
+    const char kGetWidthJS[] = "window.innerWidth;";
+    int width = content::EvalJs(contents, kGetWidthJS).ExtractInt();
+    const char kGetHeigthJS[] = "window.innerHeight;";
+    int height = content::EvalJs(contents, kGetHeigthJS).ExtractInt();
     const gfx::Size tab_size(width, height);
     EXPECT_EQ(contents_size, tab_size);
   }
@@ -903,11 +902,6 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreForeignSession) {
 
   GURL url1("http://google.com");
   GURL url2("http://google2.com");
-  SerializedNavigationEntry nav1 =
-      ContentTestHelper::CreateNavigation(url1.spec(), "one");
-  SerializedNavigationEntry nav2 =
-      ContentTestHelper::CreateNavigation(url2.spec(), "two");
-  SerializedNavigationEntryTestHelper::SetIsOverridingUserAgent(true, &nav2);
 
   // Set up the restore data -- one window with two tabs.
   std::vector<const sessions::SessionWindow*> session;
@@ -1499,11 +1493,10 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoresForwardAndBackwardNavs) {
 }
 
 // Tests that the SiteInstances used for entries in a restored tab's history
-// are given appropriate max page IDs, so that going back to a restored
-// cross-site page and then forward again works.  (Bug 1204135)
-// This test fails. See http://crbug.com/237497.
+// are correctly initialized, so that going back to a restored cross-site page
+// and then forward again works.  (See b/1204135.)
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
-                       DISABLED_RestoresCrossSiteForwardAndBackwardNavs) {
+                       RestoresCrossSiteForwardAndBackwardNavs) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL cross_site_url(embedded_test_server()->GetURL("/title2.html"));
@@ -1515,26 +1508,25 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest,
 
   GoBack(browser());
   Browser* new_browser = QuitBrowserAndRestore(browser());
+  WaitForTabsToLoad(new_browser);
   ASSERT_EQ(1u, active_browser_list_->size());
   ASSERT_EQ(1, new_browser->tab_strip_model()->count());
 
   // Check that back and forward work as expected.
-  ASSERT_EQ(cross_site_url,
-            new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
+  content::WebContents* tab =
+      new_browser->tab_strip_model()->GetActiveWebContents();
+  ASSERT_EQ(cross_site_url, tab->GetLastCommittedURL());
 
   GoBack(new_browser);
-  ASSERT_EQ(GetUrl1(),
-            new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
+  ASSERT_EQ(GetUrl1(), tab->GetLastCommittedURL());
 
   GoForward(new_browser);
-  ASSERT_EQ(cross_site_url,
-            new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
+  ASSERT_EQ(cross_site_url, tab->GetLastCommittedURL());
 
   // Test renderer-initiated back/forward as well.
   GURL go_forward_url("javascript:history.forward();");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(new_browser, go_forward_url));
-  ASSERT_EQ(GetUrl2(),
-            new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
+  ASSERT_EQ(GetUrl2(), tab->GetLastCommittedURL());
 }
 
 IN_PROC_BROWSER_TEST_F(SessionRestoreTest, TwoTabsSecondSelected) {
@@ -2816,7 +2808,7 @@ IN_PROC_BROWSER_TEST_F(MultiOriginSessionRestoreTest,
         content::ExecJs(old_tab, "window.open('about:blank', 'subframe');"));
     nav_observer.Wait();
   }
-  EXPECT_EQ(subframe, ChildFrameAt(old_tab_main_frame.get(), 0));
+  subframe = ChildFrameAt(old_tab_main_frame.get(), 0);
   EXPECT_EQ(GURL(url::kAboutBlankURL), subframe->GetLastCommittedURL());
   EXPECT_EQ(a_origin, subframe->GetLastCommittedOrigin());
 
@@ -4017,20 +4009,10 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreNavigationApiTest,
 
   // Ensure that url2 is censored in navigation due to the no-referrer policy,
   // but url1 isn't.
-  bool url1_is_censored = false;
-  bool url2_is_censored = false;
-  const char kCheckEntry1Js[] =
-      "window.domAutomationController.send("
-      "navigation.entries()[0].url == null);";
-  const char kCheckEntry2Js[] =
-      "window.domAutomationController.send("
-      "navigation.entries()[1].url == null);";
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(contents, kCheckEntry1Js,
-                                                   &url1_is_censored));
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(contents, kCheckEntry2Js,
-                                                   &url2_is_censored));
-  EXPECT_FALSE(url1_is_censored);
-  EXPECT_TRUE(url2_is_censored);
+  const char kCheckEntry1Js[] = "navigation.entries()[0].url == null;";
+  const char kCheckEntry2Js[] = "navigation.entries()[1].url == null;";
+  EXPECT_EQ(false, content::EvalJs(contents, kCheckEntry1Js));
+  EXPECT_EQ(true, content::EvalJs(contents, kCheckEntry2Js));
 
   // Simulate an exit by shutting down the session service. If we don't do this
   // the first window close is treated as though the user closed the window
@@ -4045,19 +4027,12 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreNavigationApiTest,
   content::WebContents* restored_contents =
       active_browser_list_->get(0)->tab_strip_model()->GetWebContentsAt(0);
   EXPECT_EQ(GetUrl3(), restored_contents->GetLastCommittedURL());
-  int entries_length = 0;
-  const char kCheckEntriesLength[] =
-      "window.domAutomationController.send("
-      "navigation.entries().length);";
-  EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
-      restored_contents, kCheckEntriesLength, &entries_length));
+  const char kCheckEntriesLength[] = "navigation.entries().length;";
+  int entries_length =
+      content::EvalJs(restored_contents, kCheckEntriesLength).ExtractInt();
   EXPECT_EQ(entries_length, 3);
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      restored_contents, kCheckEntry1Js, &url1_is_censored));
-  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-      restored_contents, kCheckEntry2Js, &url2_is_censored));
-  EXPECT_FALSE(url1_is_censored);
-  EXPECT_TRUE(url2_is_censored);
+  EXPECT_EQ(false, content::EvalJs(restored_contents, kCheckEntry1Js));
+  EXPECT_EQ(true, content::EvalJs(restored_contents, kCheckEntry2Js));
 }
 
 class TabbedAppSessionRestoreTest : public AppSessionRestoreTest {

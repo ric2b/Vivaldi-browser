@@ -9,6 +9,8 @@
 #include <set>
 #include <string>
 
+#include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ref.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/strings/string_piece_forward.h"
@@ -131,14 +133,14 @@ class AppPlatformMetrics : public apps::AppRegistryCache::Observer,
     // reset, ideally after the corresponding snapshot has been reported.
     base::TimeDelta reporting_usage_time;
 
-    // Converts the struct UsageTime to base::Value, e.g.:
+    // Converts the struct UsageTime to base::Value::Dict, e.g.:
     // {
     //    "app_id": "hhsosodfjlsjdflkjsdlfksdf",
     //    "app_type": "SystemWebApp",
     //    "time": 3600,
     //    "reporting_usage_time": 1800,
     // }
-    base::Value ConvertToValue() const;
+    base::Value::Dict ConvertToDict() const;
   };
 
   explicit AppPlatformMetrics(Profile* profile,
@@ -308,9 +310,9 @@ class AppPlatformMetrics : public apps::AppRegistryCache::Observer,
   // UKM for the app instance.
   void ClearAppsUsageTimeForInstance(const base::StringPiece& instance_id);
 
-  Profile* const profile_ = nullptr;
+  const raw_ptr<Profile, ExperimentalAsh> profile_ = nullptr;
 
-  AppRegistryCache& app_registry_cache_;
+  const raw_ref<AppRegistryCache, ExperimentalAsh> app_registry_cache_;
 
   bool should_record_metrics_on_new_day_ = false;
 

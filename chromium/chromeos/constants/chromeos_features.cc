@@ -24,9 +24,6 @@ BASE_FEATURE(kCloudGamingDevice,
              "CloudGamingDevice",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables dark/light mode feature.
-BASE_FEATURE(kDarkLightMode, "DarkLightMode", base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Enables Demo Mode System Web App migration
 BASE_FEATURE(kDemoModeSWA, "DemoModeSWA", base::FEATURE_ENABLED_BY_DEFAULT);
 
@@ -51,6 +48,19 @@ BASE_FEATURE(kDisableQuickAnswersV2Translation,
              "DisableQuickAnswersV2Translation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enable experimental goldfish web app profile isolation.
+BASE_FEATURE(kExperimentalWebAppProfileIsolation,
+             "ExperimentalWebAppProfileIsolation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enable experimental goldfish web app isolation.
+BASE_FEATURE(kExperimentalWebAppStoragePartitionIsolation,
+             "ExperimentalWebAppStoragePartitionIsolation",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables Jelly features.
+BASE_FEATURE(kJelly, "Jelly", base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables Jellyroll features. Jellyroll is a feature flag for CrOSNext, which
 // controls all system UI updates and new system components.
 BASE_FEATURE(kJellyroll, "Jellyroll", base::FEATURE_DISABLED_BY_DEFAULT);
@@ -71,6 +81,11 @@ BASE_FEATURE(kQuickAnswersRichCard,
              "QuickAnswersRichCard",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables the Office files upload workflow to improve Office files support.
+BASE_FEATURE(kUploadOfficeToCloud,
+             "UploadOfficeToCloud",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 bool IsCloudGamingDeviceEnabled() {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   return chromeos::BrowserParamsProxy::Get()->IsCloudGamingDevice();
@@ -79,16 +94,18 @@ bool IsCloudGamingDeviceEnabled() {
 #endif
 }
 
-bool IsDarkLightModeEnabled() {
-  return base::FeatureList::IsEnabled(kDarkLightMode);
-}
-
 bool IsDemoModeSWAEnabled() {
   return base::FeatureList::IsEnabled(kDemoModeSWA);
 }
 
+bool IsJellyEnabled() {
+  return base::FeatureList::IsEnabled(kJelly);
+}
+
 bool IsJellyrollEnabled() {
-  return base::FeatureList::IsEnabled(kJellyroll);
+  // Force Jellyroll features on if Jelly is enabled since they need to be
+  // tested together. b/270742469
+  return IsJellyEnabled() || base::FeatureList::IsEnabled(kJellyroll);
 }
 
 bool IsPasswordManagerSystemAuthenticationEnabled() {
@@ -105,6 +122,14 @@ bool IsQuickAnswersRichCardEnabled() {
 
 bool IsQuickAnswersV2SettingsSubToggleEnabled() {
   return base::FeatureList::IsEnabled(kQuickAnswersV2SettingsSubToggle);
+}
+
+bool IsUploadOfficeToCloudEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  return chromeos::BrowserParamsProxy::Get()->IsUploadOfficeToCloudEnabled();
+#else
+  return base::FeatureList::IsEnabled(kUploadOfficeToCloud);
+#endif
 }
 
 }  // namespace chromeos::features

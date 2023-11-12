@@ -11,6 +11,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app.h"
@@ -157,7 +158,7 @@ void InstallFromInfoCommand::PopulateInitialDebugInfo() {
 }
 
 void InstallFromInfoCommand::Abort(webapps::InstallResultCode code) {
-  debug_value_.Set("result_code", base::StreamableToString(code));
+  debug_value_.Set("result_code", base::ToString(code));
   if (!install_callback_)
     return;
   webapps::InstallableMetrics::TrackInstallResult(false);
@@ -171,7 +172,7 @@ void InstallFromInfoCommand::OnInstallCompleted(const AppId& app_id,
                                                 webapps::InstallResultCode code,
                                                 OsHooksErrors os_hooks_errors) {
   webapps::InstallableMetrics::TrackInstallResult(webapps::IsSuccess(code));
-  debug_value_.Set("result_code", base::StreamableToString(code));
+  debug_value_.Set("result_code", base::ToString(code));
   if (!webapps::IsSuccess(code)) {
     OnUnintallAndReplaceFinished(app_id, code,
                                  /*did_uninstall_and_replace=*/false);

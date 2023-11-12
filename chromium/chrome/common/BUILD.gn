@@ -10,6 +10,7 @@ import("//chrome/browser/downgrade/buildflags.gni")
 import("//chrome/common/features.gni")
 import("//components/nacl/features.gni")
 import("//components/offline_pages/buildflags/features.gni")
+import("//components/signin/features.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//media/media_options.gni")
@@ -50,7 +51,6 @@ buildflag_header("buildflags") {
     "ENABLE_WEBUI_CERTIFICATE_VIEWER=$enable_webui_certificate_viewer",
     "ENABLE_WEBUI_TAB_STRIP=$enable_webui_tab_strip",
     "OPTIMIZE_WEBUI=$optimize_webui",
-    "ENABLE_BOUND_SESSION_CREDENTIALS=$enable_bound_session_credentials",
   ]
 }
 
@@ -102,7 +102,7 @@ source_set("ini_parser") {
 group("common") {
   public_deps = [ ":common_lib" ]
   if (is_win) {
-    public_deps += [ ":delay_load_support" ]
+    public_deps += [ "//chrome/common/win:delay_load_failure_hook" ]
   }
 }
 
@@ -217,6 +217,7 @@ static_library("common_lib") {
     "//components/prefs",
     "//components/safe_browsing:buildflags",
     "//components/safe_browsing/core/common",
+    "//components/safe_search_api",
     "//components/services/app_service/public/cpp:app_share_target",
     "//components/services/app_service/public/cpp:app_types",
     "//components/services/heap_profiling/public/cpp",
@@ -278,6 +279,8 @@ static_library("common_lib") {
 
   if (enable_extensions) {
     sources += [
+      "controlled_frame.cc",
+      "controlled_frame.h",
       "extensions/api/file_browser_handlers/file_browser_handler.cc",
       "extensions/api/file_browser_handlers/file_browser_handler.h",
       "extensions/api/notifications/notification_style.cc",
@@ -331,6 +334,7 @@ static_library("common_lib") {
     ]
     deps += [
       "//chrome/common/apps/platform_apps",
+      "//chrome/common/controlled_frame",
       "//components/app_constants",
     ]
     public_deps += [
@@ -407,7 +411,10 @@ static_library("common_lib") {
   } else {
     # Non-Android.
     public_deps += [ "//chrome/common/importer" ]
-    sources += [ "accessibility/read_anything_constants.h" ]
+    sources += [
+      "accessibility/read_anything_constants.cc",
+      "accessibility/read_anything_constants.h",
+    ]
   }
 
   if (is_win) {
@@ -490,6 +497,10 @@ static_library("common_lib") {
       "media/cdm_host_file_path.h",
     ]
     public_deps += [ "//chrome/common:version_header" ]
+  }
+
+  if (enable_bound_session_credentials) {
+    sources += [ "bound_session_request_throttled_listener.h" ]
   }
 }
 
@@ -702,20 +713,6 @@ if (is_mac) {
   }
 }
 
-if (is_win) {
-  # delay load support must be a source_set to ensure that it has external
-  # linkage and will correctly emplace over the correct symbols in
-  # delayimp.lib at link time.
-  source_set("delay_load_support") {
-    sources = [
-      "win/delay_load_failure_hook.cc",
-      "win/delay_load_failure_hook.h",
-    ]
-
-    deps = [ "//base" ]
-  }
-}
-
 mojom("mojo_bindings") {
   disable_variants = true
 
@@ -790,6 +787,10 @@ mojom("mojo_bindings") {
 
   if (enable_plugins) {
     enabled_features += [ "enable_plugins" ]
+  }
+
+  if (enable_bound_session_credentials) {
+    enabled_features += [ "enable_bound_session_credentials" ]
   }
 }
 

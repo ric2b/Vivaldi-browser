@@ -23,7 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="NewTabPage.ActionAndroid2" enum="NewTabPageActionAndroid2"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
   <owner>twellington@chromium.org</owner>
   <owner>finkm@chromium.org</owner>
   <summary>
@@ -35,7 +35,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.ActioniOS" enum="NewTabPageActioniOS"
-    expires_after="2023-07-09">
+    expires_after="2023-09-17">
   <owner>justincohen@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
@@ -56,7 +56,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.BackgroundImageSource"
-    enum="NTPBackgroundImageSource" expires_after="2023-07-30">
+    enum="NTPBackgroundImageSource" expires_after="2023-10-01">
   <owner>danpeng@google.com</owner>
   <owner>pauladedeji@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -67,7 +67,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.BackgroundService.Collections.RequestLatency"
-    units="ms" expires_after="2023-08-08">
+    units="ms" expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -90,7 +90,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.AppliedDiscount" units="count"
-    expires_after="2023-05-06">
+    expires_after="2023-11-06">
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -104,7 +104,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.CartCount" units="count"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -115,7 +115,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.CartImageCount" units="count"
-    expires_after="2023-07-02">
+    expires_after="2023-09-03">
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <summary>
@@ -129,7 +129,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.ClickCart" units="index"
-    expires_after="2023-05-20">
+    expires_after="2023-11-20">
   <owner>wychen@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -140,7 +140,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.ClickCart.HasDiscount"
-    enum="BooleanHasDiscount" expires_after="2023-05-07">
+    enum="BooleanHasDiscount" expires_after="2023-11-07">
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -153,7 +153,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.DataRequest" enum="CartDiscountDataType"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -167,7 +167,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.DiscountAt" units="index"
-    expires_after="2023-04-09">
+    expires_after="2023-11-09">
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -181,7 +181,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.DiscountConsentShow" units="count"
-    expires_after="2022-06-30">
+    expires_after="2022-11-30">
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -196,7 +196,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.DiscountConsentStatusAtLoad"
-    enum="CartDiscountConsentStatus" expires_after="2023-07-16">
+    enum="CartDiscountConsentStatus" expires_after="2023-09-17">
   <owner>yuezhanggg@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -215,7 +215,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.DiscountConsentStatusAtLoad.{ConsentState}"
-    enum="CartDiscountConsentVariation" expires_after="2023-03-05">
+    enum="CartDiscountConsentVariation" expires_after="2023-11-05">
   <owner>meiliang@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
   <summary>
@@ -267,7 +267,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.DiscountCountAtLoad" units="count"
-    expires_after="2023-07-02">
+    expires_after="2023-09-03">
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -281,7 +281,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Carts.NonDiscountCountAtLoad" units="count"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
   <owner>meiliang@chromium.org</owner>
   <owner>yuezhanggg@chromium.org</owner>
   <owner>chrome-shopping@google.com</owner>
@@ -293,7 +293,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.Click" enum="NTPElement" expires_after="2023-06-25">
+<histogram name="NewTabPage.Click" enum="NTPElement" expires_after="2023-08-27">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -305,8 +305,21 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.Collections.IdOnLoad" enum="NTPCollectionId"
+    expires_after="2023-08-30">
+  <owner>danpeng@google.com</owner>
+  <owner>pauladedeji@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    The collection id of user's background image on the NTP. Only recorded once
+    per NTP. Note that even if the user has Google as their default search
+    engine, Incognito and Guest mode NTPs are not considered 1P and don't log
+    this histogram.
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.ConcretePage" enum="NewTabPageConcretePage"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -317,7 +330,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.ContentSuggestions.ArticlesListVisible"
-    enum="BooleanVisible" expires_after="2023-08-20">
+    enum="BooleanVisible" expires_after="2023-10-22">
   <owner>freedjm@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -331,28 +344,6 @@ chromium-metrics-reviews@google.com.
   <owner>skym@chromium.org</owner>
   <owner>carlosk@chromium.org</owner>
   <summary>Android: Loading of Zine was artifically delayed</summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.BackgroundFetchTrigger"
-    enum="BackgroundFetchTrigger" expires_after="2021-12-26">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The type of trigger that caused a background fetch of NTP content
-    suggestions from a suggestion server. Every background fetch is recorded.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.CategoryDismissed"
-    enum="ContentSuggestionsCategory" expires_after="M90">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: A category of content suggestions that was dismissed (by swiping
-    away its empty state card).
-  </summary>
 </histogram>
 
 <histogram name="NewTabPage.ContentSuggestions.CountOnNtpOpenedIfVisible"
@@ -382,36 +373,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.ContentSuggestions.DismissedUnvisited"
-    units="index" expires_after="2021-11-21">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The position of a suggestion card on the NTP that is dismissed,
-    typically by swiping it away. The suggestion had a URL that was NOT visited
-    before. We track the position the card had in the list when it was first
-    seen by the user. This tracked position can be different from the position
-    observed by the user, e.g. when the user dismissed some suggestions from the
-    list or requested more that got inserted in the middle of the feed.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.DismissedVisited" units="index"
-    expires_after="2021-07-18">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The position of a suggestion card on the NTP that is dismissed,
-    typically by swiping it away. The suggestion had a URL that was visited
-    before. We track the position the card had in the list when it was first
-    seen by the user. This tracked position can be different from the position
-    observed by the user, e.g. when the user dismissed some suggestions from the
-    list or requested more that got inserted in the middle of the feed.
-  </summary>
-</histogram>
-
 <histogram name="NewTabPage.ContentSuggestions.MenuOpened" units="index"
     expires_after="2022-01-16">
   <owner>freedjm@chromium.org</owner>
@@ -419,61 +380,6 @@ chromium-metrics-reviews@google.com.
   <summary>
     Android: The position of a suggestion card whose long-press menu was opened,
     analogous to NewTabPage.ContentSuggestions.Opened.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.MenuOpenedAge" units="ms"
-    expires_after="M90">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The age of a suggestion card on the NTP whose long-press menu was
-    opened, analogous to NewTabPage.ContentSuggestions.OpenedAge.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.MenuOpenedScoreNormalized"
-    enum="NormalizedScore" expires_after="M85">
-  <owner>tschumann@chromium.org</owner>
-  <summary>
-    Android: The relevance score of a suggestion card on the NTP whose
-    long-press menu was opened, analogous to
-    NewTabPage.ContentSuggestions.OpenedScoreNormalized. Scores (which are
-    typically floats within (0,1]) get reported as discrete integers within
-    [1,10]. For instance, the discrete value 1 represents score values from
-    (0.0, 0.1]. The discrete value 11 is the overflow bucket for unexpectedly
-    high scores.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.MoreButtonClicked" units="index"
-    expires_after="2021-11-07">
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The position of a &quot;More&quot; suggestion card that was clicked
-    on the NTP. A card is considered shown when at least 2/3 of its height is
-    visible on the screen. We track the position the card had in the list when
-    it was first seen by the user. This tracked position can be different from
-    the position observed by the user, e.g. when the user dismissed some
-    suggestions from the list or requested more that got inserted in the middle
-    of the feed.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.MoreButtonShown" units="index"
-    expires_after="2021-07-01">
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The position of a &quot;More&quot; suggestion card that was shown
-    on the NTP. A card is considered shown when at least 2/3 of its height is
-    visible on the screen. For each card, at most one impression is recorded per
-    NTP instance. We track the position the card had in the list when it was
-    first seen by the user. This tracked position can be different from the
-    position observed by the user, e.g. when the user dismissed some suggestions
-    from the list or requested more that got inserted in the middle of the feed.
   </summary>
 </histogram>
 
@@ -520,17 +426,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.ContentSuggestions.OpenDisposition"
-    enum="WindowOpenDisposition" expires_after="M90">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: How an article linked from a suggestion card on the NTP was opened
-    (e.g. plain click, open in new tab, open in incognito).
-  </summary>
-</histogram>
-
 <histogram name="NewTabPage.ContentSuggestions.Opened" units="index"
     expires_after="never">
 <!-- expires-never: key feature metric.  We will need the Opened
@@ -546,6 +441,9 @@ chromium-metrics-reviews@google.com.
     can be different from the position observed by the user, e.g. when the user
     dismissed some suggestions from the list or requested more that got inserted
     in the middle of the feed.
+
+    iOS: Reported per click on card in the feed. Does not include position
+    information and thus can only be used as a total count of clicks.
   </summary>
 </histogram>
 
@@ -563,44 +461,6 @@ chromium-metrics-reviews@google.com.
     This tracked position can be different from the position observed by the
     user, e.g. when the user dismissed some suggestions from the list or
     requested more that got inserted in the middle of the feed.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.OpenedAge" units="ms"
-    expires_after="2021-12-26">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The age of a suggestion card on the NTP that is clicked through to
-    the host website of the content. The age is measured from the moment the
-    content has been published.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.OpenedCategoryIndex"
-    units="index" expires_after="M77">
-  <owner>vitaliii@chromium.org</owner>
-  <summary>
-    Android: The index of a category on the NTP, whose suggestion card is
-    clicked through to the host website of the content. This tracked index can
-    be different from the position observed by the user, e.g. for the user a
-    category may be at the top of the NTP, but with index 1, because they
-    dismissed the one that was previously at the top.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.OpenedScoreNormalized"
-    enum="NormalizedScore" expires_after="M85">
-  <owner>tschumann@chromium.org</owner>
-  <summary>
-    Android: The score of a suggestion card on the NTP that is clicked through
-    to the host website of the content. The recorded score is from the moment
-    the suggestion was fetched, it could have changed since. Scores (which are
-    typically floats within (0,1]) get reported as discrete integers within
-    [1,10]. For instance, the discrete value 1 represents score values from
-    (0.0, 0.1]. The discrete value 11 is the overflow bucket for unexpectedly
-    high scores.
   </summary>
 </histogram>
 
@@ -644,26 +504,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram
-    name="NewTabPage.ContentSuggestions.Shown.Articles.Prefetched.Offline2"
-    units="index" expires_after="M90">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The position of a prefetched suggestion card that was shown on the
-    NTP when offline. Analogous to NewTabPage.ContentSuggestions.Shown. That is
-    a card is considered shown when at least 2/3 of its height is visible on the
-    screen. For each card, at most one impression is recorded per NTP instance.
-    We track the position the card had in the list when it was first seen by the
-    user. This tracked position can be different from the position observed by
-    the user, e.g. when the user dismissed some suggestions from the list or
-    requested more that got inserted in the middle of the feed. This metric is
-    reported not immediately after the impression, but once the request to
-    Offline Page model to check the URL finishes.
-  </summary>
-</histogram>
-
 <histogram name="NewTabPage.ContentSuggestions.ShownAge" units="ms"
     expires_after="2022-01-09">
   <owner>freedjm@chromium.org</owner>
@@ -686,111 +526,6 @@ chromium-metrics-reviews@google.com.
     within [1,10]. For instance, the discrete value 1 represents score values
     from (0.0, 0.1]. The discrete value 11 is the overflow bucket for
     unexpectedly high scores.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.TimeSinceSuggestionFetched"
-    units="ms" expires_after="2021-10-25">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The time since the displayed content suggestions was fetched.
-    Recorded when the user looks at content suggestions on the NTP. The metric
-    is only recorded for suggestions of the Articles for you section.
-  </summary>
-</histogram>
-
-<histogram base="true"
-    name="NewTabPage.ContentSuggestions.TimeUntilFirstShownTrigger" units="ms"
-    expires_after="2021-12-26">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The time since the last fetch, recorded upon the first on-shown
-    fetch trigger. The first on-shown trigger does not necessarily cause a fetch
-    (if it comes before the end of the respective scheduling interval). This
-    metric is recorded at most once after each fetch (and additionaly at most
-    once after each startup of Chrome before the next fetch). This is used to
-    understand how changing scheduling intervals will impact traffic of
-    background fetches.
-  </summary>
-</histogram>
-
-<histogram base="true"
-    name="NewTabPage.ContentSuggestions.TimeUntilFirstStartupTrigger"
-    units="ms" expires_after="2021-08-22">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The time since the last fetch, recorded upon the first startup
-    fetch trigger. The first startup trigger does not necessarily cause a fetch
-    (if it comes before the end of the respective scheduling interval). This
-    metric is recorded at most once after each fetch (and additionaly at most
-    once after each startup of Chrome before the next fetch). This is used to
-    understand how changing scheduling intervals will impact traffic of
-    background fetches.
-  </summary>
-</histogram>
-
-<histogram base="true"
-    name="NewTabPage.ContentSuggestions.TimeUntilPersistentFetch" units="ms"
-    expires_after="M90">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The time since the last fetch, recorded upon a persistent fetch.
-    This is used to understand what are the real persistent fetching intervals
-    in the wild.
-  </summary>
-</histogram>
-
-<histogram base="true" name="NewTabPage.ContentSuggestions.TimeUntilSoftFetch"
-    units="ms" expires_after="M90">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The time since the last fetch, recorded upon a soft fetch. This is
-    used to understand what are the real soft fetching intervals in the wild.
-  </summary>
-</histogram>
-
-<histogram base="true"
-    name="NewTabPage.ContentSuggestions.TimeUntilStartupFetch" units="ms"
-    expires_after="M90">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The time since the last fetch, recorded upon a startup fetch. This
-    is used to understand what are the real soft fetching intervals in the wild.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.UsageTimeLocal" units="units"
-    expires_after="2021-12-26">
-  <owner>carlosk@chromium.org</owner>
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The time of day (in the local timezone) when the user used content
-    suggestions. Recorded for example when the user scrolls to the articles
-    suggestions or opens an article suggestions.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.ContentSuggestions.VisitDuration" units="ms"
-    expires_after="2021-07-01">
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: Time spent reading the page linked by an opened suggestion card.
-    Exit conditions include the tab not being in the foreground or starting a
-    new navigation.
   </summary>
 </histogram>
 
@@ -835,7 +570,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.CustomizeChromeOpened"
-    enum="NTPCustomizeChromeEntryPoint" expires_after="2023-07-30">
+    enum="NTPCustomizeChromeEntryPoint" expires_after="2023-10-01">
   <owner>pauladedeji@chromium.org</owner>
   <owner>danpeng@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -848,7 +583,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Customized" enum="NTPCustomizedFeatures"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -859,7 +594,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.CustomizedShortcuts"
-    enum="NTPCustomizedShortcutSettings" expires_after="2023-08-20">
+    enum="NTPCustomizedShortcutSettings" expires_after="2023-10-22">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -883,7 +618,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.CustomizeShortcutAction"
-    enum="NTPCustomizeShortcutAction" expires_after="2023-08-20">
+    enum="NTPCustomizeShortcutAction" expires_after="2023-10-22">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -894,7 +629,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Drive.FileClick" units="index"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>tiborg@chromium.org</owner>
   <owner>aee@chromium.org</owner>
   <owner>andrevincent@google.com</owner>
@@ -904,8 +639,32 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.Drive.FileCount" units="count"
+    expires_after="never">
+<!-- expires-never: Used for Chirp monitoring. -->
+
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs the number of files returned by ItemSuggest. Logged every time the
+    Drive module successfully processed an ItemSuggest response.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Drive.ItemSuggestRequestResult"
+    enum="ItemSuggestRequestResult" expires_after="never">
+<!-- expires-never: Used for Chirp monitoring. -->
+
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs the result of a request to the ItemSuggest API. Logged every time the
+    Drive module makes an ItemSuggest request.
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.FeedPositionSegmentationResult"
-    enum="FeedPositionSegmentationResult" expires_after="2023-04-30">
+    enum="FeedPositionSegmentationResult" expires_after="2023-09-10">
   <owner>hanxi@chromium.org</owner>
   <owner>ssid@chromium.org</owner>
   <summary>
@@ -916,7 +675,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.HasCredentials" enum="BooleanYesNo"
-    expires_after="2023-06-30">
+    expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>danpeng@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -929,7 +688,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.Height" units="pixels" expires_after="2023-08-08">
+<histogram name="NewTabPage.Height" units="pixels" expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -941,8 +700,37 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.HistoryClusters.CartAssociationStatus"
+    units="NTPHistoryClustersModuleCartAssociationStatus"
+    expires_after="2023-08-08">
+  <owner>yuezhanggg@chromium.org</owner>
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs the association status of every abandoned cart to history clusters when
+    history clusters are loaded and ranked to be shown in the NTP History
+    Cluster Module. Logged at module UI creation time when determining if there
+    is necessary data to display the module. Only logged on the 1P NTP and when
+    the history clusters module is enabled.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.HistoryClusters.DisplayLayout"
+    enum="NTPHistoryClustersModuleDisplayLayout" expires_after="2023-10-08">
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Records the layout selected and displayed for the NTP History Clusters
+    module. Logged at module UI creation time when determining if there is
+    necessary data to display the module. Only logged on the 1P NTP when the
+    history clusters module is enabled.
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.HistoryClusters.HasCartForTopCluster"
-    enum="Boolean" expires_after="2023-08-08">
+    enum="Boolean" expires_after="2023-10-08">
   <owner>yuezhanggg@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -955,7 +743,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.HistoryClusters.HasClusterToShow" enum="Boolean"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>sophiechang@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -966,8 +754,93 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.HistoryClusters.ImageLoadSuccess" enum="Boolean"
+    expires_after="2023-08-08">
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs whether loading an image for a quests tile succeeded or failed (true
+    for success and false for failure). This is determined by whether or not we
+    get a URL back from the ImageService for a visit that we expected to have an
+    image for. Only logged in 1P NTP with the history clusters module enabled.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.HistoryClusters.IneligibleReason"
+    enum="NTPHistoryClustersIneligibleReason" expires_after="2023-10-08">
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs the reason why the last candidate cluster of a list of of ineligible
+    candidate clusters was identified as such, resulting in the module not being
+    displayed. Logged when the NewTabPage is rendering the enabled modules. Only
+    logged on the 1P NTP and the history clusters module is enabled.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.HistoryClusters.Layout{LayoutNum}.Click"
+    enum="NTPHistoryClustersElementType" expires_after="2023-08-08">
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Records the element type that was activated by the user on the NTP history
+    clusters module. Logged when a user clicks on an actionable element of the
+    module, such as a tile or button. Only logged on the 1P NTP when the history
+    clusters module is enabled.
+  </summary>
+  <token key="LayoutNum">
+    <variant name="1"/>
+    <variant name="2"/>
+    <variant name="3"/>
+  </token>
+</histogram>
+
+<histogram
+    name="NewTabPage.HistoryClusters.Layout{LayoutNum}.ImageDisplayState"
+    enum="NTPHistoryClustersImageDisplayState" expires_after="2023-08-08">
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs the overall image absence or presence on the visit tiles displayed in
+    the NTP history clusters module. Logged at page unload time. Only logged on
+    the 1P NTP and when the history clusters module is enabled.
+  </summary>
+  <token key="LayoutNum">
+    <variant name="1"/>
+    <variant name="2"/>
+    <variant name="3"/>
+  </token>
+</histogram>
+
+<histogram
+    name="NewTabPage.HistoryClusters.Layout{LayoutNum}.{Type}Tile.ClickIndex"
+    units="index" expires_after="2023-08-08">
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs the index of a clicked URL visit or suggestion tile for a given
+    displayed layout of the NTP history clusters module. Logged on clicking a
+    tile element of the module. Only logged on the 1P NTP and when the history
+    clusters module is enabled.
+  </summary>
+  <token key="LayoutNum">
+    <variant name="1"/>
+    <variant name="2"/>
+    <variant name="3"/>
+  </token>
+  <token key="Type">
+    <variant name="Suggest"/>
+    <variant name="Visit"/>
+  </token>
+</histogram>
+
 <histogram name="NewTabPage.HistoryClusters.NumClusterCandidates"
-    units="counts" expires_after="2023-08-08">
+    units="counts" expires_after="2023-10-08">
   <owner>sophiechang@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -975,6 +848,33 @@ chromium-metrics-reviews@google.com.
     Logs the number of clusters that match the desired filtering criteria
     configurable via Finch for the history clusters module. Only logged on the
     1P NTP and the history clusters module is enabled.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.HistoryClusters.NumRelatedSearches" units="counts"
+    expires_after="2023-08-08">
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs the number of related searches present in the candidate cluster that
+    might be rendered by the NTP history clusters module. Logged at module UI
+    creation time when determining if there is necessary data to display the
+    module. Only logged on the 1P NTP and when the history clusters module is
+    enabled.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.HistoryClusters.NumVisits" units="counts"
+    expires_after="2023-08-08">
+  <owner>romanarora@chromium.org</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Logs the number of URL visits present in the candidate cluster that might be
+    rendered by the NTP history clusters module. Logged at module UI creation
+    time when determining if there is necessary data to display the module. Only
+    logged on the 1P NTP and when the history clusters module is enabled.
   </summary>
 </histogram>
 
@@ -989,7 +889,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Lens.UploadDialog.DialogAction"
-    enum="NewTabPageLensUploadDialogActions" expires_after="2023-06-30">
+    enum="NewTabPageLensUploadDialogActions" expires_after="2023-09-10">
   <owner>nguyenbryan@google.com</owner>
   <owner>yowakita@google.com</owner>
   <owner>bbonnet@google.com</owner>
@@ -1005,7 +905,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Lens.UploadDialog.DialogError"
-    enum="NewTabPageLensUploadDialogErrors" expires_after="2023-06-30">
+    enum="NewTabPageLensUploadDialogErrors" expires_after="2023-09-17">
   <owner>nguyenbryan@google.com</owner>
   <owner>yowakita@google.com</owner>
   <owner>bbonnet@google.com</owner>
@@ -1019,7 +919,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.LoadTime" units="ms" expires_after="2023-07-30">
+<histogram name="NewTabPage.LoadTime" units="ms" expires_after="2023-10-01">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1046,7 +946,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.LogoDownloadOutcome"
-    enum="NewTabPageLogoDownloadOutcome" expires_after="2023-06-30">
+    enum="NewTabPageLogoDownloadOutcome" expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>danpeng@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1070,7 +970,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.LogoImageDownloaded" enum="BooleanFromHTTPCache"
-    expires_after="2023-06-30">
+    expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>danpeng@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1081,7 +981,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.LogoShown" enum="NewTabPageLogoShown"
-    expires_after="2023-06-30">
+    expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>danpeng@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1093,7 +993,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.LogoShownTime2" units="ms"
-    expires_after="2023-06-30">
+    expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>danpeng@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1104,7 +1004,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.MainUi.ShownTime" units="ms"
-    expires_after="2023-07-02">
+    expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
   <summary>
@@ -1116,6 +1016,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="NewTabPage.MobileIsUserOnline" enum="Boolean"
     expires_after="M85">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>fserb@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
@@ -1125,7 +1028,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Module.Click" enum="ModuleTypeOnStartAndNTP"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
   <owner>hanxi@chromium.org</owner>
   <owner>xinyiji@chromium.org</owner>
   <summary>
@@ -1139,13 +1042,28 @@ chromium-metrics-reviews@google.com.
     more button on the top of the feeds section. For omnibox: is recorded every
     time when user uses Omnibox or voice search on Omnibox to navigate. This is
     consistent with MobileOmniboxUse. For tab switcher button: is recorded every
-    time when user clicks on the tab switcher button. The histogram is logged on
-    New tab page and is Android-only.
+    time when user clicks on the tab switcher button. For home button: is
+    recorded when user clicks on the home button. For profile button: is
+    recorded when user clicks on the profile button. For doodle logo: is
+    recorded every time when user clicks on the doodle and navigates to another
+    website. For menu button: is recorded when user clicks on the menu button.
+    The histogram is logged on New tab page and is Android-only.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Module.LongClick" enum="ModuleTypeOnStartAndNTP"
+    expires_after="2023-09-10">
+  <owner>hanxi@chromium.org</owner>
+  <owner>xinyiji@chromium.org</owner>
+  <summary>
+    Record the total count of long clicks on different modules of the New tab
+    page. For home button: is recorded when user long presses on home button to
+    edit homepage. The histogram is logged on New tab page and is Android-only.
   </summary>
 </histogram>
 
 <histogram name="NewTabPage.Modules.DataRequest" enum="NtpModules"
-    expires_after="2023-07-30">
+    expires_after="2023-10-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1159,7 +1077,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.Disabled{Interaction}" enum="NtpModules"
-    expires_after="2023-03-20">
+    expires_after="2023-09-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1178,7 +1096,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.Dismissed" units="count"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1191,7 +1109,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram base="true" name="NewTabPage.Modules.EnabledOnNTPLoad"
-    enum="BooleanEnabled" expires_after="2023-08-08">
+    enum="BooleanEnabled" expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1222,7 +1140,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.FreExplicitOptIn" units="count"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>pauladedeji@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1235,7 +1153,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.FreImplicitOptIn" enum="BooleanEnabled"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>pauladedeji@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1248,7 +1166,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.FreImpression" enum="BooleanEnabled"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>pauladedeji@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1261,7 +1179,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.FreLoaded" enum="BooleanEnabled"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>pauladedeji@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1274,7 +1192,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.FreOptOut" units="count"
-    expires_after="2023-08-20">
+    expires_after="2023-10-22">
   <owner>danpeng@google.com</owner>
   <owner>pauladedeji@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1287,7 +1205,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.Hover" enum="NtpModules"
-    expires_after="2023-04-16">
+    expires_after="2023-09-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1300,7 +1218,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.Impression" units="ms"
-    expires_after="2023-07-30">
+    expires_after="2023-10-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1315,7 +1233,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.ImpressionRatio" units="perdecage"
-    expires_after="2023-07-30">
+    expires_after="2023-10-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1335,7 +1253,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.InfoButtonClicked" enum="NtpModules"
-    expires_after="2023-04-16">
+    expires_after="2023-09-01">
   <owner>danpeng@google.com</owner>
   <owner>pauladedeji@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1348,7 +1266,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.LoadDuration" units="ms"
-    expires_after="2023-07-30">
+    expires_after="2023-10-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1358,7 +1276,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.Loaded" units="ms"
-    expires_after="2023-07-30">
+    expires_after="2023-10-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1370,7 +1288,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.LoadedModulesCount" units="count"
-    expires_after="2023-06-18">
+    expires_after="2023-09-03">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1382,7 +1300,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.LoadedWith.{NtpModule}" enum="NtpModules"
-    expires_after="2023-03-20">
+    expires_after="2023-09-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1395,6 +1313,7 @@ chromium-metrics-reviews@google.com.
   <token key="NtpModule">
     <variant name="chrome_cart" summary="the Chrome Cart module"/>
     <variant name="drive" summary="the Drive module"/>
+    <variant name="history_clusters" summary="the History clusters module"/>
     <variant name="photos" summary="the Photos module"/>
     <variant name="recipe_tasks" summary="the Recipe module"/>
     <variant name="shopping_tasks" summary="the Shopping Tasks module"/>
@@ -1402,7 +1321,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.Restored" units="count"
-    expires_after="2023-06-25">
+    expires_after="2023-09-03">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1415,7 +1334,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.ShownTime" units="ms"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1427,7 +1346,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.Usage" units="count"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1440,7 +1359,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Modules.VisibleOnNTPLoad" enum="BooleanVisible"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1477,7 +1396,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.MostVisitedMigratedDefaultAppType"
-    enum="TypeOfDeletedMostVisitedApp" expires_after="2023-08-20">
+    enum="TypeOfDeletedMostVisitedApp" expires_after="2023-10-22">
   <owner>dibyapal@chromium.org</owner>
   <owner>desktop-pwas-team@google.com</owner>
   <summary>
@@ -1525,7 +1444,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.OneGoogleBar.ShownTime" units="ms"
-    expires_after="2023-06-04">
+    expires_after="2023-09-03">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1605,7 +1524,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Promos.DismissAction" enum="NtpPromoDismissAction"
-    expires_after="2023-08-11">
+    expires_after="2023-10-15">
   <owner>danpeng@google.com</owner>
   <owner>pauladedeji@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1645,7 +1564,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Promos.RequestLatency2" units="ms"
-    expires_after="2023-07-30">
+    expires_after="2023-10-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1657,7 +1576,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.Promos.ShownTime" units="ms"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1671,6 +1590,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="NewTabPage.Realbox.CharTypedToRepaintLatency.ToPaint"
     units="ms" expires_after="2023-08-08">
+  <obsolete>
+    Deprecated in M114 in favor of Realbox.CharTypedToRepaintLatency.ToPaint.
+  </obsolete>
   <owner>mahmadi@chromium.org</owner>
   <owner>tommycli@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1685,7 +1607,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.RecipeTasks.RecipeClick" units="index"
-    expires_after="2023-08-08">
+    expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1697,7 +1619,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.RecipeTasks.RecipesDownloadCount" units="recipes"
-    expires_after="2023-06-30">
+    expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>danpeng@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1721,7 +1643,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.RecipeTasks.RelatedSearchDownloadCount"
-    units="count" expires_after="2023-08-08">
+    units="count" expires_after="2023-10-08">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -1731,46 +1653,6 @@ chromium-metrics-reviews@google.com.
     recipe, search journey). The related search links are rendered with a name
     and URL. This metric is logged after the recipe tasks are successfuly
     retrieved.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.RequestThrottler.PerDay" units="requests"
-    expires_after="2021-07-01">
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Records how many background requests of the given type the browser tried to
-    perform each day where the type is specified by the _suffix of the
-    histogram. The histogram is emitted only after midnight of the given day
-    passes - right before the first following request (which can be several days
-    later if the user does not use Chrome in the meantime). The histogram counts
-    requests with both QUOTA_GRANTED and QUOTA_EXCEEDED status, i.e. the count
-    can easily exceed the daily quota.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.RequestThrottler.PerDayInteractive"
-    units="requests" expires_after="2021-07-01">
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Records how many interactive requests of the given type the browser tried to
-    perform each day where the type is specified by the _suffix of the
-    histogram. The histogram is emitted only after midnight of the given day
-    passes - right before the first following request (which can be several days
-    later if the user does not use Chrome in the meantime). The histogram counts
-    requests with both QUOTA_GRANTED and QUOTA_EXCEEDED status, i.e. the count
-    can easily exceed the daily quota.
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.RequestThrottler.RequestStatus"
-    enum="NtpRequestThrottlerStatus" expires_after="2021-07-01">
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Records the status w.r.t. the quota for all requests of the given type. The
-    type of request is specified by the _suffix of the histogram.
   </summary>
 </histogram>
 
@@ -1801,8 +1683,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="NewTabPage.SearchResumptionModule.NotShown"
     enum="SearchResumptionModule.ModuleNotShownReason"
-    expires_after="2023-04-30">
+    expires_after="2023-09-10">
   <owner>hanxi@chromium.org</owner>
+  <owner>xinyiji@chromium.org</owner>
   <summary>
     Logs the reason why the search resumption module is enabled but not shown on
     the NTP. Recorded when NewTabPage is created and the search resumption
@@ -1811,8 +1694,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.SearchResumptionModule.Show"
-    enum="SearchResumptionModule.ModuleShowStatus" expires_after="2023-07-09">
+    enum="SearchResumptionModule.ModuleShowStatus" expires_after="2023-09-10">
   <owner>hanxi@chromium.org</owner>
+  <owner>xinyiji@chromium.org</owner>
   <summary>
     Logs whether the search resumption module is expanded or collapsed when the
     module is shown on the NTP. Recorded when the NewTabPage is created and the
@@ -1821,7 +1705,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.SearchResumptionModule.Show.Cached"
-    enum="SearchResumptionModule.ModuleShowStatus" expires_after="2023-07-09">
+    enum="SearchResumptionModule.ModuleShowStatus" expires_after="2023-09-10">
   <owner>hanxi@chromium.org</owner>
   <owner>xinyiji@chromium.org</owner>
   <summary>
@@ -1905,7 +1789,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.SuggestionsImpression" enum="MostVisitedTileIndex"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -1916,7 +1800,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.SuggestTiles.DeletedTileType"
-    enum="SuggestTileType" expires_after="2023-08-08">
+    enum="SuggestTileType" expires_after="2023-10-08">
   <owner>ender@google.com</owner>
   <owner>mahmadi@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>
@@ -1931,7 +1815,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.SuggestTiles.SelectedTileType"
-    enum="SuggestTileType" expires_after="2023-08-08">
+    enum="SuggestTileType" expires_after="2023-10-08">
   <owner>ender@google.com</owner>
   <owner>mahmadi@chromium.org</owner>
   <owner>chrome-omnibox-team@google.com</owner>
@@ -1959,30 +1843,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.TileFaviconType" enum="FaviconType"
-    expires_after="M90">
-  <owner>dbeam@chromium.org</owner>
-  <owner>yyushkina@chromium.org</owner>
-  <summary>
-    The favicon type that was chosen to represent a most visited tile displayed
-    on the new tab page, logged at impression time. Note that these values don't
-    involve an actual icon being displayed because a scrabble time might have
-    been displayed instead (see NewTabPage.TileType).
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.TileFaviconTypeClicked" enum="FaviconType"
-    expires_after="M90">
-  <owner>dbeam@chromium.org</owner>
-  <owner>yyushkina@chromium.org</owner>
-  <summary>
-    The favicon type that was chosen to represent a most visited tile displayed
-    on the new tab page, logged when a tile is clicked. Note that these values
-    don't involve an actual icon being displayed (see
-    NewTabPage.TileTypeClicked).
-  </summary>
-</histogram>
-
 <histogram name="NewTabPage.TileOfflineAvailable" enum="MostVisitedTileIndex"
     expires_after="M77">
   <owner>treib@chromium.org</owner>
@@ -1994,7 +1854,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.TileTitle" enum="NTPTileTitleSource"
-    expires_after="2023-06-25">
+    expires_after="2023-08-27">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -2005,7 +1865,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.TileTitleClicked" enum="NTPTileTitleSource"
-    expires_after="2023-07-23">
+    expires_after="2023-09-24">
   <owner>danielms@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -2016,7 +1876,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.TileType" enum="NTPTileVisualType"
-    expires_after="2023-03-19">
+    expires_after="2023-09-01">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -2029,7 +1889,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.TileTypeClicked" enum="NTPTileVisualType"
-    expires_after="2023-06-30">
+    expires_after="2023-09-03">
   <owner>danpeng@google.com</owner>
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
@@ -2041,7 +1901,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.TimeSinceLastNTP" units="ms"
-    expires_after="2023-07-02">
+    expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -2056,7 +1916,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.TimeSpent" units="ms" expires_after="2023-08-20">
+<histogram name="NewTabPage.TimeSpent" units="ms" expires_after="2023-10-22">
   <owner>freedjm@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
@@ -2083,6 +1943,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="NewTabPage.TimeToFirstDraw2" units="ms"
     expires_after="2021-07-01">
+  <obsolete>
+    Removed in April 2023.
+  </obsolete>
   <owner>freedjm@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -2105,29 +1968,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.UserClassifier.AverageHoursToOpenNTP" units="hours"
-    expires_after="2021-09-05">
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The estimated average number of hours between two successive times
-    when a new tab page is opened. Recorded after each opening of a NTP (and
-    after updating the model used for the estimate).
-  </summary>
-</histogram>
-
-<histogram name="NewTabPage.UserClassifier.AverageHoursToShowSuggestions"
-    units="hours" expires_after="2021-09-05">
-  <owner>freedjm@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Android: The estimated average number of hours between two successive times
-    when the list of content suggestions on a new tab page is shown (i.e. when
-    the user scrolls below the fold). Recorded after each time the suggestions
-    are shown (and after updating the model used for the estimate).
-  </summary>
-</histogram>
-
 <histogram name="NewTabPage.UserClassifier.AverageHoursToUseSuggestions"
     units="hours" expires_after="2022-01-09">
   <owner>freedjm@chromium.org</owner>
@@ -2141,7 +1981,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.VoiceActions" enum="NewTabPageVoiceAction"
-    expires_after="2023-07-09">
+    expires_after="2023-09-10">
   <owner>tiborg@chromium.org</owner>
   <owner>yyushkina@chromium.org</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -2154,7 +1994,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NewTabPage.VoiceErrors" enum="NewTabPageVoiceError"
-    expires_after="2023-06-30">
+    expires_after="2023-09-03">
   <owner>tiborg@chromium.org</owner>
   <owner>danpeng@google.com</owner>
   <owner>chrome-desktop-ntp@google.com</owner>
@@ -2163,6 +2003,18 @@ chromium-metrics-reviews@google.com.
     Desktop. These may be user-induced (e.g. the user's utterance could not be
     recognized - no match), or resulting from external circumstances (e.g.
     offline, lack of microphone permission).
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Width" units="pixels" expires_after="2023-10-08">
+  <owner>danpeng@google.com</owner>
+  <owner>tiborg@chromium.org</owner>
+  <owner>chrome-desktop-ntp@google.com</owner>
+  <summary>
+    Width of the NTP viewport in CSS pixels. Logged when the NTP loads. Only
+    logged on the 1P NTP. Note that even if the user has Google as their default
+    search engine, Incognito and Guest mode NTPs are not considered 1P and don't
+    log this histogram.
   </summary>
 </histogram>
 

@@ -12,9 +12,9 @@ import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 
 import {CrCheckboxElement} from 'chrome://resources/cr_elements/cr_checkbox/cr_checkbox.js';
 import {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import {FocusRowMixin} from 'chrome://resources/js/focus_row_mixin.js';
-import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
+import {FocusRowMixin} from 'chrome://resources/cr_elements/focus_row_mixin.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
+import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
 import {getFaviconForPageURL} from 'chrome://resources/js/icon.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -240,7 +240,7 @@ export class HistoryItemElement extends HistoryItemElementBase {
   /**
    * Remove bookmark of current item when bookmark-star is clicked.
    */
-  private onRemoveBookmarkTap_() {
+  private onRemoveBookmarkClick_() {
     if (!this.item.starred) {
       return;
     }
@@ -261,7 +261,7 @@ export class HistoryItemElement extends HistoryItemElementBase {
    * Fires a custom event when the menu button is clicked. Sends the details
    * of the history item and where the menu should appear.
    */
-  private onMenuButtonTap_(e: Event) {
+  private onMenuButtonClick_(e: Event) {
     this.fire_('open-menu', {
       target: e.target,
       index: this.index,

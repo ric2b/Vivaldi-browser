@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/style/system_shadow.h"
 #include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/views/controls/button/button.h"
@@ -71,6 +73,7 @@ class ASH_EXPORT CaptureLabelView : public views::View,
   bool IsInCountDownAnimation() const;
 
   // views::View:
+  void AddedToWidget() override;
   void Layout() override;
   gfx::Size CalculatePreferredSize() const override;
   void OnThemeChanged() override;
@@ -101,22 +104,25 @@ class ASH_EXPORT CaptureLabelView : public views::View,
   // performed. If we are in video recording mode, and GIF recording is enabled,
   // this view will also host a drop down button to allow the user to choose the
   // type of the recording format.
-  CaptureButtonView* capture_button_container_ = nullptr;
+  raw_ptr<CaptureButtonView, ExperimentalAsh> capture_button_container_ =
+      nullptr;
 
   // The label that displays a text message. Not user interactable.
-  views::Label* label_ = nullptr;
+  raw_ptr<views::Label, ExperimentalAsh> label_ = nullptr;
 
   // Callback function to be called after countdown if finished.
   base::OnceClosure countdown_finished_callback_;
 
   // Pointer to the current capture mode session. Not nullptr during this
   // lifecycle.
-  CaptureModeSession* capture_mode_session_;
+  raw_ptr<CaptureModeSession, ExperimentalAsh> capture_mode_session_;
 
   // Animates the widget of this view towards the position of the stop recording
   // button at the end of the count down.
   std::unique_ptr<DropToStopRecordingButtonAnimation>
       drop_to_stop_button_animation_;
+
+  std::unique_ptr<SystemShadow> shadow_;
 
   base::WeakPtrFactory<CaptureLabelView> weak_factory_{this};
 };

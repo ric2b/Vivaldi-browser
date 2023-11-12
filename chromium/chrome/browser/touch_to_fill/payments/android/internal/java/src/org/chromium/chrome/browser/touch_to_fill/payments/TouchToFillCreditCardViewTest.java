@@ -4,18 +4,15 @@
 
 package org.chromium.chrome.browser.touch_to_fill.payments;
 
-import static androidx.test.espresso.Espresso.onView;
-import static androidx.test.espresso.action.ViewActions.click;
-import static androidx.test.espresso.assertion.ViewAssertions.matches;
-import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
-import static androidx.test.espresso.matcher.ViewMatchers.withId;
+import static androidx.test.espresso.matcher.ViewMatchers.assertThat;
 
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.junit.Assert.assertThat;
-import static org.mockito.Mockito.verify;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import static org.chromium.base.test.util.CriteriaHelper.pollUiThread;
+import static org.chromium.chrome.browser.autofill.AutofillTestHelper.createCreditCard;
 import static org.chromium.chrome.browser.autofill.AutofillTestHelper.createLocalCreditCard;
 import static org.chromium.chrome.browser.autofill.AutofillTestHelper.createVirtualCreditCard;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillCreditCardProperties.DISMISS_HANDLER;
@@ -45,7 +42,6 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.touch_to_fill.common.BottomSheetFocusHelper;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -62,14 +58,20 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 @DoNotBatch(reason = "The methods of ChromeAccessibilityUtil don't seem to work with batching.")
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TouchToFillCreditCardViewTest {
-    private static final CreditCard VISA =
-            createLocalCreditCard("Visa", "4111111111111111", "5", "2050");
+    private static final CreditCard VISA = createCreditCard(
+            "Visa", "4111111111111111", "5", "2050", true, "Visa", "• • • • 1111", 0, "visa");
+    private static final CreditCard NICKNAMED_VISA = createCreditCard(
+            "Visa", "4111111111111111", "5", "2050", true, "Best Card", "• • • • 1111", 0, "visa");
     private static final CreditCard MASTER_CARD =
             createLocalCreditCard("MasterCard", "5555555555554444", "8", "2050");
     private static final CreditCard VIRTUAL_CARD = createVirtualCreditCard(/* name= */ "Mojo Jojo",
             /* number= */ "4111111111111111", /* month= */ "4", /* year= */ "2090",
             /* network= */ "Visa", /* iconId= */ 0, /* cardNameForAutofillDisplay= */ "Visa",
             /* obfuscatedLastFourDigits= */ "1111");
+    private static final CreditCard LONG_CARD_NAME_CARD =
+            createCreditCard("MJ", "4111111111111111", "5", "2050", false,
+                    "How much wood would a woodchuck chuck if a woodchuck could chuck wood",
+                    "• • • • 1111", 0, "visa");
 
     @Rule
     public final MockitoRule mMockitoRule = MockitoJUnit.rule().strictness(Strictness.STRICT_STUBS);
@@ -77,15 +79,10 @@ public class TouchToFillCreditCardViewTest {
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
     @Mock
-    private TouchToFillCreditCardComponent.Delegate mDelegateMock;
-    @Mock
     private Callback<Integer> mDismissCallback;
-    @Mock
-    private BottomSheetFocusHelper mBottomSheetFocusHelper;
 
     private BottomSheetController mBottomSheetController;
-    private BottomSheetTestSupport mSheetSupport;
-    private TouchToFillCreditCardCoordinator mCoordinator;
+    private BottomSheetTestSupport mSheetTestSupport;
     private TouchToFillCreditCardView mTouchToFillCreditCardView;
     private PropertyModel mTouchToFillCreditCardModel;
 
@@ -96,11 +93,8 @@ public class TouchToFillCreditCardViewTest {
         mBottomSheetController = mActivityTestRule.getActivity()
                                          .getRootUiCoordinatorForTesting()
                                          .getBottomSheetController();
-        mSheetSupport = new BottomSheetTestSupport(mBottomSheetController);
+        mSheetTestSupport = new BottomSheetTestSupport(mBottomSheetController);
         runOnUiThreadBlocking(() -> {
-            mCoordinator = new TouchToFillCreditCardCoordinator();
-            mCoordinator.initialize(mActivityTestRule.getActivity(), mBottomSheetController,
-                    mDelegateMock, mBottomSheetFocusHelper);
             mTouchToFillCreditCardModel =
                     new PropertyModel.Builder(TouchToFillCreditCardProperties.ALL_KEYS)
                             .with(VISIBLE, false)
@@ -152,69 +146,23 @@ public class TouchToFillCreditCardViewTest {
 
         assertThat(getCreditCardNameAt(0).getText(), is(VISA.getCardNameForAutofillDisplay()));
         assertThat(getCreditCardNumberAt(0).getText(), is(VISA.getObfuscatedLastFourDigits()));
-        assertThat(getCreditCardExpirationAt(0).getText(), is(createExpirationDateString(VISA)));
+        assertThat(getCreditCardExpirationAt(0).getText(),
+                is(VISA.getFormattedExpirationDateWithTwoDigitYear(
+                        ContextUtils.getApplicationContext())));
 
         assertThat(
                 getCreditCardNameAt(1).getText(), is(MASTER_CARD.getCardNameForAutofillDisplay()));
         assertThat(
                 getCreditCardNumberAt(1).getText(), is(MASTER_CARD.getObfuscatedLastFourDigits()));
         assertThat(getCreditCardExpirationAt(1).getText(),
-                is(createExpirationDateString(MASTER_CARD)));
+                is(MASTER_CARD.getFormattedExpirationDateWithTwoDigitYear(
+                        ContextUtils.getApplicationContext())));
 
         assertThat(
                 getCreditCardNameAt(2).getText(), is(VIRTUAL_CARD.getCardNameForAutofillDisplay()));
         assertThat(
                 getCreditCardNumberAt(2).getText(), is(VIRTUAL_CARD.getObfuscatedLastFourDigits()));
         assertThat(getCreditCardExpirationAt(2).getText(), is(getVirtualCardLabel()));
-    }
-
-    @Test
-    @MediumTest
-    public void testScanNewCardButtonIsHidden() {
-        runOnUiThreadBlocking(
-                () -> mCoordinator.showSheet(new CreditCard[] {VISA, MASTER_CARD}, false));
-        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
-        runOnUiThreadBlocking(() -> { mSheetSupport.setSheetState(SheetState.FULL, false); });
-
-        onView(withId(R.id.scan_new_card)).check(matches(not(isDisplayed())));
-    }
-
-    @Test
-    @MediumTest
-    public void testScanNewCardClick() {
-        runOnUiThreadBlocking(
-                () -> mCoordinator.showSheet(new CreditCard[] {VISA, MASTER_CARD}, true));
-        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
-        runOnUiThreadBlocking(() -> { mSheetSupport.setSheetState(SheetState.FULL, false); });
-
-        onView(withId(R.id.scan_new_card)).perform(click());
-
-        verify(mDelegateMock).scanCreditCard();
-    }
-
-    @Test
-    @MediumTest
-    public void testManagePaymentMethodsClick() {
-        runOnUiThreadBlocking(
-                () -> mCoordinator.showSheet(new CreditCard[] {VISA, MASTER_CARD}, true));
-        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
-        runOnUiThreadBlocking(() -> mSheetSupport.setSheetState(SheetState.FULL, false));
-
-        onView(withId(R.id.manage_payment_methods)).perform(click());
-
-        verify(mDelegateMock).showCreditCardSettings();
-    }
-
-    @Test
-    @MediumTest
-    public void testContinueButtonClick() {
-        runOnUiThreadBlocking(() -> mCoordinator.showSheet(new CreditCard[] {VISA}, true));
-        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
-        runOnUiThreadBlocking(() -> mSheetSupport.setSheetState(SheetState.FULL, false));
-
-        onView(withId(R.id.touch_to_fill_button_title)).perform(click());
-
-        verify(mDelegateMock).suggestionSelected(VISA.getGUID(), VISA.getIsVirtual());
     }
 
     @Test
@@ -226,7 +174,11 @@ public class TouchToFillCreditCardViewTest {
             ChromeAccessibilityUtil.get().setTouchExplorationEnabledForTesting(true);
         });
 
-        runOnUiThreadBlocking(() -> mCoordinator.showSheet(new CreditCard[] {VISA}, true));
+        runOnUiThreadBlocking(() -> {
+            mTouchToFillCreditCardModel.get(SHEET_ITEMS)
+                    .add(new ListItem(CREDIT_CARD, createCardModel(VISA)));
+            mTouchToFillCreditCardModel.set(VISIBLE, true);
+        });
         BottomSheetTestSupport.waitForOpen(mBottomSheetController);
 
         // The sheet should be expanded to full height.
@@ -242,11 +194,89 @@ public class TouchToFillCreditCardViewTest {
     @Test
     @MediumTest
     public void testSheetStartsInHalfHeightForAccessibilityDisabled() {
-        runOnUiThreadBlocking(() -> mCoordinator.showSheet(new CreditCard[] {VISA}, true));
+        runOnUiThreadBlocking(() -> {
+            mTouchToFillCreditCardModel.get(SHEET_ITEMS)
+                    .add(new ListItem(CREDIT_CARD, createCardModel(VISA)));
+            mTouchToFillCreditCardModel.set(VISIBLE, true);
+        });
         BottomSheetTestSupport.waitForOpen(mBottomSheetController);
 
         // The sheet should be expanded to half height.
         pollUiThread(() -> getBottomSheetState() == BottomSheetController.SheetState.HALF);
+    }
+
+    @Test
+    @MediumTest
+    public void testSheetScrollabilityDependsOnState() {
+        runOnUiThreadBlocking(() -> {
+            mTouchToFillCreditCardModel.get(SHEET_ITEMS)
+                    .add(new ListItem(CREDIT_CARD, createCardModel(VISA)));
+            mTouchToFillCreditCardModel.set(VISIBLE, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        // The sheet should be expanded to the half height and scrolling suppressed.
+        RecyclerView recyclerView = mTouchToFillCreditCardView.getSheetItemListView();
+        assertTrue(recyclerView.isLayoutSuppressed());
+
+        // Expand the sheet to the full height and scrolling .
+        runOnUiThreadBlocking(()
+                                      -> mSheetTestSupport.setSheetState(
+                                              BottomSheetController.SheetState.FULL, false));
+        BottomSheetTestSupport.waitForState(
+                mBottomSheetController, BottomSheetController.SheetState.FULL);
+
+        assertFalse(recyclerView.isLayoutSuppressed());
+    }
+
+    @Test
+    @MediumTest
+    public void testCardNameContentLabelForNicknamedCardContainsANetworkName() {
+        runOnUiThreadBlocking(() -> {
+            mTouchToFillCreditCardModel.get(SHEET_ITEMS)
+                    .add(new ListItem(CREDIT_CARD, createCardModel(NICKNAMED_VISA)));
+            mTouchToFillCreditCardModel.set(VISIBLE, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        TextView cardName =
+                mTouchToFillCreditCardView.getContentView().findViewById(R.id.card_name);
+        assertTrue(cardName.getContentDescription().toString().equals("Best Card visa"));
+    }
+
+    @Test
+    @MediumTest
+    public void testCardNameContentDescriptionIsNotSetForCardWithNoNickname() {
+        runOnUiThreadBlocking(() -> {
+            mTouchToFillCreditCardModel.get(SHEET_ITEMS)
+                    .add(new ListItem(CREDIT_CARD, createCardModel(VISA)));
+            mTouchToFillCreditCardModel.set(VISIBLE, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        TextView cardName =
+                mTouchToFillCreditCardView.getContentView().findViewById(R.id.card_name);
+        assertEquals(cardName.getContentDescription(), null);
+    }
+
+    @Test
+    @MediumTest
+    public void testCardNameTooLong_cardNameTruncated_lastFourDigitsAlwaysShown() {
+        runOnUiThreadBlocking(() -> {
+            mTouchToFillCreditCardModel.get(SHEET_ITEMS)
+                    .add(new ListItem(CREDIT_CARD, createCardModel(LONG_CARD_NAME_CARD)));
+            mTouchToFillCreditCardModel.set(VISIBLE, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        TextView cardName =
+                mTouchToFillCreditCardView.getContentView().findViewById(R.id.card_name);
+        TextView cardNumber =
+                mTouchToFillCreditCardView.getContentView().findViewById(R.id.card_number);
+        assertTrue(
+                cardName.getLayout().getEllipsisCount(cardName.getLayout().getLineCount() - 1) > 0);
+        assertThat(cardNumber.getLayout().getText().toString(),
+                is(LONG_CARD_NAME_CARD.getObfuscatedLastFourDigits()));
     }
 
     private RecyclerView getCreditCards() {
@@ -277,6 +307,12 @@ public class TouchToFillCreditCardViewTest {
                                 card.getCardNameForAutofillDisplay())
                         .with(TouchToFillCreditCardProperties.CreditCardProperties.CARD_NUMBER,
                                 card.getObfuscatedLastFourDigits());
+        if (!card.getBasicCardIssuerNetwork().equals(
+                    card.getCardNameForAutofillDisplay().toLowerCase())) {
+            creditCardModelBuilder.with(
+                    TouchToFillCreditCardProperties.CreditCardProperties.NETWORK_NAME,
+                    card.getBasicCardIssuerNetwork());
+        }
         if (card.getIsVirtual()) {
             creditCardModelBuilder.with(
                     TouchToFillCreditCardProperties.CreditCardProperties.VIRTUAL_CARD_LABEL,
@@ -284,16 +320,10 @@ public class TouchToFillCreditCardViewTest {
         } else {
             creditCardModelBuilder.with(
                     TouchToFillCreditCardProperties.CreditCardProperties.CARD_EXPIRATION,
-                    createExpirationDateString(card));
+                    card.getFormattedExpirationDateWithTwoDigitYear(
+                            ContextUtils.getApplicationContext()));
         }
         return creditCardModelBuilder.build();
-    }
-
-    private static String createExpirationDateString(CreditCard card) {
-        return ContextUtils.getApplicationContext()
-                .getString(R.string.autofill_credit_card_two_line_label_from_card_number)
-                .replace("$1",
-                        card.getFormattedExpirationDate(ContextUtils.getApplicationContext()));
     }
 
     private static String getVirtualCardLabel() {

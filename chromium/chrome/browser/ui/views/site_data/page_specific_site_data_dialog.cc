@@ -58,8 +58,7 @@ int GetContentSettingRowOrder(ContentSetting setting) {
     case CONTENT_SETTING_BLOCK:
       return 2;
     default:
-      NOTREACHED();
-      return -1;
+      NOTREACHED_NORETURN();
   }
 }
 
@@ -513,6 +512,7 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
 class PageSpecificSiteDataSectionView : public views::BoxLayoutView {
  public:
   PageSpecificSiteDataSectionView(
+      Profile* profile,
       std::vector<PageSpecificSiteDataDialogSite> sites,
       PageSpecificSiteDataDialogModelDelegate* delegate) {
     SetOrientation(views::BoxLayout::Orientation::kVertical);
@@ -523,7 +523,7 @@ class PageSpecificSiteDataSectionView : public views::BoxLayoutView {
       // the row view and the delegate are owned by the dialog and will be
       // destroyed when the dialog is destroyed.
       auto* const row_view = AddChildView(std::make_unique<SiteDataRowView>(
-          site.origin, site.setting, site.is_fully_partitioned,
+          profile, site.origin, site.setting, site.is_fully_partitioned,
           delegate->favicon_cache(),
           base::BindRepeating(
               &PageSpecificSiteDataDialogModelDelegate::DeleteStoredObjects,
@@ -628,6 +628,8 @@ views::Widget* ShowPageSpecificSiteDataDialog(
           &PageSpecificSiteDataDialogModelDelegate::OnDialogExplicitlyClosed,
           base::Unretained(delegate)));
 
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
   bool has_any_sections = false;
   auto sections =
       GetSections(delegate->GetAllSites(),
@@ -643,7 +645,7 @@ views::Widget* ShowPageSpecificSiteDataDialog(
         section.title);
     builder.AddCustomField(
         CreateCustomField(std::make_unique<PageSpecificSiteDataSectionView>(
-            section.sites, delegate)),
+            profile, section.sites, delegate)),
         section.identifier);
   }
 

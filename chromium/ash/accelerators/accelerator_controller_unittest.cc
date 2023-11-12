@@ -57,6 +57,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_writer.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/system/sys_info.h"
 #include "base/test/bind.h"
@@ -109,7 +110,6 @@ struct PrefToAcceleratorEntry {
   // If |notification_id| has been set to nullptr, then no notification is
   // expected.
   const char* notification_id;
-  const char* histogram_id;
   const ui::Accelerator accelerator;
 };
 
@@ -117,21 +117,17 @@ const PrefToAcceleratorEntry kAccessibilityAcceleratorMap[] = {
     {
         prefs::kAccessibilityHighContrastEnabled,
         kHighContrastToggleAccelNotificationId,
-        kAccessibilityHighContrastShortcut,
         ui::Accelerator(ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN),
     },
     {prefs::kDockedMagnifierEnabled, kDockedMagnifierToggleAccelNotificationId,
-     kAccessibilityDockedMagnifierShortcut,
      ui::Accelerator(ui::VKEY_D, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN)},
     {
         prefs::kAccessibilitySpokenFeedbackEnabled,
         nullptr,
-        kAccessibilitySpokenFeedbackShortcut,
         ui::Accelerator(ui::VKEY_Z, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN),
     },
     {prefs::kAccessibilityScreenMagnifierEnabled,
      kFullscreenMagnifierToggleAccelNotificationId,
-     kAccessibilityScreenMagnifierShortcut,
      ui::Accelerator(ui::VKEY_M, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN)},
 };
 
@@ -427,20 +423,17 @@ class AcceleratorControllerTest : public AshTestBase {
     if (!base::DirectoryExists(file_path.DirName()))
       base::CreateDirectory(file_path.DirName());
 
-    int data_size = static_cast<int>(json_string.size());
-    int bytes_written =
-        base::WriteFile(file_path, json_string.data(), data_size);
-    if (bytes_written != data_size) {
-      LOG(ERROR) << " Wrote " << bytes_written << " byte(s) instead of "
-                 << data_size << " to " << file_path.value();
+    if (!base::WriteFile(file_path, json_string)) {
+      LOG(ERROR) << "Writing to " << file_path.value() << " failed.";
       return false;
     }
     return true;
   }
 
-  AcceleratorControllerImpl* controller_ = nullptr;  // Not owned.
+  raw_ptr<AcceleratorControllerImpl, ExperimentalAsh> controller_ =
+      nullptr;  // Not owned.
   std::unique_ptr<AcceleratorControllerImpl::TestApi> test_api_;
-  MockNewWindowDelegate* new_window_delegate_;
+  raw_ptr<MockNewWindowDelegate, ExperimentalAsh> new_window_delegate_;
   std::unique_ptr<TestNewWindowDelegateProvider> delegate_provider_;
 };
 
@@ -661,8 +654,17 @@ TEST_F(AcceleratorControllerTest, WindowSnap) {
     EXPECT_FALSE(window_state->IsFullscreen());
   }
   {
+    // Tests that window snap doesn't work while the window is minimized.
     controller_->PerformActionIfEnabled(WINDOW_MINIMIZE, {});
     EXPECT_TRUE(window_state->IsMinimized());
+    controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_LEFT, {});
+    EXPECT_TRUE(window_state->IsMinimized());
+
+    // Unminimize the window. Now window snap should work.
+    controller_->PerformActionIfEnabled(WINDOW_MINIMIZE, {});
+    EXPECT_FALSE(window_state->IsMinimized());
+    controller_->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_LEFT, {});
+    EXPECT_TRUE(window_state->IsSnapped());
   }
 }
 
@@ -1189,6 +1191,20 @@ TEST_F(AcceleratorControllerTest, DontToggleFullscreenWhenOverviewStarts) {
                   ->IsWindowInOverview(widget->GetNativeWindow()));
 }
 
+// Tests that window shortcuts don't work on a minimized, i.e. not visible,
+// window in overview.
+TEST_F(AcceleratorControllerTest, MinimizedWindowInOverview) {
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
+  WindowState* window_state = WindowState::Get(window.get());
+  window_state->Minimize();
+  EXPECT_TRUE(window_state->IsMinimized());
+  ToggleOverview();
+  GetEventGenerator()->PressKey(ui::VKEY_OEM_4, ui::EF_ALT_DOWN);
+  EXPECT_TRUE(Shell::Get()->overview_controller()->InOverviewSession());
+  EXPECT_TRUE(window_state->IsMinimized());
+}
+
 // TODO(oshima): Fix this test to use EventGenerator.
 TEST_F(AcceleratorControllerTest, ProcessOnce) {
   // The IME event filter interferes with the basic key event propagation we
@@ -1569,6 +1585,16 @@ TEST_F(AcceleratorControllerTest, PreferredReservedAccelerators) {
       controller_->IsReserved(ui::Accelerator(ui::VKEY_POWER, ui::EF_NONE)));
   EXPECT_FALSE(
       controller_->IsPreferred(ui::Accelerator(ui::VKEY_POWER, ui::EF_NONE)));
+
+  // Lock key is reserved on chromeos.
+  EXPECT_TRUE(
+      controller_->IsReserved(ui::Accelerator(ui::VKEY_SLEEP, ui::EF_NONE)));
+  EXPECT_FALSE(
+      controller_->IsPreferred(ui::Accelerator(ui::VKEY_SLEEP, ui::EF_NONE)));
+  EXPECT_TRUE(
+      controller_->IsReserved(ui::Accelerator(ui::VKEY_F13, ui::EF_NONE)));
+  EXPECT_FALSE(
+      controller_->IsPreferred(ui::Accelerator(ui::VKEY_F13, ui::EF_NONE)));
 
   // ALT+Tab are not reserved but preferred.
   EXPECT_FALSE(
@@ -2210,6 +2236,10 @@ TEST_F(AcceleratorControllerTest, TestToggleHighContrast) {
 }
 
 TEST_F(AcceleratorControllerTest, TestToggleHighContrastPinned) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      ::features::kAccessibilityAcceleratorNotificationsTimeout);
+
   ui::Accelerator accelerator(ui::VKEY_H,
                               ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
   EXPECT_TRUE(ProcessInController(accelerator));
@@ -2300,19 +2330,22 @@ class AcceleratorControllerImprovedKeyboardShortcutsTest
     input_method::InputMethodManager::Initialize(input_method_manager_);
 
     AcceleratorControllerTest::SetUp();
-    EXPECT_TRUE(input_method_manager_->observers_.HasObserver(controller_));
+    EXPECT_TRUE(
+        input_method_manager_->observers_.HasObserver(controller_.get()));
   }
 
   void TearDown() override {
     AcceleratorControllerTest::TearDown();
-    EXPECT_FALSE(input_method_manager_->observers_.HasObserver(controller_));
+    EXPECT_FALSE(
+        input_method_manager_->observers_.HasObserver(controller_.get()));
 
     input_method::InputMethodManager::Shutdown();
     input_method_manager_ = nullptr;
   }
 
  protected:
-  TestInputMethodManager* input_method_manager_ = nullptr;  // Not owned.
+  raw_ptr<TestInputMethodManager, ExperimentalAsh> input_method_manager_ =
+      nullptr;  // Not owned.
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -2365,7 +2398,8 @@ class AcceleratorControllerInputMethodTest : public AcceleratorControllerTest {
   }
 
  protected:
-  AcceleratorMockInputMethod* mock_input_ = nullptr;  // Not owned.
+  raw_ptr<AcceleratorMockInputMethod, ExperimentalAsh> mock_input_ =
+      nullptr;  // Not owned.
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -2590,7 +2624,7 @@ class FakeMagnificationManager {
 
  private:
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
-  PrefService* prefs_;
+  raw_ptr<PrefService, ExperimentalAsh> prefs_;
 };
 
 TEST_F(MagnifiersAcceleratorsTester, TestToggleFullscreenMagnifier) {
@@ -2686,6 +2720,10 @@ TEST_F(MagnifiersAcceleratorsTester, TestToggleDockedMagnifier) {
 }
 
 TEST_F(MagnifiersAcceleratorsTester, TestToggleMagnifiersPinned) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      ::features::kAccessibilityAcceleratorNotificationsTimeout);
+
   FakeMagnificationManager manager;
   manager.SetPrefs(user_pref_service());
 
@@ -2728,7 +2766,6 @@ class AccessibilityAcceleratorTester : public MagnifiersAcceleratorsTester {
   void TestAccessibilityAcceleratorControlledByPref(
       const std::string& pref_name,
       const char* notification_id,
-      const std::string& accessibility_histogram_id,
       const ui::Accelerator& accelerator) {
     // Verify that the initial state for the accessibility feature will be
     // disabled, and for accessibility accelerators controller pref
@@ -2757,7 +2794,6 @@ class AccessibilityAcceleratorTester : public MagnifiersAcceleratorsTester {
     if (notification_id)
       EXPECT_TRUE(ContainsAccessibilityNotification(notification_id));
     EXPECT_FALSE(user_pref_service()->GetBoolean(pref_name));
-    histogram_tester_.ExpectBucketCount(accessibility_histogram_id, 0, 1);
 
     // Verify that if the accessibility accelerators are enabled, then
     // it will show the confirmation dialog for the first time only when
@@ -2776,7 +2812,6 @@ class AccessibilityAcceleratorTester : public MagnifiersAcceleratorsTester {
     EXPECT_TRUE(user_pref_service()->GetBoolean(pref_name));
     if (notification_id)
       EXPECT_TRUE(ContainsAccessibilityNotification(notification_id));
-    histogram_tester_.ExpectBucketCount(accessibility_histogram_id, 1, 1);
 
     // Verify that the notification id, won't be shown if the accessibility
     // feature is going to be disabled. And verify that the accessibility
@@ -2785,9 +2820,6 @@ class AccessibilityAcceleratorTester : public MagnifiersAcceleratorsTester {
     if (notification_id)
       EXPECT_FALSE(ContainsAccessibilityNotification(notification_id));
     EXPECT_FALSE(user_pref_service()->GetBoolean(pref_name));
-    histogram_tester_.ExpectBucketCount(accessibility_histogram_id, 1, 2);
-
-    histogram_tester_.ExpectTotalCount(accessibility_histogram_id, 3);
 
     // Remove all the current notifications, to get the initial state again.
     RemoveAllNotifications();
@@ -2799,8 +2831,7 @@ TEST_F(AccessibilityAcceleratorTester, DisableAccessibilityAccelerators) {
   manager.SetPrefs(user_pref_service());
   for (const auto& test_data : kAccessibilityAcceleratorMap) {
     TestAccessibilityAcceleratorControlledByPref(
-        test_data.pref_name, test_data.notification_id, test_data.histogram_id,
-        test_data.accelerator);
+        test_data.pref_name, test_data.notification_id, test_data.accelerator);
   }
 }
 

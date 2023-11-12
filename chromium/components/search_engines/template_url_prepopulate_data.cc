@@ -5,6 +5,7 @@
 #include "components/search_engines/template_url_prepopulate_data.h"
 
 #include "base/logging.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/country_codes/country_codes.h"
@@ -1024,7 +1025,8 @@ const PrepopulatedEngine* const engines_ZW[] = {
 
 struct PrepopulatedPerLanguage {
   char lang[3];
-  const PrepopulatedEngine* const* engines;
+  // Not a raw_ptr because this is initialized from static data
+  RAW_PTR_EXCLUSION const PrepopulatedEngine* const* engines;
   size_t size;
 };
 
@@ -1438,9 +1440,10 @@ std::vector<std::unique_ptr<TemplateURLData>> GetPrepopulatedTemplateURLData(
 
   for (const base::Value& engine : list) {
     if (engine.is_dict()) {
-      auto t_url = TemplateURLDataFromOverrideDictionary(engine);
-      if (t_url)
-        t_urls.push_back(std::move(t_url));
+    auto t_url = TemplateURLDataFromOverrideDictionary(engine.GetDict());
+    if (t_url) {
+      t_urls.push_back(std::move(t_url));
+    }
     }
   }
   return t_urls;

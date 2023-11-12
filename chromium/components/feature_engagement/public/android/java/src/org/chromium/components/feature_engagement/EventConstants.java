@@ -261,6 +261,14 @@ public final class EventConstants {
     public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_VOICE_SEARCH_OPENED =
             "adaptive_toolbar_customization_voice_search_opened";
 
+    /** AdaptiveButtonInTopToolbarCustomization translate events. */
+    public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_TRANSLATE_OPENED =
+            "adaptive_toolbar_customization_translate_opened";
+
+    /** AdaptiveButtonInTopToolbarCustomization add to bookmarks events. */
+    public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_ADD_TO_BOOKMARKS_OPENED =
+            "adaptive_toolbar_customization_add_to_bookmarks_opened";
+
     /** Open new incognito tab from app menu. */
     public static final String APP_MENU_NEW_INCOGNITO_TAB_CLICKED =
             "app_menu_new_incognito_tab_clicked";
@@ -320,6 +328,10 @@ public final class EventConstants {
     /** An app menu desktop site exception addition event. */
     public static final String APP_MENU_DESKTOP_SITE_EXCEPTION_ADDED =
             "app_menu_desktop_site_exception_added";
+
+    /** Restore tabs on first run experience promo event */
+    public static final String RESTORE_TABS_ON_FIRST_RUN_SHOW_PROMO =
+            "restore_tabs_on_first_run_show_promo";
 
     /**
      * Do not instantiate.

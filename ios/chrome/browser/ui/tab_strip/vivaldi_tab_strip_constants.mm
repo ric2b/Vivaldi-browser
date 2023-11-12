@@ -30,3 +30,5 @@ CGFloat const vTabViewBackgroundCornerRadius = 6.f;
 // In order - (Top, Left, Bottom, Right)
 UIEdgeInsets const vTabViewBackgroundPadding =
     UIEdgeInsetsMake(0.f, 14.f, -1.f, 14.f);
+// Padding for the desktop tabs new tab button.
+UIEdgeInsets const vNewTabButtonPadding = UIEdgeInsetsMake(0, 8, 0, 0);

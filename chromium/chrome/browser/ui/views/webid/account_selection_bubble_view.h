@@ -60,11 +60,15 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
 
     // Called when the user clicks "close" button.
     virtual void OnCloseButtonClicked(const ui::Event& event) = 0;
+
+    // Called when the user clicks "sign in to IDP" button on failure dialog.
+    virtual void ShowModalDialogView(const GURL& url) = 0;
   };
 
   METADATA_HEADER(AccountSelectionBubbleView);
   AccountSelectionBubbleView(
-      const std::u16string& rp_for_display,
+      const std::u16string& top_frame_for_display,
+      const absl::optional<std::u16string>& iframe_for_display,
       const absl::optional<std::u16string>& idp_title,
       blink::mojom::RpContext rp_context,
       bool show_auto_reauthn_checkbox,
@@ -81,25 +85,30 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
                           const std::u16string& title) override;
 
   void ShowSingleAccountConfirmDialog(
-      const std::u16string& rp_for_display,
+      const std::u16string& top_frame_for_display,
+      const absl::optional<std::u16string>& iframe_for_display,
       const content::IdentityRequestAccount& account,
       const IdentityProviderDisplayData& idp_display_data,
       bool show_back_button) override;
 
-  void ShowFailureDialog(const std::u16string& rp_for_display,
-                         const std::u16string& idp_for_display) override;
+  void ShowFailureDialog(
+      const std::u16string& top_frame_for_display,
+      const absl::optional<std::u16string>& iframe_for_display,
+      const std::u16string& idp_for_display,
+      const content::IdentityProviderMetadata& idp_metadata) override;
 
   // Populates `idp_images` when an IDP image has been fetched.
   void AddIdpImage(const GURL& image_url, gfx::ImageSkia idp_image);
 
+  std::string GetDialogTitle() const override;
+  absl::optional<std::string> GetDialogSubtitle() const override;
+
  private:
   gfx::Rect GetBubbleBounds() override;
 
-  // Returns a View containing the logo of the identity provider and the title
-  // of the bubble, properly formatted. Creates the `header_icon_view_` if
-  // `has_idp_icon` is true.
-  std::unique_ptr<views::View> CreateHeaderView(const std::u16string& title,
-                                                bool has_idp_icon);
+  // Returns a View containing the logo of the identity provider. Creates the
+  // `header_icon_view_` if `has_idp_icon` is true.
+  std::unique_ptr<views::View> CreateHeaderView(bool has_idp_icon);
 
   // Returns a View for single account chooser. It contains the account
   // information, disclosure text and a button for the user to confirm the
@@ -133,6 +142,7 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   // image based on the IDP.
   void UpdateHeader(const content::IdentityProviderMetadata& idp_metadata,
                     const std::u16string subpage_title,
+                    const std::u16string subpage_subtitle,
                     bool show_back_button);
 
   // Sets the brand views::ImageView visibility and image. Initiates the
@@ -144,11 +154,20 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   // Removes all children except for `header_view_`.
   void RemoveNonHeaderChildViews();
 
+  // Opens a modal dialog view that renders the given `url`.
+  void ShowModalDialogView(const GURL& url);
+
   // The ImageFetcher used to fetch the account pictures for FedCM.
   std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
 
   // The accessible title.
   std::u16string accessible_title_;
+
+  // The initial title for the dialog.
+  std::u16string title_;
+
+  // The initial subtitle for the dialog.
+  std::u16string subtitle_;
 
   blink::mojom::RpContext rp_context_;
 
@@ -173,8 +192,15 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   // View containing the bubble title.
   raw_ptr<views::Label> title_label_ = nullptr;
 
+  // View containing the bubble subtitle, which is empty if the iframe domain
+  // does not need to be displayed.
+  raw_ptr<views::Label> subtitle_label_ = nullptr;
+
   // View containing the continue button.
   raw_ptr<views::MdTextButton> continue_button_ = nullptr;
+
+  // View containing the sign in to IDP button.
+  raw_ptr<views::MdTextButton> signin_to_idp_button_ = nullptr;
 
   // Auto re-authn opt-out checkbox.
   raw_ptr<views::Checkbox> auto_reauthn_checkbox_ = nullptr;

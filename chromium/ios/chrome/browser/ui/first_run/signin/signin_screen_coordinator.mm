@@ -10,6 +10,9 @@
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/first_run/first_run_metrics.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/shared/public/commands/browsing_data_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/tos_commands.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
@@ -20,21 +23,14 @@
 #import "ios/chrome/browser/ui/authentication/signin/signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator_delegate.h"
-#import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/tos_commands.h"
 #import "ios/chrome/browser/ui/first_run/first_run_constants.h"
 #import "ios/chrome/browser/ui/first_run/first_run_screen_delegate.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_consumer.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_mediator.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_view_controller.h"
+#import "ios/chrome/browser/ui/first_run/tos/tos_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/uma/uma_coordinator.h"
-#import "ios/chrome/browser/ui/first_run/welcome/tos_coordinator.h"
-
-// Vivaldi
-#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
-// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -179,7 +175,7 @@
   AuthenticationFlow* authenticationFlow =
       [[AuthenticationFlow alloc] initWithBrowser:self.browser
                                          identity:self.mediator.selectedIdentity
-                                 postSignInAction:POST_SIGNIN_ACTION_NONE
+                                 postSignInAction:PostSignInAction::kNone
                          presentingViewController:self.viewController];
   authenticationFlow.dispatcher = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), BrowsingDataCommands);
@@ -193,20 +189,6 @@
 
 // Calls the mediator and the delegate when the coordinator is finished.
 - (void)finishPresentingWithSignIn:(BOOL)signIn {
-
-  // Vivaldi
-  // We expect to store a ad blocking setting while onboarding. Here creating
-  // a weak reference of adblock manager and set the setting.
-  // IMPORTANT!! This is temporary. We have to move this to right
-  // page we implement the onboarding pages.
-  // TODO: @prio@vivaldi.com or tomas@vivaldi.com
-  VivaldiATBManager* adblockManager =
-      [[VivaldiATBManager alloc] initWithBrowser:self.browser];
-  if (!adblockManager)
-    return;
-  [adblockManager setExceptionFromBlockingType:ATBSettingNoBlocking];
-  // End Vivaldi
-
   [self.mediator finishPresentingWithSignIn:signIn];
   [self.delegate screenWillFinishPresenting];
 }
@@ -287,6 +269,7 @@
 #pragma mark - SigninScreenViewControllerDelegate
 
 - (void)showAccountPickerFromPoint:(CGPoint)point {
+  DCHECK(!self.identityChooserCoordinator);
   self.identityChooserCoordinator = [[IdentityChooserCoordinator alloc]
       initWithBaseViewController:self.viewController
                          browser:self.browser];

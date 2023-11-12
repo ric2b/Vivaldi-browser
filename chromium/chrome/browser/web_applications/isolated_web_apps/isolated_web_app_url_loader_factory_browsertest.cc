@@ -9,6 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/callback.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -26,6 +27,7 @@
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/web_package/test_support/signed_web_bundles/web_bundle_signer.h"
 #include "components/web_package/web_bundle_builder.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -134,12 +136,7 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest
       base::FilePath web_bundle_path;
       CHECK(CreateTemporaryFileInDir(temp_dir_.GetPath(), &web_bundle_path));
 
-      CHECK_EQ(
-          static_cast<size_t>(base::WriteFile(
-              web_bundle_path, reinterpret_cast<char*>(signed_bundle.data()),
-              signed_bundle.size())),
-          signed_bundle.size());
-
+      CHECK(base::WriteFile(web_bundle_path, signed_bundle));
       return web_bundle_path;
     }
   }
@@ -160,6 +157,18 @@ class IsolatedWebAppURLLoaderFactoryBrowserTest
         /*foreground=*/true);
 
     return app_window->tab_strip_model()->GetActiveWebContents();
+  }
+
+  content::RenderFrameHost* Navigate(const GURL& url) {
+    Browser* app_window = CreateAppWindow();
+    AttachWebContents(app_window);
+
+    content::RenderFrameHost* render_frame_host = NavigateToURLWithDisposition(
+        app_window, url, WindowOpenDisposition::CURRENT_TAB,
+        ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+    CHECK(render_frame_host);
+    return render_frame_host;
   }
 
   void NavigateAndWaitForTitle(const GURL& url,
@@ -395,6 +404,162 @@ self.addEventListener('activate', (event) => {
   NavigateAndWaitForTitle(GURL(kUrl),
                           u"data from web bundle data from service worker");
 }
+
+class IsolatedWebAppURLLoaderFactoryFrameBrowserTest
+    : public IsolatedWebAppURLLoaderFactoryBrowserTest {
+ protected:
+  void NavigateAndCheckForErrors(web_package::WebBundleBuilder&& builder) {
+    base::FilePath bundle_path =
+        SignAndWriteBundleToDisk(builder.CreateBundle());
+    std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
+        kUrl, WebApp::IsolationData{InstalledBundle{.path = bundle_path}});
+    RegisterWebApp(std::move(iwa));
+    TrustWebBundleId();
+
+    auto* rfh = Navigate(kUrl);
+
+    // It is not easily possible from JavaScript to determine whether a frame
+    // has loaded successfully or errored (`frame.onload` also triggers when an
+    // error page is loaded in the frame, `frame.onerror` never triggers). Thus,
+    // we eval JS inside the created frame to compare the frame's content to the
+    // expected content.
+    int sub_frame_count = 0;
+    rfh->ForEachRenderFrameHost(
+        [&sub_frame_count](content::RenderFrameHost* rfh) {
+          if (rfh->IsInPrimaryMainFrame()) {
+            return;
+          }
+          ++sub_frame_count;
+          EXPECT_THAT(content::EvalJs(rfh, "document.body.innerText"),
+                      Eq("inner frame content"));
+        });
+    EXPECT_THAT(sub_frame_count, Eq(1));
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppURLLoaderFactoryFrameBrowserTest,
+                       CanUseDataUrlForFrame) {
+  web_package::WebBundleBuilder builder;
+  builder.AddExchange(
+      kUrl, {{":status", "200"}, {"content-type", "text/html"}},
+      "<iframe src=\"data:text/html,<h1>inner frame content</h1>\"></iframe>");
+  ASSERT_NO_FATAL_FAILURE(NavigateAndCheckForErrors(std::move(builder)));
+}
+
+IN_PROC_BROWSER_TEST_F(IsolatedWebAppURLLoaderFactoryFrameBrowserTest,
+                       CanUseBlobUrlForFrame) {
+  web_package::WebBundleBuilder builder;
+  builder.AddExchange(kUrl, {{":status", "200"}, {"content-type", "text/html"}},
+                      "<script src=\"script.js\"></script>");
+  builder.AddExchange(
+      kUrl.Resolve("/script.js"),
+      {{":status", "200"}, {"content-type", "application/javascript"}},
+      R"(
+const iframe = document.createElement("iframe");
+document.currentScript.appendChild(iframe);
+const blob = new Blob(
+  ['<h1>inner frame content</h1>'],
+  {type : 'text/html'}
+);
+iframe.src = window.URL.createObjectURL(blob);
+  )");
+  ASSERT_NO_FATAL_FAILURE(NavigateAndCheckForErrors(std::move(builder)));
+}
+
+class IsolatedWebAppURLLoaderFactoryCSPBrowserTest
+    : public IsolatedWebAppURLLoaderFactoryBrowserTest,
+      public ::testing::WithParamInterface<bool> {
+ protected:
+  void AddIndexHtml(web_package::WebBundleBuilder& builder,
+                    const std::string& csp) {
+    bool use_meta_tag = GetParam();
+
+    std::string html;
+    web_package::WebBundleBuilder::Headers headers = {
+        {":status", "200"}, {"content-type", "text/html"}};
+    if (use_meta_tag) {
+      html += base::ReplaceStringPlaceholders(R"(
+        <head>
+          <meta http-equiv="Content-Security-Policy" content="$1">
+        </head>
+      )",
+                                              {csp}, nullptr);
+    } else {
+      headers.emplace_back("content-security-policy", csp);
+    }
+
+    html += R"(
+      <script type="text/javascript" src="/script.js"></script>
+    )";
+
+    builder.AddExchange(kUrl, std::move(headers), std::move(html));
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(IsolatedWebAppURLLoaderFactoryCSPBrowserTest,
+                       CanMakeCSPStricter) {
+  web_package::WebBundleBuilder builder;
+  // Make connect-src stricter than is required for IWAs. This should cause any
+  // `fetch()` request to fail.
+  AddIndexHtml(builder, "connect-src 'none'");
+  builder.AddExchange(kUrl.Resolve("/script.js"),
+                      {{":status", "200"}, {"content-type", "text/javascript"}},
+                      R"(
+    fetch('file.txt')
+      .then(res => console.error(`Unexpectedly fetched file: ` + res.text()))
+      .catch(err => {
+        console.log(err);
+        document.title = "unable to fetch";
+      });
+    )");
+  builder.AddExchange(kUrl.Resolve("/file.txt"),
+                      {{":status", "200"}, {"content-type", "text/plain"}},
+                      "some data");
+  base::FilePath bundle_path = SignAndWriteBundleToDisk(builder.CreateBundle());
+
+  std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
+      kUrl, WebApp::IsolationData{InstalledBundle{.path = bundle_path}});
+  RegisterWebApp(std::move(iwa));
+  TrustWebBundleId();
+
+  NavigateAndWaitForTitle(kUrl, u"unable to fetch");
+}
+
+IN_PROC_BROWSER_TEST_P(IsolatedWebAppURLLoaderFactoryCSPBrowserTest,
+                       CannotMakeCSPLessStrict) {
+  web_package::WebBundleBuilder builder;
+  // Attempt to allow JavaScript `eval()`. This should fail due to the CSP that
+  // we apply by default.
+  AddIndexHtml(builder, "script-src 'self' 'unsafe-eval'");
+  builder.AddExchange(kUrl.Resolve("/script.js"),
+                      {{":status", "200"}, {"content-type", "text/javascript"}},
+                      R"(
+    try {
+      eval("1+1");
+      console.error("Eval unexpectedly ran.");
+    } catch (err) {
+      console.log(err);
+      document.title = "unable to eval";
+    }
+    )");
+  base::FilePath bundle_path = SignAndWriteBundleToDisk(builder.CreateBundle());
+
+  std::unique_ptr<WebApp> iwa = CreateIsolatedWebApp(
+      kUrl, WebApp::IsolationData{InstalledBundle{.path = bundle_path}});
+  RegisterWebApp(std::move(iwa));
+  TrustWebBundleId();
+
+  NavigateAndWaitForTitle(kUrl, u"unable to eval");
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    IsolatedWebAppURLLoaderFactoryCSPBrowserTest,
+    ::testing::Bool(),
+    [](const ::testing::TestParamInfo<
+        IsolatedWebAppURLLoaderFactoryCSPBrowserTest::ParamType>& info) {
+      return info.param ? "meta_tag" : "header";
+    });
 
 }  // namespace
 }  // namespace web_app

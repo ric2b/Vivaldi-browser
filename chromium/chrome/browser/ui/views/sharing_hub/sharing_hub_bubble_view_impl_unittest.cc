@@ -7,8 +7,6 @@
 #include "base/containers/adapters.h"
 #include "base/memory/raw_ptr.h"
 #include "base/ranges/algorithm.h"
-#include "base/test/scoped_feature_list.h"
-#include "chrome/browser/share/share_features.h"
 #include "chrome/browser/ui/sharing_hub/fake_sharing_hub_bubble_controller.h"
 #include "chrome/browser/ui/views/sharing_hub/sharing_hub_bubble_action_button.h"
 #include "chrome/test/base/testing_profile.h"
@@ -20,6 +18,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/views/accessibility/view_accessibility.h"
+
+using ::testing::Truly;
 
 namespace {
 
@@ -77,9 +77,9 @@ views::View* FocusedViewOf(views::Widget* widget) {
 }
 
 const std::vector<sharing_hub::SharingHubAction> kFirstPartyActions = {
-    {0, u"Feed to Dino", nullptr, "feed-to-dino"},
-    {1, u"Reverse Star", nullptr, "reverse-star"},
-    {2, u"Pastelify", nullptr, "pastelify"},
+    {0, u"Feed to Dino", nullptr, "feed-to-dino", 0},
+    {1, u"Reverse Star", nullptr, "reverse-star", 0},
+    {2, u"Pastelify", nullptr, "pastelify", 0},
 };
 
 }  // namespace
@@ -121,17 +121,14 @@ class SharingHubBubbleTest : public ChromeViewsTestBase {
         bubble(),
         base::BindRepeating(&ViewHasClassName, "SharingHubBubbleActionButton"));
     std::vector<sharing_hub::SharingHubBubbleActionButton*> concrete_actions;
-    std::transform(
-        actions.begin(), actions.end(), std::back_inserter(concrete_actions),
-        [](views::View* view) {
+    base::ranges::transform(
+        actions, std::back_inserter(concrete_actions), [](views::View* view) {
           return static_cast<sharing_hub::SharingHubBubbleActionButton*>(view);
         });
     return concrete_actions;
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_{share::kDesktopSharePreview};
-
   raw_ptr<sharing_hub::SharingHubBubbleViewImpl> bubble_;
   testing::NiceMock<sharing_hub::FakeSharingHubBubbleController> controller_{
       kFirstPartyActions};
@@ -153,9 +150,14 @@ TEST_F(SharingHubBubbleTest, AllFirstPartyActionsAppearInOrder) {
 TEST_F(SharingHubBubbleTest, ClickingActionsCallsController) {
   ShowBubble();
 
+  constexpr auto HasRightCommandId =
+      [](const sharing_hub::SharingHubAction& action) {
+        return action.command_id == 2;
+      };
+
   auto actions = GetActionButtons();
   ASSERT_GE(actions.size(), 3u);
-  EXPECT_CALL(*controller(), OnActionSelected(2, testing::_));
+  EXPECT_CALL(*controller(), OnActionSelected(Truly(HasRightCommandId)));
   Click(actions[2]);
 }
 

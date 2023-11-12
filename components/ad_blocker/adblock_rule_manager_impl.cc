@@ -98,7 +98,7 @@ std::map<uint32_t, RuleSource> RuleManagerImpl::GetRuleSources(
 }
 
 absl::optional<RuleSource> RuleManagerImpl::GetRuleSource(RuleGroup group,
-                                                      uint32_t source_id) {
+                                                          uint32_t source_id) {
   const auto& rule_sources = GetSourceMap(group);
   const auto& source_context = rule_sources.find(source_id);
   if (source_context == rule_sources.end())
@@ -133,7 +133,8 @@ void RuleManagerImpl::DeleteRuleSource(const KnownRuleSource& known_source) {
     observer.OnRuleSourceDeleted(known_source.id, known_source.group);
 }
 
-void RuleManagerImpl::SetActiveExceptionList(RuleGroup group, ExceptionsList list) {
+void RuleManagerImpl::SetActiveExceptionList(RuleGroup group,
+                                             ExceptionsList list) {
   active_exceptions_lists_[static_cast<size_t>(group)] = list;
 
   for (Observer& observer : observers_)
@@ -148,8 +149,8 @@ RuleManagerImpl::ExceptionsList RuleManagerImpl::GetActiveExceptionList(
 }
 
 void RuleManagerImpl::AddExceptionForDomain(RuleGroup group,
-                                        ExceptionsList list,
-                                        const std::string& domain) {
+                                            ExceptionsList list,
+                                            const std::string& domain) {
   base::StringPiece canonicalized_domain(domain);
   if (canonicalized_domain.back() == '.')
     canonicalized_domain.remove_suffix(1);
@@ -163,8 +164,8 @@ void RuleManagerImpl::AddExceptionForDomain(RuleGroup group,
   schedule_save_.Run();
 }
 void RuleManagerImpl::RemoveExceptionForDomain(RuleGroup group,
-                                           ExceptionsList list,
-                                           const std::string& domain) {
+                                               ExceptionsList list,
+                                               const std::string& domain) {
   base::StringPiece canonicalized_domain(domain);
   if (canonicalized_domain.back() == '.')
     canonicalized_domain.remove_suffix(1);
@@ -184,7 +185,8 @@ void RuleManagerImpl::RemoveExceptionForDomain(RuleGroup group,
   schedule_save_.Run();
 }
 
-void RuleManagerImpl::RemoveAllExceptions(RuleGroup group, ExceptionsList list) {
+void RuleManagerImpl::RemoveAllExceptions(RuleGroup group,
+                                          ExceptionsList list) {
   exceptions_[static_cast<size_t>(group)][list].clear();
 
   for (Observer& observer : observers_)
@@ -200,7 +202,7 @@ const std::set<std::string>& RuleManagerImpl::GetExceptions(
 }
 
 bool RuleManagerImpl::IsExemptOfFiltering(RuleGroup group,
-                                      url::Origin origin) const {
+                                          url::Origin origin) const {
   bool default_exempt =
       active_exceptions_lists_[static_cast<size_t>(group)] == kProcessList;
   if (origin.opaque())
@@ -237,8 +239,8 @@ void RuleManagerImpl::OnSourceUpdated(RuleSourceHandler* rule_source_handler) {
     observer.OnRulesSourceUpdated(rule_source_handler->rule_source());
 }
 
-void RuleManagerImpl::OnRulesBufferReadFailCallback(RuleGroup rule_group,
-                                                uint32_t source_id) {
+void RuleManagerImpl::OnCompiledRulesReadFailCallback(RuleGroup rule_group,
+                                                      uint32_t source_id) {
   const auto& rule_sources = GetSourceMap(rule_group);
   const auto& source_context = rule_sources.find(source_id);
   DCHECK(source_context != rule_sources.end());

@@ -13,6 +13,8 @@
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/mojom/user_agent/user_agent_metadata.mojom-shared.h"
 
+#include "base/containers/flat_map.h"
+
 namespace mojo {
 
 template <>
@@ -91,6 +93,11 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::UserAgentOverrideDataView,
   static const absl::optional<::blink::UserAgentMetadata>& ua_metadata_override(
       const ::blink::UserAgentOverride& data) {
     return data.ua_metadata_override;
+  }
+
+  static const base::flat_map<std::string, ::blink::UserAgentMetadata>& domain_ua_metadata_override(
+    const ::blink::UserAgentOverride& data) {
+    return data.domain_ua_metadata_override;
   }
 
   static bool Read(blink::mojom::UserAgentOverrideDataView,

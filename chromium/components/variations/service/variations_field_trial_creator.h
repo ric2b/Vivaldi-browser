@@ -5,12 +5,14 @@
 #ifndef COMPONENTS_VARIATIONS_SERVICE_VARIATIONS_FIELD_TRIAL_CREATOR_H_
 #define COMPONENTS_VARIATIONS_SERVICE_VARIATIONS_FIELD_TRIAL_CREATOR_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/time/time.h"
@@ -21,6 +23,7 @@
 #include "components/variations/proto/study.pb.h"
 #include "components/variations/seed_response.h"
 #include "components/variations/service/buildflags.h"
+#include "components/variations/service/safe_seed_manager.h"
 #include "components/variations/service/ui_string_overrider.h"
 #include "components/variations/variations_seed_store.h"
 #include "components/version_info/channel.h"
@@ -184,6 +187,8 @@ class VariationsFieldTrialCreator {
   // Returns the locale that was used for evaluating trials.
   const std::string& application_locale() const { return application_locale_; }
 
+  SeedType seed_type() const { return seed_type_; }
+
  protected:
   // Get the platform we're running on, respecting OverrideVariationsPlatform().
   // Protected for testing.
@@ -202,6 +207,10 @@ class VariationsFieldTrialCreator {
   // Protected and virtual for testing.
   virtual void ApplyFieldTrialTestingConfig(base::FeatureList* feature_list);
 #endif  // BUILDFLAG(FIELDTRIAL_TESTING_ENABLED)
+
+  // Read the google group memberships from local-state prefs.
+  // Protected for testing.
+  base::flat_set<uint64_t> GetGoogleGroupsFromPrefs();
 
  private:
   // Returns true if the loaded VariationsSeed has expired. An expired seed is
@@ -246,6 +255,9 @@ class VariationsFieldTrialCreator {
   UIStringOverrider ui_string_overrider_;
 
   std::unique_ptr<VariationsSeedStore> seed_store_;
+
+  // Seed type used for variations.
+  SeedType seed_type_ = SeedType::kNullSeed;
 
   // Tracks whether |CreateTrialsFromSeed| has been called, to ensure that it is
   // called at most once.

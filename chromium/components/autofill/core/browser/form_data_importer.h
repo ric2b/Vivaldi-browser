@@ -10,6 +10,7 @@
 #include <string>
 #include <utility>
 
+#include "base/containers/span.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
@@ -219,8 +220,8 @@ class FormDataImporter : public PersonalDataManagerObserver {
   // a specified `section`. If no section is passed, the import is performed on
   // the union of all sections.
   bool ExtractAddressProfileFromSection(
-      const FormStructure& form,
-      const absl::optional<Section>& section,
+      base::span<const AutofillField* const> section_fields,
+      const GURL& source_url,
       std::vector<AddressProfileImportCandidate>*
           address_profile_import_candidates,
       LogBuffer* import_log_buffer);
@@ -245,13 +246,7 @@ class FormDataImporter : public PersonalDataManagerObserver {
   //   - NEW_CARD otherwise.
   absl::optional<CreditCard> ExtractCreditCard(const FormStructure& form);
 
-  // Returns the extracted IBAN from the `form` if applicable.
-  // This is the case if it is a new IBAN or a local IBAN.
-  //
-  // The function has one side-effect:
-  // - record_type of the returned IBAN is set to
-  //   - LOCAL_IBAN if a local IBAN matches;
-  //   - NEW_IBAN if no local IBAN matches
+  // Returns the extracted IBAN from the `form` if it is a new IBAN.
   absl::optional<IBAN> ExtractIBAN(const FormStructure& form);
 
   // Tries to initiate the saving of the `credit_card_import_candidate`
@@ -275,7 +270,7 @@ class FormDataImporter : public PersonalDataManagerObserver {
           address_profile_import_candidates,
       bool allow_prompt = true);
 
-  // Extracts the IBAN from the form structure.
+  // Helper function which extracts the IBAN from the form structure.
   IBAN ExtractIBANFromForm(const FormStructure& form);
 
   // Go through the `form` fields and find a UPI ID to extract. The return value

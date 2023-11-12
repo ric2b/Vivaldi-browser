@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "base/unguessable_token.h"
@@ -77,6 +78,7 @@ class TtsAsh : public mojom::Tts,
   void Stop(const GURL& source_url) override;
   void Pause() override;
   void Resume() override;
+  void IsSpeaking(IsSpeakingCallback callback) override;
 
  private:
   class TtsUtteranceClient;
@@ -91,7 +93,7 @@ class TtsAsh : public mojom::Tts,
   void TtsClientDisconnected(const base::UnguessableToken& browser_context_id);
 
   // Owned by g_browser_process.
-  ProfileManager* profile_manager_;
+  raw_ptr<ProfileManager, ExperimentalAsh> profile_manager_;
 
   // Support any number of connections.
   mojo::ReceiverSet<mojom::Tts> receivers_;

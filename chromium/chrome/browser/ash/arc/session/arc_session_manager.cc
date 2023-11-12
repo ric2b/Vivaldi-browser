@@ -53,7 +53,6 @@
 #include "chrome/browser/ash/guest_os/public/guest_os_service.h"
 #include "chrome/browser/ash/login/demo_mode/demo_components.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
-#include "chrome/browser/ash/policy/handlers/powerwash_requirements_checker.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -394,6 +393,15 @@ void ReportProvisioningStartTime(const base::TimeTicks& start_time,
   }
 }
 
+// Returns whether ARCVM /data migration is in progress and should be resumed.
+bool ArcVmDataMigrationIsInProgress(PrefService* prefs) {
+  if (!base::FeatureList::IsEnabled(kEnableArcVmDataMigration)) {
+    return false;
+  }
+  return GetArcVmDataMigrationStatus(prefs) ==
+         ArcVmDataMigrationStatus::kStarted;
+}
+
 }  // namespace
 
 // This class is used to track statuses on OptIn flow. It is created in case ARC
@@ -462,8 +470,8 @@ ArcSessionManager::ArcSessionManager(
           std::move(adb_sideloading_availability_delegate)),
       android_management_checker_factory_(
           ArcRequirementChecker::GetDefaultAndroidManagementCheckerFactory()),
-      attempt_user_exit_callback_(
-          base::BindRepeating(chrome::AttemptUserExit)) {
+      attempt_user_exit_callback_(base::BindRepeating(chrome::AttemptUserExit)),
+      attempt_restart_callback_(base::BindRepeating(chrome::AttemptRestart)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!g_arc_session_manager);
   g_arc_session_manager = this;
@@ -770,6 +778,31 @@ void ArcSessionManager::Initialize() {
       multi_user_util::GetAccountIdFromProfile(profile_));
   data_remover_ = std::make_unique<ArcDataRemover>(prefs, cryptohome_id);
 
+  if (ArcVmDataMigrationIsInProgress(prefs)) {
+    const int auto_resume_count =
+        prefs->GetInteger(prefs::kArcVmDataMigrationAutoResumeCount);
+    if (auto_resume_count <= kArcVmDataMigrationMaxAutoResumeCount) {
+      // |auto_resume_count| == kArcVmDataMigrationMaxAutoResumeCount means that
+      // this is the first ARC session in which auto-resume is disabled.
+      // Report to UMA and increment the pref value so that we can track the
+      // number of users who hit the maximum number of auto-resumes.
+      base::UmaHistogramExactLinear("Arc.VmDataMigration.AutoResumeCount",
+                                    auto_resume_count,
+                                    kArcVmDataMigrationMaxAutoResumeCount);
+      prefs->SetInteger(prefs::kArcVmDataMigrationAutoResumeCount,
+                        auto_resume_count + 1);
+      if (auto_resume_count < kArcVmDataMigrationMaxAutoResumeCount) {
+        VLOG(1) << "ARCVM /data migration is in progress. Restarting Chrome "
+                   "session to resume the migration. Auto-resume count: "
+                << auto_resume_count;
+        attempt_restart_callback_.Run();
+        return;
+      }
+    }
+    LOG(WARNING) << "Skipping auto-resume of ARCVM /data migration, because it "
+                    "has reached the maximum number of retries";
+  }
+
   // Chrome may be shut down before completing ARC data removal.
   // For such a case, start removing the data now, if necessary.
   MaybeStartArcDataRemoval();
@@ -1027,13 +1060,19 @@ bool ArcSessionManager::RequestEnableImpl() {
     return false;
   }
 
-  // When ARC is blocked because of powerwash request, do not proceed
-  // to starting ARC nor follow further state transitions. Applications are
-  // still visible but replaced with notification requesting powerwash.
-  policy::PowerwashRequirementsChecker pw_checker(
-      policy::PowerwashRequirementsChecker::Context::kArc, profile_);
-  if (pw_checker.GetState() !=
-      policy::PowerwashRequirementsChecker::State::kNotRequired) {
+  if (ArcVmDataMigrationIsInProgress(prefs)) {
+    VLOG(1) << "Skipping request to enable ARC because ARCVM /data migration "
+               "is in progress";
+    // Auto-resume should be disabled only when |auto_resume_enabled| is larger
+    // than kArcVmDataMigrationMaxAutoResumeCount. This is because the value is
+    // incremented in Initialize() when it is smaller than or equal to
+    // kArcVmDataMigrationMaxAutoResumeCount. See Initialize() for detail.
+    const bool auto_resume_enabled =
+        prefs->GetInteger(prefs::kArcVmDataMigrationAutoResumeCount) <=
+        kArcVmDataMigrationMaxAutoResumeCount;
+    for (auto& observer : observer_list_) {
+      observer.OnArcSessionBlockedByArcVmDataMigration(auto_resume_enabled);
+    }
     return false;
   }
 
@@ -1154,9 +1193,16 @@ void ArcSessionManager::RequestArcDataRemoval() {
   // TODO(hidehiko): Think a way to get rid of 1), too.
 
   data_remover_->Schedule();
-  profile_->GetPrefs()->SetInteger(
-      prefs::kArcManagementTransition,
-      static_cast<int>(ArcManagementTransition::NO_TRANSITION));
+  auto* prefs = profile_->GetPrefs();
+  prefs->SetInteger(prefs::kArcManagementTransition,
+                    static_cast<int>(ArcManagementTransition::NO_TRANSITION));
+
+  if (ArcVmDataMigrationIsInProgress(prefs)) {
+    VLOG(1) << "Skipping ARC /data removal because ARCVM /data migration is "
+               "in progress";
+    return;
+  }
+
   // To support 1) case above, maybe start data removal.
   if (state_ == State::STOPPED)
     MaybeStartArcDataRemoval();
@@ -1466,14 +1512,6 @@ void ArcSessionManager::OnArcDataRemoved(absl::optional<bool> result) {
     return;
   }
 
-  if (GetArcVmDataMigrationStatus(profile_->GetPrefs()) ==
-      ArcVmDataMigrationStatus::kStarted) {
-    VLOG(1) << "ARCVM /data migration is in progress. Restarting Chrome session"
-            << " to resume the migration";
-    chrome::AttemptRestart();
-    return;
-  }
-
   CheckArcVmDataMigrationNecessity(base::BindOnce(
       &ArcSessionManager::MaybeReenableArc, weak_ptr_factory_.GetWeakPtr()));
 }
@@ -1511,6 +1549,10 @@ void ArcSessionManager::OnArcVmDataMigrationNecessityChecked(
   if (!result.value_or(true)) {
     VLOG(1) << "No need to perform ARCVM /data migration. Marking the migration"
             << " as finished";
+    base::UmaHistogramEnumeration(
+        GetHistogramNameByUserType(kArcVmDataMigrationFinishReasonHistogramName,
+                                   profile_),
+        ArcVmDataMigrationFinishReason::kNoDataToMigrate);
     SetArcVmDataMigrationStatus(profile_->GetPrefs(),
                                 ArcVmDataMigrationStatus::kFinished);
   }
@@ -1654,6 +1696,12 @@ void ArcSessionManager::SetAttemptUserExitCallbackForTesting(
     const base::RepeatingClosure& callback) {
   DCHECK(!callback.is_null());
   attempt_user_exit_callback_ = callback;
+}
+
+void ArcSessionManager::SetAttemptRestartCallbackForTesting(
+    const base::RepeatingClosure& callback) {
+  DCHECK(!callback.is_null());
+  attempt_restart_callback_ = callback;
 }
 
 void ArcSessionManager::ShowArcSupportHostError(

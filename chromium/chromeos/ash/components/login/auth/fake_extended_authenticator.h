@@ -6,6 +6,7 @@
 #define CHROMEOS_ASH_COMPONENTS_LOGIN_AUTH_FAKE_EXTENDED_AUTHENTICATOR_H_
 
 #include "base/component_export.h"
+#include "base/memory/raw_ptr.h"
 #include "chromeos/ash/components/login/auth/extended_authenticator.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
 
@@ -27,17 +28,6 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_LOGIN_AUTH)
   void SetConsumer(AuthStatusConsumer* consumer) override;
   void AuthenticateToCheck(const UserContext& context,
                            base::OnceClosure success_callback) override;
-  void AuthenticateToUnlockWebAuthnSecret(
-      const UserContext& context,
-      base::OnceClosure success_callback) override;
-  void StartFingerprintAuthSession(
-      const AccountId& account_id,
-      base::OnceCallback<void(bool)> callback) override;
-  void EndFingerprintAuthSession() override;
-  void AuthenticateWithFingerprint(
-      const UserContext& context,
-      base::OnceCallback<void(::user_data_auth::CryptohomeErrorCode)> callback)
-      override;
   void TransformKeyIfNeeded(const UserContext& user_context,
                             ContextCallback callback) override;
 
@@ -54,7 +44,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_LOGIN_AUTH)
   void OnAuthSuccess(const UserContext& context);
   void OnAuthFailure(AuthState state, const AuthFailure& error);
 
-  AuthStatusConsumer* consumer_;
+  raw_ptr<AuthStatusConsumer, ExperimentalAsh> consumer_;
 
   UserContext expected_user_context_;
   bool last_unlock_webauthn_secret_ = false;

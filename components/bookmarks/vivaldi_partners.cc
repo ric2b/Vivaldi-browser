@@ -302,7 +302,7 @@ bool PartnerDatabase::ParseJson(base::Value root_value,
   std::vector<std::pair<base::GUID, base::GUID>> locale_id_guid_list;
   if (!partners_locale_value.is_dict())
     return error("partner local map json is not an object");
-  for (auto name_key_value : partners_locale_value.DictItems()) {
+  for (auto name_key_value : partners_locale_value.GetDict()) {
     const std::string& name = name_key_value.first;
     const PartnerDetails* details = FindDetailsByName(name);
     if (!details)
@@ -313,7 +313,7 @@ bool PartnerDatabase::ParseJson(base::Value root_value,
       return error(std::string(kPartnerLocaleMapFile) + "." + name +
                    " is not a dictionary");
 
-    for (auto guid_key_value : locale_dict.DictItems()) {
+    for (auto guid_key_value : locale_dict.GetDict()) {
       const std::string& guid_key = guid_key_value.first;
       base::Value& v = guid_key_value.second;
       base::GUID guid;

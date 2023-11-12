@@ -10,6 +10,7 @@ import 'chrome://resources/ash/common/cellular_setup/cellular_setup_icons.html.j
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_input/cr_input.js';
+import '../../settings_shared.css.js';
 
 import {getESimProfile} from 'chrome://resources/ash/common/cellular_setup/esim_manager_utils.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
@@ -104,7 +105,7 @@ class EsimRemoveProfileDialogElement extends
     return this.i18n('esimRemoveProfileDialogTitle', this.esimProfileName_);
   }
 
-  private onRemoveProfileTap_(): void {
+  private onRemoveProfileClick_(): void {
     this.esimProfileRemote_!.uninstallProfile().then((response) => {
       if (response.result === ESimOperationResult.kFailure) {
         this.fireShowErrorToastEvent_();
@@ -117,7 +118,7 @@ class EsimRemoveProfileDialogElement extends
         routes.INTERNET_NETWORKS, params, /*isPopState=*/ true);
   }
 
-  private onCancelTap_(): void {
+  private onCancelClick_(): void {
     this.$.dialog.close();
   }
 

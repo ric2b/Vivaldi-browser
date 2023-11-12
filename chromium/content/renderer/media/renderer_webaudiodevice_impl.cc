@@ -19,6 +19,7 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "media/audio/null_audio_sink.h"
 #include "media/base/audio_glitch_info.h"
 #include "media/base/audio_timestamp_helper.h"
@@ -94,6 +95,7 @@ int GetOutputBufferSize(const blink::WebAudioLatencyHint& latency_hint,
 media::AudioParameters GetOutputDeviceParameters(
     const blink::LocalFrameToken& frame_token,
     const std::string& device_id) {
+  TRACE_EVENT0("webaudio", "GetOutputDeviceParameters");
   return AudioDeviceFactory::GetInstance()
       ->GetOutputDeviceInfo(frame_token, device_id)
       .output_params();
@@ -132,6 +134,8 @@ RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl(
       webaudio_callback_(callback),
       frame_token_(sink_descriptor.Token()),
       create_silent_sink_cb_(std::move(create_silent_sink_cb)) {
+  TRACE_EVENT0("webaudio",
+               "RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl");
   DCHECK(webaudio_callback_);
   SendLogMessage(base::StringPrintf("%s", __func__));
 
@@ -180,19 +184,26 @@ RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl(
 }
 
 RendererWebAudioDeviceImpl::~RendererWebAudioDeviceImpl() {
-  DCHECK(!sink_);
+  // In case device is not stopped, we can stop it here.
+  Stop();
 }
 
 void RendererWebAudioDeviceImpl::Start() {
   DCHECK(thread_checker_.CalledOnValidThread());
   SendLogMessage(base::StringPrintf("%s", __func__));
 
-  if (sink_)
-    return;  // Already started.
+  // Already started.
+  if (!is_stopped_) {
+    return;
+  }
 
-  CreateAudioRendererSink();
+  if (!sink_) {
+    CreateAudioRendererSink();
+  }
+
   sink_->Start();
   sink_->Play();
+  is_stopped_ = false;
 }
 
 void RendererWebAudioDeviceImpl::Pause() {
@@ -220,6 +231,7 @@ void RendererWebAudioDeviceImpl::Stop() {
   }
 
   silent_sink_suspender_.reset();
+  is_stopped_ = true;
 }
 
 double RendererWebAudioDeviceImpl::SampleRate() {
@@ -285,7 +297,10 @@ void RendererWebAudioDeviceImpl::SendLogMessage(const std::string& message) {
 }
 
 void RendererWebAudioDeviceImpl::CreateAudioRendererSink() {
-  DCHECK(!sink_);
+  TRACE_EVENT0("webaudio",
+               "RendererWebAudioDeviceImpl::CreateAudioRendererSink");
+  DCHECK(thread_checker_.CalledOnValidThread());
+  CHECK(!sink_);
 
   switch (sink_descriptor_.Type()) {
     case blink::WebAudioSinkDescriptor::kAudible:
@@ -311,6 +326,7 @@ void RendererWebAudioDeviceImpl::CreateAudioRendererSink() {
 
 media::OutputDeviceStatus
 RendererWebAudioDeviceImpl::CreateSinkAndGetDeviceStatus() {
+  DCHECK(thread_checker_.CalledOnValidThread());
   CreateAudioRendererSink();
 
   // The device status of a silent sink is always OK.
@@ -323,12 +339,7 @@ RendererWebAudioDeviceImpl::CreateSinkAndGetDeviceStatus() {
   // If sink status is not OK, reset `sink_` and `silent_sink_suspender_`
   // because this instance will be destroyed.
   if (status != media::OutputDeviceStatus::OUTPUT_DEVICE_STATUS_OK) {
-    sink_->Stop();
-    sink_ = nullptr;
-    silent_sink_suspender_.reset();
-  } else {
-    sink_->Start();
-    sink_->Play();
+    Stop();
   }
   return status;
 }

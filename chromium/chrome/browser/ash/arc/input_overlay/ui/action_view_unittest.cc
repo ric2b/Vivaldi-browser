@@ -11,6 +11,7 @@
 #include "chrome/browser/ash/arc/input_overlay/display_overlay_controller.h"
 #include "chrome/browser/ash/arc/input_overlay/test/test_utils.h"
 #include "chrome/browser/ash/arc/input_overlay/touch_injector.h"
+#include "chrome/browser/ash/arc/input_overlay/ui/input_mapping_view.h"
 #include "chrome/browser/ash/arc/input_overlay/util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/events/base_event_utils.h"
@@ -198,6 +199,10 @@ class ActionViewTest : public views::ViewsTestBase {
     input_mapping_view_->SetDisplayMode(display_mode);
   }
 
+  absl::optional<size_t> GetIndexOf(const views::View* view) const {
+    return input_mapping_view_->GetIndexOf(view);
+  }
+
   raw_ptr<ActionView> move_action_view_;
   raw_ptr<ActionView> tap_action_view_;
   raw_ptr<Action> move_action_;
@@ -209,7 +214,7 @@ class ActionViewTest : public views::ViewsTestBase {
   void SetUp() override {
     views::ViewsTestBase::SetUp();
     root_window()->SetBounds(gfx::Rect(1000, 800));
-    widget_ = CreateArcWindow(root_window(), gfx::Rect(200, 100, 400, 600));
+    widget_ = CreateArcWindow(root_window(), gfx::Rect(200, 100, 600, 400));
     touch_injector_ = std::make_unique<TouchInjector>(
         widget_->GetNativeWindow(),
         *widget_->GetNativeWindow()->GetProperty(ash::kArcPackageNameKey),
@@ -300,7 +305,7 @@ TEST_F(ActionViewTest, TestDisplayModeChange) {
   // Change key binding.
   ui::KeyEvent event_a(ui::ET_KEY_PRESSED, ui::VKEY_A, 0);
   label->OnKeyPressed(event_a);
-  EXPECT_NE(tap_view_bounds, tap_action_view_->bounds());
+  EXPECT_EQ(tap_view_bounds, tap_action_view_->bounds());
   touch_point_in_window = touch_point->bounds().CenterPoint();
   touch_point_in_window.Offset(tap_action_view_->origin().x(),
                                tap_action_view_->origin().y());
@@ -531,6 +536,46 @@ TEST_F(ActionViewTest, TestArrowKeyMove) {
   move_action_->BindPending();
   EXPECT_POINTF_NEAR(updated_pos, move_action_->touch_down_positions()[0],
                      kTolerance);
+}
+
+TEST_F(ActionViewTest, TestActionViewReorder) {
+  SetDisplayMode(DisplayMode::kEdit);
+  // Move |move_action_view_| to the right. |tap_action_view_| is sorted in
+  // front.
+  TouchPressAtActionView(move_action_view_);
+  TouchMoveAtActionViewBy(move_action_view_, gfx::Vector2d(20, 0));
+  TouchReleaseAtActionView(move_action_view_);
+  SetDisplayMode(DisplayMode::kView);
+  SetDisplayMode(DisplayMode::kEdit);
+  EXPECT_EQ(0u, *GetIndexOf(tap_action_view_));
+  EXPECT_EQ(1u, *GetIndexOf(move_action_view_));
+  // Move |tap_action_view_| to the right of |move_action_view_|.
+  // |move_action_view_| is sorted in front.
+  TouchPressAtActionView(tap_action_view_);
+  TouchMoveAtActionViewBy(tap_action_view_, gfx::Vector2d(30, 0));
+  TouchReleaseAtActionView(tap_action_view_);
+  SetDisplayMode(DisplayMode::kView);
+  SetDisplayMode(DisplayMode::kEdit);
+  EXPECT_EQ(1u, *GetIndexOf(tap_action_view_));
+  EXPECT_EQ(0u, *GetIndexOf(move_action_view_));
+  // Move |tap_action_view_| to the top of |move_action_view_|.
+  // |tap_action_view_| is sorted in front.
+  PressLeftMouseAtActionView(tap_action_view_);
+  MouseDragActionViewBy(tap_action_view_, gfx::Vector2d(0, -10));
+  ReleaseLeftMouse(tap_action_view_);
+  SetDisplayMode(DisplayMode::kView);
+  SetDisplayMode(DisplayMode::kEdit);
+  EXPECT_EQ(0u, *GetIndexOf(tap_action_view_));
+  EXPECT_EQ(1u, *GetIndexOf(move_action_view_));
+  // Move |move_action_view_| to the left side of the window.
+  // |move_action_view_| is sorted in front.
+  TouchPressAtActionView(move_action_view_);
+  TouchMoveAtActionViewBy(move_action_view_, gfx::Vector2d(-30, 0));
+  TouchReleaseAtActionView(move_action_view_);
+  SetDisplayMode(DisplayMode::kView);
+  SetDisplayMode(DisplayMode::kEdit);
+  EXPECT_EQ(1u, *GetIndexOf(tap_action_view_));
+  EXPECT_EQ(0u, *GetIndexOf(move_action_view_));
 }
 
 }  // namespace

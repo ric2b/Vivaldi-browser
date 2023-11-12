@@ -103,11 +103,6 @@ struct CORE_EXPORT PhysicalRect {
   bool Contains(const PhysicalOffset& point) const {
     return Contains(point.left, point.top);
   }
-  // Variant of Contains() that also returns true if |point| falls on the right
-  // or bottom edge.
-  bool ContainsInclusive(const PhysicalOffset& point) const {
-    return Contains(PhysicalRect(point, PhysicalSize()));
-  }
 
   [[nodiscard]] bool Intersects(const PhysicalRect&) const;
   [[nodiscard]] bool IntersectsInclusively(const PhysicalRect&) const;
@@ -127,7 +122,6 @@ struct CORE_EXPORT PhysicalRect {
   bool InclusiveIntersect(const PhysicalRect&);
 
   void Expand(const NGPhysicalBoxStrut&);
-  void Expand(const LayoutRectOutsets&);
   void ExpandEdges(LayoutUnit top,
                    LayoutUnit right,
                    LayoutUnit bottom,
@@ -141,7 +135,6 @@ struct CORE_EXPORT PhysicalRect {
   void Inflate(LayoutUnit d) { ExpandEdges(d, d, d, d); }
 
   void Contract(const NGPhysicalBoxStrut&);
-  void Contract(const LayoutRectOutsets&);
   void ContractEdges(LayoutUnit top,
                      LayoutUnit right,
                      LayoutUnit bottom,

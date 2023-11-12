@@ -14,7 +14,6 @@ export enum SettingsType {
   BASIC_SETTINGS = 5,
   ENGLISH_BASIC_WITH_AUTOSHIFT_SETTINGS = 6,
   SUGGESTION_SETTINGS = 7,
-  PK_DIACRITICS_SETTINGS = 8,
   JAPANESE_SETTINGS = 9,
 }
 
@@ -22,20 +21,17 @@ type SettingsMap = Partial<Record<string, SettingsType[]>>;
 
 export function getInputMethodSettings(
     predictiveWritingEnabled: boolean,
-    physicalKeyboardDiacriticsEnabled: boolean,
     isJapaneseSettingsEnabled: boolean): SettingsMap {
   const usEnglishSettings = [SettingsType.LATIN_SETTINGS];
   if (predictiveWritingEnabled) {
     usEnglishSettings.push(SettingsType.SUGGESTION_SETTINGS);
   }
-  if (physicalKeyboardDiacriticsEnabled) {
-    usEnglishSettings.push(SettingsType.PK_DIACRITICS_SETTINGS);
-  }
   const settingsMap: SettingsMap = {
     // NOTE: Please group by SettingsType, and keep entries sorted
-    // alphabetically
-    // by ID within each group, just for readability.
+    // alphabetically by ID within each group, just for readability.
 
+    // The values here should be kept in sync with IsAutocorrectSupported in
+    // chrome/browser/ash/input_method/input_method_settings.cc
     // LATIN_SETTINGS
     'xkb:be::fra': [SettingsType.LATIN_SETTINGS],
     'xkb:be::ger': [SettingsType.LATIN_SETTINGS],

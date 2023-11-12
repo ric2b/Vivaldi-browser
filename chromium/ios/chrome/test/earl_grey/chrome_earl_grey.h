@@ -87,6 +87,9 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // cleared within a timeout.
 - (void)removeBrowsingCache;
 
+// Persists the current list of tabs to disk immediately.
+- (void)saveSessionImmediately;
+
 #pragma mark - Navigation Utilities (EG2)
 
 // Instructs some connected scene to open `URL` with default opening
@@ -133,13 +136,27 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // Waits for the matcher to return an element that is sufficiently visible.
 - (void)waitForSufficientlyVisibleElementWithMatcher:(id<GREYMatcher>)matcher;
 
+// Waits for the matcher to return an element that is not sufficiently visible
+// (or nil).
+- (void)waitForNotSufficientlyVisibleElementWithMatcher:
+    (id<GREYMatcher>)matcher;
+
 // Waits for the matcher to return an element.
 - (void)waitForUIElementToAppearWithMatcher:(id<GREYMatcher>)matcher;
+
+// Waits for the matcher to return an element. Returns whether the element did
+// appear in the delay.
+- (BOOL)testUIElementAppearanceWithMatcher:(id<GREYMatcher>)matcher;
 
 // Waits for the matcher to return an element. If the condition is not met
 // within the given `timeout` a GREYAssert is induced.
 - (void)waitForUIElementToAppearWithMatcher:(id<GREYMatcher>)matcher
                                     timeout:(base::TimeDelta)timeout;
+
+// Waits for the matcher to return an element. Returns wheher the condition is
+// met within the given `timeout`.
+- (BOOL)testUIElementAppearanceWithMatcher:(id<GREYMatcher>)matcher
+                                   timeout:(base::TimeDelta)timeout;
 
 // Waits for the matcher to not return any elements.
 - (void)waitForUIElementToDisappearWithMatcher:(id<GREYMatcher>)matcher;
@@ -170,12 +187,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 
 // Signs in with `identity` without sync consent.
 - (void)signInWithoutSyncWithIdentity:(FakeSystemIdentity*)identity;
-
-// Starts the sync server. The server should not be running when calling this.
-- (void)startSync;
-
-// Stops the sync server. The server should be running when calling this.
-- (void)stopSync;
 
 // Injects user demographics into the fake sync server. `rawBirthYear` is the
 // true birth year, pre-noise, and the gender corresponds to the proto enum
@@ -228,8 +239,11 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
                      originator_client_item_id:
                          (const std::string&)originator_client_item_id;
 
-// Injects typed URL to sync FakeServer.
+// Injects a typed URL to the sync FakeServer.
 - (void)addFakeSyncServerTypedURL:(const GURL&)URL;
+
+// Injects a HISTORY visit to the sync FakeServer.
+- (void)addFakeSyncServerHistoryVisit:(const GURL&)URL;
 
 // Injects device info to sync FakeServer.
 - (void)addFakeSyncServerDeviceInfo:(NSString*)deviceName
@@ -260,11 +274,11 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 - (void)waitForSyncServerHistoryURLs:(NSArray<NSURL*>*)URLs
                              timeout:(base::TimeDelta)timeout;
 
-// Induces a GREYAssert if `expected_present` is YES and the provided `url` is
-// not present, or vice versa.
-- (void)waitForTypedURL:(const GURL&)URL
-          expectPresent:(BOOL)expectPresent
-                timeout:(base::TimeDelta)timeout;
+// Induces a GREYAssert if `expectPresent` is YES and the provided `URL` is
+// not present in the history DB, or vice versa.
+- (void)waitForHistoryURL:(const GURL&)URL
+            expectPresent:(BOOL)expectPresent
+                  timeout:(base::TimeDelta)timeout;
 
 // Waits for sync invalidation field presence in the DeviceInfo data type on the
 // server.
@@ -684,8 +698,8 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // Returns whether the Web Channels feature is enabled.
 - (BOOL)isWebChannelsEnabled;
 
-// Returns whether SF Symbols are used.
-- (BOOL)isSFSymbolEnabled;
+// Returns whether UIButtonConfiguration changes are enabled.
+- (BOOL)isUIButtonConfigurationEnabled;
 
 #pragma mark - ContentSettings
 
@@ -712,6 +726,14 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration);
 // UIKeyInputEscape constants as `input`.
 - (void)simulatePhysicalKeyboardEvent:(NSString*)input
                                 flags:(UIKeyModifierFlags)flags;
+
+#pragma mark - Default Utilities (EG2)
+
+// Stores a value for the provided key in NSUserDefaults.
+- (void)setUserDefaultObject:(id)value forKey:(NSString*)defaultName;
+
+// Removes the object for `key` in NSUserDefault.
+- (void)removeUserDefaultObjectForKey:(NSString*)key;
 
 #pragma mark - Pref Utilities (EG2)
 

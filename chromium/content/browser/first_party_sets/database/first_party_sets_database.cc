@@ -14,7 +14,6 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/sequence_checker.h"
@@ -134,7 +133,7 @@ void RecordInitializationStatus(FirstPartySetsDatabase::InitStatus status) {
 
 FirstPartySetsDatabase::FirstPartySetsDatabase(base::FilePath db_path)
     : db_path_(std::move(db_path)) {
-  DCHECK(db_path_.IsAbsolute());
+  CHECK(db_path_.IsAbsolute());
 }
 
 FirstPartySetsDatabase::~FirstPartySetsDatabase() {
@@ -172,9 +171,9 @@ bool FirstPartySetsDatabase::SetPublicSets(
     const std::string& browser_context_id,
     const net::GlobalFirstPartySets& sets) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
-  DCHECK(db_->HasActiveTransactions());
-  DCHECK(sets.public_sets_version().IsValid());
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK(db_->HasActiveTransactions());
+  CHECK(sets.public_sets_version().IsValid());
 
   const std::string& version = sets.public_sets_version().GetString();
   // Checks if the version of the current public sets is referenced by *any*
@@ -195,8 +194,8 @@ bool FirstPartySetsDatabase::SetPublicSets(
     if (!sets.ForEachPublicSetEntry(
             [&](const net::SchemefulSite& site,
                 const net::FirstPartySetEntry& entry) -> bool {
-              DCHECK(!site.opaque());
-              DCHECK(!entry.primary().opaque());
+              CHECK(!site.opaque());
+              CHECK(!entry.primary().opaque());
               DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
               static constexpr char kInsertSql[] =
                   "INSERT INTO public_sets(version,site,primary_site,site_type)"
@@ -246,7 +245,7 @@ bool FirstPartySetsDatabase::InsertSitesToClear(
     return false;
 
   for (const auto& site : sites) {
-    DCHECK(!site.opaque());
+    CHECK(!site.opaque());
     static constexpr char kInsertSql[] =
         // clang-format off
         "INSERT OR REPLACE INTO browser_context_sites_to_clear"
@@ -268,7 +267,7 @@ bool FirstPartySetsDatabase::InsertSitesToClear(
 bool FirstPartySetsDatabase::InsertBrowserContextCleared(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!browser_context_id.empty());
+  CHECK(!browser_context_id.empty());
 
   if (!LazyInit())
     return false;
@@ -290,8 +289,8 @@ bool FirstPartySetsDatabase::InsertPolicyConfigurations(
     const std::string& browser_context_id,
     const net::FirstPartySetsContextConfig& config) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
-  DCHECK(db_->HasActiveTransactions());
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK(db_->HasActiveTransactions());
 
   static constexpr char kDeleteSql[] =
       "DELETE FROM policy_configurations WHERE browser_context_id=?";
@@ -305,7 +304,7 @@ bool FirstPartySetsDatabase::InsertPolicyConfigurations(
       [&](const net::SchemefulSite& site,
           const net::FirstPartySetEntryOverride& entry_override) -> bool {
         DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-        DCHECK(!site.opaque());
+        CHECK(!site.opaque());
         static constexpr char kInsertSql[] =
             "INSERT INTO "
             "policy_configurations(browser_context_id,site,primary_site)"
@@ -328,8 +327,8 @@ bool FirstPartySetsDatabase::InsertManualConfiguration(
     const std::string& browser_context_id,
     const net::GlobalFirstPartySets& global_first_party_sets) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
-  DCHECK(db_->HasActiveTransactions());
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK(db_->HasActiveTransactions());
 
   static constexpr char kDeleteSql[] =
       "DELETE FROM manual_configurations WHERE browser_context_id=?";
@@ -343,7 +342,7 @@ bool FirstPartySetsDatabase::InsertManualConfiguration(
       [&](const net::SchemefulSite& site,
           const net::FirstPartySetEntryOverride& entry_override) -> bool {
         DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-        DCHECK(!site.opaque());
+        CHECK(!site.opaque());
         static constexpr char kInsertSql[] =
             "INSERT INTO manual_configurations"
             "(browser_context_id,site,primary_site,site_type)"
@@ -370,7 +369,7 @@ std::pair<net::GlobalFirstPartySets, net::FirstPartySetsContextConfig>
 FirstPartySetsDatabase::GetGlobalSetsAndConfig(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!browser_context_id.empty());
+  CHECK(!browser_context_id.empty());
   if (!LazyInit())
     return {};
 
@@ -392,9 +391,9 @@ FirstPartySetsDatabase::GetGlobalSetsAndConfig(
 net::GlobalFirstPartySets FirstPartySetsDatabase::GetGlobalSets(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(db_->HasActiveTransactions());
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
-  DCHECK(!browser_context_id.empty());
+  CHECK(db_->HasActiveTransactions());
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK(!browser_context_id.empty());
 
   // Query public sets entries.
   std::vector<std::pair<net::SchemefulSite, net::FirstPartySetEntry>> entries;
@@ -460,11 +459,11 @@ std::pair<std::vector<net::SchemefulSite>, net::FirstPartySetsCacheFilter>
 FirstPartySetsDatabase::GetSitesToClearFilters(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!browser_context_id.empty());
+  CHECK(!browser_context_id.empty());
   if (!LazyInit())
     return {};
 
-  DCHECK_GT(run_count_, 0);
+  CHECK_GT(run_count_, 0);
 
   sql::Transaction transaction(db_.get());
   if (!transaction.Begin())
@@ -491,9 +490,9 @@ FirstPartySetsDatabase::GetSitesToClearFilters(
 std::vector<net::SchemefulSite> FirstPartySetsDatabase::FetchSitesToClear(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!browser_context_id.empty());
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
-  DCHECK(db_->HasActiveTransactions());
+  CHECK(!browser_context_id.empty());
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK(db_->HasActiveTransactions());
 
   // Gets the sites that were marked to clear but haven't been cleared yet for
   // the given `browser_context_id`. Use 0 as the default
@@ -532,8 +531,8 @@ base::flat_map<net::SchemefulSite, int64_t>
 FirstPartySetsDatabase::FetchAllSitesToClearFilter(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
-  DCHECK(db_->HasActiveTransactions());
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK(db_->HasActiveTransactions());
 
   std::vector<std::pair<net::SchemefulSite, int64_t>> results;
   static constexpr char kSelectSql[] =
@@ -566,9 +565,9 @@ net::FirstPartySetsContextConfig
 FirstPartySetsDatabase::FetchPolicyConfigurations(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(db_->HasActiveTransactions());
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
-  DCHECK(!browser_context_id.empty());
+  CHECK(db_->HasActiveTransactions());
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK(!browser_context_id.empty());
 
   std::vector<std::pair<net::SchemefulSite, net::FirstPartySetEntryOverride>>
       results;
@@ -618,7 +617,7 @@ FirstPartySetsDatabase::FetchPolicyConfigurations(
 bool FirstPartySetsDatabase::HasEntryInBrowserContextsClearedForTesting(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(!browser_context_id.empty());
+  CHECK(!browser_context_id.empty());
 
   if (!LazyInit())
     return {};
@@ -639,9 +638,9 @@ net::FirstPartySetsContextConfig
 FirstPartySetsDatabase::FetchManualConfiguration(
     const std::string& browser_context_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(db_->HasActiveTransactions());
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
-  DCHECK(!browser_context_id.empty());
+  CHECK(db_->HasActiveTransactions());
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK(!browser_context_id.empty());
 
   std::vector<std::pair<net::SchemefulSite, net::FirstPartySetEntryOverride>>
       results;
@@ -700,7 +699,7 @@ bool FirstPartySetsDatabase::LazyInit() {
   if (db_status_ != InitStatus::kUnattempted)
     return db_status_ == InitStatus::kSuccess;
 
-  DCHECK_EQ(db_.get(), nullptr);
+  CHECK_EQ(db_.get(), nullptr);
   db_ = std::make_unique<sql::Database>(sql::DatabaseOptions{
       .exclusive_locking = true, .page_size = 4096, .cache_size = 32});
   db_->set_histogram_tag("FirstPartySets");
@@ -723,7 +722,7 @@ bool FirstPartySetsDatabase::LazyInit() {
 }
 
 bool FirstPartySetsDatabase::OpenDatabase() {
-  DCHECK(db_);
+  CHECK(db_);
   if (db_->is_open() || db_->Open(db_path_)) {
     db_->Preload();
     return true;
@@ -733,7 +732,7 @@ bool FirstPartySetsDatabase::OpenDatabase() {
 
 void FirstPartySetsDatabase::DatabaseErrorCallback(int extended_error,
                                                    sql::Statement* stmt) {
-  DCHECK(db_);
+  CHECK(db_);
   // Attempt to recover a corrupt database.
   if (sql::Recovery::ShouldRecover(extended_error)) {
     // Prevent reentrant calls.
@@ -766,14 +765,14 @@ FirstPartySetsDatabase::InitStatus FirstPartySetsDatabase::InitializeTables() {
     return InitStatus::kError;
 
   // Database should now be open.
-  DCHECK(db_->is_open());
+  CHECK(db_->is_open());
 
   // Razes the DB if the version is deprecated or too new to get the feature
   // working.
   //
   // TODO(crbug.com/1372445): Re-enable track DB init status kTooNew and kTooOld
   // after the bug is resolved and migration is implemented.
-  DCHECK_LT(kDeprecatedVersionNumber, kCurrentVersionNumber);
+  CHECK_LT(kDeprecatedVersionNumber, kCurrentVersionNumber);
   sql::MetaTable::RazeIfIncompatible(
       db_.get(), /*lowest_supported_version=*/kDeprecatedVersionNumber + 1,
       kCurrentVersionNumber);
@@ -785,7 +784,7 @@ FirstPartySetsDatabase::InitStatus FirstPartySetsDatabase::InitializeTables() {
   sql::Transaction transaction(db_.get());
   if (!transaction.Begin()) {
     LOG(WARNING) << "First-Party Sets database begin initialization failed.";
-    db_->RazeAndClose();
+    db_->RazeAndPoison();
     return InitStatus::kError;
   }
 
@@ -829,7 +828,7 @@ bool FirstPartySetsDatabase::UpgradeSchema() {
 }
 
 bool FirstPartySetsDatabase::MigrateToVersion3() {
-  DCHECK(db_->HasActiveTransactions());
+  CHECK(db_->HasActiveTransactions());
   // Rename the policy_modifications table with policy_configurations.
   static constexpr char kRenamePolicyConfigurationsTableSql[] =
       "ALTER TABLE policy_modifications RENAME TO policy_configurations";
@@ -841,7 +840,7 @@ bool FirstPartySetsDatabase::MigrateToVersion3() {
 }
 
 bool FirstPartySetsDatabase::MigrateToVersion4() {
-  DCHECK(db_->HasActiveTransactions());
+  CHECK(db_->HasActiveTransactions());
   // Create manual_configurations table; transfer data from manual_sets table to
   // manual_configurations table; drop manual_sets table.
   bool success = db_->Execute(
@@ -866,16 +865,16 @@ bool FirstPartySetsDatabase::MigrateToVersion4() {
 }
 
 bool FirstPartySetsDatabase::MigrateToVersion5() {
-  DCHECK(db_->HasActiveTransactions());
+  CHECK(db_->HasActiveTransactions());
   // Only updates the versions in the meta table for fixing crbug.com/1409117.
   return meta_table_.SetVersionNumber(5) &&
          meta_table_.SetCompatibleVersionNumber(5);
 }
 
 void FirstPartySetsDatabase::IncreaseRunCount() {
-  DCHECK_EQ(db_status_, InitStatus::kSuccess);
+  CHECK_EQ(db_status_, InitStatus::kSuccess);
   // 0 is the default value, `run_count_` should only be set once.
-  DCHECK_EQ(run_count_, 0);
+  CHECK_EQ(run_count_, 0);
 
   int64_t count = 0;
   // `count` should be positive if the value exists in the meta table. Consider
@@ -901,14 +900,15 @@ bool FirstPartySetsDatabase::Destroy() {
   // Reset the value.
   run_count_ = 0;
 
-  if (db_ && db_->is_open() && !db_->RazeAndClose())
+  if (db_ && db_->is_open() && !db_->RazeAndPoison()) {
     return false;
+  }
 
   // The file already doesn't exist.
   if (db_path_.empty())
     return true;
 
-  return base::DeleteFile(db_path_);
+  return sql::Database::Delete(db_path_);
 }
 
 }  // namespace content

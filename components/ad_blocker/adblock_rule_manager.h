@@ -88,8 +88,8 @@ class RuleManager {
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;
 
-  virtual void OnRulesBufferReadFailCallback(RuleGroup rule_group,
-                                             uint32_t source_id) = 0;
+  virtual void OnCompiledRulesReadFailCallback(RuleGroup rule_group,
+                                               uint32_t source_id) = 0;
 };
 
 }  // namespace adblock_filter

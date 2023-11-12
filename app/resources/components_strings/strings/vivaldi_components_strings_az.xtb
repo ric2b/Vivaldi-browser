@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 kuki faylı istifadə olunur)} other {(# kuki faylları istifadə olunur)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Proksi ünvanının yoxlanılması<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bit)</translation>
-<translation id="5287240709317226393">Kukiləri göstərmək</translation>
 <translation id="5355557959165512791">Siz indi <ph name="SITE" /> saytına daxil ola bilməzsiniz, çünki onun sertifikatı geri çağırılıb. Qəza şəbəkə xətası və ya ona edilən kiber hücum səbəbindən beş verə bilər. Yəqin ki, bu müvəqqətidir və saytın işi bir müddət sonra bərpa olunacaq.</translation>
 <translation id="5386426401304769735">Bu saytın sertifikatları zənciri, SHA-1 ilə imzalanmış sertifikatdan ibarətdir.</translation>
 <translation id="5452270690849572955"><ph name="HOST_NAME" /> səhifəsi tapılmadı</translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Şifrə</translation>
 <translation id="6711464428925977395">Proksi serverdə hansısa problem yaranıb və ya ünvan düzgün göstərilməyib.</translation>
 <translation id="6757797048963528358">Cihazınız yuxu rejiminə keçdi.</translation>
+<translation id="6890956352250146925">Kukilər və sayt verilənləri üçün seçimlər</translation>
 <translation id="6897140037006041989">User Agent</translation>
 <translation id="7053983685419859001">Əngəlləmək</translation>
 <translation id="7079718277001814089">Saytda zərərli proqram təminatı var</translation>

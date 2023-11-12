@@ -92,7 +92,7 @@ class LoginAfterUpdateToFlexTest : public LoginManagerTest,
   LocalStateMixin local_state_mixin_{&mixin_host_, this};
 };
 
-IN_PROC_BROWSER_TEST_F(LoginAfterUpdateToFlexTest, DeviceOwner) {
+IN_PROC_BROWSER_TEST_F(LoginAfterUpdateToFlexTest, DISABLED_DeviceOwner) {
   LoginUser(GetOwnerAccountId());
   EXPECT_FALSE(ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
       prefs::kRevenOobeConsolidatedConsentAccepted));
@@ -109,7 +109,7 @@ IN_PROC_BROWSER_TEST_F(LoginAfterUpdateToFlexTest, DeviceOwner) {
   test::WaitForPrimaryUserSessionStart();
 }
 
-IN_PROC_BROWSER_TEST_F(LoginAfterUpdateToFlexTest, RegularUser) {
+IN_PROC_BROWSER_TEST_F(LoginAfterUpdateToFlexTest, DISABLED_RegularUser) {
   LoginUser(GetRegularAccountId());
   EXPECT_FALSE(ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
       prefs::kRevenOobeConsolidatedConsentAccepted));

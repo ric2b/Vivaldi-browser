@@ -8,13 +8,13 @@
 #include <algorithm>
 #include <utility>
 #include "base/feature_list.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/system/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
 #include "components/safe_browsing/buildflags.h"
-#include "components/variations/variations_associated_data.h"
 
 namespace safe_browsing {
 // Please define any new SafeBrowsing related features in this file, and add
@@ -41,10 +41,6 @@ BASE_FEATURE(kClientSideDetectionModelTag,
              "ClientSideDetectionTag",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kClientSideDetectionReferrerChain,
-             "ClientSideDetectionReferrerChain",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kClientSideDetectionTypeForceRequest,
              "ClientSideDetectionTypeForceRequest",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -52,14 +48,6 @@ BASE_FEATURE(kClientSideDetectionTypeForceRequest,
 BASE_FEATURE(kComponentUpdaterAndroidProtegoAllowlist,
              "SafeBrowsingComponentUpdaterAndroidProtegoAllowlist",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kConnectorsScanningAccessToken,
-             "ConnectorsScanningAccessToken",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kConnectorsScanningReportOnlyUI,
-             "ConnectorsScanningReportOnlyUI",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDelayedWarnings,
              "SafeBrowsingDelayedWarnings",
@@ -106,6 +94,10 @@ const base::FeatureParam<int> kExtensionTelemetryWritesPerInterval{
     &kExtensionTelemetry, "NumberOfWritesInInterval",
     /*default_value=*/1};
 
+BASE_FEATURE(kExtensionTelemetryConfiguration,
+             "SafeBrowsingExtensionTelemetryConfiguration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kExtensionTelemetryCookiesGetAllSignal,
              "SafeBrowsingExtensionTelemetryCookiesGetAllSignal",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -113,10 +105,6 @@ BASE_FEATURE(kExtensionTelemetryCookiesGetAllSignal,
 BASE_FEATURE(kExtensionTelemetryPersistence,
              "SafeBrowsingExtensionTelemetryPersistence",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kExtensionTelemetryConfiguration,
-             "SafeBrowsingExtensionTelemetryConfiguration",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kExtensionTelemetryFileData,
              "SafeBrowsingExtensionTelemetryFileData",
@@ -159,9 +147,21 @@ BASE_FEATURE(kExtensionTelemetryCookiesGetSignal,
              "SafeBrowsingExtensionTelemetryCookiesGetSignal",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kExtensionTelemetryDeclarativeNetRequestSignal,
+             "SafeBrowsingExtensionTelemetryDeclarativeNetRequestSignal",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kFileTypePoliciesTag,
              "FileTypePoliciesTag",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kHashRealTimeOverOhttp,
+             "SafeBrowsingHashRealTimeOverOhttp",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<std::string> kHashRealTimeOverOhttpRelayUrl{
+    &kHashRealTimeOverOhttp, "SafeBrowsingHashRealTimeOverOhttpRelayUrl",
+    /*default_value=*/""};
 
 BASE_FEATURE(kLogAccountEnhancedProtectionStateInProtegoPings,
              "TailoredSecurityLogAccountEnhancedProtectionStateInProtegoPings",
@@ -175,41 +175,49 @@ BASE_FEATURE(kNestedArchives,
              "SafeBrowsingArchiveImprovements",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kOmitNonUserGesturesFromReferrerChain,
-             "SafeBrowsingOmitNonUserGesturesFromReferrerChain",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kRealTimeUrlFilteringForEnterprise,
              "RealTimeUrlFilteringForEnterprise",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kReferrerChainParameters,
+             "SafeBrowsingReferrerChainParameters",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kRealTimeUrlLookupForEnterpriseAllowlistBypass,
-             "SafeBrowsingRealTimeUrlLookupForEnterpriseAllowlistBypass",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+constexpr base::FeatureParam<int> kReferrerChainEventMaximumAgeSeconds{
+    &kReferrerChainParameters, "MaximumEventAgeSeconds", /*default_value=*/120};
+
+constexpr base::FeatureParam<int> kReferrerChainEventMaximumCount{
+    &kReferrerChainParameters, "MaximumEventCount",
+    /*default_value=*/100};
 
 BASE_FEATURE(kSafeBrowsingCsbrrNewDownloadTrigger,
              "SafeBrowsingCsbrrNewDownloadTrigger",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSafeBrowsingDisableConsumerCsdForEnterprise,
-             "SafeBrowsingDisableConsumerCsdForEnterprise",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kSafeBrowsingEnterpriseCsd,
-             "SafeBrowsingEnterpriseCsd",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kSafeBrowsingLookupMechanismExperiment,
              "SafeBrowsingLookupMechanismExperiment",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<bool> kUrlLevelValidationForHprtExperimentEnabled{
+    &kSafeBrowsingLookupMechanismExperiment,
+    "UrlLevelValidationForHprtExperimentEnabled",
+    /*default_value=*/true};
+
+BASE_FEATURE(kSafeBrowsingOnUIThread,
+             "SafeBrowsingOnUIThread",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSafeBrowsingRemoveCookiesInAuthRequests,
              "SafeBrowsingRemoveCookiesInAuthRequests",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kSafeBrowsingSkipImageCssFont,
+             "SafeBrowsingSkipImageCssFont",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kSevenZipEvaluationEnabled,
              "SafeBrowsingSevenZipEvaluationEnabled",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSimplifiedUrlDisplay,
              "SimplifiedUrlDisplay",
@@ -227,13 +235,13 @@ BASE_FEATURE(kSuspiciousSiteTriggerQuotaFeature,
              "SafeBrowsingSuspiciousSiteTriggerQuota",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kTailoredSecurityDesktopNotice,
-             "TailoredSecurityDesktopNotice",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kTailoredSecurityRetryForSyncUsers,
+             "TailoredSecurityRetryForSyncUsers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kTailoredSecurityDialogRetryMechanism,
-             "TailoredSecurityDialogRetryMechanism",
+BASE_FEATURE(kTailoredSecurityObserverRetries,
+             "TailoredSecurityObserverRetries",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
@@ -246,13 +254,13 @@ BASE_FEATURE(kTailoredSecurityIntegration,
 #endif
 );
 
+BASE_FEATURE(kTailoredSecurityUpdatedMessages,
+             "TailoredSecurityUpdatedMessages",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kThreatDomDetailsTagAndAttributeFeature,
              "ThreatDomDetailsTagAttributes",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kVisualFeaturesForReusePings,
-             "VisualFeaturesInReusePings",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kVisualFeaturesSizes,
              "VisualFeaturesSizes",
@@ -262,12 +270,26 @@ BASE_FEATURE(kClientSideDetectionModelOptimizationGuide,
              "ClientSideDetectionModelOptimizationGuide",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kSafeBrowsingPhishingClassificationESBThreshold,
+             "SafeBrowsingPhishingClassificationESBThreshold",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSafeBrowsingDailyPhishingReportsLimit,
+             "SafeBrowsingDailyPhishingReportsLimit",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<int> kSafeBrowsingDailyPhishingReportsLimitESB{
+    &kSafeBrowsingDailyPhishingReportsLimit,
+    /*name=*/"kMaxReportsPerIntervalESB", /*default_value=*/3};
+
 namespace {
 // List of Safe Browsing features. Boolean value for each list member should
 // be set to true if the experiment state should be listed on
 // chrome://safe-browsing. Features should be listed in alphabetical order.
 constexpr struct {
-  const base::Feature* feature;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #global-scope, #constexpr-var-initializer
+  RAW_PTR_EXCLUSION const base::Feature* feature;
   // True if the feature's state should be listed on chrome://safe-browsing.
   bool show_state;
 } kExperimentalFeatures[]{
@@ -276,11 +298,8 @@ constexpr struct {
     {&kClientSideDetectionKillswitch, true},
     {&kClientSideDetectionModelOptimizationGuide, true},
     {&kClientSideDetectionModelIsFlatBuffer, true},
-    {&kClientSideDetectionReferrerChain, true},
     {&kClientSideDetectionTypeForceRequest, true},
     {&kComponentUpdaterAndroidProtegoAllowlist, true},
-    {&kConnectorsScanningAccessToken, true},
-    {&kConnectorsScanningReportOnlyUI, true},
     {&kDelayedWarnings, true},
     {&kDownloadBubble, true},
     {&kDownloadBubbleV2, true},
@@ -288,6 +307,7 @@ constexpr struct {
     {&kExtensionTelemetry, true},
     {&kExtensionTelemetryCookiesGetAllSignal, true},
     {&kExtensionTelemetryCookiesGetSignal, true},
+    {&kExtensionTelemetryDeclarativeNetRequestSignal, true},
     {&kExtensionTelemetryPersistence, true},
     {&kExtensionTelemetryPotentialPasswordTheft, true},
     {&kExtensionTelemetryReportContactedHosts, true},
@@ -297,22 +317,16 @@ constexpr struct {
     {&kLogAccountEnhancedProtectionStateInProtegoPings, true},
     {&kMmapSafeBrowsingDatabase, true},
     {&kNestedArchives, true},
-    {&kOmitNonUserGesturesFromReferrerChain, true},
     {&kRealTimeUrlFilteringForEnterprise, true},
-    {&kRealTimeUrlLookupForEnterpriseAllowlistBypass, true},
     {&kSafeBrowsingCsbrrNewDownloadTrigger, true},
-    {&kSafeBrowsingDisableConsumerCsdForEnterprise, true},
-    {&kSafeBrowsingEnterpriseCsd, true},
     {&kSafeBrowsingLookupMechanismExperiment, true},
     {&kSafeBrowsingRemoveCookiesInAuthRequests, true},
     {&kSevenZipEvaluationEnabled, true},
     {&kSimplifiedUrlDisplay, true},
     {&kStrictDownloadTimeout, true},
     {&kSuspiciousSiteTriggerQuotaFeature, true},
-    {&kTailoredSecurityDesktopNotice, true},
     {&kTailoredSecurityIntegration, true},
     {&kThreatDomDetailsTagAndAttributeFeature, false},
-    {&kVisualFeaturesForReusePings, true},
     {&kVisualFeaturesSizes, true},
 };
 
@@ -339,11 +353,11 @@ base::Value::List GetFeatureStatusList() {
   }
 
   // Manually add experimental features that we want param values for.
-  param_list.Append(variations::GetVariationParamValueByFeature(
+  param_list.Append(base::GetFieldTrialParamValueByFeature(
       safe_browsing::kClientSideDetectionModelTag,
       kClientSideDetectionTagParamName));
   param_list.Append(kClientSideDetectionModelTag.name);
-  param_list.Append(variations::GetVariationParamValueByFeature(
+  param_list.Append(base::GetFieldTrialParamValueByFeature(
       kFileTypePoliciesTag, kFileTypePoliciesTagParamName));
   param_list.Append(kFileTypePoliciesTag.name);
 
@@ -353,7 +367,7 @@ base::Value::List GetFeatureStatusList() {
 std::string GetClientSideDetectionTag() {
   if (base::FeatureList::IsEnabled(
           safe_browsing::kClientSideDetectionModelTag)) {
-    return variations::GetVariationParamValueByFeature(
+    return base::GetFieldTrialParamValueByFeature(
         safe_browsing::kClientSideDetectionModelTag,
         kClientSideDetectionTagParamName);
   }
@@ -369,7 +383,7 @@ std::string GetFileTypePoliciesTag() {
   if (!base::FeatureList::IsEnabled(kFileTypePoliciesTag)) {
     return "default";
   }
-  std::string tag_value = variations::GetVariationParamValueByFeature(
+  std::string tag_value = base::GetFieldTrialParamValueByFeature(
       kFileTypePoliciesTag, kFileTypePoliciesTagParamName);
 
   return tag_value.empty() ? "default" : tag_value;

@@ -445,4 +445,8 @@ public class SelectableListLayout<E> extends FrameLayout
     public void setIsNotes(boolean isNotes) {
         mIsNotes = isNotes;
     }
+
+    public SelectableListToolbar<E> getToolbarForVivaldi() {
+        return mToolbar;
+    }
 }

@@ -33,19 +33,14 @@ class FakeSharingHubBubbleController : public SharingHubBubbleController {
   SharingHubBubbleView* sharing_hub_bubble_view() const override;
   bool ShouldOfferOmniboxIcon() override;
   std::vector<SharingHubAction> GetFirstPartyActions() override;
-  bool ShouldUsePreview() override;
-  base::CallbackListSubscription RegisterPreviewImageChangedCallback(
-      PreviewImageChangedCallback callback) override;
   base::WeakPtr<SharingHubBubbleController> GetWeakPtr() override;
 
-  MOCK_METHOD2(OnActionSelected,
-               void(int command_id, std::string feature_name_for_metrics));
+  MOCK_METHOD1(OnActionSelected, void(const SharingHubAction&));
   MOCK_METHOD0(OnBubbleClosed, void());
 
  private:
   std::vector<SharingHubAction> first_party_actions_;
 
-  base::RepeatingCallbackList<void(ui::ImageModel)> preview_changed_callbacks_;
   base::WeakPtrFactory<SharingHubBubbleController> weak_factory_{this};
 };
 

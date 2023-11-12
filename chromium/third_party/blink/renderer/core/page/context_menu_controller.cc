@@ -26,15 +26,13 @@
 
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/ranges/algorithm.h"
 #include "components/shared_highlighting/core/common/shared_highlighting_features.h"
-#include "services/metrics/public/cpp/ukm_entry_builder.h"
-#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 #include "third_party/blink/public/common/features.h"
@@ -70,6 +68,7 @@
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
@@ -122,20 +121,6 @@ bool UnvisitedNodeOrAncestorHasContextMenuListener(
         current_node_for_parent_traversal->parentNode();
   }
   return false;
-}
-
-void MaybeRecordImageSelectionUkm(
-    ukm::SourceId source_id,
-    ContextMenuController::ImageSelectionOutcome outcome) {
-  DCHECK_NE(source_id, ukm::kInvalidSourceId);
-  static bool enable = base::GetFieldTrialParamByFeatureAsInt(
-      features::kEnablePenetratingImageSelection, "logUkm", false);
-
-  if (enable) {
-    ukm::UkmEntryBuilder builder(source_id, "Blink.ContextMenu.ImageSelection");
-    builder.SetMetric("Outcome", static_cast<int64_t>(outcome));
-    builder.Record(ukm::UkmRecorder::Get());
-  }
 }
 
 template <class enumType>
@@ -286,9 +271,6 @@ Node* ContextMenuController::GetContextMenuNodeWithImageContents() {
         base::UmaHistogramEnumeration(
             "Blink.ContextMenu.ImageSelection.Outcome",
             ImageSelectionOutcome(i));
-        MaybeRecordImageSelectionUkm(
-            found_image_node->GetDocument().UkmSourceID(),
-            ImageSelectionOutcome(i));
       }
     }
   }
@@ -304,31 +286,24 @@ Node* ContextMenuController::GetContextMenuNodeWithImageContents() {
 }
 
 Node* ContextMenuController::ContextMenuImageNodeForFrame(LocalFrame* frame) {
-  if (base::FeatureList::IsEnabled(
-          features::kEnablePenetratingImageSelection)) {
-    ImageSelectionRetrievalOutcome outcome;
-    // We currently will fail to retrieve an image if another hit test is made
-    // on
-    //  a non-image node is made before retrieval of the image.
-    if (!image_selection_cached_result_) {
-      outcome = ImageSelectionRetrievalOutcome::kImageNotFound;
-    } else if (image_selection_cached_result_->GetDocument().GetFrame() !=
-               frame) {
-      outcome = ImageSelectionRetrievalOutcome::kCrossFrameRetrieval;
-    } else {
-      outcome = ImageSelectionRetrievalOutcome::kImageFound;
-    }
-
-    base::UmaHistogramEnumeration(
-        "Blink.ContextMenu.ImageSelection.RetrievalOutcome", outcome);
-
-    if (outcome == ImageSelectionRetrievalOutcome::kImageFound) {
-      return image_selection_cached_result_;
-    }
-    return nullptr;
+  ImageSelectionRetrievalOutcome outcome;
+  // We currently will fail to retrieve an image if another hit test is made
+  // on a non-image node is made before retrieval of the image.
+  if (!image_selection_cached_result_) {
+    outcome = ImageSelectionRetrievalOutcome::kImageNotFound;
+  } else if (image_selection_cached_result_->GetDocument().GetFrame() !=
+             frame) {
+    outcome = ImageSelectionRetrievalOutcome::kCrossFrameRetrieval;
   } else {
-    return ContextMenuNodeForFrame(frame);
+    outcome = ImageSelectionRetrievalOutcome::kImageFound;
   }
+
+  base::UmaHistogramEnumeration(
+      "Blink.ContextMenu.ImageSelection.RetrievalOutcome", outcome);
+
+  return outcome == ImageSelectionRetrievalOutcome::kImageFound
+             ? image_selection_cached_result_
+             : nullptr;
 }
 
 // TODO(crbug.com/1184297) Cache image node when the context menu is shown and
@@ -457,11 +432,8 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
     context_menu_client_receiver_.reset();
 
   HitTestRequest::HitTestRequestType type =
-      HitTestRequest::kReadOnly | HitTestRequest::kActive;
-  if (base::FeatureList::IsEnabled(
-          features::kEnablePenetratingImageSelection)) {
-    type |= HitTestRequest::kPenetratingList | HitTestRequest::kListBased;
-  }
+      HitTestRequest::kReadOnly | HitTestRequest::kActive |
+      HitTestRequest::kPenetratingList | HitTestRequest::kListBased;
 
   HitTestLocation location(point);
   HitTestResult result(type, location);
@@ -625,16 +597,16 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
     // does not override a topmost media element.
     // TODO(benwgold): Consider extending penetration to all media types.
     Node* potential_image_node = result.InnerNodeOrImageMapImage();
-    if (base::FeatureList::IsEnabled(
-            features::kEnablePenetratingImageSelection)) {
-      SCOPED_BLINK_UMA_HISTOGRAM_TIMER(
-          "Blink.ContextMenu.ImageSelection.ElapsedTime");
-      potential_image_node = GetContextMenuNodeWithImageContents();
-    }
+    SCOPED_BLINK_UMA_HISTOGRAM_TIMER(
+        "Blink.ContextMenu.ImageSelection.ElapsedTime");
+    potential_image_node = GetContextMenuNodeWithImageContents();
+
     if (potential_image_node != nullptr &&
         IsA<HTMLCanvasElement>(potential_image_node)) {
       data.media_type = mojom::blink::ContextMenuDataMediaType::kCanvas;
-      data.has_image_contents = true;
+      // TODO(crbug.com/1267243): Support WebGPU canvas.
+      data.has_image_contents =
+          !To<HTMLCanvasElement>(potential_image_node)->IsWebGPU();
     } else if (potential_image_node != nullptr &&
                !HitTestResult::AbsoluteImageURL(potential_image_node)
                     .IsEmpty()) {
@@ -721,10 +693,10 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
         Vector<String> suggestions;
         description.Split('\n', suggestions);
         WebVector<std::u16string> web_suggestions(suggestions.size());
-        std::transform(suggestions.begin(), suggestions.end(),
-                       web_suggestions.begin(), [](const String& s) {
-                         return WebString::FromUTF8(s.Utf8()).Utf16();
-                       });
+        base::ranges::transform(suggestions, web_suggestions.begin(),
+                                [](const String& s) {
+                                  return WebString::FromUTF8(s.Utf8()).Utf16();
+                                });
         data.dictionary_suggestions = web_suggestions.ReleaseVector();
       } else if (spell_checker.GetTextCheckerClient()) {
         // No suggestions cached for the misspelled word. Retrieve suggestions
@@ -737,9 +709,8 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
             WebString::FromUTF16(data.misspelled_word), misspelled_offset,
             misspelled_length, &web_suggestions);
         WebVector<std::u16string> suggestions(web_suggestions.size());
-        std::transform(web_suggestions.begin(), web_suggestions.end(),
-                       suggestions.begin(),
-                       [](const WebString& s) { return s.Utf16(); });
+        base::ranges::transform(web_suggestions, suggestions.begin(),
+                                &WebString::Utf16);
         data.dictionary_suggestions = suggestions.ReleaseVector();
       }
     }
@@ -812,16 +783,8 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
     if (const AtomicString& attribution_src_value =
             anchor->FastGetAttribute(html_names::kAttributionsrcAttr);
         !attribution_src_value.IsNull()) {
-      // TODO(crbug.com/1381123): The background request should be sent at
-      // navigation, not context-menu creation.
-      if (!attribution_src_value.empty()) {
-        data.impression =
-            selected_frame->GetAttributionSrcLoader()->RegisterNavigation(
-                selected_frame->GetDocument()->CompleteURL(
-                    attribution_src_value),
-                mojom::blink::AttributionNavigationType::kContextMenu,
-                /*element=*/anchor);
-      }
+      // TODO(crbug.com/1381123): Support background attributionsrc requests
+      // if attribute value is non-empty.
 
       // An impression should be attached to the navigation regardless of
       // whether a background request would have been allowed or attempted.

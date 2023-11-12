@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
+#include "components/safe_browsing/content/browser/client_side_phishing_model_optimization_guide.h"
 #include "components/safe_browsing/core/common/fbs/client_model_generated.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/proto/client_model.pb.h"
@@ -132,6 +133,11 @@ ClientSidePhishingModel::GetModelSharedMemoryRegion() const {
   return mapped_region_.region.Duplicate();
 }
 
+const base::flat_map<std::string, TfLiteModelMetadata::Threshold>&
+ClientSidePhishingModel::GetVisualTfLiteModelThresholds() const {
+  return thresholds_;
+}
+
 void ClientSidePhishingModel::PopulateFromDynamicUpdate(
     const std::string& model_str,
     base::File visual_tflite_model) {
@@ -156,6 +162,30 @@ void ClientSidePhishingModel::PopulateFromDynamicUpdate(
           model_type_ = CSDModelType::kFlatbuffer;
           memcpy(mapped_region_.mapping.memory(), model_str.data(),
                  model_str.length());
+
+          const flat::ClientSideModel* flatbuffer_model_ =
+              flat::GetClientSideModel(mapped_region_.mapping.memory());
+
+          if (!ClientSidePhishingModelOptimizationGuide::
+                  VerifyCSDFlatBufferIndicesAndFields(flatbuffer_model_)) {
+            VLOG(0) << "Failed to verify CSD Flatbuffer indices and fields";
+          } else {
+            if (tflite_valid) {
+              thresholds_.clear();  // Clear the previous model's thresholds
+                                    // before adding on the new ones
+              for (const flat::TfLiteModelMetadata_::Threshold* flat_threshold :
+                   *(flatbuffer_model_->tflite_metadata()->thresholds())) {
+                TfLiteModelMetadata::Threshold threshold;
+                threshold.set_label(flat_threshold->label()->str());
+                threshold.set_threshold(flat_threshold->threshold());
+                threshold.set_esb_threshold(
+                    flat_threshold->esb_threshold() > 0
+                        ? flat_threshold->esb_threshold()
+                        : flat_threshold->threshold());
+                thresholds_[flat_threshold->label()->str()] = threshold;
+              }
+            }
+          }
         } else {
           model_valid = false;
         }

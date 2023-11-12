@@ -95,7 +95,6 @@ class SkiaOutputDeviceDComp::OverlayData {
 SkiaOutputDeviceDComp::SkiaOutputDeviceDComp(
     gpu::SharedImageRepresentationFactory* shared_image_representation_factory,
     gpu::SharedContextState* context_state,
-    gl::GLSurface* gl_surface,
     scoped_refptr<gpu::gles2::FeatureInfo> feature_info,
     gpu::MemoryTracker* memory_tracker,
     DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
@@ -106,40 +105,20 @@ SkiaOutputDeviceDComp::SkiaOutputDeviceDComp(
       context_state_(context_state) {
   DCHECK(!feature_info->workarounds()
               .disable_post_sub_buffers_for_onscreen_surfaces);
-  DCHECK(gl_surface->SupportsDCLayers());
-  DCHECK_EQ(gl_surface->GetOrigin(), gfx::SurfaceOrigin::kTopLeft);
-  DCHECK(gl_surface->SupportsGpuVSync());
-  DCHECK(!gl_surface->SupportsCommitOverlayPlanes());
-
   capabilities_.uses_default_gl_framebuffer = true;
   capabilities_.output_surface_origin = gfx::SurfaceOrigin::kTopLeft;
-  capabilities_.supports_post_sub_buffer = gl_surface->SupportsPostSubBuffer();
   // DWM handles preserving the contents of the backbuffer in Present1, so we
   // don't need to have SkiaOutputSurface handle it.
   capabilities_.preserve_buffer_content = false;
   capabilities_.number_of_buffers =
       gl::DirectCompositionRootSurfaceBufferCount();
-  capabilities_.supports_delegated_ink = gl_surface->SupportsDelegatedInk();
   if (feature_info->workarounds().supports_two_yuv_hardware_overlays) {
     capabilities_.supports_two_yuv_hardware_overlays = true;
   }
-  capabilities_.pending_swap_params.max_pending_swaps =
-      gl_surface->GetBufferCount() - 1;
-  capabilities_.supports_commit_overlay_planes = false;
   capabilities_.supports_gpu_vsync = true;
   capabilities_.supports_dc_layers = true;
 
   DCHECK(context_state_);
-  DCHECK(gl_surface);
-
-  if (gl_surface->SupportsSwapTimestamps()) {
-    gl_surface->SetEnableSwapTimestamps();
-
-    // Changes to swap timestamp queries are only picked up when making current.
-    context_state_->ReleaseCurrent(nullptr);
-    context_state_->MakeCurrent(gl_surface);
-  }
-
   DCHECK(context_state_->gr_context());
   DCHECK(context_state_->context());
 
@@ -163,25 +142,22 @@ SkiaOutputDeviceDComp::SkiaOutputDeviceDComp(
 
 SkiaOutputDeviceDComp::~SkiaOutputDeviceDComp() = default;
 
-void SkiaOutputDeviceDComp::SwapBuffers(BufferPresentedCallback feedback,
-                                        OutputSurfaceFrame frame) {
-  PostSubBuffer(gfx::Rect(GetRootSurfaceSize()), std::move(feedback),
-                std::move(frame));
-}
-
-void SkiaOutputDeviceDComp::PostSubBuffer(const gfx::Rect& rect,
-                                          BufferPresentedCallback feedback,
-                                          OutputSurfaceFrame frame) {
+void SkiaOutputDeviceDComp::Present(
+    const absl::optional<gfx::Rect>& update_rect,
+    BufferPresentedCallback feedback,
+    OutputSurfaceFrame frame) {
   StartSwapBuffers({});
 
-  DoPresent(rect,
-            base::BindOnce(&SkiaOutputDeviceDComp::OnPresentFinished,
-                           weak_ptr_factory_.GetWeakPtr(), std::move(frame)),
-            std::move(feedback), frame.data);
+  DoPresent(
+      update_rect.value_or(gfx::Rect(size_)),
+      base::BindOnce(&SkiaOutputDeviceDComp::OnPresentFinished,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(frame), size_),
+      std::move(feedback), frame.data);
 }
 
 void SkiaOutputDeviceDComp::OnPresentFinished(
     OutputSurfaceFrame frame,
+    const gfx::Size& swap_size,
     gfx::SwapCompletionResult result) {
   // Remove entries from |overlays_| for textures that weren't scheduled as an
   // overlay this frame.
@@ -196,7 +172,7 @@ void SkiaOutputDeviceDComp::OnPresentFinished(
       kv.second.EndOverlayAccess();
   }
 
-  FinishSwapBuffers(std::move(result), GetRootSurfaceSize(), std::move(frame));
+  FinishSwapBuffers(std::move(result), swap_size, std::move(frame));
 }
 
 void SkiaOutputDeviceDComp::ScheduleOverlays(
@@ -229,8 +205,8 @@ void SkiaOutputDeviceDComp::ScheduleOverlays(
     params->protected_video_type = dc_layer.protected_video_type;
     params->color_space = dc_layer.color_space;
     params->hdr_metadata = dc_layer.hdr_metadata.value_or(gfx::HDRMetadata());
-    params->is_video_fullscreen_letterboxing =
-        dc_layer.is_video_fullscreen_letterboxing;
+    params->maybe_video_fullscreen_letterboxing =
+        dc_layer.maybe_video_fullscreen_letterboxing;
 
     // Schedule DC layer overlay to be presented at next SwapBuffers().
     if (!ScheduleDCLayer(std::move(params))) {
@@ -264,12 +240,30 @@ SkiaOutputDeviceDCompGLSurface::SkiaOutputDeviceDCompGLSurface(
     DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
     : SkiaOutputDeviceDComp(shared_image_representation_factory,
                             context_state,
-                            gl_surface.get(),
                             std::move(feature_info),
                             memory_tracker,
                             std::move(did_swap_buffer_complete_callback)),
       gl_surface_(std::move(gl_surface)) {
+  DCHECK(gl_surface_);
+
   DCHECK(!gl_surface_->SupportsAsyncSwap());
+
+  DCHECK(gl_surface_->SupportsDCLayers());
+  DCHECK_EQ(gl_surface_->GetOrigin(), gfx::SurfaceOrigin::kTopLeft);
+  DCHECK(gl_surface_->SupportsGpuVSync());
+
+  capabilities_.supports_post_sub_buffer = gl_surface_->SupportsPostSubBuffer();
+  capabilities_.supports_delegated_ink = gl_surface_->SupportsDelegatedInk();
+  capabilities_.pending_swap_params.max_pending_swaps =
+      gl_surface_->GetBufferCount() - 1;
+
+  if (gl_surface_->SupportsSwapTimestamps()) {
+    gl_surface_->SetEnableSwapTimestamps();
+
+    // Changes to swap timestamp queries are only picked up when making current.
+    context_state_->ReleaseCurrent(nullptr);
+    context_state_->MakeCurrent(gl_surface_.get());
+  }
 }
 
 SkiaOutputDeviceDCompGLSurface::~SkiaOutputDeviceDCompGLSurface() {
@@ -277,17 +271,16 @@ SkiaOutputDeviceDCompGLSurface::~SkiaOutputDeviceDCompGLSurface() {
   memory_type_tracker_->TrackMemFree(backbuffer_estimated_size_);
 }
 
-bool SkiaOutputDeviceDCompGLSurface::Reshape(
-    const SkSurfaceCharacterization& characterization,
-    const gfx::ColorSpace& color_space,
-    float device_scale_factor,
-    gfx::OverlayTransform transform) {
+bool SkiaOutputDeviceDCompGLSurface::Reshape(const SkImageInfo& image_info,
+                                             const gfx::ColorSpace& color_space,
+                                             int sample_count,
+                                             float device_scale_factor,
+                                             gfx::OverlayTransform transform) {
   DCHECK_EQ(transform, gfx::OVERLAY_TRANSFORM_NONE);
 
-  const gfx::Size size = gfx::SkISizeToSize(characterization.dimensions());
-  const SkColorType color_type = characterization.colorType();
-  const bool has_alpha =
-      !SkAlphaTypeIsOpaque(characterization.imageInfo().alphaType());
+  const gfx::Size size = gfx::SkISizeToSize(image_info.dimensions());
+  const SkColorType color_type = image_info.colorType();
+  const bool has_alpha = !image_info.isOpaque();
 
   if (!gl_surface_->Resize(size, device_scale_factor, color_space, has_alpha)) {
     CheckForLoopFailures();
@@ -320,15 +313,14 @@ bool SkiaOutputDeviceDCompGLSurface::Reshape(
       NOTREACHED() << "color_type: " << color_type;
   }
 
-  GrBackendRenderTarget render_target(size.width(), size.height(),
-                                      characterization.sampleCount(),
+  GrBackendRenderTarget render_target(size.width(), size.height(), sample_count,
                                       /*stencilBits=*/0, framebuffer_info);
   auto origin = (gl_surface_->GetOrigin() == gfx::SurfaceOrigin::kTopLeft)
                     ? kTopLeft_GrSurfaceOrigin
                     : kBottomLeft_GrSurfaceOrigin;
   sk_surface_ = SkSurface::MakeFromBackendRenderTarget(
       context_state_->gr_context(), render_target, origin, color_type,
-      characterization.refColorSpace(), &surface_props);
+      image_info.refColorSpace(), &surface_props);
   if (!sk_surface_) {
     LOG(ERROR) << "Couldn't create surface:"
                << "\n  abandoned()="
@@ -354,6 +346,8 @@ bool SkiaOutputDeviceDCompGLSurface::Reshape(
       4 /* alignment */, &estimated_size, nullptr, nullptr);
   backbuffer_estimated_size_ = estimated_size * gl_surface_->GetBufferCount();
   memory_type_tracker_->TrackMemAlloc(backbuffer_estimated_size_);
+
+  size_ = size;
 
   return !!sk_surface_;
 }
@@ -384,10 +378,6 @@ bool SkiaOutputDeviceDCompGLSurface::ScheduleDCLayer(
   return gl_surface_->ScheduleDCLayer(std::move(params));
 }
 
-gfx::Size SkiaOutputDeviceDCompGLSurface::GetRootSurfaceSize() const {
-  return gl_surface_->GetSize();
-}
-
 void SkiaOutputDeviceDCompGLSurface::DoPresent(
     const gfx::Rect& rect,
     gl::GLSurface::SwapCompletionCallback completed_callback,
@@ -402,7 +392,6 @@ void SkiaOutputDeviceDCompGLSurface::DoPresent(
 }
 
 SkiaOutputDeviceDCompPresenter::SkiaOutputDeviceDCompPresenter(
-    gpu::SharedImageFactory* shared_image_factory,
     gpu::SharedImageRepresentationFactory* shared_image_representation_factory,
     gpu::SharedContextState* context_state,
     scoped_refptr<gl::Presenter> presenter,
@@ -411,215 +400,63 @@ SkiaOutputDeviceDCompPresenter::SkiaOutputDeviceDCompPresenter(
     DidSwapBufferCompleteCallback did_swap_buffer_complete_callback)
     : SkiaOutputDeviceDComp(shared_image_representation_factory,
                             context_state,
-                            presenter.get(),
                             std::move(feature_info),
                             memory_tracker,
                             std::move(did_swap_buffer_complete_callback)),
-      presenter_(std::move(presenter)),
-      shared_image_factory_(shared_image_factory) {}
+      presenter_(std::move(presenter)) {
+  DCHECK(presenter_);
+  DCHECK(presenter_->SupportsGpuVSync());
 
-SkiaOutputDeviceDCompPresenter::~SkiaOutputDeviceDCompPresenter() {
-  DestroyRootSurface();
+  capabilities_.supports_post_sub_buffer = true;
+  capabilities_.supports_delegated_ink = presenter_->SupportsDelegatedInk();
+  capabilities_.pending_swap_params.max_pending_swaps = 1;
+  capabilities_.renderer_allocates_images = true;
 }
 
-bool SkiaOutputDeviceDCompPresenter::Reshape(
-    const SkSurfaceCharacterization& characterization,
-    const gfx::ColorSpace& color_space,
-    float device_scale_factor,
-    gfx::OverlayTransform transform) {
+SkiaOutputDeviceDCompPresenter::~SkiaOutputDeviceDCompPresenter() = default;
+
+bool SkiaOutputDeviceDCompPresenter::Reshape(const SkImageInfo& image_info,
+                                             const gfx::ColorSpace& color_space,
+                                             int sample_count,
+                                             float device_scale_factor,
+                                             gfx::OverlayTransform transform) {
   DCHECK_EQ(transform, gfx::OVERLAY_TRANSFORM_NONE);
 
-  if (!characterization.isValid()) {
-    DLOG(ERROR) << "Invalid SkSurfaceCharacterization";
-    return false;
-  }
-
-  if (characterization_ != characterization || color_space_ != color_space ||
-      device_scale_factor_ != device_scale_factor || transform_ != transform) {
-    characterization_ = characterization;
-    color_space_ = color_space;
-    device_scale_factor_ = device_scale_factor;
-    transform_ = transform;
-    DestroyRootSurface();
-  }
-
-  // The |SkiaOutputDeviceDCompPresenter| alpha state depends on
-  // |characterization_| and |wants_dcomp_surface_|. Since |presenter_| can only
-  // be |DCompPresenter| and its |Resize| function ignores the |has_alpha|
-  // parameter, we opt to pass an arbitrary value that we expect to be ignored.
-  constexpr bool kDCompPresenterResizeHasAlphaIgnore = false;
+  auto size = gfx::SkISizeToSize(image_info.dimensions());
 
   // DCompPresenter calls SetWindowPos on resize, so we call it to reflect the
   // newly allocated root surface.
   // Note, we could inline SetWindowPos here, but we need access to the HWND.
-  if (!presenter_->Resize(gfx::SkISizeToSize(characterization_.dimensions()),
-                          device_scale_factor_, color_space_,
-                          kDCompPresenterResizeHasAlphaIgnore)) {
+  if (!presenter_->Resize(size, device_scale_factor, color_space,
+                          /*has_alpha=*/!image_info.isOpaque())) {
     CheckForLoopFailures();
     // To prevent tail call, so we can see the stack.
     base::debug::Alias(nullptr);
     return false;
   }
 
+  size_ = size;
+
   return true;
 }
 
 bool SkiaOutputDeviceDCompPresenter::SetDrawRectangle(
     const gfx::Rect& draw_rectangle) {
-  if (update_rect_.has_value()) {
-    DLOG(ERROR) << "SetDrawRectangle must be called only once per "
-                   "BeginPaint/EndPaint pair";
-    return false;
-  }
-
-  if (!presenter_->SetDrawRectangle(draw_rectangle)) {
-    return false;
-  }
-
-  update_rect_ = draw_rectangle;
-  return true;
-}
-
-void SkiaOutputDeviceDCompPresenter::SetEnableDCLayers(bool enable) {
-  if (want_dcomp_surface_ != enable) {
-    want_dcomp_surface_ = enable;
-
-    // Changing this value will require a new root SharedImage
-    DestroyRootSurface();
-  }
+  return presenter_->SetDrawRectangle(draw_rectangle);
 }
 
 void SkiaOutputDeviceDCompPresenter::SetGpuVSyncEnabled(bool enabled) {
   presenter_->SetGpuVSyncEnabled(enabled);
 }
 
-bool SkiaOutputDeviceDCompPresenter::EnsureRootSurfaceAllocated() {
-  DCHECK(characterization_.isValid()) << "Must call Reshape first";
-
-  if (root_surface_mailbox_.IsZero()) {
-    ResourceFormat resource_format =
-        SkColorTypeToResourceFormat(characterization_.colorType());
-
-    const gfx::Size size = gfx::SkISizeToSize(characterization_.dimensions());
-
-    // If |want_dcomp_surface_|, it means we are layering the root surface with
-    // videos that might be underlays. In this case, we want to force
-    // transparency so the underlay appears correctly.
-    SkAlphaType alpha_type = want_dcomp_surface_
-                                 ? kPremul_SkAlphaType
-                                 : characterization_.imageInfo().alphaType();
-
-    // TODO(tangm): DComp surfaces do not support RGB10A2 so we must fall back
-    // to swap chains. If this happens with video overlays, this can result in
-    // the video overlay and its parent surface having unsynchronized updates.
-    // We should clean this up by either avoiding HDR or using RGBAF32 surfaces
-    // in this case.
-    const bool dcomp_unsupported_format =
-        resource_format == ResourceFormat::RGBA_1010102;
-
-    uint32_t usage =
-        gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE | gpu::SHARED_IMAGE_USAGE_SCANOUT;
-    if (want_dcomp_surface_ && !dcomp_unsupported_format) {
-      usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT_DCOMP_SURFACE;
-    } else {
-      usage |= gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
-    }
-
-    gpu::Mailbox root_surface_mailbox = gpu::Mailbox::GenerateForSharedImage();
-    bool success = shared_image_factory_->CreateSharedImage(
-        root_surface_mailbox, SharedImageFormat::SinglePlane(resource_format),
-        size, color_space_, kTopLeft_GrSurfaceOrigin, alpha_type,
-        gpu::kNullSurfaceHandle, usage);
-    if (!success) {
-      CheckForLoopFailures();
-      // To prevent tail call, so we can see the stack.
-      base::debug::Alias(nullptr);
-      return false;
-    }
-
-    // Store the root surface's mailbox only on success.
-    root_surface_mailbox_ = root_surface_mailbox;
-  }
-
-  if (!root_surface_skia_representation_) {
-    DCHECK(!root_surface_mailbox_.IsZero());
-
-    root_surface_skia_representation_ =
-        shared_image_representation_factory_->ProduceSkia(
-            root_surface_mailbox_,
-            scoped_refptr<gpu::SharedContextState>(context_state_));
-
-    if (!root_surface_skia_representation_) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-void SkiaOutputDeviceDCompPresenter::DestroyRootSurface() {
-  root_surface_write_access_.reset();
-  root_surface_skia_representation_.reset();
-
-  if (!root_surface_mailbox_.IsZero()) {
-    shared_image_factory_->DestroySharedImage(root_surface_mailbox_);
-    root_surface_mailbox_.SetZero();
-  }
-}
-
 SkSurface* SkiaOutputDeviceDCompPresenter::BeginPaint(
     std::vector<GrBackendSemaphore>* end_semaphores) {
-  if (!EnsureRootSurfaceAllocated()) {
-    DLOG(ERROR) << "Could not create root SharedImage";
-    return nullptr;
-  }
-
-  DCHECK(root_surface_skia_representation_);
-  DCHECK(update_rect_.has_value());
-
-  std::vector<GrBackendSemaphore> begin_semaphores;
-  root_surface_write_access_ =
-      root_surface_skia_representation_->BeginScopedWriteAccess(
-          characterization_.sampleCount(), characterization_.surfaceProps(),
-          update_rect_.value(), &begin_semaphores, end_semaphores,
-          gpu::SkiaImageRepresentation::AllowUnclearedAccess::kYes, true);
-  update_rect_.reset();
-  if (!root_surface_write_access_) {
-    return nullptr;
-  }
-
-  // We don't expect any semaphores on a Windows, non-Vulkan backend.
-  DCHECK(begin_semaphores.empty());
-  DCHECK(end_semaphores->empty());
-
-  return root_surface_write_access_->surface();
-}
-
-void SkiaOutputDeviceDCompPresenter::Submit(bool sync_cpu,
-                                            base::OnceClosure callback) {
-  if (root_surface_write_access_) {
-    // On Windows, we expect `end_state` to be null, since DX11 doesn't use
-    // resource states/barriers.
-    auto end_state = root_surface_write_access_->TakeEndState();
-    DCHECK_EQ(nullptr, end_state);
-  }
-
-  SkiaOutputDevice::Submit(sync_cpu, std::move(callback));
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 void SkiaOutputDeviceDCompPresenter::EndPaint() {
-  DCHECK(root_surface_skia_representation_);
-  DCHECK(root_surface_write_access_);
-
-  // Assume the caller has drawn to everything since the first update rect is
-  // required to cover the whole surface.
-  root_surface_skia_representation_->SetCleared();
-
-  root_surface_write_access_.reset();
-}
-
-bool SkiaOutputDeviceDCompPresenter::IsRootSurfaceAllocatedForTesting() const {
-  return !root_surface_mailbox_.IsZero();
+  NOTIMPLEMENTED();
 }
 
 bool SkiaOutputDeviceDCompPresenter::ScheduleDCLayer(
@@ -627,49 +464,19 @@ bool SkiaOutputDeviceDCompPresenter::ScheduleDCLayer(
   return presenter_->ScheduleDCLayer(std::move(params));
 }
 
-gfx::Size SkiaOutputDeviceDCompPresenter::GetRootSurfaceSize() const {
-  return presenter_->GetSize();
+bool SkiaOutputDeviceDCompPresenter::IsPrimaryPlaneOverlay() const {
+  return true;
 }
 
 void SkiaOutputDeviceDCompPresenter::DoPresent(
     const gfx::Rect& rect,
-    gl::GLSurface::SwapCompletionCallback completion_callback,
+    gl::Presenter::SwapCompletionCallback completion_callback,
     BufferPresentedCallback feedback,
     gfx::FrameData data) {
-  if (!ScheduleRootSurfaceAsOverlay()) {
-    std::move(completion_callback)
-        .Run(gfx::SwapCompletionResult(gfx::SwapResult::SWAP_FAILED));
-    // Notify the caller, the buffer is never presented on a screen.
-    std::move(feedback).Run(gfx::PresentationFeedback::Failure());
-    return;
-  }
-
   // The |rect| is ignored because SetDrawRectangle specified the area to be
   // swapped.
   presenter_->Present(std::move(completion_callback), std::move(feedback),
                       data);
-}
-
-bool SkiaOutputDeviceDCompPresenter::ScheduleRootSurfaceAsOverlay() {
-  auto overlay = shared_image_representation_factory_->ProduceOverlay(
-      root_surface_mailbox_);
-  if (!overlay) {
-    return false;
-  }
-
-  auto read_access = overlay->BeginScopedReadAccess();
-  if (!read_access) {
-    return false;
-  }
-
-  auto params = std::make_unique<gl::DCLayerOverlayParams>();
-  params->z_order = 0;
-  params->quad_rect = gfx::Rect(GetRootSurfaceSize());
-  params->content_rect = params->quad_rect;
-  params->overlay_image = read_access->GetDCLayerOverlayImage();
-  ScheduleDCLayer(std::move(params));
-
-  return true;
 }
 
 }  // namespace viz

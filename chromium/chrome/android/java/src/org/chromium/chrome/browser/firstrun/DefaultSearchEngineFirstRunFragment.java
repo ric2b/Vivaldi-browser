@@ -15,13 +15,14 @@ import androidx.fragment.app.Fragment;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.locale.LocaleManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.DefaultSearchEngineDialogHelper;
 import org.chromium.chrome.browser.search_engines.SearchEnginePromoType;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.components.browser_ui.widget.RadioButtonLayout;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 /** A {@link Fragment} that presents a set of search engines for the user to choose from. */
 public class DefaultSearchEngineFirstRunFragment extends Fragment implements FirstRunFragment {
@@ -45,7 +46,8 @@ public class DefaultSearchEngineFirstRunFragment extends Fragment implements Fir
         mButton = (Button) rootView.findViewById(R.id.button_primary);
         mButton.setEnabled(false);
 
-        assert TemplateUrlServiceFactory.get().isLoaded();
+        assert TemplateUrlServiceFactory.getForProfile(Profile.getLastUsedRegularProfile())
+                .isLoaded();
         mSearchEnginePromoDialogType = LocaleManager.getInstance().getSearchEnginePromoShowType();
         if (mSearchEnginePromoDialogType != SearchEnginePromoType.DONT_SHOW) {
             new DefaultSearchEngineDialogHelper(mSearchEnginePromoDialogType,
@@ -66,21 +68,14 @@ public class DefaultSearchEngineFirstRunFragment extends Fragment implements Fir
     }
 
     @Override
-    public void setUserVisibleHint(boolean isVisibleToUser) {
-        super.setUserVisibleHint(isVisibleToUser);
+    public void onResume() {
+        super.onResume();
 
-        if (isVisibleToUser) {
-            if (mSearchEnginePromoDialogType == SearchEnginePromoType.DONT_SHOW) {
-                PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
-                    @Override
-                    public void run() {
-                        getPageDelegate().advanceToNextPage();
-                    }
-                });
-            }
-
-            recordShown();
+        if (mSearchEnginePromoDialogType == SearchEnginePromoType.DONT_SHOW) {
+            PostTask.postTask(TaskTraits.UI_DEFAULT, () -> getPageDelegate().advanceToNextPage());
         }
+
+        recordShown();
     }
 
     private void recordShown() {

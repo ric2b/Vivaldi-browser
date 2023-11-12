@@ -12,7 +12,7 @@ import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
-import {OptInStatus} from '../new_tab_page.mojom-webui.js';
+import {ModuleIdName, OptInStatus} from '../new_tab_page.mojom-webui.js';
 import {NewTabPageProxy} from '../new_tab_page_proxy.js';
 
 import {Module, ModuleHeight} from './module_descriptor.js';
@@ -21,7 +21,7 @@ import {ModuleWrapperElement} from './module_wrapper.js';
 import {getTemplate} from './modules.html.js';
 
 export type DismissModuleEvent =
-    CustomEvent<{message: string, restoreCallback: () => void}>;
+    CustomEvent<{message: string, restoreCallback?: () => void}>;
 export type DisableModuleEvent = DismissModuleEvent;
 
 declare global {
@@ -143,6 +143,7 @@ export class ModulesElement extends PolymerElement {
   private disabledModules_: {all: boolean, ids: string[]};
   private dragEnabled_: boolean;
   private moduleImpressionDetected_: boolean;
+  private modulesIdNames_: ModuleIdName[];
   private modulesFreRemoved_: boolean;
   private modulesFreShown: boolean;
   private modulesFreVisible_: boolean;
@@ -151,7 +152,7 @@ export class ModulesElement extends PolymerElement {
   private modulesRedesignedLayoutEnabled_: boolean;
   private modulesShownToUser: boolean;
   private modulesVisibilityDetermined_: boolean;
-  private removedModuleData_: {message: string, undo: () => void}|null;
+  private removedModuleData_: {message: string, undo?: () => void}|null;
 
   private setDisabledModulesListenerId_: number|null = null;
   private setModulesFreVisibilityListenerId_: number|null = null;
@@ -255,8 +256,12 @@ export class ModulesElement extends PolymerElement {
 
   private async renderModules_(): Promise<void> {
     this.moduleImpressionDetected_ = false;
-    const modules = await ModuleRegistry.getInstance().initializeModules(
-        loadTimeData.getInteger('modulesLoadTimeout'));
+    this.modulesIdNames_ =
+        (await NewTabPageProxy.getInstance().handler.getModulesIdNames()).data;
+    const modules =
+        await ModuleRegistry.getInstance().initializeModulesHavingIds(
+            this.modulesIdNames_.map(m => m.id),
+            loadTimeData.getInteger('modulesLoadTimeout'));
     if (modules) {
       NewTabPageProxy.getInstance().handler.onModulesLoadedWithData(
           modules.map(module => module.descriptor.id));
@@ -342,7 +347,7 @@ export class ModulesElement extends PolymerElement {
 
   private onModulesLoadedAndVisibilityDeterminedChange_() {
     if (this.modulesLoadedAndVisibilityDetermined_) {
-      ModuleRegistry.getInstance().getDescriptors().forEach(({id}) => {
+      this.modulesIdNames_.forEach(({id}) => {
         chrome.metricsPrivate.recordBoolean(
             `NewTabPage.Modules.EnabledOnNTPLoad.${id}`,
             !this.disabledModules_.all &&
@@ -363,11 +368,14 @@ export class ModulesElement extends PolymerElement {
     const restoreCallback = e.detail.restoreCallback;
     this.removedModuleData_ = {
       message: e.detail.message,
-      undo: () => {
-        this.splice('dismissedModules_', this.dismissedModules_.indexOf(id), 1);
-        restoreCallback();
-        NewTabPageProxy.getInstance().handler.onRestoreModule(id);
-      },
+      undo: restoreCallback ?
+          () => {
+            this.splice(
+                'dismissedModules_', this.dismissedModules_.indexOf(id), 1);
+            restoreCallback();
+            NewTabPageProxy.getInstance().handler.onRestoreModule(id);
+          } :
+          undefined,
     };
     if (!this.dismissedModules_.includes(id)) {
       this.push('dismissedModules_', id);
@@ -419,7 +427,7 @@ export class ModulesElement extends PolymerElement {
     }
 
     // Restore the module.
-    this.removedModuleData_.undo();
+    this.removedModuleData_.undo!();
 
     // Notify the user.
     this.$.removeModuleToast.hide();

@@ -14,6 +14,7 @@
 #include "chrome/browser/ash/login/oobe_quick_start/target_device_bootstrap_controller.h"
 #include "chrome/browser/ash/login/ui/kiosk_app_menu_controller.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/login/ui/login_ui_pref_controller.h"
 #include "chrome/browser/ash/login/ui/signin_ui.h"
 #include "chrome/browser/ash/tpm_firmware_update.h"
 #include "chrome/browser/ui/browser_list_observer.h"
@@ -57,7 +58,6 @@ class LoginDisplayHostCommon : public LoginDisplayHost,
   void SetDisplayEmail(const std::string& email) final;
   void SetDisplayAndGivenName(const std::string& display_name,
                               const std::string& given_name) final;
-  bool IsGaiaDialogVisibleForTesting() final;
   void ShowAllowlistCheckFailedError() final;
   void LoadWallpaper(const AccountId& account_id) final;
   void LoadSigninWallpaper() final;
@@ -78,7 +78,8 @@ class LoginDisplayHostCommon : public LoginDisplayHost,
   void SetAuthSessionForOnboarding(const UserContext& user_context) final;
   void ClearOnboardingAuthSession() final;
   void StartUserOnboarding() final;
-  void ResumeUserOnboarding(OobeScreenId screen_id) final;
+  void ResumeUserOnboarding(const PrefService& prefs,
+                            OobeScreenId screen_id) final;
   void StartManagementTransition() final;
   void ShowTosForExistingUser() final;
   void ShowNewTermsForFlexUsers() final;
@@ -156,6 +157,8 @@ class LoginDisplayHostCommon : public LoginDisplayHost,
   KioskAppMenuController kiosk_app_menu_controller_;
 
   std::unique_ptr<LoginFeedback> login_feedback_;
+
+  std::unique_ptr<LoginUIPrefController> login_ui_pref_controller_;
 
   std::unique_ptr<WizardContext> wizard_context_;
 

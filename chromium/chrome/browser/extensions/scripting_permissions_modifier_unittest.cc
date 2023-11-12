@@ -10,7 +10,6 @@
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
-#include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/permissions_test_util.h"
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
@@ -18,6 +17,7 @@
 #include "components/crx_file/id_util.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/extension.h"
@@ -326,14 +326,14 @@ TEST_F(ScriptingPermissionsModifierUnitTest,
   ExtensionId extension_id = extension->id();
   // Hold onto references for the extension dirs so they don't get deleted
   // outside the lambda.
-  std::vector<std::unique_ptr<TestExtensionDir>> extension_dirs;
+  std::vector<TestExtensionDir> extension_dirs;
 
   auto update_extension = [this, &extension_id, &pem_path, &kManifestTemplate,
                            &extension_dirs](const char* version) {
-    auto update_version = std::make_unique<TestExtensionDir>();
-    update_version->WriteManifest(
+    TestExtensionDir update_version;
+    update_version.WriteManifest(
         base::StringPrintf(kManifestTemplate, version));
-    PackCRXAndUpdateExtension(extension_id, update_version->UnpackedPath(),
+    PackCRXAndUpdateExtension(extension_id, update_version.UnpackedPath(),
                               pem_path, ENABLED);
     scoped_refptr<const Extension> updated_extension =
         registry()->GetInstalledExtension(extension_id);

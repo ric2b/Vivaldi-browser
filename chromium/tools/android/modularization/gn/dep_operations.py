@@ -5,6 +5,7 @@
 
 import argparse
 import dataclasses
+import functools
 import json
 import logging
 import multiprocessing
@@ -12,7 +13,7 @@ import os
 import pathlib
 import subprocess
 import sys
-from typing import Dict, List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 import json_gn_editor
 import utils
@@ -45,6 +46,12 @@ class OperationResult:
         return f'{dryrun}{msg}{ignore}{self.path}{skip}'
 
 
+def _search_deps(name_query: Optional[str], path_query: Optional[str],
+                 root: pathlib.Path, path: str):
+    with json_gn_editor.BuildFile(path, root) as build_file:
+        build_file.search_deps(name_query, path_query)
+
+
 def _split_deps(existing_dep: str, new_deps: List[str], root: pathlib.Path,
                 path: str, dryrun: bool) -> Optional[OperationResult]:
     with json_gn_editor.BuildFile(path, root, dryrun=dryrun) as build_file:
@@ -56,10 +63,10 @@ def _split_deps(existing_dep: str, new_deps: List[str], root: pathlib.Path,
     return None
 
 
-def _remove_deps(*, deps: List[str], out_dir: str, root: pathlib.Path,
-                 path: str, dryrun: bool, targets: List[str],
-                 inline_mode: bool, target_name_filter: Optional[str]
-                 ) -> Tuple[Optional[OperationResult], str]:
+def _remove_deps(
+        *, deps: List[str], out_dir: str, root: pathlib.Path, path: str,
+        dryrun: bool, targets: List[str], inline_mode: bool,
+        target_name_filter: Optional[str]) -> Optional[OperationResult]:
     with json_gn_editor.BuildFile(path, root, dryrun=dryrun) as build_file:
         if build_file.remove_deps(deps, out_dir, targets, target_name_filter,
                                   inline_mode):
@@ -68,6 +75,21 @@ def _remove_deps(*, deps: List[str], out_dir: str, root: pathlib.Path,
                                        root, path),
                                    dryrun=dryrun)
     return None
+
+
+def _search(args: argparse.Namespace, build_filepaths: List[str],
+            root: pathlib.Path):
+    name_query = args.name
+    path_query = args.path
+    if name_query:
+        logging.info(f'Searching dep names using: {name_query}')
+    if path_query:
+        logging.info(f'Searching paths using: {path_query}')
+    with multiprocessing.Pool() as pool:
+        pool.map(
+            functools.partial(_search_deps, name_query, path_query, root),
+            build_filepaths,
+        )
 
 
 def _split(args: argparse.Namespace, build_filepaths: List[str],
@@ -144,7 +166,7 @@ def _remove(args: argparse.Namespace, build_filepaths: List[str],
         assert args.file, '--all-java-target requires passing --file.'
         logging.info(f'Finding java deps under {out_dir}.')
         all_java_deps = subprocess_utils.run_command([
-            _SRC_PATH / 'build' / 'android' / 'list_java_targets.py',
+            str(_SRC_PATH / 'build' / 'android' / 'list_java_targets.py'),
             '--gn-labels', '-C', out_dir
         ]).split('\n')
         logging.info(f'Found {len(all_java_deps)} java deps.')
@@ -249,6 +271,17 @@ def main():
     subparsers = parser.add_subparsers(
         help='Use subcommand -h to see full usage.')
 
+    search_parser = subparsers.add_parser(
+        'search',
+        parents=[common_args_parser],
+        help='Search for strings in build files. Each query is a regex string.'
+    )
+    search_parser.add_argument('--name',
+                               help='This is checked against dep names.')
+    search_parser.add_argument(
+        '--path', help='This checks the relative path of the build file.')
+    search_parser.set_defaults(command=_search)
+
     split_parser = subparsers.add_parser(
         'split',
         parents=[common_args_parser],
@@ -346,6 +379,8 @@ def main():
 
     operation_results: List[OperationResult] = args.command(
         args, filtered_build_filepaths, root)
+    if operation_results is None:
+        return
     ignored_operation_results = [r for r in operation_results if r.git_ignored]
     skipped_operation_results = [r for r in operation_results if r.skipped]
     num_ignored = len(ignored_operation_results)

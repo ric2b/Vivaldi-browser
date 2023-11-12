@@ -5,13 +5,18 @@
 #ifndef IOS_CHROME_BROWSER_UI_PASSWORDS_ACCOUNT_STORAGE_NOTICE_PASSWORDS_ACCOUNT_STORAGE_NOTICE_COORDINATOR_H_
 #define IOS_CHROME_BROWSER_UI_PASSWORDS_ACCOUNT_STORAGE_NOTICE_PASSWORDS_ACCOUNT_STORAGE_NOTICE_COORDINATOR_H_
 
-#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
+
+enum class PasswordsAccountStorageNoticeEntryPoint;
 
 // See PasswordsAccountStorageNoticeCommands.
 @interface PasswordsAccountStorageNoticeCoordinator : ChromeCoordinator
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
+                                entryPoint:
+                                    (PasswordsAccountStorageNoticeEntryPoint)
+                                        entryPoint
                           dismissalHandler:(void (^)())dismissalHandler
     NS_DESIGNATED_INITIALIZER;
 

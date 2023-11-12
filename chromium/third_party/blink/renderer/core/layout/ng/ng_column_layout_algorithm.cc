@@ -85,7 +85,7 @@ class MulticolPartWalker {
   // If a column was added for an OOF before a spanner, we need to update the
   // column break token so that the content is resumed at the correct spot.
   void UpdateNextColumnBreakToken(
-      const NGContainerFragmentBuilder::ChildrenVector& children);
+      const NGFragmentBuilder::ChildrenVector& children);
 
  private:
   void MoveToNext();
@@ -130,7 +130,7 @@ void MulticolPartWalker::AddNextColumnBreakToken(
 }
 
 void MulticolPartWalker::UpdateNextColumnBreakToken(
-    const NGContainerFragmentBuilder::ChildrenVector& children) {
+    const NGFragmentBuilder::ChildrenVector& children) {
   if (children.empty())
     return;
   const blink::NGPhysicalFragment* last_child =
@@ -349,6 +349,14 @@ const NGLayoutResult* NGColumnLayoutAlgorithm::Layout() {
 
 MinMaxSizesResult NGColumnLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesFloatInput&) {
+  const LayoutUnit override_intrinsic_inline_size =
+      Node().OverrideIntrinsicContentInlineSize();
+  if (override_intrinsic_inline_size != kIndefiniteSize) {
+    const LayoutUnit size =
+        BorderScrollbarPadding().InlineSum() + override_intrinsic_inline_size;
+    return {{size, size}, /* depends_on_block_constraints */ false};
+  }
+
   // First calculate the min/max sizes of columns.
   NGConstraintSpace space = CreateConstraintSpaceForMinMax();
   NGFragmentGeometry fragment_geometry = CalculateInitialFragmentGeometry(
@@ -759,10 +767,10 @@ const NGLayoutResult* NGColumnLayoutAlgorithm::LayoutRow(
 
     do {
       // Lay out one column. Each column will become a fragment.
-      NGConstraintSpace child_space = CreateConstraintSpaceForColumns(
-          ConstraintSpace(), column_size, ColumnPercentageResolutionSize(),
-          allow_discard_start_margin, balance_columns,
-          min_break_appeal.value_or(kBreakAppealLastResort));
+      NGConstraintSpace child_space = CreateConstraintSpaceForFragmentainer(
+          ConstraintSpace(), kFragmentColumn, column_size,
+          ColumnPercentageResolutionSize(), allow_discard_start_margin,
+          balance_columns, min_break_appeal.value_or(kBreakAppealLastResort));
 
       NGFragmentGeometry fragment_geometry =
           CalculateInitialFragmentGeometry(child_space, Node(), BreakToken());

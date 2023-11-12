@@ -30,7 +30,7 @@ class VivaldiFrameObserver
   friend class content::WebContentsUserData<VivaldiFrameObserver>;
 
   // Keep track of the HostZoomMap we're currently subscribed to.
-  content::HostZoomMap* host_zoom_map_;
+  raw_ptr<content::HostZoomMap> host_zoom_map_;
 
   void RenderFrameHostChanged(content::RenderFrameHost* old_host,
                               content::RenderFrameHost* new_host) override;

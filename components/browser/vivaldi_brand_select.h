@@ -19,6 +19,13 @@ enum class BrandSelection {
   kEdgeBrand = 4,
 };
 
+struct BrandConfiguration {
+  BrandSelection brand;
+  bool SpecifyVivaldiBrand;
+  std::string customBrand;
+  std::string customBrandVersion;
+};
+
 void ClientHintsBrandRegisterProfilePrefs(PrefService*);
 
 void SelectClientHintsBrand(absl::optional<std::string>& brand,
@@ -26,6 +33,10 @@ void SelectClientHintsBrand(absl::optional<std::string>& brand,
                             std::string& full_version);
 
 void UpdateBrands(int seed, blink::UserAgentBrandList& brands);
+
+void ConfigureClientHintsOverrides();
+
+std::string GetBrandFullVersion();
 
 }  // namespace vivaldi
 

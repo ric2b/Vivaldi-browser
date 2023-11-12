@@ -35,7 +35,7 @@ class ServiceImpl : public Service,
       content::RenderFrameHost* frame);
 
  private:
-  content::BrowserContext* browser_context_;
+  const raw_ptr<content::BrowserContext> browser_context_;
 
   std::set<Provider*> providers_;
   mojo::RemoteSet<mojom::Manager> managers_;

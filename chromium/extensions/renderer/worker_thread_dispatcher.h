@@ -14,16 +14,17 @@
 #include "base/values.h"
 #include "content/public/renderer/render_thread_observer.h"
 #include "content/public/renderer/worker_thread.h"
-#include "extensions/common/activation_sequence.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/mojom/event_dispatcher.mojom.h"
 #include "extensions/common/mojom/event_router.mojom.h"
+#include "extensions/common/mojom/service_worker_host.mojom.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 
 namespace base {
 class SingleThreadTaskRunner;
+class UnguessableToken;
 }
 
 namespace content {
@@ -31,8 +32,7 @@ class RenderThread;
 }
 
 class GURL;
-struct ExtensionMsg_TabConnectionInfo;
-struct ExtensionMsg_ExternalConnectionInfo;
+struct ExtensionMsg_OnConnectData;
 
 namespace extensions {
 class NativeExtensionBindingsSystem;
@@ -75,7 +75,7 @@ class WorkerThreadDispatcher : public content::RenderThreadObserver,
 
   void AddWorkerData(
       int64_t service_worker_version_id,
-      ActivationSequence activation_sequence,
+      base::UnguessableToken activation_sequence,
       ScriptContext* script_context,
       std::unique_ptr<NativeExtensionBindingsSystem> bindings_system);
   void RemoveWorkerData(int64_t service_worker_version_id);
@@ -89,6 +89,14 @@ class WorkerThreadDispatcher : public content::RenderThreadObserver,
   // Called when a service worker context was destroyed.
   void DidStopContext(const GURL& service_worker_scope,
                       int64_t service_worker_version_id);
+
+  void IncrementServiceWorkerActivity(int64_t service_worker_version_id,
+                                      const std::string& request_uuid);
+  void DecrementServiceWorkerActivity(int64_t service_worker_version_id,
+                                      const std::string& request_uuid);
+
+  void RequestWorker(mojom::RequestParamsPtr params);
+  void WorkerResponseAck(int request_id, int64_t service_worker_version_id);
 
   // content::RenderThreadObserver:
   bool OnControlMessageReceived(const IPC::Message& message) override;
@@ -150,7 +158,10 @@ class WorkerThreadDispatcher : public content::RenderThreadObserver,
   // NOTE: This must be called on the IO thread because it can call
   // SyncMessageFilter::GetRemoteAssociatedInterface() which must be called on
   // the IO thread.
+  // TODO(https://crbug.com/1364183): Obtain these interfaces at the worker
+  // thread once `AssociatedInterfaceRegistry` for ServiceWorker is added.
   mojom::EventRouter* GetEventRouterOnIO();
+  mojom::ServiceWorkerHost* GetServiceWorkerHostOnIO();
 
   // Mojo interface implementation, called from the main thread.
   void DispatchEvent(mojom::DispatchEventParamsPtr params,
@@ -167,6 +178,7 @@ class WorkerThreadDispatcher : public content::RenderThreadObserver,
                                        const IPC::Message& message);
 
   bool PostTaskToWorkerThread(int worker_thread_id, base::OnceClosure task);
+  void PostTaskToIOThread(base::OnceClosure task);
 
   // IPC handlers.
   void OnResponseWorker(int worker_thread_id,
@@ -176,10 +188,7 @@ class WorkerThreadDispatcher : public content::RenderThreadObserver,
                         const std::string& error);
   void OnValidateMessagePort(int worker_thread_id, const PortId& id);
   void OnDispatchOnConnect(int worker_thread_id,
-                           const PortId& target_port_id,
-                           const std::string& channel_name,
-                           const ExtensionMsg_TabConnectionInfo& source,
-                           const ExtensionMsg_ExternalConnectionInfo& info);
+                           const ExtensionMsg_OnConnectData& connect_data);
   void OnDeliverMessage(int worker_thread_id,
                         const PortId& target_port_id,
                         const Message& message);
@@ -198,6 +207,7 @@ class WorkerThreadDispatcher : public content::RenderThreadObserver,
   base::Lock task_runner_map_lock_;
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
   mojo::AssociatedRemote<mojom::EventRouter> event_router_remote_;
+  mojo::AssociatedRemote<mojom::ServiceWorkerHost> service_worker_host_;
 };
 
 }  // namespace extensions

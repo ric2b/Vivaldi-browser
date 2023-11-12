@@ -294,9 +294,10 @@ class FakeSafeBrowsingUIManager : public TestSafeBrowsingUIManager {
     threat_details_done_ = true;
   }
 
-  void MaybeReportSafeBrowsingHit(const HitReport& hit_report,
+  void MaybeReportSafeBrowsingHit(std::unique_ptr<HitReport> hit_report,
                                   WebContents* web_contents) override {
-    if (SafeBrowsingUIManager::ShouldSendHitReport(hit_report, web_contents)) {
+    if (SafeBrowsingUIManager::ShouldSendHitReport(hit_report.get(),
+                                                   web_contents)) {
       hit_report_sent_ = true;
     }
   }
@@ -2000,7 +2001,6 @@ class SafeBrowsingBlockingPageDelayedWarningBrowserTest
         content::GetIOThreadTaskRunner({})));
     SafeBrowsingService::RegisterFactory(&factory_);
     ThreatDetails::RegisterFactory(&details_factory_);
-    InProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
   }
 
   static bool TypeAndWaitForInterstitial(Browser* browser) {
@@ -2781,7 +2781,6 @@ class SafeBrowsingBlockingPageEnhancedProtectionMessageTest
         content::GetIOThreadTaskRunner({})));
     SafeBrowsingService::RegisterFactory(&factory_);
     ThreatDetails::RegisterFactory(&details_factory_);
-    policy::PolicyTest::CreatedBrowserMainParts(browser_main_parts);
   }
 
  protected:
@@ -2927,7 +2926,6 @@ class SafeBrowsingBlockingPageRealTimeUrlCheckTest
         content::GetUIThreadTaskRunner({}),
         content::GetIOThreadTaskRunner({})));
     SafeBrowsingService::RegisterFactory(&factory_);
-    InProcessBrowserTest::CreatedBrowserMainParts(browser_main_parts);
   }
 
  protected:
@@ -3297,7 +3295,7 @@ class SafeBrowsingFencedFrameBrowserTest
     // FencedFrameTestHelper::CreateFencedFrame for this case as well.
     constexpr char kAddFencedFrameScript[] = R"({
           const fencedFrame = document.createElement('fencedframe');
-          fencedFrame.src = $1;
+          fencedFrame.config = new FencedFrameConfig($1);
           document.body.appendChild(fencedFrame);
         })";
     EXPECT_TRUE(
@@ -3392,11 +3390,16 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingFencedFrameBrowserTest,
                  const ClientSafeBrowsingReportRequest::Resource& b) -> bool {
                 return a.url() < b.url();
               });
+
+    // Fenced frames loaded with configs do not have the `src` attribute set, so
+    // they do not show up on the safe browsing report.
+    // TODO(https://crbug.com/1428788): Update this once config-loaded fenced
+    // frames show up on the safe browsing report.
     ASSERT_EQ(2U, resources.size());
     VerifyResource(report, resources[1], initial_url.spec(), initial_url.spec(),
-                   1, "");
+                   0, "");
     VerifyResource(report, resources[0], fenced_frame_url.spec(),
-                   initial_url.spec(), 0, "FENCEDFRAME");
+                   initial_url.spec(), 0, "");
 
     ASSERT_EQ(2, report.dom_size());
     // Because the order of elements is not deterministic, we just verify the

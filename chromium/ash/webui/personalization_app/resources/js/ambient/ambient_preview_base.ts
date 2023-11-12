@@ -51,10 +51,10 @@ export class AmbientPreviewBase extends WithPersonalizationStore {
       loading_: {
         type: Boolean,
         computed:
-            'computeLoading_(isAmbientModeAllowed_, ambientModeEnabled_, albums_, topicSource_, googlePhotosAlbumsPreviews_)',
+            'computeLoading_(isAmbientModeAllowed_, ambientModeEnabled_, albums_, topicSource_, previewImages_)',
         observer: 'onLoadingChanged_',
       },
-      googlePhotosAlbumsPreviews_: {
+      previewImages_: {
         type: Array,
         value: null,
       },
@@ -74,7 +74,7 @@ export class AmbientPreviewBase extends WithPersonalizationStore {
   }
 
   protected ambientModeEnabled_: boolean|null;
-  protected googlePhotosAlbumsPreviews_: Url[]|null;
+  protected previewImages_: Url[]|null;
   protected isPersonalizationJellyEnabled_: boolean;
   protected previewAlbums_: AmbientModeAlbum[]|null;
   protected topicSource_: TopicSource|null;
@@ -96,9 +96,7 @@ export class AmbientPreviewBase extends WithPersonalizationStore {
     this.watch(
         'ambientModeEnabled_', state => state.ambient.ambientModeEnabled);
     this.watch('albums_', state => state.ambient.albums);
-    this.watch(
-        'googlePhotosAlbumsPreviews_',
-        state => state.ambient.googlePhotosAlbumsPreviews);
+    this.watch('previewImages_', state => state.ambient.previews);
     this.watch('topicSource_', state => state.ambient.topicSource);
     this.updateFromStore();
   }
@@ -106,8 +104,7 @@ export class AmbientPreviewBase extends WithPersonalizationStore {
   private computeLoading_(): boolean {
     return this.isAmbientModeAllowed_ &&
         (this.ambientModeEnabled_ === null || this.albums_ === null ||
-         this.topicSource_ === null ||
-         this.googlePhotosAlbumsPreviews_ === null);
+         this.topicSource_ === null || this.previewImages_ === null);
   }
 
   private onLoadingChanged_(value: boolean) {
@@ -185,11 +182,16 @@ export class AmbientPreviewBase extends WithPersonalizationStore {
         // and number of photos in the album (only applicable for Google
         // Photos).
         const topicSourceDesc = getTopicSourceName(this.topicSource_);
-        // TODO(b/223834394): replace dot separator symbol • with an icon/image.
-        return this.topicSource_ === TopicSource.kArtGallery ?
-            topicSourceDesc :
-            `${topicSourceDesc} • ${
-                getPhotoCount(this.previewAlbums_[0].numberOfPhotos)}`;
+        if (this.topicSource_ === TopicSource.kArtGallery) {
+          return topicSourceDesc;
+        } else if (this.topicSource_ === TopicSource.kVideo) {
+          return this.previewAlbums_[0].description;
+        } else {
+          // TODO(b/223834394): replace dot separator symbol • with an
+          // icon/image.
+          return `${topicSourceDesc} • ${
+              getPhotoCount(this.previewAlbums_[0].numberOfPhotos)}`;
+        }
       case 2:
       case 3:
         // For 2-3 selected albums, album description includes the titles of all

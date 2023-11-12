@@ -19,7 +19,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/network_session_configurator/common/network_switches.h"
-#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/test/browser_test.h"
@@ -36,6 +36,11 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/common/extensions/extension_test_util.h"
+#include "extensions/common/extensions_client.h"
+#endif
 
 using ChromeContentRendererClientSearchBoxTest = ChromeRenderViewTest;
 
@@ -193,3 +198,24 @@ IN_PROC_BROWSER_TEST_P(ChromeContentRendererClientBrowserTest,
 INSTANTIATE_TEST_SUITE_P(FlashEmbeds,
                          ChromeContentRendererClientBrowserTest,
                          ::testing::ValuesIn(kFlashEmbedsTestData));
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+IN_PROC_BROWSER_TEST_F(ChromeContentRendererClientBrowserTest,
+                       AvailabilityMapCreated) {
+  auto* extensions_client = extensions::ExtensionsClient::Get();
+  ASSERT_TRUE(extensions_client);
+
+  // ChromeContentRendererClient initializes the ExtensionClient with the
+  // FeatureDelegatedAvailabilityMap, which will maintain ownership of the map.
+  // Verify that the map is created correctly.
+  {
+    const auto& map =
+        extensions_client->GetFeatureDelegatedAvailabilityCheckMap();
+    EXPECT_EQ(5u, map.size());
+    for (const auto* feature :
+         extension_test_util::GetExpectedDelegatedFeaturesForTest()) {
+      EXPECT_EQ(1u, map.count(feature));
+    }
+  }
+}
+#endif

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/test/bind.h"
 #include "chrome/browser/dips/dips_bounce_detector.h"
 
 #include "base/files/file_path.h"
@@ -9,12 +10,19 @@
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_feature_list.h"
+#include "chrome/browser/dips/dips_service.h"
+#include "chrome/browser/dips/dips_service_factory.h"
+#include "chrome/browser/dips/dips_test_utils.h"
 #include "chrome/browser/dips/dips_utils.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/chrome_test_utils.h"
 #include "content/public/browser/cookie_access_details.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/hit_test_region_observer.h"
+#include "content/public/test/test_devtools_protocol_client.h"
 #include "content/public/test/test_utils.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/http_request.h"
@@ -22,6 +30,7 @@
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/blink/public/common/switches.h"
 #include "third_party/metrics_proto/ukm/source.pb.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -41,52 +50,6 @@ using testing::Pair;
 using ukm::builders::DIPS_Redirect;
 
 namespace {
-
-class UserActivationObserver : public content::WebContentsObserver {
- public:
-  explicit UserActivationObserver(content::WebContents* web_contents,
-                                  content::RenderFrameHost* render_frame_host)
-      : WebContentsObserver(web_contents),
-        render_frame_host_(render_frame_host) {}
-
-  // Wait until the frame receives user activation.
-  void Wait() { run_loop_.Run(); }
-
-  // WebContentsObserver override
-  void FrameReceivedUserActivation(
-      content::RenderFrameHost* render_frame_host) override {
-    if (render_frame_host_ == render_frame_host) {
-      run_loop_.Quit();
-    }
-  }
-
- private:
-  raw_ptr<content::RenderFrameHost> const render_frame_host_;
-  base::RunLoop run_loop_;
-};
-
-class CookieAccessObserver : public content::WebContentsObserver {
- public:
-  explicit CookieAccessObserver(content::WebContents* web_contents,
-                                content::RenderFrameHost* render_frame_host)
-      : WebContentsObserver(web_contents),
-        render_frame_host_(render_frame_host) {}
-
-  // Wait until the frame accesses cookies.
-  void Wait() { run_loop_.Run(); }
-
-  // WebContentsObserver override
-  void OnCookiesAccessed(content::RenderFrameHost* render_frame_host,
-                         const content::CookieAccessDetails& details) override {
-    if (render_frame_host_ == render_frame_host) {
-      run_loop_.Quit();
-    }
-  }
-
- private:
-  const raw_ptr<content::RenderFrameHost> render_frame_host_;
-  base::RunLoop run_loop_;
-};
 
 // Returns a simplified URL representation for ease of comparison in tests.
 // Just host+path.
@@ -110,6 +73,12 @@ void AppendRedirects(std::vector<std::string>* vec,
   for (const auto& redirect : redirects) {
     AppendRedirect(vec, *redirect, *chain);
   }
+}
+
+void AppendSitesInReport(std::vector<std::string>* reports,
+                         const std::set<std::string>& sites) {
+  reports->push_back(base::JoinString(
+      std::vector<base::StringPiece>(sites.begin(), sites.end()), ", "));
 }
 
 }  // namespace
@@ -196,6 +165,21 @@ WEB_CONTENTS_USER_DATA_KEY_IMPL(WCOCallbackLogger);
 
 class DIPSBounceDetectorBrowserTest : public PlatformBrowserTest {
  protected:
+  DIPSBounceDetectorBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{},
+        /*disabled_features=*/{
+            // TODO(crbug.com/1394910): Use HTTPS URLs in tests to avoid having
+            // to disable this feature.
+            features::kHttpsUpgrades,
+        });
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // Prevents flakiness by handling clicks even before content is drawn.
+    command_line->AppendSwitch(blink::switches::kAllowPreCommitInput);
+  }
+
   void SetUpOnMainThread() override {
     ASSERT_TRUE(embedded_test_server()->Start());
     host_resolver()->AddRule("a.test", "127.0.0.1");
@@ -219,10 +203,60 @@ class DIPSBounceDetectorBrowserTest : public PlatformBrowserTest {
         base::BindRepeating(&AppendRedirects, redirects));
   }
 
+  void StartAppendingReportsTo(std::vector<std::string>* reports) {
+    web_contents_observer_->SetIssueReportingCallbackForTesting(
+        base::BindRepeating(&AppendSitesInReport, reports));
+  }
+
+  void BlockUntilHelperProcessesPendingRequests() {
+    base::SequenceBound<DIPSStorage>* storage =
+        DIPSServiceFactory::GetForBrowserContext(
+            GetActiveWebContents()->GetBrowserContext())
+            ->storage();
+    storage->FlushPostedTasksForTesting();
+  }
+
+  void StateForURL(const GURL& url, StateForURLCallback callback) {
+    DIPSService* dips_service = DIPSServiceFactory::GetForBrowserContext(
+        GetActiveWebContents()->GetBrowserContext());
+    dips_service->storage()
+        ->AsyncCall(&DIPSStorage::Read)
+        .WithArgs(url)
+        .Then(std::move(callback));
+  }
+
+  absl::optional<StateValue> GetDIPSState(const GURL& url) {
+    absl::optional<StateValue> state;
+
+    StateForURL(url, base::BindLambdaForTesting([&](DIPSState loaded_state) {
+                  if (loaded_state.was_loaded()) {
+                    state = loaded_state.ToStateValue();
+                  }
+                }));
+    BlockUntilHelperProcessesPendingRequests();
+
+    return state;
+  }
+
+  // Navigate to /set-cookie on `host` and wait for OnCookiesAccessed() to be
+  // called.
+  [[nodiscard]] bool NavigateToSetCookie(base::StringPiece host) {
+    auto* web_contents = GetActiveWebContents();
+    const auto url =
+        embedded_test_server()->GetURL(host, "/set-cookie?name=value");
+    URLCookieAccessObserver observer(web_contents, url,
+                                     URLCookieAccessObserver::Type::kChange);
+    bool success = content::NavigateToURL(web_contents, url);
+    if (success) {
+      observer.Wait();
+    }
+    return success;
+  }
+
   void CreateImageAndWaitForCookieAccess(const GURL& image_url) {
     WebContents* web_contents = GetActiveWebContents();
-    CookieAccessObserver observer(web_contents,
-                                  web_contents->GetPrimaryMainFrame());
+    URLCookieAccessObserver observer(web_contents, image_url,
+                                     URLCookieAccessObserver::Type::kRead);
     ASSERT_TRUE(content::ExecJs(web_contents,
                                 content::JsReplace(
                                     R"(
@@ -245,6 +279,8 @@ class DIPSBounceDetectorBrowserTest : public PlatformBrowserTest {
   }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   raw_ptr<DIPSWebContentsObserver, DanglingUntriaged> web_contents_observer_ =
       nullptr;
 };
@@ -276,25 +312,20 @@ IN_PROC_BROWSER_TEST_F(DIPSBounceDetectorBrowserTest,
   content::WebContents* web_contents = GetActiveWebContents();
 
   // Set cookies on all 4 test domains
-  ASSERT_TRUE(content::NavigateToURL(
-      web_contents,
-      embedded_test_server()->GetURL("a.test", "/set-cookie?name=value")));
-  ASSERT_TRUE(content::NavigateToURL(
-      web_contents,
-      embedded_test_server()->GetURL("b.test", "/set-cookie?name=value")));
-  ASSERT_TRUE(content::NavigateToURL(
-      web_contents,
-      embedded_test_server()->GetURL("c.test", "/set-cookie?name=value")));
-  ASSERT_TRUE(content::NavigateToURL(
-      web_contents,
-      embedded_test_server()->GetURL("d.test", "/set-cookie?name=value")));
+  ASSERT_TRUE(NavigateToSetCookie("a.test"));
+  ASSERT_TRUE(NavigateToSetCookie("b.test"));
+  ASSERT_TRUE(NavigateToSetCookie("c.test"));
+  ASSERT_TRUE(NavigateToSetCookie("d.test"));
 
   // Start logging WebContentsObserver callbacks.
   WCOCallbackLogger::CreateForWebContents(web_contents);
   auto* logger = WCOCallbackLogger::FromWebContents(web_contents);
 
   // Visit the redirect.
+  URLCookieAccessObserver observer(web_contents, final_url,
+                                   URLCookieAccessObserver::Type::kChange);
   ASSERT_TRUE(content::NavigateToURL(web_contents, redirect_url, final_url));
+  observer.Wait();
 
   // Verify that the 7 OnCookiesAccessed() executions are called in order, and
   // all between DidStartNavigation() and DidFinishNavigation().
@@ -305,25 +336,28 @@ IN_PROC_BROWSER_TEST_F(DIPSBounceDetectorBrowserTest,
   // test will intentionally fail if it happens so that we'll notice.
   EXPECT_THAT(
       logger->log(),
-      ElementsAre(
-          ("DidStartNavigation(a.test/cross-site/b.test/cross-site-with-cookie/"
-           "c.test/cross-site-with-cookie/d.test/set-cookie)"),
-          ("OnCookiesAccessed(NavigationHandle, Read: "
-           "a.test/cross-site/b.test/cross-site-with-cookie/c.test/"
-           "cross-site-with-cookie/d.test/set-cookie)"),
-          ("OnCookiesAccessed(NavigationHandle, Read: "
-           "b.test/cross-site-with-cookie/c.test/cross-site-with-cookie/d.test/"
-           "set-cookie)"),
-          ("OnCookiesAccessed(NavigationHandle, Change: "
-           "b.test/cross-site-with-cookie/c.test/cross-site-with-cookie/d.test/"
-           "set-cookie)"),
-          ("OnCookiesAccessed(NavigationHandle, Read: "
-           "c.test/cross-site-with-cookie/d.test/set-cookie)"),
-          ("OnCookiesAccessed(NavigationHandle, Change: "
-           "c.test/cross-site-with-cookie/d.test/set-cookie)"),
-          "OnCookiesAccessed(NavigationHandle, Read: d.test/set-cookie)",
-          "OnCookiesAccessed(NavigationHandle, Change: d.test/set-cookie)",
-          "DidFinishNavigation(d.test/set-cookie)"));
+      testing::ContainerEq(std::vector<std::string>(
+          {("DidStartNavigation(a.test/cross-site/b.test/"
+            "cross-site-with-cookie/"
+            "c.test/cross-site-with-cookie/d.test/set-cookie)"),
+           ("OnCookiesAccessed(NavigationHandle, Read: "
+            "a.test/cross-site/b.test/cross-site-with-cookie/c.test/"
+            "cross-site-with-cookie/d.test/set-cookie)"),
+           ("OnCookiesAccessed(NavigationHandle, Read: "
+            "b.test/cross-site-with-cookie/c.test/cross-site-with-cookie/"
+            "d.test/"
+            "set-cookie)"),
+           ("OnCookiesAccessed(NavigationHandle, Change: "
+            "b.test/cross-site-with-cookie/c.test/cross-site-with-cookie/"
+            "d.test/"
+            "set-cookie)"),
+           ("OnCookiesAccessed(NavigationHandle, Read: "
+            "c.test/cross-site-with-cookie/d.test/set-cookie)"),
+           ("OnCookiesAccessed(NavigationHandle, Change: "
+            "c.test/cross-site-with-cookie/d.test/set-cookie)"),
+           "OnCookiesAccessed(NavigationHandle, Read: d.test/set-cookie)",
+           "OnCookiesAccessed(NavigationHandle, Change: d.test/set-cookie)",
+           "DidFinishNavigation(d.test/set-cookie)"})));
 }
 
 // An EmbeddedTestServer request handler for
@@ -334,8 +368,9 @@ HandleCrossSiteSameSiteNoneCookieRedirect(
     net::EmbeddedTestServer* server,
     const net::test_server::HttpRequest& request) {
   const std::string prefix = "/cross-site-with-samesite-none-cookie";
-  if (!net::test_server::ShouldHandle(request, prefix))
+  if (!net::test_server::ShouldHandle(request, prefix)) {
     return nullptr;
+  }
 
   std::string dest_all = base::UnescapeBinaryURLComponent(
       request.relative_url.substr(prefix.size() + 1));
@@ -392,6 +427,60 @@ IN_PROC_BROWSER_TEST_F(DIPSBounceDetectorBrowserTest,
   // b.test had a stateful redirect, but because it was in an iframe, we ignored
   // it.
   EXPECT_THAT(redirects, IsEmpty());
+}
+
+// This test verifies that sites in a redirect chain with previous user
+// interaction are not reported in the resulting issue when a navigation
+// finishes.
+IN_PROC_BROWSER_TEST_F(DIPSBounceDetectorBrowserTest,
+                       ReportRedirectorsInChain_OmitSitesWithInteraction) {
+  WebContents* web_contents = GetActiveWebContents();
+
+  std::vector<std::string> reports;
+  StartAppendingReportsTo(&reports);
+
+  // Record user activation on d.test.
+  GURL url = embedded_test_server()->GetURL("d.test", "/title1.html");
+
+  ASSERT_TRUE(content::NavigateToURL(web_contents, url));
+  UserActivationObserver observer(web_contents,
+                                  web_contents->GetPrimaryMainFrame());
+  content::WaitForHitTestData(web_contents->GetPrimaryMainFrame());
+  SimulateMouseClick(web_contents, 0, blink::WebMouseEvent::Button::kLeft);
+  observer.Wait();
+
+  // Verify interaction was recorded for d.test, before proceeding.
+  absl::optional<StateValue> state = GetDIPSState(url);
+  ASSERT_TRUE(state.has_value());
+  ASSERT_TRUE(state->user_interaction_times.has_value());
+
+  // Visit initial page on a.test.
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents, embedded_test_server()->GetURL("a.test", "/title1.html")));
+
+  // Navigate with a click (not a redirect) to b.test, which S-redirects to
+  // c.test.
+  ASSERT_TRUE(content::NavigateToURLFromRenderer(
+      web_contents,
+      embedded_test_server()->GetURL("b.test",
+                                     "/cross-site/c.test/title1.html"),
+      embedded_test_server()->GetURL("c.test", "/title1.html")));
+
+  // Navigate without a click (i.e. by C-redirecting) to d.test.
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents, embedded_test_server()->GetURL("d.test", "/title1.html")));
+
+  // Navigate without a click (i.e. by C-redirecting) to e.test, which
+  // S-redirects to f.test, which S-redirects to g.test.
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents,
+      embedded_test_server()->GetURL(
+          "e.test", "/cross-site/f.test/cross-site/g.test/title1.html"),
+      embedded_test_server()->GetURL("g.test", "/title1.html")));
+  EndRedirectChain();
+  BlockUntilHelperProcessesPendingRequests();
+
+  EXPECT_THAT(reports, ElementsAre(("b.test"), ("c.test"), ("e.test, f.test")));
 }
 
 // This test verifies that a third-party cookie access doesn't cause a client
@@ -601,4 +690,85 @@ IN_PROC_BROWSER_TEST_F(DIPSBounceDetectorBrowserTest,
               ElementsAre(("[1/1] a.test/title1.html -> "
                            "b.test/cross-site/c.test/title1.html (None) -> "
                            "c.test/title1.html")));
+}
+
+class DIPSBounceTrackingDevToolsIssueTest
+    : public content::TestDevToolsProtocolClient,
+      public DIPSBounceDetectorBrowserTest {
+ protected:
+  void WaitForIssueAndCheckTrackingSites(
+      const std::vector<std::string>& sites) {
+    auto is_dips_issue = [](const base::Value::Dict& params) {
+      return *(params.FindStringByDottedPath("issue.code")) ==
+             "BounceTrackingIssue";
+    };
+
+    // Wait for notification of a Bounce Tracking Issue.
+    base::Value::Dict params = WaitForMatchingNotification(
+        "Audits.issueAdded", base::BindRepeating(is_dips_issue));
+    ASSERT_EQ(*params.FindStringByDottedPath("issue.code"),
+              "BounceTrackingIssue");
+
+    base::Value::Dict* bounce_tracking_issue_details =
+        params.FindDictByDottedPath("issue.details.bounceTrackingIssueDetails");
+    ASSERT_TRUE(bounce_tracking_issue_details);
+
+    std::vector<std::string> tracking_sites;
+    base::Value::List* tracking_sites_list =
+        bounce_tracking_issue_details->FindList("trackingSites");
+    if (tracking_sites_list) {
+      for (const auto& val : *tracking_sites_list) {
+        tracking_sites.push_back(val.GetString());
+      }
+    }
+
+    // Verify the reported tracking sites match the expected sites.
+    EXPECT_THAT(tracking_sites, testing::ElementsAreArray(sites));
+
+    // Clear existing notifications so subsequent calls don't fail by checking
+    // `sites` against old notifications.
+    ClearNotifications();
+  }
+
+  void TearDownOnMainThread() override {
+    DetachProtocolClient();
+    DIPSBounceDetectorBrowserTest::TearDownOnMainThread();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(DIPSBounceTrackingDevToolsIssueTest,
+                       BounceTrackingDevToolsIssue) {
+  WebContents* web_contents = GetActiveWebContents();
+
+  // Visit initial page on a.test.
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents, embedded_test_server()->GetURL("a.test", "/title1.html")));
+
+  // Open DevTools and enable Audit domain.
+  AttachToWebContents(web_contents);
+  SendCommandSync("Audits.enable");
+  ClearNotifications();
+
+  // Navigate with a click (not a redirect) to b.test, which S-redirects to
+  // c.test.
+  ASSERT_TRUE(content::NavigateToURLFromRenderer(
+      web_contents,
+      embedded_test_server()->GetURL("b.test",
+                                     "/cross-site/c.test/title1.html"),
+      embedded_test_server()->GetURL("c.test", "/title1.html")));
+  WaitForIssueAndCheckTrackingSites({"b.test"});
+
+  // Navigate without a click (i.e. by C-redirecting) to d.test.
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents, embedded_test_server()->GetURL("d.test", "/title1.html")));
+  WaitForIssueAndCheckTrackingSites({"c.test"});
+
+  // Navigate without a click (i.e. by C-redirecting) to e.test, which
+  // S-redirects to f.test, which S-redirects to g.test.
+  ASSERT_TRUE(content::NavigateToURLFromRendererWithoutUserGesture(
+      web_contents,
+      embedded_test_server()->GetURL(
+          "e.test", "/cross-site/f.test/cross-site/g.test/title1.html"),
+      embedded_test_server()->GetURL("g.test", "/title1.html")));
+  WaitForIssueAndCheckTrackingSites({"d.test", "e.test", "f.test"});
 }

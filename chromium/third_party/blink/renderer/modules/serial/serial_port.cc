@@ -113,7 +113,8 @@ class AbortCloseFunction : public ScriptFunction::Callable {
 }  // namespace
 
 SerialPort::SerialPort(Serial* parent, mojom::blink::SerialPortInfoPtr info)
-    : info_(std::move(info)),
+    : ActiveScriptWrappable<SerialPort>({}),
+      info_(std::move(info)),
       parent_(parent),
       port_(parent->GetExecutionContext()),
       client_receiver_(this, parent->GetExecutionContext()) {}
@@ -374,7 +375,8 @@ ScriptPromise SerialPort::close(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  close_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  close_resolver_ = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   ScriptPromise promise = close_resolver_->Promise();
 
   HeapVector<ScriptPromise> promises;
@@ -419,7 +421,8 @@ ScriptPromise SerialPort::forget(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(
+      script_state, exception_state.GetContext());
   parent_->ForgetPort(info_->token,
                       WTF::BindOnce(&SerialPort::OnForget, WrapPersistent(this),
                                     WrapPersistent(resolver)));

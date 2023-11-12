@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_path_cache.h"
 
 #import "components/bookmarks/browser/bookmark_model.h"
+#import "components/bookmarks/common/bookmark_metrics.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
 #import "ios/chrome/browser/bookmarks/bookmark_ios_unit_test_support.h"
 #import "testing/gtest/include/gtest/gtest.h"
@@ -31,7 +32,7 @@ class BookmarkPathCacheTest : public BookmarkIOSUnitTestSupport {
 
 TEST_F(BookmarkPathCacheTest, TestPathCache) {
   // Try to store and retrieve a cache.
-  const BookmarkNode* mobile_node = bookmark_model_->mobile_node();
+  const BookmarkNode* mobile_node = profile_bookmark_model_->mobile_node();
   const BookmarkNode* f1 = AddFolder(mobile_node, @"f1");
   int64_t folder_id = f1->id();
   int topmost_row = 23;
@@ -43,7 +44,7 @@ TEST_F(BookmarkPathCacheTest, TestPathCache) {
   int result_topmost_row;
   [BookmarkPathCache
       getBookmarkTopMostRowCacheWithPrefService:&prefs_
-                                          model:bookmark_model_
+                                          model:profile_bookmark_model_
                                        folderId:&result_folder_id
                                      topMostRow:&result_topmost_row];
   EXPECT_EQ(folder_id, result_folder_id);
@@ -52,7 +53,7 @@ TEST_F(BookmarkPathCacheTest, TestPathCache) {
 
 TEST_F(BookmarkPathCacheTest, TestPathCacheWhenFolderDeleted) {
   // Try to store and retrieve a cache after the cached path is deleted.
-  const BookmarkNode* mobile_node = bookmark_model_->mobile_node();
+  const BookmarkNode* mobile_node = profile_bookmark_model_->mobile_node();
   const BookmarkNode* f1 = AddFolder(mobile_node, @"f1");
   int64_t folder_id = f1->id();
   int topmost_row = 23;
@@ -61,13 +62,14 @@ TEST_F(BookmarkPathCacheTest, TestPathCacheWhenFolderDeleted) {
                                                  topMostRow:topmost_row];
 
   // Delete the folder.
-  bookmark_model_->Remove(f1);
+  profile_bookmark_model_->Remove(
+      f1, bookmarks::metrics::BookmarkEditSource::kOther);
 
   int64_t unused_folder_id;
   int unused_topmost_row;
   BOOL result = [BookmarkPathCache
       getBookmarkTopMostRowCacheWithPrefService:&prefs_
-                                          model:bookmark_model_
+                                          model:profile_bookmark_model_
                                        folderId:&unused_folder_id
                                      topMostRow:&unused_topmost_row];
   ASSERT_FALSE(result);

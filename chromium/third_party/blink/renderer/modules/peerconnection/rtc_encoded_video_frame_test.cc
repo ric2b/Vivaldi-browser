@@ -12,8 +12,11 @@
 #include "third_party/blink/renderer/modules/peerconnection/rtc_encoded_video_frame_delegate.h"
 #include "third_party/webrtc/api/test/mock_transformable_video_frame.h"
 
+using testing::_;
+using testing::NiceMock;
 using testing::Return;
 using testing::ReturnRef;
+using testing::SaveArg;
 
 using webrtc::MockTransformableVideoFrame;
 
@@ -56,7 +59,7 @@ TEST_F(RTCEncodedVideoFrameTest, GetMetadataReturnsMetadata) {
   webrtc_vp8_specifics.beginningOfPartition = true;
   webrtc_metadata.SetRTPVideoHeaderCodecSpecifics(webrtc_vp8_specifics);
 
-  EXPECT_CALL(*frame, GetMetadata()).WillOnce(ReturnRef(webrtc_metadata));
+  EXPECT_CALL(*frame, Metadata()).WillOnce(Return(webrtc_metadata));
   EXPECT_CALL(*frame, GetPayloadType()).WillRepeatedly(Return(13));
 
   RTCEncodedVideoFrame encoded_frame(std::move(frame));
@@ -94,6 +97,54 @@ TEST_F(RTCEncodedVideoFrameTest, GetMetadataReturnsMetadata) {
   EXPECT_EQ(11, retrieved_vp8_specifics->keyIdx());
   EXPECT_EQ(12, retrieved_vp8_specifics->partitionId());
   EXPECT_EQ(true, retrieved_vp8_specifics->beginningOfPartition());
+}
+
+TEST_F(RTCEncodedVideoFrameTest, ClosedFramesFailToClone) {
+  V8TestingScope v8_scope;
+
+  std::unique_ptr<MockTransformableVideoFrame> frame =
+      std::make_unique<MockTransformableVideoFrame>();
+
+  RTCEncodedVideoFrame encoded_frame(std::move(frame));
+
+  // Move the WebRTC frame out, as if the frame had been written into
+  // an encoded insertable stream's WritableStream to be sent on.
+  encoded_frame.PassWebRtcFrame();
+
+  DummyExceptionStateForTesting exception_state;
+  encoded_frame.clone(exception_state);
+
+  EXPECT_TRUE(exception_state.HadException());
+}
+
+TEST_F(RTCEncodedVideoFrameTest, SetMetadataPreservesVP9CodecSpecifics) {
+  V8TestingScope v8_scope;
+
+  std::unique_ptr<MockTransformableVideoFrame> frame =
+      std::make_unique<NiceMock<MockTransformableVideoFrame>>();
+
+  webrtc::VideoFrameMetadata webrtc_metadata;
+  webrtc_metadata.SetCodec(webrtc::VideoCodecType::kVideoCodecVP9);
+  webrtc::RTPVideoHeaderVP9 webrtc_vp9_specifics;
+  webrtc_vp9_specifics.InitRTPVideoHeaderVP9();
+  webrtc_vp9_specifics.inter_pic_predicted = true;
+  webrtc_vp9_specifics.flexible_mode = true;
+  webrtc_vp9_specifics.beginning_of_frame = true;
+  webrtc_metadata.SetRTPVideoHeaderCodecSpecifics(webrtc_vp9_specifics);
+  ON_CALL(*frame, Metadata()).WillByDefault(Return(webrtc_metadata));
+
+  webrtc::VideoFrameMetadata actual_metadata;
+  EXPECT_CALL(*frame, SetMetadata(_)).WillOnce(SaveArg<0>(&actual_metadata));
+
+  RTCEncodedVideoFrame encoded_frame(std::move(frame));
+  DummyExceptionStateForTesting exception_state;
+
+  // Expect that a GetMetadata(), SetMetadata() roundtrip will preserve all
+  // webrtc metadata data, including the VP9 header.
+  encoded_frame.setMetadata(encoded_frame.getMetadata(), exception_state);
+  EXPECT_FALSE(exception_state.HadException());
+  EXPECT_EQ(actual_metadata.GetRTPVideoHeaderCodecSpecifics(),
+            webrtc_metadata.GetRTPVideoHeaderCodecSpecifics());
 }
 
 }  // namespace blink

@@ -11,6 +11,7 @@
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_test_api.h"
 #include "base/barrier_closure.h"
+#include "base/functional/bind.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_tags.h"
 #include "base/test/test_future.h"
@@ -18,12 +19,13 @@
 #include "chrome/browser/ash/accessibility/speech_monitor.h"
 #include "chrome/browser/ash/app_mode/app_session_ash.h"
 #include "chrome/browser/ash/login/app_mode/test/kiosk_base_test.h"
+#include "chrome/browser/ash/login/app_mode/test/kiosk_test_helpers.h"
 #include "chrome/browser/ash/login/app_mode/test/test_browser_closed_waiter.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
-#include "chrome/browser/ash/login/test/kiosk_test_helpers.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_settings_navigation_throttle.h"
 #include "chrome/browser/lifetime/termination_notification.h"
@@ -38,6 +40,7 @@
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
+#include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -54,6 +57,7 @@
 #include "extensions/test/result_catcher.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -63,8 +67,8 @@ namespace ash {
 
 namespace {
 
-const test::UIPath kErrorMessageContinueButton = {"error-message",
-                                                  "continueButton"};
+const test::UIPath kSplashScreenLaunchText = {"app-launch-splash",
+                                              "launchText"};
 
 // An app to test local access to file systems via the
 // chrome.fileSystem.requestFileSystem API.
@@ -89,6 +93,15 @@ NavigateParams OpenBrowserWithUrl(
   Navigate(&params);
 
   return params;
+}
+
+void WaitForNetworkTimeoutMessage() {
+  test::TestPredicateWaiter(base::BindRepeating([]() {
+    return test::OobeJS().GetString(
+               ash::test::GetOobeElementPath(kSplashScreenLaunchText) +
+               ".textContent") ==
+           l10n_util::GetStringUTF8(IDS_APP_START_NETWORK_WAIT_TIMEOUT_MESSAGE);
+  })).Wait();
 }
 
 // Helper class to replace settings urls for KioskSettingsNavigationThrottle.
@@ -251,72 +264,6 @@ IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest, HiddenShelf) {
   EXPECT_FALSE(ShelfTestApi().IsVisible());
 }
 
-IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest, ZoomSupport) {
-  ExtensionTestMessageListener app_window_loaded_listener("appWindowLoaded");
-  StartAppLaunchFromLoginScreen(
-      NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);
-  EXPECT_TRUE(app_window_loaded_listener.WaitUntilSatisfied());
-
-  Profile* app_profile = ProfileManager::GetPrimaryUserProfile();
-  ASSERT_TRUE(app_profile);
-
-  extensions::AppWindowRegistry* app_window_registry =
-      extensions::AppWindowRegistry::Get(app_profile);
-  extensions::AppWindow* window =
-      apps::AppWindowWaiter(app_window_registry, test_app_id()).Wait();
-  ASSERT_TRUE(window);
-
-  test::JSChecker window_js(window->web_contents());
-  int original_width = window_js.GetInt("window.innerWidth");
-
-  content::DOMMessageQueue message_queue(window->web_contents());
-
-  // Inject window size observer that should notify this test when the app
-  // window size changes during zoom operations.
-  window_js.Evaluate(
-      base::StringPrintf("window.addEventListener('resize', function() {"
-                         "  window.domAutomationController.send({"
-                         "      'name': '%s',"
-                         "      'data': window.innerWidth"
-                         "  });"
-                         "});",
-                         kSizeChangedMessage));
-
-  native_app_window::NativeAppWindowViews* native_app_window_views =
-      static_cast<native_app_window::NativeAppWindowViews*>(
-          window->GetBaseWindow());
-  ui::AcceleratorTarget* accelerator_target =
-      static_cast<ui::AcceleratorTarget*>(native_app_window_views);
-
-  // Zoom in. Text is bigger and content window width becomes smaller.
-  accelerator_target->AcceleratorPressed(
-      ui::Accelerator(ui::VKEY_ADD, ui::EF_CONTROL_DOWN));
-
-  const int width_zoomed_in =
-      WaitForWidthChange(&message_queue, original_width);
-  ASSERT_LT(width_zoomed_in, original_width);
-
-  // Go back to normal. Window width is restored.
-  accelerator_target->AcceleratorPressed(
-      ui::Accelerator(ui::VKEY_0, ui::EF_CONTROL_DOWN));
-
-  const int width_zoom_normal =
-      WaitForWidthChange(&message_queue, width_zoomed_in);
-  ASSERT_EQ(width_zoom_normal, original_width);
-
-  // Zoom out. Text is smaller and content window width becomes larger.
-  accelerator_target->AcceleratorPressed(
-      ui::Accelerator(ui::VKEY_SUBTRACT, ui::EF_CONTROL_DOWN));
-
-  const int width_zoomed_out =
-      WaitForWidthChange(&message_queue, width_zoom_normal);
-  ASSERT_GT(width_zoomed_out, original_width);
-
-  // Terminate the app.
-  window->GetBaseWindow()->Close();
-  base::RunLoop().RunUntilIdle();
-}
-
 IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest, NotSignedInWithGAIAAccount) {
   // Tests that the kiosk session is not considered to be logged in with a GAIA
   // account.
@@ -343,78 +290,21 @@ IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest, LaunchAppNetworkDown) {
 }
 
 IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest,
-                       LaunchAppWithNetworkConfigAccelerator) {
-  ScopedCanConfigureNetwork can_configure_network(true, false);
-
-  // Block app loading until the welcome screen is shown.
-  BlockAppLaunch(true);
-
-  // Start app launch and wait for network connectivity timeout.
-  StartAppLaunchFromLoginScreen(
-      NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE);
-  OobeScreenWaiter splash_waiter(AppLaunchSplashScreenView::kScreenId);
-  splash_waiter.Wait();
-
-  // A network error screen should be shown after authenticating.
-  OobeScreenWaiter error_screen_waiter(ErrorScreenView::kScreenId);
-  // Simulate Ctrl+Alt+N accelerator.
-
-  LoginDisplayHost::default_host()->HandleAccelerator(
-      LoginAcceleratorAction::kAppLaunchNetworkConfig);
-  error_screen_waiter.Wait();
-  ASSERT_TRUE(GetKioskLaunchController()->showing_network_dialog());
-
-  // Continue button should be visible since we are online.
-  test::OobeJS().ExpectVisiblePath(kErrorMessageContinueButton);
-
-  // Let app launching resume.
-  BlockAppLaunch(false);
-
-  // Click on [Continue] button.
-  test::OobeJS().TapOnPath(kErrorMessageContinueButton);
-
-  WaitForAppLaunchSuccess();
-}
-
-IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest,
                        LaunchAppNetworkDownConfigureNotAllowed) {
-  // Mock network could not be configured.
-  ScopedCanConfigureNetwork can_configure_network(false, true);
+  ScopedCanConfigureNetwork can_configure_network(false);
 
   // Start app launch and wait for network connectivity timeout.
   StartAppLaunchFromLoginScreen(
       NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_OFFLINE);
   OobeScreenWaiter splash_waiter(AppLaunchSplashScreenView::kScreenId);
   splash_waiter.Wait();
-  WaitForAppLaunchNetworkTimeout();
+
+  WaitForNetworkTimeoutMessage();
 
   // Configure network link should not be visible.
   test::OobeJS().ExpectHiddenPath(kConfigNetwork);
 
   // Network becomes online and app launch is resumed.
-  SimulateNetworkOnline();
-  WaitForAppLaunchSuccess();
-}
-
-IN_PROC_BROWSER_TEST_F(KioskDeviceOwnedTest, LaunchAppNetworkPortal) {
-  // Mock network could be configured without the owner password.
-  ScopedCanConfigureNetwork can_configure_network(true, false);
-
-  // Start app launch with network portal state.
-  StartAppLaunchFromLoginScreen(
-      NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL);
-
-  OobeScreenWaiter app_splash_waiter(AppLaunchSplashScreenView::kScreenId);
-  app_splash_waiter.set_no_assert_last_screen();
-  app_splash_waiter.Wait();
-
-  WaitForAppLaunchNetworkTimeout();
-
-  // Network error should show up automatically since this test does not
-  // require owner auth to configure network.
-  OobeScreenWaiter(ErrorScreenView::kScreenId).Wait();
-
-  ASSERT_TRUE(GetKioskLaunchController()->showing_network_dialog());
   SimulateNetworkOnline();
   WaitForAppLaunchSuccess();
 }
@@ -690,19 +580,19 @@ IN_PROC_BROWSER_TEST_F(
   // Extension should be loaded only once.
   EXPECT_EQ(ready_observer.fired_times(), 1);
 
-  constexpr char kSetInStorageAPI[] =
+  static constexpr char kSetInStorageAPI[] =
       R"(chrome.storage.local.set(
              {test: 'testValue'},
-             () => { domAutomationController.send('') });)";
+             () => { chrome.test.sendScriptResult('') });)";
   // Store some data using Storage API for the extension.
   extensions::browsertest_util::ExecuteScriptInBackgroundPage(
       app_profile, extension_misc::kChromeVoxExtensionId, kSetInStorageAPI);
 
   // Expect the data to be saved.
-  constexpr char kGetFromStorageAPI[] =
+  static constexpr char kGetFromStorageAPI[] =
       R"(chrome.storage.local.get(
              'test',
-             (value) => domAutomationController.send(value.test));)";
+             (value) => chrome.test.sendScriptResult(value.test));)";
   EXPECT_EQ("testValue",
             extensions::browsertest_util::ExecuteScriptInBackgroundPage(
                 app_profile, extension_misc::kChromeVoxExtensionId,
@@ -746,12 +636,12 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ(ready_observer.fired_times(), 1);
 
   // Expect the data to be cleared.
-  constexpr char kGetFromStorageAPI[] =
+  static constexpr char kGetFromStorageAPI[] =
       R"(
       chrome.storage.local.get(
           "test",
           function(value) {
-              domAutomationController.send(value.test == undefined ?
+              chrome.test.sendScriptResult(value.test == undefined ?
                   "<none>" : value.test);
           }
       );
@@ -761,9 +651,9 @@ IN_PROC_BROWSER_TEST_F(
                 app_profile, extension_misc::kChromeVoxExtensionId,
                 kGetFromStorageAPI));
 
-  constexpr char kGetFromLocalStorage[] =
+  static constexpr char kGetFromLocalStorage[] =
       R"(
-      domAutomationController.send(
+      chrome.test.sendScriptResult(
           localStorage.getItem('test2') == undefined ?
               "<none>" : localStorage.getItem('test2'));
       )";

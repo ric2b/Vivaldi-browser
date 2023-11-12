@@ -19,7 +19,7 @@ class VivaldiSyncClient : public browser_sync::ChromeSyncClient {
   invalidation::InvalidationService* GetInvalidationService() override;
 
  private:
-  Profile* profile_;
+  const raw_ptr<Profile> profile_;
 };
 }  // namespace vivaldi
 

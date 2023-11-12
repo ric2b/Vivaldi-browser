@@ -10,6 +10,7 @@
 #include <content-type-v1-client-protocol.h>
 #include <cursor-shapes-unstable-v1-client-protocol.h>
 #include <extended-drag-unstable-v1-client-protocol.h>
+#include <fractional-scale-v1-client-protocol.h>
 #include <gtk-primary-selection-client-protocol.h>
 #include <gtk-shell-client-protocol.h>
 #include <idle-client-protocol.h>
@@ -97,6 +98,10 @@ void delete_touch(wl_touch* touch) {
     wl_touch_release(touch);
   else
     wl_touch_destroy(touch);
+}
+
+void delete_zaura_output_manager(zaura_output_manager* manager) {
+  zaura_output_manager_destroy(manager);
 }
 
 void delete_zaura_shell(zaura_shell* shell) {
@@ -221,6 +226,8 @@ IMPLEMENT_WAYLAND_OBJECT_TRAITS(wp_viewport)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(wp_viewporter)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(wp_content_type_v1)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(wp_content_type_manager_v1)
+IMPLEMENT_WAYLAND_OBJECT_TRAITS(wp_fractional_scale_manager_v1)
+IMPLEMENT_WAYLAND_OBJECT_TRAITS(wp_fractional_scale_v1)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(xdg_activation_v1)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(xdg_activation_token_v1)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(xdg_popup)
@@ -228,6 +235,8 @@ IMPLEMENT_WAYLAND_OBJECT_TRAITS(xdg_positioner)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(xdg_surface)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(xdg_toplevel)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS(xdg_wm_base)
+IMPLEMENT_WAYLAND_OBJECT_TRAITS_WITH_DELETER(zaura_output_manager,
+                                             delete_zaura_output_manager)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS_WITH_DELETER(zaura_shell, delete_zaura_shell)
 IMPLEMENT_WAYLAND_OBJECT_TRAITS_WITH_DELETER(zaura_surface,
                                              delete_zaura_surface)

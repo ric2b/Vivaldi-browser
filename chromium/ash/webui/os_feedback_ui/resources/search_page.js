@@ -53,6 +53,48 @@ const cellularRegEx = buildWordMatcher([
 ]);
 
 /**
+ * Regular expression to check for display-related keywords.
+ */
+const displayRegEx = buildWordMatcher([
+  'display',
+  'displayport',
+  'hdmi',
+  'monitor',
+  'panel',
+  'screen',
+]);
+
+/**
+ * Regular expression to check for USB-related keywords.
+ */
+const usbRegEx = buildWordMatcher([
+  'USB',
+  'USB-C',
+  'Type-C',
+  'TypeC',
+  'USBC',
+  'USBTypeC',
+  'USBPD',
+  'hub',
+  'charger',
+  'dock',
+]);
+
+/**
+ * Regular expression to check for thunderbolt-related keywords.
+ */
+const thunderboltRegEx = buildWordMatcher([
+  'Thunderbolt',
+  'Thunderbolt3',
+  'Thunderbolt4',
+  'TBT',
+  'TBT3',
+  'TBT4',
+  'TB3',
+  'TB4',
+]);
+
+/**
  * @fileoverview
  * 'search-page' is the first step of the feedback tool. It displays live help
  *  contents relevant to the text entered by the user.
@@ -464,13 +506,22 @@ export class SearchPageElement extends SearchPageElementBase {
       toAppend.push(...domainQuestions['bluetooth']);
     }
 
-
     if (wifiRegEx.test(matchedText)) {
       toAppend.push(...domainQuestions['wifi']);
     }
 
     if (cellularRegEx.test(matchedText)) {
       toAppend.push(...domainQuestions['cellular']);
+    }
+
+    if (displayRegEx.test(matchedText)) {
+      toAppend.push(...domainQuestions['display']);
+    }
+
+    if (thunderboltRegEx.test(matchedText)) {
+      toAppend.push(...domainQuestions['thunderbolt']);
+    } else if (usbRegEx.test(matchedText)) {
+      toAppend.push(...domainQuestions['usb']);
     }
 
     if (toAppend.length === 0) {

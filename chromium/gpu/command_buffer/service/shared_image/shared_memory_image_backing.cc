@@ -132,7 +132,8 @@ SharedMemoryImageBacking::ProduceGLTexturePassthrough(
   return nullptr;
 }
 
-std::unique_ptr<SkiaImageRepresentation> SharedMemoryImageBacking::ProduceSkia(
+std::unique_ptr<SkiaGaneshImageRepresentation>
+SharedMemoryImageBacking::ProduceSkiaGanesh(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {
@@ -180,8 +181,9 @@ base::trace_event::MemoryAllocatorDump* SharedMemoryImageBacking::OnMemoryDump(
   // various GPU dumps.
   auto shared_memory_guid = shared_memory_wrapper_.GetMappingGuid();
   if (!shared_memory_guid.is_empty()) {
-    pmd->CreateSharedMemoryOwnershipEdge(client_guid, shared_memory_guid,
-                                         kNonOwningEdgeImportance);
+    pmd->CreateSharedMemoryOwnershipEdge(
+        client_guid, shared_memory_guid,
+        static_cast<int>(TracingImportance::kNotOwner));
   }
   return dump;
 }

@@ -32,11 +32,12 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/autocomplete_result.h"
-#include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/search/search.h"
 #include "components/search_engines/template_url_service.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "url/gurl.h"
@@ -77,11 +78,7 @@ bool AllowLocalHistoryZeroSuggestSuggestions(AutocompleteProviderClient* client,
   if (!vivaldi::IsVivaldiRunning()){
   // Allow local history zero-suggest only when the user has set up Google as
   // their default search engine.
-  TemplateURLService* template_url_service = client->GetTemplateURLService();
-  if (!template_url_service ||
-      !template_url_service->GetDefaultSearchProvider() ||
-      template_url_service->GetDefaultSearchProvider()->GetEngineType(
-          template_url_service->search_terms_data()) != SEARCH_ENGINE_GOOGLE) {
+  if (!search::DefaultSearchProviderIsGoogle(client->GetTemplateURLService())) {
     return false;
   }
   }
@@ -97,7 +94,7 @@ bool AllowLocalHistoryZeroSuggestSuggestions(AutocompleteProviderClient* client,
   // focused from the NTP.
   return input.focus_type() == metrics::OmniboxFocusType::INTERACTION_FOCUS &&
          input.type() == OmniboxInputType::EMPTY &&
-         BaseSearchProvider::IsNTPPage(input.current_page_classification());
+         omnibox::IsNTPPage(input.current_page_classification());
 }
 
 }  // namespace
@@ -211,8 +208,8 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
       template_url_service->GetDefaultSearchProvider()->id());
   if (enumerator) {
     history::GetAutocompleteSearchTermsFromEnumerator(
-        *enumerator, max_matches_, /*ignore_duplicate_visits=*/true,
-        history::SearchTermRankingPolicy::kFrecency, &results);
+        *enumerator, max_matches_, history::SearchTermRankingPolicy::kFrecency,
+        &results);
   }
   DCHECK_LE(results.size(), max_matches_);
   base::UmaHistogramTimes(

@@ -44,14 +44,15 @@
 #include "build/build_config.h"
 #include "cc/tiles/raster_dark_mode_filter.h"
 #include "cc/trees/raster_context_provider_wrapper.h"
-#include "components/attribution_reporting/os_support.mojom-shared.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "media/base/audio_capturer_source.h"
 #include "media/base/audio_latency.h"
 #include "media/base/audio_renderer_sink.h"
+#include "services/network/public/mojom/attribution.mojom-shared.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_fetch_handler_bypass_option.mojom-shared.h"
 #include "third_party/blink/public/platform/audio/web_audio_device_source_type.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/url_loader_throttle_provider.h"
@@ -131,7 +132,6 @@ class WebDedicatedWorker;
 class WebDedicatedWorkerHostFactoryClient;
 class WebGraphicsContext3DProvider;
 class WebLocalFrame;
-class WebResourceRequestSenderDelegate;
 class WebSandboxSupport;
 class WebSecurityOrigin;
 class WebThemeEngine;
@@ -273,11 +273,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Determines whether it is safe to redirect from |from_url| to |to_url|.
   virtual bool IsRedirectSafe(const GURL& from_url, const GURL& to_url) {
     return false;
-  }
-
-  // Returns the WebResourceRequestSenderDelegate of this renderer.
-  virtual WebResourceRequestSenderDelegate* GetResourceRequestSenderDelegate() {
-    return nullptr;
   }
 
   // Appends throttles if the browser has sent a variations header to the
@@ -676,6 +671,7 @@ class BLINK_PLATFORM_EXPORT Platform {
       CrossVariantMojoRemote<mojom::ServiceWorkerContainerHostInterfaceBase>
           service_worker_container_host,
       const WebString& client_id,
+      mojom::ServiceWorkerFetchHandlerBypassOption fetch_handler_bypass_option,
       std::unique_ptr<network::PendingSharedURLLoaderFactory> fallback_factory,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver,
       scoped_refptr<base::SequencedTaskRunner> task_runner);
@@ -777,18 +773,23 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Attribution Reporting API ------------------------------------
 
-  // Returns whether OS-level support is enabled for Attribution Reporting API.
+  // Returns whether web or OS-level Attribution Reporting is supported.
   // See
   // https://github.com/WICG/attribution-reporting-api/blob/main/app_to_web.md.
-  virtual attribution_reporting::mojom::OsSupport
-  GetOsSupportForAttributionReporting() {
-    return attribution_reporting::mojom::OsSupport::kDisabled;
+  virtual network::mojom::AttributionSupport GetAttributionReportingSupport() {
+    return network::mojom::AttributionSupport::kWeb;
   }
 
 #if BUILDFLAG(IS_ANDROID)
   // User Level Memory Pressure Signal Generator ------------------
   virtual void SetPrivateMemoryFootprint(
       uint64_t private_memory_footprint_bytes) {}
+
+  virtual bool IsUserLevelMemoryPressureSignalEnabled() { return false; }
+  virtual std::pair<base::TimeDelta, base::TimeDelta>
+  InertAndMinimumIntervalOfUserLevelMemoryPressureSignal() {
+    return std::make_pair(base::TimeDelta(), base::TimeDelta());
+  }
 #endif
 
  private:

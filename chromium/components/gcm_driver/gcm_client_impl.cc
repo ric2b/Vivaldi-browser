@@ -69,15 +69,6 @@ enum MessageType {
   SEND_ERROR,        // Error sending a message.
 };
 
-enum ResetStoreError {
-  DESTROYING_STORE_FAILED,
-  INFINITE_STORE_RESET,
-  // NOTE: always keep this entry at the end. Add new value only immediately
-  // above this line. Make sure to update the corresponding histogram enum
-  // accordingly.
-  RESET_STORE_ERROR_COUNT
-};
-
 const int kMaxRegistrationRetries = 5;
 const int kMaxUnregistrationRetries = 5;
 const char kDeletedCountKey[] = "total_deleted";
@@ -210,10 +201,6 @@ bool DeserializeInstanceIDData(const std::string& serialized_data,
 bool InstanceIDUsesSubtypeForAppId(const std::string& app_id) {
   // Always use subtypes with Instance ID, except for Chrome Apps/Extensions.
   return !crx_file::id_util::IdIsValid(app_id);
-}
-
-void RecordResetStoreErrorToUMA(ResetStoreError error) {
-  UMA_HISTOGRAM_ENUMERATION("GCM.ResetStore", error, RESET_STORE_ERROR_COUNT);
 }
 
 }  // namespace
@@ -530,7 +517,6 @@ void GCMClientImpl::ResetStore() {
   // If already being reset, don't do it again. We want to prevent from
   // resetting and loading from the store again and again.
   if (gcm_store_reset_) {
-    RecordResetStoreErrorToUMA(INFINITE_STORE_RESET);
     state_ = UNINITIALIZED;
     return;
   }
@@ -807,7 +793,6 @@ void GCMClientImpl::DestroyStoreCallback(bool success) {
 
   if (!success) {
     LOG(ERROR) << "Failed to destroy GCM store";
-    RecordResetStoreErrorToUMA(DESTROYING_STORE_FAILED);
     state_ = UNINITIALIZED;
     return;
   }
@@ -825,7 +810,6 @@ void GCMClientImpl::ResetStoreCallback(bool success) {
 
   if (!success) {
     LOG(ERROR) << "Failed to reset GCM store";
-    RecordResetStoreErrorToUMA(DESTROYING_STORE_FAILED);
     state_ = UNINITIALIZED;
     return;
   }
@@ -1187,7 +1171,6 @@ void GCMClientImpl::OnUnregisterCompleted(
 
 void GCMClientImpl::OnGCMStoreDestroyed(bool success) {
   DLOG_IF(ERROR, !success) << "GCM store failed to be destroyed!";
-  UMA_HISTOGRAM_BOOLEAN("GCM.StoreDestroySucceeded", success);
 }
 
 void GCMClientImpl::Send(const std::string& app_id,
@@ -1415,13 +1398,6 @@ void GCMClientImpl::HandleIncomingDataMessage(
     bool was_subtype,
     const mcs_proto::DataMessageStanza& data_message_stanza,
     MessageData& message_data) {
-  UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceived", true);
-
-  bool has_collapse_key =
-      data_message_stanza.has_token() && !data_message_stanza.token().empty();
-  UMA_HISTOGRAM_BOOLEAN("GCM.DataMessageReceivedHasCollapseKey",
-                        has_collapse_key);
-
   recorder_.RecordDataMessageReceived(app_id, data_message_stanza.from(),
                                       data_message_stanza.ByteSize(),
                                       GCMStatsRecorder::DATA_MESSAGE);
@@ -1447,7 +1423,6 @@ void GCMClientImpl::HandleIncomingDeletedMessages(
     if (!base::StringToInt(count_iter->second, &deleted_count))
       deleted_count = 0;
   }
-  UMA_HISTOGRAM_COUNTS_1000("GCM.DeletedMessagesReceived", deleted_count);
 
   recorder_.RecordDataMessageReceived(app_id, data_message_stanza.from(),
                                       data_message_stanza.ByteSize(),

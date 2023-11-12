@@ -11,16 +11,22 @@
 
 #include "ash/accessibility/accessibility_observer.h"
 #include "ash/ash_export.h"
+#include "ash/style/switch.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/tray_detailed_view.h"
+#include "base/memory/raw_ptr.h"
 #include "chromeos/ash/components/audio/audio_device.h"
 #include "components/soda/soda_installer.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/controls/button/button.h"
-#include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/view.h"
 
 namespace gfx {
 struct VectorIcon;
+}
+
+namespace views {
+class ImageView;
 }
 
 namespace ash {
@@ -75,8 +81,6 @@ class ASH_EXPORT AudioDetailedView : public TrayDetailedView,
   // Creates the items other than the devices during initialization.
   void CreateItems();
 
-  void CreateTitleSettingsButton();
-
   // For QsRevamp: Creates the `live_caption_view_`.
   void CreateLiveCaptionView();
 
@@ -115,6 +119,7 @@ class ASH_EXPORT AudioDetailedView : public TrayDetailedView,
 
   // TrayDetailedView:
   void HandleViewClicked(views::View* view) override;
+  void CreateExtraTitleRowButtons() override;
 
   // SodaInstaller::Observer:
   void OnSodaInstalled(speech::LanguageCode language_code) override;
@@ -133,13 +138,14 @@ class ASH_EXPORT AudioDetailedView : public TrayDetailedView,
   AudioDeviceMap device_map_;
   uint64_t focused_device_id_ = -1;
   // Owned by the views hierarchy.
-  HoverHighlightView* live_caption_view_ = nullptr;
-  views::ImageView* live_caption_icon_ = nullptr;
-  views::ToggleButton* live_caption_button_ = nullptr;
-  HoverHighlightView* noise_cancellation_view_ = nullptr;
-  views::ImageView* noise_cancellation_icon_ = nullptr;
-  views::ToggleButton* noise_cancellation_button_ = nullptr;
-  views::Button* settings_button_ = nullptr;
+  raw_ptr<HoverHighlightView, ExperimentalAsh> live_caption_view_ = nullptr;
+  raw_ptr<views::ImageView, ExperimentalAsh> live_caption_icon_ = nullptr;
+  raw_ptr<Switch, ExperimentalAsh> live_caption_button_ = nullptr;
+  raw_ptr<HoverHighlightView, ExperimentalAsh> noise_cancellation_view_ =
+      nullptr;
+  raw_ptr<views::ImageView, ExperimentalAsh> noise_cancellation_icon_ = nullptr;
+  raw_ptr<Switch, ExperimentalAsh> noise_cancellation_button_ = nullptr;
+  raw_ptr<views::Button, ExperimentalAsh> settings_button_ = nullptr;
 
   base::WeakPtrFactory<AudioDetailedView> weak_factory_{this};
 };

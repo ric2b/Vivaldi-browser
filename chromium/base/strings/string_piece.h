@@ -22,11 +22,13 @@
 #define BASE_STRINGS_STRING_PIECE_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <algorithm>
 #include <iosfwd>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "base/base_export.h"
@@ -34,7 +36,6 @@
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/cxx20_is_constant_evaluated.h"
-#include "base/numerics/safe_math.h"
 #include "base/strings/string_piece_forward.h"  // IWYU pragma: export
 #include "build/build_config.h"
 
@@ -118,8 +119,14 @@ class GSL_POINTER BasicStringPiece {
   constexpr BasicStringPiece(const BasicStringPiece& other) noexcept = default;
   constexpr BasicStringPiece& operator=(const BasicStringPiece& view) noexcept =
       default;
-  constexpr BasicStringPiece(const CharT* s, CheckedNumeric<size_t> count)
-      : ptr_(s), length_(count.ValueOrDie()) {}
+  constexpr BasicStringPiece(const CharT* s, size_t count)
+      : ptr_(s), length_(count) {
+    // Intentional STL deviation: Check the string length fits in
+    // `difference_type`. No valid buffer can exceed this type, otherwise
+    // pointer arithmetic would not be defined. This helps avoid bugs where
+    // `count` was computed from an underflow or negative sentinel value.
+    CHECK(length_ <= size_t{PTRDIFF_MAX});
+  }
   // NOLINTNEXTLINE(google-explicit-constructor)
   constexpr BasicStringPiece(const CharT* s)
       : ptr_(s), length_(s ? traits_type::length(s) : 0) {
@@ -132,6 +139,7 @@ class GSL_POINTER BasicStringPiece {
   // `BasicStringPiece(nullptr_t) = delete`, but unfortunately the terse form is
   // not supported by the PNaCl toolchain.
   template <class T, class = std::enable_if_t<std::is_null_pointer<T>::value>>
+  // NOLINTNEXTLINE(google-explicit-constructor)
   BasicStringPiece(T) {
     static_assert(sizeof(T) == 0,  // Always false.
                   "StringPiece does not support construction from nullptr, use "
@@ -142,10 +150,23 @@ class GSL_POINTER BasicStringPiece {
   // (an object convertible to) a std::basic_string_view, as well as an explicit
   // cast operator to a std::basic_string_view, but (obviously) not from/to a
   // BasicStringPiece.
+  // NOLINTNEXTLINE(google-explicit-constructor)
   BasicStringPiece(const std::basic_string<CharT>& str)
       : ptr_(str.data()), length_(str.size()) {}
   explicit operator std::basic_string<CharT>() const {
     return std::basic_string<CharT>(data(), size());
+  }
+
+  // Provide implicit conversions from/to the STL version, for interoperability
+  // with non-Chromium code.
+  // TODO(crbug.com/691162): These will be moot when BasicStringPiece is
+  // replaced with std::basic_string_view.
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  constexpr BasicStringPiece(std::basic_string_view<CharT> str)
+      : ptr_(str.data()), length_(str.size()) {}
+  // NOLINTNEXTLINE(google-explicit-constructor)
+  constexpr operator std::basic_string_view<CharT>() const {
+    return std::basic_string_view<CharT>(data(), size());
   }
 
   constexpr const_iterator begin() const noexcept { return ptr_; }

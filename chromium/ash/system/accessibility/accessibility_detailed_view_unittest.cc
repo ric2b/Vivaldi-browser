@@ -14,10 +14,11 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/style/rounded_container.h"
+#include "ash/style/switch.h"
 #include "ash/system/tray/fake_detailed_view_delegate.h"
 #include "ash/system/tray/hover_highlight_view.h"
-#include "ash/system/tray/tray_toggle_button.h"
 #include "ash/test/ash_test_base.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/live_caption/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -126,14 +127,13 @@ bool IsCheckedForAccessibility(views::View* view) {
   return node_data.GetCheckedState() == ax::mojom::CheckedState::kTrue;
 }
 
-// Returns true if `item` has a toggle button on the right and the button is
-// toggled.
-bool IsToggleButtonToggled(HoverHighlightView* item) {
+// Returns true if `item` has a `Switch` on the right and the button is toggled.
+bool IsSwitchToggled(HoverHighlightView* item) {
   views::View* right_view = item->right_view();
-  if (!views::IsViewClass<TrayToggleButton>(right_view)) {
+  if (!views::IsViewClass<Switch>(right_view)) {
     return false;
   }
-  return static_cast<TrayToggleButton*>(right_view)->GetIsOn();
+  return static_cast<Switch*>(right_view)->GetIsOn();
 }
 
 }  // namespace
@@ -548,10 +548,10 @@ class AccessibilityDetailedViewTest : public AshTestBase,
     }
   }
 
-  AccessibilityControllerImpl* controller_ = nullptr;
+  raw_ptr<AccessibilityControllerImpl, ExperimentalAsh> controller_ = nullptr;
   std::unique_ptr<views::Widget> widget_;
   std::unique_ptr<DetailedViewDelegate> delegate_;
-  AccessibilityDetailedView* detailed_menu_ = nullptr;
+  raw_ptr<AccessibilityDetailedView, ExperimentalAsh> detailed_menu_ = nullptr;
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -671,11 +671,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, SpokenFeedbackTopView) {
   EnableSpokenFeedback(true);
   CreateDetailedMenu();
   ASSERT_TRUE(spoken_feedback_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(spoken_feedback_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(spoken_feedback_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(spoken_feedback_top_view()));
 
   ClickView(spoken_feedback_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(spoken_feedback_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(spoken_feedback_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(spoken_feedback_top_view()));
   EXPECT_FALSE(controller()->spoken_feedback().enabled());
 }
@@ -684,11 +684,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, SelectToSpeakTopView) {
   EnableSelectToSpeak(true);
   CreateDetailedMenu();
   ASSERT_TRUE(select_to_speak_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(select_to_speak_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(select_to_speak_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(select_to_speak_top_view()));
 
   ClickView(select_to_speak_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(select_to_speak_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(select_to_speak_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(select_to_speak_top_view()));
   EXPECT_FALSE(controller()->select_to_speak().enabled());
 }
@@ -697,11 +697,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, DictationTopView) {
   EnableDictation(true);
   CreateDetailedMenu();
   ASSERT_TRUE(dictation_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(dictation_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(dictation_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(dictation_top_view()));
 
   ClickView(dictation_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(dictation_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(dictation_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(dictation_top_view()));
   EXPECT_FALSE(controller()->dictation().enabled());
 }
@@ -710,11 +710,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, HighContrastTopView) {
   EnableHighContrast(true);
   CreateDetailedMenu();
   ASSERT_TRUE(high_contrast_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(high_contrast_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(high_contrast_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(high_contrast_top_view()));
 
   ClickView(high_contrast_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(high_contrast_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(high_contrast_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(high_contrast_top_view()));
   EXPECT_FALSE(controller()->high_contrast().enabled());
 }
@@ -723,7 +723,7 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, ScreenMagnifierTopView) {
   Shell::Get()->accessibility_delegate()->SetMagnifierEnabled(true);
   CreateDetailedMenu();
   ASSERT_TRUE(screen_magnifier_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(screen_magnifier_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(screen_magnifier_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(screen_magnifier_top_view()));
 
   ClickView(screen_magnifier_top_view());
@@ -731,7 +731,7 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, ScreenMagnifierTopView) {
   // it manually.
   controller()->NotifyAccessibilityStatusChanged();
 
-  EXPECT_FALSE(IsToggleButtonToggled(screen_magnifier_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(screen_magnifier_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(screen_magnifier_top_view()));
   EXPECT_FALSE(Shell::Get()->accessibility_delegate()->IsMagnifierEnabled());
 }
@@ -740,11 +740,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, DockedMagnifierTopView) {
   SetDockedMagnifierEnabled(true);
   CreateDetailedMenu();
   ASSERT_TRUE(docked_magnifier_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(docked_magnifier_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(docked_magnifier_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(docked_magnifier_top_view()));
 
   ClickView(docked_magnifier_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(docked_magnifier_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(docked_magnifier_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(docked_magnifier_top_view()));
   EXPECT_FALSE(Shell::Get()->docked_magnifier_controller()->GetEnabled());
 }
@@ -753,11 +753,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, LargeCursorTopView) {
   EnableLargeCursor(true);
   CreateDetailedMenu();
   ASSERT_TRUE(large_cursor_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(large_cursor_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(large_cursor_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(large_cursor_top_view()));
 
   ClickView(large_cursor_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(large_cursor_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(large_cursor_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(large_cursor_top_view()));
   EXPECT_FALSE(controller()->large_cursor().enabled());
 }
@@ -766,11 +766,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, LiveCaptionTopView) {
   EnableLiveCaption(true);
   CreateDetailedMenu();
   ASSERT_TRUE(live_caption_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(live_caption_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(live_caption_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(live_caption_top_view()));
 
   ClickView(live_caption_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(live_caption_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(live_caption_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(live_caption_top_view()));
   EXPECT_FALSE(controller()->live_caption().enabled());
 }
@@ -779,11 +779,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, AutoClickTopView) {
   EnableAutoclick(true);
   CreateDetailedMenu();
   ASSERT_TRUE(autoclick_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(autoclick_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(autoclick_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(autoclick_top_view()));
 
   ClickView(autoclick_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(autoclick_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(autoclick_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(autoclick_top_view()));
   EXPECT_FALSE(controller()->autoclick().enabled());
 }
@@ -792,11 +792,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, VirtualKeyboardTopView) {
   EnableVirtualKeyboard(true);
   CreateDetailedMenu();
   ASSERT_TRUE(virtual_keyboard_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(virtual_keyboard_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(virtual_keyboard_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(virtual_keyboard_top_view()));
 
   ClickView(virtual_keyboard_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(virtual_keyboard_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(virtual_keyboard_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(virtual_keyboard_top_view()));
   EXPECT_FALSE(controller()->virtual_keyboard().enabled());
 }
@@ -805,11 +805,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, MonoAudioTopView) {
   EnableMonoAudio(true);
   CreateDetailedMenu();
   ASSERT_TRUE(mono_audio_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(mono_audio_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(mono_audio_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(mono_audio_top_view()));
 
   ClickView(mono_audio_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(mono_audio_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(mono_audio_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(mono_audio_top_view()));
   EXPECT_FALSE(controller()->mono_audio().enabled());
 }
@@ -818,11 +818,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, CaretHighlightTopView) {
   SetCaretHighlightEnabled(true);
   CreateDetailedMenu();
   ASSERT_TRUE(caret_highlight_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(caret_highlight_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(caret_highlight_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(caret_highlight_top_view()));
 
   ClickView(caret_highlight_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(caret_highlight_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(caret_highlight_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(caret_highlight_top_view()));
   EXPECT_FALSE(controller()->caret_highlight().enabled());
 }
@@ -831,11 +831,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, HighlightMouseCursorTopView) {
   SetCursorHighlightEnabled(true);
   CreateDetailedMenu();
   ASSERT_TRUE(highlight_mouse_cursor_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(highlight_mouse_cursor_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(highlight_mouse_cursor_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(highlight_mouse_cursor_top_view()));
 
   ClickView(highlight_mouse_cursor_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(highlight_mouse_cursor_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(highlight_mouse_cursor_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(highlight_mouse_cursor_top_view()));
   EXPECT_FALSE(controller()->cursor_highlight().enabled());
 }
@@ -844,11 +844,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, HighlightKeyboardFocusTopView) {
   SetFocusHighlightEnabled(true);
   CreateDetailedMenu();
   ASSERT_TRUE(highlight_keyboard_focus_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(highlight_keyboard_focus_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(highlight_keyboard_focus_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(highlight_keyboard_focus_top_view()));
 
   ClickView(highlight_keyboard_focus_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(highlight_keyboard_focus_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(highlight_keyboard_focus_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(highlight_keyboard_focus_top_view()));
   EXPECT_FALSE(controller()->focus_highlight().enabled());
 }
@@ -857,11 +857,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, StickyKeysTopView) {
   EnableStickyKeys(true);
   CreateDetailedMenu();
   ASSERT_TRUE(sticky_keys_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(sticky_keys_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(sticky_keys_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(sticky_keys_top_view()));
 
   ClickView(sticky_keys_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(sticky_keys_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(sticky_keys_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(sticky_keys_top_view()));
   EXPECT_FALSE(controller()->sticky_keys().enabled());
 }
@@ -874,11 +874,11 @@ TEST_F(AccessibilityDetailedViewQsRevampTest, SwitchAccessTopView) {
   EnableSwitchAccess(true);
   CreateDetailedMenu();
   ASSERT_TRUE(switch_access_top_view());
-  EXPECT_TRUE(IsToggleButtonToggled(switch_access_top_view()));
+  EXPECT_TRUE(IsSwitchToggled(switch_access_top_view()));
   EXPECT_TRUE(IsCheckedForAccessibility(switch_access_top_view()));
 
   ClickView(switch_access_top_view());
-  EXPECT_FALSE(IsToggleButtonToggled(switch_access_top_view()));
+  EXPECT_FALSE(IsSwitchToggled(switch_access_top_view()));
   EXPECT_FALSE(IsCheckedForAccessibility(switch_access_top_view()));
   EXPECT_FALSE(controller()->switch_access().enabled());
 }

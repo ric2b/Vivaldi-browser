@@ -172,20 +172,22 @@ std::unique_ptr<ImageProcessor> CreateLibYUVImageProcessorWithInputCandidates(
   if (input_candidates.size() != 1)
     return nullptr;
 
-  if (input_candidates[0].fourcc != Fourcc(Fourcc::MM21))
+  if (input_candidates[0].fourcc != Fourcc(Fourcc::MM21) &&
+      input_candidates[0].fourcc != Fourcc(Fourcc::MT2T)) {
     return nullptr;
+  }
 
   std::vector<Fourcc> supported_output_formats =
       LibYUVImageProcessorBackend::GetSupportedOutputFormats(
-          Fourcc(Fourcc::MM21));
+          input_candidates[0].fourcc);
   auto output_format =
-      out_format_picker.Run(supported_output_formats, Fourcc(Fourcc::NV12));
+      out_format_picker.Run(supported_output_formats, absl::nullopt);
 
   if (!output_format)
     return nullptr;
 
   ImageProcessor::PortConfig input_config(
-      Fourcc(Fourcc::MM21), input_candidates[0].size, /*planes=*/{},
+      input_candidates[0].fourcc, input_candidates[0].size, /*planes=*/{},
       input_visible_rect, {VideoFrame::STORAGE_DMABUFS});
   ImageProcessor::PortConfig output_config(
       *output_format, output_size, /*planes=*/{}, gfx::Rect(output_size),
@@ -196,6 +198,7 @@ std::unique_ptr<ImageProcessor> CreateLibYUVImageProcessorWithInputCandidates(
       std::move(error_cb), std::move(client_task_runner));
 }
 
+#if defined(ARCH_CPU_ARM_FAMILY)
 std::unique_ptr<ImageProcessor> CreateGLImageProcessorWithInputCandidates(
     const std::vector<PixelLayoutCandidate>& input_candidates,
     const gfx::Rect& input_visible_rect,
@@ -226,6 +229,7 @@ std::unique_ptr<ImageProcessor> CreateGLImageProcessorWithInputCandidates(
       output_config, ImageProcessor::OutputMode::IMPORT, VIDEO_ROTATION_0,
       std::move(error_cb), std::move(client_task_runner));
 }
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
 #endif
 
 }  // namespace
@@ -278,6 +282,7 @@ ImageProcessorFactory::CreateWithInputCandidates(
   if (processor)
     return processor;
 #elif BUILDFLAG(USE_V4L2_CODEC)
+#if defined(ARCH_CPU_ARM_FAMILY)
   if (base::FeatureList::IsEnabled(media::kPreferGLImageProcessor)) {
     auto processor = CreateGLImageProcessorWithInputCandidates(
         input_candidates, input_visible_rect, output_size, client_task_runner,
@@ -285,6 +290,7 @@ ImageProcessorFactory::CreateWithInputCandidates(
     if (processor)
       return processor;
   }
+#endif  // defined(ARCH_CPU_ARM_FAMILY)
 
     auto processor = CreateLibYUVImageProcessorWithInputCandidates(
         input_candidates, input_visible_rect, output_size, client_task_runner,

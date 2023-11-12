@@ -6,7 +6,7 @@
 #include "base/lazy_instance.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "components/os_crypt/os_crypt.h"
+#include "components/os_crypt/sync/os_crypt.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/schema/vivaldi_account.h"
@@ -170,10 +170,10 @@ void VivaldiAccountAPI::Shutdown() {
 }
 
 ExtensionFunction::ResponseAction VivaldiAccountLoginFunction::Run() {
-  std::unique_ptr<vivaldi::vivaldi_account::Login::Params> params(
+  absl::optional<vivaldi::vivaldi_account::Login::Params> params(
       vivaldi::vivaldi_account::Login::Params::Create(args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   auto* account_manager =
       ::vivaldi::VivaldiAccountManagerFactory::GetForProfile(
@@ -210,11 +210,11 @@ ExtensionFunction::ResponseAction VivaldiAccountGetStateFunction::Run() {
 
 ExtensionFunction::ResponseAction
 VivaldiAccountSetPendingRegistrationFunction::Run() {
-  std::unique_ptr<vivaldi::vivaldi_account::SetPendingRegistration::Params>
+  absl::optional<vivaldi::vivaldi_account::SetPendingRegistration::Params>
       params(vivaldi::vivaldi_account::SetPendingRegistration::Params::Create(
           args()));
 
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   PrefService* prefs =
       Profile::FromBrowserContext(browser_context())->GetPrefs();
@@ -286,7 +286,7 @@ VivaldiAccountGetPendingRegistrationFunction::Run() {
 }
 
 void VivaldiAccountGetPendingRegistrationFunction::OnDecryptDone(
-    std::unique_ptr<vivaldi::vivaldi_account::PendingRegistration>
+    absl::optional<vivaldi::vivaldi_account::PendingRegistration>
         pending_registration,
     bool result) {
   if (!result) {

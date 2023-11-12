@@ -98,6 +98,13 @@ class LayoutUnit {
 
  public:
   constexpr LayoutUnit() : value_(0) {}
+  // Creates a LayoutUnit with the specified integer value.
+  // If the specified value is smaller than LayoutUnit::Min(), the new
+  // LayoutUnit is equivalent to LayoutUnit::Min().
+  // If the specified value is greater than the maximum integer value which
+  // LayoutUnit can represent, the new LayoutUnit is equivalent to
+  // LayoutUnit(kIntMaxForLayoutUnit) in 32-bit Arm, or is equivalent to
+  // LayoutUnit::Max() otherwise.
   template <typename IntegerType>
   constexpr explicit LayoutUnit(IntegerType value) : value_(0) {
     if (std::is_signed<IntegerType>::value)
@@ -367,16 +374,16 @@ class LayoutUnit {
     value_ = result;
   }
 #else  // end of 32-bit ARM GCC
-  constexpr ALWAYS_INLINE void SaturatedSet(int value) {
+  ALWAYS_INLINE constexpr void SaturatedSet(int value) {
     SaturatedSetNonAsm(value);
   }
 
-  constexpr ALWAYS_INLINE void SaturatedSet(unsigned value) {
+  ALWAYS_INLINE constexpr void SaturatedSet(unsigned value) {
     SaturatedSetNonAsm(value);
   }
 #endif
 
-  constexpr ALWAYS_INLINE void SaturatedSetNonAsm(int value) {
+  ALWAYS_INLINE constexpr void SaturatedSetNonAsm(int value) {
     if (value > kIntMaxForLayoutUnit)
       value_ = std::numeric_limits<int>::max();
     else if (value < kIntMinForLayoutUnit)
@@ -385,7 +392,7 @@ class LayoutUnit {
       value_ = static_cast<unsigned>(value) << kLayoutUnitFractionalBits;
   }
 
-  constexpr ALWAYS_INLINE void SaturatedSetNonAsm(unsigned value) {
+  ALWAYS_INLINE constexpr void SaturatedSetNonAsm(unsigned value) {
     if (value >= static_cast<unsigned>(kIntMaxForLayoutUnit))
       value_ = std::numeric_limits<int>::max();
     else

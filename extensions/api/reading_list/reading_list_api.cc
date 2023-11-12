@@ -51,8 +51,8 @@ ExtensionFunction::ResponseAction ReadingListPrivateAddFunction::Run() {
   using vivaldi::reading_list_private::Add::Params;
   namespace Results = vivaldi::reading_list_private::Add::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   GURL url(params->url);
 
@@ -73,8 +73,8 @@ ExtensionFunction::ResponseAction ReadingListPrivateRemoveFunction::Run() {
   using vivaldi::reading_list_private::Remove::Params;
   namespace Results = vivaldi::reading_list_private::Remove::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   GURL url(params->url);
 
@@ -129,8 +129,8 @@ ExtensionFunction::ResponseAction ReadingListPrivateSetReadStatusFunction::Run()
   using vivaldi::reading_list_private::SetReadStatus::Params;
   namespace Results = vivaldi::reading_list_private::SetReadStatus::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   GURL url(params->url);
 

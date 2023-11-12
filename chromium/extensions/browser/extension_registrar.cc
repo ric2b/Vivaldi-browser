@@ -277,9 +277,14 @@ std::vector<scoped_refptr<DevToolsAgentHost>> GetDevToolsAgentHostsFor(
   if (!BackgroundInfo::IsServiceWorkerBased(extension)) {
     ExtensionHost* host =
         process_manager->GetBackgroundHostForExtension(extension->id());
-    if (host && content::DevToolsAgentHost::HasFor(host->host_contents())) {
-      result.push_back(
-          content::DevToolsAgentHost::GetOrCreateFor(host->host_contents()));
+    if (host) {
+      content::WebContents* const wc = host->host_contents();
+      if (auto tab_host = content::DevToolsAgentHost::GetForTab(wc)) {
+        result.push_back(tab_host);
+      }
+      if (content::DevToolsAgentHost::HasFor(wc)) {
+        result.push_back(content::DevToolsAgentHost::GetOrCreateFor(wc));
+      }
     }
   } else {
     content::ServiceWorkerContext* context =
@@ -347,7 +352,6 @@ void ExtensionRegistrar::ReloadExtension(
     if (!agent_hosts.empty()) {
       for (auto& host : agent_hosts) {
         // Let DevTools know we'll be back once extension is reloaded.
-        // TODO(caseq): this should rather be called Disconnect().
         host->DisconnectWebContents();
       }
       // Retain DevToolsAgentHosts for the extension being reloaded to prevent
@@ -443,26 +447,16 @@ void ExtensionRegistrar::DidCreateMainFrameForBackgroundPage(
   ProcessManager::Get(browser_context_)
       ->IncrementLazyKeepaliveCount(host->extension(), Activity::DEV_TOOLS,
                                     std::string());
-  DCHECK_GE(1u, iter->second.size());
   // TODO(caseq): do we need to handle the case when the extension changed
   // from SW-based to WC-based during reload?
-  iter->second[0]->ConnectWebContents(host->host_contents());
+  for (auto& dev_tools_host : iter->second) {
+    dev_tools_host->ConnectWebContents(host->host_contents());
+  }
   orphaned_dev_tools_.erase(iter);
 }
 
 void ExtensionRegistrar::ActivateExtension(const Extension* extension,
                                            bool is_newly_added) {
-  // The URLRequestContexts need to be first to know that the extension
-  // was loaded. Otherwise a race can arise where a renderer that is created
-  // for the extension may try to load an extension URL with an extension id
-  // that the request context doesn't yet know about. The BrowserContext should
-  // ensure its URLRequestContexts appropriately discover the loaded extension.
-  extension_system_->RegisterExtensionWithRequestContexts(
-      extension,
-      base::BindOnce(
-          &ExtensionRegistrar::OnExtensionRegisteredWithRequestContexts,
-          weak_factory_.GetWeakPtr(), WrapRefCounted(extension)));
-
   // Activate the extension before calling
   // RendererStartupHelper::OnExtensionLoaded() below, so that we have
   // activation information ready while we send ExtensionMsg_Load IPC.
@@ -489,13 +483,17 @@ void ExtensionRegistrar::ActivateExtension(const Extension* extension,
   // service worker-based, it may be necessary to spin up its context.
   if (BackgroundInfo::HasLazyContext(extension))
     MaybeSpinUpLazyContext(extension, is_newly_added);
+
+  registry_->AddReady(extension);
+  if (registry_->enabled_extensions().Contains(extension->id())) {
+    registry_->TriggerOnReady(extension);
+  }
 }
 
 void ExtensionRegistrar::DeactivateExtension(const Extension* extension,
                                              UnloadedExtensionReason reason) {
   registry_->TriggerOnUnloaded(extension, reason);
   renderer_helper_->OnExtensionUnloaded(*extension);
-  extension_system_->UnregisterExtensionWithRequestContexts(extension->id());
   DeactivateTaskQueueForExtension(browser_context_, extension);
 
   delegate_->PostDeactivateExtension(extension);
@@ -557,15 +555,6 @@ bool ExtensionRegistrar::ReplaceReloadedExtension(
   ActivateExtension(extension.get(), false);
 
   return true;
-}
-
-void ExtensionRegistrar::OnExtensionRegisteredWithRequestContexts(
-    scoped_refptr<const Extension> extension) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  registry_->AddReady(extension);
-  if (registry_->enabled_extensions().Contains(extension->id()))
-    registry_->TriggerOnReady(extension.get());
 }
 
 void ExtensionRegistrar::MaybeSpinUpLazyContext(const Extension* extension,

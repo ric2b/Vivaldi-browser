@@ -18,8 +18,8 @@ import android.app.Activity;
 import android.app.Instrumentation;
 import android.content.Intent;
 import android.provider.Settings;
-import android.support.test.InstrumentationRegistry;
 
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.espresso.intent.Intents;
 import androidx.test.filters.LargeTest;
 
@@ -27,9 +27,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.browser.incognito.R;
 import org.chromium.chrome.browser.privacy.settings.PrivacySettings;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -65,7 +65,7 @@ public class IncognitoReauthSettingTest {
                 new Instrumentation.ActivityResult(Activity.RESULT_OK, intent);
         Intents.init();
         intending(anyIntent()).respondWith(result);
-        String summaryText = InstrumentationRegistry.getContext().getResources().getString(
+        String summaryText = ApplicationProvider.getApplicationContext().getResources().getString(
                 R.string.settings_incognito_tab_lock_summary_android_setting_off);
         summaryText = summaryText.replaceAll("</?link>", "");
         onView(withText(summaryText)).perform(click());

@@ -23,6 +23,24 @@
           ]
         }
       </script>
+      <script type="speculationrules" id="invalid-json">
+        {
+          "prefetch":[
+      </script>
+      <script type="speculationrules" id="not-object">
+        "invalid"
+      </script>
+      <script type="speculationrules" id="contains-invalid-rule">
+        {
+          "prefetch": [
+            {
+              "source": "list",
+              "urls": ["/subresource.js"]
+            }
+          ],
+          "prerender": "invalid"
+        }
+      </script>
     </head>
     <body>
     </body>
@@ -35,20 +53,18 @@
 
     await dp.Preload.enable();
 
-    await new Promise(resolve => {
-      let count = 2;
-      dp.Preload.onRuleSetUpdated(ruleSet => {
-        ruleSet.params.ruleSet.sourceText =
-            JSON.parse(ruleSet.params.ruleSet.sourceText);
-        testRunner.log(ruleSet);
+    void page.loadHTML(html);
 
-        --count;
-        if (count === 0) {
-          resolve();
-        }
-      });
-      void page.loadHTML(html);
-    });
+    for (let count = 0; count < 5; ++count) {
+      const {ruleSet} = (await dp.Preload.onceRuleSetUpdated()).params;
+
+      // Format sourceText.
+      ruleSet.sourceText = ruleSet.errorType === undefined ?
+          JSON.parse(ruleSet.sourceText) :
+          // Prevent failures due to non visible differences coming from LF.
+          ruleSet.sourceText.replaceAll(/[\n ]+/g, '');
+      testRunner.log(ruleSet);
+    }
 
     session.evaluate('document.getElementById("prefetch").remove();');
     testRunner.log(await dp.Preload.onceRuleSetRemoved());

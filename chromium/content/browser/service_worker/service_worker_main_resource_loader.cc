@@ -13,21 +13,30 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
+#include "content/browser/service_worker/service_worker_loader_helpers.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/fetch/fetch_request_type_converters.h"
+#include "content/common/service_worker/race_network_request_url_loader_client.h"
+#include "content/common/service_worker/service_worker_resource_loader.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_features.h"
+#include "net/http/http_request_headers.h"
+#include "net/http/http_status_code.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/timing_allow_origin_parser.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/service_worker/service_worker_loader_helpers.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_fetch_handler_bypass_option.mojom-shared.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
 
 namespace content {
 
@@ -42,6 +51,49 @@ std::string ComposeFetchEventResultString(
   stream << "Got response (status_code: " << response.status_code
          << " status_text: '" << response.status_text << "')";
   return stream.str();
+}
+
+const std::string ComposeNavigationTypeString(
+    const network::ResourceRequest& resource_request) {
+  return (resource_request.request_initiator &&
+          resource_request.request_initiator->IsSameOriginWith(
+              resource_request.url))
+             ? "SameOriginNavigation"
+             : "CrossOriginNavigation";
+}
+
+bool IsEligibleForRaceNetworkRequestByOriginTrial(
+    scoped_refptr<ServiceWorkerVersion> version) {
+  return version->origin_trial_tokens() &&
+         version->origin_trial_tokens()->contains(
+             "ServiceWorkerBypassFetchHandlerWithRaceNetworkRequest");
+}
+
+bool IsEligibleForRaceNetworkRequest(
+    scoped_refptr<ServiceWorkerVersion> version) {
+  if (!base::FeatureList::IsEnabled(
+          features::kServiceWorkerBypassFetchHandler)) {
+    return false;
+  }
+  if (features::kServiceWorkerBypassFetchHandlerTarget.Get() !=
+      features::ServiceWorkerBypassFetchHandlerTarget::
+          kAllWithRaceNetworkRequest) {
+    return false;
+  }
+
+  switch (features::kServiceWorkerBypassFetchHandlerStrategy.Get()) {
+    // kFeatureOptIn means that the feature relies on the manual feature
+    // toggle from about://flags etc, which is triggered by developers.
+    case features::ServiceWorkerBypassFetchHandlerStrategy::kFeatureOptIn:
+      return true;
+    // If kAllowList, the allowlist should be specified. In this case,
+    // RaceNetworkRequest is allowed only when the sha256 checksum of the
+    // script is in the allowlist.
+    case features::ServiceWorkerBypassFetchHandlerStrategy::kAllowList:
+      return content::service_worker_loader_helpers::
+          FetchHandlerBypassedHashStrings()
+              .contains(version->sha256_script_checksum());
+  }
 }
 
 }  // namespace
@@ -183,8 +235,14 @@ void ServiceWorkerMainResourceLoader::StartRequest(
       /*is_offline_capability_check=*/false);
 
   if (container_host_->IsContainerForWindowClient()) {
-    did_navigation_preload_ = fetch_dispatcher_->MaybeStartNavigationPreload(
-        resource_request_, std::move(context), frame_tree_node_id_);
+    // The RaceNetworkRequest mode doesn't support Navigation Preload. If
+    // RaceNetworkRequest is triggered, Navigation Preload never happens.
+    if (MaybeStartRaceNetworkRequest(context, active_worker)) {
+      dispatched_preload_type_ = DispatchedPreloadType::kRaceNetworkRequest;
+    } else if (fetch_dispatcher_->MaybeStartNavigationPreload(
+                   resource_request_, context, frame_tree_node_id_)) {
+      dispatched_preload_type_ = DispatchedPreloadType::kNavigationPreload;
+    }
   }
 
   // Record worker start time here as |fetch_dispatcher_| will start a service
@@ -194,21 +252,89 @@ void ServiceWorkerMainResourceLoader::StartRequest(
   fetch_dispatcher_->Run();
 }
 
-void ServiceWorkerMainResourceLoader::CommitResponseHeaders() {
+bool ServiceWorkerMainResourceLoader::MaybeStartRaceNetworkRequest(
+    scoped_refptr<ServiceWorkerContextWrapper> context,
+    scoped_refptr<ServiceWorkerVersion> version) {
+  bool is_enabled_by_feature_flag = IsEligibleForRaceNetworkRequest(version);
+  bool is_enabled_by_origin_trial =
+      IsEligibleForRaceNetworkRequestByOriginTrial(version);
+
+  if (!(is_enabled_by_feature_flag || is_enabled_by_origin_trial)) {
+    return false;
+  }
+
+  // Set fetch_handler_bypass_option to tell the renderer that
+  // RaceNetworkRequest is enabled.
+  version->set_fetch_handler_bypass_option(
+      blink::mojom::ServiceWorkerFetchHandlerBypassOption::kRaceNetworkRequest);
+
+  // RaceNetworkRequest only supports GET method.
+  if (resource_request_.method != net::HttpRequestHeaders::kGetMethod) {
+    return false;
+  }
+
+  // Create URLLoader related assets to handle the request triggered by
+  // RaceNetworkRequset.
+  auto race_network_request_url_loader_client =
+      std::make_unique<ServiceWorkerRaceNetworkRequestURLLoaderClient>(
+          resource_request_, AsWeakPtr());
+  mojo::PendingRemote<network::mojom::URLLoaderClient> client_to_pass;
+  race_network_request_url_loader_client->Bind(&client_to_pass);
+  scoped_refptr<network::SharedURLLoaderFactory> factory =
+      ServiceWorkerFetchDispatcher::CreateNetworkURLLoaderFactory(
+          context, frame_tree_node_id_);
+
+  // Perform fetch
+  mojo::PendingRemote<network::mojom::URLLoader> url_loader;
+  factory->CreateLoaderAndStart(
+      url_loader.InitWithNewPipeAndPassReceiver(),
+      GlobalRequestID::MakeBrowserInitiated().request_id,
+      network::mojom::kURLLoadOptionNone, resource_request_,
+      std::move(client_to_pass),
+      net::MutableNetworkTrafficAnnotationTag(
+          ServiceWorkerRaceNetworkRequestURLLoaderClient::
+              NetworkTrafficAnnotationTag()));
+
+  // Keep the URL loader related assets alive while the FetchEvent is ongoing in
+  // the service worker.
+  DCHECK(!race_network_request_url_loader_factory_);
+  DCHECK(!race_network_request_url_loader_);
+  DCHECK(!race_network_request_loader_client_);
+  race_network_request_url_loader_factory_ = std::move(factory);
+  race_network_request_url_loader_ = std::move(url_loader);
+  race_network_request_loader_client_ =
+      std::move(race_network_request_url_loader_client);
+
+  if (is_enabled_by_origin_trial) {
+    version->CountFeature(
+        blink::mojom::WebFeature::
+            kServiceWorkerBypassFetchHandlerForAllWithRaceNetworkRequestByOriginTrial);
+  } else if (is_enabled_by_feature_flag) {
+    version->CountFeature(
+        blink::mojom::WebFeature::
+            kServiceWorkerBypassFetchHandlerForAllWithRaceNetworkRequest);
+  }
+
+  return true;
+}
+
+void ServiceWorkerMainResourceLoader::CommitResponseHeaders(
+    const network::mojom::URLResponseHeadPtr& response_head) {
   DCHECK(url_loader_client_.is_bound());
   TRACE_EVENT_WITH_FLOW2(
       "ServiceWorker", "ServiceWorkerMainResourceLoader::CommitResponseHeaders",
       this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
-      "response_code", response_head_->headers->response_code(), "status_text",
-      response_head_->headers->GetStatusText());
+      "response_code", response_head->headers->response_code(), "status_text",
+      response_head->headers->GetStatusText());
   TransitionToStatus(Status::kSentHeader);
 }
 
 void ServiceWorkerMainResourceLoader::CommitResponseBody(
+    const network::mojom::URLResponseHeadPtr& response_head,
     mojo::ScopedDataPipeConsumerHandle response_body,
     absl::optional<mojo_base::BigBuffer> cached_metadata) {
   TransitionToStatus(Status::kSentBody);
-  url_loader_client_->OnReceiveResponse(response_head_.Clone(),
+  url_loader_client_->OnReceiveResponse(response_head.Clone(),
                                         std::move(response_body),
                                         std::move(cached_metadata));
 }
@@ -224,7 +350,7 @@ void ServiceWorkerMainResourceLoader::CommitEmptyResponseAndComplete() {
   }
 
   producer_handle.reset();  // The data pipe is empty.
-  CommitResponseBody(std::move(consumer_handle), absl::nullopt);
+  CommitResponseBody(response_head_, std::move(consumer_handle), absl::nullopt);
   CommitCompleted(net::OK, "No body exists.");
 }
 
@@ -237,8 +363,19 @@ void ServiceWorkerMainResourceLoader::CommitCompleted(int error_code,
 
   DCHECK(url_loader_client_.is_bound());
   TransitionToStatus(Status::kCompleted);
-  if (error_code == net::OK)
-    RecordTimingMetrics(true);
+  if (error_code == net::OK) {
+    switch (fetch_response_from()) {
+      case FetchResponseFrom::kNoResponseYet:
+        NOTREACHED();
+        break;
+      case FetchResponseFrom::kServiceWorker:
+        RecordTimingMetricsForFetchHandlerHandledCase();
+        break;
+      case FetchResponseFrom::kWithoutServiceWorker:
+        RecordTimingMetricsForRaceNetworkRequestCase();
+        break;
+    }
+  }
 
   // |stream_waiter_| calls this when done.
   stream_waiter_.reset();
@@ -267,13 +404,25 @@ void ServiceWorkerMainResourceLoader::DidDispatchFetchEvent(
     blink::mojom::ServiceWorkerFetchEventTimingPtr timing,
     scoped_refptr<ServiceWorkerVersion> version) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_EQ(status_, Status::kStarted);
 
   TRACE_EVENT_WITH_FLOW2(
       "ServiceWorker", "ServiceWorkerMainResourceLoader::DidDispatchFetchEvent",
       this, TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "status",
       blink::ServiceWorkerStatusToString(status), "result",
       ComposeFetchEventResultString(fetch_result, *response));
+
+  if (fetch_response_from() == FetchResponseFrom::kWithoutServiceWorker) {
+    return;
+  }
+  // Use the response from ServiceWorker fetch handler, and cancel the
+  // connection for RaceNetworkRequest.
+  // TODO(crbug.com/1420517) RaceNetworkRequrest doesn't support fallback case.
+  // If the response from the fetch handler is fallback, the fallback resource
+  // fetch will start separately without using RaceNetworkRequest's result.
+  SetFetchResponseFrom(FetchResponseFrom::kServiceWorker);
+  race_network_request_url_loader_.reset();
+
+  DCHECK_EQ(status_, Status::kStarted);
 
   ServiceWorkerMetrics::RecordFetchEventStatus(true /* is_main_resource */,
                                                status);
@@ -321,7 +470,7 @@ void ServiceWorkerMainResourceLoader::DidDispatchFetchEvent(
   if (fetch_result ==
       ServiceWorkerFetchDispatcher::FetchEventResult::kShouldFallback) {
     TransitionToStatus(Status::kCompleted);
-    RecordTimingMetrics(false);
+    RecordTimingMetricsForNetworkFallbackCase();
     // TODO(falken): Propagate the timing info to the renderer somehow, or else
     // Navigation Timing etc APIs won't know about service worker.
     if (fallback_callback_) {
@@ -357,7 +506,7 @@ void ServiceWorkerMainResourceLoader::StartResponse(
                                                       response_head_.get());
 
   response_head_->did_service_worker_navigation_preload =
-      did_navigation_preload_;
+      dispatched_preload_type_ == DispatchedPreloadType::kNavigationPreload;
   response_head_->load_timing.receive_headers_start = base::TimeTicks::Now();
   response_head_->load_timing.receive_headers_end =
       response_head_->load_timing.receive_headers_start;
@@ -394,18 +543,12 @@ void ServiceWorkerMainResourceLoader::StartResponse(
         "ServiceWorker", "ServiceWorkerMainResourceLoader::StartResponse", this,
         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result",
         "redirect", "redirect url", redirect_info->new_url.spec());
-
-    response_head_->encoded_data_length = 0;
-    url_loader_client_->OnReceiveRedirect(*redirect_info,
-                                          response_head_.Clone());
-    // Our client is the navigation loader, which will start a new URLLoader for
-    // the redirect rather than calling FollowRedirect(), so we're done here.
-    TransitionToStatus(Status::kCompleted);
+    HandleRedirect(*redirect_info, response_head_);
     return;
   }
 
   // We have a non-redirect response. Send the headers to the client.
-  CommitResponseHeaders();
+  CommitResponseHeaders(response_head_);
 
   // Handle a stream response body.
   if (!body_as_stream.is_null() && body_as_stream->stream.is_valid()) {
@@ -415,7 +558,8 @@ void ServiceWorkerMainResourceLoader::StartResponse(
         "stream response");
     stream_waiter_ = std::make_unique<StreamWaiter>(
         this, std::move(body_as_stream->callback_receiver));
-    CommitResponseBody(std::move(body_as_stream->stream), absl::nullopt);
+    CommitResponseBody(response_head_, std::move(body_as_stream->stream),
+                       absl::nullopt);
     // StreamWaiter will call CommitCompleted() when done.
     return;
   }
@@ -439,7 +583,7 @@ void ServiceWorkerMainResourceLoader::StartResponse(
         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result",
         "blob response");
 
-    CommitResponseBody(std::move(data_pipe), absl::nullopt);
+    CommitResponseBody(response_head_, std::move(data_pipe), absl::nullopt);
     // We continue in OnBlobReadingComplete().
     return;
   }
@@ -450,6 +594,16 @@ void ServiceWorkerMainResourceLoader::StartResponse(
                          "result", "no body");
 
   CommitEmptyResponseAndComplete();
+}
+
+void ServiceWorkerMainResourceLoader::HandleRedirect(
+    const net::RedirectInfo& redirect_info,
+    const network::mojom::URLResponseHeadPtr& response_head) {
+  response_head->encoded_data_length = 0;
+  url_loader_client_->OnReceiveRedirect(redirect_info, response_head->Clone());
+  // Our client is the navigation loader, which will start a new URLLoader for
+  // the redirect rather than calling FollowRedirect(), so we're done here.
+  TransitionToStatus(Status::kCompleted);
 }
 
 // URLLoader implementation----------------------------------------
@@ -504,29 +658,91 @@ void ServiceWorkerMainResourceLoader::DeleteIfNeeded() {
     delete this;
 }
 
-void ServiceWorkerMainResourceLoader::RecordTimingMetrics(bool handled) {
-  DCHECK(fetch_event_timing_);
-  DCHECK(!completion_time_.is_null());
+void ServiceWorkerMainResourceLoader::
+    RecordTimingMetricsForFetchHandlerHandledCase() {
+  if (!InitRecordTimingMetricsIfEligible(response_head_->load_timing)) {
+    return;
+  }
+  DCHECK(initial_embedded_worker_status_);
+  std::string initial_worker_status =
+      EmbeddedWorkerInstance::StatusToString(*initial_embedded_worker_status_);
 
+  RecordStartToForwardServiceWorkerTiming(response_head_->load_timing,
+                                          initial_worker_status);
+  RecordForwardServiceWorkerToWorkerReadyTiming(response_head_->load_timing,
+                                                initial_worker_status);
+  RecordWorkerReadyToFetchHandlerStartTiming(response_head_->load_timing,
+                                             initial_worker_status);
+  RecordFetchHandlerStartToFetchHandlerEndTiming(response_head_->load_timing,
+                                                 initial_worker_status);
+  RecordFetchHandlerEndToResponseReceivedTiming(response_head_->load_timing,
+                                                initial_worker_status);
+  RecordResponseReceivedToCompletedTiming(response_head_->load_timing,
+                                          initial_worker_status);
+  RecordStartToCompletedTiming(response_head_->load_timing,
+                               initial_worker_status);
+}
+
+void ServiceWorkerMainResourceLoader::
+    RecordTimingMetricsForNetworkFallbackCase() {
+  if (!InitRecordTimingMetricsIfEligible(response_head_->load_timing)) {
+    return;
+  }
+  DCHECK(initial_embedded_worker_status_);
+  std::string initial_worker_status =
+      EmbeddedWorkerInstance::StatusToString(*initial_embedded_worker_status_);
+
+  RecordStartToForwardServiceWorkerTiming(response_head_->load_timing,
+                                          initial_worker_status);
+  RecordForwardServiceWorkerToWorkerReadyTiming(response_head_->load_timing,
+                                                initial_worker_status);
+  RecordWorkerReadyToFetchHandlerStartTiming(response_head_->load_timing,
+                                             initial_worker_status);
+  RecordFetchHandlerStartToFetchHandlerEndTiming(response_head_->load_timing,
+                                                 initial_worker_status);
+  RecordStartToFallbackNetworkTiming(response_head_->load_timing,
+                                     initial_worker_status);
+  RecordFetchHandlerEndToFallbackNetworkTiming(response_head_->load_timing,
+                                               initial_worker_status);
+}
+
+void ServiceWorkerMainResourceLoader::
+    RecordTimingMetricsForRaceNetworkRequestCase() {
+  DCHECK(race_network_request_loader_client_);
+  if (!InitRecordTimingMetricsIfEligible(
+          race_network_request_loader_client_->GetLoadTimingInfo())) {
+    return;
+  }
+  DCHECK(initial_embedded_worker_status_);
+  std::string initial_worker_status =
+      EmbeddedWorkerInstance::StatusToString(*initial_embedded_worker_status_);
+
+  RecordStartToCompletedTiming(
+      race_network_request_loader_client_->GetLoadTimingInfo(),
+      initial_worker_status);
+}
+
+bool ServiceWorkerMainResourceLoader::InitRecordTimingMetricsIfEligible(
+    const net::LoadTimingInfo& load_timing) {
   // We only record these metrics for top-level navigation.
   if (resource_request_.destination !=
-      network::mojom::RequestDestination::kDocument)
-    return;
+      network::mojom::RequestDestination::kDocument) {
+    return false;
+  }
 
   // |fetch_event_timing_| is recorded in renderer so we can get reasonable
   // metrics only when TimeTicks are consistent across processes.
   if (!base::TimeTicks::IsHighResolution() ||
-      !base::TimeTicks::IsConsistentAcrossProcesses())
-    return;
+      !base::TimeTicks::IsConsistentAcrossProcesses()) {
+    return false;
+  }
 
   // Don't record metrics when DevTools is attached to reduce noise.
-  if (devtools_attached_)
-    return;
+  if (devtools_attached_) {
+    return false;
+  }
 
-  DCHECK(initial_embedded_worker_status_);
-  std::string initial_worker_status_string =
-      EmbeddedWorkerInstance::StatusToString(*initial_embedded_worker_status_);
-
+  DCHECK(!completion_time_.is_null());
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
       "ServiceWorker", "ServiceWorker.LoadTiming.MainFrame.MainResource", this,
       response_head_->load_timing.request_start, "url", resource_request_.url);
@@ -534,71 +750,102 @@ void ServiceWorkerMainResourceLoader::RecordTimingMetrics(bool handled) {
       "ServiceWorker", "ServiceWorker.LoadTiming.MainFrame.MainResource", this,
       completion_time_);
 
-  // Time between the request is made and the request is routed to this loader.
+  return true;
+}
+
+void ServiceWorkerMainResourceLoader::RecordStartToForwardServiceWorkerTiming(
+    const net::LoadTimingInfo& load_timing,
+    const std::string& initial_worker_status) {
   UMA_HISTOGRAM_TIMES(
       "ServiceWorker.LoadTiming.MainFrame.MainResource."
       "StartToForwardServiceWorker",
-      response_head_->load_timing.service_worker_start_time -
-          response_head_->load_timing.request_start);
+      load_timing.service_worker_start_time - load_timing.request_start);
   base::UmaHistogramTimes(
       base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
                     "StartToForwardServiceWorker.",
-                    initial_worker_status_string}),
-      response_head_->load_timing.service_worker_start_time -
-          response_head_->load_timing.request_start);
+                    initial_worker_status}),
+      load_timing.service_worker_start_time - load_timing.request_start);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
       "ServiceWorker", "StartToForwardServiceWorker", this,
-      response_head_->load_timing.request_start);
+      load_timing.request_start);
   TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
       "ServiceWorker", "StartToForwardServiceWorker", this,
-      response_head_->load_timing.service_worker_start_time);
+      load_timing.service_worker_start_time);
+}
 
-  // Time spent for service worker startup.
+void ServiceWorkerMainResourceLoader::
+    RecordForwardServiceWorkerToWorkerReadyTiming(
+        const net::LoadTimingInfo& load_timing,
+        const std::string& initial_worker_status) {
+  const std::string navigation_type_string =
+      ComposeNavigationTypeString(resource_request_);
   UMA_HISTOGRAM_MEDIUM_TIMES(
       "ServiceWorker.LoadTiming.MainFrame.MainResource."
       "ForwardServiceWorkerToWorkerReady2",
-      response_head_->load_timing.service_worker_ready_time -
-          response_head_->load_timing.service_worker_start_time);
+      load_timing.service_worker_ready_time -
+          load_timing.service_worker_start_time);
   base::UmaHistogramMediumTimes(
       base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
                     "ForwardServiceWorkerToWorkerReady2.",
-                    initial_worker_status_string}),
-      response_head_->load_timing.service_worker_ready_time -
-          response_head_->load_timing.service_worker_start_time);
+                    initial_worker_status}),
+      load_timing.service_worker_ready_time -
+          load_timing.service_worker_start_time);
+  base::UmaHistogramMediumTimes(
+      base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
+                    "ForwardServiceWorkerToWorkerReady2.",
+                    navigation_type_string}),
+      load_timing.service_worker_ready_time -
+          load_timing.service_worker_start_time);
+  base::UmaHistogramMediumTimes(
+      base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
+                    "ForwardServiceWorkerToWorkerReady2.",
+                    initial_worker_status, ".", navigation_type_string}),
+      load_timing.service_worker_ready_time -
+          load_timing.service_worker_start_time);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
       "ServiceWorker",
-      base::StrCat(
-          {"ForwardServiceWorkerToWorkerReady.", initial_worker_status_string})
+      base::StrCat({"ForwardServiceWorkerToWorkerReady.", initial_worker_status,
+                    ".", navigation_type_string})
           .c_str(),
-      this, response_head_->load_timing.service_worker_start_time,
-      "initial_worker_status", initial_worker_status_string);
+      this, load_timing.service_worker_start_time, "initial_worker_status",
+      initial_worker_status);
   TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
       "ServiceWorker",
-      base::StrCat(
-          {"ForwardServiceWorkerToWorkerReady.", initial_worker_status_string})
+      base::StrCat({"ForwardServiceWorkerToWorkerReady.", initial_worker_status,
+                    ".", navigation_type_string})
           .c_str(),
-      this, response_head_->load_timing.service_worker_ready_time);
+      this, load_timing.service_worker_ready_time);
+}
 
-  // Browser -> Renderer IPC delay.
+void ServiceWorkerMainResourceLoader::
+    RecordWorkerReadyToFetchHandlerStartTiming(
+        const net::LoadTimingInfo& load_timing,
+        const std::string& initial_worker_status) {
+  DCHECK(fetch_event_timing_);
   UMA_HISTOGRAM_TIMES(
       "ServiceWorker.LoadTiming.MainFrame.MainResource."
       "WorkerReadyToFetchHandlerStart",
       fetch_event_timing_->dispatch_event_time -
-          response_head_->load_timing.service_worker_ready_time);
+          load_timing.service_worker_ready_time);
   base::UmaHistogramTimes(
       base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
                     "WorkerReadyToFetchHandlerStart.",
-                    initial_worker_status_string}),
+                    initial_worker_status}),
       fetch_event_timing_->dispatch_event_time -
-          response_head_->load_timing.service_worker_ready_time);
+          load_timing.service_worker_ready_time);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
       "ServiceWorker", "WorkerReadyToFetchHandlerStart", this,
-      response_head_->load_timing.service_worker_ready_time);
+      load_timing.service_worker_ready_time);
   TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
       "ServiceWorker", "WorkerReadyToFetchHandlerStart", this,
       fetch_event_timing_->dispatch_event_time);
+}
 
-  // Time spent by fetch handlers.
+void ServiceWorkerMainResourceLoader::
+    RecordFetchHandlerStartToFetchHandlerEndTiming(
+        const net::LoadTimingInfo& load_timing,
+        const std::string& initial_worker_status) {
+  DCHECK(fetch_event_timing_);
   UMA_HISTOGRAM_TIMES(
       "ServiceWorker.LoadTiming.MainFrame.MainResource."
       "FetchHandlerStartToFetchHandlerEnd",
@@ -607,7 +854,7 @@ void ServiceWorkerMainResourceLoader::RecordTimingMetrics(bool handled) {
   base::UmaHistogramTimes(
       base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
                     "FetchHandlerStartToFetchHandlerEnd.",
-                    initial_worker_status_string}),
+                    initial_worker_status}),
       fetch_event_timing_->respond_with_settled_time -
           fetch_event_timing_->dispatch_event_time);
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
@@ -616,98 +863,116 @@ void ServiceWorkerMainResourceLoader::RecordTimingMetrics(bool handled) {
   TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
       "ServiceWorker", "FetchHandlerStartToFetchHandlerEnd", this,
       fetch_event_timing_->respond_with_settled_time);
+}
 
-  if (handled) {
-    // Renderer -> Browser IPC delay.
-    UMA_HISTOGRAM_TIMES(
-        "ServiceWorker.LoadTiming.MainFrame.MainResource."
-        "FetchHandlerEndToResponseReceived",
-        response_head_->load_timing.receive_headers_end -
-            fetch_event_timing_->respond_with_settled_time);
-    base::UmaHistogramTimes(
-        base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
-                      "FetchHandlerEndToResponseReceived.",
-                      initial_worker_status_string}),
-        response_head_->load_timing.receive_headers_end -
-            fetch_event_timing_->respond_with_settled_time);
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
-        "ServiceWorker", "FetchHandlerEndToResponseReceived", this,
-        fetch_event_timing_->respond_with_settled_time);
-    TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
-        "ServiceWorker", "FetchHandlerEndToResponseReceived", this,
-        response_head_->load_timing.receive_headers_end);
+void ServiceWorkerMainResourceLoader::
+    RecordFetchHandlerEndToResponseReceivedTiming(
+        const net::LoadTimingInfo& load_timing,
+        const std::string& initial_worker_status) {
+  DCHECK(fetch_event_timing_);
+  UMA_HISTOGRAM_TIMES(
+      "ServiceWorker.LoadTiming.MainFrame.MainResource."
+      "FetchHandlerEndToResponseReceived",
+      load_timing.receive_headers_end -
+          fetch_event_timing_->respond_with_settled_time);
+  base::UmaHistogramTimes(
+      base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
+                    "FetchHandlerEndToResponseReceived.",
+                    initial_worker_status}),
+      load_timing.receive_headers_end -
+          fetch_event_timing_->respond_with_settled_time);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
+      "ServiceWorker", "FetchHandlerEndToResponseReceived", this,
+      fetch_event_timing_->respond_with_settled_time);
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
+      "ServiceWorker", "FetchHandlerEndToResponseReceived", this,
+      load_timing.receive_headers_end);
+}
 
-    // Time spent reading response body.
-    UMA_HISTOGRAM_MEDIUM_TIMES(
-        "ServiceWorker.LoadTiming.MainFrame.MainResource."
-        "ResponseReceivedToCompleted2",
-        completion_time_ - response_head_->load_timing.receive_headers_end);
-    base::UmaHistogramMediumTimes(
-        base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
-                      "ResponseReceivedToCompleted2.",
-                      initial_worker_status_string}),
-        completion_time_ - response_head_->load_timing.receive_headers_end);
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
-        "ServiceWorker", "ResponseReceivedToCompleted", this,
-        response_head_->load_timing.receive_headers_end,
-        "fetch_response_source",
-        blink::ServiceWorkerLoaderHelpers::FetchResponseSourceToSuffix(
-            response_source_));
-    TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
-        "ServiceWorker", "ResponseReceivedToCompleted", this, completion_time_);
-    // Same as above, breakdown by response source.
-    base::UmaHistogramMediumTimes(
-        base::StrCat(
-            {"ServiceWorker.LoadTiming.MainFrame.MainResource."
-             "ResponseReceivedToCompleted2.",
-             blink::ServiceWorkerLoaderHelpers::FetchResponseSourceToSuffix(
-                 response_source_)}),
-        completion_time_ - response_head_->load_timing.receive_headers_end);
-    base::UmaHistogramMediumTimes(
-        base::StrCat(
-            {"ServiceWorker.LoadTiming.MainFrame.MainResource."
-             "ResponseReceivedToCompleted2.",
-             blink::ServiceWorkerLoaderHelpers::FetchResponseSourceToSuffix(
-                 response_source_),
-             ".", initial_worker_status_string}),
-        completion_time_ - response_head_->load_timing.receive_headers_end);
-    // Time between the request is made and complete reading response body.
-    base::UmaHistogramMediumTimes(
-        "ServiceWorker.LoadTiming.MainFrame.MainResource.StartToCompleted",
-        completion_time_ - response_head_->load_timing.request_start);
-    base::UmaHistogramMediumTimes(
-        base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
-                      "StartToCompleted.",
-                      initial_worker_status_string}),
-        completion_time_ - response_head_->load_timing.request_start);
-  } else {
-    // Time between the request is made and network fallback.
-    base::UmaHistogramMediumTimes(
-        "ServiceWorker.LoadTiming.MainFrame.MainResource."
-        "StartToFallbackNetwork",
-        completion_time_ - response_head_->load_timing.request_start);
-    base::UmaHistogramMediumTimes(
-        base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
-                      "StartToFallbackNetwork.",
-                      initial_worker_status_string}),
-        completion_time_ - response_head_->load_timing.request_start);
-    // Renderer -> Browser IPC delay (network fallback case).
-    UMA_HISTOGRAM_TIMES(
-        "ServiceWorker.LoadTiming.MainFrame.MainResource."
-        "FetchHandlerEndToFallbackNetwork",
-        completion_time_ - fetch_event_timing_->respond_with_settled_time);
-    base::UmaHistogramTimes(
-        base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
-                      "FetchHandlerEndToFallbackNetwork.",
-                      initial_worker_status_string}),
-        completion_time_ - fetch_event_timing_->respond_with_settled_time);
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
-        "ServiceWorker", "FetchHandlerEndToFallbackNetwork", this,
-        fetch_event_timing_->respond_with_settled_time);
-    TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
-        "ServiceWorker", "FetchHandlerEndToFallbackNetwork", this,
-        completion_time_);
-  }
+void ServiceWorkerMainResourceLoader::RecordResponseReceivedToCompletedTiming(
+    const net::LoadTimingInfo& load_timing,
+    const std::string& initial_worker_status) {
+  UMA_HISTOGRAM_MEDIUM_TIMES(
+      "ServiceWorker.LoadTiming.MainFrame.MainResource."
+      "ResponseReceivedToCompleted2",
+      completion_time_ - load_timing.receive_headers_end);
+  base::UmaHistogramMediumTimes(
+      base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
+                    "ResponseReceivedToCompleted2.",
+                    initial_worker_status}),
+      completion_time_ - load_timing.receive_headers_end);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP1(
+      "ServiceWorker", "ResponseReceivedToCompleted", this,
+      load_timing.receive_headers_end, "fetch_response_source",
+      blink::ServiceWorkerLoaderHelpers::FetchResponseSourceToSuffix(
+          response_source_));
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
+      "ServiceWorker", "ResponseReceivedToCompleted", this, completion_time_);
+  // Same as above, breakdown by response source.
+  base::UmaHistogramMediumTimes(
+      base::StrCat(
+          {"ServiceWorker.LoadTiming.MainFrame.MainResource."
+           "ResponseReceivedToCompleted2.",
+           blink::ServiceWorkerLoaderHelpers::FetchResponseSourceToSuffix(
+               response_source_)}),
+      completion_time_ - load_timing.receive_headers_end);
+  base::UmaHistogramMediumTimes(
+      base::StrCat(
+          {"ServiceWorker.LoadTiming.MainFrame.MainResource."
+           "ResponseReceivedToCompleted2.",
+           blink::ServiceWorkerLoaderHelpers::FetchResponseSourceToSuffix(
+               response_source_),
+           ".", initial_worker_status}),
+      completion_time_ - load_timing.receive_headers_end);
+}
+
+void ServiceWorkerMainResourceLoader::RecordStartToCompletedTiming(
+    const net::LoadTimingInfo& load_timing,
+    const std::string& initial_worker_status) {
+  base::UmaHistogramMediumTimes(
+      "ServiceWorker.LoadTiming.MainFrame.MainResource.StartToCompleted",
+      completion_time_ - load_timing.request_start);
+  base::UmaHistogramMediumTimes(
+      base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
+                    "StartToCompleted.",
+                    initial_worker_status}),
+      completion_time_ - load_timing.request_start);
+}
+
+void ServiceWorkerMainResourceLoader::RecordStartToFallbackNetworkTiming(
+    const net::LoadTimingInfo& load_timing,
+    const std::string& initial_worker_status) {
+  base::UmaHistogramMediumTimes(
+      "ServiceWorker.LoadTiming.MainFrame.MainResource."
+      "StartToFallbackNetwork",
+      completion_time_ - load_timing.request_start);
+  base::UmaHistogramMediumTimes(
+      base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
+                    "StartToFallbackNetwork.",
+                    initial_worker_status}),
+      completion_time_ - load_timing.request_start);
+}
+
+void ServiceWorkerMainResourceLoader::
+    RecordFetchHandlerEndToFallbackNetworkTiming(
+        const net::LoadTimingInfo& load_timing,
+        const std::string& initial_worker_status) {
+  DCHECK(fetch_event_timing_);
+  UMA_HISTOGRAM_TIMES(
+      "ServiceWorker.LoadTiming.MainFrame.MainResource."
+      "FetchHandlerEndToFallbackNetwork",
+      completion_time_ - fetch_event_timing_->respond_with_settled_time);
+  base::UmaHistogramTimes(
+      base::StrCat({"ServiceWorker.LoadTiming.MainFrame.MainResource."
+                    "FetchHandlerEndToFallbackNetwork.",
+                    initial_worker_status}),
+      completion_time_ - fetch_event_timing_->respond_with_settled_time);
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN_WITH_TIMESTAMP0(
+      "ServiceWorker", "FetchHandlerEndToFallbackNetwork", this,
+      fetch_event_timing_->respond_with_settled_time);
+  TRACE_EVENT_NESTABLE_ASYNC_END_WITH_TIMESTAMP0(
+      "ServiceWorker", "FetchHandlerEndToFallbackNetwork", this,
+      completion_time_);
 }
 
 void ServiceWorkerMainResourceLoader::RecordFetchEventHandlerMetrics(
@@ -758,6 +1023,10 @@ void ServiceWorkerMainResourceLoader::TransitionToStatus(Status new_status) {
   status_ = new_status;
   if (new_status == Status::kCompleted)
     completion_time_ = base::TimeTicks::Now();
+}
+
+bool ServiceWorkerMainResourceLoader::IsMainResourceLoader() {
+  return true;
 }
 
 ServiceWorkerMainResourceLoaderWrapper::ServiceWorkerMainResourceLoaderWrapper(

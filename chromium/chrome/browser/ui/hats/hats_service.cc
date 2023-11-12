@@ -31,6 +31,7 @@
 #include "components/performance_manager/public/features.h"
 #include "components/permissions/constants.h"
 #include "components/permissions/features.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/version_info/version_info.h"
@@ -375,7 +376,9 @@ std::vector<HatsService::SurveyConfig> GetSurveyConfigs() {
           permissions::kPermissionsPromptSurveyActionKey,
           permissions::kPermissionsPromptSurveyRequestTypeKey,
           permissions::kPermissionsPromptSurveyReleaseChannelKey,
-          permissions::kPermissionsPromptSurveyDisplayTimeKey});
+          permissions::kPermissionsPromptSurveyDisplayTimeKey,
+          permissions::kPermissionPromptSurveyOneTimePromptsDecidedBucketKey,
+          permissions::kPermissionPromptSurveyUrlKey});
 
   // Performance Controls surveys.
   survey_configs.emplace_back(
@@ -752,7 +755,7 @@ void HatsService::LaunchSurveyForBrowser(
     return;
   }
   if (IncognitoModePrefs::GetAvailability(profile_->GetPrefs()) ==
-      IncognitoModePrefs::Availability::kDisabled) {
+      policy::IncognitoModeAvailability::kDisabled) {
     // Incognito mode needs to be enabled to create an off-the-record profile
     // for HaTS dialog.
     UMA_HISTOGRAM_ENUMERATION(kHatsShouldShowSurveyReasonHistogram,

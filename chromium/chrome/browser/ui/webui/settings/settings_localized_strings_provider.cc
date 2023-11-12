@@ -22,13 +22,15 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
-#include "chrome/browser/net/cert_verifier_configuration.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/obsolete_system/obsolete_system.h"
 #include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
 #include "chrome/browser/preloading/preloading_features.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/account_consistency_mode_manager_factory.h"
@@ -50,6 +52,7 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
@@ -64,6 +67,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/browsing_data/core/features.h"
 #include "components/content_settings/core/common/features.h"
+#include "components/device_reauth/device_authenticator.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/google/core/common/google_util.h"
 #include "components/omnibox/common/omnibox_features.h"
@@ -535,9 +539,30 @@ void AddDownloadsStrings(content::WebUIDataSource* html_source) {
       {"promptForDownload", IDS_SETTINGS_PROMPT_FOR_DOWNLOAD},
       {"openFileTypesAutomatically",
        IDS_SETTINGS_OPEN_FILE_TYPES_AUTOMATICALLY},
+      {"showDownloadsWhenFinished", IDS_SETTINGS_DOWNLOADS_SHOW_WHEN_FINISHED},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+void AddGetTheMostOutOfChromeStrings(content::WebUIDataSource* html_source) {
+  static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"getTheMostOutOfChrome", IDS_SETTINGS_GET_THE_MOST_OUT_OF_CHROME},
+      {"getTheMostOutOfChromeDescription",
+       IDS_SETTINGS_GET_THE_MOST_OUT_OF_CHROME_DESCRIPTION},
+      {"getTheMostOutOfChromeIntro",
+       IDS_SETTINGS_GET_THE_MOST_OUT_OF_CHROME_INTRO},
+      {"getTheMostOutOfChromeMoreThanABrowser",
+       IDS_SETTINGS_GET_THE_MOST_OUT_OF_CHROME_MORE_THAN_A_BROWSER},
+      {"getTheMostOutOfChromeYourDataInChrome",
+       IDS_SETTINGS_GET_THE_MOST_OUT_OF_CHROME_YOUR_DATA_IN_CHROME},
+      {"getTheMostOutOfChromeBeyondCookies",
+       IDS_SETTINGS_GET_THE_MOST_OUT_OF_CHROME_BEYOND_COOKIES},
+  };
+
+  html_source->AddLocalizedStrings(kLocalizedStrings);
+}
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 void AddChromeCleanupStrings(content::WebUIDataSource* html_source) {
@@ -750,6 +775,8 @@ void AddPerformanceStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_SAVE_BUTTON_ARIA_LABEL},
       {"tabDiscardingExceptionsHeader",
        IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_HEADER},
+      {"tabDiscardingExceptionsAdditionalSites",
+       IDS_SETTINGS_PERFORMANCE_TAB_DISCARDING_EXCEPTIONS_ADDITIONAL_SITES},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 
@@ -908,11 +935,22 @@ bool IsFidoAuthenticationAvailable(autofill::PersonalDataManager* personal_data,
   return ::autofill::IsCreditCardFidoAuthenticationEnabled();
 }
 
+bool CheckDeviceAuthAvailability(content::WebContents* web_contents) {
+  // If `client` is not available, then don't show toggle switch.
+  autofill::ContentAutofillClient* client =
+      autofill::ContentAutofillClient::FromWebContents(web_contents);
+  if (!client) {
+    return false;
+  }
+
+  return autofill::IsDeviceAuthAvailable(client->GetDeviceAuthenticator());
+}
+
 void AddAutofillStrings(content::WebUIDataSource* html_source,
                         Profile* profile,
                         content::WebContents* web_contents) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-    {"autofillPageTitle", IDS_SETTINGS_AUTOFILL},
+    {"autofillPageTitle", IDS_SETTINGS_AUTOFILL_AND_PASSWORDS},
     {"passwordsDescription", IDS_SETTINGS_PASSWORD_MANAGER_DESCRIPTION},
     {"passwordsDevice", IDS_SETTINGS_DEVICE_PASSWORDS},
     {"checkPasswords", IDS_SETTINGS_CHECK_PASSWORDS},
@@ -961,6 +999,8 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_COMPROMISED_EDIT_DISCLAIMER_DESCRIPTION},
     {"genericCreditCard", IDS_AUTOFILL_CC_GENERIC},
     {"creditCards", IDS_AUTOFILL_PAYMENT_METHODS},
+    {"paymentsMethodsTableAriaLabel",
+     IDS_AUTOFILL_PAYMENT_METHODS_TABLE_ARIA_LABEL},
     {"noPaymentMethodsFound", IDS_SETTINGS_PAYMENT_METHODS_NONE},
     {"googlePayments", IDS_SETTINGS_GOOGLE_PAYMENTS},
     {"googlePaymentsCached", IDS_SETTINGS_GOOGLE_PAYMENTS_CACHED},
@@ -972,12 +1012,20 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
     {"enableCreditCardFIDOAuthLabel", IDS_ENABLE_CREDIT_CARD_FIDO_AUTH_LABEL},
     {"enableCreditCardFIDOAuthSublabel",
      IDS_ENABLE_CREDIT_CARD_FIDO_AUTH_SUBLABEL},
+    {"enableMandatoryAuthToggleLabel",
+     IDS_AUTOFILL_SETTINGS_PAGE_ENABLE_PAYMENT_METHOD_MANDATORY_REAUTH_LABEL},
+    {"enableMandatoryAuthToggleSublabel",
+     IDS_AUTOFILL_SETTINGS_PAGE_ENABLE_PAYMENT_METHOD_MANDATORY_REAUTH_SUBLABEL},
     {"addresses", IDS_AUTOFILL_ADDRESSES},
+    {"addressesTableAriaLabel", IDS_AUTOFILL_ADDRESSES_TABLE_ARIA_LABEL},
     {"addressesTitle", IDS_AUTOFILL_ADDRESSES_SETTINGS_TITLE},
     {"addAddressTitle", IDS_SETTINGS_AUTOFILL_ADDRESSES_ADD_TITLE},
     {"editAddressTitle", IDS_SETTINGS_AUTOFILL_ADDRESSES_EDIT_TITLE},
+    {"localAddressIconA11yLabel", IDS_AUTOFILL_LOCAL_ADDRESS_ICON_A11Y_LABEL},
+    {"newAccountAddressSourceNotice",
+     IDS_AUTOFILL_ADDRESS_WILL_BE_SAVED_IN_ACCOUNT_SOURCE_NOTICE},
     {"editAccountAddressSourceNotice",
-     IDS_AUTOFILL_EDIT_ACCOUNT_ADDRESS_SOURCE_NOTICE},
+     IDS_AUTOFILL_ADDRESS_ALREADY_SAVED_IN_ACCOUNT_SOURCE_NOTICE},
     {"deleteAccountAddressSourceNotice",
      IDS_AUTOFILL_DELETE_ACCOUNT_ADDRESS_SOURCE_NOTICE},
     {"addressCountry", IDS_SETTINGS_AUTOFILL_ADDRESSES_COUNTRY},
@@ -998,8 +1046,8 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
      IDS_AUTOFILL_DELETE_LOCAL_ADDRESS_SOURCE_NOTICE},
     {"removeLocalCreditCardConfirmationTitle",
      IDS_SETTINGS_LOCAL_CARD_REMOVE_CONFIRMATION_TITLE},
-    {"removeLocalCreditCardConfirmationDescription",
-     IDS_SETTINGS_LOCAL_CARD_REMOVE_CONFIRMATION_DESCRIPTION},
+    {"removeLocalPaymentMethodConfirmationDescription",
+     IDS_SETTINGS_LOCAL_PAYMENT_METHOD_REMOVE_CONFIRMATION_DESCRIPTION},
     {"addressRemovedMessage", IDS_SETTINGS_ADDRESS_REMOVED_MESSAGE},
     {"editAddressRequiredFieldError",
      IDS_AUTOFILL_EDIT_ADDRESS_REQUIRED_FIELD_FORM_ERROR},
@@ -1017,6 +1065,7 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
     {"creditCardExpired", IDS_SETTINGS_CREDIT_CARD_EXPIRED},
     {"editCreditCardTitle", IDS_SETTINGS_EDIT_CREDIT_CARD_TITLE},
     {"addCreditCardTitle", IDS_SETTINGS_ADD_CREDIT_CARD_TITLE},
+    {"addPaymentMethods", IDS_SETTINGS_ADD_PAYMENT_METHODS},
     {"addPaymentMethodCreditOrDebitCard",
      IDS_SETTINGS_ADD_PAYMENT_METHOD_CREDIT_OR_DEBIT_CARD},
     {"addPaymentMethodIban", IDS_SETTINGS_ADD_PAYMENT_METHOD_IBAN},
@@ -1028,7 +1077,8 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
     {"moreActionsForIbanDescription",
      IDS_SETTINGS_AUTOFILL_MORE_ACTIONS_FOR_IBAN_DESCRIPTION},
     {"editIban", IDS_SETTINGS_IBAN_EDIT},
-    {"removeIban", IDS_SETTINGS_IBAN_REMOVE},
+    {"removeLocalIbanConfirmationTitle",
+     IDS_SETTINGS_LOCAL_IBAN_REMOVE_CONFIRMATION_TITLE},
     {"migrateCreditCardsLabel", IDS_SETTINGS_MIGRATABLE_CARDS_LABEL},
     {"migratableCardsInfoSingle", IDS_SETTINGS_SINGLE_MIGRATABLE_CARD_INFO},
     {"migratableCardsInfoMultiple",
@@ -1160,14 +1210,22 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
     {"passwordRowMoreActionsButton", IDS_SETTINGS_PASSWORD_ROW_MORE_ACTIONS},
     {"passwordRowFederatedMoreActionsButton",
      IDS_SETTINGS_PASSWORD_ROW_FEDERATED_MORE_ACTIONS},
+    {"passwordTableAriaLabel", IDS_SETTINGS_PASSWORD_TABLE_ARIA_LABEL},
     {"passwordRowPasswordDetailPageButton",
      IDS_SETTINGS_PASSWORD_ROW_PASSWORD_DETAIL_PAGE},
+    {"localPasswordManager",
+     IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SAVING_ON_DEVICE},
     {"importMenuItem", IDS_SETTINGS_PASSWORDS_IMPORT_MENU_ITEM},
     {"importPasswordsTitle", IDS_SETTINGS_PASSWORDS_IMPORT_TITLE},
+    {"importPasswordsErrorTitle", IDS_SETTINGS_PASSWORDS_IMPORT_ERROR_TITLE},
+    {"importPasswordsCompleteTitle",
+     IDS_SETTINGS_PASSWORDS_IMPORT_COMPLETE_TITLE},
+    {"importPasswordsSuccessTitle",
+     IDS_SETTINGS_PASSWORDS_IMPORT_SUCCESS_TITLE},
     {"importPasswordsChooseFile", IDS_SETTINGS_PASSWORDS_IMPORT_CHOOSE_FILE},
     {"importPasswordsSuccessTip", IDS_SETTINGS_PASSWORDS_IMPORT_SUCCESS_TIP},
-    {"importPasswordsFailuresSummary",
-     IDS_SETTINGS_PASSWORDS_IMPORT_FAILURES_SUMMARY},
+    {"importPasswordsDeleteFileOption",
+     IDS_SETTINGS_PASSWORDS_IMPORT_DELETE_FILE_OPTION},
     {"importPasswordsMissingPassword",
      IDS_SETTINGS_PASSWORDS_IMPORT_MISSING_PASSWORD},
     {"importPasswordsMissingURL", IDS_SETTINGS_PASSWORDS_IMPORT_MISSING_URL},
@@ -1183,6 +1241,11 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_PASSWORDS_IMPORT_CONFLICT_DEVICE},
     {"importPasswordsConflictAccount",
      IDS_SETTINGS_PASSWORDS_IMPORT_CONFLICT_ACCOUNT},
+    {"importPasswordsConflictsDescription",
+     IDS_SETTINGS_PASSWORDS_IMPORT_CONFLICTS_DESCRIPTION},
+    {"importPasswordsCancel", IDS_SETTINGS_PASSWORDS_IMPORT_CANCEL},
+    {"importPasswordsSkip", IDS_SETTINGS_PASSWORDS_IMPORT_SKIP},
+    {"importPasswordsReplace", IDS_SETTINGS_PASSWORDS_IMPORT_REPLACE},
     {"importPasswordsUnknownError",
      IDS_SETTINGS_PASSWORDS_IMPORT_ERROR_UNKNOWN},
     {"importPasswordsBadFormatError",
@@ -1230,7 +1293,6 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
     {"addVirtualCard", IDS_AUTOFILL_ADD_VIRTUAL_CARD},
     {"removeVirtualCard", IDS_AUTOFILL_REMOVE_VIRTUAL_CARD},
     {"editServerCard", IDS_AUTOFILL_EDIT_SERVER_CREDIT_CARD},
-    {"virtualCardAvailable", IDS_AUTOFILL_VIRTUAL_CARD_AVAILABLE_LABEL},
     {"virtualCardEnabled", IDS_AUTOFILL_VIRTUAL_CARD_ENABLED_LABEL},
     {"virtualCardTurnedOn", IDS_AUTOFILL_VIRTUAL_CARD_TURNED_ON_LABEL},
     {"unenrollVirtualCardDialogTitle",
@@ -1343,8 +1405,12 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
                             /*log_manager=*/nullptr));
 
   html_source->AddBoolean("showIbansSettings",
-                          base::FeatureList::IsEnabled(
-                              autofill::features::kAutofillFillIbanFields));
+                          autofill::ShouldShowIbanOnSettingsPage(
+                              personal_data->GetCountryCodeForExperimentGroup(),
+                              profile->GetPrefs()));
+
+  html_source->AddBoolean("deviceAuthAvailable",
+                          CheckDeviceAuthAvailability(web_contents));
 
   html_source->AddBoolean(
       "fidoAuthenticationAvailableForAutofill",
@@ -1633,8 +1699,15 @@ void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
                           ProfileShortcutManager::IsFeatureEnabled());
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  html_source->AddBoolean("signinAvailable",
-                          AccountConsistencyModeManager::IsDiceSignInAllowed());
+  auto* profile_entry =
+      g_browser_process->profile_manager()
+          ? g_browser_process->profile_manager()
+                ->GetProfileAttributesStorage()
+                .GetProfileAttributesWithPath(profile->GetPath())
+          : nullptr;
+  html_source->AddBoolean(
+      "signinAvailable",
+      AccountConsistencyModeManager::IsDiceSignInAllowed(profile_entry));
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1852,10 +1925,13 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
       base::FeatureList::IsEnabled(features::kHttpsOnlyMode));
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
-  html_source->AddBoolean(
-      "showChromeRootStoreCertificates",
-      GetChromeCertVerifierServiceParams(/*localstate=*/nullptr)
-          ->use_chrome_root_store);
+  html_source->AddBoolean("showChromeRootStoreCertificates",
+#if BUILDFLAG(CHROME_ROOT_STORE_OPTIONAL)
+                          SystemNetworkContextManager::IsUsingChromeRootStore()
+#else
+                          true
+#endif
+  );
 
   html_source->AddString("chromeRootStoreHelpCenterURL",
                          chrome::kChromeRootStoreSettingsHelpCenterURL);
@@ -2151,6 +2227,30 @@ void AddPrivacySandboxStrings(content::WebUIDataSource* html_source,
       "firstPartySetsUIEnabled",
       base::FeatureList::IsEnabled(
           privacy_sandbox::kPrivacySandboxFirstPartySetsUI));
+
+  html_source->AddString("bluetoothAdapterOffHelpURL",
+                         google_util::AppendGoogleLocaleParam(
+                             GURL(chrome::kBluetoothAdapterOffHelpURL),
+                             g_browser_process->GetApplicationLocale())
+                             .spec());
+
+  html_source->AddString("chooserHidOverviewUrl",
+                         google_util::AppendGoogleLocaleParam(
+                             GURL(chrome::kChooserHidOverviewUrl),
+                             g_browser_process->GetApplicationLocale())
+                             .spec());
+
+  html_source->AddString("chooserSerialOverviewUrl",
+                         google_util::AppendGoogleLocaleParam(
+                             GURL(chrome::kChooserSerialOverviewUrl),
+                             g_browser_process->GetApplicationLocale())
+                             .spec());
+
+  html_source->AddString("chooserUsbOverviewURL",
+                         google_util::AppendGoogleLocaleParam(
+                             GURL(chrome::kChooserUsbOverviewURL),
+                             g_browser_process->GetApplicationLocale())
+                             .spec());
 }
 
 void AddPrivacyGuideStrings(content::WebUIDataSource* html_source) {
@@ -2490,6 +2590,11 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"noHidDevicesFound", IDS_SETTINGS_NO_HID_DEVICES_FOUND},
     {"noSerialPortsFound", IDS_SETTINGS_NO_SERIAL_PORTS_FOUND},
     {"noUsbDevicesFound", IDS_SETTINGS_NO_USB_DEVICES_FOUND},
+    {"resetBluetoothConfirmation", IDS_SETTINGS_RESET_BLUETOOTH_CONFIRMATION},
+    {"resetHidConfirmation", IDS_SETTINGS_RESET_HID_CONFIRMATION},
+    {"resetSerialPortsConfirmation",
+     IDS_SETTINGS_RESET_SERIAL_PORTS_CONFIRMATION},
+    {"resetUsbConfirmation", IDS_SETTINGS_RESET_USB_CONFIRMATION},
     {"serviceWorkerOrigin", IDS_SETTINGS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
     {"serviceWorkerSize",
      IDS_SETTINGS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
@@ -2621,6 +2726,12 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_ALL_SITES_SORT_METHOD_STORAGE},
     {"siteSettingsAllSitesSortMethodName",
      IDS_SETTINGS_SITE_SETTINGS_ALL_SITES_SORT_METHOD_NAME},
+    {"siteSettingsFileSystemSiteListEditHeader",
+     IDS_SETTINGS_SITE_SETTINGS_FILE_SYSTEM_SITE_LIST_EDIT_HEADER},
+    {"siteSettingsFileSystemSiteListRemoveGrantLabel",
+     IDS_SETTINGS_SITE_SETTINGS_FILE_SYSTEM_SITE_LIST_REMOVE_GRANT_LABEL},
+    {"siteSettingsFileSystemSiteListViewHeader",
+     IDS_SETTINGS_SITE_SETTINGS_FILE_SYSTEM_SITE_LIST_VIEW_HEADER},
     {"siteSettingsSiteEntryPartitionedLabel",
      IDS_SETTINGS_SITE_SETTINGS_SITE_ENTRY_PARTITIONED_LABEL},
     {"siteSettingsSiteRepresentationSeparator",
@@ -3290,6 +3401,8 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"antiAbuseWhenOnHeader", IDS_SETTINGS_ANTI_ABUSE_WHEN_ON_HEADER},
     {"antiAbuseWhenOnSectionOne", IDS_SETTINGS_ANTI_ABUSE_WHEN_ON_SECTION_ONE},
     {"antiAbuseWhenOnSectionTwo", IDS_SETTINGS_ANTI_ABUSE_WHEN_ON_SECTION_TWO},
+    {"antiAbuseWhenOnSectionThree",
+     IDS_SETTINGS_ANTI_ABUSE_WHEN_ON_SECTION_THREE},
     {"antiAbuseThingsToConsiderHeader",
      IDS_SETTINGS_ANTI_ABUSE_THINGS_TO_CONSIDER_HEADER},
     {"antiAbuseThingsToConsiderSectionOne",
@@ -3592,6 +3705,10 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddAboutStrings(html_source, profile);
   AddAutofillStrings(html_source, profile, web_contents);
   AddAppearanceStrings(html_source, profile);
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  AddGetTheMostOutOfChromeStrings(html_source);
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   AddChromeCleanupStrings(html_source);

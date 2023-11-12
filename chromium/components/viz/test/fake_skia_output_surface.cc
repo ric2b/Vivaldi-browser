@@ -24,10 +24,12 @@
 #include "gpu/command_buffer/common/swap_buffers_complete_params.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPixelRef.h"
 #include "third_party/skia/include/gpu/GpuTypes.h"
 #include "third_party/skia/include/gpu/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
+#include "third_party/skia/include/gpu/ganesh/SkImageGanesh.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/presentation_feedback.h"
@@ -130,10 +132,10 @@ void FakeSkiaOutputSurface::MakePromiseSkImage(
   auto sk_color_type =
       ToClosestSkColorType(true /* gpu_compositing */, image_context->format());
   image_context->SetImage(
-      SkImage::MakeFromTexture(gr_context(), backend_texture,
-                               kTopLeft_GrSurfaceOrigin, sk_color_type,
-                               image_context->alpha_type(),
-                               image_context->color_space()),
+      SkImages::BorrowTextureFrom(gr_context(), backend_texture,
+                                  kTopLeft_GrSurfaceOrigin, sk_color_type,
+                                  image_context->alpha_type(),
+                                  image_context->color_space()),
       {backend_texture.getBackendFormat()});
 }
 
@@ -168,8 +170,9 @@ FakeSkiaOutputSurface::CreateImageContext(
 SkCanvas* FakeSkiaOutputSurface::BeginPaintRenderPass(
     const AggregatedRenderPassId& id,
     const gfx::Size& surface_size,
-    ResourceFormat format,
+    SharedImageFormat format,
     bool mipmap,
+    bool scanout_dcomp_surface,
     sk_sp<SkColorSpace> color_space,
     bool is_overlay,
     const gpu::Mailbox& mailbox) {
@@ -182,7 +185,7 @@ SkCanvas* FakeSkiaOutputSurface::BeginPaintRenderPass(
 
   if (!sk_surface) {
     SkColorType color_type =
-        ResourceFormatToClosestSkColorType(true /* gpu_compositing */, format);
+        ToClosestSkColorType(true /* gpu_compositing */, format);
     SkImageInfo image_info = SkImageInfo::Make(
         surface_size.width(), surface_size.height(), color_type,
         kPremul_SkAlphaType, std::move(color_space));
@@ -200,6 +203,7 @@ SkCanvas* FakeSkiaOutputSurface::RecordOverdrawForCurrentPaint() {
 void FakeSkiaOutputSurface::EndPaint(
     base::OnceClosure on_finished,
     base::OnceCallback<void(gfx::GpuFenceHandle)> return_release_fence_cb,
+    const gfx::Rect& update_rect,
     bool is_overlay) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   sk_surfaces_[current_render_pass_id_]->flushAndSubmit();
@@ -214,7 +218,7 @@ void FakeSkiaOutputSurface::EndPaint(
 sk_sp<SkImage> FakeSkiaOutputSurface::MakePromiseSkImageFromRenderPass(
     const AggregatedRenderPassId& id,
     const gfx::Size& size,
-    ResourceFormat format,
+    SharedImageFormat format,
     bool mipmap,
     sk_sp<SkColorSpace> color_space,
     const gpu::Mailbox& mailbox) {
@@ -279,7 +283,7 @@ void FakeSkiaOutputSurface::CopyOutput(
     gpu::Mailbox local_mailbox = sii->CreateSharedImage(
         SinglePlaneFormat::kRGBA_8888, geometry.result_selection.size(),
         color_space, kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
-        gpu::SHARED_IMAGE_USAGE_GLES2, gpu::kNullSurfaceHandle);
+        gpu::SHARED_IMAGE_USAGE_GLES2, "CopyOutput", gpu::kNullSurfaceHandle);
 
     CopyOutputResult::ReleaseCallbacks release_callbacks;
     release_callbacks.push_back(base::BindPostTaskToCurrentDefault(
@@ -396,10 +400,11 @@ void FakeSkiaOutputSurface::InitDelegatedInkPointRendererReceiver(
 }
 
 gpu::Mailbox FakeSkiaOutputSurface::CreateSharedImage(
-    ResourceFormat format,
+    SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     uint32_t usage,
+    base::StringPiece debug_label,
     gpu::SurfaceHandle surface_handle) {
   return gpu::Mailbox::GenerateForSharedImage();
 }

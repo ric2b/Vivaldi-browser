@@ -8,18 +8,22 @@
 <translation id="1049795001945932310">&amp;Ajustos de l'idioma</translation>
 <translation id="1054153489933238809">Obre la &amp;imatge original a una pestanya nova</translation>
 <translation id="1056898198331236512">Advertiment</translation>
+<translation id="1067048845568873861">Creada</translation>
 <translation id="1084824384139382525">Copia &amp;l'adreça de l'enllaç</translation>
 <translation id="1163931534039071049">&amp;Visualitza el codi del marc</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1175364870820465910">&amp;Imprimeix...</translation>
 <translation id="1181037720776840403">Suprimeix</translation>
 <translation id="1187722533808055681">Activacions en estat de repòs</translation>
+<translation id="122082903575839559">Algoritme de signatura del certificat</translation>
 <translation id="1221825588892235038">Només la selecció</translation>
 <translation id="1234736487471201993">Crea un codi QR per aquesta imatge</translation>
 <translation id="1244303850296295656">Error del complement</translation>
 <translation id="125220115284141797">Predeterminat</translation>
+<translation id="1257336506558170607">Exporta el certificat seleccionat</translation>
 <translation id="1297175357211070620">Destí</translation>
 <translation id="1303101771013849280">Fitxer HTML dels marcadors</translation>
+<translation id="1358741672408003399">Ortografia i gramàtica</translation>
 <translation id="1430915738399379752">Imprimeix</translation>
 <translation id="1451375123200651445">Pàgina web, fitxer únic</translation>
 <translation id="1465176863081977902">C&amp;opia l'adreça de l'àudio</translation>
@@ -30,10 +34,12 @@
 <translation id="15662109988763471">La impressora seleccionada no està disponible o no s'ha instal·lat correctament. Comprova-la o prova de seleccionar-ne una altra.</translation>
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Obre l'enllaç amb...</translation>
+<translation id="1589055389569595240">Mostra l'ortografia i la gramàtica</translation>
 <translation id="159359590073980872">Memòria cau d'imatges</translation>
 <translation id="1601560923496285236">Aplica</translation>
 <translation id="1603914832182249871">(Incògnit)</translation>
 <translation id="1627276047960621195">Descriptors dels fitxers</translation>
+<translation id="166278006618318542">Algoritme de clau pública del subjecte</translation>
 <translation id="1682548588986054654">Nova finestra privada</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1723824996674794290">&amp;Nova finestra</translation>
@@ -49,6 +55,8 @@
 <translation id="1886996562706621347">Permet que els llocs sol·licitin convertir-se en gestors predeterminats de protocols (recomanat)</translation>
 <translation id="1901303067676059328">Selecciona-ho &amp;tot</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> ppp</translation>
+<translation id="1925021887439448749">Introdueix l'adreça web personalitzada</translation>
+<translation id="1932098463447129402">No abans</translation>
 <translation id="1936931585862840749">Introdueix un número per indicar quantes còpies vols imprimir (entre 1 i <ph name="MAX_COPIES" />).</translation>
 <translation id="1994173015038366702">URL del lloc</translation>
 <translation id="2019718679933488176">&amp;Obre l'àudio a una pestanya nova</translation>
@@ -57,6 +65,7 @@
 <translation id="2087822576218954668">Imprimeix: <ph name="PRINT_NAME" /></translation>
 <translation id="2114326799768592691">Torna a carregar el &amp;marc</translation>
 <translation id="2142328300403846845">Obre l'enllaç com a</translation>
+<translation id="2144536955299248197">Lector de certificats: <ph name="CERTIFICATE_NAME" /></translation>
 <translation id="2148892889047469596">Emet la pestanya</translation>
 <translation id="2150139952286079145">Cerca als destins</translation>
 <translation id="215753907730220065">Surt de pantalla sencera</translation>
@@ -89,21 +98,28 @@
 <translation id="253557089021624350">Nombre de processos actius</translation>
 <translation id="2550212893339833758">Memòria intercanviada</translation>
 <translation id="2553440850688409052">Amaga aquest complement</translation>
+<translation id="2607101320794533334">Informació de clau pública del subjecte</translation>
 <translation id="26224892172169984">No permetis que cap lloc gestioni els protocols</translation>
 <translation id="2653275834716714682">Substitució del text</translation>
+<translation id="265390580714150011">Valor del camp</translation>
 <translation id="2662876636500006917">Botiga web de Chrome</translation>
 <translation id="2678063897982469759">Reactiva</translation>
 <translation id="2678100101831051676">No es pot emetre.</translation>
+<translation id="2719936478972253983">S'han bloquejat les galetes següents</translation>
 <translation id="2721037002783622288">&amp;Cerca la imatge a <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2738771556149464852">No després</translation>
+<translation id="2749881179542288782">Comprova la gramàtica amb l'ortografia</translation>
 <translation id="2783321960289401138">Crea una drecera...</translation>
 <translation id="2785873697295365461">Descriptors dels fitxers</translation>
 <translation id="2809586584051668049">i <ph name="NUMBER_ADDITIONAL_DISABLED" /> més</translation>
+<translation id="2825758591930162672">Clau pública del subjecte</translation>
 <translation id="2850541429955027218">Afegeix el tema</translation>
 <translation id="2861941300086904918">Administrador de seguretat del client natiu</translation>
 <translation id="2881076733170862447">Quan fas clic al complement</translation>
 <translation id="2889064240420137087">Obre l'enllaç amb...</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> no s'ha pogut comunicar amb aquesta impressora. Comprova que la impressora estigui connectada i torna-ho a provar.</translation>
 <translation id="2913331724188855103">Permet que els llocs web desin i llegeixin les dades de les galetes (recomanat)</translation>
+<translation id="2916745397441987255">Cerca complements</translation>
 <translation id="2931157624143513983">Ajusta a l'àrea d'impressió</translation>
 <translation id="2932085390869194046">Suggereix una contrasenya...</translation>
 <translation id="2932883381142163287">Informa d'un abús</translation>
@@ -123,6 +139,7 @@
 <translation id="3124111068741548686">Gestionat per l'USUARI</translation>
 <translation id="3129173833825111527">Marge esquerre</translation>
 <translation id="3144647712221361880">Obre l'enllaç com a</translation>
+<translation id="3202131003361292969">Camí</translation>
 <translation id="3222066309010235055">Renderitzador previ: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Selecciona el directori arrel del complement que vols empaquetar. Per actualitzar un complement, cal que seleccionis també el fitxer de clau privada que s'utilitzarà.</translation>
 <translation id="3275778913554317645">Obre com a finestra</translation>
@@ -134,6 +151,7 @@
 <translation id="3303818374450886607">Còpies</translation>
 <translation id="3305661444342691068">Obre el PDF a la vista prèvia</translation>
 <translation id="3308134619352333507">Amaga el botó</translation>
+<translation id="3313622045786997898">Valor de la signatura del certificat</translation>
 <translation id="3317459757438853210">A dues cares</translation>
 <translation id="3331974543021145906">Informació de l'aplicació</translation>
 <translation id="3341703758641437857">Permet accedir als URLs dels fitxers</translation>
@@ -144,6 +162,7 @@
 <translation id="3390013585654699824">Detalls de l'aplicació</translation>
 <translation id="3393582007140394275">No es pot emetre la pantalla.</translation>
 <translation id="345693547134384690">Obre la &amp;imatge a una pestanya nova</translation>
+<translation id="3493881266323043047">Validesa</translation>
 <translation id="3494769164076977169">Pregunta quan un lloc provi de baixar fitxers automàticament després del primer fitxer (recomanat)</translation>
 <translation id="3505030558724226696">Revoca l'accés als dispositius</translation>
 <translation id="3511307672085573050">Copia l'adr&amp;eça de l'enllaç</translation>
@@ -159,11 +178,14 @@
 <translation id="3727187387656390258">Inspecciona l'element emergent</translation>
 <translation id="3760460896538743390">Inspecciona la pàgina en &amp;segon pla</translation>
 <translation id="3797900183766075808">&amp;Cerca <ph name="SEARCH_TERMS" /> a "<ph name="SEARCH_ENGINE" />"</translation>
+<translation id="3798449238516105146">Versió</translation>
 <translation id="3800806661949714323">Mostra-ho tot (recomanat)</translation>
 <translation id="3810973564298564668">Gestiona</translation>
 <translation id="3838085852053358637">No s'ha pogut carregar el complement</translation>
 <translation id="383891835335927981">No s'ha ampliat ni reduït cap lloc</translation>
 <translation id="385051799172605136">Enrere</translation>
+<translation id="3858860766373142691">Nom</translation>
+<translation id="3867944738977021751">Camps del certificat</translation>
 <translation id="3905761538810670789">Repara l'aplicació</translation>
 <translation id="3908501907586732282">Activa el complement</translation>
 <translation id="3909701002594999354">Mostra tots els &amp;controls</translation>
@@ -177,6 +199,7 @@
 <translation id="398477389655464998">Copia l'enllaç a destacar</translation>
 <translation id="4021279097213088397">–</translation>
 <translation id="4022426551683927403">&amp;Afegeix al diccionari</translation>
+<translation id="4058793769387728514">Comprova el document ara</translation>
 <translation id="407520071244661467">Escala</translation>
 <translation id="4079140982534148664">Fes servir el corrector ortogràfic millorat</translation>
 <translation id="4087089424473531098">S'ha creat el complement:
@@ -184,15 +207,20 @@
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4096508467498758490">Desactiva els complements del mode desenvolupador</translation>
 <translation id="4100839878934973028">Un altre programa del dispositiu ha afegit una aplicació que pot canviar el funcionament de Vivaldi.</translation>
+<translation id="4104163789986725820">E&amp;xporta...</translation>
 <translation id="4109898769411476438">Tanca el navegador abans d'importar</translation>
 <translation id="4130207949184424187">Aquest complement ha canviat la pàgina que es mostra quan fas una cerca des de l'omnibox.</translation>
 <translation id="4131410914670010031">Blanc i negre</translation>
 <translation id="4165986682804962316">Ajustos del lloc</translation>
+<translation id="4170314459383239649">Suprimeix en sortir</translation>
 <translation id="4176463684765177261">Desactivat</translation>
 <translation id="4200983522494130825">Nova pes&amp;tanya</translation>
 <translation id="4225397296022057997">A tots els llocs web</translation>
 <translation id="4256316378292851214">De&amp;sa el vídeo com a...</translation>
+<translation id="4270393598798225102">Versió <ph name="NUMBER" /></translation>
+<translation id="4278390842282768270">Permès</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (<ph name="NUM_KILOBYTES_LIVE" /> KB actius)</translation>
+<translation id="431076611119798497">&amp;Detalls</translation>
 <translation id="4345587454538109430">Configura...</translation>
 <translation id="4348766275249686434">Recopila errors</translation>
 <translation id="4363771538994847871">No s'ha trobat cap destinació per emetre. Necessites ajuda?</translation>
@@ -201,6 +229,8 @@
 <translation id="4409697491990005945">Marges</translation>
 <translation id="4423376891418188461">Restableix els ajustos</translation>
 <translation id="4478664379124702289">Desa l'&amp;enllaç com a...</translation>
+<translation id="4520385623207007473">Galetes en ús</translation>
+<translation id="4580596421317071374">Les contrasenyes es desen a <ph name="GOOGLE_PASSWORD_MANAGER" /> en aquest dispositiu.</translation>
 <translation id="4593021220803146968">&amp;Vés a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Només el gestor (<ph name="CUSTODIAN_NAME" />) pot modificar les aplicacions i complements.</translation>
 <translation id="4613271546271159013">Un complement ha canviat la pàgina que es mostra en obrir una pestanya nova.</translation>
@@ -210,6 +240,7 @@
 <translation id="4681930562518940301">Obre la &amp;imatge original a una pestanya nova</translation>
 <translation id="4711638718396952945">Restableix els ajustos</translation>
 <translation id="4726710629007580002">Han aparegut advertències quan s'ha intentat instal·lar aquest complement:</translation>
+<translation id="4763408175235639573">S'han permès les galetes següents en visitar aquesta pàgina</translation>
 <translation id="479536056609751218">Pàgina web, només HTML</translation>
 <translation id="4827904420700932487">Crea un codi QR per aquesta imatge</translation>
 <translation id="4839303808932127586">De&amp;sa el vídeo com a...</translation>
@@ -233,6 +264,7 @@
 <translation id="5116628073786783676">De&amp;sa l'àudio com a...</translation>
 <translation id="5143374789336132547">El complement <ph name="EXTENSION_NAME" /> ha canviat la pàgina que es mostra quan fas clic al botó d'inici.</translation>
 <translation id="5154108062446123722">Configuració avançada de <ph name="PRINTING_DESTINATION" /></translation>
+<translation id="5154702632169343078">Assumpte</translation>
 <translation id="5171343362375269016">Memòria intercanviada</translation>
 <translation id="5233019165164992427">Port de depuració NaCI</translation>
 <translation id="5233231016133573565">ID del procés</translation>
@@ -251,6 +283,7 @@
 <translation id="5362741141255528695">Selecciona el fitxer de clau privada.</translation>
 <translation id="536638840841140142">Cap</translation>
 <translation id="5370819323174483825">&amp;Tornar a carregar</translation>
+<translation id="5390743329570580756">Envia per</translation>
 <translation id="5398572795982417028">La referència de pàgina no respecta el límit de <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Continua baixant</translation>
 <translation id="5427459444770871191">Gira en el sentit de les &amp;agulles del rellotge</translation>
@@ -264,15 +297,18 @@
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5556459405103347317">Torna a carregar</translation>
 <translation id="5575473780076478375">Complement d'incògnit: <ph name="EXTENSION_NAME" /></translation>
+<translation id="5582839680698949063">Menú principal</translation>
 <translation id="5614553682702429503">Vols desar la contrasenya?</translation>
 <translation id="5623842676595125836">Registre</translation>
 <translation id="5627086634964711283">També controla la pàgina que es mostra quan fas clic al botó d'inici.</translation>
 <translation id="563535393368633106">Pregunta abans d'accedir (recomanat)</translation>
-<translation id="5677928146339483299">Bloquejat</translation>
+<translation id="5638309510554459422">Cerca complements i temes a la <ph name="BEGIN_LINK" />Botiga web de Chrome<ph name="END_LINK" /></translation>
+<translation id="5677928146339483299">Bloquejades</translation>
 <translation id="5707185214361380026">No s'ha pogut carregar el complement des de:</translation>
 <translation id="5713171467967533494">Obre al navegador Vivaldi</translation>
 <translation id="5715711091495208045">Agent de connectors: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5746169159649715125">Desa com a PDF</translation>
+<translation id="5747552184818312860">Caduca el</translation>
 <translation id="5747809636523347288">Engan&amp;xa i vés a <ph name="URL" /></translation>
 <translation id="5759728514498647443">Els documents que envies a la impresora mitjançant <ph name="APP_NAME" /> poden ser llegits per <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">De&amp;sa l'àudio com a...</translation>
@@ -280,15 +316,22 @@
 <translation id="5804241973901381774">Permisos</translation>
 <translation id="5828633471261496623">Imprimint...</translation>
 <translation id="583281660410589416">Desconegut</translation>
+<translation id="5851868085455377790">Emissor</translation>
 <translation id="5860491529813859533">Activa</translation>
 <translation id="5867841422488265304">Cerca o escriu l'adreça web</translation>
 <translation id="5910363049092958439">De&amp;sa la imatge com a...</translation>
+<translation id="5914724413750400082">Mòdul (<ph name="MODULUS_NUM_BITS" /> bits):
+  <ph name="MODULUS_HEX_DUMP" />
+
+  Exponent públic (<ph name="PUBLIC_EXPONENT_NUM_BITS" /> bits):
+  <ph name="EXPONENT_HEX_DUMP" /></translation>
 <translation id="5956585768868398362">Aquesta pàgina de cerca és la que esperaves?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> màxim)</translation>
 <translation id="5965661248935608907">També controla la pàgina que es mostra quan fas clic al botó d'inici o quan fas una cerca des de l'omnibox.</translation>
 <translation id="5978277834170881274">&amp;Fes servir el corrector ortogràfic bàsic</translation>
 <translation id="5979421442488174909">&amp;Tradueix a: <ph name="LANGUAGE" /></translation>
 <translation id="6042308850641462728">Més</translation>
+<translation id="6059652578941944813">Jerarquia del certificat</translation>
 <translation id="6086846494333236931">Instal·lada per l'administrador</translation>
 <translation id="6101226222197207147">S'ha afegit una aplicació nova (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="6122081475643980456">La teva connexió a Internet s'està controlant</translation>
@@ -322,9 +365,12 @@
 <translation id="6550675742724504774">Opcions</translation>
 <translation id="6579369886355986318">Mostra tots els &amp;controls</translation>
 <translation id="6639554308659482635">Memòria SQLite</translation>
+<translation id="6655190889273724601">Mode de desenvolupador</translation>
 <translation id="666731172850799929">Obre a <ph name="APP_NAME" /></translation>
 <translation id="6686817083349815241">Desa la teva contrasenya</translation>
 <translation id="6691936601825168937">&amp;Avança</translation>
+<translation id="6786747875388722282">Complements</translation>
+<translation id="6787839852456839824">Dreceres de teclat</translation>
 <translation id="6798954102094737107">Connector: <ph name="PLUGIN_NAME" /></translation>
 <translation id="6812841287760418429">Mantingues els canvis</translation>
 <translation id="6817174620439930047">Pregunta quan un lloc vulgui utilitzar els missatges exclusius del sistema per accedir a dispositius MIDI (recomanat)</translation>
@@ -334,6 +380,7 @@
 <translation id="6892812721183419409">Obre l'enllaç com a <ph name="USER" /></translation>
 <translation id="6900284862687837908">Aplicació en segon pla: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">Revoca l'accés al fitxer</translation>
+<translation id="6916590542764765824">Gestiona els complements</translation>
 <translation id="6945221475159498467">Selecciona</translation>
 <translation id="6955446738988643816">Inspecciona l'element emergent</translation>
 <translation id="6970856801391541997">Imprimeix pàgines específiques</translation>
@@ -348,6 +395,8 @@
 <translation id="7186088072322679094">Mantén-lo a la barra d'eines</translation>
 <translation id="7287143125007575591">Accés denegat.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> ppp</translation>
+<translation id="7339785458027436441">Comprova l'ortografia mentre escric</translation>
+<translation id="73786666777299047">Obre la botiga web de Chrome</translation>
 <translation id="7385854874724088939">S'ha produït un problema en intentar imprimir. Comprova la impressora i torna-ho a provar.</translation>
 <translation id="7412226954991670867">Memòria de la GPU</translation>
 <translation id="7421925624202799674">&amp;Visualitza el codi de la pàgina</translation>
@@ -365,8 +414,10 @@
 <translation id="7684212569183643648">Instal·lada per l'administrador</translation>
 <translation id="7685049629764448582">Memòria de JavaScript</translation>
 <translation id="7701869757853594372">Gestionat per l'USUARI</translation>
+<translation id="7702907602086592255">Domini</translation>
 <translation id="7704305437604973648">Tasca</translation>
 <translation id="7710568461918838723">&amp;Emet...</translation>
+<translation id="7714464543167945231">Certificat</translation>
 <translation id="7750228210027921155">Vídeo flotant</translation>
 <translation id="7760004034676677601">Aquesta pàgina d'inici és la que esperaves?</translation>
 <translation id="7771452384635174008">Disposició</translation>
@@ -398,6 +449,7 @@ Desa el fitxer de clau a una ubicació segura. El necessitaràs per crear versio
 <translation id="8032244173881942855">No es pot emetre la pestanya.</translation>
 <translation id="8071432093239591881">Imprimeix com a imatge</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />KB</translation>
+<translation id="8168435359814927499">Contingut</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Baixada en curs} other {Baixades en curs}}</translation>
 <translation id="8230134520748321204">Desa la contrasenya per a <ph name="ORIGIN" />?</translation>
@@ -407,6 +459,7 @@ Desa el fitxer de clau a una ubicació segura. El necessitaràs per crear versio
 <translation id="8413385045638830869">Pregunta-ho abans (recomanat)</translation>
 <translation id="8434480141477525001">Port de depuració NaCI</translation>
 <translation id="8449008133205184768">Enganxa i ajusta l'estil</translation>
+<translation id="8477384620836102176">&amp;General</translation>
 <translation id="8496717697661868878">Executa aquest complement</translation>
 <translation id="8512476990829870887">Finalitza el procés</translation>
 <translation id="8523493869875972733">Mantingues els canvis</translation>
@@ -419,6 +472,7 @@ Desa el fitxer de clau a una ubicació segura. El necessitaràs per crear versio
 <translation id="862750493060684461">Memòria cau CSS</translation>
 <translation id="8661290697478713397">Obre l'enllaç a una finestra pri&amp;vada</translation>
 <translation id="8664389313780386848">&amp;Visualitza el codi de la pàgina</translation>
+<translation id="8705331520020532516">Número de sèrie</translation>
 <translation id="8708000541097332489">Suprimeix en sortir</translation>
 <translation id="8714838604780058252">Gràfics de fons</translation>
 <translation id="8725066075913043281">Torna-ho a provar</translation>

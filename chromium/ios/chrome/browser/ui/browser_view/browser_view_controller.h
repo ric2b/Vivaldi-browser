@@ -9,9 +9,14 @@
 
 #import "base/ios/block_types.h"
 
+#import "base/memory/weak_ptr.h"
+#import "ios/chrome/browser/metrics/tab_usage_recorder_browser_agent.h"
+#import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
+#import "ios/chrome/browser/shared/public/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
 #import "ios/chrome/browser/ui/browser_view/key_commands_provider.h"
-#import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/browser_view/safe_area_provider.h"
+#import "ios/chrome/browser/ui/browser_view/tab_consumer.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_coordinator.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_consumer.h"
 #import "ios/chrome/browser/ui/ntp/logo_animation_controller.h"
@@ -20,17 +25,22 @@
 #import "ios/chrome/browser/ui/page_info/requirements/page_info_presentation.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
+#import "ios/chrome/browser/ui/toolbar_container/toolbar_container_coordinator.h"
+#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
+#import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web/web_navigation_ntp_delegate.h"
 #import "ios/chrome/browser/web/web_state_container_view_provider.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/public/provider/chrome/browser/voice_search/voice_search_controller.h"
 
 // Vivaldi
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/web/public/web_state.h"
 // End Vivaldi
 
 @protocol ApplicationCommands;
-class Browser;
 @class BookmarksCoordinator;
 @class BrowserContainerViewController;
 @protocol BrowserCoordinatorCommands;
@@ -45,22 +55,29 @@ class FullscreenController;
 @class NewTabPageCoordinator;
 @class LensCoordinator;
 @protocol OmniboxCommands;
+class PagePlaceholderBrowserAgent;
 @protocol PopupMenuCommands;
 @class PopupMenuCoordinator;
 // TODO(crbug.com/1328039): Remove all use of the prerender service from BVC
 @protocol PopupMenuUIUpdating;
 class PrerenderService;
 @class PrimaryToolbarCoordinator;
+@class SafeAreaProvider;
 @class SecondaryToolbarCoordinator;
 @class SideSwipeController;
-@protocol SnackbarCommands;
 @class TabStripCoordinator;
 @class TabStripLegacyCoordinator;
+class TabUsageRecorderBrowserAgent;
 @protocol TextZoomCommands;
 @class ToolbarAccessoryPresenter;
-@protocol ToolbarCommands;
+@class ToolbarContainerCoordinator;
 @protocol IncognitoReauthCommands;
+@class LayoutGuideCenter;
 @protocol LoadQueryCommands;
+class UrlLoadingBrowserAgent;
+class UrlLoadingNotifierBrowserAgent;
+@protocol VoiceSearchController;
+class WebNavigationBrowserAgent;
 
 // Vivaldi
 @class PanelInteractionController;
@@ -84,14 +101,22 @@ typedef struct {
   id<TextZoomCommands> textZoomHandler;
   id<HelpCommands> helpHandler;
   id<PopupMenuCommands> popupMenuCommandsHandler;
-  id<SnackbarCommands> snackbarCommandsHandler;
   id<ApplicationCommands> applicationCommandsHandler;
   id<BrowserCoordinatorCommands> browserCoordinatorCommandsHandler;
   id<FindInPageCommands> findInPageCommandsHandler;
-  id<ToolbarCommands> toolbarCommandsHandler;
   id<LoadQueryCommands> loadQueryCommandsHandler;
+  LayoutGuideCenter* layoutGuideCenter;
   id<OmniboxCommands> omniboxCommandsHandler;
   BOOL isOffTheRecord;
+  PagePlaceholderBrowserAgent* pagePlaceholderBrowserAgent;
+  UrlLoadingBrowserAgent* urlLoadingBrowserAgent;
+  UrlLoadingNotifierBrowserAgent* urlLoadingNotifierBrowserAgent;
+  id<VoiceSearchController> voiceSearchController;
+  TabUsageRecorderBrowserAgent* tabUsageRecorderBrowserAgent;
+  WebNavigationBrowserAgent* webNavigationBrowserAgent;
+  base::WeakPtr<WebStateList> webStateList;
+  ToolbarContainerCoordinator* secondaryToolbarContainerCoordinator;
+  SafeAreaProvider* safeAreaProvider;
 
   // Vivaldi
   PanelInteractionController* panelInteractionController;
@@ -105,6 +130,7 @@ typedef struct {
     : UIViewController <FindBarPresentationDelegate,
                         IncognitoReauthConsumer,
                         LogoAnimationControllerOwnerOwner,
+                        TabConsumer,
                         OmniboxFocusDelegate,
                         OmniboxPopupPresenterDelegate,
                         ThumbStripSupporting,
@@ -112,17 +138,16 @@ typedef struct {
                         BrowserCommands>
 
 // Initializes a new BVC.
-// `browser` is the browser whose tabs this BVC will display.
 // `browserContainerViewController` is the container object this BVC will exist
 // inside.
-// TODO(crbug.com/992582): Remove references to model objects -- including
-//   `browser` -- from this class.
-- (instancetype)initWithBrowser:(Browser*)browser
-    browserContainerViewController:
+// TODO(crbug.com/992582): Remove references to model objects from this class.
+- (instancetype)
+    initWithBrowserContainerViewController:
         (BrowserContainerViewController*)browserContainerViewController
-               keyCommandsProvider:(KeyCommandsProvider*)keyCommandsProvider
-                      dependencies:
-                          (BrowserViewControllerDependencies)dependencies
+                       keyCommandsProvider:
+                           (KeyCommandsProvider*)keyCommandsProvider
+                              dependencies:(BrowserViewControllerDependencies)
+                                               dependencies
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
@@ -133,10 +158,8 @@ typedef struct {
 // Handler for reauth commands.
 @property(nonatomic, weak) id<IncognitoReauthCommands> reauthHandler;
 
-// TODO(crbug.com/1329104): Move voice search controller/coordinator to
-// BrowserCoordinator, remove this as a public property. Returns whether or not
-// text to speech is playing.
-@property(nonatomic, assign, readonly, getter=isPlayingTTS) BOOL playingTTS;
+// Whether web usage is enabled for the WebStates in `self.browser`.
+@property(nonatomic) BOOL webUsageEnabled;
 
 // The container used for infobar banner overlays.
 @property(nonatomic, strong)
@@ -171,13 +194,6 @@ typedef struct {
 // with.
 - (void)appendTabAddedCompletion:(ProceduralBlock)tabAddedCompletion;
 
-// Informs the BVC that a new foreground tab is about to be opened. This is
-// intended to be called before setWebUsageSuspended:NO in cases where a new tab
-// is about to appear in order to allow the BVC to avoid doing unnecessary work
-// related to showing the previously selected tab.
-// TODO(crbug.com/1329109): Move this to a browser agent or web event mediator.
-- (void)expectNewForegroundTab;
-
 // Shows the voice search UI.
 - (void)startVoiceSearch;
 
@@ -187,9 +203,11 @@ typedef struct {
 - (void)displayCurrentTab;
 
 // Vivaldi
-- (ChromeBrowserState*)getBrowserState;
-- (NSString* const)getSnackbarCategory;
+// Browser state of this BVC.
+@property(nonatomic,assign) ChromeBrowserState* browserState;
+
 - (web::WebState*)getCurrentWebState;
+- (void)openWhatsNewTab;
 // End Vivaldi
 
 @end

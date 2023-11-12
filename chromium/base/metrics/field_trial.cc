@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_param_associator.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -31,6 +32,10 @@
 
 #if !BUILDFLAG(IS_IOS)
 #include "base/process/launch.h"
+#endif
+
+#if BUILDFLAG(IS_MAC)
+#include "base/mac/mach_port_rendezvous.h"
 #endif
 
 // On POSIX, the fd is shared using the mapping in GlobalDescriptors.
@@ -65,14 +70,14 @@ const char kActivationMarker = '*';
 // Constants for the field trial allocator.
 const char kAllocatorName[] = "FieldTrialAllocator";
 
-// We allocate 128 KiB to hold all the field trial data. This should be enough,
+// We allocate 256 KiB to hold all the field trial data. This should be enough,
 // as most people use 3 - 25 KiB for field trials (as of 11/25/2016).
-// This also doesn't allocate all 128 KiB at once -- the pages only get mapped
+// This also doesn't allocate all 256 KiB at once -- the pages only get mapped
 // to physical memory when they are touched. If the size of the allocated field
-// trials does get larger than 128 KiB, then we will drop some field trials in
+// trials does get larger than 256 KiB, then we will drop some field trials in
 // child processes, leading to an inconsistent view between browser and child
 // processes and possibly causing crashes (see crbug.com/661617).
-const size_t kFieldTrialAllocationSize = 128 << 10;  // 128 KiB
+const size_t kFieldTrialAllocationSize = 256 << 10;  // 256 KiB
 
 #if BUILDFLAG(IS_MAC)
 constexpr MachPortsForRendezvous::key_type kFieldTrialRendezvousKey = 'fldt';
@@ -367,13 +372,14 @@ FieldTrial* FieldTrial::CreateSimulatedFieldTrial(
     StringPiece default_group_name,
     double entropy_value) {
   return new FieldTrial(trial_name, total_probability, default_group_name,
-                        entropy_value);
+                        entropy_value, /*is_low_anonymity=*/false);
 }
 
 FieldTrial::FieldTrial(StringPiece trial_name,
                        const Probability total_probability,
                        StringPiece default_group_name,
-                       double entropy_value)
+                       double entropy_value,
+                       bool is_low_anonymity)
     : trial_name_(trial_name),
       divisor_(total_probability),
       default_group_name_(default_group_name),
@@ -384,7 +390,8 @@ FieldTrial::FieldTrial(StringPiece trial_name,
       forced_(false),
       group_reported_(false),
       trial_registered_(false),
-      ref_(FieldTrialList::FieldTrialAllocator::kReferenceNull) {
+      ref_(FieldTrialList::FieldTrialAllocator::kReferenceNull),
+      is_low_anonymity_(is_low_anonymity) {
   DCHECK_GT(total_probability, 0);
   DCHECK(!trial_name_.empty());
   DCHECK(!default_group_name_.empty())
@@ -467,7 +474,8 @@ FieldTrial* FieldTrialList::FactoryGetFieldTrial(
     FieldTrial::Probability total_probability,
     StringPiece default_group_name,
     const FieldTrial::EntropyProvider& entropy_provider,
-    uint32_t randomization_seed) {
+    uint32_t randomization_seed,
+    bool is_low_anonymity) {
   // Check if the field trial has already been created in some other way.
   FieldTrial* existing_trial = Find(trial_name);
   if (existing_trial) {
@@ -478,8 +486,9 @@ FieldTrial* FieldTrialList::FactoryGetFieldTrial(
   double entropy_value =
       entropy_provider.GetEntropyForTrial(trial_name, randomization_seed);
 
-  FieldTrial* field_trial = new FieldTrial(trial_name, total_probability,
-                                           default_group_name, entropy_value);
+  FieldTrial* field_trial =
+      new FieldTrial(trial_name, total_probability, default_group_name,
+                     entropy_value, is_low_anonymity);
   FieldTrialList::Register(field_trial, /*is_randomized_trial=*/true);
   return field_trial;
 }
@@ -604,16 +613,8 @@ std::string FieldTrialList::AllParamsToString(EscapeDataFunc encode_data_func) {
 // static
 void FieldTrialList::GetActiveFieldTrialGroups(
     FieldTrial::ActiveGroups* active_groups) {
-  DCHECK(active_groups->empty());
-  if (!global_)
-    return;
-  AutoLock auto_lock(global_->lock_);
-
-  for (const auto& registered : global_->registered_) {
-    FieldTrial::ActiveGroup active_group;
-    if (registered.second->GetActiveGroup(&active_group))
-      active_groups->push_back(active_group);
-  }
+  GetActiveFieldTrialGroupsInternal(active_groups,
+                                    /*include_low_anonymity=*/false);
 }
 
 // static
@@ -642,6 +643,9 @@ void FieldTrialList::GetInitiallyActiveFieldTrials(
   DCHECK(global_->create_trials_from_command_line_called_);
 
   if (!global_->field_trial_allocator_) {
+    UmaHistogramBoolean(
+        "ChildProcess.FieldTrials.GetInitiallyActiveFieldTrials.FromString",
+        true);
     GetActiveFieldTrialGroupsFromString(
         command_line.GetSwitchValueASCII(switches::kForceFieldTrials),
         active_groups);
@@ -738,6 +742,8 @@ void FieldTrialList::PopulateLaunchOptionsWithFieldTrialState(
 
   // If the readonly handle did not get created, fall back to flags.
   if (!global_ || !global_->readonly_allocator_region_.IsValid()) {
+    UmaHistogramBoolean(
+        "ChildProcess.FieldTrials.PopulateLaunchOptions.CommandLine", true);
     AddFeatureAndFieldTrialFlags(command_line);
     return;
   }
@@ -795,7 +801,8 @@ FieldTrialList::DuplicateFieldTrialSharedMemoryForTesting() {
 
 // static
 FieldTrial* FieldTrialList::CreateFieldTrial(StringPiece name,
-                                             StringPiece group_name) {
+                                             StringPiece group_name,
+                                             bool is_low_anonymity) {
   DCHECK(global_);
   DCHECK_GE(name.size(), 0u);
   DCHECK_GE(group_name.size(), 0u);
@@ -811,7 +818,8 @@ FieldTrial* FieldTrialList::CreateFieldTrial(StringPiece name,
     return field_trial;
   }
   const int kTotalProbability = 100;
-  field_trial = new FieldTrial(name, kTotalProbability, group_name, 0);
+  field_trial =
+      new FieldTrial(name, kTotalProbability, group_name, 0, is_low_anonymity);
   // The group choice will be finalized in this method. So
   // |is_randomized_trial| should be false.
   FieldTrialList::Register(field_trial, /*is_randomized_trial=*/false);
@@ -822,21 +830,14 @@ FieldTrial* FieldTrialList::CreateFieldTrial(StringPiece name,
 
 // static
 bool FieldTrialList::AddObserver(Observer* observer) {
-  if (!global_)
-    return false;
-  AutoLock auto_lock(global_->lock_);
-  global_->observers_.push_back(observer);
-  return true;
+  return FieldTrialList::AddObserverInternal(observer,
+                                             /*include_low_anonymity=*/false);
 }
 
 // static
 void FieldTrialList::RemoveObserver(Observer* observer) {
-  if (!global_)
-    return;
-  AutoLock auto_lock(global_->lock_);
-  Erase(global_->observers_, observer);
-  DCHECK_EQ(global_->num_ongoing_notify_field_trial_group_selection_calls_, 0)
-      << "Cannot call RemoveObserver while accessing FieldTrial::group_name().";
+  FieldTrialList::RemoveObserverInternal(observer,
+                                         /*include_low_anonymity=*/false);
 }
 
 // static
@@ -845,6 +846,7 @@ void FieldTrialList::NotifyFieldTrialGroupSelection(FieldTrial* field_trial) {
     return;
 
   std::vector<Observer*> local_observers;
+  std::vector<Observer*> local_observers_including_low_anonymity;
 
   {
     AutoLock auto_lock(global_->lock_);
@@ -860,9 +862,18 @@ void FieldTrialList::NotifyFieldTrialGroupSelection(FieldTrial* field_trial) {
     // lock. Since removing observers concurrently with this method is
     // disallowed, pointers should remain valid while observers are notified.
     local_observers = global_->observers_;
+    local_observers_including_low_anonymity =
+        global_->observers_including_low_anonymity_;
   }
 
-  for (Observer* observer : local_observers) {
+  if (!field_trial->is_low_anonymity_) {
+    for (Observer* observer : local_observers) {
+      observer->OnFieldTrialGroupFinalized(field_trial->trial_name(),
+                                           field_trial->group_name_internal());
+    }
+  }
+
+  for (Observer* observer : local_observers_including_low_anonymity) {
     observer->OnFieldTrialGroupFinalized(field_trial->trial_name(),
                                          field_trial->group_name_internal());
   }
@@ -963,6 +974,9 @@ void FieldTrialList::ClearParamsFromSharedMemoryForTesting() {
     size_t total_size = sizeof(FieldTrial::FieldTrialEntry) + pickle.size();
     FieldTrial::FieldTrialEntry* new_entry =
         allocator->New<FieldTrial::FieldTrialEntry>(total_size);
+    DCHECK(new_entry)
+        << "Failed to allocate a new entry, likely because the allocator is "
+           "full. Consider increasing kFieldTrialAllocationSize.";
     subtle::NoBarrier_Store(&new_entry->activated,
                             subtle::NoBarrier_Load(&prev_entry->activated));
     new_entry->pickle_size = pickle.size();
@@ -1384,6 +1398,57 @@ bool FieldTrialList::CreateTrialsFromFieldTrialStatesInternal(
     }
   }
   return true;
+}
+
+// static
+void FieldTrialList::GetActiveFieldTrialGroupsInternal(
+    FieldTrial::ActiveGroups* active_groups,
+    bool include_low_anonymity) {
+  DCHECK(active_groups->empty());
+  if (!global_) {
+    return;
+  }
+  AutoLock auto_lock(global_->lock_);
+
+  for (const auto& registered : global_->registered_) {
+    const FieldTrial& trial = *registered.second;
+    FieldTrial::ActiveGroup active_group;
+    if ((include_low_anonymity || !trial.is_low_anonymity_) &&
+        trial.GetActiveGroup(&active_group)) {
+      active_groups->push_back(active_group);
+    }
+  }
+}
+
+// static
+bool FieldTrialList::AddObserverInternal(Observer* observer,
+                                         bool include_low_anonymity) {
+  if (!global_) {
+    return false;
+  }
+  AutoLock auto_lock(global_->lock_);
+  if (include_low_anonymity) {
+    global_->observers_including_low_anonymity_.push_back(observer);
+  } else {
+    global_->observers_.push_back(observer);
+  }
+  return true;
+}
+
+// static
+void FieldTrialList::RemoveObserverInternal(Observer* observer,
+                                            bool include_low_anonymity) {
+  if (!global_) {
+    return;
+  }
+  AutoLock auto_lock(global_->lock_);
+  if (include_low_anonymity) {
+    Erase(global_->observers_including_low_anonymity_, observer);
+  } else {
+    Erase(global_->observers_, observer);
+  }
+  DCHECK_EQ(global_->num_ongoing_notify_field_trial_group_selection_calls_, 0)
+      << "Cannot call RemoveObserver while accessing FieldTrial::group_name().";
 }
 
 }  // namespace base

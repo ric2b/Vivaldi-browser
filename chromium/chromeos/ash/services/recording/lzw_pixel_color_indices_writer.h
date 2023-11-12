@@ -9,19 +9,12 @@
 #include <vector>
 
 #include "base/containers/flat_map.h"
+#include "base/memory/raw_ptr.h"
+#include "chromeos/ash/services/recording/gif_encoding_types.h"
 
 namespace recording {
 
 class GifFileWriter;
-
-// The specs specify a maximum of 12 bits per LZW compression code, so a 16-bit
-// unsigned integer is perfect for this type.
-using LzwCode = uint16_t;
-
-// We have a maximum of 256 colors in our color palette, so an 8-bit unsigned
-// integer is enough to represent indices to these colors.
-using ColorIndex = uint8_t;
-using ColorIndices = std::vector<ColorIndex>;
 
 // Background: After color quantization is performed on the video frame, we end
 // up with:
@@ -116,7 +109,7 @@ class LzwPixelColorIndicesWriter {
 
   // Used for writing bytes to the GIF file and takes care of handling IO errors
   // and disk space / DriveFS quota issues.
-  GifFileWriter* const gif_file_writer_;
+  const raw_ptr<GifFileWriter, ExperimentalAsh> gif_file_writer_;
 
   // See above background, we don't write the generated LZW codes directly to
   // the file, however we try to do further compression by writing only the bits

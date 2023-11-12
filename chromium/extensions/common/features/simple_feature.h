@@ -17,6 +17,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
 #include "components/version_info/version_info.h"
+#include "extensions/common/context_data.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature.h"
 #include "extensions/common/manifest.h"
@@ -58,30 +59,36 @@ class SimpleFeature : public Feature {
 
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
-                                    int context_id) const {
-    return IsAvailableToContext(extension, context, GURL(), context_id);
+                                    int context_id,
+                                    const ContextData& context_data) const {
+    return IsAvailableToContext(extension, context, GURL(), context_id,
+                                context_data);
   }
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
                                     Platform platform,
-                                    int context_id) const {
+                                    int context_id,
+                                    const ContextData& context_data) const {
     return IsAvailableToContextImpl(extension, context, GURL(), platform,
-                                    context_id, true);
+                                    context_id, true, context_data);
   }
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
                                     const GURL& url,
-                                    int context_id) const {
+                                    int context_id,
+                                    const ContextData& context_data) const {
     return IsAvailableToContextImpl(extension, context, url,
-                                    GetCurrentPlatform(), context_id, true);
+                                    GetCurrentPlatform(), context_id, true,
+                                    context_data);
   }
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
                                     const GURL& url,
                                     Platform platform,
-                                    int context_id) const {
+                                    int context_id,
+                                    const ContextData& context_data) const {
     return IsAvailableToContextImpl(extension, context, url, platform,
-                                    context_id, true);
+                                    context_id, true, context_data);
   }
 
   // extension::Feature:
@@ -96,6 +103,9 @@ class SimpleFeature : public Feature {
   bool IsIdInBlocklist(const HashedExtensionId& hashed_id) const override;
   bool IsIdInAllowlist(const HashedExtensionId& hashed_id) const override;
   bool RequiresDelegatedAvailabilityCheck() const override;
+  void SetDelegatedAvailabilityCheckHandler(
+      DelegatedAvailabilityCheckHandler handler) override;
+  bool HasDelegatedAvailabilityCheckHandler() const override;
 
   static bool IsIdInArray(const std::string& extension_id,
                           const char* const array[],
@@ -215,7 +225,8 @@ class SimpleFeature : public Feature {
       const GURL& url,
       Platform platform,
       int context_id,
-      bool check_developer_mode) const override;
+      bool check_developer_mode,
+      const ContextData& context_data) const override;
 
  private:
   friend struct FeatureComparator;
@@ -233,6 +244,7 @@ class SimpleFeature : public Feature {
       const GURL& url,
       Feature::Platform platform,
       int context_id,
+      const ContextData* context_data,
       const Feature* feature);
 
   static bool IsIdInList(const HashedExtensionId& hashed_id,
@@ -272,6 +284,17 @@ class SimpleFeature : public Feature {
                                       const GURL& url,
                                       bool is_for_service_worker) const;
 
+  // Returns the result of running the installed delegated availability check
+  // handler.
+  Availability RunDelegatedAvailabilityCheck(
+      const Extension* extension,
+      Context context,
+      const GURL& url,
+      Platform platform,
+      int context_id,
+      bool check_developer_mode,
+      const ContextData& context_data) const;
+
   // For clarity and consistency, we handle the default value of each of these
   // members the same way: it matches everything. It is up to the higher level
   // code that reads Features out of static data to validate that data and set
@@ -296,7 +319,11 @@ class SimpleFeature : public Feature {
   // then cached.
   mutable absl::optional<bool> ignore_channel_;
 
-  bool component_extensions_auto_granted_;
+  // If set and the feature needs to be overridden, this is the handler used
+  // to perform the override availability check.
+  DelegatedAvailabilityCheckHandler delegated_availability_check_handler_;
+
+  bool component_extensions_auto_granted_{false};
   bool is_internal_;
   bool requires_delegated_availability_check_{false};
   bool developer_mode_only_{false};

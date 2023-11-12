@@ -45,8 +45,7 @@ class VivaldiSyncServiceAndroid : public syncer::SyncServiceObserver {
   void OnSyncCycleCompleted(syncer::SyncService* sync) override;
 
  private:
-  Profile* profile_;
-  vivaldi::VivaldiSyncServiceImpl* sync_service_;
+  raw_ptr<vivaldi::VivaldiSyncServiceImpl> sync_service_;
 
   void SendCycleData();
 

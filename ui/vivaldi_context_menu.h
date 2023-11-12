@@ -78,7 +78,7 @@ struct MenubarMenuParams {
   MenubarMenuEntry* GetSibling(int id);
   // All menus that can be opened.
   std::vector<MenubarMenuEntry> siblings;
-  Delegate* delegate;
+  const raw_ptr<Delegate> delegate;
 };
 
 struct BookmarkMenuContainerEntry {
@@ -123,7 +123,7 @@ struct BookmarkMenuContainer {
   // Where extra items (like 'Add Active Tab') be shown wrt the list.
   Edge edge;
   // Delegate that will execute commands
-  Delegate* delegate;
+  const raw_ptr<Delegate> delegate;
 };
 
 VivaldiContextMenu* CreateVivaldiContextMenu(content::WebContents* web_contents,

@@ -72,14 +72,6 @@ SyncUserSettingsImpl::SyncUserSettingsImpl(
 
 SyncUserSettingsImpl::~SyncUserSettingsImpl() = default;
 
-bool SyncUserSettingsImpl::IsSyncRequested() const {
-  return prefs_->IsSyncRequested();
-}
-
-void SyncUserSettingsImpl::SetSyncRequested(bool requested) {
-  prefs_->SetSyncRequested(requested);
-}
-
 bool SyncUserSettingsImpl::IsFirstSetupComplete() const {
   return prefs_->IsFirstSetupComplete();
 }
@@ -117,6 +109,11 @@ UserSelectableTypeSet SyncUserSettingsImpl::GetSelectedTypes() const {
   return types;
 }
 
+bool SyncUserSettingsImpl::IsTypeManagedByPolicy(
+    UserSelectableType type) const {
+  return prefs_->IsTypeManagedByPolicy(type);
+}
+
 void SyncUserSettingsImpl::SetSelectedTypes(bool sync_everything,
                                             UserSelectableTypeSet types) {
   UserSelectableTypeSet registered_types = GetRegisteredSelectableTypes();
@@ -148,6 +145,11 @@ UserSelectableOsTypeSet SyncUserSettingsImpl::GetSelectedOsTypes() const {
   UserSelectableOsTypeSet types = prefs_->GetSelectedOsTypes();
   types.RetainAll(GetRegisteredSelectableOsTypes());
   return types;
+}
+
+bool SyncUserSettingsImpl::IsOsTypeManagedByPolicy(
+    UserSelectableOsType type) const {
+  return prefs_->IsOsTypeManagedByPolicy(type);
 }
 
 void SyncUserSettingsImpl::SetSelectedOsTypes(bool sync_all_os_types,
@@ -260,10 +262,6 @@ std::unique_ptr<Nigori> SyncUserSettingsImpl::GetDecryptionNigoriKey() const {
   return crypto_->GetDecryptionNigoriKey();
 }
 
-void SyncUserSettingsImpl::SetSyncRequestedIfNotSetExplicitly() {
-  prefs_->SetSyncRequestedIfNotSetExplicitly();
-}
-
 ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
   ModelTypeSet types = UserSelectableTypesToModelTypes(GetSelectedTypes());
   types.PutAll(AlwaysPreferredUserTypes());
@@ -272,7 +270,7 @@ ModelTypeSet SyncUserSettingsImpl::GetPreferredDataTypes() const {
 #endif
   types.RetainAll(registered_model_types_);
 
-  static_assert(45 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(46 + 1 /* notes */ == GetNumModelTypes(),
                 "If adding a new sync data type, update the list below below if"
                 " you want to disable the new data type for local sync.");
   types.PutAll(ControlTypes());

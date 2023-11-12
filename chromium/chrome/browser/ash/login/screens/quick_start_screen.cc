@@ -51,11 +51,6 @@ void QuickStartScreen::ShowImpl() {
       LoginDisplayHost::default_host()->GetQuickStartBootstrapController();
   bootstrap_controller_->AddObserver(this);
   bootstrap_controller_->StartAdvertising();
-
-  // TODO(b/234655072): Delete the call to SavePhoneInstanceID() here once the
-  // Gaia Credentials flow is complete. This is for testing with the
-  // kQuickStartPhoneInstanceIDSwitch only.
-  SavePhoneInstanceID();
 }
 
 void QuickStartScreen::HideImpl() {
@@ -90,6 +85,7 @@ void QuickStartScreen::OnStatusChanged(
       SavePhoneInstanceID();
       return;
     }
+    case Step::PIN_VERIFICATION:
     case Step::NONE:
     case Step::ERROR:
     case Step::ADVERTISING:

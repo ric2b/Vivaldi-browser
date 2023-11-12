@@ -110,10 +110,7 @@ class VIEWS_EXPORT RootView : public View,
   ui::EventTarget* GetRootForEvent(ui::Event* event) override;
   ui::EventTargeter* GetDefaultEventTargeter() override;
   void OnEventProcessingStarted(ui::Event* event) override;
-  void OnEventProcessingFinished(
-      ui::Event* event,
-      ui::EventTarget* target,
-      const ui::EventDispatchDetails& details) override;
+  void OnEventProcessingFinished(ui::Event* event) override;
 
   // View:
   const Widget* GetWidget() const override;
@@ -169,7 +166,7 @@ class VIEWS_EXPORT RootView : public View,
 
   // Returns announce_view_, a hidden view used to make announcements to the
   // screen reader via an alert or live region update.
-  raw_ptr<AnnounceTextView> GetOrCreateAnnounceView();
+  AnnounceTextView* GetOrCreateAnnounceView();
 
   // |view| is the view receiving |event|. This function sends the event to all
   // the Views up the hierarchy that has |notify_enter_exit_on_child_| flag

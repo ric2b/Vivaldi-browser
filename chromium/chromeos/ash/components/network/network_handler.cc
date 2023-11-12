@@ -15,11 +15,14 @@
 #include "chromeos/ash/components/network/cellular_metrics_logger.h"
 #include "chromeos/ash/components/network/cellular_policy_handler.h"
 #include "chromeos/ash/components/network/client_cert_resolver.h"
+#include "chromeos/ash/components/network/enterprise_managed_metadata_store.h"
 #include "chromeos/ash/components/network/geolocation_handler.h"
 #include "chromeos/ash/components/network/hidden_network_handler.h"
 #include "chromeos/ash/components/network/hotspot_allowed_flag_handler.h"
 #include "chromeos/ash/components/network/hotspot_capabilities_provider.h"
+#include "chromeos/ash/components/network/hotspot_configuration_handler.h"
 #include "chromeos/ash/components/network/hotspot_controller.h"
+#include "chromeos/ash/components/network/hotspot_enabled_state_notifier.h"
 #include "chromeos/ash/components/network/hotspot_state_handler.h"
 #include "chromeos/ash/components/network/managed_cellular_pref_handler.h"
 #include "chromeos/ash/components/network/managed_network_configuration_handler_impl.h"
@@ -27,10 +30,11 @@
 #include "chromeos/ash/components/network/metrics/connection_info_metrics_logger.h"
 #include "chromeos/ash/components/network/metrics/esim_policy_login_metrics_logger.h"
 #include "chromeos/ash/components/network/metrics/hidden_network_metrics_helper.h"
+#include "chromeos/ash/components/network/metrics/hotspot_feature_usage_metrics.h"
+#include "chromeos/ash/components/network/metrics/hotspot_metrics_helper.h"
 #include "chromeos/ash/components/network/metrics/vpn_network_metrics_helper.h"
 #include "chromeos/ash/components/network/network_activation_handler_impl.h"
 #include "chromeos/ash/components/network/network_cert_loader.h"
-#include "chromeos/ash/components/network/network_cert_migrator.h"
 #include "chromeos/ash/components/network/network_certificate_handler.h"
 #include "chromeos/ash/components/network/network_configuration_handler.h"
 #include "chromeos/ash/components/network/network_connection_handler_impl.h"
@@ -51,8 +55,8 @@ namespace ash {
 static NetworkHandler* g_network_handler = NULL;
 
 NetworkHandler::NetworkHandler()
-    : task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {
-  network_state_handler_.reset(new NetworkStateHandler());
+    : task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
+      network_state_handler_(new NetworkStateHandler()) {
   network_device_handler_.reset(new NetworkDeviceHandlerImpl());
   cellular_inhibitor_.reset(new CellularInhibitor());
   cellular_esim_profile_handler_.reset(new CellularESimProfileHandlerImpl());
@@ -78,12 +82,17 @@ NetworkHandler::NetworkHandler()
     hidden_network_handler_.reset(new HiddenNetworkHandler());
   }
   if (ash::features::IsHotspotEnabled()) {
+    enterprise_managed_metadata_store_.reset(
+        new EnterpriseManagedMetadataStore());
     hotspot_capabilities_provider_.reset(new HotspotCapabilitiesProvider());
+    hotspot_feature_usage_metrics_.reset(new HotspotFeatureUsageMetrics());
     hotspot_state_handler_.reset(new HotspotStateHandler());
     hotspot_controller_.reset(new HotspotController());
+    hotspot_configuration_handler_.reset(new HotspotConfigurationHandler());
+    hotspot_enabled_state_notifier_.reset(new HotspotEnabledStateNotifier());
+    hotspot_metrics_helper_.reset(new HotspotMetricsHelper());
   }
   if (NetworkCertLoader::IsInitialized()) {
-    network_cert_migrator_.reset(new NetworkCertMigrator());
     client_cert_resolver_.reset(new ClientCertResolver());
     auto_connect_handler_.reset(new AutoConnectHandler());
     network_certificate_handler_.reset(new NetworkCertificateHandler());
@@ -145,10 +154,22 @@ void NetworkHandler::Init() {
   hotspot_allowed_flag_handler_->Init();
   if (ash::features::IsHotspotEnabled()) {
     hotspot_capabilities_provider_->Init(network_state_handler_.get());
+    hotspot_feature_usage_metrics_->Init(
+        enterprise_managed_metadata_store_.get(),
+        hotspot_capabilities_provider_.get());
     hotspot_state_handler_->Init();
     hotspot_controller_->Init(hotspot_capabilities_provider_.get(),
+                              hotspot_feature_usage_metrics_.get(),
                               hotspot_state_handler_.get(),
                               technology_state_controller_.get());
+    hotspot_configuration_handler_->Init(hotspot_controller_.get());
+    hotspot_enabled_state_notifier_->Init(hotspot_state_handler_.get(),
+                                          hotspot_controller_.get());
+    hotspot_metrics_helper_->Init(
+        enterprise_managed_metadata_store_.get(),
+        hotspot_capabilities_provider_.get(), hotspot_state_handler_.get(),
+        hotspot_controller_.get(), hotspot_configuration_handler_.get(),
+        hotspot_enabled_state_notifier_.get(), network_state_handler_.get());
   }
   managed_cellular_pref_handler_->Init(network_state_handler_.get());
   esim_policy_login_metrics_logger_->Init(
@@ -162,8 +183,6 @@ void NetworkHandler::Init() {
                                         network_connection_handler_.get());
   hidden_network_metrics_helper_->Init(network_configuration_handler_.get());
   vpn_network_metrics_helper_->Init(network_configuration_handler_.get());
-  if (network_cert_migrator_)
-    network_cert_migrator_->Init(network_state_handler_.get());
   if (client_cert_resolver_) {
     client_cert_resolver_->Init(network_state_handler_.get(),
                                 managed_network_configuration_handler_.get());
@@ -234,8 +253,9 @@ void NetworkHandler::ShutdownPrefServices() {
   cellular_esim_profile_handler_->SetDevicePrefs(nullptr);
   managed_cellular_pref_handler_->SetDevicePrefs(nullptr);
   ui_proxy_config_service_.reset();
-  if (base::FeatureList::IsEnabled(ash::features::kHiddenNetworkMigration))
+  if (base::FeatureList::IsEnabled(ash::features::kHiddenNetworkMigration)) {
     hidden_network_handler_->SetNetworkMetadataStore(nullptr);
+  }
   network_metadata_store_.reset();
 }
 
@@ -298,8 +318,16 @@ HotspotController* NetworkHandler::hotspot_controller() {
   return hotspot_controller_.get();
 }
 
+HotspotConfigurationHandler* NetworkHandler::hotspot_configuration_handler() {
+  return hotspot_configuration_handler_.get();
+}
+
 HotspotStateHandler* NetworkHandler::hotspot_state_handler() {
   return hotspot_state_handler_.get();
+}
+
+HotspotEnabledStateNotifier* NetworkHandler::hotspot_enabled_state_notifier() {
+  return hotspot_enabled_state_notifier_.get();
 }
 
 ManagedCellularPrefHandler* NetworkHandler::managed_cellular_pref_handler() {
@@ -358,6 +386,10 @@ void NetworkHandler::SetIsEnterpriseManaged(bool is_enterprise_managed) {
     // Call SetIsEnterpriseManaged on ESimPolicyLoginMetricsLogger, this only
     // gets called when the primary user logs in.
     esim_policy_login_metrics_logger_->SetIsEnterpriseManaged(
+        is_enterprise_managed);
+  }
+  if (ash::features::IsHotspotEnabled()) {
+    enterprise_managed_metadata_store_->set_is_enterprise_managed(
         is_enterprise_managed);
   }
 }

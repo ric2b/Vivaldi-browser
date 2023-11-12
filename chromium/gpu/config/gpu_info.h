@@ -24,6 +24,7 @@
 #include "gpu/vulkan/buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gl/gl_implementation.h"
 #include "ui/gl/gpu_preference.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -279,11 +280,11 @@ struct GPU_EXPORT GPUInfo {
     CHROME_LUID luid;
 #endif  // BUILDFLAG(IS_WIN)
 
-#if BUILDFLAG(IS_MAC)
-    // The registry ID of an IOGraphicsAccelerator2 or AGXAccelerator matches
-    // the ID used for GPU selection by ANGLE_platform_angle_device_id.
-    uint64_t register_id = 0ULL;
-#endif  // BUILDFLAG(IS_MAC)
+    // The 64-bit ID used for GPU selection by ANGLE_platform_angle_device_id.
+    // On Mac this matches the registry ID of an IOGraphicsAccelerator2 or
+    // AGXAccelerator.
+    // On Windows this matches the concatenated LUID.
+    uint64_t system_device_id = 0ULL;
 
     // Whether this GPU is the currently used one.
     // Currently this field is only supported and meaningful on OS X and on
@@ -366,12 +367,6 @@ struct GPU_EXPORT GPUInfo {
   // See machine_model_name's comment.
   std::string machine_model_version;
 
-  // The GL implementation.
-  std::string gl_implementation;
-
-  // The ANGLE implementation.
-  std::string angle_implementation;
-
   // The DisplayType requested from ANGLE.
   std::string display_type;
 
@@ -400,7 +395,7 @@ struct GPU_EXPORT GPUInfo {
   // reset detection or notification not available.
   uint32_t gl_reset_notification_strategy;
 
-  bool software_rendering;
+  gl::GLImplementationParts gl_implementation_parts;
 
   // Empty means unknown. Defined on X11 as
   // - "1" means indirect (versions can't be all zero)

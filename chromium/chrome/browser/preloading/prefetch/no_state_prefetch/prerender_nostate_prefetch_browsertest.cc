@@ -23,6 +23,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/history_test_utils.h"
@@ -39,7 +40,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -285,7 +285,9 @@ class NewTabNavigationOrSwapObserver : public TabStripModelObserver,
 class NoStatePrefetchBrowserTest
     : public test_utils::PrerenderInProcessBrowserTest {
  public:
-  NoStatePrefetchBrowserTest() {}
+  NoStatePrefetchBrowserTest() {
+    feature_list_.InitAndDisableFeature(features::kPreloadingConfig);
+  }
 
   NoStatePrefetchBrowserTest(const NoStatePrefetchBrowserTest&) = delete;
   NoStatePrefetchBrowserTest& operator=(const NoStatePrefetchBrowserTest&) =
@@ -474,21 +476,47 @@ class NoStatePrefetchBrowserTest
   std::unique_ptr<base::ScopedMockElapsedTimersForTest> test_timer_;
 };
 
+enum SplitCacheTestCase {
+  kSplitCacheDisabled,
+  kSplitCacheEnabledDoublePlusBitKeyed,
+  kSplitCacheEnabledTripleKeyed,
+};
+
 class NoStatePrefetchBrowserTestHttpCache
     : public NoStatePrefetchBrowserTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<SplitCacheTestCase> {
  protected:
-  void SetUp() override {
-    bool split_cache_by_network_isolation_key = GetParam();
-    if (split_cache_by_network_isolation_key) {
-      feature_list_.InitAndEnableFeature(
+  NoStatePrefetchBrowserTestHttpCache() { InitializeScopedFeatureList(); }
+
+  void InitializeScopedFeatureList() {
+    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
+    if (IsSplitCacheEnabled()) {
+      enabled_features.push_back(
           net::features::kSplitCacheByNetworkIsolationKey);
     } else {
-      feature_list_.InitAndDisableFeature(
+      disabled_features.push_back(
           net::features::kSplitCacheByNetworkIsolationKey);
     }
 
-    NoStatePrefetchBrowserTest::SetUp();
+    if (IsCrossSiteFlagSchemeEnabled()) {
+      enabled_features.push_back(
+          net::features::kEnableCrossSiteFlagNetworkIsolationKey);
+    } else {
+      disabled_features.push_back(
+          net::features::kEnableCrossSiteFlagNetworkIsolationKey);
+    }
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
+  }
+
+  bool IsSplitCacheEnabled() const {
+    return GetParam() != SplitCacheTestCase::kSplitCacheDisabled;
+  }
+
+  bool IsCrossSiteFlagSchemeEnabled() const {
+    return GetParam() ==
+           SplitCacheTestCase::kSplitCacheEnabledDoublePlusBitKeyed;
   }
 
  private:
@@ -523,13 +551,31 @@ IN_PROC_BROWSER_TEST_P(
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       current_browser(), src_server()->GetURL(prerender_path)));
 
-  WaitForRequestCount(image_src, 2);
+  if (IsCrossSiteFlagSchemeEnabled()) {
+    // If the NIK only uses an is-cross-site bit instead of the full frame site
+    // in the cache key, then the two iframes will share a cache partition.
+    WaitForRequestCount(image_src, 1);
+  } else {
+    WaitForRequestCount(image_src, 2);
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(
     All,
     NoStatePrefetchBrowserTestHttpCache_DefaultAndAppendFrameOrigin,
-    ::testing::Values(true));
+    testing::ValuesIn(
+        {SplitCacheTestCase::kSplitCacheEnabledTripleKeyed,
+         SplitCacheTestCase::kSplitCacheEnabledDoublePlusBitKeyed}),
+    [](const testing::TestParamInfo<SplitCacheTestCase>& info) {
+      switch (info.param) {
+        case (SplitCacheTestCase::kSplitCacheDisabled):
+          return "NotUsedForThisTestSuite";
+        case (SplitCacheTestCase::kSplitCacheEnabledTripleKeyed):
+          return "TripleKeyed";
+        case (SplitCacheTestCase::kSplitCacheEnabledDoublePlusBitKeyed):
+          return "DoublePlusBitKeyed";
+      }
+    });
 
 // Checks that a page is correctly prefetched in the case of a
 // <link rel=prerender> tag and the JavaScript on the page is not executed.
@@ -638,7 +684,20 @@ IN_PROC_BROWSER_TEST_P(
 INSTANTIATE_TEST_SUITE_P(
     All,
     NoStatePrefetchBrowserTestHttpCache_DefaultAndDoubleKeyedHttpCache,
-    ::testing::Bool());
+    testing::ValuesIn(
+        {SplitCacheTestCase::kSplitCacheDisabled,
+         SplitCacheTestCase::kSplitCacheEnabledTripleKeyed,
+         SplitCacheTestCase::kSplitCacheEnabledDoublePlusBitKeyed}),
+    [](const testing::TestParamInfo<SplitCacheTestCase>& info) {
+      switch (info.param) {
+        case (SplitCacheTestCase::kSplitCacheDisabled):
+          return "SplitCacheDisabled";
+        case (SplitCacheTestCase::kSplitCacheEnabledTripleKeyed):
+          return "TripleKeyed";
+        case (SplitCacheTestCase::kSplitCacheEnabledDoublePlusBitKeyed):
+          return "DoublePlusBitKeyed";
+      }
+    });
 
 // Checks that the expected resource types are fetched via NoState Prefetch.
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchAllResourceTypes) {
@@ -910,10 +969,11 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(
       current_browser()->tab_strip_model()->GetActiveWebContents()));
 
-  std::string html_content;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      current_browser()->tab_strip_model()->GetActiveWebContents(),
-      "domAutomationController.send(document.body.innerHTML)", &html_content));
+  std::string html_content =
+      content::EvalJs(
+          current_browser()->tab_strip_model()->GetActiveWebContents(),
+          "document.body.innerHTML")
+          .ExtractString();
 
   // For any cross origin navigation (including prerender), SameSite Strict
   // cookies should not be sent, but Lax should.
@@ -939,10 +999,11 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
   EXPECT_TRUE(WaitForLoadStop(
       current_browser()->tab_strip_model()->GetActiveWebContents()));
 
-  std::string html_content;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
-      current_browser()->tab_strip_model()->GetActiveWebContents(),
-      "domAutomationController.send(document.body.innerHTML)", &html_content));
+  std::string html_content =
+      content::EvalJs(
+          current_browser()->tab_strip_model()->GetActiveWebContents(),
+          "document.body.innerHTML")
+          .ExtractString();
 
   // For any same origin navigation (including prerender), SameSite Strict
   // cookies should not be sent, but Lax should.
@@ -1775,12 +1836,11 @@ class NoStatePrefetchOmniboxBrowserTest : public NoStatePrefetchBrowserTest {
 
  protected:
   void SetUp() override {
-    // kOmniboxTriggerForPrerender2 or kOmniboxTriggerForNoStatePrefetch can be
-    // enabled in the experiment. Explicitly disable
-    // kOmniboxTriggerForPrerender2 as fieldtrial tests run with a config to
-    // enable it by default.
-    feature_list_.InitWithFeatures({},
-                                   {features::kOmniboxTriggerForPrerender2});
+    // kOmniboxTriggerForNoStatePrefetch or kOmniboxTriggerForPrerender2 can be
+    // enabled in the experiment. Explicitly enable and disable these flags.
+    feature_list_.InitWithFeatures(
+        {features::kOmniboxTriggerForNoStatePrefetch},
+        {features::kOmniboxTriggerForPrerender2});
 
     NoStatePrefetchBrowserTest::SetUp();
   }

@@ -57,7 +57,7 @@ FileManagerPrivateAddMountFunction::~FileManagerPrivateAddMountFunction() =
 
 ExtensionFunction::ResponseAction FileManagerPrivateAddMountFunction::Run() {
   using file_manager_private::AddMount::Params;
-  const std::unique_ptr<Params> params = Params::Create(args());
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
@@ -88,8 +88,9 @@ ExtensionFunction::ResponseAction FileManagerPrivateAddMountFunction::Run() {
 
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (params->password)
+  if (params->password) {
     options_.push_back("password=" + *params->password);
+  }
 
   extension_ = base::ToLowerASCII(path_.Extension());
 
@@ -140,7 +141,7 @@ FileManagerPrivateCancelMountingFunction::
 ExtensionFunction::ResponseAction
 FileManagerPrivateCancelMountingFunction::Run() {
   using file_manager_private::CancelMounting::Params;
-  const std::unique_ptr<Params> params = Params::Create(args());
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
@@ -170,7 +171,7 @@ FileManagerPrivateCancelMountingFunction::Run() {
 void FileManagerPrivateCancelMountingFunction::OnCancelled(
     ash::MountError error) {
   if (error == ash::MountError::kSuccess) {
-    Respond(WithArguments());
+    Respond(NoArguments());
   } else {
     Respond(Error(file_manager_private::ToString(
         file_manager::MountErrorToMountCompletedStatus(error))));
@@ -179,7 +180,7 @@ void FileManagerPrivateCancelMountingFunction::OnCancelled(
 
 ExtensionFunction::ResponseAction FileManagerPrivateRemoveMountFunction::Run() {
   using file_manager_private::RemoveMount::Params;
-  const std::unique_ptr<Params> params(Params::Create(args()));
+  const absl::optional<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params);
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
@@ -222,7 +223,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateRemoveMountFunction::Run() {
                                    volume->file_system_id())) {
         return RespondNow(Error("Unmount failed"));
       }
-      return RespondNow(WithArguments());
+      return RespondNow(NoArguments());
     }
 
     case file_manager::VOLUME_TYPE_CROSTINI:
@@ -235,7 +236,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateRemoveMountFunction::Run() {
     case file_manager::VOLUME_TYPE_SMB:
       ash::smb_client::SmbServiceFactory::Get(profile)->UnmountSmbFs(
           volume->mount_path());
-      return RespondNow(WithArguments());
+      return RespondNow(NoArguments());
 
     case file_manager::VOLUME_TYPE_TESTING:
       file_manager::VolumeManager::Get(profile)
@@ -244,7 +245,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateRemoveMountFunction::Run() {
               volume->is_read_only(), volume->storage_device_path(),
               volume->drive_label(), volume->file_system_type());
 
-      return RespondNow(WithArguments());
+      return RespondNow(NoArguments());
 
     case file_manager::VOLUME_TYPE_GUEST_OS:
       // TODO(crbug/1293229): Figure out if we need to support unmounting. I'm
@@ -260,7 +261,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateRemoveMountFunction::Run() {
 
 void FileManagerPrivateRemoveMountFunction::OnSshFsUnmounted(bool ok) {
   if (ok) {
-    Respond(WithArguments());
+    Respond(NoArguments());
   } else {
     Respond(Error(file_manager_private::ToString(
         api::file_manager_private::MOUNT_ERROR_UNKNOWN_ERROR)));
@@ -270,7 +271,7 @@ void FileManagerPrivateRemoveMountFunction::OnSshFsUnmounted(bool ok) {
 void FileManagerPrivateRemoveMountFunction::OnDiskUnmounted(
     ash::MountError error) {
   if (error == ash::MountError::kSuccess) {
-    Respond(WithArguments());
+    Respond(NoArguments());
   } else {
     Respond(Error(file_manager_private::ToString(
         file_manager::MountErrorToMountCompletedStatus(error))));
@@ -279,8 +280,9 @@ void FileManagerPrivateRemoveMountFunction::OnDiskUnmounted(
 
 ExtensionFunction::ResponseAction
 FileManagerPrivateGetVolumeMetadataListFunction::Run() {
-  if (!args().empty())
+  if (!args().empty()) {
     return RespondNow(Error("Invalid arguments"));
+  }
 
   Profile* const profile = Profile::FromBrowserContext(browser_context());
   const std::vector<base::WeakPtr<file_manager::Volume>>& volume_list =
@@ -293,8 +295,9 @@ FileManagerPrivateGetVolumeMetadataListFunction::Run() {
     file_manager::util::VolumeToVolumeMetadata(profile, *volume,
                                                &volume_metadata);
     result.push_back(std::move(volume_metadata));
-    if (!log_string.empty())
+    if (!log_string.empty()) {
       log_string += ", ";
+    }
     log_string += volume->mount_path().AsUTF8Unsafe();
   }
 

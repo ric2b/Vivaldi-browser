@@ -12,10 +12,10 @@
 #include "base/memory/weak_ptr.h"
 #include "content/browser/preloading/prefetch/no_vary_search_helper.h"
 #include "content/browser/preloading/prefetch/prefetch_type.h"
+#include "content/browser/preloading/speculation_host_devtools_observer.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/document_user_data.h"
 #include "content/public/browser/prefetch_metrics.h"
-#include "content/public/browser/speculation_host_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "net/http/http_no_vary_search_data.h"
 #include "third_party/blink/public/mojom/speculation_rules/speculation_rules.mojom.h"
@@ -46,6 +46,8 @@ class CONTENT_EXPORT PrefetchDocumentManager
   // prefetched. Any candidates that can be prefetched are removed from
   // |candidates|, and a prefetch for the URL of the candidate is started.
   void ProcessCandidates(
+      const absl::optional<base::UnguessableToken>&
+          initiator_devtools_navigation_token,
       std::vector<blink::mojom::SpeculationCandidatePtr>& candidates,
       base::WeakPtr<SpeculationHostDevToolsObserver> devtools_observer);
 
@@ -54,7 +56,13 @@ class CONTENT_EXPORT PrefetchDocumentManager
       const GURL& url,
       const PrefetchType& prefetch_type,
       const blink::mojom::Referrer& referrer,
+      const network::mojom::NoVarySearchPtr& no_vary_search_expected,
       base::WeakPtr<SpeculationHostDevToolsObserver> devtools_observer);
+
+  absl::optional<base::UnguessableToken> initiator_devtools_navigation_token()
+      const {
+    return initiator_devtools_navigation_token_;
+  }
 
   // Releases ownership of the |PrefetchContainer| associated with |url|. The
   // prefetch is removed from |owned_prefetches_|, but a pointer to it remains
@@ -98,6 +106,10 @@ class CONTENT_EXPORT PrefetchDocumentManager
 
   void EnableNoVarySearchSupport();
 
+  base::WeakPtr<PrefetchDocumentManager> GetWeakPtr() {
+    return weak_method_factory_.GetWeakPtr();
+  }
+
   static void SetPrefetchServiceForTesting(PrefetchService* prefetch_service);
 
  private:
@@ -129,9 +141,13 @@ class CONTENT_EXPORT PrefetchDocumentManager
 
   // NoVarySearchHelper that manages NoVarySearch data and url matching.
   // Used through the getter GetNoVarySearchHelper
-  NoVarySearchHelper no_vary_search_helper_;
+  scoped_refptr<NoVarySearchHelper> no_vary_search_helper_;
 
   bool no_vary_search_support_enabled_ = false;
+
+  // A DevTools token used to identify document. And this token is expected to
+  // be initialized when ProcessCandidates is called by PreloadingDecider.
+  absl::optional<base::UnguessableToken> initiator_devtools_navigation_token_;
 
   base::WeakPtrFactory<PrefetchDocumentManager> weak_method_factory_{this};
 

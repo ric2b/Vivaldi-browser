@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/chromeos/styles/cros_tokens_color_mappings.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/public/cpp/notifier_id.h"
 #include "ui/message_center/views/message_view.h"
@@ -140,6 +141,8 @@ NotificationTypeDetailed GetNotificationTypeForCrosSystemPriority(
   // infer it from the accent color.
   absl::optional<SkColor> accent_color =
       notification.rich_notification_data().accent_color;
+  absl::optional<ui::ColorId> accent_color_id =
+      notification.rich_notification_data().accent_color_id;
   message_center::SystemNotificationWarningLevel warning_level =
       message_center::SystemNotificationWarningLevel::NORMAL;
   if (accent_color.has_value()) {
@@ -147,6 +150,13 @@ NotificationTypeDetailed GetNotificationTypeForCrosSystemPriority(
       warning_level = message_center::SystemNotificationWarningLevel::WARNING;
     } else if (accent_color.value() ==
                kSystemNotificationColorCriticalWarning) {
+      warning_level =
+          message_center::SystemNotificationWarningLevel::CRITICAL_WARNING;
+    }
+  } else if (accent_color_id.has_value()) {
+    if (accent_color_id.value() == cros_tokens::kCrosSysWarning) {
+      warning_level = message_center::SystemNotificationWarningLevel::WARNING;
+    } else if (accent_color_id.value() == cros_tokens::kCrosSysError) {
       warning_level =
           message_center::SystemNotificationWarningLevel::CRITICAL_WARNING;
     }
@@ -355,14 +365,21 @@ void LogClickedBody(const std::string& notification_id, bool is_popup) {
           notification_id);
   if (!notification)
     return;
-  auto type = GetNotificationType(*notification);
+  const auto type = GetNotificationType(*notification);
+  const auto catalog_name = notification->notifier_id().catalog_name;
 
   if (is_popup) {
-    UMA_HISTOGRAM_ENUMERATION("Notifications.Cros.Actions.Popup.ClickedBody",
-                              type);
+    base::UmaHistogramEnumeration(
+        "Notifications.Cros.Actions.Popup.ClickedBody", type);
+    base::UmaHistogramEnumeration(
+        "Notifications.Cros.Actions.Popup.ClickedBody.GroupedByCatalog",
+        catalog_name);
   } else {
-    UMA_HISTOGRAM_ENUMERATION("Notifications.Cros.Actions.Tray.ClickedBody",
-                              type);
+    base::UmaHistogramEnumeration("Notifications.Cros.Actions.Tray.ClickedBody",
+                                  type);
+    base::UmaHistogramEnumeration(
+        "Notifications.Cros.Actions.Tray.ClickedBody.GroupedByCatalog",
+        catalog_name);
   }
 
   // If notification's delegate is null, that means the notification is not
@@ -559,6 +576,9 @@ void LogNotificationAdded(const std::string& notification_id) {
 
   base::UmaHistogramEnumeration("Notifications.Cros.Actions.NotificationAdded",
                                 GetNotificationType(*notification));
+  base::UmaHistogramEnumeration(
+      "Notifications.Cros.Actions.NotificationAdded.GroupedByCatalog",
+      notification->notifier_id().catalog_name);
 
   auto notification_view_type = GetNotificationViewType(notification);
   if (!notification_view_type)

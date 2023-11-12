@@ -10,6 +10,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
+#include "base/unguessable_token.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -25,17 +26,29 @@
 #include "components/global_media_controls/public/media_item_producer.h"
 #include "components/global_media_controls/public/media_item_ui.h"
 #include "components/media_message_center/media_notification_item.h"
+#include "components/media_router/browser/media_router_factory.h"
 #include "components/media_router/browser/presentation/start_presentation_context.h"
 #include "components/media_router/browser/presentation/web_contents_presentation_manager.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/audio_service.h"
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/media_session_service.h"
 #include "media/base/media_switches.h"
 #include "media/remoting/device_capability_checker.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/crosapi/crosapi_ash.h"
+#include "chrome/browser/ash/crosapi/crosapi_manager.h"
+#include "chrome/browser/ash/crosapi/media_ui_ash.h"
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/crosapi/mojom/media_ui.mojom.h"
+#include "chromeos/lacros/lacros_service.h"
+#endif
 
 namespace mojom {
 using global_media_controls::mojom::DeviceListClient;
@@ -77,9 +90,9 @@ bool IsWebContentsFocused(content::WebContents* web_contents) {
 
 }  // namespace
 
-MediaNotificationService::MediaNotificationService(
-    Profile* profile,
-    bool show_from_all_profiles) {
+MediaNotificationService::MediaNotificationService(Profile* profile,
+                                                   bool show_from_all_profiles)
+    : receiver_(this) {
   item_manager_ = global_media_controls::MediaItemManager::Create();
 
   absl::optional<base::UnguessableToken> source_id;
@@ -123,7 +136,58 @@ MediaNotificationService::MediaNotificationService(
     item_manager_->AddItemProducer(
         presentation_request_notification_producer_.get());
   }
+
+  // On Lacros-enabled Chrome OS, MediaNotificationService instances exist on
+  // both Ash and Lacros sides. The Ash-side instance manages Casting from
+  // System Web Apps.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  crosapi::CrosapiManager::Get()
+      ->crosapi_ash()
+      ->media_ui_ash()
+      ->RegisterDeviceService(content::MediaSession::GetSourceId(profile),
+                              receiver_.BindNewPipeAndPassRemote());
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (chromeos::LacrosService::Get()->IsAvailable<crosapi::mojom::MediaUI>()) {
+    chromeos::LacrosService::Get()
+        ->GetRemote<crosapi::mojom::MediaUI>()
+        ->RegisterDeviceService(content::MediaSession::GetSourceId(profile),
+                                receiver_.BindNewPipeAndPassRemote());
+  }
+#endif
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+void MediaNotificationService::ShowDialogAsh(
+    std::unique_ptr<media_router::StartPresentationContext> context) {
+  context_ = std::move(context);
+  auto* web_contents = content::WebContents::FromRenderFrameHost(
+      content::RenderFrameHost::FromID(
+          context_->presentation_request().render_frame_host_id));
+  auto routes = media_router::WebContentsPresentationManager::Get(web_contents)
+                    ->GetMediaRoutes();
+
+  std::string item_id;
+  if (!routes.empty()) {
+    // It is possible for a sender page to connect to two routes. For the
+    // sake of the Zenith dialog, only one notification is needed.
+    item_id = routes.begin()->media_route_id();
+  } else {
+    item_id = content::MediaSession::GetRequestIdFromWebContents(web_contents)
+                  .ToString();
+  }
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  crosapi::CrosapiManager::Get()
+      ->crosapi_ash()
+      ->media_ui_ash()
+      ->ShowDevicePicker(item_id);
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  chromeos::LacrosService::Get()
+      ->GetRemote<crosapi::mojom::MediaUI>()
+      ->ShowDevicePicker(item_id);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 MediaNotificationService::~MediaNotificationService() {
   media_session_item_producer_->RemoveObserver(this);
@@ -131,9 +195,9 @@ MediaNotificationService::~MediaNotificationService() {
 }
 
 void MediaNotificationService::Shutdown() {
-  // |cast_notification_producer_| and
-  // |presentation_request_notification_producer_| depend on MediaRouter,
-  // which is another keyed service.
+  // `cast_notification_producer_` and
+  // `presentation_request_notification_producer_` depend on MediaRouter,
+  // which is another keyed service. So they must be destroyed here.
   if (cast_notification_producer_) {
     item_manager_->RemoveItemProducer(cast_notification_producer_.get());
   }
@@ -141,7 +205,6 @@ void MediaNotificationService::Shutdown() {
     item_manager_->RemoveItemProducer(
         presentation_request_notification_producer_.get());
   }
-
   cast_notification_producer_.reset();
   presentation_request_notification_producer_.reset();
 }
@@ -257,11 +320,14 @@ void MediaNotificationService::OnStartPresentationContextCreated(
     return;
   }
 
-  // If there exists a cast notification associated with |web_contents|,
-  // delete |context| because users should not start a new presentation at
-  // this time.
+  // If there exists a cast notification / tab mirroring session associated with
+  // `web_contents`, delete `context` because users should not start a new
+  // presentation at this time.
   if (HasCastNotificationsForWebContents(web_contents)) {
     CancelRequest(std::move(context), "A presentation has already started.");
+  } else if (HasTabMirroringSessionForWebContents(web_contents)) {
+    CancelRequest(std::move(context),
+                  "A tab mirroring session has already started.");
   } else if (HasActiveControllableSessionForWebContents(web_contents)) {
     // If there exists a media session notification associated with
     // |web_contents|, hold onto the context for later use.
@@ -374,9 +440,12 @@ void MediaNotificationService::CreateCastDeviceListHost(
                 weak_ptr_factory_.GetWeakPtr(), session_id.value())
           : base::DoNothing();
   mojo::MakeSelfOwnedReceiver(
-      std::make_unique<CastDeviceListHost>(std::move(dialog_controller),
-                                           std::move(client_remote),
-                                           std::move(media_remoting_callback_)),
+      std::make_unique<CastDeviceListHost>(
+          std::move(dialog_controller), std::move(client_remote),
+          std::move(media_remoting_callback_),
+          base::BindRepeating(
+              &global_media_controls::MediaItemManager::HideDialog,
+              item_manager_->GetWeakPtr())),
       std::move(host_receiver));
 }
 
@@ -390,6 +459,31 @@ bool MediaNotificationService::HasCastNotificationsForWebContents(
   return !media_router::WebContentsPresentationManager::Get(web_contents)
               ->GetMediaRoutes()
               .empty();
+}
+
+bool MediaNotificationService::HasTabMirroringSessionForWebContents(
+    content::WebContents* web_contents) const {
+  if (!base::FeatureList::IsEnabled(
+          media_router::kFallbackToAudioTabMirroring)) {
+    return false;
+  }
+
+  // Return true if there exists a tab mirroring session associated with
+  // `web_contents`.
+  const int item_tab_id =
+      sessions::SessionTabHelper::IdForTab(web_contents).id();
+  for (const auto& route :
+       media_router::MediaRouterFactory::GetApiForBrowserContext(
+           web_contents->GetBrowserContext())
+           ->GetCurrentRoutes()) {
+    media_router::MediaSource media_source = route.media_source();
+    if (media_source.IsTabMirroringSource() &&
+        media_source.TabId().has_value() &&
+        media_source.TabId().value() == item_tab_id) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool MediaNotificationService::HasActiveControllableSessionForWebContents(

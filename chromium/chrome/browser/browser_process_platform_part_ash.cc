@@ -7,8 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
-#include "ash/components/arc/enterprise/snapshot_hours_policy_service.h"
 #include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/memory/singleton.h"
@@ -35,6 +33,7 @@
 #include "chrome/browser/component_updater/metadata_table_chromeos.h"
 #include "chrome/common/chrome_switches.h"
 #include "chromeos/ash/components/account_manager/account_manager_factory.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_flusher.h"
 #include "chromeos/ash/components/dbus/debug_daemon/debug_daemon_client.h"
 #include "chromeos/ash/components/geolocation/simple_geolocation_provider.h"
 #include "chromeos/ash/components/timezone/timezone_resolver.h"
@@ -78,6 +77,7 @@ class PrimaryProfileServicesShutdownNotifierFactory
 
 BrowserProcessPlatformPart::BrowserProcessPlatformPart()
     : created_profile_helper_(false),
+      browser_context_flusher_(std::make_unique<ash::BrowserContextFlusher>()),
       account_manager_factory_(std::make_unique<ash::AccountManagerFactory>()) {
 }
 
@@ -101,11 +101,22 @@ void BrowserProcessPlatformPart::ShutdownAutomaticRebootManager() {
 void BrowserProcessPlatformPart::InitializeChromeUserManager() {
   DCHECK(!chrome_user_manager_);
   chrome_user_manager_ = ash::ChromeUserManagerImpl::CreateChromeUserManager();
+  // DeviceCloudPolicyManager outlives UserManager, so on its initialization,
+  // there's no way to start observing UserManager. This is the earliest timing
+  // to do so.
+  if (auto* policy_manager =
+          browser_policy_connector_ash()->GetDeviceCloudPolicyManager()) {
+    policy_manager->OnUserManagerCreated(chrome_user_manager_.get());
+  }
   chrome_user_manager_->Initialize();
 }
 
 void BrowserProcessPlatformPart::DestroyChromeUserManager() {
   chrome_user_manager_->Destroy();
+  if (auto* policy_manager =
+          browser_policy_connector_ash()->GetDeviceCloudPolicyManager()) {
+    policy_manager->OnUserManagerWillBeDestroyed(chrome_user_manager_.get());
+  }
   chrome_user_manager_.reset();
 }
 
@@ -187,19 +198,9 @@ void BrowserProcessPlatformPart::InitializePrimaryProfileServices(
     ash::SystemProxyManager::Get()->StartObservingPrimaryProfilePrefs(
         primary_profile);
   }
-
-  auto* manager = arc::data_snapshotd::ArcDataSnapshotdManager::Get();
-  if (manager) {
-    manager->policy_service()->StartObservingPrimaryProfilePrefs(
-        primary_profile->GetPrefs());
-  }
 }
 
 void BrowserProcessPlatformPart::ShutdownPrimaryProfileServices() {
-  auto* manager = arc::data_snapshotd::ArcDataSnapshotdManager::Get();
-  if (manager)
-    manager->policy_service()->StopObservingPrimaryProfilePrefs();
-
   if (ash::SystemProxyManager::Get())
     ash::SystemProxyManager::Get()->StopObservingPrimaryProfilePrefs();
   in_session_password_change_manager_.reset();
@@ -245,9 +246,7 @@ ash::TimeZoneResolver* BrowserProcessPlatformPart::GetTimezoneResolver() {
         g_browser_process->shared_url_loader_factory(),
         ash::SimpleGeolocationProvider::DefaultGeolocationProviderURL(),
         base::BindRepeating(&ash::system::ApplyTimeZone),
-        base::BindRepeating(
-            &ash::DelayNetworkCall,
-            base::Milliseconds(ash::kDefaultNetworkRetryDelayMS)),
+        base::BindRepeating(&ash::DelayNetworkCall),
         g_browser_process->local_state());
   }
   return timezone_resolver_.get();
@@ -258,6 +257,7 @@ void BrowserProcessPlatformPart::StartTearDown() {
   // destroyed.  So we need to destroy |timezone_resolver_| here.
   timezone_resolver_.reset();
   profile_helper_.reset();
+  browser_context_flusher_.reset();
 }
 
 void BrowserProcessPlatformPart::AttemptExit(bool try_to_quit_application) {

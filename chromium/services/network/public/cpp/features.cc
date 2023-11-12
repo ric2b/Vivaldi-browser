@@ -103,6 +103,13 @@ BASE_FEATURE(kDnsOverHttpsUpgrade,
 #endif
 );
 
+// When enabled, the requests in a third party context to domains included in
+// the Masked Domain List Component will use the Privacy Proxy to shield the
+// client's IP.
+BASE_FEATURE(kMaskedDomainList,
+             "MaskedDomainList",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If this feature is enabled, the mDNS responder service responds to queries
 // for TXT records associated with
 // "Generated-Names._mdns_name_generator._udp.local" with a list of generated
@@ -124,9 +131,9 @@ BASE_FEATURE(kMdnsResponderGeneratedNameListing,
 //   //services/network/public/cpp/corb/README.md
 //
 // Implementing ORB in Chromium is tracked in https://crbug.com/1178928
-BASE_FEATURE(kOpaqueResponseBlockingV01,
+BASE_FEATURE(kOpaqueResponseBlockingV01_LAUNCHED,
              "OpaqueResponseBlockingV01",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables ORB blocked responses being treated as errors (according to the spec)
 // rather than the current, CORB-style handling of injecting an empty response.
@@ -144,12 +151,22 @@ BASE_FEATURE(kAttributionReportingTriggerAttestation,
              "AttributionReportingTriggerAttestation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Gate access to Attribution Reporting cross app and web APIs that allow
+// registering with a native attribution API.
+BASE_FEATURE(kAttributionReportingCrossAppWeb,
+             "AttributionReportingCrossAppWeb",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Enables preprocessing requests with the Private State Tokens API Fetch flags
 // set, and handling their responses, according to the protocol.
 // (See https://github.com/WICG/trust-token-api.)
 BASE_FEATURE(kPrivateStateTokens,
-             "TrustTokens",
+             "PrivateStateTokens",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Secondary flag used by the FLEDGE ads experiment in the interim before
+// PSTs are fully rolled out to stable.
+BASE_FEATURE(kFledgePst, "TrustTokens", base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Determines which Trust Tokens operations require the TrustTokens origin trial
 // active in order to be used. This is runtime-configurable so that the Trust
@@ -177,7 +194,7 @@ const base::FeatureParam<TrustTokenOriginTrialSpec>::Option
          "only-issuance-requires-origin-trial"}};
 const base::FeatureParam<TrustTokenOriginTrialSpec>
     kTrustTokenOperationsRequiringOriginTrial{
-        &kPrivateStateTokens, "TrustTokenOperationsRequiringOriginTrial",
+        &kFledgePst, "TrustTokenOperationsRequiringOriginTrial",
         TrustTokenOriginTrialSpec::kOriginTrialNotRequired,
         &kTrustTokenOriginTrialParamOptions};
 
@@ -286,6 +303,10 @@ BASE_FEATURE(kReduceAcceptLanguage,
              "ReduceAcceptLanguage",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+const base::FeatureParam<base::TimeDelta> kReduceAcceptLanguageCacheDuration{
+    &kReduceAcceptLanguage, "reduce-accept-language-cache-duration",
+    base::Days(30)};
+
 // Gate access to ReduceAcceptLanguage origin trial major code. Currently, All
 // ReduceAcceptLanguage feature codes are guarded by the feature flag
 // kReduceAcceptLanguage. This feature flag is useful on control major code
@@ -306,30 +327,10 @@ BASE_FEATURE(kPrivateNetworkAccessPreflightShortTimeout,
              "PrivateNetworkAccessPreflightShortTimeout",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Allow secure same origin PNA requests without preflights.
-BASE_FEATURE(kPrivateNetworkAccessAllowSecureSameOrigin,
-             "PrivateNetworkAccessAllowSecureSameOrigin",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Handle the Link header DNS prefetches and preconnects in the network
-// service instead of through the renderer process.
-BASE_FEATURE(kPreconnectInNetworkService,
-             "PreconnectInNetworkService",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When prefetching a DNS record ensures that the scheme and port are taken
-// into account so that the cache (which is keyed by scheme and port) works
-// for subsequent queries.
-BASE_FEATURE(kPrefetchDNSWithURL,
-             "PrefetchDNSWithURL",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-constexpr base::FeatureParam<bool> kPrefetchDNSWithURLAllAnchorElements{
-    &kPrefetchDNSWithURL, "prefetch_dns_all_anchor_elements", true};
-
-// Preconnect to a new origin right when a redirect starts.
-BASE_FEATURE(kPreconnectOnRedirect,
-             "PreconnectOnRedirect",
+// Allow potentially trustworthy same origin local network requests without
+// preflights.
+BASE_FEATURE(kLocalNetworkAccessAllowPotentiallyTrustworthySameOrigin,
+             "LocalNetworkAccessAllowPotentiallyTrustworthySameOrigin",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables out-of-process system DNS resolution so getaddrinfo() never runs in
@@ -347,8 +348,8 @@ BASE_FEATURE(kPrefetchNoVarySearch,
              "PrefetchNoVarySearch",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPrerender2ContentSecurityPolicyExtensions,
-             "Prerender2ContentSecurityPolicyExtensions",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kLessChattyNetworkService,
+             "LessChattyNetworkService",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace network::features

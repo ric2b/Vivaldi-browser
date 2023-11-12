@@ -36,6 +36,7 @@
 #include "components/omnibox/browser/keyword_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
+#include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/remote_suggestions_service.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/omnibox/browser/url_prefix.h"
@@ -53,6 +54,7 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
@@ -99,14 +101,6 @@ bool HasMultipleWords(const std::u16string& text) {
     }
   }
   return false;
-}
-
-bool IsSearchEngineGoogle(const TemplateURL* template_url,
-                          const AutocompleteProviderClient* client) {
-  return template_url && client &&
-         template_url->GetEngineType(
-             client->GetTemplateURLService()->search_terms_data()) ==
-             SEARCH_ENGINE_GOOGLE;
 }
 
 }  // namespace
@@ -209,7 +203,7 @@ bool SearchProvider::CanSendCurrentPageURLInRequest(
   // Don't bother sending the URL of an NTP page; it's not useful. The server
   // already gets equivalent information in the form of the current page
   // classification.
-  return !IsNTPPage(page_classification) &&
+  return !omnibox::IsNTPPage(page_classification) &&
          CanSendPageURLInRequest(current_page_url) &&
          CanSendSuggestRequestWithURL(current_page_url, template_url,
                                       search_terms_data, client);
@@ -442,10 +436,10 @@ void SearchProvider::OnURLLoadComplete(
   // request we're constructing here for on-focus inputs.
   if (input_.focus_type() == metrics::OmniboxFocusType::INTERACTION_DEFAULT &&
       request_succeeded) {
-    std::unique_ptr<base::Value> data(
+    absl::optional<base::Value::List> data =
         SearchSuggestionParser::DeserializeJsonData(
             SearchSuggestionParser::ExtractJsonData(source,
-                                                    std::move(response_body))));
+                                                    std::move(response_body)));
     if (data) {
       SearchSuggestionParser::Results* results =
           is_keyword ? &keyword_results_ : &default_results_;
@@ -455,7 +449,7 @@ void SearchProvider::OnURLLoadComplete(
       if (results_updated) {
         if (results->field_trial_triggered) {
           client()->GetOmniboxTriggeredFeatureService()->FeatureTriggered(
-              OmniboxTriggeredFeatureService::Feature::kRemoteSearchFeature);
+              metrics::OmniboxEventProto_Feature_REMOTE_SEARCH_FEATURE);
         }
         SortResults(is_keyword, results);
         PrefetchImages(results);
@@ -530,7 +524,9 @@ void SearchProvider::LogLoadComplete(bool success, bool is_keyword) {
   // only about the common case: the Google default provider used in
   // non-keyword mode.
   if (!is_keyword &&
-      IsSearchEngineGoogle(providers_.GetDefaultProviderURL(), client())) {
+      search::TemplateURLIsGoogle(
+          providers_.GetDefaultProviderURL(),
+          client()->GetTemplateURLService()->search_terms_data())) {
     const base::TimeDelta elapsed_time =
         base::TimeTicks::Now() - time_suggest_request_sent_;
     if (success) {
@@ -682,8 +678,7 @@ void SearchProvider::DoHistoryQuery(bool minimal_changes) {
         default_url->id(), input_.text());
     if (enumerator) {
       history::GetAutocompleteSearchTermsFromEnumerator(
-          *enumerator, num_matches, /*ignore_duplicate_visits=*/true,
-          history::SearchTermRankingPolicy::kRecency,
+          *enumerator, num_matches, history::SearchTermRankingPolicy::kRecency,
           &raw_default_history_results_);
     }
     DCHECK_LE(raw_default_history_results_.size(), num_matches);
@@ -694,8 +689,7 @@ void SearchProvider::DoHistoryQuery(bool minimal_changes) {
         keyword_url->id(), keyword_input_.text());
     if (enumerator) {
       history::GetAutocompleteSearchTermsFromEnumerator(
-          *enumerator, num_matches, /*ignore_duplicate_visits=*/true,
-          history::SearchTermRankingPolicy::kRecency,
+          *enumerator, num_matches, history::SearchTermRankingPolicy::kRecency,
           &raw_keyword_history_results_);
     }
     DCHECK_LE(raw_keyword_history_results_.size(), num_matches);

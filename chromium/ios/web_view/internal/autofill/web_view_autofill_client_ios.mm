@@ -276,23 +276,6 @@ void WebViewAutofillClientIOS::ScanCreditCard(CreditCardScanCallback callback) {
   NOTREACHED();
 }
 
-bool WebViewAutofillClientIOS::IsFastCheckoutSupported() {
-  return false;
-}
-
-bool WebViewAutofillClientIOS::TryToShowFastCheckout(
-    const FormData& form,
-    const FormFieldData& field,
-    base::WeakPtr<AutofillManager> autofill_manager) {
-  return false;
-}
-
-void WebViewAutofillClientIOS::HideFastCheckout(bool allow_further_runs) {}
-
-bool WebViewAutofillClientIOS::IsShowingFastCheckoutUI() {
-  return false;
-}
-
 bool WebViewAutofillClientIOS::IsTouchToFillCreditCardSupported() {
   return false;
 }
@@ -363,6 +346,11 @@ void WebViewAutofillClientIOS::PropagateAutofillPredictions(
                                                 driver))
                                                ->web_frame()];
 }
+
+void WebViewAutofillClientIOS::DidFillOrPreviewForm(
+    mojom::RendererFormDataAction action,
+    AutofillTriggerSource trigger_source,
+    bool is_refill) {}
 
 void WebViewAutofillClientIOS::DidFillOrPreviewField(
     const std::u16string& autofilled_value,

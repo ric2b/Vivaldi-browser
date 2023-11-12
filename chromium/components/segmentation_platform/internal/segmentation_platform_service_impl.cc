@@ -56,6 +56,11 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
       configs_(std::move(init_params->configs)),
       all_segment_ids_(GetAllSegmentIdsFromConfigs(configs_)),
       field_trial_register_(std::move(init_params->field_trial_register)),
+      field_trial_recorder_(
+          std::make_unique<FieldTrialRecorder>(field_trial_register_.get())),
+      prefs_migrator_(
+          std::make_unique<PrefsMigrator>(init_params->profile_prefs.get(),
+                                          configs_)),
       profile_prefs_(init_params->profile_prefs.get()),
       creation_time_(clock_->Now()) {
   base::UmaHistogramMediumTimes(
@@ -86,8 +91,8 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
           &SegmentationPlatformServiceImpl::OnModelRefreshNeeded,
           weak_ptr_factory_.GetWeakPtr()));
 
-  // TODO(ritikagup@): Move code for recording FieldTrialRegister into separate
-  // class when adding support for recording multi class output fields.
+  prefs_migrator_->MigrateOldPrefsToNewPrefs();
+
   cached_result_provider_ = std::make_unique<CachedResultProvider>(
       init_params->profile_prefs, configs_);
 
@@ -95,10 +100,16 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
       std::make_unique<ClientResultPrefs>(init_params->profile_prefs),
       init_params->clock);
 
+  field_trial_recorder_->RecordFieldTrialAtStartup(
+      configs_, cached_result_provider_.get());
+
   request_dispatcher_ = std::make_unique<RequestDispatcher>(
       configs_, cached_result_provider_.get());
 
   for (const auto& config : configs_) {
+    if (!metadata_utils::ConfigUsesLegacyOutput(config.get())) {
+      continue;
+    }
     segment_selectors_[config->segmentation_key] =
         std::make_unique<SegmentSelectorImpl>(
             storage_service_->segment_info_database(),
@@ -127,6 +138,9 @@ SegmentationPlatformServiceImpl::SegmentationPlatformServiceImpl(
       proto::CustomInput::FILL_SYNC_DEVICE_INFO,
       std::make_unique<processing::SyncDeviceInfoObserver>(
           init_params->device_info_tracker));
+
+  result_refresh_manager_ = std::make_unique<ResultRefreshManager>(
+      configs_, std::move(cached_result_writer_), platform_options_);
 }
 
 SegmentationPlatformServiceImpl::~SegmentationPlatformServiceImpl() {
@@ -243,6 +257,9 @@ void SegmentationPlatformServiceImpl::OnDatabaseInitialized(bool success) {
   for (auto& selector : segment_selectors_) {
     selector.second->OnPlatformInitialized(&execution_service_);
   }
+
+  result_refresh_manager_->RefreshModelResults(CreateSegmentResultProviders(),
+                                               &execution_service_);
 
   request_dispatcher_->OnPlatformInitialized(success, &execution_service_,
                                              CreateSegmentResultProviders());

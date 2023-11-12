@@ -45,10 +45,7 @@ VivaldiBookmarkMenuViews::VivaldiBookmarkMenuViews(
     const bookmarks::BookmarkNode* node,
     int offset,
     const gfx::Rect& button_rect)
-    : web_contents_(web_contents),
-      button_rect_(button_rect),
-      controller_(nullptr),
-      observer_(nullptr) {
+    : web_contents_(web_contents), button_rect_(button_rect) {
   Browser* browser = vivaldi::FindBrowserForEmbedderWebContents(web_contents_);
   if (browser) {
     int index = 0;

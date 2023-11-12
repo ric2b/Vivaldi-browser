@@ -117,7 +117,7 @@ bool ExtractRedemptionRecordsFromHeader(
 
     const net::structured_headers::Item& redemption_record_item =
         params_for_issuer.front().second;
-    if (!redemption_record_item.is_byte_sequence()) {
+    if (!redemption_record_item.is_string()) {
       *error_out = "Unexpected parameter value type for RR header list item";
       return false;
     }
@@ -160,7 +160,8 @@ TEST_F(TrustTokenRequestSigningHelperTest, ProvidesMajorVersionHeader) {
   EXPECT_EQ(result, mojom::TrustTokenOperationStatus::kOk);
   // This test's expectation should change whenever the supported Trust Tokens
   // major version changes.
-  EXPECT_THAT(*my_request, Header("Sec-Trust-Token-Version", "TrustTokenV3"));
+  EXPECT_THAT(*my_request, Header("Sec-Private-State-Token-Crypto-Version",
+                                  "PrivateStateTokenV3"));
 }
 
 // Test RR attachment:

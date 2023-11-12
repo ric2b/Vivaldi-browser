@@ -5,7 +5,14 @@
 #import "ios/chrome/browser/ui/omnibox/omnibox_suggestion_icon_util.h"
 
 #import "base/notreached.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -22,6 +29,11 @@ NSString* GetOmniboxSuggestionIconTypeAssetName(
     case OmniboxSuggestionIconType::kCalculator:
       return @"answer_calculator";
     case OmniboxSuggestionIconType::kDefaultFavicon:
+
+      if (IsVivaldiRunning())
+        return vNTPSDFallbackFavicon;
+      // End Vivaldi
+
       return @"favicon_fallback";
     case OmniboxSuggestionIconType::kSearch:
       return @"search";
@@ -43,6 +55,11 @@ NSString* GetOmniboxSuggestionIconTypeAssetName(
       return @"search";
     case OmniboxSuggestionIconType::kCount:
       NOTREACHED();
+
+      if (IsVivaldiRunning())
+        return vNTPSDFallbackFavicon;
+      // End Vivaldi
+
       return @"favicon_fallback";
   }
 }
@@ -98,6 +115,20 @@ UIImage* GetOmniboxSuggestionSymbol(OmniboxSuggestionIconType icon_type) {
       }
       break;
   }
+
+  // Vivaldi
+  switch (icon_type) {
+    case OmniboxSuggestionIconType::kDefaultFavicon:
+      return [[UIImage imageNamed:vNTPSDFallbackFavicon]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    case OmniboxSuggestionIconType::kCount:
+      NOTREACHED();
+      return [[UIImage imageNamed:vNTPSDFallbackFavicon]
+                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    default:
+      break;
+  }
+  // End Vivaldi
 
   if (default_symbol) {
     return DefaultSymbolWithPointSize(symbol_name, kSymbolSize);

@@ -121,7 +121,7 @@ class RulesIndex : public content::RenderProcessHostObserver {
 
   RulesBufferMap rules_buffers_;
   std::string rules_index_buffer_;
-  const flat::RulesIndex* const rules_index_;
+  const raw_ptr<const flat::RulesIndex> rules_index_;
   std::map<int, std::map<int, base::circular_deque<CachedActivation>>>
       cached_activations_;
 };

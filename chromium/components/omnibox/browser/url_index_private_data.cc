@@ -36,10 +36,12 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/omnibox/browser/in_memory_url_index.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/browser/omnibox_triggered_feature_service.h"
 #include "components/omnibox/browser/tailored_word_break_iterator.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/url_formatter/url_formatter.h"
+#include "third_party/metrics_proto/omnibox_event.pb.h"
 
 namespace {
 
@@ -122,7 +124,8 @@ ScoredHistoryMatches URLIndexPrivateData::HistoryItemsForTerms(
     const std::string& host_filter,
     size_t max_matches,
     bookmarks::BookmarkModel* bookmark_model,
-    TemplateURLService* template_url_service) {
+    TemplateURLService* template_url_service,
+    OmniboxTriggeredFeatureService* triggered_feature_service) {
   // This list will contain the original search string and any other string
   // transformations.
   String16Vector search_strings;
@@ -187,7 +190,7 @@ ScoredHistoryMatches URLIndexPrivateData::HistoryItemsForTerms(
 
     HistoryIdsToScoredMatches(std::move(history_ids), lower_raw_string,
                               host_filter, template_url_service, bookmark_model,
-                              &scored_items);
+                              &scored_items, triggered_feature_service);
   }
   // Select and sort only the top |max_matches| results.
   if (scored_items.size() > max_matches) {
@@ -259,6 +262,8 @@ bool URLIndexPrivateData::UpdateURL(
         RowQualifiesAsSignificant(new_row, base::Time()) &&
         IndexRow(nullptr, history_service, new_row, scheme_allowlist, tracker);
   } else if (RowQualifiesAsSignificant(row, base::Time())) {
+    // TODO(manukh): If we decide to launch `kDomainSuggestions`, `host_visits_`
+    //   should be incremented here.
     // This indexed row still qualifies and will be re-indexed.
     // The url won't have changed but the title, visit count, etc.
     // might have changed.
@@ -371,7 +376,6 @@ scoped_refptr<URLIndexPrivateData> URLIndexPrivateData::RebuildFromHistory(
       OmniboxFieldTrial::MaxNumHQPUrlsIndexedAtStartup();
   int num_urls_indexed = 0;
   for (history::URLRow row; history_enum.GetNextURL(&row);) {
-    DCHECK(RowQualifiesAsSignificant(row, base::Time()));
     // Do not use >= to account for case of -1 for unlimited urls.
     if (rebuilt_data->IndexRow(history_db, nullptr, row, scheme_allowlist,
                                nullptr) &&
@@ -627,7 +631,8 @@ void URLIndexPrivateData::HistoryIdsToScoredMatches(
     const std::string& host_filter,
     const TemplateURLService* template_url_service,
     bookmarks::BookmarkModel* bookmark_model,
-    ScoredHistoryMatches* scored_items) const {
+    ScoredHistoryMatches* scored_items,
+    OmniboxTriggeredFeatureService* triggered_feature_service) const {
   if (history_ids.empty())
     return;
 
@@ -695,6 +700,13 @@ void URLIndexPrivateData::HistoryIdsToScoredMatches(
         lower_terms_to_word_starts_offsets, starts_pos->second,
         bookmark_model && bookmark_model->IsBookmarked(hist_item.url()),
         num_unique_hosts, is_highly_visited_host, now);
+
+    if (new_scored_match.raw_score_before_domain_boosting <
+        new_scored_match.raw_score_after_domain_boosting) {
+      triggered_feature_service->FeatureTriggered(
+          metrics::OmniboxEventProto_Feature_DOMAIN_SUGGESTIONS);
+    }
+
     // Filter new matches that ended up scoring 0. (These are usually matches
     // which didn't match the user's raw terms.)
     if (new_scored_match.raw_score > 0)

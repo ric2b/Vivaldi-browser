@@ -15,6 +15,7 @@
 #include "ash/system/tray/tray_bubble_view.h"
 #include "ash/system/user/login_status.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/context_menu_controller.h"
@@ -46,6 +47,15 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
  public:
   METADATA_HEADER(TrayBackgroundView);
 
+  // Inherit from this class to be notified of events that happen for a specific
+  // `TrayBackgroundView`.
+  class Observer : public base::CheckedObserver {
+   public:
+    // Called when the `TrayBackgroundView`'s preferred visibility changes.
+    // `visible_preferred` is the new preferred visibility.
+    virtual void OnVisiblePreferredChanged(bool visible_preferred) = 0;
+  };
+
   enum RoundedCornerBehavior {
     kNotRounded,
     kStartRounded,
@@ -59,6 +69,9 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   TrayBackgroundView(const TrayBackgroundView&) = delete;
   TrayBackgroundView& operator=(const TrayBackgroundView&) = delete;
   ~TrayBackgroundView() override;
+
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
 
   // Overrides default button press handling in `PerformAction()`.
   void SetPressedCallback(
@@ -201,6 +214,10 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Checks if we should show bounce in or fade in animation.
   bool IsShowAnimationEnabled();
 
+  // Callbacks for Animations
+  void OnAnimationAborted();
+  void OnAnimationEnded();
+
   void SetIsActive(bool is_active);
   bool is_active() const { return is_active_; }
 
@@ -277,10 +294,6 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // child layers will still be there until all the animation finished.
   std::unique_ptr<ui::Layer> RecreateLayer() override;
 
-  // Callbacks for Animations
-  void OnAnimationAborted();
-  void OnAnimationEnded();
-
   // Applies transformations to the |layer()| to animate the view when
   // SetVisible(false) is called.
   void HideAnimation();
@@ -298,13 +311,13 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   bool ShouldUseCustomVisibilityAnimations() const;
 
   // The shelf containing the system tray for this view.
-  Shelf* shelf_;
+  raw_ptr<Shelf, ExperimentalAsh> shelf_;
 
   // The catalog name, used to record metrics on feature integrations.
   TrayBackgroundViewCatalogName catalog_name_;
 
   // Convenience pointer to the contents view.
-  TrayContainer* tray_container_;
+  raw_ptr<TrayContainer, ExperimentalAsh> tray_container_;
 
   // Determines if the view is active. This changes how  the ink drop ripples
   // behave.
@@ -346,6 +359,8 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   std::unique_ptr<TrayBackgroundViewSessionChangeHandler> handler_;
   std::unique_ptr<ui::SimpleMenuModel> context_menu_model_;
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
+
+  base::ObserverList<Observer> observers_;
 
   base::WeakPtrFactory<TrayBackgroundView> weak_factory_{this};
 };

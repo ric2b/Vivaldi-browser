@@ -7,23 +7,24 @@
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
+#import "components/policy/core/common/policy_pref_names.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/main/test_browser.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/sessions/test_session_service.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/load_query_commands.h"
-#import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/main/scene_state.h"
-#import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state_browser_agent.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
+#import "ios/chrome/browser/shared/public/commands/qr_scanner_commands.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/menu/menu_action_type.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -50,9 +51,7 @@ class BrowserActionFactoryTest : public PlatformTest {
  protected:
   BrowserActionFactoryTest()
       : test_title_(@"SomeTitle"),
-        scene_state_([[SceneState alloc] initWithAppState:nil]) {
-    feature_list_.InitAndEnableFeature(kUseSFSymbols);
-  }
+        scene_state_([[SceneState alloc] initWithAppState:nil]) {}
 
   void SetUp() override {
     TestChromeBrowserState::Builder test_cbs_builder;
@@ -250,7 +249,7 @@ TEST_F(BrowserActionFactoryTest, OpenNewTabAction) {
   EXPECT_EQ(0U, action.attributes);
 
   chrome_browser_state_->GetTestingPrefService()->SetManagedPref(
-      prefs::kIncognitoModeAvailability,
+      policy::policy_prefs::kIncognitoModeAvailability,
       std::make_unique<base::Value>(
           static_cast<int>(IncognitoModePrefs::kForced)));
 
@@ -276,7 +275,7 @@ TEST_F(BrowserActionFactoryTest, OpenNewIncognitoTabAction) {
   EXPECT_EQ(0U, action.attributes);
 
   chrome_browser_state_->GetTestingPrefService()->SetManagedPref(
-      prefs::kIncognitoModeAvailability,
+      policy::policy_prefs::kIncognitoModeAvailability,
       std::make_unique<base::Value>(
           static_cast<int>(IncognitoModePrefs::kDisabled)));
 
@@ -354,7 +353,7 @@ TEST_F(BrowserActionFactoryTest, StartNewSearchAction) {
   EXPECT_EQ(0U, action.attributes);
 
   chrome_browser_state_->GetTestingPrefService()->SetManagedPref(
-      prefs::kIncognitoModeAvailability,
+      policy::policy_prefs::kIncognitoModeAvailability,
       std::make_unique<base::Value>(
           static_cast<int>(IncognitoModePrefs::kForced)));
 
@@ -380,7 +379,7 @@ TEST_F(BrowserActionFactoryTest, NewIncognitoSearchAction) {
   EXPECT_EQ(0U, action.attributes);
 
   chrome_browser_state_->GetTestingPrefService()->SetManagedPref(
-      prefs::kIncognitoModeAvailability,
+      policy::policy_prefs::kIncognitoModeAvailability,
       std::make_unique<base::Value>(
           static_cast<int>(IncognitoModePrefs::kDisabled)));
 

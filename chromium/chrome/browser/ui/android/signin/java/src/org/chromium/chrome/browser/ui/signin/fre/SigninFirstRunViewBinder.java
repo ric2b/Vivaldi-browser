@@ -89,7 +89,7 @@ class SigninFirstRunViewBinder {
 
         if (isAccountSupervised) {
             view.getBrowserManagedHeaderView().setVisibility(View.VISIBLE);
-            view.getPrivacyDisclaimer().setText(R.string.fre_browser_managed_by_parents);
+            view.getPrivacyDisclaimer().setText(R.string.fre_browser_managed_by_parent);
             view.getPrivacyDisclaimer().setCompoundDrawablesRelativeWithIntrinsicBounds(
                     R.drawable.ic_account_child_20dp, 0, 0, 0);
         } else if (hasPolicy) {
@@ -122,7 +122,12 @@ class SigninFirstRunViewBinder {
     private static void updateVisibility(SigninFirstRunView view, PropertyModel model) {
         final boolean showInitialLoadProgressSpinner =
                 model.get(SigninFirstRunProperties.SHOW_INITIAL_LOAD_PROGRESS_SPINNER);
-        if (!showInitialLoadProgressSpinner) view.applyVariationsExperiment();
+        final boolean isSelectedAccountSupervised =
+                model.get(SigninFirstRunProperties.IS_SELECTED_ACCOUNT_SUPERVISED);
+        final boolean hasPolicy = model.get(SigninFirstRunProperties.FRE_POLICY) != null;
+        if (!showInitialLoadProgressSpinner) {
+            view.applyVariationsExperiment(!isSelectedAccountSupervised && !hasPolicy);
+        }
 
         final int selectedAccountVisibility = !showInitialLoadProgressSpinner
                         && model.get(SigninFirstRunProperties.SELECTED_ACCOUNT_DATA) != null
@@ -130,8 +135,6 @@ class SigninFirstRunViewBinder {
                 ? View.VISIBLE
                 : View.GONE;
         view.getSelectedAccountView().setVisibility(selectedAccountVisibility);
-        final boolean isSelectedAccountSupervised =
-                model.get(SigninFirstRunProperties.IS_SELECTED_ACCOUNT_SUPERVISED);
         view.getExpandIconView().setVisibility(
                 selectedAccountVisibility == View.VISIBLE && isSelectedAccountSupervised
                         ? View.INVISIBLE

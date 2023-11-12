@@ -12,6 +12,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen.h"
+#include "base/check_deref.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
@@ -19,7 +20,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
-#include "base/guid.h"
 #include "base/i18n/message_formatter.h"
 #include "base/i18n/number_formatting.h"
 #include "base/json/json_reader.h"
@@ -64,6 +64,7 @@
 #include "chrome/browser/certificate_provider/certificate_provider_service_factory.h"
 #include "chrome/browser/certificate_provider/pin_dialog_manager.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/net/nss_temp_certs_cache_chromeos.h"
 #include "chrome/browser/net/system_network_context_manager.h"
@@ -640,6 +641,12 @@ void GaiaScreenHandler::DeclareLocalizedValues(
                IDS_SAML_SECURITY_TOKEN_PIN_DIALOG_TITLE);
   builder->Add("securityTokenPinDialogSubtitle",
                IDS_SAML_SECURITY_TOKEN_PIN_DIALOG_SUBTITLE);
+  builder->Add("enrollmentNudgeTitle", IDS_ENROLLMENT_NUDGE_TITLE);
+  builder->Add("enrollmentNudgeMessage", IDS_ENROLLMENT_NUDGE_MESSAGE);
+  builder->Add("enrollmentNudgeEnterpriseEnrollmentButton",
+               IDS_ENROLLMENT_NUDGE_ENROLL_BUTTON);
+  builder->Add("enrollmentNudgeUseAnotherAccountButton",
+               IDS_ENROLLMENT_NUDGE_USE_ANOTHER_ACCOUNT_BUTTON);
 }
 
 void GaiaScreenHandler::InitAfterJavascriptAllowed() {
@@ -650,7 +657,7 @@ void GaiaScreenHandler::InitAfterJavascriptAllowed() {
   }
 }
 
-void GaiaScreenHandler::RegisterMessages() {
+void GaiaScreenHandler::DeclareJSCallbacks() {
   AddCallback("webviewLoadAborted",
               &GaiaScreenHandler::HandleWebviewLoadAborted);
   AddCallback("completeLogin", &GaiaScreenHandler::HandleCompleteLogin);
@@ -677,25 +684,14 @@ void GaiaScreenHandler::RegisterMessages() {
   AddCallback("passwordEntered", &GaiaScreenHandler::HandlePasswordEntered);
   AddCallback("showLoadingTimeoutError",
               &GaiaScreenHandler::HandleShowLoadingTimeoutError);
-
-  BaseScreenHandler::RegisterMessages();
 }
 
 void GaiaScreenHandler::HandleIdentifierEntered(const std::string& user_email) {
-  // We cannot tell a user type from the identifier, so we delay checking if
-  // the account should be allowed.
-  if (ShouldCheckUserTypeBeforeAllowing()) {
+  if (MaybeTriggerEnrollmentNudge(user_email)) {
     return;
   }
 
-  user_manager::KnownUser known_user(g_browser_process->local_state());
-  if (LoginDisplayHost::default_host() &&
-      !LoginDisplayHost::default_host()->IsUserAllowlisted(
-          known_user.GetAccountId(user_email, std::string() /* id */,
-                                  AccountType::UNKNOWN),
-          absl::nullopt)) {
-    ShowAllowlistCheckFailedError();
-  }
+  CheckIfAllowlisted(user_email);
 }
 
 void GaiaScreenHandler::HandleAuthExtensionLoaded() {
@@ -897,9 +893,10 @@ void GaiaScreenHandler::HandleLaunchSAMLPublicSession(
 
   UserContext context(user_manager::USER_TYPE_PUBLIC_ACCOUNT, account_id);
 
-  // TODO(https://crbug.com/1298392): Refactor this.
-  LoginDisplayHost::default_host()->GetLoginDisplay()->delegate()->Login(
-      context, SigninSpecifics());
+  auto& existing_user_controller =
+      CHECK_DEREF(ExistingUserController::current_controller());
+
+  existing_user_controller.Login(context, SigninSpecifics());
 }
 
 void GaiaScreenHandler::HandleUsingSAMLAPI(bool is_third_party_idp) {
@@ -1019,8 +1016,7 @@ void GaiaScreenHandler::HandleUserRemoved(const std::string& email) {
   } else {
     // Removes the account on the device.
     user_manager::UserManager::Get()->RemoveUser(
-        account_id, user_manager::UserRemovalReason::GAIA_REMOVED,
-        nullptr /*delegate*/);
+        account_id, user_manager::UserRemovalReason::GAIA_REMOVED);
   }
 }
 
@@ -1518,10 +1514,10 @@ void GaiaScreenHandler::UpdateStateInternal(NetworkError::ErrorReason reason,
       error_screen_->SetParentScreen(GaiaView::kScreenId);
       error_screen_->SetHideCallback(base::BindOnce(
           &GaiaScreenHandler::OnErrorScreenHide, weak_factory_.GetWeakPtr()));
-      histogram_helper_->OnErrorShow(error_screen_->GetErrorState());
     }
     // Show `ErrorScreen` or update network error message.
     error_screen_->ShowNetworkErrorMessage(state, reason);
+    histogram_helper_->OnErrorShow(error_screen_->GetErrorState());
   } else {
     HideOfflineMessage(state, reason);
   }
@@ -1612,6 +1608,59 @@ void GaiaScreenHandler::SAMLConfirmPassword(
     std::unique_ptr<UserContext> user_context) {
   LoginDisplayHost::default_host()->GetSigninUI()->SAMLConfirmPassword(
       std::move(scraped_saml_passwords), std::move(user_context));
+}
+
+bool GaiaScreenHandler::MaybeTriggerEnrollmentNudge(
+    const std::string& user_email) {
+  const bool is_enterprise_managed = g_browser_process->platform_part()
+                                         ->browser_policy_connector_ash()
+                                         ->IsDeviceEnterpriseManaged();
+  if (is_enterprise_managed) {
+    // Device either already went through enterprise enrollment flow or goes
+    // through it right now. No need for nudging.
+    return false;
+  }
+  const bool is_first_user =
+      user_manager::UserManager::Get()->GetUsers().empty();
+  if (!is_first_user) {
+    // Enrollment nudge targets only initial OOBE flow on unowned devices.
+    // Current user is not a first user which means that device is already
+    // owned.
+    return false;
+  }
+  const std::string email_domain =
+      chrome::enterprise_util::GetDomainFromEmail(user_email);
+  if (chrome::enterprise_util::IsKnownConsumerDomain(email_domain)) {
+    // User doesn't belong to a managed domain, so enrollment nudging can't
+    // apply.
+    return false;
+  }
+
+  // TODO(b/271104781): replace this check with a policy fetch through a special
+  // DM server API when it is available.
+  if (!ash::features::IsEnrollmentNudgingForTestingEnabled()) {
+    return false;
+  }
+
+  CallExternalAPI("showEnrollmentNudge", email_domain);
+  return true;
+}
+
+void GaiaScreenHandler::CheckIfAllowlisted(const std::string& user_email) {
+  // We cannot tell a user type from the identifier, so we delay checking if
+  // the account should be allowed.
+  if (ShouldCheckUserTypeBeforeAllowing()) {
+    return;
+  }
+
+  user_manager::KnownUser known_user(g_browser_process->local_state());
+  if (LoginDisplayHost::default_host() &&
+      !LoginDisplayHost::default_host()->IsUserAllowlisted(
+          known_user.GetAccountId(user_email, std::string() /* id */,
+                                  AccountType::UNKNOWN),
+          absl::nullopt)) {
+    ShowAllowlistCheckFailedError();
+  }
 }
 
 }  // namespace ash

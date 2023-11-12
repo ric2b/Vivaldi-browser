@@ -14,13 +14,13 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/sequence_checker.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/layers/video_frame_provider_client_impl.h"
 #include "cc/layers/video_layer.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/media_content_type.h"
 #include "media/base/media_log.h"
 #include "media/base/video_frame.h"
@@ -234,7 +234,7 @@ class WebMediaPlayerMS::FrameDeliverer {
         base::BindOnce(
             &media::GpuMemoryBufferVideoFramePool::MaybeCreateHardwareFrame,
             base::Unretained(gpu_memory_buffer_pool_.get()), std::move(frame),
-            media::BindToCurrentLoop(base::BindOnce(
+            base::BindPostTaskToCurrentDefault(base::BindOnce(
                 &FrameDeliverer::EnqueueFrame,
                 weak_factory_for_pool_.GetWeakPtr(), original_frame_id))));
   }
@@ -1417,7 +1417,7 @@ void WebMediaPlayerMS::RequestVideoFrameCallback() {
   }
 
   compositor_->SetOnFramePresentedCallback(
-      media::BindToCurrentLoop(base::BindOnce(
+      base::BindPostTaskToCurrentDefault(base::BindOnce(
           &WebMediaPlayerMS::OnNewFramePresentedCallback, weak_this_)));
 
   compositor_->SetForceBeginFrames(true);
@@ -1473,7 +1473,8 @@ void WebMediaPlayerMS::MaybeCreateWatchTimeReporter() {
       media::mojom::PlaybackProperties::New(
           HasAudio(), HasVideo(), false /*is_background*/, false /*is_muted*/,
           false /*is_mse*/, false /*is_eme*/,
-          false /*is_embedded_media_experience*/, *media_stream_type),
+          false /*is_embedded_media_experience*/, *media_stream_type,
+          media::RendererType::kRendererImpl),
       NaturalSize(),
       WTF::BindRepeating(&WebMediaPlayerMS::GetCurrentTimeInterval,
                          WTF::Unretained(this)),

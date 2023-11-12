@@ -7,8 +7,7 @@ package org.chromium.chrome.browser.incognito;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import android.support.test.InstrumentationRegistry;
-
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.LargeTest;
 
 import org.hamcrest.Matchers;
@@ -34,7 +33,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils.LoadIfNeededCaller;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -53,7 +51,6 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ParameterizedRunner.class)
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
-@DisableFeatures({ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS})
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class IncognitoStorageLeakageTest {
     private static final String SITE_DATA_HTML_PATH =
@@ -75,7 +72,8 @@ public class IncognitoStorageLeakageTest {
 
     @Before
     public void setUp() throws TimeoutException {
-        mTestServer = EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         mSiteDataTestPage = mTestServer.getURL(SITE_DATA_HTML_PATH);
 
         // Ensuring native is initialized before we access the CCT_INCOGNITO feature flag.
@@ -105,12 +103,12 @@ public class IncognitoStorageLeakageTest {
 
         // Sets the session storage in tab1
         assertEquals("true",
-                JavaScriptUtils.runJavascriptWithAsyncResult(
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(
                         tab1.getWebContents(), "setSessionStorage()"));
 
         // Checks the sessions storage is set in tab1
         assertEquals("true",
-                JavaScriptUtils.runJavascriptWithAsyncResult(
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(
                         tab1.getWebContents(), "hasSessionStorage()"));
 
         Tab tab2 = activity2.launchUrl(
@@ -121,7 +119,7 @@ public class IncognitoStorageLeakageTest {
         // Checks the session storage in tab2. Session storage set in tab1 should not be accessible.
         // The session storage is per tab basis.
         assertEquals("false",
-                JavaScriptUtils.runJavascriptWithAsyncResult(
+                JavaScriptUtils.executeJavaScriptAndWaitForResult(
                         tab2.getWebContents(), "hasSessionStorage()"));
     }
 
@@ -160,11 +158,11 @@ public class IncognitoStorageLeakageTest {
             // Set the storage in tab1
             assertEquals("true",
                     JavaScriptUtils.runJavascriptWithAsyncResult(
-                            tab1.getWebContents(), "set" + type + "()"));
+                            tab1.getWebContents(), "set" + type + "Async()"));
             // Checks the storage is set in tab1
             assertEquals("true",
                     JavaScriptUtils.runJavascriptWithAsyncResult(
-                            tab1.getWebContents(), "has" + type + "()"));
+                            tab1.getWebContents(), "has" + type + "Async()"));
 
             TestThreadUtils.runOnUiThreadBlocking(
                     () -> tab2.loadIfNeeded(LoadIfNeededCaller.OTHER));
@@ -173,7 +171,7 @@ public class IncognitoStorageLeakageTest {
             // Access the storage from tab2
             assertEquals(expected,
                     JavaScriptUtils.runJavascriptWithAsyncResult(
-                            tab2.getWebContents(), "has" + type + "()"));
+                            tab2.getWebContents(), "has" + type + "Async()"));
         }
     }
 }

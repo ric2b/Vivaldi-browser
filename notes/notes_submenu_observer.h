@@ -40,7 +40,7 @@ class NotesSubMenuObserver : public RenderViewContextMenuObserver {
   void RootMenuWillOpen();
   void PopulateModel(ui::SimpleMenuModel* model);
   ui::SimpleMenuModel* get_root_model() {
-    return root_menu_model_ ? root_menu_model_ : models_.front().get();
+    return root_menu_model_ ? root_menu_model_.get() : models_.front().get();
   }
   int GetRootId();
 
@@ -50,8 +50,8 @@ class NotesSubMenuObserver : public RenderViewContextMenuObserver {
 
   std::unique_ptr<NotesSubMenuObserverHelper> helper_;
   // The interface for adding a submenu to the parent.
-  RenderViewContextMenuProxy* proxy_;
-  ui::SimpleMenuModel* root_menu_model_ = nullptr;
+  const raw_ptr<RenderViewContextMenuProxy> proxy_;
+  raw_ptr<ui::SimpleMenuModel> root_menu_model_ = nullptr;
   bool root_is_folder_ = false;
   // Command id of element inserted into the parent menu
   int root_id_;

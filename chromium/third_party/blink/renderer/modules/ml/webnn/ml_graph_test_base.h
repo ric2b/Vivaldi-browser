@@ -5,6 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_ML_WEBNN_ML_GRAPH_TEST_BASE_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_ML_WEBNN_ML_GRAPH_TEST_BASE_H_
 
+#include <numeric>
+
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ml_compute_result.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
@@ -21,12 +23,16 @@ class V8TestingScope;
 
 // The utility methods for graph test.
 enum ExecutionMode { kAsync, kSync };
+// The backends share the unit tests in the MLGraphTest.
+enum BackendType { kFake, kXnnpack, kModelLoader };
 
-std::string ExecutionModeParamToString(
-    const ::testing::TestParamInfo<ExecutionMode>& execution_mode);
+using TestVariety = std::tuple<BackendType, ExecutionMode>;
+
+std::string TestVarietyToString(
+    const ::testing::TestParamInfo<TestVariety>& info);
 
 class MLGraphTestBase : public ::testing::Test,
-                        public ::testing::WithParamInterface<ExecutionMode> {
+                        public ::testing::WithParamInterface<TestVariety> {
  public:
   // BuildResult is returned by Build() method. Only one member of BuildResult
   // is valid. If the graph building is successful, graph points to the MLGraph
@@ -53,10 +59,9 @@ class MLGraphTestBase : public ::testing::Test,
                              MLNamedArrayBufferViews& inputs,
                              MLNamedArrayBufferViews& outputs);
 
-  // Test operations with different parameters such as tensor dimensions, data
-  // layout. Each test case will builds a graph and computes it with input data
-  // to check the expected value.
-  void TestElementWiseBinary(V8TestingScope& scope);
+ private:
+  // The execution mode for testing build and compute graph (e.g. async, sync.).
+  ExecutionMode GetExecutionMode();
 };
 
 template <typename T>
@@ -95,6 +100,20 @@ Vector<T> GetArrayBufferViewValues(
   memcpy(values.data(), array_buffer_view->BaseAddress(),
          array_buffer_view->byteLength());
   return values;
+}
+
+template <typename T>
+MLOperand* BuildConstant(MLGraphBuilder* builder,
+                         const Vector<uint32_t>& dimensions,
+                         V8MLOperandType::Enum type,
+                         const Vector<T>& values,
+                         ExceptionState& exception_state) {
+  size_t buffer_size = std::accumulate(dimensions.begin(), dimensions.end(),
+                                       size_t(1), std::multiplies<uint32_t>());
+  auto buffer = CreateDOMArrayBufferView(buffer_size, type);
+  DCHECK_EQ(buffer->byteLength(), values.size() * sizeof(T));
+  memcpy(buffer->BaseAddress(), values.data(), buffer->byteLength());
+  return BuildConstant(builder, dimensions, type, exception_state, buffer);
 }
 
 }  // namespace blink

@@ -10,6 +10,7 @@
 #include "base/auto_reset.h"
 #include "base/feature_list.h"
 #include "base/strings/string_piece.h"
+#include "base/time/time.h"
 #include "chromeos/ash/components/standalone_browser/lacros_availability.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -66,21 +67,23 @@ enum class LacrosLaunchSwitchSource {
 // LacrosSelection. The values shall be consistent with the controlling
 // policy. Unlike `LacrosSelection` representing which lacros to select,
 // `LacrosSelectionPolicy` represents how to decide which lacros to select.
+// Stateful option from `LacrosSelection` is omitted due to a breakage risks in
+// case of version skew (e.g. when the latest stateful Lacros available in omaha
+// is older than the rootfs Lacros on the device).
 enum class LacrosSelectionPolicy {
   // Indicates that the user decides which Lacros browser to launch: rootfs or
   // stateful.
   kUserChoice = 0,
   // Indicates that rootfs Lacros will always be launched.
   kRootfs = 1,
-  // Indicates that stateful Lacros will always be launched.
-  kStateful = 2,
 };
 
 // Represents the different options available for lacros selection.
 enum class LacrosSelection {
   kRootfs = 0,
   kStateful = 1,
-  kMaxValue = kStateful,
+  kDeployedLocally = 2,
+  kMaxValue = kDeployedLocally,
 };
 
 // Represents the values of the LacrosDataBackwardMigrationMode string enum
@@ -398,9 +401,15 @@ void ClearLacrosDataBackwardMigrationModeCacheForTest();
 // Clears the cached value for LacrosSelection policy.
 void ClearLacrosSelectionCacheForTest();
 
+// Returns true if profile migraiton is enabled. If profile migration is
+// enabled, the completion of it is required to enable Lacros.
 bool IsProfileMigrationEnabled();
 
-// Returns true if the profile migration can run, but not yet completed.
+bool IsProfileMigrationEnabledWithUserAndPolicyInitState(
+    const user_manager::User* user,
+    PolicyInitState policy_init_state);
+
+// Returns true if the profile migration is enabled, but not yet completed.
 bool IsProfileMigrationAvailable();
 
 // Returns `MigrationMode::kMove` if LacrosOnly or `kLacrosMoveProfileMigration`
@@ -422,19 +431,38 @@ bool IsProfileMigrationCompletedForUser(PrefService* local_state,
                                         const std::string& user_id_hash,
                                         MigrationMode mode);
 
-// Sets the value of `kProfileMigrationCompletedForUser1Pref` to be true
-// for the user identified by `user_id_hash`.
+// Sets the value of `kProfileMigrationCompletedForUserPref` or
+// `kProfileMoveMigrationCompletedForUserPref` to be true for the user
+// identified by `user_id_hash`, depending on `mode`.
 void SetProfileMigrationCompletedForUser(PrefService* local_state,
                                          const std::string& user_id_hash,
                                          MigrationMode mode);
 
-// Clears the value of `kProfileMigrationCompletedForUser1Pref` for user
-// identified by `user_id_hash`.
+// Clears the values of `kProfileMigrationCompletedForUserPref` and
+// `kProfileMoveMigrationCompletedForUserPref` prefs for user identified by
+// `user_id_hash`:
 void ClearProfileMigrationCompletedForUser(PrefService* local_state,
                                            const std::string& user_id_hash);
 
+// Sets the value of `kProfileMigrationCompletionTimeForUserPref` for the user
+// identified by `user_id_hash` to the current time.
+void SetProfileMigrationCompletionTimeForUser(PrefService* local_state,
+                                              const std::string& user_id_hash);
+
+// Gets the value of `kProfileMigrationCompletionTimeForUserPref` for the user
+// identified by `user_id_hash`.
+absl::optional<base::Time> GetProfileMigrationCompletionTimeForUser(
+    PrefService* local_state,
+    const std::string& user_id_hash);
+
+// Clears the value of `kProfileMigrationCompletionTimeForUserPref` for the user
+// identified by `user_id_hash`.
+void ClearProfileMigrationCompletionTimeForUser(
+    PrefService* local_state,
+    const std::string& user_id_hash);
+
 // Sets the value of `kProfileDataBackwardMigrationCompletedForUserPref` for the
-// user identified by `user_id_hash`;
+// user identified by `user_id_hash`.
 void SetProfileDataBackwardMigrationCompletedForUser(
     PrefService* local_state,
     const std::string& user_id_hash);
@@ -500,10 +528,6 @@ bool WasGotoFilesClicked(PrefService* local_state,
 
 // Returns true if ash 1st party extension keep list should be enforced.
 bool ShouldEnforceAshExtensionKeepList();
-
-// Forces IsLacrosEnabled() to return true or false for testing. Reset upon
-// destruction of returned |base::AutoReset| object.
-base::AutoReset<bool> SetLacrosEnabledForTest(bool force_enabled);
 
 // Forces IsLacrosPrimaryBrowser() to return true or false for testing.
 // Reset upon destruction of returned |base::AutoReset| object.

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ASH_APP_MODE_ARC_ARC_KIOSK_APP_SERVICE_H_
 
 #include "base/containers/flat_set.h"
+#include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_icon.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
@@ -93,7 +94,6 @@ class ArcKioskAppService : public KeyedService,
   void RemoveObserver(KioskAppLauncher::Observer* observer) override;
   void Initialize() override;
   void ContinueWithNetworkReady() override;
-  void RestartLauncher() override;
   void LaunchApp() override;
 
   ArcKioskAppLauncher* GetLauncherForTesting() { return app_launcher_.get(); }
@@ -110,10 +110,10 @@ class ArcKioskAppService : public KeyedService,
   // Triggered when app is closed to reset launcher.
   void ResetAppLauncher();
 
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
   bool maintenance_session_running_ = false;
   base::OneShotTimer maintenance_timeout_timer_;
-  ArcKioskAppManager* app_manager_;
+  raw_ptr<ArcKioskAppManager, ExperimentalAsh> app_manager_;
   std::string app_id_;
   std::unique_ptr<ArcAppListPrefs::AppInfo> app_info_;
   std::unique_ptr<ArcAppIcon> app_icon_;

@@ -8,11 +8,13 @@
 #import "base/ios/ios_util.h"
 #import "base/strings/utf_string_conversions.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/shared/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmarks_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
+#import "ios/chrome/browser/ui/history/history_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
-#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
+#import "ios/chrome/browser/ui/reading_list/reading_list_coordinator_delegate.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -47,7 +49,8 @@ enum class PresentedState {
 
 }  // namespace
 
-@interface PanelInteractionController () {
+@interface PanelInteractionController ()<HistoryCoordinatorDelegate,
+                                        ReadingListCoordinatorDelegate> {
   // The browser panels are presented in.
   Browser* _browser;  // weak
 
@@ -152,7 +155,7 @@ enum class PresentedState {
   _noteInteractionController.panelDelegate = self;
   _bookmarksCoordinator.panelDelegate = self;
   _readinglistCoordinator.panelDelegate = self;
-  self.historyCoordinator.panelDelegate = self;
+  _historyCoordinator.panelDelegate = self;
   int index = 0;
   switch (page) {
     case PanelPage::BookmarksPage: index = 0; break;
@@ -188,34 +191,31 @@ enum class PresentedState {
 }
 
 - (void)setupAndPresentPhonePanel:(NSInteger)index {
-    [_panelController setupControllers:
-       (NoteNavigationController*)
-     _noteInteractionController.noteNavigationController
-      withBookmarkController:
-       _bookmarksCoordinator.bookmarkNavigationController
-     andReadinglistController:
-       _readinglistCoordinator.navigationController
-      andHistoryController:self.historyCoordinator.historyNavigationController];
-    self.panelController.view.backgroundColor =
+  [_panelController setupControllers:
+      (NoteNavigationController*)_noteInteractionController
+            .noteNavigationController
+              withBookmarkController:
+      _bookmarksCoordinator.bookmarkNavigationController
+            andReadinglistController:
+      _readinglistCoordinator.navigationController
+                andHistoryController:
+      _historyCoordinator.historyNavigationController];
+
+  self.panelController.view.backgroundColor =
       [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-    [self.panelController.segmentControl setSelectedSegmentIndex:index];
-    [self.panelController setIndexForControl:index];
-    if (@available(iOS 15.0, *)) {
-       UISheetPresentationController* sheetPc =
-            _panelController.sheetPresentationController;
-       sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
-                            UISheetPresentationControllerDetent.largeDetent];
-       sheetPc.preferredCornerRadius = panel_sheet_corner_radius;
-       sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
-       sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
-       [_parentController presentViewController:_panelController
-                                       animated:YES
-                                    completion:nil];
-    } else {
-        [_parentController presentViewController:_panelController
-                                    animated:YES
+  [self.panelController.segmentControl setSelectedSegmentIndex:index];
+  [self.panelController setIndexForControl:index];
+
+  UISheetPresentationController* sheetPc =
+       _panelController.sheetPresentationController;
+  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
+                       UISheetPresentationControllerDetent.largeDetent];
+  sheetPc.preferredCornerRadius = panel_sheet_corner_radius;
+  sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
+  sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+  [_parentController presentViewController:_panelController
+                                  animated:YES
                                 completion:nil];
-    }
 }
 
 #pragma mark - Private
@@ -229,6 +229,7 @@ enum class PresentedState {
   }
   self.historyCoordinator.searchTerms = searchString;
   self.historyCoordinator.loadStrategy = UrlLoadStrategy::NORMAL;
+  self.historyCoordinator.delegate = self;
   [self.historyCoordinator start];
 }
 
@@ -254,10 +255,11 @@ enum class PresentedState {
 - (void)showReadinglist:(UIViewController*)vc {
   if (_readinglistCoordinator)
     return;
-  _readinglistCoordinator = [[ReadingListCoordinator alloc]
-      initWithBaseViewController:vc
-                         browser:_browser];
-    [_readinglistCoordinator start];
+  _readinglistCoordinator =
+  [[ReadingListCoordinator alloc] initWithBaseViewController:vc
+                                                     browser:_browser];
+  _readinglistCoordinator.delegate = self;
+  [_readinglistCoordinator start];
 }
 
 - (void)dismissPanelModalControllerAnimated:(BOOL)animated {
@@ -286,6 +288,27 @@ enum class PresentedState {
 /// enough space to show iPad side panel.
 - (BOOL)showSidePanel {
   return VivaldiGlobalHelpers.canShowSidePanel;
+}
+
+#pragma mark - HistoryCoordinatorDelegate
+
+- (void)closeHistoryWithCompletion:(ProceduralBlock)completion {
+  __weak __typeof(self) weakSelf = self;
+  [self.historyCoordinator dismissWithCompletion:^{
+    if (completion) {
+      completion();
+    }
+    [weakSelf.historyCoordinator stop];
+    weakSelf.historyCoordinator = nil;
+  }];
+}
+
+#pragma mark - ReadingListCoordinatorDelegate
+
+- (void)closeReadingList {
+  [_readinglistCoordinator stop];
+  _readinglistCoordinator.delegate = nil;
+  _readinglistCoordinator = nil;
 }
 
 @end

@@ -5,15 +5,16 @@
 #include "media/capture/video/fake_video_capture_device.h"
 
 #include <stddef.h>
+
 #include <algorithm>
 #include <utility>
 
-#include "base/cxx17_backports.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
@@ -697,23 +698,23 @@ void FakePhotoDevice::SetPhotoOptions(
 
   if (settings->has_pan) {
     device_state_write_access->pan =
-        base::clamp(settings->pan, kMinPan, kMaxPan);
+        std::clamp(settings->pan, kMinPan, kMaxPan);
   }
   if (settings->has_tilt) {
     device_state_write_access->tilt =
-        base::clamp(settings->tilt, kMinTilt, kMaxTilt);
+        std::clamp(settings->tilt, kMinTilt, kMaxTilt);
   }
   if (settings->has_zoom) {
     device_state_write_access->zoom =
-        base::clamp(settings->zoom, kMinZoom, kMaxZoom);
+        std::clamp(settings->zoom, kMinZoom, kMaxZoom);
   }
   if (settings->has_exposure_time) {
-    device_state_write_access->exposure_time = base::clamp(
-        settings->exposure_time, kMinExposureTime, kMaxExposureTime);
+    device_state_write_access->exposure_time =
+        std::clamp(settings->exposure_time, kMinExposureTime, kMaxExposureTime);
   }
 
   if (settings->has_focus_distance) {
-    device_state_write_access->focus_distance = base::clamp(
+    device_state_write_access->focus_distance = std::clamp(
         settings->focus_distance, kMinFocusDistance, kMaxFocusDistance);
   }
 
@@ -733,10 +734,8 @@ void FakePhotoDevice::SetPhotoOptions(
 
 void FakeVideoCaptureDevice::TakePhoto(TakePhotoCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&FakePhotoDevice::TakePhoto,
-                                base::Unretained(photo_device_.get()),
-                                std::move(callback), elapsed_time_));
+  photo_device_->TakePhoto(
+      base::BindPostTaskToCurrentDefault(std::move(callback)), elapsed_time_);
 }
 
 OwnBufferFrameDeliverer::OwnBufferFrameDeliverer(

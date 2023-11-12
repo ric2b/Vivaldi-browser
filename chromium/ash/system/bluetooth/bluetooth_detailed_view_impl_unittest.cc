@@ -8,12 +8,13 @@
 
 #include "ash/public/cpp/test/test_system_tray_client.h"
 #include "ash/style/rounded_container.h"
+#include "ash/style/switch.h"
 #include "ash/system/bluetooth/bluetooth_device_list_item_view.h"
 #include "ash/system/tray/detailed_view_delegate.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/test/ash_test_base.h"
+#include "base/memory/raw_ptr.h"
 #include "mojo/public/cpp/bindings/clone_traits.h"
-#include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/widget/widget.h"
@@ -98,9 +99,7 @@ class BluetoothDetailedViewImplTest : public AshTestBase {
     return bluetooth_detailed_view_->toggle_row_;
   }
 
-  views::ToggleButton* GetToggleButton() {
-    return bluetooth_detailed_view_->toggle_button_;
-  }
+  Switch* GetToggleButton() { return bluetooth_detailed_view_->toggle_button_; }
 
   RoundedContainer* GetMainContainer() {
     return bluetooth_detailed_view_->main_container_;
@@ -113,7 +112,8 @@ class BluetoothDetailedViewImplTest : public AshTestBase {
   std::unique_ptr<views::Widget> widget_;
   FakeBluetoothDetailedViewDelegate bluetooth_detailed_view_delegate_;
   FakeDetailedViewDelegate detailed_view_delegate_;
-  BluetoothDetailedViewImpl* bluetooth_detailed_view_ = nullptr;
+  raw_ptr<BluetoothDetailedViewImpl, ExperimentalAsh> bluetooth_detailed_view_ =
+      nullptr;
 };
 
 TEST_F(BluetoothDetailedViewImplTest, PressingSettingsButtonOpensSettings) {
@@ -137,7 +137,7 @@ TEST_F(BluetoothDetailedViewImplTest, PressingSettingsButtonOpensSettings) {
 TEST_F(BluetoothDetailedViewImplTest,
        UpdateBluetoothEnabledStateChangesUIState) {
   HoverHighlightView* toggle_row = GetToggleRow();
-  views::ToggleButton* toggle_button = GetToggleButton();
+  Switch* toggle_button = GetToggleButton();
   RoundedContainer* main_container = GetMainContainer();
 
   bluetooth_detailed_view_->UpdateBluetoothEnabledState(true);
@@ -167,7 +167,7 @@ TEST_F(BluetoothDetailedViewImplTest, PressingToggleRowNotifiesDelegate) {
 }
 
 TEST_F(BluetoothDetailedViewImplTest, PressingToggleButtonNotifiesDelegate) {
-  views::ToggleButton* toggle_button = GetToggleButton();
+  Switch* toggle_button = GetToggleButton();
   EXPECT_FALSE(toggle_button->GetIsOn());
   EXPECT_FALSE(bluetooth_detailed_view_delegate_.last_toggle_state_);
 

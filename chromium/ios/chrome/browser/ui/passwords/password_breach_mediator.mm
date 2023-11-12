@@ -8,8 +8,8 @@
 #import "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #import "components/password_manager/core/browser/password_manager_metrics_util.h"
 #import "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/commands/application_commands.h"
-#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/passwords/password_breach_consumer.h"
 #import "ios/chrome/browser/ui/passwords/password_breach_presenter.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -101,7 +101,7 @@ using password_manager::metrics_util::LeakDialogType;
     self.dismissReason = LeakDialogDismissalReason::kClickedCheckPasswords;
     // Opening Password page will stop the presentation in the presenter.
     // No need to send `stop`.
-    [self.presenter startPasswordCheck];
+    [self.presenter openSavedPasswordsSettings];
   } else {
     [self confirmationAlertDismissAction];
   }

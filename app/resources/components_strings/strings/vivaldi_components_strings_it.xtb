@@ -65,7 +65,7 @@
 <translation id="3447661539832366887">Il proprietario del dispositivo ha disattivato il gioco dei dinosauri.</translation>
 <translation id="3447884698081792621">Mostra certificato (rilasciato da <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Nascondi avanzate</translation>
-<translation id="3484560055331845446">Potresti non riuscire più ad accedere al tuo Account Google. Chrome consiglia di cambiare subito la password. Ti verrà chiesto di eseguire l'accesso.</translation>
+<translation id="3484560055331845446">Potresti perdere l'accesso al tuo Account Google. Ti consigliamo di cambiare subito la password. Ti sarà chiesto di accedere.</translation>
 <translation id="3566021033012934673">La connessione non è privata</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Nascondi dettagli</translation>
@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES,plural, =1{(1 in uso)}other{(# in uso)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Controllare l'indirizzo proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(a 64 bit)</translation>
-<translation id="5287240709317226393">Mostra cookie</translation>
 <translation id="5355557959165512791">Al momento non puoi visitare il sito <ph name="SITE" /> perché il relativo certificato è stato revocato. Errori di rete e attacchi sono in genere temporanei, quindi questa pagina probabilmente funzionerà più tardi.</translation>
 <translation id="5386426401304769735">La catena di certificati per questo sito contiene un certificato firmato usando SHA-1.</translation>
 <translation id="5452270690849572955">Impossibile trovare la pagina di <ph name="HOST_NAME" /></translation>
@@ -154,6 +153,7 @@
 <translation id="6657585470893396449">Password</translation>
 <translation id="6711464428925977395">Si è verificato un problema con il server proxy oppure l'indirizzo non è corretto.</translation>
 <translation id="6757797048963528358">Il dispositivo è entrato in modalità sospensione.</translation>
+<translation id="6890956352250146925">Opzioni per cookie e dati del sito</translation>
 <translation id="6897140037006041989">User-agent</translation>
 <translation id="7053983685419859001">Blocca</translation>
 <translation id="7079718277001814089">Questo sito contiene malware</translation>

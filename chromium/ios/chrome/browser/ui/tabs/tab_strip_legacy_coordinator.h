@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 #import "ios/chrome/browser/ui/gestures/view_revealing_animatee.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_highlighting.h"
 
@@ -15,7 +15,6 @@
 #import "ios/web/public/web_state.h"
 // End Vivaldi
 
-@protocol PopupMenuLongPressDelegate;
 @protocol TabStripPresentation;
 @class ViewRevealingVerticalPanHandler;
 
@@ -33,9 +32,6 @@
 // The base view controller for this coordinator. This is required because the
 // TabStripLegacyCoordinator is instantiated before the BrowserViewController.
 @property(nonatomic, weak, readwrite) UIViewController* baseViewController;
-
-// Delegate for the long press gesture recognizer triggering popup menu.
-@property(nonatomic, weak) id<PopupMenuLongPressDelegate> longPressDelegate;
 
 // Provides methods for presenting the tab strip and checking the visibility
 // of the tab strip in the containing object.

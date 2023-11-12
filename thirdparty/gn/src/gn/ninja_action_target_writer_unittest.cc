@@ -91,7 +91,7 @@ TEST(NinjaActionTargetWriter, ActionNoSourcesConsole) {
             Label(SourceDir("//"), "console", setup.toolchain()->label().dir(),
                   setup.toolchain()->label().name()));
   pool.set_depth(1);
-  target.action_values().set_pool(LabelPtrPair<Pool>(&pool));
+  target.set_pool(LabelPtrPair<Pool>(&pool));
 
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
@@ -377,7 +377,7 @@ TEST(NinjaActionTargetWriter, ForEachWithPool) {
             Label(SourceDir("//foo/"), "pool", setup.toolchain()->label().dir(),
                   setup.toolchain()->label().name()));
   pool.set_depth(5);
-  target.action_values().set_pool(LabelPtrPair<Pool>(&pool));
+  target.set_pool(LabelPtrPair<Pool>(&pool));
 
   target.SetToolchain(setup.toolchain());
   ASSERT_TRUE(target.OnResolved(&err));
@@ -546,4 +546,47 @@ TEST(NinjaActionTargetWriter, SeesConfig) {
     std::string out_str = out.str();
     EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
   }
+}
+
+// Check for proper escaping of actions with spaces in python & script.
+TEST(NinjaActionTargetWriter, ActionWithSpaces) {
+  Err err;
+  TestWithScope setup;
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.set_output_type(Target::ACTION);
+
+  target.action_values().set_script(SourceFile("//foo/my script.py"));
+  target.action_values().args() = SubstitutionList::MakeForTest("my argument");
+  target.config_values().inputs().push_back(SourceFile("//foo/input file.txt"));
+
+  target.action_values().outputs() =
+      SubstitutionList::MakeForTest("//out/Debug/foo.out");
+
+  target.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  setup.build_settings()->set_python_path(
+      base::FilePath(FILE_PATH_LITERAL("/Program Files/python")));
+
+  std::ostringstream out;
+  NinjaActionTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      R"(rule __foo_bar___rule)" "\n"
+// Escaping is different between Windows and Posix.
+#if defined(OS_WIN)
+      R"(  command = "/Program$ Files/python" "../../foo/my$ script.py" "my$ argument")" "\n"
+#else
+      R"(  command = /Program\$ Files/python ../../foo/my\$ script.py my\$ argument)" "\n"
+#endif
+      R"(  description = ACTION //foo:bar()
+  restat = 1
+
+build foo.out: __foo_bar___rule | ../../foo/my$ script.py ../../foo/input$ file.txt
+
+build obj/foo/bar.stamp: stamp foo.out
+)";
+  EXPECT_EQ(expected, out.str()) << expected << "--" << out.str();
 }

@@ -80,20 +80,27 @@ namespace blink {
 // NOTE: Use either allEditingProperties() or inheritableEditingProperties() to
 // respect runtime enabling of properties.
 static const CSSPropertyID kStaticEditingProperties[] = {
-    CSSPropertyID::kBackgroundColor, CSSPropertyID::kColor,
-    CSSPropertyID::kFontFamily, CSSPropertyID::kFontSize,
-    CSSPropertyID::kFontStyle, CSSPropertyID::kFontVariantLigatures,
-    CSSPropertyID::kFontVariantCaps, CSSPropertyID::kFontWeight,
-    CSSPropertyID::kLetterSpacing, CSSPropertyID::kOrphans,
+    CSSPropertyID::kBackgroundColor,
+    CSSPropertyID::kColor,
+    CSSPropertyID::kFontFamily,
+    CSSPropertyID::kFontSize,
+    CSSPropertyID::kFontStyle,
+    CSSPropertyID::kFontVariantLigatures,
+    CSSPropertyID::kFontVariantCaps,
+    CSSPropertyID::kFontWeight,
+    CSSPropertyID::kLetterSpacing,
+    CSSPropertyID::kOrphans,
     CSSPropertyID::kTextAlign,
-    // FIXME: CSSPropertyID::kTextDecoration needs to be removed when CSS3 Text
-    // Decoration feature is no longer experimental.
-    CSSPropertyID::kTextDecoration, CSSPropertyID::kTextDecorationLine,
-    CSSPropertyID::kTextIndent, CSSPropertyID::kTextTransform,
-    CSSPropertyID::kWhiteSpace, CSSPropertyID::kWidows,
-    CSSPropertyID::kWordSpacing, CSSPropertyID::kWebkitTextDecorationsInEffect,
-    CSSPropertyID::kWebkitTextFillColor, CSSPropertyID::kWebkitTextStrokeColor,
-    CSSPropertyID::kWebkitTextStrokeWidth, CSSPropertyID::kCaretColor};
+    CSSPropertyID::kTextDecorationLine,
+    CSSPropertyID::kTextIndent,
+    CSSPropertyID::kTextTransform,
+    CSSPropertyID::kWidows,
+    CSSPropertyID::kWordSpacing,
+    CSSPropertyID::kWebkitTextDecorationsInEffect,
+    CSSPropertyID::kWebkitTextFillColor,
+    CSSPropertyID::kWebkitTextStrokeColor,
+    CSSPropertyID::kWebkitTextStrokeWidth,
+    CSSPropertyID::kCaretColor};
 
 enum EditingPropertiesType {
   kOnlyInheritableEditingProperties,
@@ -104,14 +111,17 @@ static const Vector<const CSSProperty*>& AllEditingProperties(
     const ExecutionContext* execution_context) {
   DEFINE_STATIC_LOCAL(Vector<const CSSProperty*>, properties, ());
   if (properties.empty()) {
+    properties.ReserveInitialCapacity(std::size(kStaticEditingProperties) + 2);
     CSSProperty::FilterWebExposedCSSPropertiesIntoVector(
         execution_context, kStaticEditingProperties,
         std::size(kStaticEditingProperties), properties);
-    for (wtf_size_t index = 0; index < properties.size(); index++) {
-      if (properties[index]->IDEquals(CSSPropertyID::kTextDecoration)) {
-        properties.EraseAt(index);
-        break;
-      }
+    // TODO(crbug.com/1417543): Move to `kStaticEditingProperties` when removing
+    // the runtime switch.
+    if (RuntimeEnabledFeatures::CSSWhiteSpaceShorthandEnabled()) {
+      properties.push_back(&GetCSSPropertyWhiteSpaceCollapse());
+      properties.push_back(&GetCSSPropertyTextWrap());
+    } else {
+      properties.push_back(&GetCSSPropertyWhiteSpace());
     }
   }
   return properties;
@@ -121,15 +131,13 @@ static const Vector<const CSSProperty*>& InheritableEditingProperties(
     const ExecutionContext* execution_context) {
   DEFINE_STATIC_LOCAL(Vector<const CSSProperty*>, properties, ());
   if (properties.empty()) {
-    CSSProperty::FilterWebExposedCSSPropertiesIntoVector(
-        execution_context, kStaticEditingProperties,
-        std::size(kStaticEditingProperties), properties);
-    for (wtf_size_t index = 0; index < properties.size();) {
-      if (!properties[index]->IsInherited()) {
-        properties.EraseAt(index);
-        continue;
+    const Vector<const CSSProperty*>& all =
+        AllEditingProperties(execution_context);
+    properties.ReserveInitialCapacity(all.size());
+    for (const CSSProperty* property : all) {
+      if (property->IsInherited()) {
+        properties.push_back(property);
       }
-      ++index;
     }
   }
   return properties;
@@ -598,7 +606,7 @@ void EditingStyle::Init(Node* node, PropertiesToInclude properties_to_include) {
           /* important */ false,
           node->GetExecutionContext()->GetSecureContextMode());
     }
-
+    RemoveForcedColorsIfNeeded(computed_style);
     RemoveInheritedColorsIfNeeded(computed_style);
     ReplaceFontSizeByKeywordIfPossible(
         computed_style, node->GetExecutionContext()->GetSecureContextMode(),
@@ -607,6 +615,16 @@ void EditingStyle::Init(Node* node, PropertiesToInclude properties_to_include) {
 
   is_monospace_font_ = computed_style_at_position->IsMonospaceFont();
   ExtractFontSizeDelta();
+}
+
+void EditingStyle::RemoveForcedColorsIfNeeded(
+    const ComputedStyle* computed_style) {
+  if (!computed_style->InForcedColorsMode()) {
+    return;
+  }
+  mutable_style_->RemoveProperty(CSSPropertyID::kColor);
+  mutable_style_->RemoveProperty(CSSPropertyID::kBackgroundColor);
+  mutable_style_->RemoveProperty(CSSPropertyID::kTextDecorationColor);
 }
 
 void EditingStyle::RemoveInheritedColorsIfNeeded(
@@ -1002,11 +1020,25 @@ bool EditingStyle::ConflictsWithInlineStyleOfElement(
   for (unsigned i = 0; i < property_count; ++i) {
     CSSPropertyID property_id = mutable_style_->PropertyAt(i).Id();
 
-    // We don't override whitespace property of a tab span because that would
-    // collapse the tab into a space.
-    if (property_id == CSSPropertyID::kWhiteSpace &&
-        IsTabHTMLSpanElement(element))
+    // We don't override `white-space-collapse` property of a tab span because
+    // that would collapse the tab into a space.
+    //
+    // Logically speaking, only `white-space-collapse` is needed (i.e.,
+    // `text-wrap` is not needed.) But including other longhands helps producing
+    // `white-space` instead of `white-space-collapse`. Because the snippet
+    // produced by this logic may be sent to other browsers by copy&paste,
+    // e-mail, etc., `white-space` is more interoperable when
+    // `white-space-collapse` is not broadly supported. See crbug.com/1417543
+    // and `editing/pasteboard/pasting-tabs.html`.
+    DCHECK_NE(property_id, CSSPropertyID::kAlternativeWhiteSpace);
+    const bool is_whitespace_property =
+        RuntimeEnabledFeatures::CSSWhiteSpaceShorthandEnabled()
+            ? property_id == CSSPropertyID::kWhiteSpaceCollapse ||
+                  property_id == CSSPropertyID::kTextWrap
+            : property_id == CSSPropertyID::kWhiteSpace;
+    if (is_whitespace_property && IsTabHTMLSpanElement(element)) {
       continue;
+    }
 
     if (property_id == CSSPropertyID::kWebkitTextDecorationsInEffect &&
         inline_style->GetPropertyCSSValue(CSSPropertyID::kTextDecorationLine)) {
@@ -1509,9 +1541,7 @@ static MutableCSSPropertyValueSet* StyleFromMatchedRulesForElement(
 
 void EditingStyle::MergeStyleFromRules(Element* element) {
   MutableCSSPropertyValueSet* style_from_matched_rules =
-      StyleFromMatchedRulesForElement(
-          element,
-          StyleResolver::kAuthorCSSRules | StyleResolver::kCrossOriginCSSRules);
+      StyleFromMatchedRulesForElement(element, StyleResolver::kAuthorCSSRules);
   // Styles from the inline style declaration, held in the variable "style",
   // take precedence over those from matched rules.
   if (mutable_style_)
@@ -1553,6 +1583,19 @@ void EditingStyle::MergeStyleFromRulesForSerialization(Element* element) {
     }
   }
   mutable_style_->MergeAndOverrideOnConflict(from_computed_style);
+
+ // There are some scenarios, like when copying rich text while in ForcedColors
+  // mode where we don't want to keep the ForcedColors styling, so that if it is
+  // pasted and sent to someone with no ForcedColors applied it does not affect
+  // their styling.
+  if (element->GetDocument().InForcedColorsMode()) {
+    mutable_style_->SetLonghandProperty(CSSPropertyID::kBackgroundColor,
+                                        CSSValueID::kInitial, false);
+    mutable_style_->SetLonghandProperty(CSSPropertyID::kColor,
+                                        CSSValueID::kInitial, false);
+    mutable_style_->SetLonghandProperty(CSSPropertyID::kTextDecorationColor,
+                                        CSSValueID::kInitial, false);
+  }
 }
 
 static void RemovePropertiesInStyle(
@@ -1716,11 +1759,17 @@ StyleChange::StyleChange(EditingStyle* style, const Position& position)
     ExtractTextStyles(document, mutable_style,
                       computed_style->IsMonospaceFont());
 
-  // Changing the whitespace style in a tab span would collapse the tab into a
-  // space.
-  if (IsTabHTMLSpanElementTextNode(position.AnchorNode()) ||
-      IsTabHTMLSpanElement((position.AnchorNode())))
-    mutable_style->RemoveProperty(CSSPropertyID::kWhiteSpace);
+  // Disables this use of `white-space` as this doesn't look effective any more.
+  // See crbug.com/1417543 and crrev.com/c/4289333.
+  if (!RuntimeEnabledFeatures::EditingStyleWhiteSpaceEnabled()) {
+    // Changing the whitespace style in a tab span would collapse the tab into a
+    // space.
+    if (IsTabHTMLSpanElementTextNode(position.AnchorNode()) ||
+        IsTabHTMLSpanElement((position.AnchorNode()))) {
+      mutable_style->RemoveProperty(CSSPropertyID::kWhiteSpace);
+      mutable_style->RemoveProperty(CSSPropertyID::kAlternativeWhiteSpace);
+    }
+  }
 
   // If unicode-bidi is present in mutableStyle and direction is not, then add
   // direction to mutableStyle.

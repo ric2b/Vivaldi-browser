@@ -33,7 +33,7 @@ class VivaldiFrameHostServiceImpl
 
  private:
   // Owner
-  content::RenderFrameHostImpl* const frame_host_;
+  const raw_ptr<content::RenderFrameHostImpl> frame_host_;
   mojo::Receiver<vivaldi::mojom::VivaldiFrameHostService> receiver_{this};
 };
 

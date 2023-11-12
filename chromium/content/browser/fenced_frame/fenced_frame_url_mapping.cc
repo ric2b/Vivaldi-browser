@@ -8,18 +8,18 @@
 #include <map>
 #include <string>
 
-#include "base/check_op.h"
 #include "base/functional/callback.h"
-#include "base/guid.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_util.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/types/id_type.h"
 #include "content/browser/fenced_frame/fenced_frame_reporter.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
-#include "third_party/blink/public/common/interest_group/ad_auction_constants.h"
+#include "third_party/blink/public/common/interest_group/ad_display_size.h"
+#include "third_party/blink/public/common/interest_group/ad_display_size_utils.h"
+#include "ui/display/screen.h"
 #include "url/gurl.h"
-#include "url/url_constants.h"
 
 namespace content {
 
@@ -57,9 +57,53 @@ std::string SubstituteMappedStrings(
   return base::StrCat(output_vec);
 }
 
+int AdSizeToPixels(double size, blink::AdSize::LengthUnit unit) {
+  switch (unit) {
+    case blink::AdSize::LengthUnit::kPixels:
+      return static_cast<int>(size);
+    case blink::AdSize::LengthUnit::kScreenWidth: {
+      double screen_width = display::Screen::GetScreen()
+                                ->GetPrimaryDisplay()
+                                .GetSizeInPixel()
+                                .width();
+      return static_cast<int>(size / 100.0 * screen_width);
+    }
+    case blink::AdSize::LengthUnit::kInvalid:
+      NOTREACHED_NORETURN();
+  }
+}
+
+gfx::Size AdSizeToGfxSize(const blink::AdSize& ad_size) {
+  int width_in_pixels = AdSizeToPixels(ad_size.width, ad_size.width_units);
+  int height_in_pixels = AdSizeToPixels(ad_size.height, ad_size.height_units);
+
+  return gfx::Size(width_in_pixels, height_in_pixels);
+}
+
+// TODO(crbug.com/1420638): Once the representation of size in fenced frame
+// config is finalized, change the type of substituted width and height to the
+// same.
+// Substitute the size macros in ad url with the size from the winning bid.
+GURL SubstituteSizeIntoURL(const blink::AdDescriptor& ad_descriptor) {
+  if (!ad_descriptor.size) {
+    return ad_descriptor.url;
+  }
+
+  // Convert dimensions to pixels.
+  gfx::Size size = AdSizeToGfxSize(ad_descriptor.size.value());
+
+  return GURL(SubstituteMappedStrings(
+      ad_descriptor.url.spec(),
+      {std::make_pair("{%AD_WIDTH%}", base::NumberToString(size.width())),
+       std::make_pair("{%AD_HEIGHT%}", base::NumberToString(size.height()))}));
+}
+
 }  // namespace
 
-FencedFrameURLMapping::FencedFrameURLMapping() = default;
+FencedFrameURLMapping::FencedFrameURLMapping() : unique_id_(GetNextId()) {
+  CHECK(unique_id_);
+}
+
 FencedFrameURLMapping::~FencedFrameURLMapping() = default;
 
 FencedFrameURLMapping::SharedStorageURNMappingResult::
@@ -118,6 +162,9 @@ absl::optional<GURL> FencedFrameURLMapping::AddFencedFrameURLForTesting(
   auto& [urn, config] = *it.value();
 
   config.fenced_frame_reporter_ = std::move(fenced_frame_reporter);
+  config.mode_ = blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds;
+  config.deprecated_should_freeze_initial_size_.emplace(
+      true, VisibilityToEmbedder::kTransparent, VisibilityToContent::kOpaque);
   return urn;
 }
 
@@ -140,14 +187,18 @@ FencedFrameURLMapping::AddMappingForUrl(const GURL& url) {
 blink::FencedFrame::RedactedFencedFrameConfig
 FencedFrameURLMapping::AssignFencedFrameURLAndInterestGroupInfo(
     const GURL& urn_uuid,
-    const GURL& url,
+    absl::optional<blink::AdSize> container_size,
+    const blink::AdDescriptor& ad_descriptor,
     AdAuctionData ad_auction_data,
     base::RepeatingClosure on_navigate_callback,
-    std::vector<GURL> ad_component_urls,
+    std::vector<blink::AdDescriptor> ad_component_descriptors,
     scoped_refptr<FencedFrameReporter> fenced_frame_reporter) {
   // Move pending mapped urn::uuid to `urn_uuid_to_url_map_`.
+  // TODO(crbug.com/1422301): Remove the check for whether `urn_uuid` has been
+  // mapped already once the crash is resolved.
+  CHECK(!IsMapped(urn_uuid));
   auto pending_it = pending_urn_uuid_to_url_map_.find(urn_uuid);
-  DCHECK(pending_it != pending_urn_uuid_to_url_map_.end());
+  CHECK(pending_it != pending_urn_uuid_to_url_map_.end());
   pending_urn_uuid_to_url_map_.erase(pending_it);
 
   bool emplaced = false;
@@ -157,28 +208,67 @@ FencedFrameURLMapping::AssignFencedFrameURLAndInterestGroupInfo(
   auto& config = urn_uuid_to_url_map_[urn_uuid];
 
   // Assign mapped URL and interest group info.
+  // TODO(crbug.com/1420638): Once the representation of size in fenced frame
+  // config is finalized, pass the ad size from the winning bid to its fenced
+  // frame config.
   config.urn_uuid_.emplace(urn_uuid);
-  config.mapped_url_.emplace(url, VisibilityToEmbedder::kOpaque,
+  config.mapped_url_.emplace(SubstituteSizeIntoURL(ad_descriptor),
+                             VisibilityToEmbedder::kOpaque,
                              VisibilityToContent::kTransparent);
+  if (container_size.has_value() &&
+      blink::IsValidAdSize(container_size.value())) {
+    gfx::Size container_gfx_size = AdSizeToGfxSize(container_size.value());
+    config.container_size_.emplace(container_gfx_size,
+                                   VisibilityToEmbedder::kTransparent,
+                                   VisibilityToContent::kOpaque);
+  }
+  if (ad_descriptor.size) {
+    gfx::Size content_size = AdSizeToGfxSize(ad_descriptor.size.value());
+    config.content_size_.emplace(content_size,
+                                 VisibilityToEmbedder::kTransparent,
+                                 VisibilityToContent::kTransparent);
+  }
   config.deprecated_should_freeze_initial_size_.emplace(
-      true, VisibilityToEmbedder::kTransparent, VisibilityToContent::kOpaque);
+      !ad_descriptor.size.has_value(), VisibilityToEmbedder::kTransparent,
+      VisibilityToContent::kOpaque);
   config.ad_auction_data_.emplace(std::move(ad_auction_data),
                                   VisibilityToEmbedder::kOpaque,
                                   VisibilityToContent::kOpaque);
   config.on_navigate_callback_ = std::move(on_navigate_callback);
 
   std::vector<FencedFrameConfig> nested_configs;
-  nested_configs.reserve(ad_component_urls.size());
-  for (auto& ad_component_url : ad_component_urls) {
+  nested_configs.reserve(ad_component_descriptors.size());
+  for (const auto& ad_component_descriptor : ad_component_descriptors) {
     // This config has no urn:uuid. It will later be set when being read into
     // `nested_urn_config_pairs` in `GenerateURNConfigVectorForConfigs()`.
-    nested_configs.emplace_back(ad_component_url);
+    // For an ad component, the `fenced_frame_reporter` from its parent fenced
+    // frame is reused. The pointer to its parent's fenced frame reporter is
+    // copied to each ad component. This has the advantage that we do not need
+    // to traverse to its parent every time we need its parent's reporter.
+    // TODO(crbug.com/1420638): Once the representation of size in fenced frame
+    // config is finalized, pass the ad component size from the winning bid to
+    // its fenced frame config.
+    if (ad_component_descriptor.size) {
+      gfx::Size component_content_size =
+          AdSizeToGfxSize(ad_component_descriptor.size.value());
+      nested_configs.emplace_back(
+          /*mapped_url=*/SubstituteSizeIntoURL(ad_component_descriptor),
+          /*content_size=*/component_content_size,
+          /*fenced_frame_reporter=*/fenced_frame_reporter,
+          /*is_ad_component=*/true);
+    } else {
+      nested_configs.emplace_back(
+          /*mapped_url=*/SubstituteSizeIntoURL(ad_component_descriptor),
+          /*fenced_frame_reporter=*/fenced_frame_reporter,
+          /*is_ad_component=*/true);
+    }
   }
   config.nested_configs_.emplace(std::move(nested_configs),
                                  VisibilityToEmbedder::kOpaque,
                                  VisibilityToContent::kTransparent);
 
   config.fenced_frame_reporter_ = std::move(fenced_frame_reporter);
+  config.mode_ = blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds;
 
   return config.RedactFor(FencedFrameEntity::kEmbedder);
 }
@@ -189,8 +279,8 @@ absl::optional<GURL> FencedFrameURLMapping::GeneratePendingMappedURN() {
   }
 
   GURL urn_uuid = GenerateUrnUuid();
-  DCHECK(!IsMapped(urn_uuid));
-  DCHECK(!IsPendingMapped(urn_uuid));
+  CHECK(!IsMapped(urn_uuid));
+  CHECK(!IsPendingMapped(urn_uuid));
 
   pending_urn_uuid_to_url_map_.emplace(
       urn_uuid, std::set<raw_ptr<MappingResultObserver>>());
@@ -250,6 +340,7 @@ FencedFrameURLMapping::OnSharedStorageURNMappingResultDetermined(
     config = FencedFrameConfig(urn_uuid, mapping_result.mapped_url,
                                mapping_result.budget_metadata,
                                std::move(mapping_result.fenced_frame_reporter));
+    config->mode_ = blink::FencedFrame::DeprecatedFencedFrameMode::kOpaqueAds;
     urn_uuid_to_url_map_.emplace(urn_uuid, *config);
   }
 
@@ -261,7 +352,7 @@ FencedFrameURLMapping::OnSharedStorageURNMappingResultDetermined(
     properties = FencedFrameProperties(final_it->second);
   }
 
-  for (raw_ptr<MappingResultObserver> observer : observers) {
+  for (MappingResultObserver* observer : observers) {
     observer->OnFencedFrameURLMappingComplete(properties);
   }
 
@@ -311,6 +402,12 @@ void FencedFrameURLMapping::SubstituteMappedURL(
     }
   }
   it->second = std::move(info);
+}
+
+// static
+FencedFrameURLMapping::Id FencedFrameURLMapping::GetNextId() {
+  static Id::Generator generator;
+  return generator.GenerateNextId();
 }
 
 bool FencedFrameURLMapping::IsMapped(const GURL& urn_uuid) const {

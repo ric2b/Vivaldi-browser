@@ -13,9 +13,10 @@ import static org.chromium.chrome.features.start_surface.StartSurfaceTestUtils.c
 
 import android.app.Activity;
 import android.content.Intent;
-import android.support.test.InstrumentationRegistry;
 import android.text.TextUtils;
 
+import androidx.test.InstrumentationRegistry;
+import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Assert;
@@ -51,6 +52,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.features.start_surface.StartSurfaceTestUtils;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
@@ -178,8 +180,7 @@ public class ReturnToChromeUtilTest {
     @SmallTest
     @Feature({"ReturnToChrome", "RenderTest"})
     // clang-format off
-    @CommandLineFlags.Add({BASE_PARAMS + "/" + START_SURFACE_RETURN_TIME_SECONDS_PARAM + "/0"
-            + "/start_surface_variation/single"})
+    @CommandLineFlags.Add({BASE_PARAMS})
     @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
     @DisabledTest(message = "https://crbug.com/1023079, crbug.com/1063984")
     public void testInitialScrollIndex() throws Exception {
@@ -187,8 +188,8 @@ public class ReturnToChromeUtilTest {
         // Instant start is not applicable since we need to create tabs and restart.
         assumeTrue(!mUseInstantStart);
 
-        EmbeddedTestServer testServer =
-                EmbeddedTestServer.createAndStartServer(InstrumentationRegistry.getContext());
+        EmbeddedTestServer testServer = EmbeddedTestServer.createAndStartServer(
+                ApplicationProvider.getApplicationContext());
         String url = testServer.getURL("/chrome/test/data/android/about.html");
 
         mActivityTestRule.startMainActivityOnBlankPage();
@@ -212,8 +213,7 @@ public class ReturnToChromeUtilTest {
         assertEquals(10, mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount());
         assertEquals(9, mActivityTestRule.getActivity().getCurrentTabModel().index());
         // Make sure the grid tab switcher is scrolled down to show the selected tab.
-        mRenderTestRule.render(mActivityTestRule.getActivity().findViewById(
-                                       org.chromium.chrome.tab_ui.R.id.tab_list_view),
+        mRenderTestRule.render(mActivityTestRule.getActivity().findViewById(R.id.tab_list_view),
                 "10_web_tabs-select_last");
     }
 
@@ -256,7 +256,10 @@ public class ReturnToChromeUtilTest {
                 ()
                         -> new ReturnToChromeBackPressHandler(
                                 mActivityTestRule.getActivity().getActivityTabProvider(),
-                                () -> {}));
+                                ()
+                                        -> {},
+                                mActivityTestRule.getActivity()::getActivityTab,
+                                mActivityTestRule.getActivity()::getLayoutManager));
     }
 
     private void waitTabModelRestoration() {

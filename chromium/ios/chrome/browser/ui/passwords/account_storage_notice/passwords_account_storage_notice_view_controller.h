@@ -31,11 +31,10 @@
     : ConfirmationAlertViewController
 
 - (instancetype)initWithActionHandler:
-                    (id<PasswordsAccountStorageNoticeActionHandler>)
-                        actionHandler
-              accountStoringPasswords:(NSString*)accountStoringPasswords
+    (id<PasswordsAccountStorageNoticeActionHandler>)actionHandler
     NS_DESIGNATED_INITIALIZER;
 
+- (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithNibName:(NSString*)name
                          bundle:(NSBundle*)bundle NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;

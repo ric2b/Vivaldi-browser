@@ -56,10 +56,13 @@ import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
 import static org.chromium.content_public.browser.ActionModeCallbackHelper.MAX_SEARCH_QUERY_LENGTH;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
+
+// Vivaldi
+import org.chromium.base.task.TaskTraits;
 import org.vivaldi.browser.common.VivaldiIntentHandler;
 import org.vivaldi.browser.common.VivaldiUtils;
 
@@ -313,7 +316,7 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
                 .setPositiveButton(R.string.search,
                             (dialog, which) -> {
                                 camera.stopPreview();
-                                PostTask.postTask(UiThreadTaskTraits.DEFAULT, new Runnable() {
+                                PostTask.postTask(TaskTraits.UI_DEFAULT, new Runnable() {
                                     @Override
                                     public void run() {
                                         String query =
@@ -324,7 +327,9 @@ public class QrCodeScanMediator implements Camera.PreviewCallback {
                                             TemplateUrlService.PostParams postParams =
                                                     new TemplateUrlService.PostParams();
                                             String searchUrl =
-                                                    TemplateUrlServiceFactory.get()
+                                                    TemplateUrlServiceFactory
+                                                            .getForProfile(
+                                                                    Profile.getLastUsedRegularProfile())
                                                             .getUrlForSearchQuery(query, null,
                                                                     postParams,
                                                                     TemplateUrlService

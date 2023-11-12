@@ -5,8 +5,10 @@
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_view_controller.h"
 
 #import "base/check.h"
+#import "ios/chrome/common/button_configuration_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/confirmation_alert/confirmation_alert_action_handler.h"
+#import "ios/chrome/common/ui/confirmation_alert/constants.h"
 #import "ios/chrome/common/ui/elements/gradient_view.h"
 #import "ios/chrome/common/ui/util/button_util.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -16,21 +18,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-NSString* const kConfirmationAlertMoreInfoAccessibilityIdentifier =
-    @"kConfirmationAlertMoreInfoAccessibilityIdentifier";
-NSString* const kConfirmationAlertTitleAccessibilityIdentifier =
-    @"kConfirmationAlertTitleAccessibilityIdentifier";
-NSString* const kConfirmationAlertSecondaryTitleAccessibilityIdentifier =
-    @"kConfirmationAlertSecondaryTitleAccessibilityIdentifier";
-NSString* const kConfirmationAlertSubtitleAccessibilityIdentifier =
-    @"kConfirmationAlertSubtitleAccessibilityIdentifier";
-NSString* const kConfirmationAlertPrimaryActionAccessibilityIdentifier =
-    @"kConfirmationAlertPrimaryActionAccessibilityIdentifier";
-NSString* const kConfirmationAlertSecondaryActionAccessibilityIdentifier =
-    @"kConfirmationAlertSecondaryActionAccessibilityIdentifier";
-NSString* const kConfirmationAlertTertiaryActionAccessibilityIdentifier =
-    @"kConfirmationAlertTertiaryActionAccessibilityIdentifier";
 
 namespace {
 
@@ -87,10 +74,24 @@ const CGFloat kFaviconBadgeSideLength = 24;
 
 #pragma mark - Public
 
+- (UISheetPresentationControllerDetent*)preferredHeightDetent {
+  __typeof(self) __weak weakSelf = self;
+  auto resolver = ^CGFloat(
+      id<UISheetPresentationControllerDetentResolutionContext> context) {
+    return [weakSelf detentForPreferredHeightInContext:context];
+  };
+  return [UISheetPresentationControllerDetent
+      customDetentWithIdentifier:@"preferred_height"
+                        resolver:resolver];
+}
+
 - (instancetype)init {
-  self = [super init];
+  self = [super initWithNibName:nil bundle:nil];
   if (self) {
     _customSpacingAfterImage = kStackViewSpacingAfterIllustration;
+    _customSpacing = kStackViewSpacing;
+    _showsVerticalScrollIndicator = YES;
+    _scrollEnabled = YES;
     _showDismissBarButton = YES;
     _dismissBarButtonSystemItem = UIBarButtonSystemItemDone;
   }
@@ -116,16 +117,27 @@ const CGFloat kFaviconBadgeSideLength = 24;
     self.imageContainerView = self.imageView;
   }
 
-  UILabel* title = [self createTitleLabel];
-  UITextView* subtitle = [self createSubtitleView];
+  NSMutableArray* stackSubviews = [[NSMutableArray alloc] init];
 
-  NSArray* stackSubviews = nil;
-  if ([self.secondaryTitleString length] != 0) {
+  [stackSubviews addObject:self.imageContainerView];
+
+  if (self.titleString.length) {
+    UILabel* title = [self createTitleLabel];
+    [stackSubviews addObject:title];
+  }
+
+  if (self.secondaryTitleString.length) {
     UITextView* secondaryTitle = [self createSecondaryTitleView];
-    stackSubviews =
-        @[ self.imageContainerView, title, secondaryTitle, subtitle ];
-  } else {
-    stackSubviews = @[ self.imageContainerView, title, subtitle ];
+    [stackSubviews addObject:secondaryTitle];
+  }
+
+  if (self.subtitleString.length) {
+    UITextView* subtitle = [self createSubtitleView];
+    [stackSubviews addObject:subtitle];
+  }
+
+  if (self.underTitleView) {
+    [stackSubviews addObject:self.underTitleView];
   }
 
   DCHECK(stackSubviews);
@@ -464,6 +476,13 @@ const CGFloat kFaviconBadgeSideLength = 24;
   _imageView.image = image;
 }
 
+- (void)setScrollEnabled:(BOOL)scrollEnabled {
+  _scrollEnabled = scrollEnabled;
+  if (_scrollView) {
+    _scrollView.scrollEnabled = _scrollEnabled;
+  }
+}
+
 // Helper to create the image view.
 - (UIImageView*)createImageView {
   UIImageView* imageView = [[UIImageView alloc] initWithImage:self.image];
@@ -613,7 +632,9 @@ const CGFloat kFaviconBadgeSideLength = 24;
   scrollView.alwaysBounceVertical = NO;
   scrollView.showsHorizontalScrollIndicator = NO;
   scrollView.translatesAutoresizingMaskIntoConstraints = NO;
-  [scrollView setShowsVerticalScrollIndicator:YES];
+  scrollView.scrollEnabled = self.scrollEnabled;
+  [scrollView
+      setShowsVerticalScrollIndicator:self.showsVerticalScrollIndicator];
   return scrollView;
 }
 
@@ -643,7 +664,7 @@ const CGFloat kFaviconBadgeSideLength = 24;
 
   stackView.axis = UILayoutConstraintAxisVertical;
   stackView.translatesAutoresizingMaskIntoConstraints = NO;
-  stackView.spacing = kStackViewSpacing;
+  stackView.spacing = self.customSpacing;
   return stackView;
 }
 
@@ -662,10 +683,10 @@ const CGFloat kFaviconBadgeSideLength = 24;
     self.secondaryActionButton = [self createSecondaryActionButton];
     [actionStackView addArrangedSubview:self.secondaryActionButton];
   }
-
+  // Tertiary button should show above the primary one.
   if (self.tertiaryActionString) {
     self.tertiaryActionButton = [self createTertiaryButton];
-    [actionStackView addArrangedSubview:self.tertiaryActionButton];
+    [actionStackView insertArrangedSubview:self.tertiaryActionButton atIndex:0];
   }
   return actionStackView;
 }
@@ -695,14 +716,19 @@ const CGFloat kFaviconBadgeSideLength = 24;
                   forControlEvents:UIControlEventTouchUpInside];
   [secondaryActionButton setTitle:self.secondaryActionString
                          forState:UIControlStateNormal];
-  secondaryActionButton.contentEdgeInsets =
-      UIEdgeInsetsMake(kButtonVerticalInsets, 0, kButtonVerticalInsets, 0);
   [secondaryActionButton setBackgroundColor:[UIColor clearColor]];
   UIColor* titleColor = [UIColor colorNamed:self.secondaryActionTextColor
                                                 ? self.secondaryActionTextColor
                                                 : kBlueColor];
   [secondaryActionButton setTitleColor:titleColor
                               forState:UIControlStateNormal];
+
+  // TODO(crbug.com/1418068): Replace with UIButtonConfiguration when min
+  // deployment target is iOS 15.
+  UIEdgeInsets contentInsets =
+      UIEdgeInsetsMake(kButtonVerticalInsets, 0, kButtonVerticalInsets, 0);
+  SetContentEdgeInsets(secondaryActionButton, contentInsets);
+
   secondaryActionButton.titleLabel.font =
       [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
   secondaryActionButton.titleLabel.adjustsFontForContentSizeCategory = NO;
@@ -726,8 +752,13 @@ const CGFloat kFaviconBadgeSideLength = 24;
                  forControlEvents:UIControlEventTouchUpInside];
   [tertiaryActionButton setTitle:self.tertiaryActionString
                         forState:UIControlStateNormal];
-  tertiaryActionButton.contentEdgeInsets =
+
+  // TODO(crbug.com/1418068): Replace with UIButtonConfiguration when min
+  // deployment target is iOS 15.
+  UIEdgeInsets contentInsets =
       UIEdgeInsetsMake(kButtonVerticalInsets, 0, kButtonVerticalInsets, 0);
+  SetContentEdgeInsets(tertiaryActionButton, contentInsets);
+
   [tertiaryActionButton setBackgroundColor:[UIColor clearColor]];
   UIColor* titleColor = [UIColor colorNamed:kBlueColor];
   [tertiaryActionButton setTitleColor:titleColor forState:UIControlStateNormal];
@@ -743,6 +774,44 @@ const CGFloat kFaviconBadgeSideLength = 24;
       CreateOpaqueButtonPointerStyleProvider();
 
   return tertiaryActionButton;
+}
+
+- (CGFloat)detentForPreferredHeightInContext:
+    (id<UISheetPresentationControllerDetentResolutionContext>)context
+    API_AVAILABLE(ios(16)) {
+  // Only activate this detent in portrait orientation on iPhone.
+  UITraitCollection* traitCollection = context.containerTraitCollection;
+  if (traitCollection.horizontalSizeClass != UIUserInterfaceSizeClassCompact ||
+      traitCollection.verticalSizeClass != UIUserInterfaceSizeClassRegular) {
+    return UISheetPresentationControllerDetentInactive;
+  }
+
+  // Obtain container view from presentation controller directly because
+  // this view may not have been added to its container view yet.
+  UIView* containerView = self.sheetPresentationController.containerView;
+
+  // Measure compressed height without safe area inset (detent values are
+  // generally expressed without safe area insets).
+  CGFloat fittingWidth = containerView.bounds.size.width;
+  CGSize fittingSize =
+      CGSizeMake(fittingWidth, UILayoutFittingCompressedSize.height);
+  CGFloat height = [self.view systemLayoutSizeFittingSize:fittingSize].height;
+  height -= containerView.safeAreaInsets.bottom;
+
+  // Replace bottom margin calculated based on view's own safe area with bottom
+  // margin calculated based on the safe area of the container view it will
+  // eventually live in. This is needed in case the detent value is requested
+  // before the view has been added to its superview.
+  height -= MAX(kActionsBottomMargin, self.view.safeAreaInsets.bottom);
+  height += MAX(kActionsBottomMargin, containerView.safeAreaInsets.bottom);
+
+  // Make sure detent is not larger than 75% of the maximum detent value but at
+  // least as large as a standard medium detent.
+  height = MIN(height, 0.75 * context.maximumDetentValue);
+  CGFloat mediumDetentHeight = [UISheetPresentationControllerDetent.mediumDetent
+      resolvedValueInContext:context];
+  height = MAX(height, mediumDetentHeight);
+  return height;
 }
 
 @end

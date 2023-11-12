@@ -23,6 +23,7 @@ DictationBubbleController::DictationBubbleController() {
 }
 
 DictationBubbleController::~DictationBubbleController() {
+  input_method_observer_.Reset();
   if (widget_ && !widget_->IsClosed())
     widget_->CloseNow();
 }
@@ -35,6 +36,10 @@ void DictationBubbleController::UpdateBubble(
   MaybeInitialize();
   Update(icon, text, hints);
   visible ? widget_->Show() : widget_->Hide();
+
+  for (Observer& observer : observers_) {
+    observer.OnBubbleUpdated();
+  }
 }
 
 void DictationBubbleController::OnCaretBoundsChanged(
@@ -98,10 +103,6 @@ void DictationBubbleController::Update(
           widget_->GetNativeWindow()),
       new_bounds, CollisionDetectionUtils::RelativePriority::kDictationBubble);
   widget_->SetBounds(resting_bounds);
-
-  for (Observer& observer : observers_) {
-    observer.OnBubbleUpdated();
-  }
 }
 
 void DictationBubbleController::AddObserver(Observer* observer) {

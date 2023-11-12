@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -220,6 +221,11 @@ class AttestationClientImpl : public AttestationClient {
                     std::move(callback));
   }
 
+  void WaitForServiceToBeAvailable(
+      chromeos::WaitForServiceToBeAvailableCallback callback) override {
+    proxy_->WaitForServiceToBeAvailable(std::move(callback));
+  }
+
   void Init(dbus::Bus* bus) {
     proxy_ = bus->GetObjectProxy(
         ::attestation::kAttestationServiceName,
@@ -281,7 +287,7 @@ class AttestationClientImpl : public AttestationClient {
   }
 
   // D-Bus proxy for the Attestation daemon, not owned.
-  dbus::ObjectProxy* proxy_ = nullptr;
+  raw_ptr<dbus::ObjectProxy, ExperimentalAsh> proxy_ = nullptr;
 
   base::WeakPtrFactory<AttestationClientImpl> weak_factory_{this};
 };

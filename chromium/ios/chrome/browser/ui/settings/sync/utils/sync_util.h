@@ -7,8 +7,10 @@
 
 #import <Foundation/Foundation.h>
 
-#include "components/sync/driver/sync_service.h"
+#import "components/sync/driver/sync_service.h"
+#import "google_apis/gaia/google_service_auth_error.h"
 
+@class AccountErrorUIInfo;
 class ChromeBrowserState;
 @protocol SyncPresenter;
 
@@ -20,6 +22,10 @@ class WebState;
 // of `syncService`. Returns nil if there is no sync error.
 NSString* GetSyncErrorDescriptionForSyncService(
     syncer::SyncService* syncService);
+
+// Gets the title of the Sync error info bar.
+std::u16string GetSyncErrorInfoBarTitleForBrowserState(
+    ChromeBrowserState* browserState);
 
 // Gets the string message associated with the sync error state of
 // `browserState`. The returned error message does not contain any links.

@@ -9,6 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "chrome/browser/ui/url_identity.h"
 #include "chrome/browser/ui/views/permissions/permission_prompt_style.h"
 #include "components/permissions/permission_prompt.h"
 #include "components/permissions/permission_util.h"
@@ -22,12 +23,15 @@ enum class RequestType;
 
 class Browser;
 
+constexpr int DISTANCE_BUTTON_VERTICAL = 12;
+
 // Bubble that prompts the user to grant or deny a permission request from a
 // website.
 class PermissionPromptBubbleView : public views::BubbleDialogDelegateView {
  public:
   METADATA_HEADER(PermissionPromptBubbleView);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kPermissionPromptBubbleViewIdentifier);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kAllowButtonElementId);
   PermissionPromptBubbleView(
       Browser* browser,
       base::WeakPtr<permissions::PermissionPrompt::Delegate> delegate,
@@ -72,10 +76,10 @@ class PermissionPromptBubbleView : public views::BubbleDialogDelegateView {
 
   PermissionPromptStyle prompt_style_;
 
-  const std::u16string display_name_;
+  const bool is_one_time_permission_;
+  const UrlIdentity url_identity_;
   const std::u16string accessible_window_title_;
   const std::u16string window_title_;
-  const bool is_display_name_origin_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_PERMISSIONS_PERMISSION_PROMPT_BUBBLE_VIEW_H_

@@ -28,6 +28,7 @@ import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 import org.chromium.base.IntentUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.SynchronousInitializationActivity;
+import org.chromium.chrome.browser.bookmarks.BookmarkFolderRow;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkModelObserver;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
@@ -36,7 +37,6 @@ import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
-import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -217,7 +217,10 @@ public class BookmarkFolderSelectActivity
 
     private void updateFolderList() {
         List<BookmarkId> folderList = new ArrayList<>();
-        folderList.add(mModel.getReadingListFolder());
+        // Reading List doesn't support folders as children.
+        if (!mIsCreatingFolder) {
+            folderList.add(mModel.getReadingListFolder());
+        }
         List<Integer> depthList = new ArrayList<>();
         depthList.add(0);
         mModel.getMoveDestinations(folderList, depthList, mBookmarksToMove);
@@ -231,6 +234,7 @@ public class BookmarkFolderSelectActivity
         FolderListEntry scrollToEntry = null;
         for (int i = 0; i < folderList.size(); i++) {
             BookmarkId folder = folderList.get(i);
+
             if (!mModel.isFolderVisible(folder)) continue;
 
             String title = mModel.getBookmarkById(folder).getTitle();
@@ -492,7 +496,7 @@ public class BookmarkFolderSelectActivity
             if (ChromeApplicationImpl.isVivaldi())
                 startIcon.setImageDrawable(iconDrawable);
             else
-            SelectableItemView.applyModernIconStyle(startIcon, iconDrawable, entry.mIsSelected);
+            BookmarkFolderRow.applyModernIconStyle(startIcon, iconDrawable, entry.mIsSelected);
         }
 
         /**

@@ -14,20 +14,42 @@
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
+#include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkColorType.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkPixmap.h"
+#include "third_party/skia/include/core/SkPromiseImageTexture.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkSurfaceProps.h"
+#include "third_party/skia/include/core/SkTextureCompressionType.h"
 
 namespace gpu {
 
+namespace {
+
+// Given a debug label string from the client, construct a string we can pass to
+// debugging tools.
+std::string GetLabel(const std::string& debug_label) {
+  return std::string("WrappedSkImage_" + debug_label);
+}
+
+}  // namespace
+
 class WrappedSkImageBacking::SkiaImageRepresentationImpl
-    : public SkiaImageRepresentation {
+    : public SkiaGaneshImageRepresentation {
  public:
   SkiaImageRepresentationImpl(SharedImageManager* manager,
                               SharedImageBacking* backing,
                               MemoryTypeTracker* tracker,
                               scoped_refptr<SharedContextState> context_state)
-      : SkiaImageRepresentation(manager, backing, tracker),
+      : SkiaGaneshImageRepresentation(context_state->gr_context(),
+                                      manager,
+                                      backing,
+                                      tracker),
         context_state_(std::move(context_state)) {}
 
   ~SkiaImageRepresentationImpl() override { DCHECK(write_surfaces_.empty()); }
@@ -60,7 +82,12 @@ class WrappedSkImageBacking::SkiaImageRepresentationImpl
       write_surface->getCanvas()->restoreToCount(1);
     }
     write_surfaces_.clear();
-    DCHECK(wrapped_sk_image()->SkSurfacesAreUnique(context_state_));
+
+#if DCHECK_IS_ON()
+    for (auto& promise_texture : wrapped_sk_image()->GetPromiseTextures()) {
+      DCHECK(context_state_->CachedSkSurfaceIsUnique(promise_texture.get()));
+    }
+#endif
   }
 
   std::vector<sk_sp<SkPromiseImageTexture>> BeginReadAccess(
@@ -161,7 +188,7 @@ WrappedSkImageBacking::~WrappedSkImageBacking() {
   }
 }
 
-bool WrappedSkImageBacking::Initialize() {
+bool WrappedSkImageBacking::Initialize(const std::string& debug_label) {
   DCHECK(!format().IsCompressed());
 
   // MakeCurrent to avoid destroying another client's state because Skia may
@@ -173,14 +200,15 @@ bool WrappedSkImageBacking::Initialize() {
 
   auto mipmap = usage() & SHARED_IMAGE_USAGE_MIPMAP ? GrMipMapped::kYes
                                                     : GrMipMapped::kNo;
-  const std::string label = "WrappedSkImageBackingFactory_Initialize" +
-                            CreateLabelForSharedImageUsage(usage());
 
   int num_planes = format().NumberOfPlanes();
   textures_.resize(num_planes);
   for (int plane = 0; plane < num_planes; ++plane) {
     auto& texture = textures_[plane];
     gfx::Size plane_size = format().GetPlaneSize(plane, size());
+
+    constexpr GrRenderable is_renderable = GrRenderable::kYes;
+    constexpr GrProtected is_protected = GrProtected::kNo;
 #if DCHECK_IS_ON() && !BUILDFLAG(IS_LINUX)
     // Blue for single-planar and magenta-ish for multi-planar.
     SkColor4f fallback_color =
@@ -196,13 +224,13 @@ bool WrappedSkImageBacking::Initialize() {
     texture.backend_texture =
         context_state_->gr_context()->createBackendTexture(
             plane_size.width(), plane_size.height(), GetSkColorType(plane),
-            fallback_color, mipmap, GrRenderable::kYes, GrProtected::kNo,
-            nullptr, nullptr, label);
+            fallback_color, mipmap, is_renderable, is_protected, nullptr,
+            nullptr, GetLabel(debug_label));
 #else
     texture.backend_texture =
         context_state_->gr_context()->createBackendTexture(
             plane_size.width(), plane_size.height(), GetSkColorType(plane),
-            mipmap, GrRenderable::kYes, GrProtected::kNo, label);
+            mipmap, is_renderable, is_protected, GetLabel(debug_label));
 #endif
 
     if (!texture.backend_texture.isValid()) {
@@ -218,7 +246,8 @@ bool WrappedSkImageBacking::Initialize() {
   return true;
 }
 
-bool WrappedSkImageBacking::InitializeWithData(base::span<const uint8_t> pixels,
+bool WrappedSkImageBacking::InitializeWithData(const std::string& debug_label,
+                                               base::span<const uint8_t> pixels,
                                                size_t stride) {
   DCHECK(format().is_single_plane());
   DCHECK(pixels.data());
@@ -234,21 +263,19 @@ bool WrappedSkImageBacking::InitializeWithData(base::span<const uint8_t> pixels,
   if (format().IsCompressed()) {
     textures_[0].backend_texture =
         context_state_->gr_context()->createCompressedBackendTexture(
-            size().width(), size().height(), SkImage::kETC1_CompressionType,
-            pixels.data(), pixels.size(), GrMipMapped::kNo, GrProtected::kNo);
+            size().width(), size().height(),
+            SkTextureCompressionType::kETC1_RGB8, pixels.data(), pixels.size(),
+            GrMipMapped::kNo, GrProtected::kNo);
   } else {
     auto info = AsSkImageInfo();
     if (!stride) {
       stride = info.minRowBytes();
     }
     SkPixmap pixmap(info, pixels.data(), stride);
-    const std::string label =
-        "WrappedSkImageBackingFactory_InitializeWithData" +
-        CreateLabelForSharedImageUsage(usage());
     textures_[0].backend_texture =
         context_state_->gr_context()->createBackendTexture(
             pixmap, GrRenderable::kYes, GrProtected::kNo, nullptr, nullptr,
-            label);
+            GetLabel(debug_label));
   }
 
   if (!textures_[0].backend_texture.isValid()) {
@@ -364,23 +391,8 @@ std::vector<sk_sp<SkSurface>> WrappedSkImageBacking::GetSkSurfaces(
   return surfaces;
 }
 
-bool WrappedSkImageBacking::SkSurfacesAreUnique(
-    scoped_refptr<SharedContextState> context_state) {
-  // This method should only be called on the same thread on which this
-  // backing is created on. Hence adding a dcheck on context_state to ensure
-  // this.
-  DCHECK_EQ(context_state_, context_state);
-  for (auto& texture : textures_) {
-    DCHECK(texture.promise_texture);
-    if (!context_state_->CachedSkSurfaceIsUnique(
-            texture.promise_texture.get())) {
-      return false;
-    }
-  }
-  return true;
-}
-
-std::unique_ptr<SkiaImageRepresentation> WrappedSkImageBacking::ProduceSkia(
+std::unique_ptr<SkiaGaneshImageRepresentation>
+WrappedSkImageBacking::ProduceSkiaGanesh(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     scoped_refptr<SharedContextState> context_state) {

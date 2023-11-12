@@ -26,11 +26,9 @@ std::string PpapiPluginSandboxedProcessLauncherDelegate::GetSandboxTag() {
       "ppapi", GetSandboxType());
 }
 
-bool PpapiPluginSandboxedProcessLauncherDelegate::PreSpawnTarget(
-    sandbox::TargetPolicy* policy) {
-  sandbox::TargetConfig* config = policy->GetConfig();
-  if (config->IsConfigured())
-    return true;
+bool PpapiPluginSandboxedProcessLauncherDelegate::InitializeConfig(
+    sandbox::TargetConfig* config) {
+  DCHECK(!config->IsConfigured());
 
   // The Pepper process is as locked-down as a renderer except that it can
   // create the server side of Chrome pipes.
@@ -48,6 +46,10 @@ bool PpapiPluginSandboxedProcessLauncherDelegate::PreSpawnTarget(
   if (sandbox::SBOX_ALL_OK != config->SetDelayedProcessMitigations(flags))
     return false;
 
+  return true;
+}
+
+bool PpapiPluginSandboxedProcessLauncherDelegate::AllowWindowsFontsDir() {
   return true;
 }
 #endif  // BUILDFLAG(IS_WIN)

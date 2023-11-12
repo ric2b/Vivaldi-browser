@@ -15,6 +15,7 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/highlight_border.h"
 
 namespace aura {
 class Window;
@@ -186,14 +187,9 @@ void ConfigLabelView(views::Label* label_view);
 // Initializes the box layout for the `view` in the settings menu.
 views::BoxLayout* CreateAndInitBoxLayoutForView(views::View* view);
 
-// Gets the notification ID of a screen capture given its filepath.
-ASH_EXPORT std::string GetScreenCaptureNotificationIdForPath(
-    const base::FilePath& path);
-
-// If the privacy indicators feature is enabled, the below functions update the
-// camera and microphone capture mode indicators according to the given values.
-void MaybeUpdateCameraPrivacyIndicator(bool camera_on);
-void MaybeUpdateMicrophonePrivacyIndicator(bool mic_on);
+// If the privacy indicators feature is enabled, the below function update the
+// camera and microphone capture mode indicators according to the current state.
+void MaybeUpdateCaptureModePrivacyIndicators();
 
 ui::ColorProvider* GetColorProviderForNativeTheme();
 
@@ -212,6 +208,12 @@ ASH_EXPORT gfx::Rect CalculateHighlightLayerBounds(
 // Returns the number of currently supported recording types. The value may
 // differ based on whether `is_in_projector_mode` is true or false.
 int GetNumberOfSupportedRecordingTypes(bool is_in_projector_mode);
+
+// Sets a highlight border to the `view` with given rounded corner radius and
+// type.
+void SetHighlightBorder(views::View* view,
+                        int corner_radius,
+                        views::HighlightBorder::Type type);
 
 }  // namespace capture_mode_util
 

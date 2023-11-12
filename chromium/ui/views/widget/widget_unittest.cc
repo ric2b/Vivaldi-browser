@@ -23,6 +23,7 @@
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_provider_manager.h"
+#include "ui/color/color_recipe.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -43,6 +44,8 @@
 #include "ui/views/event_monitor.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/style/platform_style.h"
+#include "ui/views/test/mock_drag_controller.h"
+#include "ui/views/test/mock_native_widget.h"
 #include "ui/views/test/native_widget_factory.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/test/test_widget_observer.h"
@@ -53,6 +56,8 @@
 #include "ui/views/widget/native_widget_delegate.h"
 #include "ui/views/widget/native_widget_private.h"
 #include "ui/views/widget/root_view.h"
+#include "ui/views/widget/unique_widget_ptr.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_deletion_observer.h"
 #include "ui/views/widget/widget_interactive_uitest_utils.h"
 #include "ui/views/widget/widget_removals_observer.h"
@@ -434,6 +439,75 @@ TEST_F(WidgetWithCustomParamsTest, SkottieColorsTest) {
   EXPECT_EQ(contents2->history[2u], contents4->history[1u]);
 }
 #endif
+
+class WidgetColorModeTest : public WidgetTest {
+ public:
+  static constexpr SkColor kLightColor = SK_ColorWHITE;
+  static constexpr SkColor kDarkColor = SK_ColorBLACK;
+
+  WidgetColorModeTest() = default;
+  ~WidgetColorModeTest() override = default;
+
+  void SetUp() override {
+    WidgetTest::SetUp();
+
+    // Setup color provider for the ui::kColorSysPrimary color.
+    ui::ColorProviderManager& manager =
+        ui::ColorProviderManager::GetForTesting();
+    manager.AppendColorProviderInitializer(base::BindRepeating(&AddColor));
+  }
+
+  void TearDown() override {
+    ui::ColorProviderManager::ResetForTesting();
+    WidgetTest::TearDown();
+  }
+
+ private:
+  static void AddColor(ui::ColorProvider* provider,
+                       const ui::ColorProviderManager::Key& key) {
+    ui::ColorMixer& mixer = provider->AddMixer();
+    mixer[ui::kColorSysPrimary] = {
+        key.color_mode == ui::ColorProviderManager::ColorMode::kDark
+            ? kDarkColor
+            : kLightColor};
+  }
+};
+
+TEST_F(WidgetColorModeTest, ColorModeOverride_NoOverride) {
+  ui::TestNativeTheme test_theme;
+  WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
+  test_theme.SetDarkMode(true);
+  widget->SetNativeThemeForTest(&test_theme);
+
+  widget->SetColorModeOverride({});
+  // Verify that we resolve the dark color when we don't override color mode.
+  EXPECT_EQ(kDarkColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+}
+
+TEST_F(WidgetColorModeTest, ColorModeOverride_DarkOverride) {
+  ui::TestNativeTheme test_theme;
+  WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
+  test_theme.SetDarkMode(false);
+  widget->SetNativeThemeForTest(&test_theme);
+
+  widget->SetColorModeOverride(ui::ColorProviderManager::ColorMode::kDark);
+  // Verify that we resolve the light color even though the theme is dark.
+  EXPECT_EQ(kDarkColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+}
+
+TEST_F(WidgetColorModeTest, ColorModeOverride_LightOverride) {
+  ui::TestNativeTheme test_theme;
+  WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
+  test_theme.SetDarkMode(true);
+  widget->SetNativeThemeForTest(&test_theme);
+
+  widget->SetColorModeOverride(ui::ColorProviderManager::ColorMode::kLight);
+  // Verify that we resolve the light color even though the theme is dark.
+  EXPECT_EQ(kLightColor,
+            widget->GetColorProvider()->GetColor(ui::kColorSysPrimary));
+}
 
 TEST_F(WidgetTest, NativeWindowProperty) {
   const char* key = "foo";
@@ -4304,6 +4378,37 @@ TEST_F(WidgetTest, ScrollGestureEventDispatch) {
   widget->Close();
 }
 
+// TODO(b/271490637): on Mac a drag controller should still be notified when
+// drag will start. Figure out how to write a unit test for Mac. Then remove
+// this build flag check.
+#if !BUILDFLAG(IS_MAC)
+
+// Verifies that the drag controller is notified when the view drag will start.
+TEST_F(WidgetTest, NotifyDragControllerWhenDragWillStart) {
+  // Create a widget whose contents view is draggable.
+  UniqueWidgetPtr widget(std::make_unique<Widget>());
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_POPUP);
+  params.bounds = gfx::Rect(/*width=*/650, /*height=*/650);
+  widget->Init(std::move(params));
+  widget->Show();
+  MockDragController mock_drag_controller;
+  views::View contents_view;
+  contents_view.set_drag_controller(&mock_drag_controller);
+  widget->SetContentsView(&contents_view);
+
+  // Expect the drag controller is notified of the drag start.
+  EXPECT_CALL(mock_drag_controller, OnWillStartDragForView(&contents_view));
+
+  // Drag-and-drop `contents_view` by mouse.
+  ui::test::EventGenerator generator(GetContext(), widget->GetNativeWindow());
+  generator.MoveMouseTo(contents_view.GetBoundsInScreen().CenterPoint());
+  generator.PressLeftButton();
+  generator.MoveMouseBy(/*x=*/200, /*y=*/0);
+  generator.ReleaseLeftButton();
+}
+
+#endif  // !BUILDFLAG(IS_MAC)
+
 // A class used in WidgetTest.GestureEventLocationWhileBubbling to verify
 // that when a gesture event bubbles up a View hierarchy, the location
 // of a gesture event seen by each View is in the local coordinate space
@@ -5178,6 +5283,88 @@ TEST_F(WidgetTest, ShouldSaveWindowPlacement) {
   }
 }
 
+// Parameterized test that verifies the behavior of SetAspectRatio with respect
+// to the excluded margin.
+class WidgetSetAspectRatioTest
+    : public ViewsTestBase,
+      public testing::WithParamInterface<gfx::Size /* margin */> {
+ public:
+  WidgetSetAspectRatioTest() : margin_(GetParam()) {}
+
+  WidgetSetAspectRatioTest(const WidgetSetAspectRatioTest&) = delete;
+  WidgetSetAspectRatioTest& operator=(const WidgetSetAspectRatioTest&) = delete;
+
+  ~WidgetSetAspectRatioTest() override = default;
+
+  // ViewsTestBase:
+  void SetUp() override {
+    ViewsTestBase::SetUp();
+    widget_ = std::make_unique<Widget>();
+    Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+    native_widget_ = std::make_unique<MockNativeWidget>(widget());
+    ON_CALL(*native_widget(), CreateNonClientFrameView).WillByDefault([this]() {
+      return std::make_unique<NonClientFrameViewWithFixedMargin>(margin());
+    });
+    params.native_widget = native_widget();
+    widget()->Init(std::move(params));
+    task_environment()->RunUntilIdle();
+  }
+
+  void TearDown() override {
+    native_widget_.reset();
+    widget()->Close();
+    widget_.reset();
+    ViewsTestBase::TearDown();
+  }
+
+  const gfx::Size& margin() const { return margin_; }
+  Widget* widget() { return widget_.get(); }
+  MockNativeWidget* native_widget() { return native_widget_.get(); }
+
+ private:
+  // Margin around the client view that should be excluded.
+  const gfx::Size margin_;
+  std::unique_ptr<Widget> widget_;
+  std::unique_ptr<MockNativeWidget> native_widget_;
+
+  // `NonClientFrameView` that pads the client view with a fixed-size margin,
+  // to leave room for drawing that's not included in the aspect ratio.
+  class NonClientFrameViewWithFixedMargin : public NonClientFrameView {
+   public:
+    // `margin` is the margin that we'll provide to our client view.
+    explicit NonClientFrameViewWithFixedMargin(const gfx::Size& margin)
+        : margin_(margin) {}
+
+    // NonClientFrameView
+    gfx::Rect GetBoundsForClientView() const override {
+      gfx::Rect r = bounds();
+      return gfx::Rect(r.x(), r.y(), r.width() - margin_.width(),
+                       r.height() - margin_.height());
+    }
+
+    const gfx::Size margin_;
+  };
+};
+
+TEST_P(WidgetSetAspectRatioTest, SetAspectRatioIncludesMargin) {
+  // Provide a nonzero size.  It doesn't particularly matter what, as long as
+  // it's larger than our margin.
+  const gfx::Rect root_view_bounds(0, 0, 100, 200);
+  ASSERT_GT(root_view_bounds.width(), margin().width());
+  ASSERT_GT(root_view_bounds.height(), margin().height());
+  widget()->non_client_view()->SetBoundsRect(root_view_bounds);
+
+  // Verify that the excluded margin matches the margin that our custom
+  // non-client frame provides.
+  const gfx::SizeF aspect_ratio(1.5f, 1.0f);
+  EXPECT_CALL(*native_widget(), SetAspectRatio(aspect_ratio, margin()));
+  widget()->SetAspectRatio(aspect_ratio);
+}
+
+INSTANTIATE_TEST_SUITE_P(WidgetSetAspectRatioTestInstantiation,
+                         WidgetSetAspectRatioTest,
+                         ::testing::Values(gfx::Size(15, 20), gfx::Size(0, 0)));
+
 class WidgetShadowTest : public WidgetTest {
  public:
   WidgetShadowTest() = default;
@@ -5397,11 +5584,14 @@ TEST_F(DesktopWidgetTest, StackAboveTest) {
   grandchild_two->ShowInactive();
 
   // Creates the following where Z-Order is from Left to Right.
-  //            Root_one                    Root_two
+  //            root_one                    root_two
   //             /    \                         /
-  //       child_one  child_one_b           child_two
-  //          /                               /
-  // grandchild_one                     grandchild_two
+  //       child_one_b  child_one           child_two
+  //                       /                  /
+  //                 grandchild_one    grandchild_two
+  //
+  // Note: child_one and grandchild_one were brought to front
+  //       when grandchild_one was shown.
 
   // Child elements are stacked above parent.
   EXPECT_TRUE(child_one->IsStackedAbove(root_one->GetNativeView()));
@@ -5410,8 +5600,8 @@ TEST_F(DesktopWidgetTest, StackAboveTest) {
   EXPECT_TRUE(grandchild_two->IsStackedAbove(root_two->GetNativeView()));
 
   // Siblings with higher z-order are stacked correctly.
-  EXPECT_TRUE(child_one_b->IsStackedAbove(child_one->GetNativeView()));
-  EXPECT_TRUE(child_one_b->IsStackedAbove(grandchild_one->GetNativeView()));
+  EXPECT_TRUE(child_one->IsStackedAbove(child_one_b->GetNativeView()));
+  EXPECT_TRUE(grandchild_one->IsStackedAbove(child_one_b->GetNativeView()));
 
   // Root elements are stacked above child of a root with lower z-order.
   EXPECT_TRUE(root_two->IsStackedAbove(root_one->GetNativeView()));
@@ -5431,7 +5621,7 @@ TEST_F(DesktopWidgetTest, StackAboveTest) {
   EXPECT_FALSE(child_one_b->IsStackedAbove(child_two->GetNativeView()));
   EXPECT_FALSE(grandchild_one->IsStackedAbove(grandchild_two->GetNativeView()));
   EXPECT_FALSE(grandchild_one->IsStackedAbove(root_two->GetNativeView()));
-  EXPECT_FALSE(grandchild_one->IsStackedAbove(child_one_b->GetNativeView()));
+  EXPECT_FALSE(child_one_b->IsStackedAbove(grandchild_one->GetNativeView()));
 }
 
 #endif  // BUILDFLAG(IS_WIN)

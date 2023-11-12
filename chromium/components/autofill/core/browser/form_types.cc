@@ -6,6 +6,7 @@
 #include "base/containers/contains.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/common/autofill_util.h"
 
 namespace autofill {
 
@@ -26,6 +27,7 @@ FormType FieldTypeGroupToFormType(FieldTypeGroup field_type_group) {
     case FieldTypeGroup::kUsernameField:
     case FieldTypeGroup::kPasswordField:
       return FormType::kPasswordForm;
+    case FieldTypeGroup::kIban:
     case FieldTypeGroup::kNoGroup:
     case FieldTypeGroup::kTransaction:
     case FieldTypeGroup::kUnfillable:
@@ -49,14 +51,6 @@ base::StringPiece FormTypeToStringPiece(FormType form_type) {
   return "UnknownFormType";
 }
 
-bool FieldHasExpirationDateType(const AutofillField* field) {
-  const std::vector<ServerFieldType> kExpirationDateTypes = {
-      CREDIT_CARD_EXP_MONTH, CREDIT_CARD_EXP_2_DIGIT_YEAR,
-      CREDIT_CARD_EXP_4_DIGIT_YEAR, CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR,
-      CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR};
-  return base::Contains(kExpirationDateTypes, field->Type().GetStorableType());
-}
-
 bool FormHasAllCreditCardFields(const FormStructure& form_structure) {
   bool has_card_number_field = base::ranges::any_of(
       form_structure, [](const std::unique_ptr<AutofillField>& autofill_field) {
@@ -66,7 +60,7 @@ bool FormHasAllCreditCardFields(const FormStructure& form_structure) {
 
   bool has_expiration_date_field = base::ranges::any_of(
       form_structure, [](const std::unique_ptr<AutofillField>& autofill_field) {
-        return FieldHasExpirationDateType(autofill_field.get());
+        return autofill_field->HasExpirationDateType();
       });
 
   return has_card_number_field && has_expiration_date_field;

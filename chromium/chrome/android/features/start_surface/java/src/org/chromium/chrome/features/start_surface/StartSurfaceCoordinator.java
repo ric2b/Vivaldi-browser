@@ -6,7 +6,6 @@ package org.chromium.chrome.features.start_surface;
 
 import android.app.Activity;
 import android.os.SystemClock;
-import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -24,7 +23,6 @@ import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Log;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ObserverList;
-import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -49,13 +47,11 @@ import org.chromium.chrome.browser.omnibox.OmniboxStub;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.profiles.OriginalProfileSupplier;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.query_tiles.QueryTileSection;
 import org.chromium.chrome.browser.query_tiles.QueryTileUtils;
 import org.chromium.chrome.browser.share.ShareDelegate;
-import org.chromium.chrome.browser.share.crow.CrowButtonDelegate;
 import org.chromium.chrome.browser.suggestions.tile.MostVisitedTilesCoordinator;
 import org.chromium.chrome.browser.suggestions.tile.TileGroupDelegateImpl;
 import org.chromium.chrome.browser.tab.Tab;
@@ -63,7 +59,7 @@ import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tasks.ReturnToChromeUtil;
 import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegate.TabSwitcherType;
-import org.chromium.chrome.browser.tasks.tab_management.TabManagementModuleProvider;
+import org.chromium.chrome.browser.tasks.tab_management.TabManagementDelegateProvider;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherCustomViewManager;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
@@ -124,7 +120,6 @@ public class StartSurfaceCoordinator implements StartSurface {
     // TODO(crbug.com/1315676): Directly return the supplier from {@link TabSwitcherCoordinator}.
     private final ObservableSupplierImpl<TabSwitcherCustomViewManager>
             mTabSwitcherCustomViewManagerSupplier;
-    private final CrowButtonDelegate mCrowButtonDelegate;
     private final OneshotSupplier<IncognitoReauthController> mIncognitoReauthControllerSupplier;
 
     @VisibleForTesting
@@ -208,7 +203,7 @@ public class StartSurfaceCoordinator implements StartSurface {
     private MostVisitedTilesCoordinator mMostVisitedCoordinator;
     private MostVisitedSuggestionsUiDelegate mSuggestionsUiDelegate;
     private TileGroupDelegateImpl mTileGroupDelegate;
-    private OneshotSupplier<Profile> mQueryTileProfileSupplier;
+    private ObservableSupplier<Profile> mProfileSupplier;
     private QueryTileSection mQueryTileSection;
     private boolean mIsMVTilesInitialized;
 
@@ -265,12 +260,11 @@ public class StartSurfaceCoordinator implements StartSurface {
      * @param tabCreatorManager Manages {@link Tab} creation.
      * @param menuOrKeyboardActionController allows access to menu or keyboard actions.
      * @param multiWindowModeStateDispatcher Gives access to the multi window mode state.
-     * @param jankTracker Measures jank while feed or tab switcher are visible.
      * @param toolbarSupplier Supplies the {@link Toolbar}.
-     * @param crowButtonDelegate The {@link CrowButtonDelegate} to handle Crow click events.
      * @param backPressManager {@link BackPressManager} to handle back press.
      * @param incognitoReauthControllerSupplier {@link OneshotSupplier<IncognitoReauthController>}
      *         to detect pending re-auth when tab switcher is shown.
+     * @param profileSupplier Supplies the {@Profile}.
      * @param tabSwitcherClickHandler The {@link OnClickListener} for the tab switcher button.
      */
     public StartSurfaceCoordinator(@NonNull Activity activity,
@@ -292,10 +286,10 @@ public class StartSurfaceCoordinator implements StartSurface {
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull MenuOrKeyboardActionController menuOrKeyboardActionController,
             @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
-            @NonNull JankTracker jankTracker, @NonNull Supplier<Toolbar> toolbarSupplier,
-            @NonNull CrowButtonDelegate crowButtonDelegate, BackPressManager backPressManager,
+            @NonNull Supplier<Toolbar> toolbarSupplier, BackPressManager backPressManager,
             @NonNull OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
-            @NonNull OnClickListener tabSwitcherClickHandler) {
+            @NonNull OnClickListener tabSwitcherClickHandler,
+            @NonNull ObservableSupplier<Profile> profileSupplier) {
         mConstructedTimeNs = SystemClock.elapsedRealtimeNanos();
         mActivity = activity;
         mScrimCoordinator = scrimCoordinator;
@@ -318,8 +312,8 @@ public class StartSurfaceCoordinator implements StartSurface {
         mMenuOrKeyboardActionController = menuOrKeyboardActionController;
         mMultiWindowModeStateDispatcher = multiWindowModeStateDispatcher;
         mToolbarSupplier = toolbarSupplier;
-        mCrowButtonDelegate = crowButtonDelegate;
         mIncognitoReauthControllerSupplier = incognitoReauthControllerSupplier;
+        mProfileSupplier = profileSupplier;
 
         mTabSwitcherCustomViewManagerSupplier = new ObservableSupplierImpl<>();
         boolean excludeQueryTiles = !mIsStartSurfaceEnabled
@@ -332,13 +326,12 @@ public class StartSurfaceCoordinator implements StartSurface {
         ViewGroup feedPlaceholderParentView = null;
         if (!mIsStartSurfaceEnabled && !mIsStartSurfaceRefactorEnabled) {
             // Create Tab switcher directly to save one layer in the view hierarchy.
-            mGridTabSwitcher = TabManagementModuleProvider.getDelegate().createGridTabSwitcher(
+            mGridTabSwitcher = TabManagementDelegateProvider.getDelegate().createGridTabSwitcher(
                     activity, activityLifecycleDispatcher, tabModelSelector, tabContentManager,
                     browserControlsManager, tabCreatorManager, menuOrKeyboardActionController,
-                    containerView, shareDelegateSupplier, multiWindowModeStateDispatcher,
-                    scrimCoordinator, /* rootView= */ containerView, dynamicResourceLoaderSupplier,
-                    snackbarManager, modalDialogManager, incognitoReauthControllerSupplier,
-                    backPressManager);
+                    containerView, multiWindowModeStateDispatcher, scrimCoordinator,
+                    /* rootView= */ containerView, dynamicResourceLoaderSupplier, snackbarManager,
+                    modalDialogManager, incognitoReauthControllerSupplier, backPressManager);
             mTabSwitcherCustomViewManagerSupplier.set(
                     mGridTabSwitcher.getTabSwitcherCustomViewManager());
             controller = mGridTabSwitcher.getController();
@@ -366,11 +359,11 @@ public class StartSurfaceCoordinator implements StartSurface {
                 mTabSwitcherModule, mTabModelSelector, mPropertyModel,
                 mTasksSurface != null ? this::initializeSecondaryTasksSurface : null,
                 mIsStartSurfaceEnabled, mActivity, mBrowserControlsManager,
-                this::isActivityFinishingOrDestroyed, excludeQueryTiles,
-                startSurfaceOneshotSupplier, hadWarmStart, jankTracker, initializeMVTilesRunnable,
+                this::isActivityFinishingOrDestroyed, mTabCreatorManager, excludeQueryTiles,
+                startSurfaceOneshotSupplier, hadWarmStart, initializeMVTilesRunnable,
                 mParentTabSupplier, logoContainerView,
                 mGridTabSwitcher == null ? backPressManager : null, feedPlaceholderParentView,
-                mActivityLifecycleDispatcher, tabSwitcherClickHandler);
+                mActivityLifecycleDispatcher, tabSwitcherClickHandler, mProfileSupplier);
 
         startSurfaceOneshotSupplier.set(this);
     }
@@ -398,6 +391,7 @@ public class StartSurfaceCoordinator implements StartSurface {
             removeHeaderOffsetChangeListener(mOffsetChangedListenerToGenerateScrollEvents);
             mOffsetChangedListenerToGenerateScrollEvents = null;
         }
+        mProfileSupplier = null;
         if (mStartSurfaceMediator != null) {
             mStartSurfaceMediator.destroy();
         }
@@ -406,8 +400,8 @@ public class StartSurfaceCoordinator implements StartSurface {
     @Override
     public void onHide() {
         if (mIsInitializedWithNative) {
+            mStartSurfaceMediator.mayRecordHomepageSessionEnd();
             if (mTasksSurface != null) {
-                mStartSurfaceMediator.mayRecordHomepageSessionEnd();
                 mTasksSurface.onHide();
             }
             if (mSecondaryTasksSurface != null) {
@@ -509,7 +503,7 @@ public class StartSurfaceCoordinator implements StartSurface {
                     parentView, mPropertyModel, mBottomSheetController, mParentTabSupplier,
                     new ScrollableContainerDelegateImpl(), mSnackbarManager, mShareDelegateSupplier,
                     mWindowAndroid, mTabModelSelector, mToolbarSupplier, mConstructedTimeNs,
-                    mSwipeRefreshLayout, mCrowButtonDelegate);
+                    mSwipeRefreshLayout);
         }
         mStartSurfaceMediator.initWithNative(
                 mIsStartSurfaceEnabled ? mOmniboxStubSupplier.get() : null,
@@ -619,6 +613,12 @@ public class StartSurfaceCoordinator implements StartSurface {
     }
 
     @Override
+    @Nullable
+    public TabSwitcher.Controller getGridTabSwitcherController() {
+        return mStartSurfaceMediator.getTabSwitcherController();
+    }
+
+    @Override
     public ViewGroup getTabSwitcherContainer() {
         return mStartSurfaceMediator.getTabSwitcherContainer();
     }
@@ -713,9 +713,6 @@ public class StartSurfaceCoordinator implements StartSurface {
             if (ChromeFeatureList.sStartSurfaceReturnTime.isEnabled()) {
                 ReturnToChromeUtil.cacheReturnTimeFromSegmentation();
             }
-            if (!TextUtils.isEmpty(StartSurfaceConfiguration.BEHAVIOURAL_TARGETING.getValue())) {
-                ReturnToChromeUtil.cacheSegmentationResult();
-            }
         }
     }
 
@@ -754,7 +751,6 @@ public class StartSurfaceCoordinator implements StartSurface {
      * @param browserControlsStateProvider Gives access to the state of the browser controls.
      * @param tabCreatorManager Manages creation of tabs.
      * @param menuOrKeyboardActionController allows access to menu or keyboard actions.
-     * @param shareDelegateSupplier Supplies the current {@link ShareDelegate}.
      * @param multiWindowModeStateDispatcher Gives access to the multi window mode state.
      * @param rootView The root view of the app.
      * @param incognitoReauthControllerSupplier {@link OneshotSupplier<IncognitoReauthController>}
@@ -773,7 +769,6 @@ public class StartSurfaceCoordinator implements StartSurface {
             @NonNull BrowserControlsStateProvider browserControlsStateProvider,
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull MenuOrKeyboardActionController menuOrKeyboardActionController,
-            @NonNull Supplier<ShareDelegate> shareDelegateSupplier,
             @NonNull MultiWindowModeStateDispatcher multiWindowModeStateDispatcher,
             @NonNull ViewGroup rootView,
             @Nullable OneshotSupplier<IncognitoReauthController>
@@ -783,8 +778,7 @@ public class StartSurfaceCoordinator implements StartSurface {
                 activityLifecycleDispatcher, tabModelSelector, snackbarManager,
                 dynamicResourceLoaderSupplier, tabContentManager, modalDialogManager,
                 browserControlsStateProvider, tabCreatorManager, menuOrKeyboardActionController,
-                shareDelegateSupplier, multiWindowModeStateDispatcher, rootView,
-                incognitoReauthControllerSupplier);
+                multiWindowModeStateDispatcher, rootView, incognitoReauthControllerSupplier);
     }
 
     @VisibleForTesting
@@ -849,7 +843,7 @@ public class StartSurfaceCoordinator implements StartSurface {
                 mActivityLifecycleDispatcher, mTabModelSelector, mSnackbarManager,
                 mDynamicResourceLoaderSupplier, mTabContentManager, mModalDialogManager,
                 mBrowserControlsManager, mTabCreatorManager, mMenuOrKeyboardActionController,
-                mShareDelegateSupplier, mMultiWindowModeStateDispatcher, mContainerView, null);
+                mMultiWindowModeStateDispatcher, mContainerView, null);
         mTasksSurface.getView().setId(R.id.primary_tasks_surface_view);
         initializeOffsetChangedListener();
         addHeaderOffsetChangeListener(mOffsetChangedListenerToGenerateScrollEvents);
@@ -882,16 +876,19 @@ public class StartSurfaceCoordinator implements StartSurface {
                 mWindowAndroid);
         if (tabSwitcherType == TabSwitcherType.CAROUSEL) {
             mTabSwitcherModule =
-                    TabManagementModuleProvider.getDelegate().createCarouselTabSwitcher(mActivity,
+                    TabManagementDelegateProvider.getDelegate().createCarouselTabSwitcher(mActivity,
                             mActivityLifecycleDispatcher, mTabModelSelector, mTabContentManager,
                             mBrowserControlsManager, mTabCreatorManager,
                             mMenuOrKeyboardActionController,
-                            mView.getCarouselTabSwitcherContainer(), mShareDelegateSupplier,
+                            mView.getCarouselTabSwitcherContainer(),
                             mMultiWindowModeStateDispatcher, mScrimCoordinator, mView,
                             mDynamicResourceLoaderSupplier, mSnackbarManager, mModalDialogManager);
         } else {
-            mTabSwitcherModule = new SingleTabSwitcherCoordinator(
-                    mActivity, mView.getCarouselTabSwitcherContainer(), mTabModelSelector);
+            // We always pass the parameter isTablet to be false here since StartSurfaceCoordinator
+            // is only created on phones.
+            mTabSwitcherModule = new SingleTabSwitcherCoordinator(mActivity,
+                    mView.getCarouselTabSwitcherContainer(), mTabModelSelector,
+                    /* isTablet= */ false, /* mostRecentTab= */ null);
         }
         boolean isScrollableMVTEnabled =
                 !ReturnToChromeUtil.shouldImproveStartWhenFeedIsDisabled(mActivity);
@@ -912,8 +909,7 @@ public class StartSurfaceCoordinator implements StartSurface {
             if (ProfileManager.isInitialized()) {
                 initializeQueryTileSection(Profile.getLastUsedRegularProfile());
             } else {
-                mQueryTileProfileSupplier = new OriginalProfileSupplier();
-                mQueryTileProfileSupplier.onAvailable(this::initializeQueryTileSection);
+                mProfileSupplier.addObserver(this::initializeQueryTileSection);
             }
         } else {
             storeQueryTilesVisibility(false);
@@ -945,7 +941,7 @@ public class StartSurfaceCoordinator implements StartSurface {
                 mActivityLifecycleDispatcher, mTabModelSelector, mSnackbarManager,
                 mDynamicResourceLoaderSupplier, mTabContentManager, mModalDialogManager,
                 mBrowserControlsManager, mTabCreatorManager, mMenuOrKeyboardActionController,
-                mShareDelegateSupplier, mMultiWindowModeStateDispatcher, mContainerView,
+                mMultiWindowModeStateDispatcher, mContainerView,
                 mIncognitoReauthControllerSupplier);
         if (mIsInitializedWithNative) {
             mSecondaryTasksSurface.onFinishNativeInitialization(
@@ -1103,6 +1099,8 @@ public class StartSurfaceCoordinator implements StartSurface {
 
     private void initializeQueryTileSection(Profile profile) {
         assert profile != null;
+        if (profile.isOffTheRecord()) return;
+
         if (!QueryTileUtils.isQueryTilesEnabledOnStartSurface()) {
             storeQueryTilesVisibility(false);
             return;
@@ -1110,7 +1108,7 @@ public class StartSurfaceCoordinator implements StartSurface {
         mQueryTileSection = new QueryTileSection(mView.findViewById(R.id.query_tiles_layout),
                 profile, query -> performSearchQuery(query.queryText, query.searchParams));
         storeQueryTilesVisibility(true);
-        mQueryTileProfileSupplier = null;
+        mProfileSupplier.removeObserver(this::initializeQueryTileSection);
     }
 
     /**

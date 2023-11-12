@@ -52,7 +52,7 @@ bool ValidateTabRange(const tab_groups::TabGroupInfo& group_info,
     return false;
   }
 
-  if (range.GetMax() >= static_cast<uint32_t>(tab_strip_model->count())) {
+  if (range.GetMax() > static_cast<uint32_t>(tab_strip_model->count())) {
     LOG(WARNING)
         << "group_info: range max cannot be larger than count of tabs!";
     return false;
@@ -61,25 +61,30 @@ bool ValidateTabRange(const tab_groups::TabGroupInfo& group_info,
   return true;
 }
 
-// Creates a callback for when a favicon image is retrieved which creates a
-// standard icon image and then calls `callback` with the standardized image.
-base::OnceCallback<void(const favicon_base::FaviconImageResult&)>
-CreateFaviconResultCallback(
-    base::OnceCallback<void(const gfx::ImageSkia&)> callback) {
-  return base::BindOnce(
-      [](base::OnceCallback<void(const gfx::ImageSkia&)> image_skia_callback,
-         const favicon_base::FaviconImageResult& result) {
-        auto image = result.image.AsImageSkia();
-        image.EnsureRepsForSupportedScales();
-        std::move(image_skia_callback)
-            .Run(apps::CreateStandardIconImage(image));
-      },
-      std::move(callback));
+// Creates a standard icon image via `result`, and then calls `callback` with
+// the standardized image.
+void ImageResultToImageSkia(
+    base::OnceCallback<void(const gfx::ImageSkia&)> callback,
+    const favicon_base::FaviconRawBitmapResult& result) {
+  if (!result.is_valid()) {
+    std::move(callback).Run(gfx::ImageSkia());
+    return;
+  }
+
+  auto image = gfx::Image::CreateFrom1xPNGBytes(result.bitmap_data->front(),
+                                                result.bitmap_data->size())
+                   .AsImageSkia();
+  image.EnsureRepsForSupportedScales();
+  std::move(callback).Run(apps::CreateStandardIconImage(image));
 }
 
 void AddTabGroupToBrowser(TabStripModel* browser_tab_model,
                           const tab_groups::TabGroupInfo& group_info) {
   if (!ValidateTabRange(group_info, browser_tab_model)) {
+    return;
+  }
+
+  if (!browser_tab_model->SupportsTabGroups()) {
     return;
   }
 
@@ -107,7 +112,7 @@ void SetPinnedTabs(const int first_non_pinned_tab_index, Browser* out_browser) {
   DCHECK(browser_tab_model);
 
   if (first_non_pinned_tab_index < 0 ||
-      first_non_pinned_tab_index >= out_browser->tab_strip_model()->count()) {
+      first_non_pinned_tab_index > out_browser->tab_strip_model()->count()) {
     LOG(WARNING) << "Pinned tab outside of tab bounds!";
     return;
   }
@@ -173,6 +178,7 @@ void DeskTemplateClientLacros::CreateBrowserWithRestoredData(
       static_cast<ui::WindowShowState>(show_state);
   create_params.initial_bounds = bounds;
   create_params.restore_id = additional_state->restore_window_id;
+  create_params.creation_source = Browser::CreationSource::kDeskTemplate;
   Browser* browser = Browser::Create(create_params);
 
   for (size_t i = 0; i < additional_state->urls.size(); i++) {
@@ -219,6 +225,7 @@ void DeskTemplateClientLacros::GetBrowserInformation(
   crosapi::mojom::DeskTemplateStatePtr state =
       crosapi::mojom::DeskTemplateState::New();
   TabStripModel* tab_strip_model = browser->tab_strip_model();
+  DCHECK(tab_strip_model);
   state->active_index = tab_strip_model->active_index();
   state->first_non_pinned_index = tab_strip_model->IndexOfFirstNonPinnedTab();
 
@@ -247,6 +254,9 @@ void DeskTemplateClientLacros::GetFaviconImage(
           ProfileManager::GetActiveUserProfile(),
           ServiceAccessType::EXPLICIT_ACCESS);
 
-  favicon_service->GetFaviconImageForPageURL(
-      url, CreateFaviconResultCallback(std::move(callback)), &task_tracker_);
+  favicon_service->GetRawFaviconForPageURL(
+      url, {favicon_base::IconType::kFavicon}, 0,
+      /*fallback_to_host=*/false,
+      base::BindOnce(&ImageResultToImageSkia, std::move(callback)),
+      &task_tracker_);
 }

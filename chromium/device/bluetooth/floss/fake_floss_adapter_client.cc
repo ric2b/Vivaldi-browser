@@ -33,13 +33,16 @@ const char FakeFlossAdapterClient::kClassicAddress[] = "dd:dd:dd:dd:dd:dd";
 const char FakeFlossAdapterClient::kClassicName[] = "Classic Device";
 const uint32_t FakeFlossAdapterClient::kPasskey = 123456;
 const uint32_t FakeFlossAdapterClient::kHeadsetClassOfDevice = 2360344;
+const uint32_t FakeFlossAdapterClient::kKeyboardClassofDevice = 1344;
 
 void FakeFlossAdapterClient::Init(dbus::Bus* bus,
                                   const std::string& service_name,
-                                  const int adapter_index) {
+                                  const int adapter_index,
+                                  base::OnceClosure on_ready) {
   bus_ = bus;
   adapter_path_ = GenerateAdapterPath(adapter_index);
   service_name_ = service_name;
+  std::move(on_ready).Run();
 }
 
 void FakeFlossAdapterClient::StartDiscovery(ResponseCallback<Void> callback) {
@@ -76,6 +79,11 @@ void FakeFlossAdapterClient::CreateBond(ResponseCallback<bool> callback,
                                         FlossDeviceId device,
                                         BluetoothTransport transport) {
   // TODO(b/202874707): Simulate pairing failures.
+  for (auto& observer : observers_) {
+    observer.DeviceBondStateChanged(
+        device, /*status=*/0,
+        FlossAdapterClient::BondState::kBondingInProgress);
+  }
 
   if (device.address == kJustWorksAddress) {
     for (auto& observer : observers_) {
@@ -134,8 +142,12 @@ void FakeFlossAdapterClient::GetRemoteType(
 
 void FakeFlossAdapterClient::GetRemoteClass(ResponseCallback<uint32_t> callback,
                                             FlossDeviceId device) {
+  uint32_t cod = kHeadsetClassOfDevice;
+  if (device.address == kKeyboardAddress) {
+    cod = kKeyboardClassofDevice;
+  }
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(callback), kHeadsetClassOfDevice));
+      FROM_HERE, base::BindOnce(std::move(callback), cod));
 }
 
 void FakeFlossAdapterClient::GetRemoteAppearance(

@@ -51,10 +51,11 @@ class FooUI : public content::WebUIController, public ::test::mojom::Foo {
     content::WebUIDataSource* data_source =
         content::WebUIDataSource::CreateAndAdd(
             web_ui->GetWebContents()->GetBrowserContext(), "foo");
-    data_source->SetDefaultResource(IDR_MOJO_JS_INTERFACE_BROKER_TEST_FOO_HTML);
+    data_source->SetDefaultResource(
+        IDR_WEBUI_MOJO_MOJO_JS_INTERFACE_BROKER_TEST_FOO_HTML);
     data_source->AddResourcePath("foobar.mojom-webui.js",
-                                 IDR_FOOBAR_MOJOM_WEBUI_JS);
-    data_source->AddResourcePath("main.js", IDR_MOJO_MAIN_JS);
+                                 IDR_WEBUI_MOJO_FOOBAR_MOJOM_WEBUI_JS);
+    data_source->AddResourcePath("main.js", IDR_WEBUI_MOJO_MAIN_JS);
 
     // Allow Foo to embed chrome-untrusted://bar.
     data_source->OverrideContentSecurityPolicy(
@@ -95,14 +96,15 @@ class BarUI : public ui::UntrustedWebUIController, public ::test::mojom::Bar {
     content::WebUIDataSource* data_source =
         content::WebUIDataSource::CreateAndAdd(
             web_ui->GetWebContents()->GetBrowserContext(), kBarURL);
-    data_source->SetDefaultResource(IDR_MOJO_JS_INTERFACE_BROKER_TEST_BAR_HTML);
+    data_source->SetDefaultResource(
+        IDR_WEBUI_MOJO_MOJO_JS_INTERFACE_BROKER_TEST_BAR_HTML);
 
     // Allow Foo to embed this UI.
     data_source->AddFrameAncestor(GURL(kFooURL));
 
     data_source->AddResourcePath("foobar.mojom-webui.js",
-                                 IDR_FOOBAR_MOJOM_WEBUI_JS);
-    data_source->AddResourcePath("main.js", IDR_MOJO_MAIN_JS);
+                                 IDR_WEBUI_MOJO_FOOBAR_MOJOM_WEBUI_JS);
+    data_source->AddResourcePath("main.js", IDR_WEBUI_MOJO_MAIN_JS);
     // If requested path is "error", trigger an error page.
     data_source->SetRequestFilter(
         base::BindRepeating(
@@ -140,7 +142,8 @@ class BuzUI : public ui::UntrustedWebUIController {
     content::WebUIDataSource* data_source =
         content::WebUIDataSource::CreateAndAdd(
             web_ui->GetWebContents()->GetBrowserContext(), kBuzURL);
-    data_source->SetDefaultResource(IDR_MOJO_JS_INTERFACE_BROKER_TEST_BUZ_HTML);
+    data_source->SetDefaultResource(
+        IDR_WEBUI_MOJO_MOJO_JS_INTERFACE_BROKER_TEST_BUZ_HTML);
   }
 };
 
@@ -228,20 +231,12 @@ class MojoJSInterfaceBrokerBrowserTest : public InProcessBrowserTest {
                                    ->tab_strip_model()
                                    ->GetActiveWebContents()
                                    ->GetPrimaryMainFrame();
-    // We can't use EvalJs with a different world_id to get around CSP
-    // restrictions, because Mojo is only exposed to the global world
-    // (ISOLATED_WORLD_ID_GLOBAL). So we use |ExecuteScriptAndExtractString| to
-    // work with CSP and in the right world_id.
-    std::string result;
     std::string wrapped_script =
-        base::StrCat({"Promise.resolve(", statement, ").then(",
-                      "  resolved => domAutomationController.send(resolved),"
-                      "  error => domAutomationController.send('JS Error: ' + "
-                      "    error.message)",
+        base::StrCat({"Promise.resolve(", statement, ").catch(",
+                      "  error => 'JS Error: ' + "
+                      "    error.message",
                       ");"});
-    EXPECT_TRUE(
-        ExecuteScriptAndExtractString(eval_frame, wrapped_script, &result));
-    return result;
+    return EvalJs(eval_frame, wrapped_script).ExtractString();
   }
 
   // Returns whether |frame| (defaults to the main frame) has Mojo bindings
@@ -252,14 +247,7 @@ class MojoJSInterfaceBrokerBrowserTest : public InProcessBrowserTest {
                                    ->tab_strip_model()
                                    ->GetActiveWebContents()
                                    ->GetPrimaryMainFrame();
-    // We can't use EvalJs with a different world_id to get around CSP
-    // restrictions, because Mojo is only exposed to the global world
-    // (ISOLATED_WORLD_ID_GLOBAL). So we use |ExecuteScriptAndExtractString| to
-    // work with CSP and in the right world_id.
-    bool result;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-        eval_frame, "domAutomationController.send(!!window.Mojo)", &result));
-    return result;
+    return content::EvalJs(eval_frame, "!!window.Mojo").ExtractBool();
   }
 
  private:
@@ -299,6 +287,7 @@ IN_PROC_BROWSER_TEST_F(MojoJSInterfaceBrokerBrowserTest, FooWorks) {
       web_contents->GetWebUI()->GetController()->broker_for_testing();
   // Refresh to trigger a RenderFrame reuse.
   content::TestNavigationObserver observer(web_contents, 1);
+  // TODO(https://crbug.com/1157718): migrate to ExecJs.
   EXPECT_TRUE(content::ExecuteScript(web_contents, "location.reload()"));
   observer.Wait();
 
@@ -340,22 +329,14 @@ IN_PROC_BROWSER_TEST_F(MojoJSInterfaceBrokerBrowserTest,
 
   // Attempt to get a remote for a Bar interface (registered for BarUI).
   //
-  // Don't use EvalJs here because it don't work with WebUI's default CSP, and
-  // we only expose Mojo to the global world (ISOLATED_WORLD_ID_GLOBAL) thus the
-  // `world_id = 1` work-around doesn't work.
-  //
   // EXPECT_FALSE because this the following should cause renderer to shutdown
   // before it can reply with the result.
-  std::string result;
-  EXPECT_FALSE(content::ExecuteScriptAndExtractString(
-      web_contents,
-      "(async () => {"
-      "  let barRemote = window.Bar.getRemote();"
-      "  let resp = await barRemote.getBar();"
-      "  domAutomationController.send(resp.value);"
-      "})()",
-      &result));
-  EXPECT_EQ("", result);
+  EXPECT_FALSE(content::ExecJs(web_contents,
+                               "(async () => {"
+                               "  let barRemote = window.Bar.getRemote();"
+                               "  let resp = await barRemote.getBar();"
+                               "  return resp.value;"
+                               "})()"));
   watcher.Wait();
   EXPECT_FALSE(watcher.did_exit_normally());
   EXPECT_TRUE(web_contents->IsCrashed());
@@ -394,6 +375,7 @@ IN_PROC_BROWSER_TEST_F(MojoJSInterfaceBrokerBrowserTest, IframeBarWorks) {
   content::TestNavigationObserver observer(web_contents, 1);
   EXPECT_TRUE(content::ExecuteScript(bar_frame, "location.reload()"));
   observer.Wait();
+  bar_frame = ChildFrameAt(web_contents->GetPrimaryMainFrame(), 0);
 
   EXPECT_EQ("bar", EvalStatement("(async () => {"
                                  "  let barRemote = window.Bar.getRemote();"

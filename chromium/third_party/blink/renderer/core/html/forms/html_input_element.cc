@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_token_list.h"
+#include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/dom/id_target_observer.h"
@@ -124,6 +125,7 @@ const int kDefaultSize = 20;
 HTMLInputElement::HTMLInputElement(Document& document,
                                    const CreateElementFlags flags)
     : TextControlElement(html_names::kInputTag, document),
+      LazyActiveScriptWrappable<HTMLInputElement>({}),
       size_(kDefaultSize),
       has_dirty_value_(false),
       is_checked_(false),
@@ -148,12 +150,6 @@ HTMLInputElement::HTMLInputElement(Document& document,
                       : MakeGarbageCollected<TextInputType>(*this)),
       input_type_view_(input_type_ ? input_type_->CreateView() : nullptr) {
   SetHasCustomStyleCallbacks();
-
-  if (!flags.IsCreatedByParser()) {
-    DCHECK(input_type_view_->NeedsShadowSubtree());
-    CreateUserAgentShadowRoot();
-    CreateShadowSubtree();
-  }
 }
 
 void HTMLInputElement::Trace(Visitor* visitor) const {
@@ -383,6 +379,7 @@ void HTMLInputElement::HandleBlurEvent() {
 }
 
 void HTMLInputElement::setType(const AtomicString& type) {
+  EnsureShadowSubtree();
   setAttribute(html_names::kTypeAttr, type);
 }
 
@@ -399,11 +396,6 @@ void HTMLInputElement::InitializeTypeInParsing() {
   if (input_type_->GetValueMode() == ValueMode::kValue)
     non_attribute_value_ = SanitizeValue(default_value);
   has_been_password_field_ |= new_type_name == input_type_names::kPassword;
-
-  if (input_type_view_->NeedsShadowSubtree()) {
-    CreateUserAgentShadowRoot();
-    CreateShadowSubtree();
-  }
 
   UpdateWillValidateCache();
 
@@ -477,10 +469,8 @@ void HTMLInputElement::UpdateType() {
   input_type_view_->WillBeDestroyed();
   input_type_ = new_type;
   input_type_view_ = input_type_->CreateView();
-  if (input_type_view_->NeedsShadowSubtree()) {
-    EnsureUserAgentShadowRoot();
-    CreateShadowSubtree();
-  }
+
+  input_type_view_->CreateShadowSubtreeIfNeeded();
 
   UpdateWillValidateCache();
 
@@ -603,8 +593,6 @@ void HTMLInputElement::UpdateType() {
       formOwner() && isConnected())
     formOwner()->InvalidateDefaultButtonStyle();
   NotifyFormStateChanged();
-
-  CheckAndPossiblyClosePopoverStack();
 }
 
 void HTMLInputElement::SubtreeHasChanged() {
@@ -946,9 +934,8 @@ bool HTMLInputElement::LayoutObjectIsNeeded(const DisplayStyle& style) const {
          TextControlElement::LayoutObjectIsNeeded(style);
 }
 
-LayoutObject* HTMLInputElement::CreateLayoutObject(const ComputedStyle& style,
-                                                   LegacyLayout legacy) {
-  return input_type_view_->CreateLayoutObject(style, legacy);
+LayoutObject* HTMLInputElement::CreateLayoutObject(const ComputedStyle& style) {
+  return input_type_view_->CreateLayoutObject(style);
 }
 
 void HTMLInputElement::AttachLayoutTree(AttachContext& context) {
@@ -1512,8 +1499,9 @@ void HTMLInputElement::DefaultEventHandler(Event& evt) {
     TextControlElement::DefaultEventHandler(evt);
 }
 
-void HTMLInputElement::CreateShadowSubtree() {
-  input_type_view_->CreateShadowSubtree();
+ShadowRoot* HTMLInputElement::EnsureShadowSubtree() {
+  input_type_view_->CreateShadowSubtreeIfNeeded();
+  return UserAgentShadowRoot();
 }
 
 bool HTMLInputElement::HasActivationBehavior() const {
@@ -1720,6 +1708,10 @@ Node::InsertionNotificationRequest HTMLInputElement::InsertedInto(
   ResetListAttributeTargetObserver();
   LogAddElementIfIsolatedWorldAndInDocument("input", html_names::kTypeAttr,
                                             html_names::kFormactionAttr);
+  {
+    EventDispatchForbiddenScope::AllowUserAgentEvents allow_events;
+    input_type_view_->CreateShadowSubtreeIfNeeded();
+  }
   return kInsertionShouldCallDidNotifySubtreeInsertions;
 }
 
@@ -1964,6 +1956,11 @@ void HTMLInputElement::SetPlaceholderVisibility(bool visible) {
 
 bool HTMLInputElement::SupportsPlaceholder() const {
   return input_type_->SupportsPlaceholder();
+}
+
+TextControlInnerEditorElement* HTMLInputElement::EnsureInnerEditorElement()
+    const {
+  return input_type_view_->EnsureInnerEditorElement();
 }
 
 void HTMLInputElement::UpdatePlaceholderText() {

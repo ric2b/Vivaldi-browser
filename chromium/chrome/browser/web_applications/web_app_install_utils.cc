@@ -44,6 +44,7 @@
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_icon_generator.h"
+#include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_sources.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
@@ -221,19 +222,32 @@ std::vector<SquareSizePx> GetSquareSizePxs(
 }
 
 std::vector<IconSizes> GetDownloadedShortcutsMenuIconsSizes(
+    const std::vector<WebAppShortcutsMenuItemInfo>& shortcuts_menu_items,
     const ShortcutsMenuIconBitmaps& shortcuts_menu_icon_bitmaps) {
+  // Due to the bitmaps possibly being not populated (see
+  // https://crbug.com/1427444), we create empty bitmaps in that case. We
+  // continue to check to make sure that there aren't MORE bitmaps than
+  // items.
+  CHECK_LE(shortcuts_menu_icon_bitmaps.size(), shortcuts_menu_items.size());
   std::vector<IconSizes> shortcuts_menu_icons_sizes;
-  shortcuts_menu_icons_sizes.reserve(shortcuts_menu_icon_bitmaps.size());
-  for (const auto& shortcut_icon_bitmaps : shortcuts_menu_icon_bitmaps) {
+  shortcuts_menu_icons_sizes.reserve(shortcuts_menu_items.size());
+  IconBitmaps empty_icon_bitmaps;
+  for (size_t i = 0; i < shortcuts_menu_items.size(); ++i) {
+    const IconBitmaps* shortcut_icon_bitmaps;
+    if (i < shortcuts_menu_icon_bitmaps.size()) {
+      shortcut_icon_bitmaps = &shortcuts_menu_icon_bitmaps[i];
+    } else {
+      shortcut_icon_bitmaps = &empty_icon_bitmaps;
+    }
     IconSizes icon_sizes;
     icon_sizes.SetSizesForPurpose(IconPurpose::ANY,
-                                  GetSquareSizePxs(shortcut_icon_bitmaps.any));
+                                  GetSquareSizePxs(shortcut_icon_bitmaps->any));
     icon_sizes.SetSizesForPurpose(
         IconPurpose::MASKABLE,
-        GetSquareSizePxs(shortcut_icon_bitmaps.maskable));
+        GetSquareSizePxs(shortcut_icon_bitmaps->maskable));
     icon_sizes.SetSizesForPurpose(
         IconPurpose::MONOCHROME,
-        GetSquareSizePxs(shortcut_icon_bitmaps.monochrome));
+        GetSquareSizePxs(shortcut_icon_bitmaps->monochrome));
     shortcuts_menu_icons_sizes.push_back(std::move(icon_sizes));
   }
   return shortcuts_menu_icons_sizes;
@@ -309,14 +323,17 @@ apps::UrlHandlers ToWebAppUrlHandlers(
   return apps_url_handlers;
 }
 
-std::vector<ScopeExtensionInfo> ToWebAppScopeExtensions(
+ScopeExtensions ToWebAppScopeExtensions(
     const std::vector<blink::mojom::ManifestScopeExtensionPtr>&
         scope_extensions) {
-  std::vector<ScopeExtensionInfo> apps_scope_extensions;
+  ScopeExtensions apps_scope_extensions;
   for (const auto& scope_extension : scope_extensions) {
     DCHECK(scope_extension);
-    apps_scope_extensions.emplace_back(scope_extension->origin,
-                                       scope_extension->has_origin_wildcard);
+    ScopeExtensionInfo new_scope_extension;
+    new_scope_extension.origin = scope_extension->origin;
+    new_scope_extension.has_origin_wildcard =
+        scope_extension->has_origin_wildcard;
+    apps_scope_extensions.insert(std::move(new_scope_extension));
   }
   return apps_scope_extensions;
 }
@@ -362,6 +379,8 @@ void PopulateShortcutItemIcons(WebAppInstallInfo* web_app_info,
     web_app_info->shortcuts_menu_icon_bitmaps.emplace_back(
         std::move(shortcut_icon_bitmaps));
   }
+  CHECK_EQ(web_app_info->shortcuts_menu_icon_bitmaps.size(),
+           web_app_info->shortcuts_menu_item_infos.size());
 }
 
 // Reconcile the file handling icons that were specified in the manifest with
@@ -721,6 +740,7 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
   for (const auto& decl : manifest.permissions_policy) {
     blink::ParsedPermissionsPolicyDeclaration copy;
     copy.feature = decl.feature;
+    copy.self_if_matches = decl.self_if_matches;
     for (const auto& origin : decl.allowed_origins)
       copy.allowed_origins.push_back(origin);
     copy.matches_all_origins = decl.matches_all_origins;
@@ -879,6 +899,7 @@ void PopulateProductIcons(WebAppInstallInfo* web_app_info,
       web_app_info->title.empty()
           ? GenerateIconLetterFromUrl(web_app_info->start_url)
           : GenerateIconLetterFromAppName(web_app_info->title);
+
   // Ensure that all top-level icons that are in web_app_info with  Purpose::ANY
   // are present, by generating icons for any sizes that have failed to
   // download. This ensures that the created manifest for the web app does not
@@ -1028,6 +1049,7 @@ WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
     case webapps::WebappInstallSource::SYNC:
     case webapps::WebappInstallSource::MENU_CREATE_SHORTCUT:
     case webapps::WebappInstallSource::CHROME_SERVICE:
+    case webapps::WebappInstallSource::PROFILE_MENU:
       return WebAppManagement::kSync;
 
     case webapps::WebappInstallSource::ISOLATED_APP_DEV_INSTALL:
@@ -1180,6 +1202,7 @@ void SetWebAppManifestFields(const WebAppInstallInfo& web_app_info,
     web_app.SetShortcutsMenuItemInfos(web_app_info.shortcuts_menu_item_infos);
     web_app.SetDownloadedShortcutsMenuIconsSizes(
         GetDownloadedShortcutsMenuIconsSizes(
+            web_app_info.shortcuts_menu_item_infos,
             web_app_info.shortcuts_menu_icon_bitmaps));
   }
 
@@ -1291,6 +1314,8 @@ void ApplyParamsToFinalizeOptions(
   options.add_to_applications_menu = install_params.add_to_applications_menu;
   options.add_to_desktop = install_params.add_to_desktop;
   options.add_to_quick_launch_bar = install_params.add_to_quick_launch_bar;
+  options.skip_origin_association_validation =
+      install_params.skip_origin_association_validation;
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (install_params.system_app_type.has_value()) {
     options.system_web_app_data.emplace();

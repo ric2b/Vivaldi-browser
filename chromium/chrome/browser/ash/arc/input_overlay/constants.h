@@ -9,6 +9,14 @@
 
 namespace arc::input_overlay {
 
+// About Json strings.
+constexpr char kMouseAction[] = "mouse_action";
+constexpr char kPrimaryClick[] = "primary_click";
+constexpr char kSecondaryClick[] = "secondary_click";
+constexpr char kHoverMove[] = "hover_move";
+constexpr char kPrimaryDragMove[] = "primary_drag_move";
+constexpr char kSecondaryDragMove[] = "secondary_drag_move";
+
 // System version for AlphaV2.
 constexpr char kSystemVersionAlphaV2[] = "0.2";
 
@@ -100,6 +108,28 @@ enum class TapLabelPosition {
   kBottomRight = 3,
   // Undefined label position. Starts to use in AlphaV2.
   kNone = 4,
+};
+
+// These values are about how the reposition is achieved for the metrics record.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class RepositionType {
+  kTouchscreenDragRepostion = 0,
+  kMouseDragRepostion = 1,
+  kKeyboardArrowKeyReposition = 2,
+  kMaxValue = kKeyboardArrowKeyReposition
+};
+
+// This is about the window state types when recording metrics data for user UI
+// reposition for the metrics record. These values are persisted to logs.
+// Entries should not be renumbered and numeric values should never be reused.
+enum class InputOverlayWindowStateType {
+  kInvalid = 0,
+  kNormal = 1,
+  kMaximized = 2,
+  kFullscreen = 3,
+  kSnapped = 4,
+  kMaxValue = kSnapped
 };
 
 }  // namespace arc::input_overlay

@@ -23,6 +23,7 @@
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "base/values.h"
 #include "net/base/completion_once_callback.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
@@ -396,7 +397,7 @@ class NET_EXPORT SpdySession
   int GetPushedStream(const GURL& url,
                       spdy::SpdyStreamId pushed_stream_id,
                       RequestPriority priority,
-                      SpdyStream** spdy_stream);
+                      raw_ptr<SpdyStream>* spdy_stream);
 
   // Called when the pushed stream should be cancelled. If the pushed stream is
   // not claimed and active, sends RST to the server to cancel the stream.
@@ -594,7 +595,7 @@ class NET_EXPORT SpdySession
 
   // Retrieves information on the current state of the SPDY session as a
   // Value.
-  base::Value GetInfoAsValue() const;
+  base::Value::Dict GetInfoAsValue() const;
 
   // Indicates whether the session is being reused after having successfully
   // used to send/receive data in the past or if the underlying socket was idle
@@ -1238,12 +1239,16 @@ class NET_EXPORT SpdySession
 
   // Limits
   size_t max_concurrent_streams_;
+  // TODO(https://crbug.com/1426477): Remove.
   size_t max_concurrent_pushed_streams_;
 
   // Some statistics counters for the session.
   int streams_initiated_count_ = 0;
+
+  // TODO(https://crbug.com/1426477): Remove.
   int streams_pushed_count_ = 0;
   int streams_pushed_and_claimed_count_ = 0;
+
   int streams_abandoned_count_ = 0;
 
   // True if there has been a ping sent for which we have not received a
@@ -1339,6 +1344,7 @@ class NET_EXPORT SpdySession
   const bool is_http2_enabled_;
   const bool is_quic_enabled_;
 
+  // TODO(https://crbug.com/1426477): Remove.
   // If true, accept pushed streams from server.
   // If false, reset pushed streams immediately.
   const bool enable_push_;

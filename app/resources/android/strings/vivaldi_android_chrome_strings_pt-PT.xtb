@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Separadores abertos</translation>
 <translation id="1829244130665387512">Procurar na página</translation>
 <translation id="1910514478706885609">Abrir num novo grupo de separadores</translation>
+<translation id="1925021887439448749">Digitar endereço web personalizado</translation>
 <translation id="2038563949887743358">Ativar Pedir website para computador</translation>
 <translation id="2139186145475833000">Adicionar ao ecrã inicial</translation>
+<translation id="2149973817440762519">Editar favorito</translation>
 <translation id="2306442503286132111">Favorito guardado na pasta <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aparência</translation>
 <translation id="2501278716633472235">Voltar</translation>
 <translation id="2633278372998075009">Separadores privados</translation>
+<translation id="2951071800649516099">Adicione páginas à sua lista de leitura para ler mais tarde</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> favorito}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> favoritos}}</translation>
@@ -30,12 +33,15 @@
 <translation id="4121750346708795461">Ao utilizar esta aplicação, aceita as <ph name="BEGIN_LINK1" />Condições de Utilização<ph name="END_LINK1" /> e a <ph name="BEGIN_LINK2" />Política de Privacidade<ph name="END_LINK2" /> do Vivaldi.</translation>
 <translation id="4137746084635924146">Idioma atual do equipamento</translation>
 <translation id="4167670741834902166">Novo separador privado</translation>
+<translation id="4195643157523330669">Abrir num novo separador</translation>
 <translation id="4243710787042215766">Abrir num separador privado</translation>
+<translation id="451872707440238414">Procure os seus favoritos</translation>
 <translation id="4526803704855831732">Separadores privados</translation>
 <translation id="4719086422742491124">Saiba mais sobre o tema dos websites sem sair da página. Selecione uma ou mais palavras na página para pesquisar por elas.
 
 Tocar e pesquisar é uma funcionalidade disponível apenas quando tiver escolhido o Google como motor de busca padrão no Vivaldi.</translation>
 <translation id="4759238208242260848">Transferências</translation>
+<translation id="4850886885716139402">Ver</translation>
 <translation id="4883379392681899581">Deixar o modo privado</translation>
 <translation id="4943872375798546930">Sem resultados</translation>
 <translation id="49576331685473090">Bloqueador de conteúdos</translation>
@@ -48,7 +54,9 @@ Tocar e pesquisar é uma funcionalidade disponível apenas quando tiver escolhid
 Para ajustar o seu termo de pesquisa, faça um toque longo para selecionar. Para refinar a sua pesquisa, deslize o painel completamente para cima e toque na caixa de pesquisa.</translation>
 <translation id="572328651809341494">Separadores recentes</translation>
 <translation id="6150320133806434356">Favorito guardado</translation>
+<translation id="6301525844455696527">Ponha a sua lista de leitura em dia</translation>
 <translation id="6336451774241870485">Novo separador privado</translation>
+<translation id="6404511346730675251">Editar favorito</translation>
 <translation id="6585139692466700358">Propor tradução de páginas noutros idiomas utilizando o serviço de tradução do Vivaldi</translation>
 <translation id="6593061639179217415">Website para computador</translation>
 <translation id="6610147964972079463">Fechar separadores privados</translation>
@@ -57,9 +65,15 @@ Para ajustar o seu termo de pesquisa, faça um toque longo para selecionar. Para
 <translation id="732145680195464316">Favorito guardado em <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Acerca do Vivaldi</translation>
 <translation id="7465104139234185284">Fechar todos os separadores privados</translation>
+<translation id="7481312909269577407">Avançar</translation>
+<translation id="7583262514280211622">A sua lista de leitura será apresentada aqui</translation>
+<translation id="7968014550143838305">Adicionado à lista de leitura</translation>
 <translation id="804786196054284061">Condições de Utilização do Vivaldi</translation>
+<translation id="8127542551745560481">Editar página inicial</translation>
+<translation id="8560602726703398413">Encontre a sua lista de leitura nos favoritos</translation>
 <translation id="85991616550051997">Ir para a página inicial</translation>
 <translation id="8820817407110198400">Favoritos</translation>
 <translation id="9063523880881406963">Desativar Pedir website para computador</translation>
 <translation id="9080642952018487277">Entrar no modo privado</translation>
+<translation id="96681097142096641">Pretende ver a página simplificada?</translation>
 </translationbundle>

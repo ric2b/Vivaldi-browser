@@ -13,7 +13,7 @@ import {assert} from 'chrome://resources/js/assert_ts.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './password_details_section.html.js';
-import {PasswordManagerImpl} from './password_manager_proxy.js';
+import {PasswordManagerImpl, PasswordViewPageInteractions} from './password_manager_proxy.js';
 import {Page, Route, RouteObserverMixin, Router} from './router.js';
 
 export interface PasswordDetailsSectionElement {
@@ -42,6 +42,28 @@ export class PasswordDetailsSectionElement extends
   private selectedGroup_: chrome.passwordsPrivate.CredentialGroup|undefined;
   private savedPasswordsListener_: (
       (entries: chrome.passwordsPrivate.PasswordUiEntry[]) => void)|null = null;
+  private passwordManagerAuthTimeoutListener_: () => void;
+  private visibilityChangedListener_: () => void;
+
+  override connectedCallback() {
+    super.connectedCallback();
+
+    this.passwordManagerAuthTimeoutListener_ = () => {
+      if (Router.getInstance().currentRoute.page !== Page.PASSWORD_DETAILS) {
+        return;
+      }
+
+      this.dispatchEvent(new CustomEvent('auth-timed-out', {
+        bubbles: true,
+        composed: true,
+      }));
+      this.navigateBack_();
+      PasswordManagerImpl.getInstance().recordPasswordViewInteraction(
+          PasswordViewPageInteractions.TIMED_OUT_IN_VIEW_PAGE);
+    };
+    PasswordManagerImpl.getInstance().addPasswordManagerAuthTimeoutListener(
+        this.passwordManagerAuthTimeoutListener_);
+  }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
@@ -50,6 +72,8 @@ export class PasswordDetailsSectionElement extends
           this.savedPasswordsListener_);
       this.savedPasswordsListener_ = null;
     }
+    PasswordManagerImpl.getInstance().removePasswordManagerAuthTimeoutListener(
+        this.passwordManagerAuthTimeoutListener_);
   }
 
   override currentRouteChanged(route: Route, _: Route): void {
@@ -62,8 +86,11 @@ export class PasswordDetailsSectionElement extends
     if (group && group.name) {
       this.selectedGroup_ = group;
       this.startListeningForUpdates_();
+      this.$.backButton.focus();
     } else {
       // Navigation happened directly. Find group with matching name.
+      PasswordManagerImpl.getInstance().recordPasswordViewInteraction(
+          PasswordViewPageInteractions.CREDENTIAL_REQUESTED_BY_URL);
       this.assignMatchingGroup(route.details as string);
     }
   }
@@ -79,14 +106,25 @@ export class PasswordDetailsSectionElement extends
   private async assignMatchingGroup(groupName: string) {
     const groups =
         await PasswordManagerImpl.getInstance().getCredentialGroups();
-    const selectedGroup = groups.find(group => group.name === groupName);
+    let selectedGroup = groups.find(group => group.name === groupName);
+    if (!selectedGroup) {
+      // Check if any password in a group has matching domain.
+      selectedGroup = groups.find(
+          group => group.entries.some(
+              entry => entry.affiliatedDomains?.some(
+                  domain => domain.name === groupName)));
+    }
     if (!selectedGroup) {
       this.navigateBack_();
+      PasswordManagerImpl.getInstance().recordPasswordViewInteraction(
+          PasswordViewPageInteractions.CREDENTIAL_NOT_FOUND);
       return;
     }
     assert(selectedGroup);
     this.updateShownCredentials(selectedGroup).catch(this.navigateBack_);
     this.startListeningForUpdates_();
+    PasswordManagerImpl.getInstance().recordPasswordViewInteraction(
+        PasswordViewPageInteractions.CREDENTIAL_FOUND);
   }
 
   private startListeningForUpdates_() {
@@ -102,9 +140,29 @@ export class PasswordDetailsSectionElement extends
   }
 
   /*
-   * Requests passwords and notes for all credentials from a group.
+   * Requests passwords and notes for all credentials from a group. If page
+   * isn't visible the request will be postponed until tab becomes focused
+   * again. This is done to prevent unnecessary authentication prompts.
    */
   private updateShownCredentials(
+      group: chrome.passwordsPrivate.CredentialGroup): Promise<void> {
+    if (document.visibilityState === 'visible') {
+      return this.requestShownCredentials_(group);
+    }
+    return new Promise((resolve, reject) => {
+      this.visibilityChangedListener_ = () => {
+        if (document.visibilityState === 'visible') {
+          document.removeEventListener(
+              'visibilitychange', this.visibilityChangedListener_);
+          this.requestShownCredentials_(group).then(resolve).catch(reject);
+        }
+      };
+      document.addEventListener(
+          'visibilitychange', this.visibilityChangedListener_);
+    });
+  }
+
+  private requestShownCredentials_(
       group: chrome.passwordsPrivate.CredentialGroup): Promise<void> {
     const ids = group.entries.map(entry => entry.id);
     return PasswordManagerImpl.getInstance()

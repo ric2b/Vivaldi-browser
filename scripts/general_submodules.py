@@ -14,6 +14,7 @@ cipd_pick_list = [
   "buildtools/reclient",
   "third_party/lzma_sdk/bin/host_platform",
   "third_party/lzma_sdk/bin/win64",
+  "ui/gl/resources/angle-metal",
   ]
 
 exclude_cipd = [
@@ -28,7 +29,7 @@ exclude_cipd = [
   ]
 
 excluded_modules = [
-  "third_party/cros_components",
+  "third_party/cros-components/src",
   "third_party/cardboard/src",
   ]
 
@@ -36,6 +37,9 @@ def main():
   variables = vivdeps.get_chromium_variables()
   if variables.get("checkout_android", False):
     variables["checkout_android_native_support"] = True
+
+  # Temp: Freeze reclient version to 112, due to breakage in 114
+  variables["reclient_version"] = "re_client_version:0.96.2.d36a87c-gomaip"
 
   deps = vivdeps.ChromiumDeps(variables=variables)
 

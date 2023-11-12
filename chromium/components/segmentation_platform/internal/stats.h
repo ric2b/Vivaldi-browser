@@ -7,9 +7,12 @@
 
 #include "components/segmentation_platform/internal/execution/model_execution_status.h"
 #include "components/segmentation_platform/internal/metadata/metadata_utils.h"
+#include "components/segmentation_platform/internal/selection/segment_result_provider.h"
 #include "components/segmentation_platform/public/config.h"
+#include "components/segmentation_platform/public/model_provider.h"
 #include "components/segmentation_platform/public/proto/segmentation_platform.pb.h"
 #include "components/segmentation_platform/public/proto/types.pb.h"
+#include "components/segmentation_platform/public/result.h"
 #include "components/segmentation_platform/public/segment_selection_result.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -57,6 +60,20 @@ void RecordSegmentSelectionComputed(
     const Config& config,
     SegmentId new_selection,
     absl::optional<SegmentId> previous_selection);
+
+// Records the post processed result whenever computed. This is recorded when
+// results are obtained by eithier executing the model or getting a valid score
+// from database.
+void RecordClassificationResultComputed(
+    const Config& config,
+    const proto::PredictionResult& new_result);
+
+// Records from which old value to which new value the topmost label is changing
+// to when prefs expired and is updated with new result.
+void RecordClassificationResultUpdated(
+    const Config& config,
+    const absl::optional<proto::PredictionResult>& old_result,
+    const proto::PredictionResult& new_result);
 
 // Database Maintenance metrics.
 // Records the number of unique signal identifiers that were successfully
@@ -111,6 +128,14 @@ void RecordModelExecutionDurationModel(SegmentId segment_id,
 void RecordModelExecutionDurationTotal(SegmentId segment_id,
                                        ModelExecutionStatus status,
                                        base::TimeDelta duration);
+
+// Records the total duration for GetClassificationResult API starting from the
+// time request arrives in segmentation service until the result has been
+// returned. It includes feature processing and model execution as well.
+void RecordClassificationRequestTotalDuration(
+    const std::string& segmentation_key,
+    base::TimeDelta duration);
+
 // Records the total duration of on-demand segment selection which includes
 // running all the models associated with the client and computing result.
 void RecordOnDemandSegmentSelectionDuration(
@@ -122,6 +147,14 @@ void RecordModelExecutionResult(
     SegmentId segment_id,
     float result,
     proto::SegmentationModelMetadata::OutputDescription return_type);
+// Records the raw model score. Records each element of the result tensor as a
+// separate histogram identified by its index. For binary and multi-class
+// models, the raw score is multiplied by 100 to transform as percent score,
+// whereas for binned classifier the result is recorded as is in a percent
+// range.
+void RecordModelExecutionResult(SegmentId segment_id,
+                                const ModelProvider::Response& result,
+                                proto::OutputConfig output_config);
 // Records whether the result value of of executing an ML model was successfully
 // saved.
 void RecordModelExecutionSaveResult(SegmentId segment_id, bool success);
@@ -174,11 +207,26 @@ enum class SegmentationSelectionFailureReason {
   kAtLeastOneSegmentDefaultExecFailed = 13,
   kAtLeastOneSegmentDefaultMissingMetadata = 14,
   kAtLeastOneSegmentTfliteExecFailed = 15,
-  kMaxValue = kAtLeastOneSegmentTfliteExecFailed
+  kSelectionAvailableInProtoPrefs = 16,
+  kInvalidSelectionResultInProtoPrefs = 17,
+  kProtoPrefsUpdateNotRequired = 18,
+  kProtoPrefsUpdated = 19,
+  kScoreUsedFromDatabase = 20,
+  kScoreComputedFromDefaultModel = 21,
+  kScoreComputedFromTfliteModel = 22,
+  kMultiOutputNotSupported = 23,
+  kOnDemandModelExecutionFailed = 24,
+  kClassificationResultFromPrefs = 25,
+  kClassificationResultNotAvailableInPrefs = 26,
+  kMaxValue = kClassificationResultNotAvailableInPrefs,
 };
 
 // Records the reason for failure or success to compute a segment selection.
 void RecordSegmentSelectionFailure(const Config& config,
+                                   SegmentationSelectionFailureReason reason);
+
+// Records the reason for failure or success to compute a segment selection.
+void RecordSegmentSelectionFailure(const std::string& segmentation_key,
                                    SegmentationSelectionFailureReason reason);
 
 // Keep in sync with SegmentationPlatformFeatureProcessingError in
@@ -231,12 +279,25 @@ enum class TrainingDataCollectionEvent {
   kPartialDataNotAllowed = 7,
   kContinousCollectionStart = 8,
   kContinousCollectionSuccess = 9,
-  kMaxValue = kContinousCollectionSuccess,
+  kCollectAndStoreInputsSuccess = 10,
+  kObservationTimeReached = 11,
+  kDelayedTaskPosted = 12,
+  kImmediateObservationPosted = 13,
+  kWaitingForNonDelayedTrigger = 14,
+  kHistogramTriggerHit = 15,
+  kNoSegmentInfo = 16,
+  kDisallowedForRecording = 17,
+  kObservationDisallowed = 18,
+  kTrainingDataMissing = 19,
+  kMaxValue = kTrainingDataMissing,
 };
 
 // Records analytics for training data collection.
 void RecordTrainingDataCollectionEvent(SegmentId segment_id,
                                        TrainingDataCollectionEvent event);
+
+SegmentationSelectionFailureReason GetSuccessOrFailureReason(
+    SegmentResultProvider::ResultState result_state);
 
 }  // namespace segmentation_platform::stats
 

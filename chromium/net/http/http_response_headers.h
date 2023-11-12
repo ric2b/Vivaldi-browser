@@ -16,17 +16,17 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
+#include "base/trace_event/base_tracing_forward.h"
+#include "base/values.h"
 #include "net/base/net_export.h"
 #include "net/http/http_version.h"
 #include "net/log/net_log_capture_mode.h"
-#include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
 namespace base {
 class Pickle;
 class PickleIterator;
 class Time;
 class TimeDelta;
-class Value;
 }
 
 namespace net {
@@ -324,7 +324,7 @@ class NET_EXPORT HttpResponseHeaders
   bool IsChunkEncoded() const;
 
   // Creates a Value for use with the NetLog containing the response headers.
-  base::Value NetLogParams(NetLogCaptureMode capture_mode) const;
+  base::Value::Dict NetLogParams(NetLogCaptureMode capture_mode) const;
 
   // Returns the HTTP response code.  This is 0 if the response code text seems
   // to exist but could not be parsed.  Otherwise, it defaults to 200 if the

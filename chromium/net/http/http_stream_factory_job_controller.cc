@@ -44,14 +44,14 @@ namespace net {
 namespace {
 
 // Returns parameters associated with the proxy resolution.
-base::Value NetLogHttpStreamJobProxyServerResolved(
+base::Value::Dict NetLogHttpStreamJobProxyServerResolved(
     const ProxyServer& proxy_server) {
   base::Value::Dict dict;
 
   dict.Set("proxy_server", proxy_server.is_valid()
                                ? ProxyServerToPacResultElement(proxy_server)
                                : std::string());
-  return base::Value(std::move(dict));
+  return dict;
 }
 
 GURL CreateAltSvcUrl(const GURL& origin_url,
@@ -108,22 +108,22 @@ AlternativeService GetAlternativeServiceForDnsJob(const GURL& url) {
 // the main job.
 const int kMaxDelayTimeForMainJobSecs = 3;
 
-base::Value NetLogJobControllerParams(const HttpRequestInfo& request_info,
-                                      bool is_preconnect) {
+base::Value::Dict NetLogJobControllerParams(const HttpRequestInfo& request_info,
+                                            bool is_preconnect) {
   base::Value::Dict dict;
   dict.Set("url", request_info.url.possibly_invalid_spec());
   dict.Set("is_preconnect", is_preconnect);
   dict.Set("privacy_mode", PrivacyModeToDebugString(request_info.privacy_mode));
 
-  return base::Value(std::move(dict));
+  return dict;
 }
 
-base::Value NetLogAltSvcParams(const AlternativeServiceInfo* alt_svc_info,
-                               bool is_broken) {
+base::Value::Dict NetLogAltSvcParams(const AlternativeServiceInfo* alt_svc_info,
+                                     bool is_broken) {
   base::Value::Dict dict;
   dict.Set("alt_svc", alt_svc_info->ToString());
   dict.Set("is_broken", is_broken);
-  return base::Value(std::move(dict));
+  return dict;
 }
 
 HttpStreamFactory::JobController::JobController(
@@ -517,19 +517,19 @@ void HttpStreamFactory::JobController::OnNeedsProxyAuth(
 
 void HttpStreamFactory::JobController::OnPreconnectsComplete(Job* job,
                                                              int result) {
+  // Preconnects only run as `main_job_`, never `alternative_job_` or
+  // `dns_alpn_h3_job_`.
   DCHECK_EQ(main_job_.get(), job);
-  if (result == ERR_DNS_NO_MATCHING_SUPPORTED_ALPN) {
+
+  // If the job failed because there were no matching HTTPS records in DNS, run
+  // the backup job. A TCP-based protocol may work instead.
+  if (result == ERR_DNS_NO_MATCHING_SUPPORTED_ALPN && preconnect_backup_job_) {
     DCHECK_EQ(job->job_type(), PRECONNECT_DNS_ALPN_H3);
-    DCHECK(preconnect_backup_job_);
-    GURL origin_url = request_info_.url;
-    RewriteUrlWithHostMappingRules(origin_url);
-    url::SchemeHostPort destination(origin_url);
-    DCHECK(destination.IsValid());
-    ConvertWsToHttp(destination);
     main_job_ = std::move(preconnect_backup_job_);
     main_job_->Preconnect(num_streams_);
     return;
   }
+
   main_job_.reset();
   preconnect_backup_job_.reset();
   ResetErrorStatusForJobs();
@@ -833,7 +833,20 @@ int HttpStreamFactory::JobController::DoCreateJobs() {
     // priority currently makes sense for preconnects. The priority for
     // preconnects is currently ignored (see RequestSocketsForPool()), but could
     // be used at some point for proxy resolution or something.
-    if (alternative_service_info_.protocol() != kProtoUnknown) {
+    // Note: When `dns_alpn_h3_job_enabled` is true, we create a
+    // PRECONNECT_DNS_ALPN_H3 job. If no matching HTTPS DNS ALPN records are
+    // received, the PRECONNECT_DNS_ALPN_H3 job will fail with
+    // ERR_DNS_NO_MATCHING_SUPPORTED_ALPN, and `preconnect_backup_job_` will
+    // be started in OnPreconnectsComplete().
+    std::unique_ptr<Job> preconnect_job = job_factory_->CreateJob(
+        this, dns_alpn_h3_job_enabled ? PRECONNECT_DNS_ALPN_H3 : PRECONNECT,
+        session_, request_info_, IDLE, proxy_info_, server_ssl_config_,
+        proxy_ssl_config_, destination, origin_url, is_websocket_,
+        enable_ip_based_pooling_, net_log_.net_log());
+    // When there is an valid alternative service info, and `preconnect_job`
+    // has no existing QUIC session, create a job for the alternative service.
+    if (alternative_service_info_.protocol() != kProtoUnknown &&
+        !preconnect_job->HasAvailableQuicSession()) {
       GURL alternative_url = CreateAltSvcUrl(
           origin_url, alternative_service_info_.host_port_pair());
       RewriteUrlWithHostMappingRules(alternative_url);
@@ -849,19 +862,11 @@ int HttpStreamFactory::JobController::DoCreateJobs() {
           enable_ip_based_pooling_, session_->net_log(),
           alternative_service_info_.protocol(), quic_version);
     } else {
-      // Note: When `dns_alpn_h3_job_enabled` is true, we create a
-      // PRECONNECT_DNS_ALPN_H3 job. If no matching HTTPS DNS ALPN records are
-      // received, the PRECONNECT_DNS_ALPN_H3 job will fail with
-      // ERR_DNS_NO_MATCHING_SUPPORTED_ALPN, and |preconnect_backup_job_| will
-      // be started in OnPreconnectsComplete().
-      main_job_ = job_factory_->CreateJob(
-          this, dns_alpn_h3_job_enabled ? PRECONNECT_DNS_ALPN_H3 : PRECONNECT,
-          session_, request_info_, priority_, proxy_info_, server_ssl_config_,
-          proxy_ssl_config_, destination, origin_url, is_websocket_,
-          enable_ip_based_pooling_, net_log_.net_log());
+      main_job_ = std::move(preconnect_job);
+
       if (dns_alpn_h3_job_enabled) {
         preconnect_backup_job_ = job_factory_->CreateJob(
-            this, PRECONNECT, session_, request_info_, priority_, proxy_info_,
+            this, PRECONNECT, session_, request_info_, IDLE, proxy_info_,
             server_ssl_config_, proxy_ssl_config_, std::move(destination),
             origin_url, is_websocket_, enable_ip_based_pooling_,
             net_log_.net_log());

@@ -6,7 +6,7 @@
 // the Chromium repo. This file should be updated first, before syncing in the
 // other repos.
 
-// Next MinVersion: 17
+// Next MinVersion: 20
 
 module ash.ime.mojom;
 
@@ -173,6 +173,34 @@ enum DomCode {
   kControlLeft = 58,
   kControlRight = 59,
   kCapsLock = 60,
+  [MinVersion=18] kEscape = 61,
+  [MinVersion=18] kTab = 62,
+  [MinVersion=18] kNumpadMultiply = 63,
+  [MinVersion=18] kKanaMode = 64,
+  [MinVersion=18] kPageUp = 65,
+  [MinVersion=18] kEnd = 66,
+  [MinVersion=18] kDelete = 67,
+  [MinVersion=18] kHome = 68,
+  [MinVersion=18] kPageDown = 69,
+  [MinVersion=18] kArrowUp = 70,
+  [MinVersion=18] kArrowLeft = 71,
+  [MinVersion=18] kArrowRight = 72,
+  [MinVersion=18] kArrowDown = 73,
+  [MinVersion=18] kNumpad0 = 74,
+  [MinVersion=18] kNumpad1 = 75,
+  [MinVersion=18] kNumpad2 = 76,
+  [MinVersion=18] kNumpad3 = 77,
+  [MinVersion=18] kNumpad4 = 78,
+  [MinVersion=18] kNumpad5 = 79,
+  [MinVersion=18] kNumpad6 = 80,
+  [MinVersion=18] kNumpad7 = 81,
+  [MinVersion=18] kNumpad8 = 82,
+  [MinVersion=18] kNumpad9 = 83,
+  [MinVersion=18] kNumpadSubtract = 84,
+  [MinVersion=18] kNumpadAdd = 85,
+  [MinVersion=18] kNumpadDecimal = 86,
+  [MinVersion=18] kNumpadEnter = 87,
+  [MinVersion=18] kNumpadDivide = 88,
 };
 
 // Information about a physical key event.
@@ -274,7 +302,7 @@ struct InputFieldInfo {
   [MinVersion=10] TextPredictionMode text_prediction@3;
 };
 
-// Next ordinal: 4
+// Next ordinal: 8
 //
 // TODO(crbug.com/1261313): Note that this type must be marked [Extensible] in
 // all deployed versions before new ordinals can be introduced, and [Extensible]
@@ -287,6 +315,8 @@ union InputMethodSettings {
   ZhuyinSettings zhuyin_settings@3;
   [MinVersion=14, Default] bool null_settings@4;
   [MinVersion=15] JapaneseSettings japanese_settings@5;
+  [MinVersion=19] VietnameseTelexSettings vietnamese_telex_settings@6;
+  [MinVersion=19] VietnameseVniSettings vietnamese_vni_settings@7;
 };
 
 // Next ordinal: 9
@@ -511,6 +541,22 @@ enum AssistiveWindowType {
   kLongpressDiacriticsSuggestion = 6,
 };
 
+// Next ordinal: 4
+[Stable, Extensible]
+enum AutocorrectSuggestionProvider {
+  [Default] kUnknown = 0,
+  kUsEnglishPrebundled = 1,
+  kUsEnglishDownloaded = 2,
+  kUsEnglish840 = 3,
+};
+
+// Next ordinal: 1
+[Stable]
+struct InputMethodMetadata {
+  // What kind of assistive window is shown currently to the user.
+  AutocorrectSuggestionProvider autocorrect_suggestion_provider@0;
+};
+
 // Next ordinal: 2
 [Stable]
 struct AssistiveWindow {
@@ -539,7 +585,8 @@ interface InputMethod {
   // `deprecated_settings` is DEPRECATED.
   [MinVersion=9]
   OnFocus@6(InputFieldInfo input_field_info,
-            InputMethodSettings? deprecated_settings) => (bool success);
+            InputMethodSettings? deprecated_settings)
+    => (bool success, [MinVersion=17] InputMethodMetadata? metadata);
 
   // Called when the input field loses focus.
   OnBlur@1();
@@ -579,3 +626,39 @@ interface InputMethod {
   // shown, dismissed, accepted etc).
   [MinVersion=13] OnAssistiveWindowChanged@9(AssistiveWindow window);
 };
+
+// Settings for Vietnamese Telex input method.
+//
+// Next ordinal: 4
+[Stable]
+struct VietnameseTelexSettings {
+  // Allow flexible diacritic assignment.
+  bool allow_flexible_diacritics@0;
+
+  // Defines the placement of tone marks for some syllables.
+  // If false, use "old style" placement.
+  bool new_style_tone_mark_placement@1;
+
+  // When a horn modifier is applied to "uo", it will add horns to both u and o.
+  bool enable_insert_double_horn_on_uo@2;
+
+  // Type the horn modifier trigger to get u-horn.
+  bool enable_w_for_u_horn_shortcut@3;
+};
+
+// Settings for Vietnamese VNI input method.
+//
+// Next ordinal: 3
+[Stable]
+struct VietnameseVniSettings {
+  // Allow flexible diacritic assignment.
+  bool allow_flexible_diacritics@0;
+
+  // Defines the placement of tone marks for some syllables.
+  // If false, use "old style" placement.
+  bool new_style_tone_mark_placement@1;
+
+  // When a horn modifier is applied to "uo", it will add horns to both u and o.
+  bool enable_insert_double_horn_on_uo@2;
+};
+

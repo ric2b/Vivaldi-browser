@@ -30,7 +30,7 @@ class VivaldiBrowserSyncedWindowDelegate : public BrowserSyncedWindowDelegate {
   SessionID GetTabIdAt(int index) const override;
 
  private:
-  Browser* browser_copy_ = nullptr;  // Already private member in base
+  const raw_ptr<Browser> browser_copy_ = nullptr;  // Already private member in base
 };
 
 #endif  // SYNC_VIVALDI_BROWSER_SYNCED_WINDOW_DELEGATE_H_

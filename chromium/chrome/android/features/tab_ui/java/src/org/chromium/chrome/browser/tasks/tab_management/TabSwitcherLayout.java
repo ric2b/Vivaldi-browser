@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import static org.chromium.chrome.browser.device.DeviceClassManager.GTS_ACCESSIBILITY_SUPPORT;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -21,8 +23,6 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.jank_tracker.JankScenario;
-import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
@@ -55,9 +55,8 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.resources.ResourceManager;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.LinkedList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -86,7 +85,6 @@ public class TabSwitcherLayout extends Layout {
 
     private TabListSceneLayer mSceneLayer;
     private final TabSwitcher mTabSwitcher;
-    private final JankTracker mJankTracker;
     private final TabSwitcher.Controller mController;
     private final TabSwitcherViewObserver mTabSwitcherObserver;
     @Nullable
@@ -118,7 +116,7 @@ public class TabSwitcherLayout extends Layout {
     private PerfListener mPerfListenerForTesting;
 
     public TabSwitcherLayout(Context context, LayoutUpdateHost updateHost,
-            LayoutRenderHost renderHost, TabSwitcher tabSwitcher, JankTracker jankTracker,
+            LayoutRenderHost renderHost, TabSwitcher tabSwitcher,
             @Nullable ViewGroup tabSwitcherScrimAnchor,
             @Nullable ScrimCoordinator scrimCoordinator) {
         super(context, updateHost, renderHost);
@@ -128,7 +126,6 @@ public class TabSwitcherLayout extends Layout {
         mController = mTabSwitcher.getController();
         mTabSwitcher.setOnTabSelectingListener(this::onTabSelecting);
         mGridTabListDelegate = mTabSwitcher.getTabListDelegate();
-        mJankTracker = jankTracker;
         mScrimAnchor = tabSwitcherScrimAnchor;
         mScrimCoordinator = scrimCoordinator;
 
@@ -141,7 +138,7 @@ public class TabSwitcherLayout extends Layout {
             @Override
             public void finishedShowing() {
                 mAndroidViewFinishedShowing = true;
-                if (!TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(context)) {
+                if (!DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
                     doneShowing();
                 }
                 // When Tab-to-GTS animation is done, it's time to renew the thumbnail without
@@ -221,14 +218,12 @@ public class TabSwitcherLayout extends Layout {
         try (TraceEvent e = TraceEvent.scoped(TRACE_SHOW_TAB_SWITCHER)) {
             super.show(time, animate);
 
-            mJankTracker.startTrackingScenario(JankScenario.TAB_SWITCHER);
-
             // Keep the current tab in mLayoutTabs even if we are not going to show the shrinking
             // animation so that thumbnail taking is not blocked.
             LayoutTab sourceLayoutTab = createLayoutTab(
                     mTabModelSelector.getCurrentTabId(), mTabModelSelector.isIncognitoSelected());
             sourceLayoutTab.setDecorationAlpha(0);
-
+            updateCacheVisibleIds(Collections.singletonList(mTabModelSelector.getCurrentTabId()));
             mLayoutTabs = new LayoutTab[] {sourceLayoutTab};
 
             boolean quick = mGridTabListDelegate.prepareTabSwitcherView();
@@ -238,8 +233,17 @@ public class TabSwitcherLayout extends Layout {
             boolean isCurrentTabModelEmpty = mTabModelSelector.getCurrentModel().getCount() == 0;
             final boolean shouldAnimate = animate && !isCurrentTabModelEmpty;
 
-            if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(getContext())) {
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                 showOverviewWithTranslateUp(shouldAnimate);
+            } else if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(getContext())
+                    && GTS_ACCESSIBILITY_SUPPORT.getValue()
+                    && ChromeAccessibilityUtil.get().isTouchExplorationEnabled()) {
+                // Intentionally disable the shrinking animation when touch exploration is enabled.
+                // During the shrinking animation, since the ComponsitorViewHolder is not focusable,
+                // Chrome is in a temporary no "valid" focus target state. This result in focus
+                // shifting to the omnibox and triggers visual jank and accessibility announcement
+                // of the URL. Disable the animation and run immediately to avoid this state.
+                showOverviewWithTabShrink(false, () -> null, true);
             } else {
                 mDeferredAnimationRunnable = () -> {
                     showOverviewWithTabShrink(shouldAnimate,
@@ -306,7 +310,9 @@ public class TabSwitcherLayout extends Layout {
             sourceLayoutTab.setDecorationAlpha(0);
 
             List<LayoutTab> layoutTabs = new ArrayList<>();
+            List<Integer> tabIds = new ArrayList<>();
             layoutTabs.add(sourceLayoutTab);
+            tabIds.add(sourceLayoutTab.getId());
 
             if (sourceTabId != mTabModelSelector.getCurrentTabId()) {
                 // Keep the original tab in mLayoutTabs to unblock thumbnail taking at the end of
@@ -316,13 +322,13 @@ public class TabSwitcherLayout extends Layout {
                 originalTab.setScale(0);
                 originalTab.setDecorationAlpha(0);
                 layoutTabs.add(originalTab);
+                tabIds.add(originalTab.getId());
             }
             mLayoutTabs = layoutTabs.toArray(new LayoutTab[0]);
-
-            updateCacheVisibleIds(new LinkedList<>(Arrays.asList(sourceTabId)));
+            updateCacheVisibleIds(tabIds);
 
             mIsAnimatingHide = true;
-            if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(getContext())) {
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
                 translateDown();
             } else {
                 mController.hideTabSwitcherView(!isTabGtsAnimationEnabled());
@@ -335,7 +341,6 @@ public class TabSwitcherLayout extends Layout {
         try (TraceEvent e = TraceEvent.scoped(TRACE_DONE_HIDING_TAB_SWITCHER)) {
             super.doneHiding();
             RecordUserAction.record("MobileExitStackView");
-            mJankTracker.finishTrackingScenario(JankScenario.TAB_SWITCHER);
         }
     }
 
@@ -408,14 +413,6 @@ public class TabSwitcherLayout extends Layout {
         if (skipSlowZooming) {
             showShrinkingAnimation &= quick;
         }
-        if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
-            // Intentionally disable the shrinking animation when accessibility is enabled.
-            // During the shrinking animation, since the ComponsitorViewHolder is not focusable,
-            // I think we are in a temporary no "valid" focus target state, so the focus shifts
-            // to the omnibox and triggers an accessibility announcement of the URL and a
-            // keyboard hiding event. Disable the animation to avoid this temporary state.
-            showShrinkingAnimation &= !ChromeAccessibilityUtil.get().isAccessibilityEnabled();
-        }
 
         if (!showShrinkingAnimation || target.get() == null) {
             mController.showTabSwitcherView(animate);
@@ -423,6 +420,16 @@ public class TabSwitcherLayout extends Layout {
         }
 
         forceAnimationToFinish();
+        // TODO(crbug/1423109): mLayoutTabs shouldn't be null here, but it is possible the delayed
+        // removal via a handler in mTabSwitcherObserver#finishedShowing results in a null
+        // mLayoutTabs. This should be fixed by simplifying thumbnail capture logic.
+        if (mLayoutTabs == null) {
+            LayoutTab sourceLayoutTab = createLayoutTab(
+                    mTabModelSelector.getCurrentTabId(), mTabModelSelector.isIncognitoSelected());
+            sourceLayoutTab.setDecorationAlpha(0);
+
+            mLayoutTabs = new LayoutTab[] {sourceLayoutTab};
+        }
         LayoutTab sourceLayoutTab = mLayoutTabs[0];
         CompositorAnimationHandler handler = getAnimationHandler();
         Collection<Animator> animationList = new ArrayList<>(5);
@@ -465,6 +472,11 @@ public class TabSwitcherLayout extends Layout {
         mTabToSwitcherAnimation = new AnimatorSet();
         mTabToSwitcherAnimation.playTogether(animationList);
         mTabToSwitcherAnimation.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+                mController.prepareShowTabSwitcherView();
+            }
+
             @Override
             public void onAnimationEnd(Animator animation) {
                 mTabToSwitcherAnimation = null;
@@ -699,7 +711,7 @@ public class TabSwitcherLayout extends Layout {
 
     @Override
     public boolean canHostBeFocusable() {
-        if (TabUiFeatureUtilities.isLaunchPolishEnabled()
+        if (TabUiFeatureUtilities.isTabGroupsAndroidContinuationEnabled(getContext())
                 && ChromeAccessibilityUtil.get().isAccessibilityEnabled()
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
             // We don't allow this layout to gain focus when accessibility is enabled so that the
@@ -713,12 +725,17 @@ public class TabSwitcherLayout extends Layout {
         return super.canHostBeFocusable();
     }
 
+    @Override
+    public boolean isRunningAnimations() {
+        return mDeferredAnimationRunnable != null || mTabToSwitcherAnimation != null;
+    }
+
     /**
      * Shrink/Expand animation is disabled for Tablet TabSwitcher launch polish.
      * @return Whether shrink/expand animation is enabled.
      */
     private boolean isTabGtsAnimationEnabled() {
-        if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(getContext())) return false;
-        return TabUiFeatureUtilities.isTabToGtsAnimationEnabled();
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) return false;
+        return TabUiFeatureUtilities.isTabToGtsAnimationEnabled(getContext());
     }
 }

@@ -64,28 +64,24 @@ void SkiaOutputDeviceVulkanSecondaryCB::Submit(bool sync_cpu,
 }
 
 bool SkiaOutputDeviceVulkanSecondaryCB::Reshape(
-    const SkSurfaceCharacterization& characterization,
+    const SkImageInfo& image_info,
     const gfx::ColorSpace& color_space,
+    int sample_count,
     float device_scale_factor,
     gfx::OverlayTransform transform) {
   // No-op
-  size_ = gfx::SkISizeToSize(characterization.dimensions());
+  size_ = gfx::SkISizeToSize(image_info.dimensions());
   return true;
 }
 
-void SkiaOutputDeviceVulkanSecondaryCB::SwapBuffers(
+void SkiaOutputDeviceVulkanSecondaryCB::Present(
+    const absl::optional<gfx::Rect>& update_rect,
     BufferPresentedCallback feedback,
     OutputSurfaceFrame frame) {
+  CHECK(!update_rect);
   StartSwapBuffers(std::move(feedback));
   FinishSwapBuffers(gfx::SwapCompletionResult(gfx::SwapResult::SWAP_ACK), size_,
                     std::move(frame));
-}
-
-void SkiaOutputDeviceVulkanSecondaryCB::PostSubBuffer(
-    const gfx::Rect& rect,
-    BufferPresentedCallback feedback,
-    OutputSurfaceFrame frame) {
-  CHECK(false);
 }
 
 SkSurface* SkiaOutputDeviceVulkanSecondaryCB::BeginPaint(

@@ -7,6 +7,7 @@
 
 #include "base/dcheck_is_on.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item_text_index.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_break_token.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -33,8 +34,7 @@ class CORE_EXPORT NGInlineBreakToken final : public NGBreakToken {
   static NGInlineBreakToken* Create(
       NGInlineNode node,
       const ComputedStyle* style,
-      unsigned item_index,
-      unsigned text_offset,
+      const NGInlineItemTextIndex& index,
       unsigned flags /* NGInlineBreakTokenFlags */,
       const NGBreakToken* sub_break_token = nullptr);
 
@@ -42,12 +42,13 @@ class CORE_EXPORT NGInlineBreakToken final : public NGBreakToken {
   // this style.
   const ComputedStyle* Style() const { return style_.get(); }
 
-  unsigned ItemIndex() const {
-    return item_index_;
-  }
+  const NGInlineItemTextIndex& ItemTextIndex() const { return index_; }
+  wtf_size_t ItemIndex() const { return index_.item_index; }
+  wtf_size_t TextOffset() const { return index_.text_offset; }
 
-  unsigned TextOffset() const {
-    return text_offset_;
+  // True if the offset of `this` is equal to or after `other`.
+  bool IsAtEqualOrAfter(const NGInlineBreakToken& other) const {
+    return index_ >= other.index_;
   }
 
   bool UseFirstLineStyle() const {
@@ -82,8 +83,7 @@ class CORE_EXPORT NGInlineBreakToken final : public NGBreakToken {
   NGInlineBreakToken(PassKey,
                      NGInlineNode node,
                      const ComputedStyle*,
-                     unsigned item_index,
-                     unsigned text_offset,
+                     const NGInlineItemTextIndex& index,
                      unsigned flags /* NGInlineBreakTokenFlags */,
                      const NGBreakToken* sub_break_token);
 
@@ -99,8 +99,7 @@ class CORE_EXPORT NGInlineBreakToken final : public NGBreakToken {
   const Member<const NGBreakToken>* SubBreakTokenAddress() const;
 
   scoped_refptr<const ComputedStyle> style_;
-  unsigned item_index_;
-  unsigned text_offset_;
+  NGInlineItemTextIndex index_;
 
   // This is an array of one item if |kHasSubBreakToken|, or zero.
   Member<const NGBreakToken> sub_break_token_[];

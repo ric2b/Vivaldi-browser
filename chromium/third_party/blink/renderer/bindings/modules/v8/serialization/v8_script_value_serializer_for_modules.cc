@@ -125,11 +125,7 @@ bool V8ScriptValueSerializerForModules::ExtractTransferable(
     return true;
   }
 
-  if (V8MediaSourceHandle::HasInstance(object, isolate) &&
-      RuntimeEnabledFeatures::MediaSourceInWorkersEnabled(
-          CurrentExecutionContext(isolate)) &&
-      RuntimeEnabledFeatures::MediaSourceInWorkersUsingHandleEnabled(
-          CurrentExecutionContext(isolate))) {
+  if (V8MediaSourceHandle::HasInstance(object, isolate)) {
     MediaSourceHandleImpl* media_source_handle =
         V8MediaSourceHandle::ToImpl(v8::Local<v8::Object>::Cast(object));
     MediaSourceHandleTransferList* transfer_list =
@@ -325,12 +321,6 @@ bool V8ScriptValueSerializerForModules::WriteDOMObject(
   }
   if (auto* media_source_handle =
           dispatcher.ToMostDerived<MediaSourceHandleImpl>()) {
-    if (!(RuntimeEnabledFeatures::MediaSourceInWorkersEnabled(
-              ExecutionContext::From(GetScriptState())) &&
-          RuntimeEnabledFeatures::MediaSourceInWorkersUsingHandleEnabled(
-              ExecutionContext::From(GetScriptState())))) {
-      return false;
-    }
     if (IsForStorage()) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kDataCloneError,
@@ -394,6 +384,8 @@ uint32_t AlgorithmIdForWireFormat(WebCryptoAlgorithmId id) {
       return kPbkdf2Tag;
     case kWebCryptoAlgorithmIdEd25519:
       return kEd25519Tag;
+    case kWebCryptoAlgorithmIdX25519:
+      return kX25519Tag;
   }
   NOTREACHED() << "Unknown algorithm ID " << id;
   return 0;
@@ -509,10 +501,15 @@ bool V8ScriptValueSerializerForModules::WriteCryptoKey(
     case kWebCryptoKeyAlgorithmParamsTypeNone:
       switch (algorithm.Id()) {
         case kWebCryptoAlgorithmIdEd25519:
-          WriteOneByte(kEd25519KeyTag);
+        case kWebCryptoAlgorithmIdX25519: {
+          CryptoKeySubTag tag = algorithm.Id() == kWebCryptoAlgorithmIdEd25519
+                                    ? kEd25519KeyTag
+                                    : kX25519KeyTag;
+          WriteOneByte(tag);
           WriteUint32(AlgorithmIdForWireFormat(algorithm.Id()));
           WriteUint32(AsymmetricKeyTypeForWireFormat(key.GetType()));
           break;
+        }
         default:
           DCHECK(WebCryptoAlgorithm::IsKdf(algorithm.Id()));
           WriteOneByte(kNoParamsKeyTag);

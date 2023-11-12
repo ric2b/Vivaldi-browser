@@ -497,8 +497,6 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         self.fail('Target machine must have a GPU')
       if not gpu.aux_attributes:
         self.fail('Browser must support GPU aux attributes')
-      if not gpu.aux_attributes['software_rendering']:
-        self.fail('Software rendering was disabled')
       if 'SwiftShader' not in gpu.aux_attributes['gl_renderer']:
         self.fail('Expected "SwiftShader" in GPU info GL renderer string')
       if 'Google' not in gpu.aux_attributes['gl_vendor']:
@@ -648,9 +646,7 @@ class GpuProcessIntegrationTest(gpu_integration_test.GpuIntegrationTest):
           'hold on the high-performance GPU')
 
   def _GpuProcess_webgpu_iframe_removed(self, test_path: str) -> None:
-    self.RestartBrowserIfNecessaryWithArgs([
-        '--enable-unsafe-webgpu',
-    ])
+    self.RestartBrowserIfNecessaryWithArgs(cba.ENABLE_WEBGPU_FOR_TESTING)
     self._NavigateAndWait(test_path)
 
   @classmethod

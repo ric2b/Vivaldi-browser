@@ -63,8 +63,6 @@ class Menu_Model : public KeyedService {
   Menu_Node& root_node() { return root_; }
   // Returns the fixed node that is the ancestor of main menus.
   Menu_Node* mainmenu_node() { return mainmenu_node_; }
-  // Returns the fixed node that is the ancestor of context menus.
-  Menu_Node* contextmenu_node() { return contextmenu_node_; }
 
   Menu_Control* GetControl() { return control_.get(); }
 
@@ -77,13 +75,12 @@ class Menu_Model : public KeyedService {
   std::unique_ptr<MenuLoadDetails> CreateLoadDetails(int64_t id);
   bool loaded_ = false;
   base::ObserverList<MenuModelObserver> observers_;
-  content::BrowserContext* context_;
+  const raw_ptr<content::BrowserContext> context_;
   Mode mode_;
   std::unique_ptr<MenuStorage> store_;
   Menu_Node root_;
   // Managed by the root node. Provides easy access.
-  Menu_Node* mainmenu_node_ = nullptr;
-  Menu_Node* contextmenu_node_ = nullptr;
+  raw_ptr<Menu_Node> mainmenu_node_ = nullptr;
   std::unique_ptr<Menu_Control> control_;
 };
 

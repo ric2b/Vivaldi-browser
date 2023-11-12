@@ -9,7 +9,7 @@
 #import "base/notreached.h"
 #import "ios/chrome/browser/overlays/public/infobar_banner/infobar_banner_overlay_responses.h"
 #import "ios/chrome/browser/overlays/public/infobar_banner/translate_infobar_banner_overlay_request_config.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_consumer.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_overlay_mediator+consumer_support.h"
 #import "ios/chrome/browser/ui/overlays/overlay_request_mediator+subclassing.h"
@@ -22,13 +22,6 @@
 #endif
 
 using translate_infobar_overlays::TranslateBannerRequestConfig;
-
-namespace {
-
-// The name of the translate icon image.
-NSString* const kTranslateImageName = @"infobar_translate_icon";
-
-}  // namespace
 
 @interface TranslateInfobarBannerOverlayMediator ()
 // The translate banner config from the request.
@@ -62,10 +55,8 @@ NSString* const kTranslateImageName = @"infobar_translate_icon";
   [self.consumer setBannerAccessibilityLabel:[self bannerTitleText]];
   [self.consumer setButtonText:[self infobarButtonText]];
 
-  UIImage* iconImage = UseSymbols()
-                           ? CustomSymbolTemplateWithPointSize(
-                                 kTranslateSymbol, kInfobarSymbolPointSize)
-                           : [UIImage imageNamed:kTranslateImageName];
+  UIImage* iconImage = CustomSymbolTemplateWithPointSize(
+      kTranslateSymbol, kInfobarSymbolPointSize);
   [self.consumer setIconImage:iconImage];
   [self.consumer setPresentsModal:YES];
   [self.consumer setTitleText:[self bannerTitleText]];

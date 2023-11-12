@@ -25,6 +25,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "client_behavior_constants.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -33,6 +34,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
+#include "components/autofill/core/browser/payments/client_behavior_constants.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
@@ -277,9 +279,17 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
   show_save_prompt_ = !GetCreditCardSaveStrikeDatabase()->ShouldBlockFeature(
       base::UTF16ToUTF8(upload_request_.card.LastFourDigits()));
 
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableNewSaveCardBubbleUi)) {
+    upload_request_.client_behavior_signals.push_back(
+        ClientBehaviorConstants::kUsingFasterAndProtectedUi);
+  }
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+
   payments_client_->GetUploadDetails(
       country_only_profiles, upload_request_.detected_values,
-      upload_request_.active_experiments, app_locale_,
+      upload_request_.client_behavior_signals, app_locale_,
       base::BindOnce(&CreditCardSaveManager::OnDidGetUploadDetails,
                      weak_ptr_factory_.GetWeakPtr()),
       payments::kUploadCardBillableServiceNumber,
@@ -334,11 +344,12 @@ void CreditCardSaveManager::OnDidUploadCard(
       // virtual card enrollment flow, so we set them here and start the flow.
       if (upload_card_response_details.virtual_card_enrollment_state ==
           CreditCard::VirtualCardEnrollmentState::UNENROLLED_AND_ELIGIBLE) {
-        DCHECK(!upload_card_response_details.card_art_url.is_empty());
         DCHECK(upload_card_response_details.instrument_id.has_value());
-        raw_ptr<CreditCard> uploaded_card = &upload_request_.card;
-        uploaded_card->set_card_art_url(
-            upload_card_response_details.card_art_url);
+        CreditCard* uploaded_card = &upload_request_.card;
+        if (!upload_card_response_details.card_art_url.is_empty()) {
+          uploaded_card->set_card_art_url(
+              upload_card_response_details.card_art_url);
+        }
         uploaded_card->set_virtual_card_enrollment_state(
             upload_card_response_details.virtual_card_enrollment_state);
         uploaded_card->set_instrument_id(

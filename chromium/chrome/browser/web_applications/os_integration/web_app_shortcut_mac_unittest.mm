@@ -19,7 +19,7 @@
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/web_applications/os_integration/os_integration_test_override.h"
+#include "chrome/browser/web_applications/test/os_integration_test_override_impl.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #import "chrome/common/mac/app_mode_common.h"
@@ -110,7 +110,7 @@ class WebAppAutoLoginUtilMock : public WebAppAutoLoginUtil {
 
 std::unique_ptr<ShortcutInfo> GetShortcutInfo() {
   std::unique_ptr<ShortcutInfo> info(new ShortcutInfo);
-  info->extension_id = "extensionid";
+  info->app_id = "appid";
   info->title = u"Shortcut Title";
   info->url = GURL("http://example.com/");
   info->profile_path = base::FilePath("user_data_dir").Append("Profile 1");
@@ -130,7 +130,8 @@ class WebAppShortcutCreatorTest : public testing::Test {
   void SetUp() override {
     base::mac::SetBaseBundleID(kFakeChromeBundleId);
 
-    override_registration_ = OsIntegrationTestOverride::OverrideForTesting();
+    override_registration_ =
+        OsIntegrationTestOverrideImpl::OverrideForTesting();
     destination_dir_ =
         override_registration_->test_override->chrome_apps_folder();
 
@@ -152,9 +153,8 @@ class WebAppShortcutCreatorTest : public testing::Test {
     app_data_dir_ = base::MakeAbsoluteFilePath(app_data_dir_);
 
     info_ = GetShortcutInfo();
-    fallback_shim_base_name_ =
-        base::FilePath(info_->profile_path.BaseName().value() + " " +
-                       info_->extension_id + ".app");
+    fallback_shim_base_name_ = base::FilePath(
+        info_->profile_path.BaseName().value() + " " + info_->app_id + ".app");
 
     shim_base_name_ = base::FilePath(base::UTF16ToUTF8(info_->title) + ".app");
     shim_path_ = destination_dir_.Append(shim_base_name_);
@@ -188,7 +188,7 @@ class WebAppShortcutCreatorTest : public testing::Test {
   base::FilePath shim_base_name_;
   base::FilePath shim_path_;
 
-  std::unique_ptr<OsIntegrationTestOverride::BlockingRegistration>
+  std::unique_ptr<OsIntegrationTestOverrideImpl::BlockingRegistration>
       override_registration_;
 };
 
@@ -231,7 +231,7 @@ TEST_F(WebAppShortcutCreatorTest, CreateShortcuts) {
       shim_path_.Append("Contents").Append("Info.plist");
   NSDictionary* plist = [NSDictionary
       dictionaryWithContentsOfFile:base::mac::FilePathToNSString(plist_path)];
-  EXPECT_NSEQ(base::SysUTF8ToNSString(info_->extension_id),
+  EXPECT_NSEQ(base::SysUTF8ToNSString(info_->app_id),
               plist[app_mode::kCrAppModeShortcutIDKey]);
   EXPECT_NSEQ(base::SysUTF16ToNSString(info_->title),
               plist[app_mode::kCrAppModeShortcutNameKey]);
@@ -424,10 +424,9 @@ TEST_F(WebAppShortcutCreatorTest, ProtocolHandlers) {
     EXPECT_NE(protocol_types_dict, nil);
 
     // Verify CFBundleURLName is set.
-    EXPECT_NSEQ(
-        protocol_types_dict[app_mode::kCFBundleURLNameKey],
-        base::SysUTF8ToNSString(base::mac::BaseBundleID() +
-                                std::string(".app.") + info_->extension_id));
+    EXPECT_NSEQ(protocol_types_dict[app_mode::kCFBundleURLNameKey],
+                base::SysUTF8ToNSString(base::mac::BaseBundleID() +
+                                        std::string(".app.") + info_->app_id));
 
     // Verify CFBundleURLSchemes is set, and contains the expected values.
     NSArray* handlers = protocol_types_dict[app_mode::kCFBundleURLSchemesKey];
@@ -458,10 +457,9 @@ TEST_F(WebAppShortcutCreatorTest, ProtocolHandlers) {
     EXPECT_NE(protocol_types_dict, nil);
 
     // Verify CFBundleURLName is set.
-    EXPECT_NSEQ(
-        protocol_types_dict[app_mode::kCFBundleURLNameKey],
-        base::SysUTF8ToNSString(base::mac::BaseBundleID() +
-                                std::string(".app.") + info_->extension_id));
+    EXPECT_NSEQ(protocol_types_dict[app_mode::kCFBundleURLNameKey],
+                base::SysUTF8ToNSString(base::mac::BaseBundleID() +
+                                        std::string(".app.") + info_->app_id));
 
     // Verify CFBundleURLSchemes is set, and contains the expected values.
     NSArray* handlers = protocol_types_dict[app_mode::kCFBundleURLSchemesKey];
@@ -803,7 +801,7 @@ TEST_F(WebAppShortcutCreatorTest, DeleteShortcutsSingleProfile) {
   EXPECT_TRUE(base::PathExists(shim_path_));
   EXPECT_TRUE(base::PathExists(other_shim_path));
   auto_login_util_mock_->ResetCounts();
-  internals::DeleteMultiProfileShortcutsForApp(info_->extension_id);
+  internals::DeleteMultiProfileShortcutsForApp(info_->app_id);
   EXPECT_EQ(auto_login_util_mock_->GetRemoveFromLoginItemsCalledCount(), 0);
 
   EXPECT_TRUE(base::PathExists(shim_path_));
@@ -846,7 +844,7 @@ TEST_F(WebAppShortcutCreatorTest, DeleteShortcuts) {
   EXPECT_TRUE(base::PathExists(shim_path_));
   EXPECT_TRUE(base::PathExists(other_shim_path));
   auto_login_util_mock_->ResetCounts();
-  internals::DeleteMultiProfileShortcutsForApp(info_->extension_id);
+  internals::DeleteMultiProfileShortcutsForApp(info_->app_id);
   EXPECT_EQ(auto_login_util_mock_->GetRemoveFromLoginItemsCalledCount(), 2);
   EXPECT_FALSE(base::PathExists(shim_path_));
   EXPECT_FALSE(base::PathExists(other_shim_path));
@@ -966,7 +964,7 @@ TEST_F(WebAppShortcutCreatorTest, RemoveAppShimFromLoginItems) {
   EXPECT_EQ(auto_login_util_mock_->GetRemoveFromLoginItemsCalledCount(), 0);
 
   auto_login_util_mock_->ResetCounts();
-  RemoveAppShimFromLoginItems(info_->extension_id);
+  RemoveAppShimFromLoginItems(info_->app_id);
   EXPECT_EQ(auto_login_util_mock_->GetRemoveFromLoginItemsCalledCount(), 1);
 
   EXPECT_TRUE(base::DeletePathRecursively(shim_path_));

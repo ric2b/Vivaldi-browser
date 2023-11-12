@@ -15,6 +15,7 @@
 #include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/page_image_service/features.h"
 #include "components/search/ntp_features.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -25,6 +26,12 @@ namespace ntp {
 const std::vector<std::pair<const std::string, int>> MakeModuleIdNames(
     bool drive_module_enabled) {
   std::vector<std::pair<const std::string, int>> details;
+
+  if (base::FeatureList::IsEnabled(ntp_features::kNtpHistoryClustersModule) &&
+      base::FeatureList::IsEnabled(page_image_service::kImageService)) {
+    details.emplace_back("history_clusters",
+                         IDS_HISTORY_CLUSTERS_JOURNEYS_TAB_LABEL);
+  }
 
   if (IsRecipeTasksModuleEnabled()) {
     std::vector<std::string> splitExperimentGroup = base::SplitString(
@@ -42,7 +49,11 @@ const std::vector<std::pair<const std::string, int>> MakeModuleIdNames(
                              : IDS_NTP_MODULES_RECIPE_TASKS_SENTENCE);
   }
 
-  if (IsCartModuleEnabled()) {
+  if (IsCartModuleEnabled() &&
+      (!base::FeatureList::IsEnabled(
+           ntp_features::kNtpChromeCartInHistoryClusterModule) ||
+       base::FeatureList::IsEnabled(
+           ntp_features::kNtpChromeCartHistoryClusterCoexist))) {
     details.emplace_back("chrome_cart", IDS_NTP_MODULES_CART_SENTENCE);
   }
 
@@ -56,11 +67,6 @@ const std::vector<std::pair<const std::string, int>> MakeModuleIdNames(
 
   if (base::FeatureList::IsEnabled(ntp_features::kNtpFeedModule)) {
     details.emplace_back("feed", IDS_NTP_MODULES_FEED_TITLE);
-  }
-
-  if (base::FeatureList::IsEnabled(ntp_features::kNtpHistoryClustersModule)) {
-    details.emplace_back("history-clusters",
-                         IDS_HISTORY_CLUSTERS_JOURNEYS_TAB_LABEL);
   }
 
 #if !defined(OFFICIAL_BUILD)

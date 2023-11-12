@@ -10,15 +10,21 @@ import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialo
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {AcceleratorEditDialogElement} from 'chrome://shortcut-customization/js/accelerator_edit_dialog.js';
 import {AcceleratorEditViewElement} from 'chrome://shortcut-customization/js/accelerator_edit_view.js';
+import {FakeShortcutProvider} from 'chrome://shortcut-customization/js/fake_shortcut_provider.js';
+import {setShortcutProviderForTesting} from 'chrome://shortcut-customization/js/mojo_interface_provider.js';
 import {AcceleratorInfo, Modifier} from 'chrome://shortcut-customization/js/shortcut_types.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
 import {createUserAcceleratorInfo} from './shortcut_customization_test_util.js';
 
 suite('acceleratorEditDialogTest', function() {
   let viewElement: AcceleratorEditDialogElement|null = null;
+  let provider: FakeShortcutProvider;
 
   setup(() => {
+    provider = new FakeShortcutProvider();
+    setShortcutProviderForTesting(provider);
     viewElement = document.createElement('accelerator-edit-dialog');
     document.body.appendChild(viewElement);
   });
@@ -62,10 +68,10 @@ suite('acceleratorEditDialogTest', function() {
     // SHIFT + CONTROL + g
     assertEquals(3, keys1.length);
     assertEquals(
-        'shift',
+        'ctrl',
         keys1[0]!.shadowRoot!.querySelector('#key')!.textContent!.trim());
     assertEquals(
-        'ctrl',
+        'shift',
         keys1[1]!.shadowRoot!.querySelector('#key')!.textContent!.trim());
     assertEquals(
         'g', keys1[2]!.shadowRoot!.querySelector('#key')!.textContent!.trim());
@@ -118,12 +124,15 @@ suite('acceleratorEditDialogTest', function() {
         dialog!.querySelector('#pendingAccelerator');
     assertFalse(!!pendingAccelerator);
 
+    assertEquals(0, provider.getPreventProcessingAcceleratorsCallCount());
+
     // Clicking on the "Add Shortcut" button should hide the button and show
     // the pending shortcut.
     const addButton =
         dialog!.querySelector('#addAcceleratorButton') as CrButtonElement;
     addButton!.click();
     await flush();
+    assertEquals(1, provider.getPreventProcessingAcceleratorsCallCount());
     assertTrue(buttonContainer!.hidden);
     // Expected the dialog's "done" button to be disabled when adding a new
     // accelerator.
@@ -142,7 +151,9 @@ suite('acceleratorEditDialogTest', function() {
     const cancelButton = pendingAccelerator!.shadowRoot!.querySelector(
                              '#cancelButton') as CrButtonElement;
     cancelButton.click();
-    await flush();
+    await flushTasks();
+
+    assertEquals(2, provider.getPreventProcessingAcceleratorsCallCount());
 
     // "done" button should now be enabled.
     assertFalse(doneButton!.disabled);
@@ -152,5 +163,36 @@ suite('acceleratorEditDialogTest', function() {
     // Re-query the stamped element.
     pendingAccelerator = dialog!.querySelector('#pendingAccelerator');
     assertFalse(!!pendingAccelerator);
+  });
+
+  test('RestoreDefaultButton', async () => {
+    const acceleratorInfo: AcceleratorInfo = createUserAcceleratorInfo(
+        Modifier.CONTROL | Modifier.SHIFT,
+        /*key=*/ 71,
+        /*keyDisplay=*/ 'g');
+
+    const accelerators = [acceleratorInfo];
+
+    const description = 'test shortcut';
+
+    viewElement!.acceleratorInfos = accelerators;
+    viewElement!.description = description;
+    await flush();
+    const dialog =
+        viewElement!.shadowRoot!.querySelector('cr-dialog') as CrDialogElement;
+    assertTrue(dialog.open);
+    const acceleratorElements =
+        dialog.querySelectorAll('accelerator-edit-view');
+    assertEquals(1, acceleratorElements.length);
+
+    // Expect call count for `restoreDefault` to be 0.
+    assertEquals(0, provider.getRestoreDefaultCallCount());
+    const restoreDefaultButton =
+        dialog!.querySelector('#restoreDefault') as CrButtonElement;
+    restoreDefaultButton.click();
+    await flushTasks();
+
+    // Expect call count for `restoreDefault` to be 1.
+    assertEquals(1, provider.getRestoreDefaultCallCount());
   });
 });

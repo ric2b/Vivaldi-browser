@@ -24,14 +24,14 @@
 <translation id="1924750141060565109">Landskap 15</translation>
 <translation id="19598411548897379">Generisk</translation>
 <translation id="1973351931613083086">automatisk uppspelning</translation>
-<translation id="1985669426322966465">Uppdatering av programvara</translation>
+<translation id="1985669426322966465">Programuppdatering</translation>
 <translation id="2079036669923635404">Klicka här för att uppdatera Vivaldi till version <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Ett fel inträffade under nedladdningen av uppdateringsfiler. Vänligen kontrollera din internetuppkoppling och försök igen senare.</translation>
 <translation id="2339641773402824483">Söker efter uppdateringar...</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Klistra in anteckning</translation>
 <translation id="2486841023299517366">Djur 4</translation>
-<translation id="2612127540243995147">Redo att installeras. Vivaldi kommer att stängas och återstartas.</translation>
+<translation id="2612127540243995147">Klar att installera. Vivaldi kommer att stängas och startas om.</translation>
 <translation id="2613387515621326337">Visa uppdateringswebbplats</translation>
 <translation id="2647368062414805334">Tyvärr är dina Edge-inställningar inte tillgängliga medan den webbläsaren körs. Om du vill importera dessa inställningar till Vivaldi sparar du ditt arbete och stänger alla Edge-fönster. Klicka sedan på Fortsätt.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
@@ -81,6 +81,7 @@
 <translation id="4073157431025461511">&amp;Visa inte igen</translation>
 <translation id="4074744496918018786">Öppna bild i privat fönster</translation>
 <translation id="410351446219883937">Autospela</translation>
+<translation id="4281844954008187215">Användarvillkor</translation>
 <translation id="4324492550286218827">Landskap 2</translation>
 <translation id="4406101500523955324">Öppna i nytt privat fönster</translation>
 <translation id="4420816922321010053">Är du säker på att du vill stänga Vivaldi?</translation>
@@ -94,6 +95,7 @@
 <translation id="4636708767492582204">Sänd via e-post</translation>
 <translation id="4677434526832593569">Djur 8</translation>
 <translation id="474217410105706308">Tysta flik</translation>
+<translation id="4861715717329665002">Automatiskt sparade sessioner</translation>
 <translation id="4881695831933465202">Öppna</translation>
 <translation id="498766871928286903"><ph name="DOWNLOADED" /> av <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Importerade snabbval</translation>
@@ -104,7 +106,7 @@
 <translation id="527605719918376753">Tysta flik</translation>
 <translation id="5305569355661722298">Bekräfta stängning av fönster</translation>
 <translation id="5388358297987318779">Öppna bild</translation>
-<translation id="5416008465899576639">En ny version av Vivaldi är tillgänglig.</translation>
+<translation id="5416008465899576639">En nyare version av Vivaldi finns tillgänglig.</translation>
 <translation id="5497042274492038489">Bekräfta stängning av fönster</translation>
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera version 15+ (beta)</translation>
@@ -127,7 +129,7 @@
 <translation id="6538338088414940408">Öppna länk i bakgrundsflik</translation>
 <translation id="6551219277044048123">Lägg till som söktj&amp;änst...</translation>
 <translation id="6630781781151951863">Landskap 18</translation>
-<translation id="6635049669875534328">Utgivningsinformation:</translation>
+<translation id="6635049669875534328">Versionsfakta:</translation>
 <translation id="6693585104974197539">Välj Edge profilmappen för import</translation>
 <translation id="6726279523566323394">Välj Brave profilmappen för import</translation>
 <translation id="6804831687363620480">Dessvärre är dina Opera 15+-inställningar inte tillgängliga medan webbläsaren körs. För att importera inställningarna till Vivaldi, spara det du håller med och stäng alla Opera 15+-fönster. Klicka sedan Fortsätt.</translation>
@@ -150,7 +152,7 @@
 <translation id="8044382196220116469">Tillåt inte webbplatser att spela upp video automatiskt</translation>
 <translation id="8099620695029051217">Kopiera bildadress</translation>
 <translation id="8197810018650377191">Bokmärk sida</translation>
-<translation id="8261506727792406068">Ta bort</translation>
+<translation id="8261506727792406068">Radera</translation>
 <translation id="8263047843452521549">Inspektera bakgrundsservicearbetare</translation>
 <translation id="8331671104904436324">Öppna i bakgrundsflik</translation>
 <translation id="8373293945112511707">Landskap 1</translation>

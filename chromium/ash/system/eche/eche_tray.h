@@ -16,8 +16,11 @@
 #include "ash/system/eche/eche_icon_loading_indicator_view.h"
 #include "ash/system/screen_layout_observer.h"
 #include "ash/system/tray/tray_background_view.h"
+#include "ash/webui/eche_app_ui/eche_connection_status_handler.h"
+#include "ash/webui/eche_app_ui/mojom/eche_app.mojom-shared.h"
 #include "ash/webui/eche_app_ui/mojom/eche_app.mojom.h"
 #include "base/gtest_prod_util.h"
+#include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/geometry/rect.h"
@@ -59,13 +62,15 @@ class Shell;
 
 // This class represents the Eche tray button in the status area and
 // controls the bubble that is shown when the tray button is clicked.
-class ASH_EXPORT EcheTray : public TrayBackgroundView,
-                            public SessionObserver,
-                            public ScreenLayoutObserver,
-                            public ShelfObserver,
-                            public TabletModeObserver,
-                            public KeyboardControllerObserver,
-                            public ShellObserver {
+class ASH_EXPORT EcheTray
+    : public TrayBackgroundView,
+      public SessionObserver,
+      public ScreenLayoutObserver,
+      public ShelfObserver,
+      public TabletModeObserver,
+      public KeyboardControllerObserver,
+      public ShellObserver,
+      public eche_app::EcheConnectionStatusHandler::Observer {
  public:
   METADATA_HEADER(EcheTray);
 
@@ -148,6 +153,11 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   void OnKeyboardUIDestroyed() override;
   void OnKeyboardHidden(bool is_temporary_hide) override;
 
+  // eche_app::EcheConnectionStatusHandler::Observer:
+  void OnConnectionStatusChanged(
+      eche_app::mojom::ConnectionStatus connection_status) override;
+  void OnRequestBackgroundConnectionAttempt() override;
+
   // Sets the url that will be passed to the webview.
   // Setting a new value will cause the current bubble be destroyed.
   void SetUrl(const GURL& url);
@@ -192,7 +202,9 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   bool LoadBubble(const GURL& url,
                   const gfx::Image& icon,
                   const std::u16string& visible_name,
-                  const std::u16string& phone_name);
+                  const std::u16string& phone_name,
+                  eche_app::mojom::ConnectionStatus last_connection_status,
+                  eche_app::mojom::AppStreamLaunchEntryPoint entry_point);
 
   // Destroys the view inclusing the web view.
   // Note: `CloseBubble` only hides the view.
@@ -213,16 +225,26 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // Set up the params and init the bubble.
   // Note: This function makes the bubble active and makes the
   // TrayBackgroundView's background inkdrop activate.
-  void InitBubble(const std::u16string& phone_name);
+  void InitBubble(const std::u16string& phone_name,
+                  eche_app::mojom::ConnectionStatus last_connection_status,
+                  eche_app::mojom::AppStreamLaunchEntryPoint entry_point);
 
   // Starts graceful close to ensure the connection resource is released before
   // the window is closed.
   void StartGracefulClose();
 
+  void SetEcheConnectionStatusHandler(
+      eche_app::EcheConnectionStatusHandler* eche_connection_status_handler);
+
+  bool IsBackgroundConnectionAttemptInProgress();
+
   // Test helpers
   bool get_is_landscape_for_test() { return is_landscape_; }
   TrayBubbleWrapper* get_bubble_wrapper_for_test() { return bubble_.get(); }
   AshWebView* get_web_view_for_test() { return web_view_; }
+  AshWebView* get_initializer_webview_for_test() {
+    return initializer_webview_.get();
+  }
   views::ImageButton* GetIcon();
 
  private:
@@ -247,7 +269,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
     void OnKeyEvent(ui::KeyEvent* event) override;
 
    private:
-    EcheTray* const eche_tray_;
+    const raw_ptr<EcheTray, ExperimentalAsh> eche_tray_;
   };
 
   // Calculates and returns the size of the Exo bubble based on the screen size
@@ -299,6 +321,12 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // Returns true only if the bubble is initialized and visible.
   bool IsBubbleVisible();
 
+  // Starts graceful shutdown for the initializer.
+  void StartGracefulCloseInitializer();
+
+  // Kills the renderer.
+  void CloseInitializer();
+
   // The url that is transferred to the web view.
   // In the current implementation, this is supposed to be
   // Eche window URL. However, the bubble does not interpret,
@@ -306,14 +334,23 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   GURL url_;
 
   // Icon of the tray. Unowned.
-  views::ImageView* const icon_;
+  const raw_ptr<views::ImageView, ExperimentalAsh> icon_;
 
   // The bubble that appears after clicking the tray button.
   std::unique_ptr<TrayBubbleWrapper> bubble_;
 
   // The webview shown in the bubble that contains the Eche SWA.
   // owned by `bubble_`
-  AshWebView* web_view_ = nullptr;
+  raw_ptr<AshWebView, ExperimentalAsh> web_view_ = nullptr;
+
+  // Webview used to create a prewarming channel, before we have a video to
+  // attach to.
+  std::unique_ptr<AshWebView> initializer_webview_{};
+  std::unique_ptr<base::DelayTimer> initializer_timeout_{};
+  bool has_reported_initializer_result_ = false;
+
+  raw_ptr<eche_app::EcheConnectionStatusHandler, ExperimentalAsh>
+      eche_connection_status_handler_ = nullptr;
 
   GracefulCloseCallback graceful_close_callback_;
   GracefulGoBackCallback graceful_go_back_callback_;
@@ -321,10 +358,10 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // The unload timer to force close EcheTray in case unload error.
   std::unique_ptr<base::DelayTimer> unload_timer_;
 
-  views::View* header_view_ = nullptr;
-  views::Button* close_button_ = nullptr;
-  views::Button* minimize_button_ = nullptr;
-  views::Button* arrow_back_button_ = nullptr;
+  raw_ptr<views::View, ExperimentalAsh> header_view_ = nullptr;
+  raw_ptr<views::Button, ExperimentalAsh> close_button_ = nullptr;
+  raw_ptr<views::Button, ExperimentalAsh> minimize_button_ = nullptr;
+  raw_ptr<views::Button, ExperimentalAsh> arrow_back_button_ = nullptr;
   std::unique_ptr<EventInterceptor> event_interceptor_;
 
   // The time a stream is initializing. Used to record the elapsed time from

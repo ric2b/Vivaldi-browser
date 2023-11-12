@@ -9,6 +9,7 @@
 
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/window_state.h"
+#include "base/memory/raw_ptr.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace ash {
@@ -87,7 +88,9 @@ class TabletModeWindowState : public WindowState::State {
 
   // Updates the bounds to the maximum possible bounds according to the current
   // window state. If `animate` is set we animate the change.
-  void UpdateBounds(WindowState* window_state, bool animate);
+  void UpdateBounds(WindowState* window_state,
+                    chromeos::WindowStateType previous_state,
+                    bool animate);
 
   // Handles Alt+[ if `snap_position` is
   // `SplitViewController::SnapPosition::kPrimary`; handles // Alt+] if
@@ -95,8 +98,11 @@ class TabletModeWindowState : public WindowState::State {
   void CycleTabletSnap(WindowState* window_state,
                        SplitViewController::SnapPosition snap_position);
 
-  // Snap the window in tablet split view if it can be snapped.
-  void DoTabletSnap(WindowState* window_state, WMEventType snap_event_type);
+  // Tries to snap the window in tablet split view if possible. Shows a toast if
+  // it cannot be snapped.
+  void DoTabletSnap(WindowState* window_state,
+                    WMEventType snap_event_type,
+                    float snap_ratio);
 
   // Called by `WM_EVENT_RESTORE`, or a `WM_EVENT_NORMAL` that is restoring.
   // Restores to the state in `window_states`'s restore history.
@@ -107,10 +113,10 @@ class TabletModeWindowState : public WindowState::State {
   std::unique_ptr<WindowState::State> old_state_;
 
   // The window whose WindowState owns this instance.
-  aura::Window* window_;
+  raw_ptr<aura::Window, ExperimentalAsh> window_;
 
   // The creator which needs to be informed when this state goes away.
-  TabletModeWindowManager* creator_;
+  raw_ptr<TabletModeWindowManager, ExperimentalAsh> creator_;
 
   // The state type to be established in AttachState(), unless
   // previous_state->GetType() is MAXIMIZED, MINIMIZED, FULLSCREEN, PINNED, or

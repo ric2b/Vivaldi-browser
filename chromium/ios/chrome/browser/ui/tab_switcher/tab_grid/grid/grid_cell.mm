@@ -9,10 +9,10 @@
 
 #import "base/check.h"
 #import "base/notreached.h"
-#import "ios/chrome/browser/ui/elements/top_aligned_image_view.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/elements/top_aligned_image_view.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
-#import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -140,11 +140,7 @@ void PositionView(UIView* view, CGPoint point) {
     } // End Vivaldi
 
     UIView* contentView = self.contentView;
-    if (UseSymbols()) {
-      contentView.layer.cornerRadius = kGridCellCornerRadius;
-    } else {
-      contentView.layer.cornerRadius = kLegacyGridCellCornerRadius;
-    }
+    contentView.layer.cornerRadius = kGridCellCornerRadius;
     contentView.layer.masksToBounds = YES;
 
     // Vivaldi
@@ -185,11 +181,7 @@ void PositionView(UIView* view, CGPoint point) {
 
     // Vivaldi: We will not use drop shadow for tab grid items on Vivaldi.
     if (!IsVivaldiRunning()) {
-    if (UseSymbols()) {
-      self.layer.cornerRadius = kGridCellCornerRadius;
-    } else {
-      self.layer.cornerRadius = kLegacyGridCellCornerRadius;
-    }
+    self.layer.cornerRadius = kGridCellCornerRadius;
     self.layer.shadowColor = [UIColor blackColor].CGColor;
     self.layer.shadowOffset = CGSizeMake(0, 0);
     self.layer.shadowRadius = 4.0f;
@@ -323,13 +315,8 @@ void PositionView(UIView* view, CGPoint point) {
   // enough here.
   switch (theme) {
     case GridThemeLight:
-      if (UseSymbols()) {
-        self.border.layer.borderColor =
-            [UIColor colorNamed:kStaticBlue400Color].CGColor;
-      } else {
-        self.border.layer.borderColor =
-            [UIColor colorNamed:@"grid_theme_selection_tint_color"].CGColor;
-      }
+      self.border.layer.borderColor =
+          [UIColor colorNamed:kStaticBlue400Color].CGColor;
       break;
     case GridThemeDark:
       self.border.layer.borderColor = UIColor.whiteColor.CGColor;
@@ -437,6 +424,10 @@ void PositionView(UIView* view, CGPoint point) {
   iconView.layer.cornerRadius = kGridCellIconCornerRadius;
   iconView.layer.masksToBounds = YES;
 
+  // Vivaldi
+  iconView.tintColor = UIColor.labelColor;
+  // End Vivaldi
+
   CGRect indicatorFrame = CGRectMake(0, 0, kIndicatorSize, kIndicatorSize);
   MDCActivityIndicator* activityIndicator =
       [[MDCActivityIndicator alloc] initWithFrame:indicatorFrame];
@@ -454,11 +445,7 @@ void PositionView(UIView* view, CGPoint point) {
   closeIconView.contentMode = UIViewContentModeCenter;
   closeIconView.hidden = self.isInSelectionMode;
   closeIconView.image =
-      UseSymbols()
-          ? DefaultSymbolTemplateWithPointSize(kXMarkSymbol,
-                                               kIconSymbolPointSize)
-          : [[UIImage imageNamed:@"grid_cell_close_button"]
-                imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      DefaultSymbolTemplateWithPointSize(kXMarkSymbol, kIconSymbolPointSize);
 
   UIImageView* selectIconView = [[UIImageView alloc] init];
   selectIconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -643,15 +630,9 @@ void PositionView(UIView* view, CGPoint point) {
   border.hidden = self.isInSelectionMode;
   border.translatesAutoresizingMaskIntoConstraints = NO;
   border.backgroundColor = [UIColor colorNamed:kGridBackgroundColor];
-  if (UseSymbols()) {
-    border.layer.cornerRadius = kGridCellCornerRadius +
-                                kGridCellSelectionRingGapWidth +
-                                kGridCellSelectionRingTintWidth;
-  } else {
-    border.layer.cornerRadius = kLegacyGridCellCornerRadius +
-                                kGridCellSelectionRingGapWidth +
-                                kGridCellSelectionRingTintWidth;
-  }
+  border.layer.cornerRadius = kGridCellCornerRadius +
+                              kGridCellSelectionRingGapWidth +
+                              kGridCellSelectionRingTintWidth;
   border.layer.borderWidth = kGridCellSelectionRingTintWidth;
   [self.selectedBackgroundView addSubview:border];
   _border = border;

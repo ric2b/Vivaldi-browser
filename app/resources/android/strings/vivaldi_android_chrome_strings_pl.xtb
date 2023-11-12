@@ -8,12 +8,15 @@
 <translation id="17513872634828108">Otwarte karty</translation>
 <translation id="1829244130665387512">Znajdź na stronie</translation>
 <translation id="1910514478706885609">Otwórz w nowej grupie kart</translation>
+<translation id="1925021887439448749">Wprowadź własny adres strony</translation>
 <translation id="2038563949887743358">Włącz opcję „Żądanie wersji na komputer”</translation>
 <translation id="2139186145475833000">Dodaj do ekranu głównego</translation>
+<translation id="2149973817440762519">Edytuj zakładkę</translation>
 <translation id="2306442503286132111">Zakładka została zapisana w folderze <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Wygląd</translation>
 <translation id="2501278716633472235">Przejdź wstecz</translation>
 <translation id="2633278372998075009">Karty prywatne</translation>
+<translation id="2951071800649516099">Dodaj strony do listy do przeczytania, aby przeczytać je później</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> zakładka}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> zakładek}}</translation>
@@ -23,19 +26,22 @@
 <translation id="3504699618187058974">Grupy kart</translation>
 <translation id="3518985090088779359">Akceptuj i kontynuuj</translation>
 <translation id="3571177741182643350">Nieprzeczytane artykuły - dostępne offline:</translation>
-<translation id="3700829948786686853">Witamy w Vivaldi</translation>
+<translation id="3700829948786686853">Witaj w przeglądarce Vivaldi</translation>
 <translation id="3719826155360621982">Strona główna</translation>
 <translation id="385051799172605136">Wstecz</translation>
 <translation id="399014816462153200">Przeczytane artykuły:</translation>
-<translation id="4121750346708795461">Korzystając z tej aplikacji, akceptujesz <ph name="BEGIN_LINK1" />Warunki korzystania z Vivaldi<ph name="END_LINK1" /> oraz <ph name="BEGIN_LINK2" />Politykę prywatności<ph name="END_LINK2" />.</translation>
+<translation id="4121750346708795461">Korzystając z tej aplikacji, akceptujesz <ph name="BEGIN_LINK1" />Warunki użytkowania z Vivaldi<ph name="END_LINK1" /> oraz <ph name="BEGIN_LINK2" />Politykę prywatności<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Aktualny język urządzenia</translation>
 <translation id="4167670741834902166">Nowa prywatna karta</translation>
+<translation id="4195643157523330669">Otwórz w nowej karcie</translation>
 <translation id="4243710787042215766">Otwórz w karcie prywatnej</translation>
+<translation id="451872707440238414">Szukaj w zakładkach</translation>
 <translation id="4526803704855831732">Karty prywatne</translation>
 <translation id="4719086422742491124">Dowiedz się o tematach na stronach internetowych bez jej opuszczania. Zaznacz jedno lub więcej słów na stronie, aby je wyszukać.
 
 Dotknij, aby wyszukać to funkcja, która jest dostępna tylko wtedy, gdy jako domyślna wyszukiwarka w Vivaldi ustawione jest Google.</translation>
 <translation id="4759238208242260848">Pobieranie</translation>
+<translation id="4850886885716139402">Zobacz</translation>
 <translation id="4883379392681899581">Opuść tryb prywatny</translation>
 <translation id="4943872375798546930">Brak wyników</translation>
 <translation id="49576331685473090">Blokowanie zawartości</translation>
@@ -48,7 +54,9 @@ Dotknij, aby wyszukać to funkcja, która jest dostępna tylko wtedy, gdy jako d
 Aby dostosować wyszukiwane hasło, przyciśnij przez chwilę i zaznacz interesujący Cię tekst. Aby zawęzić wyszukiwanie, przesuń panel do góry i dotknij pola wyszukiwania.</translation>
 <translation id="572328651809341494">Ostatnie karty</translation>
 <translation id="6150320133806434356">Zakładka została</translation>
+<translation id="6301525844455696527">Nadrób zaległości w czytaniu</translation>
 <translation id="6336451774241870485">Nowa karta prywatna</translation>
+<translation id="6404511346730675251">Edytuj zakładkę</translation>
 <translation id="6585139692466700358">Oferuj tłumaczenie stron w innych językach za pomocą usługi tłumaczeniowej Vivaldi</translation>
 <translation id="6593061639179217415">Wersja na komputer</translation>
 <translation id="6610147964972079463">Zamknij karty prywatne</translation>
@@ -57,9 +65,15 @@ Aby dostosować wyszukiwane hasło, przyciśnij przez chwilę i zaznacz interesu
 <translation id="732145680195464316">Zakładka została zapisana w <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Vivaldi – informacje</translation>
 <translation id="7465104139234185284">Zamknij wszystkie karty prywatne</translation>
-<translation id="804786196054284061">Warunki korzystania z Vivaldi</translation>
+<translation id="7481312909269577407">Dalej</translation>
+<translation id="7583262514280211622">Tutaj znajdziesz swoją listę stron do przeczytania</translation>
+<translation id="7968014550143838305">Dodano do listy stron do przeczytania</translation>
+<translation id="804786196054284061">Warunki użytkowania Vivaldi</translation>
+<translation id="8127542551745560481">Edytuj stronę główną</translation>
+<translation id="8560602726703398413">Znajdź swoją listę stron do przeczytania w zakładkach</translation>
 <translation id="85991616550051997">Przejdź do strony głównej</translation>
 <translation id="8820817407110198400">Zakładki</translation>
 <translation id="9063523880881406963">Wyłącz opcję „Żądanie wersji na komputer”</translation>
 <translation id="9080642952018487277">Przejdź do trybu prywatnego</translation>
+<translation id="96681097142096641">Pokazać uproszczoną stronę?</translation>
 </translationbundle>

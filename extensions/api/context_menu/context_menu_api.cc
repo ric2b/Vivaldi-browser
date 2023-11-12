@@ -40,7 +40,7 @@ ContextMenuShowFunction::~ContextMenuShowFunction() = default;
 
 ExtensionFunction::ResponseAction ContextMenuShowFunction::Run() {
   auto params = context_menu::Show::Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   VivaldiBrowserWindow* window =
       VivaldiBrowserWindow::FromId(params->properties.window_id);

@@ -40,12 +40,10 @@ import org.chromium.content.browser.ViewEventSinkImpl;
 import org.chromium.content.browser.WindowEventObserver;
 import org.chromium.content.browser.WindowEventObserverManager;
 import org.chromium.content.browser.accessibility.ViewStructureBuilder;
-import org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl;
 import org.chromium.content.browser.framehost.RenderFrameHostDelegate;
 import org.chromium.content.browser.framehost.RenderFrameHostImpl;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
 import org.chromium.content_public.browser.ChildProcessImportance;
-import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.GlobalRenderFrameHostId;
 import org.chromium.content_public.browser.ImageDownloadCallback;
 import org.chromium.content_public.browser.JavaScriptCallback;
@@ -225,8 +223,8 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @CalledByNative
-    @VisibleForTesting
-    static WebContentsImpl create(
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+    public static WebContentsImpl create(
             long nativeWebContentsAndroid, NavigationController navigationController) {
         return new WebContentsImpl(nativeWebContentsAndroid, navigationController);
     }
@@ -421,6 +419,12 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     }
 
     @Override
+    public boolean isFocusedElementEditable() {
+        checkNotDestroyed();
+        return WebContentsImplJni.get().isFocusedElementEditable(mNativeWebContentsAndroid);
+    }
+
+    @Override
     public RenderFrameHost getRenderFrameHostFromId(GlobalRenderFrameHostId id) {
         checkNotDestroyed();
         return WebContentsImplJni.get().getRenderFrameHostFromId(
@@ -485,6 +489,12 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     public @Visibility int getVisibility() {
         checkNotDestroyed();
         return WebContentsImplJni.get().getVisibility(mNativeWebContentsAndroid);
+    }
+
+    @Override
+    public void updateWebContentsVisibility(@Visibility int visibility) {
+        checkNotDestroyed();
+        WebContentsImplJni.get().updateWebContentsVisibility(mNativeWebContentsAndroid, visibility);
     }
 
     @Override
@@ -606,12 +616,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
     @Override
     public void onShow() {
         checkNotDestroyed();
-        WebContentsAccessibilityImpl wcax = WebContentsAccessibilityImpl.fromWebContents(this);
-        if (wcax != null) {
-            if (ContentFeatureList.isEnabled(ContentFeatureList.AUTO_DISABLE_ACCESSIBILITY)) {
-                wcax.updateAXModeFromNativeAccessibilityState();
-            }
-        }
         SelectionPopupControllerImpl controller = getSelectionPopupController();
         if (controller != null) controller.restoreSelectionPopupsIfNecessary();
         WebContentsImplJni.get().onShow(mNativeWebContentsAndroid);
@@ -1018,6 +1022,35 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         return key.cast(data);
     }
 
+    /**
+     * Convenience method to initialize test state. Only use for testing.
+     */
+    @VisibleForTesting
+    public void initializeForTesting() {
+        if (mInternalsHolder == null) {
+            mInternalsHolder = WebContents.createDefaultInternalsHolder();
+        }
+        WebContentsInternalsImpl internals = (WebContentsInternalsImpl) mInternalsHolder.get();
+        if (internals == null) {
+            internals = new WebContentsInternalsImpl();
+            internals.userDataHost = new UserDataHost();
+        }
+        mInternalsHolder.set(internals);
+        mInitialized = true;
+    }
+
+    /**
+     * Convenience method to set user data. Only use for testing.
+     */
+    @VisibleForTesting
+    public <T extends UserData> void setUserDataForTesting(Class<T> key, T userData) {
+        // Be sure to call initializeForTesting() first.
+        assert mInitialized;
+
+        WebContentsInternalsImpl internals = (WebContentsInternalsImpl) mInternalsHolder.get();
+        internals.userDataHost.setUserData(key, userData);
+    }
+
     public <T extends UserData> void removeUserData(Class<T> key) {
         UserDataHost userDataHost = getUserDataHost();
         if (userDataHost == null) return;
@@ -1104,6 +1137,13 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         }
     }
 
+    @Override
+    public boolean needToFireBeforeUnloadOrUnloadEvents() {
+        if (mNativeWebContentsAndroid == 0) return false;
+        return WebContentsImplJni.get().needToFireBeforeUnloadOrUnloadEvents(
+                mNativeWebContentsAndroid);
+    }
+
     public void addTearDownDialogOverlaysHandler(Runnable handler) {
         if (mTearDownDialogOverlaysHandlers == null) {
             mTearDownDialogOverlaysHandlers = new ObserverList<>();
@@ -1126,8 +1166,9 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
                 "Native WebContents already destroyed", mNativeDestroyThrowable);
     }
 
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     @NativeMethods
-    interface Natives {
+    public interface Natives {
         // This is static to avoid exposing a public destroy method on the native side of this
         // class.
         void destroyWebContents(long webContentsAndroidPtr);
@@ -1138,6 +1179,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         void setTopLevelNativeWindow(long nativeWebContentsAndroid, WindowAndroid windowAndroid);
         RenderFrameHost getMainFrame(long nativeWebContentsAndroid);
         RenderFrameHost getFocusedFrame(long nativeWebContentsAndroid);
+        boolean isFocusedElementEditable(long nativeWebContentsAndroid);
         RenderFrameHost getRenderFrameHostFromId(
                 long nativeWebContentsAndroid, int renderProcessId, int renderFrameId);
         RenderFrameHost[] getAllRenderFrameHosts(long nativeWebContentsAndroid);
@@ -1145,6 +1187,7 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         WebContentsImpl[] getInnerWebContents(long nativeWebContentsAndroid);
         @Visibility
         int getVisibility(long nativeWebContentsAndroid);
+        void updateWebContentsVisibility(long nativeWebContentsAndroid, int visibility);
         String getTitle(long nativeWebContentsAndroid);
         GURL getVisibleURL(long nativeWebContentsAndroid);
         int getVirtualKeyboardMode(long nativeWebContentsAndroid);
@@ -1215,5 +1258,6 @@ public class WebContentsImpl implements WebContents, RenderFrameHostDelegate, Wi
         void notifyRendererPreferenceUpdate(long nativeWebContentsAndroid);
         void notifyBrowserControlsHeightChanged(long nativeWebContentsAndroid);
         boolean isBeingDestroyed(long nativeWebContentsAndroid);
+        boolean needToFireBeforeUnloadOrUnloadEvents(long nativeWebContentsAndroid);
     }
 }

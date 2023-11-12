@@ -72,6 +72,9 @@ std::string GetShortcutTextForExtensionAction(
   const Extension* extension =
       extensions::ExtensionRegistry::Get(profile)->GetExtensionById(
           action->extension_id(), extensions::ExtensionRegistry::ENABLED);
+  if (!extension) {
+    return std::string();
+  }
   extensions::CommandService* command_service =
       extensions::CommandService::Get(browser_context);
 
@@ -231,8 +234,8 @@ bool ExtensionActionUtilFactory::ServiceIsCreatedWithBrowserContext() const {
 content::BrowserContext* ExtensionActionUtilFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
   // Redirected in incognito.
-  return extensions::ExtensionsBrowserClient::Get()->GetOriginalContext(
-      context);
+  return ExtensionsBrowserClient::Get()->GetRedirectedContextInIncognito(
+      context, /*force_guest_profile=*/true, /*force_system_profile=*/false);
 }
 // static
 void ExtensionActionUtil::SendIconLoaded(
@@ -616,8 +619,8 @@ ExtensionActionUtilsExecuteExtensionActionFunction::Run() {
   namespace Results =
       vivaldi::extension_action_utils::ExecuteExtensionAction::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(browser_context())
@@ -656,8 +659,8 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsToggleBrowserActionVisibilityFunction::Run() {
   using vivaldi::extension_action_utils::ToggleBrowserActionVisibility::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(browser_context())
@@ -735,8 +738,8 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsRemoveExtensionFunction::Run() {
   using vivaldi::extension_action_utils::RemoveExtension::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(browser_context())
@@ -758,8 +761,8 @@ ExtensionFunction::ResponseAction
 ExtensionActionUtilsShowExtensionOptionsFunction::Run() {
   using vivaldi::extension_action_utils::ShowExtensionOptions::Params;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(browser_context())
@@ -873,8 +876,8 @@ ExtensionActionUtilsGetExtensionMenuFunction::Run() {
   namespace Results =
       vivaldi::extension_action_utils::GetExtensionMenu::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(browser_context())
@@ -896,8 +899,8 @@ ExtensionActionUtilsExecuteMenuActionFunction::Run() {
   namespace Results =
       vivaldi::extension_action_utils::ExecuteMenuAction::Results;
 
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
+  absl::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(browser_context())

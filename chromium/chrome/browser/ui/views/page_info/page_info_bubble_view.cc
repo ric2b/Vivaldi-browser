@@ -85,8 +85,8 @@ InternalPageInfoBubbleView::InternalPageInfoBubbleView(
     } else {
       text = IDS_PAGE_INFO_READER_MODE_PAGE;
     }
-  } else if (!url.SchemeIs(content::kChromeUIScheme)) {
-    NOTREACHED();
+  } else {
+    CHECK(url.SchemeIs(content::kChromeUIScheme));
   }
 
   // Title insets assume there is content (and thus have no bottom padding). Use
@@ -231,19 +231,6 @@ void PageInfoBubbleView::OpenPermissionPage(ContentSettingsType type) {
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_CURRENT_VIEW);
   page_container_->SwitchToPage(std::move(permissions_page_view));
   AnnouncePageOpened(PageInfoUI::PermissionTypeToUIString(type));
-}
-
-void PageInfoBubbleView::OpenAboutThisSitePage(
-    const page_info::proto::SiteInfo& info) {
-  presenter_->RecordPageInfoAction(
-      PageInfo::PageInfoAction::PAGE_INFO_ABOUT_THIS_SITE_PAGE_OPENED);
-  std::unique_ptr<views::View> about_this_site_page_view =
-      view_factory_->CreateAboutThisSitePageView(info);
-  about_this_site_page_view->SetID(
-      PageInfoViewFactory::VIEW_ID_PAGE_INFO_CURRENT_VIEW);
-  page_container_->SwitchToPage(std::move(about_this_site_page_view));
-  AnnouncePageOpened(
-      l10n_util::GetStringUTF16(IDS_PAGE_INFO_ABOUT_THIS_SITE_HEADER));
 }
 
 void PageInfoBubbleView::OpenAdPersonalizationPage() {

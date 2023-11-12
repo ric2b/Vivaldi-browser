@@ -247,7 +247,8 @@ void ArcScreenCaptureSession::SetOutputBuffer(
       gpu_memory_buffer.get(), gpu_memory_buffer_manager, gfx::ColorSpace(),
       kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
       gpu::SHARED_IMAGE_USAGE_GLES2 |
-          gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT);
+          gpu::SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT,
+      "ArcScreenCapture");
   gl->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
 
   GLuint texture = gl->CreateAndTexStorage2DSharedImageCHROMIUM(mailbox.name);
@@ -372,6 +373,7 @@ void ArcScreenCaptureSession::CopyDesktopTextureToGpuBuffer(
 
 void ArcScreenCaptureSession::OnAnimationStep(base::TimeTicks timestamp) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  CompositorAnimationObserver::ResetIfActive();
   if (texture_queue_.size() >= kQueueSizeToForceUpdate) {
     DVLOG(3) << "AnimationStep callback forcing update due to texture queue "
                 "size "

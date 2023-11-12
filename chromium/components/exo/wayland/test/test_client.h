@@ -45,6 +45,11 @@ class TestClient {
     return globals_;
   }
 
+  clients::Globals& globals() {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    return globals_;
+  }
+
   // Convenient getters of globals.
   wl_output* output() { return globals().output.get(); }
   wl_compositor* compositor() { return globals().compositor.get(); }
@@ -80,6 +85,9 @@ class TestClient {
   }
   zcr_remote_shell_v2* cr_remote_shell_v2() {
     return globals().cr_remote_shell_v2.get();
+  }
+  surface_augmenter* surface_augmenter() {
+    return globals().surface_augmenter.get();
   }
 
   //////////////////////////////////////////////////////////////////////////////

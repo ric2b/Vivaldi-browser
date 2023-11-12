@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors
+// Copyright 2023 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "media/base/media_switches.h"
+#include "media/base/supported_types.h"
 #include "media/media_buildflags.h"
 #include "ui/display/display_switches.h"
 
@@ -74,28 +75,34 @@ IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_mp3) {
 IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_mp4) {
 #if !BUILDFLAG(USE_PROPRIETARY_CODECS)
   // The function signature for JS is:
-  // testMp4Variants(has_proprietary_codecs:bool, platform_guarantees_hevc:bool)
-  ExecuteTest("testMp4Variants(false, false)");
+  // testMp4Variants(has_proprietary_codecs:bool,
+  //                 platform_guarantees_hevc:bool,
+  //                 platform_guarantees_ac3_eac3:bool)
+  ExecuteTest("testMp4Variants(false, false, false)");
 #elif BUILDFLAG(IS_ANDROID)
   if (!base::FeatureList::IsEnabled(media::kPlatformHEVCDecoderSupport)) {
-    ExecuteTest("testMp4Variants(true, false)");
+    ExecuteTest("testMp4Variants(true, false, false)");
     return;
   }
-  ExecuteTest("testMp4Variants(true, true)");
+  ExecuteTest("testMp4Variants(true, true, false)");
 #elif BUILDFLAG(IS_MAC)
   if (!base::FeatureList::IsEnabled(media::kPlatformHEVCDecoderSupport)) {
-    ExecuteTest("testMp4Variants(true, false)");
+    ExecuteTest("testMp4Variants(true, false, false)");
   } else if (__builtin_available(macOS 11.0, *)) {
     // the Mac compiler freaks out if __builtin_available is not the _only_
     // condition in the if statement, which is why it's written like this.
-    ExecuteTest("testMp4Variants(true, true)");
+    ExecuteTest("testMp4Variants(true, true, false)");
   } else {
-    ExecuteTest("testMp4Variants(true, false)");
+    ExecuteTest("testMp4Variants(true, false, false)");
   }
 #else
   // Other platforms query the gpu each time to find out, so it would be
   // unreliable on the bots to test for this.
-  ExecuteTest("testMp4Variants(true, false)");
+#if BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
+  ExecuteTest("testMp4Variants(true, false, true)");
+#else
+  ExecuteTest("testMp4Variants(true, false, false)");
+#endif  // BUILDFLAG(ENABLE_PLATFORM_AC3_EAC3_AUDIO)
 #endif
 }
 
@@ -128,23 +135,14 @@ IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_AvcLevels) {
 
 IN_PROC_BROWSER_TEST_F(MediaCanPlayTypeTest, CodecSupportTest_Mp4aVariants) {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
-#if BUILDFLAG(IS_ANDROID)
-  // xHE-AAC support is currently only available on P+.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() >=
-      base::android::SDK_VERSION_P) {
+  if (media::IsSupportedAudioType({media::AudioCodec::kAAC,
+                                   media::AudioCodecProfile::kXHE_AAC,
+                                   false})) {
     ExecuteTest(
         "testMp4aVariants(true, true)");  // has_proprietary_codecs=true,
                                           // has_xhe_aac_support=true
     return;
   }
-#elif BUILDFLAG(IS_MAC)
-  if (__builtin_available(macOS 10.15, *)) {
-    ExecuteTest(
-        "testMp4aVariants(true, true)");  // has_proprietary_codecs=true,
-                                          // has_xhe_aac_support=true
-    return;
-  }
-#endif
   ExecuteTest("testMp4aVariants(true, false)");  // has_proprietary_codecs=true,
                                                  // has_xhe_aac_support=false
 #else

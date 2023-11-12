@@ -14,6 +14,7 @@
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
 #include "cc/mojo_embedder/async_layer_tree_frame_sink.h"
+#include "cc/raster/categorized_worker_pool.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/paint_holding_reason.h"
@@ -42,7 +43,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/page_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/widget_scheduler.h"
-#include "third_party/blink/renderer/platform/widget/compositing/categorized_worker_pool.h"
+#include "third_party/blink/renderer/platform/widget/compositing/blink_categorized_worker_pool_delegate.h"
 #include "third_party/blink/renderer/platform/widget/compositing/layer_tree_settings.h"
 #include "third_party/blink/renderer/platform/widget/compositing/layer_tree_view.h"
 #include "third_party/blink/renderer/platform/widget/compositing/render_frame_metadata_observer_impl.h"
@@ -199,12 +200,14 @@ void WidgetBase::InitializeCompositing(
     settings = &default_settings.value();
   }
   screen_infos_ = screen_infos;
+  max_render_buffer_bounds_sw_ = settings->max_render_buffer_bounds_for_sw;
   layer_tree_view_->Initialize(
       *settings, main_thread_compositor_task_runner_,
       compositing_thread_scheduler
           ? compositing_thread_scheduler->DefaultTaskRunner()
           : nullptr,
-      CategorizedWorkerPool::GetOrCreate());
+      cc::CategorizedWorkerPool::GetOrCreate(
+          &BlinkCategorizedWorkerPoolDelegate::Get()));
 
   FrameWidget* frame_widget = client_->FrameWidget();
 
@@ -550,10 +553,6 @@ void WidgetBase::OnDeferCommitsChanged(
   widget_input_handler_manager_->OnDeferCommitsChanged(defer, reason);
 }
 
-void WidgetBase::OnPauseRenderingChanged(bool paused) {
-  widget_input_handler_manager_->OnPauseRenderingChanged(paused);
-}
-
 void WidgetBase::OnCommitRequested() {
   client_->OnCommitRequested();
 }
@@ -713,6 +712,15 @@ void WidgetBase::FinishRequestNewLayerTreeFrameSink(
     // Cause the compositor to wait and try again.
     std::move(callback).Run(nullptr, nullptr);
     return;
+  }
+
+  {
+    viz::RasterContextProvider::ScopedRasterContextLock scoped_context(
+        worker_context_provider_wrapper->GetContext().get());
+    max_render_buffer_bounds_gpu_ =
+        worker_context_provider_wrapper->GetContext()
+            ->ContextCapabilities()
+            .max_texture_size;
   }
 
   // The renderer compositor context doesn't do a lot of stuff, so we don't
@@ -1474,7 +1482,7 @@ void WidgetBase::OnImeEventGuardFinish(ImeEventGuard* guard) {
   // are ignored. These must explicitly be updated once finished handling the
   // ime event.
   UpdateSelectionBounds();
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   if (guard->show_virtual_keyboard())
     ShowVirtualKeyboard();
   else
@@ -1637,30 +1645,27 @@ gfx::Rect WidgetBase::CompositorViewportRect() const {
   return LayerTreeHost()->device_viewport_rect();
 }
 
-bool WidgetBase::ComputePreferCompositingToLCDText() {
+LCDTextPreference WidgetBase::ComputeLCDTextPreference() const {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
-  if (command_line.HasSwitch(switches::kDisablePreferCompositingToLCDText))
-    return false;
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-  // On Android, we never have subpixel antialiasing. On Chrome OS we prefer to
-  // composite all scrollers for better scrolling performance.
-  return true;
-#else
+  if (command_line.HasSwitch(switches::kDisablePreferCompositingToLCDText)) {
+    return LCDTextPreference::kStronglyPreferred;
+  }
+  if (!Platform::Current()->IsLcdTextEnabled()) {
+    return LCDTextPreference::kIgnored;
+  }
   // Prefer compositing if the device scale is high enough that losing subpixel
   // antialiasing won't have a noticeable effect on text quality.
   // Note: We should keep kHighDPIDeviceScaleFactorThreshold in
   // cc/metrics/lcd_text_metrics_reporter.cc the same as the value below.
-  if (screen_infos_.current().device_scale_factor >= 1.5f)
-    return true;
-  if (command_line.HasSwitch(switches::kEnablePreferCompositingToLCDText))
-    return true;
-  if (!Platform::Current()->IsLcdTextEnabled())
-    return true;
-  if (base::FeatureList::IsEnabled(features::kPreferCompositingToLCDText))
-    return true;
-  return false;
-#endif
+  if (screen_infos_.current().device_scale_factor >= 1.5f) {
+    return LCDTextPreference::kIgnored;
+  }
+  if (command_line.HasSwitch(switches::kEnablePreferCompositingToLCDText) ||
+      base::FeatureList::IsEnabled(features::kPreferCompositingToLCDText)) {
+    return LCDTextPreference::kWeaklyPreferred;
+  }
+  return LCDTextPreference::kStronglyPreferred;
 }
 
 void WidgetBase::CountDroppedPointerDownForEventTiming(unsigned count) {
@@ -1721,6 +1726,12 @@ gfx::Rect WidgetBase::BlinkSpaceToEnclosedDIPs(const gfx::Rect& rect) {
 gfx::RectF WidgetBase::BlinkSpaceToDIPs(const gfx::RectF& rect) {
   float reverse = 1 / GetOriginalDeviceScaleFactor();
   return gfx::ScaleRect(rect, reverse);
+}
+
+absl::optional<int> WidgetBase::GetMaxRenderBufferBounds() const {
+  return Platform::Current()->IsGpuCompositingDisabled()
+             ? max_render_buffer_bounds_sw_
+             : max_render_buffer_bounds_gpu_;
 }
 
 }  // namespace blink

@@ -112,7 +112,6 @@
 <translation id="5068778127327928576">{NUM_COOKIES, plural, =1 {(1 çerez kullanımda)} other {(# çerez kullanımda)}}</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Proxy adresini kontrol edin<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bit)</translation>
-<translation id="5287240709317226393">Çerezleri göster</translation>
 <translation id="5355557959165512791">Sertifikası iptal edildiği için <ph name="SITE" /> sitesini şu anda ziyaret edemezsiniz. Ağ hataları ve saldırılar genellikle geçici olduğundan, bu sayfa muhtemelen daha sonra çalışacaktır.</translation>
 <translation id="5386426401304769735">Bu sitenin sertifika zinciri, SHA-1 kullanılarak imzalanmış bir sertifika içeriyor.</translation>
 <translation id="5452270690849572955">Bu <ph name="HOST_NAME" /> sayfası bulunamıyor</translation>
@@ -145,6 +144,7 @@
 <translation id="6321917430147971392">DNS ayarlarınızı kontrol edin</translation>
 <translation id="6328639280570009161">Ağ tahmin özelliğini devre dışı bırakmayı deneyin</translation>
 <translation id="6328786501058569169">Bu site yanıltıcıdır</translation>
+<translation id="6348220984832452017">Etkin Varyasyonlar</translation>
 <translation id="6358450015545214790">Bunlar ne anlama geliyor?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> bağlanmayı reddetti.</translation>
 <translation id="6447842834002726250">Çerezler</translation>
@@ -162,6 +162,7 @@
 <translation id="7113310725918019676"><ph name="DOMAIN" /> adresinden <ph name="BLOCKED_TYPE" /> içeriğine izin ver</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> güvenlik standartlarına uymuyor.</translation>
 <translation id="7219179957768738017">Bağlantı <ph name="SSL_VERSION" /> kullanıyor.</translation>
+<translation id="7221855153210829124">Bildirimleri göster</translation>
 <translation id="7260504762447901703">Erişimi iptal et</translation>
 <translation id="7353601530677266744">Komut Satırı</translation>
 <translation id="7364115444476960850">Ulaşmaya çalıştığınız sayda Vivaldi'nin <ph name="BLOCKER_NAME" /> engelleyicisi tarafından engellendi</translation>
@@ -182,7 +183,7 @@
 <translation id="7834399512844817676"><ph name="SITE" /> normalde bilgilerinizi korumak için şifreleme kullanmaktadır. Vivaldi bu sefer <ph name="SITE" /> sitesine bağlanmayı denediğinde, web sitesi olağan dışı ve yanlış kimlik bilgileri gönderdi. Bir saldırgan <ph name="SITE" /> web sitesi gibi davranmaya çalışıyor olabilir ya da bir kablosuz ağ oturum açma ekranı bağlantıyı kesmiştir. Vivaldi herhangi bir veri alışverişinden önce bağlantıyı durdurduğu için bilgileriniz hâlâ güvendedir.</translation>
 <translation id="7878562273885520351">Parolanızın güvenliği ihlal edilebilir</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
-<translation id="8025119109950072390">Bu sitedeki saldırganlar sizi kandırarak yazılım yükleme veya kişisel bilgilerinizi (örneğin şifreler, telefon numaraları veya kredi kartları) ifşa etme gibi tehlikeli şeyler yaptırabilir.</translation>
+<translation id="8025119109950072390">Bu sitedeki saldırganlar sizi kandırarak yazılım yükleme veya kişisel bilgilerinizi (örneğin parolalar, telefon numaraları veya kredi kartları) ifşa etme gibi tehlikeli şeyler yaptırabilir.</translation>
 <translation id="8037357227543935929">Sor (varsayılan)</translation>
 <translation id="8041940743680923270">Genel varsayılanı kullan (Sor)</translation>
 <translation id="808894953321890993">Parolayı değiştir</translation>

@@ -113,6 +113,12 @@ class Setup {
     return no_check_patterns_.get();
   }
 
+  // This is a combination of the export_compile_commands list in the dotfile,
+  // and any additions specified on the command-line.
+  const std::vector<LabelPattern>& export_compile_commands() const {
+    return export_compile_commands_;
+  }
+
   BuildSettings& build_settings() { return build_settings_; }
   Builder& builder() { return builder_; }
   LoaderImpl* loader() { return loader_.get(); }
@@ -206,6 +212,8 @@ class Setup {
   std::unique_ptr<InputFile> args_input_file_;
   std::vector<Token> args_tokens_;
   std::unique_ptr<ParseNode> args_root_;
+
+  std::vector<LabelPattern> export_compile_commands_;
 
   Setup(const Setup&) = delete;
   Setup& operator=(const Setup&) = delete;

@@ -41,6 +41,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardPropert
 import org.chromium.chrome.browser.tasks.tab_management.TabListRecyclerView.RecyclerViewPosition;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.UiType;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -137,9 +138,7 @@ public class TabListCoordinator
             @Nullable TabSwitcherMediator
                     .PriceWelcomeMessageController priceWelcomeMessageController,
             @NonNull ViewGroup parentView, boolean attachToParent, String componentName,
-            @NonNull ViewGroup rootView, @Nullable Callback<Object> onModelTokenChange,
-            @Nullable TabGridItemTouchHelperCallback
-                    .OnLongPressTabItemEventListener onLongPressTabItemEventListener) {
+            @NonNull ViewGroup rootView, @Nullable Callback<Object> onModelTokenChange) {
         mMode = mode;
         mItemType = itemType;
         mContext = context;
@@ -180,21 +179,7 @@ public class TabListCoordinator
                 ImageView thumbnail = (ImageView) root.fastFindViewById(R.id.tab_thumbnail);
                 if (thumbnail == null) return;
 
-                if (TabUiFeatureUtilities.isLaunchPolishEnabled()) {
-                    thumbnail.setImageDrawable(null);
-                    return;
-                }
-
-                if (TabUiFeatureUtilities.isTabThumbnailAspectRatioNotOne()) {
-                    float expectedThumbnailAspectRatio =
-                            TabUtils.getTabThumbnailAspectRatio(context);
-                    int height = (int) (thumbnail.getWidth() * 1.0 / expectedThumbnailAspectRatio);
-                    thumbnail.setMinimumHeight(Math.min(thumbnail.getHeight(), height));
-                    thumbnail.setImageDrawable(null);
-                } else {
-                    thumbnail.setImageDrawable(null);
-                    thumbnail.setMinimumHeight(thumbnail.getWidth());
-                }
+                thumbnail.setImageDrawable(null);
             };
         } else if (mMode == TabListMode.STRIP) {
             mAdapter.registerType(UiType.STRIP, parent -> {
@@ -218,7 +203,7 @@ public class TabListCoordinator
                 actionButton.setImageBitmap(bitmap);
 
                 return group;
-            }, TabListViewBinder::bindListTab);
+            }, TabListViewBinder::bindClosableListTab);
 
             mAdapter.registerType(UiType.SELECTABLE, parent -> {
                 ViewGroup group = (ViewGroup) LayoutInflater.from(context).inflate(
@@ -241,8 +226,7 @@ public class TabListCoordinator
         mMediator = new TabListMediator(context, mModel, mMode, tabModelSelector, thumbnailProvider,
                 titleProvider, tabListFaviconProvider, actionOnRelatedTabs,
                 selectionDelegateProvider, gridCardOnClickListenerProvider, dialogHandler,
-                priceWelcomeMessageController, componentName, itemType,
-                onLongPressTabItemEventListener);
+                priceWelcomeMessageController, componentName, itemType);
 
         try (TraceEvent e = TraceEvent.scoped("TabListCoordinator.setupRecyclerView")) {
             if (!attachToParent) {
@@ -291,7 +275,7 @@ public class TabListCoordinator
 
         if (mMode == TabListMode.GRID) {
             mGlobalLayoutListener = this::updateThumbnailLocation;
-            if (TabUiFeatureUtilities.isTabletGridTabSwitcherEnabled(mContext)) {
+            if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)) {
                 mListLayoutListener = (view, left, top, right, bottom, oldLeft, oldTop, oldRight,
                         oldBottom) -> updateGridCardLayout(right - left);
             }
@@ -299,6 +283,16 @@ public class TabListCoordinator
             mTabStripSnapshotter =
                     new TabStripSnapshotter(onModelTokenChange, mModel, mRecyclerView);
         }
+    }
+
+    /**
+     * @param onLongPressTabItemEventListener to handle long press events on tabs.
+     */
+    public void setOnLongPressTabItemEventListener(
+            @Nullable TabGridItemTouchHelperCallback
+                    .OnLongPressTabItemEventListener onLongPressTabItemEventListener) {
+        assert mMediator != null;
+        mMediator.setOnLongPressTabItemEventListener(onLongPressTabItemEventListener);
     }
 
     @NonNull
@@ -351,14 +345,15 @@ public class TabListCoordinator
                                 mContext.getResources().getDimension(
                                         R.dimen.bottom_sheet_peek_height));
 
-                // The block below creates an instance of the ItemTouchHelper and also utilizes the
-                // TabGridItemTouchHelperCallback and its shouldBlockAction after attaching to the
-                // recycler view. The block action function determines if on longpress, a propagated
-                // MOTION_UP click event should be intercepted and negated by this listener to
-                // prevent selection state issues from occurring on subsequent recycler view layers
-                // should the MOTION_UP event continue propagating. The motion events concerning the
-                // longpress action are consumed by this recycler view, which is why the solution
-                // targets this recycler view rather than the selection editor recycler view.
+                // Creates an instance of the ItemTouchHelper using TabGridItemTouchHelperCallback
+                // and attach a downsteam mOnItemTouchListener that watches for
+                // TabGridItemTouchHelperCallback#shouldBlockAction() to occur. This determines if
+                // on a longpress the final MOTION_UP event should be intercepted if it should have
+                // been filtered in the ItemTouchHelper, but was not handled. This then allows
+                // the mOnItemTouchHelper to intercept the event and prevent subsequent downstream
+                // click handlers from receiving an input possibly causing unexpected behaviors.
+                //
+                // See similar comments in TabGridItemTouchHelperCallback for more details.
                 mItemTouchHelper = new ItemTouchHelper(callback);
                 mItemTouchHelper.attachToRecyclerView(mRecyclerView);
                 mOnItemTouchListener = new OnItemTouchListener() {
@@ -366,13 +361,14 @@ public class TabListCoordinator
                     public boolean onInterceptTouchEvent(
                             RecyclerView recyclerView, MotionEvent event) {
                         // There can be an edge case when adding the block action logic where
-                        // minimal movement not picked up by the actionStarted bool in onChildDraw
-                        // can result in a block action request with a DRAG event. The event gets
-                        // consumed and no erroneous selection would have occurred as it is not a
-                        // pure longpress, but due to the active block request, subsequent
-                        // intercepted actions may be blocked or have weird behaviours. This check
-                        // ensures that for a given action, if a block is requested, the MOTION_UP
-                        // event which results in a propagated click must be present to block it.
+                        // minimal movement not picked up by the mItemTouchHelper can result in
+                        // attempting to block an action that did have a DRAG event. Actually,
+                        // blocking the next event in this can result in an unexpected event
+                        // being consumed leading to an unexpected sequence of MotionEvents.
+                        // This bad sequence can then result in invalid UI & click state for
+                        // downstream touch handlers. This additional check ensures that for a
+                        // given action, if a block is requested it must be the UP motion that
+                        // ends the input.
                         if (callback.shouldBlockAction()
                                 && (event.getActionMasked() == MotionEvent.ACTION_UP
                                         || event.getActionMasked()

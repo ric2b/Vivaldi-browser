@@ -32,33 +32,28 @@ class SyncUserSettingsImpl : public SyncUserSettings {
                        ModelTypeSet registered_types);
   ~SyncUserSettingsImpl() override;
 
-  bool IsSyncRequested() const override;
-  void SetSyncRequested(bool requested) override;
-
+  // SyncUserSettings implementation.
   bool IsFirstSetupComplete() const override;
   void SetFirstSetupComplete(SyncFirstSetupCompleteSource source) override;
-
   bool IsSyncEverythingEnabled() const override;
   UserSelectableTypeSet GetSelectedTypes() const override;
+  bool IsTypeManagedByPolicy(UserSelectableType type) const override;
   void SetSelectedTypes(bool sync_everything,
                         UserSelectableTypeSet types) override;
   UserSelectableTypeSet GetRegisteredSelectableTypes() const override;
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   bool IsSyncAllOsTypesEnabled() const override;
   UserSelectableOsTypeSet GetSelectedOsTypes() const override;
+  bool IsOsTypeManagedByPolicy(UserSelectableOsType type) const override;
   void SetSelectedOsTypes(bool sync_all_os_types,
                           UserSelectableOsTypeSet types) override;
   UserSelectableOsTypeSet GetRegisteredSelectableOsTypes() const override;
 #endif
-
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   void SetAppsSyncEnabledByOs(bool apps_sync_enabled) override;
 #endif
-
   bool IsCustomPassphraseAllowed() const override;
   bool IsEncryptEverythingEnabled() const override;
-
   ModelTypeSet GetEncryptedDataTypes() const override;
   bool IsPassphraseRequired() const override;
   bool IsPassphraseRequiredForPreferredDataTypes() const override;
@@ -70,13 +65,10 @@ class SyncUserSettingsImpl : public SyncUserSettings {
   bool IsUsingExplicitPassphrase() const override;
   base::Time GetExplicitPassphraseTime() const override;
   PassphraseType GetPassphraseType() const override;
-
   void SetEncryptionPassphrase(const std::string& passphrase) override;
   bool SetDecryptionPassphrase(const std::string& passphrase) override;
   void SetDecryptionNigoriKey(std::unique_ptr<Nigori> nigori) override;
   std::unique_ptr<Nigori> GetDecryptionNigoriKey() const override;
-
-  void SetSyncRequestedIfNotSetExplicitly();
 
   ModelTypeSet GetPreferredDataTypes() const;
   bool IsEncryptedDatatypeEnabled() const;

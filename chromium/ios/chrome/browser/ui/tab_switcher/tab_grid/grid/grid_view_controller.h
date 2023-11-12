@@ -11,14 +11,13 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_theme.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_count_consumer.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_info_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
 
 @protocol TabContextMenuProvider;
 @protocol TabCollectionDragDropHandler;
 @protocol GridEmptyView;
-@protocol GridImageDataSource;
 @protocol GridShareableItemsProvider;
 @class GridTransitionLayout;
 @class GridViewController;
@@ -86,14 +85,21 @@
     (GridViewController*)gridViewController;
 
 // Tells the delegate that the inactive tabs button was tapped in
-// `gridViewController`, i.e., there was an intention to show inactive tabs.
+// `gridViewController`, i.e., there was an intention to show inactive tabs (in
+// TabGridModeNormal).
 - (void)didTapInactiveTabsButtonInGridViewController:
+    (GridViewController*)gridViewController;
+
+// Tells the delegate that the inactive tabs settings link was tapped in
+// `gridViewController`, i.e., there was an intention to show inactive tabs
+// settings (in TabGridModeInactive).
+- (void)didTapInactiveTabsSettingsLinkInGridViewController:
     (GridViewController*)gridViewController;
 
 @end
 
 // A view controller that contains a grid of items.
-@interface GridViewController : UIViewController <InactiveTabsCountConsumer,
+@interface GridViewController : UIViewController <InactiveTabsInfoConsumer,
                                                   IncognitoReauthConsumer,
                                                   LayoutSwitcher,
                                                   TabCollectionConsumer,
@@ -104,8 +110,9 @@
 @property(nonatomic, strong) UIView<GridEmptyView>* emptyStateView;
 // Returns YES if the grid has no items.
 @property(nonatomic, readonly, getter=isGridEmpty) BOOL gridEmpty;
-// Currently visible items in the grid.
-@property(nonatomic, readonly) NSSet<NSString*>* visibleGridItems;
+// Returns YES if the inactive grid has no items.
+@property(nonatomic, readonly, getter=isInactiveGridEmpty)
+    BOOL inactiveGridEmpty;
 // The visual look of the grid.
 @property(nonatomic, assign) GridTheme theme;
 // The current mode for the grid.
@@ -124,16 +131,13 @@
 @property(nonatomic, weak) id<GridViewControllerDelegate> delegate;
 // Handles drag and drop interactions that involved the model layer.
 @property(nonatomic, weak) id<TabCollectionDragDropHandler> dragDropHandler;
-// Data source for images.
-@property(nonatomic, weak) id<GridImageDataSource> imageDataSource;
+// Tracks if a drop animation is in progress.
+@property(nonatomic, assign) BOOL dropAnimationInProgress;
 // Data source for acquiring data to power PriceCardView
 @property(nonatomic, weak) id<PriceCardDataSource> priceCardDataSource;
 // YES if the selected cell is visible in the grid.
 @property(nonatomic, readonly, getter=isSelectedCellVisible)
     BOOL selectedCellVisible;
-// YES if the grid should show cell selection updates. This would be set to NO,
-// for example, if the grid was about to be transitioned out of.
-@property(nonatomic, assign) BOOL showsSelectionUpdates;
 // The fraction of the last item of the grid that is visible.
 @property(nonatomic, assign, readonly) CGFloat fractionVisibleOfLastItem;
 // YES when the current contents are hidden from the user before a successful
@@ -162,8 +166,12 @@
 // Returns the layout of the grid for use in an animated transition.
 - (GridTransitionLayout*)transitionLayout;
 
-// Notifies the ViewController that its content is being displayed or hidden.
+// Notifies the ViewController that its content might soon be displayed.
+- (void)prepareForAppearance;
+// Notifies the ViewController that its content is being displayed.
 - (void)contentWillAppearAnimated:(BOOL)animated;
+- (void)contentDidAppear;
+// Notifies the ViewController that its content is being hidden.
 - (void)contentWillDisappear;
 
 // Notifies the grid that it is about to be dismissed.

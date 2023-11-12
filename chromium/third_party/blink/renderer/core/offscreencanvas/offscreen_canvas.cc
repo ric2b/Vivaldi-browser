@@ -244,6 +244,7 @@ void OffscreenCanvas::RecordIdentifiabilityMetric(
 }
 
 scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
+    CanvasResourceProvider::FlushReason reason,
     SourceImageStatus* status,
     const gfx::SizeF& size,
     const AlphaDisposition alpha_disposition) {
@@ -259,7 +260,7 @@ scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
     *status = kZeroSizeCanvasSourceImageStatus;
     return nullptr;
   }
-  scoped_refptr<StaticBitmapImage> image = context_->GetImage();
+  scoped_refptr<StaticBitmapImage> image = context_->GetImage(reason);
   if (!image)
     image = CreateTransparentImage(Size());
 
@@ -267,7 +268,8 @@ scoped_refptr<Image> OffscreenCanvas::GetSourceImageForCanvas(
 
   // If the alpha_disposition is already correct, or the image is opaque, this
   // is a no-op.
-  return GetImageWithAlphaDisposition(std::move(image), alpha_disposition);
+  return GetImageWithAlphaDisposition(reason, std::move(image),
+                                      alpha_disposition);
 }
 
 gfx::Size OffscreenCanvas::BitmapSourceSize() const {
@@ -279,8 +281,10 @@ ScriptPromise OffscreenCanvas::CreateImageBitmap(
     absl::optional<gfx::Rect> crop_rect,
     const ImageBitmapOptions* options,
     ExceptionState& exception_state) {
-  if (context_)
-    context_->FinalizeFrame();
+  if (context_) {
+    context_->FinalizeFrame(
+        CanvasResourceProvider::FlushReason::kCreateImageBitmap);
+  }
   return ImageBitmapSource::FulfillImageBitmap(
       script_state,
       IsPaintable()
@@ -427,40 +431,34 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
         RuntimeEnabledFeatures::Accelerated2dCanvasEnabled() &&
         !(context_->CreationAttributes().will_read_frequently ==
           CanvasContextCreationAttributesCore::WillReadFrequently::kTrue)));
-  const bool composited_mode =
-      IsWebGPU() ||
-      (IsWebGL() && RuntimeEnabledFeatures::WebGLImageChromiumEnabled()) ||
-      (IsRenderingContext2D() &&
-       RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled());
+  const bool use_shared_image =
+      can_use_gpu ||
+      (HasPlaceholderCanvas() && SharedGpuContext::IsGpuCompositingEnabled());
+  const bool use_scanout =
+      use_shared_image && HasPlaceholderCanvas() &&
+      (IsWebGPU() ||
+       (IsWebGL() && RuntimeEnabledFeatures::WebGLImageChromiumEnabled()) ||
+       (IsRenderingContext2D() &&
+        RuntimeEnabledFeatures::Canvas2dImageChromiumEnabled()));
 
   uint32_t shared_image_usage_flags = gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
-  if (composited_mode && HasPlaceholderCanvas())
+  if (use_scanout) {
     shared_image_usage_flags |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
+  }
 
   const SkImageInfo resource_info = SkImageInfo::Make(
       SkISize::Make(surface_size.width(), surface_size.height()),
       GetRenderingContextSkColorInfo());
   const cc::PaintFlags::FilterQuality filter_quality = FilterQuality();
-  if (can_use_gpu) {
+  if (use_shared_image) {
     provider = CanvasResourceProvider::CreateSharedImageProvider(
         resource_info, filter_quality,
         CanvasResourceProvider::ShouldInitialize::kCallClear,
-        SharedGpuContext::ContextProviderWrapper(), RasterMode::kGPU,
+        SharedGpuContext::ContextProviderWrapper(),
+        can_use_gpu ? RasterMode::kGPU : RasterMode::kCPU,
         false /*is_origin_top_left*/, shared_image_usage_flags);
-  } else if (HasPlaceholderCanvas() && composited_mode) {
-    // Only try a SoftwareComposited SharedImage if the context has Placeholder
-    // canvas and the composited mode is enabled.
-    provider = CanvasResourceProvider::CreateSharedImageProvider(
-        resource_info, filter_quality,
-        CanvasResourceProvider::ShouldInitialize::kCallClear,
-        SharedGpuContext::ContextProviderWrapper(), RasterMode::kCPU,
-        false /*is_origin_top_left*/, shared_image_usage_flags);
-  }
-
-  if (!provider && HasPlaceholderCanvas()) {
-    // If this context has a Placerholder - which means that we have to display
-    // this resource - and the SharedImage Provider creation above failed, we
-    // try a SharedBitmap Provider before falling back to a Bitmap Provider.
+  } else if (HasPlaceholderCanvas()) {
+    // using the software compositor
     base::WeakPtr<CanvasResourceDispatcher> dispatcher_weakptr =
         GetOrCreateResourceDispatcher()->GetWeakPtr();
     provider = CanvasResourceProvider::CreateSharedBitmapProvider(
@@ -470,8 +468,12 @@ CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
   }
 
   if (!provider) {
-    // If any of the above Create was able to create a valid provider, a
-    // BitmapProvider will be created here.
+    // Last resort fallback is to use the bitmap provider. Using this
+    // path is normal for software-rendered OffscreenCanvases that have no
+    // placeholder canvas. If there is a placeholder, its content will not be
+    // visible on screen, but at least readbacks will work. Failure to create
+    // another type of resource prover above is a sign that the graphics
+    // pipeline is in a bad state (e.g. gpu process crashed, out of memory)
     provider = CanvasResourceProvider::CreateBitmapProvider(
         resource_info, filter_quality,
         CanvasResourceProvider::ShouldInitialize::kCallClear);

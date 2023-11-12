@@ -6,7 +6,10 @@
 
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
+#include "build/buildflag.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/drivefs/drivefs_native_message_host_origins.h"
 #include "chrome/browser/extensions/api/messaging/native_message_port.h"
 #include "chrome/browser/profiles/profile.h"
@@ -16,12 +19,20 @@
 #include "extensions/browser/api/messaging/native_message_host.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/common/api/messaging/channel_type.h"
 #include "extensions/common/api/messaging/messaging_endpoint.h"
 #include "extensions/common/api/messaging/port_id.h"
 #include "extensions/common/api/messaging/serialization_format.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
+#include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
+#include "components/keep_alive_registry/keep_alive_types.h"
+#include "components/keep_alive_registry/scoped_keep_alive.h"
+#endif
 
 namespace drive {
 
@@ -34,11 +45,22 @@ class DriveFsNativeMessageHost : public extensions::NativeMessageHost,
 
   // Used when the native messaging session is initiated by DriveFS.
   DriveFsNativeMessageHost(
+      Profile* profile,
       mojo::PendingReceiver<drivefs::mojom::NativeMessagingPort>
           extension_receiver,
       mojo::PendingRemote<drivefs::mojom::NativeMessagingHost> drivefs_remote)
-      : pending_receiver_(std::move(extension_receiver)),
-        drivefs_remote_(std::move(drivefs_remote)) {}
+      :
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+        keep_alive_(std::make_unique<ScopedKeepAlive>(
+            KeepAliveOrigin::DRIVEFS_NATIVE_MESSAGE_HOST_LACROS,
+            KeepAliveRestartOption::ENABLED)),
+        profile_keep_alive_(std::make_unique<ScopedProfileKeepAlive>(
+            profile,
+            ProfileKeepAliveOrigin::kDriveFsNativeMessageHostLacros)),
+#endif
+        pending_receiver_(std::move(extension_receiver)),
+        drivefs_remote_(std::move(drivefs_remote)) {
+  }
 
   DriveFsNativeMessageHost(const DriveFsNativeMessageHost&) = delete;
   DriveFsNativeMessageHost& operator=(const DriveFsNativeMessageHost&) = delete;
@@ -88,6 +110,12 @@ class DriveFsNativeMessageHost : public extensions::NativeMessageHost,
     drivefs_remote_.reset();
   }
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Used to keep lacros alive while connected to DriveFS.
+  std::unique_ptr<ScopedKeepAlive> keep_alive_;
+  std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive_;
+#endif
+
   CreateNativeHostSessionCallback create_native_host_callback_;
 
   // Used to buffer messages until Start() has been called.
@@ -95,7 +123,7 @@ class DriveFsNativeMessageHost : public extensions::NativeMessageHost,
   mojo::Receiver<drivefs::mojom::NativeMessagingPort> receiver_{this};
   mojo::Remote<drivefs::mojom::NativeMessagingHost> drivefs_remote_;
 
-  Client* client_ = nullptr;
+  raw_ptr<Client, ExperimentalAsh> client_ = nullptr;
 
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_ =
       base::SingleThreadTaskRunner::GetCurrentDefault();
@@ -108,11 +136,12 @@ std::unique_ptr<extensions::NativeMessageHost> CreateDriveFsNativeMessageHost(
 
 std::unique_ptr<extensions::NativeMessageHost>
 CreateDriveFsInitiatedNativeMessageHostInternal(
+    Profile* profile,
     mojo::PendingReceiver<drivefs::mojom::NativeMessagingPort>
         extension_receiver,
     mojo::PendingRemote<drivefs::mojom::NativeMessagingHost> drivefs_remote) {
   return std::make_unique<DriveFsNativeMessageHost>(
-      std::move(extension_receiver), std::move(drivefs_remote));
+      profile, std::move(extension_receiver), std::move(drivefs_remote));
 }
 
 drivefs::mojom::ExtensionConnectionStatus
@@ -139,7 +168,7 @@ ConnectToDriveFsNativeMessageExtension(
   extensions::MessageService* const message_service =
       extensions::MessageService::Get(profile);
   auto native_message_host = CreateDriveFsInitiatedNativeMessageHostInternal(
-      std::move(extension_receiver), std::move(drivefs_remote));
+      profile, std::move(extension_receiver), std::move(drivefs_remote));
   if (!native_message_host) {
     return drivefs::mojom::ExtensionConnectionStatus::kFeatureNotEnabled;
   }
@@ -152,7 +181,7 @@ ConnectToDriveFsNativeMessageExtension(
       extensions::MessagingEndpoint::ForNativeApp(
           kDriveFsNativeMessageHostName),
       std::move(native_message_port), extension_id, GURL(),
-      /* channel name= */ std::string());
+      extensions::ChannelType::kNative, /* channel name= */ std::string());
   return drivefs::mojom::ExtensionConnectionStatus::kSuccess;
 }
 

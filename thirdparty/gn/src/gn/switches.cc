@@ -153,8 +153,7 @@ Examples
 )";
 
 const char kRootTarget[] = "root-target";
-const char kRootTarget_HelpShort[] =
-    "--root-target: Override the root target.";
+const char kRootTarget_HelpShort[] = "--root-target: Override the root target.";
 const char kRootTarget_Help[] =
     R"(--root-target: Override the root target.
 
@@ -284,6 +283,9 @@ const char kVersion_Help[] = "";
 const char kDefaultToolchain[] = "default-toolchain";
 
 const char kRegeneration[] = "regeneration";
+
+const char kAddExportCompileCommands[] = "add-export-compile-commands";
+
 // -----------------------------------------------------------------------------
 
 SwitchInfo::SwitchInfo() : short_help(""), long_help("") {}

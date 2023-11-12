@@ -78,6 +78,9 @@
     "auto",
     "hint",
     "async",
+    "show",
+    "hide",
+    "toggle",
 
     // referrerpolicy attribute
     // https://w3c.github.io/webappsec-referrer-policy/#referrer-policies
@@ -101,11 +104,6 @@
     // https://github.com/MicrosoftEdge/MSEdgeExplainers/blob/master/VirtualKeyboardPolicy/explainer.md
     "auto",
     "manual",
-
-    // mode attribute
-    // https://github.com/WICG/fenced-frame
-    "default",
-    "opaque-ads",
 
     // shadowrootmode attribute
     // https://github.com/whatwg/html/pull/5465

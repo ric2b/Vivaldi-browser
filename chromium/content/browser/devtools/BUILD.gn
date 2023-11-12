@@ -9,8 +9,8 @@ import("//third_party/inspector_protocol/inspector_protocol.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//tools/grit/grit_rule.gni")
 
-# Android does not support DevTools front-end.
-if (!is_android) {
+# Android and iOS don't support DevTools front-end.
+if (!is_android && !is_ios) {
   source_set("devtools_resources_extern") {
     sources = [ "devtools_resources.cc" ]
 
@@ -110,6 +110,8 @@ inspector_protocol_generate("protocol_sources") {
     "protocol/dom.h",
     "protocol/emulation.cc",
     "protocol/emulation.h",
+    "protocol/fed_cm.cc",
+    "protocol/fed_cm.h",
     "protocol/fetch.cc",
     "protocol/fetch.h",
     "protocol/forward.h",
@@ -129,6 +131,8 @@ inspector_protocol_generate("protocol_sources") {
     "protocol/overlay.h",
     "protocol/page.cc",
     "protocol/page.h",
+    "protocol/preload.cc",
+    "protocol/preload.h",
     "protocol/protocol.h",
     "protocol/runtime.cc",
     "protocol/runtime.h",

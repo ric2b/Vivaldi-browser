@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/parsing_buildflags.h"
+#include "base/rust_buildflags.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(BUILD_RUST_JSON_READER)
@@ -145,14 +145,6 @@ absl::optional<Value> JSONReader::Read(StringPiece json,
   internal::JSONParser parser(options, max_depth);
   return parser.Parse(json);
 #endif  // BUILDFLAG(BUILD_RUST_JSON_READER)
-}
-
-// static
-std::unique_ptr<Value> JSONReader::ReadDeprecated(StringPiece json,
-                                                  int options,
-                                                  size_t max_depth) {
-  absl::optional<Value> value = Read(json, options, max_depth);
-  return value ? Value::ToUniquePtrValue(std::move(*value)) : nullptr;
 }
 
 // static

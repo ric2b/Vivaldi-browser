@@ -17,8 +17,8 @@
 #import "ios/chrome/browser/overlays/public/infobar_banner/password_infobar_banner_overlay.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
 #import "ios/chrome/browser/passwords/test/mock_ios_chrome_save_passwords_infobar_delegate.h"
-#import "ios/chrome/browser/ui/commands/command_dispatcher.h"
-#import "ios/chrome/browser/ui/commands/credential_provider_promo_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/credential_provider_promo_commands.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
 #import "testing/platform_test.h"
@@ -35,6 +35,7 @@ class PasswordInfobarBannerInteractionHandlerTest : public PlatformTest {
       : browser_state_(TestChromeBrowserState::Builder().Build()),
         browser_(std::make_unique<TestBrowser>(browser_state_.get())),
         handler_(browser_.get(),
+                 password_modal::PasswordAction::kSave,
                  PasswordInfobarBannerOverlayRequestConfig::RequestSupport()) {
     web_state_.SetNavigationManager(
         std::make_unique<web::FakeNavigationManager>());
@@ -95,11 +96,15 @@ TEST_F(PasswordInfobarBannerInteractionHandlerTest, MainButton) {
 TEST_F(PasswordInfobarBannerInteractionHandlerTest,
        MainButtonTriggersCredentialProviderPromo) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(kCredentialProviderExtensionPromo);
+  feature_list.InitAndEnableFeatureWithParameters(
+      kCredentialProviderExtensionPromo,
+      {{"enable_promo_on_password_saved", "true"}});
 
   [[mock_credential_provider_promo_commands_handler_ expect]
       showCredentialProviderPromoWithTrigger:CredentialProviderPromoTrigger::
                                                  PasswordSaved];
 
   handler_.MainButtonTapped(infobar_);
+
+  [mock_credential_provider_promo_commands_handler_ verify];
 }

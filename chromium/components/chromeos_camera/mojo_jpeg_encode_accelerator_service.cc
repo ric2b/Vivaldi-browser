@@ -23,7 +23,6 @@
 #include "base/trace_event/trace_event.h"
 #include "components/chromeos_camera/common/dmabuf.mojom.h"
 #include "components/chromeos_camera/dmabuf_utils.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/platform_handle.h"
@@ -298,6 +297,8 @@ void MojoJpegEncodeAcceleratorService::EncodeWithDmaBuf(
     int32_t coded_size_width,
     int32_t coded_size_height,
     int32_t quality,
+    bool has_input_modifier,
+    uint64_t input_modifier,
     EncodeWithDmaBufCallback callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -327,7 +328,9 @@ void MojoJpegEncodeAcceleratorService::EncodeWithDmaBuf(
   }
 
   auto input_video_frame = ConstructVideoFrame(
-      std::move(input_planes), ToVideoPixelFormat(input_format), coded_size);
+      std::move(input_planes), ToVideoPixelFormat(input_format), coded_size,
+      has_input_modifier ? input_modifier
+                         : gfx::NativePixmapHandle::kNoModifier);
   if (!input_video_frame) {
     std::move(callback).Run(
         0, ::chromeos_camera::JpegEncodeAccelerator::Status::PLATFORM_FAILURE);

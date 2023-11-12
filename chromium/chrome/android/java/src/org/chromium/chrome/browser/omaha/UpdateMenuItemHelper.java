@@ -8,6 +8,7 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.res.Resources;
 import android.text.TextUtils;
+import android.view.Choreographer;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -18,6 +19,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
+import org.chromium.base.ResettersForTesting;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
@@ -30,7 +32,6 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuItemState;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuUiState;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 /**
  * Contains logic related to displaying app menu badge and a special menu item for information
@@ -88,6 +89,7 @@ public class UpdateMenuItemHelper {
     @VisibleForTesting
     public static void setInstanceForTesting(UpdateMenuItemHelper testingInstance) {
         sInstance = testingInstance;
+        ResettersForTesting.register(() -> sInstance = null);
     }
 
     /**
@@ -98,7 +100,7 @@ public class UpdateMenuItemHelper {
         if (!mObservers.addObserver(observer)) return;
 
         if (mStatus != null) {
-            PostTask.postTask(UiThreadTaskTraits.DEFAULT, () -> {
+            PostTask.postTask(TaskTraits.UI_DEFAULT, () -> {
                 if (mObservers.hasObserver(observer)) observer.run();
             });
             return;
@@ -158,8 +160,8 @@ public class UpdateMenuItemHelper {
         mMenuDismissedRunnableExecuted = false;
         // Post a task to record the item clicked histogram. Post task is used so that the runnable
         // executes after #onMenuItemClicked is called (if it's going to be called).
-        PostTask.postTask(
-                TaskTraits.CHOREOGRAPHER_FRAME, () -> { mMenuDismissedRunnableExecuted = true; });
+        Choreographer.getInstance().postFrameCallback(
+                (long frameTimeNanos) -> { mMenuDismissedRunnableExecuted = true; });
     }
 
     /**

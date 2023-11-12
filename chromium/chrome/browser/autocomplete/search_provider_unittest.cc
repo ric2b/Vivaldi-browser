@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 
+#include "base/base64.h"
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
@@ -142,6 +143,15 @@ std::unique_ptr<KeyedService> BuildRemoteSuggestionsServiceWithURLLoader(
     content::BrowserContext* context) {
   return std::make_unique<RemoteSuggestionsService>(
       test_url_loader_factory->GetSafeWeakWrapper());
+}
+
+std::string SerializeAndEncodeEntityInfo(
+    const omnibox::EntityInfo& entity_info) {
+  std::string serialized_entity_info;
+  entity_info.SerializeToString(&serialized_entity_info);
+  std::string encoded_entity_info;
+  base::Base64Encode(serialized_entity_info, &encoded_entity_info);
+  return encoded_entity_info;
 }
 
 }  // namespace
@@ -320,14 +330,6 @@ class BaseSearchProviderTest : public testing::Test,
 
   void ClearAllResults();
 
-  // See description above class for details of these fields.
-  raw_ptr<TemplateURL> default_t_url_ = nullptr;
-  const std::u16string term1_ = u"term1";
-  GURL term1_url_;
-  raw_ptr<TemplateURL> keyword_t_url_ = nullptr;
-  const std::u16string keyword_term_ = u"keyword";
-  GURL keyword_url_;
-
   // SearchProviderFeatureTestComponent must come before BrowserTaskEnvironment,
   // to avoid a possible race.
   SearchProviderFeatureTestComponent feature_test_component_;
@@ -339,6 +341,15 @@ class BaseSearchProviderTest : public testing::Test,
   std::unique_ptr<TestingProfile> profile_;
   std::unique_ptr<TestAutocompleteProviderClient> client_;
   scoped_refptr<SearchProviderForTest> provider_;
+
+  // See description above class for details of these fields.
+  // TemplateURLs can not outlive `profile_`.
+  raw_ptr<TemplateURL> default_t_url_ = nullptr;
+  const std::u16string term1_ = u"term1";
+  GURL term1_url_;
+  raw_ptr<TemplateURL> keyword_t_url_ = nullptr;
+  const std::u16string keyword_term_ = u"keyword";
+  GURL keyword_url_;
 
   // If not nullptr, OnProviderUpdate quits the current |run_loop_|.
   raw_ptr<base::RunLoop> run_loop_ = nullptr;
@@ -2535,11 +2546,10 @@ TEST_F(SearchProviderTest, FieldTrialTriggeredParsing) {
     // Check for the match and field trial triggered bits.
     AutocompleteMatch match;
     EXPECT_TRUE(FindMatchWithContents(u"foo bar", &match));
-    EXPECT_EQ(
-        client_->GetOmniboxTriggeredFeatureService()
-            ->GetFeatureTriggeredInSession(
-                OmniboxTriggeredFeatureService::Feature::kRemoteSearchFeature),
-        trigger);
+    EXPECT_EQ(client_->GetOmniboxTriggeredFeatureService()
+                  ->GetFeatureTriggeredInSession(
+                      metrics::OmniboxEventProto_Feature_REMOTE_SEARCH_FEATURE),
+              trigger);
   };
 
   {
@@ -3032,7 +3042,6 @@ TEST_F(SearchProviderTest, DoTrimHttpsScheme) {
   EXPECT_EQ(u"facebook.com", match_inline.contents);
 }
 
-#if !BUILDFLAG(IS_WIN)
 // Verify entity suggestion parsing.
 TEST_F(SearchProviderTest, ParseEntitySuggestion) {
   struct Match {
@@ -3046,39 +3055,80 @@ TEST_F(SearchProviderTest, ParseEntitySuggestion) {
     kNotApplicable, kNotApplicable, kNotApplicable, kNotApplicable,
     AutocompleteMatchType::NUM_TYPES};
 
+  omnibox::EntityInfo entity_info;
+  entity_info.set_name("xy");
+  entity_info.set_annotation("A");
+  entity_info.set_suggest_search_parameters("p=v");
+
   struct {
     const std::string input_text;
     const std::string response_json;
     const Match matches[5];
   } cases[] = {
-    // A query and an entity suggestion with different search terms.
-    { "x",
-      "[\"x\",[\"xy\", \"yy\"],[\"\",\"\"],[],"
-      " {\"google:suggestdetail\":[{},"
-      "   {\"a\":\"A\",\"t\":\"xy\",\"q\":\"p=v\"}],"
-      "\"google:suggesttype\":[\"QUERY\",\"ENTITY\"]}]",
-      { { "x", "", "", "x", AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED },
-        { "xy", "", "", "xy", AutocompleteMatchType::SEARCH_SUGGEST },
-        { "xy", "A", "p=v", "yy",
-          AutocompleteMatchType::SEARCH_SUGGEST_ENTITY },
-        kEmptyMatch,
-        kEmptyMatch
+      // A query and an entity suggestion with different search terms.
+      {
+          "x",
+          R"(
+      [
+        "x",
+        [
+            "xy", "yy"
+        ],
+        [
+            "", ""
+        ],
+        [],
+        {
+        "google:suggestdetail":[
+            {},
+            {
+              "google:entityinfo": ")" +
+              SerializeAndEncodeEntityInfo(entity_info) +
+              R"("
+            }
+        ],
+        "google:suggesttype":["QUERY","ENTITY"]
+      }]
+      )",
+          {{"x", "", "", "x", AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED},
+           {"xy", "", "", "xy", AutocompleteMatchType::SEARCH_SUGGEST},
+           {"xy", "A", "p=v", "yy",
+            AutocompleteMatchType::SEARCH_SUGGEST_ENTITY},
+           kEmptyMatch,
+           kEmptyMatch},
       },
-    },
-    // A query and an entity suggestion with same search terms.
-    { "x",
-      "[\"x\",[\"xy\", \"xy\"],[\"\",\"\"],[],"
-      " {\"google:suggestdetail\":[{},"
-      "   {\"a\":\"A\",\"t\":\"xy\",\"q\":\"p=v\"}],"
-      "\"google:suggesttype\":[\"QUERY\",\"ENTITY\"]}]",
-      { { "x", "", "", "x", AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED },
-        { "xy", "", "", "xy", AutocompleteMatchType::SEARCH_SUGGEST },
-        { "xy", "A", "p=v", "xy",
-          AutocompleteMatchType::SEARCH_SUGGEST_ENTITY },
-        kEmptyMatch,
-        kEmptyMatch
+      // A query and an entity suggestion with same search terms.
+      {
+          "x",
+          R"(
+      [
+        "x",
+        [
+            "xy", "xy"
+        ],
+        [
+            "", ""
+        ],
+        [],
+        {
+        "google:suggestdetail":[
+            {},
+            {
+              "google:entityinfo": ")" +
+              SerializeAndEncodeEntityInfo(entity_info) +
+              R"("
+            }
+        ],
+        "google:suggesttype":["QUERY","ENTITY"]
+      }]
+      )",
+          {{"x", "", "", "x", AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED},
+           {"xy", "", "", "xy", AutocompleteMatchType::SEARCH_SUGGEST},
+           {"xy", "A", "p=v", "xy",
+            AutocompleteMatchType::SEARCH_SUGGEST_ENTITY},
+           kEmptyMatch,
+           kEmptyMatch},
       },
-    },
   };
   for (size_t i = 0; i < std::size(cases); ++i) {
     QueryForInputAndWaitForFetcherResponses(
@@ -3117,7 +3167,6 @@ TEST_F(SearchProviderTest, ParseEntitySuggestion) {
     }
   }
 }
-#endif  // !BUILDFLAG(IS_WIN)
 
 // A basic test that verifies the prefetch metadata parsing logic.
 TEST_F(SearchProviderTest, PrefetchMetadataParsing) {

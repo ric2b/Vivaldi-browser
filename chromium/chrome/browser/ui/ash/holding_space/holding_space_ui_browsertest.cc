@@ -20,13 +20,19 @@
 #include "ash/public/cpp/holding_space/holding_space_test_api.h"
 #include "ash/public/cpp/holding_space/mock_holding_space_client.h"
 #include "ash/public/cpp/holding_space/mock_holding_space_model_observer.h"
+#include "ash/root_window_controller.h"
+#include "ash/shelf/shelf.h"
+#include "ash/shell.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
+#include "ash/system/message_center/message_popup_animation_waiter.h"
+#include "ash/system/status_area_widget.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/view_drawn_waiter.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/guid.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
@@ -34,6 +40,7 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_locale.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
@@ -65,6 +72,7 @@
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/compositor/layer.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event_constants.h"
@@ -443,7 +451,8 @@ class DropTargetView : public views::WidgetDelegateView {
   }
 
   void PerformDrop(const ui::DropTargetEvent& event,
-                   ui::mojom::DragOperation& output_drag_op) {
+                   ui::mojom::DragOperation& output_drag_op,
+                   std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
     EXPECT_TRUE(event.data().GetFilename(&copied_file_path_));
     output_drag_op = ui::mojom::DragOperation::kCopy;
   }
@@ -657,8 +666,8 @@ class HoldingSpaceUiDragAndDropBrowserTest
     return GetStorageLocationFlags() & flag;
   }
 
-  DropSenderView* drop_sender_view_ = nullptr;
-  DropTargetView* drop_target_view_ = nullptr;
+  raw_ptr<DropSenderView, ExperimentalAsh> drop_sender_view_ = nullptr;
+  raw_ptr<DropTargetView, ExperimentalAsh> drop_target_view_ = nullptr;
 };
 
 // Flaky on ChromeOS bots: crbug.com/1338054
@@ -1432,7 +1441,7 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
 
           // Swap out the production download manager for the mock.
           context->SetDownloadManagerForTesting(
-              base::WrapUnique(download_manager_));
+              base::WrapUnique(download_manager_.get()));
 
           // Install a new download manager delegate after swapping out the
           // production download manager so it will properly register itself
@@ -1787,7 +1796,7 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
     // Mock `download::DownloadItem::GetGuid()`.
     ON_CALL(*ash_download_item, GetGuid)
         .WillByDefault(testing::ReturnRefOfCopy(
-            base::GUID::GenerateRandomV4().AsLowercaseString()));
+            base::Uuid::GenerateRandomV4().AsLowercaseString()));
 
     // Mock `download::DownloadItem::GetId()`.
     ON_CALL(*ash_download_item, GetId).WillByDefault(testing::Invoke([]() {
@@ -1934,7 +1943,7 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
     auto lacros_download_item = crosapi::mojom::DownloadItem::New();
 
     lacros_download_item->guid =
-        base::GUID::GenerateRandomV4().AsLowercaseString();
+        base::Uuid::GenerateRandomV4().AsLowercaseString();
     lacros_download_item->state = state;
     lacros_download_item->full_path = file_path;
     lacros_download_item->target_file_path = target_file_path;
@@ -2029,8 +2038,10 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
 
   const DownloadTypeToUse download_type_to_use_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  testing::NiceMock<content::MockDownloadManager>* download_manager_ = nullptr;
-  content::DownloadManagerDelegate* download_manager_delegate_ = nullptr;
+  raw_ptr<testing::NiceMock<content::MockDownloadManager>, ExperimentalAsh>
+      download_manager_ = nullptr;
+  raw_ptr<content::DownloadManagerDelegate, ExperimentalAsh>
+      download_manager_delegate_ = nullptr;
   base::ObserverList<content::DownloadManager::Observer>::Unchecked
       download_manager_observers_;
   testing::NiceMock<MockDownloadControllerClient> download_controller_client_;
@@ -2983,6 +2994,19 @@ IN_PROC_BROWSER_TEST_P(HoldingSpaceScreenRecordingUiBrowserTest,
         wait_for_item.Quit();
       });
   wait_for_item.Run();
+
+  // The video recording and / or the GIF recording progress notifications can
+  // get in the way while tapping on the holding space tray button. Therefore,
+  // we must wait until the notification animation completes before attempting
+  // to tap on it.
+  // TODO(b/275558519): This should not be needed, since the notification should
+  // not overlap the shelf.
+  MessagePopupAnimationWaiter(ash::Shell::GetPrimaryRootWindowController()
+                                  ->shelf()
+                                  ->GetStatusAreaWidget()
+                                  ->unified_system_tray()
+                                  ->GetMessagePopupCollection())
+      .Wait();
 
   // Verify that the screen recording appears in holding space UI.
   test_api().Show();

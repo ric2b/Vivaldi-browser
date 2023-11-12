@@ -15,4 +15,6 @@ absl::optional<base::Value> NSDataToDict(NSData* data);
 void sendRequestToServer(base::Value::Dict dict, NSURL* url,
     ServerRequestCompletionHandler handler, NSURLSessionDataTask* task);
 
+NSString* GetBackupEncryptionKeyPath();
+
 #endif // IOS_UI_SETTINGS_SYNC_VIVALDI_CREATE_ACCOUNT_UI_HELPER_H_

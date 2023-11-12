@@ -12,11 +12,13 @@
 #include "ash/system/video_conference/effects/video_conference_tray_effects_manager.h"
 #include "ash/system/video_conference/effects/video_conference_tray_effects_manager_types.h"
 #include "ash/system/video_conference/video_conference_tray_controller.h"
+#include "ash/system/video_conference/video_conference_utils.h"
 #include "base/check_is_test.h"
+#include "base/check_op.h"
+#include "base/functional/callback_helpers.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
-#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/single_thread_task_runner.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -35,45 +37,45 @@ namespace {
 using CameraHalBackgroundBlurState = std::pair<cros::mojom::BlurLevel, bool>;
 
 // Returns 'true' if `pref_value` is an allowable value of
-// `CameraEffectsController::BackgroundBlurEffectState`, 'false' otherwise.
-bool IsValidBackgroundBlurState(int pref_value) {
+// `CameraEffectsController::BackgroundBlurPrefValue`, 'false' otherwise.
+bool IsValidBackgroundBlurPrefValue(int pref_value) {
   switch (pref_value) {
-    case CameraEffectsController::BackgroundBlurEffectState::kOff:
-    case CameraEffectsController::BackgroundBlurEffectState::kLowest:
-    case CameraEffectsController::BackgroundBlurEffectState::kLight:
-    case CameraEffectsController::BackgroundBlurEffectState::kMedium:
-    case CameraEffectsController::BackgroundBlurEffectState::kHeavy:
-    case CameraEffectsController::BackgroundBlurEffectState::kMaximum:
+    case CameraEffectsController::BackgroundBlurPrefValue::kOff:
+    case CameraEffectsController::BackgroundBlurPrefValue::kLowest:
+    case CameraEffectsController::BackgroundBlurPrefValue::kLight:
+    case CameraEffectsController::BackgroundBlurPrefValue::kMedium:
+    case CameraEffectsController::BackgroundBlurPrefValue::kHeavy:
+    case CameraEffectsController::BackgroundBlurPrefValue::kMaximum:
       return true;
   }
 
   return false;
 }
 
-// Maps `effect_state` (assumed to be a value read out of
+// Maps `pref_value` (assumed to be a value read out of
 // `prefs::kBackgroundBlur`) to a `CameraHalBackgroundBlurState` (that
 // `CameraHalDispatcherImpl` expects).
-CameraHalBackgroundBlurState MapBackgroundBlurEffectStateToCameraHalState(
-    int effect_state) {
-  DCHECK(IsValidBackgroundBlurState(effect_state));
+CameraHalBackgroundBlurState MapBackgroundBlurPrefValueToCameraHalState(
+    int pref_value) {
+  DCHECK(IsValidBackgroundBlurPrefValue(pref_value));
 
-  switch (effect_state) {
+  switch (pref_value) {
     // For state `kOff`, the `bool` is 'false' because background blur is
     // disabled, `BlurLevel` is set to `kLowest` but its value doesn't matter.
-    case CameraEffectsController::BackgroundBlurEffectState::kOff:
+    case CameraEffectsController::BackgroundBlurPrefValue::kOff:
       return std::make_pair(cros::mojom::BlurLevel::kLowest, false);
 
     // For states other than `kOff`, background blur is enabled so the `bool`
-    // is set to 'true' and `effect_state` is mapped to a `BlurLevel`.
-    case CameraEffectsController::BackgroundBlurEffectState::kLowest:
+    // is set to 'true' and `pref_value` is mapped to a `BlurLevel`.
+    case CameraEffectsController::BackgroundBlurPrefValue::kLowest:
       return std::make_pair(cros::mojom::BlurLevel::kLowest, true);
-    case CameraEffectsController::BackgroundBlurEffectState::kLight:
+    case CameraEffectsController::BackgroundBlurPrefValue::kLight:
       return std::make_pair(cros::mojom::BlurLevel::kLight, true);
-    case CameraEffectsController::BackgroundBlurEffectState::kMedium:
+    case CameraEffectsController::BackgroundBlurPrefValue::kMedium:
       return std::make_pair(cros::mojom::BlurLevel::kMedium, true);
-    case CameraEffectsController::BackgroundBlurEffectState::kHeavy:
+    case CameraEffectsController::BackgroundBlurPrefValue::kHeavy:
       return std::make_pair(cros::mojom::BlurLevel::kHeavy, true);
-    case CameraEffectsController::BackgroundBlurEffectState::kMaximum:
+    case CameraEffectsController::BackgroundBlurPrefValue::kMaximum:
       return std::make_pair(cros::mojom::BlurLevel::kMaximum, true);
   }
 
@@ -82,49 +84,69 @@ CameraHalBackgroundBlurState MapBackgroundBlurEffectStateToCameraHalState(
 }
 
 // Maps the `CameraHalDispatcherImpl`-ready background blur state
-// `level`/`enabled` to `CameraEffectsController::BackgroundBlurEffectState`,
+// `level`/`enabled` to `CameraEffectsController::BackgroundBlurPrefValue`,
 // which is what's written to `prefs::kBackgroundBlur`.
-CameraEffectsController::BackgroundBlurEffectState
-MapBackgroundBlurCameraHalStateToEffectState(cros::mojom::BlurLevel level,
-                                             bool enabled) {
+CameraEffectsController::BackgroundBlurPrefValue
+MapBackgroundBlurCameraHalStateToPrefValue(cros::mojom::BlurLevel level,
+                                           bool enabled) {
   if (!enabled) {
-    return CameraEffectsController::BackgroundBlurEffectState::kOff;
+    return CameraEffectsController::BackgroundBlurPrefValue::kOff;
   }
 
   switch (level) {
     case cros::mojom::BlurLevel::kLowest:
-      return CameraEffectsController::BackgroundBlurEffectState::kLowest;
+      return CameraEffectsController::BackgroundBlurPrefValue::kLowest;
     case cros::mojom::BlurLevel::kLight:
-      return CameraEffectsController::BackgroundBlurEffectState::kLight;
+      return CameraEffectsController::BackgroundBlurPrefValue::kLight;
     case cros::mojom::BlurLevel::kMedium:
-      return CameraEffectsController::BackgroundBlurEffectState::kMedium;
+      return CameraEffectsController::BackgroundBlurPrefValue::kMedium;
     case cros::mojom::BlurLevel::kHeavy:
-      return CameraEffectsController::BackgroundBlurEffectState::kHeavy;
+      return CameraEffectsController::BackgroundBlurPrefValue::kHeavy;
     case cros::mojom::BlurLevel::kMaximum:
-      return CameraEffectsController::BackgroundBlurEffectState::kMaximum;
+      return CameraEffectsController::BackgroundBlurPrefValue::kMaximum;
   }
 
   NOTREACHED();
-  return CameraEffectsController::BackgroundBlurEffectState::kLowest;
+  return CameraEffectsController::BackgroundBlurPrefValue::kLowest;
+}
+
+CameraEffectsController::BackgroundBlurState MapBackgroundBlurPrefValueToState(
+    int pref_value) {
+  DCHECK(IsValidBackgroundBlurPrefValue(pref_value));
+
+  switch (pref_value) {
+    case CameraEffectsController::BackgroundBlurPrefValue::kOff:
+      return CameraEffectsController::BackgroundBlurState::kOff;
+    case CameraEffectsController::BackgroundBlurPrefValue::kLowest:
+      return CameraEffectsController::BackgroundBlurState::kLowest;
+    case CameraEffectsController::BackgroundBlurPrefValue::kLight:
+      return CameraEffectsController::BackgroundBlurState::kLight;
+    case CameraEffectsController::BackgroundBlurPrefValue::kMedium:
+      return CameraEffectsController::BackgroundBlurState::kMedium;
+    case CameraEffectsController::BackgroundBlurPrefValue::kHeavy:
+      return CameraEffectsController::BackgroundBlurState::kHeavy;
+    case CameraEffectsController::BackgroundBlurPrefValue::kMaximum:
+      return CameraEffectsController::BackgroundBlurState::kMaximum;
+  }
+
+  NOTREACHED();
+  return CameraEffectsController::BackgroundBlurState::kOff;
 }
 
 }  // namespace
 
-CameraEffectsController::CameraEffectsController() {
+CameraEffectsController::CameraEffectsController()
+    : main_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()) {
   auto* session_controller = Shell::Get()->session_controller();
   DCHECK(session_controller);
   session_observation_.Observe(session_controller);
 
   current_effects_ = cros::mojom::EffectsConfig::New();
 
-  media::CameraHalDispatcherImpl::GetInstance()
-      ->SetCameraEffectsControllerCallback(
-          // The callback passed to CameraHalDispatcherImpl will be called on a
-          // different thread inside CameraHalDispatcherImpl, so we need always
-          // post the callback onto current task runner.
-          base::BindPostTaskToCurrentDefault(base::BindRepeating(
-              &CameraEffectsController::OnNewCameraEffectsSet,
-              weak_factory_.GetWeakPtr())));
+  // The effects are not applied when this is constructed, observe for changes
+  // that will come later.
+  media::CameraHalDispatcherImpl::GetInstance()->AddCameraEffectObserver(
+      this, base::DoNothing());
 }
 
 CameraEffectsController::~CameraEffectsController() {
@@ -135,43 +157,25 @@ CameraEffectsController::~CameraEffectsController() {
     // unregistered.
     effects_manager.UnregisterDelegate(this);
   }
-}
-
-// TODO(b/265586822): this should be eventually detected from hardware support.
-bool CameraEffectsController::IsCameraEffectsSupported(
-    cros::mojom::CameraEffect effect) {
-  switch (effect) {
-    case cros::mojom::CameraEffect::kNone:
-    case cros::mojom::CameraEffect::kBackgroundBlur:
-    case cros::mojom::CameraEffect::kPortraitRelight:
-      return features::IsVideoConferenceEnabled();
-    case cros::mojom::CameraEffect::kBackgroundReplace:
-      return features::IsVcBackgroundReplaceEnabled();
-  }
+  media::CameraHalDispatcherImpl::GetInstance()->RemoveCameraEffectObserver(
+      this);
 }
 
 cros::mojom::EffectsConfigPtr CameraEffectsController::GetCameraEffects() {
   return current_effects_.Clone();
 }
 
-void CameraEffectsController::AddObserver(Observer* observer) {
-  observers_.AddObserver(observer);
-}
-void CameraEffectsController::RemoveObserver(Observer* observer) {
-  observers_.RemoveObserver(observer);
-}
-
 // static
 void CameraEffectsController::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
-  if (!IsCameraEffectsSupported()) {
+  if (!features::IsVideoConferenceEnabled()) {
     return;
   }
 
   // We have to register all camera effects prefs; because we need use them to
   // construct the cros::mojom::EffectsConfigPtr.
   registry->RegisterIntegerPref(prefs::kBackgroundBlur,
-                                BackgroundBlurEffectState::kOff);
+                                BackgroundBlurPrefValue::kOff);
 
   registry->RegisterBooleanPref(prefs::kBackgroundReplace, false);
 
@@ -189,9 +193,6 @@ void CameraEffectsController::OnActiveUserPrefServiceChanged(
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(pref_service);
 
-  // Initialize camera effects for the first time. Set the expected initial
-  // state in case camera server isn't registered.
-  SetInitialCameraEffects(GetEffectsConfigFromPref());
   // If the camera has started, it won't get the previous setting so call it
   // here too. If the camera service isn't ready it this call will be ignored.
   SetCameraEffects(GetEffectsConfigFromPref());
@@ -202,39 +203,38 @@ void CameraEffectsController::OnActiveUserPrefServiceChanged(
   InitializeEffectControls();
 }
 
-absl::optional<int> CameraEffectsController::GetEffectState(int effect_id) {
-  switch (static_cast<cros::mojom::CameraEffect>(effect_id)) {
-    case cros::mojom::CameraEffect::kBackgroundBlur:
-      return MapBackgroundBlurCameraHalStateToEffectState(
+absl::optional<int> CameraEffectsController::GetEffectState(
+    VcEffectId effect_id) {
+  switch (effect_id) {
+    case VcEffectId::kBackgroundBlur:
+      return MapBackgroundBlurCameraHalStateToPrefValue(
           current_effects_->blur_level, current_effects_->blur_enabled);
-    case cros::mojom::CameraEffect::kPortraitRelight:
+    case VcEffectId::kPortraitRelighting:
       return current_effects_->relight_enabled;
-    case cros::mojom::CameraEffect::kBackgroundReplace:
-    case cros::mojom::CameraEffect::kNone:
+    case VcEffectId::kNoiseCancellation:
+    case VcEffectId::kLiveCaption:
+    case VcEffectId::kTestEffect:
+      NOTREACHED();
       return absl::nullopt;
   }
-
-  NOTREACHED();
-  return absl::nullopt;
 }
 
 void CameraEffectsController::OnEffectControlActivated(
-    absl::optional<int> effect_id,
+    VcEffectId effect_id,
     absl::optional<int> state) {
-  DCHECK(effect_id.has_value());
-
   cros::mojom::EffectsConfigPtr new_effects = current_effects_.Clone();
 
-  switch (effect_id.value()) {
-    case static_cast<int>(cros::mojom::CameraEffect::kBackgroundBlur): {
+  switch (effect_id) {
+    case VcEffectId::kBackgroundBlur: {
       // UI should not pass in any invalid state.
-      if (!state.has_value() || !IsValidBackgroundBlurState(state.value())) {
+      if (!state.has_value() ||
+          !IsValidBackgroundBlurPrefValue(state.value())) {
         state = static_cast<int>(
-            CameraEffectsController::BackgroundBlurEffectState::kOff);
+            CameraEffectsController::BackgroundBlurPrefValue::kOff);
       }
 
       auto [blur_level, blur_enabled] =
-          MapBackgroundBlurEffectStateToCameraHalState(state.value());
+          MapBackgroundBlurPrefValueToCameraHalState(state.value());
       new_effects->blur_level = blur_level;
       new_effects->blur_enabled = blur_enabled;
       if (new_effects->blur_enabled) {
@@ -244,14 +244,66 @@ void CameraEffectsController::OnEffectControlActivated(
       }
       break;
     }
-    case static_cast<int>(cros::mojom::CameraEffect::kPortraitRelight): {
+    case VcEffectId::kPortraitRelighting: {
       new_effects->relight_enabled =
           state.value_or(!new_effects->relight_enabled);
       break;
     }
+    case VcEffectId::kNoiseCancellation:
+    case VcEffectId::kLiveCaption:
+    case VcEffectId::kTestEffect:
+      NOTREACHED();
+      return;
   }
 
   SetCameraEffects(std::move(new_effects));
+}
+
+void CameraEffectsController::RecordMetricsForSetValueEffect(
+    VcEffectId effect_id,
+    int state_value) const {
+  // `CameraEffectsController` currently only has background blur as a set-value
+  // effect, so it shouldn't be any other effects here.
+  DCHECK_EQ(VcEffectId::kBackgroundBlur, effect_id);
+
+  base::UmaHistogramEnumeration(
+      video_conference_utils::GetEffectHistogramName(effect_id),
+      MapBackgroundBlurPrefValueToState(state_value));
+}
+
+void CameraEffectsController::OnCameraEffectChanged(
+    const cros::mojom::EffectsConfigPtr& new_effects) {
+  // As `CameraHalDispatcher` notifies the `new_effects` from a different
+  // thread, we want to ensure the `current_effects_` is always accessed through
+  // the `main_task_runner_`.
+  if (!main_task_runner_->RunsTasksInCurrentSequence()) {
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&CameraEffectsController::OnCameraEffectChanged,
+                       weak_factory_.GetWeakPtr(), new_effects.Clone()));
+    return;
+  }
+
+  DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
+  // If `SetCamerEffects()` finished, update `current_effects_` and prefs.
+  if (!new_effects.is_null()) {
+    SetEffectsConfigToPref(new_effects.Clone());
+    current_effects_ = new_effects.Clone();
+  }
+}
+
+cros::mojom::SegmentationModel
+CameraEffectsController::GetSegmentationModelType() {
+  cros::mojom::SegmentationModel model_type =
+      cros::mojom::SegmentationModel::kHighResolution;
+  const std::string segmentation_model_param = GetFieldTrialParamValueByFeature(
+      ash::features::kVcSegmentationModel, "segmentation_model");
+
+  if (segmentation_model_param == "lower_resolution") {
+    model_type = cros::mojom::SegmentationModel::kLowerResolution;
+  }
+
+  return model_type;
 }
 
 void CameraEffectsController::SetCameraEffects(
@@ -267,46 +319,16 @@ void CameraEffectsController::SetCameraEffects(
     config->effect = cros::mojom::CameraEffect::kPortraitRelight;
   }
 
+  // Update effects config with settings from feature flags.
+  config->segmentation_model = GetSegmentationModelType();
+
   // Directly calls the callback for testing case.
-  if (effect_result_for_testing_.has_value()) {
+  if (in_testing_mode_) {
     CHECK_IS_TEST();
-    OnNewCameraEffectsSet(std::move(config),
-                          effect_result_for_testing_.value());
+    OnCameraEffectChanged(std::move(config));
   } else {
     media::CameraHalDispatcherImpl::GetInstance()->SetCameraEffects(
         std::move(config));
-  }
-}
-
-void CameraEffectsController::SetInitialCameraEffects(
-    cros::mojom::EffectsConfigPtr config) {
-  media::CameraHalDispatcherImpl::GetInstance()->SetInitialCameraEffects(
-      std::move(config));
-}
-
-void CameraEffectsController::OnNewCameraEffectsSet(
-    cros::mojom::EffectsConfigPtr new_config,
-    cros::mojom::SetEffectResult result) {
-  // If SetCamerEffects succeeded, update `current_effects_` and notify all
-  // observers.
-  // This callback with null EffectsConfigPtr indicates that
-  // (1) The last SetCamerEffect failed.
-  // (2) It was the first SetCamerEffect call after the camera stack
-  // initialized; so no camera effects were applied before that. Assuming this
-  // does not happen very often, the only way to keep the pref to be consisitent
-  // with the prefs is to reset everything.
-  if (result == cros::mojom::SetEffectResult::kOk || new_config.is_null()) {
-    if (new_config.is_null()) {
-      new_config = cros::mojom::EffectsConfig::New();
-    }
-
-    SetEffectsConfigToPref(new_config.Clone());
-
-    current_effects_ = std::move(new_config);
-
-    for (auto& ob : observers_) {
-      ob.OnCameraEffectsChanged(current_effects_.Clone());
-    }
   }
 }
 
@@ -319,17 +341,15 @@ CameraEffectsController::GetEffectsConfigFromPref() {
 
   int background_blur_state_in_pref =
       pref_change_registrar_->prefs()->GetInteger(prefs::kBackgroundBlur);
-  if (!IsValidBackgroundBlurState(background_blur_state_in_pref)) {
+  if (!IsValidBackgroundBlurPrefValue(background_blur_state_in_pref)) {
     LOG(ERROR) << __FUNCTION__ << " background_blur_state_in_pref "
                << background_blur_state_in_pref
                << " is NOT a valid background blur effect state, using kOff";
-    background_blur_state_in_pref =
-        static_cast<int>(BackgroundBlurEffectState::kOff);
+    background_blur_state_in_pref = BackgroundBlurPrefValue::kOff;
   }
 
   CameraHalBackgroundBlurState blur_state =
-      MapBackgroundBlurEffectStateToCameraHalState(
-          background_blur_state_in_pref);
+      MapBackgroundBlurPrefValueToCameraHalState(background_blur_state_in_pref);
   effects->blur_enabled = blur_state.second;
   effects->blur_level = blur_state.first;
 
@@ -350,8 +370,8 @@ void CameraEffectsController::SetEffectsConfigToPref(
       new_config->blur_level != current_effects_->blur_level) {
     pref_change_registrar_->prefs()->SetInteger(
         prefs::kBackgroundBlur,
-        MapBackgroundBlurCameraHalStateToEffectState(new_config->blur_level,
-                                                     new_config->blur_enabled));
+        MapBackgroundBlurCameraHalStateToPrefValue(new_config->blur_level,
+                                                   new_config->blur_enabled));
   }
 
   if (new_config->replace_enabled != current_effects_->replace_enabled) {
@@ -367,28 +387,15 @@ void CameraEffectsController::SetEffectsConfigToPref(
 
 bool CameraEffectsController::IsEffectControlAvailable(
     cros::mojom::CameraEffect effect /* = cros::mojom::CameraEffect::kNone*/) {
-  if (!ash::features::IsVideoConferenceEnabled()) {
-    return false;
-  }
-
   switch (effect) {
     case cros::mojom::CameraEffect::kNone:
-      // Return 'true' if any effect is available.
-      return IsCameraEffectsSupported(
-                 cros::mojom::CameraEffect::kBackgroundBlur) ||
-             IsCameraEffectsSupported(
-                 cros::mojom::CameraEffect::kPortraitRelight);
     case cros::mojom::CameraEffect::kBackgroundBlur:
-      return IsCameraEffectsSupported(
-          cros::mojom::CameraEffect::kBackgroundBlur);
+      return features::IsVideoConferenceEnabled();
     case cros::mojom::CameraEffect::kPortraitRelight:
-      return IsCameraEffectsSupported(
-          cros::mojom::CameraEffect::kPortraitRelight);
+      return features::IsVcPortraitRelightEnabled();
     case cros::mojom::CameraEffect::kBackgroundReplace:
-      return false;
+      return features::IsVcBackgroundReplaceEnabled();
   }
-
-  return false;
 }
 
 void CameraEffectsController::InitializeEffectControls() {
@@ -402,27 +409,29 @@ void CameraEffectsController::InitializeEffectControls() {
   // states.
   if (IsEffectControlAvailable(cros::mojom::CameraEffect::kBackgroundBlur)) {
     auto effect = std::make_unique<VcHostedEffect>(
-        VcEffectType::kSetValue,
-        base::BindRepeating(
-            &CameraEffectsController::GetEffectState, base::Unretained(this),
-            static_cast<int>(cros::mojom::CameraEffect::kBackgroundBlur)));
+        /*type=*/VcEffectType::kSetValue,
+        /*get_state_callback=*/
+        base::BindRepeating(&CameraEffectsController::GetEffectState,
+                            base::Unretained(this),
+                            VcEffectId::kBackgroundBlur),
+        /*effect_id=*/VcEffectId::kBackgroundBlur);
     effect->set_label_text(l10n_util::GetStringUTF16(
         IDS_ASH_VIDEO_CONFERENCE_BUBBLE_BACKGROUND_BLUR_NAME));
-    effect->set_id(
-        static_cast<int>(cros::mojom::CameraEffect::kBackgroundBlur));
+    effect->set_effects_delegate(this);
     AddBackgroundBlurStateToEffect(
         effect.get(), kVideoConferenceBackgroundBlurOffIcon,
-        /*state_value=*/BackgroundBlurEffectState::kOff,
+        /*state_value=*/BackgroundBlurPrefValue::kOff,
         /*string_id=*/IDS_ASH_VIDEO_CONFERENCE_BUBBLE_BACKGROUND_BLUR_OFF);
     AddBackgroundBlurStateToEffect(
         effect.get(), kVideoConferenceBackgroundBlurLightIcon,
-        /*state_value=*/BackgroundBlurEffectState::kLight,
+        /*state_value=*/BackgroundBlurPrefValue::kLight,
         /*string_id=*/IDS_ASH_VIDEO_CONFERENCE_BUBBLE_BACKGROUND_BLUR_LIGHT);
     AddBackgroundBlurStateToEffect(
         effect.get(), kVideoConferenceBackgroundBlurMaximumIcon,
-        /*state_value=*/BackgroundBlurEffectState::kMaximum,
+        /*state_value=*/BackgroundBlurPrefValue::kMaximum,
         /*string_id=*/
         IDS_ASH_VIDEO_CONFERENCE_BUBBLE_BACKGROUND_BLUR_FULL);
+    effect->set_dependency_flags(VcHostedEffect::ResourceDependency::kCamera);
     AddEffect(std::move(effect));
   }
 
@@ -430,26 +439,29 @@ void CameraEffectsController::InitializeEffectControls() {
   // and its state.
   if (IsEffectControlAvailable(cros::mojom::CameraEffect::kPortraitRelight)) {
     std::unique_ptr<VcHostedEffect> effect = std::make_unique<VcHostedEffect>(
-        VcEffectType::kToggle,
-        base::BindRepeating(
-            &CameraEffectsController::GetEffectState, base::Unretained(this),
-            static_cast<int>(cros::mojom::CameraEffect::kPortraitRelight)));
-    effect->set_id(
-        static_cast<int>(cros::mojom::CameraEffect::kPortraitRelight));
-    effect->AddState(std::make_unique<VcEffectState>(
-        /*icon=*/&kPrivacyIndicatorsCameraIcon,
+        /*type=*/VcEffectType::kToggle,
+        /*get_state_callback=*/
+        base::BindRepeating(&CameraEffectsController::GetEffectState,
+                            base::Unretained(this),
+                            VcEffectId::kPortraitRelighting),
+        /*effect_id=*/VcEffectId::kPortraitRelighting);
+
+    auto effect_state = std::make_unique<VcEffectState>(
+        /*icon=*/&kVideoConferencePortraitRelightOnIcon,
         /*label_text=*/
         l10n_util::GetStringUTF16(
             IDS_ASH_VIDEO_CONFERENCE_BUBBLE_PORTRAIT_RELIGHT_NAME),
         /*accessible_name_id=*/
         IDS_ASH_VIDEO_CONFERENCE_BUBBLE_PORTRAIT_RELIGHT_NAME,
         /*button_callback=*/
-        base::BindRepeating(
-            &CameraEffectsController::OnEffectControlActivated,
-            base::Unretained(this),
-            /*effect_id=*/
-            static_cast<int>(cros::mojom::CameraEffect::kPortraitRelight),
-            /*value=*/absl::nullopt)));
+        base::BindRepeating(&CameraEffectsController::OnEffectControlActivated,
+                            base::Unretained(this),
+                            /*effect_id=*/VcEffectId::kPortraitRelighting,
+                            /*value=*/absl::nullopt));
+    effect_state->set_disabled_icon(&kVideoConferencePortraitRelightOffIcon);
+    effect->AddState(std::move(effect_state));
+
+    effect->set_dependency_flags(VcHostedEffect::ResourceDependency::kCamera);
     AddEffect(std::move(effect));
   }
 
@@ -472,12 +484,10 @@ void CameraEffectsController::AddBackgroundBlurStateToEffect(
       /*label_text=*/l10n_util::GetStringUTF16(string_id),
       /*accessible_name_id=*/string_id,
       /*button_callback=*/
-      base::BindRepeating(
-          &CameraEffectsController::OnEffectControlActivated,
-          weak_factory_.GetWeakPtr(),
-          /*effect_id=*/
-          static_cast<int>(cros::mojom::CameraEffect::kBackgroundBlur),
-          /*value=*/state_value),
+      base::BindRepeating(&CameraEffectsController::OnEffectControlActivated,
+                          weak_factory_.GetWeakPtr(),
+                          /*effect_id=*/VcEffectId::kBackgroundBlur,
+                          /*value=*/state_value),
       /*state=*/state_value));
 }
 

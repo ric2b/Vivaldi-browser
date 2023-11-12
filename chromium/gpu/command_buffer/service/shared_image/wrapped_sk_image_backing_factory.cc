@@ -16,7 +16,10 @@
 #include "gpu/command_buffer/service/shared_image/wrapped_sk_image_backing.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "skia/buildflags.h"
+#include "third_party/skia/include/core/SkAlphaType.h"
+#include "third_party/skia/include/core/SkColorType.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/core/SkTextureCompressionType.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "third_party/skia/include/gpu/GrTypes.h"
 
@@ -29,7 +32,8 @@ constexpr uint32_t kSupportedUsage =
     SHARED_IMAGE_USAGE_CPU_UPLOAD | SHARED_IMAGE_USAGE_MIPMAP;
 
 bool IsUsageSupported(uint32_t usage) {
-  return (usage & kSupportedUsage) && !(usage & ~kSupportedUsage);
+  // Must have at least one of the supported usage flags.
+  return usage & kSupportedUsage;
 }
 
 }  // namespace
@@ -54,6 +58,7 @@ WrappedSkImageBackingFactory::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     bool is_thread_safe) {
   // Ensure that the backing is treated as thread safe only when DrDc is enabled
   // for vulkan context.
@@ -69,7 +74,7 @@ WrappedSkImageBackingFactory::CreateSharedImage(
       color_space, surface_origin, alpha_type, usage, context_state_,
       /*is_thread_safe=*/is_thread_safe &&
           context_state_->GrContextIsVulkan() && is_drdc_enabled_);
-  if (!texture->Initialize()) {
+  if (!texture->Initialize(debug_label)) {
     return nullptr;
   }
   return texture;
@@ -84,13 +89,14 @@ WrappedSkImageBackingFactory::CreateSharedImage(
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
+    std::string debug_label,
     base::span<const uint8_t> data) {
   auto texture = std::make_unique<WrappedSkImageBacking>(
       base::PassKey<WrappedSkImageBackingFactory>(), mailbox, format, size,
       color_space, surface_origin, alpha_type, usage, context_state_,
       /*is_thread_safe=*/context_state_->GrContextIsVulkan() &&
           is_drdc_enabled_);
-  if (!texture->InitializeWithData(data, /*stride=*/0)) {
+  if (!texture->InitializeWithData(debug_label, data, /*stride=*/0)) {
     return nullptr;
   }
   return texture;
@@ -106,7 +112,8 @@ WrappedSkImageBackingFactory::CreateSharedImage(
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
-    uint32_t usage) {
+    uint32_t usage,
+    std::string debug_label) {
   NOTREACHED();
   return nullptr;
 }
@@ -144,6 +151,14 @@ bool WrappedSkImageBackingFactory::IsSupported(
     // WrappedSkImage does not support LUMINANCE_8. See
     // https://crbug.com/1252502 for details.
     return false;
+  } else if (format == viz::SinglePlaneFormat::kALPHA_8) {
+    // For ALPHA8 skia will pick format depending on context version and
+    // extensions available and we'll have to match that format when we record
+    // DDLs. To avoid matching logic here, fallback to other backings (e.g
+    // GLTextureImageBacking) where we control what format was used.
+    if (gr_context_type == GrContextType::kGL) {
+      return false;
+    }
   } else if (format == viz::SinglePlaneFormat::kBGRX_8888 ||
              format == viz::SinglePlaneFormat::kBGR_565) {
     // For BGRX_8888/BGR_565 there is no equivalent SkColorType. Skia will use
@@ -163,7 +178,7 @@ bool WrappedSkImageBackingFactory::IsSupported(
       return false;
     }
     auto backend_format = context_state_->gr_context()->compressedBackendFormat(
-        SkImage::kETC1_CompressionType);
+        SkTextureCompressionType::kETC1_RGB8);
     if (!backend_format.isValid()) {
       return false;
     }

@@ -12,7 +12,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback_helpers.h"
-#include "base/guid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -378,7 +377,7 @@ class FileSystemAccessManagerImplTest : public testing::Test {
         base::SequencedTaskRunner::GetCurrentDefault(),
         bucket_future.GetCallback());
     auto bucket = bucket_future.Take();
-    EXPECT_TRUE(bucket.ok());
+    EXPECT_TRUE(bucket.has_value());
     return bucket->ToBucketLocator();
   }
 
@@ -405,7 +404,7 @@ class FileSystemAccessManagerImplTest : public testing::Test {
         quota_manager_proxy_sync.GetBucket(
             kTestStorageKey, storage::kDefaultBucketName,
             blink::mojom::StorageType::kTemporary);
-    EXPECT_TRUE(result.ok());
+    EXPECT_TRUE(result.has_value());
     EXPECT_EQ(result->name, storage::kDefaultBucketName);
     EXPECT_EQ(result->storage_key, kTestStorageKey);
     EXPECT_GT(result->id.value(), 0);
@@ -474,7 +473,7 @@ TEST_F(FileSystemAccessManagerImplTest, GetSandboxedFileSystem_CustomBucket) {
       base::SequencedTaskRunner::GetCurrentDefault(),
       bucket_future.GetCallback());
   auto bucket = bucket_future.Take();
-  EXPECT_TRUE(bucket.ok());
+  EXPECT_TRUE(bucket.has_value());
 
   base::test::TestFuture<
       blink::mojom::FileSystemAccessErrorPtr,

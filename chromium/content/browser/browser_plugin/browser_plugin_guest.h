@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -71,13 +71,6 @@ class BrowserPluginGuest : public WebContentsObserver {
   WebContentsImpl* GetWebContents() const;
   RenderFrameHostImpl* GetProspectiveOuterDocument();
 
-  // We need to change the delegate when we use the content from the
-  // tab-strip.
-  void set_delegate(BrowserPluginGuestDelegate* delegate) {
-    delegate_ = delegate;
-  }
-
-
  private:
   // BrowserPluginGuest is a WebContentsObserver of |web_contents| and
   // |web_contents| has to stay valid for the lifetime of BrowserPluginGuest.
@@ -86,7 +79,8 @@ class BrowserPluginGuest : public WebContentsObserver {
 
   void InitInternal(WebContentsImpl* owner_web_contents);
 
-  raw_ptr<BrowserPluginGuestDelegate, DanglingUntriaged> delegate_;
+  // May be null during guest destruction.
+  base::WeakPtr<BrowserPluginGuestDelegate> delegate_;
 };
 
 }  // namespace content

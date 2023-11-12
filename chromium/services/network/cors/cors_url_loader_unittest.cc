@@ -931,13 +931,11 @@ TEST_F(CorsURLLoaderTest, CrossOriginPreflightReceiveRedirect) {
 
   const net::NetLogEntry* entry =
       FindEntryByType(entries, net::NetLogEventType::CORS_PREFLIGHT_ERROR);
-  const base::Value::Dict* params = entry->params.GetIfDict();
-  ASSERT_TRUE(params);
-  EXPECT_THAT(params->FindString("error"), Pointee(Eq("ERR_FAILED")));
-  EXPECT_THAT(params->FindInt("cors-error"),
+  EXPECT_THAT(entry->params.FindString("error"), Pointee(Eq("ERR_FAILED")));
+  EXPECT_THAT(entry->params.FindInt("cors-error"),
               Optional(Eq(static_cast<int>(
                   mojom::CorsError::kPreflightDisallowedRedirect))));
-  EXPECT_THAT(params->FindString("failed-parameter"), IsNull());
+  EXPECT_THAT(entry->params.FindString("failed-parameter"), IsNull());
 }
 
 TEST_F(CorsURLLoaderTest, RedirectInfoShouldBeUsed) {
@@ -2006,7 +2004,7 @@ TEST_F(CorsURLLoaderTest, DevToolsObserverOnCorsErrorCallback) {
   EXPECT_TRUE(devtools_observer.cors_error_params());
   const network::MockDevToolsObserver::OnCorsErrorParams& params =
       *devtools_observer.cors_error_params();
-  EXPECT_EQ(mojom::CorsError::kDisallowedByMode, params.status.cors_error);
+  EXPECT_EQ(mojom::CorsError::kDisallowedByMode, params.status->cors_error);
   EXPECT_EQ(initiator_origin, params.initiator_origin);
   EXPECT_EQ(url, params.url);
 }
@@ -2258,13 +2256,11 @@ TEST_F(CorsURLLoaderTest, NetLogPreflightMissingAllowOrigin) {
 
   const net::NetLogEntry* entry =
       FindEntryByType(entries, net::NetLogEventType::CORS_PREFLIGHT_ERROR);
-  const base::Value::Dict* params = entry->params.GetIfDict();
-  ASSERT_TRUE(params);
-  EXPECT_THAT(params->FindString("error"), Pointee(Eq("ERR_FAILED")));
-  EXPECT_THAT(params->FindInt("cors-error"),
+  EXPECT_THAT(entry->params.FindString("error"), Pointee(Eq("ERR_FAILED")));
+  EXPECT_THAT(entry->params.FindInt("cors-error"),
               Optional(Eq(static_cast<int>(
                   mojom::CorsError::kPreflightMissingAllowOriginHeader))));
-  EXPECT_THAT(params->FindString("failed-parameter"), IsNull());
+  EXPECT_THAT(entry->params.FindString("failed-parameter"), IsNull());
 }
 
 TEST_F(CorsURLLoaderTest, NetLogPreflightMethodDisallowed) {
@@ -2296,19 +2292,15 @@ TEST_F(CorsURLLoaderTest, NetLogPreflightMethodDisallowed) {
 
   const net::NetLogEntry* entry =
       FindEntryByType(entries, net::NetLogEventType::CORS_PREFLIGHT_RESULT);
-  ASSERT_EQ(entry->params.type(), base::Value::Type::DICT);
-  EXPECT_THAT(
-      entry->params.GetDict().FindString("access-control-allow-methods"),
-      Pointee(Eq("GET")));
+  EXPECT_THAT(entry->params.FindString("access-control-allow-methods"),
+              Pointee(Eq("GET")));
 
   entry = FindEntryByType(entries, net::NetLogEventType::CORS_PREFLIGHT_ERROR);
-  const base::Value::Dict* params = entry->params.GetIfDict();
-  ASSERT_TRUE(params);
-  EXPECT_THAT(params->FindString("error"), Pointee(Eq("ERR_FAILED")));
-  EXPECT_THAT(params->FindInt("cors-error"),
+  EXPECT_THAT(entry->params.FindString("error"), Pointee(Eq("ERR_FAILED")));
+  EXPECT_THAT(entry->params.FindInt("cors-error"),
               Optional(Eq(static_cast<int>(
                   mojom::CorsError::kMethodDisallowedByPreflightResponse))));
-  EXPECT_THAT(params->FindString("failed-parameter"), Pointee(Eq("PUT")));
+  EXPECT_THAT(entry->params.FindString("failed-parameter"), Pointee(Eq("PUT")));
 }
 
 TEST_F(CorsURLLoaderTest, NetLogPreflightNetError) {
@@ -2331,10 +2323,10 @@ TEST_F(CorsURLLoaderTest, NetLogPreflightNetError) {
   ASSERT_THAT(GetTypesOfNetLogEntries(entries), Contains(type).Times(1));
 
   const net::NetLogEntry* entry = FindEntryByType(entries, type);
-  const base::Value::Dict* params = entry->params.GetIfDict();
-  EXPECT_THAT(params->FindString("error"), Pointee(Eq("ERR_INVALID_ARGUMENT")));
-  EXPECT_THAT(params->FindInt("cors-error"), Eq(absl::nullopt));
-  EXPECT_THAT(params->FindString("failed-parameter"), IsNull());
+  EXPECT_THAT(entry->params.FindString("error"),
+              Pointee(Eq("ERR_INVALID_ARGUMENT")));
+  EXPECT_THAT(entry->params.FindInt("cors-error"), Eq(absl::nullopt));
+  EXPECT_THAT(entry->params.FindString("failed-parameter"), IsNull());
 }
 
 TEST_F(CorsURLLoaderTest, PreflightMissingAllowOrigin) {

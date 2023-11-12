@@ -8,6 +8,8 @@
 #include <memory>
 #include <string>
 
+#include "base/functional/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launcher.h"
@@ -56,10 +58,10 @@ class StartupAppLauncher : public KioskAppLauncher,
   void RemoveObserver(KioskAppLauncher::Observer* observer) override;
   void Initialize() override;
   void ContinueWithNetworkReady() override;
-  void RestartLauncher() override;
   void LaunchApp() override;
 
   void BeginInstall();
+  void LaunchLacros(base::OnceClosure);
   void InstallAppInAsh();
   void InstallAppInLacros();
   void OnInstallComplete(ChromeKioskAppInstaller::InstallResult result);
@@ -77,7 +79,7 @@ class StartupAppLauncher : public KioskAppLauncher,
   void OnKioskExtensionLoadedInCache(const std::string& app_id) override;
   void OnKioskExtensionDownloadFailed(const std::string& app_id) override;
 
-  Profile* const profile_;
+  const raw_ptr<Profile, ExperimentalAsh> profile_;
   const std::string app_id_;
   const bool should_skip_install_;
 

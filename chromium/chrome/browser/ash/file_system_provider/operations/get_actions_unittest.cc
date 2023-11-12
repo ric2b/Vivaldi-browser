@@ -75,8 +75,7 @@ class CallbackLogger {
 };
 
 // Returns the request value as |result| in case of successful parse.
-void CreateRequestValueFromJSON(const std::string& json,
-                                std::unique_ptr<RequestValue>* result) {
+void CreateRequestValueFromJSON(const std::string& json, RequestValue* result) {
   using extensions::api::file_system_provider_internal::
       GetActionsRequestedSuccess::Params;
 
@@ -84,10 +83,10 @@ void CreateRequestValueFromJSON(const std::string& json,
   ASSERT_TRUE(parsed_json.has_value()) << parsed_json.error().message;
 
   ASSERT_TRUE(parsed_json->is_list());
-  std::unique_ptr<Params> params(Params::Create(parsed_json->GetList()));
-  ASSERT_TRUE(params.get());
-  *result = RequestValue::CreateForGetActionsSuccess(std::move(params));
-  ASSERT_TRUE(result->get());
+  absl::optional<Params> params = Params::Create(parsed_json->GetList());
+  ASSERT_TRUE(params.has_value());
+  *result = RequestValue::CreateForGetActionsSuccess(std::move(*params));
+  ASSERT_TRUE(result->is_valid());
 }
 
 }  // namespace
@@ -135,8 +134,8 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, Execute) {
   ASSERT_TRUE(options_as_value->is_dict());
 
   GetActionsRequestedOptions options;
-  ASSERT_TRUE(
-      GetActionsRequestedOptions::Populate(*options_as_value, &options));
+  ASSERT_TRUE(GetActionsRequestedOptions::Populate(options_as_value->GetDict(),
+                                                   options));
   EXPECT_EQ(kFileSystemId, options.file_system_id);
   EXPECT_EQ(kRequestId, options.request_id);
   ASSERT_EQ(entry_paths_.size(), options.entry_paths.size());
@@ -187,7 +186,7 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, OnSuccess) {
       "  ],\n"
       "  0\n"  // execution_time
       "]\n";
-  std::unique_ptr<RequestValue> request_value;
+  RequestValue request_value;
   ASSERT_NO_FATAL_FAILURE(CreateRequestValueFromJSON(input, &request_value));
 
   const bool has_more = false;
@@ -221,7 +220,7 @@ TEST_F(FileSystemProviderOperationsGetActionsTest, OnError) {
 
   EXPECT_TRUE(get_actions.Execute(kRequestId));
 
-  get_actions.OnError(kRequestId, std::make_unique<RequestValue>(),
+  get_actions.OnError(kRequestId, RequestValue(),
                       base::File::FILE_ERROR_TOO_MANY_OPENED);
 
   ASSERT_EQ(1u, callback_logger.events().size());

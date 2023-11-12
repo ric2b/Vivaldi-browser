@@ -102,6 +102,10 @@ bool WebClient::EnableLongPressUIContextMenu() const {
   return false;
 }
 
+bool WebClient::EnableWebInspector() const {
+  return false;
+}
+
 bool WebClient::RestoreSessionFromCache(web::WebState* web_state) const {
   return false;
 }
@@ -144,6 +148,10 @@ void WebClient::StopTextSearchInWebState(web::WebState* web_state) {
 bool WebClient::IsMixedContentAutoupgradeEnabled(
     web::BrowserState* browser_state) const {
   return true;
+}
+
+bool WebClient::IsBrowserLockdownModeEnabled(web::BrowserState* browser_state) {
+  return false;
 }
 
 }  // namespace web

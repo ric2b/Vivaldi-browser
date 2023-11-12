@@ -5,6 +5,8 @@
 #include "gn/pointer_set.h"
 #include "util/test/test.h"
 
+#include <algorithm>
+
 struct Foo {
   int x;
 };
@@ -164,4 +166,16 @@ TEST(PointerSet, IntersectionWith) {
   EXPECT_EQ(3u, set.size());
   EXPECT_EQ(set1, set);
   EXPECT_EQ(set2, set);
+}
+
+TEST(PointerSet, ToVector) {
+  TestPointerSet set(kFullList.begin(), kFullList.end());
+  auto vector = set.ToVector();
+  EXPECT_EQ(vector.size(), kFullList.size());
+
+  // NOTE: Order of items in the result is not guaranteed
+  // so just check whether items are available in it.
+  EXPECT_NE(std::find(vector.begin(), vector.end(), kFoo1), vector.end());
+  EXPECT_NE(std::find(vector.begin(), vector.end(), kFoo2), vector.end());
+  EXPECT_NE(std::find(vector.begin(), vector.end(), kFoo3), vector.end());
 }

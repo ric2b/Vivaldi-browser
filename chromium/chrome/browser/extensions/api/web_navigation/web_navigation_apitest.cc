@@ -20,12 +20,13 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_browser_main.h"
-#include "chrome/browser/download/download_browsertest.h"
+#include "chrome/browser/download/download_browsertest_utils.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/api/web_navigation/web_navigation_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
+#include "chrome/browser/ssl/https_upgrades_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -40,6 +41,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
@@ -236,10 +238,11 @@ class WebNavigationApiBackForwardCacheTest : public WebNavigationApiTest {
  public:
   WebNavigationApiBackForwardCacheTest() {
     feature_list_.InitWithFeaturesAndParameters(
-        {{features::kBackForwardCache,
-          {{"content_injection_supported", "true"},
-           {"all_extensions_allowed", "true"}}}},
-        {features::kBackForwardCacheMemoryControls});
+        content::GetBasicBackForwardCacheFeatureForTesting(
+            {{features::kBackForwardCache,
+              {{"content_injection_supported", "true"},
+               {"all_extensions_allowed", "true"}}}}),
+        content::GetDefaultDisabledBackForwardCacheFeaturesForTesting());
   }
   ~WebNavigationApiBackForwardCacheTest() override = default;
 
@@ -301,6 +304,11 @@ IN_PROC_BROWSER_TEST_P(WebNavigationApiPrerenderTestWithContextType, GetFrame) {
 
 IN_PROC_BROWSER_TEST_P(WebNavigationApiPrerenderTestWithContextType,
                        Prerendering) {
+  // TODO(crbug.com/1394910): Use https in the test and remove this allowlist
+  // entry.
+  ScopedAllowHttpForHostnamesForTesting scoped_allow_http(
+      {"a.test"}, browser()->profile()->GetPrefs());
+
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionTest("webnavigation/prerendering")) << message_;
 }
@@ -367,6 +375,11 @@ IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, MAYBE_Download) {
 
 IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType,
                        ServerRedirectSingleProcess) {
+  // TODO(crbug.com/1394910): Use https in the test and remove these allowlist
+  // entries.
+  ScopedAllowHttpForHostnamesForTesting scoped_allow_http(
+      {"www.a.com", "www.b.com"}, browser()->profile()->GetPrefs());
+
   ASSERT_TRUE(StartEmbeddedTestServer());
 
   // Set max renderers to 1 to force running out of processes.
@@ -672,6 +685,11 @@ IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, PendingDeletion) {
 }
 
 IN_PROC_BROWSER_TEST_P(WebNavigationApiTestWithContextType, Crash) {
+  // TODO(crbug.com/1394910): Use https in the test and remove this allowlist
+  // entry.
+  ScopedAllowHttpForHostnamesForTesting scoped_allow_http(
+      {"www.a.com"}, browser()->profile()->GetPrefs());
+
   content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
   ASSERT_TRUE(StartEmbeddedTestServer());
 
@@ -717,6 +735,7 @@ class WebNavigationApiFencedFrameTest : public WebNavigationApiTest {
   WebNavigationApiFencedFrameTest() {
     feature_list_.InitWithFeaturesAndParameters(
         /*enabled_features=*/{{blink::features::kFencedFrames, {}},
+                              {blink::features::kFencedFramesAPIChanges, {}},
                               {features::kPrivacySandboxAdsAPIsOverride, {}}},
         /*disabled_features=*/{features::kSpareRendererForSitePerProcess});
     // Fenced frames are only allowed in a secure context.
@@ -747,7 +766,6 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiFencedFrameTest, MappedURL) {
 
   const char* kScript = R"(
     var ff = document.createElement('fencedframe');
-    ff.mode = 'opaque-ads';
     document.body.appendChild(ff);
   )";
   EXPECT_TRUE(content::ExecJs(rfh, kScript));
@@ -772,10 +790,11 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiFencedFrameTest, MappedURL) {
 
   ResultCatcher catcher;
   EXPECT_TRUE(content::ExecJs(
-      rfh, content::JsReplace("ff.src = $1;", urn_uuid.spec())));
+      rfh, content::JsReplace("ff.config = new FencedFrameConfig($1);",
+                              urn_uuid.spec())));
   ASSERT_TRUE(catcher.GetNextResult()) << message_;
 
   // The parent still sees the urn_uuid as the fenced frame src.
-  EXPECT_EQ(urn_uuid.spec(), content::EvalJs(rfh, "ff.src"));
+  EXPECT_EQ(urn_uuid.spec(), content::EvalJs(rfh, "ff.config.url"));
 }
 }  // namespace extensions

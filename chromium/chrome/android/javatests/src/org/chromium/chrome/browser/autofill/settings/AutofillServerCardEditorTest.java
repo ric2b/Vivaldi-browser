@@ -22,9 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
-import android.graphics.Bitmap;
 import android.os.Bundle;
-import android.support.test.runner.lifecycle.Stage;
 import android.text.Spanned;
 import android.text.style.ClickableSpan;
 import android.view.View;
@@ -36,6 +34,7 @@ import androidx.test.espresso.UiController;
 import androidx.test.espresso.ViewAction;
 import androidx.test.espresso.matcher.ViewMatchers.Visibility;
 import androidx.test.filters.MediumTest;
+import androidx.test.runner.lifecycle.Stage;
 
 import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
@@ -53,12 +52,11 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
-import org.chromium.base.test.metrics.HistogramTestRule;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.JniMocker;
-import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillEditorBase;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.LegalMessageLine;
@@ -68,10 +66,12 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.autofill.VirtualCardEnrollmentLinkType;
 import org.chromium.components.autofill.VirtualCardEnrollmentState;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
+import org.chromium.url.GURL;
 
 import java.util.concurrent.TimeoutException;
 
@@ -92,8 +92,6 @@ public class AutofillServerCardEditorTest {
     @Rule
     public final SettingsActivityTestRule<AutofillServerCardEditor> mSettingsActivityTestRule =
             new SettingsActivityTestRule<>(AutofillServerCardEditor.class);
-    @Rule
-    public HistogramTestRule mHistogramTester = new HistogramTestRule();
 
     private static final long NATIVE_AUTOFILL_PAYMENTS_METHODS_DELEGATE = 100L;
 
@@ -245,12 +243,12 @@ public class AutofillServerCardEditorTest {
                 .check(matches(isEnabled()));
 
         // Press the enrollment button.
-        onView(withId(R.id.virtual_card_enrollment_button)).perform(click());
         // Verify that enrollment button click is recorded.
-        Assert.assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        "Autofill.SettingsPage.ButtonClicked.VirtualCard.VirtualCardEnroll",
-                        /* true */ 1));
+        var histogram = HistogramWatcher.newSingleRecordWatcher(
+                "Autofill.SettingsPage.ButtonClicked.VirtualCard.VirtualCardEnroll", true);
+        onView(withId(R.id.virtual_card_enrollment_button)).perform(click());
+        histogram.assertExpected();
+
         // Verify that the Virtual Card enrollment button still shows text for enrollment and that
         // the button is disabled.
         onView(withId(R.id.virtual_card_enrollment_button))
@@ -269,8 +267,7 @@ public class AutofillServerCardEditorTest {
         Callback<VirtualCardEnrollmentFields> virtualCardEnrollmentFieldsCallback =
                 callbackArgumentCaptor.getValue();
         VirtualCardEnrollmentFields fakeVirtualCardEnrollmentFields =
-                VirtualCardEnrollmentFields.create(
-                        "Visa 1234", Bitmap.createBitmap(10, 20, Bitmap.Config.ALPHA_8));
+                VirtualCardEnrollmentFields.create("Visa", "1234", 0, new GURL(""));
         fakeVirtualCardEnrollmentFields.mGoogleLegalMessages.add(new LegalMessageLine("google"));
         fakeVirtualCardEnrollmentFields.mIssuerLegalMessages.add(new LegalMessageLine("issuer"));
         TestThreadUtils.runOnUiThreadBlocking(
@@ -282,21 +279,23 @@ public class AutofillServerCardEditorTest {
         onView(withId(R.id.dialog_title)).check(matches(isDisplayed()));
 
         // Click on the education link.
-        onView(withId(R.id.virtual_card_education)).perform(clickLink());
         // Verify that education text link click is recorded.
-        Assert.assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        "Autofill.VirtualCard.SettingsPageEnrollment.LinkClicked",
-                        VirtualCardEnrollmentLinkType.VIRTUAL_CARD_ENROLLMENT_LEARN_MORE_LINK));
+        histogram = HistogramWatcher.newSingleRecordWatcher(
+                "Autofill.VirtualCard.SettingsPageEnrollment.LinkClicked",
+                VirtualCardEnrollmentLinkType.VIRTUAL_CARD_ENROLLMENT_LEARN_MORE_LINK);
+        onView(withId(R.id.virtual_card_education)).perform(clickLink());
+        histogram.assertExpected();
+
         // Go back to the settings page.
         Espresso.pressBack();
 
         // Click positive button on enrollment dialog.
-        onView(withId(R.id.positive_button)).perform(click());
         // Verify that enrollment dialog acceptance is recorded.
-        Assert.assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        "Autofill.VirtualCard.SettingsPageEnrollment", /* true */ 1));
+        histogram = HistogramWatcher.newSingleRecordWatcher(
+                "Autofill.VirtualCard.SettingsPageEnrollment", true);
+        onView(withId(R.id.positive_button)).perform(click());
+        histogram.assertExpected();
+
         // Verify that the Virtual Card enrollment button still shows text for enrollment and that
         // the button is disabled while waiting for server response.
         onView(withId(R.id.virtual_card_enrollment_button))
@@ -368,8 +367,7 @@ public class AutofillServerCardEditorTest {
         Callback<VirtualCardEnrollmentFields> virtualCardEnrollmentFieldsCallback =
                 callbackArgumentCaptor.getValue();
         VirtualCardEnrollmentFields fakeVirtualCardEnrollmentFields =
-                VirtualCardEnrollmentFields.create(
-                        "Visa 1234", Bitmap.createBitmap(10, 20, Bitmap.Config.ALPHA_8));
+                VirtualCardEnrollmentFields.create("Visa", "1234", 0, new GURL(""));
         fakeVirtualCardEnrollmentFields.mGoogleLegalMessages.add(new LegalMessageLine("google"));
         fakeVirtualCardEnrollmentFields.mIssuerLegalMessages.add(new LegalMessageLine("issuer"));
         TestThreadUtils.runOnUiThreadBlocking(
@@ -446,8 +444,7 @@ public class AutofillServerCardEditorTest {
         Callback<VirtualCardEnrollmentFields> virtualCardEnrollmentFieldsCallback =
                 callbackArgumentCaptor.getValue();
         VirtualCardEnrollmentFields fakeVirtualCardEnrollmentFields =
-                VirtualCardEnrollmentFields.create(
-                        "Visa 1234", Bitmap.createBitmap(10, 20, Bitmap.Config.ALPHA_8));
+                VirtualCardEnrollmentFields.create("Visa", "1234", 0, new GURL(""));
         fakeVirtualCardEnrollmentFields.mGoogleLegalMessages.add(new LegalMessageLine("google"));
         fakeVirtualCardEnrollmentFields.mIssuerLegalMessages.add(new LegalMessageLine("issuer"));
         TestThreadUtils.runOnUiThreadBlocking(
@@ -459,11 +456,11 @@ public class AutofillServerCardEditorTest {
         onView(withId(R.id.dialog_title)).check(matches(isDisplayed()));
 
         // Click negative button on enrollment dialog.
-        onView(withId(R.id.negative_button)).perform(click());
         // Verify that enrollment dialog rejection is recorded.
-        Assert.assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        "Autofill.VirtualCard.SettingsPageEnrollment", /* false */ 0));
+        var histogram = HistogramWatcher.newSingleRecordWatcher(
+                "Autofill.VirtualCard.SettingsPageEnrollment", false);
+        onView(withId(R.id.negative_button)).perform(click());
+        histogram.assertExpected();
 
         // Verify that the Virtual Card enrollment button again allows enrollment.
         onView(withId(R.id.virtual_card_enrollment_button))
@@ -515,8 +512,7 @@ public class AutofillServerCardEditorTest {
         Callback<VirtualCardEnrollmentFields> virtualCardEnrollmentFieldsCallback =
                 callbackArgumentCaptor.getValue();
         VirtualCardEnrollmentFields fakeVirtualCardEnrollmentFields =
-                VirtualCardEnrollmentFields.create(
-                        "Visa 1234", Bitmap.createBitmap(10, 20, Bitmap.Config.ALPHA_8));
+                VirtualCardEnrollmentFields.create("Visa", "1234", 0, new GURL(""));
         fakeVirtualCardEnrollmentFields.mGoogleLegalMessages.add(new LegalMessageLine("google"));
         fakeVirtualCardEnrollmentFields.mIssuerLegalMessages.add(new LegalMessageLine("issuer"));
         TestThreadUtils.runOnUiThreadBlocking(
@@ -598,23 +594,22 @@ public class AutofillServerCardEditorTest {
                 .check(matches(isEnabled()));
 
         // Press the unenrollment button.
-        onView(withId(R.id.virtual_card_enrollment_button)).perform(click());
         // Verify that unenrollment button click is recorded.
-        Assert.assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        "Autofill.SettingsPage.ButtonClicked.VirtualCard.VirtualCardUnenroll",
-                        /* true */ 1));
+        var histogram = HistogramWatcher.newSingleRecordWatcher(
+                "Autofill.SettingsPage.ButtonClicked.VirtualCard.VirtualCardUnenroll", true);
+        onView(withId(R.id.virtual_card_enrollment_button)).perform(click());
+        histogram.assertExpected();
 
         // Verify that the unenroll dialog is shown.
         onView(withText(R.string.autofill_credit_card_editor_virtual_card_unenroll_dialog_title))
                 .check(matches(isDisplayed()));
 
         // Click the Cancel button.
-        onView(withText(android.R.string.cancel)).perform(click());
         // Verify that unenrollment dialog rejection is recorded.
-        Assert.assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        "Autofill.VirtualCard.SettingsPageUnenrollment", /* false */ 0));
+        histogram = HistogramWatcher.newSingleRecordWatcher(
+                "Autofill.VirtualCard.SettingsPageUnenrollment", false);
+        onView(withText(android.R.string.cancel)).perform(click());
+        histogram.assertExpected();
 
         // Verify that the Virtual card enrollment button still allows unenrollment.
         onView(withId(R.id.virtual_card_enrollment_button))
@@ -655,13 +650,14 @@ public class AutofillServerCardEditorTest {
                 .check(matches(isDisplayed()));
 
         // Click the positive button on unenrollment dialog.
+        // Verify that unenrollment dialog acceptance is recorded.
+        var histogram = HistogramWatcher.newSingleRecordWatcher(
+                "Autofill.VirtualCard.SettingsPageUnenrollment", true);
         onView(withText(
                        R.string.autofill_credit_card_editor_virtual_card_unenroll_dialog_positive_button_label))
                 .perform(click());
-        // Verify that unenrollment dialog acceptance is recorded.
-        Assert.assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        "Autofill.VirtualCard.SettingsPageUnenrollment", /* true */ 1));
+        histogram.assertExpected();
+
         // Verify that the Virtual Card enrollment button still shows text for unenrollment and that
         // the button is disabled while waiting for server response.
         onView(withId(R.id.virtual_card_enrollment_button))

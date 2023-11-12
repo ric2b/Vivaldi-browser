@@ -10,10 +10,13 @@
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/style_rule.h"
+#include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+#include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_including_tree_order_traversal.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html/html_area_element.h"
@@ -21,6 +24,8 @@
 #include "third_party/blink/renderer/core/loader/speculation_rule_loader.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/speculation_rules/document_rule_predicate.h"
+#include "third_party/blink/renderer/core/speculation_rules/speculation_candidate.h"
+#include "third_party/blink/renderer/core/speculation_rules/speculation_rules_features.h"
 #include "third_party/blink/renderer/core/speculation_rules/speculation_rules_metrics.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
@@ -115,20 +120,6 @@ absl::optional<Referrer> GetReferrer(SpeculationRule* rule,
   Referrer referrer =
       SecurityPolicy::GenerateReferrer(referrer_policy, url, outgoing_referrer);
 
-  // TODO(mcnee): Speculation rules initially shipped with a bug where a policy
-  // of "no-referrer" would be assumed and the referrer policy restriction was
-  // not enforced. We emulate that behaviour here as sites did not have a means
-  // of specifying a suitable policy. SpeculationRulesReferrerPolicyKey shipped
-  // in M111. This workaround should be removed when the flag is removed.
-  // See https://crbug.com/1398772.
-  if (!RuntimeEnabledFeatures::SpeculationRulesReferrerPolicyKeyEnabled(
-          execution_context) &&
-      !AcceptableReferrerPolicy(referrer, is_initially_same_site)) {
-    referrer = SecurityPolicy::GenerateReferrer(
-        network::mojom::ReferrerPolicy::kNever, url, outgoing_referrer);
-    DCHECK(AcceptableReferrerPolicy(referrer, is_initially_same_site));
-  }
-
   if (!AcceptableReferrerPolicy(referrer, is_initially_same_site)) {
     auto* console_message = MakeGarbageCollected<ConsoleMessage>(
         mojom::blink::ConsoleMessageSource::kOther,
@@ -143,6 +134,13 @@ absl::optional<Referrer> GetReferrer(SpeculationRule* rule,
   }
 
   return referrer;
+}
+
+absl::optional<base::UnguessableToken> GetDevToolsNavigationToken(
+    DocumentLoader* document_loader) {
+  return document_loader ? document_loader->GetDevToolsNavigationToken()
+                         : static_cast<absl::optional<base::UnguessableToken>>(
+                               absl::nullopt);
 }
 
 }  // namespace
@@ -168,7 +166,10 @@ DocumentSpeculationRules* DocumentSpeculationRules::FromIfExists(
 }
 
 DocumentSpeculationRules::DocumentSpeculationRules(Document& document)
-    : Supplement(document), host_(document.GetExecutionContext()) {}
+    : Supplement(document),
+      host_(document.GetExecutionContext()),
+      devtools_navigation_token_(
+          GetDevToolsNavigationToken(document.Loader())) {}
 
 void DocumentSpeculationRules::AddRuleSet(SpeculationRuleSet* rule_set) {
   CountSpeculationRulesLoadOutcome(SpeculationRulesLoadOutcome::kSuccess);
@@ -181,6 +182,14 @@ void DocumentSpeculationRules::AddRuleSet(SpeculationRuleSet* rule_set) {
     InvalidateAllLinks();
     if (!rule_set->selectors().empty()) {
       UpdateSelectors();
+    }
+  }
+  if (!wants_pointer_events_ && rule_set->requires_unfiltered_input()) {
+    wants_pointer_events_ = true;
+    Document& document = *GetSupplementable();
+    if (auto* frame = document.GetFrame()) {
+      frame->GetEventHandlerRegistry().DidAddEventHandler(
+          document, EventHandlerRegistry::kPointerEvent);
     }
   }
   QueueUpdateSpeculationCandidates();
@@ -196,6 +205,16 @@ void DocumentSpeculationRules::RemoveRuleSet(SpeculationRuleSet* rule_set) {
     InvalidateAllLinks();
     if (!rule_set->selectors().empty()) {
       UpdateSelectors();
+    }
+  }
+  if (wants_pointer_events_ && rule_set->requires_unfiltered_input() &&
+      base::ranges::none_of(rule_sets_,
+                            &SpeculationRuleSet::requires_unfiltered_input)) {
+    wants_pointer_events_ = false;
+    Document& document = *GetSupplementable();
+    if (auto* frame = document.GetFrame()) {
+      frame->GetEventHandlerRegistry().DidRemoveEventHandler(
+          document, EventHandlerRegistry::kPointerEvent);
     }
   }
   QueueUpdateSpeculationCandidates();
@@ -254,31 +273,19 @@ void DocumentSpeculationRules::HrefAttributeChanged(
 
 void DocumentSpeculationRules::ReferrerPolicyAttributeChanged(
     HTMLAnchorElement* link) {
-  if (!initialized_)
-    return;
-
-  DCHECK(link->isConnected());
-  InvalidateLink(link);
-
-  QueueUpdateSpeculationCandidates();
+  LinkAttributeChanged(link);
 }
 
 void DocumentSpeculationRules::RelAttributeChanged(HTMLAnchorElement* link) {
-  if (!initialized_)
-    return;
+  LinkAttributeChanged(link);
+}
 
-  DCHECK(link->isConnected());
-  InvalidateLink(link);
-
-  QueueUpdateSpeculationCandidates();
+void DocumentSpeculationRules::TargetAttributeChanged(HTMLAnchorElement* link) {
+  LinkAttributeChanged(link);
 }
 
 void DocumentSpeculationRules::DocumentReferrerPolicyChanged() {
-  if (!initialized_)
-    return;
-
-  InvalidateAllLinks();
-  QueueUpdateSpeculationCandidates();
+  DocumentPropertyChanged();
 }
 
 void DocumentSpeculationRules::DocumentBaseURLChanged() {
@@ -287,8 +294,7 @@ void DocumentSpeculationRules::DocumentBaseURLChanged() {
   for (Member<SpeculationRuleSet>& rule_set : rule_sets_) {
     SpeculationRuleSet::Source* source = rule_set->source();
     rule_set = SpeculationRuleSet::Parse(
-        source, GetSupplementable()->GetExecutionContext(),
-        /*out_error=*/nullptr);
+        source, GetSupplementable()->GetExecutionContext());
     // There should not be any parsing errors as these rule sets have already
     // been parsed once without errors, and an updated base URL should not cause
     // new errors. There may however still be warnings.
@@ -297,6 +303,10 @@ void DocumentSpeculationRules::DocumentBaseURLChanged() {
   if (initialized_)
     InvalidateAllLinks();
   QueueUpdateSpeculationCandidates();
+}
+
+void DocumentSpeculationRules::DocumentBaseTargetChanged() {
+  DocumentPropertyChanged();
 }
 
 void DocumentSpeculationRules::LinkMatchedSelectorsUpdated(
@@ -325,6 +335,94 @@ void DocumentSpeculationRules::DocumentStyleUpdated() {
   }
 }
 
+void DocumentSpeculationRules::ChildStyleRecalcBlocked(Element* root) {
+  if (!SelectorMatchesEnabled() || !initialized_) {
+    return;
+  }
+
+  if (!elements_blocking_child_style_recalc_.insert(root).is_new_entry) {
+    return;
+  }
+
+  bool queue_update = false;
+
+  Node* node = FlatTreeTraversal::Next(*root, root);
+  while (node) {
+    if (node->IsLink() && (node->HasTagName(html_names::kATag) ||
+                           node->HasTagName(html_names::kAreaTag))) {
+      HTMLAnchorElement* anchor = node->HasTagName(html_names::kATag)
+                                      ? To<HTMLAnchorElement>(node)
+                                      : To<HTMLAreaElement>(node);
+      if (stale_links_.insert(anchor).is_new_entry) {
+        InvalidateLink(anchor);
+        queue_update = true;
+      }
+    }
+
+    // If |node| is an element that is already marked as blocking child style
+    // recalc, we don't need to traverse its subtree (all of its children should
+    // already be accounted for).
+    if (auto* element = DynamicTo<Element>(node);
+        element && elements_blocking_child_style_recalc_.Contains(element)) {
+      node = FlatTreeTraversal::NextSkippingChildren(*node, root);
+      continue;
+    }
+
+    node = FlatTreeTraversal::Next(*node, root);
+  }
+
+  if (queue_update) {
+    QueueUpdateSpeculationCandidates();
+  }
+}
+
+void DocumentSpeculationRules::DidStyleChildren(Element* root) {
+  if (!SelectorMatchesEnabled() || !initialized_) {
+    return;
+  }
+
+  if (!elements_blocking_child_style_recalc_.Take(root)) {
+    return;
+  }
+
+  bool queue_update = false;
+
+  Node* node = FlatTreeTraversal::Next(*root, root);
+  while (node) {
+    if (node->IsLink() && (node->HasTagName(html_names::kATag) ||
+                           node->HasTagName(html_names::kAreaTag))) {
+      HTMLAnchorElement* anchor = node->HasTagName(html_names::kATag)
+                                      ? To<HTMLAnchorElement>(node)
+                                      : To<HTMLAreaElement>(node);
+      if (auto it = stale_links_.find(anchor); it != stale_links_.end()) {
+        stale_links_.erase(it);
+        InvalidateLink(anchor);
+        queue_update = true;
+      }
+    }
+
+    // If |node| is a display-locked element that is already marked as blocking
+    // child style recalc, we don't need to traverse its children.
+    if (auto* element = DynamicTo<Element>(node);
+        element && elements_blocking_child_style_recalc_.Contains(element)) {
+      node = FlatTreeTraversal::NextSkippingChildren(*node, root);
+      continue;
+    }
+
+    node = FlatTreeTraversal::Next(*node, root);
+  }
+
+  if (queue_update) {
+    QueueUpdateSpeculationCandidates();
+  }
+}
+
+void DocumentSpeculationRules::DisplayLockedElementDisconnected(Element* root) {
+  elements_blocking_child_style_recalc_.erase(root);
+  // Note: We don't queue an update or invalidate any links here because
+  // |root|'s children will also be disconnected shortly after this.
+}
+
 void DocumentSpeculationRules::Trace(Visitor* visitor) const {
   Supplement::Trace(visitor);
   visitor->Trace(rule_sets_);
@@ -333,6 +431,8 @@ void DocumentSpeculationRules::Trace(Visitor* visitor) const {
   visitor->Trace(matched_links_);
   visitor->Trace(unmatched_links_);
   visitor->Trace(pending_links_);
+  visitor->Trace(stale_links_);
+  visitor->Trace(elements_blocking_child_style_recalc_);
   visitor->Trace(selectors_);
 }
 
@@ -388,12 +488,16 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
 
   mojom::blink::SpeculationHost* host = GetHost();
   auto* execution_context = GetSupplementable()->GetExecutionContext();
-  if (!host || !execution_context)
+  // devtools_navigation_token is expected to be non-null because a null token
+  // means the document is detached and will be destroyed shortly.
+  if (!host || !execution_context || !devtools_navigation_token_.has_value()) {
     return;
+  }
 
-  Vector<mojom::blink::SpeculationCandidatePtr> candidates;
+  HeapVector<Member<SpeculationCandidate>> candidates;
   auto push_candidates = [&candidates, &execution_context](
                              mojom::blink::SpeculationAction action,
+                             SpeculationRuleSet* rule_set,
                              const HeapVector<Member<SpeculationRule>>& rules) {
     for (SpeculationRule* rule : rules) {
       for (const KURL& url : rule->urls()) {
@@ -402,18 +506,16 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
         if (!referrer)
           continue;
 
-        auto referrer_ptr = mojom::blink::Referrer::New(
-            KURL(referrer->referrer), referrer->referrer_policy);
-        candidates.push_back(mojom::blink::SpeculationCandidate::New(
-            url, action, std::move(referrer_ptr),
+        CHECK(!rule->target_browsing_context_name_hint() ||
+              action == mojom::blink::SpeculationAction::kPrerender);
+
+        candidates.push_back(MakeGarbageCollected<SpeculationCandidate>(
+            url, action, referrer.value(),
             rule->requires_anonymous_client_ip_when_cross_origin(),
             rule->target_browsing_context_name_hint().value_or(
                 mojom::blink::SpeculationTargetHint::kNoHint),
-            // The default Eagerness value for |"source": "list"| rules is
-            // |kEager|. More info can be found here:
-            // https://github.com/WICG/nav-speculation/blob/main/triggers.md#eagerness
-            rule->eagerness().value_or(
-                mojom::blink::SpeculationEagerness::kEager)));
+            rule->eagerness(), rule->no_vary_search_expected().Clone(),
+            rule->injection_world(), rule_set, /*anchor=*/nullptr));
       }
     }
   };
@@ -423,7 +525,7 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
     // speculation rules.
     if (RuntimeEnabledFeatures::SpeculationRulesPrefetchProxyEnabled(
             execution_context)) {
-      push_candidates(mojom::blink::SpeculationAction::kPrefetch,
+      push_candidates(mojom::blink::SpeculationAction::kPrefetch, rule_set,
                       rule_set->prefetch_rules());
     }
 
@@ -431,13 +533,13 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
     if (RuntimeEnabledFeatures::SpeculationRulesPrefetchWithSubresourcesEnabled(
             execution_context)) {
       push_candidates(
-          mojom::blink::SpeculationAction::kPrefetchWithSubresources,
+          mojom::blink::SpeculationAction::kPrefetchWithSubresources, rule_set,
           rule_set->prefetch_with_subresources_rules());
     }
 
     // If kPrerender2 is enabled, collect all prerender speculation rules.
     if (RuntimeEnabledFeatures::Prerender2Enabled(execution_context)) {
-      push_candidates(mojom::blink::SpeculationAction::kPrerender,
+      push_candidates(mojom::blink::SpeculationAction::kPrerender, rule_set,
                       rule_set->prerender_rules());
 
       // Set the flag to evict the cached data of Session Storage when the
@@ -460,37 +562,74 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
     host->EnableNoVarySearchSupport();
   }
 
-  host->UpdateSpeculationCandidates(std::move(candidates));
+  probe::SpeculationCandidatesUpdated(*GetSupplementable(), candidates);
+
+  using SpeculationEagerness = blink::mojom::SpeculationEagerness;
+  base::EnumSet<SpeculationEagerness, SpeculationEagerness::kMinValue,
+                SpeculationEagerness::kMaxValue>
+      eagerness_set;
+
+  Vector<mojom::blink::SpeculationCandidatePtr> mojom_candidates;
+  mojom_candidates.ReserveInitialCapacity(candidates.size());
+  for (SpeculationCandidate* candidate : candidates) {
+    eagerness_set.Put(candidate->eagerness());
+    mojom_candidates.push_back(candidate->ToMojom());
+  }
+
+  host->UpdateSpeculationCandidates(devtools_navigation_token_.value(),
+                                    std::move(mojom_candidates));
+
+  if (eagerness_set.Has(SpeculationEagerness::kConservative)) {
+    UseCounter::Count(GetSupplementable(),
+                      WebFeature::kSpeculationRulesEagernessConservative);
+  }
+  if (eagerness_set.Has(SpeculationEagerness::kModerate)) {
+    UseCounter::Count(GetSupplementable(),
+                      WebFeature::kSpeculationRulesEagernessModerate);
+  }
+  if (eagerness_set.Has(SpeculationEagerness::kEager)) {
+    UseCounter::Count(GetSupplementable(),
+                      WebFeature::kSpeculationRulesEagernessEager);
+  }
 }
 
 void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
-    Vector<mojom::blink::SpeculationCandidatePtr>& candidates) {
+    HeapVector<Member<SpeculationCandidate>>& candidates) {
   // Match all the unmatched
   while (!pending_links_.empty()) {
     auto it = pending_links_.begin();
     HTMLAnchorElement* link = *it;
-    Vector<mojom::blink::SpeculationCandidatePtr> link_candidates;
+    HeapVector<Member<SpeculationCandidate>>* link_candidates =
+        MakeGarbageCollected<HeapVector<Member<SpeculationCandidate>>>();
     ExecutionContext* execution_context =
         GetSupplementable()->GetExecutionContext();
-    DCHECK(execution_context);
-    const bool selector_matches_enabled = SelectorMatchesEnabled();
+    CHECK(execution_context);
 
     const auto push_link_candidates =
-        [&link, &link_candidates, &execution_context,
-         &selector_matches_enabled](
+        [&link, &link_candidates, &execution_context, this](
             mojom::blink::SpeculationAction action,
+            SpeculationRuleSet* rule_set,
             const HeapVector<Member<SpeculationRule>>& speculation_rules) {
           if (!link->HrefURL().ProtocolIsInHTTPFamily()) {
             return;
           }
 
-          // We exclude links that don't have a ComputedStyle stored (or have a
-          // ComputedStyle only because EnsureComputedStyle was called, and
-          // otherwise wouldn't). This corresponds to links that are not in the
-          // flat tree or links with a "display: none" inclusive-ancestor.
-          if (selector_matches_enabled &&
-              ComputedStyle::IsNullOrEnsured(link->GetComputedStyle())) {
-            return;
+          if (SelectorMatchesEnabled()) {
+            // We exclude links that don't have a ComputedStyle stored (or have
+            // a ComputedStyle only because EnsureComputedStyle was called, and
+            // otherwise wouldn't). This corresponds to links that are not in
+            // the flat tree or links with a "display: none" inclusive-ancestor.
+            if (ComputedStyle::IsNullOrEnsured(link->GetComputedStyle())) {
+              return;
+            }
+
+            // Links with display locked ancestors can have a stale
+            // ComputedStyle, i.e. a ComputedStyle that wasn't updated during a
+            // style update because the element isn't currently being rendered,
+            // but is not discarded either. We ignore these links as well.
+            if (stale_links_.Contains(link)) {
+              return;
+            }
           }
 
           for (SpeculationRule* rule : speculation_rules) {
@@ -504,24 +643,28 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
                             /*opt_url=*/absl::nullopt);
             if (!referrer)
               continue;
-            mojom::blink::ReferrerPtr referrer_ptr =
-                mojom::blink::Referrer::New(KURL(referrer->referrer),
-                                            referrer->referrer_policy);
 
-            // TODO(crbug.com/1371522): We should be generating a target hint
-            // based on the link's target.
-            mojom::blink::SpeculationCandidatePtr candidate =
-                mojom::blink::SpeculationCandidate::New(
-                    link->HrefURL(), action, std::move(referrer_ptr),
+            mojom::blink::SpeculationTargetHint target_hint =
+                mojom::blink::SpeculationTargetHint::kNoHint;
+            if (action == mojom::blink::SpeculationAction::kPrerender) {
+              if (rule->target_browsing_context_name_hint()) {
+                target_hint = rule->target_browsing_context_name_hint().value();
+              } else {
+                // Obtain target hint from the link's target (if specified).
+                target_hint =
+                    SpeculationRuleSet::SpeculationTargetHintFromString(
+                        link->GetEffectiveTarget());
+              }
+            }
+
+            SpeculationCandidate* candidate =
+                MakeGarbageCollected<SpeculationCandidate>(
+                    link->HrefURL(), action, referrer.value(),
                     rule->requires_anonymous_client_ip_when_cross_origin(),
-                    rule->target_browsing_context_name_hint().value_or(
-                        mojom::blink::SpeculationTargetHint::kNoHint),
-                    // The default Eagerness value for |"source": "document"|
-                    // rules is |kConservative|. More info can be found here:
-                    // https://github.com/WICG/nav-speculation/blob/main/triggers.md#eagerness
-                    rule->eagerness().value_or(
-                        mojom::blink::SpeculationEagerness::kConservative));
-            link_candidates.push_back(std::move(candidate));
+                    target_hint, rule->eagerness(),
+                    rule->no_vary_search_expected().Clone(),
+                    rule->injection_world(), rule_set, link);
+            link_candidates->push_back(std::move(candidate));
           }
         };
 
@@ -529,7 +672,7 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
       if (RuntimeEnabledFeatures::SpeculationRulesPrefetchProxyEnabled(
               execution_context)) {
         push_link_candidates(mojom::blink::SpeculationAction::kPrefetch,
-                             rule_set->prefetch_rules());
+                             rule_set, rule_set->prefetch_rules());
       }
 
       if (RuntimeEnabledFeatures::
@@ -537,27 +680,26 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
                   execution_context)) {
         push_link_candidates(
             mojom::blink::SpeculationAction::kPrefetchWithSubresources,
-            rule_set->prefetch_with_subresources_rules());
+            rule_set, rule_set->prefetch_with_subresources_rules());
       }
 
       if (RuntimeEnabledFeatures::Prerender2Enabled(execution_context)) {
         push_link_candidates(mojom::blink::SpeculationAction::kPrerender,
-                             rule_set->prerender_rules());
+                             rule_set, rule_set->prerender_rules());
       }
     }
 
-    if (!link_candidates.empty())
-      matched_links_.Set(link, std::move(link_candidates));
-    else
+    if (!link_candidates->empty()) {
+      matched_links_.Set(link, link_candidates);
+    } else {
       unmatched_links_.insert(link);
+    }
 
     pending_links_.erase(it);
   }
 
   for (auto& it : matched_links_) {
-    for (const auto& candidate : it.value) {
-      candidates.push_back(candidate.Clone());
-    }
+    candidates.AppendVector(*(it.value));
   }
 }
 
@@ -576,18 +718,43 @@ void DocumentSpeculationRules::InitializeIfNecessary() {
   }
 }
 
+void DocumentSpeculationRules::LinkAttributeChanged(HTMLAnchorElement* link) {
+  if (!initialized_) {
+    return;
+  }
+  DCHECK(link->isConnected());
+  InvalidateLink(link);
+  QueueUpdateSpeculationCandidates();
+}
+
+void DocumentSpeculationRules::DocumentPropertyChanged() {
+  if (!initialized_) {
+    return;
+  }
+  InvalidateAllLinks();
+  QueueUpdateSpeculationCandidates();
+}
+
 void DocumentSpeculationRules::AddLink(HTMLAnchorElement* link) {
   DCHECK(initialized_);
   DCHECK(link->IsLink());
   DCHECK(!base::Contains(unmatched_links_, link));
   DCHECK(!base::Contains(matched_links_, link));
   DCHECK(!base::Contains(pending_links_, link));
+  DCHECK(!base::Contains(stale_links_, link));
 
   pending_links_.insert(link);
+  // TODO(crbug.com/1371522): A stale link is guaranteed to not match, so we
+  // should put it into |unmatched_links_| directly and skip queueing an update.
+  if (SelectorMatchesEnabled() &&
+      DisplayLockUtilities::LockedAncestorPreventingStyle(*link)) {
+    stale_links_.insert(link);
+  }
 }
 
 void DocumentSpeculationRules::RemoveLink(HTMLAnchorElement* link) {
   DCHECK(initialized_);
+  stale_links_.erase(link);
 
   if (auto it = matched_links_.find(link); it != matched_links_.end()) {
     matched_links_.erase(it);
@@ -660,9 +827,8 @@ bool DocumentSpeculationRules::SelectorMatchesEnabled() {
   if (was_selector_matches_enabled_) {
     return true;
   }
-  was_selector_matches_enabled_ = RuntimeEnabledFeatures::
-      SpeculationRulesDocumentRulesSelectorMatchesEnabled(
-          GetSupplementable()->GetExecutionContext());
+  was_selector_matches_enabled_ = speculation_rules::SelectorMatchesEnabled(
+      GetSupplementable()->GetExecutionContext());
   return was_selector_matches_enabled_;
 }
 

@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -21,6 +20,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/metrics_hashes.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -45,6 +45,7 @@
 #include "components/autofill/core/browser/metrics/form_events/form_events.h"
 #include "components/autofill/core/browser/metrics/log_event.h"
 #include "components/autofill/core/browser/mock_autocomplete_history_manager.h"
+#include "components/autofill/core/browser/mock_autofill_optimization_guide.h"
 #include "components/autofill/core/browser/mock_iban_manager.h"
 #include "components/autofill/core/browser/mock_merchant_promo_code_manager.h"
 #include "components/autofill/core/browser/mock_single_field_form_fill_router.h"
@@ -138,6 +139,10 @@ class MockAutofillClient : public TestAutofillClient {
   ~MockAutofillClient() override = default;
 
   MOCK_METHOD(version_info::Channel, GetChannel, (), (const override));
+  MOCK_METHOD(AutofillOptimizationGuide*,
+              GetAutofillOptimizationGuide,
+              (),
+              (const override));
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   MOCK_METHOD(void,
               ConfirmSaveUpiIdLocally,
@@ -151,7 +156,12 @@ class MockAutofillClient : public TestAutofillClient {
               (const override));
   MOCK_METHOD(void, HideAutofillPopup, (PopupHidingReason reason), (override));
   MOCK_METHOD(bool, IsPasswordManagerEnabled, (), (override));
-  MOCK_METHOD(void, HideFastCheckout, (bool), (override));
+  MOCK_METHOD(void,
+              DidFillOrPreviewForm,
+              (mojom::RendererFormDataAction action,
+               AutofillTriggerSource trigger_source,
+               bool is_refill),
+              (override));
 };
 
 class MockAutofillDownloadManager : public AutofillDownloadManager {
@@ -197,21 +207,58 @@ class MockAutofillDownloadManager : public AutofillDownloadManager {
   std::vector<FormStructure*> last_queried_forms_;
 };
 
-class MockTouchToFillDelegateImpl : public TouchToFillDelegateImpl {
+class MockTouchToFillDelegate : public TouchToFillDelegate {
  public:
-  explicit MockTouchToFillDelegateImpl(BrowserAutofillManager* manager)
-      : TouchToFillDelegateImpl(manager) {}
-  MockTouchToFillDelegateImpl(const MockTouchToFillDelegateImpl&) = delete;
-  MockTouchToFillDelegateImpl& operator=(const MockTouchToFillDelegateImpl&) =
-      delete;
-  ~MockTouchToFillDelegateImpl() override = default;
-
+  MockTouchToFillDelegate() = default;
+  MockTouchToFillDelegate(const MockTouchToFillDelegate&) = delete;
+  MockTouchToFillDelegate& operator=(const MockTouchToFillDelegate&) = delete;
+  ~MockTouchToFillDelegate() override = default;
+  MOCK_METHOD(BrowserAutofillManager*, GetManager, (), (override));
+  MOCK_METHOD(bool,
+              IntendsToShowTouchToFill,
+              (FormGlobalId, FieldGlobalId),
+              (override));
   MOCK_METHOD(bool,
               TryToShowTouchToFill,
-              (const FormData& form, const FormFieldData& field),
+              (const FormData&, const FormFieldData&),
               (override));
   MOCK_METHOD(bool, IsShowingTouchToFill, (), (override));
   MOCK_METHOD(void, HideTouchToFill, (), (override));
+  MOCK_METHOD(void, Reset, (), (override));
+  MOCK_METHOD(bool, ShouldShowScanCreditCard, (), (override));
+  MOCK_METHOD(void, ScanCreditCard, (), (override));
+  MOCK_METHOD(void, OnCreditCardScanned, (const CreditCard& card), (override));
+  MOCK_METHOD(void, ShowCreditCardSettings, (), (override));
+  MOCK_METHOD(void,
+              SuggestionSelected,
+              (std::string unique_id, bool is_virtual),
+              (override));
+  MOCK_METHOD(void, OnDismissed, (bool dismissed_by_user), (override));
+  MOCK_METHOD(void,
+              LogMetricsAfterSubmission,
+              (const FormStructure&),
+              (override));
+};
+
+class MockFastCheckoutDelegate : public FastCheckoutDelegate {
+ public:
+  MockFastCheckoutDelegate() = default;
+  MockFastCheckoutDelegate(const MockFastCheckoutDelegate&) = delete;
+  MockFastCheckoutDelegate& operator=(const MockFastCheckoutDelegate&) = delete;
+  ~MockFastCheckoutDelegate() override = default;
+
+  MOCK_METHOD(bool,
+              TryToShowFastCheckout,
+              (const FormData&,
+               const FormFieldData&,
+               base::WeakPtr<AutofillManager>),
+              (override));
+  MOCK_METHOD(bool,
+              IntendsToShowFastCheckout,
+              (AutofillManager&, FormGlobalId, FieldGlobalId),
+              (const, override));
+  MOCK_METHOD(bool, IsShowingFastCheckoutUI, (), (const, override));
+  MOCK_METHOD(void, HideFastCheckout, (bool), (override));
 };
 
 void ExpectFilledField(const char* expected_label,
@@ -402,6 +449,7 @@ class BrowserAutofillManagerTest : public testing::Test {
                          /*local_state=*/autofill_client_.GetPrefs(),
                          /*identity_manager=*/nullptr,
                          /*history_service=*/nullptr,
+                         /*sync_service=*/nullptr,
                          /*strike_database=*/nullptr,
                          /*image_fetcher=*/nullptr,
                          /*is_off_the_record=*/false);
@@ -467,13 +515,17 @@ class BrowserAutofillManagerTest : public testing::Test {
     browser_autofill_manager_->SetExternalDelegateForTest(
         std::move(external_delegate));
 
-    auto touch_to_fill_delegate = std::make_unique<MockTouchToFillDelegateImpl>(
-        browser_autofill_manager_.get());
-    ON_CALL(*touch_to_fill_delegate, IsShowingTouchToFill())
+    browser_autofill_manager_->set_touch_to_fill_delegate(
+        std::make_unique<MockTouchToFillDelegate>());
+    ON_CALL(touch_to_fill_delegate(), GetManager())
+        .WillByDefault(Return(browser_autofill_manager_.get()));
+    ON_CALL(touch_to_fill_delegate(), IsShowingTouchToFill())
         .WillByDefault(Return(false));
-    touch_to_fill_delegate_ = touch_to_fill_delegate.get();
-    browser_autofill_manager_->SetTouchToFillDelegateImplForTest(
-        std::move(touch_to_fill_delegate));
+
+    browser_autofill_manager_->set_fast_checkout_delegate(
+        std::make_unique<MockFastCheckoutDelegate>());
+    ON_CALL(fast_checkout_delegate(), IsShowingFastCheckoutUI())
+        .WillByDefault(Return(false));
 
     auto test_strike_database = std::make_unique<TestStrikeDatabase>();
     strike_database_ = test_strike_database.get();
@@ -541,6 +593,16 @@ class BrowserAutofillManagerTest : public testing::Test {
     personal_data().ClearCreditCards();
   }
 
+  MockTouchToFillDelegate& touch_to_fill_delegate() {
+    return *static_cast<MockTouchToFillDelegate*>(
+        browser_autofill_manager_->touch_to_fill_delegate());
+  }
+
+  MockFastCheckoutDelegate& fast_checkout_delegate() {
+    return *static_cast<MockFastCheckoutDelegate*>(
+        browser_autofill_manager_->fast_checkout_delegate());
+  }
+
   void GetAutofillSuggestions(const FormData& form,
                               const FormFieldData& field) {
     browser_autofill_manager_->OnAskForValuesToFill(
@@ -560,9 +622,9 @@ class BrowserAutofillManagerTest : public testing::Test {
       FieldGlobalId field_id,
       const std::vector<std::u16string>& results) {
     std::vector<Suggestion> suggestions;
-    std::transform(results.begin(), results.end(),
-                   std::back_inserter(suggestions),
-                   [](auto result) { return Suggestion(result); });
+    base::ranges::transform(
+        results, std::back_inserter(suggestions),
+        [](const auto& result) { return Suggestion(result); });
 
     browser_autofill_manager_->OnSuggestionsReturned(
         field_id, AutoselectFirstSuggestion(false), suggestions);
@@ -585,7 +647,8 @@ class BrowserAutofillManagerTest : public testing::Test {
         form, field, {}, AutoselectFirstSuggestion(true),
         FormElementWasClicked(false));
     browser_autofill_manager_->FillOrPreviewForm(
-        mojom::RendererFormDataAction::kFill, form, field, unique_id);
+        mojom::RendererFormDataAction::kFill, form, field, unique_id,
+        AutofillTriggerSource::kPopup);
   }
 
   // Calls |browser_autofill_manager_->OnFillAutofillFormData()| with the
@@ -612,7 +675,7 @@ class BrowserAutofillManagerTest : public testing::Test {
         .WillOnce((DoAll(testing::SaveArg<1>(response_data),
                          testing::Return(std::vector<FieldGlobalId>{}))));
     browser_autofill_manager_->FillOrPreviewVirtualCardInformation(
-        action, guid, input_form, input_field);
+        action, guid, input_form, input_field, AutofillTriggerSource::kPopup);
   }
 
   int MakeFrontendId(
@@ -690,7 +753,8 @@ class BrowserAutofillManagerTest : public testing::Test {
     EXPECT_CALL(*autofill_driver_, FillOrPreviewForm(_, _, _, _))
         .Times(AtLeast(1));
     browser_autofill_manager_->FillOrPreviewCreditCardForm(
-        mojom::RendererFormDataAction::kFill, *form, form->fields[0], card);
+        mojom::RendererFormDataAction::kFill, *form, form->fields[0], card,
+        AutofillTriggerSource::kPopup);
   }
 
   void OnDidGetRealPan(AutofillClient::PaymentsRpcResult result,
@@ -945,12 +1009,11 @@ class BrowserAutofillManagerTest : public testing::Test {
   }
 
   base::test::TaskEnvironment task_environment_;
-  test::AutofillEnvironment autofill_environment_;
+  test::AutofillUnitTestEnvironment autofill_test_environment_;
   NiceMock<MockAutofillClient> autofill_client_;
   std::unique_ptr<MockAutofillDriver> autofill_driver_;
   std::unique_ptr<TestBrowserAutofillManager> browser_autofill_manager_;
   raw_ptr<TestAutofillExternalDelegate> external_delegate_;
-  raw_ptr<MockTouchToFillDelegateImpl> touch_to_fill_delegate_;
   scoped_refptr<AutofillWebDataService> database_;
   raw_ptr<MockAutofillDownloadManager> download_manager_;
   std::unique_ptr<MockAutocompleteHistoryManager> autocomplete_history_manager_;
@@ -1652,8 +1715,9 @@ TEST_F(BrowserAutofillManagerTest,
   FormsSeen({form});
 
   // Disable Autofill.
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
 
   GetAutofillSuggestions(form, form.fields[0]);
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
@@ -2420,7 +2484,8 @@ TEST_F(BrowserAutofillManagerTest, OnCreditCardFetched_StoreInstrumentId) {
   FormsSeen({form});
   CreditCard credit_card = test::GetMaskedServerCard();
   browser_autofill_manager_->FillOrPreviewCreditCardForm(
-      mojom::RendererFormDataAction::kFill, form, form.fields[0], &credit_card);
+      mojom::RendererFormDataAction::kFill, form, form.fields[0], &credit_card,
+      AutofillTriggerSource::kPopup);
 
   browser_autofill_manager_->OnCreditCardFetchedForTest(
       CreditCardFetchResult::kSuccess, &credit_card,
@@ -2651,6 +2716,22 @@ TEST_F(BrowserAutofillManagerTest, DoNotFillIfFormFieldChanged) {
 
   EXPECT_THAT(filled_fields, Each(Not(HasValue(u""))));
   EXPECT_THAT(skipped_fields, Each(HasValue(u"")));
+}
+
+TEST_F(BrowserAutofillManagerTest,
+       FillOrPreviewDataModelFormCallsDidFillOrPreviewForm) {
+  FormData form =
+      CreateTestCreditCardFormData(/*is_https=*/true, /*use_month_type=*/false);
+  FormsSeen({form});
+  FormStructure* form_structure;
+  AutofillField* autofill_field;
+  ASSERT_TRUE(browser_autofill_manager_->GetCachedFormAndField(
+      form, form.fields.front(), &form_structure, &autofill_field));
+  EXPECT_CALL(autofill_client_, DidFillOrPreviewForm);
+  browser_autofill_manager_->FillOrPreviewDataModelFormForTest(
+      mojom::RendererFormDataAction::kFill, form, form.fields.front(),
+      personal_data().GetCreditCards()[0], /*optional_cvc=*/nullptr,
+      form_structure, autofill_field);
 }
 
 // Test that if the form cache is outdated because a field was removed, filling
@@ -3014,8 +3095,9 @@ TEST_F(BrowserAutofillManagerTest,
   test::CreateTestAddressFormData(&form);
 
   // Disable autofill and the password manager.
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
   ON_CALL(autofill_client_, IsPasswordManagerEnabled())
       .WillByDefault(Return(false));
 
@@ -5873,7 +5955,7 @@ TEST_F(BrowserAutofillManagerWithLogEventsTest,
   const FormFieldData& field = form.fields[0];
 
   // Touch the field of "Name on Card" and autofill suggestion is shown.
-  EXPECT_CALL(*touch_to_fill_delegate_, TryToShowTouchToFill(_, _))
+  EXPECT_CALL(touch_to_fill_delegate(), TryToShowTouchToFill(_, _))
       .WillOnce(Return(false));
   TryToShowTouchToFill(form, field, FormElementWasClicked(true));
   EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
@@ -6223,8 +6305,9 @@ TEST_F(BrowserAutofillManagerWithLogEventsTest,
 // Test that when Autocomplete is enabled and Autofill is disabled, form
 // submissions are still received by the SingleFieldFormFillRouter.
 TEST_F(BrowserAutofillManagerTest, FormSubmittedAutocompleteEnabled) {
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
 
   // Set up our form data.
   FormData form;
@@ -6266,8 +6349,9 @@ TEST_F(BrowserAutofillManagerTest, ValuePatternsMetric) {
 // still queried as a fallback.
 TEST_F(BrowserAutofillManagerTest,
        SingleFieldFormFillSuggestions_SomeWhenAutofillDisabled) {
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
   auto external_delegate = std::make_unique<TestAutofillExternalDelegate>(
       browser_autofill_manager_.get(), autofill_driver_.get(),
       /*call_parent_methods=*/false);
@@ -6340,8 +6424,9 @@ TEST_F(BrowserAutofillManagerTest,
   replacements.SetSchemeStr(url::kHttpScheme);
   client.set_form_origin(client.form_origin().ReplaceComponents(replacements));
   ResetBrowserAutofillManager(&client);
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
   auto external_delegate = std::make_unique<TestAutofillExternalDelegate>(
       browser_autofill_manager_.get(), autofill_driver_.get(),
       /*call_parent_methods=*/false);
@@ -6374,8 +6459,9 @@ TEST_F(BrowserAutofillManagerTest,
   replacements.SetSchemeStr(url::kHttpScheme);
   client.set_form_origin(client.form_origin().ReplaceComponents(replacements));
   ResetBrowserAutofillManager(&client);
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
   auto external_delegate = std::make_unique<TestAutofillExternalDelegate>(
       browser_autofill_manager_.get(), autofill_driver_.get(),
       /*call_parent_methods=*/false);
@@ -6433,8 +6519,9 @@ TEST_F(
 TEST_F(
     BrowserAutofillManagerTest,
     SingleFieldFormFillSuggestions_NoneWhenSingleFieldFormFillConditionsNotMet) {
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
   auto external_delegate = std::make_unique<TestAutofillExternalDelegate>(
       browser_autofill_manager_.get(), autofill_driver_.get(),
       /*call_parent_methods=*/false);
@@ -6801,19 +6888,13 @@ TEST_F(BrowserAutofillManagerTest, FormSubmittedWithDefaultValues) {
   FillAutofillFormDataAndSaveResults(form, form.fields[3],
                                      MakeFrontendId({.profile_id = guid}),
                                      &response_data);
-
-  // Simulate form submission.  We should call into the PDM to try to save the
-  // filled data.
-  FormSubmitted(response_data);
-  EXPECT_EQ(1, personal_data().num_times_save_imported_profile_called());
-
   // Set the address field's value back to the default value.
   response_data.fields[3].value = u"Enter your address";
 
   // Simulate form submission.  We should not call into the PDM to try to save
   // the filled data, since the filled form is effectively missing an address.
   FormSubmitted(response_data);
-  EXPECT_EQ(1, personal_data().num_times_save_imported_profile_called());
+  EXPECT_EQ(0, personal_data().num_times_save_imported_profile_called());
 }
 
 struct ProfileMatchingTypesTestCase {
@@ -8006,7 +8087,7 @@ TEST_F(BrowserAutofillManagerTest, FillInUpdatedExpirationDate) {
 }
 
 TEST_F(BrowserAutofillManagerTest, ProfileDisabledDoesNotFillFormData) {
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
 
   // Set up our form data.
   FormData form;
@@ -8023,7 +8104,7 @@ TEST_F(BrowserAutofillManagerTest, ProfileDisabledDoesNotFillFormData) {
 }
 
 TEST_F(BrowserAutofillManagerTest, ProfileDisabledDoesNotSuggest) {
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
 
   // Set up our form data.
   FormData form;
@@ -8039,7 +8120,8 @@ TEST_F(BrowserAutofillManagerTest, ProfileDisabledDoesNotSuggest) {
 }
 
 TEST_F(BrowserAutofillManagerTest, CreditCardDisabledDoesNotFillFormData) {
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
 
   // Set up our form data.
   FormData form = CreateTestCreditCardFormData(true, false);
@@ -8055,7 +8137,8 @@ TEST_F(BrowserAutofillManagerTest, CreditCardDisabledDoesNotFillFormData) {
 }
 
 TEST_F(BrowserAutofillManagerTest, CreditCardDisabledDoesNotSuggest) {
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
 
   // Set up our form data.
   FormData form = CreateTestCreditCardFormData(true, false);
@@ -8395,8 +8478,9 @@ TEST_F(BrowserAutofillManagerTest, ShouldUploadForm) {
   EXPECT_TRUE(browser_autofill_manager_->ShouldUploadForm(FormStructure(form)));
 
   // Autofill disabled.
-  browser_autofill_manager_->SetAutofillProfileEnabled(false);
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillProfileEnabled(autofill_client_, false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
   EXPECT_FALSE(
       browser_autofill_manager_->ShouldUploadForm(FormStructure(form)));
 }
@@ -8533,39 +8617,6 @@ TEST_F(BrowserAutofillManagerTest,
   }
 }
 
-// Tests that a form with <select> field is accepted if <option> value (not
-// content) is quite long. Some websites use value to propagate long JSON to
-// JS-backed logic.
-TEST_F(BrowserAutofillManagerTest, FormWithLongOptionValuesIsAcceptable) {
-  FormData form;
-  form.name = u"MyForm";
-  form.url = GURL("https://myform.com/form.html");
-  form.action = GURL("https://myform.com/submit.html");
-
-  FormFieldData field;
-  test::CreateTestFormField("First name", "firstname", "", "text", &field);
-  form.fields.push_back(field);
-  test::CreateTestFormField("Last name", "lastname", "", "text", &field);
-  form.fields.push_back(field);
-
-  // Prepare <select> field with long <option> values.
-  const size_t kOptionValueLength = 10240;
-  const std::string long_string(kOptionValueLength, 'a');
-  const std::vector<const char*> values(3, long_string.c_str());
-  const std::vector<const char*> contents{"A", "B", "C"};
-  test::CreateTestSelectField("Country", "country", "", values, contents,
-                              &field);
-  form.fields.push_back(field);
-
-  FormsSeen({form});
-
-  // Suggestions should be displayed.
-  for (const FormFieldData& form_field : form.fields) {
-    GetAutofillSuggestions(form, form_field);
-    EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
-  }
-}
-
 // Test that is_all_server_suggestions is true if there are only
 // full_server_card and masked_server_card on file.
 TEST_F(BrowserAutofillManagerTest,
@@ -8669,6 +8720,42 @@ TEST_F(BrowserAutofillManagerTest, GetCreditCardSuggestions_VirtualCard) {
 }
 
 TEST_F(BrowserAutofillManagerTest,
+       IbanFormProcessed_AutofillOptimizationGuidePresent) {
+  FormData form_data;
+  test::CreateTestIbanFormData(&form_data);
+  FormStructure form_structure{form_data};
+  FormStructureTestApi(&form_structure)
+      .SetFieldTypes({IBAN_VALUE}, {IBAN_VALUE});
+
+  MockAutofillOptimizationGuide autofill_optimization_guide;
+  ON_CALL(autofill_client_, GetAutofillOptimizationGuide)
+      .WillByDefault(testing::Return(&autofill_optimization_guide));
+
+  // We reset `browser_autofill_manager_` here so that `autofill_client_`
+  // initializes `autofill_optimization_guide` in `browser_autofill_manager_`.
+  browser_autofill_manager_ = std::make_unique<TestBrowserAutofillManager>(
+      autofill_driver_.get(), &autofill_client_);
+  EXPECT_CALL(autofill_optimization_guide, OnDidParseForm).Times(1);
+
+  browser_autofill_manager_->OnFormProcessedForTesting(form_data,
+                                                       form_structure);
+}
+
+TEST_F(BrowserAutofillManagerTest,
+       IbanFormProcessed_AutofillOptimizationGuideNotPresent) {
+  FormData form_data;
+  test::CreateTestIbanFormData(&form_data);
+  FormStructure form_structure{form_data};
+  FormStructureTestApi(&form_structure)
+      .SetFieldTypes({IBAN_VALUE}, {IBAN_VALUE});
+
+  // Test that form processing doesn't crash when we have an IBAN form but no
+  // AutofillOptimizationGuide present.
+  browser_autofill_manager_->OnFormProcessedForTesting(form_data,
+                                                       form_structure);
+}
+
+TEST_F(BrowserAutofillManagerTest,
        DidShowSuggestions_LogAutocompleteShownMetric) {
   FormData form;
   form.name = u"NothingSpecial";
@@ -8711,10 +8798,12 @@ TEST_F(BrowserAutofillManagerTest,
   histogram_tester.ExpectBucketCount("Autofill.UserHappiness.Address",
                                      AutofillMetrics::SUGGESTIONS_SHOWN_ONCE,
                                      1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // No Autocomplete or credit cards logs.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -8748,10 +8837,12 @@ TEST_F(BrowserAutofillManagerTest, DidShowSuggestions_LogByType_AddressOnly) {
   browser_autofill_manager_->DidShowSuggestions(
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
 
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.AddressOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.AddressOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.AddressOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.AddressOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -8793,10 +8884,12 @@ TEST_F(BrowserAutofillManagerTest,
   browser_autofill_manager_->DidShowSuggestions(
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
 
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.AddressOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.AddressOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.AddressOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.AddressOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -8836,10 +8929,12 @@ TEST_F(BrowserAutofillManagerTest, DidShowSuggestions_LogByType_ContactOnly) {
   base::HistogramTester histogram_tester;
   browser_autofill_manager_->DidShowSuggestions(
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.ContactOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.ContactOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.ContactOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.ContactOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -8882,10 +8977,12 @@ TEST_F(BrowserAutofillManagerTest,
   base::HistogramTester histogram_tester;
   browser_autofill_manager_->DidShowSuggestions(
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.ContactOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.ContactOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.ContactOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.ContactOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -8928,10 +9025,12 @@ TEST_F(BrowserAutofillManagerTest, DidShowSuggestions_LogByType_PhoneOnly) {
   base::HistogramTester histogram_tester;
   browser_autofill_manager_->DidShowSuggestions(
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.PhoneOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.PhoneOnly",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.PhoneOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.PhoneOnly",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -8971,10 +9070,12 @@ TEST_F(BrowserAutofillManagerTest, DidShowSuggestions_LogByType_Other) {
   base::HistogramTester histogram_tester;
   browser_autofill_manager_->DidShowSuggestions(
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.Other",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address.Other",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.Other",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address.Other",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9019,16 +9120,16 @@ TEST_F(BrowserAutofillManagerTest,
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusEmail",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusEmail",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9070,16 +9171,16 @@ TEST_F(BrowserAutofillManagerTest,
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusEmail",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusEmail",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9123,16 +9224,16 @@ TEST_F(BrowserAutofillManagerTest,
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusPhone",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusPhone",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9174,16 +9275,16 @@ TEST_F(BrowserAutofillManagerTest,
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusPhone",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusPhone",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9229,16 +9330,16 @@ TEST_F(BrowserAutofillManagerTest,
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusEmailPlusPhone",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusEmailPlusPhone",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9279,16 +9380,16 @@ TEST_F(BrowserAutofillManagerTest,
       /*has_autofill_suggestions=*/true, form, form.fields[0]);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusEmailPlusPhone",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusEmailPlusPhone",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
   histogram_tester.ExpectBucketCount(
       "Autofill.FormEvents.Address.AddressPlusContact",
-      FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // Logging is not done for other types of address forms.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9319,10 +9420,12 @@ TEST_F(BrowserAutofillManagerTest,
   histogram_tester.ExpectBucketCount("Autofill.UserHappiness.CreditCard",
                                      AutofillMetrics::SUGGESTIONS_SHOWN_ONCE,
                                      1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                     FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      autofill_metrics::FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
 
   // No Autocomplete or address logs.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9338,8 +9441,9 @@ TEST_F(BrowserAutofillManagerTest,
 
   base::HistogramTester histogram_tester;
   browser_autofill_manager_->DidSuppressPopup(form, form.fields[0]);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.Address",
-                                     FORM_EVENT_POPUP_SUPPRESSED, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.Address",
+      autofill_metrics::FORM_EVENT_POPUP_SUPPRESSED, 1);
 
   // No Autocomplete or credit cards logs.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9356,8 +9460,9 @@ TEST_F(BrowserAutofillManagerTest,
   browser_autofill_manager_->OnFormsSeen({form}, {});
   base::HistogramTester histogram_tester;
   browser_autofill_manager_->DidSuppressPopup(form, form.fields[0]);
-  histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                     FORM_EVENT_POPUP_SUPPRESSED, 1);
+  histogram_tester.ExpectBucketCount(
+      "Autofill.FormEvents.CreditCard",
+      autofill_metrics::FORM_EVENT_POPUP_SUPPRESSED, 1);
 
   // No Autocomplete or address logs.
   const std::string histograms = histogram_tester.GetAllHistogramsRecorded();
@@ -9713,7 +9818,7 @@ TEST_F(BrowserAutofillManagerTest, GetSuggestions_MixedForm) {
 }
 
 // Test that if a form is mixed content we do not show a warning if the opt out
-// polcy is set.
+// policy is set.
 TEST_F(BrowserAutofillManagerTest, GetSuggestions_MixedFormOptoutPolicy) {
   // Set pref to disabled.
   autofill_client_.GetPrefs()->SetBoolean(::prefs::kMixedFormsWarningsEnabled,
@@ -9931,8 +10036,9 @@ TEST_F(BrowserAutofillManagerTest, AutofillOverridePrefilledValue) {
 TEST_F(BrowserAutofillManagerTest, HideAutofillPopupAndOtherPopups) {
   EXPECT_CALL(autofill_client_,
               HideAutofillPopup(PopupHidingReason::kRendererEvent));
-  EXPECT_CALL(*touch_to_fill_delegate_, HideTouchToFill);
-  EXPECT_CALL(autofill_client_, HideFastCheckout(/*allow_further_runs=*/false));
+  EXPECT_CALL(touch_to_fill_delegate(), HideTouchToFill);
+  EXPECT_CALL(fast_checkout_delegate(),
+              HideFastCheckout(/*allow_further_runs=*/false));
   browser_autofill_manager_->OnHidePopup();
 }
 
@@ -9940,8 +10046,9 @@ TEST_F(BrowserAutofillManagerTest, HideAutofillPopupAndOtherPopups) {
 TEST_F(BrowserAutofillManagerTest, OnDidEndTextFieldEditing) {
   EXPECT_CALL(autofill_client_,
               HideAutofillPopup(PopupHidingReason::kEndEditing));
-  EXPECT_CALL(*touch_to_fill_delegate_, HideTouchToFill).Times(0);
-  EXPECT_CALL(autofill_client_, HideFastCheckout(/*allow_further_runs=*/false))
+  EXPECT_CALL(touch_to_fill_delegate(), HideTouchToFill).Times(0);
+  EXPECT_CALL(fast_checkout_delegate(),
+              HideFastCheckout(/*allow_further_runs=*/false))
       .Times(0);
   browser_autofill_manager_->OnDidEndTextFieldEditing();
 }
@@ -9955,18 +10062,18 @@ TEST_F(BrowserAutofillManagerTest, AutofillSuggestionsOrTouchToFill) {
   const FormFieldData& field = form.fields[1];
 
   // Not a form element click, Autofill suggestions shown.
-  EXPECT_CALL(*touch_to_fill_delegate_, TryToShowTouchToFill(_, _)).Times(0);
+  EXPECT_CALL(touch_to_fill_delegate(), TryToShowTouchToFill(_, _)).Times(0);
   TryToShowTouchToFill(form, field, FormElementWasClicked(false));
   EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
 
   // TTF not available, Autofill suggestions shown.
-  EXPECT_CALL(*touch_to_fill_delegate_, TryToShowTouchToFill(_, _))
+  EXPECT_CALL(touch_to_fill_delegate(), TryToShowTouchToFill(_, _))
       .WillOnce(Return(false));
   TryToShowTouchToFill(form, field, FormElementWasClicked(true));
   EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
 
   // A form element click and TTF available, Autofill suggestions not shown.
-  EXPECT_CALL(*touch_to_fill_delegate_, TryToShowTouchToFill(_, _))
+  EXPECT_CALL(touch_to_fill_delegate(), TryToShowTouchToFill(_, _))
       .WillOnce(Return(true));
   TryToShowTouchToFill(form, field, FormElementWasClicked(true));
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
@@ -9981,9 +10088,9 @@ TEST_F(BrowserAutofillManagerTest, ShowNothingIfTouchToFillAlreadyShown) {
   FormsSeen({form});
   const FormFieldData& field = form.fields[1];
 
-  EXPECT_CALL(*touch_to_fill_delegate_, IsShowingTouchToFill)
+  EXPECT_CALL(touch_to_fill_delegate(), IsShowingTouchToFill)
       .WillOnce(Return(true));
-  EXPECT_CALL(*touch_to_fill_delegate_, TryToShowTouchToFill(_, _)).Times(0);
+  EXPECT_CALL(touch_to_fill_delegate(), TryToShowTouchToFill(_, _)).Times(0);
   TryToShowTouchToFill(form, field, FormElementWasClicked(true));
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
 }
@@ -10126,7 +10233,7 @@ class BrowserAutofillManagerTestForVirtualCardOption
   void SetUp() override {
     BrowserAutofillManagerTest::SetUp();
 
-    // The URL should always matche the form URL in
+    // The URL should always match the form URL in
     // CreateTestCreditCardFormData() to have the allowlist work correctly.
     autofill_client_.set_allowed_merchants({"https://myform.com/form.html"});
 
@@ -10197,7 +10304,8 @@ TEST_F(BrowserAutofillManagerTestForVirtualCardOption,
 // preference for credit card upload is set to disabled.
 TEST_F(BrowserAutofillManagerTestForVirtualCardOption,
        ShouldNotShowDueToCreditCardUploadPrefDisabled) {
-  browser_autofill_manager_->SetAutofillCreditCardEnabled(false);
+  browser_autofill_manager_->SetAutofillCreditCardEnabled(autofill_client_,
+                                                          false);
   FieldGlobalId field_id = CreateCompleteFormAndGetSuggestions();
   external_delegate_->CheckSuggestionCount(field_id, 0);
 }
@@ -10866,7 +10974,7 @@ class BrowserAutofillManagerClearFieldTest : public BrowserAutofillManagerTest {
   base::HistogramTester histogram_tester_;
 
   // Shorter alias of the Autofill.FormEvents we are interested in.
-  const FormEvent kEvent =
+  const autofill_metrics::FormEvent kEvent = autofill_metrics::
       FORM_EVENT_AUTOFILLED_FIELD_CLEARED_BY_JAVASCRIPT_AFTER_FILL_ONCE;
 };
 
@@ -11011,7 +11119,7 @@ TEST_P(BrowserAutofillManagerVotingTest, DynamicFormSubmission) {
   browser_autofill_manager_->OnTextFieldDidChange(
       form_, form_.fields[1], gfx::RectF(), AutofillTickClock::NowTicks());
 
-  // 4. Simulate removing the focus from the form, which generaets a second blur
+  // 4. Simulate removing the focus from the form, which generates a second blur
   // vote which should be sent.
   std::map<std::u16string, ServerFieldTypeSet> expected_vote_types = {
       {u"firstname",

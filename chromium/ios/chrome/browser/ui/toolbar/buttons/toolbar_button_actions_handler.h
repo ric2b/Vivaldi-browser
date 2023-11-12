@@ -10,7 +10,6 @@
 @protocol ApplicationCommands;
 @protocol ActivityServiceCommands;
 @protocol PopupMenuCommands;
-@protocol FindInPageCommands;
 @protocol OmniboxCommands;
 
 // Vivaldi
@@ -26,7 +25,6 @@ class WebNavigationBrowserAgent;
 @property(nonatomic, weak) id<ApplicationCommands> applicationHandler;
 @property(nonatomic, weak) id<ActivityServiceCommands> activityHandler;
 @property(nonatomic, weak) id<PopupMenuCommands> menuHandler;
-@property(nonatomic, weak) id<FindInPageCommands> findHandler;
 @property(nonatomic, weak) id<OmniboxCommands> omniboxHandler;
 
 // Vivaldi

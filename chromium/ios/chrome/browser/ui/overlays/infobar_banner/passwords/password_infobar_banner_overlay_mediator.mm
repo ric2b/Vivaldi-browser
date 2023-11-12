@@ -8,11 +8,16 @@
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/overlays/public/infobar_banner/password_infobar_banner_overlay.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_support.h"
-#import "ios/chrome/browser/ui/icons/symbols.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_consumer.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_overlay_mediator+consumer_support.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/settings/vivaldi_settings_constants.h"
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -46,6 +51,10 @@
 // The icon image, can be from the config or not from it.
 - (UIImage*)iconImageWithConfig:
     (PasswordInfobarBannerOverlayRequestConfig*)config {
+
+  if (vivaldi::IsVivaldiRunning())
+    return [UIImage imageNamed:vPasswordSetting]; // End Vivaldi
+
   UIImage* image =
       CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize);
 #if !BUILDFLAG(IS_IOS_MACCATALYST)

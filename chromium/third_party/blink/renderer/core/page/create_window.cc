@@ -26,20 +26,20 @@
 
 #include "third_party/blink/renderer/core/page/create_window.h"
 
+#include "base/check.h"
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/mojom/conversions/attribution_reporting.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
+#include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/public/web/web_window_features.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
-#include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/number_parsing_options.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_to_number.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
 
@@ -67,13 +68,14 @@ static bool IsWindowFeaturesSeparator(UChar c) {
 }
 
 WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string,
-                                              LocalDOMWindow* dom_window,
-                                              const KURL& url) {
+                                              LocalDOMWindow* dom_window) {
   WebWindowFeatures window_features;
 
   bool attribution_reporting_enabled =
       dom_window &&
-      RuntimeEnabledFeatures::AttributionReportingEnabled(dom_window);
+      (RuntimeEnabledFeatures::AttributionReportingEnabled(dom_window) ||
+       RuntimeEnabledFeatures::AttributionReportingCrossAppWebEnabled(
+           dom_window));
 
   // This code follows the HTML spec, specifically
   // https://html.spec.whatwg.org/C/#concept-window-open-features-tokenize
@@ -164,7 +166,7 @@ WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string,
     }
 
     if (!ui_features_were_disabled && key_string != "noopener" &&
-        key_string != "noreferrer" &&
+        key_string != "noreferrer" && key_string != "fullscreen" &&
         (!attribution_reporting_enabled || key_string != "attributionsrc")) {
       ui_features_were_disabled = true;
       menu_bar = false;
@@ -206,40 +208,34 @@ WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string,
       window_features.background = true;
     } else if (key_string == "persistent") {
       window_features.persistent = true;
+    } else if (key_string == "fullscreen" &&
+               RuntimeEnabledFeatures::FullscreenPopupWindowsEnabled()) {
+      // TODO(crbug.com/1142516): Add permission check to give earlier
+      // feedback / console warning if permission isn't granted, and/or just
+      // silently drop the flag. Currently the browser will block the popup
+      // entirely if this flag is set and permission is not granted.
+      window_features.is_fullscreen = value;
     } else if (attribution_reporting_enabled &&
                key_string == "attributionsrc") {
-      // attributionsrc values are URLs, and as such their original case needs
-      // to be retained for correctness. Positions in both `feature_string` and
-      // `buffer` correspond because ASCII-lowercasing doesn't add, remove, or
-      // swap character positions; it only does in-place transformations of
-      // capital ASCII characters. See crbug.com/1338698 for details.
-      DCHECK_EQ(feature_string.length(), buffer.length());
-      const StringView original_case_value_string(feature_string, value_begin,
-                                                  value_end - value_begin);
-
-      // attributionsrc values are encoded in order to support embedded special
-      // characters, such as '='.
-      const String decoded = DecodeURLEscapeSequences(
-          original_case_value_string.ToString(), DecodeURLMode::kUTF8);
-
-      if (!decoded.empty()) {
-        window_features.impression =
-            dom_window->GetFrame()
-                ->GetAttributionSrcLoader()
-                ->RegisterNavigation(
-                    dom_window->CompleteURL(decoded),
-                    mojom::blink::AttributionNavigationType::kWindowOpen);
+      if (!window_features.attribution_srcs.has_value()) {
+        window_features.attribution_srcs.emplace();
       }
 
-      // If the impression could not be set, or if the value was empty, mark
-      // attribution eligibility by adding an impression.
-      if (!window_features.impression &&
-          dom_window->GetFrame()->GetAttributionSrcLoader()->CanRegister(
-              url,
-              /*element=*/nullptr,
-              /*request_id=*/absl::nullopt)) {
-        window_features.impression = blink::Impression{
-            .nav_type = mojom::blink::AttributionNavigationType::kWindowOpen};
+      if (!value_string.empty()) {
+        // attributionsrc values are URLs, and as such their original case needs
+        // to be retained for correctness. Positions in both `feature_string`
+        // and `buffer` correspond because ASCII-lowercasing doesn't add,
+        // remove, or swap character positions; it only does in-place
+        // transformations of capital ASCII characters. See crbug.com/1338698
+        // for details.
+        DCHECK_EQ(feature_string.length(), buffer.length());
+        const StringView original_case_value_string(feature_string, value_begin,
+                                                    value_end - value_begin);
+
+        // attributionsrc values are encoded in order to support embedded
+        // special characters, such as '='.
+        window_features.attribution_srcs->emplace_back(DecodeURLEscapeSequences(
+            original_case_value_string.ToString(), DecodeURLMode::kUTF8));
       }
     }
   }
@@ -252,6 +248,11 @@ WebWindowFeatures GetWindowFeaturesFromString(const String& feature_string,
 
   if (window_features.noreferrer)
     window_features.noopener = true;
+
+  if (window_features.is_fullscreen) {
+    UseCounter::Count(dom_window->document(),
+                      WebFeature::kWindowOpenFullscreenRequested);
+  }
 
   return window_features;
 }

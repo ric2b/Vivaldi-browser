@@ -11,15 +11,6 @@
     margin-inline-end: 16px;
   }
 
-  #createCustomApnButton iron-icon {
-    --iron-icon-fill-color: var(--text-color);
-    margin-inline-end: 8px;
-  }
-
-  #createCustomApnButton[disabled] iron-icon {
-    --iron-icon-fill-color: var(--disabled);
-  }
-
   #apnTooltip {
     --paper-tooltip-background: var(--cros-tooltip-background-color);
     --paper-tooltip-text-color: var(--cros-tooltip-label-color);
@@ -58,7 +49,7 @@
         <div class="list-frame vertical-list">
           <template is="dom-if" if="[[shouldShowAddWiFiRow_(globalPolicy_,
               managedNetworkAvailable, deviceStates)]]">
-            <div actionable class="list-item" on-click="onAddWiFiTap_">
+            <div actionable class="list-item" on-click="onAddWiFiClick_">
               <div class="start settings-box-text"
                   id="add-wifi-label" aria-hidden="true">
                 $i18n{internetAddWiFi}
@@ -68,7 +59,7 @@
             </div>
           </template>
           <div actionable$="[[!vpnIsProhibited_]]" class="list-item"
-              on-click="onAddVpnTap_">
+              on-click="onAddVpnClick_">
             <div class="start settings-box-text"
                 id="add-vpn-label" aria-hidden="true">
               $i18n{internetAddVPN}
@@ -87,7 +78,7 @@
           </div>
           <template is="dom-repeat" items="[[vpnProviders_]]">
             <div actionable class="list-item"
-                on-click="onAddThirdPartyVpnTap_">
+                on-click="onAddThirdPartyVpnClick_">
               <div class="start settings-box-text">
                 [[getAddThirdPartyVpnLabel_(item)]]
               </div>
@@ -116,19 +107,19 @@
           slot="subpage-title-extra"
           device-state="[[getDeviceState_(subpageType_, deviceStates)]]">
       </settings-internet-detail-menu>
-      <settings-internet-detail-page prefs="{{prefs}}"
+      <settings-internet-detail-subpage prefs="{{prefs}}"
           default-network="[[defaultNetwork]]"
           global-policy="[[globalPolicy_]]"
           managed-network-available="[[managedNetworkAvailable]]">
-      </settings-internet-detail-page>
+      </settings-internet-detail-subpage>
     </os-settings-subpage>
   </template>
 
   <template is="dom-if" route-path="/knownNetworks" restamp>
     <os-settings-subpage page-title="$i18n{internetKnownNetworksPageTitle}">
-      <settings-internet-known-networks-page
+      <settings-internet-known-networks-subpage
           network-type="[[knownNetworksType_]]">
-      </settings-internet-known-networks-page>
+      </settings-internet-known-networks-subpage>
     </os-settings-subpage>
   </template>
 
@@ -140,7 +131,7 @@
               on-click="onCreateCustomApnClicked_"
               class="cancel-button"
               disabled="[[isCreateCustomApnButtonDisabled_]]">
-            <iron-icon icon="cr:add"></iron-icon>
+            <iron-icon icon="cr:add" slot="prefix-icon"></iron-icon>
             $i18n{apnPageAddNewApn}
           </cr-button>
         </div>
@@ -162,6 +153,10 @@
     <os-settings-subpage page-title="[[getNetworksPageTitle_(subpageType_)]]"
         show-spinner="[[showSpinner_]]"
         spinner-title="$i18n{networkScanningLabel}">
+      <settings-internet-subpage-menu
+          slot="subpage-title-extra"
+          device-state="[[getDeviceState_(subpageType_, deviceStates)]]">
+      </settings-internet-subpage-menu>
       <settings-internet-subpage
           default-network="[[defaultNetwork]]"
           device-state="[[getDeviceState_(subpageType_, deviceStates)]]"

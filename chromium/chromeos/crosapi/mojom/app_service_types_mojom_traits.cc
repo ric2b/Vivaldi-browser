@@ -378,8 +378,8 @@ EnumTraits<crosapi::mojom::Readiness, apps::Readiness>::ToMojom(
       return crosapi::mojom::Readiness::kUninstalledByUser;
     case apps::Readiness::kRemoved:
       return crosapi::mojom::Readiness::kRemoved;
-    case apps::Readiness::kUninstalledByMigration:
-      return crosapi::mojom::Readiness::kUninstalledByMigration;
+    case apps::Readiness::kUninstalledByNonUser:
+      return crosapi::mojom::Readiness::kUninstalledByNonUser;
   }
 
   NOTREACHED();
@@ -413,8 +413,8 @@ bool EnumTraits<crosapi::mojom::Readiness, apps::Readiness>::FromMojom(
     case crosapi::mojom::Readiness::kRemoved:
       *output = apps::Readiness::kRemoved;
       return true;
-    case crosapi::mojom::Readiness::kUninstalledByMigration:
-      *output = apps::Readiness::kUninstalledByMigration;
+    case crosapi::mojom::Readiness::kUninstalledByNonUser:
+      *output = apps::Readiness::kUninstalledByNonUser;
       return true;
   }
 
@@ -906,11 +906,15 @@ EnumTraits<crosapi::mojom::LaunchSource, apps::LaunchSource>::ToMojom(
       return crosapi::mojom::LaunchSource::kFromProtocolHandler;
     case apps::LaunchSource::kFromUrlHandler:
       return crosapi::mojom::LaunchSource::kFromUrlHandler;
+    case apps::LaunchSource::kFromSysTrayCalendar:
+      return crosapi::mojom::LaunchSource::kFromSysTrayCalendar;
     // TODO(crbug.com/1343692): Make lock screen apps use lacros browser.
     case apps::LaunchSource::kFromLockScreen:
     case apps::LaunchSource::kFromCommandLine:
     case apps::LaunchSource::kFromBackgroundMode:
     case apps::LaunchSource::kFromAppHomePage:
+    case apps::LaunchSource::kFromReparenting:
+    case apps::LaunchSource::kFromProfileMenu:
       NOTREACHED();
       return crosapi::mojom::LaunchSource::kUnknown;
   }
@@ -1010,6 +1014,9 @@ bool EnumTraits<crosapi::mojom::LaunchSource, apps::LaunchSource>::FromMojom(
       return true;
     case crosapi::mojom::LaunchSource::kFromUrlHandler:
       *output = apps::LaunchSource::kFromUrlHandler;
+      return true;
+    case crosapi::mojom::LaunchSource::kFromSysTrayCalendar:
+      *output = apps::LaunchSource::kFromSysTrayCalendar;
       return true;
   }
 
